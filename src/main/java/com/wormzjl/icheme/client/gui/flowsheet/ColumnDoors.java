@@ -179,7 +179,7 @@ public final class ColumnDoors {
                     right.add(right.size() - 1, Door.group(x.text("door.group.ejector"), Door.entry("ejector_discharge", x.text("door.discharge"), x.units().pressure().symbol()),
                             Door.entry("ejector_motive", x.text("door.motive"), x.units().pressure().symbol())));
                 columns = List.of(right);
-                glass = ColumnGlass.connections(x, unit, door, duties(x, id, door));
+                glass = ColumnGlass.connections(x, unit, door, duties(x, id, door), view);
             }
             default -> {
                 var in = new CalculatorColumn.ColumnInput(false, true, symbol, x.units().pressure().symbol(), x.units().molesUnit(), view.connection, view.index, view.spread(door), door.draws().size() < V3ColumnInput.MAX_SIDE_DRAWS, door.pumparounds().size() < MAX_PA, door.steam().size() < MAX_STEAM);
@@ -387,6 +387,8 @@ public final class ColumnDoors {
         int colon = key.indexOf(':');
         String head = colon < 0 ? key : key.substring(0, colon), tail = colon < 0 ? "" : key.substring(colon + 1);
         if (view.press(key)) return;
+        // Another sheet on the Results glass opens at its top (D44).
+        if (head.equals("view") || head.equals("stream") || head.startsWith("tray")) view.glass.reset();
         switch (head) {
             case "view" -> {
                 for (var v : CalculatorColumn.View.values()) if (v.key().equals(tail)) view.results = v;

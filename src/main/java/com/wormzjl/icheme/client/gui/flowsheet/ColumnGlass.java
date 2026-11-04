@@ -7,7 +7,6 @@ import com.wormzjl.icheme.client.gui.common.CalculatorColumn.Mark;
 import com.wormzjl.icheme.client.gui.common.CalculatorColumn.Metric;
 import com.wormzjl.icheme.client.gui.common.CalculatorColumn.Page;
 import com.wormzjl.icheme.client.gui.common.CalculatorColumn;
-import com.wormzjl.icheme.client.gui.common.DialogColumns;
 import com.wormzjl.icheme.client.gui.common.kit.Canvas;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
 import com.wormzjl.icheme.client.gui.common.kit.Palette;
@@ -94,39 +93,58 @@ final class ColumnGlass {
 
     /**
      * The block's pumps and connection points (W8, D43): the pumps' duties as one table ({@link CalculatorColumn#pumpDuties}), then what
-     * each connection point carries, read from the last run.
+     * each connection point carries, read from the last run, as a grid that stacks where the glass is narrow ({@link CalculatorColumn.SheetBuilder#grid}).
+     * Where the two are taller than the glass, they scroll in {@code view}'s own view (D44), the pumps first.
      */
-    static Door.Glass connections(SheetContext x, Flowsheet.Unit unit, ColumnDoor door, List<CalculatorColumn.PumpDuty> pumps) {
-        return (c, skin, box) -> {
-            var u = x.units();
-            // The glass does not scroll: on a short door what passes its foot is cut there, not drawn over the footer.
-            c.clip(box);
-            var duties = CalculatorColumn.pumpDuties(pumps, box.w(), c.measure(), x.t());
-            CalculatorColumn.draw(c, duties, box, 0);
-            int x0 = box.x() + 4, y = box.y() + duties.height() + CalculatorColumn.PITCH;
-            String[] head = {x.text("door.connection"), x.text("door.stream"), x.text("door.temperature"), x.text("door.heat")};
-            int[] at = {0, 124, 200, 280};
-            for (int i = 0; i < head.length; i++) c.text(head[i], x0 + at[i], y, Palette.MUTED);
-            c.hLine(box.x() + 2, box.right() - 2, y + 10, Palette.LINE);
-            y += 14;
-            var results = x.state().shown(unit.id());
-            int r = 0;
-            var ports = new ArrayList<>(UnitTypes.model("column").ports(unit.params()));
-            ports.sort(java.util.Comparator.comparingInt(port -> rank(port.id())));
-            for (var port : ports) {
-                var stream = port.direction() == Port.Direction.IN ? x.into(unit.id(), port.id()) : x.outOf(unit.id(), port.id());
-                var props = x.props(stream);
-                if (r % 2 == 1) c.fill(box.x(), y - 3, box.right(), y + 11, DialogColumns.BAND);
-                c.text(point(x, door, port.id()), x0 + at[0], y, Palette.TEXT);
-                c.text(stream == null ? x.text("door.none") : stream.name(), x0 + at[1], y, Palette.MUTED);
-                if (props != null) c.text(u.t(props.temperature()) + " " + u.temperature().symbol(), x0 + at[2], y, Palette.ACCENT);
-                double heat = results == null ? Double.NaN : heat(results, unit, door, port.id());
-                if (!Double.isNaN(heat)) c.text(SheetUnits.megawatts(Math.abs(heat)) + " MW", x0 + at[3], y, Palette.ACCENT);
-                r++;
-                y += 14;
+    static Door.Glass connections(SheetContext x, Flowsheet.Unit unit, ColumnDoor door, List<CalculatorColumn.PumpDuty> pumps, Door.View view) {
+        return new Door.Glass() {
+            // D44: the content at its full height, through the view's own bar where it is taller than the glass.
+            @Override public void draw(Canvas c, Skin skin, Rect box) {
+                var content = equipment(x, unit, door, pumps, box, c.measure());
+                var scroll = view.glass;
+                scroll.layout(box, box.right() - ScrollView.BAR, content.height());
+                var area = new Rect(box.x(), box.y(), content.width(), box.h());
+                c.clip(box);
+                CalculatorColumn.draw(c, content.duties(), area, scroll.offset());
+                CalculatorColumn.draw(c, content.points(), area, scroll.offset() - content.duties().height() - CalculatorColumn.PITCH);
+                c.unclip();
+                scroll.drawBar(c, skin);
             }
-            c.unclip();
+
+            @Override public ScrollView scroll() {
+                return view.glass;
+            }
         };
+    }
+
+    /** The Equipment glass's content {@code width} wide: the pumps' duties, a blank line, then the connection points. */
+    record Equipment(int width, CalculatorColumn.Sheet duties, CalculatorColumn.Sheet points) {
+        int height() {
+            return duties.height() + CalculatorColumn.PITCH + points.height();
+        }
+    }
+
+    /** The content as the glass {@code box} shows it: its whole width where it fits the glass's height, else beside the bar. */
+    static Equipment equipment(SheetContext x, Flowsheet.Unit unit, ColumnDoor door, List<CalculatorColumn.PumpDuty> pumps, Rect box, com.wormzjl.icheme.client.gui.common.kit.Measure m) {
+        var whole = equipment(x, unit, door, pumps, box.w(), m);
+        return whole.height() <= box.h() ? whole : equipment(x, unit, door, pumps, box.w() - ScrollView.BAR - 2, m);
+    }
+
+    private static Equipment equipment(SheetContext x, Flowsheet.Unit unit, ColumnDoor door, List<CalculatorColumn.PumpDuty> pumps, int width, com.wormzjl.icheme.client.gui.common.kit.Measure m) {
+        var u = x.units();
+        var head = List.of(x.text("door.connection"), x.text("door.stream"), x.text("door.temperature"), x.text("door.heat"));
+        var results = x.state().shown(unit.id());
+        var rows = new ArrayList<List<String>>();
+        var ports = new ArrayList<>(UnitTypes.model("column").ports(unit.params()));
+        ports.sort(java.util.Comparator.comparingInt(port -> rank(port.id())));
+        for (var port : ports) {
+            var stream = port.direction() == Port.Direction.IN ? x.into(unit.id(), port.id()) : x.outOf(unit.id(), port.id());
+            var props = x.props(stream);
+            double heat = results == null ? Double.NaN : heat(results, unit, door, port.id());
+            rows.add(List.of(point(x, door, port.id()), stream == null ? x.text("door.none") : stream.name(), props == null ? "" : u.t(props.temperature()) + " " + u.temperature().symbol(),
+                    Double.isNaN(heat) ? "" : SheetUnits.megawatts(Math.abs(heat)) + " MW"));
+        }
+        return new Equipment(width, CalculatorColumn.pumpDuties(pumps, width, m, x.t()), new CalculatorColumn.SheetBuilder(width, m).grid(head, rows, 2).build());
     }
 
     /** The heat of a pair, shown on its inlet: a part's reading, {@code T-101/pa 1}; air then water's, its trim's. */
@@ -181,28 +199,40 @@ final class ColumnGlass {
                 List.of(c(x, "free_water"), u.moles(node.freeWaterMolPerSecond()) + flow));
     }
 
-    /** The Results page's glass: the calculator's profiles, products, heat, tray and solver sheets. */
+    /**
+     * The Results page's glass: the calculator's profiles, products, heat, tray and solver sheets. A sheet taller than the glass scrolls in
+     * {@code view}'s own view (D44), beside its bar; a profile is a plot fitted to the glass and does not.
+     */
     record ResultGlass(SheetContext x, String id, ColumnDoor door, Door.View view) implements Door.Glass {
         @Override public void draw(Canvas c, Skin skin, Rect box) {
-            var m = c.measure();
-            int width = box.w() - ScrollView.BAR - 2;
             var display = display(x, id);
             var inspection = display == null ? null : display.inspection().orElse(null);
+            var scroll = view.glass;
+            int width = box.w();
+            var sheet = sheet(display, inspection, width, c);
+            if (sheet != null && sheet.height() > box.h()) sheet = sheet(display, inspection, width = box.w() - ScrollView.BAR - 2, c);
+            scroll.layout(box, box.right() - ScrollView.BAR, sheet == null ? 0 : sheet.height());
             c.clip(box);
-            if (view.results == CalculatorColumn.View.PROFILES) {
-                if (inspection == null) sheet(c, box, new CalculatorColumn.SheetBuilder(width, m).note(c(x, "solve_profiles"), Palette.MUTED));
-                else profile(c, box, inspection);
-            } else sheet(c, box, switch (view.results) {
+            if (sheet == null) profile(c, box, inspection);
+            else CalculatorColumn.draw(c, sheet, new Rect(box.x(), box.y(), width, box.h()), scroll.offset());
+            c.unclip();
+            scroll.drawBar(c, skin);
+        }
+
+        @Override public ScrollView scroll() {
+            return view.glass;
+        }
+
+        /** The view's sheet {@code width} wide, or null for a profile, which plots. */
+        private CalculatorColumn.@Nullable Sheet sheet(@Nullable V3ColumnDisplayResult display, @Nullable V3ColumnInspection inspection, int width, Canvas c) {
+            if (view.results == CalculatorColumn.View.PROFILES)
+                return inspection == null ? new CalculatorColumn.SheetBuilder(width, c.measure()).note(c(x, "solve_profiles"), Palette.MUTED).build() : null;
+            return (switch (view.results) {
                 case PRODUCTS -> products(display, width, c);
                 case HEAT -> heat(display, width, c);
                 case TRAY -> tray(inspection, width, c);
                 default -> solver(display, inspection, width, c);
-            });
-            c.unclip();
-        }
-
-        private void sheet(Canvas c, Rect box, CalculatorColumn.SheetBuilder builder) {
-            CalculatorColumn.draw(c, builder.build(), new Rect(box.x(), box.y(), box.w() - ScrollView.BAR - 2, box.h()), 0);
+            }).build();
         }
 
         private double value(V3ColumnInspection.Node node, int series) {

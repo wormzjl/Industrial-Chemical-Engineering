@@ -70,11 +70,16 @@ class SimulatorColumnsTest {
         return doors;
     }
 
-    private static List<Door> columnDoors(SheetFixture.Texts texts) {
+    /** A column T-101 fed by a stream, not run. */
+    private static SheetContext columnContext(SheetFixture.Texts texts) {
         var units = List.of(new Flowsheet.Unit("t", "column", "T-101", 300, 40, SheetFixture.column()));
         var streams = List.of(new Flowsheet.Stream("feed", "FEED", null, new Flowsheet.End("t", "feed"), SheetFixture.water(100), List.of(new Flowsheet.Point(100, 200)), new JsonObject()));
         var editor = SheetFixture.editor(new Flowsheet(SheetFixture.basis(), units, streams, FlowsheetSolver.Settings.DEFAULT));
-        var x = new SheetContext(editor, new SheetState(editor.sheet(), null, null, 0, null), SheetUnits.DEFAULT, texts, texts.measure, SheetFixture.FLUIDS, SimulatorHost.NONE, java.util.List.of());
+        return new SheetContext(editor, new SheetState(editor.sheet(), null, null, 0, null), SheetUnits.DEFAULT, texts, texts.measure, SheetFixture.FLUIDS, SimulatorHost.NONE, java.util.List.of());
+    }
+
+    private static List<Door> columnDoors(SheetFixture.Texts texts) {
+        var x = columnContext(texts);
         var doors = new ArrayList<Door>();
         for (int tab = 0; tab < 4; tab++)
             for (var connection : CalculatorColumn.Connection.values()) {
@@ -178,6 +183,90 @@ class SimulatorColumnsTest {
             assertFits(m, SimulatorFrame.doorColumn(BasisPage.rows(x), SimulatorFrame.BASIS_DOOR, m), basis, "basis");
         }
         assertEveryLineThere(texts);
+    }
+
+    /** A canvas that records each text's place and the clip it falls in. */
+    private static final class Placing implements com.wormzjl.icheme.client.gui.common.kit.Canvas {
+        final List<Rect> places = new ArrayList<>();
+        final List<String> texts = new ArrayList<>();
+        private final Measure m;
+
+        Placing(Measure m) {
+            this.m = m;
+        }
+
+        @Override public Measure measure() {
+            return m;
+        }
+
+        @Override public void fill(int x0, int y0, int x1, int y1, int argb) {
+        }
+
+        @Override public void text(String text, int x, int y, int argb) {
+            texts.add(text);
+            places.add(new Rect(x, y, m.width(text), 9));
+        }
+
+        @Override public void text(String text, float x, float y, float scale, int argb) {
+            text(text, (int) x, (int) y, argb);
+        }
+
+        @Override public void clip(Rect area) {
+        }
+
+        @Override public void unclip() {
+        }
+    }
+
+    /**
+     * D44 (batch 2026-11-03-rotating-machinery): the column door's Equipment glass, rated and not, at every door width and at the least and the
+     * simulator's door height. No text is wider than the glass, or than the room beside its bar where it scrolls; its whole content is reachable by
+     * its own view: the pumps' first line inside the glass at the top, the connection points' last line inside it at the end. Scrolling keeps the
+     * widgets: the glass has none.
+     */
+    @Test
+    void theEquipmentGlassScrollsToItsWholeContentAndCutsNoText() {
+        var texts = new SheetFixture.Texts();
+        var m = texts.measure;
+        var x = columnContext(texts);
+        var unit = x.editor().unit("t");
+        var column = com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor.of(unit.params());
+        var rated = List.of(new CalculatorColumn.PumpDuty("Reflux pump", 60, 55, 29.6e3, 1.7, 37e3), new CalculatorColumn.PumpDuty("Pumparound 1 pump", 250, 45, 99e3, 3.3, 132e3),
+                CalculatorColumn.PumpDuty.unknown("Pumparound 2 pump"));
+        boolean scrolled = false;
+        for (var pumps : List.of(ColumnDoors.duties(x, "t", column), rated))
+            for (int height : new int[]{SimulatorFrame.LEAST_H, SimulatorFrame.DOOR_H})
+                for (int width = 300; width <= 790; width += 7) {
+                    String what = pumps.size() + " pumps" + (pumps == rated ? ", rated" : "") + " at " + width + " by " + height;
+                    var view = new Door.View();
+                    view.tab = CalculatorColumn.Page.EQUIPMENT.ordinal();
+                    var door = ColumnDoors.door(x, "t", view);
+                    var glass = ColumnGlass.connections(x, unit, column, pumps, view);
+                    var box = SimulatorFrame.inner(DoorFrame.glass(door, width, height));
+                    assertSame(view.glass, door.glass().scroll(), what + ": the page's glass scrolls in the view");
+                    assertEquals(List.of(), door.glass().slots(box), what + ": no widget on the glass");
+                    var top = new Placing(m);
+                    glass.draw(top, com.wormzjl.icheme.client.gui.common.kit.Skin.PLAIN, box);
+                    var content = ColumnGlass.equipment(x, unit, column, pumps, box, m);
+                    var scroll = view.glass;
+                    assertEquals(content.height(), scroll.content(), what + ": the view laid out for the content");
+                    assertTrue(content.height() <= box.h() + scroll.max(), what + ": content " + content.height() + " px past the view's " + box.h() + " + " + scroll.max());
+                    int right = scroll.max() > 0 ? box.right() - ScrollView.BAR - 2 : box.right();
+                    assertEquals(right - box.x(), content.width(), what + ": the content beside the bar only where it scrolls");
+                    for (var place : top.places) assertTrue(place.x() >= box.x() && place.right() <= right, what + ": a text past the glass " + place);
+                    var first = top.places.getFirst();
+                    assertTrue(first.y() >= box.y() && first.bottom() <= box.bottom(), what + ": the first line " + top.texts.getFirst() + " inside the glass at the top");
+                    while (scroll.offset() < scroll.max()) assertTrue(scroll.wheel(box.x() + 4, box.y() + 4, -1), what + ": the wheel scrolls the glass");
+                    scrolled |= scroll.max() > 0;
+                    var end = new Placing(m);
+                    glass.draw(end, com.wormzjl.icheme.client.gui.common.kit.Skin.PLAIN, box);
+                    var last = end.places.getLast();
+                    assertTrue(last.y() >= box.y() && last.bottom() <= box.bottom(), what + ": the last line " + end.texts.getLast() + " at " + last + " inside the glass " + box + " at the end");
+                    for (var place : end.places) assertTrue(place.x() >= box.x() && place.right() <= right, what + ": a text past the glass at the end " + place);
+                    view.press("tab/0");
+                    assertEquals(0, view.glass.offset(), what + ": a change of tab takes the glass back to the top");
+                }
+        assertTrue(scrolled, "a short door's Equipment glass scrolls");
     }
 
     /** What each kind sets, by its widgets' keys, in the door's first tab. */

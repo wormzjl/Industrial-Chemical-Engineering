@@ -608,6 +608,59 @@ class CalculatorColumnTest {
         assertEquals(t.get("column.duty.none"), String.join(" ", unrated.lines().stream().filter(l -> l.kind() == Kind.NOTE).map(l -> l.cells().getFirst()).toList()));
     }
 
+    /**
+     * D44 (batch 2026-11-03-rotating-machinery): the connection points' grid at every Equipment glass width. No cell is cut or crosses
+     * another; where the columns do not fit beside the name, a row stacks its values on further lines on its band, each under its heading;
+     * a stacked line with nothing to show is left out; on a wide glass a row is one line.
+     */
+    @Test
+    void theGridStacksWhereItsColumnsDoNotFit() {
+        var header = List.of("Connection point", "Stream", "Temperature", "Heat");
+        var rows = List.of(List.of("Feed, tray 12", "FEED", "350.0 °C", ""), List.of("Pumparound 1 return, tray 8", "PA-1R", "180.5 °C", "12.40 MW"),
+                List.of("Condenser outlet", "None", "", ""), List.of("Reboiler inlet", "RB-IN", "352.1 °C", "8.10 MW"));
+        boolean stacked = false, wide = false;
+        for (int door = CalculatorColumn.MIN_WIDTH; door <= CalculatorColumn.MAX_WIDTH; door += 7) {
+            int width = CalculatorColumn.glass(door, 254, false).w() - 8;
+            for (int w : new int[]{width, width - ScrollView.BAR - 2}) {
+                var sheet = new CalculatorColumn.SheetBuilder(w, M).grid(header, rows, 2).build();
+                int heads = (int) sheet.lines().stream().filter(l -> l.kind() == Kind.GRID_HEADER && l.placed().getFirst().x() != 0).count(), lines = (int) sheet.lines().stream().filter(l -> l.placed().getFirst().x() != 0).count();
+                for (var line : sheet.lines()) {
+                    int end = Integer.MIN_VALUE;
+                    for (var cell : line.placed()) {
+                        assertTrue(cell.x() >= end, w + ": cells cross on " + line.cells());
+                        end = cell.x() + M.width(cell.text()) + 1;
+                        assertTrue(cell.x() >= 0 && cell.x() + M.width(cell.text()) <= w - 6, w + ": a cell outside the glass: " + cell);
+                        assertFalse(cell.text().isEmpty(), w + ": a blank cell placed");
+                    }
+                    if (line.kind() == Kind.GRID_ROW) assertFalse(line.placed().isEmpty(), w + ": a stacked line with nothing to show");
+                }
+                for (int r = 0; r < rows.size(); r++) {
+                    int entry = r;
+                    var cells = sheet.lines().stream().filter(l -> l.entry() == entry).flatMap(l -> l.cells().stream()).toList();
+                    for (int i = 1; i < 4; i++) if (!rows.get(r).get(i).isEmpty()) assertTrue(cells.contains(rows.get(r).get(i)), w + ": " + rows.get(r).get(i) + " shown");
+                    assertEquals(rows.get(r).getFirst(), String.join(" ", sheet.lines().stream().filter(l -> l.entry() == entry && l.placed().getFirst().x() == 0).map(l -> l.cells().getFirst()).toList()),
+                            w + ": the name whole");
+                }
+                // Each value under its heading: its right edge (a number) or left edge (a text) where its heading's is.
+                var headings = sheet.lines().stream().filter(l -> l.kind() == Kind.GRID_HEADER).flatMap(l -> l.placed().stream()).toList();
+                for (var line : sheet.lines())
+                    if (line.kind() == Kind.GRID_ROW)
+                        for (var cell : line.placed())
+                            if (cell.x() != 0) assertTrue(headings.stream().anyMatch(h -> h.x() == cell.x() || h.x() + M.width(h.text()) == cell.x() + M.width(cell.text())), w + ": " + cell + " under no heading");
+                stacked |= heads > 0;
+                if (w >= 330) {
+                    assertEquals(0, lines, w + ": a wide glass holds the grid in one line a row");
+                    wide = true;
+                }
+                var canvas = new Recording();
+                CalculatorColumn.draw(canvas, sheet, new Rect(0, 0, w, 10_000), 0);
+                assertEquals(1, canvas.fills.stream().filter(f -> f[4] == Palette.LINE).count(), w + ": one rule, under the header");
+                for (var place : canvas.places) assertTrue(place.x() >= 0 && place.right() <= w, w + ": a text outside the glass " + place);
+            }
+        }
+        assertTrue(stacked && wide, "the narrowest glass stacks, the widest does not");
+    }
+
     private static final List<String> NAMES = List.of("Water", "n-Hexane", "Ethylbenzene and its isomers", "1,2,4-Trimethylbenzene", "Hydrogen sulfide");
 
     /** No text cut on a sheet: a note wraps, a readout stacks its value under its label, a table wraps its names or stacks; every second entry on a band. */

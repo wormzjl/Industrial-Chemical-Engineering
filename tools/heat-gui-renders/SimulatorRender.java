@@ -1079,7 +1079,17 @@ public final class SimulatorRender {
 
     /** {@link #door}, its columns in one view scrolled to the end where the page asks ({@code GuiPrototypes.doorColumn}). */
     private static void scrolledDoor(GuiPrototypes.Door d, Door door) {
+        // The glass's own view (D44): opened at its top; scrolled to its end, drawn once to lay it out, then again at the end.
+        var scroll = door.glass().scroll();
+        if (scroll != null) scroll.reset();
         var box = DoorFrame.back(d.c, d.skin, door, d.w, d.h);
+        if (scroll != null) {
+            if (!d.end && d.skin == PanelSkin.LIGHT) System.out.printf(java.util.Locale.ROOT, "column door %d by %d: glass content %d px in a %d px view (%d wide)%n", d.w, d.h, scroll.content(), box.h(), box.w());
+            if (d.end && scroll.max() > 0) {
+                while (scroll.offset() < scroll.max()) scroll.wheel(box.x() + 2, box.y() + 2, -1);
+                box = DoorFrame.back(d.c, d.skin, door, d.w, d.h);
+            }
+        }
         d.skin.iconKey(d.c, com.wormzjl.icheme.client.gui.common.CalculatorColumn.theme(d.w), Skin.Icon.THEME, false);
         var tabs = DoorFrame.tabs(door, d.w);
         for (int i = 0; i < door.tabs().size(); i++) d.skin.button(d.c, tabs.get(i), door.tabs().get(i).text(), SimulatorPage.press(door.tabs().get(i)), false);

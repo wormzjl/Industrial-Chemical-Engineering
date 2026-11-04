@@ -813,15 +813,30 @@ public final class CalculatorColumn {
 
     // ---- Readouts and tables on the glass ----
 
-    /** A line's kind on the glass: a note (one cell at the left), a readout (its label at the left, its value at the right), a table's header, the units under its header where it has them, or a row; a blank line. */
+    /**
+     * A line's kind on the glass: a note (one cell at the left), a readout (its label at the left, its value at the right), a table's header, the
+     * units under its header where it has them, or a row; a grid's header line or row line ({@link SheetBuilder#grid}, its cells placed); a blank line.
+     */
     public enum Kind {
-        NOTE, PAIR, HEADER, UNITS, ROW, BLANK
+        NOTE, PAIR, HEADER, UNITS, ROW, BLANK, GRID_HEADER, GRID_ROW
     }
 
-    /** A line on the glass: its kind, its cells, a note's tone, and the entry it belongs to (-1 for a header or a blank line), so a wrapped entry shares its band. */
-    public record Line(Kind kind, List<String> cells, int palette, int entry) {
+    /** A grid's cell as placed: its text, its x from the sheet's text edge, its tone. */
+    public record Cell(String text, int x, int tone) {
+    }
+
+    /**
+     * A line on the glass: its kind, its cells, a note's tone, and the entry it belongs to (-1 for a header or a blank line), so a wrapped entry
+     * shares its band; a grid line's cells as placed ({@link #cells} their texts), empty for the other kinds.
+     */
+    public record Line(Kind kind, List<String> cells, int palette, int entry, List<Cell> placed) {
         public Line {
             cells = List.copyOf(cells);
+            placed = List.copyOf(placed);
+        }
+
+        public Line(Kind kind, List<String> cells, int palette, int entry) {
+            this(kind, cells, palette, entry, List.of());
         }
     }
 
@@ -936,6 +951,76 @@ public final class CalculatorColumn {
             return this;
         }
 
+        /**
+         * A grid (D44, the column door's connection points): a name, then {@code texts - 1} text columns (left-aligned), then number columns
+         * (right-aligned); a row a name, every second one on a band. A long name wraps in its column. Where the columns do not fit side by side, a
+         * row stacks: its first line holds the name and the columns after it that fit beside the name's longest word, and each further line the
+         * next columns that fit, at the right; the header stacks alike, so each value stands under its heading. A stacked line with nothing to show
+         * is left out. A text column wider than the glass (a name the player typed) is cut to it. One grid a sheet, with no table.
+         */
+        public SheetBuilder grid(List<String> header, List<List<String>> rows, int texts) {
+            int n = header.size(), room = width - 6;
+            int[] w = new int[n];
+            for (int i = 1; i < n; i++) {
+                int most = m.width(header.get(i));
+                for (var r : rows) most = Math.max(most, m.width(r.get(i)));
+                w[i] = Math.min(room, most + 8);
+            }
+            int word = 0;
+            for (var name : rows.stream().map(List::getFirst).toList()) for (var part : name.split(" ")) word = Math.max(word, m.width(part));
+            for (var part : header.getFirst().split(" ")) word = Math.max(word, m.width(part));
+            // The lines' columns: the first after the name while they fit beside its longest word, then each line as many as fit.
+            var spans = new ArrayList<int[]>();
+            int used = Math.min(word, room), next = 1;
+            while (next < n && used + w[next] <= room) used += w[next++];
+            spans.add(new int[]{1, next});
+            while (next < n) {
+                int from = next, sum = w[next++];
+                while (next < n && sum + w[next] <= room) sum += w[next++];
+                spans.add(new int[]{from, next});
+            }
+            int nameWidth = room;
+            for (int i = spans.getFirst()[0]; i < spans.getFirst()[1]; i++) nameWidth -= w[i];
+            gridLines(header, true, w, spans, nameWidth, texts);
+            for (var r : rows) {
+                gridLines(r, false, w, spans, nameWidth, texts);
+                entry++;
+            }
+            return this;
+        }
+
+        /** One grid row (or its header) as its lines: the name's wrapped lines, its first line with the first span's cells, then the other spans. */
+        private void gridLines(List<String> row, boolean header, int[] w, List<int[]> spans, int nameWidth, int texts) {
+            Kind kind = header ? Kind.GRID_HEADER : Kind.GRID_ROW;
+            int band = header ? -1 : entry;
+            var names = m.wrap(row.getFirst(), nameWidth);
+            for (int j = 0; j < names.size(); j++) {
+                var placed = new ArrayList<Cell>();
+                placed.add(new Cell(names.get(j), 0, header ? Palette.MUTED : Palette.TEXT));
+                if (j == 0) placeSpan(placed, row, header, w, spans.getFirst(), texts);
+                lines.add(new Line(kind, placed.stream().map(Cell::text).toList(), Palette.TEXT, band, placed));
+            }
+            for (int s = 1; s < spans.size(); s++) {
+                var placed = new ArrayList<Cell>();
+                placeSpan(placed, row, header, w, spans.get(s), texts);
+                if (placed.isEmpty()) continue;
+                lines.add(new Line(kind, placed.stream().map(Cell::text).toList(), Palette.TEXT, band, placed));
+            }
+        }
+
+        /** A span's cells from the right edge: a text column at its column's left, a number at its right; blank cells left out. */
+        private void placeSpan(List<Cell> placed, List<String> row, boolean header, int[] w, int[] span, int texts) {
+            int end = width - 6;
+            var out = new ArrayList<Cell>();
+            for (int i = span[1] - 1; i >= span[0]; i--) {
+                String text = i < texts ? m.cut(row.get(i), w[i] - 8) : row.get(i);
+                int tone = header ? Palette.MUTED : i < texts ? Palette.MUTED : Palette.ACCENT;
+                if (!text.isEmpty()) out.addFirst(new Cell(text, i < texts ? end - w[i] + 8 : end - m.width(text), tone));
+                end -= w[i];
+            }
+            placed.addAll(out);
+        }
+
         /** Whether a table of {@code header} and {@code rows} fits {@code width}: its numbers and its header's first cell side by side. */
         public static boolean fits(List<String> header, List<List<String>> rows, int width, Measure m) {
             int numbers = 0;
@@ -980,6 +1065,11 @@ public final class CalculatorColumn {
                             end -= sheet.widths()[i];
                         }
                         if (ruled) c.hLine(box.x() + 2, box.right() - 2, y + 10, Palette.LINE);
+                    }
+                    case GRID_HEADER, GRID_ROW -> {
+                        for (var cell : line.placed()) c.text(cell.text(), box.x() + 3 + cell.x(), y, cell.tone());
+                        if (line.kind() == Kind.GRID_HEADER && (at + 1 == sheet.lines().size() || sheet.lines().get(at + 1).kind() != Kind.GRID_HEADER))
+                            c.hLine(box.x() + 2, box.right() - 2, y + 10, Palette.LINE);
                     }
                     case BLANK -> {
                     }

@@ -5,6 +5,7 @@ import com.wormzjl.icheme.client.gui.common.kit.Canvas;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
 import com.wormzjl.icheme.client.gui.common.kit.Palette;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
+import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
 import java.util.List;
 import java.util.Locale;
@@ -48,6 +49,11 @@ public record Door(String title, List<Column.Button> tabs, int tab, String statu
         default @Nullable String click(Rect box, double x, double y) {
             return null;
         }
+
+        /** The glass's own scroll view, laid out by {@link #draw}, where the glass scrolls; null where it does not. The screen gives it the wheel and its bar's drag. */
+        default @Nullable ScrollView scroll() {
+            return null;
+        }
     }
 
     /** Tabs that each open, keyed {@code tab/<i>}. */
@@ -82,13 +88,17 @@ public record Door(String title, List<Column.Button> tabs, int tab, String statu
         public CalculatorColumn.View results = CalculatorColumn.View.PROFILES;
         public CalculatorColumn.Metric metric = CalculatorColumn.Metric.TEMPERATURE;
         public int index, stream, tray;
+        /** The glass's own scroll, where the page's glass scrolls ({@link Glass#scroll}); a change of tab takes it back to the top. */
+        public final ScrollView glass = new ScrollView();
         /** What a key just did, which the door's status says until its next change of tab. */
         public @Nullable String said;
 
         /** Takes a door's own view keys, {@code tab/<i>} and {@code phase/<i>}: whether {@code key} was one. */
         public boolean press(String key) {
-            if (key.startsWith("tab/")) tab = Integer.parseInt(key.substring(4));
-            else if (key.startsWith("phase/")) {
+            if (key.startsWith("tab/")) {
+                tab = Integer.parseInt(key.substring(4));
+                glass.reset();
+            } else if (key.startsWith("phase/")) {
                 phase = Integer.parseInt(key.substring(6));
                 phasePicked = true;
             } else return false;
