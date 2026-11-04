@@ -194,6 +194,7 @@ The owner's, 2026-11-04, on the OFFGAS door:
 - Solids: "Fill Solid key, drop tab (Recommended)". A product door has no tabs; the Solid key lists the stream's solids.
 - Small flows: "3 significant figures (Recommended)", then "Allow scientific display for the numbers when there is too much zero": E form under 0.01 and from a million (agent's threshold, reversible).
 - Opening phase: "The largest phase (Recommended)".
+- The column door's pump selector (the reflux pump and each PA: Standard or In-line, `CalculatorColumn.pumps`, keys `column.pump.standard` and `column.pump.in_line`): "These should not be identified as standard/inline, but with pump duty requirements. Another branch is working on this". Left as it is here; the rotating machinery branch (`claude/realistic-pump-compressor-6fdfd9`, which has no client GUI change yet at `f53708de3`) replaces it. Open item for whichever of the two merges second.
 - E readings on a 46 px LED meter (six glyphs, 48 px of segments): "Keep text". They fall back to text in the meter's colour; not wider meters, not two figures on the meters.
 
 ## Line head and title-row key decisions
