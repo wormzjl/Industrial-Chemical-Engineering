@@ -37,7 +37,7 @@ No world places a shaft train. Bundled defaults' counters are identical. The ran
 
 ## 4. Readings for the owner (A41 to A52, taken under D28)
 
-- **A42 departs from D28's A27, so please confirm it.** Pump and compressor power is read at commit from the end flows, heads and suction state, not booked as a `SHAFT` boundary per mover. The reason: `BackwardEulerStepTest` asserts that a closed pump island has no boundary transfer. The turbine keeps its `SHAFT` boundary. The planned test "Σ machine SHAFT = pumpWorkJoule" was dropped.
+- **A42 departs from D28's A27; the owner kept it as built (D29, option A).** Pump and compressor power is read at commit from the end flows, heads and suction state, not booked as a `SHAFT` boundary per mover. The reason: `BackwardEulerStepTest` asserts that a closed pump island has no boundary transfer. The turbine keeps its `SHAFT` boundary. The planned test "Σ machine SHAFT = pumpWorkJoule" was dropped.
   - Option A (as built): read at commit. The energy balance is unchanged.
   - Option B: book `SHAFT` per mover, as A27 planned, and restate that `BackwardEulerStepTest` row.
 - **A48.** The GameTest "a motor at 150 % trips, reset restarts it" became a test of the creative motor's power limit, because lining up a motor structure's coupling with the pump needs the in-game layout. `ShaftTrainTest` covers the trip and its latch.

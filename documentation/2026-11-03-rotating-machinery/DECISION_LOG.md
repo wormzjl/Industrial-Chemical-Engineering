@@ -88,6 +88,10 @@ Batch `2026-11-03-rotating-machinery`. Owner decisions first, then decisions tak
 
 - **D28 (A15 to A40).** W3 builds as its plan recommends: shaft parts saved as facts (A15); a coupling through at least one shaft block (A16); one driver per train, else `TWO DRIVERS` (A17); the defaults of A19; an automatic gearbox ratio (A20); `OVERLOAD` above exactly 1.0 × rating (A21); a latched overspeed trip at 1.10 × set (A22); an ungoverned turbine without a sensor (A23); the speed sensor on the turbine's coupling guard, bound to the nearest unbranched upstream control valve (A24, A25); the fed-forward governor target (A26); machine work as `SHAFT` boundaries (A27); trains stepped at their members' commits (A28); old casings converted when restored (A29); the readings A30 to A40 as the plan gives them.
 
+2026-11-04, W3's review (`W3_REVIEW.md` section 4, reading A42 against A27; A: read at commit as built, B: a `SHAFT` boundary per mover): the owner, "A: keep as built".
+
+- **D29 (A42).** A pump's or compressor's shaft power is read at commit from its end flows, heads and suction state (`law.shaftPower`, `Compressor.power`) and loads its train; it books no `SHAFT` boundary, and a closed pump island keeps no boundary transfer (`BackwardEulerStepTest`). Only the turbine's work leaves as a `SHAFT` boundary (D22). This replaces A27 for pumps and compressors.
+
 W4's decisions, taken on its branch `claude/sad-elgamal-92e0e4` as D10 to D13 and renumbered at its merge into this branch (owner "Yes, merge W4", 2026-11-04):
 
 - **D23 (W4's D10, 2026-11-04).** Constructor duty rows: option A (choice keys for poles, drive and steam class; steppers for flow, head, power and exhaust).
