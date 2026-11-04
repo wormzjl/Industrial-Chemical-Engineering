@@ -110,10 +110,49 @@ public final class MaterialCatalog {
         }
     }
     /**
+     * The phase physics of a compound list, named by records and their declared revisions, without a package or a method
+     * record: the model, each compound with its dataset, the pair libraries in priority order, the policy for a pair none
+     * of them names and the water model. A neural model stores the physics it was trained on in this form (sidecar schema
+     * 3) and {@link #resolve} builds it from the live catalog's records. Its ideal gas is the datasets' fits.
+     */
+    public record Physics(String model, List<Compound> compounds, List<Revisioned> interactions, String missingInteractions,
+            Revisioned water) {
+        /** A record id and its declared revision, written {@code id@revision}. */
+        public record Revisioned(String id, String revision) {
+            public Revisioned { Objects.requireNonNull(id); Objects.requireNonNull(revision); }
+            /** Reads {@code id@revision}. */
+            public static Revisioned parse(String text) {
+                int at=text.indexOf('@');
+                if(at<=0||at!=text.lastIndexOf('@')||at==text.length()-1)throw new IllegalArgumentException("Expected id@revision, got "+text);
+                return new Revisioned(text.substring(0,at),text.substring(at+1));
+            }
+            @Override public String toString() { return id+"@"+revision; }
+        }
+        /** A compound and the dataset it takes. */
+        public record Compound(String id, Revisioned properties) {
+            public Compound { Objects.requireNonNull(id); Objects.requireNonNull(properties); }
+        }
+        public Physics {
+            Objects.requireNonNull(model); compounds=List.copyOf(compounds); interactions=List.copyOf(interactions);
+            Objects.requireNonNull(missingInteractions); Objects.requireNonNull(water);
+            if(compounds.isEmpty())throw new IllegalArgumentException("physics: no compounds");
+        }
+        /** The compound ids, in order. */
+        public List<String> components() { return compounds.stream().map(Compound::id).toList(); }
+        /** The same physics on the compounds of {@code ids}, in this list's order. */
+        public Physics on(Collection<String> ids) {
+            return new Physics(model,compounds.stream().filter(c->ids.contains(c.id())).toList(),interactions,missingInteractions,water);
+        }
+    }
+    /**
      * The longest identity, {@link Package#scientificRevision} or {@link #fluidRevision}: the column's result payloads, the
      * neural models and the fluid saves carry them. A catalog whose identity would be longer is refused at load.
      */
     public static final int MAX_IDENTITY = 16384;
+    /** The records packages are built from, kept so a view is built by the loader's own code ({@link #build}). */
+    private final Records records;
+    /** How each package of this catalog was built; absent for a lens ({@link #inferenceView}), which no view restricts. */
+    private final Map<String, Definition> definitions;
     private final SolidMaterialCatalog solids;
     public SolidMaterialCatalog solids(){return solids;}
     private final FluidData fluidData;
@@ -135,10 +174,12 @@ public final class MaterialCatalog {
             Map<String, Map<ViscosityCorrelation.Phase, ViscosityCorrelation>> viscosities, Map<String, String> waterModels,
             Map<String, FluidAppearance> assayAppearances, Map<String, FluidAppearance> componentAppearances, Map<String, LiquidMixtureCorrection> liquidMixtures, MaterialPresets presets, FluidData fluidData,
             Map<String, Validity> propertyValidity, Map<String, Validity> packageValidity,
-            Map<String, ReferenceSpine> spines, Map<String, CrystalReference> crystals) {
+            Map<String, ReferenceSpine> spines, Map<String, CrystalReference> crystals, SolidMaterialCatalog solids,
+            Records records, Map<String, Definition> definitions) {
         this.propertyValidity = Map.copyOf(propertyValidity); this.packageValidity = Map.copyOf(packageValidity);
         this.spines = Map.copyOf(spines); this.crystals = Map.copyOf(crystals);
-        this.solids=SolidMaterialCatalog.parse(resources);
+        this.records=Objects.requireNonNull(records); this.definitions=Map.copyOf(definitions);
+        this.solids=Objects.requireNonNull(solids);
         // A solid population names its record by id (owner decision D23: crystals are solids), a crystal or a custom solid:
         // the two kinds never share an id.
         for(String id:this.crystals.keySet())if(solids.materials().containsKey(id))throw new IllegalArgumentException("crystals: "+id+" is also a solid material record; a solid id names one record");
@@ -149,6 +190,11 @@ public final class MaterialCatalog {
         this.viscosities = Map.copyOf(viscosities); this.waterModels = Map.copyOf(waterModels);
         this.assayAppearances = Map.copyOf(assayAppearances);
         this.componentAppearances = Map.copyOf(componentAppearances);
+    }
+    /** This catalog with its packages, liquid-mixture corrections and definitions replaced; a view, never published. */
+    private MaterialCatalog derived(Map<String, Package> packages, Map<String, LiquidMixtureCorrection> liquidMixtures, Map<String, Definition> definitions) {
+        return new MaterialCatalog(names,packages,resources,viscosities,waterModels,assayAppearances,componentAppearances,liquidMixtures,presets,
+                fluidData,propertyValidity,packageValidity,spines,crystals,solids,records,definitions);
     }
     public Package requirePackage(String id) {
         Package p = packages.get(id);
@@ -261,18 +307,16 @@ public final class MaterialCatalog {
     private static JsonObject propertyScience(Property property) {
         var json=new Gson().toJsonTree(property).getAsJsonObject();json.remove("id");return json;
     }
+    /** {@link #physicsContent(Package, List)} of package {@code packageId}; package-private so tests compare it across catalogs. */
+    String physicsContent(String packageId,List<String> axis) { return physicsContent(requirePackage(packageId),axis); }
     /**
-     * Whether packages {@code first} and {@code second} hold the same numbers on {@code axis}: the model, the axis's
-     * property constants, interactions and NRTL pairs, the water model's numbers and any group-contribution pairs.
-     * Assays, names, transport, record ids, declared revisions and the column's admission bounds are left out. The
-     * content is compared directly, never hashed (owner decision 2026-10-26).
+     * The numbers package {@code p} holds on {@code axis}, as canonical JSON: the model, the axis's property constants,
+     * interactions and NRTL pairs, the water model's numbers and any group-contribution pairs. Assays, names, transport,
+     * record ids, declared revisions and the column's admission bounds are left out. Two packages have the same physics on
+     * an axis when their contents are equal; the content is compared directly, never hashed (owner decision 2026-10-26).
      */
-    public boolean samePhysics(String first,String second,List<String> axis) {
-        return physicsContent(first,axis).equals(physicsContent(second,axis));
-    }
-    /** The content {@link #samePhysics} compares, as canonical JSON; package-private so tests compare it across catalogs. */
-    String physicsContent(String packageId,List<String> axis) {
-        var p=requirePackage(packageId);new MaterialAxis(axis);
+    static String physicsContent(Package p,List<String> axis) {
+        new MaterialAxis(axis);
         var indices=axis.stream().map(id->{int i=p.components().indexOf(id);if(i<0)throw new IllegalArgumentException("Component outside package: "+id);return i;}).toList();
         var properties=indices.stream().map(i->propertyScience(p.properties().get(i))).toList();
         var matrix=indices.stream().map(i->indices.stream().map(j->p.interactions().get(i).get(j)).toList()).toList();
@@ -286,52 +330,106 @@ public final class MaterialCatalog {
     }
 
     /**
-     * Immutable PR view for a qualified inference axis. Missing zero species can use an explicitly
-     * selected reference package; the caller must check the projected physics ({@link #samePhysics}).
-     * This does not convert saved inventories or publish a replacement runtime catalog.
+     * This catalog with package {@code packageId} replaced by its view on the compounds {@code ids} (batch
+     * 2026-11-04-refinery-compounds, V1): the package's compounds of {@code ids}, in the package's order, built from the
+     * package's own records by the loader's code ({@link #build}). It has the same method, datasets, water model and
+     * liquid-mixture correction; pairs among its compounds only; the spines and crystals of its compounds; the assays
+     * whose non-zero compounds it holds. It keeps the package's column range and fluid envelope, so no state is judged
+     * differently. Its identity names only its compounds' records and the pair libraries that give a pair among them.
+     * Every mixing sum of the model runs over the compounds present, so a state that holds none of the other compounds has
+     * the same numbers on the view as on the package. The view of every compound is the package itself.
      */
-    public MaterialCatalog inferenceView(String packageId,List<String> axis,String referencePackage,boolean allowMissing) {
-        var source=requirePackage(packageId);new MaterialAxis(axis);
-        if(source.components().equals(axis))return this;
-        // A projection is a PR78 axis without crystal records (P6): a package that admits crystals is refused, never
-        // projected fluid-only.
-        if(!source.crystals().isEmpty())throw new CrystalPhasesUnavailable(packageId,source.crystals(),"a neural inference projection");
-        if(!source.model().equals("pr78"))throw new IllegalArgumentException("Inference projection requires PR78");
-        if(source.groupContributions()!=null)throw new IllegalArgumentException("Inference projection of a package with temperature-dependent interactions is not supported: "+packageId);
-        var reference=requirePackage(referencePackage);
-        var properties=new ArrayList<Property>();
-        for(String id:axis) {
-            int i=source.components().indexOf(id);
-            if(i>=0)properties.add(source.properties().get(i));
-            else {
-                int j=reference.components().indexOf(id);
-                if(!allowMissing||j<0)throw new IllegalArgumentException("Unqualified missing inference species: "+id);
-                properties.add(reference.properties().get(j));
-            }
+    public MaterialCatalog restrict(String packageId,List<String> ids) {
+        var parent=requirePackage(packageId);var definition=definitions.get(packageId);
+        if(definition==null)throw new IllegalArgumentException("Package "+packageId+" is a lens of one inference; it has no view");
+        var subset=new HashSet<>(ids);
+        if(subset.isEmpty()||subset.size()!=ids.size())throw new IllegalArgumentException("restrict: expected distinct compounds, got "+ids);
+        for(String id:ids)if(!parent.components().contains(id))throw new IllegalArgumentException("restrict: "+id+" is outside package "+packageId);
+        if(subset.size()==parent.components().size())return this;
+        var view=new Definition(definition.id(),definition.revision(),definition.head(),definition.method(),
+                definition.entries().stream().filter(e->subset.contains(e.component())).toList(),
+                definition.crystals().stream().filter(c->subset.contains(records.crystals().get(c).component())).toList(),definition.evidence());
+        var built=build(records,view,parent,records.assays());
+        var packs=new HashMap<>(packages);packs.put(packageId,built.pack());
+        var mixtures=new HashMap<>(liquidMixtures);mixtures.put(packageId,built.liquidMixture());
+        var defs=new HashMap<>(definitions);defs.put(packageId,view);
+        return derived(packs,mixtures,defs);
+    }
+
+    /**
+     * The package {@code physics} names, built from this catalog's records by the loader's code ({@link #build}); empty
+     * when the physics is stale: a compound, dataset, pair library or water model it names is missing, or declares another
+     * revision. A physics record names no method: its ideal gas is the datasets' fits and it has no column pressure range
+     * of its own (a consumer takes its range from the package it serves). Records that do not form a package (a dataset
+     * without a fit, a pair library with a group-contribution rule) are refused with an {@link IllegalArgumentException}.
+     */
+    public Optional<Package> resolve(Physics physics) {
+        if(!Set.of("pr78","nrtl").contains(physics.model()))throw new IllegalArgumentException("physics: unsupported model "+physics.model());
+        if(!Set.of("zero","error").contains(physics.missingInteractions())||physics.model().equals("nrtl")&&!physics.missingInteractions().equals("error"))
+            throw new IllegalArgumentException("physics: invalid missing_interactions policy "+physics.missingInteractions());
+        var entries=new ArrayList<Entry>();
+        for(var compound:physics.compounds()) {
+            var property=records.properties().get(compound.properties().id());
+            if(!records.names().containsKey(compound.id())||property==null||!property.component().equals(compound.id())
+                    ||!compound.properties().revision().equals(records.propertyRevisions().get(property.id())))return Optional.empty();
+            entries.add(new Entry(compound.id(),property.id(),null));
         }
-        var interactions=new ArrayList<List<Double>>();
-        for(String a:axis) {
+        var libraries=new ArrayList<String>();
+        for(var library:physics.interactions()) {
+            var record=records.libraries().get(library.id());
+            if(record==null||!library.revision().equals(text(record,"revision")))return Optional.empty();
+            if(!physics.model().equals(text(record,"model")))throw new IllegalArgumentException("physics: interaction model mismatch: "+library.id());
+            if(record.has("rule"))throw new IllegalArgumentException("physics: "+library.id()+" carries a group-contribution rule, which needs reference spines");
+            libraries.add(library.id());
+        }
+        var water=records.waters().get(physics.water().id());
+        if(water==null||!water.revision().equals(physics.water().revision()))return Optional.empty();
+        var method=new Method("physics",physics.model(),physics.model(),false,libraries,physics.missingInteractions(),physics.water().id(),
+                Double.MIN_VALUE,Double.MAX_VALUE,new JsonObject(),List.of());
+        var definition=new Definition("physics",physics.model(),List.of("physics="+physics.model()),method,entries,List.of(),List.of());
+        return Optional.of(build(records,definition,null,Map.of()).pack());
+    }
+
+    /**
+     * The lens a model trained on {@code reference} reads a request on package {@code packageId} through (plan section
+     * 3.3): this catalog with {@code packageId} replaced by a PR78 package on the reference's compound list. The compounds
+     * of {@code active} (the request's non-zero feed) take the request's data, the others the reference's, and a pair
+     * takes the request's value when both its compounds are active. It keeps the request's column range, water, evidence
+     * and identity: it is a lens for one inference, never published. Empty when the reference is stale ({@link #resolve})
+     * or when the request's physics on {@code active} differs from the reference's, compared by content on the two views
+     * ({@link #restrict}, {@link #physicsContent(Package, List)}), never by package ids. A request whose view on
+     * {@code active} admits a crystal is refused (P6): it is never projected fluid-only.
+     */
+    public Optional<MaterialCatalog> inferenceView(String packageId,List<String> active,Physics reference) {
+        var source=requirePackage(packageId);var axis=reference.components();
+        if(!axis.containsAll(active)||!source.components().containsAll(active))
+            throw new IllegalArgumentException("Inference compounds outside the request package or the model: "+active);
+        // The lens carries constant pairs only.
+        if(!reference.model().equals("pr78"))throw new IllegalArgumentException("Inference projection requires PR78");
+        var request=restrict(packageId,active).requirePackage(packageId);
+        if(!request.crystals().isEmpty())throw new CrystalPhasesUnavailable(packageId,request.crystals(),"a neural inference projection");
+        var model=resolve(reference).orElse(null);
+        if(model==null)return Optional.empty();
+        var trained=resolve(reference.on(active)).orElseThrow();
+        if(!physicsContent(request,active).equals(physicsContent(trained,active)))return Optional.empty();
+        var properties=new ArrayList<Property>();var interactions=new ArrayList<List<Double>>();
+        for(int a=0;a<axis.size();a++) {
+            int i=active.contains(axis.get(a))?source.components().indexOf(axis.get(a)):-1;
+            properties.add(i>=0?source.properties().get(i):model.properties().get(a));
             var row=new ArrayList<Double>();
-            for(String b:axis) {
-                int i=source.components().indexOf(a),j=source.components().indexOf(b);
-                if(i>=0&&j>=0)row.add(source.interactions().get(i).get(j));
-                else {
-                    int ri=reference.components().indexOf(a),rj=reference.components().indexOf(b);
-                    if(ri<0||rj<0)throw new IllegalArgumentException("Missing qualified inference interaction: "+a+"/"+b);
-                    row.add(reference.interactions().get(ri).get(rj));
-                }
+            for(int b=0;b<axis.size();b++) {
+                int j=active.contains(axis.get(b))?source.components().indexOf(axis.get(b)):-1;
+                row.add(i>=0&&j>=0?source.interactions().get(i).get(j):model.interactions().get(a).get(b));
             }
             interactions.add(row);
         }
-        // A projected inference view is a PR78 axis only: it carries no reference spine or crystals. It keeps its source's
-        // identity: it is a lens on that package for one inference, never published.
-        var view=new Package(source.id(),source.revision(),source.model(),axis,properties,
+        var lens=new Package(source.id(),source.revision(),source.model(),axis,properties,
                 interactions,List.of(),Map.of(),Map.of(),source.water(),source.minimumTemperature(),
                 source.maximumTemperature(),source.minimumPressure(),source.maximumPressure(),source.evidence(),List.of(),List.of(),null,
                 source.scientificRevision());
-        var projected=new HashMap<>(packages);projected.put(packageId,view);
-        return new MaterialCatalog(names,projected,resources,viscosities,waterModels,assayAppearances,
-                componentAppearances,liquidMixtures,presets,fluidData,propertyValidity,packageValidity,spines,crystals);
+        var packs=new HashMap<>(packages);packs.put(packageId,lens);
+        var defs=new HashMap<>(definitions);defs.remove(packageId);
+        return Optional.of(derived(packs,liquidMixtures,defs));
     }
 
     /** Parse a complete winning resource set; never publishes partially validated data. */
@@ -483,6 +581,9 @@ public final class MaterialCatalog {
         var entries=Entries.resolve(group(groups,"packages"),origins,defaults);
         var spinesByComponent=new HashMap<String,List<String>>();
         for(var spine:spines.values())spinesByComponent.computeIfAbsent(spine.component(),unused->new ArrayList<>()).add(spine.id());
+        var records=new Records(names,properties,propertyRevisions,descriptors,waters,group(groups,"interactions"),matrices,spines,
+                spinesByComponent,crystals,aliases,assayRecords,propertyValidity,viscosities,fluidData);
+        var definitions=new HashMap<String,Definition>();
         for (var o : group(groups,"packages").values()) checked(origins,o,() -> {
             // A package is a property method and a list of compounds (batch 2026-11-04-refinery-compounds): every number comes
             // from the method, the compounds' datasets and the pair libraries.
@@ -491,126 +592,22 @@ public final class MaterialCatalog {
                     "temperature_max_kelvin","pressure_min_pascal","pressure_max_pascal","fluid_domain","liquid_mixture","aliases","spine"))
                 if(o.has(moved))throw new IllegalArgumentException(moved+": a package names its method and its compounds; this field belongs to the method, a compound or its dataset");
             var method=require(methods,text(o,"method"),"method");
-            var resolved=entries.get(id);
-            List<String> ids=resolved.stream().map(Entry::component).toList(), refs=resolved.stream().map(Entry::properties).toList();
-            if (ids.isEmpty() || ids.size()>64 || new HashSet<>(ids).size()!=ids.size())
-                throw new IllegalArgumentException("components: expected 1 to 64 distinct compounds, got "+ids);
             var evidence=new ArrayList<>(method.evidence()); if(o.has("advisory_evidence"))evidence.addAll(strings(o,"advisory_evidence"));
             if(evidence.size()>32 || evidence.stream().anyMatch(e->e.length()>256))throw new IllegalArgumentException("advisory_evidence: exceeds reporting bounds");
-            var ps=new ArrayList<Property>();
-            // The column's admission range: the temperatures every member dataset covers, at the method's pressures.
-            double tmin=0,tmax=Double.POSITIVE_INFINITY;
-            for(int i=0;i<ids.size();i++) {
-                require(names,ids.get(i),"component"); Property p=require(properties,refs.get(i),"property");
-                if(!p.component().equals(ids.get(i)) || method.model().equals("pr78") && p.pr()==null) throw new IllegalArgumentException("Property/model does not match component " + ids.get(i));
-                // D6, one ideal-gas source per species: a method with a reference spine takes every compound's ideal gas from
-                // it, a method without one from the dataset's shifted_polynomial_5 fit.
-                if(p.cp().isEmpty() && !method.spine())
-                    throw new IllegalArgumentException("Property "+p.id()+" has no ideal_gas_cp: a method without a reference spine needs a shifted_polynomial_5 fit for "+ids.get(i));
-                if(!p.cp().isEmpty() && method.spine())
-                    throw new IllegalArgumentException("Property "+p.id()+" carries ideal_gas_cp in a method with a reference spine: one ideal-gas source per species (D6), "+ids.get(i));
-                tmin=Math.max(tmin,p.minimumTemperature()); tmax=Math.min(tmax,p.maximumTemperature());
-                ps.add(p);
-            }
-            if(!(tmax>tmin))throw new IllegalArgumentException("temperature: the member datasets share no temperature range");
-            double pmin=method.minimumPressure(),pmax=method.maximumPressure();
-            var spineIds=new ArrayList<String>(); var spineRecords=new ArrayList<ReferenceSpine>();
-            for(int i=0;i<ids.size();i++) {
-                String named=resolved.get(i).spine();
-                if(!method.spine()) {
-                    if(named!=null)throw new IllegalArgumentException("spine: method "+method.id()+" takes the datasets' fits, not the reference spine "+named);
-                    continue;
-                }
-                String spineId=named;
-                if(spineId==null) {
-                    var candidates=spinesByComponent.getOrDefault(ids.get(i),List.of());
-                    if(candidates.size()!=1)throw new IllegalArgumentException("spine: "+ids.get(i)+" has "+candidates.size()+" reference-spine records; name one");
-                    spineId=candidates.getFirst();
-                }
-                var spine=require(spines,spineId,"spine");
-                if(!spine.component().equals(ids.get(i)))throw new IllegalArgumentException("spine: "+spine.id()+" is for "+spine.component()+", not component "+ids.get(i));
-                double difference=Math.abs(spine.molarMass()/ps.get(i).molecularWeight()-1);
-                if(difference>1e-4)throw new IllegalArgumentException("spine: molar mass of "+spine.id()+" ("+spine.molarMass()+" kg/mol) differs from property "
-                        +ps.get(i).id()+" ("+ps.get(i).molecularWeight()+" kg/mol) by "+difference+" relative, above 1e-4");
-                spineIds.add(spine.id()); spineRecords.add(spine);
-            }
-            liquidMixtures.put(id,LiquidMixtureCorrection.read(method.record(),refs.stream().map(descriptors::get).toList()));
-            // The method's pair libraries in order: the first that names a pair gives its value; pairs outside the package are
-            // skipped. Only libraries that give a pair on this axis enter the identity, so a library for other compounds moves
-            // nothing here.
-            double[][] matrix=new double[ids.size()][ids.size()]; var nrtl=new ArrayList<NrtlPair>(); var seen=new HashSet<String>();
-            boolean[][] constant=new boolean[ids.size()][ids.size()];
-            var contributing=new ArrayList<String>(); JsonObject ruleLibrary=null;
-            for(String library:method.interactions()) {
-                JsonObject interaction=group(groups,"interactions").get(library); boolean contributed=false;
-                for(var value:array(interaction,"pairs")) {
-                    JsonObject pair=value.getAsJsonObject(); String a=text(pair,"first"), b=text(pair,"second");
-                    int i=ids.indexOf(a),j=ids.indexOf(b); if(i<0 || j<0 || !seen.add(pairKey(a,b))) continue;
-                    constant[i][j]=constant[j][i]=true; contributed=true;
-                    if(method.model().equals("pr78")) matrix[i][j]=matrix[j][i]=number(pair,"kij");
-                    else {
-                        NrtlPair n=nrtl(pair); if(tmin<n.minimumTemperature() || tmax>n.maximumTemperature()) throw new IllegalArgumentException("NRTL temperature validity: "+a+" / "+b+" in "+library); nrtl.add(n);
-                    }
-                }
-                if(interaction.has("rule"))ruleLibrary=interaction;
-                if(contributed)contributing.add(library+"@"+text(interaction,"revision"));
-            }
-            GroupContributionInteractions groupContributions=null; String groupToken=null;
-            if(ruleLibrary!=null) {
-                // Every pair without an explicit constant is resolved by the group-contribution rule from the spines' group
-                // counts; its constant matrix entry stays 0.0 and is not its kij (see Package).
-                JsonObject rule=object(ruleLibrary,"rule"); var groupMatrix=require(matrices,text(rule,"group_interactions"),"rule.group_interactions");
-                groupContributions=GroupContributionInteractions.resolve(text(rule,"type"),groupMatrix,ids,spineRecords,constant);
-                for(var pair:groupContributions.pairs())seen.add(pairKey(ids.get(pair.first()),ids.get(pair.second())));
-                if(!groupContributions.pairs().isEmpty()) {
-                    String token=text(ruleLibrary,"id")+"@"+text(ruleLibrary,"revision"); if(!contributing.contains(token))contributing.add(token);
-                    groupToken=groupMatrix.id()+"@"+groupMatrix.revision();
-                }
-            }
-            if(method.missing().equals("error")) for(int i=0;i<ids.size();i++) for(int j=i+1;j<ids.size();j++)
-                if(!seen.contains(pairKey(ids.get(i),ids.get(j)))) throw new IllegalArgumentException("Missing interaction: " + ids.get(i)+" / "+ids.get(j));
-            Map<String,String> packageAliases=new HashMap<>();
-            for(var alias:aliases.entrySet())if(ids.contains(alias.getValue()))packageAliases.put(alias.getKey(),alias.getValue());
-            Water water=require(waters,method.water(),"water_model");
-            waterModels.put(id, method.water());
-            // The package's envelope on the fluid network is the hull of its members' data ranges and the water model's triple
-            // point, absent when a member declares none. Leaving it, or a component's range, never holds a state (owner rule
-            // of 2026-10-16).
-            var memberDomains=ps.stream().map(p->propertyValidity.get(p.id())).toList();
-            if(memberDomains.stream().allMatch(Objects::nonNull))packageValidity.put(id,envelope(ids,memberDomains,water));
-            var packageAssays=new HashMap<String,Assay>();
-            for(var record:assayRecords.values()) { var assay=record.on(ids,ps,id); if(assay!=null)packageAssays.put(record.id(),assay); }
-            var rows=new ArrayList<List<Double>>(); for(double[] row:matrix) rows.add(Arrays.stream(row).boxed().toList());
             List<String> crystalIds=o.has("crystals")?strings(o,"crystals"):List.of();
             if(new HashSet<>(crystalIds).size()!=crystalIds.size())throw new IllegalArgumentException("crystals: duplicate crystal record");
-            // A crystal is anchored at its triple point to the spine family's liquid and moved to a consumer's datum by the
-            // spine's formation enthalpies (P2, D10): a package without a spine cannot carry one, and a consumer would run it
-            // fluid-only where a crystal could form (P6).
-            if(!crystalIds.isEmpty()&&spineIds.isEmpty())throw new IllegalArgumentException("crystals: package "+id+" declares crystals without a reference spine, which anchors them");
-            for(String crystalId:crystalIds) {
-                var crystal=require(crystals,crystalId,"crystals");
-                if(!ids.contains(crystal.component()))throw new IllegalArgumentException("crystals: "+crystalId+" is for "+crystal.component()+", outside the package components");
-            }
-            // The column's identity: every record the package names for its phase physics, each by its declared revision,
-            // checked as a token where the record was read (see Package).
-            var identity=new ArrayList<String>();
-            identity.add(id+"@"+revision(o,"revision"));
-            identity.add("method="+method.id()+"@"+method.revision());
-            identity.add("properties="+String.join(",",refs.stream().map(ref->ref+"@"+propertyRevisions.get(ref)).toList()));
-            identity.add("interactions="+String.join(",",contributing));
-            if(groupToken!=null)identity.add("group-interactions="+groupToken);
-            identity.add("water="+method.water()+"@"+water.revision());
-            var parsed=new Package(id,text(o,"revision"),method.model(),ids,ps,rows,nrtl,packageAliases,packageAssays,water,tmin,tmax,pmin,pmax,evidence,
-                    spineIds,crystalIds,groupContributions,String.join(";",identity));
-            int longest=fluidIdentity(parsed,method.water(),viscosities,crystals,fluidData).length();
-            if(longest>MAX_IDENTITY)throw new IllegalArgumentException("the package's fluid identity is "+longest+" characters, above "+MAX_IDENTITY);
-            packages.put(id,parsed);
+            String revision=revision(o,"revision");
+            var definition=new Definition(id,revision,List.of(id+"@"+revision,"method="+method.id()+"@"+method.revision()),method,entries.get(id),crystalIds,evidence);
+            var built=build(records,definition,null,assayRecords);
+            packages.put(id,built.pack()); definitions.put(id,definition);
+            liquidMixtures.put(id,built.liquidMixture()); waterModels.put(id,method.water());
+            if(built.envelope()!=null)packageValidity.put(id,built.envelope());
         });
         for(var record:assayRecords.values())if(packages.values().stream().noneMatch(p->p.assays().containsKey(record.id())))
             throw new IllegalArgumentException(record.origin()+": no package holds every compound of assay "+record.id());
         if(packages.isEmpty()) throw new IllegalArgumentException("Material catalog has no packages");
         var result=new MaterialCatalog(names,packages,resources,viscosities,waterModels,assayAppearances,componentAppearances,liquidMixtures,MaterialPresets.read(group(groups,"presets"),group(groups,"networks"),origins,packages,names.keySet()),fluidData,
-                propertyValidity,packageValidity,spines,crystals);
+                propertyValidity,packageValidity,spines,crystals,SolidMaterialCatalog.parse(resources),records,definitions);
         for(var row:group(groups,"presets").values())if(text(row,"kind").equals("column"))checked(origins,row,()->
                 MaterialRuntime.with(result,text(row,"package"),()->{com.wormzjl.icheme.science.column.v3.V3ColumnProblemResolver.validateInput(result.presets().column(text(row,"id")).input(result));return null;}));
         for(var row:group(groups,"networks").values())checked(origins,row,()->{
@@ -812,6 +809,149 @@ public final class MaterialCatalog {
             } catch(RuntimeException invalid) { throw new IllegalArgumentException(origins.get(row)+": "+invalid.getMessage(),invalid); }
             finally { visiting.remove(id); }
         }
+    }
+    /** The records a package is built from, after validation: what {@link #build} reads. */
+    private record Records(Map<String,MaterialName> names,Map<String,Property> properties,Map<String,String> propertyRevisions,
+            Map<String,LiquidMixtureCorrection.Descriptor> descriptors,Map<String,Water> waters,Map<String,JsonObject> libraries,
+            Map<String,GroupInteractionMatrix> matrices,Map<String,ReferenceSpine> spines,Map<String,List<String>> spinesByComponent,
+            Map<String,CrystalReference> crystals,Map<String,String> aliases,Map<String,AssayRecord> assays,
+            Map<String,Validity> propertyValidity,Map<String,Map<ViscosityCorrelation.Phase,ViscosityCorrelation>> viscosities,FluidData fluidData) {
+        Records {
+            names=Map.copyOf(names); properties=Map.copyOf(properties); propertyRevisions=Map.copyOf(propertyRevisions);
+            descriptors=Map.copyOf(descriptors); waters=Map.copyOf(waters); libraries=Map.copyOf(libraries); matrices=Map.copyOf(matrices);
+            spines=Map.copyOf(spines); crystals=Map.copyOf(crystals); aliases=Map.copyOf(aliases); assays=Map.copyOf(assays);
+            propertyValidity=Map.copyOf(propertyValidity); viscosities=Map.copyOf(viscosities);
+            var byComponent=new HashMap<String,List<String>>(); spinesByComponent.forEach((k,v)->byComponent.put(k,List.copyOf(v)));
+            spinesByComponent=Map.copyOf(byComponent);
+        }
+    }
+    /**
+     * What a package is built from: its id and own revision, the leading tokens of its identity (the package's and its
+     * method's), its method, its compounds with their datasets, the crystals it admits and its evidence. A restricted view
+     * ({@link #restrict}) keeps the package's definition with fewer compounds; a physics record ({@link #resolve}) has a
+     * method of its own.
+     */
+    private record Definition(String id,String revision,List<String> head,Method method,List<Entry> entries,List<String> crystals,List<String> evidence) {
+        Definition { head=List.copyOf(head); entries=List.copyOf(entries); crystals=List.copyOf(crystals); evidence=List.copyOf(evidence); }
+    }
+    /** A built package with its liquid-mixture correction and its fluid envelope (null when a compound's dataset declares none). */
+    private record Built(Package pack,LiquidMixtureCorrection liquidMixture,Validity envelope) {}
+    /**
+     * Builds the package of {@code d} from the records: the one place a package, its pairs and its identity are made, for
+     * the loader, a restricted view and a physics record. {@code parent}, when given, is the package {@code d} restricts:
+     * the view keeps its column range (the fluid envelope stays the parent's by its id). {@code assays} are the assay
+     * records to apply.
+     */
+    private static Built build(Records r,Definition d,Package parent,Map<String,AssayRecord> assays) {
+        String id=d.id(); Method method=d.method(); var resolved=d.entries();
+        List<String> ids=resolved.stream().map(Entry::component).toList(), refs=resolved.stream().map(Entry::properties).toList();
+        if (ids.isEmpty() || ids.size()>64 || new HashSet<>(ids).size()!=ids.size())
+            throw new IllegalArgumentException("components: expected 1 to 64 distinct compounds, got "+ids);
+        var ps=new ArrayList<Property>();
+        // The column's admission range: the temperatures every member dataset covers, at the method's pressures.
+        double tmin=0,tmax=Double.POSITIVE_INFINITY;
+        for(int i=0;i<ids.size();i++) {
+            require(r.names(),ids.get(i),"component"); Property p=require(r.properties(),refs.get(i),"property");
+            if(!p.component().equals(ids.get(i)) || method.model().equals("pr78") && p.pr()==null) throw new IllegalArgumentException("Property/model does not match component " + ids.get(i));
+            // D6, one ideal-gas source per species: a method with a reference spine takes every compound's ideal gas from
+            // it, a method without one from the dataset's shifted_polynomial_5 fit.
+            if(p.cp().isEmpty() && !method.spine())
+                throw new IllegalArgumentException("Property "+p.id()+" has no ideal_gas_cp: a method without a reference spine needs a shifted_polynomial_5 fit for "+ids.get(i));
+            if(!p.cp().isEmpty() && method.spine())
+                throw new IllegalArgumentException("Property "+p.id()+" carries ideal_gas_cp in a method with a reference spine: one ideal-gas source per species (D6), "+ids.get(i));
+            tmin=Math.max(tmin,p.minimumTemperature()); tmax=Math.min(tmax,p.maximumTemperature());
+            ps.add(p);
+        }
+        if(parent!=null) { tmin=parent.minimumTemperature(); tmax=parent.maximumTemperature(); }
+        else if(!(tmax>tmin))throw new IllegalArgumentException("temperature: the member datasets share no temperature range");
+        double pmin=parent==null?method.minimumPressure():parent.minimumPressure(),pmax=parent==null?method.maximumPressure():parent.maximumPressure();
+        var spineIds=new ArrayList<String>(); var spineRecords=new ArrayList<ReferenceSpine>();
+        for(int i=0;i<ids.size();i++) {
+            String named=resolved.get(i).spine();
+            if(!method.spine()) {
+                if(named!=null)throw new IllegalArgumentException("spine: method "+method.id()+" takes the datasets' fits, not the reference spine "+named);
+                continue;
+            }
+            String spineId=named;
+            if(spineId==null) {
+                var candidates=r.spinesByComponent().getOrDefault(ids.get(i),List.of());
+                if(candidates.size()!=1)throw new IllegalArgumentException("spine: "+ids.get(i)+" has "+candidates.size()+" reference-spine records; name one");
+                spineId=candidates.getFirst();
+            }
+            var spine=require(r.spines(),spineId,"spine");
+            if(!spine.component().equals(ids.get(i)))throw new IllegalArgumentException("spine: "+spine.id()+" is for "+spine.component()+", not component "+ids.get(i));
+            double difference=Math.abs(spine.molarMass()/ps.get(i).molecularWeight()-1);
+            if(difference>1e-4)throw new IllegalArgumentException("spine: molar mass of "+spine.id()+" ("+spine.molarMass()+" kg/mol) differs from property "
+                    +ps.get(i).id()+" ("+ps.get(i).molecularWeight()+" kg/mol) by "+difference+" relative, above 1e-4");
+            spineIds.add(spine.id()); spineRecords.add(spine);
+        }
+        var liquidMixture=LiquidMixtureCorrection.read(method.record(),refs.stream().map(r.descriptors()::get).toList());
+        // The method's pair libraries in order: the first that names a pair gives its value; pairs outside the package are
+        // skipped. Only libraries that give a pair on this axis enter the identity, so a library for other compounds moves
+        // nothing here.
+        double[][] matrix=new double[ids.size()][ids.size()]; var nrtl=new ArrayList<NrtlPair>(); var seen=new HashSet<String>();
+        boolean[][] constant=new boolean[ids.size()][ids.size()];
+        var contributing=new ArrayList<String>(); JsonObject ruleLibrary=null;
+        for(String library:method.interactions()) {
+            JsonObject interaction=r.libraries().get(library); boolean contributed=false;
+            for(var value:array(interaction,"pairs")) {
+                JsonObject pair=value.getAsJsonObject(); String a=text(pair,"first"), b=text(pair,"second");
+                int i=ids.indexOf(a),j=ids.indexOf(b); if(i<0 || j<0 || !seen.add(pairKey(a,b))) continue;
+                constant[i][j]=constant[j][i]=true; contributed=true;
+                if(method.model().equals("pr78")) matrix[i][j]=matrix[j][i]=number(pair,"kij");
+                else {
+                    NrtlPair n=nrtl(pair); if(tmin<n.minimumTemperature() || tmax>n.maximumTemperature()) throw new IllegalArgumentException("NRTL temperature validity: "+a+" / "+b+" in "+library); nrtl.add(n);
+                }
+            }
+            if(interaction.has("rule"))ruleLibrary=interaction;
+            if(contributed)contributing.add(library+"@"+text(interaction,"revision"));
+        }
+        GroupContributionInteractions groupContributions=null; String groupToken=null;
+        if(ruleLibrary!=null) {
+            // Every pair without an explicit constant is resolved by the group-contribution rule from the spines' group
+            // counts; its constant matrix entry stays 0.0 and is not its kij (see Package).
+            JsonObject rule=object(ruleLibrary,"rule"); var groupMatrix=require(r.matrices(),text(rule,"group_interactions"),"rule.group_interactions");
+            groupContributions=GroupContributionInteractions.resolve(text(rule,"type"),groupMatrix,ids,spineRecords,constant);
+            for(var pair:groupContributions.pairs())seen.add(pairKey(ids.get(pair.first()),ids.get(pair.second())));
+            if(!groupContributions.pairs().isEmpty()) {
+                String token=text(ruleLibrary,"id")+"@"+text(ruleLibrary,"revision"); if(!contributing.contains(token))contributing.add(token);
+                groupToken=groupMatrix.id()+"@"+groupMatrix.revision();
+            }
+        }
+        if(method.missing().equals("error")) for(int i=0;i<ids.size();i++) for(int j=i+1;j<ids.size();j++)
+            if(!seen.contains(pairKey(ids.get(i),ids.get(j)))) throw new IllegalArgumentException("Missing interaction: " + ids.get(i)+" / "+ids.get(j));
+        Map<String,String> packageAliases=new HashMap<>();
+        for(var alias:r.aliases().entrySet())if(ids.contains(alias.getValue()))packageAliases.put(alias.getKey(),alias.getValue());
+        Water water=require(r.waters(),method.water(),"water_model");
+        // The package's envelope on the fluid network is the hull of its members' data ranges and the water model's triple
+        // point, absent when a member declares none. Leaving it, or a component's range, never holds a state (owner rule
+        // of 2026-10-16).
+        var memberDomains=ps.stream().map(p->r.propertyValidity().get(p.id())).toList();
+        Validity envelope=memberDomains.stream().allMatch(Objects::nonNull)?envelope(ids,memberDomains,water):null;
+        var packageAssays=new HashMap<String,Assay>();
+        for(var record:assays.values()) { var assay=record.on(ids,ps,id); if(assay!=null)packageAssays.put(record.id(),assay); }
+        var rows=new ArrayList<List<Double>>(); for(double[] row:matrix) rows.add(Arrays.stream(row).boxed().toList());
+        var crystalIds=d.crystals();
+        // A crystal is anchored at its triple point to the spine family's liquid and moved to a consumer's datum by the
+        // spine's formation enthalpies (P2, D10): a package without a spine cannot carry one, and a consumer would run it
+        // fluid-only where a crystal could form (P6).
+        if(!crystalIds.isEmpty()&&spineIds.isEmpty())throw new IllegalArgumentException("crystals: package "+id+" declares crystals without a reference spine, which anchors them");
+        for(String crystalId:crystalIds) {
+            var crystal=require(r.crystals(),crystalId,"crystals");
+            if(!ids.contains(crystal.component()))throw new IllegalArgumentException("crystals: "+crystalId+" is for "+crystal.component()+", outside the package components");
+        }
+        // The column's identity: every record the package names for its phase physics, each by its declared revision,
+        // checked as a token where the record was read (see Package).
+        var identity=new ArrayList<>(d.head());
+        identity.add("properties="+String.join(",",refs.stream().map(ref->ref+"@"+r.propertyRevisions().get(ref)).toList()));
+        identity.add("interactions="+String.join(",",contributing));
+        if(groupToken!=null)identity.add("group-interactions="+groupToken);
+        identity.add("water="+method.water()+"@"+water.revision());
+        var built=new Package(id,d.revision(),method.model(),ids,ps,rows,nrtl,packageAliases,packageAssays,water,tmin,tmax,pmin,pmax,d.evidence(),
+                spineIds,crystalIds,groupContributions,String.join(";",identity));
+        int longest=fluidIdentity(built,method.water(),r.viscosities(),r.crystals(),r.fluidData()).length();
+        if(longest>MAX_IDENTITY)throw new IllegalArgumentException("the package's fluid identity is "+longest+" characters, above "+MAX_IDENTITY);
+        return new Built(built,liquidMixture,envelope);
     }
     /**
      * An assay (kind {@code assays}): a composition by compound, independent of any package. It applies to every package

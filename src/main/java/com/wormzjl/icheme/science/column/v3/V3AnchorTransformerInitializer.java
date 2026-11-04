@@ -6,6 +6,7 @@ import com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo;
 import com.wormzjl.icheme.science.column.v3.thermo.V3ThermoException;
 import com.wormzjl.icheme.science.column.v3.thermo.V3ThermoModel;
 import com.wormzjl.icheme.science.column.v3.thermo.V3ThermoWorkspace;
+import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.math.DeterministicMath;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel.Root;
 import com.wormzjl.icheme.science.thermo.TraceTruncationPolicy;
@@ -33,10 +34,12 @@ final class V3AnchorTransformerInitializer implements V3NeuralInitializer {
             V3CondenserPhaseBranch.TWO_PHASE, V3CondenserPhaseBranch.VAPOR_ONLY};
 
     private final Document model;
+    /** The physics the model was trained on: its compounds in trained order, each with its dataset, by declared revision. */
+    private final MaterialCatalog.Physics physics;
     /** Decoder variant selected by the loading caller, never by the model bytes. */
     private final V3FactorizedNeuralFeatures.DecodeOptions decode;
-    private V3AnchorTransformerInitializer(Document model, V3FactorizedNeuralFeatures.DecodeOptions decode) {
-        this.model = model; this.decode = decode;
+    private V3AnchorTransformerInitializer(Document model, MaterialCatalog.Physics physics, V3FactorizedNeuralFeatures.DecodeOptions decode) {
+        this.model = model; this.physics = physics; this.decode = decode;
     }
 
     static V3AnchorTransformerInitializer read(InputStream stream, V3FactorizedNeuralFeatures.DecodeOptions decode) throws IOException {
@@ -47,7 +50,7 @@ final class V3AnchorTransformerInitializer implements V3NeuralInitializer {
         if (m == null || !REVISION.equals(m.featureRevision) || !"anchor-augmented".equals(m.modelType)
                 || !("compact".equals(m.anchorLayout) || "full".equals(m.anchorLayout))
                 || m.modelId == null || !m.modelId.matches("[A-Za-z0-9._:/-]{1,96}")
-                || m.packageId == null || m.propertyRevision == null || m.components == null || m.components.isEmpty() || m.components.size() > V3ComponentBasis.MAX_COMPONENTS
+                || m.components == null || m.components.isEmpty() || m.components.size() > V3ComponentBasis.MAX_COMPONENTS
                 || m.components.stream().anyMatch(s -> s == null || s.isBlank()) || m.components.stream().distinct().count() != m.components.size()
                 || m.formulationRevisions == null || m.formulationRevisions.isEmpty()
                 || m.branchesSeen == null || m.branchesSeen.length != 3 || !(m.branchesSeen[0] || m.branchesSeen[1] || m.branchesSeen[2])
@@ -76,7 +79,7 @@ final class V3AnchorTransformerInitializer implements V3NeuralInitializer {
                     throw new IllegalArgumentException("Invalid composition endpoint");
             }
         }
-        var result = new V3AnchorTransformerInitializer(m, decode);
+        var result = new V3AnchorTransformerInitializer(m, physics(m), decode);
         result.checkLinear("embed", inputs(m), 64); result.checkNorm("output.0"); result.checkLinear("output.1", 64, outputWidth(m));
         result.checkLinear("branch.0", globalWidth(m), 64); result.checkLinear("branch.2", 64, 3);
         for (int i = 0; i < 2; i++) {
@@ -95,6 +98,23 @@ final class V3AnchorTransformerInitializer implements V3NeuralInitializer {
         return result;
     }
 
+    /**
+     * The trained physics (sidecar schema 3): the model type, each of the model's compounds in its trained order with the
+     * dataset it was trained on, the pair libraries, the policy for a missing pair and the water model, every record as
+     * {@code id@revision}.
+     */
+    private static MaterialCatalog.Physics physics(Document m) {
+        var p = m.physics;
+        if (p == null || p.model == null || p.compounds == null || p.interactions == null || p.missingInteractions == null || p.water == null
+                || p.compounds.stream().anyMatch(c -> c == null || c.id == null || c.properties == null) || p.interactions.stream().anyMatch(java.util.Objects::isNull)
+                || !p.compounds.stream().map(c -> c.id).toList().equals(m.components))
+            throw new IllegalArgumentException("Invalid transformer physics: the model's compounds in trained order, each with its dataset");
+        return new MaterialCatalog.Physics(p.model, p.compounds.stream().map(c -> new MaterialCatalog.Physics.Compound(c.id,
+                MaterialCatalog.Physics.Revisioned.parse(c.properties))).toList(),
+                p.interactions.stream().map(MaterialCatalog.Physics.Revisioned::parse).toList(), p.missingInteractions,
+                MaterialCatalog.Physics.Revisioned.parse(p.water));
+    }
+
     private static int globalWidth(Document m) { return V3GeneralNeuralFeatures.globalWidth(m.components.size()); }
     private static int nodeWidth(Document m) { return V3GeneralNeuralFeatures.nodeWidth(m.components.size())-3; }
     private static int outputWidth(Document m) { return V3FactorizedNeuralFeatures.outputWidth(m.components.size()); }
@@ -102,11 +122,12 @@ final class V3AnchorTransformerInitializer implements V3NeuralInitializer {
 
     @Override public String modelId() { return model.modelId; }
 
-    /** The property dataset this model's targets were labelled against; a mismatch is not corrected. */
+    /** The identity a prediction carries: the scientific revision of the request's package in the calculation's catalog. */
     String propertyRevision(String packageId) { return com.wormzjl.icheme.science.material.MaterialRuntime.current().requirePackage(packageId).scientificRevision(); }
 
     List<String> componentIds() { return List.copyOf(model.components); }
-    String referencePackage() { return model.packageId; }
+    /** The physics the model was trained on; a request binds only where its physics on its active compounds is this one's. */
+    MaterialCatalog.Physics physics() { return physics; }
 
     long parameterCount() { return parameterStorageBytes() / Double.BYTES; }
 
@@ -129,16 +150,16 @@ final class V3AnchorTransformerInitializer implements V3NeuralInitializer {
         return best;
     }
 
+    /**
+     * Whether the model covers a request on its own compound list, in the calculation's catalog: the composition edges, the
+     * topology and the global bounds. The physics is the binding's ({@link V3NeuralRegistry#bind}): the request reaches
+     * the model only through the lens of a request whose physics on its active compounds is the model's.
+     */
     boolean supported(V3ColumnInput input) {
         var catalog=com.wormzjl.icheme.science.material.MaterialRuntime.current();
-        // The model was trained on the reference package's data identity (every record's declared revision); the input's physics on the model's axis
-        // must be the reference's, compared directly (owner decision 2026-10-26: no hash).
-        if (!catalog.packages().containsKey(input.packageId()) || !catalog.packages().containsKey(model.packageId)
-                || !input.componentBasis().componentIds().equals(model.components)
-                || !catalog.requirePackage(input.packageId()).components().equals(model.components)
-                || !catalog.requirePackage(model.packageId).scientificRevision().equals(model.propertyRevision)
-                || !catalog.samePhysics(input.packageId(),model.packageId,model.components)) return false;
-        if (!input.componentBasis().componentIds().equals(model.components)                || input.stageCount() < 2 || input.stageCount() > 64 || input.feedStageNumber() < 1 || input.feedStageNumber() > input.stageCount()
+        var registered=catalog.packages().get(input.packageId());
+        if (registered == null || !registered.components().equals(model.components)
+                || !input.componentBasis().componentIds().equals(model.components) || input.stageCount() < 2 || input.stageCount() > 64 || input.feedStageNumber() < 1 || input.feedStageNumber() > input.stageCount()
                 || input.pumparounds().size() > 4 || input.sideDraws().size() > 3 || input.steamFeeds().size() > 2
                 || !(model.formulationRevisions.contains(V3ColumnCalculator.initializationFormulationRevision(input))
                         || model.formulationRevisions.contains(V3ColumnCalculator.formulationRevision(input, 0)))) return false;
@@ -285,9 +306,12 @@ final class V3AnchorTransformerInitializer implements V3NeuralInitializer {
         if (x == null || x.length != size || Arrays.stream(x).anyMatch(v -> !Double.isFinite(v) || positive && v <= 0)) throw new IllegalArgumentException("Invalid model vector");
     }
     private static final class Tensor { int[] shape; double[] values; }
+    private static final class PhysicsDocument { String model, missingInteractions, water; List<CompoundDocument> compounds; List<String> interactions; }
+    private static final class CompoundDocument { String id, properties; }
     private static final class Design { double minimumNodePressurePascal, maximumNodePressurePascal; boolean steamAtSumpOnly; List<V3PumparoundSpec.Split> pumparoundSplits; }
     private static final class Document {
-        String featureRevision, modelType, modelId, packageId, propertyRevision, anchorLayout, baselineRevision;
+        String featureRevision, modelType, modelId, anchorLayout, baselineRevision;
+        PhysicsDocument physics;
         double[][][] compositionEdges;
         List<String> components, formulationRevisions; boolean[] branchesSeen;
         double presenceThreshold, traceFloorFraction; double[] globalMin, globalMax;

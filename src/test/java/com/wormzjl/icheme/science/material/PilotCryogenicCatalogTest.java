@@ -81,11 +81,11 @@ class PilotCryogenicCatalogTest {
                 assertTrue(p.spine().isEmpty() && p.crystals().isEmpty() && catalog.spineRevision(pin[0]).isEmpty() && p.groupContributions() == null, pin[0]);
             }
             var axis = catalog.requirePackage(TJL20).components();
-            for (String id : TJL20_PHYSICS) assertTrue(catalog.samePhysics(TJL20, id, axis), id);
+            for (String id : TJL20_PHYSICS) assertEquals(catalog.physicsContent(TJL20, axis), catalog.physicsContent(id, axis), id);
             // tjl19_dwsim had a fingerprint of its own for its 18-component axis; on that axis its physics is tjl20's.
             var dwsim = catalog.requirePackage("icheme:tjl19_dwsim");
             assertTrue(axis.containsAll(dwsim.components()));
-            assertTrue(catalog.samePhysics(dwsim.id(), TJL20, dwsim.components()), "tjl19_dwsim on its own axis");
+            assertEquals(catalog.physicsContent(TJL20, dwsim.components()), catalog.physicsContent(dwsim.id(), dwsim.components()), "tjl19_dwsim on its own axis");
             // The pilot is the fourth bundled package and the only one with a reference spine.
             assertEquals(BUNDLED_PINS.length + 1, catalog.packages().size());
             assertEquals(List.of(PilotCryogenicTestCatalog.PACKAGE_ID), catalog.packages().values().stream()

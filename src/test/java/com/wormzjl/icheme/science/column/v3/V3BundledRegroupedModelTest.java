@@ -45,6 +45,34 @@ class V3BundledRegroupedModelTest {
             assertArrayEquals(actual.temperatures(),model.predict(input,V3SolveControl.UNBOUNDED).orElseThrow().temperatures());
         }
     }
+    /**
+     * The network package holds the model's 19 compounds and nitrogen (plan section 3.3 of batch
+     * 2026-11-04-refinery-compounds): with nitrogen at zero its request binds the bundled model, and the seed is the
+     * base seed with a zero nitrogen slot.
+     */
+    @Test void theNetworkPackageWithZeroNitrogenBindsTheBundledModel() throws Exception {
+        JsonObject fixture;
+        try(var stream=getClass().getResourceAsStream("/science/column/v3/neural/regrouped-predictions.json")) {
+            assertNotNull(stream);fixture=JsonParser.parseReader(new InputStreamReader(stream,StandardCharsets.UTF_8)).getAsJsonObject();
+        }
+        var base=input(fixture.getAsJsonArray("fixtures").get(0).getAsJsonObject().getAsJsonObject("input"));
+        var network=com.wormzjl.icheme.science.material.MaterialCatalog.bundled().requirePackage("icheme:tjl20_methane_nitrogen");
+        var from=new com.wormzjl.icheme.science.material.MaterialAxis(base.componentBasis().componentIds());
+        var to=new com.wormzjl.icheme.science.material.MaterialAxis(network.components());
+        assertTrue(to.ids().containsAll(from.ids())&&to.size()==from.size()+1);
+        var input=new V3ColumnInput(base.schemaVersion(),network.id(),base.assayId(),new V3ComponentBasis(network.components()),
+                to.project(from,base.feedComponentMolarFlowsMolPerSecond()),base.feedTemperatureKelvin(),base.stageCount(),base.feedStageNumber(),
+                base.topPressurePascal(),base.stagePressureDropPascal(),base.specifications(),base.sideDraws(),base.steamFeeds(),base.pumparounds(),
+                base.columnDiameterMetres());
+        var expected=V3NeuralRegistry.bundled().predict(base,V3SolveControl.UNBOUNDED).orElseThrow();
+        var actual=V3NeuralRegistry.bundled().predict(input,V3SolveControl.UNBOUNDED).orElseThrow();
+        assertEquals(input,actual.input());
+        assertArrayEquals(expected.temperatures(),actual.temperatures());
+        for(int n=0;n<expected.liquid().length;n++) {
+            assertArrayEquals(to.project(from,expected.liquid()[n]),actual.liquid()[n]);
+            assertArrayEquals(to.project(from,expected.vapor()[n]),actual.vapor()[n]);
+        }
+    }
     /** The model has three draw slots; a column with the fourth draw the input allows is left to the classical seed. */
     @Test void aFourthSideDrawIsAValidInputTheBundledModelDeclines() throws Exception {
         JsonObject fixture;

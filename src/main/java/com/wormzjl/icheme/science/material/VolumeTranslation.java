@@ -10,7 +10,7 @@ import com.wormzjl.icheme.science.thermo.PengRobinsonKernel;
  * constant Peneloux shift it implies on the untranslated PR78 kernel,
  * {@code c = v_ref - v_PR,L(T, Psat_ref)}.
  *
- * <p>Only the numbers are carried (and so compared with the property record, {@link MaterialCatalog#samePhysics}); the
+ * <p>Only the numbers are carried (and so compared with the property record, {@code MaterialCatalog.physicsContent}); the
  * record's {@code reference}, {@code oracle} and {@code source} texts are required but not kept. A package's
  * translation of a component is this record when present; the global {@code liquid_calibration.json} point of the
  * same component is then not that package's anchor ({@link MaterialCatalog#fluidRevision}), so each package has

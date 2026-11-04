@@ -11,8 +11,7 @@ import java.util.*;
 /** Immutable, bounded, bundled-only model registry. Selection never performs neural inference. */
 public final class V3NeuralRegistry implements V3NeuralInitializer {
     private static final int MAX_ENTRIES=16;
-    record Entry(int priority,V3AnchorTransformerInitializer model,String pipelineSha256,
-            boolean allowExtraZeroComponents,boolean allowMissingZeroComponents) {
+    record Entry(int priority,V3AnchorTransformerInitializer model,String pipelineSha256) {
         Entry { Objects.requireNonNull(model);Objects.requireNonNull(pipelineSha256); }
     }
     @FunctionalInterface interface Resources { InputStream open(String path) throws IOException; }
@@ -59,8 +58,7 @@ public final class V3NeuralRegistry implements V3NeuralInitializer {
                     if(!loaded.initializer().modelId().equals(row.get("modelId").getAsString())
                             ||!loaded.pipelineSha256().equals(row.get("pipelineSha256").getAsString()))
                         throw new IllegalArgumentException("Neural registry identity mismatch");
-                    entries.add(new Entry(priority,loaded.initializer(),loaded.pipelineSha256(),
-                            loaded.allowExtraZeroComponents(),loaded.allowMissingZeroComponents()));
+                    entries.add(new Entry(priority,loaded.initializer(),loaded.pipelineSha256()));
                 }
             }
             return new V3NeuralRegistry(entries);
@@ -75,26 +73,33 @@ public final class V3NeuralRegistry implements V3NeuralInitializer {
         return path;
     }
     @Override public String modelId(){return "bundled-registry";}
+    /**
+     * The first model, by priority, that a request binds (plan section 3.3 of batch 2026-11-04-refinery-compounds): its
+     * active compounds A (the non-zero feed, as {@link V3ActiveComponentBasis} takes them) lie in the model's list M; the
+     * records the model was trained on are current in {@code catalog}; and the request package's physics on A is the
+     * model's, compared by content on the two restricted views. The model then reads the request on M through the lens
+     * ({@link MaterialCatalog#inferenceView}): A's data from the request, M  A from the trained records. The composition,
+     * topology and global-bound gates are the model's own ({@link V3AnchorTransformerInitializer#supported}).
+     */
     @Override public V3NeuralInitializer bind(MaterialCatalog catalog,V3ColumnInput input) {
         Objects.requireNonNull(catalog);Objects.requireNonNull(input);
         var source=catalog.packages().get(input.packageId());
         if(source==null||!source.components().equals(input.componentBasis().componentIds()))return UNAVAILABLE;
-        // A package that admits crystals (P6) is outside every model's physics: classical initialization, never a
-        // fluid-only projection of it.
-        if(!source.crystals().isEmpty())return UNAVAILABLE;
+        var original=new MaterialAxis(source.components());
+        double[] flows=input.feedComponentMolarFlowsMolPerSecond();var active=new ArrayList<String>();
+        for(int i=0;i<flows.length;i++)if(flows[i]!=0.0)active.add(source.components().get(i));
+        if(active.isEmpty())return UNAVAILABLE;
         for(var entry:entries) {
             var model=entry.model();var axis=new MaterialAxis(model.componentIds());
-            var original=new MaterialAxis(source.components());
-            if(!entry.allowExtraZeroComponents()&&!axis.ids().containsAll(original.ids()))continue;
-            if(!entry.allowMissingZeroComponents()&&!original.ids().containsAll(axis.ids()))continue;
+            if(!axis.ids().containsAll(active))continue;
             try {
-                double[] feed=axis.project(original,input.feedComponentMolarFlowsMolPerSecond());
-                var view=catalog.inferenceView(input.packageId(),axis.ids(),model.referencePackage(),entry.allowMissingZeroComponents());
-                var projected=source.components().equals(axis.ids())?input:project(input,axis.ids(),feed);
+                var view=catalog.inferenceView(input.packageId(),active,model.physics()).orElse(null);
+                if(view==null)continue;
+                var projected=source.components().equals(axis.ids())?input:project(input,axis.ids(),axis.project(original,flows));
                 if(!MaterialRuntime.with(view,input.packageId(),()->model.supported(projected)))continue;
                 return new Bound(entry,catalog,view,input,projected);
             } catch(IllegalArgumentException incompatible) {
-                // Unsupported identity/physics is ordinary registry exclusion, never a zero default.
+                // Unsupported physics or input is ordinary registry exclusion, never a zero default.
             }
         }
         return UNAVAILABLE;
@@ -132,28 +137,24 @@ public final class V3NeuralRegistry implements V3NeuralInitializer {
     static final class TransformerArtifact {
         private static final Set<String> PAYLOAD = Set.of("schemaVersion", "featureRevision", "modelType",
                 "anchorLayout", "baselineRevision", "components", "normalization", "weights");
-        private static final Set<String> SIDECAR = Set.of("schemaVersion", "payloadSha256", "modelId", "packageId",
-                "propertyRevision", "formulationRevisions",
-                "allowExtraZeroComponents", "allowMissingZeroComponents",
+        private static final Set<String> SIDECAR = Set.of("schemaVersion", "payloadSha256", "modelId", "physics", "formulationRevisions",
                 "branchesSeen", "presenceThreshold", "traceFloorFraction", "globalMin", "globalMax",
                 "designConstraints", "compositionEdges", "decoder", "candidateRule", "correctionRule");
-        record Loaded(V3AnchorTransformerInitializer initializer, String pipelineSha256, boolean allowExtraZeroComponents, boolean allowMissingZeroComponents) {}
+        record Loaded(V3AnchorTransformerInitializer initializer, String pipelineSha256) {}
         private TransformerArtifact() {}
 
         static Loaded read(InputStream payloadStream, InputStream sidecarStream) throws IOException {
             byte[] payload = bounded(payloadStream, 8 * 1024 * 1024);
             byte[] sidecar = bounded(sidecarStream, 256 * 1024);
             try {
-                JsonObject weights = object(payload, PAYLOAD, 1), policy = object(sidecar, SIDECAR, 2);
+                JsonObject weights = object(payload, PAYLOAD, 1), policy = object(sidecar, SIDECAR, 3);
                 if (!sha256(payload).equals(policy.get("payloadSha256").getAsString()))
                     throw new IllegalArgumentException("Transformer payload SHA-256 mismatch");
                 if (!"ZERO_PHASE_FLOOR_10".equals(policy.get("decoder").getAsString())
                         || !"SINGLE".equals(policy.get("candidateRule").getAsString())
                         || !"PROGRESS".equals(policy.get("correctionRule").getAsString()))
                     throw new IllegalArgumentException("Unsupported transformer inference policy");
-                for(String key : Set.of("allowExtraZeroComponents", "allowMissingZeroComponents"))
-                    if(!policy.get(key).isJsonPrimitive() || !policy.getAsJsonPrimitive(key).isBoolean())
-                        throw new IllegalArgumentException("Expected boolean " + key);
+                if(!policy.get("physics").isJsonObject())throw new IllegalArgumentException("Expected the trained physics object");
                 JsonObject document = new JsonObject();
                 weights.entrySet().stream().filter(e -> !e.getKey().equals("schemaVersion"))
                         .forEach(e -> document.add(e.getKey(), e.getValue()));
@@ -163,8 +164,7 @@ public final class V3NeuralRegistry implements V3NeuralInitializer {
                 var model = V3AnchorTransformerInitializer.read(new ByteArrayInputStream(
                         document.toString().getBytes(StandardCharsets.UTF_8)),
                         V3FactorizedNeuralFeatures.DecodeOptions.zeroPhaseFloor(10));
-                return new Loaded(model, sha256((sha256(payload) + ":" + sha256(sidecar)).getBytes(StandardCharsets.US_ASCII)),
-                        policy.get("allowExtraZeroComponents").getAsBoolean(), policy.get("allowMissingZeroComponents").getAsBoolean());
+                return new Loaded(model, sha256((sha256(payload) + ":" + sha256(sidecar)).getBytes(StandardCharsets.US_ASCII)));
             } catch (com.google.gson.JsonParseException | IllegalStateException | NullPointerException invalid) {
                 throw new IllegalArgumentException("Invalid transformer payload or sidecar", invalid);
             }

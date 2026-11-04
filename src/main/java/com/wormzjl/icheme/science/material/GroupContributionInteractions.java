@@ -37,7 +37,8 @@ import java.util.TreeMap;
  * <p>Identity: the group matrix declares its own revision, which the identity of every package that resolves its
  * interactions from it carries ({@link MaterialCatalog.Package#scientificRevision}). {@link #science} (rule,
  * scheme, and per resolved pair the component ids and every term's groups, A, B and weight, in MPa as the record
- * carries them) is the content {@link MaterialCatalog#samePhysics} compares, only for a package that has a rule.</p>
+ * carries them) is part of the physics content a package is compared by ({@code MaterialCatalog.physicsContent}), only for
+ * a package that has a rule.</p>
  */
 public final class GroupContributionInteractions {
     /** The one rule type in P3. */
@@ -140,7 +141,7 @@ public final class GroupContributionInteractions {
         return Optional.ofNullable(byComponents[i][j]);
     }
 
-    /** The numeric content restricted to pairs of {@code axis} (component ids), for {@link MaterialCatalog#samePhysics}. */
+    /** The numeric content restricted to pairs of {@code axis} (component ids), for {@code MaterialCatalog.physicsContent}. */
     Object science(List<String> components, Collection<String> axis) {
         var resolved = new ArrayList<Object>();
         for (Pair pair : pairs) {

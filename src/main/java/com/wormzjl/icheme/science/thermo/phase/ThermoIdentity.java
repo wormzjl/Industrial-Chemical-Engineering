@@ -24,8 +24,9 @@ import java.util.Objects;
  * {@link #revision()} and drops it, never migrates it, when it changes: the fluid network's thermodynamic revision
  * ({@code FluidThermodynamics.thermodynamicRevision}; saved contents keep their amounts and temperature and restate),
  * regression fixtures and pins, and any approximation state (warm starts, factorizations) built on the phase engine. The
- * column's neural models key instead on {@link MaterialCatalog.Package#scientificRevision()} and compare package content
- * directly ({@link MaterialCatalog#samePhysics(String, String, java.util.List)}).</p>
+ * column's neural models key instead on the records they were trained on, each by its declared revision
+ * ({@link MaterialCatalog.Physics}), and compare the request's physics with them by content
+ * ({@link MaterialCatalog#inferenceView}).</p>
  *
  * <p>The revision encodes every part length-prefixed, so no two different identities share a revision whatever
  * characters the parts contain.</p>

@@ -6,7 +6,7 @@
       "modelId": "regrouped-seed-17041-epoch-160",
       "payload": "/data/icheme/neural/v3-column-transformer-regrouped.payload.json",
       "sidecar": "/data/icheme/neural/v3-column-transformer-regrouped.sidecar.json",
-      "pipelineSha256": "abf6d8bb503ef8ad6ed52dad6dfaf6ea7eb7ea8ccb8d9c8d150b771a80a7e7d0"
+      "pipelineSha256": "ccac06be900b984247948a72aafaee3b70d1552f5935efe55752a4aac7161bc0"
     }
   ]
 }

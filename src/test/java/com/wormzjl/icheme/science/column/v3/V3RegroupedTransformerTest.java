@@ -26,9 +26,7 @@ class V3RegroupedTransformerTest {
         d.addProperty("featureRevision","v3-anchor-augmented-regrouped-2");
         d.addProperty("modelType","anchor-augmented"); d.addProperty("anchorLayout","full");
         d.addProperty("baselineRevision",V3AnchorTransformerInitializer.NativeAnchor.REVISION); d.addProperty("modelId","test:synthetic");
-        d.addProperty("packageId",input.packageId());
-        var p=MaterialCatalog.bundled().requirePackage(input.packageId());
-        d.addProperty("propertyRevision",p.scientificRevision());
+        d.add("physics",physics(MaterialCatalog.bundled(),input.packageId()));
         d.add("components",JSON.toJsonTree(input.componentBasis().componentIds()));
         double[] z=input.feedComponentMolarFlowsMolPerSecond(); double total=Arrays.stream(z).sum();
         for(int i=0;i<z.length;i++)z[i]/=total;
@@ -56,6 +54,23 @@ class V3RegroupedTransformerTest {
         var bias=weights.getAsJsonObject("output.1.bias").getAsJsonArray("values");
         bias.set(0,new JsonPrimitive(370)); bias.set(1,new JsonPrimitive(1)); bias.set(2,new JsonPrimitive(1));
         d.add("weights",weights); return d;
+    }
+    /**
+     * The physics a model trained on package {@code packageId} stores (sidecar schema 3): the records its identity names,
+     * each by its declared revision, and its method's policy for a missing pair.
+     */
+    static JsonObject physics(MaterialCatalog catalog,String packageId) {
+        var p=catalog.requirePackage(packageId);var tokens=new HashMap<String,String>();
+        for(String token:p.scientificRevision().split(";")){int at=token.indexOf('=');if(at>0)tokens.put(token.substring(0,at),token.substring(at+1));}
+        String method=tokens.get("method").substring(0,tokens.get("method").indexOf('@'));
+        String missing=catalog.resources().values().stream().map(s->JsonParser.parseString(s).getAsJsonObject())
+                .filter(o->o.has("missing_interactions")&&o.get("id").getAsString().equals(method)).findFirst().orElseThrow().get("missing_interactions").getAsString();
+        var compounds=new JsonArray();String[] datasets=tokens.get("properties").split(",");
+        for(int i=0;i<datasets.length;i++){var c=new JsonObject();c.addProperty("id",p.components().get(i));c.addProperty("properties",datasets[i]);compounds.add(c);}
+        var libraries=new JsonArray();for(String library:tokens.get("interactions").split(","))if(!library.isEmpty())libraries.add(library);
+        var physics=new JsonObject();physics.addProperty("model",p.model());physics.add("compounds",compounds);physics.add("interactions",libraries);
+        physics.addProperty("missingInteractions",missing);physics.addProperty("water",tokens.get("water"));
+        return physics;
     }
     private static double[] fill(int n,double value) { double[] a=new double[n]; Arrays.fill(a,value); return a; }
     private static void tensor(JsonObject w,String name,double v,int... shape) {
@@ -96,6 +111,7 @@ class V3RegroupedTransformerTest {
     @Test void editedPhysicsIsExcludedWhileCapturedCatalogRemainsEligible() throws Exception {
         var input=input("icheme:tjl20_methane"); var original=MaterialCatalog.bundled();
         var model=V3AnchorTransformerInitializer.read(stream(document(input)), V3FactorizedNeuralFeatures.DecodeOptions.NONE);
+        var registry=new V3NeuralRegistry(List.of(new V3NeuralRegistry.Entry(1,model,"0".repeat(64))));
         var records=new HashMap<>(original.resources());
         String key=records.keySet().stream().filter(k->k.endsWith("properties/crude_pc08.json")).findFirst().orElseThrow();
         var edited=JsonParser.parseString(records.get(key)).getAsJsonObject();
@@ -105,17 +121,23 @@ class V3RegroupedTransformerTest {
         edited.addProperty("revision",edited.get("revision").getAsString()+"-edited");
         records.put(key,edited.toString());
         var changed=MaterialCatalog.parse(records);
-        assertFalse(com.wormzjl.icheme.science.material.MaterialRuntime.with(changed,input.packageId(),()->model.supported(input)));
-        assertTrue(com.wormzjl.icheme.science.material.MaterialRuntime.with(original,input.packageId(),()->model.supported(input)));
+        // The binding reads the physics: the trained dataset's revision is not the catalog's, so the model is stale.
+        assertSame(V3NeuralInitializer.UNAVAILABLE,registry.bind(changed,input));
+        assertEquals(model.modelId(),registry.bind(original,input).modelId());
     }
     @Test void sidecarPinsPayloadAndRejectsOverlappingFields() throws Exception {
         var d=document(input("icheme:tjl20_methane")); var payload=new JsonObject();
         for(String key:List.of("featureRevision","modelType","anchorLayout","baselineRevision","components","normalization","weights"))payload.add(key,d.remove(key));
-        payload.addProperty("schemaVersion",1); d.addProperty("schemaVersion",2);
-        d.addProperty("allowExtraZeroComponents",false);d.addProperty("allowMissingZeroComponents",false);
+        payload.addProperty("schemaVersion",1); d.addProperty("schemaVersion",3);
         d.addProperty("payloadSha256",V3NeuralRegistry.TransformerArtifact.sha256(payload.toString().getBytes(StandardCharsets.UTF_8)));
         d.addProperty("decoder","ZERO_PHASE_FLOOR_10"); d.addProperty("candidateRule","SINGLE"); d.addProperty("correctionRule","PROGRESS");
         assertEquals(88852,V3NeuralRegistry.TransformerArtifact.read(stream(payload),stream(d)).initializer().parameterCount());
+        // Schema 3 only: the schema 2 identity fields are refused, and the physics names the model's compounds in order.
+        var old=d.deepCopy(); old.addProperty("schemaVersion",2); old.addProperty("packageId","icheme:tjl20_methane");
+        assertThrows(IllegalArgumentException.class,()->V3NeuralRegistry.TransformerArtifact.read(stream(payload),stream(old)));
+        var shuffled=d.deepCopy(); var compounds=shuffled.getAsJsonObject("physics").getAsJsonArray("compounds");
+        var first=compounds.remove(0); compounds.add(first);
+        assertThrows(IllegalArgumentException.class,()->V3NeuralRegistry.TransformerArtifact.read(stream(payload),stream(shuffled)));
         payload.addProperty("baselineRevision","changed");
         assertThrows(IllegalArgumentException.class,()->V3NeuralRegistry.TransformerArtifact.read(stream(payload),stream(d)));
         payload.addProperty("baselineRevision",V3AnchorTransformerInitializer.NativeAnchor.REVISION); d.add("weights",payload.get("weights"));

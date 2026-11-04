@@ -66,8 +66,12 @@ class CrystalPackageConsumersTest {
                 List.of(new V3ColumnSpecification.CondenserOutletTemperature(200), new V3ColumnSpecification.OrganicRefluxRatio(2),
                         new V3ColumnSpecification.ReboilerDuty(0)), List.of());
         assertSame(V3NeuralInitializer.UNAVAILABLE, V3NeuralRegistry.bundled().bind(catalog, input), "no model binds a crystal package");
+        // A lens of a request whose view on its active compounds admits a crystal is refused, never projected fluid-only.
+        var any = MaterialCatalog.Physics.Revisioned.parse("test:any@r1");
+        var physics = new MaterialCatalog.Physics("pr78", List.of(new MaterialCatalog.Physics.Compound("Nitrogen", any),
+                new MaterialCatalog.Physics.Compound("Methane", any), new MaterialCatalog.Physics.Compound("CarbonDioxide", any)), List.of(), "zero", any);
         var projection = assertThrows(CrystalPhasesUnavailable.class,
-                () -> catalog.inferenceView(PILOT, List.of("Nitrogen", "Methane"), "icheme:tjl20_methane_nitrogen", true));
+                () -> catalog.inferenceView(PILOT, List.of("Nitrogen", "Methane", "CarbonDioxide"), physics));
         assertEquals("a neural inference projection", projection.consumer());
     }
 
