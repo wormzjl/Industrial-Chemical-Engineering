@@ -297,7 +297,7 @@ Every new model keeps one free block between nozzle pipe blocks (`ProcessUnitTes
 Prototypes first (`gui-creation` skill), owner picks, then build.
 
 - **Motor.** Off/On. Drive: fixed or variable speed. Variable: Speed (%), or Regulate (the driven machine's flow, or its discharge pressure). Status: `RUNNING`, `STOPPED`, `TRIPPED: OVERLOAD`, `TRIPPED: NO POWER`. Readings: speed, shaft power, electric power, FE/t, buffer.
-- **Turbine.** Trip and Reset. Speed set or Regulate, as the motor. Status: `RUNNING`, `STEAM LIMITED`, `TRIPPED`. Readings: steam flow, inlet and exhaust pressure, power, speed.
+- **Turbine.** Trip and Reset. Speed set or Regulate, as the motor; its governor is a speed sensor on the train and the control valve upstream with the shaft-speed source (owner decision D27). Status: `RUNNING`, `STEAM LIMITED`, `TRIPPED`. Readings: steam flow, inlet and exhaust pressure, power, speed.
 - **Gearbox.** Ratio. Readings: both speeds, power.
 - **Create coupling.** Readings: Create speed, stress drawn, the network's headroom.
 - **Creative motor.** Speed, power limit, Regulate as the motor.
@@ -307,7 +307,7 @@ Prototypes first (`gui-creation` skill), owner picks, then build.
 
 ## 10. Saves (AGENTS.md "Saves and data formats")
 
-- Fluid facts schema 10 (main 0.20.0 holds 8 and 9): the new device kinds, the machine's design point and law kind, the driver's settings, the FE buffer's content (energy the player put in), the gearbox ratio, the creative motor's set points, and each pump's and compressor's health, constructed or in-line (request 11, D19: a double from 0 to 1, default 1.0, which is the behaviour before the field: no wear, full performance). Corpus image `compat/fluid/schema-8`. If W3 lands schema 8 first, health goes in schema 9 with its own image.
+- Fluid facts schema 10 (main 0.20.0 holds 8 and 9): the new device kinds, the machine's design point and law kind, the driver's settings, the FE buffer's content (energy the player put in), the gearbox ratio, the creative motor's set points, and each pump's and compressor's health, constructed or in-line (request 11, D19: a double from 0 to 1, default 1.0, which is the behaviour before the field: no wear, full performance). Corpus image `compat/fluid/schema-10`. If W3 lands schema 10 before W10b, health goes in schema 11 with its own image.
 - Equipment shape fields 8 (main 0.20.0 holds 6 and 7; W4 built it as 6, renumbered at its merge): the pump's and compressor's design point, the motor's and turbine's duty. An old pump's missing design point takes today's datasheet values (A3). Corpus image `compat/equipment/shapes-8.snbt`.
 - No backward compatibility for constructed movers (owner D4): old placed pumps and compressors rebuild to the casing layout through the layout refresh, without their drawn motor (and gear); they stand closed with `NO DRIVER` until the player joins a driver. Their registrations, identity and settings stay; the set flow is still the set flow.
 - Old steam turbines (drawing only) rebuild to the new layout; the owner approves the moved nozzle pipe blocks (owner D5).
