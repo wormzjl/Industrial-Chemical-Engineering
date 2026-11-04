@@ -38,7 +38,7 @@ class ColumnSolveTest {
         var steam = design.steamFeeds().stream().map(s -> new ColumnSolve.Steam(s.molarFlowMolPerSecond(), s.temperatureKelvin(), Double.NaN)).toList();
         double screen = V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO;
         var outcome = ColumnSolve.run(new ColumnSolve.Job(DriftBands.Trigger.START, design, setpoints, new ColumnSolve.Taken(feed, Double.NaN, steam), null),
-                model, catalog, screen, () -> {});
+                model,screen, () -> {});
         var solved = assertInstanceOf(ColumnSolve.Solved.class, outcome, outcome::toString);
         var table = solved.table();
         assertEquals(axis, table.axis());
@@ -72,10 +72,97 @@ class ColumnSolveTest {
         // The feed 2 K warmer: a band crossed, solved warm from the seed.
         double warmer = table.reference().feedEnthalpy() + 2 * table.reference().enthalpySlope();
         var again = ColumnSolve.run(new ColumnSolve.Job(DriftBands.Trigger.ENTHALPY, design, setpoints, new ColumnSolve.Taken(feed, warmer, steam), solved.seed()),
-                model, catalog, screen, () -> {});
+                model,screen, () -> {});
         var resolved = assertInstanceOf(ColumnSolve.Solved.class, again, again::toString);
         assertTrue(resolved.route().contains("warm"), "the warm route: " + resolved.route());
         assertEquals(warmer, resolved.table().reference().feedEnthalpy(), 0);
+    }
+
+    /**
+     * The column's public basis is its feed island's list (batch 2026-11-04-refinery-compounds, V4): a network package of more
+     * than 64 compounds (the bundled one extended by clones of the crude fractions' records under new ids) runs the default column
+     * on an island that carries the feed's 20, and the table, on the wide world list, equals the bundled package's on each of its
+     * compounds bit for bit; each clone, which the feed does not hold, takes a solved compound's row.
+     */
+    @Test void aNetworkPackageAbove64CompoundsSolvesOnItsFeedIslandsList() {
+        var bundled = MaterialCatalog.bundled();
+        V3ColumnInput design = bundled.presets().column("tia_juana_nitrogen").input(bundled);
+        var wide = MaterialCatalog.parse(widened(4));
+        var narrow = FluidThermodynamics.forNetwork(bundled, design.packageId());
+        var whole = FluidThermodynamics.forNetwork(wide, com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(wide));
+        assertTrue(whole.compounds().size() > com.wormzjl.icheme.science.column.v3.V3ComponentBasis.MAX_COMPONENTS, "a wide network package: " + whole.compounds().size());
+        var island = whole.on(narrow.compounds());
+        assertEquals(narrow.components(), island.components(), "the island carries the feed's compounds and water");
+        var setpoints = Setpoints.of(ColumnOperatingPoint.of(design));
+        var steam = design.steamFeeds().stream().map(s -> new ColumnSolve.Steam(s.molarFlowMolPerSecond(), s.temperatureKelvin(), Double.NaN)).toList();
+        double screen = V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO;
+        java.util.function.BiFunction<FluidThermodynamics, List<String>, ColumnSolve.Solved> solve = (model, world) -> {
+            double[] feed = new double[world.size()];
+            for (int c = 0; c < design.componentBasis().componentCount(); c++) feed[world.indexOf(design.componentBasis().componentId(c))] += design.feedComponentMolarFlowsMolPerSecond()[c];
+            var outcome = ColumnSolve.run(new ColumnSolve.Job(DriftBands.Trigger.START, design, setpoints, new ColumnSolve.Taken(feed, Double.NaN, steam), null), model, screen, () -> {});
+            return assertInstanceOf(ColumnSolve.Solved.class, outcome, outcome::toString);
+        };
+        var reference = solve.apply(narrow, narrow.components());
+        var solved = solve.apply(island, whole.components());
+        var a = reference.table();
+        var b = solved.table();
+        assertEquals(whole.components(), b.axis(), "the table is on the world list");
+        assertEquals(narrow.compounds(), solved.seed().input().componentBasis().componentIds(), "V3's public basis is the island's list");
+        assertEquals(a.condenserPerFeed(), b.condenserPerFeed(), 0);
+        assertEquals(a.reboilerPerFeed(), b.reboilerPerFeed(), 0);
+        assertEquals(a.products().size(), b.products().size());
+        double[][] ha = reference.enthalpy(), hb = solved.enthalpy();
+        for (int k = 0; k < a.products().size(); k++) {
+            var p = a.products().get(k);
+            var q = b.products().get(k);
+            assertEquals(p.port(), q.port());
+            assertEquals(p.temperature(), q.temperature(), 0, p.port() + " temperature");
+            for (int i = 0; i < a.axis().size(); i++) {
+                int j = b.axis().indexOf(a.axis().get(i));
+                assertEquals(p.recovery()[i], q.recovery()[j], 0, p.port() + " " + a.axis().get(i));
+                assertEquals(ha[k][i], hb[k][j], 0, p.port() + " enthalpy of " + a.axis().get(i));
+            }
+        }
+        // A clone takes the row of its own fraction, the solved compound nearest in boiling point.
+        int clone = b.axis().indexOf("crude_pc05_x1"), original = b.axis().indexOf("crude_pc05");
+        assertFalse(b.held()[clone]);
+        for (var q : b.products()) assertEquals(q.recovery()[original], q.recovery()[clone], 0);
+    }
+
+    /**
+     * The bundled resources with {@code copies} clones of each crude fraction's component and property records under new ids
+     * ({@code crude_pc05_x1}, ...) and the network on {@code test:wide}, the bundled network package extended by the clones
+     * (the column presets stay on their own packages, which the calculator keeps at 64).
+     */
+    private static java.util.Map<String, String> widened(int copies) {
+        String root = "data/icheme/materials/";
+        var resources = new java.util.HashMap<>(MaterialCatalog.bundled().resources());
+        var network = com.google.gson.JsonParser.parseString(resources.get(root + "networks/default.json")).getAsJsonObject();
+        var pack = new com.google.gson.JsonObject();
+        pack.addProperty("schema_version", 1);
+        pack.addProperty("id", "test:wide");
+        pack.addProperty("revision", "r1");
+        pack.addProperty("method", "icheme:crude_pr78");
+        pack.addProperty("extends", network.get("package").getAsString());
+        pack.add("components", new com.google.gson.JsonArray());
+        network.addProperty("package", "test:wide");
+        resources.put(root + "networks/default.json", network.toString());
+        String path = root + "packages/test_wide.json";
+        for (int k = 1; k <= copies; k++)
+            for (int f = 1; f <= 12; f++) {
+                String id = String.format(java.util.Locale.ROOT, "crude_pc%02d", f), copy = id + "_x" + k;
+                var component = com.google.gson.JsonParser.parseString(resources.get(root + "components/" + id + ".json")).getAsJsonObject();
+                component.addProperty("id", copy);
+                component.addProperty("properties", "icheme:" + copy);
+                resources.put(root + "components/" + copy + ".json", component.toString());
+                var property = com.google.gson.JsonParser.parseString(resources.get(root + "properties/" + id + ".json")).getAsJsonObject();
+                property.addProperty("id", "icheme:" + copy);
+                property.addProperty("component", copy);
+                resources.put(root + "properties/" + copy + ".json", property.toString());
+                pack.get("components").getAsJsonArray().add(copy);
+            }
+        resources.put(path, pack.toString());
+        return resources;
     }
 
     /**
@@ -98,9 +185,9 @@ class ColumnSolveTest {
         var setpoints = Setpoints.of(ColumnOperatingPoint.of(design));
         double screen = V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO;
         var full = (ColumnSolve.Solved) ColumnSolve.run(new ColumnSolve.Job(DriftBands.Trigger.START, design, setpoints, new ColumnSolve.Taken(feed, Double.NaN,
-                design.steamFeeds().stream().map(s -> new ColumnSolve.Steam(s.molarFlowMolPerSecond(), s.temperatureKelvin(), Double.NaN)).toList()), null), model, catalog, screen, () -> {});
+                design.steamFeeds().stream().map(s -> new ColumnSolve.Steam(s.molarFlowMolPerSecond(), s.temperatureKelvin(), Double.NaN)).toList()), null), model,screen, () -> {});
         var half = ColumnSolve.run(new ColumnSolve.Job(DriftBands.Trigger.THROUGHPUT, design, setpoints, new ColumnSolve.Taken(scale(feed, .5), full.table().reference().feedEnthalpy(),
-                design.steamFeeds().stream().map(s -> new ColumnSolve.Steam(s.molarFlowMolPerSecond() * .5, s.temperatureKelvin(), Double.NaN)).toList()), full.seed()), model, catalog, screen, () -> {});
+                design.steamFeeds().stream().map(s -> new ColumnSolve.Steam(s.molarFlowMolPerSecond() * .5, s.temperatureKelvin(), Double.NaN)).toList()), full.seed()), model,screen, () -> {});
         var scaled = assertInstanceOf(ColumnSolve.Solved.class, half, half::toString).table();
         var table = full.table();
         assertEquals(table.products().size(), scaled.products().size());
@@ -138,7 +225,7 @@ class ColumnSolveTest {
         }
         var steam = start.steamFeeds().stream().map(s -> new ColumnSolve.Steam(s.molarFlowMolPerSecond(), s.temperatureKelvin(), Double.NaN)).toList();
         var outcome = ColumnSolve.run(new ColumnSolve.Job(DriftBands.Trigger.START, start, Setpoints.of(saved), new ColumnSolve.Taken(feed, Double.NaN, steam), null),
-                model, catalog, V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO, () -> {});
+                model,V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO, () -> {});
         assertInstanceOf(ColumnSolve.Solved.class, outcome, outcome::toString);
     }
 
@@ -183,7 +270,7 @@ class ColumnSolveTest {
             var setpoints = new Setpoints(s.designFeedRate(), s.feedRate(), 273.15 + celsius, s.refluxRatio(), s.reboilerPerFeed(), s.steamPerFeed(), s.drawsPerFeed(),
                     s.pumparoundsPerFeed());
             var outcome = ColumnSolve.run(new ColumnSolve.Job(DriftBands.Trigger.START, design, setpoints, new ColumnSolve.Taken(feed, Double.NaN, steam), null,
-                    ColumnComponents.Condenser.AIR_THEN_WATER), model, catalog, V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO, () -> {});
+                    ColumnComponents.Condenser.AIR_THEN_WATER), model,V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO, () -> {});
             var solved = assertInstanceOf(ColumnSolve.Solved.class, outcome, outcome::toString);
             var table = solved.table();
             double whole = table.condenserPerFeed() * rate, water = table.condenserWaterPerFeed() * rate;
@@ -225,7 +312,7 @@ class ColumnSolveTest {
         java.util.function.BiFunction<ColumnComponents.Condenser, Double, SplitTable> solve = (condenser, receiver) -> {
             var setpoints = new Setpoints(s.designFeedRate(), s.feedRate(), receiver, s.refluxRatio(), s.reboilerPerFeed(), s.steamPerFeed(), s.drawsPerFeed(), s.pumparoundsPerFeed());
             var outcome = ColumnSolve.run(new ColumnSolve.Job(DriftBands.Trigger.START, design, setpoints, new ColumnSolve.Taken(feed, Double.NaN, steam), null, condenser),
-                    model, catalog, V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO, () -> {});
+                    model,V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO, () -> {});
             return assertInstanceOf(ColumnSolve.Solved.class, outcome, outcome::toString).table();
         };
         double receiver = s.condenserTemperature();

@@ -190,6 +190,8 @@ public final class FluidThermodynamics {
     public FreeWaterIce freeWaterIce(){return freeWaterIce;}
     /** The catalog this model was built from; the phase engine is built from it on first use. */
     private final MaterialCatalog catalog;
+    /** The catalog this model was built from: a view's is the whole one's restricted to its list, its package under the same id. */
+    public MaterialCatalog catalog(){return catalog;}
     /** The equilibrium engine that decides this model's phases; built on the first phase decision. */
     private volatile NetworkPhaseEngine phaseEngine;
     NetworkPhaseEngine phaseEngine() {
