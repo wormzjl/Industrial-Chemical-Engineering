@@ -140,6 +140,10 @@ Batch `2026-11-03-rotating-machinery`. Owner decisions first, then decisions tak
 
 - **D41.** The Create coupling's machine page is the prototype of `23c634d1f`: Shaft group (Create speed, train speed, power), Supply group (stress drawn, network spare, su), a nameplate on the glass (stress rate, rated speed), no switches, Close only.
 
+2026-11-04, on `W8_BUILD_PLAN.md`: the owner: "A: simple" and "(a) Duty readings".
+
+- **D42.** W8 is form A: pump and compressor tiles take their design efficiency (shaft power = ideal / η, all of it heating the stream) and propose a motor with 20 % spare (electric power, FE/t); the steam turbine tile is modelled (steam in, exhaust at a set pressure, shaft power out); no shaft wires, no driver tiles. The column door's Standard / In-line keys give way to each pump's duty readings (flow, head, shaft power, NPSH required, proposed motor); the design names no pump kind and the assembly takes either, the standard one first. The door is prototyped first.
+
 W4's decisions, taken on its branch `claude/sad-elgamal-92e0e4` as D10 to D13 and renumbered at its merge into this branch (owner "Yes, merge W4", 2026-11-04):
 
 - **D23 (W4's D10, 2026-11-04).** Constructor duty rows: option A (choice keys for poles, drive and steam class; steppers for flow, head, power and exhaust).

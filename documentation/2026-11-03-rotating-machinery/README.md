@@ -57,6 +57,7 @@ Status: In progress since 2026-11-03 (plan revision 3, 2026-11-04: request 11, g
 - 2026-11-04: W6b built 23c634d1f (Drive.CREATE, compat/create behind one guard, CreateInput events, impact cut to the spare, gearbox 64 behind a coupling, facts unchanged); affected test 340 + the agent's 80, GameTests 45/45 with and without Create; owner D41 "Build as shown" for the page; page agent started.
 - 2026-11-04: W6b page built (MachineView.Coupling, protocol machine-2, no Apply on the coupling); page tests 281 pass, GameTests 45/45 with and without Create. Review `W6B_REVIEW.md` (A142 to A157). W6b done.
 - 2026-11-04: owner "Start W8". Plan `W8_BUILD_PLAN.md`: form A (efficiencies, proposed driver, modelled turbine tile) or B (shaft wires, driver tiles); the column door pump selector (a) duty readings or (b) keys kept; owner pick next.
+- 2026-11-04: owner D42: form A, duty readings on the column door; build agent started (laws, turbine tile, sizing rows, door prototype).
 
 ## Documents
 
