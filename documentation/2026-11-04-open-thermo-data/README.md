@@ -6,11 +6,13 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
 
 ## Documents
 
-- [OPEN_DATA_PLAN.md](OPEN_DATA_PLAN.md): expected behaviour, the data today, work packages O1 to O8 and decisions E1 to E20.
+- [OPEN_DATA_PLAN.md](OPEN_DATA_PLAN.md): expected behaviour, the data today, work packages O1 to O9 and decisions E1 to E23.
 - [NIST_REDERIVATION_REVIEW.md](NIST_REDERIVATION_REVIEW.md): O1 and O2, what the open re-derivation moved, the measurements and the owner decisions.
 - [CRUDE_GRADES_REVIEW.md](CRUDE_GRADES_REVIEW.md): research R1 and the production data. Grade specifications and the generation method on the shared cuts, cut viscosity candidates, the mixture rule and its open refit, the validation against ECCC records.
 - [CUT_VISCOSITY_REVIEW.md](CUT_VISCOSITY_REVIEW.md): O4, the Twu cut tables and the one-term mixture term, the bit-for-bit proof and what moved.
 - [UNUSED_DATA_REVIEW.md](UNUSED_DATA_REVIEW.md): research R2, the O5 inventory. Who reads each data file, where ExxonMobil-derived values are, and the removal lists.
+- [PHUV_ROUNDTRIP_REVIEW.md](PHUV_ROUNDTRIP_REVIEW.md): P1, the free-water UV round-trip miss. The all-steam TP closure stops at 1e-8 P, the options, and the owner's option A (E21).
+- [COMBUSTION_FLAMMABILITY_REVIEW.md](COMBUSTION_FLAMMABILITY_REVIEW.md): R3 for O9. Combustion heat, flammability limits and flash point: sources and terms, estimates and their errors, design options, and the owner's choices (E23).
 - [CRUDE_GRADES_APPLY_REVIEW.md](CRUDE_GRADES_APPLY_REVIEW.md): O3, the four grades applied, the Tia Juana test overlay, the default preset before and after, the medium grade's classical fragility, the moved sample sizes and the owner choices.
 
 ## Code areas
@@ -40,18 +42,29 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
 - 2026-11-05: O3 step 1 (E1), `f12f8f15d`: the four grades (`generated-r1`) replace the seven assays: fluid presets `fluid_2..5`, network fluid presets water, nitrogen and the grades, default column preset `medium_crude` (the generator's draft; classical solve converges, draw shares 0.18, 0.15, 0.07 of tray liquid). ExxonMobil out of `src/` (5 assays, `fluid_3/4`, 12 client files, en_us keys). Tia Juana (tjl20, tjl19, `column_literature`, the two TJL column presets, its fluid preset) moved to the test overlay `materials/tia-juana/` (`TiaJuanaTestCatalog`, `TiaJuanaExtension`); ~40 tests routed through it with no re-pin, bundled-default tests moved to the grades; fixtures and compat preset images rebuilt. No saved format stores a preset id: no alias.
 - 2026-11-05: O3 step 2, `7b141f79c`: the example sheet on the medium grade; column, line, unit and Size-all sample gates re-pinned (condenser 5 to 4 shells, H-101 12 to 11 m, sphere 17 to 14 m, P-102 yellow at 69 % of rated, 4 line bores). The coupling gates `FlowsheetColumnTest` and `UtilityRegulationTest` stay on Tia Juana: the classical start fails on the medium grade at 5 of 10 feed temperatures from 622 to 644 K.
 - 2026-11-05: O3 tools, `ed9208252`: `tools/crude-grades/presets.mjs` reads the Tia Juana templates from `reference/` (byte-identical re-run); four `O3*` probes in `tools/open-thermo-data/`. Measured in [CRUDE_GRADES_APPLY_REVIEW.md](CRUDE_GRADES_APPLY_REVIEW.md): chain-100 exact 0 deviation; hold-fuzz smoke equal to O4's counters (no 200-seed check: the fuzz loads no changed preset); tests pass but the PhUv item below. Code guide: no change (updated at merge).
+- 2026-11-05: P1 diagnosis, [PHUV_ROUNDTRIP_REVIEW.md](PHUV_ROUNDTRIP_REVIEW.md). The UV solver is exact; the miss comes from the TP stage. When all the water is steam, the hydrocarbon partial pressure closes only to 1e-8 P: the fixed point diverges at water ratio 1 (slope -2.3), and a bisection then decides. So V(T, P) is a staircase, and the UV answer lands on another step: TP residuals -4.86e-9 and +7.75e-9 P give the whole 1.31e-8 miss. O2 passed by luck. The owner chose option A (E21).
+- 2026-11-05: P2 built E21 as form A2 (`tmp/phuv-roundtrip/fix/final.patch`; not yet on the branch).
+  - One `PartialPressureClosure` serves `solveWet` and `solveWetWithCrystals`. It starts at the fixed point's guess, takes one fixed-point step to bracket the root, then runs Illinois regula falsi to 1e-13 P.
+  - Deleted: both fixed-point loops and `PARTIAL_PRESSURE_FIXED_POINT_STEPS`.
+  - Scratch worktree results: 12 classes pass. The failing UV takes 7,723 kernel evaluations instead of 42,509.
+  - `LegacyNetworkPathPinTest` digest re-pinned: 21 of 63 all-steam flashes move by at most 9.4e-9 in V.
+- 2026-11-05: owner request E22: combustion heat, flash point and LEL. R3 research, [COMBUSTION_FLAMMABILITY_REVIEW.md](COMBUSTION_FLAMMABILITY_REVIEW.md):
+  - Gas-basis LHV by Hess from ChemSep heats of formation for all 29 combustible compounds. The cuts use Cragoe 1929: 0.5 % mean error on paraffins and naphthenes, 2.8 % on aromatics.
+  - Measured LFL and UFL for all 29, from NIOSH and Bulletin 627.
+  - Flash point computed from the LFL and the PR78 vapour pressure: 4.3 K mean error on 11 liquids.
+  - The owner's choices are E23.
+
 
 ## Open items
 
 - Next:
   1. Owner: the medium grade's classical fragility and the simulator gates on Tia Juana ([CRUDE_GRADES_APPLY_REVIEW.md](CRUDE_GRADES_APPLY_REVIEW.md) section 4, options a to c) and the O3 least-change choices listed there.
-  2. O8: the existing model on the new grades.
-  3. O5: removals.
-  4. The final lane, on the merged code (E19).
-- `FluidTpEquilibriumPhUvTest.freeWaterRoundTripsAndBoiling` fails since O7 step 1 (`570c8441c`), which changes only the methane ideal-gas Cp coefficients. Found by O4, bisected 2026-11-05 (`tmp/phuv-roundtrip/`):
-  - At `2f052f28f` (O2) the class passes, 8 of 8. Free-water tally: worst |dT/T| 8.78e-12, worst |dP/P| 1.04e-9 over 16 round trips.
-  - At `570c8441c` it fails at 460 K, 0.5 MPa: the UV round trip gives 499999.99346 Pa. The limit is the isochoric stiffness times 1e-9 times P. The UV Newton stops at a step of 1e-11 (10 times that at its noise floor), so a miss of 1.3e-8 needs another explanation.
-  - Diagnosis thread P1 runs on the second Gradle lane in a scratch worktree, beside O3. Its options go to the owner.
+  2. Land E21 (form A2): apply the patch, re-run the 12 classes, then chain-100 exact and the 200-seed quick check.
+  3. O8: the existing model on the new grades, with the 10 feed temperatures of the medium-grade check.
+  4. O5: removals, with O3's leftovers (the TJL19 and "global Dalia transport" evidence texts, code comments naming TJL19).
+  5. O9: combustion data (E22, E23). First, verify the Bulletin 627 values.
+  6. The final lane, on the merged code (E19).
+- `FluidTpEquilibriumPhUvTest.freeWaterRoundTripsAndBoiling` fails since O7 step 1 (`570c8441c`, methane Cp only). E21 fixes it in the TP stage (form A2, P2), and it lands next.
 - E6: the neural model's fate, after O8. Before a public release it must be retrained on open data or removed. Its training includes the ExxonMobil crudes, and the schema-4 sidecar stores their compositions and trained values from the old NIST methane fit and water Shomate.
 - The learned seed is not used on the default preset: the model binds again, but its probe takes 109 ms against the 100 ms large-wet budget (`V3ColumnCalculator.LARGE_WET_NEURAL_PROBE_MILLISECONDS`). It did the same before O2. O8 runs the model with the budget lifted, to judge the seed itself. The wall-clock budget makes the seed's use depend on the machine.
 - NIST copies left in test fixtures and tools, for O5 (list in NIST_REDERIVATION_REVIEW.md, section 5).
