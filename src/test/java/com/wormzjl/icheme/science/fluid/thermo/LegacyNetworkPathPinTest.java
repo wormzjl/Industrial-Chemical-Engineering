@@ -69,8 +69,15 @@ class LegacyNetworkPathPinTest {
      * {@code 37c1b7020d789e0d44041f8cc0a9b24ac8c694c63ef59e36214f08ccdccab1ee}): the wet flashes whose state holds steam
      * move, their gas volume, partial pressures, enthalpy and acoustic bound now those of {@code R T / p + B} steam; every
      * changed line runs only for a state or a phase holding water, so the dry probe states run no changed code.</p>
+     *
+     * <p>Re-pinned for the hydrocarbon partial pressure closed to {@code 1e-13 P} (owner decision E21, 2026-11-05; the
+     * value before, {@code 829a4af5d5fabb47d173294a1430d40ee5d815c25ae1949baeaa93d0d7e76b4a}): the old stop at
+     * {@code 1e-8 P} left each all-steam answer anywhere in that band. Point by point (the probe's wet flashes printed at
+     * both trees, batch 2026-11-04-open-thermo-data) only the 21 wet flashes whose water is all steam moved (350 K at
+     * 0.1 MPa, 450 and 700 K at every pressure): volume within 9.4e-9 relative, enthalpy within 1.6e-5 J, the same
+     * phases and water split; the other 42 flashes keep their bits, and the other stages run no changed code.</p>
      */
-    static final String DIGEST = "829a4af5d5fabb47d173294a1430d40ee5d815c25ae1949baeaa93d0d7e76b4a";
+    static final String DIGEST = "1f535246354242c26385dd83ca6634406fe3e8ed623a8b3eb9c7834d61509f0b";
     /**
      * The revision string: the formulation tag {@code direct-liquid-v1:tp-engine-v1:range-continuation-v1} (the phases
      * decided by the equilibrium engine, every data range continued since the owner rule of 2026-10-16) and the fluid
