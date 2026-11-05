@@ -81,29 +81,77 @@ public final class V3NeuralRegistry implements V3NeuralInitializer {
      * takes part. The model then reads the request on M through the lens ({@link MaterialCatalog#inferenceView}): A's records
      * from the request, the rest of M from the request package or the catalog's default records. The composition,
      * topology and global-bound gates are the model's own ({@link V3AnchorTransformerInitializer#supported}).
+     *
+     * <p>Unknown compounds (U1, batch 2026-11-05-neural-retrain): an active compound off the model's list binds when the
+     * model's lump map names it and the off-axis share of the feed is at most the model's limit. Its flow is lumped into its
+     * axis compound before inference ({@link Lumping}); the physics and composition checks read only the known part.</p>
      */
     @Override public V3NeuralInitializer bind(MaterialCatalog catalog,V3ColumnInput input) {
         Objects.requireNonNull(catalog);Objects.requireNonNull(input);
         var source=catalog.packages().get(input.packageId());
         if(source==null||!source.components().equals(input.componentBasis().componentIds()))return UNAVAILABLE;
-        var original=new MaterialAxis(source.components());
-        double[] flows=input.feedComponentMolarFlowsMolPerSecond();var active=new ArrayList<String>();
-        for(int i=0;i<flows.length;i++)if(flows[i]!=0.0)active.add(source.components().get(i));
-        if(active.isEmpty())return UNAVAILABLE;
+        double[] flows=input.feedComponentMolarFlowsMolPerSecond();
         for(var entry:entries) {
-            var model=entry.model();var axis=new MaterialAxis(model.componentIds());
-            if(!axis.ids().containsAll(active))continue;
+            var model=entry.model();var ids=model.componentIds();
+            var lumping=Lumping.of(source.components(),flows,ids,model.lumpMap(),model.offAxisLimit());
+            if(lumping==null)continue;
             try {
-                var view=catalog.inferenceView(input.packageId(),active,model.physics()).orElse(null);
+                var view=catalog.inferenceView(input.packageId(),lumping.known(),model.physics()).orElse(null);
                 if(view==null)continue;
-                var projected=source.components().equals(axis.ids())?input:project(input,axis.ids(),axis.project(original,flows));
-                if(!MaterialRuntime.with(view,input.packageId(),()->model.supported(projected)))continue;
-                return new Bound(entry,catalog,view,input,projected);
+                var projected=source.components().equals(ids)?input:project(input,ids,lumping.lumped());
+                if(!MaterialRuntime.with(view,input.packageId(),()->model.supported(projected,lumping.knownFeed())))continue;
+                return new Bound(entry,catalog,view,input,projected,lumping);
             } catch(IllegalArgumentException incompatible) {
                 // Unsupported physics or input is ordinary registry exclusion, never a zero default.
             }
         }
         return UNAVAILABLE;
+    }
+
+    /**
+     * A request's feed on a model's axis (U1, NEURAL_RETRAIN_DATA.md section 5 of batch 2026-11-05-neural-retrain).
+     *
+     * @param target for each request compound, its axis slot: its own on the axis, its lump's for a lumped off-axis compound,
+     *               -1 for an off-axis compound with no feed
+     * @param lumped the feed on the axis, each off-axis flow added to its lump
+     * @param knownFeed the feed on the axis without the off-axis flows
+     * @param known the active compounds on the axis, the ones the physics check reads
+     */
+    record Lumping(int[] target,double[] flows,double[] lumped,double[] knownFeed,List<String> known) {
+        /** The lumping, or null when an active compound has no lump, the off-axis share exceeds {@code limit}, or nothing known is fed. */
+        static Lumping of(List<String> request,double[] flows,List<String> axis,Map<String,String> lumps,double limit) {
+            int[] target=new int[request.size()];double[] lumped=new double[axis.size()],known=new double[axis.size()];
+            var knownIds=new ArrayList<String>();double total=0,offAxis=0;
+            for(int k=0;k<target.length;k++) {
+                String id=request.get(k);int at=axis.indexOf(id);total+=flows[k];
+                if(at>=0) {
+                    known[at]=flows[k];if(flows[k]!=0.0)knownIds.add(id);
+                } else if(flows[k]!=0.0) {
+                    String lump=lumps.get(id);
+                    if(lump==null)return null;
+                    at=axis.indexOf(lump);offAxis+=flows[k];
+                }
+                target[k]=at;
+                if(at>=0)lumped[at]+=flows[k];
+            }
+            if(knownIds.isEmpty()||!(offAxis<=limit*total))return null;
+            return new Lumping(target,flows.clone(),lumped,known,List.copyOf(knownIds));
+        }
+
+        /**
+         * A predicted node's compound flows on the request's list: each compound of a lump takes the lump's flow times its
+         * share of the lump's feed, so every member keeps the lump's recovery at every node; a compound on the axis with no
+         * fed lump keeps the model's value, an off-axis compound with no feed is zero.
+         */
+        double[] delump(double[] predicted) {
+            double[] out=new double[target.length];
+            for(int k=0;k<out.length;k++) {
+                int at=target[k];
+                // A lump of one fed compound keeps the predicted value exactly.
+                if(at>=0)out[k]=lumped[at]>0&&lumped[at]!=flows[k]?predicted[at]*(flows[k]/lumped[at]):predicted[at];
+            }
+            return out;
+        }
     }
     @Override public Optional<V3NeuralSeed> predict(V3ColumnInput input,V3SolveControl control) {
         control.checkpoint();return bind(MaterialRuntime.current(),input).predict(input,control);
@@ -115,18 +163,17 @@ public final class V3NeuralRegistry implements V3NeuralInitializer {
                 input.columnDiameterMetres());
     }
     private record Bound(Entry entry,MaterialCatalog originalCatalog,MaterialCatalog view,
-            V3ColumnInput original,V3ColumnInput projected) implements V3NeuralInitializer {
+            V3ColumnInput original,V3ColumnInput projected,Lumping lumping) implements V3NeuralInitializer {
         @Override public String modelId(){return entry.model().modelId();}
         @Override public Optional<V3NeuralSeed> predict(V3ColumnInput input,V3SolveControl control) {
             control.checkpoint();
             if(!input.equals(original))return Optional.empty();
-            return MaterialRuntime.with(view,projected.packageId(),()->entry.model().predict(projected,control)).map(seed->{
+            return MaterialRuntime.with(view,projected.packageId(),
+                    ()->entry.model().predict(projected,lumping.knownFeed(),control)).map(seed->{
                 if(projected==original)return seed;
-                var target=new MaterialAxis(original.componentBasis().componentIds());
-                var source=new MaterialAxis(projected.componentBasis().componentIds());
                 double[][] liquid=seed.liquid(),vapor=seed.vapor();
                 for(int n=0;n<liquid.length;n++) {
-                    control.checkpoint();liquid[n]=target.project(source,liquid[n]);vapor[n]=target.project(source,vapor[n]);
+                    control.checkpoint();liquid[n]=lumping.delump(liquid[n]);vapor[n]=lumping.delump(vapor[n]);
                 }
                 return new V3NeuralSeed(original,originalCatalog.requirePackage(original.packageId()).scientificRevision(),
                         seed.branch(),liquid,vapor,seed.temperatures(),seed.freeWater(),seed.wetTrays());
@@ -141,6 +188,17 @@ public final class V3NeuralRegistry implements V3NeuralInitializer {
         private static final Set<String> SIDECAR = Set.of("schemaVersion", "payloadSha256", "modelId", "physics", "formulationRevisions",
                 "branchesSeen", "presenceThreshold", "traceFloorFraction", "globalMin", "globalMax",
                 "designConstraints", "compositionEdges", "decoder", "candidateRule", "correctionRule");
+        /**
+         * Schema 5 (batch 2026-11-05-neural-retrain, N5): the E7 composition families replace the blend edges, and the model
+         * declares the off-axis share it takes and the lump map of U1. Schema 4 stays readable until the bundled model is
+         * replaced (N6).
+         */
+        private static final Set<String> SIDECAR_5;
+        static {
+            var fields = new HashSet<>(SIDECAR); fields.remove("compositionEdges");
+            fields.addAll(Set.of("families", "offAxisLimit", "lumpMap"));
+            SIDECAR_5 = Set.copyOf(fields);
+        }
         record Loaded(V3AnchorTransformerInitializer initializer, String pipelineSha256) {}
         private TransformerArtifact() {}
 
@@ -148,7 +206,7 @@ public final class V3NeuralRegistry implements V3NeuralInitializer {
             byte[] payload = bounded(payloadStream, 8 * 1024 * 1024);
             byte[] sidecar = bounded(sidecarStream, 256 * 1024);
             try {
-                JsonObject weights = object(payload, PAYLOAD, 1), policy = object(sidecar, SIDECAR, 4);
+                JsonObject weights = object(payload, PAYLOAD, 1), policy = sidecar(sidecar);
                 if (!sha256(payload).equals(policy.get("payloadSha256").getAsString()))
                     throw new IllegalArgumentException("Transformer payload SHA-256 mismatch");
                 if (!"ZERO_PHASE_FLOOR_10".equals(policy.get("decoder").getAsString())
@@ -169,6 +227,11 @@ public final class V3NeuralRegistry implements V3NeuralInitializer {
             } catch (com.google.gson.JsonParseException | IllegalStateException | NullPointerException | UnsupportedOperationException invalid) {
                 throw new IllegalArgumentException("Invalid transformer payload or sidecar", invalid);
             }
+        }
+
+        private static JsonObject sidecar(byte[] bytes) {
+            var schema = JsonParser.parseString(new String(bytes, StandardCharsets.UTF_8)).getAsJsonObject().get("schemaVersion");
+            return schema != null && schema.toString().equals("5") ? object(bytes, SIDECAR_5, 5) : object(bytes, SIDECAR, 4);
         }
 
         private static JsonObject object(byte[] bytes, Set<String> fields, int schema) {

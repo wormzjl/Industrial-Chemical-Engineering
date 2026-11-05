@@ -29,7 +29,7 @@ Installed 2026-11-05: torch 2.10.0+cu128 (CUDA on the RTX 4070 Ti), numpy 2.3.5,
 - `relabel.mjs`: re-derives `sense` and `label` (the overflash criterion) of a journal written before that window changed: `node tools/neural-retrain/relabel.mjs <dir>`.
 - `NeuralRetrainProbe.export` (N2 -> N3): for every label of `NR_LABELS` (journals joined by `;`), the axis-projected model inputs (U1 lumping by nearest normal boiling point), the native anchor on the label's branch, U2's three off-axis bands, targets and phase fractions. Injected rows run on `catalog.restrict(icheme:refinery, their compounds)`, as the simulator's sheet view does (O11 put CO2-I in that package).
 - `train.py` (N3): `python -I tools/neural-retrain/train.py <features.jsonl> <out> [--seed] [--epochs] [--width] [--u2]`; the guide's recipe and loss; normalisation from TRAIN only.
-- `export.py`: a checkpoint as the payload and a schema-4 sidecar the Java reader loads; `NeuralRetrainProbe.features` with `NR_PAYLOAD`/`NR_SIDECAR` then `model.py` checks parity.
+- `export.py`: a checkpoint as the payload and a schema-5 sidecar the Java reader loads (E7 families per unit, `offAxisLimit` 0.05, the `lumpMap.json` that the probe's `export` writes beside `features.jsonl`); `NeuralRetrainProbe.features` with `NR_PAYLOAD`/`NR_SIDECAR` then `model.py` checks parity.
 - `tally.mjs`: yield table, failure classes A to D, sense criteria and the VDU anchor count of a labels journal. Run: `node tools/neural-retrain/tally.mjs <dir>`.
 
 ## History
@@ -42,3 +42,4 @@ Installed 2026-11-05: torch 2.10.0+cu128 (CUDA on the RTX 4070 Ti), numpy 2.3.5,
 - 2026-11-05, VDU form 3: dry top (top return on tray 2 or lower), `VDU_TOP_WET` state check: 28 of 75 labels.
 - 2026-11-05, pipeline end to end (smoke, pilot labels only): export 112 rows (anchor 112 of 112; 64 rows of the pre-O11 injected basis skipped); `train.py` 160 epochs in 8 s on the GPU (96 train, 16 validation: temperature MAE 9.6 K); `export.py` payload read by the Java loader; Java against Python 5.3e-7. The smoke model puts tray 1 of the light preset at 377 K (old model 414 K, classical 351 to 371 K). Not a candidate: 96 rows, pre-E30 code.
 - 2026-11-05, injected rows after O11: the first 20 injected pilot rows on sheet views of `icheme:refinery` (20 to 22 compounds each): 11 labels, as before O11 (11 of the same 20); 6 DRY_SUPERSATURATED, 2 poll caps, 1 class D.
+- 2026-11-05, N5: the probe's `export` writes `lumpMap.json` (the 24 injectable off-axis compounds and their U1 lumps); `export.py` writes sidecar schema 5. Neither has been run since the change: the next export is at N3 on the N2 labels.

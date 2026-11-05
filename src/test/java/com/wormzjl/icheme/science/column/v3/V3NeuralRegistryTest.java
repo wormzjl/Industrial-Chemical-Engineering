@@ -183,6 +183,120 @@ class V3NeuralRegistryTest {
         assertThrows(IllegalArgumentException.class,()->V3NeuralRegistry.read(stream(data.toString()),p->{throw new AssertionError("Unsafe path was opened");}));
     }
 
+    // ------------------------------------------------ unknown compounds and the E7 family check (batch 2026-11-05-neural-retrain, N5)
+
+    /**
+     * A schema-5 model: one family around {@link #input()}'s feed (its two fed compounds, the plane their split moves in),
+     * its trained composition at the family's origin, and the given off-axis policy.
+     */
+    private static V3NeuralRegistry.Entry unknowns(double inPlane,double outOfPlane,double limit,Map<String,String> lumps) throws Exception {
+        var d=family(inPlane,outOfPlane,limit,lumps);
+        return new V3NeuralRegistry.Entry(1,V3AnchorTransformerInitializer.read(stream(d.toString()),V3FactorizedNeuralFeatures.DecodeOptions.NONE),"0".repeat(64));
+    }
+    private static JsonObject family(double inPlane,double outOfPlane,double limit,Map<String,String> lumps) {
+        var input=input();var d=V3RegroupedTransformerTest.document(input);d.addProperty("modelId","test:unknowns");d.remove("compositionEdges");
+        int c=input.componentBasis().componentCount();double[] mean=new double[c],u=new double[c];
+        mean[c-2]=.5;mean[c-8]=.5;u[c-2]=Math.sqrt(.5);u[c-8]=-Math.sqrt(.5);
+        var json=new Gson();var family=new JsonObject();family.addProperty("name","cdu");
+        family.add("mean",json.toJsonTree(mean));family.add("basis",json.toJsonTree(new double[][]{u}));
+        family.add("points",json.toJsonTree(new double[][]{{0}}));
+        family.addProperty("inPlaneLimit",inPlane);family.addProperty("outOfPlaneLimit",outOfPlane);
+        var families=new JsonArray();families.add(family);d.add("families",families);
+        d.addProperty("offAxisLimit",limit);d.add("lumpMap",json.toJsonTree(lumps));
+        return d;
+    }
+    /** {@link #input()} on the network package: {@code a} and {@code b} mol/s on its two compounds, {@code third} on a third, nitrogen. */
+    private static V3ColumnInput network(double a,double b,double third,double nitrogen) {
+        var p=CATALOG.requirePackage(NETWORK);int c=p.components().size()-1;double[] feed=new double[c+1];
+        feed[c-2]=a;feed[c-8]=b;feed[c-5]=third;feed[c]=nitrogen;
+        return V3TestInputs.dry(1,NETWORK,"test:reader",new V3ComponentBasis(p.components()),feed,550,2,1,250000,750,input().specifications());
+    }
+
+    /** U1: each lump member takes the lump's flow by its share of the lump's feed; a lump of one keeps the value exactly. */
+    @Test void aLumpSplitsByFeedShareAndOneMemberKeepsItsValueExactly() {
+        var ids=List.of("A","X","B","Y");var axis=List.of("A","B");var lumps=Map.of("X","B");
+        var lumping=V3NeuralRegistry.Lumping.of(ids,new double[]{60,4,36,0},axis,lumps,.05);
+        assertArrayEquals(new double[]{60,40},lumping.lumped());assertArrayEquals(new double[]{60,36},lumping.knownFeed());
+        assertEquals(List.of("A","B"),lumping.known());
+        double a=0.123456789;double[] out=lumping.delump(new double[]{a,10});
+        assertEquals(a,out[0]);assertEquals(1,out[1],1e-12);assertEquals(9,out[2],1e-12);assertEquals(0,out[3]);
+        assertNull(V3NeuralRegistry.Lumping.of(ids,new double[]{60,6,34,0},axis,lumps,.05),"6 % off the axis");
+        assertNull(V3NeuralRegistry.Lumping.of(ids,new double[]{60,4,36,1},axis,lumps,.05),"Y has no lump");
+        assertNull(V3NeuralRegistry.Lumping.of(ids,new double[]{0,4,0,0},axis,lumps,1),"nothing known is fed");
+        assertNull(V3NeuralRegistry.Lumping.of(ids,new double[]{60,1e-100,36,0},axis,lumps,0),"a schema-4 model takes no unknowns");
+    }
+
+    /** An unknown compound binds through its lump up to the model's share; the seed carries it on the request's own list. */
+    @Test void anUnknownCompoundBindsThroughItsLumpUpToTheModelsShare() throws Exception {
+        var registry=new V3NeuralRegistry(List.of(unknowns(1e-6,1e-9,.05,Map.of("Nitrogen","Methane"))));
+        var four=network(50,50,0,100*.04/.96);
+        var bound=registry.bind(CATALOG,four);assertEquals("test:unknowns",bound.modelId());
+        var seed=bound.predict(four,V3SolveControl.UNBOUNDED).orElseThrow();
+        assertEquals(four,seed.input());
+        var ids=four.componentBasis().componentIds();int methane=ids.indexOf("Methane"),nitrogen=ids.indexOf("Nitrogen");
+        for(int n=0;n<seed.liquid().length;n++) {
+            // Methane is not fed, so its lump is all nitrogen: methane's slot goes to nitrogen.
+            assertEquals(0,seed.liquid()[n][methane]);assertEquals(0,seed.vapor()[n][methane]);
+            assertTrue(seed.liquid()[n][nitrogen]>=0&&Double.isFinite(seed.vapor()[n][nitrogen]));
+        }
+        assertSame(V3NeuralInitializer.UNAVAILABLE,registry.bind(CATALOG,network(50,50,0,100*.06/.94)),"6 % is over the model's 5 %");
+        assertSame(V3NeuralInitializer.UNAVAILABLE,new V3NeuralRegistry(List.of(unknowns(1e-6,1e-9,.05,Map.of()))).bind(CATALOG,four),
+                "nitrogen has no lump");
+    }
+
+    /** E7 reads the known part renormalised: the in-plane distance to a trained composition and the residual off the plane. */
+    @Test void theFamilyCheckReadsTheKnownPartRenormalised() throws Exception {
+        var tight=new V3NeuralRegistry(List.of(unknowns(.05,1e-9,.05,Map.of("Nitrogen","Methane"))));
+        assertNotSame(V3NeuralInitializer.UNAVAILABLE,tight.bind(CATALOG,network(50,50,0,4)),"the known part is the trained composition");
+        // A 60/40 split lies in the plane, 0.1414 from the trained point.
+        assertSame(V3NeuralInitializer.UNAVAILABLE,tight.bind(CATALOG,network(60,40,0,0)));
+        var wide=new V3NeuralRegistry(List.of(unknowns(.2,1e-9,.05,Map.of("Nitrogen","Methane"))));
+        assertNotSame(V3NeuralInitializer.UNAVAILABLE,wide.bind(CATALOG,network(60,40,0,0)));
+        // A third known compound at 1 % leaves the plane: another crude.
+        assertSame(V3NeuralInitializer.UNAVAILABLE,wide.bind(CATALOG,network(50,49,1,0)));
+        assertNotSame(V3NeuralInitializer.UNAVAILABLE,new V3NeuralRegistry(List.of(unknowns(.2,.02,.05,Map.of()))).bind(CATALOG,network(50,49,1,0)));
+    }
+
+    /** Schema 5 reads only a complete off-axis policy within the owner's 5 %, an orthonormal basis and one composition domain. */
+    @Test void schemaFiveRejectsAnIncompleteOrWiderPolicy() {
+        Map<String,String> lumps=Map.of("Nitrogen","Methane");
+        for(Consumer<JsonObject> damage:List.<Consumer<JsonObject>>of(
+                d->d.addProperty("offAxisLimit",.06),
+                d->d.add("lumpMap",new Gson().toJsonTree(Map.of("Nitrogen","Argon"))),
+                d->d.add("lumpMap",new Gson().toJsonTree(Map.of("Methane","Ethane"))),
+                d->d.remove("lumpMap"),
+                d->d.getAsJsonArray("families").get(0).getAsJsonObject().getAsJsonArray("basis").get(0).getAsJsonArray().set(0,new JsonPrimitive(.5)),
+                d->d.add("compositionEdges",V3RegroupedTransformerTest.document(input()).get("compositionEdges")))) {
+            var d=family(.05,1e-9,.05,lumps);damage.accept(d);
+            assertThrows(IllegalArgumentException.class,()->V3AnchorTransformerInitializer.read(stream(d.toString()),V3FactorizedNeuralFeatures.DecodeOptions.NONE));
+        }
+        // Schema 4 takes no off-axis policy.
+        var d=V3RegroupedTransformerTest.document(input());d.addProperty("offAxisLimit",0);
+        assertThrows(IllegalArgumentException.class,()->V3AnchorTransformerInitializer.read(stream(d.toString()),V3FactorizedNeuralFeatures.DecodeOptions.NONE));
+    }
+
+    /** The bundled pair read as a schema-5 sidecar: the artifact reader takes the new fields and still pins the payload. */
+    @Test void theArtifactReaderTakesSchemaFive() throws Exception {
+        byte[] payload;String sidecar;
+        try(var p=getClass().getResourceAsStream("/data/icheme/neural/v3-column-transformer-regrouped.payload.json");
+            var s=getClass().getResourceAsStream("/data/icheme/neural/v3-column-transformer-regrouped.sidecar.json")) {
+            payload=p.readAllBytes();sidecar=new String(s.readAllBytes(),StandardCharsets.UTF_8);
+        }
+        var side=JsonParser.parseString(sidecar).getAsJsonObject();
+        var endpoint=side.getAsJsonArray("compositionEdges").get(0).getAsJsonArray().get(0).getAsJsonArray();
+        side.remove("compositionEdges");side.addProperty("schemaVersion",5);
+        double[] unit=new double[endpoint.size()];unit[0]=1;
+        var family=new JsonObject();family.addProperty("name","cdu");family.add("mean",endpoint);
+        family.add("basis",new Gson().toJsonTree(new double[][]{unit}));family.add("points",new Gson().toJsonTree(new double[][]{{0}}));
+        family.addProperty("inPlaneLimit",.01);family.addProperty("outOfPlaneLimit",.01);
+        var families=new JsonArray();families.add(family);side.add("families",families);
+        side.addProperty("offAxisLimit",.05);side.add("lumpMap",new Gson().toJsonTree(Map.of("Nitrogen","Methane")));
+        var loaded=V3NeuralRegistry.TransformerArtifact.read(new ByteArrayInputStream(payload),stream(side.toString()));
+        assertEquals(.05,loaded.initializer().offAxisLimit());assertEquals(Map.of("Nitrogen","Methane"),loaded.initializer().lumpMap());
+        side.addProperty("schemaVersion",4);
+        assertThrows(IllegalArgumentException.class,()->V3NeuralRegistry.TransformerArtifact.read(new ByteArrayInputStream(payload),stream(side.toString())));
+    }
+
     /** A result is current only for the exact resolved scientific dataset (moved from MaterialRuntime, which had no other caller). */
     private static boolean isCurrent(String packageId, String scientificRevision) {
         var p = MaterialRuntime.current().packages().get(packageId);

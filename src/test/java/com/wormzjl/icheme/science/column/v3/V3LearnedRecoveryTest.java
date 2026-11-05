@@ -57,7 +57,7 @@ class V3LearnedRecoveryTest {
     }
 
     private static V3InitializationOptions learned(V3InitializationOptions.Mode mode, int iterations) {
-        return new V3InitializationOptions(mode, V3InitializationOptions.WetStart.AUTO, iterations, 30_000,
+        return new V3InitializationOptions(mode, V3InitializationOptions.WetStart.AUTO, iterations, 5_000_000,
                 V3InitializationOptions.Correction.PROGRESS);
     }
 

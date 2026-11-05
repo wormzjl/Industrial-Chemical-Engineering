@@ -84,13 +84,6 @@ public final class V3ColumnCalculator {
     /** Free-water tray-set refreshes within one attempt; only a converged attempt spends one. */
     private static final int MAXIMUM_WET_TRAY_REFRESHES = 3;
     /**
-     * A large wet request has to run the classical steam/heat ramp after a learned seed is rejected.  The bundled
-     * model's correction is not trained for that high-dimensional wet lane and can spend its whole two-second
-     * allowance before handing back the unchanged classical route.  Give it a short probe instead; a candidate that
-     * closes quickly is still accepted, while a poor candidate falls back almost immediately.
-     */
-    private static final int LARGE_WET_NEURAL_PROBE_MILLISECONDS = 100;
-    /**
      * Newton budget of the one refresh that follows a stalled attempt and only removes points.
      *
      * <p>Measured on the 40 MW return-tray case: all four such refreshes stalled again with a worse final
@@ -259,12 +252,13 @@ public final class V3ColumnCalculator {
         if (unsuppliedDraws != null) return unsuppliedDraws;
         V3ColumnOutcome.Failure coolingFailure = staticCoolingAdmission(input);
         if (coolingFailure != null) return coolingFailure;
-        long started = System.nanoTime();
-        int neuralBudgetMilliseconds = neuralBudgetMilliseconds(input, options);
+        // The learned route spends at most options.budgetPolls() control polls (owner decision D2, batch
+        // 2026-11-05-neural-retrain): a counter, so the same request takes the same route on any machine.
+        java.util.concurrent.atomic.AtomicLong neuralPolls = new java.util.concurrent.atomic.AtomicLong();
         NeuralProgress progress = new NeuralProgress(trace);
         V3SolveControl neuralControl = () -> {
             control.checkpoint(); // Whole-request cancellation always wins over the local neural budget.
-            if (System.nanoTime() - started >= neuralBudgetMilliseconds * 1_000_000L)
+            if (neuralPolls.incrementAndGet() > options.budgetPolls())
                 throw new NeuralBudgetExceeded();
         };
         String reason = "model unavailable or outside coverage";
@@ -329,14 +323,12 @@ public final class V3ColumnCalculator {
             if (observer != null) observer.accept(Objects.requireNonNull(selectedProfile));
             return initializationEvent(selected, "initializer=LNN; model=" + modelId + "; wet=" + options.wetStart()
                     + "; mode=" + options.mode() + "; candidates=" + candidatesTried
-                    + "; neuralMs=" + (System.nanoTime() - started) / 1_000_000);
+                    + "; neuralPolls=" + neuralPolls.get());
         }
         if (lastFailure != null && (lastFailure.code() == V3SolverFailureCode.PROPERTY_OUT_OF_RANGE
                 || lastFailure.code() == V3SolverFailureCode.INFEASIBLE_SPECIFICATION)) return lastFailure;
         String event = "initializer=" + (options.mode() == V3InitializationOptions.Mode.LNN_ONLY ? "LNN_FAILED" : "CURRENT_BACKUP")
-                + "; model=" + modelId + "; neuralMs=" + (System.nanoTime() - started) / 1_000_000
-                + (neuralBudgetMilliseconds == options.budgetMilliseconds()
-                ? "" : "; neuralBudgetMs=" + neuralBudgetMilliseconds)
+                + "; model=" + modelId + "; neuralPolls=" + neuralPolls.get() + "/" + options.budgetPolls()
                 + "; " + reason;
         if (options.mode() == V3InitializationOptions.Mode.LNN_ONLY)
             return initializationEvent(lastFailure != null ? lastFailure
@@ -2542,15 +2534,6 @@ public final class V3ColumnCalculator {
 
     private static boolean featureRampRequired(V3ColumnInput input) {
         return !input.sideDraws().isEmpty() || !input.steamFeeds().isEmpty() || !input.pumparounds().isEmpty();
-    }
-
-    private static int neuralBudgetMilliseconds(V3ColumnInput input, V3InitializationOptions options) {
-        if (options.mode() != V3InitializationOptions.Mode.LNN_FIRST
-                || input.stageCount() < 32
-                || !featureRampRequired(input)) {
-            return options.budgetMilliseconds();
-        }
-        return Math.min(options.budgetMilliseconds(), LARGE_WET_NEURAL_PROBE_MILLISECONDS);
     }
 
     private static V3SolvePass withRampEvents(V3SolvePass pass, List<String> events) {

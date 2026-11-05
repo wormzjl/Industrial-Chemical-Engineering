@@ -1,7 +1,9 @@
 """Exports a train.py checkpoint as the payload and sidecar the Java reader takes (V3NeuralRegistry.TransformerArtifact),
-batch 2026-11-05-neural-retrain. The sidecar is schema 4 for now (N5 replaces compositionEdges with the E7 family check, schema 5):
-it takes the physics block, decoder and rules from a template sidecar, and its own model id, payload hash, formulation revisions,
-branches seen, global bounds over the TRAIN features, node-pressure bounds and composition edges between the training grades.
+batch 2026-11-05-neural-retrain. The sidecar is schema 5 (N5): it takes the physics block, decoder, rules and design constraints
+from a template sidecar, and writes its own model id, payload hash, formulation revisions, branches seen, the global bounds over the
+TRAIN features (the composition box widened by 10 % of its span, NEURAL_RETRAIN_DATA.md section 4), the E7 families (one per unit:
+mean, 3-PC basis, the TRAIN compositions' coordinates, in-plane and out-of-plane limits at the 99th percentile of the trained spread),
+the off-axis limit (the owner's 5 %) and the U1 lump map the probe's export wrote (lumpMap.json beside features.jsonl).
 
 Run: python -I tools/neural-retrain/export.py <checkpoint.pt> <norm.json> <features.jsonl> <template-sidecar.json> <model-id> <out-dir>
 """
@@ -18,7 +20,29 @@ from train import fold, read  # noqa: E402
 
 FEATURE_REVISION = 'v3-anchor-augmented-regrouped-2'     # the Java encoding is unchanged under U1
 ANCHOR_REVISION = 'native-material-closed-anchor-v2-basis-width'
+OFF_AXIS_LIMIT = 0.05
+BOX = slice(17, 17 + 19)        # global features x17..x35: the feed's mole fractions
+MAX_POINTS = 2048               # V3AnchorTransformerInitializer.Family.MAXIMUM_POINTS
 COMPONENTS = ['Methane', 'Ethane', 'Propane', 'Isobutane', 'N-butane', 'Isopentane', 'N-pentane'] + [f'crude_pc{i:02d}' for i in range(1, 13)]
+
+
+def family(name, fractions):
+    """E7 family of one unit's TRAIN compositions (non-injected rows): mean, 3-PC basis, coordinates, limits."""
+    x = np.asarray(fractions, dtype=np.float64)
+    mean = x.mean(0)
+    _, _, vt = np.linalg.svd(x - mean, full_matrices=False)
+    basis = vt[:min(3, len(vt))]
+    coords = (x - mean) @ basis.T
+    residual = np.linalg.norm((x - mean) - coords @ basis, axis=1)
+    if len(coords) > 1:
+        d = np.linalg.norm(coords[:, None, :] - coords[None, :, :], axis=-1)
+        np.fill_diagonal(d, np.inf)
+        in_plane = float(np.percentile(d.min(1), 99))
+    else:
+        in_plane = 0.0
+    points = coords[::max(1, -(-len(coords) // MAX_POINTS))]
+    return {'name': name, 'mean': mean.tolist(), 'basis': basis.tolist(), 'points': points.tolist(),
+            'inPlaneLimit': in_plane, 'outOfPlaneLimit': float(np.percentile(residual, 99))}
 
 
 def main(checkpoint, norm_path, features, template, model_id, out):
@@ -39,15 +63,21 @@ def main(checkpoint, norm_path, features, template, model_id, out):
     side['modelId'] = model_id
     side['formulationRevisions'] = sorted({r['formulationRevision'] for r in rows if r.get('formulationRevision')})
     side['branchesSeen'] = ck['branchesSeen']
-    side['globalMin'] = g.min(0).tolist(); side['globalMax'] = g.max(0).tolist()
-    pure = {}
-    for r in rows:
-        f = np.asarray(r['feedFractions']); pure.setdefault(tuple(np.round(f, 12)), f)
-    vertices = list(pure.values())[:4]
-    side['compositionEdges'] = [[a.tolist(), b.tolist()] for i, a in enumerate(vertices) for b in vertices[i + 1:]] or [[vertices[0].tolist(), vertices[0].tolist()]]
+    lo, hi = g.min(0), g.max(0)
+    span = hi[BOX] - lo[BOX]
+    lo[BOX] = np.maximum(lo[BOX] - 0.1 * span, 0); hi[BOX] = hi[BOX] + 0.1 * span
+    side['globalMin'] = lo.tolist(); side['globalMax'] = hi.tolist()
+    side['schemaVersion'] = 5
+    side.pop('compositionEdges', None)
+    known = [r for r in rows if not r.get('injected')]
+    side['families'] = [family(unit, [r['feedFractions'] for r in known if r['unit'] == unit])
+                        for unit in ('cdu', 'vdu') if any(r['unit'] == unit for r in known)]
+    side['offAxisLimit'] = OFF_AXIS_LIMIT
+    side['lumpMap'] = json.loads((Path(features).parent / 'lumpMap.json').read_text(encoding='utf-8'))
     (out / 'sidecar.json').write_text(json.dumps(side), encoding='utf-8')
     print(json.dumps({'payloadBytes': len(payload_bytes), 'payloadSha256': side['payloadSha256'], 'formulationRevisions': side['formulationRevisions'],
-                      'trainRows': len(rows)}))
+                      'trainRows': len(rows),
+                      'families': [{k: f[k] for k in ('name', 'inPlaneLimit', 'outOfPlaneLimit')} | {'points': len(f['points'])} for f in side['families']]}))
 
 
 if __name__ == '__main__':

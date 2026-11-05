@@ -19,6 +19,7 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.Executors;
@@ -48,6 +49,10 @@ class NeuralRetrainProbe {
     static final double SCREEN_RATIO = 0.30, SIGMA_LIMIT = 0.66, LAMBDA = 60_000.0;
     /** The package that holds the 19-compound axis, nitrogen and the 24 refinery compounds (extends chain): injected rows. */
     static final String WORLD_PACKAGE = "icheme:refinery";
+    /** design.mjs OFF_AXIS: the injectable off-axis compounds (the world list less CO2 and oxygen). */
+    static final List<String> OFF_AXIS = List.of("Nitrogen", "Hydrogen", "HydrogenSulfide", "CarbonMonoxide", "Ammonia", "SulfurDioxide",
+            "CarbonylSulfide", "Ethylene", "Propylene", "Butene-1", "Isobutene", "Cis-2-butene", "Trans-2-butene", "Butadiene", "N-hexane",
+            "Cyclohexane", "Benzene", "Toluene", "Ethylbenzene", "O-xylene", "M-xylene", "P-xylene", "MethylMercaptan", "EthylMercaptan");
     /**
      * Sense windows (NEURAL_RETRAIN_DATA.md section 7): physical properties of the operating point, never solver difficulty.
      * Heater outlet below cracking (CDU about 370 C, VDU about 420 C); stripping steam by mass of hydrocarbon feed; trays below the
@@ -546,7 +551,13 @@ class NeuralRetrainProbe {
                 }
             }
         }
-        System.out.println("nr export rows=" + rows + " anchors=" + anchors + " skipped=" + skipped);
+        // The sidecar's lump map (schema 5): each injectable off-axis compound and its U1 lump, as trainingRow lumps it.
+        var all = new JsonObject(); all.add("compounds", JSON.toJsonTree(OFF_AXIS)); all.addProperty("fraction", 0.01);
+        var every = injected(base[1], all); int[] map = lumpMap(every); var lumps = new TreeMap<String, String>();
+        var ids = every.componentBasis().componentIds();
+        for (int k = 0; k < ids.size(); k++) if (!axis().contains(ids.get(k))) lumps.put(ids.get(k), axis().get(map[k]));
+        Files.writeString(out.resolve("lumpMap.json"), new GsonBuilder().setPrettyPrinting().create().toJson(lumps));
+        System.out.println("nr export rows=" + rows + " anchors=" + anchors + " skipped=" + skipped + " lumps=" + lumps.size());
     }
 
     // ---------------------------------------------------------------- bundled-model parity reference (N0)

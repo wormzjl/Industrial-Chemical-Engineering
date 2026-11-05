@@ -5,9 +5,9 @@ import java.util.List;
 
 /** Shared fixtures of the V3 column tests. */
 public final class V3TestInputs {
-    /** The learned route at the shipped walls (16 iterations, two seconds) and the qualified progress rule. */
+    /** The learned route at the shipped walls (16 iterations, the default poll budget) and the qualified progress rule. */
     static final V3InitializationOptions LEARNED = new V3InitializationOptions(V3InitializationOptions.Mode.LNN_FIRST,
-            V3InitializationOptions.WetStart.AUTO, 16, 2_000, V3InitializationOptions.Correction.PROGRESS);
+            V3InitializationOptions.WetStart.AUTO, 16, V3InitializationOptions.DEFAULT_BUDGET_POLLS, V3InitializationOptions.Correction.PROGRESS);
 
     /** The registered TJL19 DWSIM package of the literature CDU preset. */
     public static final String LITERATURE_PACKAGE = "icheme:tjl19_dwsim";

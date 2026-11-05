@@ -30,6 +30,8 @@ import java.util.Optional;
  */
 final class V3AnchorTransformerInitializer implements V3NeuralInitializer {
     private static final String REVISION = "v3-anchor-augmented-regrouped-2";
+    /** The owner's ceiling on unknown compounds a model may take (batch 2026-11-05-neural-retrain: "up to ~5% unknowns"). */
+    static final double MAXIMUM_OFF_AXIS_SHARE = 0.05;
     private static final V3CondenserPhaseBranch[] BRANCHES = {V3CondenserPhaseBranch.LIQUID_ONLY,
             V3CondenserPhaseBranch.TWO_PHASE, V3CondenserPhaseBranch.VAPOR_ONLY};
 
@@ -69,15 +71,28 @@ final class V3AnchorTransformerInitializer implements V3NeuralInitializer {
                 || d.minimumNodePressurePascal <= 0 || d.maximumNodePressurePascal < d.minimumNodePressurePascal
                 || d.pumparoundSplits == null || d.pumparoundSplits.stream().anyMatch(s -> s == null))
             throw new IllegalArgumentException("Invalid design constraints");
-        if (m.compositionEdges == null || m.compositionEdges.length == 0 || m.compositionEdges.length > 128)
-            throw new IllegalArgumentException("Missing bounded composition domain");
-        for (double[][] edge : m.compositionEdges) {
-            if (edge == null || edge.length != 2) throw new IllegalArgumentException("Invalid composition edge");
-            for (double[] endpoint : edge) {
-                vector(endpoint, m.components.size(), false);
-                if (Arrays.stream(endpoint).anyMatch(v -> v < 0) || Math.abs(Arrays.stream(endpoint).sum()-1) > 1e-10)
-                    throw new IllegalArgumentException("Invalid composition endpoint");
+        if ((m.compositionEdges == null) == (m.families == null))
+            throw new IllegalArgumentException("Expected exactly one composition domain: edges (schema 4) or families (schema 5)");
+        if (m.compositionEdges != null) {
+            if (m.compositionEdges.length == 0 || m.compositionEdges.length > 128)
+                throw new IllegalArgumentException("Missing bounded composition domain");
+            for (double[][] edge : m.compositionEdges) {
+                if (edge == null || edge.length != 2) throw new IllegalArgumentException("Invalid composition edge");
+                for (double[] endpoint : edge) {
+                    vector(endpoint, m.components.size(), false);
+                    if (Arrays.stream(endpoint).anyMatch(v -> v < 0) || Math.abs(Arrays.stream(endpoint).sum()-1) > 1e-10)
+                        throw new IllegalArgumentException("Invalid composition endpoint");
+                }
             }
+            if (m.offAxisLimit != null || m.lumpMap != null) throw new IllegalArgumentException("Unknown compounds need sidecar schema 5");
+        } else {
+            if (m.families.length == 0 || m.families.length > 4) throw new IllegalArgumentException("Invalid composition families");
+            for (Family f : m.families) f.validate(m.components.size());
+            if (m.offAxisLimit == null || !(m.offAxisLimit >= 0) || m.offAxisLimit > MAXIMUM_OFF_AXIS_SHARE
+                    || m.lumpMap == null || m.lumpMap.size() > 128
+                    || m.lumpMap.entrySet().stream().anyMatch(e -> e.getKey() == null || e.getKey().isBlank()
+                            || m.components.contains(e.getKey()) || !m.components.contains(e.getValue())))
+                throw new IllegalArgumentException("Invalid off-axis policy");
         }
         var result = new V3AnchorTransformerInitializer(m, physics(m), decode);
         result.checkLinear("embed", inputs(m), 64); result.checkNorm("output.0"); result.checkLinear("output.1", 64, outputWidth(m));
@@ -123,12 +138,24 @@ final class V3AnchorTransformerInitializer implements V3NeuralInitializer {
     List<String> componentIds() { return List.copyOf(model.components); }
     /** The physics the model was trained on; a request binds only where its values on its active compounds are these. */
     TrainedPhysics physics() { return physics; }
+    /** The largest off-axis mole share of a feed the model takes (U1, sidecar schema 5); zero for schema 4. */
+    double offAxisLimit() { return model.offAxisLimit == null ? 0.0 : model.offAxisLimit; }
+    /** The axis compound each known off-axis compound is lumped into (U1, sidecar schema 5); empty for schema 4. */
+    Map<String, String> lumpMap() { return model.lumpMap == null ? Map.of() : Map.copyOf(model.lumpMap); }
 
     long parameterCount() { return parameterStorageBytes() / Double.BYTES; }
 
     @Override public Optional<V3NeuralSeed> predict(V3ColumnInput input, V3SolveControl control) {
+        return predict(input, input.feedComponentMolarFlowsMolPerSecond(), control);
+    }
+
+    /**
+     * A prediction for {@code input} on the model's axis whose composition gate reads {@code knownFeed}: the request's feed
+     * on the axis without its lumped off-axis compounds ({@link V3NeuralRegistry#bind}).
+     */
+    Optional<V3NeuralSeed> predict(V3ColumnInput input, double[] knownFeed, V3SolveControl control) {
         control.checkpoint();
-        if (!supported(input)) return Optional.empty();
+        if (!supported(input, knownFeed)) return Optional.empty();
         Raw raw = raw(input, control);
         int best = bestBranch(input, raw.branchLogits);
         if (best < 0 || !Double.isFinite(raw.branchLogits[best])) return Optional.empty();
@@ -150,7 +177,10 @@ final class V3AnchorTransformerInitializer implements V3NeuralInitializer {
      * topology and the global bounds. The physics is the binding's ({@link V3NeuralRegistry#bind}): the request reaches
      * the model only through the lens of a request whose physics on its active compounds is the model's.
      */
-    boolean supported(V3ColumnInput input) {
+    boolean supported(V3ColumnInput input) { return supported(input, input.feedComponentMolarFlowsMolPerSecond()); }
+
+    /** {@link #supported(V3ColumnInput)} with the composition gate on {@code knownFeed}, the feed without its lumped unknowns. */
+    boolean supported(V3ColumnInput input, double[] knownFeed) {
         var catalog=com.wormzjl.icheme.science.material.MaterialRuntime.current();
         var registered=catalog.packages().get(input.packageId());
         if (registered == null || !registered.components().equals(model.components)
@@ -158,7 +188,7 @@ final class V3AnchorTransformerInitializer implements V3NeuralInitializer {
                 || input.pumparounds().size() > 4 || input.sideDraws().size() > 3 || input.steamFeeds().size() > 2
                 || !(model.formulationRevisions.contains(V3ColumnCalculator.initializationFormulationRevision(input))
                         || model.formulationRevisions.contains(V3ColumnCalculator.formulationRevision(input, 0)))) return false;
-        if (!compositionSupported(input.feedComponentMolarFlowsMolPerSecond())) return false;
+        if (knownFeed.length != model.components.size() || !compositionSupported(knownFeed)) return false;
         Design d = model.designConstraints;
         double bottom = input.topPressurePascal() + (input.stageCount() - 1) * input.stagePressureDropPascal();
         double slack = 1e-9 * Math.max(1, d.maximumNodePressurePascal);
@@ -173,10 +203,20 @@ final class V3AnchorTransformerInitializer implements V3NeuralInitializer {
         return true;
     }
 
-    /** Coverage is the explicitly qualified union of blend segments, not a feature bounding box. */
+    /**
+     * Coverage is an explicitly qualified composition domain, not a feature bounding box: the union of blend segments
+     * (schema 4), or since batch 2026-11-05-neural-retrain the E7 family check (schema 5, decision D5 A), where a feed passes
+     * when one family holds it ({@link Family#holds}).
+     */
     private boolean compositionSupported(double[] feed) {
         double total = Arrays.stream(feed).sum();
         if (!(total > 0)) return false;
+        if (model.families != null) {
+            double[] x = new double[feed.length];
+            for (int i = 0; i < x.length; i++) x[i] = feed[i] / total;
+            for (Family family : model.families) if (family.holds(x)) return true;
+            return false;
+        }
         for (double[][] edge : model.compositionEdges) {
             double numerator=0, denominator=0;
             for (int i=0;i<feed.length;i++) {
@@ -301,11 +341,57 @@ final class V3AnchorTransformerInitializer implements V3NeuralInitializer {
         if (x == null || x.length != size || Arrays.stream(x).anyMatch(v -> !Double.isFinite(v) || positive && v <= 0)) throw new IllegalArgumentException("Invalid model vector");
     }
     private static final class Tensor { int[] shape; double[] values; }
+    /**
+     * One feed family of the E7 check (sidecar schema 5): the mean and the principal-composition basis of its strict TRAIN
+     * compositions, those compositions' coordinates in the basis, and two limits taken from the trained spread. A composition
+     * belongs to the family when its residual off the basis plane is at most {@code outOfPlaneLimit} ("the same crude") and its
+     * coordinates lie within {@code inPlaneLimit} of a trained composition ("inside the blends the model saw").
+     */
+    static final class Family {
+        static final int MAXIMUM_POINTS = 2048;
+        String name; double[] mean; double[][] basis, points; double inPlaneLimit, outOfPlaneLimit;
+
+        void validate(int components) {
+            if (name == null || !name.matches("[a-z0-9_-]{1,32}")) throw new IllegalArgumentException("Invalid family name");
+            vector(mean, components, false);
+            if (basis == null || basis.length < 1 || basis.length > 3 || points == null || points.length < 1 || points.length > MAXIMUM_POINTS
+                    || !Double.isFinite(inPlaneLimit) || inPlaneLimit < 0 || !Double.isFinite(outOfPlaneLimit) || outOfPlaneLimit < 0)
+                throw new IllegalArgumentException("Invalid composition family: " + name);
+            for (int a = 0; a < basis.length; a++) {
+                vector(basis[a], components, false);
+                for (int b = 0; b <= a; b++) {
+                    double dot = 0; for (int i = 0; i < components; i++) dot += basis[a][i] * basis[b][i];
+                    if (Math.abs(dot - (a == b ? 1 : 0)) > 1e-6) throw new IllegalArgumentException("Family basis is not orthonormal: " + name);
+                }
+            }
+            for (double[] p : points) vector(p, basis.length, false);
+        }
+
+        boolean holds(double[] fractions) {
+            double[] d = new double[mean.length];
+            for (int i = 0; i < d.length; i++) d[i] = fractions[i] - mean[i];
+            double[] coordinates = new double[basis.length];
+            for (int a = 0; a < basis.length; a++) for (int i = 0; i < d.length; i++) coordinates[a] += basis[a][i] * d[i];
+            double residual = 0;
+            for (int i = 0; i < d.length; i++) {
+                double r = d[i]; for (int a = 0; a < basis.length; a++) r -= coordinates[a] * basis[a][i];
+                residual += r * r;
+            }
+            if (Math.sqrt(residual) > outOfPlaneLimit) return false;
+            double limit = inPlaneLimit * inPlaneLimit;
+            for (double[] p : points) {
+                double distance = 0; for (int a = 0; a < p.length; a++) distance += (coordinates[a] - p[a]) * (coordinates[a] - p[a]);
+                if (distance <= limit) return true;
+            }
+            return false;
+        }
+    }
     private static final class Design { double minimumNodePressurePascal, maximumNodePressurePascal; boolean steamAtSumpOnly; List<V3PumparoundSpec.Split> pumparoundSplits; }
     private static final class Document {
         String featureRevision, modelType, modelId, anchorLayout, baselineRevision;
         com.google.gson.JsonObject physics;
         double[][][] compositionEdges;
+        Family[] families; Double offAxisLimit; Map<String, String> lumpMap;
         List<String> components, formulationRevisions; boolean[] branchesSeen;
         double presenceThreshold, traceFloorFraction; double[] globalMin, globalMax;
         Map<String, double[]> normalization; Map<String, Tensor> weights; Design designConstraints;

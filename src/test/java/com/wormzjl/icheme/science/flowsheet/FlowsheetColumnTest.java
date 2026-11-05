@@ -130,7 +130,7 @@ final class FlowsheetColumnTest {
     }
 
     private static V3ColumnResult calculator(V3ColumnInput input) {
-        var options = new V3InitializationOptions(V3InitializationOptions.Mode.LNN_FIRST, V3InitializationOptions.WetStart.AUTO, 16, 2_000, V3InitializationOptions.Correction.PROGRESS);
+        var options = new V3InitializationOptions(V3InitializationOptions.Mode.LNN_FIRST, V3InitializationOptions.WetStart.AUTO, 16, V3InitializationOptions.DEFAULT_BUDGET_POLLS, V3InitializationOptions.Correction.PROGRESS);
         var outcome = MaterialRuntime.with(CATALOG, input.packageId(), () -> V3ColumnCalculator.calculate(input, V3SolveControl.UNBOUNDED, 0, 0, options, V3NeuralRegistry.bundled().bind(CATALOG, input), V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO));
         return ((V3ColumnOutcome.Success) outcome).result();
     }

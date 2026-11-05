@@ -2,7 +2,7 @@
 
 Purpose: retrain the V3 column's learned start on open data (the four generated crude grades and their blends) and today's column (wet condenser, steam, pumparounds, side draws, flow-dependent tray pressure drop), with E7's principal-composition check, and remove the stale regrouped model in the same change. Owner decision E26 of [OPEN_DATA_PLAN.md](../2026-11-04-open-thermo-data/OPEN_DATA_PLAN.md).
 
-Status: In progress since 2026-11-05, on `claude/neural-retrain-open-data-712a75`, which merges into `claude/refinery-compounds-thermos-252973`. Plan revision 2 waits for the owner; N0 done; no Gradle (lane 2 passed to O11). Index: [../INDEX.md](../INDEX.md).
+Status: In progress since 2026-11-05, on `claude/neural-retrain-open-data-712a75`, which merges into `claude/refinery-compounds-thermos-252973`. Plan revision 2 approved; N0, N1 pilot, N3 pipeline and N5 code done; N2 waits for E30. Index: [../INDEX.md](../INDEX.md).
 
 ## Documents
 
@@ -17,7 +17,7 @@ Status: In progress since 2026-11-05, on `claude/neural-retrain-open-data-712a75
 
 ## Code areas
 
-- `science/column/v3/`: `V3ColumnCalculator` (learned route, `neuralBudgetMilliseconds`), `V3NeuralRegistry`, `V3AnchorTransformerInitializer`, `V3GeneralNeuralFeatures`, `V3FactorizedNeuralFeatures`, `V3NeuralSeed`; `science/material/TrainedPhysics.java`; `science/flowsheet/unit/ColumnUnit.java`; `src/main/resources/data/icheme/neural/`.
+- `science/column/v3/`: `V3ColumnCalculator` (learned route, poll budget), `V3NeuralRegistry`, `V3AnchorTransformerInitializer`, `V3GeneralNeuralFeatures`, `V3FactorizedNeuralFeatures`, `V3NeuralSeed`; `science/material/TrainedPhysics.java`; `science/flowsheet/unit/ColumnUnit.java`; `src/main/resources/data/icheme/neural/`.
 
 ## Open items
 
@@ -25,6 +25,7 @@ Status: In progress since 2026-11-05, on `claude/neural-retrain-open-data-712a75
 - Open checks V0 (the encoding and anchor on the VDU top), M1 (timing, alone).
 - N1 pilot of record: needs a Gradle lane from the base session. N2 waits for the base branch commit of F1b and fix (a) (E30) and a sync with the base branch.
 - Open measurement M1: time of bind, anchor and inference on the four presets.
+- `V3InitializationOptions.DEFAULT_BUDGET_POLLS` = 150,000 is provisional (sixteen Newton iterations of the 40-tray medium preset at about 8,000 polls each, O8, with a margin). Set it by counters on the four presets with the N4 candidate, before N6.
 
 ## History (continued)
 
@@ -38,3 +39,4 @@ Status: In progress since 2026-11-05, on `claude/neural-retrain-open-data-712a75
 - 2026-11-05, VDU form 3 (owner: "Top trays should be dry for VDU"): the top pumparound returns on tray 2 or lower, plus the state check VDU_TOP_WET. 28 of 75 labels (37 %), dry top on 30 of 30 accepted states; chosen. 29 depleted draws remain (the open VDU convergence item).
 - 2026-11-05: base branch merged (O11: CO2 and CO2-I in `icheme:refinery`; the column refuses a package that holds crystals, so injected rows now run on the sheet view `catalog.restrict`). N3 pipeline built and smoke-tested on the pilot labels: export, train.py, export.py, Java reader parity 5.3e-7 (tools/neural-retrain/README.md). The injected pilot rows predate O11's views and must be relabelled; N2 relabels everything after E30 anyway.
 - 2026-11-05: injected rows on O11's sheet views: 11 of 20 labels, as before O11 (the view changes no result).
+- 2026-11-05, N5 code (owner: "Yes, start N5 code"). D2: `V3InitializationOptions.budgetPolls` replaces `budgetMilliseconds` and the 100 ms large-wet probe. The learned route counts its own control polls (`neuralPolls=` in the event), so whether a seed is used no longer depends on the machine. The stall test now sets its poll budget at the calibrated checkpoint, without a sleep. U1: `V3NeuralRegistry.bind` lumps each fed off-axis compound into the axis compound the model's `lumpMap` names. This needs the off-axis share to be at most the model's `offAxisLimit` (at most 5 %; 0 for schema 4, which keeps the old rule). The lens and physics check read the known compounds only. `Lumping.delump` splits each lump's predicted flow by feed share, and a lump of one fed compound keeps its value exactly. E7: sidecar schema 5, `families` (mean, at most 3 PCs, TRAIN coordinates, in-plane nearest-neighbour and out-of-plane limits) replaces `compositionEdges`; it is checked on the known part renormalised. Schema 4 still reads until N6. Tools: the probe's `export` writes `lumpMap.json`; `export.py` writes schema 5 (families from the non-injected TRAIN rows, 99th percentiles, box +10 % on global features 17 to 35, the feed fractions, as checked in `V3GeneralNeuralFeatures.global`). Tests: `columnGates` on the 10 classes that load the changed code, 57 tests passed (V3NeuralRegistryTest +5); SimulatorRunnerTest 28 passed; holdGates FlowsheetColumnTest 10 and SimulatorRunTest 6 passed (lane 1, 4 workers, no timing). The bundled schema-4 model is unchanged and still bound.
