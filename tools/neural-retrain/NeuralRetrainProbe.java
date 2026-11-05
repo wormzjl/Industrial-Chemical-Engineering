@@ -172,8 +172,12 @@ class NeuralRetrainProbe {
         double f = Arrays.stream(feed).sum();
         int n = o.get("stages").getAsInt();
         double pa = o.get("pumparoundFactor").getAsDouble(), duty1 = VDU_PA_1 * f * pa, duty2 = VDU_PA_2 * f * pa;
-        var draws = List.of(new V3SideDrawSpec(Math.max(1, (int) Math.round(0.3 * n)), VDU_CUT_SHARE * duty1 / VDU_LATENT * o.get("cut1Factor").getAsDouble()),
-                new V3SideDrawSpec(Math.max(2, (int) Math.round(0.6 * n)), VDU_CUT_SHARE * duty2 / VDU_LATENT * o.get("cut2Factor").getAsDouble()));
+        // Owner, 2026-11-05: "Top trays should be dry for VDU". At zero reflux the dry prefix ends at the first cooling return, so
+        // the top pumparound returns on tray 2 or lower and at least tray 1 stays dry (the accepted case: return 2, cut 3 of 10).
+        // Cut 2 stays at least two trays below cut 1 and at least one above the feed (accepted: 6, feed 8).
+        int t1 = Math.max(3, (int) Math.round(0.3 * n)), t2 = Math.min(n - 3, Math.max(t1 + 2, (int) Math.round(0.6 * n)));
+        var draws = List.of(new V3SideDrawSpec(t1, VDU_CUT_SHARE * duty1 / VDU_LATENT * o.get("cut1Factor").getAsDouble()),
+                new V3SideDrawSpec(t2, VDU_CUT_SHARE * duty2 / VDU_LATENT * o.get("cut2Factor").getAsDouble()));
         var steam = List.of(new V3SteamFeedSpec(n + 1, VDU_STEAM * f * o.get("steamFactor").getAsDouble(), 533.15));
         int d1 = draws.get(0).trayNumber(), d2 = draws.get(1).trayNumber();
         var pas = List.of(new V3PumparoundSpec(Math.max(1, d1 - 1), d1, -duty1, V3PumparoundSpec.Split.UNIFORM),
@@ -229,6 +233,11 @@ class NeuralRetrainProbe {
         double f = Arrays.stream(in.feedComponentMolarFlowsMolPerSecond()).sum();
         double[][] liquid = seed.liquid();
         if (!vdu) for (int n = 1; n <= in.stageCount(); n++) if (Arrays.stream(liquid[n]).sum() <= 0) { failed.add("NO_INTERNAL_REFLUX"); break; }
+        if (vdu) { // the trays above the top cooling return are dry (owner: "Top trays should be dry for VDU")
+            int top = in.pumparounds().stream().mapToInt(V3PumparoundSpec::returnTray).min().orElse(in.feedStageNumber());
+            if (top <= 1) failed.add("VDU_TOP_WET");
+            for (int n = 1; n < top; n++) if (Arrays.stream(liquid[n]).sum() > 0) { failed.add("VDU_TOP_WET"); break; }
+        }
         double overflash = Arrays.stream(liquid[in.feedStageNumber() - 1]).sum() / f;
         // Lower bound only: the presets run 0.44 to 1.12 mol of liquid above the feed per mol of feed (pilot r2, 2026-11-05), far above
         // the 2 to 5 vol % of refinery practice, so an upper bound would refuse the game's own operating points. A dry wash zone fails.

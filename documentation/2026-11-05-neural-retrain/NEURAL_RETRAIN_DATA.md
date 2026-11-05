@@ -98,7 +98,8 @@ Owner: "Data generation needs to include a set of VDU specific data (" (the text
   - the new sidecar's node-pressure floor comes from its labels (guide 9.2), so the old 50 kPa floor does not bind;
   - zero reflux admits the VAPOR_ONLY branch in `bestBranch`;
   - the dry-layout formulation revisions (`-phase-r1`) must be listed by the model;
-  - whether `NativeAnchor` (the MATERIAL_CLOSED initializer) builds on a dry zero-reflux top at 1 to 8 kPa is unmeasured. The pilot measures it.
+  - `NativeAnchor` (the MATERIAL_CLOSED initializer) builds on a dry zero-reflux top: 26 of 26 accepted VDU states in the pilot (V0 closed).
+- Dry top (owner, 2026-11-05: "Top trays should be dry for VDU"): at zero reflux the trays above the top cooling return carry no liquid. The design keeps the top return on tray 2 or lower, and the state check `VDU_TOP_WET` refuses any liquid above it.
 - Thermo caveats, noted only (no basis change without the owner):
   - in the 12-cut basis, the HVGO cut point (538 to 566 C) falls in the gap between pc10 (558) and pc11 (661);
   - PR78 cuts sit 4 to 13 K below Maxwell-Bonnell at 1 to 13 kPa.
