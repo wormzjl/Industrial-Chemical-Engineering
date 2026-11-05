@@ -6,13 +6,14 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
 
 ## Documents
 
-- [OPEN_DATA_PLAN.md](OPEN_DATA_PLAN.md): expected behaviour, the data today, work packages O1 to O9 and decisions E1 to E23.
+- [OPEN_DATA_PLAN.md](OPEN_DATA_PLAN.md): expected behaviour, the data today, work packages O1 to O11 and decisions E1 to E26.
 - [NIST_REDERIVATION_REVIEW.md](NIST_REDERIVATION_REVIEW.md): O1 and O2, what the open re-derivation moved, the measurements and the owner decisions.
 - [CRUDE_GRADES_REVIEW.md](CRUDE_GRADES_REVIEW.md): research R1 and the production data. Grade specifications and the generation method on the shared cuts, cut viscosity candidates, the mixture rule and its open refit, the validation against ECCC records.
 - [CUT_VISCOSITY_REVIEW.md](CUT_VISCOSITY_REVIEW.md): O4, the Twu cut tables and the one-term mixture term, the bit-for-bit proof and what moved.
 - [UNUSED_DATA_REVIEW.md](UNUSED_DATA_REVIEW.md): research R2, the O5 inventory. Who reads each data file, where ExxonMobil-derived values are, and the removal lists.
 - [PHUV_ROUNDTRIP_REVIEW.md](PHUV_ROUNDTRIP_REVIEW.md): P1, the free-water UV round-trip miss. The all-steam TP closure stops at 1e-8 P, the options, and the owner's option A (E21).
 - [COMBUSTION_FLAMMABILITY_REVIEW.md](COMBUSTION_FLAMMABILITY_REVIEW.md): R3 for O9. Combustion heat, flammability limits and flash point: sources and terms, estimates and their errors, design options, and the owner's choices (E23).
+- [NEURAL_GRADES_REVIEW.md](NEURAL_GRADES_REVIEW.md): O8, the existing neural seed forced onto the grades, the medium-grade temperatures and blends; distances from its training ring; the composition-check forms for E7.
 - [CRUDE_GRADES_APPLY_REVIEW.md](CRUDE_GRADES_APPLY_REVIEW.md): O3, the four grades applied, the Tia Juana test overlay, the default preset before and after, the medium grade's classical fragility, the moved sample sizes and the owner choices.
 
 ## Code areas
@@ -59,24 +60,31 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
   - Flash point computed from the LFL and the PR78 vapour pressure: 4.3 K mean error on 11 liquids.
   - The owner's choices are E23.
 
+- 2026-11-05: O8, [NEURAL_GRADES_REVIEW.md](NEURAL_GRADES_REVIEW.md) (probe in `tools/open-thermo-data/o8/`). The bundled seed was forced past its composition gate, with its 100 ms cap lifted.
+  - The learned start was accepted 0 times in 39 runs: the four grades, the medium grade at 10 feed temperatures, 12 Tia Juana blends, and Tia Juana itself. On Tia Juana the model binds with every input in its trained range.
+  - It rescued none of the 7 classical stalls. Its seed has no off-gas and no condenser free water, against 27 and 331 mol/s in today's converged Tia Juana column.
+  - The classical start also stalls on 2 of the 12 blends, so the fragility is not tied to the medium grade.
+  - E7 forms: (A) a per-compound box, (B) five principal cuts, (C) three principal components; C with A was recommended.
+- 2026-11-05: owner decisions:
+  - E24: diagnose the medium grade's stall (O10, running on lane 1).
+  - E25: CO2 joins the world list with its dry-ice crystal (O11); the column's solid handling is separate, later work.
+  - E26: retrain the neural model on open data and today's column, planned first by an opus medium sub-thread.
 
 ## Open items
 
 - Next:
-  1. Owner: the medium grade's classical fragility and the simulator gates on Tia Juana ([CRUDE_GRADES_APPLY_REVIEW.md](CRUDE_GRADES_APPLY_REVIEW.md) section 4, options a to c) and the O3 least-change choices listed there.
-  2. O8: the existing model on the new grades, with the 10 feed temperatures of the medium-grade check.
-  3. O5: removals, with O3's leftovers (the TJL19 and "global Dalia transport" evidence texts, code comments naming TJL19).
-  4. O9: combustion data (E22, E23). First, verify the Bulletin 627 values.
-  5. The final lane, on the merged code (E19). It must re-check the fluid GameTests and the hold-gate sample sheets (`ColumnSizingSampleTest`, `SizeAllSampleTest`, `UnitSizingSampleTest`, `LineSizingSampleTest`, `UtilityRegulationTest`, `FlowsheetColumnTest`, `ColumnEjectorTest`): they reach the E21 closure and were not run by L1.
+  1. O10 (running, lane 1): the medium grade's classical stall and the simulator-to-column energy gap; options go to the owner (E24).
+  2. The retrain plan (E26), `NEURAL_RETRAIN_PLAN.md`, goes to the owner before any training.
+  3. O11: CO2 in the world list with its dry-ice crystal (E25).
+  4. O5: removals, with O3's leftovers (the TJL19 and "global Dalia transport" evidence texts, code comments naming TJL19). After O11, the pilot package moves to the test overlay (E25).
+  5. O9: combustion data (E22, E23). First, verify the Bulletin 627 values.
+  6. The translation commit (en_us changed in O3 and later), then the final lane on the merged code (E19). It must re-check the fluid GameTests and the hold-gate sample sheets (`ColumnSizingSampleTest`, `SizeAllSampleTest`, `UnitSizingSampleTest`, `LineSizingSampleTest`, `UtilityRegulationTest`, `FlowsheetColumnTest`, `ColumnEjectorTest`).
 - Fixed, 2026-11-05 (E21, `b96c1e810`): `FluidTpEquilibriumPhUvTest.freeWaterRoundTripsAndBoiling`, which failed from O7 step 1 (`570c8441c`).
 - Code guide, at merge: `documentation/reference/code-guide/equilibrium-engine.md` (line 191, and the table at lines 364-365) still describes the fixed point and the bisection, and names `PARTIAL_PRESSURE_BISECTIONS` and `PARTIAL_PRESSURE_FIXED_POINT_STEPS`. E21 deleted both. Since E21 the constants are `PARTIAL_PRESSURE_TRIALS` 70, `PARTIAL_PRESSURE_CLOSURE` 1e-13, `PARTIAL_PRESSURE_BRACKET_ULPS` 4, `PARTIAL_PRESSURE_TOLERANCE` 1e-8 and `PARTIAL_PRESSURE_ACCEPTANCE` 1e-6.
-- E6: the neural model's fate, after O8. Before a public release it must be retrained on open data or removed. Its training includes the ExxonMobil crudes, and the schema-4 sidecar stores their compositions and trained values from the old NIST methane fit and water Shomate.
-- The learned seed is not used on the default preset: the model binds again, but its probe takes 109 ms against the 100 ms large-wet budget (`V3ColumnCalculator.LARGE_WET_NEURAL_PROBE_MILLISECONDS`). It did the same before O2. O8 runs the model with the budget lifted, to judge the seed itself. The wall-clock budget makes the seed's use depend on the machine.
+- The neural model (E6, E26): the current model stays until a retrained one replaces it. It must not ship in a public release: its sidecar stores the ExxonMobil compositions. O8 shows it never helps today, and in the game it only spends its probe cap.
 - NIST copies left in test fixtures and tools, for O5 (list in NIST_REDERIVATION_REVIEW.md, section 5).
 - E11 limit: the dilbit reads API 29 and about 19 times too thin; a dense second cut family is the fix (CRUDE_GRADES_REVIEW.md 3.5-3).
 - Owner items from R2, not acted on:
-  - the pilot cryogenic package: test overlay or kept ready;
-  - the 8 dormant CO2 pairs;
   - ExxonMobil values in git history;
   - the local assay PDFs in `research/`;
   - the 542 MB of tracked `tools/`.
