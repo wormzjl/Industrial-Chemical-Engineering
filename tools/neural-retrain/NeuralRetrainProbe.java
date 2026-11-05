@@ -107,7 +107,14 @@ class NeuralRetrainProbe {
     static V3ColumnInput realise(JsonObject row) {
         var c = row.getAsJsonObject("composition");
         double[] w = JSON.fromJson(c.get("weights"), double[].class);
-        if (row.getAsJsonObject("operating").has("preset")) { for (int i = 0; i < w.length; i++) if (w[i] == 1) return base[i]; }
+        var op = row.getAsJsonObject("operating");
+        if (op.has("preset")) for (int i = 0; i < w.length; i++) if (w[i] == 1) { // a grade preset, optionally at another feed temperature (N4 grid)
+            var b = base[i];
+            if (!op.has("feedTemperatureKelvin")) return b;
+            return new V3ColumnInput(b.schemaVersion(), b.packageId(), b.assayId(), b.componentBasis(), b.feedComponentMolarFlowsMolPerSecond(),
+                    op.get("feedTemperatureKelvin").getAsDouble(), b.stageCount(), b.feedStageNumber(), b.topPressurePascal(), b.stagePressureDropPascal(),
+                    b.specifications(), b.sideDraws(), b.steamFeeds(), b.pumparounds(), b.columnDiameterMetres());
+        }
         double[] m = JSON.fromJson(c.get("multipliers"), double[].class);
         int[] zero = JSON.fromJson(c.get("zero"), int[].class);
         var o = row.getAsJsonObject("operating");
