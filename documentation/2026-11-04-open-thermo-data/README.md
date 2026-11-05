@@ -48,6 +48,11 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
   - Deleted: both fixed-point loops and `PARTIAL_PRESSURE_FIXED_POINT_STEPS`.
   - Scratch worktree results: 12 classes pass. The failing UV takes 7,723 kernel evaluations instead of 42,509.
   - `LegacyNetworkPathPinTest` digest re-pinned: 21 of 63 all-steam flashes move by at most 9.4e-9 in V.
+- 2026-11-05: E21 landed (L1), `b96c1e810`: P2's form A2 and its `LegacyNetworkPathPinTest` re-pin, unchanged; it compiles with no new warnings.
+  - The 12 classes pass on the O3 tree, and the pin keeps P2's digest. Also run, as callers that reach `solveWet` on wet states: `ColumnSolveTest` and `ColumnRunTest` (via `ColumnSolve`'s `flashTP`), and `EjectorTest`, `FlowsheetUnitsTest` and `SheetSizingTest` (via `FlowThermo`). All pass: 17 classes, 173 tests. The V3 column gates do not load `science/thermo/phase`.
+  - chain-100 exact: 0 deviation. The 200-seed quick check matches O4's run, seed by seed, except two wall-budget seeds: cold random has 197 clean (E1 85, E6 101, F 118); bundled random is now 200/200 (O4's seed 6 class F is clean, as O4's replay of it alone was); bundled defaults has 200/200 with the same counters. Refused 0. Phase refusals are equal (231 / 368 / 0).
+  - Cold and bundled random counters: Newton iterations -1.8 % and +1.6 %, residual evaluations -2.4 % and +3.0 %. The report has no per-seed counters, so these cannot be split from seeds 118 and 6, whose work ends at the wall deadline. No new hold class.
+- 2026-11-05: E21 tools, `731e1279f`: `tools/open-thermo-data/phuv/` holds P1's and P2's round-trip probes, P2's legacy-pin flash probe, and the option A1 and C patches (records against `7d386ba5b`). Code guide: no change (updated at merge, see open items).
 - 2026-11-05: owner request E22: combustion heat, flash point and LEL. R3 research, [COMBUSTION_FLAMMABILITY_REVIEW.md](COMBUSTION_FLAMMABILITY_REVIEW.md):
   - Gas-basis LHV by Hess from ChemSep heats of formation for all 29 combustible compounds. The cuts use Cragoe 1929: 0.5 % mean error on paraffins and naphthenes, 2.8 % on aromatics.
   - Measured LFL and UFL for all 29, from NIOSH and Bulletin 627.
@@ -59,12 +64,12 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
 
 - Next:
   1. Owner: the medium grade's classical fragility and the simulator gates on Tia Juana ([CRUDE_GRADES_APPLY_REVIEW.md](CRUDE_GRADES_APPLY_REVIEW.md) section 4, options a to c) and the O3 least-change choices listed there.
-  2. Land E21 (form A2): apply the patch, re-run the 12 classes, then chain-100 exact and the 200-seed quick check.
-  3. O8: the existing model on the new grades, with the 10 feed temperatures of the medium-grade check.
-  4. O5: removals, with O3's leftovers (the TJL19 and "global Dalia transport" evidence texts, code comments naming TJL19).
-  5. O9: combustion data (E22, E23). First, verify the Bulletin 627 values.
-  6. The final lane, on the merged code (E19).
-- `FluidTpEquilibriumPhUvTest.freeWaterRoundTripsAndBoiling` fails since O7 step 1 (`570c8441c`, methane Cp only). E21 fixes it in the TP stage (form A2, P2), and it lands next.
+  2. O8: the existing model on the new grades, with the 10 feed temperatures of the medium-grade check.
+  3. O5: removals, with O3's leftovers (the TJL19 and "global Dalia transport" evidence texts, code comments naming TJL19).
+  4. O9: combustion data (E22, E23). First, verify the Bulletin 627 values.
+  5. The final lane, on the merged code (E19). It must re-check the fluid GameTests and the hold-gate sample sheets (`ColumnSizingSampleTest`, `SizeAllSampleTest`, `UnitSizingSampleTest`, `LineSizingSampleTest`, `UtilityRegulationTest`, `FlowsheetColumnTest`, `ColumnEjectorTest`): they reach the E21 closure and were not run by L1.
+- Fixed, 2026-11-05 (E21, `b96c1e810`): `FluidTpEquilibriumPhUvTest.freeWaterRoundTripsAndBoiling`, which failed from O7 step 1 (`570c8441c`).
+- Code guide, at merge: `documentation/reference/code-guide/equilibrium-engine.md` (line 191, and the table at lines 364-365) still describes the fixed point and the bisection, and names `PARTIAL_PRESSURE_BISECTIONS` and `PARTIAL_PRESSURE_FIXED_POINT_STEPS`. E21 deleted both. Since E21 the constants are `PARTIAL_PRESSURE_TRIALS` 70, `PARTIAL_PRESSURE_CLOSURE` 1e-13, `PARTIAL_PRESSURE_BRACKET_ULPS` 4, `PARTIAL_PRESSURE_TOLERANCE` 1e-8 and `PARTIAL_PRESSURE_ACCEPTANCE` 1e-6.
 - E6: the neural model's fate, after O8. Before a public release it must be retrained on open data or removed. Its training includes the ExxonMobil crudes, and the schema-4 sidecar stores their compositions and trained values from the old NIST methane fit and water Shomate.
 - The learned seed is not used on the default preset: the model binds again, but its probe takes 109 ms against the 100 ms large-wet budget (`V3ColumnCalculator.LARGE_WET_NEURAL_PROBE_MILLISECONDS`). It did the same before O2. O8 runs the model with the budget lifted, to judge the seed itself. The wall-clock budget makes the seed's use depend on the machine.
 - NIST copies left in test fixtures and tools, for O5 (list in NIST_REDERIVATION_REVIEW.md, section 5).
