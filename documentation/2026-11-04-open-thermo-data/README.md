@@ -91,9 +91,7 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
 ## Open items
 
 - Next:
-  1. O10 is done. The owner chooses:
-     - the stall fix: F1b recommended;
-     - the gap option: (a), one water model, recommended. (a) bumps the wet revision, so the retrain's N2 labels wait for it.
+  1. O10's fixes (E30, "Land both"): F1b for the stall, and (a) one water model for the gap. A design phase runs now without Gradle; the landing follows O11's Gradle work in this worktree. (a) bumps the wet revision, so the retrain's N2 labels wait for it.
   2. The retrain (E26) runs in its own session, `neural-retrain`: branch `claude/neural-retrain-open-data-712a75`, batch `2026-11-05-neural-retrain`. Its plan, `NEURAL_RETRAIN_PLAN.md`, with `NEURAL_RETRAIN_DATA.md` (`138b0024e`), was approved by the owner on 2026-11-05: "Approve all A" (D1 to D5). The owner also allowed the torch and numpy download. N0 and N1 run now, on lane 2. N2 waits until O10 states whether its fix changes a formulation revision. M1, the timing run, waits for a free machine. The same day the owner asked for four plan changes:
      - tolerate about 5 % unknown compounds, with research into a model structure that allows it;
      - a VDU data set;
@@ -101,10 +99,21 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
      - two re-iteration rounds that use the first model to gain converged data.
 
      The session revises its plan first. N1's pilot waits for the revised plan, and the session runs without Gradle until then.
+
+     Revision 2 is `d72caf1e0`, with O10 recorded in `849e684df`.
+     - N0 is done: the venv works on CUDA, and the Python model matches Java to 7.3e-7.
+     - A partial pilot, stopped at 203 of 300 rows, gave 62 % strict labels.
+     - It waits for the owner on D3, D5, D6 and D7, and on the VDU text (D8).
   3. O11: CO2 in the world list with its dry-ice crystal (E25). The owner chose option A, one crystal rule for both ideal-gas sources (E27). The N2 pairs follow the `kij_pr.dat` erratum (E28). Implementation runs now on Gradle lane 2.
   4. O5: removals, with O3's leftovers (the TJL19 and "global Dalia transport" evidence texts, code comments naming TJL19). After O11, the pilot package moves to the test overlay (E25).
   5. O9: combustion data (E22, E23). First, verify the Bulletin 627 values.
   6. The translation commit (en_us changed in O3 and later), then the final lane on the merged code (E19). It must re-check the fluid GameTests and the hold-gate sample sheets (`ColumnSizingSampleTest`, `SizeAllSampleTest`, `UnitSizingSampleTest`, `LineSizingSampleTest`, `UtilityRegulationTest`, `FlowsheetColumnTest`, `ColumnEjectorTest`).
+- Column solids (E29), later and separate work:
+  - no solid phase transitions in the column;
+  - solid particles as input and output only;
+  - a tray below the freezing point ceases to function.
+
+  Until then the column refuses islands that hold a crystal. The open design points are in E29.
 - Fixed, 2026-11-05 (E21, `b96c1e810`): `FluidTpEquilibriumPhUvTest.freeWaterRoundTripsAndBoiling`, which failed from O7 step 1 (`570c8441c`).
 - Code guide, at merge: `documentation/reference/code-guide/equilibrium-engine.md` (line 191, and the table at lines 364-365) still describes the fixed point and the bisection, and names `PARTIAL_PRESSURE_BISECTIONS` and `PARTIAL_PRESSURE_FIXED_POINT_STEPS`. E21 deleted both. Since E21 the constants are `PARTIAL_PRESSURE_TRIALS` 70, `PARTIAL_PRESSURE_CLOSURE` 1e-13, `PARTIAL_PRESSURE_BRACKET_ULPS` 4, `PARTIAL_PRESSURE_TOLERANCE` 1e-8 and `PARTIAL_PRESSURE_ACCEPTANCE` 1e-6.
 - The neural model (E6, E26): the current model stays until a retrained one replaces it. It must not ship in a public release: its sidecar stores the ExxonMobil compositions. O8 shows it never helps today, and in the game it only spends its probe cap.
