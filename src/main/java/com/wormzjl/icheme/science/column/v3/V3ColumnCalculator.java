@@ -116,7 +116,8 @@ public final class V3ColumnCalculator {
      * from 0.058 to 0.042, with 786 line-search trials and four entries into the damped normal-equation cascade
      * at doubled bandwidth: 2.6 s of a 13.0 s solve for a state the ramp discards.</p>
      *
-     * <p>So an intermediate steam rung stops as soon as its residual has not halved over twelve iterations —
+     * <p>So an intermediate steam rung stops as soon as its residual has not halved over twelve iterations (the
+     * solver's one stall rule, {@link V3SimultaneousColumnSolver#STALL_WINDOW_ITERATIONS}) —
      * well outside the quadratic tail, and floored at 1e-3 so a rung merely closing slowly is never cut off —
      * and keeps only the first two dampings of the cascade with no gradient fallback and no certificate cascade
      * behind them.</p>
@@ -133,7 +134,8 @@ public final class V3ColumnCalculator {
      * free-water continuation all keep {@link V3SimultaneousColumnSolver.RungBudget#DEFAULT}.</p>
      */
     private static final V3SimultaneousColumnSolver.RungBudget INTERMEDIATE_RUNG_BUDGET =
-            new V3SimultaneousColumnSolver.RungBudget(2, false, 0, 12, 0.5, 1.0e-3);
+            new V3SimultaneousColumnSolver.RungBudget(2, false, 0, V3SimultaneousColumnSolver.STALL_WINDOW_ITERATIONS,
+                    V3SimultaneousColumnSolver.STALL_FACTOR, 1.0e-3);
     /**
      * How far above its own material row a seeded point may sit before {@link #capOversizedPoint} resets it.
      *
@@ -1687,9 +1689,15 @@ public final class V3ColumnCalculator {
             // corrected support is what converges the rung. Only one, though: a second stall in a row is a
             // rung the continuation is going to subdivide or abandon anyway, and re-solving it three times
             // triples the cost of every case that is on its way to a typed failure.
+            //
+            // A release is not a stall. The solve held a point at its floor and stopped earning steps because of
+            // it (STALLED_SUPPORT_FLOOR): the refresh that drops that point is the next step of the same
+            // solve, so it is neither counted against the stalled limit nor cut to the polish budget.
             boolean converged = attempt instanceof V3SimultaneousColumnSolver.Attempt.Converged;
+            boolean released = attempt instanceof V3SimultaneousColumnSolver.Attempt.Failure heldFailure
+                    && heldFailure.code().equals("STALLED_SUPPORT_FLOOR");
             boolean floorBudget = refreshes < floorRefreshLimit
-                    && (converged || stalledRefreshes < MAXIMUM_STALLED_FLOOR_SUPPORT_REFRESHES);
+                    && (converged || released || stalledRefreshes < MAXIMUM_STALLED_FLOOR_SUPPORT_REFRESHES);
             // The wet set is re-derived only from a state that solved its own equations, and carries its own
             // small budget so it never has to compete with the support refreshes for one. How far a tray sits
             // below the water dew point, and how much water it must therefore shed, are readings of a
@@ -1705,14 +1713,14 @@ public final class V3ColumnCalculator {
             // A refresh that only removes — points from the support, trays from the wet set — carries no
             // information the stalled state did not already have. One that adds a wet tray does: the water
             // that tray sheds is a degree of freedom the stalled solve never had, so it keeps the full budget.
-            nextIterations = !converged
+            nextIterations = !converged && !released
                     && refreshed.support().presentPhaseCount() <= prepared.support().presentPhaseCount()
                     && refreshed.wetTrays().wetTrayCount() <= prepared.wetTrays().wetTrayCount()
                     ? Math.min(maximumIterations, STALLED_DROP_REFRESH_ITERATIONS)
                     : maximumIterations;
             if (!refreshed.support().sameRetention(prepared.support())) {
                 refreshes++;
-                if (!converged) stalledRefreshes++;
+                if (!converged && !released) stalledRefreshes++;
             }
             if (!refreshed.wetTrays().sameSet(prepared.wetTrays())) {
                 wetTrayRefreshes++;
