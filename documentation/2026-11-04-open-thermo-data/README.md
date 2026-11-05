@@ -104,6 +104,8 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
      - N0 is done: the venv works on CUDA, and the Python model matches Java to 7.3e-7.
      - A partial pilot, stopped at 203 of 300 rows, gave 62 % strict labels.
      - It waits for the owner on D3, D5, D6 and D7, and on the VDU text (D8).
+
+     The owner commands the session directly since 2026-11-05 ("I'll take command of the neuro thread directly"). This session no longer relays its decisions. The session uses Gradle lane 1 while this worktree builds on lane 2.
   3. O11: CO2 in the world list with its dry-ice crystal (E25). The owner chose option A, one crystal rule for both ideal-gas sources (E27). The N2 pairs follow the `kij_pr.dat` erratum (E28). Implementation runs now on Gradle lane 2.
   4. O5: removals, with O3's leftovers (the TJL19 and "global Dalia transport" evidence texts, code comments naming TJL19). After O11, the pilot package moves to the test overlay (E25).
   5. O9: combustion data (E22, E23). First, verify the Bulletin 627 values.
