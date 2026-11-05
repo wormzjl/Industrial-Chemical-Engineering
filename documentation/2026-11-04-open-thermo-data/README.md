@@ -21,6 +21,7 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
   - The medium grade's classical stall: a log-flow point sinks below its floor inside a frozen-support Newton solve.
   - The simulator-to-column energy gap: all water, from two water models.
   - Fix forms F1 to F1b, and gap options (a) to (c).
+- [CLASSICAL_STALL_APPLY_REVIEW.md](CLASSICAL_STALL_APPLY_REVIEW.md): E30 applied. Part 1, option (a): the column takes the network's water (wet revisions r32/r33), the gap per case, the moved pins, the network proof. Part 2: the stall fix F1c.
 
 ## Code areas
 
@@ -89,6 +90,7 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
     40 of 44 tests in 6 columnGates classes pass. The 4 failures are in `V3StageContinuationTest`: 3 contracts of the frozen solve, and the wet half-steam case, which now needs no full-budget steam resume.
   - Gap, 56 to 59 kW on both grades: all water. Steam is a virial gas in the simulator and an ideal gas in V3 (-45 kW); free water is priced 285 J/mol apart at 332 K (+93 kW). The hydrocarbons agree within 0.015 % per stream. The 2e-3 rule fails only with the 1 MPa let-down (2.2e-3).
 - 2026-11-05: O11 applied (E27, E28), [CO2_CRYSTAL_APPLY_REVIEW.md](CO2_CRYSTAL_APPLY_REVIEW.md). CoefficientIdealGas is shared, the 5 spine-only refusals are deleted, CO2 and CO2-I are in `refinery.json` r3 with their own pair library; the probe numbers hold, views without CO2 keep identity and numbers, chain-100 exact 0, quick check identical to the baseline.
+- 2026-11-05: E30 part 1, option (a) applied (`3867e710d`), [CLASSICAL_STALL_APPLY_REVIEW.md](CLASSICAL_STALL_APPLY_REVIEW.md). V3 water is the network's: virial steam at its partial pressure, IF97 Region 1 liquid at the node's pressure. Wet formulation `v3-wet-mesh-r32-steam` / `v3-wet-mesh-r33-steam`; the bundled sidecar binds no wet column until the retrain. Gap 56-59 kW -> 11-14 kW, free water 0.0; the steam resume stays. Pins: 6 test classes and 2 fixtures. 675 class tests pass; chain-100 exact 0; quick check equal to O11 seed by seed (the cold total differs only by wall-deadline seed 118; identical counters without it).
 
 ## Open items
 
