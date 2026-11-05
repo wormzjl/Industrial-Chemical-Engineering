@@ -10,6 +10,7 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
 - [NIST_REDERIVATION_REVIEW.md](NIST_REDERIVATION_REVIEW.md): O1 and O2, what the open re-derivation moved, the measurements and the owner decisions.
 - [CRUDE_GRADES_REVIEW.md](CRUDE_GRADES_REVIEW.md): research R1 and the production data. Grade specifications and the generation method on the shared cuts, cut viscosity candidates, the mixture rule and its open refit, the validation against ECCC records.
 - [CUT_VISCOSITY_REVIEW.md](CUT_VISCOSITY_REVIEW.md): O4, the Twu cut tables and the one-term mixture term, the bit-for-bit proof and what moved.
+- [UNUSED_DATA_APPLY_REVIEW.md](UNUSED_DATA_APPLY_REVIEW.md): O5 applied. The ExxonMobil and NIST copies are out of the tree, the pilot package is in the test overlay and the leftovers are cleaned; what waits for E26.
 - [UNUSED_DATA_REVIEW.md](UNUSED_DATA_REVIEW.md): research R2, the O5 inventory. Who reads each data file, where ExxonMobil-derived values are, and the removal lists.
 - [PHUV_ROUNDTRIP_REVIEW.md](PHUV_ROUNDTRIP_REVIEW.md): P1, the free-water UV round-trip miss. The all-steam TP closure stops at 1e-8 P, the options, and the owner's option A (E21).
 - [COMBUSTION_FLAMMABILITY_REVIEW.md](COMBUSTION_FLAMMABILITY_REVIEW.md): R3 for O9. Combustion heat, flammability limits and flash point: sources and terms, estimates and their errors, design options, and the owner's choices (E23).
@@ -95,6 +96,15 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
 - 2026-11-05: E30 (a) follow-up, `5499de72a`: the medium-grade sample sizing pins re-pinned. (a)'s landing (`3867e710d`) ran no sample-sizing class, so these pins stayed stale until H's runs found them (they pass at `3867e710d^`): NAPHTHA line drop 0.174 to 0.175 bar/100 m (more distillate), H-101 duty 73.00 to 73.03 MW and E-101 surface 573 to 572 m² and 579.1 to 578.5 m² (a lighter, cooler residue gives E-101 less heat).
 - 2026-11-05: O11 follow-up, `50449db3d`: the `crude_unit` example lists CarbonDioxide, as `icheme:refinery` r3 does. O11's landing (`19a544b82`) did not run `FlowsheetExamplesTest`, so the example stayed on the old component list. The sheet feeds no CO2: its data revision holds and every sample pin holds.
 - 2026-11-05: E30 form H landed, `28d3bd420` (the owner's "Yes, land H"): a sinking support point is held only when its drop cuts a feed path (`V3TruncationSupport.Reachability`); traces stay free. Medium grid 5/10 to 8/10 at 5,898k polls (6,223k), Tia Juana 10/10, roots equal. The furnace pin now expects the cold run to close (its first pass is a sound column); the `loop.first_estimate` hint moved to `FlowsheetSolverTest`. Tests: columnGates 523, holdGates 8 classes 63, quick suite 46 classes 535, all pass. Tools: `tools/open-thermo-data/o10/`.
+- 2026-11-05: O5 applied (E3, E25; the owner's "Start O5"), [UNUSED_DATA_APPLY_REVIEW.md](UNUSED_DATA_APPLY_REVIEW.md):
+  - `2f59caa62`: the ExxonMobil and NIST copies leave `tools/`, `examples/` and the docs. The WTI world dumps and the WebBook fetchers go to the main checkout's `research/2026-11-04-open-thermo-data/`.
+  - `4e2a77b9f`: the NIST test fixtures take the open values.
+  - `bc471a90c`: the pilot package moves to the test overlay (12 records); the game keeps the CO2-I crystal and `chemsep_carbon_dioxide`.
+  - `b89cb024e`: evidence texts and TJL19 comments.
+  - Inventory: 28 items. 13 were done already by O3, O4 and O11, 11 were done here, 5 wait for E26, and 1 is kept.
+  - Save check: no writer stores a moved record id.
+  - Tests: 68 classes in g2 plus the 3 fixed pilot readers, all pass.
+  - The owner's rules the same day: a sub-thread never waits, so the main thread runs the tests; every subagent needs the owner's approval (`~/.claude/CLAUDE.md`).
 
 ## Open items
 
@@ -118,7 +128,7 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
 
      The owner commands the session directly since 2026-11-05 ("I'll take command of the neuro thread directly"). This session no longer relays its decisions. The session uses Gradle lane 1 while this worktree builds on lane 2.
   3. O11: CO2 in the world list with its dry-ice crystal (E25), applied with option A (E27) and the `kij_pr.dat` erratum (E28); not merged. Open: the final lane (fluid GameTests, `equipmentGates`, `holdGates`, `test slowGates`) and the code guide chapters named in CO2_CRYSTAL_APPLY_REVIEW.md. The d3-r2 bump moves the identity of every view the library gives a pair (state only).
-  4. O5: removals, with O3's leftovers (the TJL19 and "global Dalia transport" evidence texts, code comments naming TJL19). After O11, the pilot package moves to the test overlay (E25). The Tia Juana test copy `src/test/resources/materials/tia-juana/flowsheet/crude_unit.json` still has the component list from before O11; no gate reads it, so it is updated or removed with that move.
+  4. O5: done (`2f59caa62`, `4e2a77b9f`, `bc471a90c`, `b89cb024e`; [UNUSED_DATA_APPLY_REVIEW.md](UNUSED_DATA_APPLY_REVIEW.md)). Still waiting for E26: the neural files, and the manifest that hashes the removed `tools/neural/fit_methane.py`. Kept: `tools/spine-join-measurement/build-spine-records.mjs`, the generator the 4 spine records name. The Tia Juana `crude_unit.json` test copy is read by `UtilityRegulationTest`; it now lists CarbonDioxide.
   5. O9: combustion data (E22, E23). First, verify the Bulletin 627 values.
   6. The translation commit (en_us changed in O3 and later), then the final lane on the merged code (E19). It must re-check the fluid GameTests and the hold-gate sample sheets (`ColumnSizingSampleTest`, `SizeAllSampleTest`, `UnitSizingSampleTest`, `LineSizingSampleTest`, `UtilityRegulationTest`, `FlowsheetColumnTest`, `ColumnEjectorTest`).
 - Column solids (E29), later and separate work:
@@ -128,9 +138,9 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
 
   Until then the column refuses islands that hold a crystal. The open design points are in E29.
 - Fixed, 2026-11-05 (E21, `b96c1e810`): `FluidTpEquilibriumPhUvTest.freeWaterRoundTripsAndBoiling`, which failed from O7 step 1 (`570c8441c`).
-- Code guide, at merge: `documentation/reference/code-guide/equilibrium-engine.md` (line 191, and the table at lines 364-365) still describes the fixed point and the bisection, and names `PARTIAL_PRESSURE_BISECTIONS` and `PARTIAL_PRESSURE_FIXED_POINT_STEPS`. E21 deleted both. Since E21 the constants are `PARTIAL_PRESSURE_TRIALS` 70, `PARTIAL_PRESSURE_CLOSURE` 1e-13, `PARTIAL_PRESSURE_BRACKET_ULPS` 4, `PARTIAL_PRESSURE_TOLERANCE` 1e-8 and `PARTIAL_PRESSURE_ACCEPTANCE` 1e-6.
+- Code guide, at merge: `documentation/reference/code-guide/equilibrium-engine.md` (line 191, and the table at lines 364-365) still describes the fixed point and the bisection, and names `PARTIAL_PRESSURE_BISECTIONS` and `PARTIAL_PRESSURE_FIXED_POINT_STEPS`. E21 deleted both. Since E21 the constants are `PARTIAL_PRESSURE_TRIALS` 70, `PARTIAL_PRESSURE_CLOSURE` 1e-13, `PARTIAL_PRESSURE_BRACKET_ULPS` 4, `PARTIAL_PRESSURE_TOLERANCE` 1e-8 and `PARTIAL_PRESSURE_ACCEPTANCE` 1e-6. Since O5, `thermo-materials.md` and the guide's `README.md` (line 183) must say that the pilot package is a test overlay.
 - The neural model (E6, E26): the current model stays until a retrained one replaces it. It must not ship in a public release: its sidecar stores the ExxonMobil compositions. O8 shows it never helps today, and in the game it only spends its probe cap.
-- NIST copies left in test fixtures and tools, for O5 (list in NIST_REDERIVATION_REVIEW.md, section 5).
+- NIST copies: removed in O5 (`2f59caa62`, `4e2a77b9f`), except `build-spine-records.mjs` (kept, see item 4).
 - E11 limit: the dilbit reads API 29 and about 19 times too thin; a dense second cut family is the fix (CRUDE_GRADES_REVIEW.md 3.5-3).
 - Owner items from R2, not acted on:
   - ExxonMobil values in git history;
