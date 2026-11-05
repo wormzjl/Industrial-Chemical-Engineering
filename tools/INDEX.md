@@ -53,10 +53,10 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 | [pressure-valve-accessory/](pressure-valve-accessory/README.md) | Production previews, focused/full verification and WIP-preserving integration | `2026-10-24-pressure-valve-accessory` | Archived 2026-10-24 |
 | [mover-equipment-arrows/](mover-equipment-arrows/README.md) | Depth-tested equipment/pipe software renders and before/after pump connection fingerprint | `2026-10-24-mover-equipment-arrows` | Archived 2026-10-24 |
 | [pipeline-check-valve/](pipeline-check-valve/README.md) | Actual-mesh renders, focused/full merge evidence and local-file-preserving integration | `2026-10-24-pipeline-check-valve` | Archived 2026-10-24 |
-| [wti-pumping-rate-hold/](wti-pumping-rate-hold/README.md) | Format-17 reader, replays and traces, hold inventories, cold 430/431 validation | `2026-10-24-wti-pumping-rate-hold` | Concluded 2026-10-26 (batch in 0.12.0) |
+| [wti-pumping-rate-hold/](wti-pumping-rate-hold/README.md) | Format-17 reader, replays and traces, hold inventories, cold 430/431 validation | `2026-10-24-wti-pumping-rate-hold` | Concluded 2026-10-26 (batch in 0.12.0); world dump to research/ 2026-11-05 (O5) |
 | [fluid-display-followups/](fluid-display-followups/README.md) | Actual item mesh/GUI-transform slot bounds and fresh WTI feed volume/mass calculation | `2026-10-23-fluid-display-followups` | Archived 2026-10-23 |
 | [pipeline-shutoff-valve/](pipeline-shutoff-valve/README.md) | Actual production-mesh valve render sheets, targeted test/package and resource evidence | `2026-10-23-pipeline-shutoff-valve` | Archived 2026-10-23 |
-| [fluid-world-inspector/](fluid-world-inspector/README.md) | Read-only format-16/17 world inspection, accepted-mode validation, deferred-hold capture | `2026-10-23-valve-regime-convergence`, `2026-10-23-deferred-fluid-hold` | Archived 2026-10-23 |
+| [fluid-world-inspector/](fluid-world-inspector/README.md) | Read-only format-16/17 world inspection, accepted-mode validation, deferred-hold capture | `2026-10-23-valve-regime-convergence`, `2026-10-23-deferred-fluid-hold` | Archived 2026-10-23; world dump to research/ 2026-11-05 (O5) |
 | [fluid-device-controls-display/](fluid-device-controls-display/README.md) | Compressed compile/package evidence only; no harness | `2026-10-23-fluid-device-controls-display` | Archived 2026-10-23 |
 | [mover-port-markings/](mover-port-markings/README.md) | Production equipment/pipe arrow software renders and preview sheet, no game or solver work | `2026-10-23-mover-port-markings` | Archived 2026-10-23 |
 | [fluid-format-reset/](fluid-format-reset/README.md) | Compressed owner crash, compile/package, integration preservation and startup evidence; no harness | `2026-10-23-fluid-format-reset` | Archived 2026-10-23 |
@@ -121,7 +121,7 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 | [wp7c-hot-gas-label/](wp7c-hot-gas-label/README.md) | P3 WP7c probes and envelope scans of the hot-gas phase label | `2026-09-24-coolprop-low-temperature` | Concluded 2026-09-25 (P3 WP7c) |
 | [wp7b-engine-fixed-point/](wp7b-engine-fixed-point/README.md) | P3 WP7b probes and logs of the fixed-point wet flash start | `2026-09-24-coolprop-low-temperature` | Concluded 2026-09-25 (P3 WP7b) |
 | [wp7-network-integration/](wp7-network-integration/README.md) | P3 WP7 probes, record-edit scripts, logs and engine patch of the network integration | `2026-09-24-coolprop-low-temperature` | Concluded 2026-09-25 (P3 WP7) |
-| [wp5-legacy-digest/](wp5-legacy-digest/README.md) | Printer of the legacy network thermo path digest (`LegacyNetworkPathPinTest`) | `2026-09-24-coolprop-low-temperature` | Concluded 2026-09-25 (P3 WP5) |
+| [wp5-legacy-digest/](wp5-legacy-digest/README.md) | Printer of the legacy network thermo path digest (`LegacyNetworkPathPinTest`) | `2026-09-24-coolprop-low-temperature` | Concluded 2026-09-25 (P3 WP5); data copy removed 2026-11-05 (O5) |
 | [wp4-runtime-diagnosis/](wp4-runtime-diagnosis/README.md) | P3 WP4 probes, patches and outputs behind the two runtime failures | `2026-09-24-coolprop-low-temperature` | Concluded 2026-09-25 |
 | [gerg-bubble-points/](gerg-bubble-points/README.md) | GERG-2008 bubble- and dew-point references of the six pilot binaries (CoolProp) | `2026-09-24-coolprop-low-temperature` | Concluded 2026-09-24 (P3 WP8) |
 | [methane-ideal-gas/](methane-ideal-gas/README.md) | Methane ideal-gas Cp from ExoMol energy levels, cross-checked | `2026-09-24-coolprop-low-temperature` | Concluded 2026-09-24 (P3 WP10) |
@@ -165,6 +165,4 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 | `examples/Fluid-Benchmarks.py` | Fluid benchmark audit, summary and memory subcommands (the default jar is `build/libs/createcheme-<mod_version>.jar`, read from `gradle.properties` since `5f866a9`) |
 | `examples/test_fluid_benchmark_summary.py` | Evidence-gate regressions for `Fluid-Benchmarks.py` |
 | `examples/Generate-Hydraulic-References.py` | Decimal reference table for `src/test/resources/fluid/reference/hydraulic-friction.json` |
-| `examples/Fetch-FluidSteamReferences.py` | Reproduces the NIST vapor compressibility checkpoints |
-| `examples/Build-NitrogenFluidProperties.py` | Builds the versioned nitrogen data for the fluid package |
 | `examples/Generate-Fluid-Models.py` | Deterministic prototype block models from Minecraft textures |
