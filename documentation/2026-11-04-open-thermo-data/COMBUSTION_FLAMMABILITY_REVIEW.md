@@ -47,4 +47,4 @@ Batch [2026-11-04-open-thermo-data](README.md), 2026-11-05. Research only: no co
   - US Government works, Bulletin 627 and Cragoe 1929: "not available for any work of the United States Government" (law.cornell.edu/uscode/text/17/105).
   - CAMEO: terms page 404, unconfirmed; its value is NTP's. ECCC: OGL-Canada. Riazi, Channiwala-Parikh, Jones, Burgess-Wheeler, Liaw: methods only.
 - Download to approve: Bulletin 627 PDF, https://stacks.cdc.gov/view/cdc/235822/cdc_235822_DS1.pdf, 8,584,508 bytes, to verify the 10 values entered from memory.
-Owner, 2026-11-05 (E23): download Bulletin 627; readers (a), data only; storage S1 in W1; the three simplifications approved.
+- Owner, 2026-11-05 (E23): download Bulletin 627; readers (a), data only; storage S1 in W1; the three simplifications approved.
