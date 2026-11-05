@@ -21,7 +21,7 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
   - The medium grade's classical stall: a log-flow point sinks below its floor inside a frozen-support Newton solve.
   - The simulator-to-column energy gap: all water, from two water models.
   - Fix forms F1 to F1b, and gap options (a) to (c).
-- [CLASSICAL_STALL_APPLY_REVIEW.md](CLASSICAL_STALL_APPLY_REVIEW.md): E30 applied. Part 1, option (a): the column takes the network's water (wet revisions r32/r33), the gap per case, the moved pins, the network proof. Part 2: the stall fix F1c.
+- [CLASSICAL_STALL_APPLY_REVIEW.md](CLASSICAL_STALL_APPLY_REVIEW.md): E30 applied. Part 1, option (a): the column takes the network's water (wet revisions r32/r33), the gap per case, the moved pins, the network proof. Part 2: the stall fix, form H (landed), with every form tried.
 
 ## Code areas
 
@@ -92,32 +92,17 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
 - 2026-11-05: O11 applied (E27, E28), [CO2_CRYSTAL_APPLY_REVIEW.md](CO2_CRYSTAL_APPLY_REVIEW.md). CoefficientIdealGas is shared, the 5 spine-only refusals are deleted, CO2 and CO2-I are in `refinery.json` r3 with their own pair library; the probe numbers hold, views without CO2 keep identity and numbers, chain-100 exact 0, quick check identical to the baseline.
 - 2026-11-05: E30 part 1, option (a) applied (`3867e710d`), [CLASSICAL_STALL_APPLY_REVIEW.md](CLASSICAL_STALL_APPLY_REVIEW.md). V3 water is the network's: virial steam at its partial pressure, IF97 Region 1 liquid at the node's pressure. Wet formulation `v3-wet-mesh-r32-steam` / `v3-wet-mesh-r33-steam`; the bundled sidecar binds no wet column until the retrain. Gap 56-59 kW -> 11-14 kW, free water 0.0; the steam resume stays. Pins: 6 test classes and 2 fixtures. 675 class tests pass; chain-100 exact 0; quick check equal to O11 seed by seed (the cold total differs only by wall-deadline seed 118; identical counters without it).
 - 2026-11-05: E30 part 2, F1c measured and stopped (not committed): roots unchanged, polls about 10x F1b, six column tests fail. One probe per case: the hold, not the release, keeps the cold stage-continuation solves at a 0.999 residual; forms G1 and G2 go to the owner.
+- 2026-11-05: E30 (a) follow-up, `5499de72a`: the medium-grade sample sizing pins re-pinned. (a)'s landing (`3867e710d`) ran no sample-sizing class, so these pins stayed stale until H's runs found them (they pass at `3867e710d^`): NAPHTHA line drop 0.174 to 0.175 bar/100 m (more distillate), H-101 duty 73.00 to 73.03 MW and E-101 surface 573 to 572 m² and 579.1 to 578.5 m² (a lighter, cooler residue gives E-101 less heat).
+- 2026-11-05: O11 follow-up, `50449db3d`: the `crude_unit` example lists CarbonDioxide, as `icheme:refinery` r3 does. O11's landing (`19a544b82`) did not run `FlowsheetExamplesTest`, so the example stayed on the old component list. The sheet feeds no CO2: its data revision holds and every sample pin holds.
+- 2026-11-05: E30 form H landed, `28d3bd420` (the owner's "Yes, land H"): a sinking support point is held only when its drop cuts a feed path (`V3TruncationSupport.Reachability`); traces stay free. Medium grid 5/10 to 8/10 at 5,898k polls (6,223k), Tia Juana 10/10, roots equal. The furnace pin now expects the cold run to close (its first pass is a sound column); the `loop.first_estimate` hint moved to `FlowsheetSolverTest`. Tests: columnGates 523, holdGates 8 classes 63, quick suite 46 classes 535, all pass. Tools: `tools/open-thermo-data/o10/`.
 
 ## Open items
 
 - Next:
-  1. O10's stall fix (E30). (a), the single water model, is applied (`3867e710d`, wet revisions r32/r33); the stall fix is open. [CLASSICAL_STALL_APPLY_REVIEW.md](CLASSICAL_STALL_APPLY_REVIEW.md) part 2.
-     - F1c (the hold, released only by the stall stop) keeps every root but costs about 10x the polls (medium grid 53,285k, Tia Juana 60,064k) and fails six column tests that pass today. Not committed; the patch and probes are in `tmp/o10-fix/f1c/` and `tmp/o10-fix/runs/`.
-     - The cause is the hold's level: converging solves take trace points below the 1e-10 floor and close there; held, they cannot close until the refresh.
-     - The owner chose G2 ("Yes, G2", 2026-11-05), with G1 as the fallback. Both were measured, and neither landed. Patches and the stop note are in `tmp/o10-fix/g2/`.
-       - Medium grid: G2 8/10 (633 and 640 K fail) at 3,708k polls; G1 5/10 at 16,231k. HEAD is 5/10 at 6,223k.
-       - Both forms keep every root, and both pass the 42 tests that F1b broke.
-       - Both turn `FlowsheetColumnTest.aFurnaceOnADutyStartsFromAFirstEstimate` from its expected FAILED into STEADY.
-       - Why G2 misses: it fires far from a root (scaled residual 1 to 5e4), and the refresh then re-derives the profile and drops up to 53 points.
-     - The owner chose "Try G2b" (2026-11-05). G2b drops only the dead coordinates and resumes from the same state on the full budget. Result: medium grid 7/10 (631.28, 633 and 640 K fail) at 7,783k polls, every root kept; not landed (`tmp/o10-fix/g2b/`).
-       - The dead coordinate is a cut path, not a trace. At 633 K, PC8 vapour on tray 26 falls to ln -572 while PC8 is major on trays 0-25. Dropping it removes 52 live phases through the support's reachability rule.
-       - The LU first goes singular only after the solve is already far from a root (residual 1.08 to 4.0). So acting at the singularity (G2, G2b) comes too late. Only a form that stops the dive itself (F1b) reaches 10/10.
-     - The furnace pin `FlowsheetColumnTest.aFurnaceOnADutyStartsFromAFirstEstimate` (written in `fc3b4ad25`) expects FAILED. Under G2b the cold start converges to the estimated run's answer:
-       - all products equal to 4 decimals, and the furnace at its set 70.40 MW;
-       - mass closure 2.7e-7, heat closure 15.5 kW of 173.7 MW;
-       - all 15 audit checks pass, no dry tray, positive flows.
-
-       So the pin records a solver limit, not physics. Flipping it is the owner's item.
-     - The owner chose "Try form H" (2026-11-05). H uses F1b's hold, but only on cut-path points: a point whose drop would cut live phases of its component off from the feed (the support's reachability rule). Traces stay free. Results, not landed (`tmp/o10-fix/h/`):
-       - medium grid 8/10 (636 and 644 K fail) at 5,898k polls; presets equal to HEAD; every root kept; the 42 tests pass, F1b's five broken ones included;
-       - at 636 and 644 K whole trace tails sink with nothing live beyond them, and after the refresh the state does not close (residual 1e-4 to 1e-3);
-       - G2 and H lose disjoint points. HEAD fails 631.28, 634, 636, 640 and 644 K. H fails two of these, 636 and 644 K (at 644 K it takes HEAD's own path, 799k polls), so it loses no point that HEAD converges. G2 fails 640 K and also 633 K, which HEAD converges.
-     - Open for the owner: land H as a partial fix (medium grid 5/10 to 8/10, no point lost, the 42 tests pass, polls -5 %), with the furnace pin flipped, after the column classes pass; land G2 instead (polls -40 %, but 633 K is lost); or keep the stall as a known limit.
+  1. O10's stall fix (E30): landed as form H (`28d3bd420`, the owner's "Yes, land H"). [CLASSICAL_STALL_APPLY_REVIEW.md](CLASSICAL_STALL_APPLY_REVIEW.md) part 2 has the forms tried and the runs.
+     - A partial fix: medium grid 5/10 to 8/10, no point lost that HEAD converges, polls -5 %, every root kept.
+     - Remaining limit: 636 and 644 K. Whole trace tails sink with nothing live beyond them, so no point is a cut path; after the refresh the state does not close (residual 1e-4 to 1e-3). Warm starts are unaffected.
+     - The steam resume is still reached on the half-steam wet preset; it stays.
   2. The retrain (E26) runs in its own session, `neural-retrain`: branch `claude/neural-retrain-open-data-712a75`, batch `2026-11-05-neural-retrain`. Its plan, `NEURAL_RETRAIN_PLAN.md`, with `NEURAL_RETRAIN_DATA.md` (`138b0024e`), was approved by the owner on 2026-11-05: "Approve all A" (D1 to D5). The owner also allowed the torch and numpy download. N0 and N1 run now, on lane 2. N2 waits until O10 states whether its fix changes a formulation revision. M1, the timing run, waits for a free machine. The same day the owner asked for four plan changes:
      - tolerate about 5 % unknown compounds, with research into a model structure that allows it;
      - a VDU data set;
