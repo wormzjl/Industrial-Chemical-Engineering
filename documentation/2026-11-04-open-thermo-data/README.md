@@ -104,7 +104,7 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
        - Both forms keep every root, and both pass the 42 tests that F1b broke.
        - Both turn `FlowsheetColumnTest.aFurnaceOnADutyStartsFromAFirstEstimate` from its expected FAILED into STEADY.
        - Why G2 misses: it fires far from a root (scaled residual 1 to 5e4), and the refresh then re-derives the profile and drops up to 53 points.
-     - Open for the owner: G2b, which drops only the dead coordinates and resumes from the same state on the full budget; or no stall fix for now. A stall fix changes no formulation revision.
+     - The owner chose "Try G2b" (2026-11-05). G2b drops only the dead coordinates and resumes from the same state on the full budget. It is built and measured now. A stall fix changes no formulation revision.
   2. The retrain (E26) runs in its own session, `neural-retrain`: branch `claude/neural-retrain-open-data-712a75`, batch `2026-11-05-neural-retrain`. Its plan, `NEURAL_RETRAIN_PLAN.md`, with `NEURAL_RETRAIN_DATA.md` (`138b0024e`), was approved by the owner on 2026-11-05: "Approve all A" (D1 to D5). The owner also allowed the torch and numpy download. N0 and N1 run now, on lane 2. N2 waits until O10 states whether its fix changes a formulation revision. M1, the timing run, waits for a free machine. The same day the owner asked for four plan changes:
      - tolerate about 5 % unknown compounds, with research into a model structure that allows it;
      - a VDU data set;
