@@ -93,7 +93,16 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
 ## Open items
 
 - Next:
-  1. O10's fixes (E30, "Land both"): F1b for the stall, and (a) one water model for the gap. A design phase runs now without Gradle; the landing follows O11's Gradle work in this worktree. (a) bumps the wet revision, so the retrain's N2 labels wait for it.
+  1. O10's fixes (E30, "Land both"). Phase 2 stopped before any commit; the record is `tmp/o10-fix/stop.md`.
+     - F1b breaks columns that converge today, with either release window:
+       - V3ConvergenceClosureTest case D, dry: NONCONVERGENCE;
+       - the dry three-cooler case: NONCONVERGENCE;
+       - the wet vacuum startup: NONCONVERGENCE;
+       - the dry 40 MW pumparound case: 2.02M checkpoints against about 475k.
+
+       With window 12 the medium grid is 10/10 and the roots are unchanged.
+     - (a) works. Free water closes at 0.0 kW, and the gap falls from 57-59 kW to 11-14 kW (the 2e-3 rule passes). The rest is not water: the overhead light ends 6-11 kW, the steam priced at its 2.7 bar tray but supplied at 2.5 bar 4 kW, the hydrocarbons about 1 kW. The new wet revisions are r32 and r33.
+     - `tmp/o10-fix/stage-final/` holds `landing-a-only.patch` and `landing-w12.patch`. The owner decides the next step.
   2. The retrain (E26) runs in its own session, `neural-retrain`: branch `claude/neural-retrain-open-data-712a75`, batch `2026-11-05-neural-retrain`. Its plan, `NEURAL_RETRAIN_PLAN.md`, with `NEURAL_RETRAIN_DATA.md` (`138b0024e`), was approved by the owner on 2026-11-05: "Approve all A" (D1 to D5). The owner also allowed the torch and numpy download. N0 and N1 run now, on lane 2. N2 waits until O10 states whether its fix changes a formulation revision. M1, the timing run, waits for a free machine. The same day the owner asked for four plan changes:
      - tolerate about 5 % unknown compounds, with research into a model structure that allows it;
      - a VDU data set;
