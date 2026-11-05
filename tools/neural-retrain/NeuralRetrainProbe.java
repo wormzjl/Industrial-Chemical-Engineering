@@ -432,7 +432,7 @@ class NeuralRetrainProbe {
         if (!sources.isEmpty()) { var map = new LinkedHashMap<String, JsonObject>(); for (var r : read(Path.of(sources))) map.put(r.get("id").getAsString(), r); cduLabels = map; }
         Path out = Path.of(env("NR_OUT", "tmp/neural-retrain/pilot")); Files.createDirectories(out);
         int workers = Integer.parseInt(env("NR_WORKERS", "4"));
-        if (workers < 1 || workers > 10) throw new IllegalArgumentException("NR_WORKERS 1..10");
+        if (workers < 1 || workers > Runtime.getRuntime().availableProcessors()) throw new IllegalArgumentException("NR_WORKERS 1..cores");
         Path journal = out.resolve("cases.jsonl");
         if (Files.exists(journal)) throw new IllegalStateException("Journal exists: " + journal);
         var pool = Executors.newFixedThreadPool(workers); var done = new ExecutorCompletionService<JsonObject>(pool);
