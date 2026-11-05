@@ -26,9 +26,10 @@ Installed 2026-11-05: torch 2.10.0+cu128 (CUDA on the RTX 4070 Ti), numpy 2.3.5,
   - `labels`: realises the design rows, screens them (request-only admission at 0.30, sigma >= 0.66, the degenerate family), solves CURRENT_ONLY under a 4 M control-poll cap, and journals every row with its strict evidence, profile and targets. Run: `NR_DESIGN=... NR_OUT=... NR_WORKERS=4 ./gradlew columnGates --offline --tests "*NeuralRetrainProbe.labels" --max-workers=4`.
   - `features`: the bundled model's raw inputs and outputs, the parity reference. Run with `NR_OUT=tmp/neural-retrain/parity`, optionally `NR_CASES` (a labels journal) and `NR_LIMIT`.
 - `model.py`: the Python twin of `V3AnchorTransformerInitializer`, with state-dict names equal to the payload's. Parity check: `python -I tools/neural-retrain/model.py <payload> <features.jsonl>`.
-- `tally.mjs`: yield table and failure classes A to D of a labels journal. Run: `node tools/neural-retrain/tally.mjs <dir>`.
+- `tally.mjs`: yield table, failure classes A to D, sense criteria and the VDU anchor count of a labels journal. Run: `node tools/neural-retrain/tally.mjs <dir>`.
 
 ## History
 
 - 2026-11-05, N0: venv installed. Parity of `model.py` against the bundled payload on the four presets: worst raw output 7.3e-7 relative, logits 4.7e-7 (the Java GELU's erf approximation), 88,852 parameters. Java exports the features, so Python needs no feature twin.
 - 2026-11-05, N1: design written. The 300-row pilot on Gradle lane 2 (4 workers) was stopped at 203 rows when the lane passed to O11 (journal in `tmp/neural-retrain/pilot/`). It is not the pilot of record: the design changes with plan revision 2.
+- 2026-11-05, revision 2: design windows, injection and VDU rows; the probe's sense checks, `icheme:refinery` realisation, VDU realisation and V0 anchor record. Not yet compiled (no Gradle lane).

@@ -46,9 +46,24 @@ class NeuralRetrainProbe {
     /** Control-poll cap of one classical solve: 4 M polls, about 24 s at 165 polls/ms; O8's slowest classical run was 1.76 M. */
     static final long POLL_CAP = 4_000_000L;
     static final double SCREEN_RATIO = 0.30, SIGMA_LIMIT = 0.66, LAMBDA = 60_000.0;
+    /** The package that holds the 19-compound axis, nitrogen and the 24 refinery compounds (extends chain): injected rows. */
+    static final String WORLD_PACKAGE = "icheme:refinery";
+    /**
+     * Sense windows (NEURAL_RETRAIN_DATA.md section 7): physical properties of the operating point, never solver difficulty.
+     * Heater outlet below cracking (CDU about 370 C, VDU about 420 C); stripping steam by mass of hydrocarbon feed; trays below the
+     * cracking limit; overflash (liquid from the tray above the feed, per mole of feed); no vanishing product.
+     */
+    static final double CDU_HEATER_K = 643.15, VDU_HEATER_K = 693.15, CDU_STEAM_MASS = 0.10, VDU_STEAM_MASS = 0.03,
+            CDU_TRAY_K = 653.15, VDU_TRAY_K = 703.15, OVERFLASH_MIN = 0.01, OVERFLASH_MAX = 0.15, PRODUCT_MIN = 0.005;
+    /**
+     * The accepted VDU of batch 2026-10-28-vacuum-column per mole of its feed (about 210 mol/s of residue, 94.4 kg/s): cuts
+     * 21.2 and 53.0 mol/s, steam 52.4 mol/s at 533.15 K, pumparound cooling 10 and 15 MW; condenser 333.15 K, reflux 0, no reboiler.
+     */
+    static final double VDU_CUT_1 = 0.10, VDU_CUT_2 = 0.25, VDU_STEAM = 0.25, VDU_PA_1 = 47.6e3, VDU_PA_2 = 71.4e3;
 
     static MaterialCatalog catalog;
     static V3ColumnInput[] base = new V3ColumnInput[GRADES.length];
+    static Map<String, JsonObject> cduLabels = Map.of();
 
     static synchronized void setUp() throws Exception {
         if (catalog != null) return;
@@ -108,8 +123,121 @@ class NeuralRetrainProbe {
                 new V3ColumnSpecification.CondenserOutletTemperature(o.get("condenserTemperatureKelvin").getAsDouble()),
                 new V3ColumnSpecification.OrganicRefluxRatio(o.get("refluxRatio").getAsDouble()),
                 new V3ColumnSpecification.ReboilerDuty(0));
-        return new V3ColumnInput(b0.schemaVersion(), b0.packageId(), b0.assayId(), b0.componentBasis(), feed, o.get("feedTemperatureKelvin").getAsDouble(),
+        var cdu = new V3ColumnInput(b0.schemaVersion(), b0.packageId(), b0.assayId(), b0.componentBasis(), feed, o.get("feedTemperatureKelvin").getAsDouble(),
                 stages, stages - 3, o.get("topPressurePascal").getAsDouble(), 0, specs, draws, steam, pas, o.get("diameterMetres").getAsDouble());
+        return c.has("injection") ? injected(cdu, c.getAsJsonObject("injection")) : cdu;
+    }
+
+    /**
+     * The same column on the world package with off-axis compounds added (NEURAL_RETRAIN_DATA.md section 5): {@code fraction}
+     * of the feed moles, split equally over {@code compounds}; the axis part is scaled down so the total feed is unchanged.
+     */
+    static V3ColumnInput injected(V3ColumnInput in, JsonObject injection) {
+        var pack = catalog.packages().get(WORLD_PACKAGE);
+        if (pack == null) throw new IllegalStateException("No package " + WORLD_PACKAGE);
+        var ids = pack.components(); var axis = in.componentBasis().componentIds();
+        double[] axisFeed = in.feedComponentMolarFlowsMolPerSecond(), feed = new double[ids.size()];
+        double total = Arrays.stream(axisFeed).sum(), fraction = injection.get("fraction").getAsDouble();
+        for (int k = 0; k < axis.size(); k++) {
+            int at = ids.indexOf(axis.get(k));
+            if (at < 0) throw new IllegalStateException(WORLD_PACKAGE + " lacks " + axis.get(k));
+            feed[at] = axisFeed[k] * (1 - fraction);
+        }
+        var compounds = injection.getAsJsonArray("compounds");
+        for (var compound : compounds) {
+            int at = ids.indexOf(compound.getAsString());
+            if (at < 0) throw new IllegalArgumentException(WORLD_PACKAGE + " lacks " + compound.getAsString());
+            feed[at] += total * fraction / compounds.size();
+        }
+        return new V3ColumnInput(in.schemaVersion(), pack.id(), in.assayId(), new V3ComponentBasis(ids), feed, in.feedTemperatureKelvin(),
+                in.stageCount(), in.feedStageNumber(), in.topPressurePascal(), in.stagePressureDropPascal(), in.specifications(),
+                in.sideDraws(), in.steamFeeds(), in.pumparounds(), in.columnDiameterMetres());
+    }
+
+    /** A VDU on the bottoms of a strict CDU label (NEURAL_RETRAIN_DATA.md section 6, case A envelope); grades are never blended directly. */
+    static V3ColumnInput realiseVdu(JsonObject row) {
+        var o = row.getAsJsonObject("operating");
+        var strict = cduLabels.values().stream().filter(r -> r.has("label") ? r.get("label").getAsBoolean() : r.has("strict") && r.get("strict").getAsBoolean()).sorted((a, b) -> a.get("id").getAsString().compareTo(b.get("id").getAsString())).toList();
+        if (strict.isEmpty()) throw new IllegalStateException("NR_CDU_LABELS holds no strict CDU label");
+        var source = strict.get(Math.min(strict.size() - 1, (int) Math.floor(o.get("sourceRank").getAsDouble() * strict.size())));
+        var sourceInput = realise(source.getAsJsonObject("design"));
+        double[][] liquid = JSON.fromJson(source.getAsJsonObject("seed").get("liquid"), double[][].class);
+        double[] feed = liquid[liquid.length - 1].clone(); // the sump liquid: the CDU's bottoms product
+        double f = Arrays.stream(feed).sum();
+        int n = o.get("stages").getAsInt();
+        var draws = List.of(new V3SideDrawSpec(Math.max(1, (int) Math.round(0.3 * n)), VDU_CUT_1 * f * o.get("cut1Factor").getAsDouble()),
+                new V3SideDrawSpec(Math.max(2, (int) Math.round(0.6 * n)), VDU_CUT_2 * f * o.get("cut2Factor").getAsDouble()));
+        var steam = List.of(new V3SteamFeedSpec(n + 1, VDU_STEAM * f * o.get("steamFactor").getAsDouble(), 533.15));
+        int d1 = draws.get(0).trayNumber(), d2 = draws.get(1).trayNumber();
+        var pas = List.of(new V3PumparoundSpec(Math.max(1, d1 - 1), d1, -VDU_PA_1 * f * o.get("pumparoundFactor").getAsDouble(), V3PumparoundSpec.Split.UNIFORM),
+                new V3PumparoundSpec(Math.max(1, d2 - 1), d2, -VDU_PA_2 * f * o.get("pumparoundFactor").getAsDouble(), V3PumparoundSpec.Split.UNIFORM));
+        var specs = List.<V3ColumnSpecification>of(new V3ColumnSpecification.CondenserOutletTemperature(333.15),
+                new V3ColumnSpecification.OrganicRefluxRatio(0), new V3ColumnSpecification.ReboilerDuty(0));
+        return new V3ColumnInput(sourceInput.schemaVersion(), sourceInput.packageId(), sourceInput.assayId(), sourceInput.componentBasis(), feed,
+                o.get("feedTemperatureKelvin").getAsDouble(), n, n - 2, o.get("topPressurePascal").getAsDouble(), 0, specs, draws, steam, pas,
+                o.get("diameterMetres").getAsDouble());
+    }
+
+    static boolean vdu(JsonObject row) { return "vdu".equals(row.has("unit") ? row.get("unit").getAsString() : "cdu"); }
+
+    static V3ColumnInput build(JsonObject row) { return vdu(row) ? realiseVdu(row) : realise(row); }
+
+    static double[] molarMasses(V3ColumnInput in) {
+        var pack = catalog.packages().get(in.packageId()); var ids = in.componentBasis().componentIds();
+        double[] m = new double[ids.size()];
+        for (int k = 0; k < m.length; k++) {
+            String id = ids.get(k);
+            m[k] = pack.properties().stream().filter(p -> p.component().equals(id)).findFirst().orElseThrow(() -> new IllegalStateException("No property " + id)).molecularWeight();
+        }
+        return m;
+    }
+
+    static double[] boilingPoints(V3ColumnInput in) {
+        var pack = catalog.packages().get(in.packageId()); var ids = in.componentBasis().componentIds();
+        double[] b = new double[ids.size()];
+        for (int k = 0; k < b.length; k++) {
+            String id = ids.get(k);
+            b[k] = pack.properties().stream().filter(p -> p.component().equals(id)).findFirst().orElseThrow().normalBoilingPoint();
+        }
+        return b;
+    }
+
+    /** Input sense checks at generation, no solve; the first failed criterion, or null. */
+    static String senseInput(V3ColumnInput in, boolean vdu) {
+        if (in.feedTemperatureKelvin() > (vdu ? VDU_HEATER_K : CDU_HEATER_K)) return "HEATER_ABOVE_CRACKING";
+        double[] feed = in.feedComponentMolarFlowsMolPerSecond(), mw = molarMasses(in);
+        double mass = 0; for (int k = 0; k < feed.length; k++) mass += feed[k] * mw[k];
+        double steam = in.steamFeeds().stream().mapToDouble(V3SteamFeedSpec::molarFlowMolPerSecond).sum() * 0.018015;
+        if (steam > (vdu ? VDU_STEAM_MASS : CDU_STEAM_MASS) * mass) return "STEAM_TO_FEED";
+        if (vdu ? in.topPressurePascal() < 1.3e3 || in.topPressurePascal() > 8e3 : in.topPressurePascal() < 150e3 || in.topPressurePascal() > 350e3) return "TOP_PRESSURE";
+        if (vdu ? in.stageCount() < 8 || in.stageCount() > 15 : in.stageCount() < 20) return "STAGE_COUNT";
+        return null;
+    }
+
+    /** Sense checks on the converged state; the failed criteria (empty when it makes sense). */
+    static List<String> senseState(V3ColumnInput in, V3NeuralSeed seed, List<V3ColumnStreamProperties> streams, boolean vdu) {
+        var failed = new ArrayList<String>();
+        double[] t = seed.temperatures(); int last = t.length - 1;
+        for (int n = 1; n < last; n++) if (t[n] > (vdu ? VDU_TRAY_K : CDU_TRAY_K)) { failed.add("TRAY_ABOVE_CRACKING"); break; }
+        double f = Arrays.stream(in.feedComponentMolarFlowsMolPerSecond()).sum();
+        double[][] liquid = seed.liquid();
+        if (!vdu) for (int n = 1; n <= in.stageCount(); n++) if (Arrays.stream(liquid[n]).sum() <= 0) { failed.add("NO_INTERNAL_REFLUX"); break; }
+        double overflash = Arrays.stream(liquid[in.feedStageNumber() - 1]).sum() / f;
+        if (overflash < OVERFLASH_MIN || overflash > OVERFLASH_MAX) failed.add("OVERFLASH");
+        for (var d : in.sideDraws()) if (d.molarFlowMolPerSecond() < PRODUCT_MIN * f) { failed.add("VANISHING_PRODUCT"); break; }
+        if (!failed.contains("VANISHING_PRODUCT")) for (var s : streams)
+            if (!"FREE_WATER".equalsIgnoreCase(s.phase()) && !s.streamId().contains("water") && s.molarFlowMolPerSecond() < PRODUCT_MIN * f) { failed.add("VANISHING_PRODUCT"); break; }
+        // Products in boiling-range order: the mole-weighted normal boiling point of each liquid product rises from top to bottom.
+        double[] nbp = boilingPoints(in); double previous = 0; boolean ordered = true;
+        int[] trays = new int[in.sideDraws().size() + 1]; for (int k = 0; k < in.sideDraws().size(); k++) trays[k] = in.sideDraws().get(k).trayNumber();
+        trays[trays.length - 1] = last; Arrays.sort(trays);
+        for (int node : trays) {
+            double tot = Arrays.stream(liquid[node]).sum(); if (tot <= 0) continue;
+            double mean = 0; for (int k = 0; k < nbp.length; k++) mean += liquid[node][k] / tot * nbp[k];
+            if (mean < previous) ordered = false; previous = mean;
+        }
+        if (!ordered) failed.add("PRODUCT_ORDER");
+        return failed;
     }
 
     // ---------------------------------------------------------------- generation screens (guide 4.4, 6.1)
@@ -201,7 +329,7 @@ class NeuralRetrainProbe {
         var out = new JsonObject();
         out.add("id", row.get("id")); out.add("split", row.get("split")); out.add("design", row);
         final V3ColumnInput in;
-        try { in = realise(row); }
+        try { in = build(row); }
         catch (IllegalArgumentException invalid) { out.addProperty("status", "INVALID_INPUT"); out.addProperty("failure", invalid.getMessage()); return out; }
         out.add("input", inputJson(in));
         return MaterialRuntime.with(catalog, in.packageId(), () -> {
@@ -209,6 +337,7 @@ class NeuralRetrainProbe {
             try { sigma = sigma(in); } catch (RuntimeException failed) { sigma = Double.NaN; out.addProperty("sigmaFailure", String.valueOf(failed.getMessage())); }
             out.addProperty("sigma", sigma);
             String excluded = screen(in, Double.isNaN(sigma) ? 0 : sigma);
+            if (excluded == null) { String sense = senseInput(in, vdu(row)); if (sense != null) excluded = "SENSE:" + sense; }
             if (excluded != null) { out.addProperty("status", "EXCLUDED_BY_DESIGN"); out.addProperty("exclusion", excluded); return out; }
             var polls = new AtomicLong(); V3NeuralSeed[] profile = {null};
             long start = System.nanoTime();
@@ -238,6 +367,14 @@ class NeuralRetrainProbe {
             if (water != null) { out.addProperty("waterGrade", water.grade().name()); out.addProperty("wetTrayCount", water.wetTrayCount()); }
             String reason = water == null ? "NO_PROFILE" : strict(outcome, profile[0], in, water);
             out.addProperty("strict", reason == null); if (reason != null) out.addProperty("strictFailure", reason);
+            var sense = profile[0] == null ? List.of("NO_PROFILE") : senseState(in, profile[0], ((V3ColumnOutcome.Success) outcome).result().streams(), vdu(row));
+            out.add("sense", JSON.toJsonTree(sense));
+            out.addProperty("label", reason == null && sense.isEmpty());
+            if (vdu(row) && profile[0] != null) { // open check V0: the native anchor on a dry zero-reflux top
+                var anchor = V3AnchorTransformerInitializer.NativeAnchor.build(in, profile[0].branch(), () -> {});
+                out.addProperty("anchorAvailable", anchor.available()); out.addProperty("anchorReason", anchor.reason());
+                out.addProperty("branch", profile[0].branch().name());
+            }
             if (profile[0] != null) {
                 out.add("seed", seedJson(profile[0]));
                 out.add("targets", JSON.toJsonTree(V3FactorizedNeuralFeatures.targets(profile[0])));
@@ -255,6 +392,8 @@ class NeuralRetrainProbe {
     @Test void labels() throws Exception {
         setUp();
         var rows = read(Path.of(env("NR_DESIGN", "tmp/neural-retrain/design/pilot.jsonl")));
+        String sources = env("NR_CDU_LABELS", ""); // VDU rows take their feeds from this CDU labels journal
+        if (!sources.isEmpty()) { var map = new LinkedHashMap<String, JsonObject>(); for (var r : read(Path.of(sources))) map.put(r.get("id").getAsString(), r); cduLabels = map; }
         Path out = Path.of(env("NR_OUT", "tmp/neural-retrain/pilot")); Files.createDirectories(out);
         int workers = Integer.parseInt(env("NR_WORKERS", "4"));
         if (workers < 1 || workers > 10) throw new IllegalArgumentException("NR_WORKERS 1..10");

@@ -10,6 +10,11 @@ const seed = Number(process.argv[3] ?? 20261105);
 export const GRADES = ['light_crude', 'medium_crude', 'heavy_crude', 'oil_sand_dilbit'];
 export const COMPONENTS = 19; // tjl20_methane: C1..nC5, crude_pc01..12
 const C1C2 = [0, 1];
+// Off-axis compounds of icheme:refinery (N2 and the 24 refinery compounds), less CO2 (E25: the column refuses crystals) and
+// oxygen (no crude column carries free oxygen: a sense rule at generation).
+export const OFF_AXIS = ["Nitrogen", "Hydrogen", "HydrogenSulfide", "CarbonMonoxide", "Ammonia", "SulfurDioxide", "CarbonylSulfide",
+  "Ethylene", "Propylene", "Butene-1", "Isobutene", "Cis-2-butene", "Trans-2-butene", "Butadiene", "N-hexane", "Cyclohexane", "Benzene",
+  "Toluene", "Ethylbenzene", "O-xylene", "M-xylene", "P-xylene", "MethylMercaptan", "EthylMercaptan"];
 
 function mulberry32(a) {
   return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a);
@@ -41,13 +46,20 @@ function composition() {
   }
   const multipliers = Array.from({ length: COMPONENTS }, () => (common ? 1 : Math.exp(0.25 * normal())));
   const zeroC1C2 = !common && rand() < 0.05;
-  return { kind, weights: w, multipliers, zero: zeroC1C2 ? C1C2 : [] };
+  const result = { kind, weights: w, multipliers, zero: zeroC1C2 ? C1C2 : [] };
+  // Up to 5 mol % of off-axis world-list compounds on about a third of all rows (NEURAL_RETRAIN_DATA.md section 5).
+  if (!common && rand() < 0.5) {
+    const count = 1 + Math.floor(rand() * 3), picked = new Set();
+    while (picked.size < count) picked.add(OFF_AXIS[Math.floor(rand() * OFF_AXIS.length)]);
+    result.injection = { compounds: [...picked], fraction: uniform(0, 0.05) };
+  }
+  return result;
 }
 
 function operating() {
   return {
     stages: STAGES[pick(STAGE_WEIGHTS)],
-    feedTemperatureKelvin: uniform(615, 660),
+    feedTemperatureKelvin: uniform(615, 643), // CDU heater outlet below cracking (about 370 C)
     topPressurePascal: uniform(180e3, 320e3),
     refluxRatio: uniform(3.0, 5.5),
     condenserTemperatureKelvin: uniform(320, 345),
@@ -65,12 +77,20 @@ const rows = { train: [], validation: [] };
 for (const [split, count] of [['train', 6000], ['validation', 550]])
   for (let i = 0; i < count; i++) rows[split].push({ id: `${split}-${String(i).padStart(5, '0')}`, split, composition: composition(), operating: operating() });
 const pilot = rows.train.filter((_, i) => i % 20 === 0); // the 5 % pilot (guide section 5): a fixed subset of TRAIN
+// VDU rows (section 6, case A): each takes the bottoms of a strict CDU label, picked by sourceRank in the labels journal.
+const vduRow = (split, i) => ({ id: `vdu-${split}-${String(i).padStart(5, "0")}`, split, unit: "vdu", composition: { kind: "cdu-bottoms" }, operating: {
+  stages: 8 + Math.floor(rand() * 8), topPressurePascal: uniform(1.3e3, 8e3), feedTemperatureKelvin: uniform(615, 683),
+  cut1Factor: uniform(0.6, 1.2), cut2Factor: uniform(0.6, 1.2), steamFactor: uniform(0.5, 2.0), pumparoundFactor: uniform(0.6, 1.3),
+  diameterMetres: uniform(12, 15), sourceRank: rand() } });
+const vdu = { train: Array.from({ length: 1500 }, (_, i) => vduRow("train", i)), validation: Array.from({ length: 150 }, (_, i) => vduRow("validation", i)) };
+const vduPilot = vdu.train.filter((_, i) => i % 20 === 0);
 const panel = GRADES.map((g, i) => ({ id: `panel-${g}`, split: 'panel', composition: { kind: 'preset', weights: GRADES.map((_, k) => (k === i ? 1 : 0)), multipliers: Array(COMPONENTS).fill(1), zero: [] }, operating: { preset: true } }));
 
 fs.mkdirSync(out, { recursive: true });
 const write = (name, list) => fs.writeFileSync(path.join(out, name), list.map((r) => JSON.stringify(r)).join('\n') + '\n');
 write('train.jsonl', rows.train); write('validation.jsonl', rows.validation); write('pilot.jsonl', pilot); write('panel.jsonl', panel);
+write("vdu-train.jsonl", vdu.train); write("vdu-validation.jsonl", vdu.validation); write("vdu-pilot.jsonl", vduPilot);
 const tally = (list, f) => list.reduce((m, r) => ((m[f(r)] = (m[f(r)] ?? 0) + 1), m), {});
 console.log(JSON.stringify({ seed, train: rows.train.length, validation: rows.validation.length, pilot: pilot.length,
   composition: tally(rows.train, (r) => r.composition.kind), stages: tally(rows.train, (r) => r.operating.stages),
-  pilotStages: tally(pilot, (r) => r.operating.stages), pilotComposition: tally(pilot, (r) => r.composition.kind) }));
+  pilotStages: tally(pilot, (r) => r.operating.stages), pilotComposition: tally(pilot, (r) => r.composition.kind), injected: rows.train.filter((r) => r.composition.injection).length, vdu: vdu.train.length, vduPilot: vduPilot.length }));

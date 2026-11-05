@@ -22,7 +22,7 @@ Status: In progress since 2026-11-05, on `claude/neural-retrain-open-data-712a75
 ## Open items
 
 - The VDU text after "VDU specific data (" (D8 follows case A until then).
-- Open checks U0 (the package for off-axis compounds), V0 (the encoding and anchor on the VDU top), M1 (timing, alone).
+- Open checks V0 (the encoding and anchor on the VDU top), M1 (timing, alone).
 - N1 pilot of record: needs a Gradle lane from the base session. N2 waits for the base branch commit of F1b and fix (a) (E30) and a sync with the base branch.
 - Open measurement M1: time of bind, anchor and inference on the four presets.
 
@@ -32,3 +32,4 @@ Status: In progress since 2026-11-05, on `claude/neural-retrain-open-data-712a75
 - 2026-11-05, N1: `design.mjs` and `NeuralRetrainProbe` written. The pilot was stopped at 203 of 300 rows when lane 2 passed to O11: 126 strict (62 %), 38 DRY_SUPERSATURATED, 27 stalls at 30 stages, 10 with steam above the feed rate.
 - 2026-11-05, plan revision 2: the owner's four changes (5 % unknowns, a VDU set, sense checks, two re-iteration rounds), relayed by the base session. NEURAL_RETRAIN_DATA.md sections 5 to 8 added; D3 and D5 revised; D6 to D8 added.
 - 2026-11-05: E30 recorded. The owner: "freezing isn't part of this work ... you will not be training CDU/VDU models based on freezing conditions"; the frozen-tray check is dropped. Revision 2 approved: "Go with recommended" (D3, D5, D6, D7 = A; D8 follows case A until the VDU text arrives).
+- 2026-11-05, N1 revision 2 (no Gradle): `design.mjs` now has CDU feed temperatures of at most 643 K, injection of 1 to 3 off-axis compounds (U(0, 5) mol %) on 2,070 of the 6,000 TRAIN rows, and 1,500 + 150 VDU rows (pilot 75) on CDU-label bottoms. `NeuralRetrainProbe` realises injected rows on `icheme:refinery` and VDU rows on the case A layout; it applies the input and state sense checks of section 7, records the native anchor's availability on VDU labels (V0) and writes `label` = strict and sensible. U0 answered from the code. Not yet compiled: it needs a Gradle lane.
