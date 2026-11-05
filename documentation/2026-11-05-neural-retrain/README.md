@@ -23,7 +23,7 @@ Status: In progress since 2026-11-05, on `claude/neural-retrain-open-data-712a75
 
 - Owner decisions D3 and D5 (revised), D6 to D8 of revision 2; the VDU text after "VDU specific data (".
 - Open checks U0 (the package for off-axis compounds), V0 (the encoding and anchor on the VDU top), M1 (timing, alone).
-- N1 pilot of record after revision 2 is approved. N2 waits for the owner's choice on O10's energy gap (CLASSICAL_STALL_REVIEW.md, base branch `f53a6b4ba`): fix (a), one water model in V3, bumps the wet formulation revision, so labels made before it would be stale. N2 starts after (a) lands and this branch syncs with the base branch. The stall fix F1b changes no revision; it lifts the medium grade in the 622-644 K band from 5 to 10 of 10, so it shrinks the stall class that re-iteration targets.
+- N1 pilot of record after revision 2 is approved. N2 waits for the base branch commit of F1b and fix (a) (E30) and a sync with the base branch.
 - Open measurement M1: time of bind, anchor and inference on the four presets.
 
 ## History (continued)
@@ -31,3 +31,4 @@ Status: In progress since 2026-11-05, on `claude/neural-retrain-open-data-712a75
 - 2026-11-05, N0: venv (torch 2.10.0+cu128, numpy 2.3.5) in `tmp/neural-retrain/venv`. `tools/neural-retrain/model.py` matches the Java forward pass on the four presets: worst 7.3e-7 relative, 88,852 parameters.
 - 2026-11-05, N1: `design.mjs` and `NeuralRetrainProbe` written. The pilot was stopped at 203 of 300 rows when lane 2 passed to O11: 126 strict (62 %), 38 DRY_SUPERSATURATED, 27 stalls at 30 stages, 10 with steam above the feed rate.
 - 2026-11-05, plan revision 2: the owner's four changes (5 % unknowns, a VDU set, sense checks, two re-iteration rounds), relayed by the base session. NEURAL_RETRAIN_DATA.md sections 5 to 8 added; D3 and D5 revised; D6 to D8 added.
+- 2026-11-05: E29 and E30 recorded (NEURAL_RETRAIN_DATA.md section 9). Frozen-tray counts on the 126 partial-pilot labels: 0 under the pure-freezing-point rule and 0 under the ideal-solubility rule. Frozen trays become a post-label check; CO2 joins the injection list only after the column solids work.

@@ -46,7 +46,7 @@ Compute estimate (8 workers, 165 polls/ms; the pilot of record replaces these nu
 
 Decided 2026-11-05: "Approve all A" (D1 to D5 = A) and the N0 download. D1, D2 and D4 stand. Revision 2 replaces D3 and D5 and adds D6 to D8:
 
-D1 after O10 (reported 2026-11-05, base branch `f53a6b4ba`): the stall fix F1b changes no formulation revision; the energy-gap fix (a) bumps the wet revision. N2 waits for the owner's gap choice, and after (a) also for its landing and a sync with the base branch.
+D1 after O10 (reported 2026-11-05, base branch `f53a6b4ba`): the stall fix F1b changes no formulation revision; the energy-gap fix (a) bumps the wet revision. N2 waits for the owner's gap choice, and after (a) also for its landing and a sync with the base branch. E30 (2026-11-05, "Land both"): F1b and fix (a) land on the base branch; N2 starts after that commit and a sync. E29: CO2 joins the injection list only after the column solids work; frozen trays are a post-label check (NEURAL_RETRAIN_DATA.md section 9).
 
 - D3, envelope. A: the 4 grades and their blends (lognormal perturbation); up to 5 mol % injected from the world list (CO2 excluded while E25 refuses it); the VDU set on CDU-label bottoms; the column-operation ranges; the constructor's stage counts. **Recommended.** B: A without injection (the unknowns rule then acts at inference only, untrained). Product streams other than the CDU bottoms (naphtha to a stabiliser) stay out and run classical.
 - D5, E7 check per family. A: two families, CDU feed (the 3-PC plane of the grades) and VDU feed (PCA of the labels' bottoms), each with limits from the trained spread; off-axis share at most 5 %, the known part renormalised and checked; the box with 10 % span margin. **Recommended.** B: one PCA over both families.
