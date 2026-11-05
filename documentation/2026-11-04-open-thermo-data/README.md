@@ -99,7 +99,12 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
   1. O10's stall fix (E30). (a), the single water model, is applied (`3867e710d`, wet revisions r32/r33); the stall fix is open. [CLASSICAL_STALL_APPLY_REVIEW.md](CLASSICAL_STALL_APPLY_REVIEW.md) part 2.
      - F1c (the hold, released only by the stall stop) keeps every root but costs about 10x the polls (medium grid 53,285k, Tia Juana 60,064k) and fails six column tests that pass today. Not committed; the patch and probes are in `tmp/o10-fix/f1c/` and `tmp/o10-fix/runs/`.
      - The cause is the hold's level: converging solves take trace points below the 1e-10 floor and close there; held, they cannot close until the refresh.
-     - The owner chose G2 ("Yes, G2", 2026-11-05), with G1 as the fallback. G2 ends a solve whose LU is singular on a sub-floor point and sends it to the refresh. It is built and measured now.
+     - The owner chose G2 ("Yes, G2", 2026-11-05), with G1 as the fallback. Both were measured, and neither landed. Patches and the stop note are in `tmp/o10-fix/g2/`.
+       - Medium grid: G2 8/10 (633 and 640 K fail) at 3,708k polls; G1 5/10 at 16,231k. HEAD is 5/10 at 6,223k.
+       - Both forms keep every root, and both pass the 42 tests that F1b broke.
+       - Both turn `FlowsheetColumnTest.aFurnaceOnADutyStartsFromAFirstEstimate` from its expected FAILED into STEADY.
+       - Why G2 misses: it fires far from a root (scaled residual 1 to 5e4), and the refresh then re-derives the profile and drops up to 53 points.
+     - Open for the owner: G2b, which drops only the dead coordinates and resumes from the same state on the full budget; or no stall fix for now. A stall fix changes no formulation revision.
   2. The retrain (E26) runs in its own session, `neural-retrain`: branch `claude/neural-retrain-open-data-712a75`, batch `2026-11-05-neural-retrain`. Its plan, `NEURAL_RETRAIN_PLAN.md`, with `NEURAL_RETRAIN_DATA.md` (`138b0024e`), was approved by the owner on 2026-11-05: "Approve all A" (D1 to D5). The owner also allowed the torch and numpy download. N0 and N1 run now, on lane 2. N2 waits until O10 states whether its fix changes a formulation revision. M1, the timing run, waits for a free machine. The same day the owner asked for four plan changes:
      - tolerate about 5 % unknown compounds, with research into a model structure that allows it;
      - a VDU data set;
