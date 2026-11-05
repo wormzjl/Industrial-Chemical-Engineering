@@ -33,7 +33,12 @@ The owner asked for four changes: "tolerate up to ~5% unknowns", "a set of VDU s
 | N5 integrate | sidecar schema 5: per-family E7 check (D5), off-axis limit, lump map; registry row; poll budget (D2) | E7 on Tia Juana (refused), grades, blends, VDU feeds, 5 % injected feeds (admitted), 10 % injected (refused) | the neural tests of revision 1; columnGates on the changed classes only |
 | N6 remove old, N7 cleanup | as revision 1 | as revision 1 | as revision 1 |
 
-Partial pilot (stopped 2026-11-05 at 203 of 300 rows when lane 2 passed to O11; not the pilot of record): 126 strict (62 %); 38 accepted but DRY_SUPERSATURATED (19 %, D7); 27 stalls at 30 stages (13 %, the O10 mechanism); 10 invalid (steam above the feed rate: heavy grade, steam x1.4 at turndown; the generation sense check removes these); 1 linear-solve failure, 1 poll cap. Cost: 1.20 M polls per strict label, 0.74 M per solved row; wall 4.8 s per solved row at 4 workers beside another lane (informative only).
+Pilot of record (2026-11-05, Gradle lane 1, 4 workers; journals in `tmp/neural-retrain/pilot-r2/` and `pilot-vdu/`):
+
+- CDU, 300 rows: 148 labels (49 %), 53 of them from the 108 injected rows (U0 measured: the classical start solves feeds with off-axis compounds as well as the rest). 105 accepted but DRY_SUPERSATURATED (35 %, not labels under D7 A); 34 class D, 8 depleted draws, 5 poll caps; no sense failure after the overflash fix. Supersaturation grows as the feed cools (610 to 630 K: 30 to 56 % of accepted rows; 640 K: 5 %), as the top pressure rises (300 kPa: 70 %) and with more steam. Cost: 1.60 M polls per label (median label 0.58 M).
+- VDU, 75 rows on the CDU labels' bottoms: 20 labels (27 %; the vacuum batch measured 23 %). 30 depleted side draws, 19 poll caps, 5 class D, 1 sense exclusion (steam to feed). V0: the native anchor builds on 20 of 20 VDU labels, all on the LIQUID_ONLY branch. Cost: 8.7 M polls per label (median label 27k: bimodal).
+- Overflash: the presets run 0.44 to 1.12 mol of liquid above the feed per mol of feed, so the 15 % upper bound would refuse the game's own operating points. The check keeps the lower bound only (a dry wash zone fails); `relabel.mjs` re-derived the CDU journal.
+- Partial run before revision 2 (203 rows, stopped): 126 strict, 38 DRY_SUPERSATURATED.
 
 Compute estimate (8 workers, 165 polls/ms; the pilot of record replaces these numbers):
 

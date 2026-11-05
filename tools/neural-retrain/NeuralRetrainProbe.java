@@ -51,10 +51,10 @@ class NeuralRetrainProbe {
     /**
      * Sense windows (NEURAL_RETRAIN_DATA.md section 7): physical properties of the operating point, never solver difficulty.
      * Heater outlet below cracking (CDU about 370 C, VDU about 420 C); stripping steam by mass of hydrocarbon feed; trays below the
-     * cracking limit; overflash (liquid from the tray above the feed, per mole of feed); no vanishing product.
+     * cracking limit; a wet wash zone above the feed (overflash at least 1 % of the feed moles); no vanishing product.
      */
     static final double CDU_HEATER_K = 643.15, VDU_HEATER_K = 693.15, CDU_STEAM_MASS = 0.10, VDU_STEAM_MASS = 0.03,
-            CDU_TRAY_K = 653.15, VDU_TRAY_K = 703.15, OVERFLASH_MIN = 0.01, OVERFLASH_MAX = 0.15, PRODUCT_MIN = 0.005;
+            CDU_TRAY_K = 653.15, VDU_TRAY_K = 703.15, OVERFLASH_MIN = 0.01, PRODUCT_MIN = 0.005;
     /**
      * The accepted VDU of batch 2026-10-28-vacuum-column per mole of its feed (about 210 mol/s of residue, 94.4 kg/s): cuts
      * 21.2 and 53.0 mol/s, steam 52.4 mol/s at 533.15 K, pumparound cooling 10 and 15 MW; condenser 333.15 K, reflux 0, no reboiler.
@@ -223,7 +223,9 @@ class NeuralRetrainProbe {
         double[][] liquid = seed.liquid();
         if (!vdu) for (int n = 1; n <= in.stageCount(); n++) if (Arrays.stream(liquid[n]).sum() <= 0) { failed.add("NO_INTERNAL_REFLUX"); break; }
         double overflash = Arrays.stream(liquid[in.feedStageNumber() - 1]).sum() / f;
-        if (overflash < OVERFLASH_MIN || overflash > OVERFLASH_MAX) failed.add("OVERFLASH");
+        // Lower bound only: the presets run 0.44 to 1.12 mol of liquid above the feed per mol of feed (pilot r2, 2026-11-05), far above
+        // the 2 to 5 vol % of refinery practice, so an upper bound would refuse the game's own operating points. A dry wash zone fails.
+        if (overflash < OVERFLASH_MIN) failed.add("OVERFLASH");
         for (var d : in.sideDraws()) if (d.molarFlowMolPerSecond() < PRODUCT_MIN * f) { failed.add("VANISHING_PRODUCT"); break; }
         if (!failed.contains("VANISHING_PRODUCT")) for (var s : streams)
             if (!"FREE_WATER".equalsIgnoreCase(s.phase()) && !s.streamId().contains("water") && s.molarFlowMolPerSecond() < PRODUCT_MIN * f) { failed.add("VANISHING_PRODUCT"); break; }

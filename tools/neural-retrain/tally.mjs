@@ -4,7 +4,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const dir = process.argv[2] ?? 'tmp/neural-retrain/pilot';
-const rows = fs.readFileSync(path.join(dir, 'cases.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+const journal = fs.existsSync(path.join(dir, 'cases-relabelled.jsonl')) ? 'cases-relabelled.jsonl' : 'cases.jsonl';
+const rows = fs.readFileSync(path.join(dir, journal), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
 const runFile = path.join(dir, "run.json");
 const run = fs.existsSync(runFile) ? JSON.parse(fs.readFileSync(runFile, "utf8")) : { note: "no run.json: the run was stopped before its end" };
 const GRADES = ['light', 'medium', 'heavy', 'dilbit'];
