@@ -39,9 +39,11 @@ public final class V3ColumnProblem {
         }
         this.nodeSteamFeedMolPerSecond = V3SteamFeedSpec.nodeFeedFlows(input, topology);
         this.nodeSteamFeedEnthalpyWatts = new double[topology.nodeCount()];
+        // Steam enters alone at its node's pressure, the injection pressure the resolver checks its superheat at.
         for (V3SteamFeedSpec feed : input.steamFeeds()) {
             this.nodeSteamFeedEnthalpyWatts[feed.stageNumber()] = feed.molarFlowMolPerSecond()
-                    * V3WaterProperties.vaporMolarEnthalpy(feed.temperatureKelvin());
+                    * V3WaterProperties.steamMolarEnthalpy(feed.temperatureKelvin(),
+                            this.nodePressuresPascal[feed.stageNumber()]);
         }
         this.nodeHeatDutyWatts = V3PumparoundSpec.nodeDutyWatts(input, topology);
         this.waterVaporFlowMolPerSecond = V3SteamFeedSpec.upwardVaporProfile(nodeSteamFeedMolPerSecond, topology);

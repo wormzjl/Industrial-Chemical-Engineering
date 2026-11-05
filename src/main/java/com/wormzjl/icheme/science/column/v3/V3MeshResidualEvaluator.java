@@ -349,16 +349,23 @@ final class V3MeshResidualEvaluator {
             }
         }
         if (water != 0.0) {
-            vaporEnergyByTemperature += water * V3WaterProperties.dVaporMolarEnthalpyDT(temperature);
-            double vaporEnthalpy = V3WaterProperties.vaporMolarEnthalpy(temperature);
-            for (int j = 0; j < components; j++) vaporEnergyByVaporFlow[j] += waterByVaporFlow[j] * vaporEnthalpy;
+            // The steam is at its Dalton partial pressure P W / (V + W), so its virial residual moves with the
+            // hydrocarbon vapour V as well as with W and T.
+            vaporEnergyByTemperature += V3WaterProperties.steamEnthalpyRateByTemperature(
+                    temperature, pressure, water, vaporTotal);
+            double byWater = V3WaterProperties.steamEnthalpyRateByWater(temperature, pressure, water, vaporTotal);
+            double byHydrocarbon = V3WaterProperties.steamEnthalpyRateByHydrocarbon(
+                    temperature, pressure, water, vaporTotal);
+            for (int j = 0; j < components; j++) {
+                vaporEnergyByVaporFlow[j] += waterByVaporFlow[j] * byWater + state.vaporFlow(node, j) * byHydrocarbon;
+            }
         }
 
         double freeWater = problem.freeWaterFlowMolPerSecond(state, node);
         double freeWaterEnergyByFreeWaterFlow = freeWater == 0.0
-                ? 0.0 : freeWater * V3WaterProperties.liquidMolarEnthalpy(temperature);
+                ? 0.0 : freeWater * V3WaterProperties.liquidMolarEnthalpy(temperature, pressure);
         double freeWaterEnergyByTemperature = freeWater == 0.0
-                ? 0.0 : freeWater * V3WaterProperties.dLiquidMolarEnthalpyDT(temperature);
+                ? 0.0 : freeWater * V3WaterProperties.dLiquidMolarEnthalpyDT(temperature, pressure);
 
         double[] waterSaturationByVaporFlow = new double[components];
         double waterSaturationByTemperature = 0.0;
@@ -499,7 +506,7 @@ final class V3MeshResidualEvaluator {
     private double freeWaterEnergy(V3DryMeshState state, int node) {
         double freeWater = problem.freeWaterFlowMolPerSecond(state, node);
         return freeWater == 0.0 ? 0.0
-                : freeWater * V3WaterProperties.liquidMolarEnthalpy(state.temperatureKelvin(node));
+                : freeWater * V3WaterProperties.liquidMolarEnthalpy(state.temperatureKelvin(node), problem.nodePressurePascal(node));
     }
 
     /**
@@ -532,7 +539,8 @@ final class V3MeshResidualEvaluator {
         // pure-water overhead product, and that product's enthalpy belongs to the condenser vapor outlet.
         if (!liquid && problem.hasSteamFeeds()) {
             double water = waterVaporFlow(state, node);
-            if (water != 0.0) energy += water * V3WaterProperties.vaporMolarEnthalpy(state.temperatureKelvin(node));
+            if (water != 0.0) energy += V3WaterProperties.steamEnthalpyRate(state.temperatureKelvin(node),
+                    problem.nodePressurePascal(node), water, totalFlow);
         }
         return energy;
     }

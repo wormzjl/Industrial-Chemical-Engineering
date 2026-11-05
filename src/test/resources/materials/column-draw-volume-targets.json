@@ -1,42 +1,42 @@
 {
   "source_commit": "8396d8d98",
   "reference": "additive standard-liquid volume from selected component densities; accepted old-basis classical results",
-  "recaptured": "2026-11-05, batch 2026-11-04-open-thermo-data O3: captured on the four generated grades (their client templates on the default column), classical, prescribed drop; parent 8396d8d98 plus the O3 data",
+  "recaptured": "2026-11-05, batch 2026-11-04-open-thermo-data O3: captured on the four generated grades (their client templates on the default column), classical, prescribed drop; parent 8396d8d98 plus the O3 data; re-captured 2026-11-05 for the network's water (E30 of the same batch, wet formulation r32/r33): moves up to 3.9e-4",
   "targets": [
     {
       "preset": "light_crude",
       "package": "icheme:tjl20_methane",
       "targets_m3_per_second": {
-        "side_liquid_tray_10": 0.03665855129132894,
-        "side_liquid_tray_18": 0.034666509991529544,
-        "side_liquid_tray_28": 0.012536603165481601
+        "side_liquid_tray_10": 0.03665887950860499,
+        "side_liquid_tray_18": 0.03466729841141742,
+        "side_liquid_tray_28": 0.012536517481299423
       }
     },
     {
       "preset": "medium_crude",
       "package": "icheme:tjl20_methane",
       "targets_m3_per_second": {
-        "side_liquid_tray_10": 0.023397238656168374,
-        "side_liquid_tray_18": 0.027596895950807655,
-        "side_liquid_tray_28": 0.012723556941629601
+        "side_liquid_tray_10": 0.023403721975614918,
+        "side_liquid_tray_18": 0.02760088824607825,
+        "side_liquid_tray_28": 0.012728311212685197
       }
     },
     {
       "preset": "heavy_crude",
       "package": "icheme:tjl20_methane",
       "targets_m3_per_second": {
-        "side_liquid_tray_10": 0.017159756488465495,
-        "side_liquid_tray_18": 0.018578908510070775,
-        "side_liquid_tray_28": 0.008736789108226423
+        "side_liquid_tray_10": 0.017164562093737838,
+        "side_liquid_tray_18": 0.018585332627557877,
+        "side_liquid_tray_28": 0.008736483627647604
       }
     },
     {
       "preset": "oil_sand_dilbit",
       "package": "icheme:tjl20_methane",
       "targets_m3_per_second": {
-        "side_liquid_tray_10": 0.010086158046317366,
-        "side_liquid_tray_18": 0.009656590245177166,
-        "side_liquid_tray_28": 0.007058587194797441
+        "side_liquid_tray_10": 0.010087668208296907,
+        "side_liquid_tray_18": 0.009660398236660839,
+        "side_liquid_tray_28": 0.007060906881222291
       }
     }
   ]

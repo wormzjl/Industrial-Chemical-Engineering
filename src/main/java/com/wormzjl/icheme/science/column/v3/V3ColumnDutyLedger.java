@@ -86,13 +86,14 @@ public record V3ColumnDutyLedger(
         return leaving - trayOne.vaporPhaseEnergy();
     }
 
-    /** Decanted free water leaves the drum as saturated liquid at the specified outlet temperature. */
+    /** Decanted free water leaves the drum as liquid at the specified outlet temperature and the drum's pressure. */
     static double freeWaterEnergyWatts(V3ColumnProblem problem, V3DryMeshState state) {
         if (!problem.hasSteamFeeds()) return 0.0;
         double freeWater = problem.waterCondenserSplit(state).freeWaterFlowMolPerSecond();
         if (freeWater == 0.0) return 0.0;
+        int condenser = problem.topology().condenserNode();
         return freeWater * V3WaterProperties.liquidMolarEnthalpy(
-                state.temperatureKelvin(problem.topology().condenserNode()));
+                state.temperatureKelvin(condenser), problem.nodePressurePascal(condenser));
     }
 
     static double reboilerDutyWatts(V3ColumnProblem problem) {

@@ -208,13 +208,16 @@ final class V3AcceptanceAuditor {
         double vaporOut = topology.hasVaporPhase(condenser)
                 ? hydrocarbonPhaseEnergyWatts(problem, thermo, state, condenser, false, workspace) : 0.0;
         IndependentWaterSplit water = independentCondenserWaterSplit(problem, state);
-        double waterVaporOut = water.vaporFlowMolPerSecond() == 0.0 ? 0.0
-                : water.vaporFlowMolPerSecond() * V3WaterProperties.vaporMolarEnthalpy(outletTemperature);
+        double outletPressure = problem.nodePressurePascal(condenser);
+        double waterVaporOut = V3WaterProperties.steamEnthalpyRate(outletTemperature, outletPressure,
+                water.vaporFlowMolPerSecond(), topology.hasVaporPhase(condenser)
+                        ? V3WetTraySet.hydrocarbonVaporTotal(state, condenser) : 0.0);
         double freeWaterOut = water.freeWaterFlowMolPerSecond() == 0.0 ? 0.0
-                : water.freeWaterFlowMolPerSecond() * V3WaterProperties.liquidMolarEnthalpy(outletTemperature);
+                : water.freeWaterFlowMolPerSecond() * V3WaterProperties.liquidMolarEnthalpy(outletTemperature, outletPressure);
         double arrivingWater = authoredWaterAtCondenser(problem);
         double vaporIn = hydrocarbonPhaseEnergyWatts(problem, thermo, state, 1, false, workspace)
-                + (arrivingWater == 0.0 ? 0.0 : arrivingWater * V3WaterProperties.vaporMolarEnthalpy(state.temperatureKelvin(1)));
+                + V3WaterProperties.steamEnthalpyRate(state.temperatureKelvin(1), problem.nodePressurePascal(1),
+                        arrivingWater, V3WetTraySet.hydrocarbonVaporTotal(state, 1));
         double expected = liquidOut + vaporOut + waterVaporOut + freeWaterOut - vaporIn;
         double largest = 0.0;
         for (double term : new double[] {liquidOut, vaporOut, waterVaporOut, freeWaterOut, vaporIn, publishedCondenserWatts}) {

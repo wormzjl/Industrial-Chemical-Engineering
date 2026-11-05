@@ -2611,7 +2611,10 @@ public final class V3ColumnCalculator {
             // r30/r31: a tray below the water dew point carries a free-water phase. Water vapour is a
             // function of the state rather than a parameter, wet trays gain a free-water unknown and a
             // saturation row, and the tray energy rows carry the aqueous liquid in and out.
-            return (heat ? "v3-wet-mesh-r31-steam" : "v3-wet-mesh-r30-steam")
+            // r32/r33 (E30 of batch 2026-11-04-open-thermo-data): the water is the fluid network's, the steam its
+            // second-virial gas at the steam's partial pressure and the liquid IF97 Region 1 at the tray's
+            // pressure, so accepted wet states move by the steam's residual and the liquid's enthalpy difference.
+            return (heat ? "v3-wet-mesh-r33-steam" : "v3-wet-mesh-r32-steam")
                     + (!input.sideDraws().isEmpty() ? "-side-draws" : "") + trace
                     + (heat ? HEAT_FORMULATION_SUFFIX : "");
         }
