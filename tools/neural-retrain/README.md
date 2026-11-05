@@ -35,3 +35,4 @@ Installed 2026-11-05: torch 2.10.0+cu128 (CUDA on the RTX 4070 Ti), numpy 2.3.5,
 - 2026-11-05, N1: design written. The 300-row pilot on Gradle lane 2 (4 workers) was stopped at 203 rows when the lane passed to O11 (journal in `tmp/neural-retrain/pilot/`). It is not the pilot of record: the design changes with plan revision 2.
 - 2026-11-05, revision 2: design windows, injection and VDU rows; the probe's sense checks, `icheme:refinery` realisation, VDU realisation and V0 anchor record. Not yet compiled (no Gradle lane).
 - 2026-11-05, pilot of record: `relabel.mjs` (re-derives the overflash criterion of an earlier journal); the probe's overflash check keeps its lower bound only. CDU 148 of 300 labels, VDU 20 of 74.
+- 2026-11-05, VDU rerun: cuts sized on their own pumparound (`VDU_CUT_SHARE`, `VDU_LATENT`), cooling 1.0 to 1.6x, steam 0.5 to 1.5x in `design.mjs`: 25 of 75 labels.

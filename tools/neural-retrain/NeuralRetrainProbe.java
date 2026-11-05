@@ -59,7 +59,13 @@ class NeuralRetrainProbe {
      * The accepted VDU of batch 2026-10-28-vacuum-column per mole of its feed (about 210 mol/s of residue, 94.4 kg/s): cuts
      * 21.2 and 53.0 mol/s, steam 52.4 mol/s at 533.15 K, pumparound cooling 10 and 15 MW; condenser 333.15 K, reflux 0, no reboiler.
      */
-    static final double VDU_CUT_1 = 0.10, VDU_CUT_2 = 0.25, VDU_STEAM = 0.25, VDU_PA_1 = 47.6e3, VDU_PA_2 = 71.4e3;
+    static final double VDU_STEAM = 0.25, VDU_PA_1 = 47.6e3, VDU_PA_2 = 71.4e3;
+    /**
+     * Each VDU cut is sized on the liquid its own pumparound condenses (duty over a gas-oil latent heat of about 80 kJ/mol): liquid
+     * condensed higher up re-boils on the hotter trays below, so the accepted case draws 0.17 (cut 1) and 0.28 (cut 2) of its own
+     * pumparound's liquid. The design draws 0.3 x U(0.6, 1.2) of it: 0.18 to 0.36 (pilot r2 lost 30 of 74 rows to depleted draws).
+     */
+    static final double VDU_LATENT = 80e3, VDU_CUT_SHARE = 0.3;
 
     static MaterialCatalog catalog;
     static V3ColumnInput[] base = new V3ColumnInput[GRADES.length];
@@ -165,12 +171,13 @@ class NeuralRetrainProbe {
         double[] feed = liquid[liquid.length - 1].clone(); // the sump liquid: the CDU's bottoms product
         double f = Arrays.stream(feed).sum();
         int n = o.get("stages").getAsInt();
-        var draws = List.of(new V3SideDrawSpec(Math.max(1, (int) Math.round(0.3 * n)), VDU_CUT_1 * f * o.get("cut1Factor").getAsDouble()),
-                new V3SideDrawSpec(Math.max(2, (int) Math.round(0.6 * n)), VDU_CUT_2 * f * o.get("cut2Factor").getAsDouble()));
+        double pa = o.get("pumparoundFactor").getAsDouble(), duty1 = VDU_PA_1 * f * pa, duty2 = VDU_PA_2 * f * pa;
+        var draws = List.of(new V3SideDrawSpec(Math.max(1, (int) Math.round(0.3 * n)), VDU_CUT_SHARE * duty1 / VDU_LATENT * o.get("cut1Factor").getAsDouble()),
+                new V3SideDrawSpec(Math.max(2, (int) Math.round(0.6 * n)), VDU_CUT_SHARE * duty2 / VDU_LATENT * o.get("cut2Factor").getAsDouble()));
         var steam = List.of(new V3SteamFeedSpec(n + 1, VDU_STEAM * f * o.get("steamFactor").getAsDouble(), 533.15));
         int d1 = draws.get(0).trayNumber(), d2 = draws.get(1).trayNumber();
-        var pas = List.of(new V3PumparoundSpec(Math.max(1, d1 - 1), d1, -VDU_PA_1 * f * o.get("pumparoundFactor").getAsDouble(), V3PumparoundSpec.Split.UNIFORM),
-                new V3PumparoundSpec(Math.max(1, d2 - 1), d2, -VDU_PA_2 * f * o.get("pumparoundFactor").getAsDouble(), V3PumparoundSpec.Split.UNIFORM));
+        var pas = List.of(new V3PumparoundSpec(Math.max(1, d1 - 1), d1, -duty1, V3PumparoundSpec.Split.UNIFORM),
+                new V3PumparoundSpec(Math.max(1, d2 - 1), d2, -duty2, V3PumparoundSpec.Split.UNIFORM));
         var specs = List.<V3ColumnSpecification>of(new V3ColumnSpecification.CondenserOutletTemperature(333.15),
                 new V3ColumnSpecification.OrganicRefluxRatio(0), new V3ColumnSpecification.ReboilerDuty(0));
         return new V3ColumnInput(sourceInput.schemaVersion(), sourceInput.packageId(), sourceInput.assayId(), sourceInput.componentBasis(), feed,

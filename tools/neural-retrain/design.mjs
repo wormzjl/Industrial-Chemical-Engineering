@@ -80,7 +80,7 @@ const pilot = rows.train.filter((_, i) => i % 20 === 0); // the 5 % pilot (guide
 // VDU rows (section 6, case A): each takes the bottoms of a strict CDU label, picked by sourceRank in the labels journal.
 const vduRow = (split, i) => ({ id: `vdu-${split}-${String(i).padStart(5, "0")}`, split, unit: "vdu", composition: { kind: "cdu-bottoms" }, operating: {
   stages: 8 + Math.floor(rand() * 8), topPressurePascal: uniform(1.3e3, 8e3), feedTemperatureKelvin: uniform(615, 683),
-  cut1Factor: uniform(0.6, 1.2), cut2Factor: uniform(0.6, 1.2), steamFactor: uniform(0.5, 2.0), pumparoundFactor: uniform(0.6, 1.3),
+  cut1Factor: uniform(0.6, 1.2), cut2Factor: uniform(0.6, 1.2), steamFactor: uniform(0.5, 1.5), pumparoundFactor: uniform(1.0, 1.6), // pilot r2: 1 label in 20 rows at 0.6x the accepted 25 MW, 10 in 16 at 1.2x
   diameterMetres: uniform(12, 15), sourceRank: rand() } });
 const vdu = { train: Array.from({ length: 1500 }, (_, i) => vduRow("train", i)), validation: Array.from({ length: 150 }, (_, i) => vduRow("validation", i)) };
 const vduPilot = vdu.train.filter((_, i) => i % 20 === 0);
