@@ -91,20 +91,15 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
   - Gap, 56 to 59 kW on both grades: all water. Steam is a virial gas in the simulator and an ideal gas in V3 (-45 kW); free water is priced 285 J/mol apart at 332 K (+93 kW). The hydrocarbons agree within 0.015 % per stream. The 2e-3 rule fails only with the 1 MPa let-down (2.2e-3).
 - 2026-11-05: O11 applied (E27, E28), [CO2_CRYSTAL_APPLY_REVIEW.md](CO2_CRYSTAL_APPLY_REVIEW.md). CoefficientIdealGas is shared, the 5 spine-only refusals are deleted, CO2 and CO2-I are in `refinery.json` r3 with their own pair library; the probe numbers hold, views without CO2 keep identity and numbers, chain-100 exact 0, quick check identical to the baseline.
 - 2026-11-05: E30 part 1, option (a) applied (`3867e710d`), [CLASSICAL_STALL_APPLY_REVIEW.md](CLASSICAL_STALL_APPLY_REVIEW.md). V3 water is the network's: virial steam at its partial pressure, IF97 Region 1 liquid at the node's pressure. Wet formulation `v3-wet-mesh-r32-steam` / `v3-wet-mesh-r33-steam`; the bundled sidecar binds no wet column until the retrain. Gap 56-59 kW -> 11-14 kW, free water 0.0; the steam resume stays. Pins: 6 test classes and 2 fixtures. 675 class tests pass; chain-100 exact 0; quick check equal to O11 seed by seed (the cold total differs only by wall-deadline seed 118; identical counters without it).
+- 2026-11-05: E30 part 2, F1c measured and stopped (not committed): roots unchanged, polls about 10x F1b, six column tests fail. One probe per case: the hold, not the release, keeps the cold stage-continuation solves at a 0.999 residual; forms G1 and G2 go to the owner.
 
 ## Open items
 
 - Next:
-  1. O10's fixes (E30, "Land both"). Phase 2 stopped before any commit; the record is `tmp/o10-fix/stop.md`.
-     - F1b breaks columns that converge today, with either release window:
-       - V3ConvergenceClosureTest case D, dry: NONCONVERGENCE;
-       - the dry three-cooler case: NONCONVERGENCE;
-       - the wet vacuum startup: NONCONVERGENCE;
-       - the dry 40 MW pumparound case: 2.02M checkpoints against about 475k.
-
-       With window 12 the medium grid is 10/10 and the roots are unchanged.
-     - (a) works. Free water closes at 0.0 kW, and the gap falls from 57-59 kW to 11-14 kW (the 2e-3 rule passes). The rest is not water: the overhead light ends 6-11 kW, the steam priced at its 2.7 bar tray but supplied at 2.5 bar 4 kW, the hydrocarbons about 1 kW. The new wet revisions are r32 and r33.
-     - `tmp/o10-fix/stage-final/` holds `landing-a-only.patch` and `landing-w12.patch`. The owner chose "Yes, both" (2026-11-05). (a) lands alone now. F1b goes back to design as F1c: its release follows the stall stop's rule and exemptions, and it is measured on every column test.
+  1. O10's stall fix (E30). (a), the single water model, is applied (`3867e710d`, wet revisions r32/r33); the stall fix is open. [CLASSICAL_STALL_APPLY_REVIEW.md](CLASSICAL_STALL_APPLY_REVIEW.md) part 2.
+     - F1c (the hold, released only by the stall stop) keeps every root but costs about 10x the polls (medium grid 53,285k, Tia Juana 60,064k) and fails six column tests that pass today. Not committed; the patch and probes are in `tmp/o10-fix/f1c/` and `tmp/o10-fix/runs/`.
+     - The cause is the hold's level: converging solves take trace points below the 1e-10 floor and close there; held, they cannot close until the refresh.
+     - The owner chooses between G2 (end a solve whose LU is singular on a sub-floor point, to the refresh) and G1 (hold at the representability floor). Recommendation G2.
   2. The retrain (E26) runs in its own session, `neural-retrain`: branch `claude/neural-retrain-open-data-712a75`, batch `2026-11-05-neural-retrain`. Its plan, `NEURAL_RETRAIN_PLAN.md`, with `NEURAL_RETRAIN_DATA.md` (`138b0024e`), was approved by the owner on 2026-11-05: "Approve all A" (D1 to D5). The owner also allowed the torch and numpy download. N0 and N1 run now, on lane 2. N2 waits until O10 states whether its fix changes a formulation revision. M1, the timing run, waits for a free machine. The same day the owner asked for four plan changes:
      - tolerate about 5 % unknown compounds, with research into a model structure that allows it;
      - a VDU data set;

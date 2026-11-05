@@ -27,5 +27,24 @@ Owner decision E30, "Yes, both": (a) lands alone, F1b returns to design as F1c. 
   - `V3WaterPhaseQualificationTest`: `tjl20-wet-boundary.json` re-made by `tools/open-thermo-data/WetBoundaryTeacherProbe.java`: condenser outlet 333.9526 -> 333.8533 K, tray 1 at its dew point, released as WET_EQUILIBRIUM.
   - `MaterialCatalogTest` x2: the binding checks use the methane CDU without its steam; the sidecar is unchanged.
 - Tests (lane 2, `--tests`): columnGates `science.column.v3.*Test` 523, test 95 (water, steam, network thermo, MaterialCatalogTest), holdGates 23 (FlowsheetColumnTest, ColumnEjectorTest, UtilityRegulationTest), equipmentGates 34: all pass after the V3SteamFeedContractTest edit (9 of 9).
-- Network bit-identical: chain-100 exact 0 deviation. 200-seed quick check (4 threads): cold random 197 clean (E1 85, E6 101, F 118), bundled random and bundled defaults 200/200; every seed line equals O11's, and the bundled counters too. The cold total differs only by seed 118, held at a wall deadline: without it, HEAD and (a) give identical counters (199 seeds).
-- Commit: `3867e710d`. Code guide: the column chapter's water pricing changes; recorded for the merge.
+- Network bit-identical: chain-100 exact 0 deviation. 200-seed quick check (4 threads): cold random 197 clean (E1 85, E6 101, F 118), bundled random and bundled defaults 200/200; every seed line equals O11's, and the bundled counters too. The cold total differs only by seed 118, held at a wall deadline: without it, HEAD and (a) give identical counters (199 seeds). Commit `3867e710d`; the column chapter of the code guide changes at the merge.
+
+## Part 2: F1c, the stall fix redesigned (stopped; not committed)
+
+- Expected: a point the frozen support cannot move does not end a solve that would converge; the release acts only where the stall stop does.
+- F1c: F1b's hold (every trial step keeps a point at or above min(its level, ln 1e-10 - 1e-3), phases lifted together), with no second window: the stall stop itself is the release (`STALLED_SUPPORT_FLOOR` when every accepted step of its 12-iteration window held a point), so it fires only on intermediate steam rungs. F1b's seam: a release is not a stall (full budget, not counted). Patch: the session worktree's `tmp/o10-fix/f1c/f1c.patch`.
+- Measured, on (a), classical start (polls; reference F1b window 12 before (a); (a) alone):
+
+| Case | (a) alone | F1b w12 | F1c |
+| --- | --- | --- | --- |
+| medium grid | 5/10, 6,223k | 10/10, 5,572k | 10/10, 53,285k |
+| Tia Juana grid | 10/10, 5,804k | 10/10, 4,096k | 10/10, 60,064k |
+| light / heavy / dilbit | 555k / 563k / 1,839k | 868k / 1,550k / 390k | 6,122k / 7,337k / 4,760k |
+
+- Roots: every F1c point equals (a) alone, and F1b with (a) where (a) alone fails, to 4 decimals.
+- Tests: the five F1b failures stay and a sixth joins (`V3PumparoundCalculatorTest` thesis three-cooler with draws, NONCONVERGENCE); the 40 MW case takes 6.30M checkpoints (bound about 475k); `FlowsheetColumnTest` furnace-on-duty still turns FAILED into STEADY. Stop rule: tests that pass today fail.
+- Why, from one probe per case (scratch counters, the six tests with the hold counted but not applied, then applied; `tmp/o10-fix/runs/probe-hold-*`): today, in all six, 43 cold stage-continuation solves take 1 to 37 points below the floor, most on every accepted step, and converge in 8 to 27 iterations. These are trace components whose root lies below 1e-10 of their feed; the refresh drops them afterwards. Held, the same solves sit at a scaled residual of 0.999 (the held points' own rows) for the whole budget (128, 40 or 16 iterations), on DEFAULT budgets the stall stop exempts. So the exemptions cannot clear them: the cause is the hold's level, not the release. A point below the floor is a normal state inside a solve; the O10 defect is a point at 5.9e-210, where its finite-difference column vanishes.
+- Two further forms for the owner (neither built):
+  - G1: hold at the level where a point's Jacobian column stops being representable (about machine epsilon of its row's throughput) instead of the support floor. It acts only on the O10 dive; its constant needs one measurement (the lowest level converging solves reach).
+  - G2: no hold. A solve whose LU is SINGULAR on a coordinate below the support floor ends as `STALLED_SUPPORT_FLOOR` and goes to the refresh (F1b's seam). It acts only where the mathematics fails and leaves every converging solve bit-identical; it needs the pivot's column from the banded solver.
+- Recommendation: G2, then G1 if G2 misses grid points. Measure both forms on the grids and the six tests before the column classes.
