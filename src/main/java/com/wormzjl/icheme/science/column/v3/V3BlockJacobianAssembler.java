@@ -217,8 +217,11 @@ final class V3BlockJacobianAssembler {
             double free = state.freeWaterFlow(source);
             double water = problem.waterVaporFlow(state, node);
             double hydrocarbon = V3WetTraySet.hydrocarbonVaporTotal(state, node);
+            // The steam's marginal enthalpy: its own, plus the shift of its virial residual as F_m raises its
+            // partial pressure.
             double vaporEnthalpy = com.wormzjl.icheme.science.column.v3.thermo.V3WaterProperties
-                    .vaporMolarEnthalpy(state.temperatureKelvin(node));
+                    .steamEnthalpyRateByWater(state.temperatureKelvin(node), problem.nodePressurePascal(node),
+                            water, hydrocarbon);
             if (!(water > 0.0) || !Double.isFinite(hydrocarbon) || !Double.isFinite(vaporEnthalpy)) {
                 throw new IllegalArgumentException("V3 local block free-water coupling has no physical water state");
             }

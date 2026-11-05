@@ -1,16 +1,22 @@
 package com.wormzjl.icheme.science.column.v3.thermo;
 
+import com.wormzjl.icheme.science.fluid.thermo.WaterRegion1;
 import com.wormzjl.icheme.science.math.DeterministicMath;
 
 import com.wormzjl.icheme.science.material.MaterialCatalog;
+import com.wormzjl.icheme.science.thermo.phase.SteamVirial;
 
 /**
- * Pinned, dependency-free pure-water correlations for V3's free-water steam contract.
+ * The water of the column and of the fluid network: one model (decision E30 of batch 2026-11-04-open-thermo-data).
  *
- * <p>The saturation-pressure relation is the IAPWS Wagner--Pruss auxiliary equation. Vapor
- * enthalpy integrates the water record's Shomate-form heat capacity (a fit to the IAPWS-95 ideal-gas Cp); its reference cancels
- * in column energy differences. Liquid enthalpy is deliberately reference-consistent through the
- * vaporization enthalpy correlation.</p>
+ * <p>The saturation-pressure relation is the IAPWS Wagner--Pruss auxiliary equation. The steam is the network's
+ * second-virial gas: the ideal-gas enthalpy integrates the water record's Shomate-form heat capacity (a fit to the
+ * IAPWS-95 ideal-gas Cp), and {@link SteamVirial} adds IF97 Region 2's residual at the steam's partial pressure. The
+ * liquid is the network's, IF97 Region 1 at the pressure ({@link WaterRegion1}), on the water datum: liquid water at
+ * 298.15 K and 1 atm sits one Watson vaporization enthalpy below the ideal-gas steam ({@link #liquidEnthalpyOffset}).
+ * The datum cancels in column energy differences. Before E30 the column priced steam as an ideal gas and liquid water
+ * as the steam less the Watson enthalpy at every temperature, 136 J/mol (533 K, 2.5 bar) and 285 J/mol (332 K) off the
+ * network's.</p>
  *
  * <p>Every correlation exists twice: once resolving the water data from the calculation context,
  * which is what V3 and the legacy callers use, and once taking that data explicitly. They compute
@@ -156,37 +162,104 @@ public final class V3WaterProperties {
     }
 
     /**
-     * The Watson correlation's temperature slope in J/(mol K); zero from the critical point upward.
-     *
-     * <p>Zero above the critical temperature is the derivative of the constant zero the value returns there,
-     * and is the correct one-sided answer at the critical point itself, where the true slope is unbounded.
-     * Approaching it from below the slope does diverge, which is a property of the correlation and not of this
-     * derivative: the free water that uses it exists only where liquid water does.</p>
+     * Steam at its partial pressure {@code p}, J/mol: the ideal-gas steam ({@link #vaporMolarEnthalpy}) plus the
+     * second virial's residual {@code p (B - T dB/dT)} ({@link SteamVirial#residualEnthalpy}), the network's steam.
      */
-    public static double dVaporizationEnthalpyDT(MaterialCatalog.Water water, double temperatureKelvin) {
-        requireEnthalpyTemperature(water, temperatureKelvin);
-        if (temperatureKelvin >= water.criticalTemperature()) return 0.0;
-        double span = 1.0 - water.boilingTemperature() / water.criticalTemperature();
-        double reduced = (1.0 - temperatureKelvin / water.criticalTemperature()) / span;
-        return water.vaporizationEnthalpy() * water.watsonExponent()
-                * DeterministicMath.pow(reduced, water.watsonExponent() - 1.0) * (-1.0 / (water.criticalTemperature() * span));
+    public static double steamMolarEnthalpy(double temperatureKelvin, double partialPressurePascal) {
+        return vaporMolarEnthalpy(temperatureKelvin) + SteamVirial.residualEnthalpy(temperatureKelvin, partialPressurePascal);
     }
 
-    public static double liquidMolarEnthalpy(double temperatureKelvin) {
-        return liquidMolarEnthalpy(data(), temperatureKelvin);
+    /** {@code dh/dT} of {@link #steamMolarEnthalpy} at constant partial pressure, J/(mol K). */
+    public static double dSteamMolarEnthalpyDT(double temperatureKelvin, double partialPressurePascal) {
+        return dVaporMolarEnthalpyDT(temperatureKelvin)
+                + SteamVirial.residualHeatCapacity(temperatureKelvin, partialPressurePascal);
     }
 
-    public static double liquidMolarEnthalpy(MaterialCatalog.Water water, double temperatureKelvin) {
-        return vaporMolarEnthalpy(water, temperatureKelvin) - vaporizationEnthalpy(water, temperatureKelvin);
+    /**
+     * The enthalpy rate of {@code water} mol/s of steam in a gas with {@code hydrocarbon} mol/s of hydrocarbon vapour at
+     * total pressure {@code pressurePascal}, W: the steam at its Dalton partial pressure {@code P W / (V + W)}. Zero
+     * without steam.
+     */
+    public static double steamEnthalpyRate(double temperatureKelvin, double pressurePascal, double water, double hydrocarbon) {
+        if (water == 0.0) return 0.0;
+        return water * steamMolarEnthalpy(temperatureKelvin, pressurePascal * water / (hydrocarbon + water));
     }
 
-    /** The liquid-water heat capacity in J/(mol K), consistent with {@link #liquidMolarEnthalpy} by construction. */
-    public static double dLiquidMolarEnthalpyDT(double temperatureKelvin) {
-        return dLiquidMolarEnthalpyDT(data(), temperatureKelvin);
+    /** {@code d/dW} of {@link #steamEnthalpyRate} at constant T, P and V: {@code h + W (dh/dp) P V / (V + W)^2}. */
+    public static double steamEnthalpyRateByWater(
+            double temperatureKelvin, double pressurePascal, double water, double hydrocarbon) {
+        double gas = hydrocarbon + water;
+        return steamMolarEnthalpy(temperatureKelvin, pressurePascal * water / gas)
+                + water * steamPressureSlope(temperatureKelvin) * pressurePascal * hydrocarbon / (gas * gas);
     }
 
-    public static double dLiquidMolarEnthalpyDT(MaterialCatalog.Water water, double temperatureKelvin) {
-        return dVaporMolarEnthalpyDT(water, temperatureKelvin) - dVaporizationEnthalpyDT(water, temperatureKelvin);
+    /** {@code d/dV} of {@link #steamEnthalpyRate} at constant T, P and W: {@code -W (dh/dp) P W / (V + W)^2}. */
+    public static double steamEnthalpyRateByHydrocarbon(
+            double temperatureKelvin, double pressurePascal, double water, double hydrocarbon) {
+        if (water == 0.0) return 0.0;
+        double gas = hydrocarbon + water;
+        return -water * steamPressureSlope(temperatureKelvin) * pressurePascal * water / (gas * gas);
+    }
+
+    /** {@code d/dT} of {@link #steamEnthalpyRate} at constant P, W and V. */
+    public static double steamEnthalpyRateByTemperature(
+            double temperatureKelvin, double pressurePascal, double water, double hydrocarbon) {
+        if (water == 0.0) return 0.0;
+        return water * dSteamMolarEnthalpyDT(temperatureKelvin, pressurePascal * water / (hydrocarbon + water));
+    }
+
+    /** {@code dh/dp} of the steam at constant T, J/(mol Pa): {@code B - T dB/dT}; the residual is linear in p. */
+    private static double steamPressureSlope(double temperatureKelvin) {
+        return SteamVirial.residualEnthalpy(temperatureKelvin, 1.0);
+    }
+
+    /**
+     * Liquid water at {@code (T, p)}, J/mol: the network's, IF97 Region 1 at the pressure and its continuation past
+     * its range ({@link WaterRegion1#evaluateLiquid}), on the water datum ({@link #liquidEnthalpyOffset}).
+     */
+    public static double liquidMolarEnthalpy(double temperatureKelvin, double pressurePascal) {
+        return liquidMolarEnthalpy(data(), temperatureKelvin, pressurePascal);
+    }
+
+    public static double liquidMolarEnthalpy(MaterialCatalog.Water water, double temperatureKelvin, double pressurePascal) {
+        LiquidScratch scratch = LIQUID.get();
+        WaterRegion1.evaluateLiquid(water, temperatureKelvin, pressurePascal, scratch.region);
+        return scratch.region.specificEnthalpy() * water.molarMass() + scratch.offset(water);
+    }
+
+    /** {@code dh/dT} of {@link #liquidMolarEnthalpy} at constant pressure, J/(mol K): Region 1's c_p, held past its range. */
+    public static double dLiquidMolarEnthalpyDT(double temperatureKelvin, double pressurePascal) {
+        MaterialCatalog.Water water = data();
+        LiquidScratch scratch = LIQUID.get();
+        WaterRegion1.evaluateLiquid(water, temperatureKelvin, pressurePascal, scratch.region);
+        return scratch.region.specificHeatCapacity() * water.molarMass();
+    }
+
+    /**
+     * The water datum, J/mol: what moves Region 1's enthalpy (its own datum) onto the steam's, so that liquid water at
+     * 298.15 K and 1 atm sits one Watson vaporization enthalpy below the ideal-gas steam at 298.15 K. The network's
+     * liquid water ({@code FluidThermodynamics.waterLiquid}) and the column's take this one offset.
+     */
+    public static double liquidEnthalpyOffset(MaterialCatalog.Water water) {
+        return vaporMolarEnthalpy(water, 298.15) - vaporizationEnthalpy(water, 298.15)
+                - WaterRegion1.evaluate(water, 298.15, 101325).specificEnthalpy() * water.molarMass();
+    }
+
+    /** Per-thread Region 1 scratch and the last water record's datum, so a residual evaluation allocates nothing. */
+    private static final ThreadLocal<LiquidScratch> LIQUID = ThreadLocal.withInitial(LiquidScratch::new);
+
+    private static final class LiquidScratch {
+        private final WaterRegion1.Workspace region = new WaterRegion1.Workspace();
+        private MaterialCatalog.Water water;
+        private double offset;
+
+        private double offset(MaterialCatalog.Water record) {
+            if (record != water) {
+                offset = liquidEnthalpyOffset(record);
+                water = record;
+            }
+            return offset;
+        }
     }
 
     private static void requireSaturationTemperature(MaterialCatalog.Water water, double temperatureKelvin) {

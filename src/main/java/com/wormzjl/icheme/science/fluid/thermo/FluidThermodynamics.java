@@ -127,7 +127,7 @@ public final class FluidThermodynamics {
         crystalCeiling=ceiling;
         // Region 1 at 298.15 K and 1 atm itself, the stable liquid: the network's water datum and the pump's density.
         var reference=WaterRegion1.evaluate(water,298.15,101325);
-        waterEnthalpyOffset=V3WaterProperties.liquidMolarEnthalpy(water,298.15)-reference.specificEnthalpy()*waterMolecularWeight;
+        waterEnthalpyOffset=V3WaterProperties.liquidEnthalpyOffset(water);
         pumpReferenceDensity=waterMolecularWeight/(reference.specificVolume()*waterMolecularWeight);
         // The free water's ice (WP4): its record anchored to this model's liquid water at the triple point, on the network's
         // water datum, with this model's steam; below the melting line the free water is ice, on every package.

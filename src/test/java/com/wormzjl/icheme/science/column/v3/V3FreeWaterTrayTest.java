@@ -83,10 +83,16 @@ class V3FreeWaterTrayTest {
         V3MeshResidualEvaluator evaluator = new V3MeshResidualEvaluator(
                 problem, new AffineEnthalpyThermo(), 0.0);
 
-        double latent = V3WaterProperties.vaporMolarEnthalpy(base.temperatureKelvin(2))
-                - V3WaterProperties.liquidMolarEnthalpy(base.temperatureKelvin(1));
-        // Free water leaves tray one as liquid and comes back up out of tray two as vapour, so admitting one
-        // more mole of it moves exactly one latent heat from the tray below into the wet tray.
+        // The steam is at its partial pressure on tray two, which the extra water raises, so its enthalpy is the
+        // difference of two rates rather than one molar value.
+        double water = problem.waterVaporFlow(base, 2);
+        double hydrocarbon = V3WetTraySet.hydrocarbonVaporTotal(base, 2);
+        double pressure = problem.nodePressurePascal(2);
+        double latent = (V3WaterProperties.steamEnthalpyRate(base.temperatureKelvin(2), pressure, water + increment, hydrocarbon)
+                - V3WaterProperties.steamEnthalpyRate(base.temperatureKelvin(2), pressure, water, hydrocarbon)) / increment
+                - V3WaterProperties.liquidMolarEnthalpy(base.temperatureKelvin(1), problem.nodePressurePascal(1));
+        // Free water leaves tray one as liquid and comes back up out of tray two as vapour, so admitting more of it
+        // moves exactly its latent heat from the tray below into the wet tray.
         assertEquals(increment * latent, energy(evaluator, raised, 1) - energy(evaluator, base, 1), 1.0e-6);
         assertEquals(-increment * latent, energy(evaluator, raised, 2) - energy(evaluator, base, 2), 1.0e-6);
         // Nothing below the tray that receives it sees the circulation at all.
