@@ -75,6 +75,20 @@ class NeuralRetrainProbe {
     static MaterialCatalog catalog;
     static V3ColumnInput[] base = new V3ColumnInput[GRADES.length];
     static Map<String, JsonObject> cduLabels = Map.of();
+    /**
+     * N3b (NEURAL_RETRAIN_DATA.md section 8): when NR_PAYLOAD and NR_SIDECAR name a candidate, `labels` solves LNN_FIRST through a
+     * registry of that one model (so injected rows are lumped, U1) at the production start options (ColumnUnit.START: the default
+     * poll budget, classical backup). The strict rule and the sense checks are unchanged: a network output is never a label.
+     */
+    static V3NeuralInitializer learned = null;
+    static final V3InitializationOptions LEARNED_START = new V3InitializationOptions(V3InitializationOptions.Mode.LNN_FIRST,
+            V3InitializationOptions.WetStart.AUTO, 16, V3InitializationOptions.DEFAULT_BUDGET_POLLS, V3InitializationOptions.Correction.PROGRESS);
+
+    static V3NeuralInitializer candidate() throws Exception {
+        byte[] payload = Files.readAllBytes(Path.of(env("NR_PAYLOAD", ""))), sidecar = Files.readAllBytes(Path.of(env("NR_SIDECAR", "")));
+        var loaded = V3NeuralRegistry.TransformerArtifact.read(new ByteArrayInputStream(payload), new ByteArrayInputStream(sidecar));
+        return new V3NeuralRegistry(List.of(new V3NeuralRegistry.Entry(1, loaded.initializer(), loaded.pipelineSha256())));
+    }
 
     static synchronized void setUp() throws Exception {
         if (catalog != null) return;
@@ -382,7 +396,10 @@ class NeuralRetrainProbe {
                 if (polls.incrementAndGet() > POLL_CAP) throw new CancellationException("poll cap");
             };
             V3ColumnOutcome outcome;
-            try { outcome = V3ColumnCalculator.calculateWithAcceptedProfile(in, control, p -> profile[0] = p); }
+            try {
+                outcome = learned == null ? V3ColumnCalculator.calculateWithAcceptedProfile(in, control, p -> profile[0] = p)
+                        : V3ColumnCalculator.calculateWithAcceptedProfile(in, control, LEARNED_START, learned, p -> profile[0] = p);
+            }
             catch (CancellationException capped) { outcome = null; }
             catch (RuntimeException failed) { outcome = null; out.addProperty("exception", failed.getClass().getSimpleName() + ": " + failed.getMessage()); }
             out.addProperty("controlPolls", polls.get());
@@ -392,6 +409,8 @@ class NeuralRetrainProbe {
             out.addProperty("success", outcome.isSuccess());
             out.addProperty("newtonIterations", d.newtonIterations()); out.addProperty("initializerIterations", d.initializerIterations());
             out.addProperty("solvePath", d.solvePath());
+            if (learned != null) d.events().stream().filter(e -> e.startsWith("initializer=")).findFirst()
+                    .ifPresent(e -> out.addProperty("route", e.length() > 300 ? e.substring(0, 300) : e));
             if (outcome instanceof V3ColumnOutcome.Failure f) {
                 out.addProperty("status", f.code().name()); out.addProperty("failure", f.summary());
                 var ev = new JsonArray(); d.events().stream().limit(4).map(e -> e.length() > 300 ? e.substring(0, 300) : e).forEach(ev::add); out.add("events", ev);
@@ -431,6 +450,7 @@ class NeuralRetrainProbe {
         String sources = env("NR_CDU_LABELS", ""); // VDU rows take their feeds from this CDU labels journal
         if (!sources.isEmpty()) { var map = new LinkedHashMap<String, JsonObject>(); for (var r : read(Path.of(sources))) map.put(r.get("id").getAsString(), r); cduLabels = map; }
         Path out = Path.of(env("NR_OUT", "tmp/neural-retrain/pilot")); Files.createDirectories(out);
+        learned = env("NR_PAYLOAD", "").isEmpty() ? null : candidate();
         int workers = Integer.parseInt(env("NR_WORKERS", "4"));
         if (workers < 1 || workers > Runtime.getRuntime().availableProcessors()) throw new IllegalArgumentException("NR_WORKERS 1..cores");
         Path journal = out.resolve("cases.jsonl");
@@ -449,7 +469,7 @@ class NeuralRetrainProbe {
         } finally { pool.shutdownNow(); }
         var run = new JsonObject();
         run.addProperty("rows", rows.size()); run.addProperty("accepted", accepted); run.addProperty("strict", strict); run.addProperty("workers", workers);
-        run.addProperty("pollCap", POLL_CAP); run.addProperty("elapsedSecondsInformative", (System.nanoTime() - start) / 1e9);
+        run.addProperty("pollCap", POLL_CAP); run.addProperty("learned", learned == null ? "none (CURRENT_ONLY)" : env("NR_PAYLOAD", "")); run.addProperty("elapsedSecondsInformative", (System.nanoTime() - start) / 1e9);
         run.addProperty("note", "wall time is informative only: the run shares the machine with another Gradle lane; judge cost by control polls");
         Files.writeString(out.resolve("run.json"), new GsonBuilder().setPrettyPrinting().create().toJson(run));
     }
