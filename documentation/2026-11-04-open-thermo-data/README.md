@@ -103,7 +103,7 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
      Revision 2 is `d72caf1e0`, with O10 recorded in `849e684df`.
      - N0 is done: the venv works on CUDA, and the Python model matches Java to 7.3e-7.
      - A partial pilot, stopped at 203 of 300 rows, gave 62 % strict labels.
-     - It waits for the owner on D3, D5, D6 and D7, and on the VDU text (D8).
+     - Its decisions after revision 2 are recorded in its own batch, `2026-11-05-neural-retrain`.
 
      The owner commands the session directly since 2026-11-05 ("I'll take command of the neuro thread directly"). This session no longer relays its decisions. The session uses Gradle lane 1 while this worktree builds on lane 2.
   3. O11: CO2 in the world list with its dry-ice crystal (E25). The owner chose option A, one crystal rule for both ideal-gas sources (E27). The N2 pairs follow the `kij_pr.dat` erratum (E28). Implementation runs now on Gradle lane 2.
