@@ -288,11 +288,17 @@ final class FlowsheetColumnTest {
         return sample("{\"target\":\"duty\",\"duty\":" + duty + ",\"radiant_drop\":5.1e5,\"convection_drop\":2.5e5}").feed("CRUDE", "P-101", "in", crude(298.15, 8e5)).product("RESIDUE", "E-102", "b");
     }
 
-    /** With no flow on its tear the residue's heat is missing from the first pass, so the feed comes in tens of megawatts short. */
-    @Test void aFurnaceOnADutyStartsFromAFirstEstimate() {
+    /**
+     * With no flow on its tear the residue's heat is missing from the first pass, so the feed comes in tens of megawatts short (568 K
+     * against the closed loop's 609 K, 21 MW less feed enthalpy). That is a colder column, not an unsound one: it passes its audit
+     * with liquid on every tray (E30 of batch 2026-11-04-open-thermo-data), so the cold run closes on the state a first estimate of the
+     * residue reaches.
+     */
+    @Test void aFurnaceOnADutyClosesColdAsFromAFirstEstimate() {
         var cold = onDuty(70.4e6).run();
-        assertEquals(FlowsheetRun.Status.FAILED, cold.status());
-        assertTrue(cold.log().stream().anyMatch(note -> note.key().equals("loop.first_estimate")), () -> "the log says what would start it: " + cold.log());
+        closed(cold, 1e-3);
+        assertTrue(cold.loops().getFirst().closed());
+        assertTrue(cold.passes().getFirst().steps().stream().noneMatch(FlowsheetRun.Step::failed), () -> "the cold first pass solves: " + cold.passes().getFirst());
         var bottoms = crude(573, 2.7e5);
         var amounts = new LinkedHashMap<String, Double>();
         var heavy = BASE.componentBasis().componentIds();
@@ -300,6 +306,14 @@ final class FlowsheetColumnTest {
         var run = onDuty(70.4e6).estimate("S-9", new Flowsheet.Feed(bottoms.temperature(), bottoms.pressure(), amounts, List.of())).run();
         closed(run, 1e-3);
         assertTrue(run.loops().getFirst().closed());
+        // Each run's tear closed to the sheet's tolerances, so the two answers differ by at most twice them.
+        var tolerance = FlowsheetSolver.Settings.DEFAULT;
+        for (var product : List.of("OFFGAS", "NAPHTHA", "WATER", "KERO", "DIESEL", "AGO", "RESIDUE")) {
+            var a = cold.streams().get(product);
+            var b = run.streams().get(product);
+            assertEquals(b.mass(), a.mass(), 2 * tolerance.flowTolerance() * Math.max(a.mass(), b.mass()), product + " kg/s");
+            assertEquals(b.temperature(), a.temperature(), 2 * tolerance.temperatureTolerance(), product + " K");
+        }
     }
 
     @Test void aFifteenPercentRecycleCloses() {

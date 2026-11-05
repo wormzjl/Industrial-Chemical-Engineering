@@ -21,7 +21,7 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
   - The medium grade's classical stall: a log-flow point sinks below its floor inside a frozen-support Newton solve.
   - The simulator-to-column energy gap: all water, from two water models.
   - Fix forms F1 to F1b, and gap options (a) to (c).
-- [CLASSICAL_STALL_APPLY_REVIEW.md](CLASSICAL_STALL_APPLY_REVIEW.md): E30 applied. Part 1, option (a): the column takes the network's water (wet revisions r32/r33), the gap per case, the moved pins, the network proof. Part 2: the stall fix F1c.
+- [CLASSICAL_STALL_APPLY_REVIEW.md](CLASSICAL_STALL_APPLY_REVIEW.md): E30 applied. Part 1, option (a): the column takes the network's water (wet revisions r32/r33), the gap per case, the moved pins, the network proof. Part 2: the stall fix, form H (landed), with every form tried.
 
 ## Code areas
 
@@ -91,20 +91,18 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
   - Gap, 56 to 59 kW on both grades: all water. Steam is a virial gas in the simulator and an ideal gas in V3 (-45 kW); free water is priced 285 J/mol apart at 332 K (+93 kW). The hydrocarbons agree within 0.015 % per stream. The 2e-3 rule fails only with the 1 MPa let-down (2.2e-3).
 - 2026-11-05: O11 applied (E27, E28), [CO2_CRYSTAL_APPLY_REVIEW.md](CO2_CRYSTAL_APPLY_REVIEW.md). CoefficientIdealGas is shared, the 5 spine-only refusals are deleted, CO2 and CO2-I are in `refinery.json` r3 with their own pair library; the probe numbers hold, views without CO2 keep identity and numbers, chain-100 exact 0, quick check identical to the baseline.
 - 2026-11-05: E30 part 1, option (a) applied (`3867e710d`), [CLASSICAL_STALL_APPLY_REVIEW.md](CLASSICAL_STALL_APPLY_REVIEW.md). V3 water is the network's: virial steam at its partial pressure, IF97 Region 1 liquid at the node's pressure. Wet formulation `v3-wet-mesh-r32-steam` / `v3-wet-mesh-r33-steam`; the bundled sidecar binds no wet column until the retrain. Gap 56-59 kW -> 11-14 kW, free water 0.0; the steam resume stays. Pins: 6 test classes and 2 fixtures. 675 class tests pass; chain-100 exact 0; quick check equal to O11 seed by seed (the cold total differs only by wall-deadline seed 118; identical counters without it).
+- 2026-11-05: E30 part 2, F1c measured and stopped (not committed): roots unchanged, polls about 10x F1b, six column tests fail. One probe per case: the hold, not the release, keeps the cold stage-continuation solves at a 0.999 residual; forms G1 and G2 go to the owner.
+- 2026-11-05: E30 (a) follow-up, `5499de72a`: the medium-grade sample sizing pins re-pinned. (a)'s landing (`3867e710d`) ran no sample-sizing class, so these pins stayed stale until H's runs found them (they pass at `3867e710d^`): NAPHTHA line drop 0.174 to 0.175 bar/100 m (more distillate), H-101 duty 73.00 to 73.03 MW and E-101 surface 573 to 572 m² and 579.1 to 578.5 m² (a lighter, cooler residue gives E-101 less heat).
+- 2026-11-05: O11 follow-up, `50449db3d`: the `crude_unit` example lists CarbonDioxide, as `icheme:refinery` r3 does. O11's landing (`19a544b82`) did not run `FlowsheetExamplesTest`, so the example stayed on the old component list. The sheet feeds no CO2: its data revision holds and every sample pin holds.
+- 2026-11-05: E30 form H landed, `28d3bd420` (the owner's "Yes, land H"): a sinking support point is held only when its drop cuts a feed path (`V3TruncationSupport.Reachability`); traces stay free. Medium grid 5/10 to 8/10 at 5,898k polls (6,223k), Tia Juana 10/10, roots equal. The furnace pin now expects the cold run to close (its first pass is a sound column); the `loop.first_estimate` hint moved to `FlowsheetSolverTest`. Tests: columnGates 523, holdGates 8 classes 63, quick suite 46 classes 535, all pass. Tools: `tools/open-thermo-data/o10/`.
 
 ## Open items
 
 - Next:
-  1. O10's fixes (E30, "Land both"). Phase 2 stopped before any commit; the record is `tmp/o10-fix/stop.md`.
-     - F1b breaks columns that converge today, with either release window:
-       - V3ConvergenceClosureTest case D, dry: NONCONVERGENCE;
-       - the dry three-cooler case: NONCONVERGENCE;
-       - the wet vacuum startup: NONCONVERGENCE;
-       - the dry 40 MW pumparound case: 2.02M checkpoints against about 475k.
-
-       With window 12 the medium grid is 10/10 and the roots are unchanged.
-     - (a) works. Free water closes at 0.0 kW, and the gap falls from 57-59 kW to 11-14 kW (the 2e-3 rule passes). The rest is not water: the overhead light ends 6-11 kW, the steam priced at its 2.7 bar tray but supplied at 2.5 bar 4 kW, the hydrocarbons about 1 kW. The new wet revisions are r32 and r33.
-     - `tmp/o10-fix/stage-final/` holds `landing-a-only.patch` and `landing-w12.patch`. The owner chose "Yes, both" (2026-11-05). (a) lands alone now. F1b goes back to design as F1c: its release follows the stall stop's rule and exemptions, and it is measured on every column test.
+  1. O10's stall fix (E30): landed as form H (`28d3bd420`, the owner's "Yes, land H"). [CLASSICAL_STALL_APPLY_REVIEW.md](CLASSICAL_STALL_APPLY_REVIEW.md) part 2 has the forms tried and the runs.
+     - A partial fix: medium grid 5/10 to 8/10, no point lost that HEAD converges, polls -5 %, every root kept.
+     - Remaining limit: 636 and 644 K. Whole trace tails sink with nothing live beyond them, so no point is a cut path; after the refresh the state does not close (residual 1e-4 to 1e-3). Warm starts are unaffected.
+     - The steam resume is still reached on the half-steam wet preset; it stays.
   2. The retrain (E26) runs in its own session, `neural-retrain`: branch `claude/neural-retrain-open-data-712a75`, batch `2026-11-05-neural-retrain`. Its plan, `NEURAL_RETRAIN_PLAN.md`, with `NEURAL_RETRAIN_DATA.md` (`138b0024e`), was approved by the owner on 2026-11-05: "Approve all A" (D1 to D5). The owner also allowed the torch and numpy download. N0 and N1 run now, on lane 2. N2 waits until O10 states whether its fix changes a formulation revision. M1, the timing run, waits for a free machine. The same day the owner asked for four plan changes:
      - tolerate about 5 % unknown compounds, with research into a model structure that allows it;
      - a VDU data set;
@@ -120,7 +118,7 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
 
      The owner commands the session directly since 2026-11-05 ("I'll take command of the neuro thread directly"). This session no longer relays its decisions. The session uses Gradle lane 1 while this worktree builds on lane 2.
   3. O11: CO2 in the world list with its dry-ice crystal (E25), applied with option A (E27) and the `kij_pr.dat` erratum (E28); not merged. Open: the final lane (fluid GameTests, `equipmentGates`, `holdGates`, `test slowGates`) and the code guide chapters named in CO2_CRYSTAL_APPLY_REVIEW.md. The d3-r2 bump moves the identity of every view the library gives a pair (state only).
-  4. O5: removals, with O3's leftovers (the TJL19 and "global Dalia transport" evidence texts, code comments naming TJL19). After O11, the pilot package moves to the test overlay (E25).
+  4. O5: removals, with O3's leftovers (the TJL19 and "global Dalia transport" evidence texts, code comments naming TJL19). After O11, the pilot package moves to the test overlay (E25). The Tia Juana test copy `src/test/resources/materials/tia-juana/flowsheet/crude_unit.json` still has the component list from before O11; no gate reads it, so it is updated or removed with that move.
   5. O9: combustion data (E22, E23). First, verify the Bulletin 627 values.
   6. The translation commit (en_us changed in O3 and later), then the final lane on the merged code (E19). It must re-check the fluid GameTests and the hold-gate sample sheets (`ColumnSizingSampleTest`, `SizeAllSampleTest`, `UnitSizingSampleTest`, `LineSizingSampleTest`, `UtilityRegulationTest`, `FlowsheetColumnTest`, `ColumnEjectorTest`).
 - Column solids (E29), later and separate work:

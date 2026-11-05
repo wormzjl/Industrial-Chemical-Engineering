@@ -675,41 +675,105 @@ final class V3TruncationSupport {
      * only and a VAPOR_ONLY point upward only.</p>
      */
     private static boolean[][] reachableFromFeed(V3ColumnProblem problem, byte[][] phases, double refluxRatio) {
-        V3ColumnTopology topology = problem.topology();
-        V3CondenserComponentPhases condenserPhases = problem.condenserComponentPhases();
         int components = problem.activeComponentBasis().componentCount();
-        boolean[][] reachable = new boolean[topology.nodeCount()][components];
-        int[] pending = new int[topology.nodeCount()];
+        boolean[][] reachable = new boolean[problem.topology().nodeCount()][components];
+        int[] pending = new int[problem.topology().nodeCount()];
         for (int component = 0; component < components; component++) {
-            int feed = topology.feedTrayNumber();
-            if (phases[feed][component] == PointPhases.ABSENT.mask()) continue;
-            int next = 0;
-            int count = 1;
-            pending[0] = feed;
-            reachable[feed][component] = true;
-            while (next < count) {
-                int node = pending[next++];
-                if (node > topology.condenserNode()
-                        && topology.hasVaporPhase(node)
-                        && PointPhases.ofMask(phases[node][component]).retainsVapor()
-                        && phases[node - 1][component] != PointPhases.ABSENT.mask()
-                        && !reachable[node - 1][component]) {
-                    reachable[node - 1][component] = true;
-                    pending[count++] = node - 1;
-                }
-                if (node < topology.reboilerNode()
-                        && topology.hasLiquidPhase(node)
-                        && condenserPhases.hasLiquid(topology, node, component)
-                        && PointPhases.ofMask(phases[node][component]).retainsLiquid()
-                        && (node != topology.condenserNode() || refluxRatio > 0.0)
-                        && phases[node + 1][component] != PointPhases.ABSENT.mask()
-                        && !reachable[node + 1][component]) {
-                    reachable[node + 1][component] = true;
-                    pending[count++] = node + 1;
-                }
-            }
+            reachFromFeed(problem, phases, refluxRatio, component, reachable, pending);
         }
         return reachable;
+    }
+
+    /** Marks in {@code reachable} the points of one component that have a retained path from the feed. */
+    private static void reachFromFeed(V3ColumnProblem problem, byte[][] phases, double refluxRatio, int component,
+                                      boolean[][] reachable, int[] pending) {
+        V3ColumnTopology topology = problem.topology();
+        V3CondenserComponentPhases condenserPhases = problem.condenserComponentPhases();
+        int feed = topology.feedTrayNumber();
+        if (phases[feed][component] == PointPhases.ABSENT.mask()) return;
+        int next = 0;
+        int count = 1;
+        pending[0] = feed;
+        reachable[feed][component] = true;
+        while (next < count) {
+            int node = pending[next++];
+            if (node > topology.condenserNode()
+                    && topology.hasVaporPhase(node)
+                    && PointPhases.ofMask(phases[node][component]).retainsVapor()
+                    && phases[node - 1][component] != PointPhases.ABSENT.mask()
+                    && !reachable[node - 1][component]) {
+                reachable[node - 1][component] = true;
+                pending[count++] = node - 1;
+            }
+            if (node < topology.reboilerNode()
+                    && topology.hasLiquidPhase(node)
+                    && condenserPhases.hasLiquid(topology, node, component)
+                    && PointPhases.ofMask(phases[node][component]).retainsLiquid()
+                    && (node != topology.condenserNode() || refluxRatio > 0.0)
+                    && phases[node + 1][component] != PointPhases.ABSENT.mask()
+                    && !reachable[node + 1][component]) {
+                reachable[node + 1][component] = true;
+                pending[count++] = node + 1;
+            }
+        }
+    }
+
+    /** The feed reachability of this support, asked with some points removed; see {@link Reachability}. */
+    Reachability reachability(V3ColumnProblem problem) {
+        return new Reachability(problem);
+    }
+
+    /**
+     * The reachability rule {@link #derive} prunes by, asked of this support with some points of one component
+     * removed (ABSENT, as the refresh leaves a point below its floor in both phases).
+     *
+     * <p>A removed point cuts a path when a point of its component that this support reaches from the feed is
+     * reached no longer: the refresh that drops the removed point would prune that one too. The feed tray is
+     * never removed, as {@link #derive} never removes it.</p>
+     */
+    final class Reachability {
+        private final V3ColumnProblem problem;
+        private final byte[][] working;
+        private final double refluxRatio;
+        private final boolean[][] base;
+        private final boolean[][] reachable;
+        private final int[] pending;
+
+        private Reachability(V3ColumnProblem problem) {
+            requireCompatible(problem.topology(), problem.activeComponentBasis().componentCount());
+            this.problem = problem;
+            int nodes = topology.nodeCount();
+            working = new byte[nodes][componentCount];
+            for (int node = 0; node < nodes; node++) {
+                for (int component = 0; component < componentCount; component++) {
+                    working[node][component] = pointPhases(node, component).mask();
+                }
+            }
+            refluxRatio = refluxRatio(problem);
+            base = reachableFromFeed(problem, working, refluxRatio);
+            reachable = new boolean[nodes][componentCount];
+            pending = new int[nodes];
+        }
+
+        /**
+         * Whether removing the points of {@code component} that {@code removed} marks (by node) leaves a point that
+         * {@code live} marks, and that this support reaches, without a path from the feed.
+         */
+        boolean cuts(int component, boolean[] removed, boolean[] live) {
+            int nodes = working.length;
+            int feed = topology.feedTrayNumber();
+            for (int node = 0; node < nodes; node++) {
+                reachable[node][component] = false;
+                if (removed[node] && node != feed) working[node][component] = PointPhases.ABSENT.mask();
+            }
+            reachFromFeed(problem, working, refluxRatio, component, reachable, pending);
+            boolean cut = false;
+            for (int node = 0; node < nodes; node++) {
+                if (removed[node]) working[node][component] = pointPhases(node, component).mask();
+                else if (live[node] && base[node][component] && !reachable[node][component]) cut = true;
+            }
+            return cut;
+        }
     }
 
     private static boolean allBoth(byte[][] phases) {
