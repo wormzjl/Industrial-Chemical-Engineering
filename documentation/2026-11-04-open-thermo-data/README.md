@@ -104,7 +104,16 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
        - Both forms keep every root, and both pass the 42 tests that F1b broke.
        - Both turn `FlowsheetColumnTest.aFurnaceOnADutyStartsFromAFirstEstimate` from its expected FAILED into STEADY.
        - Why G2 misses: it fires far from a root (scaled residual 1 to 5e4), and the refresh then re-derives the profile and drops up to 53 points.
-     - The owner chose "Try G2b" (2026-11-05). G2b drops only the dead coordinates and resumes from the same state on the full budget. It is built and measured now. A stall fix changes no formulation revision.
+     - The owner chose "Try G2b" (2026-11-05). G2b drops only the dead coordinates and resumes from the same state on the full budget. Result: medium grid 7/10 (631.28, 633 and 640 K fail) at 7,783k polls, every root kept; not landed (`tmp/o10-fix/g2b/`).
+       - The dead coordinate is a cut path, not a trace. At 633 K, PC8 vapour on tray 26 falls to ln -572 while PC8 is major on trays 0-25. Dropping it removes 52 live phases through the support's reachability rule.
+       - The LU first goes singular only after the solve is already far from a root (residual 1.08 to 4.0). So acting at the singularity (G2, G2b) comes too late. Only a form that stops the dive itself (F1b) reaches 10/10.
+     - The furnace pin `FlowsheetColumnTest.aFurnaceOnADutyStartsFromAFirstEstimate` (written in `fc3b4ad25`) expects FAILED. Under G2b the cold start converges to the estimated run's answer:
+       - all products equal to 4 decimals, and the furnace at its set 70.40 MW;
+       - mass closure 2.7e-7, heat closure 15.5 kW of 173.7 MW;
+       - all 15 audit checks pass, no dry tray, positive flows.
+
+       So the pin records a solver limit, not physics. Flipping it is the owner's item.
+     - Open for the owner: stop the stall fix for now, or try one more form.
   2. The retrain (E26) runs in its own session, `neural-retrain`: branch `claude/neural-retrain-open-data-712a75`, batch `2026-11-05-neural-retrain`. Its plan, `NEURAL_RETRAIN_PLAN.md`, with `NEURAL_RETRAIN_DATA.md` (`138b0024e`), was approved by the owner on 2026-11-05: "Approve all A" (D1 to D5). The owner also allowed the torch and numpy download. N0 and N1 run now, on lane 2. N2 waits until O10 states whether its fix changes a formulation revision. M1, the timing run, waits for a free machine. The same day the owner asked for four plan changes:
      - tolerate about 5 % unknown compounds, with research into a model structure that allows it;
      - a VDU data set;
