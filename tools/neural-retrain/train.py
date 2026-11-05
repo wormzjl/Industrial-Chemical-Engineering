@@ -27,11 +27,16 @@ def read(path):
     return [json.loads(line) for line in open(path, encoding='utf-8') if line.strip()]
 
 
-def fold(row):
-    """TRAIN rows of the design split 85/15 by a hash of the id when no validation rows exist (pilot smoke)."""
-    if row['split'] != 'train':
-        return row['split']
-    return 'validation' if int(hashlib.sha256(row['id'].encode()).hexdigest(), 16) % 100 < 15 else 'train'
+def folds(rows):
+    """The fold of each row: its design split, except that TRAIN rows split 85/15 by a hash of the id when the set has no
+    validation rows (the pilot smoke). N2 has its own validation journals, so its TRAIN rows all train."""
+    held = any(r['split'] != 'train' for r in rows)
+
+    def fold(row):
+        if row['split'] != 'train' or held:
+            return row['split']
+        return 'validation' if int(hashlib.sha256(row['id'].encode()).hexdigest(), 16) % 100 < 15 else 'train'
+    return fold
 
 
 def moments(values, weights=None):
@@ -47,10 +52,20 @@ def global_of(row, u2):
     return g + list(row['offAxisBands']) if u2 else g
 
 
+def node_rows(row, node_width, c, u2):
+    """A row's node features. Under U2 the three off-axis bands join the global block each node row repeats (the first
+    54 + c columns, V3GeneralNeuralFeatures.nodes), as a Java U2 encoding would place them: global, bands, then the 22 local."""
+    x = np.asarray(row['nodes'])[:, :node_width]
+    if not u2:
+        return x
+    g = 54 + c
+    return np.concatenate([x[:, :g], np.tile(np.asarray(row['offAxisBands']), (len(x), 1)), x[:, g:]], axis=1)
+
+
 def normalization(rows, node_width, c, u2):
     xs, ys, bs, weights = [], [], [], []
     for r in rows:
-        x = np.asarray(r['nodes'])[:, :node_width]
+        x = node_rows(r, node_width, c, u2)
         xs.append(x); ys.append(np.asarray(r['targets'])); bs.append(np.asarray(r['anchor']))
         weights.extend([1 / len(x)] * len(x))
     xm, xscale = moments(np.vstack(xs), weights)
@@ -70,14 +85,14 @@ def normalization(rows, node_width, c, u2):
 
 def tensors(rows, norm, node_width, c, u2, device):
     n, length = len(rows), max(len(r['nodes']) for r in rows)
-    inputs = node_width + 4 * c + 5 + 4
+    inputs = node_width + (3 if u2 else 0) + 4 * c + 5 + 4
     x = np.zeros((n, length, inputs), np.float32)
     raw = np.zeros((n, length, 4 * c + 5), np.float32)
     fractions = np.zeros((n, length, 2, c), np.float32)
     valid = np.zeros((n, length), bool)
     xm, xs, bm, bs = (np.asarray(norm[k]) for k in ('xm', 'xscale', 'bm', 'bscale'))
     for i, r in enumerate(rows):
-        nodes = np.asarray(r['nodes'])[:, :node_width]; count = len(nodes)
+        nodes = node_rows(r, node_width, c, u2); count = len(nodes)
         extra = np.zeros((count, 4)); extra[:, r['branch']] = 1; extra[:, 3] = 1.0 if r['anchorAvailable'] else 0.0
         x[i, :count] = np.concatenate([(nodes - xm) / xs, (np.asarray(r['anchor']) - bm) / bs, extra], axis=1)
         raw[i, :count] = r['targets']; fractions[i, :count] = r['fractions']; valid[i, :count] = True
@@ -141,21 +156,27 @@ def main():
     a = p.parse_args()
     torch.manual_seed(a.seed); np.random.seed(a.seed)
     torch.use_deterministic_algorithms(True, warn_only=True)
+    # The fused attention kernels (flash, memory-efficient) have non-deterministic backward passes; the math kernel does not.
+    torch.backends.cuda.enable_flash_sdp(False); torch.backends.cuda.enable_mem_efficient_sdp(False)
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     rows = read(a.features)
     c = len(rows[0]['feedFractions']); node_width = 54 + c + 22
+    fold = folds(rows)
     train = [r for r in rows if fold(r) == 'train']; val = [r for r in rows if fold(r) == 'validation']
+    subsets = {'all': val, 'axisOnly': [r for r in val if not r.get('injected')], 'injected': [r for r in val if r.get('injected')],
+               'cdu': [r for r in val if r['unit'] == 'cdu'], 'vdu': [r for r in val if r['unit'] == 'vdu']}
     norm = normalization(train, node_width, c, a.u2)
     model = ColumnModel(c, width=a.width, extra_global=3 if a.u2 else 0).to(device)
-    tt, vt = (tensors(s, norm, node_width, c, a.u2, device) for s in (train, val))
+    tt = tensors(train, norm, node_width, c, a.u2, device)
+    vts = {k: tensors(v, norm, node_width, c, a.u2, device) for k, v in subsets.items() if v}
     ym, ys = (torch.tensor(norm[k], device=device, dtype=torch.float32) for k in ('ym', 'yscale'))
     seen = torch.zeros(3, dtype=torch.bool, device=device); seen[tt['labels'].unique()] = True
     opt = torch.optim.AdamW(model.parameters(), lr=8e-4, weight_decay=1e-4)
     out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
     (out / 'norm.json').write_text(json.dumps(norm))
     marks = {int(e) for e in a.checkpoints.split(',')}
-    report = {'rows': len(rows), 'train': len(train), 'validation': len(val), 'components': c, 'width': a.width, 'u2': a.u2,
-              'seed': a.seed, 'parameters': sum(q.numel() for q in model.parameters()), 'branchesSeen': seen.tolist(), 'epochs': []}
+    report = {'rows': len(rows), 'train': len(train), 'validation': {k: len(v) for k, v in subsets.items()}, 'components': c, 'width': a.width, 'u2': a.u2,
+              'seed': a.seed, 'device': torch.cuda.get_device_name(0) if device == 'cuda' else 'cpu', 'parameters': sum(q.numel() for q in model.parameters()), 'branchesSeen': seen.tolist(), 'epochs': []}
     generator = torch.Generator(device='cpu').manual_seed(a.seed)
     for epoch in range(1, a.epochs + 1):
         model.train()
@@ -167,8 +188,8 @@ def main():
             value = loss(pred, logits, batch, ym, ys)
             opt.zero_grad(); value.backward(); torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0); opt.step()
         if epoch in marks or epoch == a.epochs:
-            metrics = evaluate(model, vt, ym, ys, c, seen) if val else {}
-            metrics['epoch'] = epoch; report['epochs'].append(metrics)
+            metrics = {'epoch': epoch} | {k: evaluate(model, v, ym, ys, c, seen) for k, v in vts.items()}
+            report['epochs'].append(metrics)
             torch.save({'state': model.state_dict(), 'components': c, 'width': a.width, 'u2': a.u2, 'branchesSeen': seen.tolist()}, out / f'checkpoint-{epoch}.pt')
             print(json.dumps(metrics))
     (out / 'report.json').write_text(json.dumps(report, indent=1))

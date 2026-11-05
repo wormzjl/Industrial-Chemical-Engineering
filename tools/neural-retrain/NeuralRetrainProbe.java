@@ -558,6 +558,24 @@ class NeuralRetrainProbe {
         for (int k = 0; k < ids.size(); k++) if (!axis().contains(ids.get(k))) lumps.put(ids.get(k), axis().get(map[k]));
         Files.writeString(out.resolve("lumpMap.json"), new GsonBuilder().setPrettyPrinting().create().toJson(lumps));
         System.out.println("nr export rows=" + rows + " anchors=" + anchors + " skipped=" + skipped + " lumps=" + lumps.size());
+        physics();
+    }
+
+    /**
+     * The sidecar's trained physics (schema 4/5, TrainedPhysics): the values of the axis package the labels were solved on, in
+     * this catalog, written to NR_OUT/physics.json. export.py sets the trained temperature ceiling from the TRAIN feeds.
+     */
+    @Test void physics() throws Exception {
+        setUp();
+        Path out = Path.of(env("NR_OUT", "tmp/neural-retrain/features")); Files.createDirectories(out);
+        String packageId = base[0].packageId();
+        var physics = V3RegroupedTransformerTest.physics(catalog, packageId);
+        physics.addProperty("source", "The values of package " + packageId + " in the catalog the N2 labels were solved with "
+                + "(batch 2026-11-05-neural-retrain, tools/neural-retrain NeuralRetrainProbe.physics). Trained range: 298.15 K to the "
+                + "trained feed temperature maximum (sidecar globalMax[1]). Pairs not listed are zero.");
+        Files.writeString(out.resolve("physics.json"), new GsonBuilder().setPrettyPrinting().create().toJson(physics));
+        System.out.println("nr physics " + packageId + " compounds=" + physics.getAsJsonArray("compounds").size()
+                + " pairs=" + physics.getAsJsonArray("pairs").size());
     }
 
     // ---------------------------------------------------------------- bundled-model parity reference (N0)
@@ -592,10 +610,11 @@ class NeuralRetrainProbe {
                     var anchor = V3AnchorTransformerInitializer.NativeAnchor.build(in, branch, () -> {});
                     x.addProperty("branch", best); x.add("anchor", JSON.toJsonTree(anchor.values())); x.addProperty("anchorAvailable", anchor.available());
                     x.add("javaBranchLogits", JSON.toJsonTree(raw.branchLogits())); x.add("javaRaw", JSON.toJsonTree(raw.values()));
+                    x.addProperty("supported", model.supported(in)); // the composition family, topology and global bounds
                     return x;
                 });
                 w.write(JSON.toJson(o)); w.newLine();
-                System.out.println("nr features " + e.getKey() + " branch=" + o.get("branch") + " anchor=" + o.get("anchorAvailable"));
+                System.out.println("nr features " + e.getKey() + " branch=" + o.get("branch") + " anchor=" + o.get("anchorAvailable") + " supported=" + o.get("supported"));
             }
         }
     }

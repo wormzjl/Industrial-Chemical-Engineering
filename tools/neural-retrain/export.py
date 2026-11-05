@@ -1,6 +1,8 @@
 """Exports a train.py checkpoint as the payload and sidecar the Java reader takes (V3NeuralRegistry.TransformerArtifact),
-batch 2026-11-05-neural-retrain. The sidecar is schema 5 (N5): it takes the physics block, decoder, rules and design constraints
-from a template sidecar, and writes its own model id, payload hash, formulation revisions, branches seen, the global bounds over the
+batch 2026-11-05-neural-retrain. The sidecar is schema 5 (N5): it takes the decoder, rules, presence threshold, trace floor,
+pumparound splits and the steam-at-sump rule from a template sidecar, and writes the trained physics the probe's `physics`
+wrote (physics.json beside features.jsonl) with its ceiling at the TRAIN feed temperature maximum, the node-pressure bounds of
+the TRAIN rows (top pressure to bottom pressure), its own model id, payload hash, formulation revisions, branches seen, the global bounds over the
 TRAIN features (the composition box widened by 10 % of its span, NEURAL_RETRAIN_DATA.md section 4), the E7 families (one per unit:
 mean, 3-PC basis, the TRAIN compositions' coordinates, in-plane and out-of-plane limits at the 99th percentile of the trained spread),
 the off-axis limit (the owner's 5 %) and the U1 lump map the probe's export wrote (lumpMap.json beside features.jsonl).
@@ -16,7 +18,7 @@ import numpy as np
 import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from train import fold, read  # noqa: E402
+from train import folds, read  # noqa: E402
 
 FEATURE_REVISION = 'v3-anchor-augmented-regrouped-2'     # the Java encoding is unchanged under U1
 ANCHOR_REVISION = 'native-material-closed-anchor-v2-basis-width'
@@ -56,7 +58,8 @@ def main(checkpoint, norm_path, features, template, model_id, out):
     out = Path(out); out.mkdir(parents=True, exist_ok=True)
     payload_bytes = json.dumps(payload, separators=(',', ':')).encode('utf-8')
     (out / 'payload.json').write_bytes(payload_bytes)
-    rows = [r for r in read(features) if fold(r) == 'train']
+    every = read(features); fold = folds(every)
+    rows = [r for r in every if fold(r) == 'train']
     g = np.asarray([r['global'] for r in rows])
     side = json.loads(Path(template).read_text(encoding='utf-8'))
     side['payloadSha256'] = hashlib.sha256(payload_bytes).hexdigest()
@@ -67,6 +70,12 @@ def main(checkpoint, norm_path, features, template, model_id, out):
     span = hi[BOX] - lo[BOX]
     lo[BOX] = np.maximum(lo[BOX] - 0.1 * span, 0); hi[BOX] = hi[BOX] + 0.1 * span
     side['globalMin'] = lo.tolist(); side['globalMax'] = hi.tolist()
+    physics = json.loads((Path(features).parent / 'physics.json').read_text(encoding='utf-8'))
+    physics['temperatureMaximumKelvin'] = float(hi[1])
+    side['physics'] = physics
+    top = g[:, 2] * 1e5; bottom = top + (np.rint(g[:, 4] * 64) - 1) * g[:, 3] * 1e3   # V3GeneralNeuralFeatures.global x2, x3, x4
+    side['designConstraints'] = side['designConstraints'] | {'minimumNodePressurePascal': float(top.min()),
+                                                             'maximumNodePressurePascal': float(bottom.max())}
     side['schemaVersion'] = 5
     side.pop('compositionEdges', None)
     known = [r for r in rows if not r.get('injected')]
@@ -76,7 +85,8 @@ def main(checkpoint, norm_path, features, template, model_id, out):
     side['lumpMap'] = json.loads((Path(features).parent / 'lumpMap.json').read_text(encoding='utf-8'))
     (out / 'sidecar.json').write_text(json.dumps(side), encoding='utf-8')
     print(json.dumps({'payloadBytes': len(payload_bytes), 'payloadSha256': side['payloadSha256'], 'formulationRevisions': side['formulationRevisions'],
-                      'trainRows': len(rows),
+                      'trainRows': len(rows), 'nodePressurePascal': [side['designConstraints']['minimumNodePressurePascal'],
+                      side['designConstraints']['maximumNodePressurePascal']], 'trainedMaximumKelvin': physics['temperatureMaximumKelvin'],
                       'families': [{k: f[k] for k in ('name', 'inPlaneLimit', 'outOfPlaneLimit')} | {'points': len(f['points'])} for f in side['families']]}))
 
 
