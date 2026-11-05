@@ -14,7 +14,7 @@ Status words:
 
 | Batch | Purpose | Status |
 |---|---|---|
-| [2026-11-05-neural-retrain/](2026-11-05-neural-retrain/README.md) | Retrain the column's learned start on the open crude grades and today's column; remove the old model | Planned (2026-11-05) |
+| [2026-11-05-neural-retrain/](2026-11-05-neural-retrain/README.md) | Retrain the column's learned start on the open crude grades and today's column; remove the old model | In progress since 2026-11-05 |
 | [2026-11-04-open-thermo-data/](2026-11-04-open-thermo-data/README.md) | Generated crude grades, open viscosity source, NIST values re-derived from open sources, unused data removed | In progress since 2026-11-04 |
 | [2026-11-04-refinery-compounds/](2026-11-04-refinery-compounds/README.md) | Major refinery compounds for the thermo package, data and sources; freezing points for all compounds | In progress since 2026-11-04 |
 | [2026-11-03-localization/](2026-11-03-localization/README.md) | Missing lang keys; fr_fr, es_es and ja_jp added; zh_cn completed and reviewed | Implemented 2026-11-03 (0.19.3) |

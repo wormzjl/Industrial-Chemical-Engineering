@@ -41,6 +41,8 @@ Compute estimate (from O8's stored counters, 165 polls/ms, mean classical 3.8 s)
 
 ## 4. Owner decisions
 
+Decided 2026-11-05: "Approve all A" (D1 to D5 = A), and "Yes, download" for the N0 packages (torch 2.10.0+cu128, numpy 2.3.5, torch's PyPI dependencies).
+
 - D1, order against O10 (the classical stall). If O10 makes the classical start robust, the seed is worth only its poll saving on a sheet's first column solve (about 2 to 8 s once per sheet run, since warm seeds cover the rest). A label is a converged state, so an O10 fix that leaves the formulation revisions alone does not stale the labels; a formulation change does.
   - A: N0 and N1 now; N2 after O10's diagnosis states whether it changes a formulation revision. **Recommended.**
   - B: everything now; relabel if O10 changes a revision (about 1 h lost).
