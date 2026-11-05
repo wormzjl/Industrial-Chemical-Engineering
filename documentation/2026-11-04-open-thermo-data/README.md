@@ -79,7 +79,7 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
 
 - Next:
   1. O10 (running, lane 1): the medium grade's classical stall and the simulator-to-column energy gap; options go to the owner (E24).
-  2. The retrain (E26) runs in its own session, `neural-retrain`: branch `claude/neural-retrain-open-data-712a75`, batch `2026-11-05-neural-retrain`. Its plan, `NEURAL_RETRAIN_PLAN.md` (`546ae8027`), waits for the owner's D1 to D5; no training before.
+  2. The retrain (E26) runs in its own session, `neural-retrain`: branch `claude/neural-retrain-open-data-712a75`, batch `2026-11-05-neural-retrain`. Its plan, `NEURAL_RETRAIN_PLAN.md`, with `NEURAL_RETRAIN_DATA.md` (`138b0024e`), was approved by the owner on 2026-11-05: "Approve all A" (D1 to D5). The owner also allowed the torch and numpy download. N0 and N1 run now, on lane 2. N2 waits until O10 states whether its fix changes a formulation revision. M1, the timing run, waits for a free machine.
   3. O11: CO2 in the world list with its dry-ice crystal (E25). Stopped: crystals compete only on spine packages; the owner chooses A, B or C and the N2/CO2 pair (CO2_CRYSTAL_REVIEW.md sections 3 and 4).
   4. O5: removals, with O3's leftovers (the TJL19 and "global Dalia transport" evidence texts, code comments naming TJL19). After O11, the pilot package moves to the test overlay (E25).
   5. O9: combustion data (E22, E23). First, verify the Bulletin 627 values.
