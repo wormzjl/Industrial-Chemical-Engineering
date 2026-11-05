@@ -23,7 +23,7 @@ Status: In progress since 2026-11-05, on `claude/neural-retrain-open-data-712a75
 
 - Owner decisions D3 and D5 (revised), D6 to D8 of revision 2; the VDU text after "VDU specific data (".
 - Open checks U0 (the package for off-axis compounds), V0 (the encoding and anchor on the VDU top), M1 (timing, alone).
-- N1 pilot of record after revision 2 is approved; N2 waits for O10.
+- N1 pilot of record after revision 2 is approved. N2 waits for the owner's choice on O10's energy gap (CLASSICAL_STALL_REVIEW.md, base branch `f53a6b4ba`): fix (a), one water model in V3, bumps the wet formulation revision, so labels made before it would be stale. N2 starts after (a) lands and this branch syncs with the base branch. The stall fix F1b changes no revision; it lifts the medium grade in the 622-644 K band from 5 to 10 of 10, so it shrinks the stall class that re-iteration targets.
 - Open measurement M1: time of bind, anchor and inference on the four presets.
 
 ## History (continued)
