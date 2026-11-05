@@ -102,7 +102,7 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
 
        With window 12 the medium grid is 10/10 and the roots are unchanged.
      - (a) works. Free water closes at 0.0 kW, and the gap falls from 57-59 kW to 11-14 kW (the 2e-3 rule passes). The rest is not water: the overhead light ends 6-11 kW, the steam priced at its 2.7 bar tray but supplied at 2.5 bar 4 kW, the hydrocarbons about 1 kW. The new wet revisions are r32 and r33.
-     - `tmp/o10-fix/stage-final/` holds `landing-a-only.patch` and `landing-w12.patch`. The owner decides the next step.
+     - `tmp/o10-fix/stage-final/` holds `landing-a-only.patch` and `landing-w12.patch`. The owner chose "Yes, both" (2026-11-05). (a) lands alone now. F1b goes back to design as F1c: its release follows the stall stop's rule and exemptions, and it is measured on every column test.
   2. The retrain (E26) runs in its own session, `neural-retrain`: branch `claude/neural-retrain-open-data-712a75`, batch `2026-11-05-neural-retrain`. Its plan, `NEURAL_RETRAIN_PLAN.md`, with `NEURAL_RETRAIN_DATA.md` (`138b0024e`), was approved by the owner on 2026-11-05: "Approve all A" (D1 to D5). The owner also allowed the torch and numpy download. N0 and N1 run now, on lane 2. N2 waits until O10 states whether its fix changes a formulation revision. M1, the timing run, waits for a free machine. The same day the owner asked for four plan changes:
      - tolerate about 5 % unknown compounds, with research into a model structure that allows it;
      - a VDU data set;
