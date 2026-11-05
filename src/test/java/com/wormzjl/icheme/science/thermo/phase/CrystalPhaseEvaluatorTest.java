@@ -33,7 +33,7 @@ class CrystalPhaseEvaluatorTest {
 
     @Test
     void anchorsToThePilotLiquidAndFillsAConsistentSolidState() {
-        MaterialCatalog catalog = MaterialCatalog.bundled();
+        MaterialCatalog catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
         var fluid = CubicPhaseEvaluator.forPackage(catalog, PILOT);
         var solid = CrystalPhaseEvaluator.forPackage(catalog, PILOT, CRYSTAL);
         assertEquals("crystal_jaeger_span_2012_triple_point_anchored_v1", solid.family());
@@ -85,7 +85,7 @@ class CrystalPhaseEvaluatorTest {
 
     @Test
     void refusesForeignAnchorsAndContinuesPastItsRange() {
-        MaterialCatalog catalog = MaterialCatalog.bundled();
+        MaterialCatalog catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
         var fluid = CubicPhaseEvaluator.forPackage(catalog, PILOT);
         var solid = CrystalPhaseEvaluator.forPackage(catalog, PILOT, CRYSTAL);
         var anchor = solid.anchor(fluid);

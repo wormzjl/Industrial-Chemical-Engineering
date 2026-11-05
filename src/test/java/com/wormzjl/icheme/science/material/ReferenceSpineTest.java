@@ -29,7 +29,7 @@ class ReferenceSpineTest {
 
     /** The spine records are bundled since P3 (main resources). */
     private static ReferenceSpine spine(String species) {
-        return MaterialCatalog.bundled().requireSpine(PilotCryogenicTestCatalog.PACKAGE_ID, FLUID.get(species));
+        return com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot().requireSpine(PilotCryogenicTestCatalog.PACKAGE_ID, FLUID.get(species));
     }
 
     private static String path(String species) { return "data/icheme/materials/spine/" + species + ".json"; }

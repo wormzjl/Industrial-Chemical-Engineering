@@ -20,7 +20,7 @@ class PilotVolumeAnchorTest {
     /** P1 study section 2.1, rule (b), cm3/mol (computed with CoolProp's critical constants). */
     private static final Map<String, Double> P1_SHIFT = Map.of("Nitrogen", 3.519, "Methane", 3.389, "Ethane", 3.454, "CarbonDioxide", 1.170);
 
-    private static MaterialCatalog.Package pilot() { return MaterialCatalog.bundled().requirePackage(PilotCryogenicTestCatalog.PACKAGE_ID); }
+    private static MaterialCatalog.Package pilot() { return com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot().requirePackage(PilotCryogenicTestCatalog.PACKAGE_ID); }
 
     @Test
     void anchorsEqualTheOracle() {

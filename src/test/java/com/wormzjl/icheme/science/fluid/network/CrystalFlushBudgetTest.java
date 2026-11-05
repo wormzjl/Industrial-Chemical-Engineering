@@ -32,7 +32,7 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class CrystalFlushBudgetTest {
     private static final String PILOT = "icheme:pilot_cryogenic";
-    private static final MaterialCatalog CATALOG = MaterialCatalog.bundled();
+    private static final MaterialCatalog CATALOG = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
     private static final int CO2 = 3;
     private final FluidThermodynamics model = FluidTestSupport.model(CATALOG, PILOT);
 

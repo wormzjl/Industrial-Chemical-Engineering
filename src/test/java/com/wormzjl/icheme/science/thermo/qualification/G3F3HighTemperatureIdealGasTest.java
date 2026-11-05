@@ -64,7 +64,7 @@ class G3F3HighTemperatureIdealGasTest {
     static final double[][] LINE_LIST_CH4 = {{1000, 72.796, 38469.5}, {1073, 75.710, 43891.5}, {1100, 76.725, 45949.4}, {1143, 78.271, 49282.2},
             {1200, 80.188, 53799.0}};
 
-    static ReferenceSpine spine(String component) { return MaterialCatalog.bundled().requireSpine(PILOT, component); }
+    static ReferenceSpine spine(String component) { return com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot().requireSpine(PILOT, component); }
 
     @Test
     void idealGasAgainstTheHoldouts() {

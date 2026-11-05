@@ -45,7 +45,7 @@ class LiquidMixtureCorrectionTest {
             assertEquals(java.util.stream.IntStream.rangeClosed(1,12).mapToObj("crude_pc%02d"::formatted).toList(),
                     term.participants().stream().map(axis::get).toList(),id);
         }
-        assertTrue(catalog.liquidMixture("icheme:pilot_cryogenic").participants().isEmpty());
+        assertTrue(PilotCryogenicTestCatalog.withPilot().liquidMixture("icheme:pilot_cryogenic").participants().isEmpty());
     }
     @Test void transportEditChangesOnlyTransportAndNamesResourceOnError() {
         // The liquid-mixture term is the crude method's: an edit there moves every crude package's transport alone.

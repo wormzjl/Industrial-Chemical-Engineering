@@ -31,7 +31,7 @@ class LiquidCo2LetDownTest {
     static final String DIMENSION="minecraft:overworld",PILOT="icheme:pilot_cryogenic";
     static final long GENERATOR=1,VALVE=3,LET_DOWN=4,TANK=5;
     static final int CO2=3;
-    final FluidThermodynamics pilot=FluidTestSupport.model(MaterialCatalog.bundled(),PILOT);
+    final FluidThermodynamics pilot=FluidTestSupport.model(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(),PILOT);
 
     static PhysicalFluidTopology.Device device(long id,int x,int y,Kind kind,PhysicalFluidTopology.Direction facing,FlowControl control,double diameter) {
         return new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position(DIMENSION,x,y,0),kind,facing,

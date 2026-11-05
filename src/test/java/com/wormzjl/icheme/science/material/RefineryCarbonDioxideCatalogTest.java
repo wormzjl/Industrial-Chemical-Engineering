@@ -2,6 +2,7 @@ package com.wormzjl.icheme.science.material;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 import com.google.gson.JsonArray;
@@ -36,8 +37,9 @@ class RefineryCarbonDioxideCatalogTest {
         assertEquals("icheme:chemsep_carbon_dioxide", refinery.properties().get(co2).id());
         assertEquals(List.of(CRYSTAL), refinery.crystals());
         assertEquals(List.of(CRYSTAL), com.wormzjl.icheme.science.thermo.phase.PhaseContract.admittedCrystals(catalog, REFINERY));
-        // The pilot keeps the component's default dataset until O5.
-        var pilot = catalog.requirePackage("icheme:pilot_cryogenic");
+        // The pilot is a test overlay since O5 (E25): the game's CO2 record defaults to the game's dataset, the overlay's to the pilot's.
+        assertFalse(catalog.packages().containsKey(PilotCryogenicTestCatalog.PACKAGE_ID));
+        var pilot = PilotCryogenicTestCatalog.withPilot().requirePackage("icheme:pilot_cryogenic");
         assertEquals("icheme:pilot_carbon_dioxide", pilot.properties().get(pilot.components().indexOf("CarbonDioxide")).id());
         // The CO2 fluid preset is on the network's list.
         assertEquals("CarbonDioxide", catalog.presets().fluid("carbon_dioxide").component());

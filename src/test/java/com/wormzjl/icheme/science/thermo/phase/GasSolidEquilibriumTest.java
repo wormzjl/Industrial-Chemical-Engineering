@@ -32,7 +32,7 @@ import org.junit.jupiter.api.Test;
 class GasSolidEquilibriumTest {
     static final String PILOT = "icheme:pilot_cryogenic";
     static final String CRYSTAL = "icheme:crystal_carbon_dioxide_i";
-    static final FluidTpEquilibrium SERVICE = FluidTpEquilibrium.forPackage(MaterialCatalog.bundled(), PILOT);
+    static final FluidTpEquilibrium SERVICE = FluidTpEquilibrium.forPackage(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PILOT);
     static final List<String> BASIS = SERVICE.contract().components();
     static final int CO2 = BASIS.indexOf("CarbonDioxide");
     static final double R = PhaseTestSupport.R;
@@ -65,7 +65,7 @@ class GasSolidEquilibriumTest {
     /** (1) The contract: the package's crystal set qualified as a whole, requested by name or as the package's. */
     @Test
     void theCrystalCompetitionIsQualifiedAsAWholeSet() {
-        MaterialCatalog catalog = MaterialCatalog.bundled();
+        MaterialCatalog catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
         var contract = SERVICE.contract();
         var named = PhaseCompetition.withCrystals(CRYSTAL);
         assertEquals(Set.of(PhaseCompetition.FLUID_ONLY, named), contract.qualifiedCompetitions());
@@ -120,7 +120,7 @@ class GasSolidEquilibriumTest {
     /** Fluid-only requests on the crystal contract's service answer bit for bit as on the network contract's. */
     @Test
     void fluidOnlyRequestsAreUnchanged() {
-        MaterialCatalog catalog = MaterialCatalog.bundled();
+        MaterialCatalog catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
         var network = new FluidTpEquilibrium(PhaseContract.forNetworkPackage(catalog, PILOT), CubicPhaseEvaluator.forPackage(catalog, PILOT), FluidTpEquilibrium.Settings.DEFAULT, null);
         var a = SERVICE.newWorkspace();
         var b = network.newWorkspace();
@@ -156,7 +156,7 @@ class GasSolidEquilibriumTest {
 
     /** The pure crystal species' sublimation temperature on the pilot family at pressure p (the stage-1 pure path). */
     static double pureSublimationTemperature(double p) {
-        var family = SolidCarbonDioxideQualificationTest.Family.of(MaterialCatalog.bundled());
+        var family = SolidCarbonDioxideQualificationTest.Family.of(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot());
         double t0 = 190.0, t1 = 200.0;
         double f0 = Math.log(family.sublimation(t0) / p), f1 = Math.log(family.sublimation(t1) / p);
         for (int k = 0; k < 60 && Math.abs(t1 - t0) > 1e-12; k++) {
@@ -522,7 +522,7 @@ class GasSolidEquilibriumTest {
     /** (4) The crystal's derivatives against central differences, its capability flags, and the anchored view. */
     @Test
     void theCrystalsDerivativesAndItsAnchoredView() {
-        MaterialCatalog catalog = MaterialCatalog.bundled();
+        MaterialCatalog catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
         var fluid = CubicPhaseEvaluator.forPackage(catalog, PILOT);
         var crystal = CrystalPhaseEvaluator.forPackage(catalog, PILOT, CRYSTAL);
         var anchor = crystal.anchor(fluid);

@@ -41,7 +41,7 @@ class MaterialFluidDataTest {
  @Test void aCalibrationPointAnchorsAPackageWithoutASpineWhateverTheRecordTranslates() {
   var resources=new HashMap<>(MaterialCatalog.bundled().resources());String property="data/icheme/materials/properties/tjl20_methane.json";
   var methane=JsonParser.parseString(resources.get(property)).getAsJsonObject();
-  var pilot=JsonParser.parseString(resources.get("data/icheme/materials/properties/pilot_methane.json")).getAsJsonObject();
+  var pilot=JsonParser.parseString(PilotCryogenicTestCatalog.withPilotResources().get("data/icheme/materials/properties/pilot_methane.json")).getAsJsonObject();
   methane.add("volume_translation",pilot.get("volume_translation"));resources.put(property,methane.toString());
   var translated=MaterialCatalog.parse(resources);assertTrue(translated.volumeTranslation(ID,"Methane").isPresent());
   var point=translated.fluidData().volumeReferences().get("Methane");

@@ -107,7 +107,7 @@ class RefineryCarbonDioxideCrystalTest {
     /** The pilot's spine family keeps the numbers the probe measured beside it (the spine path is unchanged by E27). */
     @Test
     void thePilotSpineFamilyDoesNotMove() {
-        var family = Family.of(MaterialCatalog.bundled(), "icheme:pilot_cryogenic");
+        var family = Family.of(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), "icheme:pilot_cryogenic");
         assertTrue(!(family.solid().idealGas() instanceof CoefficientIdealGas), "the pilot's crystal is split against its spine");
         double[] m = family.measure("pilot");
         assertEquals(216.5916, m[0], 5e-5, "model triple point");

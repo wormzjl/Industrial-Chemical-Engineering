@@ -28,7 +28,7 @@ import java.util.Map;
  */
 final class G5Support {
     static final String PILOT = "icheme:pilot_cryogenic";
-    static final FluidTpEquilibrium SERVICE = FluidTpEquilibrium.forPackage(MaterialCatalog.bundled(), PILOT);
+    static final FluidTpEquilibrium SERVICE = FluidTpEquilibrium.forPackage(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PILOT);
     /** The pilot basis: N2, CH4, C2H6, CO2, water. */
     static final List<String> BASIS = SERVICE.contract().components();
     static final int CO2 = 3;

@@ -29,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class LiquidFullBubblePointTest {
     static final String PILOT="icheme:pilot_cryogenic";
-    private static final MaterialCatalog CATALOG=MaterialCatalog.bundled();
+    private static final MaterialCatalog CATALOG=com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
     private final FluidThermodynamics model=FluidTestSupport.model(CATALOG,PILOT);
 
     private FluidThermodynamics.State charge(double t,double p,double[] z,double volume) {

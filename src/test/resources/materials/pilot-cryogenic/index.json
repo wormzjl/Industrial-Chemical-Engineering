@@ -1,5 +1,18 @@
 [
   "data/icheme/materials/networks/default.json",
   "data/icheme/materials/presets/fluid_pilot_methane.json",
-  "data/icheme/materials/presets/fluid_pilot_ethane.json"
+  "data/icheme/materials/presets/fluid_pilot_ethane.json",
+  "data/icheme/materials/components/carbon_dioxide.json",
+  "data/icheme/materials/packages/pilot_cryogenic.json",
+  "data/icheme/materials/methods/pilot_eppr78.json",
+  "data/icheme/materials/interactions/pilot_cryogenic.json",
+  "data/icheme/materials/group_interactions/eppr78_2022.json",
+  "data/icheme/materials/properties/pilot_nitrogen.json",
+  "data/icheme/materials/properties/pilot_methane.json",
+  "data/icheme/materials/properties/pilot_ethane.json",
+  "data/icheme/materials/properties/pilot_carbon_dioxide.json",
+  "data/icheme/materials/spine/nitrogen.json",
+  "data/icheme/materials/spine/methane.json",
+  "data/icheme/materials/spine/ethane.json",
+  "data/icheme/materials/spine/carbon_dioxide.json"
 ]

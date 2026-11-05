@@ -91,7 +91,7 @@ class PilotCryogenicCatalogTest {
 
     @Test
     void bundledPackageRevisionsAndSharedPhysicsAreUnchanged() {
-        for (MaterialCatalog catalog : List.of(MaterialCatalog.bundled(), PilotCryogenicTestCatalog.catalog())) {
+        for (MaterialCatalog catalog : List.of(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PilotCryogenicTestCatalog.catalog())) {
             for (String[] pin : BUNDLED_PINS) {
                 var p = catalog.requirePackage(pin[0]);
                 assertEquals(pin[1], p.id() + "@" + p.revision(), pin[0]);
@@ -116,7 +116,7 @@ class PilotCryogenicCatalogTest {
 
     @Test
     void pilotPackageIsBundled() {
-        var catalog = MaterialCatalog.bundled();
+        var catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
         var p = catalog.requirePackage(PilotCryogenicTestCatalog.PACKAGE_ID);
         System.out.printf("P3 pilot identity: scientific revision %s, spine %s, fluid %s%n", p.scientificRevision(),
                 catalog.spineRevision(p.id()), catalog.fluidRevision(p.id()));
@@ -168,7 +168,7 @@ class PilotCryogenicCatalogTest {
 
     @Test
     void theTestNetworkOverrideSelectsThePilot() {
-        var bundled = MaterialCatalog.bundled();
+        var bundled = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
         var pilot = PilotCryogenicTestCatalog.catalog();
         assertEquals("icheme:refinery", bundled.presets().network().packageId(), "the bundled network is unchanged");
         var network = pilot.presets().network();
@@ -240,7 +240,7 @@ class PilotCryogenicCatalogTest {
         var fit = JsonParser.parseString(PilotCryogenicTestCatalog.read(TJL20_METHANE)).getAsJsonObject().getAsJsonObject("ideal_gas_cp");
         refused(PILOT_METHANE, o -> o.add("ideal_gas_cp", fit), "Property icheme:pilot_methane carries ideal_gas_cp in a method with a reference spine");
         // The record itself stays loadable without a fit; only its use is refused.
-        assertTrue(MaterialCatalog.bundled().requirePackage(PilotCryogenicTestCatalog.PACKAGE_ID).properties().get(1).cp().isEmpty());
+        assertTrue(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot().requirePackage(PilotCryogenicTestCatalog.PACKAGE_ID).properties().get(1).cp().isEmpty());
     }
 
     @Test
