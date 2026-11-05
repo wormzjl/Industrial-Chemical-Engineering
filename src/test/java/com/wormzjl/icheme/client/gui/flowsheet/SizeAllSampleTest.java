@@ -142,6 +142,9 @@ class SizeAllSampleTest {
      * <p>O3 of batch 2026-11-04-open-thermo-data runs the sample on the medium crude grade, lighter than Tia Juana: S-6 stands at
      * the same 5.00 and 11.9 bar, the furnace fires 73.0 MW before sizing and 67.7 after, the coil's vapour share is 0.67 and 0.41,
      * and the feed reaches the column at 358.5 °C and 347.1 °C.
+     *
+     * <p>Since the column took the network's water (E30 (a)) its residue leaves a little lighter and cooler, so E-101 gives the
+     * crude less heat and the furnace fires 73.03 MW before sizing, not 73.00.
      */
     @Test
     void theSampleSizedMovesAsThePlanSays() {
@@ -150,7 +153,7 @@ class SizeAllSampleTest {
         assertEquals(FlowsheetRun.Status.STEADY, all.run().status());
         assertEquals(5.00, before.get("S-6").pressure() / 1e5, HUNDREDTH);
         assertEquals(11.9, after.get("S-6").pressure() / 1e5, .15);
-        assertEquals(73.00, run.reports().get("H-101").readings().get("duty") / 1e6, HUNDREDTH);
+        assertEquals(73.03, run.reports().get("H-101").readings().get("duty") / 1e6, HUNDREDTH);
         assertEquals(67.70, all.run().reports().get("H-101").readings().get("duty") / 1e6, .1);
         assertEquals(358.5, before.get("S-7").temperature() - 273.15, .1);
         assertEquals(347.1, after.get("S-7").temperature() - 273.15, .15);

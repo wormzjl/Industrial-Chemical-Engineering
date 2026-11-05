@@ -114,6 +114,7 @@ class UnitSizingSampleTest {
      * S4c: Auto takes the least surface that holds 1.2 × the need, 528 m²: a 1.25 m shell with 5 m tubes, 586 m², where the bare
      * need's least was the plan's 1.00 × 6 m, 450 m². Its wider shell and shorter tubes lose less on both sides. On the medium
      * crude grade (O3 of batch 2026-11-04-open-thermo-data) the need is 573 m², 688 with the spare: the same shell with 6 m tubes, 703 m².
+     * Since the column took the network's water (E30 (a)) the residue brings E-101 a little less heat, and the need is 572 m² (the probe's 578.5).
      */
     @Test
     void e101() {
@@ -122,8 +123,8 @@ class UnitSizingSampleTest {
         closest(unit.rating(), Limit.EXCHANGER_SURFACE);
         var surface = unit.rating().reading(Limit.EXCHANGER_SURFACE);
         assertEquals(703, surface.value(), ONE);
-        assertEquals(573, surface.low(), ONE, "the curves' surface");
-        assertEquals(579.1, probesSurface(), ONE, "the probe's one LMTD at U 1000, from the same streams");
+        assertEquals(572, surface.low(), ONE, "the curves' surface");
+        assertEquals(578.5, probesSurface(), ONE, "the probe's one LMTD at U 1000, from the same streams");
         assertEquals(67.3, read(unit.rating(), Limit.EXCHANGER_HOT_END), TENTH);
         assertEquals(32.7, read(unit.rating(), Limit.EXCHANGER_COLD_END), TENTH);
         assertEquals(32.7, read(unit.rating(), Limit.EXCHANGER_APPROACH), TENTH);
