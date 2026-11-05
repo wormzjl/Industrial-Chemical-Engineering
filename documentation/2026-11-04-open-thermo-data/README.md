@@ -99,7 +99,7 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
   1. O10's stall fix (E30). (a), the single water model, is applied (`3867e710d`, wet revisions r32/r33); the stall fix is open. [CLASSICAL_STALL_APPLY_REVIEW.md](CLASSICAL_STALL_APPLY_REVIEW.md) part 2.
      - F1c (the hold, released only by the stall stop) keeps every root but costs about 10x the polls (medium grid 53,285k, Tia Juana 60,064k) and fails six column tests that pass today. Not committed; the patch and probes are in `tmp/o10-fix/f1c/` and `tmp/o10-fix/runs/`.
      - The cause is the hold's level: converging solves take trace points below the 1e-10 floor and close there; held, they cannot close until the refresh.
-     - The owner chooses between G2 (end a solve whose LU is singular on a sub-floor point, to the refresh) and G1 (hold at the representability floor). Recommendation G2.
+     - The owner chose G2 ("Yes, G2", 2026-11-05), with G1 as the fallback. G2 ends a solve whose LU is singular on a sub-floor point and sends it to the refresh. It is built and measured now.
   2. The retrain (E26) runs in its own session, `neural-retrain`: branch `claude/neural-retrain-open-data-712a75`, batch `2026-11-05-neural-retrain`. Its plan, `NEURAL_RETRAIN_PLAN.md`, with `NEURAL_RETRAIN_DATA.md` (`138b0024e`), was approved by the owner on 2026-11-05: "Approve all A" (D1 to D5). The owner also allowed the torch and numpy download. N0 and N1 run now, on lane 2. N2 waits until O10 states whether its fix changes a formulation revision. M1, the timing run, waits for a free machine. The same day the owner asked for four plan changes:
      - tolerate about 5 % unknown compounds, with research into a model structure that allows it;
      - a VDU data set;
