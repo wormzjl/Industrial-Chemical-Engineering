@@ -27,6 +27,9 @@ Installed 2026-11-05: torch 2.10.0+cu128 (CUDA on the RTX 4070 Ti), numpy 2.3.5,
   - `features`: the bundled model's raw inputs and outputs, the parity reference. Run with `NR_OUT=tmp/neural-retrain/parity`, optionally `NR_CASES` (a labels journal) and `NR_LIMIT`.
 - `model.py`: the Python twin of `V3AnchorTransformerInitializer`, with state-dict names equal to the payload's. Parity check: `python -I tools/neural-retrain/model.py <payload> <features.jsonl>`.
 - `relabel.mjs`: re-derives `sense` and `label` (the overflash criterion) of a journal written before that window changed: `node tools/neural-retrain/relabel.mjs <dir>`.
+- `NeuralRetrainProbe.export` (N2 -> N3): for every label of `NR_LABELS` (journals joined by `;`), the axis-projected model inputs (U1 lumping by nearest normal boiling point), the native anchor on the label's branch, U2's three off-axis bands, targets and phase fractions. Injected rows run on `catalog.restrict(icheme:refinery, their compounds)`, as the simulator's sheet view does (O11 put CO2-I in that package).
+- `train.py` (N3): `python -I tools/neural-retrain/train.py <features.jsonl> <out> [--seed] [--epochs] [--width] [--u2]`; the guide's recipe and loss; normalisation from TRAIN only.
+- `export.py`: a checkpoint as the payload and a schema-4 sidecar the Java reader loads; `NeuralRetrainProbe.features` with `NR_PAYLOAD`/`NR_SIDECAR` then `model.py` checks parity.
 - `tally.mjs`: yield table, failure classes A to D, sense criteria and the VDU anchor count of a labels journal. Run: `node tools/neural-retrain/tally.mjs <dir>`.
 
 ## History
@@ -37,3 +40,4 @@ Installed 2026-11-05: torch 2.10.0+cu128 (CUDA on the RTX 4070 Ti), numpy 2.3.5,
 - 2026-11-05, pilot of record: `relabel.mjs` (re-derives the overflash criterion of an earlier journal); the probe's overflash check keeps its lower bound only. CDU 148 of 300 labels, VDU 20 of 74.
 - 2026-11-05, VDU rerun: cuts sized on their own pumparound (`VDU_CUT_SHARE`, `VDU_LATENT`), cooling 1.0 to 1.6x, steam 0.5 to 1.5x in `design.mjs`: 25 of 75 labels.
 - 2026-11-05, VDU form 3: dry top (top return on tray 2 or lower), `VDU_TOP_WET` state check: 28 of 75 labels.
+- 2026-11-05, pipeline end to end (smoke, pilot labels only): export 112 rows (anchor 112 of 112; 64 rows of the pre-O11 injected basis skipped); `train.py` 160 epochs in 8 s on the GPU (96 train, 16 validation: temperature MAE 9.6 K); `export.py` payload read by the Java loader; Java against Python 5.3e-7. The smoke model puts tray 1 of the light preset at 377 K (old model 414 K, classical 351 to 371 K). Not a candidate: 96 rows, pre-E30 code.

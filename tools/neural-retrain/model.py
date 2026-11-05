@@ -17,17 +17,18 @@ from torch import nn
 WIDTH, HEADS, FEED_FORWARD = 64, 4, 128
 
 
-def widths(components):
-    glob = 54 + components                    # V3GeneralNeuralFeatures.globalWidth
+def widths(components, extra_global=0):
+    glob = 54 + components + extra_global                 # V3GeneralNeuralFeatures.globalWidth
     node = glob + 22                          # V3GeneralNeuralFeatures.nodeWidth (LOCAL_WIDTH 22 + 3 branch columns) minus the 3 branch columns
     output = 4 * components + 5               # V3FactorizedNeuralFeatures.outputWidth
     return glob, node, output, node + output + 4   # inputs: node, full anchor, branch one-hot (3), anchor availability
 
 
 class ColumnModel(nn.Module):
-    def __init__(self, components, width=WIDTH, feed_forward=FEED_FORWARD):
+    def __init__(self, components, width=WIDTH, feed_forward=FEED_FORWARD, extra_global=0):
+        """extra_global: U2's off-axis volatility channels (3) appended to the global features; 0 is the Java layout of today."""
         super().__init__()
-        glob, node, output, inputs = widths(components)
+        glob, node, output, inputs = widths(components, extra_global)
         self.node_width, self.output_width = node, output
         self.embed = nn.Linear(inputs, width)
         self.blocks = nn.ModuleList([nn.TransformerEncoderLayer(width, HEADS, feed_forward, dropout=0.0, activation='gelu',

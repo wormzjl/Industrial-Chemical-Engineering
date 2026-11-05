@@ -141,7 +141,11 @@ class NeuralRetrainProbe {
     static V3ColumnInput injected(V3ColumnInput in, JsonObject injection) {
         var pack = catalog.packages().get(WORLD_PACKAGE);
         if (pack == null) throw new IllegalStateException("No package " + WORLD_PACKAGE);
-        var ids = pack.components(); var axis = in.componentBasis().componentIds();
+        var axis = in.componentBasis().componentIds(); var injectedIds = new java.util.HashSet<String>();
+        for (var compound : injection.getAsJsonArray("compounds")) injectedIds.add(compound.getAsString());
+        // The sheet's view (SheetCompounds: catalog.restrict): the axis and the injected compounds, in the package's order; it holds
+        // only their crystals, so a column without CO2 is not refused for the package's CO2-I (O11).
+        var ids = pack.components().stream().filter(id -> axis.contains(id) || injectedIds.contains(id)).toList();
         double[] axisFeed = in.feedComponentMolarFlowsMolPerSecond(), feed = new double[ids.size()];
         double total = Arrays.stream(axisFeed).sum(), fraction = injection.get("fraction").getAsDouble();
         for (int k = 0; k < axis.size(); k++) {
@@ -189,12 +193,20 @@ class NeuralRetrainProbe {
                 o.get("diameterMetres").getAsDouble());
     }
 
+    static final java.util.concurrent.ConcurrentHashMap<List<String>, MaterialCatalog> VIEWS = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** The catalog a request runs in: the world package restricted to the request's compounds, as the simulator does. */
+    static MaterialCatalog catalogFor(V3ColumnInput in) {
+        if (!WORLD_PACKAGE.equals(in.packageId())) return catalog;
+        return VIEWS.computeIfAbsent(in.componentBasis().componentIds(), ids -> catalog.restrict(WORLD_PACKAGE, ids));
+    }
+
     static boolean vdu(JsonObject row) { return "vdu".equals(row.has("unit") ? row.get("unit").getAsString() : "cdu"); }
 
     static V3ColumnInput build(JsonObject row) { return vdu(row) ? realiseVdu(row) : realise(row); }
 
     static double[] molarMasses(V3ColumnInput in) {
-        var pack = catalog.packages().get(in.packageId()); var ids = in.componentBasis().componentIds();
+        var pack = catalogFor(in).packages().get(in.packageId()); var ids = in.componentBasis().componentIds();
         double[] m = new double[ids.size()];
         for (int k = 0; k < m.length; k++) {
             String id = ids.get(k);
@@ -204,7 +216,7 @@ class NeuralRetrainProbe {
     }
 
     static double[] boilingPoints(V3ColumnInput in) {
-        var pack = catalog.packages().get(in.packageId()); var ids = in.componentBasis().componentIds();
+        var pack = catalogFor(in).packages().get(in.packageId()); var ids = in.componentBasis().componentIds();
         double[] b = new double[ids.size()];
         for (int k = 0; k < b.length; k++) {
             String id = ids.get(k);
@@ -301,6 +313,7 @@ class NeuralRetrainProbe {
     static JsonObject inputJson(V3ColumnInput in) {
         var o = new JsonObject();
         o.addProperty("packageId", in.packageId()); o.addProperty("assayId", in.assayId());
+        o.add("componentIds", JSON.toJsonTree(in.componentBasis().componentIds()));
         o.add("feedComponentMolarFlowsMolPerSecond", JSON.toJsonTree(in.feedComponentMolarFlowsMolPerSecond()));
         o.addProperty("feedTemperatureKelvin", in.feedTemperatureKelvin()); o.addProperty("stageCount", in.stageCount());
         o.addProperty("feedStageNumber", in.feedStageNumber()); o.addProperty("topPressurePascal", in.topPressurePascal());
@@ -350,7 +363,7 @@ class NeuralRetrainProbe {
         try { in = build(row); }
         catch (IllegalArgumentException invalid) { out.addProperty("status", "INVALID_INPUT"); out.addProperty("failure", invalid.getMessage()); return out; }
         out.add("input", inputJson(in));
-        return MaterialRuntime.with(catalog, in.packageId(), () -> {
+        return MaterialRuntime.with(catalogFor(in), in.packageId(), () -> {
             double sigma;
             try { sigma = sigma(in); } catch (RuntimeException failed) { sigma = Double.NaN; out.addProperty("sigmaFailure", String.valueOf(failed.getMessage())); }
             out.addProperty("sigma", sigma);
@@ -436,6 +449,106 @@ class NeuralRetrainProbe {
         Files.writeString(out.resolve("run.json"), new GsonBuilder().setPrettyPrinting().create().toJson(run));
     }
 
+    // ---------------------------------------------------------------- training features (N2 -> N3), U1 lumping
+
+    /** The model's axis: the 19 compounds of the column package the grades are on. */
+    static List<String> axis() { return base[0].componentBasis().componentIds(); }
+
+    /**
+     * U1 (NEURAL_RETRAIN_DATA.md section 5): each off-axis compound of {@code ids} goes to the axis compound with the nearest normal
+     * boiling point (the gases lighter than methane go to methane). Returns, for each of {@code ids}, its axis index.
+     */
+    static int[] lumpMap(V3ColumnInput in) {
+        var ids = in.componentBasis().componentIds(); var ax = axis();
+        double[] nbp = boilingPoints(in), axisNbp = boilingPoints(base[0]);
+        int[] map = new int[ids.size()];
+        for (int k = 0; k < map.length; k++) {
+            int at = ax.indexOf(ids.get(k));
+            if (at < 0) { at = 0; for (int a = 1; a < ax.size(); a++) if (Math.abs(axisNbp[a] - nbp[k]) < Math.abs(axisNbp[at] - nbp[k])) at = a; }
+            map[k] = at;
+        }
+        return map;
+    }
+
+    static double[] lump(double[] flows, int[] map, int width) { double[] out = new double[width]; for (int k = 0; k < flows.length; k++) out[map[k]] += flows[k]; return out; }
+
+    /** The request on the axis package: off-axis flows lumped (U1); identical to {@code in} for a request on the axis. */
+    static V3ColumnInput lumped(V3ColumnInput in) {
+        if (in.packageId().equals(base[0].packageId())) return in;
+        var b = base[0];
+        return new V3ColumnInput(in.schemaVersion(), b.packageId(), b.assayId(), b.componentBasis(), lump(in.feedComponentMolarFlowsMolPerSecond(), lumpMap(in), axis().size()),
+                in.feedTemperatureKelvin(), in.stageCount(), in.feedStageNumber(), in.topPressurePascal(), in.stagePressureDropPascal(), in.specifications(),
+                in.sideDraws(), in.steamFeeds(), in.pumparounds(), in.columnDiameterMetres());
+    }
+
+    /** U2's channels: the off-axis share of the feed with normal boiling point below 150 K, 150 to 320 K, above 320 K. */
+    static double[] offAxisBands(V3ColumnInput in) {
+        double[] bands = new double[3], f = in.feedComponentMolarFlowsMolPerSecond(), nbp = boilingPoints(in);
+        double total = Arrays.stream(f).sum(); var ids = in.componentBasis().componentIds(); var ax = axis();
+        for (int k = 0; k < f.length; k++) if (!ax.contains(ids.get(k))) bands[nbp[k] < 150 ? 0 : nbp[k] <= 320 ? 1 : 2] += f[k] / total;
+        return bands;
+    }
+
+    static V3CondenserPhaseBranch[] BRANCHES = {V3CondenserPhaseBranch.LIQUID_ONLY, V3CondenserPhaseBranch.TWO_PHASE, V3CondenserPhaseBranch.VAPOR_ONLY};
+
+    /** One label's model inputs and targets on the axis: global, nodes, the native anchor on the label's branch, targets, fractions. */
+    static JsonObject trainingRow(JsonObject row) {
+        final V3ColumnInput in;
+        try { in = build(row.getAsJsonObject("design")); }
+        catch (IllegalArgumentException basisChanged) { return null; } // a VDU row on an injected source written before O11's views
+        var s = row.getAsJsonObject("seed");
+        var branch = V3CondenserPhaseBranch.valueOf(s.get("branch").getAsString());
+        int[] map = lumpMap(in); int width = axis().size();
+        double[][] liquid = JSON.fromJson(s.get("liquid"), double[][].class), vapor = JSON.fromJson(s.get("vapor"), double[][].class);
+        if (liquid[0].length != map.length) return null; // a journal written on another basis (an injected row before O11's views): relabel it
+        for (int n = 0; n < liquid.length; n++) { liquid[n] = lump(liquid[n], map, width); vapor[n] = lump(vapor[n], map, width); }
+        var axisInput = lumped(in);
+        return MaterialRuntime.with(catalog, axisInput.packageId(), () -> {
+            var seed = new V3NeuralSeed(axisInput, s.get("propertyRevision").getAsString(), branch, liquid, vapor,
+                    JSON.fromJson(s.get("temperatures"), double[].class), JSON.fromJson(s.get("freeWater"), double[].class), JSON.fromJson(s.get("wetTrays"), boolean[].class));
+            var x = new JsonObject();
+            x.add("id", row.get("id")); x.add("split", row.get("split")); x.addProperty("unit", vdu(row.getAsJsonObject("design")) ? "vdu" : "cdu");
+            x.addProperty("injected", !in.packageId().equals(axisInput.packageId()));
+            x.add("offAxisBands", JSON.toJsonTree(offAxisBands(in)));
+            x.add("feedFractions", JSON.toJsonTree(Arrays.stream(axisInput.feedComponentMolarFlowsMolPerSecond()).map(v -> v / Arrays.stream(axisInput.feedComponentMolarFlowsMolPerSecond()).sum()).toArray()));
+            x.add("global", JSON.toJsonTree(V3GeneralNeuralFeatures.global(axisInput)));
+            x.add("nodes", JSON.toJsonTree(V3GeneralNeuralFeatures.nodes(axisInput, V3CondenserPhaseBranch.TWO_PHASE)));
+            var anchor = V3AnchorTransformerInitializer.NativeAnchor.build(axisInput, branch, () -> {});
+            x.add("anchor", JSON.toJsonTree(anchor.values())); x.addProperty("anchorAvailable", anchor.available());
+            x.addProperty("branch", Arrays.asList(BRANCHES).indexOf(branch));
+            x.addProperty("reflux", axisInput.specifications().stream().anyMatch(sp -> sp instanceof V3ColumnSpecification.OrganicRefluxRatio r && r.ratio() > 0));
+            x.add("targets", JSON.toJsonTree(V3FactorizedNeuralFeatures.targets(seed)));
+            double[][][] fractions = new double[liquid.length][2][width];
+            for (int n = 0; n < liquid.length; n++) for (int p = 0; p < 2; p++) {
+                double[] q = p == 0 ? liquid[n] : vapor[n]; double t = Arrays.stream(q).sum();
+                if (t > 0) for (int c = 0; c < width; c++) fractions[n][p][c] = q[c] / t;
+            }
+            x.add("fractions", JSON.toJsonTree(fractions));
+            x.add("formulationRevision", row.get("formulationRevision"));
+            return x;
+        });
+    }
+
+    @Test void export() throws Exception {
+        setUp();
+        String sources = env("NR_CDU_LABELS", "");
+        if (!sources.isEmpty()) { var map = new LinkedHashMap<String, JsonObject>(); for (var r : read(Path.of(sources))) map.put(r.get("id").getAsString(), r); cduLabels = map; }
+        Path out = Path.of(env("NR_OUT", "tmp/neural-retrain/features")); Files.createDirectories(out);
+        int rows = 0, anchors = 0, skipped = 0;
+        try (BufferedWriter w = Files.newBufferedWriter(out.resolve("features.jsonl"), StandardCharsets.UTF_8)) {
+            for (String journal : env("NR_LABELS", "").split(java.io.File.pathSeparator)) {
+                if (journal.isBlank()) continue;
+                for (var row : read(Path.of(journal))) {
+                    if (!(row.has("label") ? row.get("label").getAsBoolean() : row.has("strict") && row.get("strict").getAsBoolean())) continue;
+                    var x = trainingRow(row);
+                    if (x == null) { skipped++; continue; }
+                    w.write(JSON.toJson(x)); w.newLine(); rows++; if (x.get("anchorAvailable").getAsBoolean()) anchors++;
+                }
+            }
+        }
+        System.out.println("nr export rows=" + rows + " anchors=" + anchors + " skipped=" + skipped);
+    }
+
     // ---------------------------------------------------------------- bundled-model parity reference (N0)
 
     @Test void features() throws Exception {
@@ -443,6 +556,7 @@ class NeuralRetrainProbe {
         byte[] payload, sidecar;
         try (var p = getClass().getResourceAsStream("/data/icheme/neural/v3-column-transformer-regrouped.payload.json");
              var s = getClass().getResourceAsStream("/data/icheme/neural/v3-column-transformer-regrouped.sidecar.json")) { payload = p.readAllBytes(); sidecar = s.readAllBytes(); }
+        if (!env("NR_PAYLOAD", "").isEmpty()) { payload = Files.readAllBytes(Path.of(env("NR_PAYLOAD", ""))); sidecar = Files.readAllBytes(Path.of(env("NR_SIDECAR", ""))); } // an exported candidate
         var model = V3NeuralRegistry.TransformerArtifact.read(new ByteArrayInputStream(payload), new ByteArrayInputStream(sidecar)).initializer();
         var inputs = new ArrayList<Map.Entry<String, V3ColumnInput>>();
         for (int g = 0; g < GRADES.length; g++) inputs.add(Map.entry("preset-" + GRADES[g], base[g]));
@@ -450,13 +564,13 @@ class NeuralRetrainProbe {
         int limit = Integer.parseInt(env("NR_LIMIT", "50"));
         if (!cases.isEmpty()) for (var row : read(Path.of(cases))) {
             if (inputs.size() >= limit + GRADES.length) break;
-            if (row.has("strict") && row.get("strict").getAsBoolean()) inputs.add(Map.entry(row.get("id").getAsString(), realise(row.getAsJsonObject("design"))));
+            if (row.has("strict") && row.get("strict").getAsBoolean() && !vdu(row.getAsJsonObject("design")) && !row.getAsJsonObject("design").getAsJsonObject("composition").has("injection")) inputs.add(Map.entry(row.get("id").getAsString(), build(row.getAsJsonObject("design"))));
         }
         Path out = Path.of(env("NR_OUT", "tmp/neural-retrain/parity")); Files.createDirectories(out);
         try (BufferedWriter w = Files.newBufferedWriter(out.resolve("features.jsonl"), StandardCharsets.UTF_8)) {
             for (var e : inputs) {
                 var in = e.getValue();
-                var o = MaterialRuntime.with(catalog, in.packageId(), () -> {
+                var o = MaterialRuntime.with(catalogFor(in), in.packageId(), () -> {
                     var x = new JsonObject(); x.addProperty("id", e.getKey());
                     double[] global = V3GeneralNeuralFeatures.global(in);
                     x.add("global", JSON.toJsonTree(global));
