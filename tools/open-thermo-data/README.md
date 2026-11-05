@@ -2,7 +2,7 @@
 
 Purpose: re-derive the bundled values that came from NIST Standard Reference Data (the WebBook and JANAF) from open implementations of the same correlations, and measure how far each one moves. Owner decision D-B option 2 of `documentation/2026-11-04-refinery-compounds/DATA_LICENSE_REVIEW.md`.
 
-Batch: `2026-11-04-open-thermo-data`, work packages O2, O3, O4 and O7 (O1 moved the raw NIST copies to the main checkout's `research/`). Reports: `documentation/2026-11-04-open-thermo-data/NIST_REDERIVATION_REVIEW.md`, `CUT_VISCOSITY_REVIEW.md` (O4), `CRUDE_GRADES_APPLY_REVIEW.md` (O3).
+Batch: `2026-11-04-open-thermo-data`, work packages O2, O3, O4 and O7 (O1 moved the raw NIST copies to the main checkout's `research/`), and the PH/UV round-trip fix E21 (P1, P2). Reports: `documentation/2026-11-04-open-thermo-data/NIST_REDERIVATION_REVIEW.md`, `CUT_VISCOSITY_REVIEW.md` (O4), `CRUDE_GRADES_APPLY_REVIEW.md` (O3), `PHUV_ROUNDTRIP_REVIEW.md` (E21).
 
 ## Sources
 
@@ -35,10 +35,14 @@ Node 22 from this folder; the Java probes through Gradle (one at a time, AGENTS.
 15. `O3GradeFluidProbe.java` (test, package `science.fluid.network`, O3): each network fluid preset's vapour volume share at 298.15 K and 1 atm and its bubble point at 298.15 and 350 K, for the comments the grades re-baseline.
 16. `O3FixtureCapture.java` (columnGates, O3): the four grades' column qualification inputs and classical draw volumes (prescribed-drop mode) for `materials/column-preset-inputs.json` and `column-draw-volume-targets.json`; writes `tmp/open-thermo-o3/capture/`.
 17. `O3FeedTemperatureProbe.java` (columnGates, O3): the classical start over a feed-temperature grid, 622 to 644 K, for the Tia Juana column and the medium default with its draws, steam and feed tray varied; prints `o3 grid` lines.
+18. `phuv/PhuvRoundTripProbe.java` (test, package `science.thermo.phase`, E21 P2): the free-water UV round trip of `FluidTpEquilibriumPhUvTest` (crude + N2, water 0.01 and 1.0 of the feed, 340/460/580 K, 0.5/1.4 MPa) with dT/T, dP/P and kernel evaluations, then a `TRACE` section: one TP each on a fresh workspace, water 1e-5 to 1.0 of the feed at 460/580 K and 0.5/1.4 MPa, with the kernel evaluations and the partial-pressure closure residual r/P. Copy to `src/test/java/com/wormzjl/icheme/science/thermo/phase/`, run `./gradlew test --offline --tests com.wormzjl.icheme.science.thermo.phase.PhuvRoundTripProbe`, move it back; prints a `PHUV PROBE` block to the test's standard output (results XML).
+19. `phuv/LegacyPinFlashProbe.java` (test, package `science.fluid.thermo`, E21 P2): the free-water flashes behind `LegacyNetworkPathPinTest`'s digest with their numbers (volume, enthalpy, phases, water split), so that the outputs of two trees diff to the flashes that moved. Run the same way; prints a `PIN FLASH PROBE` block.
+20. `phuv/p1/PhuvRoundTripProbe.java` with `phuv/p1/trace-instrumentation.patch` (E21 P1): P1's form of item 18, with the UV solver's trace at the failing state (460 K, 0.5 MPa, ratio 1.0) and the TP closure at the reference and at the UV answer. It needs the trace hook `FluidTpEquilibrium.uvTrace`: `git apply` the patch on 7d386ba5b (the parent of the E21 code commit; `FluidTpEquilibrium.java` blob 304df9012), run as item 18, then `git apply -R`.
+21. `phuv/optionA1-closure-falsi.patch` and `phuv/optionC-test-tolerance.patch` (E21 P1, records of the options not taken): A1, an Illinois regula falsi inside the old bisection bracket with the fixed point kept (accepting at 1e-13 P); C, the test's UV pressure tolerance widened by 2 `PARTIAL_PRESSURE_TOLERANCE` P on all-steam wet states. Both apply on 7d386ba5b. The chosen form A2 is in the code since the E21 commit.
 
 ## Entry points
 
-`lib.mjs` (evaluators and fits), `derive.mjs`, `records.mjs`, `spine-checks.mjs`, `compat-energy.mjs`, `check-transport.mjs`, `OpenThermoOracleProbe.java`, `ColumnPresetProbe.java`, `WetBoundaryCaptureProbe.java`, `sidecar-schema4.mjs`, `O7BindingProbe.java`, `WetBoundaryTeacherProbe.java`, `O4ViscosityProbe.java`, `O4MixtureEquivalenceProbe.java`, `O4SoftPins.mjs`, `O4Soft.java`, `O3GradePresetProbe.java`, `O3GradeFluidProbe.java`, `O3FixtureCapture.java`, `O3FeedTemperatureProbe.java`.
+`lib.mjs` (evaluators and fits), `derive.mjs`, `records.mjs`, `spine-checks.mjs`, `compat-energy.mjs`, `check-transport.mjs`, `OpenThermoOracleProbe.java`, `ColumnPresetProbe.java`, `WetBoundaryCaptureProbe.java`, `sidecar-schema4.mjs`, `O7BindingProbe.java`, `WetBoundaryTeacherProbe.java`, `O4ViscosityProbe.java`, `O4MixtureEquivalenceProbe.java`, `O4SoftPins.mjs`, `O4Soft.java`, `O3GradePresetProbe.java`, `O3GradeFluidProbe.java`, `O3FixtureCapture.java`, `O3FeedTemperatureProbe.java`, `phuv/PhuvRoundTripProbe.java`, `phuv/LegacyPinFlashProbe.java`, `phuv/p1/PhuvRoundTripProbe.java`.
 
 ## History
 
@@ -48,3 +52,4 @@ Node 22 from this folder; the Java probes through Gradle (one at a time, AGENTS.
 - 2026-11-04: O7 step 3 (O2 decision 7): `WetBoundaryTeacherProbe.java` re-made `tjl20-wet-boundary.json` (condenser outlet 333.953903 to 333.952610 K).
 - 2026-11-04: O4 (E12, E14): `O4ViscosityProbe.java` measures the whole-crude viscosity before and after; `O4MixtureEquivalenceProbe.java` proved the one-term mixture term equal to the old form bit for bit (100,132 mixtures on 5 packages, 0 differing) before the old form was deleted.
 - 2026-11-05: O3: the four `O3*` probes (grade presets on the classical start, grade bubble points, fixture capture, the feed-temperature grid); `O4Soft.java` reports its first outside caller and takes `Supplier` messages.
+- 2026-11-05: E21 (P1, P2): `phuv/` holds the PH/UV round-trip probes (P1's traced form and P2's with the TP closure trace), the legacy pin's flash probe, and the option A1 and C patches. Their logs and outputs stay in the session worktree's `tmp/phuv-roundtrip/`.
