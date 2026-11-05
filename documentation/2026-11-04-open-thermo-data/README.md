@@ -113,7 +113,11 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
        - all 15 audit checks pass, no dry tray, positive flows.
 
        So the pin records a solver limit, not physics. Flipping it is the owner's item.
-     - The owner chose "Try form H" (2026-11-05). H uses F1b's hold, but only on cut-path points: a point whose drop would cut live phases of its component off from the feed (the support's reachability rule). Traces stay free. It is built and measured now.
+     - The owner chose "Try form H" (2026-11-05). H uses F1b's hold, but only on cut-path points: a point whose drop would cut live phases of its component off from the feed (the support's reachability rule). Traces stay free. Results, not landed (`tmp/o10-fix/h/`):
+       - medium grid 8/10 (636 and 644 K fail) at 5,898k polls; presets equal to HEAD; every root kept; the 42 tests pass, F1b's five broken ones included;
+       - at 636 and 644 K whole trace tails sink with nothing live beyond them, and after the refresh the state does not close (residual 1e-4 to 1e-3);
+       - G2 and H lose disjoint points: G2 loses 633 and 640 K, H loses 636 and 644 K.
+     - Open for the owner: land G2 as a partial fix (8/10, the fewest polls, every root kept), with the furnace pin flipped and after the full column suite passes; or keep the stall as a known limit.
   2. The retrain (E26) runs in its own session, `neural-retrain`: branch `claude/neural-retrain-open-data-712a75`, batch `2026-11-05-neural-retrain`. Its plan, `NEURAL_RETRAIN_PLAN.md`, with `NEURAL_RETRAIN_DATA.md` (`138b0024e`), was approved by the owner on 2026-11-05: "Approve all A" (D1 to D5). The owner also allowed the torch and numpy download. N0 and N1 run now, on lane 2. N2 waits until O10 states whether its fix changes a formulation revision. M1, the timing run, waits for a free machine. The same day the owner asked for four plan changes:
      - tolerate about 5 % unknown compounds, with research into a model structure that allows it;
      - a VDU data set;
