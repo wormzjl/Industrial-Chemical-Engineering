@@ -23,7 +23,7 @@
     { "id": "Nitrogen", "cas": "7727-37-9" },
     { "id": "CarbonDioxide", "cas": "124-38-9" }
   ],
-  "pair_library": { "id": "icheme:dwsim_refinery_pr78", "file": "dwsim_refinery_pr78", "revision": "dwsim-10.2.5-d3-r1" },
+  "pair_library": { "id": "icheme:dwsim_refinery_pr78", "file": "dwsim_refinery_pr78", "revision": "dwsim-10.2.5-d3-r2" },
   "volume_reference": { "id": "icheme:chemsep_liquid_reference", "file": "chemsep_liquid_reference", "revision": "chemsep-8.3-tr07-r1" },
   "compounds": [
     { "id": "Hydrogen", "cas": "1333-74-0", "english": "Hydrogen", "appearance": { "color": "#DCE8FA", "transparency": 0.95 } },
