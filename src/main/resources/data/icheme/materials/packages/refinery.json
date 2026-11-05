@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "id": "icheme:refinery",
-  "revision": "refinery-tier1-r2",
+  "revision": "refinery-tier1-r3",
   "method": "icheme:crude_pr78",
   "extends": "icheme:tjl20_methane_nitrogen",
   "components": [
@@ -28,7 +28,14 @@
     "M-xylene",
     "P-xylene",
     "MethylMercaptan",
-    "EthylMercaptan"
+    "EthylMercaptan",
+    {
+      "id": "CarbonDioxide",
+      "properties": "icheme:chemsep_carbon_dioxide"
+    }
+  ],
+  "crystals": [
+    "icheme:crystal_carbon_dioxide_i"
   ],
   "advisory_evidence": [
     "RECONSTRUCTED_PETROLEUM_PROPERTIES: frozen TJL19 reconstruction, not original HYSYS properties; 60 F standard-liquid basis assumed",
@@ -44,6 +51,7 @@
     "REFINERY_PAIRS: icheme:dwsim_refinery_pr78 holds only pairs with a new compound (D3): DWSIM kij_pr.dat, else the DECHEMA pr_ip.dat value nearest 300..600 K, else zero; Methane/HydrogenSulfide 0.08125 from ChemSep pr.ipd; existing pairs unchanged",
     "HYDROGEN_PAIRS_ZERO: every hydrogen pair is zero by rule (owner, 2026-11-04): the narrow-range DECHEMA fits would put hydrogen into the oil; H2 and H2S solubility in oil at k_ij = 0 is a known simplification",
     "COS_CONSTANTS: carbonyl sulfide on CoolProp 8.0.0 Tc 378.77 K, Pc 6.3688 MPa and omega 0.0978 (Lemmon and Span 2006, owner decision D4b); ChemSep correlations otherwise; triple-point pressure omitted",
+    "CO2_DRY_ICE: CO2 from ChemSep 909 (tools/compound-import selection-co2.json), pairs in icheme:dwsim_refinery_pr78_co2; the CO2-I crystal is anchored at its triple point to this family's liquid on the fit ideal gas (E27); the V3 column refuses CO2 views",
     "ESTIMATED_DATA_ENDS: ideal-gas Cp fitted from each compound's ChemSep data start (or triple point) to 900 K and held past its ends; liquid viscosity past the ChemSep data end continued at the Andrade slope, marked estimated; appearances estimated"
   ]
 }

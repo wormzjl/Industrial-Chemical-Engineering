@@ -41,13 +41,27 @@ public final class TiaJuanaTestCatalog {
     /** Runs {@code action} in this catalog, on the TJL20 package, without publishing it. */
     public static <T> T with(Supplier<T> action) { return MaterialRuntime.with(CATALOG, PACKAGE_ID, action); }
 
-    /** The registered thermodynamics of {@code packageId} in this catalog: its {@code crudeFeed} knows Tia Juana. */
+    /**
+     * The registered thermodynamics of {@code packageId} in this catalog: its {@code crudeFeed} knows Tia Juana. The column
+     * refuses a package that admits crystals (the world's package since O11 of batch 2026-11-04-open-thermo-data, CO2-I), so
+     * there it is the view without the crystals' compounds, which an assay does not hold. That view's axis is the package's
+     * less its tail (the crystals' compounds are the package's last), so a feed on it padded with zeros is the package's.
+     */
     public static V3PengRobinsonThermo thermo(String packageId) {
-        return MaterialRuntime.with(CATALOG, packageId, () -> V3PengRobinsonThermo.fromRegisteredPackage(packageId));
+        var pkg = CATALOG.requirePackage(packageId);
+        if (pkg.crystals().isEmpty()) return MaterialRuntime.with(CATALOG, packageId, () -> V3PengRobinsonThermo.fromRegisteredPackage(packageId));
+        var crystalSpecies = pkg.crystals().stream().map(id -> CATALOG.crystals().get(id).component()).collect(java.util.stream.Collectors.toSet());
+        var kept = pkg.components().stream().filter(c -> !crystalSpecies.contains(c)).toList();
+        if (!pkg.components().subList(0, kept.size()).equals(kept))
+            throw new IllegalStateException(packageId + ": the crystals' compounds " + crystalSpecies + " are not the package's last");
+        var view = CATALOG.restrict(packageId, kept);
+        return MaterialRuntime.with(view, packageId, () -> V3PengRobinsonThermo.fromRegisteredPackage(packageId));
     }
 
     /** Tia Juana Light (TJL20) as mole fractions on {@code packageId}'s axis, through the column thermodynamics. */
-    public static double[] feed(String packageId) { return thermo(packageId).crudeFeed(ASSAY_ID).moleFractions(); }
+    public static double[] feed(String packageId) {
+        return java.util.Arrays.copyOf(thermo(packageId).crudeFeed(ASSAY_ID).moleFractions(), CATALOG.requirePackage(packageId).components().size());
+    }
 
     private static Map<String, String> load() {
         var resources = new LinkedHashMap<>(MaterialCatalog.bundled().resources());

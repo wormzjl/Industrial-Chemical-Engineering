@@ -113,10 +113,10 @@ public final class FluidThermodynamics {
                 com.wormzjl.icheme.science.material.MaterialRuntime::water);
         steam=new NetworkPhaseEngine.Steam(water);
         domain=hydrocarbon.domain();
-        // The crystal competition: the package's admitted crystals, on a spine package only (a crystal is anchored to the
-        // spine family's liquid, and its enthalpy is moved to the network datum by the spine's formation enthalpies). None
-        // on every bundled network package: the fluid-only path is unchanged.
-        var admitted=hydrocarbon.spine().isPresent()?PhaseContract.admittedCrystals(catalog,packageId):List.<String>of();
+        // The crystal competition: the package's admitted crystals, on either ideal-gas source (E27). A crystal is anchored
+        // to this family's liquid at its triple point; a spine package's formation enthalpies move it to the network datum,
+        // a fit package's ideal gas is that datum (NetworkCrystals). A view without a crystal's compound admits none.
+        var admitted=PhaseContract.admittedCrystals(catalog,packageId);
         crystalIds=List.copyOf(admitted);crystalSpecies=new boolean[hydrocarbon.componentCount()];
         double ceiling=Double.POSITIVE_INFINITY;
         for(String crystal:admitted) {

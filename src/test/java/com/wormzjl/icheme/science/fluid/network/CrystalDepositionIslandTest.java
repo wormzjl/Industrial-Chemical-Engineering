@@ -91,7 +91,7 @@ class CrystalDepositionIslandTest {
         return Math.abs(state.temperature()-t);
     }
 
-    @Test void theCrystalsAreThePilotsSolidAndTheIceAndTheBundledNetworkPackageHasTheIceOnly() {
+    @Test void theCrystalsAreThePilotsSolidAndTheIceAndTheBundledNetworkPackageHasTheIceAndCarbonDioxideI() {
         var crystals=model.crystalSolids().all();assertEquals(2,crystals.size(),"CO2-I and, last, the free water's ice (WP4)");
         assertTrue(crystals.getLast().water());assertEquals("icheme:crystal_ice_ih",crystals.getLast().material().id());
         var crystal=crystals.getFirst();
@@ -100,9 +100,12 @@ class CrystalDepositionIslandTest {
         assertTrue(model.crystalsCompete(150,new double[]{0,.98,0,.02,0}),"a dry request carrying CO2 below the crystals' ceiling");
         assertFalse(model.crystalsCompete(150,new double[]{0,1,0,0,0}),"no CO2, no competition");
         assertTrue(model.flashTP(150,2e6,new double[]{0,.98,0,.02,0},()->{}).liquidVolume()>0,"CO2 dissolved in liquid methane below its triple point is evaluated");
+        // The bundled network package admits CO2-I on its fit ideal gas since O11 (decision E27); a view without CO2 holds the ice only.
         var bundled=FluidTestSupport.networkModel().crystalSolids().all();
-        assertEquals(1,bundled.size(),"the bundled network package has no crystal competition: its one crystal is the free water's ice");
-        assertTrue(bundled.getFirst().water());
+        assertEquals(2,bundled.size(),"CO2-I and the free water's ice");
+        assertEquals(CO2_I,bundled.getFirst().material().id());assertTrue(bundled.getLast().water());
+        var dry=FluidTestSupport.networkModel().on(java.util.List.of("Methane","Nitrogen")).crystalSolids().all();
+        assertEquals(1,dry.size(),"a view without CO2: the free water's ice only");assertTrue(dry.getFirst().water());
     }
 
     /**

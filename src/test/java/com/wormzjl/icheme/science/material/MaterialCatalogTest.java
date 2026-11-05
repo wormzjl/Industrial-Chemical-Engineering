@@ -162,7 +162,7 @@ class MaterialCatalogTest {
             var o=JsonParser.parseString(entry.getValue()).getAsJsonObject();
             assertTrue(o.has("freezing"),entry.getKey());o.remove("freezing");entry.setValue(o.toString());stripped++;
         }
-        assertEquals(48,stripped,"24 datasets and the 24 Tier 1 imports (W6)");
+        assertEquals(49,stripped,"24 datasets, the 24 Tier 1 imports (W6) and the crude_pr78 CO2 (O11 of batch 2026-11-04-open-thermo-data)");
         var without=MaterialCatalog.parse(resources);
         for(var p:bundled.packages().values()) {
             assertEquals(p.scientificRevision(),without.requirePackage(p.id()).scientificRevision(),p.id());
@@ -175,8 +175,10 @@ class MaterialCatalogTest {
             }
             assertTrue(bundled.freezingPoint(p.id(),"Water").isEmpty(),p.id());
         }
-        var co2=bundled.freezingPoint("icheme:pilot_cryogenic","CarbonDioxide").orElseThrow();
-        assertEquals(bundled.crystals().get("icheme:crystal_carbon_dioxide_i").anchor().temperature(),co2.triplePointTemperature().doubleValue());
+        for(String id:List.of("icheme:pilot_cryogenic","icheme:refinery")) {
+            var co2=bundled.freezingPoint(id,"CarbonDioxide").orElseThrow();
+            assertEquals(bundled.crystals().get("icheme:crystal_carbon_dioxide_i").anchor().temperature(),co2.triplePointTemperature().doubleValue(),id);
+        }
         var pc01=bundled.freezingPoint(ID,"crude_pc01").orElseThrow();
         assertTrue(pc01.estimated());assertNull(pc01.triplePointTemperature());
         assertFalse(bundled.freezingPoint(ID,"Methane").orElseThrow().estimated());

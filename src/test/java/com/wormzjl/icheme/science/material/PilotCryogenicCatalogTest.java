@@ -37,12 +37,14 @@ class PilotCryogenicCatalogTest {
      * pins were hashes of the data, with a physics fingerprint per package (their history is in this file's git log);
      * since then nothing is hashed and each record declares its own revision (owner decisions): the rest of an identity
      * is every record's revision (MaterialCatalogTest checks the composition), and the physics the packages share is
-     * compared directly ({@link #TJL20_PHYSICS}).
+     * compared directly ({@link #TJL20_PHYSICS}). The refinery record is r3 since O11 of batch 2026-11-04-open-thermo-data
+     * (decisions E25, E27): it holds CO2 on its ChemSep dataset and admits the CO2-I crystal, the only column or network
+     * package with a crystal.
      */
     private static final String[][] BUNDLED_PINS = {
         {"icheme:tjl20_methane", "icheme:tjl20_methane@crude-regrouped-r3"},
         {"icheme:tjl20_methane_nitrogen", "icheme:tjl20_methane_nitrogen@crude-regrouped-r3"},
-        {"icheme:refinery", "icheme:refinery@refinery-tier1-r2"},
+        {"icheme:refinery", "icheme:refinery@refinery-tier1-r3"},
     };
     private static final String TJL20 = "icheme:tjl20_methane";
     /**
@@ -94,7 +96,10 @@ class PilotCryogenicCatalogTest {
                 var p = catalog.requirePackage(pin[0]);
                 assertEquals(pin[1], p.id() + "@" + p.revision(), pin[0]);
                 assertTrue(p.scientificRevision().startsWith("method=") && !p.scientificRevision().contains(pin[1]), p.scientificRevision());
-                assertTrue(p.spine().isEmpty() && p.crystals().isEmpty() && catalog.spineRevision(pin[0]).isEmpty() && p.groupContributions() == null, pin[0]);
+                boolean crystal = pin[0].equals("icheme:refinery");
+                assertTrue(p.spine().isEmpty() && p.groupContributions() == null, pin[0]);
+                assertEquals(crystal ? List.of("icheme:crystal_carbon_dioxide_i") : List.of(), p.crystals(), pin[0]);
+                assertEquals(crystal ? "spine:icheme:crystal_carbon_dioxide_i@crystal-carbon_dioxide-i-r2" : "", catalog.spineRevision(pin[0]), pin[0]);
             }
             var axis = catalog.requirePackage(TJL20).components();
             for (String id : TJL20_PHYSICS) assertEquals(catalog.physicsContent(TJL20, axis), catalog.physicsContent(id, axis), id);

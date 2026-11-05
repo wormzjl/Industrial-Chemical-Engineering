@@ -941,10 +941,7 @@ public final class MaterialCatalog {
         for(var record:assays.values()) { var assay=record.on(ids,ps,id); if(assay!=null)packageAssays.put(record.id(),assay); }
         var rows=new ArrayList<List<Double>>(); for(double[] row:matrix) rows.add(Arrays.stream(row).boxed().toList());
         var crystalIds=d.crystals();
-        // A crystal is anchored at its triple point to the spine family's liquid and moved to a consumer's datum by the
-        // spine's formation enthalpies (P2, D10): a package without a spine cannot carry one, and a consumer would run it
-        // fluid-only where a crystal could form (P6).
-        if(!crystalIds.isEmpty()&&spineIds.isEmpty())throw new IllegalArgumentException("crystals: package "+id+" declares crystals without a reference spine, which anchors them");
+        // A crystal is anchored at its triple point to the package family's own liquid, on either ideal-gas source (E27).
         for(String crystalId:crystalIds) {
             var crystal=require(r.crystals(),crystalId,"crystals");
             if(!ids.contains(crystal.component()))throw new IllegalArgumentException("crystals: "+crystalId+" is for "+crystal.component()+", outside the package components");

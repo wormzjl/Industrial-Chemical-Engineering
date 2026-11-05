@@ -66,7 +66,7 @@ class FluidDeviceSpecDomainTest {
 
     // ---------------- from FluidDeviceSpecTest ----------------
     @Test void allRequiredCrudePresetsShareTheExactQualifiedPropertyBasis() {
-        var presets=FluidPresetCatalog.resolve(MaterialCatalog.bundled());assertEquals(7,presets.size());assertTrue(presets.stream().anyMatch(p->p.id().equals("icheme:demo_slurry")&&p.solids().volumeFraction()==.1));
+        var presets=FluidPresetCatalog.resolve(MaterialCatalog.bundled());assertEquals(8,presets.size(),"water, nitrogen, the four grades, CO2 (O11) and the demo slurry");assertTrue(presets.stream().anyMatch(p->p.id().equals("icheme:demo_slurry")&&p.solids().volumeFraction()==.1));
         for(var preset:presets){assertEquals(com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1,preset.moleFractions().length);assertEquals(1,java.util.Arrays.stream(preset.moleFractions()).sum(),1e-12);}
         assertTrue(presets.stream().anyMatch(p->p.name().equals("Oil sand dilbit")));assertTrue(presets.stream().anyMatch(p->p.name().equals("Light crude")));
     }

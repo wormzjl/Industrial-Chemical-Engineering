@@ -5,10 +5,10 @@ import com.wormzjl.icheme.fluid.support.FluidTestSupport;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.wormzjl.icheme.science.fluid.state.EnergyReference;
+import com.wormzjl.icheme.science.fluid.thermo.CoefficientIdealGas;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.fluid.thermo.HydrocarbonModel;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
@@ -106,11 +106,10 @@ class SpinePackageEvaluatorTest {
     }
 
     @Test
-    void theEvaluatorNeedsASpineAndContinuesOutsideIt() {
+    void theEvaluatorTakesEitherIdealGasAndContinuesOutsideIt() {
         var catalog = MaterialCatalog.bundled();
-        var refused = assertThrows(IllegalArgumentException.class,
-                () -> CubicPhaseEvaluator.forPackage(catalog, PhaseTestSupport.NETWORK));
-        assertTrue(refused.getMessage().contains("no reference spine"), refused.getMessage());
+        // A package without a spine takes its fits on the network's datum (decision E27; it was refused before).
+        assertTrue(CubicPhaseEvaluator.forPackage(catalog, PhaseTestSupport.NETWORK).idealGas(0) instanceof CoefficientIdealGas);
         var evaluator = CubicPhaseEvaluator.forPackage(catalog, PILOT);
         var workspace = evaluator.newWorkspace();
         var out = new PhaseState(4);

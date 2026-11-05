@@ -140,7 +140,8 @@ final class SheetCompoundsTest {
     /**
      * A sheet drawn on another package, or on one since removed, runs on the network's method and records by compound ids (owner
      * 2026-11-04): the same bits as the sheet drawn on the network. A feed's compound the network does not hold is parked: the run
-     * names it and goes on.
+     * names it and goes on (helium, which no package holds; CO2 was the example until it joined the network in O11 of batch
+     * 2026-11-04-open-thermo-data).
      */
     @Test void aSheetDrawnOnAnotherPackageRunsOnTheNetworksRecords() {
         var light = new LinkedHashMap<String, Double>();
@@ -158,12 +159,12 @@ final class SheetCompoundsTest {
             for (var id : drawn.streams().keySet())
                 for (int i = 0; i < AXIS.size(); i++) bits(drawn.streams().get(id).amountsView()[i], run.streams().get(id).amountsView()[i], other + " " + id + " " + AXIS.get(i));
         }
-        var carbon = FlowsheetRuns.run(sheet("icheme:pilot_cryogenic", with(light, "CarbonDioxide", 1.)), CATALOG, () -> {
+        var carbon = FlowsheetRuns.run(sheet("icheme:pilot_cryogenic", with(light, "Helium", 1.)), CATALOG, () -> {
         });
         assertEquals(FlowsheetRun.Status.STEADY, carbon.status(), () -> "log " + carbon.log());
         assertTrue(carbon.reports().values().stream().flatMap(report -> report.notes().stream())
-                .anyMatch(note -> note.key().equals("basis.parked") && note.arguments().equals(List.of("CarbonDioxide"))), () -> "reports " + carbon.reports());
-        assertEquals(SheetCompounds.of(sheet(NETWORK, light), CATALOG), SheetCompounds.of(sheet("icheme:pilot_cryogenic", with(light, "CarbonDioxide", 1.)), CATALOG));
+                .anyMatch(note -> note.key().equals("basis.parked") && note.arguments().equals(List.of("Helium"))), () -> "reports " + carbon.reports());
+        assertEquals(SheetCompounds.of(sheet(NETWORK, light), CATALOG), SheetCompounds.of(sheet("icheme:pilot_cryogenic", with(light, "Helium", 1.)), CATALOG));
     }
 
     /**

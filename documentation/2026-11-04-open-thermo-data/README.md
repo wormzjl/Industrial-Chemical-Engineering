@@ -15,6 +15,12 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
 - [COMBUSTION_FLAMMABILITY_REVIEW.md](COMBUSTION_FLAMMABILITY_REVIEW.md): R3 for O9. Combustion heat, flammability limits and flash point: sources and terms, estimates and their errors, design options, and the owner's choices (E23).
 - [NEURAL_GRADES_REVIEW.md](NEURAL_GRADES_REVIEW.md): O8, the existing neural seed forced onto the grades, the medium-grade temperatures and blends; distances from its training ring; the composition-check forms for E7.
 - [CRUDE_GRADES_APPLY_REVIEW.md](CRUDE_GRADES_APPLY_REVIEW.md): O3, the four grades applied, the Tia Juana test overlay, the default preset before and after, the medium grade's classical fragility, the moved sample sizes and the owner choices.
+- [CO2_CRYSTAL_REVIEW.md](CO2_CRYSTAL_REVIEW.md): O11, CO2 for the world list. The crude_pr78 CO2 dataset, the crystal anchored on this family against Span-Wagner, the spine-only crystal rule that stops it, options A to C, and the CO2 pairs (a kij_pr.dat N2-row shift).
+- [CO2_CRYSTAL_APPLY_REVIEW.md](CO2_CRYSTAL_APPLY_REVIEW.md): O11 applied (E27, E28). One crystal rule for both ideal-gas sources, CO2 and CO2-I in `icheme:refinery`, the N2 erratum, the numbers against the probe, identities and tests.
+- [CLASSICAL_STALL_REVIEW.md](CLASSICAL_STALL_REVIEW.md): O10.
+  - The medium grade's classical stall: a log-flow point sinks below its floor inside a frozen-support Newton solve.
+  - The simulator-to-column energy gap: all water, from two water models.
+  - Fix forms F1 to F1b, and gap options (a) to (c).
 
 ## Code areas
 
@@ -69,16 +75,49 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
   - E24: diagnose the medium grade's stall (O10, running on lane 1).
   - E25: CO2 joins the world list with its dry-ice crystal (O11); the column's solid handling is separate, later work.
   - E26: retrain the neural model on open data and today's column, planned first by an opus medium sub-thread.
+- 2026-11-05: O11, [CO2_CRYSTAL_REVIEW.md](CO2_CRYSTAL_REVIEW.md) (probe in `tools/open-thermo-data/o11/`, import `tools/compound-import/selection-co2.json`). Stopped before the package change; no product file changed.
+  - The ChemSep CO2 dataset is made in `tmp/open-thermo-o11/import/`. Anchored on this family, the crystal sublimes at 194.636 K at 1 atm (-0.050 K); the model triple point is 216.5915 K and -0.47 % in pressure; the worst p_sub error is 3.84 % at 150 K.
+  - The engine admits crystals only on spine packages (5 places); the catalog refuses `refinery.json` with the crystal. Options A (one crystal rule for both ideal-gas sources), B (CO2 fluid-only now) and C go to the owner.
+  - kij_pr.dat's N2 row is shifted one column after the diagonal: the D3 N2/CO2 would be 0.1652 (DECHEMA -0.010 to -0.022), and the live N2/H2S 0.1641 is the N2/benzene value.
+- 2026-11-05: O10, [CLASSICAL_STALL_REVIEW.md](CLASSICAL_STALL_REVIEW.md) (probes and forms patch in `tools/open-thermo-data/o10/`). No product file changed.
+  - Stall: in the 30-stage dry surrogate, iteration 16 at 636 K takes PC11 liquid on tray 2 to 5.9e-210 mol/s. Its Jacobian column becomes 0 and the LU is singular, so damped Gauss-Newton creeps to a non-root (1.38e-3). This is a path effect, not existence: a warm continuation from 638.15 K solves all 10 points in at most 4 Newton iterations.
+  - F1b holds a sinking point at its floor, and hands the solve to the support refresh after 8 held iterations that do not halve the residual. Results (polls, form against baseline):
+    - medium grid: 10/10 at 3,445k (baseline 5/10, 6,206k);
+    - Tia Juana grid: 10/10 at 3,228k (6,624k);
+    - light 735k (549k), heavy 1,179k (551k), dilbit 248k (1,325k).
+
+    40 of 44 tests in 6 columnGates classes pass. The 4 failures are in `V3StageContinuationTest`: 3 contracts of the frozen solve, and the wet half-steam case, which now needs no full-budget steam resume.
+  - Gap, 56 to 59 kW on both grades: all water. Steam is a virial gas in the simulator and an ideal gas in V3 (-45 kW); free water is priced 285 J/mol apart at 332 K (+93 kW). The hydrocarbons agree within 0.015 % per stream. The 2e-3 rule fails only with the 1 MPa let-down (2.2e-3).
+- 2026-11-05: O11 applied (E27, E28), [CO2_CRYSTAL_APPLY_REVIEW.md](CO2_CRYSTAL_APPLY_REVIEW.md). CoefficientIdealGas is shared, the 5 spine-only refusals are deleted, CO2 and CO2-I are in `refinery.json` r3 with their own pair library; the probe numbers hold, views without CO2 keep identity and numbers, chain-100 exact 0, quick check identical to the baseline.
 
 ## Open items
 
 - Next:
-  1. O10 (running, lane 1): the medium grade's classical stall and the simulator-to-column energy gap; options go to the owner (E24).
-  2. The retrain plan (E26), `NEURAL_RETRAIN_PLAN.md`, goes to the owner before any training.
-  3. O11: CO2 in the world list with its dry-ice crystal (E25).
+  1. O10's fixes (E30, "Land both"): F1b for the stall, and (a) one water model for the gap. A design phase runs now without Gradle; the landing follows O11's Gradle work in this worktree. (a) bumps the wet revision, so the retrain's N2 labels wait for it.
+  2. The retrain (E26) runs in its own session, `neural-retrain`: branch `claude/neural-retrain-open-data-712a75`, batch `2026-11-05-neural-retrain`. Its plan, `NEURAL_RETRAIN_PLAN.md`, with `NEURAL_RETRAIN_DATA.md` (`138b0024e`), was approved by the owner on 2026-11-05: "Approve all A" (D1 to D5). The owner also allowed the torch and numpy download. N0 and N1 run now, on lane 2. N2 waits until O10 states whether its fix changes a formulation revision. M1, the timing run, waits for a free machine. The same day the owner asked for four plan changes:
+     - tolerate about 5 % unknown compounds, with research into a model structure that allows it;
+     - a VDU data set;
+     - a "does this condition make sense" cleaning step;
+     - two re-iteration rounds that use the first model to gain converged data.
+
+     The session revises its plan first. N1's pilot waits for the revised plan, and the session runs without Gradle until then.
+
+     Revision 2 is `d72caf1e0`, with O10 recorded in `849e684df`.
+     - N0 is done: the venv works on CUDA, and the Python model matches Java to 7.3e-7.
+     - A partial pilot, stopped at 203 of 300 rows, gave 62 % strict labels.
+     - Its decisions after revision 2 are recorded in its own batch, `2026-11-05-neural-retrain`.
+
+     The owner commands the session directly since 2026-11-05 ("I'll take command of the neuro thread directly"). This session no longer relays its decisions. The session uses Gradle lane 1 while this worktree builds on lane 2.
+  3. O11: CO2 in the world list with its dry-ice crystal (E25), applied with option A (E27) and the `kij_pr.dat` erratum (E28); not merged. Open: the final lane (fluid GameTests, `equipmentGates`, `holdGates`, `test slowGates`) and the code guide chapters named in CO2_CRYSTAL_APPLY_REVIEW.md. The d3-r2 bump moves the identity of every view the library gives a pair (state only).
   4. O5: removals, with O3's leftovers (the TJL19 and "global Dalia transport" evidence texts, code comments naming TJL19). After O11, the pilot package moves to the test overlay (E25).
   5. O9: combustion data (E22, E23). First, verify the Bulletin 627 values.
   6. The translation commit (en_us changed in O3 and later), then the final lane on the merged code (E19). It must re-check the fluid GameTests and the hold-gate sample sheets (`ColumnSizingSampleTest`, `SizeAllSampleTest`, `UnitSizingSampleTest`, `LineSizingSampleTest`, `UtilityRegulationTest`, `FlowsheetColumnTest`, `ColumnEjectorTest`).
+- Column solids (E29), later and separate work:
+  - no solid phase transitions in the column;
+  - solid particles as input and output only;
+  - a tray below the freezing point ceases to function.
+
+  Until then the column refuses islands that hold a crystal. The open design points are in E29.
 - Fixed, 2026-11-05 (E21, `b96c1e810`): `FluidTpEquilibriumPhUvTest.freeWaterRoundTripsAndBoiling`, which failed from O7 step 1 (`570c8441c`).
 - Code guide, at merge: `documentation/reference/code-guide/equilibrium-engine.md` (line 191, and the table at lines 364-365) still describes the fixed point and the bisection, and names `PARTIAL_PRESSURE_BISECTIONS` and `PARTIAL_PRESSURE_FIXED_POINT_STEPS`. E21 deleted both. Since E21 the constants are `PARTIAL_PRESSURE_TRIALS` 70, `PARTIAL_PRESSURE_CLOSURE` 1e-13, `PARTIAL_PRESSURE_BRACKET_ULPS` 4, `PARTIAL_PRESSURE_TOLERANCE` 1e-8 and `PARTIAL_PRESSURE_ACCEPTANCE` 1e-6.
 - The neural model (E6, E26): the current model stays until a retrained one replaces it. It must not ship in a public release: its sidecar stores the ExxonMobil compositions. O8 shows it never helps today, and in the game it only spends its probe cap.

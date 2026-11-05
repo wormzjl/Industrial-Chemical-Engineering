@@ -19,6 +19,23 @@ const KIJ_PR_LABELS = {
 const ascii = (s) => s.replace(/[^\x20-\x7e]/g, '').trim();
 export const pairKey = (a, b) => (a < b ? a + '|' + b : b + '|' + a);
 
+/**
+ * Decision E28 (batch 2026-11-04-open-thermo-data): kij_pr.dat's N2 row is shifted one cell to the left after the
+ * diagonal, and its N2 column copies two of the shifted cells. The evidence:
+ * - the N2 row's H2O cell holds -0.0193 while the H2O row's N2 cell is blank; -0.0193 is DECHEMA's N2/CO2 (p310);
+ * - the row's CO2 cell holds 0.1652, DECHEMA's N2/H2S (p318), and its H2S cell 0.1641, which equals N2/benzene (the
+ *   benzene row's N2 cell, DECHEMA p343); its benzene cell is blank;
+ * - all six DECHEMA N2/CO2 fits (pr_ip.dat rows 55 to 60, p306 to p314) lie between -0.010 and -0.022, far from 0.1652.
+ * The reader takes the N2 row after the diagonal one column to the right (the cell under column j belongs to column
+ * j + 1) and checks every N2-column cell after the diagonal: it equals the corrected value (then it is the pair's
+ * cell, as for benzene) or is a copy of the row's shifted cell at that column (CO2, H2S). Result: N2/CO2 -0.0193,
+ * N2/H2S 0.1652, N2/benzene 0.1641, no N2/H2O pair.
+ */
+const SHIFTED_ROW = '7727-37-9';
+const SHIFT_NOTE = 'one-cell shift of the N2 row after the diagonal undone, decision E28';
+// The DECHEMA value each corrected cell equals (ChemSep pr_ip.dat, with the page its comment gives).
+const SHIFT_CHECK = { '124-38-9': "DECHEMA's N2/CO2, p310", '7783-06-4': "DECHEMA's N2/H2S, p318", '71-43-2': "the benzene row's cell, DECHEMA p343" };
+
 /** kij_pr.dat as a map pairKey(cas, cas) -> {kij, cell}; conflicts lists pairs whose two triangle cells disagree. */
 export function readKijPr(dir) {
   const lines = readFileSync(join(dir, 'kij_pr.dat'), 'latin1').split(/\r?\n/).filter((l) => l.trim());
@@ -27,21 +44,53 @@ export function readKijPr(dir) {
     if (!(label in KIJ_PR_LABELS)) throw new Error('kij_pr.dat: unmapped label ' + label);
     return KIJ_PR_LABELS[label];
   });
-  const values = new Map(), conflicts = [];
-  for (const line of lines.slice(1)) {
+  const number = (text) => {
+    const kij = Number(text);
+    if (!Number.isFinite(kij)) throw new Error('kij_pr.dat: bad value ' + text);
+    return kij;
+  };
+  const blank = (text) => !text || text === '-';
+  const rows = lines.slice(1).map((line) => {
     const cells = line.split(';');
     const row = KIJ_PR_LABELS[ascii(cells[0])];
     if (!row) throw new Error('kij_pr.dat: unmapped row ' + cells[0]);
-    cells.slice(1).forEach((cell, j) => {
-      const text = cell.trim();
-      if (!text || text === '-' || cas[j] === row) return;
-      const kij = Number(text);
-      if (!Number.isFinite(kij)) throw new Error('kij_pr.dat: bad value ' + text);
+    return { row, label: ascii(cells[0]), cells: cells.slice(1).map((c) => c.trim()) };
+  });
+  // E28: the N2 row after the diagonal, one column to the right.
+  const diagonal = cas.indexOf(SHIFTED_ROW);
+  const shifted = rows.find((r) => r.row === SHIFTED_ROW);
+  if (diagonal < 0 || !shifted) throw new Error('kij_pr.dat: no N2 row and column');
+  const corrected = new Map(); // column index -> { kij, cell }
+  for (let j = diagonal + 1; j < cas.length; j++) {
+    const text = shifted.cells[j] ?? '';
+    if (blank(text)) continue;
+    if (j + 1 >= cas.length) throw new Error('kij_pr.dat: the N2 row\'s last cell is not blank: ' + text);
+    corrected.set(j + 1, { kij: number(text), cell: `${shifted.label} / ${header[j]}, read as ${header[j + 1]}: ${SHIFT_NOTE}${SHIFT_CHECK[cas[j + 1]] ? '; equals ' + SHIFT_CHECK[cas[j + 1]] : ''}` });
+  }
+  const values = new Map(), conflicts = [];
+  for (const { row, label, cells } of rows) {
+    const after = cas.indexOf(row) > diagonal;
+    cells.forEach((text, j) => {
+      if (blank(text) || cas[j] === row) return;
+      if (row === SHIFTED_ROW && j > diagonal) return; // read above, corrected
+      const kij = number(text);
+      if (cas[j] === SHIFTED_ROW && after) {
+        // An N2-column cell after the diagonal: the corrected value, or a copy of the row's shifted cell there.
+        const i = cas.indexOf(row), fixed = corrected.get(i), copy = shifted.cells[i];
+        if (fixed && fixed.kij === kij) { corrected.delete(i); values.set(pairKey(row, SHIFTED_ROW), { kij, cell: label + ' / ' + header[j] }); return; }
+        if (!blank(copy) && number(copy) === kij) return;
+        throw new Error(`kij_pr.dat: N2-column cell ${label} = ${kij} is neither the corrected N2 row (${fixed ? fixed.kij : 'blank'}) nor its shifted cell (${copy || 'blank'})`);
+      }
       const key = pairKey(row, cas[j]);
       const seen = values.get(key);
       if (seen && seen.kij !== kij) conflicts.push(key + ' ' + seen.kij + ' vs ' + kij);
-      if (!seen) values.set(key, { kij, cell: ascii(cells[0]) + ' / ' + header[j] });
+      if (!seen) values.set(key, { kij, cell: label + ' / ' + header[j] });
     });
+  }
+  for (const [j, value] of corrected) {
+    const key = pairKey(SHIFTED_ROW, cas[j]);
+    if (values.has(key)) throw new Error('kij_pr.dat: corrected N2 pair also read elsewhere: ' + key);
+    values.set(key, value);
   }
   return { values, conflicts };
 }

@@ -187,6 +187,24 @@ function viscosity(c, phase, domainLow) {
   };
 }
 
+/** A freezing sub-record that takes a crystal record's anchor (its values and estimated flag), for a compound with a crystal. */
+function crystalFreezing(component, crystalFile, note) {
+  if (!materialsDir) throw new Error('--materials is required for ' + component);
+  const crystal = JSON.parse(readFileSync(join(materialsDir, 'crystals', crystalFile), 'utf8')), a = crystal.anchor;
+  return { normal_melting_kelvin: a.temperature_kelvin, triple_point_kelvin: a.temperature_kelvin, triple_point_pascal: a.pressure_pascal,
+    fusion_enthalpy_j_per_mol: a.fusion_enthalpy_j_per_mol, estimated: a.estimated ?? false,
+    source: `The anchor of ${crystal.id} (revision ${crystal.revision}), its values and estimated flag. ${note ?? ''} Data only: never a validity floor or a range end.`,
+    revision: crystalFreezingRevision };
+}
+
+/** Notes the gap between a crystal's anchor and a freezing record's triple point. */
+function crystalGap(component, crystalFile, record) {
+  if (!crystalFile || !materialsDir) return;
+  const crystal = JSON.parse(readFileSync(join(materialsDir, 'crystals', crystalFile), 'utf8'));
+  const gap = Math.abs(crystal.anchor.temperature_kelvin - (record.triple_point_kelvin ?? record.normal_melting_kelvin));
+  report.notes.push(`${component}: crystal ${crystal.id} anchor ${crystal.anchor.temperature_kelvin} K, freezing ${record.triple_point_kelvin} K, gap ${gap} K${gap > 0.005 ? ' (EXCEEDS 0.005 K)' : ''}`);
+}
+
 function freezingRecord(c, override, note) {
   if (override) return { ...override, revision: override.revision ?? selection.freezing_revision };
   const record = { normal_melting_kelvin: c.tm ?? c.tt };
@@ -303,7 +321,10 @@ for (const s of selection.compounds) {
   if (muL) visc.liquid = muL.entry;
   if (muV) visc.vapor = muV.entry;
   if (Object.keys(visc).length) property.viscosity = visc;
-  property.freezing = freezingRecord(c, s.freezing_override, s.constants?.freezing_note);
+  // A compound with a crystal record takes the crystal's anchor as its freezing data (as the existing CO2 dataset).
+  property.freezing = s.from_crystal ? crystalFreezing(s.id, s.from_crystal, s.freezing_note)
+    : freezingRecord(c, s.freezing_override, s.constants?.freezing_note);
+  crystalGap(s.id, s.from_crystal, property.freezing);
   write(`properties/${propertiesId.replace(/^[a-z0-9_.-]+:/, '')}.json`, property);
 
   references.push({
@@ -405,20 +426,11 @@ for (const e of selection.freezing_only ?? []) {
         + 'Data only: never a validity floor or a range end.',
       revision: estimateFreezingRevision };
   } else if (e.from_crystal) {
-    if (!materialsDir) throw new Error('--materials is required for ' + e.component);
-    const crystal = JSON.parse(readFileSync(join(materialsDir, 'crystals', e.from_crystal), 'utf8')), a = crystal.anchor;
-    record = { normal_melting_kelvin: a.temperature_kelvin, triple_point_kelvin: a.temperature_kelvin, triple_point_pascal: a.pressure_pascal,
-      fusion_enthalpy_j_per_mol: a.fusion_enthalpy_j_per_mol, estimated: a.estimated ?? false,
-      source: `The anchor of ${crystal.id} (revision ${crystal.revision}), its values and estimated flag. ${e.note ?? ''} Data only: never a validity floor or a range end.`,
-      revision: crystalFreezingRevision };
+    record = crystalFreezing(e.component, e.from_crystal, e.note);
   } else {
     record = freezingRecord(chemsep(e.cas));
   }
-  if ((e.from_crystal ?? e.crystal) && materialsDir) {
-    const crystal = JSON.parse(readFileSync(join(materialsDir, 'crystals', e.from_crystal ?? e.crystal), 'utf8'));
-    const gap = Math.abs(crystal.anchor.temperature_kelvin - (record.triple_point_kelvin ?? record.normal_melting_kelvin));
-    report.notes.push(`${e.component}: crystal ${crystal.id} anchor ${crystal.anchor.temperature_kelvin} K, freezing ${record.triple_point_kelvin} K, gap ${gap} K${gap > 0.005 ? ' (EXCEEDS 0.005 K)' : ''}`);
-  }
+  crystalGap(e.component, e.from_crystal ?? e.crystal, record);
   write(`freezing/${e.properties_file}`, { properties: e.properties, component: e.component, freezing: record });
   report.freezing_only.push({ component: e.component, properties: e.properties, ...record, source: undefined });
 }
