@@ -37,8 +37,8 @@ class RangeContinuationGateTest {
                 else {
                     var property = propertyPackage.properties().get(i);
                     if (property.cp().isEmpty()) continue;
-                    double[] fit = HydrocarbonModel.idealGasFitRange(catalog, id, property);
-                    gas = new NetworkPhaseEngine.CoefficientIdealGas(property, fit[0], fit[1]);
+                    double[] fit = CoefficientIdealGas.fitRange(catalog, id, property);
+                    gas = new CoefficientIdealGas(property, fit[0], fit[1]);
                 }
                 ends(gas, id + " " + component);
                 checked++;
@@ -58,9 +58,9 @@ class RangeContinuationGateTest {
         int n = propertyPackage.components().size();
         for (int i = 0; i < n; i++) {
             var property = propertyPackage.properties().get(i);
-            double[] fit = HydrocarbonModel.idealGasFitRange(catalog, NETWORK, property);
+            double[] fit = CoefficientIdealGas.fitRange(catalog, NETWORK, property);
             double minimum = fit[0], maximum = fit[1];
-            var gas = new NetworkPhaseEngine.CoefficientIdealGas(property, minimum, maximum);
+            var gas = new CoefficientIdealGas(property, minimum, maximum);
             double[] pure = new double[n];
             pure[i] = 1;
             DoubleUnaryOperator cp = t -> eos.evaluateValues(t, 1000, pure, PengRobinsonKernel.Root.VAPOR, eos.prepare(t)).idealGasHeatCapacity();

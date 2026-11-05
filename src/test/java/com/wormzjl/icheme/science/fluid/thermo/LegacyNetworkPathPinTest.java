@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.wormzjl.icheme.fluid.support.FluidTestSupport;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
-import com.wormzjl.icheme.science.thermo.IdealGasFunction;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel;
 import com.wormzjl.icheme.science.thermo.phase.CubicPhaseEvaluator;
 import com.wormzjl.icheme.science.thermo.phase.PhaseDerivatives;
@@ -14,9 +13,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.ArrayList;
 import java.util.HexFormat;
-import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -179,22 +176,14 @@ class LegacyNetworkPathPinTest {
     }
 
     /**
-     * The engine's evaluator of a package without a spine, as {@link NetworkPhaseEngine} builds it: the package's PR78
-     * constants and constant interactions, the network model's own translations, and the {@code shifted_polynomial_5}
-     * fits on the network's datum over the translated model's fit ranges.
+     * The engine's evaluator of a package without a spine: {@link CubicPhaseEvaluator#forPackage}, which since decision
+     * E27 builds it as {@link NetworkPhaseEngine} does ({@link HydrocarbonModel#coefficientEvaluator}: the package's PR78
+     * constants and constant interactions, the model's own translations, and the {@link CoefficientIdealGas} fits on the
+     * network's datum over the translated model's fit ranges). The digest is unchanged by that move: the shared evaluator
+     * is bit for bit the one this test built itself before.
      */
     static CubicPhaseEvaluator evaluator(MaterialCatalog catalog, FluidThermodynamics model) {
-        var propertyPackage = catalog.requirePackage(NETWORK);
-        var translated = model.hydrocarbon.translated();
-        int n = propertyPackage.components().size();
-        double[] translations = new double[n];
-        List<IdealGasFunction> gas = new ArrayList<>(n);
-        for (int i = 0; i < n; i++) {
-            translations[i] = translated.translation(i);
-            gas.add(new NetworkPhaseEngine.CoefficientIdealGas(propertyPackage.properties().get(i),
-                    translated.idealGasMinimumTemperature(i), translated.idealGasMaximumTemperature(i)));
-        }
-        return CubicPhaseEvaluator.fromPackage(propertyPackage, propertyPackage.components(), translations, gas);
+        return CubicPhaseEvaluator.forPackage(catalog, NETWORK);
     }
 
     /** Every number of the probe, in a fixed order, as SHA-256 hex. */

@@ -16,7 +16,8 @@ import java.util.function.Consumer;
  * interactions) are bundled in the main resources; this catalog adds only what a test selection needs, listed in
  * {@code /materials/pilot-cryogenic/index.json}: an override of the resource key
  * {@code data/icheme/materials/networks/default.json} naming the pilot package ({@code MaterialPresets} allows one
- * network configuration), and component fluid presets for methane, ethane and CO2. The override files live outside
+ * network configuration), and component fluid presets for methane and ethane (CO2's is bundled since O11 of batch
+ * 2026-11-04-open-thermo-data). The override files live outside
  * {@code data/} on the test classpath, so the bundled catalog of every other test is not shadowed.
  */
 public final class PilotCryogenicTestCatalog {

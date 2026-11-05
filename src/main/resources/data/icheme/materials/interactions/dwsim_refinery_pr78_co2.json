@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "id": "icheme:dwsim_refinery_pr78_co2",
+  "model": "pr78",
+  "revision": "dwsim-10.2.5-d3-r1",
+  "source": "PR78 k_ij for the pairs that involve an imported compound (owner decision D3): DWSIM 10.2.5 kij_pr.dat; else the DECHEMA Peng-Robinson value of ChemSep pr_ip.dat (Kooijman and Taylor, Artistic License 2.0) whose fitted temperature range is nearest 300..600 K; else no pair (the method's zero). Owner exceptions (tools/compound-import/pair-exceptions.json): no Hydrogen pair; Methane/HydrogenSulfide from ChemSep pr.ipd 2009. Pairs between existing compounds are left to their own libraries.",
+  "pairs": [
+    {
+      "first": "Methane",
+      "second": "CarbonDioxide",
+      "kij": 0.0885,
+      "source": "DWSIM 10.2.5 kij_pr.dat (Metano (C1) / Dixido de Carbono (CO2))"
+    },
+    {
+      "first": "Ethane",
+      "second": "CarbonDioxide",
+      "kij": 0.13,
+      "source": "DWSIM 10.2.5 kij_pr.dat (Etano (C2) / Dixido de Carbono (CO2))"
+    },
+    {
+      "first": "Propane",
+      "second": "CarbonDioxide",
+      "kij": 0.0978,
+      "source": "DECHEMA PR via ChemSep pr_ip.dat row 193: \"CarbonDioxide/C3 T=272-366K P=33.3-53.3bar p593\" (272..366 K; nearest 300..600 K of 5)"
+    },
+    {
+      "first": "Isobutane",
+      "second": "CarbonDioxide",
+      "kij": 0.13,
+      "source": "DWSIM 10.2.5 kij_pr.dat (Isobutano (iC4) / Dixido de Carbono (CO2))"
+    },
+    {
+      "first": "N-butane",
+      "second": "CarbonDioxide",
+      "kij": 0.1352,
+      "source": "DWSIM 10.2.5 kij_pr.dat (n-Butano (nC4) / Dixido de Carbono (CO2))"
+    },
+    {
+      "first": "Isopentane",
+      "second": "CarbonDioxide",
+      "kij": 0.1219,
+      "source": "DWSIM 10.2.5 kij_pr.dat (Isopentano (iC5) / Dixido de Carbono (CO2))"
+    },
+    {
+      "first": "N-pentane",
+      "second": "CarbonDioxide",
+      "kij": 0.1252,
+      "source": "DWSIM 10.2.5 kij_pr.dat (n-Pentano (nC5) / Dixido de Carbono (CO2))"
+    },
+    {
+      "first": "Nitrogen",
+      "second": "CarbonDioxide",
+      "kij": -0.0193,
+      "source": "DWSIM 10.2.5 kij_pr.dat (Nitrognio (N2) / gua (H2O), read as Dixido de Carbono (CO2): one-cell shift of the N2 row after the diagonal undone, decision E28; equals DECHEMA's N2/CO2, p310)"
+    }
+  ]
+}

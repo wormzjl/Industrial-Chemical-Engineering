@@ -35,7 +35,9 @@ class RefineryImportTest {
             return o.has("properties")&&o.get("properties").getAsString().startsWith("icheme:chemsep_");
         });
         edit(resources,"methods/crude_pr78.json",o->{var libraries=new JsonArray();libraries.add("icheme:tjl20");o.add("interactions",libraries);o.addProperty("revision","crude-pr78-r1");});
-        edit(resources,"networks/default.json",o->o.addProperty("package",NETWORK));
+        // O11 (batch 2026-11-04-open-thermo-data) is a later import: its records stay, and its CO2 preset leaves the old
+        // network's list, whose package does not hold CO2.
+        edit(resources,"networks/default.json",o->{o.addProperty("package",NETWORK);var presets=new JsonArray();for(var e:o.getAsJsonArray("fluid_presets"))if(!e.getAsString().equals("carbon_dioxide"))presets.add(e);o.add("fluid_presets",presets);});
         for(String file:List.of("properties/tjl19_isobutane.json","properties/tjl19_isopentane.json"))
             edit(resources,file,o->{var liquid=o.getAsJsonObject("viscosity").getAsJsonObject("liquid");liquid.addProperty("revision","dwsim-viscosity-api-r1");liquid.addProperty("estimated",false);});
         return MaterialCatalog.parse(resources);
@@ -66,7 +68,7 @@ class RefineryImportTest {
         var axis=before.requirePackage(NETWORK).components();var refinery=after.requirePackage(REFINERY);
         assertEquals(axis,refinery.components().subList(0,axis.size()));
         assertEquals(before.physicsContent(NETWORK,axis),after.physicsContent(REFINERY,axis),"the refinery package on the old network's axis");
-        assertEquals(axis.size()+24,refinery.components().size());
+        assertEquals(axis.size()+25,refinery.components().size(),"the 24 Tier 1 compounds and CO2 (O11 of batch 2026-11-04-open-thermo-data)");
         assertTrue(refinery.components().size()+1<=MaterialAxis.MAX_CONSERVED_COMPONENTS,"the world list stays under the cap");
     }
 
@@ -92,7 +94,7 @@ class RefineryImportTest {
     @Test void thePairLibraryAddsOnlyPairsWithANewCompound() {
         var after=TiaJuanaTestCatalog.catalog();var before=before();
         var added=new HashSet<>(after.requirePackage(REFINERY).components());added.removeAll(before.requirePackage(NETWORK).components());
-        assertEquals(24,added.size());
+        assertEquals(25,added.size(),"the 24 Tier 1 compounds and CO2 (O11), whose pairs with the old compounds are their own library's");
         var library=JsonParser.parseString(after.resources().get(ROOT+"interactions/dwsim_refinery_pr78.json")).getAsJsonObject();
         assertEquals(LIBRARY,library.get("id").getAsString());
         double methaneSulfide=Double.NaN;

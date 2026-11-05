@@ -305,13 +305,25 @@ class FluidFactsCompatTest {
     /**
      * The bundled catalog with its network package's record written out (no {@code extends}) as {@code compounds} of its
      * own list, under id {@code id}; the network configuration follows it (no column preset names the network package
-     * since W6). A shorter list holds no crude assay, so the network then offers only its pure presets.
+     * since W6). A shorter list holds no crude assay, so the network then offers only its pure presets. Each of the
+     * package's compounds keeps its dataset in the package (CO2 names its crude_pr78 dataset, not its default, since O11);
+     * a compound new to the list takes its default.
      */
+    /** {@code list} as a package's compound entries: each of {@code pkg}'s compounds with its dataset there, any other by id. */
+    static com.google.gson.JsonArray entries(com.wormzjl.icheme.science.material.MaterialCatalog.Package pkg,List<String> list) {
+        var entries=new com.google.gson.JsonArray();
+        for(String compound:list) {
+            int i=pkg.components().indexOf(compound);
+            if(i<0){entries.add(compound);continue;}
+            var entry=new com.google.gson.JsonObject();entry.addProperty("id",compound);entry.addProperty("properties",pkg.properties().get(i).id());entries.add(entry);
+        }
+        return entries;
+    }
     private static MaterialCatalog network(String id,java.util.function.UnaryOperator<List<String>> compounds) {
         var resources=new HashMap<>(MaterialCatalog.bundled().resources());var whole=CATALOG.requirePackage(PACKAGE).components();
         var record=com.google.gson.JsonParser.parseString(resources.get(NETWORK_RECORD)).getAsJsonObject();record.remove("extends");
         var list=compounds.apply(new ArrayList<>(whole));
-        record.add("components",new com.google.gson.Gson().toJsonTree(list));
+        record.add("components",entries(CATALOG.requirePackage(PACKAGE),list));
         record.addProperty("id",id);resources.put(NETWORK_RECORD,record.toString());
         String network="data/icheme/materials/networks/default.json";
         if(!list.containsAll(whole)) {

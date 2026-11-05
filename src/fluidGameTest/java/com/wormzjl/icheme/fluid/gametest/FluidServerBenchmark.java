@@ -9,7 +9,6 @@ import com.wormzjl.icheme.science.fluid.network.*;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind;
 import com.wormzjl.icheme.science.material.MaterialRuntime;
-import com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -319,7 +318,7 @@ public final class FluidServerBenchmark {
         if(!Set.of("one","many","contention").contains(profile)&&!TIMED_PROFILES.contains(profile))throw new IllegalArgumentException("Unknown benchmark profile "+profile);
         if(Files.exists(server.getWorldPath(LevelResource.ROOT).resolve("data/"+FluidSavedData.DATA_NAME+".dat")))throw new IllegalStateException("Benchmark requires a fresh disposable world");
         var model=FluidThermodynamics.forNetwork(MaterialRuntime.active(),FluidPresetCatalog.NETWORK_PACKAGE);
-        var composition=Arrays.copyOf(MaterialRuntime.with(MaterialRuntime.active(),FluidPresetCatalog.NETWORK_PACKAGE,()->V3PengRobinsonThermo.fromRegisteredPackage(FluidPresetCatalog.NETWORK_PACKAGE).crudeFeed("icheme:medium_crude").moleFractions()),com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.conservedCount());composition[com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.nitrogenIndex()]=.1;composition[com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.waterIndex()]=.2;
+        var composition=Arrays.copyOf(FluidPresetCatalog.resolve(MaterialRuntime.active()).stream().filter(p->p.id().equals("icheme:medium_crude")).findFirst().orElseThrow().moleFractions(),com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.conservedCount());composition[com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.nitrogenIndex()]=.1;composition[com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.waterIndex()]=.2;
         var devices=new ArrayList<PhysicalFluidTopology.Device>();var registrations=new LinkedHashMap<Long,WorldTopologyLedger.Registration>();var stocks=new LinkedHashMap<Long,PassiveNetwork.Reservoir>();var reservoirs=new ArrayList<Long>();
         var ladderOf=new HashMap<Long,Ladder>();
         class Builder {
