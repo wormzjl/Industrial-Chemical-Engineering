@@ -18,7 +18,7 @@ final class V3TruncationSupport {
      * component material balance is not scaled any further down.
      *
      * <p>The fraction multiplies the component's flow scale (its authored feed flow, guarded by
-     * {@code F_total * 1e-12}). At 1e-10 the documented TJL19 trace spike of 2.3e-11 mol/s in a 45.8 mol/s
+     * {@code F_total * 1e-12}). At 1e-10 the documented TJL19 (Tia Juana test fixture) trace spike of 2.3e-11 mol/s in a 45.8 mol/s
      * feed component (5e-13 relative) is two hundred times below the floor, so the two balances whose
      * equilibrated rows collapsed onto one unit vector are not equations at all and the Jacobian is no longer
      * rank deficient. Choosing 1e-11 instead would leave only a factor twenty of margin against a spike whose

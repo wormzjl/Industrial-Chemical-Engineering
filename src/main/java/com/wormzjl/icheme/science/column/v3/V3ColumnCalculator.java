@@ -2832,7 +2832,8 @@ public final class V3ColumnCalculator {
      * upward for the vapour the tray below delivers, each pass reading the values the earlier lifts wrote.
      * A profile that re-enters over several trays is therefore restored in one pass; reading the unlifted
      * state instead made reinsertion a front that could only advance one tray per refresh, which is what
-     * exhausted the refresh cap on the wet TJL19 case and lost it entirely at a cap of one.</p>
+     * exhausted the refresh cap on the wet TJL19 case (a Tia Juana test fixture since 2026-11-05) and lost it entirely
+     * at a cap of one.</p>
      *
      * <p>The same two sweeps also run the opposite rule, {@link #capOversizedPoint}: a retained point the seed
      * put far <em>above</em> the material its neighbours deliver is brought back down to that material. The two
@@ -3134,7 +3135,7 @@ public final class V3ColumnCalculator {
      * existing case moves. Above 30 the schedule gains 30, then 60: a request of 40 becomes 4-8-15-30-40 and
      * a request of 64 becomes 4-8-15-30-60-64.</p>
      *
-     * <p>Measured on the plain TJL19 40-tray literature column (feed tray 37, 250 kPa, reflux 4.17, condenser
+     * <p>Measured on the plain TJL19 40-tray literature column (a Tia Juana test fixture since 2026-11-05; feed tray 37, 250 kPa, reflux 4.17, condenser
      * 332.15 K, 8 MW reboiler): the 15 to 40 jump hands Newton a seed whose energy rows are all short by the
      * same 285 kW and whose first direction the line search rejects at iteration 0, so the request fails after
      * 287 s. With the intermediate 30-stage grid the same column converges in 5.4 s.</p>
