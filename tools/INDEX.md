@@ -10,6 +10,7 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 |---|---|---|---|
 | [crude-grades/](crude-grades/README.md) | Generator of the four open crude grades, the Twu cut viscosity tables, the ECCC mixture refit and draft presets | `2026-11-04-open-thermo-data` | In use since 2026-11-04 |
 | [open-thermo-data/](open-thermo-data/README.md) | NIST-derived values re-derived from CoolProp, CEA, IAPWS; the neural sidecar's trained physics as values; oracle and column probes | `2026-11-04-open-thermo-data` | In progress since 2026-11-04 |
+| [neural-retrain/](neural-retrain/README.md) | Open-data retrain of the column's learned start: design, label and feature probe, Python twin, yield table | `2026-11-05-neural-retrain` | In progress since 2026-11-05 |
 | [compound-import/](compound-import/README.md) | DWSIM/ChemSep data extract and compound record import | `2026-11-04-refinery-compounds` | In progress since 2026-11-04 |
 | [package-rework/](package-rework/README.md) | Package snapshot probe, W1 data migrations, sidecar schema 3, wire-width probe | `2026-11-04-refinery-compounds` | Kept for reference since 2026-11-04 |
 | [process-simulator/](process-simulator/README.md) | Plain-JVM probes: a client can run the column and flashes; the design sheets' sample flowsheet solved by hand | `2026-11-02-process-simulator` | In use since 2026-11-02 |

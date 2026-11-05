@@ -2,7 +2,7 @@
 
 Purpose: retrain the V3 column's learned start on open data (the four generated crude grades and their blends) and today's column (wet condenser, steam, pumparounds, side draws, flow-dependent tray pressure drop), with E7's principal-composition check, and remove the stale regrouped model in the same change. Owner decision E26 of [OPEN_DATA_PLAN.md](../2026-11-04-open-thermo-data/OPEN_DATA_PLAN.md).
 
-Status: In progress since 2026-11-05, on `claude/neural-retrain-open-data-712a75`, which merges into `claude/refinery-compounds-thermos-252973`. Plan approved; N0 and N1 running, N2 waits for O10. Index: [../INDEX.md](../INDEX.md).
+Status: In progress since 2026-11-05, on `claude/neural-retrain-open-data-712a75`, which merges into `claude/refinery-compounds-thermos-252973`. Plan revision 2 waits for the owner; N0 done; no Gradle (lane 2 passed to O11). Index: [../INDEX.md](../INDEX.md).
 
 ## Documents
 
@@ -21,5 +21,13 @@ Status: In progress since 2026-11-05, on `claude/neural-retrain-open-data-712a75
 
 ## Open items
 
-- N2 waits for O10; M1 waits for a free machine.
+- Owner decisions D3 and D5 (revised), D6 to D8 of revision 2; the VDU text after "VDU specific data (".
+- Open checks U0 (the package for off-axis compounds), V0 (the encoding and anchor on the VDU top), M1 (timing, alone).
+- N1 pilot of record after revision 2 is approved; N2 waits for O10.
 - Open measurement M1: time of bind, anchor and inference on the four presets.
+
+## History (continued)
+
+- 2026-11-05, N0: venv (torch 2.10.0+cu128, numpy 2.3.5) in `tmp/neural-retrain/venv`. `tools/neural-retrain/model.py` matches the Java forward pass on the four presets: worst 7.3e-7 relative, 88,852 parameters.
+- 2026-11-05, N1: `design.mjs` and `NeuralRetrainProbe` written. The pilot was stopped at 203 of 300 rows when lane 2 passed to O11: 126 strict (62 %), 38 DRY_SUPERSATURATED, 27 stalls at 30 stages, 10 with steam above the feed rate.
+- 2026-11-05, plan revision 2: the owner's four changes (5 % unknowns, a VDU set, sense checks, two re-iteration rounds), relayed by the base session. NEURAL_RETRAIN_DATA.md sections 5 to 8 added; D3 and D5 revised; D6 to D8 added.

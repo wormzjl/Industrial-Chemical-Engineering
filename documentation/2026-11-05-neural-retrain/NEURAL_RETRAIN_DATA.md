@@ -63,3 +63,76 @@ Companion to [NEURAL_RETRAIN_PLAN.md](NEURAL_RETRAIN_PLAN.md), work packages N1 
   - the out-of-plane limit is the 99th percentile of the TRAIN out-of-plane residuals.
   - Both are measured in N5. O8's 0.3 RMS radius is a ceiling, not the value.
 - The per-compound box (feature x17 to x35, 10 % span margin) stays as the second gate.
+
+## 5. Up to 5 % unknowns (revision 2; D6)
+
+Owner: "The neuro model need to tolerate up to ~5% unknowns, research about the model structure that can accommodate this purpose."
+
+- Physics first. Unknowns are not inert. A grade feed is 527 (heavy) to 912 (light) mol/s; medium is 710. So 5 mol % of a non-condensable (H2, N2, CO) is about 36 mol/s, against about 27 mol/s of off-gas today. It more than doubles the vapour leaving the condenser, and it strips more C3 to C5 into that gas. Heavy unknowns (xylenes, about 412 K) stay in the naphtha and kerosene trays. The seed's top therefore depends on the unknowns' volatility, and a structure that ignores them is wrong at the top. The water-soluble ones (NH3, H2S, SO2) also go into the condenser water in a real plant. The column's free water is pure water, so the model need not carry that.
+- What "unknown" means here: a compound on the column's feed that is not on the model's 19-compound axis. The candidates are the world list's 25 compounds outside the axis: N2 and the 24 of `icheme:refinery`. CO2 is out while E25 refuses it. Open check U0: which package and compound list a column with such compounds solves on. If V3 cannot take them, unknowns cannot reach the model yet, and this rule waits for that package.
+- Forms (at most three):
+  - **U1, volatility lumping before inference.** Each off-axis compound is mapped onto the axis compound with the nearest normal boiling point:
+    - lighter than methane (H2 20 K, N2 77 K, CO 82 K, O2 90 K) -> methane;
+    - ethylene -> ethane;
+    - H2S, propylene, COS -> propane;
+    - SO2, isobutene -> isobutane;
+    - the butenes, butadiene, methyl mercaptan -> n-butane;
+    - ethyl mercaptan -> n-pentane;
+    - C6 and the aromatics -> the nearest crude cut.
+    The fixed 19-slot model predicts. Each unknown is then delumped with its lump's split: the same recovery fraction per node, scaled by its share of the lump. Methane is a fair lump for the gases: at 332 K and 250 kPa every one of them leaves overhead, so the top's total gas and its stripping effect come out right to first order. No architecture change; the lump map is data in the sidecar. Newton corrects the residual difference (heat capacity, exact K).
+  - **U2, U1 plus off-axis channels.** Three extra global features give the off-axis mole share in three volatility bands: normal boiling point below 150 K, 150 to 320 K, above 320 K. The model learns how the top responds beyond the lump. This changes the input width only (global 73 -> 76): a feature revision and a retrain, both already planned.
+  - **U3, property-descriptor tokens.** Each compound is a token built from its constants (Tc, Pc, omega, MW, normal boiling point, density, Cp coefficients). A set encoder (Deep Sets, Zaheer et al. 2017; Set Transformer, Lee et al. 2019) pools the tokens, weighted by mole fraction. It covers any compound, but it needs a new encoder and anchor encoding, and labels with many different compounds before it generalises. Estimated at about 2 days more than U1 or U2, with the most risk.
+  - Recommendation (D6 A): build U1 and U2, compare them in N3, keep the better; do not build U3. This follows the owner's preference for lightweight game-level rules; petroleum practice already characterises unknown fractions by boiling-point lumping.
+- Training injection: about a third of the CDU rows get an injection. 1 to 3 compounds are drawn from the world list (CO2 excluded) with a total of U(0, 5) mol % of the feed, and the hydrocarbon part is renormalised. N3 reports validation errors with and without injection.
+- E7 with unknowns: the off-axis share must be at most 5 %. The known part, renormalised, must pass its family check (D5).
+
+## 6. VDU set (revision 2; D8 placeholder)
+
+Owner: "Data generation needs to include a set of VDU specific data (" (the text breaks off; the base session has asked the owner what it held).
+
+- Since 0.18.0 the V3 column solves a VDU on CDU bottoms (batch [2026-10-28-vacuum-column](../2026-10-28-vacuum-column/README.md)). The accepted case: 10 interior stages, feed stage 8, top 2 kPa(a), diameter 15 m, inlet 355.4 C, zero reflux with dry upper stages, no reboiler, bottom steam, cuts on stages 3 and 6, pumparound cooling of 10 and 15 MW.
+- Broad VDU convergence is open: 228 of 1,000 cold cases passed all checks. That 23 % sets the expected classical yield, and it is the class where re-iteration (section 8) should help most.
+- Owner rule: literature before VDU experiments. The design follows case A ([2026-08-31-v3-vdu](../2026-08-31-v3-vdu/README.md), Ji and Bagajewicz 2002, adopted 2026-09-08): top 1.3 to 8 kPa, flash 3.3 to 6.7 kPa, 8 to 15 stages, no condenser reflux and no reboiler, the heat removed by pumparounds.
+- Feeds: the bottoms of the strict CDU labels, per grade and blend, exported exactly as in `tools/vacuum-column-test/`. The grades are never blended directly, because a residue lies far off the grade plane. The bottoms therefore form a second composition family (D5).
+- Open check V0, before the design is frozen:
+  - the new sidecar's node-pressure floor comes from its labels (guide 9.2), so the old 50 kPa floor does not bind;
+  - zero reflux admits the VAPOR_ONLY branch in `bestBranch`;
+  - the dry-layout formulation revisions (`-phase-r1`) must be listed by the model;
+  - whether `NativeAnchor` (the MATERIAL_CLOSED initializer) builds on a dry zero-reflux top at 1 to 8 kPa is unmeasured. The pilot measures it.
+- Thermo caveats, noted only (no basis change without the owner):
+  - in the 12-cut basis, the HVGO cut point (538 to 566 C) falls in the gap between pc10 (558) and pc11 (661);
+  - PR78 cuts sit 4 to 13 K below Maxwell-Bonnell at 1 to 13 kPa.
+
+## 7. "Does this condition make sense" (revision 2)
+
+Owner: "Data cleaning should include a 'does this condition makes sense' step to prevent too much garbage data."
+
+Every criterion is a physical property of the operating point, never solver difficulty (residual, iterations, time, path). That keeps the guide's rule "never drop by residual, iterations, time, solver path". Counts are reported per criterion.
+
+- At generation, on the inputs, with no solve. Each window is cited in N1 to its source (Watkins 1979, *Petroleum Refinery Distillation*; Kister 1992, *Distillation Design*; or the game's GUI limits). A preset that fails a window flags the window, not the preset.
+  - Heater outlet below cracking: CDU at most about 370 C (643 K), VDU about 400 to 420 C. The revision-1 design reached 660 K, so it narrows to at most 643 K.
+  - Top pressure by column type: CDU about 150 to 350 kPa, VDU 1.3 to 8 kPa.
+  - Stage count by column type: CDU from the constructor's templates, VDU 8 to 15.
+  - Reflux, steam-to-feed, draw and pumparound-duty ranges. Steam never above the feed rate: 10 of the 203 partial-pilot rows broke this, all heavy grade with steam x1.4. The heavy preset itself runs 468 mol/s of steam on 527 mol/s of feed.
+- After labelling, on the converged state:
+  - no tray above the cracking limit;
+  - products in boiling-range order (overhead < naphtha < kerosene < diesel < bottoms, by each product's 50 % point);
+  - positive internal reflux in every wet section;
+  - overflash inside a set range (about 2 to 5 vol % of the feed in practice, cited in N1);
+  - no vanishing product rate (each draw and product at least 0.5 % of the feed);
+  - a VDU residue above the VDU's heater limit flags the case.
+- A row that fails a check is kept in the journal with its criterion, and is not a label. It is not a solver failure, and it stays out of the A to D classes.
+
+## 8. Re-iteration, two rounds (revision 2)
+
+Owner: "Add a re-iteration step to use the first neuro model to generate more converged data to increase coverage, repeat 2 times."
+
+- v1 is trained on the classical labels (N3).
+- Round 1:
+  - run v1 as LNN_FIRST, at D2's poll budget, on every TRAIN input that classical did not solve (stalls, heat gate, VDU), plus about 1,000 fresh requests in the design's thinnest cells;
+  - keep strict native results that pass section 7 only; a network output is never a label;
+  - root disagreements with existing labels go to quarantine;
+  - retrain from scratch on the union to get v2.
+- Round 2: the same with v2, giving v3.
+- Each promotion (v1, v2, v3) is judged on a fresh holdout; a consumed holdout is not blind again. After each round, report coverage per cell and per class (heat gate, VDU, stall band) and the round's cost in polls and hours.
+- Bias guard: inputs that v1 solves are the inputs it already covers. The fresh thin-cell requests and the per-class coverage report show whether a round widened coverage or only deepened it.
