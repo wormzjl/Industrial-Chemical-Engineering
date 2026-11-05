@@ -16,6 +16,10 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
 - [NEURAL_GRADES_REVIEW.md](NEURAL_GRADES_REVIEW.md): O8, the existing neural seed forced onto the grades, the medium-grade temperatures and blends; distances from its training ring; the composition-check forms for E7.
 - [CRUDE_GRADES_APPLY_REVIEW.md](CRUDE_GRADES_APPLY_REVIEW.md): O3, the four grades applied, the Tia Juana test overlay, the default preset before and after, the medium grade's classical fragility, the moved sample sizes and the owner choices.
 - [CO2_CRYSTAL_REVIEW.md](CO2_CRYSTAL_REVIEW.md): O11, CO2 for the world list. The crude_pr78 CO2 dataset, the crystal anchored on this family against Span-Wagner, the spine-only crystal rule that stops it, options A to C, and the CO2 pairs (a kij_pr.dat N2-row shift).
+- [CLASSICAL_STALL_REVIEW.md](CLASSICAL_STALL_REVIEW.md): O10.
+  - The medium grade's classical stall: a log-flow point sinks below its floor inside a frozen-support Newton solve.
+  - The simulator-to-column energy gap: all water, from two water models.
+  - Fix forms F1 to F1b, and gap options (a) to (c).
 
 ## Code areas
 
@@ -74,11 +78,22 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
   - The ChemSep CO2 dataset is made in `tmp/open-thermo-o11/import/`. Anchored on this family, the crystal sublimes at 194.636 K at 1 atm (-0.050 K); the model triple point is 216.5915 K and -0.47 % in pressure; the worst p_sub error is 3.84 % at 150 K.
   - The engine admits crystals only on spine packages (5 places); the catalog refuses `refinery.json` with the crystal. Options A (one crystal rule for both ideal-gas sources), B (CO2 fluid-only now) and C go to the owner.
   - kij_pr.dat's N2 row is shifted one column after the diagonal: the D3 N2/CO2 would be 0.1652 (DECHEMA -0.010 to -0.022), and the live N2/H2S 0.1641 is the N2/benzene value.
+- 2026-11-05: O10, [CLASSICAL_STALL_REVIEW.md](CLASSICAL_STALL_REVIEW.md) (probes and forms patch in `tools/open-thermo-data/o10/`). No product file changed.
+  - Stall: in the 30-stage dry surrogate, iteration 16 at 636 K takes PC11 liquid on tray 2 to 5.9e-210 mol/s. Its Jacobian column becomes 0 and the LU is singular, so damped Gauss-Newton creeps to a non-root (1.38e-3). This is a path effect, not existence: a warm continuation from 638.15 K solves all 10 points in at most 4 Newton iterations.
+  - F1b holds a sinking point at its floor, and hands the solve to the support refresh after 8 held iterations that do not halve the residual. Results (polls, form against baseline):
+    - medium grid: 10/10 at 3,445k (baseline 5/10, 6,206k);
+    - Tia Juana grid: 10/10 at 3,228k (6,624k);
+    - light 735k (549k), heavy 1,179k (551k), dilbit 248k (1,325k).
+
+    40 of 44 tests in 6 columnGates classes pass. The 4 failures are in `V3StageContinuationTest`: 3 contracts of the frozen solve, and the wet half-steam case, which now needs no full-budget steam resume.
+  - Gap, 56 to 59 kW on both grades: all water. Steam is a virial gas in the simulator and an ideal gas in V3 (-45 kW); free water is priced 285 J/mol apart at 332 K (+93 kW). The hydrocarbons agree within 0.015 % per stream. The 2e-3 rule fails only with the 1 MPa let-down (2.2e-3).
 
 ## Open items
 
 - Next:
-  1. O10 (running, lane 1): the medium grade's classical stall and the simulator-to-column energy gap; options go to the owner (E24).
+  1. O10 is done. The owner chooses:
+     - the stall fix: F1b recommended;
+     - the gap option: (a), one water model, recommended. (a) bumps the wet revision, so the retrain's N2 labels wait for it.
   2. The retrain (E26) runs in its own session, `neural-retrain`: branch `claude/neural-retrain-open-data-712a75`, batch `2026-11-05-neural-retrain`. Its plan, `NEURAL_RETRAIN_PLAN.md`, with `NEURAL_RETRAIN_DATA.md` (`138b0024e`), was approved by the owner on 2026-11-05: "Approve all A" (D1 to D5). The owner also allowed the torch and numpy download. N0 and N1 run now, on lane 2. N2 waits until O10 states whether its fix changes a formulation revision. M1, the timing run, waits for a free machine. The same day the owner asked for four plan changes:
      - tolerate about 5 % unknown compounds, with research into a model structure that allows it;
      - a VDU data set;
