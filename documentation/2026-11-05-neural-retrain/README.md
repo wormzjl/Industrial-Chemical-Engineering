@@ -21,9 +21,9 @@ Status: In progress since 2026-11-05, on `claude/neural-retrain-open-data-712a75
 
 ## Open items
 
-- Owner decisions D3 and D5 (revised), D6 to D8 of revision 2; the VDU text after "VDU specific data (".
+- The VDU text after "VDU specific data (" (D8 follows case A until then).
 - Open checks U0 (the package for off-axis compounds), V0 (the encoding and anchor on the VDU top), M1 (timing, alone).
-- N1 pilot of record after revision 2 is approved. N2 waits for the base branch commit of F1b and fix (a) (E30) and a sync with the base branch.
+- N1 pilot of record: needs a Gradle lane from the base session. N2 waits for the base branch commit of F1b and fix (a) (E30) and a sync with the base branch.
 - Open measurement M1: time of bind, anchor and inference on the four presets.
 
 ## History (continued)
@@ -31,4 +31,4 @@ Status: In progress since 2026-11-05, on `claude/neural-retrain-open-data-712a75
 - 2026-11-05, N0: venv (torch 2.10.0+cu128, numpy 2.3.5) in `tmp/neural-retrain/venv`. `tools/neural-retrain/model.py` matches the Java forward pass on the four presets: worst 7.3e-7 relative, 88,852 parameters.
 - 2026-11-05, N1: `design.mjs` and `NeuralRetrainProbe` written. The pilot was stopped at 203 of 300 rows when lane 2 passed to O11: 126 strict (62 %), 38 DRY_SUPERSATURATED, 27 stalls at 30 stages, 10 with steam above the feed rate.
 - 2026-11-05, plan revision 2: the owner's four changes (5 % unknowns, a VDU set, sense checks, two re-iteration rounds), relayed by the base session. NEURAL_RETRAIN_DATA.md sections 5 to 8 added; D3 and D5 revised; D6 to D8 added.
-- 2026-11-05: E29 and E30 recorded (NEURAL_RETRAIN_DATA.md section 9). Frozen-tray counts on the 126 partial-pilot labels: 0 under the pure-freezing-point rule and 0 under the ideal-solubility rule. Frozen trays become a post-label check; CO2 joins the injection list only after the column solids work.
+- 2026-11-05: E30 recorded. The owner: "freezing isn't part of this work ... you will not be training CDU/VDU models based on freezing conditions"; the frozen-tray check is dropped. Revision 2 approved: "Go with recommended" (D3, D5, D6, D7 = A; D8 follows case A until the VDU text arrives).

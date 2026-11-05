@@ -137,17 +137,7 @@ Owner: "Add a re-iteration step to use the first neuro model to generate more co
 - Each promotion (v1, v2, v3) is judged on a fresh holdout; a consumed holdout is not blind again. After each round, report coverage per cell and per class (heat gate, VDU, stall band) and the round's cost in polls and hours.
 - Bias guard: inputs that v1 solves are the inputs it already covers. The fresh thin-cell requests and the per-class coverage report show whether a round widened coverage or only deepened it.
 
-## 9. Frozen trays and solids (E29, E30; 2026-11-05)
+## 9. Freezing out of scope; E30 (2026-11-05)
 
-- E29, the owner's words: "column should not hand solid phase transitions. It should allow solid particles as input/output only" and "if some plate temperature decreases below the freezing point simply let it cease to function". That is the scope of the later column solids work. Until it lands, the column refuses islands whose view holds a crystal, so CO2 stays out of the injection list (section 5). After it lands, CO2 joins the list as a fluid.
-- The axis compounds' freezing data, from the base branch at `ad399df3b`:
-  - light ends 85 to 143 K;
-  - cuts, each the estimated upper bound of an n-paraffin of the cut's molar mass: pc01 178 K, pc04 254 K, pc07 308 K, pc08 326 K, pc09 346 K, pc10 365 K, pc11 377 K, pc12 389 K.
-  - The cuts carry no fusion enthalpy.
-- Overlap with the tray temperatures: pc08 to pc12 melt (upper bound) above the CDU condenser's 320 to 345 K, and a VDU top can sit near these values too. So a rule on a compound's pure freezing point could stop trays that a mixture rule leaves running.
-- Measured on the 126 strict labels of the partial pilot (the lowest node is 320 K, the median tray 1 is 375 K):
-  - pure-freezing-point rule (a compound above 1e-6 of the tray liquid, below its melting point): 0 labels affected;
-  - ideal-solubility rule (x above x_sat, with an n-paraffin fusion entropy of about 11 J/(mol K) per carbon): 0 labels affected, worst ratio 0.97 on a tray above every melting point.
-  - So the CDU labels do not depend on the solids work. VDU labels are not measured yet; the VDU pilot reports the same two counts.
-- Rule for N2: the post-label sense checks (section 7) add "frozen tray", under both rules. A flagged row is kept in the journal and is not a label, because the solids work would change that state (the tray would cease to function).
+- The owner: "freezing isn't part of this work (it's for cryo separation of other compounds), you will not be training CDU/VDU models based on freezing conditions". So there is no frozen-tray check and no freezing condition in the design or the labels. CO2 stays out of the injection list while the column refuses islands that hold a crystal (E25, E29).
 - E30, the owner's words: "Land both". F1b and fix (a), one water model, land on the base branch after O11's Gradle work. Fix (a) bumps the wet formulation revisions, so N2 waits for that commit and a sync.
