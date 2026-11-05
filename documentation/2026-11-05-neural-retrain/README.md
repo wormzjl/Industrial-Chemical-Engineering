@@ -7,10 +7,12 @@ Status: Planned (2026-11-05), on `claude/neural-retrain-open-data-712a75`, which
 ## Documents
 
 - [NEURAL_RETRAIN_PLAN.md](NEURAL_RETRAIN_PLAN.md): expected behaviour, what exists and what was lost, work packages N0 to N7, the compute estimate, owner decisions D1 to D5, the branch relation.
+- [NEURAL_RETRAIN_DATA.md](NEURAL_RETRAIN_DATA.md): the 19-compound basis and the grades, the data generation (composition sampling, factors, screens, yield) and the cleaning rules, the E7 thresholds from the trained spread.
 
 ## History
 
 - 2026-11-05: plan written (no training, no data generation, no `src/` edit, no Gradle run). Facts checked in the code at `25865edf1`: the only caller of the learned start is `ColumnUnit.solve`; the 100 ms cap `LARGE_WET_NEURAL_PROBE_MILLISECONDS`; sidecar schema 4 with six `compositionEdges`.
+- 2026-11-05: owner question on the basis and the data method: NEURAL_RETRAIN_DATA.md added; N2 re-based at the measured 30 to 35 % yield (about 6,000 TRAIN requests, 1.5 h); lognormal perturbation in N1; D3 option B (product-stream feeds); D5 limits from the trained spread.
 
 ## Code areas
 

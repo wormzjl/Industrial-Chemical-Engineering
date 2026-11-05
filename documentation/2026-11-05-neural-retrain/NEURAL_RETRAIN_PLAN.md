@@ -23,8 +23,8 @@ Owner decision E26 of [OPEN_DATA_PLAN.md](../2026-11-04-open-thermo-data/OPEN_DA
 | WP | Inputs -> outputs | Measurement (at most three forms) | Gates |
 |---|---|---|---|
 | N0 environment | `requirements-transformer.txt`, uv cpython 3.12 -> venv in `tmp/neural-retrain/venv`; training folder rebuilt in `tools/neural-retrain/` (train, basis, design, Java feature twin as a test-source probe) | none | Python twins equal Java features and targets on 50 old-format rows; parameter count `76,616 + 644c` |
-| N1 design | the four grades, the presets, the column-operation and simulator-door ranges -> request design (JSON): Dirichlet blends of the 4 grades (vertices and edges oversampled), feed T, top P, reflux, condenser T, steam, PA duties, draw rates, the constructor's stage counts and feed trays, diameter (flow-dependent dP on) | M1: inference, bind and anchor time on the 4 presets (one columnGates run, 10 repeats) | design audit and 5 % pilot (guide section 5): yield and wall time per label |
-| N2 labels | design -> classical labels on the current V3 code (wet condenser, steam, PA, draws, hydraulics), strict acceptance, plus the anchors and features | pilot decides; then one campaign | every label `audit.accepted()` and `satisfiesGates`; no Tia Juana or ExxonMobil composition in the set (checked against the overlay) |
+| N1 design | the 19-compound basis and the four grades ([NEURAL_RETRAIN_DATA.md](NEURAL_RETRAIN_DATA.md) section 1), the presets, the column-operation and simulator-door ranges -> request design (JSON): Dirichlet(0.5) blends of the 4 grades, then each compound x lognormal(0, 0.25) and renormalised (guide 4.3; one third at pure grades and pairs), feed T, top P, reflux, condenser T, steam, PA duties, draw rates, the constructor's stage counts and feed trays, diameter (flow-dependent dP on) | M1: inference, bind and anchor time on the 4 presets (one columnGates run, 10 repeats) | design audit and 5 % pilot (guide section 5): yield and wall time per label |
+| N2 labels | design -> classical labels on the current V3 code (wet condenser, steam, PA, draws, hydraulics), plus the anchors and features; cleaning rules in [NEURAL_RETRAIN_DATA.md](NEURAL_RETRAIN_DATA.md) section 3 | pilot decides; then one campaign | every label passes `prepare_transformer_data.strict`; dedupe, quarantine, failure classes A to D; no Tia Juana or ExxonMobil composition in the set |
 | N3 train | labels -> checkpoints | F1: current architecture from scratch (3 seeds, 160 epochs, export 120/160). F2: half width (d = 32): the composition space is a 3-simplex. F3: F1 with the flow-dependent dP terms as node features, only if F1 misses the hydraulic rows | validation scaled starting residual, tray-1 temperature error, off-gas and condenser-water error; pick one form |
 | N4 qualify | chosen checkpoint -> O8 harness rerun: 4 grades x 10 feed T (622 to 644 K), 12 grade-to-grade blends (w = 0.25, 0.5, 0.75), fresh holdout of 300; arms LNN_FIRST and CURRENT_ONLY | polls, Newton, accepted, rescued, lost | earns its place if (a) accepted on at least 80 % of in-family holdout with median polls at most half of classical, or (b) rescues at least half of the classical stalls; and a failed attempt costs at most the probe budget |
 | N5 integrate | sidecar schema 5 (mean, 3-PC basis, training compositions, box), registry row, poll budget -> `src/main` | E7 check on Tia Juana (refused), the grades and blends (admitted), a CO2/N2 feed (refused) | `V3BundledRegroupedModelTest` successor, `V3NeuralRegistryTest`, `V3NeuralInitializationTest`, `V3LearnedRecoveryTest`, `CrystalPackageConsumersTest`; columnGates on the changed classes only |
@@ -33,11 +33,11 @@ Owner decision E26 of [OPEN_DATA_PLAN.md](../2026-11-04-open-thermo-data/OPEN_DA
 
 Compute estimate (from O8's stored counters, 165 polls/ms, mean classical 3.8 s):
 
-- Requests: about 3,100 training (65 % strict yield -> about 2,000 labels), 550 validation, 300 holdout; pilot 200.
-- N2: 4,150 x 3.8 s = 15,800 CPU-s -> about 35 to 50 min on 8 workers; about 100 min on 4 workers (second Gradle lane).
+- Requests: about 6,000 training (the measured 30 to 35 % strict yield of guide 4.5 -> about 2,000 labels), 550 validation, 300 holdout; pilot 300. The pilot's yield sets the final count.
+- N2: 7,150 x 3.8 s = 27,200 CPU-s -> about 1.5 h on 8 workers; about 3 h on 4 workers (second Gradle lane).
 - N3: about 2 to 3 min per seed on the GPU; 3 seeds x at most 3 forms -> at most 30 min.
 - N4: (40 + 12 + 300) x 2 arms = 704 solves -> about 10 to 15 min on 8 workers. N1 pilot and M1: under 10 min.
-- Total about 2 to 3 h of machine time; N2 and N4 are campaigns: 8 workers only when no other campaign or suite runs, else 4 workers on the second lane.
+- Total about 2.5 to 3.5 h of machine time on 8 workers; N2 and N4 are campaigns: 8 workers only when no other campaign or suite runs, else 4 workers on the second lane.
 
 ## 4. Owner decisions
 
@@ -46,9 +46,12 @@ Compute estimate (from O8's stored counters, 165 polls/ms, mean classical 3.8 s)
   - B: everything now; relabel if O10 changes a revision (about 1 h lost).
   - C: wait for O10's fix.
 - D2, the wall-clock cap. A: replace both learned budgets (100 ms and 2,000 ms) with a control-poll budget, about 150k polls (16 Newton iterations on the medium grade plus the anchor), machine-independent. **Recommended.** B: Newton iteration cap only (16), no time or poll limit. C: keep 100 ms (fails "a seed's use must not depend on the machine's speed").
-- D3, envelope. A: the 4 grades and their blends, the column-operation ranges, the constructor's stage counts. **Recommended.** B: A plus nitrogen in the feed (the nitrogen package has another axis: a second model). Feeds with CO2 stay refused (E25).
+- D3, envelope. The axis is the 19 compounds of `tjl20_methane`; a sour grade or a new compound changes it and must be decided before N2 ([NEURAL_RETRAIN_DATA.md](NEURAL_RETRAIN_DATA.md) section 1).
+  - A: the 4 grades, their blends with the lognormal perturbation, the column-operation ranges, the constructor's stage counts. **Recommended.** A column fed with another column's product (residue to a vacuum column, naphtha to a stabiliser) lies far off the 4-grade plane: E7 refuses it and it runs classical.
+  - B: A plus product-stream feeds by the guide's global composition rule, served by the box alone in that region. Cost: about 2,000 more requests for about 700 labels (the regrouped campaign added 689), about 30 min more labelling. Measured value there: neural-first 145 -> 148 on the ring holdout; off the ring it decides whether the model works at all (33 against 107 neural-only).
+  - C: A plus nitrogen in the feed (another package axis: a second model). Feeds with CO2 stay refused (E25).
 - D4, if N4 fails both (a) and (b): A: ship N6 alone (classical start only, O8's E6 recommendation; saves the failed probe). **Recommended.** B: one more round of N3 forms.
-- D5, E7 thresholds: O8's form C plus box A (in-plane and out-of-plane each at most 0.3 training RMS radius; box with 10 % span margin), re-measured on the new training set in N5. **Recommended.**
+- D5, E7 thresholds: O8's form C plus box A, with limits taken from the trained spread (guide 9.2: the envelope must not exceed the labels). In-plane: inside the hull of the four grades, widened by the 99th percentile of the perturbation's in-plane shift. Out-of-plane: the 99th percentile of the TRAIN residuals. O8's 0.3 RMS radius is only a ceiling. Box with 10 % span margin. Measured in N5. **Recommended.**
 
 ## 5. Branch and merge
 
