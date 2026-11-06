@@ -266,6 +266,9 @@ public final class ShapeRasterizer {
         }
     }
 
+    /** Cached accessory geometry in equipment-local world axes; not part of the bare tank's shell/collision. */
+    public static List<Polygon> tankGauge(EquipmentShape shape){if(!drawing)throw new IllegalStateException("A dedicated server keeps no accessory surfaces");return shape.kind()==EquipmentShape.Kind.TANK?geometry(shape).tankGauge():List.of();}
+
     /** A floating-roof tank's client-drawn parts in the box, or null for any other shape. */
     public static @Nullable Floating floating(EquipmentShape shape) {
         if (!drawing) throw new IllegalStateException("A dedicated server keeps no surfaces");
@@ -1432,6 +1435,14 @@ public final class ShapeRasterizer {
             return reach;
         }
 
+        private volatile List<Polygon> tankGauge;
+        private List<Polygon> tankGauge(){
+            var result=tankGauge;if(result!=null)return result;
+            var accessory=new Mesh();accessory.transform(transform);
+            TankDesign.gauge(accessory,TankDesign.Plan.of(shape.diameter(),(int)shape.tangentLength()));
+            var polygons=new ArrayList<Polygon>();cut(accessory,accessory.facets(),new double[3],polygons);
+            return tankGauge=List.copyOf(polygons);
+        }
         private volatile Floating floating;
         private volatile Roof roof;
 

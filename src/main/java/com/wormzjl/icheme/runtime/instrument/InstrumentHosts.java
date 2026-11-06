@@ -33,7 +33,7 @@ public final class InstrumentHosts {
         synchronized(INDEX_LOCK){
             LOADED.computeIfAbsent(be.getLevel(),l->new HashMap<>()).put(be.getBlockPos().immutable(),extent);
             var equipped=INSTALLED.computeIfAbsent(be.getLevel(),l->new HashMap<>());
-            if(be instanceof Instrument.Holder h&&(!h.instruments().installed().isEmpty()||!h.instruments().sensors().isEmpty()))equipped.put(be.getBlockPos().immutable(),extent);else equipped.remove(be.getBlockPos());
+            if(be instanceof Instrument.Holder h&&(!h.instruments().installed().isEmpty()||!h.instruments().sensors().isEmpty()||h.instruments().fitting()!=null))equipped.put(be.getBlockPos().immutable(),extent);else equipped.remove(be.getBlockPos());
         }
     }
     private static Map<BlockPos,Double> loaded(Level level,boolean installed){synchronized(INDEX_LOCK){return Map.copyOf((installed?INSTALLED:LOADED).getOrDefault(level,Map.of()));}}
@@ -46,7 +46,8 @@ public final class InstrumentHosts {
             if(pos.getCenter().distanceToSqr(centre)>reach*reach||!level.hasChunkAt(pos))continue;
             var h=at(level,pos);if(h==null)continue;
             var mounts=new ArrayList<>(h.mounts());mounts.addAll(Sensor.mounts(h,Sensor.Kind.LEVEL));mounts.addAll(Sensor.mounts(h,Sensor.Kind.FLOW));mounts.addAll(Sensor.mounts(h,Sensor.Kind.SPEED));
-            if(mounts.stream().anyMatch(m->m.centre().distanceToSqr(centre)<=radius*radius))result.putIfAbsent(h.identity(),h);
+            var gauge=LevelGauge.of(h);
+            if(mounts.stream().anyMatch(m->m.centre().distanceToSqr(centre)<=radius*radius)||gauge!=null&&gauge.bounds().distanceToSqr(centre)<=radius*radius)result.putIfAbsent(h.identity(),h);
         }
         return List.copyOf(result.values());
     }
@@ -81,7 +82,37 @@ public final class InstrumentHosts {
     private static Direction reservoirFace(EquipmentShape shape){if(!shape.saddles())return Direction.valueOf(shape.front().name());var n=shape.transform().direction(new double[]{0,0,-1});return Direction.getNearest(n[0],n[1],n[2]);}
     public static Selection select(Collection<Host> hosts,Vec3 eye,Vec3 direction,double reach,GaugeSettings.Kind kind,boolean installedOnly){Selection best=null;Vec3 end=eye.add(direction.scale(reach));for(var h:hosts)for(var m:h.mounts){if(kind!=null&&!m.kinds().contains(kind))continue;if(installedOnly&&h.metadata().installed().stream().noneMatch(i->i.key().mount().equals(m.id())))continue;var hit=m.bounds().clip(eye,end);if(hit.isEmpty())continue;double d=hit.get().distanceTo(eye);if(best==null||d<best.distance)best=new Selection(h,m,d);}return best;}
     public static boolean reachable(net.minecraft.world.entity.player.Player player,Host host,Instrument.Selectable mount){var eye=player.getEyePosition();if(mount.bounds().distanceToSqr(eye)>player.blockInteractionRange()*player.blockInteractionRange())return false;var point=mount.bounds().clip(eye,mount.bounds().getCenter()).orElse(mount.bounds().getCenter());var hit=player.level().clip(new net.minecraft.world.level.ClipContext(eye,point,net.minecraft.world.level.ClipContext.Block.COLLIDER,net.minecraft.world.level.ClipContext.Fluid.NONE,player));return hit.getType()==HitResult.Type.MISS||hit.getLocation().distanceTo(eye)+.025>=point.distanceTo(eye);}
-    public static boolean clear(Level level,Host host,Instrument.Mount mount){for(var pos:BlockPos.betweenClosedStream(mount.bounds()).toList()){if(!level.hasChunkAt(pos))return false;if(pos.equals(host.entity().getBlockPos())||level.getBlockState(pos).canBeReplaced())continue;var owner=at(level,pos);if(owner==null||owner.identity()!=host.identity())return false;}return true;}
+    public static boolean clear(Level level,Host host,Instrument.Selectable mount){for(var pos:BlockPos.betweenClosedStream(mount.bounds()).toList()){if(!level.hasChunkAt(pos))return false;if(pos.equals(host.entity().getBlockPos())||level.getBlockState(pos).canBeReplaced())continue;var owner=at(level,pos);if(owner==null||owner.identity()!=host.identity())return false;}return true;}
+    public record FittingSelection(Host host,Instrument.Selectable mount,double distance){}
+    public static FittingSelection selectFitting(Collection<Host> hosts,Vec3 eye,Vec3 direction,double reach,boolean installedOnly){
+        FittingSelection best=null;var end=eye.add(direction.scale(reach));
+        for(var host:hosts){
+            Instrument.Selectable mount=host.pipe()?host.entity() instanceof FluidDeviceBlockEntity pipe?PipeAccessory.of(pipe):null:LevelGauge.of(host);
+            if(mount==null||installedOnly&&(host.pipe()?legacy(host.entity().getBlockState())==null:!host.metadata().levelGauge()))continue;
+            // Installation only supports the reservoir gauge; pipe fittings keep their existing item path.
+            if(!installedOnly&&host.pipe())continue;
+            var hit=mount.bounds().clip(eye,end);if(hit.isEmpty())continue;double distance=hit.get().distanceTo(eye);
+            if(best==null||distance<best.distance())best=new FittingSelection(host,mount,distance);
+        }
+        return best;
+    }
+    /** Full accessory bounds shared by install ghosts, clearance, hover and wrench validation. */
+    public record LevelGauge(AABB bounds) implements Instrument.Selectable {
+        private static final Map<EquipmentShape,AABB> BOUNDS=new ConcurrentHashMap<>();
+        @Override public String id(){return "tank_level";}
+        public static LevelGauge of(Host host){
+            if(!(host.entity() instanceof EquipmentShellBlockEntity shell)||shell.shape()==null||shell.shape().kind()!=EquipmentShape.Kind.TANK)return null;
+            if(BOUNDS.size()>64)BOUNDS.clear();
+            var box=BOUNDS.computeIfAbsent(shell.shape(),LevelGauge::selectionBounds);
+            return new LevelGauge(box.move(shell.origin()));
+        }
+        static AABB selectionBounds(EquipmentShape shape){
+            var bounds=TankGaugeGeometry.bounds(shape);
+            // The drain ends at grade. Reach tolerance must not make the foundation below it block installation.
+            return new AABB(bounds[0]-.008,bounds[1],bounds[2]-.008,bounds[3]+.008,bounds[4]+.008,bounds[5]+.008);
+        }
+
+    }
     public static Instrument.Type legacy(net.minecraft.world.level.block.state.BlockState state){if(FluidDeviceBlock.hasPump(state))return Instrument.Type.PUMP;if(FluidDeviceBlock.hasCompressor(state))return Instrument.Type.COMPRESSOR;if(FluidDeviceBlock.hasFilter(state))return Instrument.Type.FILTER;if(FluidDeviceBlock.hasSightGlass(state))return Instrument.Type.SIGHT_GLASS;if(FluidDeviceBlock.hasPressureValve(state))return Instrument.Type.PRESSURE_VALVE;if(!state.hasProperty(FluidDeviceBlock.SHUTOFF))return null;return switch(FluidDeviceBlock.cutoff(state)){case NONE->null;case CHECK->Instrument.Type.CHECK;default->Instrument.Type.SHUTOFF;};}
     /** Wrench hit boxes come from the existing fittings' actual model extents, including tall actuators/handles. */
     public record PipeAccessory(AABB bounds) implements Instrument.Selectable {

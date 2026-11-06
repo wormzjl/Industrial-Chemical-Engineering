@@ -78,6 +78,7 @@ public final class ModItems {
     /** A steam turbine's speed pickup (W3): mounted on its coupling guard, it works the turbine's governor valve. */
     public static final DeferredItem<com.wormzjl.icheme.world.item.SensorItem> SPEED_SENSOR=sensor("speed_sensor",com.wormzjl.icheme.runtime.instrument.Sensor.Kind.SPEED);
     private static DeferredItem<com.wormzjl.icheme.world.item.SensorItem> sensor(String name,com.wormzjl.icheme.runtime.instrument.Sensor.Kind kind){return ITEMS.registerItem(name,p->new com.wormzjl.icheme.world.item.SensorItem(p,kind));}
+    public static final DeferredItem<com.wormzjl.icheme.world.item.LiquidLevelGaugeItem> LIQUID_LEVEL_GAUGE = ITEMS.registerItem("liquid_level_gauge", com.wormzjl.icheme.world.item.LiquidLevelGaugeItem::new);
 
     private ModItems() {
     }

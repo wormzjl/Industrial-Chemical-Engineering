@@ -14,15 +14,20 @@ import java.util.UUID;
 /** Immutable persistent attachments and ephemeral published samples, their mounts and their hosts' static metadata. */
 public final class Instrument {
     private Instrument(){}
-    /** What a player attaches: the two gauges and the pipe fittings. */
-    public enum Type { PRESSURE, TEMPERATURE, SIGHT_GLASS, SHUTOFF, CHECK, PRESSURE_VALVE, FILTER, PUMP, COMPRESSOR }
+    /** What a player attaches: the dial gauges, tank level gauge and pipe fittings. */
+    public enum Type { PRESSURE, TEMPERATURE, SIGHT_GLASS, SHUTOFF, CHECK, PRESSURE_VALVE, FILTER, PUMP, COMPRESSOR, LEVEL_GAUGE }
     /** Every mount name; saved by name, like an enum constant. */
-    public static final Set<String> MOUNTS=Set.of("pipe_north","pipe_south","pipe_east","pipe_west","pipe_accessory","pressure_top","pressure_bottom","temperature_top","temperature_bottom","level_body","level_boot","valve_sensor",Sensor.SPEED_PICKUP);
+    public static final Set<String> MOUNTS=Set.of("pipe_north","pipe_south","pipe_east","pipe_west","pipe_accessory","pressure_top","pressure_bottom","temperature_top","temperature_bottom","level_body","level_boot","valve_sensor",Sensor.SPEED_PICKUP,"tank_level");
+    /** One non-dial accessory. Tank instruments and pipe fittings share persistence, revisions and recovery. */
+    public record Fitting(Key key,UUID instance,long revision,Type type) {
+        public Fitting{Objects.requireNonNull(key);Objects.requireNonNull(instance);Objects.requireNonNull(type);if(revision<=0||type==Type.PRESSURE||type==Type.TEMPERATURE||!key.mount().equals(mount(type)))throw new IllegalArgumentException("Invalid accessory fitting");}
+        public static String mount(Type type){return type==Type.LEVEL_GAUGE?"tank_level":"pipe_accessory";}
+    }
     public record Key(long host,String mount) {
         public Key{if(host<=0||mount==null||!MOUNTS.contains(mount))throw new IllegalArgumentException("Invalid instrument key");}
     }
     public record Installed(Key key,UUID instance,long revision,GaugeSettings settings) {
-        public Installed{Objects.requireNonNull(key);Objects.requireNonNull(instance);Objects.requireNonNull(settings);if(revision<=0||key.mount().equals("pipe_accessory")||key.mount().startsWith("pressure_")&&settings.kind()!=GaugeSettings.Kind.PRESSURE||key.mount().startsWith("temperature_")&&settings.kind()!=GaugeSettings.Kind.TEMPERATURE)throw new IllegalArgumentException("Invalid instrument revision or mount kind");}
+        public Installed{Objects.requireNonNull(key);Objects.requireNonNull(instance);Objects.requireNonNull(settings);if(revision<=0||key.mount().equals("pipe_accessory")||key.mount().equals("tank_level")||key.mount().startsWith("pressure_")&&settings.kind()!=GaugeSettings.Kind.PRESSURE||key.mount().startsWith("temperature_")&&settings.kind()!=GaugeSettings.Kind.TEMPERATURE)throw new IllegalArgumentException("Invalid instrument revision or mount kind");}
     }
     public enum Availability { AVAILABLE, NO_FLOW, UNAVAILABLE; public int code(){return switch(this){case AVAILABLE->0;case NO_FLOW->1;case UNAVAILABLE->2;};} public static Availability fromCode(int code){return switch(code){case 0->AVAILABLE;case 1->NO_FLOW;case 2->UNAVAILABLE;default->throw new IllegalArgumentException("Invalid instrument availability");};} }
     public record Sample(double value,long tick,Availability availability) {
@@ -60,6 +65,9 @@ public final class Instrument {
      */
     public static final class Metadata {
         private List<Installed> installed=List.of();
+        private Fitting fitting;
+        public Fitting fitting(){return fitting;}
+        public boolean levelGauge(){return fitting!=null&&fitting.type()==Type.LEVEL_GAUGE;}
         private long revision;
         private List<Sensor.Installed> sensors=List.of();
         public List<Sensor.Installed> sensors(){return sensors;}
@@ -69,15 +77,19 @@ public final class Instrument {
         public void recoverOnBreak(boolean value){recoverOnBreak=value;}
         public List<Installed> installed(){return installed;}
         public long revision(){return revision;}
-        public void set(List<Installed> value,long revision){installed=List.copyOf(value);this.revision=revision;}
-        public void write(CompoundTag tag){tag.putLong("AccessoryRevision",revision);var list=new ListTag();for(var i:installed)list.add(AccessoryFacts.installed(i));tag.put("Instruments",list);var transmitters=new ListTag();sensors.forEach(s->transmitters.add(Sensor.save(s)));tag.put("Sensors",transmitters);}
+        public void set(List<Installed> value,long revision){set(value,revision,null);}
+        public void set(List<Installed> value,long revision,Fitting fitting){installed=List.copyOf(value);this.revision=revision;this.fitting=fitting;}
+        public void write(CompoundTag tag){tag.putLong("AccessoryRevision",revision);var list=new ListTag();for(var i:installed)list.add(AccessoryFacts.installed(i));tag.put("Instruments",list);var transmitters=new ListTag();sensors.forEach(s->transmitters.add(Sensor.save(s)));tag.put("Sensors",transmitters);if(fitting!=null)tag.put("Fitting",AccessoryFacts.fitting(fitting));else tag.remove("Fitting");}
         public void read(CompoundTag tag) {
             try {
                 long saved=tag.getLong("AccessoryRevision");if(saved<0)throw new IllegalArgumentException("Invalid accessory revision");
                 var list=tag.getList("Instruments",10);if(list.size()>6)throw new IllegalArgumentException("Too many host instruments");
                 var result=new java.util.ArrayList<Installed>();for(var t:list)result.add(AccessoryFacts.installed((CompoundTag)t));installed=List.copyOf(result);revision=saved;var sensorList=tag.getList("Sensors",10);if(sensorList.size()>8)throw new IllegalArgumentException("Too many sensors");var sensorCopy=new java.util.ArrayList<Sensor.Installed>();for(var t:sensorList)sensorCopy.add(Sensor.load((CompoundTag)t));sensors=List.copyOf(sensorCopy);
+                var attached=tag.contains("Fitting")?AccessoryFacts.fitting(tag.getCompound("Fitting")):null;
+                if(attached!=null&&(attached.revision()>saved||attached.type()!=Type.LEVEL_GAUGE&&(!result.isEmpty()||!sensors.isEmpty())))throw new IllegalArgumentException("Conflicting accessory copy");
+                fitting=attached;
             } catch(IllegalArgumentException unreadable) {
-                installed=List.of();sensors=List.of();revision=0;com.wormzjl.icheme.IChemE.LOGGER.warn("accessory_copy status=DROPPED detail={}",unreadable.getMessage());
+                installed=List.of();sensors=List.of();fitting=null;revision=0;com.wormzjl.icheme.IChemE.LOGGER.warn("accessory_copy status=DROPPED detail={}",unreadable.getMessage());
             }
         }
     }
