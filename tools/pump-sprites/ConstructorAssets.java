@@ -43,7 +43,7 @@ public final class ConstructorAssets {
         return List.copyOf(boxes);
     }
 
-    private static Box box(String name, double x0, double y0, double z0, double x1, double y1, double z1, String texture) {
+    static Box box(String name, double x0, double y0, double z0, double x1, double y1, double z1, String texture) {
         var faces = new LinkedHashMap<String, Face>();
         for (var direction : DIRECTIONS) faces.put(direction, new Face(texture));
         return new Box(name, new double[]{x0, y0, z0}, new double[]{x1, y1, z1}, faces);
@@ -96,7 +96,7 @@ public final class ConstructorAssets {
         return out;
     }
 
-    private static BufferedImage surface(int width, int height, int colour) {
+    static BufferedImage surface(int width, int height, int colour) {
         var image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
         for (int y = 0; y < height; y++) for (int x = 0; x < width; x++) {
             int grain = ((x / 3 * 17 + y / 2 * 31) & 3) - 1;
@@ -106,7 +106,7 @@ public final class ConstructorAssets {
         return image;
     }
 
-    private static void rect(Graphics2D g, int x, int y, int w, int h, int colour) {
+    static void rect(Graphics2D g, int x, int y, int w, int h, int colour) {
         g.setColor(new Color(colour)); g.fillRect(x, y, w, h);
     }
 
@@ -134,12 +134,22 @@ public final class ConstructorAssets {
     }
 
     private static String model() {
+        var textures = new LinkedHashMap<String, String>();
+        textures.put("particle", "icheme:block/constructor_cabinet");
+        for (var name : sprites().keySet()) textures.put(name, "icheme:block/constructor_" + name);
+        return model(textures, boxes());
+    }
+
+    static String model(Map<String, String> textures, List<Box> boxes) {
         var json = new StringBuilder("{\n  \"parent\": \"minecraft:block/block\",\n  \"textures\": {\n");
-        json.append("    \"particle\": \"icheme:block/constructor_cabinet\"");
-        for (var name : sprites().keySet()) json.append(",\n    \"").append(name).append("\": \"icheme:block/constructor_").append(name).append('"');
+        boolean firstTexture = true;
+        for (var entry : textures.entrySet()) {
+            if (!firstTexture) json.append(",\n"); firstTexture = false;
+            json.append("    \"").append(entry.getKey()).append("\": \"").append(entry.getValue()).append('"');
+        }
         json.append("\n  },\n  \"elements\": [\n");
         boolean first = true;
-        for (var box : boxes()) {
+        for (var box : boxes) {
             if (!first) json.append(",\n"); first = false;
             json.append("    {\n      \"name\": \"").append(box.name()).append("\",\n      \"from\": ").append(vector(box.from()))
                     .append(",\n      \"to\": ").append(vector(box.to())).append(",\n      \"faces\": {");
