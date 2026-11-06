@@ -231,7 +231,7 @@ public final class LineGeometry {
         m.prism(f, flange, halfSeam, t, sides, Material.FLANGE);
         for (int side = -1; side <= 1; side += 2) {
             m.annulus(f, hubR, flange, side * t, sides, side, Material.FLANGE);
-            m.bolts(f, od, hubR, flange, side * t, side, Material.BOLT);
+            m.bolts(f, od, hubR, flange, side * t, side, PipeSizes.drawnBolts(od), Material.BOLT);
             m.frustum(f, hubR, od / 2, side * t, side * (t + hub), sides, Material.PIPE);
         }
         return t + hub;
@@ -314,7 +314,7 @@ public final class LineGeometry {
         boolean hub = .5 - t > z + EPS;
         if (hub) m.frustum(f, od / 2, hubR, z, .5 - t, sides, Material.PIPE);
         m.annulus(f, hub ? hubR : 0, flange, .5 - t, sides, -1, Material.FLANGE);
-        m.bolts(f, od, hub ? hubR : od / 2, flange, .5 - t, -1, Material.BOLT);
+        m.bolts(f, od, hub ? hubR : od / 2, flange, .5 - t, -1, PipeSizes.drawnBolts(od), Material.BOLT);
         double seam = joined ? PipeSizes.FLANGE_SEAM / 2 : 0;
         m.prism(f, flange, .5 - t, .5 - seam, sides, Material.FLANGE);
         if (joined) m.prism(f, flange, .5 - seam, .5, sides, Material.OPENING);
