@@ -1070,6 +1070,9 @@ class ShapeRasterizerTest {
                 if (compact) assertTrue(unit.decks.isEmpty(), "compact tanks have no top platform");
                 if (rolling) innerRailFlanksTheLadder(shape, unit.floating);
                 else assertTrue(ShapeRasterizer.floating(shape).ladder().isEmpty(), "compact and tall narrow tanks have no rolling ladder");
+                var centre = unit.roofPlan.centre();
+                assertEquals(!rolling, unit.inside(new double[]{centre[0], shape.tangentLength() + Access.DECK / 2, centre[2]}),
+                        "tanks without a rolling ladder have a solid safety grating at the rim: " + shape);
             }
             var nozzles = shape.nozzles();
             assertEquals(shape.kind() == Kind.TANK ? 3 : 2, nozzles.size(), shape.toString());
@@ -1114,6 +1117,7 @@ class ShapeRasterizerTest {
         double roof = 0;
         for (var p : f.roof()) roof += area(p);
         assertTrue(roof > Math.PI * 100, "the roof's area " + roof);
+        assertTrue(f.roof().stream().anyMatch(p -> p.material() == Material.OPENING && p.normals()[1] > 0), "rim seal faces the opening above");
         assertNull(ShapeRasterizer.floating(EquipmentShape.storage(Kind.SPHERE, 14, 1, Heading.NORTH, 2)));
     }
 

@@ -23,7 +23,8 @@ import java.util.List;
  * platform over the rim, and the front service region for the optional level-gauge accessory. A tank under {@link #STAIR_SIZE} across has neither
  * walkway nor stair but caged ladders on its right side to the platform. Below {@link #COMPACT_LIMIT} in both diameter
  * and shell height, it instead has a plain external rim ladder, with no platform or rolling ladder. Tanks taller than
- * their diameter also omit the rolling ladder, retaining the platform with a closed inner railing.
+ * their diameter also omit the rolling ladder, retaining the platform with a closed inner railing. Tanks without a
+ * rolling ladder carry a fixed see-through safety grating across the rim.
  * Drawn by the client, apart ({@link ProcessUnit#floating}):
  * the roof (pontoon ring 0.1 D wide, centre deck, rim seal, legs 1.8 m, drain sump), floating on the liquid and landing on
  * its legs, and the rolling ladder, as long as the fill height, hinged at the platform with its foot on a runway on the
@@ -202,6 +203,7 @@ final class TankDesign extends UnitDesign {
     void build(ProcessUnit u) {
         var p = Plan.of(u.shape.diameter(), (int) u.shape.tangentLength());
         shell(u, p);
+        if (!p.rollingLadder()) safetyGrating(u, p);
         double hinge;
         if (p.compact()) {
             // Keep the established rim-access frame so deleting its platform cannot shift existing pipe blocks.
@@ -239,6 +241,25 @@ final class TankDesign extends UnitDesign {
         u.nozzles.add(nozzle(Role.OVERFLOW, p, -1, p.shell - .5));
         u.fluidPoint = new double[]{p.a, .01, p.a - p.r + .02};
         floating(u, p, hinge);
+    }
+
+    /** Fixed rim grating where there is no access down to the roof; its small openings collide as a continuous deck. */
+    private static void safetyGrating(ProcessUnit u, Plan p) {
+        double top = p.shell + Access.DECK, inner = p.r - .06;
+        var axis = new double[]{p.a, 0, p.a};
+        var up = Frame.of(axis, 1, 1);
+        u.mesh.hoop(up, inner, p.r, p.shell, top, p.n, Material.STEELWORK);
+        u.mesh.bore(up, inner, p.shell, top, p.n, Material.STEELWORK);
+        // A bare-metal welded grid, 20 mm bars on 400 mm centres: about 90% open so the roof remains visible. The cross-bars
+        // sit just below the longitudinal bars, avoiding coplanar visible faces at their intersections.
+        double pitch = .4, bar = .02, y = top - bar / 2;
+        int rows = (int) Math.floor(inner / pitch);
+        for (int row = -rows; row <= rows; row++) {
+            double offset = row * pitch, half = Math.sqrt(inner * inner - offset * offset) + .02;
+            u.mesh.bar(new double[]{p.a - half, y, p.a + offset}, new double[]{p.a + half, y, p.a + offset}, bar, UP, Mesh.NO_ENDS, Material.PIPE);
+            u.mesh.bar(new double[]{p.a + offset, y - bar, p.a - half}, new double[]{p.a + offset, y - bar, p.a + half}, bar, UP, Mesh.NO_ENDS, Material.PIPE);
+        }
+        u.solids.add(ProcessUnit.Solid.rod(axis, 1, p.shell, top, p.r, 0));
     }
 
     /**
@@ -567,7 +588,15 @@ final class TankDesign extends UnitDesign {
         roof.annulus(up, rr - pw, rr, top, p.n, 1, Material.SUPPORT);
         roof.annulus(up, 0, rr, under, p.n, -1, Material.SUPPORT);
         roof.annulus(up, 0, rr - pw, deck, p.n, 1, Material.STEELWORK);
-        roof.frustum(up, rr, p.r - EquipmentShape.PLATE - .01, top, top + .15, p.n, Material.OPENING);
+        // The flexible seal bridges the movement clearance and overlaps the inner wall slightly. An outward-facing
+        // frustum widens upwards here, so its face points down and disappears from above; draw both sides of the skin.
+        double seal = p.r - EquipmentShape.PLATE + .01;
+        for (int i = 0; i < p.n; i++) {
+            double a0 = 2 * Math.PI * i / p.n, a1 = 2 * Math.PI * (i + 1) / p.n;
+            var skin = List.of(up.at(a0, rr, top), up.at(a1, rr, top), up.at(a1, seal, top + .15), up.at(a0, seal, top + .15));
+            roof.flat(skin, UP, Material.OPENING);
+            roof.flat(skin, Mesh.neg(UP), Material.OPENING);
+        }
         roof.cylinder(up, .3, under - .3, under, 12, Material.SUPPORT);
         // Legs on the pontoon and on the deck, about 4 m apart round each ring.
         for (double ring : new double[]{rr - pw / 2, (rr - pw) / 2}) {
