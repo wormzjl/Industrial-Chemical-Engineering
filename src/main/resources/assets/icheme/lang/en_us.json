@@ -2881,7 +2881,7 @@
   "gui.icheme.data.port": "Data port %s",
   "block.icheme.creative_power": "Creative RF Power Source",
   "gui.icheme.equipment_constructor.motor.base_speed": "Base speed",
-  "gui.icheme.equipment_constructor.motor.vfd.hint": "All motors use a variable-frequency drive. Power and base speed define the torque limit.",
+  "gui.icheme.equipment_constructor.motor.vfd.hint": "All motors use a variable-frequency drive with a maximum speed of 3000 rpm. Power and base speed define the torque limit.",
   "gui.icheme.fluid.inline.rating": "Fixed rating",
   "gui.icheme.fluid.inline.pump_rating": "%s m³/h at 25 m head. The integral drive draws electrical power.",
   "gui.icheme.fluid.inline.compressor_rating": "%s m³/h at inlet conditions; nominal air pressure ratio 1.5. The integral drive draws electrical power.",
@@ -2893,5 +2893,6 @@
   "gui.icheme.machine.mode.manual": "Manual",
   "gui.icheme.machine.mode.auto": "Auto",
   "gui.icheme.machine.auto.hint": "Link exactly one driven pump or compressor by data cable. It must also share the shaft train. Then press Apply.",
-  "gui.icheme.equipment_constructor.motor.base_speed.hint": "Speed where the motor reaches its rated power. Below it torque is limited; above it power is limited."
+  "gui.icheme.equipment_constructor.motor.base_speed.hint": "Speed where the motor reaches its rated power. Below it torque is limited; above it power is limited.",
+  "gui.icheme.machine.speed.motor.hint": "Set the motor speed in rpm, up to 3000 rpm. Then press Apply."
 }

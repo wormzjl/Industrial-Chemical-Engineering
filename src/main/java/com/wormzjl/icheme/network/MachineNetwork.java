@@ -328,8 +328,12 @@ public final class MachineNetwork {
         try {
             next = switch (u.kind()) {
                 case MOTOR, STEAM_TURBINE -> {
-                    if (asked.mode() == ShaftTrain.Mode.SPEED && (asked.setPoint() < Motor.LOWEST_SPEED || asked.setPoint() > (u.kind()==ShaftNetwork.Kind.MOTOR?Motor.HIGHEST_SPEED:MAXIMUM_SHARE)))
-                        yield refuse(String.format(java.util.Locale.ROOT, "the speed lies between %.0f %% and %.0f %%", 100 * Motor.LOWEST_SPEED, 100 * (u.kind()==ShaftNetwork.Kind.MOTOR?Motor.HIGHEST_SPEED:MAXIMUM_SHARE)));
+                    if(asked.mode()==ShaftTrain.Mode.SPEED) {
+                        if(u.kind()==ShaftNetwork.Kind.MOTOR&&(asked.setPoint()<Motor.LOWEST_SPEED||asked.setPoint()*u.designSpeed()>Motor.MAXIMUM_RPM))
+                            yield refuse(String.format(java.util.Locale.ROOT,"the speed lies between %.0f and %.0f rpm",Motor.LOWEST_SPEED*u.designSpeed(),Motor.MAXIMUM_RPM));
+                        if(u.kind()!=ShaftNetwork.Kind.MOTOR&&(asked.setPoint()<Motor.LOWEST_SPEED||asked.setPoint()>MAXIMUM_SHARE))
+                            yield refuse(String.format(java.util.Locale.ROOT,"the speed lies between %.0f %% and %.0f %%",100*Motor.LOWEST_SPEED,100*MAXIMUM_SHARE));
+                    }
                     yield new ShaftUnit.Settings(asked.running(), asked.mode(), asked.mode() == ShaftTrain.Mode.SPEED ? asked.setPoint() : now.setPoint(), u.kind()==ShaftNetwork.Kind.MOTOR?Math.min(MAXIMUM_LIMIT,asked.powerLimit()):now.powerLimit(), now.ratio());
                 }
                 case CREATIVE_MOTOR -> {

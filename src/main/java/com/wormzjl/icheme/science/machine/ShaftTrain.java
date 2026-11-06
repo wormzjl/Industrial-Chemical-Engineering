@@ -68,7 +68,8 @@ public final class ShaftTrain {
         public Driver atSpeed(double rpm){return new Driver(drive,ratedPower,designSpeed,poles,running,Mode.SPEED,rpm/designSpeed,powerLimit,trip,governed,powered);}
         public double setSpeed() {
             if (drive == Drive.CREATE) return setPoint;
-            return drive == Drive.CREATIVE ? setPoint > 0 ? setPoint : CREATIVE_SPEED : (setPoint > 0 ? setPoint : 1) * designSpeed;
+            double target=drive == Drive.CREATIVE ? setPoint > 0 ? setPoint : CREATIVE_SPEED : (setPoint > 0 ? setPoint : 1) * designSpeed;
+            return drive==Drive.VARIABLE_MOTOR||drive==Drive.FIXED_MOTOR?Math.min(Motor.MAXIMUM_RPM,target):target;
         }
 
         /** The power the driver can give, W: its rating, or a creative motor's limit. */
@@ -112,7 +113,7 @@ public final class ShaftTrain {
         return switch (driver.drive()) {
             case FIXED_MOTOR -> demand > driver.ratedPower() * (1 + 1e-9)
                     ? new Step(0, Trip.OVERLOAD, "TRIPPED: OVERLOAD", 0, 0)
-                    : new Step(driver.designSpeed(), Trip.NONE, "RUNNING", 0, electric(driver, demand));
+                    : new Step(Math.min(driver.designSpeed(),Motor.MAXIMUM_RPM), Trip.NONE, "RUNNING", 0, electric(driver, demand));
             case VARIABLE_MOTOR, CREATIVE -> {
                 double limit=driver.drive()==Drive.VARIABLE_MOTOR?Motor.availablePower(driver.limit(),driver.designSpeed(),speed>0?speed:set):driver.limit();
                 double next = limited(speed, limit, demand, set);
@@ -173,7 +174,7 @@ public final class ShaftTrain {
         double share = speed > 0 ? speed / design : 1;
         double previous = Double.isFinite(measure.previousSpeed()) ? measure.previousSpeed() / design : Double.NaN;
         double next = SpeedControl.regulate(measure.target(), share, measure.measured(), previous, measure.previousMeasured(),
-                driver.mode() == Mode.REGULATE_FLOW ? 1 : 2, Motor.LOWEST_SPEED, driver.drive()==Drive.VARIABLE_MOTOR?Motor.HIGHEST_SPEED:1);
+                driver.mode() == Mode.REGULATE_FLOW ? 1 : 2, Motor.LOWEST_SPEED, driver.drive()==Drive.VARIABLE_MOTOR?Motor.maximumShare(design):1);
         return next * design;
     }
 

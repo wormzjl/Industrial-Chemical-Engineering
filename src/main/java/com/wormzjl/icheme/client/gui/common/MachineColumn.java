@@ -144,7 +144,7 @@ public final class MachineColumn {
                 regulate.add(new Column.Buttons(keys));
             }
             // Flow and pressure targets are the casing's own set points: their keys' hovers say so (panel rule 1).
-            if (in.mode() == Mode.SPEED) regulate.add(new Column.Field("speed", t.get(KEY + "speed"), in.kind().speedUnit(), t.get(KEY + "speed." + in.kind().speedUnit().replace("%", "share") + ".hint")));
+            if (in.mode() == Mode.SPEED) regulate.add(new Column.Field("speed", t.get(KEY + "speed"), in.kind().speedUnit(), t.get(KEY + "speed." + (in.kind()==Kind.MOTOR?"motor":in.kind().speedUnit().replace("%", "share")) + ".hint")));
             rows.add(new Column.Group(t.get(KEY + "regulate"), t.get(KEY + "regulate.hint"), regulate));
         }
         if (in.kind() == Kind.CREATIVE_MOTOR || in.kind() == Kind.MOTOR)

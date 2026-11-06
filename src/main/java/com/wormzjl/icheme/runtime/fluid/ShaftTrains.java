@@ -547,8 +547,8 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
                     double q = density > 0 ? Math.max(0, flows[e]) / density : 0;
                     run.power.put(unit, m.speed() > 0 && density > 0 ? m.law().shaftPower(q, m.speed(), density, suction.pressure(), 1.4) : 0);
                     run.duties.put(unit,new Duty(q,solved.reservoirs().get(pipe.second()).state().pressure(),m.setFlow(),m.setPressure(),
-                            m.setFlow()>0?com.wormzjl.icheme.science.machine.SpeedControl.requiredSpeed(m.law(),m.setFlow(),heads[e],density,suction.pressure(),1.4,com.wormzjl.icheme.science.machine.Motor.LOWEST_SPEED,com.wormzjl.icheme.science.machine.Motor.HIGHEST_SPEED):Double.NaN,
-                            m.setPressure()>0?com.wormzjl.icheme.science.machine.SpeedControl.requiredSpeed(m.law(),q,m.setPressure()-suction.pressure(),density,suction.pressure(),1.4,com.wormzjl.icheme.science.machine.Motor.LOWEST_SPEED,com.wormzjl.icheme.science.machine.Motor.HIGHEST_SPEED):Double.NaN));
+                            m.setFlow()>0?com.wormzjl.icheme.science.machine.SpeedControl.requiredSpeed(m.law(),m.setFlow(),heads[e],density,suction.pressure(),1.4,com.wormzjl.icheme.science.machine.Motor.LOWEST_SPEED,com.wormzjl.icheme.science.machine.SpeedControl.MAXIMUM_CURVE_SPEED):Double.NaN,
+                            m.setPressure()>0?com.wormzjl.icheme.science.machine.SpeedControl.requiredSpeed(m.law(),q,m.setPressure()-suction.pressure(),density,suction.pressure(),1.4,com.wormzjl.icheme.science.machine.Motor.LOWEST_SPEED,com.wormzjl.icheme.science.machine.SpeedControl.MAXIMUM_CURVE_SPEED):Double.NaN));
                     if (first(run, unit)) {
                         run.measured = q;
                         run.target = m.setFlow() > 0 ? m.setFlow() : m.setPressure() > 0 ? m.setPressure() : Double.NaN;
@@ -649,7 +649,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         // power this step decided (reading A59); one that runs short stops here (NO POWER) and restarts on the cadence.
         boolean motor = d.kind() == ShaftNetwork.Kind.MOTOR && electric != null;
         var driver = driver(d, turbine || valve != null, !motor || electric.powered(d.id()));
-        if(Double.isFinite(requestedRpm))driver=driver.atSpeed(Math.clamp(requestedRpm,driver.designSpeed()*com.wormzjl.icheme.science.machine.Motor.LOWEST_SPEED,driver.designSpeed()*com.wormzjl.icheme.science.machine.Motor.HIGHEST_SPEED));
+        if(Double.isFinite(requestedRpm))driver=driver.atSpeed(Math.clamp(requestedRpm,driver.designSpeed()*com.wormzjl.icheme.science.machine.Motor.LOWEST_SPEED,com.wormzjl.icheme.science.machine.Motor.MAXIMUM_RPM));
         var step = ShaftTrain.step(driver, state.speed(), measure);
         if(automatic!=null&&driver.running()&&driver.powered()&&step.trip()==ShaftTrain.Trip.NONE)
             step=new ShaftTrain.Step(Math.min(state.speed(),step.speed()),ShaftTrain.Trip.NONE,automatic+" / LAST SPEED",0,state.speed()>0?step.electricPower():0);

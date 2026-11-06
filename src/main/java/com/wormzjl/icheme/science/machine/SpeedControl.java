@@ -71,6 +71,8 @@ public final class SpeedControl {
         for(int i=0;i<40;i++){double middle=(low+high)/2;if(law.rise(flow,middle)<head)low=middle;else high=middle;}
         return (low+high)/2;
     }
+    /** Search bound for a driven machine's curve, independent of the motor's absolute rpm limit. */
+    public static final double MAXIMUM_CURVE_SPEED=1.5;
     private static double clamp(double value, double lowest, double highest) {
         return Math.min(highest, Math.max(lowest, value));
     }

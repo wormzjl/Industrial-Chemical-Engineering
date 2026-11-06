@@ -7,9 +7,17 @@ import static org.junit.jupiter.api.Assertions.*;
 class RotatingDriveReworkTest {
     @Test void vfdHasFiniteLowSpeedTorqueAndHighSpeedPower() {
         assertEquals(11000,Motor.availablePower(22000,3000,1500),1e-9);
-        assertEquals(22000,Motor.availablePower(22000,3000,4500),1e-9);
+        assertEquals(22000,Motor.availablePower(22000,1500,3000),1e-9);
         assertEquals(Motor.torque(22000,3000),Motor.torque(11000,1500),1e-9);
         assertEquals(0,Motor.availablePower(22000,3000,0));
+    }
+    @Test void manualAndAutomaticMotorsNeverExceed3000Rpm() {
+        for(double base:new double[]{1500,3000,12000})for(var mode:List.of(ShaftTrain.Mode.SPEED,ShaftTrain.Mode.REGULATE_FLOW)){
+            var driver=new ShaftTrain.Driver(ShaftTrain.Drive.VARIABLE_MOTOR,22000,base,4,true,mode,10,0,ShaftTrain.Trip.NONE,false);
+            var measure=new ShaftTrain.Measure(0,0,false,1,100,Double.NaN,Double.NaN);
+            assertEquals(3000,ShaftTrain.step(driver,2950,measure).speed(),1e-9);
+            assertTrue(driver.setSpeed()<=Motor.MAXIMUM_RPM);
+        }
     }
     @Test void inlineRatingsFollowBoreAreaAndKeepTheRatedHead() {
         var small=InlineMachines.design(.025,true);var large=InlineMachines.design(.05,true);

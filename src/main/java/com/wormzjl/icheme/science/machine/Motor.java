@@ -76,7 +76,12 @@ public final class Motor {
         return ratedPower*Math.min(1,rpm/baseRpm);
     }
     public static double torque(double power,double rpm) { return rpm>0?power*60/(2*Math.PI*rpm):0; }
-    public static final double HIGHEST_SPEED=1.5;
+    /** Absolute operating-speed ceiling; a saved base-speed rating is retained independently. */
+    public static final double MAXIMUM_RPM=3000;
+    public static double maximumShare(double baseRpm) {
+        if(!(baseRpm>0)||!Double.isFinite(baseRpm))throw new IllegalArgumentException("Invalid motor base speed");
+        return MAXIMUM_RPM/baseRpm;
+    }
 
     private static int poleColumn(int poles) {
         return switch (poles) {
