@@ -37,6 +37,7 @@ public final class EquipmentClient {
         event.register(EquipmentShellModel.LOADER_ID, EquipmentShellModel.LOADER);
         event.register(com.wormzjl.icheme.client.model.FluidDeviceModel.LOADER_ID, com.wormzjl.icheme.client.model.FluidDeviceModel.LOADER);
         event.register(com.wormzjl.icheme.client.model.PipeRackModel.LOADER_ID, com.wormzjl.icheme.client.model.PipeRackModel.LOADER);
+        event.register(com.wormzjl.icheme.client.model.ShaftModel.LOADER_ID, com.wormzjl.icheme.client.model.ShaftModel.LOADER);
     }
 
     /**

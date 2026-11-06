@@ -616,6 +616,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         presentation.tick(topology.onlineTick());
         // The watched drivers' states at the presentation cadence (W3): a read of what the trains last decided.
         if(!driverWatchers.isEmpty()&&topology.onlineTick()%100==0)publishDrivers();
+        if(!rotationWatchers.isEmpty()&&topology.onlineTick()%100==0)publishRotations();
         // The electric stores at the presentation cadence (W5, readings A60, A62): booking at rest, restarts, the facts handed over.
         if(topology.onlineTick()%ElectricStores.CADENCE==0&&propertyHold==null){electric.cadence();shafts.cadence();health.cadence();}
         // A generator's port pushes FE to its neighbours (the FE protocol, reading A65): stored FE only, nothing solves.
@@ -831,7 +832,79 @@ public final class FluidWorldAuthority implements AutoCloseable {
         return new FluidView.Pump(finite(s.available()),finite(s.required()),finite(s.gas()),Math.clamp(h,0,1),curve);
     }
     private static Double finite(double value){return Double.isFinite(value)?value:null;}
-    public void forgetWatcher(UUID player){owned();driverWatchers.remove(player);tankWatchers.forget(player);for(long id:sightGlassWatchers.devices(player))unwatchSightGlass(player,id);for(long id:moverWatchers.devices(player))unwatchMover(player,id);}
+    public void forgetWatcher(UUID player){owned();driverWatchers.remove(player);rotationWatchers.remove(player);tankWatchers.forget(player);for(long id:sightGlassWatchers.devices(player))unwatchSightGlass(player,id);for(long id:moverWatchers.devices(player))unwatchMover(player,id);}
+
+    /** Requested shaft/machine speeds, keyed by dimension as well as cell; published values are presentation state only. */
+    private final Map<UUID,Set<PhysicalFluidTopology.Position>> rotationWatchers=new HashMap<>();
+    private final Map<PhysicalFluidTopology.Position,com.wormzjl.icheme.network.RotationNetwork.State> publishedRotations=new HashMap<>();
+
+    /** Validate a bounded subscription and replay its cached publication. Opening a watch never reads a train's speed. */
+    public void watchRotations(net.minecraft.server.level.ServerPlayer player,List<BlockPos> watch,List<BlockPos> unwatch) {
+        owned();if(closed)return;
+        var level=player.serverLevel();String dimension=level.dimension().location().toString();
+        var set=rotationWatchers.computeIfAbsent(player.getUUID(),k->new HashSet<>());
+        var removed=new HashSet<>(unwatch);
+        set.removeIf(p->!p.dimension().equals(dimension)||removed.contains(new BlockPos(p.x(),p.y(),p.z())));
+        for(var position:watch) {
+            if(set.size()>=com.wormzjl.icheme.network.RotationNetwork.MAXIMUM_WATCHED||!level.hasChunkAt(position)||!moverRange(player,position))continue;
+            var key=new PhysicalFluidTopology.Position(dimension,position.getX(),position.getY(),position.getZ());
+            if(!(level.getBlockState(position).getBlock() instanceof com.wormzjl.icheme.world.level.block.ShaftBlock)&&shafts.unitAt(key)==null)continue;
+            set.add(key);
+            var published=publishedRotations.get(key);
+            if(published!=null)com.wormzjl.icheme.network.RotationNetwork.send(player,published);
+        }
+        if(set.isEmpty())rotationWatchers.remove(player.getUUID());
+    }
+
+    /** Cadence-only reads of the trains' already decided rpm, sent exclusively to clients watching those parts. */
+    private void publishRotations() {
+        var current=new HashMap<PhysicalFluidTopology.Position,com.wormzjl.icheme.network.RotationNetwork.State>();
+        var units=new HashMap<PhysicalFluidTopology.Position,ShaftUnit>();
+        for(var unit:shafts.units())units.put(unit.position(),unit);
+        var speeds=new HashMap<Long,Double>();
+        for(var it=rotationWatchers.entrySet().iterator();it.hasNext();) {
+            var entry=it.next();var player=server.getPlayerList().getPlayer(entry.getKey());
+            if(player==null||player.hasDisconnected()){it.remove();continue;}
+            String dimension=player.serverLevel().dimension().location().toString();
+            for(var key:List.copyOf(entry.getValue())) {
+                var position=new BlockPos(key.x(),key.y(),key.z());
+                if(!key.dimension().equals(dimension)||!player.serverLevel().hasChunkAt(position)||!moverRange(player,position)){
+                    entry.getValue().remove(key);continue;
+                }
+                var state=current.computeIfAbsent(key,p->{
+                    var pair=rotationSpeeds(units.get(p),units,speeds);
+                    float rpm=(float)pair[0],output=(float)pair[1];
+                    return new com.wormzjl.icheme.network.RotationNetwork.State(position,Float.isFinite(rpm)?rpm:0,Float.isFinite(output)?output:0);
+                });
+                com.wormzjl.icheme.network.RotationNetwork.send(player,state);
+            }
+            if(entry.getValue().isEmpty())it.remove();
+        }
+        publishedRotations.clear();publishedRotations.putAll(current);
+    }
+
+    /** A gearbox's connected shaft fixes that end's speed; its compiled ratio also fixes an unconnected other end. */
+    private double[] rotationSpeeds(ShaftUnit unit,Map<PhysicalFluidTopology.Position,ShaftUnit> units,Map<Long,Double> speeds) {
+        if(unit==null)return new double[]{0,0};
+        if(unit.kind()==com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.GEARBOX) {
+            double ratio=shafts.ratio(unit.id());
+            if(!(ratio>0))return new double[]{0,0};
+            for(var end:unit.ends()) {
+                var p=end.cell();var adjacent=units.get(new PhysicalFluidTopology.Position(p.dimension(),p.x()+end.dx(),p.y()+end.dy(),p.z()+end.dz()));
+                int axis=end.dx()!=0?0:end.dy()!=0?1:2;
+                if(adjacent==null||adjacent.kind()!=com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.SHAFT||adjacent.axis()!=axis)continue;
+                double rpm=rotationSpeed(adjacent,speeds);
+                return end.output()?new double[]{rpm/ratio,rpm}:new double[]{rpm,rpm*ratio};
+            }
+            return new double[]{0,0};
+        }
+        double rpm=rotationSpeed(unit,speeds);
+        return new double[]{rpm,rpm};
+    }
+
+    private double rotationSpeed(ShaftUnit unit,Map<Long,Double> speeds) {
+        return speeds.computeIfAbsent(unit.id(),id->{var view=shafts.view(id);return view==null?0:Math.max(0,view.speed());});
+    }
 
     /** The drivers each player watches (W3), by their structures' origins, within their dimension. */
     private final Map<UUID,Set<BlockPos>> driverWatchers=new HashMap<>();
@@ -1392,7 +1465,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
             });
         }
     }
-    @Override public void close(){owned();if(closed)return;closed=true;unboundStructures.clear();publishedMenuData.clear();publishedSightGlasses.clear();publishedMovers.clear();runtime.close();data.setDirty();}
+    @Override public void close(){owned();if(closed)return;closed=true;unboundStructures.clear();publishedMenuData.clear();publishedSightGlasses.clear();publishedMovers.clear();rotationWatchers.clear();publishedRotations.clear();runtime.close();data.setDirty();}
 
     /**
      * Which players watch which open tanks, sight glasses or movers (the request path R-B of the engine-owned presentation

@@ -245,15 +245,14 @@ public class PumpSprites {
     }
 
     /**
-     * Bright machined steel for every turning shaft and hub, and the shaft block's model: turned streaks along the shaft
-     * (the sprite's columns; the shaft block samples columns 6 to 10), a highlight down its middle.
+     * Machined steel for every turning shaft and hub: faint grain without baked lighting bands. The rotating geometry
+     * supplies the highlights, so the same finish works on the hexagonal sides and their cut ends.
      */
     static int[][] shaft() {
         int n = 16;
         var out = new int[n][n];
         for (int y = 0; y < n; y++) for (int x = 0; x < n; x++) {
-            double v = .72 + .05 * Math.sin(2 * Math.PI * x / n * 3 + 1) + .04 * (grain(x, 0, 12) - .5) + .015 * (grain(x, y, 13) - .5);
-            if (x == 7 || x == 8) v += .08;
+            double v = .72 + .012 * (grain(x, 0, 12) - .5) + .008 * (grain(x, y, 13) - .5);
             int r = (int) Math.round(255 * Math.min(1, v * .97)), g = (int) Math.round(255 * Math.min(1, v * .99)), b = (int) Math.round(255 * Math.min(1, v * 1.03));
             out[y][x] = r << 16 | g << 8 | b;
         }

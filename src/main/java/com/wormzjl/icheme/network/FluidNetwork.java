@@ -614,6 +614,7 @@ public final class FluidNetwork {
 
     /** The requested displays and the item settings saves: the tanks' on the fluid registrar, the others each on its own version string. */
     private static void registerDisplays(RegisterPayloadHandlersEvent event,PayloadRegistrar fluid) {
+        RotationNetwork.register(event);
         fluid.playToServer(TankWatch.TYPE,TankWatch.STREAM_CODEC,(payload,context)->{
             if(context.player() instanceof ServerPlayer player)FluidWorldAuthority.find(player.server).ifPresent(world->world.watchTanks(player,payload.watch,payload.unwatch));
         });

@@ -1518,8 +1518,8 @@ public final class ProcessUnit {
         for (int e = 0; e < 2; e++) {
             double h0 = e == 0 ? zf0 : zb0, h1 = e == 0 ? zf1 : zb1;
             mesh.band(f, rb, rb, h0, h1, nb, Material.PUMP_FINS);
-            // Close the housing behind its bracket; tuck the bore under the octagonal shaft so the joint cannot leak light.
-            mesh.annulus(f, shaft * DeterministicMath.cos(Math.PI / 8), rb + .03, e == 0 ? h1 : h0, n, e == 0 ? 1 : -1, Material.PUMP_CASTING);
+            // Close the housing behind its bracket; tuck the bore under the hexagonal shaft so the joint cannot leak light.
+            mesh.annulus(f, shaft * DeterministicMath.cos(Math.PI / ShaftGeometry.SIDES), rb + .03, e == 0 ? h1 : h0, n, e == 0 ? 1 : -1, Material.PUMP_CASTING);
             mesh.disc(f, rb, e == 0 ? zf0 : zb1, nb, e == 0 ? -1 : 1, Material.PUMP_DISC);
             mesh.cylinder(Frame.of(new double[]{a, 0, (h0 + h1) / 2}, 1, 1), .025 + .01 * di, y + rb - .01, y + rb + .05, 8, Material.PIPE);
         }
@@ -1693,7 +1693,7 @@ public final class ProcessUnit {
         if (!standing) {
             mesh.disc(f, rb, z0, n, -1, Material.MOTOR_SHIELD);
             if (full) mesh.cylinder(f, .35 * r, z0 - .04, z0, n, Material.MOTOR_PLAIN);
-            if (shaft > 0) mesh.prism(f, shaft, z0 - .1, full ? z0 - .04 : z0, 8, Material.SHAFT);
+            if (shaft > 0) mesh.prism(f, shaft, z0 - .1, full ? z0 - .04 : z0, ShaftGeometry.SIDES, Material.SHAFT);
         }
         if (rc > rb) mesh.annulus(f, rb, rc, cowl, n, -1, Material.MOTOR_PLAIN);
         if (full) {
@@ -2109,12 +2109,12 @@ public final class ProcessUnit {
     /**
      * A shaft of radius {@code shaft} along frame {@code f} (its axis along z) over {@code spans} ({z0, z1} each), seen in
      * a pump's bracket windows, with a seal's drive collar and its four set screws centred at each of {@code collars}: a
-     * moving part turning at {@link #PUMP_SPEED} (owner answer 2026-10-18: the shaft and the motor's fan turn). A round
-     * shaft turning shows nothing; its screws show it.
+     * moving part (owner answer 2026-10-18: the shaft and the motor's fan turn). Its six-sided section and the collars'
+     * screws show the rotation; the client applies the shaft train's operating speed.
      */
     void shaft(Frame f, double shaft, double[][] spans, double... collars) {
         mesh.part(motions.size());
-        for (var s : spans) mesh.prism(f, shaft, s[0], s[1], 8, Material.SHAFT);
+        for (var s : spans) mesh.prism(f, shaft, s[0], s[1], ShaftGeometry.SIDES, Material.SHAFT);
         double rc = 1.7 * shaft + .01, w = .02 + shaft / 2;
         for (double zc : collars) {
             mesh.cylinder(f, rc, zc - w / 2, zc + w / 2, 12, Material.FLANGE);
@@ -2187,8 +2187,8 @@ public final class ProcessUnit {
         // Under a guard the hub stops 0.02 m short of the face, inside the guard's end plate.
         double inset = guarded ? .02 : 0, h0 = sign > 0 ? face - width - inset : face + inset, h1 = sign > 0 ? face - inset : face + width + inset;
         mesh.part(motions.size());
-        mesh.prism(f, rs, s0, s1, 8, Material.SHAFT);
-        mesh.disc(f, rs, face, 8, sign, Material.SHAFT);
+        mesh.prism(f, rs, s0, s1, ShaftGeometry.SIDES, Material.SHAFT);
+        mesh.disc(f, rs, face, ShaftGeometry.SIDES, sign, Material.SHAFT);
         mesh.cylinder(f, hub, h0, h1, 12, Material.SHAFT);
         // The hub's bolts show it turning.
         double ring = .75 * hub, zb = sign > 0 ? h0 - .015 : h1 + .015;
