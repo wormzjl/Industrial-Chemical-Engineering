@@ -3,7 +3,7 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 
 /**
- * Writes the vessel sprites (batch 2026-10-15-custom-equipment-rendering, supports task), 16 px per metre, from a fixed
+ * Writes the vessel sprites (batch 2026-10-15-custom-equipment-rendering, supports task), from a fixed
  * seed so the output is reproducible:
  * <ul>
  *   <li>vessel_shell.png 64x64: one plate length (fitted to the circumference) by two 2 m courses. A weld bead closes each
@@ -12,8 +12,9 @@ import java.io.File;
  *   <li>vessel_head.png 64x64: a pressed head, seamless; the tangent line weld on rows 0-1 (the sprite runs from the weld
  *   to the apex).</li>
  *   <li>vessel_support.png 32x32: 2 m of painted support steel, darker, plain.</li>
- *   <li>equipment_*.png (process equipment task 2026-10-16), one per remaining Mesh.Material: 16x16 for 1 m parts (pipe,
- *   flange, opening, grating, handrail, steelwork, machine, motor, actuator, feed, drain), 32x32 for 2 m of cladding.</li>
+ *   <li>equipment_*.png (process equipment task 2026-10-16), one per remaining Mesh.Material: 32x32 for 1 m of pipe and
+ *   flange, 16x16 for the other 1 m parts (opening, grating, handrail, steelwork, machine, motor, actuator, feed, drain),
+ *   32x32 for 2 m of cladding.</li>
  * </ul>
  * Run: java tools/custom-equipment-rendering-poc/textures/VesselTextures.java src/main/resources/assets/createcheme/textures/block
  */
@@ -25,8 +26,8 @@ public class VesselTextures {
         ImageIO.write(head(), "png", new File(out, "vessel_head.png"));
         ImageIO.write(support(), "png", new File(out, "vessel_support.png"));
         // Process equipment task (2026-10-16), colours from PROCESS_EQUIPMENT_PHOTO_SURVEY.md; one sprite per Mesh.Material.
-        ImageIO.write(plain(16, PIPE, 4, 1), "png", new File(out, "equipment_pipe.png"));
-        ImageIO.write(plain(16, FLANGE, 5, 1), "png", new File(out, "equipment_flange.png"));
+        ImageIO.write(line(PIPE), "png", new File(out, "equipment_pipe.png"));
+        ImageIO.write(line(FLANGE), "png", new File(out, "equipment_flange.png"));
         ImageIO.write(opening(), "png", new File(out, "equipment_opening.png"));
         ImageIO.write(cladding(), "png", new File(out, "equipment_cladding.png"));
         ImageIO.write(grating(), "png", new File(out, "equipment_grating.png"));
@@ -159,11 +160,24 @@ public class VesselTextures {
      * painted structural steel, a grey pump volute, a blue finned motor, a red diaphragm casing, and the source (green)
      * and sink (dark red) boxes of the debug devices.
      */
-    static final int[] PIPE = {150, 155, 160}, FLANGE = {112, 116, 121}, CLADDING = {196, 199, 201}, GRATING = {142, 145, 140},
+    static final int[] PIPE = {161, 161, 160}, FLANGE = {135, 136, 136}, CLADDING = {196, 199, 201}, GRATING = {142, 145, 140},
             HANDRAIL = {214, 172, 36}, STEELWORK = {104, 110, 117}, MACHINE = {124, 130, 136}, MOTOR = {58, 94, 140},
             ACTUATOR = {168, 52, 44}, FEED = {58, 150, 84}, DRAIN = {120, 42, 52};
     /** Flange nuts and studs: black-oxide steel, darker than the flanges (owner request 2026-10-16: bolts on all flanges). */
     static final int[] BOLT = {66, 68, 72};
+
+    /** Smooth line finish in the pump coating's family, 32 texels per metre: no coarse grain or baked highlight bands. */
+    static BufferedImage line(int[] colour) {
+        int size = 32;
+        var image = new BufferedImage(size, size, BufferedImage.TYPE_INT_RGB);
+        for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++) {
+                double a = 2 * Math.PI * x / size, b = 2 * Math.PI * y / size;
+                double shade = 1.4 * Math.sin(a + b) + .9 * Math.sin(a - 2 * b + 1) + .5 * Math.sin(2 * a + b + 2);
+                image.setRGB(x, y, rgb(colour, shade));
+            }
+        return image;
+    }
 
     /** A plain painted part: grain and mottle scaled by {@code texture}. */
     static BufferedImage plain(int size, int[] colour, int seed, double texture) {
