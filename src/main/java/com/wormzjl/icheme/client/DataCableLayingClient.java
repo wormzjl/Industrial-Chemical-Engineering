@@ -90,16 +90,16 @@ public final class DataCableLayingClient {
                 for(var free:LayingToolAim.freeSlots(rack))box(pose,buffers,camera,free,false);
                 if(start==null||route==null||!route.found()){
                     var slot=LayingToolAim.slot(mc.level,new PipeAnchor.Click(hovered.clicked(),hovered.face(),hovered.local()),DataCableGeometry.OUTSIDE);
-                    if(slot!=null){boolean refused=!slot.fits()||start!=null&&route!=null&&!route.found();DataControlRenderer.draw(pose,buffers,camera,Vec3.atLowerCornerOf(rack.getBlockPos()),DataCableGeometry.path(RackGeometry.path(rack.rack(),slot.lane())),refused?0xff5555:0x70c7e8,135);}
+                    if(slot!=null){boolean refused=!slot.fits()||start!=null&&route!=null&&!route.found();DataControlRenderer.draw(pose,buffers,camera,Vec3.atLowerCornerOf(rack.getBlockPos()),DataCableGeometry.path(RackGeometry.path(rack.rack(),slot.lane())),refused?0xff5555:0xe5ca70,135);}
                 }
             }
         }
         if(start!=null){var anchor=DataCableLaying.resolve(mc.level,start,DataControlRenderer.ports(mc.level,mc.player.position(),96));if(anchor!=null){var point=anchor.port()==null?DataCableLaying.block(anchor.end().cell()).getCenter():anchor.port().centre();net.minecraft.client.renderer.LevelRenderer.renderLineBox(pose,buffers.getBuffer(net.minecraft.client.renderer.RenderType.lines()),new AABB(point,point).inflate(.17).move(camera.scale(-1)),.3f,1,.35f,1);}}
-        for(var cable:ghost){var at=cable.site().cell();List<Mesh.Polygon> polygons;if(cable.site().lane()>0&&mc.level.getBlockEntity(at) instanceof PipeRackBlockEntity rack)polygons=DataCableGeometry.path(RackGeometry.path(rack.rack(),rack.cableLane(cable)));else polygons=DataCableGeometry.polygons(cable.geometry());DataControlRenderer.draw(pose,buffers,camera,Vec3.atLowerCornerOf(at),polygons,0x70c7e8,135);}
+        for(var cable:ghost){var at=cable.site().cell();List<Mesh.Polygon> polygons;if(cable.site().lane()>0&&mc.level.getBlockEntity(at) instanceof PipeRackBlockEntity rack)polygons=DataCableGeometry.path(RackGeometry.path(rack.rack(),rack.cableLane(cable)));else polygons=DataCableGeometry.polygons(cable.geometry());DataControlRenderer.draw(pose,buffers,camera,Vec3.atLowerCornerOf(at),polygons,0xe5ca70,135);}
         // Show the added branch on an existing cable as part of the same preview.
         if(start!=null&&end!=null&&route!=null&&route.found())for(var click:List.of(start,end)){
             var a=DataCableLaying.resolve(mc.level,click,DataControlRenderer.ports(mc.level,mc.player.position(),96));if(a==null||a.host()==null||a.host().lane()!=0||!(mc.level.getBlockEntity(a.host().cell()) instanceof DataCableBlockEntity wire))continue;
-            var key=wire.geometry();int u=a.point()&31,v=a.point()>>5&31;key=key.connect(a.face(),u>=16?u-32:u,v>=16?v-32:v);DataControlRenderer.draw(pose,buffers,camera,Vec3.atLowerCornerOf(a.host().cell()),DataCableGeometry.polygons(key),0x70c7e8,135);
+            var key=wire.geometry();int u=a.point()&31,v=a.point()>>5&31;key=key.connect(a.face(),u>=16?u-32:u,v>=16?v-32:v);DataControlRenderer.draw(pose,buffers,camera,Vec3.atLowerCornerOf(a.host().cell()),DataCableGeometry.polygons(key),0xe5ca70,135);
         }
     }
     private static void box(PoseStack pose,MultiBufferSource buffers,Vec3 camera,AABB bounds,boolean refused){net.minecraft.client.renderer.LevelRenderer.renderLineBox(pose,buffers.getBuffer(net.minecraft.client.renderer.RenderType.lines()),bounds.move(camera.scale(-1)),refused?1:.3f,refused?.3f:1,refused?.3f:.35f,1);}

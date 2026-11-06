@@ -54,7 +54,7 @@ public final class DataControlRenderer {
         if(mc.level.getBlockEntity(port.owner()) instanceof com.wormzjl.icheme.runtime.instrument.Instrument.Holder holder&&!holder.instruments().sensorIds().isEmpty())text+=" / "+String.join(", ",holder.instruments().sensorIds().values().stream().sorted().toList());
         var g=event.getGuiGraphics();var lines=mc.font.split(net.minecraft.network.chat.Component.literal(text),Math.max(32,Math.min(260,g.guiWidth()-16)));
         int width=lines.stream().mapToInt(mc.font::width).max().orElse(0),x=Math.max(4,Math.min(g.guiWidth()/2+14,g.guiWidth()-width-4)),y=g.guiHeight()/2+27;
-        g.fill(x-3,y-2,x+width+3,y+lines.size()*10,0xe0202a31);for(int i=0;i<lines.size();i++)g.drawString(mc.font,lines.get(i),x,y+i*10,0xffb8dfec,false);
+        g.fill(x-3,y-2,x+width+3,y+lines.size()*10,0xe0202a31);for(int i=0;i<lines.size();i++)g.drawString(mc.font,lines.get(i),x,y+i*10,0xffe9d598,false);
     }
     @SubscribeEvent public static void render(RenderLevelStageEvent event){
         if(event.getStage()!=RenderLevelStageEvent.Stage.AFTER_PARTICLES)return;var mc=Minecraft.getInstance();if(mc.level==null||mc.player==null)return;
@@ -64,7 +64,7 @@ public final class DataControlRenderer {
             var polygons=PORTS.computeIfAbsent(port,p->DataPortGeometry.polygons(new double[]{0,0,0},new double[]{-p.face().getStepX(),-p.face().getStepY(),-p.face().getStepZ()}));
             draw(pose,buffers,camera,port.centre(),polygons,0,255);
             if(connected(mc.level,port)){var end=port.cablePoint().subtract(port.centre());drawCable(pose,buffers,camera,port.centre(),DataCableGeometry.path(List.of(new double[]{0,0,0},new double[]{end.x,end.y,end.z})));}
-            if(DataCableLayingClient.holding(mc.player))LevelRenderer.renderLineBox(pose,buffers.getBuffer(RenderType.lines()),new AABB(port.centre(),port.centre()).inflate(.14).move(camera.scale(-1)),.2f,.8f,1,1);
+            if(DataCableLayingClient.holding(mc.player))LevelRenderer.renderLineBox(pose,buffers.getBuffer(RenderType.lines()),new AABB(port.centre(),port.centre()).inflate(.14).move(camera.scale(-1)),1,.8f,.22f,1);
         }
         for(var rack:PipeRackBlockEntity.clientRacks())if(rack.getLevel()==mc.level&&rack.getBlockPos().getCenter().distanceToSqr(camera)<96*96)for(var cable:rack.cables())drawCable(pose,buffers,camera,Vec3.atLowerCornerOf(rack.getBlockPos()),DataCableGeometry.path(RackGeometry.path(rack.rack(),rack.cableLane(cable))));
         DataCableLayingClient.draw(pose,buffers,camera);
@@ -81,7 +81,7 @@ public final class DataControlRenderer {
     public static void draw(PoseStack pose,MultiBufferSource buffers,Vec3 camera,Vec3 origin,List<Mesh.Polygon> polygons,int tint,int alpha){
         var consumer=buffers.getBuffer(alpha==255?SOLID:GHOST);var shift=origin.subtract(camera);pose.pushPose();pose.translate(shift.x,shift.y,shift.z);
         int light=alpha==255?LevelRenderer.getLightColor(Minecraft.getInstance().level,BlockPos.containing(origin)):LightTexture.FULL_BRIGHT;
-        for(var q:polygons){int colour=tint!=0?tint:switch(q.material()){case OPENING->0x17282d;case GUARD->0x39819a;case FLANGE->0x747a7d;default->0xa0a6a8;};var p=q.positions();var n=q.normals();
+        for(var q:polygons){int colour=tint!=0?tint:switch(q.material()){case OPENING->0x17282d;case GUARD->0xb99d38;case FLANGE->0x747a7d;default->0xa0a6a8;};var p=q.positions();var n=q.normals();
             for(int first=1;first+1<q.size();first+=2)for(int corner:new int[]{0,first,first+1,Math.min(first+2,q.size()-1)})consumer.addVertex(pose.last(),(float)p[corner*3],(float)p[corner*3+1],(float)p[corner*3+2]).setColor(colour>>16&255,colour>>8&255,colour&255,alpha).setUv(0,0).setOverlay(OverlayTexture.NO_OVERLAY).setLight(light).setNormal(pose.last(),(float)n[corner*3],(float)n[corner*3+1],(float)n[corner*3+2]);
         }pose.popPose();
     }
