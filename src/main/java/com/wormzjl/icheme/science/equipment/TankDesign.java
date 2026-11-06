@@ -42,7 +42,7 @@ final class TankDesign extends UnitDesign {
     /** The top angle's outstand and depth, m. */
     static final double TOP_ANGLE = .08;
     /** The gauger's landing: its overhang over the rim, length round the shell, and knee-brace drop, m. */
-    static final double OVERHANG = .6, PLATFORM = 2, BRACE_DROP = 1.5;
+    static final double OVERHANG = .8, PLATFORM = 3, BRACE_DROP = 1.5;
     /** The opening in the platform's inner rail at the rolling ladder's head, m: the ladder's 0.6 m and a player's room either side. */
     static final double LADDER_OPENING = 1.1;
     /** The roof: its legs, the pontoon ring's width over D, the rim gap to the shell, the pontoon's depth, the deck's top over the roof's underside, m. */
@@ -203,15 +203,15 @@ final class TankDesign extends UnitDesign {
             u.ladders.add(climb);
             hinge = LADDER;
         } else {
-            // One landing beside the straight ladder, extended into the ring walkway on wider tanks.
-            double from = LADDER + Access.clearance(p.r), span = span(p, p.r + Access.MIN_DECK / 2);
+            // The straight climb steps directly onto the landing, facing the rolling ladder across its centre.
+            double span = span(p, p.r + Access.MIN_DECK / 2), from = LADDER - span / 2;
             if (p.ringWalkway()) walkway(u, p);
             platform(u, p, from, from + span);
             // Rows below the landing's knee braces can share the cylindrical body geometry.
             u.bodyRows = new double[]{1, Math.floor(p.shell - BRACE_DROP - 1e-9), 0};
             u.irregularFrom = u.mesh.facets().size();
             externalLadder(u, p);
-            hinge = from + span / 2;
+            hinge = LADDER;
         }
         u.nozzles.add(nozzle(Role.BOTTOM, p, -1, .5));
         u.nozzles.add(nozzle(Role.BOTTOM, p, 1, .5));
@@ -252,7 +252,7 @@ final class TankDesign extends UnitDesign {
 
     /** One continuous straight climb from grade to the rim landing, clear of both pipe lanes and the level gauge. */
     private static void externalLadder(ProcessUnit u, Plan p) {
-        u.verticalLadder(p.a, p.a, p.r, LADDER, 0, p.shell + Access.DECK + Access.LANDING, false);
+        u.verticalLadder(p.a, p.a, p.r, LADDER, 0, p.shell + Access.DECK + Access.LANDING, true);
     }
 
     /**
@@ -299,22 +299,32 @@ final class TankDesign extends UnitDesign {
                 Access.ALL_PARTS, true, false);
         u.platform(new Access.Arc(p.a, p.a, p.r, LADDER + clear, stop, edge, Access.Arc.step(edge)), p.shell, WALKWAY,
                 Access.ALL_PARTS, false, true);
+        double half = span(p, p.r + Access.MIN_DECK / 2) / 2;
+        // Put the inner fence over the shell rim; its band ends where the grating starts, preserving the walking lane.
+        for (var angles : new double[][]{{start, LADDER - half}, {LADDER + half, stop}})
+            u.rails(new Access.Arc(p.a, p.a, p.r - 1, angles[0], angles[1], p.r, Access.Arc.step(edge)),
+                    p.shell, 1 + Access.GAP, false, false);
     }
 
     /**
-     * The landing beside the straight ladder. On a wide tank its inward extension fills the ring walkway out over the
+     * The landing facing the straight ladder. On a wide tank its inward extension fills the ring walkway out over the
      * rim, sharing the same floor and outer railing; a narrow tank has a standalone landing. The inner railing opens
      * at the rolling ladder's head where fitted, with a short guard across each exposed inner end.
      */
     private static void platform(ProcessUnit u, Plan p, double from, double to) {
         double wall = p.r - OVERHANG - Access.GAP, s = p.shell, step = Access.Arc.step(p.outer);
-        double edgeRadius = p.ringWalkway() ? p.r + Access.GAP : p.outer, width = edgeRadius - wall;
+        double edgeRadius = p.r + Access.GAP, width = edgeRadius - wall;
         var run = new Access.Arc(p.a, p.a, wall, from, to, edgeRadius, step);
-        if (p.ringWalkway()) {
-            // Infill of the ring's existing floor, without a second outer railing or overlapping deck surfaces.
-            Access.deck(u.mesh, run, s, width, Access.WALL_EDGE);
-            u.solids.add(ProcessUnit.Solid.ring(p.a, p.a, s, s + Access.DECK, wall + Access.GAP, edgeRadius, from, to));
-        } else u.platform(run, s, width, Access.RAILED | Access.WALL_EDGE, false, true);
+        // Infill ends inboard of the climb: leave its vertical shaft open so the player can reach the step-through top.
+        Access.deck(u.mesh, run, s, width, Access.WALL_EDGE);
+        u.solids.add(ProcessUnit.Solid.ring(p.a, p.a, s, s + Access.DECK, wall + Access.GAP, edgeRadius, from, to));
+        if (!p.ringWalkway()) {
+            double clear = Access.clearance(p.r), outerWidth = p.outer - p.r;
+            u.platform(new Access.Arc(p.a, p.a, p.r, from, LADDER - clear, p.outer, step), s, outerWidth,
+                    Access.ALL_PARTS, true, false);
+            u.platform(new Access.Arc(p.a, p.a, p.r, LADDER + clear, to, p.outer, step), s, outerWidth,
+                    Access.ALL_PARTS, false, true);
+        }
         // The inner edge over the tank: a rail whose band runs along the deck's inner edge, open at the rolling ladder's head
         // in its middle (owner report 2026-10-21: the rail kept the player from the ladder).
         var edge = new Access.Arc(p.a, p.a, wall - 1, from, to, wall + Access.GAP, step);
@@ -323,7 +333,7 @@ final class TankDesign extends UnitDesign {
             u.rails(edge, s, 1 + Access.GAP + Access.RAIL_BAND, false, false, edge.length() / 2 - head, edge.length() / 2 + head);
         } else u.rails(edge, s, 1 + Access.GAP + Access.RAIL_BAND, false, false);
         // Guard the overhang's ends without fencing across the ring's walking lane or the ladder's step-off.
-        for (int end = 0; end < (p.ringWalkway() ? 2 : 1); end++) {
+        for (int end = 0; end < 2; end++) {
             double open = end == 0 ? from : to, limit = p.r + Access.GAP, sign = end == 0 ? -1 : 1;
             double deck = s + Access.DECK, inner = wall + Access.GAP, length = limit - inner, inward = Access.RAIL_BAND / 2;
             double[] radial = {DeterministicMath.cos(open), 0, DeterministicMath.sin(open)}, back = {sign * DeterministicMath.sin(open), 0, -sign * DeterministicMath.cos(open)};
