@@ -1062,8 +1062,10 @@ class ShapeRasterizerTest {
             boolean tank = shape.kind() == Kind.TANK, stair = !tank && shape.diameter() >= SphereDesign.STAIR_SIZE;
             assertEquals(stair ? 1 : 0, unit.woundStairs().size(), shape.toString());
             assertEquals(stair, unit.ladders().isEmpty(), shape.toString());
-            for (var l : unit.ladders()) assertTrue(l.top() - Access.LANDING - l.base() <= Access.MAX_CLIMB + Access.DECK + 1e-9, shape + " climbs from " + l.base());
+            if (!tank) for (var l : unit.ladders()) assertTrue(l.top() - Access.LANDING - l.base() <= Access.MAX_CLIMB + Access.DECK + 1e-9, shape + " climbs from " + l.base());
             if (tank) {
+                assertEquals(1, unit.ladders().size(), "one continuous external ladder: " + shape);
+                assertEquals(0, unit.ladders().getFirst().base(), 0, "tank ladder starts at grade: " + shape);
                 boolean compact = shape.diameter() < 6 && shape.tangentLength() < 6;
                 boolean rolling = !compact && shape.tangentLength() <= shape.diameter();
                 assertEquals(rolling ? shape.fillHeight() : 0, unit.floating.length(), 0, shape.toString());

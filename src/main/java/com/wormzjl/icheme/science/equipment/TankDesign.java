@@ -7,7 +7,6 @@ import com.wormzjl.icheme.science.equipment.Mesh.Frame;
 import com.wormzjl.icheme.science.equipment.Mesh.Material;
 import com.wormzjl.icheme.science.math.DeterministicMath;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -213,7 +212,7 @@ final class TankDesign extends UnitDesign {
             double bodyTop = p.ringWalkway() ? p.shell - GIRDER_DROP - Access.DECK - .6 : p.shell - TOP_ANGLE - .6;
             u.bodyRows = new double[]{1, Math.floor(bodyTop - 1e-9), 0};
             u.irregularFrom = u.mesh.facets().size();
-            ladders(u, p);
+            externalLadder(u, p);
             hinge = from + span / 2;
         }
         u.nozzles.add(nozzle(Role.BOTTOM, p, -1, .5));
@@ -253,24 +252,9 @@ final class TankDesign extends UnitDesign {
         return Math.max(PLATFORM / mid, (LADDER_OPENING + 2 * Access.RAIL_BAND) / (p.r - OVERHANG));
     }
 
-    /**
-     * Straight access: caged ladders from grade to the rim landing, the top one at the
-     * right side ({@link #LADDER}), split by part-ring rest platforms where the climb is over {@link Access#MAX_CLIMB},
-     * with successive sections beside one another in that side area ({@link ProcessUnit#ringAccess});
-     * both centered pipe lanes and the level gauge on the left remain clear.
-     */
-    private static void ladders(ProcessUnit u, Plan p) {
-        var levels = Access.climbs(0, List.of(), p.shell);
-        levels.removeLast();
-        int m = levels.size();
-        double clear = Access.clearance(p.r), adjacent = LADDER + 2 * clear;
-        var rings = new ArrayList<ProcessUnit.Ring>();
-        for (int j = 0; j < m; j++) {
-            double in = (m - j) % 2 == 0 ? LADDER : adjacent;
-            rings.add(in == LADDER ? new ProcessUnit.Ring(levels.get(j), in, in, adjacent + clear) : new ProcessUnit.Ring(levels.get(j), in, LADDER - clear, in));
-        }
-        u.ringAccess(p.a, p.a, p.r, Access.MIN_DECK, 0, rings);
-        u.verticalLadder(p.a, p.a, p.r, LADDER, m == 0 ? 0 : levels.getLast() + Access.DECK, p.shell + Access.DECK + Access.LANDING, false);
+    /** One continuous straight climb from grade to the rim landing, clear of both pipe lanes and the level gauge. */
+    private static void externalLadder(ProcessUnit u, Plan p) {
+        u.verticalLadder(p.a, p.a, p.r, LADDER, 0, p.shell + Access.DECK + Access.LANDING, false);
     }
 
     /**
