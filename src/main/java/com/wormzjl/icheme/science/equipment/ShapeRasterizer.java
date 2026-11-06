@@ -1199,8 +1199,8 @@ public final class ShapeRasterizer {
                 var root = unit != null ? unit.nozzleRoots.get(k) : null;
                 if (root != null) {
                     double end = root.end(length, od);
-                    m.frustum(f, root.radius(), r, .01, end, sides, Material.MACHINE);
-                    if (root.radius() > r) m.annulus(f, r, root.radius(), .01, sides, 1, Material.MACHINE);
+                    m.frustum(f, root.radius(), r, .01, end, sides, root.material());
+                    if (root.radius() > r) m.annulus(f, r, root.radius(), .01, sides, 1, root.material());
                     neckStart = end;
                     taper = Math.max(taper, end);
                 }
@@ -1208,7 +1208,7 @@ public final class ShapeRasterizer {
                 if (taper > neckStart) m.prism(f, r, neckStart, taper, sides, Material.PIPE);
                 m.frustum(f, r, hubR, taper, length - t, sides, Material.PIPE);
                 m.annulus(f, hubR, flange, length - t, sides, -1, Material.FLANGE);
-                m.bolts(f, od, hubR, flange, length - t, -1, PipeSizes.drawnBolts(od), Material.BOLT);
+                m.bolts(f, od, hubR, flange, length - t, -1, Material.BOLT);
                 m.prism(f, flange, length - t, length, sides, Material.FLANGE);
                 m.annulus(f, 0, flange, length, sides, 1, Material.FLANGE);
                 if (nozzle.riser() > 0) {

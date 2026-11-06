@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
@@ -708,8 +709,16 @@ public final class ProcessUnit {
     /** The sleeves through a closed skirt, by nozzle index: drawn with the nozzle at its pipe's size ({@link Sleeve}). */
     final Map<Integer, Sleeve> sleeves = new HashMap<>();
 
-    /** A casting blend or reducer, limiting its length and how much of the standard flange hub it reserves. */
-    record NozzleRoot(double radius, double maxLength, double maxHub) {
+    /** A casting blend or pipe reducer: its finish, length limit and how much standard flange hub it reserves. */
+    record NozzleRoot(double radius, double maxLength, double maxHub, Material material) {
+        NozzleRoot {
+            Objects.requireNonNull(material);
+        }
+
+        NozzleRoot(double radius, double maxLength, double maxHub) {
+            this(radius, maxLength, maxHub, Material.MACHINE);
+        }
+
         NozzleRoot(double radius) {
             this(radius, .12, Double.POSITIVE_INFINITY);
         }

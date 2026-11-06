@@ -79,7 +79,7 @@ public final class InlineMoverGeometry {
         m.ring(f,.44*od,outside,at-t,at-seam,sides,3,Material.FLANGE);
         m.prism(f,outside,at-seam,at+seam,sides,Material.OPENING);
         m.ring(f,.44*od,outside,at+seam,at+t,sides,3,Material.FLANGE);
-        m.bolts(f,od,.50*od,outside,at-t,-1,PipeSizes.drawnBolts(od),Material.BOLT);m.bolts(f,od,.50*od,outside,at+t,1,PipeSizes.drawnBolts(od),Material.BOLT);
+        m.bolts(f,od,.50*od,outside,at-t,-1,Material.BOLT);m.bolts(f,od,.50*od,outside,at+t,1,Material.BOLT);
         m.bore(f,.44*od,at-seam,at+seam,sides,Material.OPENING);
         // The opaque casing has no modeled internal cavity; terminate its recessed throat ahead of the casting walls.
         m.annulus(f,0,.44*od,at-t+.001,sides,1,Material.OPENING);

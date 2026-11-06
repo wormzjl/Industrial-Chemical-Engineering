@@ -589,7 +589,7 @@ public final class Mesh {
 
     /**
      * The nuts on one side of a bolted flange (owner request 2026-10-16: "add bolts to all flanges") on frame {@code f}:
-     * the class 150 bolting of a line of outside diameter {@code od} ({@link PipeSizes#bolts}), each nut 1.6 bolt diameters
+     * the shared visible count of a line of outside diameter {@code od} ({@link PipeSizes#drawnBolts}), each nut 1.6 bolt diameters
      * across its flats and, with its stud's end, 1.2 d high, a closed hexagonal prism standing on the flange's surface at
      * {@code z} towards {@code sign} along the axis. They sit on a bolt circle half way from {@code inner} (the hub, the
      * neck or a cover's edge) to {@code outer} (the rim), straddling the frame's reference direction as flange bolt holes
@@ -597,7 +597,7 @@ public final class Mesh {
      * cover it everywhere (LineGeometryTest found its inside seen from outside without it).
      */
     void bolts(Frame f, double od, double inner, double outer, double z, int sign, Material material) {
-        bolts(f, od, inner, outer, z, sign, PipeSizes.bolts(od), material);
+        bolts(f, od, inner, outer, z, sign, PipeSizes.drawnBolts(od), material);
     }
 
     /** The same bolt geometry with an explicit visual count for large equipment covers. */
