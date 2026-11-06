@@ -266,9 +266,12 @@ final class SphereDesign extends UnitDesign {
         double rm = Math.max(inner + .4, (inner + p.rp) / 2);
         var manway = p.at(rm, mid + Math.PI, deck);
         var cover = Frame.of(manway, 1, 1);
-        u.mesh.cylinder(cover, .36, -.4, .1, 16, Material.FLANGE);
-        u.mesh.bolts(cover, .6, .3, .36, .1, 1, Material.BOLT);
-        u.solids.add(ProcessUnit.Solid.rod(manway, 1, deck - .4, deck + .1, .36, 0));
+        double size = Manway.preferredSize(p.d);
+        if (.6 * size > Math.min(rm - inner, p.rp - rm) + 1e-9) size = Manway.LARGE;
+        double coverRadius = .6 * size;
+        u.mesh.cylinder(cover, coverRadius, -.4, .1, 16, Material.FLANGE);
+        u.mesh.bolts(cover, size, size / 2, coverRadius, .1, 1, Material.BOLT);
+        u.solids.add(ProcessUnit.Solid.rod(manway, 1, deck - .4, deck + .1, coverRadius, 0));
     }
 
     /**

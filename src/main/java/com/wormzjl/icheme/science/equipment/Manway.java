@@ -4,7 +4,7 @@ import com.wormzjl.icheme.science.equipment.Mesh.Frame;
 import com.wormzjl.icheme.science.equipment.Mesh.Material;
 
 /**
- * A manway (photo survey EQUIPMENT_DETAILS_PHOTO_SURVEY.md, section D: 24 in, 18 in on a small vessel): its neck from
+ * A manway: its neck from
  * inside the vessel's plate out to its flange, the bolted flange and the painted blind cover, and the hinge davit that
  * swings the cover aside (a post on two lugs at the vessel's surface, an arm over the cover's centre, a drop to it).
  * Shared by a column's platforms ({@link ColumnStructure}) and a drum's shell or head ({@link EquipmentShape#manway}).
@@ -15,14 +15,19 @@ import com.wormzjl.icheme.science.equipment.Mesh.Material;
  * at {@code face}, the cover beyond it.
  */
 public record Manway(double[] centre, double[] out, double[] up, double size, double start, double surface, double face) {
-    /** The usual manway and the smaller one of a vessel under 1.25 m, m; a vessel under 0.9 m has none (a body flange instead). */
-    public static final double LARGE = .6, SMALL = .45;
+    /** Nominal access openings, m: general service, smaller vessels, and selected large equipment. */
+    public static final double LARGE = .6, SMALL = .5, EXTRA_LARGE = .75;
     /** The cover's diameter over the neck's, its thickness and the flange's, and how far the face stands beyond the surface, m. */
     static final double COVER_RATIO = 4 / 3.0, THICKNESS = .06, REACH = .25;
 
-    /** The manway a vessel of {@code diameter} carries: half its diameter at most; 0 for none. */
+    /** Game layout bands, not a pressure-design rule: 500 mm below 1.25 m, 600 mm generally, 750 mm from 4 m. */
+    static double preferredSize(double diameter) {
+        return diameter >= 4 ? EXTRA_LARGE : diameter >= 1.25 ? LARGE : SMALL;
+    }
+
+    /** A drum's opening; retain the 450 mm option where a 500 mm neck exceeds half the body diameter. */
     public static double size(double diameter) {
-        return diameter >= 1.25 ? LARGE : diameter >= .9 ? SMALL : 0;
+        return diameter >= 1 ? preferredSize(diameter) : diameter >= .9 ? .45 : 0;
     }
 
     public double cover() {

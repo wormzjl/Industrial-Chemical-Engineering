@@ -345,13 +345,14 @@ final class AdsorberDesign extends UnitDesign {
     }
 
     /**
-     * The loading manway on the top head towards the front left (DN 500 to 600 [survey], as large as fits beside the top
-     * nozzle on a small head, none under 0.25 m): its neck, flange and bolted cover, and the davit at its front-right edge
+     * The loading manway on the top head towards the front left, sized from the shared access catalog where it fits
+     * beside the top nozzle. A fitted opening below 500 mm is an inspection hatch; none under 0.25 m. Its neck, flange
+     * and bolted cover, and the davit at its front-right edge
      * with its arm over the cover.
      */
     private static void manway(ProcessUnit u, Plan p, double z) {
         double rc = p.rc, riser = PipeSizes.flange(p.main) / 2, s = Math.sqrt(.5);
-        double size = Math.floor(Math.min(.6, .3 + .1 * p.d) * 20 + 1e-9) / 20, cover = 0, rho = 0;
+        double size = Manway.preferredSize(p.d), cover = 0, rho = 0;
         for (; size >= .25 - 1e-9; size -= .05) {
             cover = .6 * size + .01;
             rho = riser + .06 + cover;
