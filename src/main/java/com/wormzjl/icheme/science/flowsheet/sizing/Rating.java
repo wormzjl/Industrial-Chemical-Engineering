@@ -63,9 +63,9 @@ public record Rating(List<Reading> readings, Map<String, Double> values) {
         return null;
     }
 
-    /** Whether Auto can stop here: every limit met, but a {@linkplain Limit.Rank#PAID paid} row may stand missed. */
+    /** Whether Auto can stop here: every limit met except paid costs and surplus capacity, whose advisories stay visible. */
     boolean settled() {
-        for (var reading : readings) if (reading.limit().rank() != Limit.Rank.PAID && !reading.met()) return false;
+        for (var reading : readings) if (reading.limit().rank() != Limit.Rank.PAID && reading.limit().rank() != Limit.Rank.SURPLUS && !reading.met()) return false;
         return true;
     }
 
@@ -74,14 +74,14 @@ public record Rating(List<Reading> readings, Map<String, Double> values) {
         return miss(Limit.Kind.MUST);
     }
 
-    /** How far past the Shoulds it stands, 0 if it meets them. */
+    /** How far past the Shoulds it stands, excluding unused capacity: extra equipment never buys a lower excess. */
     double shouldMiss() {
         return miss(Limit.Kind.SHOULD);
     }
 
     private double miss(Limit.Kind kind) {
         double miss = 0;
-        for (var reading : readings) if (reading.limit().kind() == kind && !reading.met()) miss += reading.load();
+        for (var reading : readings) if (reading.limit().kind() == kind && reading.limit().rank() != Limit.Rank.SURPLUS && !reading.met()) miss += reading.load();
         return miss;
     }
 }

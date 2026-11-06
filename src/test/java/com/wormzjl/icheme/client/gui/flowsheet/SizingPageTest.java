@@ -136,8 +136,14 @@ class SizingPageTest {
     private static void assertDoorsFit(SheetFixture.Texts texts) {
         var m = texts.measure;
         int width = SimulatorFrame.SIZING_DOOR - 10;
-        for (boolean reader : new boolean[]{false, true}) {
-            var x = context(texts, SheetFixture.editor(SHEET), STEADY, reader);
+        for (boolean reader : new boolean[]{false, true}) for (boolean manual : new boolean[]{false, true}) {
+            var editor = SheetFixture.editor(SHEET);
+            if (manual) {
+                var facts = SHEET.sizing();
+                for (var entry : sized().units().entrySet()) facts = facts.with(entry.getKey(), facts.unit(entry.getKey()).with(SizingFacts.Mode.FIXED).with(entry.getValue().size()));
+                editor.sizing(facts, null);
+            }
+            var x = context(texts, editor, STEADY, reader);
             var state = new SizingPage.State();
             var sized = sized();
             for (var view : SizingPage.View.values()) {
@@ -190,7 +196,7 @@ class SizingPageTest {
         }
         state.view = SizingPage.View.UNITS;
         // The head is one line where the columns fit: the third row down is the third unit.
-        String key = SizingGlass.click(x, state, texts.measure, box, box.x() + 30, box.y() + 4 + 12 + 2 * 12 + 4);
+        String key = SizingGlass.click(x, state, texts.measure, box, box.x() + 30, box.y() + 4 + 48 + 12 + 2 * 12 + 4);
         assertEquals("T-101/condenser", key);
         assertTrue(SizingGlass.pick(state, key));
         assertEquals("T-101/condenser", state.unit);
@@ -275,9 +281,11 @@ class SizingPageTest {
         assertFalse(editor.sheet().sizing().any(), "two steps, two undos");
         // A member's count is its column door's (S3b): one step writes both.
         state.unit = "T-101/condenser";
+        SizingPage.press(x, state, "sizing/fixed");
         SizingPage.press(x, state, "sizing/size/count+");
         assertEquals(4, editor.sheet().sizing().unit("T-101/condenser").size().count());
         assertEquals(4, ColumnDoor.of(editor.unit("T-101").params()).units().condenser());
+        assertTrue(editor.undo());
         assertTrue(editor.undo());
         assertEquals(1, ColumnDoor.of(editor.unit("T-101").params()).units().condenser());
         assertFalse(editor.sheet().sizing().any());
@@ -303,6 +311,81 @@ class SizingPageTest {
         assertEquals(Service.values()[0], editor.sheet().sizing().line("S-1").service());
         SizingPage.press(x, state, "sizing/line/runs+");
         assertEquals(new LineSizing.Size(.3, 2), editor.sheet().sizing().line("S-1").size());
+    }
+
+    @Test
+    void equipmentTypeAndSizingMethodHaveSeparateGroupsAndManualEnablesEntries() {
+        var x = context(new SheetFixture.Texts(), SheetFixture.editor(SHEET), STEADY, false);
+        var state = new SizingPage.State();
+        state.unit = "H-101";
+        var rows = SizingPage.rows(x, state);
+        var equipment = (Column.Group) rows.get(2);
+        var method = (Column.Group) rows.get(3);
+        assertEquals(x.text("sizing.equipment"), equipment.title());
+        assertEquals(x.text("sizing.method"), method.title());
+        assertTrue(SimulatorPage.keys(equipment.rows()).contains("sizing/type/CABIN_HEATER"));
+        assertFalse(SimulatorPage.keys(equipment.rows()).contains("sizing/auto"));
+        assertTrue(SimulatorPage.keys(method.rows()).contains("sizing/fixed"));
+        assertFalse(method.rows().stream().filter(row -> row instanceof Column.Setting setting && setting.key().equals("sizing/size/diameter")).map(row -> (Column.Setting) row).findFirst().orElseThrow().steps());
+        SizingPage.press(x, state, "sizing/fixed");
+        method = (Column.Group) SizingPage.rows(x, state).get(3);
+        assertTrue(method.rows().stream().filter(row -> row instanceof Column.Setting setting && setting.key().equals("sizing/size/diameter")).map(row -> (Column.Setting) row).findFirst().orElseThrow().steps());
+        assertFalse(method.rows().stream().anyMatch(row -> row instanceof Column.Field));
+        SizingPage.press(x, state, "sizing/size/diameter-");
+        assertEquals(SizingPage.stepped(new HeaterSizing.Size(UnitType.CABIN_HEATER, 1, 11, 41), "diameter", -1), x.editor().sheet().sizing().unit("H-101").size());
+        SizingPage.press(x, state, "sizing/auto");
+        var held = x.editor().sheet().sizing().unit("H-101").size();
+        SizingPage.press(x, state, "sizing/size/diameter+");
+        assertEquals(held, x.editor().sheet().sizing().unit("H-101").size(), "Auto cannot be stepped");
+    }
+
+    @Test
+    void manualStepsUseConstructorGridsAndKeepDependentLengthsBuildable() {
+        UnitSize size = new ExchangerSizing.Size(false, 1, .5, 2);
+        for (int i = 0; i < 20; i++) {
+            size = SizingPage.stepped(size, "shell", 1);
+            assertNotNull(UnitSize.built(size), size.toString());
+        }
+        var largest = (ExchangerSizing.Size) size;
+        var design = com.wormzjl.icheme.science.equipment.UnitDesign.of(com.wormzjl.icheme.science.equipment.EquipmentShape.Kind.EXCHANGER);
+        assertEquals(design.maxSize(), largest.shell());
+        assertTrue(largest.tubes() >= design.minLength(largest.shell()));
+        assertEquals(size, SizingPage.stepped(size, "shell", 1), "clamps at the constructor maximum");
+        assertEquals(1, SizingPage.stepped(size, "count", -100).count());
+        assertEquals(ColumnComponents.MAX_UNITS, SizingPage.stepped(size, "count", 100).count());
+        var air = new AirCoolerSizing.Size(2.5, 6, ProcessUnit.Bank.ONE, 1);
+        var next = (AirCoolerSizing.Size) SizingPage.stepped(air, "bay", 1);
+        var bays = ProcessUnit.bays();
+        int at = 0;
+        for (int i = 0; i < bays.size(); i++) if (bays.get(i)[0] == air.width() && bays.get(i)[1] == air.length()) at = i;
+        assertEquals(bays.get(at + 1)[0], next.width());
+        assertEquals((int) bays.get(at + 1)[1], next.length());
+        assertNotNull(UnitSize.built(next));
+    }
+
+    @Test
+    void consecutiveColumnStepsFollowTheDoorDiameter() {
+        var x = context(new SheetFixture.Texts(), SheetFixture.editor(SHEET), STEADY, false);
+        var state = new SizingPage.State();
+        state.unit = "T-101";
+        double before = ColumnDoor.of(x.editor().unit("T-101").params()).diameter();
+        SizingPage.press(x, state, "sizing/fixed");
+        SizingPage.press(x, state, "sizing/size/diameter+");
+        SizingPage.press(x, state, "sizing/size/diameter+");
+        assertEquals(before + 1, ColumnDoor.of(x.editor().unit("T-101").params()).diameter());
+    }
+
+    @Test
+    void buildRequirementsShowCountAndDimensionsOfEachPhysicalUnit() {
+        var x = context(new SheetFixture.Texts(), SheetFixture.editor(SHEET), STEADY, false);
+        var requirements = SizingGlass.requirements(x, sized(), "T-101/condenser");
+        assertEquals(x.text("sizing.build_count", 3, SizingPage.equipment(x, "T-101/condenser", sized().units().get("T-101/condenser").size())), requirements.get(1));
+        assertEquals(x.text("sizing.build_each", SizingPage.sizeText(x, new ExchangerSizing.Size(false, 1, 1.25, 4))), requirements.get(2));
+        var canvas = new Recording(x.m());
+        var state = new SizingPage.State();
+        state.unit = "T-101/condenser";
+        SizingGlass.draw(canvas, x, state, new Rect(189, 77, 1200, 600));
+        for (var line : requirements) assertTrue(canvas.texts.stream().anyMatch(text -> text.text().equals(line)), line);
     }
 
     @Test

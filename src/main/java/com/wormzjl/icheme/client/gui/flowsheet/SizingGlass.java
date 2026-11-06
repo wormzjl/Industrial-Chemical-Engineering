@@ -288,7 +288,7 @@ public final class SizingGlass {
     }
 
     /** One of a counted size, as the constructor builds each. */
-    private static UnitSize one(UnitSize size) {
+    static UnitSize one(UnitSize size) {
         return switch (size) {
             case ExchangerSizing.Size e -> e.withShells(1);
             case AirCoolerSizing.Size a -> a.withBanks(1);
@@ -296,6 +296,33 @@ public final class SizingGlass {
             case TankSizing.Size t -> new TankSizing.Size(t.type(), 1, t.diameter(), t.shell());
             default -> size;
         };
+    }
+
+    /** The selected unit's build count and dimensions per physical unit, separate from its calculated limits. */
+    static List<String> requirements(SheetContext x, SheetSizing.Sized sized, @Nullable String picked) {
+        var size = picked == null ? null : size(x, picked, sized);
+        if (size == null || UnitSize.built(size) == null) return List.of();
+        return List.of(x.text("sizing.requirements") + ": " + name(x, picked),
+                x.text("sizing.build_count", size.count(), equipment(x, picked, size)), x.text("sizing.build_each", sizeText(x, one(size))));
+    }
+
+    private static List<String> requirementLines(SheetContext x, SheetSizing.Sized sized, @Nullable String picked, Measure m, int width) {
+        var lines = new ArrayList<String>();
+        for (var text : requirements(x, sized, picked)) lines.addAll(m.wrap(text, width - 16));
+        return lines;
+    }
+
+    private static int requirementHeight(SheetContext x, SheetSizing.Sized sized, @Nullable String picked, Measure m, int width) {
+        var lines = requirementLines(x, sized, picked, m, width);
+        return lines.isEmpty() ? 0 : lines.size() * ROW + 12;
+    }
+
+    private static void requirements(Canvas c, SheetContext x, SheetSizing.Sized sized, String picked, Rect box) {
+        var lines = requirementLines(x, sized, picked, c.measure(), box.w() - 8);
+        if (lines.isEmpty()) return;
+        int height = lines.size() * ROW + 8, y = box.y() + 8;
+        c.outline(box.x() + 3, box.y() + 2, box.w() - 6, height, Palette.ACCENT);
+        for (int i = 0; i < lines.size(); i++, y += ROW) c.text(lines.get(i), box.x() + 8, y, i == 0 ? Palette.TEXT : Palette.ACCENT);
     }
 
     /** The glass of the view shown. */
@@ -311,6 +338,8 @@ public final class SizingGlass {
         switch (state.view) {
             case UNITS -> {
                 String picked = unit(state, sized);
+                if (picked != null) requirements(c, x, sized, picked, box);
+                y += requirementHeight(x, sized, picked, m, width);
                 var limits = picked == null ? List.<Item>of() : limitItems(x, sized.units().get(picked).rating());
                 String[] limitHead = limitHead(x, x.text("sizing.every_limit", picked == null ? "" : name(x, picked)));
                 var lower = Table.of(m, width, limitHead, limits);
@@ -353,6 +382,12 @@ public final class SizingGlass {
             }
             case BUILD -> {
                 var items = buildItems(x, sized);
+                int count = sized.units().keySet().stream().map(id -> size(x, id, sized)).filter(size -> size != null && UnitSize.built(size) != null).mapToInt(UnitSize::count).sum();
+                for (var text : m.wrap(x.text("sizing.requirements") + " · " + x.text("sizing.build_total", count), width)) {
+                    c.text(text, box.x() + 4, y, Palette.ACCENT);
+                    y += ROW;
+                }
+                y += 4;
                 Table.of(m, width, buildHead(x), items).draw(c, box, buildHead(x), items, Math.clamp(state.offset, 0, Math.max(0, items.size() - 1)), y, box.bottom());
             }
         }
@@ -434,7 +469,8 @@ public final class SizingGlass {
         }
         var table = Table.of(m, box.w() - 8, head, items);
         int first = Math.clamp(state.offset, 0, Math.max(0, items.size() - 1));
-        int row = (int) Math.floor((py - (box.y() + 4 + table.height() - 2)) / table.height());
+        int header = state.view == View.UNITS ? requirementHeight(x, sized, unit(state, sized), m, box.w() - 8) : 0;
+        int row = (int) Math.floor((py - (box.y() + 4 + header + table.height() - 2)) / table.height());
         int i = first + row;
         return row >= 0 && i < items.size() ? items.get(i).key() : null;
     }

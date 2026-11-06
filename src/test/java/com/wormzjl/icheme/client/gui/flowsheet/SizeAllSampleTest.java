@@ -163,21 +163,21 @@ class SizeAllSampleTest {
     }
 
     /**
-     * S3b: Auto's member counts reach the door, as the column's diameter does. The condenser's five shells are the design's count,
+     * Auto's member counts reach the door, as the column's diameter does. The enlarged condenser needs two shells,
      * which the assembly asks for and builds (at most {@code ColumnComponents.MAX_UNITS}); each cooler keeps one shell.
      */
     @Test
-    void theCondensersFiveShellsReachTheDoor() {
+    void theScaledUpCondensersCountReachesTheDoor() {
         var door = com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor.of(all.sheet().units().stream().filter(u -> u.id().equals("T-101")).findFirst().orElseThrow().params());
-        assertEquals(new com.wormzjl.icheme.science.equipment.ColumnComponents.Units(5, 1, List.of(1, 1, 1)), door.units());
+        assertEquals(new com.wormzjl.icheme.science.equipment.ColumnComponents.Units(2, 1, List.of(1, 1, 1)), door.units());
         var choices = door.choices();
-        assertEquals(5, choices.units().condenser(), "a design the calculator and the assembly take");
+        assertEquals(2, choices.units().condenser(), "a design the calculator and the assembly take");
         assertEquals(1, com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor.of(sheet.units().stream().filter(u -> u.id().equals("T-101")).findFirst().orElseThrow().params()).units().condenser(),
                 "the sheet it was given keeps its door");
     }
 
     /**
-     * S5: Send to block stores the column at its door's diameter with its member counts, the condenser's five shells as its count, and every
+     * Send to block stores the column at its door's diameter with its member counts, the enlarged condenser's two shells, and every
      * unit with a shape but the valve, each reading back whole as the block keeps it.
      */
     @Test
@@ -189,7 +189,7 @@ class SizeAllSampleTest {
         assertEquals(door.diameter(), column.column().diameter(), 1e-12);
         assertEquals(door.units(), column.column().components().units());
         var condenser = designs.stream().filter(d -> d.member().equals("condenser")).findFirst().orElseThrow();
-        assertEquals(5, condenser.count());
+        assertEquals(2, condenser.count());
         long shaped = all.sized().units().values().stream().filter(u -> u.size() != null && !(u.size() instanceof com.wormzjl.icheme.science.flowsheet.sizing.ValveSizing.Size)).count();
         assertEquals(shaped, designs.size());
         var read = com.wormzjl.icheme.world.level.block.entity.SentDesignTags.read(com.wormzjl.icheme.world.level.block.entity.SentDesignTags.write(designs, List.of()));

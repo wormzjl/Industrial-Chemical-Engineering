@@ -3,12 +3,16 @@ package com.wormzjl.icheme.client.gui.flowsheet;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.wormzjl.icheme.client.gui.common.DialogColumns;
+import com.wormzjl.icheme.client.gui.common.ConstructorColumn;
 import com.wormzjl.icheme.client.gui.common.kit.Canvas;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
 import com.wormzjl.icheme.client.gui.common.kit.Measure;
 import com.wormzjl.icheme.client.gui.common.kit.Palette;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.science.equipment.ColumnComponents;
+import com.wormzjl.icheme.science.equipment.EquipmentShape;
+import com.wormzjl.icheme.science.equipment.MachineDuty;
+import com.wormzjl.icheme.science.equipment.UnitDesign;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
 import com.wormzjl.icheme.science.equipment.SentDesign;
 import com.wormzjl.icheme.science.flowsheet.Flowsheet;
@@ -47,7 +51,7 @@ import org.jetbrains.annotations.Nullable;
 
 /**
  * The Sizing tab (batch 2026-11-02-process-simulator, {@code SIZING_PLAN.md} section 3.8, sheets 24 to 28): four views of one
- * rating. The door holds the view keys, the Design group and the selected item's Auto and Fixed keys, type keys and sizes; the
+ * rating. The door separates equipment type from Auto/Manual sizing, using the constructor's dimension steppers; the
  * glass holds the table, the selected item's limits and the path's stair. Every key and entry is a fact of the sheet, written
  * through {@link SheetEditor} as one step; the lamps are the last rating's, which the screen rebuilds after an edit. Keys start
  * {@code sizing/}. Minecraft-free.
@@ -318,7 +322,7 @@ public final class SizingPage {
         switch (state.view) {
             case UNITS -> {
                 String id = unit(state, sized);
-                if (id != null) rows.add(unitGroup(x, id, sized));
+                if (id != null) rows.addAll(unitGroups(x, id, sized));
             }
             case LINES -> {
                 String id = line(state, sized);
@@ -333,11 +337,12 @@ public final class SizingPage {
         return rows;
     }
 
-    private static Column.Group unitGroup(SheetContext x, String id, SheetSizing.Sized sized) {
+    private static List<Column.Row> unitGroups(SheetContext x, String id, SheetSizing.Sized sized) {
         boolean edits = x.editor().editable();
         var held = facts(x).unit(id);
         var size = size(x, id, sized);
         var group = new ArrayList<Column.Row>();
+        var equipmentRows = new ArrayList<Column.Row>();
         boolean valve = size instanceof ValveSizing.Size;
         if (!valve) group.add(new Column.Buttons(List.of(position("auto", x.text("sizing.auto"), held.mode() == SizingFacts.Mode.AUTO, edits),
                 position("fixed", x.text("sizing.fixed"), held.mode() == SizingFacts.Mode.FIXED, edits))));
@@ -348,8 +353,9 @@ public final class SizingPage {
             var keys = new ArrayList<Column.Button>();
             for (var type : types)
                 keys.add(new Column.Button(KEY + "type/" + type.name(), x.text("sizing.type." + type.name().toLowerCase(Locale.ROOT)), edits, x.text(held.type() == type ? "sizing.type_auto_hint" : "sizing.type_hint"), type == shown));
-            group.add(new Column.Buttons(keys));
+            equipmentRows.add(new Column.Buttons(keys));
         }
+        if (types.isEmpty()) equipmentRows.add(new Column.Line(equipment(x, id, size), Palette.TEXT));
         String hint = x.text("sizing.fixed_hint");
         switch (size) {
             case PumpSizing.Size p -> group.add(Door.entry(KEY + "size/discharge", x.text("sizing.discharge"), "m"));
@@ -367,8 +373,7 @@ public final class SizingPage {
                 group.add(new Column.Setting(KEY + "size/count", x.text("sizing.banks"), Integer.toString(a.banks()), "", hint, edits));
                 group.add(new Column.Setting(KEY + "size/parallel", x.text("sizing.parallel"), Integer.toString(a.bank().parallel()), "", hint, edits));
                 group.add(new Column.Setting(KEY + "size/series", x.text("sizing.series"), Integer.toString(a.bank().series()), "", hint, edits));
-                group.add(Door.entry(KEY + "size/width", x.text("sizing.width"), "m"));
-                group.add(Door.entry(KEY + "size/length", x.text("sizing.length"), "m"));
+                group.add(new Column.Setting(KEY + "size/bay", x.t().get(ConstructorColumn.KEY + "bay"), SheetUnits.number(1, a.width()) + "×" + a.length(), "m", hint, edits));
             }
             case HeaterSizing.Size h -> {
                 group.add(new Column.Setting(KEY + "size/count", x.text("sizing.count"), Integer.toString(h.count()), "", hint, edits));
@@ -382,7 +387,7 @@ public final class SizingPage {
             case DrumSizing.Size d -> {
                 group.add(Door.entry(KEY + "size/diameter", x.text("sizing.diameter"), "m"));
                 group.add(Door.entry(KEY + "size/length", x.text("sizing.length"), "m"));
-                group.add(new Column.Buttons(List.of(new Column.Button(KEY + "size/boot", x.text("sizing.boot"), edits, x.text("sizing.boot_hint"), d.boot()))));
+                group.add(new Column.Buttons(List.of(new Column.Button(KEY + "size/boot", x.text("sizing.boot"), edits && held.mode() == SizingFacts.Mode.FIXED, x.text("sizing.boot_hint"), d.boot()))));
             }
             case TankSizing.Size t -> {
                 group.add(new Column.Setting(KEY + "size/count", x.text("sizing.count"), Integer.toString(t.count()), "", hint, edits));
@@ -402,7 +407,97 @@ public final class SizingPage {
         String tile = tile(x, id, size);
         if ("drum".equals(tile) && unit != null) group.add(Door.entry(KEY + "hold", x.text("sizing.hold"), "min"));
         if ("storage_tank".equals(tile)) group.add(Door.entry(KEY + "hold", x.text("sizing.hold"), "h"));
-        return new Column.Group(name(x, id), null, group);
+        var values = values(x, newState(id));
+        var dimensions = dimensions(size);
+        boolean manual = held.mode() == SizingFacts.Mode.FIXED;
+        for (int i = 0; i < group.size(); i++) {
+            var row = group.get(i);
+            if (row instanceof Column.Field field && field.key().startsWith(KEY + "size/")) {
+                String label = field.label(), unitText = field.unit(), fieldName = field.key().substring((KEY + "size/").length());
+                if (dimensions != null) {
+                    var design = UnitDesign.of(dimensions.kind());
+                    boolean main = fieldName.equals(dimensions.main());
+                    if (!main && dimensions.length() == null) {
+                        group.remove(i--);
+                        continue;
+                    }
+                    label = x.t().get(ConstructorColumn.KEY + (main ? design.sizeRow() : design.lengthRow()));
+                    unitText = main ? design.sizeUnit() : design.lengthInMetres() ? "m" : "";
+                } else if (size instanceof DrumSizing.Size && fieldName.equals("length")) label = x.t().get(ConstructorColumn.KEY + "tangent_length");
+                group.set(i, new Column.Setting(field.key(), label, values.getOrDefault(field.key(), ""), unitText, x.text(manual ? "sizing.fixed_hint" : "sizing.manual_hint"), edits && manual));
+            } else if (row instanceof Column.Setting setting && setting.key().startsWith(KEY + "size/"))
+                group.set(i, new Column.Setting(setting.key(), setting.label(), setting.value(), setting.unit(), x.text(manual ? "sizing.fixed_hint" : "sizing.manual_hint"), edits && manual));
+        }
+        return List.of(new Column.Group(x.text("sizing.equipment"), name(x, id), equipmentRows),
+                new Column.Group(x.text("sizing.method"), x.text("sizing.method_hint"), group));
+    }
+
+    private static State newState(String id) {
+        var state = new State();
+        state.unit = id;
+        return state;
+    }
+
+    /** The same dimensional definitions and grids that the equipment constructor uses. */
+    private record Dimensions(EquipmentShape.Kind kind, String main, @Nullable String length, double size, int second) {
+    }
+
+    private static @Nullable Dimensions dimensions(@Nullable UnitSize size) {
+        return switch (size) {
+            case PumpSizing.Size p -> new Dimensions(EquipmentShape.Kind.PUMP, "discharge", null, p.discharge(), 1);
+            case EjectorSizing.Size e -> new Dimensions(EquipmentShape.Kind.EJECTOR, "suction", null, e.suction(), 1);
+            case ExchangerSizing.Size e -> new Dimensions(e.kettle() ? EquipmentShape.Kind.KETTLE : EquipmentShape.Kind.EXCHANGER, "shell", "tubes", e.shell(), e.tubes());
+            case HeaterSizing.Size h -> new Dimensions(h.type().kind(), "diameter", "length", h.diameter(), h.length());
+            case CompressorSizing.Size c -> new Dimensions(c.type().kind(), "size", "length", c.size(), c.length());
+            case TankSizing.Size t -> new Dimensions(t.type().kind(), "diameter", t.type() == UnitType.SPHERE ? null : "shell", t.diameter(), t.shell());
+            case null, default -> null;
+        };
+    }
+
+    private static int length(UnitDesign design, double size, int value) {
+        int least = design.minLength(size), next = Math.clamp(value, least, design.maxLength(size));
+        return next - (next - least) % design.lengthStep();
+    }
+
+    /** One constructor-style step, clamped to its range; length follows a changed main size. */
+    static @Nullable UnitSize stepped(UnitSize size, String field, int by) {
+        if (field.equals("count")) {
+            int most = size instanceof ExchangerSizing.Size || size instanceof AirCoolerSizing.Size ? ColumnComponents.MAX_UNITS : Integer.MAX_VALUE;
+            return resized(size, field, Math.clamp(size.count() + by, 1, most));
+        }
+        if (size instanceof AirCoolerSizing.Size a) {
+            if (field.equals("bay")) {
+                var bays = ProcessUnit.bays();
+                int at = 0;
+                for (int i = 0; i < bays.size(); i++) if (bays.get(i)[0] == a.width() && bays.get(i)[1] == a.length()) at = i;
+                var bay = bays.get(Math.clamp(at + by, 0, bays.size() - 1));
+                return new AirCoolerSizing.Size(bay[0], (int) bay[1], a.bank(), a.banks());
+            }
+            if (field.equals("parallel")) return resized(size, field, Math.clamp(a.bank().parallel() + by, 1, ProcessUnit.Bank.MAX_PARALLEL));
+            if (field.equals("series")) return resized(size, field, Math.clamp(a.bank().series() + by, 1, ProcessUnit.Bank.MAX_SERIES));
+        }
+        if (size instanceof TurbineSizing.Size t) {
+            var duty = UnitDesign.of(EquipmentShape.Kind.STEAM_TURBINE).step(MachineDuty.turbine(t.power(), t.steam(), t.exhaust()), field, by);
+            return new TurbineSizing.Size(duty.power(), duty.steam(), duty.exhaust());
+        }
+        if (size instanceof DrumSizing.Size d) return switch (field) {
+            case "diameter" -> resized(size, field, Math.clamp(Math.round((d.diameter() + .5 * by) * 2) / 2., EquipmentShape.MIN_DIAMETER, EquipmentShape.MAX_DIAMETER));
+            case "length" -> resized(size, field, Math.clamp(d.length() + by, 1, (int) EquipmentShape.MAX_TANGENT_LENGTH));
+            default -> null;
+        };
+        if (size instanceof ColumnSizing.Size c && field.equals("diameter"))
+            return new ColumnSizing.Size(Math.clamp(Math.round((c.diameter() + .5 * by) * 2) / 2., EquipmentShape.MIN_DIAMETER, EquipmentShape.MAX_COLUMN_DIAMETER), c.layout());
+        var dimensions = dimensions(size);
+        if (dimensions == null) return null;
+        var design = UnitDesign.of(dimensions.kind());
+        if (field.equals(dimensions.main())) {
+            double next = design.step(dimensions.size(), by);
+            if (size instanceof TankSizing.Size t && t.type() == UnitType.SPHERE) return new TankSizing.Size(t.type(), t.count(), next, design.defaultLength(next));
+            var resized = resized(size, field, next);
+            return dimensions.length() == null ? resized : resized(resized, dimensions.length(), length(design, next, dimensions.second()));
+        }
+        if (field.equals(dimensions.length())) return resized(size, field, length(design, dimensions.size(), dimensions.second() + by * design.lengthStep()));
+        return null;
     }
 
     private static Column.Group lineGroup(SheetContext x, String id, SheetSizing.Sized sized) {
@@ -727,15 +822,14 @@ public final class SizingPage {
             x.editor().sizing(facts.with(id, held.typed(held.type() == type ? null : type)), null);
         } else if (key.equals("size/boot") && size instanceof DrumSizing.Size d) keep(x, id, new DrumSizing.Size(d.type(), d.diameter(), d.length(), !d.boot()), null);
         else if (key.startsWith("size/") && (key.endsWith("-") || key.endsWith("+")) && size != null) {
+            if (held.mode() != SizingFacts.Mode.FIXED) return;
             String field = key.substring(5, key.length() - 1);
             int by = key.endsWith("+") ? 1 : -1;
-            int now = switch (field) {
-                case "parallel" -> size instanceof AirCoolerSizing.Size a ? a.bank().parallel() : 1;
-                case "series" -> size instanceof AirCoolerSizing.Size a ? a.bank().series() : 1;
-                default -> size.count();
-            };
-            var next = resized(size, field, now + by);
-            if (next != null) keep(x, id, next, null);
+            var column = x.editor().unit(id);
+            if (size instanceof ColumnSizing.Size c && column != null) size = new ColumnSizing.Size(ColumnDoor.of(column.params()).diameter(), c.layout());
+            var next = stepped(size, field, by);
+            if (next instanceof ColumnSizing.Size c) typed(x, state, "size/diameter", c.diameter(), "step sizing diameter");
+            else if (next != null) keep(x, id, next, null);
         }
     }
 

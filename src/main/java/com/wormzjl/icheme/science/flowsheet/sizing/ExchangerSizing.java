@@ -18,8 +18,9 @@ import java.util.List;
 /**
  * An exchanger or a kettle (batch 2026-11-02-process-simulator, {@code SIZING_PLAN.md} sections 3.4, 3.5 and 3.11). The surface a
  * duty needs comes from {@link ExchangerRating} on the world's two curves, and each side's drop from its {@link HeatSides} passage
- * at its inlet's flow, as the world's law prices it. Auto takes the fewest shells, then the least surface, that holds it under
- * twice the need and within both drops. A kettle's shell is a pool, so it has no shell drop and reads its flux.
+ * at its inlet's flow, as the world's law prices it. Auto takes the fewest shells, then the least surface, within both drops.
+ * Excess surface stays advisory: enlarge a shell before adding parallel shells. A kettle's shell is a pool, so it has no shell
+ * drop and reads its flux.
  */
 public final class ExchangerSizing {
     /** The most shells Auto tries: as many as a column member step takes in parallel (S3b). */

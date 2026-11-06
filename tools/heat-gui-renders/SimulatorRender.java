@@ -295,7 +295,7 @@ public final class SimulatorRender {
             }
             case SIZING -> {
                 SimulatorPage.sizing(d.c, d.skin, x, s.sizing, frame, d.w);
-                rows(d, SizingPage.rows(x, s.sizing), 10, SimulatorFrame.DOOR_TOP, SimulatorFrame.SIZING_DOOR - 10, SizingPage.values(x, s.sizing));
+                GuiPrototypes.doorColumn(d, SizingPage.rows(x, s.sizing), new Rect(10, SimulatorFrame.DOOR_TOP, SimulatorFrame.SIZING_DOOR - 10, frame.bottom() - SimulatorFrame.DOOR_TOP), SizingPage.values(x, s.sizing), "Sizing");
             }
             case BASIS -> {
                 SimulatorPage.basis(d.c, d.skin, x, frame, d.w);
@@ -813,6 +813,21 @@ public final class SimulatorRender {
         System.out.printf("sized: run %s, %d units, %d lines, %d paths, %.1f s%n", all.run().status(), all.sized().units().size(), all.sized().lines().size(), all.sized().paths().size(), took);
         var finished = new SimulatorHost.Finished(all.sheet(), all.run(), seconds + took);
         var host = new Sized(finished, new SimulatorRunner.Rated(all.sheet(), finished, all.sized(), true), null);
+        if ("sizing-controls".equals(System.getProperty("only"))) {
+            Consumer<Scene> condenser = s -> s.sizing.unit = "T-101/condenser";
+            Consumer<Scene> manual = s -> {
+                condenser.accept(s);
+                SizingPage.press(s.context(), s.sizing, "sizing/fixed");
+            };
+            var manualBody = sized(host, manual);
+            sheet(out, "08-sizing-controls", W, H, List.of("Condenser: Auto", "Condenser: Manual, constructor size controls", "Manual, scrolled to the end", "Air cooler: Manual bay selector"),
+                    List.of(sized(host, condenser), manualBody, (d, skin) -> manualBody.accept(new GuiPrototypes.Door(d.c, skin, d.w, d.h, true), skin), sized(host, s -> {
+                        s.sizing.unit = "E-102";
+                        SizingPage.press(s.context(), s.sizing, "sizing/fixed");
+                    })));
+            sheet(out, "09-build-requirements", W, H, List.of("Equipment counts and dimensions per physical unit"), List.of(sized(host, s -> s.sizing.view = SizingPage.View.BUILD)));
+            return;
+        }
         // E-101 kept at a 0.75 m shell: Fixed, rated red, and greyed until the next run.
         var held = all.sheet().sizing().unit("E-101");
         var kept = held.size() instanceof ExchangerSizing.Size e ? new ExchangerSizing.Size(false, e.shells(), .75, e.tubes()) : new ExchangerSizing.Size(false, 1, .75, 6);
@@ -1139,7 +1154,7 @@ public final class SimulatorRender {
             return;
         }
         // -Donly=sizing: S4b's sheets alone.
-        if ("sizing".equals(System.getProperty("only"))) {
+        if ("sizing".equals(System.getProperty("only")) || "sizing-controls".equals(System.getProperty("only"))) {
             sizing(out, sheet, run, seconds);
             return;
         }

@@ -12,6 +12,7 @@ import static com.wormzjl.icheme.science.flowsheet.sizing.Limit.Kind.MUST;
 import static com.wormzjl.icheme.science.flowsheet.sizing.Limit.Kind.RULE;
 import static com.wormzjl.icheme.science.flowsheet.sizing.Limit.Kind.SHOULD;
 import static com.wormzjl.icheme.science.flowsheet.sizing.Limit.Rank.PAID;
+import static com.wormzjl.icheme.science.flowsheet.sizing.Limit.Rank.SURPLUS;
 import static com.wormzjl.icheme.science.flowsheet.sizing.Limit.Rank.QUIET;
 
 import com.wormzjl.icheme.science.column.operation.ColumnSolve;
@@ -139,7 +140,7 @@ public enum Limit {
     EXCHANGER_DROP_LIQUID(SHOULD, most(.7), "bar", "[BLOG]"),
     EXCHANGER_DROP_GAS(SHOULD, most(.2), "bar", "[SCR-HX], [BLOG]"),
     EXCHANGER_DROP_BOILING(SHOULD, most(.1), "bar", "[BLOG]"),
-    EXCHANGER_OVER_NEED(SHOULD, most(100), "%", "This plan", QUIET),
+    EXCHANGER_OVER_NEED(SHOULD, most(100), "%", "This plan", SURPLUS),
     EXCHANGER_WATER_OUT(SHOULD, most(45), "°C", "[BLOG]", QUIET),
     KETTLE_FLUX(SHOULD, most(38), "kW/m²", "[ET]"),
 
@@ -260,7 +261,9 @@ public enum Limit {
         /** It is what is closest only when it fails: a size of this item hardly moves it. */
         QUIET,
         /** As QUIET, and {@link Selection} pays it to meet every other limit: the lamp shows the price. */
-        PAID
+        PAID,
+        /** Unused capacity: visible as an advisory, never a reason to build additional equipment. */
+        SURPLUS
     }
 
     private final Kind kind;
