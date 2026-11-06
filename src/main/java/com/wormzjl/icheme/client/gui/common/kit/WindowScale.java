@@ -31,40 +31,39 @@ public final class WindowScale {
     }
 
     /**
-     * The scale for a frame {@code width} by {@code height} screen px; with the forced Unicode font an even one, as the
-     * game's own ({@code Window.calculateScale}), the next lower where the window has room for it.
+     * The scale for a frame {@code width} by {@code height} screen px. The font option does not change the panel's size;
+     * whole scales work with either font. Only {@link #restore} follows vanilla's Unicode parity rule.
      */
     public static int of(int width, int height, boolean unicode) {
-        return holding(width, height, unicode, HEIGHT);
+        return holding(width, height, HEIGHT);
     }
 
     /**
      * The smallest scale a player reads the screens at: half the design size's ({@link #of(int, int, boolean)}), rounded
-     * up, and never below 2 where that one is 2 or more; even with the Unicode font. A 1920 by 1080 window reads at 2 and
+     * up, and never below 2 where that one is 2 or more. A 1920 by 1080 window reads at 2 and
      * up, 2560 by 1440 at 3, 3840 by 2160 at 4, 1366 by 768 at 2, 800 by 600 at 1.
      */
     public static int minimum(int width, int height, boolean unicode) {
         int design = of(width, height, unicode), least = Math.max((design + 1) / 2, Math.min(design, 2));
-        return unicode && least % 2 != 0 ? least + 1 : least;
+        return least;
     }
 
     /**
      * The scale for a screen designed {@link #WIDTH} by {@code designHeight} GUI px whose door columns fit as {@code fit}
      * says: the largest at which the window holds its design size, between {@link #minimum} and the design size's
-     * ({@link #of(int, int, boolean)}); lowered a whole step (two with the Unicode font) while the columns do not fit,
+     * ({@link #of(int, int, boolean)}); lowered a whole step while the columns do not fit,
      * down to the minimum, where they scroll. The GUI size at a scale is the game's: the frame over the scale, rounded up.
      */
     public static int of(int width, int height, boolean unicode, int designHeight, Fit fit) {
-        int least = minimum(width, height, unicode), step = unicode ? 2 : 1;
-        int scale = Math.clamp(holding(width, height, unicode, designHeight), least, of(width, height, unicode));
-        while (scale > least && !fit.fits(-Math.floorDiv(-width, scale), -Math.floorDiv(-height, scale))) scale -= step;
+        int least = minimum(width, height, unicode);
+        int scale = Math.clamp(holding(width, height, designHeight), least, of(width, height, unicode));
+        while (scale > least && !fit.fits(-Math.floorDiv(-width, scale), -Math.floorDiv(-height, scale))) scale--;
         return scale;
     }
 
-    /** The largest whole scale at which the frame holds {@link #WIDTH} by {@code designHeight}, at least 1 (with Unicode, even). */
-    private static int holding(int width, int height, boolean unicode, int designHeight) {
-        int scale = Math.max(1, Math.min(width / WIDTH, height / designHeight));
-        return unicode && scale % 2 != 0 ? scale > 1 ? scale - 1 : 2 : scale;
+    /** The largest whole scale at which the frame holds {@link #WIDTH} by {@code designHeight}, at least 1. */
+    private static int holding(int width, int height, int designHeight) {
+        return Math.max(1, Math.min(width / WIDTH, height / designHeight));
     }
 
     /** Sets the screen's scale on the window, and the screen's size to the window's in GUI px at that scale. */

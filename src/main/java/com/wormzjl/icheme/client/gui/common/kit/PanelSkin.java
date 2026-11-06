@@ -6,7 +6,7 @@ import java.util.regex.Pattern;
 
 /**
  * A control panel door (GUI_TOOLKIT_PLAN.md sections 9 to 13; owner: "Both 3a and 3c, configurable as light and dark"):
- * flat engraved legend plates for the title and the function groups, an engraved line round each group, engraved text,
+ * flat engraved legend plates for the title and the function groups, an engraved line round each group, plain text,
  * push buttons in a black bezel with a chrome ring (lit from behind when latched), flat display keys in an engraved tray,
  * pilot lights with a glow, 7-segment LCD set-point windows for the entries and LED panel meters for the readings, an LED
  * bar graph with a top zone, a message display for the status, the HMI screen in its bezel with a power LED, a
@@ -14,7 +14,7 @@ import java.util.regex.Pattern;
  * Panel legends keep their colour; the lamps show state. Button colours follow IEC 60073: black general, green running
  * (latched), blue confirm, amber a confirm that is due (attention: Run while the results are out of date). {@link #LIGHT} is door 3a, {@link #DARK} door 3c.
  */
-public record PanelSkin(Door door, Face legend, int emboss, boolean shadow, Face key, Face lit, Face confirm, Face due, Face dim, int bezel, int chrome,
+public record PanelSkin(Door door, Face legend, Face key, Face lit, Face confirm, Face due, Face dim, int bezel, int chrome,
                         Window meter, int lampOn, int lampOff, Window bar, int barTop, Window display, int alarm, Window screen, int screenBezel,
                         Ink ink) implements Skin {
     /** A face of a push button or a legend plate: its colour, its top-left and bottom-right edges, and its legend's colour. */
@@ -44,14 +44,14 @@ public record PanelSkin(Door door, Face legend, int emboss, boolean shadow, Face
 
     /** Door 3a: RAL 7035 light grey, white legend plates (black ones read as buttons), green lamps, red LED meters, a green bar graph. */
     public static final PanelSkin LIGHT = new PanelSkin(new Door(0xFFC9CCC8, 0xFFE2E5E1, 0xFFA5A8A4, 0xFF6E716D),
-            new Face(0xFFF4F4F0, 0xFFFFFFFF, 0xFF6E716D, 0xFF1A1A1A), 0xFFE9ECE8, false,
+            new Face(0xFFF4F4F0, 0xFFFFFFFF, 0xFF6E716D, 0xFF1A1A1A),
             BLACK_KEY, GREEN_LIT, BLUE_CONFIRM, AMBER_DUE, new Face(0xFF8A8D89, 0xFF9C9F9B, 0xFF767975, 0xFFC4C7C3), 0xFF111111, 0xFFA9ACA8,
             new Window(0xFF0A0A0A, 0xFFFF3B1F, 0xFF2A0D08), 0xFF3BE060, 0xFF1F3A26, new Window(0xFF0A0A0A, 0xFF3BE060, 0xFF12301A), 0xFFFFB000,
             new Window(0xFF06100D, 0xFF6CF0C2, 0), 0xFFFFB347, SCREEN, 0xFF1A1A1A, new Ink(0xFF1A1A1A, 0xFF3C3F3B, 0xFF1E7A34, 0xFF9A6A00));
 
     /** Door 3c: RAL 7016 anthracite, aluminium legend plates, amber LED meters and bar graph with a red top zone. */
     public static final PanelSkin DARK = new PanelSkin(new Door(0xFF383E42, 0xFF4F565B, 0xFF24282B, 0xFF121416),
-            new Face(0xFFB9BDC0, 0xFFDDE1E4, 0xFF6E7275, 0xFF111111), 0xA0000000, true,
+            new Face(0xFFB9BDC0, 0xFFDDE1E4, 0xFF6E7275, 0xFF111111),
             new Face(0xFF1A1C1E, 0xFF3A3E42, 0xFF0C0D0E, 0xFFE6E6E6), GREEN_LIT, BLUE_CONFIRM, AMBER_DUE_DARK,
             new Face(0xFF2C3134, 0xFF363B3F, 0xFF22262A, 0xFF6E757A), 0xFF0A0B0C, 0xFF8E9396,
             new Window(0xFF080808, 0xFFFFB000, 0xFF2A1E05), 0xFF3BE060, 0xFF1A2A1F, new Window(0xFF080808, 0xFFFFB000, 0xFF2A1E05), 0xFFFF4A2A,
@@ -66,10 +66,9 @@ public record PanelSkin(Door door, Face legend, int emboss, boolean shadow, Face
         return p == Palette.TEXT ? ink.text() : p == Palette.MUTED ? ink.dim() : p == Palette.ACCENT ? ink.accent() : p == Palette.WARN ? ink.warn() : p;
     }
 
-    /** Engraved: a highlight under the text on a light door, a shadow on a dark one. */
+    /** Body text uses one glyph pass, as the legend plates do, so live readings have no offset ghost. */
     @Override
     public void text(Canvas c, String text, int x, int y, int palette) {
-        c.text(text, shadow ? x + 1 : x, y + 1, emboss);
         c.text(text, x, y, tone(palette));
     }
 
