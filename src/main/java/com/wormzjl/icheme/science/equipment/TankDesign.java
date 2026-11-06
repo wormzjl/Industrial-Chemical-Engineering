@@ -588,14 +588,20 @@ final class TankDesign extends UnitDesign {
         roof.annulus(up, rr - pw, rr, top, p.n, 1, Material.SUPPORT);
         roof.annulus(up, 0, rr, under, p.n, -1, Material.SUPPORT);
         roof.annulus(up, 0, rr - pw, deck, p.n, 1, Material.STEELWORK);
-        // The flexible seal bridges the movement clearance and overlaps the inner wall slightly. An outward-facing
-        // frustum widens upwards here, so its face points down and disappears from above; draw both sides of the skin.
-        double seal = p.r - EquipmentShape.PLATE + .01;
+        // Rim-mounted secondary seal: overlapping bare-metal compression plates bridge the clearance, with only a
+        // narrow flexible wiper at the shell. The upper face must look into the tank opening; an outward-facing
+        // frustum widens upwards here and points down instead. Both sides of each thin sheet are visible.
+        double seal = p.r - EquipmentShape.PLATE + .01, metal = seal - .02;
+        double metalTop = top + .15 * (metal - rr) / (seal - rr);
         for (int i = 0; i < p.n; i++) {
             double a0 = 2 * Math.PI * i / p.n, a1 = 2 * Math.PI * (i + 1) / p.n;
-            var skin = List.of(up.at(a0, rr, top), up.at(a1, rr, top), up.at(a1, seal, top + .15), up.at(a0, seal, top + .15));
-            roof.flat(skin, UP, Material.OPENING);
-            roof.flat(skin, Mesh.neg(UP), Material.OPENING);
+            var plate = List.of(up.at(a0, rr, top), up.at(a1, rr, top), up.at(a1, metal, metalTop), up.at(a0, metal, metalTop));
+            roof.flat(plate, UP, Material.PIPE);
+            roof.flat(plate, Mesh.neg(UP), Material.PIPE);
+            var wiper = List.of(up.at(a0, metal, metalTop), up.at(a1, metal, metalTop), up.at(a1, seal, top + .15), up.at(a0, seal, top + .15));
+            roof.flat(wiper, UP, Material.OPENING);
+            roof.flat(wiper, Mesh.neg(UP), Material.OPENING);
+            if (i % 2 == 0) roof.bar(up.at(a0, rr, top + .008), up.at(a0, metal, metalTop + .008), .008, UP, Material.PIPE);
         }
         roof.cylinder(up, .3, under - .3, under, 12, Material.SUPPORT);
         // Legs on the pontoon and on the deck, about 4 m apart round each ring.
