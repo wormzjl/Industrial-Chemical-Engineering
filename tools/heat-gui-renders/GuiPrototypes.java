@@ -102,11 +102,11 @@ public final class GuiPrototypes {
             constructorDoor(d,page,"Heat exchanger","change",DIALOG.get(CONSTRUCTOR+"surface","2,658"),Palette.ACCENT,Map.of());
             var b=d.skin.well(d.c,new Rect(203,30,251,170));
             d.c.text("Two tube passes",b.x()+8,b.y()+10,Palette.ACCENT);
-            d.c.text("Upper distributor",b.x()+8,b.y()+35,Palette.TEXT);
+            d.c.text("Upper internal space",b.x()+8,b.y()+35,Palette.TEXT);
             d.c.fill(b.x()+20,b.y()+55,b.x()+220,b.y()+65,Palette.LINE);
-            d.c.outline(b.x()+20,b.y()+68,200,45,Palette.ACCENT);
+            d.c.outline(b.x()+20,b.y()+50,200,80,Palette.ACCENT);
             d.c.fill(b.x()+20,b.y()+116,b.x()+220,b.y()+126,Palette.LINE);
-            d.c.text("Lower collector",b.x()+8,b.y()+139,Palette.TEXT);
+            d.c.text("Lower internal space",b.x()+8,b.y()+139,Palette.TEXT);
         },true);
     }
 

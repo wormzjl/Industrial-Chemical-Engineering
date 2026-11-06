@@ -341,24 +341,30 @@ class SizingPageTest {
         var state = new SizingPage.State();
         state.unit = "H-101";
         var rows = SizingPage.rows(x, state);
-        var equipment = (Column.Group) rows.get(2);
-        var method = (Column.Group) rows.get(3);
+        var method = (Column.Group) rows.get(2);
+        var equipment = (Column.Group) rows.get(3);
         assertEquals(x.text("sizing.equipment"), equipment.title());
         assertEquals(x.text("sizing.method"), method.title());
         assertTrue(SimulatorPage.keys(equipment.rows()).contains("sizing/type/CABIN_HEATER"));
         assertFalse(SimulatorPage.keys(equipment.rows()).contains("sizing/auto"));
         assertTrue(SimulatorPage.keys(method.rows()).contains("sizing/fixed"));
-        assertFalse(method.rows().stream().filter(row -> row instanceof Column.Setting setting && setting.key().equals("sizing/size/diameter")).map(row -> (Column.Setting) row).findFirst().orElseThrow().steps());
+        assertEquals(List.of("sizing/auto", "sizing/fixed"), SimulatorPage.keys(method.rows()), "the method frame holds only the method selector");
+        assertFalse(equipment.rows().stream().filter(row -> row instanceof Column.Setting setting && setting.key().equals("sizing/size/diameter")).map(row -> (Column.Setting) row).findFirst().orElseThrow().steps());
         SizingPage.press(x, state, "sizing/fixed");
-        method = (Column.Group) SizingPage.rows(x, state).get(3);
-        assertTrue(method.rows().stream().filter(row -> row instanceof Column.Setting setting && setting.key().equals("sizing/size/diameter")).map(row -> (Column.Setting) row).findFirst().orElseThrow().steps());
-        assertFalse(method.rows().stream().anyMatch(row -> row instanceof Column.Field));
+        equipment = (Column.Group) SizingPage.rows(x, state).get(3);
+        assertTrue(equipment.rows().stream().filter(row -> row instanceof Column.Setting setting && setting.key().equals("sizing/size/diameter")).map(row -> (Column.Setting) row).findFirst().orElseThrow().steps());
+        assertFalse(equipment.rows().stream().anyMatch(row -> row instanceof Column.Field));
         SizingPage.press(x, state, "sizing/size/diameter-");
         assertEquals(SizingPage.stepped(new HeaterSizing.Size(UnitType.CABIN_HEATER, 1, 11, 41), "diameter", -1), x.editor().sheet().sizing().unit("H-101").size());
         SizingPage.press(x, state, "sizing/auto");
         var held = x.editor().sheet().sizing().unit("H-101").size();
         SizingPage.press(x, state, "sizing/size/diameter+");
         assertEquals(held, x.editor().sheet().sizing().unit("H-101").size(), "Auto cannot be stepped");
+        state.unit="T-101/condenser";
+        rows=SizingPage.rows(x,state);
+        method=(Column.Group)rows.get(2);equipment=(Column.Group)rows.get(3);
+        assertEquals(List.of("sizing/auto","sizing/fixed"),SimulatorPage.keys(method.rows()));
+        assertTrue(SimulatorPage.keys(equipment.rows()).containsAll(List.of("sizing/exchanger/STANDARD","sizing/exchanger/CROSSFLOW","sizing/size/count","sizing/size/shell","sizing/size/tubes")));
     }
 
     @Test

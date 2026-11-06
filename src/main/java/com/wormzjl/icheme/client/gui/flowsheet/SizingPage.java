@@ -344,8 +344,9 @@ public final class SizingPage {
         var size = size(x, id, sized);
         var group = new ArrayList<Column.Row>();
         var equipmentRows = new ArrayList<Column.Row>();
+        var methodRows = new ArrayList<Column.Row>();
         boolean valve = size instanceof ValveSizing.Size;
-        if (!valve) group.add(new Column.Buttons(List.of(position("auto", x.text("sizing.auto"), held.mode() == SizingFacts.Mode.AUTO, edits),
+        if (!valve) methodRows.add(new Column.Buttons(List.of(position("auto", x.text("sizing.auto"), held.mode() == SizingFacts.Mode.AUTO, edits),
                 position("fixed", x.text("sizing.fixed"), held.mode() == SizingFacts.Mode.FIXED, edits))));
         var unit = x.editor().unit(id);
         var types = unit == null ? List.<UnitType>of() : Tiles.types(unit.type());
@@ -434,8 +435,11 @@ public final class SizingPage {
             } else if (row instanceof Column.Setting setting && setting.key().startsWith(KEY + "size/"))
                 group.set(i, new Column.Setting(setting.key(), setting.label(), setting.value(), setting.unit(), x.text(manual ? "sizing.fixed_hint" : "sizing.manual_hint"), edits && manual));
         }
-        return List.of(new Column.Group(x.text("sizing.equipment"), name(x, id), equipmentRows),
-                new Column.Group(x.text("sizing.method"), x.text("sizing.method_hint"), group));
+        equipmentRows.addAll(group);
+        var rows = new ArrayList<Column.Row>();
+        if (!methodRows.isEmpty()) rows.add(new Column.Group(x.text("sizing.method"), x.text("sizing.method_hint"), methodRows));
+        rows.add(new Column.Group(x.text("sizing.equipment"), name(x, id), equipmentRows));
+        return rows;
     }
 
     private static State newState(String id) {

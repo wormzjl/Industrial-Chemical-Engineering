@@ -595,9 +595,13 @@ public final class Mesh {
      * cover it everywhere (LineGeometryTest found its inside seen from outside without it).
      */
     void bolts(Frame f, double od, double inner, double outer, double z, int sign, Material material) {
+        bolts(f, od, inner, outer, z, sign, PipeSizes.bolts(od), material);
+    }
+
+    /** The same bolt geometry with an explicit visual count for large equipment covers. */
+    void bolts(Frame f, double od, double inner, double outer, double z, int sign, int count, Material material) {
         double d = PipeSizes.boltDiameter(od), across = Math.max(1.6 * d, MIN_NUT);
         if (outer - inner < across) return;
-        int count = PipeSizes.bolts(od);
         double r = across / Math.sqrt(3), height = Math.max(1.2 * d, MIN_NUT), circle = (inner + outer) / 2;
         var axis = new double[]{sign * f.axis[0], sign * f.axis[1], sign * f.axis[2]};
         for (int k = 0; k < count; k++) cylinder(new Frame(f.at(2 * Math.PI * (k + .5) / count, circle, z), axis, f.ref), r, 0, height, 6, material);

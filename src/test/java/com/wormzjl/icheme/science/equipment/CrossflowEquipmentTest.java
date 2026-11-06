@@ -9,6 +9,38 @@ import java.util.HashSet;
 import static org.junit.jupiter.api.Assertions.*;
 
 class CrossflowEquipmentTest {
+    @Test void remodelingRetainsEverySupportedPipeConnection() throws Exception {
+        var recorded=java.nio.file.Files.readAllLines(java.nio.file.Path.of("src/test/resources/compat/layouts/crossflow-pipes.txt"));
+        int checked=0;
+        for(var line:recorded) {
+            if(line.startsWith("#")||line.isBlank())continue;
+            var columns=line.split(" ");var size=columns[0].split(":");
+            double d=Double.parseDouble(size[0]);int length=Integer.parseInt(size[1]);
+            var kind=EquipmentShape.Kind.EXCHANGER;
+            var shape=EquipmentShape.unit(kind,d,length,EquipmentShape.Heading.valueOf(size[2]),ProcessUnit.minSupport(kind,d,length)).withExchangerType(ExchangerType.CROSSFLOW);
+            var ports=ShapeRasterizer.ports(shape);assertEquals(columns.length-1,ports.size());
+            for(int i=0;i<ports.size();i++) {
+                var port=ports.get(i);
+                assertEquals(columns[i+1],(port.cell().x()+port.dx())+","+(port.cell().y()+port.dy())+","+(port.cell().z()+port.dz()),columns[0]);
+            }
+            for(var nozzle:shape.nozzles())if(nozzle.role()==EquipmentShape.Role.SHELL_INLET||nozzle.role()==EquipmentShape.Role.SHELL_OUTLET) {
+                double centre=shape.support()+d/2;
+                assertTrue(Math.abs(nozzle.base()[1]-centre)<d/2,"the nozzle neck starts inside the cylindrical shell");
+            }
+            checked++;
+        }
+        assertEquals(292,checked);
+    }
+
+    @Test void distributionSpacesStayInsideTheRoundPressureShell() {
+        var shape=EquipmentShape.unit(EquipmentShape.Kind.EXCHANGER,2.25,7,EquipmentShape.Heading.NORTH,2).withExchangerType(ExchangerType.CROSSFLOW);
+        var unit=ProcessUnit.of(shape);var tube=shape.nozzles().getFirst();
+        double x=tube.base()[0],y=shape.support()+shape.diameter()/2,z=tube.base()[2]+2.5;
+        assertTrue(unit.inside(new double[]{x,y,z}));
+        assertFalse(unit.inside(new double[]{x,y+shape.diameter()/2+.15,z}),"no rectangular header above the barrel");
+        assertFalse(unit.inside(new double[]{x,y-shape.diameter()/2-.15,z}),"no rectangular header below the barrel");
+    }
+
     @Test void everyBuildableSizeAndHeadingLeavesSeparateFreePipeBlocks() {
         var kind = EquipmentShape.Kind.EXCHANGER;
         int checked = 0;

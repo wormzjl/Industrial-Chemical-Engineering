@@ -13,22 +13,22 @@ public enum ExchangerType {
     private final String key;
     private final HeatRouting tube, shell;
     private final int cells;
-    private final boolean headers;
+    private final boolean transverseShell;
 
-    ExchangerType(String key, HeatRouting tube, HeatRouting shell, int cells, boolean headers) {
+    ExchangerType(String key, HeatRouting tube, HeatRouting shell, int cells, boolean transverseShell) {
         this.key = key;
         this.tube = tube;
         this.shell = shell;
         this.cells = cells;
-        this.headers = headers;
+        this.transverseShell = transverseShell;
     }
 
     public String key() { return key; }
     public int cells() { return cells; }
     public HeatRouting routing(HeatSides.Side side) { return side == HeatSides.Side.TUBE ? tube : shell; }
-    /** Longitudinal distributor/collector dimensions; zero height retains the original shell nozzles. */
-    public record Layout(double headerHeight, double headerHalfWidth) {}
-    public Layout layout(double diameter) { return headers ? new Layout(.2*diameter+.1,.3*diameter) : new Layout(0,0); }
+    /** X-shell distribution and collection spaces lie inside the cylindrical pressure shell. */
+    public record Layout(boolean transverseShell, double nozzleStandOff) {}
+    public Layout layout(double diameter) { return new Layout(transverseShell,transverseShell?.2*diameter+.1:0); }
 
     public PipeResistance.Geometry tubePassage(double diameter, double length) {
         return HeatSides.tubePassage(diameter, length);
