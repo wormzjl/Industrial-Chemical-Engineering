@@ -33,6 +33,18 @@ public final class EquipmentClient {
     }
 
     @SubscribeEvent
+    public static void registerBreakSounds(net.neoforged.neoforge.client.extensions.common.RegisterClientExtensionsEvent event) {
+        event.registerBlock(new net.neoforged.neoforge.client.extensions.common.IClientBlockExtensions() {
+            @Override
+            public boolean playBreakSound(net.minecraft.world.level.block.state.BlockState state,
+                                          net.minecraft.world.level.Level level, BlockPos position) {
+                // EquipmentStructure sends the one structure-break sound; keep the vanilla event's particles only.
+                return true;
+            }
+        }, ModBlocks.EQUIPMENT_SHELL.get(), ModBlocks.EQUIPMENT_INTERIOR.get());
+    }
+
+    @SubscribeEvent
     public static void registerGeometryLoaders(ModelEvent.RegisterGeometryLoaders event) {
         event.register(EquipmentShellModel.LOADER_ID, EquipmentShellModel.LOADER);
         event.register(com.wormzjl.icheme.client.model.FluidDeviceModel.LOADER_ID, com.wormzjl.icheme.client.model.FluidDeviceModel.LOADER);

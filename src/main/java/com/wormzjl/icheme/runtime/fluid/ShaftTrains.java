@@ -252,9 +252,9 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
                     var u = topology.shaft(configure.unit());
                     if (u == null || u.settings().equals(configure.settings())) continue;
                     var next = u.withSettings(configure.settings());
-                    // A start turns the driver to its set speed at once (quasi-steady, no run-up); a stop stands it.
+                    // Starting or resetting arms the driver; only its next power-backed step may turn it.
                     if (u.kind().driver() && u.settings().running() != configure.settings().running())
-                        next = next.withState(new ShaftUnit.State(configure.settings().running() && u.trip() == ShaftTrain.Trip.NONE ? driver(next, false).setSpeed() : 0, Double.NaN, Double.NaN));
+                        next = next.withState(new ShaftUnit.State(0, Double.NaN, Double.NaN));
                     topology.shaft(next);
                     recompile |= u.kind() == ShaftNetwork.Kind.GEARBOX;
                     fresh(u.id());
@@ -263,7 +263,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
                     var u = topology.shaft(reset.unit());
                     if (u == null || u.trip() == ShaftTrain.Trip.NONE) continue;
                     var cleared = u.withTrip(ShaftTrain.Trip.NONE);
-                    topology.shaft(cleared.withState(new ShaftUnit.State(cleared.settings().running() ? driver(cleared, false).setSpeed() : 0, Double.NaN, Double.NaN)));
+                    topology.shaft(cleared.withState(new ShaftUnit.State(0, Double.NaN, Double.NaN)));
                     fresh(u.id());
                 }
                 case Governor governor -> governors.add(governor);
@@ -331,11 +331,11 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         }
         for (var u : units.values()) if (u.fluid() != 0) unitOfDevice.put(u.fluid(), u.id());
         impacts.keySet().retainAll(units.keySet());
-        // A driver that has no saved speed starts at its set speed.
+        // A newly registered driver has delivered no power yet. Its set speed is a target, not operating state.
         for (var run : runs.values()) {
             var d = run.train.driver() == 0 ? null : units.get(run.train.driver());
             if (d != null && d.state() == null)
-                topology.shaft(d.withState(new ShaftUnit.State(d.settings().running() && d.trip() == ShaftTrain.Trip.NONE ? driver(d, false).setSpeed() : 0, Double.NaN, Double.NaN)));
+                topology.shaft(d.withState(new ShaftUnit.State(0, Double.NaN, Double.NaN)));
         }
         findGovernors();
         resize();

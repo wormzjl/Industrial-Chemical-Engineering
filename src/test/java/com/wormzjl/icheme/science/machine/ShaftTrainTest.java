@@ -72,7 +72,7 @@ class ShaftTrainTest {
     void case2AGovernedTurbineFeedsItsDemandForward() {
         var design = SteamTurbine.rated(55e3);
         assertEquals(.45, design.efficiency(), 1e-12);
-        var step = ShaftTrain.step(turbine(true), 6000, Measure.of(RATED));
+        var step = ShaftTrain.step(turbine(true), 6000, new Measure(RATED, RATED, false, Double.NaN, Double.NaN, Double.NaN, Double.NaN));
         assertEquals(6000, step.speed(), 0);
         assertEquals("RUNNING", step.status());
         assertEquals(RATED, step.governorPower(), 1e-9 * RATED, "at the set speed, the demand there");
@@ -80,7 +80,25 @@ class ShaftTrainTest {
         assertEquals(.10562, steam, 1e-3 * .10562);
         assertEquals(15.27, steam * 3600 / (RATED / 1000), .01, "kg/kWh");
         // Below its set speed, the governor feeds the demand at the set speed forward: the cube law.
-        assertEquals(RATED, ShaftTrain.step(turbine(true), 5400, Measure.of(RATED * cube(.9))).governorPower(), 1e-9 * RATED);
+        assertEquals(RATED, ShaftTrain.step(turbine(true), 5400, new Measure(RATED * cube(.9), RATED, false, Double.NaN, Double.NaN, Double.NaN, Double.NaN)).governorPower(), 1e-9 * RATED);
+    }
+
+    @Test
+    void noSteamWorkCannotTurnOrOverspeedAnUnloadedTurbine() {
+        for (boolean governed : List.of(false, true)) {
+            for (double speed : List.of(0.0, 6000.0, 12000.0)) {
+                var step = ShaftTrain.step(turbine(governed), speed, Measure.of(0));
+                assertEquals(0, step.speed());
+                assertEquals(Trip.NONE, step.trip());
+                assertEquals("STEAM LIMITED", step.status());
+            }
+        }
+        var startup = ShaftTrain.step(turbine(true), 0, Measure.of(0));
+        assertEquals(55e3, startup.governorPower(), "the stopped governor can request steam without claiming rotation");
+        var supplied = ShaftTrain.step(turbine(false), 0, new Measure(0, RATED, false, Double.NaN, Double.NaN, Double.NaN, Double.NaN));
+        assertEquals(6000, supplied.speed(), "booked fluid work permits startup");
+        assertEquals(Trip.OVERSPEED, ShaftTrain.step(turbine(false), supplied.speed(),
+                new Measure(0, RATED, false, Double.NaN, Double.NaN, Double.NaN, Double.NaN)).trip(), "a real unloaded power surplus still trips");
     }
 
     /** Case 2 short of steam: 0.080 kg/s at most gives 18.9 kW; the shaft goes 0.955, 0.933 toward 0.912. */

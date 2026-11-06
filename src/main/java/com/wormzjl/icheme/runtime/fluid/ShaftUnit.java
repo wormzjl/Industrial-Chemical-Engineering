@@ -27,7 +27,7 @@ public record ShaftUnit(long id,ShaftNetwork.Kind kind,PhysicalFluidTopology.Pos
         ShaftNetwork.End science(){return new ShaftNetwork.End(ShaftUnit.cell(cell),dx,dy,dz,output);}
     }
     /**
-     * What the player set: whether it runs (default true: a placed driver turns, reading A19), its mode (default SPEED),
+     * What the player set: whether it is armed to run (default true; actual speed requires power), its mode (default SPEED),
      * its set point (default 0: its design speed; a creative motor's rpm), a creative motor's power limit (default 0:
      * {@link ShaftTrain#CREATIVE_LIMIT}), a gearbox's ratio (0: auto, reading A20; new placements start at 4); up to
      * {@link ShaftNetwork#CREATE_RATIO} either way, of which a train applies more than {@link ShaftNetwork#MAXIMUM_RATIO} only

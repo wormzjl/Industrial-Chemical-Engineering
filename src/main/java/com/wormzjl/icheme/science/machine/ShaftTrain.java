@@ -132,9 +132,12 @@ public final class ShaftTrain {
     /** A turbine (D27, readings A22, A23, A26). */
     private static Step turbine(Driver driver, double speed, Measure measure, double demand, double set) {
         double available = Math.max(0, measure.available());
+        // At rest the speed governor opens for startup; this is a steam request, never delivered shaft power.
+        double governor = driver.governed() ? speed > 0 ? demand * cube(set / speed) : Math.max(demand, driver.limit()) : 0;
+        // This model has no rotor inertia: without delivered fluid work the shaft cannot coast, start or overspeed.
+        if (!(available > 0)) return new Step(0, Trip.NONE, "STEAM LIMITED", governor, 0);
         if (driver.governed()) {
             // Feed-forward: the demand at the set speed, by the cube law from the demand here.
-            double governor = speed > 0 ? demand * cube(set / speed) : demand;
             if (speed <= 0 || demand <= 0) return new Step(set, Trip.NONE, "RUNNING", governor, 0);
             double balance = SpeedControl.balance(speed, available, demand);
             if (measure.steamShort()) {

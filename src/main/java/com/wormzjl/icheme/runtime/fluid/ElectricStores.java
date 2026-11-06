@@ -293,10 +293,10 @@ public final class ElectricStores {
 
     // ---------------- booking ----------------
 
-    /** Whether unit {@code id} has power to run: it has none only when its metered store ran empty. */
+    /** A new consumer waits for its store; existing unmetered stores retain their saved free-running behaviour. */
     public boolean powered(long id) {
         var s = stores.get(id);
-        return s == null || !s.unpowered || !needPower();
+        return !needPower() || s != null && !s.unpowered;
     }
 
     /** Whether unit {@code id} runs free: no store, an unmetered one, or a world whose machines need no power. */

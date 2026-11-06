@@ -908,18 +908,21 @@ public final class FluidWorldAuthority implements AutoCloseable {
 
     /** The drivers each player watches (W3), by their structures' origins, within their dimension. */
     private final Map<UUID,Set<BlockPos>> driverWatchers=new HashMap<>();
+    private final Map<PhysicalFluidTopology.Position,com.wormzjl.icheme.network.FluidNetwork.DriverState> publishedDrivers=new HashMap<>();
     /**
-     * A driver sound subscription (W3, reading A36): each new watch of a loaded driver within
-     * {@link com.wormzjl.icheme.network.FluidNetwork#MOVER_RANGE} is answered with its train's last decided state (a read:
-     * nothing steps), and the presentation cadence sends it again ({@link #publishDrivers}).
+     * A driver sound subscription replays its cached publication; only the presentation cadence reads train state.
      */
     public void watchDrivers(net.minecraft.server.level.ServerPlayer player,List<BlockPos> watch,List<BlockPos> unwatch) {
         owned();if(closed)return;var set=driverWatchers.computeIfAbsent(player.getUUID(),k->new HashSet<>());
         unwatch.forEach(set::remove);
         for(var origin:watch) {
             if(set.size()>=com.wormzjl.icheme.network.FluidNetwork.MAXIMUM_WATCHED||!player.serverLevel().hasChunkAt(origin)||!moverRange(player,origin))continue;
-            var state=driverState(player.serverLevel(),origin);if(state==null)continue;
-            set.add(origin.immutable());com.wormzjl.icheme.network.FluidNetwork.sendDriver(player,state);
+            var key=new PhysicalFluidTopology.Position(player.serverLevel().dimension().location().toString(),origin.getX(),origin.getY(),origin.getZ());
+            var unit=shafts.unitAt(key);
+            if(unit==null||!(unit.kind().driver()||unit.kind()==com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.GENERATOR))continue;
+            set.add(origin.immutable());
+            var state=publishedDrivers.get(key);
+            if(state!=null)com.wormzjl.icheme.network.FluidNetwork.sendDriver(player,state);
         }
         if(set.isEmpty())driverWatchers.remove(player.getUUID());
     }
@@ -931,14 +934,22 @@ public final class FluidWorldAuthority implements AutoCloseable {
     }
     /** The presentation cadence's driver states: one per watched driver, to its watchers only. */
     private void publishDrivers() {
+        var current=new HashMap<PhysicalFluidTopology.Position,com.wormzjl.icheme.network.FluidNetwork.DriverState>();
         for(var it=driverWatchers.entrySet().iterator();it.hasNext();) {
             var e=it.next();var player=server.getPlayerList().getPlayer(e.getKey());
             if(player==null||player.hasDisconnected()){it.remove();continue;}
             for(var origin:List.copyOf(e.getValue())) {
-                var state=player.serverLevel().hasChunkAt(origin)&&moverRange(player,origin)?driverState(player.serverLevel(),origin):null;
-                if(state==null)e.getValue().remove(origin);else com.wormzjl.icheme.network.FluidNetwork.sendDriver(player,state);
+                var key=new PhysicalFluidTopology.Position(player.serverLevel().dimension().location().toString(),origin.getX(),origin.getY(),origin.getZ());
+                var state=player.serverLevel().hasChunkAt(origin)&&moverRange(player,origin)
+                        ?current.computeIfAbsent(key,k->driverState(player.serverLevel(),origin)):null;
+                if(state==null) {
+                    e.getValue().remove(origin);
+                    com.wormzjl.icheme.network.FluidNetwork.sendDriver(player,new com.wormzjl.icheme.network.FluidNetwork.DriverState(origin,false,0));
+                } else com.wormzjl.icheme.network.FluidNetwork.sendDriver(player,state);
             }
+            if(e.getValue().isEmpty())it.remove();
         }
+        publishedDrivers.clear();publishedDrivers.putAll(current);
     }
     /** A sound/animation subscription replays published operating state only; it never reads or advances a process. */
     public void watchMovers(net.minecraft.server.level.ServerPlayer player,List<com.wormzjl.icheme.network.FluidNetwork.Target> watch,List<com.wormzjl.icheme.network.FluidNetwork.Target> unwatch) {
@@ -1465,7 +1476,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
             });
         }
     }
-    @Override public void close(){owned();if(closed)return;closed=true;unboundStructures.clear();publishedMenuData.clear();publishedSightGlasses.clear();publishedMovers.clear();rotationWatchers.clear();publishedRotations.clear();runtime.close();data.setDirty();}
+    @Override public void close(){owned();if(closed)return;closed=true;unboundStructures.clear();publishedMenuData.clear();publishedSightGlasses.clear();publishedMovers.clear();driverWatchers.clear();publishedDrivers.clear();rotationWatchers.clear();publishedRotations.clear();runtime.close();data.setDirty();}
 
     /**
      * Which players watch which open tanks, sight glasses or movers (the request path R-B of the engine-owned presentation

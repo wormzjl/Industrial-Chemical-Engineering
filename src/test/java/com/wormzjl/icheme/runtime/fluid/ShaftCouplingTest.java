@@ -158,6 +158,43 @@ class ShaftCouplingTest {
         return new PhysicalFluidTopology.Position(EventPathWorld.DIM, x, 64, 0);
     }
 
+    @Test
+    void newlyRegisteredMotorAndAutoGearboxWaitForPowerIncludingStartAndReset() {
+        var rig = new Rig();
+        var ledger = new WorldTopologyLedger(WorldTopologyLedger.Snapshot.empty(EventPathWorld.CATALOG));
+        var trains = new ShaftTrains(ledger, device -> null, rig.coordinator);
+        var stores = new ElectricStores(ledger, device -> null, rig.coordinator, () -> ElectricStores.Settings.DEFAULT);
+        trains.electric(stores);
+        var kind = com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR;
+        var gearbox = com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.GEARBOX;
+        var fixed = com.wormzjl.icheme.science.equipment.MachineDuty.Drive.FIXED;
+        var none = com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE;
+        trains.queue(new ShaftTrains.Put(cell(0), kind, id -> new ShaftUnit(id, kind, cell(0), 0,
+                List.of(new ShaftUnit.End(cell(0), 1, 0, 0, true)), 0, 11e3, 2950, 2, fixed, ShaftUnit.Settings.DEFAULT, none, null)));
+        trains.queue(new ShaftTrains.Put(cell(1), com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.SHAFT, id -> ShaftUnit.shaft(id, cell(1), 0)));
+        trains.queue(new ShaftTrains.Put(cell(2), gearbox, id -> new ShaftUnit(id, gearbox, cell(2), 0,
+                List.of(new ShaftUnit.End(cell(2), -1, 0, 0, false), new ShaftUnit.End(cell(2), 1, 0, 0, true)),
+                0, 0, 0, 0, fixed, ShaftUnit.Settings.DEFAULT, none, null)));
+        trains.apply();
+        long motor = trains.unitAt(cell(0)).id(), gear = trains.unitAt(cell(2)).id();
+        assertFalse(stores.powered(motor), "a newly registered consumer has no legacy free-power exemption");
+        assertEquals(0, trains.view(motor).speed());
+        assertEquals(0, trains.view(gear).speed());
+        trains.decide();
+        assertEquals(0, trains.view(motor).speed());
+        assertEquals(0, trains.view(gear).speed());
+        trains.queue(new ShaftTrains.Configure(motor, new ShaftUnit.Settings(false, com.wormzjl.icheme.science.machine.ShaftTrain.Mode.SPEED, 0, 0, 0)));
+        trains.apply();
+        trains.queue(new ShaftTrains.Configure(motor, ShaftUnit.Settings.DEFAULT));
+        trains.apply();
+        assertEquals(0, trains.view(motor).speed(), "Run arms the driver without inventing power");
+        ledger.shaft(ledger.shaft(motor).withTrip(com.wormzjl.icheme.science.machine.ShaftTrain.Trip.OVERLOAD));
+        trains.queue(new ShaftTrains.Reset(motor));
+        trains.apply();
+        assertEquals(none, trains.unit(motor).trip());
+        assertEquals(0, trains.view(motor).speed(), "Reset also waits for a power-backed step");
+    }
+
     /**
      * W5 (build plan section 7.4): an 11 kW motor drives the pump at node 1 through a shaft. Built from W5 on, its store
      * starts empty, so it stands (NO POWER) until its port is filled to one slice of its rated draw; it then runs, books
