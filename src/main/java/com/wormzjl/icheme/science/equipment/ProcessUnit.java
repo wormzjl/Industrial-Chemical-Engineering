@@ -2053,9 +2053,17 @@ public final class ProcessUnit {
         header(hd, new double[]{xl, ydb, head}, new double[]{xl, ydb, zd}, new double[]{xr, ydb, zd}, new double[]{xr, ydb, head});
         double start = zd + .03, face = Math.floor(zd - hd / 2 - NECK);
         nozzles.add(new Nozzle(Role.DISCHARGE, new double[]{a, ydb, start}, 2, -1, start - face, ColumnStructure.size(hd, hd), 0));
-        // The shaft end: the crankshaft's half coupling under its guard, on the table.
+        // The shaft end uses the pumps' coupling and guard. A large torque-sized hub needs a shelf below the table top
+        // to enclose its underside without raising the crankshaft or moving the existing shaft and process connections.
         double rpm = compressorSpeed(b), rs = shaftRadius(1000 * compressorPower(b, throwCount), rpm);
-        coupling(a, yc, end, Math.ceil(end + .2 + rs - 1e-9), 1, rs, h, shown(rpm), EquipmentShape.ShaftEnd.Role.DRIVEN_INPUT);
+        double driveFace = Math.ceil(end + .2 + rs - 1e-9), floor = Math.min(h, yc - couplingHubRadius(rs) - .1);
+        double mount = couplingHubRadius(rs) + .13;
+        baseplate(a - mount, a + mount, floor - .06, floor, end - .15, driveFace - .01);
+        for (int side = -1; side <= 1; side += 2) {
+            double x = a + side * (mount - .08);
+            box(new double[]{x - .05, floor - .18, end - .15}, new double[]{x + .05, floor - .06, driveFace - .01}, Material.STEELWORK, true);
+        }
+        coupling(a, yc, end, driveFace, 1, rs, floor, shown(rpm), EquipmentShape.ShaftEnd.Role.DRIVEN_INPUT);
     }
 
     /**
@@ -2158,6 +2166,11 @@ public final class ProcessUnit {
         return Math.max(1, Math.round(Math.min(rpm, 120) / 60 * turns)) / turns;
     }
 
+    /** The half coupling's outside radius around a shaft of radius {@code rs}, m. */
+    private static double couplingHubRadius(double rs) {
+        return Math.max(rs + .04, 2.2 * rs);
+    }
+
     /**
      * A machine's shaft end along frame z (batch 2026-11-03-rotating-machinery, W4): its shaft of radius {@code rs} at
      * (x, y) from {@code from} (where it leaves its bearing) to the coupling face {@code face} (a block face, the shaft
@@ -2168,7 +2181,7 @@ public final class ProcessUnit {
      */
     void coupling(double x, double y, double from, double face, int sign, double rs, double floor, double speed, EquipmentShape.ShaftEnd.Role role) {
         var f = Frame.of(new double[]{x, y, 0}, 2, 1);
-        double hub = Math.max(rs + .04, 2.2 * rs), width = .06 + rs, s0 = Math.min(from, face), s1 = Math.max(from, face);
+        double hub = couplingHubRadius(rs), width = .06 + rs, s0 = Math.min(from, face), s1 = Math.max(from, face);
         double g = hub + .05, g0 = sign > 0 ? s0 + .02 : face + .01, g1 = sign > 0 ? face - .01 : s1 - .02;
         boolean guarded = g1 - g0 > .05 && y - floor > g;
         // Under a guard the hub stops 0.02 m short of the face, inside the guard's end plate.
