@@ -51,6 +51,7 @@ public final class ModCreativeTabs {
                 output.accept(ModItems.EQUIPMENT_CONSTRUCTOR.get());
                 output.accept(ModItems.SHAFT.get());
                 output.accept(ModItems.CREATIVE_MOTOR.get());
+                output.accept(ModItems.CREATIVE_POWER.get());
             })
             .build());
 

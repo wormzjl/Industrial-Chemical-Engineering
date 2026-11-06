@@ -56,11 +56,12 @@ public record ShaftPlan(Kind kind, double value) {
             }
             FlowControl next = switch (pipe.control()) {
                 case FlowControl.Machine machine when plan.kind == Kind.FAILED -> plan.value == 0 ? machine.withSpeed(0) : machine;
+                case FlowControl.Compressor c when plan.kind == Kind.FAILED -> c.withEnabled(plan.value>0);
                 case FlowControl.Pump pump when plan.kind == Kind.FAILED -> pump.enabled() == (plan.value > 0) ? pump : new FlowControl.Pump(pump.requestedVolumeFlow(), pump.maximumAddedPressure(), plan.value > 0);
                 case FlowControl.Machine machine when plan.kind == Kind.SPEED -> machine.withSpeed(plan.value);
                 case FlowControl.Compressor compressor when plan.kind == Kind.DISPLACEMENT -> {
                     double flow = Math.min(FlowControl.Mover.MAXIMUM_VOLUME_FLOW, plan.value);
-                    yield flow == compressor.requestedVolumeFlow() ? compressor : new FlowControl.Compressor(flow, compressor.maximumPressureRatio(), compressor.enabled());
+                    yield flow == compressor.requestedVolumeFlow() ? compressor : compressor.withDisplacement(flow);
                 }
                 case FlowControl.ControlValve valve when plan.kind == Kind.GOVERNOR && valve.source() == FlowControl.ValveSource.SHAFT_SPEED ->
                         Math.abs(plan.value - valve.massTarget()) <= PassiveStepSolver.VALVE_DEADBAND * Math.max(plan.value, valve.massTarget()) + 1e-9
@@ -85,7 +86,7 @@ public record ShaftPlan(Kind kind, double value) {
         return switch (dispatched) {
             case FlowControl.Machine a when solved instanceof FlowControl.Machine b -> a.sameButSpeed(b);
             case FlowControl.Pump a when solved instanceof FlowControl.Pump b -> a.requestedVolumeFlow() == b.requestedVolumeFlow() && a.maximumAddedPressure() == b.maximumAddedPressure();
-            case FlowControl.Compressor a when solved instanceof FlowControl.Compressor b -> a.maximumPressureRatio() == b.maximumPressureRatio() && a.enabled() == b.enabled();
+            case FlowControl.Compressor a when solved instanceof FlowControl.Compressor b -> a.maximumPressureRatio() == b.maximumPressureRatio() && a.setFlow()==b.setFlow() && a.setPressure()==b.setPressure();
             case FlowControl.ControlValve a when solved instanceof FlowControl.ControlValve b -> a.source() == FlowControl.ValveSource.SHAFT_SPEED && b.source() == a.source()
                     && a.targetPressure() == b.targetPressure() && a.volumeTarget() == b.volumeTarget() && java.util.Objects.equals(a.sensor(), b.sensor()) && a.revision() == b.revision();
             case FlowControl.Turbine a when solved instanceof FlowControl.Turbine b -> a.design().equals(b.design());

@@ -195,6 +195,8 @@ public final class MachineScreen extends AbstractContainerScreen<MachineMenu> {
     private void act(String key) {
         message = "";
         if (key.equals("power:off") || key.equals("power:on")) running = key.equals("power:on");
+        else if(key.equals("mode:manual"))mode=MachineColumn.Mode.SPEED;
+        else if(key.equals("mode:auto")&&mode==MachineColumn.Mode.SPEED)mode=MachineColumn.Mode.FLOW;
         else if (key.startsWith("regulate:")) mode = MachineColumn.Mode.valueOf(key.substring(9).toUpperCase(Locale.ROOT));
         else if (key.equals("reset")) send(MachineNetwork.Action.RESET, Objects.requireNonNull(menu.view()).settings());
         rebuildWidgets();
@@ -210,7 +212,7 @@ public final class MachineScreen extends AbstractContainerScreen<MachineMenu> {
             double setPoint = v.settings().setPoint(), power = v.settings().powerLimit(), gear = v.settings().ratio();
             if (mode == MachineColumn.Mode.SPEED && kind().driver() && (kind() != MachineColumn.Kind.MOTOR || v.variable()))
                 setPoint = MachineColumn.setPoint(kind(), number(speed), v.designSpeed());
-            if (kind() == MachineColumn.Kind.CREATIVE_MOTOR || kind() == MachineColumn.Kind.GENERATOR) power = limit.isBlank() ? 0 : 1000 * number(limit);
+            if (kind() == MachineColumn.Kind.MOTOR || kind() == MachineColumn.Kind.CREATIVE_MOTOR || kind() == MachineColumn.Kind.GENERATOR) power = limit.isBlank() ? 0 : 1000 * number(limit);
             if (kind() == MachineColumn.Kind.GEARBOX) gear = number(ratio);
             send(MachineNetwork.Action.APPLY, new ShaftUnit.Settings(running, mode.engine(), setPoint, power, gear));
         } catch (IllegalArgumentException invalid) {
@@ -317,7 +319,10 @@ public final class MachineScreen extends AbstractContainerScreen<MachineMenu> {
         door.place(rows(), GuiCanvas.measure(font));
         String hint = door.draw(canvas, skin, hx, hy);
         if (hint != null) hovered = hint;
-        if (v != null) nameplate(canvas, v);
+        if (v != null) {
+            if(kind()==MachineColumn.Kind.MOTOR)com.wormzjl.icheme.client.gui.common.MotorCurve.draw(canvas,glass(),v.ratedPower(),v.designSpeed(),v.speed(),v.shaftPower(),MachineScreen::tr);
+            else nameplate(canvas,v);
+        }
     }
 
     /** The nameplate on the glass ({@link MachineColumn#nameplate}: rating, poles, drive, a coupling's stress rate, rated speed). */

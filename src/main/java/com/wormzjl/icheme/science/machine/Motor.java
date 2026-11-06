@@ -2,11 +2,7 @@ package com.wormzjl.icheme.science.machine;
 
 import com.wormzjl.icheme.science.math.DeterministicMath;
 
-/**
- * Electric motors at process level (batch 2026-11-03-rotating-machinery, plan sections 1.3, 6 and 7): the standard rated
- * outputs, the speed of each pole count, the full-load efficiency. A motor runs at its rated speed at every load (no slip,
- * no torque-speed curve: simplification S5) and at its full-load efficiency.
- */
+/** VFD motor ratings, efficiency and continuous torque/power envelope. Legacy pole counts remain readable. */
 public final class Motor {
     /** The rated outputs a design offers, kW: IEC 60072-1 from 0.75 kW to 1 MW, then the R20 series to 20 MW. */
     private static final double[] RATINGS_KW = {.75, 1.1, 1.5, 2.2, 3, 4, 5.5, 7.5, 11, 15, 18.5, 22, 30, 37, 45, 55, 75, 90, 110,
@@ -73,6 +69,14 @@ public final class Motor {
     public static double electricPower(double shaftPower, double ratedPower, int poles, boolean variableSpeed) {
         return Math.max(0, shaftPower) / (efficiency(ratedPower, poles) * (variableSpeed ? DRIVE_EFFICIENCY : 1));
     }
+
+    /** VFD continuous envelope: constant torque below base speed, constant power above it. */
+    public static double availablePower(double ratedPower,double baseRpm,double rpm) {
+        if (!(ratedPower>=0)||!(baseRpm>0)||!(rpm>=0)||!Double.isFinite(ratedPower+baseRpm+rpm)) throw new IllegalArgumentException("Invalid motor envelope");
+        return ratedPower*Math.min(1,rpm/baseRpm);
+    }
+    public static double torque(double power,double rpm) { return rpm>0?power*60/(2*Math.PI*rpm):0; }
+    public static final double HIGHEST_SPEED=1.5;
 
     private static int poleColumn(int poles) {
         return switch (poles) {

@@ -3,6 +3,7 @@ package com.wormzjl.icheme.runtime.control;
 import com.wormzjl.icheme.runtime.instrument.InstrumentHosts;
 import com.wormzjl.icheme.world.level.block.ControlPanelBlock;
 import com.wormzjl.icheme.world.level.block.entity.ControlPanelBlockEntity;
+import com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity;
 import net.minecraft.core.*;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
@@ -18,6 +19,11 @@ public final class DataPorts {
                 mount.centre().add(outward.getAxis()==Direction.Axis.X?0:.28,0,outward.getAxis()==Direction.Axis.X?.28:0);
         return create(UUID.randomUUID(),actuator?DataPort.Kind.ACTUATOR:DataPort.Kind.SENSOR,host.identity(),
                 host.entity().getLevel(),host.entity().getBlockPos(),centre,outward);
+    }
+    public static DataPort motor(EquipmentShellBlockEntity cell,com.wormzjl.icheme.runtime.fluid.ShaftUnit unit) {
+        var shaft=unit.ends().getFirst();var face=Direction.fromDelta(shaft.dx(),shaft.dy(),shaft.dz());
+        var centre=new Vec3(shaft.cell().x()+.5,shaft.cell().y()+.8,shaft.cell().z()+.5);
+        return create(UUID.randomUUID(),DataPort.Kind.ACTUATOR,unit.id(),cell.getLevel(),cell.getBlockPos(),centre,face);
     }
     public static DataPort panel(ControlPanelBlockEntity panel){
         return panel(panel,panel.identity());

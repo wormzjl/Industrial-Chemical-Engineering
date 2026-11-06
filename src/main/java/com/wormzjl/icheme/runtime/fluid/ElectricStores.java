@@ -2,6 +2,7 @@ package com.wormzjl.icheme.runtime.fluid;
 
 import com.wormzjl.icheme.science.equipment.HeatSides;
 import com.wormzjl.icheme.science.fluid.network.AirCooled;
+import com.wormzjl.icheme.science.fluid.network.FlowControl;
 import com.wormzjl.icheme.science.fluid.network.CoolingTower;
 import com.wormzjl.icheme.science.fluid.network.PassiveIntervalSolver;
 import com.wormzjl.icheme.science.fluid.network.PassiveNetwork;
@@ -44,7 +45,7 @@ public final class ElectricStores {
 
     /** What a store powers. */
     public enum Kind {
-        MOTOR, GENERATOR, FANS, TOWER;
+        MOTOR, GENERATOR, FANS, TOWER, INLINE;
 
         public boolean generator() {
             return this == GENERATOR;
@@ -104,6 +105,9 @@ public final class ElectricStores {
             var s = new Store(kind, facts, now);
             stores.put(id, s);
         });
+        // Existing inline movers retain their saved custom duty and former unmetered behaviour until wired.
+        for(var r:topology.active().values()) if(r.device().kind()==com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.PIPE&&r.device().control() instanceof FlowControl.Mover&&!(r.device().control() instanceof FlowControl.Machine)&&!stores.containsKey(r.device().id()))
+            stores.put(r.device().id(),new Store(Kind.INLINE,ElectricStore.Facts.UNMETERED,now));
         sync();
         for (var s : stores.values()) s.unpowered = !kindGenerator(s) && s.metered && s.joules <= 0 && needPower();
     }
@@ -128,6 +132,7 @@ public final class ElectricStores {
 
     /** Whether registration {@code r} is a powered unit: an air cooler's process side, an induced-draft tower's basin. */
     public static boolean powered(WorldTopologyLedger.Registration r) {
+        if(r.device().kind()==com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.PIPE&&r.device().control() instanceof FlowControl.Mover)return true;
         var heat = r.device().heat();
         if (heat != null && heat.fans()) return true;
         var tower = r.spec().tower();
@@ -144,7 +149,7 @@ public final class ElectricStores {
         if (u != null) return u.kind() == ShaftNetwork.Kind.MOTOR ? Kind.MOTOR : u.kind() == ShaftNetwork.Kind.GENERATOR ? Kind.GENERATOR : null;
         var r = topology.active().get(id);
         if (r == null || !powered(r)) return null;
-        return r.device().heat() != null ? Kind.FANS : Kind.TOWER;
+        return r.device().control() instanceof FlowControl.Mover ? Kind.INLINE : r.device().heat() != null ? Kind.FANS : Kind.TOWER;
     }
 
     /** A unit's rated electric draw, W (a generator's rated output): the store's capacity and rates follow it (plan 7). */
@@ -152,11 +157,15 @@ public final class ElectricStores {
         return switch (kind) {
             case MOTOR -> {
                 var u = topology.shaft(id);
-                yield u == null ? 0 : ElectricStore.motorDraw(u.ratedPower(), u.poles(), u.drive() == com.wormzjl.icheme.science.equipment.MachineDuty.Drive.VARIABLE);
+                yield u == null ? 0 : ElectricStore.motorDraw(u.ratedPower(), u.poles(), true);
             }
             case GENERATOR -> {
                 var u = topology.shaft(id);
                 yield u == null ? 0 : u.ratedPower();
+            }
+            case INLINE -> {
+                var r=topology.active().get(id);
+                yield r==null?0:com.wormzjl.icheme.science.machine.InlineMachines.ratedDraw((FlowControl.Mover)r.device().control());
             }
             case FANS -> {
                 var r = topology.active().get(id);
@@ -370,15 +379,20 @@ public final class ElectricStores {
 
     /** Each fan unit's slice input at dispatch: its fans' limit, 0 unpowered, 1 otherwise (reading A61). Reads only. */
     void plans(PassiveNetwork graph, Map<Long, ShaftPlan> out) {
-        if (stores.isEmpty()) return;
         for (var pipe : graph.pipes()) {
+            long moverId=graph.reservoirs().get(pipe.first()).id();var moverStore=pipe.control() instanceof FlowControl.Mover||pipe.heat() instanceof AirCooled?store(moverId):stores.get(moverId);
+            if(moverStore!=null&&moverStore.kind==Kind.INLINE){
+                var registration=topology.active().get(moverId);var design=registration==null?null:registration.device().control();
+                boolean running=powered(moverId)&&design instanceof FlowControl.Mover mover&&mover.enabled();
+                out.put(moverId,new ShaftPlan(design instanceof FlowControl.Machine?ShaftPlan.Kind.SPEED:ShaftPlan.Kind.FAILED,running?1:0));continue;
+            }
             if (!(pipe.heat() instanceof AirCooled)) continue;
             long id = graph.reservoirs().get(pipe.first()).id();
             var s = stores.get(id);
             if (s != null && s.kind == Kind.FANS) out.put(id, new ShaftPlan(ShaftPlan.Kind.FANS, powered(id) ? 1 : 0));
         }
         for (var node : graph.reservoirs()) {
-            var s = node.inventory().tower() == null ? null : stores.get(node.id());
+            var s = node.inventory().tower() == null ? null : store(node.id());
             if (s != null && s.kind == Kind.TOWER) out.put(node.id(), new ShaftPlan(ShaftPlan.Kind.FANS, powered(node.id()) ? 1 : 0));
         }
     }
@@ -390,7 +404,17 @@ public final class ElectricStores {
     void booked(long island, long start, long end, PassiveIntervalSolver.Result result) {
         if (stores.isEmpty() || end <= start) return;
         var solved = result.graph();
-        for (var pipe : solved.pipes()) {
+        var average=result.averageMassFlows();var heads=result.endpointHeads();
+        for(int edge=0;edge<solved.pipes().size();edge++) {
+            var pipe=solved.pipes().get(edge);var node=solved.reservoirs().get(pipe.first());var supply=node.state();
+            var store=stores.get(node.id());
+            if(store!=null&&store.kind==Kind.INLINE&&pipe.control() instanceof FlowControl.Mover mover) {
+                double rho=supply.volume()>0?supply.mass()/supply.volume():0;
+                double q=rho>0?Math.max(0,average[edge])/rho:0,shaft=0;
+                if(rho>0&&mover.enabled())shaft=mover instanceof FlowControl.Machine m?m.law().shaftPower(q,m.speed(),rho,supply.pressure(),1.4):mover.power(Math.max(0,average[edge]),heads[edge],rho,supply.pressure(),1.4)/.65;
+                draw(store,com.wormzjl.icheme.science.machine.InlineMachines.electricPower(shaft),start,end,false);
+                continue;
+            }
             if (!(pipe.heat() instanceof AirCooled cooled)) continue;
             long id = solved.reservoirs().get(pipe.first()).id();
             var s = stores.get(id);
@@ -425,7 +449,7 @@ public final class ElectricStores {
         for (var e : stores.entrySet()) {
             var s = e.getValue();
             long id = e.getKey();
-            if (s.kind == Kind.FANS || s.kind == Kind.TOWER) {
+            if (s.kind == Kind.FANS || s.kind == Kind.TOWER || s.kind == Kind.INLINE) {
                 boolean changed = now - s.bookedTick >= CADENCE && draw(s, s.power, s.bookedTick, now, true);
                 if (s.shortfall) {
                     s.shortfall = false;

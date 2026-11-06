@@ -45,7 +45,7 @@ import org.jetbrains.annotations.Nullable;
  * get no compatibility work (AGENTS.md).
  */
 public final class MachineNetwork {
-    public static final String PROTOCOL = "machine-2";
+    public static final String PROTOCOL = "machine-3";
     /** The highest speed share a variable drive or a turbine's governor takes, and the highest creative motor speed (rpm) and power limit (W). */
     public static final double MAXIMUM_SHARE = 1.1, MAXIMUM_RPM = 1e5, MAXIMUM_LIMIT = 1e9;
 
@@ -255,10 +255,10 @@ public final class MachineNetwork {
         if (world == null) return false;
         var level = player.serverLevel();
         var unit = world.shafts().unitAt(new PhysicalFluidTopology.Position(level.dimension().location().toString(), origin.getX(), origin.getY(), origin.getZ()));
-        if (unit == null || !hasPage(unit.kind())) return false;
+        if (unit == null || !hasPage(world.shafts().kindOf(unit.id()))) return false;
         if (player instanceof FakePlayer) return true;
         long id = unit.id();
-        var kind = unit.kind();
+        var kind = world.shafts().kindOf(unit.id());
         player.openMenu(new SimpleMenuProvider((container, inventory, p) -> new MachineMenu(container, inventory, origin, reach, id, kind, datasheet),
                 Component.translatable("gui.icheme.machine.kind." + kind.name().toLowerCase(java.util.Locale.ROOT))), buffer -> MachineMenu.write(buffer, origin, reach, id, kind, datasheet));
         // Subscribe after the opening packet, so the replay follows it.
@@ -328,11 +328,9 @@ public final class MachineNetwork {
         try {
             next = switch (u.kind()) {
                 case MOTOR, STEAM_TURBINE -> {
-                    boolean variable = u.kind() == ShaftNetwork.Kind.STEAM_TURBINE || u.drive() == com.wormzjl.icheme.science.equipment.MachineDuty.Drive.VARIABLE;
-                    if (!variable) yield new ShaftUnit.Settings(asked.running(), now.mode(), now.setPoint(), now.powerLimit(), now.ratio());
-                    if (asked.mode() == ShaftTrain.Mode.SPEED && (asked.setPoint() < Motor.LOWEST_SPEED || asked.setPoint() > MAXIMUM_SHARE))
-                        yield refuse(String.format(java.util.Locale.ROOT, "the speed lies between %.0f %% and %.0f %%", 100 * Motor.LOWEST_SPEED, 100 * MAXIMUM_SHARE));
-                    yield new ShaftUnit.Settings(asked.running(), asked.mode(), asked.mode() == ShaftTrain.Mode.SPEED ? asked.setPoint() : now.setPoint(), now.powerLimit(), now.ratio());
+                    if (asked.mode() == ShaftTrain.Mode.SPEED && (asked.setPoint() < Motor.LOWEST_SPEED || asked.setPoint() > (u.kind()==ShaftNetwork.Kind.MOTOR?Motor.HIGHEST_SPEED:MAXIMUM_SHARE)))
+                        yield refuse(String.format(java.util.Locale.ROOT, "the speed lies between %.0f %% and %.0f %%", 100 * Motor.LOWEST_SPEED, 100 * (u.kind()==ShaftNetwork.Kind.MOTOR?Motor.HIGHEST_SPEED:MAXIMUM_SHARE)));
+                    yield new ShaftUnit.Settings(asked.running(), asked.mode(), asked.mode() == ShaftTrain.Mode.SPEED ? asked.setPoint() : now.setPoint(), u.kind()==ShaftNetwork.Kind.MOTOR?Math.min(MAXIMUM_LIMIT,asked.powerLimit()):now.powerLimit(), now.ratio());
                 }
                 case CREATIVE_MOTOR -> {
                     if (asked.mode() == ShaftTrain.Mode.SPEED && (asked.setPoint() <= 0 || asked.setPoint() > MAXIMUM_RPM)) yield refuse("the speed lies between 0 and 100000 rpm");

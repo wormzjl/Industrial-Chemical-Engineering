@@ -43,10 +43,12 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
      * coupling's block entity when Create's speed or spare moves past {@link com.wormzjl.icheme.science.machine.CreateCoupling#moved};
      * engine state, never saved (reading A147).
      */
-    public record CreateInput(PhysicalFluidTopology.Position cell, double rpm, double stress) implements Event {
+    public record CreateInput(PhysicalFluidTopology.Position cell, double rpm, double stress,double demand,boolean connected,double actualPower) implements Event {
+        public CreateInput(PhysicalFluidTopology.Position cell,double rpm,double stress,double demand,boolean connected){this(cell,rpm,stress,demand,connected,demand);}
+        public CreateInput(PhysicalFluidTopology.Position cell,double rpm,double stress){this(cell,rpm,stress,0,true);}
         public CreateInput {
             Objects.requireNonNull(cell);
-            if (!(rpm >= 0) || !Double.isFinite(rpm) || !Double.isFinite(stress)) throw new IllegalArgumentException("Invalid Create input");
+            if (!(rpm >= 0) || !Double.isFinite(rpm) || !Double.isFinite(stress)||!(demand>=0)||!Double.isFinite(demand)||!(actualPower>=0)||!Double.isFinite(actualPower)||actualPower>demand+1e-6) throw new IllegalArgumentException("Invalid Create input");
         }
     }
 
@@ -93,6 +95,10 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         default void stress(PhysicalFluidTopology.Position coupling, double impact) {
         }
 
+        /** Hosts connected to a VFD over its data cable. */
+        default Set<Long> linked(long motor) { return Set.of(); }
+        default void output(PhysicalFluidTopology.Position port,double rpm,double watts) {}
+        default void removed(long id) {}
         Host NONE = new Host() {
             public void edit(long device, FlowControl.ControlValve control) {
             }
@@ -116,6 +122,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
                        double electricPower, double energyPerTick, ShaftUnit.Settings settings, ShaftTrain.Trip trip, ElectricStores.View electric) {
     }
 
+    private record Duty(double flow,double pressure,double setFlow,double setPressure,double flowSpeed,double pressureSpeed) {}
     /** One train's engine state. */
     private static final class Run {
         final ShaftNetwork.Train train;
@@ -132,6 +139,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         ShaftTrain.Trip trip = ShaftTrain.Trip.NONE;
         /** Each generator's electric output decided at the last step, W, and whether it stood outside its speed window. */
         final Map<Long, Double> output = new HashMap<>();
+        final Map<Long,Duty> duties=new HashMap<>();
         final Set<Long> offSpeed = new HashSet<>();
 
         Run(ShaftNetwork.Train train) {
@@ -163,6 +171,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
     private final Map<Long, String> bindings = new HashMap<>();
     /** Each Create coupling's last input by its cell (W6b): engine state, rebuilt from the block entity's next report. */
     private final Map<PhysicalFluidTopology.Position, CreateInput> create = new HashMap<>();
+    private final Set<Long> createDrivers=new HashSet<>(),createLoads=new HashSet<>();
     /** The stress impact last sent to each coupling unit, su per rpm. */
     private final Map<Long, Double> impacts = new HashMap<>();
     /** Stress units per FE per tick (config {@code create.stressPerFE}). */
@@ -246,7 +255,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
                     create.remove(remove.position());
                     var old = index.remove(remove.position());
                     if (old != null) {
-                        topology.removeShaft(old.id());
+                        host.removed(old.id());topology.removeShaft(old.id());
                         recompile = true;
                     }
                 }
@@ -272,9 +281,10 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
                 case CreateInput input -> {
                     // Create's speed or spare moved (W6b): the coupling's train steps at the next decision point. Its
                     // impact is sent again after it, in case the block entity reloaded since the last one (reading A147).
-                    create.put(input.cell(), input);
+                    var prior=create.put(input.cell(), input);
                     var u = index.get(input.cell());
-                    if (u == null || u.kind() != ShaftNetwork.Kind.CREATE_COUPLING) continue;
+                    if (u == null || u.kind() != ShaftNetwork.Kind.CREATE_COUPLING&&u.kind()!=ShaftNetwork.Kind.SHAFT) continue;
+                    recompile|=prior==null||prior.connected()!=input.connected();
                     impacts.remove(u.id());
                     fresh(u.id());
                     resize = true;
@@ -293,7 +303,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         long id;
         if (old != null && old.kind() == put.kind()) id = old.id();
         else {
-            if (old != null) topology.removeShaft(old.id());
+            if (old != null){host.removed(old.id());topology.removeShaft(old.id());}
             id = topology.reserve(1);
         }
         var unit = put.make().apply(id);
@@ -319,7 +329,20 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
     /** Compiles every part into trains; a train with the same key and parts keeps its state. */
     private void compile() {
         var units = topology.shafts();
-        var compiled = ShaftNetwork.compile(units.values().stream().map(ShaftUnit::part).toList());
+        var oldLoads=Set.copyOf(createLoads);
+        var parts=new HashMap<Long,ShaftNetwork.Part>();units.values().forEach(u->parts.put(u.id(),u.part()));
+        // First find physical trains. A real industrial driver owns its train; connected Create endpoints are loads.
+        var physical=ShaftNetwork.compile(parts.values());createDrivers.clear();createLoads.clear();
+        for(var train:physical) {
+            boolean industrial=train.parts().stream().map(units::get).anyMatch(u->u.kind().driver()&&u.kind()!=ShaftNetwork.Kind.CREATE_COUPLING);
+            var endpoints=train.parts().stream().map(units::get).filter(u->u.kind()==ShaftNetwork.Kind.CREATE_COUPLING||u.kind()==ShaftNetwork.Kind.SHAFT&&create.containsKey(u.position())&&create.get(u.position()).connected()).sorted(Comparator.comparingLong(ShaftUnit::id)).toList();
+            if(industrial)for(var u:endpoints){parts.put(u.id(),parts.get(u.id()).withRole(ShaftNetwork.Role.LOAD,u.designSpeed()));createLoads.add(u.id());}
+            else if(endpoints.stream().noneMatch(u->u.kind()==ShaftNetwork.Kind.CREATE_COUPLING)&&!endpoints.isEmpty()) {
+                var source=endpoints.getFirst();parts.put(source.id(),parts.get(source.id()).withRole(ShaftNetwork.Role.SOURCE,com.wormzjl.icheme.science.machine.CreateCoupling.DESIGN_SPEED));createDrivers.add(source.id());
+            }
+        }
+        var compiled = ShaftNetwork.compile(parts.values());
+        for(long id:oldLoads)if(!createLoads.contains(id)){var u=units.get(id);if(u!=null)host.output(u.position(),0,0);}
         var before = new HashMap<>(runs);
         runs.clear();
         trainOf.clear();
@@ -433,7 +456,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         for (var run : runs.values()) {
             var d = run.train.driver() == 0 ? null : units.get(run.train.driver());
             double rated = d == null ? 0 : driver(d, false).limit(), rpm = d == null ? 0 : d.designSpeed();
-            if (d != null && d.kind() == ShaftNetwork.Kind.CREATIVE_MOTOR || d != null && d.kind() == ShaftNetwork.Kind.CREATE_COUPLING) rpm = driver(d, false).setSpeed();
+            if (d != null && d.kind() == ShaftNetwork.Kind.CREATIVE_MOTOR || d != null && (d.kind() == ShaftNetwork.Kind.CREATE_COUPLING||createDrivers.contains(d.id()))) rpm = driver(d, false).setSpeed();
             for (var e : run.train.shafts().entrySet()) {
                 double speed = rpm * e.getValue();
                 int pixels = d == null || speed <= 0 ? com.wormzjl.icheme.world.level.block.ShaftBlock.DEFAULT_SIZE
@@ -523,13 +546,26 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
                 case FlowControl.Machine m -> {
                     double q = density > 0 ? Math.max(0, flows[e]) / density : 0;
                     run.power.put(unit, m.speed() > 0 && density > 0 ? m.law().shaftPower(q, m.speed(), density, suction.pressure(), 1.4) : 0);
+                    run.duties.put(unit,new Duty(q,solved.reservoirs().get(pipe.second()).state().pressure(),m.setFlow(),m.setPressure(),
+                            m.setFlow()>0?com.wormzjl.icheme.science.machine.SpeedControl.requiredSpeed(m.law(),m.setFlow(),heads[e],density,suction.pressure(),1.4,com.wormzjl.icheme.science.machine.Motor.LOWEST_SPEED,com.wormzjl.icheme.science.machine.Motor.HIGHEST_SPEED):Double.NaN,
+                            m.setPressure()>0?com.wormzjl.icheme.science.machine.SpeedControl.requiredSpeed(m.law(),q,m.setPressure()-suction.pressure(),density,suction.pressure(),1.4,com.wormzjl.icheme.science.machine.Motor.LOWEST_SPEED,com.wormzjl.icheme.science.machine.Motor.HIGHEST_SPEED):Double.NaN));
                     if (first(run, unit)) {
                         run.measured = q;
                         run.target = m.setFlow() > 0 ? m.setFlow() : m.setPressure() > 0 ? m.setPressure() : Double.NaN;
                         if (m.setFlow() <= 0 && m.setPressure() > 0) run.measured = solved.reservoirs().get(pipe.second()).state().pressure();
                     }
                 }
-                case FlowControl.Compressor c -> run.power.put(unit, density > 0 ? c.power(Math.max(0, flows[e]), heads[e], density, suction.pressure(), 1.4) : 0);
+                case FlowControl.Compressor c -> {
+                    run.power.put(unit,density>0?c.power(Math.max(0,flows[e]),heads[e],density,suction.pressure(),1.4):0);
+                    var registration=topology.latest().get(node.id());
+                    if(density>0&&registration!=null&&registration.device().control() instanceof FlowControl.Compressor design&&design.requestedVolumeFlow()>0){
+                        double q=Math.max(0,flows[e])/density,pressure=solved.reservoirs().get(pipe.second()).state().pressure();
+                        var law=new com.wormzjl.icheme.science.machine.PositiveDisplacement(design.requestedVolumeFlow(),design.riseLimit(density,suction.pressure(),density,1.4));
+                        run.duties.put(unit,new Duty(q,pressure,design.setFlow(),design.setPressure(),
+                                design.setFlow()>0?com.wormzjl.icheme.science.machine.SpeedControl.requiredSpeed(law,design.setFlow(),heads[e],.1,1.5):Double.NaN,
+                                design.setPressure()>0?com.wormzjl.icheme.science.machine.SpeedControl.requiredSpeed(law,q,design.setPressure()-suction.pressure(),.1,1.5):Double.NaN));
+                    }
+                }
                 case FlowControl.Turbine t -> {
                     double work = 0;
                     for (var b : result.boundaries())
@@ -577,7 +613,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
             // A coupling on a standing train draws nothing from its Create network (W6b).
             for (long id : train.parts()) {
                 var u = topology.shaft(id);
-                if (u != null && u.kind() == ShaftNetwork.Kind.CREATE_COUPLING) impact(u, 0);
+                if (u != null){if(u.kind()==ShaftNetwork.Kind.CREATE_COUPLING||create.containsKey(u.position()))host.output(u.position(),0,0);if(u.kind() == ShaftNetwork.Kind.CREATE_COUPLING) impact(u, 0);}
             }
             return false;
         }
@@ -587,6 +623,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         var state = d.state() == null ? new ShaftUnit.State(0, Double.NaN, Double.NaN) : d.state();
         // A generator (W5) books its output since its last step and takes the load its store has room for.
         generators(run, state.speed(), now);
+        for(var m:train.driven())if(createLoads.contains(m.id())){var u=topology.shaft(m.id());var input=u==null?null:create.get(u.position());run.power.put(m.id(),input==null?0:input.demand());}
         double demand = 0;
         for (var m : train.driven()) demand += run.power.getOrDefault(m.id(), 0.0) / m.efficiency();
         Long valve = valveOfTurbine.get(d.id());
@@ -594,13 +631,41 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         double sent = turbine ? run.admission : valve == null ? 0 : governorTargets.getOrDefault(valve, 0.0);
         boolean steamShort = (turbine || valve != null) && sent > 0 && run.steamFlow < .99 * sent;
         boolean idleSupply = turbine && run.admission == 0 && run.drop > 0;
+        String automatic=null;double requestedRpm=Double.NaN;
+        if(d.kind()==ShaftNetwork.Kind.MOTOR&&d.settings().mode()!=ShaftTrain.Mode.SPEED) {
+            var linked=host.linked(d.id());
+            var candidates=train.driven().stream().map(m->topology.shaft(m.id())).filter(Objects::nonNull).filter(u->u.fluid()>0&&linked.contains(u.fluid())).toList();
+            automatic=candidates.isEmpty()?"NO DATA LINK":candidates.size()>1?"MULTIPLE DUTIES":null;
+            if(automatic==null) {
+                var sample=run.duties.get(candidates.getFirst().id());boolean flow=d.settings().mode()==ShaftTrain.Mode.REGULATE_FLOW;
+                run.measured=sample==null?Double.NaN:flow?sample.flow():sample.pressure();
+                run.target=sample==null?Double.NaN:flow?sample.setFlow():sample.setPressure();
+                if(!(run.target>0))automatic="NO DUTY TARGET";
+                else if(sample!=null){double share=flow?sample.flowSpeed():sample.pressureSpeed();var member=train.driven().stream().filter(m->m.id()==candidates.getFirst().id()).findFirst().orElseThrow();requestedRpm=share*candidates.getFirst().designSpeed()/member.ratio();}
+            }
+        }
         var measure = new ShaftTrain.Measure(demand, run.available, steamShort, run.measured, run.target, state.previousSpeed(), state.previousMeasured(), run.available > 0 || idleSupply);
         // A motor runs while its store has energy (W5): its draw is booked at this step, from its last booking to now, at the
         // power this step decided (reading A59); one that runs short stops here (NO POWER) and restarts on the cadence.
         boolean motor = d.kind() == ShaftNetwork.Kind.MOTOR && electric != null;
         var driver = driver(d, turbine || valve != null, !motor || electric.powered(d.id()));
+        if(Double.isFinite(requestedRpm))driver=driver.atSpeed(Math.clamp(requestedRpm,driver.designSpeed()*com.wormzjl.icheme.science.machine.Motor.LOWEST_SPEED,driver.designSpeed()*com.wormzjl.icheme.science.machine.Motor.HIGHEST_SPEED));
         var step = ShaftTrain.step(driver, state.speed(), measure);
+        if(automatic!=null&&driver.running()&&driver.powered()&&step.trip()==ShaftTrain.Trip.NONE)
+            step=new ShaftTrain.Step(Math.min(state.speed(),step.speed()),ShaftTrain.Trip.NONE,automatic+" / LAST SPEED",0,state.speed()>0?step.electricPower():0);
+        if(motor) {
+            double actualDemand=0;for(var member:train.driven()) {
+                var unit=topology.shaft(member.id());var input=unit==null?null:create.get(unit.position());
+                actualDemand+=(createLoads.contains(member.id())?(input==null?0:input.actualPower()):run.power.getOrDefault(member.id(),0.0))/member.efficiency();
+            }
+            step=new ShaftTrain.Step(step.speed(),step.trip(),step.status(),step.governorPower(),step.speed()>0?com.wormzjl.icheme.science.machine.Motor.electricPower(actualDemand,d.ratedPower(),d.poles(),true):0);
+        }
         if (motor && electric.draw(d.id(), step.electricPower(), now)) step = ShaftTrain.step(driver(d, valve != null, false), state.speed(), measure);
+        // Publish only finite mechanical capacity left after the internal machines. External demand is booked once above.
+        double internal=0;for(var m:train.driven())if(!createLoads.contains(m.id()))internal+=run.power.getOrDefault(m.id(),0.0)/m.efficiency();
+        double capacity=driver.drive()==ShaftTrain.Drive.TURBINE?Math.min(driver.limit(),run.available):driver.limit();
+        if(driver.drive()==ShaftTrain.Drive.VARIABLE_MOTOR)capacity=com.wormzjl.icheme.science.machine.Motor.availablePower(capacity,driver.designSpeed(),step.speed());
+        for(var m:train.driven())if(createLoads.contains(m.id())){var u=topology.shaft(m.id());if(u!=null)host.output(u.position(),step.speed()*m.ratio(),step.speed()>0?Math.max(0,capacity-internal)*m.efficiency()/Math.max(1,train.driven().stream().filter(part->createLoads.contains(part.id())).count()):0);}
         run.trip = step.trip();
         run.status = step.status();
         if (d.kind() == ShaftNetwork.Kind.STEAM_TURBINE && bindings.containsKey(d.id()) && step.trip() == ShaftTrain.Trip.NONE) run.status = run.status + " / " + bindings.get(d.id());
@@ -678,7 +743,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
 
     /** The step's driver for unit {@code d}, with power ({@code powered}) or without. */
     private ShaftTrain.Driver driver(ShaftUnit d, boolean governed, boolean powered) {
-        var drive = d.drive(d.drive() == com.wormzjl.icheme.science.equipment.MachineDuty.Drive.VARIABLE);
+        var drive = createDrivers.contains(d.id())?ShaftTrain.Drive.CREATE:d.drive(d.drive() == com.wormzjl.icheme.science.equipment.MachineDuty.Drive.VARIABLE);
         if (drive == null) drive = ShaftTrain.Drive.CREATIVE;
         double design = d.designSpeed() > 0 ? d.designSpeed() : ShaftTrain.CREATIVE_SPEED;
         var s = d.settings();
@@ -812,6 +877,11 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
     }
 
     /** Every shaft unit as the ledger holds it (a read). */
+    public void dataChanged(){
+        var wake=new TreeSet<Long>();
+        for(var run:runs.values()){run.fresh=true;for(var member:run.train.driven()){var u=topology.shaft(member.id());if(u!=null&&u.fluid()>0)owners(u.fluid(),wake);}}
+        if(!wake.isEmpty())coordinator.shaftsMoved(wake);
+    }
     public List<ShaftUnit> units() {
         return List.copyOf(topology.shafts().values());
     }
@@ -861,9 +931,10 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
     }
 
     /** Coupling unit {@code unit}'s Create input and the impact last sent, or null for another part or none (a read). */
+    public ShaftNetwork.Kind kindOf(long unit){var u=topology.shaft(unit);return u!=null&&createDrivers.contains(unit)?ShaftNetwork.Kind.CREATE_COUPLING:u==null?null:u.kind();}
     public Coupling coupling(long unit) {
         var u = topology.shaft(unit);
-        if (u == null || u.kind() != ShaftNetwork.Kind.CREATE_COUPLING) return null;
+        if (u == null || kindOf(unit) != ShaftNetwork.Kind.CREATE_COUPLING) return null;
         var in = create.get(u.position());
         return new Coupling(in == null ? 0 : in.rpm(), in == null ? 0 : in.stress(), impacts.getOrDefault(unit, Double.NaN));
     }

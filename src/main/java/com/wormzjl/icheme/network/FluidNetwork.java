@@ -55,7 +55,7 @@ import java.util.*;
  * {@link FluidView.Power} (the Power group; NO POWER and UNMETERED stay on the status).</p>
  */
 public final class FluidNetwork {
-    public static final String PROTOCOL="fluid-18";
+    public static final String PROTOCOL="fluid-19";
     private static final Gson JSON=new Gson();
     public static final int MAX_JSON=262144;
     public static final int MAX_EDIT_JSON=4096;
@@ -73,7 +73,8 @@ public final class FluidNetwork {
      * A menu's edit form. {@code heat} is a controllable heat side's control (batch 2026-10-27-heat-exchanger-design, W4: an
      * exchanger side's or an air cooler's mode, set point, low limit and manual share), null for any other device.
      */
-    public record Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio,Power power,FlowControl.ValveSource valveSource,double massFlow,HeatUnit.Control heat,com.wormzjl.icheme.science.fluid.network.CoolingTower tower) {
+    public record Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio,Power power,FlowControl.ValveSource valveSource,double massFlow,HeatUnit.Control heat,com.wormzjl.icheme.science.fluid.network.CoolingTower tower,boolean fixedMover) {
+        public Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio,Power power,FlowControl.ValveSource valveSource,double massFlow,HeatUnit.Control heat,com.wormzjl.icheme.science.fluid.network.CoolingTower tower){this(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,power,valveSource,massFlow,heat,tower,false);}
         public Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio,Power power,FlowControl.ValveSource valveSource,double massFlow){this(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,power,valveSource,massFlow,null,null);}
         public Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio,Power power){this(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,power,FlowControl.ValveSource.NONE,1);}
         public Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio){this(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,Power.ON);}
@@ -90,10 +91,12 @@ public final class FluidNetwork {
         }
         @Override public double[] composition(){return composition.clone();}
         public static Controls from(WorldTopologyLedger.Registration record) {
-            var d=record.device();double flow=d.control() instanceof FlowControl.Mover m?m.requestedVolumeFlow():.01;
+            var d=record.device();double flow=d.control() instanceof FlowControl.Machine m?m.law().ratedFlow():d.control() instanceof FlowControl.Mover m?m.requestedVolumeFlow():.01;
             double head=d.control() instanceof FlowControl.Pump p?p.maximumAddedPressure():500000;
             double ratio=d.control() instanceof FlowControl.Compressor c?c.maximumPressureRatio():DEFAULT_PRESSURE_RATIO;
             double pressure=d.control() instanceof FlowControl.Valve v&&!(v instanceof FlowControl.Turbine)?v.targetPressure():record.spec().pressure();
+            if(d.control() instanceof FlowControl.Machine m&&m.setPressure()>0)pressure=m.setPressure();
+            if(d.control() instanceof FlowControl.Compressor c){if(c.setFlow()>0)flow=c.setFlow();if(c.setPressure()>0)pressure=c.setPressure();}
             var valve=d.control() instanceof FlowControl.ControlValve v?v:null;
             if(valve!=null)flow=valve.volumeTarget();
             // An air cooler's fans and a fired heater's burners are its power (batch 2026-10-27-heat-exchanger-design): on while
@@ -102,7 +105,7 @@ public final class FluidNetwork {
             var power=!d.generatorEnabled()||d.control() instanceof FlowControl.Mover m&&!m.enabled()||heat!=null&&(heat.fans()||heat.burners())&&heat.control().share()==0?Power.OFF:Power.ON;
             double temperature=heat!=null&&heat.burners()?heat.control().target():record.spec().temperature();
             return new Controls(temperature,pressure,d.geometry().diameter(),d.geometry().roughness(),flow,head,record.spec().composition(),record.spec().solids(),ratio,power,valve==null?(d.control() instanceof FlowControl.PressureValve?FlowControl.ValveSource.PRESSURE:FlowControl.ValveSource.NONE):valve.source(),valve==null?1:valve.massTarget(),
-                    heat!=null&&heat.controllable()?heat.control():null,record.spec().tower());
+                    heat!=null&&heat.controllable()?heat.control():null,record.spec().tower(),d.kind()==TopologyCompiler.Kind.PIPE&&d.control() instanceof FlowControl.Machine);
         }
     }
     /**
@@ -346,8 +349,8 @@ public final class FluidNetwork {
                 var geometry=d.geometry();var control=d.control();var spec=old.spec();var heat=d.heat();
                 switch(d.hydraulicKind()) {
                     case PIPE,FILTER->geometry=new PipeResistance.Geometry(geometry.length(),controls.diameter,PipeResistance.DEFAULT_ROUGHNESS_METRES,geometry.minorLoss());
-                    case PUMP->control=new FlowControl.Pump(controls.volumeFlow,controls.maximumAddedPressure,controls.power==Power.ON);
-                    case COMPRESSOR->control=new FlowControl.Compressor(controls.volumeFlow,controls.maximumPressureRatio,controls.power==Power.ON);
+                    case PUMP->{if(control instanceof FlowControl.Machine m)control=new FlowControl.Machine(m.law(),m.speed(),controls.power==Power.ON,d.kind()==TopologyCompiler.Kind.PIPE?0:controls.volumeFlow,d.kind()==TopologyCompiler.Kind.PIPE?0:controls.pressure);else control=new FlowControl.Pump(controls.volumeFlow,controls.maximumAddedPressure,controls.power==Power.ON);}
+                    case COMPRESSOR->{if(control instanceof FlowControl.Machine m)control=new FlowControl.Machine(m.law(),m.speed(),controls.power==Power.ON,d.kind()==TopologyCompiler.Kind.PIPE?0:controls.volumeFlow,d.kind()==TopologyCompiler.Kind.PIPE?0:controls.pressure);else if(control instanceof FlowControl.Compressor c&&world.shafts().unitOf(d.id()))control=new FlowControl.Compressor(c.requestedVolumeFlow(),c.maximumPressureRatio(),controls.power==Power.ON,controls.volumeFlow,controls.pressure);else control=new FlowControl.Compressor(controls.volumeFlow,controls.maximumPressureRatio,controls.power==Power.ON);}
                     case VALVE->{
                         if(control instanceof FlowControl.ControlValve valve){
                             if(valve.bare())throw new IllegalArgumentException("Lacking components");

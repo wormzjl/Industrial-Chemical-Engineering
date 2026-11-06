@@ -73,7 +73,7 @@ public record ShaftUnit(long id,ShaftNetwork.Kind kind,PhysicalFluidTopology.Pos
     }
     /** The driver this unit is in the step's terms, or null for a part that drives nothing. */
     public ShaftTrain.Drive drive(boolean variable) {
-        return switch(kind){case MOTOR->variable?ShaftTrain.Drive.VARIABLE_MOTOR:ShaftTrain.Drive.FIXED_MOTOR;case STEAM_TURBINE->ShaftTrain.Drive.TURBINE;case CREATIVE_MOTOR->ShaftTrain.Drive.CREATIVE;case CREATE_COUPLING->ShaftTrain.Drive.CREATE;default->null;};
+        return switch(kind){case MOTOR->ShaftTrain.Drive.VARIABLE_MOTOR;case STEAM_TURBINE->ShaftTrain.Drive.TURBINE;case CREATIVE_MOTOR->ShaftTrain.Drive.CREATIVE;case CREATE_COUPLING->ShaftTrain.Drive.CREATE;default->null;};
     }
     static ShaftNetwork.Cell cell(PhysicalFluidTopology.Position p){return new ShaftNetwork.Cell(p.dimension(),p.x(),p.y(),p.z());}
 }

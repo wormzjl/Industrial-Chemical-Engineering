@@ -438,7 +438,7 @@ class EquipmentShapeCompatTest {
      * column's member counts; 7: a column's water trim count and its air-then-water condenser; 8: a machine's design
      * point).
      */
-    private static final int SHAPE_FIELDS = 9;
+    private static final int SHAPE_FIELDS = 10;
 
     /** A column's components as an image written before the member counts shows them. */
     private static final java.util.regex.Pattern COMPONENTS_BEFORE_UNITS = java.util.regex.Pattern.compile(
@@ -504,11 +504,13 @@ class EquipmentShapeCompatTest {
                         expected = expected.replace("kind=CONDENSING_TURBINE", "kind=STEAM_TURBINE");
                         var shape = read.shape();
                         var duty = shape.designed() ? UnitDesign.of(shape.kind()).duty(shape.diameter(), (int) shape.tangentLength()) : MachineDuty.NONE;
+                        if(shape.kind()==Kind.MOTOR)duty=MachineDuty.motor(shape.diameter(),4,MachineDuty.Drive.FIXED);
                         if (condensing) duty = MachineDuty.turbine(duty.power(), duty.steam(), SteamTurbineDesign.CONDENSING_EXHAUST);
                         expected = expected.substring(0, expected.length() - 1) + ", duty=" + duty + "]";
                     }
                     if (read.shape().column()) expected = expected.replaceFirst("tangentLength=[0-9.]+", "tangentLength=" + read.shape().tangentLength());
                     if (!expected.contains("exchangerType=")) expected = expected.substring(0, expected.length() - 1) + ", exchangerType=STANDARD]";
+                    if(!expected.contains("baseSpeed="))expected=expected.replaceAll("(exhaust=[0-9.Ee+-]+)\\]","$1, baseSpeed=0.0]");
                     assertEquals(expected, read.shape().toString(), file.toString());
                 }
         }

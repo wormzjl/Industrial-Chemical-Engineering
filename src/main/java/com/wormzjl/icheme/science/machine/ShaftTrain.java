@@ -65,6 +65,7 @@ public final class ShaftTrain {
         }
 
         /** The speed the driver aims at before any limit, rpm. */
+        public Driver atSpeed(double rpm){return new Driver(drive,ratedPower,designSpeed,poles,running,Mode.SPEED,rpm/designSpeed,powerLimit,trip,governed,powered);}
         public double setSpeed() {
             if (drive == Drive.CREATE) return setPoint;
             return drive == Drive.CREATIVE ? setPoint > 0 ? setPoint : CREATIVE_SPEED : (setPoint > 0 ? setPoint : 1) * designSpeed;
@@ -73,7 +74,7 @@ public final class ShaftTrain {
         /** The power the driver can give, W: its rating, or a creative motor's limit. */
         public double limit() {
             if (drive == Drive.CREATE) return powerLimit;
-            return drive == Drive.CREATIVE ? powerLimit > 0 ? powerLimit : CREATIVE_LIMIT : ratedPower;
+            return drive == Drive.CREATIVE ? powerLimit > 0 ? powerLimit : CREATIVE_LIMIT : powerLimit>0?Math.min(ratedPower,powerLimit):ratedPower;
         }
     }
 
@@ -113,7 +114,8 @@ public final class ShaftTrain {
                     ? new Step(0, Trip.OVERLOAD, "TRIPPED: OVERLOAD", 0, 0)
                     : new Step(driver.designSpeed(), Trip.NONE, "RUNNING", 0, electric(driver, demand));
             case VARIABLE_MOTOR, CREATIVE -> {
-                double next = limited(speed, driver.limit(), demand, set);
+                double limit=driver.drive()==Drive.VARIABLE_MOTOR?Motor.availablePower(driver.limit(),driver.designSpeed(),speed>0?speed:set):driver.limit();
+                double next = limited(speed, limit, demand, set);
                 String status = next < set * (1 - 1e-9) ? driver.drive() == Drive.CREATIVE ? "POWER LIMITED" : "CURRENT LIMITED" : "RUNNING";
                 yield new Step(next, Trip.NONE, status, 0, driver.drive() == Drive.CREATIVE ? 0 : electric(driver, demand));
             }
@@ -171,7 +173,7 @@ public final class ShaftTrain {
         double share = speed > 0 ? speed / design : 1;
         double previous = Double.isFinite(measure.previousSpeed()) ? measure.previousSpeed() / design : Double.NaN;
         double next = SpeedControl.regulate(measure.target(), share, measure.measured(), previous, measure.previousMeasured(),
-                driver.mode() == Mode.REGULATE_FLOW ? 1 : 2, Motor.LOWEST_SPEED, 1);
+                driver.mode() == Mode.REGULATE_FLOW ? 1 : 2, Motor.LOWEST_SPEED, driver.drive()==Drive.VARIABLE_MOTOR?Motor.HIGHEST_SPEED:1);
         return next * design;
     }
 

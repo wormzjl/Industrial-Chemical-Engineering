@@ -24,6 +24,8 @@ public final class ModBlocks {
             com.wormzjl.icheme.world.level.block.DataCableBlock::new,BlockBehaviour.Properties.of().mapColor(MapColor.COLOR_BLUE).strength(.5F).sound(SoundType.WOOL).noOcclusion().noCollission().dynamicShape());
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.ControlPanelBlock> LOCAL_CONTROLLER=controlPanel("local_controller");
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.ControlPanelBlock> DCS=controlPanel("dcs");
+    public static final DeferredBlock<com.wormzjl.icheme.world.level.block.CreativePowerBlock> CREATIVE_POWER=BLOCKS.registerBlock("creative_power",
+            com.wormzjl.icheme.world.level.block.CreativePowerBlock::new,BlockBehaviour.Properties.of().mapColor(MapColor.COLOR_BLUE).strength(-1,3600000).sound(SoundType.METAL));
     private static DeferredBlock<com.wormzjl.icheme.world.level.block.ControlPanelBlock> controlPanel(String name){return BLOCKS.registerBlock(name,
             com.wormzjl.icheme.world.level.block.ControlPanelBlock::new,BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(3).sound(SoundType.METAL).noOcclusion());}
     // A pipe rack (batch 2026-10-26-pipe-laying-system): a thin frame, so light and the faces behind it show through; its shape follows its lanes.
@@ -73,7 +75,7 @@ public final class ModBlocks {
     // Rotating machinery (batch 2026-11-03-rotating-machinery): a shaft on one axis and the creative motor; their trains are the engine's.
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.ShaftBlock> SHAFT = BLOCKS.registerBlock(
             "shaft",
-            com.wormzjl.icheme.world.level.block.ShaftBlock::new,
+            properties->net.neoforged.fml.ModList.get().isLoaded("create")?new com.wormzjl.icheme.compat.create.CreateShaftBlock(properties):new com.wormzjl.icheme.world.level.block.ShaftBlock(properties),
             BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(3.5F).sound(SoundType.METAL).noOcclusion()
     );
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.CreativeMotorBlock> CREATIVE_MOTOR = BLOCKS.registerBlock(

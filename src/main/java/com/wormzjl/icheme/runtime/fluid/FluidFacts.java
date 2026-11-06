@@ -51,7 +51,7 @@ final class FluidFacts {
      *  11 (batch 2026-11-03-rotating-machinery, W5): the world's electric stores (after the shaft units), an air cooler side's
      *  fans, the shaft trip {@code NO_POWER} (never written: it is not latched).
      *  12 (batch 2026-11-03-rotating-machinery, W10b): the pumps' health (after the electric stores), only pumps below 1. */
-    static final int SCHEMA=13;
+    static final int SCHEMA=14;
     /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 12. */
     private static final Map<Class<?>,Map<String,String>> ALIASES=Map.of();
     private static final int MAXIMUM_FIELDS=256,MAXIMUM_ITEMS=1<<22,MAXIMUM_TEXTS=1<<20,MAXIMUM_ARRAY=4096,MAXIMUM_CHANNELS=1<<20;
@@ -441,7 +441,7 @@ final class FluidFacts {
         switch(control) {
             case FlowControl.Passive ignored->f.text("passive").f64(0).f64(0).bool(false).f64(0);
             case FlowControl.Pump pump->f.text("pump").f64(pump.requestedVolumeFlow()).f64(pump.maximumAddedPressure()).bool(pump.enabled()).f64(0);
-            case FlowControl.Compressor compressor->f.text("compressor").f64(compressor.requestedVolumeFlow()).f64(compressor.maximumPressureRatio()).bool(compressor.enabled()).f64(0);
+            case FlowControl.Compressor compressor->f.text("compressor").f64(compressor.requestedVolumeFlow()).f64(compressor.maximumPressureRatio()).bool(compressor.enabled()).f64(0).f64(compressor.setFlow()).f64(compressor.setPressure());
             // Schema 10 (W3): a casing on its curve, its set points, switch and law; its speed is its train's, a slice input.
             case FlowControl.Machine machine->{var law=machine.law();
                 f.text("machine").f64(machine.setFlow()).f64(machine.setPressure()).bool(machine.enabled()).f64(0)
@@ -458,7 +458,7 @@ final class FluidFacts {
         return valid(f,"control",()->switch(kind) {
             case "passive"->new FlowControl.Passive();
             case "pump"->new FlowControl.Pump(flow,limit,enabled);
-            case "compressor"->new FlowControl.Compressor(flow,limit,enabled);
+            case "compressor"->new FlowControl.Compressor(flow,limit,enabled,f.f64(0),f.f64(0));
             case "pressure_valve"->new FlowControl.PressureValve(target);
             case "control_valve"->{var source=f.name(FlowControl.ValveSource.class,null);var sensor=f.list(List.of(),FluidFacts::uuid);long revision=f.i64(0);if(sensor.size()>1)throw f.invalid("multiple control sources");double mass=f.f64(1),volume=f.f64(.01);yield new FlowControl.ControlValve(source,target,mass,volume,sensor.isEmpty()?null:sensor.getFirst(),revision);}
             case "machine"->{var law=f.record(null,q->{var type=q.text("");double rated=q.f64(0),head=q.f64(0),efficiency=q.f64(0),rpm=q.f64(0);

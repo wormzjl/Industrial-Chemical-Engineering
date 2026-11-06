@@ -75,6 +75,8 @@ public final class ShaftParts {
      */
     public interface Coupling {
         void stressImpact(double suPerRpm);
+        default void output(double rpm,double watts) {}
+        default double nativeSpeed(){return 0;}
     }
 
     /** The part at {@code at} (a block, or a structure's origin) leaves. */

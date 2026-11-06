@@ -48,7 +48,7 @@ import java.util.Optional;
  * 2026-11-03-rotating-machinery).
  */
 public final class EquipmentNetwork {
-    public static final String PROTOCOL = "equipment-19";
+    public static final String PROTOCOL = "equipment-20";
     /** A player edits or builds only within this distance of the constructor, blocks. */
     private static final double REACH = 8;
     /** A process simulator's designs are imported from within this many blocks of the constructor. */
@@ -278,6 +278,7 @@ public final class EquipmentNetwork {
         b.writeEnum(d.drive());
         b.writeVarInt(d.steam() == null ? 0 : d.steam().ordinal() + 1);
         b.writeDouble(d.exhaust());
+        b.writeDouble(d.baseSpeed());
     }
 
     private static MachineDuty readDuty(RegistryFriendlyByteBuf b) {
@@ -286,7 +287,7 @@ public final class EquipmentNetwork {
         var drive = b.readEnum(MachineDuty.Drive.class);
         int steam = b.readVarInt();
         if (steam < 0 || steam > MachineDuty.Steam.values().length) throw new IllegalArgumentException("Unknown steam class " + steam);
-        return new MachineDuty(flow, head, polytropicHead, power, poles, drive, steam == 0 ? null : MachineDuty.Steam.values()[steam - 1], b.readDouble());
+        return new MachineDuty(flow, head, polytropicHead, power, poles, drive, steam == 0 ? null : MachineDuty.Steam.values()[steam - 1], b.readDouble(),b.readDouble());
     }
 
     public static void register(RegisterPayloadHandlersEvent event) {

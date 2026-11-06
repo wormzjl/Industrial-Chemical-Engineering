@@ -34,6 +34,8 @@ public final class CreateCompat {
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<CreateCouplingBlockEntity>> COUPLING_ENTITY = BLOCK_ENTITIES.register("create_coupling",
             () -> BlockEntityType.Builder.of((pos, state) -> new CreateCouplingBlockEntity(CreateCompat.COUPLING_ENTITY.get(), pos, state), COUPLING.get()).build(null));
 
+    public static final DeferredHolder<BlockEntityType<?>,BlockEntityType<CreateShaftBlockEntity>> SHAFT_ENTITY=BLOCK_ENTITIES.register("create_shaft",
+            ()->BlockEntityType.Builder.of(CreateShaftBlockEntity::new,com.wormzjl.icheme.registry.ModBlocks.SHAFT.get()).build(null));
     private CreateCompat() {
     }
 

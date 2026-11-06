@@ -524,7 +524,7 @@ public final class EquipmentConstructorScreen extends Screen {
                 connections.set(selected, new EquipmentShape.Connection(c.side(), c.station(), clamp(c.offset() + step, -across, across)));
             }
             case "nozzle" -> nozzle = clamp(nozzle + step, 0, Math.max(0, sideNozzles().size() - 1));
-            case "flow", "head", "power", "exhaust" -> {
+            case "flow", "head", "power", "exhaust", "base_speed" -> {
                 machine(UnitDesign.of(kind).step(duty, key, step));
                 return;
             }

@@ -45,6 +45,7 @@
     "motor_frame": "icheme:block/motor_frame",
     "motor_shield": "icheme:block/motor_shield",
     "motor_panel": "icheme:block/motor_panel",
+    "generator_panel": "icheme:block/generator_panel",
     "motor_plain": "icheme:block/motor_plain",
     "heater": "icheme:block/painted_heater",
     "concrete": "icheme:block/equipment_concrete",

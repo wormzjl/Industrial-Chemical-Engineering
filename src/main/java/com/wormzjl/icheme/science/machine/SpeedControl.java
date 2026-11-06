@@ -54,6 +54,23 @@ public final class SpeedControl {
         return speed * DeterministicMath.cbrt(Math.sqrt(Math.max(0, available) / demand));
     }
 
+    /** Invert one finite speed line at the requested duty, rather than ramping through multiple controller slices. */
+    public static double requiredSpeed(MachineLaw law,double flow,double head,double density,double pressure,double k,double lowest,double highest) {
+        if(!(flow>=0)||!(density>0)||!(pressure>0)||!Double.isFinite(flow+head+density+pressure))return Double.NaN;
+        double low=lowest,high=highest;
+        if(law.rise(flow,low,density,pressure,k)>=head)return low;
+        if(law.rise(flow,high,density,pressure,k)<=head)return high;
+        for(int i=0;i<40;i++){double middle=(low+high)/2;if(law.rise(flow,middle,density,pressure,k)<head)low=middle;else high=middle;}
+        return (low+high)/2;
+    }
+    public static double requiredSpeed(PositiveDisplacement law,double flow,double head,double lowest,double highest) {
+        if(!(flow>=0)||!Double.isFinite(flow+head))return Double.NaN;
+        double low=lowest,high=highest;
+        if(law.rise(flow,low)>=head)return low;
+        if(law.rise(flow,high)<=head)return high;
+        for(int i=0;i<40;i++){double middle=(low+high)/2;if(law.rise(flow,middle)<head)low=middle;else high=middle;}
+        return (low+high)/2;
+    }
     private static double clamp(double value, double lowest, double highest) {
         return Math.min(highest, Math.max(lowest, value));
     }

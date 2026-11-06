@@ -64,7 +64,7 @@ public final class Mesh {
          * stretched over its body, its end shield's face, a large motor's bolted panels (tiled by the metre), the plain
          * cast parts (cowl, terminal box, feet, caps).
          */
-        MOTOR_FRAME(1, Paint.BODY), MOTOR_SHIELD(1, Paint.BODY), MOTOR_PANEL(1, Paint.BODY), MOTOR_PLAIN(1, Paint.BODY),
+        MOTOR_FRAME(1, Paint.BODY), MOTOR_SHIELD(1, Paint.BODY), MOTOR_PANEL(1, Paint.BODY), GENERATOR_PANEL(1, Paint.BODY), MOTOR_PLAIN(1, Paint.BODY),
         /** Fixed shaft role markings, independent of the equipment's paint. */
         SHAFT_INPUT(1, -1), SHAFT_OUTPUT(1, -1);
 

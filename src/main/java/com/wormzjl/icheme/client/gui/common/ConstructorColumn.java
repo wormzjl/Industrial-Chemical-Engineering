@@ -440,20 +440,14 @@ public final class ConstructorColumn {
         if (design.supportRow() != null) duty.add(step("support", design.supportRow(), Integer.toString(in.support()), "m", t));
         var rows = new ArrayList<Column.Row>();
         rows.add(new Column.Group(t.get(KEY + "group.duty"), t.get(KEY + "shift"), duty));
-        if (d.poles() != 0) {
+        if (d.poles() != 0 && kind != EquipmentShape.Kind.MOTOR) {
             var poles = new ArrayList<Column.Button>();
             for (int p : kind == EquipmentShape.Kind.PUMP ? List.of(2, 4) : MachineDuty.POLES)
                 poles.add(position("poles:" + p, t.get(KEY + "poles", p), p == d.poles(), t.get(KEY + "poles.hint", UnitDesign.whole(6000.0 / p))));
             rows.add(new Column.Group(t.get(KEY + "group.speed"), t.get(KEY + "group.speed.hint"), pairs(poles)));
         }
-        if (kind == EquipmentShape.Kind.MOTOR) {
-            var drives = new ArrayList<Column.Button>();
-            for (var drive : MachineDuty.Drive.values()) {
-                String key = "drive." + drive.name().toLowerCase(Locale.ROOT);
-                drives.add(position("drive:" + drive.name().toLowerCase(Locale.ROOT), t.get(KEY + key), drive == d.drive(), t.get(KEY + key + ".hint")));
-            }
-            rows.add(new Column.Group(t.get(KEY + "group.drive"), null, List.of(new Column.Buttons(drives))));
-        }
+        if (kind == EquipmentShape.Kind.MOTOR)
+            rows.add(new Column.Group(t.get(KEY+"group.speed"),t.get(KEY+"motor.vfd.hint"),List.of(step("base_speed","motor.base_speed",amount(d.speed()),"rpm",t))));
         if (d.steam() != null) {
             var classes = new ArrayList<Column.Button>();
             for (var steam : MachineDuty.Steam.values()) {

@@ -17,7 +17,7 @@ public final class ControlService {
     private final ControlFacts facts;
     private final Map<Long,DataPort> equipmentPorts=new HashMap<>();
     private DataBus bus=new DataBus(List.of(),Map.of());
-    private long busRevision=-1;
+    private long busRevision=-1,driveRevision=-1;
     private final Set<ControlPanelMenu> watchers=Collections.newSetFromMap(new IdentityHashMap<>());
     private final Map<UUID,CompoundTag> published=new HashMap<>();
     private final ArrayDeque<Edit> edits=new ArrayDeque<>();
@@ -74,7 +74,7 @@ public final class ControlService {
     public void removePanel(UUID id){facts.removePanel(id);levels.remove(id);status.remove(id);published.remove(id);}
     public void bind(InstrumentHosts.Host host){
         var r=world.registrations().get(host.identity());
-        boolean actuator=r!=null&&(r.device().control() instanceof FlowControl.ControlValve||r.device().heat()!=null);
+        boolean actuator=r!=null&&(r.device().control() instanceof FlowControl.ControlValve||r.device().control() instanceof FlowControl.Mover||r.device().heat()!=null);
         if(!actuator&&host.metadata().sensors().isEmpty()&&host.metadata().dataPort()==null)return;
         var ids=new HashMap<UUID,String>();for(var sensor:host.metadata().sensors())ids.put(sensor.instance(),facts.identify(sensor).label());boolean namesChanged=!ids.equals(host.metadata().sensorIds());host.metadata().sensorIds(ids);
         var port=equipmentPorts.get(host.identity());
@@ -83,6 +83,19 @@ public final class ControlService {
             host.metadata().dataPort(port);host.entity().setChanged();InstrumentHosts.loaded(host.entity());
             host.entity().getLevel().sendBlockUpdated(host.entity().getBlockPos(),host.entity().getBlockState(),host.entity().getBlockState(),2);
         }
+    }
+    public void bindMotor(EquipmentShellBlockEntity cell,ShaftUnit unit) {
+        var port=equipmentPorts.get(unit.id());
+        if(port==null){port=DataPorts.motor(cell,unit);facts.port(port);equipmentPorts.put(unit.id(),port);}
+        if(!port.equals(cell.instruments().dataPort())) {
+            cell.instruments().dataPort(port);cell.setChanged();InstrumentHosts.loaded(cell);
+            cell.getLevel().sendBlockUpdated(cell.getBlockPos(),cell.getBlockState(),cell.getBlockState(),2);
+        }
+    }
+    /** Connected physical host IDs, independent of chunk loading and menu subscriptions. */
+    public Set<Long> connectedHosts(long host) {
+        var port=equipmentPorts.get(host);if(port==null)return Set.of();
+        var result=new HashSet<Long>();for(var id:bus().connected(port.id())){var p=facts.port(id);if(p!=null&&p.host()>0&&p.host()!=host)result.add(p.host());}return Set.copyOf(result);
     }
     public void removeHost(long host){var port=equipmentPorts.remove(host);if(port!=null)facts.removePort(port.id());}
     private DataBus bus(){if(busRevision!=facts.topologyRevision()){bus=new DataBus(facts.cables(),facts.ports());busRevision=facts.topologyRevision();}return bus;}
@@ -94,6 +107,7 @@ public final class ControlService {
         if(tick%CADENCE!=0)return;
         if(facts.panels().isEmpty()&&watchers.isEmpty()&&edits.isEmpty()&&valvePlans.isEmpty()&&heatPlans.isEmpty())return;
         bus();
+        if(driveRevision!=busRevision){driveRevision=busRevision;world.shafts().dataChanged();}
         while(!edits.isEmpty()){
             var edit=edits.removeFirst();var panel=facts.panel(edit.id());
             if(!edit.menu().stillValid(edit.menu().player())||!edit.menu().player().mayBuild()||!accessible(edit.menu(),edit.id())||panel==null||panel.dcs()||panel.revision()!=edit.revision()){edit.menu().answer(edit.id(),"SETTINGS CHANGED: APPLY AGAIN");continue;}
@@ -209,7 +223,7 @@ public final class ControlService {
                 var in=new CompoundTag();in.putUUID("id",s.instance());in.putString("label",facts.sensorId(s.instance()).label()+" / "+s.kind().name());in.putString("kind",s.kind().name());in.putString("unit",Sensor.primaryUnit(s.kind()).name());Sensor.secondaryUnit(s.kind()).ifPresent(u->in.putString("secondUnit",u.name()));
                 var r=readings.get(s.instance());if(r!=null){in.putDouble("value",r.value());in.putDouble("secondary",r.secondary());in.putDouble("span",r.span());in.putString("quality",r.availability().name());in.putString("unit",r.unit().name());if(r.secondaryUnit().isPresent())in.putString("secondUnit",r.secondaryUnit().get().name());}inputs.add(in);
             }row.put("inputs",inputs);
-            var outputChoices=world.registrations().values().stream().filter(r->hostIds.contains(r.device().id())&&(r.device().control() instanceof FlowControl.ControlValve||r.device().heat()!=null&&r.device().heat().controllable())).sorted(Comparator.comparingLong(r->r.device().id())).toList();
+            var outputChoices=world.registrations().values().stream().filter(r->hostIds.contains(r.device().id())&&(r.device().control() instanceof FlowControl.ControlValve||r.device().control() instanceof FlowControl.Mover||r.device().heat()!=null&&r.device().heat().controllable())).sorted(Comparator.comparingLong(r->r.device().id())).toList();
             row.putInt("outputPages",Math.max(1,(outputChoices.size()+63)/64));row.putInt("outputPage",Math.clamp(menu.devicePage(),0,Math.max(0,(outputChoices.size()-1)/64)));
             var outputRows=page(outputChoices,menu.devicePage(),64);outputChoices.stream().filter(r->r.device().id()==p.settings().output()&&!outputRows.contains(r)).findFirst().ifPresent(outputRows::add);
             var outputs=new ListTag();for(var r:outputRows){var out=new CompoundTag();out.putLong("id",r.device().id());out.putString("label",label(r.device().id()));outputs.add(out);}row.put("outputs",outputs);controllers.add(row);

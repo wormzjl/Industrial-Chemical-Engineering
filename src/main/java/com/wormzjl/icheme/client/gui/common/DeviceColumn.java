@@ -53,7 +53,9 @@ public final class DeviceColumn {
      */
     public record Input(Kind kind, boolean canEdit, boolean switchable, boolean powerOn, String pressureUnit, String temperatureUnit, String flowTime,
                         Valve valve, @Nullable Opening opening, boolean recoverable, @Nullable Level level, @Nullable String junction,
-                        List<Column.Row> lead, @Nullable Phases phases, List<Meter> readings, @Nullable Drive drive, @Nullable Power power, @Nullable Suction suction) {
+                        List<Column.Row> lead, @Nullable Phases phases, List<Meter> readings, @Nullable Drive drive, @Nullable Power power, @Nullable Suction suction,@Nullable String fixedDuty) {
+        public Input(Kind kind,boolean canEdit,boolean switchable,boolean powerOn,String pressureUnit,String temperatureUnit,String flowTime,Valve valve,@Nullable Opening opening,boolean recoverable,@Nullable Level level,@Nullable String junction,List<Column.Row> lead,@Nullable Phases phases,List<Meter> readings,@Nullable Drive drive,@Nullable Power power,@Nullable Suction suction) {this(kind,canEdit,switchable,powerOn,pressureUnit,temperatureUnit,flowTime,valve,opening,recoverable,level,junction,lead,phases,readings,drive,power,suction,null);}
+        public Input withFixedDuty(String text){return new Input(kind,canEdit,switchable,powerOn,pressureUnit,temperatureUnit,flowTime,valve,opening,recoverable,level,junction,lead,phases,readings,drive,power,suction,text);}
         public Input {
             lead = List.copyOf(lead);
             readings = List.copyOf(readings);
@@ -68,7 +70,7 @@ public final class DeviceColumn {
 
         /** This input with a pump's readings. */
         public Input withSuction(@Nullable Suction value) {
-            return new Input(kind, canEdit, switchable, powerOn, pressureUnit, temperatureUnit, flowTime, valve, opening, recoverable, level, junction, lead, phases, readings, drive, power, value);
+            return new Input(kind, canEdit, switchable, powerOn, pressureUnit, temperatureUnit, flowTime, valve, opening, recoverable, level, junction, lead, phases, readings, drive, power, value,fixedDuty);
         }
 
         /** A device with no driver and no fans. */
@@ -182,12 +184,13 @@ public final class DeviceColumn {
                 new Column.Field(target ? "towerTemperature" : "towerSpeed", t.get(target ? "tower_temperature" : "tower_speed"), target ? temperatureUnit : "%", null)));
     }
     static List<Column.Row> settings(Input in, HeatControlColumn.Texts t) {
+        if(in.fixedDuty()!=null)return List.of(new Column.Group(t.get("inline.rating"),null,List.of(new Column.Paragraph(in.fixedDuty(),Palette.TEXT))));
         String p = in.pressureUnit(), volume = "m³" + in.flowTime(), mass = "kg" + in.flowTime();
         var setPoint = t.get("heat_group.set_point");
         return switch (in.kind()) {
             case GENERATOR -> List.of(group(setPoint, field("pressure", t, "pressure", p), field("temperature", t, "temperature", in.temperatureUnit())));
-            case PUMP -> List.of(group(setPoint, suctionFlow(in, t, volume)), group(t.get("device_group.limit"), field("maximumAddedPressure", t, "max_rise", p)));
-            case COMPRESSOR -> List.of(group(setPoint, suctionFlow(in, t, volume)), group(t.get("device_group.limit"), field("maximumPressureRatio", t, "max_ratio", "")));
+            case PUMP -> in.drive()!=null?List.of(group(setPoint,suctionFlow(in,t,volume),field("pressure",t,"discharge_target",p))):List.of(group(setPoint, suctionFlow(in, t, volume)), group(t.get("device_group.limit"), field("maximumAddedPressure", t, "max_rise", p)));
+            case COMPRESSOR -> in.drive()!=null?List.of(group(setPoint,suctionFlow(in,t,volume),field("pressure",t,"discharge_target",p))):List.of(group(setPoint, suctionFlow(in, t, volume)), group(t.get("device_group.limit"), field("maximumPressureRatio", t, "max_ratio", "")));
             case VOID -> List.of(group(setPoint, field("pressure", t, "pressure", p)));
             case PIPE -> List.of(group(t.get("device_group.size"), field("diameter", t, "bore", "m")));
             case VALVE -> switch (in.valve()) {

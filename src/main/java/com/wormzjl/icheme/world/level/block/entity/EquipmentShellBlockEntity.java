@@ -618,6 +618,7 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
         tag.putString("Drive", duty.drive().name());
         if (duty.steam() != null) tag.putString("Steam", duty.steam().name());
         tag.putDouble("Exhaust", duty.exhaust());
+        tag.putDouble("BaseSpeed", duty.baseSpeed());
         return tag;
     }
 
@@ -626,7 +627,7 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
         if (!tag.contains("Duty", net.minecraft.nbt.Tag.TAG_COMPOUND)) return null;
         var d = tag.getCompound("Duty");
         return new ShapeRepair.SavedDuty(d.getDouble("Flow"), d.getDouble("Head"), d.getDouble("PolytropicHead"), d.getDouble("Power"), d.getInt("Poles"),
-                d.contains("Drive") ? d.getString("Drive") : null, d.contains("Steam") ? d.getString("Steam") : null, d.getDouble("Exhaust"));
+                d.contains("Drive") ? d.getString("Drive") : null, d.contains("Steam") ? d.getString("Steam") : null, d.getDouble("Exhaust"),d.getDouble("BaseSpeed"));
     }
 
     /** The shape fields of {@code tag} as written, before any rule reads them. */

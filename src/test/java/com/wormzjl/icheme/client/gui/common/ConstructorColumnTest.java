@@ -340,9 +340,8 @@ class ConstructorColumnTest {
         assertEquals(List.of("flow", "flow-", "flow+", "head", "head-", "head+", "size", "poles:2", "poles:4"), slots(pump).subList(0, 9));
         assertTrue(buttons(pump).get("poles:2").latched() && buttons(pump).get("poles:4").active());
         var motor = ConstructorColumn.design(design(Form.MOTOR, 250, 1, 2, 3, 0, 0), t);
-        assertEquals(List.of("power", "power-", "power+", "support", "support-", "support+", "poles:2", "poles:4", "poles:6", "poles:8", "drive:fixed", "drive:variable"),
-                slots(motor).subList(0, 12));
-        assertTrue(buttons(motor).get("poles:4").latched() && buttons(motor).get("drive:fixed").latched() && buttons(motor).get("drive:variable").active());
+        assertEquals(List.of("power","power-","power+","support","support-","support+","base_speed","base_speed-","base_speed+"),slots(motor).subList(0,9));
+        assertFalse(slots(motor).stream().anyMatch(k->k.startsWith("poles:")||k.startsWith("drive:")));
         var turbine = ConstructorColumn.design(design(Form.STEAM_TURBINE, 1, 1, 0, 3, 0, 0), t);
         assertEquals(List.of("power", "power-", "power+", "size", "support", "support-", "support+", "steam:mp", "steam:hp", "steam:vhp", "exhaust", "exhaust-", "exhaust+"),
                 slots(turbine).subList(0, 13));

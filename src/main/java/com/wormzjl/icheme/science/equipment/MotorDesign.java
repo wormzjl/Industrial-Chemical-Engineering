@@ -9,8 +9,8 @@ import java.util.Locale;
 
 /**
  * An electric motor, or its mirror the generator (batch 2026-11-03-rotating-machinery, W4; plan section 6): its design
- * point is its rated power from the IEC list (0.75 kW to 20 MW, the main size), its poles (2, 4, 6 or 8: its
- * synchronous speed at 50 Hz) and a motor's drive (fixed speed or a variable-speed drive). Up to {@link #LOW_VOLTAGE} a
+ * point is its rated power from the IEC list (0.75 kW to 20 MW, the main size), its explicit VFD base speed (legacy poles retain their
+ * old meaning). New motors all use a variable-speed drive. Up to {@link #LOW_VOLTAGE} a
  * low-voltage TEFC motor ({@link ProcessUnit#motor}: fins, cowl and turning fan, feet, terminal box), its body
  * {@link ProcessUnit#motorDiameter} across; above it a large motor ({@link ProcessUnit#largeMotor}: octagonal stator,
  * top-hat cooler, terminal box on its side), 1.15 of that across. Its drive end is at its back (every machine's shaft end
@@ -107,7 +107,7 @@ final class MotorDesign extends UnitDesign {
 
     @Override
     public MachineDuty duty(double size, int length) {
-        return generator ? MachineDuty.generator(size, DEFAULT_POLES) : MachineDuty.motor(size, DEFAULT_POLES, MachineDuty.Drive.FIXED);
+        return generator ? MachineDuty.generator(size, DEFAULT_POLES) : MachineDuty.motor(size,3000.0);
     }
 
     @Override
@@ -118,7 +118,8 @@ final class MotorDesign extends UnitDesign {
     @Override
     void checkDuty(MachineDuty duty) {
         if (!POWERS.contains(duty.power())) throw new IllegalArgumentException("A " + name() + "'s rated power is one of the IEC list, 0.75 to 20,000 kW, not " + duty.power());
-        if (duty.poles() == 0) throw new IllegalArgumentException("A " + name() + " has 2, 4, 6 or 8 poles");
+        if (!generator && duty.baseSpeed()!=0 && (duty.baseSpeed()<300||duty.baseSpeed()>12000))throw new IllegalArgumentException("Motor base speed is 300 to 12000 rpm");
+        if (generator && duty.poles() == 0) throw new IllegalArgumentException("A " + name() + " has 2, 4, 6 or 8 poles");
         if (generator && duty.drive() != MachineDuty.Drive.FIXED) throw new IllegalArgumentException("A generator has no drive");
         if (duty.flow() != 0 || duty.head() != 0 || duty.polytropicHead() != 0 || duty.steam() != null || duty.exhaust() != 0)
             throw new IllegalArgumentException("A " + name() + "'s design point is its power, poles" + (generator ? "" : " and drive"));
@@ -127,9 +128,10 @@ final class MotorDesign extends UnitDesign {
     /** Power steps along the IEC list ({@link #POWERS}). */
     @Override
     public MachineDuty step(MachineDuty duty, String setting, int steps) {
+        if (setting.equals("base_speed") && !generator) return duty.withBaseSpeed(Math.clamp(duty.speed()+steps*100,300,12000));
         if (!setting.equals("power")) return duty;
         double power = MachineDuty.step(POWERS, duty.power(), steps);
-        return generator ? MachineDuty.generator(power, duty.poles()) : MachineDuty.motor(power, duty.poles(), duty.drive());
+        return generator ? MachineDuty.generator(power, duty.poles()) : new MachineDuty(0,0,0,power,duty.poles(),duty.drive(),null,0,duty.baseSpeed());
     }
 
     private String name() {
@@ -162,7 +164,7 @@ final class MotorDesign extends UnitDesign {
         var duty = shape.duty();
         var rating = new Line(name() + ".rating", sizeText(duty.power()), whole(duty.speed()), size(frame(duty.power())));
         if (generator) return List.of(rating);
-        return List.of(rating, new Line("motor.drive." + duty.drive().name().toLowerCase(Locale.ROOT)));
+        return List.of(rating, new Line("motor.drive." + "variable"));
     }
 
     /** The body's diameter, m: a TEFC motor's {@link ProcessUnit#motorDiameter}, a large motor's frame 1.15 of it across. */
@@ -197,7 +199,8 @@ final class MotorDesign extends UnitDesign {
                 deck = floor + BASEPLATE;
             }
             drive = front + length;
-            u.motor(Frame.of(new double[]{a, y, drive}, 2, -1), r, 0, length, 0, deck, ProcessUnit.MotorDetail.FULL);
+            if(generator)u.generator(Frame.of(new double[]{a,y,drive},2,-1),r,0,length,deck);
+            else u.motor(Frame.of(new double[]{a, y, drive}, 2, -1), r, 0, length, 0, deck, ProcessUnit.MotorDetail.FULL);
         } else {
             double across = frame(kw), r = across / 2, length = 1.7 * across + .2, terminal = Math.min(1.2, .3 + .2 * across);
             half = r + .4 * terminal + .05;
@@ -211,7 +214,7 @@ final class MotorDesign extends UnitDesign {
             }
             front = .35;
             drive = front + length;
-            u.largeMotor(a, y, front, across, length, deck);
+            if(generator)u.largeGenerator(a,y,front,across,length,deck);else u.largeMotor(a, y, front, across, length, deck);
         }
         u.terminal = u.terminalBox;
         double face = Math.ceil(drive + .2 + rs - 1e-9);

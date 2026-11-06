@@ -75,9 +75,14 @@ public final class ShaftNetwork {
      * One part: its identity, kind, and for a shaft block its cell and axis; for a machine its ends. {@code ratio} is a
      * gearbox's fast-end speed over its slow end's (0: auto, reading A20); {@code designSpeed} a member's rated speed, rpm.
      */
-    public record Part(long id, Kind kind, Cell cell, int axis, List<End> ends, double ratio, double designSpeed) {
+    public enum Role { PASSIVE, SOURCE, LOAD }
+    public record Part(long id, Kind kind, Cell cell, int axis, List<End> ends, double ratio, double designSpeed,Role role) {
+        public Part(long id,Kind kind,Cell cell,int axis,List<End> ends,double ratio,double designSpeed){this(id,kind,cell,axis,ends,ratio,designSpeed,Role.PASSIVE);}
+        public boolean driver(){return role==Role.SOURCE||role!=Role.LOAD&&kind.driver();}
+        public boolean driven(){return role==Role.LOAD||role!=Role.SOURCE&&kind.driven();}
+        public Part withRole(Role value,double rpm){return new Part(id,kind,cell,axis,ends,ratio,rpm,value);}
         public Part {
-            Objects.requireNonNull(kind);
+            Objects.requireNonNull(kind);Objects.requireNonNull(role);
             ends = List.copyOf(ends);
             if (kind == Kind.SHAFT ? cell == null || axis < 0 || axis > 2 || !ends.isEmpty() : ends.isEmpty())
                 throw new IllegalArgumentException("A shaft block has a cell and an axis, a machine its shaft ends");
@@ -187,10 +192,10 @@ public final class ShaftNetwork {
             for (int line : entry.getValue())
                 for (int node : lines.get(line)) {
                     partIds.add(nodes.get(node)[0]);
-                    if (nodes.get(node)[1] >= 0) hasEnd = true;
+                    if (nodes.get(node)[1] >= 0 || byId.get(nodes.get(node)[0]).role()!=Role.PASSIVE) hasEnd = true;
                 }
             if (!hasEnd) continue;
-            var drivers = partIds.stream().map(byId::get).filter(p -> p.kind().driver()).toList();
+            var drivers = partIds.stream().map(byId::get).filter(Part::driver).toList();
             var fault = loops.contains(entry.getKey()) ? Fault.GEAR_LOOP : drivers.isEmpty() ? Fault.NO_DRIVER : drivers.size() > 1 ? Fault.TWO_DRIVERS : Fault.NONE;
             var driven = new ArrayList<Driven>();
             var shafts = new HashMap<Long, Double>();
@@ -198,7 +203,7 @@ public final class ShaftNetwork {
             long driver = drivers.size() == 1 ? drivers.getFirst().id() : 0;
             if (fault == Fault.NONE) {
                 var driverPart = drivers.getFirst();
-                int start = lineOf[endNode.get(driverPart.id())[0]];
+                int start = lineOf[driverPart.kind()==Kind.SHAFT?shaftAt.get(driverPart.cell()):endNode.get(driverPart.id())[0]];
                 var factor = new HashMap<Integer, Double>();
                 var efficiency = new HashMap<Integer, Double>();
                 factor.put(start, 1.0);
@@ -229,7 +234,7 @@ public final class ShaftNetwork {
                             ratio = target > 0 && here > 0 ? (upward ? target / here : here / target) : 1;
                         }
                         // Behind a Create coupling, on the line it drives, a gearbox steps up to 64 (plan 5.3, W6b; reading A145).
-                        double most = driverPart.kind() == Kind.CREATE_COUPLING && upward && line == start ? CREATE_RATIO : MAXIMUM_RATIO;
+                        double most = (driverPart.kind() == Kind.CREATE_COUPLING||driverPart.role()==Role.SOURCE) && upward && line == start ? CREATE_RATIO : MAXIMUM_RATIO;
                         ratio = Math.max(1 / most, Math.min(most, ratio));
                         ratios.put(gear.id(), ratio);
                         factor.put(other, factor.get(line) * (upward ? ratio : 1 / ratio));
@@ -243,7 +248,7 @@ public final class ShaftNetwork {
                     for (int node : lines.get(line)) {
                         var part = byId.get(nodes.get(node)[0]);
                         if (part.kind() == Kind.SHAFT) shafts.put(part.id(), f);
-                        else if (part.kind().driven() && seen.add(part.id())) driven.add(new Driven(part.id(), f, eta));
+                        if (part.driven() && seen.add(part.id())) driven.add(new Driven(part.id(), f, eta));
                     }
                 }
                 driven.sort(Comparator.comparingLong(Driven::id));

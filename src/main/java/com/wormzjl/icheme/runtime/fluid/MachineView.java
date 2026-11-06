@@ -80,8 +80,8 @@ public record MachineView(long unit, ShaftNetwork.Kind kind, String status, doub
         String status = v.status().length() > MAX_TEXT ? v.status().substring(0, MAX_TEXT) : v.status();
         var steam = trains.steam(unit);
         String name = governor.length() > MAX_TEXT ? governor.substring(0, MAX_TEXT) : governor;
-        return new MachineView(unit, v.kind(), status, v.speed(), v.shaftPower(), v.electricPower(), v.energyPerTick(), v.settings(), v.trip(), u.ratedPower(),
-                u.designSpeed(), u.poles(), u.drive() == com.wormzjl.icheme.science.equipment.MachineDuty.Drive.VARIABLE, share, seconds, name, trains.ratio(unit),
+        return new MachineView(unit, trains.kindOf(unit), status, v.speed(), v.shaftPower(), v.electricPower(), v.energyPerTick(), v.settings(), v.trip(), u.ratedPower(),
+                u.designSpeed(), u.poles(), u.kind()==ShaftNetwork.Kind.MOTOR||u.drive() == com.wormzjl.icheme.science.equipment.MachineDuty.Drive.VARIABLE, share, seconds, name, trains.ratio(unit),
                 steam == null ? Double.NaN : steam.flow(), steam == null ? Double.NaN : steam.inlet(), steam == null ? Double.NaN : steam.exhaust(), coupling(trains, unit));
     }
 

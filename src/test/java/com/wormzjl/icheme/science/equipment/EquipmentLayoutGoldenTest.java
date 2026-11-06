@@ -53,7 +53,7 @@ class EquipmentLayoutGoldenTest {
     /** One table line: the shape, then what its layout places. */
     static String line(EquipmentShape shape) {
         var layout = ShapeRasterizer.layout(shape);
-        var printed = shape.toString();
+        var printed = shape.toString().replace(", baseSpeed=0.0]","]");
         if (shape.exchangerType() == ExchangerType.STANDARD) printed = printed.replace(", exchangerType=STANDARD]", "]").replaceAll(", exchangers=Exchangers\\[condenser=STANDARD, trim=STANDARD, coolers=\\[[A-Z, ]*\\]\\]", "");
         var b = new StringBuilder(printed).append(" | box ").append(shape.sizeX()).append(' ').append(shape.sizeY()).append(' ').append(shape.sizeZ())
                 .append(" | shell ").append(layout.shell().size()).append(" interior ").append(layout.interior().size())

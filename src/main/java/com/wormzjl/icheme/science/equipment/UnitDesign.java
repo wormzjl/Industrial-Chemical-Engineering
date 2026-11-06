@@ -362,7 +362,8 @@ public abstract class UnitDesign {
     public static double designSpeed(EquipmentShape shape) {
         var duty = shape.duty();
         return switch (shape.kind()) {
-            case PUMP, MOTOR -> com.wormzjl.icheme.science.machine.Motor.ratedSpeed(duty.poles() == 0 ? 2 : duty.poles());
+            case MOTOR -> duty.baseSpeed()>0 ? duty.baseSpeed() : com.wormzjl.icheme.science.machine.Motor.ratedSpeed(duty.poles()==0?2:duty.poles());
+            case PUMP -> com.wormzjl.icheme.science.machine.Motor.ratedSpeed(duty.poles() == 0 ? 2 : duty.poles());
             case GENERATOR -> duty.poles() == 0 ? 3000 : duty.speed();
             case CENTRIFUGAL_COMPRESSOR -> CentrifugalCompressorDesign.speed(shape.diameter());
             case COMPRESSOR -> ProcessUnit.compressorSpeed(shape.diameter());

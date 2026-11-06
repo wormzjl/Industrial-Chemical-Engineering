@@ -159,11 +159,15 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
      * displacement less the liquid's volume (plan section 3.6). It refuses a supply that carries any solid population above
      * {@link com.wormzjl.icheme.science.fluid.transport.SlurryTransport#DEFAULT_TRACE_VOLUME_FRACTION} of its volume.
      */
-    record Compressor(double requestedVolumeFlow,double maximumPressureRatio,boolean enabled) implements Mover {
+    record Compressor(double requestedVolumeFlow,double maximumPressureRatio,boolean enabled,double setFlow,double setPressure) implements Mover {
+        public Compressor(double requestedVolumeFlow,double maximumPressureRatio,boolean enabled){this(requestedVolumeFlow,maximumPressureRatio,enabled,0,0);}
+        public Compressor withDisplacement(double flow){return new Compressor(flow,maximumPressureRatio,enabled,setFlow,setPressure);}
+        public Compressor withEnabled(boolean value){return new Compressor(requestedVolumeFlow,maximumPressureRatio,value,setFlow,setPressure);}
         public Compressor(double targetVolumeFlow,double maximumPressureRatio){this(targetVolumeFlow,maximumPressureRatio,true);}
         /** The largest pressure ratio a compressor's controls take (plan Appendix B). */
         public static final double MAXIMUM_PRESSURE_RATIO=10;
         public Compressor {
+            if(!(setFlow>=0)||setFlow>MAXIMUM_VOLUME_FLOW||!(setPressure>=0)||!Double.isFinite(setFlow+setPressure))throw new IllegalArgumentException("Invalid compressor demand");
             if(!Double.isFinite(requestedVolumeFlow)||requestedVolumeFlow<0||!Double.isFinite(maximumPressureRatio)||maximumPressureRatio<=1)
                 throw new IllegalArgumentException("Invalid compressor settings");
         }

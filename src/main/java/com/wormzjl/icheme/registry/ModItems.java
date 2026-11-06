@@ -57,6 +57,7 @@ public final class ModItems {
     public static final DeferredItem<com.wormzjl.icheme.world.item.RecoveredSolidsItem> RECOVERED_SOLIDS=ITEMS.registerItem("recovered_solids",com.wormzjl.icheme.world.item.RecoveredSolidsItem::new);
     public static final DeferredItem<BlockItem> EQUIPMENT_CONSTRUCTOR=ITEMS.registerSimpleBlockItem("equipment_constructor",ModBlocks.EQUIPMENT_CONSTRUCTOR);
     public static final DeferredItem<BlockItem> SHAFT=ITEMS.registerSimpleBlockItem("shaft",ModBlocks.SHAFT);
+    public static final DeferredItem<BlockItem> CREATIVE_POWER=ITEMS.registerSimpleBlockItem("creative_power",ModBlocks.CREATIVE_POWER);
     public static final DeferredItem<BlockItem> CREATIVE_MOTOR=ITEMS.registerSimpleBlockItem("creative_motor",ModBlocks.CREATIVE_MOTOR);
     public static final DeferredItem<net.minecraft.world.item.Item> FLUID_DEBUGGER=ITEMS.registerSimpleItem("fluid_debugger",new net.minecraft.world.item.Item.Properties().stacksTo(1));
     public static final DeferredItem<PipelineToolItem> PIPELINE_TOOL =
