@@ -15,6 +15,14 @@ public final class VisualRotation {
     public static final class Clock {
         private double turns, previous = Double.NaN;
 
+        /** A disconnected line keeps its current angle and then advances independently. Client-thread only. */
+        public Clock copy() {
+            var copy = new Clock();
+            copy.turns = turns;
+            copy.previous = previous;
+            return copy;
+        }
+
         public double at(double seconds, double rpm) {
             return advance(seconds, turnsPerSecond(rpm));
         }

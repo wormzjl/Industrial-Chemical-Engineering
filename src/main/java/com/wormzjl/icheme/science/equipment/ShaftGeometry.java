@@ -22,7 +22,10 @@ public final class ShaftGeometry {
             var sizes = new java.util.ArrayList<List<Mesh.Polygon>>();
             for (int pixels = 2; pixels <= 8; pixels++) {
                 var mesh = new Mesh();
-                var frame = Mesh.Frame.of(new double[]{.5, .5, .5}, axis, 1);
+                // Horizontal machine shafts have flats on top after any heading turn. Frame.of's X reference points
+                // up instead, which rotates a hexagon 30 degrees relative to those equipment couplings.
+                var frame = axis == 0 ? new Mesh.Frame(new double[]{.5, .5, .5}, new double[]{1, 0, 0}, new double[]{0, 0, 1})
+                        : Mesh.Frame.of(new double[]{.5, .5, .5}, axis, 1);
                 double radius = pixels / 32.0;
                 for (int side = 0; side < SIDES; side++) {
                     double a = 2 * Math.PI * side / SIDES, b = 2 * Math.PI * (side + 1) / SIDES;
