@@ -16,8 +16,8 @@ import java.util.List;
  * The roof floats on the liquid, so the tank keeps only liquid at ambient pressure up to its fill height H, the shell
  * less the roof's own depth ({@link #FREEBOARD}): {@code volume() = π D²/4 · H}, {@code levelHeight() = H}.
  *
- * <p>In the chunk mesh: the shell in 2 m courses (rows clear of everything else are body rows), the top angle, the wind
- * girder 1.2 m below the top, a rim-level ring walkway merged with the gauger's landing, straight external ladders and
+ * <p>In the chunk mesh: the shell in 2 m courses (rows clear of everything else are body rows), the top angle,
+ * a rim-level ring walkway merged with the gauger's landing, straight external ladders and
  * the front service region for the optional level-gauge accessory. A tank under {@link #RING_SIZE} across has no ring
  * walkway but retains the landing. Below {@link #COMPACT_LIMIT} in both diameter
  * and shell height, it instead has a plain external rim ladder, with no platform or rolling ladder. Tanks taller than
@@ -37,14 +37,12 @@ final class TankDesign extends UnitDesign {
     static final double FREEBOARD = 1;
     /** The concrete ringwall's height and its projection beyond the shell, m (photo survey: 0.3 to 0.5 m ringwalls, mostly buried). */
     static final double RINGWALL = .15, RINGWALL_OUT = .25;
-    /** The plain wind girder below the shell's top, m, and its outstand and depth. The walkway is at the rim. */
-    static final double GIRDER_DROP = 1.2, GIRDER = .35, GIRDER_DEPTH = .3;
     /** The walkway's width, m: room for a player round the shell between its rail and the shell ({@link Access#PLAYER}), to the next 5 cm. */
     static final double WALKWAY = Math.ceil((Access.GAP + Access.PLAYER + Access.RAIL_BAND) * 20) / 20;
     /** The top angle's outstand and depth, m. */
     static final double TOP_ANGLE = .08;
-    /** The gauger's landing: its overhang over the rim and its length round the shell, m. */
-    static final double OVERHANG = .6, PLATFORM = 2;
+    /** The gauger's landing: its overhang over the rim, length round the shell, and knee-brace drop, m. */
+    static final double OVERHANG = .6, PLATFORM = 2, BRACE_DROP = 1.5;
     /** The opening in the platform's inner rail at the rolling ladder's head, m: the ladder's 0.6 m and a player's room either side. */
     static final double LADDER_OPENING = 1.1;
     /** The roof: its legs, the pontoon ring's width over D, the rim gap to the shell, the pontoon's depth, the deck's top over the roof's underside, m. */
@@ -209,8 +207,8 @@ final class TankDesign extends UnitDesign {
             double from = LADDER + Access.clearance(p.r), span = span(p, p.r + Access.MIN_DECK / 2);
             if (p.ringWalkway()) walkway(u, p);
             platform(u, p, from, from + span);
-            double bodyTop = p.ringWalkway() ? p.shell - GIRDER_DROP - Access.DECK - .6 : p.shell - TOP_ANGLE - .6;
-            u.bodyRows = new double[]{1, Math.floor(bodyTop - 1e-9), 0};
+            // Rows below the landing's knee braces can share the cylindrical body geometry.
+            u.bodyRows = new double[]{1, Math.floor(p.shell - BRACE_DROP - 1e-9), 0};
             u.irregularFrom = u.mesh.facets().size();
             externalLadder(u, p);
             hinge = from + span / 2;
@@ -294,12 +292,7 @@ final class TankDesign extends UnitDesign {
 
     /** One rim-level ring, open beside the straight ladder and across the front nozzle/gauge service lane. */
     private static void walkway(ProcessUnit u, Plan p) {
-        double level = p.shell - GIRDER_DROP - Access.DECK, low = level - GIRDER_DEPTH, edge = p.outer;
-        var up = Frame.of(new double[]{p.a, 0, p.a}, 1, 1);
-        u.mesh.prism(up, p.r + GIRDER, low, level, p.n, Material.SUPPORT);
-        u.mesh.annulus(up, p.r, p.r + GIRDER, low, p.n, -1, Material.SUPPORT);
-        u.mesh.annulus(up, p.r, p.r + GIRDER, level, p.n, 1, Material.SUPPORT);
-        u.solids.add(ProcessUnit.Solid.ring(p.a, p.a, low, level, p.r, p.r + GIRDER, 0, 0));
+        double edge = p.outer;
         double gap = DeterministicMath.asin(Math.min(1, FRONT_GAP / p.r)), clear = Access.clearance(p.r);
         double start = -Math.PI / 2 + gap, stop = 3 * Math.PI / 2 - gap;
         u.platform(new Access.Arc(p.a, p.a, p.r, start, LADDER - clear, edge, Access.Arc.step(edge)), p.shell, WALKWAY,
@@ -355,7 +348,7 @@ final class TankDesign extends UnitDesign {
         // Knee braces from the shell under the deck's ends, and the rolling ladder's hinge.
         double span = to - from;
         for (double t : new double[]{from + .15 * span, to - .15 * span})
-            u.mesh.bar(p.at(p.r + .02, t, s - 1.5), p.at(p.outer - .1, t, s - .03), .08, new double[]{-DeterministicMath.sin(t), 0, DeterministicMath.cos(t)}, Material.STEELWORK);
+            u.mesh.bar(p.at(p.r + .02, t, s - BRACE_DROP), p.at(p.outer - .1, t, s - .03), .08, new double[]{-DeterministicMath.sin(t), 0, DeterministicMath.cos(t)}, Material.STEELWORK);
         if (p.rollingLadder()) {
             double mid = (from + to) / 2;
             // Under the deck's slab, clear of its faces (owner report 2026-10-21: the hinge's top flickered in the grating's plane).
