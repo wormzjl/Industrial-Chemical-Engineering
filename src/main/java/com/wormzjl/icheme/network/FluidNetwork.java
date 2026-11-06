@@ -93,7 +93,7 @@ public final class FluidNetwork {
             var d=record.device();double flow=d.control() instanceof FlowControl.Mover m?m.requestedVolumeFlow():.01;
             double head=d.control() instanceof FlowControl.Pump p?p.maximumAddedPressure():500000;
             double ratio=d.control() instanceof FlowControl.Compressor c?c.maximumPressureRatio():DEFAULT_PRESSURE_RATIO;
-            double pressure=d.control() instanceof FlowControl.Valve v?v.targetPressure():record.spec().pressure();
+            double pressure=d.control() instanceof FlowControl.Valve v&&!(v instanceof FlowControl.Turbine)?v.targetPressure():record.spec().pressure();
             var valve=d.control() instanceof FlowControl.ControlValve v?v:null;
             if(valve!=null)flow=valve.volumeTarget();
             // An air cooler's fans and a fired heater's burners are its power (batch 2026-10-27-heat-exchanger-design): on while
@@ -254,7 +254,7 @@ public final class FluidNetwork {
     public static double opening(FluidWorldAuthority world,long id){return world.stored(()->storedOpening(world,id));}
     private static double storedOpening(FluidWorldAuthority world,long id){var record=world.registrations().get(id);if(record==null)return Double.NaN;var data=valveData(world,record,world.view(id));return data==null||!data.configured()?Double.NaN:data.opening();}
     private static ValveData valveData(FluidWorldAuthority world,WorldTopologyLedger.Registration record,FluidView view){
-        if(!(record.device().control() instanceof FlowControl.Valve valve))return null;
+        if(!(record.device().control() instanceof FlowControl.Valve valve)||valve instanceof FlowControl.Turbine)return null;
         if(valve.bare())return new ValveData(false,1,"Lacking components");
         double head=view.devicePressureChange()==null?0:Math.max(0,view.devicePressureChange());
         double rho=view.state()==null?1:view.state().mass()/Math.max(1e-300,view.state().volume());

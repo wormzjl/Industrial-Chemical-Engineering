@@ -65,6 +65,10 @@ public record ShaftPlan(Kind kind, double value) {
                 case FlowControl.ControlValve valve when plan.kind == Kind.GOVERNOR && valve.source() == FlowControl.ValveSource.SHAFT_SPEED ->
                         Math.abs(plan.value - valve.massTarget()) <= PassiveStepSolver.VALVE_DEADBAND * Math.max(plan.value, valve.massTarget()) + 1e-9
                                 ? valve : valve.withMassTarget(plan.value);
+                case FlowControl.Turbine turbine when plan.kind == Kind.GOVERNOR ->
+                        (plan.value == turbine.massTarget() || plan.value > 0 && turbine.massTarget() > 0
+                                && Math.abs(plan.value - turbine.massTarget()) <= PassiveStepSolver.VALVE_DEADBAND * Math.max(plan.value, turbine.massTarget()) + 1e-9)
+                                ? turbine : turbine.withMassTarget(plan.value);
                 default -> pipe.control();
             };
             if (next == pipe.control()) continue;
@@ -84,6 +88,7 @@ public record ShaftPlan(Kind kind, double value) {
             case FlowControl.Compressor a when solved instanceof FlowControl.Compressor b -> a.maximumPressureRatio() == b.maximumPressureRatio() && a.enabled() == b.enabled();
             case FlowControl.ControlValve a when solved instanceof FlowControl.ControlValve b -> a.source() == FlowControl.ValveSource.SHAFT_SPEED && b.source() == a.source()
                     && a.targetPressure() == b.targetPressure() && a.volumeTarget() == b.volumeTarget() && java.util.Objects.equals(a.sensor(), b.sensor()) && a.revision() == b.revision();
+            case FlowControl.Turbine a when solved instanceof FlowControl.Turbine b -> a.design().equals(b.design());
             default -> false;
         };
     }

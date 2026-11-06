@@ -8,22 +8,31 @@ import com.wormzjl.icheme.science.machine.Npsh;
 import com.wormzjl.icheme.science.machine.PositiveDisplacement;
 
 /** Immutable actuator settings; the active regime belongs to a solve attempt, never to this shared value. */
-public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Mover,FlowControl.Valve,FlowControl.Turbine {
+public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Mover,FlowControl.Valve {
     record Passive() implements FlowControl {}
     /**
      * A steam turbine (batch 2026-11-03-rotating-machinery, plan section 3.4, owner decision D22): a driver of its own,
-     * separate from the machines it drives, which a shaft train joins later (W3). Its control is a separate component in
-     * line (for now the mass-target {@link ControlValve} upstream); the turbine has no governor and no set flow. It passes
-     * what its own flow resistance passes between its inlet (its first end) and its exhaust (its second), as an open line
-     * does (mode {@code VALVE_OPEN}, no added or throttled pressure), and takes {@link #shaftPower} out of the stream: the
+     * separate from the machines it drives, which a shaft train joins later (W3). Its internal governor limits admission
+     * through the ordinary mass-flow valve rows. {@code massTarget} is a derived slice input in kg/s, -1 for the full-open
+     * startup passage; facts carry only the design. The turbine takes {@link #shaftPower} out of the stream: the
      * exhaust leaves at {@code h_in − W/ṁ}, and the receiver's flash gives its temperature and wetness. The work leaves the
      * island as a {@link ConservativeTransport.BoundaryTransfer.Kind#SHAFT} transfer at the connection, which W3 reads as the
      * power the turbine delivers. A reverse flow passes as through an open line and does no work.
      *
      * @param design its rated power and isentropic efficiency η_is
      */
-    record Turbine(com.wormzjl.icheme.science.machine.SteamTurbine design) implements FlowControl {
-        public Turbine {java.util.Objects.requireNonNull(design);}
+    record Turbine(com.wormzjl.icheme.science.machine.SteamTurbine design,double massTarget) implements Valve {
+        public Turbine(com.wormzjl.icheme.science.machine.SteamTurbine design){this(design,-1);}
+        public Turbine {
+            java.util.Objects.requireNonNull(design);
+            if(!Double.isFinite(massTarget)||massTarget<0&&massTarget!=-1)throw new IllegalArgumentException("Invalid turbine admission target");
+        }
+        @Override public double targetPressure(){return 0;}
+        @Override public boolean pressureControl(){return false;}
+        @Override public boolean massControl(){return true;}
+        @Override public boolean bare(){return massTarget<0;}
+        @Override public double targetMassFlow(double density){return massTarget;}
+        public Turbine withMassTarget(double target){return new Turbine(design,target);}
         /**
          * The shaft power (W, out of the stream, never negative) of {@code massFlow} (kg/s, forward) expanding from the inlet's
          * real {@code inletPressure} (Pa) and {@code inletDensity} (kg/m3) to {@code exhaustPressure} (Pa), for the inlet gas's
@@ -239,9 +248,10 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
         return new PositiveDisplacement(mover.targetVolumeFlow(),mover.riseLimit(suctionDensity,suctionPressure,referenceDensity,k));
     }
     /** A passive throttling actuator. It never adds shaft work or pressure. */
-    sealed interface Valve extends FlowControl permits PressureValve,ControlValve {
+    sealed interface Valve extends FlowControl permits PressureValve,ControlValve,Turbine {
         double targetPressure();
         default boolean pressureControl(){return true;}
+        default boolean massControl(){return false;}
         default boolean bare(){return false;}
         default double targetMassFlow(double density){return Double.NaN;}
     }
@@ -264,6 +274,7 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
         }
         public static ControlValve unconfigured(){return new ControlValve(ValveSource.NONE,200000,null,0);}
         @Override public boolean pressureControl(){return source==ValveSource.PRESSURE;}
+        @Override public boolean massControl(){return source.mass();}
         @Override public boolean bare(){return sensor==null;}
         public double target(){return switch(source){case NONE,PRESSURE->targetPressure;case MASS_FLOW,SHAFT_SPEED->massTarget;case VOLUME_FLOW->volumeTarget;};}
         @Override public double targetMassFlow(double density){return source.mass()?massTarget:volumeTarget*density;}

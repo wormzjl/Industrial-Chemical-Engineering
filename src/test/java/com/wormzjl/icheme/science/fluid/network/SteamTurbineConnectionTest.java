@@ -76,6 +76,38 @@ class SteamTurbineConnectionTest extends PortFixture {
                 List.of(new PassiveNetwork.Pipe(VALVE,0,2,LINE,valve),new PassiveNetwork.Pipe(TURBINE,2,1,CASING,new FlowControl.Turbine(ONE_MW)))),model);
     }
 
+    @Test void internalAdmissionLimitsSteamAtBothSupplyConditionsAndKeepsTheWorkInTheLedger() {
+        for (double[] condition : List.of(new double[]{673.15,4e6},new double[]{773.15,8e6})) {
+            var inlet=steam(condition[0],condition[1]);
+            for (double target : List.of(0.0,.02)) {
+                var graph=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,inlet,PassiveNetwork.NodeKind.GENERATOR),
+                        new PassiveNetwork.Reservoir(2,0,steam(450,4e5),PassiveNetwork.NodeKind.VOID)),
+                        List.of(new PassiveNetwork.Pipe(TURBINE,0,1,CASING,new FlowControl.Turbine(ONE_MW,target))));
+                var result=new PassiveStepSolver(model).solve(graph,1,NOOP);
+                double flow=result.massFlows()[0],work=-energy(result.boundaries(),TURBINE,ConservativeTransport.BoundaryTransfer.Kind.SHAFT);
+                assertEquals(target,flow,1e-7,"the internal valve controls admission at either inlet pressure/temperature");
+                assertEquals(target==0?FlowControl.Mode.CLOSED:FlowControl.Mode.VALVE_REGULATING,result.modes().getFirst());
+                if(target==0){assertEquals(0,work);continue;}
+                assertEquals(expectedPower(ONE_MW,flow,inlet,4e5,model.heatCapacityRatio(inlet)),work,1e-7*Math.max(1,work));
+                var in=exchange(result.boundaries(),1);var out=exchange(result.boundaries(),2);
+                assertEquals(mass(in.moles()),mass(out.moles()),1e-10,"the valve loses no steam");
+                assertEquals(work,in.totalEnergyJoule()-out.totalEnergyJoule(),1e-7*Math.max(1,work),"all extracted energy is booked as shaft work");
+            }
+        }
+    }
+
+    @Test void aLowerInternalTargetWinsOverAnExternalValveWithoutDuplicateFlowRows() {
+        var original=governed(.5);
+        var pipes=new ArrayList<>(original.pipes());
+        pipes.set(1,pipes.get(1).withControl(new FlowControl.Turbine(ONE_MW,.25)));
+        var graph=new PassiveNetwork(original.reservoirs(),pipes);
+        assertTrue(ControlConstraints.standing(graph).get(0),"the external .5 kg/s valve stands open behind the internal .25 kg/s limit");
+        assertFalse(ControlConstraints.standing(graph).get(1));
+        var result=drive("internal-governor-series",graph,5,6);
+        assertEquals(.25,result.averageMassFlows()[1],1e-4*.25);
+        assertEquals(FlowControl.Mode.VALVE_REGULATING,result.endpointModes().get(1));
+    }
+
     /**
      * (b) The same turbine behind a mass-target control valve at 0.5 kg/s, under the 2.7 kg/s its casing passes open: the
      * valve regulates and holds its target, the junction between them settles where the turbine passes it (about 7 bar,

@@ -78,8 +78,6 @@ public record MachineView(long unit, ShaftNetwork.Kind kind, String status, doub
             if (v.kind() == ShaftNetwork.Kind.MOTOR && v.electricPower() > 0) seconds = store.joules() / v.electricPower();
         }
         String status = v.status().length() > MAX_TEXT ? v.status().substring(0, MAX_TEXT) : v.status();
-        // A turbine running with no governor valve says so on the display (plan section 3: UNGOVERNED).
-        if (v.kind() == ShaftNetwork.Kind.STEAM_TURBINE && governor.isEmpty() && status.equals("RUNNING")) status = "UNGOVERNED";
         var steam = trains.steam(unit);
         String name = governor.length() > MAX_TEXT ? governor.substring(0, MAX_TEXT) : governor;
         return new MachineView(unit, v.kind(), status, v.speed(), v.shaftPower(), v.electricPower(), v.energyPerTick(), v.settings(), v.trip(), u.ratedPower(),

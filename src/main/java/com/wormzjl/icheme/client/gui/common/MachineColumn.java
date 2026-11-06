@@ -198,8 +198,8 @@ public final class MachineColumn {
             supply.add(new Meter("inlet", Format.number(v.inletPressure() / 1e5), "bar", null));
             supply.add(new Meter("exhaust", Format.number(v.exhaustPressure() / 1e5), "bar", null));
         }
-        // UNGOVERNED is a status word, said on the display (MachineView.of); the group names a bound valve only.
-        String governor = kind == Kind.STEAM_TURBINE && !v.governor().isEmpty() ? t.get(KEY + "governed", v.governor()) : null;
+        String governor = kind == Kind.STEAM_TURBINE ? v.governor().isEmpty()
+                ? t.get(KEY + "governor.internal") : t.get(KEY + "governed", v.governor()) : null;
         return new Input(kind, canEdit, running, v.variable(), mode, v.trip() != ShaftTrain.Trip.NONE && v.trip().latched(), governor, shaft, supply, lasts);
     }
 

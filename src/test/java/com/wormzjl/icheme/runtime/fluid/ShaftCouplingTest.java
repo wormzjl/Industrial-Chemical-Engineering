@@ -195,6 +195,37 @@ class ShaftCouplingTest {
         assertEquals(0, trains.view(motor).speed(), "Reset also waits for a power-backed step");
     }
 
+    @Test
+    void turbineHasInternalAdmissionControlWithoutAnAccessoryAndStopClosesIt() {
+        var rig = new Rig();
+        var ledger = new WorldTopologyLedger(WorldTopologyLedger.Snapshot.empty(EventPathWorld.CATALOG));
+        var trains = new ShaftTrains(ledger, device -> null, rig.coordinator);
+        var kind = com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.STEAM_TURBINE;
+        var none = com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE;
+        trains.queue(new ShaftTrains.Put(cell(0), kind, id -> new ShaftUnit(id, kind, cell(0), 0,
+                List.of(new ShaftUnit.End(cell(0), 1, 0, 0, true)), 1, 1e6, 6000, 0,
+                com.wormzjl.icheme.science.equipment.MachineDuty.Drive.FIXED, ShaftUnit.Settings.DEFAULT, none, null)));
+        trains.apply();
+        var base = line();
+        var graph = new PassiveNetwork(base.reservoirs(), List.of(base.pipes().getFirst().withControl(
+                new FlowControl.Turbine(com.wormzjl.icheme.science.machine.SteamTurbine.rated(1e6)))));
+        var plan = trains.plans(1, graph).get(1L);
+        assertNotNull(plan, "no external speed sensor or valve is required");
+        assertEquals(ShaftPlan.Kind.GOVERNOR, plan.kind());
+        assertTrue(plan.value() > 0);
+        long turbine = trains.unitAt(cell(0)).id();
+        trains.decide();
+        assertEquals(0, trains.view(turbine).speed(), "open admission without booked steam work does not start the shaft");
+        assertEquals(none, trains.view(turbine).trip());
+        trains.queue(new ShaftTrains.Configure(turbine, new ShaftUnit.Settings(false, com.wormzjl.icheme.science.machine.ShaftTrain.Mode.SPEED, 0, 0, 0)));
+        trains.apply();
+        assertEquals(0, trains.plans(1, graph).get(1L).value(), "Stop closes internal admission");
+        trains.queue(new ShaftTrains.Configure(turbine, ShaftUnit.Settings.DEFAULT));
+        trains.apply();
+        assertTrue(trains.plans(1, graph).get(1L).value() > 0, "Run rearms admission");
+        assertEquals(0, trains.view(turbine).speed(), "rearming still waits for fluid work");
+    }
+
     /**
      * W5 (build plan section 7.4): an 11 kW motor drives the pump at node 1 through a shaft. Built from W5 on, its store
      * starts empty, so it stands (NO POWER) until its port is filled to one slice of its rated draw; it then runs, books

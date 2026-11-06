@@ -77,4 +77,16 @@ class ShaftPlanTest extends PortFixture {
         assertFalse(ShaftPlan.planned(new FlowControl.Machine(PUMP, 1, true), new FlowControl.Machine(new CentrifugalPump(.02, 50, .7), 1, true)));
         assertFalse(ShaftPlan.planned(new FlowControl.Machine(PUMP, 1, true), new FlowControl.Machine(PUMP, 1, false)));
     }
+
+    @Test
+    void internalTurbineAdmissionIsPlannedAndEvenATinyTargetCanCloseExactly() {
+        var control=new FlowControl.Turbine(com.wormzjl.icheme.science.machine.SteamTurbine.rated(1e6));
+        var graph=line(nitrogenAt(150000),nitrogenAt(100000),control);
+        var admitted=ShaftPlan.apply(graph,Map.of(1L,new ShaftPlan(ShaftPlan.Kind.GOVERNOR,.02)));
+        assertEquals(.02,((FlowControl.Turbine)admitted.pipes().getFirst().control()).massTarget());
+        assertTrue(ShaftPlan.planned(control,admitted.pipes().getFirst().control()));
+        var tiny=ShaftPlan.apply(admitted,Map.of(1L,new ShaftPlan(ShaftPlan.Kind.GOVERNOR,5e-10)));
+        var stopped=ShaftPlan.apply(tiny,Map.of(1L,new ShaftPlan(ShaftPlan.Kind.GOVERNOR,0)));
+        assertEquals(0,((FlowControl.Turbine)stopped.pipes().getFirst().control()).massTarget());
+    }
 }

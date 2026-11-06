@@ -122,6 +122,8 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         /** Each driven member's shaft power at its last booking, W. */
         final Map<Long, Double> power = new HashMap<>();
         double available, steamFlow, inlet = Double.NaN, exhaust = Double.NaN, specificWork = Double.NaN, drop = Double.NaN, efficiency = Double.NaN, measured = Double.NaN, target = Double.NaN;
+        /** Startup asks for the full passage until a booked steam state supplies the work per kilogram. */
+        double admission = FlowControl.Mover.MAXIMUM_VOLUME_FLOW * 1000;
         boolean fresh = true, booked;
         long stepped = Long.MIN_VALUE;
         String status = "RUNNING";
@@ -383,7 +385,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         long valve = governorValve(g.turbine());
         var r = valve == 0 ? null : topology.latest().get(valve);
         if (r == null || !(r.device().control() instanceof FlowControl.ControlValve v) || v.sensor() != null && !(v.source() == FlowControl.ValveSource.SHAFT_SPEED && g.sensor().equals(v.sensor()))) {
-            bindings.put(unit, "NO GOVERNOR VALVE");
+            bindings.put(unit, "INTERNAL GOVERNOR");
             return;
         }
         if (v.source() == FlowControl.ValveSource.SHAFT_SPEED && g.sensor().equals(v.sensor())) return;
@@ -464,7 +466,8 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
                 default -> null;
             };
             Double target = governorTargets.get(id);
-            if (target != null && pipe.control() instanceof FlowControl.ControlValve v && v.source() == FlowControl.ValveSource.SHAFT_SPEED)
+            if (target != null && (pipe.control() instanceof FlowControl.Turbine
+                    || pipe.control() instanceof FlowControl.ControlValve v && v.source() == FlowControl.ValveSource.SHAFT_SPEED))
                 plan = new ShaftPlan(ShaftPlan.Kind.GOVERNOR, target);
             if (plan == null) continue;
             if (plans == null) plans = new HashMap<>();
@@ -587,13 +590,15 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         double demand = 0;
         for (var m : train.driven()) demand += run.power.getOrDefault(m.id(), 0.0) / m.efficiency();
         Long valve = valveOfTurbine.get(d.id());
-        double sent = valve == null ? 0 : governorTargets.getOrDefault(valve, 0.0);
-        boolean steamShort = valve != null && sent > 0 && run.steamFlow < .99 * sent;
-        var measure = new ShaftTrain.Measure(demand, run.available, steamShort, run.measured, run.target, state.previousSpeed(), state.previousMeasured());
+        boolean turbine = d.kind() == ShaftNetwork.Kind.STEAM_TURBINE;
+        double sent = turbine ? run.admission : valve == null ? 0 : governorTargets.getOrDefault(valve, 0.0);
+        boolean steamShort = (turbine || valve != null) && sent > 0 && run.steamFlow < .99 * sent;
+        boolean idleSupply = turbine && run.admission == 0 && run.drop > 0;
+        var measure = new ShaftTrain.Measure(demand, run.available, steamShort, run.measured, run.target, state.previousSpeed(), state.previousMeasured(), run.available > 0 || idleSupply);
         // A motor runs while its store has energy (W5): its draw is booked at this step, from its last booking to now, at the
         // power this step decided (reading A59); one that runs short stops here (NO POWER) and restarts on the cadence.
         boolean motor = d.kind() == ShaftNetwork.Kind.MOTOR && electric != null;
-        var driver = driver(d, valve != null, !motor || electric.powered(d.id()));
+        var driver = driver(d, turbine || valve != null, !motor || electric.powered(d.id()));
         var step = ShaftTrain.step(driver, state.speed(), measure);
         if (motor && electric.draw(d.id(), step.electricPower(), now)) step = ShaftTrain.step(driver(d, valve != null, false), state.speed(), measure);
         run.trip = step.trip();
@@ -604,17 +609,20 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         // A coupling draws the stress of the power its train takes, at most what its network spares (W6b, D40).
         if (driver.drive() == ShaftTrain.Drive.CREATE)
             impact(d, step.speed() > 0 ? com.wormzjl.icheme.science.machine.CreateCoupling.impact(demand, driver.limit(), driver.setSpeed(), wattsPerStress()) : 0);
-        if (valve != null) {
+        if (turbine || valve != null) {
             double w = run.specificWork > 0 ? run.specificWork : run.efficiency > 0 && run.drop > 0 ? run.efficiency * run.drop : Double.NaN;
-            double target = w > 0 ? step.governorPower() / w : 0;
-            if (Double.isFinite(target)) governorTargets.put(valve, Math.min(target, FlowControl.Mover.MAXIMUM_VOLUME_FLOW * 1000));
+            double target = !driver.running() || step.trip() != ShaftTrain.Trip.NONE ? 0
+                    : w > 0 ? step.governorPower() / w : FlowControl.Mover.MAXIMUM_VOLUME_FLOW * 1000;
+            target = Math.min(target, FlowControl.Mover.MAXIMUM_VOLUME_FLOW * 1000);
+            if (turbine) run.admission = target;
+            if (valve != null) governorTargets.put(valve, target);
         }
         // Only a protection trip is the unit's (it waits for the reset); NO POWER clears itself and is never saved.
         var trip = step.trip().latched() ? step.trip() : ShaftTrain.Trip.NONE;
         boolean changed = Math.abs(step.speed() - state.speed()) > ShaftTrain.SPEED_DEADBAND * Math.max(d.designSpeed(), 1) || trip != d.trip();
         var next = d.withTrip(trip).withState(new ShaftUnit.State(step.speed(), state.speed(), run.measured));
         if (changed) topology.shaft(next);
-        return changed || valve != null;
+        return changed || turbine || valve != null;
     }
 
     /**
@@ -711,7 +719,16 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         for (long gone : shares.keySet()) if (!next.containsKey(gone)) owners(gone, wake);
         shares.clear();
         shares.putAll(next);
-        governorTargets.keySet().retainAll(turbineOfValve.keySet());
+        var governors = new HashSet<>(turbineOfValve.keySet());
+        for (var u : units.values()) {
+            if (u.kind() != ShaftNetwork.Kind.STEAM_TURBINE || u.fluid() == 0) continue;
+            var key = trainOf.get(u.id());
+            var run = key == null ? null : runs.get(key);
+            boolean open = run != null && run.train.fault() == ShaftNetwork.Fault.NONE && u.settings().running() && u.trip() == ShaftTrain.Trip.NONE;
+            governorTargets.put(u.fluid(), open ? run.admission : 0);
+            governors.add(u.fluid());
+        }
+        governorTargets.keySet().retainAll(governors);
         woken.keySet().retainAll(governorTargets.keySet());
         for (var e : governorTargets.entrySet()) {
             // A governor target outside the valve's deadband of the one its island was last woken for wakes it (reading A26).

@@ -28,7 +28,7 @@ public final class ControlConstraints {
      */
     public static BitSet standing(PassiveNetwork graph){
         int edges=graph.pipes().size();var result=new BitSet(edges);var valves=new ArrayList<Integer>();
-        for(int e=0;e<edges;e++)if(graph.pipes().get(e).control() instanceof FlowControl.ControlValve v&&!v.bare()&&v.source().mass())valves.add(e);
+        for(int e=0;e<edges;e++)if(graph.pipes().get(e).control() instanceof FlowControl.Valve v&&!v.bare()&&v.massControl())valves.add(e);
         if(valves.size()<2)return result;
         var basis=junctionBasis(graph);
         var lines=new ArrayList<Line>();
@@ -81,7 +81,7 @@ public final class ControlConstraints {
         }
         return basis;
     }
-    private static double target(PassiveNetwork graph,int e){return ((FlowControl.ControlValve)graph.pipes().get(e).control()).massTarget();}
+    private static double target(PassiveNetwork graph,int e){return ((FlowControl.Valve)graph.pipes().get(e).control()).targetMassFlow(1);}
     /** 0 a column's outlet valve (a generator feeds the node it stands on), 1 its inlet valve, 2 any other. */
     private static int rank(PassiveNetwork graph,int e){
         var pipe=graph.pipes().get(e);

@@ -24,6 +24,19 @@ class FluidCheckpointCodecTest {
         return new FluidCheckpointCodec.Checkpoint(List.of(new FluidCheckpointCodec.IslandEntry("minecraft:overworld",PACKAGE,state)));
     }
     private static CompoundTag islands(CompoundTag core){return core.getCompound("Islands");}
+
+    @Test void turbineAdmissionTargetRoundTripsAsComputedState() {
+        var gas=model.initialNitrogenCharge(1,298.15,101325,()->{});
+        var control=new FlowControl.Turbine(com.wormzjl.icheme.science.machine.SteamTurbine.rated(1e6),.125);
+        var graph=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,gas),new PassiveNetwork.Reservoir(2,0,gas)),
+                List.of(new PassiveNetwork.Pipe(3,0,1,new PipeResistance.Geometry(1,.1,1e-5,0),control)));
+        var snapshot=new IslandCoordinator.Snapshot(1,0,graph,new IslandClock.Snapshot(0,0,0,100),Optional.empty(),"READY");
+        var before=new FluidCheckpointCodec.Checkpoint(List.of(new FluidCheckpointCodec.IslandEntry("minecraft:overworld",PACKAGE,snapshot)));
+        var image=FluidCheckpointCodec.encode(before,key->model);
+        var after=FluidCheckpointCodec.decode(image,key->model);
+        assertEquals(control,after.islands().getFirst().snapshot().graph().pipes().getFirst().control());
+    }
+
     static void assertSameImage(FluidCheckpointCodec.Image a,FluidCheckpointCodec.Image b,String what) {
         assertEquals(a.core(),b.core(),what+": core record");assertEquals(a.packs().keySet(),b.packs().keySet(),what+": packs");
         for(var pack:a.packs().keySet())assertArrayEquals(a.packs().get(pack),b.packs().get(pack),what+": pack "+pack);

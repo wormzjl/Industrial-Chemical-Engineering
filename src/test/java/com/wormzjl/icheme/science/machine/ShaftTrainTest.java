@@ -101,6 +101,24 @@ class ShaftTrainTest {
                 new Measure(0, RATED, false, Double.NaN, Double.NaN, Double.NaN, Double.NaN)).trip(), "a real unloaded power surplus still trips");
     }
 
+    @Test
+    void internalGoverningHoldsSpeedOnSurplusAndClosesAdmissionAtNoLoad() {
+        for (double available : List.of(RATED, 2 * RATED, 10 * RATED)) {
+            var step = ShaftTrain.step(turbine(true), 6000, new Measure(RATED, available, false, Double.NaN, Double.NaN, Double.NaN, Double.NaN));
+            assertEquals(6000, step.speed());
+            assertEquals(Trip.NONE, step.trip());
+            assertEquals(RATED, step.governorPower(), 1e-9);
+        }
+        var unloaded = ShaftTrain.step(turbine(true), 6000, new Measure(0, 0, false, Double.NaN, Double.NaN, Double.NaN, Double.NaN, true));
+        assertEquals(6000, unloaded.speed(), "closed admission holds an established unloaded speed while steam pressure remains available");
+        assertEquals(0, unloaded.governorPower(), "no shaft load requests no steam work");
+        assertEquals(0, ShaftTrain.step(turbine(true), 0, new Measure(0, 0, false, Double.NaN, Double.NaN, Double.NaN, Double.NaN, true)).speed(), "supply pressure alone cannot start it before work is booked");
+        assertEquals(0, ShaftTrain.step(turbine(true), 6000, Measure.of(0)).speed(), "loss of admission supply stops it");
+        var limited = ShaftTrain.step(turbine(true), 6000, new Measure(RATED, RATED / 4, false, Double.NaN, Double.NaN, Double.NaN, Double.NaN));
+        assertTrue(limited.speed() > 0 && limited.speed() < 6000, "meeting a mass target cannot create missing shaft power");
+        assertEquals("STEAM LIMITED", limited.status());
+    }
+
     /** Case 2 short of steam: 0.080 kg/s at most gives 18.9 kW; the shaft goes 0.955, 0.933 toward 0.912. */
     @Test
     void case2AGovernedTurbineShortOfSteamSlowsToItsBalance() {

@@ -82,8 +82,13 @@ public final class ShaftTrain {
      * power a turbine's steam gave, W; {@code steamShort} whether its governor valve passed less than its target (the valve
      * wide open); {@code measured} and {@code target} the regulated quantity (flow m³/s or discharge pressure Pa, NaN for
      * none), with the slice before's speed and measure ({@code previousSpeed} rpm, NaN for none).
+     * {@code admissionAvailable} also covers a pressurized but closed internal inlet at an established zero-load speed.
      */
-    public record Measure(double demand, double available, boolean steamShort, double measured, double target, double previousSpeed, double previousMeasured) {
+    public record Measure(double demand, double available, boolean steamShort, double measured, double target, double previousSpeed, double previousMeasured,
+                          boolean admissionAvailable) {
+        public Measure(double demand, double available, boolean steamShort, double measured, double target, double previousSpeed, double previousMeasured) {
+            this(demand, available, steamShort, measured, target, previousSpeed, previousMeasured, available > 0);
+        }
         public static Measure of(double demand) {
             return new Measure(demand, 0, false, Double.NaN, Double.NaN, Double.NaN, Double.NaN);
         }
@@ -134,13 +139,17 @@ public final class ShaftTrain {
         double available = Math.max(0, measure.available());
         // At rest the speed governor opens for startup; this is a steam request, never delivered shaft power.
         double governor = driver.governed() ? speed > 0 ? demand * cube(set / speed) : Math.max(demand, driver.limit()) : 0;
-        // This model has no rotor inertia: without delivered fluid work the shaft cannot coast, start or overspeed.
-        if (!(available > 0)) return new Step(0, Trip.NONE, "STEAM LIMITED", governor, 0);
+        // An unloaded shaft needs no steady work. A closed governor may retain its established speed while admission
+        // pressure remains available; it cannot start an unpowered shaft or keep turning after that supply disappears.
+        if (!(available > 0)) {
+            boolean idle = driver.governed() && speed > 0 && demand == 0 && measure.admissionAvailable();
+            return new Step(idle ? set : 0, Trip.NONE, idle ? "RUNNING" : "STEAM LIMITED", governor, 0);
+        }
         if (driver.governed()) {
             // Feed-forward: the demand at the set speed, by the cube law from the demand here.
             if (speed <= 0 || demand <= 0) return new Step(set, Trip.NONE, "RUNNING", governor, 0);
             double balance = SpeedControl.balance(speed, available, demand);
-            if (measure.steamShort()) {
+            if (measure.steamShort() || available < demand * (1 - 1e-9)) {
                 double next = Math.min(set, balance);
                 return new Step(next, Trip.NONE, next < set * (1 - 1e-9) ? "STEAM LIMITED" : "RUNNING", governor, 0);
             }
