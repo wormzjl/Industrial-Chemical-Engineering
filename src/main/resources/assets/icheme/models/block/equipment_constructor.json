@@ -1,10 +1,179 @@
 {
-  "parent": "minecraft:block/orientable_with_bottom",
+  "parent": "minecraft:block/block",
   "textures": {
-    "top": "icheme:block/computer_keys",
-    "bottom": "icheme:block/computer_shell",
-    "side": "icheme:block/computer_shell",
-    "front": "icheme:block/computer_face",
-    "particle": "icheme:block/computer_shell"
-  }
+    "particle": "icheme:block/constructor_cabinet",
+    "cabinet": "icheme:block/constructor_cabinet",
+    "frame": "icheme:block/constructor_frame",
+    "bed": "icheme:block/constructor_bed",
+    "plan": "icheme:block/constructor_plan",
+    "controls": "icheme:block/constructor_controls",
+    "warning": "icheme:block/constructor_warning",
+    "brass": "icheme:block/constructor_brass"
+  },
+  "elements": [
+    {
+      "name": "cast base",
+      "from": [1.0, 0.0, 1.0],
+      "to": [15.0, 2.0, 15.0],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" }
+      }
+    },
+    {
+      "name": "enclosed cabinet",
+      "from": [1.0, 2.0, 1.0],
+      "to": [15.0, 10.0, 15.0],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" }
+      }
+    },
+    {
+      "name": "slotted worktable",
+      "from": [0.0, 10.0, 0.0],
+      "to": [16.0, 12.0, 16.0],
+      "faces": {
+        "north": { "uv": [0.0, 6.0, 16.0, 10.0], "texture": "#warning" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#bed" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" }
+      }
+    },
+    {
+      "name": "recessed blueprint console",
+      "from": [2.0, 3.5, 0.75],
+      "to": [14.0, 9.5, 1.0],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#controls" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" }
+      }
+    },
+    {
+      "name": "brass selector",
+      "from": [3.0, 4.5, 0.2],
+      "to": [5.0, 6.5, 0.75],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#brass" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#brass" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#brass" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#brass" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#brass" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#brass" }
+      }
+    },
+    {
+      "name": "left gantry upright",
+      "from": [1.0, 12.0, 11.0],
+      "to": [3.0, 16.0, 13.0],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" }
+      }
+    },
+    {
+      "name": "right gantry upright",
+      "from": [13.0, 12.0, 11.0],
+      "to": [15.0, 16.0, 13.0],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" }
+      }
+    },
+    {
+      "name": "cross rail",
+      "from": [3.0, 14.5, 11.0],
+      "to": [13.0, 16.0, 13.0],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" }
+      }
+    },
+    {
+      "name": "tool carriage",
+      "from": [6.0, 13.0, 10.5],
+      "to": [10.0, 15.0, 13.5],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" }
+      }
+    },
+    {
+      "name": "tool nose",
+      "from": [7.0, 12.5, 10.5],
+      "to": [9.0, 13.0, 12.5],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" }
+      }
+    },
+    {
+      "name": "blueprint sheet",
+      "from": [4.0, 12.015, 3.0],
+      "to": [12.0, 12.025, 9.0],
+      "faces": {
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#plan" }
+      }
+    },
+    {
+      "name": "left paper clamp",
+      "from": [3.5, 12.03, 4.0],
+      "to": [4.5, 12.3, 5.5],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#brass" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#brass" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#brass" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#brass" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#brass" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#brass" }
+      }
+    },
+    {
+      "name": "right paper clamp",
+      "from": [11.5, 12.03, 4.0],
+      "to": [12.5, 12.3, 5.5],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#brass" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#brass" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#brass" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#brass" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#brass" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#brass" }
+      }
+    }
+  ]
 }

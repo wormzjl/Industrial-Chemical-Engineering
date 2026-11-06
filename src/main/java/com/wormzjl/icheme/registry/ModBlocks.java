@@ -61,7 +61,7 @@ public final class ModBlocks {
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.EquipmentConstructorBlock> EQUIPMENT_CONSTRUCTOR = BLOCKS.registerBlock(
             "equipment_constructor",
             com.wormzjl.icheme.world.level.block.EquipmentConstructorBlock::new,
-            BlockBehaviour.Properties.of().mapColor(MapColor.WOOD).strength(2.5F).sound(SoundType.WOOD)
+            BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(2.5F).sound(SoundType.METAL).noOcclusion()
     );
 
     // Rotating machinery (batch 2026-11-03-rotating-machinery): a shaft on one axis and the creative motor; their trains are the engine's.

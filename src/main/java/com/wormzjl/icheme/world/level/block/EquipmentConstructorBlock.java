@@ -8,6 +8,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.context.BlockPlaceContext;
+import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BaseEntityBlock;
 import net.minecraft.world.level.block.Block;
@@ -20,7 +21,13 @@ import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.shapes.CollisionContext;
+import net.minecraft.world.phys.shapes.Shapes;
+import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jetbrains.annotations.Nullable;
+
+import java.util.EnumMap;
+import java.util.Map;
 
 /**
  * Builds a parametric vessel in front of itself (owner decision 2026-10-15: a placed block, the Schematicannon
@@ -31,6 +38,32 @@ public final class EquipmentConstructorBlock extends BaseEntityBlock {
     public static final MapCodec<EquipmentConstructorBlock> CODEC = simpleCodec(EquipmentConstructorBlock::new);
     /** The way the vessel is built: away from the player who placed the constructor. */
     public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
+    private static final Map<Direction, VoxelShape> SHAPES = benchShapes();
+
+    /** The solid cabinet/worktop and the gantry, matching the model's parts without filling its open working space. */
+    private static Map<Direction, VoxelShape> benchShapes() {
+        double[][] parts = {
+                {0, 0, 0, 16, 12, 16},
+                {1, 12, 11, 3, 16, 13}, {13, 12, 11, 15, 16, 13},
+                {3, 14.5, 11, 13, 16, 13},
+                {6, 13, 10.5, 10, 15, 13.5}, {7, 12.5, 10.5, 9, 13, 12.5}
+        };
+        var shapes = new EnumMap<Direction, VoxelShape>(Direction.class);
+        for (var facing : Direction.Plane.HORIZONTAL) {
+            VoxelShape shape = Shapes.empty();
+            for (var p : parts) {
+                var part = switch (facing) {
+                    case EAST -> Block.box(16 - p[5], p[1], p[0], 16 - p[2], p[4], p[3]);
+                    case SOUTH -> Block.box(16 - p[3], p[1], 16 - p[5], 16 - p[0], p[4], 16 - p[2]);
+                    case WEST -> Block.box(p[2], p[1], 16 - p[3], p[5], p[4], 16 - p[0]);
+                    default -> Block.box(p[0], p[1], p[2], p[3], p[4], p[5]);
+                };
+                shape = Shapes.or(shape, part);
+            }
+            shapes.put(facing, shape.optimize());
+        }
+        return Map.copyOf(shapes);
+    }
 
     public EquipmentConstructorBlock(Properties properties) {
         super(properties);
@@ -65,6 +98,11 @@ public final class EquipmentConstructorBlock extends BaseEntityBlock {
     @Override
     protected RenderShape getRenderShape(BlockState state) {
         return RenderShape.MODEL;
+    }
+
+    @Override
+    protected VoxelShape getShape(BlockState state, BlockGetter level, BlockPos position, CollisionContext context) {
+        return SHAPES.get(state.getValue(FACING));
     }
 
     @Override
