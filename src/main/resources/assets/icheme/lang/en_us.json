@@ -377,7 +377,7 @@
   "gui.icheme.equipment_constructor.equipment.ebullated_bed_reactor": "Ebullated-bed reactor",
   "gui.icheme.equipment_constructor.equipment.ebullated_bed_reactor.hint": "A residue hydrocracker whose catalyst bed is kept expanded by the ebullating pump under its bottom head, recycling liquid from above the bed; fresh catalyst added on top and spent catalyst drawn off on line",
   "gui.icheme.equipment_constructor.equipment.centrifugal_compressor": "Centrifugal compressor",
-  "gui.icheme.equipment_constructor.equipment.centrifugal_compressor.hint": "A multistage barrel compressor on broad bearing pedestals, with a larger top inlet, a smaller top outlet, two cooling-water fittings at the base, and a guarded shaft connection for a separate driver",
+  "gui.icheme.equipment_constructor.equipment.centrifugal_compressor.hint": "A multistage barrel compressor on broad bearing pedestals, with a larger top inlet, a smaller top outlet, and a guarded shaft connection for a separate driver",
   "gui.icheme.equipment_constructor.equipment.steam_turbine": "Steam turbine",
   "gui.icheme.equipment_constructor.equipment.steam_turbine.hint": "A steam turbine on its base frame, at grade or on a concrete table: steam in through the trip-and-throttle valve and the governor valve, exhaust up into a lower-pressure header or a condenser, its shaft end under a coupling guard at the back, where a shaft joins the machine it drives",
   "gui.icheme.equipment_constructor.equipment.motor": "Electric motor",

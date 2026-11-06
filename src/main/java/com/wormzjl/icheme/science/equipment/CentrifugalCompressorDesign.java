@@ -1,6 +1,5 @@
 package com.wormzjl.icheme.science.equipment;
 
-import com.wormzjl.icheme.science.equipment.EquipmentShape.Nozzle;
 import com.wormzjl.icheme.science.equipment.EquipmentShape.Orientation;
 import com.wormzjl.icheme.science.equipment.EquipmentShape.Role;
 import com.wormzjl.icheme.science.equipment.Mesh.Frame;
@@ -17,7 +16,7 @@ import java.util.List;
  * between them, including on the smallest casing. Distinct bearing housings stand on broad tapered pedestals.
  * The shared pump baseplate and guarded half coupling match the other rotating machines; the driver is separate.
  * The plinth takes up the shaft's block-grid alignment allowance; a selected support raises the base as for a motor.
- * Two small cooling-water fittings rise from the frame. No side box, access platform, stairs or driver bay is drawn.
+ * No cooling-water fittings, side box, access platform, stairs or driver bay is drawn.
  */
 final class CentrifugalCompressorDesign extends UnitDesign {
     /** The casing's diameter and its unscaled plenum, stage and discharge lengths, impeller diameters. */
@@ -202,7 +201,7 @@ final class CentrifugalCompressorDesign extends UnitDesign {
 
     @Override
     void build(ProcessUnit u) {
-        double d = u.shape.diameter(), k = (d - .3) / 1.2, ax = .5;
+        double d = u.shape.diameter(), ax = .5;
         int stages = (int) u.shape.tangentLength(), h = u.shape.support();
         double r = CASING * d / 2, cap = r + .1 * d + .03, capLength = .06 + .04 * d;
         // The port rows are at least two cells apart; the casing supplies space for both roots and their flanges.
@@ -220,8 +219,9 @@ final class CentrifugalCompressorDesign extends UnitDesign {
             u.mesh.band(along, cap, cap, end[0], end[1], n, Material.PUMP_JOINT);
             u.mesh.disc(along, cap, end[2] < 0 ? end[0] : end[1], n, (int) end[2], Material.PUMP_DISC);
             u.mesh.annulus(along, r, cap, end[2] < 0 ? end[1] : end[0], n, -(int) end[2], Material.PUMP_CASTING);
+            u.solids.add(Solid.rod(new double[]{ax, ys, 0}, 2, end[0], end[1], cap, 0));
         }
-        u.solids.add(Solid.rod(new double[]{ax, ys, 0}, 2, -capLength, length + capLength, cap, 0));
+        u.solids.add(Solid.rod(new double[]{ax, ys, 0}, 2, 0, length, r, 0));
         u.volumes.add(Solid.rod(new double[]{ax, ys, 0}, 2, .05, length - .05, r - .05, 0));
         u.round(ax, ys, 0, length, r);
         // Two lifting lugs, as on the reference barrel casing.
@@ -251,31 +251,26 @@ final class CentrifugalCompressorDesign extends UnitDesign {
         // Straight cast branches grow directly out of the top: larger suction, smaller discharge.
         for (int which = 0; which < 2; which++) {
             double od = which == 0 ? suction(d) : DISCHARGE * d, z = which == 0 ? inRow : outRow;
-            double rn = od / 2 + .03, low = ys + .55 * r, neck = ys + r + .02;
+            // Start the line inside the cast branch so even the smallest visible neck has room for its flow arrow.
+            double rn = od / 2 + .03, low = ys + .55 * r, neck = ys + r - .03;
             var up = Frame.of(new double[]{ax, 0, z}, 1, 1);
             u.mesh.cylinder(up, rn, low, neck, ProcessUnit.sides(2 * rn), Material.PUMP_CASTING);
             u.solids.add(Solid.rod(new double[]{ax, 0, z}, 1, low, neck, rn, 0));
             u.pumpNozzle(which == 0 ? Role.SUCTION : Role.DISCHARGE, new double[]{ax, 0, z}, 1, 1,
-                    neck, Math.ceil(neck + PipeSizes.flangeThickness(od) + EquipmentShape.STAND_OUT), od, rn);
+                    neck, Math.ceil(ys + r + .02 + PipeSizes.flangeThickness(od) + EquipmentShape.STAND_OUT), od, od / 2);
         }
         // One compact frame and the shared rotating coupling; no side cabinet or operating platform.
         double rs = ProcessUnit.shaftRadius(1000 * power(u.shape.duty()), speed(d)), face = Math.ceil(zb1 + .2 + rs - 1e-9);
-        double auxiliary = ax + Math.ceil(cap + .15), half = Math.max(cap + .2, auxiliary - ax + .12);
+        double half = Math.max(cap + .2, Math.ceil(cap + .15) + .12);
         double x0 = ax - half, x1 = ax + half, z0 = cover - .15, z1 = face - .01;
         u.coupling(ax, ys, zb1, face, 1, rs, deck, ProcessUnit.shown(speed(d)), EquipmentShape.ShaftEnd.Role.DRIVEN_INPUT);
         u.baseplate(x0, x1, base + GROUT, deck, z0, z1);
         u.box(new double[]{x0 + .02, base, z0 + .02}, new double[]{x1 - .02, base + GROUT, z1 - .02}, Material.CONCRETE, false);
         u.driverBase(x0 - .08, x1 + .08, z0 - .08, z1, base, h);
 
-        // Retain the existing cooling-water roles as two small frame fittings, without a separate accessory body.
-        double odW = .06 + .08 * k, low = deck + .1;
-        double face0 = Math.floor(z0 - ProcessUnit.NECK), face1 = Math.ceil(z1 + ProcessUnit.NECK);
-        double inlet = face0 + ProcessUnit.NECK, outlet = face1 - ProcessUnit.NECK;
-        u.pipe(odW / 2, Material.PIPE, true, new double[]{auxiliary, low, z0 + .12}, new double[]{auxiliary, low, inlet + .2},
-                new double[]{auxiliary, ys, inlet + .2}, new double[]{auxiliary, ys, inlet});
-        u.pipe(odW / 2, Material.PIPE, true, new double[]{auxiliary, low, z1 - .12}, new double[]{auxiliary, low, outlet - .2},
-                new double[]{auxiliary, ys, outlet - .2}, new double[]{auxiliary, ys, outlet});
-        u.nozzles.add(new Nozzle(Role.COOLANT_INLET, new double[]{auxiliary, ys, inlet}, 2, -1, ProcessUnit.NECK, odW, 0));
-        u.nozzles.add(new Nozzle(Role.COOLANT_OUTLET, new double[]{auxiliary, ys, outlet}, 2, 1, ProcessUnit.NECK, odW, 0));
+        // Keep the placement frame of the former coolant fittings so removing them moves neither gas port
+        // nor the coupling in an existing structure, at any heading. These points occupy no cells.
+        u.framePoints.add(new double[]{ax, 0, Math.floor(z0 - ProcessUnit.NECK)});
+        u.framePoints.add(new double[]{ax, 0, Math.ceil(z1 + ProcessUnit.NECK)});
     }
 }

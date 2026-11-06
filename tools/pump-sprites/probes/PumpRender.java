@@ -49,9 +49,14 @@ public class PumpRender {
         var shape = EquipmentShape.unit(kind, size, length, Heading.NORTH, support);
         var sprites = sprites();
         var triangles = new ArrayList<Triangle>();
-        for (var cell : ShapeRasterizer.layout(shape).shell())
-            for (var polygon : ShapeRasterizer.surface(ShapeRasterizer.key(shape, cell.x(), cell.y(), cell.z())))
+        for (var cell : ShapeRasterizer.layout(shape).shell()) {
+            var key = ShapeRasterizer.key(shape, cell.x(), cell.y(), cell.z());
+            for (var polygon : ShapeRasterizer.surface(key))
                 add(triangles, polygon, cell.x(), cell.y(), cell.z());
+            // The chunk model adds this separate layer; software previews must show the same flow arrows.
+            for (var polygon : PortMarkings.surface(key))
+                add(triangles, polygon, cell.x(), cell.y(), cell.z());
+        }
         new File(out).getAbsoluteFile().getParentFile().mkdirs();
         for (var view : views) {
             double[] depth = switch (view) {

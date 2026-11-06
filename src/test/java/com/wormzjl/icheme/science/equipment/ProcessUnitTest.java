@@ -242,7 +242,7 @@ class ProcessUnitTest {
                         Role.REGENERATION_INLET, "2+")),
                 Map.entry(Kind.TRICKLE_BED_REACTOR, Map.of(Role.FEED, "2-", Role.HYDROGEN, "0+", Role.EFFLUENT, "2-", Role.QUENCH, "0+")),
                 Map.entry(Kind.EBULLATED_BED_REACTOR, Map.of(Role.EFFLUENT, "2-", Role.FEED, "2-", Role.HYDROGEN, "2+", Role.CATALYST_INLET, "1+", Role.CATALYST_OUTLET, "0+")),
-                Map.entry(Kind.CENTRIFUGAL_COMPRESSOR, Map.of(Role.SUCTION, "1+", Role.DISCHARGE, "1+", Role.COOLANT_INLET, "2-", Role.COOLANT_OUTLET, "2+")),
+                Map.entry(Kind.CENTRIFUGAL_COMPRESSOR, Map.of(Role.SUCTION, "1+", Role.DISCHARGE, "1+")),
                 Map.entry(Kind.STEAM_TURBINE, Map.of(Role.STEAM, "0+", Role.EXHAUST, "1+")),
                 Map.entry(Kind.MOTOR, Map.of()), Map.entry(Kind.GENERATOR, Map.of()), Map.entry(Kind.GEARBOX, Map.of()),
                 Map.entry(Kind.CYCLONE, Map.of(Role.FEED, "2-", Role.VAPOUR_OUTLET, "2+", Role.SOLIDS_OUTLET, "1-")),
