@@ -213,7 +213,7 @@ final class TankDesign extends UnitDesign {
             u.bodyRows = new double[]{1, Math.floor(p.shell - TOP_ANGLE - .6 - 1e-9), 0};
             u.irregularFrom = u.mesh.facets().size();
             var climb = new Access.Climb(p.a - p.r - Access.STANDOFF, p.a, -1, 0, 0, p.shell + Access.LANDING, p.shell);
-            Access.ladder(u.mesh, climb, Access.STANDOFF + .12, false);
+            Access.ladder(u.mesh, climb, Access.roundLadderBack(p.r, p.n), false);
             u.ladders.add(climb);
             hinge = LADDER;
         } else if (p.stairway()) {

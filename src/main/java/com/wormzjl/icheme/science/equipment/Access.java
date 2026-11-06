@@ -376,6 +376,15 @@ final class Access {
         }
     }
 
+    /** Bracket depth behind a round wall's rung plane: clear the curvature and facets, then anchor 10 mm into the skin. */
+    static double roundLadderBack(double wall, int facets) {
+        double side = LADDER_HALF + BAR / 2;
+        double curve = wall - Math.sqrt(Math.max(0, wall * wall - side * side));
+        double facet = wall * (1 - DeterministicMath.cos(Math.PI / facets));
+        // ladder() starts the bracket 10 mm short of back; another 10 mm embeds it without crossing a thin shell.
+        return STANDOFF + curve + facet + .02;
+    }
+
     /**
      * A ladder ({@link Climb}) standing {@code back} out from its wall: two rails on brackets to the wall every 2 m, rungs every
      * {@link #RUNG} up to the landing {@link #LANDING} under the rails' top, and when {@link #caged} a cage of hoops every

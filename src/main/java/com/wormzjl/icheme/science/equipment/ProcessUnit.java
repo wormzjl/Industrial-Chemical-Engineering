@@ -2588,7 +2588,7 @@ public final class ProcessUnit {
      */
     void verticalLadder(double x, double z, double wall, double t, double base, double top, boolean walkThrough) {
         double rung = wall + Access.STANDOFF;
-        ladder(x + rung * DeterministicMath.cos(t), z + rung * DeterministicMath.sin(t), new double[]{DeterministicMath.cos(t), 0, DeterministicMath.sin(t)}, Access.STANDOFF + .12,
+        ladder(x + rung * DeterministicMath.cos(t), z + rung * DeterministicMath.sin(t), new double[]{DeterministicMath.cos(t), 0, DeterministicMath.sin(t)}, Access.roundLadderBack(wall, shape.facets()),
                 base, top, walkThrough);
     }
 
