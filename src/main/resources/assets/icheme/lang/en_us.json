@@ -1226,7 +1226,7 @@
   "gui.icheme.vessel.unit_support.adsorber": "Skirts %s m high",
   "gui.icheme.vessel.tank": "%s m across, %s m shell, fill height %s m",
   "gui.icheme.vessel.tank.roof": "Pontoon roof, its ring %s m wide, on legs %s m long",
-  "gui.icheme.vessel.tank.access": "Wind girder walkway at %s m; stair round the shell to the gauger's platform",
+  "gui.icheme.vessel.tank.access": "Rim walkway and gauger's landing at %s m; straight ladders up the shell",
   "gui.icheme.vessel.tank.access.ladder": "Gauger's platform at %s m; caged ladders up the shell",
   "gui.icheme.vessel.tank.access.compact": "External ladder to the rim at %s m",
   "gui.icheme.vessel.unit_support.tank": "On its ringwall at grade",

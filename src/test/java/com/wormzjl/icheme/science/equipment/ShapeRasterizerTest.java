@@ -1049,9 +1049,9 @@ class ShapeRasterizerTest {
     }
 
     /**
-     * Every size: its decks and its wound stair or ladders are walked (at frame level), its pipes kept one block apart. The
-     * wound stair from {@link TankDesign#STAIR_SIZE} and {@link SphereDesign#STAIR_SIZE} across, caged ladders under (owner
-     * change 2026-10-21); every tank's roof and any rolling ladder drawn apart. Compact tanks omit the top platform,
+     * Every size: its decks and access are walked (at frame level), its pipes kept one block apart. Tanks use straight
+     * ladders, spheres retain their wound stair from {@link SphereDesign#STAIR_SIZE}. Every tank's roof and any rolling
+     * ladder are drawn apart. Compact tanks omit the top platform,
      * and neither compact nor tall narrow tanks have a rolling ladder.
      */
     @Test
@@ -1059,7 +1059,7 @@ class ShapeRasterizerTest {
         for (var shape : everyStorageSize()) {
             var unit = ProcessUnit.of(shape);
             ProcessUnitTest.walkedInFrame(unit);
-            boolean tank = shape.kind() == Kind.TANK, stair = shape.diameter() >= (tank ? TankDesign.STAIR_SIZE : SphereDesign.STAIR_SIZE);
+            boolean tank = shape.kind() == Kind.TANK, stair = !tank && shape.diameter() >= SphereDesign.STAIR_SIZE;
             assertEquals(stair ? 1 : 0, unit.woundStairs().size(), shape.toString());
             assertEquals(stair, unit.ladders().isEmpty(), shape.toString());
             for (var l : unit.ladders()) assertTrue(l.top() - Access.LANDING - l.base() <= Access.MAX_CLIMB + Access.DECK + 1e-9, shape + " climbs from " + l.base());

@@ -18,10 +18,9 @@ import java.util.List;
  * less the roof's own depth ({@link #FREEBOARD}): {@code volume() = π D²/4 · H}, {@code levelHeight() = H}.
  *
  * <p>In the chunk mesh: the shell in 2 m courses (rows clear of everything else are body rows), the top angle, the wind
- * girder 1.2 m below the top with its walkway (API 650 5.9.6), one stair wound round the shell at about 40° from grade to
- * the gauger's platform at the rim (owner approval 2026-10-21), which it passes beside the walkway and opens onto it, the
- * platform over the rim, and the front service region for the optional level-gauge accessory. A tank under {@link #STAIR_SIZE} across has neither
- * walkway nor stair but caged ladders on its right side to the platform. Below {@link #COMPACT_LIMIT} in both diameter
+ * girder 1.2 m below the top, a rim-level ring walkway merged with the gauger's landing, straight external ladders and
+ * the front service region for the optional level-gauge accessory. A tank under {@link #RING_SIZE} across has no ring
+ * walkway but retains the landing. Below {@link #COMPACT_LIMIT} in both diameter
  * and shell height, it instead has a plain external rim ladder, with no platform or rolling ladder. Tanks taller than
  * their diameter also omit the rolling ladder, retaining the platform with a closed inner railing. Tanks without a
  * rolling ladder carry a fixed see-through safety grating across the rim.
@@ -39,13 +38,13 @@ final class TankDesign extends UnitDesign {
     static final double FREEBOARD = 1;
     /** The concrete ringwall's height and its projection beyond the shell, m (photo survey: 0.3 to 0.5 m ringwalls, mostly buried). */
     static final double RINGWALL = .15, RINGWALL_OUT = .25;
-    /** The wind girder's walkway below the shell's top, m (API 650 5.9.6: at least 1.1 m; the photo survey's 1.2), and the girder's outstand and depth under it. */
+    /** The plain wind girder below the shell's top, m, and its outstand and depth. The walkway is at the rim. */
     static final double GIRDER_DROP = 1.2, GIRDER = .35, GIRDER_DEPTH = .3;
     /** The walkway's width, m: room for a player round the shell between its rail and the shell ({@link Access#PLAYER}), to the next 5 cm. */
     static final double WALKWAY = Math.ceil((Access.GAP + Access.PLAYER + Access.RAIL_BAND) * 20) / 20;
     /** The top angle's outstand and depth, m. */
     static final double TOP_ANGLE = .08;
-    /** The gauger's platform: its overhang over the rim and its length along the stair, m (the photo survey's 2 m platform). */
+    /** The gauger's landing: its overhang over the rim and its length round the shell, m. */
     static final double OVERHANG = .6, PLATFORM = 2;
     /** The opening in the platform's inner rail at the rolling ladder's head, m: the ladder's 0.6 m and a player's room either side. */
     static final double LADDER_OPENING = 1.1;
@@ -65,13 +64,8 @@ final class TankDesign extends UnitDesign {
 
     /** Half the walkway's gap across the front, m: the overflow's pipe stands there. */
     static final double FRONT_GAP = 1.2;
-    /**
-     * The least diameter that carries the wound stair, m (owner change 2026-10-21, "only put round ladders on them when they
-     * are big enough"): spiral tank stairs start at about 20 ft (6 m) of diameter in practice, the size above API 650 Annex
-     * J's shop-assembled tanks (6 m at most), which carry caged ladders. A smaller tank has caged ladders on its right side
-     * instead ({@link #ladders}) and no walkway: its top angle is its wind girder.
-     */
-    static final double STAIR_SIZE = 6;
+    /** Least diameter with the rim-level ring walkway, m. Every noncompact tank uses straight external ladders. */
+    static final double RING_SIZE = 6;
     /** Compact rim access below this size in both diameter and shell height, m. */
     static final double COMPACT_LIMIT = 6;
     /** Small-tank access stands on the right side (frame -x), clear of the centered front/back pipe lanes. */
@@ -151,20 +145,18 @@ final class TankDesign extends UnitDesign {
         return List.of(new Line("tank", size(d), (int) shape.tangentLength(), number(shape.fillHeight())),
                 new Line("tank.roof", number(PONTOON * d), number(LEGS)),
                 Plan.of(d, (int) shape.tangentLength()).compact() ? new Line("tank.access.compact", number(shape.tangentLength())) :
-                        d >= STAIR_SIZE ? new Line("tank.access", number(shape.tangentLength() - GIRDER_DROP)) : new Line("tank.access.ladder", number(shape.tangentLength())));
+                        d >= RING_SIZE ? new Line("tank.access", number(shape.tangentLength() + Access.DECK)) : new Line("tank.access.ladder", number(shape.tangentLength())));
     }
 
     /**
      * A tank's sizes, m, in its frame (y up from grade, front -z): its diameter, shell height and radius, the axis (x and
-     * z), the fill height, the shell's facets, the walkway's walking level, the stair's inner radius (beyond the walkway)
-     * and the platform's outer radius (a small tank's: its ladders' decks'), the stair approach's setback, and the nozzles' default size.
+     * z), the fill height, the shell's facets, the access deck's outer radius, and the nozzles' default size.
      */
-    record Plan(double d, int shell, double r, double a, double fill, int n, double walk, double band, double outer, int accessSetback, double defaultOd) {
+    record Plan(double d, int shell, double r, double a, double fill, int n, double outer, double defaultOd) {
         static Plan of(double d, int shell) {
-            double r = d / 2, band = r + WALKWAY + Access.GAP, outer = d >= STAIR_SIZE ? band + Access.WOUND_WIDTH + Access.GAP : r + Access.MIN_DECK;
+            double r = d / 2, outer = r + (d >= RING_SIZE ? WALKWAY : Access.MIN_DECK);
             int n = Math.max(12, 4 * (int) Math.ceil(.75 * Math.PI * d));
-            return new Plan(d, shell, r, ProcessUnit.centre(outer + .05), shell - FREEBOARD, n, shell - GIRDER_DROP, band, outer,
-                    Math.max(d >= STAIR_SIZE ? 2 : 1, (int) Math.round(r / 6)), PipeSizes.od(.1 + .007 * d, .15, .35));
+            return new Plan(d, shell, r, TankPlacement.of(d, shell).axis(), shell - FREEBOARD, n, outer, PipeSizes.od(.1 + .007 * d, .15, .35));
         }
 
         /** The point {@code rho} from the axis at angle {@code t} (from +x towards +z), at height {@code y}. */
@@ -178,9 +170,9 @@ final class TankDesign extends UnitDesign {
             return new Gauge(a + GLASS_OFFSET, a - Math.sqrt(rho * rho - GLASS_OFFSET * GLASS_OFFSET), new double[]{0, 0, -1});
         }
 
-        /** Whether the tank carries the wound stair and the walkway ({@link #STAIR_SIZE}). */
-        boolean stairway() {
-            return d >= STAIR_SIZE;
+        /** Whether the rim landing continues round the shell as a ring walkway. */
+        boolean ringWalkway() {
+            return d >= RING_SIZE;
         }
 
         boolean compact() {
@@ -202,36 +194,24 @@ final class TankDesign extends UnitDesign {
     @Override
     void build(ProcessUnit u) {
         var p = Plan.of(u.shape.diameter(), (int) u.shape.tangentLength());
+        TankPlacement.of(p.d, p.shell).retain(u);
         shell(u, p);
         if (!p.rollingLadder()) safetyGrating(u, p);
         double hinge;
         if (p.compact()) {
-            // Keep the established rim-access frame so deleting its platform cannot shift existing pipe blocks.
-            double from = LADDER + Access.clearance(p.r), span = span(p, p.r + Access.MIN_DECK / 2);
-            u.framePoints.add(p.at(p.outer, from, 0));
-            u.framePoints.add(p.at(p.outer, from + span, 0));
             u.bodyRows = new double[]{1, Math.floor(p.shell - TOP_ANGLE - .6 - 1e-9), 0};
             u.irregularFrom = u.mesh.facets().size();
             var climb = new Access.Climb(p.a - p.r - Access.STANDOFF, p.a, -1, 0, 0, p.shell + Access.LANDING, p.shell);
             Access.ladder(u.mesh, climb, Access.roundLadderBack(p.r, p.n), false);
             u.ladders.add(climb);
             hinge = LADDER;
-        } else if (p.stairway()) {
-            var stair = stair(p);
-            double end = stair.angle(stair.steps()), span = span(p, p.band + Access.WOUND_WIDTH / 2);
-            walkway(u, p, stair, end - span, end);
-            platform(u, p, end - span, end, false);
-            // Everything after this crosses the body rows: its box columns keep their own keys.
-            u.bodyRows = new double[]{1, Math.floor(p.walk - Access.DECK - .6 - 1e-9), 0};
-            u.irregularFrom = u.mesh.facets().size();
-            u.woundStair(stair);
-            brackets(u, p, stair);
-            hinge = end - span / 2;
         } else {
-            // The platform beside the top ladder, round from it towards the right.
+            // One landing beside the straight ladder, extended into the ring walkway on wider tanks.
             double from = LADDER + Access.clearance(p.r), span = span(p, p.r + Access.MIN_DECK / 2);
-            platform(u, p, from, from + span, true);
-            u.bodyRows = new double[]{1, Math.floor(p.shell - TOP_ANGLE - .6 - 1e-9), 0};
+            if (p.ringWalkway()) walkway(u, p);
+            platform(u, p, from, from + span);
+            double bodyTop = p.ringWalkway() ? p.shell - GIRDER_DROP - Access.DECK - .6 : p.shell - TOP_ANGLE - .6;
+            u.bodyRows = new double[]{1, Math.floor(bodyTop - 1e-9), 0};
             u.irregularFrom = u.mesh.facets().size();
             ladders(u, p);
             hinge = from + span / 2;
@@ -252,7 +232,8 @@ final class TankDesign extends UnitDesign {
         u.mesh.bore(up, inner, p.shell, top, p.n, Material.STEELWORK);
         // A bare-metal welded grid, 20 mm bars on 400 mm centres: about 90% open so the roof remains visible. The cross-bars
         // sit just below the longitudinal bars, avoiding coplanar visible faces at their intersections.
-        double pitch = .4, bar = .02, y = top - bar / 2;
+        // Recess the grid 5 mm below the rim landing so its bars cannot flicker through the landing's floor.
+        double pitch = .4, bar = .02, y = top - bar / 2 - .005;
         int rows = (int) Math.floor(inner / pitch);
         for (int row = -rows; row <= rows; row++) {
             double offset = row * pitch, half = Math.sqrt(inner * inner - offset * offset) + .02;
@@ -273,7 +254,7 @@ final class TankDesign extends UnitDesign {
     }
 
     /**
-     * A small tank's access ({@link #STAIR_SIZE}): caged ladders from grade to the gauger's platform, the top one at the
+     * Straight access: caged ladders from grade to the rim landing, the top one at the
      * right side ({@link #LADDER}), split by part-ring rest platforms where the climb is over {@link Access#MAX_CLIMB},
      * with successive sections beside one another in that side area ({@link ProcessUnit#ringAccess});
      * both centered pipe lanes and the level gauge on the left remain clear.
@@ -290,93 +271,6 @@ final class TankDesign extends UnitDesign {
         }
         u.ringAccess(p.a, p.a, p.r, Access.MIN_DECK, 0, rings);
         u.verticalLadder(p.a, p.a, p.r, LADDER, m == 0 ? 0 : levels.getLast() + Access.DECK, p.shell + Access.DECK + Access.LANDING, false);
-    }
-
-    /**
-     * The stair from grade to the gauger's platform, wound clockwise seen from above round the shell beyond the walkway,
-     * at the plant stair's slope. Its foot stands beside the front access gap, and it
-     * climbs away from them; where that would meet the front's nozzles or bring the platform or the walkway's landing into
-     * the walkway's front gap, it starts further round, in steps of 0.1 rad.
-     */
-    static Access.WoundStair stair(Plan p) {
-        double hw = Access.WOUND_WIDTH / 2, rw = p.band + hw, top = p.shell + Access.DECK;
-        // Retain the established access approach clearance, independent of the relocated nozzle centers.
-        double zone = Math.max(p.accessSetback + .5, FRONT_GAP) + .5 + hw;
-        double first = -Math.PI / 2 - DeterministicMath.asin(Math.min(1, (p.accessSetback + 1 + hw) / rw));
-        for (int m = 0; m < 63; m++) {
-            double start = first - .1 * m;
-            var plain = Access.WoundStair.wind(p.a, p.a, y -> p.r, WALKWAY + Access.GAP, start, -1, 0, top, Access.WOUND_WIDTH, Access.WOUND_SLOPE, List.of(), false);
-            double landing = plain.station(p.walk);
-            var opening = new double[]{landing - .6, landing + .6};
-            if (clear(p, plain, opening, zone)) return Access.WoundStair.wind(p.a, p.a, y -> p.r, WALKWAY + Access.GAP, start, -1, 0, top, Access.WOUND_WIDTH,
-                    Access.WOUND_SLOPE, List.<double[]>of(opening), false);
-        }
-        throw new IllegalStateException("No place for a " + p.d + " m tank's stair on a " + p.shell + " m shell");
-    }
-
-    /**
-     * Whether a planned stair keeps clear: its treads and fences pass front/back (within {@code zone} of the centerline) only
-     * over the bottom nozzles' row, and pass the front under the overflow; the gauger's platform at its top and its landing onto the
-     * walkway ({@code opening}) stand outside the walkway's front gap, and the landing outside the platform.
-     */
-    private static boolean clear(Plan p, Access.WoundStair stair, double[] opening, double zone) {
-        for (int k = 1; k <= stair.steps(); k++) {
-            var q = stair.at((k - .5) * Access.WOUND_GOING, 0, 0);
-            // The front includes the gauge/access gap; the back has only its centered 1 m maximum nozzle.
-            double width = q[2] < p.a ? zone : PipeSizes.MAX_OUTSIDE / 2 + .5 + Access.WOUND_WIDTH / 2;
-            if (Math.abs(q[0] - p.a) >= width) continue;
-            double low = stair.tread(k) - stair.rise(k) - .3, high = stair.tread(k) + Access.FENCE;
-            if (low < 1.1 || q[2] < p.a && high > p.shell - 1.2 && low < p.shell + .2) return false;
-        }
-        double end = stair.angle(stair.steps()), span = PLATFORM / (p.band + Access.WOUND_WIDTH / 2), gap = frontGap(p), margin = .3 / p.r;
-        if (meets(end - span - margin, end + margin, -Math.PI / 2 - gap, -Math.PI / 2 + gap)) return false;
-        if (!(opening[0] > 0)) return false;
-        // The landing lies on a walkway piece, clear of its closed ends.
-        double t0 = angle(p, stair.at(opening[1], 0, 0)), t1 = angle(p, stair.at(opening[0], 0, 0)), ends = (Access.RAIL_BAND + .1) / (p.r + WALKWAY);
-        for (var piece : pieces(p, end - span, end)) {
-            var on = landing(piece, t0, t1);
-            if (on != null && on[0] - piece[0] >= ends && piece[1] - on[1] >= ends) return true;
-        }
-        return false;
-    }
-
-    /**
-     * The walkway's pieces, {from, to} angles each (rising): the circle from the front gap's left end round to its right
-     * end, less the gauger's platform's stretch from {@code from} to {@code to} and a margin; a piece under 2 m along its
-     * edge, between the front's gap and the platform's, leads nowhere and is left out.
-     */
-    static List<double[]> pieces(Plan p, double from, double to) {
-        double gap = frontGap(p), margin = .3 / p.r, start = -Math.PI / 2 + gap, stop = 3 * Math.PI / 2 - gap, edge = p.r + WALKWAY;
-        double p0 = from - margin;
-        p0 += 2 * Math.PI * Math.ceil((start - p0) / (2 * Math.PI));
-        double p1 = p0 + (to - from) + 2 * margin;
-        var out = new ArrayList<double[]>();
-        for (var piece : p0 >= stop ? List.of(new double[]{start, stop}) : List.of(new double[]{start, p0}, new double[]{p1, stop}))
-            if ((piece[1] - piece[0]) * edge >= 2) out.add(piece);
-        return out;
-    }
-
-    /** The landing's angles [t0, t1] (rising) on {@code piece}, turned to lie there, or null where it does not. */
-    private static double[] landing(double[] piece, double t0, double t1) {
-        double l0 = t0 + 2 * Math.PI * Math.ceil((piece[0] - t0) / (2 * Math.PI)), l1 = l0 + (t1 - t0 + 2 * Math.PI) % (2 * Math.PI);
-        return l1 <= piece[1] ? new double[]{l0, l1} : null;
-    }
-
-    /** Half the angle of the walkway's front gap, at the shell. */
-    private static double frontGap(Plan p) {
-        return DeterministicMath.asin(Math.min(1, FRONT_GAP / p.r));
-    }
-
-    private static double angle(Plan p, double[] q) {
-        return DeterministicMath.atan2(q[2] - p.a, q[0] - p.a);
-    }
-
-    /** Whether the arcs [a0, a1] and [b0, b1] (rising, under a turn each) meet, round the circle. */
-    static boolean meets(double a0, double a1, double b0, double b1) {
-        double start = b0 - a0;
-        start -= 2 * Math.PI * Math.floor(start / (2 * Math.PI));
-        // b0 lies start after a0; the arcs meet where b starts inside a, or a starts inside b.
-        return start <= a1 - a0 + 1e-9 || 2 * Math.PI - start <= b1 - b0 + 1e-9;
     }
 
     /**
@@ -414,37 +308,36 @@ final class TankDesign extends UnitDesign {
         u.round(p.a, p.a, 0, s, r, 1);
     }
 
-    /**
-     * The wind girder, a ring under the walkway, and its walkway round the shell but across the front (the overflow and the level gauge stand
-     * there) and under the gauger's platform from {@code from} to {@code to}: one deck or two, railed
-     * across their ends, open towards the stair over its landing.
-     */
-    private static void walkway(ProcessUnit u, Plan p, Access.WoundStair stair, double from, double to) {
-        double level = p.walk - Access.DECK, low = level - GIRDER_DEPTH, edge = p.r + WALKWAY;
+    /** One rim-level ring, open beside the straight ladder and across the front nozzle/gauge service lane. */
+    private static void walkway(ProcessUnit u, Plan p) {
+        double level = p.shell - GIRDER_DROP - Access.DECK, low = level - GIRDER_DEPTH, edge = p.outer;
         var up = Frame.of(new double[]{p.a, 0, p.a}, 1, 1);
         u.mesh.prism(up, p.r + GIRDER, low, level, p.n, Material.SUPPORT);
         u.mesh.annulus(up, p.r, p.r + GIRDER, low, p.n, -1, Material.SUPPORT);
+        u.mesh.annulus(up, p.r, p.r + GIRDER, level, p.n, 1, Material.SUPPORT);
         u.solids.add(ProcessUnit.Solid.ring(p.a, p.a, low, level, p.r, p.r + GIRDER, 0, 0));
-        var opening = stair.openings().getFirst();
-        double t0 = angle(p, stair.at(opening[1], 0, 0)), t1 = angle(p, stair.at(opening[0], 0, 0));
-        for (var piece : pieces(p, from, to)) {
-            var arc = new Access.Arc(p.a, p.a, p.r, piece[0], piece[1], edge, Access.Arc.step(edge));
-            // Open over the landing's stations, on the piece it lies on.
-            var on = landing(piece, t0, t1);
-            double[] gaps = on != null ? new double[]{(on[0] - piece[0]) * edge, (on[1] - piece[0]) * edge} : new double[0];
-            u.platform(arc, level, WALKWAY, Access.ALL_PARTS, true, true, gaps);
-        }
+        double gap = DeterministicMath.asin(Math.min(1, FRONT_GAP / p.r)), clear = Access.clearance(p.r);
+        double start = -Math.PI / 2 + gap, stop = 3 * Math.PI / 2 - gap;
+        u.platform(new Access.Arc(p.a, p.a, p.r, start, LADDER - clear, edge, Access.Arc.step(edge)), p.shell, WALKWAY,
+                Access.ALL_PARTS, true, false);
+        u.platform(new Access.Arc(p.a, p.a, p.r, LADDER + clear, stop, edge, Access.Arc.step(edge)), p.shell, WALKWAY,
+                Access.ALL_PARTS, false, true);
     }
 
     /**
-     * The gauger's platform at the access's top, over the rim from the shell's inside out over the walkway to beyond the
-     * stair (a small tank's: beyond its top ladder's cage), from angle {@code from} to {@code to}: railed round but where
-     * the access arrives (the stair's top at {@code to}, or a small tank's ladder beside {@code from}: {@code ladder}), its
-     * inner edge railed over the tank, on two knee braces from the shell; the ladder's hinge at its middle.
+     * The landing beside the straight ladder. On a wide tank its inward extension fills the ring walkway out over the
+     * rim, sharing the same floor and outer railing; a narrow tank has a standalone landing. The inner railing opens
+     * at the rolling ladder's head where fitted, with a short guard across each exposed inner end.
      */
-    private static void platform(ProcessUnit u, Plan p, double from, double to, boolean ladder) {
-        double wall = p.r - OVERHANG - Access.GAP, width = p.outer - wall, s = p.shell, step = Access.Arc.step(p.outer);
-        u.platform(new Access.Arc(p.a, p.a, wall, from, to, p.outer, step), s, width, Access.RAILED | Access.WALL_EDGE, !ladder, ladder);
+    private static void platform(ProcessUnit u, Plan p, double from, double to) {
+        double wall = p.r - OVERHANG - Access.GAP, s = p.shell, step = Access.Arc.step(p.outer);
+        double edgeRadius = p.ringWalkway() ? p.r + Access.GAP : p.outer, width = edgeRadius - wall;
+        var run = new Access.Arc(p.a, p.a, wall, from, to, edgeRadius, step);
+        if (p.ringWalkway()) {
+            // Infill of the ring's existing floor, without a second outer railing or overlapping deck surfaces.
+            Access.deck(u.mesh, run, s, width, Access.WALL_EDGE);
+            u.solids.add(ProcessUnit.Solid.ring(p.a, p.a, s, s + Access.DECK, wall + Access.GAP, edgeRadius, from, to));
+        } else u.platform(run, s, width, Access.RAILED | Access.WALL_EDGE, false, true);
         // The inner edge over the tank: a rail whose band runs along the deck's inner edge, open at the rolling ladder's head
         // in its middle (owner report 2026-10-21: the rail kept the player from the ladder).
         var edge = new Access.Arc(p.a, p.a, wall - 1, from, to, wall + Access.GAP, step);
@@ -452,28 +345,29 @@ final class TankDesign extends UnitDesign {
             double head = LADDER_OPENING / 2 / (wall + Access.GAP) * edge.length() / (to - from);
             u.rails(edge, s, 1 + Access.GAP + Access.RAIL_BAND, false, false, edge.length() / 2 - head, edge.length() / 2 + head);
         } else u.rails(edge, s, 1 + Access.GAP + Access.RAIL_BAND, false, false);
-        // Across the open end, from the inner edge out to the stair's inner side (or just past the shell, short of the
-        // ladder's rung plane): the climber arrives beyond it.
-        double open = ladder ? from : to, limit = ladder ? p.r + .1 : p.band, sign = ladder ? -1 : 1;
-        double deck = s + Access.DECK, inner = wall + Access.GAP, length = limit - inner, inward = Access.RAIL_BAND / 2;
-        double[] radial = {DeterministicMath.cos(open), 0, DeterministicMath.sin(open)}, back = {sign * DeterministicMath.sin(open), 0, -sign * DeterministicMath.cos(open)};
-        var centre = p.at(inner + length / 2, open, deck + Access.FENCE / 2);
-        centre[0] += inward * back[0];
-        centre[2] += inward * back[2];
-        u.solids.add(ProcessUnit.Solid.block(centre, Mesh.scale(radial, length / 2), new double[]{0, Access.FENCE / 2, 0}, Mesh.scale(back, inward)));
-        for (double over : new double[]{Access.RAIL, Access.MID_RAIL}) {
-            var a = p.at(inner + .12, open, deck + over);
-            var b = p.at(limit - .03, open, deck + over);
-            for (var q : new double[][]{a, b}) {
-                q[0] += .03 * back[0];
-                q[2] += .03 * back[2];
+        // Guard the overhang's ends without fencing across the ring's walking lane or the ladder's step-off.
+        for (int end = 0; end < (p.ringWalkway() ? 2 : 1); end++) {
+            double open = end == 0 ? from : to, limit = p.r + Access.GAP, sign = end == 0 ? -1 : 1;
+            double deck = s + Access.DECK, inner = wall + Access.GAP, length = limit - inner, inward = Access.RAIL_BAND / 2;
+            double[] radial = {DeterministicMath.cos(open), 0, DeterministicMath.sin(open)}, back = {sign * DeterministicMath.sin(open), 0, -sign * DeterministicMath.cos(open)};
+            var centre = p.at(inner + length / 2, open, deck + Access.FENCE / 2);
+            centre[0] += inward * back[0];
+            centre[2] += inward * back[2];
+            u.solids.add(ProcessUnit.Solid.block(centre, Mesh.scale(radial, length / 2), new double[]{0, Access.FENCE / 2, 0}, Mesh.scale(back, inward)));
+            for (double over : new double[]{Access.RAIL, Access.MID_RAIL}) {
+                var a = p.at(inner + .12, open, deck + over);
+                var b = p.at(limit - .03, open, deck + over);
+                for (var q : new double[][]{a, b}) {
+                    q[0] += .03 * back[0];
+                    q[2] += .03 * back[2];
+                }
+                u.mesh.bar(a, b, Access.BAR, UP, Mesh.NO_ENDS, Material.HANDRAIL);
             }
-            u.mesh.bar(a, b, Access.BAR, UP, Mesh.NO_ENDS, Material.HANDRAIL);
+            var post = p.at(limit - .03, open, deck - .04);
+            post[0] += .03 * back[0];
+            post[2] += .03 * back[2];
+            u.mesh.bar(post, new double[]{post[0], deck + Access.RAIL + Access.BAR / 2, post[2]}, Access.BAR, radial, Mesh.NO_ENDS, Material.HANDRAIL);
         }
-        var post = p.at(limit - .03, open, deck - .04);
-        post[0] += .03 * back[0];
-        post[2] += .03 * back[2];
-        u.mesh.bar(post, new double[]{post[0], deck + Access.RAIL + Access.BAR / 2, post[2]}, Access.BAR, radial, Mesh.NO_ENDS, Material.HANDRAIL);
         // Knee braces from the shell under the deck's ends, and the rolling ladder's hinge.
         double span = to - from;
         for (double t : new double[]{from + .15 * span, to - .15 * span})
@@ -484,17 +378,6 @@ final class TankDesign extends UnitDesign {
             var hinge = p.at(p.r - OVERHANG + .1, mid, s - .07);
             u.mesh.block(hinge, Mesh.scale(new double[]{DeterministicMath.cos(mid), 0, DeterministicMath.sin(mid)}, .1), new double[]{0, .06, 0},
                     Mesh.scale(new double[]{-DeterministicMath.sin(mid), 0, DeterministicMath.cos(mid)}, .4), Material.STEELWORK);
-        }
-    }
-
-    /** The stair's brackets to the shell from its inner stringer, every eight treads, below the walkway (the girder carries it above). */
-    private static void brackets(ProcessUnit u, Plan p, Access.WoundStair stair) {
-        for (int j = 4; j < stair.steps(); j += 8) {
-            double y = stair.tread(j) - .25;
-            if (y > p.walk - 2.5 || y < .3) continue;
-            var q = stair.at((j - .5) * Access.WOUND_GOING, -Access.WOUND_WIDTH / 2 + .03, y);
-            double t = DeterministicMath.atan2(q[2] - p.a, q[0] - p.a);
-            u.mesh.bar(q, p.at(p.r + .01, t, y), .08, UP, Material.STEELWORK);
         }
     }
 
