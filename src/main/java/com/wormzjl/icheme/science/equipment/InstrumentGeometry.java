@@ -47,18 +47,23 @@ public final class InstrumentGeometry {
         if(thermometer)cylinder(q,add(tap,direction,-probeDepth),bossEnd,.006,12,0xff89979d);
         return List.copyOf(q);
     }
-    /** Sealed transmitter cover, without a display, needle or face markings. */
+    /** Bevelled cast transmitter with a recessed label window and a blue instrument-band bezel. */
     private static final List<Quad> PROBE=buildTransmitter(false),LEVEL_TRANSMITTER=buildTransmitter(true);
     public static List<Quad> transmitter(boolean level){return level?LEVEL_TRANSMITTER:PROBE;}
     private static List<Quad> buildTransmitter(boolean level){
-        var q=new ArrayList<Quad>();double x=level?.13:.10,y=level?.08:.10,z=.065,b=-.055;
-        q.add(quad(-x,-y,b,x,-y,b,x,y,b,-x,y,b,0xff89969e));
-        q.add(quad(-x,-y,z,-x,y,z,x,y,z,x,-y,z,0xff466774));
-        q.add(quad(-x,-y,b,-x,y,b,-x,y,z,-x,-y,z,0xff89969e));
-        q.add(quad(x,-y,b,x,-y,z,x,y,z,x,y,b,0xffa9b3b8));
-        q.add(quad(-x,y,b,x,y,b,x,y,z,-x,y,z,0xffa9b3b8));
-        q.add(quad(-x,-y,b,-x,-y,z,x,-y,z,x,-y,b,0xff66757d));
-        return q.stream().map(face->{var v=face.vertices();return new Quad(new double[]{v[9],v[10],v[11],v[6],v[7],v[8],v[3],v[4],v[5],v[0],v[1],v[2]},face.colour());}).toList();
+        var q=new ArrayList<Quad>();double x=level?.14:.115,y=.115,back=-.065,front=.07;
+        double[][] outline={{-.7*x,-y},{.7*x,-y},{x,-.7*y},{x,.7*y},{.7*x,y},{-.7*x,y},{-x,.7*y},{-x,-.7*y}};
+        for(int i=0;i<8;i++){
+            var a=outline[i];var b=outline[(i+1)%8];
+            q.add(quad(a[0],a[1],back,b[0],b[1],back,b[0],b[1],.045,a[0],a[1],.045,0xff8e969a));
+            q.add(quad(a[0],a[1],.045,b[0],b[1],.045,b[0]*.88,b[1]*.88,front,a[0]*.88,a[1]*.88,front,0xffb0b7b9));
+            q.add(quad(0,0,front,a[0]*.88,a[1]*.88,front,b[0]*.88,b[1]*.88,front,0,0,front,0xff737e83).front());
+            q.add(quad(0,0,back,b[0],b[1],back,a[0],a[1],back,0,0,back,0xff727d82));
+        }
+        q.add(quad(-x*.65,-.067,.071,x*.65,-.067,.071,x*.65,.067,.071,-x*.65,.067,.071,0xff1f343b).front());
+        q.add(quad(-x*.55,-.052,.072,x*.55,-.052,.072,x*.55,.052,.072,-x*.55,.052,.072,0xffa7bcb4).front());
+        q.add(quad(-.04,-.083,.072,.04,-.083,.072,.04,-.071,.072,-.04,-.071,.072,0xff387386).front());
+        return List.copyOf(q);
     }
     private static void cylinder(List<Quad> out,double[] start,double[] end,double radius,int sides,int colour){
         var axis=unit(sub(end,start));var ref=unit(cross(axis,Math.abs(axis[1])>.9?new double[]{1,0,0}:new double[]{0,1,0}));var side=cross(axis,ref);
@@ -75,7 +80,35 @@ public final class InstrumentGeometry {
     private static double[] cross(double[] a,double[] b){return new double[]{a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]};}
 
     // ---- fixed front service taps, using each native vessel design's own axis and surface ----
-    public record Socket(String id,double x,double y,double z,boolean pressure,boolean top) {}
+    public record Socket(String id,double x,double y,double z,boolean pressure,boolean top,int face) {
+        public Socket(String id,double x,double y,double z,boolean pressure,boolean top){this(id,x,y,z,pressure,top,-1);}
+    }
+    /** Process equipment without vessel service taps mounts its transmitters beside its own fluid connection. */
+    public static List<Socket> sockets(EquipmentShape shape,ShapeRasterizer.Cell node){
+        var standard=sockets(shape);
+        if(!standard.isEmpty()||node==null)return standard;
+        var ports=ShapeRasterizer.ports(shape);
+        var port=ports.stream().min(Comparator.comparingDouble(p->
+                Math.pow(p.cell().x()-node.x(),2)+Math.pow(p.cell().y()-node.y(),2)+Math.pow(p.cell().z()-node.z(),2))).orElse(null);
+        if(port==null)return List.of();
+        var definitions=HeatSides.of(shape);int side=ShapeRasterizer.fluidCells(shape).indexOf(node);
+        var outlet=side>=0&&side<definitions.size()?ports.stream().filter(p->shape.nozzles().get(p.nozzle()).role()==definitions.get(side).outlet()).findFirst().orElse(port):port;
+        var result=new ArrayList<Socket>();
+        for(int k=0;k<2;k++){
+            var tap=k==0?port:outlet;
+            double nx=tap.dz()!=0?1:0,nz=tap.dz()!=0?0:tap.dx()!=0?1:-1;
+            int face=nx>0?5:nz>0?3:2;
+            double x=tap.cell().x()+.5-.35*tap.dx(),y=tap.cell().y()+.5-.35*tap.dy()+(tap==port?.4*k:0),
+                    z=tap.cell().z()+.5-.35*tap.dz();
+            // Leave the actual casting, then stand the housing clear of it; do not infer a rectangular body surface.
+            double out=0;
+            while(out<2&&ShapeRasterizer.inside(shape,x+nx*out,y,z+nz*out))out+=1/32.0;
+            if(ShapeRasterizer.inside(shape,x+nx*out,y,z+nz*out))continue;
+            x+=nx*(out+.16);z+=nz*(out+.16);
+            result.add(new Socket(k==0?"pressure_bottom":"temperature_bottom",x,y,z,k==0,false,face));
+        }
+        return List.copyOf(result);
+    }
     public static List<Socket> sockets(EquipmentShape s){boolean drum=s.kind()==EquipmentShape.Kind.DRUM&&s.orientation()==EquipmentShape.Orientation.VERTICAL,tank=s.kind()==EquipmentShape.Kind.TANK,sphere=s.kind()==EquipmentShape.Kind.SPHERE;if(s.kind()==EquipmentShape.Kind.DRUM&&s.orientation().horizontal()){
         int cells=(int)Math.ceil(s.diameter());double a=(cells%2==0?cells+1:cells)/2.0,r=s.radius(),station=s.headDepth()+s.tangentLength()/2;
         var result=new ArrayList<Socket>();

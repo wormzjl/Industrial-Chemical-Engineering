@@ -194,6 +194,7 @@ public final class IslandCoordinator {
         private long fence(){return fences.values().stream().mapToLong(Long::longValue).min().orElse(Long.MAX_VALUE);}
     }
     private static final class Pending {
+        private PassiveNetwork dispatched;
         private final Attempt attempt;
         private ProcessSolveServices.FluidIslandSolveResult result;
         private boolean terminal,closed;
@@ -267,6 +268,9 @@ public final class IslandCoordinator {
         };
     }
     private Shafts shafts=Shafts.NONE;
+    private java.util.function.UnaryOperator<PassiveNetwork> controls=java.util.function.UnaryOperator.identity();
+    public void controls(java.util.function.UnaryOperator<PassiveNetwork> value){owned();controls=Objects.requireNonNull(value);}
+    public void controlsMoved(Collection<Long> changed){owned();for(long id:changed)if(islands.containsKey(id))toWake.add(id);}
     /** Installs the shaft trains. */
     public void shafts(Shafts value){owned();shafts=Objects.requireNonNull(value);}
     /** A shaft train's speed, trip or start changed (a dependency change, plan 5.2): the islands it drives end their
@@ -559,11 +563,12 @@ public final class IslandCoordinator {
                 island.retained.committed(island.lastResult.orElse(null));
                 var reads=reads(island,slice);
                 // The shaft trains' slice inputs (W3), read here as a heat side's partner is.
-                var dispatched=com.wormzjl.icheme.science.fluid.network.ShaftPlan.apply(island.graph,shafts.plans(island.id,island.graph));
+                var controlled=controls.apply(island.graph);
+                var dispatched=com.wormzjl.icheme.science.fluid.network.ShaftPlan.apply(controlled,shafts.plans(island.id,controlled));
                 var command=new ProcessSolveServices.FluidIslandCommand(island.model,dispatched,slice.seconds(),PassiveIntervalSolver.Settings.defaults(),settings.hardBudgetNanos,island.retained,reads,ports.plans(island.id,dispatched,slice));
                 if(!dispatcher.submit(attempt,command)) {island.status="WAITING: shared worker capacity";island.touch();break;}
                 island.clock.admitted(slice);island.status="SOLVING";island.touch();FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.solvesDispatched);
-                var entry=new Pending(attempt,island.clock.snapshot().onlineTick(),nanoClock.getAsLong());entry.reads=reads;pending.put(request,entry);island.pendingEntries++;admitted.add(entry);dispatchedThisTick++;
+                var entry=new Pending(attempt,island.clock.snapshot().onlineTick(),nanoClock.getAsLong());entry.dispatched=dispatched;entry.reads=reads;pending.put(request,entry);island.pendingEntries++;admitted.add(entry);dispatchedThisTick++;
                 reconsider(island);
             }
             if(!admitted.isEmpty()){var round=new Round(roundSequence=Math.addExact(roundSequence,1),List.copyOf(admitted),roundStarted);rounds.add(round);scheduleRoundTimeout(round,settings.hardBudgetNanos);}
@@ -598,7 +603,7 @@ public final class IslandCoordinator {
             boolean accept=entry.terminal&&outcome!=null&&outcome.candidate().isPresent()&&attempt.revision==island.revision;
             if(accept) {
                 var candidate=outcome.candidate().orElseThrow();
-                accept=validCandidate(island,attempt,candidate);
+                accept=validCandidate(island,attempt,candidate,entry.dispatched);
                 if(!accept)refusal="candidate identity or interval mismatch";
                 else {
                     island.graph=candidate.graph();island.lastResult=Optional.of(candidate);
@@ -728,8 +733,8 @@ public final class IslandCoordinator {
         return a instanceof FlowControl.ControlValve x&&b instanceof FlowControl.ControlValve y&&y.source()==FlowControl.ValveSource.MASS_FLOW
                 &&x.targetPressure()==y.targetPressure()&&x.volumeTarget()==y.volumeTarget()&&java.util.Objects.equals(x.sensor(),y.sensor())&&x.revision()==y.revision();
     }
-    private static boolean validCandidate(Island island,Attempt attempt,PassiveIntervalSolver.Result result) {
-        if(result.advancedSeconds()!=attempt.slice.seconds()||!sameConnections(island.graph.pipes(),result.graph().pipes())||!result.graph().scheduledTransfers().isEmpty())return false;
+    private static boolean validCandidate(Island island,Attempt attempt,PassiveIntervalSolver.Result result,PassiveNetwork dispatched) {
+        if(result.advancedSeconds()!=attempt.slice.seconds()||!sameConnections(dispatched.pipes(),result.graph().pipes())||!result.graph().scheduledTransfers().isEmpty())return false;
         var old=island.graph.reservoirs();var next=result.graph().reservoirs();if(old.size()!=next.size())return false;
         for(int i=0;i<old.size();i++) {
             var a=old.get(i);var b=next.get(i);

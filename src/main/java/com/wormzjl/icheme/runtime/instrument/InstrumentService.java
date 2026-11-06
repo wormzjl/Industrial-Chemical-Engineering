@@ -161,10 +161,11 @@ public final class InstrumentService {
     private ServerLevel level(String name){return server.getLevel(ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION,ResourceLocation.parse(name)));}
     /** A flowmeter installed or removed (W8): an assembly whose walk read that pipe reverts, as for a fitting. */
     private static void metered(InstrumentHosts.Host host){if(host.entity().getLevel() instanceof net.minecraft.server.level.ServerLevel level)com.wormzjl.icheme.runtime.assembly.AssemblyService.metered(level,host.entity().getBlockPos());}
-    private void sync(InstrumentHosts.Host host){host.metadata().sensors(store.sensors(host.identity()));host.metadata().set(store.host(host.identity()),store.revision(host.identity()),host.pipe()?null:store.legacy(host.identity()));host.entity().setChanged();InstrumentHosts.loaded(host.entity());var l=host.entity().getLevel();var pos=host.entity().getBlockPos();l.sendBlockUpdated(pos,host.entity().getBlockState(),host.entity().getBlockState(),Block.UPDATE_CLIENTS);}
+    private void sync(InstrumentHosts.Host host){host.metadata().sensors(store.sensors(host.identity()));host.metadata().set(store.host(host.identity()),store.revision(host.identity()),host.pipe()?null:store.legacy(host.identity()));world.controls().bind(host);host.entity().setChanged();InstrumentHosts.loaded(host.entity());var l=host.entity().getLevel();var pos=host.entity().getBlockPos();l.sendBlockUpdated(pos,host.entity().getBlockState(),host.entity().getBlockState(),Block.UPDATE_CLIENTS);}
     /** Saved registrations include unloaded valves; reconciliation queues edits without touching their chunks. */
     public void reconcileLegacyValves(){for(var record:List.copyOf(world.registrations().values()))if(record.device().control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.PressureValve legacy)editSensorValve(record,store.convertLegacyValve(record.device().id(),legacy));}
-    public void bind(InstrumentHosts.Host host){if(host==null)return;
+    public java.util.List<Sensor.Installed> allSensors(){return store.allSensors();}
+    public void bind(InstrumentHosts.Host host){if(host==null)return;world.controls().bind(host);
         var record=world.registrations().get(host.identity());
         if(host.pipe()&&record!=null&&record.device().control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.PressureValve legacy){
             var control=store.convertLegacyValve(host.identity(),legacy);

@@ -27,12 +27,13 @@ public final class PipelineToolMenu extends AbstractContainerMenu {
     private final ItemStack tool;
     private final PipelineToolItem.Settings initialSettings;
     private final int initialPaint, initialSecondary;
+    private final boolean initialData;
 
     public PipelineToolMenu(int id, Inventory inventory, RegistryFriendlyByteBuf buffer) {
-        this(id, inventory, buffer.readEnum(InteractionHand.class), buffer.readVarInt(), PipelineToolItem.Settings.STREAM_CODEC.decode(buffer), buffer.readInt(), buffer.readInt());
+        this(id, inventory, buffer.readEnum(InteractionHand.class), buffer.readVarInt(), PipelineToolItem.Settings.STREAM_CODEC.decode(buffer), buffer.readInt(), buffer.readInt(), buffer.readBoolean());
     }
 
-    private PipelineToolMenu(int id, Inventory inventory, InteractionHand hand, int selectedSlot, PipelineToolItem.Settings settings, int paint, int secondary) {
+    private PipelineToolMenu(int id, Inventory inventory, InteractionHand hand, int selectedSlot, PipelineToolItem.Settings settings, int paint, int secondary, boolean data) {
         super(ModMenus.PIPELINE_TOOL.get(), id);
         this.hand = hand;
         this.selectedSlot = selectedSlot;
@@ -40,6 +41,7 @@ public final class PipelineToolMenu extends AbstractContainerMenu {
         initialSettings = Objects.requireNonNull(settings);
         initialPaint = Paint.line(paint) ? paint : Paint.BARE;
         initialSecondary = Paint.line(secondary) ? secondary : initialPaint;
+        initialData = data && tool.is(ModItems.PIPE_LAYING_TOOL.get());
     }
 
     public static void open(ServerPlayer player, InteractionHand hand) {
@@ -47,13 +49,15 @@ public final class PipelineToolMenu extends AbstractContainerMenu {
         var stack = player.getItemInHand(hand);
         var settings = Objects.requireNonNull(stack.get(component(stack)));
         int paint = PipeLayingToolItem.paint(stack), secondary = PipeLayingToolItem.secondary(stack);
-        player.openMenu(new SimpleMenuProvider((id, inventory, owner) -> new PipelineToolMenu(id, inventory, hand, slot, settings, paint, secondary),
+        boolean data=PipeLayingToolItem.data(stack);
+        player.openMenu(new SimpleMenuProvider((id, inventory, owner) -> new PipelineToolMenu(id, inventory, hand, slot, settings, paint, secondary, data),
                 stack.getHoverName()), buffer -> {
             buffer.writeEnum(hand);
             buffer.writeVarInt(slot);
             PipelineToolItem.Settings.STREAM_CODEC.encode(buffer, settings);
             buffer.writeInt(paint);
             buffer.writeInt(secondary);
+            buffer.writeBoolean(data);
         });
     }
 
@@ -80,11 +84,17 @@ public final class PipelineToolMenu extends AbstractContainerMenu {
     public boolean paints() {
         return tool.is(ModItems.PIPE_LAYING_TOOL.get());
     }
+    public boolean initialData(){return initialData;}
 
     /** Server: the packet handler has checked this session's id, lifetime, diameter and paints. The sizing tool keeps no paint; a secondary paint equal to the primary is kept as unset. */
     public void save(PipelineToolItem.Settings settings, int paint, int secondary) {
+        save(settings,paint,secondary,initialData);
+    }
+    public void save(PipelineToolItem.Settings settings, int paint, int secondary,boolean data) {
         tool.set(component(tool), settings);
         if (paints()) {
+            if(data)tool.set(ModItems.PIPE_LAYING_DATA.get(),true);
+            else tool.remove(ModItems.PIPE_LAYING_DATA.get());
             if (paint == Paint.BARE) tool.remove(ModItems.PIPE_LAYING_PAINT.get());
             else tool.set(ModItems.PIPE_LAYING_PAINT.get(), paint);
             if (secondary == paint) tool.remove(ModItems.PIPE_LAYING_SECONDARY.get());

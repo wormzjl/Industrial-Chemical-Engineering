@@ -230,7 +230,7 @@ public record PipeAnchor(Kind kind, BlockPos cell, @Nullable Direction joint, @N
      * A new lane in {@code rack} in the slot aimed at cell-local {@code local} ({@link #aimed}); refused where the slot is
      * taken, or where the rack takes no lane of {@code outside}.
      */
-    private static Resolved rack(BlockPos at, PipeRackBlockEntity rack, Vec3 local, double outside) {
+    public static Resolved rack(BlockPos at, PipeRackBlockEntity rack, Vec3 local, double outside) {
         var aim = aimed(rack, local, outside);
         if (aim == null) return new Resolved(null, Refusal.LANE_SIZE);
         if (!aim.fits()) return new Resolved(null, Refusal.SLOT_TAKEN);
@@ -239,7 +239,7 @@ public record PipeAnchor(Kind kind, BlockPos cell, @Nullable Direction joint, @N
 
     /** The slot on {@code rack}'s tier that a click at cell-local {@code local} aims at, for a line of {@code outside} ({@link RackGeometry#aim}). */
     public static @Nullable RackGeometry.Aim aimed(PipeRackBlockEntity rack, Vec3 local, double outside) {
-        return RackGeometry.aim(rack.rack(), rack.drawnLanes(), outside, new double[]{local.x, local.y, local.z});
+        return RackGeometry.aim(rack.rack(), rack.layingLanes(), outside, new double[]{local.x, local.y, local.z});
     }
 
     /** Whether the laid pipe at {@code pipe} with {@code joints} meets a rack lane through one of them. */

@@ -20,6 +20,12 @@ public final class ModBlocks {
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.FluidDeviceBlock> FLUID_GENERATOR=fluid("fluid_generator",com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.GENERATOR);
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.FluidDeviceBlock> FLUID_VOID=fluid("fluid_void",com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.VOID);
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.FluidDeviceBlock> INLINE_FILTER=fluid("inline_filter",com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.FILTER);
+    public static final DeferredBlock<com.wormzjl.icheme.world.level.block.DataCableBlock> DATA_CABLE=BLOCKS.registerBlock("data_cable",
+            com.wormzjl.icheme.world.level.block.DataCableBlock::new,BlockBehaviour.Properties.of().mapColor(MapColor.COLOR_BLUE).strength(.5F).sound(SoundType.WOOL).noOcclusion().noCollission().dynamicShape());
+    public static final DeferredBlock<com.wormzjl.icheme.world.level.block.ControlPanelBlock> LOCAL_CONTROLLER=controlPanel("local_controller");
+    public static final DeferredBlock<com.wormzjl.icheme.world.level.block.ControlPanelBlock> DCS=controlPanel("dcs");
+    private static DeferredBlock<com.wormzjl.icheme.world.level.block.ControlPanelBlock> controlPanel(String name){return BLOCKS.registerBlock(name,
+            com.wormzjl.icheme.world.level.block.ControlPanelBlock::new,BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(3).sound(SoundType.METAL).noOcclusion());}
     // A pipe rack (batch 2026-10-26-pipe-laying-system): a thin frame, so light and the faces behind it show through; its shape follows its lanes.
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.PipeRackBlock> PIPE_RACK=BLOCKS.registerBlock("pipe_rack",com.wormzjl.icheme.world.level.block.PipeRackBlock::new,
             BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(3.5F).sound(SoundType.METAL).pushReaction(net.minecraft.world.level.material.PushReaction.BLOCK).noOcclusion().dynamicShape());

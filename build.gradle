@@ -519,7 +519,7 @@ def columnGates = gateGroup('column', 'science/column/v3',
         ['column/**', 'materials/**', 'science/column/**', 'compat/presets/**'], ['data/icheme/neural/**', 'natives/**', 'assets/icheme/columnpreset/**', 'assets/icheme/mixturepreset/**'])
 def equipmentGates = gateGroup('equipment', 'science/equipment',
         ['science/material', 'science/math', 'science/fluid/topology/TopologyCompiler*', 'science/thermo/IdealGasFunction*',
-         'science/thermo/PengRobinsonKernel*', 'runtime/fluid/FluidView*', 'runtime/instrument/Instrument*',
+         'science/thermo/PengRobinsonKernel*', 'runtime/fluid/FluidView*', 'runtime/instrument/Instrument*', 'runtime/control/DataPort*',
          'science/column/v3/V3ColumnInput*',
          'science/column/v3/V3ColumnOutcome*', 'science/column/v3/V3ColumnProblemResolver*', 'science/column/v3/V3ColumnSpecification*',
          'science/column/v3/V3ComponentBasis*', 'science/column/v3/V3InitializationOptions*',

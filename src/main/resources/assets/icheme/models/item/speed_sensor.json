@@ -1,74 +1,8 @@
 {
+  "parent": "icheme:item/sensor_probe",
   "textures": {
-    "metal": "icheme:block/equipment_pipe",
-    "cover": "icheme:block/equipment_motor"
+    "face": "icheme:block/sensor_n"
   },
-  "elements": [
-    {
-      "from": [
-        6,
-        7,
-        6
-      ],
-      "to": [
-        10,
-        9,
-        15
-      ],
-      "faces": {
-        "down": {
-          "texture": "#metal"
-        },
-        "up": {
-          "texture": "#metal"
-        },
-        "north": {
-          "texture": "#metal"
-        },
-        "south": {
-          "texture": "#metal"
-        },
-        "east": {
-          "texture": "#metal"
-        },
-        "west": {
-          "texture": "#metal"
-        }
-      }
-    },
-    {
-      "from": [
-        4,
-        5,
-        2
-      ],
-      "to": [
-        12,
-        11,
-        7
-      ],
-      "faces": {
-        "down": {
-          "texture": "#cover"
-        },
-        "up": {
-          "texture": "#cover"
-        },
-        "north": {
-          "texture": "#cover"
-        },
-        "south": {
-          "texture": "#cover"
-        },
-        "east": {
-          "texture": "#cover"
-        },
-        "west": {
-          "texture": "#cover"
-        }
-      }
-    }
-  ],
   "display": {
     "gui": {
       "rotation": [

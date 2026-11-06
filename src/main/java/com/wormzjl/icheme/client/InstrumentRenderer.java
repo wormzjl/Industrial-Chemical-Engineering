@@ -45,7 +45,7 @@ public final class InstrumentRenderer {
         var hosts=InstrumentHosts.nearby(mc.level,mc.player.position(),120,draft==null&&sensorDraft==null&&!wrench&&!levelGauge);
         var selected=draft==null?null:InstrumentHosts.select(hosts,mc.player.getEyePosition(),mc.player.getLookAngle(),mc.player.blockInteractionRange(),draft.kind(),false);
         for(var host:hosts) {
-            for(var sensor:host.metadata().sensors())for(var mount:Sensor.mounts(host,sensor.kind()))if(mount.id().equals(sensor.key().mount()))drawSensor(pose,buffers,mount,camera,sensor.kind(),255);
+            for(var sensor:host.metadata().sensors())for(var mount:Sensor.mounts(host,sensor.kind()))if(mount.id().equals(sensor.key().mount()))drawSensor(pose,buffers,mount,camera,sensor.kind(),255,host.metadata().sensorIds().getOrDefault(sensor.instance(),""));
             if(sensorDraft!=null)for(var mount:Sensor.mounts(host,sensorDraft)){
                 if(mount.centre().distanceToSqr(mc.player.getEyePosition())>64)continue;
                 boolean occupied=host.metadata().sensors().stream().anyMatch(s->s.key().mount().equals(mount.id()))||host.metadata().installed().stream().anyMatch(s->s.key().mount().equals(mount.id()))||host.pipe()&&!mount.id().equals("valve_sensor")&&host.occupied(mount);
@@ -98,8 +98,13 @@ public final class InstrumentRenderer {
         } else LevelRenderer.renderLineBox(pose,lines,selection.bounds().move(camera.scale(-1)),(colour>>16&255)/255f,(colour>>8&255)/255f,(colour&255)/255f,.53f);
     }
     private static void drawSensor(PoseStack pose,MultiBufferSource buffers,Instrument.Mount mount,Vec3 camera,Sensor.Kind kind,int alpha){
+        drawSensor(pose,buffers,mount,camera,kind,alpha,"");
+    }
+    private static void drawSensor(PoseStack pose,MultiBufferSource buffers,Instrument.Mount mount,Vec3 camera,Sensor.Kind kind,int alpha,String id){
         var consumer=buffers.getBuffer(alpha==255?TYPE:GHOST);
         for(var q:InstrumentGeometry.transmitter(kind==Sensor.Kind.LEVEL))quad(pose,consumer,mount,camera,q,0,alpha);
+        if(alpha==255)text(pose,buffers,mount,camera,switch(kind){case PRESSURE->"P";case TEMPERATURE->"T";case FLOW->"F";case LEVEL->"L";case SPEED->"N";},0,.022,.006f,.074,0xff253e40);
+        if(alpha==255&&!id.isEmpty())text(pose,buffers,mount,camera,id,0,-.071,(float)Math.min(.0013,.07/Math.max(1,Minecraft.getInstance().font.width(id))),.074,0xffe1eeee);
         var tap=mount.localTap();var key=new Connector(List.of(tap[0],tap[1],tap[2]),mount.bottomEntry(),kind==Sensor.Kind.TEMPERATURE,mount.probeDepth());if(CONNECTORS.size()>2048)CONNECTORS.clear();
         for(var q:CONNECTORS.computeIfAbsent(key,k->InstrumentGeometry.connection(tap,k.bottom(),k.temperature(),k.probeDepth())))quad(pose,consumer,mount,camera,q,0,alpha);
     }
@@ -122,7 +127,8 @@ public final class InstrumentRenderer {
     }
     private static String compact(double value){return String.format(Locale.ROOT,Math.abs(value)>=10000?"%.1e":"%.3g",value);}
     private static void quad(PoseStack pose,VertexConsumer consumer,Instrument.Mount mount,Vec3 camera,InstrumentGeometry.Quad q,int tint,int alpha){var v=q.vertices();Vec3 p0=mount.point(v[0],v[1],v[2]),p1=mount.point(v[3],v[4],v[5]),p2=mount.point(v[6],v[7],v[8]);var n=p1.subtract(p0).cross(p2.subtract(p0)).normalize();int c=tint==0?q.colour():tint;for(int j=0;j<4;j++){var p=mount.point(v[j*3],v[j*3+1],v[j*3+2]).subtract(camera);consumer.addVertex(pose.last(),(float)p.x,(float)p.y,(float)p.z).setColor(c>>16&255,c>>8&255,c&255,alpha).setUv(0,0).setOverlay(OverlayTexture.NO_OVERLAY).setLight(tint==0?LevelRenderer.getLightColor(Minecraft.getInstance().level,net.minecraft.core.BlockPos.containing(mount.centre())):LightTexture.FULL_BRIGHT).setNormal(pose.last(),(float)n.x,(float)n.y,(float)n.z);}}
-    private static void text(PoseStack pose,MultiBufferSource buffers,Instrument.Mount m,Vec3 camera,String text,double x,double y,float scale){var mc=Minecraft.getInstance();var p=m.point(x,y,InstrumentGeometry.LABEL).subtract(camera);pose.pushPose();pose.translate(p.x,p.y,p.z);float angle=switch(m.face()){case NORTH->180;case EAST->90;case WEST->-90;default->0;};pose.mulPose(Axis.YP.rotationDegrees(angle));pose.scale(scale,-scale,scale);mc.font.drawInBatch(text,-mc.font.width(text)/2f,0,0xff252b2e,false,pose.last().pose(),buffers,net.minecraft.client.gui.Font.DisplayMode.NORMAL,0,LightTexture.FULL_BRIGHT);pose.popPose();}
+    private static void text(PoseStack pose,MultiBufferSource buffers,Instrument.Mount m,Vec3 camera,String text,double x,double y,float scale){text(pose,buffers,m,camera,text,x,y,scale,InstrumentGeometry.LABEL,0xff252b2e);}
+    private static void text(PoseStack pose,MultiBufferSource buffers,Instrument.Mount m,Vec3 camera,String text,double x,double y,float scale,double depth,int colour){var mc=Minecraft.getInstance();var p=m.point(x,y,depth).subtract(camera);pose.pushPose();pose.translate(p.x,p.y,p.z);float angle=switch(m.face()){case NORTH->180;case EAST->90;case WEST->-90;default->0;};pose.mulPose(Axis.YP.rotationDegrees(angle));pose.scale(scale,-scale,scale);mc.font.drawInBatch(text,-mc.font.width(text)/2f,0,colour,false,pose.last().pose(),buffers,net.minecraft.client.gui.Font.DisplayMode.NORMAL,0,LightTexture.FULL_BRIGHT);pose.popPose();}
     private static void drawLevelGhost(PoseStack pose,MultiBufferSource buffers,InstrumentHosts.Host host,Vec3 camera,int tint,int alpha){
         if(!(host.entity() instanceof com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity shell))return;
         var origin=shell.origin();var consumer=buffers.getBuffer(GHOST);
@@ -141,7 +147,9 @@ public final class InstrumentRenderer {
         var selected=InstrumentHosts.select(hosts,mc.player.getEyePosition(),mc.player.getLookAngle(),mc.player.blockInteractionRange(),null,true);
         var fitting=InstrumentHosts.selectFitting(hosts,mc.player.getEyePosition(),mc.player.getLookAngle(),mc.player.blockInteractionRange(),true);
         Component line;
-        if(fitting!=null&&fitting.mount() instanceof InstrumentHosts.LevelGauge&&(selected==null||fitting.distance()<selected.distance())&&InstrumentHosts.reachable(mc.player,fitting.host(),fitting.mount())){
+        String sensorId=sensorIdAt(hosts,mc.player);
+        if(sensorId!=null)line=Component.literal(sensorId);
+        else if(fitting!=null&&fitting.mount() instanceof InstrumentHosts.LevelGauge&&(selected==null||fitting.distance()<selected.distance())&&InstrumentHosts.reachable(mc.player,fitting.host(),fitting.mount())){
             var display=TankRenderer.get(fitting.host().entity().getBlockPos(),mc.level.getGameTime());
             line=display==null?Component.translatable("gui.icheme.gauge.unavailable"):Component.literal(String.format(Locale.ROOT,"%.3f m",display.level()));
         }else{
@@ -152,6 +160,15 @@ public final class InstrumentRenderer {
         }
         var g=event.getGuiGraphics();int x=g.guiWidth()/2+14,y=g.guiHeight()/2+12;
         g.fill(x-3,y-2,x+mc.font.width(line)+3,y+10,0xe0202a31);g.drawString(mc.font,line,x,y,0xffeaf1f5,false);
+    }
+
+    private static String sensorIdAt(List<InstrumentHosts.Host> hosts,net.minecraft.client.player.LocalPlayer player){
+        var eye=player.getEyePosition();var end=eye.add(player.getLookAngle().scale(player.blockInteractionRange()));double nearest=Double.POSITIVE_INFINITY;String id=null;
+        for(var host:hosts)for(var sensor:host.metadata().sensors())for(var mount:Sensor.mounts(host,sensor.kind())){
+            if(!mount.id().equals(sensor.key().mount()))continue;var hit=mount.bounds().clip(eye,end).orElse(null);
+            if(hit==null||hit.distanceTo(eye)>=nearest||!InstrumentHosts.reachable(player,host,mount))continue;nearest=hit.distanceTo(eye);
+            id=host.metadata().sensorIds().getOrDefault(sensor.instance(),sensor.kind().name())+" / "+sensor.kind().name();
+        }return id;
     }
 
     // ---- the client's live readings: ephemeral, identity/instance-bound, the nearest 64 within 120 m, requested explicitly ----

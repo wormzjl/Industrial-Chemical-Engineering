@@ -29,6 +29,10 @@ public final class ModItems {
     public static final DeferredHolder<DataComponentType<?>, DataComponentType<Integer>> PIPE_LAYING_PAINT = linePaint("pipe_laying_paint");
     /** The secondary paint (their flanges), 0xRRGGBB or bare; absent: the primary paint, as the flanges took before it existed. */
     public static final DeferredHolder<DataComponentType<?>, DataComponentType<Integer>> PIPE_LAYING_SECONDARY = linePaint("pipe_laying_secondary");
+    /** Absent on existing tools: pipe mode. Pipe sizes and paints remain stored while laying data cables. */
+    public static final DeferredHolder<DataComponentType<?>,DataComponentType<Boolean>> PIPE_LAYING_DATA = COMPONENTS.register("pipe_laying_data",
+            ()->DataComponentType.<Boolean>builder().persistent(com.mojang.serialization.Codec.BOOL)
+                    .networkSynchronized(net.minecraft.network.codec.ByteBufCodecs.BOOL).build());
 
     private static DeferredHolder<DataComponentType<?>, DataComponentType<Integer>> linePaint(String name) {
         return COMPONENTS.register(name, () -> DataComponentType.<Integer>builder()
@@ -38,6 +42,9 @@ public final class ModItems {
     }
 
     public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(IChemE.MOD_ID);
+        public static final DeferredItem<net.minecraft.world.item.Item> DATA_CABLE=ITEMS.registerSimpleItem("data_cable");
+    public static final DeferredItem<net.minecraft.world.item.BlockItem> LOCAL_CONTROLLER=ITEMS.registerSimpleBlockItem(ModBlocks.LOCAL_CONTROLLER);
+    public static final DeferredItem<net.minecraft.world.item.BlockItem> DCS=ITEMS.registerSimpleBlockItem(ModBlocks.DCS);
     public static final DeferredItem<BlockItem> FLUID_RESERVOIR=ITEMS.registerSimpleBlockItem("fluid_reservoir",ModBlocks.FLUID_RESERVOIR);
     public static final DeferredItem<BlockItem> FLUID_PIPE=ITEMS.registerSimpleBlockItem("fluid_pipe",ModBlocks.FLUID_PIPE);
     public static final DeferredItem<PipelineFittingItem> FLUID_PUMP=fitting("fluid_pump",Instrument.Type.PUMP);

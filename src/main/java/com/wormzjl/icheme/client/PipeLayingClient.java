@@ -112,11 +112,11 @@ public final class PipeLayingClient {
     }
 
     public static boolean holding(LocalPlayer player) {
-        return tool(player.getMainHandItem()) || tool(player.getOffhandItem());
+        return LayingToolAim.holding(player)&&!PipeLayingToolItem.data(LayingToolAim.held(player));
     }
 
     private static boolean tool(ItemStack stack) {
-        return stack.is(ModItems.PIPE_LAYING_TOOL.get());
+        return stack.is(ModItems.PIPE_LAYING_TOOL.get())&&!PipeLayingToolItem.data(stack);
     }
 
     /** One command per press of the use key; a held key does not repeat it. */
@@ -124,7 +124,7 @@ public final class PipeLayingClient {
     public static void use(InputEvent.InteractionKeyMappingTriggered event) {
         var mc = Minecraft.getInstance();
         var player = mc.player;
-        if (!event.isUseItem() || player == null || mc.level == null || !tool(player.getItemInHand(event.getHand()))) return;
+        if (!event.isUseItem() || player == null || mc.level == null || !holding(player) || !tool(player.getItemInHand(event.getHand()))) return;
         event.setCanceled(true);
         event.setSwingHand(false);
         if (!armed) return;
@@ -259,42 +259,7 @@ public final class PipeLayingClient {
      * unless the block it hits is that rack and the hit is on a lane; else the block it hits. The tier point is sent just
      * under the beams' top, where no lane resting on them is picked.
      */
-    private static @Nullable PipeAnchor.Click aimed(Minecraft mc) {
-        var hit = mc.hitResult instanceof BlockHitResult block && block.getType() == HitResult.Type.BLOCK ? block : null;
-        var vanilla = hit == null ? null : new PipeAnchor.Click(hit.getBlockPos(), hit.getDirection(), hit.getLocation().subtract(Vec3.atLowerCornerOf(hit.getBlockPos())));
-        var player = mc.player;
-        if (player == null || mc.level == null) return vanilla;
-        var eye = player.getEyePosition();
-        var look = player.getViewVector(1);
-        double reach = hit != null ? hit.getLocation().distanceTo(eye) : player.blockInteractionRange();
-        double[] from = {eye.x, eye.y, eye.z}, along = {look.x, look.y, look.z}, next = new double[3], delta = new double[3];
-        int[] at = {(int) Math.floor(eye.x), (int) Math.floor(eye.y), (int) Math.floor(eye.z)}, step = new int[3];
-        for (int a = 0; a < 3; a++) {
-            step[a] = along[a] > 0 ? 1 : -1;
-            delta[a] = along[a] == 0 ? Double.MAX_VALUE : 1 / Math.abs(along[a]);
-            next[a] = along[a] == 0 ? Double.MAX_VALUE : (along[a] > 0 ? at[a] + 1 - from[a] : from[a] - at[a]) * delta[a];
-        }
-        var entered = Direction.UP;
-        for (double t = 0; t <= reach + 1e-6; ) {
-            var cell = new BlockPos(at[0], at[1], at[2]);
-            boolean last = hit != null && cell.equals(hit.getBlockPos());
-            if (mc.level.getBlockEntity(cell) instanceof PipeRackBlockEntity rack) {
-                if (last && onLane(rack, vanilla)) return vanilla;
-                double tier = rack.frame().beam() * LineGeometry.OFFSET, crossing = along[1] == 0 ? -1 : (cell.getY() + tier - eye.y) / along[1];
-                if (crossing >= 0) {
-                    double x = eye.x + crossing * look.x - cell.getX(), z = eye.z + crossing * look.z - cell.getZ();
-                    if (x >= 0 && x <= 1 && z >= 0 && z <= 1) return new PipeAnchor.Click(cell, entered, new Vec3(x, tier - LineGeometry.OFFSET, z));
-                }
-            }
-            if (last) break;
-            int a = next[0] < next[1] ? (next[0] < next[2] ? 0 : 2) : (next[1] < next[2] ? 1 : 2);
-            t = next[a];
-            next[a] += delta[a];
-            at[a] += step[a];
-            entered = Direction.values()[2 * ((a + 2) % 3) + (step[a] > 0 ? 0 : 1)];
-        }
-        return vanilla;
-    }
+    private static @Nullable PipeAnchor.Click aimed(Minecraft mc){return LayingToolAim.aimed(mc,PipeLayingClient::onLane);}
 
     /** Whether {@code click} lands on a lane of {@code rack}. */
     private static boolean onLane(PipeRackBlockEntity rack, @Nullable PipeAnchor.Click click) {
@@ -315,12 +280,10 @@ public final class PipeLayingClient {
 
     /** The slot {@code click} aims at on a rack's tier, as a ghost lane open at its far face; red where it does not fit, or where {@code refused}. */
     private static @Nullable Slot slot(Level level, PipeAnchor.Click click, double outside, boolean refused) {
-        if (!(level.getBlockEntity(click.clicked()) instanceof PipeRackBlockEntity rack) || onLane(rack, click)) return null;
-        var aim = PipeAnchor.aimed(rack, click.local(), outside);
-        if (aim == null) return null;
-        int code = PipeSizes.code(outside), width = RackGeometry.width(PipeSizes.outsideOf(code));
-        var lane = new RackGeometry.Lane(aim.option(), width, 1 << aim.through() | 1 << aim.open(), 1 << aim.through(), code);
-        return new Slot(click.clicked(), rack.frame(), lane, aim.through(), refused || !aim.fits());
+        if(!(level.getBlockEntity(click.clicked()) instanceof PipeRackBlockEntity rack)||onLane(rack,click))return null;
+        var aimed=LayingToolAim.slot(level,click,outside);if(aimed==null)return null;
+        int through=Integer.numberOfTrailingZeros(aimed.lane().joined());
+        return new Slot(click.clicked(),rack.frame(),aimed.lane(),through,refused||!aimed.fits());
     }
 
     /** The boxes of what a dismantle at {@code click} removes, in world coordinates: a pipe block or a rack lane's arms; null for anything else. */
@@ -337,7 +300,7 @@ public final class PipeLayingClient {
 
     /** The laying tool the player holds: the main hand's, else the off hand's. */
     private static ItemStack held(LocalPlayer player) {
-        return tool(player.getMainHandItem()) ? player.getMainHandItem() : player.getOffhandItem();
+        return LayingToolAim.held(player);
     }
 
     private static double settingsDiameter(LocalPlayer player) {
@@ -562,16 +525,7 @@ public final class PipeLayingClient {
     /** While a rack is aimed, a small cube on each tier position no lane takes: where a new lane may go. */
     private static void freeSlots(Level level, @Nullable PipeAnchor.Click hit, Set<Object> shown) {
         if (hit == null || !(level.getBlockEntity(hit.clicked()) instanceof PipeRackBlockEntity rack)) return;
-        var frame = rack.rack();
-        int taken = RackGeometry.taken(frame, rack.drawnLanes());
-        for (int position = 0; position < RackGeometry.POSITIONS; position++) {
-            if ((taken >> position & 1) != 0) continue;
-            var c = frame.world(RackGeometry.centre(position, 1), (RackGeometry.BEAM_TOP + 2) * LineGeometry.OFFSET, .5);
-            double half = .04;
-            var key = "icheme:free_slot:" + position;
-            shown.add(key);
-            Outlines.box(key, new AABB(c[0] - half, c[1] - half, c[2] - half, c[0] + half, c[1] + half, c[2] + half).move(hit.clicked()), FREE_COLOUR, 1 / 32F);
-        }
+        int position=0;for(var box:LayingToolAim.freeSlots(rack)){var key="icheme:free_slot:"+position++;shown.add(key);Outlines.box(key,box,FREE_COLOUR,1/32F);}
     }
 
     /** A flat square {@code 2 half} blocks across on {@code face} of {@code cell}, centred at block-local {@code point} on that face. */

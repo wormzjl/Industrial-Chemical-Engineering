@@ -41,7 +41,7 @@ public final class PipeLaying {
     public static @Nullable Component lay(ServerPlayer player, InteractionHand hand, PipeAnchor.Click startClick, PipeAnchor.Click endClick, List<BlockPos> path, List<Integer> options) {
         var stack = player.getItemInHand(hand);
         var settings = stack.get(ModItems.PIPE_LAYING_SETTINGS.get());
-        if (!stack.is(ModItems.PIPE_LAYING_TOOL.get()) || settings == null || player.isSpectator() || !player.mayBuild()) return message("not_allowed");
+        if (!stack.is(ModItems.PIPE_LAYING_TOOL.get()) || PipeLayingToolItem.data(stack) || settings == null || player.isSpectator() || !player.mayBuild()) return message("not_allowed");
         var level = player.serverLevel();
         var startClicked = startClick.clicked();
         var endClicked = endClick.clicked();
@@ -144,7 +144,7 @@ public final class PipeLaying {
      * neighbours keep their joints towards it and become open ends.
      */
     public static @Nullable Component dismantle(ServerPlayer player, InteractionHand hand, PipeAnchor.Click click) {
-        if (!player.getItemInHand(hand).is(ModItems.PIPE_LAYING_TOOL.get()) || player.isSpectator() || !player.mayBuild()) return message("not_allowed");
+        if (!player.getItemInHand(hand).is(ModItems.PIPE_LAYING_TOOL.get()) || PipeLayingToolItem.data(player.getItemInHand(hand)) || player.isSpectator() || !player.mayBuild()) return message("not_allowed");
         var position = click.clicked();
         var level = player.serverLevel();
         if (!player.canInteractWithBlock(position, 1) || !level.hasChunkAt(position)) return message("out_of_reach");

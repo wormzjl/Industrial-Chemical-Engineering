@@ -725,7 +725,7 @@ public final class RackGeometry {
      * turn at mid-block up, down or out flat, or a rise or drop to a crossing level at mid-block and out sideways; a
      * tee's lane as its leg lays it.
      */
-    static List<double[]> path(Rack rack, Lane lane) {
+    public static List<double[]> path(Rack rack, Lane lane) {
         if (rack.tee()) {
             var leg = leg(rack, lane);
             return path(leg.rack, leg.lane);

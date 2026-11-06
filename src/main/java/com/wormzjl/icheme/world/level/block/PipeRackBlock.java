@@ -123,7 +123,7 @@ public final class PipeRackBlock extends BaseEntityBlock {
     }
 
     private static boolean carries(BlockGetter level, BlockPos position) {
-        return level.getBlockEntity(position) instanceof PipeRackBlockEntity rack && !rack.lanes().isEmpty();
+        return level.getBlockEntity(position) instanceof PipeRackBlockEntity rack && (!rack.lanes().isEmpty()||!rack.cables().isEmpty());
     }
 
     /** A rack with lanes cannot be mined (D9): its pipes come out first. */
@@ -167,6 +167,7 @@ public final class PipeRackBlock extends BaseEntityBlock {
         if (state.getBlock() != replacement.getBlock() && level instanceof ServerLevel server && level.getBlockEntity(position) instanceof PipeRackBlockEntity rack)
             FluidWorldAuthority.find(server.getServer()).ifPresent(world -> {
                 for (var lane : rack.lanes()) world.remove(lane.identity());
+                for(var cable:rack.cables())world.controls().removeCable(cable.site());
             });
         super.onRemove(state, level, position, replacement, moved);
     }

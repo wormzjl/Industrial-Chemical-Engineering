@@ -1,0 +1,7 @@
+{
+  "loader": "icheme:data_cable",
+  "textures": {
+    "cable": "icheme:block/data_cable",
+    "particle": "icheme:block/data_cable"
+  }
+}

@@ -194,6 +194,7 @@ public final class IChemE {
         modEventBus.addListener(com.wormzjl.icheme.network.EquipmentNetwork::register);
         modEventBus.addListener(com.wormzjl.icheme.network.AssemblyNetwork::register);
         modEventBus.addListener(com.wormzjl.icheme.network.MachineNetwork::register);
+        modEventBus.addListener(com.wormzjl.icheme.network.ControlNetwork::register);
         modEventBus.addListener(IChemE::registerCapabilities);
         modContainer.registerConfig(ModConfig.Type.COMMON, CONFIG_SPEC, "icheme-common.toml");
         // The client's own settings (the process screens' panel theme); a dedicated server never loads them.

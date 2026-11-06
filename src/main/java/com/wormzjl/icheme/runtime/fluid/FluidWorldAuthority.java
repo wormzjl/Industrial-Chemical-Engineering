@@ -76,6 +76,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
     private final Watchers moverWatchers=new Watchers();
     private final Map<Long,com.wormzjl.icheme.network.FluidNetwork.MoverState> publishedMovers=new HashMap<>();
     private final com.wormzjl.icheme.runtime.instrument.InstrumentService instruments;
+    private final com.wormzjl.icheme.runtime.control.ControlFacts controlFacts;
+    private com.wormzjl.icheme.runtime.control.ControlService controls;
+    public com.wormzjl.icheme.runtime.control.ControlService controls(){owned();if(controls==null)controls=new com.wormzjl.icheme.runtime.control.ControlService(this,controlFacts);return controls;}
     public com.wormzjl.icheme.runtime.instrument.InstrumentService instruments(){owned();return instruments;}
     private boolean closed;
     private long lastDebugChat=Long.MIN_VALUE;
@@ -88,6 +91,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
         options=IChemE.fluidOptions();
         // Both stores open before anything starts: one this build cannot read refuses the world with its files as they are.
         var accessories=com.wormzjl.icheme.runtime.instrument.InstrumentService.Store.open(server);
+        controlFacts=com.wormzjl.icheme.runtime.control.ControlFacts.open(server);
+        controlFacts.requireSensorIds(accessories.allSensors());
         data=FluidSavedData.open(server,this::model,catalog);
         model=model(new FluidCheckpointCodec.PackageKey(com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(catalog)));
         propertyReload=new FluidPropertyReloadGuard(catalog,com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(catalog),model);
@@ -119,6 +124,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
             }
         });
         instruments=new com.wormzjl.icheme.runtime.instrument.InstrumentService(server,this,accessories);
+        runtime.coordinator().controls(g->controls().apply(g));
         instruments.reconcileLegacyValves();
         shafts=new ShaftTrains(topology,registry::owner,runtime.coordinator());runtime.coordinator().shafts(shafts);shafts.host(new ShaftHost());
         electric=new ElectricStores(topology,registry::owner,runtime.coordinator(),()->new ElectricStores.Settings(IChemE.joulesPerFE(),IChemE.machinesNeedPower()));shafts.electric(electric);
@@ -561,7 +567,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
     }
     /** Reading committed static configuration never advances or materialises process state. */
     public Optional<PhysicalFluidTopology.Device> committedDevice(long id){owned();var record=topology.active().get(id);return record==null?Optional.empty():Optional.of(record.device());}
-    public void remove(long id){owned();instruments.recoverHost(id);var old=registrations().get(id);if(old!=null)submit(List.of(new WorldTopologyLedger.Edit(id,null)),topology.nextIdentity(),old.device().filter()?new WorldTopologyLedger.Recovery(id,null):null);}
+    public void remove(long id){owned();controls().removeHost(id);instruments.recoverHost(id);var old=registrations().get(id);if(old!=null)submit(List.of(new WorldTopologyLedger.Edit(id,null)),topology.nextIdentity(),old.device().filter()?new WorldTopologyLedger.Recovery(id,null):null);}
     /**
      * Queues a filter's solid recovery as a ledger event and returns it, as an edit is queued: nothing is applied or
      * delivered here. The engine applies it with the next batch of events, takes the cake the island holds then and
@@ -613,6 +619,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         // Repair kits (W10b): queued engine events, applied after the devices they name; a repaired failed pump wakes its island.
         if(health.hasEvents()&&propertyHold==null){health.apply();runtime.coordinator().pumpIfUseful();}
         instruments.tick(topology.onlineTick());
+        controls().tick(topology.onlineTick());
         presentation.tick(topology.onlineTick());
         // The watched drivers' states at the presentation cadence (W3): a read of what the trains last decided.
         if(!driverWatchers.isEmpty()&&topology.onlineTick()%100==0)publishDrivers();
@@ -761,9 +768,11 @@ public final class FluidWorldAuthority implements AutoCloseable {
         String name=dimension.location().toString();
         for(var cell:List.copyOf(loaded.getBlockEntitiesPos())) {
             var block=loaded.getBlockState(cell).getBlock();
-            if(!(block instanceof FluidDeviceBlock)&&!(block instanceof EquipmentShellBlock)&&!(block instanceof com.wormzjl.icheme.world.level.block.PipeRackBlock))continue;
+            if(!(block instanceof FluidDeviceBlock)&&!(block instanceof EquipmentShellBlock)&&!(block instanceof com.wormzjl.icheme.world.level.block.PipeRackBlock)&&!(block instanceof com.wormzjl.icheme.world.level.block.ControlPanelBlock)&&!(block instanceof com.wormzjl.icheme.world.level.block.DataCableBlock))continue;
             var entity=loaded.getBlockEntity(cell); // Includes saved cells not yet promoted from pending NBT.
-            if(entity instanceof com.wormzjl.icheme.world.level.block.entity.PipeRackBlockEntity rack)rack.bind(this);
+            if(entity instanceof com.wormzjl.icheme.world.level.block.entity.ControlPanelBlockEntity box)controls().loaded(box);
+            else if(entity instanceof com.wormzjl.icheme.world.level.block.entity.DataCableBlockEntity cable)controls().loaded(cable);
+            else if(entity instanceof com.wormzjl.icheme.world.level.block.entity.PipeRackBlockEntity rack){rack.bind(this);controls().loaded(rack);}
             else if(entity instanceof FluidDeviceBlockEntity pipe) {
                 var position=new PhysicalFluidTopology.Position(name,cell.getX(),cell.getY(),cell.getZ());
                 var record=registry.at(position).orElseGet(()->place(position,pipe.kind(),PhysicalFluidTopology.Direction.valueOf(pipe.getBlockState().getValue(FluidDeviceBlock.FACING).name()),FluidDeviceBlock.cutoff(pipe.getBlockState()),FluidDeviceBlock.hasPressureValve(pipe.getBlockState()),FluidDeviceBlock.hasFilter(pipe.getBlockState()),FluidDeviceBlock.hasMover(pipe.getBlockState())?pipe.getBlockState().getValue(FluidDeviceBlock.INLINE_MOVER).kind():TopologyCompiler.Kind.PIPE,pipe.kind()==TopologyCompiler.Kind.PIPE?pipe.joints():PhysicalFluidTopology.ALL_FACES));
@@ -1049,6 +1058,28 @@ public final class FluidWorldAuthority implements AutoCloseable {
     }
     /** Marks a device for its next bucket (a test or tool asking for a refresh gets it on the engine's schedule). */
     public com.wormzjl.icheme.runtime.instrument.InstrumentHosts.Host instrumentHost(long id){owned();var r=registrations().get(id);if(r==null)return null;var p=r.device().position();var level=server.getLevel(dimension(p.dimension()));if(level==null)return null;var h=com.wormzjl.icheme.runtime.instrument.InstrumentHosts.at(level,new BlockPos(p.x(),p.y(),p.z()));return h!=null&&h.identity()==id?h:null;}
+    public void controlInputsChanged(java.util.Collection<Long> devices){owned();runtime.coordinator().controlsMoved(devices.stream().map(registry::owner).filter(java.util.Objects::nonNull).distinct().toList());}
+    public boolean controlCoupled(long sensor,long output){owned();var a=registry.owner(sensor);return a!=null&&a.equals(registry.owner(output));}
+    public boolean controlReserved(long output){
+        owned();var r=registrations().get(output);if(r==null)return false;
+        if(r.device().control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.ControlValve valve
+                &&(valve.source()==com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.SHAFT_SPEED||com.wormzjl.icheme.science.fluid.network.PortPlan.COLUMN_SENSOR.equals(valve.sensor())))return true;
+        var heat=r.device().heat();if(heat!=null&&(heat.control().mode()==HeatUnit.Mode.COLUMN||heat.control().mode()==HeatUnit.Mode.RATIO))return true;
+        for(var entry:lines.entrySet())if(entry.getValue().status()==Lines.Status.COMPLETE&&entry.getValue().valve()==output){var side=registrations().get(entry.getKey());if(side!=null&&side.device().heat()!=null&&side.device().heat().lines()!=com.wormzjl.icheme.science.assembly.ExchangerBlueprint.Lines.NONE)return true;}
+        return false;
+    }
+    /** A valve separated from a vessel by a single hydraulic path has an unambiguous inlet/outlet action. */
+    public com.wormzjl.icheme.runtime.control.ControlSettings.Action controlAction(long sensor,long output){
+        owned();var owner=registry.owner(output);if(owner==null)return null;var graph=runtime.coordinator().observe(owner).graph();
+        int source=-1;for(int n=0;n<graph.reservoirs().size();n++)if(graph.reservoirs().get(n).id()==sensor)source=n;
+        if(source<0)return null;
+        for(int e=0;e<graph.pipes().size();e++){var p=graph.pipes().get(e);if(!(p.control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.ControlValve)||graph.reservoirs().get(p.first()).id()!=output)continue;
+            var seen=new java.util.BitSet();var queue=new java.util.ArrayDeque<Integer>();queue.add(p.first());seen.set(p.first());
+            while(!queue.isEmpty()){int n=queue.removeFirst();for(int k=0;k<graph.pipes().size();k++)if(k!=e){var link=graph.pipes().get(k);int next=link.first()==n?link.second():link.second()==n?link.first():-1;if(next>=0&&!seen.get(next)){seen.set(next);queue.addLast(next);}}}
+            if(seen.get(p.second()))return null;
+            return seen.get(source)?com.wormzjl.icheme.runtime.control.ControlSettings.Action.OUTLET:com.wormzjl.icheme.runtime.control.ControlSettings.Action.INLET;
+        }return null;
+    }
     public void instrumentObservationChanged(long id){owned();refreshObserved(id);}
     public void forgetFlowmeter(long id){owned();registry.forgetFlowmeter(id);}
     /** Whether a flowmeter is installed on device {@code id} (W8). */

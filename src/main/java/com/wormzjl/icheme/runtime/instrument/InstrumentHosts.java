@@ -33,11 +33,18 @@ public final class InstrumentHosts {
         synchronized(INDEX_LOCK){
             LOADED.computeIfAbsent(be.getLevel(),l->new HashMap<>()).put(be.getBlockPos().immutable(),extent);
             var equipped=INSTALLED.computeIfAbsent(be.getLevel(),l->new HashMap<>());
-            if(be instanceof Instrument.Holder h&&(!h.instruments().installed().isEmpty()||!h.instruments().sensors().isEmpty()||h.instruments().fitting()!=null))equipped.put(be.getBlockPos().immutable(),extent);else equipped.remove(be.getBlockPos());
+            if(be instanceof Instrument.Holder h&&(!h.instruments().installed().isEmpty()||!h.instruments().sensors().isEmpty()||h.instruments().dataPort()!=null||h.instruments().fitting()!=null))equipped.put(be.getBlockPos().immutable(),extent);else equipped.remove(be.getBlockPos());
         }
     }
     private static Map<BlockPos,Double> loaded(Level level,boolean installed){synchronized(INDEX_LOCK){return Map.copyOf((installed?INSTALLED:LOADED).getOrDefault(level,Map.of()));}}
     public static void unloaded(BlockEntity be){synchronized(INDEX_LOCK){var set=LOADED.get(be.getLevel());if(set!=null)set.remove(be.getBlockPos());var equipped=INSTALLED.get(be.getLevel());if(equipped!=null)equipped.remove(be.getBlockPos());}}
+    public static List<com.wormzjl.icheme.runtime.control.DataPort> dataPorts(Level level,Vec3 centre,double radius){
+        var result=new ArrayList<com.wormzjl.icheme.runtime.control.DataPort>();
+        for(var entry:loaded(level,true).entrySet()){
+            var pos=entry.getKey();double reach=radius+entry.getValue();if(pos.getCenter().distanceToSqr(centre)>reach*reach||!level.hasChunkAt(pos))continue;
+            if(level.getBlockEntity(pos) instanceof Instrument.Holder holder){var port=holder.instruments().dataPort();if(port!=null&&port.centre().distanceToSqr(centre)<=radius*radius)result.add(port);}
+        }return List.copyOf(result);
+    }
     public static List<Host> nearby(Level level,Vec3 centre,double radius){return nearby(level,centre,radius,false);}
     public static List<Host> nearby(Level level,Vec3 centre,double radius,boolean installedOnly){
         var result=new LinkedHashMap<Long,Host>();
@@ -53,7 +60,16 @@ public final class InstrumentHosts {
     }
     public static Host at(Level level,BlockPos position){if(!level.hasChunkAt(position))return null;var be=level.getBlockEntity(position);
         if(be instanceof FluidDeviceBlockEntity pipe&&pipe.getBlockState().getBlock() instanceof FluidDeviceBlock block&&block.kind()==TopologyCompiler.Kind.PIPE&&pipe.fluidIdentity()>0)return new Host(pipe.fluidIdentity(),pipe,pipe.transition()?List.of():pipeMounts(position,pipe.bore(),pipe.getBlockState()),true);
-        if(be instanceof EquipmentShellBlockEntity shell&&shell.shape()!=null){var shape=shell.shape();var c=ShapeRasterizer.fluidCell(shape);if(c==null)return null;var root=shell.origin().offset(c.x(),c.y(),c.z());if(!root.equals(position))return at(level,root);if(shell.fluidIdentity()>0)return new Host(shell.fluidIdentity(),shell,reservoirMounts(shape,shell.origin()),false);}
+        if(be instanceof EquipmentShellBlockEntity shell&&shell.shape()!=null){
+            var shape=shell.shape();
+            if(shell.fluidIdentity()>0)return new Host(shell.fluidIdentity(),shell,reservoirMounts(shape,shell.origin(),shell.cell()),false);
+            var cells=ShapeRasterizer.fluidCells(shape);
+            var c=cells.stream().min(Comparator.comparingDouble(cell->
+                    Math.pow(cell.x()-shell.cell().x(),2)+Math.pow(cell.y()-shell.cell().y(),2)+Math.pow(cell.z()-shell.cell().z(),2))).orElse(null);
+            if(c==null)return null;
+            var root=shell.origin().offset(c.x(),c.y(),c.z());
+            if(!root.equals(position))return at(level,root);
+        }
         return null;
     }
     public static List<Instrument.Mount> pipeMounts(BlockPos pos,double bore,net.minecraft.world.level.block.state.BlockState state){return pipeMounts(pos,bore,FluidDeviceBlock.connectionMask(state),state.getValue(FluidDeviceBlock.FACING));}
@@ -78,7 +94,8 @@ public final class InstrumentHosts {
         return mount==null?null:new Selection(host,mount,hit.getLocation().distanceTo(player.getEyePosition()));
     }
     public static boolean pipeReachable(net.minecraft.world.entity.player.Player player,Host host){var hit=player.pick(player.blockInteractionRange(),0,false);return hit instanceof BlockHitResult b&&hit.getType()==HitResult.Type.BLOCK&&b.getBlockPos().equals(host.entity().getBlockPos());}
-    public static List<Instrument.Mount> reservoirMounts(EquipmentShape shape,BlockPos origin){return com.wormzjl.icheme.science.equipment.InstrumentGeometry.sockets(shape).stream().map(t->new Instrument.Mount(t.id(),new Vec3(origin.getX()+t.x(),origin.getY()+t.y(),origin.getZ()+t.z()),reservoirFace(shape),Set.of(t.pressure()?GaugeSettings.Kind.PRESSURE:GaugeSettings.Kind.TEMPERATURE),t.top())).toList();}
+    public static List<Instrument.Mount> reservoirMounts(EquipmentShape shape,BlockPos origin){return reservoirMounts(shape,origin,ShapeRasterizer.fluidCell(shape));}
+    private static List<Instrument.Mount> reservoirMounts(EquipmentShape shape,BlockPos origin,ShapeRasterizer.Cell node){return InstrumentGeometry.sockets(shape,node).stream().map(t->new Instrument.Mount(t.id(),new Vec3(origin.getX()+t.x(),origin.getY()+t.y(),origin.getZ()+t.z()),t.face()<0?reservoirFace(shape):Direction.values()[t.face()],Set.of(t.pressure()?GaugeSettings.Kind.PRESSURE:GaugeSettings.Kind.TEMPERATURE),t.top())).toList();}
     private static Direction reservoirFace(EquipmentShape shape){if(!shape.saddles())return Direction.valueOf(shape.front().name());var n=shape.transform().direction(new double[]{0,0,-1});return Direction.getNearest(n[0],n[1],n[2]);}
     public static Selection select(Collection<Host> hosts,Vec3 eye,Vec3 direction,double reach,GaugeSettings.Kind kind,boolean installedOnly){Selection best=null;Vec3 end=eye.add(direction.scale(reach));for(var h:hosts)for(var m:h.mounts){if(kind!=null&&!m.kinds().contains(kind))continue;if(installedOnly&&h.metadata().installed().stream().noneMatch(i->i.key().mount().equals(m.id())))continue;var hit=m.bounds().clip(eye,end);if(hit.isEmpty())continue;double d=hit.get().distanceTo(eye);if(best==null||d<best.distance)best=new Selection(h,m,d);}return best;}
     public static boolean reachable(net.minecraft.world.entity.player.Player player,Host host,Instrument.Selectable mount){var eye=player.getEyePosition();if(mount.bounds().distanceToSqr(eye)>player.blockInteractionRange()*player.blockInteractionRange())return false;var point=mount.bounds().clip(eye,mount.bounds().getCenter()).orElse(mount.bounds().getCenter());var hit=player.level().clip(new net.minecraft.world.level.ClipContext(eye,point,net.minecraft.world.level.ClipContext.Block.COLLIDER,net.minecraft.world.level.ClipContext.Fluid.NONE,player));return hit.getType()==HitResult.Type.MISS||hit.getLocation().distanceTo(eye)+.025>=point.distanceTo(eye);}

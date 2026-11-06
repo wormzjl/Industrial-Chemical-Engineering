@@ -28,6 +28,7 @@ public final class ModMenus {
     /** A machine's own page (batch 2026-11-03-rotating-machinery, W7). */
     public static final DeferredHolder<MenuType<?>, MenuType<com.wormzjl.icheme.world.inventory.MachineMenu>> MACHINE = MENU_TYPES.register("machine", () -> IMenuTypeExtension.create(com.wormzjl.icheme.world.inventory.MachineMenu::new));
 
+    public static final DeferredHolder<MenuType<?>,MenuType<com.wormzjl.icheme.world.inventory.ControlPanelMenu>> CONTROL_PANEL=MENU_TYPES.register("control_panel",()->IMenuTypeExtension.create(com.wormzjl.icheme.world.inventory.ControlPanelMenu::new));
     private ModMenus() {
     }
 

@@ -18,6 +18,8 @@ public final class Sensor {
      * speed pickup on its coupling guard, which works its governor valve (owner decision D27). */
     public enum Kind { PRESSURE, TEMPERATURE, FLOW, LEVEL, SPEED }
     public enum Unit { ABSOLUTE_PASCAL, KELVIN, KILOGRAM_PER_SECOND, CUBIC_METRE_PER_SECOND, METRE, HEIGHT_PERCENT, REVOLUTIONS_PER_MINUTE }
+    public static Unit primaryUnit(Kind kind){return switch(kind){case PRESSURE->Unit.ABSOLUTE_PASCAL;case TEMPERATURE->Unit.KELVIN;case FLOW->Unit.KILOGRAM_PER_SECOND;case LEVEL->Unit.METRE;case SPEED->Unit.REVOLUTIONS_PER_MINUTE;};}
+    public static Optional<Unit> secondaryUnit(Kind kind){return switch(kind){case FLOW->Optional.of(Unit.CUBIC_METRE_PER_SECOND);case LEVEL->Optional.of(Unit.HEIGHT_PERCENT);default->Optional.empty();};}
     /** The speed pickup's mount on a steam turbine's coupling guard. */
     public static final String SPEED_PICKUP="speed_pickup";
     public record Installed(Instrument.Key key,UUID instance,long revision,Kind kind) {
@@ -27,8 +29,8 @@ public final class Sensor {
         }
     }
     public record Reading(UUID instance,Kind kind,String mount,double value,double secondary,double span,long tick,Instrument.Availability availability) {
-        public Unit unit(){return switch(kind){case PRESSURE->Unit.ABSOLUTE_PASCAL;case TEMPERATURE->Unit.KELVIN;case FLOW->Unit.KILOGRAM_PER_SECOND;case LEVEL->Unit.METRE;case SPEED->Unit.REVOLUTIONS_PER_MINUTE;};}
-        public Optional<Unit> secondaryUnit(){return switch(kind){case FLOW->Optional.of(Unit.CUBIC_METRE_PER_SECOND);case LEVEL->Optional.of(Unit.HEIGHT_PERCENT);default->Optional.empty();};}
+        public Unit unit(){return primaryUnit(kind);}
+        public Optional<Unit> secondaryUnit(){return Sensor.secondaryUnit(kind);}
         public Reading {
             Objects.requireNonNull(instance);Objects.requireNonNull(kind);Objects.requireNonNull(mount);Objects.requireNonNull(availability);
             if(!Double.isFinite(value)||!Double.isFinite(secondary)||!Double.isFinite(span)||span<0||tick<0)throw new IllegalArgumentException("Invalid sensor reading");
@@ -75,6 +77,9 @@ public final class Sensor {
         long tick=view.committedTick();double value=0,second=0,span=0;var quality=Instrument.Availability.UNAVAILABLE;
         if(sensor.kind()==Kind.PRESSURE&&sensor.key().mount().equals("valve_sensor")&&view.state()!=null){
             value=view.state().pressure();quality=Instrument.Availability.AVAILABLE;
+        }else if(sensor.kind()==Kind.TEMPERATURE&&view.heat()!=null){
+            if(pipe!=null&&pipe.flowing()&&view.heat().outletTemperature()>0){value=view.heat().outletTemperature();quality=Instrument.Availability.AVAILABLE;}
+            else if(previous!=null&&previous.availability()!=Instrument.Availability.UNAVAILABLE){value=previous.value();tick=previous.tick();quality=Instrument.Availability.NO_FLOW;}
         }else if(pipe!=null){
             switch(sensor.kind()){
                 case PRESSURE->{value=sensor.key().mount().equals("valve_sensor")&&view.state()!=null?view.state().pressure():pipe.pressure();quality=Instrument.Availability.AVAILABLE;}

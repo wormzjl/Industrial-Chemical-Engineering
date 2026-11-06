@@ -96,8 +96,9 @@ class GaugeAccessoriesTest {
             }
         }
         for(boolean level:List.of(false,true)){
-            var faces=InstrumentGeometry.transmitter(level);assertEquals(6,faces.size());
+            var faces=InstrumentGeometry.transmitter(level);assertFalse(faces.isEmpty());
             for(var face:faces){var v=face.vertices();for(double x:v)assertTrue(Double.isFinite(x));
+                for(int i=0;i<12;i+=3){assertTrue(Math.abs(v[i])<=InstrumentGeometry.RADIUS);assertTrue(Math.abs(v[i+1])<=InstrumentGeometry.RADIUS);assertTrue(Math.abs(v[i+2])<=.1,"cover stays inside the mount envelope");}
                 double nx=(v[4]-v[1])*(v[8]-v[2])-(v[5]-v[2])*(v[7]-v[1]),ny=(v[5]-v[2])*(v[6]-v[0])-(v[3]-v[0])*(v[8]-v[2]),nz=(v[3]-v[0])*(v[7]-v[1])-(v[4]-v[1])*(v[6]-v[0]);
                 double cx=0,cy=0,cz=0;for(int i=0;i<12;i+=3){cx+=v[i]/4;cy+=v[i+1]/4;cz+=v[i+2]/4;}assertTrue(nx*cx+ny*cy+nz*(cz-.005)>0,"outward cover winding");
             }
