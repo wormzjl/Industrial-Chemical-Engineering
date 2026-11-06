@@ -80,6 +80,14 @@ public final class LineGeometry {
             return (flanged >> face & 1) != 0;
         }
 
+        /** Adds a welded branch at the actual neighbour's size and face point, preserving every other connection. */
+        public Key withConnection(int face, int code, int u, int v) {
+            if (face < 0 || face >= 6 || code <= 0 || code > 127) throw new IllegalArgumentException("Invalid pipe connection");
+            long nextFaces = (faces & ~(127L << 7 * face)) | (long) code << 7 * face;
+            long nextOffsets = (offsets & ~(1023L << 10 * face)) | offsets(face, u, v);
+            return new Key(kind, facing, connections | 1 << face, outside, nextFaces, flanged & ~(1 << face), spool, nextOffsets);
+        }
+
         /** An item's look: a pipe 0.25 m across lying north-south, a device on a 0.15 m line. */
         public static Key item(Kind kind) {
             if (kind == Kind.PIPE) {

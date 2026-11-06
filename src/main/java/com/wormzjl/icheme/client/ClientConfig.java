@@ -5,7 +5,11 @@ import com.wormzjl.icheme.client.gui.common.kit.Skin;
 import com.wormzjl.icheme.science.display.DisplayUnit.FlowRateUnit;
 import com.wormzjl.icheme.science.display.DisplayUnit.PressureUnit;
 import com.wormzjl.icheme.science.display.DisplayUnit.TemperatureUnit;
+import com.wormzjl.icheme.science.equipment.Paint;
 import net.neoforged.neoforge.common.ModConfigSpec;
+
+import java.util.List;
+import java.util.UUID;
 
 /**
  * The client's own settings, {@code icheme-client.toml} (batch 2026-10-28-gui-toolkit): the process screens' panel
@@ -35,6 +39,7 @@ public final class ClientConfig {
     public static final ModConfigSpec.EnumValue<FlowRateUnit> FLOW_TIME;
     public static final ModConfigSpec.EnumValue<Basis> BASIS;
     public static final ModConfigSpec.BooleanValue STREAM_CONDITIONS;
+    public static final ModConfigSpec.ConfigValue<List<? extends String>> EQUIPMENT_PAINTS;
 
     static {
         var builder = new ModConfigSpec.Builder();
@@ -49,6 +54,11 @@ public final class ClientConfig {
         PRESSURE = builder.comment("PASCAL, KILOPASCAL, BAR or MEGAPASCAL.").defineEnum("pressure", PressureUnit.KILOPASCAL);
         FLOW_TIME = builder.comment("Flows per second (PER_SECOND), per minute (PER_MINUTE) or per hour (PER_HOUR).").defineEnum("flow_time", FlowRateUnit.PER_SECOND);
         BASIS = builder.comment("Compositions and flows in moles (MOLE) or in mass (MASS); VOLUME shows the process simulator's stream flows in m³ at the stream's own temperature and pressure, and the fluid device screens read it as MOLE.").defineEnum("basis", Basis.MOLE);
+        builder.pop();
+        builder.push("equipment");
+        EQUIPMENT_PAINTS = builder.comment("Constructor body and structure colours by player account: UUID:#RRGGBB:#RRGGBB. Remembered when the Paint page is edited.")
+                .defineListAllowEmpty("paint_schemes", List.<String>of(),
+                        () -> new UUID(0, 0) + ":#A1A1A0:#5B686D", EquipmentPaints::valid);
         builder.pop();
         SPEC = builder.build();
     }
@@ -109,6 +119,14 @@ public final class ClientConfig {
 
     public static void streamConditions(boolean shown) {
         set(STREAM_CONDITIONS, shown);
+    }
+
+    public static Paint equipmentPaint(UUID player, Paint fallback) {
+        return EquipmentPaints.find(get(EQUIPMENT_PAINTS, List.of()), player, fallback);
+    }
+
+    public static void rememberEquipmentPaint(UUID player, Paint paint) {
+        set(EQUIPMENT_PAINTS, EquipmentPaints.remember(get(EQUIPMENT_PAINTS, List.of()), player, paint));
     }
 
     /** The value set, {@code fallback} before the config has loaded. */

@@ -72,8 +72,8 @@ public final class PipeLaying {
             edited.add(anchor.host());
             var record = world.at(anchor.hostPosition(dimension)).orElse(null);
             if (record == null || record.device().kind() != TopologyCompiler.Kind.PIPE) return message("anchor.fitting");
-            int joints = hosts.getOrDefault(record.device().id(), record.device().joints()) | anchor.joints();
-            if (Integer.bitCount(joints) > (anchor.hostLane() > 0 ? 2 : 4)) return message(anchor.hostLane() > 0 ? "anchor.lane_closed" : "anchor.junction");
+            int joints = PipeRoute.hostJoints(hosts.getOrDefault(record.device().id(), record.device().joints()), anchor.joints(), anchor.hostLane() > 0);
+            if (joints < 0) return message(anchor.hostLane() > 0 ? "anchor.lane_closed" : "anchor.junction");
             hosts.put(record.device().id(), joints);
         }
         if (!player.getAbilities().instabuild && !take(player, path.size())) return message("items", path.size());

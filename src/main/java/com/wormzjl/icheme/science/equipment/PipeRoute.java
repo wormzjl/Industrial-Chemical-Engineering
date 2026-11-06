@@ -638,6 +638,13 @@ public final class PipeRoute {
     public record Placement(int[] joints, int[] facings, int[] arms) {
     }
 
+    /** Endpoint edits share the same limit in the laying authority and its preview; -1 means the host is full. */
+    public static int hostJoints(int existing, int added, boolean lane) {
+        if ((existing & ~63) != 0 || (added & ~63) != 0) throw new IllegalArgumentException("Invalid pipe joints");
+        int merged = existing | added;
+        return Integer.bitCount(merged) <= (lane ? 2 : 4) ? merged : -1;
+    }
+
     /** The {@link Placement} of a checked line from {@code start}, leaving along {@code heading}, to {@code end}. */
     public static Placement placement(List<Cell> cells, End start, int heading, End end) {
         return new Placement(laidJoints(cells, start, end), facings(cells, heading), arms(cells, start, heading, end));

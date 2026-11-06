@@ -50,6 +50,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.function.IntUnaryOperator;
 
 import static com.wormzjl.icheme.science.equipment.UnitDesign.number;
@@ -118,6 +119,8 @@ public final class EquipmentConstructorScreen extends Screen {
     private int nozzle;
     /** The paint, and the channel the paint page edits ({@link Paint#BODY} or {@link Paint#STRUCTURE}). */
     private Paint paint;
+    private @Nullable UUID paintPlayer;
+    private @Nullable Paint editedPaint;
     /** An air cooler's bays in parallel and in series, kept for the other kinds. */
     private ProcessUnit.Bank bank;
     private com.wormzjl.icheme.science.equipment.TowerBank towerBank;
@@ -327,6 +330,11 @@ public final class EquipmentConstructorScreen extends Screen {
     @Override
     protected void init() {
         WindowScale.apply(minecraft, this);
+        if (paintPlayer == null && minecraft.player != null) {
+            paintPlayer = minecraft.player.getUUID();
+            paint = ClientConfig.equipmentPaint(paintPlayer, paint);
+            follow();
+        }
         build = null;
         custom = null;
         var m = GuiCanvas.measure(font);
@@ -469,6 +477,7 @@ public final class EquipmentConstructorScreen extends Screen {
             case "default" -> {
                 // Rebuilt, so the custom field shows the edited channel's default colour.
                 paint = IChemE.defaultPaint();
+                editedPaint = paint;
                 follow();
                 rebuildWidgets();
             }
@@ -544,6 +553,7 @@ public final class EquipmentConstructorScreen extends Screen {
     private void colour(int rgb) {
         if (paint.colour(channel) == rgb) return;
         paint = paint.with(channel, rgb);
+        editedPaint = paint;
         refresh();
         if (custom != null && !custom.isFocused()) custom.setValue(rgb(rgb));
     }
@@ -701,8 +711,8 @@ public final class EquipmentConstructorScreen extends Screen {
     }
 
     /**
-     * Goes to the design of {@code equipment}, keeping the draft's sizes within the new kind's ranges; a horizontal drum
-     * keeps its axis. A change between standing and lying, or to or from a unit, proposes that support's default height.
+     * A new kind starts at an interior size; reselecting the current kind keeps the player's dimensions. A horizontal
+     * drum keeps its axis, and an imported column keeps its specified dimensions.
      */
     private void choose(Equipment equipment) {
         var before = form;
@@ -712,14 +722,17 @@ public final class EquipmentConstructorScreen extends Screen {
             case HORIZONTAL_DRUM -> Equipment.of(form) == Equipment.HORIZONTAL_DRUM ? form : VesselPlacement.Form.LENGTHWISE;
             default -> VesselPlacement.Form.valueOf(equipment.name());
         };
+        boolean changedKind = before.kind() != form.kind();
+        if (changedKind && !(form.column() && column != null)) {
+            var sizes = com.wormzjl.icheme.science.equipment.ConstructorDefaults.sizes(form);
+            diameter = sizes.diameter();
+            tangentLength = sizes.length();
+        }
         if (form.designed()) {
             var kind = form.kind();
-            diameter = ProcessUnit.snap(kind, before.kind()!=kind&&kind.coolingTower()?(kind==EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER?8:60)
-                    // A machine rated in kW starts at 75 kW.
-                    :before.kind()!=kind&&"kW".equals(com.wormzjl.icheme.science.equipment.UnitDesign.of(kind).sizeUnit())?75:diameter);
-            // A new kind starts at its design's second size and support; the same kind keeps the player's.
-            tangentLength = unitLength(kind, before.kind() != kind ? ProcessUnit.defaultLength(kind, diameter) : tangentLength);
-            if (before.kind() != kind) support = ProcessUnit.defaultSupport(kind, diameter, tangentLength);
+            diameter = ProcessUnit.snap(kind, diameter);
+            tangentLength = unitLength(kind, tangentLength);
+            if (changedKind) support = ProcessUnit.defaultSupport(kind, diameter, tangentLength);
             // A machine keeps its design point; a new kind takes the one its starting sizes give, which its sizes follow.
             var design = UnitDesign.of(kind);
             duty = !design.hasDuty() ? MachineDuty.NONE : before.kind() != kind || duty.equals(MachineDuty.NONE) ? design.duty(diameter, tangentLength) : duty;
@@ -731,7 +744,7 @@ public final class EquipmentConstructorScreen extends Screen {
             duty = MachineDuty.NONE;
             diameter = vesselDiameter(diameter);
             tangentLength = clamp(tangentLength, 1, (int) EquipmentShape.MAX_TANGENT_LENGTH);
-            if (before.designed() || before.orientation() != form.orientation()) support = EquipmentShape.defaultSupport(diameter, form.orientation());
+            if (changedKind || before.orientation() != form.orientation()) support = EquipmentShape.defaultSupport(diameter, form.orientation());
         }
         support = Math.max(support, minimumSupport());
         // A drum laid down or stood up takes that form's connection: its sides face other ways (a standing drum's left
@@ -861,6 +874,7 @@ public final class EquipmentConstructorScreen extends Screen {
     /** Closing keeps the draft as the constructor's design (unless Build already sent it). */
     @Override
     public void removed() {
+        if (editedPaint != null && paintPlayer != null) ClientConfig.rememberEquipmentPaint(paintPlayer, editedPaint);
         if (!sent && !design().equals(saved)) EquipmentNetwork.send(position, design(), EquipmentNetwork.Action.KEEP);
         sent = true;
         WindowScale.restore(minecraft);

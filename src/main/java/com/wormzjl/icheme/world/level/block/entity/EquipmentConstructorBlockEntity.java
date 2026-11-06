@@ -93,8 +93,8 @@ public final class EquipmentConstructorBlockEntity extends BlockEntity {
         public static final ColumnTrays TRAYS = ColumnTrays.simple(20, 10);
         /**
          * A 2 m drum, 4 m between tangent lines, on a 2 m skirt, right in front of its constructor, with a new drum's side
-         * connection, its bottom outlet to the front, in the built-in paint; a new constructor proposes it in the configured
-         * paint ({@link #fresh}).
+         * connection, its bottom outlet to the front, in the built-in paint. This baseline remains fixed; new constructors
+         * use the interior sizes from {@link #fresh}.
          */
         public static final Design DEFAULT = new Design(2, 4, VesselPlacement.Form.VERTICAL, EquipmentShape.defaultSupport(2, Orientation.VERTICAL),
                 VesselPlacement.DEFAULT, TRAYS, EquipmentShape.defaultConnections(2, 4, Orientation.VERTICAL, EquipmentShape.defaultSupport(2, Orientation.VERTICAL), false),
@@ -113,10 +113,14 @@ public final class EquipmentConstructorBlockEntity extends BlockEntity {
             this(diameter, tangentLength, form, support, placement, trays, connections, paint, bank, boot, outlet, column, List.of(), com.wormzjl.icheme.science.equipment.TowerBank.ONE);
         }
 
-        /** What a new constructor proposes: {@link #DEFAULT} in the config's primary and secondary colours. */
+        /** A new constructor starts inside the size ranges, in the config's primary and secondary colours. */
         public static Design fresh() {
             var d = DEFAULT;
-            return new Design(d.diameter, d.tangentLength, d.form, d.support, d.placement, d.trays, d.connections, IChemE.defaultPaint(), d.bank, d.boot, d.outlet);
+            var sizes = com.wormzjl.icheme.science.equipment.ConstructorDefaults.sizes(d.form);
+            int support = EquipmentShape.defaultSupport(sizes.diameter(), d.form.orientation());
+            return new Design(sizes.diameter(), sizes.length(), d.form, support, d.placement, d.trays,
+                    EquipmentShape.defaultConnections(sizes.diameter(), sizes.length(), d.form.orientation(), support, d.boot),
+                    IChemE.defaultPaint(), d.bank, d.boot, d.outlet);
         }
 
         public Design {

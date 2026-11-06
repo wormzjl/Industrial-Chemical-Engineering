@@ -15,6 +15,25 @@ class LineGeometryTest {
     private static final int DOWN = 0, UP = 1, NORTH = 2, SOUTH = 3, WEST = 4, EAST = 5;
     private static final double[] SIZES = {1 / 16.0, .15, .4, 1};
 
+    @Test
+    void junctionPreviewKeepsTheHostSizeFlangesAndOtherFacePoints() {
+        var before = key(Kind.PIPE, EAST, .4, new int[]{WEST, EAST}, .15, 1 << EAST, true);
+        before = new Key(before.kind(), before.facing(), before.connections(), before.outside(), before.faces(),
+                before.flanged(), before.spool(), Key.offsets(WEST, 3, -2));
+        var tee = before.withConnection(NORTH, PipeSizes.code(.0625), -4, 5);
+        assertEquals(before.outside(), tee.outside());
+        assertEquals(before.face(WEST), tee.face(WEST));
+        assertEquals(before.face(EAST), tee.face(EAST));
+        assertEquals(before.flanged(), tee.flanged());
+        assertEquals(3, tee.offset(WEST, 0));
+        assertEquals(-2, tee.offset(WEST, 1));
+        assertEquals(-4, tee.offset(NORTH, 0));
+        assertEquals(5, tee.offset(NORTH, 1));
+        assertEquals(PipeSizes.code(.0625), tee.face(NORTH));
+        assertEquals(3, Integer.bitCount(tee.connections()));
+        assertFalse(LineGeometry.polygons(tee).isEmpty());
+    }
+
     /** A key whose connected faces meet lines of {@code met} outside (0: own size), flanged where {@code flanged} says. */
     private static Key key(Kind kind, int facing, double own, int[] faces, double met, int flanged, boolean spool) {
         int connections = 0;

@@ -3,6 +3,7 @@ package com.wormzjl.icheme.client;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.wormzjl.icheme.IChemE;
+import com.wormzjl.icheme.client.model.FluidDeviceModel;
 import com.wormzjl.icheme.network.FluidNetwork;
 import com.wormzjl.icheme.registry.ModItems;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
@@ -50,6 +51,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
@@ -79,8 +81,16 @@ public final class PipeLayingClient {
     }
 
     /** The route to the aimed click, or why there is none; its ghost cells, and how they are laid when found. */
-    private record Plan(PipeAnchor.Click end, @Nullable PipeAnchor anchor, PipeRoute.Result route, @Nullable Component refusal, @Nullable PipeRoute.Placement placement) {
+    private record Plan(PipeAnchor.Click end, @Nullable PipeAnchor anchor, PipeRoute.Result route, @Nullable Component refusal,
+                        @Nullable PipeRoute.Placement placement, List<Junction> junctions) {
+        private Plan(PipeAnchor.Click end, @Nullable PipeAnchor anchor, PipeRoute.Result route, @Nullable Component refusal, @Nullable PipeRoute.Placement placement) {
+            this(end, anchor, route, refusal, placement, List.of());
+        }
     }
+
+    private record Host(BlockPos cell, int lane) {}
+    private record Junction(BlockPos cell, List<Mesh.Polygon> polygons) {}
+    private record Junctions(List<Junction> shown, @Nullable Component refusal) {}
 
     /** The slot aimed on a rack's tier before a click ({@link PipeAnchor#aimed}): its cell, frame and lane, the face the line passes through, and whether it is refused. */
     private record Slot(BlockPos cell, RackGeometry.Rack frame, RackGeometry.Lane lane, int through, boolean refused) {
@@ -170,7 +180,7 @@ public final class PipeLayingClient {
             if (laid) {
                 start = null;
                 plan = null;
-            } else if (plan != null) plan = refused = new Plan(plan.end, plan.anchor, plan.route, message, plan.placement);
+            } else if (plan != null) plan = refused = new Plan(plan.end, plan.anchor, plan.route, message, plan.placement, plan.junctions);
         }
         sent = null;
     }
@@ -348,7 +358,60 @@ public final class PipeLayingClient {
         int heading = from.leaving();
         var route = PipeRoute.search(from.end(), heading, to.end(), outside, PipeAnchor.space(level), PipeRoute.Limits.DEFAULT);
         if (!route.found()) return new Plan(end, to, route, PipeLaying.refusal(route.refusal()), null);
-        return new Plan(end, to, route, null, PipeRoute.placement(route.cells(), from.end(), heading, to.end()));
+        var junctions = junctions(level, from, to, route, outside);
+        return new Plan(end, to, route, junctions.refusal, PipeRoute.placement(route.cells(), from.end(), heading, to.end()), junctions.shown);
+    }
+
+    /** Endpoint hosts also change when a line is laid: merge both ends before drawing a tee, cross or lane extension. */
+    private static Junctions junctions(Level level, PipeAnchor from, PipeAnchor to, PipeRoute.Result route, double outside) {
+        var hosts = new LinkedHashMap<Host, List<PipeAnchor>>();
+        for (var anchor : List.of(from, to)) {
+            if (anchor.kind() != PipeAnchor.Kind.PIPE && anchor.kind() != PipeAnchor.Kind.LANE) continue;
+            hosts.computeIfAbsent(new Host(anchor.host(), anchor.hostLane()), key -> new ArrayList<>()).add(anchor);
+        }
+        int code = PipeSizes.code(outside), width = RackGeometry.width(PipeSizes.outsideOf(code));
+        var shown = new ArrayList<Junction>();
+        for (var entry : hosts.entrySet()) {
+            var host = entry.getKey();
+            var entity = level.getBlockEntity(host.cell);
+            if (host.lane > 0) {
+                if (!(entity instanceof PipeRackBlockEntity rack)) return new Junctions(List.of(), PipeLaying.message("anchor.fitting"));
+                var lane = rack.lanes().stream().filter(l -> l.option() == host.lane - 1).findFirst().orElse(null);
+                if (lane == null) return new Junctions(List.of(), PipeLaying.message("anchor.fitting"));
+                int joints = lane.joints();
+                for (var anchor : entry.getValue()) {
+                    if (anchor.joints() < 0) continue;
+                    joints = PipeRoute.hostJoints(joints, anchor.joints(), true);
+                    if (joints < 0) return new Junctions(List.of(), PipeLaying.message("anchor.lane_closed"));
+                }
+                if (joints != lane.joints()) shown.add(new Junction(host.cell, RackGeometry.lane(rack.frame(),
+                        new RackGeometry.Lane(lane.option(), lane.width(), lane.arms(), joints, PipeSizes.code(PipeSizes.outside(lane.bore()))))));
+            } else {
+                if (!(entity instanceof FluidDeviceBlockEntity pipe) || pipe.kind() != TopologyCompiler.Kind.PIPE)
+                    return new Junctions(List.of(), PipeLaying.message("anchor.fitting"));
+                var before = FluidDeviceModel.blockKey(pipe.getBlockState(), pipe.getModelData());
+                var after = before;
+                int joints = pipe.joints();
+                for (var anchor : entry.getValue()) {
+                    if (anchor.joints() >= 0) {
+                        joints = PipeRoute.hostJoints(joints, anchor.joints(), false);
+                        if (joints < 0) return new Junctions(List.of(), PipeLaying.message("anchor.junction"));
+                    }
+                    int face = anchor.joint().getOpposite().ordinal();
+                    int index = anchor == from ? 0 : route.cells().size() - 1;
+                    int option = route.options().get(index);
+                    int u = 0, v = 0;
+                    if (option >= 0 && level.getBlockEntity(anchor.cell()) instanceof PipeRackBlockEntity rack) {
+                        var at = RackGeometry.steps(RackGeometry.point(rack.rack(), option, width, PipeSizes.outsideOf(code), face ^ 1));
+                        u = at[0];
+                        v = at[1];
+                    }
+                    after = after.withConnection(face, code, u, v);
+                }
+                if (!after.equals(before)) shown.add(new Junction(host.cell, LineGeometry.polygons(after)));
+            }
+        }
+        return new Junctions(List.copyOf(shown), null);
     }
 
     /** Start → end, the length, the elbows, the size and the pipes needed; or why the aimed spot takes no line. */
@@ -567,13 +630,25 @@ public final class PipeLayingClient {
             }
             ghost(consumer, pose, camera, sprite, cell, polygons, colour);
         }
+        if (shown != null) for (var junction : shown.junctions)
+            ghost(consumer, pose, camera, sprite, junction.cell, junction.polygons, GHOST, true);
         buffers.endBatch(TYPE);
     }
 
     /** One cell's polygons drawn translucent in {@code colour} on the plate sprite, at {@code cell}. */
     private static void ghost(VertexConsumer consumer, PoseStack pose, Vec3 camera, TextureAtlasSprite sprite, BlockPos cell, List<Mesh.Polygon> polygons, int colour) {
+        ghost(consumer, pose, camera, sprite, cell, polygons, colour, false);
+    }
+
+    private static void ghost(VertexConsumer consumer, PoseStack pose, Vec3 camera, TextureAtlasSprite sprite, BlockPos cell, List<Mesh.Polygon> polygons, int colour, boolean overlay) {
         pose.pushPose();
         pose.translate(cell.getX() - camera.x, cell.getY() - camera.y, cell.getZ() - camera.z);
+        if (overlay) {
+            // Lift the existing host's preview off its opaque surface, keeping the branch visible without z-fighting.
+            pose.translate(.5, .5, .5);
+            pose.scale(1.005f, 1.005f, 1.005f);
+            pose.translate(-.5, -.5, -.5);
+        }
         var last = pose.last();
         for (var polygon : polygons) {
             double[] p = polygon.positions(), uv = polygon.uvs(), n = polygon.normals();
