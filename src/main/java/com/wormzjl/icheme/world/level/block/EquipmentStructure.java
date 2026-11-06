@@ -629,19 +629,7 @@ public final class EquipmentStructure {
         return null;
     }
 
-    static void breaking(Level level,BlockPos position,net.minecraft.world.entity.player.Player player) {
-        // One sound for the selected cell, before the whole structure leaves. Native break particles remain separate.
-        if(!level.isClientSide()) {
-            var sound=level.getBlockState(position).getSoundType(level,position,player);
-            level.playSound(null,position,sound.getBreakSound(),net.minecraft.sounds.SoundSource.BLOCKS,
-                    (sound.getVolume()+1)/2,sound.getPitch()*.8f);
-        }
-        var vessel=find(level,position);
-        if(vessel==null||!vessel.shape().fluidDevice())return;
-        var cell=ShapeRasterizer.fluidCell(vessel.shape());
-        if(cell!=null&&level.getBlockEntity(vessel.origin().offset(cell.x(),cell.y(),cell.z())) instanceof EquipmentShellBlockEntity shell)
-            shell.instruments().recoverOnBreak(!player.isCreative());
-    }
+    static void breaking(Level level,BlockPos position,net.minecraft.world.entity.player.Player player){var vessel=find(level,position);if(vessel==null||!vessel.shape().fluidDevice())return;var cell=ShapeRasterizer.fluidCell(vessel.shape());if(cell!=null&&level.getBlockEntity(vessel.origin().offset(cell.x(),cell.y(),cell.z())) instanceof EquipmentShellBlockEntity shell)shell.instruments().recoverOnBreak(!player.isCreative());}
 
     /** Removes every remaining cell of the vessel; nothing drops. */
     static void dismantle(Level level, Vessel vessel) {
