@@ -9,9 +9,11 @@ import java.util.HashSet;
 import static org.junit.jupiter.api.Assertions.*;
 
 class CrossflowEquipmentTest {
-    @Test void remodelingRetainsEverySupportedPipeConnection() throws Exception {
+    @Test void shorterNecksOnlyLowerTheApprovedShellInletConnections() throws Exception {
         var recorded=java.nio.file.Files.readAllLines(java.nio.file.Path.of("src/test/resources/compat/layouts/crossflow-pipes.txt"));
-        int checked=0;
+        // Owner-approved removal of the old header stand-off: these sizes lower only the shell inlet by one block.
+        var lowered=java.util.Set.of(.75,1.5,1.75,2.25,2.5);
+        int checked=0,moved=0;
         for(var line:recorded) {
             if(line.startsWith("#")||line.isBlank())continue;
             var columns=line.split(" ");var size=columns[0].split(":");
@@ -21,8 +23,12 @@ class CrossflowEquipmentTest {
             var ports=ShapeRasterizer.ports(shape);assertEquals(columns.length-1,ports.size());
             for(int i=0;i<ports.size();i++) {
                 var port=ports.get(i);
-                assertEquals(columns[i+1],(port.cell().x()+port.dx())+","+(port.cell().y()+port.dy())+","+(port.cell().z()+port.dz()),columns[0]);
+                var old=columns[i+1].split(",");
+                int x=Integer.parseInt(old[0]),y=Integer.parseInt(old[1]),z=Integer.parseInt(old[2]);
+                if(shape.nozzles().get(i).role()==EquipmentShape.Role.SHELL_INLET&&lowered.contains(d)) { y--;moved++; }
+                assertEquals(new ShapeRasterizer.Cell(x,y,z),new ShapeRasterizer.Cell(port.cell().x()+port.dx(),port.cell().y()+port.dy(),port.cell().z()+port.dz()),columns[0]);
             }
+            assertEquals(shape.nozzles().get(1).face()[1],shape.nozzles().get(2).face()[1],1e-12,"both upper connections end at the same height");
             for(var nozzle:shape.nozzles())if(nozzle.role()==EquipmentShape.Role.SHELL_INLET||nozzle.role()==EquipmentShape.Role.SHELL_OUTLET) {
                 double centre=shape.support()+d/2;
                 assertTrue(Math.abs(nozzle.base()[1]-centre)<d/2,"the nozzle neck starts inside the cylindrical shell");
@@ -30,6 +36,7 @@ class CrossflowEquipmentTest {
             checked++;
         }
         assertEquals(292,checked);
+        assertEquals(144,moved);
     }
 
     @Test void distributionSpacesStayInsideTheRoundPressureShell() {

@@ -924,14 +924,13 @@ public final class ProcessUnit {
         nozzles.add(radial(Role.TUBE_OUTLET, a, y, r, n, zn, 1, ColumnStructure.size(.25 * d, tube)));
         // The shell nozzles near the tubesheets, two rows at least behind the channel's (one free block between pipes).
         double zIn = Math.max(Math.floor(s1 - flange / 2 - .1 - .5) + .5, zn + 2), zOut = Math.max(Math.ceil(s0 + flange / 2 + .1 - .5) + .5, zn + 2);
-        var layout=shape.exchangerType().layout(d);
+        var layout=shape.exchangerType().layout();
         if(layout.transverseShell()) {
             // TEMA X-shell: distribution and collection are internal; the outer pressure shell stays cylindrical.
             zIn=zOut=Math.max(zn+2,Math.floor((s0+s1)/2)+.5);
         }
-        double flangeRadius=r+layout.nozzleStandOff();
-        nozzles.add(radial(Role.SHELL_INLET, a, y, r, n, zIn, 1, ColumnStructure.size(.3 * d, shellOd),flangeRadius));
-        nozzles.add(radial(Role.SHELL_OUTLET, a, y, r, n, zOut, -1, ColumnStructure.size(.3 * d, shellOd),flangeRadius));
+        nozzles.add(radial(Role.SHELL_INLET, a, y, r, n, zIn, 1, ColumnStructure.size(.3 * d, shellOd)));
+        nozzles.add(radial(Role.SHELL_OUTLET, a, y, r, n, zOut, -1, ColumnStructure.size(.3 * d, shellOd)));
         // The saddles a fifth of the shell in from its ends, off the pipe blocks under the tube inlet and the shell outlet.
         double w = saddleWidth(r), length = s1 - s0;
         saddle(saddleAt(s0 + .2 * length, w, s0, s1, zn, zOut), a, y, r, w, 0);
@@ -3134,13 +3133,8 @@ public final class ProcessUnit {
      * {@link #NECK} beyond.
      */
     static Nozzle radial(Role role, double x, double y, double r, int n, double z, int sign, double defaultOd) {
-        return radial(role,x,y,r,n,z,sign,defaultOd,r);
-    }
-
-    /** A neck rooted in the round shell, with a flange stand-off that keeps existing pipe connection blocks in place. */
-    static Nozzle radial(Role role, double x, double y, double r, int n, double z, int sign, double defaultOd, double flangeRadius) {
         double start = rootUnder(r, n);
-        double surface = y + sign * flangeRadius, plane = sign > 0 ? Math.ceil(surface + NECK) : Math.floor(surface - NECK);
+        double surface = y + sign * r, plane = sign > 0 ? Math.ceil(surface + NECK) : Math.floor(surface - NECK);
         return new Nozzle(role, new double[]{x, y + sign * start, z}, 1, sign, Math.abs(plane - (y + sign * start)), defaultOd, 0);
     }
 
