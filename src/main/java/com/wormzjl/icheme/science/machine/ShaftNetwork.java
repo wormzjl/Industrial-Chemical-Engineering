@@ -14,6 +14,8 @@ import java.util.*;
 public final class ShaftNetwork {
     /** A gearbox's efficiency (plan 1.3). */
     public static final double GEAR_EFFICIENCY = .98;
+    /** Initial output/input speed ratio of a newly built gearbox; an explicitly selected zero still means Auto. */
+    public static final double DEFAULT_GEARBOX_RATIO = 4;
     /** The largest ratio a gearbox takes either way (plan 5.3). */
     public static final double MAXIMUM_RATIO = 20;
     /** The largest ratio of a gearbox whose slow line a Create coupling drives (plan 5.3, W6b): 256 rpm reaches 16,384 rpm. */

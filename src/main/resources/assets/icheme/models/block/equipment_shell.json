@@ -40,6 +40,8 @@
     "pump_channel": "icheme:block/pump_channel",
     "coupling_guard": "icheme:block/coupling_guard",
     "shaft": "icheme:block/shaft_steel",
+    "shaft_input": "icheme:block/shaft_input",
+    "shaft_output": "icheme:block/shaft_output",
     "motor_frame": "icheme:block/motor_frame",
     "motor_shield": "icheme:block/motor_shield",
     "motor_panel": "icheme:block/motor_panel",

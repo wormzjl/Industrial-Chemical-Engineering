@@ -362,6 +362,30 @@ public class PumpSprites {
         return out;
     }
 
+    /** Fixed industrial IN/OUT tags, legible independently of the equipment's paint. */
+    static int[][] shaftPort(boolean input) {
+        int width = 80, height = 32, border = 0x26343C;
+        int colour = input ? 0x2271B3 : 0xF7B500, ink = input ? 0xF4F5F2 : 0x17232B;
+        var out = new int[height][width];
+        for (int y = 0; y < height; y++) for (int x = 0; x < width; x++)
+            out[y][x] = x < 2 || y < 2 || x >= width - 2 || y >= height - 2 ? border : colour;
+        String text = input ? "IN" : "OUT";
+        int scale = 3, left = (width - (6 * text.length() - 1) * scale) / 2, top = (height - 7 * scale) / 2;
+        for (int letter = 0; letter < text.length(); letter++) {
+            var rows = switch (text.charAt(letter)) {
+                case 'I' -> new String[]{"11111", "00100", "00100", "00100", "00100", "00100", "11111"};
+                case 'N' -> new String[]{"10001", "11001", "11001", "10101", "10011", "10011", "10001"};
+                case 'O' -> new String[]{"01110", "10001", "10001", "10001", "10001", "10001", "01110"};
+                case 'U' -> new String[]{"10001", "10001", "10001", "10001", "10001", "10001", "01110"};
+                case 'T' -> new String[]{"11111", "00100", "00100", "00100", "00100", "00100", "00100"};
+                default -> throw new IllegalArgumentException("Unknown shaft label");
+            };
+            for (int y = 0; y < 7; y++) for (int x = 0; x < 5; x++) if (rows[y].charAt(x) == '1')
+                for (int dy = 0; dy < scale; dy++) for (int dx = 0; dx < scale; dx++) out[top + y * scale + dy][left + (letter * 6 + x) * scale + dx] = ink;
+        }
+        return out;
+    }
+
     public static void main(String[] args) throws Exception {
         writeRgb(new File(args[0]), "motor_frame", motorFrame());
         writeRgb(new File(args[0]), "motor_shield", motorShield());
@@ -369,6 +393,8 @@ public class PumpSprites {
         writeRgb(new File(args[0]), "motor_plain", motorPlain());
         writeRgb(new File(args[0]), "coupling_guard", guard());
         writeRgb(new File(args[0]), "shaft_steel", shaft());
+        writeRgb(new File(args[0]), "shaft_input", shaftPort(true));
+        writeRgb(new File(args[0]), "shaft_output", shaftPort(false));
         var folder = new File(args[0]);
         write(folder, "pump_casting", casting());
         write(folder, "pump_volute", volute());
