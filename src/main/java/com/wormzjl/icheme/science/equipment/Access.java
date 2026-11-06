@@ -385,6 +385,11 @@ final class Access {
      * tops and the hoops' bends show their ends.
      */
     static void ladder(Mesh m, Climb climb, double back) {
+        ladder(m, climb, back, caged(climb.base(), climb.top()));
+    }
+
+    /** The same rails, rungs and brackets, with the cage selected by the equipment's access layout. */
+    static void ladder(Mesh m, Climb climb, double back, boolean cage) {
         double[] foot = {climb.x(), 0, climb.z()}, out = {climb.outX(), 0, climb.outZ()}, across = {-out[2], 0, out[0]};
         double base = climb.base(), top = climb.top();
         double landing = top - LANDING;
@@ -395,7 +400,7 @@ final class Access {
         }
         for (double y = base + RUNG; y <= landing + 1e-9; y += RUNG)
             m.bar(at(foot, out, across, 0, -LADDER_HALF, y), at(foot, out, across, 0, LADDER_HALF, y), BAR * .8, UP, NO_ENDS, Material.HANDRAIL);
-        if (!caged(base, top)) return;
+        if (!cage) return;
         var hoop = hoop();
         double first = base + CAGE_START;
         for (double y = first; y <= top + 1e-9; y = y + HOOP > top && y < top - .2 ? top : y + HOOP) {

@@ -1051,7 +1051,8 @@ class ShapeRasterizerTest {
     /**
      * Every size: its decks and its wound stair or ladders are walked (at frame level), its pipes kept one block apart. The
      * wound stair from {@link TankDesign#STAIR_SIZE} and {@link SphereDesign#STAIR_SIZE} across, caged ladders under (owner
-     * change 2026-10-21); every tank's roof and rolling ladder drawn apart.
+     * change 2026-10-21); every tank's roof and any rolling ladder drawn apart. Compact tanks omit the top platform,
+     * and neither compact nor tall narrow tanks have a rolling ladder.
      */
     @Test
     void everyStorageSizeIsWalkedAndKeepsItsPipesApart() {
@@ -1063,8 +1064,12 @@ class ShapeRasterizerTest {
             assertEquals(stair, unit.ladders().isEmpty(), shape.toString());
             for (var l : unit.ladders()) assertTrue(l.top() - Access.LANDING - l.base() <= Access.MAX_CLIMB + Access.DECK + 1e-9, shape + " climbs from " + l.base());
             if (tank) {
-                assertEquals(shape.fillHeight(), unit.floating.length(), 0, shape.toString());
-                innerRailFlanksTheLadder(shape, unit.floating);
+                boolean compact = shape.diameter() < 6 && shape.tangentLength() < 6;
+                boolean rolling = !compact && shape.tangentLength() <= shape.diameter();
+                assertEquals(rolling ? shape.fillHeight() : 0, unit.floating.length(), 0, shape.toString());
+                if (compact) assertTrue(unit.decks.isEmpty(), "compact tanks have no top platform");
+                if (rolling) innerRailFlanksTheLadder(shape, unit.floating);
+                else assertTrue(ShapeRasterizer.floating(shape).ladder().isEmpty(), "compact and tall narrow tanks have no rolling ladder");
             }
             var nozzles = shape.nozzles();
             assertEquals(shape.kind() == Kind.TANK ? 3 : 2, nozzles.size(), shape.toString());

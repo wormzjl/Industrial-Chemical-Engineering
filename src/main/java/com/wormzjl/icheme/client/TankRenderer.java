@@ -150,12 +150,14 @@ public final class TankRenderer {
             }
 
             // The ladder: turned down about its axis at its pivot, its foot towards the axis going down.
-            double[] p = f.pivot(), a = f.axis(), along = f.along();
-            double down = a[2] * along[0] - a[0] * along[2] > 0 ? -1 : 1;
-            int ladderLight = LevelRenderer.getLightColor(level, BlockPos.containing(origin.getX() + p[0], origin.getY() + p[1], origin.getZ() + p[2]));
-            pose = new Matrix4f(event.getModelViewMatrix()).translate((float) (ox + p[0]), (float) (oy + p[1]), (float) (oz + p[2]))
-                    .rotate((float) (down * pitch), (float) a[0], (float) a[1], (float) a[2]);
-            bound = draw(shader, buffer(new Key(shape, Part.LADDER, cell.paint(), ladderLight), f), pose, bound);
+            if (!f.ladder().isEmpty()) {
+                double[] p = f.pivot(), a = f.axis(), along = f.along();
+                double down = a[2] * along[0] - a[0] * along[2] > 0 ? -1 : 1;
+                int ladderLight = LevelRenderer.getLightColor(level, BlockPos.containing(origin.getX() + p[0], origin.getY() + p[1], origin.getZ() + p[2]));
+                pose = new Matrix4f(event.getModelViewMatrix()).translate((float) (ox + p[0]), (float) (oy + p[1]), (float) (oz + p[2]))
+                        .rotate((float) (down * pitch), (float) a[0], (float) a[1], (float) a[2]);
+                bound = draw(shader, buffer(new Key(shape, Part.LADDER, cell.paint(), ladderLight), f), pose, bound);
+            }
         }
         if (shader != null) {
             shader.clear();

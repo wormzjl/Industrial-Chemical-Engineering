@@ -21,7 +21,10 @@ import java.util.List;
  * girder 1.2 m below the top with its walkway (API 650 5.9.6), one stair wound round the shell at about 40° from grade to
  * the gauger's platform at the rim (owner approval 2026-10-21), which it passes beside the walkway and opens onto it, the
  * platform over the rim, and the front service region for the optional level-gauge accessory. A tank under {@link #STAIR_SIZE} across has neither
- * walkway nor stair but caged ladders on its right side to the platform. Drawn by the client, apart ({@link ProcessUnit#floating}):
+ * walkway nor stair but caged ladders on its right side to the platform. Below {@link #COMPACT_LIMIT} in both diameter
+ * and shell height, it instead has a plain external rim ladder, with no platform or rolling ladder. Tanks taller than
+ * their diameter also omit the rolling ladder, retaining the platform with a closed inner railing.
+ * Drawn by the client, apart ({@link ProcessUnit#floating}):
  * the roof (pontoon ring 0.1 D wide, centre deck, rim seal, legs 1.8 m, drain sump), floating on the liquid and landing on
  * its legs, and the rolling ladder, as long as the fill height, hinged at the platform with its foot on a runway on the
  * deck. Nozzles, fixed: two identical bottom nozzles centered opposite each other at front and back ({@link Role#BOTTOM},
@@ -68,6 +71,8 @@ final class TankDesign extends UnitDesign {
      * instead ({@link #ladders}) and no walkway: its top angle is its wind girder.
      */
     static final double STAIR_SIZE = 6;
+    /** Compact rim access below this size in both diameter and shell height, m. */
+    static final double COMPACT_LIMIT = 6;
     /** Small-tank access stands on the right side (frame -x), clear of the centered front/back pipe lanes. */
     static final double LADDER = Math.PI;
 
@@ -144,7 +149,8 @@ final class TankDesign extends UnitDesign {
         double d = shape.diameter();
         return List.of(new Line("tank", size(d), (int) shape.tangentLength(), number(shape.fillHeight())),
                 new Line("tank.roof", number(PONTOON * d), number(LEGS)),
-                d >= STAIR_SIZE ? new Line("tank.access", number(shape.tangentLength() - GIRDER_DROP)) : new Line("tank.access.ladder", number(shape.tangentLength())));
+                Plan.of(d, (int) shape.tangentLength()).compact() ? new Line("tank.access.compact", number(shape.tangentLength())) :
+                        d >= STAIR_SIZE ? new Line("tank.access", number(shape.tangentLength() - GIRDER_DROP)) : new Line("tank.access.ladder", number(shape.tangentLength())));
     }
 
     /**
@@ -175,6 +181,15 @@ final class TankDesign extends UnitDesign {
         boolean stairway() {
             return d >= STAIR_SIZE;
         }
+
+        boolean compact() {
+            return d < COMPACT_LIMIT && shell < COMPACT_LIMIT;
+        }
+
+        /** The fixed ladder must fit across the roof at its highest level. Shell and diameter use whole metres. */
+        boolean rollingLadder() {
+            return !compact() && shell <= d;
+        }
     }
 
     private static final double[] UP = {0, 1, 0};
@@ -188,7 +203,18 @@ final class TankDesign extends UnitDesign {
         var p = Plan.of(u.shape.diameter(), (int) u.shape.tangentLength());
         shell(u, p);
         double hinge;
-        if (p.stairway()) {
+        if (p.compact()) {
+            // Keep the established rim-access frame so deleting its platform cannot shift existing pipe blocks.
+            double from = LADDER + Access.clearance(p.r), span = span(p, p.r + Access.MIN_DECK / 2);
+            u.framePoints.add(p.at(p.outer, from, 0));
+            u.framePoints.add(p.at(p.outer, from + span, 0));
+            u.bodyRows = new double[]{1, Math.floor(p.shell - TOP_ANGLE - .6 - 1e-9), 0};
+            u.irregularFrom = u.mesh.facets().size();
+            var climb = new Access.Climb(p.a - p.r - Access.STANDOFF, p.a, -1, 0, 0, p.shell + Access.LANDING, p.shell);
+            Access.ladder(u.mesh, climb, Access.STANDOFF + .12, false);
+            u.ladders.add(climb);
+            hinge = LADDER;
+        } else if (p.stairway()) {
             var stair = stair(p);
             double end = stair.angle(stair.steps()), span = span(p, p.band + Access.WOUND_WIDTH / 2);
             walkway(u, p, stair, end - span, end);
@@ -401,8 +427,10 @@ final class TankDesign extends UnitDesign {
         // The inner edge over the tank: a rail whose band runs along the deck's inner edge, open at the rolling ladder's head
         // in its middle (owner report 2026-10-21: the rail kept the player from the ladder).
         var edge = new Access.Arc(p.a, p.a, wall - 1, from, to, wall + Access.GAP, step);
-        double head = LADDER_OPENING / 2 / (wall + Access.GAP) * edge.length() / (to - from);
-        u.rails(edge, s, 1 + Access.GAP + Access.RAIL_BAND, false, false, edge.length() / 2 - head, edge.length() / 2 + head);
+        if (p.rollingLadder()) {
+            double head = LADDER_OPENING / 2 / (wall + Access.GAP) * edge.length() / (to - from);
+            u.rails(edge, s, 1 + Access.GAP + Access.RAIL_BAND, false, false, edge.length() / 2 - head, edge.length() / 2 + head);
+        } else u.rails(edge, s, 1 + Access.GAP + Access.RAIL_BAND, false, false);
         // Across the open end, from the inner edge out to the stair's inner side (or just past the shell, short of the
         // ladder's rung plane): the climber arrives beyond it.
         double open = ladder ? from : to, limit = ladder ? p.r + .1 : p.band, sign = ladder ? -1 : 1;
@@ -429,11 +457,13 @@ final class TankDesign extends UnitDesign {
         double span = to - from;
         for (double t : new double[]{from + .15 * span, to - .15 * span})
             u.mesh.bar(p.at(p.r + .02, t, s - 1.5), p.at(p.outer - .1, t, s - .03), .08, new double[]{-DeterministicMath.sin(t), 0, DeterministicMath.cos(t)}, Material.STEELWORK);
-        double mid = (from + to) / 2;
-        // Under the deck's slab, clear of its faces (owner report 2026-10-21: the hinge's top flickered in the grating's plane).
-        var hinge = p.at(p.r - OVERHANG + .1, mid, s - .07);
-        u.mesh.block(hinge, Mesh.scale(new double[]{DeterministicMath.cos(mid), 0, DeterministicMath.sin(mid)}, .1), new double[]{0, .06, 0},
-                Mesh.scale(new double[]{-DeterministicMath.sin(mid), 0, DeterministicMath.cos(mid)}, .4), Material.STEELWORK);
+        if (p.rollingLadder()) {
+            double mid = (from + to) / 2;
+            // Under the deck's slab, clear of its faces (owner report 2026-10-21: the hinge's top flickered in the grating's plane).
+            var hinge = p.at(p.r - OVERHANG + .1, mid, s - .07);
+            u.mesh.block(hinge, Mesh.scale(new double[]{DeterministicMath.cos(mid), 0, DeterministicMath.sin(mid)}, .1), new double[]{0, .06, 0},
+                    Mesh.scale(new double[]{-DeterministicMath.sin(mid), 0, DeterministicMath.cos(mid)}, .4), Material.STEELWORK);
+        }
     }
 
     /** The stair's brackets to the shell from its inner stringer, every eight treads, below the walkway (the girder carries it above). */
@@ -548,28 +578,30 @@ final class TankDesign extends UnitDesign {
             }
         }
         // The ladder's hinge over the rim, the runway from the rim towards the axis along the deck.
-        double length = p.fill, runway = Math.min(length, 2 * rr - .6);
+        double length = p.rollingLadder() ? p.fill : 0, runway = Math.min(length, 2 * rr - .6);
         double[] along = {-DeterministicMath.cos(hinge), 0, -DeterministicMath.sin(hinge)}, axis = {along[2], 0, -along[0]};
         // The ladder's head at the platform's inner edge, level with its deck (a climber steps off it onto the deck with
         // nothing overhead; owner report 2026-10-21), its hinge under the deck's slab.
         var pivot = p.at(p.r - OVERHANG, hinge, p.shell + Access.DECK);
-        for (double side : new double[]{-.3, .3}) {
-            var from = p.at(rr - .1, hinge, deck + .03);
-            from[0] += side * axis[0];
-            from[2] += side * axis[2];
-            roof.bar(from, new double[]{from[0] + runway * along[0], deck + .03, from[2] + runway * along[2]}, .06, UP, Material.STEELWORK);
-            // The stringers and treads under the walking line through the pivot, their tops on it (they stood half over it,
-            // through the deck's edge at the head); the first tread half a pitch from the head, at the deck's edge.
-            var foot = pivot.clone();
-            foot[0] += side * axis[0];
-            foot[1] -= .04;
-            foot[2] += side * axis[2];
-            u.ladder.bar(foot, new double[]{foot[0] + length * along[0], foot[1], foot[2] + length * along[2]}, .08, UP, Material.STEELWORK);
-        }
-        for (double s = .15; s < length - .1; s += .3) {
-            double[] c = {pivot[0] + s * along[0], pivot[1] - .025, pivot[2] + s * along[2]};
-            u.ladder.bar(new double[]{c[0] - .3 * axis[0], c[1], c[2] - .3 * axis[2]}, new double[]{c[0] + .3 * axis[0], c[1], c[2] + .3 * axis[2]}, .05, UP,
-                    Mesh.NO_ENDS, Material.HANDRAIL);
+        if (length > 0) {
+            for (double side : new double[]{-.3, .3}) {
+                var from = p.at(rr - .1, hinge, deck + .03);
+                from[0] += side * axis[0];
+                from[2] += side * axis[2];
+                roof.bar(from, new double[]{from[0] + runway * along[0], deck + .03, from[2] + runway * along[2]}, .06, UP, Material.STEELWORK);
+                // The stringers and treads under the walking line through the pivot, their tops on it (they stood half over it,
+                // through the deck's edge at the head); the first tread half a pitch from the head, at the deck's edge.
+                var foot = pivot.clone();
+                foot[0] += side * axis[0];
+                foot[1] -= .04;
+                foot[2] += side * axis[2];
+                u.ladder.bar(foot, new double[]{foot[0] + length * along[0], foot[1], foot[2] + length * along[2]}, .08, UP, Material.STEELWORK);
+            }
+            for (double s = .15; s < length - .1; s += .3) {
+                double[] c = {pivot[0] + s * along[0], pivot[1] - .025, pivot[2] + s * along[2]};
+                u.ladder.bar(new double[]{c[0] - .3 * axis[0], c[1], c[2] - .3 * axis[2]}, new double[]{c[0] + .3 * axis[0], c[1], c[2] + .3 * axis[2]}, .05, UP,
+                        Mesh.NO_ENDS, Material.HANDRAIL);
+            }
         }
         var gauge = p.gauge();
         u.floating = new ProcessUnit.Floating(under, p.fill, DECK, pivot, along, axis, length, runway, new double[]{gauge.x(), gauge.z()}, gaugeLow(), p.fill,

@@ -297,6 +297,7 @@ public final class ShapeRasterizer {
 
         /** The ladder's turn down from level, radians, its foot on the deck ({@link Floating#pitch}). */
         public double pitch(double level) {
+            if (length <= 0) return 0;
             double drop = pivot[1] - (underside(level) + deck);
             return drop >= length ? Math.PI / 2 : drop <= 0 ? 0 : DeterministicMath.asin(drop / length);
         }

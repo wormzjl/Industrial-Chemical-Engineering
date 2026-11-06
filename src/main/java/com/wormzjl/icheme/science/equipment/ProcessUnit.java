@@ -681,6 +681,7 @@ public final class ProcessUnit {
 
         /** The ladder's turn down from level, radians, with its foot on the roof's deck at {@code level}: straight down where it cannot reach. */
         double pitch(double level) {
+            if (length <= 0) return 0;
             double drop = pivot[1] - (underside(level) + deck);
             return drop >= length ? Math.PI / 2 : drop <= 0 ? 0 : DeterministicMath.asin(drop / length);
         }
@@ -719,6 +720,8 @@ public final class ProcessUnit {
 
     /** Fixed outline edges, {x0, y0, z0, x1, y1, z1}; round bodies outlined against the eye, {x, y, z on the axis, axis, radius, lo, hi}. */
     final List<double[]> edges = new ArrayList<>(), rounds = new ArrayList<>();
+    /** Reference points retained in the placement frame when optional steelwork is omitted. They occupy no cells. */
+    final List<double[]> framePoints = new ArrayList<>();
     private final double[] box;
     /** What draws the unit: its kind's design ({@link UnitDesign#build}), or a test's kit pieces. */
     private final Consumer<ProcessUnit> design;
@@ -797,6 +800,10 @@ public final class ProcessUnit {
     private double top;
 
     double[] box(double[] bounds) {
+        for (var point : framePoints) for (int axis = 0; axis < 3; axis++) {
+            bounds[axis] = Math.min(bounds[axis], point[axis]);
+            bounds[axis + 3] = Math.max(bounds[axis + 3], point[axis]);
+        }
         double[] out = {Math.floor(bounds[0] + 1e-9), 0, Math.floor(bounds[2] + 1e-9), Math.ceil(bounds[3] - 1e-9), Math.ceil(bounds[4] - 1e-9), Math.ceil(bounds[5] - 1e-9)};
         top = bounds[4];
         for (var n : nozzles) {
