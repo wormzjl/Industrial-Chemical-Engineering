@@ -2894,5 +2894,19 @@
   "gui.icheme.machine.mode.auto": "Auto",
   "gui.icheme.machine.auto.hint": "Link exactly one driven pump or compressor by data cable. It must also share the shaft train. Then press Apply.",
   "gui.icheme.equipment_constructor.motor.base_speed.hint": "Speed where the motor reaches its rated power. Below it torque is limited; above it power is limited.",
-  "gui.icheme.machine.speed.motor.hint": "Set the motor speed in rpm, up to 3000 rpm. Then press Apply."
+  "gui.icheme.machine.speed.motor.hint": "Set the motor speed in rpm, up to 3000 rpm. Then press Apply.",
+  "tooltip.icheme.sensor.pressure": "Fits: straight pipes, control valves and equipment pressure taps.",
+  "tooltip.icheme.sensor.temperature": "Fits: straight pipes and equipment temperature taps.",
+  "tooltip.icheme.sensor.flow": "Fits: straight pipes and control valves. Use a nozzle pipe to meter equipment flow.",
+  "tooltip.icheme.sensor.level": "Fits: drums, floating-roof tanks, storage spheres and cooling-tower basins.",
+  "tooltip.icheme.sensor.speed": "Fits: the steam turbine output coupling.",
+  "tooltip.icheme.sensor.install": "Right-click a supported host or its preview. Installs at the next process update.",
+  "message.icheme.sensor.unsupported": "No compatible sensor mount here. Check the item tooltip.",
+  "message.icheme.sensor.reach": "Move within reach of the sensor preview on the outside of the equipment.",
+  "message.icheme.sensor.occupied": "This sensor mount or pipe accessory slot is occupied.",
+  "message.icheme.sensor.blocked": "The sensor mount is obstructed. Clear the space around its preview.",
+  "message.icheme.sensor.queued": "Sensor change queued for the next process update.",
+  "message.icheme.sensor.changed": "Sensor change cancelled: the item or equipment changed.",
+  "message.icheme.sensor.installed": "Sensor installed.",
+  "message.icheme.sensor.removed": "Sensor removed."
 }

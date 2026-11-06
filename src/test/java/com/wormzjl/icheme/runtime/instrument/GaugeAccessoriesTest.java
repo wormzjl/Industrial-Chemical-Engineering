@@ -87,6 +87,23 @@ class GaugeAccessoriesTest {
         }
         assertEquals(3,InstrumentHosts.reservoirMounts(EquipmentShape.drum(2,4,EquipmentShape.Orientation.HORIZONTAL,EquipmentShape.Heading.NORTH,1),BlockPos.ZERO).size());
     }
+    @Test void tankDigitalLevelMountIsReachableAtGradeAndSeparateFromServiceTapsAndSightColumn(){
+        var origin=new BlockPos(23,64,-41);
+        for(var heading:EquipmentShape.Heading.values())for(double diameter:new double[]{4,5,6,20,40})for(int height:new int[]{4,14,24}){
+            var shape=EquipmentShape.storage(EquipmentShape.Kind.TANK,diameter,height,heading,0);
+            var mounts=Sensor.levelMounts(shape,origin);assertEquals(1,mounts.size());var mount=mounts.getFirst();
+            assertEquals("level_body",mount.id());assertEquals(heading.name(),mount.face().name());
+            assertEquals(origin.getY()+1.35,mount.centre().y,1e-10);
+            var eye=mount.centre().add(mount.normal().scale(2)).add(0,.27,0);
+            assertTrue(mount.bounds().distanceToSqr(eye)<9,"standing two metres outside the shell is within reach");
+            for(var tap:InstrumentGeometry.sockets(shape)){
+                var centre=new net.minecraft.world.phys.Vec3(origin.getX()+tap.x(),origin.getY()+tap.y(),origin.getZ()+tap.z());
+                assertTrue(mount.centre().distanceTo(centre)>.5,"independent P/T service taps");
+            }
+            var gauge=InstrumentHosts.LevelGauge.selectionBounds(shape).move(origin);
+            assertFalse(mount.bounds().intersects(gauge),"the optional sight column can coexist");
+        }
+    }
     @Test void levelPadsRemainDistinctAcrossNativeSizesAndHeadingsAndCoversAreClosed(){
         for(var heading:EquipmentShape.Heading.values())for(double d:new double[]{4,6,10}){
             var shapes=List.of(EquipmentShape.storage(EquipmentShape.Kind.TANK,d,4,heading,0),EquipmentShape.storage(EquipmentShape.Kind.SPHERE,d,1,heading,2),EquipmentShape.drum(d,6,EquipmentShape.Orientation.VERTICAL,heading,0),EquipmentShape.drum(d,6,EquipmentShape.Orientation.HORIZONTAL,heading,EquipmentShape.minimumBootSupport(d,6),List.of(),true));

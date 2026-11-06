@@ -47,7 +47,7 @@ public final class InstrumentGeometry {
         if(thermometer)cylinder(q,add(tap,direction,-probeDepth),bossEnd,.006,12,0xff89979d);
         return List.copyOf(q);
     }
-    /** Bevelled cast transmitter with a recessed label window and a blue instrument-band bezel. */
+    /** Bevelled metal transmitter with a recessed display and the shared yellow instrument tag. */
     private static final List<Quad> PROBE=buildTransmitter(false),LEVEL_TRANSMITTER=buildTransmitter(true);
     public static List<Quad> transmitter(boolean level){return level?LEVEL_TRANSMITTER:PROBE;}
     private static List<Quad> buildTransmitter(boolean level){
@@ -62,7 +62,7 @@ public final class InstrumentGeometry {
         }
         q.add(quad(-x*.65,-.067,.071,x*.65,-.067,.071,x*.65,.067,.071,-x*.65,.067,.071,0xff1f343b).front());
         q.add(quad(-x*.55,-.052,.072,x*.55,-.052,.072,x*.55,.052,.072,-x*.55,.052,.072,0xffa7bcb4).front());
-        q.add(quad(-.04,-.083,.072,.04,-.083,.072,.04,-.071,.072,-.04,-.071,.072,0xff387386).front());
+        q.add(quad(-x*.8,-.092,.072,x*.8,-.092,.072,x*.8,-.070,.072,-x*.8,-.070,.072,0xffb59d55).front());
         return List.copyOf(q);
     }
     private static void cylinder(List<Quad> out,double[] start,double[] end,double radius,int sides,int colour){
@@ -124,9 +124,16 @@ public final class InstrumentGeometry {
         socket(result,s,a,r,sphere?"temperature_top":"temperature_bottom",sphere?upper:lower,offset,false,sphere);
         return List.copyOf(result);
     }
-    /** Body and boot transmitter pads on the rear shell, separate from the existing front service taps. */
+    /** Body and boot transmitter pads; tanks use a grade-accessible front pad beside their service taps. */
     public static List<Socket> levelSockets(EquipmentShape s){
         if(!s.reservoir())return List.of();
+        if(s.kind()==EquipmentShape.Kind.TANK){
+            // Opposite the optional sight column (+x), clear of both the central nozzles and the P/T taps.
+            var plan=TankDesign.Plan.of(s.diameter(),(int)s.tangentLength());double offset=-.85;
+            var p=s.transform().point(new double[]{plan.a()+offset,1.35,plan.a()-Math.sqrt(s.radius()*s.radius()-offset*offset)-.16});
+            var n=s.transform().direction(new double[]{0,0,-1});int face=n[0]<0?4:n[0]>0?5:n[2]<0?2:3;
+            return List.of(new Socket("level_body",p[0],p[1],p[2],false,false,face));
+        }
         if(s.kind().coolingTower()){
             var tower=s.coolingTower();boolean natural=tower.draft()==com.wormzjl.icheme.science.fluid.network.CoolingTower.Draft.NATURAL;
             double x=natural?tower.width()/2+.5:tower.width()*tower.columns()/2;
@@ -135,8 +142,7 @@ public final class InstrumentGeometry {
             return List.of(new Socket("level_body",p[0],p[1],p[2],false,false));
         }
         double a=s.axis(),r=s.radius(),x=a,y=s.bottomTangent()+s.tangentLength()/2,z=a+r+.14;
-        if(s.kind()==EquipmentShape.Kind.TANK){var plan=TankDesign.Plan.of(s.diameter(),(int)s.tangentLength());a=plan.a();x=a;y=s.fillHeight()/2;z=a+r+.14;}
-        else if(s.kind()==EquipmentShape.Kind.SPHERE){var plan=SphereDesign.Plan.of(s.diameter(),s.support());a=plan.a();x=a;y=plan.yc();z=a+r+.14;}
+        if(s.kind()==EquipmentShape.Kind.SPHERE){var plan=SphereDesign.Plan.of(s.diameter(),s.support());a=plan.a();x=a;y=plan.yc();z=a+r+.14;}
         else if(s.saddles()){int cells=(int)Math.ceil(s.diameter());a=(cells%2==0?cells+1:cells)/2.0;x=a;y=s.headDepth()+s.tangentLength()/2;z=a+r+.14;}
         var result=new ArrayList<Socket>();var p=s.transform().point(new double[]{x,y,z});result.add(new Socket("level_body",p[0],p[1],p[2],false,false));
         var b=s.bootPlace();if(b!=null){p=s.transform().point(new double[]{a-r-b.length()/2,b.station(),a+b.diameter()/2+.14});result.add(new Socket("level_boot",p[0],p[1],p[2],false,false));}

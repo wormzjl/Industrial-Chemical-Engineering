@@ -11,12 +11,17 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.phys.Vec3;
 import java.util.*;
 
-/** GUI-only transmitters. Configuration/identity are facts; readings are accepted engine observations. */
+/** Digital transmitters. Configuration/identity are facts; readings are accepted engine observations. */
 public final class Sensor {
     private Sensor(){}
     /** Saved by name. {@code SPEED} (accessory facts schema 3, batch 2026-11-03-rotating-machinery W3): a steam turbine's
      * speed pickup on its coupling guard, which works its governor valve (owner decision D27). */
-    public enum Kind { PRESSURE, TEMPERATURE, FLOW, LEVEL, SPEED }
+    public enum Kind {
+        PRESSURE("P"), TEMPERATURE("T"), FLOW("F"), LEVEL("L"), SPEED("N");
+        private final String symbol;
+        Kind(String symbol){this.symbol=symbol;}
+        public String symbol(){return symbol;}
+    }
     public enum Unit { ABSOLUTE_PASCAL, KELVIN, KILOGRAM_PER_SECOND, CUBIC_METRE_PER_SECOND, METRE, HEIGHT_PERCENT, REVOLUTIONS_PER_MINUTE }
     public static Unit primaryUnit(Kind kind){return switch(kind){case PRESSURE->Unit.ABSOLUTE_PASCAL;case TEMPERATURE->Unit.KELVIN;case FLOW->Unit.KILOGRAM_PER_SECOND;case LEVEL->Unit.METRE;case SPEED->Unit.REVOLUTIONS_PER_MINUTE;};}
     public static Optional<Unit> secondaryUnit(Kind kind){return switch(kind){case FLOW->Optional.of(Unit.CUBIC_METRE_PER_SECOND);case LEVEL->Optional.of(Unit.HEIGHT_PERCENT);default->Optional.empty();};}
@@ -57,8 +62,11 @@ public final class Sensor {
         if(kind==Kind.SPEED)return speedPickup(host);
         if(kind!=Kind.LEVEL)return host.mounts().stream().filter(m->supports(kind,m.id())).toList();
         if(!(host.entity() instanceof EquipmentShellBlockEntity shell)||shell.shape()==null||!shell.shape().reservoir())return List.of();
-        var shape=shell.shape();var n=shape.transform().direction(new double[]{0,0,1});var face=Direction.getNearest(n[0],n[1],n[2]);
-        return com.wormzjl.icheme.science.equipment.InstrumentGeometry.levelSockets(shape).stream().map(socket->new Instrument.Mount(socket.id(),new Vec3(socket.x()+shell.origin().getX(),socket.y()+shell.origin().getY(),socket.z()+shell.origin().getZ()),face,Set.of(GaugeSettings.Kind.PRESSURE),false)).toList();
+        return levelMounts(shell.shape(),shell.origin());
+    }
+    static List<Instrument.Mount> levelMounts(EquipmentShape shape,net.minecraft.core.BlockPos origin){
+        var n=shape.transform().direction(new double[]{0,0,1});var face=Direction.getNearest(n[0],n[1],n[2]);
+        return com.wormzjl.icheme.science.equipment.InstrumentGeometry.levelSockets(shape).stream().map(socket->new Instrument.Mount(socket.id(),new Vec3(socket.x()+origin.getX(),socket.y()+origin.getY(),socket.z()+origin.getZ()),socket.face()<0?face:Direction.values()[socket.face()],Set.of(GaugeSettings.Kind.PRESSURE),false)).toList();
     }
 
     /** A steam turbine's speed pickup (W3): at its output coupling, on the face the shaft leaves by; none on another host. */

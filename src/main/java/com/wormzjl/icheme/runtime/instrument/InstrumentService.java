@@ -22,7 +22,7 @@ public final class InstrumentService {
     private final MinecraftServer server;
     private final FluidWorldAuthority world;
     private final Store store;
-    private record SensorOperation(UUID player,Instrument.Key key,Sensor.Kind kind,ItemStack held,InteractionHand hand,boolean remove,long revision,String dimension,long position){}
+    private record SensorOperation(UUID player,Instrument.Key key,Sensor.Kind kind,ItemStack held,int slot,boolean remove,long revision,String dimension,long position){}
     private final Map<Instrument.Key,SensorOperation> sensorOperations=new LinkedHashMap<>();
     private final Map<UUID,ItemStack> exactStacks=new HashMap<>();
     private final Map<UUID,Set<FluidNetwork.InstrumentTarget>> watchers=new HashMap<>();
@@ -88,17 +88,31 @@ public final class InstrumentService {
         InstrumentHosts.Host chosen=null;Instrument.Mount mount=null;double nearest=player.blockInteractionRange();
         var eye=player.getEyePosition();var end=eye.add(player.getLookAngle().scale(nearest));
         for(var host:hosts)for(var m:Sensor.mounts(host,kind)){var hit=m.bounds().clip(eye,end);if(hit.isPresent()&&hit.get().distanceTo(eye)<=nearest){chosen=host;mount=m;nearest=hit.get().distanceTo(eye);}}
-        if(chosen==null&&player.pick(player.blockInteractionRange(),0,false) instanceof net.minecraft.world.phys.BlockHitResult hit){
-            var host=InstrumentHosts.at(player.level(),hit.getBlockPos());if(host!=null){var mounts=Sensor.mounts(host,kind);if(!mounts.isEmpty()){chosen=host;mount=mounts.stream().min(Comparator.comparingDouble(m->m.centre().distanceToSqr(eye))).orElseThrow();}}
+        if(player.pick(player.blockInteractionRange(),0,false) instanceof net.minecraft.world.phys.BlockHitResult hit&&hit.getType()==net.minecraft.world.phys.HitResult.Type.BLOCK){
+            var host=InstrumentHosts.at(player.level(),hit.getBlockPos());
+            if(host!=null&&(chosen==null||host.pipe()&&chosen.identity()==host.identity())){
+                var mounts=Sensor.mounts(host,kind);
+                if(!mounts.isEmpty()){
+                    chosen=host;
+                    var toward=eye.subtract(hit.getBlockPos().getCenter());
+                    mount=host.pipe()?mounts.stream().max(Comparator.comparingDouble(m->m.normal().dot(toward))).orElseThrow():mounts.stream().min(Comparator.comparingDouble(m->m.centre().distanceToSqr(eye))).orElseThrow();
+                }
+            }
         }
-        if(chosen==null||mount==null||!permission(player,chosen,player.getItemInHand(hand)))return;
+        if(chosen==null||mount==null){sensorNotice(player,"unsupported");return;}
+        if(!permission(player,chosen,player.getItemInHand(hand)))return;
+        boolean pipeTap=chosen.pipe()&&mount.id().startsWith("pipe_");
+        if(!InstrumentHosts.reachable(player,chosen,mount)&&!(pipeTap&&InstrumentHosts.pipeReachable(player,chosen))){sensorNotice(player,"reach");return;}
+        var key=new Instrument.Key(chosen.identity(),mount.id());
+        if(store.sensor(key)!=null||store.get(key)!=null||pipeTap&&occupied(chosen.identity())){sensorNotice(player,"occupied");return;}
+        if(!InstrumentHosts.clear(player.level(),chosen,mount)){sensorNotice(player,"blocked");return;}
         queueSensor(player,hand,chosen,mount,kind,false);
     }
     private boolean requestSensorRemoval(ServerPlayer player,InteractionHand hand){
         if(!player.getItemInHand(hand).is(ModItems.ACCESSORY_WRENCH.get())||player.isSpectator()||!player.mayBuild())return false;
         double reach=player.blockInteractionRange();var eye=player.getEyePosition();var end=eye.add(player.getLookAngle().scale(reach));
         for(var host:InstrumentHosts.nearby(player.level(),eye,8))for(var sensor:store.sensors(host.identity()))for(var mount:Sensor.mounts(host,sensor.kind())){
-            if(!mount.id().equals(sensor.key().mount())||mount.bounds().clip(eye,end).isEmpty())continue;
+            if(!mount.id().equals(sensor.key().mount())||mount.bounds().clip(eye,end).isEmpty()||!InstrumentHosts.reachable(player,host,mount))continue;
             queueSensor(player,hand,host,mount,sensor.kind(),true);return true;
         }
         return false;
@@ -106,22 +120,27 @@ public final class InstrumentService {
     private void queueSensor(ServerPlayer player,InteractionHand hand,InstrumentHosts.Host host,Instrument.Mount mount,Sensor.Kind kind,boolean remove){
         var key=new Instrument.Key(host.identity(),mount.id());
         if(sensorOperations.size()>=4096||sensorOperations.containsKey(key))return;
-        sensorOperations.put(key,new SensorOperation(player.getUUID(),key,kind,player.getItemInHand(hand),hand,remove,store.revision(host.identity()),player.level().dimension().location().toString(),host.entity().getBlockPos().asLong()));
+        int slot=hand==InteractionHand.OFF_HAND?net.minecraft.world.entity.player.Inventory.SLOT_OFFHAND:player.getInventory().selected;
+        sensorOperations.put(key,new SensorOperation(player.getUUID(),key,kind,player.getItemInHand(hand),slot,remove,store.revision(host.identity()),player.level().dimension().location().toString(),host.entity().getBlockPos().asLong()));
+        sensorNotice(player,"queued");
     }
+    private static void sensorNotice(ServerPlayer player,String reason){player.displayClientMessage(net.minecraft.network.chat.Component.translatable("message.icheme.sensor."+reason),true);}
     private void commitSensors(){
         var operations=List.copyOf(sensorOperations.values());sensorOperations.clear();
         for(var op:operations){
-            var player=server.getPlayerList().getPlayer(op.player());var level=level(op.dimension());if(player==null||level==null||player.level()!=level||player.getItemInHand(op.hand())!=op.held())continue;
+            var player=server.getPlayerList().getPlayer(op.player());var level=level(op.dimension());if(player==null)continue;
+            if(level==null||player.level()!=level||player.getInventory().getItem(op.slot())!=op.held()||op.held().isEmpty()){sensorNotice(player,"changed");continue;}
             var host=InstrumentHosts.at(level,BlockPos.of(op.position()));
-            if(host==null||host.identity()!=op.key().host()||store.revision(host.identity())!=op.revision()||!permission(player,host,op.held()))continue;
+            if(host==null||host.identity()!=op.key().host()||store.revision(host.identity())!=op.revision()||!permission(player,host,op.held())){sensorNotice(player,"changed");continue;}
             var mount=Sensor.mounts(host,op.kind()).stream().filter(m->m.id().equals(op.key().mount())).findFirst().orElse(null);
-            if(mount==null||!InstrumentHosts.reachable(player,host,mount))continue;
+            // Reach and aim belong to the click. Selecting another hotbar slot or walking away must not cancel a queued action.
+            if(mount==null){sensorNotice(player,"changed");continue;}
             var old=store.sensor(op.key());Sensor.Installed value;
             if(op.remove()){
                 if(!op.held().is(ModItems.ACCESSORY_WRENCH.get())||old==null)continue;
                 value=store.removeSensor(op.key(),old.instance());if(value==null)continue;sensorSamples.remove(value.instance());refund(player,level,host.entity().getBlockPos(),sensorItem(value.kind()));
             }else{
-                if(!(op.held().getItem() instanceof SensorItem item)||item.kind()!=op.kind()||!InstrumentHosts.clear(level,host,mount))continue;
+                if(!(op.held().getItem() instanceof SensorItem item)||item.kind()!=op.kind()||!InstrumentHosts.clear(level,host,mount)){sensorNotice(player,"blocked");continue;}
                 value=store.installSensor(op.key(),UUID.randomUUID(),op.kind(),op.revision());if(value==null)continue;
                 if(!player.isCreative())op.held().shrink(1);
             }
@@ -138,6 +157,7 @@ public final class InstrumentService {
             // A speed pickup binds or frees its turbine's governor valve, as a queued shaft event (W3, reading A25).
             if(op.kind()==Sensor.Kind.SPEED)governor(host.identity(),op.remove()?null:value.instance());
             sync(host);world.markViewDirty(host.identity());player.inventoryMenu.broadcastChanges();
+            sensorNotice(player,op.remove()?"removed":"installed");
         }
     }
     private void editSensorValve(WorldTopologyLedger.Registration record,com.wormzjl.icheme.science.fluid.network.FlowControl.ControlValve control){

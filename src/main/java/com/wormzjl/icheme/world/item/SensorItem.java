@@ -8,6 +8,9 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.*;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.Level;
+import net.minecraft.network.chat.Component;
+import java.util.List;
+import java.util.Locale;
 
 /** A passive transmitter; installation commits on the engine's event schedule. */
 public final class SensorItem extends Item {
@@ -20,4 +23,8 @@ public final class SensorItem extends Item {
     }
     @Override public InteractionResult onItemUseFirst(ItemStack stack,UseOnContext context){return context.getPlayer()==null?InteractionResult.PASS:interact(context.getPlayer(),context.getHand());}
     @Override public InteractionResultHolder<ItemStack> use(Level level,Player player,InteractionHand hand){return new InteractionResultHolder<>(interact(player,hand),player.getItemInHand(hand));}
+    @Override public void appendHoverText(ItemStack stack,TooltipContext context,List<Component> lines,TooltipFlag flag){
+        lines.add(Component.translatable("tooltip.icheme.sensor."+kind.name().toLowerCase(Locale.ROOT)));
+        lines.add(Component.translatable("tooltip.icheme.sensor.install"));
+    }
 }
