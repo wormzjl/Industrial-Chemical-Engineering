@@ -22,8 +22,6 @@ public final class InstrumentService {
     private final MinecraftServer server;
     private final FluidWorldAuthority world;
     private final Store store;
-    private record SensorOperation(UUID player,Instrument.Key key,Sensor.Kind kind,ItemStack held,int slot,boolean remove,long revision,String dimension,long position){}
-    private final Map<Instrument.Key,SensorOperation> sensorOperations=new LinkedHashMap<>();
     private final Map<UUID,ItemStack> exactStacks=new HashMap<>();
     private final Map<UUID,Set<FluidNetwork.InstrumentTarget>> watchers=new HashMap<>();
     private final Map<UUID,Sensor.Reading> sensorSamples=new HashMap<>();
@@ -61,7 +59,7 @@ public final class InstrumentService {
         if(store.queue(pending)){exactStacks.put(pending.request(),held);commit(player,player.serverLevel(),pending);store.finish(pending.request());exactStacks.remove(pending.request());}
     }
     private static boolean permission(ServerPlayer player,InstrumentHosts.Host host,ItemStack held){var pos=host.entity().getBlockPos();return player.mayBuild()&&!player.isSpectator()&&player.serverLevel().mayInteract(player,pos)&&player.mayUseItemAt(pos,Direction.UP,held);}
-    public void tick(long tick){if(store.nextDue()==0)store.nextDue(tick+100);if(tick<store.nextDue())return;store.nextDue(tick+100);commitSensors();recoverInvalidSensors();for(var p:store.pending()){var player=server.getPlayerList().getPlayer(p.player());if(player==null)continue;var level=level(p.dimension());if(level==null||!level.hasChunkAt(BlockPos.of(p.position())))continue;commit(player,level,p);store.finish(p.request());exactStacks.remove(p.request());}for(var i:store.installed()){var h=world.instrumentHost(i.key().host());if(h==null)continue;var m=h.mount(i.key().mount());if(m==null||!m.kinds().contains(i.settings().kind())||h.pipe()&&InstrumentHosts.legacy(h.entity().getBlockState())!=null){var removed=store.remove(i.key(),i.instance());if(removed!=null){refund(null,h.entity().getLevel(),h.entity().getBlockPos(),item(removed));samples.remove(i.instance());sync(h);}}}prune();}
+    public void tick(long tick){if(store.nextDue()==0)store.nextDue(tick+100);if(tick<store.nextDue())return;store.nextDue(tick+100);recoverInvalidSensors();for(var p:store.pending()){var player=server.getPlayerList().getPlayer(p.player());if(player==null)continue;var level=level(p.dimension());if(level==null||!level.hasChunkAt(BlockPos.of(p.position())))continue;commit(player,level,p);store.finish(p.request());exactStacks.remove(p.request());}for(var i:store.installed()){var h=world.instrumentHost(i.key().host());if(h==null)continue;var m=h.mount(i.key().mount());if(m==null||!m.kinds().contains(i.settings().kind())||h.pipe()&&InstrumentHosts.legacy(h.entity().getBlockState())!=null){var removed=store.remove(i.key(),i.instance());if(removed!=null){refund(null,h.entity().getLevel(),h.entity().getBlockPos(),item(removed));samples.remove(i.instance());sync(h);}}}prune();}
     private void commit(ServerPlayer player,ServerLevel level,Store.Pending p){var host=InstrumentHosts.at(level,BlockPos.of(p.position()));if(host==null||host.identity()!=p.key().host()||player.serverLevel()!=level||store.revision(host.identity())!=p.expectedRevision())return;var hand=p.offhand()?InteractionHand.OFF_HAND:InteractionHand.MAIN_HAND;var held=player.getItemInHand(hand);if(!permission(player,host,held))return;if(!p.offhand()&&player.getInventory().selected!=p.slot()||exactStacks.containsKey(p.request())&&held!=exactStacks.get(p.request()))return;
         if(p.type()==Instrument.Type.LEVEL_GAUGE){
             var mount=InstrumentHosts.LevelGauge.of(host);
@@ -106,59 +104,49 @@ public final class InstrumentService {
         var key=new Instrument.Key(chosen.identity(),mount.id());
         if(store.sensor(key)!=null||store.get(key)!=null||pipeTap&&occupied(chosen.identity())){sensorNotice(player,"occupied");return;}
         if(!InstrumentHosts.clear(player.level(),chosen,mount)){sensorNotice(player,"blocked");return;}
-        queueSensor(player,hand,chosen,mount,kind,false);
+        changeSensor(player,hand,chosen,mount,kind,false);
     }
     private boolean requestSensorRemoval(ServerPlayer player,InteractionHand hand){
         if(!player.getItemInHand(hand).is(ModItems.ACCESSORY_WRENCH.get())||player.isSpectator()||!player.mayBuild())return false;
         double reach=player.blockInteractionRange();var eye=player.getEyePosition();var end=eye.add(player.getLookAngle().scale(reach));
         for(var host:InstrumentHosts.nearby(player.level(),eye,8))for(var sensor:store.sensors(host.identity()))for(var mount:Sensor.mounts(host,sensor.kind())){
             if(!mount.id().equals(sensor.key().mount())||mount.bounds().clip(eye,end).isEmpty()||!InstrumentHosts.reachable(player,host,mount))continue;
-            queueSensor(player,hand,host,mount,sensor.kind(),true);return true;
+            changeSensor(player,hand,host,mount,sensor.kind(),true);return true;
         }
         return false;
     }
-    private void queueSensor(ServerPlayer player,InteractionHand hand,InstrumentHosts.Host host,Instrument.Mount mount,Sensor.Kind kind,boolean remove){
-        var key=new Instrument.Key(host.identity(),mount.id());
-        if(sensorOperations.size()>=4096||sensorOperations.containsKey(key))return;
-        int slot=hand==InteractionHand.OFF_HAND?net.minecraft.world.entity.player.Inventory.SLOT_OFFHAND:player.getInventory().selected;
-        sensorOperations.put(key,new SensorOperation(player.getUUID(),key,kind,player.getItemInHand(hand),slot,remove,store.revision(host.identity()),player.level().dimension().location().toString(),host.entity().getBlockPos().asLong()));
-        sensorNotice(player,"queued");
-    }
     private static void sensorNotice(ServerPlayer player,String reason){player.displayClientMessage(net.minecraft.network.chat.Component.translatable("message.icheme.sensor."+reason),true);}
-    private void commitSensors(){
-        var operations=List.copyOf(sensorOperations.values());sensorOperations.clear();
-        for(var op:operations){
-            var player=server.getPlayerList().getPlayer(op.player());var level=level(op.dimension());if(player==null)continue;
-            if(level==null||player.level()!=level||player.getInventory().getItem(op.slot())!=op.held()||op.held().isEmpty()){sensorNotice(player,"changed");continue;}
-            var host=InstrumentHosts.at(level,BlockPos.of(op.position()));
-            if(host==null||host.identity()!=op.key().host()||store.revision(host.identity())!=op.revision()||!permission(player,host,op.held())){sensorNotice(player,"changed");continue;}
-            var mount=Sensor.mounts(host,op.kind()).stream().filter(m->m.id().equals(op.key().mount())).findFirst().orElse(null);
-            // Reach and aim belong to the click. Selecting another hotbar slot or walking away must not cancel a queued action.
-            if(mount==null){sensorNotice(player,"changed");continue;}
-            var old=store.sensor(op.key());Sensor.Installed value;
-            if(op.remove()){
-                if(!op.held().is(ModItems.ACCESSORY_WRENCH.get())||old==null)continue;
-                value=store.removeSensor(op.key(),old.instance());if(value==null)continue;sensorSamples.remove(value.instance());refund(player,level,host.entity().getBlockPos(),sensorItem(value.kind()));
-            }else{
-                if(!(op.held().getItem() instanceof SensorItem item)||item.kind()!=op.kind()||!InstrumentHosts.clear(level,host,mount)){sensorNotice(player,"blocked");continue;}
-                value=store.installSensor(op.key(),UUID.randomUUID(),op.kind(),op.revision());if(value==null)continue;
-                if(!player.isCreative())op.held().shrink(1);
-            }
-            if(op.key().mount().equals("valve_sensor")){
-                var record=world.registrations().get(host.identity());
-                if(record!=null){var source=op.remove()?com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.NONE:op.kind()==Sensor.Kind.PRESSURE?com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.PRESSURE:com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.VOLUME_FLOW;
-                    double target=source==com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.VOLUME_FLOW?.01:200000;
-                    if(record.device().control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.ControlValve previous&&(op.remove()||previous.source()==source))target=previous.target();
-                    var next=record.device().control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.ControlValve previous?previous.withSource(op.remove()?previous.source():source,op.remove()?null:value.instance(),store.revision(host.identity())):new com.wormzjl.icheme.science.fluid.network.FlowControl.ControlValve(source,target,op.remove()?null:value.instance(),store.revision(host.identity()));
-                    editSensorValve(record,next);
-                }
-            }
-            if(op.kind()==Sensor.Kind.FLOW){world.flowmeter(host.identity(),!op.remove());metered(host);}
-            // A speed pickup binds or frees its turbine's governor valve, as a queued shaft event (W3, reading A25).
-            if(op.kind()==Sensor.Kind.SPEED)governor(host.identity(),op.remove()?null:value.instance());
-            sync(host);world.markViewDirty(host.identity());player.inventoryMenu.broadcastChanges();
-            sensorNotice(player,op.remove()?"removed":"installed");
+    /** Physical attachment is immediate; the resulting process edits still enter the engine's queues. */
+    private void changeSensor(ServerPlayer player,InteractionHand hand,InstrumentHosts.Host host,Instrument.Mount mount,Sensor.Kind kind,boolean remove){
+        var held=player.getItemInHand(hand);
+        if(held.isEmpty()||!permission(player,host,held))return;
+        var key=new Instrument.Key(host.identity(),mount.id());
+        var old=store.sensor(key);Sensor.Installed value;
+        if(remove){
+            if(!held.is(ModItems.ACCESSORY_WRENCH.get())||old==null)return;
+            value=store.removeSensor(key,old.instance());if(value==null)return;
+            sensorSamples.remove(value.instance());refund(player,player.serverLevel(),host.entity().getBlockPos(),sensorItem(value.kind()));
+        }else{
+            if(!(held.getItem() instanceof SensorItem item)||item.kind()!=kind)return;
+            if(!InstrumentHosts.clear(player.level(),host,mount)){sensorNotice(player,"blocked");return;}
+            value=store.installSensor(key,UUID.randomUUID(),kind,store.revision(host.identity()));
+            if(value==null){sensorNotice(player,"occupied");return;}
+            if(!player.isCreative())held.shrink(1);
         }
+        if(key.mount().equals("valve_sensor")){
+            var record=world.registrations().get(host.identity());
+            if(record!=null){var source=remove?com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.NONE:kind==Sensor.Kind.PRESSURE?com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.PRESSURE:com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.VOLUME_FLOW;
+                double target=source==com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.VOLUME_FLOW?.01:200000;
+                if(record.device().control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.ControlValve previous&&(remove||previous.source()==source))target=previous.target();
+                var next=record.device().control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.ControlValve previous?previous.withSource(remove?previous.source():source,remove?null:value.instance(),store.revision(host.identity())):new com.wormzjl.icheme.science.fluid.network.FlowControl.ControlValve(source,target,remove?null:value.instance(),store.revision(host.identity()));
+                editSensorValve(record,next);
+            }
+        }
+        if(kind==Sensor.Kind.FLOW){world.flowmeter(host.identity(),!remove);metered(host);}
+        // A speed pickup binds or frees its turbine's governor valve through a queued shaft event.
+        if(kind==Sensor.Kind.SPEED)governor(host.identity(),remove?null:value.instance());
+        sync(host);world.markViewDirty(host.identity());player.inventoryMenu.broadcastChanges();
+        sensorNotice(player,remove?"removed":"installed");
     }
     private void editSensorValve(WorldTopologyLedger.Registration record,com.wormzjl.icheme.science.fluid.network.FlowControl.ControlValve control){
         var d=record.device();world.edit(d.id(),record.revision(),d.withControl(control),record.spec());

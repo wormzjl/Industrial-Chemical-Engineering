@@ -12,7 +12,7 @@ import net.minecraft.network.chat.Component;
 import java.util.List;
 import java.util.Locale;
 
-/** A passive transmitter; installation commits on the engine's event schedule. */
+/** A passive transmitter; physical installation is immediate, readings follow the engine's publications. */
 public final class SensorItem extends Item {
     private final Sensor.Kind kind;
     public SensorItem(Properties properties,Sensor.Kind kind){super(properties.stacksTo(64));this.kind=kind;}
