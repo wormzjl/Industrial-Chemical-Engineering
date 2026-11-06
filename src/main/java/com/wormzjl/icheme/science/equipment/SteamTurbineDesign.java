@@ -205,6 +205,10 @@ final class SteamTurbineDesign extends UnitDesign {
         // Steam into the valve from the side, its pipe block two columns at least from the exhaust's; the exhaust up.
         double inlet = xv + rb + .08, steamFace = Math.max(Math.ceil(inlet + ProcessUnit.NECK), a + 1.5);
         u.nozzles.add(new Nozzle(Role.STEAM, new double[]{inlet - .01, yv, zv}, 0, 1, steamFace - inlet + .01, od, 0));
+        // A reducer from the fixed valve flange to the connected pipe. On a short inlet it replaces most of the
+        // straight hub, retaining the flange face and 30 mm of neck rather than cutting a large pipe off at the valve.
+        u.nozzleRoots.put(u.nozzles.size() - 1, new ProcessUnit.NozzleRoot(od / 2, .4, .03));
         u.nozzles.add(new Nozzle(Role.EXHAUST, new double[]{a, top - .01, zE}, 1, 1, Math.ceil(top + ProcessUnit.NECK) - top + .01, oe, 0));
+        u.nozzleRoots.put(u.nozzles.size() - 1, new ProcessUnit.NozzleRoot(oe / 2, .4, .03));
     }
 }

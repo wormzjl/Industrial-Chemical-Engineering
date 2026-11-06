@@ -111,10 +111,19 @@ public final class PortMarkings {
         int sign = flow == Flow.IN ? -1 : 1;
         var frame = Mesh.Frame.of(nozzle.base(), nozzle.axis(), nozzle.sign());
         var tangent = frame.side();
+        var root = ShapeRasterizer.nozzleRoot(shape, k);
+        double straightFrom = 0;
+        if (root != null && Math.abs(root.radius() - od / 2) > 1e-9) {
+            straightFrom = root.end(nozzle.length(), od);
+            if (end - straightFrom < Math.min(longest, .28) + MARGIN) {
+                reducerBand(mesh, shape, k, code, frame, root, od, sides, end, longest, sign);
+                return;
+            }
+        }
         for (int side = 0; side < 4; side++) {
             // Across the whole facet: a curved wall frees a neck's edges where it does not free its middle, and a part's corner
             // can reach in between.
-            double length = longest + MARGIN;
+            double length = Math.min(longest + MARGIN, end - straightFrom);
             for (double offset = -.5; offset <= .5; offset += .25)
                 length = Math.min(length, shown(shape, k, code, frame, normal(frame, tangent, side * sides / 4 + .5 + offset, sides), od / 2 + .01, end, length));
             length -= MARGIN;
@@ -122,6 +131,42 @@ public final class PortMarkings {
             // A short arrow on a wide line keeps an arrow's proportions.
             var normal = normal(frame, tangent, side * sides / 4 + .5, sides);
             badge(new Label(mesh, new Mesh.Frame(frame.origin(), frame.axis(), normal), radius, end - length / 2, sign), length, Math.min(facet, .6 * length));
+        }
+    }
+
+    /** A stencil lies on one conical facet, with its flow axis following that facet's slope. */
+    private static void reducerBand(Mesh mesh, EquipmentShape shape, int k, int code, Mesh.Frame frame,
+                                    ProcessUnit.NozzleRoot root, double od, int sides, double end, double longest, int sign) {
+        double to = root.end(shape.nozzles().get(k).length(), od), low = .01 + MARGIN, high = Math.min(to, end);
+        if (high <= low) return;
+        double slope = (od / 2 - root.radius()) / (to - .01), apothem = DeterministicMath.cos(Math.PI / sides);
+        double incline = slope * apothem, scale = Math.sqrt(1 + incline * incline);
+        double span = Math.min(.65 * (high - low), longest / scale);
+        if (span * scale < SHORTEST) return;
+        if (slope > 0) low = high - span;
+        else high = low + span;
+        double station = (low + high) / 2, radius = root.radius() + slope * (station - .01);
+        double narrow = Math.min(root.radius() + slope * (low - .01), root.radius() + slope * (high - .01));
+        double width = Math.min(.82 * 2 * narrow * DeterministicMath.sin(Math.PI / sides), .6 * span * scale);
+        for (int side = 0; side < 4; side++) {
+            var radial = normal(frame, frame.side(), side * sides / 4 + .5, sides);
+            boolean hidden = false;
+            for (double s = low; s <= high + 1e-9; s += STEP) {
+                var point = frame.along(s);
+                double r = root.radius() + slope * (s - .01);
+                for (int a = 0; a < 3; a++) point[a] += (r + .01) * radial[a];
+                if (ShapeRasterizer.hides(shape, k, code, point)) { hidden = true; break; }
+            }
+            if (hidden) continue;
+            var centre = frame.along(station);
+            var axis = new double[3];
+            var normal = new double[3];
+            for (int a = 0; a < 3; a++) {
+                centre[a] += radius * apothem * radial[a];
+                axis[a] = (frame.axis()[a] + incline * radial[a]) / scale;
+                normal[a] = (radial[a] - incline * frame.axis()[a]) / scale;
+            }
+            badge(new Label(mesh, new Mesh.Frame(centre, axis, normal), 0, 0, sign), span * scale, width);
         }
     }
 

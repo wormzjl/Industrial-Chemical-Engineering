@@ -703,10 +703,22 @@ public final class ProcessUnit {
     double @org.jetbrains.annotations.Nullable [] terminal;
     /** The last terminal box a motor drawing drew ({@link #motor}, {@link #largeMotor}): its centre in the frame. */
     double @org.jetbrains.annotations.Nullable [] terminalBox;
-    /** Fixed casting radii at nozzle roots, by nozzle index: the pipe-sized nozzle blends into each casting. */
-    final Map<Integer, Double> nozzleRoots = new HashMap<>();
+    /** Fixed roots and the room for their transition into the connected pipe, by nozzle index. */
+    final Map<Integer, NozzleRoot> nozzleRoots = new HashMap<>();
     /** The sleeves through a closed skirt, by nozzle index: drawn with the nozzle at its pipe's size ({@link Sleeve}). */
     final Map<Integer, Sleeve> sleeves = new HashMap<>();
+
+    /** A casting blend or reducer, limiting its length and how much of the standard flange hub it reserves. */
+    record NozzleRoot(double radius, double maxLength, double maxHub) {
+        NozzleRoot(double radius) {
+            this(radius, .12, Double.POSITIVE_INFINITY);
+        }
+
+        double end(double length, double outside) {
+            double hub = Math.min(PipeSizes.hub(outside), maxHub);
+            return .01 + Math.min(maxLength, length - PipeSizes.flangeThickness(outside) - hub - .01);
+        }
+    }
 
     /**
      * A nozzle's sleeve through a closed skirt (owner decision 2026-10-21: "Skirt hole needs to adapt to the size of the
@@ -1425,7 +1437,7 @@ public final class ProcessUnit {
             root = bore / 2;
         } else at[axis] = from - sign * .01;
         nozzles.add(new Nozzle(role, at, axis, sign, sign * (face - at[axis]), bore, 0));
-        nozzleRoots.put(nozzles.size() - 1, root);
+        nozzleRoots.put(nozzles.size() - 1, new NozzleRoot(root));
     }
 
     /**

@@ -456,6 +456,12 @@ public final class ShapeRasterizer {
         return geometry(shape).nozzleCells.get(k);
     }
 
+    /** The fixed casting and transition shared by a nozzle's surface, collision and flow stencil. */
+    static @Nullable ProcessUnit.NozzleRoot nozzleRoot(EquipmentShape shape, int k) {
+        var unit = geometry(shape).unit;
+        return unit != null ? unit.nozzleRoots.get(k) : null;
+    }
+
     /**
      * A drum's shell cell at its lowest inside point, where its fluid node stands: the bottom apex, or a lying drum's
      * bottom line; a mover's suction nozzle cell, a steam turbine's steam inlet cell (W3); null for other columns and units.
@@ -1192,13 +1198,14 @@ public final class ShapeRasterizer {
                 double taper = length - t - hub, neckStart = 0;
                 var root = unit != null ? unit.nozzleRoots.get(k) : null;
                 if (root != null) {
-                    double end = .01 + Math.min(.12, taper - .01);
-                    m.frustum(f, root, r, .01, end, sides, Material.MACHINE);
-                    if (root > r) m.annulus(f, r, root, .01, sides, 1, Material.MACHINE);
+                    double end = root.end(length, od);
+                    m.frustum(f, root.radius(), r, .01, end, sides, Material.MACHINE);
+                    if (root.radius() > r) m.annulus(f, r, root.radius(), .01, sides, 1, Material.MACHINE);
                     neckStart = end;
+                    taper = Math.max(taper, end);
                 }
                 // The neck's taper into the flange: a weld-neck hub.
-                m.prism(f, r, neckStart, taper, sides, Material.PIPE);
+                if (taper > neckStart) m.prism(f, r, neckStart, taper, sides, Material.PIPE);
                 m.frustum(f, r, hubR, taper, length - t, sides, Material.PIPE);
                 m.annulus(f, hubR, flange, length - t, sides, -1, Material.FLANGE);
                 m.bolts(f, od, hubR, flange, length - t, -1, Material.BOLT);
@@ -1251,9 +1258,9 @@ public final class ShapeRasterizer {
             double length = nozzle.length(), radius = od / 2;
             var root = unit != null ? unit.nozzleRoots.get(k) : null;
             if (root != null) {
-                double end = .01 + Math.min(.12, length - t - PipeSizes.hub(od) - .01);
-                if (s >= .01 && s <= end) {
-                    double r = root + (radius - root) * (s - .01) / (end - .01);
+                double end = root.end(length, od);
+                if (s >= 0 && s <= end) {
+                    double r = root.radius() + (radius - root.radius()) * (Math.max(.01, s) - .01) / (end - .01);
                     return rho2 <= r * r;
                 }
             }
