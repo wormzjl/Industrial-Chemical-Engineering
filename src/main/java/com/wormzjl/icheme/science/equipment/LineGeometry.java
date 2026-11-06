@@ -23,7 +23,7 @@ import static com.wormzjl.icheme.science.equipment.Mesh.*;
  * <p>Pipeline devices draw their bodies from photographs (survey section 4): a globe control valve with its diaphragm
  * actuator above a horizontal line or beside a vertical one; a vertical in-line pump with its motor up on a pedestal; a
  * compressor barrel with its motor on a skid; a Y-strainer with its screen leg 45° down and downstream; a small
- * vertical tank on legs; and the feed and drain boxes of the source and sink. Each draws a flanged nozzle at the size of
+ * vertical tank on legs; and symmetric six-faced source and sink housings. Each draws a flanged nozzle at the size of
  * the line met at each connected face; an in-line device draws its two line nozzles even unconnected.
  */
 public final class LineGeometry {
@@ -131,8 +131,8 @@ public final class LineGeometry {
             case VALVE -> valve(m, key);
             case FILTER -> strainer(m, key);
             case RESERVOIR -> tank(m, key);
-            case GENERATOR -> box(m, key, Material.FEED);
-            case VOID -> box(m, key, Material.DRAIN);
+            case GENERATOR -> boundary(m, key, Material.FEED);
+            case VOID -> boundary(m, key, Material.DRAIN);
         }
         return m;
     }
@@ -620,11 +620,52 @@ public final class LineGeometry {
         faceNozzles(m, key, new double[]{end, end, side, side, side, side});
     }
 
-    /** The source or sink: a painted box on the floor with a flanged nozzle to each line met. */
-    private static void box(Mesh m, Key key, Material material) {
-        m.box(new double[]{.18, 0, .18}, new double[]{.82, .7, .82}, ALL_FACES, material);
-        m.box(new double[]{.15, .7, .15}, new double[]{.85, .76, .85}, ALL_FACES, Material.STEELWORK);
-        faceNozzles(m, key, new double[]{.5, .25, .3, .3, .3, .3});
+    /** Six identical port covers on a bevelled steel housing; no preferred facing or floor. */
+    private static void boundary(Mesh m, Key key, Material material) {
+        double radius = .32, shoulder = .26;
+        for (int face = 0; face < 6; face++) {
+            var f = frame(face, ref(face));
+            var square = new ArrayList<double[]>(4);
+            for (int[] corner : new int[][]{{-1, -1}, {1, -1}, {1, 1}, {-1, 1}}) {
+                var p = f.along(radius);
+                for (int k = 0; k < 3; k++)
+                    p[k] += shoulder * (corner[0] * f.ref()[k] + corner[1] * f.side()[k]);
+                square.add(p);
+            }
+            m.flat(square, step(face), Material.PIPE);
+            m.prism(f, .24, radius, radius + .008, 8, Material.FLANGE);
+            m.disc(f, .24, radius + .008, 8, 1, material);
+            if (key.connected(face)) {
+                double size = key.face(face) == 0 ? NOZZLE : PipeSizes.outsideOf(key.face(face));
+                arm(m, face, .30, size, End.flanged(size, true), ref(face), PipeSizes.sides(size), true);
+            }
+        }
+        // The twelve edge bevels and eight corner bevels close the same housing along every axis.
+        for (int a = 0; a < 3; a++) for (int b = a + 1; b < 3; b++) {
+            int c = 3 - a - b;
+            for (int sa : new int[]{-1, 1}) for (int sb : new int[]{-1, 1}) {
+                var edge = new ArrayList<double[]>(4);
+                for (int[] end : new int[][]{{0, -1}, {1, -1}, {1, 1}, {0, 1}}) {
+                    var p = CENTRE.clone();
+                    p[a] += sa * (end[0] == 0 ? radius : shoulder);
+                    p[b] += sb * (end[0] == 0 ? shoulder : radius);
+                    p[c] += end[1] * shoulder;
+                    edge.add(p);
+                }
+                var normal = new double[3]; normal[a] = sa; normal[b] = sb;
+                m.flat(edge, normal, Material.FLANGE);
+            }
+        }
+        for (int sx : new int[]{-1, 1}) for (int sy : new int[]{-1, 1}) for (int sz : new int[]{-1, 1}) {
+            var corner = new ArrayList<double[]>(3);
+            int[] signs = {sx, sy, sz};
+            for (int axis = 0; axis < 3; axis++) {
+                var p = CENTRE.clone();
+                for (int k = 0; k < 3; k++) p[k] += signs[k] * (k == axis ? radius : shoulder);
+                corner.add(p);
+            }
+            m.flat(corner, new double[]{sx, sy, sz}, Material.FLANGE);
+        }
     }
 
     // ---- Frames ----------------------------------------------------------------------------------------------------
