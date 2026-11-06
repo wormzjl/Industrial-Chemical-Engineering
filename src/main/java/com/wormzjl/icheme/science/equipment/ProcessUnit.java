@@ -1511,6 +1511,8 @@ public final class ProcessUnit {
         for (int e = 0; e < 2; e++) {
             double h0 = e == 0 ? zf0 : zb0, h1 = e == 0 ? zf1 : zb1;
             mesh.band(f, rb, rb, h0, h1, nb, Material.PUMP_FINS);
+            // Close the housing behind its bracket; tuck the bore under the octagonal shaft so the joint cannot leak light.
+            mesh.annulus(f, shaft * DeterministicMath.cos(Math.PI / 8), rb + .03, e == 0 ? h1 : h0, n, e == 0 ? 1 : -1, Material.PUMP_CASTING);
             mesh.disc(f, rb, e == 0 ? zf0 : zb1, nb, e == 0 ? -1 : 1, Material.PUMP_DISC);
             mesh.cylinder(Frame.of(new double[]{a, 0, (h0 + h1) / 2}, 1, 1), .025 + .01 * di, y + rb - .01, y + rb + .05, 8, Material.PIPE);
         }
