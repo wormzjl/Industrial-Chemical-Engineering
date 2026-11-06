@@ -117,12 +117,14 @@ class ColumnSizingSampleTest {
     @Test
     void theCondenserIsSetByItsShellDrop() {
         var condenser = unit("condenser");
-        assertEquals(new ExchangerSizing.Size(false, 2, 2, 6), condenser.size(), "scale up before scaling out");
+        assertEquals(new ExchangerSizing.Size(false, 1, 2.25, 7, com.wormzjl.icheme.science.equipment.ExchangerType.CROSSFLOW), condenser.size(), "qualify scale-up before scaling out");
         assertEquals(Lamp.YELLOW, condenser.rating().lamp());
         assertTrue(condenser.rating().reading(Limit.EXCHANGER_DROP_GAS).met());
+        assertTrue(condenser.rating().reading(Limit.EXCHANGER_DROP_LIQUID).met());
         assertTrue(condenser.rating().reading(Limit.EXCHANGER_SURFACE).met());
         assertFalse(condenser.rating().reading(Limit.EXCHANGER_OVER_NEED).met());
-        assertEquals(782, condenser.rating().reading(Limit.EXCHANGER_SURFACE).low(), 8);
+        assertEquals(781, condenser.rating().reading(Limit.EXCHANGER_SURFACE).low(), 8);
+        assertTrue(condenser.rating().reading(Limit.EXCHANGER_SURFACE).value() >= 1.2*condenser.rating().reading(Limit.EXCHANGER_SURFACE).low());
         var single = new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of(SheetSizing.member(T, "condenser"), new SheetSizing.UnitEntry(new ExchangerSizing.Size(false, 1, 2.5, 8), null, null, false)));
         var singleRating = size(sheet, run, thermo, single).units().get(SheetSizing.member(T, "condenser")).rating();
         assertFalse(singleRating.reading(Limit.EXCHANGER_DROP_GAS).met(), "the widest single shell still loses too much pressure");

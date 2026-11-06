@@ -59,6 +59,19 @@ class EquipmentNetworkCodecTest {
     }
 
     @Test
+    void exchangerSubTypeCrossesWithTheConstructorDraftAndImportedShape() {
+        var type=com.wormzjl.icheme.science.equipment.ExchangerType.CROSSFLOW;
+        var shape=EquipmentShape.unit(EquipmentShape.Kind.EXCHANGER,1.5,6,EquipmentShape.Heading.NORTH,2).withExchangerType(type);
+        var sent=new SentDesign("E-1","",1,shape,null);
+        var draft=Design.DEFAULT.landed(sent);
+        assertEquals(type,draft.exchangerType());
+        var wire=EquipmentNetwork.ConstructorPayload.of(AT,draft,EquipmentNetwork.Action.KEEP);
+        var read=roundTrip(EquipmentNetwork.ConstructorPayload.STREAM_CODEC,wire);
+        assertEquals(type,read.exchangerType());
+        assertEquals(type,read.design(STORED).exchangerType());
+    }
+
+    @Test
     void aColumnTemplateCrossesWithItsNameAndInput() {
         var c = com.wormzjl.icheme.science.material.MaterialCatalog.bundled();
         var input = c.presets().column("tia_juana").input(c);

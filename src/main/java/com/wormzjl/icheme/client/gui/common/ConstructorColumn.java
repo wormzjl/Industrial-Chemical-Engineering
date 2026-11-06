@@ -309,7 +309,10 @@ public final class ConstructorColumn {
      * the reach of a column's import in blocks, and a machine's design point ({@link MachineDuty#NONE} for another form).
      */
     public record Design(VesselPlacement.Form form, double diameter, int length, int support, int forward, int right, int up, ProcessUnit.Bank bank,
-                         @Nullable Imported column, Outlet outlet, int reach,com.wormzjl.icheme.science.equipment.TowerBank towerBank, MachineDuty duty) {
+                         @Nullable Imported column, Outlet outlet, int reach,com.wormzjl.icheme.science.equipment.TowerBank towerBank, MachineDuty duty,com.wormzjl.icheme.science.equipment.ExchangerType exchangerType) {
+        public Design(VesselPlacement.Form form,double diameter,int length,int support,int forward,int right,int up,ProcessUnit.Bank bank,@Nullable Imported column,Outlet outlet,int reach,com.wormzjl.icheme.science.equipment.TowerBank towerBank,MachineDuty duty) {
+            this(form,diameter,length,support,forward,right,up,bank,column,outlet,reach,towerBank,duty,com.wormzjl.icheme.science.equipment.ExchangerType.STANDARD);
+        }
         /** The draft of a form without a design point. */
         public Design(VesselPlacement.Form form, double diameter, int length, int support, int forward, int right, int up, ProcessUnit.Bank bank,
                       @Nullable Imported column, Outlet outlet, int reach, com.wormzjl.icheme.science.equipment.TowerBank towerBank) {
@@ -378,6 +381,11 @@ public final class ConstructorColumn {
             }
         }
         var rows = new ArrayList<Column.Row>();
+        if(form.kind()==EquipmentShape.Kind.EXCHANGER) {
+            var types=new ArrayList<Column.Button>();
+            for(var type:com.wormzjl.icheme.science.equipment.ExchangerType.CATALOG)types.add(position("exchanger:"+type.name(),t.get("exchanger.type."+type.key()),type==in.exchangerType(),t.get("exchanger.type_hint")));
+            rows.add(new Column.Group(t.get(KEY+"group.subtype"),null,List.of(new Column.Buttons(types))));
+        }
         if (form.designed() && UnitDesign.of(form.kind()).hasDuty()) rows.addAll(machine(in, t));
         else rows.add(new Column.Group(t.get(KEY + "group.size"), t.get(KEY + "shift"), size));
         // A bottom outlet leaving through the skirt turns where the design lets it (a trickle-bed reactor's effluent).

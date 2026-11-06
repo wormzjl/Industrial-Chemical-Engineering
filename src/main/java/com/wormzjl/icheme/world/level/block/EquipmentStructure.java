@@ -270,7 +270,7 @@ public final class EquipmentStructure {
         var placing = new ArrayList<FluidWorldAuthority.UnitSide>();
         for (int i = 0; i < sides.size(); i++) {
             var side = sides.get(i);
-            placing.add(new FluidWorldAuthority.UnitSide(position(level, nodes.get(i)), sidePorts(level, vessel, side), side.passage(), new HeatUnit(unit, side.side(), side.area(), 0).withFans(HeatSides.fans(shape))));
+            placing.add(new FluidWorldAuthority.UnitSide(position(level, nodes.get(i)), sidePorts(level, vessel, side), side.passage(), new HeatUnit(unit, side.side(), side.area(), 0).withFans(HeatSides.fans(shape)).withExchangerType(shape.exchangerType())));
         }
         // A kettle's shell (W7): a closed vessel at its pool's node, its phase ports the drum's, its surface its tubes'.
         var pool = HeatSides.pool(shape.kind()) ? new FluidWorldAuthority.UnitVessel(position(level, nodes.get(sides.size())), ports(level, vessel), shape.volume(), shape.levelHeight(),

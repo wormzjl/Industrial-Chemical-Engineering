@@ -452,7 +452,7 @@ final class SheetSizingTest {
 
     /** A type key's choice is a fact: Size all proposes in that type, and the rating reads the size it holds. */
     @Test void aTypeKeyIsAFactTheRatingReads() {
-        var sheet = separator().flowsheet().with(SizingFacts.NONE.with("T", SizingFacts.UnitFacts.AUTO.typed(UnitType.SPHERE)));
+        var sheet = separator().flowsheet().with(SizingFacts.NONE.with("T", SizingFacts.UnitFacts.AUTO.with(new TankSizing.Size(UnitType.SPHERE,1,6,6)).with(SizingFacts.Mode.FIXED).typed(UnitType.SPHERE)));
         var run = run(sheet);
         var all = on(() -> com.wormzjl.icheme.science.flowsheet.FlowsheetRuns.sizeAll(sheet, run, THERMO));
         var held = all.sheet().sizing().unit("T");

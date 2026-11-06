@@ -139,7 +139,10 @@ public final class ShapeRepair {
      * section 6), 1 where a design was saved before it.
      */
     public record SavedComponents(String condenser, String refluxPump, List<String> pumparoundPumps, boolean ejector, boolean kettle,
-                                  int condenserUnits, int kettleUnits, int[] coolerUnits, int trimUnits) {
+                                  int condenserUnits, int kettleUnits, int[] coolerUnits, int trimUnits,ColumnComponents.Exchangers exchangers) {
+        public SavedComponents(String condenser,String refluxPump,List<String> pumparoundPumps,boolean ejector,boolean kettle,int condenserUnits,int kettleUnits,int[] coolerUnits,int trimUnits) {
+            this(condenser,refluxPump,pumparoundPumps,ejector,kettle,condenserUnits,kettleUnits,coolerUnits,trimUnits,ColumnComponents.Exchangers.STANDARD);
+        }
         public SavedComponents {
             pumparoundPumps = List.copyOf(pumparoundPumps);
             coolerUnits = coolerUnits.clone();
@@ -168,7 +171,7 @@ public final class ShapeRepair {
             for (int i = 0; i < Math.min(coolerUnits.length, pumparoundPumps.size()); i++) coolers.add(count(coolerUnits[i], "pumparound cooler " + (i + 1) + " units", repairs));
             if (coolerUnits.length > pumparoundPumps.size()) repairs.accept("cooler units (" + coolerUnits.length + " for " + pumparoundPumps.size() + " pumparounds) -> " + pumparoundPumps.size());
             int trimCount = count(trimUnits, "trim units", repairs);
-            return ColumnComponents.named(condenser, refluxPump, pumparoundPumps, ejector, kettle, new ColumnComponents.Units(condenserCount, kettleCount, coolers, trimCount));
+            return ColumnComponents.named(condenser, refluxPump, pumparoundPumps, ejector, kettle, new ColumnComponents.Units(condenserCount, kettleCount, coolers, trimCount)).withExchangers(exchangers);
         }
 
         private static int count(int saved, String field, java.util.function.Consumer<String> repairs) {

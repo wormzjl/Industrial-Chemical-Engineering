@@ -36,7 +36,13 @@ import java.util.List;
  */
 public record ColumnDoor(String packageId, String assayId, int stages, int feedStage, double topPressure, double stageDrop, double diameter,
                          double condenserTemperature, double reflux, double reboilerDuty, ColumnComponents.Condenser condenser, double condenserDrop, double reboilerDrop,
+                         List<Draw> draws, List<Steam> steam, List<Pumparound> pumparounds, ColumnComponents.Units units, Ejector ejector, ColumnComponents.Exchangers exchangers) {
+    public ColumnDoor(String packageId, String assayId, int stages, int feedStage, double topPressure, double stageDrop, double diameter,
+                         double condenserTemperature, double reflux, double reboilerDuty, ColumnComponents.Condenser condenser, double condenserDrop, double reboilerDrop,
                          List<Draw> draws, List<Steam> steam, List<Pumparound> pumparounds, ColumnComponents.Units units, Ejector ejector) {
+        this(packageId,assayId,stages,feedStage,topPressure,stageDrop,diameter,condenserTemperature,reflux,reboilerDuty,condenser,condenserDrop,reboilerDrop,draws,steam,pumparounds,units,ejector,ColumnComponents.Exchangers.STANDARD);
+    }
+
     /** A side draw on {@code tray} (mol/s). */
     public record Draw(String id, int tray, double flow) {
     }
@@ -82,7 +88,7 @@ public record ColumnDoor(String packageId, String assayId, int stages, int feedS
         return new ColumnDoor(p.text("package", ""), p.text("assay", ""), (int) p.number("stages"), (int) p.number("feed_stage"), p.number("top_pressure"), p.number("stage_drop"), p.number("diameter", 0),
                 p.number("condenser_temperature"), p.number("reflux"), p.number("reboiler_duty"), condenser(p), p.number("condenser_drop", 0), p.number("reboiler_drop", 0), draws, steam, pumparounds,
                 new ColumnComponents.Units(units(p, CONDENSER_UNITS), units(p, KETTLE_UNITS), coolers, units(p, TRIM_UNITS)),
-                new Ejector(p.number(EJECTOR_DISCHARGE, EjectorUnit.DISCHARGE_PRESSURE), p.number(EJECTOR_MOTIVE, EjectorUnit.MOTIVE_PRESSURE)));
+                new Ejector(p.number(EJECTOR_DISCHARGE, EjectorUnit.DISCHARGE_PRESSURE), p.number(EJECTOR_MOTIVE, EjectorUnit.MOTIVE_PRESSURE)),readExchangers(p.json()));
     }
 
     /**
@@ -103,7 +109,30 @@ public record ColumnDoor(String packageId, String assayId, int stages, int feedS
      * 2026-11-03-rotating-machinery, D42): every pump is standard, and the assembly takes either kind in its slot.
      */
     public ColumnComponents.Choices choices() {
-        return new ColumnComponents.Choices(condenser, ColumnComponents.Pump.STANDARD, List.of(), units).fit(pumparounds.size());
+        return new ColumnComponents.Choices(condenser, ColumnComponents.Pump.STANDARD, List.of(), units,exchangers).fit(pumparounds.size());
+    }
+
+    private static ColumnComponents.Exchangers readExchangers(JsonObject json) {
+        if(!json.has("exchangers"))return ColumnComponents.Exchangers.STANDARD;
+        var p=new Params(json.getAsJsonObject("exchangers"));var coolers=new ArrayList<com.wormzjl.icheme.science.equipment.ExchangerType>();
+        if(p.json().has("coolers"))for(var value:p.json().getAsJsonArray("coolers"))coolers.add(com.wormzjl.icheme.science.equipment.ExchangerType.valueOf(value.getAsString()));
+        return new ColumnComponents.Exchangers(com.wormzjl.icheme.science.equipment.ExchangerType.valueOf(p.text("condenser","STANDARD")),com.wormzjl.icheme.science.equipment.ExchangerType.valueOf(p.text("trim","STANDARD")),coolers);
+    }
+    public static void writeExchangers(JsonObject json,ColumnComponents.Exchangers types) {
+        var fields=new JsonObject();fields.addProperty("condenser",types.condenser().name());fields.addProperty("trim",types.trim().name());
+        var coolers=new JsonArray();for(var type:types.coolers())coolers.add(type.name());fields.add("coolers",coolers);json.add("exchangers",fields);
+    }
+    /** Keeps one member's selected configuration in the column design that its constructor will import. */
+    public static void exchanger(JsonObject json,String member,com.wormzjl.icheme.science.equipment.ExchangerType type) {
+        var door=of(new Params(json));var previous=door.exchangers().fit(door.pumparounds().size());var types=previous;
+        if(member.equals("condenser"))types=types.withCondenser(type);
+        else if(member.equals(com.wormzjl.icheme.science.flowsheet.sizing.SheetSizing.TRIM))types=types.withTrim(type);
+        else {
+            var pa=com.wormzjl.icheme.science.flowsheet.sizing.SheetSizing.PumparoundMember.of(member);
+            if(pa==null||!pa.part().equals("cooler"))return;
+            for(int i=0;i<door.pumparounds().size();i++)if(door.pumparounds().get(i).id().equals(pa.pumparound()))types=types.withCooler(i,type);
+        }
+        if(!types.equals(previous))writeExchangers(json,types);
     }
 
     private static String id(Params row, String kind, HashSet<String> ids) {

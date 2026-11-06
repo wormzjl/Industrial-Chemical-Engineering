@@ -102,6 +102,7 @@ public final class EquipmentConstructorScreen extends Screen {
     private int tangentLength, support, forward, right, up;
     /** A machine's design point, which its sizes follow ({@link UnitDesign#size}); {@link MachineDuty#NONE} for another form. */
     private MachineDuty duty;
+    private com.wormzjl.icheme.science.equipment.ExchangerType exchangerType;
     private ColumnTrays trays;
     /** The column design imported from a column calculator, the only one a column is built from (plan 2026-10-26, section 4.5); null before an import. */
     private @Nullable ColumnDesign column;
@@ -159,6 +160,7 @@ public final class EquipmentConstructorScreen extends Screen {
         diameter = design.diameter();
         tangentLength = design.tangentLength();
         duty = design.duty();
+        exchangerType=design.exchangerType();
         boot = design.boot();
         outlet = design.outlet();
         support = Math.max(design.support(), minimumSupport());
@@ -186,7 +188,7 @@ public final class EquipmentConstructorScreen extends Screen {
     /** The draft; always valid, because every stepper is clamped to the bounds of its parameter. */
     public Design design() {
         return new Design(diameter, tangentLength, form, support, new VesselPlacement(forward, right, up), trays, List.copyOf(connections), paint, bank, hasBoot(), outlet(),
-                column, List.copyOf(turns), towerBank, name, duty);
+                column, List.copyOf(turns), towerBank, name, duty,exchangerType);
     }
 
     private static Skin skin() {
@@ -270,7 +272,7 @@ public final class EquipmentConstructorScreen extends Screen {
             case CHOOSE -> ConstructorColumn.choose(category != null ? category : Equipment.of(form).category, Equipment.of(form), EquipmentNetwork.IMPORT_REACH, EquipmentConstructorScreen::tr);
             case DESIGN -> ConstructorColumn.design(new ConstructorColumn.Design(form, diameter, tangentLength, support, forward, right, up, bank,
                     form.column() ? new ConstructorColumn.Imported(column != null ? column.diameter() : diameter, shownTrays().trays() + 2, shownTrays().feed() + 1) : null,
-                    new ConstructorColumn.Outlet(outlets(), outlet(), words()), EquipmentNetwork.IMPORT_REACH,towerBank,duty), EquipmentConstructorScreen::tr);
+                    new ConstructorColumn.Outlet(outlets(), outlet(), words()), EquipmentNetwork.IMPORT_REACH,towerBank,duty,exchangerType), EquipmentConstructorScreen::tr);
             case CONNECTIONS -> {
                 var c = connections.isEmpty() ? null : connection();
                 int[] stations = stations();
@@ -404,6 +406,7 @@ public final class EquipmentConstructorScreen extends Screen {
         int colon = key.indexOf(':');
         String what = colon < 0 ? key : key.substring(0, colon), at = colon < 0 ? "" : key.substring(colon + 1);
         switch (what) {
+            case "exchanger" -> {exchangerType=com.wormzjl.icheme.science.equipment.ExchangerType.valueOf(at);rebuildWidgets();}
             case "category" -> {
                 category = Category.valueOf(at.toUpperCase(Locale.ROOT));
                 rebuildWidgets();

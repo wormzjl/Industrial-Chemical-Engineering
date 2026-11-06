@@ -922,8 +922,17 @@ public final class ProcessUnit {
         nozzles.add(radial(Role.TUBE_OUTLET, a, y, r, n, zn, 1, ColumnStructure.size(.25 * d, tube)));
         // The shell nozzles near the tubesheets, two rows at least behind the channel's (one free block between pipes).
         double zIn = Math.max(Math.floor(s1 - flange / 2 - .1 - .5) + .5, zn + 2), zOut = Math.max(Math.ceil(s0 + flange / 2 + .1 - .5) + .5, zn + 2);
-        nozzles.add(radial(Role.SHELL_INLET, a, y, r, n, zIn, 1, ColumnStructure.size(.3 * d, shellOd)));
-        nozzles.add(radial(Role.SHELL_OUTLET, a, y, r, n, zOut, -1, ColumnStructure.size(.3 * d, shellOd)));
+        double shellRadius=r;
+        var layout=shape.exchangerType().layout(d);
+        if(layout.headerHeight()>0) {
+            double header=layout.headerHeight(),half=layout.headerHalfWidth();
+            box(new double[]{a-half,y+r-.03,s0},new double[]{a+half,y+r+header,s1},Material.SHELL,true);
+            box(new double[]{a-half,y-r-header,s0},new double[]{a+half,y-r+.03,s1},Material.SHELL,true);
+            shellRadius=r+header;
+            zIn=zOut=Math.max(zn+2,Math.floor((s0+s1)/2)+.5);
+        }
+        nozzles.add(radial(Role.SHELL_INLET, a, y, shellRadius, n, zIn, 1, ColumnStructure.size(.3 * d, shellOd)));
+        nozzles.add(radial(Role.SHELL_OUTLET, a, y, shellRadius, n, zOut, -1, ColumnStructure.size(.3 * d, shellOd)));
         // The saddles a fifth of the shell in from its ends, off the pipe blocks under the tube inlet and the shell outlet.
         double w = saddleWidth(r), length = s1 - s0;
         saddle(saddleAt(s0 + .2 * length, w, s0, s1, zn, zOut), a, y, r, w, 0);

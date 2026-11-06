@@ -34,6 +34,19 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class ConstructorColumnTest {
     private static final Measure M = Measure.fixed(6);
+
+    @Test void heatExchangerSubTypesShareTheOneMajorEquipmentEntry() {
+        var texts=new HeatControlColumnTest.Recording("gui.icheme.");
+        var type=com.wormzjl.icheme.science.equipment.ExchangerType.CROSSFLOW;
+        var design=new ConstructorColumn.Design(Form.EXCHANGER,1.5,6,2,3,0,0,ProcessUnit.Bank.ONE,null,
+                new ConstructorColumn.Outlet(1,0,STANDING),16,com.wormzjl.icheme.science.equipment.TowerBank.ONE,MachineDuty.NONE,type);
+        var buttons=ConstructorColumn.buttons(ConstructorColumn.design(design,texts).rows());
+        assertEquals(1,java.util.Arrays.stream(Equipment.values()).filter(e->e==Equipment.EXCHANGER).count());
+        for(var subtype:com.wormzjl.icheme.science.equipment.ExchangerType.CATALOG) {
+            var button=buttons.stream().filter(b->b.key().equals("exchanger:"+subtype.name())).findFirst().orElseThrow();
+            assertEquals(subtype==type,button.latched());
+        }
+    }
     /** The door's height in the renders (464 by 254 GUI px), and the room the view's bar takes where a column scrolls. */
     private static final int HEIGHT = 254, BAR = ScrollView.BAR + 4;
     private static final List<String> STANDING = List.of("front", "right", "back", "left"), LYING = List.of("front", "top", "back", "bottom");

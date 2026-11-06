@@ -183,7 +183,8 @@ public final class AssemblyMatcher {
                         var hit = take(rest, form -> accepts(form, u), true);
                         if (hit == null) {
                             var first = rest.getFirst();
-                            stop(rest, first.form() instanceof UnitForm ? State.WRONG_KIND : State.MISSING, u.origin(), describe(u));
+                            boolean configuration = first.form() instanceof UnitForm f && f.kind() == u.kind() && f.exchangerType() != null;
+                            stop(rest, configuration ? State.CONFIGURATION : first.form() instanceof UnitForm ? State.WRONG_KIND : State.MISSING, u.origin(), describe(u));
                             return;
                         }
                         var slot = hit.step().slot();
@@ -342,7 +343,7 @@ public final class AssemblyMatcher {
             var strays = new ArrayList<Run>();
             final var wanted = step;
             for (var leaf : split.leaves()) {
-                if (leaf.end() instanceof AtPort at && !member(at.port().unit()) && form(wanted, f -> accepts(f, at.port().unit())) != null
+                if (leaf.end() instanceof AtPort at && !member(at.port().unit()) && form(wanted, f -> acceptsKind(f, at.port().unit())) != null
                         && entries.stream().noneMatch(e -> e.unit().origin() == at.port().unit().origin())) entries.add(at.port());
                 else strays.add(leaf);
             }
@@ -352,7 +353,7 @@ public final class AssemblyMatcher {
             }
             rest.remove(step);
             var first = entries.getFirst().unit();
-            var form = (UnitForm) Objects.requireNonNull(form(step, f -> accepts(f, first)));
+            var form = (UnitForm) Objects.requireNonNull(form(step, f -> acceptsKind(f, first)));
             var slot = step.slot();
             for (var entry : entries)
                 if (taken.contains(entry.unit().origin())) {
@@ -366,6 +367,7 @@ public final class AssemblyMatcher {
             for (var entry : entries) {
                 used.add(Key.of(entry));
                 var u = entry.unit();
+                if (!accepts(form,u)) fault(slot,State.CONFIGURATION,u.origin(),describe(u));
                 Role next = form.out();
                 if (entry.role() != form.in()) {
                     fault(slot, State.WRONG_PORT, NONE, PortMarkings.flow(u.kind(), entry.role()) == PortMarkings.Flow.OUT ? "backwards" : entry.role().name());
@@ -550,7 +552,11 @@ public final class AssemblyMatcher {
         }
 
         private static boolean accepts(Form form, Unit unit) {
-            return form instanceof UnitForm f && f.kind() == unit.kind() && (!f.lyingWithBoot() || unit.lying() && unit.boot());
+            return acceptsKind(form,unit)&&form instanceof UnitForm f
+                    &&(f.exchangerType()==null||f.exchangerType()==(unit.size()==null?com.wormzjl.icheme.science.equipment.ExchangerType.STANDARD:unit.size().exchangerType()));
+        }
+        private static boolean acceptsKind(Form form,Unit unit) {
+            return form instanceof UnitForm f && f.kind()==unit.kind()&&(!f.lyingWithBoot()||unit.lying()&&unit.boot());
         }
 
         /** The line stops: its next step takes the fault, the steps after it wait for another line. */

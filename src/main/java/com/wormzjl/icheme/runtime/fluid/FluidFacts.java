@@ -51,7 +51,7 @@ final class FluidFacts {
      *  11 (batch 2026-11-03-rotating-machinery, W5): the world's electric stores (after the shaft units), an air cooler side's
      *  fans, the shaft trip {@code NO_POWER} (never written: it is not latched).
      *  12 (batch 2026-11-03-rotating-machinery, W10b): the pumps' health (after the electric stores), only pumps below 1. */
-    static final int SCHEMA=12;
+    static final int SCHEMA=13;
     /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 12. */
     private static final Map<Class<?>,Map<String,String>> ALIASES=Map.of();
     private static final int MAXIMUM_FIELDS=256,MAXIMUM_ITEMS=1<<22,MAXIMUM_TEXTS=1<<20,MAXIMUM_ARRAY=4096,MAXIMUM_CHANNELS=1<<20;
@@ -421,7 +421,7 @@ final class FluidFacts {
     private static void heatUnit(Fields f,HeatUnit h) {
         var c=h.control();
         f.name(h.unit()).name(h.side()).f64(h.area()).count(h.partner()).record(q->q.name(c.mode()).f64(c.target()).f64(c.lowLimit()).f64(c.share())).f64(h.transitJoule())
-                .count(h.fanCount());
+                .count(h.fanCount()).name(h.exchangerType());
     }
     private static HeatUnit heatUnit(Record f) {
         var unit=f.name(com.wormzjl.icheme.science.equipment.HeatSides.Unit.class,null);var side=f.name(com.wormzjl.icheme.science.equipment.HeatSides.Side.class,null);double area=f.f64(0);long partner=f.count(0);
@@ -432,7 +432,8 @@ final class FluidFacts {
         long fans=f.count(0);
         required(unit,f,"heat unit");required(side,f,"heat unit side");
         if(fans>HeatUnit.MAXIMUM_FANS)throw f.invalid("heat unit fans "+fans);
-        return valid(f,"heat unit",()->new HeatUnit(unit,side,area,partner,control,transit,(int)fans));
+        var type=f.name(com.wormzjl.icheme.science.equipment.ExchangerType.class,com.wormzjl.icheme.science.equipment.ExchangerType.STANDARD);
+        return valid(f,"heat unit",()->new HeatUnit(unit,side,area,partner,control,transit,(int)fans,type));
     }
     private static void geometry(Fields f,com.wormzjl.icheme.science.fluid.network.VesselGeometry g){f.name(g.form()).f64(g.capacity()).f64(g.height()).f64(g.diameter()).f64(g.length()).f64(g.bootDiameter()).f64(g.bootLength());}
     private static com.wormzjl.icheme.science.fluid.network.VesselGeometry geometry(Record f){var form=f.name(com.wormzjl.icheme.science.fluid.network.VesselGeometry.Form.class,null);double capacity=f.f64(0),height=f.f64(0),d=f.f64(0),l=f.f64(0),bd=f.f64(0),bl=f.f64(0);return valid(f,"vessel geometry",()->new com.wormzjl.icheme.science.fluid.network.VesselGeometry(form,capacity,height,d,l,bd,bl));}

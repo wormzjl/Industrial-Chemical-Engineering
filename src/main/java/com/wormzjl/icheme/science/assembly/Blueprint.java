@@ -47,7 +47,9 @@ public record Blueprint(Slot master, List<Slot> slots, List<Link> links) {
      * A unit of {@code kind}, entered at {@code in}; a stream passes it to {@code out} (null: the link ends at the unit).
      * {@code lyingWithBoot}: a drum must lie and carry a boot. {@code utilities}: its utility ports, advice only (D2).
      */
-    public record UnitForm(Kind kind, boolean lyingWithBoot, Role in, @Nullable Role out, Set<Role> utilities) implements Form {
+    public record UnitForm(Kind kind, boolean lyingWithBoot, Role in, @Nullable Role out, Set<Role> utilities,@Nullable com.wormzjl.icheme.science.equipment.ExchangerType exchangerType) implements Form {
+        public UnitForm(Kind kind,boolean lyingWithBoot,Role in,@Nullable Role out,Set<Role> utilities){this(kind,lyingWithBoot,in,out,utilities,null);}
+        public UnitForm withExchangerType(com.wormzjl.icheme.science.equipment.ExchangerType type){return new UnitForm(kind,lyingWithBoot,in,out,utilities,type);}
         public UnitForm {
             utilities = Set.copyOf(utilities);
         }

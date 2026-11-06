@@ -294,12 +294,14 @@ class SizingPageTest {
         SizingPage.entry(x, state, "sizing/size/diameter", "7.5");
         assertEquals(7.5, ColumnDoor.of(editor.unit("T-101").params()).diameter());
         assertEquals(SizingFacts.Mode.FIXED, editor.sheet().sizing().unit("T-101").mode());
-        // A type key keeps the type; pressed again it lets Auto choose.
+        // Equipment choices belong to Manual; Auto leaves dormant choices alone.
         state.unit = "H-101";
+        SizingPage.press(x, state, "sizing/fixed");
         SizingPage.press(x, state, "sizing/type/VERTICAL_HEATER");
         assertEquals(UnitType.VERTICAL_HEATER, editor.sheet().sizing().unit("H-101").type());
         SizingPage.press(x, state, "sizing/type/VERTICAL_HEATER");
-        assertNull(editor.sheet().sizing().unit("H-101").type());
+        assertEquals(UnitType.VERTICAL_HEATER, editor.sheet().sizing().unit("H-101").type());
+        assertNotNull(UnitSize.built(editor.sheet().sizing().unit("H-101").size()));
         // The design basis, a line's service and runs.
         SizingPage.entry(x, state, "sizing/design_flow", "120");
         assertEquals(1.2, editor.sheet().sizing().basis().designFlow(), 1e-12);
@@ -311,6 +313,26 @@ class SizingPageTest {
         assertEquals(Service.values()[0], editor.sheet().sizing().line("S-1").service());
         SizingPage.press(x, state, "sizing/line/runs+");
         assertEquals(new LineSizing.Size(.3, 2), editor.sheet().sizing().line("S-1").size());
+    }
+
+    @Test
+    void exchangerSubTypeIsManualAndKeepsItsCountAndDimensions() {
+        var x=context(new SheetFixture.Texts(),SheetFixture.editor(SHEET),STEADY,false);
+        var state=new SizingPage.State();state.unit="T-101/condenser";
+        SizingPage.press(x,state,"sizing/exchanger/CROSSFLOW");
+        assertNull(x.editor().sheet().sizing().unit(state.unit).size());
+        SizingPage.press(x,state,"sizing/fixed");
+        var frozen=(ExchangerSizing.Size)x.editor().sheet().sizing().unit(state.unit).size();
+        SizingPage.press(x,state,"sizing/exchanger/CROSSFLOW");
+        var cross=(ExchangerSizing.Size)x.editor().sheet().sizing().unit(state.unit).size();
+        assertEquals(frozen.withType(com.wormzjl.icheme.science.equipment.ExchangerType.CROSSFLOW),cross);
+        assertEquals(cross.type(),ColumnDoor.of(x.editor().unit("T-101").params()).exchangers().condenser());
+        SizingPage.press(x,state,"sizing/exchanger/STANDARD");
+        assertEquals(frozen,x.editor().sheet().sizing().unit(state.unit).size());
+        SizingPage.press(x,state,"sizing/auto");
+        SizingPage.press(x,state,"sizing/exchanger/CROSSFLOW");
+        assertEquals(frozen,x.editor().sheet().sizing().unit(state.unit).size());
+        assertEquals(SizingFacts.Mode.AUTO,x.editor().sheet().sizing().unit(state.unit).mode());
     }
 
     @Test
@@ -532,8 +554,8 @@ class SizingPageTest {
         var heater = editor.unit("H-101");
         assertEquals(Symbol.HEATER, Tiles.symbol(heater, editor.sheet().sizing()), "the tile's, until a type is held");
         var facts = editor.sheet().sizing().with("H-101", SizingFacts.UnitFacts.AUTO.with(new HeaterSizing.Size(UnitType.CABIN_HEATER, 1, 11, 41)))
-                .with("u-drum", SizingFacts.UnitFacts.AUTO.typed(UnitType.LYING_DRUM)).with("u-compressor", SizingFacts.UnitFacts.AUTO.typed(UnitType.TURBO))
-                .with("u-storage_tank", SizingFacts.UnitFacts.AUTO.typed(UnitType.SPHERE)).with("E-101", SizingFacts.UnitFacts.AUTO.with(new ExchangerSizing.Size(false, 1, 1, 6)));
+                .with("u-drum", SizingFacts.UnitFacts.AUTO.with(SizingFacts.Mode.FIXED).typed(UnitType.LYING_DRUM)).with("u-compressor", SizingFacts.UnitFacts.AUTO.with(SizingFacts.Mode.FIXED).typed(UnitType.TURBO))
+                .with("u-storage_tank", SizingFacts.UnitFacts.AUTO.with(SizingFacts.Mode.FIXED).typed(UnitType.SPHERE)).with("E-101", SizingFacts.UnitFacts.AUTO.with(new ExchangerSizing.Size(false, 1, 1, 6)));
         assertTrue(editor.sizing(facts, null));
         var sizing = editor.sheet().sizing();
         assertEquals(Symbol.CABIN, Tiles.symbol(heater, sizing));

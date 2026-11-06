@@ -568,6 +568,7 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
      * boot, an air cooler's bank; a drum's and a designed shape's bottom outlet turns (a column's leaves to the front).
      */
     public static void writeShape(CompoundTag tag, EquipmentShape shape) {
+        if (shape.kind() == EquipmentShape.Kind.EXCHANGER) tag.putString("ExchangerType", shape.exchangerType().name());
         tag.putString("Kind", shape.kind().name().toLowerCase(Locale.ROOT));
         tag.putDouble("Diameter", shape.diameter());
         tag.putDouble("TangentLength", shape.tangentLength());
@@ -597,6 +598,7 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
      */
     public static ShapeRepair.Read readShape(CompoundTag tag) {
         var read=ShapeRepair.read(saved(tag));
+        if(read.shape()!=null && tag.contains("ExchangerType")) read=new ShapeRepair.Read(read.shape().withExchangerType(com.wormzjl.icheme.science.equipment.ExchangerType.valueOf(tag.getString("ExchangerType"))),read.retired(),read.repairs());
         if(read.shape()==null||read.shape().kind()!=EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER)return read;
         try{return new ShapeRepair.Read(read.shape().withTowerBank(com.wormzjl.icheme.science.equipment.TowerBank.decode(tag.getIntArray("TowerBank"))),null,read.repairs());}
         catch(IllegalArgumentException invalid){var repairs=new java.util.ArrayList<>(read.repairs());repairs.add("tower bank -> one cell: "+invalid.getMessage());return new ShapeRepair.Read(read.shape(),null,repairs);}

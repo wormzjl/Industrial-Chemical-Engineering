@@ -29,6 +29,21 @@ import static org.junit.jupiter.api.Assertions.*;
 class AssemblyParallelTest {
     private static final Size SIZE = new Size(2, 5, ProcessUnit.Bank.ONE), OTHER = new Size(2.5, 5, ProcessUnit.Bank.ONE);
 
+    @Test void parallelExchangersIdentifyAConfigurationMismatch() {
+        var cross=com.wormzjl.icheme.science.equipment.ExchangerType.CROSSFLOW;
+        var standard=com.wormzjl.icheme.science.equipment.ExchangerType.STANDARD;
+        for(int standardCount=0;standardCount<=2;standardCount++) {
+            var g=new TestGraph();var master=g.unit(Kind.COLUMN,VAPOUR_OUTLET);var split=g.hub();g.leg(split,port(master,VAPOUR_OUTLET));
+            for(int i=0;i<2;i++)g.leg(split,port(g.unit(Kind.EXCHANGER,new Size(2,6,ProcessUnit.Bank.ONE,i<standardCount?standard:cross),SHELL_INLET),SHELL_INLET));
+            var root=new Blueprint.Slot("column",0);var member=new Blueprint.Slot("condenser",0);
+            var form=new Blueprint.UnitForm(Kind.EXCHANGER,false,SHELL_INLET,null,Set.of()).withExchangerType(cross);
+            var step=Blueprint.Step.of(member,form).withCount(2);
+            var blueprint=new Blueprint(root,List.of(root,member),List.of(new Blueprint.Link("overhead",Blueprint.Start.at(root,VAPOUR_OUTLET,0),List.of(step),new Blueprint.AtUnit(),false,member)));
+            var report=AssemblyMatcher.match(blueprint,g,master,Set.of());
+            assertEquals(standardCount==0?State.OK:State.CONFIGURATION,report.slot(member).state(),"standard shells="+standardCount);
+        }
+    }
+
     /** A plant: its graph, its column, and its units by part (the condenser's and the kettle's and cooler's in parallel numbered). */
     private record Plant(ColumnTrays trays, TestGraph graph, Unit column, Map<String, List<Unit>> units) {
         AssemblyReport match() {

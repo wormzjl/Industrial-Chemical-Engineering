@@ -88,9 +88,26 @@ public final class GuiPrototypes {
         out.add(titleStrip());
         out.addAll(machines());
         out.addAll(machinePages());
+        out.add(exchangerTypes());
         out.addAll(pumpReadings());
         out.addAll(createCoupling());
         return out;
+    }
+
+    static Prototype exchangerTypes() {
+        return new Prototype("exchanger-types",464,254,(d,s)-> {
+            var page=ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.EXCHANGER,2.25,7,2,3,0,0,ProcessUnit.Bank.ONE,null,
+                    new ConstructorColumn.Outlet(1,0,STANDING),16,com.wormzjl.icheme.science.equipment.TowerBank.ONE,MachineDuty.NONE,
+                    com.wormzjl.icheme.science.equipment.ExchangerType.CROSSFLOW),DIALOG);
+            constructorDoor(d,page,"Heat exchanger","change",DIALOG.get(CONSTRUCTOR+"surface","2,658"),Palette.ACCENT,Map.of());
+            var b=d.skin.well(d.c,new Rect(203,30,251,170));
+            d.c.text("Two tube passes",b.x()+8,b.y()+10,Palette.ACCENT);
+            d.c.text("Upper distributor",b.x()+8,b.y()+35,Palette.TEXT);
+            d.c.fill(b.x()+20,b.y()+55,b.x()+220,b.y()+65,Palette.LINE);
+            d.c.outline(b.x()+20,b.y()+68,200,45,Palette.ACCENT);
+            d.c.fill(b.x()+20,b.y()+116,b.x()+220,b.y()+126,Palette.LINE);
+            d.c.text("Lower collector",b.x()+8,b.y()+139,Palette.TEXT);
+        },true);
     }
 
     // ---- W10d's pump readings and curve (batch 2026-11-03-rotating-machinery, decision D37; W10D_BUILD_PLAN.md) ----

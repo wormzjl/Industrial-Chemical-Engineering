@@ -40,7 +40,7 @@ public record AssemblyReport(List<SlotReport> slots, List<PortReport> ports, Set
      */
     public enum State {
         OK(Colour.TEAL), SHARED(Colour.YELLOW), WRONG_ORDER(Colour.YELLOW), BRANCHED(Colour.YELLOW), EXTRA_VALVE(Colour.YELLOW),
-        VALVE_REVERSED(Colour.YELLOW), WRONG_PORT(Colour.YELLOW), UNIT_SHAPES(Colour.YELLOW), UNIT_COUNT(Colour.YELLOW), WRONG_KIND(Colour.YELLOW),
+        VALVE_REVERSED(Colour.YELLOW), WRONG_PORT(Colour.YELLOW), UNIT_SHAPES(Colour.YELLOW), UNIT_COUNT(Colour.YELLOW), WRONG_KIND(Colour.YELLOW), CONFIGURATION(Colour.YELLOW),
         NOT_LOADED(Colour.RED), OPEN_END(Colour.RED), MISSING(Colour.RED);
 
         public final Colour colour;

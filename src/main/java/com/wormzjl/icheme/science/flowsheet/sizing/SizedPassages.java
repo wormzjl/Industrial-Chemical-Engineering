@@ -81,7 +81,11 @@ public final class SizedPassages {
         }
         if (laws.isEmpty()) return Passages.TYPED;
         Map<String, Passages.Law> held = Map.copyOf(laws);
-        return held::get;
+        var type=facts.unit(unit.id()).size() instanceof ExchangerSizing.Size e?e.type():com.wormzjl.icheme.science.equipment.ExchangerType.STANDARD;
+        return new Passages() {
+            @Override public Law passage(String name){return held.get(name);}
+            @Override public com.wormzjl.icheme.science.equipment.ExchangerType exchangerType(){return type;}
+        };
     }
 
     /** What {@link #of} reads of {@code facts} for {@code unit}: a change in it moves the unit's run. */
@@ -138,7 +142,7 @@ public final class SizedPassages {
 
     /** What {@code carried} loses through {@code size}'s tubes, bar, its shells in parallel: the sizer's at design flow, the run's at its own. */
     static double tube(ExchangerSizing.Size size, LineSizing.Carried carried) {
-        return carried.drop(HeatSides.tubePassage(size.shell(), size.tubes()), size.shells());
+        return carried.drop(size.type().tubePassage(size.shell(), size.tubes()), size.shells());
     }
 
     /** What {@code in} loses through {@code size}'s shells at {@code flow} times its rate, Pa. */
@@ -148,7 +152,7 @@ public final class SizedPassages {
 
     /** What {@code carried} loses through {@code size}'s shells, bar. */
     static double shell(ExchangerSizing.Size size, LineSizing.Carried carried) {
-        return carried.drop(HeatSides.shellPassage(size.shell(), size.tubes()), size.shells());
+        return carried.drop(size.type().shellPassage(size.shell(), size.tubes()), size.shells());
     }
 
     /** What the stream loses through {@code size}'s banks in parallel between {@code in} and {@code out} at {@code flow} times its rate, Pa: at its mean temperature. */

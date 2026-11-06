@@ -13,6 +13,7 @@ public interface Passages {
 
     /** The law of the passage named, null where the unit has no size for it. */
     @Nullable Law passage(String name);
+    default com.wormzjl.icheme.science.equipment.ExchangerType exchangerType(){return com.wormzjl.icheme.science.equipment.ExchangerType.STANDARD;}
 
     /** One passage's law. */
     interface Law {

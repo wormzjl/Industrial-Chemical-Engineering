@@ -78,10 +78,10 @@ public final class ColumnBlueprint {
         if (c.ejector()) overhead.add(Step.of(EJECTOR, EJECTOR_UNIT));
         switch (c.condenser()) {
             case AIR_COOLER -> overhead.add(Step.of(CONDENSER, AIR_COOLER, EXCHANGER_CONDENSER).withCount(c.units().condenser()));
-            case EXCHANGER -> overhead.add(Step.of(CONDENSER, EXCHANGER_CONDENSER, AIR_COOLER).withCount(c.units().condenser()));
+            case EXCHANGER -> overhead.add(Step.of(CONDENSER, ((UnitForm)EXCHANGER_CONDENSER).withExchangerType(c.exchangers().condenser()), AIR_COOLER).withCount(c.units().condenser()));
             case AIR_THEN_WATER -> {
                 overhead.add(Step.of(CONDENSER, AIR_COOLER_THROUGH, EXCHANGER_THROUGH).withCount(c.units().condenser()));
-                overhead.add(Step.of(TRIM_CONDENSER, EXCHANGER_CONDENSER, AIR_COOLER).withCount(c.units().trim()));
+                overhead.add(Step.of(TRIM_CONDENSER, ((UnitForm)EXCHANGER_CONDENSER).withExchangerType(c.exchangers().trim()), AIR_COOLER).withCount(c.units().trim()));
             }
         }
         var last = trimmed ? TRIM_CONDENSER : CONDENSER;
@@ -108,7 +108,7 @@ public final class ColumnBlueprint {
             slots.add(pumparoundPump(i));
             slots.add(pumparoundCooler(i));
             // The pump and the cooler in either order: a cooler before the pump is common where the draw is hot.
-            var steps = List.of(pump(pumparoundPump(i), c.pumparoundPumps().get(i - 1)).withAnyOrder(), Step.of(pumparoundCooler(i), PA_COOLER).withCount(c.units().cooler(i - 1)));
+            var steps = List.of(pump(pumparoundPump(i), c.pumparoundPumps().get(i - 1)).withAnyOrder(), Step.of(pumparoundCooler(i), ((UnitForm)PA_COOLER).withExchangerType(c.exchangers().cooler(i-1))).withCount(c.units().cooler(i - 1)));
             links.add(new Link("pumparound", Start.at(COLUMN, Role.PUMPAROUND_DRAW, i - 1), steps, new ToPort(new PortSpec(COLUMN, Role.RETURN, i - 1)),
                     false, pumparoundCooler(i)));
         }

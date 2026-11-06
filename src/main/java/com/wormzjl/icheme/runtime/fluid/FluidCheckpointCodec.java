@@ -97,7 +97,7 @@ import java.util.function.Function;
  */
 public final class FluidCheckpointCodec {
     /** The state format: the core record's {@code StateFormat} and every unit's state section. */
-    public static final int VERSION=35;
+    public static final int VERSION=36;
     /** The most wall cells a saved heat side holds (an exchanger's 8; an air cooler's flat wall 1). */
     private static final int MAXIMUM_WALL_CELLS=64;
     /** The envelope: the core record's frame, the unit header and the section layout. Frozen. */
@@ -378,7 +378,7 @@ public final class FluidCheckpointCodec {
                 case com.wormzjl.icheme.science.fluid.network.HeatSide heat->{var films=heat.films();var wall=heat.wall();w.u8(1);
                     w.f64(heat.area());w.f64(films.liquid());w.f64(films.twoPhase());w.f64(films.gas());
                     w.varint(wall.length);for(double t:wall)w.f64(t);w.f64(heat.bypass());w.f64(heat.giveBack());w.i64(heat.partner());w.f64(heat.active());
-                    control(w,heat.control());w.u8(heat.limit().ordinal());}
+                    control(w,heat.control());w.u8(heat.limit().ordinal());w.text(heat.routing().name());}
                 case com.wormzjl.icheme.science.fluid.network.AirCooled cooled->{var air=cooled.air();w.u8(3);w.f64(cooled.area());
                     w.f64(air.temperature());w.f64(air.barePerFace());w.f64(air.film());w.f64(air.capacity());w.f64(air.natural());
                     w.f64(cooled.draught());control(w,cooled.control());w.u8(cooled.limit().ordinal());}
@@ -446,7 +446,8 @@ public final class FluidCheckpointCodec {
         double area=r.f64();var films=new com.wormzjl.icheme.science.fluid.network.HeatCurve.Films(r.f64(),r.f64(),r.f64());
         var wall=new double[r.varint(MAXIMUM_WALL_CELLS)];for(int k=0;k<wall.length;k++)wall[k]=r.f64();
         double bypass=r.f64(),giveBack=r.f64();long partner=r.i64();double active=r.f64();var control=control(r);
-        return new com.wormzjl.icheme.science.fluid.network.HeatSide(area,films,wall,bypass,giveBack,partner,active,control,limit(r));
+        var why=limit(r);var routing=com.wormzjl.icheme.science.fluid.network.HeatRouting.valueOf(r.text());
+        return new com.wormzjl.icheme.science.fluid.network.HeatSide(area,films,wall,bypass,giveBack,partner,active,control,why,routing);
     }
     /** Tag 5: a machine on its curve, its law (liquid flag, rated flow, head and efficiency, a pump's rated speed), speed,
      * enabled flag and (format 35, W3) set flow and set discharge pressure. */

@@ -49,6 +49,9 @@ public final class ColumnWire {
         buffer.writeVarInt(units.coolers().size());
         for (int count : units.coolers()) buffer.writeVarInt(count);
         buffer.writeVarInt(units.trim());
+        var types=choices.exchangers();
+        buffer.writeEnum(types.condenser());buffer.writeEnum(types.trim());buffer.writeVarInt(types.coolers().size());
+        for(var type:types.coolers())buffer.writeEnum(type);
     }
 
     static ColumnComponents.Choices readChoices(RegistryFriendlyByteBuf buffer) {
@@ -60,8 +63,14 @@ public final class ColumnWire {
         var counts = new ArrayList<Integer>(coolers);
         for (int i = 0; i < coolers; i++) counts.add(buffer.readVarInt());
         int trimUnits = buffer.readVarInt();
+        var condenserType=readKind(buffer,com.wormzjl.icheme.science.equipment.ExchangerType.class);
+        var trimType=readKind(buffer,com.wormzjl.icheme.science.equipment.ExchangerType.class);
+        int typeCount=readCount(buffer,ColumnTrays.MAX_PUMPAROUNDS,"pumparound exchanger type",1);
+        var types=new ArrayList<com.wormzjl.icheme.science.equipment.ExchangerType>(typeCount);
+        for(int i=0;i<typeCount;i++)types.add(readKind(buffer,com.wormzjl.icheme.science.equipment.ExchangerType.class));
         try {
-            return new ColumnComponents.Choices(condenser, reflux, pumps, new ColumnComponents.Units(condenserUnits, kettleUnits, counts, trimUnits));
+            return new ColumnComponents.Choices(condenser, reflux, pumps, new ColumnComponents.Units(condenserUnits, kettleUnits, counts, trimUnits),
+                    new ColumnComponents.Exchangers(condenserType,trimType,types));
         } catch (IllegalArgumentException invalid) {
             throw new DecoderException(invalid.getMessage());
         }

@@ -84,7 +84,7 @@ final class SizingFactsFile {
         try {
             return switch (kind) {
                 case "PUMP" -> new PumpSizing.Size(fields.number("discharge"));
-                case "EXCHANGER" -> new ExchangerSizing.Size(fields.bool("kettle"), fields.whole("shells"), fields.number("shell"), fields.whole("tubes"));
+                case "EXCHANGER" -> new ExchangerSizing.Size(fields.bool("kettle"), fields.whole("shells"), fields.number("shell"), fields.whole("tubes"),fields.name("type",com.wormzjl.icheme.science.equipment.ExchangerType.class,com.wormzjl.icheme.science.equipment.ExchangerType.STANDARD));
                 case "AIR_COOLER" -> new AirCoolerSizing.Size(fields.number("width"), fields.whole("length"), new ProcessUnit.Bank(fields.whole("parallel"), fields.whole("series")), fields.whole("banks", 1));
                 case "HEATER" -> new HeaterSizing.Size(fields.name("type", UnitType.class), fields.whole("count"), fields.number("diameter"), fields.whole("length"));
                 case "COMPRESSOR" -> new CompressorSizing.Size(fields.name("type", UnitType.class), fields.number("size"), fields.whole("length"));
@@ -147,6 +147,7 @@ final class SizingFactsFile {
                 json.addProperty("shells", exchanger.shells());
                 json.addProperty("shell", exchanger.shell());
                 json.addProperty("tubes", exchanger.tubes());
+                if(exchanger.type()!=com.wormzjl.icheme.science.equipment.ExchangerType.STANDARD)json.addProperty("type", exchanger.type().name());
             }
             case AirCoolerSizing.Size cooler -> {
                 json.addProperty("kind", "AIR_COOLER");

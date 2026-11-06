@@ -203,6 +203,7 @@ public final class SizingPage {
 
     /** What the item is built as: its type, else its tile's name. */
     static String equipment(SheetContext x, String id, @Nullable UnitSize size) {
+        if(size instanceof ExchangerSizing.Size e&&!e.kettle()&&e.type()!=com.wormzjl.icheme.science.equipment.ExchangerType.STANDARD)return x.t().get("exchanger.equipment."+e.type().key());
         var type = type(x, id, size);
         if (type != null) return x.text("sizing.equipment." + type.name().toLowerCase(Locale.ROOT));
         String tile = tile(x, id, size);
@@ -212,7 +213,7 @@ public final class SizingPage {
     /** The type in use: the player's key, else the size's where its tile is built as types (an exchanger tile's size is no Water cooler). */
     private static @Nullable UnitType type(SheetContext x, String id, @Nullable UnitSize size) {
         var held = facts(x).unit(id).type();
-        if (held != null) return held;
+        if (held != null && facts(x).unit(id).mode()==SizingFacts.Mode.FIXED) return held;
         var typed = SizingFacts.UnitFacts.typeOf(size);
         return Tiles.builtAs(tile(x, id, size), typed) ? typed : null;
     }
@@ -352,10 +353,15 @@ public final class SizingPage {
             var shown = type(x, id, size);
             var keys = new ArrayList<Column.Button>();
             for (var type : types)
-                keys.add(new Column.Button(KEY + "type/" + type.name(), x.text("sizing.type." + type.name().toLowerCase(Locale.ROOT)), edits, x.text(held.type() == type ? "sizing.type_auto_hint" : "sizing.type_hint"), type == shown));
+                keys.add(new Column.Button(KEY + "type/" + type.name(), x.text("sizing.type." + type.name().toLowerCase(Locale.ROOT)), edits&&held.mode()==SizingFacts.Mode.FIXED, x.text("sizing.manual_hint"), type == shown));
             equipmentRows.add(new Column.Buttons(keys));
         }
         if (types.isEmpty()) equipmentRows.add(new Column.Line(equipment(x, id, size), Palette.TEXT));
+        if(size instanceof ExchangerSizing.Size e&&!e.kettle()) {
+            var subtypes=new ArrayList<Column.Button>();
+            for(var subtype:com.wormzjl.icheme.science.equipment.ExchangerType.CATALOG)subtypes.add(new Column.Button(KEY+"exchanger/"+subtype.name(),x.t().get("exchanger.type."+subtype.key()),edits&&held.mode()==SizingFacts.Mode.FIXED,x.t().get("exchanger.type_hint"),e.type()==subtype));
+            equipmentRows.add(new Column.Buttons(subtypes));
+        }
         String hint = x.text("sizing.fixed_hint");
         switch (size) {
             case PumpSizing.Size p -> group.add(Door.entry(KEY + "size/discharge", x.text("sizing.discharge"), "m"));
@@ -679,8 +685,8 @@ public final class SizingPage {
             };
             case ExchangerSizing.Size e -> switch (field) {
                 case "count" -> e.withShells(whole);
-                case "shell" -> new ExchangerSizing.Size(e.kettle(), e.shells(), value, e.tubes());
-                case "tubes" -> new ExchangerSizing.Size(e.kettle(), e.shells(), e.shell(), whole);
+                case "shell" -> new ExchangerSizing.Size(e.kettle(), e.shells(), value, e.tubes(),e.type());
+                case "tubes" -> new ExchangerSizing.Size(e.kettle(), e.shells(), e.shell(), whole,e.type());
                 default -> null;
             };
             case AirCoolerSizing.Size a -> switch (field) {
@@ -727,18 +733,20 @@ public final class SizingPage {
         var next = facts.with(id, facts.unit(id).with(SizingFacts.Mode.FIXED).with(size));
         String block = block(id);
         var column = block == null ? null : x.editor().unit(block);
-        var json = column == null ? null : door(column, id.substring(block.length() + 1), size.count());
+        var json = column == null ? null : door(column, id.substring(block.length() + 1), size);
         if (json == null) x.editor().sizing(next, step);
         else x.editor().sizing(next, block, new Params(json), step);
     }
 
     /** The column's settings with member {@code member}'s count at {@code count}, or null for a member that has none on the door. */
-    private static @Nullable JsonObject door(Flowsheet.Unit column, String member, int count) {
+    private static @Nullable JsonObject door(Flowsheet.Unit column, String member, UnitSize size) {
         var json = column.params().json().deepCopy();
-        int units = Math.clamp(count, 1, ColumnComponents.MAX_UNITS);
+        if(size instanceof ExchangerSizing.Size e&&!e.kettle())ColumnDoor.exchanger(json,member,e.type());
+        int units = Math.clamp(size.count(), 1, ColumnComponents.MAX_UNITS);
         switch (member) {
             case "condenser" -> json.addProperty(ColumnDoor.CONDENSER_UNITS, units);
             case "reboiler" -> json.addProperty(ColumnDoor.KETTLE_UNITS, units);
+            case SheetSizing.TRIM -> json.addProperty(ColumnDoor.TRIM_UNITS,units);
             default -> {
                 var pa = SheetSizing.PumparoundMember.of(member);
                 if (pa == null || !pa.part().equals(SheetSizing.PumparoundMember.COOLER) || !(json.get("pumparounds") instanceof JsonArray rows)) return null;
@@ -816,10 +824,16 @@ public final class SizingPage {
         else if (key.equals("fixed")) {
             // A column's and a valve's size is the door's or the line's; every other Fixed item keeps the size it shows.
             boolean own = !(size instanceof ColumnSizing.Size) && !(size instanceof ValveSizing.Size);
-            x.editor().sizing(facts.with(id, held.with(SizingFacts.Mode.FIXED).with(own ? size : held.size())), null);
+            var next=held.with(SizingFacts.Mode.FIXED).with(own?size:held.size());
+            var inferred=SizingFacts.UnitFacts.typeOf(size);
+            if(Tiles.builtAs(tile(x,id,size),inferred))next=next.typed(inferred);
+            x.editor().sizing(facts.with(id,next), null);
+        } else if(key.startsWith("exchanger/")&&held.mode()==SizingFacts.Mode.FIXED&&size instanceof ExchangerSizing.Size e&&!e.kettle()) {
+            keep(x,id,e.withType(com.wormzjl.icheme.science.equipment.ExchangerType.valueOf(key.substring(10))),null);
         } else if (key.startsWith("type/")) {
+            if(held.mode()!=SizingFacts.Mode.FIXED)return;
             var type = UnitType.valueOf(key.substring(5));
-            x.editor().sizing(facts.with(id, held.typed(held.type() == type ? null : type)), null);
+            if(type!=SizingFacts.UnitFacts.typeOf(size))x.editor().sizing(facts.with(id,held.typed(type).with(initial(type))),null);
         } else if (key.equals("size/boot") && size instanceof DrumSizing.Size d) keep(x, id, new DrumSizing.Size(d.type(), d.diameter(), d.length(), !d.boot()), null);
         else if (key.startsWith("size/") && (key.endsWith("-") || key.endsWith("+")) && size != null) {
             if (held.mode() != SizingFacts.Mode.FIXED) return;
@@ -831,6 +845,20 @@ public final class SizingPage {
             if (next instanceof ColumnSizing.Size c) typed(x, state, "size/diameter", c.diameter(), "step sizing diameter");
             else if (next != null) keep(x, id, next, null);
         }
+    }
+
+    /** A different equipment family's constructor starting point. Sub-types of one exchanger keep their dimensions. */
+    private static UnitSize initial(UnitType type) {
+        if(type==UnitType.STANDING_DRUM||type==UnitType.LYING_DRUM)return new DrumSizing.Size(type,2,type==UnitType.STANDING_DRUM?4:6,false);
+        var design=UnitDesign.of(type.kind());double d=design.minSize();int length=design.defaultLength(d);
+        return switch(type) {
+            case VERTICAL_HEATER,CABIN_HEATER -> new HeaterSizing.Size(type,1,d,length);
+            case FLOATING_ROOF,SPHERE -> new TankSizing.Size(type,1,d,length);
+            case PISTON,TURBO -> new CompressorSizing.Size(type,d,length);
+            case AIR_COOLER -> new AirCoolerSizing.Size(d,length,ProcessUnit.Bank.ONE,1);
+            case WATER_COOLER -> new ExchangerSizing.Size(false,1,d,length);
+            default -> throw new IllegalArgumentException("No starting size for "+type);
+        };
     }
 
     /** What the status line says on the tab. */

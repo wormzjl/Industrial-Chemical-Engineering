@@ -71,6 +71,10 @@ class EquipmentShapeCompatTest {
         shapes.add(EquipmentShape.unit(Kind.MOTOR, .75, 1, Heading.NORTH, 2).withDuty(MachineDuty.motor(4500, 6, MachineDuty.Drive.VARIABLE)));
         shapes.add(EquipmentShape.unit(Kind.GENERATOR, .75, 1, Heading.WEST, 0).withDuty(MachineDuty.generator(2000, 2)));
         shapes.add(EquipmentShape.unit(Kind.GEARBOX, .75, 1, Heading.EAST, 0).withDuty(MachineDuty.gearbox(5000)));
+        shapes.add(EquipmentShape.unit(Kind.EXCHANGER, 1.5, 6, Heading.EAST, 3).withExchangerType(ExchangerType.CROSSFLOW));
+        shapes.add(EquipmentShape.column(3, new ColumnTrays(20, 15, List.of(8), List.of(21), List.of(new ColumnTrays.Pumparound(8, 6)),
+                trimmed.withExchangers(new ColumnComponents.Exchangers(ExchangerType.CROSSFLOW, ExchangerType.CROSSFLOW, List.of(ExchangerType.CROSSFLOW)))),
+                Heading.NORTH, EquipmentShape.minimumSkirt(3)));
         return shapes;
     }
 
@@ -434,7 +438,7 @@ class EquipmentShapeCompatTest {
      * column's member counts; 7: a column's water trim count and its air-then-water condenser; 8: a machine's design
      * point).
      */
-    private static final int SHAPE_FIELDS = 8;
+    private static final int SHAPE_FIELDS = 9;
 
     /** A column's components as an image written before the member counts shows them. */
     private static final java.util.regex.Pattern COMPONENTS_BEFORE_UNITS = java.util.regex.Pattern.compile(
@@ -486,6 +490,13 @@ class EquipmentShapeCompatTest {
                     var expected = entry.getString("Expected");
                     if(!expected.contains("towerBank="))expected=expected.substring(0,expected.length()-1)+", towerBank=TowerBank[columns=1, rows=1]]";
                     expected = withUnits(expected);
+                    if (!expected.contains("exchangers=Exchangers[") && read.shape().trays() != null && read.shape().trays().components() != null) {
+                        var pattern = java.util.regex.Pattern.compile("(units=Units\\[condenser=\\d+, kettle=\\d+, coolers=\\[[0-9, ]*\\], trim=\\d+\\])\\]");
+                        var match = pattern.matcher(expected);
+                        var upgraded = new StringBuilder();
+                        while (match.find()) match.appendReplacement(upgraded, java.util.regex.Matcher.quoteReplacement(match.group(1) + ", exchangers=" + read.shape().trays().components().exchangers() + "]"));
+                        expected = match.appendTail(upgraded).toString();
+                    }
                     if (!expected.contains("duty=MachineDuty[")) {
                         // Shape fields 8: a machine saved before its design point takes its size's (decision A3); a
                         // condensing turbine is the steam turbine exhausting to a condenser (owner decision D5).
@@ -497,6 +508,7 @@ class EquipmentShapeCompatTest {
                         expected = expected.substring(0, expected.length() - 1) + ", duty=" + duty + "]";
                     }
                     if (read.shape().column()) expected = expected.replaceFirst("tangentLength=[0-9.]+", "tangentLength=" + read.shape().tangentLength());
+                    if (!expected.contains("exchangerType=")) expected = expected.substring(0, expected.length() - 1) + ", exchangerType=STANDARD]";
                     assertEquals(expected, read.shape().toString(), file.toString());
                 }
         }

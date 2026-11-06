@@ -48,7 +48,7 @@ import java.util.Optional;
  * 2026-11-03-rotating-machinery).
  */
 public final class EquipmentNetwork {
-    public static final String PROTOCOL = "equipment-18";
+    public static final String PROTOCOL = "equipment-19";
     /** A player edits or builds only within this distance of the constructor, blocks. */
     private static final double REACH = 8;
     /** A process simulator's designs are imported from within this many blocks of the constructor. */
@@ -71,13 +71,16 @@ public final class EquipmentNetwork {
      * ({@link ColumnTrays#encodeTurns}), a machine's design point {@code duty}), and what to do with it.
      */
     public record ConstructorPayload(BlockPos position, double diameter, int tangentLength, int form, int support, int forward, int right, int up,
-                                     int[] trays, int[] connections, int[] paint, int[] bank, boolean boot, int outlet, int[] turns, Action action, int[] towerBank, MachineDuty duty) implements CustomPacketPayload {
+                                     int[] trays, int[] connections, int[] paint, int[] bank, boolean boot, int outlet, int[] turns, Action action, int[] towerBank, MachineDuty duty,com.wormzjl.icheme.science.equipment.ExchangerType exchangerType) implements CustomPacketPayload {
+        public ConstructorPayload(BlockPos position,double diameter,int tangentLength,int form,int support,int forward,int right,int up,int[] trays,int[] connections,int[] paint,int[] bank,boolean boot,int outlet,int[] turns,Action action,int[] towerBank,MachineDuty duty) {
+            this(position,diameter,tangentLength,form,support,forward,right,up,trays,connections,paint,bank,boot,outlet,turns,action,towerBank,duty,com.wormzjl.icheme.science.equipment.ExchangerType.STANDARD);
+        }
         public static final Type<ConstructorPayload> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID, "equipment_constructor"));
         public static final StreamCodec<RegistryFriendlyByteBuf, ConstructorPayload> STREAM_CODEC = new StreamCodec<>() {
             public ConstructorPayload decode(RegistryFriendlyByteBuf b) {
                 return new ConstructorPayload(b.readBlockPos(), b.readDouble(), b.readVarInt(), b.readVarInt(), b.readVarInt(), b.readVarInt(), b.readVarInt(),
                         b.readVarInt(), b.readVarIntArray(ColumnTrays.MAX_ENCODED), b.readVarIntArray(3 * EquipmentShape.MAX_CONNECTIONS), b.readVarIntArray(2), b.readVarIntArray(2), b.readBoolean(), b.readVarInt(),
-                        b.readVarIntArray(3 * ColumnTrays.MAX_TURNS), b.readEnum(Action.class), b.readVarIntArray(2), readDuty(b));
+                        b.readVarIntArray(3 * ColumnTrays.MAX_TURNS), b.readEnum(Action.class), b.readVarIntArray(2), readDuty(b),com.wormzjl.icheme.science.equipment.ExchangerType.valueOf(b.readUtf(64)));
             }
 
             public void encode(RegistryFriendlyByteBuf b, ConstructorPayload p) {
@@ -98,6 +101,7 @@ public final class EquipmentNetwork {
                 b.writeVarIntArray(p.turns);
                 b.writeEnum(p.action);b.writeVarIntArray(p.towerBank);
                 writeDuty(b, p.duty);
+                b.writeUtf(p.exchangerType.name(),64);
             }
         };
 
@@ -105,7 +109,7 @@ public final class EquipmentNetwork {
             var p = design.placement();
             return new ConstructorPayload(position, design.diameter(), design.tangentLength(), design.form().ordinal(), design.support(), p.forward(), p.right(), p.up(),
                     design.trays().encode(), EquipmentShape.Connection.encode(design.connections()), design.paint().encode(), design.bank().encode(), design.boot(), design.outlet(),
-                    ColumnTrays.encodeTurns(design.turns()), action,design.towerBank().encode(), design.duty());
+                    ColumnTrays.encodeTurns(design.turns()), action,design.towerBank().encode(), design.duty(),design.exchangerType());
         }
 
         /**
@@ -118,7 +122,7 @@ public final class EquipmentNetwork {
             if (form < 0 || form >= forms.length) throw new IllegalArgumentException("Unknown form " + form);
             return stored.keepingColumn(new EquipmentConstructorBlockEntity.Design(diameter, tangentLength, forms[form], support, new VesselPlacement(forward, right, up),
                     ColumnTrays.decode(trays), EquipmentShape.Connection.decode(connections), Paint.decode(paint), ProcessUnit.Bank.decode(bank), boot, outlet, null,
-                    ColumnTrays.decodeTurns(turns),com.wormzjl.icheme.science.equipment.TowerBank.decode(towerBank), duty));
+                    ColumnTrays.decodeTurns(turns),com.wormzjl.icheme.science.equipment.TowerBank.decode(towerBank), duty).withExchangerType(exchangerType));
         }
 
         @Override

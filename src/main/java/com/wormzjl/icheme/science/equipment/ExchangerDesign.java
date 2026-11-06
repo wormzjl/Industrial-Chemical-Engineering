@@ -63,6 +63,11 @@ final class ExchangerDesign extends UnitDesign {
     }
 
     @Override
+    public String variant(EquipmentShape shape) {
+        return shape.exchangerType()==ExchangerType.STANDARD?"":"."+shape.exchangerType().key();
+    }
+
+    @Override
     public List<Line> datasheet(EquipmentShape shape) {
         double d = shape.diameter(), tubes = shape.tangentLength();
         return List.of(new Line("shell", size(d)), new Line("tubes", number(tubes), number(ProcessUnit.tubeSurface(d, tubes))));

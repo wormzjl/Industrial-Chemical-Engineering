@@ -21,9 +21,12 @@ import org.jetbrains.annotations.Nullable;
  * for none) is a fact; it plans the bypass with the wall at each slice start ({@link ExchangerRelay#plan}), and {@code limit}
  * records why the planned bypass stands where it does. Only the facts are the connection's identity ({@link #shape}).
  */
-public record HeatSide(double area,HeatCurve.Films films,double[] wall,double bypass,double giveBack,long partner,double active,@Nullable HeatControl control,HeatControl.Limit limit) implements HeatLaw {
+public record HeatSide(double area,HeatCurve.Films films,double[] wall,double bypass,double giveBack,long partner,double active,@Nullable HeatControl control,HeatControl.Limit limit,HeatRouting routing) implements HeatLaw {
+    public HeatSide(double area,HeatCurve.Films films,double[] wall,double bypass,double giveBack,long partner,double active,@Nullable HeatControl control,HeatControl.Limit limit) {
+        this(area,films,wall,bypass,giveBack,partner,active,control,limit,HeatRouting.SERIES);
+    }
     public HeatSide {
-        Objects.requireNonNull(films);Objects.requireNonNull(limit);
+        Objects.requireNonNull(films);Objects.requireNonNull(limit);Objects.requireNonNull(routing);routing.validate(wall.length);
         if(!(area>0)||!Double.isFinite(area)||wall.length<1||!(bypass>=0&&bypass<=1)||!Double.isFinite(giveBack)||!(active>=0&&active<=1))throw new IllegalArgumentException("Invalid heat side");
         wall=wall.clone();
         for(double temperature:wall)if(!(temperature>0)||!Double.isFinite(temperature))throw new IllegalArgumentException("Invalid wall temperature");
@@ -33,8 +36,8 @@ public record HeatSide(double area,HeatCurve.Films films,double[] wall,double by
     /** A side without a controller. */
     public HeatSide(double area,HeatCurve.Films films,double[] wall,double bypass,double giveBack,long partner,double active){this(area,films,wall,bypass,giveBack,partner,active,null,HeatControl.Limit.NONE);}
     /** The facts that shape the side's equations, without the slice inputs. */
-    public record Shape(double area,HeatCurve.Films films,int cells,long partner,HeatControl control) {}
-    @Override public Shape shape(){return new Shape(area,films,wall.length,partner,control);}
+    public record Shape(double area,HeatCurve.Films films,int cells,long partner,HeatControl control,HeatRouting routing) {}
+    @Override public Shape shape(){return new Shape(area,films,wall.length,partner,control,routing);}
     @Override public double[] wall(){return wall.clone();}
     public int cells(){return wall.length;}
     public double wallTemperature(int cell){return wall[cell];}
@@ -49,7 +52,7 @@ public record HeatSide(double area,HeatCurve.Films films,double[] wall,double by
     /** This side with other slice inputs, its controller's limit as it was. */
     public HeatSide withInputs(double[] wall,double bypass,double giveBack,double active){return withInputs(wall,bypass,giveBack,active,limit);}
     /** This side with other slice inputs. */
-    public HeatSide withInputs(double[] wall,double bypass,double giveBack,double active,HeatControl.Limit why){return new HeatSide(area,films,wall,bypass,giveBack,partner,active,control,why);}
+    public HeatSide withInputs(double[] wall,double bypass,double giveBack,double active,HeatControl.Limit why){return new HeatSide(area,films,wall,bypass,giveBack,partner,active,control,why,routing);}
 
     /**
      * The heat (W) the stream takes up in passing, positive when it is heated: the share {@code 1 - bypass} of
@@ -60,6 +63,11 @@ public record HeatSide(double area,HeatCurve.Films films,double[] wall,double by
     @Override public double heat(HeatCurve curve,double inlet,double massFlow) {
         double mass=Math.abs(massFlow);
         if(mass==0)return 0;
+        if(routing!=HeatRouting.SERIES) {
+            double through=(1-bypass)*mass;
+            double out=routing.visit(curve,inlet,through,area,wall,massFlow>0,null,null);
+            return active*through*(out-inlet)+mass*giveBack;
+        }
         double through=(1-bypass)*mass,value=inlet,cell=area/wall.length;
         if(through>0&&active>0)for(int k=0;k<wall.length;k++)value=curve.march(value,through,cell,wall[massFlow>0?k:wall.length-1-k]);
         return active*through*(value-inlet)+mass*giveBack;
@@ -67,8 +75,8 @@ public record HeatSide(double area,HeatCurve.Films films,double[] wall,double by
     @Override public boolean equals(Object other) {
         return other instanceof HeatSide side&&Double.compare(area,side.area)==0&&films.equals(side.films)&&Arrays.equals(wall,side.wall)
                 &&Double.compare(bypass,side.bypass)==0&&Double.compare(giveBack,side.giveBack)==0&&partner==side.partner&&Double.compare(active,side.active)==0
-                &&Objects.equals(control,side.control)&&limit==side.limit;
+                &&Objects.equals(control,side.control)&&limit==side.limit&&routing==side.routing;
     }
-    @Override public int hashCode(){return 31*Objects.hash(area,films,bypass,giveBack,partner,active,control,limit)+Arrays.hashCode(wall);}
+    @Override public int hashCode(){return 31*Objects.hash(area,films,bypass,giveBack,partner,active,control,limit,routing)+Arrays.hashCode(wall);}
     @Override public String toString(){return "HeatSide[area="+area+", films="+films+", wall="+Arrays.toString(wall)+", bypass="+bypass+", giveBack="+giveBack+", partner="+partner+", active="+active+", control="+control+", limit="+limit+"]";}
 }

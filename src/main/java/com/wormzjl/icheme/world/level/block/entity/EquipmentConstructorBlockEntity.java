@@ -56,7 +56,14 @@ public final class EquipmentConstructorBlockEntity extends BlockEntity {
     public record Design(double diameter, int tangentLength, VesselPlacement.Form form, int support, VesselPlacement placement, ColumnTrays trays,
                          List<EquipmentShape.Connection> connections, Paint paint, ProcessUnit.Bank bank, boolean boot, int outlet,
                          @org.jetbrains.annotations.Nullable ColumnDesign column, List<ColumnTrays.Turn> turns, com.wormzjl.icheme.science.equipment.TowerBank towerBank, String name,
+                         MachineDuty duty, com.wormzjl.icheme.science.equipment.ExchangerType exchangerType) {
+        public Design(double diameter, int tangentLength, VesselPlacement.Form form, int support, VesselPlacement placement, ColumnTrays trays,
+                         List<EquipmentShape.Connection> connections, Paint paint, ProcessUnit.Bank bank, boolean boot, int outlet,
+                         @org.jetbrains.annotations.Nullable ColumnDesign column, List<ColumnTrays.Turn> turns, com.wormzjl.icheme.science.equipment.TowerBank towerBank, String name,
                          MachineDuty duty) {
+            this(diameter,tangentLength,form,support,placement,trays,connections,paint,bank,boot,outlet,column,turns,towerBank,name,duty,com.wormzjl.icheme.science.equipment.ExchangerType.STANDARD);
+        }
+
         /** A design with no name: built by hand, its structure starts unnamed (N1). */
         public Design(double diameter, int tangentLength, VesselPlacement.Form form, int support, VesselPlacement placement, ColumnTrays trays,
                       List<EquipmentShape.Connection> connections, Paint paint, ProcessUnit.Bank bank, boolean boot, int outlet,
@@ -73,11 +80,14 @@ public final class EquipmentConstructorBlockEntity extends BlockEntity {
 
         /** This design whose structure is built named {@code value} (cleaned; empty: unnamed). */
         public Design withName(String value) {
-            return new Design(diameter,tangentLength,form,support,placement,trays,connections,paint,bank,boot,outlet,column,turns,towerBank,value,duty);
+            return new Design(diameter,tangentLength,form,support,placement,trays,connections,paint,bank,boot,outlet,column,turns,towerBank,value,duty, exchangerType);
+        }
+        public Design withExchangerType(com.wormzjl.icheme.science.equipment.ExchangerType value) {
+            return new Design(diameter,tangentLength,form,support,placement,trays,connections,paint,bank,boot,outlet,column,turns,towerBank,name,duty,value);
         }
 
         public Design withTowerBank(com.wormzjl.icheme.science.equipment.TowerBank value) {
-            return new Design(diameter,tangentLength,form,support,placement,trays,connections,paint,bank,boot,outlet,column,turns,value,name,duty);
+            return new Design(diameter,tangentLength,form,support,placement,trays,connections,paint,bank,boot,outlet,column,turns,value,name,duty, exchangerType);
         }
         /** A new column's trays: twenty, fed in the middle. */
         public static final ColumnTrays TRAYS = ColumnTrays.simple(20, 10);
@@ -110,6 +120,7 @@ public final class EquipmentConstructorBlockEntity extends BlockEntity {
         }
 
         public Design {
+            Objects.requireNonNull(exchangerType);
             Objects.requireNonNull(form, "form");
             Objects.requireNonNull(placement, "placement");
             Objects.requireNonNull(trays, "trays");
@@ -132,12 +143,12 @@ public final class EquipmentConstructorBlockEntity extends BlockEntity {
         }
 
         public EquipmentShape shape(Direction facing) {
-            return shape(diameter, tangentLength, form, support, trays, connections, bank, boot, outlet, column, turns, duty, form.front(facing.getStepX(), facing.getStepZ())).withTowerBank(form.kind()==EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER?towerBank:com.wormzjl.icheme.science.equipment.TowerBank.ONE);
+            return shape(diameter, tangentLength, form, support, trays, connections, bank, boot, outlet, column, turns, duty, form.front(facing.getStepX(), facing.getStepZ())).withTowerBank(form.kind()==EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER?towerBank:com.wormzjl.icheme.science.equipment.TowerBank.ONE).withExchangerType(form.kind()==EquipmentShape.Kind.EXCHANGER?exchangerType:com.wormzjl.icheme.science.equipment.ExchangerType.STANDARD);
         }
 
         /** This design with the column's side nozzles turned as {@code next}. */
         public Design withTurns(List<ColumnTrays.Turn> next) {
-            return new Design(diameter, tangentLength, form, support, placement, trays, connections, paint, bank, boot, outlet, column, next, towerBank, name, duty);
+            return new Design(diameter, tangentLength, form, support, placement, trays, connections, paint, bank, boot, outlet, column, next, towerBank, name, duty, exchangerType);
         }
 
         /** Whether this design builds: anything but a column without an imported design. */
@@ -152,7 +163,7 @@ public final class EquipmentConstructorBlockEntity extends BlockEntity {
         public Design imported(ColumnDesign imported) {
             double d = imported.diameter();
             return new Design(d, tangentLength, VesselPlacement.Form.COLUMN, Math.max(support, EquipmentShape.minimumSkirt(d)), placement, trays, connections, paint,
-                    bank, boot, 0, imported, turns,towerBank, name, duty);
+                    bank, boot, 0, imported, turns,towerBank, name, duty, exchangerType);
         }
 
         /**
@@ -174,13 +185,13 @@ public final class EquipmentConstructorBlockEntity extends BlockEntity {
             boolean drum = kind == EquipmentShape.Kind.DRUM;
             var fitted = drum ? EquipmentShape.defaultConnections(shape.diameter(), length, shape.orientation(), shape.support(), shape.boot(), shape.outlet()) : connections;
             return new Design(shape.diameter(), length, to, shape.support(), placement, trays, fitted, paint, kind == EquipmentShape.Kind.AIR_COOLER ? shape.bank() : bank,
-                    drum ? shape.boot() : boot, shape.outlet(), column, turns, kind == EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER ? shape.towerBank() : towerBank, name, shape.duty());
+                    drum ? shape.boot() : boot, shape.outlet(), column, turns, kind == EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER ? shape.towerBank() : towerBank, name, shape.duty(), kind == EquipmentShape.Kind.EXCHANGER ? shape.exchangerType() : exchangerType);
         }
 
         /** {@code edited}, a design the player sent, with this design's imported column: only an import sets it. */
         public Design keepingColumn(Design edited) {
             return new Design(edited.diameter, edited.tangentLength, edited.form, edited.support, edited.placement, edited.trays, edited.connections, edited.paint,
-                    edited.bank, edited.boot, edited.outlet, column, edited.turns,edited.towerBank, name, edited.duty);
+                    edited.bank, edited.boot, edited.outlet, column, edited.turns,edited.towerBank, name, edited.duty, edited.exchangerType);
         }
 
         /** The shape; an outlet the form does not turn to is refused ({@link EquipmentShape#outlets}); a machine carries its design point. */
@@ -289,6 +300,7 @@ public final class EquipmentConstructorBlockEntity extends BlockEntity {
      */
     public static Design readDesign(CompoundTag tag, Design fresh, java.util.function.Consumer<String> repairs) {
         var design=readBaseDesign(tag,fresh,repairs).withName(savedName(tag,repairs));
+        if(tag.contains("ExchangerType"))design=design.withExchangerType(com.wormzjl.icheme.science.equipment.ExchangerType.valueOf(tag.getString("ExchangerType")));
         if(!tag.contains("TowerBank"))return design;
         try{return design.withTowerBank(com.wormzjl.icheme.science.equipment.TowerBank.decode(tag.getIntArray("TowerBank")));}
         catch(IllegalArgumentException invalid){repairs.accept("tower bank -> one cell: "+invalid.getMessage());return design;}
@@ -381,6 +393,7 @@ public final class EquipmentConstructorBlockEntity extends BlockEntity {
      * under {@code Duty}, as a shell saves it.
      */
     public static void writeDesign(CompoundTag tag, Design design) {
+        tag.putString("ExchangerType",design.exchangerType().name());
         tag.putDouble("Diameter", design.diameter());
         tag.putInt("TangentLength", design.tangentLength());
         tag.putString("Form", design.form().name().toLowerCase(Locale.ROOT));

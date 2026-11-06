@@ -91,7 +91,7 @@ public final class SheetSizing {
             var units = new HashMap<String, UnitEntry>();
             facts.units().forEach((id, unit) -> {
                 boolean fixed = unit.mode() == SizingFacts.Mode.FIXED;
-                units.put(id, new UnitEntry(all || fixed ? unit.size() : null, unit.type(), unit.hold(), fixed));
+                units.put(id, new UnitEntry(all || fixed ? unit.size() : null, fixed?unit.type():null, unit.hold(), fixed));
             });
             if (all) for (var unit : sheet.units()) if (unit.type().equals(COLUMN)) units.put(unit.id(), new UnitEntry(null, facts.unit(unit.id()).type(), null, true));
             var lines = new HashMap<String, LineEntry>();

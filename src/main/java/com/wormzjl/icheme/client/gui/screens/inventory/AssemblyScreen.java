@@ -666,6 +666,7 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
                 yield tr("state.not_loaded", name, pos.getX() >> 4, pos.getZ() >> 4);
             }
             case WRONG_KIND -> tr("state.wrong_kind", name, found(detail, at), wanted == null ? where : wanted);
+            case CONFIGURATION -> tr("state.configuration", name, position(at));
             case WRONG_PORT -> detail.equals("backwards") ? tr("state.backwards", name)
                     : detail.startsWith("returns:") ? tr("state.wrong_port.returns", name, role(detail.substring(8)))
                     : tr("state.wrong_port", name, role(detail), where);
