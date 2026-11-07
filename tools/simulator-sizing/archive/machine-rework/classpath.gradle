@@ -1,0 +1,5 @@
+gradle.projectsEvaluated {
+    rootProject.tasks.register('writeMachineClasspath') {
+        doLast { new File(rootProject.projectDir,'tmp/machine-rework/classpath.txt').text = rootProject.sourceSets.main.runtimeClasspath.asPath }
+    }
+}

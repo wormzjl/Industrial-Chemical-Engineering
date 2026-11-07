@@ -45,4 +45,6 @@ It writes the fifteen PNGs above. `probes/PumpRender` takes `-Dpaint=RRGGBB` to 
 
 ## History
 
+- 2026-11-07, batch `2026-11-06-simulator-sizing`: `ConstructorAssets.java` and `SimulatorAssets.java` now author the industrial fabrication bench and operator cabinet as vanilla JSON models, using existing steel, panel, grating and display textures. From the worktree root, run `java tools/pump-sprites/ConstructorAssets.java src/main/resources/assets/icheme` and the corresponding `SimulatorAssets.java` command to regenerate their block/item models and facing variants. Compile both classes with `tools/simulator-sizing/StationRender.java` for software views; `tools/simulator-sizing/check_models.py` checks collision coverage, UVs, resources and facing. The batch's other one-off renderers and texture sources are retained under `tools/simulator-sizing/archive/`.
+
 - 2026-11-04: created for the pump rework (OH2 and BB2 drawn with baked castings, fins, joints and drain-rim baseplate), the coupling guard (API 686 expanded-metal hood with end plates and a shaft opening, its own material so `GUARD`'s plain yellow stays as it is for valve handles, labels and the derrick), steel shafts that match the shaft block, and the motor rework (finned TEFC frame, end shields, large motor's panels).

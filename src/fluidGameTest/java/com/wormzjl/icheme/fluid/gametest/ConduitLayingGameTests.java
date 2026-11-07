@@ -22,7 +22,7 @@ import net.neoforged.neoforge.client.model.data.*;
 import java.util.*;
 
 /** Focused fresh-world checks for the real placement adapter, rather than preconstructed connectivity facts. */
-@GameTestHolder("icheme_cable_test")
+@GameTestHolder("icheme_fluid_test")
 @PrefixGameTestTemplate(false)
 public final class ConduitLayingGameTests {
     private ConduitLayingGameTests(){}
@@ -32,10 +32,6 @@ public final class ConduitLayingGameTests {
     public static void anExistingPowerStubCanBeAttachedWithoutReplacingIt(GameTestHelper helper){exercise(helper,CableMedium.POWER,true);}
     @GameTest(template="empty",timeoutTicks=500,batch="data-direct")
     public static void dataLayingBindsItsControllerAndMotor(GameTestHelper helper){exercise(helper,CableMedium.DATA,false);}
-    @GameTest(template="empty",timeoutTicks=200,batch="pipe-regression-straight")
-    public static void sharedAnchorsStillLayAndDismantleFluidPipe(GameTestHelper helper){PipeLayingGameTests.aLaidLineJoinsItsTanksOnlyAndComesOutOneBlockAtATime(helper);}
-    @GameTest(template="empty",timeoutTicks=200,batch="pipe-regression-rack")
-    public static void sharedAnchorsStillUseFluidRackCorners(GameTestHelper helper){PipeLayingGameTests.aLineThroughARackCornerJoinsItsTanksAndALaneComesOutAlone(helper);}
 
     @GameTest(template="empty",timeoutTicks=80,batch="service-port-families")
     public static void controllersAndInlineMoversUseTheirAvailableConnectionSpace(GameTestHelper helper){

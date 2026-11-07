@@ -99,7 +99,7 @@ import java.util.function.Function;
 public final class FluidCheckpointCodec {
     /** The state format: the core record's {@code StateFormat} and every unit's state section. */
     public static final int VERSION=39;
-    /** The most wall cells a saved heat side holds (an exchanger's 8; an air cooler's flat wall 1). */
+    /** The most wall cells a saved heat side holds (crossflow 64, Standard 8, an air cooler's flat wall 1). */
     private static final int MAXIMUM_WALL_CELLS=64;
     /** The envelope: the core record's frame, the unit header and the section layout. Frozen. */
     public static final int ENVELOPE=1;

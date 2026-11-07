@@ -20,7 +20,7 @@ import net.neoforged.neoforge.common.util.FakePlayerFactory;
 import net.neoforged.neoforge.gametest.*;
 import java.util.*;
 
-@GameTestHolder("icheme_power_test")
+@GameTestHolder("icheme_fluid_test")
 @PrefixGameTestTemplate(false)
 public final class CreativePowerGameTests {
     private CreativePowerGameTests(){}
