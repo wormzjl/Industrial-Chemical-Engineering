@@ -1,27 +1,30 @@
 {
   "parent": "minecraft:block/block",
   "textures": {
-    "particle": "icheme:block/constructor_cabinet",
-    "cabinet": "icheme:block/constructor_cabinet",
-    "frame": "icheme:block/constructor_frame",
+    "particle": "icheme:block/pump_casting",
+    "cabinet": "icheme:block/pump_casting",
+    "frame": "icheme:block/equipment_flange",
     "bed": "icheme:block/constructor_bed",
     "plan": "icheme:block/constructor_plan",
     "controls": "icheme:block/constructor_controls",
     "warning": "icheme:block/constructor_warning",
-    "brass": "icheme:block/constructor_brass"
+    "brass": "icheme:block/constructor_brass",
+    "dark": "icheme:block/equipment_steelwork",
+    "black": "icheme:block/equipment_opening",
+    "red": "icheme:block/equipment_actuator"
   },
   "elements": [
     {
-      "name": "cast base",
+      "name": "welded plinth",
       "from": [1.0, 0.0, 1.0],
       "to": [15.0, 2.0, 15.0],
       "faces": {
-        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
-        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
-        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
-        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
-        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
-        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" }
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" }
       }
     },
     {
@@ -38,11 +41,24 @@
       }
     },
     {
-      "name": "slotted worktable",
+      "name": "cast worktable bed",
       "from": [0.0, 10.0, 0.0],
-      "to": [16.0, 12.0, 16.0],
+      "to": [16.0, 11.5, 16.0],
       "faces": {
-        "north": { "uv": [0.0, 6.0, 16.0, 10.0], "texture": "#warning" },
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" }
+      }
+    },
+    {
+      "name": "machined slotted worktop",
+      "from": [0.15, 11.5, 0.15],
+      "to": [15.85, 12.0, 15.85],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
         "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
         "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
         "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
@@ -51,11 +67,141 @@
       }
     },
     {
-      "name": "recessed blueprint console",
-      "from": [2.0, 3.5, 0.75],
-      "to": [14.0, 9.5, 1.0],
+      "name": "front service door gasket",
+      "from": [1.5, 2.4, 0.91],
+      "to": [14.5, 9.6, 1.02],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" }
+      }
+    },
+    {
+      "name": "front service door",
+      "from": [1.7, 2.6, 0.82],
+      "to": [14.3, 9.4, 0.94],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" }
+      }
+    },
+    {
+      "name": "operator panel backplate",
+      "from": [2.0, 4.9, 0.78],
+      "to": [10.6, 9.2, 0.85],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" }
+      }
+    },
+    {
+      "name": "operator panel left bezel",
+      "from": [2.0, 4.9, 0.68],
+      "to": [2.3, 9.2, 0.8],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" }
+      }
+    },
+    {
+      "name": "operator panel right bezel",
+      "from": [10.3, 4.9, 0.68],
+      "to": [10.6, 9.2, 0.8],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" }
+      }
+    },
+    {
+      "name": "operator panel bottom bezel",
+      "from": [2.3, 4.9, 0.68],
+      "to": [10.3, 5.05, 0.8],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" }
+      }
+    },
+    {
+      "name": "operator panel top bezel",
+      "from": [2.3, 9.05, 0.68],
+      "to": [10.3, 9.2, 0.8],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" }
+      }
+    },
+    {
+      "name": "recessed fabrication HMI",
+      "from": [2.3, 5.05, 0.74],
+      "to": [10.3, 9.05, 0.78],
       "faces": {
         "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#controls" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" }
+      }
+    },
+    {
+      "name": "emergency stop backing",
+      "from": [11.65, 6.15, 0.73],
+      "to": [12.75, 7.25, 0.86],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#warning" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#warning" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#warning" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#warning" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#warning" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#warning" }
+      }
+    },
+    {
+      "name": "red emergency stop",
+      "from": [11.85, 6.35, 0.38],
+      "to": [12.55, 7.05, 0.75],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#red" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#red" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#red" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#red" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#red" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#red" }
+      }
+    },
+    {
+      "name": "selector escutcheon",
+      "from": [11.8, 7.85, 0.74],
+      "to": [12.6, 8.65, 0.86],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
         "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
         "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
         "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
@@ -64,16 +210,211 @@
       }
     },
     {
-      "name": "brass selector",
-      "from": [3.0, 4.5, 0.2],
-      "to": [5.0, 6.5, 0.75],
+      "name": "black rotary selector",
+      "from": [12.08, 7.95, 0.5],
+      "to": [12.32, 8.55, 0.76],
       "faces": {
-        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#brass" },
-        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#brass" },
-        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#brass" },
-        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#brass" },
-        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#brass" },
-        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#brass" }
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" }
+      }
+    },
+    {
+      "name": "door latch",
+      "from": [13.4, 3.8, 0.58],
+      "to": [13.65, 4.8, 0.84],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" }
+      }
+    },
+    {
+      "name": "service door hinge",
+      "from": [1.65, 3.1, 0.68],
+      "to": [2.05, 3.6500000000000004, 1.02],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" }
+      }
+    },
+    {
+      "name": "service door hinge",
+      "from": [1.65, 8.6, 0.68],
+      "to": [2.05, 9.15, 1.02],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" }
+      }
+    },
+    {
+      "name": "left cabinet louvre",
+      "from": [0.94, 3.4, 4.0],
+      "to": [1.01, 3.56, 12.0],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" }
+      }
+    },
+    {
+      "name": "right cabinet louvre",
+      "from": [14.99, 3.4, 4.0],
+      "to": [15.06, 3.56, 12.0],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" }
+      }
+    },
+    {
+      "name": "left cabinet louvre",
+      "from": [0.94, 3.88, 4.0],
+      "to": [1.01, 4.04, 12.0],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" }
+      }
+    },
+    {
+      "name": "right cabinet louvre",
+      "from": [14.99, 3.88, 4.0],
+      "to": [15.06, 4.04, 12.0],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" }
+      }
+    },
+    {
+      "name": "left cabinet louvre",
+      "from": [0.94, 4.359999999999999, 4.0],
+      "to": [1.01, 4.52, 12.0],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" }
+      }
+    },
+    {
+      "name": "right cabinet louvre",
+      "from": [14.99, 4.359999999999999, 4.0],
+      "to": [15.06, 4.52, 12.0],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" }
+      }
+    },
+    {
+      "name": "left cabinet louvre",
+      "from": [0.94, 4.84, 4.0],
+      "to": [1.01, 5.0, 12.0],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" }
+      }
+    },
+    {
+      "name": "right cabinet louvre",
+      "from": [14.99, 4.84, 4.0],
+      "to": [15.06, 5.0, 12.0],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" }
+      }
+    },
+    {
+      "name": "left cabinet louvre",
+      "from": [0.94, 5.32, 4.0],
+      "to": [1.01, 5.48, 12.0],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" }
+      }
+    },
+    {
+      "name": "right cabinet louvre",
+      "from": [14.99, 5.32, 4.0],
+      "to": [15.06, 5.48, 12.0],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" }
+      }
+    },
+    {
+      "name": "rear maintenance panel gasket",
+      "from": [2.0, 3.0, 14.99],
+      "to": [14.0, 9.0, 15.04],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" }
+      }
+    },
+    {
+      "name": "rear maintenance panel",
+      "from": [2.2, 3.2, 15.025],
+      "to": [13.8, 8.8, 15.08],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" }
       }
     },
     {
@@ -81,12 +422,12 @@
       "from": [1.0, 12.0, 11.0],
       "to": [3.0, 16.0, 13.0],
       "faces": {
-        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
-        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
-        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
-        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
-        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
-        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" }
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" }
       }
     },
     {
@@ -94,18 +435,31 @@
       "from": [13.0, 12.0, 11.0],
       "to": [15.0, 16.0, 13.0],
       "faces": {
-        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
-        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
-        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
-        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
-        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
-        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" }
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" }
       }
     },
     {
       "name": "cross rail",
       "from": [3.0, 14.5, 11.0],
       "to": [13.0, 16.0, 13.0],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" }
+      }
+    },
+    {
+      "name": "linear guide rail",
+      "from": [3.0, 14.85, 10.78],
+      "to": [13.0, 15.2, 11.02],
       "faces": {
         "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
         "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
@@ -129,9 +483,22 @@
       }
     },
     {
+      "name": "tool head face",
+      "from": [6.3, 13.25, 10.42],
+      "to": [9.7, 14.65, 10.52],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" }
+      }
+    },
+    {
       "name": "tool nose",
-      "from": [7.0, 12.5, 10.5],
-      "to": [9.0, 13.0, 12.5],
+      "from": [7.5, 12.5, 11.0],
+      "to": [8.5, 13.0, 12.0],
       "faces": {
         "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
         "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
@@ -142,37 +509,159 @@
       }
     },
     {
-      "name": "blueprint sheet",
-      "from": [4.0, 12.015, 3.0],
-      "to": [12.0, 12.025, 9.0],
+      "name": "carriage fastener",
+      "from": [6.55, 13.5, 10.32],
+      "to": [6.8, 13.75, 10.44],
       "faces": {
-        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#plan" }
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" }
       }
     },
     {
-      "name": "left paper clamp",
-      "from": [3.5, 12.03, 4.0],
-      "to": [4.5, 12.3, 5.5],
+      "name": "carriage fastener",
+      "from": [6.55, 14.2, 10.32],
+      "to": [6.8, 14.45, 10.44],
       "faces": {
-        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#brass" },
-        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#brass" },
-        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#brass" },
-        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#brass" },
-        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#brass" },
-        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#brass" }
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" }
       }
     },
     {
-      "name": "right paper clamp",
-      "from": [11.5, 12.03, 4.0],
-      "to": [12.5, 12.3, 5.5],
+      "name": "carriage fastener",
+      "from": [9.2, 13.5, 10.32],
+      "to": [9.45, 13.75, 10.44],
       "faces": {
-        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#brass" },
-        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#brass" },
-        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#brass" },
-        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#brass" },
-        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#brass" },
-        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#brass" }
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" }
+      }
+    },
+    {
+      "name": "carriage fastener",
+      "from": [9.2, 14.2, 10.32],
+      "to": [9.45, 14.45, 10.44],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" }
+      }
+    },
+    {
+      "name": "gantry mounting shoe",
+      "from": [0.7, 12.005, 10.6],
+      "to": [3.3, 12.3, 13.4],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" }
+      }
+    },
+    {
+      "name": "mounting stud",
+      "from": [1.2, 12.3, 10.7],
+      "to": [1.5, 12.5, 11.0],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" }
+      }
+    },
+    {
+      "name": "mounting stud",
+      "from": [1.2, 12.3, 13.0],
+      "to": [1.5, 12.5, 13.3],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" }
+      }
+    },
+    {
+      "name": "gantry mounting shoe",
+      "from": [12.7, 12.005, 10.6],
+      "to": [15.299999999999999, 12.3, 13.4],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" }
+      }
+    },
+    {
+      "name": "mounting stud",
+      "from": [13.2, 12.3, 10.7],
+      "to": [13.5, 12.5, 11.0],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" }
+      }
+    },
+    {
+      "name": "mounting stud",
+      "from": [13.2, 12.3, 13.0],
+      "to": [13.5, 12.5, 13.3],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" }
+      }
+    },
+    {
+      "name": "workholding plate",
+      "from": [4.5, 12.005, 3.5],
+      "to": [11.5, 12.06, 8.5],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" }
+      }
+    },
+    {
+      "name": "machined steel blank",
+      "from": [6.0, 12.065, 5.0],
+      "to": [10.0, 12.35, 7.0],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" }
       }
     }
   ]

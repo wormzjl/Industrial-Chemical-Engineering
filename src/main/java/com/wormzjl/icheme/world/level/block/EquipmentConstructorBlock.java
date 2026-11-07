@@ -45,8 +45,10 @@ public final class EquipmentConstructorBlock extends BaseEntityBlock {
         double[][] parts = {
                 {0, 0, 0, 16, 12, 16},
                 {1, 12, 11, 3, 16, 13}, {13, 12, 11, 15, 16, 13},
-                {3, 14.5, 11, 13, 16, 13},
-                {6, 13, 10.5, 10, 15, 13.5}, {7, 12.5, 10.5, 9, 13, 12.5}
+                {3, 14.5, 10.75, 13, 16, 13},
+                {6, 13, 10.3, 10, 15, 13.5}, {7.5, 12.5, 11, 8.5, 13, 12},
+                {.7, 12, 10.6, 3.3, 12.5, 13.4}, {12.7, 12, 10.6, 15.3, 12.5, 13.4},
+                {4.5, 12, 3.5, 11.5, 12.35, 8.5}
         };
         var shapes = new EnumMap<Direction, VoxelShape>(Direction.class);
         for (var facing : Direction.Plane.HORIZONTAL) {

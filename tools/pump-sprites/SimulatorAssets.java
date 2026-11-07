@@ -8,33 +8,57 @@ import java.util.List;
 import java.util.Map;
 import javax.imageio.ImageIO;
 
-/** Pixel-art process-control console. Shares the constructor's metalwork palette and vanilla-model writer. */
+/** Cabinet-mounted industrial operator terminal, sharing the constructor's steelwork and vanilla-model writer. */
 public final class SimulatorAssets {
     private SimulatorAssets() {}
 
     static List<ConstructorAssets.Box> boxes() {
         var boxes = new ArrayList<ConstructorAssets.Box>();
-        boxes.add(ConstructorAssets.box("terminal base", 1, 0, 1, 15, 2, 15, "frame"));
-        var pedestal = ConstructorAssets.box("console pedestal", 2, 2, 6, 14, 7, 15, "cabinet");
-        pedestal.faces().put("up", new ConstructorAssets.Face("frame"));
-        boxes.add(pedestal);
-        boxes.add(ConstructorAssets.box("keyboard tray", 1, 6, 0, 15, 7, 6, "frame"));
-        boxes.add(ConstructorAssets.box("monitor bezel", 1, 7, 9, 15, 16, 12, "bezel"));
-        boxes.add(ConstructorAssets.box("vented monitor housing", 2, 8, 12, 14, 15, 14.5, "vents"));
-        boxes.add(new ConstructorAssets.Box("flowsheet display", new double[]{2, 9, 8.7}, new double[]{14, 15, 9},
+        boxes.add(ConstructorAssets.box("steel cabinet plinth", .75, 0, .75, 15.25, 2, 15.25, "dark"));
+        boxes.add(ConstructorAssets.box("lower control cabinet", 1, 2, 3, 15, 7, 15, "cabinet"));
+        boxes.add(ConstructorAssets.box("pressed console worktop", 1, 7, 0, 15, 8, 15, "dark"));
+        boxes.add(ConstructorAssets.box("stainless worktop skin", 1.12,7.88,.12,14.88,8.015,7.9,"frame"));
+        boxes.add(ConstructorAssets.box("operator terminal cabinet", 1, 8, 8, 15, 16, 15, "cabinet"));
+        boxes.add(ConstructorAssets.box("HMI backplate",1.75,8.85,7.9,14.25,15.6,8.02,"black"));
+        boxes.add(ConstructorAssets.box("HMI left bezel",1.75,8.85,7.7,2.25,15.6,7.92,"dark"));
+        boxes.add(ConstructorAssets.box("HMI right bezel",13.75,8.85,7.7,14.25,15.6,7.92,"dark"));
+        boxes.add(ConstructorAssets.box("HMI bottom bezel",2.25,8.85,7.7,13.75,9.35,7.92,"dark"));
+        boxes.add(ConstructorAssets.box("HMI top bezel",2.25,15.1,7.7,13.75,15.6,7.92,"dark"));
+        boxes.add(new ConstructorAssets.Box("recessed flowsheet display", new double[]{2.25, 9.35, 7.82}, new double[]{13.75, 15.1, 7.88},
                 Map.of("north", new ConstructorAssets.Face("screen"))));
-        var keyboard = ConstructorAssets.box("keyboard", 4, 7.03, 1, 14, 7.35, 6, "bezel");
+        boxes.add(ConstructorAssets.box("screen hood",1,15.6,7.25,15,16,8.05,"dark"));
+        var keyboard = ConstructorAssets.box("sealed panel keyboard", 2.5, 8.015, 1, 11.5, 8.25, 5.5, "black");
         keyboard.faces().put("up", new ConstructorAssets.Face("keys"));
         boxes.add(keyboard);
-        boxes.add(ConstructorAssets.box("trackball controller", 1.6, 7.03, 2, 3.4, 7.5, 5, "brass"));
-        boxes.add(ConstructorAssets.box("power selector", 3, 7.6, 8.55, 4.25, 8.65, 9, "brass"));
+        boxes.add(ConstructorAssets.box("trackball mounting plate",12,8.015,1.5,14,8.18,4.5,"frame"));
+        boxes.add(ConstructorAssets.box("rubber trackball",12.55,8.18,2.2,13.45,8.5,3.1,"black"));
+        boxes.add(ConstructorAssets.box("left trackball key",12.2,8.18,3.55,12.9,8.28,4.2,"dark"));
+        boxes.add(ConstructorAssets.box("right trackball key",13.1,8.18,3.55,13.8,8.28,4.2,"dark"));
+        boxes.add(ConstructorAssets.box("lower service door gasket",1.5,2.4,2.82,14.5,6.6,3.02,"black"));
+        boxes.add(ConstructorAssets.box("lower service door",1.7,2.6,2.7,14.3,6.4,2.85,"cabinet"));
+        boxes.add(ConstructorAssets.box("quarter-turn door latch",13.2,4.05,2.55,13.5,4.8,2.74,"dark"));
+        for(double y:new double[]{3.1,5.5})boxes.add(ConstructorAssets.box("service door hinge",1.65,y,2.56,2.05,y+.55,3.02,"frame"));
+        for(double x:new double[]{1.95,13.8})for(double y:new double[]{9.0,15.2})boxes.add(ConstructorAssets.box("HMI captive screw",x,y,7.64,x+.22,y+.22,7.72,"frame"));
+        boxes.add(ConstructorAssets.box("rear access panel gasket",1.75,2.7,14.99,14.25,15.3,15.04,"black"));
+        boxes.add(ConstructorAssets.box("rear access panel",2,2.95,15.025,14,15.05,15.1,"cabinet"));
+        for(int row=0;row<6;row++){
+            double y=9.2+.55*row;
+            boxes.add(ConstructorAssets.box("rear ventilation louvre",3,y,15.09,13,y+.15,15.16,"black"));
+        }
+        for(int row=0;row<4;row++){
+            double y=3.3+.5*row;
+            boxes.add(ConstructorAssets.box("side cooling louvre",14.99,y,7,15.06,y+.16,12.5,"black"));
+        }
         return List.copyOf(boxes);
     }
 
     static Map<String, String> texturePaths() {
         var paths = new LinkedHashMap<String, String>();
-        paths.put("particle", "icheme:block/constructor_cabinet");
-        for (var name : new String[]{"frame", "cabinet", "brass"}) paths.put(name, "icheme:block/constructor_" + name);
+        paths.put("particle", "icheme:block/pump_casting");
+        paths.put("cabinet", "icheme:block/pump_casting");
+        paths.put("frame", "icheme:block/equipment_flange");
+        paths.put("dark", "icheme:block/equipment_steelwork");
+        paths.put("black", "icheme:block/equipment_opening");
         for (var name : new String[]{"bezel", "screen", "keys", "vents"}) paths.put(name, "icheme:block/simulator_" + name);
         return paths;
     }

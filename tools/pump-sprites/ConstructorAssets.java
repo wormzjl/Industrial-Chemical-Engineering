@@ -20,26 +20,49 @@ public final class ConstructorAssets {
 
     static List<Box> boxes() {
         var boxes = new ArrayList<Box>();
-        boxes.add(box("cast base", 1, 0, 1, 15, 2, 15, "frame"));
+        boxes.add(box("welded plinth", 1, 0, 1, 15, 2, 15, "dark"));
         boxes.add(box("enclosed cabinet", 1, 2, 1, 15, 10, 15, "cabinet"));
-        var deck = box("slotted worktable", 0, 10, 0, 16, 12, 16, "frame");
+        boxes.add(box("cast worktable bed", 0, 10, 0, 16, 11.5, 16, "dark"));
+        var deck = box("machined slotted worktop", .15, 11.5, .15, 15.85, 12, 15.85, "frame");
         deck.faces().put("up", new Face("bed"));
-        deck.faces().put("north", new Face("warning", new double[]{0, 6, 16, 10}));
         boxes.add(deck);
-        var controls = box("recessed blueprint console", 2, 3.5, .75, 14, 9.5, 1, "frame");
+        boxes.add(box("front service door gasket", 1.5, 2.4, .91, 14.5, 9.6, 1.02, "black"));
+        boxes.add(box("front service door", 1.7, 2.6, .82, 14.3, 9.4, .94, "cabinet"));
+        boxes.add(box("operator panel backplate", 2, 4.9, .78, 10.6, 9.2, .85, "black"));
+        boxes.add(box("operator panel left bezel",2,4.9,.68,2.3,9.2,.8,"dark"));
+        boxes.add(box("operator panel right bezel",10.3,4.9,.68,10.6,9.2,.8,"dark"));
+        boxes.add(box("operator panel bottom bezel",2.3,4.9,.68,10.3,5.05,.8,"dark"));
+        boxes.add(box("operator panel top bezel",2.3,9.05,.68,10.3,9.2,.8,"dark"));
+        var controls = box("recessed fabrication HMI", 2.3, 5.05, .74, 10.3, 9.05, .78, "dark");
         controls.faces().put("north", new Face("controls"));
         boxes.add(controls);
-        var dial = box("brass selector", 3, 4.5, .2, 5, 6.5, .75, "brass");
-        boxes.add(dial);
-        boxes.add(box("left gantry upright", 1, 12, 11, 3, 16, 13, "frame"));
-        boxes.add(box("right gantry upright", 13, 12, 11, 15, 16, 13, "frame"));
-        boxes.add(box("cross rail", 3, 14.5, 11, 13, 16, 13, "frame"));
+        boxes.add(box("emergency stop backing", 11.65, 6.15, .73, 12.75, 7.25, .86, "warning"));
+        boxes.add(box("red emergency stop", 11.85, 6.35, .38, 12.55, 7.05, .75, "red"));
+        boxes.add(box("selector escutcheon", 11.8, 7.85, .74, 12.6, 8.65, .86, "frame"));
+        boxes.add(box("black rotary selector", 12.08, 7.95, .5, 12.32, 8.55, .76, "black"));
+        boxes.add(box("door latch", 13.4, 3.8, .58, 13.65, 4.8, .84, "dark"));
+        for(double y:new double[]{3.1,8.6})boxes.add(box("service door hinge", 1.65,y,.68,2.05,y+.55,1.02,"frame"));
+        for(int row=0;row<5;row++){
+            double y=3.4+.48*row;
+            boxes.add(box("left cabinet louvre", .94,y,4,1.01,y+.16,12,"black"));
+            boxes.add(box("right cabinet louvre", 14.99,y,4,15.06,y+.16,12,"black"));
+        }
+        boxes.add(box("rear maintenance panel gasket", 2,3,14.99,14,9,15.04,"black"));
+        boxes.add(box("rear maintenance panel", 2.2,3.2,15.025,13.8,8.8,15.08,"cabinet"));
+        boxes.add(box("left gantry upright", 1, 12, 11, 3, 16, 13, "dark"));
+        boxes.add(box("right gantry upright", 13, 12, 11, 15, 16, 13, "dark"));
+        boxes.add(box("cross rail", 3, 14.5, 11, 13, 16, 13, "dark"));
+        boxes.add(box("linear guide rail", 3,14.85,10.78,13,15.2,11.02,"frame"));
         boxes.add(box("tool carriage", 6, 13, 10.5, 10, 15, 13.5, "cabinet"));
-        boxes.add(box("tool nose", 7, 12.5, 10.5, 9, 13, 12.5, "frame"));
-        boxes.add(new Box("blueprint sheet", new double[]{4, 12.015, 3}, new double[]{12, 12.025, 9},
-                Map.of("up", new Face("plan"))));
-        boxes.add(box("left paper clamp", 3.5, 12.03, 4, 4.5, 12.3, 5.5, "brass"));
-        boxes.add(box("right paper clamp", 11.5, 12.03, 4, 12.5, 12.3, 5.5, "brass"));
+        boxes.add(box("tool head face", 6.3,13.25,10.42,9.7,14.65,10.52,"dark"));
+        boxes.add(box("tool nose", 7.5, 12.5, 11, 8.5, 13, 12, "frame"));
+        for(double x:new double[]{6.55,9.2})for(double y:new double[]{13.5,14.2})boxes.add(box("carriage fastener",x,y,10.32,x+.25,y+.25,10.44,"frame"));
+        for(double x:new double[]{.7,12.7}){
+            boxes.add(box("gantry mounting shoe",x,12.005,10.6,x+2.6,12.3,13.4,"frame"));
+            for(double z:new double[]{10.7,13.0})boxes.add(box("mounting stud",x+.5,12.3,z,x+.8,12.5,z+.3,"dark"));
+        }
+        boxes.add(box("workholding plate",4.5,12.005,3.5,11.5,12.06,8.5,"frame"));
+        boxes.add(box("machined steel blank",6,12.065,5,10,12.35,7,"frame"));
         return List.copyOf(boxes);
     }
 
@@ -133,11 +156,16 @@ public final class ConstructorAssets {
         return "[" + values[0] + ", " + values[1] + ", " + values[2] + "]";
     }
 
-    private static String model() {
+    static Map<String,String> texturePaths() {
         var textures = new LinkedHashMap<String, String>();
-        textures.put("particle", "icheme:block/constructor_cabinet");
+        textures.put("particle", "icheme:block/pump_casting");
         for (var name : sprites().keySet()) textures.put(name, "icheme:block/constructor_" + name);
-        return model(textures, boxes());
+        textures.put("cabinet","icheme:block/pump_casting");
+        textures.put("frame","icheme:block/equipment_flange");
+        textures.put("dark","icheme:block/equipment_steelwork");
+        textures.put("black","icheme:block/equipment_opening");
+        textures.put("red","icheme:block/equipment_actuator");
+        return textures;
     }
 
     static String model(Map<String, String> textures, List<Box> boxes) {
@@ -169,7 +197,7 @@ public final class ConstructorAssets {
         var assets = Path.of(args[0]);
         var textures = assets.resolve("textures/block");
         for (var entry : sprites().entrySet()) ImageIO.write(entry.getValue(), "png", textures.resolve("constructor_" + entry.getKey() + ".png").toFile());
-        Files.writeString(assets.resolve("models/block/equipment_constructor.json"), model());
+        Files.writeString(assets.resolve("models/block/equipment_constructor.json"), model(texturePaths(),boxes()));
         System.out.println("Wrote constructor model and " + sprites().size() + " sprites");
     }
 }

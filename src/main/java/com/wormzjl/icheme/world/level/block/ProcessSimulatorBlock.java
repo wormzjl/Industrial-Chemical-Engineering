@@ -41,9 +41,9 @@ public final class ProcessSimulatorBlock extends BaseEntityBlock {
 
     private static Map<Direction, VoxelShape> consoleShapes() {
         double[][] parts = {
-                {1, 0, 1, 15, 2, 15}, {2, 2, 6, 14, 7, 15}, {1, 6, 0, 15, 7, 6},
-                {1, 7, 9, 15, 16, 12}, {2, 8, 12, 14, 15, 14.5}, {2, 9, 8.7, 14, 15, 9},
-                {4, 7.03, 1, 14, 7.35, 6}, {1.6, 7.03, 2, 3.4, 7.5, 5}, {3, 7.6, 8.55, 4.25, 8.65, 9}
+                {.75, 0, .75, 15.25, 2, 15.25}, {1, 2, 2.5, 15.1, 7, 15.2}, {1, 7, 0, 15, 8.015, 15.2},
+                {1, 8, 8, 15, 16, 15.2}, {1.75, 8.85, 7.64, 14.25, 15.6, 8},
+                {1, 15.6, 7.25, 15, 16, 8.05}, {2.5, 8, 1, 11.5, 8.25, 5.5}, {12, 8, 1.5, 14, 8.5, 4.5}
         };
         var shapes = new EnumMap<Direction, VoxelShape>(Direction.class);
         for (var facing : Direction.Plane.HORIZONTAL) {
@@ -104,8 +104,8 @@ public final class ProcessSimulatorBlock extends BaseEntityBlock {
     }
 
     /**
-     * The computer model leaves most of the cell empty. A full occlusion shape still shades the grass beneath it as if
-     * a solid cube were sitting there.
+     * The cabinet leaves space around its plinth and below the keyboard overhang. A full occlusion cube would shade
+     * those exposed surfaces as though the cell were completely filled.
      */
     @Override
     protected VoxelShape getOcclusionShape(BlockState state, BlockGetter level, BlockPos position) {
