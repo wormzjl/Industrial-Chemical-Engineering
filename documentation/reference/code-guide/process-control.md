@@ -1,6 +1,11 @@
 # Process sensors and ideal regulation
 
-**Snapshot:** 69056145f (branch `claude/realistic-pump-compressor-6fdfd9`), 2026-11-05 · **Updated:** 2026-11-05 (batch 2026-11-03-rotating-machinery: the valve source `SHAFT_SPEED`, a speed sensor governing a turbine's valve; `ControlConstraints.moverBounds`; accessory facts schema 3) · earlier: 2026-11-03 at 0c88691e (branch `claude/test-suite-optimization-8fbeab`) (batch 2026-11-02-test-suite-optimization: `ControlBinding` moves to `src/test`; batch 2026-10-26-multi-machine-framework: facts schema 4 named beside schema 3; the code of this chapter is unchanged) · earlier: 2026-10-27 (batch 2026-10-26-process-control: review findings 2-6 on the codex batch (the head over the body bottom with its solids, `PhaseDraw.mixedShares`, flowmeter taps kept across a reload, a flow valve's island at rest), the seed-236 trace rule, main 0.14.0 merged in: facts schema 3, `Device.withControl`) · earlier: 2026-10-27 (new chapter at `b92385c6`, `codex/process-control`, on main `600549d9`)
+**Snapshot:** 3515b1ff (branch `codex/simulator-sizing`), 2026-11-07. Batch `2026-11-06-simulator-sizing`, prepared for 0.22.0; not merged. Earlier snapshots and release history are in Git and the batch READMEs.
+
+## Wired controller boxes and DCS (0.22.0)
+
+[Wired control and FE power](wired-control-power.md) owns `runtime/control` and `runtime/power`: boxes run native ideal loops, DCS edits/monitors linked boxes, sensors have stable human IDs, and the common pipe/rack framework lays data/power lines. Structural sensor installation/removal is immediate without a solver; measurements and loop plans remain on the 100-online-tick engine cadence. The turbine also has internal admission regulation, so an external speed-sensor valve is optional. Current fluid/accessory/control formats are 14/4/3; older format introductions below are history.
+
 
 Sensor installation is a saved fact. A measurement and an accepted controller regime/opening are disposable state. The fluid worker regulates directly on its trial state, independent of GUI requests. There is no PID, tuning or actuator lag.
 

@@ -1,6 +1,11 @@
 # Water cooling towers
 
-**Snapshot:** 97ae9c6d8 (branch `claude/realistic-pump-compressor-6fdfd9`), 2026-11-05 (batch 2026-11-03-rotating-machinery W5: an induced tower's fans draw FE from one store at its basin rim, `CoolingTower.fanLimit` as a dispatch input) · earlier: 2026-11-03 at 6bf2205bf (branch `claude/in-game-process-simulator-93dd9a`) (batch 2026-11-02-process-simulator: the persistence paragraph's protocol and corpus lines; no tower code changed) · earlier: 2026-11-02 at d5be9da6d (branch `claude/codex-water-cooling-tower-review-09c170`, mod 0.19.0). Batch: [2026-10-30-water-cooling-tower](../../2026-10-30-water-cooling-tower/README.md). Up: [code guide](README.md).
+**Snapshot:** 3515b1ff (branch `codex/simulator-sizing`), 2026-11-07. Batch `2026-11-06-simulator-sizing`, prepared for 0.22.0; not merged. Earlier snapshots and release history are in Git and the batch READMEs.
+
+## Service ports and shared visuals (0.22.0)
+
+Tower basin sensor/data and fan-power ports join the shared service-port and conduit framework, including rack routes and FE capabilities. Basins remain valid level-sensor hosts. Tower fan rotation uses the common nonlinear animation clock; its physical FE budget and natural-draught fallback remain separate from the visual speed. The Merkel contact model and conserved air/water exchange are unchanged. See [wired-control-power.md](wired-control-power.md).
+
 
 ## Geometry and placement
 

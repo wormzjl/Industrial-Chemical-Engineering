@@ -1,6 +1,17 @@
 # Pipe laying: the laying tool, routes and pipe racks
 
-**Snapshot:** 43731e4d3 (branch `claude/realistic-pump-compressor-6fdfd9`), 2026-11-05 · **Updated:** 2026-11-05 (batch 2026-11-03-rotating-machinery W6a: the tool's outlines through `client/Outlines` in place of Catnip's `Outliner`; no other pipe-laying code changed) · earlier: 2026-11-03 at 6bf2205bf (branch `claude/in-game-process-simulator-93dd9a`) (batch 2026-11-02-process-simulator: the assembly marks' colour test is `AssemblyDiagramTest.everyPortHasItsOwnColourForTheLayingTool`, `AssemblyPortColoursTest` having gone with `AssemblyFlowsheet`) · earlier: 2026-11-02 at c1b35ce2 (branch `claude/test-suite-optimization-8fbeab`) (batch 2026-11-02-test-suite-optimization: archived tests leave these tables, and the gate group replaces `test`; batch 2026-10-28-column-operation: a nozzle's mark takes the assembly drawing's colour, `PortColours.assembly`) · earlier: 2026-10-27 at ce71b45c (batch 2026-10-26-multi-machine-framework: holding the laying tool watches the column assemblies around the player (W7): a framed port, the port's line in its label, port colours from `PortColours`; the Pipe Sizing Tool resizes a whole line, rack lanes included, see [fluid-runtime.md](fluid-runtime.md); a column's nozzle takes the largest pipe its place clears: the anchor refuses a larger line (`NOZZLE_SIZE`) and the port label shows the nozzle's own largest, `67343274`) · earlier: 2026-10-27 (new chapter, batch 2026-10-26-pipe-laying-system: the laying tool, its route search and server check, explicit pipe joints, pipe racks and their lanes, transition pipes, line paints)
+**Snapshot:** 3515b1ff (branch `codex/simulator-sizing`), 2026-11-07. Batch `2026-11-06-simulator-sizing`, prepared for 0.22.0; not merged. Earlier snapshots and release history are in Git and the batch READMEs.
+
+## Shared line framework and electrical/data conduits (0.22.0)
+
+The laying tool has fluid, data and power modes. All use `PipeAnchor` for endpoints, `PipeRoute` for the searched path, `LineSelection` and `LayingToolAim` for target/face selection, `LinePortTarget` for sockets, `LineShapes` for shared geometry and `LinePlacement` for the validation/placement transaction. Pipe-specific fluid laws and cable-specific saved connectivity are adapters to that path. Existing stubs and rack lanes participate in the same route and attachment checks; cable placement must not invent a block-centred endpoint beside an off-centre socket.
+
+`CableMedium` supplies one 0.125 m diameter per medium (both now equal), steel housing, blue data/orange power bands and symbols. `ConduitGeometry.markedAt` places a band when `floorMod(x+y+z,4)==0`, approximately every four cells along a straight run. Closed opaque end caps prevent a transparent pipe-like end. Render cache keys include look and marking; marking is transient model data, not a saved shape field.
+
+`ConduitLaying` handles data/power structural facts and `DataBus` compiles face/lane connections. Pipe rack occupancy, drawn meshes and model-data packet refresh share the normal line path. A saved wired endpoint remains a fact across drawing-size changes. Power endpoints use the standard FE capability, not a fluid port. See [wired-control-power.md](wired-control-power.md).
+
+Fresh-world `ConduitLayingGameTests` cover direct and existing-stub power attachment, data attachment, service-port families and live model refresh; existing `PipeLayingGameTests` cover fluid regressions once, without duplicate wrappers. The fluid tool also previews proposed junction creation.
+
 Up: [code guide](README.md)
 
 ## Read this when

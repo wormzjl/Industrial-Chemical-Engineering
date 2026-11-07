@@ -1,6 +1,11 @@
 # Column operation: the column running in the built plant
 
-**Snapshot:** 6bf2205bf (branch `claude/in-game-process-simulator-93dd9a`), 2026-11-03 · **Updated:** 2026-11-03 (batch 2026-11-02-process-simulator: the condenser's cooling water and air fans (C1, C1b, U1, U2): the water's share and an outlet's booking difference by temperature, condenser shells in parallel, the water valve the column sets (COLUMN), the fans and the air limit; facts schemas 8 and 9) · earlier: 2026-11-02 at 321b8d1d (branch `claude/column-operation-5c3005`) (new chapter, batches 2026-10-28-column-operation and 2026-11-02-valve-hold)
+**Snapshot:** 3515b1ff (branch `codex/simulator-sizing`), 2026-11-07. Batch `2026-11-06-simulator-sizing`, prepared for 0.22.0; not merged. Earlier snapshots and release history are in Git and the batch READMEs.
+
+## Exchanger configuration integration (0.22.0)
+
+Column member designs now carry Standard/Low-dP crossflow choices through sizing, sent designs, constructor import and assembly matching. Water condenser, trim and pumparound designs share the catalogued exchanger model and pressure-drop checks. The running column keeps its current V3 solve, duty/energy-transfer contract and publication cadence; no new crossflow-specific column solver was introduced. A layout or type mismatch is an assembly issue, not permission to fabricate a required duty.
+
 Up: [code guide](README.md)
 
 ## Read this when

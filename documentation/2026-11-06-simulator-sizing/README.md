@@ -22,8 +22,10 @@ Scale-up-first Auto sizing, constructor-style Manual sizing, Standard/Low-dP cro
 - 2026-11-07: `a839f2c38` completes shared laying/model updates; `8b4ac02ee` makes creative RF six-sided; `0f39d2f71` increases nonlinear visual speed; `b7a90872e` stops disconnected motors, reduces their buffer and caps cable ends; `7a6301da8` unifies 125 mm conduits with sparse blue/orange symbols; `c45cea075` completes industrial workstation models.
 - 2026-11-07: `8a768d9d` updates all four translations; `db322f04f` integrates conduit/RF GameTests into the normal gate, supplies column-gate dependencies and retains investigation tools. Owner chooses 0.22.0. Final-lane results are recorded in MERGE_REVIEW.
 
+- 2026-11-07: final lane at `891c8acf5`; focused corrections `3515b1ff` resolve all gate failures, including fresh-world FE/sensor fixtures; 2865 checks covered, chain exact and campaign holds match baseline. Guide, artefact and evidence inventories complete.
+
 ## Code areas and open items
 
 `science/flowsheet`, `science/equipment`, `science/fluid/network`, `science/machine`, `runtime/{fluid,control,power,instrument}`, equipment/pipe/rack blocks, shared laying/client models, GUI and network payloads. The column operation’s V3 duty/energy contract is unchanged.
 
-Open: final verification and release artefact; owner’s in-game acceptance; owner’s later merge instruction. No dev client is launched for merge preparation. No unmerged output is deleted.
+Open: owner’s in-game acceptance and later merge instruction. Merge preparation, final lane, filtered corrections and release jar are complete. No dev client is launched for merge preparation. No unmerged output is deleted.

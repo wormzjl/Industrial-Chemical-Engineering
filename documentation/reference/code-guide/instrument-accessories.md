@@ -9,7 +9,23 @@ Sensors use `Sensor.Installed` (host/mount, UUID, revision and kind), `Sensor.Re
 **Feature branch:** `b1477c09` (`codex/liquid-gauge-accessory`), 2026-10-26, based on main `600549d9`. Floating-roof tank level gauge is an optional item/accessory;24 focused checks/package and8 native views pass. Main merge pending. [Contracts](../../2026-10-26-liquid-level-gauge-accessory/LEVEL_GAUGE_CONTRACTS.md).
 
 
-**Snapshot:** 69056145f (branch `claude/realistic-pump-compressor-6fdfd9`), 2026-11-05 · **Updated:** 2026-11-05 (batch 2026-11-03-rotating-machinery W3: the speed sensor, accessory facts schema 3) · earlier: 2026-10-28 at f20ceefa (branch `claude/heat-exchanger-design-cf05d1`, released as 0.17.0) (batch 2026-10-27-heat-exchanger-design, W8: a flowmeter installed or removed reverts an assembly report that read its pipe, `AssemblyService.metered`; batch 2026-10-28-gui-toolkit: `GaugeSettings.Unit.of(kind)` and `measures(kind)` replace `next(kind)`, the gauge screen offers a kind's units as a list) · earlier: 2026-10-27 at ce71b45c (batch 2026-10-26-multi-machine-framework: the Pipe Sizing Tool's sneak-use on a pipe resizes its whole line as one event; sneak-use elsewhere opens the menu; a pipe or a line beside a nozzle that takes a smaller pipe is refused, `nozzle_too_small`, `67343274`) · earlier: 2026-10-27 (batch 2026-10-26-process-control: sensors and their store records, accessory facts schema 2, legacy valve conversion, the Control Valve's modules; after main 0.14.0 merged in: a sensor sets its valve through `Device.withControl`; review finding 5: an installed flowmeter queues its host's registration) · earlier: 2026-10-27 (batch 2026-10-26-pipe-laying-system: the pipe laying tool item and its paint components, the shared settings menu, a transition pipe takes no fitting, sight glass or gauge mount) · earlier: 2026-10-26 (batch 2026-10-26-accessory-store-compat: the store's facts and state, `AccessoryFacts`, the refusal at open, the host copy as state, the gauge kind and unit alias tables) · earlier: 2026-10-25 (new chapter: the gauges, the pipe fittings' item and recovery path, the accessory store)
+**Snapshot:** 3515b1ff (branch `codex/simulator-sizing`), 2026-11-07. Batch `2026-11-06-simulator-sizing`, prepared for 0.22.0; not merged. Earlier snapshots and release history are in Git and the batch READMEs.
+
+## Installed sensors, IDs and optional gauge (0.22.0)
+
+`InstrumentService` installs/removes structural accessories immediately, including equipment mounts (owner exception to scheduled process inputs). Readings remain cached accepted process observations, published on the engine cadence. Installing a fitting never forces a solver. `ControlFacts` assigns a stable human `SensorId` backed by each sensor UUID; controllers select IDs, not coordinates. Sensor housings share one industrial treatment with restrained P/T/F/L/N identification.
+
+| Item | Supported host |
+|---|---|
+| Pressure sensor | Straight pipe, control valve or equipment pressure tap |
+| Temperature sensor | Straight pipe or equipment temperature tap |
+| Flow sensor | Straight pipe/control valve; equipment uses its nozzle pipe |
+| Digital level sensor | Drum, floating-roof tank, sphere or cooling basin |
+| Speed sensor | Steam turbine output coupling |
+| Liquid level gauge accessory | Floating-roof tank only |
+
+Actual mounts come from `Instrument`, `Sensor` and equipment geometry; a generic equipment face is not automatically a valid process tap. Pressure/temperature/level metadata survives equipment reconstruction. Accessory facts schema is 4; the compatibility corpus preserves older fittings and the optional tank gauge. Data socket registration follows the eligible host and installed sensors, with casing/cabinet mounts instead of attaching an equipment socket to its fluid nozzle. See [wired-control-power.md](wired-control-power.md).
+
 Up: [code guide](README.md)
 
 ## Read this when
