@@ -16,8 +16,9 @@ public final class ValveGeometry {
     private ValveGeometry(){}
 
     /** The check valve; its arrows paint the casting's axial facets. */
-    public static List<Polygon> check(LineGeometry.Key key,boolean accessory) {
-        var mesh=new Mesh();double od=PipeSizes.outsideOf(key.outside());
+    public static List<Polygon> check(LineGeometry.Key key,boolean accessory) { return check(key,accessory,RenderDetail.NORMAL); }
+    public static List<Polygon> check(LineGeometry.Key key,boolean accessory,RenderDetail detail) {
+        var mesh=new Mesh(detail);double od=PipeSizes.outsideOf(key.outside());
         if(accessory)od=Math.max(.40,od);
         int axis=key.facing()&~1,sides=Math.max(16,PipeSizes.sides(od));
         double radius=Math.min(.485,Math.max(.065,.64*od)),half=Math.min(.27,Math.max(.085,.48*od));
@@ -32,7 +33,7 @@ public final class ValveGeometry {
         mesh.hoop(body,radius,radius+.001,-.62*half,-.58*half,sides,Material.OPENING);
         double bolt=Math.min(.025,Math.max(.006,.05*od));
         for(int sign:new int[]{-1,1})for(int i=0;i<4;i++)
-            mesh.cylinder(new Frame(body.at(Math.PI/4+i*Math.PI/2,.90*radius,sign*half),new double[]{sign*run[0],sign*run[1],sign*run[2]},up),bolt,0,bolt,6,Material.BOLT);
+            mesh.nut(new Frame(body.at(Math.PI/4+i*Math.PI/2,.90*radius,sign*half),new double[]{sign*run[0],sign*run[1],sign*run[2]},up),bolt,0,bolt,6,Material.BOLT);
         if(!accessory)arms(mesh,key,half,od,sides);
         var out=new ArrayList<>(mesh.cell(0,0,0));
         boolean positive=(key.facing()&1)!=0;
@@ -41,8 +42,9 @@ public final class ValveGeometry {
     }
 
     /** The shutoff valve. Pure geometry; the open flag changes only the lever, never pipe diameter or collision. */
-    public static List<Polygon> shutoff(LineGeometry.Key key,boolean open,boolean accessory) {
-        var mesh=new Mesh();double od=PipeSizes.outsideOf(key.outside());
+    public static List<Polygon> shutoff(LineGeometry.Key key,boolean open,boolean accessory) { return shutoff(key,open,accessory,RenderDetail.NORMAL); }
+    public static List<Polygon> shutoff(LineGeometry.Key key,boolean open,boolean accessory,RenderDetail detail) {
+        var mesh=new Mesh(detail);double od=PipeSizes.outsideOf(key.outside());
         int axis=key.facing()&~1,sides=Math.max(16,PipeSizes.sides(od));
         double radius=Math.min(.495,Math.max(.065,.64*od)),half=Math.min(.31,Math.max(.085,.55*od));
         double[] run=LineGeometry.step(axis|1),stem=axis==0?new double[]{0,0,-1}:new double[]{0,1,0};
@@ -58,7 +60,7 @@ public final class ValveGeometry {
         double bolt=Math.min(.03,Math.max(.008,.065*od));
         for(int sign:new int[]{-1,1})for(int i=0;i<4;i++) {
             var cap=new Frame(body.at(Math.PI/4+i*Math.PI/2,.90*radius,sign*half),new double[]{sign*run[0],sign*run[1],sign*run[2]},stem);
-            mesh.cylinder(cap,bolt,0,1.2*bolt,6,Material.BOLT);
+            mesh.nut(cap,bolt,0,1.2*bolt,6,Material.BOLT);
         }
         var bonnet=new Frame(CENTRE,stem,run);double neck=Math.max(.016,.12*od),rise=Math.max(.055,.17*od);
         mesh.cylinder(bonnet,1.65*neck,.80*radius,radius+.30*rise,12,Material.FLANGE);
@@ -79,8 +81,9 @@ public final class ValveGeometry {
     }
 
     /** The pressure-control valve; its arrows paint the casting's diagonal facets, clear of the bonnet. */
-    public static List<Polygon> pressure(LineGeometry.Key key,boolean accessory) {
-        var mesh=new Mesh();pressureBody(mesh,key,accessory);
+    public static List<Polygon> pressure(LineGeometry.Key key,boolean accessory) { return pressure(key,accessory,RenderDetail.NORMAL); }
+    public static List<Polygon> pressure(LineGeometry.Key key,boolean accessory,RenderDetail detail) {
+        var mesh=new Mesh(detail);pressureBody(mesh,key,accessory);
         double half=pressureHalf(PipeSizes.outsideOf(key.outside()));
         var arrows=PortMarkings.fitting(mesh.cell(0,0,0),key.facing(),-.42*half,.42*half,Math.PI/4);
         pressureTop(mesh,key,accessory);var out=new ArrayList<>(LineGeometry.overhanging(mesh));out.addAll(arrows);
@@ -131,7 +134,7 @@ public final class ValveGeometry {
         mesh.frustum(f,rc,.34*rc,edge,cap,n,Material.ACTUATOR);
         mesh.annulus(f,0,.34*rc,cap,n,1,Material.ACTUATOR);
         mesh.cylinder(f,.13*rc,cap,cap+.025,8,Material.BOLT);
-        for(int i=0;i<8;i++)mesh.cylinder(new Frame(f.at(i*Math.PI/4,.92*rc,edge),stem,run),Math.max(.007,.018*casing),0,.022,6,Material.BOLT);
+        for(int i=0;i<8;i++)mesh.nut(new Frame(f.at(i*Math.PI/4,.92*rc,edge),stem,run),Math.max(.007,.018*casing),0,.022,6,Material.BOLT);
         if(!accessory)arms(mesh,key,h,od,PipeSizes.sides(od));
     }
 

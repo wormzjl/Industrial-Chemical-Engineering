@@ -54,6 +54,7 @@ public final class ShapeRasterizer {
     private static final int CODE_BITS = 7, KEYED_NOZZLES = 9;
     private static final int GEOMETRY_CACHE = 64, GEOMETRY_FACETS = 300_000;
     private static final Map<EquipmentShape, Geometry> GEOMETRIES = new ConcurrentHashMap<>();
+    private static final Map<EquipmentShape, Geometry> LOW_GEOMETRIES = new ConcurrentHashMap<>();
     /**
      * Whether geometries keep their facets to draw cells ({@link #surface}, {@link #facetArea}). A dedicated server never draws:
      * once a vessel's layout is known it keeps only the cell tables, the ports and the solid test ({@link #serverOnly}).
@@ -72,6 +73,7 @@ public final class ShapeRasterizer {
     static void drawing(boolean on) {
         drawing = on;
         GEOMETRIES.clear();
+        LOW_GEOMETRIES.clear();
     }
 
     public record Cell(int x, int y, int z) {
@@ -184,6 +186,51 @@ public final class ShapeRasterizer {
         return surface(key.shape(),c[0],c[1],c[2],key.nozzles(),false,true);
     }
 
+    /** Separate drawing mesh: coarse facets may cross interior/empty cells, so they are never clipped to the placed shell. */
+    public static List<Polygon> renderBody(EquipmentShape shape, RenderDetail detail) {
+        var g = geometry(shape, detail);
+        var out = new ArrayList<Polygon>();
+        for (var facet : g.mesh.facets()) if (facet.part() < 0 && facet.material() != Material.GLASS) out.addAll(Mesh.tiled(facet));
+        return List.copyOf(out);
+    }
+
+    /** Constructor ghost: the complete neutral-pose drawing, including moving parts and unconnected nozzles. */
+    public static List<Polygon> renderPreview(EquipmentShape shape, RenderDetail detail) {
+        var g = geometry(shape, detail);
+        var out = new ArrayList<Polygon>();
+        for (var facet : g.mesh.facets()) out.addAll(Mesh.tiled(facet));
+        for (int nozzle = 0; nozzle < g.nozzles.size(); nozzle++) for (var facet : g.nozzle(nozzle, 0).facets()) out.addAll(Mesh.tiled(facet));
+        return List.copyOf(out);
+    }
+
+    /** Low mode leaves interfaces in the chunk mesh; body and access structures use the single whole-equipment mesh. */
+    public static List<Polygon> chunkSurface(CellKey key, RenderDetail detail) {
+        if (detail == RenderDetail.NORMAL) return chunkSurface(key);
+        var physical = geometry(key.shape());
+        var rendered = geometry(key.shape(), detail);
+        int[] c = cell(key);
+        var at = new Cell(c[0], c[1], c[2]);
+        var out = new ArrayList<Polygon>();
+        for (var facet : physical.facetsIn(at)) if (facet.part() < 0 && facet.material() == Material.GLASS)
+            physical.mesh.cell(facet, c[0], c[1], c[2], out);
+        var reaching = physical.reaching(at);
+        for (int j = 0; j < reaching.length; j++) {
+            var nozzle = rendered.nozzle(reaching[j], code(key.nozzles(), j));
+            for (var facet : nozzle.facets()) nozzle.cell(facet, c[0], c[1], c[2], out);
+        }
+        return List.copyOf(out);
+    }
+
+    private static Geometry geometry(EquipmentShape shape, RenderDetail detail) {
+        if (detail == RenderDetail.NORMAL) return geometry(shape);
+        if (!drawing) throw new IllegalStateException("A dedicated server keeps no drawing geometry");
+        var cached = LOW_GEOMETRIES.get(shape);
+        if (cached != null) return cached;
+        long facets = LOW_GEOMETRIES.values().stream().mapToLong(g -> g.mesh.facets().size()).sum();
+        if (LOW_GEOMETRIES.size() >= 16 || facets >= GEOMETRY_FACETS) LOW_GEOMETRIES.clear();
+        return LOW_GEOMETRIES.computeIfAbsent(shape, k -> new Geometry(k, detail));
+    }
+
     public static List<Polygon> towerShell(EquipmentShape shape){
         if(!shape.kind().coolingTower())return List.of();
         var g=geometry(shape);var polygons=new ArrayList<Polygon>();
@@ -237,9 +284,10 @@ public final class ShapeRasterizer {
     }
 
     /** A unit's moving parts in the box, by index ({@link ProcessUnit.Motion}); none for a vessel, a column or a unit without any. */
-    public static List<Moving> moving(EquipmentShape shape) {
+    public static List<Moving> moving(EquipmentShape shape) { return moving(shape, RenderDetail.NORMAL); }
+    public static List<Moving> moving(EquipmentShape shape, RenderDetail detail) {
         if (!drawing) throw new IllegalStateException("A dedicated server keeps no surfaces");
-        return geometry(shape).moving();
+        return geometry(shape, detail).moving();
     }
 
     /**
@@ -270,9 +318,10 @@ public final class ShapeRasterizer {
     public static List<Polygon> tankGauge(EquipmentShape shape){if(!drawing)throw new IllegalStateException("A dedicated server keeps no accessory surfaces");return shape.kind()==EquipmentShape.Kind.TANK?geometry(shape).tankGauge():List.of();}
 
     /** A floating-roof tank's client-drawn parts in the box, or null for any other shape. */
-    public static @Nullable Floating floating(EquipmentShape shape) {
+    public static @Nullable Floating floating(EquipmentShape shape) { return floating(shape, RenderDetail.NORMAL); }
+    public static @Nullable Floating floating(EquipmentShape shape, RenderDetail detail) {
         if (!drawing) throw new IllegalStateException("A dedicated server keeps no surfaces");
-        return geometry(shape).floating();
+        return geometry(shape, detail).floating();
     }
 
     /**
@@ -605,7 +654,8 @@ public final class ShapeRasterizer {
         /** Each head's rings, {height over the tangent line, radius}, and its meridian lengths to them: the top head's (clad on a column) and the bottom head's (bare). */
         private final double[][] rings, bottomRings;
         private final double[] meridian, bottomMeridian;
-        private final Mesh mesh = new Mesh();
+        private final Mesh mesh;
+        private final RenderDetail detail;
         private final List<EquipmentShape.Nozzle> nozzles;
         private final List<Set<Cell>> nozzleCells = new ArrayList<>();
         /** The nozzles reaching each cell, in nozzle order. */
@@ -622,11 +672,14 @@ public final class ShapeRasterizer {
         /** The layout's {@link #stamp}, 0 until first asked. */
         private volatile long stamp;
 
-        Geometry(EquipmentShape shape) {
+        Geometry(EquipmentShape shape) { this(shape, RenderDetail.NORMAL); }
+        Geometry(EquipmentShape shape, RenderDetail detail) {
             this.shape = shape;
+            this.detail = detail;
+            mesh = new Mesh(detail);
             transform = shape.transform();
             mesh.transform(transform);
-            n = shape.facets();
+            n = detail.sides(shape.facets());
             axis = shape.axis();
             radius = shape.radius();
             outer = shape.outerRadius();
@@ -685,7 +738,7 @@ public final class ShapeRasterizer {
 
             if (unit != null) {
                 // The design's facets one for one: those from its irregular index on cross its body rows (a tank's stair).
-                mesh.include(unit.mesh());
+                mesh.include(unit.mesh(detail));
                 irregularFrom = unit.irregularFrom;
             } else {
                 build();
@@ -697,11 +750,24 @@ public final class ShapeRasterizer {
             }
             skylight = unit != null ? unit.openSkirt : hollow;
             if (column != null) {
-                var ladders = new Mesh();
+                var ladders = new Mesh(detail);
                 ladders.transform(transform);
                 column.build(mesh, ladders, nozzles);
                 irregularFrom = mesh.facets().size();
                 mesh.facets().addAll(ladders.facets());
+            }
+            if (detail != RenderDetail.NORMAL) {
+                // Reuse every physical decision, including maximum nozzle reach and registration cells.
+                var physical = geometry(shape);
+                reaching.putAll(physical.reaching);
+                nozzleCells.addAll(physical.nozzleCells);
+                ports.addAll(physical.ports);
+                shafts.addAll(physical.shafts);
+                terminal = physical.terminal;
+                layout = physical.layout;
+                fluidCell = physical.fluidCell;
+                fluidCells = physical.fluidCells;
+                return;
             }
             // Every nozzle takes the pipe's size. Reservoir ports and a mover's suction/discharge also join the engine.
             var byCell = new HashMap<Cell, List<Integer>>();
@@ -782,7 +848,7 @@ public final class ShapeRasterizer {
 
         /** A head's rings from its tangent line (k = 0) to its apex: {height over the line, radius} at equal latitude steps. */
         private double[][] rings(double r, double depth) {
-            int bands = shape.bands();
+            int bands = detail.bands(shape.bands());
             var out = new double[bands + 1][];
             for (int k = 0; k <= bands; k++) {
                 double phi = Math.PI / 2 * k / bands;
@@ -1184,7 +1250,7 @@ public final class ShapeRasterizer {
             return nozzleMeshes.computeIfAbsent(k * 128 + code, key -> {
                 var nozzle = nozzles.get(k);
                 double od = code == 0 ? nozzle.defaultOd() : PipeSizes.outsideOf(code);
-                var m = new Mesh();
+                var m = new Mesh(detail);
                 m.transform(transform);
                 var dir = nozzle.direction();
                 var ref = new double[3];
@@ -1446,7 +1512,7 @@ public final class ShapeRasterizer {
         private volatile List<Polygon> tankGauge;
         private List<Polygon> tankGauge(){
             var result=tankGauge;if(result!=null)return result;
-            var accessory=new Mesh();accessory.transform(transform);
+            var accessory=new Mesh(detail);accessory.transform(transform);
             TankDesign.gauge(accessory,TankDesign.Plan.of(shape.diameter(),(int)shape.tangentLength()));
             var polygons=new ArrayList<Polygon>();cut(accessory,accessory.facets(),new double[3],polygons);
             return tankGauge=List.copyOf(polygons);
@@ -1469,13 +1535,13 @@ public final class ShapeRasterizer {
         @Nullable Floating floating() {
             var out = floating;
             if (out != null || unit == null || unit.floating == null) return out;
-            var drawn = unit.drawing();
+            var drawn = unit.drawing(detail);
             var f = drawn.floating;
             var pivot = transform.point(f.pivot());
             var roof = new ArrayList<Polygon>();
             var ladder = new ArrayList<Polygon>();
             for (var part : List.of(drawn.roof, drawn.ladder)) {
-                var m = new Mesh();
+                var m = new Mesh(detail);
                 m.transform(transform);
                 m.include(part);
                 cut(m, m.facets(), part == drawn.roof ? new double[3] : pivot, part == drawn.roof ? roof : ladder);

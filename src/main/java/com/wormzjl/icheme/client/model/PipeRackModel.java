@@ -54,6 +54,7 @@ public final class PipeRackModel implements IDynamicBakedModel {
 
     private final TextureAtlasSprite[][] paintedSprites;
     private final TextureAtlasSprite particle;
+    private final com.wormzjl.icheme.science.equipment.RenderDetail detail = com.wormzjl.icheme.client.ClientConfig.renderDetail();
     private final ItemTransforms transforms;
     private final Map<Look, List<BakedQuad>> quads = new ConcurrentHashMap<>();
 
@@ -89,7 +90,7 @@ public final class PipeRackModel implements IDynamicBakedModel {
         var out = new ArrayList<>(EquipmentShellModel.bake(RackGeometry.polygons(look.rack, look.occupied), paintedSprites[0], false));
         for (int i = 0; i < look.lanes.size(); i++) {
             var lane = look.lanes.get(i);
-            var polygons = RackGeometry.lane(look.rack, lane, (look.spools >> i & 1) != 0);
+            var polygons = RackGeometry.lane(look.rack, lane, (look.spools >> i & 1) != 0, detail);
             int painted = (int) (look.painted >> 2 * i & 3);
             out.addAll(EquipmentShellModel.bake(polygons, paintedSprites[painted], EquipmentShellModel.lineTints(painted, 2 * lane.option())));
         }

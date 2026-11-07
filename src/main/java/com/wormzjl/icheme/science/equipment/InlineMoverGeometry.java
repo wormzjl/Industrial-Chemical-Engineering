@@ -16,7 +16,8 @@ public final class InlineMoverGeometry {
     }
     /** Above approximately 0.2 m bore, use block-face joints at the model key's drawn-size precision. */
     public static boolean boundaryJoints(int outside){return outside>PipeSizes.code(PipeSizes.outside(.2));}
-    public static List<Polygon> polygons(LineGeometry.Key key,boolean compressor,boolean item){
+    public static List<Polygon> polygons(LineGeometry.Key key,boolean compressor,boolean item) { return polygons(key,compressor,item,RenderDetail.NORMAL); }
+    public static List<Polygon> polygons(LineGeometry.Key key,boolean compressor,boolean item,RenderDetail detail){
         if(!supports(key.connections(),key.facing()))throw new IllegalArgumentException("Inline movers require horizontal straight pipe");
         double od=PipeSizes.outsideOf(key.outside()),r=Math.max(compressor?.15:.12,(compressor?.78:.72)*od+.04);
         boolean boundary=boundaryJoints(key.outside());
@@ -24,10 +25,10 @@ public final class InlineMoverGeometry {
         double root=connection-thickness-(boundary?.04:0);
         double axial=Math.min(boundary?root-.02:.25,.96*r),low=Math.max(-.39,-Math.max(1.10*r,.65*od)),lid=Math.max(.57*r,.53*od);
         int n=Math.max(20,PipeSizes.sides(2*r)),axis=key.facing()&~1;var along=LineGeometry.step(key.facing());
-        var body=new Mesh();var up=new Frame(CENTRE,UP,along);
+        var body=new Mesh(detail);var up=new Frame(CENTRE,UP,along);
         // The wet end wraps around the vertical shaft; its horizontal nozzles enter below the top cover.
         volute(body,up,axial,r,low,lid,n);
-        var pads=new Mesh();
+        var pads=new Mesh(detail);
         for(int sign:new int[]{-1,1})pads.block(plus(up.along(.04*r),scale(up.side(),sign*1.02*r)),scale(along,.38*axial),scale(UP,.16*r),scale(up.side(),.09*r),Material.FLANGE);
         var arrows=PortMarkings.fittingOverhanging(LineGeometry.overhanging(pads),key.facing(),-.6*axial,.6*axial);
         double motorBase;
@@ -97,7 +98,7 @@ public final class InlineMoverGeometry {
         ellipticalCap(m,up,1.04*axial,1.04*r,0,lid+.015,1,sides,Material.FLANGE);
         for(int i=0;i<8;i++){
             var at=ellipsePoint(up,.88*axial,.88*r,(i+.5)*Math.PI/4,lid+.015);
-            m.cylinder(new Frame(at,UP,up.ref()),Math.max(.004,.03*r),-.001,.012,6,Material.BOLT);
+            m.nut(new Frame(at,UP,up.ref()),Math.max(.004,.03*r),-.001,.012,6,Material.BOLT);
         }
     }
     private static void castingRing(Mesh m,Frame f,double major,double tube,double axialScale,int rings,int sides){
@@ -189,14 +190,14 @@ public final class InlineMoverGeometry {
         m.block(up.along(floor),scale(up.ref(),1.02*axial),scale(UP,thick/2),scale(up.side(),.96*r),Material.MACHINE);
         for(int a:new int[]{-1,1})for(int b:new int[]{-1,1}){
             var at=plus(plus(up.along(floor+thick/2),scale(up.ref(),a*.86*axial)),scale(up.side(),b*.82*r));
-            m.cylinder(new Frame(at,UP,up.ref()),Math.max(.004,.025*r),-.001,.011,6,Material.BOLT);
+            m.nut(new Frame(at,UP,up.ref()),Math.max(.004,.025*r),-.001,.011,6,Material.BOLT);
         }
     }
     private static void fasteners(Mesh m,Frame f,double pitch,double at,double radius,int count){
         for(int i=0;i<count;i++){
             var bolt=new Frame(f.at((i+.5)*2*Math.PI/count,pitch,at),f.axis(),f.ref());
             m.cylinder(bolt,1.3*radius,-.001,.003,12,Material.FLANGE);
-            m.cylinder(bolt,radius,.002,.012+radius,6,Material.BOLT);
+            m.nut(bolt,radius,.002,.012+radius,6,Material.BOLT);
         }
     }
     private static void gearboxDetails(Mesh m,Frame up,double r,double gearBottom,double split,double od,double[] along){

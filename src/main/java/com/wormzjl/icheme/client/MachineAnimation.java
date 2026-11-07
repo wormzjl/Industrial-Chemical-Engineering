@@ -109,7 +109,7 @@ public final class MachineAnimation {
                     var display=TankRenderer.get(origin.offset(node.x(),node.y(),node.z()),ticks);
                     speedScale=moving&&display!=null?display.fanSpeed():0;
                 }
-                var parts = ShapeRasterizer.moving(shape);
+                var parts = ShapeRasterizer.moving(shape, EquipmentShellModel.detail());
                 double unitPhase = Math.floorMod(31L * origin.getX() + 7L * origin.getY() + origin.getZ(), 97) / 97.0;
                 for (int index : cell.moving()) {
                     if (index >= parts.size()) continue;

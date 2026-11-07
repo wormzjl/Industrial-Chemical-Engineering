@@ -202,7 +202,9 @@ public final class EquipmentGhost {
         if (mesh != null && mesh.sprite == sprite) return mesh;
         var out = new ArrayList<float[]>();
         // A tower's preview is its whole facets; anything else, its cells as the chunks draw them.
-        if (shape.kind().coolingTower())
+        if (com.wormzjl.icheme.client.model.EquipmentShellModel.detail() == com.wormzjl.icheme.science.equipment.RenderDetail.LOW)
+            for (var polygon : ShapeRasterizer.renderPreview(shape, com.wormzjl.icheme.science.equipment.RenderDetail.LOW)) quads(out, polygon, 0, 0, 0, sprite);
+        else if (shape.kind().coolingTower())
             for (var polygon : ShapeRasterizer.towerPreview(shape)) quads(out, polygon, 0, 0, 0, sprite);
         else for (var cell : layout(shape).shell())
             for (var polygon : ShapeRasterizer.surface(ShapeRasterizer.key(shape, cell.x(), cell.y(), cell.z())))

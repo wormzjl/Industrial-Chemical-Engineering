@@ -29,7 +29,7 @@ public final class Mesh {
         SHELL(4, Paint.BODY), HEAD(4, Paint.BODY), SUPPORT(2, Paint.STRUCTURE), PIPE(1, -1), FLANGE(1, -1), OPENING(1, -1), CLADDING(2, Paint.BODY),
         GRATING(1, -1), HANDRAIL(1, -1), STEELWORK(1, Paint.STRUCTURE), MACHINE(1, Paint.BODY), MOTOR(1, -1), ACTUATOR(1, -1), FEED(1, -1), DRAIN(1, -1),
         /** A flange's nuts and stud ends ({@link #bolts}). */
-        BOLT(1, -1),
+        BOLT(1, -1), BOLT_FACE(1, -1),
         /**
          * An air cooler's Blender parts (their own texture coordinates) and sprites: fan rotor, fan ring and guard, motor;
          * fins (the bundle, seen through the fan rings from below), headers, the plenum casing's sheet.
@@ -50,7 +50,7 @@ public final class Mesh {
          * joint's rim and face, its baseplate's drain-rim deck and channel sides. All but the casting are stretched once
          * over their part ({@link Mesh#band}, {@link Mesh#disc}).
          */
-        PUMP_CASTING(2, Paint.BODY), PUMP_VOLUTE(.5, Paint.BODY), PUMP_FINS(1, Paint.BODY), PUMP_JOINT(1, Paint.BODY), PUMP_DISC(1, Paint.BODY),
+        PUMP_CASTING(2, Paint.BODY), PUMP_VOLUTE(.5, Paint.BODY), PUMP_FINS(1, Paint.BODY), PUMP_JOINT(1, Paint.BODY), PUMP_DISC(1, Paint.BODY), PUMP_COVER(1, Paint.BODY),
         PUMP_BASE(1, Paint.STRUCTURE), PUMP_CHANNEL(1, Paint.STRUCTURE),
         /**
          * A coupling guard's framed expanded-metal panel in safety yellow, one sprite a panel ({@code ProcessUnit.guard}); its
@@ -359,8 +359,11 @@ public final class Mesh {
     private Transform transform = Transform.IDENTITY;
     private int part = -1;
 
-    public Mesh() {
-    }
+    private final RenderDetail detail;
+
+    public Mesh() { this(RenderDetail.NORMAL); }
+    public Mesh(RenderDetail detail) { this.detail = java.util.Objects.requireNonNull(detail); }
+    RenderDetail detail() { return detail; }
 
     /** The transform applied to everything added from now on. */
     public void transform(Transform transform) {
@@ -498,6 +501,7 @@ public final class Mesh {
 
     /** The side of a frustum from radius {@code r0} at {@code z0} to {@code r1} at {@code z1}, lit as a cone. */
     void frustum(Frame f, double r0, double r1, double z0, double z1, int n, Material material) {
+        n = detail.sides(n);
         if (z1 < z0) {
             frustum(f, r1, r0, z1, z0, n, material);
             return;
@@ -531,6 +535,7 @@ public final class Mesh {
      * part, never cut where a tiled one would cross a tile.
      */
     void band(Frame f, double r0, double r1, double z0, double z1, int n, Material material) {
+        n = detail.sides(n);
         double chord = 2 * Math.max(r0, r1) * DeterministicMath.sin(Math.PI / n), slope = (r0 - r1) / Math.max(EPS, z1 - z0);
         Shading shading = r0 == r1 ? new Radial(f.origin, f.axis) : new Cone(f.origin, f.axis, slope);
         var along = new Uv(f.along(z0), f.axis, 0, z1 - z0);
@@ -548,6 +553,17 @@ public final class Mesh {
      * ({@code sign} +1) or against it, its sprite stretched once across it (a bolted cover, a flange's back): one polygon.
      */
     void disc(Frame f, double r, double z, int n, int sign, Material material) {
+        n = detail.sides(n);
+        if (material == Material.PUMP_DISC && detail == RenderDetail.NORMAL) {
+            // Keep the previous cover envelope: relief sits in a shallow recess, its bolt ends on the old face.
+            double recess = Math.min(.025, .05 * r);
+            disc(f, r, z - sign * recess, n, sign, Material.PUMP_COVER);
+            bore(f, .96 * r, Math.min(z, z - sign * recess), Math.max(z, z - sign * recess), n, Material.PUMP_CASTING);
+            annulus(f, .96 * r, r, z, n, sign, Material.PUMP_CASTING);
+            var outward = new double[]{sign * f.axis[0], sign * f.axis[1], sign * f.axis[2]};
+            for (int k = 0; k < 12; k++) cylinder(new Frame(f.at(2 * Math.PI * (k + .5) / 12, .82 * r, z - sign * recess), outward, f.ref), .075 * r, 0, recess, 6, Material.BOLT);
+            return;
+        }
         var polygon = new ArrayList<double[]>(n);
         for (int i = 0; i < n; i++) polygon.add(f.at(2 * Math.PI * i / n, r, z));
         var centre = f.along(z);
@@ -557,6 +573,7 @@ public final class Mesh {
 
     /** The inside of a tube (seen from its axis), radius {@code r}, from {@code z0} to {@code z1}. */
     void bore(Frame f, double r, double z0, double z1, int n, Material material) {
+        n = detail.sides(n);
         double chord = 2 * r * DeterministicMath.sin(Math.PI / n);
         var along = new Uv(f.along(z0), f.axis, 0, material.period());
         for (int i = 0; i < n; i++) {
@@ -571,6 +588,7 @@ public final class Mesh {
 
     /** A flat ring from {@code rIn} to {@code rOut} at {@code z}, facing along the axis ({@code sign} +1) or against it (-1). */
     void annulus(Frame f, double rIn, double rOut, double z, int n, double sign, Material material) {
+        n = detail.sides(n);
         var outward = new double[]{sign * f.axis[0], sign * f.axis[1], sign * f.axis[2]};
         if (rIn <= EPS) {
             var polygon = new ArrayList<double[]>(n);
@@ -606,7 +624,11 @@ public final class Mesh {
         if (outer - inner < across) return;
         double r = across / Math.sqrt(3), height = Math.max(1.2 * d, MIN_NUT), circle = (inner + outer) / 2;
         var axis = new double[]{sign * f.axis[0], sign * f.axis[1], sign * f.axis[2]};
-        for (int k = 0; k < count; k++) cylinder(new Frame(f.at(2 * Math.PI * (k + .5) / count, circle, z), axis, f.ref), r, 0, height, 6, material);
+        for (int k = 0; k < count; k++) {
+            var nut = new Frame(f.at(2 * Math.PI * (k + .5) / count, circle, z), axis, f.ref);
+            if (detail == RenderDetail.LOW) disc(nut, r, .0004, 6, 1, Material.BOLT_FACE);
+            else cylinder(nut, r, 0, height, 6, material);
+        }
     }
 
     /**
@@ -623,6 +645,8 @@ public final class Mesh {
      * a sixth of its sides, four at least).
      */
     void head(Frame f, double r, double at, double depth, int n, int bands, Material material) {
+        n = detail.sides(n);
+        bands = detail.bands(bands);
         var base = f.along(at);
         var spheroid = new Spheroid(base, f.axis(), r, depth);
         for (int k = 0; k < bands; k++) {
@@ -641,6 +665,12 @@ public final class Mesh {
                 add(polygon, base, spheroid, material, null, null);
             }
         }
+    }
+
+    /** A fastener rather than a dark cylindrical machine part; low detail uses its flush textured face. */
+    void nut(Frame f, double radius, double from, double to, int sides, Material material) {
+        if (detail == RenderDetail.LOW) disc(f, radius, Math.min(from, to) + .0004, 6, 1, Material.BOLT_FACE);
+        else cylinder(f, radius, from, to, sides, material);
     }
 
     /** A closed cylinder (prism with both ends). */
@@ -819,6 +849,7 @@ public final class Mesh {
      * straight pipe whose facet reference lies at that angle meets it vertex to vertex.
      */
     void torus(Frame f, double bend, double r, double a0, double a1, int segments, int n, double phase, Material material) {
+        n = detail.sides(n);
         var shading = new Torus(f.origin, f.axis, bend);
         double chord = 2 * r * DeterministicMath.sin(Math.PI / n);
         for (int s = 0; s < segments; s++) {
@@ -881,8 +912,9 @@ public final class Mesh {
 
     /** A sphere of {@code n} meridians and n/2 bands (a pipe junction's core, a cap). */
     void sphere(double[] centre, double r, int n, Material material) {
+        n = detail.sides(n);
         var f = Frame.of(centre, 1, 1);
-        int bands = Math.max(2, n / 2);
+        int bands = detail == RenderDetail.LOW ? Math.min(12, Math.max(2, n / 2)) : Math.max(2, n / 2);
         var shading = new Sphere(centre);
         for (int k = 0; k < bands; k++) {
             double lat0 = -Math.PI / 2 + Math.PI * k / bands, lat1 = -Math.PI / 2 + Math.PI * (k + 1) / bands;
@@ -971,8 +1003,20 @@ public final class Mesh {
         return out;
     }
 
+    /** Drawing polygons in world-local coordinates, split only at texture repeats. */
+    static List<Polygon> tiled(Facet facet) {
+        var out = new ArrayList<Polygon>();
+        for (var across : tiles(facet.positions(), facet.u)) for (var along : tiles(across.polygon, facet.v))
+            out.add(polygon(along.polygon, facet, 0, 0, 0, across.index, along.index, false));
+        return out;
+    }
+
     /** Cell-local polygon with texture coordinates in tile ({@code tileU}, {@code tileV}) of its sprite, and smooth normals. */
     private static Polygon polygon(List<double[]> clipped, Facet facet, int x, int y, int z, int tileU, int tileV) {
+        return polygon(clipped, facet, x, y, z, tileU, tileV, true);
+    }
+
+    private static Polygon polygon(List<double[]> clipped, Facet facet, int x, int y, int z, int tileU, int tileV, boolean cellLocal) {
         int m = clipped.size();
         var positions = new double[m * 3];
         var uvs = new double[m * 2];
@@ -980,7 +1024,7 @@ public final class Mesh {
         int[] cell = {x, y, z};
         for (int i = 0; i < m; i++) {
             var p = clipped.get(i);
-            for (int a = 0; a < 3; a++) positions[3 * i + a] = clamp(p[a] - cell[a]);
+            for (int a = 0; a < 3; a++) positions[3 * i + a] = cellLocal ? clamp(p[a] - cell[a]) : p[a];
             // The sprite's top row is the far end of the tile along v.
             uvs[2 * i] = clamp(facet.u.at(p) - tileU);
             uvs[2 * i + 1] = 1 - clamp(facet.v.at(p) - tileV);

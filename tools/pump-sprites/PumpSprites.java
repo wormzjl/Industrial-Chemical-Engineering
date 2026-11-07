@@ -116,7 +116,8 @@ public class PumpSprites {
      * A bolted face seen square on, stretched across its diameter: a chamfered rim, a machined face with faint turning
      * rings, twelve nuts on their washers on a circle at 0.82 of the radius, a spigot ring round the middle.
      */
-    static double[][] disc() {
+    static double[][] disc() { return disc(true); }
+    static double[][] disc(boolean bolts) {
         int n = 64;
         double c = n / 2.0;
         var out = new double[n][n];
@@ -127,7 +128,7 @@ public class PumpSprites {
             else if (r > .92) v = BODY * (py < 0 ? 1.04 : .9);
             if (r > .33 && r < .37) v = BODY * (py < 0 ? 1.05 : .82);
             if (r <= .33) v = BODY * .97;
-            for (int k = 0; k < 12; k++) {
+            for (int k = 0; bolts && k < 12; k++) {
                 double t = 2 * Math.PI * (k + .5) / 12, nx = c * .82 * Math.cos(t), ny = c * .82 * Math.sin(t);
                 double dx = px - nx, dy = py - ny, rr = Math.hypot(dx, dy);
                 if (rr < 3.6) v = BODY * .78;
@@ -386,6 +387,18 @@ public class PumpSprites {
         return out;
     }
 
+    /** One flush hex nut: the polygon supplies its outline, so no alpha/cutout pass is needed. */
+    static double[][] boltFace() {
+        int n = 32;
+        var out = new double[n][n];
+        for (int y = 0; y < n; y++) for (int x = 0; x < n; x++) {
+            double px = (x + .5 - n / 2.0) / (n / 2.0), py = (y + .5 - n / 2.0) / (n / 2.0);
+            double radial = Math.hypot(px, py);
+            out[y][x] = radial < .18 ? .64 : radial < .27 ? .30 : py < -.2 ? .60 : py > .2 ? .37 : .48;
+        }
+        return out;
+    }
+
     public static void main(String[] args) throws Exception {
         writeRgb(new File(args[0]), "motor_frame", motorFrame());
         writeRgb(new File(args[0]), "motor_shield", motorShield());
@@ -401,6 +414,8 @@ public class PumpSprites {
         write(folder, "pump_fins", fins());
         write(folder, "pump_joint", joint());
         write(folder, "pump_disc", disc());
+        write(folder, "pump_cover", disc(false));
+        write(folder, "equipment_bolt_face", boltFace());
         write(folder, "pump_base", base());
         write(folder, "pump_channel", channel());
     }

@@ -263,14 +263,15 @@ final class TankDesign extends UnitDesign {
      * inside collided in those cells, and a climber on the rolling ladder met it under the platform).
      */
     private static void shell(ProcessUnit u, Plan p) {
-        double r = p.r, in = r - EquipmentShape.PLATE, s = p.shell, chord = 2 * r * DeterministicMath.sin(Math.PI / p.n), circumference = p.n * chord;
+        int sides = u.mesh.detail().sides(p.n);
+        double r = p.r, in = r - EquipmentShape.PLATE, s = p.shell, chord = 2 * r * DeterministicMath.sin(Math.PI / sides), circumference = sides * chord;
         double plates = circumference / Math.max(1, Math.round(circumference / ShapeRasterizer.PLATE_LENGTH));
         var axis = new double[]{p.a, 0, p.a};
         var courses = new Mesh.Uv(axis, UP, 0, 2 * ShapeRasterizer.COURSE);
         var round = new Mesh.Radial(axis, UP);
         var inward = new Mesh.Inward(axis, UP);
-        for (int i = 0; i < p.n; i++) {
-            double t0 = 2 * Math.PI * i / p.n, t1 = 2 * Math.PI * (i + 1) / p.n;
+        for (int i = 0; i < sides; i++) {
+            double t0 = 2 * Math.PI * i / sides, t1 = 2 * Math.PI * (i + 1) / sides;
             double[] a = p.at(r, t0, 0), b = p.at(r, t1, 0);
             var tangent = Mesh.unit(b[0] - a[0], 0, b[2] - a[2]);
             var around = new Mesh.Uv(a, Mesh.neg(tangent), -i * chord, plates);
@@ -279,10 +280,10 @@ final class TankDesign extends UnitDesign {
             u.mesh.add(List.of(p.at(in, t0, 0), p.at(in, t1, 0), p.at(in, t1, s), p.at(in, t0, s)), p.at(2 * r, mid, s / 2), inward, Material.SHELL, around, courses);
         }
         var up = Frame.of(axis, 1, 1);
-        u.mesh.annulus(up, in, r, s, p.n, 1, Material.HEAD);
-        u.mesh.hoop(up, r, r + TOP_ANGLE, s - TOP_ANGLE, s, p.n, Material.HEAD);
-        u.mesh.prism(up, r + RINGWALL_OUT, 0, RINGWALL, p.n, Material.CONCRETE);
-        u.mesh.annulus(up, r, r + RINGWALL_OUT, RINGWALL, p.n, 1, Material.CONCRETE);
+        u.mesh.annulus(up, in, r, s, sides, 1, Material.HEAD);
+        u.mesh.hoop(up, r, r + TOP_ANGLE, s - TOP_ANGLE, s, sides, Material.HEAD);
+        u.mesh.prism(up, r + RINGWALL_OUT, 0, RINGWALL, sides, Material.CONCRETE);
+        u.mesh.annulus(up, r, r + RINGWALL_OUT, RINGWALL, sides, 1, Material.CONCRETE);
         u.solids.add(ProcessUnit.Solid.ring(p.a, p.a, 0, s, r - Access.NARROW_BAND, r, 0, 0));
         u.solids.add(ProcessUnit.Solid.ring(p.a, p.a, 0, RINGWALL, r, r + RINGWALL_OUT, 0, 0));
         u.solids.add(ProcessUnit.Solid.ring(p.a, p.a, s - TOP_ANGLE, s, r, r + TOP_ANGLE, 0, 0));
@@ -463,8 +464,9 @@ final class TankDesign extends UnitDesign {
         // frustum widens upwards here and points down instead. Both sides of each thin sheet are visible.
         double seal = p.r - EquipmentShape.PLATE + .01, metal = seal - .02;
         double metalTop = top + .15 * (metal - rr) / (seal - rr);
-        for (int i = 0; i < p.n; i++) {
-            double a0 = 2 * Math.PI * i / p.n, a1 = 2 * Math.PI * (i + 1) / p.n;
+        int sides = roof.detail().sides(p.n);
+        for (int i = 0; i < sides; i++) {
+            double a0 = 2 * Math.PI * i / sides, a1 = 2 * Math.PI * (i + 1) / sides;
             var plate = List.of(up.at(a0, rr, top), up.at(a1, rr, top), up.at(a1, metal, metalTop), up.at(a0, metal, metalTop));
             roof.flat(plate, UP, Material.PIPE);
             roof.flat(plate, Mesh.neg(UP), Material.PIPE);

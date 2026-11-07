@@ -56,21 +56,30 @@ public final class EquipmentShellModel implements IDynamicBakedModel {
     private static final ChunkRenderTypeSet GLASS = ChunkRenderTypeSet.of(RenderType.solid(), RenderType.translucent());
     private final TextureAtlasSprite[] sprites;
     private final TextureAtlasSprite particle;
+    private final com.wormzjl.icheme.science.equipment.RenderDetail detail;
     /** Rebuilt with the model on every resource reload, since quads embed atlas coordinates. Meshing threads share them. */
     private final Map<ShapeRasterizer.CellKey, Layers> quads = new ConcurrentHashMap<>();
     /** The sprites of the model last baked, for parts drawn outside the chunk mesh ({@link #sprite}). */
-    private static volatile TextureAtlasSprite @Nullable [] current;
+    private record Active(TextureAtlasSprite[] sprites, com.wormzjl.icheme.science.equipment.RenderDetail detail) {}
+    private static volatile @Nullable Active current;
 
     private EquipmentShellModel(TextureAtlasSprite[] sprites, TextureAtlasSprite particle) {
         this.sprites = sprites;
+        detail = com.wormzjl.icheme.client.ClientConfig.renderDetail();
         this.particle = particle;
-        current = sprites;
+        current = new Active(sprites, detail);
     }
 
     /** The sprite of {@code material} in the model last baked, or null before the first bake. */
     public static @Nullable TextureAtlasSprite sprite(Mesh.Material material) {
-        var sprites = current;
-        return sprites == null ? null : sprites[material.ordinal()];
+        var active = current;
+        return active == null ? null : active.sprites()[material.ordinal()];
+    }
+
+    /** The profile of the atlas/model actually baked, so a config edit cannot mix old chunk meshes with new bodies. */
+    public static com.wormzjl.icheme.science.equipment.RenderDetail detail() {
+        var active = current;
+        return active == null ? com.wormzjl.icheme.science.equipment.RenderDetail.NORMAL : active.detail();
     }
 
     @Override
@@ -100,7 +109,7 @@ public final class EquipmentShellModel implements IDynamicBakedModel {
      * quads carry its paint channel as their tint index, so the cell's paint colours them as the chunk is meshed.
      */
     private Layers bake(ShapeRasterizer.CellKey key) {
-        return layers(ShapeRasterizer.chunkSurface(key), bake(PortMarkings.surface(key), sprites, true));
+        return layers(ShapeRasterizer.chunkSurface(key, detail), bake(PortMarkings.surface(key), sprites, true));
     }
 
     private Layers layers(List<Mesh.Polygon> polygons, List<BakedQuad> markings) {

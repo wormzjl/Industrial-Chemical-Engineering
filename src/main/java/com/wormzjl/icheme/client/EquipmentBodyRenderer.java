@@ -23,13 +23,13 @@ import org.joml.Matrix4f;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/** Render thread only: a tower's shell uploads once and draws once, independent of its occupied block count. */
+/** Render thread only: a coarse equipment body (or the normal tower shell) uploads once and draws once, independent of its occupied block count. */
 @EventBusSubscriber(modid=IChemE.MOD_ID,value=Dist.CLIENT)
-public final class CoolingTowerShellRenderer {
-    private record Key(EquipmentShape shape,Paint paint,int light) {}
+public final class EquipmentBodyRenderer {
+    private record Key(EquipmentShape shape,Paint paint,int light,com.wormzjl.icheme.science.equipment.RenderDetail detail) {}
     private static final Map<Key,VertexBuffer> BUFFERS=new LinkedHashMap<>(16,.75f,true);
     private static TextureAtlasSprite atlasMarker;
-    private CoolingTowerShellRenderer() {}
+    private EquipmentBodyRenderer() {}
 
     @SubscribeEvent public static void render(RenderLevelStageEvent event){
         if(event.getStage()!=RenderLevelStageEvent.Stage.AFTER_SOLID_BLOCKS)return;
@@ -37,14 +37,16 @@ public final class CoolingTowerShellRenderer {
         var marker=EquipmentShellModel.sprite(Mesh.Material.CONCRETE);if(marker==null)return;
         if(marker!=atlasMarker){release();atlasMarker=marker;}
         var camera=event.getCamera().getPosition();var type=RenderType.solid();
+        var detail=EquipmentShellModel.detail();
         net.minecraft.client.renderer.ShaderInstance shader=null;
-        for(var tower:EquipmentShellBlockEntity.clientTowers(mc.level)){
+        for(var tower:EquipmentShellBlockEntity.clientStructures(mc.level)){
             var shape=tower.shape();var origin=tower.origin();
+            if(detail==com.wormzjl.icheme.science.equipment.RenderDetail.NORMAL&&!shape.kind().coolingTower())continue;
             if(!event.getFrustum().isVisible(new AABB(origin.getX(),origin.getY(),origin.getZ(),origin.getX()+shape.sizeX(),origin.getY()+shape.sizeY(),origin.getZ()+shape.sizeZ())))continue;
             int light=LevelRenderer.getLightColor(mc.level,BlockPos.containing(origin.getX()+shape.sizeX()/2.0,origin.getY()+shape.sizeY(),origin.getZ()+shape.sizeZ()/2.0));
-            var key=new Key(shape,tower.paint(),light);var buffer=BUFFERS.get(key);
+            var key=new Key(shape,tower.paint(),light,detail);var buffer=BUFFERS.get(key);
             if(buffer==null){
-                buffer=build(shape,tower.paint(),light);if(buffer==null)continue;
+                buffer=build(shape,tower.paint(),light,detail);if(buffer==null)continue;
                 if(BUFFERS.size()>=64){var oldest=BUFFERS.entrySet().iterator();oldest.next().getValue().close();oldest.remove();}
                 BUFFERS.put(key,buffer);
             }
@@ -62,8 +64,8 @@ public final class CoolingTowerShellRenderer {
         if(shader!=null){shader.clear();VertexBuffer.unbind();type.clearRenderState();}
     }
 
-    private static VertexBuffer build(EquipmentShape shape,Paint paint,int light){
-        var polygons=ShapeRasterizer.towerShell(shape);int vertices=0;
+    private static VertexBuffer build(EquipmentShape shape,Paint paint,int light,com.wormzjl.icheme.science.equipment.RenderDetail detail){
+        var polygons=detail==com.wormzjl.icheme.science.equipment.RenderDetail.NORMAL?ShapeRasterizer.towerShell(shape):ShapeRasterizer.renderBody(shape,detail);int vertices=0;
         for(var polygon:polygons)vertices+=3*(polygon.size()-2);
         int[] tints={Paint.tint(paint.body()),Paint.tint(paint.structure())};
         if(vertices==0)return null;
@@ -84,5 +86,5 @@ public final class CoolingTowerShellRenderer {
             var buffer=new VertexBuffer(VertexBuffer.Usage.STATIC);buffer.bind();buffer.upload(mesh);VertexBuffer.unbind();return buffer;
         }
     }
-    private static void release(){BUFFERS.values().forEach(VertexBuffer::close);BUFFERS.clear();}
+    public static void release(){BUFFERS.values().forEach(VertexBuffer::close);BUFFERS.clear();}
 }

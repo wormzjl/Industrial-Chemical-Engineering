@@ -10,6 +10,7 @@
     "painted_pipe": "icheme:block/painted_pipe",
     "painted_flange": "icheme:block/painted_flange",
     "bolt": "icheme:block/equipment_bolt",
+    "bolt_face": "icheme:block/equipment_bolt_face",
     "opening": "icheme:block/equipment_opening",
     "cladding": "icheme:block/equipment_cladding",
     "grating": "icheme:block/equipment_grating",

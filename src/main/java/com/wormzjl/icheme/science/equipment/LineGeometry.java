@@ -102,10 +102,11 @@ public final class LineGeometry {
     }
 
     /** The block's polygons, cell-local. */
-    public static List<Polygon> polygons(Key key) {
-        if(key.kind()==Kind.VALVE)return ValveGeometry.pressure(key,false);
-        if(key.kind()==Kind.FILTER)return overhanging(mesh(key));
-        return mesh(key).cell(0, 0, 0);
+    public static List<Polygon> polygons(Key key) { return polygons(key, RenderDetail.NORMAL); }
+    public static List<Polygon> polygons(Key key, RenderDetail detail) {
+        if(key.kind()==Kind.VALVE)return ValveGeometry.pressure(key,false,detail);
+        if(key.kind()==Kind.FILTER)return overhanging(mesh(key,detail));
+        return mesh(key,detail).cell(0, 0, 0);
     }
 
     /** Fixed-size electrical conduit uses the pipe mesher, including elbows, junctions and off-centre transitions. */
@@ -140,7 +141,8 @@ public final class LineGeometry {
     private static int face(double[] v){int axis=0;for(int k=1;k<3;k++)if(Math.abs(v[k])>Math.abs(v[axis]))axis=k;return (axis==0?4:axis==1?0:2)+(v[axis]>0?1:0);}
 
     /** Native Y-strainer, sized from its host pipe and retaining overhanging screen geometry. */
-    public static List<Polygon> filterPolygons(Key pipe){return overhanging(mesh(new Key(Kind.FILTER,pipe.facing,pipe.connections,pipe.outside,pipe.faces,pipe.flanged,pipe.spool,pipe.offsets)));}
+    public static List<Polygon> filterPolygons(Key pipe){return filterPolygons(pipe,RenderDetail.NORMAL);}
+    public static List<Polygon> filterPolygons(Key pipe,RenderDetail detail){return overhanging(mesh(new Key(Kind.FILTER,pipe.facing,pipe.connections,pipe.outside,pipe.faces,pipe.flanged,pipe.spool,pipe.offsets),detail));}
 
     /** Keep decorative overhangs in their owning block model, with UV/cell clipping intact. */
     static List<Polygon> overhanging(Mesh mesh) {
@@ -155,8 +157,9 @@ public final class LineGeometry {
         return List.copyOf(out);
     }
 
-    static Mesh mesh(Key key) {
-        var m = new Mesh();
+    static Mesh mesh(Key key) { return mesh(key, RenderDetail.NORMAL); }
+    static Mesh mesh(Key key, RenderDetail detail) {
+        var m = new Mesh(detail);
         switch (key.kind()) {
             case PIPE -> pipe(m, key);
             case VALVE -> valve(m, key);

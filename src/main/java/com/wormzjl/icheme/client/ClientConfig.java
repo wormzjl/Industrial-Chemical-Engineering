@@ -40,6 +40,7 @@ public final class ClientConfig {
     public static final ModConfigSpec.EnumValue<Basis> BASIS;
     public static final ModConfigSpec.BooleanValue STREAM_CONDITIONS;
     public static final ModConfigSpec.ConfigValue<List<? extends String>> EQUIPMENT_PAINTS;
+    public static final ModConfigSpec.BooleanValue LOW_POLYGON_MODE;
 
     static {
         var builder = new ModConfigSpec.Builder();
@@ -56,6 +57,7 @@ public final class ClientConfig {
         BASIS = builder.comment("Compositions and flows in moles (MOLE) or in mass (MASS); VOLUME shows the process simulator's stream flows in m³ at the stream's own temperature and pressure, and the fluid device screens read it as MOLE.").defineEnum("basis", Basis.MOLE);
         builder.pop();
         builder.push("equipment");
+        LOW_POLYGON_MODE = builder.comment("Drawing only: textured flange bolts and fewer round-surface facets. Placement, collision and process calculations keep their normal geometry. Reload resources (F3+T) after changing.").define("low_polygon_mode", false);
         EQUIPMENT_PAINTS = builder.comment("Constructor body and structure colours by player account: UUID:#RRGGBB:#RRGGBB. Remembered when the Paint page is edited.")
                 .defineListAllowEmpty("paint_schemes", List.<String>of(),
                         () -> new UUID(0, 0) + ":#A1A1A0:#5B686D", EquipmentPaints::valid);
@@ -119,6 +121,10 @@ public final class ClientConfig {
 
     public static void streamConditions(boolean shown) {
         set(STREAM_CONDITIONS, shown);
+    }
+
+    public static com.wormzjl.icheme.science.equipment.RenderDetail renderDetail() {
+        return get(LOW_POLYGON_MODE, false) ? com.wormzjl.icheme.science.equipment.RenderDetail.LOW : com.wormzjl.icheme.science.equipment.RenderDetail.NORMAL;
     }
 
     public static Paint equipmentPaint(UUID player, Paint fallback) {

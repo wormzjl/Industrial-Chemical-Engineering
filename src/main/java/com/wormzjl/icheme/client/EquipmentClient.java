@@ -41,6 +41,15 @@ public final class EquipmentClient {
         event.register(com.wormzjl.icheme.client.model.ShaftModel.LOADER_ID, com.wormzjl.icheme.client.model.ShaftModel.LOADER);
     }
 
+    @SubscribeEvent
+    public static void renderConfigReloaded(net.neoforged.fml.event.config.ModConfigEvent.Reloading event) {
+        if (event.getConfig().getSpec() != ClientConfig.SPEC || ClientConfig.renderDetail() == EquipmentShellModel.detail()) return;
+        var client = net.minecraft.client.Minecraft.getInstance();
+        client.execute(() -> {
+            if (ClientConfig.renderDetail() != EquipmentShellModel.detail()) client.reloadResourcePacks();
+        });
+    }
+
     /**
      * A painted quad of a shell cell (tint index: its {@link Paint} channel) takes the cell's paint, scaled to show on the
      * neutral painted sprites; a cell not yet bound shows the default paint.

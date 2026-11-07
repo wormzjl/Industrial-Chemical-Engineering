@@ -754,8 +754,9 @@ public final class RackGeometry {
     }
 
     /** One lane's polygons, cell-local, its spool flanges where {@code spool} says ({@link #spool}): the rack draws each lane apart for its paints. */
-    public static List<Polygon> lane(Rack rack, Lane lane, boolean spool) {
-        var m = new Mesh();
+    public static List<Polygon> lane(Rack rack, Lane lane, boolean spool) { return lane(rack,lane,spool,RenderDetail.NORMAL); }
+    public static List<Polygon> lane(Rack rack, Lane lane, boolean spool,RenderDetail detail) {
+        var m = new Mesh(detail);
         lane(m, rack, lane, spool);
         return m.cell(0, 0, 0);
     }

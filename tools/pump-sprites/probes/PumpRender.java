@@ -22,7 +22,7 @@ import java.util.regex.Pattern;
  * shaded by the game's directional shade, back faces culled as the chunk renderer culls them, on a grass ground with a
  * block grid. Orthographic views, written as PNGs.
  *
- * <p>Args: {@code kind size length support outPrefix [views]}; views from front, back, left, right, top, iso (front
+ * <p>Args: {@code kind size length support outPrefix [views]}, {@code -Ddetail=NORMAL|LOW}; COLUMN length is its tray count; views from front, back, left, right, top, iso (front
  * left, above), iso2 (front right), iso3 (back left), low (front left, at eye height); default {@code iso,front,right,top}.
  * The unit faces north: its front (the constructor's side) is -z. Run from the worktree root (it reads the sprites from
  * src/main/resources). Moving parts are drawn at rest.
@@ -46,10 +46,19 @@ public class PumpRender {
         int length = Integer.parseInt(args[2]), support = Integer.parseInt(args[3]);
         String out = args[4];
         var views = args.length > 5 ? args[5].split(",") : new String[]{"iso", "front", "right", "top"};
-        var shape = EquipmentShape.unit(kind, size, length, Heading.NORTH, support);
+        var shape = switch (kind) {
+            case COLUMN -> EquipmentShape.column(size, ColumnTrays.simple(length, Math.max(1, length / 2)), Heading.NORTH, support);
+            case DRUM -> EquipmentShape.drum(size, length, EquipmentShape.Orientation.HORIZONTAL, Heading.NORTH, support);
+            case TANK, SPHERE -> EquipmentShape.designed(kind,size,length,Heading.NORTH,support,ProcessUnit.Bank.ONE);
+            default -> EquipmentShape.unit(kind, size, length, Heading.NORTH, support);
+        };
+        var detail = RenderDetail.valueOf(System.getProperty("detail", "NORMAL"));
         var sprites = sprites();
         var triangles = new ArrayList<Triangle>();
-        for (var cell : ShapeRasterizer.layout(shape).shell()) {
+        if (detail == RenderDetail.LOW) {
+            for (var polygon : ShapeRasterizer.renderPreview(shape, detail)) add(triangles, polygon, 0, 0, 0);
+            for (var cell : ShapeRasterizer.layout(shape).shell()) for (var polygon : PortMarkings.surface(ShapeRasterizer.key(shape,cell.x(),cell.y(),cell.z()))) add(triangles,polygon,cell.x(),cell.y(),cell.z());
+        } else for (var cell : ShapeRasterizer.layout(shape).shell()) {
             var key = ShapeRasterizer.key(shape, cell.x(), cell.y(), cell.z());
             for (var polygon : ShapeRasterizer.surface(key))
                 add(triangles, polygon, cell.x(), cell.y(), cell.z());

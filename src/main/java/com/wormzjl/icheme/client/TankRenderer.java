@@ -122,7 +122,7 @@ public final class TankRenderer {
             if (cell.getBlockPos().distToCenterSqr(camera) > DRAW_RANGE * DRAW_RANGE) continue;
             if (!frustum.isVisible(new AABB(origin.getX(), origin.getY(), origin.getZ(), origin.getX() + shape.sizeX(), origin.getY() + shape.sizeY(), origin.getZ() + shape.sizeZ())))
                 continue;
-            var f = ShapeRasterizer.floating(shape);
+            var f = ShapeRasterizer.floating(shape, EquipmentShellModel.detail());
             if (f == null) continue;
             double liquid = level(cell.getBlockPos(), ticks);
             double lift = f.underside(liquid) - f.landed(), pitch = f.pitch(liquid);
@@ -189,7 +189,7 @@ public final class TankRenderer {
             var display = get(cell.getBlockPos(), ticks);
             if (!cell.instruments().levelGauge() || display == null || cell.isRemoved() || cell.getLevel() != level || shape == null || origin == null) continue;
             if (cell.getBlockPos().distToCenterSqr(camera) > DRAW_RANGE * DRAW_RANGE) continue;
-            var f = ShapeRasterizer.floating(shape);
+            var f = ShapeRasterizer.floating(shape, EquipmentShellModel.detail());
             if (f == null) continue;
             double low = f.glassLow(), high = f.glassHigh(), water = Math.min(display.waterLevel(), high), oil = Math.min(display.level(), high);
             double[] g = f.glass();

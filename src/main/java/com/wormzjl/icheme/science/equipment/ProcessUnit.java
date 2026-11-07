@@ -604,7 +604,7 @@ public final class ProcessUnit {
 
     final EquipmentShape shape;
     /** The mesh being drawn: the cached unit drops it once built; {@link #mesh()} draws the facets again. */
-    Mesh mesh = new Mesh();
+    Mesh mesh;
     final List<Solid> solids = new ArrayList<>(), volumes = new ArrayList<>();
     /** The moving parts, by the index their facets carry ({@link Mesh#part}). */
     final List<Motion> motions = new ArrayList<>();
@@ -653,7 +653,7 @@ public final class ProcessUnit {
      * legs, and the rolling ladder, drawn level from its pivot; null for any other shape.
      */
     Floating floating;
-    final Mesh roof = new Mesh(), ladder = new Mesh();
+    final Mesh roof, ladder;
     /** A floating-roof tank's roof as the world collides with it, in the frame; null for any other shape. */
     RoofPlan roofPlan;
 
@@ -751,8 +751,13 @@ public final class ProcessUnit {
     /** What draws the unit: its kind's design ({@link UnitDesign#build}), or a test's kit pieces. */
     private final Consumer<ProcessUnit> design;
 
-    private ProcessUnit(EquipmentShape s, Consumer<ProcessUnit> design, boolean drawing) {
+    private ProcessUnit(EquipmentShape s, Consumer<ProcessUnit> design, boolean drawing) { this(s, design, drawing, RenderDetail.NORMAL); }
+
+    private ProcessUnit(EquipmentShape s, Consumer<ProcessUnit> design, boolean drawing, RenderDetail detail) {
         shape = s;
+        mesh = new Mesh(detail);
+        roof = new Mesh(detail);
+        ladder = new Mesh(detail);
         this.design = design;
         design.accept(this);
         box = box(mesh.bounds());
@@ -773,9 +778,9 @@ public final class ProcessUnit {
     }
 
     /** The unit drawn afresh, its meshes kept: the chunk mesh's parts and a floating-roof tank's client-drawn ones. */
-    ProcessUnit drawing() {
-        return new ProcessUnit(shape, design, true);
-    }
+    ProcessUnit drawing() { return drawing(RenderDetail.NORMAL); }
+    ProcessUnit drawing(RenderDetail detail) { return new ProcessUnit(shape, design, true, detail); }
+    Mesh mesh(RenderDetail detail) { return drawing(detail).mesh; }
 
     List<Access.WoundStair> woundStairs() {
         return List.copyOf(woundStairs);
@@ -1638,6 +1643,7 @@ public final class ProcessUnit {
      * of its length and 100° of its round, drawn inside and out so the seal shows through.
      */
     void bracket(Frame f, double r0, double r1, double z0, double z1, int n, Material material) {
+        n = mesh.detail().sides(n);
         double t = .025, w0 = z0 + .2 * (z1 - z0), w1 = z0 + .8 * (z1 - z0), window = Math.toRadians(50);
         double[] stations = {z0, w0, w1, z1};
         for (int band = 0; band < 3; band++) {
@@ -3654,6 +3660,7 @@ public final class ProcessUnit {
      * collide beyond them).
      */
     void fill(double x, double z, double half, double body, int sides, double level) {
+        sides = mesh.detail().sides(sides);
         double top = level + Access.DECK;
         for (int i = 0; i < sides; i++) {
             double t0 = 2 * Math.PI * i / sides, t1 = 2 * Math.PI * (i + 1) / sides;
@@ -3962,6 +3969,7 @@ public final class ProcessUnit {
      * reaches grade (a bay one walks into), then as drawn.
      */
     void skirt(double x, double z, double r, double y1, int n, double[]... openings) {
+        n = mesh.detail().sides(n);
         double[] axis = {x, 0, z}, up = {0, 1, 0}, down = {0, -1, 0};
         var outside = new Radial(axis, up);
         var inside = new Inward(axis, up);
@@ -4041,8 +4049,8 @@ public final class ProcessUnit {
             double t = 2 * Math.PI * (k + .5) / count;
             for (int s = -1; s <= 1; s += 2) {
                 var f = new Frame(Access.around(x, z, circle, t, s < 0 ? low : high), new double[]{0, s, 0}, new double[]{0, 0, 1});
-                mesh.cylinder(f, nut, 0, d, 6, Material.BOLT);
-                if (d >= .04) mesh.cylinder(f, d / 2, d, 1.5 * d, 6, Material.BOLT);
+                mesh.nut(f, nut, 0, d, 6, Material.BOLT);
+                if (mesh.detail() == RenderDetail.NORMAL && d >= .04) mesh.cylinder(f, d / 2, d, 1.5 * d, 6, Material.BOLT);
             }
         }
     }
@@ -4063,7 +4071,7 @@ public final class ProcessUnit {
         for (int k = 0; k < count; k++) {
             double t = 2 * Math.PI * (k + .5) / count;
             for (int s = -1; s <= 1; s += 2)
-                mesh.cylinder(new Frame(f.at(t, circle, station + s * (gap / 2 + tf)), s < 0 ? neg(axis) : axis, f.ref()), nut, 0, d, 6, Material.BOLT);
+                mesh.nut(new Frame(f.at(t, circle, station + s * (gap / 2 + tf)), s < 0 ? neg(axis) : axis, f.ref()), nut, 0, d, 6, Material.BOLT);
         }
     }
 

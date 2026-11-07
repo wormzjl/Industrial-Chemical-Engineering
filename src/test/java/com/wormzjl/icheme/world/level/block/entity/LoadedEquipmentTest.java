@@ -6,12 +6,12 @@ import net.minecraft.core.BlockPos;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
-class LoadedTowersTest {
+class LoadedEquipmentTest {
     private static final EquipmentShape SHAPE = EquipmentShape.unit(EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER, 80, 104, EquipmentShape.Heading.NORTH, 0);
 
     /** The chunk of the tower's node leaves the view while a chunk of its rim stays: the tower stays with it. */
     @Test void aTowerStandsWhileAnyOfItsCellsIsLoaded() {
-        var index = new LoadedTowers();
+        var index = new LoadedEquipment();
         var origin = new BlockPos(16, 64, 16);
         var node = index.add(origin, SHAPE, Paint.DEFAULT);
         var rim = index.add(origin, SHAPE, Paint.DEFAULT);
@@ -24,7 +24,7 @@ class LoadedTowersTest {
     }
 
     @Test void towersAreToldApartByOrigin() {
-        var index = new LoadedTowers();
+        var index = new LoadedEquipment();
         index.add(new BlockPos(0, 64, 0), SHAPE, Paint.DEFAULT);
         index.add(new BlockPos(200, 64, 0), SHAPE, Paint.DEFAULT);
         assertEquals(2, index.all().size());

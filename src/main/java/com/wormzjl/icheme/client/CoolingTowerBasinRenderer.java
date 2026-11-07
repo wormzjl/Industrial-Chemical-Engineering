@@ -20,6 +20,7 @@ import java.util.Map;
 @EventBusSubscriber(modid=IChemE.MOD_ID,value=Dist.CLIENT)
 public final class CoolingTowerBasinRenderer {
     private static final Map<EquipmentShape,List<CoolingTowerBasin.Triangle>> SURFACES=new HashMap<>();
+    private static com.wormzjl.icheme.science.equipment.RenderDetail detail;
     private CoolingTowerBasinRenderer() {}
 
     @SubscribeEvent public static void render(RenderLevelStageEvent event){
@@ -37,7 +38,9 @@ public final class CoolingTowerBasinRenderer {
             double height=CoolingTowerBasin.height(display.waterLevel());
             if(!event.getFrustum().isVisible(new AABB(origin.getX(),origin.getY(),origin.getZ(),origin.getX()+shape.sizeX(),origin.getY()+3,origin.getZ()+shape.sizeZ())))continue;
             if(SURFACES.size()>64)SURFACES.clear();
-            var surface=SURFACES.computeIfAbsent(shape,CoolingTowerBasin::surface);
+            var selected=com.wormzjl.icheme.client.model.EquipmentShellModel.detail();
+            if(selected!=detail){SURFACES.clear();detail=selected;}
+            var surface=SURFACES.computeIfAbsent(shape,k->CoolingTowerBasin.surface(k,selected));
             int tint=display.waterArgb();
             int light=LevelRenderer.getLightColor(mc.level,BlockPos.containing(origin.getX()+shape.sizeX()/2.0,origin.getY()+height+.1,origin.getZ()+shape.sizeZ()/2.0));
             pose.pushPose();pose.translate(origin.getX()-camera.x,origin.getY()+height-camera.y,origin.getZ()-camera.z);

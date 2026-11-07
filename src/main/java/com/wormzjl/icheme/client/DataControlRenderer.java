@@ -29,6 +29,7 @@ public final class DataControlRenderer {
     private static final RenderType JACKET=RenderType.entityCutoutNoCull(net.minecraft.world.inventory.InventoryMenu.BLOCK_ATLAS);
     private record PortMesh(List<Mesh.Polygon> polygons,net.minecraft.core.Direction outward){}
     private static final Map<DataPort,PortMesh> PORTS=new HashMap<>();
+    private static RenderDetail detail = RenderDetail.NORMAL;
     private record RackCable(RackGeometry.Rack rack,RackGeometry.Lane lane,ConduitGeometry.Key geometry,boolean marked){}
     private static final Map<RackCable,List<Mesh.Polygon>> CABLES=new HashMap<>();
     private DataControlRenderer(){}
@@ -59,6 +60,8 @@ public final class DataControlRenderer {
     }
     @SubscribeEvent public static void render(RenderLevelStageEvent event){
         if(event.getStage()!=RenderLevelStageEvent.Stage.AFTER_PARTICLES)return;var mc=Minecraft.getInstance();if(mc.level==null||mc.player==null)return;
+        var selected=com.wormzjl.icheme.client.model.EquipmentShellModel.detail();
+        if(selected!=detail){PORTS.clear();detail=selected;}
         var pose=event.getPoseStack();var camera=event.getCamera().getPosition();var buffers=mc.renderBuffers().bufferSource();
         if(PORTS.size()>2048)PORTS.clear();
         if(CABLES.size()>2048)CABLES.clear();
@@ -68,7 +71,7 @@ public final class DataControlRenderer {
                     box=true;var socket=shell.shape()==null?null:p.kind().power()?DataSocketGeometry.power(shell.shape()):DataSocketGeometry.equipment(shell.shape());
                     if(socket!=null){var centre=new Vec3(shell.origin().getX()+socket.x(),shell.origin().getY()+socket.y(),shell.origin().getZ()+socket.z());if(centre.distanceToSqr(p.centre())<1e-12)box=socket.junctionBox();}
                 }
-                return new PortMesh(p.kind().power()?PowerPortGeometry.polygons(new double[]{0,0,0},new double[]{out.getStepX(),out.getStepY(),out.getStepZ()},box):DataPortGeometry.polygons(new double[]{0,0,0},new double[]{out.getStepX(),out.getStepY(),out.getStepZ()},box),out);});
+                return new PortMesh(p.kind().power()?PowerPortGeometry.polygons(new double[]{0,0,0},new double[]{out.getStepX(),out.getStepY(),out.getStepZ()},box,detail):DataPortGeometry.polygons(new double[]{0,0,0},new double[]{out.getStepX(),out.getStepY(),out.getStepZ()},box,detail),out);});
             draw(pose,buffers,camera,port.centre(),mesh.polygons(),0,255);
             if(connected(mc.level,port))drawLead(pose,buffers,camera,port,false);
             if(CableLayingClient.holding(mc.player)&&port.kind().medium()==CableLayingClient.medium())LevelRenderer.renderLineBox(pose,buffers.getBuffer(RenderType.lines()),new AABB(port.centre(),port.centre()).inflate(.14).move(camera.scale(-1)),1,.8f,.22f,1);
@@ -98,7 +101,7 @@ public final class DataControlRenderer {
     public static void draw(PoseStack pose,MultiBufferSource buffers,Vec3 camera,Vec3 origin,List<Mesh.Polygon> polygons,int tint,int alpha){
         var consumer=buffers.getBuffer(alpha==255?SOLID:GHOST);var shift=origin.subtract(camera);pose.pushPose();pose.translate(shift.x,shift.y,shift.z);
         int light=alpha==255?LevelRenderer.getLightColor(Minecraft.getInstance().level,BlockPos.containing(origin)):LightTexture.FULL_BRIGHT;
-        for(var q:polygons){int colour=tint!=0?tint:switch(q.material()){case OPENING->0x17282d;case GUARD->CableMedium.DATA.colour();case ACTUATOR->CableMedium.POWER.colour();case FLANGE->0x747a7d;default->0xa0a6a8;};var p=q.positions();var n=q.normals();
+        for(var q:polygons){int colour=tint!=0?tint:switch(q.material()){case OPENING->0x17282d;case GUARD->CableMedium.DATA.colour();case ACTUATOR->CableMedium.POWER.colour();case FLANGE->0x747a7d;case BOLT,BOLT_FACE->0x555b60;default->0xa0a6a8;};var p=q.positions();var n=q.normals();
             for(int first=1;first+1<q.size();first+=2)for(int corner:new int[]{0,first,first+1,Math.min(first+2,q.size()-1)})consumer.addVertex(pose.last(),(float)p[corner*3],(float)p[corner*3+1],(float)p[corner*3+2]).setColor(colour>>16&255,colour>>8&255,colour&255,alpha).setUv(0,0).setOverlay(OverlayTexture.NO_OVERLAY).setLight(light).setNormal(pose.last(),(float)n[corner*3],(float)n[corner*3+1],(float)n[corner*3+2]);
         }pose.popPose();
     }
