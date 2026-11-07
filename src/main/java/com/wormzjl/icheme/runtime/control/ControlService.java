@@ -222,7 +222,7 @@ public final class ControlService {
         root.putInt("controllerPages",Math.max(1,(visible.size()+31)/32));root.putInt("controllerPage",Math.clamp(menu.controllerPage(),0,Math.max(0,(visible.size()-1)/32)));
         for(var p:page(visible,menu.controllerPage(),32)){
             var row=p.save();row.putString("status",status.getOrDefault(p.id(),"WAITING"));row.putString("controllerId","LC-"+p.id().toString().substring(0,8).toUpperCase(Locale.ROOT));
-            var hostIds=bus().hosts(p.id(),facts.ports());
+            var hostIds=bus().hosts(p.id(),facts::port);
             var inputChoices=sensors.values().stream().filter(s->hostIds.contains(s.key().host())).sorted(Comparator.comparingLong(s->facts.sensorId(s.instance()).number())).toList();
             row.putInt("inputPages",Math.max(1,(inputChoices.size()+63)/64));row.putInt("inputPage",Math.clamp(menu.devicePage(),0,Math.max(0,(inputChoices.size()-1)/64)));
             var inputRows=page(inputChoices,menu.devicePage(),64);inputChoices.stream().filter(s->s.instance().equals(p.settings().sensor())&&!inputRows.contains(s)).findFirst().ifPresent(inputRows::add);

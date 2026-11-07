@@ -15,10 +15,10 @@ class ControlSystemTest {
         var other=new DataPort(new UUID(0,800),DataPort.Kind.SENSOR,800,sensor.dimension(),new BlockPos(20,0,0),new net.minecraft.world.phys.Vec3(20.5,.5,-.1),new BlockPos(20,0,-1),Direction.SOUTH,0,0);
         facts.port(other);
         var bus=new DataBus(facts.cables(),facts.ports());
-        assertEquals(Set.of(sensor.host()),bus.hosts(controller.id(),facts.ports()));
-        assertFalse(bus.hosts(controller.id(),facts.ports()).contains(other.host()));
+        assertEquals(Set.of(sensor.host()),bus.hosts(controller.id(),facts::port));
+        assertFalse(bus.hosts(controller.id(),facts::port).contains(other.host()));
         facts.removeCable(facts.cables().iterator().next().site());
-        assertTrue(new DataBus(facts.cables(),facts.ports()).hosts(controller.id(),facts.ports()).isEmpty());
+        assertTrue(new DataBus(facts.cables(),facts.ports()).hosts(controller.id(),facts::port).isEmpty());
         assertNotNull(facts.port(sensor.id()),"Disconnected equipment and its stable IDs remain built facts");
     }
     @Test void inventoryCorrectionClosesEitherBalanceInOneInterval(){
