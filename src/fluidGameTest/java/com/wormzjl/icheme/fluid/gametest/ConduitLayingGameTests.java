@@ -105,8 +105,8 @@ public final class ConduitLayingGameTests {
     private static void exercise(GameTestHelper helper,CableMedium medium,boolean stub){
         var level=helper.getLevel();var world=FluidWorldAuthority.find(level.getServer()).orElseThrow();
         var origin=helper.absolutePos(new BlockPos(8,2,8));var shape=EquipmentShape.unit(EquipmentShape.Kind.MOTOR,1000,1,EquipmentShape.Heading.NORTH,0);
-        for(var c:ShapeRasterizer.layout(shape).shell())level.setBlock(origin.offset(c.x(),c.y(),c.z()),Blocks.AIR.defaultBlockState(),3);
-        for(var c:ShapeRasterizer.layout(shape).interior())level.setBlock(origin.offset(c.x(),c.y(),c.z()),Blocks.AIR.defaultBlockState(),3);
+        for(var c:ShapeRasterizer.layout(shape).shell())EquipmentTestCleanup.remove(level,origin.offset(c.x(),c.y(),c.z()));
+        for(var c:ShapeRasterizer.layout(shape).interior())EquipmentTestCleanup.remove(level,origin.offset(c.x(),c.y(),c.z()));
         EquipmentStructure.place(level,origin,shape,Paint.DEFAULT,shape.sizeY());
         var socket=medium==CableMedium.POWER?DataSocketGeometry.power(shape):DataSocketGeometry.equipment(shape);
         var normal=Direction.values()[socket.face()];var centre=new Vec3(origin.getX()+socket.x(),origin.getY()+socket.y(),origin.getZ()+socket.z());
@@ -158,7 +158,7 @@ public final class ConduitLayingGameTests {
                     helper.assertTrue(world.shafts().view(unit.id()).electricPower()==0,"A disconnected drive still reports electric draw");
                     helper.assertTrue(!com.wormzjl.icheme.runtime.power.PowerNetwork.of(level.getServer()).supplied(unit),"The broken circuit still reports a live source");
                     helper.assertTrue(energy.getEnergyStored()==retained[0],"Unplugging the unloaded motor discarded buffered energy");
-                    for(var p:placed)level.removeBlock(p,false);level.removeBlock(station,false);level.removeBlock(new EquipmentStructure.Vessel(origin,shape).controller(),false);
+                    for(var p:placed)level.removeBlock(p,false);level.removeBlock(station,false);EquipmentTestCleanup.remove(level,new EquipmentStructure.Vessel(origin,shape).controller());
                     return;
                 }
                 helper.assertTrue(energy.getEnergyStored()==energy.getMaxEnergyStored()&&world.shafts().view(unit.id()).speed()>0,"Waiting for the connected unloaded motor to run with a full buffer");
@@ -168,7 +168,7 @@ public final class ConduitLayingGameTests {
             var removed=placed.get(placed.size()/2);level.destroyBlock(removed,false);
             helper.assertTrue(!new DataBus(world.controls().facts().cables(),world.controls().facts().ports(),medium).connected(selected[0].id(),selected[1].id()),"Breaking the line did not disconnect it");
             if(medium==CableMedium.POWER){broken[0]=true;breakTick[0]=level.getGameTime();helper.assertTrue(false,"Waiting for power loss to stop the motor");}
-            for(var p:placed)level.removeBlock(p,false);level.removeBlock(station,false);level.removeBlock(new EquipmentStructure.Vessel(origin,shape).controller(),false);
+            for(var p:placed)level.removeBlock(p,false);level.removeBlock(station,false);EquipmentTestCleanup.remove(level,new EquipmentStructure.Vessel(origin,shape).controller());
         });
     }
 }

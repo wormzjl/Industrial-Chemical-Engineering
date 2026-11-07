@@ -123,6 +123,23 @@ public final class ConstructorColumn {
         }
     }
 
+    /** The physical removal target; null means no structure crosses the placement line. */
+    public record Removal(@Nullable String target, String position, int cells, boolean waiting, @Nullable String message, boolean warn) {
+        public Removal(String target, String position, int cells, boolean waiting) { this(target, position, cells, waiting, null, false); }
+    }
+
+    public static Page withRemoval(Page page, Removal target, HeatControlColumn.Texts t) {
+        var rows = new ArrayList<>(page.rows());
+        var removal = new ArrayList<Column.Row>();
+        removal.add(new Column.Paragraph(target.target() == null ? t.get(KEY + "deconstruct.none") : target.target(), Palette.TEXT));
+        if (target.target() != null) removal.add(new Column.Paragraph(t.get(KEY + "deconstruct.target", target.position(), target.cells()), Palette.MUTED));
+        removal.add(new Column.Buttons(List.of(new Column.Button("deconstruct", t.get(KEY + "deconstruct"),
+                target.target() != null && !target.waiting(), t.get(KEY + "deconstruct.hint")))));
+        if (target.message() != null) removal.add(new Column.Paragraph(target.message(), target.warn() ? Palette.WARN : Palette.ACCENT));
+        rows.add(new Column.Group(t.get(KEY + "group.deconstruct"), t.get(KEY + "deconstruct.hint"), removal));
+        return new Page(rows, page.footer(), page.display());
+    }
+
     /** A selector's position: latched where it stands, else a key that moves it there. */
     private static Column.Button position(String key, String text, boolean current, @Nullable String hint) {
         return new Column.Button(key, text, !current, hint, current);

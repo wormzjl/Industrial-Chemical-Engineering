@@ -47,6 +47,22 @@ class ConstructorColumnTest {
             assertEquals(subtype==type,button.latched());
         }
     }
+    @Test void deconstructionNamesItsPhysicalTargetAndDisablesMissingOrPendingTargets() {
+        var t = new HeatControlColumnTest.Recording("gui.icheme.");
+        var page = ConstructorColumn.design(design(Form.VERTICAL, 2, 4, 2, 1, 0, 0), t);
+        for (var target : List.of(new ConstructorColumn.Removal(null, "", 0, false),
+                new ConstructorColumn.Removal("V-101 · Drum", "4, 64, 8", 382, false),
+                new ConstructorColumn.Removal("V-101 · Drum", "4, 64, 8", 382, true))) {
+            var shown = ConstructorColumn.withRemoval(page, target, t);
+            var button = ConstructorColumn.buttons(shown.rows()).stream().filter(b -> b.key().equals("deconstruct")).findFirst().orElseThrow();
+            assertEquals(target.target() != null && !target.waiting(), button.active());
+            for (int width : new int[]{ConstructorColumn.WIDTH, ConstructorColumn.WIDTH - BAR}) {
+                var placed = Column.place(shown.rows(), 0, 0, width, M, Column.Metrics.COMPACT);
+                assertTrue(placed.bounds().w() <= width);
+            }
+        }
+    }
+
     /** The door's height in the renders (464 by 254 GUI px), and the room the view's bar takes where a column scrolls. */
     private static final int HEIGHT = 254, BAR = ScrollView.BAR + 4;
     private static final List<String> STANDING = List.of("front", "right", "back", "left"), LYING = List.of("front", "top", "back", "bottom");
@@ -128,6 +144,12 @@ class ConstructorColumnTest {
         out.add(new Case("no templates, files unreadable", ConstructorColumn.templates(List.of(), 3, t)));
         out.add(new Case("imports", ConstructorColumn.imports(imports(t), t)));
         out.add(new Case("no imports", ConstructorColumn.imports(List.of(), t)));
+        var removal = new ConstructorColumn.Removal("V-101 · Vertical drum", "12, 64, -8", 382, false);
+        out.add(new Case("deconstruction on design", ConstructorColumn.withRemoval(ConstructorColumn.design(design(Form.VERTICAL, 2, 4, 2, 1, 0, 0), t), removal, t)));
+        out.add(new Case("deconstruction on choice", ConstructorColumn.withRemoval(ConstructorColumn.choose(Category.VESSELS, Equipment.COLUMN, 16, t), removal, t)));
+        var distant = new ConstructorColumn.Removal("V-101 · Very long equipment name at the world border", "-29999980, -64, 29999980", 1000000, false,
+                "You do not have permission to deconstruct every cell of this equipment.", true);
+        out.add(new Case("deconstruction at world border with error", ConstructorColumn.withRemoval(ConstructorColumn.choose(Category.VESSELS, Equipment.COLUMN, 16, t), distant, t)));
         return out;
     }
 

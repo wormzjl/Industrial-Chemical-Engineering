@@ -56,13 +56,13 @@ public final class ModBlocks {
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.EquipmentShellBlock> EQUIPMENT_SHELL = BLOCKS.registerBlock(
             "equipment_shell",
             com.wormzjl.icheme.world.level.block.EquipmentShellBlock::new,
-            BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(3.5F).sound(SoundType.METAL)
+            BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(-1.0F, 3600000.0F).sound(SoundType.METAL)
                     .pushReaction(net.minecraft.world.level.material.PushReaction.BLOCK).noOcclusion().dynamicShape().noLootTable()
     );
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.EquipmentInteriorBlock> EQUIPMENT_INTERIOR = BLOCKS.registerBlock(
             "equipment_interior",
             com.wormzjl.icheme.world.level.block.EquipmentInteriorBlock::new,
-            BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(3.5F).sound(SoundType.METAL)
+            BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(-1.0F, 3600000.0F).sound(SoundType.METAL)
                     .pushReaction(net.minecraft.world.level.material.PushReaction.BLOCK).noLootTable()
                     // An open tank's cells collide up to its floating roof, which moves (FloatingRoofs); nothing spawns on it.
                     // A dynamic shape leaves the state unsolid, which lets fluids wash it away: forced solid.

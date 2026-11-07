@@ -5,7 +5,11 @@ gradle.projectsEvaluated {
     if (!(selected ==~ /[A-Za-z0-9_#,.]+/)) throw new GradleException('Invalid focused GameTest selection')
     p.sourceSets.fluidGameTest.java.srcDir(p.file('tools/simulator-sizing/focused-gametests'))
     p.sourceSets.fluidGameTest.resources.srcDir(p.file('tools/simulator-sizing/focused-resources'))
+    def output = p.providers.gradleProperty('fluidFocusedOut').getOrElse('tmp/merge-prep/focused-world')
+    def resolved = p.file(output).toPath().toAbsolutePath().normalize()
+    if (!resolved.startsWith(p.file('tmp').toPath().toAbsolutePath().normalize())) throw new GradleException('Focused world must be under this worktree tmp/')
     p.extensions.getByName('neoForge').runs.named('fluidGameTestServer') {
+        gameDirectory = p.layout.projectDirectory.dir(output)
         systemProperty 'neoforge.enabledGameTestNamespaces', 'icheme_fluid_focus'
         systemProperty 'icheme.fluid.focus', selected
     }

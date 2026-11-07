@@ -761,7 +761,9 @@ public final class GuiPrototypes {
         templates.add(new ConstructorColumn.Template("Two-tray pot", false, DIALOG.get(CONSTRUCTOR + "template.unusable", "Two-tray pot", "a column needs a tray")));
         templates.add(new ConstructorColumn.Template("My vacuum column", true, DIALOG.get(CONSTRUCTOR + "template.own", "My vacuum column")));
         var templatePage = ConstructorColumn.templates(templates, 0, DIALOG);
+        var removal = ConstructorColumn.withRemoval(drum, new ConstructorColumn.Removal("V-101 · Vertical drum", "12, 64, -8", 382, false), DIALOG);
         return List.of(
+                new Prototype("equipment-constructor-removal", 464, 254, (d, theme) -> constructorDoor(d, removal, "Vertical drum", "change", volume, Palette.ACCENT, Map.of()), true),
                 new Prototype("equipment-constructor-column-design", 464, 254, (d, s) -> {
                     constructorDoor(d, columnDesign, "Distillation column", "change", DIALOG.get(CONSTRUCTOR + "volume", "1696.5", "792.7"), Palette.ACCENT, Map.of());
                     columnDrawing(d, d.well(new Rect(d.w - 16 - 140, 16, 152, d.h - 32)));

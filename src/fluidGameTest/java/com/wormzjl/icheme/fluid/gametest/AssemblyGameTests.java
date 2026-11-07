@@ -377,7 +377,7 @@ public final class AssemblyGameTests {
         /** Removes every pipe, tank and structure the plant placed. */
         void remove() {
             for (var at : devices) level.removeBlock(at, false);
-            for (var vessel : structures) level.removeBlock(vessel.controller(), false);
+            for (var vessel : structures) EquipmentTestCleanup.remove(level, vessel.controller());
         }
 
         /** Releases the chunks the plant held loaded. */

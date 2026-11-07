@@ -48,7 +48,7 @@ import java.util.Optional;
  * 2026-11-03-rotating-machinery).
  */
 public final class EquipmentNetwork {
-    public static final String PROTOCOL = "equipment-20";
+    public static final String PROTOCOL = "equipment-21";
     /** A player edits or builds only within this distance of the constructor, blocks. */
     private static final double REACH = 8;
     /** A process simulator's designs are imported from within this many blocks of the constructor. */
@@ -193,6 +193,22 @@ public final class EquipmentNetwork {
         }
     }
 
+    public record Deconstruct(BlockPos position, BlockPos origin, int shape, long request) implements CustomPacketPayload {
+        public static final Type<Deconstruct> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID, "equipment_deconstruct"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, Deconstruct> STREAM_CODEC = StreamCodec.composite(
+                BlockPos.STREAM_CODEC, Deconstruct::position, BlockPos.STREAM_CODEC, Deconstruct::origin,
+                ByteBufCodecs.INT, Deconstruct::shape, ByteBufCodecs.VAR_LONG, Deconstruct::request, Deconstruct::new);
+        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
+    }
+
+    public record DeconstructAnswer(BlockPos position, long request, boolean done, Component message) implements CustomPacketPayload {
+        public static final Type<DeconstructAnswer> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID, "equipment_deconstruct_answer"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, DeconstructAnswer> STREAM_CODEC = StreamCodec.composite(
+                BlockPos.STREAM_CODEC, DeconstructAnswer::position, ByteBufCodecs.VAR_LONG, DeconstructAnswer::request,
+                ByteBufCodecs.BOOL, DeconstructAnswer::done, ComponentSerialization.TRUSTED_STREAM_CODEC, DeconstructAnswer::message, DeconstructAnswer::new);
+        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
+    }
+
     /**
      * Client to server: a column template for a constructor (owner request 2026-10-28), sent after the screen's draft
      * ({@link Action#KEEP}): its name as shown, and its input, the calculator's default input with the template's column
@@ -297,6 +313,9 @@ public final class EquipmentNetwork {
         registrar.playToServer(ImportList.TYPE, ImportList.STREAM_CODEC, EquipmentNetwork::importList);
         registrar.playToServer(ImportChoice.TYPE, ImportChoice.STREAM_CODEC, EquipmentNetwork::importChoice);
         registrar.playToServer(Rename.TYPE, Rename.STREAM_CODEC, EquipmentNetwork::rename);
+        registrar.playToServer(Deconstruct.TYPE, Deconstruct.STREAM_CODEC, EquipmentNetwork::deconstruct);
+        registrar.playToClient(DeconstructAnswer.TYPE, DeconstructAnswer.STREAM_CODEC, (reply, context) ->
+                com.wormzjl.icheme.client.gui.screens.EquipmentConstructorScreen.deconstructed(reply));
         registrar.playToClient(ImportListAnswer.TYPE, ImportListAnswer.STREAM_CODEC, (answer, context) -> com.wormzjl.icheme.client.gui.screens.EquipmentConstructorScreen.listed(
                 answer.position(), answer.message(), answer.listed()));
         registrar.playToClient(ImportAnswer.TYPE, ImportAnswer.STREAM_CODEC, (answer, context) -> com.wormzjl.icheme.client.gui.screens.EquipmentConstructorScreen.answered(
@@ -317,6 +336,25 @@ public final class EquipmentNetwork {
             return null;
         return constructor;
     }
+
+    private static void deconstruct(Deconstruct request, IPayloadContext context) {
+        if (!(context.player() instanceof ServerPlayer player)) return;
+        Component message;
+        boolean done = false;
+        var constructor = editable(player, request.position());
+        if (constructor == null) message = Component.translatable("message.icheme.equipment.deconstruct.not_editable");
+        else try {
+            int cells = com.wormzjl.icheme.world.level.block.EquipmentDeconstruction.remove(player, constructor, request.origin(), request.shape());
+            message = Component.translatable("message.icheme.equipment.deconstruct.done", request.origin().toShortString(), cells);
+            done = true;
+        } catch (IllegalStateException refused) {
+            String reason = java.util.Set.of("not_editable", "changed", "unloaded", "protected").contains(refused.getMessage()) ? refused.getMessage() : "changed";
+            message = Component.translatable("message.icheme.equipment.deconstruct." + reason);
+        }
+        PacketDistributor.sendToPlayer(player, new DeconstructAnswer(request.position(), request.request(), done, message));
+    }
+
+    public static void sendDeconstruct(Deconstruct request) { PacketDistributor.sendToServer(request); }
 
     /** Applies the screen's design, then keeps it or builds it. */
     private static void constructor(ConstructorPayload payload, IPayloadContext context) {

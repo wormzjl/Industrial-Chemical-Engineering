@@ -146,6 +146,14 @@ public final class EquipmentConstructorScreen extends Screen {
     private ColumnTemplates.Library templates = new ColumnTemplates.Library(List.of(), 0);
     /** The designs the Import page lists, as the server last answered. */
     private List<SentDesign> imports = List.of();
+    private static long nextDeconstructionRequest;
+    private long deconstructionRequest;
+    private boolean deconstructing;
+    private int targetAge;
+    private @Nullable com.wormzjl.icheme.world.level.block.EquipmentStructure.Vessel removalTarget;
+    private @Nullable Component deconstructionMessage;
+    private boolean deconstructionFailed;
+
     private boolean sent;
 
     public EquipmentConstructorScreen(BlockPos position, Direction facing, Design design) {
@@ -271,7 +279,7 @@ public final class EquipmentConstructorScreen extends Screen {
 
     /** The page's rows, footer and message display as the builder makes them from the draft. */
     private ConstructorColumn.Page panel() {
-        return switch (page) {
+        var panel = switch (page) {
             case CHOOSE -> ConstructorColumn.choose(category != null ? category : Equipment.of(form).category, Equipment.of(form), EquipmentNetwork.IMPORT_REACH, EquipmentConstructorScreen::tr);
             case DESIGN -> ConstructorColumn.design(new ConstructorColumn.Design(form, diameter, tangentLength, support, forward, right, up, bank,
                     form.column() ? new ConstructorColumn.Imported(column != null ? column.diameter() : diameter, shownTrays().trays() + 2, shownTrays().feed() + 1) : null,
@@ -301,6 +309,21 @@ public final class EquipmentConstructorScreen extends Screen {
             case TEMPLATES -> ConstructorColumn.templates(templateKeys(), templates.unreadable(), EquipmentConstructorScreen::tr);
             case IMPORTS -> ConstructorColumn.imports(importKeys(), EquipmentConstructorScreen::tr);
         };
+        if (page != Page.CHOOSE && page != Page.DESIGN) return panel;
+        String target = null, at = "";
+        int cells = 0;
+        if (removalTarget != null) {
+            var shape = removalTarget.shape();
+            target = tr("vessel.title." + shape.kind().name().toLowerCase(Locale.ROOT));
+            var shell = ShapeRasterizer.layout(shape).controller();
+            if (minecraft.level.getBlockEntity(removalTarget.origin().offset(shell.x(), shell.y(), shell.z())) instanceof com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity entity && !entity.name().isEmpty())
+                target = entity.name() + " · " + target;
+            at = removalTarget.origin().toShortString();
+            var layout = ShapeRasterizer.layout(shape);
+            cells = layout.shell().size() + layout.interior().size();
+        }
+        return ConstructorColumn.withRemoval(panel, new ConstructorColumn.Removal(target, at, cells, deconstructing,
+                deconstructionMessage == null ? null : deconstructionMessage.getString(), deconstructionFailed), EquipmentConstructorScreen::tr);
     }
 
     /** The templates as their page lists them: a name cut to its key (its hover says it whole), whether it builds a column and why not. */
@@ -330,6 +353,7 @@ public final class EquipmentConstructorScreen extends Screen {
     @Override
     protected void init() {
         WindowScale.apply(minecraft, this);
+        updateRemovalTarget();
         if (paintPlayer == null && minecraft.player != null) {
             paintPlayer = minecraft.player.getUUID();
             paint = ClientConfig.equipmentPaint(paintPlayer, paint);
@@ -407,6 +431,7 @@ public final class EquipmentConstructorScreen extends Screen {
 
     /** A press on a key of the door, by its key ({@link ConstructorColumn}): a stepper's ends in - or +, a selector's names its position after a colon. */
     private void act(String key) {
+        deconstructionMessage = null;
         if (key.endsWith("-") || key.endsWith("+")) {
             step(key.substring(0, key.length() - 1), key.endsWith("+") ? 1 : -1);
             return;
@@ -428,6 +453,7 @@ public final class EquipmentConstructorScreen extends Screen {
             case "nozzles" -> show(form.column() ? Page.NOZZLES : Page.CONNECTIONS);
             case "paint" -> show(Page.PAINT);
             case "build" -> build();
+            case "deconstruct" -> deconstruct();
             case "import" -> listImports();
             case "design" -> land(Integer.parseInt(at));
             case "templates" -> {
@@ -845,6 +871,7 @@ public final class EquipmentConstructorScreen extends Screen {
         refused = null;
         support = Math.max(support, minimumSupport());
         fitConnections();
+        updateRemovalTarget();
         var shape = design().shape(facing);
         if (!shape.equals(layout.shape())) layout = ShapeRasterizer.layout(shape);
         if (build != null) build.active = buildable();
@@ -860,6 +887,38 @@ public final class EquipmentConstructorScreen extends Screen {
         return Math.max(low, Math.min(high, value));
     }
 
+    private void updateRemovalTarget() {
+        if (deconstructing) return;
+        removalTarget = minecraft == null || minecraft.level == null ? null : com.wormzjl.icheme.world.level.block.EquipmentDeconstruction.target(
+                minecraft.level, position, facing, new VesselPlacement(forward, right, up));
+    }
+
+    private void deconstruct() {
+        if (removalTarget == null || deconstructing) return;
+        // Keep the shown target: a changed world must be reviewed rather than silently removing the next unit.
+        var target = removalTarget;
+        saved = design();
+        EquipmentNetwork.send(position, saved, EquipmentNetwork.Action.KEEP);
+        deconstructionRequest = ++nextDeconstructionRequest;
+        deconstructing = true;
+        deconstructionMessage = null;
+        EquipmentNetwork.sendDeconstruct(new EquipmentNetwork.Deconstruct(position, target.origin(),
+                com.wormzjl.icheme.world.level.block.EquipmentDeconstruction.stamp(target), deconstructionRequest));
+        refresh();
+    }
+
+    public static void deconstructed(EquipmentNetwork.DeconstructAnswer answer) {
+        var client = Minecraft.getInstance();
+        if (client.screen instanceof EquipmentConstructorScreen screen && screen.position.equals(answer.position())
+                && screen.deconstructing && screen.deconstructionRequest == answer.request()) {
+            screen.deconstructing = false;
+            screen.deconstructionMessage = answer.message();
+            screen.deconstructionFailed = !answer.done();
+            screen.updateRemovalTarget();
+            screen.refresh();
+        } else if (client.player != null) client.player.displayClientMessage(answer.message(), false);
+    }
+
     private void build() {
         EquipmentNetwork.send(position, design(), EquipmentNetwork.Action.BUILD);
         sent = true;
@@ -869,6 +928,11 @@ public final class EquipmentConstructorScreen extends Screen {
     @Override
     public void tick() {
         if (constructor() == null) onClose();
+        else if (!deconstructing && ++targetAge >= 20) {
+            targetAge = 0;
+            updateRemovalTarget();
+            refresh();
+        }
     }
 
     /** Closing keeps the draft as the constructor's design (unless Build already sent it). */

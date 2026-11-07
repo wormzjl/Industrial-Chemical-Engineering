@@ -36,6 +36,7 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.shapes.BooleanOp;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
@@ -107,6 +108,11 @@ public final class EquipmentStructure {
     private EquipmentStructure() {
     }
 
+    /** All verified layout/removal writes share the same narrowly scoped authority. */
+    private static boolean setCell(Level level, BlockPos position, BlockState state, int flags) {
+        return EquipmentProtection.edit(level, position, () -> level.setBlock(position, state, flags));
+    }
+
     /** Collision and outline shape of a shell cell: its solid at 1/8 block. Both sides compute the same shape. */
     public static VoxelShape collision(ShapeRasterizer.CellKey key) {
         var shape = SHAPES.get(key);
@@ -161,13 +167,13 @@ public final class EquipmentStructure {
         for (var cell : layout.shell()) {
             if (cell.y() >= rows) continue;
             var position = origin.offset(cell.x(), cell.y(), cell.z());
-            level.setBlock(position, ModBlocks.EQUIPMENT_SHELL.get().defaultBlockState(), flags);
+            setCell(level, position, ModBlocks.EQUIPMENT_SHELL.get().defaultBlockState(), flags);
             if (level.getBlockEntity(position) instanceof EquipmentShellBlockEntity entity) entity.bind(shape, cell, paint, name);
             placed++;
         }
         for (var cell : layout.interior()) {
             if (cell.y() >= rows) continue;
-            level.setBlock(origin.offset(cell.x(), cell.y(), cell.z()), interior(shape), flags);
+            setCell(level, origin.offset(cell.x(), cell.y(), cell.z()), interior(shape), flags);
             placed++;
         }
         var vessel = new Vessel(origin, shape);
@@ -611,7 +617,7 @@ public final class EquipmentStructure {
             var at = origin.offset(cell.x(), cell.y(), cell.z());
             var held = level.getBlockState(at);
             if (held.is(ModBlocks.EQUIPMENT_INTERIOR.get()) && held != state) {
-                level.setBlock(at, state, flags);
+                setCell(level, at, state, flags);
                 changed++;
             }
         }
@@ -647,7 +653,7 @@ public final class EquipmentStructure {
                     var state = level.getBlockState(position);
                     boolean ours = state.is(ModBlocks.EQUIPMENT_INTERIOR.get())
                             || level.getBlockEntity(position) instanceof EquipmentShellBlockEntity shell && vessel.origin().equals(shell.origin());
-                    if (ours) level.setBlock(position, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE);
+                    if (ours) setCell(level, position, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE);
                 }
             reconnect(level, vessel);
         } finally {
@@ -700,8 +706,8 @@ public final class EquipmentStructure {
         int flags = Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE;
         dismantling = true;
         try {
-            for (var at : interior) level.setBlock(at, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), flags);
-            for (var at : shells) level.setBlock(at, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), flags);
+            for (var at : interior) setCell(level, at, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), flags);
+            for (var at : shells) setCell(level, at, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), flags);
         } finally {
             dismantling = false;
         }
@@ -843,7 +849,7 @@ public final class EquipmentStructure {
         try {
             for (var cell : plan.clear()) {
                 var at = placed.offset(cell.x(), cell.y(), cell.z());
-                level.setBlock(at, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), flags);
+                setCell(level, at, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), flags);
                 touched.add(at);
             }
             for (var cell : layout.shell()) {
@@ -851,7 +857,7 @@ public final class EquipmentStructure {
                 var at = placed.offset(cell.x(), cell.y(), cell.z());
                 var cellPaint = paint;
                 if (placeShell.contains(cell)) {
-                    level.setBlock(at, ModBlocks.EQUIPMENT_SHELL.get().defaultBlockState(), flags);
+                    setCell(level, at, ModBlocks.EQUIPMENT_SHELL.get().defaultBlockState(), flags);
                     touched.add(at);
                 }
                 if (level.getBlockEntity(at) instanceof EquipmentShellBlockEntity entity) {
@@ -864,7 +870,7 @@ public final class EquipmentStructure {
                     }
                 }
             }
-            for (var cell : plan.interior()) level.setBlock(placed.offset(cell.x(), cell.y(), cell.z()), interior(shape), flags);
+            for (var cell : plan.interior()) setCell(level, placed.offset(cell.x(), cell.y(), cell.z()), interior(shape), flags);
             // The interior cells it kept take the current state too (restate); a blocked cell is another owner's.
             restateCells(level, placed, shape, blocked, flags);
             // Cells left out where other blocks stand: the cells written keep no stamp, so the next load tries again.

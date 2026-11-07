@@ -116,11 +116,28 @@ public final class EquipmentInteriorBlock extends Block {
         return EquipmentShellBlock.useDebugger(stack, level, position, player);
     }
 
+    @Override
+    public boolean onDestroyedByPlayer(BlockState state, Level level, BlockPos position, Player player, boolean harvest,
+                                       net.minecraft.world.level.material.FluidState fluid) {
+        return EquipmentProtection.playerRemoval(level, position, player,
+                () -> super.onDestroyedByPlayer(state, level, position, player, harvest, fluid));
+    }
+
+    @Override
+    public boolean canEntityDestroy(BlockState state, BlockGetter level, BlockPos position, net.minecraft.world.entity.Entity entity) {
+        return false;
+    }
+
+    @Override
+    public void onBlockExploded(BlockState state, Level level, BlockPos position, net.minecraft.world.level.Explosion explosion) {
+        // Explosions never authorise deconstruction, even when a custom blast ignores resistance.
+    }
+
     @Override public BlockState playerWillDestroy(Level level,BlockPos pos,BlockState state,Player player){EquipmentStructure.breaking(level,pos,player);return super.playerWillDestroy(level,pos,state,player);}
 
     @Override
     protected void onRemove(BlockState state, Level level, BlockPos position, BlockState replacement, boolean moved) {
-        if (!level.isClientSide() && !state.is(replacement.getBlock())) {
+        if (!level.isClientSide() && !state.is(replacement.getBlock()) && EquipmentProtection.editing(level, position)) {
             var vessel = EquipmentStructure.find(level, position);
             if (vessel != null) EquipmentStructure.dismantle(level, vessel);
         }

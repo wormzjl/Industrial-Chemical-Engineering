@@ -58,6 +58,13 @@ class EquipmentNetworkCodecTest {
         }
     }
 
+    @Test void deconstructionRequestsRoundTrip() {
+        assertEquals("equipment-21", EquipmentNetwork.PROTOCOL);
+        var request = new EquipmentNetwork.Deconstruct(AT, AT.north(5), 12345, 99);
+        assertEquals(request, roundTrip(EquipmentNetwork.Deconstruct.STREAM_CODEC, request));
+
+    }
+
     @Test
     void exchangerSubTypeCrossesWithTheConstructorDraftAndImportedShape() {
         var type=com.wormzjl.icheme.science.equipment.ExchangerType.CROSSFLOW;

@@ -305,7 +305,7 @@ public final class PipeLayingGameTests {
             double beside = EquipmentShellBlockEntity.largestBoreBeside(level, cell.relative(face), PhysicalFluidTopology.ALL_FACES);
             helper.assertTrue(Math.abs(beside - largest) < 1e-9, "A pipe in front of the reflux takes " + beside + " m");
         } finally {
-            level.removeBlock(vessel.controller(), false);
+            EquipmentTestCleanup.remove(level, vessel.controller());
         }
         helper.runAfterDelay(2, () -> {
             var world = FluidWorldAuthority.find(level.getServer()).orElseThrow();

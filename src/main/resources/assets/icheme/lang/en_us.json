@@ -2,7 +2,6 @@
   "tooltip.icheme.liquid_level_gauge.remove": "Shift + right-click with the accessory wrench to recover.",
   "item.icheme.liquid_level_gauge": "Liquid Level Gauge",
   "tooltip.icheme.liquid_level_gauge": "Right-click the highlighted mount on a floating-roof tank.",
-
   "gui.icheme.fluid.state_on": "On",
   "gui.icheme.fluid.state_off": "Off",
   "gui.icheme.fluid.fans_state": "Fans",
@@ -2922,5 +2921,15 @@
   "gui.icheme.power.no_route": "No clear power route. Select an FE port, power conduit end or free cell.",
   "gui.icheme.power.started": "Power start selected. Select the other end.",
   "gui.icheme.power.laid": "Power conduit laid",
-  "message.icheme.conduit.items": "Needs %s %s items"
+  "message.icheme.conduit.items": "Needs %s %s items",
+  "gui.icheme.equipment_constructor.group.deconstruct": "Deconstruction",
+  "gui.icheme.equipment_constructor.deconstruct": "Deconstruct",
+  "gui.icheme.equipment_constructor.deconstruct.none": "No equipment in front",
+  "gui.icheme.equipment_constructor.deconstruct.target": "%s · %s cells",
+  "gui.icheme.equipment_constructor.deconstruct.hint": "Remove the whole equipment shown above. Uses the placement line, up to 16 blocks ahead. Connected pipes stay; installed accessories are recovered in Survival. Contents leave with the equipment.",
+  "message.icheme.equipment.deconstruct.done": "Deconstructed equipment at %s (%s cells).",
+  "message.icheme.equipment.deconstruct.changed": "The equipment in front changed. Check the target and try again.",
+  "message.icheme.equipment.deconstruct.unloaded": "Load every chunk of the equipment before deconstructing it.",
+  "message.icheme.equipment.deconstruct.protected": "You do not have permission to deconstruct every cell of this equipment.",
+  "message.icheme.equipment.deconstruct.not_editable": "You cannot use this constructor here."
 }
