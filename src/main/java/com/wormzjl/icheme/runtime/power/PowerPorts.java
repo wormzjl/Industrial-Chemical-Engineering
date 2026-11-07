@@ -10,7 +10,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.capabilities.Capabilities;
 import java.nio.charset.StandardCharsets;
-import java.util.UUID;
+import java.util.*;
 
 /** Physical FE terminals, independent of process readings and sensor identities. */
 public final class PowerPorts {
@@ -41,6 +41,18 @@ public final class PowerPorts {
     public static DataPort refresh(DataPort old,BlockEntity be,boolean wired){
         var current=create(be);if(current==null)return old;
         return DataPorts.remount(old,current,wired);
+    }
+    /** Six centred supply faces derived from the saved primary identity; its original socket and wires are retained. */
+    public static List<DataPort> omnidirectional(DataPort primary){
+        if(primary.kind()!=DataPort.Kind.POWER_OUTPUT)throw new IllegalArgumentException("Not a supply socket");
+        var result=new ArrayList<DataPort>(6);
+        for(var face:Direction.values()){
+            if(face==primary.face().getOpposite()){result.add(primary);continue;}
+            var id=UUID.nameUUIDFromBytes((primary.id()+":power:"+face.getName()).getBytes(StandardCharsets.UTF_8));
+            result.add(new DataPort(id,DataPort.Kind.POWER_OUTPUT,0,primary.dimension(),primary.owner(),
+                    primary.owner().getCenter().add(Vec3.atLowerCornerOf(face.getNormal()).scale(.52)),primary.owner().relative(face),face.getOpposite(),0,0));
+        }
+        return List.copyOf(result);
     }
     /** An ordinary FE-capable block face is also a legal endpoint; previews never create saved ports. */
     public static DataPort external(Level level,BlockPos owner,Direction face){

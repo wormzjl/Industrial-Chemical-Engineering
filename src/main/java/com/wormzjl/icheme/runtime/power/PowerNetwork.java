@@ -40,20 +40,20 @@ public final class PowerNetwork {
     private void refresh(){
         owned();var world=FluidWorldAuthority.find(server).orElse(null);if(world==null)return;
         var facts=world.controls().facts();
-        var physical=new HashMap<Host,DataPort>();
+        var physical=new HashMap<Host,List<DataPort>>();
         if(!pending.isEmpty())for(var p:facts.ports().values())if(p.kind()==DataPort.Kind.POWER_INPUT||p.kind()==DataPort.Kind.POWER_OUTPUT)
-            physical.put(new Host(ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION,ResourceLocation.parse(p.dimension())),p.owner()),p);
+            physical.computeIfAbsent(new Host(ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION,ResourceLocation.parse(p.dimension())),p.owner()),key->new ArrayList<>()).add(p);
         for(var host:List.copyOf(pending)){
             pending.remove(host);var level=server.getLevel(host.dimension());if(level==null||!level.hasChunkAt(host.pos()))continue;
             var be=level.getBlockEntity(host.pos());if(!(be instanceof Instrument.Holder holder))continue;
             if(!PowerPorts.eligible(be)){if(holder.instruments().powerPort()!=null){holder.instruments().powerPort(null);publish(be);}continue;}
-            var port=physical.get(host);
-            if(port==null){port=PowerPorts.create(be);if(port==null)continue;facts.port(port);}
-            else{
-                var identity=port.id();boolean wired=facts.wired(identity);
-                var changed=PowerPorts.refresh(port,be,wired);if(!changed.equals(port)){port=changed;facts.port(port);}
-            }
+            var registered=physical.getOrDefault(host,List.of());var cached=holder.instruments().powerPort();
+            var port=cached==null?null:registered.stream().filter(p->p.id().equals(cached.id())).findFirst().orElse(null);
+            var mount=PowerPorts.create(be);if(mount==null)continue;
+            if(port==null)port=registered.stream().filter(p->p.face()==mount.face()).findFirst().orElse(registered.isEmpty()?mount:registered.getFirst());
+            port=DataPorts.remount(port,mount,facts.wired(port.id()));facts.port(port);
             if(!port.equals(holder.instruments().powerPort())){holder.instruments().powerPort(port);publish(be);}
+            for(var socket:holder.powerPorts())facts.port(socket);
         }
         if(revision!=facts.topologyRevision()){
             ports=facts.ports();bus=new DataBus(facts.cables(),ports,CableMedium.POWER);grid=new PowerGrid(bus,ports,this::energy);revision=facts.topologyRevision();

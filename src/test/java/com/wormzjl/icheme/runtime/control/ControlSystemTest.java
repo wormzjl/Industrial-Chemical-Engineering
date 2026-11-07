@@ -79,6 +79,16 @@ class ControlSystemTest {
             assertEquals(old,DataPorts.remount(old,otherSide,true),"A connected terminal stays on its built side until rewired");
         }
     }
+    @Test void omnidirectionalSupplyRetainsThePrimarySocketAndSavedFaceIdentities(){
+        var primary=new DataPort(new UUID(0,600),DataPort.Kind.POWER_OUTPUT,0,"minecraft:overworld",BlockPos.ZERO,new net.minecraft.world.phys.Vec3(1.02,.5,.5),new BlockPos(1,0,0),Direction.WEST,0,0);
+        var faces=com.wormzjl.icheme.runtime.power.PowerPorts.omnidirectional(primary);
+        assertEquals(6,faces.size());assertEquals(6,faces.stream().map(DataPort::id).distinct().count());
+        assertEquals(java.util.EnumSet.allOf(Direction.class),faces.stream().map(DataPort::face).collect(java.util.stream.Collectors.toSet()));
+        assertSame(primary,faces.stream().filter(p->p.id().equals(primary.id())).findFirst().orElseThrow());
+        var facts=new ControlFacts();faces.forEach(facts::port);var read=ControlFacts.load(facts.save(new CompoundTag(),null));
+        assertEquals(faces,com.wormzjl.icheme.runtime.power.PowerPorts.omnidirectional(read.port(primary.id())));
+        for(var port:faces){assertEquals(DataPort.Kind.POWER_OUTPUT,port.kind());assertEquals(0,port.u());assertEquals(0,port.v());}
+    }
 
     @Test void powerFactsRoundTripAndCannotJoinTheDataBus() throws Exception {
         var facts=ControlFacts.load(TagParser.parseTag(Files.readString(Path.of("src/test/resources/compat/control/control-3.snbt"))));

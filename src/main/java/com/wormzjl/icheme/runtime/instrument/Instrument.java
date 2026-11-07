@@ -39,6 +39,10 @@ public final class Instrument {
     /** A block entity that hosts attachments. Static metadata only; live readings use the requested instruments protocol. */
     public interface Holder {
         Metadata instruments();
+        /** Physical power sockets; most equipment has one, while a supply block can expose several faces. */
+        default List<com.wormzjl.icheme.runtime.control.DataPort> powerPorts(){
+            var port=instruments().powerPort();return port==null?List.of():List.of(port);
+        }
     }
 
     /** Shared selectable extent for instrument sockets and existing model-based pipe accessories. */

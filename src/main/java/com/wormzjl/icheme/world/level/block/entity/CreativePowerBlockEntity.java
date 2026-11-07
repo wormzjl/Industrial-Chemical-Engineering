@@ -11,7 +11,16 @@ import net.neoforged.neoforge.energy.IEnergyStorage;
 /** Unlimited extract-only FE capability, also pushing to each loaded adjacent receiver. No saved inventory. */
 public final class CreativePowerBlockEntity extends BlockEntity implements IEnergyStorage,com.wormzjl.icheme.runtime.instrument.Instrument.Holder {
     private final com.wormzjl.icheme.runtime.instrument.Instrument.Metadata instruments=new com.wormzjl.icheme.runtime.instrument.Instrument.Metadata();
+    private com.wormzjl.icheme.runtime.control.DataPort socketPrimary;
+    private java.util.List<com.wormzjl.icheme.runtime.control.DataPort> sockets=java.util.List.of();
     @Override public com.wormzjl.icheme.runtime.instrument.Instrument.Metadata instruments(){return instruments;}
+    @Override public java.util.List<com.wormzjl.icheme.runtime.control.DataPort> powerPorts(){
+        var primary=instruments.powerPort();
+        if(!java.util.Objects.equals(primary,socketPrimary)){
+            socketPrimary=primary;sockets=primary==null?java.util.List.of():com.wormzjl.icheme.runtime.power.PowerPorts.omnidirectional(primary);
+        }
+        return sockets;
+    }
     @Override public void onLoad(){super.onLoad();com.wormzjl.icheme.runtime.instrument.InstrumentHosts.loaded(this);}
     @Override public void setRemoved(){com.wormzjl.icheme.runtime.instrument.InstrumentHosts.unloaded(this);super.setRemoved();}
     @Override public void onChunkUnloaded(){com.wormzjl.icheme.runtime.instrument.InstrumentHosts.unloaded(this);super.onChunkUnloaded();}

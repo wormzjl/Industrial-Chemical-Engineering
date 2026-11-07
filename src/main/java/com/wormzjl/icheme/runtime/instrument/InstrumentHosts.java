@@ -50,7 +50,7 @@ public final class InstrumentHosts {
         var result=new ArrayList<com.wormzjl.icheme.runtime.control.DataPort>();
         for(var entry:loaded(level,true).entrySet()){
             var pos=entry.getKey();double reach=radius+entry.getValue();if(pos.getCenter().distanceToSqr(centre)>reach*reach||!level.hasChunkAt(pos))continue;
-            if(level.getBlockEntity(pos) instanceof Instrument.Holder holder){var port=holder.instruments().powerPort();if(port!=null&&port.centre().distanceToSqr(centre)<=radius*radius)result.add(port);}
+            if(level.getBlockEntity(pos) instanceof Instrument.Holder holder)for(var port:holder.powerPorts())if(port.centre().distanceToSqr(centre)<=radius*radius)result.add(port);
         }return List.copyOf(result);
     }
     public static List<Host> nearby(Level level,Vec3 centre,double radius){return nearby(level,centre,radius,false);}
