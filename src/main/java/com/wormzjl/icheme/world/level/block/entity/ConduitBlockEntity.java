@@ -1,5 +1,7 @@
 package com.wormzjl.icheme.world.level.block.entity;
 
+import com.wormzjl.icheme.world.level.block.LinePieces;
+
 import com.wormzjl.icheme.registry.ModBlockEntities;
 import com.wormzjl.icheme.runtime.control.DataBus;
 import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
@@ -14,7 +16,10 @@ import net.neoforged.neoforge.client.model.data.*;
 import java.util.*;
 
 /** Chunk model copy of cable facts. The registered control store remains authoritative across chunk unloading. */
-public final class ConduitBlockEntity extends ModelledBlockEntity {
+public final class ConduitBlockEntity extends ModelledBlockEntity implements LinePieces.Copy {
+    private List<LinePieces.Piece> pieces=List.of();
+    public List<LinePieces.Piece> linePieces(){return pieces;}
+    public void linePieces(List<LinePieces.Piece> value){if(pieces.equals(value))return;pieces=List.copyOf(value);setChanged();LinePieces.clientCopy(this,pieces);if(level!=null&&!level.isClientSide())level.sendBlockUpdated(worldPosition,getBlockState(),getBlockState(),2);}
     /** Client-thread loaded geometry index; never scans or loads world chunks for tool marks. */
     private static final Set<ConduitBlockEntity> CLIENT_CABLES=Collections.newSetFromMap(new WeakHashMap<>());
     public static List<ConduitBlockEntity> clientCables(){return List.copyOf(CLIENT_CABLES);}
@@ -41,13 +46,13 @@ public final class ConduitBlockEntity extends ModelledBlockEntity {
             level.sendBlockUpdated(worldPosition,state,state,Block.UPDATE_CLIENTS);
         }else refreshModelData();
     }
-    @Override public void onLoad(){super.onLoad();if(level!=null&&level.isClientSide())CLIENT_CABLES.add(this);if(level instanceof ServerLevel server)FluidWorldAuthority.find(server.getServer()).ifPresent(w->w.controls().loaded(this));}
+    @Override public void onLoad(){super.onLoad();LinePieces.clientCopy(this,pieces);if(level!=null&&level.isClientSide())CLIENT_CABLES.add(this);if(level instanceof ServerLevel server)FluidWorldAuthority.find(server.getServer()).ifPresent(w->w.controls().loaded(this));}
     @Override protected void clientGeometryChanged(){CLIENT_CABLES.add(this);}
-    @Override public void setRemoved(){super.setRemoved();if(level!=null&&level.isClientSide())CLIENT_CABLES.remove(this);}
-    @Override public void onChunkUnloaded(){super.onChunkUnloaded();if(level!=null&&level.isClientSide())CLIENT_CABLES.remove(this);}
-    @Override protected void saveAdditional(CompoundTag tag,HolderLookup.Provider provider){super.saveAdditional(tag,provider);tag.putString("Medium",geometry.medium().name());tag.putInt("Joints",geometry.joints());tag.putLong("Offsets",geometry.offsets());tag.put("Endpoints",DataBus.saveEndpoints(endpoints));}
+    @Override public void setRemoved(){LinePieces.unloaded(this);super.setRemoved();if(level!=null&&level.isClientSide())CLIENT_CABLES.remove(this);}
+    @Override public void onChunkUnloaded(){LinePieces.unloaded(this);super.onChunkUnloaded();if(level!=null&&level.isClientSide())CLIENT_CABLES.remove(this);}
+    @Override protected void saveAdditional(CompoundTag tag,HolderLookup.Provider provider){super.saveAdditional(tag,provider);tag.put("LinePieces",LinePieces.save(pieces));tag.putString("Medium",geometry.medium().name());tag.putInt("Joints",geometry.joints());tag.putLong("Offsets",geometry.offsets());tag.put("Endpoints",DataBus.saveEndpoints(endpoints));}
     @Override protected void loadAdditional(CompoundTag tag,HolderLookup.Provider provider){
-        super.loadAdditional(tag,provider);
+        super.loadAdditional(tag,provider);pieces=LinePieces.load(tag);LinePieces.clientCopy(this,pieces);
         try{geometry=new ConduitGeometry.Key(tag.getInt("Joints"),tag.getLong("Offsets"),((ConduitBlock)getBlockState().getBlock()).medium());}catch(IllegalArgumentException invalid){geometry=new ConduitGeometry.Key(0,0,((ConduitBlock)getBlockState().getBlock()).medium());}
         try{endpoints=DataBus.loadEndpoints(tag.getList("Endpoints",10));}catch(IllegalArgumentException invalid){endpoints=Map.of();}
     }

@@ -52,12 +52,15 @@ public final class ControlFacts extends SavedData {
     public DataPort port(UUID id){return ports.get(id);}
     public Panel panel(UUID id){return panels.get(id);}
     public long topologyRevision(){return topologyRevision;}
-    public void cable(DataBus.Cable cable){if(cable.equals(cables.put(cable.site(),cable)))return;wiredPorts=null;changed();}
-    public void removeCable(DataBus.Site site){if(cables.remove(site)!=null){wiredPorts=null;changed();}}
-    public void port(DataPort port){if(port.equals(ports.put(port.id(),port)))return;changed();}
-    public void removePort(UUID id){if(ports.remove(id)!=null)changed();}
+    private java.util.function.Consumer<DataBus.Site> lineChanges=site->{};
+    public void lineChanges(java.util.function.Consumer<DataBus.Site> listener){lineChanges=Objects.requireNonNull(listener);}
+    private void leadChanged(DataPort port){if(port!=null)lineChanges.accept(new DataBus.Site(port.dimension(),port.cell(),0));}
+    public void cable(DataBus.Cable cable){if(cable.equals(cables.put(cable.site(),cable)))return;wiredPorts=null;changed();lineChanges.accept(cable.site());}
+    public void removeCable(DataBus.Site site){if(cables.remove(site)!=null){wiredPorts=null;changed();lineChanges.accept(site);}}
+    public void port(DataPort port){var old=ports.put(port.id(),port);if(port.equals(old))return;changed();leadChanged(old);leadChanged(port);}
+    public void removePort(UUID id){var old=ports.remove(id);if(old!=null){changed();leadChanged(old);}}
     public void panel(Panel panel){var before=panels.put(panel.id(),panel);if(panel.equals(before))return;if(before==null)changed();else setDirty();}
-    public void removePanel(UUID id){if(panels.remove(id)!=null){ports.remove(id);changed();}}
+    public void removePanel(UUID id){if(panels.remove(id)!=null){removePort(id);changed();}}
     private void changed(){topologyRevision=Math.addExact(topologyRevision,1);setDirty();}
     @Override public CompoundTag save(CompoundTag tag,HolderLookup.Provider provider){
         tag.putInt("format",FORMAT);var wires=new ListTag();cables.values().stream().sorted(Comparator.comparing(c->c.site().toString())).forEach(c->wires.add(c.save()));tag.put("cables",wires);

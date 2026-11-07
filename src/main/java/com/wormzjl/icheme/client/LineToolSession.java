@@ -11,7 +11,8 @@ import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.*;
-import java.util.Objects;
+import java.util.*;
+import com.wormzjl.icheme.world.level.block.*;
 import java.util.function.Consumer;
 
 /** The sole interaction/session state machine for fluid, data and FE laying. Adapters own domain data, not workflow. */
@@ -33,10 +34,11 @@ public final class LineToolSession<C,S,P> {
     private final Adapter<C,S,P> adapter;
     private C click,hovered,lastEnd;private S selected;private P plan;
     private Object dimension;private int mode,age;private long generation,pendingGeneration;
+    private UUID ticket;
     private boolean pending,serverRefused;private Component refusal;
     LineToolSession(Adapter<C,S,P> adapter){this.adapter=Objects.requireNonNull(adapter);}
     View<C,S,P> view(){return new View<>(click,selected,hovered,plan,refusal,pending,age);}
-    private void reset(){generation++;click=null;selected=null;hovered=null;lastEnd=null;plan=null;dimension=null;refusal=null;serverRefused=false;}
+    private void reset(){pending=false;ticket=null;generation++;click=null;selected=null;hovered=null;lastEnd=null;plan=null;dimension=null;refusal=null;serverRefused=false;}
     void deactivate(){reset();adapter.show(view());}
     void disconnect(){pending=false;deactivate();}
     private void context(Context context){
@@ -50,10 +52,10 @@ public final class LineToolSession<C,S,P> {
         if(selected!=null&&!context.screen()&&age%HUD_TICKS==0){var text=refusal!=null?refusal:adapter.hud(selected,plan);if(text!=null)adapter.message(text);}
     }
     void press(Context context,boolean offHand){
-        context(context);var aim=adapter.aimed();hovered=aim;
+        context(context);if(dimension==null){dimension=context.dimension();mode=context.mode();}var aim=adapter.aimed();hovered=aim;
         if(context.shift()){
             if(selected!=null){reset();adapter.message(PipeLaying.message("cancelled"));}
-            else if(aim!=null&&adapter.removable(aim)){if(!pending)adapter.dismantle(offHand,aim);}
+            else if(aim!=null&&adapter.removable(aim)){if(!pending){begin();adapter.dismantle(offHand,aim);}}
             else adapter.settings(offHand);
             adapter.show(view());return;
         }
@@ -79,6 +81,16 @@ public final class LineToolSession<C,S,P> {
         lastEnd=aim;serverRefused=false;refusal=null;
         plan=aim==null?null:adapter.plan(selected,aim);if(plan!=null)refusal=adapter.refusal(plan);
     }
+    /** All media share request correlation, including removal and late replies after switching tools/worlds. */
+    public static void command(boolean offHand,LineLaying.Action action,LineTarget first,LineTarget last,List<BlockPos> path,List<Integer> options){
+        var mc=Minecraft.getInstance();if(active==null||mc.player==null||mc.level==null)return;
+        active.ticket=UUID.randomUUID();
+        com.wormzjl.icheme.network.LineNetwork.send(new LineLaying.Request(active.ticket,offHand,LineProfile.of(LayingToolAim.held(mc.player)),action,first,last,path,options));
+    }
+    public static void answered(UUID ticket,Component message,boolean success){
+        if(active==null||!Objects.equals(active.ticket,ticket))return;
+        active.ticket=null;active.answered(message,success);
+    }
     void answered(Component message,boolean success){
         if(!pending){if(message!=null)adapter.message(message);return;}
         pending=false;
@@ -95,7 +107,7 @@ public final class LineToolSession<C,S,P> {
     private static LineToolSession<?,?,?> activate(Minecraft mc){
         var held=LayingToolAim.held(mc.player);int mode=mode(held);
         var session=mode==0?PipeLayingClient.session():CableLayingClient.session();
-        if(active!=session||activeMode!=mode){if(active!=null)active.deactivate();active=session;activeMode=mode;}
+        if(active!=session||activeMode!=mode){if(active!=null)active.disconnect();active=session;activeMode=mode;}
         return session;
     }
     @SubscribeEvent public static void use(InputEvent.InteractionKeyMappingTriggered event){

@@ -36,25 +36,34 @@ public final class LinePlacement {
     /** Both previews search through this entry; the server checks the resulting complete plan again before writing. */
     public static PipeRoute.Result search(Level level,PipeAnchor start,PipeAnchor end,double outside,List<Lead> leads){
         if(PipeAnchor.refuses(start,end,outside)!=null||checkLeads(level,leads)!=null)return new PipeRoute.Result(List.of(),List.of(),PipeRoute.Refusal.BLOCKED);
-        return PipeRoute.search(start.end(),start.leaving(),end.end(),outside,PipeAnchor.space(level),PipeRoute.Limits.DEFAULT);
+        return PipeRoute.search(start.end(),start.leaving(),end.end(),outside,space(level,leads),PipeRoute.Limits.DEFAULT);
     }
     public static Component check(Level level,PipeAnchor start,PipeAnchor end,List<BlockPos> path,List<Integer> options,double outside){
         return check(level,plan(start,end,path,options,outside));
     }
     public static Component check(Level level,Plan plan){
-        if(plan.start()!=null){var refused=route(level,plan.start(),plan.end(),plan.path(),plan.options(),plan.outside());if(refused!=null)return refused;}
+        if(plan.start()!=null){var refused=route(level,plan.start(),plan.end(),plan.path(),plan.options(),plan.outside(),plan.leads());if(refused!=null)return refused;}
         return checkLeads(level,plan.leads(),plan.start()==null?Set.copyOf(plan.path()):Set.of());
     }
-    private static Component route(Level level,PipeAnchor start,PipeAnchor end,List<BlockPos> path,List<Integer> options,double outside){
+    private static Component route(Level level,PipeAnchor start,PipeAnchor end,List<BlockPos> path,List<Integer> options,double outside,List<Lead> leads){
         var fit=PipeAnchor.refuses(start,end,outside);if(fit!=null)return PipeLaying.refusal(fit);
         var cells=path.stream().map(PipeAnchor::cell).toList();
         var refusal=PipeRoute.check(cells,options,start.end(),end.end(),PipeRoute.Limits.DEFAULT.cells());if(refusal!=null)return PipeLaying.refusal(refusal);
-        int blocked=PipeRoute.blocked(cells,options,start.end(),start.leaving(),end.end(),outside,PipeAnchor.space(level));
+        int blocked=PipeRoute.blocked(cells,options,start.end(),start.leaving(),end.end(),outside,space(level,leads));
         return blocked<0?null:PipeLaying.message("occupied",path.get(blocked).toShortString());
     }
+    private static PipeRoute.Space space(Level level,List<Lead> leads){return reserve(PipeAnchor.space(level),leads);}
+    /** Leads occupy cells before any new block is placed; only their own entries may carry the route. */
+    public static PipeRoute.Space reserve(PipeRoute.Space world,List<Lead> leads){
+        var occupied=new HashSet<BlockPos>();for(var lead:leads)occupied.addAll(LinePieces.slices(lead).keySet());for(var lead:leads)occupied.remove(lead.entry());
+        return new PipeRoute.Space(){
+            public PipeRoute.Room room(PipeRoute.Cell cell){return occupied.contains(PipeAnchor.block(cell))?PipeRoute.Room.BLOCKED:world.room(cell);}
+            public Collection<PipeRoute.Cell> racks(PipeRoute.Cell low,PipeRoute.Cell high){return world.racks(low,high);}
+        };
+    }
     /** Swept lead envelopes include the fluid/equipment cells between a socket and its first placed cell. */
-    private static List<AABB> bounds(Lead lead){
-        var out=new ArrayList<AABB>();var points=lead.points();double radius=lead.outside()/2;
+    public static List<AABB> bounds(Lead lead){
+        var out=new ArrayList<AABB>();var points=lead.points();double radius=Math.max(3.0/32,lead.outside()/2);
         for(int i=1;i<points.size();i++)if(points.get(i-1).distanceToSqr(points.get(i))>1e-12)
             out.add(new AABB(points.get(i-1),points.get(i)).inflate(radius));
         return out;
@@ -63,10 +72,12 @@ public final class LinePlacement {
         return checkLeads(level,leads,Set.of());
     }
     private static Component checkLeads(Level level,List<Lead> leads,Set<BlockPos> retained){
+        for(int i=0;i<leads.size();i++)for(int j=0;j<i;j++)if(!leads.get(i).equals(leads.get(j)))for(var a:bounds(leads.get(i)))for(var b:bounds(leads.get(j)))if(a.deflate(1e-6).intersects(b.deflate(1e-6)))return PipeLaying.message("occupied",BlockPos.containing(a.getCenter()).toShortString());
         for(var lead:leads)for(var box:bounds(lead))for(var pos:BlockPos.betweenClosedStream(box).toList()){
             if(!level.hasChunkAt(pos)||level.isOutsideBuildHeight(pos)||!level.getWorldBorder().isWithinBounds(pos))return PipeLaying.message("anchor.outside");
             var state=level.getBlockState(pos);
             if(state.canBeReplaced())continue;
+            if(state.getBlock() instanceof LinePieceBlock&&LinePieces.at(level,pos).stream().allMatch(p->p.lead().equals(lead)))continue;
             // An attachment retains this cable block. Its connector geometry is the object being edited.
             if(pos.equals(lead.entry())&&retained.contains(pos))continue;
             // Only the owner's actual gland may overlap the first few centimetres of its own casting.
@@ -77,7 +88,8 @@ public final class LinePlacement {
             // Other occupied cells are reserved exactly as in PipeAnchor.space, including hollow equipment and rack
             // slots. An implicit lead cannot bypass a rack lane registration or cross another structure's empty skirt.
             var occupied=(own?state.getCollisionShape(level,pos):Shapes.block()).move(pos.getX(),pos.getY(),pos.getZ());
-            if(own)occupied=Shapes.join(occupied,Shapes.create(new AABB(lead.socket(),lead.socket()).inflate(.09)),BooleanOp.ONLY_FIRST);
+            if(own&&LinePieces.at(level,pos).stream().anyMatch(p->p.lead().equals(lead))){var part=LinePieces.slices(lead).get(pos);if(part!=null)occupied=Shapes.join(occupied,part.move(pos.getX(),pos.getY(),pos.getZ()),BooleanOp.ONLY_FIRST);}
+            if(own)occupied=Shapes.join(occupied,Shapes.create(new AABB(lead.socket(),lead.socket()).inflate(Math.max(.09,lead.outside()/2+.04))),BooleanOp.ONLY_FIRST);
             if(Shapes.joinIsNotEmpty(occupied,Shapes.create(box.deflate(1e-6)),BooleanOp.AND))return PipeLaying.message("occupied",pos.toShortString());
         }
         return null;
@@ -97,14 +109,14 @@ public final class LinePlacement {
         var refused=check(player.level(),plan);if(refused!=null)return refused;
         for(var pos:touched(plan))if(!editable(player,pos))return PipeLaying.message("not_allowed");
         if(!player.getAbilities().instabuild&&!take(player,material,count))return missing;
-        var work=prepare.get();boolean laying=FluidDeviceBlock.laying;FluidDeviceBlock.laying=true;
-        try{
-            for(var edit:work.edits()){
-                if(edit.state()!=null)player.level().setBlock(edit.at(),edit.state(),edit.flags());
-                edit.bind().accept(player.level().getBlockEntity(edit.at()));
-            }
-        }finally{FluidDeviceBlock.laying=laying;}
-        work.finish().run();return null;
+        apply(player.level(),prepare.get());LinePieces.flush(player.server);return null;
+    }
+    public static void apply(Level level,Work work){
+        boolean laying=FluidDeviceBlock.laying;FluidDeviceBlock.laying=true;
+        try{for(var edit:work.edits()){
+            if(edit.state()!=null)level.setBlock(edit.at(),edit.state(),edit.flags());edit.bind().accept(level.getBlockEntity(edit.at()));
+        }}finally{FluidDeviceBlock.laying=laying;}
+        work.finish().run();
     }
     public static boolean editable(ServerPlayer player,BlockPos pos){
         var level=player.serverLevel();return level.hasChunkAt(pos)&&level.getWorldBorder().isWithinBounds(pos)&&level.mayInteract(player,pos)

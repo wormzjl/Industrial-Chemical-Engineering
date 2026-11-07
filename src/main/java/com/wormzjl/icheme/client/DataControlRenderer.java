@@ -78,8 +78,9 @@ public final class DataControlRenderer {
                 }
                 return new PortMesh(p.kind().power()?PowerPortGeometry.polygons(new double[]{0,0,0},new double[]{out.getStepX(),out.getStepY(),out.getStepZ()},box,detail):DataPortGeometry.polygons(new double[]{0,0,0},new double[]{out.getStepX(),out.getStepY(),out.getStepZ()},box,detail),out);});
             draw(pose,buffers,camera,port.centre(),mesh.polygons(),0,255);
-            if(connected(mc.level,port))drawLead(pose,buffers,camera,port,false);
+
         }
+        for(var piece:com.wormzjl.icheme.world.level.block.LinePieces.visible(mc.level))if(piece.port().centre().distanceToSqr(camera)<96*96)drawLead(pose,buffers,camera,piece.port(),false);
         for(var rack:PipeRackBlockEntity.clientRacks())if(rack.getLevel()==mc.level&&rack.getBlockPos().getCenter().distanceToSqr(camera)<96*96)for(var cable:rack.cables()){
             var at=rack.getBlockPos();var key=new RackCable(rack.rack(),rack.cableLane(cable),cable.geometry(),ConduitGeometry.markedAt(at.getX(),at.getY(),at.getZ()));
             drawCable(pose,buffers,camera,Vec3.atLowerCornerOf(at),CABLES.computeIfAbsent(key,k->ConduitGeometry.lane(k.rack(),k.lane(),k.geometry(),k.marked())),cable.geometry().medium());
@@ -89,7 +90,7 @@ public final class DataControlRenderer {
     }
     /** The ghost and the placed line include the same short connection from the socket to its route entry. */
     public static void drawLead(PoseStack pose,MultiBufferSource buffers,Vec3 camera,DataPort port,boolean ghost){
-        var mesh=PORTS.get(port);var outward=mesh==null?DataPorts.outward(Minecraft.getInstance().level,port):mesh.outward();var end=port.cablePoint().subtract(port.centre());
+        if(port==null)return;var outward=port.face().getOpposite();var end=port.cablePoint().subtract(port.centre());
         var polygons=LEADS.computeIfAbsent(new LeadMesh(outward,end,port.kind().medium()),k->ConduitGeometry.lead(new double[]{outward.getStepX(),outward.getStepY(),outward.getStepZ()},new double[]{end.x,end.y,end.z},new double[]{outward.getStepX(),outward.getStepY(),outward.getStepZ()},k.medium()));
         if(ghost)draw(pose,buffers,camera,port.centre(),polygons,port.kind().medium().colour(),135);
         else drawCable(pose,buffers,camera,port.centre(),polygons,port.kind().medium());

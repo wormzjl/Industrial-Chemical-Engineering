@@ -103,7 +103,7 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
     private static final net.minecraft.world.phys.shapes.VoxelShape DEVICE=Block.box(1,0,1,15,16,15);
     /** A pipe's shape follows its drawn outside diameter (at least 3/16 block across, so a thin line can be aimed at); devices nearly fill their block. */
     @Override protected net.minecraft.world.phys.shapes.VoxelShape getShape(BlockState state,BlockGetter level,BlockPos position,net.minecraft.world.phys.shapes.CollisionContext context) {
-        if(kind!=TopologyCompiler.Kind.PIPE)return DEVICE;
+        if(kind!=TopologyCompiler.Kind.PIPE)return LinePieces.shape(level,position,DEVICE);
         double bore=level.getBlockEntity(position) instanceof FluidDeviceBlockEntity entity?entity.bore():.05;
         int code=com.wormzjl.icheme.science.equipment.PipeSizes.code(com.wormzjl.icheme.science.equipment.PipeSizes.outside(bore)),mask=0;
         for(var direction:Direction.values())if(state.getValue(CONNECTIONS.get(direction)))mask|=1<<direction.ordinal();
@@ -111,7 +111,7 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
         if(mask==0)mask=3<<(state.getValue(FACING).ordinal()&~1);
         else if(Integer.bitCount(mask)==1)mask|=1<<(Integer.numberOfTrailingZeros(mask)^1);
         long offsets=level.getBlockEntity(position) instanceof FluidDeviceBlockEntity entity?entity.lineOffsets():0;
-        return LineShapes.shape(mask,state.getValue(FACING).ordinal(),code,offsets);
+        return LinePieces.shape(level,position,LineShapes.shape(mask,state.getValue(FACING).ordinal(),code,offsets));
     }
     @Override public @Nullable BlockEntity newBlockEntity(BlockPos position,BlockState state){return new FluidDeviceBlockEntity(position,state);}
     /** Only pipes and valves may stand in a vertical line (owner decision 2026-10-16); every other device faces a horizontal direction. */
@@ -168,7 +168,7 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
             if(level.getBlockEntity(position) instanceof FluidDeviceBlockEntity entity)FluidWorldAuthority.find(level.getServer()).ifPresent(w->w.instruments().recoverLegacy(entity.fluidIdentity(),level,position));
         }
     }
-    /** Server thread: the laying tool is placing the blocks of a line it registered itself ({@link PipeLaying}). */
+    /** Server thread: the laying tool is placing the blocks of a line it registered itself ({@link LineLaying}). */
     static boolean laying;
     @Override protected void onPlace(BlockState state,Level level,BlockPos position,BlockState previous,boolean moved) {
         super.onPlace(state,level,position,previous,moved);if(!(level instanceof ServerLevel serverLevel)||laying)return;

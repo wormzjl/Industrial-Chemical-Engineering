@@ -18,7 +18,7 @@ import com.wormzjl.icheme.world.item.PipeLayingToolItem;
 import com.wormzjl.icheme.world.level.block.FluidDeviceBlock;
 import com.wormzjl.icheme.world.level.block.PipeAnchor;
 import com.wormzjl.icheme.world.level.block.PipeLaying;
-import com.wormzjl.icheme.world.level.block.LinePlacement;
+import com.wormzjl.icheme.world.level.block.*;
 import com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity;
 import com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity;
 import com.wormzjl.icheme.world.level.block.entity.PipeRackBlockEntity;
@@ -74,15 +74,13 @@ public final class PipeLayingClient {
 
     /** The route to the aimed click, or why there is none; its ghost cells, and how they are laid when found. */
     private record Plan(PipeAnchor.Click end, @Nullable PipeAnchor anchor, PipeRoute.Result route, @Nullable Component refusal,
-                        @Nullable PipeRoute.Placement placement, List<Junction> junctions) {
-        private Plan(PipeAnchor.Click end, @Nullable PipeAnchor anchor, PipeRoute.Result route, @Nullable Component refusal, @Nullable PipeRoute.Placement placement) {
-            this(end, anchor, route, refusal, placement, List.of());
+                        @Nullable LineLayout layout, List<Junction> junctions) {
+        private Plan(PipeAnchor.Click end, @Nullable PipeAnchor anchor, PipeRoute.Result route, @Nullable Component refusal, @Nullable LineLayout layout) {
+            this(end, anchor, route, refusal, layout, List.of());
         }
     }
 
-    private record Host(BlockPos cell, int lane) {}
     private record Junction(BlockPos cell, List<Mesh.Polygon> polygons) {}
-    private record Junctions(List<Junction> shown, @Nullable Component refusal) {}
 
     /** The slot aimed on a rack's tier before a click ({@link PipeAnchor#aimed}): its cell, frame and lane, the face the line passes through, and whether it is refused. */
     private record Slot(BlockPos cell, RackGeometry.Rack frame, RackGeometry.Lane lane, int through, boolean refused) {
@@ -110,9 +108,9 @@ public final class PipeLayingClient {
         public void show(LineToolSession.View<PipeAnchor.Click,Start,Plan> view){project(view);}
         public void message(Component message){var p=Minecraft.getInstance().player;if(p!=null)say(p,message);}
         public boolean removable(PipeAnchor.Click click){return PipeLayingClient.removable(Minecraft.getInstance().level,click)!=null;}
-        public void dismantle(boolean offHand,PipeAnchor.Click click){FluidNetwork.dismantlePipe(offHand,click);}
+        public void dismantle(boolean offHand,PipeAnchor.Click click){LineToolSession.command(offHand,LineLaying.Action.DISMANTLE,LineTarget.of(click),LineTarget.of(click),List.of(),List.of());}
         public void settings(boolean offHand){FluidNetwork.openPipeLaying(offHand);}
-        public void lay(boolean offHand,PipeAnchor.Click click,Start selected,PipeAnchor.Click end,Plan plan){FluidNetwork.layPipe(offHand,click,end,plan.route().cells().stream().map(PipeAnchor::block).toList(),plan.route().options());}
+        public void lay(boolean offHand,PipeAnchor.Click click,Start selected,PipeAnchor.Click end,Plan plan){LineToolSession.command(offHand,LineLaying.Action.LAY,LineTarget.of(click),LineTarget.of(end),plan.route().cells().stream().map(PipeAnchor::block).toList(),plan.route().options());}
     });
     static LineToolSession<PipeAnchor.Click,Start,Plan> session(){return SESSION;}
 
@@ -123,12 +121,11 @@ public final class PipeLayingClient {
         return LayingToolAim.holding(player)&&!PipeLayingToolItem.conduit(LayingToolAim.held(player));
     }
 
-    public static void answered(Component message,boolean laid){SESSION.answered(message,laid);}
 
     private static void project(LineToolSession.View<PipeAnchor.Click,Start,Plan> view){
         var mc=Minecraft.getInstance();var player=mc.player;
         start=view.start();plan=view.plan();
-        if(plan!=null&&view.refusal()!=null)plan=new Plan(plan.end,plan.anchor,plan.route,view.refusal(),plan.placement,plan.junctions);
+        if(plan!=null&&view.refusal()!=null)plan=new Plan(plan.end,plan.anchor,plan.route,view.refusal(),plan.layout,plan.junctions);
         if(player==null||mc.level==null||!holding(player)||mc.screen!=null){start=null;plan=null;slot=null;markers.clear();return;}
         var hit=view.hovered();double outside=PipeSizes.outside(settingsDiameter(player));
         var shown=new HashSet<Object>();
@@ -203,97 +200,21 @@ public final class PipeLayingClient {
 
     /** The route from the start to {@code end}, searched now on this thread within the search limits. */
     private static Plan plan(Level level, PipeAnchor.Click end, double diameter, Start selected) {
-        double outside = PipeSizes.outside(diameter);
-        var nothing = new PipeRoute.Result(List.of(), List.of(), null);
-        var resolved = PipeAnchor.resolve(level, end, outside);
-        if (resolved.anchor() == null) return new Plan(end, null, nothing, PipeLaying.refusal(resolved.refusal()), null);
-        var from = selected.anchor;
-        var to = resolved.anchor();
-        var refused = PipeAnchor.refuses(from, to, outside);
-        if (refused != null) return new Plan(end, to, nothing, PipeLaying.refusal(refused), null);
-        int heading = from.leaving();
-        var route = LinePlacement.search(level,from,to,outside,List.of());
-        if (!route.found()) return new Plan(end, to, route, PipeLaying.refusal(route.refusal()), null);
-        var junctions = junctions(level, from, to, route, outside);
-        return new Plan(end, to, route, junctions.refusal, PipeRoute.placement(route.cells(), from.end(), heading, to.end()), junctions.shown);
-    }
-
-    /** Endpoint hosts also change when a line is laid: merge both ends before drawing a tee, cross or lane extension. */
-    private static Junctions junctions(Level level, PipeAnchor from, PipeAnchor to, PipeRoute.Result route, double outside) {
-        var hosts = new LinkedHashMap<Host, List<PipeAnchor>>();
-        for (var anchor : List.of(from, to)) {
-            if (anchor.kind() != PipeAnchor.Kind.PIPE && anchor.kind() != PipeAnchor.Kind.LANE) continue;
-            hosts.computeIfAbsent(new Host(anchor.host(), anchor.hostLane()), key -> new ArrayList<>()).add(anchor);
-        }
-        int code = PipeSizes.code(outside), width = RackGeometry.width(PipeSizes.outsideOf(code));
-        var shown = new ArrayList<Junction>();
-        for (var entry : hosts.entrySet()) {
-            var host = entry.getKey();
-            var entity = level.getBlockEntity(host.cell);
-            if (host.lane > 0) {
-                if (!(entity instanceof PipeRackBlockEntity rack)) return new Junctions(List.of(), PipeLaying.message("anchor.fitting"));
-                var lane = rack.lanes().stream().filter(l -> l.option() == host.lane - 1).findFirst().orElse(null);
-                if (lane == null) return new Junctions(List.of(), PipeLaying.message("anchor.fitting"));
-                int joints = lane.joints();
-                for (var anchor : entry.getValue()) {
-                    if (anchor.joints() < 0) continue;
-                    joints = PipeRoute.hostJoints(joints, anchor.joints(), true);
-                    if (joints < 0) return new Junctions(List.of(), PipeLaying.message("anchor.lane_closed"));
-                }
-                if (joints != lane.joints()) shown.add(new Junction(host.cell, RackGeometry.lane(rack.frame(),
-                        new RackGeometry.Lane(lane.option(), lane.width(), lane.arms(), joints, PipeSizes.code(PipeSizes.outside(lane.bore()))))));
-            } else {
-                if (!(entity instanceof FluidDeviceBlockEntity pipe) || pipe.kind() != TopologyCompiler.Kind.PIPE)
-                    return new Junctions(List.of(), PipeLaying.message("anchor.fitting"));
-                var before = FluidDeviceModel.blockKey(pipe.getBlockState(), pipe.getModelData());
-                var after = before;
-                int joints = pipe.joints();
-                for (var anchor : entry.getValue()) {
-                    if (anchor.joints() >= 0) {
-                        joints = PipeRoute.hostJoints(joints, anchor.joints(), false);
-                        if (joints < 0) return new Junctions(List.of(), PipeLaying.message("anchor.junction"));
-                    }
-                    int face = anchor.joint().getOpposite().ordinal();
-                    int index = anchor == from ? 0 : route.cells().size() - 1;
-                    int option = route.options().get(index);
-                    int u = 0, v = 0;
-                    if (option >= 0 && level.getBlockEntity(anchor.cell()) instanceof PipeRackBlockEntity rack) {
-                        var at = RackGeometry.steps(RackGeometry.point(rack.rack(), option, width, PipeSizes.outsideOf(code), face ^ 1));
-                        u = at[0];
-                        v = at[1];
-                    }
-                    after = after.withConnection(face, code, u, v);
-                }
-                if (!after.equals(before)) shown.add(new Junction(host.cell, LineGeometry.polygons(after)));
+        var design=LineLaying.search(level,LineTarget.of(selected.click()),LineTarget.of(end),LineProfile.FLUID.settings(held(Minecraft.getInstance().player)));
+        var layout=design.layout();var shown=new ArrayList<Junction>();
+        if(layout!=null)for(var edit:layout.hosts()){
+            var host=edit.before();
+            if(host.lane()>0&&level.getBlockEntity(host.cell()) instanceof PipeRackBlockEntity rack)
+                shown.add(new Junction(host.cell(),RackGeometry.lane(rack.frame(),new RackGeometry.Lane(host.lane()-1,RackGeometry.width(PipeSizes.drawn(host.bore())),host.arms(),edit.joints(),PipeSizes.code(PipeSizes.outside(host.bore()))))));
+            else if(level.getBlockEntity(host.cell()) instanceof FluidDeviceBlockEntity pipe){
+                var after=FluidDeviceModel.blockKey(pipe.getBlockState(),pipe.getModelData());
+                for(int face=0;face<6;face++)if((edit.changedFaces()&1<<face)!=0){int packed=(int)(edit.points()>>10*face)&1023;int u=packed&31,v=packed>>5&31;after=after.withConnection(face,PipeSizes.code(PipeSizes.outside(diameter)),u>=16?u-32:u,v>=16?v-32:v);}
+                shown.add(new Junction(host.cell(),LineGeometry.polygons(after)));
             }
         }
-        return new Junctions(List.copyOf(shown), null);
+        return new Plan(end,design.end()==null?null:design.end().placement(),design.route()==null?new PipeRoute.Result(List.of(),List.of(),null):design.route(),design.refusal(),layout,List.copyOf(shown));
     }
 
-    /**
-     * Where plain route cell {@code i} meets a lane through {@code face}, as steps off the face's centre along its in-plane
-     * axes: the route's own lane next to it, or the lane the line starts or ends on; null where it meets none.
-     */
-    private static int @Nullable [] lanePoint(Level level, Plan shown, int i, int face, double outside) {
-        var cells = shown.route.cells();
-        var next = cells.get(i).step(face);
-        for (int j : new int[]{i - 1, i + 1}) {
-            if (j < 0 || j >= cells.size() || !cells.get(j).equals(next)) continue;
-            int option = shown.route.options().get(j);
-            if (option < 0 || !(level.getBlockEntity(PipeAnchor.block(next)) instanceof PipeRackBlockEntity rack)) return null;
-            double standard = PipeSizes.outsideOf(PipeSizes.code(outside));
-            return RackGeometry.steps(RackGeometry.point(rack.rack(), option, RackGeometry.width(standard), standard, face ^ 1));
-        }
-        var first = start;
-        for (var anchor : new PipeAnchor[]{i == 0 && first != null ? first.anchor : null, i == cells.size() - 1 ? shown.anchor : null}) {
-            if (anchor == null || anchor.kind() != PipeAnchor.Kind.LANE || anchor.joint() == null || anchor.joint().ordinal() != face) continue;
-            if (!(level.getBlockEntity(anchor.host()) instanceof PipeRackBlockEntity rack)) continue;
-            for (var lane : rack.lanes()) if (lane.option() == anchor.hostLane() - 1) return RackGeometry.steps(rack.point(lane, face ^ 1));
-        }
-        return null;
-    }
-
-    /** The aimed nozzle: its role, whether a pipe is on it, and the largest bore it takes. */
     private static @Nullable Component portLabel(Level level, PipeAnchor.Click hit) {
         if (!(level.getBlockEntity(hit.clicked()) instanceof EquipmentShellBlockEntity shell)) return null;
         var port = shell.port(hit.face());
@@ -439,22 +360,21 @@ public final class PipeLayingClient {
         for (int i = 0; i < cells.size(); i++) {
             var cell = PipeAnchor.block(cells.get(i));
             int option = shown.route.options().get(i);
-            int joints = shown.placement.joints()[i];
+            int joints = shown.layout.cells().get(i).joints();
             List<Mesh.Polygon> polygons;
             // A lane is drawn where the rack will draw it, welded at every joint.
             if (option >= 0) {
                 if (!(mc.level.getBlockEntity(cell) instanceof PipeRackBlockEntity rack)) continue;
-                polygons = RackGeometry.lane(rack.frame(), new RackGeometry.Lane(option, width, shown.placement.arms()[i], joints, code));
+                polygons = RackGeometry.lane(rack.frame(), new RackGeometry.Lane(option, width, shown.layout.cells().get(i).arms(), joints, code));
             } else {
                 long faces = 0, offsets = 0;
                 for (int face = 0; face < 6; face++) {
                     if ((joints >> face & 1) == 0) continue;
                     faces |= (long) code << 7 * face;
                     // A plain cell beside a lane is a transition pipe to the lane's off-centre point.
-                    var at = lanePoint(mc.level, shown, i, face, outside);
-                    if (at != null) offsets |= LineGeometry.Key.offsets(face, at[0], at[1]);
+                    offsets=shown.layout.cells().get(i).points();
                 }
-                polygons = LineGeometry.polygons(new LineGeometry.Key(TopologyCompiler.Kind.PIPE, shown.placement.facings()[i], joints, code, faces, 0, false, offsets));
+                polygons = LineGeometry.polygons(new LineGeometry.Key(TopologyCompiler.Kind.PIPE, shown.layout.cells().get(i).facing(), joints, code, faces, 0, false, offsets));
             }
             ghost(consumer, pose, camera, sprite, cell, polygons, colour);
         }

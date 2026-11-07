@@ -56,8 +56,8 @@ public final class EquipmentShellBlock extends BaseEntityBlock {
     /** Unbound cells (before their data arrives) are full blocks, so nothing falls through while a vessel loads. */
     @Override
     protected VoxelShape getShape(BlockState state, BlockGetter level, BlockPos position, CollisionContext context) {
-        return level.getBlockEntity(position) instanceof EquipmentShellBlockEntity shell && shell.key() != null
-                ? EquipmentStructure.collision(shell.key()) : Shapes.block();
+        return LinePieces.shape(level,position,level.getBlockEntity(position) instanceof EquipmentShellBlockEntity shell && shell.key() != null
+                ? EquipmentStructure.collision(shell.key()) : Shapes.block());
     }
 
     /**

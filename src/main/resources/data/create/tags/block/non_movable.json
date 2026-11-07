@@ -5,6 +5,7 @@
     "icheme:fluid_pipe",
     "icheme:pipe_rack",
     "icheme:data_cable",
+    "icheme:line_piece",
     "icheme:power_cable",
     "icheme:local_controller",
     "icheme:dcs",

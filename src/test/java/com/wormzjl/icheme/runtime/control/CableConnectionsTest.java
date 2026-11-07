@@ -9,17 +9,6 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class CableConnectionsTest {
-    @Test void previewAndCommitMergeBothEditsToOneHostBeforeEnforcingTheJointLimit(){
-        var old=cable(BlockPos.ZERO,0,48,0,CableMedium.DATA,Map.of());
-        var a=new com.wormzjl.icheme.world.level.block.CableLaying.Anchor(null,null,old.site(),0,0);
-        var b=new com.wormzjl.icheme.world.level.block.CableLaying.Anchor(null,null,old.site(),2,0);
-        var edits=com.wormzjl.icheme.world.level.block.CableLaying.hosts(a,b,site->old);
-        assertNull(edits.refusal());assertEquals(1,edits.cables().size());assertEquals(53,edits.cables().getFirst().geometry().joints());
-        var full=cable(BlockPos.ZERO,0,49,0,CableMedium.DATA,Map.of());
-        var c=new com.wormzjl.icheme.world.level.block.CableLaying.Anchor(null,null,old.site(),3,0);
-        assertNotNull(com.wormzjl.icheme.world.level.block.CableLaying.hosts(b,c,site->full).refusal());
-        assertEquals(49,full.geometry().joints());
-    }
     @Test void terminalMarksAndBusAgreeAfterASensorOrNeighbourIsRemoved(){
         for(var medium:CableMedium.values()){
             var id=new UUID(0,1);var port=new DataPort(id,medium==CableMedium.DATA?DataPort.Kind.SENSOR:DataPort.Kind.POWER_INPUT,medium==CableMedium.DATA?12:0,

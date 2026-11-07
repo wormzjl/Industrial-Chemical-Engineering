@@ -13,6 +13,8 @@ public final class ModBlockEntities {
             DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, IChemE.MOD_ID);
     public static final DeferredHolder<BlockEntityType<?>,BlockEntityType<com.wormzjl.icheme.world.level.block.entity.CreativePowerBlockEntity>> CREATIVE_POWER=BLOCK_ENTITY_TYPES.register("creative_power",
             ()->BlockEntityType.Builder.of(com.wormzjl.icheme.world.level.block.entity.CreativePowerBlockEntity::new,ModBlocks.CREATIVE_POWER.get()).build(null));
+    public static final DeferredHolder<BlockEntityType<?>,BlockEntityType<com.wormzjl.icheme.world.level.block.entity.LinePieceBlockEntity>> LINE_PIECE=BLOCK_ENTITY_TYPES.register("line_piece",
+            ()->BlockEntityType.Builder.of(com.wormzjl.icheme.world.level.block.entity.LinePieceBlockEntity::new,ModBlocks.LINE_PIECE.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>,BlockEntityType<com.wormzjl.icheme.world.level.block.entity.ConduitBlockEntity>> DATA_CABLE=BLOCK_ENTITY_TYPES.register("data_cable",
             ()->BlockEntityType.Builder.of(com.wormzjl.icheme.world.level.block.entity.ConduitBlockEntity::new,ModBlocks.DATA_CABLE.get(),ModBlocks.POWER_CABLE.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>,BlockEntityType<com.wormzjl.icheme.world.level.block.entity.ControlPanelBlockEntity>> CONTROL_PANEL=BLOCK_ENTITY_TYPES.register("control_panel",

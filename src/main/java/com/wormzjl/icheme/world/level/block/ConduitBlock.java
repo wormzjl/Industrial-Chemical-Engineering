@@ -29,11 +29,11 @@ public final class ConduitBlock extends BaseEntityBlock {
     @Override protected RenderShape getRenderShape(BlockState state){return RenderShape.MODEL;}
     @Override public void setPlacedBy(Level level,BlockPos pos,BlockState state,net.minecraft.world.entity.LivingEntity placer,net.minecraft.world.item.ItemStack stack){
         super.setPlacedBy(level,pos,state,placer,stack);
-        if(level.getBlockEntity(pos) instanceof ConduitBlockEntity wire)CableLaying.handPlaced(level,wire,placer==null?Direction.EAST:placer.getDirection(),placer instanceof net.minecraft.server.level.ServerPlayer player?player:null);
+        if(level.getBlockEntity(pos) instanceof ConduitBlockEntity wire)LineLaying.handPlaced(level,pos,LineProfile.of(medium),placer==null?Direction.EAST:placer.getDirection(),placer instanceof net.minecraft.server.level.ServerPlayer player?player:null);
     }
     @Override protected VoxelShape getShape(BlockState state,BlockGetter level,BlockPos pos,CollisionContext context){
         if(!(level.getBlockEntity(pos) instanceof ConduitBlockEntity cable))return Block.box(6,6,6,10,10,10);
-        var key=cable.geometry();return LineShapes.shape(key.joints(),5,com.wormzjl.icheme.science.equipment.PipeSizes.code(key.medium().outside()),key.offsets());
+        var key=cable.geometry();return LinePieces.shape(level,pos,LineShapes.shape(key.joints(),5,com.wormzjl.icheme.science.equipment.PipeSizes.code(key.medium().outside()),key.offsets()));
     }
     @Override protected void onRemove(BlockState state,Level level,BlockPos pos,BlockState next,boolean moved){
         if(!state.is(next.getBlock())&&level instanceof ServerLevel server)FluidWorldAuthority.find(server.getServer())

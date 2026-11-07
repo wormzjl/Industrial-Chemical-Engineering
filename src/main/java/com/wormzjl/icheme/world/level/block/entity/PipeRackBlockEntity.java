@@ -1,5 +1,7 @@
 package com.wormzjl.icheme.world.level.block.entity;
 
+import com.wormzjl.icheme.world.level.block.LinePieces;
+
 import com.wormzjl.icheme.IChemE;
 import com.wormzjl.icheme.registry.ModBlockEntities;
 import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
@@ -50,7 +52,10 @@ import java.util.concurrent.ConcurrentHashMap;
  * that, the lane kept. Format rack-3 added the secondary paint, saved only when it differs from the paint; a rack-1
  * copy reads as it did.</p>
  */
-public final class PipeRackBlockEntity extends ModelledBlockEntity {
+public final class PipeRackBlockEntity extends ModelledBlockEntity implements LinePieces.Copy {
+    private List<LinePieces.Piece> pieces=List.of();
+    public List<LinePieces.Piece> linePieces(){return pieces;}
+    public void linePieces(List<LinePieces.Piece> value){if(pieces.equals(value))return;pieces=List.copyOf(value);setChanged();LinePieces.clientCopy(this,pieces);if(level!=null&&!level.isClientSide())level.sendBlockUpdated(worldPosition,getBlockState(),getBlockState(),2);}
     public static final String FORMAT = "rack-3";
 
     /**
@@ -424,7 +429,7 @@ public final class PipeRackBlockEntity extends ModelledBlockEntity {
 
     @Override
     public void onLoad() {
-        super.onLoad();
+        super.onLoad();LinePieces.clientCopy(this,pieces);
         if (level != null && level.isClientSide()) CLIENT_RACKS.add(this);
         if (level instanceof ServerLevel serverLevel) FluidWorldAuthority.find(serverLevel.getServer()).ifPresent(this::bind);
         if(level instanceof ServerLevel serverLevel)FluidWorldAuthority.find(serverLevel.getServer()).ifPresent(w->w.controls().loaded(this));
@@ -432,13 +437,13 @@ public final class PipeRackBlockEntity extends ModelledBlockEntity {
 
     @Override
     public void onChunkUnloaded() {
-        super.onChunkUnloaded();
+        LinePieces.unloaded(this);super.onChunkUnloaded();
         CLIENT_RACKS.remove(this);
     }
 
     @Override
     public void setRemoved() {
-        super.setRemoved();
+        LinePieces.unloaded(this);super.setRemoved();
         CLIENT_RACKS.remove(this);
     }
 
@@ -459,12 +464,12 @@ public final class PipeRackBlockEntity extends ModelledBlockEntity {
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
         write(lanes, tag);
-        writeCables(tag);
+        writeCables(tag);tag.put("LinePieces",LinePieces.save(pieces));
     }
 
     @Override
     protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
-        super.loadAdditional(tag, registries);
+        super.loadAdditional(tag, registries);pieces=LinePieces.load(tag);LinePieces.clientCopy(this,pieces);
         var wires=new ArrayList<com.wormzjl.icheme.runtime.control.DataBus.Cable>();
         try{
             var saved=tag.getList("DataCables",10);if(saved.size()>RackGeometry.OPTIONS)throw new IllegalArgumentException("Too many rack cables");var options=new java.util.HashSet<Integer>();
@@ -530,7 +535,7 @@ public final class PipeRackBlockEntity extends ModelledBlockEntity {
     @Override
     public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
         var tag = write(lanes, new CompoundTag());
-        writeCables(tag);
+        writeCables(tag);tag.put("LinePieces",LinePieces.save(pieces));
         tag.putIntArray("Joined", joined.clone());
         tag.putInt("Frame", frame);
         return tag;

@@ -110,7 +110,7 @@ public final class PipeRackBlock extends BaseEntityBlock {
 
     @Override
     protected VoxelShape getShape(BlockState state, BlockGetter level, BlockPos position, CollisionContext context) {
-        return level.getBlockEntity(position) instanceof PipeRackBlockEntity rack ? rack.shape() : PipeRackBlockEntity.frame(rack(state));
+        return LinePieces.shape(level,position,level.getBlockEntity(position) instanceof PipeRackBlockEntity rack ? rack.shape() : PipeRackBlockEntity.frame(rack(state)));
     }
 
     /** A neighbour changed: the shape stays (J1); the drawn steel and the faces its lanes meet redraw once the change is in the world. */

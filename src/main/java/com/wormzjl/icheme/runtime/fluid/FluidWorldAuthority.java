@@ -92,6 +92,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         // Both stores open before anything starts: one this build cannot read refuses the world with its files as they are.
         var accessories=com.wormzjl.icheme.runtime.instrument.InstrumentService.Store.open(server);
         controlFacts=com.wormzjl.icheme.runtime.control.ControlFacts.open(server);
+        com.wormzjl.icheme.world.level.block.LinePieces.watch(server,controlFacts);
         controlFacts.requireSensorIds(accessories.allSensors());
         data=FluidSavedData.open(server,this::model,catalog);
         model=model(new FluidCheckpointCodec.PackageKey(com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(catalog)));

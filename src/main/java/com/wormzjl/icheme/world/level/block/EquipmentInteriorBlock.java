@@ -89,7 +89,7 @@ public final class EquipmentInteriorBlock extends Block {
             var world = FloatingRoofs.level(level, context);
             if (world != null) {
                 var shape = FloatingRoofs.of(world).collision(position, world.getGameTime());
-                if (shape != null) return shape;
+                if (shape != null) return LinePieces.shape(level,position,shape);
             }
         }
         return super.getCollisionShape(state, level, position, context);

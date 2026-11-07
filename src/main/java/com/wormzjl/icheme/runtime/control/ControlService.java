@@ -58,8 +58,11 @@ public final class ControlService {
     }
     public void cable(DataBus.Cable cable){facts.cable(cable);}
     public void removeCable(DataBus.Site site){facts.removeCable(site);}
-    public void loaded(ConduitBlockEntity cable){var existing=facts.cable(cable.cable().site());if(existing!=null)cable.configure(existing);else facts.cable(cable.cable());}
-    public void loaded(PipeRackBlockEntity rack){rack.cables(facts.cables().stream().filter(c->c.site().lane()>0&&c.site().dimension().equals(rack.getLevel().dimension().location().toString())&&c.site().cell().equals(rack.getBlockPos())).toList());}
+    public void loaded(ConduitBlockEntity cable){var existing=facts.cable(cable.cable().site());if(existing!=null)cable.configure(existing);else facts.cable(cable.cable());if(cable.getLevel() instanceof net.minecraft.server.level.ServerLevel server)com.wormzjl.icheme.world.level.block.LinePieces.queue(server.getServer(),cable.cable().site());}
+    public void loaded(PipeRackBlockEntity rack){
+        var wires=facts.cables().stream().filter(c->c.site().lane()>0&&c.site().dimension().equals(rack.getLevel().dimension().location().toString())&&c.site().cell().equals(rack.getBlockPos())).toList();
+        rack.cables(wires);if(rack.getLevel() instanceof net.minecraft.server.level.ServerLevel server)for(var cable:wires)com.wormzjl.icheme.world.level.block.LinePieces.queue(server.getServer(),cable.site());
+    }
     public void loaded(ControlPanelBlockEntity box){
         var dim=box.getLevel().dimension().location().toString();
         var panel=facts.panels().stream().filter(p->p.dimension().equals(dim)&&p.position().equals(box.getBlockPos())).findFirst().orElse(null);
