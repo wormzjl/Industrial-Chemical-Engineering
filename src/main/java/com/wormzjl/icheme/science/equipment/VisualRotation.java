@@ -5,10 +5,11 @@ public final class VisualRotation {
     private VisualRotation() {
     }
 
-    /** 1500 rpm shows as one turn/s, 3000 as 1.33; the speed approaches two turns/s without a hard cutoff. */
+    /** Same low-rpm slope, a stronger rise at high rpm: 1500 shows as 2.4 turns/s, 3000 as 4, approaching 6 smoothly. */
     public static double turnsPerSecond(double rpm) {
-        if (!Double.isFinite(rpm)) return 0;
-        return 2 * rpm / (1500 + Math.abs(rpm));
+        if (!Double.isFinite(rpm) || rpm == 0) return 0;
+        double speed = Math.abs(rpm) / 1500;
+        return Math.copySign(6 / (1 + 3 / (speed * (1 + speed))), rpm);
     }
 
     /** Client-thread-owned accumulated angle. Changing or stopping the speed keeps the current angle. */
