@@ -55,14 +55,14 @@ public final class InstrumentGeometry {
         double[][] outline={{-.7*x,-y},{.7*x,-y},{x,-.7*y},{x,.7*y},{.7*x,y},{-.7*x,y},{-x,.7*y},{-x,-.7*y}};
         for(int i=0;i<8;i++){
             var a=outline[i];var b=outline[(i+1)%8];
-            q.add(quad(a[0],a[1],back,b[0],b[1],back,b[0],b[1],.045,a[0],a[1],.045,0xff8e969a));
-            q.add(quad(a[0],a[1],.045,b[0],b[1],.045,b[0]*.88,b[1]*.88,front,a[0]*.88,a[1]*.88,front,0xffb0b7b9));
-            q.add(quad(0,0,front,a[0]*.88,a[1]*.88,front,b[0]*.88,b[1]*.88,front,0,0,front,0xff737e83).front());
-            q.add(quad(0,0,back,b[0],b[1],back,a[0],a[1],back,0,0,back,0xff727d82));
+            q.add(quad(a[0],a[1],back,b[0],b[1],back,b[0],b[1],.045,a[0],a[1],.045,0xffd9dcdc));
+            q.add(quad(a[0],a[1],.045,b[0],b[1],.045,b[0]*.88,b[1]*.88,front,a[0]*.88,a[1]*.88,front,0xffeceeea));
+            q.add(quad(0,0,front,a[0]*.88,a[1]*.88,front,b[0]*.88,b[1]*.88,front,0,0,front,0xffafb8ba).front());
+            q.add(quad(0,0,back,b[0],b[1],back,a[0],a[1],back,0,0,back,0xff9ea9ac));
         }
-        q.add(quad(-x*.65,-.067,.071,x*.65,-.067,.071,x*.65,.067,.071,-x*.65,.067,.071,0xff1f343b).front());
-        q.add(quad(-x*.55,-.052,.072,x*.55,-.052,.072,x*.55,.052,.072,-x*.55,.052,.072,0xffa7bcb4).front());
-        q.add(quad(-x*.8,-.092,.072,x*.8,-.092,.072,x*.8,-.070,.072,-x*.8,-.070,.072,0xffb59d55).front());
+        q.add(quad(-x*.65,-.067,.071,x*.65,-.067,.071,x*.65,.067,.071,-x*.65,.067,.071,0xff354249).front());
+        q.add(quad(-x*.55,-.052,.072,x*.55,-.052,.072,x*.55,.052,.072,-x*.55,.052,.072,0xff102b36).front());
+        q.add(quad(-x*.8,-.092,.072,x*.8,-.092,.072,x*.8,-.070,.072,-x*.8,-.070,.072,0xffc3ad69).front());
         return List.copyOf(q);
     }
     private static void cylinder(List<Quad> out,double[] start,double[] end,double radius,int sides,int colour){

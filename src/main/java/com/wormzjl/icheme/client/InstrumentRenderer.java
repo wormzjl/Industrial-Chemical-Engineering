@@ -106,7 +106,7 @@ public final class InstrumentRenderer {
         var tap=mount.localTap();var key=new Connector(List.of(tap[0],tap[1],tap[2]),mount.bottomEntry(),kind==Sensor.Kind.TEMPERATURE,mount.probeDepth());if(CONNECTORS.size()>2048)CONNECTORS.clear();
         for(var q:CONNECTORS.computeIfAbsent(key,k->InstrumentGeometry.connection(tap,k.bottom(),k.temperature(),k.probeDepth())))quad(pose,consumer,mount,camera,q,0,alpha);
         // Font rendering may flush the shared geometry buffer. Finish every connector before requesting font buffers.
-        if(alpha==255)text(pose,buffers,mount,camera,kind.symbol(),0,.038,.011f,.074,0xff253e40);
+        if(alpha==255)text(pose,buffers,mount,camera,kind.symbol(),0,.038,.011f,.074,0xffa6d4d9);
         if(alpha==255&&!id.isEmpty())text(pose,buffers,mount,camera,id,0,-.072,(float)Math.min(.0013,.15/Math.max(1,Minecraft.getInstance().font.width(id))),.074,0xff152126);
     }
     private static void draw(PoseStack pose,MultiBufferSource buffers,Instrument.Mount mount,Vec3 camera,GaugeSettings settings,double ratio,int tint,int alpha){

@@ -11,10 +11,20 @@ public class StationRender {
     static double[] unit(double[] a) { double r=Math.sqrt(dot(a,a)); return new double[]{a[0]/r,a[1]/r,a[2]/r}; }
     static double edge(double[] a,double[] b,double x,double y) { return (x-a[0])*(b[1]-a[1])-(y-a[1])*(b[0]-a[0]); }
     public static void main(String[] args) throws Exception {
+        var paths=switch(args[2]) {
+            case "constructor"->ConstructorAssets.texturePaths();case "simulator"->SimulatorAssets.texturePaths();
+            case "controller"->ControlAssets.texturePaths(false);case "dcs"->ControlAssets.texturePaths(true);
+            default->throw new IllegalArgumentException("Unknown workstation: "+args[2]);
+        };
+        var boxes=switch(args[2]) {
+            case "constructor"->ConstructorAssets.boxes();case "simulator"->SimulatorAssets.boxes();
+            case "controller"->ControlAssets.boxes(false);case "dcs"->ControlAssets.boxes(true);
+            default->throw new IllegalArgumentException("Unknown workstation: "+args[2]);
+        };
         var textures=new HashMap<String,BufferedImage>();
-        for (var entry:(args[2].equals("constructor")?ConstructorAssets.texturePaths():SimulatorAssets.texturePaths()).entrySet()) textures.put(entry.getKey(),ImageIO.read(Path.of(args[0],"textures/block/"+entry.getValue().substring("icheme:block/".length())+".png").toFile()));
+        for (var entry:paths.entrySet()) textures.put(entry.getKey(),ImageIO.read(Path.of(args[0],"textures/block/"+entry.getValue().substring("icheme:block/".length())+".png").toFile()));
         var quads=new ArrayList<Quad>();
-        for(var box:(args[2].equals("constructor")?ConstructorAssets.boxes():SimulatorAssets.boxes())) {
+        for(var box:boxes) {
             var a=box.from();var b=box.to();double x=a[0],y=a[1],z=a[2],X=b[0],Y=b[1],Z=b[2];
             for(var f:box.faces().entrySet()) {
                 double[][] p; double[] n;
