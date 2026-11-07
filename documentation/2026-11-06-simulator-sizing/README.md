@@ -9,6 +9,8 @@ Scale-up-first Auto sizing, constructor-style Manual sizing, Standard/Low-dP cro
 ## Documents and evidence
 
 - [MERGE_REVIEW.md](MERGE_REVIEW.md): scope, compatibility, verification and remaining limits.
+- [CONTROL_FINISH_REVIEW.md](CONTROL_FINISH_REVIEW.md): shared cabinet/sensor finish, unchanged envelopes and inspected assets.
+- [CONTROL_REWORK_REVIEW.md](CONTROL_REWORK_REVIEW.md): offset junction gaps, drum terminal pads, connected visibility, IDs and the 25% level workflow.
 - [LOW_POLY_REVIEW.md](LOW_POLY_REVIEW.md): restored casing nuts, client-only detail mode, geometry inventory and measured reductions.
 - [EQUIPMENT_PROTECTION_REVIEW.md](EQUIPMENT_PROTECTION_REVIEW.md): Creative-only breaking and constructor deconstruction, validation and updated jar.
 - [IMPLEMENTATION_REVIEW.md](IMPLEMENTATION_REVIEW.md): the implemented contracts and modelling assumptions.
@@ -29,6 +31,8 @@ Scale-up-first Auto sizing, constructor-style Manual sizing, Standard/Low-dP cro
 - 2026-11-07: `efa22cfe` protects constructed cells at the chunk write boundary and adds physical-target constructor deconstruction; `f13019d1` translates it in four locales. Combined filtered runs resolve 58 world paths, 23 constructor/codec checks and five language/source checks; light/dark renders and updated 0.22.0 jar inspected. Existing science lane stands.
 
 - 2026-11-07: `238c136b` restores raised casing nuts and adds default-off client Low polygon mode, compatible with the normal server and mixed clients. Golden layouts/ports remain identical; 146 affected equipment/four quick checks and 16 dedicated-server paths resolve through filtered runs. Static mesh counts and comparison sheets are in LOW_POLY_REVIEW.
+
+- 2026-11-07: `4682156e` unifies controller/DCS/sensor industrial finishes; `76ad7889` repairs shared offset junctions, places drum shell pads and clarifies connected level control/IDs; `f6d02add` updates all four translations; `68294ece` avoids full registry copies per controller view. Combined 68 affected checks pass through filtered runs; all source/assets are in the refreshed 0.22.0 jar.
 
 ## Code areas and open items
 

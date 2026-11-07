@@ -4,7 +4,7 @@
 
 **Port colours** (since `645e203d`, 2026-10-29; the screen's drawing removed in batch 2026-11-02-process-simulator): the pipe laying tool colours an assembly's nozzles by `PortColours.assembly`, matching a slot, nozzle role and ordinal to `AssemblyDiagram`'s fixed port order (negative mark ordinals accept any nozzle of that role). Colours spread hues and vary brightness/saturation. The tool resolves a column's own nozzles without validation and other equipment from its watched report; matched world squares keep the colour with grey connected frames or yellow misplaced frames, other nozzles use class colours. A design edit can reorder colours. The assembly screen no longer draws ports: `AssemblyFlowsheet` and `AssemblyPortColoursTest` are gone, and its drawing is `AssemblyBlock` (below). `AssemblyDiagramTest.everyPortHasItsOwnColourForTheLayingTool` keeps the colours distinct. No live world-marker check.
 
-**Snapshot:** 238c136b (branch `codex/simulator-sizing`), 2026-11-07. Batch `2026-11-06-simulator-sizing`, prepared for 0.22.0; not merged. Earlier snapshots and release history are in Git and the batch READMEs.
+**Snapshot:** 68294ece (branch `codex/simulator-sizing`), 2026-11-07. Batch `2026-11-06-simulator-sizing`, prepared for 0.22.0; not merged. Earlier snapshots and release history are in Git and the batch READMEs.
 
 ## Shared presentation and workstation changes (0.22.0)
 
@@ -35,6 +35,10 @@ The constructor ghost also follows the active client drawing profile (`equipment
 ## Constructor deconstruction (0.22.0)
 
 `ConstructorColumn.withRemoval` appends a separate Deconstruction group to the choice/design pages: physical target name, wrapping coordinates/cell count, Deconstruct button and optional result. Missing targets and pending requests disable the action. `EquipmentConstructorScreen` follows loaded physical equipment once per second, preserves the displayed target while awaiting the reply, and accepts a result only for its constructor and per-screen request ID. Draft type and dimensions do not determine the removal target. The server validates all cells before removal; see [equipment.md](equipment.md). `GuiPrototypes` includes `equipment-constructor-removal` in both themes and scroll positions.
+
+## Connected control forms (0.22.0)
+
+`ControlColumns` is the shared pure controller/DCS builder. Valve location replaces Action for level/pressure and explains filling/draining; other quantities omit it. A new level selection defaults to percent. `ControlPanelScreen` keeps drafts through publication but will not apply an enabled loop with a disconnected input/output. `DeviceColumn.instrumentIds` and `InstrumentRenderer.identities` show synced instrument labels in fluid/machine pages without a live sample. Software prototypes are `control-local`, `control-dcs` and `control-instrument-ids`, including light/dark and end scroll.
 
 ## Read this when
 

@@ -9,11 +9,11 @@ Sensors use `Sensor.Installed` (host/mount, UUID, revision and kind), `Sensor.Re
 **Feature branch:** `b1477c09` (`codex/liquid-gauge-accessory`), 2026-10-26, based on main `600549d9`. Floating-roof tank level gauge is an optional item/accessory;24 focused checks/package and8 native views pass. Main merge pending. [Contracts](../../2026-10-26-liquid-level-gauge-accessory/LEVEL_GAUGE_CONTRACTS.md).
 
 
-**Snapshot:** 3515b1ff (branch `codex/simulator-sizing`), 2026-11-07. Batch `2026-11-06-simulator-sizing`, prepared for 0.22.0; not merged. Earlier snapshots and release history are in Git and the batch READMEs.
+**Snapshot:** 68294ece (branch `codex/simulator-sizing`), 2026-11-07. Batch `2026-11-06-simulator-sizing`, prepared for 0.22.0; not merged. Earlier snapshots and release history are in Git and the batch READMEs.
 
 ## Installed sensors, IDs and optional gauge (0.22.0)
 
-`InstrumentService` installs/removes structural accessories immediately, including equipment mounts (owner exception to scheduled process inputs). Readings remain cached accepted process observations, published on the engine cadence. Installing a fitting never forces a solver. `ControlFacts` assigns a stable human `SensorId` backed by each sensor UUID; controllers select IDs, not coordinates. Sensor housings share one industrial treatment with restrained P/T/F/L/N identification.
+`InstrumentService` installs/removes structural accessories immediately, including equipment mounts (owner exception to scheduled process inputs). Readings remain cached accepted process observations, published on the engine cadence. Installing a fitting never forces a solver. `ControlFacts` assigns a stable human `SensorId` backed by each sensor UUID; controllers select IDs, not coordinates. Sensor housings share the workstation/control-cabinet neutral metal, dark bezel, blue display and amber tag treatment with P/T/F/L/N identification (`ControlAssets`). `InstrumentRenderer.identities` reads synced host metadata for fluid/machine GUIs; `DeviceColumn.instrumentIds` wraps each stable ID with its measurement label, including body/boot distinction. This needs no sample or process update. Controller choices and disconnected-display handling are in wired-control-power.md.
 
 | Item | Supported host |
 |---|---|

@@ -1,8 +1,14 @@
 # Wired controllers, data links and FE power
 
-**Snapshot:** 3515b1ff (branch `codex/simulator-sizing`), 2026-11-07. Batch `2026-11-06-simulator-sizing`, prepared for 0.22.0; not merged.
+**Snapshot:** 68294ece (branch `codex/simulator-sizing`), 2026-11-07. Batch `2026-11-06-simulator-sizing`, prepared for 0.22.0; not merged.
 
 Local controller boxes own automatic loops. The DCS selects a linked box and edits its settings; it does not run a second controller. Data cable carries connectivity rather than fluid or a packet stream simulation. Power conduit transports ordinary NeoForge FE through capabilities. Both use the pipe laying tool's anchors, routes, validation and rack framework.
+
+Controller, DCS and sealed sensors share neutral metal, dark bezels, blue displays and amber ID trim with the constructor/simulator; `tools/pump-sprites/ControlAssets.java` owns those resources.
+
+Operator choices use `DataBus.hosts` for the selected controller, including when viewed through DCS. A replay cache with an obsolete topology revision is skipped until scheduled publication; enabled edits require both links. Dormant disconnected selections remain facts without displaying an unconnected instrument ID. Local loop outputs are control valves and controllable heat units; mover demand control remains the motor path.
+
+The form calls the direction selector Valve location, shows it only for level/pressure, and explains inlet fill versus outlet drain. New level picks default to HEIGHT_PERCENT; old settings keep their unit/action. To hold 25%, select the linked LT and CV, choose %, enter 25, select the valve’s location, switch On and Apply. Percent refers to height span. Device/machine pages list static sensor IDs and type labels, plus the CV label on a valve page.
 
 ## Class map
 

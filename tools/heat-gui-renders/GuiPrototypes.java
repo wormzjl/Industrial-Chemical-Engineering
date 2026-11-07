@@ -101,7 +101,8 @@ public final class GuiPrototypes {
         for(boolean dcs:new boolean[]{false,true})out.add(new Prototype(dcs?"control-dcs":"control-local",dcs?464:246,254,(d,s)->{
             d.skin.title(d.c,10,10,dcs?"DCS":"Local controller");
             var view=new ControlColumns.View(true,"m","%",true,"LT-0012 / LEVEL","37.0","CV-0021","CONTROLLING",true,ControlColumns.Variable.LEVEL);
-            if(dcs)doorColumn(d,ControlColumns.controllers(List.of(new ControlColumns.Choice("controller:1","Drum level",true)),DIALOG::get),new Rect(10,30,194,184),Map.of(),"DCS controller list");
+            // KitDoor shares the long loop column's scroll offset; this one-row controller list is above the end view.
+            if(dcs&&!d.end)doorColumn(d,ControlColumns.controllers(List.of(new ControlColumns.Choice("controller:1","Drum level",true)),DIALOG::get),new Rect(10,30,194,184),Map.of(),"DCS controller list");
             doorColumn(d,ControlColumns.loop(view,DIALOG::get),new Rect(dcs?218:10,30,dcs?222:226,184),Map.of("name","Drum level","target","25"),"Level control");
             dialogFooter(d,DIALOG.get("control.close"),DIALOG.get("control.apply"));
         },true));

@@ -1,4 +1,4 @@
-# Pump, coupling and motor sprites
+# Machinery and control sprites
 
 Batch: `documentation/2026-11-03-rotating-machinery/` (pump and motor rework, 2026-11-04).
 
@@ -40,12 +40,25 @@ It writes seventeen PNGs including the plain cover and low-detail hex nut. `prob
 - `UnitCount "KIND size length support"...`: drawn polygons (chunk and moving).
 - `PumpRender KIND size length support outPrefix views`: software renders. `-Dground=0 -Dcap=300` for a close view, `-Dfocus=x,y,z,radius` to frame one joint.
 
+## Controller, DCS and sensor finishes
+
+`ControlAssets.java` uses the workstation palette/model writer to generate eleven cabinet/sensor sprites and the controller/DCS block JSONs without changing their envelopes or UVs. It reads `pump_casting.png`; legacy shared `control_case.png` stays untouched. From the worktree root, with an indexed task folder:
+
+```text
+javac -encoding UTF-8 -d tmp/<task>/classes tools/pump-sprites/ConstructorAssets.java tools/pump-sprites/SimulatorAssets.java tools/pump-sprites/ControlAssets.java
+java -Djava.awt.headless=true -Djava.io.tmpdir=tmp/<task> -cp tmp/<task>/classes ControlAssets src/main/resources/assets/icheme
+```
+
+`probes/SensorSheet.java <render-folder> <output.png>` combines the five sensor item renders at enlarged/inventory scales. The exporter/rasterizer recipe is in `tools/simulator-sizing/README.md`. Installed sensor colours are owned by `InstrumentGeometry`/`InstrumentRenderer`, rather than their item textures.
+
 ## Entry points
 
 - `PumpSprites.main(folder)`: bakes every sprite.
 - `PumpSprites.relief(nx, ny, nz)`: the game's shade of a normal relative to a wall facing +z, as in `TowerSprites`.
 
 ## History
+
+- 2026-11-07: `4682156e` adds `ControlAssets` and `SensorSheet`, giving controller/DCS/sensors the constructor/simulator metal, bezel, blue-glass and amber-ID finish. Cabinet geometry/UV and sensor item transforms stay unchanged. Control finish/rework reviews record asset checks and the later filtered checks/package.
 
 - 2026-11-07, batch `2026-11-06-simulator-sizing`: `ConstructorAssets.java` and `SimulatorAssets.java` now author the industrial fabrication bench and operator cabinet as vanilla JSON models, using existing steel, panel, grating and display textures. From the worktree root, run `java tools/pump-sprites/ConstructorAssets.java src/main/resources/assets/icheme` and the corresponding `SimulatorAssets.java` command to regenerate their block/item models and facing variants. Compile both classes with `tools/simulator-sizing/StationRender.java` for software views; `tools/simulator-sizing/check_models.py` checks collision coverage, UVs, resources and facing. The batch's other one-off renderers and texture sources are retained under `tools/simulator-sizing/archive/`.
 

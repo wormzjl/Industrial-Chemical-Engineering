@@ -15,7 +15,7 @@
 **Integrated on this branch:** optional floating-roof tank gauge (`b1477c090` via `0c5ce5224`); sizing, exchanger configurations, wired controls and FE conduits. Pending merge as part of 0.22.0. See [batch review](../../2026-11-06-simulator-sizing/MERGE_REVIEW.md).
 
 
-**Snapshot:** 238c136b (branch `codex/simulator-sizing`), 2026-11-07. Batch `2026-11-06-simulator-sizing`, prepared for 0.22.0; not merged. Earlier snapshots and release history are in Git and the batch READMEs.
+**Snapshot:** 68294ece (branch `codex/simulator-sizing`), 2026-11-07. Batch `2026-11-06-simulator-sizing`, prepared for 0.22.0; not merged. Earlier snapshots and release history are in Git and the batch READMEs.
 
 This guide describes the code in layers. Read level 1 and level 2 here first. Then open only the chapter your task needs. Each chapter starts with a summary and a class map, and puts its details in collapsed sections. The code is the authority. When code and guide disagree, trust the code and fix the guide (AGENTS.md, "Code guide").
 

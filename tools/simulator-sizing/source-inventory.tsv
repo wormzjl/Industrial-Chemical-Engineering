@@ -49,6 +49,9 @@ conduit-rework/preview.py	3445
 constructor-model/ConstructorRender.java	5138
 constructor-options/ConstructorOptionsRender.java	2038
 constructor-options/PipeLayingRender.java	45100
+control-rework/ControlPortRender.java	702
+control-rework/NormalProbe.java	795
+control-rework/SeamProbe.java	1585
 control-stations/StationModels.java	496
 control-stations/StationRender.java	5308
 control-stations/check_models.py	1620
