@@ -55,6 +55,13 @@ class ControlSystemTest {
     }
     private static ControlFacts corpus() throws Exception {return ControlFacts.load(TagParser.parseTag(Files.readString(Path.of("src/test/resources/compat/control/control-1.snbt"))));}
 
+    @Test void wiringIndexFollowsCableEditsWithoutLosingPortFacts() throws Exception {
+        var facts=corpus();var cable=facts.cables().iterator().next();var id=cable.endpoints().values().iterator().next();
+        assertTrue(facts.wired(id));facts.removeCable(cable.site());assertFalse(facts.wired(id));assertNotNull(facts.port(id));
+        facts.cable(cable);assertTrue(facts.wired(id));
+        facts.cable(new DataBus.Cable(cable.site(),cable.geometry(),cable.arms(),Map.of()));assertFalse(facts.wired(id));
+    }
+
     @Test void powerFactsRoundTripAndCannotJoinTheDataBus() throws Exception {
         var facts=ControlFacts.load(TagParser.parseTag(Files.readString(Path.of("src/test/resources/compat/control/control-3.snbt"))));
         var power=new DataBus(facts.cables(),facts.ports(),com.wormzjl.icheme.science.equipment.CableMedium.POWER);

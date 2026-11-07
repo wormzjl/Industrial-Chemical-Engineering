@@ -27,7 +27,13 @@ public final class DataSocketGeometry {
     }
     private static Socket powerSocket(EquipmentShape shape){
         if(!shape.designed())return null;
-        var unit=ProcessUnit.of(shape);var centre=unit.terminal();if(centre==null)return null;
+        var unit=ProcessUnit.of(shape);
+        if(unit.powerSocket!=null){
+            var socket=unit.powerSocket;var p=shape.transform().point(new double[]{socket.x(),socket.y(),socket.z()});
+            var n=shape.transform().direction(LineGeometry.step(socket.face()));int face=n[0]>.5?5:n[0]<-.5?4:n[2]>.5?3:2;
+            return new Socket(p[0],p[1],p[2],face);
+        }
+        var centre=unit.terminal();if(centre==null)return null;
         double x=Double.NEGATIVE_INFINITY;
         for(var facet:unit.mesh().facets()){
             var v=Mesh.whole(facet).positions();boolean positive=false,negative=false;

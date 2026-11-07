@@ -51,6 +51,7 @@ public final class DataBus {
     private record End(String dimension,long x,long y,long z,int axis){}
     private final Map<UUID,Set<UUID>> components;
     private final Map<Site,UUID> sitePorts;
+    private final List<Set<UUID>> circuits;
     public DataBus(Collection<Cable> cables,Map<UUID,DataPort> ports){this(cables,ports,CableMedium.DATA);}
     public DataBus(Collection<Cable> cables,Map<UUID,DataPort> ports,CableMedium medium){
         var byEnd=new HashMap<End,List<Site>>();var bySite=new HashMap<Site,Cable>();
@@ -87,8 +88,13 @@ public final class DataBus {
             var group=Set.copyOf(members);for(var id:group)linked.put(id,group);
         }
         components=Map.copyOf(linked);sitePorts=Map.copyOf(representatives);
+        var unique=Collections.newSetFromMap(new IdentityHashMap<Set<UUID>,Boolean>());var groups=new ArrayList<Set<UUID>>();
+        for(var group:components.values())if(unique.add(group))groups.add(group);
+        circuits=List.copyOf(groups);
     }
     public Set<UUID> connected(Site site){var id=sitePorts.get(site);return id==null?Set.of():connected(id);}
-    public Set<UUID> connected(UUID port){return components.getOrDefault(port,Set.of(port));}
+    public Set<UUID> connected(UUID port){var group=components.get(port);return group==null?Set.of(port):group;}
     public boolean connected(UUID a,UUID b){return connected(a).contains(b);}
+    /** Unique wired components, compiled once with the topology; unconnected sockets do not form circuits. */
+    public List<Set<UUID>> circuits(){return circuits;}
 }

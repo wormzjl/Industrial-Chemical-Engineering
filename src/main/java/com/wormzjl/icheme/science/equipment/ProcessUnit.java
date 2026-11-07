@@ -706,6 +706,8 @@ public final class ProcessUnit {
     double @org.jetbrains.annotations.Nullable [] terminalBox;
     /** Optional native junction-box mount on a service housing, independent of process nozzles. */
     DataSocketGeometry.Socket dataSocket;
+    /** Optional paired electrical mount, in the same native frame as the data socket. */
+    DataSocketGeometry.Socket powerSocket;
     /** Fixed roots and the room for their transition into the connected pipe, by nozzle index. */
     final Map<Integer, NozzleRoot> nozzleRoots = new HashMap<>();
     /** The sleeves through a closed skirt, by nozzle index: drawn with the nozzle at its pipe's size ({@link Sleeve}). */

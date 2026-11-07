@@ -39,6 +39,12 @@ public final class ControlFacts extends SavedData {
         var id=new SensorId(sensor.instance(),nextSensorId,sensor.kind());nextSensorId=Math.addExact(nextSensorId,1);sensorIds.put(id.instance(),id);setDirty();return id;
     }
     private long topologyRevision;
+    /** Disposable wiring index; moving or editing a socket does not change the cable endpoint facts. */
+    private Set<UUID> wiredPorts;
+    public boolean wired(UUID port){
+        if(wiredPorts==null){var ids=new HashSet<UUID>();for(var cable:cables.values())ids.addAll(cable.endpoints().values());wiredPorts=Set.copyOf(ids);}
+        return wiredPorts.contains(port);
+    }
     public Collection<DataBus.Cable> cables(){return List.copyOf(cables.values());}
     public Map<UUID,DataPort> ports(){return Map.copyOf(ports);}
     public Collection<Panel> panels(){return List.copyOf(panels.values());}
@@ -46,8 +52,8 @@ public final class ControlFacts extends SavedData {
     public DataPort port(UUID id){return ports.get(id);}
     public Panel panel(UUID id){return panels.get(id);}
     public long topologyRevision(){return topologyRevision;}
-    public void cable(DataBus.Cable cable){if(cable.equals(cables.put(cable.site(),cable)))return;changed();}
-    public void removeCable(DataBus.Site site){if(cables.remove(site)!=null)changed();}
+    public void cable(DataBus.Cable cable){if(cable.equals(cables.put(cable.site(),cable)))return;wiredPorts=null;changed();}
+    public void removeCable(DataBus.Site site){if(cables.remove(site)!=null){wiredPorts=null;changed();}}
     public void port(DataPort port){if(port.equals(ports.put(port.id(),port)))return;changed();}
     public void removePort(UUID id){if(ports.remove(id)!=null)changed();}
     public void panel(Panel panel){var before=panels.put(panel.id(),panel);if(panel.equals(before))return;if(before==null)changed();else setDirty();}

@@ -6,11 +6,15 @@ import static org.junit.jupiter.api.Assertions.*;
 class ConduitGeometryTest {
     @Test void motorAndGeneratorConnectorsFaceOppositeSidesAtEveryHeading(){
         for(var kind:new EquipmentShape.Kind[]{EquipmentShape.Kind.MOTOR,EquipmentShape.Kind.GENERATOR})
-            for(var heading:EquipmentShape.Heading.values())for(double size:new double[]{1,22,1000}){
+            for(var heading:EquipmentShape.Heading.values())for(double size:new double[]{.75,22,400,500,1000,20000}){
                 var shape=EquipmentShape.unit(kind,size,1,heading,0);
                 var data=DataSocketGeometry.equipment(shape);var power=DataSocketGeometry.power(shape);
                 assertNotNull(data,shape.toString());assertNotNull(power,shape.toString());
                 assertEquals(data.face()^1,power.face(),shape.toString());
+                assertEquals(data.y(),power.y(),1e-12,shape.toString());
+                var transverse=LineGeometry.step(data.face());
+                if(transverse[0]!=0)assertEquals(data.z(),power.z(),1e-12,shape.toString());
+                else assertEquals(data.x(),power.x(),1e-12,shape.toString());
                 var n=LineGeometry.step(power.face());
                 assertTrue((power.x()-data.x())*n[0]+(power.z()-data.z())*n[2]>.25,shape.toString());
             }

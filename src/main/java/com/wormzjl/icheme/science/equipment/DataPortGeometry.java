@@ -15,6 +15,7 @@ public final class DataPortGeometry {
     static List<Polygon> polygons(double[] centre,double[] outward,boolean junctionBox,double cableOutside){
         var mesh=new Mesh();
         double opening=Math.max(.035,cableOutside/2+.00375);
+        double gland=cableOutside>CableMedium.DATA.outside()?.095:.075;
         var ref=Math.abs(outward[1])<.8?new double[]{0,1,0}:new double[]{1,0,0};
         var f=new Frame(centre,outward,ref);
         if(junctionBox){
@@ -24,8 +25,8 @@ public final class DataPortGeometry {
         }
         mesh.cylinder(f,cableOutside<=CableMedium.DATA.outside()?.03:cableOutside/2,-.22,-.04,8,Material.PIPE);
         mesh.cylinder(f,.11,-.04,.015,8,Material.FLANGE);
-        mesh.prism(f,.075,.015,.05,6,Material.PIPE);
-        mesh.annulus(f,opening,.075,.05,6,1,Material.GUARD);
+        mesh.prism(f,gland,.015,.05,6,Material.PIPE);
+        mesh.annulus(f,opening,gland,.05,6,1,Material.GUARD);
         mesh.cylinder(f,opening,.025,.055,8,Material.OPENING);
         return LineGeometry.overhanging(mesh);
     }
