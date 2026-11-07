@@ -128,6 +128,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         instruments.reconcileLegacyValves();
         shafts=new ShaftTrains(topology,registry::owner,runtime.coordinator());runtime.coordinator().shafts(shafts);shafts.host(new ShaftHost());
         electric=new ElectricStores(topology,registry::owner,runtime.coordinator(),()->new ElectricStores.Settings(IChemE.joulesPerFE(),IChemE.machinesNeedPower()));shafts.electric(electric);
+        electric.supply(id->com.wormzjl.icheme.runtime.power.PowerNetwork.of(server).supplied(shafts.unit(id)));
         // The Create coupling (W6b): its stress rate; a world opened without Create lost its couplings' blocks, so their parts leave.
         shafts.stressPerFE(IChemE::stressPerFE);if(!net.neoforged.fml.ModList.get().isLoaded("create"))shafts.forget(com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.CREATE_COUPLING);
         health=new PumpHealth(topology,registry::owner,runtime.coordinator(),id->PumpHealth.pump(topology.active().get(id)),id->{var r=topology.active().get(id);return r==null?null:r.device().control();},IChemE::wearSettings);shafts.health(health);
@@ -612,6 +613,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
     private void tick() {
         owned();if(closed)return;refreshProperties();topology.tick();
         holdValves();
+        // Sample electrical supply before this cadence's shaft decisions and presentation, including idle trains.
+        if(topology.onlineTick()%ElectricStores.CADENCE==0&&propertyHold==null){electric.cadence();shafts.cadence();}
         runtime.tick();
         if(topology.hasPendingEvents()){applyPending();runtime.coordinator().pumpIfUseful();}
         // Shaft events apply after the devices they name (W3), then their trains recompile and wake what moved.
@@ -629,8 +632,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         // The watched drivers' states at the presentation cadence (W3): a read of what the trains last decided.
         if(!driverWatchers.isEmpty()&&topology.onlineTick()%100==0)publishDrivers();
         if(!rotationWatchers.isEmpty()&&topology.onlineTick()%100==0)publishRotations();
-        // The electric stores at the presentation cadence (W5, readings A60, A62): booking at rest, restarts, the facts handed over.
-        if(topology.onlineTick()%ElectricStores.CADENCE==0&&propertyHold==null){electric.cadence();shafts.cadence();health.cadence();}
+        if(topology.onlineTick()%ElectricStores.CADENCE==0&&propertyHold==null)health.cadence();
         // A generator's port pushes FE to its neighbours (the FE protocol, reading A65): stored FE only, nothing solves.
         pushGenerators();
         com.wormzjl.icheme.network.AssemblyNetwork.presentationTick(server, topology.onlineTick());

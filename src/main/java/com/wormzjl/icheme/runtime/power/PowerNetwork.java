@@ -2,10 +2,14 @@ package com.wormzjl.icheme.runtime.power;
 
 import com.wormzjl.icheme.runtime.control.*;
 import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
+import com.wormzjl.icheme.runtime.fluid.ShaftUnit;
 import com.wormzjl.icheme.runtime.instrument.*;
 import com.wormzjl.icheme.science.equipment.CableMedium;
+import com.wormzjl.icheme.science.equipment.ShapeRasterizer;
 import com.wormzjl.icheme.world.level.block.entity.ConduitBlockEntity;
+import com.wormzjl.icheme.world.level.block.EquipmentStructure;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.resources.*;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -69,6 +73,24 @@ public final class PowerNetwork {
         return level.getCapability(Capabilities.EnergyStorage.BLOCK,address.owner(),address.face());
     }
     public void tick(){owned();if(transferring)return;refresh();transferring=true;try{grid.tick();}finally{transferring=false;}}
+    /** Scheduled motor supply check, including an ordinary FE source placed directly beside its terminal. */
+    public boolean supplied(ShaftUnit unit){
+        owned();if(transferring||unit==null)return false;refresh();
+        var at=unit.position();var key=ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION,ResourceLocation.parse(at.dimension()));
+        var level=server.getLevel(key);var origin=new BlockPos(at.x(),at.y(),at.z());
+        if(level==null||!level.hasChunkAt(origin))return false;
+        var vessel=EquipmentStructure.at(level,origin);if(vessel==null)return false;
+        var terminal=ShapeRasterizer.terminal(vessel.shape());if(terminal==null)return false;
+        var pos=origin.offset(terminal.x(),terminal.y(),terminal.z());if(!level.hasChunkAt(pos))return false;
+        if(level.getBlockEntity(pos) instanceof Instrument.Holder holder){
+            var port=holder.instruments().powerPort();if(port!=null&&grid.supplied(port.id()))return true;
+        }
+        for(var face:Direction.values()){
+            var source=energy(new PowerGrid.Address(at.dimension(),pos.relative(face),face.getOpposite()));
+            if(source!=null&&source.canExtract()&&source.extractEnergy(1,true)>0)return true;
+        }
+        return false;
+    }
     /** No local buffer or alternate energy unit: neighbouring mods see the connected FE stores directly. */
     public IEnergyStorage capability(DataBus.Site site){
         return new IEnergyStorage(){

@@ -29,6 +29,8 @@ public final class DataControlRenderer {
     private static final RenderType JACKET=RenderType.entityCutoutNoCull(net.minecraft.world.inventory.InventoryMenu.BLOCK_ATLAS);
     private record PortMesh(List<Mesh.Polygon> polygons,net.minecraft.core.Direction outward){}
     private static final Map<DataPort,PortMesh> PORTS=new HashMap<>();
+    private record RackCable(RackGeometry.Rack rack,RackGeometry.Lane lane,ConduitGeometry.Key geometry){}
+    private static final Map<RackCable,List<Mesh.Polygon>> CABLES=new HashMap<>();
     private DataControlRenderer(){}
     public static void loaded(ControlPanelBlockEntity box){PANELS.add(box);}public static void unloaded(ControlPanelBlockEntity box){PANELS.remove(box);}
     public static Map<UUID,DataPort> ports(Level level,Vec3 centre,double radius){
@@ -59,6 +61,7 @@ public final class DataControlRenderer {
         if(event.getStage()!=RenderLevelStageEvent.Stage.AFTER_PARTICLES)return;var mc=Minecraft.getInstance();if(mc.level==null||mc.player==null)return;
         var pose=event.getPoseStack();var camera=event.getCamera().getPosition();var buffers=mc.renderBuffers().bufferSource();
         if(PORTS.size()>2048)PORTS.clear();
+        if(CABLES.size()>2048)CABLES.clear();
         for(var port:ports(mc.level,mc.player.position(),96).values()){
             var mesh=PORTS.computeIfAbsent(port,p->{var out=DataPorts.outward(mc.level,p);boolean box=false;
                 if(mc.level.getBlockEntity(p.owner()) instanceof EquipmentShellBlockEntity shell){
@@ -70,7 +73,10 @@ public final class DataControlRenderer {
             if(connected(mc.level,port))drawLead(pose,buffers,camera,port,false);
             if(CableLayingClient.holding(mc.player)&&port.kind().medium()==CableLayingClient.medium())LevelRenderer.renderLineBox(pose,buffers.getBuffer(RenderType.lines()),new AABB(port.centre(),port.centre()).inflate(.14).move(camera.scale(-1)),1,.8f,.22f,1);
         }
-        for(var rack:PipeRackBlockEntity.clientRacks())if(rack.getLevel()==mc.level&&rack.getBlockPos().getCenter().distanceToSqr(camera)<96*96)for(var cable:rack.cables())drawCable(pose,buffers,camera,Vec3.atLowerCornerOf(rack.getBlockPos()),ConduitGeometry.lane(rack.rack(),rack.cableLane(cable)),cable.geometry().medium());
+        for(var rack:PipeRackBlockEntity.clientRacks())if(rack.getLevel()==mc.level&&rack.getBlockPos().getCenter().distanceToSqr(camera)<96*96)for(var cable:rack.cables()){
+            var key=new RackCable(rack.rack(),rack.cableLane(cable),cable.geometry());
+            drawCable(pose,buffers,camera,Vec3.atLowerCornerOf(rack.getBlockPos()),CABLES.computeIfAbsent(key,k->ConduitGeometry.lane(k.rack(),k.lane(),k.geometry())),cable.geometry().medium());
+        }
         CableLayingClient.draw(pose,buffers,camera);
         buffers.endBatch(SOLID);buffers.endBatch(JACKET);buffers.endBatch(GHOST);buffers.endBatch(RenderType.lines());
     }

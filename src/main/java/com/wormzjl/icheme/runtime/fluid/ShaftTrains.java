@@ -645,7 +645,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
             }
         }
         var measure = new ShaftTrain.Measure(demand, run.available, steamShort, run.measured, run.target, state.previousSpeed(), state.previousMeasured(), run.available > 0 || idleSupply);
-        // A motor runs while its store has energy (W5): its draw is booked at this step, from its last booking to now, at the
+        // A motor needs its live feed and buffered energy: its draw is booked at this step, from its last booking to now, at the
         // power this step decided (reading A59); one that runs short stops here (NO POWER) and restarts on the cadence.
         boolean motor = d.kind() == ShaftNetwork.Kind.MOTOR && electric != null;
         var driver = driver(d, turbine || valve != null, !motor || electric.powered(d.id()));
@@ -726,8 +726,8 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
             var d = topology.shaft(run.train.driver());
             if (d == null) continue;
             if (d.kind() == ShaftNetwork.Kind.MOTOR) {
-                if (electric.restart(d.id())) run.fresh = true;
-                else if (!electric.bookedWithin(d.id(), now) && electric.draw(d.id(), run.electric, now)) run.fresh = true;
+                if (!electric.bookedWithin(d.id(), now) && electric.draw(d.id(), run.electric, now)) run.fresh = true;
+                if (electric.disconnect(d.id()) || electric.restart(d.id())) run.fresh = true;
             }
             for (var m : run.train.driven()) {
                 var g = topology.shaft(m.id());

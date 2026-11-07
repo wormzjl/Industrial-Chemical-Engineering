@@ -18,6 +18,7 @@ public final class PowerGrid {
     private record Endpoint(Owner owner,IEnergyStorage storage){}
     private final DataBus bus;
     private final Map<UUID,Circuit> byPort;
+    private final Map<UUID,Owner> owners;
     private final List<Circuit> active;
     private final Function<Address,IEnergyStorage> resolve;
     private boolean busy;
@@ -25,13 +26,13 @@ public final class PowerGrid {
 
     public PowerGrid(DataBus bus,Map<UUID,DataPort> ports,Function<Address,IEnergyStorage> resolve){
         this.bus=Objects.requireNonNull(bus);this.resolve=Objects.requireNonNull(resolve);
-        var index=new HashMap<UUID,Circuit>();var operating=new ArrayList<Circuit>();
+        var index=new HashMap<UUID,Circuit>();var operating=new ArrayList<Circuit>();var portOwners=new HashMap<UUID,Owner>();
         for(var group:bus.circuits()){
             var inputs=new LinkedHashMap<Owner,List<Address>>();var outputs=new LinkedHashMap<Owner,List<Address>>();
             var owners=new LinkedHashSet<Owner>();
             for(var id:group){
                 var p=ports.get(id);if(p==null||!p.kind().power())continue;
-                var owner=new Owner(p.dimension(),p.owner());owners.add(owner);var address=new Address(p.dimension(),p.owner(),p.face().getOpposite());
+                var owner=new Owner(p.dimension(),p.owner());owners.add(owner);portOwners.put(id,owner);var address=new Address(p.dimension(),p.owner(),p.face().getOpposite());
                 if(p.kind()!=DataPort.Kind.POWER_OUTPUT)inputs.computeIfAbsent(owner,k->new ArrayList<>()).add(address);
                 if(p.kind()!=DataPort.Kind.POWER_INPUT)outputs.computeIfAbsent(owner,k->new ArrayList<>()).add(address);
             }
@@ -45,7 +46,7 @@ public final class PowerGrid {
             for(var id:group)index.put(id,circuit);
             if(terminals.size()>1&&!receiving.isEmpty()&&!producing.isEmpty())operating.add(circuit);
         }
-        byPort=Map.copyOf(index);active=List.copyOf(operating);
+        byPort=Map.copyOf(index);active=List.copyOf(operating);owners=Map.copyOf(portOwners);
     }
     private Circuit circuit(DataBus.Site site){var group=bus.connected(site);return group.isEmpty()?null:byPort.get(group.iterator().next());}
     private IEnergyStorage storage(Terminal terminal,boolean input){
@@ -84,6 +85,18 @@ public final class PowerGrid {
     public boolean available(DataBus.Site site,boolean input){
         if(busy)return false;busy=true;
         try{var c=circuit(site);if(c==null)return false;for(var t:input?c.inputs():c.outputs())if(storage(t,input)!=null)return true;return false;}finally{busy=false;}
+    }
+    /** Read whether another terminal on this circuit can currently supply FE, even when this consumer is full. */
+    public boolean supplied(UUID port){
+        if(busy)return false;busy=true;
+        try{
+            var c=byPort.get(port);if(c==null)return false;
+            for(var t:c.outputs()){
+                if(t.owner().equals(owners.get(port)))continue;
+                var source=storage(t,false);if(source!=null&&source.extractEnergy(1,true)>0)return true;
+            }
+            return false;
+        }finally{busy=false;}
     }
     public int total(DataBus.Site site,boolean capacity){
         if(busy)return 0;busy=true;

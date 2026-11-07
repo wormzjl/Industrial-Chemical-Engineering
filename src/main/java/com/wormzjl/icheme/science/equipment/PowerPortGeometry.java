@@ -3,7 +3,7 @@ package com.wormzjl.icheme.science.equipment;
 import java.util.List;
 import static com.wormzjl.icheme.science.equipment.Mesh.*;
 
-/** Larger orange-identified gland for the metallic power enclosure; the data socket remains yellow. */
+/** Orange-identified gland for the metallic power enclosure; the equal-sized data socket remains yellow. */
 public final class PowerPortGeometry {
     private PowerPortGeometry(){}
     public static List<Polygon> polygons(double[] centre,double[] outward,boolean box){

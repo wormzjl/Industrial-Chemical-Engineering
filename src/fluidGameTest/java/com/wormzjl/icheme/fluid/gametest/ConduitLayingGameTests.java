@@ -119,7 +119,7 @@ public final class ConduitLayingGameTests {
         else level.setBlock(station,ModBlocks.LOCAL_CONTROLLER.get().defaultBlockState().setValue(ControlPanelBlock.FACING,normal),3);
         var player=FakePlayerFactory.get(level,new GameProfile(UUID.randomUUID(),"ConduitPlacement"));player.setGameMode(GameType.CREATIVE);
         var tool=new ItemStack(ModItems.PIPE_LAYING_TOOL.get());tool.set(medium==CableMedium.POWER?ModItems.PIPE_LAYING_POWER.get():ModItems.PIPE_LAYING_DATA.get(),true);player.setItemInHand(InteractionHand.MAIN_HAND,tool);
-        var placed=new ArrayList<BlockPos>();boolean[] laid={false};DataPort[] selected=new DataPort[2];
+        var placed=new ArrayList<BlockPos>();boolean[] laid={false},broken={false};long[] breakTick={0};int[] retained={0};DataPort[] selected=new DataPort[2];
         helper.succeedWhen(()->{
             if(!laid[0]){
                 var ports=world.controls().facts().ports();
@@ -154,9 +154,24 @@ public final class ConduitLayingGameTests {
             if(medium==CableMedium.POWER){
                 var motor=selected[1];var terminal=(EquipmentShellBlockEntity)level.getBlockEntity(motor.owner());var energy=terminal.energy();
                 helper.assertTrue(energy!=null&&energy.getEnergyStored()>0,"Waiting for FE through the actual placed cable");
+                var unit=world.shafts().unitAt(new PhysicalFluidTopology.Position(level.dimension().location().toString(),origin.getX(),origin.getY(),origin.getZ()));
+                helper.assertTrue(unit!=null,"Waiting for the motor shaft unit");
+                if(broken[0]){
+                    helper.assertTrue(level.getGameTime()-breakTick[0]>=120,"Waiting past one power/presentation cadence");
+                    helper.assertTrue(world.shafts().view(unit.id()).speed()==0,"The charged unloaded motor still turns after its FE cable was broken");
+                    helper.assertTrue(world.shafts().view(unit.id()).electricPower()==0,"A disconnected drive still reports electric draw");
+                    helper.assertTrue(!com.wormzjl.icheme.runtime.power.PowerNetwork.of(level.getServer()).supplied(unit),"The broken circuit still reports a live source");
+                    helper.assertTrue(energy.getEnergyStored()==retained[0],"Unplugging the unloaded motor discarded buffered energy");
+                    for(var p:placed)level.removeBlock(p,false);level.removeBlock(station,false);level.removeBlock(new EquipmentStructure.Vessel(origin,shape).controller(),false);
+                    return;
+                }
+                helper.assertTrue(energy.getEnergyStored()==energy.getMaxEnergyStored()&&world.shafts().view(unit.id()).speed()>0,"Waiting for the connected unloaded motor to run with a full buffer");
+                helper.assertTrue(com.wormzjl.icheme.runtime.power.PowerNetwork.of(level.getServer()).supplied(unit),"The full motor cannot see its connected source without receiving FE");
+                retained[0]=energy.getEnergyStored();
             }
             var removed=placed.get(placed.size()/2);level.destroyBlock(removed,false);
             helper.assertTrue(!new DataBus(world.controls().facts().cables(),world.controls().facts().ports(),medium).connected(selected[0].id(),selected[1].id()),"Breaking the line did not disconnect it");
+            if(medium==CableMedium.POWER){broken[0]=true;breakTick[0]=level.getGameTime();helper.assertTrue(false,"Waiting for power loss to stop the motor");}
             for(var p:placed)level.removeBlock(p,false);level.removeBlock(station,false);level.removeBlock(new EquipmentStructure.Vessel(origin,shape).controller(),false);
         });
     }

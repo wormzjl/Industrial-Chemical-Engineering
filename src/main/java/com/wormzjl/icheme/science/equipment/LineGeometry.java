@@ -115,8 +115,12 @@ public final class LineGeometry {
         else if(Integer.bitCount(drawn)==1)drawn|=1<<(Integer.numberOfTrailingZeros(drawn)^1);
         var key=new Key(Kind.PIPE,5,drawn,PipeSizes.code(outside),0,0,false,offsets);
         var out=new ArrayList<>(polygons(key));var fittings=new Mesh();
-        for(int face=0;face<6;face++)if(key.connected(face))
-            fittings.hoop(new Frame(point(key,face),step(face),ref(face)),outside/2,.60*outside,-.02,0,PipeSizes.sides(outside),Material.FLANGE);
+        for(int face=0;face<6;face++)if(key.connected(face)) {
+            var frame=new Frame(point(key,face),step(face),ref(face));
+            fittings.hoop(frame,outside/2,.60*outside,-.02,0,PipeSizes.sides(outside),Material.FLANGE);
+            // Insulated cable fills its enclosure. Recess the face so adjoining blocks never share coplanar caps.
+            fittings.disc(frame,outside/2,-.002,PipeSizes.sides(outside),1,Material.OPENING);
+        }
         out.addAll(overhanging(fittings));return List.copyOf(out);
     }
 

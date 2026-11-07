@@ -20,13 +20,34 @@ class ConduitGeometryTest {
             }
     }
     @Test void fixedPowerDiameterRetainsThePipeFaceCoordinates(){
-        assertEquals(2*CableMedium.DATA.outside(),CableMedium.POWER.outside());
+        assertEquals(CableMedium.DATA.outside(),CableMedium.POWER.outside());
+        assertEquals(.125,CableMedium.DATA.outside());
         var data=new ConduitGeometry.Key(0,0).connect(4,-7,9).connect(5,3,-4);
         var power=new ConduitGeometry.Key(0,0,CableMedium.POWER).connect(4,-7,9).connect(5,3,-4);
         assertArrayEquals(data.point(4),power.point(4));assertArrayEquals(data.point(5),power.point(5));
         for(var medium:CableMedium.values())for(int joints:new int[]{48,36,52})for(var p:ConduitGeometry.polygons(new ConduitGeometry.Key(joints,0,medium))){
             for(double v:p.positions())assertTrue(Double.isFinite(v));
             assertEquals(p.size()*2,p.uvs().length);assertEquals(p.size()*3,p.normals().length);
+        }
+    }
+    @Test void insulatedEndsAreClosedAndBothKindsCarryDifferentSymbolsOnEveryStraightHeading(){
+        for(int axis=0;axis<3;axis++){
+            int face=2*axis,mask=3<<face;
+            var data=ConduitGeometry.polygons(new ConduitGeometry.Key(mask,0,CableMedium.DATA));
+            var power=ConduitGeometry.polygons(new ConduitGeometry.Key(mask,0,CableMedium.POWER));
+            for(var medium:CableMedium.values()){
+                var polygons=medium==CableMedium.DATA?data:power;
+                var ends=polygons.stream().filter(p->p.material()==Mesh.Material.OPENING&&p.size()==8).toList();
+                assertEquals(2,ends.size(),"Both insulated cut ends must block the view through the conduit");
+                assertTrue(polygons.stream().filter(p->p.material()==Mesh.Material.OPENING&&p.size()!=8).count()>=24,"Repeating symbols must be visible from all four sides");
+                for(var end:ends)for(int v=0;v<end.size();v++){
+                    int dim=LineGeometry.axis(face);
+                    double at=end.positions()[3*v+dim];assertTrue(Math.abs(at-.002)<1e-9||Math.abs(at-.998)<1e-9,"Caps are recessed to avoid shared coplanar faces");
+                    assertEquals(0,Math.abs(end.normals()[3*v+dim])-1,1e-12);
+                }
+            }
+            assertNotEquals(data.stream().filter(p->p.material()==Mesh.Material.OPENING).map(p->java.util.Arrays.toString(p.positions())).toList(),
+                    power.stream().filter(p->p.material()==Mesh.Material.OPENING).map(p->java.util.Arrays.toString(p.positions())).toList(),"Power and data symbols differ geometrically");
         }
     }
     @Test void mountsPreferBlockFaceCentresAndKeepOffsetsOnlyForSmallSpans(){
@@ -49,6 +70,28 @@ class ConduitGeometryTest {
             for(int k=0;k<3;k++)if(k!=axis)assertEquals(.5,p[k]%1,1e-12);
         }
     }
+    @Test void wideningSavedRackCablesKeepsTheirEndCoordinates(){
+        for(int facing=2;facing<6;facing++)for(int corner=RackGeometry.STRAIGHT;corner<=RackGeometry.TEE;corner++){
+            var rack=new RackGeometry.Rack(facing,corner);int arms=RackGeometry.runs(rack);
+            if(Integer.bitCount(arms)!=2)continue;
+            var old=new RackGeometry.Lane(0,1,arms,arms,PipeSizes.code(.0625));
+            var current=new RackGeometry.Lane(0,1,arms,arms,PipeSizes.code(CableMedium.DATA.outside()));
+            var saved=new ConduitGeometry.Key(arms,0,CableMedium.DATA);
+            for(int face=0;face<6;face++)if((arms&1<<face)!=0){
+                int point=RackGeometry.point(rack,old.option(),old.width(),old.diameter(),face);
+                saved=saved.connect(face,signed(point&31),signed(point>>5&31));
+            }
+            var caps=ConduitGeometry.lane(rack,current,saved).stream().filter(p->p.material()==Mesh.Material.OPENING&&p.size()==8).toList();
+            assertEquals(2,caps.size());
+            for(int face=0;face<6;face++)if((arms&1<<face)!=0){
+                var expected=saved.point(face);var normal=LineGeometry.step(face);
+                var matching=caps.stream().filter(p->p.normals()[0]*normal[0]+p.normals()[1]*normal[1]+p.normals()[2]*normal[2]>.99).findFirst().orElseThrow();
+                var centre=new double[3];for(int v=0;v<matching.size();v++)for(int k=0;k<3;k++)centre[k]+=matching.positions()[3*v+k]/matching.size();
+                for(int k=0;k<3;k++)assertEquals(expected[k]-.002*normal[k],centre[k],1e-10,"Saved cable end moved with its diameter");
+            }
+        }
+    }
+    private static int signed(int value){return value>=16?value-32:value;}
     @Test void serviceSocketsClearTheCastingsAcrossEveryEquipmentFamily(){
         int checked=0,nativeData=0,powered=0;
         var kinds=java.util.EnumSet.noneOf(EquipmentShape.Kind.class);

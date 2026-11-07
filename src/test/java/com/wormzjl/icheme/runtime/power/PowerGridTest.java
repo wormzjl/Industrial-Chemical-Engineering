@@ -37,6 +37,18 @@ class PowerGridTest {
         var replacement=new EnergyStorage(200,1000,0);r.stores().put(r.addresses().get(1),replacement);r.grid().tick();
         assertEquals(0,a.getEnergyStored());assertEquals(200,replacement.getEnergyStored());assertEquals(0,source.getEnergyStored());
     }
+    @Test void aFullConsumerStillSeesItsLiveSourceWithoutAFeTransfer(){
+        var source=new EnergyStorage(1000,0,1000,400);var a=new EnergyStorage(200,1000,0,200);var b=new EnergyStorage(200,1000,0,200);var r=rig(source,a,b);
+        var consumer=new UUID(0,2);var producer=new UUID(0,1);
+        assertTrue(r.grid().supplied(consumer));assertFalse(r.grid().supplied(producer),"A terminal cannot count itself as its own feed");
+        assertFalse(r.grid().supplied(new UUID(0,99)));
+        r.grid().tick();assertEquals(400,source.getEnergyStored());assertEquals(200,a.getEnergyStored());
+        assertTrue(r.grid().supplied(consumer),"A full idle load still has a live circuit");
+        assertEquals(400,source.getEnergyStored(),"Checking availability never extracts energy");
+        r.stores().remove(r.addresses().getFirst());assertFalse(r.grid().supplied(consumer),"Source removal is observed without waiting for a failed transfer");
+        r.stores().put(r.addresses().getFirst(),new EnergyStorage(1000,0,1000));assertFalse(r.grid().supplied(consumer),"An empty source cannot power the drive");
+        r.stores().put(r.addresses().getFirst(),source);assertTrue(r.grid().supplied(consumer));
+    }
     @Test void aCapabilityCallingBackIntoTheGridCannotRecurseOrDuplicateEnergy(){
         var grid=new PowerGrid[1];var backing=new EnergyStorage(100,100,0);
         IEnergyStorage callback=new IEnergyStorage(){

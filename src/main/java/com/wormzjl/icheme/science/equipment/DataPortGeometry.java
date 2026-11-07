@@ -15,7 +15,7 @@ public final class DataPortGeometry {
     static List<Polygon> polygons(double[] centre,double[] outward,boolean junctionBox,double cableOutside){
         var mesh=new Mesh();
         double opening=Math.max(.035,cableOutside/2+.00375);
-        double gland=cableOutside>CableMedium.DATA.outside()?.095:.075;
+        double gland=Math.max(.075,opening/.8660254037844386+.012);
         var ref=Math.abs(outward[1])<.8?new double[]{0,1,0}:new double[]{1,0,0};
         var f=new Frame(centre,outward,ref);
         if(junctionBox){
@@ -23,7 +23,7 @@ public final class DataPortGeometry {
             mesh.block(f.along(-.012),scale(f.ref(),.115),scale(f.side(),.115),scale(outward,.008),Material.FLANGE);
             for(int a:new int[]{-1,1})for(int b:new int[]{-1,1})mesh.cylinder(new Frame(f.at(Math.atan2(b,a),.13,-.003),outward,ref),.008,0,.01,6,Material.BOLT);
         }
-        mesh.cylinder(f,cableOutside<=CableMedium.DATA.outside()?.03:cableOutside/2,-.22,-.04,8,Material.PIPE);
+        mesh.cylinder(f,Math.max(.03,cableOutside/2),-.22,-.04,8,Material.PIPE);
         mesh.cylinder(f,.11,-.04,.015,8,Material.FLANGE);
         mesh.prism(f,gland,.015,.05,6,Material.PIPE);
         mesh.annulus(f,opening,gland,.05,6,1,Material.GUARD);

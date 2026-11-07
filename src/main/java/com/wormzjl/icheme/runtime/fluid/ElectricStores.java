@@ -11,6 +11,7 @@ import com.wormzjl.icheme.science.machine.ElectricStore;
 import com.wormzjl.icheme.science.machine.ShaftNetwork;
 import java.util.*;
 import java.util.function.LongFunction;
+import java.util.function.LongPredicate;
 import java.util.function.Supplier;
 
 /**
@@ -68,6 +69,7 @@ public final class ElectricStores {
         /** A commit or replay ran the store short: the unit stops at the next cadence (a replay may be a view's read, which wakes nothing). */
         boolean shortfall;
         long bookedTick, rateTick, tick = Long.MIN_VALUE;
+        long offeredTick = Long.MIN_VALUE;
 
         Store(Kind kind, ElectricStore.Facts facts, long now) {
             this.kind = kind;
@@ -77,7 +79,7 @@ public final class ElectricStores {
         }
 
         double capacity() {
-            return ElectricStore.capacity(ratedDraw);
+            return kind == Kind.MOTOR ? ElectricStore.MOTOR_BUFFER_SECONDS * ratedDraw : ElectricStore.capacity(ratedDraw);
         }
     }
 
@@ -85,6 +87,7 @@ public final class ElectricStores {
     private final LongFunction<Long> owner;
     private final IslandCoordinator coordinator;
     private final Supplier<Settings> settings;
+    private LongPredicate supply=id->false;
     private final Map<Long, Store> stores = new TreeMap<>();
     /** Islands to wake at the next decision point: a fan unit lost or regained its power. */
     private final Set<Long> wake = new TreeSet<>();
@@ -109,7 +112,7 @@ public final class ElectricStores {
         for(var r:topology.active().values()) if(r.device().kind()==com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.PIPE&&r.device().control() instanceof FlowControl.Mover&&!(r.device().control() instanceof FlowControl.Machine)&&!stores.containsKey(r.device().id()))
             stores.put(r.device().id(),new Store(Kind.INLINE,ElectricStore.Facts.UNMETERED,now));
         sync();
-        for (var s : stores.values()) s.unpowered = !kindGenerator(s) && s.metered && s.joules <= 0 && needPower();
+        for (var s : stores.values()) s.unpowered = !kindGenerator(s) && s.metered && (s.kind == Kind.MOTOR || s.joules <= 0) && needPower();
     }
 
     private static boolean kindGenerator(Store s) {
@@ -123,6 +126,9 @@ public final class ElectricStores {
     public double joulesPerFE() {
         return settings.get().joulesPerFE();
     }
+
+    /** Installs the server-thread, read-only FE source lookup used at the motor decision cadence. */
+    public void supply(LongPredicate value){supply=Objects.requireNonNull(value);}
 
     private boolean needPower() {
         return settings.get().needPower();
@@ -260,6 +266,8 @@ public final class ElectricStores {
     public int receive(long id, int fe, boolean simulate) {
         var s = store(id);
         if (s == null || s.kind.generator() || fe <= 0) return 0;
+        // Push-only FE sources also prove their live feed when a full buffer accepts nothing. Preflight stays read-only.
+        if(!simulate)s.offeredTick = coordinator.now();
         double jpf = joulesPerFE();
         double taken = Math.min(ElectricStore.accepted(s.joules, s.capacity(), fe * jpf), room(s));
         int whole = (int) Math.min(fe, Math.floor(taken / jpf + 1e-9));
@@ -366,8 +374,22 @@ public final class ElectricStores {
     public boolean restart(long id) {
         var s = stores.get(id);
         if (s == null || !s.unpowered) return false;
-        if (needPower() && s.metered && s.joules < ElectricStore.restart(s.ratedDraw)) return false;
+        double threshold = s.kind == Kind.MOTOR ? ElectricStore.MOTOR_RESTART_SECONDS * s.ratedDraw : ElectricStore.restart(s.ratedDraw);
+        if (!free(s) && (s.joules < threshold || s.kind == Kind.MOTOR && !supplied(id,s))) return false;
         s.unpowered = false;
+        return true;
+    }
+
+    private boolean supplied(long id,Store s) {
+        // FE producers can tick before or after the engine. One tick of ordering tolerance, no process work per tick.
+        return s.offeredTick != Long.MIN_VALUE && coordinator.now() - s.offeredTick <= 1 || supply.test(id);
+    }
+
+    /** Sample the motor's live FE feed at an engine decision point, retaining all saved joules. */
+    public boolean disconnect(long id) {
+        var s = stores.get(id);
+        if (s == null || s.kind != Kind.MOTOR || free(s) || s.unpowered || supplied(id,s)) return false;
+        s.unpowered = true;
         return true;
     }
 
