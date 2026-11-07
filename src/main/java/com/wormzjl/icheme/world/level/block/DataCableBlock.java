@@ -15,6 +15,7 @@ import net.minecraft.world.phys.shapes.*;
 
 /** Structural signal cable. It shares grid routing with pipes but never joins the fluid topology. */
 public final class DataCableBlock extends BaseEntityBlock {
+    private static final java.util.Map<com.wormzjl.icheme.science.equipment.DataCableGeometry.Key,VoxelShape> SHAPES=new java.util.concurrent.ConcurrentHashMap<>();
     public static final MapCodec<DataCableBlock> CODEC=simpleCodec(DataCableBlock::new);
     public DataCableBlock(Properties properties){super(properties);var state=stateDefinition.any();for(var face:Direction.values())state=state.setValue(connection(face),false);registerDefaultState(state);}
     @Override protected MapCodec<? extends BaseEntityBlock> codec(){return CODEC;}
@@ -24,11 +25,10 @@ public final class DataCableBlock extends BaseEntityBlock {
     @Override protected RenderShape getRenderShape(BlockState state){return RenderShape.MODEL;}
     @Override protected VoxelShape getShape(BlockState state,BlockGetter level,BlockPos pos,CollisionContext context){
         if(!(level.getBlockEntity(pos) instanceof DataCableBlockEntity cable))return Block.box(6,6,6,10,10,10);
-        VoxelShape shape=Shapes.empty();var key=cable.geometry();
-        for(var s:com.wormzjl.icheme.science.equipment.DataCableGeometry.segments(key))
-            shape=Shapes.or(shape,Shapes.box(Math.min(s.ax(),s.bx())-.045,Math.min(s.ay(),s.by())-.045,Math.min(s.az(),s.bz())-.045,
-                    Math.max(s.ax(),s.bx())+.045,Math.max(s.ay(),s.by())+.045,Math.max(s.az(),s.bz())+.045));
-        return shape.isEmpty()?Block.box(2,7,7,14,9,9):shape;
+        if(SHAPES.size()>1024)SHAPES.clear();
+        return SHAPES.computeIfAbsent(cable.geometry(),key->{VoxelShape shape=Shapes.empty();
+            for(var b:com.wormzjl.icheme.science.equipment.DataCableGeometry.boxes(key))shape=Shapes.or(shape,Shapes.box(b[0],b[1],b[2],b[3],b[4],b[5]));
+            return shape.optimize();});
     }
     @Override protected void onRemove(BlockState state,Level level,BlockPos pos,BlockState next,boolean moved){
         if(!state.is(next.getBlock())&&level instanceof ServerLevel server)FluidWorldAuthority.find(server.getServer())

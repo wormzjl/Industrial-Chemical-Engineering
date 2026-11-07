@@ -26,7 +26,7 @@ public final class InstrumentHosts {
     public record Selection(Host host,Instrument.Mount mount,double distance) {}
     private static final Object INDEX_LOCK=new Object();
     public static void loaded(BlockEntity be){
-        if(be.getLevel()==null||!(be instanceof FluidDeviceBlockEntity pipe&&pipe.getBlockState().getBlock() instanceof FluidDeviceBlock block&&block.kind()==TopologyCompiler.Kind.PIPE||be instanceof EquipmentShellBlockEntity shell&&shell.shape()!=null&&shell.fluidIdentity()>0))return;
+        if(be.getLevel()==null||!(be instanceof FluidDeviceBlockEntity pipe&&pipe.getBlockState().getBlock() instanceof FluidDeviceBlock block&&block.kind()==TopologyCompiler.Kind.PIPE||be instanceof EquipmentShellBlockEntity shell&&shell.shape()!=null&&(shell.fluidIdentity()>0||shell.instruments().dataPort()!=null)))return;
         double extent=2;
         if(be instanceof EquipmentShellBlockEntity shell){var s=shell.shape();extent=Math.sqrt((double)s.sizeX()*s.sizeX()+(double)s.sizeY()*s.sizeY()+(double)s.sizeZ()*s.sizeZ())+2;}
         // The index and its equipped subset are published together; callers inspect hosts outside the lock.

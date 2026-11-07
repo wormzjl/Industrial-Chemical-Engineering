@@ -1,6 +1,11 @@
 package com.wormzjl.icheme.runtime.control;
 
 import com.wormzjl.icheme.runtime.instrument.InstrumentHosts;
+import com.wormzjl.icheme.runtime.instrument.Sensor;
+import com.wormzjl.icheme.science.equipment.*;
+import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler;
+import com.wormzjl.icheme.world.level.block.FluidDeviceBlock;
+import com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity;
 import com.wormzjl.icheme.world.level.block.ControlPanelBlock;
 import com.wormzjl.icheme.world.level.block.entity.ControlPanelBlockEntity;
 import com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity;
@@ -12,18 +17,46 @@ import java.util.*;
 /** Physical connectors use the same signed 1/32 m face coordinates as off-centre pipe entries. */
 public final class DataPorts {
     private DataPorts(){}
-    public static DataPort equipment(InstrumentHosts.Host host,boolean actuator){
-        var mount=host.mounts().stream().findFirst().orElse(null);
+    private record Mount(Vec3 centre,Direction outward){}
+    private static Mount equipmentMount(InstrumentHosts.Host host){
+        if(host.entity() instanceof EquipmentShellBlockEntity shell&&shell.shape()!=null){
+            var socket=DataSocketGeometry.equipment(shell.shape());
+            if(socket!=null)return new Mount(new Vec3(socket.x()+shell.origin().getX(),socket.y()+shell.origin().getY(),socket.z()+shell.origin().getZ()),Direction.values()[socket.face()]);
+        }
+        if(host.pipe()){
+            for(var sensor:host.metadata().sensors())for(var mount:Sensor.mounts(host,sensor.kind()))if(mount.id().equals(sensor.key().mount()))
+                return new Mount(mount.point(.14,0,0),Direction.getNearest(mount.right().x,mount.right().y,mount.right().z));
+            if(host.entity() instanceof FluidDeviceBlockEntity pipe){
+                var state=pipe.getBlockState();var key=new LineGeometry.Key(TopologyCompiler.Kind.PIPE,state.getValue(FluidDeviceBlock.FACING).ordinal(),FluidDeviceBlock.connectionMask(state),PipeSizes.code(PipeSizes.outside(pipe.bore())),0,0,false);
+                List<Mesh.Polygon> polygons=List.of();
+                if(FluidDeviceBlock.hasPressureValve(state))polygons=ValveGeometry.pressure(key,false);
+                else if(FluidDeviceBlock.hasPump(state)||FluidDeviceBlock.hasCompressor(state))polygons=InlineMoverGeometry.polygons(key,FluidDeviceBlock.hasCompressor(state),false);
+                var socket=DataSocketGeometry.surface(polygons);
+                if(socket!=null)return new Mount(new Vec3(socket.x()+pipe.getBlockPos().getX(),socket.y()+pipe.getBlockPos().getY(),socket.z()+pipe.getBlockPos().getZ()),Direction.EAST);
+            }
+        }
+        var mount=host.mounts().stream().filter(m->!m.top()).findFirst().orElse(host.mounts().stream().findFirst().orElse(null));
         var outward=mount==null?Direction.NORTH:mount.face();
-        var centre=mount==null?host.entity().getBlockPos().getCenter().add(0,.2,-.51):
-                mount.centre().add(outward.getAxis()==Direction.Axis.X?0:.28,0,outward.getAxis()==Direction.Axis.X?.28:0);
-        return create(UUID.randomUUID(),actuator?DataPort.Kind.ACTUATOR:DataPort.Kind.SENSOR,host.identity(),
-                host.entity().getLevel(),host.entity().getBlockPos(),centre,outward);
+        var centre=mount==null?host.entity().getBlockPos().getCenter().add(0,.2,-.51):mount.centre().add(outward.getAxis()==Direction.Axis.X?0:.28,0,outward.getAxis()==Direction.Axis.X?.28:0);
+        return new Mount(centre,outward);
     }
-    public static DataPort motor(EquipmentShellBlockEntity cell,com.wormzjl.icheme.runtime.fluid.ShaftUnit unit) {
-        var shaft=unit.ends().getFirst();var face=Direction.fromDelta(shaft.dx(),shaft.dy(),shaft.dz());
-        var centre=new Vec3(shaft.cell().x()+.5,shaft.cell().y()+.8,shaft.cell().z()+.5);
-        return create(UUID.randomUUID(),DataPort.Kind.ACTUATOR,unit.id(),cell.getLevel(),cell.getBlockPos(),centre,face);
+    public static DataPort equipment(InstrumentHosts.Host host,boolean actuator){var m=equipmentMount(host);return create(UUID.randomUUID(),actuator?DataPort.Kind.ACTUATOR:DataPort.Kind.SENSOR,host.identity(),host.entity().getLevel(),host.entity().getBlockPos(),m.centre(),m.outward());}
+    public static DataPort refresh(DataPort old,InstrumentHosts.Host host,java.util.function.Predicate<UUID> wired){
+        var m=equipmentMount(host);if(old.centre().distanceToSqr(m.centre())<1e-12)return old;
+        if(wired.test(old.id())){
+            // Existing cable face points are built facts. Move only the enclosure, retaining its lead and endpoint identity.
+            if(m.centre().distanceToSqr(old.cell().getCenter())>25)return old;
+            return new DataPort(old.id(),old.kind(),old.host(),old.dimension(),old.owner(),m.centre(),old.cell(),old.face(),old.u(),old.v());
+        }
+        return create(old.id(),old.kind(),old.host(),host.entity().getLevel(),old.owner(),m.centre(),m.outward());
+    }
+    public static Direction outward(Level level,DataPort port){
+        var host=InstrumentHosts.at(level,port.owner());if(host!=null)return equipmentMount(host).outward();
+        if(level.getBlockEntity(port.owner()) instanceof EquipmentShellBlockEntity cell&&cell.shape()!=null){var socket=DataSocketGeometry.equipment(cell.shape());if(socket!=null)return Direction.values()[socket.face()];}
+        return port.face().getOpposite();
+    }
+    public static DataPort motor(EquipmentShellBlockEntity cell,com.wormzjl.icheme.runtime.fluid.ShaftUnit unit){
+        return equipment(new InstrumentHosts.Host(unit.id(),cell,List.of(),false),true);
     }
     public static DataPort panel(ControlPanelBlockEntity panel){
         return panel(panel,panel.identity());

@@ -3,7 +3,7 @@ package com.wormzjl.icheme.science.equipment;
 import java.util.*;
 import static com.wormzjl.icheme.science.equipment.Mesh.*;
 
-/** A signal cable uses the pipe layer's face-point coordinates, without fluid passages or flanges. */
+/** Fixed-diameter metal signal conduit, using the pipe mesher and its face-point coordinates. */
 public final class DataCableGeometry {
     public static final double OUTSIDE=1/16.0;
     public record Key(int joints,long offsets) {
@@ -21,36 +21,26 @@ public final class DataCableGeometry {
         }
     }
     private DataCableGeometry(){}
-    public record Segment(double ax,double ay,double az,double bx,double by,double bz){}
-    public static List<Segment> segments(Key key){
-        var points=new ArrayList<double[]>();
-        for(int face=0;face<6;face++)if((key.joints()&(1<<face))!=0)points.add(key.point(face));
-        if(points.isEmpty())points.addAll(List.of(new double[]{.15,.5,.5},new double[]{.85,.5,.5}));
-        else if(points.size()==1)points.add(new double[]{.5,.5,.5});
-        var centre=new double[3];
-        for(var p:points)for(int k=0;k<3;k++)centre[k]+=p[k]/points.size();
-        var out=new ArrayList<Segment>();
-        if(points.size()==2){var a=points.get(0);var b=points.get(1);out.add(new Segment(a[0],a[1],a[2],b[0],b[1],b[2]));}
-        else for(var p:points)out.add(new Segment(centre[0],centre[1],centre[2],p[0],p[1],p[2]));
-        return List.copyOf(out);
+    public static List<Polygon> polygons(Key key){return LineGeometry.conduit(key.joints(),key.offsets(),OUTSIDE);}
+    /** Rack conduit uses the rack pipe sweep, rather than chords between its corners. */
+    public static List<Polygon> lane(RackGeometry.Rack rack,RackGeometry.Lane lane){return RackGeometry.lane(rack,lane);}
+    public static List<Polygon> path(List<double[]> points){return LineGeometry.conduit(points,OUTSIDE);}
+    /** Orthogonal equipment lead, with face-normal connector and cable-entry legs. */
+    public static List<Polygon> lead(double[] outward,double[] end,double[] entering){
+        var p=scale(outward,.18);var q=sub(end,scale(entering,.18));var points=new ArrayList<double[]>();
+        points.add(new double[3]);points.add(p);
+        int axis=Math.abs(outward[0])>.5?0:Math.abs(outward[1])>.5?1:2;
+        for(int step=1;step<=3;step++){int k=(axis+step)%3;if(Math.abs(p[k]-q[k])>1e-8){p=p.clone();p[k]=q[k];points.add(p);}}
+        points.add(end);return path(points);
     }
-    public static List<Polygon> polygons(Key key){
-        var mesh=new Mesh();var paths=segments(key);
-        for(var s:paths)segment(mesh,new double[]{s.ax,s.ay,s.az},new double[]{s.bx,s.by,s.bz});
-        if(paths.size()>1){var c=paths.getFirst();mesh.sphere(new double[]{c.ax,c.ay,c.az},OUTSIDE*.65,8,Material.PIPE);}
-        return LineGeometry.overhanging(mesh);
-    }
-    /** Shared by installed cable segments, equipment leads, rack lanes and route ghosts. */
-    public static List<Polygon> path(List<double[]> points){
-        var mesh=new Mesh();
-        for(int k=1;k<points.size();k++)segment(mesh,points.get(k-1),points.get(k));
-        return LineGeometry.overhanging(mesh);
-    }
-    private static void segment(Mesh mesh,double[] a,double[] b){
-        double[] delta=sub(b,a);double length=Math.sqrt(dot(delta,delta));
-        if(length<1e-8)return;
-        var axis=scale(delta,1/length);
-        var ref=unit(cross(axis,Math.abs(axis[1])<.8?new double[]{0,1,0}:new double[]{1,0,0}));
-        mesh.cylinder(new Frame(a,axis,ref),OUTSIDE/2,0,length,8,Material.PIPE);
+    /** Small boxes around the actual pipe polygons, shared by selection and removal previews. */
+    public static List<double[]> boxes(Key key){
+        var result=new ArrayList<double[]>();
+        for(var p:polygons(key)){
+            var bounds=new double[]{Double.POSITIVE_INFINITY,Double.POSITIVE_INFINITY,Double.POSITIVE_INFINITY,Double.NEGATIVE_INFINITY,Double.NEGATIVE_INFINITY,Double.NEGATIVE_INFINITY};
+            var v=p.positions();for(int i=0;i<v.length;i++){int k=i%3;bounds[k]=Math.min(bounds[k],v[i]);bounds[k+3]=Math.max(bounds[k+3],v[i]);}
+            for(int k=0;k<3;k++){bounds[k]-=.012;bounds[k+3]+=.012;}result.add(bounds);
+        }
+        return List.copyOf(result);
     }
 }

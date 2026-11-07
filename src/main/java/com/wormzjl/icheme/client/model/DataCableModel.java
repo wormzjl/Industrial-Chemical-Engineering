@@ -25,14 +25,16 @@ public final class DataCableModel implements IDynamicBakedModel {
     public static final IGeometryLoader<Geometry> LOADER=(json,context)->new Geometry();
     private static final ChunkRenderTypeSet SOLID=ChunkRenderTypeSet.of(RenderType.solid());
     private final TextureAtlasSprite sprite;
+    private final TextureAtlasSprite fitting,opening;
     private final ItemTransforms transforms;
     private final Map<DataCableGeometry.Key,List<BakedQuad>> cache=new ConcurrentHashMap<>();
-    private DataCableModel(TextureAtlasSprite sprite,ItemTransforms transforms){this.sprite=sprite;this.transforms=transforms;}
+    private DataCableModel(TextureAtlasSprite sprite,TextureAtlasSprite fitting,TextureAtlasSprite opening,ItemTransforms transforms){this.sprite=sprite;this.fitting=fitting;this.opening=opening;this.transforms=transforms;}
     @Override public List<BakedQuad> getQuads(@Nullable BlockState state,@Nullable Direction side,RandomSource random,ModelData data,@Nullable RenderType type){
         if(side!=null)return List.of();
         var key=data.get(DataCableBlockEntity.GEOMETRY);if(key==null)key=new DataCableGeometry.Key(0,0);
         if(cache.size()>2048)cache.clear();
         return cache.computeIfAbsent(key,k->{var sprites=new TextureAtlasSprite[Mesh.Material.values().length];Arrays.fill(sprites,sprite);
+            sprites[Mesh.Material.FLANGE.ordinal()]=fitting;sprites[Mesh.Material.BOLT.ordinal()]=fitting;sprites[Mesh.Material.OPENING.ordinal()]=opening;
             return EquipmentShellModel.bake(DataCableGeometry.polygons(k),sprites,false);});
     }
     @Override public ChunkRenderTypeSet getRenderTypes(BlockState state,RandomSource random,ModelData data){return SOLID;}
@@ -45,7 +47,7 @@ public final class DataCableModel implements IDynamicBakedModel {
     @Override public ItemOverrides getOverrides(){return ItemOverrides.EMPTY;}
     public record Geometry() implements IUnbakedGeometry<Geometry> {
         @Override public BakedModel bake(IGeometryBakingContext context,ModelBaker baker,Function<Material,TextureAtlasSprite> sprites,ModelState state,ItemOverrides overrides){
-            return new DataCableModel(sprites.apply(context.getMaterial("cable")),context.getTransforms());
+            return new DataCableModel(sprites.apply(context.getMaterial("cable")),sprites.apply(context.getMaterial("fitting")),sprites.apply(context.getMaterial("opening")),context.getTransforms());
         }
     }
 }

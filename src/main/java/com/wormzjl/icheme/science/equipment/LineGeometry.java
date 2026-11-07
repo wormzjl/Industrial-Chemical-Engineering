@@ -108,6 +108,33 @@ public final class LineGeometry {
         return mesh(key).cell(0, 0, 0);
     }
 
+    /** Fixed-size electrical conduit uses the pipe mesher, including elbows, junctions and off-centre transitions. */
+    public static List<Polygon> conduit(int joints,long offsets,double outside) {
+        int drawn=joints;
+        if(Integer.bitCount(drawn)==0)drawn=48;
+        else if(Integer.bitCount(drawn)==1)drawn|=1<<(Integer.numberOfTrailingZeros(drawn)^1);
+        var key=new Key(Kind.PIPE,5,drawn,PipeSizes.code(outside),0,0,false,offsets);
+        var out=new ArrayList<>(polygons(key));var fittings=new Mesh();
+        for(int face=0;face<6;face++)if(key.connected(face))
+            fittings.hoop(new Frame(point(key,face),step(face),ref(face)),outside/2,.60*outside,-.02,0,PipeSizes.sides(outside),Material.FLANGE);
+        out.addAll(overhanging(fittings));return List.copyOf(out);
+    }
+
+    /** A conduit lead with face-normal end legs, swept by the same fitted-line mesher as rack pipes. */
+    public static List<Polygon> conduit(List<double[]> path,double outside) {
+        var points=new ArrayList<double[]>();
+        for(var p:path)if(points.isEmpty()||dot(sub(p,points.getLast()),sub(p,points.getLast()))>EPS)points.add(p);
+        if(points.size()<2)return List.of();
+        var end=new End(outside,false,0,0,true);var m=new Mesh();
+        var fitted=fitted(points,end,end,outside);
+        int a=face(neg(fitted.dirs()[0])),b=face(fitted.dirs()[fitted.dirs().length-1]);
+        if(fitted.dirs().length==1)m.prism(new Frame(fitted.points().getFirst(),fitted.dirs()[0],ref(a)),outside/2,0,fitted.lengths()[0],PipeSizes.sides(outside),Material.PIPE);
+        else line(m,fitted,a,b,outside,PipeSizes.sides(outside),false);
+        return overhanging(m);
+    }
+
+    private static int face(double[] v){int axis=0;for(int k=1;k<3;k++)if(Math.abs(v[k])>Math.abs(v[axis]))axis=k;return (axis==0?4:axis==1?0:2)+(v[axis]>0?1:0);}
+
     /** Native Y-strainer, sized from its host pipe and retaining overhanging screen geometry. */
     public static List<Polygon> filterPolygons(Key pipe){return overhanging(mesh(new Key(Kind.FILTER,pipe.facing,pipe.connections,pipe.outside,pipe.faces,pipe.flanged,pipe.spool,pipe.offsets)));}
 
@@ -483,6 +510,10 @@ public final class LineGeometry {
      * fits, the corners are balls.
      */
     static void line(Mesh m, Fitted line, int a, int b, double od, int sides) {
+        line(m,line,a,b,od,sides,true);
+    }
+
+    private static void line(Mesh m, Fitted line, int a, int b, double od, int sides,boolean bounded) {
         var points = line.points();
         double[][] dirs = line.dirs();
         double[] lengths = line.lengths(), tans = line.tans();
@@ -495,7 +526,7 @@ public final class LineGeometry {
             for (int k = 1; k < legs; k++) {
                 var p = points.get(k);
                 double wall = Math.min(Math.min(Math.min(p[0], 1 - p[0]), Math.min(p[1], 1 - p[1])), Math.min(p[2], 1 - p[2]));
-                m.sphere(p, Math.min(wall, r / DeterministicMath.cos(Math.PI / sides)), sides, Material.PIPE);
+                m.sphere(p, Math.min(bounded?wall:Double.POSITIVE_INFINITY, r / DeterministicMath.cos(Math.PI / sides)), sides, Material.PIPE);
             }
             arm(m, originA, a, .5 - lengths[0], od, line.ea(), ref(a), sides, true);
             for (int k = 1; k < legs - 1; k++) {

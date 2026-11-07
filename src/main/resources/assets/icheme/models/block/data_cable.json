@@ -2,6 +2,8 @@
   "loader": "icheme:data_cable",
   "textures": {
     "cable": "icheme:block/data_cable",
+    "fitting": "icheme:block/equipment_flange",
+    "opening": "icheme:block/equipment_opening",
     "particle": "icheme:block/data_cable"
   }
 }

@@ -28,7 +28,8 @@ public final class DataControlRenderer {
     private static final RenderType SOLID=RenderType.entitySolid(WHITE),GHOST=RenderType.entityTranslucent(WHITE);
     private static final RenderType JACKET=RenderType.entityCutoutNoCull(net.minecraft.world.inventory.InventoryMenu.BLOCK_ATLAS);
     private static final ResourceLocation CABLE_TEXTURE=ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"block/data_cable");
-    private static final Map<DataPort,List<Mesh.Polygon>> PORTS=new HashMap<>();
+    private record PortMesh(List<Mesh.Polygon> polygons,net.minecraft.core.Direction outward){}
+    private static final Map<DataPort,PortMesh> PORTS=new HashMap<>();
     private DataControlRenderer(){}
     public static void loaded(ControlPanelBlockEntity box){PANELS.add(box);}public static void unloaded(ControlPanelBlockEntity box){PANELS.remove(box);}
     public static Map<UUID,DataPort> ports(Level level,Vec3 centre,double radius){
@@ -61,20 +62,20 @@ public final class DataControlRenderer {
         var pose=event.getPoseStack();var camera=event.getCamera().getPosition();var buffers=mc.renderBuffers().bufferSource();
         if(PORTS.size()>2048)PORTS.clear();
         for(var port:ports(mc.level,mc.player.position(),96).values()){
-            var polygons=PORTS.computeIfAbsent(port,p->DataPortGeometry.polygons(new double[]{0,0,0},new double[]{-p.face().getStepX(),-p.face().getStepY(),-p.face().getStepZ()}));
-            draw(pose,buffers,camera,port.centre(),polygons,0,255);
-            if(connected(mc.level,port)){var end=port.cablePoint().subtract(port.centre());drawCable(pose,buffers,camera,port.centre(),DataCableGeometry.path(List.of(new double[]{0,0,0},new double[]{end.x,end.y,end.z})));}
+            var mesh=PORTS.computeIfAbsent(port,p->{var out=DataPorts.outward(mc.level,p);boolean box=mc.level.getBlockEntity(p.owner()) instanceof EquipmentShellBlockEntity;return new PortMesh(DataPortGeometry.polygons(new double[]{0,0,0},new double[]{out.getStepX(),out.getStepY(),out.getStepZ()},box),out);});
+            draw(pose,buffers,camera,port.centre(),mesh.polygons(),0,255);
+            if(connected(mc.level,port)){var end=port.cablePoint().subtract(port.centre());drawCable(pose,buffers,camera,port.centre(),DataCableGeometry.lead(new double[]{mesh.outward().getStepX(),mesh.outward().getStepY(),mesh.outward().getStepZ()},new double[]{end.x,end.y,end.z},new double[]{-port.face().getStepX(),-port.face().getStepY(),-port.face().getStepZ()}));}
             if(DataCableLayingClient.holding(mc.player))LevelRenderer.renderLineBox(pose,buffers.getBuffer(RenderType.lines()),new AABB(port.centre(),port.centre()).inflate(.14).move(camera.scale(-1)),1,.8f,.22f,1);
         }
-        for(var rack:PipeRackBlockEntity.clientRacks())if(rack.getLevel()==mc.level&&rack.getBlockPos().getCenter().distanceToSqr(camera)<96*96)for(var cable:rack.cables())drawCable(pose,buffers,camera,Vec3.atLowerCornerOf(rack.getBlockPos()),DataCableGeometry.path(RackGeometry.path(rack.rack(),rack.cableLane(cable))));
+        for(var rack:PipeRackBlockEntity.clientRacks())if(rack.getLevel()==mc.level&&rack.getBlockPos().getCenter().distanceToSqr(camera)<96*96)for(var cable:rack.cables())drawCable(pose,buffers,camera,Vec3.atLowerCornerOf(rack.getBlockPos()),DataCableGeometry.lane(rack.rack(),rack.cableLane(cable)));
         DataCableLayingClient.draw(pose,buffers,camera);
         buffers.endBatch(SOLID);buffers.endBatch(JACKET);buffers.endBatch(GHOST);buffers.endBatch(RenderType.lines());
     }
-    /** Rack lanes, flexible socket leads and chunk-baked cable blocks all sample the same insulating jacket. */
+    /** Rack lanes, connector leads and chunk-baked conduit blocks use the same painted-metal finish. */
     private static void drawCable(PoseStack pose,MultiBufferSource buffers,Vec3 camera,Vec3 origin,List<Mesh.Polygon> polygons){
-        var mc=Minecraft.getInstance();var sprite=mc.getModelManager().getAtlas(net.minecraft.world.inventory.InventoryMenu.BLOCK_ATLAS).getSprite(CABLE_TEXTURE);var consumer=buffers.getBuffer(JACKET);
+        var mc=Minecraft.getInstance();var atlas=mc.getModelManager().getAtlas(net.minecraft.world.inventory.InventoryMenu.BLOCK_ATLAS);var body=atlas.getSprite(CABLE_TEXTURE);var fitting=atlas.getSprite(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"block/equipment_flange"));var opening=atlas.getSprite(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"block/equipment_opening"));var consumer=buffers.getBuffer(JACKET);
         var shift=origin.subtract(camera);pose.pushPose();pose.translate(shift.x,shift.y,shift.z);int light=LevelRenderer.getLightColor(mc.level,BlockPos.containing(origin));
-        for(var q:polygons){var p=q.positions();var n=q.normals();var uv=q.uvs();
+        for(var q:polygons){var sprite=switch(q.material()){case FLANGE,BOLT->fitting;case OPENING->opening;default->body;};var p=q.positions();var n=q.normals();var uv=q.uvs();
             for(int first=1;first+1<q.size();first+=2)for(int corner:new int[]{0,first,first+1,Math.min(first+2,q.size()-1)})consumer.addVertex(pose.last(),(float)p[corner*3],(float)p[corner*3+1],(float)p[corner*3+2]).setColor(255,255,255,255).setUv(sprite.getU((float)uv[corner*2]),sprite.getV((float)uv[corner*2+1])).setOverlay(OverlayTexture.NO_OVERLAY).setLight(light).setNormal(pose.last(),(float)n[corner*3],(float)n[corner*3+1],(float)n[corner*3+2]);
         }pose.popPose();
     }

@@ -79,6 +79,7 @@ public final class ControlService {
         var ids=new HashMap<UUID,String>();for(var sensor:host.metadata().sensors())ids.put(sensor.instance(),facts.identify(sensor).label());boolean namesChanged=!ids.equals(host.metadata().sensorIds());host.metadata().sensorIds(ids);
         var port=equipmentPorts.get(host.identity());
         if(port==null){port=DataPorts.equipment(host,actuator);facts.port(port);equipmentPorts.put(host.identity(),port);}
+        else{var refreshed=DataPorts.refresh(port,host,id->facts.cables().stream().anyMatch(c->c.endpoints().containsValue(id)));if(!refreshed.equals(port)){port=refreshed;facts.port(port);equipmentPorts.put(host.identity(),port);}}
         if(namesChanged||!port.equals(host.metadata().dataPort())){
             host.metadata().dataPort(port);host.entity().setChanged();InstrumentHosts.loaded(host.entity());
             host.entity().getLevel().sendBlockUpdated(host.entity().getBlockPos(),host.entity().getBlockState(),host.entity().getBlockState(),2);
@@ -87,6 +88,7 @@ public final class ControlService {
     public void bindMotor(EquipmentShellBlockEntity cell,ShaftUnit unit) {
         var port=equipmentPorts.get(unit.id());
         if(port==null){port=DataPorts.motor(cell,unit);facts.port(port);equipmentPorts.put(unit.id(),port);}
+        else{var host=new InstrumentHosts.Host(unit.id(),cell,List.of(),false);var refreshed=DataPorts.refresh(port,host,id->facts.cables().stream().anyMatch(c->c.endpoints().containsValue(id)));if(!refreshed.equals(port)){port=refreshed;facts.port(port);equipmentPorts.put(unit.id(),port);}}
         if(!port.equals(cell.instruments().dataPort())) {
             cell.instruments().dataPort(port);cell.setChanged();InstrumentHosts.loaded(cell);
             cell.getLevel().sendBlockUpdated(cell.getBlockPos(),cell.getBlockState(),cell.getBlockState(),2);
