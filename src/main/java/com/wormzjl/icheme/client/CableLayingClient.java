@@ -107,6 +107,7 @@ public final class CableLayingClient {
         for(var cable:ghost){var at=cable.site().cell();List<Mesh.Polygon> polygons;if(cable.site().lane()>0&&mc.level.getBlockEntity(at) instanceof PipeRackBlockEntity rack)polygons=ConduitGeometry.lane(rack.rack(),rack.cableLane(cable));else polygons=ConduitGeometry.polygons(cable.geometry());DataControlRenderer.draw(pose,buffers,camera,Vec3.atLowerCornerOf(at),polygons,medium().colour(),135);}
         // Show the added branch on an existing cable as part of the same preview.
         if(start!=null&&end!=null&&route!=null&&route.found())for(var click:List.of(start,end)){
+            if(click.port()!=null){var port=DataControlRenderer.ports(mc.level,mc.player.position(),96,medium()).get(click.port());if(port!=null)DataControlRenderer.drawLead(pose,buffers,camera,port,true);}
             var a=CableLaying.resolve(mc.level,click,DataControlRenderer.ports(mc.level,mc.player.position(),96,medium()),medium());if(a==null||a.host()==null||a.host().lane()!=0||!(mc.level.getBlockEntity(a.host().cell()) instanceof ConduitBlockEntity wire))continue;
             var key=wire.geometry();int u=a.point()&31,v=a.point()>>5&31;key=key.connect(a.face(),u>=16?u-32:u,v>=16?v-32:v);DataControlRenderer.draw(pose,buffers,camera,Vec3.atLowerCornerOf(a.host().cell()),ConduitGeometry.polygons(key),medium().colour(),135);
         }

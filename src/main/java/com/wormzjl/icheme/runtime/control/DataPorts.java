@@ -32,7 +32,7 @@ public final class DataPorts {
                 if(FluidDeviceBlock.hasPressureValve(state))polygons=ValveGeometry.pressure(key,false);
                 else if(FluidDeviceBlock.hasPump(state)||FluidDeviceBlock.hasCompressor(state))polygons=InlineMoverGeometry.polygons(key,FluidDeviceBlock.hasCompressor(state),false);
                 var socket=DataSocketGeometry.surface(polygons);
-                if(socket!=null)return new Mount(new Vec3(socket.x()+pipe.getBlockPos().getX(),socket.y()+pipe.getBlockPos().getY(),socket.z()+pipe.getBlockPos().getZ()),Direction.EAST);
+                if(socket!=null)return new Mount(new Vec3(socket.x()+pipe.getBlockPos().getX(),socket.y()+pipe.getBlockPos().getY(),socket.z()+pipe.getBlockPos().getZ()),Direction.values()[socket.face()]);
             }
         }
         var mount=host.mounts().stream().filter(m->!m.top()).findFirst().orElse(host.mounts().stream().findFirst().orElse(null));
@@ -42,21 +42,17 @@ public final class DataPorts {
     }
     public static DataPort equipment(InstrumentHosts.Host host,boolean actuator){var m=equipmentMount(host);return create(UUID.randomUUID(),actuator?DataPort.Kind.ACTUATOR:DataPort.Kind.SENSOR,host.identity(),host.entity().getLevel(),host.entity().getBlockPos(),m.centre(),m.outward());}
     public static DataPort refresh(DataPort old,InstrumentHosts.Host host,java.util.function.Predicate<UUID> wired){
-        var m=equipmentMount(host);if(old.centre().distanceToSqr(m.centre())<1e-12)return old;
-        if(wired.test(old.id())){
-            // Existing cable face points are built facts. Move only the enclosure, retaining its lead and endpoint identity.
-            if(m.centre().distanceToSqr(old.cell().getCenter())>25)return old;
-            return new DataPort(old.id(),old.kind(),old.host(),old.dimension(),old.owner(),m.centre(),old.cell(),old.face(),old.u(),old.v());
-        }
-        return create(old.id(),old.kind(),old.host(),host.entity().getLevel(),old.owner(),m.centre(),m.outward());
+        var m=equipmentMount(host);
+        return remount(old,create(old.id(),old.kind(),old.host(),host.entity().getLevel(),old.owner(),m.centre(),m.outward()),wired.test(old.id()));
+    }
+    /** Existing cable face points are built facts. Do not swap a wired connector to another side of its equipment. */
+    public static DataPort remount(DataPort old,DataPort current,boolean wired){
+        if(wired&&(old.face()!=current.face()||current.centre().distanceToSqr(old.cell().getCenter())>25))return old;
+        return new DataPort(old.id(),current.kind(),current.host(),current.dimension(),current.owner(),current.centre(),
+                wired?old.cell():current.cell(),wired?old.face():current.face(),wired?old.u():current.u(),wired?old.v():current.v());
     }
     public static Direction outward(Level level,DataPort port){
-        if(port.kind().power()){
-            if(level.getBlockEntity(port.owner()) instanceof EquipmentShellBlockEntity shell&&shell.shape()!=null){var socket=DataSocketGeometry.power(shell.shape());if(socket!=null)return Direction.values()[socket.face()];}
-            return port.face().getOpposite();
-        }
-        var host=InstrumentHosts.at(level,port.owner());if(host!=null)return equipmentMount(host).outward();
-        if(level.getBlockEntity(port.owner()) instanceof EquipmentShellBlockEntity cell&&cell.shape()!=null){var socket=DataSocketGeometry.equipment(cell.shape());if(socket!=null)return Direction.values()[socket.face()];}
+        // A live mount can move within its face, but remount never flips a wired connector to another side.
         return port.face().getOpposite();
     }
     public static DataPort motor(EquipmentShellBlockEntity cell,com.wormzjl.icheme.runtime.fluid.ShaftUnit unit){
@@ -69,16 +65,19 @@ public final class DataPorts {
         var outward=panel.getBlockState().getValue(ControlPanelBlock.FACING).getOpposite();
         var normal=Vec3.atLowerCornerOf(outward.getNormal());
         return create(identity,panel.dcs()?DataPort.Kind.DCS:DataPort.Kind.CONTROLLER,0,panel.getLevel(),
-                panel.getBlockPos(),panel.getBlockPos().getCenter().add(normal.scale((panel.dcs()?.375:.3125)+.005)).add(0,-.22,0),outward);
+                panel.getBlockPos(),panel.getBlockPos().getCenter().add(normal.scale((panel.dcs()?.375:.3125)+.005)),outward);
     }
     public static DataPort power(UUID id,DataPort.Kind kind,Level level,BlockPos owner,Vec3 centre,Direction outward){if(!kind.power())throw new IllegalArgumentException("Not a power port");return create(id,kind,0,level,owner,centre,outward);}
     private static DataPort create(UUID id,DataPort.Kind kind,long host,Level level,BlockPos owner,Vec3 centre,Direction outward){
         var normal=Vec3.atLowerCornerOf(outward.getNormal());
-        var cell=BlockPos.containing(centre.add(normal.scale(.2)));
+        // A gland may overlap its neighbouring pipe face, but an empty overhang cell must not put the entry behind it.
+        var ahead=centre.add(normal.scale(-.075));int axis=outward.getAxis().ordinal();
+        int boundary=outward.getAxisDirection()==Direction.AxisDirection.POSITIVE?(int)Math.ceil(ahead.get(outward.getAxis())):(int)Math.floor(ahead.get(outward.getAxis()))-1;
+        var cell=new BlockPos(axis==0?boundary:(int)Math.floor(centre.x),axis==1?boundary:(int)Math.floor(centre.y),axis==2?boundary:(int)Math.floor(centre.z));
+        var first=cell;
         // Clear the casting, without loading chunks, moving blocks or hiding the socket behind a solid cell.
         for(int step=0;step<8&&level.hasChunkAt(cell)&&!level.getBlockState(cell).canBeReplaced();step++)cell=cell.relative(outward);
-        if(centre.distanceToSqr(cell.getCenter())>16)cell=BlockPos.containing(centre.add(normal.scale(.2)));
-        int axis=outward.getAxis().ordinal(); // Direction.Axis order X, Y, Z.
+        if(centre.distanceToSqr(cell.getCenter())>16)cell=first;
         double[] local={centre.x-cell.getX()-.5,centre.y-cell.getY()-.5,centre.z-cell.getZ()-.5};
         int u=(int)Math.clamp(Math.round(local[(axis+1)%3]*32),-14,14),v=(int)Math.clamp(Math.round(local[(axis+2)%3]*32),-14,14);
         return new DataPort(id,kind,host,level.dimension().location().toString(),owner,centre,cell,outward.getOpposite(),u,v);

@@ -1364,7 +1364,7 @@ public final class ProcessUnit {
         // The bearing housing: its oil sump, the round body finned behind it, the bolted end cover; the oiler on the sump,
         // the vent on top.
         double sump = zb0 + .45 * lb;
-        dataSocket=new DataSocketGeometry.Socket(a+rb+.12,y,(sump+zb1)/2,5);
+        dataSocket=new DataSocketGeometry.Socket(a+rb+.12,y,DataSocketGeometry.centered((sump+zb1)/2,sump+.14,zb1-.14),5);
         box(new double[]{a - .9 * rb, y - 1.2 * rb, zb0}, new double[]{a + .9 * rb, y + .55 * rb, sump}, Material.PUMP_CASTING, false);
         mesh.prism(f, rb, zb0, sump, nb, Material.PUMP_CASTING);
         mesh.band(f, rb, rb, sump, zb1, nb, Material.PUMP_FINS);
@@ -1536,7 +1536,7 @@ public final class ProcessUnit {
                 box(new double[]{px - .09, top, z + .02}, new double[]{px + .09, y - .06, z + .23}, ALL_FACES & ~12, Material.STEELWORK, false);
             }
         // The brackets, seal chambers and finned bearing housings at both ends; the shaft through them.
-        dataSocket=new DataSocketGeometry.Socket(a+rb+.12,y,(zb0+zb1)/2,5);
+        dataSocket=new DataSocketGeometry.Socket(a+rb+.12,y,DataSocketGeometry.centered((zb0+zb1)/2,zb0+.14,zb1-.14),5);
         bracket(f, rb + .03, .45 * di, zf1, z0, n, Material.PUMP_CASTING);
         bracket(f, .45 * di, rb + .03, zk, zb0, n, Material.PUMP_CASTING);
         mesh.cylinder(f, .22 * di, z0 - .55 * lk, z0, n, Material.PUMP_CASTING);

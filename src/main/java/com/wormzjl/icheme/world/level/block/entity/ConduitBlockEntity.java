@@ -7,16 +7,14 @@ import com.wormzjl.icheme.science.equipment.ConduitGeometry;
 import com.wormzjl.icheme.world.level.block.ConduitBlock;
 import net.minecraft.core.*;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.neoforge.client.model.data.*;
 import java.util.*;
 
 /** Chunk model copy of cable facts. The registered control store remains authoritative across chunk unloading. */
-public final class ConduitBlockEntity extends BlockEntity {
+public final class ConduitBlockEntity extends ModelledBlockEntity {
     public static final ModelProperty<ConduitGeometry.Key> GEOMETRY=new ModelProperty<>();
     private ConduitGeometry.Key geometry;
     private Map<Direction,UUID> endpoints=Map.of();
@@ -37,7 +35,7 @@ public final class ConduitBlockEntity extends BlockEntity {
             level.setBlock(worldPosition,state,Block.UPDATE_CLIENTS);
             FluidWorldAuthority.find(server.getServer()).ifPresent(w->w.controls().cable(cable));
             level.sendBlockUpdated(worldPosition,state,state,Block.UPDATE_CLIENTS);
-        }else{requestModelDataUpdate();level.sendBlockUpdated(worldPosition,getBlockState(),getBlockState(),0);}
+        }else refreshModelData();
     }
     @Override public void onLoad(){super.onLoad();if(level instanceof ServerLevel server)FluidWorldAuthority.find(server.getServer()).ifPresent(w->w.controls().loaded(this));}
     @Override protected void saveAdditional(CompoundTag tag,HolderLookup.Provider provider){super.saveAdditional(tag,provider);tag.putString("Medium",geometry.medium().name());tag.putInt("Joints",geometry.joints());tag.putLong("Offsets",geometry.offsets());tag.put("Endpoints",DataBus.saveEndpoints(endpoints));}
@@ -47,7 +45,5 @@ public final class ConduitBlockEntity extends BlockEntity {
         try{endpoints=DataBus.loadEndpoints(tag.getList("Endpoints",10));}catch(IllegalArgumentException invalid){endpoints=Map.of();}
     }
     @Override public CompoundTag getUpdateTag(HolderLookup.Provider provider){return saveWithoutMetadata(provider);}
-    @Override public ClientboundBlockEntityDataPacket getUpdatePacket(){return ClientboundBlockEntityDataPacket.create(this);}
-    @Override public void handleUpdateTag(CompoundTag tag,HolderLookup.Provider provider){loadAdditional(tag,provider);requestModelDataUpdate();if(level!=null)level.sendBlockUpdated(worldPosition,getBlockState(),getBlockState(),0);}
     @Override public ModelData getModelData(){return ModelData.of(GEOMETRY,geometry);}
 }

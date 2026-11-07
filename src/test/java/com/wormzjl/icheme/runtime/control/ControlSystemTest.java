@@ -67,6 +67,18 @@ class ControlSystemTest {
         var invalid=new ListTag();invalid.add(StringTag.valueOf("not an endpoint"));
         assertThrows(IllegalArgumentException.class,()->DataBus.loadEndpoints(invalid));
     }
+    @Test void remountingCentersUnusedPortsAndPreservesWiredEntryFacts(){
+        for(var kind:List.of(DataPort.Kind.CONTROLLER,DataPort.Kind.POWER_INPUT)){
+            var old=new DataPort(new UUID(0,1),kind,0,"minecraft:overworld",BlockPos.ZERO,new net.minecraft.world.phys.Vec3(.3,.3,-.1),new BlockPos(0,0,-1),Direction.SOUTH,-7,8);
+            var current=new DataPort(new UUID(0,2),kind,0,old.dimension(),old.owner(),new net.minecraft.world.phys.Vec3(.5,.5,-.1),old.cell(),old.face(),0,0);
+            var unused=DataPorts.remount(old,current,false);assertEquals(old.id(),unused.id());assertEquals(0,unused.u());assertEquals(0,unused.v());
+            var wired=DataPorts.remount(old,current,true);assertEquals(old.id(),wired.id());assertEquals(old.cell(),wired.cell());assertEquals(old.face(),wired.face());
+            assertEquals(old.u(),wired.u());assertEquals(old.v(),wired.v());assertEquals(current.centre(),wired.centre());
+            assertEquals(wired,DataPort.load(wired.save()));
+            var otherSide=new DataPort(current.id(),kind,0,current.dimension(),current.owner(),current.centre(),current.cell(),current.face().getOpposite(),0,0);
+            assertEquals(old,DataPorts.remount(old,otherSide,true),"A connected terminal stays on its built side until rewired");
+        }
+    }
 
     @Test void powerFactsRoundTripAndCannotJoinTheDataBus() throws Exception {
         var facts=ControlFacts.load(TagParser.parseTag(Files.readString(Path.of("src/test/resources/compat/control/control-3.snbt"))));

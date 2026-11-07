@@ -68,7 +68,9 @@ public final class ControlService {
             panel=new ControlFacts.Panel(id,dim,box.getBlockPos(),box.dcs(),0,ControlSettings.EMPTY);facts.panel(panel);
         }
         if(panel.dcs()!=box.dcs())throw new IllegalStateException("Control panel kind differs from registered facts");
-        var port=facts.port(panel.id());if(port==null){port=DataPorts.panel(box,panel.id());facts.port(port);}
+        var port=facts.port(panel.id());var mount=DataPorts.panel(box,panel.id());
+        if(port==null){port=mount;facts.port(port);}
+        else{var refreshed=DataPorts.remount(port,mount,facts.wired(port.id()));if(!refreshed.equals(port)){port=refreshed;facts.port(port);}}
         if(!panel.id().equals(box.identity())||!port.equals(box.dataPort()))box.bind(panel.id(),port);
     }
     public void removePanel(UUID id){facts.removePanel(id);levels.remove(id);status.remove(id);published.remove(id);}

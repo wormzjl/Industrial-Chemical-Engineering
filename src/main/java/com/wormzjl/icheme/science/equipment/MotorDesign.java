@@ -219,11 +219,21 @@ final class MotorDesign extends UnitDesign {
             if(generator)u.largeGenerator(a,y,front,across,length,deck);else u.largeMotor(a, y, front, across, length, deck);
         }
         u.terminal = u.terminalBox;
-        // Both service enclosures sit on the same shaft-centre line and axial station. The large frame's
-        // existing terminal cabinet occupies its middle, so use the front quarter there.
-        double socketZ = front + (kw <= LOW_VOLTAGE ? .5 : .25) * (drive - front);
-        u.dataSocket = new DataSocketGeometry.Socket(a + socketRadius + .18, y, socketZ, 5);
-        u.powerSocket = new DataSocketGeometry.Socket(a - socketRadius - .18, y, socketZ, 4);
+        if(kw>LOW_VOLTAGE){
+            double length=drive-front,r=frame(kw)/2,terminal=Math.min(1.2,.3+.4*r),middle=(front+drive)/2;
+            // Main power enters the existing terminal cabinet. The accessory box uses the opposite casing's
+            // solid centre strip: its ventilation panels end at 42% and resume at 58% of the body length.
+            double lowY=Math.max(y-.5*r+.14,y-.35*r+.11),highY=Math.min(y+.5*r-.14,y-.35*r+.7*terminal-.11);
+            double socketY=DataSocketGeometry.centered(u.terminalBox[1],lowY,highY);
+            double lowZ=Math.max(front+.42*length+.14,middle-terminal/2+.11),highZ=Math.min(front+.58*length-.14,middle+terminal/2-.11);
+            double socketZ=DataSocketGeometry.centered(middle,lowZ,highZ);
+            u.dataSocket=new DataSocketGeometry.Socket(a-r-.18,socketY,socketZ,4);
+            u.powerSocket=new DataSocketGeometry.Socket(a+r+.4*terminal+.04,socketY,socketZ,5,false);
+        }else{
+            double socketZ=DataSocketGeometry.centered((front+drive)/2,front+.14,drive-.14);
+            u.dataSocket=new DataSocketGeometry.Socket(a+socketRadius+.18,y,socketZ,5);
+            u.powerSocket=new DataSocketGeometry.Socket(a-socketRadius-.18,y,socketZ,4);
+        }
         double face = Math.ceil(drive + .2 + rs - 1e-9);
         u.coupling(a, y, drive, face, 1, rs, deck, ProcessUnit.shown(rpm), role);
         // The baseplate and the plinth or table under it.

@@ -9,6 +9,8 @@ import com.wormzjl.icheme.world.level.block.*;
 import com.wormzjl.icheme.world.level.block.entity.*;
 import net.minecraft.core.*;
 import net.minecraft.gametest.framework.*;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.*;
@@ -16,6 +18,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.*;
 import net.neoforged.neoforge.common.util.FakePlayerFactory;
 import net.neoforged.neoforge.gametest.*;
+import net.neoforged.neoforge.client.model.data.*;
 import java.util.*;
 
 /** Focused fresh-world checks for the real placement adapter, rather than preconstructed connectivity facts. */
@@ -33,6 +36,74 @@ public final class ConduitLayingGameTests {
     public static void sharedAnchorsStillLayAndDismantleFluidPipe(GameTestHelper helper){PipeLayingGameTests.aLaidLineJoinsItsTanksOnlyAndComesOutOneBlockAtATime(helper);}
     @GameTest(template="empty",timeoutTicks=200,batch="pipe-regression-rack")
     public static void sharedAnchorsStillUseFluidRackCorners(GameTestHelper helper){PipeLayingGameTests.aLineThroughARackCornerJoinsItsTanksAndALaneComesOutAlone(helper);}
+
+    @GameTest(template="empty",timeoutTicks=80,batch="service-port-families")
+    public static void controllersAndInlineMoversUseTheirAvailableConnectionSpace(GameTestHelper helper){
+        var level=helper.getLevel();var at=helper.absolutePos(new BlockPos(1,2,1));
+        for(var block:List.of(ModBlocks.LOCAL_CONTROLLER,ModBlocks.DCS))for(var face:Direction.Plane.HORIZONTAL){
+            level.setBlock(at,block.get().defaultBlockState().setValue(ControlPanelBlock.FACING,face),3);
+            var port=DataPorts.panel((ControlPanelBlockEntity)level.getBlockEntity(at));
+            helper.assertTrue(port.u()==0&&port.v()==0,"A controller's unobstructed connector must use the block-face centre");
+            level.removeBlock(at,false);
+        }
+        for(var mover:List.of(FluidDeviceBlock.InlineMover.PUMP,FluidDeviceBlock.InlineMover.COMPRESSOR))for(var face:Direction.Plane.HORIZONTAL){
+            level.setBlock(at,ModBlocks.FLUID_PIPE.get().defaultBlockState().setValue(FluidDeviceBlock.INLINE_MOVER,mover).setValue(FluidDeviceBlock.FACING,face),3);
+            var pipe=(FluidDeviceBlockEntity)level.getBlockEntity(at);
+            var power=com.wormzjl.icheme.runtime.power.PowerPorts.create(pipe);
+            var data=DataPorts.equipment(new com.wormzjl.icheme.runtime.instrument.InstrumentHosts.Host(1,pipe,List.of(),true),true);
+            helper.assertTrue(power!=null&&data!=null&&power.kind().power()&&!data.kind().power(),"Inline mover is missing a distinct typed service connection: "+mover+" / "+face);
+            helper.assertTrue(power.centre().distanceToSqr(data.centre())>.01,"Inline mover power and data glands overlap: "+mover+" / "+face);
+            for(var port:List.of(power,data)){
+                var normal=Vec3.atLowerCornerOf(port.face().getOpposite().getNormal());
+                helper.assertTrue(port.cablePoint().subtract(port.centre()).dot(normal)>=-.075-1e-9,"An overhanging device points its cable entry backwards through the casing");
+            }
+            level.removeBlock(at,false);
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=40,batch="line-model-packets")
+    public static void linePacketsRefreshCachedGeometryBeforeTheNextChunkMesh(GameTestHelper helper){
+        var level=helper.getLevel();var registries=level.registryAccess();var at=helper.absolutePos(new BlockPos(1,2,1));
+        var probe=new CachedModel(at);probe.setLevel(level);
+        probe.requestModelDataUpdate();
+        var initial=new CompoundTag();initial.putInt("Revision",1);probe.handleUpdateTag(initial,registries);
+        helper.assertTrue(probe.cached.get(CachedModel.REVISION)==1&&probe.hookRevision==1,"Chunk loading did not invalidate the old model after reading its geometry");
+        int previous=probe.refreshes;
+        var changed=new CompoundTag();changed.putInt("Revision",2);
+        probe.onDataPacket(null,ClientboundBlockEntityDataPacket.create(probe,(entity,lookup)->changed),registries);
+        helper.assertTrue(probe.refreshes==previous+1&&probe.cached.get(CachedModel.REVISION)==2&&probe.hookRevision==2,"A live packet left the chunk mesher using stale model data");
+        for(var type:List.of(ConduitBlockEntity.class,FluidDeviceBlockEntity.class,PipeRackBlockEntity.class,EquipmentShellBlockEntity.class)){
+            try{
+                helper.assertTrue(type.getMethod("onDataPacket",net.minecraft.network.Connection.class,ClientboundBlockEntityDataPacket.class,HolderLookup.Provider.class).getDeclaringClass()==ModelledBlockEntity.class,"A line bypasses the tested shared packet lifecycle: "+type.getSimpleName());
+            }catch(NoSuchMethodException missing){throw new AssertionError(missing);}
+        }
+        for(var medium:CableMedium.values()){
+            var state=(medium==CableMedium.POWER?ModBlocks.POWER_CABLE:ModBlocks.DATA_CABLE).get().defaultBlockState();level.setBlock(at,state,3);
+            var server=(ConduitBlockEntity)level.getBlockEntity(at);var client=new ConduitBlockEntity(at,state);client.setLevel(level);
+            var site=new DataBus.Site(level.dimension().location().toString(),at,0);
+            for(int mask:new int[]{48,17,6}){
+                int face=Integer.numberOfTrailingZeros(mask);var id=UUID.randomUUID();var key=new ConduitGeometry.Key(mask,0,medium).connect(face,-9,12);
+                server.configure(new DataBus.Cable(site,key,0,Map.of(Direction.values()[face],id)));
+                client.onDataPacket(null,server.getUpdatePacket(),registries);
+                helper.assertTrue(key.equals(client.getModelData().get(ConduitBlockEntity.GEOMETRY)),"The live cable model lost its elbows or off-centre endpoint");
+                helper.assertTrue(client.cable().endpoints().containsValue(id),"The live cable model lost its socket binding");
+            }
+            level.removeBlock(at,false);
+        }
+        helper.succeed();
+    }
+
+    /** A chunk mesher's cached snapshot: reading a packet alone must not leave it at the previous revision. */
+    private static final class CachedModel extends ModelledBlockEntity {
+        static final ModelProperty<Integer> REVISION=new ModelProperty<>();
+        int revision,hookRevision,refreshes;ModelData cached=ModelData.EMPTY;
+        CachedModel(BlockPos at){super(ModBlockEntities.DATA_CABLE.get(),at,ModBlocks.DATA_CABLE.get().defaultBlockState());}
+        @Override protected void loadAdditional(CompoundTag tag,HolderLookup.Provider registries){super.loadAdditional(tag,registries);revision=tag.getInt("Revision");}
+        @Override public ModelData getModelData(){return ModelData.of(REVISION,revision);}
+        @Override public void requestModelDataUpdate(){cached=getModelData();refreshes++;}
+        @Override protected void clientGeometryChanged(){hookRevision=revision;}
+    }
 
     private static CableLaying.End end(DataPort p){return new CableLaying.End(p.id(),p.owner(),p.face().getOpposite(),new Vec3(.5,.5,.5),0);}
     private static void exercise(GameTestHelper helper,CableMedium medium,boolean stub){

@@ -33,19 +33,14 @@ public final class PowerPorts {
             if(shell.shape().kind()==EquipmentShape.Kind.GENERATOR)kind=DataPort.Kind.POWER_OUTPUT;
         }else if(be instanceof FluidDeviceBlockEntity pipe){
             var s=pipe.getBlockState();var key=new LineGeometry.Key(pipe.kind(),s.getValue(FluidDeviceBlock.FACING).ordinal(),FluidDeviceBlock.connectionMask(s),PipeSizes.code(PipeSizes.outside(pipe.bore())),0,0,false);
-            var socket=DataSocketGeometry.surface(InlineMoverGeometry.polygons(key,FluidDeviceBlock.hasCompressor(s),false).stream().filter(p->p.material()==Mesh.Material.MOTOR).toList());if(socket==null)return null;
-            centre=new Vec3(pipe.getBlockPos().getX()+socket.x(),pipe.getBlockPos().getY()+socket.y(),pipe.getBlockPos().getZ()+socket.z());outward=Direction.EAST;
+            var socket=DataSocketGeometry.surface(InlineMoverGeometry.polygons(key,FluidDeviceBlock.hasCompressor(s),false).stream().filter(p->p.material()==Mesh.Material.MOTOR).toList(),Direction.WEST.ordinal());if(socket==null)return null;
+            centre=new Vec3(pipe.getBlockPos().getX()+socket.x(),pipe.getBlockPos().getY()+socket.y(),pipe.getBlockPos().getZ()+socket.z());outward=Direction.values()[socket.face()];
         }else{centre=be.getBlockPos().getCenter().add(.52,0,0);outward=Direction.EAST;kind=DataPort.Kind.POWER_OUTPUT;}
         return DataPorts.power(UUID.randomUUID(),kind,level,be.getBlockPos(),centre,outward);
     }
     public static DataPort refresh(DataPort old,BlockEntity be,boolean wired){
         var current=create(be);if(current==null)return old;
-        if(current.kind()==old.kind()&&current.centre().distanceToSqr(old.centre())<1e-12)return old;
-        if(wired){
-            if(current.centre().distanceToSqr(old.cell().getCenter())>25)return old;
-            return new DataPort(old.id(),current.kind(),0,old.dimension(),old.owner(),current.centre(),old.cell(),old.face(),old.u(),old.v());
-        }
-        return new DataPort(old.id(),current.kind(),0,current.dimension(),current.owner(),current.centre(),current.cell(),current.face(),current.u(),current.v());
+        return DataPorts.remount(old,current,wired);
     }
     /** An ordinary FE-capable block face is also a legal endpoint; previews never create saved ports. */
     public static DataPort external(Level level,BlockPos owner,Direction face){

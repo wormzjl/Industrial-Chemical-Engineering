@@ -30,7 +30,12 @@ public final class ConduitGeometry {
     /** Orthogonal equipment lead, with face-normal connector and cable-entry legs. */
     public static List<Polygon> lead(double[] outward,double[] end,double[] entering){return lead(outward,end,entering,CableMedium.DATA);}
     public static List<Polygon> lead(double[] outward,double[] end,double[] entering,CableMedium medium){
-        var p=scale(outward,.18);var q=sub(end,scale(entering,.18));var points=new ArrayList<double[]>();
+        double along=dot(end,outward);var lateral=sub(end,scale(outward,along));
+        boolean parallel=dot(outward,entering)>.99;
+        if(parallel&&along<=.08&&dot(lateral,lateral)<.025*.025)return List.of(); // The placed line already enters the gland.
+        if(parallel&&along>0&&dot(lateral,lateral)<1e-12)return LineGeometry.conduit(List.of(new double[3],end),medium.outside());
+        double tail=parallel?Math.min(.18,Math.max(0,.4*along)):.18;
+        var p=scale(outward,tail);var q=sub(end,scale(entering,tail));var points=new ArrayList<double[]>();
         points.add(new double[3]);points.add(p);
         int axis=Math.abs(outward[0])>.5?0:Math.abs(outward[1])>.5?1:2;
         for(int step=1;step<=3;step++){int k=(axis+step)%3;if(Math.abs(p[k]-q[k])>1e-8){p=p.clone();p[k]=q[k];points.add(p);}}

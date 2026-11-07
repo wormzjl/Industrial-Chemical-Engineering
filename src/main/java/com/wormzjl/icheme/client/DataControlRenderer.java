@@ -60,14 +60,26 @@ public final class DataControlRenderer {
         var pose=event.getPoseStack();var camera=event.getCamera().getPosition();var buffers=mc.renderBuffers().bufferSource();
         if(PORTS.size()>2048)PORTS.clear();
         for(var port:ports(mc.level,mc.player.position(),96).values()){
-            var mesh=PORTS.computeIfAbsent(port,p->{var out=DataPorts.outward(mc.level,p);boolean box=mc.level.getBlockEntity(p.owner()) instanceof EquipmentShellBlockEntity;return new PortMesh(p.kind().power()?PowerPortGeometry.polygons(new double[]{0,0,0},new double[]{out.getStepX(),out.getStepY(),out.getStepZ()},box):DataPortGeometry.polygons(new double[]{0,0,0},new double[]{out.getStepX(),out.getStepY(),out.getStepZ()},box),out);});
+            var mesh=PORTS.computeIfAbsent(port,p->{var out=DataPorts.outward(mc.level,p);boolean box=false;
+                if(mc.level.getBlockEntity(p.owner()) instanceof EquipmentShellBlockEntity shell){
+                    box=true;var socket=shell.shape()==null?null:p.kind().power()?DataSocketGeometry.power(shell.shape()):DataSocketGeometry.equipment(shell.shape());
+                    if(socket!=null){var centre=new Vec3(shell.origin().getX()+socket.x(),shell.origin().getY()+socket.y(),shell.origin().getZ()+socket.z());if(centre.distanceToSqr(p.centre())<1e-12)box=socket.junctionBox();}
+                }
+                return new PortMesh(p.kind().power()?PowerPortGeometry.polygons(new double[]{0,0,0},new double[]{out.getStepX(),out.getStepY(),out.getStepZ()},box):DataPortGeometry.polygons(new double[]{0,0,0},new double[]{out.getStepX(),out.getStepY(),out.getStepZ()},box),out);});
             draw(pose,buffers,camera,port.centre(),mesh.polygons(),0,255);
-            if(connected(mc.level,port)){var end=port.cablePoint().subtract(port.centre());drawCable(pose,buffers,camera,port.centre(),ConduitGeometry.lead(new double[]{mesh.outward().getStepX(),mesh.outward().getStepY(),mesh.outward().getStepZ()},new double[]{end.x,end.y,end.z},new double[]{-port.face().getStepX(),-port.face().getStepY(),-port.face().getStepZ()},port.kind().medium()),port.kind().medium());}
+            if(connected(mc.level,port))drawLead(pose,buffers,camera,port,false);
             if(CableLayingClient.holding(mc.player)&&port.kind().medium()==CableLayingClient.medium())LevelRenderer.renderLineBox(pose,buffers.getBuffer(RenderType.lines()),new AABB(port.centre(),port.centre()).inflate(.14).move(camera.scale(-1)),1,.8f,.22f,1);
         }
         for(var rack:PipeRackBlockEntity.clientRacks())if(rack.getLevel()==mc.level&&rack.getBlockPos().getCenter().distanceToSqr(camera)<96*96)for(var cable:rack.cables())drawCable(pose,buffers,camera,Vec3.atLowerCornerOf(rack.getBlockPos()),ConduitGeometry.lane(rack.rack(),rack.cableLane(cable)),cable.geometry().medium());
         CableLayingClient.draw(pose,buffers,camera);
         buffers.endBatch(SOLID);buffers.endBatch(JACKET);buffers.endBatch(GHOST);buffers.endBatch(RenderType.lines());
+    }
+    /** The ghost and the placed line include the same short connection from the socket to its route entry. */
+    public static void drawLead(PoseStack pose,MultiBufferSource buffers,Vec3 camera,DataPort port,boolean ghost){
+        var mesh=PORTS.get(port);var outward=mesh==null?DataPorts.outward(Minecraft.getInstance().level,port):mesh.outward();var end=port.cablePoint().subtract(port.centre());
+        var polygons=ConduitGeometry.lead(new double[]{outward.getStepX(),outward.getStepY(),outward.getStepZ()},new double[]{end.x,end.y,end.z},new double[]{-port.face().getStepX(),-port.face().getStepY(),-port.face().getStepZ()},port.kind().medium());
+        if(ghost)draw(pose,buffers,camera,port.centre(),polygons,port.kind().medium().colour(),135);
+        else drawCable(pose,buffers,camera,port.centre(),polygons,port.kind().medium());
     }
     /** Rack lanes, connector leads and chunk-baked conduit blocks use the same painted-metal finish. */
     private static void drawCable(PoseStack pose,MultiBufferSource buffers,Vec3 camera,Vec3 origin,List<Mesh.Polygon> polygons,CableMedium medium){

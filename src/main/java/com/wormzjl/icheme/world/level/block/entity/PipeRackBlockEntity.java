@@ -17,10 +17,7 @@ import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
-import net.minecraft.network.Connection;
-import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
@@ -53,7 +50,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * that, the lane kept. Format rack-3 added the secondary paint, saved only when it differs from the paint; a rack-1
  * copy reads as it did.</p>
  */
-public final class PipeRackBlockEntity extends BlockEntity {
+public final class PipeRackBlockEntity extends ModelledBlockEntity {
     public static final String FORMAT = "rack-3";
 
     /**
@@ -535,18 +532,6 @@ public final class PipeRackBlockEntity extends BlockEntity {
         tag.putIntArray("Joined", joined.clone());
         tag.putInt("Frame", frame);
         return tag;
-    }
-
-    @Override
-    public ClientboundBlockEntityDataPacket getUpdatePacket() {
-        return ClientboundBlockEntityDataPacket.create(this);
-    }
-
-    @Override
-    public void onDataPacket(Connection connection, ClientboundBlockEntityDataPacket packet, HolderLookup.Provider registries) {
-        super.onDataPacket(connection, packet, registries);
-        requestModelDataUpdate();
-        if (level != null) level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 0);
     }
 
     @Override

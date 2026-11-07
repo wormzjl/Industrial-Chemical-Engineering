@@ -26,9 +26,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.neoforge.client.model.data.ModelData;
 import net.neoforged.neoforge.client.model.data.ModelProperty;
@@ -52,7 +50,7 @@ import java.util.WeakHashMap;
  * fluid identity and is its presentation binding, as a device block entity is for a one-block tank. Nothing of the
  * drum's contents is kept here.
  */
-public final class EquipmentShellBlockEntity extends BlockEntity implements com.wormzjl.icheme.runtime.instrument.Instrument.Holder, FluidView.Receiver {
+public final class EquipmentShellBlockEntity extends ModelledBlockEntity implements com.wormzjl.icheme.runtime.instrument.Instrument.Holder, FluidView.Receiver {
     /** Model data read by the shell model while the chunk is meshed. */
     public static final ModelProperty<ShapeRasterizer.CellKey> CELL = new ModelProperty<>();
     /** A saved cell or box beyond this many cells along any side is corrupt (the largest unit is under 100). */
@@ -649,18 +647,9 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
     }
 
     @Override
-    public ClientboundBlockEntityDataPacket getUpdatePacket() {
-        return ClientboundBlockEntityDataPacket.create(this);
-    }
-
-    /** Data that arrives after the block was meshed: refresh the model data and rebuild the section. */
-    @Override
-    public void onDataPacket(net.minecraft.network.Connection connection, ClientboundBlockEntityDataPacket packet, HolderLookup.Provider registries) {
-        super.onDataPacket(connection, packet, registries);
-        requestModelDataUpdate();
+    protected void clientGeometryChanged() {
         trackMoving();
         trackRoof();
-        if (level != null) level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 0);
     }
 
     @Override

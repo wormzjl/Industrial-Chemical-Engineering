@@ -529,7 +529,7 @@ def equipmentGates = gateGroup('equipment', 'science/equipment',
          'science/fluid/network/HeatControl*', 'science/fluid/network/HeatCurve*', 'science/fluid/network/HeatLaw*',
          'science/fluid/network/HeatSide*', 'science/fluid/network/HeatRouting*', 'science/fluid/network/PipeResistance*', 'science/fluid/network/VesselGeometry*',
          'world/level/block/entity/ColumnDesignTags*', 'world/level/block/entity/EquipmentConstructorBlockEntity*',
-         'world/level/block/entity/EquipmentShellBlockEntity*', 'world/level/block/entity/DeviceNames*'],
+         'world/level/block/entity/EquipmentShellBlockEntity*', 'world/level/block/entity/ModelledBlockEntity*', 'world/level/block/entity/DeviceNames*'],
         ['science/column/v3/V3TestInputs*', 'science/column/v3/HollandB12Thermo*', 'science/column/v3/HollandExample32Data*', 'science/column/v3/V3HollandExample32*'],
         ['column/**', 'compat/**', 'materials/**'], ['assets/icheme/parts/**', 'assets/icheme/lang/**'])
 
