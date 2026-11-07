@@ -1,6 +1,8 @@
 # Pipe laying: the laying tool, routes and pipe racks
 
-**Snapshot:** 3515b1ff (branch `codex/simulator-sizing`), 2026-11-07. Batch `2026-11-06-simulator-sizing`, prepared for 0.22.0; not merged. Earlier snapshots and release history are in Git and the batch READMEs.
+**Snapshot:** 238c136b (branch `codex/simulator-sizing`), 2026-11-07. Batch `2026-11-06-simulator-sizing`, prepared for 0.22.0; not merged. Earlier snapshots and release history are in Git and the batch READMEs.
+
+Client render-detail overloads for line, valve, inline-mover, sight-glass and rack geometry simplify fasteners to flush textured heads. Default overloads retain Normal. Route solving, offsets, endpoint profiles, physical placement and connection keys are unchanged; server/client detail never participates in laying.
 
 ## Shared line framework and electrical/data conduits (0.22.0)
 

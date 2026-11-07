@@ -12,7 +12,9 @@ Every sprite but the casting (tiled by 2 m), the motor's plain and panel sprites
 | `pump_volute` | `PUMP_VOLUTE` | volute crown: fillets and the cast rib |
 | `pump_fins` | `PUMP_FINS` | finned bearing housing |
 | `pump_joint` | `PUMP_JOINT` | bolted joint's rim: two flanges and the gasket |
-| `pump_disc` | `PUMP_DISC` | bolted face: twelve nuts, spigot |
+| `pump_disc` | `PUMP_DISC` | low-detail cover face: twelve textured nuts, spigot |
+| `pump_cover` | `PUMP_COVER` | plain recessed cover under normal raised casing nuts |
+| `equipment_bolt_face` | `BOLT_FACE` | flush textured hex nut for low-detail flanges |
 | `pump_base`, `pump_channel` | `PUMP_BASE`, `PUMP_CHANNEL` | drain-rim deck with anchors, drain and grout holes; channel sides with gussets |
 | `coupling_guard` | `COUPLING_GUARD` | framed expanded-metal panel, safety yellow; its plain band makes the end plates |
 | `shaft_steel` | `SHAFT` | machined steel of every turning shaft and hub, and of the shaft block models |
@@ -28,7 +30,7 @@ From the worktree root:
 java -Djava.awt.headless=true tools/pump-sprites/PumpSprites.java src/main/resources/assets/icheme/textures/block
 ```
 
-It writes the fifteen PNGs above. `probes/PumpRender` takes `-Dpaint=RRGGBB` to render another body paint. The output is the same on every run (no random numbers; the grain is a fixed hash).
+It writes seventeen PNGs including the plain cover and low-detail hex nut. `probes/PumpRender` takes `-Dpaint=RRGGBB` to render another body paint. The output is the same on every run (no random numbers; the grain is a fixed hash).
 
 `probes/` holds the checks used for the rework. They are in package `com.wormzjl.icheme.science.equipment`: compile them with `javac -proc:none -d <worktree>/tmp/<folder>` against `build/classes/java/main` and the runtime class path, and run them with that folder, the main classes and `build/resources/main` on the class path, from the worktree root.
 
@@ -48,3 +50,10 @@ It writes the fifteen PNGs above. `probes/PumpRender` takes `-Dpaint=RRGGBB` to 
 - 2026-11-07, batch `2026-11-06-simulator-sizing`: `ConstructorAssets.java` and `SimulatorAssets.java` now author the industrial fabrication bench and operator cabinet as vanilla JSON models, using existing steel, panel, grating and display textures. From the worktree root, run `java tools/pump-sprites/ConstructorAssets.java src/main/resources/assets/icheme` and the corresponding `SimulatorAssets.java` command to regenerate their block/item models and facing variants. Compile both classes with `tools/simulator-sizing/StationRender.java` for software views; `tools/simulator-sizing/check_models.py` checks collision coverage, UVs, resources and facing. The batch's other one-off renderers and texture sources are retained under `tools/simulator-sizing/archive/`.
 
 - 2026-11-04: created for the pump rework (OH2 and BB2 drawn with baked castings, fins, joints and drain-rim baseplate), the coupling guard (API 686 expanded-metal hood with end plates and a shaft opening, its own material so `GUARD`'s plain yellow stays as it is for valve handles, labels and the derrick), steel shafts that match the shaft block, and the motor rework (finned TEFC frame, end shields, large motor's panels).
+
+## Client drawing detail follow-up
+
+- 2026-11-07 (`238c136b`, batch `2026-11-06-simulator-sizing`): normal casing nuts return as geometry within the prior envelope; optional client Low mode uses textured nuts and coarser round primitives. No physics/layout contract changes.
+- `probes/PumpRender.java` accepts `-Ddetail=NORMAL|LOW` and also renders COLUMN (length = trays), DRUM, TANK and SPHERE. Other arguments/views remain unchanged.
+- `probes/DetailSheet.java <render-folder> <sheet-name> <kind>...` pairs existing `<kind>-normal-iso2.png` and `<kind>-low-iso2.png` images. Run with `-Djava.awt.headless=true`; outputs stay in the supplied indexed worktree `tmp/` folder.
+- Final figures/manifest/jar: canonical main `research/2026-11-06-simulator-sizing/evidence/low-poly/`; compressed verification logs at main `tools/simulator-sizing/logs/simulator-sizing-low-poly-logs-2026-11-07.tar.gz`. Originals and prior release evidence remain.

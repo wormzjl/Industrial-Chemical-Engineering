@@ -11,7 +11,7 @@
 **Feature branch:** `b1477c09` (`codex/liquid-gauge-accessory`), 2026-10-26, based on main `600549d9`. Floating-roof tank level gauge is an optional item/accessory;24 focused checks/package and8 native views pass. Main merge pending. [Contracts](../../2026-10-26-liquid-level-gauge-accessory/LEVEL_GAUGE_CONTRACTS.md).
 
 
-**Snapshot:** efa22cfe (branch `codex/simulator-sizing`), 2026-11-07. Batch `2026-11-06-simulator-sizing`, prepared for 0.22.0; not merged. Earlier snapshots and release history are in Git and the batch READMEs.
+**Snapshot:** 238c136b (branch `codex/simulator-sizing`), 2026-11-07. Batch `2026-11-06-simulator-sizing`, prepared for 0.22.0; not merged. Earlier snapshots and release history are in Git and the batch READMEs.
 
 ## Construction and layout additions (0.22.0)
 
@@ -26,6 +26,12 @@ Short reducer stencils use their available exposed surface and are omitted on a 
 Constructor initial dimensions are interior defaults and its paint scheme is user-specific. Its collision warning stays visible away from the aimed cell. Constructor/simulator models are authored in `tools/pump-sprites/`, with matching collision boxes and four facing variants. `ModelledBlockEntity` centralises geometry/model-data refresh for equipment, pipes, racks and conduits. Data/FE service mounts are on casings or cabinets with clearance; see [wired-control-power.md](wired-control-power.md).
 
 Up: [code guide](README.md)
+
+## Optional client render detail (0.22.0)
+
+`RenderDetail.NORMAL|LOW` selects drawing only. Client config `equipment.low_polygon_mode` in `icheme-client.toml` defaults false. Mixed-detail clients share the same server facts, shape, collision, layout stamps, nozzle/shaft positions and calculations. Normal pump/compressor cover faces use `PUMP_COVER` plus twelve raised nuts recessed within the prior envelope; Low keeps the earlier `PUMP_DISC` texture and flat textured flange nuts (`BOLT_FACE`).
+
+`ShapeRasterizer` keeps canonical geometry separate from its bounded coarse cache; coarse meshes reuse physical registration/reach tables. Round primitives cap angular samples at 24, heads at six bands and spheres at 12 latitude bands; small pipe/shaft profiles remain unchanged. `EquipmentBodyRenderer` and `LoadedEquipment` generalise the tower's whole-mesh renderer/index so coarse facets spanning interior cells cannot disappear at chunk-cell boundaries. Interfaces/markings/glass remain in chunk models. Moving parts, roof/ladder frames, preview and visible liquids follow the active profile. See the [review](../../2026-11-06-simulator-sizing/LOW_POLY_REVIEW.md) for inventory and measured counts.
 
 ## Protected removal and constructor deconstruction (0.22.0)
 

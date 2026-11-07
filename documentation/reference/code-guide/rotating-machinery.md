@@ -1,6 +1,8 @@
 # Rotating machinery: machine laws, shaft trains, drivers, electricity, wear and the Create coupling
 
-**Snapshot:** efa22cfe (branch `codex/simulator-sizing`), 2026-11-07. Batch `2026-11-06-simulator-sizing`, prepared for 0.22.0; not merged. Earlier snapshots and release history are in Git and the batch READMEs.
+**Snapshot:** 238c136b (branch `codex/simulator-sizing`), 2026-11-07. Batch `2026-11-06-simulator-sizing`, prepared for 0.22.0; not merged. Earlier snapshots and release history are in Git and the batch READMEs.
+
+Normal casing-cover nuts are raised geometry over a plain cover sprite, recessed within the existing envelope. Optional client Low detail uses textured flat nuts and capped round meshes while retaining all mechanical frames, hex shafts, published RPM and animation clocks. See [equipment.md](equipment.md).
 Up: [code guide](README.md)
 
 ## VFD demand, supply and shared rotation (0.22.0)
