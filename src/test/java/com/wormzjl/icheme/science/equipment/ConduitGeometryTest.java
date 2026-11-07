@@ -39,7 +39,7 @@ class ConduitGeometryTest {
                 var polygons=medium==CableMedium.DATA?data:power;
                 var ends=polygons.stream().filter(p->p.material()==Mesh.Material.OPENING&&p.size()==8).toList();
                 assertEquals(2,ends.size(),"Both insulated cut ends must block the view through the conduit");
-                assertTrue(polygons.stream().filter(p->p.material()==Mesh.Material.OPENING&&p.size()!=8).count()>=24,"Repeating symbols must be visible from all four sides");
+                assertTrue(polygons.stream().filter(p->p.material()==Mesh.Material.OPENING&&p.size()!=8).count()>=12,"Repeating symbols must be visible from all four sides");
                 for(var end:ends)for(int v=0;v<end.size();v++){
                     int dim=LineGeometry.axis(face);
                     double at=end.positions()[3*v+dim];assertTrue(Math.abs(at-.002)<1e-9||Math.abs(at-.998)<1e-9,"Caps are recessed to avoid shared coplanar faces");

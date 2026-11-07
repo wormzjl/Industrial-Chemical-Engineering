@@ -29,7 +29,7 @@ public final class DataControlRenderer {
     private static final RenderType JACKET=RenderType.entityCutoutNoCull(net.minecraft.world.inventory.InventoryMenu.BLOCK_ATLAS);
     private record PortMesh(List<Mesh.Polygon> polygons,net.minecraft.core.Direction outward){}
     private static final Map<DataPort,PortMesh> PORTS=new HashMap<>();
-    private record RackCable(RackGeometry.Rack rack,RackGeometry.Lane lane,ConduitGeometry.Key geometry){}
+    private record RackCable(RackGeometry.Rack rack,RackGeometry.Lane lane,ConduitGeometry.Key geometry,boolean marked){}
     private static final Map<RackCable,List<Mesh.Polygon>> CABLES=new HashMap<>();
     private DataControlRenderer(){}
     public static void loaded(ControlPanelBlockEntity box){PANELS.add(box);}public static void unloaded(ControlPanelBlockEntity box){PANELS.remove(box);}
@@ -74,8 +74,8 @@ public final class DataControlRenderer {
             if(CableLayingClient.holding(mc.player)&&port.kind().medium()==CableLayingClient.medium())LevelRenderer.renderLineBox(pose,buffers.getBuffer(RenderType.lines()),new AABB(port.centre(),port.centre()).inflate(.14).move(camera.scale(-1)),1,.8f,.22f,1);
         }
         for(var rack:PipeRackBlockEntity.clientRacks())if(rack.getLevel()==mc.level&&rack.getBlockPos().getCenter().distanceToSqr(camera)<96*96)for(var cable:rack.cables()){
-            var key=new RackCable(rack.rack(),rack.cableLane(cable),cable.geometry());
-            drawCable(pose,buffers,camera,Vec3.atLowerCornerOf(rack.getBlockPos()),CABLES.computeIfAbsent(key,k->ConduitGeometry.lane(k.rack(),k.lane(),k.geometry())),cable.geometry().medium());
+            var at=rack.getBlockPos();var key=new RackCable(rack.rack(),rack.cableLane(cable),cable.geometry(),ConduitGeometry.markedAt(at.getX(),at.getY(),at.getZ()));
+            drawCable(pose,buffers,camera,Vec3.atLowerCornerOf(at),CABLES.computeIfAbsent(key,k->ConduitGeometry.lane(k.rack(),k.lane(),k.geometry(),k.marked())),cable.geometry().medium());
         }
         CableLayingClient.draw(pose,buffers,camera);
         buffers.endBatch(SOLID);buffers.endBatch(JACKET);buffers.endBatch(GHOST);buffers.endBatch(RenderType.lines());
@@ -89,16 +89,16 @@ public final class DataControlRenderer {
     }
     /** Rack lanes, connector leads and chunk-baked conduit blocks use the same painted-metal finish. */
     private static void drawCable(PoseStack pose,MultiBufferSource buffers,Vec3 camera,Vec3 origin,List<Mesh.Polygon> polygons,CableMedium medium){
-        var mc=Minecraft.getInstance();var atlas=mc.getModelManager().getAtlas(net.minecraft.world.inventory.InventoryMenu.BLOCK_ATLAS);var body=atlas.getSprite(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"block/"+medium.texture()));var fitting=atlas.getSprite(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"block/equipment_flange"));var opening=atlas.getSprite(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"block/equipment_opening"));var consumer=buffers.getBuffer(JACKET);
+        var mc=Minecraft.getInstance();var atlas=mc.getModelManager().getAtlas(net.minecraft.world.inventory.InventoryMenu.BLOCK_ATLAS);var body=atlas.getSprite(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"block/"+medium.texture()));var fitting=atlas.getSprite(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"block/equipment_flange"));var opening=atlas.getSprite(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"block/equipment_opening"));var marker=atlas.getSprite(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"block/painted_pipe"));var consumer=buffers.getBuffer(JACKET);
         var shift=origin.subtract(camera);pose.pushPose();pose.translate(shift.x,shift.y,shift.z);int light=LevelRenderer.getLightColor(mc.level,BlockPos.containing(origin));
-        for(var q:polygons){var sprite=switch(q.material()){case FLANGE,BOLT->fitting;case OPENING->opening;default->body;};var p=q.positions();var n=q.normals();var uv=q.uvs();
-            for(int first=1;first+1<q.size();first+=2)for(int corner:new int[]{0,first,first+1,Math.min(first+2,q.size()-1)})consumer.addVertex(pose.last(),(float)p[corner*3],(float)p[corner*3+1],(float)p[corner*3+2]).setColor(255,255,255,255).setUv(sprite.getU((float)uv[corner*2]),sprite.getV((float)uv[corner*2+1])).setOverlay(OverlayTexture.NO_OVERLAY).setLight(light).setNormal(pose.last(),(float)n[corner*3],(float)n[corner*3+1],(float)n[corner*3+2]);
+        for(var q:polygons){var sprite=switch(q.material()){case FLANGE,BOLT->fitting;case OPENING->opening;case GUARD->marker;default->body;};var p=q.positions();var n=q.normals();var uv=q.uvs();int colour=q.material()==Mesh.Material.GUARD?medium.colour():0xffffff;
+            for(int first=1;first+1<q.size();first+=2)for(int corner:new int[]{0,first,first+1,Math.min(first+2,q.size()-1)})consumer.addVertex(pose.last(),(float)p[corner*3],(float)p[corner*3+1],(float)p[corner*3+2]).setColor(colour>>16&255,colour>>8&255,colour&255,255).setUv(sprite.getU((float)uv[corner*2]),sprite.getV((float)uv[corner*2+1])).setOverlay(OverlayTexture.NO_OVERLAY).setLight(light).setNormal(pose.last(),(float)n[corner*3],(float)n[corner*3+1],(float)n[corner*3+2]);
         }pose.popPose();
     }
     public static void draw(PoseStack pose,MultiBufferSource buffers,Vec3 camera,Vec3 origin,List<Mesh.Polygon> polygons,int tint,int alpha){
         var consumer=buffers.getBuffer(alpha==255?SOLID:GHOST);var shift=origin.subtract(camera);pose.pushPose();pose.translate(shift.x,shift.y,shift.z);
         int light=alpha==255?LevelRenderer.getLightColor(Minecraft.getInstance().level,BlockPos.containing(origin)):LightTexture.FULL_BRIGHT;
-        for(var q:polygons){int colour=tint!=0?tint:switch(q.material()){case OPENING->0x17282d;case GUARD->0xb99d38;case ACTUATOR->0xc68239;case FLANGE->0x747a7d;default->0xa0a6a8;};var p=q.positions();var n=q.normals();
+        for(var q:polygons){int colour=tint!=0?tint:switch(q.material()){case OPENING->0x17282d;case GUARD->CableMedium.DATA.colour();case ACTUATOR->CableMedium.POWER.colour();case FLANGE->0x747a7d;default->0xa0a6a8;};var p=q.positions();var n=q.normals();
             for(int first=1;first+1<q.size();first+=2)for(int corner:new int[]{0,first,first+1,Math.min(first+2,q.size()-1)})consumer.addVertex(pose.last(),(float)p[corner*3],(float)p[corner*3+1],(float)p[corner*3+2]).setColor(colour>>16&255,colour>>8&255,colour&255,alpha).setUv(0,0).setOverlay(OverlayTexture.NO_OVERLAY).setLight(light).setNormal(pose.last(),(float)n[corner*3],(float)n[corner*3+1],(float)n[corner*3+2]);
         }pose.popPose();
     }

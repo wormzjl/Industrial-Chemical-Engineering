@@ -23,22 +23,26 @@ public final class ConduitGeometry {
         }
     }
     private ConduitGeometry(){}
-    public static List<Polygon> polygons(Key key){
+    /** One identification band every four cells, including at negative world coordinates. */
+    public static boolean markedAt(int x,int y,int z){return Math.floorMod(x+y+z,4)==0;}
+    public static List<Polygon> polygons(Key key){return polygons(key,true);}
+    public static List<Polygon> polygons(Key key,boolean marked){
         var body=LineGeometry.conduit(key.joints(),key.offsets(),key.medium().outside());
         var out=new ArrayList<>(finish(body));
         int drawn=key.joints();if(drawn==0)drawn=48;else if(Integer.bitCount(drawn)==1)drawn|=1<<(Integer.numberOfTrailingZeros(drawn)^1);
-        for(int face=0;face<6;face++)if((drawn&1<<face)!=0)mark(out,body,key.point(face),LineGeometry.step(face),LineGeometry.ref(face),key.medium());
+        if(marked)for(int face=0;face<6;face++)if((drawn&1<<face)!=0&&mark(out,body,key.point(face),LineGeometry.step(face),LineGeometry.ref(face),key.medium()))break;
         return List.copyOf(out);
     }
     /** Rack conduit uses the rack pipe sweep, rather than chords between its corners. */
     public static List<Polygon> lane(RackGeometry.Rack rack,RackGeometry.Lane lane){return lane(rack,lane,CableMedium.DATA);}
-    public static List<Polygon> lane(RackGeometry.Rack rack,RackGeometry.Lane lane,CableMedium medium){
+    public static List<Polygon> lane(RackGeometry.Rack rack,RackGeometry.Lane lane,CableMedium medium){return lane(rack,lane,medium,true);}
+    public static List<Polygon> lane(RackGeometry.Rack rack,RackGeometry.Lane lane,CableMedium medium,boolean marked){
         var body=RackGeometry.lane(rack,lane);var out=new ArrayList<>(finish(body));
         var caps=new Mesh();
         for(int face=0;face<6;face++)if((lane.arms()&1<<face)!=0){
             var point=RackGeometry.facePoint(rack,lane,face);
             if(point!=null){
-                mark(out,body,point,LineGeometry.step(face),LineGeometry.ref(face),medium);
+                if(marked&&mark(out,body,point,LineGeometry.step(face),LineGeometry.ref(face),medium))marked=false;
                 if((lane.joined()&1<<face)!=0)caps.disc(new Frame(point,LineGeometry.step(face),LineGeometry.ref(face)),medium.outside()/2,-.002,8,1,Material.OPENING);
             }
         }
@@ -46,7 +50,8 @@ public final class ConduitGeometry {
         return List.copyOf(out);
     }
     /** Saved end coordinates remain authoritative when an enclosure's drawing diameter changes. */
-    public static List<Polygon> lane(RackGeometry.Rack rack,RackGeometry.Lane lane,Key geometry){
+    public static List<Polygon> lane(RackGeometry.Rack rack,RackGeometry.Lane lane,Key geometry){return lane(rack,lane,geometry,true);}
+    public static List<Polygon> lane(RackGeometry.Rack rack,RackGeometry.Lane lane,Key geometry,boolean marked){
         boolean displaced=false;var actual=geometry;
         for(int face=0;face<6;face++)if((lane.arms()&1<<face)!=0){
             int point=RackGeometry.point(rack,lane.option(),lane.width(),lane.diameter(),face);
@@ -56,7 +61,7 @@ public final class ConduitGeometry {
                 if(b!=null&&dot(sub(a,b),sub(a,b))>EPS)displaced=true;
             }
         }
-        return displaced?polygons(actual):lane(rack,lane,geometry.medium());
+        return displaced?polygons(actual,marked):lane(rack,lane,geometry.medium(),marked);
     }
     private static int signed(int value){return value>=16?value-32:value;}
     public static List<Polygon> path(List<double[]> points){return finish(LineGeometry.conduit(points,OUTSIDE));}
@@ -84,7 +89,7 @@ public final class ConduitGeometry {
         }).toList();
     }
 
-    private static void mark(List<Polygon> out,List<Polygon> body,double[] end,double[] axis,double[] ref,CableMedium medium){
+    private static boolean mark(List<Polygon> out,List<Polygon> body,double[] end,double[] axis,double[] ref,CableMedium medium){
         double radius=medium.outside()/2;
         // A short transition can bend immediately behind its gland. Mark only an actual straight length of enclosure.
         boolean straight=false;
@@ -97,13 +102,10 @@ public final class ConduitGeometry {
             }
             if(cylinder&&lo<=-.22+EPS&&hi>=-.04-EPS){straight=true;break;}
         }
-        if(!straight)return;
+        if(!straight)return false;
         var m=new Mesh();var frame=new Frame(end,axis,ref);double r=radius+.0007;
-        m.prism(frame,r,-.22,-.04,8,Material.PIPE);
-        for(var p:LineGeometry.overhanging(m)){
-            var uv=p.uvs().clone();for(int v=1;v<uv.length;v+=2)uv[v]=.23+.03*uv[v];
-            out.add(new Polygon(p.positions(),uv,p.normals(),p.material()));
-        }
+        m.prism(frame,r,-.22,-.04,8,Material.GUARD);
+        out.addAll(LineGeometry.overhanging(m));
         // The symbols are vector decals on alternate octagonal flats, readable from every side of a straight run.
         var ink=new Mesh();double width=radius*.48,length=.13;
         double[][] bolt={{-.2,-.5},{.48,-.5},{.05,-.08},{.4,-.08},{-.38,.5},{-.05,.08},{-.4,.08}};
@@ -120,6 +122,7 @@ public final class ConduitGeometry {
             }
         }
         out.addAll(LineGeometry.overhanging(ink));
+        return true;
     }
 
     private static void glyph(Mesh mesh,double[] centre,double[] across,double[] along,double[] normal,double[][] points,double width,double length){

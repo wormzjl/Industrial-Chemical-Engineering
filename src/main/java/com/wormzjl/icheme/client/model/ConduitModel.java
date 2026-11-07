@@ -26,17 +26,20 @@ public final class ConduitModel implements IDynamicBakedModel {
     private static final ChunkRenderTypeSet SOLID=ChunkRenderTypeSet.of(RenderType.solid());
     private final CableMedium medium;
     private final TextureAtlasSprite sprite;
-    private final TextureAtlasSprite fitting,opening;
+    private final TextureAtlasSprite fitting,opening,marker;
     private final ItemTransforms transforms;
-    private final Map<ConduitGeometry.Key,List<BakedQuad>> cache=new ConcurrentHashMap<>();
-    private ConduitModel(CableMedium medium,TextureAtlasSprite sprite,TextureAtlasSprite fitting,TextureAtlasSprite opening,ItemTransforms transforms){this.medium=medium;this.sprite=sprite;this.fitting=fitting;this.opening=opening;this.transforms=transforms;}
+    private record Look(ConduitGeometry.Key geometry,boolean marked){}
+    private final Map<Look,List<BakedQuad>> cache=new ConcurrentHashMap<>();
+    private ConduitModel(CableMedium medium,TextureAtlasSprite sprite,TextureAtlasSprite fitting,TextureAtlasSprite opening,TextureAtlasSprite marker,ItemTransforms transforms){this.medium=medium;this.sprite=sprite;this.fitting=fitting;this.opening=opening;this.marker=marker;this.transforms=transforms;}
     @Override public List<BakedQuad> getQuads(@Nullable BlockState state,@Nullable Direction side,RandomSource random,ModelData data,@Nullable RenderType type){
         if(side!=null)return List.of();
         var key=data.get(ConduitBlockEntity.GEOMETRY);if(key==null)key=new ConduitGeometry.Key(0,0,medium);
         if(cache.size()>2048)cache.clear();
-        return cache.computeIfAbsent(key,k->{var sprites=new TextureAtlasSprite[Mesh.Material.values().length];Arrays.fill(sprites,sprite);
+        var look=new Look(key,!Boolean.FALSE.equals(data.get(ConduitBlockEntity.MARKED)));
+        return cache.computeIfAbsent(look,l->{var k=l.geometry();var sprites=new TextureAtlasSprite[Mesh.Material.values().length];Arrays.fill(sprites,sprite);
             sprites[Mesh.Material.FLANGE.ordinal()]=fitting;sprites[Mesh.Material.BOLT.ordinal()]=fitting;sprites[Mesh.Material.OPENING.ordinal()]=opening;
-            return EquipmentShellModel.bake(ConduitGeometry.polygons(k),sprites,false);});
+            sprites[Mesh.Material.GUARD.ordinal()]=marker;
+            return EquipmentShellModel.bake(ConduitGeometry.polygons(k,l.marked()),sprites,material->-1,material->material==Mesh.Material.GUARD?k.medium().colour():0xffffff);});
     }
     @Override public ChunkRenderTypeSet getRenderTypes(BlockState state,RandomSource random,ModelData data){return SOLID;}
     @Override public boolean useAmbientOcclusion(){return false;}
@@ -48,7 +51,7 @@ public final class ConduitModel implements IDynamicBakedModel {
     @Override public ItemOverrides getOverrides(){return ItemOverrides.EMPTY;}
     public record Geometry(CableMedium medium) implements IUnbakedGeometry<Geometry> {
         @Override public BakedModel bake(IGeometryBakingContext context,ModelBaker baker,Function<Material,TextureAtlasSprite> sprites,ModelState state,ItemOverrides overrides){
-            return new ConduitModel(medium,sprites.apply(context.getMaterial("cable")),sprites.apply(context.getMaterial("fitting")),sprites.apply(context.getMaterial("opening")),context.getTransforms());
+            return new ConduitModel(medium,sprites.apply(context.getMaterial("cable")),sprites.apply(context.getMaterial("fitting")),sprites.apply(context.getMaterial("opening")),sprites.apply(context.getMaterial("marker")),context.getTransforms());
         }
     }
 }

@@ -2,7 +2,7 @@ package com.wormzjl.icheme.science.equipment;
 
 /** Saved by name. Both metallic cable enclosures use the same fixed outside diameter. */
 public enum CableMedium {
-    DATA(1/8.0,"data_cable",0xe5ca70), POWER(1/8.0,"power_cable",0xd89455);
+    DATA(1/8.0,"power_cable",0x69b9db), POWER(1/8.0,"power_cable",0xd89455);
     private final double outside;
     private final String texture;
     private final int colour;

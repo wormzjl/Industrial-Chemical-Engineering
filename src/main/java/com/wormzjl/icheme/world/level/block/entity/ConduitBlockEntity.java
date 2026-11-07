@@ -16,6 +16,7 @@ import java.util.*;
 /** Chunk model copy of cable facts. The registered control store remains authoritative across chunk unloading. */
 public final class ConduitBlockEntity extends ModelledBlockEntity {
     public static final ModelProperty<ConduitGeometry.Key> GEOMETRY=new ModelProperty<>();
+    public static final ModelProperty<Boolean> MARKED=new ModelProperty<>();
     private ConduitGeometry.Key geometry;
     private Map<Direction,UUID> endpoints=Map.of();
     public ConduitBlockEntity(BlockPos pos,BlockState state){super(ModBlockEntities.DATA_CABLE.get(),pos,state);geometry=new ConduitGeometry.Key(0,0,((ConduitBlock)state.getBlock()).medium());}
@@ -45,5 +46,5 @@ public final class ConduitBlockEntity extends ModelledBlockEntity {
         try{endpoints=DataBus.loadEndpoints(tag.getList("Endpoints",10));}catch(IllegalArgumentException invalid){endpoints=Map.of();}
     }
     @Override public CompoundTag getUpdateTag(HolderLookup.Provider provider){return saveWithoutMetadata(provider);}
-    @Override public ModelData getModelData(){return ModelData.of(GEOMETRY,geometry);}
+    @Override public ModelData getModelData(){return ModelData.builder().with(GEOMETRY,geometry).with(MARKED,ConduitGeometry.markedAt(worldPosition.getX(),worldPosition.getY(),worldPosition.getZ())).build();}
 }

@@ -1,9 +1,10 @@
 {
   "loader": "icheme:data_cable",
   "textures": {
-    "cable": "icheme:block/data_cable",
+    "cable": "icheme:block/power_cable",
+    "marker": "icheme:block/painted_pipe",
     "fitting": "icheme:block/equipment_flange",
     "opening": "icheme:block/equipment_opening",
-    "particle": "icheme:block/data_cable"
+    "particle": "icheme:block/power_cable"
   }
 }

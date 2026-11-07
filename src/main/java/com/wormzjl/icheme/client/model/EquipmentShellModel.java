@@ -126,11 +126,16 @@ public final class EquipmentShellModel implements IDynamicBakedModel {
 
     /** As {@link #bake(List, TextureAtlasSprite[], boolean)}, each material's quads with the tint index {@code tint} gives it (-1: none). */
     public static List<BakedQuad> bake(List<Mesh.Polygon> polygons, TextureAtlasSprite[] sprites, java.util.function.ToIntFunction<Mesh.Material> tints) {
+        return bake(polygons,sprites,tints,material->0xffffff);
+    }
+
+    /** Fixed material colours multiplied by the same lighting as uncoloured surfaces, without a block tint lookup. */
+    public static List<BakedQuad> bake(List<Mesh.Polygon> polygons, TextureAtlasSprite[] sprites, java.util.function.ToIntFunction<Mesh.Material> tints, java.util.function.ToIntFunction<Mesh.Material> colours) {
         var out = new ArrayList<BakedQuad>();
         for (var polygon : polygons) {
             int tint = tints.applyAsInt(polygon.material());
             for (int first = 1; first + 1 < polygon.size(); first += 2)
-                out.add(quad(polygon, sprites[polygon.material().ordinal()], tint, 0, first, first + 1, Math.min(first + 2, polygon.size() - 1)));
+                out.add(quad(polygon, sprites[polygon.material().ordinal()], tint, colours.applyAsInt(polygon.material()), 0, first, first + 1, Math.min(first + 2, polygon.size() - 1)));
         }
         return List.copyOf(out);
     }
@@ -209,7 +214,7 @@ public final class EquipmentShellModel implements IDynamicBakedModel {
         return Math.round(255 * Math.min(1, QuadLighter.calculateShade(nx, ny, nz, false) + (k > 0 ? sheen(k, nx, nz) : 0)));
     }
 
-    private static BakedQuad quad(Mesh.Polygon polygon, TextureAtlasSprite sprite, int tint, int... corners) {
+    private static BakedQuad quad(Mesh.Polygon polygon, TextureAtlasSprite sprite, int tint, int colour, int... corners) {
         double[] p = polygon.positions(), uv = polygon.uvs(), n = polygon.normals();
         // Face direction from the corners' winding (Newell), for vanilla's directional shade.
         double fx = 0, fy = 0, fz = 0;
@@ -231,7 +236,7 @@ public final class EquipmentShellModel implements IDynamicBakedModel {
         for (int c : corners) {
             int shade = shade(polygon, c);
             baker.addVertex((float) p[3 * c], (float) p[3 * c + 1], (float) p[3 * c + 2])
-                    .setColor(shade, shade, shade, 255)
+                      .setColor(shade*(colour>>16&255)/255, shade*(colour>>8&255)/255, shade*(colour&255)/255, 255)
                     .setUv(sprite.getU((float) uv[2 * c]), sprite.getV((float) uv[2 * c + 1]))
                     .setNormal((float) n[3 * c], (float) n[3 * c + 1], (float) n[3 * c + 2]);
         }
