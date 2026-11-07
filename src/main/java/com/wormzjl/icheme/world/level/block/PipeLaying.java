@@ -52,15 +52,9 @@ public final class PipeLaying {
         if (start.anchor() == null) return refusal(start.refusal());
         var end = PipeAnchor.resolve(level, endClick, outside);
         if (end.anchor() == null) return refusal(end.refusal());
-        var refused = PipeAnchor.refuses(start.anchor(), end.anchor(), outside);
-        if (refused != null) return refusal(refused);
-        var cells = path.stream().map(PipeAnchor::cell).toList();
-        var broken = PipeRoute.check(cells, options, start.anchor().end(), end.anchor().end(), PipeRoute.Limits.DEFAULT.cells());
-        if (broken != null) return refusal(broken);
-        int heading = start.anchor().leaving();
-        int blocked = PipeRoute.blocked(cells, options, start.anchor().end(), heading, end.anchor().end(), outside, PipeAnchor.space(level));
-        if (blocked >= 0) return message("occupied", path.get(blocked).toShortString());
-        for (var cell : path) if (!level.mayInteract(player, cell)) return message("occupied", cell.toShortString());
+        var refused=LinePlacement.check(level,start.anchor(),end.anchor(),path,options,outside);if(refused!=null)return refused;
+        var cells=path.stream().map(PipeAnchor::cell).toList();int heading=start.anchor().leaving();
+        for(var cell:path)if(!LinePlacement.editable(player,cell))return message("occupied",cell.toShortString());
         var world = FluidWorldAuthority.find(player.server).orElse(null);
         if (world == null) return message("not_allowed");
         String dimension = level.dimension().location().toString();
@@ -76,7 +70,7 @@ public final class PipeLaying {
             if (joints < 0) return message(anchor.hostLane() > 0 ? "anchor.lane_closed" : "anchor.junction");
             hosts.put(record.device().id(), joints);
         }
-        if (!player.getAbilities().instabuild && !take(player, path.size())) return message("items", path.size());
+        if (!player.getAbilities().instabuild && !LinePlacement.take(player,ModItems.FLUID_PIPE.get(),path.size())) return message("items", path.size());
         var placement = PipeRoute.placement(cells, start.anchor().end(), heading, end.anchor().end());
         int[] joints = placement.joints(), facings = placement.facings(), arms = placement.arms();
         int width = RackGeometry.width(PipeSizes.drawn(settings.diameter()));
@@ -165,24 +159,6 @@ public final class PipeLaying {
         }
         if (!(state.getBlock() instanceof FluidDeviceBlock block) || block.kind() != TopologyCompiler.Kind.PIPE) return message("not_a_pipe");
         return player.gameMode.destroyBlock(position) ? null : message("not_allowed");
-    }
-
-    /** Takes {@code count} pipe items from the player's inventory, or none when they hold fewer. */
-    private static boolean take(ServerPlayer player, int count) {
-        var inventory = player.getInventory();
-        int held = 0;
-        for (int slot = 0; slot < inventory.getContainerSize(); slot++)
-            if (inventory.getItem(slot).is(ModItems.FLUID_PIPE.get())) held += inventory.getItem(slot).getCount();
-        if (held < count) return false;
-        for (int slot = 0; slot < inventory.getContainerSize() && count > 0; slot++) {
-            var stack = inventory.getItem(slot);
-            if (!stack.is(ModItems.FLUID_PIPE.get())) continue;
-            int taken = Math.min(count, stack.getCount());
-            stack.shrink(taken);
-            count -= taken;
-        }
-        inventory.setChanged();
-        return true;
     }
 
     private static String name(Enum<?> value) {

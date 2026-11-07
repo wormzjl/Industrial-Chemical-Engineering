@@ -39,18 +39,15 @@ public final class DataControlRenderer {
         return Map.copyOf(ports);
     }
     public static Map<UUID,DataPort> ports(Level level,Vec3 centre,double radius,CableMedium medium){var result=new HashMap<UUID,DataPort>();ports(level,centre,radius).forEach((id,p)->{if(p.kind().medium()==medium)result.put(id,p);});return Map.copyOf(result);}
-    public static DataPort aim(Map<UUID,DataPort> ports,Vec3 eye,Vec3 look,double range){
-        return ports.values().stream().filter(p->new AABB(p.centre(),p.centre()).inflate(.18).clip(eye,eye.add(look.scale(range))).isPresent()).min(Comparator.comparingDouble(p->p.centre().distanceToSqr(eye))).orElse(null);
-    }
     private static boolean connected(Level level,DataPort port){
         if(!level.hasChunkAt(port.cell()))return false;var be=level.getBlockEntity(port.cell());
         var wires=be instanceof ConduitBlockEntity c?List.of(c.cable()):be instanceof PipeRackBlockEntity r?r.cables():List.<DataBus.Cable>of();
-        for(var c:wires)if(c.geometry().medium()==port.kind().medium()&&(c.geometry().joints()&(1<<port.face().ordinal()))!=0){var point=c.geometry().point(port.face().ordinal());if(new Vec3(point[0]+port.cell().getX(),point[1]+port.cell().getY(),point[2]+port.cell().getZ()).distanceToSqr(port.cablePoint())<1e-12)return true;}return false;
+        for(var c:wires)if(Objects.equals(c.endpoints().get(port.face()),port.id())&&c.geometry().medium()==port.kind().medium()&&(c.geometry().joints()&(1<<port.face().ordinal()))!=0){var point=c.geometry().point(port.face().ordinal());if(new Vec3(point[0]+port.cell().getX(),point[1]+port.cell().getY(),point[2]+port.cell().getZ()).distanceToSqr(port.cablePoint())<1e-12)return true;}return false;
     }
     @SubscribeEvent public static void hud(RenderGuiEvent.Post event){
         var mc=Minecraft.getInstance();if(mc.player==null||mc.level==null||mc.screen!=null||!CableLayingClient.holding(mc.player))return;
-        var port=aim(ports(mc.level,mc.player.getEyePosition(),mc.player.blockInteractionRange()+1,CableLayingClient.medium()),mc.player.getEyePosition(),mc.player.getLookAngle(),mc.player.blockInteractionRange());
-        if(port==null||mc.hitResult!=null&&port.centre().distanceTo(mc.player.getEyePosition())>mc.hitResult.getLocation().distanceTo(mc.player.getEyePosition())+.2)return;
+        var port=LayingToolAim.port(mc,ports(mc.level,mc.player.getEyePosition(),mc.player.blockInteractionRange()+1,CableLayingClient.medium()).values());
+        if(port==null)return;
         String id=port.host()>0?String.format(Locale.ROOT,"#%04d",port.host()):"LC-"+port.id().toString().substring(0,8).toUpperCase(Locale.ROOT);
         String text=port.kind().power()?net.minecraft.network.chat.Component.translatable("gui.icheme.power."+switch(port.kind()){case POWER_INPUT->"input";case POWER_OUTPUT->"output";default->"both";}).getString():net.minecraft.network.chat.Component.translatable("gui.icheme.data.port",id).getString();
         if(!port.kind().power()&&mc.level.getBlockEntity(port.owner()) instanceof com.wormzjl.icheme.runtime.instrument.Instrument.Holder holder&&!holder.instruments().sensorIds().isEmpty())text+=" / "+String.join(", ",holder.instruments().sensorIds().values().stream().sorted().toList());

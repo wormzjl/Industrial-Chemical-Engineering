@@ -35,9 +35,9 @@ public final class CableLayingClient {
     public static boolean holding(LocalPlayer p){return LayingToolAim.holding(p)&&PipeLayingToolItem.conduit(LayingToolAim.held(p));}
     private static CableLaying.End aimed(){
         var mc=Minecraft.getInstance();var p=mc.player;var ports=DataControlRenderer.ports(mc.level,p.getEyePosition(),p.blockInteractionRange()+1,medium());
-        var port=DataControlRenderer.aim(ports,p.getEyePosition(),p.getLookAngle(),p.blockInteractionRange());
+        var port=LayingToolAim.port(mc,ports.values());
         double solid=mc.hitResult==null?Double.POSITIVE_INFINITY:mc.hitResult.getLocation().distanceTo(p.getEyePosition());
-        if(port!=null&&port.centre().distanceTo(p.getEyePosition())<solid+.2)return new CableLaying.End(port.id(),port.owner(),port.face().getOpposite(),new Vec3(.5,.5,.5),0);
+        if(port!=null)return new CableLaying.End(port.id(),port.owner(),port.face().getOpposite(),new Vec3(.5,.5,.5),0);
         CableLaying.End picked=null;double nearest=solid+.04;var eye=p.getEyePosition();var end=eye.add(p.getLookAngle().scale(p.blockInteractionRange()));
         for(var rack:PipeRackBlockEntity.clientRacks())if(rack.getLevel()==mc.level&&rack.getBlockPos().getCenter().distanceToSqr(eye)<Math.pow(p.blockInteractionRange()+2,2))for(var cable:rack.cables()){
             if(cable.geometry().medium()!=medium())continue;
@@ -63,6 +63,11 @@ public final class CableLayingClient {
         }
         if(aim==null||sent)return;
         var ports=DataControlRenderer.ports(mc.level,mc.player.position(),96,medium());
+        var socket=aim.port()==null?null:ports.get(aim.port());
+        if(socket!=null&&mc.level.getBlockEntity(socket.cell()) instanceof ConduitBlockEntity wire&&wire.geometry().medium()==medium()
+                &&!Objects.equals(wire.cable().endpoints().get(socket.face()),socket.id())){
+            sent=true;request=ControlNetwork.cable(off,false,medium(),aim,aim,List.of(),List.of());return;
+        }
         if(start==null){if(CableLaying.resolve(mc.level,aim,ports,medium())==null){say("gui.icheme.data.no_route");return;}start=aim;startedMedium=medium();dimension=mc.level.dimension();end=null;say("gui.icheme.data.started");return;}
         plan(aim);if(route==null||!route.found()){say("gui.icheme.data.no_route");return;}
         sent=true;request=ControlNetwork.cable(off,false,medium(),start,aim,route.cells().stream().map(CableLaying::block).toList(),route.options());
@@ -77,6 +82,7 @@ public final class CableLayingClient {
         if(Objects.equals(end,aim)&&route!=null&&age%20!=0)return;
         end=aim;ghost=List.of();route=null;if(aim==null)return;var mc=Minecraft.getInstance();var ports=DataControlRenderer.ports(mc.level,mc.player.position(),96,medium());
         var a=CableLaying.resolve(mc.level,start,ports,medium());var b=CableLaying.resolve(mc.level,aim,ports,medium());if(a==null||b==null)return;
+        if(PipeAnchor.refuses(a.placement(),b.placement(),medium().outside())!=null)return;
         route=PipeRoute.search(a.end(),a.heading(),b.end(),medium().outside(),PipeAnchor.space(mc.level),PipeRoute.Limits.DEFAULT);
         if(route.found())ghost=CableLaying.design(mc.level,a,b,route,medium());
     }

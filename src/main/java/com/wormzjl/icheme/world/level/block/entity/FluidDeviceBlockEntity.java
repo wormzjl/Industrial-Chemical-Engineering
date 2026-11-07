@@ -327,6 +327,7 @@ public final class FluidDeviceBlockEntity extends BlockEntity implements com.wor
         super.onDataPacket(connection,packet,registries);com.wormzjl.icheme.runtime.instrument.InstrumentHosts.loaded(this);requestModelDataUpdate();trackOpenEnds();
         if(level!=null)level.sendBlockUpdated(worldPosition,getBlockState(),getBlockState(),0);
     }
+    public long lineOffsets(){return offsets;}
     @Override public ModelData getModelData() {
         long packed=0;int flanged=0;
         for(int i=0;i<6;i++){packed|=(long)(faces[i]&127)<<(7*i);if((faces[i]&FLANGED)!=0)flanged|=1<<i;}

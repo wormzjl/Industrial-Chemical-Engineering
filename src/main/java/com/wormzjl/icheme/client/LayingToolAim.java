@@ -3,6 +3,8 @@ package com.wormzjl.icheme.client;
 import com.wormzjl.icheme.registry.ModItems;
 import com.wormzjl.icheme.science.equipment.*;
 import com.wormzjl.icheme.world.level.block.PipeAnchor;
+import com.wormzjl.icheme.world.level.block.LinePortTarget;
+import com.wormzjl.icheme.runtime.control.DataPort;
 import com.wormzjl.icheme.world.level.block.entity.PipeRackBlockEntity;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
@@ -22,6 +24,10 @@ public final class LayingToolAim {
         for(int position=0;position<RackGeometry.POSITIONS;position++){if((taken>>position&1)!=0)continue;var c=frame.world(RackGeometry.centre(position,1),(RackGeometry.BEAM_TOP+2)*LineGeometry.OFFSET,.5);double h=.04;boxes.add(new AABB(c[0]-h,c[1]-h,c[2]-h,c[0]+h,c[1]+h,c[2]+h).move(rack.getBlockPos()));}return List.copyOf(boxes);
     }
     public record Slot(PipeRackBlockEntity rack,RackGeometry.Lane lane,boolean fits){}
+    public static DataPort port(Minecraft mc,Collection<DataPort> ports){
+        var player=mc.player;if(player==null||mc.level==null)return null;
+        return LinePortTarget.aim(mc.level,ports,player.getEyePosition(),player.getLookAngle(),player.blockInteractionRange(),mc.hitResult instanceof BlockHitResult hit?hit:null);
+    }
     public static Slot slot(net.minecraft.world.level.Level level,PipeAnchor.Click click,double outside){
         if(click==null||!(level.getBlockEntity(click.clicked()) instanceof PipeRackBlockEntity rack))return null;
         var aim=PipeAnchor.aimed(rack,click.local(),outside);if(aim==null)return null;int code=PipeSizes.code(outside),width=RackGeometry.width(PipeSizes.outsideOf(code));

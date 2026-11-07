@@ -40,10 +40,11 @@ public final class ConduitBlockEntity extends BlockEntity {
         }else{requestModelDataUpdate();level.sendBlockUpdated(worldPosition,getBlockState(),getBlockState(),0);}
     }
     @Override public void onLoad(){super.onLoad();if(level instanceof ServerLevel server)FluidWorldAuthority.find(server.getServer()).ifPresent(w->w.controls().loaded(this));}
-    @Override protected void saveAdditional(CompoundTag tag,HolderLookup.Provider provider){super.saveAdditional(tag,provider);tag.putString("Medium",geometry.medium().name());tag.putInt("Joints",geometry.joints());tag.putLong("Offsets",geometry.offsets());}
+    @Override protected void saveAdditional(CompoundTag tag,HolderLookup.Provider provider){super.saveAdditional(tag,provider);tag.putString("Medium",geometry.medium().name());tag.putInt("Joints",geometry.joints());tag.putLong("Offsets",geometry.offsets());tag.put("Endpoints",DataBus.saveEndpoints(endpoints));}
     @Override protected void loadAdditional(CompoundTag tag,HolderLookup.Provider provider){
         super.loadAdditional(tag,provider);
         try{geometry=new ConduitGeometry.Key(tag.getInt("Joints"),tag.getLong("Offsets"),((ConduitBlock)getBlockState().getBlock()).medium());}catch(IllegalArgumentException invalid){geometry=new ConduitGeometry.Key(0,0,((ConduitBlock)getBlockState().getBlock()).medium());}
+        try{endpoints=DataBus.loadEndpoints(tag.getList("Endpoints",10));}catch(IllegalArgumentException invalid){endpoints=Map.of();}
     }
     @Override public CompoundTag getUpdateTag(HolderLookup.Provider provider){return saveWithoutMetadata(provider);}
     @Override public ClientboundBlockEntityDataPacket getUpdatePacket(){return ClientboundBlockEntityDataPacket.create(this);}

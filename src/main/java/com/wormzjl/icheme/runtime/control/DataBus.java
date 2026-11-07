@@ -31,22 +31,26 @@ public final class DataBus {
         public CompoundTag save(){
             var t=new CompoundTag();t.putString("dimension",site.dimension());t.putLong("cell",site.cell().asLong());t.putInt("lane",site.lane());
             if(geometry.medium()!=CableMedium.DATA)t.putString("medium",geometry.medium().name());t.putInt("joints",geometry.joints());t.putLong("offsets",geometry.offsets());t.putInt("arms",arms);
-            var ends=new ListTag();endpoints.forEach((face,id)->{var e=new CompoundTag();e.putString("face",face.name());e.putUUID("port",id);ends.add(e);});
-            t.put("endpoints",ends);return t;
+            t.put("endpoints",saveEndpoints(endpoints));return t;
         }
         public static Cable load(CompoundTag t){
             if(!t.getAllKeys().equals(t.contains("medium")?Set.of("dimension","cell","lane","joints","offsets","arms","endpoints","medium"):Set.of("dimension","cell","lane","joints","offsets","arms","endpoints"))
                     ||t.contains("medium")&&!t.contains("medium",8)||!t.contains("dimension",8)||!t.contains("cell",4)||!t.contains("lane",3)||!t.contains("joints",3)
                     ||!t.contains("offsets",4)||!t.contains("arms",3)||!t.contains("endpoints",9))throw new IllegalArgumentException("Damaged cable facts");
-            var ends=new EnumMap<Direction,UUID>(Direction.class);var tags=t.getList("endpoints",10);
-            var saved=(ListTag)t.get("endpoints");if(!saved.isEmpty()&&saved.getElementType()!=10)throw new IllegalArgumentException("Invalid cable endpoints list");
-            if(tags.size()>6)throw new IllegalArgumentException("Too many cable endpoints");
-            for(var tag:tags){var e=(CompoundTag)tag;
-                if(!e.getAllKeys().equals(Set.of("face","port"))||!e.contains("face",8)||!e.hasUUID("port")
-                        ||ends.put(Direction.valueOf(e.getString("face")),e.getUUID("port"))!=null)throw new IllegalArgumentException("Invalid cable endpoint");}
+            var ends=loadEndpoints((ListTag)t.get("endpoints"));
             return new Cable(new Site(t.getString("dimension"),BlockPos.of(t.getLong("cell")),t.getInt("lane")),
                     new ConduitGeometry.Key(t.getInt("joints"),t.getLong("offsets"),t.contains("medium")?CableMedium.valueOf(t.getString("medium")):CableMedium.DATA),t.getInt("arms"),ends);
         }
+    }
+    public static ListTag saveEndpoints(Map<Direction,UUID> endpoints){
+        var tags=new ListTag();endpoints.forEach((face,id)->{var e=new CompoundTag();e.putString("face",face.name());e.putUUID("port",id);tags.add(e);});return tags;
+    }
+    public static Map<Direction,UUID> loadEndpoints(ListTag tags){
+        if(!tags.isEmpty()&&tags.getElementType()!=10||tags.size()>6)throw new IllegalArgumentException("Invalid cable endpoints list");
+        var ends=new EnumMap<Direction,UUID>(Direction.class);
+        for(var tag:tags){var e=(CompoundTag)tag;if(!e.getAllKeys().equals(Set.of("face","port"))||!e.contains("face",8)||!e.hasUUID("port")
+                ||ends.put(Direction.valueOf(e.getString("face")),e.getUUID("port"))!=null)throw new IllegalArgumentException("Invalid cable endpoint");}
+        return Map.copyOf(ends);
     }
     private record End(String dimension,long x,long y,long z,int axis){}
     private final Map<UUID,Set<UUID>> components;

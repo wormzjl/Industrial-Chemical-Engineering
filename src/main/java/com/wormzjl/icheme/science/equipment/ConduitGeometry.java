@@ -36,14 +36,8 @@ public final class ConduitGeometry {
         for(int step=1;step<=3;step++){int k=(axis+step)%3;if(Math.abs(p[k]-q[k])>1e-8){p=p.clone();p[k]=q[k];points.add(p);}}
         points.add(end);return LineGeometry.conduit(points,medium.outside());
     }
-    /** Small boxes around the actual pipe polygons, shared by selection and removal previews. */
+    /** The shared pipe selection envelope, also used by removal previews. */
     public static List<double[]> boxes(Key key){
-        var result=new ArrayList<double[]>();
-        for(var p:polygons(key)){
-            var bounds=new double[]{Double.POSITIVE_INFINITY,Double.POSITIVE_INFINITY,Double.POSITIVE_INFINITY,Double.NEGATIVE_INFINITY,Double.NEGATIVE_INFINITY,Double.NEGATIVE_INFINITY};
-            var v=p.positions();for(int i=0;i<v.length;i++){int k=i%3;bounds[k]=Math.min(bounds[k],v[i]);bounds[k+3]=Math.max(bounds[k+3],v[i]);}
-            for(int k=0;k<3;k++){bounds[k]-=.012;bounds[k+3]+=.012;}result.add(bounds);
-        }
-        return List.copyOf(result);
+        return LineSelection.boxes(key.joints(),5,PipeSizes.code(key.medium().outside()),key.offsets());
     }
 }

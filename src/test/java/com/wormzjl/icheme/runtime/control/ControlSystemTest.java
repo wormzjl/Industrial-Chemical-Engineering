@@ -61,6 +61,12 @@ class ControlSystemTest {
         facts.cable(cable);assertTrue(facts.wired(id));
         facts.cable(new DataBus.Cable(cable.site(),cable.geometry(),cable.arms(),Map.of()));assertFalse(facts.wired(id));
     }
+    @Test void clientEndpointCopiesRetainBothSocketIdentities(){
+        var ports=Map.of(Direction.WEST,new UUID(0,11),Direction.EAST,new UUID(0,12));
+        assertEquals(ports,DataBus.loadEndpoints(DataBus.saveEndpoints(ports)));
+        var invalid=new ListTag();invalid.add(StringTag.valueOf("not an endpoint"));
+        assertThrows(IllegalArgumentException.class,()->DataBus.loadEndpoints(invalid));
+    }
 
     @Test void powerFactsRoundTripAndCannotJoinTheDataBus() throws Exception {
         var facts=ControlFacts.load(TagParser.parseTag(Files.readString(Path.of("src/test/resources/compat/control/control-3.snbt"))));

@@ -15,7 +15,6 @@ import net.minecraft.world.phys.shapes.*;
 
 /** Metallic signal or FE conduit. Both share pipe routing without joining the fluid topology. */
 public final class ConduitBlock extends BaseEntityBlock {
-    private static final java.util.Map<com.wormzjl.icheme.science.equipment.ConduitGeometry.Key,VoxelShape> SHAPES=new java.util.concurrent.ConcurrentHashMap<>();
     public static final MapCodec<ConduitBlock> CODEC=com.mojang.serialization.codecs.RecordCodecBuilder.mapCodec(instance->instance.group(
             propertiesCodec(),com.mojang.serialization.Codec.STRING.xmap(com.wormzjl.icheme.science.equipment.CableMedium::valueOf,
                     com.wormzjl.icheme.science.equipment.CableMedium::name).optionalFieldOf("medium",com.wormzjl.icheme.science.equipment.CableMedium.DATA).forGetter(ConduitBlock::medium)).apply(instance,ConduitBlock::new));
@@ -30,10 +29,7 @@ public final class ConduitBlock extends BaseEntityBlock {
     @Override protected RenderShape getRenderShape(BlockState state){return RenderShape.MODEL;}
     @Override protected VoxelShape getShape(BlockState state,BlockGetter level,BlockPos pos,CollisionContext context){
         if(!(level.getBlockEntity(pos) instanceof ConduitBlockEntity cable))return Block.box(6,6,6,10,10,10);
-        if(SHAPES.size()>1024)SHAPES.clear();
-        return SHAPES.computeIfAbsent(cable.geometry(),key->{VoxelShape shape=Shapes.empty();
-            for(var b:com.wormzjl.icheme.science.equipment.ConduitGeometry.boxes(key))shape=Shapes.or(shape,Shapes.box(b[0],b[1],b[2],b[3],b[4],b[5]));
-            return shape.optimize();});
+        var key=cable.geometry();return LineShapes.shape(key.joints(),5,com.wormzjl.icheme.science.equipment.PipeSizes.code(key.medium().outside()),key.offsets());
     }
     @Override protected void onRemove(BlockState state,Level level,BlockPos pos,BlockState next,boolean moved){
         if(!state.is(next.getBlock())&&level instanceof ServerLevel server)FluidWorldAuthority.find(server.getServer())

@@ -203,17 +203,33 @@ public record PipeAnchor(Kind kind, BlockPos cell, @Nullable Direction joint, @N
             // A nozzle takes a pipe up to the largest its place clears (NozzleBore).
             if (outside > PipeSizes.outside(shell.largestBore(face)) + 1e-9) return new Resolved(null, Refusal.NOZZLE_SIZE);
             anchor = new PipeAnchor(Kind.NOZZLE, next, face.getOpposite(), clicked, 0, -1, face, -1, Fit.ANY, null);
-        } else {
-            boolean inside = state.canBeReplaced();
-            var target = inside ? clicked : next;
-            if (level.hasChunkAt(target) && level.getBlockEntity(target) instanceof PipeRackBlockEntity rack) {
-                // A click on the block face against a rack aims at the rack's tier from that face's point.
-                var local = inside ? click.local : click.local.subtract(face.getStepX(), face.getStepY(), face.getStepZ());
-                var resolved = rack(target, rack, local, outside);
-                if (resolved.anchor == null) return resolved;
-                anchor = resolved.anchor;
-            } else anchor = new PipeAnchor(Kind.FREE, target, null, null, 0, -1, face, -1, Fit.ANY, null);
-        }
+        } else return open(level,click,outside);
+        return validate(level,anchor);
+    }
+    /** Free surfaces and rack slots follow the same resolution for pipes, data and power. */
+    public static Resolved open(Level level,Click click,double outside){
+        var clicked=click.clicked();var face=click.face();var next=clicked.relative(face);var state=level.getBlockState(clicked);
+        PipeAnchor anchor;
+        boolean inside = state.canBeReplaced();
+        var target = inside ? clicked : next;
+        if (level.hasChunkAt(target) && level.getBlockEntity(target) instanceof PipeRackBlockEntity rack) {
+            // A click on the block face against a rack aims at the rack's tier from that face's point.
+            var local = inside ? click.local : click.local.subtract(face.getStepX(), face.getStepY(), face.getStepZ());
+            var resolved = rack(target, rack, local, outside);
+            if (resolved.anchor == null) return resolved;
+            anchor = resolved.anchor;
+        } else anchor = new PipeAnchor(Kind.FREE, target, null, null, 0, -1, face, -1, Fit.ANY, null);
+        return validate(level,anchor);
+    }
+    /** A registered physical socket/nozzle enters a particular face point of its first line cell. */
+    public static Resolved socket(Level level,BlockPos cell,Direction joint,BlockPos owner,int point){
+        return validate(level,new PipeAnchor(Kind.NOZZLE,cell,joint,owner,0,-1,joint.getOpposite(),point,Fit.ANY,null));
+    }
+    /** An existing line or lane grows through its selected face; topology-specific facts stay with its adapter. */
+    public static Resolved continuation(Level level,BlockPos host,Direction face,int lane,int joints,int point){
+        return validate(level,new PipeAnchor(lane>0?Kind.LANE:Kind.PIPE,host.relative(face),face.getOpposite(),host,lane,joints,face,point,Fit.ANY,null));
+    }
+    private static Resolved validate(Level level,PipeAnchor anchor){
         if (level.isOutsideBuildHeight(anchor.cell) || !level.getWorldBorder().isWithinBounds(anchor.cell) || !level.hasChunkAt(anchor.cell)) return new Resolved(null, Refusal.OUTSIDE);
         // A rack cell takes the line as a lane: whether it has room for it is the route's to say.
         boolean rackCell = level.getBlockEntity(anchor.cell) instanceof PipeRackBlockEntity;
