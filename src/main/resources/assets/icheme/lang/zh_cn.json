@@ -2921,5 +2921,15 @@
   "gui.icheme.power.no_route": "没有畅通的电力路径。请选择 FE 端口、电力导管端或空位置。",
   "gui.icheme.power.started": "已选择电力线起点，请选择另一端。",
   "gui.icheme.power.laid": "电力导管已铺设",
-  "message.icheme.conduit.items": "需要 %s 个 %s 物品"
+  "message.icheme.conduit.items": "需要 %s 个 %s 物品",
+  "gui.icheme.equipment_constructor.group.deconstruct": "拆除",
+  "gui.icheme.equipment_constructor.deconstruct": "拆除设备",
+  "gui.icheme.equipment_constructor.deconstruct.none": "前方没有设备",
+  "gui.icheme.equipment_constructor.deconstruct.target": "%s · %s 个方块",
+  "gui.icheme.equipment_constructor.deconstruct.hint": "拆除上方所示的整台设备。沿放置基准线查找前方 16 格内的设备。相连的管道保留；生存模式下会回收已安装的附件。设备内的物料随设备移除。",
+  "message.icheme.equipment.deconstruct.done": "已拆除 %s 处的设备（%s 个方块）。",
+  "message.icheme.equipment.deconstruct.changed": "前方设备已改变，请检查目标后重试。",
+  "message.icheme.equipment.deconstruct.unloaded": "请先加载设备所在的所有区块，再拆除设备。",
+  "message.icheme.equipment.deconstruct.protected": "你没有拆除这台设备所有方块的权限。",
+  "message.icheme.equipment.deconstruct.not_editable": "你无法在此使用这台设备建造器。"
 }

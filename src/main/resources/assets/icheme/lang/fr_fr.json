@@ -2921,5 +2921,15 @@
   "gui.icheme.power.no_route": "Aucun trajet électrique libre. Choisir un port FE, une extrémité de conduit ou une case libre.",
   "gui.icheme.power.started": "Départ électrique choisi. Sélectionner l'autre extrémité.",
   "gui.icheme.power.laid": "Conduit électrique posé",
-  "message.icheme.conduit.items": "Nécessite %s objets %s"
+  "message.icheme.conduit.items": "Nécessite %s objets %s",
+  "gui.icheme.equipment_constructor.group.deconstruct": "Démontage",
+  "gui.icheme.equipment_constructor.deconstruct": "Démonter",
+  "gui.icheme.equipment_constructor.deconstruct.none": "Aucun équipement devant",
+  "gui.icheme.equipment_constructor.deconstruct.target": "%s · %s blocs",
+  "gui.icheme.equipment_constructor.deconstruct.hint": "Démonte tout l'équipement indiqué ci-dessus. Suit la ligne de placement jusqu'à 16 blocs devant. Les tuyaux raccordés restent ; les accessoires installés sont récupérés en Survie. Le contenu est retiré avec l'équipement.",
+  "message.icheme.equipment.deconstruct.done": "Équipement démonté en %s (%s blocs).",
+  "message.icheme.equipment.deconstruct.changed": "L'équipement devant a changé. Vérifier la cible et réessayer.",
+  "message.icheme.equipment.deconstruct.unloaded": "Charger tous les chunks de l'équipement avant de le démonter.",
+  "message.icheme.equipment.deconstruct.protected": "Vous n'avez pas l'autorisation de démonter chaque bloc de cet équipement.",
+  "message.icheme.equipment.deconstruct.not_editable": "Vous ne pouvez pas utiliser ce constructeur ici."
 }

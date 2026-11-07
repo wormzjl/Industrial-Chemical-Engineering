@@ -2921,5 +2921,15 @@
   "gui.icheme.power.no_route": "No hay ruta eléctrica libre. Elija un puerto FE, un extremo de conducto o una celda libre.",
   "gui.icheme.power.started": "Inicio eléctrico seleccionado. Elija el otro extremo.",
   "gui.icheme.power.laid": "Conducto eléctrico tendido",
-  "message.icheme.conduit.items": "Se necesitan %s objetos %s"
+  "message.icheme.conduit.items": "Se necesitan %s objetos %s",
+  "gui.icheme.equipment_constructor.group.deconstruct": "Desmontaje",
+  "gui.icheme.equipment_constructor.deconstruct": "Desmontar",
+  "gui.icheme.equipment_constructor.deconstruct.none": "Ningún equipo delante",
+  "gui.icheme.equipment_constructor.deconstruct.target": "%s · %s bloques",
+  "gui.icheme.equipment_constructor.deconstruct.hint": "Desmonta todo el equipo indicado arriba. Sigue la línea de colocación hasta 16 bloques por delante. Las tuberías conectadas permanecen; los accesorios instalados se recuperan en Supervivencia. El contenido se retira con el equipo.",
+  "message.icheme.equipment.deconstruct.done": "Equipo desmontado en %s (%s bloques).",
+  "message.icheme.equipment.deconstruct.changed": "El equipo de delante ha cambiado. Compruebe el objetivo e inténtelo de nuevo.",
+  "message.icheme.equipment.deconstruct.unloaded": "Cargue todos los chunks del equipo antes de desmontarlo.",
+  "message.icheme.equipment.deconstruct.protected": "No tiene permiso para desmontar todos los bloques de este equipo.",
+  "message.icheme.equipment.deconstruct.not_editable": "No puede usar este constructor aquí."
 }
