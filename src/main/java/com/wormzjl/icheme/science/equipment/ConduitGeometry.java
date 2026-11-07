@@ -52,32 +52,48 @@ public final class ConduitGeometry {
     /** Saved end coordinates remain authoritative when an enclosure's drawing diameter changes. */
     public static List<Polygon> lane(RackGeometry.Rack rack,RackGeometry.Lane lane,Key geometry){return lane(rack,lane,geometry,true);}
     public static List<Polygon> lane(RackGeometry.Rack rack,RackGeometry.Lane lane,Key geometry,boolean marked){
-        boolean displaced=false;var actual=geometry;
+        var actual=laneKey(rack,lane,geometry);
+        return displaced(rack,lane,geometry)?polygons(actual,marked):lane(rack,lane,geometry.medium(),marked);
+    }
+    private static Key laneKey(RackGeometry.Rack rack,RackGeometry.Lane lane,Key geometry){
+        var actual=geometry;
         for(int face=0;face<6;face++)if((lane.arms()&1<<face)!=0){
             int point=RackGeometry.point(rack,lane.option(),lane.width(),lane.diameter(),face);
             if((geometry.joints()&1<<face)==0)actual=actual.connect(face,signed(point&31),signed(point>>5&31));
-            else{
-                var a=geometry.point(face);var b=RackGeometry.facePoint(rack,lane,face);
-                if(b!=null&&dot(sub(a,b),sub(a,b))>EPS)displaced=true;
-            }
         }
-        return displaced?polygons(actual,marked):lane(rack,lane,geometry.medium(),marked);
+        return actual;
+    }
+    private static boolean displaced(RackGeometry.Rack rack,RackGeometry.Lane lane,Key geometry){
+        for(int face=0;face<6;face++)if((lane.arms()&geometry.joints()&1<<face)!=0){
+            var a=geometry.point(face);var b=RackGeometry.facePoint(rack,lane,face);
+            if(b!=null&&dot(sub(a,b),sub(a,b))>EPS)return true;
+        }
+        return false;
+    }
+    /** Collision and picking follow saved face points, just as the drawn lane does. */
+    public static List<double[]> laneBoxes(RackGeometry.Rack rack,RackGeometry.Lane lane,Key geometry){
+        return displaced(rack,lane,geometry)?boxes(laneKey(rack,lane,geometry)):RackGeometry.boxes(rack,lane);
     }
     private static int signed(int value){return value>=16?value-32:value;}
     public static List<Polygon> path(List<double[]> points){return finish(LineGeometry.conduit(points,OUTSIDE));}
     /** Orthogonal equipment lead, with face-normal connector and cable-entry legs. */
     public static List<Polygon> lead(double[] outward,double[] end,double[] entering){return lead(outward,end,entering,CableMedium.DATA);}
     public static List<Polygon> lead(double[] outward,double[] end,double[] entering,CableMedium medium){
+        var points=leadPoints(outward,end,entering);
+        return points.size()<2?List.of():finish(LineGeometry.conduit(points,medium.outside()));
+    }
+    /** The same lead spine drives drawing and placement clearance; neither may invent a different connection. */
+    public static List<double[]> leadPoints(double[] outward,double[] end,double[] entering){
         double along=dot(end,outward);var lateral=sub(end,scale(outward,along));
         boolean parallel=dot(outward,entering)>.99;
         if(parallel&&along<=.08&&dot(lateral,lateral)<.025*.025)return List.of(); // The placed line already enters the gland.
-        if(parallel&&along>0&&dot(lateral,lateral)<1e-12)return finish(LineGeometry.conduit(List.of(new double[3],end),medium.outside()));
+        if(parallel&&along>0&&dot(lateral,lateral)<1e-12)return List.of(new double[3],end.clone());
         double tail=parallel?Math.min(.18,Math.max(0,.4*along)):.18;
         var p=scale(outward,tail);var q=sub(end,scale(entering,tail));var points=new ArrayList<double[]>();
         points.add(new double[3]);points.add(p);
         int axis=Math.abs(outward[0])>.5?0:Math.abs(outward[1])>.5?1:2;
         for(int step=1;step<=3;step++){int k=(axis+step)%3;if(Math.abs(p[k]-q[k])>1e-8){p=p.clone();p[k]=q[k];points.add(p);}}
-        points.add(end);return finish(LineGeometry.conduit(points,medium.outside()));
+        points.add(end.clone());return List.copyOf(points);
     }
 
     /** Keep the metal finish continuous around bends; identification belongs on deliberate straight marker bands. */

@@ -18,6 +18,7 @@ import com.wormzjl.icheme.world.item.PipeLayingToolItem;
 import com.wormzjl.icheme.world.level.block.FluidDeviceBlock;
 import com.wormzjl.icheme.world.level.block.PipeAnchor;
 import com.wormzjl.icheme.world.level.block.PipeLaying;
+import com.wormzjl.icheme.world.level.block.LinePlacement;
 import com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity;
 import com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity;
 import com.wormzjl.icheme.world.level.block.entity.PipeRackBlockEntity;
@@ -319,7 +320,7 @@ public final class PipeLayingClient {
         var refused = PipeAnchor.refuses(from, to, outside);
         if (refused != null) return new Plan(end, to, nothing, PipeLaying.refusal(refused), null);
         int heading = from.leaving();
-        var route = PipeRoute.search(from.end(), heading, to.end(), outside, PipeAnchor.space(level), PipeRoute.Limits.DEFAULT);
+        var route = LinePlacement.search(level,from,to,outside,List.of());
         if (!route.found()) return new Plan(end, to, route, PipeLaying.refusal(route.refusal()), null);
         var junctions = junctions(level, from, to, route, outside);
         return new Plan(end, to, route, junctions.refusal, PipeRoute.placement(route.cells(), from.end(), heading, to.end()), junctions.shown);

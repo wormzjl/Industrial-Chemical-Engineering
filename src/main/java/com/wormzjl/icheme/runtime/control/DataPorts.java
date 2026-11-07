@@ -80,8 +80,16 @@ public final class DataPorts {
         int boundary=outward.getAxisDirection()==Direction.AxisDirection.POSITIVE?(int)Math.ceil(ahead.get(outward.getAxis())):(int)Math.floor(ahead.get(outward.getAxis()))-1;
         var cell=new BlockPos(axis==0?boundary:(int)Math.floor(centre.x),axis==1?boundary:(int)Math.floor(centre.y),axis==2?boundary:(int)Math.floor(centre.z));
         var first=cell;
-        // Clear the casting, without loading chunks, moving blocks or hiding the socket behind a solid cell.
-        for(int step=0;step<8&&level.hasChunkAt(cell)&&!level.getBlockState(cell).canBeReplaced();step++)cell=cell.relative(outward);
+        // Only clear cells belonging to this casting. An unrelated wall must remain an obstacle, never become a
+        // long invisible jump to the first empty cell beyond it. The complete lead is checked by LinePlacement.
+        var casting=level.getBlockEntity(owner) instanceof EquipmentShellBlockEntity shell?shell:null;
+        for(int step=0;step<8&&level.hasChunkAt(cell)&&!level.getBlockState(cell).canBeReplaced();step++){
+            var be=level.getBlockEntity(cell);
+            boolean own=cell.equals(owner)||casting!=null&&be instanceof EquipmentShellBlockEntity shell
+                    &&casting.origin().equals(shell.origin())&&Objects.equals(casting.shape(),shell.shape());
+            if(!own)break;
+            cell=cell.relative(outward);
+        }
         if(centre.distanceToSqr(cell.getCenter())>16)cell=first;
         double[] local={centre.x-cell.getX()-.5,centre.y-cell.getY()-.5,centre.z-cell.getZ()-.5};
         int u=(int)Math.clamp(Math.round(local[(axis+1)%3]*32),-14,14),v=(int)Math.clamp(Math.round(local[(axis+2)%3]*32),-14,14);

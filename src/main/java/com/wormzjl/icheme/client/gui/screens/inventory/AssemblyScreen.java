@@ -19,7 +19,6 @@ import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
 import com.wormzjl.icheme.client.gui.common.kit.SkinButton;
 import com.wormzjl.icheme.client.gui.common.kit.SkinField;
-import com.wormzjl.icheme.client.gui.common.kit.WindowScale;
 import com.wormzjl.icheme.network.AssemblyNetwork;
 import com.wormzjl.icheme.science.assembly.AssemblyReport;
 import com.wormzjl.icheme.science.assembly.AssemblyReport.SlotReport;
@@ -219,20 +218,6 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
         return new OperationColumn.Input(view, commanded, units());
     }
 
-    /**
-     * Whether the Operation page fits a window {@code width} by {@code height} GUI px (WindowScale.Fit): its door column in
-     * its area, its tables on the glass.
-     */
-    private boolean fits(int width, int height) {
-        var view = operationView();
-        if (view == null) return true;
-        int w = Math.max(320, Math.min(760, width - 16)), h = Math.max(220, height - 16);
-        var m = GuiCanvas.measure(font);
-        var area = AssemblyColumn.area(w, h);
-        int tall = Column.place(OperationColumn.rows(operationInput(view), AssemblyScreen::lang), area.x(), area.y(), area.w(), m, Column.Metrics.COMPACT).bounds().h();
-        return tall <= area.h() && OperationColumn.height(view) <= AssemblyColumn.glass(w, h, true).h() - 4;
-    }
-
     /** A focused entry keeps its keys: the name's letters (the inventory key among them) do not close the screen; Enter saves the name. */
     @Override
     public boolean keyPressed(int key, int scan, int modifiers) {
@@ -241,17 +226,9 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
     }
 
     @Override
-    public void removed() {
-        super.removed();
-        WindowScale.restore(minecraft);
-    }
-
-    @Override
     protected void init() {
         follow();
-        // The Operation page is designed taller (owner's choice B), at the scale that holds it; the Structure page at the design size.
-        if (operationView() != null) WindowScale.apply(minecraft, this, OperationColumn.HEIGHT, this::fits);
-        else WindowScale.apply(minecraft, this);
+        // Use the supplied GUI dimensions; the operation and structure doors keep their own scrolling view.
         imageWidth = Math.max(320, Math.min(760, width - 16));
         imageHeight = Math.max(220, height - 16);
         super.init();

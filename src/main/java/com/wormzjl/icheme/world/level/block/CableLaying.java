@@ -28,12 +28,47 @@ public final class CableLaying {
         public int heading(){return placement.leaving();}
     }
     private static Anchor socket(Level level,DataPort p){var resolved=PipeAnchor.socket(level,p.cell(),p.face(),p.owner(),DataPorts.packed(p));return resolved.anchor()==null?null:new Anchor(resolved.anchor(),p,null,-1,DataPorts.packed(p));}
+    /** Facts alone are not a live socket: a replaced host or removed FE capability must not remain connectable. */
+    private static DataPort port(Level level,End click,Map<UUID,DataPort> ports,CableMedium medium){
+        if(click.port()==null||!level.hasChunkAt(click.clicked()))return null;
+        var p=ports.get(click.port());var be=level.getBlockEntity(click.clicked());DataPort live=null;
+        if(be instanceof ControlPanelBlockEntity panel)live=panel.dataPort();
+        else if(be instanceof com.wormzjl.icheme.runtime.instrument.Instrument.Holder holder){
+            if(medium==CableMedium.POWER&&PowerPorts.eligible(be))live=holder.powerPorts().stream().filter(q->q.id().equals(click.port())).findFirst().orElse(null);
+            else live=holder.instruments().dataPort();
+        }else if(medium==CableMedium.POWER)live=PowerPorts.external(level,click.clicked(),click.face());
+        if(live==null||!live.id().equals(click.port())||p!=null&&!p.equals(live))return null;
+        p=live;
+        return p.kind().medium()==medium&&p.dimension().equals(level.dimension().location().toString())&&p.owner().equals(click.clicked())&&level.hasChunkAt(p.cell())?p:null;
+    }
+    public static List<LinePlacement.Lead> leads(Anchor start,Anchor end){
+        var out=new ArrayList<LinePlacement.Lead>();
+        for(var a:List.of(start,end))if(a.port()!=null)out.add(lead(a.port()));return List.copyOf(out);
+    }
+    private static LinePlacement.Lead lead(DataPort port){
+        var n=Vec3.atLowerCornerOf(port.face().getOpposite().getNormal());var delta=port.cablePoint().subtract(port.centre());
+        var points=ConduitGeometry.leadPoints(new double[]{n.x,n.y,n.z},new double[]{delta.x,delta.y,delta.z},new double[]{n.x,n.y,n.z});
+        return new LinePlacement.Lead(port.owner(),port.cell(),port.centre(),port.kind().medium().outside(),points.stream().map(p->port.centre().add(p[0],p[1],p[2])).toList());
+    }
+    public static LinePlacement.Plan plan(Anchor start,Anchor end,List<BlockPos> path,List<Integer> options,CableMedium medium){
+        return new LinePlacement.Plan(start.placement(),end.placement(),path,options,medium.outside(),leads(start,end));
+    }
+    public record Attachment(DataPort port,DataBus.Cable cable,LinePlacement.Plan plan){}
+    /** The preview and server share the zero-new-block connection adapter too. */
+    public static Attachment attachment(Level level,End click,Map<UUID,DataPort> ports,CableMedium medium){
+        var port=port(level,click,ports,medium);if(port==null)return null;
+        if(!(level.getBlockEntity(port.cell()) instanceof ConduitBlockEntity wire)||wire.geometry().medium()!=medium)return null;
+        var old=wire.cable();var bound=old.endpoints().get(port.face());if(bound!=null&&!bound.equals(port.id()))return null;
+        if(PipeRoute.hostJoints(old.geometry().joints(),1<<port.face().ordinal(),false)<0)return null;
+        var plan=new LinePlacement.Plan(null,null,List.of(port.cell()),List.of(),medium.outside(),List.of(lead(port)));
+        return new Attachment(port,old.connect(port.face().ordinal(),port.u(),port.v(),port.id()),plan);
+    }
     public static PipeRoute.Cell cell(BlockPos p){return new PipeRoute.Cell(p.getX(),p.getY(),p.getZ());}
     public static BlockPos block(PipeRoute.Cell p){return new BlockPos(p.x(),p.y(),p.z());}
     public static Anchor resolve(Level level,End click,Map<UUID,DataPort> ports,CableMedium medium){
         if(!level.hasChunkAt(click.clicked()))return null;
         if(click.port()!=null){
-            var p=ports.get(click.port());if(p==null&&medium==CableMedium.POWER){var candidate=PowerPorts.external(level,click.clicked(),click.face());if(candidate!=null&&candidate.id().equals(click.port()))p=candidate;}if(p==null||p.kind().medium()!=medium||!p.dimension().equals(level.dimension().location().toString())||!p.owner().equals(click.clicked())||!level.hasChunkAt(p.cell()))return null;
+            var p=port(level,click,ports,medium);if(p==null)return null;
             return socket(level,p);
         }
         var be=level.getBlockEntity(click.clicked());
@@ -94,7 +129,8 @@ public final class CableLaying {
         var level=player.serverLevel();var world=FluidWorldAuthority.find(player.server).orElse(null);if(world==null)return message("not_allowed");
         if(first.clicked().getCenter().distanceToSqr(player.position())>64*64||!reachable(player,last,world.controls().facts().ports(),medium))return message("out_of_reach");
         var a=resolve(level,first,world.controls().facts().ports(),medium);var b=resolve(level,last,world.controls().facts().ports(),medium);if(a==null||b==null)return message("anchor.fitting");
-        var refused=LinePlacement.check(level,a.placement(),b.placement(),path,options,medium.outside());if(refused!=null)return refused;
+        var plan=plan(a,b,path,options,medium);
+        var refused=LinePlacement.check(level,plan);if(refused!=null)return refused;
         var cells=path.stream().map(CableLaying::cell).toList();
         var hosts=new HashMap<DataBus.Site,DataBus.Cable>();
         for(var anchor:List.of(a,b))if(anchor.host()!=null){
@@ -102,26 +138,36 @@ public final class CableLaying {
             int joints=PipeRoute.hostJoints(old.geometry().joints(),1<<anchor.face(),old.site().lane()>0);if(joints<0)return message("anchor.junction");
             var key=connect(old.geometry(),anchor.face(),anchor.point());hosts.put(old.site(),new DataBus.Cable(old.site(),key,old.arms(),old.endpoints()));
         }
-        for(var pos:path)if(!editable(player,pos))return message("not_allowed");for(var site:hosts.keySet())if(!editable(player,site.cell()))return message("not_allowed");
-        if(!editable(player,first.clicked())||!editable(player,last.clicked()))return message("not_allowed");
         var wires=design(level,a,b,new PipeRoute.Result(cells,options,null),medium);
-        if(!player.getAbilities().instabuild&&!LinePlacement.take(player,item(medium),path.size()))return Component.translatable("message.icheme.conduit.items",path.size(),item(medium).getDescription());
-        for(var anchor:List.of(a,b))if(anchor.port()!=null&&anchor.port().kind().power())world.controls().facts().port(anchor.port());
-        for(var wire:wires){var at=wire.site().cell();if(wire.site().lane()==0){level.setBlock(at,(medium==CableMedium.POWER?ModBlocks.POWER_CABLE:ModBlocks.DATA_CABLE).get().defaultBlockState(),Block.UPDATE_CLIENTS);((ConduitBlockEntity)level.getBlockEntity(at)).configure(wire);}else{world.controls().cable(wire);var rack=(PipeRackBlockEntity)level.getBlockEntity(at);var all=new ArrayList<>(rack.cables());all.add(wire);rack.cables(all);}}
-        for(var wire:hosts.values())if(wire.site().lane()==0)((ConduitBlockEntity)level.getBlockEntity(wire.site().cell())).configure(wire);else{world.controls().cable(wire);var rack=(PipeRackBlockEntity)level.getBlockEntity(wire.site().cell());var all=new ArrayList<>(rack.cables());all.removeIf(c->c.site().equals(wire.site()));all.add(wire);rack.cables(all);}
-        return null;
+        return LinePlacement.commit(player,plan,item(medium),path.size(),Component.translatable("message.icheme.conduit.items",path.size(),item(medium).getDescription()),()->{
+            for(var anchor:List.of(a,b))if(anchor.port()!=null&&anchor.port().kind().power())world.controls().facts().port(anchor.port());
+            var edits=new ArrayList<LinePlacement.Edit>();
+            for(var wire:wires)edits.add(edit(world,wire,wire.site().lane()==0));
+            for(var wire:hosts.values())edits.add(edit(world,wire,false));
+            return new LinePlacement.Work(edits,()->{});
+        });
+    }
+    private static LinePlacement.Edit edit(FluidWorldAuthority world,DataBus.Cable cable,boolean place){
+        var state=place?(cable.geometry().medium()==CableMedium.POWER?ModBlocks.POWER_CABLE:ModBlocks.DATA_CABLE).get().defaultBlockState():null;
+        return new LinePlacement.Edit(cable.site().cell(),state,Block.UPDATE_CLIENTS,entity->{
+            if(entity instanceof ConduitBlockEntity wire)wire.configure(cable);
+            else if(entity instanceof PipeRackBlockEntity rack){
+                world.controls().cable(cable);var all=new ArrayList<>(rack.cables());all.removeIf(c->c.site().equals(cable.site()));all.add(cable);rack.cables(all);
+            }else throw new IllegalStateException("Validated line host disappeared");
+        });
     }
     /** Finish a previously laid open end at its socket; the pipe framework likewise reuses an existing end. */
     public static Component attach(ServerPlayer player,InteractionHand hand,End click,CableMedium medium){
         if(!allowed(player,hand,medium)||click.port()==null)return message("not_allowed");
         var world=FluidWorldAuthority.find(player.server).orElse(null);if(world==null)return message("not_allowed");
-        var port=world.controls().facts().port(click.port());
-        if(port==null||port.kind().medium()!=medium||!port.dimension().equals(player.level().dimension().location().toString())||!port.owner().equals(click.clicked()))return message("anchor.fitting");
+        var attachment=attachment(player.level(),click,world.controls().facts().ports(),medium);
+        if(attachment==null)return message("anchor.fitting");
+        var port=attachment.port();
         if(port.centre().distanceToSqr(player.getEyePosition())>Math.pow(player.blockInteractionRange()+1,2)||!editable(player,port.owner())||!editable(player,port.cell()))return message("not_allowed");
-        if(!(player.level().getBlockEntity(port.cell()) instanceof ConduitBlockEntity wire)||wire.geometry().medium()!=medium)return message("anchor.fitting");
-        var old=wire.cable();var bound=old.endpoints().get(port.face());if(bound!=null&&!bound.equals(port.id()))return message("anchor.fitting");
-        if(PipeRoute.hostJoints(old.geometry().joints(),1<<port.face().ordinal(),false)<0)return message("anchor.junction");
-        var next=old.connect(port.face().ordinal(),port.u(),port.v(),port.id());wire.configure(next);return null;
+        return LinePlacement.commit(player,attachment.plan(),item(medium),0,message("not_allowed"),()->{
+            if(port.kind().power())world.controls().facts().port(port);
+            return new LinePlacement.Work(List.of(edit(world,attachment.cable(),false)),()->{});
+        });
     }
     public static Component dismantle(ServerPlayer player,InteractionHand hand,End click,CableMedium medium){
         if(!allowed(player,hand,medium)||!editable(player,click.clicked())||!player.canInteractWithBlock(click.clicked(),1))return message("not_allowed");

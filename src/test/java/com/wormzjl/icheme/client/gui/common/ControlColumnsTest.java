@@ -7,6 +7,21 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ControlColumnsTest {
+    @Test void panelsFitTheSuppliedGuiDimensionsWithNoScaleOverride(){
+        for(int width=320;width<=1280;width+=7)for(int height=240;height<=800;height+=53)for(boolean dcs:new boolean[]{false,true}){
+            var frame=ControlColumns.layout(width,height,dcs);var panel=new Rect(0,0,frame.width(),frame.height());
+            assertTrue(frame.width()<=width-8&&frame.height()<=height-8);
+            for(var area:frame.areas())assertTrue(area.inside(panel));
+            for(var footer:DialogColumns.footer(frame.width(),frame.height(),2)){
+                assertTrue(footer.inside(panel));
+                assertTrue(frame.areas().getFirst().bottom()<=footer.y());
+            }
+            if(frame.chooser()!=null)assertTrue(frame.chooser().inside(panel)&&frame.chooser().bottom()<frame.areas().getFirst().y());
+        }
+        assertFalse(ControlColumns.layout(320,240,true).split());
+        assertNotNull(ControlColumns.layout(320,240,true).chooser());
+        assertTrue(ControlColumns.layout(640,360,true).split());
+    }
     @Test void levelSetupNamesTheValveLocationAndFitsBothPanels(){
         var text=new HeatControlColumnTest.Recording("gui.icheme.");
         var measure=Measure.fixed(6);

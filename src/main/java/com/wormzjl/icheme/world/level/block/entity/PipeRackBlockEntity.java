@@ -212,6 +212,8 @@ public final class PipeRackBlockEntity extends ModelledBlockEntity {
         var out = frame(rack);
         for (var lane : drawnLanes())
             for (var box : RackGeometry.boxes(rack, lane)) out = Shapes.or(out, Shapes.box(box[0], box[1], box[2], box[3], box[4], box[5]));
+        for(var cable:cables)for(var box:com.wormzjl.icheme.science.equipment.ConduitGeometry.laneBoxes(rack,cableLane(cable),cable.geometry()))
+            out=Shapes.or(out,Shapes.box(box[0],box[1],box[2],box[3],box[4],box[5]));
         return shape = out.optimize();
     }
 

@@ -29,6 +29,7 @@ public final class CableLayingClient {
     private CableLayingClient(){}
     private static CableLaying.End start,end,hovered;private static net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dimension;
     private static CableMedium startedMedium;
+    private static CableLaying.Attachment attachGhost;private static boolean attachRefused;
     public static CableMedium medium(){return PipeLayingToolItem.medium(LayingToolAim.held(Minecraft.getInstance().player));}
     private static UUID request;private static boolean armed=true,sent;private static int age;private static List<DataBus.Cable> ghost=List.of();private static PipeRoute.Result route;
     private static boolean tool(ItemStack item){return item.is(ModItems.PIPE_LAYING_TOOL.get())&&PipeLayingToolItem.conduit(item);}
@@ -42,7 +43,7 @@ public final class CableLayingClient {
         for(var rack:PipeRackBlockEntity.clientRacks())if(rack.getLevel()==mc.level&&rack.getBlockPos().getCenter().distanceToSqr(eye)<Math.pow(p.blockInteractionRange()+2,2))for(var cable:rack.cables()){
             if(cable.geometry().medium()!=medium())continue;
             var lane=rack.cableLane(cable);
-            for(var box:RackGeometry.boxes(rack.rack(),lane)){
+            for(var box:ConduitGeometry.laneBoxes(rack.rack(),lane,cable.geometry())){
                 var hit=new AABB(box[0],box[1],box[2],box[3],box[4],box[5]).move(rack.getBlockPos()).inflate(.025).clip(eye,end).orElse(null);
                 if(hit==null||hit.distanceTo(eye)>=nearest)continue;nearest=hit.distanceTo(eye);var local=hit.subtract(Vec3.atLowerCornerOf(rack.getBlockPos()));
                 int face=-1;double closest=Double.POSITIVE_INFINITY;for(int f=0;f<6;f++)if((cable.arms()&(1<<f))!=0){var q=RackGeometry.facePoint(rack.rack(),lane,f);double distance=local.distanceToSqr(new Vec3(q[0],q[1],q[2]));if(distance<closest){closest=distance;face=f;}}
@@ -66,6 +67,8 @@ public final class CableLayingClient {
         var socket=aim.port()==null?null:ports.get(aim.port());
         if(socket!=null&&mc.level.getBlockEntity(socket.cell()) instanceof ConduitBlockEntity wire&&wire.geometry().medium()==medium()
                 &&!Objects.equals(wire.cable().endpoints().get(socket.face()),socket.id())){
+            var attachment=CableLaying.attachment(mc.level,aim,ports,medium());
+            if(attachment==null||LinePlacement.check(mc.level,attachment.plan())!=null){say("gui.icheme.data.no_route");return;}
             sent=true;request=ControlNetwork.cable(off,false,medium(),aim,aim,List.of(),List.of());return;
         }
         if(start==null){if(CableLaying.resolve(mc.level,aim,ports,medium())==null){say("gui.icheme.data.no_route");return;}start=aim;startedMedium=medium();dimension=mc.level.dimension();end=null;say("gui.icheme.data.started");return;}
@@ -76,25 +79,38 @@ public final class CableLayingClient {
         var mc=Minecraft.getInstance();if(!mc.options.keyUse.isDown())armed=true;
         if(mc.player==null||mc.level==null||!holding(mc.player)||startedMedium!=null&&startedMedium!=medium()||dimension!=null&&!dimension.equals(mc.level.dimension())){clear();return;}
         age++;if(start!=null&&start.clicked().getCenter().distanceToSqr(mc.player.position())>96*96){clear();say("gui.icheme.data.cancelled");}
-        hovered=mc.screen==null?aimed():null;if(start!=null&&!sent&&age%5==0)plan(hovered);
+        var previous=hovered;hovered=mc.screen==null?aimed():null;
+        if(!Objects.equals(previous,hovered)||age%5==0){
+            attachGhost=start==null&&hovered!=null&&hovered.port()!=null?CableLaying.attachment(mc.level,hovered,DataControlRenderer.ports(mc.level,mc.player.position(),96,medium()),medium()):null;
+            attachRefused=attachGhost!=null&&LinePlacement.check(mc.level,attachGhost.plan())!=null;
+        }
+        if(start!=null&&!sent&&age%5==0)plan(hovered);
     }
     private static void plan(CableLaying.End aim){
         if(Objects.equals(end,aim)&&route!=null&&age%20!=0)return;
         end=aim;ghost=List.of();route=null;if(aim==null)return;var mc=Minecraft.getInstance();var ports=DataControlRenderer.ports(mc.level,mc.player.position(),96,medium());
         var a=CableLaying.resolve(mc.level,start,ports,medium());var b=CableLaying.resolve(mc.level,aim,ports,medium());if(a==null||b==null)return;
         if(PipeAnchor.refuses(a.placement(),b.placement(),medium().outside())!=null)return;
-        route=PipeRoute.search(a.end(),a.heading(),b.end(),medium().outside(),PipeAnchor.space(mc.level),PipeRoute.Limits.DEFAULT);
+        route=LinePlacement.search(mc.level,a.placement(),b.placement(),medium().outside(),CableLaying.leads(a,b));
         if(route.found())ghost=CableLaying.design(mc.level,a,b,route,medium());
     }
     public static void answered(UUID ticket,boolean success,String detail){if(!Objects.equals(ticket,request))return;request=null;sent=false;if(Minecraft.getInstance().player==null){clear();return;}if(success){clear();say("gui.icheme.data.laid");}else Minecraft.getInstance().player.displayClientMessage(Component.literal(detail),true);}
-    private static void clear(){hovered=null;request=null;start=null;end=null;dimension=null;startedMedium=null;route=null;ghost=List.of();sent=false;}
+    private static void clear(){hovered=null;attachGhost=null;request=null;start=null;end=null;dimension=null;startedMedium=null;route=null;ghost=List.of();sent=false;}
     private static void say(String key){if(medium()==CableMedium.POWER)key=key.replace(".data.",".power.");Minecraft.getInstance().player.displayClientMessage(Component.translatable(key),true);}
     public static void draw(PoseStack pose,MultiBufferSource buffers,Vec3 camera){
         var mc=Minecraft.getInstance();if(mc.player==null||!holding(mc.player))return;
         if(hovered!=null){
+            if(start==null&&!mc.player.isShiftKeyDown()&&hovered.port()!=null){
+                var attachment=attachGhost;
+                if(attachment!=null){
+                    boolean refused=attachRefused;var at=attachment.cable().site().cell();
+                    DataControlRenderer.draw(pose,buffers,camera,Vec3.atLowerCornerOf(at),ConduitGeometry.polygons(attachment.cable().geometry(),ConduitGeometry.markedAt(at.getX(),at.getY(),at.getZ())),refused?0xff5555:medium().colour(),135);
+                    if(!refused)DataControlRenderer.drawLead(pose,buffers,camera,attachment.port(),true);
+                }
+            }
             if(mc.player.isShiftKeyDown()&&start==null){
                 if(mc.level.getBlockEntity(hovered.clicked()) instanceof ConduitBlockEntity wire)for(var b:ConduitGeometry.boxes(wire.geometry()))box(pose,buffers,camera,new AABB(b[0],b[1],b[2],b[3],b[4],b[5]).move(hovered.clicked()),true);
-                else if(mc.level.getBlockEntity(hovered.clicked()) instanceof PipeRackBlockEntity rack)for(var cable:rack.cables())if(cable.site().lane()==hovered.lane())for(var b:RackGeometry.boxes(rack.rack(),rack.cableLane(cable)))box(pose,buffers,camera,new AABB(b[0],b[1],b[2],b[3],b[4],b[5]).move(rack.getBlockPos()),true);
+                else if(mc.level.getBlockEntity(hovered.clicked()) instanceof PipeRackBlockEntity rack)for(var cable:rack.cables())if(cable.site().lane()==hovered.lane())for(var b:ConduitGeometry.laneBoxes(rack.rack(),rack.cableLane(cable),cable.geometry()))box(pose,buffers,camera,new AABB(b[0],b[1],b[2],b[3],b[4],b[5]).move(rack.getBlockPos()),true);
             }else if(hovered.port()==null&&hovered.lane()==0&&mc.level.getBlockEntity(hovered.clicked()) instanceof PipeRackBlockEntity rack){
                 for(var free:LayingToolAim.freeSlots(rack))box(pose,buffers,camera,free,false);
                 if(start==null||route==null||!route.found()){
@@ -108,8 +124,14 @@ public final class CableLayingClient {
         // Show the added branch on an existing cable as part of the same preview.
         if(start!=null&&end!=null&&route!=null&&route.found())for(var click:List.of(start,end)){
             if(click.port()!=null){var port=DataControlRenderer.ports(mc.level,mc.player.position(),96,medium()).get(click.port());if(port!=null)DataControlRenderer.drawLead(pose,buffers,camera,port,true);}
-            var a=CableLaying.resolve(mc.level,click,DataControlRenderer.ports(mc.level,mc.player.position(),96,medium()),medium());if(a==null||a.host()==null||a.host().lane()!=0||!(mc.level.getBlockEntity(a.host().cell()) instanceof ConduitBlockEntity wire))continue;
-            var key=wire.geometry();int u=a.point()&31,v=a.point()>>5&31;key=key.connect(a.face(),u>=16?u-32:u,v>=16?v-32:v);DataControlRenderer.draw(pose,buffers,camera,Vec3.atLowerCornerOf(a.host().cell()),ConduitGeometry.polygons(key,ConduitGeometry.markedAt(a.host().cell().getX(),a.host().cell().getY(),a.host().cell().getZ())),medium().colour(),135);
+            var a=CableLaying.resolve(mc.level,click,DataControlRenderer.ports(mc.level,mc.player.position(),96,medium()),medium());if(a==null||a.host()==null)continue;
+            var entity=mc.level.getBlockEntity(a.host().cell());
+            DataBus.Cable wire=entity instanceof ConduitBlockEntity c?c.cable():entity instanceof PipeRackBlockEntity rack?rack.cables().stream().filter(c->c.site().equals(a.host())).findFirst().orElse(null):null;
+            if(wire==null)continue;
+            var key=wire.geometry();int u=a.point()&31,v=a.point()>>5&31;key=key.connect(a.face(),u>=16?u-32:u,v>=16?v-32:v);
+            boolean marked=ConduitGeometry.markedAt(a.host().cell().getX(),a.host().cell().getY(),a.host().cell().getZ());
+            var polygons=entity instanceof PipeRackBlockEntity rack?ConduitGeometry.lane(rack.rack(),rack.cableLane(wire),key,marked):ConduitGeometry.polygons(key,marked);
+            DataControlRenderer.draw(pose,buffers,camera,Vec3.atLowerCornerOf(a.host().cell()),polygons,medium().colour(),135);
         }
     }
     private static void box(PoseStack pose,MultiBufferSource buffers,Vec3 camera,AABB bounds,boolean refused){net.minecraft.client.renderer.LevelRenderer.renderLineBox(pose,buffers.getBuffer(net.minecraft.client.renderer.RenderType.lines()),bounds.move(camera.scale(-1)),refused?1:.3f,refused?.3f:1,refused?.3f:.35f,1);}

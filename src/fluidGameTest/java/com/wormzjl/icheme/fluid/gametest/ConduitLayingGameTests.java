@@ -33,6 +33,113 @@ public final class ConduitLayingGameTests {
     @GameTest(template="empty",timeoutTicks=500,batch="data-direct")
     public static void dataLayingBindsItsControllerAndMotor(GameTestHelper helper){exercise(helper,CableMedium.DATA,false);}
 
+    @GameTest(template="empty",timeoutTicks=80,batch="line-clearance")
+    public static void socketsNeverSkipUnrelatedWalls(GameTestHelper helper){
+        var level=helper.getLevel();var owner=helper.absolutePos(new BlockPos(1,2,1));
+        level.setBlock(owner,ModBlocks.LOCAL_CONTROLLER.get().defaultBlockState().setValue(ControlPanelBlock.FACING,Direction.WEST),3);
+        var panel=(ControlPanelBlockEntity)level.getBlockEntity(owner);var clear=DataPorts.panel(panel);
+        level.setBlock(clear.cell(),Blocks.STONE.defaultBlockState(),3);
+        helper.assertTrue(DataPorts.panel(panel).cell().equals(clear.cell()),"Data socket jumped to the far side of a wall");
+        var power=com.wormzjl.icheme.runtime.control.DataPorts.power(UUID.randomUUID(),DataPort.Kind.POWER_INPUT,level,owner,
+                owner.getCenter().add(.52,0,0),Direction.EAST);
+        helper.assertTrue(power.cell().equals(clear.cell()),"Power socket jumped to the far side of a wall");
+        helper.assertTrue(PipeAnchor.socket(level,clear.cell(),clear.face(),owner,DataPorts.packed(clear)).anchor()==null,"Blocked socket was accepted");
+        level.removeBlock(clear.cell(),false);level.removeBlock(owner,false);helper.succeed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=100,batch="line-clearance")
+    public static void everyCableAdapterRechecksLeadsBeforeLayingOrAttaching(GameTestHelper helper){
+        var level=helper.getLevel();var world=FluidWorldAuthority.find(level.getServer()).orElseThrow();
+        var owner=helper.absolutePos(new BlockPos(1,2,1));var entry=owner.east(3);var last=owner.east(6);var wall=owner.east();
+        var player=FakePlayerFactory.get(level,new GameProfile(UUID.randomUUID(),"LeadClearance"));player.setGameMode(GameType.SURVIVAL);
+        player.setPos(last.getX()-.5,last.getY(),last.getZ()-1);
+        for(var medium:CableMedium.values()){
+            for(int x=0;x<=6;x++)level.setBlock(owner.east(x),Blocks.AIR.defaultBlockState(),3);
+            var tool=new ItemStack(ModItems.PIPE_LAYING_TOOL.get());tool.set(medium==CableMedium.POWER?ModItems.PIPE_LAYING_POWER.get():ModItems.PIPE_LAYING_DATA.get(),true);
+            player.setItemInHand(InteractionHand.MAIN_HAND,tool);
+            var item=(medium==CableMedium.POWER?ModItems.POWER_CABLE:ModItems.DATA_CABLE).get();player.getInventory().add(new ItemStack(item,16));
+            level.setBlock(owner,(medium==CableMedium.POWER?ModBlocks.CREATIVE_POWER.get():ModBlocks.LOCAL_CONTROLLER.get()).defaultBlockState(),3);
+            // A retained, previously built entry beyond the socket: new work must check the connecting space too.
+            var port=new DataPort(UUID.randomUUID(),medium==CableMedium.POWER?DataPort.Kind.POWER_OUTPUT:DataPort.Kind.CONTROLLER,0,
+                    level.dimension().location().toString(),owner,owner.getCenter().add(.52,0,0),entry,Direction.WEST,0,0);
+            if(level.getBlockEntity(owner) instanceof ControlPanelBlockEntity panel)panel.bind(port.id(),port);
+            else ((CreativePowerBlockEntity)level.getBlockEntity(owner)).instruments().powerPort(port);
+            world.controls().facts().port(port);
+            var start=end(port);var finish=new CableLaying.End(null,last,Direction.EAST,new Vec3(.5,.5,.5),0);
+            var a=CableLaying.resolve(level,start,world.controls().facts().ports(),medium);var b=CableLaying.resolve(level,finish,world.controls().facts().ports(),medium);
+            helper.assertTrue(a!=null&&b!=null,"Clear socket anchors failed: "+medium);
+            var preview=LinePlacement.search(level,a.placement(),b.placement(),medium.outside(),CableLaying.leads(a,b));
+            helper.assertTrue(preview.found(),"Clear lead and route refused: "+medium);
+            // Change the world after preview, outside every new route cell.
+            level.setBlock(wall,Blocks.STONE.defaultBlockState(),3);
+            helper.assertTrue(!LinePlacement.search(level,a.placement(),b.placement(),medium.outside(),CableLaying.leads(a,b)).found(),"Preview ignored a blocked lead: "+medium);
+            int inventory=player.getInventory().countItem(item),cables=world.controls().facts().cables().size();
+            var refusal=CableLaying.lay(player,InteractionHand.MAIN_HAND,start,finish,preview.cells().stream().map(CableLaying::block).toList(),preview.options(),medium);
+            helper.assertTrue(refusal!=null&&player.getInventory().countItem(item)==inventory&&world.controls().facts().cables().size()==cables,
+                    "A refused lead consumed items or changed wiring: "+medium);
+            helper.assertTrue(preview.cells().stream().allMatch(c->level.getBlockState(CableLaying.block(c)).isAir()),"A refused lead placed part of its route");
+            level.setBlock(wall,ModBlocks.EQUIPMENT_INTERIOR.get().defaultBlockState().setValue(EquipmentInteriorBlock.OPEN,true),3);
+            helper.assertTrue(LinePlacement.checkLeads(level,CableLaying.leads(a,b))!=null,"A lead crossed a reserved open equipment interior: "+medium);
+            EquipmentTestCleanup.remove(level,wall);level.setBlock(wall,Blocks.STONE.defaultBlockState(),3);
+            // The zero-new-block attachment adapter must pass the same check and preserve the existing stub.
+            level.setBlock(entry,(medium==CableMedium.POWER?ModBlocks.POWER_CABLE:ModBlocks.DATA_CABLE).get().defaultBlockState(),3);
+            var stub=(ConduitBlockEntity)level.getBlockEntity(entry);var old=new DataBus.Cable(new DataBus.Site(port.dimension(),entry,0),new ConduitGeometry.Key(48,0,medium),0,Map.of());stub.configure(old);
+            helper.assertTrue(CableLaying.attach(player,InteractionHand.MAIN_HAND,start,medium)!=null&&old.equals(stub.cable()),"Attachment crossed a wall: "+medium);
+            level.removeBlock(wall,false);
+            helper.assertTrue(CableLaying.attach(player,InteractionHand.MAIN_HAND,start,medium)==null&&port.id().equals(stub.cable().endpoints().get(port.face())),"Clear existing end could not attach: "+medium);
+            helper.assertTrue(level.getBlockEntity(entry)==stub&&player.getInventory().countItem(item)==inventory,"Attachment replaced a stub or consumed a new cable");
+            level.setBlock(owner,Blocks.STONE.defaultBlockState(),3);var bound=stub.cable();
+            helper.assertTrue(CableLaying.attachment(level,start,world.controls().facts().ports(),medium)==null
+                    &&CableLaying.attach(player,InteractionHand.MAIN_HAND,start,medium)!=null&&bound.equals(stub.cable()),"A stale registered socket remained connectable after its host was replaced: "+medium);
+            level.removeBlock(entry,false);level.removeBlock(owner,false);world.controls().facts().removePort(port.id());
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=80,batch="line-clearance")
+    public static void cableRackLanesParticipateInCollisionAndUnloadedLeadsAreRefused(GameTestHelper helper){
+        var level=helper.getLevel();var at=helper.absolutePos(new BlockPos(1,2,1));
+        level.setBlock(at,ModBlocks.PIPE_RACK.get().defaultBlockState(),3);var rack=(PipeRackBlockEntity)level.getBlockEntity(at);
+        for(var medium:CableMedium.values()){
+            int arms=RackGeometry.runs(rack.rack());var lane=new RackGeometry.Lane(0,RackGeometry.width(medium.outside()),arms,arms,PipeSizes.code(medium.outside()));
+            var cable=new DataBus.Cable(new DataBus.Site(level.dimension().location().toString(),at,1),new ConduitGeometry.Key(arms,RackGeometry.points(rack.rack(),lane),medium),arms,Map.of());
+            rack.cables(List.of(cable));
+            for(var box:RackGeometry.boxes(rack.rack(),rack.cableLane(cable)))helper.assertTrue(!net.minecraft.world.phys.shapes.Shapes.joinIsNotEmpty(
+                    net.minecraft.world.phys.shapes.Shapes.box(box[0],box[1],box[2],box[3],box[4],box[5]),rack.shape(),net.minecraft.world.phys.shapes.BooleanOp.ONLY_FIRST),"Cable lane omitted from rack collision: "+medium);
+        }
+        var unloaded=at.offset(4096,0,0);helper.assertTrue(!level.hasChunkAt(unloaded),"Unloaded fixture unexpectedly loaded");
+        var lead=new LinePlacement.Lead(at,unloaded,at.getCenter(),.125,List.of(unloaded.getCenter(),unloaded.getCenter().add(.25,0,0)));
+        helper.assertTrue(LinePlacement.checkLeads(level,List.of(lead))!=null&&!level.hasChunkAt(unloaded),"A lead loaded a chunk or accepted unavailable space");
+        level.removeBlock(at,false);helper.succeed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=80,batch="line-clearance")
+    public static void pipeDataAndPowerRefuseChangedRouteCellsWithoutPartialWrites(GameTestHelper helper){
+        var level=helper.getLevel();var world=FluidWorldAuthority.find(level.getServer()).orElseThrow();
+        var first=helper.absolutePos(new BlockPos(1,2,1));var last=first.east(4);var wall=first.east(2);
+        var player=FakePlayerFactory.get(level,new GameProfile(UUID.randomUUID(),"LineRecheck"));player.setGameMode(GameType.SURVIVAL);player.setPos(last.getX(),last.getY(),last.getZ()-1);
+        for(int kind=0;kind<3;kind++){
+            for(int i=0;i<=4;i++)level.setBlock(first.east(i),Blocks.AIR.defaultBlockState(),3);
+            var tool=new ItemStack(ModItems.PIPE_LAYING_TOOL.get());
+            if(kind==0)tool.set(ModItems.PIPE_LAYING_SETTINGS.get(),new com.wormzjl.icheme.world.item.PipelineToolItem.Settings(.1));
+            else tool.set(kind==1?ModItems.PIPE_LAYING_DATA.get():ModItems.PIPE_LAYING_POWER.get(),true);
+            var item=(kind==0?ModItems.FLUID_PIPE:kind==1?ModItems.DATA_CABLE:ModItems.POWER_CABLE).get();
+            player.setItemInHand(InteractionHand.MAIN_HAND,tool);player.getInventory().add(new ItemStack(item,16));
+            double outside=kind==0?PipeSizes.outside(.1):.125;
+            var start=new PipeAnchor.Click(first,Direction.EAST);var finish=new PipeAnchor.Click(last,Direction.EAST);
+            var a=PipeAnchor.open(level,start,outside).anchor();var b=PipeAnchor.open(level,finish,outside).anchor();
+            var preview=LinePlacement.search(level,a,b,outside,List.of());helper.assertTrue(preview.found(),"Clear route did not plan: "+kind);
+            var path=preview.cells().stream().map(PipeAnchor::block).toList();
+            level.setBlock(wall,Blocks.STONE.defaultBlockState(),3);
+            int held=player.getInventory().countItem(item),fluids=world.registrations().size(),cables=world.controls().facts().cables().size();
+            var refusal=kind==0?PipeLaying.lay(player,InteractionHand.MAIN_HAND,start,finish,path,preview.options()):
+                    CableLaying.lay(player,InteractionHand.MAIN_HAND,new CableLaying.End(null,first,Direction.EAST,start.local(),0),new CableLaying.End(null,last,Direction.EAST,finish.local(),0),path,preview.options(),kind==1?CableMedium.DATA:CableMedium.POWER);
+            helper.assertTrue(refusal!=null&&held==player.getInventory().countItem(item)&&fluids==world.registrations().size()&&cables==world.controls().facts().cables().size(),"Changed obstacle caused partial inventory/topology writes: "+kind);
+            helper.assertTrue(path.stream().filter(p->!p.equals(wall)).allMatch(p->level.getBlockState(p).isAir()),"Changed obstacle caused partial placement: "+kind);
+        }
+        level.removeBlock(wall,false);helper.succeed();
+    }
+
     @GameTest(template="empty",timeoutTicks=80,batch="service-port-families")
     public static void controllersAndInlineMoversUseTheirAvailableConnectionSpace(GameTestHelper helper){
         var level=helper.getLevel();var at=helper.absolutePos(new BlockPos(1,2,1));

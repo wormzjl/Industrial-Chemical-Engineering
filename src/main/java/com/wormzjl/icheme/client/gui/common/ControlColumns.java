@@ -8,6 +8,16 @@ import java.util.function.BiFunction;
 public final class ControlColumns {
     private ControlColumns(){}
     public record Choice(String key,String label,boolean selected){}
+    public record Layout(int width,int height,boolean split,Rect chooser,List<Rect> areas,int bar){}
+    /** Uses the GUI dimensions Minecraft supplies at the player's chosen scale. Overflow scrolls inside the panel. */
+    public static Layout layout(int guiWidth,int guiHeight,boolean dcs){
+        boolean split=dcs&&guiWidth>=472;
+        int width=Math.min(split?464:246,Math.max(20,guiWidth-8)),height=Math.min(390,Math.max(80,guiHeight-8));
+        var chooser=dcs&&!split?new Rect(10,DialogColumns.TOP,width-20,18):null;
+        int top=DialogColumns.TOP+(chooser==null?0:24),view=Math.max(0,height-top-DialogColumns.FOOTER);
+        var areas=split?List.of(new Rect(10,top,194,view),new Rect(218,top,width-242,view)):List.of(new Rect(10,top,width-20,view));
+        return new Layout(width,height,split,chooser,areas,width-14);
+    }
     public enum Variable { UNKNOWN, LEVEL, PRESSURE, FLOW, TEMPERATURE, SPEED }
     public record View(boolean enabled,String unit,String secondUnit,boolean secondary,String input,String value,String output,String status,boolean outlet,Variable variable){}
     public static List<Column.Row> navigation(int page,int pages,String key,BiFunction<String,Object[],String> text){

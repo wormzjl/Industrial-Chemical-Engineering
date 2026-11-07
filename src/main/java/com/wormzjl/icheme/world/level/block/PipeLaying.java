@@ -52,9 +52,9 @@ public final class PipeLaying {
         if (start.anchor() == null) return refusal(start.refusal());
         var end = PipeAnchor.resolve(level, endClick, outside);
         if (end.anchor() == null) return refusal(end.refusal());
-        var refused=LinePlacement.check(level,start.anchor(),end.anchor(),path,options,outside);if(refused!=null)return refused;
+        var plan=LinePlacement.plan(start.anchor(),end.anchor(),path,options,outside);
+        var refused=LinePlacement.check(level,plan);if(refused!=null)return refused;
         var cells=path.stream().map(PipeAnchor::cell).toList();int heading=start.anchor().leaving();
-        for(var cell:path)if(!LinePlacement.editable(player,cell))return message("occupied",cell.toShortString());
         var world = FluidWorldAuthority.find(player.server).orElse(null);
         if (world == null) return message("not_allowed");
         String dimension = level.dimension().location().toString();
@@ -70,7 +70,6 @@ public final class PipeLaying {
             if (joints < 0) return message(anchor.hostLane() > 0 ? "anchor.lane_closed" : "anchor.junction");
             hosts.put(record.device().id(), joints);
         }
-        if (!player.getAbilities().instabuild && !LinePlacement.take(player,ModItems.FLUID_PIPE.get(),path.size())) return message("items", path.size());
         var placement = PipeRoute.placement(cells, start.anchor().end(), heading, end.anchor().end());
         int[] joints = placement.joints(), facings = placement.facings(), arms = placement.arms();
         int width = RackGeometry.width(PipeSizes.drawn(settings.diameter()));
@@ -92,44 +91,45 @@ public final class PipeLaying {
             lanes.add(lane);
             laid.add(new FluidWorldAuthority.Laid(position, PhysicalFluidTopology.Direction.values()[lane.facing()], joints[i], lane.width(), rack.points(lane)));
         }
-        var records = world.lay(laid, settings.diameter(), hosts);
         // The new pipes and lanes take the tool's paints, the pipe's and the flanges'; the pipes and lanes the line starts
         // or ends at keep theirs.
         int paint = PipeLayingToolItem.paint(stack), secondary = PipeLayingToolItem.secondary(stack);
         // The blocks and lanes bind to their queued registrations, then take their connections: every new block's joints
         // are set before any neighbour reads them, as EquipmentStructure.place sets its cells before it reconnects them.
-        var racks = new ArrayList<PipeRackBlockEntity>();
-        FluidDeviceBlock.laying = true;
-        try {
+        return LinePlacement.commit(player,plan,ModItems.FLUID_PIPE.get(),path.size(),message("items",path.size()),()->{
+            var records=world.lay(laid,settings.diameter(),hosts);
+            var racks=new ArrayList<PipeRackBlockEntity>();
+            var changes=new ArrayList<LinePlacement.Edit>();
             for (int i = 0; i < path.size(); i++) {
+                int index=i;
                 var lane = lanes.get(i);
                 if (lane != null) {
-                    var rack = (PipeRackBlockEntity) level.getBlockEntity(path.get(i));
-                    rack.addLane(new PipeRackBlockEntity.Lane(records.get(i).device().id(), lane.option(), lane.width(), lane.arms(), lane.joints(), lane.bore(), paint, secondary));
-                    racks.add(rack);
+                    changes.add(new LinePlacement.Edit(path.get(i),null,0,entity->{
+                        var rack=(PipeRackBlockEntity)entity;
+                        rack.addLane(new PipeRackBlockEntity.Lane(records.get(index).device().id(),lane.option(),lane.width(),lane.arms(),lane.joints(),lane.bore(),paint,secondary));
+                        racks.add(rack);
+                    }));
                     continue;
                 }
                 var state = ModBlocks.FLUID_PIPE.get().defaultBlockState().setValue(FluidDeviceBlock.FACING, Direction.values()[facings[i]]);
-                level.setBlock(path.get(i), state, Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE);
-                if (level.getBlockEntity(path.get(i)) instanceof FluidDeviceBlockEntity entity) {
+                changes.add(new LinePlacement.Edit(path.get(i),state,Block.UPDATE_CLIENTS|Block.UPDATE_KNOWN_SHAPE,blockEntity->{
+                    var entity=(FluidDeviceBlockEntity)blockEntity;
                     entity.paint(paint, secondary);
-                    entity.bindIdentity(records.get(i).device().id());
-                }
+                    entity.bindIdentity(records.get(index).device().id());
+                }));
             }
-        } finally {
-            FluidDeviceBlock.laying = false;
-        }
-        for (var host : edited) if (level.getBlockEntity(host) instanceof PipeRackBlockEntity rack) racks.add(rack);
-        // Racks take their lanes' new joints first, so the pipes next door see them when they connect.
-        for (var rack : racks) rack.refresh(false);
-        // An edited host pipe copies its new joints from its queued registration; any other host (a tank, a nozzle, a
-        // pipe with the joint already) takes the connection through the new block's neighbour update.
-        for (var host : edited)
-            if (level.getBlockEntity(host) instanceof FluidDeviceBlockEntity entity) entity.refreshGeometry(entity.bore(), true);
-        for (int i = 0; i < path.size(); i++)
-            if (options.get(i) < 0 && level.getBlockEntity(path.get(i)) instanceof FluidDeviceBlockEntity entity) entity.refreshGeometry(settings.diameter(), true);
-        for (var rack : racks) rack.refresh(true);
-        return null;
+            return new LinePlacement.Work(changes,()->{
+                for (var host : edited) if (level.getBlockEntity(host) instanceof PipeRackBlockEntity rack) racks.add(rack);
+                // Racks take their lanes' new joints first, so the pipes next door see them when they connect.
+                for (var rack : racks) rack.refresh(false);
+                // An edited host copies its queued joints; a nozzle takes the new block's neighbour update.
+                for (var host : edited)
+                    if (level.getBlockEntity(host) instanceof FluidDeviceBlockEntity entity) entity.refreshGeometry(entity.bore(), true);
+                for (int i = 0; i < path.size(); i++)
+                    if (options.get(i) < 0 && level.getBlockEntity(path.get(i)) instanceof FluidDeviceBlockEntity entity) entity.refreshGeometry(settings.diameter(), true);
+                for (var rack : racks) rack.refresh(true);
+            });
+        });
     }
 
     /**

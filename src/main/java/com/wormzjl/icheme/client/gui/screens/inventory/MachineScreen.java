@@ -15,7 +15,6 @@ import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
 import com.wormzjl.icheme.client.gui.common.kit.SkinButton;
 import com.wormzjl.icheme.client.gui.common.kit.SkinField;
-import com.wormzjl.icheme.client.gui.common.kit.WindowScale;
 import com.wormzjl.icheme.client.gui.screens.inventory.FluidDeviceScreen.FluidGuiLayout;
 import com.wormzjl.icheme.network.MachineNetwork;
 import com.wormzjl.icheme.runtime.fluid.MachineView;
@@ -101,19 +100,7 @@ public final class MachineScreen extends AbstractContainerScreen<MachineMenu> {
     }
 
     @Override
-    public void removed() {
-        super.removed();
-        WindowScale.restore(minecraft);
-    }
-
-    /** Whether the door fits a window {@code width} by {@code height} GUI px (WindowScale.Fit). */
-    private boolean fits(int width, int height) {
-        return FluidGuiLayout.fits(width, height, w -> Column.place(rows(), 10, FluidGuiLayout.DOOR_TOP, FluidGuiLayout.side(w) - 10, GuiCanvas.measure(font), Column.Metrics.COMPACT).bounds().h());
-    }
-
-    @Override
     protected void init() {
-        WindowScale.apply(minecraft, this, FluidGuiLayout.HEIGHT, this::fits);
         imageWidth = FluidGuiLayout.imageWidth(width);
         imageHeight = FluidGuiLayout.imageHeight(height);
         super.init();
@@ -257,7 +244,6 @@ public final class MachineScreen extends AbstractContainerScreen<MachineMenu> {
         super.containerTick();
         follow();
         if (!signature(rows()).equals(signature)) rebuildWidgets();
-        else if (door.view().max() > 0 && WindowScale.lower(minecraft, FluidGuiLayout.HEIGHT, this::fits)) rebuildWidgets();
     }
 
     @Override

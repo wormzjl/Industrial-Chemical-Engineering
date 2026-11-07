@@ -14,6 +14,13 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class FluidGuiConsistencyTest {
+    @Test void sharedDeviceFramesFitThePlayersSmallestGuiWindow(){
+        for(int width=320;width<=1600;width+=7)for(int height=240;height<=900;height+=31){
+            assertTrue(FluidGuiLayout.imageWidth(width)<=width-16);
+            assertTrue(FluidGuiLayout.imageHeight(height)<=height-16);
+            assertTrue(FluidGuiLayout.doorView(height)>0);
+        }
+    }
     @Test void switchingUnitsPreservesUntouchedSiAndConvertsEditedValues() {
         double exact=101325.123456789;var pressure=new NumericDraft(exact,PressureUnit.KILOPASCAL);
         for(int cycle=0;cycle<100;cycle++)for(var unit:PressureUnit.values()){pressure=pressure.in(unit);assertEquals(Double.doubleToRawLongBits(exact),Double.doubleToRawLongBits(pressure.si()));}

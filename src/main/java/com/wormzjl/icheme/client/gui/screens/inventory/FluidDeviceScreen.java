@@ -15,7 +15,6 @@ import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
 import com.wormzjl.icheme.client.gui.common.kit.SkinButton;
 import com.wormzjl.icheme.client.gui.common.kit.SkinField;
-import com.wormzjl.icheme.client.gui.common.kit.WindowScale;
 import com.wormzjl.icheme.network.FluidNetwork;
 import com.wormzjl.icheme.runtime.fluid.HeatUnit;
 import com.wormzjl.icheme.runtime.fluid.SlurryFeed;
@@ -75,9 +74,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private String nameDraft,nameShown;
     /** Whether Apply has a name to send: the typed name, cleaned, differs from the device's. */
     private boolean renames(){return nameDraft!=null&&nameable()&&!com.wormzjl.icheme.science.equipment.DeviceName.clean(nameDraft).equals(currentName());}
-    @Override public void removed(){super.removed();WindowScale.restore(minecraft);}
     @Override protected void init(){
-        WindowScale.apply(minecraft,this,FluidGuiLayout.HEIGHT,this::fits);
         imageWidth=FluidGuiLayout.imageWidth(width);imageHeight=FluidGuiLayout.imageHeight(height);
         super.init();titleLabelY=inventoryLabelY=-1000;
         if(nameDraft==null)nameDraft=nameShown=currentName();
@@ -937,20 +934,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private HeatFlowsheet flowsheet;private String flowsheetKey="";
     private int controlTop(){return FluidGuiLayout.DOOR_TOP;}
     private int controlBottom(){return imageHeight-FluidGuiLayout.DOOR_FOOT;}
-    /**
-     * Whether the door fits in a window {@code width} by {@code height} GUI px (WindowScale.Fit): the device's column
-     * and a heat unit's Control tab's columns, so a page change never changes the scale.
-     */
-    private boolean fits(int width,int height){return FluidGuiLayout.fits(width,height,this::tallest);}
-    private int tallest(int width){
-        if(menu.clientData()==null)return 0;
-        int tall=deviceColumn(width).bounds().h();
-        if(heat()!=null)for(var column:controlColumns(width))tall=Math.max(tall,column.bounds().h());
-        return tall;
-    }
-    // A column that grows past its view after the screen opened (the first publication's readings) lowers the scale
-    // where a lower one holds it; the screen builds again between frames, so no frame draws at two scales.
-    @Override protected void containerTick(){super.containerTick();followName();if(doorView.max()>0&&WindowScale.lower(minecraft,FluidGuiLayout.HEIGHT,this::fits))rebuildWidgets();}
+    @Override protected void containerTick(){super.containerTick();followName();}
     /** The name entry follows the device's name (another player's rename, this one's answered) while the player has not changed it. */
     private void followName(){
         String now=currentName();if(nameShown==null||now.equals(nameShown))return;
@@ -1243,22 +1227,14 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     /** Shared fluid-screen control positions, including the minimum supported 300px GUI width. */
     public static final class FluidGuiLayout {
         private FluidGuiLayout(){}
-        /** The screen's image in a window {@code width} by {@code height} GUI px: 8 px round it, 300 to 790 px wide, at least 250 high. */
+        /** The screen's image at the player's scale: 8 px round it, 300 to 790 px wide; short doors scroll. */
         public static int imageWidth(int width){return Math.max(300,Math.min(790,width-16));}
-        public static int imageHeight(int height){return Math.max(250,height-16);}
+        public static int imageHeight(int height){return Math.max(180,height-16);}
         /** The door columns' view on every page: from y {@code DOOR_TOP} to {@code DOOR_FOOT} px above the image's foot. */
         public static final int DOOR_TOP=74,DOOR_FOOT=52;
-        /**
-         * The device screen's design height (WindowScale, owner 2026-10-28 option b: one scale for every device screen):
-         * its door view is 338 px there, room for a valve's page (323 px) and a pump's (330 px); 2560 by 1440 takes scale 3.
-         */
         public static final int HEIGHT=480;
         /** The door view in a window {@code height} GUI px high. */
         public static int doorView(int height){return imageHeight(height)-DOOR_FOOT-DOOR_TOP;}
-        /**
-         * Whether the door columns fit their view, with no bar, in a window {@code width} by {@code height} GUI px
-         * ({@code WindowScale.Fit}); {@code tallest} gives the tallest door column the screen places at an image width.
-         */
         public static boolean fits(int width,int height,java.util.function.IntUnaryOperator tallest){
             return tallest.applyAsInt(imageWidth(width))<=doorView(height);
         }

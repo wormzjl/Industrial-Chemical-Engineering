@@ -19,7 +19,6 @@ import com.wormzjl.icheme.client.gui.common.kit.Palette;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
-import com.wormzjl.icheme.client.gui.common.kit.WindowScale;
 import com.wormzjl.icheme.client.gui.screens.inventory.FluidDeviceScreen.FluidGuiLayout;
 import com.wormzjl.icheme.science.assembly.AssemblyReport;
 import com.wormzjl.icheme.science.assembly.AssemblyView;
@@ -98,14 +97,25 @@ public final class GuiPrototypes {
 
     static List<Prototype> controlPanels(){
         var out=new ArrayList<Prototype>();
-        for(boolean dcs:new boolean[]{false,true})out.add(new Prototype(dcs?"control-dcs":"control-local",dcs?464:246,254,(d,s)->{
+        for(boolean dcs:new boolean[]{false,true})for(boolean compact:new boolean[]{false,true}){
+            var layout=ControlColumns.layout(compact?320:640,compact?240:480,dcs);
+            out.add(new Prototype((dcs?"control-dcs":"control-local")+(compact?"-compact":"-wide"),layout.width(),layout.height(),(d,s)->{
             d.skin.title(d.c,10,10,dcs?"DCS":"Local controller");
             var view=new ControlColumns.View(true,"m","%",true,"LT-0012 / LEVEL","37.0","CV-0021","CONTROLLING",true,ControlColumns.Variable.LEVEL);
             // KitDoor shares the long loop column's scroll offset; this one-row controller list is above the end view.
-            if(dcs&&!d.end)doorColumn(d,ControlColumns.controllers(List.of(new ControlColumns.Choice("controller:1","Drum level",true)),DIALOG::get),new Rect(10,30,194,184),Map.of(),"DCS controller list");
-            doorColumn(d,ControlColumns.loop(view,DIALOG::get),new Rect(dcs?218:10,30,dcs?222:226,184),Map.of("name","Drum level","target","25"),"Level control");
+            if(layout.split()&&!d.end)doorColumn(d,ControlColumns.controllers(List.of(new ControlColumns.Choice("controller:1","Drum level",true)),DIALOG::get),layout.areas().getFirst(),Map.of(),"DCS controller list");
+            if(layout.chooser()!=null)d.skin.button(d.c,layout.chooser(),DIALOG.get("control.controllers"),Skin.Press.REST,false);
+            doorColumn(d,ControlColumns.loop(view,DIALOG::get),layout.areas().getLast(),Map.of("name","Drum level","target","25"),"Level control");
             dialogFooter(d,DIALOG.get("control.close"),DIALOG.get("control.apply"));
-        },true));
+            },true));
+        }
+        var compact=ControlColumns.layout(320,240,true);
+        out.add(new Prototype("control-dcs-controller-list",compact.width(),compact.height(),(d,s)->{
+            d.skin.title(d.c,10,10,"DCS");
+            d.skin.button(d.c,compact.chooser(),DIALOG.get("control.back"),Skin.Press.REST,false);
+            doorColumn(d,ControlColumns.controllers(List.of(new ControlColumns.Choice("controller:1","Drum level",true),new ControlColumns.Choice("controller:2","Feed flow",false)),DIALOG::get),compact.areas().getFirst(),Map.of(),"Compact controller list");
+            dialogFooter(d,DIALOG.get("control.close"));
+        }));
         out.add(new Prototype("control-instrument-ids",246,254,(d,s)->{
             d.skin.title(d.c,10,10,"Drum instruments");
             var rows=new ArrayList<Column.Row>();
@@ -211,10 +221,10 @@ public final class GuiPrototypes {
     /** A device page's frame around {@code rows} instead of a DeviceColumn.Input's (as {@link #devicePage}). */
     static Prototype devicePage(String file, int fw, int fh, List<Column.Row> rows, BiConsumer<Door, Skin> body) {
         var m = new HeatDiagramRender.Java2dCanvas(new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB).createGraphics()).measure();
-        WindowScale.Fit fit = (w, h) -> FluidGuiLayout.fits(w, h, iw -> Column.place(rows, 10, FluidGuiLayout.DOOR_TOP, FluidGuiLayout.side(iw) - 10, m, Column.Metrics.COMPACT).bounds().h());
-        int s = WindowScale.of(fw, fh, false, FluidGuiLayout.HEIGHT, fit), gw = -Math.floorDiv(-fw, s), gh = -Math.floorDiv(-fh, s);
-        System.out.printf(java.util.Locale.ROOT, "%-24s %d by %d window: scale %d (the design size's %d, the minimum %d), %d by %d GUI px%n", file, fw, fh, s, WindowScale.of(fw, fh, false), WindowScale.minimum(fw, fh, false), gw, gh);
-        return new Prototype(file, FluidGuiLayout.imageWidth(gw), FluidGuiLayout.imageHeight(gh), body, !fit.fits(gw, gh));
+        java.util.function.BiPredicate<Integer,Integer> fit = (w, h) -> FluidGuiLayout.fits(w, h, iw -> Column.place(rows, 10, FluidGuiLayout.DOOR_TOP, FluidGuiLayout.side(iw) - 10, m, Column.Metrics.COMPACT).bounds().h());
+        int s = Math.max(1, Integer.getInteger("guiScale", 3)), gw = -Math.floorDiv(-fw, s), gh = -Math.floorDiv(-fh, s);
+        System.out.printf(java.util.Locale.ROOT, "%-24s %d by %d window: player scale %d, %d by %d GUI px%n", file, fw, fh, s, gw, gh);
+        return new Prototype(file, FluidGuiLayout.imageWidth(gw), FluidGuiLayout.imageHeight(gh), body, !fit.test(gw, gh));
     }
 
     /**
@@ -1036,16 +1046,16 @@ public final class GuiPrototypes {
 
     /**
      * A device's page as a window {@code fw} by {@code fh} screen px shows it: at the scale FluidDeviceScreen takes
-     * (WindowScale with the page's column as its fit), its image 8 px inside the window's GUI size; drawn scrolled to its
+     * (the explicit -DguiScale preview setting), its image 8 px inside the window's GUI size; drawn scrolled to its
      * end too where even that scale leaves the column a bar.
      */
     static Prototype devicePage(String file, int fw, int fh, DeviceColumn.Input in, BiConsumer<Door, Skin> body) {
         var m = new HeatDiagramRender.Java2dCanvas(new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB).createGraphics()).measure();
         var rows = DeviceColumn.rows(in, TEXTS);
-        WindowScale.Fit fit = (w, h) -> FluidGuiLayout.fits(w, h, iw -> Column.place(rows, 10, FluidGuiLayout.DOOR_TOP, FluidGuiLayout.side(iw) - 10, m, Column.Metrics.COMPACT).bounds().h());
-        int s = WindowScale.of(fw, fh, false, FluidGuiLayout.HEIGHT, fit), gw = -Math.floorDiv(-fw, s), gh = -Math.floorDiv(-fh, s);
-        System.out.printf(java.util.Locale.ROOT, "%-24s %d by %d window: scale %d (the design size's %d, the minimum %d), %d by %d GUI px%n", file, fw, fh, s, WindowScale.of(fw, fh, false), WindowScale.minimum(fw, fh, false), gw, gh);
-        return new Prototype(file, FluidGuiLayout.imageWidth(gw), FluidGuiLayout.imageHeight(gh), body, !fit.fits(gw, gh));
+        java.util.function.BiPredicate<Integer,Integer> fit = (w, h) -> FluidGuiLayout.fits(w, h, iw -> Column.place(rows, 10, FluidGuiLayout.DOOR_TOP, FluidGuiLayout.side(iw) - 10, m, Column.Metrics.COMPACT).bounds().h());
+        int s = Math.max(1, Integer.getInteger("guiScale", 3)), gw = -Math.floorDiv(-fw, s), gh = -Math.floorDiv(-fh, s);
+        System.out.printf(java.util.Locale.ROOT, "%-24s %d by %d window: player scale %d, %d by %d GUI px%n", file, fw, fh, s, gw, gh);
+        return new Prototype(file, FluidGuiLayout.imageWidth(gw), FluidGuiLayout.imageHeight(gh), body, !fit.test(gw, gh));
     }
 
     static Prototype pump() {
