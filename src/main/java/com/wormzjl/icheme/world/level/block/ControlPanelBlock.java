@@ -17,7 +17,8 @@ import net.minecraft.world.level.block.state.*;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.phys.BlockHitResult;
 
-public final class ControlPanelBlock extends BaseEntityBlock {
+/** A local controller; the DCS subclass adds its second physical half without another control identity. */
+public class ControlPanelBlock extends BaseEntityBlock {
     public static final MapCodec<ControlPanelBlock> CODEC=simpleCodec(ControlPanelBlock::new);
     public static final DirectionProperty FACING=HorizontalDirectionalBlock.FACING;
     public ControlPanelBlock(Properties properties){super(properties);registerDefaultState(stateDefinition.any().setValue(FACING,Direction.NORTH));}

@@ -8,8 +8,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import javax.imageio.ImageIO;
+import com.wormzjl.icheme.science.equipment.DcsGeometry;
 
-/** Controller/DCS finishes using the workstation palette and writer, with their existing model envelopes. */
+/** Controller/DCS finishes using the shared workstation palette; the DCS is a two-block operator console. */
 public final class ControlAssets {
     private static final int GASKET=0x354249, EDGE=0xA5AEAF, HIGHLIGHT=0xEFF1EE;
     private static final int GLASS=0x102B36, GRID=0x173A46, CYAN=0xA6D4D9, AMBER=0xC3AD69;
@@ -24,10 +25,12 @@ public final class ControlAssets {
         paths.put("rear","icheme:block/control_panel_rear");
         paths.put("door","icheme:block/control_panel_service");
         paths.put("front","icheme:block/"+(dcs?"dcs_front":"controller_front"));
+        if(dcs)for(var name:List.of("bezel","keyboard","label","alarms"))paths.put(name,"icheme:block/dcs_"+name);
         return paths;
     }
 
     static List<ConstructorAssets.Box> boxes(boolean dcs) {
+        if(dcs)return dcsBoxes(DcsGeometry.parts());
         var boxes=new ArrayList<ConstructorAssets.Box>();
         boxes.add(dcs?ConstructorAssets.box("steel plinth",1,0,2,15,2,14,"metal"):
                 ConstructorAssets.box("steel mounting foot",3,0,5,13,2,12,"metal"));
@@ -35,6 +38,21 @@ public final class ControlAssets {
         boxes.add(dcs?cabinet("DCS operator terminal",1,9,3,15,16,13,"front"):
                 cabinet("local loop controller",2,2,3,14,15,13,"front"));
         return List.copyOf(boxes);
+    }
+
+    private static List<ConstructorAssets.Box> dcsBoxes(List<DcsGeometry.Part> parts){
+        return parts.stream().map(p->{
+            String body=p.body().name().toLowerCase(java.util.Locale.ROOT);
+            var box=ConstructorAssets.box(p.name(),p.x(),p.y(),p.z(),p.X(),p.Y(),p.Z(),body);
+            box.faces().put("north",new ConstructorAssets.Face(p.front().name().toLowerCase(java.util.Locale.ROOT)));
+            box.faces().put("up",new ConstructorAssets.Face(p.top().name().toLowerCase(java.util.Locale.ROOT)));
+            if(p.top()==DcsGeometry.Finish.KEYBOARD)box.faces().put("up",new ConstructorAssets.Face("keyboard",new double[]{16,16,0,0}));
+            if(p.name().equals("lower service cabinet")||p.name().equals("monitor enclosure")){
+                box.faces().put("south",new ConstructorAssets.Face("rear"));
+                for(var face:List.of("east","west"))box.faces().put(face,new ConstructorAssets.Face("side"));
+            }
+            return box;
+        }).toList();
     }
 
     private static ConstructorAssets.Box cabinet(String name,double x,double y,double z,double X,double Y,double Z,String front) {
@@ -103,21 +121,79 @@ public final class ControlAssets {
     }
 
     private static BufferedImage dcs(BufferedImage steel) {
-        var image=painted(steel,112,56);var g=image.createGraphics();
+        var image=new BufferedImage(256,128,BufferedImage.TYPE_INT_RGB);var g=image.createGraphics();
         try {
-            frame(g,1,1,110,54,HIGHLIGHT,0x7E898D);glass(g,8,8,96,32);label(g,"DCS",11,9,CYAN);
-            g.setColor(new Color(0x46717A));g.drawLine(15,23,91,23);
-            for(int x:new int[]{18,43,68}) {
-                rect(g,x,19,19,16,0x264652);frame(g,x,19,19,16,0x54828B,0x0C2530);
-                g.setColor(new Color(CYAN));g.drawOval(x+3,22,5,5);g.drawLine(x+8,24,x+14,24);
-                g.setColor(new Color(0x8EC7AB));g.drawPolyline(new int[]{x+3,x+6,x+9,x+12,x+15},new int[]{32,29,31,27,28},5);
+            rect(g,0,0,256,128,0xB9C3C4);rect(g,0,0,256,14,0x243E48);text(g,"PLANT OVERVIEW",6,5,0xDFE9E6);
+            rect(g,215,5,4,4,0x7BA491);text(g,"LINK",224,5,0xCFDFDC);
+            rect(g,3,18,172,92,0xD9DFDC);frame(g,3,18,172,92,0xEDF0E9,0x8E9FA1);
+            rect(g,179,18,74,92,0xD1D9D6);text(g,"LT-101",184,23,0x304E56);text(g,"25 PCT",217,23,0x304E56);
+            text(g,"LT-101",58,29,0x304E56);text(g,"V-101",61,88,0x304E56);text(g,"P-101",108,88,0x304E56);
+            g.setColor(new Color(0x5C757C));g.drawPolyline(new int[]{10,36,36,62},new int[]{69,69,53,53},4);g.drawPolyline(new int[]{87,108,108,153,153},new int[]{77,77,58,58,38},5);
+            g.drawRoundRect(62,40,25,44,9,9);rect(g,65,70,20,10,0x76A7B1);g.setColor(new Color(0x5C757C));g.drawLine(63,68,86,68);
+            g.drawOval(110,70,14,14);g.drawPolygon(new int[]{114,121,114},new int[]{73,77,81},3);
+            g.drawLine(124,77,156,77);g.drawLine(156,77,156,58);g.drawPolygon(new int[]{145,153,145},new int[]{53,58,63},3);g.drawPolygon(new int[]{161,153,161},new int[]{53,58,63},3);
+            rect(g,149,43,8,5,0x7BA491);text(g,"LV-101",132,30,0x304E56);
+            text(g,"FEED",9,57,0x304E56);text(g,"PRODUCT",126,96,0x304E56);
+            for(int y:new int[]{33,72}){
+                rect(g,184,y,64,28,0x243F49);
+                for(int x=192;x<247;x+=12)rect(g,x,y+1,1,26,0x38545D);
+                for(int yy=y+7;yy<y+27;yy+=7)rect(g,185,yy,62,1,0x38545D);
+                g.setColor(new Color(y==33?0x9CC6CC:0xB1C9AB));g.drawPolyline(new int[]{186,193,200,206,212,218,224,230,236,246},new int[]{y+21,y+19,y+21,y+16,y+17,y+12,y+13,y+9,y+10,y+10},10);
             }
-            rect(g,93,18,7,2,AMBER);rect(g,93,25,7,2,0x8EC7AB);rect(g,93,32,7,2,0x54828B);
-            for(int x=13;x<83;x+=14)key(g,x,46,9,4,0x8B9C9D);
-            key(g,92,46,8,4,0xB5A367);
-            for(int x:new int[]{3,105})for(int y:new int[]{3,48})screw(g,x,y);
+            text(g,"PT-102",184,64,0x304E56);text(g,"3.2 BAR",216,64,0x304E56);
+            rect(g,0,114,256,14,0x354F58);for(int i=0;i<5;i++){rect(g,4+i*50,117,46,8,i==0?0x69878C:0x47636C);text(g,new String[]{"OVERVIEW","TRENDS","ALARMS","LOOPS","SYSTEM"}[i],7+i*50,119,0xDCE5DF);}
         } finally { g.dispose(); }
         return image;
+    }
+
+    private static void text(Graphics2D g,String value,int x,int y,int colour){
+        g.setColor(new Color(colour));g.setFont(new java.awt.Font(java.awt.Font.MONOSPACED,java.awt.Font.PLAIN,7));g.drawString(value,x,y+6);
+    }
+    private static BufferedImage keyboard(){
+        var image=ConstructorAssets.surface(128,64,0x68767A);var g=image.createGraphics();
+        try{
+            frame(g,1,1,126,62,0x9CA8A8,0x37474D);
+            for(int row=0;row<4;row++)for(int col=0;col<13;col++)keyboardKey(g,5+9*col,15+9*row,6,6,0x394B53);
+            for(int col=0;col<12;col++)keyboardKey(g,6+10*col,5,6,5,col<3?0x68858B:0x455A62);
+            keyboardKey(g,32,52,57,6,0x3B5159);for(int x:new int[]{5,15,101,111})keyboardKey(g,x,52,7,6,0x455A62);
+        }finally{g.dispose();}return image;
+    }
+    private static void keyboardKey(Graphics2D g,int x,int y,int w,int h,int colour){
+        rect(g,x-1,y-1,w+2,h+2,0x2B3C43);rect(g,x,y,w,h,colour);rect(g,x,y,w,1,0x627478);
+        if(w<10)rect(g,x+2,y+2,2,1,0x95A4A3);
+    }
+    private static BufferedImage strip(boolean alarms){
+        var image=ConstructorAssets.surface(128,16,0x35464C);var g=image.createGraphics();
+        try{
+            if(alarms)for(int i=0;i<4;i++){
+                rect(g,3+31*i,3,29,11,i==0?0xA78E4D:0x536765);text(g,new String[]{"ALARM","ACK","SYS","NET"}[i],7+31*i,5,0xDCE4D9);
+            }else{text(g,"DCS",4,5,0xD4DEDA);text(g,"OPERATOR STATION",28,5,0xA9BBB9);rect(g,115,6,3,3,0x8BAF94);rect(g,121,6,3,3,0x9DB9BF);}
+        }finally{g.dispose();}return image;
+    }
+    private static void writeDcs(Path assets,BufferedImage steel)throws Exception{
+        var texture=assets.resolve("textures/block");var images=Map.of("dcs_front",dcs(steel),"dcs_keyboard",keyboard(),"dcs_label",strip(false),"dcs_alarms",strip(true),"dcs_bezel",ConstructorAssets.surface(16,16,0x35464C));
+        for(var entry:images.entrySet())ImageIO.write(entry.getValue(),"png",texture.resolve(entry.getKey()+".png").toFile());
+        for(boolean upper:new boolean[]{false,true})Files.writeString(assets.resolve("models/block/"+(upper?"dcs_upper":"dcs")+".json"),ConstructorAssets.model(texturePaths(true),dcsBoxes(DcsGeometry.parts(upper))));
+        Files.writeString(assets.resolve("models/block/dcs_complete.json"),ConstructorAssets.model(texturePaths(true),boxes(true)));
+        var variants=new StringBuilder("{\n  \"variants\": {\n");boolean first=true;int turn=0;
+        for(var face:List.of("north","east","south","west")){
+            for(var half:List.of("lower","upper")){
+                if(!first)variants.append(",\n");first=false;
+                variants.append("    \"facing=").append(face).append(",half=").append(half).append("\": {\"model\": \"icheme:block/").append(half.equals("upper")?"dcs_upper":"dcs").append("\", \"y\": ").append(90*turn).append("}");
+            }turn++;
+        }
+        Files.writeString(assets.resolve("blockstates/dcs.json"),variants.append("\n  }\n}\n").toString());
+        Files.writeString(assets.resolve("models/item/dcs.json"),"""
+                {
+                  "parent": "icheme:block/dcs_complete",
+                  "display": {
+                    "gui": {"rotation": [30, 225, 0], "translation": [0, -3.5, 0], "scale": [0.45, 0.45, 0.45]},
+                    "ground": {"translation": [0, 0, 0], "scale": [0.25, 0.25, 0.25]},
+                    "thirdperson_righthand": {"rotation": [75, 45, 0], "translation": [0, 1.5, 0], "scale": [0.3, 0.3, 0.3]},
+                    "firstperson_righthand": {"rotation": [0, 45, 0], "translation": [0, 0, 0], "scale": [0.3, 0.3, 0.3]}
+                  }
+                }
+                """);
     }
 
     private static BufferedImage panel(BufferedImage steel,boolean vents) {
@@ -178,13 +254,15 @@ public final class ControlAssets {
     public static void main(String[] args) throws Exception {
         var assets=Path.of(args[0]);var texture=assets.resolve("textures/block");
         var steel=ImageIO.read(texture.resolve("pump_casting.png").toFile());
+        if(args.length>1&&args[1].equals("dcs")){writeDcs(assets,steel);System.out.println("Wrote two-block DCS console and operator finishes");return;}
         var images=new LinkedHashMap<String,BufferedImage>();
         images.put("controller_front",local(steel));images.put("dcs_front",dcs(steel));
         images.put("control_panel_side",panel(steel,true));images.put("control_panel_rear",panel(steel,false));images.put("control_panel_service",service(steel));
         images.put("sensor_case",sensorCase(steel));
         for(char kind:new char[]{'p','t','f','l','n'})images.put("sensor_"+kind,sensor(steel,kind));
         for(var entry:images.entrySet())ImageIO.write(entry.getValue(),"png",texture.resolve(entry.getKey()+".png").toFile());
-        for(boolean remote:new boolean[]{false,true})Files.writeString(assets.resolve("models/block/"+(remote?"dcs":"local_controller")+".json"),ConstructorAssets.model(texturePaths(remote),boxes(remote)));
-        System.out.println("Wrote controller/DCS and five sensor finishes; existing element bounds retained.");
+        Files.writeString(assets.resolve("models/block/local_controller.json"),ConstructorAssets.model(texturePaths(false),boxes(false)));
+        writeDcs(assets,steel);
+        System.out.println("Wrote controller, two-block DCS and five sensor finishes");
     }
 }

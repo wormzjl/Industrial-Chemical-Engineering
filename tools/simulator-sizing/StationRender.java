@@ -11,6 +11,18 @@ public class StationRender {
     static double[] unit(double[] a) { double r=Math.sqrt(dot(a,a)); return new double[]{a[0]/r,a[1]/r,a[2]/r}; }
     static double edge(double[] a,double[] b,double x,double y) { return (x-a[0])*(b[1]-a[1])-(y-a[1])*(b[0]-a[0]); }
     public static void main(String[] args) throws Exception {
+        if(args[2].equals("faces")){
+            var quads=new ArrayList<Quad>();
+            for(var line:java.nio.file.Files.readAllLines(Path.of(args[0]))){
+                var columns=line.split("\t");if(!columns[0].equals(args[3]))continue;
+                int at=2;var p=new double[4][3];var uv=new double[4][2];var normal=new double[3];
+                for(int i=0;i<4;i++)for(int k=0;k<3;k++)p[i][k]=Double.parseDouble(columns[at++]);
+                for(int i=0;i<4;i++)for(int k=0;k<2;k++)uv[i][k]=Double.parseDouble(columns[at++]);
+                for(int k=0;k<3;k++)normal[k]=Double.parseDouble(columns[at++]);
+                quads.add(new Quad(p,uv,normal,ImageIO.read(Path.of(columns[1]).toFile())));
+            }
+            views(quads,args[1]);return;
+        }
         var paths=switch(args[2]) {
             case "constructor"->ConstructorAssets.texturePaths();case "simulator"->SimulatorAssets.texturePaths();
             case "controller"->ControlAssets.texturePaths(false);case "dcs"->ControlAssets.texturePaths(true);
@@ -40,15 +52,17 @@ public class StationRender {
                 quads.add(new Quad(p,new double[][]{{u[0]/16,u[1]/16},{u[0]/16,u[3]/16},{u[2]/16,u[3]/16},{u[2]/16,u[1]/16}},n,textures.get(f.getValue().texture())));
             }
         }
-        render(quads,new double[]{-1,-.8,1.3},args[1]+"-front.png");
-        render(quads,new double[]{1,-.8,-1.3},args[1]+"-rear.png");
-        render(quads,new double[]{-.15,-1,.35},args[1]+"-top.png");
+        views(quads,args[1]);
+    }
+    private static void views(List<Quad> quads,String output)throws Exception{
+        render(quads,new double[]{-1,-.8,1.3},output+"-front.png");
+        render(quads,new double[]{1,-.8,-1.3},output+"-rear.png");
+        render(quads,new double[]{-.15,-1,.35},output+"-top.png");
     }
     static void render(List<Quad> quads,double[] view,String output) throws Exception {
         var depth=unit(view);var right=unit(cross(depth,new double[]{0,1,0}));var up=cross(right,depth);
         double loX=1e9,hiX=-1e9,loY=1e9,hiY=-1e9;
-        for(int i=0;i<8;i++) {
-            var p=new double[]{(i&1)*16,(i>>1&1)*16,(i>>2&1)*16};
+        for(var quad:quads)for(var p:quad.points()) {
             double sx=dot(p,right),sy=dot(p,up);loX=Math.min(loX,sx);hiX=Math.max(hiX,sx);loY=Math.min(loY,sy);hiY=Math.max(hiY,sy);
         }
         double scale=560/Math.max(hiX-loX,hiY-loY);int w=(int)((hiX-loX)*scale)+48,h=(int)((hiY-loY)*scale)+48;

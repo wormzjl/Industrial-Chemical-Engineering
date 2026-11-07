@@ -26,6 +26,10 @@ public final class ControlPanelBlockEntity extends BlockEntity {
     }
     @Override public void onLoad(){
         super.onLoad();
+        if(getBlockState().getBlock() instanceof com.wormzjl.icheme.world.level.block.DcsBlock dcs){
+            if(getBlockState().getValue(com.wormzjl.icheme.world.level.block.DcsBlock.HALF)==net.minecraft.world.level.block.state.properties.DoubleBlockHalf.UPPER)return;
+            if(level!=null&&!level.isClientSide())level.scheduleTick(worldPosition,dcs,1);
+        }
         if(level instanceof ServerLevel server)FluidWorldAuthority.find(server.getServer()).ifPresent(w->w.controls().loaded(this));
         else if(level!=null)com.wormzjl.icheme.client.DataControlRenderer.loaded(this);
     }

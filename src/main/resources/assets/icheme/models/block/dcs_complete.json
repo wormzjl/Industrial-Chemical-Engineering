@@ -1,0 +1,213 @@
+{
+  "parent": "minecraft:block/block",
+  "textures": {
+    "particle": "icheme:block/pump_casting",
+    "case": "icheme:block/pump_casting",
+    "metal": "icheme:block/equipment_steelwork",
+    "side": "icheme:block/control_panel_side",
+    "rear": "icheme:block/control_panel_rear",
+    "door": "icheme:block/control_panel_service",
+    "front": "icheme:block/dcs_front",
+    "bezel": "icheme:block/dcs_bezel",
+    "keyboard": "icheme:block/dcs_keyboard",
+    "label": "icheme:block/dcs_label",
+    "alarms": "icheme:block/dcs_alarms"
+  },
+  "elements": [
+    {
+      "name": "steel plinth",
+      "from": [1.0, 0.0, 2.0],
+      "to": [15.0, 2.0, 14.0],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" }
+      }
+    },
+    {
+      "name": "lower service cabinet",
+      "from": [2.0, 2.0, 7.0],
+      "to": [14.0, 14.0, 14.0],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#door" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#side" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#rear" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#side" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#case" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#case" }
+      }
+    },
+    {
+      "name": "worktop edge",
+      "from": [0.5, 14.0, 1.0],
+      "to": [15.5, 15.0, 15.0],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" }
+      }
+    },
+    {
+      "name": "operator worktop",
+      "from": [0.5, 15.0, 1.0],
+      "to": [15.5, 16.0, 15.0],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#case" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#case" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#case" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#case" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#case" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#case" }
+      }
+    },
+    {
+      "name": "operator keyboard",
+      "from": [4.25, 16.0, 2.0],
+      "to": [14.0, 16.7, 6.75],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#bezel" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#bezel" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#bezel" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#bezel" },
+        "up": { "uv": [16.0, 16.0, 0.0, 0.0], "texture": "#keyboard" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#bezel" }
+      }
+    },
+    {
+      "name": "trackball base",
+      "from": [1.5, 16.0, 3.5],
+      "to": [3.75, 16.4, 6.0],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#bezel" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#bezel" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#bezel" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#bezel" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#bezel" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#bezel" }
+      }
+    },
+    {
+      "name": "trackball",
+      "from": [2.25, 16.4, 4.25],
+      "to": [3.0, 16.75, 5.0],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#case" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#case" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#case" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#case" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#case" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#case" }
+      }
+    },
+    {
+      "name": "display pedestal",
+      "from": [6.0, 16.0, 11.0],
+      "to": [10.0, 20.5, 13.5],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" }
+      }
+    },
+    {
+      "name": "monitor enclosure",
+      "from": [0.75, 20.0, 9.0],
+      "to": [15.25, 29.25, 12.5],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#case" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#side" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#rear" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#side" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#case" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#case" }
+      }
+    },
+    {
+      "name": "monitor bezel",
+      "from": [1.0, 20.5, 8.65],
+      "to": [15.0, 28.75, 9.05],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#bezel" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#bezel" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#bezel" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#bezel" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#bezel" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#bezel" }
+      }
+    },
+    {
+      "name": "process overview display",
+      "from": [1.25, 21.5, 8.6],
+      "to": [14.75, 28.25, 8.7],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#front" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#bezel" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#bezel" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#bezel" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#bezel" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#bezel" }
+      }
+    },
+    {
+      "name": "operator identification strip",
+      "from": [1.25, 20.65, 8.59],
+      "to": [14.75, 21.3, 8.7],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#label" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#bezel" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#bezel" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#bezel" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#bezel" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#bezel" }
+      }
+    },
+    {
+      "name": "alarm fascia",
+      "from": [1.0, 29.25, 10.0],
+      "to": [15.0, 31.5, 12.5],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#bezel" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#bezel" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#bezel" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#bezel" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#bezel" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#bezel" }
+      }
+    },
+    {
+      "name": "alarm annunciators",
+      "from": [1.5, 29.7, 9.95],
+      "to": [14.5, 31.05, 10.05],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#alarms" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#bezel" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#bezel" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#bezel" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#bezel" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#bezel" }
+      }
+    },
+    {
+      "name": "top cover",
+      "from": [0.75, 31.5, 9.75],
+      "to": [15.25, 32.0, 12.75],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#case" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#case" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#case" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#case" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#case" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#case" }
+      }
+    }
+  ]
+}

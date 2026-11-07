@@ -2,7 +2,7 @@
 # Usage: python tools/simulator-sizing/export-model-faces.py tmp/<task>/models.tsv
 from pathlib import Path
 import json, sys
-assets=Path('src/main/resources/assets/icheme');models=[(n,'block') for n in ['local_controller','dcs']]+[(n,'item') for n in ['pressure_probe','temperature_probe','flowmeter','digital_level_meter','speed_sensor']]
+assets=Path('src/main/resources/assets/icheme');models=[('local_controller','block'),('dcs','item')]+[(n,'item') for n in ['pressure_probe','temperature_probe','flowmeter','digital_level_meter','speed_sensor']]
 rows=[]
 for name,folder in models:
  model=json.loads((assets/f'models/{folder}/{name}.json').read_text(encoding='utf-8'))
