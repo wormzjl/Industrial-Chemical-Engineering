@@ -10,10 +10,14 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
   - **patch** (`0.x.y`) for a merge that contains fixes only.
 - The major version stays `0` until the owner declares a public release.
 - A work branch writes its entry under `[Unreleased]`; the merge moves it under a new version heading dated with the merge day.
-- One line per batch of work, with its main commits and the name of its batch folder in the local `documentation/` index (`documentation/INDEX.md`, not tracked).
+- One line per batch of work, with its main commits and the name of its batch folder in the local `documentation/` index (`documentation/INDEX.md`).
 - `0.1.0` is the state of `main` before this changelog existed. Its section was backfilled from `git log --first-parent main --date=short` since 2026-08-01. No git tags exist for these versions; they are identified by commit id (`0.1.0` = `3c27271`).
 
 ## [Unreleased]
+
+### Added
+
+- Simulator sizing and plant integration (sizing `6402aeb64`, crossflow `622e35bde`, gauge merge `0c5ce5224`, wired controls `47abf7bcb`, VFD/FE `2260953dd`, shared laying `a839f2c38`, motor supply `b7a90872e`, cable finish `7a6301da8`, workstation models `c45cea075`, translations `8a768d9d`, gate/tooling cleanup `db322f04f`; batch [2026-11-06-simulator-sizing](documentation/2026-11-06-simulator-sizing/README.md), prepared for owner-approved 0.22.0): scale-up-first Auto and constructor-style Manual sizing, a shared Standard/Low-dP crossflow exchanger family, local controller boxes and DCS over data cable, shared pipe/rack laying for data and standard-FE power conduits, six-faced creative RF, VFD demand control and native Create integration, powered inline movers, turbine admission regulation, optional tank gauge and safer access, industrial machinery/workstation models, unified nonlinear rotation, port/flange/texture fixes, GUI text/presentation fixes and all four translations; investigation sources retained in `tools/simulator-sizing/`, with no test-only production code found.
 
 ## [0.21.0] - 2026-11-05
 
