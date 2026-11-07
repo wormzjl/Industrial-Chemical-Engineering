@@ -80,9 +80,7 @@ public final class DataBus {
                 var site=queue.removeFirst();sites.add(site);var cable=bySite.get(site);
                 for(var entry:cable.endpoints().entrySet()){
                     var port=ports.get(entry.getValue());
-                    if(port==null||port.kind().medium()!=medium||!port.dimension().equals(site.dimension())||!port.cell().equals(site.cell())||port.face()!=entry.getKey())continue;
-                    var point=cable.geometry().point(entry.getKey().ordinal());var expected=port.cablePoint().subtract(site.cell().getX(),site.cell().getY(),site.cell().getZ());
-                    if(expected.distanceToSqr(new net.minecraft.world.phys.Vec3(point[0],point[1],point[2]))<1e-12)members.add(port.id());
+                    if(CableConnections.binds(cable,port))members.add(port.id());
                 }
                 for(var next:neighbours.getOrDefault(site,Set.of()))if(seen.add(next))queue.addLast(next);
             }

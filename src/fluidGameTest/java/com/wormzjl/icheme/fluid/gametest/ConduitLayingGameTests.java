@@ -26,6 +26,34 @@ import java.util.*;
 @PrefixGameTestTemplate(false)
 public final class ConduitLayingGameTests {
     private ConduitLayingGameTests(){}
+    @GameTest(template="empty",timeoutTicks=100,batch="conduit-hand-placement")
+    public static void blockItemsRegisterExplicitConnectionsAndKeepParallelLinesSeparate(GameTestHelper helper){
+        var level=helper.getLevel();var world=FluidWorldAuthority.find(level.getServer()).orElseThrow();
+        var player=FakePlayerFactory.get(level,new GameProfile(UUID.randomUUID(),"ConduitHand"));player.setGameMode(GameType.CREATIVE);player.setYRot(-90);
+        for(var medium:CableMedium.values()){
+            var at=helper.absolutePos(new BlockPos(1,2,1+medium.ordinal()*4));var item=(medium==CableMedium.POWER?ModItems.POWER_CABLE:ModItems.DATA_CABLE).get();
+            player.setItemInHand(InteractionHand.MAIN_HAND,new ItemStack(item,8));
+            for(var cell:List.of(at,at.east(),at.north())){
+                level.setBlock(cell.below(),Blocks.STONE.defaultBlockState(),3);player.setPos(cell.getX()+.5,cell.getY(),cell.getZ()+2);
+                var hit=new BlockHitResult(cell.below().getCenter().add(0,.5,0),Direction.UP,cell.below(),false);
+                helper.assertTrue(item.useOn(new net.minecraft.world.item.context.UseOnContext(player,InteractionHand.MAIN_HAND,hit)).consumesAction(),"BlockItem refused: "+medium);
+            }
+            var first=(ConduitBlockEntity)level.getBlockEntity(at);var second=(ConduitBlockEntity)level.getBlockEntity(at.east());var parallel=(ConduitBlockEntity)level.getBlockEntity(at.north());
+            helper.assertTrue(CableConnections.meets(first.cable(),Direction.EAST,second.cable()),"Hand-placed blocks do not join: "+medium);
+            helper.assertTrue(!CableConnections.meets(first.cable(),Direction.NORTH,parallel.cable()),"A missing laid branch was silently added: "+medium);
+            helper.assertTrue(first.cable().equals(world.controls().facts().cable(first.cable().site())),"Hand-placed cable is not registered");
+            for(var cell:List.of(at,at.east(),at.north())){level.removeBlock(cell,false);level.removeBlock(cell.below(),false);}
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template="empty",timeoutTicks=80,batch="conduit-rack-anchor")
+    public static void aStaleNamedRackLaneCannotTurnIntoANewSlot(GameTestHelper helper){
+        var level=helper.getLevel();var at=helper.absolutePos(new BlockPos(1,1,1));level.setBlock(at,ModBlocks.PIPE_RACK.get().defaultBlockState(),3);
+        var stale=new CableLaying.End(null,at,Direction.NORTH,new Vec3(.5,.5,.5),99);
+        for(var medium:CableMedium.values())helper.assertTrue(CableLaying.resolve(level,stale,Map.of(),medium)==null,"Stale lane became a new slot: "+medium);
+        level.removeBlock(at,false);helper.succeed();
+    }
     @GameTest(template="empty",timeoutTicks=500,batch="power-direct")
     public static void powerLayingSelectsAndSuppliesALargeMotor(GameTestHelper helper){exercise(helper,CableMedium.POWER,false);}
     @GameTest(template="empty",timeoutTicks=500,batch="power-stub")

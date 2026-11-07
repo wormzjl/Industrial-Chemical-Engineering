@@ -117,6 +117,8 @@ public record PipeAnchor(Kind kind, BlockPos cell, @Nullable Direction joint, @N
         var refusal = start.refuses(outside);
         return refusal != null ? refusal : end.refuses(outside);
     }
+    /** A rack continues through the aimed open arm, otherwise its first open arm; never creates a rack junction. */
+    public static int openArm(int open,int aimed){return open==0?-1:(open&1<<aimed)!=0?aimed:Integer.numberOfTrailingZeros(open);}
 
     /**
      * The face a line starting here leaves along: the clicked face; or for a slot aimed on a rack, the face opposite the
@@ -164,7 +166,7 @@ public record PipeAnchor(Kind kind, BlockPos cell, @Nullable Direction joint, @N
                 var lane = rack.lanes().get(pick.lane());
                 int open = rack.openFaces(pick.lane());
                 if (open == 0) return new Resolved(null, Refusal.LANE_CLOSED);
-                var out = Direction.values()[(open >> pick.face() & 1) != 0 ? pick.face() : Integer.numberOfTrailingZeros(open)];
+                var out = Direction.values()[openArm(open,pick.face())];
                 var beyond = clicked.relative(out);
                 boolean continued = level.hasChunkAt(beyond) && level.getBlockEntity(beyond) instanceof PipeRackBlockEntity;
                 for (var other : rack.lanes())

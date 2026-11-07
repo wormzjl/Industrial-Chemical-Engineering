@@ -9,6 +9,13 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ControlSystemTest {
+    @Test void removingASensorSocketLeavesItsCableAndHistoricalIdRoundTrippable() throws Exception {
+        var facts=corpus();var port=facts.ports().values().stream().filter(p->p.host()>0).findFirst().orElseThrow();
+        var cables=facts.cables();facts.removePort(port.id());
+        var read=ControlFacts.load(facts.save(new CompoundTag(),null));
+        assertNull(read.port(port.id()));assertEquals(new HashSet<>(cables),new HashSet<>(read.cables()));
+        var panel=read.panels().iterator().next();assertTrue(new DataBus(read.cables(),read.ports()).hosts(panel.id(),read::port).isEmpty());
+    }
     @Test void operatorVisibilityContainsOnlyHostsOnItsDataBus() throws Exception {
         var facts=corpus();var controller=facts.panels().iterator().next();
         var sensor=facts.ports().values().stream().filter(p->p.host()>0).findFirst().orElseThrow();

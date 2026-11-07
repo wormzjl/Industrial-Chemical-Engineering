@@ -15,6 +15,9 @@ import java.util.*;
 
 /** Chunk model copy of cable facts. The registered control store remains authoritative across chunk unloading. */
 public final class ConduitBlockEntity extends ModelledBlockEntity {
+    /** Client-thread loaded geometry index; never scans or loads world chunks for tool marks. */
+    private static final Set<ConduitBlockEntity> CLIENT_CABLES=Collections.newSetFromMap(new WeakHashMap<>());
+    public static List<ConduitBlockEntity> clientCables(){return List.copyOf(CLIENT_CABLES);}
     public static final ModelProperty<ConduitGeometry.Key> GEOMETRY=new ModelProperty<>();
     public static final ModelProperty<Boolean> MARKED=new ModelProperty<>();
     private ConduitGeometry.Key geometry;
@@ -38,7 +41,10 @@ public final class ConduitBlockEntity extends ModelledBlockEntity {
             level.sendBlockUpdated(worldPosition,state,state,Block.UPDATE_CLIENTS);
         }else refreshModelData();
     }
-    @Override public void onLoad(){super.onLoad();if(level instanceof ServerLevel server)FluidWorldAuthority.find(server.getServer()).ifPresent(w->w.controls().loaded(this));}
+    @Override public void onLoad(){super.onLoad();if(level!=null&&level.isClientSide())CLIENT_CABLES.add(this);if(level instanceof ServerLevel server)FluidWorldAuthority.find(server.getServer()).ifPresent(w->w.controls().loaded(this));}
+    @Override protected void clientGeometryChanged(){CLIENT_CABLES.add(this);}
+    @Override public void setRemoved(){super.setRemoved();if(level!=null&&level.isClientSide())CLIENT_CABLES.remove(this);}
+    @Override public void onChunkUnloaded(){super.onChunkUnloaded();if(level!=null&&level.isClientSide())CLIENT_CABLES.remove(this);}
     @Override protected void saveAdditional(CompoundTag tag,HolderLookup.Provider provider){super.saveAdditional(tag,provider);tag.putString("Medium",geometry.medium().name());tag.putInt("Joints",geometry.joints());tag.putLong("Offsets",geometry.offsets());tag.put("Endpoints",DataBus.saveEndpoints(endpoints));}
     @Override protected void loadAdditional(CompoundTag tag,HolderLookup.Provider provider){
         super.loadAdditional(tag,provider);

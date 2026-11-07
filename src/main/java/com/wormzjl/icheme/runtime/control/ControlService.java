@@ -58,7 +58,7 @@ public final class ControlService {
     }
     public void cable(DataBus.Cable cable){facts.cable(cable);}
     public void removeCable(DataBus.Site site){facts.removeCable(site);}
-    public void loaded(ConduitBlockEntity cable){var existing=facts.cable(cable.cable().site());if(existing!=null)cable.configure(existing);}
+    public void loaded(ConduitBlockEntity cable){var existing=facts.cable(cable.cable().site());if(existing!=null)cable.configure(existing);else facts.cable(cable.cable());}
     public void loaded(PipeRackBlockEntity rack){rack.cables(facts.cables().stream().filter(c->c.site().lane()>0&&c.site().dimension().equals(rack.getLevel().dimension().location().toString())&&c.site().cell().equals(rack.getBlockPos())).toList());}
     public void loaded(ControlPanelBlockEntity box){
         var dim=box.getLevel().dimension().location().toString();
@@ -78,15 +78,25 @@ public final class ControlService {
     public void bind(InstrumentHosts.Host host){
         var r=world.registrations().get(host.identity());
         boolean actuator=r!=null&&(r.device().control() instanceof FlowControl.ControlValve||r.device().control() instanceof FlowControl.Mover||r.device().heat()!=null);
-        if(!actuator&&host.metadata().sensors().isEmpty()&&host.metadata().dataPort()==null)return;
         var ids=new HashMap<UUID,String>();for(var sensor:host.metadata().sensors())ids.put(sensor.instance(),facts.identify(sensor).label());boolean namesChanged=!ids.equals(host.metadata().sensorIds());host.metadata().sensorIds(ids);
+        // A pipe sensor carries its connector. Removing the last sensor removes that connector too;
+        // the cable's built geometry and endpoint ID remain as a disconnected terminal.
+        if(host.pipe()&&!actuator&&host.metadata().sensors().isEmpty()){
+            removeHost(host.identity());
+            if(host.metadata().dataPort()!=null||namesChanged){host.metadata().dataPort(null);syncPort(host);}
+            return;
+        }
+        if(!actuator&&host.metadata().sensors().isEmpty()&&host.metadata().dataPort()==null)return;
         var port=equipmentPorts.get(host.identity());
         if(port==null){port=DataPorts.equipment(host,actuator);facts.port(port);equipmentPorts.put(host.identity(),port);}
         else{var refreshed=DataPorts.refresh(port,host,facts::wired);if(!refreshed.equals(port)){port=refreshed;facts.port(port);equipmentPorts.put(host.identity(),port);}}
         if(namesChanged||!port.equals(host.metadata().dataPort())){
-            host.metadata().dataPort(port);host.entity().setChanged();InstrumentHosts.loaded(host.entity());
-            host.entity().getLevel().sendBlockUpdated(host.entity().getBlockPos(),host.entity().getBlockState(),host.entity().getBlockState(),2);
+            host.metadata().dataPort(port);syncPort(host);
         }
+    }
+    private static void syncPort(InstrumentHosts.Host host){
+        host.entity().setChanged();InstrumentHosts.loaded(host.entity());
+        host.entity().getLevel().sendBlockUpdated(host.entity().getBlockPos(),host.entity().getBlockState(),host.entity().getBlockState(),2);
     }
     public void bindMotor(EquipmentShellBlockEntity cell,ShaftUnit unit) {
         var port=equipmentPorts.get(unit.id());

@@ -55,7 +55,7 @@ public final class ConduitGeometry {
         var actual=laneKey(rack,lane,geometry);
         return displaced(rack,lane,geometry)?polygons(actual,marked):lane(rack,lane,geometry.medium(),marked);
     }
-    private static Key laneKey(RackGeometry.Rack rack,RackGeometry.Lane lane,Key geometry){
+    public static Key laneKey(RackGeometry.Rack rack,RackGeometry.Lane lane,Key geometry){
         var actual=geometry;
         for(int face=0;face<6;face++)if((lane.arms()&1<<face)!=0){
             int point=RackGeometry.point(rack,lane.option(),lane.width(),lane.diameter(),face);

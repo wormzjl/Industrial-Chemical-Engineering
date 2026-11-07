@@ -21,9 +21,9 @@ public final class ModBlocks {
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.FluidDeviceBlock> FLUID_VOID=fluid("fluid_void",com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.VOID);
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.FluidDeviceBlock> INLINE_FILTER=fluid("inline_filter",com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.FILTER);
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.ConduitBlock> DATA_CABLE=BLOCKS.registerBlock("data_cable",
-            com.wormzjl.icheme.world.level.block.ConduitBlock::new,BlockBehaviour.Properties.of().mapColor(MapColor.COLOR_BLUE).strength(.5F).sound(SoundType.METAL).noOcclusion().noCollission().dynamicShape());
+            com.wormzjl.icheme.world.level.block.ConduitBlock::new,BlockBehaviour.Properties.of().mapColor(MapColor.COLOR_BLUE).strength(.5F).sound(SoundType.METAL).pushReaction(net.minecraft.world.level.material.PushReaction.BLOCK).noOcclusion().noCollission().dynamicShape());
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.ConduitBlock> POWER_CABLE=BLOCKS.registerBlock("power_cable",
-            p->new com.wormzjl.icheme.world.level.block.ConduitBlock(p,com.wormzjl.icheme.science.equipment.CableMedium.POWER),BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(.5F).sound(SoundType.METAL).noOcclusion().noCollission().dynamicShape());
+            p->new com.wormzjl.icheme.world.level.block.ConduitBlock(p,com.wormzjl.icheme.science.equipment.CableMedium.POWER),BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(.5F).sound(SoundType.METAL).pushReaction(net.minecraft.world.level.material.PushReaction.BLOCK).noOcclusion().noCollission().dynamicShape());
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.ControlPanelBlock> LOCAL_CONTROLLER=controlPanel("local_controller");
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.DcsBlock> DCS=BLOCKS.registerBlock("dcs",
             com.wormzjl.icheme.world.level.block.DcsBlock::new,BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(3).sound(SoundType.METAL)

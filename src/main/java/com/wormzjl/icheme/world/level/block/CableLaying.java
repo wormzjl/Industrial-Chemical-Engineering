@@ -65,6 +65,10 @@ public final class CableLaying {
     }
     public static PipeRoute.Cell cell(BlockPos p){return new PipeRoute.Cell(p.getX(),p.getY(),p.getZ());}
     public static BlockPos block(PipeRoute.Cell p){return new BlockPos(p.x(),p.y(),p.z());}
+    public static List<DataBus.Cable> cables(Level level,BlockPos pos){
+        if(!level.hasChunkAt(pos))return List.of();
+        var be=level.getBlockEntity(pos);return be instanceof ConduitBlockEntity wire?List.of(wire.cable()):be instanceof PipeRackBlockEntity rack?rack.cables():List.of();
+    }
     public static Anchor resolve(Level level,End click,Map<UUID,DataPort> ports,CableMedium medium){
         if(!level.hasChunkAt(click.clicked()))return null;
         if(click.port()!=null){
@@ -72,16 +76,23 @@ public final class CableLaying {
             return socket(level,p);
         }
         var be=level.getBlockEntity(click.clicked());
+        if(click.lane()>0&&!(be instanceof PipeRackBlockEntity))return null;
         DataBus.Cable cable=null;
         if(be instanceof ConduitBlockEntity wire)cable=wire.cable();
         else if(be instanceof PipeRackBlockEntity rack&&click.lane()>0)cable=rack.cables().stream().filter(c->c.site().lane()==click.lane()).findFirst().orElse(null);
+        if(click.lane()>0&&cable==null)return null;
         if(cable!=null){
             if(cable.geometry().medium()!=medium)return null;
             int face=click.face().ordinal();
-            if(cable.site().lane()>0&&(cable.arms()&(1<<face))==0)return null;
+            var geometry=cable.geometry();
+            if(be instanceof PipeRackBlockEntity rack){
+                int open=CableConnections.openFaces(cable,p->cables(level,p),ports::get);if(open==0)return null;
+                face=PipeAnchor.openArm(open,face);
+                geometry=ConduitGeometry.laneKey(rack.rack(),rack.cableLane(cable),geometry);
+            }
             if(PipeRoute.hostJoints(cable.geometry().joints(),1<<face,cable.site().lane()>0)<0)return null;
-            int packed=(int)(cable.geometry().offsets()>>10*face)&1023;
-            var resolved=PipeAnchor.continuation(level,click.clicked(),click.face(),cable.site().lane(),cable.geometry().joints()|1<<face,packed);
+            int packed=(int)(geometry.offsets()>>10*face)&1023;
+            var resolved=PipeAnchor.continuation(level,click.clicked(),Direction.values()[face],cable.site().lane(),cable.geometry().joints()|1<<face,packed);
             return resolved.anchor()==null?null:new Anchor(resolved.anchor(),null,cable.site(),face,packed);
         }
         if(be instanceof PipeRackBlockEntity rack){
@@ -118,6 +129,42 @@ public final class CableLaying {
         endpoint(result,0,start);endpoint(result,result.size()-1,end);return List.copyOf(result);
     }
     private static ConduitGeometry.Key connect(ConduitGeometry.Key key,int face,int packed){int u=packed&31,v=packed>>5&31;return key.connect(face,u>=16?u-32:u,v>=16?v-32:v);}
+    /** BlockItem placement registers the same explicit face geometry as tool placement, without editing neighbours. */
+    public static void handPlaced(Level level,ConduitBlockEntity wire,Direction facing,ServerPlayer player){
+        if(!(level instanceof net.minecraft.server.level.ServerLevel server))return;
+        var world=FluidWorldAuthority.find(server.getServer()).orElse(null);if(world==null)return;
+        var old=wire.cable();if(old.geometry().joints()!=0){wire.configure(old);return;}
+        var key=old.geometry();var medium=key.medium();var endpoints=new EnumMap<Direction,UUID>(Direction.class);
+        for(var port:world.controls().facts().ports().values().stream().filter(p->p.kind().medium()==medium&&p.dimension().equals(old.site().dimension())&&p.cell().equals(old.site().cell())).sorted(Comparator.comparing(p->p.id().toString())).toList()){
+            if(player==null||endpoints.containsKey(port.face())||PipeRoute.hostJoints(key.joints(),1<<port.face().ordinal(),false)<0)continue;
+            var click=new End(port.id(),port.owner(),port.face().getOpposite(),new Vec3(.5,.5,.5),0);
+            var attachment=attachment(level,click,world.controls().facts().ports(),key.medium());
+            if(attachment==null||LinePlacement.check(level,attachment.plan())!=null||LinePlacement.touched(attachment.plan()).stream().anyMatch(p->!LinePlacement.editable(player,p)))continue;
+            key=key.connect(port.face().ordinal(),port.u(),port.v());endpoints.put(port.face(),port.id());
+        }
+        for(var face:Direction.values()){
+            if((key.joints()&1<<face.ordinal())!=0||PipeRoute.hostJoints(key.joints(),1<<face.ordinal(),false)<0)continue;
+            for(var neighbour:cables(level,wire.getBlockPos().relative(face)))if(neighbour.geometry().medium()==key.medium()&&(neighbour.geometry().joints()&1<<face.getOpposite().ordinal())!=0){
+                key=connect(key,face.ordinal(),(int)(neighbour.geometry().offsets()>>10*face.getOpposite().ordinal())&1023);break;
+            }
+        }
+        int count=Integer.bitCount(key.joints());
+        if(count==0)key=key.connect(facing.ordinal(),0,0).connect(facing.getOpposite().ordinal(),0,0);
+        else if(count==1){int face=Integer.numberOfTrailingZeros(key.joints())^1;key=key.connect(face,0,0);}
+        wire.configure(new DataBus.Cable(old.site(),key,0,endpoints));
+    }
+    public record Hosts(List<DataBus.Cable> cables,Component refusal){public Hosts{cables=List.copyOf(cables);}}
+    /** Preview and server merge both ends into each retained host before checking its joint limit. */
+    public static Hosts hosts(Anchor start,Anchor end,java.util.function.Function<DataBus.Site,DataBus.Cable> source){
+        var edits=new LinkedHashMap<DataBus.Site,DataBus.Cable>();
+        for(var anchor:List.of(start,end))if(anchor.host()!=null){
+            var old=edits.get(anchor.host());if(old==null)old=source.apply(anchor.host());
+            if(old==null)return new Hosts(List.of(),message("anchor.fitting"));
+            if(PipeRoute.hostJoints(old.geometry().joints(),1<<anchor.face(),old.site().lane()>0)<0)return new Hosts(List.of(),message("anchor.junction"));
+            edits.put(old.site(),new DataBus.Cable(old.site(),connect(old.geometry(),anchor.face(),anchor.point()),old.arms(),old.endpoints()));
+        }
+        return new Hosts(List.copyOf(edits.values()),null);
+    }
     private static void endpoint(List<DataBus.Cable> wires,int index,Anchor anchor){
         if(anchor.end().joint()<0)return;
         var c=wires.get(index);var key=connect(c.geometry(),anchor.end().joint(),anchor.point());var ends=new EnumMap<Direction,UUID>(Direction.class);ends.putAll(c.endpoints());
@@ -132,18 +179,13 @@ public final class CableLaying {
         var plan=plan(a,b,path,options,medium);
         var refused=LinePlacement.check(level,plan);if(refused!=null)return refused;
         var cells=path.stream().map(CableLaying::cell).toList();
-        var hosts=new HashMap<DataBus.Site,DataBus.Cable>();
-        for(var anchor:List.of(a,b))if(anchor.host()!=null){
-            var old=hosts.getOrDefault(anchor.host(),world.controls().facts().cable(anchor.host()));if(old==null)return message("anchor.fitting");
-            int joints=PipeRoute.hostJoints(old.geometry().joints(),1<<anchor.face(),old.site().lane()>0);if(joints<0)return message("anchor.junction");
-            var key=connect(old.geometry(),anchor.face(),anchor.point());hosts.put(old.site(),new DataBus.Cable(old.site(),key,old.arms(),old.endpoints()));
-        }
+        var hosts=hosts(a,b,world.controls().facts()::cable);if(hosts.refusal()!=null)return hosts.refusal();
         var wires=design(level,a,b,new PipeRoute.Result(cells,options,null),medium);
         return LinePlacement.commit(player,plan,item(medium),path.size(),Component.translatable("message.icheme.conduit.items",path.size(),item(medium).getDescription()),()->{
             for(var anchor:List.of(a,b))if(anchor.port()!=null&&anchor.port().kind().power())world.controls().facts().port(anchor.port());
             var edits=new ArrayList<LinePlacement.Edit>();
             for(var wire:wires)edits.add(edit(world,wire,wire.site().lane()==0));
-            for(var wire:hosts.values())edits.add(edit(world,wire,false));
+            for(var wire:hosts.cables())edits.add(edit(world,wire,false));
             return new LinePlacement.Work(edits,()->{});
         });
     }
