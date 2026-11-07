@@ -26,6 +26,23 @@ import java.util.*;
 @PrefixGameTestTemplate(false)
 public final class ConduitLayingGameTests {
     private ConduitLayingGameTests(){}
+    @GameTest(template="empty",timeoutTicks=80,batch="conduit-collision")
+    public static void cableBlocksUseTheSharedPipeShapeForPhysicalCollisionAndPicking(GameTestHelper helper){
+        var level=helper.getLevel();var at=helper.absolutePos(new BlockPos(1,2,1));
+        for(var medium:CableMedium.values())for(int joints:new int[]{48,18,52})for(int offset:new int[]{0,8}){
+            level.setBlock(at,(medium==CableMedium.POWER?ModBlocks.POWER_CABLE:ModBlocks.DATA_CABLE).get().defaultBlockState(),3);
+            var wire=(ConduitBlockEntity)level.getBlockEntity(at);var key=new ConduitGeometry.Key(joints,0,medium);
+            if((joints&16)!=0)key=key.connect(Direction.WEST.ordinal(),offset,0);
+            wire.configure(new DataBus.Cable(new DataBus.Site(level.dimension().location().toString(),at,0),key,0,Map.of()));
+            var state=level.getBlockState(at);var selection=state.getShape(level,at);var collision=state.getCollisionShape(level,at);
+            var expected=LineShapes.shape(key.joints(),5,PipeSizes.code(medium.outside()),key.offsets());
+            helper.assertTrue(!collision.isEmpty(),"Conduit physical collision is disabled: "+medium);
+            helper.assertTrue(!net.minecraft.world.phys.shapes.Shapes.joinIsNotEmpty(collision,selection,net.minecraft.world.phys.shapes.BooleanOp.NOT_SAME),"Selection and physical collision disagree: "+medium);
+            helper.assertTrue(!net.minecraft.world.phys.shapes.Shapes.joinIsNotEmpty(collision,expected,net.minecraft.world.phys.shapes.BooleanOp.NOT_SAME),"Conduit bypassed shared pipe shape: "+medium);
+            level.removeBlock(at,false);
+        }
+        helper.succeed();
+    }
     @GameTest(template="empty",timeoutTicks=100,batch="conduit-hand-placement")
     public static void blockItemsRegisterExplicitConnectionsAndKeepParallelLinesSeparate(GameTestHelper helper){
         var level=helper.getLevel();var world=FluidWorldAuthority.find(level.getServer()).orElseThrow();
