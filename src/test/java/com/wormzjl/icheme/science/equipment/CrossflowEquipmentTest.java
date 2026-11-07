@@ -125,7 +125,9 @@ class CrossflowEquipmentTest {
         for(var line:java.nio.file.Files.readAllLines(corpus)) {
             var image=net.minecraft.nbt.TagParser.parseTag(line);
             var read=com.wormzjl.icheme.world.level.block.entity.EquipmentConstructorBlockEntity.readDesign(image.getCompound("Saved"),fresh,repair->fail(repair));
-            assertEquals(image.getString("Expected"),read.toString());
+            // The snapshot string predates the appended base-speed fact; its absent value is zero.
+            var expected=image.getString("Expected").replaceAll("(exhaust=[0-9.Ee+-]+)\\]","$1, baseSpeed=0.0]");
+            assertEquals(expected,read.toString());
         }
     }
 }

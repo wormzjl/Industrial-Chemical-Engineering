@@ -89,7 +89,7 @@ public final class InstrumentGeometry {
         if(!standard.isEmpty()||node==null)return standard;
         var ports=ShapeRasterizer.ports(shape);
         var port=ports.stream().min(Comparator.comparingDouble(p->
-                Math.pow(p.cell().x()-node.x(),2)+Math.pow(p.cell().y()-node.y(),2)+Math.pow(p.cell().z()-node.z(),2))).orElse(null);
+                com.wormzjl.icheme.science.math.DeterministicMath.pow(p.cell().x()-node.x(),2)+com.wormzjl.icheme.science.math.DeterministicMath.pow(p.cell().y()-node.y(),2)+com.wormzjl.icheme.science.math.DeterministicMath.pow(p.cell().z()-node.z(),2))).orElse(null);
         if(port==null)return List.of();
         var definitions=HeatSides.of(shape);int side=ShapeRasterizer.fluidCells(shape).indexOf(node);
         var outlet=side>=0&&side<definitions.size()?ports.stream().filter(p->shape.nozzles().get(p.nozzle()).role()==definitions.get(side).outlet()).findFirst().orElse(port):port;

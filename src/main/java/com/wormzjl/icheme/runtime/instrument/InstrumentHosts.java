@@ -73,7 +73,7 @@ public final class InstrumentHosts {
             if(shell.fluidIdentity()>0)return new Host(shell.fluidIdentity(),shell,reservoirMounts(shape,shell.origin(),shell.cell()),false);
             var cells=ShapeRasterizer.fluidCells(shape);
             var c=cells.stream().min(Comparator.comparingDouble(cell->
-                    Math.pow(cell.x()-shell.cell().x(),2)+Math.pow(cell.y()-shell.cell().y(),2)+Math.pow(cell.z()-shell.cell().z(),2))).orElse(null);
+                    com.wormzjl.icheme.science.math.DeterministicMath.pow(cell.x()-shell.cell().x(),2)+com.wormzjl.icheme.science.math.DeterministicMath.pow(cell.y()-shell.cell().y(),2)+com.wormzjl.icheme.science.math.DeterministicMath.pow(cell.z()-shell.cell().z(),2))).orElse(null);
             if(c==null)return null;
             var root=shell.origin().offset(c.x(),c.y(),c.z());
             if(!root.equals(position))return at(level,root);

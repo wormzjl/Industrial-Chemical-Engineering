@@ -424,7 +424,10 @@ class EquipmentShapeCompatTest {
             old.remove("Duty");
             var read = EquipmentConstructorBlockEntity.readDesign(old, fresh, repair -> {
             });
-            assertEquals(design.duty(read.diameter(), read.tangentLength()), read.duty(), kind::name);
+            // Absence of Duty means the historical fixed-speed motor, not a new VFD default.
+            var legacy = kind == Kind.MOTOR ? MachineDuty.motor(read.diameter(), 4, MachineDuty.Drive.FIXED)
+                    : design.duty(read.diameter(), read.tangentLength());
+            assertEquals(legacy, read.duty(), kind::name);
         }
         assertTrue(checked > 60, "design points checked: " + checked);
     }

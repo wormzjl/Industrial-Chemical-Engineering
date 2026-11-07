@@ -10,6 +10,8 @@ This folder retains the batch's offline measurements, model authoring references
 - `PowerLookRender.java`: current data/power conduit software views, including sparse identification bands.
 - `StationRender.java`: constructor/simulator views using the current authoring sources in `tools/pump-sprites/`.
 - `StationModels.java`, `check_models.py`: station model/collision/resource/facing probes.
+- `PortProbe.java`: inspect cast reducer endpoints, visible stencil counts and clearance samples without a client.
+- `focused-gametests.init.gradle` and `focused-gametests/`: select existing GameTest methods in a fresh world, preserving their annotations and calling the real bodies. They add no permanent duplicate tests or production classes. The separate empty template only identifies the filtered namespace.
 - `archive/`: original one-off probes, texture generators, scripts and experimental patches, grouped by their original task folder. `source-inventory.tsv` records the original path and byte count. These sources describe several intermediate revisions; do not apply an archived patch to current code without reviewing it.
 
 ## Run from the repository root
@@ -20,6 +22,7 @@ All outputs belong in an indexed `tmp/<name>/` folder. For Java tools that impor
 java -cp <probe-and-runtime-classpath> CableStress tmp/<name> representative
 java -Djava.awt.headless=true -cp <probe-and-runtime-classpath> PowerLookRender tmp/<name>
 python tools/simulator-sizing/check_models.py
+gradlew.bat --no-configuration-cache --init-script tools/simulator-sizing/focused-gametests.init.gradle runFluidGameTestServer "-PfluidFocusedTests=PumpHealthGameTests#anInlinePumpPublishesItsCrackle" -PfluidGameTestRunId=<fresh-name>
 javac -d tmp/<name>/classes tools/pump-sprites/ConstructorAssets.java tools/pump-sprites/SimulatorAssets.java tools/simulator-sizing/StationRender.java
 java -Djava.awt.headless=true -cp tmp/<name>/classes StationRender src/main/resources/assets/icheme tmp/<name>/constructor constructor
 ```

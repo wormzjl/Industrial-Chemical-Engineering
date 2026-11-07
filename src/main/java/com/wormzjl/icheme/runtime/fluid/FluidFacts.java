@@ -50,9 +50,11 @@ final class FluidFacts {
      *  {@code TURBINE}, the control valve source {@code SHAFT_SPEED}, and the world's shaft units (after the column units).
      *  11 (batch 2026-11-03-rotating-machinery, W5): the world's electric stores (after the shaft units), an air cooler side's
      *  fans, the shaft trip {@code NO_POWER} (never written: it is not latched).
-     *  12 (batch 2026-11-03-rotating-machinery, W10b): the pumps' health (after the electric stores), only pumps below 1. */
+     *  12 (batch 2026-11-03-rotating-machinery, W10b): the pumps' health (after the electric stores), only pumps below 1.
+     *  13 (batch 2026-11-06-simulator-sizing): a heat unit's exchanger configuration, absent means Standard.
+     *  14 (the same batch): a shaft unit's explicit VFD base speed, absent means its legacy pole-derived speed. */
     static final int SCHEMA=14;
-    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 12. */
+    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 14. */
     private static final Map<Class<?>,Map<String,String>> ALIASES=Map.of();
     private static final int MAXIMUM_FIELDS=256,MAXIMUM_ITEMS=1<<22,MAXIMUM_TEXTS=1<<20,MAXIMUM_ARRAY=4096,MAXIMUM_CHANNELS=1<<20;
     /** The cadence an island rebuilt from facts starts at (ticks): the shortest the clock allows, as after a merge. */

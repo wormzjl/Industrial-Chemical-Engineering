@@ -115,7 +115,7 @@ public final class PortMarkings {
         double straightFrom = 0;
         if (root != null && Math.abs(root.radius() - od / 2) > 1e-9) {
             straightFrom = root.end(nozzle.length(), od);
-            if (end - straightFrom < Math.min(longest, .28) + MARGIN) {
+            if (end - straightFrom < SHORTEST + MARGIN) {
                 reducerBand(mesh, shape, k, code, frame, root, od, sides, end, longest, sign);
                 return;
             }
@@ -141,7 +141,7 @@ public final class PortMarkings {
         if (high <= low) return;
         double slope = (od / 2 - root.radius()) / (to - .01), apothem = DeterministicMath.cos(Math.PI / sides);
         double incline = slope * apothem, scale = Math.sqrt(1 + incline * incline);
-        double span = Math.min(.65 * (high - low), longest / scale);
+        double span = Math.min(high - low, longest / scale);
         if (span * scale < SHORTEST) return;
         if (slope > 0) low = high - span;
         else high = low + span;
@@ -166,8 +166,28 @@ public final class PortMarkings {
                 axis[a] = (frame.axis()[a] + incline * radial[a]) / scale;
                 normal[a] = (radial[a] - incline * frame.axis()[a]) / scale;
             }
-            badge(new Label(mesh, new Mesh.Frame(centre, axis, normal), 0, 0, sign), span * scale, width);
+            var candidate = new Mesh();
+            badge(new Label(candidate, new Mesh.Frame(centre, axis, normal), 0, 0, sign), span * scale, width);
+            // On a steep reducer the badge corners reach beyond the centre-line samples; keep the whole stencil clear.
+            if (visible(shape, k, code, candidate)) mesh.include(candidate);
         }
+    }
+
+    private static boolean visible(EquipmentShape shape, int k, int code, Mesh badge) {
+        var nozzle = shape.nozzles().get(k);
+        double od = code == 0 ? nozzle.defaultOd() : PipeSizes.outsideOf(code);
+        var root = ShapeRasterizer.nozzleRoot(shape, k);
+        for (var facet : badge.facets()) for (var p : facet.positions()) {
+            double s = (p[nozzle.axis()] - nozzle.base()[nozzle.axis()]) * nozzle.sign();
+            double radius = od / 2, squared = 0;
+            if (root != null && s >= .01 && s < root.end(nozzle.length(), od))
+                radius = root.radius() + (radius - root.radius()) * (s - .01) / (root.end(nozzle.length(), od) - .01);
+            for (int a = 0; a < 3; a++) if (a != nozzle.axis()) squared += (p[a] - nozzle.base()[a]) * (p[a] - nozzle.base()[a]);
+            var q = p.clone();
+            for (int a = 0; a < 3; a++) if (a != nozzle.axis()) q[a] = nozzle.base()[a] + (p[a] - nozzle.base()[a]) * (radius + .01) / Math.sqrt(squared);
+            if (ShapeRasterizer.hides(shape, k, code, q)) return false;
+        }
+        return true;
     }
 
     /** The direction out of the neck at {@code facets} facet widths round from the frame's reference. */

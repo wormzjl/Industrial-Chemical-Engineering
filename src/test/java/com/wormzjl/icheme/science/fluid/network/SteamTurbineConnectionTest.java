@@ -87,11 +87,11 @@ class SteamTurbineConnectionTest extends PortFixture {
                 double flow=result.massFlows()[0],work=-energy(result.boundaries(),TURBINE,ConservativeTransport.BoundaryTransfer.Kind.SHAFT);
                 assertEquals(target,flow,1e-7,"the internal valve controls admission at either inlet pressure/temperature");
                 assertEquals(target==0?FlowControl.Mode.CLOSED:FlowControl.Mode.VALVE_REGULATING,result.modes().getFirst());
-                if(target==0){assertEquals(0,work);continue;}
+                if(target==0){assertEquals(0,work,0);continue;}
                 assertEquals(expectedPower(ONE_MW,flow,inlet,4e5,model.heatCapacityRatio(inlet)),work,1e-7*Math.max(1,work));
                 var in=exchange(result.boundaries(),1);var out=exchange(result.boundaries(),2);
-                assertEquals(mass(in.moles()),mass(out.moles()),1e-10,"the valve loses no steam");
-                assertEquals(work,in.totalEnergyJoule()-out.totalEnergyJoule(),1e-7*Math.max(1,work),"all extracted energy is booked as shaft work");
+                assertEquals(0,mass(in.moles())+mass(out.moles()),1e-10,"the valve loses no steam");
+                assertEquals(work,in.totalEnergyJoule()+out.totalEnergyJoule(),1e-7*Math.max(1,work),"all extracted energy is booked as shaft work");
             }
         }
     }

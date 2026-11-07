@@ -238,7 +238,7 @@ public final class FluidPresentationGameTests {
                 var tag=entity.getUpdateTag(level.registryAccess());
                 // The identity and the drawn state, static like a block state: the bore and faces (batch
                 // 2026-10-15-custom-equipment-rendering) and the pipe's accessories (batch 2026-10-24-gauge-accessories); no view data.
-                if(!tag.getAllKeys().equals(Set.of("FluidIdentity","Bore","Faces","AccessoryRevision","Instruments","Sensors")))failure[0]=(failure[0]==null?"":failure[0]+" | ")+"The binding update carries more than the identity and the drawn state: "+tag;
+                if(!tag.getAllKeys().equals(Set.of("FluidIdentity","Bore","Faces","AccessoryRevision","Instruments","Sensors","SensorIds")))failure[0]=(failure[0]==null?"":failure[0]+" | ")+"The binding update carries more than the identity and the drawn state: "+tag;
                 return;
             }
             var entity=(FluidDeviceBlockEntity)level.getBlockEntity(pos);long bucket=nextBucket(loadedAt[0],world.presentationKey(id));

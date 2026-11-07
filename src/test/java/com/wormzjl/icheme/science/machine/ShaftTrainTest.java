@@ -49,25 +49,23 @@ class ShaftTrainTest {
         assertEquals("TRIPPED: OVERLOAD", ShaftTrain.step(tripped, 0, Measure.of(0)).status());
     }
 
-    /** A variable-speed motor at its current limit on a friction line (P ∝ s³): 0.984, 0.976, 0.973 toward 0.969, the error halving. */
+    /** Below base speed the VFD is torque-limited: P_available ∝ s and a friction load P ∝ s³. */
     @Test
     void case1AVariableSpeedMotorAtItsLimitStepsDownToItsBalance() {
         var driver = motor(Drive.VARIABLE_MOTOR, 30e3);
         double full = 1.325 * RATED, speed = 2950;
-        var expected = List.of(.98424, .97645, .97258);
-        for (double share : expected) {
+        double balance = Math.sqrt(30e3 / full), error = Math.log(1 / balance);
+        for (int i = 0; i < 6; i++) {
             var step = ShaftTrain.step(driver, speed, Measure.of(full * cube(speed / 2950)));
             assertEquals("CURRENT LIMITED", step.status());
+            assertTrue(step.speed() < speed && step.speed() / 2950 > balance);
             speed = step.speed();
-            assertEquals(share, speed / 2950, 1e-3 * share);
+            double nextError = Math.log(speed / 2950 / balance);
+            assertEquals(error * 2 / 3, nextError, 1e-12, "log error contracts under the torque envelope");
+            error = nextError;
         }
-        assertEquals(.96873, DeterministicCube.root(30e3 / full), 1e-5, "the balance");
-        // The error to the balance halves each step (1 − 3/6).
-        double e1 = .98424 - .96873, e2 = .97645 - .96873;
-        assertEquals(.5, e2 / e1, .03);
     }
 
-    /** Case 2: a governed 55 kW turbine (η_is 0.45) across 524 kJ/kg feeds the 24.9 kW forward: 0.1056 kg/s, 15.3 kg/kWh. */
     @Test
     void case2AGovernedTurbineFeedsItsDemandForward() {
         var design = SteamTurbine.rated(55e3);

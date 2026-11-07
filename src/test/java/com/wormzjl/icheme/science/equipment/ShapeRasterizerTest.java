@@ -354,8 +354,7 @@ class ShapeRasterizerTest {
                     max[a] = Math.max(max[a], c[a]);
                 }
             }
-            assertArrayEquals(new int[]{0, 0, 0}, min, shape.toString());
-            assertArrayEquals(new int[]{shape.sizeX() - 1, shape.sizeY() - 1, shape.sizeZ() - 1}, max, shape.toString());
+            ProcessUnitTest.occupiesPlacementFrame(shape, min, max);
         }
     }
 

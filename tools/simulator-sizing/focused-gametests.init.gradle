@@ -1,0 +1,12 @@
+// Register only selected real GameTest methods; the ordinary gate/source sets remain unchanged without this script.
+gradle.projectsEvaluated {
+    def p = gradle.rootProject
+    def selected = p.providers.gradleProperty('fluidFocusedTests').get()
+    if (!(selected ==~ /[A-Za-z0-9_#,.]+/)) throw new GradleException('Invalid focused GameTest selection')
+    p.sourceSets.fluidGameTest.java.srcDir(p.file('tools/simulator-sizing/focused-gametests'))
+    p.sourceSets.fluidGameTest.resources.srcDir(p.file('tools/simulator-sizing/focused-resources'))
+    p.extensions.getByName('neoForge').runs.named('fluidGameTestServer') {
+        systemProperty 'neoforge.enabledGameTestNamespaces', 'icheme_fluid_focus'
+        systemProperty 'icheme.fluid.focus', selected
+    }
+}

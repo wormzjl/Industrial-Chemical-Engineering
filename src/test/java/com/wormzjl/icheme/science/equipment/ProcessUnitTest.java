@@ -306,10 +306,10 @@ class ProcessUnitTest {
      * 4b842f30), each with what the neck touches and how deep; every other neck stands clear.
      */
     private static final List<Touch> TOUCHES = List.of(
-            // Shell 0.75 m: hub 0.02 m clear of the 1.05 r rod, its base on the channel's girth flanges; 1.75 m: 0.01 m into the rod.
-            new Touch(Kind.EXCHANGER, Role.TUBE_OUTLET, List.of(.75, 1.75)),
-            // Shell 0.75 m: hub 0.02 m clear of the 1.05 r rod, its base on the shell's girth flange; 1.75 m: 0.01 m into the rod.
-            new Touch(Kind.EXCHANGER, Role.SHELL_INLET, List.of(.75, 1.75)),
+            // Shell 1.75 m: 0.01 m into the channel rod; the 0.75 m neck clears with its shortened drawn hub.
+            new Touch(Kind.EXCHANGER, Role.TUBE_OUTLET, List.of(1.75)),
+            // Shell 1.75 m: 0.01 m into the rod; the 0.75 m neck clears with its shortened drawn hub.
+            new Touch(Kind.EXCHANGER, Role.SHELL_INLET, List.of(1.75)),
             // Channel 0.75 m: the hub's base on its girth flanges (1.12 rb rod); 1 m: 0.02 m into them.
             new Touch(Kind.KETTLE, Role.TUBE_OUTLET, List.of(.75, 1.)),
             // The smallest heater's front legs stand 0.68 m apart: the neck 0.08 m into each one's casing and footing (owner item).
@@ -529,8 +529,18 @@ class ProcessUnitTest {
                     max[a] = Math.max(max[a], c[a]);
                 }
             }
-            assertArrayEquals(new int[]{0, 0, 0}, min, shape.toString());
-            assertArrayEquals(new int[]{shape.sizeX() - 1, shape.sizeY() - 1, shape.sizeZ() - 1}, max, shape.toString());
+            occupiesPlacementFrame(shape, min, max);
+        }
+    }
+
+    /** Empty edge cells retain established nozzle coordinates when tank access or compressor coolant is removed. */
+    static void occupiesPlacementFrame(EquipmentShape shape, int[] min, int[] max) {
+        int[] size = {shape.sizeX(), shape.sizeY(), shape.sizeZ()};
+        boolean retained = shape.kind() == Kind.TANK || shape.kind() == Kind.CENTRIFUGAL_COMPRESSOR;
+        for (int axis = 0; axis < 3; axis++) {
+            int padding = retained && axis != 1 ? shape.kind() == Kind.TANK ? 2 : 1 : 0;
+            assertTrue(min[axis] >= 0 && min[axis] <= padding, shape + " min axis " + axis + ": " + min[axis]);
+            assertTrue(max[axis] < size[axis] && max[axis] >= size[axis] - 1 - padding, shape + " max axis " + axis + ": " + max[axis]);
         }
     }
 
@@ -749,7 +759,8 @@ class ProcessUnitTest {
             assertTrue(starts.contains(l.base()), shape + " a climb from " + l.base() + " starts on a deck or the ground");
             // Owner decision C1 2026-10-18: no climb longer than Access.MAX_CLIMB from its foot to the deck it lands on
             // (the columns' rule; a deck's grating may add its own thickness: 9.125 m, under the old rule's 30 ft).
-            assertTrue(l.top() - Access.LANDING - l.base() <= Access.MAX_CLIMB + Access.DECK + 1e-9, shape + " climbs from " + l.base() + " to " + (l.top() - Access.LANDING));
+            // The owner explicitly removed tank intermediate platforms; other equipment keeps the rest rule.
+            assertTrue(shape.kind() == Kind.TANK || l.top() - Access.LANDING - l.base() <= Access.MAX_CLIMB + Access.DECK + 1e-9, shape + " climbs from " + l.base() + " to " + (l.top() - Access.LANDING));
             double y = (l.base() + l.rungTop()) / 2;
             assertTrue(climbable(shape, new double[]{l.x() + .3 * l.outX(), y, l.z() + .3 * l.outZ()}), shape + " climbable in front of the rungs at " + y);
             assertFalse(climbable(shape, new double[]{l.x() + 1.5 * l.outX(), y, l.z() + 1.5 * l.outZ()}), shape + " not climbable outside the cage");
@@ -1176,6 +1187,9 @@ class ProcessUnitTest {
         static boolean clear(EquipmentShape shape, int k, double od) {
             var nozzle = shape.nozzles().get(k);
             double to = nozzle.length() - PipeSizes.flangeThickness(od) - PipeSizes.hub(od) - .01, radius = od / 2 + .01;
+            // The mesh shortens its flange hub where the cast reducer needs the available neck.
+            var root = ShapeRasterizer.nozzleRoot(shape, k);
+            if (root != null) to = Math.max(to, root.end(nozzle.length(), od));
             double near = Math.max(0, leaves(shape, nozzle, nozzle.defaultOd() / 2 + .01, 0, to));
             double out = leaves(shape, nozzle, radius, near, Math.min(to, near + PipeSizes.MAX_OUTSIDE / 2)), from = out + SURFACE;
             if (out < 0) return false;
@@ -1187,7 +1201,12 @@ class ProcessUnitTest {
 
         /** The first distance from {@code from} to {@code to} along the neck, in {@link #STEP}s, where a ring of {@code radius} is wholly out of the solid; -1 where there is none. */
         private static double leaves(EquipmentShape shape, EquipmentShape.Nozzle nozzle, double radius, double from, double to) {
-            for (double s = from; s <= to + 1e-9; s += STEP) if (ringClear(shape, nozzle, radius, s)) return s;
+            if (to < from) return -1;
+            int steps = Math.max(1, (int) Math.ceil((to - from) / STEP));
+            for (int i = 0; i <= steps; i++) {
+                double s = from + (to - from) * i / steps;
+                if (ringClear(shape, nozzle, radius, s)) return s;
+            }
             return -1;
         }
 
