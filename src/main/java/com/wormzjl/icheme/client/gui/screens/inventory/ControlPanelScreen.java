@@ -37,9 +37,10 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
         if(page.equals("output"))return withNavigation(ControlColumns.choices(tr("control.output"),tags(row,"outputs").stream().map(t->new ControlColumns.Choice("device:"+t.getLong("id"),t.getString("label"),d.output==t.getLong("id"))).toList(),ControlPanelScreen::tr),row.getInt("outputPage"),row.getInt("outputPages"),"devices");
         var input=input();String primary=input==null?symbol(d.unit.name()):symbol(input.getString("unit")),secondary=input==null?"":symbol(input.getString("secondUnit"));boolean second=input!=null&&input.getString("secondUnit").equals(d.unit.name());
         String value=input==null?"—":input.getString("quality").equals("AVAILABLE")?String.format(Locale.ROOT,"%.4g",input.getDouble(second?"secondary":"value")):"—";
-        String output=tags(row,"outputs").stream().filter(t->t.getLong("id")==d.output).map(t->t.getString("label")).findFirst().orElse(tr("control.none"));
+        String output=tags(row,"outputs").stream().filter(t->t.getLong("id")==d.output).map(t->t.getString("label")).findFirst().orElse(tr(d.output==0?"control.none":"control.disconnected"));
         String state=pending?tr("control.pending"):!reply.isBlank()?reply:row.getString("status");if(state.isBlank())state=tr("control.waiting");
-        return ControlColumns.loop(new ControlColumns.View(d.enabled,primary,secondary,second,input==null?row.contains("sensorId")?tr("control.missing",row.getString("sensorId")):tr("control.none"):input.getString("label"),value,output,state,d.action==ControlSettings.Action.OUTLET),ControlPanelScreen::tr);
+        var variable=input==null?ControlColumns.Variable.UNKNOWN:ControlColumns.Variable.valueOf(input.getString("kind"));
+        return ControlColumns.loop(new ControlColumns.View(d.enabled,primary,secondary,second,input==null?d.sensor!=null?tr("control.disconnected"):tr("control.none"):input.getString("label"),value,output,state,d.action==ControlSettings.Action.OUTLET,variable),ControlPanelScreen::tr);
     }
     private static List<Column.Row> withNavigation(List<Column.Row> rows,int page,int pages,String key){var out=new ArrayList<>(rows);out.addAll(ControlColumns.navigation(page,pages,key,ControlPanelScreen::tr));return out;}
     private List<List<Column.Row>> rows(){var r=right();if(!menu.dcs())return List.of(r);return List.of(withNavigation(ControlColumns.controllers(controllers.stream().map(t->{var id=t.getUUID("id");String name=t.getCompound("settings").getString("name");return new ControlColumns.Choice("controller:"+id,name.isBlank()?t.getString("controllerId"):name,id.equals(selected));}).toList(),ControlPanelScreen::tr),controllerPage,controllerPages,"controllers"),r);}
@@ -59,8 +60,24 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
     private AbstractWidget field(Column.Field f,Rect r){var d=draft();var box=new SkinField(font,r.x(),r.y(),r.w(),r.h(),Component.literal(f.key().equals("name")?tr("control.name"):f.label()),ControlPanelScreen::skin);box.setMaxLength(f.key().equals("name")?48:32);box.setValue(f.key().equals("name")?d.name:d.target);box.setResponder(v->{if(f.key().equals("name"))d.name=v;else d.target=v;d.dirty=true;});return addRenderableWidget(box);}
     private void act(String key){var d=draft();
         if(key.startsWith("controllers:")||key.startsWith("devices:")){int direction=key.endsWith("next")?1:-1;if(key.startsWith("controllers:"))ControlNetwork.browse(menu.containerId,controllerPage+direction,0);else{var row=selected();if(row!=null)ControlNetwork.browse(menu.containerId,controllerPage,row.getInt(page.equals("input")?"inputPage":"outputPage")+direction);}return;}
-if(key.startsWith("controller:")){selected=UUID.fromString(key.substring(11));page="loop";}else if(key.equals("input")||key.equals("output"))page=key;else if(key.equals("back"))page="loop";else if(d!=null){d.dirty=true;
-        if(key.equals("on")||key.equals("off"))d.enabled=key.equals("on");else if(key.startsWith("sensor:")){var prior=input();d.sensor=UUID.fromString(key.substring(7));var input=input();if(input!=null){d.unit=Sensor.Unit.valueOf(input.getString("unit"));if(prior==null||!prior.getString("kind").equals(input.getString("kind")))d.target=Double.toString(Math.max(0,input.getDouble("value")));}page="loop";}else if(key.startsWith("device:")){d.output=Long.parseLong(key.substring(7));page="loop";}else if(key.equals("inlet")||key.equals("outlet"))d.action=key.equals("inlet")?ControlSettings.Action.INLET:ControlSettings.Action.OUTLET;else if(key.equals("primary")||key.equals("secondary")){var in=input();if(in!=null)convert(d,in,Sensor.Unit.valueOf(in.getString(key.equals("primary")?"unit":"secondUnit")));}}
+        if(key.startsWith("controller:")){selected=UUID.fromString(key.substring(11));page="loop";}
+        else if(key.equals("input")||key.equals("output"))page=key;
+        else if(key.equals("back"))page="loop";
+        else if(d!=null){
+            d.dirty=true;
+            if(key.equals("on")||key.equals("off"))d.enabled=key.equals("on");
+            else if(key.startsWith("sensor:")){
+                var prior=input();d.sensor=UUID.fromString(key.substring(7));var input=input();
+                if(input!=null&&(prior==null||!prior.getString("kind").equals(input.getString("kind")))){
+                    boolean level=input.getString("kind").equals("LEVEL");
+                    d.unit=Sensor.Unit.valueOf(input.getString(level?"secondUnit":"unit"));
+                    d.target=Double.toString(Math.max(0,input.getDouble(level?"secondary":"value")));
+                }
+                page="loop";
+            }else if(key.startsWith("device:")){d.output=Long.parseLong(key.substring(7));page="loop";}
+            else if(key.equals("inlet")||key.equals("outlet"))d.action=key.equals("inlet")?ControlSettings.Action.INLET:ControlSettings.Action.OUTLET;
+            else if(key.equals("primary")||key.equals("secondary")){var in=input();if(in!=null)convert(d,in,Sensor.Unit.valueOf(in.getString(key.equals("primary")?"unit":"secondUnit")));}
+        }
         rebuildWidgets();}
     private void convert(Draft d,CompoundTag input,Sensor.Unit unit){
         if(d.unit==unit)return;
@@ -68,7 +85,9 @@ if(key.startsWith("controller:")){selected=UUID.fromString(key.substring(11));pa
             if(value!=0&&(!(factor>0)||!Double.isFinite(factor))){reply=tr("control.no_conversion");return;}d.target=Double.toString(value==0?0:toSecondary?value*factor:value/factor);d.unit=unit;
         }catch(NumberFormatException incomplete){reply=tr("control.invalid");}
     }
-    private void apply(){var d=draft();if(d==null||pending)return;try{var settings=d.settings();submitted.put(selected,settings);ControlNetwork.edit(menu.containerId,selected,d.revision,settings);pending=true;rebuildWidgets();}catch(IllegalArgumentException invalid){if(minecraft.player!=null)minecraft.player.displayClientMessage(Component.translatable("gui.icheme.control.invalid"),true);}}
+    private void apply(){var d=draft();if(d==null||pending)return;
+        if(d.enabled&&(input()==null||tags(selected(),"outputs").stream().noneMatch(t->t.getLong("id")==d.output))){reply=tr("control.no_devices");return;}
+        try{var settings=d.settings();submitted.put(selected,settings);ControlNetwork.edit(menu.containerId,selected,d.revision,settings);pending=true;rebuildWidgets();}catch(IllegalArgumentException invalid){if(minecraft.player!=null)minecraft.player.displayClientMessage(Component.translatable("gui.icheme.control.invalid"),true);}}
     @Override protected void containerTick(){super.containerTick();receive();if(!signature.equals(signature()))rebuildWidgets();}
     @Override public void removed(){super.removed();WindowScale.restore(minecraft);}
     @Override public void render(GuiGraphics g,int x,int y,float partial){door.place(leftPos,topPos);super.render(g,x,y,partial);KitDoor.hint(g,font,hovered,x,y);}

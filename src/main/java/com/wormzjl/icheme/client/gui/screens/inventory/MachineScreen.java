@@ -1,5 +1,7 @@
 package com.wormzjl.icheme.client.gui.screens.inventory;
 
+import com.wormzjl.icheme.client.gui.common.DeviceColumn;
+
 import com.wormzjl.icheme.client.ClientConfig;
 import com.wormzjl.icheme.client.gui.common.MachineColumn;
 import com.wormzjl.icheme.client.gui.common.ProcessUi;
@@ -84,7 +86,9 @@ public final class MachineScreen extends AbstractContainerScreen<MachineMenu> {
     private List<Column.Row> rows() {
         var v = menu.view();
         if (v == null) return MachineColumn.rows(new MachineColumn.Input(kind(), false, running, true, mode, false, null, List.of(), List.of(), null), MachineScreen::tr);
-        return MachineColumn.rows(MachineColumn.input(v, canEdit(), running, mode, MachineScreen::tr), MachineScreen::tr);
+        var rows=new java.util.ArrayList<>(MachineColumn.rows(MachineColumn.input(v, canEdit(), running, mode, MachineScreen::tr), MachineScreen::tr));
+        rows.addAll(DeviceColumn.instrumentIds(com.wormzjl.icheme.client.InstrumentRenderer.identities(minecraft.level,menu.origin()),(key,args)->tr("fluid."+key,args)));
+        return java.util.List.copyOf(rows);
     }
 
     /** The structure's name, as its cells hold it (empty for a creative motor or none). */

@@ -99,6 +99,12 @@ public final class DataBus {
     public Set<UUID> connected(Site site){var id=sitePorts.get(site);return id==null?Set.of():connected(id);}
     public Set<UUID> connected(UUID port){var group=components.get(port);return group==null?Set.of(port):group;}
     public boolean connected(UUID a,UUID b){return connected(a).contains(b);}
+    /** Equipment visible to one physical bus endpoint. Unwired registered equipment contributes nothing. */
+    public Set<Long> hosts(UUID endpoint,Map<UUID,DataPort> ports){
+        var hosts=new HashSet<Long>();
+        for(var id:connected(endpoint)){var port=ports.get(id);if(port!=null&&port.host()>0)hosts.add(port.host());}
+        return Set.copyOf(hosts);
+    }
     /** Unique wired components, compiled once with the topology; unconnected sockets do not form circuits. */
     public List<Set<UUID>> circuits(){return circuits;}
 }

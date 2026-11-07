@@ -24,6 +24,12 @@ public final class DeviceColumn {
     private DeviceColumn() {
     }
 
+    /** Structural IDs from the host metadata; available even before its first process reading. */
+    public static List<Column.Row> instrumentIds(List<String> ids,HeatControlColumn.Texts t){
+        if(ids.isEmpty())return List.of();
+        return List.of(new Column.Group(t.get("instrument_ids"),null,ids.stream().<Column.Row>map(id->new Column.Paragraph(id,Palette.TEXT)).toList()));
+    }
+
     /** How a valve is set: none, not configured yet, to a pressure, or to a mass or a volume flow. */
     public enum Valve {
         NONE, UNCONFIGURED, PRESSURE, MASS_FLOW, VOLUME_FLOW

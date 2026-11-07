@@ -43,7 +43,12 @@ public final class DataPorts {
     public static DataPort equipment(InstrumentHosts.Host host,boolean actuator){var m=equipmentMount(host);return create(UUID.randomUUID(),actuator?DataPort.Kind.ACTUATOR:DataPort.Kind.SENSOR,host.identity(),host.entity().getLevel(),host.entity().getBlockPos(),m.centre(),m.outward());}
     public static DataPort refresh(DataPort old,InstrumentHosts.Host host,java.util.function.Predicate<UUID> wired){
         var m=equipmentMount(host);
-        return remount(old,create(old.id(),old.kind(),old.host(),host.entity().getLevel(),old.owner(),m.centre(),m.outward()),wired.test(old.id()));
+        boolean connected=wired.test(old.id());
+        if(connected&&host.entity() instanceof EquipmentShellBlockEntity shell&&shell.shape()!=null){
+            var socket=DataSocketGeometry.drum(shell.shape(),old.face().getOpposite().ordinal());
+            if(socket!=null)m=new Mount(new Vec3(socket.x()+shell.origin().getX(),socket.y()+shell.origin().getY(),socket.z()+shell.origin().getZ()),old.face().getOpposite());
+        }
+        return remount(old,create(old.id(),old.kind(),old.host(),host.entity().getLevel(),old.owner(),m.centre(),m.outward()),connected);
     }
     /** Existing cable face points are built facts. Do not swap a wired connector to another side of its equipment. */
     public static DataPort remount(DataPort old,DataPort current,boolean wired){

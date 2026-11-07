@@ -25,6 +25,19 @@ import java.util.*;
 @EventBusSubscriber(modid=IChemE.MOD_ID,value=Dist.CLIENT)
 public final class InstrumentRenderer {
     private InstrumentRenderer(){}
+    /** Synced structural labels, shared by the host's fluid and machinery GUIs; no process subscription or solve. */
+    public static List<String> identities(net.minecraft.world.level.Level level,BlockPos position){
+        if(level==null)return List.of();
+        var host=InstrumentHosts.at(level,position);
+        var metadata=host!=null?host.metadata():level.getBlockEntity(position) instanceof Instrument.Holder holder?holder.instruments():null;
+        if(metadata==null)return List.of();
+        return metadata.sensors().stream().filter(s->metadata.sensorIds().containsKey(s.instance())).map(s->{
+            String label=s.kind()==Sensor.Kind.SPEED?"item.icheme.speed_sensor":"gui.icheme.fluid."+switch(s.kind()){
+                case PRESSURE->"pressure_probe";case TEMPERATURE->"temperature_probe";case FLOW->"flowmeter";
+                case LEVEL->s.key().mount().equals("level_boot")?"boot_level":"body_level";case SPEED->throw new IllegalStateException();};
+            return metadata.sensorIds().get(s.instance())+" / "+Component.translatable(label).getString();
+        }).sorted().toList();
+    }
     private static final ResourceLocation WHITE=ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"textures/misc/instrument.png");
     private static final RenderType TYPE=RenderType.entitySolid(WHITE);
     private static final RenderType GHOST=RenderType.entityTranslucentCull(WHITE);

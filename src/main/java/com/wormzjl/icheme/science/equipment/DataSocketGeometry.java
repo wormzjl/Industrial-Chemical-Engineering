@@ -18,6 +18,7 @@ public final class DataSocketGeometry {
     public static Socket equipment(EquipmentShape shape){
         if(CACHE.size()>128)CACHE.clear();
         return CACHE.computeIfAbsent(shape,s->{
+            if(s.kind()==EquipmentShape.Kind.DRUM)return Optional.of(drum(s,-1));
             if(!s.designed()||s.reservoir())return Optional.empty();
             var unit=ProcessUnit.of(s);
             var socket=unit.dataSocket!=null?unit.dataSocket:surface(unit.mesh().facets().stream().filter(f->f.part()<0).map(Mesh::whole).toList());
@@ -26,6 +27,26 @@ public final class DataSocketGeometry {
             int face=n[0]>.5?5:n[0]<-.5?4:n[2]>.5?3:2;
             return Optional.ofNullable(clear(s,new Socket(p[0],p[1],p[2],face,socket.junctionBox())));
         }).orElse(null);
+    }
+    /** A separate shell-mounted terminal pad, away from the front process and instrument connections. */
+    public static Socket drum(EquipmentShape s,int requiredFace){
+        if(s.kind()!=EquipmentShape.Kind.DRUM)return null;
+        double a=s.axis(),r=s.radius();
+        // Standing: a side pad avoids front P/T taps and rear manway/level pads. Lying: use the side, not its crown.
+        var directions=s.saddles()?new double[][]{{0,0,1},{0,0,-1}}:new double[][]{{1,0,0},{-1,0,0},{0,0,-1},{0,0,1}};
+        double[] local=null,n=null;int face=-1;
+        for(var candidate:directions){
+            var world=s.transform().direction(candidate);int f=world[0]>.5?5:world[0]<-.5?4:world[2]>.5?3:2;
+            if(requiredFace<0||f==requiredFace){local=candidate;n=world;face=f;break;}
+        }
+        if(local==null)return null;
+        double low=s.saddles()?s.headDepth():s.bottomTangent(),length=s.tangentLength();
+        double preferred=low+(s.saddles()?length*.25:Math.min(1.5,length*.5));
+        if(!s.saddles()&&local[2]>.5)preferred=low+length*.75; // Existing rear wiring clears the manway below it.
+        double y=centered(preferred,low+.15,low+length-.15);
+        var p=s.transform().point(new double[]{a+local[0]*r,y,a+local[2]*r});
+        // The box's back is 0.18 m behind its gland; put that back against the actual shell.
+        return new Socket(p[0]+n[0]*.18,p[1]+n[1]*.18,p[2]+n[2]*.18,face);
     }
     /** The terminal box's opposite side from the +X data connector on the casing. */
     public static Socket power(EquipmentShape shape){

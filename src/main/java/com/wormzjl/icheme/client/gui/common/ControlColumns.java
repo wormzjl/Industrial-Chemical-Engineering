@@ -8,7 +8,8 @@ import java.util.function.BiFunction;
 public final class ControlColumns {
     private ControlColumns(){}
     public record Choice(String key,String label,boolean selected){}
-    public record View(boolean enabled,String unit,String secondUnit,boolean secondary,String input,String value,String output,String status,boolean outlet){}
+    public enum Variable { UNKNOWN, LEVEL, PRESSURE, FLOW, TEMPERATURE, SPEED }
+    public record View(boolean enabled,String unit,String secondUnit,boolean secondary,String input,String value,String output,String status,boolean outlet,Variable variable){}
     public static List<Column.Row> navigation(int page,int pages,String key,BiFunction<String,Object[],String> text){
         if(pages<=1)return List.of();
         return List.of(new Column.Line((page+1)+" / "+pages,Palette.TEXT),new Column.Buttons(List.of(
@@ -33,12 +34,14 @@ public final class ControlColumns {
         var settings=new Column.Group(t.apply("settings"),null,List.of(
                 new Column.Line(t.apply("name"),Palette.TEXT),new Column.Wide("name",t.apply("name")),
                 new Column.Buttons(List.of(button("off",t.apply("off"),!v.enabled()),button("on",t.apply("on"),v.enabled()))),
-                new Column.Field("target",t.apply("target"),v.secondary()?v.secondUnit():v.unit(),null)));
+                new Column.Field("target",t.apply("target"),v.secondary()?v.secondUnit():v.unit(),v.variable()==Variable.LEVEL?t.apply("level_target_hint"):null)));
         var output=new Column.Group(t.apply("output"),null,List.of(
                 new Column.Buttons(List.of(button("output",t.apply("choose_output"),false))),new Column.Paragraph(v.output(),Palette.TEXT)));
-        var action=new Column.Group(t.apply("action"),null,List.of(
-                new Column.Buttons(List.of(button("inlet",t.apply("inlet"),!v.outlet()),button("outlet",t.apply("outlet"),v.outlet())))));
-        return List.of(settings,new Column.Group(t.apply("input"),null,input),output,action,
-                new Column.Group(t.apply("status"),null,List.of(new Column.Paragraph(v.status(),Palette.TEXT))));
+        var rows=new ArrayList<Column.Row>(List.of(settings,new Column.Group(t.apply("input"),null,input),output));
+        if(v.variable()==Variable.LEVEL||v.variable()==Variable.PRESSURE)rows.add(new Column.Group(t.apply("action"),t.apply("valve_location_hint"),List.of(
+                new Column.Buttons(List.of(button("inlet",t.apply("inlet"),!v.outlet()),button("outlet",t.apply("outlet"),v.outlet()))),
+                new Column.Paragraph(t.apply(v.variable()==Variable.LEVEL?(v.outlet()?"level_outlet":"level_inlet"):"pressure_outlet"),Palette.TEXT))));
+        rows.add(new Column.Group(t.apply("status"),null,List.of(new Column.Paragraph(v.status(),Palette.TEXT))));
+        return List.copyOf(rows);
     }
 }

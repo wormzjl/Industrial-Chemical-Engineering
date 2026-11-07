@@ -215,6 +215,11 @@ public final class LineGeometry {
             transition(m, key, arms, od, sides);
             return;
         }
+        if (arms.size() > 2 && arms.stream().anyMatch(i -> !key.centred(i))) {
+            // A branch added to a transition retains each built face point. Centred tee arms cannot reach those ends.
+            offsetJunction(m, key, arms, od, sides);
+            return;
+        }
         if (arms.size() <= 1) {
             // Unconnected, a length along its facing; a dead end, straight on from its connection: blind flanges where
             // the line ends.
@@ -353,6 +358,22 @@ public final class LineGeometry {
         m.prism(f, flange, .5 - t, .5 - seam, sides, Material.FLANGE);
         if (joined) m.prism(f, flange, .5 - seam, .5, sides, Material.OPENING);
         m.annulus(f, 0, flange, .5, sides, 1, Material.FLANGE);
+    }
+
+    /** Off-centre junction branches use the same fitted sweep as transition pipes, meeting inside one closed hub. */
+    private static void offsetJunction(Mesh m, Key key, List<Integer> arms, double od, int sides) {
+        ball(m, od, sides);
+        var centre = new double[]{.5, .5, .5};
+        for (int face : arms) {
+            if (key.centred(face)) {
+                arm(m, face, 0, od, end(key, face, od), ref(face), sides, true);
+                continue;
+            }
+            var outward = step(face);
+            var point = point(key, face);
+            var path = List.of(point, sub(point, scale(outward, .25)), plus(centre, scale(outward, .25)), centre);
+            line(m, fitted(path, end(key, face, od), new End(od, false, 0, 0, true), od), face, face ^ 1, od, sides);
+        }
     }
 
     // ---- Transition pipes ------------------------------------------------------------------------------------------

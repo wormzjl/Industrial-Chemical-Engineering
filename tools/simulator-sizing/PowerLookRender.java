@@ -24,13 +24,16 @@ public class PowerLookRender {
             render(quads,new double[]{-.12,-.5,1.3},args[0]+"/"+medium.name().toLowerCase()+"-run.png");
         }    }
     static String texture="power_cable"; static int markerColour=0xffffff; static int blocks=1;
+    /** Optional model-space crop for inspecting a real equipment socket without changing its source mesh. */
+    static double[] crop;
     static void mesh(List<Quad> quads,com.wormzjl.icheme.science.equipment.Mesh.Polygon q)throws Exception {mesh(quads,q,0);}
     static void mesh(List<Quad> quads,com.wormzjl.icheme.science.equipment.Mesh.Polygon q,int colour)throws Exception {var v=q.positions();var ns=q.normals();for(int first=1;first+1<q.size();first+=2){var corners=new int[]{0,first,first+1,Math.min(first+2,q.size()-1)};var p=new double[4][3];for(int i=0;i<4;i++)for(int k=0;k<3;k++)p[i][k]=16*v[corners[i]*3+k];var t=new BufferedImage(1,1,BufferedImage.TYPE_INT_RGB);t.setRGB(0,0,colour!=0?colour:switch(q.material()){case OPENING->0x17282d;case GUARD->0xb99d38;case FLANGE->0x747a7d;case STEELWORK->0x434d54;default->0x8b9398;});var uv=new double[4][2];if(colour==0x376674){t=ImageIO.read(Path.of("src/main/resources/assets/icheme/textures/block/"+(q.material()==com.wormzjl.icheme.science.equipment.Mesh.Material.FLANGE?"equipment_flange.png":q.material()==com.wormzjl.icheme.science.equipment.Mesh.Material.OPENING?"equipment_opening.png":q.material()==com.wormzjl.icheme.science.equipment.Mesh.Material.GUARD?"painted_pipe.png":texture+".png")).toFile());if(q.material()==com.wormzjl.icheme.science.equipment.Mesh.Material.GUARD){var painted=new BufferedImage(t.getWidth(),t.getHeight(),BufferedImage.TYPE_INT_RGB);for(int py=0;py<t.getHeight();py++)for(int px=0;px<t.getWidth();px++){int c=t.getRGB(px,py);painted.setRGB(px,py,((c>>16&255)*(markerColour>>16&255)/255)<<16|((c>>8&255)*(markerColour>>8&255)/255)<<8|(c&255)*(markerColour&255)/255);}t=painted;}var coordinates=q.uvs();for(int i=0;i<4;i++){uv[i][0]=coordinates[corners[i]*2];uv[i][1]=coordinates[corners[i]*2+1];}}quads.add(new Quad(p,uv,new double[]{ns[0],ns[1],ns[2]},t));}}
     static void render(List<Quad> quads,double[] view,String output) throws Exception {
         var depth=unit(view);var right=unit(cross(depth,new double[]{0,1,0}));var up=cross(right,depth);
         double loX=1e9,hiX=-1e9,loY=1e9,hiY=-1e9;
         for(int i=0;i<8;i++) {
-            var p=new double[]{(i&1)*16*blocks,(i>>1&1)*16,(i>>2&1)*16};
+            var p=crop==null?new double[]{(i&1)*16*blocks,(i>>1&1)*16,(i>>2&1)*16}:
+                    new double[]{16*(crop[0]+(i&1)*(crop[3]-crop[0])),16*(crop[1]+(i>>1&1)*(crop[4]-crop[1])),16*(crop[2]+(i>>2&1)*(crop[5]-crop[2]))};
             double sx=dot(p,right),sy=dot(p,up);loX=Math.min(loX,sx);hiX=Math.max(hiX,sx);loY=Math.min(loY,sy);hiY=Math.max(hiY,sy);
         }
         double scale=(blocks==1?560:1100)/Math.max(hiX-loX,hiY-loY);int w=(int)((hiX-loX)*scale)+48,h=(int)((hiY-loY)*scale)+48;

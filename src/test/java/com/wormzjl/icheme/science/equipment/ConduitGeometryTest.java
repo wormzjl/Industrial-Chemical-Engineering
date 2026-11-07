@@ -4,6 +4,35 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ConduitGeometryTest {
+    @Test void branchingAnOffsetLineKeepsEveryBuiltFaceConnectedToItsBody(){
+        for(int missing=0;missing<6;missing++)for(int shifted=0;shifted<6;shifted++)if(shifted!=missing)
+            for(int u:new int[]{-12,0,12})for(int v:new int[]{-12,12}){
+                int mask=63&~(1<<missing)&~(1<<(missing^1));
+                if((mask&1<<shifted)==0)continue;
+                var key=new ConduitGeometry.Key(mask,LineGeometry.Key.offsets(shifted,u,v));
+                var polygons=ConduitGeometry.polygons(key,false);var point=key.point(shifted);int axis=LineGeometry.axis(shifted);
+                for(int corner=0;corner<PipeSizes.sides(.125);corner++){
+                    var expected=new Mesh.Frame(point,LineGeometry.step(shifted),LineGeometry.ref(shifted)).at(2*Math.PI*corner/PipeSizes.sides(.125),.0625,0);
+                    boolean found=false;
+                    for(var p:polygons)if(p.material()==Mesh.Material.PIPE)for(int k=0;k<p.positions().length;k+=3)
+                        if(Math.abs(p.positions()[k]-expected[0])+Math.abs(p.positions()[k+1]-expected[1])+Math.abs(p.positions()[k+2]-expected[2])<1e-8)found=true;
+                    assertTrue(found,"Junction body stops short of offset connector: "+key+" / axis="+axis+" corner="+corner);
+                }
+            }
+    }
+    @Test void drumTerminalPadsTouchTheShellAndPreferFaceCentres(){
+        for(var heading:EquipmentShape.Heading.values())for(var orientation:new EquipmentShape.Orientation[]{EquipmentShape.Orientation.VERTICAL,EquipmentShape.Orientation.HORIZONTAL})
+            for(double diameter:new double[]{.5,2,10})for(int length:new int[]{1,4,12}){
+                var s=EquipmentShape.drum(diameter,length,orientation,heading,EquipmentShape.defaultSupport(diameter,orientation));
+                var socket=DataSocketGeometry.equipment(s);assertNotNull(socket);
+                var n=LineGeometry.step(socket.face());var back=new double[]{socket.x()-.18*n[0],socket.y()-.18*n[1],socket.z()-.18*n[2]};
+                assertTrue(ShapeRasterizer.inside(s,back[0]-.02*n[0],back[1]-.02*n[1],back[2]-.02*n[2]),s.toString());
+                assertFalse(ShapeRasterizer.inside(s,back[0]+.06*n[0],back[1]+.06*n[1],back[2]+.06*n[2]),s.toString());
+                assertTrue(Double.isFinite(socket.x()+socket.y()+socket.z()));
+                int axis=LineGeometry.axis(socket.face());double[] p={socket.x(),socket.y(),socket.z()};
+                if(length>=2)for(int k=0;k<3;k++)if(k!=axis)assertEquals(.5,p[k]-Math.floor(p[k]),1e-9,"Broad drum pad should be centered: "+s);
+            }
+    }
     @Test void motorAndGeneratorConnectorsFaceOppositeSidesAtEveryHeading(){
         for(var kind:new EquipmentShape.Kind[]{EquipmentShape.Kind.MOTOR,EquipmentShape.Kind.GENERATOR})
             for(var heading:EquipmentShape.Heading.values())for(double size:new double[]{.75,22,400,500,1000,20000}){

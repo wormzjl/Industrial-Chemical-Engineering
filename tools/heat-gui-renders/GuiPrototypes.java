@@ -5,6 +5,7 @@ import com.wormzjl.icheme.client.gui.flowsheet.AssemblyBlock;
 import com.wormzjl.icheme.client.gui.common.CalculatorColumn;
 import com.wormzjl.icheme.client.gui.common.ConstructorColumn;
 import com.wormzjl.icheme.client.gui.common.DeviceColumn;
+import com.wormzjl.icheme.client.gui.common.ControlColumns;
 import com.wormzjl.icheme.client.gui.common.DialogColumns;
 import com.wormzjl.icheme.client.gui.common.HeatControlColumn;
 import com.wormzjl.icheme.client.gui.common.MachineColumnSamples;
@@ -91,6 +92,27 @@ public final class GuiPrototypes {
         out.add(exchangerTypes());
         out.addAll(pumpReadings());
         out.addAll(createCoupling());
+        out.addAll(controlPanels());
+        return out;
+    }
+
+    static List<Prototype> controlPanels(){
+        var out=new ArrayList<Prototype>();
+        for(boolean dcs:new boolean[]{false,true})out.add(new Prototype(dcs?"control-dcs":"control-local",dcs?464:246,254,(d,s)->{
+            d.skin.title(d.c,10,10,dcs?"DCS":"Local controller");
+            var view=new ControlColumns.View(true,"m","%",true,"LT-0012 / LEVEL","37.0","CV-0021","CONTROLLING",true,ControlColumns.Variable.LEVEL);
+            if(dcs)doorColumn(d,ControlColumns.controllers(List.of(new ControlColumns.Choice("controller:1","Drum level",true)),DIALOG::get),new Rect(10,30,194,184),Map.of(),"DCS controller list");
+            doorColumn(d,ControlColumns.loop(view,DIALOG::get),new Rect(dcs?218:10,30,dcs?222:226,184),Map.of("name","Drum level","target","25"),"Level control");
+            dialogFooter(d,DIALOG.get("control.close"),DIALOG.get("control.apply"));
+        },true));
+        out.add(new Prototype("control-instrument-ids",246,254,(d,s)->{
+            d.skin.title(d.c,10,10,"Drum instruments");
+            var rows=new ArrayList<Column.Row>();
+            rows.add(new Column.Group("Readings",null,List.of(new Column.Reading("level","Liquid level","25","%",null))));
+            rows.addAll(DeviceColumn.instrumentIds(List.of("LT-0012 / Liquid level","PT-0013 / Pressure probe"),TEXTS));
+            doorColumn(d,rows,new Rect(10,30,226,184),Map.of(),"Instrument IDs");
+            dialogFooter(d,"Close");
+        }));
         return out;
     }
 
@@ -211,11 +233,14 @@ public final class GuiPrototypes {
             if (p.row() instanceof Column.Field f) {
                 var r = p.slots().get(f.key());
                 if (view.visible(r)) d.skin.field(d.c, view.onScreen(r), drafts.getOrDefault(f.key(), ""), "", false);
+            } else if (p.row() instanceof Column.Wide wide) {
+                var r=p.slots().get(wide.key());
+                if(view.visible(r))d.skin.field(d.c,view.onScreen(r),drafts.getOrDefault(wide.key(),""),"",false);
             } else if (p.row() instanceof Column.Buttons b)
                 for (var spec : b.buttons()) {
                     var r = p.slots().get(spec.key());
                     if (!view.visible(r)) continue;
-                    if (spec.soft()) d.skin.softKey(d.c, view.onScreen(r), spec.text(), false);
+                    if (spec.soft()) d.skin.softKey(d.c, view.onScreen(r), spec.text(), spec.latched());
                     else d.skin.button(d.c, view.onScreen(r), spec.text(), spec.latched() ? Skin.Press.CURRENT : !spec.active() ? Skin.Press.OFF : Skin.Press.REST, false);
                 }
             else if (p.row() instanceof Column.Setting st && st.steps())

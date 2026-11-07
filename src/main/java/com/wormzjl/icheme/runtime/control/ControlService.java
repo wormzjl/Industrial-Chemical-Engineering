@@ -19,7 +19,8 @@ public final class ControlService {
     private DataBus bus=new DataBus(List.of(),Map.of());
     private long busRevision=-1,driveRevision=-1;
     private final Set<ControlPanelMenu> watchers=Collections.newSetFromMap(new IdentityHashMap<>());
-    private final Map<UUID,CompoundTag> published=new HashMap<>();
+    private record Published(CompoundTag view,long topology){}
+    private final Map<UUID,Published> published=new HashMap<>();
     private final ArrayDeque<Edit> edits=new ArrayDeque<>();
     private final Map<UUID,String> status=new HashMap<>();
     private final Map<UUID,LevelSample> levels=new HashMap<>();
@@ -103,7 +104,7 @@ public final class ControlService {
     }
     public void removeHost(long host){var port=equipmentPorts.remove(host);if(port!=null)facts.removePort(port.id());}
     private DataBus bus(){if(busRevision!=facts.topologyRevision()){bus=new DataBus(facts.cables(),facts.ports());busRevision=facts.topologyRevision();}return bus;}
-    public void watch(ControlPanelMenu menu){watchers.add(menu);var cached=published.get(menu.panel());if(cached!=null)menu.publish(cached);}
+    public void watch(ControlPanelMenu menu){watchers.add(menu);var cached=published.get(menu.panel());if(cached!=null&&cached.topology()==facts.topologyRevision())menu.publish(cached.view());}
     public void unwatch(ControlPanelMenu menu){watchers.remove(menu);}
     public void edit(ControlPanelMenu menu,UUID id,long revision,ControlSettings settings){if(edits.size()<4096)edits.addLast(new Edit(menu,id,revision,settings));else menu.answer(id,"BUSY: APPLY AGAIN");}
     private boolean accessible(ControlPanelMenu menu,UUID id){var owner=facts.panel(menu.panel());return owner!=null&&(owner.id().equals(id)||owner.dcs()&&bus().connected(owner.id(),id));}
@@ -112,15 +113,17 @@ public final class ControlService {
         if(facts.panels().isEmpty()&&watchers.isEmpty()&&edits.isEmpty()&&valvePlans.isEmpty()&&heatPlans.isEmpty())return;
         bus();
         if(driveRevision!=busRevision){driveRevision=busRevision;world.shafts().dataChanged();}
+        var sensors=new HashMap<UUID,Sensor.Installed>();world.instruments().allSensors().forEach(s->{facts.identify(s);sensors.put(s.instance(),s);});
         while(!edits.isEmpty()){
             var edit=edits.removeFirst();var panel=facts.panel(edit.id());
             if(!edit.menu().stillValid(edit.menu().player())||!edit.menu().player().mayBuild()||!accessible(edit.menu(),edit.id())||panel==null||panel.dcs()||panel.revision()!=edit.revision()){edit.menu().answer(edit.id(),"SETTINGS CHANGED: APPLY AGAIN");continue;}
             var before=panel.settings();var after=edit.settings();
+            var sensor=sensors.get(after.sensor());
+            if(after.enabled()&&(sensor==null||!wired(panel.id(),sensor.key().host())||!wired(panel.id(),after.output()))){edit.menu().answer(edit.id(),"NO DATA LINK");continue;}
             if(!Objects.equals(before.sensor(),after.sensor())||before.output()!=after.output()||before.action()!=after.action()||before.enabled()!=after.enabled())levels.remove(panel.id());
             facts.panel(panel.edit(after));
             edit.menu().answer(edit.id(),"APPLIED");
         }
-        var sensors=new HashMap<UUID,Sensor.Installed>();world.instruments().allSensors().forEach(s->{facts.identify(s);sensors.put(s.instance(),s);});
         var readings=new HashMap<UUID,Sensor.Reading>();
         var needed=new HashSet<Long>();
         for(var panel:facts.panels())if(!panel.dcs()&&panel.settings().enabled()){var s=sensors.get(panel.settings().sensor());if(s!=null&&wired(panel.id(),s.key().host()))needed.add(s.key().host());}
@@ -147,7 +150,7 @@ public final class ControlService {
         valvePlans=Map.copyOf(nextValves);heatPlans=Map.copyOf(nextHeat);world.controlInputsChanged(changed);
         // Publication is only built for active requests. Opening a menu only replays this cache.
         watchers.removeIf(m->!m.stillValid(m.player())||m.player().containerMenu!=m);
-        for(var menu:watchers){var view=snapshot(menu,sensors,readings);published.put(menu.panel(),view);menu.publish(view);}
+        for(var menu:watchers){var view=snapshot(menu,sensors,readings);published.put(menu.panel(),new Published(view,facts.topologyRevision()));menu.publish(view);}
     }
     private boolean wired(UUID controller,long host){var port=equipmentPorts.get(host);return port!=null&&bus().connected(controller,port.id());}
     private String control(ControlFacts.Panel panel,Sensor.Installed sensor,Sensor.Reading reading,long tick){
@@ -218,8 +221,8 @@ public final class ControlService {
         var visible=facts.panels().stream().filter(p->!p.dcs()&&(p.id().equals(owner)||station.dcs()&&connected.contains(p.id()))).sorted(Comparator.comparing(p->p.position().toShortString())).toList();
         root.putInt("controllerPages",Math.max(1,(visible.size()+31)/32));root.putInt("controllerPage",Math.clamp(menu.controllerPage(),0,Math.max(0,(visible.size()-1)/32)));
         for(var p:page(visible,menu.controllerPage(),32)){
-            var row=p.save();row.putString("status",status.getOrDefault(p.id(),"WAITING"));row.putString("controllerId","LC-"+p.id().toString().substring(0,8).toUpperCase(Locale.ROOT));var selectedId=facts.sensorId(p.settings().sensor());if(selectedId!=null)row.putString("sensorId",selectedId.label());
-            var available=bus().connected(p.id());var hostIds=available.stream().map(facts::port).filter(Objects::nonNull).map(DataPort::host).filter(h->h>0).collect(java.util.stream.Collectors.toSet());
+            var row=p.save();row.putString("status",status.getOrDefault(p.id(),"WAITING"));row.putString("controllerId","LC-"+p.id().toString().substring(0,8).toUpperCase(Locale.ROOT));
+            var hostIds=bus().hosts(p.id(),facts.ports());
             var inputChoices=sensors.values().stream().filter(s->hostIds.contains(s.key().host())).sorted(Comparator.comparingLong(s->facts.sensorId(s.instance()).number())).toList();
             row.putInt("inputPages",Math.max(1,(inputChoices.size()+63)/64));row.putInt("inputPage",Math.clamp(menu.devicePage(),0,Math.max(0,(inputChoices.size()-1)/64)));
             var inputRows=page(inputChoices,menu.devicePage(),64);inputChoices.stream().filter(s->s.instance().equals(p.settings().sensor())&&!inputRows.contains(s)).findFirst().ifPresent(inputRows::add);
@@ -227,7 +230,7 @@ public final class ControlService {
                 var in=new CompoundTag();in.putUUID("id",s.instance());in.putString("label",facts.sensorId(s.instance()).label()+" / "+s.kind().name());in.putString("kind",s.kind().name());in.putString("unit",Sensor.primaryUnit(s.kind()).name());Sensor.secondaryUnit(s.kind()).ifPresent(u->in.putString("secondUnit",u.name()));
                 var r=readings.get(s.instance());if(r!=null){in.putDouble("value",r.value());in.putDouble("secondary",r.secondary());in.putDouble("span",r.span());in.putString("quality",r.availability().name());in.putString("unit",r.unit().name());if(r.secondaryUnit().isPresent())in.putString("secondUnit",r.secondaryUnit().get().name());}inputs.add(in);
             }row.put("inputs",inputs);
-            var outputChoices=world.registrations().values().stream().filter(r->hostIds.contains(r.device().id())&&(r.device().control() instanceof FlowControl.ControlValve||r.device().control() instanceof FlowControl.Mover||r.device().heat()!=null&&r.device().heat().controllable())).sorted(Comparator.comparingLong(r->r.device().id())).toList();
+            var outputChoices=world.registrations().values().stream().filter(r->hostIds.contains(r.device().id())&&(r.device().control() instanceof FlowControl.ControlValve||r.device().heat()!=null&&r.device().heat().controllable())).sorted(Comparator.comparingLong(r->r.device().id())).toList();
             row.putInt("outputPages",Math.max(1,(outputChoices.size()+63)/64));row.putInt("outputPage",Math.clamp(menu.devicePage(),0,Math.max(0,(outputChoices.size()-1)/64)));
             var outputRows=page(outputChoices,menu.devicePage(),64);outputChoices.stream().filter(r->r.device().id()==p.settings().output()&&!outputRows.contains(r)).findFirst().ifPresent(outputRows::add);
             var outputs=new ListTag();for(var r:outputRows){var out=new CompoundTag();out.putLong("id",r.device().id());out.putString("label",label(r.device().id()));outputs.add(out);}row.put("outputs",outputs);controllers.add(row);

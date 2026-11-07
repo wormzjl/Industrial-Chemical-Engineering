@@ -996,7 +996,11 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     }
     /** The device's page's column at an image width: from x 10 to {@code FluidGuiLayout.side}. */
     private Column deviceColumn(int width){
-        return Column.place(DeviceColumn.rows(deviceInput(),FluidDeviceScreen::tr),10,controlTop(),FluidGuiLayout.side(width)-10,GuiCanvas.measure(font),Column.Metrics.COMPACT);
+        var rows=new ArrayList<>(DeviceColumn.rows(deviceInput(),FluidDeviceScreen::tr));
+        var ids=new ArrayList<>(com.wormzjl.icheme.client.InstrumentRenderer.identities(minecraft.level,menu.position()));
+        if(menu.clientData().valve()!=null)ids.add(String.format(Locale.ROOT,"CV-%04d",menu.identity()));
+        rows.addAll(DeviceColumn.instrumentIds(ids,FluidDeviceScreen::tr));
+        return Column.place(rows,10,controlTop(),FluidGuiLayout.side(width)-10,GuiCanvas.measure(font),Column.Metrics.COMPACT);
     }
     /**
      * The door columns' fields and buttons, kept at their slots and moved as the view scrolls, so a scroll rebuilds
