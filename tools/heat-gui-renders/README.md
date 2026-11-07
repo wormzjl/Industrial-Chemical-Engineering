@@ -1,5 +1,7 @@
 # heat-gui-renders
 
+The 0.22.0 equipment-protection follow-up (`efa22cfe`, 2026-11-07) adds `equipment-constructor-removal` to `GuiPrototypes.java`: the shared constructor builder with its physical target and Deconstruct action, in both themes and at both scroll positions. Use `-Donly=equipment-constructor-removal` with the existing prototype recipe; output belongs in an indexed worktree `tmp/` folder.
+
 Purpose: software renders of the heat units' Control-tab flowsheet, so its layout is judged without a game client (owner: enough client testing).
 
 Batch: `2026-10-27-heat-exchanger-design`, the heat GUI task (`HEAT_GUI_PLAN.md` section 4), branch `claude/heat-gui-redesign-abb1db`; then `2026-10-28-gui-toolkit` (`GuiPrototypes.java`, the kit's renders). Status: in use since 2026-10-28; it draws the shipped screen code, so it stays as a check of later GUI work.

@@ -1,6 +1,6 @@
 # Rotating machinery: machine laws, shaft trains, drivers, electricity, wear and the Create coupling
 
-**Snapshot:** 3515b1ff (branch `codex/simulator-sizing`), 2026-11-07. Batch `2026-11-06-simulator-sizing`, prepared for 0.22.0; not merged. Earlier snapshots and release history are in Git and the batch READMEs.
+**Snapshot:** efa22cfe (branch `codex/simulator-sizing`), 2026-11-07. Batch `2026-11-06-simulator-sizing`, prepared for 0.22.0; not merged. Earlier snapshots and release history are in Git and the batch READMEs.
 Up: [code guide](README.md)
 
 ## VFD demand, supply and shared rotation (0.22.0)
@@ -121,7 +121,7 @@ flowchart TD
 - Fluid facts (`FluidFacts.SCHEMA` 14): 10 adds the machine and turbine controls, device kind `TURBINE`, valve source `SHAFT_SPEED` and the shaft units (after the column units); 11 the electric stores (after the shaft units) and an air cooler side's fan count; 12 the pumps' health (only pumps below 1). Corpus images `src/test/resources/compat/fluid/schema-10/` to `schema-12/`. A world before 10 has no shaft units; before 11, unmetered stores for its powered units; before 12, every pump new.
 - Checkpoint state format 39 (`FluidCheckpointCodec.VERSION`): control tag 5 a machine on its curve (law, a pump's rated speed, speed, enabled, set flow and set pressure), tag 6 a steam turbine; the endpoint modes lost `PUMP_TARGET` and `PUMP_HEAD_LIMIT` and gained `MOVER_LAW`; a driver's `ShaftUnit.State` in the topology state.
 - Accessory facts schema 4 (earlier schema 3 introduced sensor kind `SPEED`, mount `speed_pickup`, no new field); current sensor/accessory metadata has its schema-4 image.
-- Wire (no compatibility work): `machine-3`, `mover-4`, `fluid-19` (a casing's `FluidView.Drive`, a fan unit's `FluidView.Power`, a pump's `FluidView.Pump`), `equipment-20` (the constructor's `MachineDuty`).
+- Wire (no compatibility work): `machine-3`, `mover-4`, `fluid-19` (a casing's `FluidView.Drive`, a fan unit's `FluidView.Power`, a pump's `FluidView.Pump`), `equipment-21` (the constructor's `MachineDuty` and deconstruction requests).
 - Config (`icheme-common.toml`): `energy.joulesPerFE` 2.5, `energy.machinesNeedPower` true, `create.stressPerFE` 34.13, `machines.wear.enabled` true, `machines.wear.cavitationHours` 2.0, `machines.wear.dryMinutes` 10.0 (`IChemE.joulesPerFE`, `machinesNeedPower`, `stressPerFE`, `wearSettings`).
 - Create is optional (`neoforge.mods.toml` `optional`); Create, Ponder, Flywheel, Registrate and KubeJS are `compileOnly` plus `optionalModRuntime`; `-PwithoutCreate` drops them from the dev, test and GameTest runtimes ([verification.md](verification.md)).
 </details>

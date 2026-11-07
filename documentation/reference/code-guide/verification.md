@@ -10,7 +10,7 @@ Added `VesselGeometryTest`, `ProcessOutletTest`, `FlowControlTest` coverage, `Fl
 **Feature branch:** `b1477c09` (`codex/liquid-gauge-accessory`), 2026-10-26, based on main `600549d9`. Floating-roof tank level gauge is an optional item/accessory;24 focused checks/package and8 native views pass. Main merge pending. [Contracts](../../2026-10-26-liquid-level-gauge-accessory/LEVEL_GAUGE_CONTRACTS.md).
 
 
-**Snapshot:** 3515b1ff (branch `codex/simulator-sizing`), 2026-11-07. Batch `2026-11-06-simulator-sizing`, prepared for 0.22.0; not merged. Earlier snapshots and release history are in Git and the batch READMEs.
+**Snapshot:** efa22cfe (branch `codex/simulator-sizing`), 2026-11-07. Batch `2026-11-06-simulator-sizing`, prepared for 0.22.0; not merged. Earlier snapshots and release history are in Git and the batch READMEs.
 
 ## Simulator sizing and wired integration batch (0.22.0)
 
@@ -19,6 +19,8 @@ The final lane is `tools/merge-lane/lane.sh head`, once on final code: `test slo
 `ConduitLayingGameTests` (five) and `CreativePowerGameTests` (one) use `icheme_fluid_test`, so the standard lane includes them. Existing fluid-pipe checks are not duplicated. Crossflow kernel/geometry/sizing, Auto/Manual GUI, control/data/power, compatibility, layouts, motor supply and shared rotation tests remain in their normal groups. `LanguageFilesTest` and `UnitTextTest` run after the four-locale translation commit.
 
 Current corpus additions include fluid schema 13/14, shape fields 9/10, constructor designs, control formats 1–3 including six-sided creative RF and crossflow layout images. Use corpus images, never player worlds. Reachability at `db322f04f`: 638/638 production classes reachable, versus 583/583 on main. Offline tools live in `tools/simulator-sizing/`, outside source sets; model authoring remains `tools/pump-sprites/`. The lane found 17 stale/geometry assertions; focused corrections at `3515b1ff` passed, including nine fresh-world paths across the focused runs. The batch [merge review](../../2026-11-06-simulator-sizing/MERGE_REVIEW.md) is the authority for actual final-lane results, failures and limitations; older counts below are historical.
+
+Equipment protection/deconstruction follow-up `efa22cfe` adds seven permanent `EquipmentProtectionGameTests` in the normal fluid namespace: Creative/Survival removal, explosions/entities/pistons, world/chunk writes, scoped authority, physical constructor targets, stale/permission-denied targets and reply codecs. Old fixture cleanup now uses Creative removal; a test-only reflective helper recreates old saved interior states for layout compatibility. Combined filtered coverage resolves 58 world paths, with no second full lane or campaign. Constructor/codec checks and five language/source gates pass. New production code is game-reachable (641/641 unique class names); no facts schema changes.
 
 Up: [code guide](README.md)
 

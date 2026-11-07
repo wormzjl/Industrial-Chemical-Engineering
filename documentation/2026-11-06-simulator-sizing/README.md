@@ -4,11 +4,12 @@ Status: **In progress since 2026-11-06** on `codex/simulator-sizing`; merge prep
 
 ## Scope
 
-Scale-up-first Auto sizing, constructor-style Manual sizing, Standard/Low-dP crossflow exchangers, industrial equipment/access models, shared rotation, wired local controllers and DCS, shared pipe/data/power laying, standard FE power and user-facing fixes.
+Scale-up-first Auto sizing, constructor-style Manual sizing, Standard/Low-dP crossflow exchangers, industrial equipment/access models, shared rotation, wired local controllers and DCS, shared pipe/data/power laying, standard FE power, protected equipment removal and user-facing fixes.
 
 ## Documents and evidence
 
 - [MERGE_REVIEW.md](MERGE_REVIEW.md): scope, compatibility, verification and remaining limits.
+- [EQUIPMENT_PROTECTION_REVIEW.md](EQUIPMENT_PROTECTION_REVIEW.md): Creative-only breaking and constructor deconstruction, validation and updated jar.
 - [IMPLEMENTATION_REVIEW.md](IMPLEMENTATION_REVIEW.md): the implemented contracts and modelling assumptions.
 - [Code guide](../reference/code-guide/README.md): current subsystem maps and formats.
 - [Retained tools](../../tools/simulator-sizing/README.md): source inventory and reproducible entry points.
@@ -23,6 +24,8 @@ Scale-up-first Auto sizing, constructor-style Manual sizing, Standard/Low-dP cro
 - 2026-11-07: `8a768d9d` updates all four translations; `db322f04f` integrates conduit/RF GameTests into the normal gate, supplies column-gate dependencies and retains investigation tools. Owner chooses 0.22.0. Final-lane results are recorded in MERGE_REVIEW.
 
 - 2026-11-07: final lane at `891c8acf5`; focused corrections `3515b1ff` resolve all gate failures, including fresh-world FE/sensor fixtures; 2865 checks covered, chain exact and campaign holds match baseline. Guide, artefact and evidence inventories complete.
+
+- 2026-11-07: `efa22cfe` protects constructed cells at the chunk write boundary and adds physical-target constructor deconstruction; `f13019d1` translates it in four locales. Combined filtered runs resolve 58 world paths, 23 constructor/codec checks and five language/source checks; light/dark renders and updated 0.22.0 jar inspected. Existing science lane stands.
 
 ## Code areas and open items
 

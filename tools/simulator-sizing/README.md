@@ -22,16 +22,20 @@ All outputs belong in an indexed `tmp/<name>/` folder. For Java tools that impor
 java -cp <probe-and-runtime-classpath> CableStress tmp/<name> representative
 java -Djava.awt.headless=true -cp <probe-and-runtime-classpath> PowerLookRender tmp/<name>
 python tools/simulator-sizing/check_models.py
-gradlew.bat --no-configuration-cache --init-script tools/simulator-sizing/focused-gametests.init.gradle runFluidGameTestServer "-PfluidFocusedTests=PumpHealthGameTests#anInlinePumpPublishesItsCrackle" -PfluidGameTestRunId=<fresh-name>
+gradlew.bat --no-configuration-cache --init-script tools/simulator-sizing/focused-gametests.init.gradle runFluidGameTestServer "-PfluidFocusedTests=PumpHealthGameTests#anInlinePumpPublishesItsCrackle" -PfluidFocusedOut=tmp/<name>/world -PfluidGameTestRunId=<fresh-name>
 javac -d tmp/<name>/classes tools/pump-sprites/ConstructorAssets.java tools/pump-sprites/SimulatorAssets.java tools/simulator-sizing/StationRender.java
 java -Djava.awt.headless=true -cp tmp/<name>/classes StationRender src/main/resources/assets/icheme tmp/<name>/constructor constructor
 ```
 
 Run timing probes alone. A software render does not qualify live Minecraft lighting or chunk synchronisation. The one final integration lane remains `tools/merge-lane/lane.sh`; this folder does not duplicate it.
 
+`fluidFocusedOut` defaults to `tmp/merge-prep/focused-world`; the init script refuses any resolved directory outside this worktree's `tmp/`. Use a fresh named child directory for a new run and retain prior results. This does not change the normal GameTest source set or gate.
+
 ## Evidence and history
 
-- 2026-11-06–07: sizing/crossflow, tank access, rotating equipment, wired controls, shared conduit placement, FE supply, models and GUI investigations. Product work ends at `c45cea075` before merge preparation.
+- 2026-11-07: `efa22cfe` adds equipment protection/deconstruction and the validated focused-world output property; seven new permanent GameTests and 51 affected existing paths resolve through filtered runs. Constructor removal software renders use `tools/heat-gui-renders/GuiPrototypes.java`. Current jar/figure/manifest: main `research/2026-11-06-simulator-sizing/evidence/equipment-protection/`; logs: main `tools/simulator-sizing/logs/simulator-sizing-protection-logs-2026-11-07.tar.gz`. Earlier release evidence remains intact.
+
+- 2026-11-06–07: sizing/crossflow, tank access, rotating equipment, wired controls, shared conduit placement, FE supply, models and GUI investigations. Initial product work reached `c45cea075` before merge preparation; later follow-ups are listed below.
 - 2026-11-07: archived 174 source/script files from the batch's indexed scratch folders; retained the originals because the branch is unmerged. No production helper was detached: the reachability audit found 638 of 638 production classes reachable.
 - 2026-11-07: `3515b1ff` resolves the final lane's stale assertions and short-reducer stencil visibility. `PortProbe` and the optional focused GameTest registrar retain that investigation without duplicating permanent test bodies. Final archive: main checkout `tools/simulator-sizing/logs/simulator-sizing-final-logs-2026-11-07.tar.gz`; the inspected jar and verification manifest are in `research/2026-11-06-simulator-sizing/evidence/release/`.
 - Figures and tables: main checkout `research/2026-11-06-simulator-sizing/evidence/`. Compressed logs: main checkout `tools/simulator-sizing/logs/simulator-sizing-logs-2026-11-07.tar.gz`. Both remain local and ignored. The batch review distinguishes historical measurements from the final verification lane.
