@@ -622,7 +622,8 @@ public final class LineGeometry {
 
     /** Six identical port covers on a bevelled steel housing; no preferred facing or floor. */
     private static void boundary(Mesh m, Key key, Material material) {
-        double radius = .32, shoulder = .26;
+        // Fill the device's 14/16-block collision width, with the same bevel proportions on all six sides.
+        double radius = 7 / 16.0, shoulder = .36, cover = .33;
         for (int face = 0; face < 6; face++) {
             var f = frame(face, ref(face));
             var square = new ArrayList<double[]>(4);
@@ -633,11 +634,11 @@ public final class LineGeometry {
                 square.add(p);
             }
             m.flat(square, step(face), Material.PIPE);
-            m.prism(f, .24, radius, radius + .008, 8, Material.FLANGE);
-            m.disc(f, .24, radius + .008, 8, 1, material);
+            m.prism(f, cover, radius, radius + .008, 8, Material.FLANGE);
+            m.disc(f, cover, radius + .008, 8, 1, material);
             if (key.connected(face)) {
                 double size = key.face(face) == 0 ? NOZZLE : PipeSizes.outsideOf(key.face(face));
-                arm(m, face, .30, size, End.flanged(size, true), ref(face), PipeSizes.sides(size), true);
+                arm(m, face, radius - .02, size, End.flanged(size, true), ref(face), PipeSizes.sides(size), true);
             }
         }
         // The twelve edge bevels and eight corner bevels close the same housing along every axis.
