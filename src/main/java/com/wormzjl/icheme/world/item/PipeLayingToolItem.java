@@ -17,15 +17,18 @@ import java.util.List;
  * the item's own use does nothing, so a Shift + use that cancels a line never also opens the settings.
  */
 public final class PipeLayingToolItem extends Item {
-    public static boolean data(ItemStack stack){return stack.getOrDefault(ModItems.PIPE_LAYING_DATA.get(),false);}
+    public static boolean data(ItemStack stack){return !power(stack)&&stack.getOrDefault(ModItems.PIPE_LAYING_DATA.get(),false);}
+    public static boolean power(ItemStack stack){return stack.getOrDefault(ModItems.PIPE_LAYING_POWER.get(),false);}
+    public static boolean conduit(ItemStack stack){return data(stack)||power(stack);}
+    public static com.wormzjl.icheme.science.equipment.CableMedium medium(ItemStack stack){return power(stack)?com.wormzjl.icheme.science.equipment.CableMedium.POWER:com.wormzjl.icheme.science.equipment.CableMedium.DATA;}
     public PipeLayingToolItem(Properties properties) {
         super(properties.stacksTo(1).component(ModItems.PIPE_LAYING_SETTINGS.get(), PipelineToolItem.Settings.DEFAULT));
     }
 
     @Override
     public void appendHoverText(ItemStack stack, TooltipContext context, List<Component> tooltip, TooltipFlag flag) {
-        tooltip.add(Component.translatable(data(stack)?"gui.icheme.pipeline_tool.mode.data":"gui.icheme.pipeline_tool.mode.pipe").withStyle(ChatFormatting.AQUA));
-        if(data(stack)){for(var line:List.of("lay","remove","configure","items"))tooltip.add(Component.translatable("item.icheme.pipe_laying_tool.data."+line).withStyle(ChatFormatting.GRAY));return;}
+        tooltip.add(Component.translatable(power(stack)?"gui.icheme.pipeline_tool.mode.power":data(stack)?"gui.icheme.pipeline_tool.mode.data":"gui.icheme.pipeline_tool.mode.pipe").withStyle(ChatFormatting.AQUA));
+        if(conduit(stack)){for(var line:List.of("lay","remove","configure","items"))tooltip.add(Component.translatable("item.icheme.pipe_laying_tool."+(power(stack)?"power.":"data.")+line).withStyle(ChatFormatting.GRAY));return;}
         var settings = stack.get(ModItems.PIPE_LAYING_SETTINGS.get());
         if (settings != null) tooltip.add(Component.translatable("item.icheme.pipe_laying_tool.size", Double.toString(settings.diameter())).withStyle(ChatFormatting.AQUA));
         tooltip.add(Component.translatable("item.icheme.pipe_laying_tool.paint", paintName(paint(stack))).withStyle(ChatFormatting.AQUA));

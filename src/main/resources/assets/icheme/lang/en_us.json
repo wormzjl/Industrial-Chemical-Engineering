@@ -2906,5 +2906,21 @@
   "message.icheme.sensor.occupied": "This sensor mount or pipe accessory slot is occupied.",
   "message.icheme.sensor.blocked": "The sensor mount is obstructed. Clear the space around its preview.",
   "message.icheme.sensor.installed": "Sensor installed.",
-  "message.icheme.sensor.removed": "Sensor removed."
+  "message.icheme.sensor.removed": "Sensor removed.",
+  "block.icheme.power_cable": "Power conduit",
+  "item.icheme.power_cable": "Power conduit",
+  "gui.icheme.pipeline_tool.mode.power": "Power",
+  "gui.icheme.pipeline_tool.mode.power.hint": "Lay 1/8 m electrical conduit. Connects FE power ports and uses pipe routing and rack slots.",
+  "item.icheme.pipe_laying_tool.power.lay": "Use twice to lay power conduit between FE ports.",
+  "item.icheme.pipe_laying_tool.power.remove": "Shift + use removes one conduit.",
+  "item.icheme.pipe_laying_tool.power.configure": "Shift + use in the air opens settings.",
+  "item.icheme.pipe_laying_tool.power.items": "Each laid cell consumes one power conduit item.",
+  "gui.icheme.power.input": "FE input",
+  "gui.icheme.power.output": "FE output",
+  "gui.icheme.power.both": "FE connection",
+  "gui.icheme.power.cancelled": "Power route cancelled",
+  "gui.icheme.power.no_route": "No clear power route. Select an FE port, power conduit end or free cell.",
+  "gui.icheme.power.started": "Power start selected. Select the other end.",
+  "gui.icheme.power.laid": "Power conduit laid",
+  "message.icheme.conduit.items": "Needs %s %s items"
 }

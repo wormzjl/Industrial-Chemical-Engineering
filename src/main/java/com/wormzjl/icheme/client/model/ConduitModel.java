@@ -2,7 +2,7 @@ package com.wormzjl.icheme.client.model;
 
 import com.wormzjl.icheme.IChemE;
 import com.wormzjl.icheme.science.equipment.*;
-import com.wormzjl.icheme.world.level.block.entity.DataCableBlockEntity;
+import com.wormzjl.icheme.world.level.block.entity.ConduitBlockEntity;
 import net.minecraft.client.renderer.*;
 import net.minecraft.client.renderer.block.model.*;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
@@ -20,22 +20,23 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
-public final class DataCableModel implements IDynamicBakedModel {
+public final class ConduitModel implements IDynamicBakedModel {
     public static final ResourceLocation LOADER_ID=ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"data_cable");
-    public static final IGeometryLoader<Geometry> LOADER=(json,context)->new Geometry();
+    public static final IGeometryLoader<Geometry> LOADER=(json,context)->new Geometry(json.has("medium")?CableMedium.valueOf(json.get("medium").getAsString()):CableMedium.DATA);
     private static final ChunkRenderTypeSet SOLID=ChunkRenderTypeSet.of(RenderType.solid());
+    private final CableMedium medium;
     private final TextureAtlasSprite sprite;
     private final TextureAtlasSprite fitting,opening;
     private final ItemTransforms transforms;
-    private final Map<DataCableGeometry.Key,List<BakedQuad>> cache=new ConcurrentHashMap<>();
-    private DataCableModel(TextureAtlasSprite sprite,TextureAtlasSprite fitting,TextureAtlasSprite opening,ItemTransforms transforms){this.sprite=sprite;this.fitting=fitting;this.opening=opening;this.transforms=transforms;}
+    private final Map<ConduitGeometry.Key,List<BakedQuad>> cache=new ConcurrentHashMap<>();
+    private ConduitModel(CableMedium medium,TextureAtlasSprite sprite,TextureAtlasSprite fitting,TextureAtlasSprite opening,ItemTransforms transforms){this.medium=medium;this.sprite=sprite;this.fitting=fitting;this.opening=opening;this.transforms=transforms;}
     @Override public List<BakedQuad> getQuads(@Nullable BlockState state,@Nullable Direction side,RandomSource random,ModelData data,@Nullable RenderType type){
         if(side!=null)return List.of();
-        var key=data.get(DataCableBlockEntity.GEOMETRY);if(key==null)key=new DataCableGeometry.Key(0,0);
+        var key=data.get(ConduitBlockEntity.GEOMETRY);if(key==null)key=new ConduitGeometry.Key(0,0,medium);
         if(cache.size()>2048)cache.clear();
         return cache.computeIfAbsent(key,k->{var sprites=new TextureAtlasSprite[Mesh.Material.values().length];Arrays.fill(sprites,sprite);
             sprites[Mesh.Material.FLANGE.ordinal()]=fitting;sprites[Mesh.Material.BOLT.ordinal()]=fitting;sprites[Mesh.Material.OPENING.ordinal()]=opening;
-            return EquipmentShellModel.bake(DataCableGeometry.polygons(k),sprites,false);});
+            return EquipmentShellModel.bake(ConduitGeometry.polygons(k),sprites,false);});
     }
     @Override public ChunkRenderTypeSet getRenderTypes(BlockState state,RandomSource random,ModelData data){return SOLID;}
     @Override public boolean useAmbientOcclusion(){return false;}
@@ -45,9 +46,9 @@ public final class DataCableModel implements IDynamicBakedModel {
     @Override public TextureAtlasSprite getParticleIcon(){return sprite;}
     @Override public ItemTransforms getTransforms(){return transforms;}
     @Override public ItemOverrides getOverrides(){return ItemOverrides.EMPTY;}
-    public record Geometry() implements IUnbakedGeometry<Geometry> {
+    public record Geometry(CableMedium medium) implements IUnbakedGeometry<Geometry> {
         @Override public BakedModel bake(IGeometryBakingContext context,ModelBaker baker,Function<Material,TextureAtlasSprite> sprites,ModelState state,ItemOverrides overrides){
-            return new DataCableModel(sprites.apply(context.getMaterial("cable")),sprites.apply(context.getMaterial("fitting")),sprites.apply(context.getMaterial("opening")),context.getTransforms());
+            return new ConduitModel(medium,sprites.apply(context.getMaterial("cable")),sprites.apply(context.getMaterial("fitting")),sprites.apply(context.getMaterial("opening")),context.getTransforms());
         }
     }
 }

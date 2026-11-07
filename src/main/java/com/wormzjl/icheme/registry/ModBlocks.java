@@ -20,8 +20,10 @@ public final class ModBlocks {
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.FluidDeviceBlock> FLUID_GENERATOR=fluid("fluid_generator",com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.GENERATOR);
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.FluidDeviceBlock> FLUID_VOID=fluid("fluid_void",com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.VOID);
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.FluidDeviceBlock> INLINE_FILTER=fluid("inline_filter",com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.FILTER);
-    public static final DeferredBlock<com.wormzjl.icheme.world.level.block.DataCableBlock> DATA_CABLE=BLOCKS.registerBlock("data_cable",
-            com.wormzjl.icheme.world.level.block.DataCableBlock::new,BlockBehaviour.Properties.of().mapColor(MapColor.COLOR_BLUE).strength(.5F).sound(SoundType.WOOL).noOcclusion().noCollission().dynamicShape());
+    public static final DeferredBlock<com.wormzjl.icheme.world.level.block.ConduitBlock> DATA_CABLE=BLOCKS.registerBlock("data_cable",
+            com.wormzjl.icheme.world.level.block.ConduitBlock::new,BlockBehaviour.Properties.of().mapColor(MapColor.COLOR_BLUE).strength(.5F).sound(SoundType.METAL).noOcclusion().noCollission().dynamicShape());
+    public static final DeferredBlock<com.wormzjl.icheme.world.level.block.ConduitBlock> POWER_CABLE=BLOCKS.registerBlock("power_cable",
+            p->new com.wormzjl.icheme.world.level.block.ConduitBlock(p,com.wormzjl.icheme.science.equipment.CableMedium.POWER),BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(.5F).sound(SoundType.METAL).noOcclusion().noCollission().dynamicShape());
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.ControlPanelBlock> LOCAL_CONTROLLER=controlPanel("local_controller");
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.ControlPanelBlock> DCS=controlPanel("dcs");
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.CreativePowerBlock> CREATIVE_POWER=BLOCKS.registerBlock("creative_power",

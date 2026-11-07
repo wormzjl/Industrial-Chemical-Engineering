@@ -34,6 +34,8 @@ public final class ModItems {
             ()->DataComponentType.<Boolean>builder().persistent(com.mojang.serialization.Codec.BOOL)
                     .networkSynchronized(net.minecraft.network.codec.ByteBufCodecs.BOOL).build());
 
+    public static final DeferredHolder<DataComponentType<?>,DataComponentType<Boolean>> PIPE_LAYING_POWER = COMPONENTS.register("pipe_laying_power",
+            ()->DataComponentType.<Boolean>builder().persistent(com.mojang.serialization.Codec.BOOL).networkSynchronized(net.minecraft.network.codec.ByteBufCodecs.BOOL).build());
     private static DeferredHolder<DataComponentType<?>, DataComponentType<Integer>> linePaint(String name) {
         return COMPONENTS.register(name, () -> DataComponentType.<Integer>builder()
                 .persistent(com.mojang.serialization.Codec.INT.validate(rgb -> com.wormzjl.icheme.science.equipment.Paint.line(rgb) ? com.mojang.serialization.DataResult.success(rgb)
@@ -43,6 +45,7 @@ public final class ModItems {
 
     public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(IChemE.MOD_ID);
         public static final DeferredItem<net.minecraft.world.item.Item> DATA_CABLE=ITEMS.registerSimpleItem("data_cable");
+    public static final DeferredItem<net.minecraft.world.item.Item> POWER_CABLE=ITEMS.registerSimpleItem("power_cable");
     public static final DeferredItem<net.minecraft.world.item.BlockItem> LOCAL_CONTROLLER=ITEMS.registerSimpleBlockItem(ModBlocks.LOCAL_CONTROLLER);
     public static final DeferredItem<net.minecraft.world.item.BlockItem> DCS=ITEMS.registerSimpleBlockItem(ModBlocks.DCS);
     public static final DeferredItem<BlockItem> FLUID_RESERVOIR=ITEMS.registerSimpleBlockItem("fluid_reservoir",ModBlocks.FLUID_RESERVOIR);

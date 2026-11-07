@@ -64,6 +64,9 @@ public final class Instrument {
      * read is dropped, never thrown at the block entity's load (which would drop the block entity with its other fields).
      */
     public static final class Metadata {
+        private com.wormzjl.icheme.runtime.control.DataPort powerPort;
+        public com.wormzjl.icheme.runtime.control.DataPort powerPort(){return powerPort;}
+        public void powerPort(com.wormzjl.icheme.runtime.control.DataPort value){powerPort=value;}
         private com.wormzjl.icheme.runtime.control.DataPort dataPort;
         public com.wormzjl.icheme.runtime.control.DataPort dataPort(){return dataPort;}
         public void dataPort(com.wormzjl.icheme.runtime.control.DataPort value){dataPort=value;}
@@ -85,8 +88,9 @@ public final class Instrument {
         public long revision(){return revision;}
         public void set(List<Installed> value,long revision){set(value,revision,null);}
         public void set(List<Installed> value,long revision,Fitting fitting){installed=List.copyOf(value);this.revision=revision;this.fitting=fitting;}
-        public void write(CompoundTag tag){var ids=new ListTag();sensorIds.forEach((instance,id)->{var t=new CompoundTag();t.putUUID("instance",instance);t.putString("id",id);ids.add(t);});tag.put("SensorIds",ids);if(dataPort!=null)tag.put("DataPort",dataPort.save());else tag.remove("DataPort");tag.putLong("AccessoryRevision",revision);var list=new ListTag();for(var i:installed)list.add(AccessoryFacts.installed(i));tag.put("Instruments",list);var transmitters=new ListTag();sensors.forEach(s->transmitters.add(Sensor.save(s)));tag.put("Sensors",transmitters);if(fitting!=null)tag.put("Fitting",AccessoryFacts.fitting(fitting));else tag.remove("Fitting");}
+        public void write(CompoundTag tag){if(powerPort!=null)tag.put("PowerPort",powerPort.save());else tag.remove("PowerPort");var ids=new ListTag();sensorIds.forEach((instance,id)->{var t=new CompoundTag();t.putUUID("instance",instance);t.putString("id",id);ids.add(t);});tag.put("SensorIds",ids);if(dataPort!=null)tag.put("DataPort",dataPort.save());else tag.remove("DataPort");tag.putLong("AccessoryRevision",revision);var list=new ListTag();for(var i:installed)list.add(AccessoryFacts.installed(i));tag.put("Instruments",list);var transmitters=new ListTag();sensors.forEach(s->transmitters.add(Sensor.save(s)));tag.put("Sensors",transmitters);if(fitting!=null)tag.put("Fitting",AccessoryFacts.fitting(fitting));else tag.remove("Fitting");}
         public void read(CompoundTag tag) {
+            try{powerPort=tag.contains("PowerPort",10)?com.wormzjl.icheme.runtime.control.DataPort.load(tag.getCompound("PowerPort")):null;if(powerPort!=null&&!powerPort.kind().power())powerPort=null;}catch(IllegalArgumentException invalid){powerPort=null;}
             var ids=new java.util.HashMap<java.util.UUID,String>();for(var value:tag.getList("SensorIds",10)){var t=(CompoundTag)value;if(ids.size()<8&&t.hasUUID("instance")&&t.getString("id").matches("[A-Z]{2}-[0-9]{4,19}"))ids.put(t.getUUID("instance"),t.getString("id"));}sensorIds=java.util.Map.copyOf(ids);
             try{dataPort=tag.contains("DataPort",10)?com.wormzjl.icheme.runtime.control.DataPort.load(tag.getCompound("DataPort")):null;}catch(IllegalArgumentException invalid){dataPort=null;}
             try {

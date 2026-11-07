@@ -112,11 +112,11 @@ public final class PipeLayingClient {
     }
 
     public static boolean holding(LocalPlayer player) {
-        return LayingToolAim.holding(player)&&!PipeLayingToolItem.data(LayingToolAim.held(player));
+        return LayingToolAim.holding(player)&&!PipeLayingToolItem.conduit(LayingToolAim.held(player));
     }
 
     private static boolean tool(ItemStack stack) {
-        return stack.is(ModItems.PIPE_LAYING_TOOL.get())&&!PipeLayingToolItem.data(stack);
+        return stack.is(ModItems.PIPE_LAYING_TOOL.get())&&!PipeLayingToolItem.conduit(stack);
     }
 
     /** One command per press of the use key; a held key does not repeat it. */

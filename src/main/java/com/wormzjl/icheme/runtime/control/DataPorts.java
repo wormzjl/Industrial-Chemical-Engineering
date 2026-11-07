@@ -51,6 +51,10 @@ public final class DataPorts {
         return create(old.id(),old.kind(),old.host(),host.entity().getLevel(),old.owner(),m.centre(),m.outward());
     }
     public static Direction outward(Level level,DataPort port){
+        if(port.kind().power()){
+            if(level.getBlockEntity(port.owner()) instanceof EquipmentShellBlockEntity shell&&shell.shape()!=null){var socket=DataSocketGeometry.power(shell.shape());if(socket!=null)return Direction.values()[socket.face()];}
+            return port.face().getOpposite();
+        }
         var host=InstrumentHosts.at(level,port.owner());if(host!=null)return equipmentMount(host).outward();
         if(level.getBlockEntity(port.owner()) instanceof EquipmentShellBlockEntity cell&&cell.shape()!=null){var socket=DataSocketGeometry.equipment(cell.shape());if(socket!=null)return Direction.values()[socket.face()];}
         return port.face().getOpposite();
@@ -67,6 +71,7 @@ public final class DataPorts {
         return create(identity,panel.dcs()?DataPort.Kind.DCS:DataPort.Kind.CONTROLLER,0,panel.getLevel(),
                 panel.getBlockPos(),panel.getBlockPos().getCenter().add(normal.scale((panel.dcs()?.375:.3125)+.005)).add(0,-.22,0),outward);
     }
+    public static DataPort power(UUID id,DataPort.Kind kind,Level level,BlockPos owner,Vec3 centre,Direction outward){if(!kind.power())throw new IllegalArgumentException("Not a power port");return create(id,kind,0,level,owner,centre,outward);}
     private static DataPort create(UUID id,DataPort.Kind kind,long host,Level level,BlockPos owner,Vec3 centre,Direction outward){
         var normal=Vec3.atLowerCornerOf(outward.getNormal());
         var cell=BlockPos.containing(centre.add(normal.scale(.2)));

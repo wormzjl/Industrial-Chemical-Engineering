@@ -48,6 +48,7 @@ class DialogColumnsTest {
             out.add(new Case("laying tool " + valid, DialogColumns.pipelineTool(new DialogColumns.PipelineTool(true, 0, false, valid), t), PIPELINE));
             out.add(new Case("laying tool bare " + valid, DialogColumns.pipelineTool(new DialogColumns.PipelineTool(true, 1, true, valid), t), PIPELINE));
             out.add(new Case("data cable tool " + valid, DialogColumns.pipelineTool(new DialogColumns.PipelineTool(true, 0, false, valid,true), t), PIPELINE));
+            out.add(new Case("power conduit tool " + valid, DialogColumns.pipelineTool(new DialogColumns.PipelineTool(true, 0, false, valid,false,true), t), PIPELINE));
         }
         out.add(new Case("drum", DialogColumns.vessel(DRUM, false, false, t), VESSEL));
         out.add(new Case("pump", DialogColumns.vessel(PUMP, true, true, t), VESSEL));

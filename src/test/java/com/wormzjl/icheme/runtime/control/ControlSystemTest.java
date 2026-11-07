@@ -1,6 +1,6 @@
 package com.wormzjl.icheme.runtime.control;
 
-import com.wormzjl.icheme.science.equipment.DataCableGeometry;
+import com.wormzjl.icheme.science.equipment.ConduitGeometry;
 import net.minecraft.core.*;
 import net.minecraft.nbt.*;
 import org.junit.jupiter.api.Test;
@@ -46,12 +46,24 @@ class ControlSystemTest {
     }
     @Test void coincidentFacesWithDifferentOffsetsRemainSeparate(){
         var first=new UUID(0,1);var second=new UUID(0,2);
-        var a=new DataBus.Cable(new DataBus.Site("minecraft:overworld",BlockPos.ZERO,0),new DataCableGeometry.Key(0,0).connect(4,0,0).connect(5,0,0),0,Map.of(Direction.WEST,first));
-        var b=new DataBus.Cable(new DataBus.Site("minecraft:overworld",new BlockPos(1,0,0),0),new DataCableGeometry.Key(0,0).connect(4,8,0).connect(5,8,0),0,Map.of(Direction.EAST,second));
+        var a=new DataBus.Cable(new DataBus.Site("minecraft:overworld",BlockPos.ZERO,0),new ConduitGeometry.Key(0,0).connect(4,0,0).connect(5,0,0),0,Map.of(Direction.WEST,first));
+        var b=new DataBus.Cable(new DataBus.Site("minecraft:overworld",new BlockPos(1,0,0),0),new ConduitGeometry.Key(0,0).connect(4,8,0).connect(5,8,0),0,Map.of(Direction.EAST,second));
         var ports=Map.of(first,new DataPort(first,DataPort.Kind.SENSOR,1,"minecraft:overworld",new BlockPos(-1,0,0),new net.minecraft.world.phys.Vec3(-.1,.5,.5),BlockPos.ZERO,Direction.WEST,0,0),second,new DataPort(second,DataPort.Kind.ACTUATOR,2,"minecraft:overworld",new BlockPos(2,0,0),new net.minecraft.world.phys.Vec3(2.1,.75,.5),new BlockPos(1,0,0),Direction.EAST,8,0));
         assertFalse(new DataBus(List.of(a,b),ports).connected(first,second));
         var joined=new DataBus.Cable(b.site(),b.geometry().connect(4,0,0),0,b.endpoints());
         assertTrue(new DataBus(List.of(a,joined),ports).connected(first,second));
     }
     private static ControlFacts corpus() throws Exception {return ControlFacts.load(TagParser.parseTag(Files.readString(Path.of("src/test/resources/compat/control/control-1.snbt"))));}
+
+    @Test void powerFactsRoundTripAndCannotJoinTheDataBus() throws Exception {
+        var facts=ControlFacts.load(TagParser.parseTag(Files.readString(Path.of("src/test/resources/compat/control/control-3.snbt"))));
+        var power=new DataBus(facts.cables(),facts.ports(),com.wormzjl.icheme.science.equipment.CableMedium.POWER);
+        assertTrue(power.connected(new UUID(0,1),new UUID(0,2)));
+        assertFalse(new DataBus(facts.cables(),facts.ports()).connected(new UUID(0,1),new UUID(0,2)));
+        assertEquals(Set.of(new UUID(0,1),new UUID(0,2)),power.connected(facts.cables().iterator().next().site()));
+        var wires=new ArrayList<>(facts.cables());var second=wires.get(1);
+        wires.set(1,new DataBus.Cable(second.site(),new ConduitGeometry.Key(second.geometry().joints(),second.geometry().offsets()),second.arms(),second.endpoints()));
+        assertFalse(new DataBus(wires,facts.ports(),com.wormzjl.icheme.science.equipment.CableMedium.POWER).connected(new UUID(0,1),new UUID(0,2)));
+        assertTrue(corpus().cables().stream().allMatch(c->c.geometry().medium()==com.wormzjl.icheme.science.equipment.CableMedium.DATA));
+    }
 }

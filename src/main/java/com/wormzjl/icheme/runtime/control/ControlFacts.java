@@ -10,7 +10,7 @@ import java.util.*;
 
 /** Registered cable, socket and controller facts persist independently of loaded chunks. Connectivity is rebuilt. */
 public final class ControlFacts extends SavedData {
-    public static final int FORMAT=2;
+    public static final int FORMAT=3;
     public static final String NAME="icheme_control";
     public record Panel(UUID id,String dimension,BlockPos position,boolean dcs,long revision,ControlSettings settings) {
         public Panel {
@@ -61,7 +61,7 @@ public final class ControlFacts extends SavedData {
     }
     public static ControlFacts load(CompoundTag tag){
         boolean legacy=tag.contains("format",3)&&tag.getInt("format")==1;
-        if(!tag.getAllKeys().equals(legacy?Set.of("format","cables","ports","panels"):Set.of("format","cables","ports","panels","sensorIds","nextSensorId"))||!tag.contains("format",3)||!legacy&&tag.getInt("format")!=FORMAT
+        if(!tag.getAllKeys().equals(legacy?Set.of("format","cables","ports","panels"):Set.of("format","cables","ports","panels","sensorIds","nextSensorId"))||!tag.contains("format",3)||!legacy&&tag.getInt("format")!=2&&tag.getInt("format")!=FORMAT
                 ||!tag.contains("cables",9)||!tag.contains("ports",9)||!tag.contains("panels",9))throw new IllegalArgumentException("Unsupported or damaged control facts");
         for(var key:List.of("cables","ports","panels")){var list=(ListTag)tag.get(key);if(!list.isEmpty()&&list.getElementType()!=10)throw new IllegalArgumentException("Invalid control facts list: "+key);}
         var facts=new ControlFacts();var wires=tag.getList("cables",10);var sockets=tag.getList("ports",10);var boxes=tag.getList("panels",10);

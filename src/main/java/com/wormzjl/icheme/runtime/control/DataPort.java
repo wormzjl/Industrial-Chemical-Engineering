@@ -1,6 +1,6 @@
 package com.wormzjl.icheme.runtime.control;
 
-import com.wormzjl.icheme.science.equipment.DataCableGeometry;
+import com.wormzjl.icheme.science.equipment.ConduitGeometry;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
@@ -10,7 +10,10 @@ import java.util.*;
 /** Persistent physical socket and cable entry. Process bindings use sensor instance identities, independently. */
 public record DataPort(UUID id,Kind kind,long host,String dimension,BlockPos owner,Vec3 centre,
                        BlockPos cell,Direction face,int u,int v) {
-    public enum Kind { SENSOR, ACTUATOR, CONTROLLER, DCS }
+    public enum Kind { SENSOR, ACTUATOR, CONTROLLER, DCS, POWER_INPUT, POWER_OUTPUT, POWER_BOTH;
+        public boolean power(){return ordinal()>=POWER_INPUT.ordinal();}
+        public com.wormzjl.icheme.science.equipment.CableMedium medium(){return power()?com.wormzjl.icheme.science.equipment.CableMedium.POWER:com.wormzjl.icheme.science.equipment.CableMedium.DATA;}
+    }
     private static final Set<String> FIELDS=Set.of("id","kind","host","dimension","owner","x","y","z","cell","face","u","v");
     public DataPort {
         Objects.requireNonNull(id);Objects.requireNonNull(kind);Objects.requireNonNull(dimension);
@@ -19,9 +22,9 @@ public record DataPort(UUID id,Kind kind,long host,String dimension,BlockPos own
         if(net.minecraft.resources.ResourceLocation.tryParse(dimension)==null||host<0||dimension.isBlank()||dimension.length()>128||u< -16||u>15||v< -16||v>15
                 ||!Double.isFinite(centre.x)||!Double.isFinite(centre.y)||!Double.isFinite(centre.z)
                 ||centre.distanceToSqr(cell.getCenter())>25)throw new IllegalArgumentException("Invalid data port");
-        if((kind==Kind.SENSOR||kind==Kind.ACTUATOR)!=(host>0))throw new IllegalArgumentException("Invalid port host");
+        if(kind.power()?host!=0:(kind==Kind.SENSOR||kind==Kind.ACTUATOR)!=(host>0))throw new IllegalArgumentException("Invalid port host");
     }
-    public Vec3 cablePoint(){var p=new DataCableGeometry.Key(0,0).connect(face.ordinal(),u,v).point(face.ordinal());return new Vec3(cell.getX()+p[0],cell.getY()+p[1],cell.getZ()+p[2]);}
+    public Vec3 cablePoint(){var p=new ConduitGeometry.Key(0,0).connect(face.ordinal(),u,v).point(face.ordinal());return new Vec3(cell.getX()+p[0],cell.getY()+p[1],cell.getZ()+p[2]);}
     public CompoundTag save(){
         var t=new CompoundTag();t.putUUID("id",id);t.putString("kind",kind.name());t.putLong("host",host);t.putString("dimension",dimension);
         t.putLong("owner",owner.asLong());t.putDouble("x",centre.x);t.putDouble("y",centre.y);t.putDouble("z",centre.z);

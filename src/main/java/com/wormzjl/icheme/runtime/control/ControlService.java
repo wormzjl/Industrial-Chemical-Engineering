@@ -29,7 +29,7 @@ public final class ControlService {
     private Map<Long,Double> nextHeat;
     private record LevelSample(UUID sensor,long output,long tick,double volume){}
     private record Edit(ControlPanelMenu menu,UUID id,long revision,ControlSettings settings){}
-    public ControlService(FluidWorldAuthority world,ControlFacts facts){this.world=world;this.facts=facts;world.instruments().allSensors().stream().sorted(Comparator.comparing(s->s.instance().toString())).forEach(facts::identify);facts.ports().values().forEach(p->{if(p.host()>0)equipmentPorts.put(p.host(),p);});}
+    public ControlService(FluidWorldAuthority world,ControlFacts facts){this.world=world;this.facts=facts;world.instruments().allSensors().stream().sorted(Comparator.comparing(s->s.instance().toString())).forEach(facts::identify);facts.ports().values().forEach(p->{if(p.host()>0&&!p.kind().power())equipmentPorts.put(p.host(),p);});}
     public ControlFacts facts(){return facts;}
     /** Immutable slice inputs. The original device settings remain facts and resume when the controller is off. */
     public PassiveNetwork apply(PassiveNetwork graph){
@@ -57,7 +57,7 @@ public final class ControlService {
     }
     public void cable(DataBus.Cable cable){facts.cable(cable);}
     public void removeCable(DataBus.Site site){facts.removeCable(site);}
-    public void loaded(DataCableBlockEntity cable){var existing=facts.cable(cable.cable().site());if(existing!=null)cable.configure(existing);}
+    public void loaded(ConduitBlockEntity cable){var existing=facts.cable(cable.cable().site());if(existing!=null)cable.configure(existing);}
     public void loaded(PipeRackBlockEntity rack){rack.cables(facts.cables().stream().filter(c->c.site().lane()>0&&c.site().dimension().equals(rack.getLevel().dimension().location().toString())&&c.site().cell().equals(rack.getBlockPos())).toList());}
     public void loaded(ControlPanelBlockEntity box){
         var dim=box.getLevel().dimension().location().toString();

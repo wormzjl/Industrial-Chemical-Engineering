@@ -64,6 +64,8 @@ public final class FluidDeviceBlockEntity extends BlockEntity implements com.wor
     }
     @Override public void setBlockState(BlockState state) {
         boolean before=FluidDeviceBlock.hasSightGlass(getBlockState());super.setBlockState(state);
+        com.wormzjl.icheme.runtime.power.PowerNetwork.loaded(this);
+        if(level!=null&&!level.isClientSide())level.invalidateCapabilities(worldPosition);
         if(level!=null&&level.isClientSide()) {
             if(FluidDeviceBlock.hasSightGlass(state))CLIENT_GLASSES.add(this);else CLIENT_GLASSES.remove(this);
             if(before&&!FluidDeviceBlock.hasSightGlass(state))com.wormzjl.icheme.client.SightGlassRenderer.forget(worldPosition);

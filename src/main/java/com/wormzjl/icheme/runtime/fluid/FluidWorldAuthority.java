@@ -773,10 +773,10 @@ public final class FluidWorldAuthority implements AutoCloseable {
         String name=dimension.location().toString();
         for(var cell:List.copyOf(loaded.getBlockEntitiesPos())) {
             var block=loaded.getBlockState(cell).getBlock();
-            if(!(block instanceof FluidDeviceBlock)&&!(block instanceof EquipmentShellBlock)&&!(block instanceof com.wormzjl.icheme.world.level.block.PipeRackBlock)&&!(block instanceof com.wormzjl.icheme.world.level.block.ControlPanelBlock)&&!(block instanceof com.wormzjl.icheme.world.level.block.DataCableBlock))continue;
+            if(!(block instanceof FluidDeviceBlock)&&!(block instanceof EquipmentShellBlock)&&!(block instanceof com.wormzjl.icheme.world.level.block.PipeRackBlock)&&!(block instanceof com.wormzjl.icheme.world.level.block.ControlPanelBlock)&&!(block instanceof com.wormzjl.icheme.world.level.block.ConduitBlock))continue;
             var entity=loaded.getBlockEntity(cell); // Includes saved cells not yet promoted from pending NBT.
             if(entity instanceof com.wormzjl.icheme.world.level.block.entity.ControlPanelBlockEntity box)controls().loaded(box);
-            else if(entity instanceof com.wormzjl.icheme.world.level.block.entity.DataCableBlockEntity cable)controls().loaded(cable);
+            else if(entity instanceof com.wormzjl.icheme.world.level.block.entity.ConduitBlockEntity cable)controls().loaded(cable);
             else if(entity instanceof com.wormzjl.icheme.world.level.block.entity.PipeRackBlockEntity rack){rack.bind(this);controls().loaded(rack);}
             else if(entity instanceof FluidDeviceBlockEntity pipe) {
                 var position=new PhysicalFluidTopology.Position(name,cell.getX(),cell.getY(),cell.getZ());

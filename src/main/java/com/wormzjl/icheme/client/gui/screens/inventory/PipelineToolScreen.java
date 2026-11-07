@@ -44,7 +44,7 @@ public final class PipelineToolScreen extends AbstractContainerScreen<PipelineTo
     private final int[] paints = new int[2];
     /** The channel the palette, the custom field and bare steel edit. */
     private int channel = Paint.BODY;
-    private boolean data;
+    private boolean data,power;
     private @Nullable EditBox custom;
     private @Nullable SkinButton bare, save;
     private @Nullable String hovered;
@@ -56,7 +56,7 @@ public final class PipelineToolScreen extends AbstractContainerScreen<PipelineTo
         bore = Double.toString(menu.initialSettings().diameter());
         paints[Paint.BODY] = menu.initialPaint();
         paints[Paint.STRUCTURE] = menu.initialSecondary();
-        data=menu.initialData();
+        data=menu.initialData();power=menu.initialPower();
     }
 
     private static Skin skin() {
@@ -68,7 +68,7 @@ public final class PipelineToolScreen extends AbstractContainerScreen<PipelineTo
     }
 
     private List<Column.Row> rows(boolean valid) {
-        return DialogColumns.pipelineTool(new DialogColumns.PipelineTool(menu.paints(), channel, paints[channel] == Paint.BARE, valid,data), PipelineToolScreen::tr);
+        return DialogColumns.pipelineTool(new DialogColumns.PipelineTool(menu.paints(), channel, paints[channel] == Paint.BARE, valid,data,power), PipelineToolScreen::tr);
     }
 
     @Override
@@ -145,7 +145,7 @@ public final class PipelineToolScreen extends AbstractContainerScreen<PipelineTo
 
     private void act(String key) {
         if(key.startsWith("mode:")){
-            data=key.equals("mode:data");
+            data=key.equals("mode:data");power=key.equals("mode:power");
             rebuildWidgets();
         }else if (key.startsWith("channel:")) {
             channel = Integer.parseInt(key.substring(8));
@@ -176,13 +176,13 @@ public final class PipelineToolScreen extends AbstractContainerScreen<PipelineTo
         } catch (NumberFormatException invalid) {
             // Incomplete text is a normal editing state; retain it until the player enters a valid value.
         }
-        if (save != null) save.active = data || parsed != null;
+        if (save != null) save.active = data || power || parsed != null;
     }
 
     private void save() {
         validate();
-        if (parsed == null&&!data) return;
-        FluidNetwork.savePipelineTool(menu.containerId, parsed==null?menu.initialSettings().diameter():parsed, menu.paints() ? paints[Paint.BODY] : Paint.BARE, menu.paints() ? paints[Paint.STRUCTURE] : Paint.BARE,data);
+        if (parsed == null&&!data&&!power) return;
+        FluidNetwork.savePipelineTool(menu.containerId, parsed==null?menu.initialSettings().diameter():parsed, menu.paints() ? paints[Paint.BODY] : Paint.BARE, menu.paints() ? paints[Paint.STRUCTURE] : Paint.BARE,data,power);
         onClose();
     }
 

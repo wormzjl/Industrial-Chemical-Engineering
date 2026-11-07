@@ -337,6 +337,7 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
         trackRoof();
         // The cell may have become (or stopped being) a terminal box (W5): cached FE ports look again.
         if (level != null && !level.isClientSide()) level.invalidateCapabilities(worldPosition);
+        com.wormzjl.icheme.runtime.instrument.InstrumentHosts.loaded(this);
     }
 
     /**

@@ -216,6 +216,7 @@ public final class IChemE {
     }
     /** The FE port of a structure's terminal box (W5): the shell block entity's energy capability, on its terminal cell only. */
     private static void registerCapabilities(net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent event) {
+        event.registerBlockEntity(net.neoforged.neoforge.capabilities.Capabilities.EnergyStorage.BLOCK,ModBlockEntities.DATA_CABLE.get(),(cable,side)->cable.energy());
         event.registerBlockEntity(net.neoforged.neoforge.capabilities.Capabilities.EnergyStorage.BLOCK,ModBlockEntities.CREATIVE_POWER.get(),(source,side)->source);
         event.registerBlockEntity(net.neoforged.neoforge.capabilities.Capabilities.EnergyStorage.BLOCK,ModBlockEntities.FLUID_DEVICE.get(),(pipe,side)->pipe.energy());
         event.registerBlockEntity(net.neoforged.neoforge.capabilities.Capabilities.EnergyStorage.BLOCK, ModBlockEntities.EQUIPMENT_SHELL.get(), (shell, side) -> shell.energy());
@@ -317,6 +318,7 @@ public final class IChemE {
         try {
             ProcessSolveCoordinator.drainCompletedCalculations(event.getServer());
             com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.tick(event.getServer());
+            com.wormzjl.icheme.runtime.power.PowerNetwork.of(event.getServer()).tick();
             com.wormzjl.icheme.runtime.assembly.AssemblyService.tick(event.getServer());
         } catch (RuntimeException exception) {
             LOGGER.error("process_solver lifecycle=DRAIN_FAILED", exception);
@@ -341,6 +343,7 @@ public final class IChemE {
         try {
             // ServerStopped can still fire after an abnormal lifecycle path that skipped ServerStopping.
             com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.forget(event.getServer());
+            com.wormzjl.icheme.runtime.power.PowerNetwork.forget(event.getServer());
             com.wormzjl.icheme.runtime.assembly.AssemblyService.forget(event.getServer());
             com.wormzjl.icheme.runtime.fluid.FluidRuntimeDiagnostics.Meter.forget(event.getServer());
             ProcessSolveCoordinator.stopCalculations(event.getServer());

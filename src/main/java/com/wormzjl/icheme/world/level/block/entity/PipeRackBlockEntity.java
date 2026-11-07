@@ -136,7 +136,7 @@ public final class PipeRackBlockEntity extends BlockEntity {
         if(level!=null&&!level.isClientSide())level.sendBlockUpdated(worldPosition,getBlockState(),getBlockState(),2);
     }
     private void writeCables(CompoundTag tag){var list=new ListTag();cables.forEach(c->list.add(c.save()));tag.put("DataCables",list);}
-    public RackGeometry.Lane cableLane(com.wormzjl.icheme.runtime.control.DataBus.Cable cable){return new RackGeometry.Lane(cable.site().lane()-1,1,cable.arms(),cable.geometry().joints(),PipeSizes.code(com.wormzjl.icheme.science.equipment.DataCableGeometry.OUTSIDE));}
+    public RackGeometry.Lane cableLane(com.wormzjl.icheme.runtime.control.DataBus.Cable cable){return new RackGeometry.Lane(cable.site().lane()-1,RackGeometry.width(cable.geometry().medium().outside()),cable.arms(),cable.geometry().joints(),PipeSizes.code(cable.geometry().medium().outside()));}
     private int[] joined = new int[0];
     /** The steel of a rack alone on the ground: a whole bent at each end, on pedestals. The item and a cell whose neighbours are not read yet draw it. */
     public static final int BARE = RackGeometry.BENT_BACK | RackGeometry.BENT_FRONT | RackGeometry.END_BACK | RackGeometry.END_FRONT | RackGeometry.GROUNDED;

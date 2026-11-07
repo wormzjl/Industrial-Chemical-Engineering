@@ -27,13 +27,13 @@ public final class PipelineToolMenu extends AbstractContainerMenu {
     private final ItemStack tool;
     private final PipelineToolItem.Settings initialSettings;
     private final int initialPaint, initialSecondary;
-    private final boolean initialData;
+    private final boolean initialData,initialPower;
 
     public PipelineToolMenu(int id, Inventory inventory, RegistryFriendlyByteBuf buffer) {
-        this(id, inventory, buffer.readEnum(InteractionHand.class), buffer.readVarInt(), PipelineToolItem.Settings.STREAM_CODEC.decode(buffer), buffer.readInt(), buffer.readInt(), buffer.readBoolean());
+        this(id, inventory, buffer.readEnum(InteractionHand.class), buffer.readVarInt(), PipelineToolItem.Settings.STREAM_CODEC.decode(buffer), buffer.readInt(), buffer.readInt(), buffer.readBoolean(),buffer.readBoolean());
     }
 
-    private PipelineToolMenu(int id, Inventory inventory, InteractionHand hand, int selectedSlot, PipelineToolItem.Settings settings, int paint, int secondary, boolean data) {
+    private PipelineToolMenu(int id, Inventory inventory, InteractionHand hand, int selectedSlot, PipelineToolItem.Settings settings, int paint, int secondary, boolean data,boolean power) {
         super(ModMenus.PIPELINE_TOOL.get(), id);
         this.hand = hand;
         this.selectedSlot = selectedSlot;
@@ -41,7 +41,8 @@ public final class PipelineToolMenu extends AbstractContainerMenu {
         initialSettings = Objects.requireNonNull(settings);
         initialPaint = Paint.line(paint) ? paint : Paint.BARE;
         initialSecondary = Paint.line(secondary) ? secondary : initialPaint;
-        initialData = data && tool.is(ModItems.PIPE_LAYING_TOOL.get());
+        initialPower=power&&tool.is(ModItems.PIPE_LAYING_TOOL.get());
+        initialData = data && !initialPower&& tool.is(ModItems.PIPE_LAYING_TOOL.get());
     }
 
     public static void open(ServerPlayer player, InteractionHand hand) {
@@ -49,15 +50,15 @@ public final class PipelineToolMenu extends AbstractContainerMenu {
         var stack = player.getItemInHand(hand);
         var settings = Objects.requireNonNull(stack.get(component(stack)));
         int paint = PipeLayingToolItem.paint(stack), secondary = PipeLayingToolItem.secondary(stack);
-        boolean data=PipeLayingToolItem.data(stack);
-        player.openMenu(new SimpleMenuProvider((id, inventory, owner) -> new PipelineToolMenu(id, inventory, hand, slot, settings, paint, secondary, data),
+        boolean data=PipeLayingToolItem.data(stack),power=PipeLayingToolItem.power(stack);
+        player.openMenu(new SimpleMenuProvider((id, inventory, owner) -> new PipelineToolMenu(id, inventory, hand, slot, settings, paint, secondary, data,power),
                 stack.getHoverName()), buffer -> {
             buffer.writeEnum(hand);
             buffer.writeVarInt(slot);
             PipelineToolItem.Settings.STREAM_CODEC.encode(buffer, settings);
             buffer.writeInt(paint);
             buffer.writeInt(secondary);
-            buffer.writeBoolean(data);
+            buffer.writeBoolean(data);buffer.writeBoolean(power);
         });
     }
 
@@ -85,15 +86,18 @@ public final class PipelineToolMenu extends AbstractContainerMenu {
         return tool.is(ModItems.PIPE_LAYING_TOOL.get());
     }
     public boolean initialData(){return initialData;}
+    public boolean initialPower(){return initialPower;}
 
     /** Server: the packet handler has checked this session's id, lifetime, diameter and paints. The sizing tool keeps no paint; a secondary paint equal to the primary is kept as unset. */
     public void save(PipelineToolItem.Settings settings, int paint, int secondary) {
-        save(settings,paint,secondary,initialData);
+        save(settings,paint,secondary,initialData,initialPower);
     }
-    public void save(PipelineToolItem.Settings settings, int paint, int secondary,boolean data) {
+    public void save(PipelineToolItem.Settings settings,int paint,int secondary,boolean data){save(settings,paint,secondary,data,false);}
+    public void save(PipelineToolItem.Settings settings, int paint, int secondary,boolean data,boolean power) {
         tool.set(component(tool), settings);
         if (paints()) {
-            if(data)tool.set(ModItems.PIPE_LAYING_DATA.get(),true);
+            if(power)tool.set(ModItems.PIPE_LAYING_POWER.get(),true);else tool.remove(ModItems.PIPE_LAYING_POWER.get());
+            if(data&&!power)tool.set(ModItems.PIPE_LAYING_DATA.get(),true);
             else tool.remove(ModItems.PIPE_LAYING_DATA.get());
             if (paint == Paint.BARE) tool.remove(ModItems.PIPE_LAYING_PAINT.get());
             else tool.set(ModItems.PIPE_LAYING_PAINT.get(), paint);

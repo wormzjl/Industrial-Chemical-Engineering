@@ -26,14 +26,15 @@ public final class InstrumentHosts {
     public record Selection(Host host,Instrument.Mount mount,double distance) {}
     private static final Object INDEX_LOCK=new Object();
     public static void loaded(BlockEntity be){
-        if(be.getLevel()==null||!(be instanceof FluidDeviceBlockEntity pipe&&pipe.getBlockState().getBlock() instanceof FluidDeviceBlock block&&block.kind()==TopologyCompiler.Kind.PIPE||be instanceof EquipmentShellBlockEntity shell&&shell.shape()!=null&&(shell.fluidIdentity()>0||shell.instruments().dataPort()!=null)))return;
+        com.wormzjl.icheme.runtime.power.PowerNetwork.loaded(be);
+        if(be.getLevel()==null||!(be instanceof FluidDeviceBlockEntity pipe&&pipe.getBlockState().getBlock() instanceof FluidDeviceBlock block&&block.kind()==TopologyCompiler.Kind.PIPE||be instanceof EquipmentShellBlockEntity shell&&shell.shape()!=null&&(shell.fluidIdentity()>0||shell.instruments().dataPort()!=null||shell.instruments().powerPort()!=null)||be instanceof CreativePowerBlockEntity))return;
         double extent=2;
         if(be instanceof EquipmentShellBlockEntity shell){var s=shell.shape();extent=Math.sqrt((double)s.sizeX()*s.sizeX()+(double)s.sizeY()*s.sizeY()+(double)s.sizeZ()*s.sizeZ())+2;}
         // The index and its equipped subset are published together; callers inspect hosts outside the lock.
         synchronized(INDEX_LOCK){
             LOADED.computeIfAbsent(be.getLevel(),l->new HashMap<>()).put(be.getBlockPos().immutable(),extent);
             var equipped=INSTALLED.computeIfAbsent(be.getLevel(),l->new HashMap<>());
-            if(be instanceof Instrument.Holder h&&(!h.instruments().installed().isEmpty()||!h.instruments().sensors().isEmpty()||h.instruments().dataPort()!=null||h.instruments().fitting()!=null))equipped.put(be.getBlockPos().immutable(),extent);else equipped.remove(be.getBlockPos());
+            if(be instanceof Instrument.Holder h&&(!h.instruments().installed().isEmpty()||!h.instruments().sensors().isEmpty()||h.instruments().dataPort()!=null||h.instruments().powerPort()!=null||h.instruments().fitting()!=null))equipped.put(be.getBlockPos().immutable(),extent);else equipped.remove(be.getBlockPos());
         }
     }
     private static Map<BlockPos,Double> loaded(Level level,boolean installed){synchronized(INDEX_LOCK){return Map.copyOf((installed?INSTALLED:LOADED).getOrDefault(level,Map.of()));}}
@@ -43,6 +44,13 @@ public final class InstrumentHosts {
         for(var entry:loaded(level,true).entrySet()){
             var pos=entry.getKey();double reach=radius+entry.getValue();if(pos.getCenter().distanceToSqr(centre)>reach*reach||!level.hasChunkAt(pos))continue;
             if(level.getBlockEntity(pos) instanceof Instrument.Holder holder){var port=holder.instruments().dataPort();if(port!=null&&port.centre().distanceToSqr(centre)<=radius*radius)result.add(port);}
+        }return List.copyOf(result);
+    }
+    public static List<com.wormzjl.icheme.runtime.control.DataPort> powerPorts(Level level,Vec3 centre,double radius){
+        var result=new ArrayList<com.wormzjl.icheme.runtime.control.DataPort>();
+        for(var entry:loaded(level,true).entrySet()){
+            var pos=entry.getKey();double reach=radius+entry.getValue();if(pos.getCenter().distanceToSqr(centre)>reach*reach||!level.hasChunkAt(pos))continue;
+            if(level.getBlockEntity(pos) instanceof Instrument.Holder holder){var port=holder.instruments().powerPort();if(port!=null&&port.centre().distanceToSqr(centre)<=radius*radius)result.add(port);}
         }return List.copyOf(result);
     }
     public static List<Host> nearby(Level level,Vec3 centre,double radius){return nearby(level,centre,radius,false);}

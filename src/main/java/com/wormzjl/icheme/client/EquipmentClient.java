@@ -36,7 +36,7 @@ public final class EquipmentClient {
     public static void registerGeometryLoaders(ModelEvent.RegisterGeometryLoaders event) {
         event.register(EquipmentShellModel.LOADER_ID, EquipmentShellModel.LOADER);
         event.register(com.wormzjl.icheme.client.model.FluidDeviceModel.LOADER_ID, com.wormzjl.icheme.client.model.FluidDeviceModel.LOADER);
-        event.register(com.wormzjl.icheme.client.model.DataCableModel.LOADER_ID,com.wormzjl.icheme.client.model.DataCableModel.LOADER);
+        event.register(com.wormzjl.icheme.client.model.ConduitModel.LOADER_ID,com.wormzjl.icheme.client.model.ConduitModel.LOADER);
         event.register(com.wormzjl.icheme.client.model.PipeRackModel.LOADER_ID, com.wormzjl.icheme.client.model.PipeRackModel.LOADER);
         event.register(com.wormzjl.icheme.client.model.ShaftModel.LOADER_ID, com.wormzjl.icheme.client.model.ShaftModel.LOADER);
     }

@@ -1,0 +1,21 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "redstone",
+  "pattern": [
+    "III",
+    "CCC",
+    "III"
+  ],
+  "key": {
+    "C": {
+      "item": "minecraft:copper_ingot"
+    },
+    "I": {
+      "item": "minecraft:iron_ingot"
+    }
+  },
+  "result": {
+    "id": "icheme:power_cable",
+    "count": 16
+  }
+}
