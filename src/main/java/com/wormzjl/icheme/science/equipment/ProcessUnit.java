@@ -1697,7 +1697,8 @@ public final class ProcessUnit {
         // A broad alternator stator, enclosed end ventilation and bearing caps; no motor fins or external fan cowl.
         motorBox(f,across,z0+.12*length,z1-.12*length,y-.80*r,y+.80*r,-1.05*r,1.05*r,Material.GENERATOR_PANEL,true);
         for(double end:new double[]{z0,z1-.12*length}) {
-            mesh.cylinder(f,.80*r,end,end+.12*length,12,Material.MOTOR_PLAIN);
+            // The vented discs close the casing; a closed cylinder would put plain caps in the same planes.
+            mesh.prism(f,.80*r,end,end+.12*length,12,Material.MOTOR_PLAIN);
             mesh.disc(f,.80*r,end,12,-1,Material.GENERATOR_PANEL);
             mesh.disc(f,.80*r,end+.12*length,12,1,Material.GENERATOR_PANEL);
         }
@@ -1930,6 +1931,11 @@ public final class ProcessUnit {
 
     /** A prism along z from {@code z0} to {@code z1} whose section is the convex polygon {@code outline} of (x, y) points, both ends drawn. */
     void extrude(List<double[]> outline, double z0, double z1, Material material) {
+        extrude(outline,z0,z1,material,3);
+    }
+
+    /** Extrusion with optional end caps (1 front, 2 back); adjoining covers can own the end faces instead. */
+    private void extrude(List<double[]> outline, double z0, double z1, Material material, int caps) {
         int m = outline.size();
         double cx = 0, cy = 0;
         for (var p : outline) {
@@ -1945,8 +1951,8 @@ public final class ProcessUnit {
             front.add(new double[]{p[0], p[1], z0});
             back.add(new double[]{p[0], p[1], z1});
         }
-        mesh.flat(front, new double[]{0, 0, -1}, material);
-        mesh.flat(back, new double[]{0, 0, 1}, material);
+        if((caps&1)!=0)mesh.flat(front, new double[]{0, 0, -1}, material);
+        if((caps&2)!=0)mesh.flat(back, new double[]{0, 0, 1}, material);
     }
 
     // ---- Reciprocating compressor -----------------------------------------------------------------------------------
@@ -2365,7 +2371,8 @@ public final class ProcessUnit {
         mesh.part(-1);
         // The pivot's cell owns the animated part. Keep it inside the hub, including on a sparse/open structure.
         motions.add(Motion.turning(f.along((deep + shallow) / 2), f.axis(), speed, 0));
-        for (int k = 0; k < 8; k++) mesh.bar(f.at(k * Math.PI / 4, .15 * r, face - t / 2), f.at(k * Math.PI / 4, r, face - t / 2), t, f.axis(), material);
+        // Spokes sit behind the hoops, with their faces touching the hoops' backs instead of overlapping their fronts.
+        for (int k = 0; k < 8; k++) mesh.bar(f.at(k * Math.PI / 4, .15 * r, face - 1.5 * t), f.at(k * Math.PI / 4, r, face - 1.5 * t), t, f.axis(), material);
         for (double ring : new double[]{.45 * r, .75 * r}) mesh.ring(f, ring - t / 2, ring + t / 2, face - t, face, n, 3, material);
         mesh.cylinder(f, .15 * r, face - t, face, 10, material);
     }
@@ -2425,7 +2432,8 @@ public final class ProcessUnit {
             double t = Math.PI / 4 * k, c = DeterministicMath.cos(t), s = DeterministicMath.sin(t), u = -s, v = c;
             octagon.add(new double[]{x + r * c - corner * u, y + r * s - corner * v});
         }
-        extrude(octagon, z0 + .1, z1 - .1, Material.MOTOR_PANEL);
+        // The enlarged end bands close the stator. Keep the frame open at those same planes to avoid duplicate caps.
+        extrude(octagon, z0 + .1, z1 - .1, Material.MOTOR_PANEL,0);
         for (double zb : new double[]{z0 + .1, z1 - .22}) {
             var band = new ArrayList<double[]>();
             for (var p : octagon) band.add(new double[]{x + (p[0] - x) * (r + .04) / r, y + (p[1] - y) * (r + .04) / r});
