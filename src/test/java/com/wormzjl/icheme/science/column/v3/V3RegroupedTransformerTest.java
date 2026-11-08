@@ -31,7 +31,13 @@ class V3RegroupedTransformerTest {
         d.add("components",JSON.toJsonTree(input.componentBasis().componentIds()));
         double[] z=input.feedComponentMolarFlowsMolPerSecond(); double total=Arrays.stream(z).sum();
         for(int i=0;i<z.length;i++)z[i]/=total;
-        d.add("compositionEdges",JSON.toJsonTree(new double[][][]{{z,z}}));
+        // One E7 family holding exactly this feed (sidecar schema 5): its mean, one unit axis and the origin as its only point.
+        double[] axis=new double[z.length];axis[0]=1;
+        var family=new JsonObject();family.addProperty("name","cdu");family.add("mean",JSON.toJsonTree(z));
+        family.add("basis",JSON.toJsonTree(new double[][]{axis}));family.add("points",JSON.toJsonTree(new double[][]{{0}}));
+        family.addProperty("inPlaneLimit",1e-8);family.addProperty("outOfPlaneLimit",1e-8);
+        var families=new JsonArray();families.add(family);d.add("families",families);
+        d.addProperty("offAxisLimit",0);d.add("lumpMap",new JsonObject());
         d.add("formulationRevisions",JSON.toJsonTree(List.of(V3ColumnCalculator.formulationRevision(input,0,V3ConvergenceEvidence.MAXIMUM_LOG_FLOW_CHANGE))));
         d.add("branchesSeen",JSON.toJsonTree(new boolean[]{true,true,false}));
         d.addProperty("presenceThreshold",.02); d.addProperty("traceFloorFraction",V3TruncationSupport.TRACE_FLOOR_FRACTION);
@@ -57,7 +63,7 @@ class V3RegroupedTransformerTest {
         d.add("weights",weights); return d;
     }
     /**
-     * The physics a model trained on package {@code packageId} stores (sidecar schema 4, O7 of batch
+     * The physics a model trained on package {@code packageId} stores (the sidecar's physics, O7 of batch
      * 2026-11-04-open-thermo-data): the package's values, each compound's PR78 constants and ideal-gas fit, its non-zero
      * pairs and its water, over the bundled model's trained range.
      */
@@ -142,14 +148,18 @@ class V3RegroupedTransformerTest {
     @Test void sidecarPinsPayloadAndRejectsOverlappingFields() throws Exception {
         var d=document(input("icheme:tjl20_methane")); var payload=new JsonObject();
         for(String key:List.of("featureRevision","modelType","anchorLayout","baselineRevision","components","normalization","weights"))payload.add(key,d.remove(key));
-        payload.addProperty("schemaVersion",1); d.addProperty("schemaVersion",4);
+        payload.addProperty("schemaVersion",1); d.addProperty("schemaVersion",5);
         d.addProperty("payloadSha256",V3NeuralRegistry.TransformerArtifact.sha256(payload.toString().getBytes(StandardCharsets.UTF_8)));
         d.addProperty("decoder","ZERO_PHASE_FLOOR_10"); d.addProperty("candidateRule","SINGLE"); d.addProperty("correctionRule","PROGRESS");
         assertEquals(88852,V3NeuralRegistry.TransformerArtifact.read(stream(payload),stream(d)).initializer().parameterCount());
-        // Schema 4 only: a schema 3 sidecar (the trained records by id@revision) is refused, the physics holds the model's
-        // compounds in order, and it holds exactly its fields.
-        var old=d.deepCopy(); old.addProperty("schemaVersion",3);
-        assertThrows(IllegalArgumentException.class,()->V3NeuralRegistry.TransformerArtifact.read(stream(payload),stream(old)));
+        // Schema 5 only: a schema 3 sidecar (the trained records by id@revision) and a schema 4 one (blend edges) are refused, the
+        // physics holds the model's compounds in order, and the sidecar holds exactly its fields.
+        for(int schema:new int[]{3,4}) {
+            var old=d.deepCopy(); old.addProperty("schemaVersion",schema);
+            assertThrows(IllegalArgumentException.class,()->V3NeuralRegistry.TransformerArtifact.read(stream(payload),stream(old)));
+        }
+        var edges=d.deepCopy(); edges.remove("families"); edges.add("compositionEdges",new JsonArray());
+        assertThrows(IllegalArgumentException.class,()->V3NeuralRegistry.TransformerArtifact.read(stream(payload),stream(edges)));
         var named=d.deepCopy(); named.getAsJsonObject("physics").addProperty("water","icheme:water@water-iapws95-shomate-r3");
         assertThrows(IllegalArgumentException.class,()->V3NeuralRegistry.TransformerArtifact.read(stream(payload),stream(named)));
         var shuffled=d.deepCopy(); var compounds=shuffled.getAsJsonObject("physics").getAsJsonArray("compounds");

@@ -65,10 +65,12 @@ public record V3InitializationOptions(Mode mode, WetStart wetStart, int maximumI
     }
 
     /**
-     * The learned route's default budget: the anchor and inference plus sixteen Newton iterations of the 40-tray medium-grade preset
-     * (about 8,000 polls each, O8), with a margin. Re-measured by counters in batch 2026-11-05-neural-retrain (N5).
+     * The learned route's default budget (owner, 2026-11-08: "Ship v2, 300k budget"). Measured in batch 2026-11-05-neural-retrain
+     * (N4, the bundled model on its holdout at a 2 M budget): learned labels need p50 35k, p90 92k, p95 153k polls, 272 of 276
+     * within 300k; a failed learned attempt ends by itself at a median 84k, max 380k. A failed attempt costs at most this budget,
+     * about half the median classical label (589k).
      */
-    public static final int DEFAULT_BUDGET_POLLS = 150_000;
+    public static final int DEFAULT_BUDGET_POLLS = 300_000;
     /** Ceiling of any authored budget: 20 M polls, about two minutes of solving. */
     public static final int MAXIMUM_BUDGET_POLLS = 20_000_000;
 

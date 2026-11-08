@@ -1,4 +1,4 @@
-# N6: swap the bundled model (prepared 2026-11-05, not run)
+# N6: swap the bundled model (prepared 2026-11-05, done 2026-11-08: v2, see the batch README)
 
 Runs after N4 qualifies a candidate trained on the r34 labels (after condenser carry-over). One commit adds the new model and removes the regrouped one (owner rule of this batch: the old model goes in the same change).
 

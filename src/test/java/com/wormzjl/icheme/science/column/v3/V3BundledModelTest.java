@@ -9,28 +9,42 @@ import java.util.concurrent.CancellationException;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
-/** Independently exported float64 predictions, not solver-generated expected answers. */
-class V3BundledRegroupedModelTest {
+/**
+ * The bundled model (batch 2026-11-05-neural-retrain, N6): its raw outputs against independent PyTorch float64 inference, and
+ * its decoded seed against the phase-floor decoder on those outputs ({@code open-predictions.json},
+ * {@code NeuralRetrainProbe.fixtures}).
+ */
+class V3BundledModelTest {
     private static final Gson JSON=new Gson();
+    private static final String PAYLOAD="/data/icheme/neural/v3-column-transformer-open.payload.json";
+    private static final String SIDECAR="/data/icheme/neural/v3-column-transformer-open.sidecar.json";
+    private static JsonObject fixture() throws IOException {
+        try(var stream=V3BundledModelTest.class.getResourceAsStream("/science/column/v3/neural/open-predictions.json")) {
+            assertNotNull(stream);return JsonParser.parseReader(new InputStreamReader(stream,StandardCharsets.UTF_8)).getAsJsonObject();
+        }
+    }
+    private static V3AnchorTransformerInitializer model() throws IOException {
+        try(var p=V3BundledModelTest.class.getResourceAsStream(PAYLOAD);var s=V3BundledModelTest.class.getResourceAsStream(SIDECAR)) {
+            assertNotNull(p);assertNotNull(s);
+            return V3NeuralRegistry.TransformerArtifact.read(new ByteArrayInputStream(p.readAllBytes()),new ByteArrayInputStream(s.readAllBytes())).initializer();
+        }
+    }
     @Test void packagedWeightsAndDecoderMatchIndependentFloat64Fixtures() throws Exception {
-        JsonObject fixture;
-        try(var stream=getClass().getResourceAsStream("/science/column/v3/neural/regrouped-predictions.json")) {
-            assertNotNull(stream);fixture=JsonParser.parseReader(new InputStreamReader(stream,StandardCharsets.UTF_8)).getAsJsonObject();
-        }
+        var fixture=fixture();
         byte[] payload,sidecar;
-        try(var p=getClass().getResourceAsStream("/data/icheme/neural/v3-column-transformer-regrouped.payload.json");var s=getClass().getResourceAsStream("/data/icheme/neural/v3-column-transformer-regrouped.sidecar.json")) {
-            assertNotNull(p);assertNotNull(s);payload=p.readAllBytes();sidecar=s.readAllBytes();
-        }
+        try(var p=getClass().getResourceAsStream(PAYLOAD);var s=getClass().getResourceAsStream(SIDECAR)) {payload=p.readAllBytes();sidecar=s.readAllBytes();}
         assertEquals(fixture.get("payloadSha256").getAsString(),V3NeuralRegistry.TransformerArtifact.sha256(payload));
-        var model=V3NeuralRegistry.TransformerArtifact.read(new ByteArrayInputStream(payload),new ByteArrayInputStream(sidecar)).initializer();
+        assertEquals(fixture.get("sidecarSha256").getAsString(),V3NeuralRegistry.TransformerArtifact.sha256(sidecar));
+        var model=model();
         assertEquals(88852,model.parameterCount());
         assertEquals(fixture.get("modelId").getAsString(),model.modelId());
         for(var entry:fixture.getAsJsonArray("fixtures")) {
             var row=entry.getAsJsonObject();var input=input(row.getAsJsonObject("input"));
-            assertTrue(model.supported(input));var raw=model.raw(input,V3SolveControl.UNBOUNDED);
+            assertTrue(model.supported(input),row.get("id").getAsString());var raw=model.raw(input,V3SolveControl.UNBOUNDED);
             var expectedRaw=JSON.fromJson(row.get("raw"),double[][].class);
             for(int n=0;n<expectedRaw.length;n++)assertArrayEquals(expectedRaw[n],raw.values()[n],1e-4);
             assertArrayEquals(JSON.fromJson(row.get("branchLogits"),double[].class),raw.branchLogits(),1e-5);
+            assertEquals(model.modelId(),V3NeuralRegistry.bundled().bind(com.wormzjl.icheme.science.material.MaterialCatalog.bundled(),input).modelId());
             var actual=V3NeuralRegistry.bundled().predict(input,V3SolveControl.UNBOUNDED).orElseThrow();
             var expected=row.getAsJsonObject("expected");
             assertEquals(expected.get("branch").getAsString(),actual.branch().name());
@@ -51,11 +65,7 @@ class V3BundledRegroupedModelTest {
      * base seed with a zero nitrogen slot.
      */
     @Test void theNetworkPackageWithZeroNitrogenBindsTheBundledModel() throws Exception {
-        JsonObject fixture;
-        try(var stream=getClass().getResourceAsStream("/science/column/v3/neural/regrouped-predictions.json")) {
-            assertNotNull(stream);fixture=JsonParser.parseReader(new InputStreamReader(stream,StandardCharsets.UTF_8)).getAsJsonObject();
-        }
-        var base=input(fixture.getAsJsonArray("fixtures").get(0).getAsJsonObject().getAsJsonObject("input"));
+        var base=input(fixture().getAsJsonArray("fixtures").get(0).getAsJsonObject().getAsJsonObject("input"));
         var network=com.wormzjl.icheme.science.material.MaterialCatalog.bundled().requirePackage("icheme:tjl20_methane_nitrogen");
         var from=new com.wormzjl.icheme.science.material.MaterialAxis(base.componentBasis().componentIds());
         var to=new com.wormzjl.icheme.science.material.MaterialAxis(network.components());
@@ -74,28 +84,14 @@ class V3BundledRegroupedModelTest {
         }
     }
     /**
-     * The bundled model carries the values it was trained on (sidecar schema 4): the records before batch
-     * 2026-11-04-open-thermo-data. The open data moved methane's ideal-gas Cp (O2, E16) and the water's vapour Shomate (O2);
-     * both stay within the 1 % of decision E9 over the trained range, so the default package binds the model.
+     * The bundled model carries the values it was trained on (sidecar schema 5): the values of {@code icheme:tjl20_methane}
+     * when its labels were solved (r34), so the default package binds it at zero distance; its ceiling is the hottest TRAIN feed.
      */
-    @Test void theOpenDataStaysWithinTheTrainedTolerance() throws Exception {
-        byte[] payload,sidecar;
-        try(var p=getClass().getResourceAsStream("/data/icheme/neural/v3-column-transformer-regrouped.payload.json");var s=getClass().getResourceAsStream("/data/icheme/neural/v3-column-transformer-regrouped.sidecar.json")) {
-            payload=p.readAllBytes();sidecar=s.readAllBytes();
-        }
-        var physics=V3NeuralRegistry.TransformerArtifact.read(new ByteArrayInputStream(payload),new ByteArrayInputStream(sidecar)).initializer().physics();
-        assertEquals(298.15,physics.minimumTemperature());assertEquals(765.7654003015762,physics.maximumTemperature());
+    @Test void theDefaultPackageIsTheTrainedPhysics() throws Exception {
+        var physics=model().physics();
+        assertEquals(298.15,physics.minimumTemperature());assertEquals(682.9973857719451,physics.maximumTemperature());
         var p=com.wormzjl.icheme.science.material.MaterialCatalog.bundled().requirePackage("icheme:tjl20_methane");
-        var deviations=physics.compare(p,p.components());
-        for(var d:deviations) {
-            System.out.println("trained distance "+d.subject()+" "+d.quantity()+": "+d.value()+" (limit "+d.limit()+")");
-            assertTrue(d.within(),d.toString());
-            boolean moved=d.subject().equals("Methane")&&d.quantity().equals("ideal-gas heat capacity")
-                    ||d.subject().equals("Water")&&d.quantity().startsWith("vapour");
-            if(!moved)assertEquals(0,d.value(),d.toString());
-        }
-        var methane=deviations.stream().filter(d->d.subject().equals("Methane")&&d.quantity().equals("ideal-gas heat capacity")).findFirst().orElseThrow();
-        assertTrue(methane.value()>0.008&&methane.value()<0.009,"methane Cp at the trained maximum: "+methane.value());
+        for(var d:physics.compare(p,p.components()))assertEquals(0,d.value(),d.toString());
     }
     /**
      * What the binding leaves out of its comparison (O7 of batch 2026-11-04-open-thermo-data, {@code TrainedPhysics}) moves
@@ -103,10 +99,6 @@ class V3BundledRegroupedModelTest {
      * model's raw output (the native anchor, the network and the branch) is the same bit for bit, and the model binds.
      */
     @Test void theValuesTheBindingLeavesOutMoveNoPrediction() throws Exception {
-        JsonObject fixture;
-        try(var stream=getClass().getResourceAsStream("/science/column/v3/neural/regrouped-predictions.json")) {
-            assertNotNull(stream);fixture=JsonParser.parseReader(new InputStreamReader(stream,StandardCharsets.UTF_8)).getAsJsonObject();
-        }
         var bundled=com.wormzjl.icheme.science.material.MaterialCatalog.bundled();
         var resources=new HashMap<>(bundled.resources());int edited=0;
         for(var property:bundled.requirePackage("icheme:tjl20_methane").properties())for(var entry:resources.entrySet()) {
@@ -119,12 +111,8 @@ class V3BundledRegroupedModelTest {
         }
         assertEquals(19,edited);
         var catalog=com.wormzjl.icheme.science.material.MaterialCatalog.parse(resources);
-        byte[] payload,sidecar;
-        try(var p=getClass().getResourceAsStream("/data/icheme/neural/v3-column-transformer-regrouped.payload.json");var s=getClass().getResourceAsStream("/data/icheme/neural/v3-column-transformer-regrouped.sidecar.json")) {
-            payload=p.readAllBytes();sidecar=s.readAllBytes();
-        }
-        var model=V3NeuralRegistry.TransformerArtifact.read(new ByteArrayInputStream(payload),new ByteArrayInputStream(sidecar)).initializer();
-        for(var entry:fixture.getAsJsonArray("fixtures")) {
+        var model=model();
+        for(var entry:fixture().getAsJsonArray("fixtures")) {
             var input=input(entry.getAsJsonObject().getAsJsonObject("input"));
             var expected=com.wormzjl.icheme.science.material.MaterialRuntime.with(bundled,input.packageId(),()->model.raw(input,V3SolveControl.UNBOUNDED));
             var actual=com.wormzjl.icheme.science.material.MaterialRuntime.with(catalog,input.packageId(),()->model.raw(input,V3SolveControl.UNBOUNDED));
@@ -135,12 +123,8 @@ class V3BundledRegroupedModelTest {
     }
     /** The model has three draw slots; a column with the fourth draw the input allows is left to the classical seed. */
     @Test void aFourthSideDrawIsAValidInputTheBundledModelDeclines() throws Exception {
-        JsonObject fixture;
-        try(var stream=getClass().getResourceAsStream("/science/column/v3/neural/regrouped-predictions.json")) {
-            assertNotNull(stream);fixture=JsonParser.parseReader(new InputStreamReader(stream,StandardCharsets.UTF_8)).getAsJsonObject();
-        }
         V3ColumnInput base=null;
-        for(var entry:fixture.getAsJsonArray("fixtures")){var candidate=input(entry.getAsJsonObject().getAsJsonObject("input"));if(candidate.stageCount()>=4){base=candidate;break;}}
+        for(var entry:fixture().getAsJsonArray("fixtures")){var candidate=input(entry.getAsJsonObject().getAsJsonObject("input"));if(candidate.stageCount()>=4){base=candidate;break;}}
         assertNotNull(base);
         double rate=Arrays.stream(base.feedComponentMolarFlowsMolPerSecond()).sum()*0.01;
         var draws=new ArrayList<V3SideDrawSpec>();for(int tray=1;tray<=V3ColumnInput.MAX_SIDE_DRAWS;tray++)draws.add(new V3SideDrawSpec(tray,rate));
@@ -158,6 +142,7 @@ class V3BundledRegroupedModelTest {
             for(int c=0;c<expected[n].length;c++)assertEquals(expected[n][c]==0,actual[n][c]==0,"Decoded support changed");
         }
     }
+    /** A fixture input as {@code NeuralRetrainProbe.inputJson} writes it. */
     private static V3ColumnInput input(JsonObject json) {
         var specs=new ArrayList<V3ColumnSpecification>();
         for(var value:json.getAsJsonArray("specifications")) {
@@ -167,12 +152,12 @@ class V3BundledRegroupedModelTest {
             else specs.add(new V3ColumnSpecification.ReboilerDuty(s.get("watts").getAsDouble()));
         }
         return new V3ColumnInput(json.get("schemaVersion").getAsInt(),json.get("packageId").getAsString(),json.get("assayId").getAsString(),
-                new V3ComponentBasis(Arrays.asList(JSON.fromJson(json.getAsJsonObject("componentBasis").get("componentIds"),String[].class))),
+                new V3ComponentBasis(Arrays.asList(JSON.fromJson(json.get("componentIds"),String[].class))),
                 JSON.fromJson(json.get("feedComponentMolarFlowsMolPerSecond"),double[].class),json.get("feedTemperatureKelvin").getAsDouble(),
                 json.get("stageCount").getAsInt(),json.get("feedStageNumber").getAsInt(),json.get("topPressurePascal").getAsDouble(),
                 json.get("stagePressureDropPascal").getAsDouble(),specs,
                 Arrays.asList(JSON.fromJson(json.get("sideDraws"),V3SideDrawSpec[].class)),
                 Arrays.asList(JSON.fromJson(json.get("steamFeeds"),V3SteamFeedSpec[].class)),
-                Arrays.asList(JSON.fromJson(json.get("pumparounds"),V3PumparoundSpec[].class)), V3ColumnInput.PRESCRIBED_DROP_DIAMETER);
+                Arrays.asList(JSON.fromJson(json.get("pumparounds"),V3PumparoundSpec[].class)),json.get("columnDiameterMetres").getAsDouble());
     }
 }

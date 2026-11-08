@@ -1,0 +1,70 @@
+{
+  "schema_version": 2,
+  "model_id": "icheme:v3-column-open-r34-u1-v2",
+  "payload_sha256": "4c66a436bee7b0916112967f2a3c319880bdbe33099c18f7b94eefcc73154149",
+  "sidecar_sha256": "a4fa9f833a0b5de286dcbfd90b10deade6774b4eb9304774135f291a0e545393",
+  "sidecar_schema": 5,
+  "feature_revision": "v3-anchor-augmented-regrouped-2",
+  "anchor_revision": "native-material-closed-anchor-v2-basis-width",
+  "parameters": 88852,
+  "components": 19,
+  "formulation_revisions": [
+    "v3-wet-mesh-r35-steam-side-draws-stage-heat-phase-r1"
+  ],
+  "training": "batch 2026-11-05-neural-retrain: U1 (19-compound axis, off-axis compounds lumped by normal boiling point), width 64, 160 epochs, seed 17041 (lowest validation loss of seeds 17041-17043), deterministic math attention, PyTorch 2.10.0+cu128 on an RTX 4070 Ti; v2 of N3b: trained from scratch on the classical labels plus round 1 (LNN_FIRST with v1); normalisation from TRAIN only",
+  "labels": {
+    "formulation": "wet mesh r34/r35 (condenser carry-over, E31), merged at 0c76e881c",
+    "design_seed": 20261105,
+    "classical": {
+      "cduTrain": "4,722 of 6,000",
+      "cduValidation": "428 of 550",
+      "vduTrain": "428 of 1,500",
+      "vduValidation": "40 of 150"
+    },
+    "round1": {
+      "seed": 20261106,
+      "model": "icheme:v3-column-open-r34-u1",
+      "labels": 1093
+    },
+    "trainRows": 6243,
+    "validationRows": 468
+  },
+  "validation": {
+    "epoch": 160,
+    "loss": 0.32822006940841675,
+    "nodeTemperatureMaeK": 3.288731336593628,
+    "cduTray1TemperatureMaeK": 3.8797056674957275,
+    "vduTemperatureMaeK": 7.207018852233887
+  },
+  "families": [
+    {
+      "name": "cdu",
+      "points": 1803,
+      "inPlaneLimit": 0.02029257995317419,
+      "outOfPlaneLimit": 0.08647749424335019
+    },
+    {
+      "name": "vdu",
+      "points": 485,
+      "inPlaneLimit": 0.05588835801126354,
+      "outOfPlaneLimit": 0.17537904811507601
+    }
+  ],
+  "offAxisLimit": 0.05,
+  "parity": "Java against PyTorch float64 on 4 presets and 50 validation feeds: worst raw output 3.5e-6 relative, logit 1.8e-6",
+  "qualification": {
+    "harness": "tools/neural-retrain/qualify.mjs",
+    "holdoutSeed": 20261114,
+    "budgetPolls": 300000,
+    "admittedCduHoldout": 280,
+    "learnedRouteShare": 0.754,
+    "medianPollRatio": 0.0644657190688674,
+    "rescued": 31,
+    "classicalFailures": 93,
+    "lost": 0,
+    "criteria": "(a) and (b) of NEURAL_RETRAIN_PLAN.md N4 not met; shipped by the owner (2026-11-08: \"Ship v2, 300k budget\")"
+  },
+  "scope": "Columns with stripping steam, side draws and pumparounds (formulation v3-wet-mesh-r35-steam-side-draws-stage-heat-phase-r1) on icheme:tjl20_methane and packages with up to 5 % lumped off-axis compounds, inside the CDU and VDU composition families and the global bounds; everything else runs classical.",
+  "known_limit": "The learned route fails mostly in the start correction (neural correction INITIALIZATION_FAILURE); VDU admission about 65 % of the holdout.",
+  "research_tracking": "Journals, checkpoints and features stay in tmp/neural-retrain (untracked); the tools are in tools/neural-retrain."
+}

@@ -50,7 +50,7 @@ class MaterialCatalogTest {
         assertNotEquals(before.scientificRevision(),science.requirePackage(ID).scientificRevision());
         assertFalse(MaterialRuntime.with(science,ID,()->isCurrent(ID,before.scientificRevision())));
         assertTrue(MaterialRuntime.with(names,ID,()->isCurrent(ID,before.scientificRevision())));
-        var input=dryMethaneCdu();
+        var input=boundCdu();
         // A molar mass is outside what the neural model computes with (O7 of batch 2026-11-04-open-thermo-data): the model
         // still binds, and its seed names the new identity.
         assertEquals(science.requirePackage(ID).scientificRevision(),MaterialRuntime.with(science,ID,
@@ -126,11 +126,10 @@ class MaterialCatalogTest {
      * (E30 of batch 2026-11-04-open-thermo-data, the network's water), which the bundled sidecar does not list; the
      * dry formulations it lists did not move.
      */
-    private static V3ColumnInput dryMethaneCdu() {
-        var wet=V3TestInputs.methaneCduInput();
-        return new V3ColumnInput(wet.schemaVersion(),wet.packageId(),wet.assayId(),wet.componentBasis(),wet.feedComponentMolarFlowsMolPerSecond(),
-                wet.feedTemperatureKelvin(),wet.stageCount(),wet.feedStageNumber(),wet.topPressurePascal(),wet.stagePressureDropPascal(),
-                wet.specifications(),wet.sideDraws(),List.of(),wet.pumparounds(),wet.columnDiameterMetres());
+    /** A column the bundled model covers: the game's medium-crude preset (steam, side draws and pumparounds, batch 2026-11-05-neural-retrain). */
+    private static V3ColumnInput boundCdu() {
+        var bundled=MaterialCatalog.bundled();
+        return bundled.presets().column("medium_crude").input(bundled);
     }
     /** A package's compounds and their datasets: its parent's first, then its own, each its default dataset unless the entry names one. */
     private static List<String[]> members(JsonObject record,Map<String,JsonObject> packages,Map<String,JsonObject> components) {
@@ -158,7 +157,7 @@ class MaterialCatalogTest {
             assertEquals(!namesMethane,bundled.fluidRevision(p.id()).equals(edited.fluidRevision(p.id())),p.id());
         }
         assertTrue(MaterialRuntime.with(edited,ID,()->isCurrent(ID,bundled.requirePackage(ID).scientificRevision())));
-        var input=dryMethaneCdu();
+        var input=boundCdu();
         assertTrue(MaterialRuntime.with(edited,ID,()->V3NeuralRegistry.bundled().predict(input,V3SolveControl.UNBOUNDED).isPresent()));
     }
     /**

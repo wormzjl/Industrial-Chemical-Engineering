@@ -77,7 +77,7 @@ public final class V3NeuralRegistry implements V3NeuralInitializer {
      * The first model, by priority, that a request binds (plan section 3.3 of batch 2026-11-04-refinery-compounds): its
      * active compounds A (the non-zero feed, as {@link V3ActiveComponentBasis} takes them) lie in the model's list M, and
      * the request package's values on A are the model's trained values within the tolerances of decision E9
-     * ({@link TrainedPhysics}, sidecar schema 4 since O7 of batch 2026-11-04-open-thermo-data): no record id or revision
+     * ({@link TrainedPhysics}, the sidecar's physics since O7 of batch 2026-11-04-open-thermo-data): no record id or revision
      * takes part. The model then reads the request on M through the lens ({@link MaterialCatalog#inferenceView}): A's records
      * from the request, the rest of M from the request package or the catalog's default records. The composition,
      * topology and global-bound gates are the model's own ({@link V3AnchorTransformerInitializer#supported}).
@@ -185,20 +185,13 @@ public final class V3NeuralRegistry implements V3NeuralInitializer {
     static final class TransformerArtifact {
         private static final Set<String> PAYLOAD = Set.of("schemaVersion", "featureRevision", "modelType",
                 "anchorLayout", "baselineRevision", "components", "normalization", "weights");
+        /**
+         * Sidecar schema 5 (batch 2026-11-05-neural-retrain): the trained physics as values, the E7 composition families, the
+         * off-axis share the model takes and the lump map of U1.
+         */
         private static final Set<String> SIDECAR = Set.of("schemaVersion", "payloadSha256", "modelId", "physics", "formulationRevisions",
                 "branchesSeen", "presenceThreshold", "traceFloorFraction", "globalMin", "globalMax",
-                "designConstraints", "compositionEdges", "decoder", "candidateRule", "correctionRule");
-        /**
-         * Schema 5 (batch 2026-11-05-neural-retrain, N5): the E7 composition families replace the blend edges, and the model
-         * declares the off-axis share it takes and the lump map of U1. Schema 4 stays readable until the bundled model is
-         * replaced (N6).
-         */
-        private static final Set<String> SIDECAR_5;
-        static {
-            var fields = new HashSet<>(SIDECAR); fields.remove("compositionEdges");
-            fields.addAll(Set.of("families", "offAxisLimit", "lumpMap"));
-            SIDECAR_5 = Set.copyOf(fields);
-        }
+                "designConstraints", "families", "offAxisLimit", "lumpMap", "decoder", "candidateRule", "correctionRule");
         record Loaded(V3AnchorTransformerInitializer initializer, String pipelineSha256) {}
         private TransformerArtifact() {}
 
@@ -229,10 +222,7 @@ public final class V3NeuralRegistry implements V3NeuralInitializer {
             }
         }
 
-        private static JsonObject sidecar(byte[] bytes) {
-            var schema = JsonParser.parseString(new String(bytes, StandardCharsets.UTF_8)).getAsJsonObject().get("schemaVersion");
-            return schema != null && schema.toString().equals("5") ? object(bytes, SIDECAR_5, 5) : object(bytes, SIDECAR, 4);
-        }
+        private static JsonObject sidecar(byte[] bytes) { return object(bytes, SIDECAR, 5); }
 
         private static JsonObject object(byte[] bytes, Set<String> fields, int schema) {
             var result = JsonParser.parseString(new String(bytes, StandardCharsets.UTF_8)).getAsJsonObject();

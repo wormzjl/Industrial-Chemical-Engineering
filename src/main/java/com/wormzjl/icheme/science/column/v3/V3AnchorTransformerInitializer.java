@@ -36,7 +36,7 @@ final class V3AnchorTransformerInitializer implements V3NeuralInitializer {
             V3CondenserPhaseBranch.TWO_PHASE, V3CondenserPhaseBranch.VAPOR_ONLY};
 
     private final Document model;
-    /** The physics the model was trained on, as values: its compounds in trained order (sidecar schema 4). */
+    /** The physics the model was trained on, as values: its compounds in trained order (the sidecar's physics). */
     private final TrainedPhysics physics;
     /** Decoder variant selected by the loading caller, never by the model bytes. */
     private final V3FactorizedNeuralFeatures.DecodeOptions decode;
@@ -71,29 +71,13 @@ final class V3AnchorTransformerInitializer implements V3NeuralInitializer {
                 || d.minimumNodePressurePascal <= 0 || d.maximumNodePressurePascal < d.minimumNodePressurePascal
                 || d.pumparoundSplits == null || d.pumparoundSplits.stream().anyMatch(s -> s == null))
             throw new IllegalArgumentException("Invalid design constraints");
-        if ((m.compositionEdges == null) == (m.families == null))
-            throw new IllegalArgumentException("Expected exactly one composition domain: edges (schema 4) or families (schema 5)");
-        if (m.compositionEdges != null) {
-            if (m.compositionEdges.length == 0 || m.compositionEdges.length > 128)
-                throw new IllegalArgumentException("Missing bounded composition domain");
-            for (double[][] edge : m.compositionEdges) {
-                if (edge == null || edge.length != 2) throw new IllegalArgumentException("Invalid composition edge");
-                for (double[] endpoint : edge) {
-                    vector(endpoint, m.components.size(), false);
-                    if (Arrays.stream(endpoint).anyMatch(v -> v < 0) || Math.abs(Arrays.stream(endpoint).sum()-1) > 1e-10)
-                        throw new IllegalArgumentException("Invalid composition endpoint");
-                }
-            }
-            if (m.offAxisLimit != null || m.lumpMap != null) throw new IllegalArgumentException("Unknown compounds need sidecar schema 5");
-        } else {
-            if (m.families.length == 0 || m.families.length > 4) throw new IllegalArgumentException("Invalid composition families");
-            for (Family f : m.families) f.validate(m.components.size());
-            if (m.offAxisLimit == null || !(m.offAxisLimit >= 0) || m.offAxisLimit > MAXIMUM_OFF_AXIS_SHARE
-                    || m.lumpMap == null || m.lumpMap.size() > 128
-                    || m.lumpMap.entrySet().stream().anyMatch(e -> e.getKey() == null || e.getKey().isBlank()
-                            || m.components.contains(e.getKey()) || !m.components.contains(e.getValue())))
-                throw new IllegalArgumentException("Invalid off-axis policy");
-        }
+        if (m.families == null || m.families.length == 0 || m.families.length > 4) throw new IllegalArgumentException("Invalid composition families");
+        for (Family f : m.families) f.validate(m.components.size());
+        if (m.offAxisLimit == null || !(m.offAxisLimit >= 0) || m.offAxisLimit > MAXIMUM_OFF_AXIS_SHARE
+                || m.lumpMap == null || m.lumpMap.size() > 128
+                || m.lumpMap.entrySet().stream().anyMatch(e -> e.getKey() == null || e.getKey().isBlank()
+                        || m.components.contains(e.getKey()) || !m.components.contains(e.getValue())))
+            throw new IllegalArgumentException("Invalid off-axis policy");
         var result = new V3AnchorTransformerInitializer(m, physics(m), decode);
         result.checkLinear("embed", inputs(m), 64); result.checkNorm("output.0"); result.checkLinear("output.1", 64, outputWidth(m));
         result.checkLinear("branch.0", globalWidth(m), 64); result.checkLinear("branch.2", 64, 3);
@@ -114,7 +98,7 @@ final class V3AnchorTransformerInitializer implements V3NeuralInitializer {
     }
 
     /**
-     * The trained physics (sidecar schema 4, O7 of batch 2026-11-04-open-thermo-data): the values the model was trained on,
+     * The trained physics (O7 of batch 2026-11-04-open-thermo-data): the values the model was trained on,
      * its compounds in its trained order ({@link TrainedPhysics#read}).
      */
     private static TrainedPhysics physics(Document m) {
@@ -138,10 +122,10 @@ final class V3AnchorTransformerInitializer implements V3NeuralInitializer {
     List<String> componentIds() { return List.copyOf(model.components); }
     /** The physics the model was trained on; a request binds only where its values on its active compounds are these. */
     TrainedPhysics physics() { return physics; }
-    /** The largest off-axis mole share of a feed the model takes (U1, sidecar schema 5); zero for schema 4. */
-    double offAxisLimit() { return model.offAxisLimit == null ? 0.0 : model.offAxisLimit; }
-    /** The axis compound each known off-axis compound is lumped into (U1, sidecar schema 5); empty for schema 4. */
-    Map<String, String> lumpMap() { return model.lumpMap == null ? Map.of() : Map.copyOf(model.lumpMap); }
+    /** The largest off-axis mole share of a feed the model takes (U1, batch 2026-11-05-neural-retrain). */
+    double offAxisLimit() { return model.offAxisLimit; }
+    /** The axis compound each known off-axis compound is lumped into (U1). */
+    Map<String, String> lumpMap() { return Map.copyOf(model.lumpMap); }
 
     long parameterCount() { return parameterStorageBytes() / Double.BYTES; }
 
@@ -173,7 +157,7 @@ final class V3AnchorTransformerInitializer implements V3NeuralInitializer {
     }
 
     /**
-     * Whether the model covers a request on its own compound list, in the calculation's catalog: the composition edges, the
+     * Whether the model covers a request on its own compound list, in the calculation's catalog: the composition families, the
      * topology and the global bounds. The physics is the binding's ({@link V3NeuralRegistry#bind}): the request reaches
      * the model only through the lens of a request whose physics on its active compounds is the model's.
      */
@@ -204,31 +188,15 @@ final class V3AnchorTransformerInitializer implements V3NeuralInitializer {
     }
 
     /**
-     * Coverage is an explicitly qualified composition domain, not a feature bounding box: the union of blend segments
-     * (schema 4), or since batch 2026-11-05-neural-retrain the E7 family check (schema 5, decision D5 A), where a feed passes
-     * when one family holds it ({@link Family#holds}).
+     * Coverage is an explicitly qualified composition domain, not a feature bounding box: the E7 family check (batch
+     * 2026-11-05-neural-retrain, decision D5 A), where a feed passes when one family holds it ({@link Family#holds}).
      */
     private boolean compositionSupported(double[] feed) {
         double total = Arrays.stream(feed).sum();
         if (!(total > 0)) return false;
-        if (model.families != null) {
-            double[] x = new double[feed.length];
-            for (int i = 0; i < x.length; i++) x[i] = feed[i] / total;
-            for (Family family : model.families) if (family.holds(x)) return true;
-            return false;
-        }
-        for (double[][] edge : model.compositionEdges) {
-            double numerator=0, denominator=0;
-            for (int i=0;i<feed.length;i++) {
-                double delta=edge[1][i]-edge[0][i];
-                numerator+=(feed[i]/total-edge[0][i])*delta; denominator+=delta*delta;
-            }
-            double t=denominator==0?0:Math.clamp(numerator/denominator,0,1);
-            boolean matches=true;
-            for (int i=0;i<feed.length;i++)
-                if (Math.abs(feed[i]/total-(edge[0][i]+t*(edge[1][i]-edge[0][i])))>1e-8) { matches=false; break; }
-            if (matches) return true;
-        }
+        double[] x = new double[feed.length];
+        for (int i = 0; i < x.length; i++) x[i] = feed[i] / total;
+        for (Family family : model.families) if (family.holds(x)) return true;
         return false;
     }
 
@@ -390,7 +358,6 @@ final class V3AnchorTransformerInitializer implements V3NeuralInitializer {
     private static final class Document {
         String featureRevision, modelType, modelId, anchorLayout, baselineRevision;
         com.google.gson.JsonObject physics;
-        double[][][] compositionEdges;
         Family[] families; Double offAxisLimit; Map<String, String> lumpMap;
         List<String> components, formulationRevisions; boolean[] branchesSeen;
         double presenceThreshold, traceFloorFraction; double[] globalMin, globalMax;

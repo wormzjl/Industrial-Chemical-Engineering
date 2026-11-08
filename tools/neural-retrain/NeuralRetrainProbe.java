@@ -611,8 +611,8 @@ class NeuralRetrainProbe {
     @Test void features() throws Exception {
         setUp();
         byte[] payload, sidecar;
-        try (var p = getClass().getResourceAsStream("/data/icheme/neural/v3-column-transformer-regrouped.payload.json");
-             var s = getClass().getResourceAsStream("/data/icheme/neural/v3-column-transformer-regrouped.sidecar.json")) { payload = p.readAllBytes(); sidecar = s.readAllBytes(); }
+        try (var p = getClass().getResourceAsStream("/data/icheme/neural/v3-column-transformer-open.payload.json");
+             var s = getClass().getResourceAsStream("/data/icheme/neural/v3-column-transformer-open.sidecar.json")) { payload = p.readAllBytes(); sidecar = s.readAllBytes(); }
         if (!env("NR_PAYLOAD", "").isEmpty()) { payload = Files.readAllBytes(Path.of(env("NR_PAYLOAD", ""))); sidecar = Files.readAllBytes(Path.of(env("NR_SIDECAR", ""))); } // an exported candidate
         var model = V3NeuralRegistry.TransformerArtifact.read(new ByteArrayInputStream(payload), new ByteArrayInputStream(sidecar)).initializer();
         var inputs = new ArrayList<Map.Entry<String, V3ColumnInput>>();
@@ -645,5 +645,52 @@ class NeuralRetrainProbe {
                 System.out.println("nr features " + e.getKey() + " branch=" + o.get("branch") + " anchor=" + o.get("anchorAvailable") + " supported=" + o.get("supported"));
             }
         }
+    }
+
+    /**
+     * N6: the bundled model's float64 fixtures (V3BundledModelTest). For the NR_FIXTURE_IDS rows (presets or NR_CASES ids), the
+     * input, the raw outputs and branch logits of the independent PyTorch float64 inference (NR_PYTHON, written by fixtures.py
+     * from this probe's `features`), and the seed the Java decoder makes of those raw outputs on their best legal branch.
+     */
+    @Test void fixtures() throws Exception {
+        setUp();
+        byte[] payload = Files.readAllBytes(Path.of(env("NR_PAYLOAD", ""))), sidecar = Files.readAllBytes(Path.of(env("NR_SIDECAR", "")));
+        var model = V3NeuralRegistry.TransformerArtifact.read(new ByteArrayInputStream(payload), new ByteArrayInputStream(sidecar)).initializer();
+        var side = JsonParser.parseString(new String(sidecar, StandardCharsets.UTF_8)).getAsJsonObject();
+        boolean[] seen = JSON.fromJson(side.get("branchesSeen"), boolean[].class);
+        var python = JsonParser.parseString(Files.readString(Path.of(env("NR_PYTHON", "")))).getAsJsonObject();
+        var byId = new LinkedHashMap<String, V3ColumnInput>();
+        for (int g = 0; g < GRADES.length; g++) byId.put("preset-" + GRADES[g], base[g]);
+        if (!env("NR_CASES", "").isEmpty()) for (var row : read(Path.of(env("NR_CASES", "")))) byId.put(row.get("id").getAsString(), build(row.getAsJsonObject("design")));
+        var branches = new V3CondenserPhaseBranch[] {V3CondenserPhaseBranch.LIQUID_ONLY, V3CondenserPhaseBranch.TWO_PHASE, V3CondenserPhaseBranch.VAPOR_ONLY};
+        var list = new JsonArray();
+        for (String id : env("NR_FIXTURE_IDS", "").split(",")) {
+            var in = byId.get(id); if (in == null) throw new IllegalArgumentException("No input " + id);
+            var p = python.getAsJsonObject(id);
+            double[][] raw = JSON.fromJson(p.get("raw"), double[][].class); double[] logits = JSON.fromJson(p.get("branchLogits"), double[].class);
+            boolean reflux = in.specifications().stream().anyMatch(s -> s instanceof V3ColumnSpecification.OrganicRefluxRatio r && r.ratio() > 0);
+            int best = -1;
+            for (int i = 0; i < 3; i++) if (seen[i] && !(i == 2 && reflux) && (best < 0 || logits[i] > logits[best])) best = i;
+            int b = best;
+            var seed = MaterialRuntime.with(catalogFor(in), in.packageId(), () -> {
+                if (!model.supported(in)) throw new IllegalStateException(id + " is outside the model's coverage");
+                return V3FactorizedNeuralFeatures.decode(in, model.propertyRevision(in.packageId()), branches[b], raw, 0.02,
+                        V3FactorizedNeuralFeatures.DecodeOptions.zeroPhaseFloor(10));
+            });
+            var input = inputJson(in); input.addProperty("schemaVersion", in.schemaVersion());
+            var expected = new JsonObject(); expected.addProperty("branch", seed.branch().name());
+            expected.add("temperatures", JSON.toJsonTree(seed.temperatures())); expected.add("liquid", JSON.toJsonTree(seed.liquid()));
+            expected.add("vapor", JSON.toJsonTree(seed.vapor())); expected.add("freeWater", JSON.toJsonTree(seed.freeWater()));
+            expected.add("wetTrays", JSON.toJsonTree(seed.wetTrays()));
+            var x = new JsonObject(); x.addProperty("id", id); x.add("input", input); x.add("raw", p.get("raw")); x.add("branchLogits", p.get("branchLogits"));
+            x.add("expected", expected); list.add(x);
+            System.out.println("nr fixture " + id + " branch=" + seed.branch() + " stages=" + in.stageCount());
+        }
+        var o = new JsonObject(); o.addProperty("schemaVersion", 2); o.addProperty("modelId", model.modelId());
+        o.addProperty("payloadSha256", V3NeuralRegistry.TransformerArtifact.sha256(payload)); o.addProperty("sidecarSha256", V3NeuralRegistry.TransformerArtifact.sha256(sidecar));
+        o.addProperty("source", "Raw outputs and branch logits: independent PyTorch float64 inference (tools/neural-retrain/fixtures.py) on the probe's features; expected seed: the Java phase-floor decoder (ZERO_PHASE_FLOOR_10) on those raw outputs; N4 holdout and validation inputs");
+        o.add("fixtures", list);
+        Path out = Path.of(env("NR_OUT", "tmp/neural-retrain/fixtures.json")); Files.createDirectories(out.toAbsolutePath().getParent());
+        Files.writeString(out, new GsonBuilder().setPrettyPrinting().create().toJson(o) + "\n");
     }
 }

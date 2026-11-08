@@ -8,8 +8,9 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
- * The column's admission limits that the bundled model does not cover, solved on the default route (the model declines them,
- * so the classical seed solves them): nitrogen in the feed, and a fourth side draw.
+ * The column's admission limits, solved on the default route: nitrogen in the feed, which the bundled model takes lumped into
+ * methane (U1, up to 5 % off its axis, batch 2026-11-05-neural-retrain), and a fourth side draw, which it declines, so the
+ * classical seed solves it.
  */
 @org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.TiaJuanaExtension.class)
 class V3ColumnFeedAndDrawLimitsTest {
@@ -28,7 +29,7 @@ class V3ColumnFeedAndDrawLimitsTest {
         double total = Arrays.stream(feed).sum();
         for (int i = 0; i < feed.length; i++) feed[i] *= 0.98;
         feed[nitrogen] = 0.02 * total;
-        var success = solve(with(preset, feed, preset.sideDraws()));
+        var success = solve(with(preset, feed, preset.sideDraws()), true);
         assertEquals(feed[nitrogen], nitrogenIn(success, s -> true), feed[nitrogen] * 1e-7, "nitrogen is conserved");
         double overhead = nitrogenIn(success, s -> s.streamId().equals("overhead_vapor"));
         assertTrue(overhead > 0.95 * feed[nitrogen], "nitrogen leaves with the overhead vapor: " + overhead + " of " + feed[nitrogen]);
@@ -41,7 +42,7 @@ class V3ColumnFeedAndDrawLimitsTest {
         var draws = new ArrayList<>(preset.sideDraws());
         draws.add(new V3SideDrawSpec(29, 10 / 3.6));
         assertEquals(V3ColumnInput.MAX_SIDE_DRAWS, draws.size());
-        var success = solve(with(preset, preset.feedComponentMolarFlowsMolPerSecond(), draws));
+        var success = solve(with(preset, preset.feedComponentMolarFlowsMolPerSecond(), draws), false);
         var side = success.result().streams().stream().filter(s -> s.streamId().equals("side_liquid_tray_29")).findFirst().orElseThrow();
         assertEquals(10 / 3.6, side.molarFlowMolPerSecond(), 1e-6);
         assertTrue(success.result().streams().size() <= V3ColumnStreamProperties.MAX_STREAMS);
@@ -54,8 +55,9 @@ class V3ColumnFeedAndDrawLimitsTest {
                 preset.columnDiameterMetres());
     }
 
-    private static V3ColumnOutcome.Success solve(V3ColumnInput input) {
-        assertTrue(V3NeuralRegistry.bundled().predict(input, V3SolveControl.UNBOUNDED).isEmpty(), "the model declines this input");
+    private static V3ColumnOutcome.Success solve(V3ColumnInput input, boolean modelBinds) {
+        assertEquals(modelBinds, V3NeuralRegistry.bundled().predict(input, V3SolveControl.UNBOUNDED).isPresent(),
+                modelBinds ? "the model takes this input" : "the model declines this input");
         long start = System.nanoTime();
         var outcome = V3ColumnCalculator.calculate(input, () -> {
             if (System.nanoTime() - start > 120_000_000_000L) throw new java.util.concurrent.CancellationException("solve deadline");

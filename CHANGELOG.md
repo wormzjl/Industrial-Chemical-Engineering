@@ -15,6 +15,10 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+### Changed
+
+- The column's learned start is retrained on the open crude grades and today's column (condenser carry-over, wet mesh r34/r35): bundled model `icheme:v3-column-open-r34-u1-v2` replaces the regrouped model, sidecar schema 5 only (E7 composition families, up to 5 % off-axis compounds lumped by U1), learned-route budget 300,000 control polls instead of milliseconds (N5 `c1fb0abf0`, the N6 swap on `claude/neural-retrain-open-data-712a75`); batch `2026-11-05-neural-retrain`.
+
 ## [0.20.0] - 2026-11-04
 
 ### Added

@@ -194,7 +194,7 @@ class V3NeuralRegistryTest {
         return new V3NeuralRegistry.Entry(1,V3AnchorTransformerInitializer.read(stream(d.toString()),V3FactorizedNeuralFeatures.DecodeOptions.NONE),"0".repeat(64));
     }
     private static JsonObject family(double inPlane,double outOfPlane,double limit,Map<String,String> lumps) {
-        var input=input();var d=V3RegroupedTransformerTest.document(input);d.addProperty("modelId","test:unknowns");d.remove("compositionEdges");
+        var input=input();var d=V3RegroupedTransformerTest.document(input);d.addProperty("modelId","test:unknowns");
         int c=input.componentBasis().componentCount();double[] mean=new double[c],u=new double[c];
         mean[c-2]=.5;mean[c-8]=.5;u[c-2]=Math.sqrt(.5);u[c-8]=-Math.sqrt(.5);
         var json=new Gson();var family=new JsonObject();family.addProperty("name","cdu");
@@ -223,7 +223,7 @@ class V3NeuralRegistryTest {
         assertNull(V3NeuralRegistry.Lumping.of(ids,new double[]{60,6,34,0},axis,lumps,.05),"6 % off the axis");
         assertNull(V3NeuralRegistry.Lumping.of(ids,new double[]{60,4,36,1},axis,lumps,.05),"Y has no lump");
         assertNull(V3NeuralRegistry.Lumping.of(ids,new double[]{0,4,0,0},axis,lumps,1),"nothing known is fed");
-        assertNull(V3NeuralRegistry.Lumping.of(ids,new double[]{60,1e-100,36,0},axis,lumps,0),"a schema-4 model takes no unknowns");
+        assertNull(V3NeuralRegistry.Lumping.of(ids,new double[]{60,1e-100,36,0},axis,lumps,0),"a model with no off-axis share takes no unknowns");
     }
 
     /** An unknown compound binds through its lump up to the model's share; the seed carries it on the request's own list. */
@@ -257,7 +257,7 @@ class V3NeuralRegistryTest {
         assertNotSame(V3NeuralInitializer.UNAVAILABLE,new V3NeuralRegistry(List.of(unknowns(.2,.02,.05,Map.of()))).bind(CATALOG,network(50,49,1,0)));
     }
 
-    /** Schema 5 reads only a complete off-axis policy within the owner's 5 %, an orthonormal basis and one composition domain. */
+    /** Schema 5 reads only a complete off-axis policy within the owner's 5 %, an orthonormal basis and its composition families. */
     @Test void schemaFiveRejectsAnIncompleteOrWiderPolicy() {
         Map<String,String> lumps=Map.of("Nitrogen","Methane");
         for(Consumer<JsonObject> damage:List.<Consumer<JsonObject>>of(
@@ -266,33 +266,26 @@ class V3NeuralRegistryTest {
                 d->d.add("lumpMap",new Gson().toJsonTree(Map.of("Methane","Ethane"))),
                 d->d.remove("lumpMap"),
                 d->d.getAsJsonArray("families").get(0).getAsJsonObject().getAsJsonArray("basis").get(0).getAsJsonArray().set(0,new JsonPrimitive(.5)),
-                d->d.add("compositionEdges",V3RegroupedTransformerTest.document(input()).get("compositionEdges")))) {
+                d->d.remove("offAxisLimit"),
+                d->d.remove("families"))) {
             var d=family(.05,1e-9,.05,lumps);damage.accept(d);
             assertThrows(IllegalArgumentException.class,()->V3AnchorTransformerInitializer.read(stream(d.toString()),V3FactorizedNeuralFeatures.DecodeOptions.NONE));
         }
-        // Schema 4 takes no off-axis policy.
-        var d=V3RegroupedTransformerTest.document(input());d.addProperty("offAxisLimit",0);
-        assertThrows(IllegalArgumentException.class,()->V3AnchorTransformerInitializer.read(stream(d.toString()),V3FactorizedNeuralFeatures.DecodeOptions.NONE));
     }
 
-    /** The bundled pair read as a schema-5 sidecar: the artifact reader takes the new fields and still pins the payload. */
+    /** The bundled pair is schema 5: the artifact reader takes its families and off-axis policy, and refuses it as schema 4. */
     @Test void theArtifactReaderTakesSchemaFive() throws Exception {
         byte[] payload;String sidecar;
-        try(var p=getClass().getResourceAsStream("/data/icheme/neural/v3-column-transformer-regrouped.payload.json");
-            var s=getClass().getResourceAsStream("/data/icheme/neural/v3-column-transformer-regrouped.sidecar.json")) {
+        try(var p=getClass().getResourceAsStream("/data/icheme/neural/v3-column-transformer-open.payload.json");
+            var s=getClass().getResourceAsStream("/data/icheme/neural/v3-column-transformer-open.sidecar.json")) {
             payload=p.readAllBytes();sidecar=new String(s.readAllBytes(),StandardCharsets.UTF_8);
         }
         var side=JsonParser.parseString(sidecar).getAsJsonObject();
-        var endpoint=side.getAsJsonArray("compositionEdges").get(0).getAsJsonArray().get(0).getAsJsonArray();
-        side.remove("compositionEdges");side.addProperty("schemaVersion",5);
-        double[] unit=new double[endpoint.size()];unit[0]=1;
-        var family=new JsonObject();family.addProperty("name","cdu");family.add("mean",endpoint);
-        family.add("basis",new Gson().toJsonTree(new double[][]{unit}));family.add("points",new Gson().toJsonTree(new double[][]{{0}}));
-        family.addProperty("inPlaneLimit",.01);family.addProperty("outOfPlaneLimit",.01);
-        var families=new JsonArray();families.add(family);side.add("families",families);
-        side.addProperty("offAxisLimit",.05);side.add("lumpMap",new Gson().toJsonTree(Map.of("Nitrogen","Methane")));
-        var loaded=V3NeuralRegistry.TransformerArtifact.read(new ByteArrayInputStream(payload),stream(side.toString()));
-        assertEquals(.05,loaded.initializer().offAxisLimit());assertEquals(Map.of("Nitrogen","Methane"),loaded.initializer().lumpMap());
+        assertEquals(5,side.get("schemaVersion").getAsInt());
+        var loaded=V3NeuralRegistry.TransformerArtifact.read(new ByteArrayInputStream(payload),stream(sidecar));
+        assertEquals(.05,loaded.initializer().offAxisLimit());
+        assertEquals(24,loaded.initializer().lumpMap().size());
+        assertTrue(loaded.initializer().lumpMap().values().stream().allMatch(loaded.initializer().componentIds()::contains));
         side.addProperty("schemaVersion",4);
         assertThrows(IllegalArgumentException.class,()->V3NeuralRegistry.TransformerArtifact.read(new ByteArrayInputStream(payload),stream(side.toString())));
     }
