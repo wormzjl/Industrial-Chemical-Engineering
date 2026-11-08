@@ -18,7 +18,11 @@ const read = (f) => fs.readFileSync(f, 'utf8').split('\n').filter((l) => l.trim(
 const rows = journals.flatMap(read);
 const label = (r) => r.label ?? r.strict ?? false;
 const unsolved = (r) => !label(r) && r.split === 'train' && !['ACCEPTED', 'EXCLUDED_BY_DESIGN', 'INVALID_INPUT'].includes(r.status);
-const failed = rows.filter(unsolved).map((r) => r.design);
+// A round re-solves an earlier journal's input under the same id: an id labelled in any journal is solved, and an input that
+// failed in several journals enters the next round once (its latest row).
+const solvedIds = new Set(rows.filter(label).map((r) => r.id));
+const latest = new Map(); for (const r of rows) latest.set(r.id, r);
+const failed = [...latest.values()].filter((r) => !solvedIds.has(r.id) && unsolved(r)).map((r) => r.design);
 
 const GRADES = ['light', 'medium', 'heavy', 'dilbit'];
 const vdu = (d) => d.unit === 'vdu';
