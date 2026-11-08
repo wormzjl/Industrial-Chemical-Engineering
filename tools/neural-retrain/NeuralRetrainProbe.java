@@ -82,7 +82,8 @@ class NeuralRetrainProbe {
      */
     static V3NeuralInitializer learned = null;
     static final V3InitializationOptions LEARNED_START = new V3InitializationOptions(V3InitializationOptions.Mode.LNN_FIRST,
-            V3InitializationOptions.WetStart.AUTO, 16, V3InitializationOptions.DEFAULT_BUDGET_POLLS, V3InitializationOptions.Correction.PROGRESS);
+            V3InitializationOptions.WetStart.AUTO, 16, Integer.parseInt(env("NR_BUDGET", String.valueOf(V3InitializationOptions.DEFAULT_BUDGET_POLLS))),
+            V3InitializationOptions.Correction.PROGRESS); // NR_BUDGET: N4's budget measurement (the default is provisional)
 
     static V3NeuralInitializer candidate() throws Exception {
         byte[] payload = Files.readAllBytes(Path.of(env("NR_PAYLOAD", ""))), sidecar = Files.readAllBytes(Path.of(env("NR_SIDECAR", "")));
