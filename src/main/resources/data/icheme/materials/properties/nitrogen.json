@@ -48,6 +48,15 @@
     "source": "ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Nitrogen\" (ChemSep index 905, CAS 7727-37-9): melting point, triple point temperature and pressure, heat of fusion at the melting point. Data only: never a validity floor or a range end.",
     "revision": "chemsep-8.3-r1"
   },
+  "thermochemistry": {
+    "formation_enthalpy_j_per_mol": 0,
+    "elements": {
+      "N": 2
+    },
+    "estimated": false,
+    "source": "0 by definition: N2 is an element in its reference state (ChemSep agrees). Ideal-gas heat of formation at 298.15 K and formula N2 (molar mass 28.014 g/mol) of ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Nitrogen\" (ChemSep index 905, CAS 7727-37-9). Heats of reaction follow by Hess's law. Data only.",
+    "revision": "chemsep-8.3-hf-r1"
+  },
   "viscosity": {
     "liquid": {
       "type": "log_table",

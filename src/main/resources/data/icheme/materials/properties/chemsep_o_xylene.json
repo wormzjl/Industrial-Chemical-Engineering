@@ -38,6 +38,23 @@
       "acentric_factor": 0.312
     }
   },
+  "thermochemistry": {
+    "formation_enthalpy_j_per_mol": 19080,
+    "elements": {
+      "C": 8,
+      "H": 10
+    },
+    "estimated": false,
+    "source": "Ideal-gas heat of formation at 298.15 K and formula C8H10 (molar mass 106.168 g/mol) of ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"O-xylene\" (ChemSep index 505, CAS 95-47-6). Heats of reaction follow by Hess's law. Data only.",
+    "revision": "chemsep-8.3-hf-r1"
+  },
+  "flammability": {
+    "lfl_volume_fraction": 0.009,
+    "ufl_volume_fraction": 0.067,
+    "estimated": false,
+    "source": "NIOSH Pocket Guide to Chemical Hazards, o-Xylene (npgd0668, https://www.cdc.gov/niosh/npg/npgd0668.html, read 2026-11-05): LEL and UEL in air. CDC material, in the public domain. Constant with temperature (owner decision E23).",
+    "revision": "npg-b627-r1"
+  },
   "viscosity": {
     "liquid": {
       "type": "log_table",

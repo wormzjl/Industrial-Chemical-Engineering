@@ -38,6 +38,24 @@
       "acentric_factor": 0.189
     }
   },
+  "thermochemistry": {
+    "formation_enthalpy_j_per_mol": -46300,
+    "elements": {
+      "C": 2,
+      "H": 6,
+      "S": 1
+    },
+    "estimated": false,
+    "source": "Ideal-gas heat of formation at 298.15 K and formula C2H6S (molar mass 62.13 g/mol) of ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Ethyl mercaptan\" (ChemSep index 1802, CAS 75-08-1). Heats of reaction follow by Hess's law. Data only.",
+    "revision": "chemsep-8.3-hf-r1"
+  },
+  "flammability": {
+    "lfl_volume_fraction": 0.028,
+    "ufl_volume_fraction": 0.18,
+    "estimated": false,
+    "source": "NIOSH Pocket Guide to Chemical Hazards, Ethyl mercaptan (npgd0280, https://www.cdc.gov/niosh/npg/npgd0280.html, read 2026-11-05): LEL and UEL in air. CDC material, in the public domain. Constant with temperature (owner decision E23).",
+    "revision": "npg-b627-r1"
+  },
   "viscosity": {
     "liquid": {
       "type": "log_table",

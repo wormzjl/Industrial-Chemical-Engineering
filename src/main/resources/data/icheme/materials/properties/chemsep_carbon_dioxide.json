@@ -38,6 +38,16 @@
       "acentric_factor": 0.223621
     }
   },
+  "thermochemistry": {
+    "formation_enthalpy_j_per_mol": -393510,
+    "elements": {
+      "C": 1,
+      "O": 2
+    },
+    "estimated": false,
+    "source": "Ideal-gas heat of formation at 298.15 K and formula CO2 (molar mass 44.009 g/mol) of ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Carbon dioxide\" (ChemSep index 909, CAS 124-38-9). Heats of reaction follow by Hess's law. Data only.",
+    "revision": "chemsep-8.3-hf-r1"
+  },
   "viscosity": {
     "liquid": {
       "type": "log_table",

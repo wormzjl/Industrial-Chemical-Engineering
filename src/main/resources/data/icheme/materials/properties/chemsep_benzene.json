@@ -38,6 +38,23 @@
       "acentric_factor": 0.209
     }
   },
+  "thermochemistry": {
+    "formation_enthalpy_j_per_mol": 82880,
+    "elements": {
+      "C": 6,
+      "H": 6
+    },
+    "estimated": false,
+    "source": "Ideal-gas heat of formation at 298.15 K and formula C6H6 (molar mass 78.114 g/mol) of ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Benzene\" (ChemSep index 501, CAS 71-43-2). Heats of reaction follow by Hess's law. Data only.",
+    "revision": "chemsep-8.3-hf-r1"
+  },
+  "flammability": {
+    "lfl_volume_fraction": 0.012,
+    "ufl_volume_fraction": 0.078,
+    "estimated": false,
+    "source": "NIOSH Pocket Guide to Chemical Hazards, Benzene (npgd0049, https://www.cdc.gov/niosh/npg/npgd0049.html, read 2026-11-05): LEL and UEL in air. CDC material, in the public domain. Constant with temperature (owner decision E23).",
+    "revision": "npg-b627-r1"
+  },
   "viscosity": {
     "liquid": {
       "type": "log_table",

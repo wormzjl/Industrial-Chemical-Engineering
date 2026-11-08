@@ -44,6 +44,22 @@
     "source": "Estimated upper bound: the melting point of the n-paraffin of the fraction's molar mass 105.51938460005479 g/mol (icheme:crude_pc02, revision crude-regrouped-r1), Riazi and Al-Sahhaf, Ind. Eng. Chem. Res. 34 (1995) 4145, Tm = 397 - exp(6.5096 - 0.14187 M^0.47), fitted for C5..C40 (M about 70..565). A fraction freezes over a range (cloud and pour points lie lower). Data only: never a validity floor or a range end.",
     "revision": "riazi-al-sahhaf-1995-r1"
   },
+  "thermochemistry": {
+    "formation_enthalpy_j_per_mol": -185690.4806952395,
+    "elements": {
+      "C": 7.499009487832644,
+      "H": 15.326172263588198
+    },
+    "estimated": true,
+    "source": "Estimated. Formula CHx: hydrogen 14.640704833762726 wt% from Cragoe 1929 (US Bureau of Standards Miscellaneous Publication 97, Thermal Properties of Petroleum Products), 26 - 15 SG, at the molar mass 105.51938460005479 g/mol of icheme:crude_pc02 (revision crude-regrouped-r1), the rest carbon; SG 0.7572863444158182 = its standard liquid density over 999.016 kg/m3, water at 60 F; sulfur ignored (owner decision E23). Formation enthalpy back-computed so that Hess's law to CO2 and H2O (gas), on ChemSep v8.3's ideal-gas heats of formation (-393510 and -241814 J/mol), gives Cragoe's net heat 51.916 - 8.792 SG^2 - 0.2122 H = 43.76718334967473 MJ/kg. Against 177 ChemSep C5+ hydrocarbons that heat has -0.3 % bias and 0.5 % mean absolute error for paraffins and naphthenes, +2.5 % and 2.8 % for aromatics (COMBUSTION_FLAMMABILITY_REVIEW.md, batch 2026-11-04-open-thermo-data). Cragoe 1929 is a US Government work. Computed by tools/crude-grades/thermochemistry.mjs. Data only.",
+    "revision": "cragoe-1929-chx-r1"
+  },
+  "flammability": {
+    "lfl_volume_fraction": 0.009351953871291167,
+    "estimated": true,
+    "source": "Estimated, Burgess-Wheeler: LFL x LHV = 4319 vol% kJ/mol, the median over the 22 hydrocarbons of the world list (0.2 % bias, 7.5 % mean absolute error, 23 % largest; COMBUSTION_FLAMMABILITY_REVIEW.md), on the Hess heat of this record's estimated thermochemistry. Constant with temperature (owner decision E23). No upper limit: no correlation is good enough (Jones, 25 % mean absolute error).",
+    "revision": "burgess-wheeler-r1"
+  },
   "viscosity": {
     "liquid": {
       "type": "log_table",

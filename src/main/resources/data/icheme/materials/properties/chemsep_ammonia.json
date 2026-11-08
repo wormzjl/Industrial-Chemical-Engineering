@@ -38,6 +38,23 @@
       "acentric_factor": 0.256
     }
   },
+  "thermochemistry": {
+    "formation_enthalpy_j_per_mol": -45898,
+    "elements": {
+      "H": 3,
+      "N": 1
+    },
+    "estimated": false,
+    "source": "Ideal-gas heat of formation at 298.15 K and formula NH3 (molar mass 17.031 g/mol) of ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Ammonia\" (ChemSep index 1911, CAS 7664-41-7). Heats of reaction follow by Hess's law. Data only.",
+    "revision": "chemsep-8.3-hf-r1"
+  },
+  "flammability": {
+    "lfl_volume_fraction": 0.15,
+    "ufl_volume_fraction": 0.28,
+    "estimated": false,
+    "source": "NIOSH Pocket Guide to Chemical Hazards, Ammonia (npgd0028, https://www.cdc.gov/niosh/npg/npgd0028.html, read 2026-11-05): LEL and UEL in air. CDC material, in the public domain. Constant with temperature (owner decision E23).",
+    "revision": "npg-b627-r1"
+  },
   "viscosity": {
     "liquid": {
       "type": "log_table",
