@@ -296,10 +296,12 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
                 r.pending==null?null:r.pending.trigger,r.failed,r.status+water(u),true,true,set,streams,duties,solve);
     }
     record InstrumentSample(double value,long tick) {}
-    private ColumnUnit.Probes probes(com.wormzjl.icheme.science.column.v3.V3ColumnInspection accepted){
+    ColumnUnit.Probes probes(com.wormzjl.icheme.science.column.v3.V3ColumnInspection accepted,SplitTable table){
         if(accepted==null)return null;
         var top=accepted.nodes().get(1);var bottom=accepted.nodes().getLast();var reflux=accepted.nodes().getFirst();
-        double feed=Arrays.stream(accepted.input().feedComponentMolarFlowsMolPerSecond()).sum(),refluxMass=0,vapourMass=0;
+        // The cycle meters total feed, including feed water; V3's component vector is hydrocarbon-only.
+        double feed=table.reference().alpha()*table.reference().setpoints().designFeedRate(),refluxMass=0,vapourMass=0;
+        if(!(feed>0))return null;
         for(int c=0;c<accepted.input().componentBasis().componentCount();c++){
             int k=axis.indexOf(accepted.input().componentBasis().componentId(c));
             if(k<0)return null;
@@ -378,7 +380,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         var u=topology.column(r.unit);
         String refused=p.outcome instanceof ColumnSolve.Solved s?missingStation(u,s.table()):null;
         if(p.outcome instanceof ColumnSolve.Solved s&&refused==null) {
-            r.before=r.table;r.table=s.table();r.enthalpy=s.enthalpy();r.seed=s.seed();r.probes=probes(s.inspection());r.rebuildProbes=false;r.tableTick=p.tick;r.applied=tick;r.solvedCondenser=s.solvedCondenser();r.failures=0;r.note=s.note();r.solvedBy=p.trigger;r.warm=s.route().contains("warm");r.failed=false;
+            r.before=r.table;r.table=s.table();r.enthalpy=s.enthalpy();r.seed=s.seed();r.probes=probes(s.inspection(),s.table());r.rebuildProbes=false;r.tableTick=p.tick;r.applied=tick;r.solvedCondenser=s.solvedCondenser();r.failures=0;r.note=s.note();r.solvedBy=p.trigger;r.warm=s.route().contains("warm");r.failed=false;
             // Only a solve of the short steam itself lifts rule A: one at A's own state says nothing of B's.
             if(p.trigger==DriftBands.Trigger.STEAM_RATIO)r.ruleA=false;
             return true;

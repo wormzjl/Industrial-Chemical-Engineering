@@ -120,7 +120,7 @@ public record ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean r
         /** A cycle's product credited to an outlet at {@code tick}. */
         public record Credit(long device,long tick,Account product) {public Credit{Objects.requireNonNull(product);}}
     }
-    /** Accepted solve readings: Pa, K, and kg of internal stream per mol of hydrocarbon feed. Rebuildable state. */
+    /** Accepted solve readings: Pa, K, and kg of internal stream per mol of total feed. Rebuildable state. */
     public record Probes(double topPressure,double topTemperature,double bottomPressure,double bottomTemperature,
                          double refluxPressure,double refluxTemperature,double refluxPerFeed,double vapourPerFeed) {
         public Probes {
