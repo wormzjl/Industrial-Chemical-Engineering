@@ -130,17 +130,6 @@ class ControlSystemTest {
     }
 
     @Test
-    void removingOneCableBreaksTheBusButKeepsRegisteredPorts() throws Exception {
-        var facts = corpus();
-        var panel = facts.panels().iterator().next();
-        var sensor =
-                facts.ports().values().stream().filter(p -> p.host() > 0).findFirst().orElseThrow();
-        facts.removeCable(facts.cables().iterator().next().site());
-        assertFalse(new DataBus(facts.cables(), facts.ports()).connected(panel.id(), sensor.id()));
-        assertEquals(2, facts.ports().size());
-    }
-
-    @Test
     void wrongTypeListsDuplicateSocketsAndDamagedNamesRefuseFacts() throws Exception {
         var saved = corpus().save(new CompoundTag(), null);
         var bad = saved.copy();

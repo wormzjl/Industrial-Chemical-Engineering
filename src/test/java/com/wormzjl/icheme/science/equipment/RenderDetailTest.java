@@ -105,13 +105,6 @@ class RenderDetailTest {
         for (var shape : shapes) {
             long normal = triangles(ShapeRasterizer.renderBody(shape, RenderDetail.NORMAL));
             long low = triangles(ShapeRasterizer.renderBody(shape, RenderDetail.LOW));
-            System.out.println(
-                    "render_detail kind="
-                            + shape.kind()
-                            + " normal_triangles="
-                            + normal
-                            + " low_triangles="
-                            + low);
             assertTrue(low < normal, shape.kind() + " has no polygon saving");
         }
     }

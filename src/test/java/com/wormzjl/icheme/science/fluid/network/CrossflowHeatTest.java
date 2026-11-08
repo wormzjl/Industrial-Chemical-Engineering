@@ -111,8 +111,6 @@ class CrossflowHeatTest {
         HeatCurve[][] pairs = {
             {water, water}, {gas, water}, {water, phase}, {phase, water}, {phase, phase}
         };
-        double worst = 0;
-        int sweeps = 0, cases = 0;
         for (double d = .5; d <= 2.5; d += .25)
             for (int length = (int) Math.ceil(3 * d); length <= 12; length++)
                 for (var pair : pairs) {
@@ -122,14 +120,8 @@ class CrossflowHeatTest {
                     var coarse = rate(pair[0], hot, 100, pair[1], cold, 150, area, 8);
                     var fine = rate(pair[0], hot, 100, pair[1], cold, 150, area, 16);
                     double error = Math.abs(coarse[0] - fine[0]) / Math.max(1, Math.abs(fine[0]));
-                    worst = Math.max(worst, error);
-                    sweeps += (int) coarse[1];
-                    cases++;
                     assertTrue(error < .025, "D=" + d + ", L=" + length + ", error=" + error);
                 }
-        System.out.printf(
-                "CROSSFLOW_SWEEP cases=%d worstRelativeError=%.6f wallSweeps=%d%n",
-                cases, worst, sweeps);
     }
 
     @Test

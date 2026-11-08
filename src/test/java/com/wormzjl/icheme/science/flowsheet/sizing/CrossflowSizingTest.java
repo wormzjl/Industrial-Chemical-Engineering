@@ -36,9 +36,6 @@ class CrossflowSizingTest {
                                 ExchangerRating.crossflow(TUBE, SHELL, cross.area() * .99, null)
                                         .intoTube())
                         < duty);
-        System.out.printf(
-                "CROSSFLOW_REQUIRED area=%.3f standard=%.3f sweeps=%d approach=%.3f%n",
-                cross.area(), standard.area(), actual.sweeps(), actual.approach());
     }
 
     @Test

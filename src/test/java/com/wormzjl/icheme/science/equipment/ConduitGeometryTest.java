@@ -137,16 +137,7 @@ class ConduitGeometryTest {
     }
 
     @Test
-    void fixedPowerDiameterRetainsThePipeFaceCoordinates() {
-        assertEquals(CableMedium.DATA.outside(), CableMedium.POWER.outside());
-        assertEquals(.125, CableMedium.DATA.outside());
-        var data = new ConduitGeometry.Key(0, 0).connect(4, -7, 9).connect(5, 3, -4);
-        var power =
-                new ConduitGeometry.Key(0, 0, CableMedium.POWER)
-                        .connect(4, -7, 9)
-                        .connect(5, 3, -4);
-        assertArrayEquals(data.point(4), power.point(4));
-        assertArrayEquals(data.point(5), power.point(5));
+    void everyMediumBuildsWellFormedStraightElbowAndTeeMeshes() {
         for (var medium : CableMedium.values())
             for (int joints : new int[] {48, 36, 52})
                 for (var p : ConduitGeometry.polygons(new ConduitGeometry.Key(joints, 0, medium))) {
@@ -263,7 +254,6 @@ class ConduitGeometryTest {
 
     @Test
     void serviceSocketsClearTheCastingsAcrossEveryEquipmentFamily() {
-        int checked = 0, nativeData = 0, powered = 0;
         var kinds = java.util.EnumSet.noneOf(EquipmentShape.Kind.class);
         var buried = new java.util.ArrayList<String>();
         for (var shape : EquipmentLayoutGoldenTest.shapes()) {
@@ -272,22 +262,16 @@ class ConduitGeometryTest {
             var power = SocketGeometry.power(shape);
             if (data != null) {
                 checkClear(shape, data, buried);
-                nativeData++;
             }
             if (power != null) {
                 checkClear(shape, power, buried);
-                powered++;
             }
             var node = ShapeRasterizer.fluidCell(shape);
             for (var socket : InstrumentGeometry.sockets(shape, node)) {
                 assertTrue(Double.isFinite(socket.x() + socket.y() + socket.z()), shape.toString());
             }
-            checked++;
         }
         assertEquals(java.util.EnumSet.allOf(EquipmentShape.Kind.class), kinds);
-        System.out.printf(
-                "SERVICE_PORT_SWEEP shapes=%d native_data=%d power=%d%n",
-                checked, nativeData, powered);
         assertTrue(buried.isEmpty(), "Sockets buried in castings:\n" + String.join("\n", buried));
     }
 

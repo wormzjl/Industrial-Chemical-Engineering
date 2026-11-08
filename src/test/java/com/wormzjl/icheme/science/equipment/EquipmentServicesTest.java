@@ -103,7 +103,6 @@ class EquipmentServicesTest {
     @Test
     void fittedProbeRoutesQualifyAtConstructorSizeExtremesAndBothDetails() {
         var failures = new ArrayList<String>();
-        int checked = 0;
         for (var shape : EquipmentLayoutGoldenTest.shapes()) {
             var probes = EquipmentInstruments.of(shape).probes();
             if (probes.isEmpty()) continue;
@@ -112,7 +111,6 @@ class EquipmentServicesTest {
                             .map(EquipmentInstruments.Probe::id)
                             .collect(java.util.stream.Collectors.toSet());
             for (var detail : RenderDetail.values()) {
-                checked++;
                 try {
                     var drawing = ShapeRasterizer.instrumentWiring(shape, ids, detail);
                     if (!drawing.unresolved().isEmpty())
@@ -138,7 +136,6 @@ class EquipmentServicesTest {
                 }
             }
         }
-        System.out.println("native_instrument_finish_profiles=" + checked);
         assertTrue(failures.isEmpty(), String.join("\n", failures));
     }
 
