@@ -3,13 +3,14 @@
 These are equipment-owned visual parts. They add no layable cable, network node,
 world block, process state or collision rule. Shared native meshes own the carrier.
 """
-import heapq,json,math,hashlib,gzip,inspect,pickle,itertools
+import heapq,json,math,hashlib,gzip,inspect,pickle
 from functools import lru_cache
 from pathlib import Path
 import numpy as np
 from PIL import Image
 import sensor_layouts
 import revised_layouts
+import surface_routes
 
 CONTACT=.022
 TEXTURES={};_plans={}
@@ -158,11 +159,10 @@ def surface_graph(carriers,zones,k):
 
 
 def wire_sources(d,cat,p,native,k):
- sources=[];represented=set()
+ sources=[]
  for probe in cat['points']+cat['factory']:
   if probe.get('existing'):continue
-  centre=np.array(probe['centre']);tap=np.array(probe['tap']);n=np.array(probe['normal']);right=sensor_layouts.basis(n)[:,0]
-  if probe.get('processRole'):represented.add(probe['processRole'])
+  centre=np.array(probe['centre']);tap=np.array(probe['tap']);n=np.array(probe['normal'])
   if sensor_layouts.head_model(probe):
    gland,entry_axis=sensor_layouts.instrument_entry(probe);start=gland+entry_axis*.03;axis=int(np.argmax(abs(entry_axis)));sign=-int(entry_axis[axis])
    foot=revised_layouts.surface(native,axis,start,sign,{'SHELL','HEAD','PIPE','TOWER_PANEL','CONCRETE'})
@@ -174,35 +174,6 @@ def wire_sources(d,cat,p,native,k):
  # markers are not exterior probes and must not generate a deck of fake leads.
  return sources
 
-def bridge_component(graph,start,reachable,limit=.30):
- # A sealed metallic connection across a measured small assembly joint.
- _,component=graph.tree(start);pts=np.array(graph.points);bins={};size=limit;best=(limit*limit,None,None)
- for at in reachable:bins.setdefault(tuple(np.floor(pts[at]/size).astype(int)),[]).append(at)
- for at in component:
-  cell=np.floor(pts[at]/size).astype(int);ids=[a for delta in itertools.product(range(-1,2),repeat=3) for a in bins.get(tuple(cell+delta),())]
-  if not ids:continue
-  ds=np.sum((pts[ids]-pts[at])**2,axis=1)
-  for index in np.argsort(ds):
-   if ds[index]>=best[0]:break
-   other=ids[index];a,b=pts[at],pts[other]
-   if not blocked(a,b,graph.zones) and sensor_layouts.segment_clear(graph.triangles,a,b):best=(ds[index],at,other);break
- if best[1] is None:return None
- _,a,b=best;graph.link(a,b,-1);return dict(a=pts[a].tolist(),b=pts[b].tolist(),length=math.sqrt(best[0]))
-
-def straighten(points,graph):
- # Pull the route straight across each supported plane; retain curved-shell stations.
- if len(points)<3:return points
- result=[points[0]];at=0
- while at<len(points)-1:
-  best=at+1
-  for other in range(at+2,min(len(points),at+25)):
-   a,b=points[at],points[other]
-   if blocked(a,b,graph.zones):continue
-   samples=[a+(b-a)*v for v in [.2,.4,.6,.8]]
-   if all(np.linalg.norm(graph.nearest(q)[0]-q)<.0005 for q in samples):best=other
-  result.append(points[best]);at=best
- return result
-
 @lru_cache(maxsize=1)
 def native_meshes(k):
  file=k.ROOT/'instrument-conduits-meshes.json'
@@ -213,112 +184,78 @@ def support_normal(graph,face):
  # and falsely make the escape-ray test point into the pressure body.
  return graph.outward(face,graph.triangles[face].mean(0))
 
-def straight_spine(graph,target,sources):
- """Add an axial surface route; straight barrels stay straight, heads curve."""
- points=np.array([s['desired'] for s in sources]);span=np.ptp(np.vstack([points,target]),axis=0);axis=int(np.argmax(span));lo=min(points[:,axis].min(),target[axis]);hi=max(points[:,axis].max(),target[axis]);previous=None
- for value in np.linspace(lo,hi,max(2,int((hi-lo)/.25)+1)):
-  wanted=target.copy();wanted[axis]=value;q,face=graph.nearest(wanted);at,_=graph.attach(q)
-  if previous is not None:
-   a=graph.points[previous];b=graph.points[at];mid=(a+b)/2;closest,f=graph.nearest(mid)
-   if np.linalg.norm(closest-mid)<.0005:graph.link(previous,at,f)
-  previous=at
-
-def intended_surface_path(points,d,native,graph):
- """Choose a clean drawing curve first; native facets only carry the texture."""
- if len(points)<2:return points
- if d['kind'] in ['DRUM','COLUMN','EXCHANGER','KETTLE']:
-  longitudinal=1 if d['kind']=='COLUMN' or (d['kind']=='DRUM' and d['parameters']['orientation']=='VERTICAL') else 2
-  shell=[v for v,m in native if m=='SHELL']
-  if shell:
-   vertices=np.concatenate(shell);lo=vertices.min(0);hi=vertices.max(0);a,b=points[0],points[-1]
-   sign=1 if min(a[longitudinal],b[longitudinal])>=hi[longitudinal]-.05 else -1 if max(a[longitudinal],b[longitudinal])<=lo[longitudinal]+.05 else 0
-   if sign:
-    result=[]
-    for t in np.linspace(0,1,max(3,int(np.linalg.norm(b-a)/.04)+1)):
-     wanted=a+(b-a)*t
-     try:point=revised_layouts.surface(native,longitudinal,wanted,sign,{'HEAD','SHELL'})
-     except ValueError:return straighten(points,graph)
-     if blocked(result[-1],point,graph.zones) if result else False:return straighten(points,graph)
-     result.append(point)
-    return result
- # Flat panels and decks use aligned runs and an intentional right-angle turn.
- a,b=points[0],points[-1];_,face=graph.nearest(a);normal=graph.normals[face]
- if max(abs((np.array(points)-a)@normal))<.0005:
-  ref=np.array([0.,1.,0.]) if abs(normal[1])<.8 else np.array([1.,0.,0.]);u=unit(ref-normal*(ref@normal));v=np.cross(normal,u)
-  for direction in [u,v]:
-   elbow=a+direction*((b-a)@direction);segments=[(a,elbow),(elbow,b)]
-   if not any(blocked(p,q,graph.zones) for p,q in segments) and all(np.linalg.norm(graph.nearest(p+(q-p)*t)[0]-(p+(q-p)*t))<.0005 for p,q in segments for t in [.25,.5,.75]):return [a,elbow,b]
- # Other curved casings use the projected endpoint curve, not the triangle-edge
- # walk. Split only where a real part boundary prevents a continuous projection.
- def project(path):
-  a,b=path[0],path[-1];count=min(128,max(3,int(np.linalg.norm(b-a)/.12)+1));result=[graph.nearest(a+(b-a)*t)[0] for t in np.linspace(0,1,count)]
-  steps=np.linalg.norm(np.diff(result,axis=0),axis=1);original=sum(np.linalg.norm(q-p) for p,q in zip(path,path[1:]));nominal=np.linalg.norm(b-a)/(count-1)
-  safe=max(steps,default=0)<max(.08,nominal*3) and sum(steps)<=original*1.02 and not any(blocked(p,q,graph.zones) for p,q in zip(result,result[1:]))
-  if safe:return result
-  if len(path)<4:return straighten(path,graph)
-  middle=len(path)//2;return project(path[:middle+1])[:-1]+project(path[middle:])
- return project(points)
-
 def build(d,native,p,cat,k):
  key=d['id']
  if key in _plans:return _plans[key]
  if d['kind'] in ['SENSOR_HOUSING','LEVEL_SENSOR_HOUSING']:return dict(polys=[],paths=[],sources=0)
  sources=wire_sources(d,cat,p,native,k)
  if not sources:return dict(polys=[],paths=[],sources=0)
- carriers=native+p['extra'];stamp=hashlib.sha256(Path(__file__).read_bytes()+Path(sensor_layouts.__file__).read_bytes())
+ carriers=native+p['extra'];stamp=hashlib.sha256(Path(__file__).read_bytes()+Path(sensor_layouts.__file__).read_bytes()+Path(surface_routes.__file__).read_bytes())
  for v,m in carriers:stamp.update(v.tobytes());stamp.update(m.encode())
  stamp.update(json.dumps(cat,sort_keys=True).encode());signature=stamp.hexdigest();cache=k.ROOT/'metal-conduit-cache';cache.mkdir(exist_ok=True);file=cache/(key+'.json')
  if file.exists() and (data:=json.loads(file.read_text())).get('signature')==signature:
   report=data['report'];hardware=[(np.array(v),m) for v,m in data['hardware']]
  else:
   graph=surface_graph(carriers,cat.get('reserved',[]),k)
+  materials={}
+  for vertices,material in carriers:
+   for i in range(1,len(vertices)-1):materials[vertices[[0,i,i+1]].tobytes()]=material
+  graph.carrier_materials=[materials.get(triangle.tobytes(),'') for triangle in graph.triangles]
   _,port,normal=next(v for v in p['ports'] if v[0]=='DATA');normal=np.array(normal);low=np.array(p['low']);high=np.array(p['high']);axis=int(np.argmax(abs(normal)));side=2 if axis==0 else 0;target=(low+high)/2
   approach=np.mean([s['desired'] for s in sources],axis=0);entry_normal=np.zeros(3);entry_normal[side]=1. if approach[side]>=target[side] else -1.
   target[1]=low[1]+min(.07,(high[1]-low[1])*.25);target[side]=(high[side] if entry_normal[side]>0 else low[side])+.003*entry_normal[side]
-  straight_spine(graph,target,sources)
-  end,end_face=graph.attach(target);ends=[(s,*graph.attach(s['desired'])) for s in sources];parents,distances=graph.tree(end);bridges=[]
-  for src,start,face in ends:
-   if start not in distances:
-    bridge=bridge_component(graph,start,distances)
-    if bridge:bridges.append(bridge);parents,distances=graph.tree(end)
-  paths=[];used={};hardware=[];failures=[];runs=[];surface=[]
-  def run(points,diameter,flex=False):
+  shared=surface_routes.baseline(graph,d,native,sources,target,blocked)
+  end,end_face=graph.attach(target);ends=[(source,*graph.attach(source['desired'])) for source in sources]
+  baseline_nodes=shared['nodes'];exit_node=baseline_nodes[shared['exit']]
+  cabinet=surface_routes.route_between(graph,exit_node,end,set(baseline_nodes)-{exit_node})
+  paths=[];hardware=[];failures=[];runs=[];surface=[];branches=[];concealed=[]
+  def run(points,diameter):
    points=[np.array(v) for i,v in enumerate(points) if i==0 or np.linalg.norm(np.array(v)-points[i-1])>1e-6]
-   if len(points)>1:runs.append(dict(id=key+'/'+str(len(runs)),points=[v.tolist() for v in points],outside=diameter,flex=flex))
+   if len(points)>1:runs.append(dict(id=key+'/'+str(len(runs)),points=[v.tolist() for v in points],outside=diameter,flex=False))
+  emitted=set()
+  def emit(points,role,source=None,hidden=()):
+   phase=0.
+   concealed_edges={tuple(sorted([tuple(np.round(v['a'],7)),tuple(np.round(v['b'],7))])) for v in hidden}
+   for a,b in zip(points,points[1:]):
+    length=np.linalg.norm(b-a)
+    if length<1e-8:continue
+    edge=tuple(sorted([tuple(np.round(a,7)),tuple(np.round(b,7))]))
+    if edge in concealed_edges:phase+=length;continue
+    if edge not in emitted:
+     _,face=graph.nearest((a+b)/2);surface.append(dict(a=a.tolist(),b=b.tolist(),normal=support_normal(graph,face).tolist(),width=.025,phase=phase,role=role,source=source));emitted.add(edge)
+    phase+=length
+  # The baseline has one geometric definition and is emitted exactly once.
+  emit(shared['points'],'baseline')
   for src,start,face in ends:
-   if start not in distances:failures.append(src['id']);continue
-   nodes=[start]
-   while nodes[-1]!=end:nodes.append(parents[nodes[-1]])
-   for a,b in zip(nodes,nodes[1:]):used[tuple(sorted([a,b]))]=used.get(tuple(sorted([a,b])),0)+1
+   join_index=shared['joins'][src['id']];join_node=baseline_nodes[join_index]
+   branch=surface_routes.route_between(graph,start,join_node,set(baseline_nodes)-{join_node})
+   branch_points=[graph.points[node] for node in branch];axis=shared['axis'];station=shared['points'][join_index][axis]
+   constant=axis if abs(branch_points[0][axis]-station)<1e-5 else None
+   if constant is not None:
+    constrained=[]
+    for point in branch_points:
+     wanted=point.copy();wanted[axis]=station;constrained.append(surface_routes.section_nearest(graph.triangles,wanted,axis))
+    branch_points=constrained
+   head_project=(1,lambda wanted:revised_layouts.surface(native,1,wanted,1,{'HEAD','SHELL'})) if shared['head'] else None
+   hidden=[]
+   try:rendered,intent=surface_routes.orthogonal(branch_points,graph,blocked,constant,head_project,hidden)
+   except ValueError:
+    # A nozzle may meet its host outside the station plane. Keep its one pinned
+    # join and H/V legs, but allow the required perpendicular approach around it.
+    constant=None;branch_points=[graph.points[node] for node in branch];hidden=[]
+    try:rendered,intent=surface_routes.orthogonal(branch_points,graph,blocked,concealed=hidden)
+    except ValueError as error:raise ValueError(d['id']+' '+src['id']+': '+str(error)) from error
+   rendered[0]=graph.points[start];rendered[-1]=shared['points'][join_index]
+   emit(rendered,'branch',src['id'],hidden);concealed.extend(hidden);branches.append(dict(source=src['id'],joinIndex=join_index,join=shared['points'][join_index].tolist(),points=[v.tolist() for v in rendered],intent=intent,constantAxis=constant,concealed=hidden))
+   direction=1 if join_index<=shared['exit'] else -1;trunk=[baseline_nodes[i] for i in range(join_index,shared['exit']+direction,direction)]
+   nodes=branch+trunk[1:]+cabinet[1:]
    support=graph.points[start];n=support_normal(graph,face);entry=support+n*.001
-   if src['physical']:run(src['tail']+[entry],.020)
-   paths.append(dict(source=src['id'],points=[graph.points[v].tolist() for v in nodes],tail=[np.array(v).tolist() for v in src['tail']]+[entry.tolist()],surfaceLength=distances[start]))
-  # Emit maximal unbranched runs, not one independent tube per mesh edge.
-  adjacent={}
-  for a,b in used:adjacent.setdefault(a,[]).append(b);adjacent.setdefault(b,[]).append(a)
-  done=set();junctions={node for node,arms in adjacent.items() if len(arms)!=2}
-  for node in junctions:
-   for nxt in adjacent[node]:
-    if tuple(sorted([node,nxt])) in done:continue
-    chain=[node,nxt];done.add(tuple(sorted([node,nxt])))
-    while chain[-1] not in junctions:
-     a,b=chain[-2:];nxt=next(v for v in adjacent[b] if v!=a);done.add(tuple(sorted([b,nxt])));chain.append(nxt)
-    # Separate assembly joints from supported rigid runs; no exposed wires.
-    chunk=[]
-    def surface_run(ids):
-     if len(ids)<2:return
-     points=intended_surface_path([graph.points[v] for v in ids],d,native,graph)
-     phase=0.
-     for a,b in zip(points,points[1:]):
-      _,face=graph.nearest((a+b)/2);surface.append(dict(a=a.tolist(),b=b.tolist(),normal=support_normal(graph,face).tolist(),width=.025,phase=phase));phase+=np.linalg.norm(b-a)
-    for i,(a,b) in enumerate(zip(chain,chain[1:])):
-     if graph.edges[tuple(sorted([a,b]))]<0:
-      surface_run(chunk+[a]);chunk=[]
-     else:
-      if not chunk:chunk=[a]
-      chunk.append(b)
-    surface_run(chunk)
-  report=dict(paths=paths,sources=len(sources),connected=len(paths),failed=failures,concealedTransitions=bridges,gland=target.tolist(),glandNormal=entry_normal.tolist(),branchDiameter=.020,trunkDiameter=.025,uniqueSurfaceSegments=len(used),conduitRuns=runs,surfaceRuns=surface,texture='instrument-conduit.png')
+   run(src['tail']+[entry],.020)
+   paths.append(dict(source=src['id'],points=[graph.points[v].tolist() for v in nodes],tail=[np.array(v).tolist() for v in src['tail']]+[entry.tolist()],surfaceLength=sum(np.linalg.norm(graph.points[a]-graph.points[b]) for a,b in zip(nodes,nodes[1:])),joinIndex=join_index))
+  hidden=[];cabinet_points,cabinet_intent=surface_routes.orthogonal([graph.points[node] for node in cabinet],graph,blocked,concealed=hidden)
+  emit(cabinet_points,'controller',hidden=hidden);concealed.extend(hidden)
+  baseline=dict(axis=shared['axis'],points=[v.tolist() for v in shared['points']],parameters=shared['stations'],exitIndex=shared['exit'],projectionAxis=shared['projectionAxis'],definitionCount=1)
+  report=dict(paths=paths,sources=len(sources),connected=len(paths),failed=failures,concealedTransitions=concealed,gland=target.tolist(),glandNormal=entry_normal.tolist(),branchDiameter=.020,trunkDiameter=.025,uniqueSurfaceSegments=len(surface),conduitRuns=runs,surfaceRuns=surface,baseline=baseline,branches=branches,controllerIntent=cabinet_intent,texture='instrument-conduit.png')
   report['meshFingerprint']=hashlib.sha256(json.dumps(runs,sort_keys=True).encode()).hexdigest()
   file.write_text(json.dumps(dict(signature=signature,report=report,hardware=[(v.tolist(),m) for v,m in hardware])))
  polys=list(hardware);meshes=native_meshes(k).get(key)

@@ -13,13 +13,13 @@ from reportlab.pdfbase import pdfmetrics
 REPO=Path(__file__).resolve().parents[3]
 ROOT=Path(os.environ['ICHEME_PROPOSAL_WORK']).resolve()
 RUN_DATE=datetime.now(timezone(timedelta(hours=8))).date().isoformat()
-OUT=ROOT/'drawings-k'; OUT.mkdir(exist_ok=True)
+OUT=ROOT/'drawings-l'; OUT.mkdir(exist_ok=True)
 VIEWS=OUT/'views'; VIEWS.mkdir(exist_ok=True)
 MAN=json.loads((ROOT/'geometry/manifest.json').read_text())
 ACTIVE='';REFRESH=set(os.environ.get('DRAW_REFRESH','').split(','))
 W,H=1190.551,841.89
 from sensor_layouts import CHANGED as INSTRUMENT_LAYOUTS
-TOTAL=len(MAN['entries'])+len(INSTRUMENT_LAYOUTS)+12
+TOTAL=len(MAN['entries'])+len(INSTRUMENT_LAYOUTS)+13
 INK='#233b49'; MUTE='#637783'; BLUE='#137baf'; DATA='#1499b3'; POWER='#c96b24'
 TITLES={'VERTICAL':'Vertical drum','LENGTHWISE':'Horizontal drum','LENGTHWISE_BOOT':'Horizontal drum - boot and twin level','COLUMN':'Distillation column',
  'FLOATING_ROOF_TANK':'Floating-roof tank - ring access','TANK_COMPACT':'Floating-roof tank - compact',
@@ -248,7 +248,7 @@ def titleblock(c,index,title,subtitle):
  txt(c,28,H-24,'IChemE  /  EQUIPMENT CONTROL INTERFACES',11,'#a8d8ec','Helvetica-Bold')
  txt(c,28,H-47,title,20,'#ffffff','Helvetica-Bold')
  txt(c,W-186,H-24,f'REVIEW DRAWING  {index:02d}',10,'#ffffff','Helvetica-Bold')
- txt(c,W-186,H-43,'REV K  |  '+MAN['snapshot']+'  |  '+RUN_DATE,8,'#cedde4')
+ txt(c,W-186,H-43,'REV L  |  '+MAN['snapshot']+'  |  '+RUN_DATE,8,'#cedde4')
  txt(c,28,H-80,subtitle,8.5)
  line(c,(26,42),(W-26,42),'#a9bac3',.6)
  txt(c,28,25,'PROPOSAL ONLY  |  Exact native geometry + dimensioned proposed interfaces  |  1 block = 1 m',8,MUTE)

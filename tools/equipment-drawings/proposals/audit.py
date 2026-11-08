@@ -5,12 +5,22 @@ import numpy as np
 
 def main():
  p=argparse.ArgumentParser();p.add_argument('work',type=Path);p.add_argument('--previous',type=Path);args=p.parse_args()
- drawing=args.work/'drawings-k';data=json.loads((drawing/'measurements.json').read_text());records=data['sheets'];wires=json.loads((args.work/'wiring-report.json').read_text());sources=segments=bridges=0
+ drawing=args.work/'drawings-l';data=json.loads((drawing/'measurements.json').read_text());records=data['sheets'];wires=json.loads((args.work/'wiring-report.json').read_text());sources=segments=bridges=0
  for id,row in wires.items():
   if not row.get('sources'):continue
   assert row['sources']==row['connected'] and not row['failed'],id
   assert row['branchDiameter']==.020 and row['trunkDiameter']==.025,id
   assert row.get('meshed'),id
+  baseline=row['baseline'];points=np.array(baseline['points']);axis=baseline['axis']
+  assert baseline['definitionCount']==1,id
+  assert np.max(abs(points[:,axis]-baseline['parameters']))<1e-5,(id,'baseline station drift')
+  assert sum(s['role']=='baseline' for s in row['surfaceRuns'])==len(points)-1,(id,'trunk not emitted once')
+  assert len({tuple(sorted([tuple(np.round(s['a'],7)),tuple(np.round(s['b'],7))])) for s in row['surfaceRuns']})==len(row['surfaceRuns']),(id,'duplicate surface line')
+  assert len(row['branches'])==row['sources'],id
+  for branch in row['branches']:
+   assert np.linalg.norm(np.array(branch['points'][-1])-points[branch['joinIndex']])<1e-7,(id,'independent branch baseline')
+  for a,b in row['controllerIntent']+[leg for branch in row['branches'] for leg in branch['intent']]:
+   assert np.count_nonzero(abs(np.array(b)-a)>1e-6)<=1,(id,'diagonal design leg')
   assert len(row['paths'])==len({v['source'] for v in row['paths']}),id
   for path in row['paths']:
    assert np.isfinite(np.array(path['points'])).all(),id
@@ -21,9 +31,12 @@ def main():
    for head in heads:
     path=next(p for p in row['paths'] if p['source']==head['mount']);tail=np.array(path['tail']);direction=tail[1]-tail[0];direction/=np.linalg.norm(direction)
     assert max(np.linalg.norm(np.cross(tail-tail[0],direction),axis=1))<.0012,(id,head['tag'],'unnecessary lead bend')
-  for bridge in row['concealedTransitions']:assert 0<bridge['length']<=.30,id
+  for bridge in row['concealedTransitions']:
+   assert bridge['length']>0 and bridge['reason']=='embedded in supporting structure',id
+   edge=tuple(sorted([tuple(np.round(bridge['a'],7)),tuple(np.round(bridge['b'],7))]))
+   assert not any(edge==tuple(sorted([tuple(np.round(s['a'],7)),tuple(np.round(s['b'],7))])) for s in row['surfaceRuns']),(id,'concealed span drawn outside')
   sources+=row['sources'];segments+=row['uniqueSurfaceSegments'];bridges+=len(row['concealedTransitions'])
- assert len([v for v in records if v.get('mode')=='WIRING'])==4
+ assert len([v for v in records if v.get('mode')=='WIRING'])==5
  for reference in records:
   if 'instruments' not in reference or reference['id'].endswith('_INSTRUMENTS'):continue
   cat=reference['instruments'];physical=[p for p in cat['points']+cat['factory'] if not p.get('existing')]
@@ -42,7 +55,7 @@ def main():
      clean=lambda rows:[{k:v for k,v in row.items() if k!='processRole'} for row in rows]
      assert clean(left)==clean(right),(id,key)
    preserved.append(id)
- report=dict(snapshot=data['snapshot'],referenceSources=sources,surfaceSegments=segments,shortJointBridges=bridges,wiredReferences=sum(v.get('sources',0)>0 for v in wires.values()),preservedSheets=preserved,scope='Proposal/reference checks only; no world placement, collision, all-size or runtime qualification.')
- (args.work/'drawing-k-audit.json').write_text(json.dumps(report,indent=2));print(json.dumps(report,indent=2))
+ report=dict(snapshot=data['snapshot'],referenceSources=sources,surfaceSegments=segments,shortJointBridges=bridges,wiredReferences=sum(v.get('sources',0)>0 for v in wires.values()),commonBaseline=True,orthogonalDesignLegs=True,preservedSheets=preserved,scope='Proposal/reference checks only; no world placement, collision, all-size or runtime qualification.')
+ (args.work/'drawing-l-audit.json').write_text(json.dumps(report,indent=2));print(json.dumps(report,indent=2))
 
 if __name__=='__main__':main()

@@ -42,7 +42,10 @@ def main():
   command=native.gradle_wrapper()+['--offline','--no-daemon','--max-workers=2','--no-configuration-cache','--init-script',str(TOOL.parent/'export.init.gradle'),'exportEquipmentProposalMeshes','-PequipmentDrawingWork='+str(work)]
   with (work/'proposal-mesh-export.log').open('w',encoding='utf-8') as output:subprocess.run(command,cwd=REPO,stdout=output,stderr=subprocess.STDOUT,check=True)
  if args.render:
-  k.main();pages=k.OUT/'pages';pages.mkdir(exist_ok=True)
+  k.main()
+  import wiring_pages
+  wiring_pages.baseline_detail(k)
+  pages=k.OUT/'pages';pages.mkdir(exist_ok=True)
   subprocess.run(['pdftoppm','-r','100','-png',str(k.OUT/'equipment-control-interfaces.pdf'),str(pages/'sheet')],check=True)
   subprocess.run([sys.executable,str(TOOL/'package_drawings.py'),str(k.OUT)],check=True)
  print('Proposal workspace:',work)
