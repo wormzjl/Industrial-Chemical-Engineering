@@ -8,6 +8,7 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 
 | Folder | Purpose | Batch | Status |
 |---|---|---|---|
+| [equipment-drawings/](equipment-drawings/README.md) | Native equipment drawings and labelled interface proposals | `2026-11-06-simulator-sizing` | In use since 2026-11-08 |
 | [simulator-sizing/](simulator-sizing/README.md) | Sizing, connected control, conduit stress and equipment render probes | `2026-11-06-simulator-sizing` | Retained since 2026-11-07 |
 | [process-simulator/](process-simulator/README.md) | Plain-JVM probes: a client can run the column and flashes; the design sheets' sample flowsheet solved by hand | `2026-11-02-process-simulator` | In use since 2026-11-02 |
 | [device-names/](device-names/README.md) | Nameplate placement probe and plate-look renders | `2026-11-02-process-simulator` | In use since 2026-11-03 |
