@@ -15,6 +15,7 @@ This folder retains the batch's offline measurements, model authoring references
 - `PortProbe.java`: inspect cast reducer endpoints, visible stencil counts and clearance samples without a client.
 - `focused-gametests.init.gradle` and `focused-gametests/`: select existing GameTest methods in a fresh world, preserving their annotations and calling the real bodies. They add no permanent duplicate tests or production classes. The separate empty template only identifies the filtered namespace.
 - `archive/`: original one-off probes, texture generators, scripts and experimental patches, grouped by their original task folder. `source-inventory.tsv` records the original path and byte count. These sources describe several intermediate revisions; do not apply an archived patch to current code without reviewing it.
+- `consolidation/`: the evidence scripts of the 2026-11-08 consolidation review. `density.js` measures the line density of the Java files a branch adds; `javap-dump.sh` disassembles every compiled class, so that a layout-only change can be shown to leave the bytecode unchanged; `move-check.js` compares each method of the original `ControlService` token by token with the method it became, and the cadence with its new helpers inlined.
 
 ## Run from the repository root
 
@@ -40,6 +41,15 @@ java -Djava.awt.headless=true -Djava.io.tmpdir=tmp/<name> -cp tmp/<name>/classes
 java -Djava.awt.headless=true -Djava.io.tmpdir=tmp/<name> -cp <probe-and-runtime-classpath> ControlPortProbe tmp/<name>/renders
 ```
 
+For the consolidation review's measurements (dump the bytecode before and after a layout change, after a compile each time, and compare the two folders with `cmp`):
+
+```text
+node tools/simulator-sizing/consolidation/density.js f1db3a892 3107ecc90 658861333
+bash tools/simulator-sizing/consolidation/javap-dump.sh tmp/<name>/before
+git show 3efffdb2d^:src/main/java/com/wormzjl/icheme/runtime/control/ControlService.java > tmp/<name>/ControlService.orig.java
+node tools/simulator-sizing/consolidation/move-check.js tmp/<name>/ControlService.orig.java src/main/java/com/wormzjl/icheme/runtime/control
+```
+
 Run timing probes alone. A software render does not qualify live Minecraft lighting or chunk synchronisation. The one final integration lane remains `tools/merge-lane/lane.sh`; this folder does not duplicate it.
 
 `fluidFocusedOut` defaults to `tmp/merge-prep/focused-world`; the init script refuses any resolved directory outside this worktree's `tmp/`. Use a fresh named child directory for a new run and retain prior results. This does not change the normal GameTest source set or gate.
@@ -58,3 +68,4 @@ Run timing probes alone. A software render does not qualify live Minecraft light
 - 2026-11-08: late integration at `050cd109` closes deferred shared-line/DCS/GUI/native-interface checks. The final full lane at `891c8acf5` was not repeated; only affected filters ran. 206 distinct JUnit checks and 25 dedicated-server methods resolve through preserved follow-ups. Reachability reports no orphan production class; source counts are 669 main, 489 test and 36 GameTest files. Current 0.22.0 package, all native drawings/proofs, 838-entry applicability matrix and verification manifest are under canonical `research/2026-11-06-simulator-sizing/evidence/readiness-2026-11-08/`; logs are `simulator-sizing-readiness-logs-2026-11-08.tar.gz` in the main local logs folder.
 - 2026-11-08: moved 177 byte-verified earlier archived sources and 102 late source/scripts out of scratch; preserved generated results and previous jars. The late archive has a SHA-256 inventory, and the readiness archive retains this pass's authoring/audit scripts. Historical patch scripts are not current migrations. Accepted model regeneration is `tools/equipment-drawings/update.py`; `ControlAssets` now shares local cabinet bounds with collision through `DcsGeometry.localParts`.
 - 2026-11-08: the consolidation review (`df24eb6ac`) moved `ControlPortProbe` to `SocketGeometry.polygons`; it compiles against the branch. The archived tests of that review are in `tools/test-archive-2026-11-08/`.
+- 2026-11-08: `3efffdb2d` splits `ControlService` by duty into `ControlHosts`, `ControlLaw`, `ControlPlans` and `ControlPublication`. `consolidation/move-check.js` shows the move: 20 of 25 methods are token-identical; the rest and the inlined cadence differ only by delegation, the `Decision` value, two dead locals and an unused parameter (111 differences listed, all reviewed). `consolidation/` also keeps the density and bytecode scripts behind the review's layout numbers.

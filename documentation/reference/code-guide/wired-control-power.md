@@ -1,6 +1,6 @@
 # Wired controllers, data links and FE power
 
-**Snapshot:** da982f268 (branch `claude/simulator-sizing-refactor-6bacab`, the consolidation review of `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, prepared for owner-approved 0.22.0; not merged.
+**Snapshot:** 3efffdb2d (branch `claude/simulator-sizing-refactor-6bacab`, the consolidation review of `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, prepared for owner-approved 0.22.0; not merged.
 
 Local controller boxes own automatic loops. The DCS selects a linked box and edits its settings; it does not run a second controller. Data cable carries connectivity rather than fluid or a packet stream simulation. Power conduit transports ordinary NeoForge FE through capabilities. Both use the pipe laying tool's anchors, routes, validation and rack framework.
 
@@ -30,7 +30,8 @@ The DCS is a two-block console (`DcsBlock`, `DcsGeometry`), one lower-half panel
 | `runtime/control/ControlFacts` | Saved cables, sockets, panels/settings and stable sensor IDs; format 3 |
 | `DataPort`, `DataPorts`, `SensorId` | Socket identities, eligible host registration/remounting and human sensor labels |
 | `DataBus` | Immutable compiled connectivity from face/lane cable facts, filtered by medium |
-| `ControlService`, `ControlSettings`, `ControlInput`, `BuiltInInputs` | Server-owned edits, cadence, loop plans, access/revision checks and requested views |
+| `ControlService`, `ControlSettings`, `ControlInput`, `BuiltInInputs` | Server-owned edits, cadence and access/revision checks; `ControlService` is the facade the world, block entities and menus call |
+| `ControlHosts`, `ControlLaw`, `ControlPlans`, `ControlPublication` | Package-private parts of `ControlService`: host bindings, aliases and wiring queries; one loop's decision; the valve/heat plans a slice takes; watched menus, replay cache and snapshots |
 | `InventoryControl` | Volume-balance inversion for level control; attainable flow still belongs to hydraulics |
 | `runtime/power/PowerNetwork`, `PowerPorts` | Server-thread-owned topology refresh, pending hosts, capability resolution and live-source checks |
 | `PowerGrid` | Compiled circuits grouped by owner, FE transfer/extraction and read-only source availability |
@@ -42,7 +43,7 @@ The DCS is a two-block console (`DcsBlock`, `DcsGeometry`), one lower-half panel
 
 1. Immediate accessory installation registers the host/sensor. `ControlFacts` assigns a stable human ID backed by the sensor UUID. A fitting install does not force a process step.
 2. Shared laying creates cable joint/face/lane facts and explicit endpoint bindings. Topology revision rebuilds the data bus; it is not searched afresh for every reading.
-3. At each 100-online-tick cadence, `ControlService` validates controller settings and data reachability, reads accepted observations and creates immutable valve/heat plans. The saved equipment settings remain underneath them.
+3. At each 100-online-tick cadence, `ControlService` validates controller settings and data reachability, reads accepted observations and creates immutable valve/heat plans (`ControlLaw` decides each loop, `ControlPlans` keeps the plans). The saved equipment settings remain underneath them.
 4. Flow control scales the native flow target; pressure control compensates the measured intervening drop for the native upstream pressure valve and requires outlet action; level derives the balancing flow from volume change and requests correction over one 5 s cadence; temperature uses the same heat device's native outlet control.
 5. Missing links/signals and conflicting outputs report explicit status. A controller cannot reserve an output already owned by another loop or a column. Limits and conservation remain enforced by native process laws.
 6. DCS/controller screens replay cached requested state and subscribe to scheduled publication. Closing ends the subscription. Sensor selection is ID-based, with paged choices; location is explanatory only.

@@ -1,10 +1,10 @@
 # Machine assemblies: a column's plant, validated against its design
 
-**Snapshot:** 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, prepared for owner-approved 0.22.0; not merged.
+**Snapshot:** 3efffdb2d (branch `claude/simulator-sizing-refactor-6bacab`, the consolidation review of `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, prepared for owner-approved 0.22.0; not merged.
 
 ## Column C1 instrumentation (0.22.0)
 
-`ControlService.refreshColumnMembers` reads the accepted cached `AssemblyReport` and loaded member registration identities. It does not walk or validate pipes from a GUI request, load chunks, or run the column solver. Stable member/slot/channel identities expose accepted member process and utility readings through the column's physical C1. Existing assembly/column ownership still reserves its outputs; monitoring does not replace its duty/energy-transfer controller. Line placement/edit notifications now come through the shared `LineLaying` owners.
+`ControlHosts.refreshColumnMembers`, which each `ControlService` cadence calls before it validates edits, reads the accepted cached `AssemblyReport` and loaded member registration identities. It does not walk or validate pipes from a GUI request, load chunks, or run the column solver. Stable member/slot/channel identities expose accepted member process and utility readings through the column's physical C1. Existing assembly/column ownership still reserves its outputs; monitoring does not replace its duty/energy-transfer controller. Line placement/edit notifications now come through the shared `LineLaying` owners.
 
 
 ## Exchanger configuration and shared laying (0.22.0)
