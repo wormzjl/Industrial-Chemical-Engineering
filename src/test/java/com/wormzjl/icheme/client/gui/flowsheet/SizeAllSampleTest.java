@@ -147,7 +147,8 @@ class SizeAllSampleTest {
      *
      * <p>Since the column took the network's water (E30 (a)) its residue leaves a little lighter and cooler, so E-101 gives the
      * crude less heat and the furnace fires 73.03 MW before sizing, not 73.00. With condenser
-     * carry-over (E31) it fires 73.08 MW before sizing and 67.60 after.
+     * carry-over (E31) it fires 73.08 MW before sizing and 67.60 after. Since the pumps' losses heat the crude (D42 of batch
+     * 2026-11-03-rotating-machinery) it fires 73.06 MW before sizing and 67.58 after, and the sized coil's vapour share is 0.415.
      */
     @Test
     void theSampleSizedMovesAsThePlanSays() {
@@ -156,12 +157,12 @@ class SizeAllSampleTest {
         assertEquals(FlowsheetRun.Status.STEADY, all.run().status());
         assertEquals(5.00, before.get("S-6").pressure() / 1e5, HUNDREDTH);
         assertEquals(11.9, after.get("S-6").pressure() / 1e5, .15);
-        assertEquals(78.36, run.reports().get("H-101").readings().get("duty") / 1e6, HUNDREDTH);
-        assertEquals(73.93, all.run().reports().get("H-101").readings().get("duty") / 1e6, .1);
-        assertEquals(359.7, before.get("S-7").temperature() - 273.15, .1);
-        assertEquals(350.0, after.get("S-7").temperature() - 273.15, .15);
-        assertEquals(.71, run.reports().get("H-101").readings().get("vapour"), HUNDREDTH);
-        assertEquals(.52, all.run().reports().get("H-101").readings().get("vapour"), HUNDREDTH);
+        assertEquals(73.06, run.reports().get("H-101").readings().get("duty") / 1e6, HUNDREDTH);
+        assertEquals(67.58, all.run().reports().get("H-101").readings().get("duty") / 1e6, .1);
+        assertEquals(358.5, before.get("S-7").temperature() - 273.15, .1);
+        assertEquals(347.1, after.get("S-7").temperature() - 273.15, .15);
+        assertEquals(.67, run.reports().get("H-101").readings().get("vapour"), HUNDREDTH);
+        assertEquals(.415, all.run().reports().get("H-101").readings().get("vapour"), HUNDREDTH);
     }
 
     /** Nothing is sized twice: every Auto item holds the size Size all proposed, and that is the size its rating reads. */

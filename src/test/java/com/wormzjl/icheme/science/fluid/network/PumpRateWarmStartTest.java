@@ -17,15 +17,24 @@ import static org.junit.jupiter.api.Assertions.*;
  * rotating-machinery batch; the root used to flash the suction junction on the pump's law); at 1 m³/s it runs on its law.
  * The start is 1 m³/s: on WTI the NPSH3 floor (owner decisions D20 Q11 A and D21) made the pump cavitate from 1.5 m³/s,
  * and the more viscous heavy grade meets the pump's 5 bar head limit at 1.5 already (O3 of batch 2026-11-04-open-thermo-data).
+ * The source stands at 150 kPa, as {@link PumpJunctionStartupTest}'s does: from 1 atm, 1 m below the pump, the heavy grade
+ * reaches the suction at some 92 kPa before any line loss, under the 99 kPa its bubble point and the NPSH3 floor ask, so
+ * the pump stood on its suction limit at every rate.
  */
 class PumpRateWarmStartTest extends PortFixture {
+    /** The generator's pressure: enough suction head for the law at 1 m³/s; the line still starves the pump at 2. */
+    private static final double SOURCE=150000;
+
     private FluidThermodynamics.State oil(double volume) {
+        return oil(volume,101325);
+    }
+    private FluidThermodynamics.State oil(double volume,double pressure) {
         var n=FluidPresetCatalog.resolve(MaterialCatalog.bundled()).stream().filter(p->p.id().equals("icheme:heavy_crude")).findFirst().orElseThrow().moleFractions();
-        var unit=model.flashTP(298.15,101325,n,NOOP);for(int c=0;c<n.length;c++)n[c]*=volume/unit.volume();
-        return model.flashTP(298.15,101325,n,NOOP);
+        var unit=model.flashTP(298.15,pressure,n,NOOP);for(int c=0;c<n.length;c++)n[c]*=volume/unit.volume();
+        return model.flashTP(298.15,pressure,n,NOOP);
     }
     private PassiveNetwork loop(double rate) {
-        var source=oil(1);var fill=oil(24);var junction=oil(1/source.mass());
+        var source=oil(1,SOURCE);var fill=oil(24);var junction=oil(1/source.mass());
         var stock=new PassiveNetwork.Inventory(200,PhaseLayout.totalAmounts(fill),fill.internalEnergy(),SolidInventory.EMPTY,4,true);
         var nodes=List.of(new PassiveNetwork.Reservoir(1,0,fill,PassiveNetwork.NodeKind.RESERVOIR,stock),
                 new PassiveNetwork.Reservoir(2,0,junction,PassiveNetwork.NodeKind.JUNCTION),

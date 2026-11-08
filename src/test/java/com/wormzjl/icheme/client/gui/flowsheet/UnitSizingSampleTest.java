@@ -119,6 +119,8 @@ class UnitSizingSampleTest {
      * need's least was the plan's 1.00 × 6 m, 450 m². Its wider shell and shorter tubes lose less on both sides. On the medium
      * crude grade (O3 of batch 2026-11-04-open-thermo-data) the need is 573 m², 688 with the spare: the same shell with 6 m tubes, 703 m².
      * Since the column took the network's water (E30 (a)) the residue brings E-101 a little less heat, and the need is 572 m² (the probe's 578.5).
+     * Since the pumps' losses heat the crude (D42 of batch 2026-11-03-rotating-machinery) the crude reaches E-101 0.08 K warmer:
+     * both ends close by 0.05 K and the need is 569 m² (the probe's 575.0).
      */
     @Test
     void e101() {
@@ -126,13 +128,13 @@ class UnitSizingSampleTest {
         assertEquals(new ExchangerSizing.Size(false, 1, 1.25, 6), unit.size());
         closest(unit.rating(), Limit.EXCHANGER_SURFACE);
         var surface = unit.rating().reading(Limit.EXCHANGER_SURFACE);
-        assertEquals(586, surface.value(), ONE);
-        assertEquals(440, surface.low(), ONE, "the curves' surface");
-        assertEquals(443.5, probesSurface(), ONE, "the probe's one LMTD at U 1000, from the same streams");
-        assertEquals(81.7, read(unit.rating(), Limit.EXCHANGER_HOT_END), TENTH);
-        assertEquals(46.7, read(unit.rating(), Limit.EXCHANGER_COLD_END), TENTH);
-        assertEquals(46.7, read(unit.rating(), Limit.EXCHANGER_APPROACH), TENTH);
-        assertEquals(33, read(unit.rating(), Limit.EXCHANGER_OVER_NEED), ONE);
+        assertEquals(703, surface.value(), ONE);
+        assertEquals(569, surface.low(), ONE, "the curves' surface");
+        assertEquals(575.0, probesSurface(), ONE, "the probe's one LMTD at U 1000, from the same streams");
+        assertEquals(67.91, read(unit.rating(), Limit.EXCHANGER_HOT_END), TENTH);
+        assertEquals(32.64, read(unit.rating(), Limit.EXCHANGER_COLD_END), TENTH);
+        assertEquals(32.63, read(unit.rating(), Limit.EXCHANGER_APPROACH), TENTH);
+        assertEquals(23.6, read(unit.rating(), Limit.EXCHANGER_OVER_NEED), ONE);
         var drops = unit.rating().readings().stream().filter(reading -> reading.limit() == Limit.EXCHANGER_DROP_LIQUID).toList();
         assertEquals(.20, drops.get(0).value(), HUNDREDTH, "the tube side, 0.44 on 1.00 × 6 m; 0.17 before O4's crude viscosity");
         assertEquals(.07, drops.get(1).value(), HUNDREDTH, "the shell side, 0.15 on 1.00 × 6 m");

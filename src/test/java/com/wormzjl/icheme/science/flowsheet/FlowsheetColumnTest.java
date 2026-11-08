@@ -268,9 +268,9 @@ final class FlowsheetColumnTest {
         assertTrue(Math.abs(run.heatGap()) < 65e3, () -> "heat gap " + run.heatGap());
         assertEquals(102.48 + 273.15, run.streams().get("S-4").temperature(), .05, "the crude reaches E-101 two coolers warm, not three");
         var limit = run.reports().get("H-101").notes().stream().filter(note -> note.key().equals("heater.limit")).findFirst().orElseThrow();
-        // 98.08 MW since the column took the network's water (E30 of batch 2026-11-04-open-thermo-data): 16 kW less, from the
-        // products' small re-split.
-        assertEquals(98.08e6, Double.parseDouble(limit.arguments().getFirst()), .01e6, "what the furnace asks");
+        // 98.04 MW: the column took the network's water (E30 of batch 2026-11-04-open-thermo-data), 16 kW less from the products'
+        // small re-split, and the pumps' losses heat the crude (D42 of batch 2026-11-03-rotating-machinery), some 45 kW less.
+        assertEquals(98.04e6, Double.parseDouble(limit.arguments().getFirst()), .01e6, "what the furnace asks");
         assertEquals(90e6, Double.parseDouble(limit.arguments().get(1)), 1, "and what it may give");
     }
 
