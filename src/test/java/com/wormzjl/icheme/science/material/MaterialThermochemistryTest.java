@@ -61,9 +61,9 @@ class MaterialThermochemistryTest {
     private static double atoms(MaterialCatalog.Thermochemistry t,String element) { return t.elements().getOrDefault(element,0.0); }
     /** Hess's law: the net heat of combustion to CO2, H2O (gas), SO2 and N2 on the package's own product records, J/mol. */
     private static double hess(MaterialCatalog catalog,MaterialCatalog.Thermochemistry fuel) {
-        double co2=catalog.thermochemistry(WORLD,"CarbonDioxide").orElseThrow().formationEnthalpy();
-        double h2o=catalog.thermochemistry(WORLD,"Water").orElseThrow().formationEnthalpy();
-        double so2=catalog.thermochemistry(WORLD,"SulfurDioxide").orElseThrow().formationEnthalpy();
+        double co2=SubRecords.thermochemistry(catalog,WORLD,"CarbonDioxide").orElseThrow().formationEnthalpy();
+        double h2o=SubRecords.thermochemistry(catalog,WORLD,"Water").orElseThrow().formationEnthalpy();
+        double so2=SubRecords.thermochemistry(catalog,WORLD,"SulfurDioxide").orElseThrow().formationEnthalpy();
         return fuel.formationEnthalpy()-atoms(fuel,"C")*co2-atoms(fuel,"H")/2*h2o-atoms(fuel,"S")*so2;
     }
 
@@ -71,31 +71,31 @@ class MaterialThermochemistryTest {
     @Test void theSubRecordsRoundTripAndAreOptional() {
         var bundled=MaterialCatalog.bundled();
         var json=JsonParser.parseString(bundled.resources().get(ROOT+METHANE)).getAsJsonObject();
-        var t=bundled.thermochemistry(WORLD,"Methane").orElseThrow();var tj=json.getAsJsonObject("thermochemistry");
+        var t=SubRecords.thermochemistry(bundled,WORLD,"Methane").orElseThrow();var tj=json.getAsJsonObject("thermochemistry");
         assertEquals(tj.get("formation_enthalpy_j_per_mol").getAsDouble(),t.formationEnthalpy());
         assertEquals(Map.of("C",1.0,"H",4.0),t.elements());
         assertEquals(tj.get("estimated").getAsBoolean(),t.estimated());
         assertEquals(tj.get("source").getAsString(),t.source());
         assertEquals(tj.get("revision").getAsString(),t.revision());
-        var f=bundled.flammability(WORLD,"Methane").orElseThrow();var fj=json.getAsJsonObject("flammability");
+        var f=SubRecords.flammability(bundled,WORLD,"Methane").orElseThrow();var fj=json.getAsJsonObject("flammability");
         assertEquals(fj.get("lfl_volume_fraction").getAsDouble(),f.lowerLimit());
         assertEquals(fj.get("ufl_volume_fraction").getAsDouble(),f.upperLimit().doubleValue());
         assertEquals(fj.get("estimated").getAsBoolean(),f.estimated());
         assertEquals(fj.get("source").getAsString(),f.source());
         assertEquals(fj.get("revision").getAsString(),f.revision());
         // The water model carries its own; the water has no flammability.
-        assertEquals(-241814,bundled.thermochemistry(WORLD,"Water").orElseThrow().formationEnthalpy());
-        assertTrue(bundled.flammability(WORLD,"Water").isEmpty());
+        assertEquals(-241814,SubRecords.thermochemistry(bundled,WORLD,"Water").orElseThrow().formationEnthalpy());
+        assertTrue(SubRecords.flammability(bundled,WORLD,"Water").isEmpty());
         // Without the sub-records, the records parse as they did before O9.
         var without=MaterialCatalog.parse(changed(METHANE,o->{o.remove("thermochemistry");o.remove("flammability");}));
-        assertTrue(without.thermochemistry(WORLD,"Methane").isEmpty());assertTrue(without.flammability(WORLD,"Methane").isEmpty());
+        assertTrue(SubRecords.thermochemistry(without,WORLD,"Methane").isEmpty());assertTrue(SubRecords.flammability(without,WORLD,"Methane").isEmpty());
         assertEquals(bundled.requirePackage(WORLD).properties(),without.requirePackage(WORLD).properties());
         var dryWater=MaterialCatalog.parse(changed(WATER,o->o.remove("thermochemistry")));
-        assertTrue(dryWater.thermochemistry(WORLD,"Water").isEmpty());
+        assertTrue(SubRecords.thermochemistry(dryWater,WORLD,"Water").isEmpty());
         var lowerOnly=MaterialCatalog.parse(changed(METHANE,o->o.getAsJsonObject("flammability").remove("ufl_volume_fraction")));
-        assertNull(lowerOnly.flammability(WORLD,"Methane").orElseThrow().upperLimit());
-        assertThrows(IllegalArgumentException.class,()->bundled.thermochemistry(WORLD,"Missing"));
-        assertThrows(IllegalArgumentException.class,()->bundled.flammability(WORLD,"Missing"));
+        assertNull(SubRecords.flammability(lowerOnly,WORLD,"Methane").orElseThrow().upperLimit());
+        assertThrows(IllegalArgumentException.class,()->SubRecords.thermochemistry(bundled,WORLD,"Missing"));
+        assertThrows(IllegalArgumentException.class,()->SubRecords.flammability(bundled,WORLD,"Missing"));
     }
 
     /** Each invalid value or missing field refuses the catalog, naming the record's file and the field. */
@@ -137,16 +137,16 @@ class MaterialThermochemistryTest {
     @Test void theWorldListCarriesThermochemistryAndTheLimitsOfWhatBurns() {
         var catalog=MaterialCatalog.bundled();var world=catalog.requirePackage(WORLD);
         assertEquals(45,world.components().size(),"7 light ends, 12 cuts, N2, the 24 Tier 1 compounds and CO2");
-        var water=catalog.thermochemistry(WORLD,"Water").orElseThrow();
+        var water=SubRecords.thermochemistry(catalog,WORLD,"Water").orElseThrow();
         assertEquals(formula(FORMULA.get("Water")),water.elements());assertEquals(-241814,water.formationEnthalpy());
-        assertEquals(.01801528,water.molarMass(),.01801528*MOLAR_MASS_TOLERANCE,"the water's formula");
+        assertEquals(.01801528,SubRecords.molarMass(water),.01801528*MOLAR_MASS_TOLERANCE,"the water's formula");
         int compounds=0,cuts=0,limits=0;
         for(String component:world.components()) {
-            var t=catalog.thermochemistry(WORLD,component).orElseThrow(()->new AssertionError(component+" has no thermochemistry"));
-            var f=catalog.flammability(WORLD,component);
+            var t=SubRecords.thermochemistry(catalog,WORLD,component).orElseThrow(()->new AssertionError(component+" has no thermochemistry"));
+            var f=SubRecords.flammability(catalog,WORLD,component);
             assertFalse(t.source().contains("CAMEO")||f.isPresent()&&f.get().source().contains("CAMEO"),component);
             double mass=world.properties().get(world.components().indexOf(component)).molecularWeight();
-            assertEquals(mass,t.molarMass(),mass*MOLAR_MASS_TOLERANCE,component+": the formula's molar mass");
+            assertEquals(mass,SubRecords.molarMass(t),mass*MOLAR_MASS_TOLERANCE,component+": the formula's molar mass");
             if(component.startsWith("crude_pc")) {
                 cuts++;limits++;
                 assertTrue(t.estimated(),component);assertEquals(Set.of("C","H"),t.elements().keySet(),component);
@@ -181,9 +181,9 @@ class MaterialThermochemistryTest {
         }
         assertEquals(33,compounds);assertEquals(12,cuts);assertEquals(40,limits);
         // What the formula adds: oxygen demand and flue gas per mole of fuel (ammonia: 0.75 O2, 1.5 H2O, 0.5 N2).
-        var ammonia=catalog.thermochemistry(WORLD,"Ammonia").orElseThrow();
+        var ammonia=SubRecords.thermochemistry(catalog,WORLD,"Ammonia").orElseThrow();
         assertEquals(.75,atoms(ammonia,"C")+atoms(ammonia,"H")/4+atoms(ammonia,"S")-atoms(ammonia,"O")/2);
-        var cos=catalog.thermochemistry(WORLD,"CarbonylSulfide").orElseThrow();
+        var cos=SubRecords.thermochemistry(catalog,WORLD,"CarbonylSulfide").orElseThrow();
         assertEquals(1.5,atoms(cos,"C")+atoms(cos,"H")/4+atoms(cos,"S")-atoms(cos,"O")/2,"COS + 1.5 O2 -> CO2 + SO2");
     }
 
@@ -209,7 +209,7 @@ class MaterialThermochemistryTest {
             assertEquals(bundled.spineRevision(p.id()),other.spineRevision(p.id()),p.id());
             assertEquals(bundled.physicsContent(p.id(),p.components()),other.physicsContent(p.id(),p.components()),p.id());
         }
-        assertEquals(-75000,edited.thermochemistry(WORLD,"Methane").orElseThrow().formationEnthalpy());
-        assertEquals(.044,edited.flammability(WORLD,"Methane").orElseThrow().lowerLimit());
+        assertEquals(-75000,SubRecords.thermochemistry(edited,WORLD,"Methane").orElseThrow().formationEnthalpy());
+        assertEquals(.044,SubRecords.flammability(edited,WORLD,"Methane").orElseThrow().lowerLimit());
     }
 }
