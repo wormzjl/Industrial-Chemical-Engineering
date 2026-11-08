@@ -1,6 +1,6 @@
 # Wired controllers, data links and FE power
 
-**Snapshot:** e4749cdb6 (branch `claude/simulator-sizing-refactor-6bacab`, the consolidation review of `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, prepared for owner-approved 0.22.0; not merged.
+**Snapshot:** e4749cdb6 (branch `claude/simulator-sizing-refactor-6bacab`, the consolidation review of `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
 
 Local controller boxes own automatic loops. The DCS selects a linked box and edits its settings; it does not run a second controller. Data cable carries connectivity rather than fluid or a packet stream simulation. Power conduit transports ordinary NeoForge FE through capabilities. Both use the pipe laying tool's anchors, routes, validation and rack framework.
 

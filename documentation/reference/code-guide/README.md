@@ -12,10 +12,10 @@
 
 **Merged before it:** process control (`codex/process-control` to `8523595a`, its review fixes and main 0.14.0 merged in), release 0.14.1, main `0e697177`, 2026-10-27; sensors, ideal local regulation and shared vessel geometry. [Process control](process-control.md).
 
-**Integrated on this branch:** optional floating-roof tank gauge (`b1477c090` via `0c5ce5224`); sizing, exchanger configurations, wired controls and FE conduits. Pending merge as part of 0.22.0. See [batch review](../../2026-11-06-simulator-sizing/MERGE_REVIEW.md).
+**Integrated in 0.22.0:** optional floating-roof tank gauge (`b1477c090` via `0c5ce5224`); sizing, exchanger configurations, wired controls and FE conduits. Merged to `main` on 2026-11-08. See [batch review](../../2026-11-06-simulator-sizing/MERGE_REVIEW.md).
 
 
-**Snapshot:** 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, prepared for owner-approved 0.22.0; not merged.
+**Snapshot:** 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
 
 This guide describes the code in layers. Read level 1 and level 2 here first. Then open only the chapter your task needs. Each chapter starts with a summary and a class map, and puts its details in collapsed sections. The code is the authority. When code and guide disagree, trust the code and fix the guide (AGENTS.md, "Code guide").
 

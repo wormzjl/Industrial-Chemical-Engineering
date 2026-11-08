@@ -1,6 +1,6 @@
 # Heat exchangers: heat sides, the coupling across islands and built-in control
 
-**Snapshot:** 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, prepared for owner-approved 0.22.0; not merged.
+**Snapshot:** 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
 
 ## Factory probes and one physical data interface (0.22.0)
 

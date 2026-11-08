@@ -2,7 +2,7 @@
 
 Owner request: "Review codex/simulator-sizing, make it maintainable and consolidate the codes, remove unnecessary tests".
 Reviewed `3107ecc90` (code as `050cd1098`) against `main` `f1db3a892`: 85 commits, 832 files, +39.6k lines. Changes on
-`claude/simulator-sizing-refactor-6bacab`, not merged or pushed; scripts in `tools/simulator-sizing/consolidation/`.
+`claude/simulator-sizing-refactor-6bacab`, merged to `main` as 0.22.0 on 2026-11-08, not pushed; scripts in `tools/simulator-sizing/consolidation/`.
 
 ## Findings
 

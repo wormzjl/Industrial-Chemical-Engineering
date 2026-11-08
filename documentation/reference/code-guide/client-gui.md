@@ -4,7 +4,7 @@
 
 **Port colours** (since `645e203d`, 2026-10-29; the screen's drawing removed in batch 2026-11-02-process-simulator): the pipe laying tool colours an assembly's nozzles by `PortColours.assembly`, matching a slot, nozzle role and ordinal to `AssemblyDiagram`'s fixed port order (negative mark ordinals accept any nozzle of that role). Colours spread hues and vary brightness/saturation. The tool resolves a column's own nozzles without validation and other equipment from its watched report; matched world squares keep the colour with grey connected frames or yellow misplaced frames, other nozzles use class colours. A design edit can reorder colours. The assembly screen no longer draws ports: `AssemblyFlowsheet` and `AssemblyPortColoursTest` are gone, and its drawing is `AssemblyBlock` (below). `AssemblyDiagramTest.everyPortHasItsOwnColourForTheLayingTool` keeps the colours distinct. No live world-marker check.
 
-**Snapshot:** 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, prepared for owner-approved 0.22.0; not merged.
+**Snapshot:** 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
 
 ## Viewport, main-door nozzles and identity hovers (0.22.0)
 

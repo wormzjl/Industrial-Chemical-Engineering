@@ -1,6 +1,6 @@
 # Water cooling towers
 
-**Snapshot:** 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, prepared for owner-approved 0.22.0; not merged.
+**Snapshot:** 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
 
 Optional client Low detail caps the shell's angular samples at 24 and uses the same coarse basin-water boundary. `EquipmentBodyRenderer`/`LoadedEquipment` now also serve other coarse equipment bodies. Normal tower drawing, basin volume/level, structural collision and process duty remain unchanged. The mode is absent from server facts and packets.
 

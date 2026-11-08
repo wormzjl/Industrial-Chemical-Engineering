@@ -10,7 +10,7 @@ Added `VesselGeometryTest`, `ProcessOutletTest`, `FlowControlTest` coverage, `Fl
 **Feature branch:** `b1477c09` (`codex/liquid-gauge-accessory`), 2026-10-26, based on main `600549d9`. Floating-roof tank level gauge is an optional item/accessory;24 focused checks/package and8 native views pass. Ported into the 0.22.0 branch; this batch is not merged. [Contracts](../../2026-10-26-liquid-level-gauge-accessory/LEVEL_GAUGE_CONTRACTS.md).
 
 
-**Snapshot:** e4749cdb6 (branch `claude/simulator-sizing-refactor-6bacab`, the consolidation review of `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, prepared for owner-approved 0.22.0; not merged.
+**Snapshot:** e4749cdb6 (branch `claude/simulator-sizing-refactor-6bacab`, the consolidation review of `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
 
 ## Later 0.22.0 readiness follow-ups (2026-11-08)
 

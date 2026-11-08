@@ -1,6 +1,6 @@
 # Simulator sizing, wired control and equipment integration
 
-Status: **In progress since 2026-11-06** on `codex/simulator-sizing`; merge preparation for owner-approved **0.22.0**. Do not merge without the owner’s instruction.
+Status: **Implemented 2026-11-08**: merged to `main` as **0.22.0** from `claude/simulator-sizing-refactor-6bacab`, which carries `codex/simulator-sizing` (`3107ecc90`) and the consolidation review (owner: "go merge directly"). Not pushed.
 
 ## Scope
 
@@ -41,9 +41,10 @@ Scale-up-first Auto sizing, constructor-style Manual sizing, Standard/Low-dP cro
 - 2026-11-08: consolidation review on `claude/simulator-sizing-refactor-6bacab` ([CONSOLIDATION_REVIEW.md](CONSOLIDATION_REVIEW.md)): `658861333` formats the 114 added Java files (bytecode identical); `df24eb6ac` consolidates socket geometry, cabinet shapes and line-tool helpers (5 classes removed, 2 added); `da982f268`/`2414c4e3a` archive 3 tests and 5 prints to `tools/test-archive-2026-11-08/`; the docs commit brings the gui-creation skill in line with the preserved GUI scale. 150 targeted JUnit tests and 32 focused GameTests pass.
 - 2026-11-08: `3efffdb2d` splits `ControlService` (1,031 lines) by duty into `ControlHosts`, `ControlLaw`, `ControlPlans` and `ControlPublication` (owner: "Yes, split it"); `tools/simulator-sizing/consolidation/move-check.js` shows a pure move apart from the `Decision` value, two dead locals and an unused parameter. `DeterministicMathSourceTest` and 22 focused GameTests pass. No test drives a controller through an edit, its decision and its publication (review owner option 2). Code guide `fluid-runtime.md`, `machine-assemblies.md`, `wired-control-power.md` at `3efffdb2d`.
 - 2026-11-08: `e4749cdb6` adds `ControlLoopGameTests` (owner: "Yes, add it"), which closes review owner option 2: a local controller takes a flow target through its menu, decides CONTROLLING, the valve plan brings the line to half its free flow with the saved valve law unchanged, and the open menu receives the reading; switched off, the free flow returns. It passes in a fresh world in about 600 of 4000 ticks (twice); with `ControlPlans.apply` returning its graph unchanged it times out at the target. Code guide `wired-control-power.md`, `verification.md` at `e4749cdb6`.
+- 2026-11-08: merged to `main` as 0.22.0 (owner: "go merge directly"). The CHANGELOG entries moved under `[0.22.0] - 2026-11-08`; the INDEX row and the code-guide snapshot lines read merged. The final lane ran once, at `891c8acf5`; the affected tests of every later commit passed ([MERGE_REVIEW.md](MERGE_REVIEW.md), [CONSOLIDATION_REVIEW.md](CONSOLIDATION_REVIEW.md)). Not pushed.
 
 ## Code areas and open items
 
 `science/flowsheet`, `science/equipment`, `science/fluid/network`, `science/machine`, `runtime/{fluid,control,power,instrument}`, equipment/pipe/rack blocks, shared laying/client models, GUI and network payloads. The column operation’s V3 duty/energy contract is unchanged.
 
-Open: owner’s in-game acceptance and later merge instruction. The once-run final lane and affected later follow-ups are recorded separately; current merge preparation and the release jar are complete. No dev client is launched for merge preparation. No unmerged output is deleted.
+Open: owner’s in-game acceptance, on a jar built from `main` (the recorded jar is `050cd1098`’s), and the push. The once-run final lane and the affected later follow-ups are recorded separately. No dev client was launched for the merge.

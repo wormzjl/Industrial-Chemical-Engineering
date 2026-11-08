@@ -1,6 +1,6 @@
 # Rotating machinery: machine laws, shaft trains, drivers, electricity, wear and the Create coupling
 
-**Snapshot:** 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, prepared for owner-approved 0.22.0; not merged.
+**Snapshot:** 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
 
 Normal casing-cover nuts are raised geometry over a plain cover sprite, recessed within the existing envelope. Optional client Low detail uses textured flat nuts and capped round meshes while retaining all mechanical frames, hex shafts, published RPM and animation clocks. See [equipment.md](equipment.md).
 Up: [code guide](README.md)

@@ -1,6 +1,6 @@
 # Fluid, data and power line placement
 
-**Snapshot:** da982f268 (branch `claude/simulator-sizing-refactor-6bacab`, the consolidation review of `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, prepared for owner-approved 0.22.0; not merged.
+**Snapshot:** da982f268 (branch `claude/simulator-sizing-refactor-6bacab`, the consolidation review of `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
 
 Up: [code guide](README.md). Related: [equipment](equipment.md), [fluid runtime](fluid-runtime.md), [wired control/power](wired-control-power.md), [GUI](client-gui.md).
 
