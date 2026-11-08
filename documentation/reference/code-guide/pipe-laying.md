@@ -1,17 +1,17 @@
 # Fluid, data and power line placement
 
-**Snapshot:** 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, prepared for owner-approved 0.22.0; not merged.
+**Snapshot:** da982f268 (branch `claude/simulator-sizing-refactor-6bacab`, the consolidation review of `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, prepared for owner-approved 0.22.0; not merged.
 
 Up: [code guide](README.md). Related: [equipment](equipment.md), [fluid runtime](fluid-runtime.md), [wired control/power](wired-control-power.md), [GUI](client-gui.md).
 
 ## Contract and ownership
 
-The pipe laying tool selects Fluid, Data or Power. These modes share the interaction state machine, targeting, route search, spatial admission, immutable layout, server command, inventory/permission checks, collision/picking, open-end marks and structural refresh. `PipeLayingClient` and `CableLayingClient` are domain adapters, not independent placement engines. `PipeLaying` only supplies common refusal/message vocabulary; the old server `CableLaying` and `ConduitLaying` command engines are gone.
+The pipe laying tool selects Fluid, Data or Power. These modes share the interaction state machine, targeting, route search, spatial admission, immutable layout, server command, inventory/permission checks, collision/picking, open-end marks and structural refresh. `PipeLayingClient` and `CableLayingClient` are domain adapters, not independent placement engines. `LineLaying` also holds the common refusal/message vocabulary (the former `PipeLaying`); the old server `CableLaying` and `ConduitLaying` command engines are gone.
 
 | Decision | Owner | Domain adapter |
 |---|---|---|
 | Use key, start/end, cancel, replan, refusal, one request in flight | `client/LineToolSession` | `PipeLayingClient` / `CableLayingClient` provide selection and presentation |
-| Target face/lane/parent, socket hit, marks and HUD feedback | `LineSelection`, `LayingToolAim`, `LinePortTarget`, `LineToolMarkers`, `LineToolFeedback` | Fluid assembly colours; DATA/FE socket catalogues |
+| Target face/lane/parent, socket hit, marks and HUD feedback | `LineSelection`, `LayingToolAim`, `LinePortTarget`, `LineToolMarkers` (one begin/box/line/end frame for both clients), `LineToolSession.routeHud` | Fluid assembly colours; DATA/FE socket catalogues |
 | Profile, material, diameter and finish | `LineProfile` | Fluid bore/paint; one 0.125 m diameter for each cable medium |
 | Resolve clicks and retained hosts | `LineAnchors`, `PipeAnchor`, `LineBackend` | Nozzle/device faces vs UUID data/power sockets |
 | Client search and server acceptance | `LineLaying`, `LinePlacement`, `PipeRoute` | Neither backend may search or bypass admission |

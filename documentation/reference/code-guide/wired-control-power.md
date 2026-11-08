@@ -1,6 +1,6 @@
 # Wired controllers, data links and FE power
 
-**Snapshot:** 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, prepared for owner-approved 0.22.0; not merged.
+**Snapshot:** da982f268 (branch `claude/simulator-sizing-refactor-6bacab`, the consolidation review of `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, prepared for owner-approved 0.22.0; not merged.
 
 Local controller boxes own automatic loops. The DCS selects a linked box and edits its settings; it does not run a second controller. Data cable carries connectivity rather than fluid or a packet stream simulation. Power conduit transports ordinary NeoForge FE through capabilities. Both use the pipe laying tool's anchors, routes, validation and rack framework.
 
@@ -12,13 +12,13 @@ The form calls the direction selector Valve location, shows it only for level/pr
 
 ## Physical interfaces and accepted channel catalog (0.22.0)
 
-`EquipmentServices` owns supported enclosure solids and physical socket datums; `DataSocketGeometry`, `DataPorts` and `PowerPorts` adapt that plan. Inline movers and the pneumatic control-valve positioner expose integrated side entries. One physical C1 represents a multi-registration heat unit; secondary fluid registrations alias to its primary host. Columns reserve a control identity in the world's existing namespace and reuse it on reload. Saved wired face points remain facts.
+`EquipmentServices` owns supported enclosure solids and physical socket datums; `SocketGeometry` (the data and FE socket datums and their one gland mesh), `DataPorts` (`at`, `fittingKey`) and `PowerPorts` adapt that plan. Inline movers and the pneumatic control-valve positioner expose integrated side entries. One physical C1 represents a multi-registration heat unit; secondary fluid registrations alias to its primary host. Columns reserve a control identity in the world's existing namespace and reuse it on reload. Saved wired face points remain facts.
 
 `ControlInput` represents either an installed sensor UUID or a deterministic equipment/channel UUID. `BuiltInInputs.Binding` maps the physical host, shape/origin and fluid registrations. Movers expose inlet/outlet P/T, flow and speed; motors/generators expose speed. Heat units expose accepted process/utility port P/T and exchanger flow channels. Cooling towers expose inlet/outlet P/T and liquid-plus-solid basin level. Columns expose top/bottom P/T, reflux P/T/flow and native/external stream channels; cached assembly members add their accepted port/utility channels through C1. Unsupported air properties and V3's unmodelled circulating pumparound streams remain unavailable.
 
 `ControlService` refreshes the cached assembly-member catalog before validating edits. It reads only accepted `FluidView`/pipe observations and column publications, for requested or enabled-loop hosts, on the 100-tick cadence. The column stores a bounded `ColumnUnit.Probes` state snapshot alongside its table; internal mass flows scale with accepted total feed, including feed water. Reload preserves these readings without a GUI-triggered solve; older rebuildable state gets its normal scheduled refresh.
 
-`DcsGeometry.localParts` supplies the local cabinet model-authoring/collision bounds; its recessed rear entry is not blocked by a full-cube collision. Both cabinets union derived lead geometry into their actual shape. DATA/POWER item IDs now register BlockItems and direct placement enters `LineLaying.handPlaced`.
+`DcsGeometry.localParts` supplies the local cabinet model-authoring/collision bounds; its recessed rear entry is not blocked by a full-cube collision. `HorizontalShapes` turns north-facing boxes into the four facings' collision shapes of the local controller, both DCS halves, the simulator console and the constructor bench; `DcsGeometry.turned` is the same quarter turn in closed form. Both cabinets union derived lead geometry into their actual shape. DATA/POWER item IDs now register BlockItems and direct placement enters `LineLaying.handPlaced`.
 
 The DCS is a two-block console (`DcsBlock`, `DcsGeometry`), one lower-half panel identity/menu/socket. Placement and removal treat both halves together; a legacy one-block console waits for room without moving saved identity or endpoints. Protocols: controller `control-3`, shared commands `lines-1`, tool settings `pipeline-tool-5`. Screens preserve the player's GUI scale and scroll/page within their viewport. Hover shows sensor block coordinates and attached EQ identity, with no dimension identifier.
 

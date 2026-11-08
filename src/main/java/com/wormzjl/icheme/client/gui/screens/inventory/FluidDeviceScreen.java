@@ -126,10 +126,8 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private boolean pool(){return heat()!=null&&unitKind()==com.wormzjl.icheme.science.equipment.HeatSides.Unit.KETTLE&&sideKind()==com.wormzjl.icheme.science.equipment.HeatSides.Side.SHELL;}
     private String flowUnit(){return flowRateUnit.unit(mass?"kg":"kmol");}
     // Every page but the Control tab: the door column from x 10 to side(), its bar right of it, then the tables' HMI
-    // screen. The screen takes the scale at which the window holds its design height (FluidGuiLayout.HEIGHT), lower where
-    // its tallest column still does not fit, down to the minimum a player reads (WindowScale, fits): 2 at 1920x1080, where
-    // the design size's 4 left a pump's column 128 px. There the column scrolls in its own view (the Control tab's view),
-    // as the table area scrolls its rows.
+    // screen, sized from the window at the player's GUI scale (FluidGuiLayout.imageWidth, imageHeight; owner 2026-11-07).
+    // A column taller than its view scrolls in its own view (the Control tab's view), as the table area scrolls its rows.
     private int side(){return FluidGuiLayout.side(imageWidth);}
     private int hoverX=-1,hoverY=-1;
     private int tableX(){return side()+24;}

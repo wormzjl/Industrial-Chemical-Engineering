@@ -48,7 +48,7 @@ def cylinder(p,n,r,a,b,material,sides=8):
  v,w=ring(a),ring(b);out=[(v,material),(w[::-1],material)]
  out.extend((np.array([v[i],w[i],w[(i+1)%sides],v[(i+1)%sides]]),material) for i in range(sides));return out
 def gland(p,n,material,compact=False):
- # Matches DataPortGeometry outer pipe/flange/gland envelopes; sealed socket shown, no cable run.
+ # Matches SocketGeometry outer pipe/flange/gland envelopes; sealed socket shown, no cable run.
  out=cylinder(p,n,.0625,-.22,-.04,material)
  out+=cylinder(p,n,.095 if compact else .11,-.04,.015,material)
  out+=cylinder(p,n,.0885,.015,.05,material,6)

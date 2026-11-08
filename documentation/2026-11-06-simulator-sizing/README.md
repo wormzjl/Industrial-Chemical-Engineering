@@ -14,6 +14,7 @@ Scale-up-first Auto sizing, constructor-style Manual sizing, Standard/Low-dP cro
 - [LOW_POLY_REVIEW.md](LOW_POLY_REVIEW.md): restored casing nuts, client-only detail mode, geometry inventory and measured reductions.
 - [EQUIPMENT_PROTECTION_REVIEW.md](EQUIPMENT_PROTECTION_REVIEW.md): Creative-only breaking and constructor deconstruction, validation and updated jar.
 - [IMPLEMENTATION_REVIEW.md](IMPLEMENTATION_REVIEW.md): the implemented contracts and modelling assumptions.
+- [CONSOLIDATION_REVIEW.md](CONSOLIDATION_REVIEW.md): layout, consolidated socket/shape/line-tool code, archived tests, stale GUI rules and owner options.
 - [Code guide](../reference/code-guide/README.md): current subsystem maps and formats.
 - [Retained tools](../../tools/simulator-sizing/README.md): source inventory and reproducible entry points.
 - Local figures/tables: main checkout `research/2026-11-06-simulator-sizing/evidence/`; compressed logs: main checkout `tools/simulator-sizing/logs/`. Scratch originals are retained while unmerged.
@@ -37,6 +38,7 @@ Scale-up-first Auto sizing, constructor-style Manual sizing, Standard/Low-dP cro
 - 2026-11-07–08: `417d70417`/`349099167`/`3d09e6188` consolidate line session, commands, admission and derived collision; `1edbc055f` builds the two-block DCS; `5b84b9ec6` preserves GUI scale; `c15dfcecc` adds ID/location hover, main-door nozzles and RPM controls. Initially compiled/rendered while owner tested; fresh-server/JUnit qualification completed in this readiness pass.
 - 2026-11-08: `616fe7a1c` implements the reviewed native service/probe plans with matching equipment paint; `fd5603249` corrects total-feed probe mass basis. Native route/extreme/heading/Normal-Low and saved-probe gates pass. Current drawing workflow is tracked under `tools/equipment-drawings/`.
 - 2026-11-08: translations `429fe26b1` bring four locales to 2949 keys. Readiness code `050cd1098` fixes crossed-cell cursor handling, direct cable items and cabinet collision. Combined 206 focused JUnit and 25 dedicated-server methods pass; native drawings, guide, archive inventories and the 0.22.0 package refreshed. See [MERGE_REVIEW](MERGE_REVIEW.md) and [PIPE_FRAMEWORK_REVIEW](PIPE_FRAMEWORK_REVIEW.md).
+- 2026-11-08: consolidation review on `claude/simulator-sizing-refactor-6bacab` ([CONSOLIDATION_REVIEW.md](CONSOLIDATION_REVIEW.md)): `658861333` formats the 114 added Java files (bytecode identical); `df24eb6ac` consolidates socket geometry, cabinet shapes and line-tool helpers (5 classes removed, 2 added); `da982f268`/`2414c4e3a` archive 3 tests and 5 prints to `tools/test-archive-2026-11-08/`; the docs commit brings the gui-creation skill in line with the preserved GUI scale. 150 targeted JUnit tests and 32 focused GameTests pass.
 
 ## Code areas and open items
 
