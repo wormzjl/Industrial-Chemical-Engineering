@@ -10,27 +10,77 @@ import com.wormzjl.icheme.science.fluid.network.InlineFilter;
 public record FluidView(long identity,long inputRevision,long committedTick,long onlineTick,String status,State state,
                         double massFlow,List<PipeTransfer> pipeHistory,Double devicePressureChange,
                         double intervalSeconds,List<PipeRoute> pipeRoutes,InlineFilter filter,PipeInfo pipeInfo,
-                        List<Outlet> outlets,Tank tank,Heat heat,Tower tower) {
+                        List<Outlet> outlets,Tank tank,Heat heat,Tower tower,Drive drive,Power power,Pump pump) {
+    /**
+     * A pump's readings (batch 2026-11-03-rotating-machinery W10d, owner decision D37), from its last committed suction read
+     * and its health: NPSH available and NPSH required (NPSH3 at the accepted flow and speed; an in-line pump's at its D21
+     * duty speed), m, and the suction's vapour volume share, 0 to 1, each null where the slice made no read; its health, 0
+     * to 1; a constructed centrifugal pump's design for its curve, null for an in-line pump. Null for a device that is no pump.
+     */
+    public record Pump(Double npshAvailable,Double npshRequired,Double gasShare,double health,Curve curve) {
+        public Pump {
+            if(npshAvailable!=null&&!Double.isFinite(npshAvailable)||npshRequired!=null&&!(npshRequired>=0&&Double.isFinite(npshRequired))
+                    ||gasShare!=null&&!(gasShare>=0&&gasShare<=1)||!(health>=0&&health<=1))throw new IllegalArgumentException("Invalid pump presentation");
+        }
+    }
+    /** A constructed centrifugal pump's design ({@code CentrifugalPump}): rated suction flow (m³/s), head (m), efficiency and speed (rpm). Static: its casing's duty. */
+    public record Curve(double ratedFlow,double ratedHead,double efficiency,double ratedSpeed) {
+        public Curve {
+            if(!(ratedFlow>0)||!(ratedHead>0)||!(efficiency>0&&efficiency<=1)||!(ratedSpeed>0)||!Double.isFinite(ratedFlow+ratedHead+ratedSpeed))throw new IllegalArgumentException("Invalid pump curve presentation");
+        }
+    }
     public record Tower(com.wormzjl.icheme.science.fluid.network.CoolingTower specification,com.wormzjl.icheme.science.fluid.network.TowerExchange.Rates rates) {}
-    public FluidView withTower(Tower value){return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,value);}
-    public FluidView withStatus(String value){return new FluidView(identity,inputRevision,committedTick,onlineTick,value,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,tower);}
+    /**
+     * A casing's driver (batch 2026-11-03-rotating-machinery, W7, option A's Drive group): the driver's kind by name
+     * ({@code MOTOR}, {@code STEAM_TURBINE}, {@code CREATIVE_MOTOR}; empty: {@code NO DRIVER}), its rating (W) and a motor's
+     * poles, its status word and speed (rpm), whether it runs at a fixed speed (a fixed motor: the flow follows the line), the
+     * casing's speed share and the shaft power it takes (W). Null for a device that is not a casing.
+     */
+    public record Drive(String driver,double ratedPower,int poles,String status,double speed,boolean fixed,double share,double shaftPower) {
+        public Drive {
+            Objects.requireNonNull(driver);Objects.requireNonNull(status);
+            if(driver.length()>32||status.length()>256||!(ratedPower>=0)||!(speed>=0)||!(share>=0)||!Double.isFinite(ratedPower+speed+share+shaftPower)||poles<0)
+                throw new IllegalArgumentException("Invalid drive presentation");
+        }
+    }
+    /**
+     * A fan unit's power (W5, reading A68; W7, reading A86): its electric draw (W) and FE per tick, its store's share full
+     * (null for none), and its status word on the display ({@code NO POWER}, the notice {@code UNMETERED}, or empty). Null
+     * for a device without fans.
+     */
+    public record Power(double draw,double perTick,Double store,String status) {
+        public Power {
+            Objects.requireNonNull(status);
+            if(!(draw>=0)||!(perTick>=0)||!Double.isFinite(draw+perTick)||store!=null&&!(store>=0&&store<=1)||status.length()>32)throw new IllegalArgumentException("Invalid power presentation");
+        }
+    }
+    /** Every field but a casing's drive and a fan unit's power. */
+    public FluidView(long identity,long inputRevision,long committedTick,long onlineTick,String status,State state,double massFlow,List<PipeTransfer> pipeHistory,Double devicePressureChange,
+                     double intervalSeconds,List<PipeRoute> pipeRoutes,InlineFilter filter,PipeInfo pipeInfo,List<Outlet> outlets,Tank tank,Heat heat,Tower tower) {
+        this(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,tower,null,null,null);
+    }
+    public FluidView withDrive(Drive value){return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,tower,value,power,pump);}
+    public FluidView withPower(Power value){return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,tower,drive,value,pump);}
+    public FluidView withTower(Tower value){return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,value,drive,power,pump);}
+    public FluidView withPump(Pump value){return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,tower,drive,power,value);}
+    public FluidView withStatus(String value){return new FluidView(identity,inputRevision,committedTick,onlineTick,value,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,tower,drive,power,pump);}
     /** A tank has six faces and each face one neighbour, so it has at most six connections. */
     public static final int MAXIMUM_OUTLETS=6;
     /** Source-side convenience for devices without pipe inspection, not a wire-format fallback. */
     public FluidView(long identity,long inputRevision,long committedTick,long onlineTick,String status,State state,double massFlow,List<PipeTransfer> pipeHistory,Double devicePressureChange,double intervalSeconds,List<PipeRoute> pipeRoutes,InlineFilter filter){
-        this(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,null,List.of(),null,null,null);
+        this(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,null,List.of(),null,null,null,null,null,null);
     }
     public FluidView withPipeInfo(PipeInfo info){
         return withPipeInfo(info,intervalSeconds);
     }
     public FluidView withPipeInfo(PipeInfo info,double seconds){
-        return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,seconds,pipeRoutes,filter,info,outlets,tank,heat,tower);
+        return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,seconds,pipeRoutes,filter,info,outlets,tank,heat,tower,drive,power,pump);
     }
     public FluidView withOutlets(List<Outlet> list){
-        return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,list,tank,heat,tower);
+        return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,list,tank,heat,tower,drive,power,pump);
     }
     public FluidView withTank(Tank value){
-        return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,value,heat,tower);
+        return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,value,heat,tower,drive,power,pump);
     }
     /**
      * A vessel's own geometry and what it gave the atmosphere over the last completed interval (batch
@@ -188,10 +238,10 @@ public record FluidView(long identity,long inputRevision,long committedTick,long
     /** Every field but the heat side's: a view of a device that is not one. */
     public FluidView(long identity,long inputRevision,long committedTick,long onlineTick,String status,State state,double massFlow,List<PipeTransfer> pipeHistory,Double devicePressureChange,
                      double intervalSeconds,List<PipeRoute> pipeRoutes,InlineFilter filter,PipeInfo pipeInfo,List<Outlet> outlets,Tank tank) {
-        this(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,null,null);
+        this(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,null,null,null,null,null);
     }
     public FluidView withHeat(Heat value){
-        return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,value,tower);
+        return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,value,tower,drive,power,pump);
     }
     public FluidView(long identity,long inputRevision,long committedTick,long onlineTick,String status,State state,double massFlow,List<PipeTransfer> pipeHistory) {
         this(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,null,0,List.of(),null);

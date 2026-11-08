@@ -95,8 +95,6 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
         return state;
     }
     @Override public RenderShape getRenderShape(BlockState state){return RenderShape.MODEL;}
-    /** Pipe shapes by drawn outside code and connected faces. */
-    private static final java.util.Map<Integer,net.minecraft.world.phys.shapes.VoxelShape> PIPE_SHAPES=new java.util.concurrent.ConcurrentHashMap<>();
     /**
      * A device's shape: its block less a texel at the sides. A full cube would make the chunk renderer light every flat
      * face inside the block from the neighbour it faces (vanilla takes such a block's axis-aligned quads as lying on its
@@ -105,25 +103,15 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
     private static final net.minecraft.world.phys.shapes.VoxelShape DEVICE=Block.box(1,0,1,15,16,15);
     /** A pipe's shape follows its drawn outside diameter (at least 3/16 block across, so a thin line can be aimed at); devices nearly fill their block. */
     @Override protected net.minecraft.world.phys.shapes.VoxelShape getShape(BlockState state,BlockGetter level,BlockPos position,net.minecraft.world.phys.shapes.CollisionContext context) {
-        if(kind!=TopologyCompiler.Kind.PIPE)return DEVICE;
+        if(kind!=TopologyCompiler.Kind.PIPE)return LinePieces.shape(level,position,DEVICE);
         double bore=level.getBlockEntity(position) instanceof FluidDeviceBlockEntity entity?entity.bore():.05;
         int code=com.wormzjl.icheme.science.equipment.PipeSizes.code(com.wormzjl.icheme.science.equipment.PipeSizes.outside(bore)),mask=0;
         for(var direction:Direction.values())if(state.getValue(CONNECTIONS.get(direction)))mask|=1<<direction.ordinal();
         // Unconnected, it lies along its facing as drawn. A dead end likewise runs to a blind flange at the other face.
         if(mask==0)mask=3<<(state.getValue(FACING).ordinal()&~1);
         else if(Integer.bitCount(mask)==1)mask|=1<<(Integer.numberOfTrailingZeros(mask)^1);
-        return PIPE_SHAPES.computeIfAbsent(code<<6|mask,FluidDeviceBlock::pipeShape);
-    }
-    private static net.minecraft.world.phys.shapes.VoxelShape pipeShape(int key) {
-        // At most a texel short of the block on each side: a full cube changes how its flat faces are lit (see DEVICE).
-        double h=Math.min(7.5,Math.max(com.wormzjl.icheme.science.equipment.PipeSizes.outsideOf(key>>6)/2,3/32.0)*16),lo=8-h,hi=8+h;
-        var shape=Block.box(lo,lo,lo,hi,hi,hi);
-        for(var direction:Direction.values())if((key>>direction.ordinal()&1)!=0) {
-            var arm=switch(direction){case DOWN->Block.box(lo,0,lo,hi,8,hi);case UP->Block.box(lo,8,lo,hi,16,hi);case NORTH->Block.box(lo,lo,0,hi,hi,8);
-                case SOUTH->Block.box(lo,lo,8,hi,hi,16);case WEST->Block.box(0,lo,lo,8,hi,hi);case EAST->Block.box(8,lo,lo,16,hi,hi);};
-            shape=net.minecraft.world.phys.shapes.Shapes.or(shape,arm);
-        }
-        return shape.optimize();
+        long offsets=level.getBlockEntity(position) instanceof FluidDeviceBlockEntity entity?entity.lineOffsets():0;
+        return LinePieces.shape(level,position,LineShapes.shape(mask,state.getValue(FACING).ordinal(),code,offsets));
     }
     @Override public @Nullable BlockEntity newBlockEntity(BlockPos position,BlockState state){return new FluidDeviceBlockEntity(position,state);}
     /** Only pipes and valves may stand in a vertical line (owner decision 2026-10-16); every other device faces a horizontal direction. */
@@ -180,7 +168,7 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
             if(level.getBlockEntity(position) instanceof FluidDeviceBlockEntity entity)FluidWorldAuthority.find(level.getServer()).ifPresent(w->w.instruments().recoverLegacy(entity.fluidIdentity(),level,position));
         }
     }
-    /** Server thread: the laying tool is placing the blocks of a line it registered itself ({@link PipeLaying}). */
+    /** Server thread: the laying tool is placing the blocks of a line it registered itself ({@link LineLaying}). */
     static boolean laying;
     @Override protected void onPlace(BlockState state,Level level,BlockPos position,BlockState previous,boolean moved) {
         super.onPlace(state,level,position,previous,moved);if(!(level instanceof ServerLevel serverLevel)||laying)return;

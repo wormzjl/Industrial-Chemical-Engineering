@@ -193,7 +193,16 @@ public final class UnitDoors {
                 r.group("set_point", r.text("target", "outlet").equals("rise") ? r.entry("rise", x.text("door.rise"), Quantity.PRESSURE) : r.entry("pressure", x.text("door.outlet"), Quantity.PRESSURE));
                 var meters = new ArrayList<Column.Row>(List.of(Door.meter(x.text("door.power"), r.reading("power", 1e3, 1), "kW"), Door.meter(x.text("door.rise"), r.reading("rise", u.pressure().si(1), 2), u.pressure().symbol())));
                 if (unit.type().equals("pump")) meters.add(Door.meter(x.text("door.head"), r.reading("head", 1, 1), "m"));
+                meters.add(Door.meter(x.text("door.efficiency"), r.reading("efficiency", .01, 1), "%"));
                 r.readings(meters.toArray(Column.Row[]::new));
+                // The proposed driver (W8 form A, D42): a motor with 20 % spare, its draw in kW and in FE/t.
+                r.group("motor", Door.meter(x.text("door.rating"), r.reading("motor", 1e3, 1), "kW"), Door.meter("motor_efficiency", x.text("door.efficiency"), r.reading("motor_efficiency", .01, 1), "%"),
+                        Door.meter(x.text("door.electric"), r.reading("electric", 1e3, 1), "kW"), Door.meter(x.text("door.draw"), r.reading("electric", 20 * x.host().joulesPerFE(), 0), "FE/t"));
+            }
+            case "steam_turbine" -> {
+                r.group("pressure", r.entry("exhaust", x.text("door.exhaust"), Quantity.PRESSURE));
+                r.readings(Door.meter(x.text("door.power"), r.reading("power", 1e3, 1), "kW"), Door.meter(x.text("door.efficiency"), r.reading("efficiency", .01, 1), "%"),
+                        Door.meter(x.text("door.steam_rate"), r.reading("steam_rate", 1, 2), "kg/kWh"), Door.meter(x.text("door.isentropic"), r.reading("drop", 1e3, 1), "kJ/kg"));
             }
             case "ejector" -> {
                 r.group("pressure", r.entry("discharge", x.text("door.discharge"), Quantity.PRESSURE), r.entry("motive", x.text("door.motive"), Quantity.PRESSURE));

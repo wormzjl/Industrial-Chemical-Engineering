@@ -1,0 +1,11 @@
+{
+  "medium": "POWER",
+  "loader": "icheme:data_cable",
+  "textures": {
+    "cable": "icheme:block/power_cable",
+    "marker": "icheme:block/painted_pipe",
+    "fitting": "icheme:block/equipment_flange",
+    "opening": "icheme:block/equipment_opening",
+    "particle": "icheme:block/power_cable"
+  }
+}

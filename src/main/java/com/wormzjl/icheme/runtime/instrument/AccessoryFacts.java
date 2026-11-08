@@ -7,7 +7,7 @@ import java.util.function.Supplier;
 
 /**
  * The records of the accessory store (AGENTS.md, "Saves and data formats"). Its facts are what the player attached: the
- * installed gauges with their settings, the pipe fittings, and the per-host slot revisions those records carry. Its
+ * installed gauges with their settings, the non-dial fittings, and the per-host slot revisions those records carry. Its
  * state, which the service computes again, is the pending operations and the retry deadline.
  *
  * <p>Facts schema {@link #SCHEMA}. A record is a compound read by name. A field is only ever added and never changes
@@ -21,7 +21,8 @@ import java.util.function.Supplier;
  * or refunds an item, so a dropped operation loses nothing.</p>
  */
 final class AccessoryFacts {
-    static final int SCHEMA=2,STATE=1;
+    /** Schema 4: optional floating-roof level gauges, retaining schema 3's sensors and speed pickups. */
+    static final int SCHEMA=4,STATE=1;
     /**
      * Renamed or removed saved names, per name set: the saved name to the current one. A gauge's kind and unit share the
      * item component's tables, so one alias serves both. None at schema 1.
@@ -84,12 +85,12 @@ final class AccessoryFacts {
         var settings=settings(f.record("settings"),"installed gauge");f.end();
         return f.valid("gauge on host "+host,()->new Instrument.Installed(new Instrument.Key(host,mount),instance,revision,settings));
     }
-    static CompoundTag fitting(InstrumentService.Store.Legacy fitting) {
+    static CompoundTag fitting(Instrument.Fitting fitting) {
         var t=new CompoundTag();t.putLong("host",fitting.key().host());t.putUUID("instance",fitting.instance());t.putLong("revision",fitting.revision());t.putString("type",fitting.type().name());return t;
     }
-    static InstrumentService.Store.Legacy fitting(CompoundTag tag) {
-        var f=new Fields(tag,"pipe fitting");long host=f.i64("host");var instance=f.uuid("instance");long revision=f.i64("revision");var type=f.name("type","type",Instrument.Type.class);f.end();
-        return f.valid("fitting on host "+host,()->new InstrumentService.Store.Legacy(new Instrument.Key(host,"pipe_accessory"),instance,revision,type));
+    static Instrument.Fitting fitting(CompoundTag tag) {
+        var f=new Fields(tag,"accessory fitting");long host=f.i64("host");var instance=f.uuid("instance");long revision=f.i64("revision");var type=f.name("type","type",Instrument.Type.class);f.end();
+        return f.valid("fitting on host "+host,()->new Instrument.Fitting(new Instrument.Key(host,Instrument.Fitting.mount(type)),instance,revision,type));
     }
     /** A host's slot revision: the counter its records and its block entity's copy are checked against. */
     static CompoundTag revision(long host,long revision){var t=new CompoundTag();t.putLong("host",host);t.putLong("revision",revision);return t;}

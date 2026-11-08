@@ -147,6 +147,12 @@ public final class ExchangerUnit implements UnitModel {
         var cold = hot == tube ? shell : tube;
         var hotSide = ExchangerRating.side(u.thermo(), hot, cold.temperature(), hot.temperature());
         var coldSide = ExchangerRating.side(u.thermo(), cold, cold.temperature(), hot.temperature());
+        if(u.passages().exchangerType()==com.wormzjl.icheme.science.equipment.ExchangerType.CROSSFLOW) {
+            var at=ExchangerRating.crossflow(hot==tube?hotSide:coldSide,hot==tube?coldSide:hotSide,area,null);
+            if(!at.converged())throw new FlowsheetFailure("exchanger.heat_cross");
+            report.reading("duty",Math.abs(at.intoTube()));report.reading("approach",at.approach());
+            return at.intoTube();
+        }
         double duty = ExchangerRating.duty(hotSide, coldSide, area, hot.temperature(), cold.temperature());
         report.reading("duty", duty);
         report.reading("approach", ExchangerRating.rate(hotSide, coldSide, duty).approach());
@@ -167,7 +173,9 @@ public final class ExchangerUnit implements UnitModel {
                 report.note(Note.warning(u.id(), "exchanger.heat_cross"));
                 return;
             }
-            var result = ExchangerRating.rate(ExchangerRating.side(u.thermo(), hot, cold.temperature(), hot.temperature()), ExchangerRating.side(u.thermo(), cold, cold.temperature(), hot.temperature()), Math.abs(into));
+            var hotCurve=ExchangerRating.side(u.thermo(), hot, cold.temperature(), hot.temperature());
+            var coldCurve=ExchangerRating.side(u.thermo(), cold, cold.temperature(), hot.temperature());
+            var result = ExchangerRating.required(u.passages().exchangerType(),hot==t?hotCurve:coldCurve,hot==t?coldCurve:hotCurve,Math.abs(into));
             report.reading("approach", result.approach());
             if (Double.isFinite(result.area())) report.reading("area_needed", result.area());
             else report.note(Note.warning(u.id(), "exchanger.heat_cross"));

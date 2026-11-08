@@ -47,6 +47,8 @@ class DialogColumnsTest {
             out.add(new Case("pipeline tool " + valid, DialogColumns.pipelineTool(new DialogColumns.PipelineTool(false, 0, false, valid), t), PIPELINE));
             out.add(new Case("laying tool " + valid, DialogColumns.pipelineTool(new DialogColumns.PipelineTool(true, 0, false, valid), t), PIPELINE));
             out.add(new Case("laying tool bare " + valid, DialogColumns.pipelineTool(new DialogColumns.PipelineTool(true, 1, true, valid), t), PIPELINE));
+            out.add(new Case("data cable tool " + valid, DialogColumns.pipelineTool(new DialogColumns.PipelineTool(true, 0, false, valid,true), t), PIPELINE));
+            out.add(new Case("power conduit tool " + valid, DialogColumns.pipelineTool(new DialogColumns.PipelineTool(true, 0, false, valid,false,true), t), PIPELINE));
         }
         out.add(new Case("drum", DialogColumns.vessel(DRUM, false, false, t), VESSEL));
         out.add(new Case("pump", DialogColumns.vessel(PUMP, true, true, t), VESSEL));
@@ -134,6 +136,9 @@ class DialogColumnsTest {
         var keys = buttons(laying);
         assertTrue(keys.get("channel:1").latched() && keys.get("channel:0").active() && keys.get("bare").latched());
         assertTrue(buttons(DialogColumns.pipelineTool(new DialogColumns.PipelineTool(true, 0, false, true), t)).get("bare").active());
+        var cable=DialogColumns.pipelineTool(new DialogColumns.PipelineTool(true,0,false,false,true),t);
+        assertTrue(fields(cable).isEmpty(),"dormant pipe size and paint do not edit a data cable");
+        assertTrue(buttons(cable).get("mode:data").latched());assertFalse(buttons(cable).containsKey("bare"));
 
         var drum = DialogColumns.vessel(DRUM, false, false, t);
         assertEquals(List.of("diameter", "length"), fields(drum), "a drum's chosen sizes are entries; the rest are meters");

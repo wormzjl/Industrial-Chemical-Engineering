@@ -37,10 +37,9 @@ class ProcessUnitTest {
         var shapes = new ArrayList<EquipmentShape>();
         for (var kind : Kind.values()) {
             if (!kind.unit()) continue;
-            double step = ProcessUnit.diameterStep(kind);
-            boolean few = Math.round((ProcessUnit.maxDiameter(kind) - ProcessUnit.minDiameter(kind)) / step) < 9;
-            for (double d = ProcessUnit.minDiameter(kind); d <= ProcessUnit.maxDiameter(kind) + 1e-9; d += step) {
-                double size = ProcessUnit.snap(kind, d);
+            var sizes = ProcessUnit.sizes(kind);
+            boolean few = sizes.size() <= 9;
+            for (double size : sizes) {
                 boolean end = size == ProcessUnit.minDiameter(kind) || size == ProcessUnit.maxDiameter(kind);
                 int least = ProcessUnit.minLength(kind, size), most = ProcessUnit.maxLength(kind, size);
                 for (int length : (few || end) && most > least ? new int[]{least, most} : new int[]{least})
@@ -114,8 +113,7 @@ class ProcessUnitTest {
         // A new unit (2026-10-18, NEW_UNITS_PLAN.md) starts at its design's second size and support, inside its ranges at every size.
         for (var kind : Kind.values()) {
             if (!kind.unit()) continue;
-            for (double d = ProcessUnit.minDiameter(kind); d <= ProcessUnit.maxDiameter(kind) + 1e-9; d += ProcessUnit.diameterStep(kind)) {
-                double size = ProcessUnit.snap(kind, d);
+            for (double size : ProcessUnit.sizes(kind)) {
                 int length = ProcessUnit.defaultLength(kind, size), support = ProcessUnit.defaultSupport(kind, size, length);
                 assertTrue(length >= ProcessUnit.minLength(kind, size) && length <= ProcessUnit.maxLength(kind, size), kind + " " + size + " default length " + length);
                 assertTrue(support >= ProcessUnit.minSupport(kind, size, length) && support <= ProcessUnit.maxSupport(kind), kind + " " + size + " default support " + support);
@@ -182,15 +180,16 @@ class ProcessUnitTest {
         assertEquals(20, ProcessUnit.maxLength(Kind.VERTICAL_HEATER, 12));
         assertEquals(3, ProcessUnit.minSupport(Kind.VERTICAL_HEATER, 4, 8));
         assertEquals(0, ProcessUnit.maxSupport(Kind.PUMP));
-        // A compressor's lowest foundation keeps its discharge bottles 0.3 m and its motor 0.1 m over grade, and is the
-        // lowest that does.
+        // A compressor's lowest foundation keeps its discharge bottles 0.3 m over grade, and is the lowest that does; its
+        // discharge bottles clear the cylinders on the crankshaft's cell centre (batch 2026-11-03-rotating-machinery).
         for (double b = .15; b <= ProcessUnit.maxDiameter(Kind.COMPRESSOR) + 1e-9; b += .05)
             for (int throwsCount = 2; throwsCount <= ProcessUnit.MAX_THROWS; throwsCount += 2) {
                 double bore = ProcessUnit.snap(Kind.COMPRESSOR, b);
                 var c = ProcessUnit.Compressor.of(bore, throwsCount);
                 int h = ProcessUnit.minSupport(Kind.COMPRESSOR, bore, throwsCount);
                 assertTrue(c.clears(h) && (h == 1 || !c.clears(h - 1)), bore + " x " + throwsCount);
-                assertTrue(c.dischargeAxis(h) - c.discharge() / 2 >= .3 && h + c.crank() - c.motor() / 2 >= .1, bore + " x " + throwsCount);
+                assertTrue(c.dischargeAxis(h) - c.discharge() / 2 >= .3, bore + " x " + throwsCount);
+                assertTrue(h + c.crank() - c.cylinder() / 2 - c.dischargeAxis(h) - c.discharge() / 2 >= .05, bore + " x " + throwsCount);
             }
     }
 
@@ -243,9 +242,9 @@ class ProcessUnitTest {
                         Role.REGENERATION_INLET, "2+")),
                 Map.entry(Kind.TRICKLE_BED_REACTOR, Map.of(Role.FEED, "2-", Role.HYDROGEN, "0+", Role.EFFLUENT, "2-", Role.QUENCH, "0+")),
                 Map.entry(Kind.EBULLATED_BED_REACTOR, Map.of(Role.EFFLUENT, "2-", Role.FEED, "2-", Role.HYDROGEN, "2+", Role.CATALYST_INLET, "1+", Role.CATALYST_OUTLET, "0+")),
-                Map.entry(Kind.CENTRIFUGAL_COMPRESSOR, Map.of(Role.SUCTION, "1-", Role.DISCHARGE, "0-", Role.COOLANT_INLET, "2-", Role.COOLANT_OUTLET, "2+")),
+                Map.entry(Kind.CENTRIFUGAL_COMPRESSOR, Map.of(Role.SUCTION, "1+", Role.DISCHARGE, "1+")),
                 Map.entry(Kind.STEAM_TURBINE, Map.of(Role.STEAM, "0+", Role.EXHAUST, "1+")),
-                Map.entry(Kind.CONDENSING_TURBINE, Map.of(Role.STEAM, "0+", Role.COOLANT_INLET, "1-", Role.COOLANT_OUTLET, "2-", Role.CONDENSATE, "2+", Role.VENT, "0-")),
+                Map.entry(Kind.MOTOR, Map.of()), Map.entry(Kind.GENERATOR, Map.of()), Map.entry(Kind.GEARBOX, Map.of()),
                 Map.entry(Kind.CYCLONE, Map.of(Role.FEED, "2-", Role.VAPOUR_OUTLET, "2+", Role.SOLIDS_OUTLET, "1-")),
                 Map.entry(Kind.FCC_CONVERTER, Map.of(Role.FEED, "2-", Role.STEAM, "2+", Role.AIR, "2-", Role.FUEL, "2-", Role.FLUE_GAS, "0-", Role.VAPOUR_OUTLET, "0+",
                         Role.CATALYST_INLET, "2-", Role.CATALYST_OUTLET, "2+")),
@@ -261,7 +260,7 @@ class ProcessUnitTest {
                         Role.SOLIDS_OUTLET, "1-", Role.QUENCH, "1+", Role.LIQUID_OUTLET, "1-", Role.SYNGAS, "0+")));
         for (var kind : Kind.values()) assertEquals(kind.unit(), expected.containsKey(kind), kind + " has its nozzles' faces listed");
         for (var shape : everySize()) {
-            var sides = shape.kind() == Kind.PUMP && shape.diameter() > ProcessUnit.OH2_MAX ? Map.of(Role.SUCTION, "0-", Role.DISCHARGE, "0+") : expected.get(shape.kind());
+            var sides = shape.kind() == Kind.PUMP && shape.diameter() > ProcessUnit.OH2_MAX ? Map.of(Role.SUCTION, "1+", Role.DISCHARGE, "1+") : expected.get(shape.kind());
             var nozzles = shape.nozzles();
             assertEquals(sides.keySet(), new HashSet<>(nozzles.stream().map(EquipmentShape.Nozzle::role).toList()), shape.toString());
             assertEquals(sides.size(), nozzles.size(), shape.toString());
@@ -307,10 +306,10 @@ class ProcessUnitTest {
      * 4b842f30), each with what the neck touches and how deep; every other neck stands clear.
      */
     private static final List<Touch> TOUCHES = List.of(
-            // Shell 0.75 m: hub 0.02 m clear of the 1.05 r rod, its base on the channel's girth flanges; 1.75 m: 0.01 m into the rod.
-            new Touch(Kind.EXCHANGER, Role.TUBE_OUTLET, List.of(.75, 1.75)),
-            // Shell 0.75 m: hub 0.02 m clear of the 1.05 r rod, its base on the shell's girth flange; 1.75 m: 0.01 m into the rod.
-            new Touch(Kind.EXCHANGER, Role.SHELL_INLET, List.of(.75, 1.75)),
+            // Shell 1.75 m: 0.01 m into the channel rod; the 0.75 m neck clears with its shortened drawn hub.
+            new Touch(Kind.EXCHANGER, Role.TUBE_OUTLET, List.of(1.75)),
+            // Shell 1.75 m: 0.01 m into the rod; the 0.75 m neck clears with its shortened drawn hub.
+            new Touch(Kind.EXCHANGER, Role.SHELL_INLET, List.of(1.75)),
             // Channel 0.75 m: the hub's base on its girth flanges (1.12 rb rod); 1 m: 0.02 m into them.
             new Touch(Kind.KETTLE, Role.TUBE_OUTLET, List.of(.75, 1.)),
             // The smallest heater's front legs stand 0.68 m apart: the neck 0.08 m into each one's casing and footing (owner item).
@@ -456,6 +455,46 @@ class ProcessUnitTest {
         throw new AssertionError(shape + " has no " + role);
     }
 
+    /**
+     * Batch 2026-11-03-rotating-machinery (W4): every machine's shaft end has its coupling's half in the machine and a
+     * free block beyond its coupling face for the shaft block, level, off the ground and a block clear of every nozzle's
+     * pipe; a gearbox has its input and its output, every other machine one end. A motor's and a generator's terminal box
+     * lies in the machine; an air cooler and an induced-draft tower have one too (W5); no other kind has one.
+     */
+    @Test
+    void everyShaftEndMeetsAFreeBlockForItsShaft() {
+        int machines = 0;
+        for (var shape : everySize()) {
+            var shafts = ShapeRasterizer.shafts(shape);
+            var terminal = ShapeRasterizer.terminal(shape);
+            boolean electric = shape.kind() == Kind.MOTOR || shape.kind() == Kind.GENERATOR || shape.kind() == Kind.AIR_COOLER || shape.kind() == Kind.INDUCED_DRAFT_COOLING_TOWER;
+            assertEquals(electric, terminal != null, shape.toString());
+            if (!UnitDesign.of(shape.kind()).hasDuty() && shape.kind() != Kind.COMPRESSOR) {
+                assertEquals(List.of(), shafts, shape.toString());
+                continue;
+            }
+            machines++;
+            assertEquals(shape.kind() == Kind.GEARBOX ? 2 : 1, shafts.size(), shape.toString());
+            var layout = ShapeRasterizer.layout(shape);
+            var occupied = new HashSet<ShapeRasterizer.Cell>(layout.shell());
+            occupied.addAll(layout.interior());
+            if (terminal != null) assertTrue(occupied.contains(terminal), shape + ": its terminal box at " + terminal);
+            for (var shaft : shafts) {
+                var block = shaft.block();
+                assertEquals(0, shaft.dy(), shape + ": a level shaft");
+                assertTrue(occupied.contains(shaft.cell()), shape + ": its coupling at " + shaft.cell());
+                assertFalse(occupied.contains(block), shape + ": no room for its shaft at " + block);
+                assertTrue(block.y() >= 0, shape + ": its shaft under the ground");
+                for (var port : ShapeRasterizer.ports(shape)) {
+                    int dx = Math.abs(block.x() - port.cell().x() - port.dx()), dy = Math.abs(block.y() - port.cell().y() - port.dy()),
+                            dz = Math.abs(block.z() - port.cell().z() - port.dz());
+                    assertTrue(Math.max(dx, Math.max(dy, dz)) >= 2, shape + ": its shaft touches the pipe of " + shape.nozzles().get(port.nozzle()).role());
+                }
+            }
+        }
+        assertTrue(machines > 200, machines + " machines");
+    }
+
     @Test
     void everyNozzleLeavesAFreeBlockForItsPipe() {
         for (var shape : everySize()) {
@@ -490,8 +529,18 @@ class ProcessUnitTest {
                     max[a] = Math.max(max[a], c[a]);
                 }
             }
-            assertArrayEquals(new int[]{0, 0, 0}, min, shape.toString());
-            assertArrayEquals(new int[]{shape.sizeX() - 1, shape.sizeY() - 1, shape.sizeZ() - 1}, max, shape.toString());
+            occupiesPlacementFrame(shape, min, max);
+        }
+    }
+
+    /** Empty edge cells retain established nozzle coordinates when tank access or compressor coolant is removed. */
+    static void occupiesPlacementFrame(EquipmentShape shape, int[] min, int[] max) {
+        int[] size = {shape.sizeX(), shape.sizeY(), shape.sizeZ()};
+        boolean retained = shape.kind() == Kind.TANK || shape.kind() == Kind.CENTRIFUGAL_COMPRESSOR;
+        for (int axis = 0; axis < 3; axis++) {
+            int padding = retained && axis != 1 ? shape.kind() == Kind.TANK ? 2 : 1 : 0;
+            assertTrue(min[axis] >= 0 && min[axis] <= padding, shape + " min axis " + axis + ": " + min[axis]);
+            assertTrue(max[axis] < size[axis] && max[axis] >= size[axis] - 1 - padding, shape + " max axis " + axis + ": " + max[axis]);
         }
     }
 
@@ -655,7 +704,6 @@ class ProcessUnitTest {
             String prefix = UnitDesign.of(kind).getClass().getSimpleName().replace("Design", "");
             for (var name : names) if (name.startsWith(prefix)) owners.computeIfAbsent(name, n -> EnumSet.noneOf(Kind.class)).add(kind);
         }
-        owners.get("SteamTurbineTrain").add(Kind.CONDENSING_TURBINE);
         owners.put("FluidizedBedParts", EnumSet.of(Kind.FLUIDIZED_BED_BOILER, Kind.FLUIDIZED_BED_GASIFIER));
         owners.put("HydroprocessingParts", EnumSet.of(Kind.TRICKLE_BED_REACTOR, Kind.EBULLATED_BED_REACTOR));
         var crossings = new ArrayList<String>();
@@ -711,7 +759,8 @@ class ProcessUnitTest {
             assertTrue(starts.contains(l.base()), shape + " a climb from " + l.base() + " starts on a deck or the ground");
             // Owner decision C1 2026-10-18: no climb longer than Access.MAX_CLIMB from its foot to the deck it lands on
             // (the columns' rule; a deck's grating may add its own thickness: 9.125 m, under the old rule's 30 ft).
-            assertTrue(l.top() - Access.LANDING - l.base() <= Access.MAX_CLIMB + Access.DECK + 1e-9, shape + " climbs from " + l.base() + " to " + (l.top() - Access.LANDING));
+            // The owner explicitly removed tank intermediate platforms; other equipment keeps the rest rule.
+            assertTrue(shape.kind() == Kind.TANK || l.top() - Access.LANDING - l.base() <= Access.MAX_CLIMB + Access.DECK + 1e-9, shape + " climbs from " + l.base() + " to " + (l.top() - Access.LANDING));
             double y = (l.base() + l.rungTop()) / 2;
             assertTrue(climbable(shape, new double[]{l.x() + .3 * l.outX(), y, l.z() + .3 * l.outZ()}), shape + " climbable in front of the rungs at " + y);
             assertFalse(climbable(shape, new double[]{l.x() + 1.5 * l.outX(), y, l.z() + 1.5 * l.outZ()}), shape + " not climbable outside the cage");
@@ -1138,6 +1187,9 @@ class ProcessUnitTest {
         static boolean clear(EquipmentShape shape, int k, double od) {
             var nozzle = shape.nozzles().get(k);
             double to = nozzle.length() - PipeSizes.flangeThickness(od) - PipeSizes.hub(od) - .01, radius = od / 2 + .01;
+            // The mesh shortens its flange hub where the cast reducer needs the available neck.
+            var root = ShapeRasterizer.nozzleRoot(shape, k);
+            if (root != null) to = Math.max(to, root.end(nozzle.length(), od));
             double near = Math.max(0, leaves(shape, nozzle, nozzle.defaultOd() / 2 + .01, 0, to));
             double out = leaves(shape, nozzle, radius, near, Math.min(to, near + PipeSizes.MAX_OUTSIDE / 2)), from = out + SURFACE;
             if (out < 0) return false;
@@ -1149,7 +1201,12 @@ class ProcessUnitTest {
 
         /** The first distance from {@code from} to {@code to} along the neck, in {@link #STEP}s, where a ring of {@code radius} is wholly out of the solid; -1 where there is none. */
         private static double leaves(EquipmentShape shape, EquipmentShape.Nozzle nozzle, double radius, double from, double to) {
-            for (double s = from; s <= to + 1e-9; s += STEP) if (ringClear(shape, nozzle, radius, s)) return s;
+            if (to < from) return -1;
+            int steps = Math.max(1, (int) Math.ceil((to - from) / STEP));
+            for (int i = 0; i <= steps; i++) {
+                double s = from + (to - from) * i / steps;
+                if (ringClear(shape, nozzle, radius, s)) return s;
+            }
             return -1;
         }
 

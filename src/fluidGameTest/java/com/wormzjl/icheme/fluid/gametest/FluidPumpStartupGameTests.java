@@ -28,10 +28,10 @@ public final class FluidPumpStartupGameTests {
         level.setBlock(pump,inlinePump(Direction.EAST),3);
         long sourceId=((FluidDeviceBlockEntity)level.getBlockEntity(source)).fluidIdentity(),tankId=((FluidDeviceBlockEntity)level.getBlockEntity(tank)).fluidIdentity();
         var feed=world.presets().stream().filter(p->p.id().equals("icheme:medium_crude")).findFirst().orElseThrow();
-        // A liquid-only pump (decision D1 of the phase-ports batch) refuses the crude at 350 K and 1 atm, where it is
-        // two-phase; the medium crude's bubble point at 350 K is 232 kPa (one flashTP bisection, O3 of batch
-        // 2026-11-04-open-thermo-data; Tia Juana Light read 226 kPa, PHASE_PORTS_REVIEW.md WP3), so the generator stands
-        // at 1 MPa and supplies a liquid (re-baselined from 101325 Pa).
+        // A liquid-only pump (decision D1 of the phase-ports batch; gas refuses nothing since request 11) refused the crude
+        // at 350 K and 1 atm, where it is two-phase; the medium crude's bubble point at 350 K is 232 kPa (one flashTP
+        // bisection, O3 of batch 2026-11-04-open-thermo-data; Tia Juana Light read 226 kPa, PHASE_PORTS_REVIEW.md WP3), so
+        // the generator stands at 1 MPa and supplies a liquid (re-baselined from 101325 Pa).
         TankCharge.run(world,sourceId,new FluidDeviceSpec(1,350,1e6,feed.moleFractions()));
         long id=((FluidDeviceBlockEntity)level.getBlockEntity(pump)).fluidIdentity();var old=world.registrations().get(id);var d=old.device();
         world.edit(id,old.revision(),d.withControl(new FlowControl.Pump(.0001,500000)),old.spec());

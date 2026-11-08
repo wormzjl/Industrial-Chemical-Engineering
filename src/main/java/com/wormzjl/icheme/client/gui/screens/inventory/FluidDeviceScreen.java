@@ -15,7 +15,6 @@ import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
 import com.wormzjl.icheme.client.gui.common.kit.SkinButton;
 import com.wormzjl.icheme.client.gui.common.kit.SkinField;
-import com.wormzjl.icheme.client.gui.common.kit.WindowScale;
 import com.wormzjl.icheme.network.FluidNetwork;
 import com.wormzjl.icheme.runtime.fluid.HeatUnit;
 import com.wormzjl.icheme.runtime.fluid.SlurryFeed;
@@ -75,9 +74,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private String nameDraft,nameShown;
     /** Whether Apply has a name to send: the typed name, cleaned, differs from the device's. */
     private boolean renames(){return nameDraft!=null&&nameable()&&!com.wormzjl.icheme.science.equipment.DeviceName.clean(nameDraft).equals(currentName());}
-    @Override public void removed(){super.removed();WindowScale.restore(minecraft);}
     @Override protected void init(){
-        WindowScale.apply(minecraft,this,FluidGuiLayout.HEIGHT,this::fits);
         imageWidth=FluidGuiLayout.imageWidth(width);imageHeight=FluidGuiLayout.imageHeight(height);
         super.init();titleLabelY=inventoryLabelY=-1000;
         if(nameDraft==null)nameDraft=nameShown=currentName();
@@ -129,10 +126,8 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private boolean pool(){return heat()!=null&&unitKind()==com.wormzjl.icheme.science.equipment.HeatSides.Unit.KETTLE&&sideKind()==com.wormzjl.icheme.science.equipment.HeatSides.Side.SHELL;}
     private String flowUnit(){return flowRateUnit.unit(mass?"kg":"kmol");}
     // Every page but the Control tab: the door column from x 10 to side(), its bar right of it, then the tables' HMI
-    // screen. The screen takes the scale at which the window holds its design height (FluidGuiLayout.HEIGHT), lower where
-    // its tallest column still does not fit, down to the minimum a player reads (WindowScale, fits): 2 at 1920x1080, where
-    // the design size's 4 left a pump's column 128 px. There the column scrolls in its own view (the Control tab's view),
-    // as the table area scrolls its rows.
+    // screen, sized from the window at the player's GUI scale (FluidGuiLayout.imageWidth, imageHeight; owner 2026-11-07).
+    // A column taller than its view scrolls in its own view (the Control tab's view), as the table area scrolls its rows.
     private int side(){return FluidGuiLayout.side(imageWidth);}
     private int hoverX=-1,hoverY=-1;
     private int tableX(){return side()+24;}
@@ -289,7 +284,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             return;
         }
         buildDevice();
-        if(page==0)buildContents();else if(page==1)buildComposition();else if(page==2)buildSolids();
+        if(page==0&&curve())configureScroll(0);else if(page==0)buildContents();else if(page==1)buildComposition();else if(page==2)buildSolids();
         else if(page==4)configureScroll(data.view().outlets().size());else if(page==5)configureScroll(datasheetGlass().lines().size());
         else configureScroll(data.view().pipeInfo().connections().size());
         if(focused!=null&&editors.containsKey(focused)){setFocused(editors.get(focused));editors.get(focused).setCursorPosition(cursor);}
@@ -518,6 +513,8 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     }
     /** The drawing's box inside the Control tab's HMI screen, as {@link #renderBg} drew it this frame. */
     private Rect drawingBox;
+    /** The box inside every other page's glass, as {@link #renderBg} drew it this frame (a pump's curve, W10d). */
+    private Rect pageBox;
     /** Every page but the Control tab: the tables' HMI screen right of the door column, from below the status to the footer's divider. */
     private Rect pageWell(){return new Rect(side()+15,72,imageWidth-side()-20,imageHeight-50-72);}
     @Override protected void renderBg(GuiGraphics g,float partialTick,int mouseX,int mouseY){
@@ -526,7 +523,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         skin.page(canvas,new Rect(0,0,imageWidth,imageHeight));
         // The HMI screen goes under the widgets that sit on it.
         var data=menu.clientData();
-        if(data!=null){if(page==CONTROL&&data.view().heat()!=null)drawingBox=skin.well(canvas,controlWell());else skin.well(canvas,pageWell());}
+        if(data!=null){if(page==CONTROL&&data.view().heat()!=null)drawingBox=skin.well(canvas,controlWell());else pageBox=skin.well(canvas,pageWell());}
         skin.softKeys(canvas,FluidGuiLayout.softKeys(imageWidth,imageHeight));
         g.pose().popPose();
     }
@@ -549,7 +546,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             skin.text(canvas,shown,at[0],at[1],Palette.TEXT);if(shown.length()<name.length()&&strip.name().contains(hoverX,hoverY))hovered=name;}
         var data=menu.clientData();
         if(data==null){doorStatus(canvas,skin,tr("waiting"),MUTED);return;}
-        // A refused mover's reason ("ERROR: pump inlet not liquid ...") and a hold read in the warning colour.
+        // A refused mover's reason ("ERROR: pump inlet dry ...") and a hold read in the warning colour.
         var view=data.view();
         skin.hDivider(canvas,8,imageWidth-8,imageHeight-49);
         // A message only (waiting, an invalid input); the view's time is gone (owner, 2026-10-28).
@@ -568,7 +565,9 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         skin.vDivider(canvas,side()+13,controlTop(),controlBottom());
         for(var label:labels)text(g,label.text(),label.x(),label.y(),MUTED,label.width());
         renderDevice(canvas,skin);
-        if(page==0)renderContents(g,mouseX-leftPos,mouseY-topPos);
+        // A constructed centrifugal pump's Overview draws its curve on the glass (W10d); every other device its contents.
+        if(page==0&&curve()){var box=pageBox!=null?pageBox:skin.well(canvas,pageWell());canvas.clip(box);PumpCurve.draw(canvas,box,curveInput(),FluidDeviceScreen::tr);canvas.unclip();}
+        else if(page==0)renderContents(g,mouseX-leftPos,mouseY-topPos);
         else if(page==1)renderComposition(g,mouseX-leftPos,mouseY-topPos);
         else if(page==3)renderConnections(g,mouseX-leftPos,mouseY-topPos);
         else if(page==4)renderOutlets(g,mouseX-leftPos,mouseY-topPos);
@@ -643,6 +642,17 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         boolean ratio=data.kind()==TopologyCompiler.Kind.COMPRESSOR&&view.devicePressureChange()!=null&&state!=null&&state.pressure()>0;
         if(ratio)rows.add(new DeviceColumn.Meter("pressure_ratio",value((state.pressure()+view.devicePressureChange())/state.pressure()),"",tr("pressure_ratio.hint",pressureValue(view.devicePressureChange())+" "+p)));
         else if(view.devicePressureChange()!=null)rows.add(meter("pressure_change",pressureValue(view.devicePressureChange()),p));
+        // A driven casing's readings (W7, build plan section 3): a pump's head, its speed share, the shaft power it takes
+        // and its efficiency (the fluid's power over the shaft's), from the view the bucket sent.
+        var drive=view.drive();
+        if(drive!=null&&!drive.driver().equals("STEAM_TURBINE")&&(data.kind()==TopologyCompiler.Kind.PUMP||data.kind()==TopologyCompiler.Kind.COMPRESSOR)){
+            double density=state!=null&&state.volume()>0?state.mass()/state.volume():Double.NaN,rise=view.devicePressureChange()==null?Double.NaN:view.devicePressureChange();
+            if(data.kind()==TopologyCompiler.Kind.PUMP)rows.add(new DeviceColumn.Meter("head",value(rise/(density*9.80665)),"m",tr("head.hint")));
+            rows.add(meter("speed_share",value(100*drive.share()),"%"));
+            rows.add(meter("shaft_power",value(drive.shaftPower()/1000),"kW"));
+            double fluid=Math.abs(view.massFlow())/density*rise;
+            rows.add(new DeviceColumn.Meter("efficiency",drive.shaftPower()>0&&fluid>0&&data.kind()==TopologyCompiler.Kind.PUMP?value(100*fluid/drive.shaftPower()):"—","%",tr("efficiency.hint")));
+        }
         if(view.heat()!=null){var heat=view.heat();
             rows.add(meter("outlet_temperature",temperatureValue(heat.outletTemperature()),t));
             rows.add(new DeviceColumn.Meter("duty",value(Math.abs(heat.heatWatt())/1000),"kW",tr(heat.burners()!=null?"duty.fired":heat.heatWatt()<0?"duty.cooled":"duty.heated")));
@@ -657,7 +667,9 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         // An instrument's main value on its meter, the other on hover: a flowmeter's mass flow (its volume flow), a level
         // gauge's share of its span (its height).
         for(var sensor:data.sensors()){
-            String key=switch(sensor.kind()){case PRESSURE->"pressure_probe";case TEMPERATURE->"temperature_probe";case FLOW->"flowmeter";case LEVEL->sensor.mount().equals("level_boot")?"boot_level":"body_level";};
+            // A turbine's speed pickup (W3) shows on its status line's shaft words; its meter comes with the W7 pages (reading A40).
+            if(sensor.kind()==com.wormzjl.icheme.runtime.instrument.Sensor.Kind.SPEED)continue;
+            String key=switch(sensor.kind()){case PRESSURE->"pressure_probe";case TEMPERATURE->"temperature_probe";case FLOW->"flowmeter";case LEVEL->sensor.mount().equals("level_boot")?"boot_level":"body_level";case SPEED->"";};
             var availability=sensor.availability();
             if(availability==com.wormzjl.icheme.runtime.instrument.Instrument.Availability.UNAVAILABLE){rows.add(new DeviceColumn.Meter(key,"—","",tr("reading.unavailable")));continue;}
             rows.add(switch(sensor.kind()){
@@ -665,6 +677,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
                 case TEMPERATURE->new DeviceColumn.Meter(key,temperatureValue(sensor.value()),t,availability==com.wormzjl.icheme.runtime.instrument.Instrument.Availability.NO_FLOW?tr("reading.still"):null);
                 case FLOW->new DeviceColumn.Meter(key,value(flowRateUnit.display(sensor.value())),flowRateUnit.unit("kg"),tr("reading.volume_flow",quantity(flowRateUnit.display(sensor.secondary()),flowRateUnit.unit("m³"))));
                 case LEVEL->new DeviceColumn.Meter(key,value(sensor.secondary()),"%",tr(sensor.value()<0||sensor.value()>sensor.span()?"reading.height_overrange":"reading.height",quantity(sensor.value(),"m")));
+                case SPEED->throw new IllegalStateException("A speed pickup has no meter");
             });
         }
         return List.copyOf(rows);
@@ -704,8 +717,44 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         String junction=pipe()&&view.pipeInfo().junction()?tr("junction",view.pipeInfo().connections().size()):null;
         // A paired heat side leads with its side selector, as its Control tab does.
         var lead=tower()?DeviceColumn.towerControl(menu.clientData().controls().tower().draft()==com.wormzjl.icheme.science.fluid.network.CoolingTower.Draft.INDUCED,towerAuto,canEdit(),temperatureUnit.symbol(),FluidDeviceScreen::tr):heat()!=null?HeatControlColumn.sideSelector(controlInput(),FluidDeviceScreen::tr):List.<Column.Row>of();
-        return new DeviceColumn.Input(data.kind(),canEdit(),switchable(),powerOn,pressureUnit.symbol(),temperatureUnit.symbol(),flowRateUnit.suffix(),valve,opening,
-            view.filter()!=null&&!view.filter().captured().empty(),level(),junction,lead,phases(),meters());
+        var input=new DeviceColumn.Input(data.kind(),canEdit(),switchable(),powerOn,pressureUnit.symbol(),temperatureUnit.symbol(),flowRateUnit.suffix(),valve,opening,
+            view.filter()!=null&&!view.filter().captured().empty(),level(),junction,lead,phases(),meters(),drive(),power(),suction());
+        return data.controls().fixedMover()?input.withFixedDuty(tr(data.kind()==TopologyCompiler.Kind.PUMP?"inline.pump_rating":"inline.compressor_rating",value(data.controls().volumeFlow()*3600))):input;
+    }
+    /**
+     * A pump's Suction and Health groups (W10d, owner decision D37): NPSH available and required, the suction's gas and the
+     * health left, from the view the bucket sent; null for a device that is no pump. CAVITATION, GAS and FAILED stay on the display.
+     */
+    private DeviceColumn.Suction suction(){
+        var p=menu.clientData().view().pump();if(p==null)return null;
+        return new DeviceColumn.Suction(boxed(p.npshAvailable()),boxed(p.npshRequired()),p.gasShare()==null?"—":value(100*p.gasShare()),value(100*p.health()));
+    }
+    private String boxed(Double v){return v==null?"—":value(v);}
+    /** Whether the Overview's glass draws this pump's curve (W10d): a constructed centrifugal pump with a driver. In-line pumps keep their tables. */
+    private boolean curve(){var view=menu.clientData()==null?null:menu.clientData().view();return view!=null&&view.pump()!=null&&view.pump().curve()!=null&&view.drive()!=null;}
+    /** The curve's input from the view: the speed share, the suction volume flow and the head as the Readings show them, the NPSH available. */
+    private PumpCurve.Input curveInput(){
+        var view=menu.clientData().view();var c=view.pump().curve();var state=view.state();
+        double density=state!=null&&state.volume()>0?state.mass()/state.volume():Double.NaN,rise=view.devicePressureChange()==null?Double.NaN:view.devicePressureChange();
+        var pump=new com.wormzjl.icheme.science.machine.CentrifugalPump(c.ratedFlow(),c.ratedHead(),c.efficiency(),c.ratedSpeed());
+        double available=view.pump().npshAvailable()==null?Double.NaN:view.pump().npshAvailable();
+        return new PumpCurve.Input(pump,Math.max(0,view.drive().share()),Math.abs(view.massFlow())/density,rise/(density*9.80665),available,flowRateUnit.display(1),flowRateUnit.unit("m³"));
+    }
+    /**
+     * A casing's or a turbine's Drive group (W7, owner decision D31, option A): the driver in one line, its state, Open
+     * driver; {@code NO DRIVER} where the casing has none and stands closed. Null for a device with no shaft.
+     */
+    private DeviceColumn.Drive drive(){
+        var d=menu.clientData().view().drive();if(d==null)return null;
+        if(d.driver().isEmpty())return new DeviceColumn.Drive(tr("no_driver"),null,false,false);
+        String kind=tr("driver."+d.driver().toLowerCase(Locale.ROOT)),rating=number(d.ratedPower()/1000);
+        String line=d.ratedPower()<=0?kind:tr("drive_line",kind,rating);
+        return new DeviceColumn.Drive(line,tr("drive_state",d.status(),String.format(Locale.ROOT,"%.0f",d.speed())),true,d.fixed());
+    }
+    /** A fan unit's Power group (W7, reading A86): its draw, FE per tick and store; NO POWER or UNMETERED stay on the display. */
+    private DeviceColumn.Power power(){
+        var p=menu.clientData().view().power();if(p==null)return null;
+        return new DeviceColumn.Power(value(p.draw()/1000),String.format(Locale.ROOT,"%.0f",p.perTick()),p.store()==null?null:String.format(Locale.ROOT,"%.0f",100*p.store()));
     }
     private static boolean warning(String status){return status.contains("HELD")||status.contains("ERROR");}
     /**
@@ -883,20 +932,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private HeatFlowsheet flowsheet;private String flowsheetKey="";
     private int controlTop(){return FluidGuiLayout.DOOR_TOP;}
     private int controlBottom(){return imageHeight-FluidGuiLayout.DOOR_FOOT;}
-    /**
-     * Whether the door fits in a window {@code width} by {@code height} GUI px (WindowScale.Fit): the device's column
-     * and a heat unit's Control tab's columns, so a page change never changes the scale.
-     */
-    private boolean fits(int width,int height){return FluidGuiLayout.fits(width,height,this::tallest);}
-    private int tallest(int width){
-        if(menu.clientData()==null)return 0;
-        int tall=deviceColumn(width).bounds().h();
-        if(heat()!=null)for(var column:controlColumns(width))tall=Math.max(tall,column.bounds().h());
-        return tall;
-    }
-    // A column that grows past its view after the screen opened (the first publication's readings) lowers the scale
-    // where a lower one holds it; the screen builds again between frames, so no frame draws at two scales.
-    @Override protected void containerTick(){super.containerTick();followName();if(doorView.max()>0&&WindowScale.lower(minecraft,FluidGuiLayout.HEIGHT,this::fits))rebuildWidgets();}
+    @Override protected void containerTick(){super.containerTick();followName();}
     /** The name entry follows the device's name (another player's rename, this one's answered) while the player has not changed it. */
     private void followName(){
         String now=currentName();if(nameShown==null||now.equals(nameShown))return;
@@ -905,7 +941,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     }
     private FluidGuiLayout.ControlSlots controlSlots(){return FluidGuiLayout.control(imageWidth);}
     private int drawingRight(){return controlSlots().drawingRight();}
-    private HeatControlColumn.Input controlInput(){return new HeatControlColumn.Input(heat(),menu.clientData().controls().heat(),canEdit(),controllable(),heatMode,powerOn,temperatureUnit.symbol());}
+    private HeatControlColumn.Input controlInput(){return new HeatControlColumn.Input(heat(),menu.clientData().controls().heat(),canEdit(),controllable(),heatMode,powerOn,temperatureUnit.symbol(),power());}
     /**
      * The Control column on the GUI kit (batch 2026-10-28-gui-toolkit): placed once from the columns' widths, at compact
      * heights; its fields and buttons are kept at their slots and moved as it scrolls, so a scroll rebuilds nothing. Both
@@ -942,7 +978,11 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     }
     /** The device's page's column at an image width: from x 10 to {@code FluidGuiLayout.side}. */
     private Column deviceColumn(int width){
-        return Column.place(DeviceColumn.rows(deviceInput(),FluidDeviceScreen::tr),10,controlTop(),FluidGuiLayout.side(width)-10,GuiCanvas.measure(font),Column.Metrics.COMPACT);
+        var rows=new ArrayList<>(DeviceColumn.rows(deviceInput(),FluidDeviceScreen::tr));
+        var ids=new ArrayList<>(com.wormzjl.icheme.client.InstrumentRenderer.identities(minecraft.level,menu.position()));
+        if(menu.clientData().valve()!=null)ids.add(String.format(Locale.ROOT,"CV-%04d",menu.identity()));
+        rows.addAll(DeviceColumn.instrumentIds(ids,FluidDeviceScreen::tr));
+        return Column.place(rows,10,controlTop(),FluidGuiLayout.side(width)-10,GuiCanvas.measure(font),Column.Metrics.COMPACT);
     }
     /**
      * The door columns' fields and buttons, kept at their slots and moved as the view scrolls, so a scroll rebuilds
@@ -967,6 +1007,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
      */
     private void deviceAction(String action){
         if(action.startsWith("side:"))FluidNetwork.openPartner(menu);
+        else if(action.equals("open_driver"))com.wormzjl.icheme.network.MachineNetwork.openDriver(menu.containerId,menu.position(),menu.identity());
         else if(action.equals("recover")){FluidNetwork.recoverSolids(menu,revision);message=tr("waiting");}
         else{
             switch(action){
@@ -1184,22 +1225,14 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     /** Shared fluid-screen control positions, including the minimum supported 300px GUI width. */
     public static final class FluidGuiLayout {
         private FluidGuiLayout(){}
-        /** The screen's image in a window {@code width} by {@code height} GUI px: 8 px round it, 300 to 790 px wide, at least 250 high. */
+        /** The screen's image at the player's scale: 8 px round it, 300 to 790 px wide; short doors scroll. */
         public static int imageWidth(int width){return Math.max(300,Math.min(790,width-16));}
-        public static int imageHeight(int height){return Math.max(250,height-16);}
+        public static int imageHeight(int height){return Math.max(180,height-16);}
         /** The door columns' view on every page: from y {@code DOOR_TOP} to {@code DOOR_FOOT} px above the image's foot. */
         public static final int DOOR_TOP=74,DOOR_FOOT=52;
-        /**
-         * The device screen's design height (WindowScale, owner 2026-10-28 option b: one scale for every device screen):
-         * its door view is 338 px there, room for a valve's page (323 px) and a pump's (330 px); 2560 by 1440 takes scale 3.
-         */
         public static final int HEIGHT=480;
         /** The door view in a window {@code height} GUI px high. */
         public static int doorView(int height){return imageHeight(height)-DOOR_FOOT-DOOR_TOP;}
-        /**
-         * Whether the door columns fit their view, with no bar, in a window {@code width} by {@code height} GUI px
-         * ({@code WindowScale.Fit}); {@code tallest} gives the tallest door column the screen places at an image width.
-         */
         public static boolean fits(int width,int height,java.util.function.IntUnaryOperator tallest){
             return tallest.applyAsInt(imageWidth(width))<=doorView(height);
         }

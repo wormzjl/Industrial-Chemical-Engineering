@@ -1,0 +1,6 @@
+// Batch 2026-11-03-rotating-machinery, W2 probe: the unit test task with the set-flow movers on the corner law (form F2b).
+allprojects {
+    tasks.withType(Test).configureEach {
+        systemProperty 'icheme.fluid.cornerLaw', 'true'
+    }
+}

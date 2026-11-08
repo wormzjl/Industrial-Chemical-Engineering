@@ -295,7 +295,7 @@ public final class SimulatorRender {
             }
             case SIZING -> {
                 SimulatorPage.sizing(d.c, d.skin, x, s.sizing, frame, d.w);
-                rows(d, SizingPage.rows(x, s.sizing), 10, SimulatorFrame.DOOR_TOP, SimulatorFrame.SIZING_DOOR - 10, SizingPage.values(x, s.sizing));
+                GuiPrototypes.doorColumn(d, SizingPage.rows(x, s.sizing), new Rect(10, SimulatorFrame.DOOR_TOP, SimulatorFrame.SIZING_DOOR - 10, frame.bottom() - SimulatorFrame.DOOR_TOP), SizingPage.values(x, s.sizing), "Sizing");
             }
             case BASIS -> {
                 SimulatorPage.basis(d.c, d.skin, x, frame, d.w);
@@ -813,6 +813,21 @@ public final class SimulatorRender {
         System.out.printf("sized: run %s, %d units, %d lines, %d paths, %.1f s%n", all.run().status(), all.sized().units().size(), all.sized().lines().size(), all.sized().paths().size(), took);
         var finished = new SimulatorHost.Finished(all.sheet(), all.run(), seconds + took);
         var host = new Sized(finished, new SimulatorRunner.Rated(all.sheet(), finished, all.sized(), true), null);
+        if ("sizing-controls".equals(System.getProperty("only"))) {
+            Consumer<Scene> condenser = s -> s.sizing.unit = "T-101/condenser";
+            Consumer<Scene> manual = s -> {
+                condenser.accept(s);
+                SizingPage.press(s.context(), s.sizing, "sizing/fixed");
+            };
+            var manualBody = sized(host, manual);
+            sheet(out, "08-sizing-controls", W, H, List.of("Condenser: Auto", "Condenser: Manual, constructor size controls", "Manual, scrolled to the end", "Air cooler: Manual bay selector"),
+                    List.of(sized(host, condenser), manualBody, (d, skin) -> manualBody.accept(new GuiPrototypes.Door(d.c, skin, d.w, d.h, true), skin), sized(host, s -> {
+                        s.sizing.unit = "E-102";
+                        SizingPage.press(s.context(), s.sizing, "sizing/fixed");
+                    })));
+            sheet(out, "09-build-requirements", W, H, List.of("Equipment counts and dimensions per physical unit"), List.of(sized(host, s -> s.sizing.view = SizingPage.View.BUILD)));
+            return;
+        }
         // E-101 kept at a 0.75 m shell: Fixed, rated red, and greyed until the next run.
         var held = all.sheet().sizing().unit("E-101");
         var kept = held.size() instanceof ExchangerSizing.Size e ? new ExchangerSizing.Size(false, e.shells(), .75, e.tubes()) : new ExchangerSizing.Size(false, 1, .75, 6);
@@ -1044,6 +1059,66 @@ public final class SimulatorRender {
                 List.of(sized(sized, s -> s.sizing.unit = "E-102"), sized(sized, s -> s.sizing.unit = "T-101")));
     }
 
+    /**
+     * W8 (batch 2026-11-03-rotating-machinery, D43): T-101's Equipment page as the game draws it, the pumps' duties on the glass from a
+     * real Size all of the sample, and before any rating; at 464, 380 and the simulator's door width, each opened and scrolled to its end.
+     */
+    private static void pumpDuties(Path out, Flowsheet sheet, FlowsheetRun run, double seconds) throws Exception {
+        var thermo = new FlowThermo(FluidThermodynamics.forNetwork(CATALOG, NETWORK), CATALOG, NETWORK, () -> {
+        });
+        var all = MaterialRuntime.with(CATALOG, NETWORK, () -> Proposal.sizeAll(sheet, run, thermo, FlowsheetSolver.Progress.NONE));
+        var finished = new SimulatorHost.Finished(all.sheet(), all.run(), seconds);
+        var host = new Sized(finished, new SimulatorRunner.Rated(all.sheet(), finished, all.sized(), true), null);
+        for (var member : List.of("T-101/reflux pump", "T-101/pa 1 pump", "T-101/pa 2 pump", "T-101/pa 3 pump")) {
+            var unit = all.sized().units().get(member);
+            System.out.printf("%s: %s%n", member, unit == null ? "none" : com.wormzjl.icheme.science.flowsheet.sizing.PumpSizing.Duty.of(unit.rating()));
+        }
+        var view = new Door.View();
+        view.tab = 3;
+        List<BiConsumer<GuiPrototypes.Door, Skin>> bodies = List.of((d, skin) -> scrolledDoor(d, ColumnDoors.door(new Scene(all.sheet(), all.run(), seconds, host).context(), "T-101", view)),
+                (d, skin) -> scrolledDoor(d, ColumnDoors.door(new Scene(sheet, run, seconds, new Host(false, null)).context(), "T-101", view)));
+        var titles = List.of("Rated: the pumps' duties from Size all", "Not rated yet: dashes and the note");
+        for (int[] size : new int[][]{{464, 254}, {380, 254}, {DW, DH}})
+            for (var skin : SKINS) {
+                var pages = new ArrayList<BufferedImage>();
+                var names = new ArrayList<String>();
+                for (int i = 0; i < bodies.size(); i++)
+                    for (boolean end : new boolean[]{false, true}) {
+                        var body = bodies.get(i);
+                        pages.add(GuiPrototypes.render(new GuiPrototypes.Prototype("pump duties " + size[0] + " | " + titles.get(i), size[0], size[1], (d, s) -> d.c.batch(() -> body.accept(d, s)), true), skin, end));
+                        names.add(titles.get(i) + (end ? ", scrolled to its end" : ", opened") + (skin == PanelSkin.LIGHT ? " (light door)" : " (dark door)"));
+                    }
+                SimulatorPrototypes.stack(out.resolve("pump-duties-" + size[0] + (skin == PanelSkin.LIGHT ? "" : "-dark") + ".png"), names, pages, List.of());
+            }
+    }
+
+    /** {@link #door}, its columns in one view scrolled to the end where the page asks ({@code GuiPrototypes.doorColumn}). */
+    private static void scrolledDoor(GuiPrototypes.Door d, Door door) {
+        // The glass's own view (D44): opened at its top; scrolled to its end, drawn once to lay it out, then again at the end.
+        var scroll = door.glass().scroll();
+        if (scroll != null) scroll.reset();
+        var box = DoorFrame.back(d.c, d.skin, door, d.w, d.h);
+        if (scroll != null) {
+            if (!d.end && d.skin == PanelSkin.LIGHT) System.out.printf(java.util.Locale.ROOT, "column door %d by %d: glass content %d px in a %d px view (%d wide)%n", d.w, d.h, scroll.content(), box.h(), box.w());
+            if (d.end && scroll.max() > 0) {
+                while (scroll.offset() < scroll.max()) scroll.wheel(box.x() + 2, box.y() + 2, -1);
+                box = DoorFrame.back(d.c, d.skin, door, d.w, d.h);
+            }
+        }
+        d.skin.iconKey(d.c, com.wormzjl.icheme.client.gui.common.CalculatorColumn.theme(d.w), Skin.Icon.THEME, false);
+        var tabs = DoorFrame.tabs(door, d.w);
+        for (int i = 0; i < door.tabs().size(); i++) d.skin.button(d.c, tabs.get(i), door.tabs().get(i).text(), SimulatorPage.press(door.tabs().get(i)), false);
+        var areas = DoorFrame.areas(door, d.w, d.h);
+        for (int i = 0; i < areas.size(); i++) GuiPrototypes.doorColumn(d, DoorFrame.columns(door, d.w).get(i), areas.get(i), door.values(), "column door " + d.w + " by " + d.h + ", glass " + box.w() + " by " + box.h());
+        var footer = DoorFrame.footer(door, d.w, d.h, d.m);
+        d.skin.button(d.c, footer.getFirst(), T.get("fluid.close"), Skin.Press.REST, false);
+        for (int i = 0; i < door.footer().size(); i++) {
+            var key = door.footer().get(i);
+            if (key.soft()) d.skin.softKey(d.c, footer.get(i + 1), key.text(), false);
+            else d.skin.button(d.c, footer.get(i + 1), key.text(), SimulatorPage.press(key), false);
+        }
+    }
+
     private static Flowsheet withType(Flowsheet sheet, String id, String type) {
         var units = new ArrayList<Flowsheet.Unit>();
         for (var unit : sheet.units()) units.add(unit.id().equals(id) ? new Flowsheet.Unit(unit.id(), type, unit.name(), unit.x(), unit.y(), unit.params(), unit.unknown()) : unit);
@@ -1079,8 +1154,13 @@ public final class SimulatorRender {
             return;
         }
         // -Donly=sizing: S4b's sheets alone.
-        if ("sizing".equals(System.getProperty("only"))) {
+        if ("sizing".equals(System.getProperty("only")) || "sizing-controls".equals(System.getProperty("only"))) {
             sizing(out, sheet, run, seconds);
+            return;
+        }
+        // -Donly=pump-duties: W8's column door, its Equipment page with the pumps' duties on the glass (D43).
+        if ("pump-duties".equals(System.getProperty("only"))) {
+            pumpDuties(out, sheet, run, seconds);
             return;
         }
         // -Donly=c3: C3's sheets alone.

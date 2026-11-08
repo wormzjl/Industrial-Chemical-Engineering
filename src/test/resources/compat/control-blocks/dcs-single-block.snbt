@@ -1,0 +1,7 @@
+{
+  state: {Name:"icheme:dcs",Properties:{facing:"east"}},
+  entity: {
+    id:"icheme:control_panel",x:3,y:0,z:0,ControlIdentity:[I;0,0,0,2],
+    DataPort:{id:[I;0,0,0,2],kind:"DCS",host:0L,dimension:"minecraft:overworld",owner:824633720832L,x:3.12d,y:0.5d,z:0.5d,cell:549755813888L,face:"EAST",u:0,v:0}
+  }
+}

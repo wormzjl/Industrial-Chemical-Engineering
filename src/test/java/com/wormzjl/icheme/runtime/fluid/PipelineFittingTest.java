@@ -342,7 +342,7 @@ class PipelineFittingTest {
             assertTrue(world.registry.installPipeMover(3,axis,kind));assertFalse(world.registry.installPipeMover(3,axis,kind));
             assertFalse(world.registry.installPipeFilter(3,axis));assertFalse(world.registry.installPipePressureValve(3,axis));assertFalse(world.registry.installPipeCutoff(3,axis));
             var installed=world.registry.registrations().get(3L);var d=installed.device();
-            assertEquals(Kind.PIPE,d.kind());assertEquals(kind,d.hydraulicKind());assertEquals(PhysicalFluidTopology.defaultMover(kind),d.control());assertEquals(old.spec(),installed.spec());assertEquals(old.device().geometry(),d.geometry());assertEquals(old.device().id(),d.id());
+            assertEquals(Kind.PIPE,d.kind());assertEquals(kind,d.hydraulicKind());assertEquals(com.wormzjl.icheme.science.machine.InlineMachines.design(old.device().geometry().diameter(),kind==Kind.PUMP),d.control());assertEquals(old.spec(),installed.spec());assertEquals(old.device().geometry(),d.geometry());assertEquals(old.device().id(),d.id());
             world.registry.applyPending();assertEquals(before,stock(world));
             // The one-block mover this was once compared with is gone (batch 2026-10-28-old-mover-removal): the in-line
             // mover is the only form, one driven pipe in the host's bore.

@@ -5,6 +5,7 @@ import com.wormzjl.icheme.client.gui.common.kit.Measure;
 import com.wormzjl.icheme.client.gui.common.kit.Palette;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
+import com.wormzjl.icheme.science.equipment.MachineDuty;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
 import com.wormzjl.icheme.science.equipment.SentDesign;
 import com.wormzjl.icheme.science.equipment.UnitDesign;
@@ -89,7 +90,7 @@ public final class ConstructorColumn {
         ADSORBER(Category.VESSELS), CYCLONE(Category.VESSELS),
         EXCHANGER(Category.HEAT), KETTLE(Category.HEAT), AIR_COOLER(Category.HEAT), VERTICAL_HEATER(Category.HEAT), CABIN_HEATER(Category.HEAT), INDUCED_DRAFT_COOLING_TOWER(Category.HEAT), NATURAL_DRAFT_COOLING_TOWER(Category.HEAT),
         PUMP(Category.MACHINES), COMPRESSOR(Category.MACHINES), CENTRIFUGAL_COMPRESSOR(Category.MACHINES), EJECTOR(Category.MACHINES),
-        STEAM_TURBINE(Category.MACHINES), CONDENSING_TURBINE(Category.MACHINES),
+        STEAM_TURBINE(Category.MACHINES), MOTOR(Category.MACHINES), GENERATOR(Category.MACHINES), GEARBOX(Category.MACHINES),
         STIRRED_REACTOR(Category.REACTORS), TRICKLE_BED_REACTOR(Category.REACTORS), EBULLATED_BED_REACTOR(Category.REACTORS), FCC_CONVERTER(Category.REACTORS),
         DELAYED_COKER(Category.REACTORS),
         FLUIDIZED_BED_BOILER(Category.SOLID_FUEL), FLUIDIZED_BED_GASIFIER(Category.SOLID_FUEL), GRATE_BOILER(Category.SOLID_FUEL), FIXED_BED_GASIFIER(Category.SOLID_FUEL);
@@ -120,6 +121,23 @@ public final class ConstructorColumn {
             rows = List.copyOf(rows);
             footer = List.copyOf(footer);
         }
+    }
+
+    /** The physical removal target; null means no structure crosses the placement line. */
+    public record Removal(@Nullable String target, String position, int cells, boolean waiting, @Nullable String message, boolean warn) {
+        public Removal(String target, String position, int cells, boolean waiting) { this(target, position, cells, waiting, null, false); }
+    }
+
+    public static Page withRemoval(Page page, Removal target, HeatControlColumn.Texts t) {
+        var rows = new ArrayList<>(page.rows());
+        var removal = new ArrayList<Column.Row>();
+        removal.add(new Column.Paragraph(target.target() == null ? t.get(KEY + "deconstruct.none") : target.target(), Palette.TEXT));
+        if (target.target() != null) removal.add(new Column.Paragraph(t.get(KEY + "deconstruct.target", target.position(), target.cells()), Palette.MUTED));
+        removal.add(new Column.Buttons(List.of(new Column.Button("deconstruct", t.get(KEY + "deconstruct"),
+                target.target() != null && !target.waiting(), t.get(KEY + "deconstruct.hint")))));
+        if (target.message() != null) removal.add(new Column.Paragraph(target.message(), target.warn() ? Palette.WARN : Palette.ACCENT));
+        rows.add(new Column.Group(t.get(KEY + "group.deconstruct"), t.get(KEY + "deconstruct.hint"), removal));
+        return new Page(rows, page.footer(), page.display());
     }
 
     /** A selector's position: latched where it stands, else a key that moves it there. */
@@ -305,16 +323,25 @@ public final class ConstructorColumn {
     /**
      * The draft as the design page shows it: its form, sizes (diameter or a unit's size, tangent length or a unit's second
      * size, support), place, an air cooler's bank, a column's design (null for another form), the bottom outlet's sides,
-     * and the reach of a column's import in blocks.
+     * the reach of a column's import in blocks, and a machine's design point ({@link MachineDuty#NONE} for another form).
      */
     public record Design(VesselPlacement.Form form, double diameter, int length, int support, int forward, int right, int up, ProcessUnit.Bank bank,
-                         @Nullable Imported column, Outlet outlet, int reach,com.wormzjl.icheme.science.equipment.TowerBank towerBank) {
+                         @Nullable Imported column, Outlet outlet, int reach,com.wormzjl.icheme.science.equipment.TowerBank towerBank, MachineDuty duty,com.wormzjl.icheme.science.equipment.ExchangerType exchangerType) {
+        public Design(VesselPlacement.Form form,double diameter,int length,int support,int forward,int right,int up,ProcessUnit.Bank bank,@Nullable Imported column,Outlet outlet,int reach,com.wormzjl.icheme.science.equipment.TowerBank towerBank,MachineDuty duty) {
+            this(form,diameter,length,support,forward,right,up,bank,column,outlet,reach,towerBank,duty,com.wormzjl.icheme.science.equipment.ExchangerType.STANDARD);
+        }
+        /** The draft of a form without a design point. */
+        public Design(VesselPlacement.Form form, double diameter, int length, int support, int forward, int right, int up, ProcessUnit.Bank bank,
+                      @Nullable Imported column, Outlet outlet, int reach, com.wormzjl.icheme.science.equipment.TowerBank towerBank) {
+            this(form, diameter, length, support, forward, right, up, bank, column, outlet, reach, towerBank, MachineDuty.NONE);
+        }
     }
 
     /**
      * The design page: Size (the form's sizes and its support; a column's imported diameter, trays and feed tray shown,
      * with Import and Templates), a unit's Bottom outlet where its design turns it, then Place (a lying drum's axis, then forward, right
-     * and up); every other form imports from the choice page. Footer: a drum's or a column's Nozzles, Paint, Build. Keys: the settings
+     * and up); every other form imports from the choice page. A machine shows its design point instead of Size (option A,
+     * owner pick 2026-11-04, {@link #machine}). Footer: Paint and Build; the main door overload inserts nozzle controls before Place. Keys: the settings
      * {@code size}, {@code length}, {@code support}, {@code parallel}, {@code series}, {@code forward}, {@code right}, {@code up} (their
      * steppers {@code <key>-} and {@code <key>+}); a column's {@code import} and {@code templates}; {@code axis:lengthwise}, {@code axis:crosswise};
      * {@code outlet:<turn>}.
@@ -364,13 +391,20 @@ public final class ConstructorColumn {
             default -> {
                 // A unit's rows, as its design names them: its size, its second size and its support where it has them.
                 var design = UnitDesign.of(form.kind());
-                size.add(step("size", design.sizeRow(), size(in.diameter()), "m", t));
+                if (design.hasDuty()) break;
+                size.add(step("size", design.sizeRow(), design.sizeText(in.diameter()), design.sizeUnit(), t));
                 if (design.lengthRow() != null) size.add(step("length", design.lengthRow(), length, design.lengthInMetres() ? "m" : "", t));
                 if (design.supportRow() != null) size.add(step("support", design.supportRow(), support, "m", t));
             }
         }
         var rows = new ArrayList<Column.Row>();
-        rows.add(new Column.Group(t.get(KEY + "group.size"), t.get(KEY + "shift"), size));
+        if(form.kind()==EquipmentShape.Kind.EXCHANGER) {
+            var types=new ArrayList<Column.Button>();
+            for(var type:com.wormzjl.icheme.science.equipment.ExchangerType.CATALOG)types.add(position("exchanger:"+type.name(),t.get("exchanger.type."+type.key()),type==in.exchangerType(),t.get("exchanger.type_hint")));
+            rows.add(new Column.Group(t.get(KEY+"group.subtype"),null,List.of(new Column.Buttons(types))));
+        }
+        if (form.designed() && UnitDesign.of(form.kind()).hasDuty()) rows.addAll(machine(in, t));
+        else rows.add(new Column.Group(t.get(KEY + "group.size"), t.get(KEY + "shift"), size));
         // A bottom outlet leaving through the skirt turns where the design lets it (a trickle-bed reactor's effluent).
         if (form.designed() && Integer.bitCount(in.outlet().allowed()) > 1) rows.add(outlet(in.outlet(), t));
         var place = new ArrayList<Column.Row>();
@@ -383,14 +417,77 @@ public final class ConstructorColumn {
         place.add(step("up", "up", Integer.toString(in.up()), "", t));
         rows.add(new Column.Group(t.get(KEY + "group.place"), t.get(KEY + "group.place.hint"), place));
         var footer = new ArrayList<Column.Button>();
-        if (!form.designed()) footer.add(push("nozzles", form.column() ? "column_nozzles.hint" : "connections.hint", t));
         footer.add(push("paint", "paint.hint", t));
         footer.add(build(t));
         return new Page(rows, footer, true);
     }
 
+    /** The same design door includes its nozzle editor before placement; one footer and scroll view own all controls. */
+    public static Page design(Design in,@Nullable Connections connections,@Nullable Nozzles nozzles,HeatControlColumn.Texts t){
+        var base=design(in,t);if(in.form().designed())return base;
+        Page editor=in.form().column()?ConstructorColumn.nozzles(java.util.Objects.requireNonNull(nozzles),t):ConstructorColumn.connections(java.util.Objects.requireNonNull(connections),t);
+        var rows=new ArrayList<>(base.rows());int beforePlacement=rows.size()-1;rows.addAll(beforePlacement,editor.rows());
+        if(in.form().column()){
+            var reset=editor.footer().stream().filter(button->button.key().equals("reset")).findFirst().orElseThrow();
+            var group=(Column.Group)rows.get(beforePlacement);var controls=new ArrayList<>(group.rows());controls.add(new Column.Buttons(List.of(reset)));
+            rows.set(beforePlacement,new Column.Group(group.title(),group.hint(),controls));
+        }
+        return new Page(rows,base.footer(),base.display());
+    }
+
     private static Column.Button importKey(int reach, HeatControlColumn.Texts t) {
         return new Column.Button("import", t.get(KEY + "import"), true, t.get(KEY + "import.hint", reach));
+    }
+
+    /**
+     * A machine's design point (batch 2026-11-03-rotating-machinery, option A): Duty (a pump's flow and head, a
+     * centrifugal compressor's inlet flow and polytropic head, else the rated power; then the sizes they give, shown,
+     * and the table), an electric machine's or a pump's rated RPM, a motor's Drive,
+     * a turbine's Inlet steam (latched keys) and Exhaust. Keys: the settings {@code flow}, {@code head},
+     * {@code power}, {@code exhaust}, {@code support}; {@code base_speed},
+     * {@code steam:mp}, {@code steam:hp}, {@code steam:vhp}.
+     */
+    private static List<Column.Row> machine(Design in, HeatControlColumn.Texts t) {
+        var kind = in.form().kind();
+        var design = UnitDesign.of(kind);
+        var d = in.duty();
+        var duty = new ArrayList<Column.Row>();
+        switch (kind) {
+            case PUMP -> {
+                duty.add(step("flow", "duty.flow", amount(d.flow()), "m³/h", t));
+                duty.add(step("head", "duty.head", amount(d.head()), "m", t));
+            }
+            case CENTRIFUGAL_COMPRESSOR -> {
+                duty.add(step("flow", "duty.flow", amount(d.flow()), "m³/h", t));
+                duty.add(step("head", "duty.polytropic_head", amount(d.polytropicHead()), "kJ/kg", t));
+            }
+            default -> duty.add(step("power", "duty.power", amount(d.power()), "kW", t));
+        }
+        // The sizes the design point gives, where they are not the power itself.
+        if (!"kW".equals(design.sizeUnit())) duty.add(shown("size", design.sizeRow(), design.sizeText(in.diameter()), design.sizeUnit(), t));
+        if (design.lengthRow() != null) duty.add(shown("length", design.lengthRow(), Integer.toString(in.length()), design.lengthInMetres() ? "m" : "", t));
+        if (design.supportRow() != null) duty.add(step("support", design.supportRow(), Integer.toString(in.support()), "m", t));
+        var rows = new ArrayList<Column.Row>();
+        rows.add(new Column.Group(t.get(KEY + "group.duty"), t.get(KEY + "shift"), duty));
+        if (kind == EquipmentShape.Kind.MOTOR || kind == EquipmentShape.Kind.PUMP || kind == EquipmentShape.Kind.GENERATOR)
+            rows.add(new Column.Group(t.get(KEY+"group.speed"),t.get(KEY+(kind==EquipmentShape.Kind.MOTOR?"motor.vfd.hint":"rated_speed.hint")),List.of(step("base_speed",kind==EquipmentShape.Kind.MOTOR?"motor.base_speed":"rated_speed",amount(UnitDesign.designSpeed(kind,d)),"rpm",t))));
+        if (d.steam() != null) {
+            var classes = new ArrayList<Column.Button>();
+            for (var steam : MachineDuty.Steam.values()) {
+                String name = steam.name().toLowerCase(Locale.ROOT);
+                classes.add(position("steam:" + name, t.get(KEY + "steam." + name), steam == d.steam(),
+                        t.get(KEY + "steam.hint", UnitDesign.whole(steam.pressure), UnitDesign.whole(steam.temperature - 273.15))));
+            }
+            rows.add(new Column.Group(t.get(KEY + "group.steam"), t.get(KEY + "group.steam.hint"), List.of(new Column.Buttons(classes))));
+            rows.add(new Column.Group(t.get(KEY + "group.exhaust"), null, List.of(step("exhaust", "duty.exhaust", amount(d.exhaust()), "kPa", t))));
+        }
+        return rows;
+    }
+
+    /** A rated quantity as its LCD shows it, in segments: to two decimals below 10 (1.25, 6.3), else whole, with no separator (2500). */
+    static String amount(double value) {
+        if (value >= 10) return Long.toString(Math.round(value));
+        return new java.math.BigDecimal(String.format(Locale.ROOT, "%.2f", value)).stripTrailingZeros().toPlainString();
     }
 
     /** The Bottom outlet group: its four sides latched where it faces, those its form does not allow switched off. Keys {@code outlet:<turn>}. */

@@ -8,7 +8,6 @@ import com.wormzjl.icheme.science.column.v3.V3NeuralSeed;
 import com.wormzjl.icheme.science.column.v3.V3SteamFeedSpec;
 import com.wormzjl.icheme.science.column.v3.V3TrayHydraulics;
 import com.wormzjl.icheme.science.column.v3.V3TrayHydraulicsSummary;
-import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.equipment.ColumnDesign;
 import com.wormzjl.icheme.science.equipment.ColumnTrays;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
@@ -95,7 +94,7 @@ public final class ColumnSizing {
             try {
                 // The shell carries the door's steam rows: water the feed brings joins V3's steam on the feed tray, through the feed nozzle.
                 var steam = door.steam().stream().map(s -> new V3SteamFeedSpec(s.stage(), s.flow(), s.temperature())).toList();
-                layout = ColumnDesign.layout(at(solved, steam, solved.columnDiameterMetres()), door.choices(ColumnComponents.Pump.STANDARD, List.of()));
+                layout = ColumnDesign.layout(at(solved, steam, solved.columnDiameterMetres()), door.choices());
             } catch (IllegalArgumentException refused) {
                 return null;
             }

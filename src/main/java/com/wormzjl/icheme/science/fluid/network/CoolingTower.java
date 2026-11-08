@@ -2,9 +2,16 @@ package com.wormzjl.icheme.science.fluid.network;
 
 import java.util.Objects;
 
-/** Geometry and operating facts of an open water cooling tower; SI throughout. */
+/**
+ * Geometry and operating facts of an open water cooling tower; SI throughout. {@code fanLimit} is no fact: the most of
+ * full speed its fans may turn at this slice (batch 2026-11-03-rotating-machinery W5: 0 when its electric store runs
+ * empty, 1 otherwise), a dispatch input ({@link ShaftPlan}) that the facts and the checkpoint never carry.
+ */
 public record CoolingTower(Draft draft, double width, double fillDepth, double height, int columns, int rows,
-                           Mode mode, double speed, double setPoint) {
+                           Mode mode, double speed, double setPoint, double fanLimit) {
+    public CoolingTower(Draft draft, double width, double fillDepth, double height, int columns, int rows, Mode mode, double speed, double setPoint) {
+        this(draft, width, fillDepth, height, columns, rows, mode, speed, setPoint, 1);
+    }
     public enum Draft { INDUCED, NATURAL }
     public enum Mode { FAN_SPEED, TARGET_TEMPERATURE }
     public static final double AIR_TEMPERATURE = 298.15, RELATIVE_HUMIDITY = .5, PRESSURE = 101325;
@@ -17,7 +24,7 @@ public record CoolingTower(Draft draft, double width, double fillDepth, double h
         Objects.requireNonNull(draft); Objects.requireNonNull(mode);
         for (double v : new double[]{width, fillDepth, height, speed, setPoint})
             if (!Double.isFinite(v)) throw new IllegalArgumentException("Nonfinite cooling tower setting");
-        if (columns < 1 || columns > 8 || rows < 1 || rows > 2 || speed < 0 || speed > 1 || setPoint <= 0)
+        if (columns < 1 || columns > 8 || rows < 1 || rows > 2 || speed < 0 || speed > 1 || setPoint <= 0 || !(fanLimit >= 0 && fanLimit <= 1))
             throw new IllegalArgumentException("Cooling tower setting outside its range");
         if (draft == Draft.INDUCED) {
             // 8 m is the narrowest cell whose fan leaves a railed walkway round its bell mouth.
@@ -61,6 +68,23 @@ public record CoolingTower(Draft draft, double width, double fillDepth, double h
     public double deckHeight() { return deck(width, fillDepth); }
     public double fanRadius() { return FAN_RATIO * width / 2; }
     public CoolingTower withControl(Mode mode, double speed, double setPoint) {
-        return new CoolingTower(draft, width, fillDepth, height, columns, rows, mode, speed, setPoint);
+        return new CoolingTower(draft, width, fillDepth, height, columns, rows, mode, speed, setPoint, fanLimit);
+    }
+    /** This tower with its fans held at most at {@code value} of full speed (W5's dispatch input). */
+    public CoolingTower withFanLimit(double value) {
+        return value == fanLimit ? this : new CoolingTower(draft, width, fillDepth, height, columns, rows, mode, speed, setPoint, value);
+    }
+    /** The record's text as before the fan limit, which it names only below 1 (an island's certificate signature reads it). */
+    @Override public String toString() {
+        return "CoolingTower[draft=" + draft + ", width=" + width + ", fillDepth=" + fillDepth + ", height=" + height + ", columns=" + columns + ", rows=" + rows
+                + ", mode=" + mode + ", speed=" + speed + ", setPoint=" + setPoint + (fanLimit < 1 ? ", fanLimit=" + fanLimit : "") + "]";
+    }
+    /** These facts without a dispatch's fan limit. */
+    public CoolingTower facts() {
+        return withFanLimit(1);
+    }
+    /** The fan speed it runs at for {@code wanted} of full speed: at most its {@link #fanLimit}. */
+    public double fanSpeed(double wanted) {
+        return Math.min(wanted, fanLimit);
     }
 }

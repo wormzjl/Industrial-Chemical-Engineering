@@ -34,7 +34,6 @@ final class LimitTest {
         assertEquals(36000, Limit.PUMP_FLOW.value(), EXACT);
         assertEquals(2e6, Limit.PUMP_HEAD.value(), EXACT);
         assertEquals(FluidNetwork.MAXIMUM_PRESSURE_RATIO, Limit.COMPRESSOR_RATIO.value(), EXACT);
-        assertEquals(100 * FlowControl.Compressor.CONDENSED_REFUSE, Limit.COMPRESSOR_LIQUID.value(), EXACT);
         assertEquals(FluidDeviceSpec.MAX_VOLUME, Limit.TANK_VOLUME.value(), EXACT);
         assertEquals(EquipmentShape.MAX_COLUMN_DIAMETER, Limit.COLUMN_DIAMETER.value(), EXACT);
         assertEquals(ColumnTrays.MAX_TRAYS, Limit.COLUMN_TRAYS.value(), EXACT);
@@ -72,8 +71,8 @@ final class LimitTest {
         assertEquals(Lamp.RED, Limit.LINE_BORE.read(.81).lamp());
         assertEquals(Lamp.GREEN, Limit.PUMP_NPSH.read(1).lamp(), "at least: on it meets it");
         assertEquals(Lamp.YELLOW, Limit.PUMP_NPSH.read(.9).lamp());
-        assertEquals(Lamp.RED, Limit.PUMP_NPSH_WORLD.read(0).lamp(), "above: on it misses it");
-        assertEquals(Lamp.GREEN, Limit.PUMP_NPSH_WORLD.read(.1).lamp());
+        assertEquals(Lamp.RED, Limit.PUMP_NPSH_WORLD.against(2, 2).lamp(), "above: on it misses it");
+        assertEquals(Lamp.GREEN, Limit.PUMP_NPSH_WORLD.against(2.1, 2).lamp());
         assertEquals(Lamp.YELLOW, Limit.PUMP_RATED.read(69).lamp());
         assertEquals(Lamp.GREEN, Limit.PUMP_RATED.read(96).lamp());
         assertEquals(Lamp.YELLOW, Limit.PUMP_RATED.read(121).lamp());

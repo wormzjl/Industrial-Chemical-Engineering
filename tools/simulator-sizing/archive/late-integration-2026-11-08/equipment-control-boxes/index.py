@@ -1,0 +1,2 @@
+from pathlib import Path
+p=Path('tmp/INDEX.md');s=p.read_text(encoding='utf-8');s=s.replace('Codex active task: [operator-gui/REQUEST.md](operator-gui/REQUEST.md).','Codex active task: [equipment-control-boxes/REQUEST.md](equipment-control-boxes/REQUEST.md). Previous GUI refinements: [operator-gui/REQUEST.md](operator-gui/REQUEST.md).');s+='\n| equipment-control-boxes/ | Controller enclosure concept and built-in instrument policy | 2026-11-08 | Sketch shown; awaiting owner review |\n';p.write_text(s,encoding='utf-8')

@@ -12,6 +12,8 @@ public final class InstrumentGeometry {
         @Override public double[] vertices(){return vertices.clone();}
         public Quad front(){double z=(vertices[3]-vertices[0])*(vertices[7]-vertices[1])-(vertices[4]-vertices[1])*(vertices[6]-vertices[0]);return z>=0?this:new Quad(new double[]{vertices[9],vertices[10],vertices[11],vertices[6],vertices[7],vertices[8],vertices[3],vertices[4],vertices[5],vertices[0],vertices[1],vertices[2]},colour);}
     }
+    /** Upright world pose shared by in-world instruments and native drawing tools. */
+    public static Quad pose(Quad quad,double[] centre,double[] normal){var source=quad.vertices();var p=new double[source.length];var right=new double[]{normal[2],0,-normal[0]};for(int i=0;i<source.length;i+=3)for(int a=0;a<3;a++)p[i+a]=centre[a]+right[a]*source[i]+(a==1?source[i+1]:0)+normal[a]*source[i+2];return new Quad(p,quad.colour());}
     private static final List<Quad> HOUSING=build();
     public static List<Quad> housing(){return HOUSING;}
     private static List<Quad> build(){
@@ -47,18 +49,34 @@ public final class InstrumentGeometry {
         if(thermometer)cylinder(q,add(tap,direction,-probeDepth),bossEnd,.006,12,0xff89979d);
         return List.copyOf(q);
     }
-    /** Sealed transmitter cover, without a display, needle or face markings. */
+    /** Bevelled metal transmitter with a recessed display and the shared yellow instrument tag. */
     private static final List<Quad> PROBE=buildTransmitter(false),LEVEL_TRANSMITTER=buildTransmitter(true);
     public static List<Quad> transmitter(boolean level){return level?LEVEL_TRANSMITTER:PROBE;}
+    /** Static constructor/drawing silhouette; the placed renderer uses the same posed head with its face colours and ID. */
+    public static List<Mesh.Polygon> previewHead(EquipmentInstruments.Probe probe){
+        var out=new ArrayList<Mesh.Polygon>();
+        for(var q:transmitter(probe.quantity()==EquipmentInstruments.Quantity.LEVEL)){
+            var v=pose(q,probe.centre(),probe.normal()).vertices();
+            var normal=Mesh.unit(Mesh.cross(Mesh.sub(java.util.Arrays.copyOfRange(v,3,6),java.util.Arrays.copyOfRange(v,0,3)),Mesh.sub(java.util.Arrays.copyOfRange(v,6,9),java.util.Arrays.copyOfRange(v,0,3))));
+            var normals=new double[v.length];for(int i=0;i<v.length;i+=3)System.arraycopy(normal,0,normals,i,3);
+            out.add(new Mesh.Polygon(v,new double[v.length/3*2],normals,(q.colour()&0xffffff)==0x102b36?Mesh.Material.OPENING:Mesh.Material.INSTRUMENT_STEEL));
+        }
+        return List.copyOf(out);
+    }
     private static List<Quad> buildTransmitter(boolean level){
-        var q=new ArrayList<Quad>();double x=level?.13:.10,y=level?.08:.10,z=.065,b=-.055;
-        q.add(quad(-x,-y,b,x,-y,b,x,y,b,-x,y,b,0xff89969e));
-        q.add(quad(-x,-y,z,-x,y,z,x,y,z,x,-y,z,0xff466774));
-        q.add(quad(-x,-y,b,-x,y,b,-x,y,z,-x,-y,z,0xff89969e));
-        q.add(quad(x,-y,b,x,-y,z,x,y,z,x,y,b,0xffa9b3b8));
-        q.add(quad(-x,y,b,x,y,b,x,y,z,-x,y,z,0xffa9b3b8));
-        q.add(quad(-x,-y,b,-x,-y,z,x,-y,z,x,-y,b,0xff66757d));
-        return q.stream().map(face->{var v=face.vertices();return new Quad(new double[]{v[9],v[10],v[11],v[6],v[7],v[8],v[3],v[4],v[5],v[0],v[1],v[2]},face.colour());}).toList();
+        var q=new ArrayList<Quad>();double x=level?.14:.115,y=.115,back=-.065,front=.07;
+        double[][] outline={{-.7*x,-y},{.7*x,-y},{x,-.7*y},{x,.7*y},{.7*x,y},{-.7*x,y},{-x,.7*y},{-x,-.7*y}};
+        for(int i=0;i<8;i++){
+            var a=outline[i];var b=outline[(i+1)%8];
+            q.add(quad(a[0],a[1],back,b[0],b[1],back,b[0],b[1],.045,a[0],a[1],.045,0xffd9dcdc));
+            q.add(quad(a[0],a[1],.045,b[0],b[1],.045,b[0]*.88,b[1]*.88,front,a[0]*.88,a[1]*.88,front,0xffeceeea));
+            q.add(quad(0,0,front,a[0]*.88,a[1]*.88,front,b[0]*.88,b[1]*.88,front,0,0,front,0xffafb8ba).front());
+            q.add(quad(0,0,back,b[0],b[1],back,a[0],a[1],back,0,0,back,0xff9ea9ac));
+        }
+        q.add(quad(-x*.65,-.067,.071,x*.65,-.067,.071,x*.65,.067,.071,-x*.65,.067,.071,0xff354249).front());
+        q.add(quad(-x*.55,-.052,.072,x*.55,-.052,.072,x*.55,.052,.072,-x*.55,.052,.072,0xff102b36).front());
+        q.add(quad(-x*.8,-.092,.072,x*.8,-.092,.072,x*.8,-.070,.072,-x*.8,-.070,.072,0xffc3ad69).front());
+        return List.copyOf(q);
     }
     private static void cylinder(List<Quad> out,double[] start,double[] end,double radius,int sides,int colour){
         var axis=unit(sub(end,start));var ref=unit(cross(axis,Math.abs(axis[1])>.9?new double[]{1,0,0}:new double[]{0,1,0}));var side=cross(axis,ref);
@@ -75,39 +93,12 @@ public final class InstrumentGeometry {
     private static double[] cross(double[] a,double[] b){return new double[]{a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]};}
 
     // ---- fixed front service taps, using each native vessel design's own axis and surface ----
-    public record Socket(String id,double x,double y,double z,boolean pressure,boolean top) {}
-    public static List<Socket> sockets(EquipmentShape s){boolean drum=s.kind()==EquipmentShape.Kind.DRUM&&s.orientation()==EquipmentShape.Orientation.VERTICAL,tank=s.kind()==EquipmentShape.Kind.TANK,sphere=s.kind()==EquipmentShape.Kind.SPHERE;if(s.kind()==EquipmentShape.Kind.DRUM&&s.orientation().horizontal()){
-        int cells=(int)Math.ceil(s.diameter());double a=(cells%2==0?cells+1:cells)/2.0,r=s.radius(),station=s.headDepth()+s.tangentLength()/2;
-        var result=new ArrayList<Socket>();
-        for(int i=0;i<3;i++){double h=i==0?a+r*.65:i==1?a-r*.65:a,offset=h-a,z=a-Math.sqrt(Math.max(.0001,r*r-offset*offset))-.16;
-            var p=s.transform().point(new double[]{h,station+(i==2?.4:0),z});result.add(new Socket(i==0?"pressure_top":i==1?"pressure_bottom":"temperature_bottom",p[0],p[1],p[2],i<2,i==0));}
-        return List.copyOf(result);
-    }if(!drum&&!tank&&!sphere)return List.of();double a=s.axis(),r=s.radius(),lower=s.bottomTangent()+Math.min(.5,s.tangentLength()*.25),upper=s.topTangent()-Math.min(.5,s.tangentLength()*.25);
-        if(tank){var p=TankDesign.Plan.of(s.diameter(),(int)s.tangentLength());a=p.a();lower=.8;}
-        if(sphere){var p=SphereDesign.Plan.of(s.diameter(),s.support());a=p.a();upper=p.yc()+p.r()*.65;}
-        double offset=Math.min(.3,r*.75);var result=new ArrayList<Socket>();
-        if(drum||sphere)socket(result,s,a,r,"pressure_top",upper,-offset,true,true);
-        if(drum||tank)socket(result,s,a,r,"pressure_bottom",lower,-offset,true,false);
-        socket(result,s,a,r,sphere?"temperature_top":"temperature_bottom",sphere?upper:lower,offset,false,sphere);
-        return List.copyOf(result);
+    public record Socket(String id,double x,double y,double z,boolean pressure,boolean top,int face) {
+        public Socket(String id,double x,double y,double z,boolean pressure,boolean top){this(id,x,y,z,pressure,top,-1);}
     }
-    /** Body and boot transmitter pads on the rear shell, separate from the existing front service taps. */
-    public static List<Socket> levelSockets(EquipmentShape s){
-        if(!s.reservoir())return List.of();
-        if(s.kind().coolingTower()){
-            var tower=s.coolingTower();boolean natural=tower.draft()==com.wormzjl.icheme.science.fluid.network.CoolingTower.Draft.NATURAL;
-            double x=natural?tower.width()/2+.5:tower.width()*tower.columns()/2;
-            double z=natural?tower.width()+.84:tower.width()*tower.rows()+.34;
-            var p=s.transform().point(new double[]{x,1,z});
-            return List.of(new Socket("level_body",p[0],p[1],p[2],false,false));
-        }
-        double a=s.axis(),r=s.radius(),x=a,y=s.bottomTangent()+s.tangentLength()/2,z=a+r+.14;
-        if(s.kind()==EquipmentShape.Kind.TANK){var plan=TankDesign.Plan.of(s.diameter(),(int)s.tangentLength());a=plan.a();x=a;y=s.fillHeight()/2;z=a+r+.14;}
-        else if(s.kind()==EquipmentShape.Kind.SPHERE){var plan=SphereDesign.Plan.of(s.diameter(),s.support());a=plan.a();x=a;y=plan.yc();z=a+r+.14;}
-        else if(s.saddles()){int cells=(int)Math.ceil(s.diameter());a=(cells%2==0?cells+1:cells)/2.0;x=a;y=s.headDepth()+s.tangentLength()/2;z=a+r+.14;}
-        var result=new ArrayList<Socket>();var p=s.transform().point(new double[]{x,y,z});result.add(new Socket("level_body",p[0],p[1],p[2],false,false));
-        var b=s.bootPlace();if(b!=null){p=s.transform().point(new double[]{a-r-b.length()/2,b.station(),a+b.diameter()/2+.14});result.add(new Socket("level_boot",p[0],p[1],p[2],false,false));}
-        return List.copyOf(result);
-    }
-    private static void socket(List<Socket> out,EquipmentShape s,double a,double r,String id,double y,double offset,boolean pressure,boolean top){double radialSquared=r*r;if(s.kind()==EquipmentShape.Kind.SPHERE){double dy=y-s.support()-r;radialSquared-=dy*dy;}double z=a-Math.sqrt(Math.max(.0001,radialSquared-offset*offset))-.16;double[] p=s.transform().point(new double[]{a+offset,y,z});out.add(new Socket(id,p[0],p[1],p[2],pressure,top));}
+    /** The shared physical catalog alone decides which equipment accepts manual instruments. */
+    public static List<Socket> sockets(EquipmentShape shape,ShapeRasterizer.Cell node){return sockets(shape);}
+    public static List<Socket> sockets(EquipmentShape shape){return EquipmentInstruments.of(shape).probes().stream().filter(p->p.manual()&&(p.quantity()==EquipmentInstruments.Quantity.PRESSURE||p.quantity()==EquipmentInstruments.Quantity.TEMPERATURE)).map(InstrumentGeometry::socket).toList();}
+    public static List<Socket> levelSockets(EquipmentShape shape){return EquipmentInstruments.of(shape).probes().stream().filter(p->p.manual()&&p.quantity()==EquipmentInstruments.Quantity.LEVEL).map(InstrumentGeometry::socket).toList();}
+    private static Socket socket(EquipmentInstruments.Probe p){var c=p.centre();return new Socket(p.id(),c[0],c[1],c[2],p.quantity()==EquipmentInstruments.Quantity.PRESSURE,p.top(),p.face());}
 }

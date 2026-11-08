@@ -445,6 +445,21 @@ public final class FluidThermodynamics {
         return speed;
     }
     /**
+     * The gas's ideal-gas heat capacity ratio {@code k = c_p/(c_p − R)} at the state's temperature, for a compressor's
+     * polytropic exponent (batch 2026-11-03-rotating-machinery, plan section 3.2): the hydrocarbon vapour's components on the
+     * package's own ideal-gas data, the water vapour on Smith, Van Ness and Abbott's {@code c_p/R = 3.470 + 1.450e-3 T +
+     * 0.121e5/T²} (298 to 2000 K). 1.4 for a state that holds no gas.
+     */
+    public double heatCapacityRatio(State state) {
+        double t=state.temperature(),moles=state.waterVapor(),cp=moles*R*(3.470+1.450e-3*t+.121e5/(t*t));
+        double[] vapor=state.vapor();double hydrocarbonMoles=0;
+        for(double n:vapor)hydrocarbonMoles+=n;
+        if(hydrocarbonMoles>0){var terms=hydrocarbon.prepare(t);for(int i=0;i<vapor.length;i++)cp+=vapor[i]*terms.idealGasHeatCapacity(i);moles+=hydrocarbonMoles;}
+        if(!(moles>0))return 1.4;
+        cp/=moles;
+        return cp/(cp-R);
+    }
+    /**
      * The fluid a phase-selective vessel outlet draws, read off the vessel's own state with no flash and no extra
      * equation-of-state root: every term is a sum over the phase amounts, volumes and molar properties {@link #state}
      * already computed. The vapour stream is the hydrocarbon vapour and the water vapour ({@code moles} are {@code vapor}

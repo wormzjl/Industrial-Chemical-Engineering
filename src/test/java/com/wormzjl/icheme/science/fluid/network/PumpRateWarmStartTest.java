@@ -12,8 +12,11 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Fresh configured heavy-crude loop; no saved-world fixture or altered physical law. The heavy grade is liquid at 298.15 K
- * and 1 atm (bubble point 68.6 kPa), as WTI was; the light grade boils there (138 kPa). The heavy grade is more viscous, and the
- * pump meets its 5 bar head limit at a setpoint of 1.5 already, so the first setpoint is 1.0 (O3 of batch 2026-11-04-open-thermo-data).
+ * and 1 atm (bubble point 68.6 kPa), as WTI was; the light grade boils there (138 kPa). At 2 m³/s the pump outruns the
+ * junction it draws from, so it stands on its suction limit at the oil's bubble pressure (owner decision D14 of the
+ * rotating-machinery batch; the root used to flash the suction junction on the pump's law); at 1 m³/s it runs on its law.
+ * The start is 1 m³/s: on WTI the NPSH3 floor (owner decisions D20 Q11 A and D21) made the pump cavitate from 1.5 m³/s,
+ * and the more viscous heavy grade meets the pump's 5 bar head limit at 1.5 already (O3 of batch 2026-11-04-open-thermo-data).
  */
 class PumpRateWarmStartTest extends PortFixture {
     private FluidThermodynamics.State oil(double volume) {
@@ -39,8 +42,7 @@ class PumpRateWarmStartTest extends PortFixture {
     @Test void repeatedRateCallsKeepTheFlashedPumpLimitConvergent() {
         var graph=loop(2);var solver=new PassiveStepSolver(model);
         var first=solver.portRate(graph,NOOP);var repeated=solver.portRate(graph,NOOP);assertNotNull(first);assertNotNull(repeated);
-        assertEquals(FlowControl.Mode.PUMP_HEAD_LIMIT,first.modes().getFirst());assertEquals(first.modes(),repeated.modes());
-        assertTrue(first.states().get(3).vaporVolume()>0,"the rate root changes the input's liquid-only phase layout");
+        assertEquals(FlowControl.Mode.PUMP_SUCTION_LIMIT,first.modes().getFirst());assertEquals(first.modes(),repeated.modes());
         assertArrayEquals(first.massFlows(),repeated.massFlows(),1e-6);
         assertEquals(0,graph.reservoirs().get(3).state().vaporVolume(),0,"rate queries leave their input untouched");
     }
@@ -48,13 +50,13 @@ class PumpRateWarmStartTest extends PortFixture {
     @Test void increasingTheSetpointAdvancesOnItsLimitWithConservedMaterialAndEnergy() {
         var graph=loop(1.0);var solver=new PassiveIntervalSolver(model);
         var previous=solver.solve(graph,3.2,PassiveIntervalSolver.Settings.defaults(),NOOP);
-        assertEquals(FlowControl.Mode.PUMP_TARGET,previous.endpointModes().getFirst());graph=previous.graph();
+        assertEquals(FlowControl.Mode.MOVER_LAW,previous.endpointModes().getFirst());graph=previous.graph();
         var pipes=new ArrayList<>(graph.pipes());var p=pipes.getFirst();pipes.set(0,new PassiveNetwork.Pipe(p.id(),p.first(),p.second(),p.sections(),new FlowControl.Pump(2,500000),p.blockedDirections(),p.filter(),p.firstPort(),p.secondPort()));
         graph=new PassiveNetwork(graph.reservoirs(),pipes);
         var before=owned(graph);double energy=ownedEnergy(graph),externalEnergy=0,energyTurnover=0;var external=new double[mw.length];var turnover=new double[mw.length];
         for(int interval=0;interval<11;interval++) {
             solver.replayStart(graph,previous);var result=solver.solve(graph,3.2,PassiveIntervalSolver.Settings.defaults(),NOOP);
-            assertEquals(3.2,result.advancedSeconds(),0);assertEquals(FlowControl.Mode.PUMP_HEAD_LIMIT,result.endpointModes().getFirst());
+            assertEquals(3.2,result.advancedSeconds(),0);assertEquals(FlowControl.Mode.PUMP_SUCTION_LIMIT,result.endpointModes().getFirst());
             for(var b:result.boundaries()){var n=b.moles();for(int c=0;c<n.length;c++){external[c]+=n[c];turnover[c]+=Math.abs(n[c]);}externalEnergy+=b.totalEnergyJoule();energyTurnover+=Math.abs(b.totalEnergyJoule());}
             externalEnergy+=result.pumpWorkJoule();energyTurnover+=Math.abs(result.pumpWorkJoule());graph=result.graph();previous=result;
             ConservationAssertions.components(before,owned(graph),external,turnover);ConservationAssertions.energy(energy,ownedEnergy(graph),externalEnergy,energyTurnover);

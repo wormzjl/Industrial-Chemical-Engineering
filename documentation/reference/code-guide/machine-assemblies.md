@@ -1,6 +1,18 @@
 # Machine assemblies: a column's plant, validated against its design
 
-**Snapshot:** 6bf2205bf (branch `claude/in-game-process-simulator-93dd9a`), 2026-11-03 · **Updated:** 2026-11-03 (batch 2026-11-02-process-simulator: member counts (units in parallel, the trim condenser), `AssemblyStore` format 2, the FEED link, the screen's `AssemblyBlock` in place of `AssemblyFlowsheet` (removed with `AssemblyPortColoursTest`), the name entry) · earlier: 2026-11-02 at 321b8d1d (branch `claude/column-operation-5c3005`) (batch 2026-10-28-column-operation: Start, Stop and set points on a complete column (`ColumnStarts`), the Operation tab's view and commands, protocol `assembly-3`, a dismantled column's unit) · earlier: 2026-10-28 at 545c827a (batch 2026-10-28-constructor-templates: a Validate queued before the screen closed still runs on its bucket (`PresentationMailbox`)) · earlier: 2026-10-28 (batch 2026-10-27-heat-exchanger-design, W8: a shell-and-tube exchanger's control lines as a second kind of assembly (`ExchangerBlueprint`, `ExchangerLines`, the FLOWMETER fitting, a bypass tee's branch scoring, `AssemblyService.metered` and `redesigned`), the heat review world; batch 2026-10-28-gui-toolkit: the button reads Check parts) · earlier: 2026-10-27 at ce71b45c (new chapter, batch 2026-10-26-multi-machine-framework, first stage: the distillation column assembly; work packages W1 to W7, findings F2 and F3, owner answers Q1 to Q9)
+**Snapshot:** 3efffdb2d (branch `claude/simulator-sizing-refactor-6bacab`, the consolidation review of `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
+
+## Column C1 instrumentation (0.22.0)
+
+`ControlHosts.refreshColumnMembers`, which each `ControlService` cadence calls before it validates edits, reads the accepted cached `AssemblyReport` and loaded member registration identities. It does not walk or validate pipes from a GUI request, load chunks, or run the column solver. Stable member/slot/channel identities expose accepted member process and utility readings through the column's physical C1. Existing assembly/column ownership still reserves its outputs; monitoring does not replace its duty/energy-transfer controller. Line placement/edit notifications now come through the shared `LineLaying` owners.
+
+
+## Exchanger configuration and shared laying (0.22.0)
+
+`ColumnComponents` and blueprint member choices carry `ExchangerType`. The match compares the built exchanger's selected sub-type as well as kind/count/dimensions and reports a configuration mismatch when Standard and Crossflow differ. Missing saved type means Standard. `AssemblyNetwork` now uses `assembly-4` for these choices; wire payloads are tested on fresh data, not migrated.
+
+Assembly pipe laying and previews use the same selected layout/nozzle definition as constructor rendering and occupied cells. Crossflow applies to standalone exchangers and column condensers, trims and pumparound coolers; the kettle pool is unchanged. This does not redesign column operation: the existing duty/energy transfer contract still determines the running column's heat work. Assembly registration/reversion remains event-driven, preserving physical equipment and stored settings.
+
 Up: [code guide](README.md)
 
 ## Read this when
@@ -12,7 +24,7 @@ Up: [code guide](README.md)
 - You add a slot, a link or a part form to a column's blueprint, or a new kind of assembly.
 - You change what a click on a column or on a unit next to it opens, or the laying tool's assembly marks.
 - Start refuses a complete column, or a change stops a running one.
-- You touch the `assembly-3` packets, the `icheme_assemblies` store, or the review world (`runReviewWorldServer`).
+- You touch the `assembly-4` packets, the `icheme_assemblies` store, or the review world (`runReviewWorldServer`).
 
 The column's design (what Save design stores, `ColumnComponents` with its member counts, `ColumnDesign`) and the column's nozzles are in [equipment.md](equipment.md); Save design is on the process simulator's column (`ProcessSimulatorNetwork.SaveDesign`). The pipes and fittings the walk reads are registry devices ([fluid-runtime.md](fluid-runtime.md)). What a started column does is in [column-operation.md](column-operation.md).
 
@@ -43,7 +55,7 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
 | [`ExchangerLines`](../../../src/main/java/com/wormzjl/icheme/runtime/assembly/ExchangerLines.java) | Package-private: `design(level, world, vessel)` reads the lines each side's registered control asks for (`HeatUnit.lines()`, through `EquipmentStructure.sideIdentities`); `publish(level, world, vessel, entry)` sets each such side's `FluidWorldAuthority.Lines`: NOT_VALIDATED, CHECKED with the parts not in place counted, UNMETERED (complete, its valve without a flowmeter), COMPLETE (its valve with one) with the operated valve's identity and the slot states | How a report reaches a side's control |
 | [`AssemblyPresentation`](../../../src/main/java/com/wormzjl/icheme/runtime/assembly/AssemblyPresentation.java) | The column screens' sessions on a `PresentationMailbox` (100-tick buckets): `open`, `validate`, `act` (Start, Stop or Apply, a queued command like Validate), `close` (a command queued before still runs), `tick`; `Host` | Engine-owned GUI updates |
 | [`AssemblyWatch`](../../../src/main/java/com/wormzjl/icheme/runtime/assembly/AssemblyWatch.java) | The laying tool's watch, `RANGE` 48 blocks: `start`, `stop`, `tick`; `Host` | The tool's marks (W7) |
-| [`network/AssemblyNetwork`](../../../src/main/java/com/wormzjl/icheme/network/AssemblyNetwork.java) | Protocol `assembly-3` (main thread); `open(player, vessel, cell)`, `target`, `closed`, `datasheet`, `presentationTick`, `forget`; the `VIEW` codec; `Action` START, STOP, APPLY; `REFUSALS` (each server's last refused Start per master, until the next press, not saved) | What a click opens; the wire |
+| [`network/AssemblyNetwork`](../../../src/main/java/com/wormzjl/icheme/network/AssemblyNetwork.java) | Protocol `assembly-4` (main thread); `open(player, vessel, cell)`, `target`, `closed`, `datasheet`, `presentationTick`, `forget`; the `VIEW` codec; `Action` START, STOP, APPLY; `REFUSALS` (each server's last refused Start per master, until the next press, not saved) | What a click opens; the wire |
 | [`world/inventory/AssemblyMenu`](../../../src/main/java/com/wormzjl/icheme/world/inventory/AssemblyMenu.java) | Menu `assembly`: origin, cell (a shell cell of the column), anchor, reach (`REACH` 8 + the clicked structure's largest size), selected member; client `view()`/`accept`; `removed` ends the session | Who may keep the screen open |
 | **Client** | | |
 | [`gui/screens/inventory/AssemblyScreen`](../../../src/main/java/com/wormzjl/icheme/client/gui/screens/inventory/AssemblyScreen.java) | The column's screen: on the GUI kit's door and glass ([client-gui.md](client-gui.md)), the drawing (`AssemblyBlock`) beside the parts list (`AssemblyColumn`), Check parts, Open unit, Datasheet, and the column's name entry in the title strip (saved by `EquipmentNetwork.rename`, [equipment.md](equipment.md)); tabs Operation (`OperationColumn`, when the report is complete and the view has an operation) and Structure | What the player sees |
@@ -141,7 +153,7 @@ A shell-and-tube exchanger (kind EXCHANGER) is a master only while a side's cont
 - A run starts at a nozzle's pipe block and follows joined blocks. Only pipes join (decision D20). A fitting passes along its axis and is recorded as an `Element` with its direction and the pipes before it.
 - A run ends at a structure's nozzle (`AtPort`), a block of three or more joints (`Junction`, whose other runs `branches` gives), a one-block tank, generator or void (`Terminal`, outside), an open end, a chunk that is not loaded (`NotLoaded`), or no pipe in front of a nozzle (`Unconnected`).
 - The walk reads loaded chunks only (`getChunkNow`), never passes through a vessel or a constructed mover, and stops after `MAX_WALK` 8192 blocks; the rest reads as not loaded.
-- `LevelGround.piece(device)`: a device with ports (a vessel, a constructed mover) is null: the walk meets it at its shell's nozzles. A pipe's fitting comes from the law it compiles through (`hydraulicKind`): VALVE is a CONTROL_VALVE whatever module or setting it has; PUMP or COMPRESSOR an INLINE_PUMP; a shutoff, check valve or strainer is OTHER and passes the line on; a plain pipe carrying a flowmeter is a FLOWMETER, which a step may ask for and a line otherwise passes over. A unit's heat side is never a piece: it has ports, so the walk meets it at the unit's nozzles. A one-block filter is OTHER, a one-block pump or compressor an INLINE_PUMP, a one-block valve a CONTROL_VALVE; a reservoir, generator or void is a terminal.
+- `LevelGround.piece(device)`: a device with ports (a vessel, a constructed mover, a heat side, a steam turbine) is null: the walk meets it at its shell's nozzles. A pipe's fitting comes from the law it compiles through (`hydraulicKind`): VALVE is a CONTROL_VALVE whatever module or setting it has; PUMP or COMPRESSOR an INLINE_PUMP; a shutoff, check valve or strainer is OTHER and passes the line on; a plain pipe carrying a flowmeter is a FLOWMETER, which a step may ask for and a line otherwise passes over. A unit's heat side is never a piece: it has ports, so the walk meets it at the unit's nozzles. A one-block filter is OTHER, a one-block pump or compressor an INLINE_PUMP, a one-block valve a CONTROL_VALVE; a reservoir, generator or void is a terminal.
 - Every block and nozzle read gets a structural code (`Piece.code()`, or `nozzleCode` for a nozzle); a setting edit does not change a code.
 </details>
 
@@ -200,7 +212,7 @@ States in rank order (a later one outranks an earlier one on the same slot):
 <details><summary>Formats and wire</summary>
 
 - **Store** `icheme_assemblies` in each level's data storage (`AssemblyStore.of`), state (AGENTS.md: state formats change freely): `format` (`FORMAT` 2; 1 had no units in parallel), `rebuild`, `entries` (each: `master`, `status`, the coded positions and codes, `changed`, the slots with their `parallel` origins, fewer than `ColumnComponents.MAX_UNITS`, the ports, footprint and members). Bounds `MAX_MASTERS` 4096, `MAX_SLOTS` 256, `MAX_PORTS` 1024, `MAX_FOOTPRINT` 2 · `MAX_WALK`. A store of another format, or one that does not read, is dropped whole (`assembly_store status=STATE_DROPPED`) and marked for rebuilding.
-- **Protocol `assembly-3`** (all `HandlerThread.MAIN`; bounds `MAX_SLOTS` 256, `MAX_PORTS` 1024, `MAX_MEMBERS` 256, `MAX_TEXT` 1024, `MAX_STREAMS` 32, `MAX_VALUES` 64; the `VIEW` codec leaves out the footprint, carries each slot's `parallel` origins after its detail (at most `MAX_UNITS` - 1) and the operation after the report):
+- **Protocol `assembly-4`** (all `HandlerThread.MAIN`; bounds `MAX_SLOTS` 256, `MAX_PORTS` 1024, `MAX_MEMBERS` 256, `MAX_TEXT` 1024, `MAX_STREAMS` 32, `MAX_VALUES` 64; the `VIEW` codec leaves out the footprint, carries each slot's `parallel` origins after its detail (at most `MAX_UNITS` - 1) and the operation after the report):
 
 | Payload | Direction | Fields |
 |---|---|---|
@@ -226,7 +238,7 @@ States in rank order (a later one outranks an earlier one on the same slot):
 - **The first report keeps a unit.** A unit another column's report already holds is SHARED for the next column validated and not bound there. Should two reports hold one (one validated while the other was reverted), a click opens the least master's screen (`holder`).
 - `cellOf` looks for a loaded shell cell among the report's coded nozzles: a member whose cells are not loaded cannot be opened from the list.
 - **An exchanger's lines are state twice over.** Its entry is in the store; the sides' `Lines` are in the fluid world and last only while the server runs. Every path that changes an exchanger's entry calls `published` or `ExchangerLines.publish`; a new path must too, or a side keeps working a valve its report no longer holds.
-- **`assembly-3` names two view codecs.** The slots' `parallel` list (S3b) entered the `VIEW` codec without a protocol bump, so a client and a server built on either side of it agree on the protocol and misread each other's views.
+- **`assembly-4` names two view codecs.** The slots' `parallel` list (S3b) entered the `VIEW` codec without a protocol bump, so a client and a server built on either side of it agree on the protocol and misread each other's views.
 - **A step's count is the design's.** The matcher checks the number of units in parallel against `ColumnComponents.Units`; the units' sizes are only compared with each other, never with a sizing.
 - **A flowmeter changes a code.** A FLOWMETER is a fitting kind, so installing or removing one reverts a report that read the pipe (`metered`), as installing a valve does.
 </details>

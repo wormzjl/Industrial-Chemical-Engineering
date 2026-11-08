@@ -42,6 +42,8 @@ class AccessoryStoreCompatTest {
         s.installSensor(new Instrument.Key(63,"level_body"),new UUID(0x5e,3),Sensor.Kind.LEVEL,0);
         s.installSensor(new Instrument.Key(63,"level_boot"),new UUID(0x5e,4),Sensor.Kind.LEVEL,s.revision(63));
         s.installLegacy(64,Instrument.Type.PRESSURE_VALVE);s.installSensor(new Instrument.Key(64,"valve_sensor"),new UUID(0x5e,5),Sensor.Kind.PRESSURE,s.revision(64));
+        // Accessory facts schema 3 (batch 2026-11-03-rotating-machinery W3): a steam turbine's speed pickup.
+        s.installSensor(new Instrument.Key(65,Sensor.SPEED_PICKUP),new UUID(0x5e,6),Sensor.Kind.SPEED,0);
         s.nextDue(123456);
         return s;
     }

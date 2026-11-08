@@ -111,7 +111,8 @@ public final class ColumnSolve {
      * @param route           V3's solve path
      * @param note            what the input left out (feed water too cold to enter as steam), or empty
      */
-    public record Solved(SplitTable table, double[][] enthalpy, V3NeuralSeed seed, double solvedCondenser, String route, String note) implements Outcome {
+    public record Solved(SplitTable table, double[][] enthalpy, V3NeuralSeed seed, double solvedCondenser, String route, String note, com.wormzjl.icheme.science.column.v3.V3ColumnInspection inspection) implements Outcome {
+        public Solved(SplitTable table,double[][] enthalpy,V3NeuralSeed seed,double duty,String route,String note){this(table,enthalpy,seed,duty,route,note,null);}
         public Solved {
             Objects.requireNonNull(table, "table");
             enthalpy = copy(enthalpy);
@@ -280,7 +281,7 @@ public final class ColumnSolve {
                 : airArea(model, success.result().inspection().orElseThrow(), basis, axis, setpoints.condenserTemperature(), job.condenser() == ColumnComponents.Condenser.AIR_THEN_WATER, rate, checkpoint);
         var table = new SplitTable(solved.axis(), solved.products(), solved.reboilerPerFeed(), pa, condenser, reference, solved.held(), cooled, waterBelow, air);
         return new Solved(table, enthalpy, success.result().warmSeed().orElse(null), solved.condenserPerFeed() * rate,
-                success.diagnostics().solvePath(), note);
+                success.diagnostics().solvePath(), note, success.result().inspection().orElse(null));
     }
 
     /**

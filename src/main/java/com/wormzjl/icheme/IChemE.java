@@ -51,6 +51,11 @@ public final class IChemE {
     private static final ModConfigSpec.DoubleValue COLUMN_V3_LIQUID_SUPPLY_SCREEN_RATIO;
     private static final ModConfigSpec.ConfigValue<String> EQUIPMENT_PRIMARY_COLOUR, EQUIPMENT_SECONDARY_COLOUR;
     private static final ModConfigSpec.DoubleValue EQUIPMENT_SHEEN;
+    private static final ModConfigSpec.DoubleValue ENERGY_JOULES_PER_FE;
+    private static final ModConfigSpec.BooleanValue ENERGY_MACHINES_NEED_POWER;
+    private static final ModConfigSpec.DoubleValue CREATE_STRESS_PER_FE;
+    private static final ModConfigSpec.BooleanValue WEAR_ENABLED;
+    private static final ModConfigSpec.DoubleValue WEAR_CAVITATION_HOURS, WEAR_DRY_MINUTES;
 
     static {
         ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
@@ -150,6 +155,29 @@ public final class IChemE {
                         "Read when the models are baked: restart the client or reload resources (F3+T) after a change.")
                 .defineInRange("metallicSheen", 0.2, 0.0, 0.4);
         builder.pop();
+        // Electricity (batch 2026-11-03-rotating-machinery W5, reading A66).
+        builder.push("energy");
+        ENERGY_JOULES_PER_FE = builder.comment("Joules per forge energy unit (FE). Motors, fans and generators convert their watts at this rate; stores keep joules, so a change keeps the energy they hold. Default 2.5, Mekanism's joule.")
+                .defineInRange("joulesPerFE", 2.5, 0.01, 1e6);
+        ENERGY_MACHINES_NEED_POWER = builder.comment("Whether motors, air cooler fans and cooling tower fans need FE at their terminal box. False: nothing is drawn, nothing stops for want of power, and the ports still accept FE (a pack without energy mods).")
+                .define("machinesNeedPower", true);
+        builder.pop();
+        // The Create coupling (batch 2026-11-03-rotating-machinery W6b, decision D7): read only with Create installed.
+        builder.push("create");
+        CREATE_STRESS_PER_FE = builder.comment("Create stress units that one FE per tick trades for: a stress unit is worth 20 x joulesPerFE / stressPerFE watts (1.465 W at the defaults). Default 34.13, the rate of Create Crafts & Additions and Create: New Age. A pack that changes their rate sets this to match, so no round trip FE -> shaft -> Create -> FE gains energy.")
+                .defineInRange("stressPerFE", 34.13, 0.01, 1e6);
+        builder.pop();
+        // Pump wear (batch 2026-11-03-rotating-machinery W10b, owner decision D34).
+        builder.push("machines");
+        builder.push("wear");
+        WEAR_ENABLED = builder.comment("Whether pumps wear from cavitation and from running dry, and fail at 0 % health until a repair kit restores them. False: nothing wears and no pump stands failed.")
+                .define("enabled", true);
+        WEAR_CAVITATION_HOURS = builder.comment("A pump's life in online hours at the worst cavitation (its NPSH available about twice its NPSH3). Longer elsewhere: 5.1 h at NPSH3, 18.9 h at 3.5 times it, none from 4 times it up.")
+                .defineInRange("cavitationHours", 2.0, 0.001, 1e6);
+        WEAR_DRY_MINUTES = builder.comment("A pump's life in online minutes running dry: its driver on while it is gas- or vapour-locked or its suction holds no liquid.")
+                .defineInRange("dryMinutes", 10.0, 0.01, 1e6);
+        builder.pop();
+        builder.pop();
         CONFIG_SPEC = builder.build();
     }
 
@@ -157,12 +185,18 @@ public final class IChemE {
         ModBlocks.register(modEventBus);
         ModItems.register(modEventBus);
         com.wormzjl.icheme.registry.ModCreativeTabs.register(modEventBus);
+        // The Create coupling (W6b, D40): its only entry point, guarded; no class outside compat/create names a Create type.
+        if (net.neoforged.fml.ModList.get().isLoaded("create")) com.wormzjl.icheme.compat.create.CreateCompat.register(modEventBus);
         ModBlockEntities.register(modEventBus);
         ModMenus.register(modEventBus);
         modEventBus.addListener(ProcessSimulatorNetwork::register);
         modEventBus.addListener(com.wormzjl.icheme.network.FluidNetwork::register);
         modEventBus.addListener(com.wormzjl.icheme.network.EquipmentNetwork::register);
         modEventBus.addListener(com.wormzjl.icheme.network.AssemblyNetwork::register);
+        modEventBus.addListener(com.wormzjl.icheme.network.MachineNetwork::register);
+        modEventBus.addListener(com.wormzjl.icheme.network.ControlNetwork::register);
+        modEventBus.addListener(com.wormzjl.icheme.network.LineNetwork::register);
+        modEventBus.addListener(IChemE::registerCapabilities);
         modContainer.registerConfig(ModConfig.Type.COMMON, CONFIG_SPEC, "icheme-common.toml");
         // The client's own settings (the process screens' panel theme); a dedicated server never loads them.
         modContainer.registerConfig(ModConfig.Type.CLIENT, com.wormzjl.icheme.client.ClientConfig.SPEC, "icheme-client.toml");
@@ -180,6 +214,13 @@ public final class IChemE {
         gameEventBus.addListener(IChemE::onFluidChunkLoaded);
         gameEventBus.addListener(IChemE::onPlayerLoggedOut);
         gameEventBus.addListener(IChemE::onLevelTickPost);
+    }
+    /** The FE port of a structure's terminal box (W5): the shell block entity's energy capability, on its terminal cell only. */
+    private static void registerCapabilities(net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent event) {
+        event.registerBlockEntity(net.neoforged.neoforge.capabilities.Capabilities.EnergyStorage.BLOCK,ModBlockEntities.DATA_CABLE.get(),(cable,side)->cable.energy());
+        event.registerBlockEntity(net.neoforged.neoforge.capabilities.Capabilities.EnergyStorage.BLOCK,ModBlockEntities.CREATIVE_POWER.get(),(source,side)->source);
+        event.registerBlockEntity(net.neoforged.neoforge.capabilities.Capabilities.EnergyStorage.BLOCK,ModBlockEntities.FLUID_DEVICE.get(),(pipe,side)->pipe.energy());
+        event.registerBlockEntity(net.neoforged.neoforge.capabilities.Capabilities.EnergyStorage.BLOCK, ModBlockEntities.EQUIPMENT_SHELL.get(), (shell, side) -> shell.energy());
     }
     /** The floating roofs that rise this tick lift what stands on them (a read of each tank's glide; nothing solves). */
     private static void onLevelTickPost(net.neoforged.neoforge.event.tick.LevelTickEvent.Post event) {
@@ -199,6 +240,27 @@ public final class IChemE {
                 var loaded=server.getLevel(dimension);if(loaded!=null)com.wormzjl.icheme.runtime.assembly.AssemblyService.chunkLoaded(loaded,new net.minecraft.world.level.ChunkPos(chunk));
             }));
         }
+    }
+
+    /** Joules per FE (W5; default 2.5 before the config loads). */
+    public static double joulesPerFE() {
+        return CONFIG_SPEC.isLoaded() ? ENERGY_JOULES_PER_FE.get() : 2.5;
+    }
+
+    /** The pumps' wear settings (W10b; the defaults before the config loads). */
+    public static com.wormzjl.icheme.science.machine.Wear.Settings wearSettings() {
+        if (!CONFIG_SPEC.isLoaded()) return com.wormzjl.icheme.science.machine.Wear.Settings.DEFAULT;
+        return new com.wormzjl.icheme.science.machine.Wear.Settings(WEAR_ENABLED.get(), WEAR_CAVITATION_HOURS.get(), WEAR_DRY_MINUTES.get());
+    }
+
+    /** Create stress units per FE per tick (W6b; default 34.13 before the config loads). */
+    public static double stressPerFE() {
+        return CONFIG_SPEC.isLoaded() ? CREATE_STRESS_PER_FE.get() : com.wormzjl.icheme.science.machine.CreateCoupling.STRESS_PER_FE;
+    }
+
+    /** Whether machines need FE (W5; default true before the config loads). */
+    public static boolean machinesNeedPower() {
+        return !CONFIG_SPEC.isLoaded() || ENERGY_MACHINES_NEED_POWER.get();
     }
 
     /** The equipment's metallic sheen, 0 to 0.4 (0: none; default 0.2). */
@@ -257,6 +319,8 @@ public final class IChemE {
         try {
             ProcessSolveCoordinator.drainCompletedCalculations(event.getServer());
             com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.tick(event.getServer());
+            com.wormzjl.icheme.world.level.block.LinePieces.flush(event.getServer());
+            com.wormzjl.icheme.runtime.power.PowerNetwork.of(event.getServer()).tick();
             com.wormzjl.icheme.runtime.assembly.AssemblyService.tick(event.getServer());
         } catch (RuntimeException exception) {
             LOGGER.error("process_solver lifecycle=DRAIN_FAILED", exception);
@@ -281,6 +345,7 @@ public final class IChemE {
         try {
             // ServerStopped can still fire after an abnormal lifecycle path that skipped ServerStopping.
             com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.forget(event.getServer());
+            com.wormzjl.icheme.runtime.power.PowerNetwork.forget(event.getServer());
             com.wormzjl.icheme.runtime.assembly.AssemblyService.forget(event.getServer());
             com.wormzjl.icheme.runtime.fluid.FluidRuntimeDiagnostics.Meter.forget(event.getServer());
             ProcessSolveCoordinator.stopCalculations(event.getServer());

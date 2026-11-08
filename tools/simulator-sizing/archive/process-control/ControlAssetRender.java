@@ -1,0 +1,58 @@
+import java.awt.image.BufferedImage;
+import java.nio.file.Path;
+import java.util.*;
+import javax.imageio.ImageIO;
+public class ControlAssetRender {
+    record Quad(double[][] points,double[][] uv,double[] normal,BufferedImage texture) {}
+    static double[] cross(double[] a, double[] b) { return new double[]{a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]}; }
+    static double dot(double[] a, double[] b) { return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]; }
+    static double[] unit(double[] a) { double r=Math.sqrt(dot(a,a)); return new double[]{a[0]/r,a[1]/r,a[2]/r}; }
+    static double edge(double[] a,double[] b,double x,double y) { return (x-a[0])*(b[1]-a[1])-(y-a[1])*(b[0]-a[0]); }
+    public static void main(String[] args) throws Exception {
+        var models=new LinkedHashMap<String,List<Quad>>();
+        for(var line:java.nio.file.Files.readAllLines(Path.of(args[0]))){var c=line.split("\t");var p=new double[4][3];var uv=new double[4][2];var normal=new double[3];int at=2;for(int i=0;i<4;i++)for(int k=0;k<3;k++)p[i][k]=Double.parseDouble(c[at++]);for(int i=0;i<4;i++)for(int k=0;k<2;k++)uv[i][k]=Double.parseDouble(c[at++]);for(int k=0;k<3;k++)normal[k]=Double.parseDouble(c[at++]);models.computeIfAbsent(c[0],x->new ArrayList<>()).add(new Quad(p,uv,normal,ImageIO.read(Path.of(c[1]).toFile())));}
+        var port=new ArrayList<Quad>();for(var p:com.wormzjl.icheme.science.equipment.DataPortGeometry.polygons(new double[]{.5,.5,.5},new double[]{0,0,-1}))mesh(port,p);models.put("data-port",port);
+        var wire=new ArrayList<Quad>();for(var p:com.wormzjl.icheme.science.equipment.DataCableGeometry.polygons(new com.wormzjl.icheme.science.equipment.DataCableGeometry.Key(0,0).connect(3,0,0).connect(4,0,0).connect(5,0,0)))mesh(wire,p);models.put("cable-junction",wire);
+        var sensor=new ArrayList<Quad>();for(var q:com.wormzjl.icheme.science.equipment.InstrumentGeometry.transmitter(false)){var p=new double[4][3];var uv=new double[4][2];var v=q.vertices();for(int i=0;i<4;i++)for(int k=0;k<3;k++)p[i][k]=8+v[3*i+k]*40;var n=unit(cross(new double[]{p[1][0]-p[0][0],p[1][1]-p[0][1],p[1][2]-p[0][2]},new double[]{p[2][0]-p[0][0],p[2][1]-p[0][1],p[2][2]-p[0][2]}));if(Double.isNaN(n[0]))continue;var t=new BufferedImage(1,1,BufferedImage.TYPE_INT_RGB);t.setRGB(0,0,q.colour());sensor.add(new Quad(p,uv,n,t));}models.put("world-sensor",sensor);
+        var rackView=new ArrayList<Quad>();int arms=1<<2|1<<3;var rack=new com.wormzjl.icheme.science.equipment.RackGeometry.Rack(2,0,com.wormzjl.icheme.science.equipment.RackGeometry.BENT_BACK|com.wormzjl.icheme.science.equipment.RackGeometry.BENT_FRONT|com.wormzjl.icheme.science.equipment.RackGeometry.END_BACK|com.wormzjl.icheme.science.equipment.RackGeometry.END_FRONT|com.wormzjl.icheme.science.equipment.RackGeometry.GROUNDED,com.wormzjl.icheme.science.equipment.RackGeometry.BEAM_TOP);
+        var pipe=new com.wormzjl.icheme.science.equipment.RackGeometry.Lane(com.wormzjl.icheme.science.equipment.RackGeometry.option(0,com.wormzjl.icheme.science.equipment.RackGeometry.TIER),2,arms,arms,com.wormzjl.icheme.science.equipment.PipeSizes.code(.25));
+        var cableA=new com.wormzjl.icheme.science.equipment.RackGeometry.Lane(com.wormzjl.icheme.science.equipment.RackGeometry.option(2,com.wormzjl.icheme.science.equipment.RackGeometry.TIER),1,arms,arms,com.wormzjl.icheme.science.equipment.PipeSizes.code(.0625));
+        var cableB=new com.wormzjl.icheme.science.equipment.RackGeometry.Lane(com.wormzjl.icheme.science.equipment.RackGeometry.option(3,com.wormzjl.icheme.science.equipment.RackGeometry.TIER),1,arms,arms,com.wormzjl.icheme.science.equipment.PipeSizes.code(.0625));
+        for(var q:com.wormzjl.icheme.science.equipment.RackGeometry.polygons(rack,List.of(pipe,cableA,cableB)))mesh(rackView,q);
+        for(var q:com.wormzjl.icheme.science.equipment.RackGeometry.lane(rack,pipe))mesh(rackView,q);
+        for(var lane:List.of(cableA,cableB))for(var q:com.wormzjl.icheme.science.equipment.DataCableGeometry.path(com.wormzjl.icheme.science.equipment.RackGeometry.path(rack,lane)))mesh(rackView,q,0x376674);models.put("mixed-pipe-cable-rack",rackView);
+        for(var entry:models.entrySet()){render(entry.getValue(),entry.getKey().equals("world-sensor")?new double[]{1,-.8,-1.3}:new double[]{-1,-.8,1.3},args[1]+"/"+entry.getKey()+"-front.png");if(entry.getKey().equals("local_controller")||entry.getKey().equals("dcs"))render(entry.getValue(),new double[]{1,-.8,-1.3},args[1]+"/"+entry.getKey()+"-rear.png");}
+    }
+    static void mesh(List<Quad> quads,com.wormzjl.icheme.science.equipment.Mesh.Polygon q)throws Exception {mesh(quads,q,0);}
+    static void mesh(List<Quad> quads,com.wormzjl.icheme.science.equipment.Mesh.Polygon q,int colour)throws Exception {var v=q.positions();var ns=q.normals();for(int first=1;first+1<q.size();first+=2){var corners=new int[]{0,first,first+1,Math.min(first+2,q.size()-1)};var p=new double[4][3];for(int i=0;i<4;i++)for(int k=0;k<3;k++)p[i][k]=16*v[corners[i]*3+k];var t=new BufferedImage(1,1,BufferedImage.TYPE_INT_RGB);t.setRGB(0,0,colour!=0?colour:switch(q.material()){case OPENING->0x17282d;case GUARD->0xb99d38;case FLANGE->0x747a7d;case STEELWORK->0x434d54;default->0x8b9398;});var uv=new double[4][2];if(colour==0x376674){t=ImageIO.read(Path.of("src/main/resources/assets/icheme/textures/block/data_cable.png").toFile());var coordinates=q.uvs();for(int i=0;i<4;i++){uv[i][0]=coordinates[corners[i]*2];uv[i][1]=coordinates[corners[i]*2+1];}}quads.add(new Quad(p,uv,new double[]{ns[0],ns[1],ns[2]},t));}}
+    static void render(List<Quad> quads,double[] view,String output) throws Exception {
+        var depth=unit(view);var right=unit(cross(depth,new double[]{0,1,0}));var up=cross(right,depth);
+        double loX=1e9,hiX=-1e9,loY=1e9,hiY=-1e9;
+        for(int i=0;i<8;i++) {
+            var p=new double[]{(i&1)*16,(i>>1&1)*16,(i>>2&1)*16};
+            double sx=dot(p,right),sy=dot(p,up);loX=Math.min(loX,sx);hiX=Math.max(hiX,sx);loY=Math.min(loY,sy);hiY=Math.max(hiY,sy);
+        }
+        double scale=560/Math.max(hiX-loX,hiY-loY);int w=(int)((hiX-loX)*scale)+48,h=(int)((hiY-loY)*scale)+48;
+        var image=new BufferedImage(w,h,BufferedImage.TYPE_INT_RGB);var zbuffer=new double[w*h];Arrays.fill(zbuffer,Double.POSITIVE_INFINITY);
+        for(int y=0;y<h;y++)for(int x=0;x<w;x++)image.setRGB(x,y,0xD7DEDE);
+        for(var q:quads) {
+            if(dot(q.normal(),depth)>=0)continue;
+            double[][] screen=new double[4][3];
+            for(int i=0;i<4;i++){var p=q.points()[i];screen[i]=new double[]{24+(dot(p,right)-loX)*scale,h-24-(dot(p,up)-loY)*scale,dot(p,depth)};}
+            double[] n=q.normal();double light=n[0]*n[0]*.6+n[1]*n[1]*(3+n[1])/4+n[2]*n[2]*.8;
+            for(var tri:new int[][]{{0,1,2},{0,2,3}}) {
+                var a=screen[tri[0]];var b=screen[tri[1]];var c=screen[tri[2]];double area=edge(a,b,c[0],c[1]);if(Math.abs(area)<1e-9)continue;
+                int minX=Math.max(0,(int)Math.floor(Math.min(a[0],Math.min(b[0],c[0])))),maxX=Math.min(w-1,(int)Math.ceil(Math.max(a[0],Math.max(b[0],c[0]))));
+                int minY=Math.max(0,(int)Math.floor(Math.min(a[1],Math.min(b[1],c[1])))),maxY=Math.min(h-1,(int)Math.ceil(Math.max(a[1],Math.max(b[1],c[1]))));
+                for(int y=minY;y<=maxY;y++)for(int x=minX;x<=maxX;x++) {
+                    double aa=edge(b,c,x+.5,y+.5)/area,bb=edge(c,a,x+.5,y+.5)/area,cc=1-aa-bb;
+                    if(aa<0||bb<0||cc<0)continue;double z=aa*a[2]+bb*b[2]+cc*c[2];if(z>=zbuffer[y*w+x])continue;
+                    double u=aa*q.uv()[tri[0]][0]+bb*q.uv()[tri[1]][0]+cc*q.uv()[tri[2]][0],v=aa*q.uv()[tri[0]][1]+bb*q.uv()[tri[1]][1]+cc*q.uv()[tri[2]][1];
+                    var t=q.texture();int rgb=t.getRGB(Math.min(t.getWidth()-1,Math.max(0,(int)(u*t.getWidth()))),Math.min(t.getHeight()-1,Math.max(0,(int)(v*t.getHeight()))));
+                    int r=(int)((rgb>>16&255)*light),g=(int)((rgb>>8&255)*light),bcol=(int)((rgb&255)*light);image.setRGB(x,y,r<<16|g<<8|bcol);zbuffer[y*w+x]=z;
+                }
+            }
+        }
+        ImageIO.write(image,"png",Path.of(output).toFile());System.out.println("Wrote "+output);
+    }
+}

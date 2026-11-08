@@ -336,9 +336,10 @@ class LevelHeadTest extends PortFixture {
         return PassiveNetwork.sizeJunctionHoldups(new PassiveNetwork(nodes,List.of(new PassiveNetwork.Pipe(20,0,1,g),
                 new PassiveNetwork.Pipe(21,1,2,List.of(g),new FlowControl.Pump(.01,300000),0,null,PhasePort.BULK,tankPort))),model);
     }
-    /** The pump closes when the discharge it sees reaches its shutoff: into a side (BULK) port that is the headspace, into a
-     * bottom (LIQUID) port the headspace plus the level head, so the bottom-fed tank's headspace closes {@code rho g L}
-     * lower - the head of the water it received. */
+    /** The pump stops delivering when the discharge it sees reaches its shutoff: into a side (BULK) port that is the
+     * headspace, into a bottom (LIQUID) port the headspace plus the level head, so the bottom-fed tank's headspace closes
+     * {@code rho g L} lower - the head of the water it received. At its shutoff a pump runs on its law with no net flow, its
+     * relief passing its whole displacement back (batch 2026-11-03-rotating-machinery, form F2e), or stands closed. */
     @Test void aPumpIntoABottomPortClosesTheLevelHeadEarlier() {
         var side=drive("pump-side",pumpedFill(PhasePort.BULK),5,30);var low=drive("pump-bottom",pumpedFill(PhasePort.LIQUID),5,30);
         var s=side.last().reservoirs().get(2);var b=low.last().reservoirs().get(2);
@@ -346,8 +347,10 @@ class LevelHeadTest extends PortFixture {
         System.out.println("LEVEL_HEAD_RUN pump sideHeadspace="+sideShutoff+" bottomHeadspace="+bottomHeadspace+" bottomHead="+bottomHead+" bottomPort="+(bottomHeadspace+bottomHead)
                 +" sideWater="+model.liquidMass(s.state())+" bottomWater="+model.liquidMass(b.state())+" modes="+side.slices().getLast().endpointModes()+"/"+low.slices().getLast().endpointModes()
                 +" side: "+side.counters()+" bottom: "+low.counters());
-        assertEquals(FlowControl.Mode.CLOSED,side.slices().getLast().endpointModes().get(1),"the side-fed pump has closed");
-        assertEquals(FlowControl.Mode.CLOSED,low.slices().getLast().endpointModes().get(1),"the bottom-fed pump has closed");
+        for(var run:List.of(side,low)) {
+            var mode=run.slices().getLast().endpointModes().get(1);
+            assertTrue(mode==FlowControl.Mode.MOVER_LAW||mode==FlowControl.Mode.CLOSED,"the pump stands at its shutoff: "+mode);
+        }
         assertTrue(bottomHead>5000,"the bottom port stands under several kPa of water: "+bottomHead);
         assertEquals(sideShutoff,bottomHeadspace+bottomHead,1,"both close at the same discharge pressure, the bottom's including its head");
         assertEquals(bottomHead,sideShutoff-bottomHeadspace,1,"the bottom-fed headspace closes the level head earlier");

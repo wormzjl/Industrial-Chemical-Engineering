@@ -54,7 +54,8 @@ public final class TowerExchange {
         double basinTemperature=states.get(node).temperature();
         double temperature=inlet>0?heat/inlet:basinTemperature;
         boolean target=tower.mode()==CoolingTower.Mode.TARGET_TEMPERATURE;
-        double speed=!target?tower.speed():inlet>0?TowerTransfer.targetSpeed(model,tower,inlet,temperature):0;
+        // Fans without power stand (W5, fanLimit 0): the tower runs on its stack draught alone.
+        double speed=tower.fanSpeed(!target?tower.speed():inlet>0&&tower.fanLimit()>0?TowerTransfer.targetSpeed(model,tower,inlet,temperature):0);
         var fill=TowerTransfer.fill(model,tower,inlet,temperature,speed);
         String status=unsupported?"WATER_ONLY: pure liquid water required at atmospheric discharge"
             :target&&inlet>0&&Math.abs(fill.outletTemperature()-tower.setPoint())>.1?"TARGET_LIMIT: leaving-water temperature target unavailable"

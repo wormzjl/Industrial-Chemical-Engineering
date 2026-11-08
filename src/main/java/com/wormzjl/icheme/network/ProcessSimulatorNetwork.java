@@ -36,7 +36,7 @@ import org.jetbrains.annotations.Nullable;
  * the holder only, and the server reads them whole before it keeps them; a constructor reads them when its Import opens. Wire format: no compatibility work.
  */
 public final class ProcessSimulatorNetwork {
-    private static final String PROTOCOL = "2";
+    private static final String PROTOCOL = "3";
     private static final int MAX_KEY = 64, MAX_DETAIL = 256;
     /** Translation key suffixes of an answer. */
     public static final String SAVED = "store.saved", DESIGN_SAVED = "store.design_saved", DESIGN_REFUSED = "store.design_refused", DESIGNS_SENT = "store.designs_sent", DESIGNS_REFUSED = "store.designs_refused";

@@ -295,6 +295,17 @@ final class FlowsheetFileTest {
         assertEquals(sheet, FlowsheetFile.read(FlowsheetFile.write(sheet)));
     }
 
+    @Test void aCrossflowSelectionRoundTripsWhileAutoKeepsDormantManualFacts() {
+        var type=com.wormzjl.icheme.science.equipment.ExchangerType.CROSSFLOW;
+        var size=new ExchangerSizing.Size(false,2,1.5,6,type);
+        var sheet=FlowsheetFile.read(bytes(sized()));
+        var facts=sheet.sizing().with("E-1",SizingFacts.UnitFacts.AUTO.typed(UnitType.WATER_COOLER).with(size));
+        var read=FlowsheetFile.read(FlowsheetFile.write(sheet.with(facts)));
+        assertEquals(facts,read.sizing());
+        assertEquals(size,read.sizing().unit("E-1").size());
+        assertEquals(SizingFacts.Mode.AUTO,read.sizing().unit("E-1").mode());
+    }
+
     /**
      * S3b: an air cooler's banks in parallel, one where absent, and a column door's member counts; a count past the most a member
      * step takes is damage.

@@ -4,42 +4,32 @@ import com.wormzjl.icheme.science.equipment.Mesh.Frame;
 import com.wormzjl.icheme.science.equipment.Mesh.Material;
 import com.wormzjl.icheme.science.math.DeterministicMath;
 
-import java.util.ArrayList;
 import java.util.List;
 
 import static com.wormzjl.icheme.science.equipment.Mesh.ALL_FACES;
 
 /**
- * A steam turbine-generator set's train (owner decisions D2 and D4 2026-10-18, {@code NEW_UNITS_PLAN.md}; its proportions
- * from {@code NEW_UNITS_SURVEY_ROTATING.md} section 2), shared by the back-pressure set at grade
- * ({@link SteamTurbineDesign}) and the condensing set on its table ({@link CondensingTurbineDesign}). Its shaft runs along
- * frame z; from the front: the front standard over the front bearing (the governor actuator and the overspeed trip on
- * its face), the turbine casing, the rear bearing pedestal, the high-speed coupling under its guard, the parallel-shaft
- * gear (sets up to 50-65 MW are geared, Siemens SST-100 to 400), the low-speed coupling, the 4-pole generator under its
- * TEWAC cooler, the outboard bearing and the brushless exciter. Across the top of the casing's HP end lies the steam
- * chest with its governor valves; beside it stands the trip-and-throttle valve, which with the steam chest is the set's
- * signature from 10 to 30 m.
+ * A mechanical-drive steam turbine (owner decision D5, batch 2026-11-03-rotating-machinery; its proportions from
+ * {@code NEW_UNITS_SURVEY_ROTATING.md} section 2), drawn by {@link SteamTurbineDesign}. Its shaft runs along frame z; from
+ * the front: the front standard over the front bearing (the governor actuator and the overspeed trip on its face), the
+ * turbine casing, the rear bearing pedestal, and the shaft end, a half coupling under its guard, where its driven
+ * machine joins it through a shaft block. Across the top of the casing's HP end lies the steam chest with its governor
+ * valves; beside it stands the trip-and-throttle valve, which with the steam chest is the turbine's signature from 10 to
+ * 30 m. The generator, gear, exciter, TEWAC cooler, auxiliary oil pump and sentinel valve of the generator sets it
+ * replaces are gone: a generator is a machine of its own.
  *
- * <p>Proportions in Dc, the exhaust-end casing's outside diameter (survey, typ.): the HP end 0.8 Dc (back-pressure) or
- * 0.65 Dc (condensing), joined to the exhaust end by a cone; (0.5 + 0.15 N) Dc between the end walls for N stages, a
- * third of it the HP barrel under its aluminium cladding and half the bare, ribbed exhaust barrel; the horizontal split
- * flange 0.08 Dc proud with its studs from Dc 1 m (smaller ones are left out first); the shaft 0.6 Dc over the base frame
- * or 0.45 Dc over the table (the exhaust casing's lower half sits in the deck opening); the front standard 0.6 Dc long;
- * the gear 0.6 Dc long, 1.0 Dc wide and 0.9 Dc tall, its pinion on the turbine's shaft line; the generator's shaft
- * {@link #generatorShaft} high, its body 3.5 Hg long, 2.2 Hg wide and 2.0 Hg tall under a 0.6 Hg cooler, the exciter
- * 0.6 Hg long. The steam chest, 0.25 Dc across and 0.8 Dc long, carries one governor valve (N 3 at most) to five under a
- * bar-lift bridge 0.2 Dc high worked by a hydraulic servo 0.13 Dc across; a single-stage turbine (API 611) has one
- * governor valve on a lever and one to three hand valves with handwheels of 0.15 to 0.25 m. The trip-and-throttle valve's
- * body is 0.25 Dc, its handwheel 0.4 to 0.6 m, its hydraulic trip cylinder beside its yoke, its steam line 0.15 Dc.
- * Gland condenser, drains, lube console and instrument tubing are left out (survey: leave out first). The exciter's fan
- * turns behind its grille, the one part seen moving (survey: shafts are enclosed, the turning gear runs only at shutdown).
+ * <p>Proportions in Dc, the exhaust-end casing's outside diameter (survey, typ.): the HP end 0.8 Dc (back pressure) or
+ * 0.65 Dc (vacuum), joined to the exhaust end by a cone; (0.5 + 0.15 N) Dc between the end walls for N stages, a third of
+ * it the HP barrel under its aluminium cladding and half the bare, ribbed exhaust barrel; the horizontal split flange
+ * 0.08 Dc proud with its studs from Dc 1 m (smaller ones are left out first); the shaft about 0.6 Dc (back pressure) or
+ * 0.45 Dc (vacuum) over the base frame, on a cell centre; the front standard 0.6 Dc long. The steam chest, 0.25 Dc across
+ * and 0.8 Dc long, carries one governor valve (N 3 at most) to five under a bar-lift bridge 0.2 Dc high worked by a
+ * hydraulic servo 0.13 Dc across; a single-stage turbine (API 611) has one governor valve on a lever and one to three
+ * hand valves with handwheels of 0.15 to 0.25 m. The trip-and-throttle valve's body is 0.25 Dc, its handwheel 0.4 to
+ * 0.6 m, its hydraulic trip cylinder beside its yoke, its steam line 0.15 Dc. Gland condenser, drains, lube console and
+ * instrument tubing are left out (survey: leave out first). The coupling's hub turns.
  */
 final class SteamTurbineTrain {
-    /** The generator's shaft height over its feet, m: half the exhaust casing, 0.4 to 1.4 m (ABB 6 to 85 MVA on frames 710 to 1400 mm). */
-    static double generatorShaft(double d) {
-        return Math.max(.4, Math.min(1.4, .5 * d));
-    }
-
     /** A set's power, MW: about 5 Dc² (survey, within a factor of 2; 13 MW at about 1.6 m). */
     static double power(double d) {
         return 5 * d * d;
@@ -47,28 +37,28 @@ final class SteamTurbineTrain {
 
     /**
      * The turbine's speed, rev/min, to the next 100: the last stage's tip (about 0.8 Dc across) at 300 m/s, 3,000 to
-     * 13,500 rpm (API 612 sets; the 13 MW set turns 4,500 rpm), geared down to the generator.
+     * 13,500 rpm (API 612 sets; the 13 MW set turns 4,500 rpm); a gearbox matches it to the machine it drives.
      */
     static double speed(double d) {
         return Math.round(Math.max(3000, Math.min(13500, 7200 / d)) / 100) * 100.0;
     }
 
-    final double d, hp, casing, rise, hg, flange;
+    final double d, hp, casing, rise, flange;
     final int stages, valves;
-    final boolean condensing;
-    /** Stations along z from the front standard's front face: its back, the casing's HP end wall, the HP barrel's end, the cone's end, the exhaust end wall, the rear pedestal, the gear, the generator, the outboard bearing's end, the exciter. */
-    final double standard, hpEnd, hpBarrel, coneEnd, exhaustEnd, pedestal0, pedestal1, gear0, gear1, generator0, generator1, bearing1, exciter0, exciter1;
-    /** The exhaust barrel's middle, the condensing exhaust neck's length along z, the steam chest's axis. */
-    final double exhaust, neck, chest;
+    final boolean vacuum;
+    /** Stations along z from the front standard's front face: its back, the casing's HP end wall, the HP barrel's end, the cone's end, the exhaust end wall, the rear pedestal. */
+    final double standard, hpEnd, hpBarrel, coneEnd, exhaustEnd, pedestal0, pedestal1;
+    /** The exhaust barrel's middle, the steam chest's axis. */
+    final double exhaust, chest;
 
-    SteamTurbineTrain(double d, int stages, boolean condensing) {
+    /** A turbine of exhaust-end casing {@code d} and {@code stages}, exhausting to a condenser where {@code vacuum}, its shaft {@code rise} over its base frame. */
+    SteamTurbineTrain(double d, int stages, boolean vacuum, double rise) {
         this.d = d;
         this.stages = stages;
-        this.condensing = condensing;
-        hp = (condensing ? .65 : .8) * d;
+        this.vacuum = vacuum;
+        this.rise = rise;
+        hp = (vacuum ? .65 : .8) * d;
         casing = (.5 + .15 * stages) * d;
-        rise = (condensing ? .45 : .6) * d;
-        hg = generatorShaft(d);
         flange = .08 * d;
         valves = Math.max(1, Math.min(5, (stages - 1) / 2));
         standard = .6 * d;
@@ -78,20 +68,13 @@ final class SteamTurbineTrain {
         exhaustEnd = hpEnd + casing;
         pedestal0 = exhaustEnd + .08 * d + .03;
         pedestal1 = pedestal0 + .25 * d + .05;
-        gear0 = pedestal1 + .2 * d + .1;
-        gear1 = gear0 + .6 * d;
-        generator0 = gear1 + .25 * hg + .1;
-        generator1 = generator0 + 3.5 * hg;
-        bearing1 = generator1 + .25 * hg + .1;
-        exciter0 = bearing1 + .02;
-        exciter1 = exciter0 + .6 * hg;
         exhaust = (coneEnd + exhaustEnd) / 2;
-        neck = Math.max(.16 * d, Math.min(.8 * d, exhaustEnd - coneEnd - .1 * d));
         chest = hpEnd + Math.max(.14 * d, .15 * casing);
     }
 
+    /** The rear pedestal's back face from the front standard's front. */
     double length() {
-        return exciter1;
+        return pedestal1;
     }
 
     /** The steam chest's axis over the base. */
@@ -126,26 +109,21 @@ final class SteamTurbineTrain {
         return .8 * Math.max(.06, .1 * d) + .02;
     }
 
-    /** How far the train reaches to -x from its shaft: the servo, the gear's feet, the generator's feet, the split flange. */
+    /** How far the turbine reaches to -x from its shaft: the governor's servo, the split flange. */
     double leftReach() {
-        return Math.max(Math.max(.63 * d + .02, .56 * d + .05), Math.max(1.2 * hg + .02, .5 * d + flange + .02));
-    }
-
-    /** How far the train reaches to +x with its trip-and-throttle valve {@code offset} from the shaft: the valve, the generator's terminal box and cooler lines. */
-    double rightReach(double offset) {
-        return Math.max(Math.max(leftReach(), 1.24 * hg + .2), Math.max(offset + Math.max(valveBody() + .1, handwheel() / 2) + .02, 1.5 * hg + .02));
+        return Math.max(.63 * d + .02, .5 * d + flange + .02);
     }
 
     // ---- Drawing ----------------------------------------------------------------------------------------------------
 
     /**
-     * Draws the train on {@code base} (the base frame's or the table's top), its shaft along z at x {@code a}, its front
-     * standard's front face at {@code z0}; the trip-and-throttle valve's body centred at (xv, yv, zv), its inlet towards
-     * +x (back-pressure, at grade) or from below (condensing, an angle body), its outlet to the steam chest's +x end.
+     * Draws the turbine on {@code base} (the base frame's top), its shaft along z at x {@code a}, its front standard's
+     * front face at {@code z0}; the trip-and-throttle valve's body centred at (xv, yv, zv), its inlet towards +x, its
+     * outlet to the steam chest's +x end. The shaft end follows the rear pedestal ({@link #couple}).
      */
     void draw(ProcessUnit u, double a, double base, double z0, double xv, double yv, double zv) {
         var m = u.mesh;
-        double shaft = base + rise, gShaft = base + hg, r = d / 2, e = flange;
+        double shaft = base + rise, r = d / 2, e = flange;
         int n = ProcessUnit.sides(d);
         var f = Frame.of(new double[]{a, shaft, 0}, 2, 1);
         double zs = z0 + standard, zh = z0 + hpEnd, z1 = z0 + hpBarrel, z2 = z0 + coneEnd, ze = z0 + exhaustEnd;
@@ -155,6 +133,7 @@ final class SteamTurbineTrain {
         u.box(new double[]{a - sx, base, z0}, new double[]{a + sx, top, zs}, Material.MACHINE, true);
         u.box(new double[]{a - .6 * sx, top, z0 + .25 * standard}, new double[]{a + .6 * sx, top + .02 + .04 * d, zs - .25 * standard}, Material.MACHINE, false);
         u.box(new double[]{a - ga, shaft + .02, z0 - .8 * ga}, new double[]{a + ga, shaft + .02 + 1.8 * ga, z0}, Material.ACTUATOR, true);
+        u.serviceHousing=new double[]{a-ga,shaft+.02,z0-.8*ga,a+ga,shaft+.02+1.8*ga,z0};
         m.cylinder(Frame.of(new double[]{a + .55 * sx, shaft - .05 * d - .05, 0}, 2, 1), .04 * d + .02, z0 - .05 * d - .03, z0, 10, Material.MACHINE);
 
         // The casing: the clad HP end wall, barrel and cone, the bare exhaust barrel and its end wall; the cladding's edge
@@ -201,12 +180,6 @@ final class SteamTurbineTrain {
         u.box(new double[]{a - px, base, p0}, new double[]{a + px, pt, p1}, Material.MACHINE, true);
         u.box(new double[]{a - .6 * px, pt, p0 + .2 * (p1 - p0)}, new double[]{a + .6 * px, pt + .02 + .03 * d, p1 - .2 * (p1 - p0)}, Material.MACHINE, false);
 
-        // The high-speed coupling's guard; the gear.
-        guard(u, a, base, shaft, .14 * d + .06, p1, z0 + gear0);
-        gear(u, a, base, shaft, gShaft, z0 + gear0, z0 + gear1);
-        guard(u, a, base, gShaft, .15 * hg + .07, z0 + gear1, z0 + generator0);
-
-        generator(u, a, base, gShaft, z0 + generator0, z0 + generator1, z0 + bearing1, z0 + exciter0, z0 + exciter1);
         steamChest(u, a, base + chestAxis(), z0 + chest);
         tripThrottle(u, a, xv, yv, zv, base + chestAxis(), z0 + chest);
     }
@@ -239,101 +212,12 @@ final class SteamTurbineTrain {
                     material);
     }
 
-    /** A coupling guard from {@code za} to {@code zb}: a half-round hood of radius {@code g} over the shaft at height {@code y}, standing on {@code base}. */
-    static void guard(ProcessUnit u, double a, double base, double y, double g, double za, double zb) {
-        var hood = new ArrayList<double[]>();
-        hood.add(new double[]{a - g, base});
-        hood.add(new double[]{a + g, base});
-        for (int k = 0; k <= 6; k++) hood.add(new double[]{a + g * DeterministicMath.cos(Math.PI * k / 6), y + g * DeterministicMath.sin(Math.PI * k / 6)});
-        u.extrude(hood, za + .02, zb - .02, Material.GUARD);
-        u.solids.add(ProcessUnit.Solid.box(new double[]{a - g, base, za + .02}, new double[]{a + g, y + g, zb - .02}));
-    }
-
     /**
-     * The gear from {@code g0} to {@code g1}: a split housing 1.0 Dc wide with chamfered top edges, as tall as reaches 0.2 Dc
-     * over both shafts and 0.9 Dc at least, its split flange on the pinion's line ({@code shaft}) with studs from 1 m, an
-     * inspection cover and a breather on top, feet along both sides; the wheel's shaft leaves its back at {@code gShaft}.
+     * The shaft end behind the rear pedestal: the shaft and the half coupling at {@code face} (a block face), under its
+     * guard on {@code base}, turning at the turbine's shown speed; a {@link EquipmentShape.ShaftEnd.Role#DRIVER_OUTPUT}.
      */
-    private void gear(ProcessUnit u, double a, double base, double shaft, double gShaft, double g0, double g1) {
-        double gw = .5 * d, gt = Math.max(base + .9 * d, Math.max(shaft, gShaft) + .2 * d), c = .15 * d, gm = (g0 + g1) / 2, sp = Math.max(.025, .03 * d);
-        u.extrude(List.of(new double[]{a - gw, base}, new double[]{a + gw, base}, new double[]{a + gw, gt - c}, new double[]{a + gw - c, gt}, new double[]{a - gw + c, gt},
-                new double[]{a - gw, gt - c}), g0, g1, Material.MACHINE);
-        u.solids.add(ProcessUnit.Solid.box(new double[]{a - gw, base, g0}, new double[]{a + gw, gt, g1}));
-        u.volumes.add(ProcessUnit.Solid.box(new double[]{a - gw + .05, base + .05, g0 + .05}, new double[]{a + gw - .05, gt - .05, g1 - .05}));
-        u.box(new double[]{a - gw - .04, shaft - sp, g0 - .03}, new double[]{a + gw + .04, shaft + sp, g1 + .03}, Material.MACHINE, false);
-        if (d >= 1) {
-            int studs = Math.max(2, (int) Math.round((g1 - g0) / .25));
-            for (int side = -1; side <= 1; side += 2)
-                for (int k = 0; k < studs; k++) {
-                    double x = a + side * (gw + .02), z = g0 + (g1 - g0) * (k + .5) / studs;
-                    u.mesh.box(new double[]{x - .02, shaft + sp, z - .02}, new double[]{x + .02, shaft + sp + .05, z + .02}, ALL_FACES & ~4, Material.BOLT);
-                }
-        }
-        u.box(new double[]{a - .3 * gw, gt, gm - .2 * (g1 - g0)}, new double[]{a + .3 * gw, gt + .02 + .01 * d, gm + .2 * (g1 - g0)}, Material.MACHINE, false);
-        u.mesh.cylinder(Frame.of(new double[]{a + .55 * gw, 0, gm}, 1, 1), .025 + .01 * d, gt, gt + .06 + .03 * d, 8, Material.PIPE);
-        for (int side = -1; side <= 1; side += 2) {
-            double x0 = a + side * gw, x1 = a + side * (gw + .04 + .04 * d);
-            u.box(new double[]{Math.min(x0, x1), base, g0 + .03}, new double[]{Math.max(x0, x1), base + .06 + .06 * d, g1 - .03}, Material.MACHINE, false);
-        }
-    }
-
-    /**
-     * The 4-pole generator from {@code m0} to {@code m1}, its shaft at {@code gShaft}: a fabricated frame 2.2 Hg wide and 2.0
-     * Hg tall with chamfered edges and banded ends, round end shields, feet along both sides; the TEWAC cooler on top with
-     * its tube plates and the cooling water's two lines down its +x side; the terminal box on its +x side by the drive end;
-     * the outboard pedestal bearing (its sight glass) to {@code b1}; the brushless exciter from {@code x0} to {@code x1}
-     * on its foot, its fan turning behind the grille at its end (a moving part at {@link ProcessUnit#CRANK_SPEED}).
-     */
-    private void generator(ProcessUnit u, double a, double base, double gShaft, double m0, double m1, double b1, double x0, double x1) {
-        var m = u.mesh;
-        double wg = 1.1 * hg, yb0 = base + .1 * hg, yt0 = base + 2 * hg, ct = .3 * hg, cb = .15 * hg, length = m1 - m0, mid = (yb0 + yt0) / 2;
-        var body = List.of(new double[]{a - wg + cb, yb0}, new double[]{a + wg - cb, yb0}, new double[]{a + wg, yb0 + cb}, new double[]{a + wg, yt0 - ct},
-                new double[]{a + wg - ct, yt0}, new double[]{a - wg + ct, yt0}, new double[]{a - wg, yt0 - ct}, new double[]{a - wg, yb0 + cb});
-        double s0 = m0 + .06 * hg, s1 = m1 - .06 * hg, band = .12 * hg;
-        u.extrude(body, s0, s1, Material.MOTOR);
-        var wide = new ArrayList<double[]>();
-        for (var p : body) wide.add(new double[]{a + (p[0] - a) * (wg + .03) / wg, mid + (p[1] - mid) * ((yt0 - yb0) / 2 + .03) / ((yt0 - yb0) / 2)});
-        u.extrude(wide, s0, s0 + band, Material.MOTOR);
-        u.extrude(wide, s1 - band, s1, Material.MOTOR);
-        u.solids.add(ProcessUnit.Solid.box(new double[]{a - wg, yb0, s0}, new double[]{a + wg, yt0, s1}));
-        u.volumes.add(ProcessUnit.Solid.box(new double[]{a - wg + ct, yb0 + .05, s0 + .05}, new double[]{a + wg - ct, yt0 - .05, s1 - .05}));
-        var fg = Frame.of(new double[]{a, gShaft, 0}, 2, 1);
-        int ng = ProcessUnit.sides(1.5 * hg);
-        m.cylinder(fg, .75 * hg, m0, s0 + .01, ng, Material.MOTOR);
-        m.cylinder(fg, .28 * hg, m0 - .05, m0, 12, Material.MOTOR);
-        m.cylinder(fg, .75 * hg, s1 - .01, m1, ng, Material.MOTOR);
-        for (int side = -1; side <= 1; side += 2) {
-            double xi = a + side * (wg - .12 * hg), xo = a + side * (wg + .08 * hg);
-            u.box(new double[]{Math.min(xi, xo), base, m0 + .1 * length}, new double[]{Math.max(xi, xo), base + .3 * hg, m1 - .1 * length}, Material.MOTOR, false);
-        }
-        // The cooler on top, its tube plates; the cooling water in and out down the +x side.
-        double c0 = m0 + .15 * length, c1 = m1 - .1 * length, cw = .8 * hg, ch = .6 * hg;
-        u.box(new double[]{a - cw, yt0 - .02, c0}, new double[]{a + cw, yt0 + ch, c1}, Material.MOTOR, true);
-        u.volumes.add(ProcessUnit.Solid.box(new double[]{a - cw + .05, yt0, c0 + .05}, new double[]{a + cw - .05, yt0 + ch - .05, c1 - .05}));
-        for (double zc : new double[]{c0 - .04, c1})
-            u.box(new double[]{a - cw - .03, yt0 - .02, zc}, new double[]{a + cw + .03, yt0 + ch + .03, zc + .04}, Material.MOTOR, false);
-        double rw = .03 + .02 * hg, xw = a + wg + .1 * hg + .12 + rw;
-        for (int k = 0; k < 2; k++) {
-            double zw = c1 - .15 - (.15 + .2 * hg) * k, yw = yt0 + .35 * ch;
-            u.line(rw, Material.PIPE, new double[]{a + cw, yw, zw}, new double[]{xw, yw, zw}, new double[]{xw, base + .02, zw});
-            u.solids.add(ProcessUnit.Solid.rod(new double[]{xw, 0, zw}, 1, base, yw, rw, 0));
-        }
-        u.box(new double[]{a + wg - .02, base + .4 * hg, m0 + .18 * length}, new double[]{a + wg + .4 * hg, base + 1.2 * hg, m0 + .42 * length}, Material.MOTOR, true);
-        // The outboard pedestal bearing with its housing and sight glass.
-        double b0 = m1 + .02, pw = .3 * hg + .05, bm = (b0 + b1) / 2;
-        u.box(new double[]{a - pw, base, b0}, new double[]{a + pw, gShaft + .2 * hg, b1}, Material.MOTOR, true);
-        m.cylinder(fg, .12 + .1 * hg, b0 - .01, b1 + .01, 12, Material.MOTOR);
-        u.box(new double[]{a + pw, gShaft - .1 * hg - .04, bm - .05}, new double[]{a + pw + .015, gShaft - .1 * hg + .04, bm + .05}, Material.OPENING, false);
-        // The exciter on its foot, its grilled fan.
-        double re = .42 * hg, xl = x1 - x0;
-        int ne = ProcessUnit.sides(2 * re);
-        m.prism(fg, re, x0, x1, ne, Material.MOTOR);
-        m.annulus(fg, 0, re, x0, ne, -1, Material.MOTOR);
-        m.annulus(fg, .82 * re, re, x1, ne, 1, Material.MOTOR);
-        u.grilledFan(fg, .82 * re, x1, Math.min(.15, .3 * xl), ne, ProcessUnit.CRANK_SPEED);
-        u.box(new double[]{a - .5 * re, base, x0 + .1 * xl}, new double[]{a + .5 * re, gShaft - .9 * re, x1 - .1 * xl}, Material.MOTOR, false);
-        u.solids.add(ProcessUnit.Solid.rod(new double[]{a, gShaft, 0}, 2, x0, x1, re, 0));
-        u.round(a, gShaft, x0, x1, re);
+    void couple(ProcessUnit u, double a, double base, double z0, double face, double rs, double rpm) {
+        u.coupling(a, base + rise, z0 + pedestal1, face, 1, rs, base, ProcessUnit.shown(rpm), EquipmentShape.ShaftEnd.Role.DRIVER_OUTPUT);
     }
 
     /**
@@ -392,7 +276,7 @@ final class SteamTurbineTrain {
 
     /**
      * The trip-and-throttle valve, its body centred at (xv, yv, zv): a globe body, its outlet's neck and flange towards
-     * the steam chest and its inlet's towards +x (back-pressure) or underneath (condensing, an angle body); the bonnet, the
+     * the steam chest and its inlet's towards +x; the bonnet, the
      * yoke's two arms and head, the stem and the handwheel on top; the hydraulic trip cylinder on a bracket beside the
      * yoke. Its outlet line runs to the chest's +x cover at (yc, zc), jogging where the valve stands off the chest's row.
      */
@@ -404,14 +288,8 @@ final class SteamTurbineTrain {
         var fx = Frame.of(new double[]{0, yv, zv}, 0, 1);
         m.prism(fx, neck, xv - rb - .05, xv - .5 * rb, 12, Material.MACHINE);
         m.cylinder(fx, rf, xv - rb - .08, xv - rb - .05, 12, Material.FLANGE);
-        if (!condensing) {
-            m.prism(fx, neck, xv + .5 * rb, xv + rb + .05, 12, Material.MACHINE);
-            m.cylinder(fx, rf, xv + rb + .05, xv + rb + .08, 12, Material.FLANGE);
-        } else {
-            var fy = Frame.of(new double[]{xv, 0, zv}, 1, 1);
-            m.prism(fy, neck, yv - rb - .05, yv - .5 * rb, 12, Material.MACHINE);
-            m.cylinder(fy, rf, yv - rb - .08, yv - rb - .05, 12, Material.FLANGE);
-        }
+        m.prism(fx, neck, xv + .5 * rb, xv + rb + .05, 12, Material.MACHINE);
+        m.cylinder(fx, rf, xv + rb + .05, xv + rb + .08, 12, Material.FLANGE);
         double yB = yv + rb + .08 * d + .03, yY = yB + .3 * d + .1, arm = .03 * d + .02, head = .04 + .02 * d, yH = yY + head + .08;
         var up = Frame.of(new double[]{xv, 0, zv}, 1, 1);
         m.cylinder(up, .6 * rb, yv + .5 * rb, yB, nv, Material.MACHINE);

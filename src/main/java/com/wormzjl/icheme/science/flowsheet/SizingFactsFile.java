@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.science.flowsheet;
 
 import com.google.gson.JsonObject;
+import com.wormzjl.icheme.science.equipment.MachineDuty;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
 import com.wormzjl.icheme.science.flowsheet.sizing.AirCoolerSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.CompressorSizing;
@@ -14,6 +15,7 @@ import com.wormzjl.icheme.science.flowsheet.sizing.PumpSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.Service;
 import com.wormzjl.icheme.science.flowsheet.sizing.SizingFacts;
 import com.wormzjl.icheme.science.flowsheet.sizing.TankSizing;
+import com.wormzjl.icheme.science.flowsheet.sizing.TurbineSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.UnitSize;
 import com.wormzjl.icheme.science.flowsheet.sizing.UnitType;
 import org.jetbrains.annotations.Nullable;
@@ -82,13 +84,14 @@ final class SizingFactsFile {
         try {
             return switch (kind) {
                 case "PUMP" -> new PumpSizing.Size(fields.number("discharge"));
-                case "EXCHANGER" -> new ExchangerSizing.Size(fields.bool("kettle"), fields.whole("shells"), fields.number("shell"), fields.whole("tubes"));
+                case "EXCHANGER" -> new ExchangerSizing.Size(fields.bool("kettle"), fields.whole("shells"), fields.number("shell"), fields.whole("tubes"),fields.name("type",com.wormzjl.icheme.science.equipment.ExchangerType.class,com.wormzjl.icheme.science.equipment.ExchangerType.STANDARD));
                 case "AIR_COOLER" -> new AirCoolerSizing.Size(fields.number("width"), fields.whole("length"), new ProcessUnit.Bank(fields.whole("parallel"), fields.whole("series")), fields.whole("banks", 1));
                 case "HEATER" -> new HeaterSizing.Size(fields.name("type", UnitType.class), fields.whole("count"), fields.number("diameter"), fields.whole("length"));
                 case "COMPRESSOR" -> new CompressorSizing.Size(fields.name("type", UnitType.class), fields.number("size"), fields.whole("length"));
                 case "DRUM" -> new DrumSizing.Size(fields.name("type", UnitType.class), fields.number("diameter"), fields.whole("length"), fields.bool("boot"));
                 case "TANK" -> new TankSizing.Size(fields.name("type", UnitType.class), fields.whole("count"), fields.number("diameter"), fields.whole("shell"));
                 case "EJECTOR" -> new EjectorSizing.Size(fields.number("suction"));
+                case "STEAM_TURBINE" -> new TurbineSizing.Size(fields.number("power"), fields.name("steam", MachineDuty.Steam.class), fields.number("exhaust"));
                 default -> throw JsonFields.damaged(fields.path + ".kind");
             };
         } catch (IllegalArgumentException invalid) {
@@ -144,6 +147,7 @@ final class SizingFactsFile {
                 json.addProperty("shells", exchanger.shells());
                 json.addProperty("shell", exchanger.shell());
                 json.addProperty("tubes", exchanger.tubes());
+                if(exchanger.type()!=com.wormzjl.icheme.science.equipment.ExchangerType.STANDARD)json.addProperty("type", exchanger.type().name());
             }
             case AirCoolerSizing.Size cooler -> {
                 json.addProperty("kind", "AIR_COOLER");
@@ -184,6 +188,12 @@ final class SizingFactsFile {
             case EjectorSizing.Size ejector -> {
                 json.addProperty("kind", "EJECTOR");
                 json.addProperty("suction", ejector.suction());
+            }
+            case TurbineSizing.Size turbine -> {
+                json.addProperty("kind", "STEAM_TURBINE");
+                json.addProperty("power", turbine.power());
+                json.addProperty("steam", turbine.steam().name());
+                json.addProperty("exhaust", turbine.exhaust());
             }
             default -> throw new IllegalArgumentException("A " + size.getClass().getSimpleName() + " is no fact: it follows from the sheet");
         }

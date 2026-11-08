@@ -59,16 +59,17 @@ public final class SightGlassGeometry {
     public static boolean supports(int connections){return Integer.bitCount(connections)<=1||connections==3||connections==12||connections==48;}
 
     /** Housing and straight arms; static windows and transient liquid share the same saved visual orientation. */
-    public static Geometry build(Key look,boolean accessory) {
+    public static Geometry build(Key look,boolean accessory) { return build(look,accessory,RenderDetail.NORMAL); }
+    public static Geometry build(Key look,boolean accessory,RenderDetail detail) {
         var key=look.pipe();
-        if(!accessory&&!supports(key.connections()))return new Geometry(LineGeometry.polygons(key),List.of(),List.of());
+        if(!accessory&&!supports(key.connections()))return new Geometry(LineGeometry.polygons(key,detail),List.of(),List.of());
         double od=PipeSizes.outsideOf(key.outside());
         // The body and viewing aperture scale with diameter. Large cross-run shoulders may overhang the host cell.
         var size=size(look);double radius=size.radius(),window=.60*radius,depth=size.depth();
         int mask=key.connections();
         if(Integer.bitCount(mask)<=1){int face=mask==0?key.facing():Integer.numberOfTrailingZeros(mask);mask=(1<<face)|(1<<(face^1));}
         double[] view=look.window().vector(),reference=look.window()==Axis.Y?new double[]{0,0,1}:UP;
-        var frame=new Frame(CENTRE,view,reference);var metal=new Mesh();var glass=new Mesh();var liquid=new Mesh();
+        var frame=new Frame(CENTRE,view,reference);var metal=new Mesh(detail);var glass=new Mesh(detail);var liquid=new Mesh(detail);
         int crossAxis=3-run(key.connections(),key.facing()).ordinal()-look.window().ordinal();
         windowPlate(metal,frame,window,.93*radius,.93*radius,-depth,depth,3,Material.PIPE,crossAxis,size.crossScale());
         for(int sign:new int[]{-1,1}) {
@@ -86,8 +87,8 @@ public final class SightGlassGeometry {
             for(int bolt=0;bolt<4;bolt++) {
                 var fastener=new Frame(side.at(Math.PI/4+Math.PI*bolt/2,Math.sqrt(2)*.72*radius,depth+.14*radius),side.axis(),reference);
                 metal.cylinder(fastener,.13*radius,0,.012*radius,12,Material.FLANGE);
-                metal.cylinder(fastener,.18*radius/Math.sqrt(3),.012*radius,.077*radius,6,Material.BOLT);
-                metal.cylinder(fastener,.045*radius,.077*radius,.092*radius,8,Material.BOLT);
+                metal.nut(fastener,.18*radius/Math.sqrt(3),.012*radius,.077*radius,6,Material.BOLT);
+                if(detail==RenderDetail.NORMAL)metal.cylinder(fastener,.045*radius,.077*radius,.092*radius,8,Material.BOLT);
             }
             glass.annulus(side,0,window,depth+.09*radius,SIDES,1,Material.GLASS);
             liquid.annulus(side,0,window*.995,depth+.08*radius,SIDES,1,Material.GLASS);
@@ -105,8 +106,9 @@ public final class SightGlassGeometry {
     }
     private static void windowPlate(Mesh mesh,Frame frame,double bore,double half0,double half1,double z0,double z1,int caps,Material material,int crossAxis,double stretch) {
         mesh.bore(frame,bore,z0,z1,SIDES,material);
-        for(int i=0;i<SIDES;i++) {
-            double a=2*Math.PI*i/SIDES,b=2*Math.PI*(i+1)/SIDES;
+        int sides=mesh.detail().sides(SIDES);
+        for(int i=0;i<sides;i++) {
+            double a=2*Math.PI*i/sides,b=2*Math.PI*(i+1)/sides;
             var p0=outer(frame,a,half0,z0,crossAxis,stretch);var p1=outer(frame,b,half0,z0,crossAxis,stretch);
             var p2=outer(frame,b,half1,z1,crossAxis,stretch);var p3=outer(frame,a,half1,z1,crossAxis,stretch);
             mesh.add(List.of(p0,p1,p2,p3),frame.along((z0+z1)/2),FLAT,material,null,null);

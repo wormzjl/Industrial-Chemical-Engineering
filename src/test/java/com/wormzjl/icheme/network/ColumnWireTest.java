@@ -246,10 +246,12 @@ class ColumnWireTest {
     void theComponentChoicesRoundTripWithTheTrimCount() {
         var one = com.wormzjl.icheme.science.equipment.ColumnComponents.Units.ONE;
         for (var condenser : com.wormzjl.icheme.science.equipment.ColumnComponents.Condenser.values())
-            for (int trim = 1; trim <= com.wormzjl.icheme.science.equipment.ColumnComponents.MAX_UNITS; trim++) {
+            for (int trim = 1; trim <= com.wormzjl.icheme.science.equipment.ColumnComponents.MAX_UNITS; trim++)
+                for(var type:com.wormzjl.icheme.science.equipment.ExchangerType.CATALOG) {
                 var choices = new com.wormzjl.icheme.science.equipment.ColumnComponents.Choices(condenser,
                         com.wormzjl.icheme.science.equipment.ColumnComponents.Pump.IN_LINE,
-                        List.of(com.wormzjl.icheme.science.equipment.ColumnComponents.Pump.STANDARD), one.withCondenser(2).withCooler(0, 3).withTrim(trim));
+                        List.of(com.wormzjl.icheme.science.equipment.ColumnComponents.Pump.STANDARD), one.withCondenser(2).withCooler(0, 3).withTrim(trim),
+                        new com.wormzjl.icheme.science.equipment.ColumnComponents.Exchangers(type,type,List.of(type)));
                 RegistryFriendlyByteBuf buffer = buffer();
                 try {
                     ColumnWire.writeChoices(buffer, choices);

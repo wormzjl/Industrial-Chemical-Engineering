@@ -71,7 +71,7 @@ final class PathWalk {
         if (unit == null) return null;
         String port = from.port();
         return switch (unit.type()) {
-            case "pump", "compressor", "drum", "storage_tank" -> unit.id();
+            case "pump", "compressor", "steam_turbine", "drum", "storage_tank" -> unit.id();
             case "kettle" -> port.equals("tube_out") ? null : unit.id();
             case COLUMN -> port.equals(ColumnUnit.CONDENSER_OUT) || port.equals(ColumnUnit.REBOILER_OUT) || port.startsWith(ColumnUnit.PUMPAROUND) ? null : unit.id();
             case "valve" -> set(unit) ? unit.id() : null;

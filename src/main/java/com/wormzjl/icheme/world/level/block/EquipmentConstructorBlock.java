@@ -8,6 +8,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.context.BlockPlaceContext;
+import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BaseEntityBlock;
 import net.minecraft.world.level.block.Block;
@@ -20,7 +21,11 @@ import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.shapes.CollisionContext;
+import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jetbrains.annotations.Nullable;
+
+import java.util.Map;
 
 /**
  * Builds a parametric vessel in front of itself (owner decision 2026-10-15: a placed block, the Schematicannon
@@ -31,6 +36,20 @@ public final class EquipmentConstructorBlock extends BaseEntityBlock {
     public static final MapCodec<EquipmentConstructorBlock> CODEC = simpleCodec(EquipmentConstructorBlock::new);
     /** The way the vessel is built: away from the player who placed the constructor. */
     public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
+    private static final Map<Direction, VoxelShape> SHAPES = benchShapes();
+
+    /** The solid cabinet/worktop and the gantry, matching the model's parts without filling its open working space. */
+    private static Map<Direction, VoxelShape> benchShapes() {
+        double[][] parts = {
+                {0, 0, 0, 16, 12, 16},
+                {1, 12, 11, 3, 16, 13}, {13, 12, 11, 15, 16, 13},
+                {3, 14.5, 10.75, 13, 16, 13},
+                {6, 13, 10.3, 10, 15, 13.5}, {7.5, 12.5, 11, 8.5, 13, 12},
+                {.7, 12, 10.6, 3.3, 12.5, 13.4}, {12.7, 12, 10.6, 15.3, 12.5, 13.4},
+                {4.5, 12, 3.5, 11.5, 12.35, 8.5}
+        };
+        return HorizontalShapes.byFacing(java.util.List.of(parts));
+    }
 
     public EquipmentConstructorBlock(Properties properties) {
         super(properties);
@@ -65,6 +84,11 @@ public final class EquipmentConstructorBlock extends BaseEntityBlock {
     @Override
     protected RenderShape getRenderShape(BlockState state) {
         return RenderShape.MODEL;
+    }
+
+    @Override
+    protected VoxelShape getShape(BlockState state, BlockGetter level, BlockPos position, CollisionContext context) {
+        return SHAPES.get(state.getValue(FACING));
     }
 
     @Override

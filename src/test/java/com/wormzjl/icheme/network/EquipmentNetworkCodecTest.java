@@ -58,6 +58,26 @@ class EquipmentNetworkCodecTest {
         }
     }
 
+    @Test void deconstructionRequestsRoundTrip() {
+        assertEquals("equipment-21", EquipmentNetwork.PROTOCOL);
+        var request = new EquipmentNetwork.Deconstruct(AT, AT.north(5), 12345, 99);
+        assertEquals(request, roundTrip(EquipmentNetwork.Deconstruct.STREAM_CODEC, request));
+
+    }
+
+    @Test
+    void exchangerSubTypeCrossesWithTheConstructorDraftAndImportedShape() {
+        var type=com.wormzjl.icheme.science.equipment.ExchangerType.CROSSFLOW;
+        var shape=EquipmentShape.unit(EquipmentShape.Kind.EXCHANGER,1.5,6,EquipmentShape.Heading.NORTH,2).withExchangerType(type);
+        var sent=new SentDesign("E-1","",1,shape,null);
+        var draft=Design.DEFAULT.landed(sent);
+        assertEquals(type,draft.exchangerType());
+        var wire=EquipmentNetwork.ConstructorPayload.of(AT,draft,EquipmentNetwork.Action.KEEP);
+        var read=roundTrip(EquipmentNetwork.ConstructorPayload.STREAM_CODEC,wire);
+        assertEquals(type,read.exchangerType());
+        assertEquals(type,read.design(STORED).exchangerType());
+    }
+
     @Test
     void aColumnTemplateCrossesWithItsNameAndInput() {
         var c = com.wormzjl.icheme.science.material.MaterialCatalog.bundled();
@@ -77,6 +97,18 @@ class EquipmentNetworkCodecTest {
             // The payload carries no column: the server keeps its own.
             assertEquals(DRAFT, read.design(STORED));
         }
+    }
+
+    /** A machine's design point crosses whole (protocol 18): its numbers, its drive and its steam class. */
+    @Test
+    void aMachinesDesignPointCrosses() {
+        var points = List.of(new Design(0, 0, VesselPlacement.Form.STEAM_TURBINE, 4, new VesselPlacement(3, 1, 0), Design.TRAYS, List.of(), Paint.DEFAULT,
+                        com.wormzjl.icheme.science.equipment.ProcessUnit.Bank.ONE, false, 0, null, List.of(), com.wormzjl.icheme.science.equipment.TowerBank.ONE,
+                        com.wormzjl.icheme.science.equipment.MachineDuty.turbine(2500, com.wormzjl.icheme.science.equipment.MachineDuty.Steam.VHP, 10)),
+                new Design(0, 0, VesselPlacement.Form.MOTOR, 2, new VesselPlacement(3, 1, 0), Design.TRAYS, List.of(), Paint.DEFAULT,
+                        com.wormzjl.icheme.science.equipment.ProcessUnit.Bank.ONE, false, 0, null, List.of(), com.wormzjl.icheme.science.equipment.TowerBank.ONE,
+                        com.wormzjl.icheme.science.equipment.MachineDuty.motor(4500, 6, com.wormzjl.icheme.science.equipment.MachineDuty.Drive.VARIABLE)));
+        for (var draft : points) assertEquals(draft, roundTrip(ConstructorPayload.STREAM_CODEC, ConstructorPayload.of(AT, draft, Action.KEEP)).design(Design.DEFAULT));
     }
 
     /** Import sends the draft first: a simulator's column lands on it as the calculator's design did, and the player's edits stay. */

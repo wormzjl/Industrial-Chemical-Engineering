@@ -1,6 +1,18 @@
 # Column operation: the column running in the built plant
 
-**Snapshot:** 6bf2205bf (branch `claude/in-game-process-simulator-93dd9a`), 2026-11-03 · **Updated:** 2026-11-03 (batch 2026-11-02-process-simulator: the condenser's cooling water and air fans (C1, C1b, U1, U2): the water's share and an outlet's booking difference by temperature, condenser shells in parallel, the water valve the column sets (COLUMN), the fans and the air limit; facts schemas 8 and 9) · earlier: 2026-11-02 at 321b8d1d (branch `claude/column-operation-5c3005`) (new chapter, batches 2026-10-28-column-operation and 2026-11-02-valve-hold)
+**Snapshot:** 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
+
+## Accepted instrumentation (0.22.0)
+
+`ColumnSolve.Solved` carries the already accepted `V3ColumnInspection` to the scheduled application boundary. `ColumnOperation` reduces it to `ColumnUnit.Probes`: top/bottom/reflux pressure and temperature, and internal mass-per-total-feed coefficients. The denominator is `reference.alpha * reference.setpoints.designFeedRate`, including feed water; V3's hydrocarbon-only vector is not that basis. The latest accepted cycle supplies actual throughput. Stream boundary readings use existing accepted cycle accounts and conditions.
+
+`FluidFacts.columnState` round-trips this bounded snapshot as rebuildable state, not player facts. Restoring it runs no solver. A state without the snapshot can keep its split table while the normal engine deadline asks for a refresh. `FluidWorldAuthority.columnInstrument` is read-only; opening a controller never advances a column. The duty/energy/heat-in-transit contract is unchanged. Pumparound specifications currently prescribe heat only, so no fictitious circulation flow or return temperature is created. `ColumnProbeTest` covers the wet-feed mass basis; `ColumnRunTest` covers saved-reading reload and continuing operation.
+
+
+## Exchanger configuration integration (0.22.0)
+
+Column member designs now carry Standard/Low-dP crossflow choices through sizing, sent designs, constructor import and assembly matching. Water condenser, trim and pumparound designs share the catalogued exchanger model and pressure-drop checks. The running column keeps its current V3 solve, duty/energy-transfer contract and publication cadence; no new crossflow-specific column solver was introduced. A layout or type mismatch is an assembly issue, not permission to fabricate a required duty.
+
 Up: [code guide](README.md)
 
 ## Read this when

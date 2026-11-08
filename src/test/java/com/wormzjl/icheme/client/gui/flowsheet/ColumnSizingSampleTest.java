@@ -110,19 +110,24 @@ class ColumnSizingSampleTest {
     /**
      * The probe's 3 × 1.25 × 4 m rested on the top tray's vapour flashed by the world at V3's temperature, 19 % of it liquid and so
      * denser; that inlet holds less heat than V3's condenser takes out. Heated back by that duty, the inlet is the gas the column
-     * sends, faster through the shell: 3 × 1.25 × 4 m loses over 0.20 bar, no four shells meet both the drop and the cap, and five
-     * of 1.00 × 3 m do, on the curves' 782 m² against the probe's 862. A kept size stands at its door's count (S3b): the probe's
-     * shells on a door of three, and the same size on a door of one, which is short of surface. On the medium crude grade (O3 of batch
-     * 2026-11-04-open-thermo-data) the condenser takes less: four shells of 1.00 × 3 m on the curves' 522 m², 0.13 bar.
-     * With condenser carry-over (E31 of that batch) the same four shells stand on the curves' 508 m².
+     * sends, faster through the shell. Auto enlarges shells before adding them, retaining excess surface as an advisory.
+     * A kept size stands at its door's count (S3b): the probe's
+     * shells on a door of three, and the same size on a door of one, which is short of surface.
      */
     @Test
     void theCondenserIsSetByItsShellDrop() {
         var condenser = unit("condenser");
-        assertEquals(new ExchangerSizing.Size(false, 4, 1, 3), condenser.size());
-        closest(condenser.rating(), Limit.EXCHANGER_DROP_GAS);
-        assertEquals(.13, read(condenser.rating(), Limit.EXCHANGER_DROP_GAS), HUNDREDTH);
-        assertEquals(508, condenser.rating().reading(Limit.EXCHANGER_SURFACE).low(), 8);
+        assertEquals(new ExchangerSizing.Size(false, 1, 2.25, 7, com.wormzjl.icheme.science.equipment.ExchangerType.CROSSFLOW), condenser.size(), "qualify scale-up before scaling out");
+        assertEquals(Lamp.YELLOW, condenser.rating().lamp());
+        assertTrue(condenser.rating().reading(Limit.EXCHANGER_DROP_GAS).met());
+        assertTrue(condenser.rating().reading(Limit.EXCHANGER_DROP_LIQUID).met());
+        assertTrue(condenser.rating().reading(Limit.EXCHANGER_SURFACE).met());
+        assertFalse(condenser.rating().reading(Limit.EXCHANGER_OVER_NEED).met());
+        assertEquals(781, condenser.rating().reading(Limit.EXCHANGER_SURFACE).low(), 8);
+        assertTrue(condenser.rating().reading(Limit.EXCHANGER_SURFACE).value() >= 1.2*condenser.rating().reading(Limit.EXCHANGER_SURFACE).low());
+        var single = new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of(SheetSizing.member(T, "condenser"), new SheetSizing.UnitEntry(new ExchangerSizing.Size(false, 1, 2.5, 8), null, null, false)));
+        var singleRating = size(sheet, run, thermo, single).units().get(SheetSizing.member(T, "condenser")).rating();
+        assertFalse(singleRating.reading(Limit.EXCHANGER_DROP_GAS).met(), "the widest single shell still loses too much pressure");
         var probe = new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of(SheetSizing.member(T, "condenser"), new SheetSizing.UnitEntry(new ExchangerSizing.Size(false, 3, 1.25, 4), null, null, false)));
         var three = size(door(sheet, json -> json.addProperty("condenser_units", 3)), run, thermo, probe).units().get(SheetSizing.member(T, "condenser"));
         assertEquals(new ExchangerSizing.Size(false, 3, 1.25, 4), three.size());

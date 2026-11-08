@@ -30,8 +30,8 @@ The steps for each kind of job are in `references/`. Read the one the job needs:
 
 ## The kit (`client/gui/common/kit/`)
 
-Builders, tests and the render tool use the Minecraft-free part. `KitDoor`, `KitWidgets`, `GuiCanvas`, `SkinButton`,
-`SkinField` and `WindowScale` hold Minecraft classes and belong to the screens.
+Builders, tests and the render tool use the Minecraft-free part. `KitDoor`, `KitWidgets`, `GuiCanvas`, `SkinButton`
+and `SkinField` hold Minecraft classes and belong to the screens.
 
 - `Column.place(rows, x, y, width, measure, Column.Metrics.COMPACT)`. Rows: `Group` (a framed function group under a
   plate), `Line`, `Paragraph`, `Choice` (a mark and a title, an action key), `Field` (an entry), `Reading` (a meter),
@@ -72,11 +72,11 @@ Builders, tests and the render tool use the Minecraft-free part. `KitDoor`, `Kit
 7. The theme and the units are the client's (`icheme-client.toml`, `ClientConfig`), one switch for every screen, never
    sent to the server. Controls cross the network in SI. The theme key shows a sign (`Skin.Icon.THEME`), not a word.
 8. Every screen draws through the kit and the light or dark theme.
-9. Every screen takes its own whole scale (owner: "This should be scaled to window size"): `WindowScale.apply(minecraft,
-   this)` first in `init()`, `WindowScale.restore(minecraft)` in `removed()` (after `super.removed()`). Design and
-   render every screen at 464 by 254. A fluid device page has a design height of 480 (owner: "It should scale"): keep
-   it within 338 px, or tell the owner what keeps a bar. Never size a widget from the player's GUI scale. The calls,
-   the numbers and what to do with a page that does not fit are in `references/fit-and-scale.md`.
+9. Every screen keeps the player's GUI scale (owner, 2026-11-07: "Preserve the player's GUI scale across IChemE
+   screens"). Nothing sets it; `KitLayoutTest` fails on a `setGuiScale` call. A screen takes its size from the window
+   at that scale, and what does not fit scrolls in its door. Design and render every screen at 464 by 254, and check
+   it at the smallest GUI window, 320 by 240. Never size a widget from the player's GUI scale. The rule in code and
+   what to do with a page that does not fit are in `references/fit-and-scale.md`.
 
 ## When the owner comments on a screen
 
@@ -143,10 +143,10 @@ As in `HeatControlColumnTest`, `DeviceColumnTest`, `DialogColumnsTest`, `Constru
 
 ## Renders
 
-From the worktree root, after `./gradlew compileJava`:
+From the worktree root, after `./gradlew compileJava` (and `compileTestJava` for `GuiPrototypes`, whose machine pages take `MachineColumnSamples` from the test classes):
 
 ```
-java -Duser.language=en -Djava.awt.headless=true -cp build/classes/java/main tools/heat-gui-renders/GuiPrototypes.java src/main/resources/assets/icheme/lang/en_us.json tmp/gui-prototypes
+java -Duser.language=en -Djava.awt.headless=true -cp "build/classes/java/main;build/classes/java/test" tools/heat-gui-renders/GuiPrototypes.java src/main/resources/assets/icheme/lang/en_us.json tmp/gui-prototypes
 java -Duser.language=en -Djava.awt.headless=true -cp build/classes/java/main tools/heat-gui-renders/HeatDiagramRender.java src/main/resources/assets/icheme/lang/en_us.json tmp/heat-gui-renders
 ```
 

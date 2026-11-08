@@ -1,6 +1,22 @@
 # Process simulator: the flowsheet, its run, sizing and the block
 
-**Snapshot:** a5e1304e2 (branch `claude/in-game-process-simulator-93dd9a`), 2026-11-04 · **Updated:** 2026-11-04 (new chapter, batch 2026-11-02-process-simulator: W1 to W10b, S1 to S5, C1 to C3, U1 to U2, N1; the sheet's loops of fills one draw call each; reversible passages and sheet FORMAT 2; a stream's flow on the Mole, Mass and Volume key; the bundled crude unit example; Delete in Open; a drag on empty canvas pans; each dialog's confirming key primary; Run lit when out of date; a column frame's empty inside pans; door flows and pressures on the display keys; the client consolidation: `Reader`, the glass in `UnitGlass`, `ColumnGlass` and `SizingGlass`, `SheetUnits.KMOL_PER_HOUR`, `Door.View.press`, one footer builder, templates through the paste rule; a door built once a frame; the autosave off the render thread, one waiting sheet per file; the column door's Results glass on the display keys, its profiles and drops too; the frame drawn in one batch that holds texts and sprites; the science consolidation: no sheet aliases, `PumparoundMember`, `FlowThermo.water`, one drop rule in `SizedPassages`, `ColumnUnit.add`, and the splits `SizingFactsFile`, `JsonFields`, `ColumnSides`, `ColumnBlockSolve`, `Proposal`, `BlockSizing`, `PathWalk`; a run starts where the steady one ended, its column too (`Report.Warm`), and a block's stored steady run starts the loops; 2026-11-04 merge check: the edit-focus rule and three screen tests named; a head at each line's end on the port's edge, the tab's keys in two groups between the tabs and the file keys, the top rows' keys in recesses; a product door with no tabs, its solids on the Solid key, opened on its largest phase; readings to three significant figures or in E form; the P, T key: every stream's T and P on the canvas; a column's members on a tree in the Sizing tables)
+**Snapshot:** 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
+
+## Current viewport and constructor handoff (0.22.0)
+
+The screen retains the player's GUI scale; `WindowScale` is removed. Layout and scrolling use the actual GUI viewport. Equipment type/count/dimensions remain separate from Auto/Manual sizing method, with constructor-style Manual controls and build requirements emphasized. Constructor nozzle controls now join its main door; no separate Nozzles navigation is required. Pump/generator constructors display rated/design RPM, not a pole selector. Sizing facts and dormant saved dimensions remain facts; these GUI changes do not alter the V3 solve or Send-to-block duty contract.
+
+
+## Sizing and exchanger configurations (0.22.0)
+
+`UnitSizing`, `CoolerSizing`, `ColumnSizing` and the sizing candidate types share `ExchangerType.CATALOG`. Auto searches available configurations and supported constructor dimensions: first meet existing limits and the 20% spare, then minimise physical count, then total surface; Standard wins an exact tie. When every candidate fails, the existing failure ranking still applies. A crossflow candidate computes required surface with its own thermal routing; an unreachable duty is unsuccessful.
+
+`SizingPage` keeps **Sizing method** (Auto/Manual) separate from **Equipment** (type, count and size). Manual freezes the displayed build choices and uses constructor-style size controls. Auto may choose again on Size all; dormant manual choices remain saved. Build requirements emphasise unit counts and dimensions rather than a material bill. Constructor defaults begin within their design range; a player's paint scheme is remembered locally.
+
+Type follows `SizingChoice`, `SizingFacts`, sent designs, constructor import and column member choices, including condensers, water trims and pumparound coolers. It does not create another flowsheet tile. `FlowsheetFile` remains format 2 with optional appended fields; missing type is Standard. Wire simulator protocol is `3`; it is not a saved-data migration. See [heat-exchangers.md](heat-exchangers.md).
+
+Tests: `UnitSizingTest`, `CrossflowSizingTest`, `SizingPageTest`, `ColumnSizingSampleTest`, sent-design and constructor compatibility tests.
+
 
 Up: [code guide](README.md)
 
@@ -46,11 +62,13 @@ Paths are under `src/main/java/com/wormzjl/icheme/`. "pp" = package-private.
 | `ColumnUnit`, `ColumnDoor` (record), `ColumnSides` (pp), `ColumnBlockSolve` (pp) | The column as one BLOCK calculation (`ColumnBlockSolve`; `ColumnUnit.solve`: warm from the last seed, else the learned start; the first pass's seed is the steady run's `Report.Warm`, and the block leaves its own on its report) plus one calculation per heat side (`ColumnSides`); `ColumnUnit` holds the public port names and builders and `add` (a mole fraction onto the axis; an id the axis lacks fails the column); the condenser duty reaches its side as a link; regulated utility feeds (cooling water, kettle steam, stripping steam through its inlet valve); the steam CHECK | The column on the sheet |
 | `ExchangerUnit`, `ExchangerRating` | Exchanger or kettle, target Outlet, Duty or Area; counterflow surface and duty on the two heat curves | Heat units |
 | `CoolerUnit` | Target Outlet or Duty, coolant in at 25 °C; Air or Water is a sizing type only | Coolers |
-| `FiredHeaterUnit`, `MoverUnit`, `ValveUnit` (isenthalpic), `VesselUnit` (drum or tank flash), `MixerUnit` (lowest inlet pressure), `SplitterUnit`, `FilterUnit` (solids leave as cake), `EjectorUnit` | The other units | Each unit's balance |
+| `MoverUnit` | Pump or compressor on the world's closure (`FlowControl.Pump`/`Compressor`): a pump's shaft power is the ideal work over the best efficiency of a centrifugal pump rated at the tile's duty (`pumpEfficiency`, `CentrifugalPump.rated`, Corripio), a compressor's the polytropic work over 0.78; all of it heats the discharge; readings `power`, `hydraulic` (a pump), `efficiency`, `head`, and the proposed driver, a 2-pole (`POLES`) IE3 motor with `Motor.SPARE` 1.2 (`driver`: readings `motor`, `motor_efficiency`, `electric`) | A mover's duty and its motor |
+| `TurbineUnit` | Steam turbine (`steam_turbine`, MODELLED since W8): steam in, exhaust out at the door's pressure (`EXHAUST_PRESSURE` 3.5e5 Pa default), shaft power out of the sheet by the world's `FlowControl.Turbine.shaftPower`, η the `SteamTurbine.typicalEfficiency` of a turbine rated at its own power; an exhaust at or above the inlet is refused | Turbine power |
+| `FiredHeaterUnit`, `ValveUnit` (isenthalpic), `VesselUnit` (drum or tank flash), `MixerUnit` (lowest inlet pressure), `SplitterUnit`, `FilterUnit` (solids leave as cake), `EjectorUnit` | The other units | Each unit's balance |
 | **Sizing (`science/flowsheet/sizing/`)** | | |
 | `Limit` (enum, `Kind` MUST/SHOULD/RULE, `Rank` CLOSEST/QUIET/PAID), `Bound`, `Lamp` (NONE < GREEN < YELLOW < RED) | Every rated row with its bound, unit and source; the name is the stable id | A row's lamp |
 | `Rating`, `Reading` (records) | A unit's or line's readings and values | Sizing output |
-| `UnitSize` (sealed) and the sizers `PumpSizing`, `CompressorSizing`, `ExchangerSizing`, `AirCoolerSizing` (fan speed and power), `CoolerSizing`, `HeaterSizing`, `DrumSizing`, `TankSizing`, `ValveSizing`, `ColumnSizing` (half-metre diameters by real solves), `EjectorSizing` | One `Size` record, `rate` and `auto` per kind | A unit's sizes |
+| `UnitSize` (sealed) and the sizers `PumpSizing` (with `Duty`: flow, head, shaft power, NPSH3 and proposed motor, the column door's table; `PUMP_NPSH_WORLD` against `0.85 NPSH3`, `PUMP_NPSH` against NPSH3 plus its margin), `TurbineSizing` (rated power from `MachineDuty.POWERS` with `Motor.SPARE`, the lowest steam class whose header holds the inlet, the nearest exhaust of `MachineDuty.EXHAUSTS`; rows `TURBINE_SPARE`, `TURBINE_INLET`, refusals on `UNIT_SHAPE`; saved as `STEAM_TURBINE` in `SizingFactsFile`), `CompressorSizing` (`COMPRESSOR_LIQUID` a SHOULD row since a wet suction is compressed), `ExchangerSizing`, `AirCoolerSizing` (fan speed and power), `CoolerSizing`, `HeaterSizing`, `DrumSizing`, `TankSizing`, `ValveSizing`, `ColumnSizing` (half-metre diameters by real solves), `EjectorSizing` | One `Size` record, `rate` and `auto` per kind | A unit's sizes |
 | `LineSizing`, `Service` (enum) | A line's bore, speed and drop (pipe resistance on the network's viscosity); the service picks its rows | Line sizes |
 | `PressurePath` (record) | From a set pressure through every step to its taker: available, lost, spare (bar) | Path rows |
 | `Selection` | Auto: the smallest size that rates well, those holding the need with the spare first | Auto |
@@ -60,7 +78,7 @@ Paths are under `src/main/java/com/wormzjl/icheme/`. "pp" = package-private.
 | `SimulatorRunner`, `SimulatorHost` (`NONE`) | Runs one job at a time on the thread "IChemE simulator run" (daemon, lowest priority): Run, Solve alone, Size all, the quiet rate; Stop sets a flag the next checkpoint throws on and drops the columns' warm starts (`FlowsheetRun.cold`); `steady`, the last steady run, starts the next Run; `restore` sets it from a block's stored steady run | Threads and Stop |
 | `SimulatorFrame`, `SimulatorPage`, `DoorFrame`, `Door` (record), `SheetContext` (record), `SheetUnits` (record) | The screen's frame, pages and doors on the GUI kit | Layout |
 | `UnitDoors`, `ColumnDoors`, `StreamDoors`, `BasisPage`, `ResultsPage`, `SizingPage`, `SelectionColumn`, `FileColumns` | The doors and pages: units, the column, streams, basis, Results, Sizing, the Auto list, Open/Save as and file names | A door's rows |
-| `UnitGlass`, `ColumnGlass`, `SizingGlass`, `Reader` (record) | The glass beside a unit's and the column's door and the Sizing table (split from their doors and page); one reading of a unit's results in the display units | A door's rows |
+| `UnitGlass`, `ColumnGlass`, `SizingGlass`, `Reader` (record) | The glass beside a unit's and the column's door and the Sizing table (split from their doors and page); one reading of a unit's results in the display units; the column's Equipment glass holds the design's pump duties (reflux pump and each pumparound's, from the last rating's members `reflux pump` and `pa <id> pump`, `ColumnDoors.duties`) above its connection points, and it and the Results sheets scroll in their own view where taller than the glass (W8, D43, D44) | A door's rows |
 | `FlowsheetExamples` | The bundled example flowsheets Open lists first: `assets/icheme/flowsheet_examples/index.json` and its files, read through a `Function<String, InputStream>` (the screen passes `ColumnTemplates.resources`, the resource manager); a file that does not read is listed with its reason, never thrown | The examples |
 | `SheetEditor`, `SheetGestures`, `SheetClipboard` | Edits with undo and redo, the mouse, one clipboard | Editing |
 | `SheetAutosave` (`CLIENT`) | The autosave's one writer, off the render thread; each file's newest sheet wins | Tick |
@@ -122,7 +140,7 @@ flowchart TD
 
 - Save design (`simulator_save_design`) stores the column door's `ColumnDesign.of(input, choices)` on the block; a refusal names its reason.
 - Send to block (`simulator_send_designs`) carries `SheetSizing.designs`: one `SentDesign` per sized unit (valves left out, at most 64). The server takes it only from the holder, whole; it replaces the earlier list.
-- The constructor's Import (`EquipmentNetwork`, protocol `equipment-17`) asks the nearest simulator within `EquipmentNetwork.IMPORT_REACH` (16 blocks, `EquipmentConstructorBlockEntity.simulator`) for its list: the saved column design first, then the sent designs. The player picks one; the constructor lands it. See [equipment.md](equipment.md).
+- The constructor's Import (`EquipmentNetwork`, protocol `equipment-18`) asks the nearest simulator within `EquipmentNetwork.IMPORT_REACH` (16 blocks, `EquipmentConstructorBlockEntity.simulator`) for its list: the saved column design first, then the sent designs. The player picks one; the constructor lands it. See [equipment.md](equipment.md).
 
 </details>
 
@@ -137,7 +155,7 @@ flowchart TD
 | Sent designs | `SentDesignTags` (fields 2) | `world/level/block/entity/SentDesignTags` | Fact: corpus `compat/simulator/designs-<n>.snbt` (`SentDesignTagsTest`) |
 | Column wire | No number of its own: it rides in the simulator and constructor packets | `network/ColumnWire` | Wire |
 | Simulator packets | `ProcessSimulatorNetwork.PROTOCOL` = "2" | `network/ProcessSimulatorNetwork` | Wire |
-| Constructor packets | `EquipmentNetwork.PROTOCOL` = "equipment-17" | `network/EquipmentNetwork` | Wire |
+| Constructor packets | `EquipmentNetwork.PROTOCOL` = "equipment-18" | `network/EquipmentNetwork` | Wire |
 
 The file keeps fields it does not know and refuses a newer format and an older one, which it would misread: a sheet file needs no compatibility (owner 2026-11-04), so a format change re-records the corpus and the block keeps an old body as unreadable (`KeptSheets`). `SheetLayout` reads a stream's `route`, so a change to it is a format change.
 
@@ -169,7 +187,7 @@ The file keeps fields it does not know and refuses a newer format and an older o
 
 `client/gui/screens/inventory/ProcessSimulatorScreen` is the only Minecraft class of the screen. `IChemEClient.registerScreens` registers it on `ModMenus.PROCESS_SIMULATOR`. It is a plain `Screen` on a `ProcessSimulatorMenu` (`MenuAccess`), not an `AbstractContainerScreen`, so it has no slots and a typed E is text. A close, a disconnect and the block going all end it. It forwards events and draws. Everything it shows is built Minecraft-free in `client/gui/flowsheet/`, so `tools/heat-gui-renders/SimulatorRender.java` draws the same pages from shipped code.
 
-- **Window:** `WindowScale.apply` at design height 480. The least window is 464 × 254 (`SimulatorFrame.LEAST_W`, `LEAST_H`). A door takes 790 × 524 (`DOOR_W`, `DOOR_H`). `removed()` restores the scale.
+- **Window:** current Minecraft GUI scale, native viewport layout/scrolling; opening or closing the screen does not change the global scale.
 - **Frame and tabs:** `SimulatorFrame` gives the rectangles: title, tabs and file keys, the one status display, the canvas's well, the palette and the footer. `keys(third)` puts Close in the footer and the tab's two keys (the second `third(tab)` wide), then Undo and Redo, in two pairs 12 px apart (the owner, 2026-11-04: "regroup these buttons"): centred on the tab row between the tabs and the file keys where they fit (`keysOnTabRow`: every wide window, a compact one from 662 px), else centred on the title row, no further left than the title's plate (`SimulatorFrame(w, h, title)` takes the title's width). The tabs and file keys keep their wide widths only where the pairs still fit between them (`wideKeys`, from 856 px; Size all's 84 px measures the room, so no tab moves the row). `recesses(tab)`: the tabs, each pair, the file keys and the theme key each stand in a recess 3 px round (`Skin.recess`, drawn by `SimulatorPage.back`); the footer keeps Close bare and the display keys' engraved tray (the owner: "Revert to the original design on the bottom"). The P, T key (`conditionsKey`, a push button latched while shown, the owner's "Individual button on the bottom beside mole") stands in its own recess (`conditionsRecess`) 6 px left of the tray; `SheetUnits.conditions` carries it from `ClientConfig.streamConditions`, and `SheetPainter.draw` then puts each stream's T and P (`SheetContext.conditions`: the run's, or a feed's set values before a run) under its name or its pill, both lines or neither, plates then texts in one batch. The screen hit-tests them, and the render tool draws them. The tabs (`SimulatorFrame.Tab`) are FLOWSHEET, RESULTS, SIZING and BASIS. The Sizing tab opens only once the sheet can be sized (`SizingPage.open`). `SimulatorPage` says which keys stand where on each page.
 - **The sheet:**
   - `SheetLayout` places boxes, ports and routes and answers hit tests.
@@ -221,7 +239,7 @@ Opening needs no packet of its own. `ProcessSimulatorBlock.useWithoutItem` calls
 - it replays the stored body in parts;
 - it parses the body once, solves nothing and creates no process state.
 
-The constructor's Import uses `EquipmentNetwork` (`equipment-17`); see Send to block and Import above.
+The constructor's Import uses `EquipmentNetwork` (`equipment-18`); see Send to block and Import above.
 
 ## The block and its store
 
@@ -250,7 +268,7 @@ The constructor's Import uses `EquipmentNetwork` (`equipment-17`); see Send to b
 
 ## New equipment joins the simulator (plan 3.10)
 
-Every new `EquipmentShape.Kind`, `ConstructorColumn.Equipment` and `TopologyCompiler.Kind` constant joins the simulator (AGENTS.md, New equipment). `FlowsheetCatalog` (`src/test/.../client/gui/flowsheet/`) maps each to its tile, MODELLED or DRAWING_ONLY, through switches without a default, so a new constant fails `compileTestJava`. `FlowsheetPaletteCoverageTest` holds each to a tile, a port rule and a lang line; one tile may hold several kinds. `SizingCoverage` (`src/test/.../science/flowsheet/sizing/`) does the same for sizing: each kind names its size class or why it has none (`SizingCoverageTest`).
+Every new `EquipmentShape.Kind`, `ConstructorColumn.Equipment` and `TopologyCompiler.Kind` constant joins the simulator (AGENTS.md, New equipment). `FlowsheetCatalog` (`src/test/.../client/gui/flowsheet/`) maps each to its tile, MODELLED or DRAWING_ONLY, through switches without a default, so a new constant fails `compileTestJava`. `FlowsheetPaletteCoverageTest` holds each to a tile, a port rule and a lang line; one tile may hold several kinds. `SizingCoverage` (`src/test/.../science/flowsheet/sizing/`) does the same for sizing: each kind names its size class or why it has none (`SizingCoverageTest`). Batch 2026-11-03-rotating-machinery: the steam turbine tile is MODELLED (`TurbineUnit`, `TurbineSizing`); `MOTOR`, `GENERATOR` and `GEARBOX` stand on the turbine's tile as DRAWING_ONLY (`FlowsheetCatalog.DRIVER`) and size nothing (D43); `TopologyCompiler.Kind.TURBINE` maps to the turbine tile.
 
 ## Change the layer that owns it
 

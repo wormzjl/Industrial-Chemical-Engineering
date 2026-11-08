@@ -34,7 +34,7 @@ import static com.wormzjl.icheme.science.equipment.Mesh.*;
 final class ColumnStructure {
     /** Least deck width, m: the kit's ({@link Access#MIN_DECK}), which the designs reach through the column's name too. */
     static final double MIN_DECK = Access.MIN_DECK;
-    /** Manway: neck and cover diameters (24" class 150), cover face beyond the cladding, centre over the deck, m. */
+    /** Minimum manway reservation for pipe placement; larger openings fit around the resulting nozzles, m. */
     static final double MANWAY = Manway.LARGE, COVER = Manway.COVER_RATIO * MANWAY, MANWAY_REACH = Manway.REACH, MANWAY_HEIGHT = .9;
     /** Rain flashing rings: pitch, band height and projection, m. */
     static final double FLASHING_PITCH = 3, FLASHING = 1 / 16.0;
@@ -76,6 +76,8 @@ final class ColumnStructure {
     private final Plan plan;
     private final double axis, outer, apothem, rung;
     private final int n;
+    /** Fitted covers shared by rendering, collision and the cladding's flashing gaps. */
+    private final List<Manway> manways;
     /** The plan's ladders as a player meets them, the first from the ground. */
     private final List<Access.Climb> climbs = new ArrayList<>();
 
@@ -87,6 +89,7 @@ final class ColumnStructure {
         apothem = outer * DeterministicMath.cos(Math.PI / n);
         rung = outer + STANDOFF;
         plan = plan(shape);
+        manways = plan.platforms().stream().filter(Platform::manway).map(p -> manway(p.manwayHeight())).toList();
         for (var l : plan.ladders()) {
             var foot = at(rung, l.angle(), 0);
             var out = radial(l.angle());
@@ -661,8 +664,8 @@ final class ColumnStructure {
             var run = new Access.Arc(axis, axis, outer, p.from(), p.to(), plan.deckRadius(), Access.Arc.STEP);
             Access.deck(mesh, run, p.level(), plan.deckRadius() - outer, Access.ALL_PARTS);
             Access.handrail(mesh, run, p.level(), plan.deckRadius() - outer, p.closedFrom(), p.closedTo());
-            if (p.manway()) manway(p.manwayHeight()).draw(mesh);
         }
+        for (var manway : manways) manway.draw(mesh);
         for (var climb : climbs) Access.ladder(ladders, climb, STANDOFF);
         davit(mesh);
     }
@@ -707,8 +710,8 @@ final class ColumnStructure {
             double heading = nozzle.axis() == 0 ? (nozzle.sign() > 0 ? 0 : Math.PI) : (nozzle.sign() > 0 ? Math.PI / 2 : 3 * Math.PI / 2);
             if (Math.abs(nozzle.base()[1] - y) < reach && apart(angle, heading) < reach / outer + half) return true;
         }
-        for (var p : plan.platforms())
-            if (p.manway() && Math.abs(p.manwayHeight() - y) < COVER / 2 + .05 && apart(angle, BACK) < (COVER / 2 + .05) / outer + half) return true;
+        for (var manway : manways)
+            if (Math.abs(manway.centre()[1] - y) < manway.cover() / 2 + .05 && apart(angle, BACK) < (manway.cover() / 2 + .05) / outer + half) return true;
         return false;
     }
 
@@ -717,10 +720,15 @@ final class ColumnStructure {
         return Math.min(d, 2 * Math.PI - d);
     }
 
-    /** The manway over a platform, at height {@code y}, facing the back ({@link Manway}): its 24" neck through the cladding. */
+    /** A rear manway fitted around the fixed process nozzles and the shell's tangent lines. */
     private Manway manway(double y) {
-        double r = MANWAY / 2;
-        return new Manway(new double[]{axis, y, axis}, new double[]{0, 0, 1}, UP, MANWAY, Math.sqrt(apothem * apothem - r * r) - .03, outer, outer + MANWAY_REACH);
+        double size = Math.max(MANWAY, Manway.preferredSize(shape.diameter())), cover = Manway.COVER_RATIO * size / 2;
+        boolean room = y >= shape.bottomTangent() + cover + .05 && y <= shape.topTangent() - cover - .05;
+        for (var nozzle : shape.nozzles())
+            if (nozzle.axis() == 2 && nozzle.sign() > 0 && Math.abs(nozzle.base()[1] - y) < cover + PipeSizes.flange(PipeSizes.MAX_OUTSIDE) / 2 + .05) room = false;
+        if (!room) size = MANWAY;
+        double r = size / 2;
+        return new Manway(new double[]{axis, y, axis}, new double[]{0, 0, 1}, UP, size, Math.sqrt(apothem * apothem - r * r) - .03, outer, outer + MANWAY_REACH);
     }
 
     /** The lifting davit on the top ring ({@link Access#davit}): a mast on a base plate, a jib out past the deck with a knee brace, a cable and a hook block. */
@@ -752,10 +760,7 @@ final class ColumnStructure {
                 }
         }
         for (var climb : climbs) if (climb.rungs(p)) return true;
-        for (var platform : plan.platforms()) {
-            if (!platform.manway()) continue;
-            if (manway(platform.manwayHeight()).inside(p)) return true;
-        }
+        for (var manway : manways) if (manway.inside(p)) return true;
         var mast = at(outer + .35, plan.davitAngle(), 0);
         double mx = p[0] - mast[0], mz = p[2] - mast[2];
         return y >= plan.top().level() && y <= plan.davitTop() && mx * mx + mz * mz <= .01;

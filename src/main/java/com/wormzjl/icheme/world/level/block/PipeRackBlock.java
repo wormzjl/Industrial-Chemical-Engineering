@@ -110,7 +110,7 @@ public final class PipeRackBlock extends BaseEntityBlock {
 
     @Override
     protected VoxelShape getShape(BlockState state, BlockGetter level, BlockPos position, CollisionContext context) {
-        return level.getBlockEntity(position) instanceof PipeRackBlockEntity rack ? rack.shape() : PipeRackBlockEntity.frame(rack(state));
+        return LinePieces.shape(level,position,level.getBlockEntity(position) instanceof PipeRackBlockEntity rack ? rack.shape() : PipeRackBlockEntity.frame(rack(state)));
     }
 
     /** A neighbour changed: the shape stays (J1); the drawn steel and the faces its lanes meet redraw once the change is in the world. */
@@ -123,7 +123,7 @@ public final class PipeRackBlock extends BaseEntityBlock {
     }
 
     private static boolean carries(BlockGetter level, BlockPos position) {
-        return level.getBlockEntity(position) instanceof PipeRackBlockEntity rack && !rack.lanes().isEmpty();
+        return level.getBlockEntity(position) instanceof PipeRackBlockEntity rack && (!rack.lanes().isEmpty()||!rack.cables().isEmpty());
     }
 
     /** A rack with lanes cannot be mined (D9): its pipes come out first. */
@@ -151,7 +151,7 @@ public final class PipeRackBlock extends BaseEntityBlock {
         public static void refuse(BlockEvent.BreakEvent event) {
             if (!(event.getState().getBlock() instanceof PipeRackBlock) || !carries(event.getLevel(), event.getPos())) return;
             event.setCanceled(true);
-            event.getPlayer().displayClientMessage(PipeLaying.message("rack_carries"), true);
+            event.getPlayer().displayClientMessage(LineLaying.message("rack_carries"), true);
         }
     }
 
@@ -167,6 +167,7 @@ public final class PipeRackBlock extends BaseEntityBlock {
         if (state.getBlock() != replacement.getBlock() && level instanceof ServerLevel server && level.getBlockEntity(position) instanceof PipeRackBlockEntity rack)
             FluidWorldAuthority.find(server.getServer()).ifPresent(world -> {
                 for (var lane : rack.lanes()) world.remove(lane.identity());
+                for(var cable:rack.cables())world.controls().removeCable(cable.site());
             });
         super.onRemove(state, level, position, replacement, moved);
     }

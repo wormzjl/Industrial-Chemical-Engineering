@@ -11,12 +11,10 @@ import com.wormzjl.icheme.world.level.block.FluidDeviceBlock;
 import net.minecraft.core.*;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.server.level.*;
 import net.minecraft.world.MenuProvider;
 import net.minecraft.world.entity.player.*;
 import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.neoforge.client.model.data.ModelData;
 import net.neoforged.neoforge.client.model.data.ModelProperty;
@@ -34,14 +32,19 @@ import java.util.Arrays;
  * changes and when a topology commit applies an edit (the engine's schedule), and the update tag carries it like a
  * vessel cell's shape.
  */
-public final class FluidDeviceBlockEntity extends BlockEntity implements com.wormzjl.icheme.runtime.instrument.Instrument.Holder, FluidView.Receiver {
+public final class FluidDeviceBlockEntity extends ModelledBlockEntity implements com.wormzjl.icheme.runtime.instrument.Instrument.Holder, FluidView.Receiver {
     /** Accessed only by the client-thread lifecycle hooks and renderer, including in an integrated server. */
     private static final java.util.Set<FluidDeviceBlockEntity> CLIENT_GLASSES=java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
+    public net.neoforged.neoforge.energy.IEnergyStorage energy() {
+        if(!(level instanceof net.minecraft.server.level.ServerLevel server))return null;
+        var world=com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.find(server.getServer()).orElse(null);
+        return world==null||world.electric().generator(fluidIdentity())==null?null:new InlineEnergy(world.electric(),fluidIdentity());
+    }
     public static java.util.List<FluidDeviceBlockEntity> clientSightGlasses(){return java.util.List.copyOf(CLIENT_GLASSES);}
     /** Client: the pipes with an open end, which the pipe laying tool marks while it is held. Client thread only; weak, as above. */
     private static final java.util.Set<FluidDeviceBlockEntity> CLIENT_OPEN_ENDS=java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
     public static java.util.List<FluidDeviceBlockEntity> clientOpenEnds(){return java.util.List.copyOf(CLIENT_OPEN_ENDS);}
-    private void trackOpenEnds(){if(level!=null&&level.isClientSide()){if(openEnds()!=0)CLIENT_OPEN_ENDS.add(this);else CLIENT_OPEN_ENDS.remove(this);if(!name.isEmpty()&&nameable())CLIENT_NAMED.add(this);else CLIENT_NAMED.remove(this);}}
+    private void trackOpenEnds(){if(level!=null&&level.isClientSide()){com.wormzjl.icheme.client.MoverSounds.track(this);if(openEnds()!=0)CLIENT_OPEN_ENDS.add(this);else CLIENT_OPEN_ENDS.remove(this);if(!name.isEmpty()&&nameable())CLIENT_NAMED.add(this);else CLIENT_NAMED.remove(this);}}
     /** Client: the named devices, whose tags the client draws (N1). Client thread only; weak, as above. */
     private static final java.util.Set<FluidDeviceBlockEntity> CLIENT_NAMED=java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
     public static java.util.List<FluidDeviceBlockEntity> clientNamed(){return java.util.List.copyOf(CLIENT_NAMED);}
@@ -59,6 +62,8 @@ public final class FluidDeviceBlockEntity extends BlockEntity implements com.wor
     }
     @Override public void setBlockState(BlockState state) {
         boolean before=FluidDeviceBlock.hasSightGlass(getBlockState());super.setBlockState(state);
+        com.wormzjl.icheme.runtime.power.PowerNetwork.loaded(this);
+        if(level!=null&&!level.isClientSide())level.invalidateCapabilities(worldPosition);
         if(level!=null&&level.isClientSide()) {
             if(FluidDeviceBlock.hasSightGlass(state))CLIENT_GLASSES.add(this);else CLIENT_GLASSES.remove(this);
             if(before&&!FluidDeviceBlock.hasSightGlass(state))com.wormzjl.icheme.client.SightGlassRenderer.forget(worldPosition);
@@ -252,7 +257,7 @@ public final class FluidDeviceBlockEntity extends BlockEntity implements com.wor
     private void released() {
         com.wormzjl.icheme.runtime.instrument.InstrumentHosts.unloaded(this);
         if(level!=null&&level.isClientSide())com.wormzjl.icheme.client.InstrumentRenderer.forget(worldPosition);
-        if(level!=null&&level.isClientSide()){CLIENT_GLASSES.remove(this);CLIENT_OPEN_ENDS.remove(this);CLIENT_NAMED.remove(this);com.wormzjl.icheme.client.SightGlassRenderer.forget(worldPosition);}
+        if(level!=null&&level.isClientSide()){CLIENT_GLASSES.remove(this);CLIENT_OPEN_ENDS.remove(this);CLIENT_NAMED.remove(this);com.wormzjl.icheme.client.SightGlassRenderer.forget(worldPosition);com.wormzjl.icheme.client.MoverSounds.forget(this);}
         if(identity!=0&&level instanceof ServerLevel serverLevel&&serverLevel.getServer().isSameThread())FluidWorldAuthority.find(serverLevel.getServer()).ifPresent(world->world.deviceUnloaded(identity));
     }
     /** The engine's bucket hands over this device's view (the authority checked the identity); the block entity keeps it for server-side readers. */
@@ -314,12 +319,8 @@ public final class FluidDeviceBlockEntity extends BlockEntity implements com.wor
         offsets=tag.getLong("Offsets")&(1L<<60)-1;
     }
     @Override public CompoundTag getUpdateTag(HolderLookup.Provider registries){var tag=new CompoundTag();instruments.write(tag);tag.putLong("FluidIdentity",identity);tag.putDouble("Bore",bore);tag.putByteArray("Faces",faces.clone());if(offsets!=0)tag.putLong("Offsets",offsets);writeLine(joints,paint,secondary,tag);DeviceNames.write(tag,name);return tag;}
-    @Override public ClientboundBlockEntityDataPacket getUpdatePacket(){return ClientboundBlockEntityDataPacket.create(this);}
-    /** Drawn geometry that arrives after the block was meshed: refresh the model data and rebuild the section. */
-    @Override public void onDataPacket(net.minecraft.network.Connection connection,ClientboundBlockEntityDataPacket packet,HolderLookup.Provider registries) {
-        super.onDataPacket(connection,packet,registries);com.wormzjl.icheme.runtime.instrument.InstrumentHosts.loaded(this);requestModelDataUpdate();trackOpenEnds();
-        if(level!=null)level.sendBlockUpdated(worldPosition,getBlockState(),getBlockState(),0);
-    }
+    @Override protected void clientGeometryChanged(){com.wormzjl.icheme.runtime.instrument.InstrumentHosts.loaded(this);trackOpenEnds();}
+    public long lineOffsets(){return offsets;}
     @Override public ModelData getModelData() {
         long packed=0;int flanged=0;
         for(int i=0;i<6;i++){packed|=(long)(faces[i]&127)<<(7*i);if((faces[i]&FLANGED)!=0)flanged|=1<<i;}

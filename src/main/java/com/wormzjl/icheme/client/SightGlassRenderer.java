@@ -40,6 +40,7 @@ public final class SightGlassRenderer {
     private static final float[][] RING=ring();
     private static ClientLevel world;
     private static int age;
+    private static com.wormzjl.icheme.science.equipment.RenderDetail detail;
     private SightGlassRenderer(){}
 
     @SubscribeEvent public static void tick(ClientTickEvent.Post event) {
@@ -57,6 +58,8 @@ public final class SightGlassRenderer {
         // Liquid must be drawn before the terrain's translucent glass writes depth in front of it.
         if(event.getStage()!=RenderLevelStageEvent.Stage.AFTER_BLOCK_ENTITIES)return;
         var mc=Minecraft.getInstance();var level=mc.level;if(level==null)return;
+        var selected=com.wormzjl.icheme.client.model.EquipmentShellModel.detail();
+        if(selected!=detail){SURFACES.clear();detail=selected;}
         var sprite=mc.getModelManager().getAtlas(InventoryMenu.BLOCK_ATLAS).getSprite(WHITE);
         float u=sprite.getU(.5F),v=sprite.getV(.5F);var camera=event.getCamera().getPosition();
         var pose=event.getPoseStack();var buffers=mc.renderBuffers().bufferSource();VertexConsumer consumer=null;
@@ -67,7 +70,7 @@ public final class SightGlassRenderer {
             var key=FluidDeviceModel.sightGlassKey(entity.getBlockState(),entity.getModelData());
             if(!SightGlassGeometry.supports(key.pipe().connections()))continue;
             if(SURFACES.size()>=256)SURFACES.clear();
-            var surface=SURFACES.computeIfAbsent(key,k->new Surface(SightGlassGeometry.build(k,false).liquid(),SightGlassGeometry.window(k)));
+            var surface=SURFACES.computeIfAbsent(key,k->new Surface(SightGlassGeometry.build(k,false,selected).liquid(),SightGlassGeometry.window(k)));
             int light=LevelRenderer.getLightColor(level,pos);
             if(consumer==null)consumer=buffers.getBuffer(LIQUID);
             pose.pushPose();pose.translate(pos.getX()-camera.x,pos.getY()-camera.y,pos.getZ()-camera.z);

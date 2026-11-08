@@ -21,6 +21,19 @@ class PipeRouteTest {
     /** A 2" line, one rack position wide; a 6" line; a 14" line, two positions. */
     private static final double SMALL = .0625, SIX = .171875, WIDE = .359375;
 
+    @Test
+    void endpointEditsShareTheServerAndPreviewJunctionLimit() {
+        int straight = 1 << WEST | 1 << EAST;
+        int tee = PipeRoute.hostJoints(straight, straight | 1 << NORTH, false);
+        assertEquals(3, Integer.bitCount(tee));
+        int cross = PipeRoute.hostJoints(tee, straight | 1 << SOUTH, false);
+        assertEquals(4, Integer.bitCount(cross));
+        assertEquals(-1, PipeRoute.hostJoints(cross, 1 << UP, false));
+        assertEquals(cross, PipeRoute.hostJoints(cross, 1 << NORTH, false));
+        assertEquals(-1, PipeRoute.hostJoints(straight, 1 << NORTH, true));
+        assertEquals(straight, PipeRoute.hostJoints(1 << WEST, 1 << EAST, true));
+    }
+
     private static PipeRoute.Space without(Set<Cell> blocked) {
         return PipeRoute.Space.of(cell -> blocked.contains(cell) ? Room.BLOCKED : Room.FREE, List.of());
     }

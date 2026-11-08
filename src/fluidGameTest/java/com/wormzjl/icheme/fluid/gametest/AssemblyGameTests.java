@@ -118,6 +118,30 @@ public final class AssemblyGameTests {
             route(front(drum, Role.LIQUID_OUTLET), front(pump, Role.SUCTION));
             tee(route(front(pump, Role.DISCHARGE), front(column, Role.REFLUX)));
             for (var valve : valves.entrySet()) install(valve.getKey(), valve.getValue());
+            // A casing turns only with its shaft train (W3): a creative motor drives the reflux pump.
+            drive(pump);
+        }
+
+        /**
+         * A creative motor on a pump's coupling (batch 2026-11-03-rotating-machinery W3): a shaft block beyond the casing's
+         * driven end, the motor beyond it facing back along the shaft. Both are the plant's, removed with it. Returns the
+         * shaft block's position.
+         */
+        BlockPos drive(Vessel vessel) {
+            for (var s : ShapeRasterizer.shafts(vessel.shape())) {
+                if (s.role() != EquipmentShape.ShaftEnd.Role.DRIVEN_INPUT) continue;
+                var d = Direction.fromDelta(s.dx(), s.dy(), s.dz());
+                var shaft = vessel.origin().offset(s.block().x(), s.block().y(), s.block().z());
+                var motor = shaft.relative(d);
+                if (!level.getBlockState(shaft).canBeReplaced() || !level.getBlockState(motor).canBeReplaced() || d.getAxis() == Direction.Axis.Y)
+                    throw new IllegalStateException("No room for the " + vessel.shape().kind() + "'s creative motor at " + shaft.toShortString());
+                level.setBlock(shaft, ModBlocks.SHAFT.get().defaultBlockState().setValue(com.wormzjl.icheme.world.level.block.ShaftBlock.AXIS, d.getAxis()), Block.UPDATE_ALL);
+                level.setBlock(motor, ModBlocks.CREATIVE_MOTOR.get().defaultBlockState().setValue(com.wormzjl.icheme.world.level.block.CreativeMotorBlock.FACING, d.getOpposite()), Block.UPDATE_ALL);
+                devices.add(shaft.immutable());
+                devices.add(motor.immutable());
+                return shaft.immutable();
+            }
+            throw new IllegalStateException("No driven coupling on the " + vessel.shape().kind());
         }
 
         /**
@@ -353,7 +377,7 @@ public final class AssemblyGameTests {
         /** Removes every pipe, tank and structure the plant placed. */
         void remove() {
             for (var at : devices) level.removeBlock(at, false);
-            for (var vessel : structures) level.removeBlock(vessel.controller(), false);
+            for (var vessel : structures) EquipmentTestCleanup.remove(level, vessel.controller());
         }
 
         /** Releases the chunks the plant held loaded. */

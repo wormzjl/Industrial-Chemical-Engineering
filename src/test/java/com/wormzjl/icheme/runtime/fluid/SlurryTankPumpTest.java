@@ -128,15 +128,15 @@ class SlurryTankPumpTest {
      * Test world row 9, the fast pump (H2; owner decision D40 A): a pump's start mode reads its own lines only. The pump
      * draws 5 L/s of the slurry from the tank's bottom while R7's side outlet stands closed by deposition, as the rig's
      * side outlet closed at its 1.02 m/s threshold. Physics: nothing in the pump's own lines changed, so it goes on at its
-     * target, about 2.2 kg/s, its suction junction a few kPa above the tank. Before the rule, any blocked connection in the
+     * set flow on its law, about 2.2 kg/s, its suction junction a few kPa above the tank. Before the rule, any blocked connection in the
      * island started every pump on its head limit: there the pump drew about 20 kg/s, its liquid-only suction junction fell
      * to the 1 Pa box floor, and the step stalled at every size (the rig held for good at tick 5075, |r| 0.4575).
      */
-    @Test void aSideOutletClosedByDepositionLeavesThePumpOnItsTarget() {
+    @Test void aSideOutletClosedByDepositionLeavesThePumpAtItsSetFlow() {
         var graph=islandWithClosedSideOutlet(.005);var retained=new RetainedSolver();PassiveIntervalSolver.Result last=null;
         for(int k=1;k<=2;k++){last=slice(retained,last,graph,"side outlet closed "+k);graph=last.graph();}
         int pump=edge(graph,FlowControl.Pump.class);
-        assertEquals(FlowControl.Mode.PUMP_TARGET,last.endpointModes().get(pump),"the pump stays on its target");
+        assertEquals(FlowControl.Mode.MOVER_LAW,last.endpointModes().get(pump),"the pump runs on its law");
         assertEquals(2.2,last.averageMassFlows()[pump],.15,"the pump draws about 2.2 kg/s of the slurry");
     }
 }

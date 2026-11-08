@@ -33,6 +33,10 @@ sourceSets {
     }
 }
 
+tasks.named('processFluidGameTestResources') {
+    from('src/test/resources') { include 'compat/control-blocks/**' }
+}
+
 repositories {
     mavenCentral()
     maven { url = 'https://maven.createmod.net' }
@@ -164,11 +168,19 @@ neoForge {
 }
 
 configurations {
+    // The optional mods' runtime jars (Create and KubeJS, see dependencies): dev runs, GameTests and tests load them,
+    // dependents of the mod never pull them.
+    optionalModRuntime {
+        canBeConsumed = false
+        canBeResolved = false
+    }
+    localRuntime.extendsFrom optionalModRuntime
     runtimeClasspath.extendsFrom localRuntime
     fluidGameTestImplementation.extendsFrom implementation
-    fluidGameTestRuntimeOnly.extendsFrom runtimeOnly
+    fluidGameTestCompileOnly.extendsFrom compileOnly
+    fluidGameTestRuntimeOnly.extendsFrom runtimeOnly, optionalModRuntime
     mcpCompatImplementation.extendsFrom implementation
-    mcpCompatRuntimeOnly.extendsFrom runtimeOnly
+    mcpCompatRuntimeOnly.extendsFrom runtimeOnly, optionalModRuntime
 }
 
 // Optional MCP test-client tooling never enters the production jar or ordinary test runtime.
@@ -203,22 +215,31 @@ dependencies {
             version { prefer '0.44.0' }
         }
     }
-    // Create's slim development jar deliberately excludes its companion libraries.
-    implementation("com.simibubi.create:create-${minecraft_version}:${create_version}:slim") {
+    // Create (with its libraries Ponder, Catnip inside Ponder, Flywheel and Registrate) and KubeJS are optional mods: compiled
+    // against, loaded in dev runs, GameTests and tests through optionalModRuntime. -PwithoutCreate drops all five from
+    // those runtimes, for the check without Create. Create's slim development jar excludes its companion libraries.
+    def withoutCreate = providers.gradleProperty('withoutCreate').map { it != 'false' }.getOrElse(false)
+    compileOnly("com.simibubi.create:create-${minecraft_version}:${create_version}:slim") {
         transitive = false
     }
-    implementation("net.createmod.ponder:ponder-neoforge:${ponder_version}+mc${minecraft_version}")
+    compileOnly("net.createmod.ponder:ponder-neoforge:${ponder_version}+mc${minecraft_version}")
     compileOnly("dev.engine-room.flywheel:flywheel-neoforge-api-${minecraft_version}:${flywheel_version}")
-    runtimeOnly("dev.engine-room.flywheel:flywheel-neoforge-${minecraft_version}:${flywheel_version}")
-    implementation("com.tterrag.registrate:Registrate:${registrate_version}")
+    compileOnly("com.tterrag.registrate:Registrate:${registrate_version}")
+    compileOnly("dev.latvian.mods:kubejs-neoforge:${kubejs_version}")
+    if (!withoutCreate) {
+        optionalModRuntime("com.simibubi.create:create-${minecraft_version}:${create_version}:slim") {
+            transitive = false
+        }
+        optionalModRuntime("net.createmod.ponder:ponder-neoforge:${ponder_version}+mc${minecraft_version}")
+        optionalModRuntime("dev.engine-room.flywheel:flywheel-neoforge-${minecraft_version}:${flywheel_version}")
+        optionalModRuntime("com.tterrag.registrate:Registrate:${registrate_version}")
+        optionalModRuntime("dev.latvian.mods:kubejs-neoforge:${kubejs_version}")
+    }
 
     // JEI is an optional client integration: APIs at compile time, full mod only in dev runs.
     compileOnly("mezz.jei:jei-${minecraft_version}-common-api:${jei_version}")
     compileOnly("mezz.jei:jei-${minecraft_version}-neoforge-api:${jei_version}")
     localRuntime("mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}")
-
-    // Milestone 1 requires the KubeJS preset adapter. Its POM supplies Rhino and runtime helpers.
-    api("dev.latvian.mods:kubejs-neoforge:${kubejs_version}")
 
     testImplementation(platform("org.junit:junit-bom:${junit_version}"))
     testImplementation('org.junit.jupiter:junit-jupiter')
@@ -496,15 +517,16 @@ def columnGates = gateGroup('column', 'science/column/v3',
          'science/fluid/thermo/WaterRegion1*', 'science/thermo/phase/SteamVirial*',
          'science/thermo/IdealGasFunction*', 'science/thermo/PairInteractions*', 'science/thermo/PengRobinsonKernel*',
          'science/thermo/ThermoComponent*', 'science/thermo/TraceTruncationPolicy*', 'network/ColumnWire*',
-         'science/equipment/ColumnComponents*'],
+         'science/equipment/ColumnComponents*', 'science/equipment/ExchangerType*',
+         'science/fluid/network/HeatRouting*', 'science/fluid/network/PipeResistance*'],
         ['network/ColumnCodecs*', 'science/material/CatalogScopedExtension*', 'science/material/Cdu17FixtureExtension*',
          'science/material/Cdu17TestCatalog*', 'science/material/MaterialTestBasis*', 'science/material/PilotCryogenicTestCatalog*',
          'science/material/TjlReferenceExtension*', 'science/material/TiaJuanaTestCatalog*', 'science/material/TiaJuanaExtension*',
          'science/thermo/PengRobinson78*', 'science/thermo/PhaseProperties*'],
         ['column/**', 'materials/**', 'science/column/**', 'compat/presets/**'], ['data/icheme/neural/**', 'natives/**', 'assets/icheme/columnpreset/**', 'assets/icheme/mixturepreset/**'])
 def equipmentGates = gateGroup('equipment', 'science/equipment',
-        ['science/material', 'science/math', 'science/fluid/topology/TopologyCompiler*', 'science/thermo/IdealGasFunction*',
-         'science/thermo/PengRobinsonKernel*', 'runtime/fluid/FluidView*', 'runtime/instrument/Instrument*',
+        ['science/material', 'science/math', 'science/machine', 'science/fluid/topology/TopologyCompiler*', 'science/thermo/IdealGasFunction*',
+         'science/thermo/PengRobinsonKernel*', 'runtime/fluid/FluidView*', 'runtime/instrument/Instrument*', 'runtime/control/DataPort*',
          'science/column/v3/V3ColumnInput*',
          'science/column/v3/V3ColumnOutcome*', 'science/column/v3/V3ColumnProblemResolver*', 'science/column/v3/V3ColumnSpecification*',
          'science/column/v3/V3ComponentBasis*', 'science/column/v3/V3InitializationOptions*',
@@ -513,12 +535,17 @@ def equipmentGates = gateGroup('equipment', 'science/equipment',
          'science/fluid/thermo/WaterRegion1*', 'science/thermo/phase/SteamVirial*',
          'science/fluid/network/CoolingTower*', 'science/fluid/network/AirCooled*', 'science/fluid/network/ConvectionCoil*', 'science/fluid/network/FiredCoil*',
          'science/fluid/network/HeatControl*', 'science/fluid/network/HeatCurve*', 'science/fluid/network/HeatLaw*',
-         'science/fluid/network/HeatSide*', 'science/fluid/network/PipeResistance*', 'science/fluid/network/VesselGeometry*',
+         'science/fluid/network/HeatSide*', 'science/fluid/network/HeatRouting*', 'science/fluid/network/PipeResistance*', 'science/fluid/network/VesselGeometry*',
          'world/level/block/entity/ColumnDesignTags*', 'world/level/block/entity/EquipmentConstructorBlockEntity*',
-         'world/level/block/entity/EquipmentShellBlockEntity*', 'world/level/block/entity/DeviceNames*'],
+         'world/level/block/entity/EquipmentShellBlockEntity*', 'world/level/block/entity/ModelledBlockEntity*', 'world/level/block/entity/DeviceNames*'],
         ['science/column/v3/V3TestInputs*', 'science/column/v3/HollandB12Thermo*', 'science/column/v3/HollandExample32Data*', 'science/column/v3/V3HollandExample32*',
          'science/material/TiaJuanaTestCatalog*', 'science/material/TiaJuanaExtension*', 'science/material/CatalogScopedExtension*'],
-        ['column/**', 'compat/**', 'materials/**'], ['assets/icheme/parts/**', 'assets/icheme/lang/**'])
+        ['column/**', 'compat/**', 'materials/**'], ['assets/icheme/parts/**', 'assets/icheme/lang/**',
+         'assets/icheme/models/block/dcs*.json', 'assets/icheme/models/item/dcs.json', 'assets/icheme/blockstates/dcs.json',
+         'assets/icheme/models/block/local_controller.json',
+         'assets/icheme/textures/block/dcs_*.png', 'assets/icheme/textures/block/control_panel_*.png',
+         'assets/icheme/textures/block/controller_front.png',
+         'assets/icheme/textures/block/pump_casting.png', 'assets/icheme/textures/block/equipment_steelwork.png'])
 
 // The slow gates (3 s or more each): the everyday `test` leaves them out and `holdGates` runs them. `slowGates` runs those
 // and the gate groups; `check` (so `build`) and the final lane run it with `test`.

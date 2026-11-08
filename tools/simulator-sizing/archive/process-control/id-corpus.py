@@ -1,0 +1,5 @@
+from pathlib import Path
+p=Path('src/test/resources/compat/control/control-1.snbt');s=p.read_text(encoding='utf-8').strip().replace('format:1,','format:2,');s=s[:-1]+',sensorIds:[{instance:[I;0,0,0,3],number:12L,kind:"LEVEL"}],nextSensorId:13L}\n';Path('src/test/resources/compat/control/control-2.snbt').write_text(s,encoding='utf-8')
+for file in ['src/main/java/com/wormzjl/icheme/runtime/control/ControlService.java','src/main/java/com/wormzjl/icheme/client/gui/screens/inventory/ControlPanelScreen.java']:
+ p=Path(file);s=p.read_text(encoding='utf-8').replace('positionLabel','controllerId');p.write_text(s,encoding='utf-8')
+p=Path('tmp/process-control/ControlPrototypes.java');s=p.read_text(encoding='utf-8').replace('LEVEL / TANK 9, 2, 8','LT-0012 / LEVEL').replace('CONTROL VALVE 14, 2, 8','CV-0021').replace('(i%2==0?"LEVEL / TANK ":"TEMPERATURE / HEAT SIDE ")+(i+4)+", 2, 8"','String.format(java.util.Locale.ROOT,"%s-%04d / %s",i%2==0?"LT":"TT",i+1,i%2==0?"LEVEL":"TEMPERATURE")');p.write_text(s,encoding='utf-8')

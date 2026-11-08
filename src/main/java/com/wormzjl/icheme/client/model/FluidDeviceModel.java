@@ -52,6 +52,7 @@ public final class FluidDeviceModel implements IDynamicBakedModel {
     private static final int CACHE = 4096;
     private static final ChunkRenderTypeSet SOLID = ChunkRenderTypeSet.of(RenderType.solid());
     private static final ChunkRenderTypeSet GLASS = ChunkRenderTypeSet.of(RenderType.solid(),RenderType.translucent());
+    private final com.wormzjl.icheme.science.equipment.RenderDetail detail = com.wormzjl.icheme.client.ClientConfig.renderDetail();
     private final TopologyCompiler.Kind kind;
     private final boolean accessory;
     private final boolean shutoffAccessory;
@@ -99,13 +100,13 @@ public final class FluidDeviceModel implements IDynamicBakedModel {
     }
 
     private Baked bake(Look look) {
-        if(look.mover!=TopologyCompiler.Kind.PIPE)return new Baked(quads(look,com.wormzjl.icheme.science.equipment.InlineMoverGeometry.polygons(look.geometry.pipe(),look.mover==TopologyCompiler.Kind.COMPRESSOR,moverAccessory)),List.of());
-        if(look.filter)return new Baked(quads(look,LineGeometry.filterPolygons(look.geometry.pipe())),List.of());
-        if(look.pressureValve)return new Baked(quads(look,ValveGeometry.pressure(look.geometry.pipe(),pressureAccessory)),List.of());
-        if(look.shutoff==FluidDeviceBlock.Shutoff.CHECK)return new Baked(quads(look,ValveGeometry.check(look.geometry.pipe(),checkAccessory)),List.of());
-        if(look.shutoff!=FluidDeviceBlock.Shutoff.NONE)return new Baked(quads(look,ValveGeometry.shutoff(look.geometry.pipe(),look.shutoff==FluidDeviceBlock.Shutoff.OPEN,shutoffAccessory)),List.of());
-        if(!look.sightGlass)return new Baked(quads(look,LineGeometry.polygons(look.geometry.pipe())),List.of());
-        var geometry=SightGlassGeometry.build(look.geometry,accessory);
+        if(look.mover!=TopologyCompiler.Kind.PIPE)return new Baked(quads(look,com.wormzjl.icheme.science.equipment.InlineMoverGeometry.polygons(look.geometry.pipe(),look.mover==TopologyCompiler.Kind.COMPRESSOR,moverAccessory,detail)),List.of());
+        if(look.filter)return new Baked(quads(look,LineGeometry.filterPolygons(look.geometry.pipe(),detail)),List.of());
+        if(look.pressureValve)return new Baked(quads(look,ValveGeometry.pressure(look.geometry.pipe(),pressureAccessory,detail)),List.of());
+        if(look.shutoff==FluidDeviceBlock.Shutoff.CHECK)return new Baked(quads(look,ValveGeometry.check(look.geometry.pipe(),checkAccessory,detail)),List.of());
+        if(look.shutoff!=FluidDeviceBlock.Shutoff.NONE)return new Baked(quads(look,ValveGeometry.shutoff(look.geometry.pipe(),look.shutoff==FluidDeviceBlock.Shutoff.OPEN,shutoffAccessory,detail)),List.of());
+        if(!look.sightGlass)return new Baked(quads(look,LineGeometry.polygons(look.geometry.pipe(),detail)),List.of());
+        var geometry=SightGlassGeometry.build(look.geometry,accessory,detail);
         return new Baked(quads(look,geometry.metal()),EquipmentShellModel.bake(geometry.glass(),sprites,false));
     }
 

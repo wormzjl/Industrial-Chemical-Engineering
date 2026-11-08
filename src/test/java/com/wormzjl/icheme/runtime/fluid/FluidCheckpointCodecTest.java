@@ -24,6 +24,19 @@ class FluidCheckpointCodecTest {
         return new FluidCheckpointCodec.Checkpoint(List.of(new FluidCheckpointCodec.IslandEntry("minecraft:overworld",PACKAGE,state)));
     }
     private static CompoundTag islands(CompoundTag core){return core.getCompound("Islands");}
+
+    @Test void turbineAdmissionTargetRoundTripsAsComputedState() {
+        var gas=model.initialNitrogenCharge(1,298.15,101325,()->{});
+        var control=new FlowControl.Turbine(com.wormzjl.icheme.science.machine.SteamTurbine.rated(1e6),.125);
+        var graph=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,gas),new PassiveNetwork.Reservoir(2,0,gas)),
+                List.of(new PassiveNetwork.Pipe(3,0,1,new PipeResistance.Geometry(1,.1,1e-5,0),control)));
+        var snapshot=new IslandCoordinator.Snapshot(1,0,graph,new IslandClock.Snapshot(0,0,0,100),Optional.empty(),"READY");
+        var before=new FluidCheckpointCodec.Checkpoint(List.of(new FluidCheckpointCodec.IslandEntry("minecraft:overworld",PACKAGE,snapshot)));
+        var image=FluidCheckpointCodec.encode(before,key->model);
+        var after=FluidCheckpointCodec.decode(image,key->model);
+        assertEquals(control,after.islands().getFirst().snapshot().graph().pipes().getFirst().control());
+    }
+
     static void assertSameImage(FluidCheckpointCodec.Image a,FluidCheckpointCodec.Image b,String what) {
         assertEquals(a.core(),b.core(),what+": core record");assertEquals(a.packs().keySet(),b.packs().keySet(),what+": packs");
         for(var pack:a.packs().keySet())assertArrayEquals(a.packs().get(pack),b.packs().get(pack),what+": pack "+pack);
@@ -198,11 +211,13 @@ class FluidCheckpointCodecTest {
         return model.flashTP(t,pressure,n,()->{});
     }
     /**
-     * An island whose pipes have every port kind and a compressor, solved for one interval in which the compressor, fed
-     * the bulk of a half-water tank, is refused ({@code INLET_WRONG_PHASE}): graph, ports, controls, the last interval's
-     * endpoint modes come back exactly, and the reloaded checkpoint re-encodes to the same bytes.
+     * An island whose pipes have every port kind and a compressor fed the bulk of a half-water tank, solved for one
+     * interval: graph, ports, controls, the last interval's endpoint modes come back exactly, and the reloaded checkpoint
+     * re-encodes to the same bytes. Restated for request 11 (batch 2026-11-03-rotating-machinery, owner decisions D19 and
+     * D20): the compressor was refused there ({@code INLET_WRONG_PHASE}); liquid at a compressor is no refusal now, so it
+     * runs on its law and its committed mode is the one that round-trips.
      */
-    @Test void portsACompressorAndARefusedMoverRoundTripExactly() {
+    @Test void portsACompressorAndItsModeRoundTripExactly() {
         var block=new PipeResistance.Geometry(1,.05,.000045,0);
         var nodes=List.of(new PassiveNetwork.Reservoir(1,0,waterUnderNitrogen(.5,150000)),new PassiveNetwork.Reservoir(2,0,model.initialNitrogenCharge(1,298.15,150000,()->{}),PassiveNetwork.NodeKind.JUNCTION),
                 new PassiveNetwork.Reservoir(3,0,model.initialNitrogenCharge(1,298.15,101325,()->{}),PassiveNetwork.NodeKind.VOID));
@@ -211,7 +226,7 @@ class FluidCheckpointCodecTest {
                 new PassiveNetwork.Pipe(12,1,2,List.of(block),new FlowControl.Compressor(.01,2.5),0,null,PassiveNetwork.PhasePort.BULK,PassiveNetwork.PhasePort.BULK),
                 new PassiveNetwork.Pipe(13,0,2,List.of(block),new FlowControl.Passive(),0,null,PassiveNetwork.PhasePort.VAPOR,PassiveNetwork.PhasePort.BULK));
         var full=new PassiveIntervalSolver(model).solve(new PassiveNetwork(nodes,pipes),5,PassiveIntervalSolver.Settings.defaults(),()->{});
-        assertEquals(FlowControl.Mode.INLET_WRONG_PHASE,full.endpointModes().get(2),"the compressor on the tank's bulk is refused");
+        assertNotEquals(FlowControl.Mode.INLET_WRONG_PHASE,full.endpointModes().get(2),"the compressor on the tank's bulk is not refused");
         var state=new IslandCoordinator.Snapshot(1,4,full.graph(),new IslandClock.Snapshot(350,200,400,100),Optional.of(full),"FULL");
         var before=new FluidCheckpointCodec.Checkpoint(List.of(new FluidCheckpointCodec.IslandEntry("minecraft:overworld",PACKAGE,state)));
         var image=FluidCheckpointCodec.encode(before,key->key.on(model));assertEquals(FluidCheckpointCodec.VERSION,image.core().getInt("StateFormat"));
@@ -219,11 +234,27 @@ class FluidCheckpointCodecTest {
         assertEquals(full.graph().pipes(),after.graph().pipes(),"ends, sections, controls, blocked masks and the ports of every pipe");
         assertEquals(PassiveNetwork.PhasePort.LIQUID,after.graph().pipes().get(0).firstPort());assertEquals(PassiveNetwork.PhasePort.VAPOR,after.graph().pipes().get(3).firstPort());
         assertEquals(new FlowControl.Compressor(.01,2.5),after.graph().pipes().get(2).control());
-        assertEquals(full.endpointModes(),after.lastResult().orElseThrow().endpointModes(),"the refused mover's committed mode, the hysteresis input of the next slice (A38)");
+        assertEquals(full.endpointModes(),after.lastResult().orElseThrow().endpointModes(),"the movers' committed modes, the carry input of the next slice (A38)");
         assertArrayEquals(full.averageMassFlows(),after.lastResult().orElseThrow().averageMassFlows());
         // Since format 7: the end flows the island's next job starts from round-trip bit for bit.
         assertArrayEquals(full.endpointFlows(),after.lastResult().orElseThrow().endpointFlows(),"the committed end flows (format 7)");
         assertSameImage(image,FluidCheckpointCodec.encode(FluidCheckpointCodec.decode(image,key->key.on(model)),key->key.on(model)),"a reloaded checkpoint re-encodes to the same bytes");
+    }
+    /** Format 31 (batch 2026-11-03-rotating-machinery, W2): machines on their curves, control tag 5. A pump's and a
+     * compressor's law (rated flow, head and efficiency, and since format 33 a pump's rated speed), speed and switch come back exactly, and the reloaded checkpoint
+     * re-encodes to the same bytes. */
+    @Test void machinesOnTheirCurvesRoundTripExactly() {
+        var block=new PipeResistance.Geometry(1,.05,.000045,0);
+        var nodes=new ArrayList<PassiveNetwork.Reservoir>();for(long id=1;id<=3;id++)nodes.add(new PassiveNetwork.Reservoir(id,0,model.initialNitrogenCharge(1,298.15,150000,()->{})));
+        var pump=new FlowControl.Machine(new com.wormzjl.icheme.science.machine.CentrifugalPump(.01,50,.7,1475),.85,true);
+        var compressor=new FlowControl.Machine(new com.wormzjl.icheme.science.machine.CentrifugalCompressor(.02,24400,.78),1,false);
+        var pipes=List.of(new PassiveNetwork.Pipe(10,0,1,List.of(block),pump,0,null,PassiveNetwork.PhasePort.BULK,PassiveNetwork.PhasePort.BULK),
+                new PassiveNetwork.Pipe(11,1,2,List.of(block),compressor,0,null,PassiveNetwork.PhasePort.BULK,PassiveNetwork.PhasePort.BULK));
+        var state=new IslandCoordinator.Snapshot(1,4,new PassiveNetwork(nodes,pipes),new IslandClock.Snapshot(350,200,400,100),Optional.empty(),"FULL");
+        var image=FluidCheckpointCodec.encode(new FluidCheckpointCodec.Checkpoint(List.of(new FluidCheckpointCodec.IslandEntry("minecraft:overworld",PACKAGE,state))),key->model);
+        var after=FluidCheckpointCodec.decode(image,key->model).islands().getFirst().snapshot();
+        assertEquals(pump,after.graph().pipes().get(0).control());assertEquals(compressor,after.graph().pipes().get(1).control());
+        assertSameImage(image,FluidCheckpointCodec.encode(FluidCheckpointCodec.decode(image,key->model),key->model),"a reloaded checkpoint re-encodes to the same bytes");
     }
     /** The world ledger's compressor registration comes back exactly; an unknown control kind is refused. */
     @Test void aCompressorRegistrationRoundTripsInTheTopologyUnit() {

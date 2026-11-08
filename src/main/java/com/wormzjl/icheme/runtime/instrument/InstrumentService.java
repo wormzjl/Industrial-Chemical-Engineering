@@ -22,8 +22,6 @@ public final class InstrumentService {
     private final MinecraftServer server;
     private final FluidWorldAuthority world;
     private final Store store;
-    private record SensorOperation(UUID player,Instrument.Key key,Sensor.Kind kind,ItemStack held,InteractionHand hand,boolean remove,long revision,String dimension,long position){}
-    private final Map<Instrument.Key,SensorOperation> sensorOperations=new LinkedHashMap<>();
     private final Map<UUID,ItemStack> exactStacks=new HashMap<>();
     private final Map<UUID,Set<FluidNetwork.InstrumentTarget>> watchers=new HashMap<>();
     private final Map<UUID,Sensor.Reading> sensorSamples=new HashMap<>();
@@ -33,17 +31,53 @@ public final class InstrumentService {
     public InstrumentService(MinecraftServer server,FluidWorldAuthority world,Store store){this.server=server;this.world=world;this.store=store;}
     public boolean occupied(long host){return !store.sensors(host).isEmpty()||!store.host(host).isEmpty()||store.pending().stream().anyMatch(p->p.key().host()==host&&p.install());}
     public boolean observes(long host){return watchers.values().stream().anyMatch(set->set.stream().anyMatch(t->t.key().host()==host));}
-    public void request(ServerPlayer player,InteractionHand hand,boolean remove){if(remove&&requestSensorRemoval(player,hand))return;if(player.isSpectator()||!player.mayBuild())return;var held=player.getItemInHand(hand);GaugeSettings.Kind kind=held.getItem() instanceof GaugeItem g?g.kind():null;if(!remove&&kind==null||remove&&!held.is(ModItems.ACCESSORY_WRENCH.get()))return;double reach=player.blockInteractionRange();var hosts=InstrumentHosts.nearby(player.level(),player.getEyePosition(),8);var selected=InstrumentHosts.select(hosts,player.getEyePosition(),player.getLookAngle(),reach,kind,remove);if(!remove){var pipeHit=InstrumentHosts.pipeSelection(player,kind);if(pipeHit!=null)selected=pipeHit;}
+    public void request(ServerPlayer player,InteractionHand hand,boolean remove){
+        if(remove&&requestSensorRemoval(player,hand))return;
+        if(player.isSpectator()||!player.mayBuild())return;
+        var held=player.getItemInHand(hand);
+        GaugeSettings.Kind kind=held.getItem() instanceof GaugeItem g?g.kind():null;
+        boolean levelGauge=held.is(ModItems.LIQUID_LEVEL_GAUGE.get());
+        if(!remove&&kind==null&&!levelGauge||remove&&!held.is(ModItems.ACCESSORY_WRENCH.get()))return;
+        double reach=player.blockInteractionRange();var hosts=InstrumentHosts.nearby(player.level(),player.getEyePosition(),8);
+        var selected=levelGauge?null:InstrumentHosts.select(hosts,player.getEyePosition(),player.getLookAngle(),reach,kind,remove);
+        if(!remove&&kind!=null){var pipeHit=InstrumentHosts.pipeSelection(player,kind);if(pipeHit!=null)selected=pipeHit;}
+        var fitting=levelGauge||remove?InstrumentHosts.selectFitting(hosts,player.getEyePosition(),player.getLookAngle(),reach,remove):null;
+        if(selected!=null&&fitting!=null&&fitting.distance()<selected.distance())selected=null;
         InstrumentHosts.Host host;String mount;UUID instance;Instrument.Type type;GaugeSettings settings=null;
-        if(selected!=null){host=selected.host();mount=selected.mount().id();if(remove){var installed=store.get(new Instrument.Key(host.identity(),mount));if(installed==null)return;instance=installed.instance();type=installed.settings().kind()==GaugeSettings.Kind.PRESSURE?Instrument.Type.PRESSURE:Instrument.Type.TEMPERATURE;}else{if(host.occupied(selected.mount())||!InstrumentHosts.clear(player.level(),host,selected.mount())||host.pipe()&&occupied(host.identity()))return;settings=held.get(ModItems.GAUGE_SETTINGS.get());if(settings==null||settings.kind()!=kind)return;instance=UUID.randomUUID();type=kind==GaugeSettings.Kind.PRESSURE?Instrument.Type.PRESSURE:Instrument.Type.TEMPERATURE;}}
-        else if(remove){host=null;InstrumentHosts.PipeAccessory selectedLegacy=null;double nearest=reach;for(var candidate:hosts){if(!(candidate.entity() instanceof com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity pipe))continue;var legacy=InstrumentHosts.PipeAccessory.of(pipe);if(legacy==null)continue;var hit=legacy.bounds().clip(player.getEyePosition(),player.getEyePosition().add(player.getLookAngle().scale(reach)));if(hit.isPresent()&&hit.get().distanceTo(player.getEyePosition())<=nearest&&InstrumentHosts.reachable(player,candidate,legacy)){host=candidate;selectedLegacy=legacy;nearest=hit.get().distanceTo(player.getEyePosition());}}if(host==null)return;type=InstrumentHosts.legacy(host.entity().getBlockState());mount=selectedLegacy.id();var fitting=store.legacy(host.identity());if(fitting==null)return;instance=fitting.instance();}
-        else return;
-        if(!permission(player,host,held))return;var p=new Store.Pending(UUID.randomUUID(),player.getUUID(),new Instrument.Key(host.identity(),mount),instance,store.revision(host.identity()),!remove,type,settings,player.level().dimension().location().toString(),host.entity().getBlockPos().asLong(),player.getInventory().selected,hand==InteractionHand.OFF_HAND);if(store.queue(p)){exactStacks.put(p.request(),held);commit(player,player.serverLevel(),p);store.finish(p.request());exactStacks.remove(p.request());}
+        if(selected!=null){
+            host=selected.host();mount=selected.mount().id();
+            if(remove){var installed=store.get(new Instrument.Key(host.identity(),mount));if(installed==null)return;instance=installed.instance();type=installed.settings().kind()==GaugeSettings.Kind.PRESSURE?Instrument.Type.PRESSURE:Instrument.Type.TEMPERATURE;}
+            else{if(host.occupied(selected.mount())||!InstrumentHosts.clear(player.level(),host,selected.mount())||host.pipe()&&occupied(host.identity()))return;settings=held.get(ModItems.GAUGE_SETTINGS.get());if(settings==null||settings.kind()!=kind)return;instance=UUID.randomUUID();type=kind==GaugeSettings.Kind.PRESSURE?Instrument.Type.PRESSURE:Instrument.Type.TEMPERATURE;}
+        }else if(fitting!=null){
+            host=fitting.host();mount=fitting.mount().id();
+            if(!InstrumentHosts.reachable(player,host,fitting.mount()))return;
+            if(remove){var old=store.legacy(host.identity());if(old==null)return;instance=old.instance();type=old.type();}
+            else{if(store.legacy(host.identity())!=null||!InstrumentHosts.clear(player.level(),host,fitting.mount()))return;instance=UUID.randomUUID();type=Instrument.Type.LEVEL_GAUGE;}
+        }else return;
+        if(!permission(player,host,held))return;
+        var pending=new Store.Pending(UUID.randomUUID(),player.getUUID(),new Instrument.Key(host.identity(),mount),instance,store.revision(host.identity()),!remove,type,settings,player.level().dimension().location().toString(),host.entity().getBlockPos().asLong(),player.getInventory().selected,hand==InteractionHand.OFF_HAND);
+        if(store.queue(pending)){exactStacks.put(pending.request(),held);commit(player,player.serverLevel(),pending);store.finish(pending.request());exactStacks.remove(pending.request());}
     }
     private static boolean permission(ServerPlayer player,InstrumentHosts.Host host,ItemStack held){var pos=host.entity().getBlockPos();return player.mayBuild()&&!player.isSpectator()&&player.serverLevel().mayInteract(player,pos)&&player.mayUseItemAt(pos,Direction.UP,held);}
-    public void tick(long tick){if(store.nextDue()==0)store.nextDue(tick+100);if(tick<store.nextDue())return;store.nextDue(tick+100);commitSensors();recoverInvalidSensors();for(var p:store.pending()){var player=server.getPlayerList().getPlayer(p.player());if(player==null)continue;var level=level(p.dimension());if(level==null||!level.hasChunkAt(BlockPos.of(p.position())))continue;commit(player,level,p);store.finish(p.request());exactStacks.remove(p.request());}for(var i:store.installed()){var h=world.instrumentHost(i.key().host());if(h==null)continue;var m=h.mount(i.key().mount());if(m==null||!m.kinds().contains(i.settings().kind())||h.pipe()&&InstrumentHosts.legacy(h.entity().getBlockState())!=null){var removed=store.remove(i.key(),i.instance());if(removed!=null){refund(null,h.entity().getLevel(),h.entity().getBlockPos(),item(removed));samples.remove(i.instance());sync(h);}}}prune();}
-    private void commit(ServerPlayer player,ServerLevel level,Store.Pending p){var host=InstrumentHosts.at(level,BlockPos.of(p.position()));if(host==null||host.identity()!=p.key().host()||player.serverLevel()!=level||store.revision(host.identity())!=p.expectedRevision())return;var hand=p.offhand()?InteractionHand.OFF_HAND:InteractionHand.MAIN_HAND;var held=player.getItemInHand(hand);if(!permission(player,host,held))return;if(!p.offhand()&&player.getInventory().selected!=p.slot()||exactStacks.containsKey(p.request())&&held!=exactStacks.get(p.request()))return;var mount=host.mount(p.key().mount());if(p.install()){if((!(held.getItem() instanceof GaugeItem gauge)||gauge.kind()!=p.settings().kind())||!p.settings().equals(held.get(ModItems.GAUGE_SETTINGS.get()))||mount==null||host.occupied(mount)||!InstrumentHosts.clear(level,host,mount)||!mount.kinds().contains(p.settings().kind())||host.pipe()&&!store.host(host.identity()).isEmpty()||!(host.pipe()?InstrumentHosts.pipeReachable(player,host):InstrumentHosts.reachable(player,host,mount)))return;if(store.install(p)==null)return;if(!player.isCreative())held.shrink(1);}
-        else {if(!held.is(ModItems.ACCESSORY_WRENCH.get()))return;if(p.type()==Instrument.Type.PRESSURE||p.type()==Instrument.Type.TEMPERATURE){if(mount==null||!InstrumentHosts.reachable(player,host,mount))return;var removed=store.remove(p.key(),p.instance());if(removed==null)return;refund(player,level,host.entity().getBlockPos(),item(removed));samples.remove(removed.instance());}else{if(InstrumentHosts.legacy(host.entity().getBlockState())!=p.type()||!(host.entity() instanceof com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity pipe)||InstrumentHosts.PipeAccessory.of(pipe)==null||!InstrumentHosts.reachable(player,host,InstrumentHosts.PipeAccessory.of(pipe))||store.legacy(host.identity())==null||!store.legacy(host.identity()).instance().equals(p.instance())||!world.removePipeAccessory(host.identity()))return;var recovered=store.removeLegacy(host.identity(),p.instance());if(recovered==null)return;recoverSensors(host.identity(),player,level,host.entity().getBlockPos(),true);clearLegacy(host);refund(player,level,host.entity().getBlockPos(),item(recovered.type()));}}
+    public void tick(long tick){if(store.nextDue()==0)store.nextDue(tick+100);if(tick<store.nextDue())return;store.nextDue(tick+100);recoverInvalidSensors();for(var p:store.pending()){var player=server.getPlayerList().getPlayer(p.player());if(player==null)continue;var level=level(p.dimension());if(level==null||!level.hasChunkAt(BlockPos.of(p.position())))continue;commit(player,level,p);store.finish(p.request());exactStacks.remove(p.request());}for(var i:store.installed()){var h=world.instrumentHost(i.key().host());if(h==null)continue;var m=h.mount(i.key().mount());if(m==null||!m.kinds().contains(i.settings().kind())||h.pipe()&&InstrumentHosts.legacy(h.entity().getBlockState())!=null){var removed=store.remove(i.key(),i.instance());if(removed!=null){refund(null,h.entity().getLevel(),h.entity().getBlockPos(),item(removed));samples.remove(i.instance());sync(h);}}}prune();}
+    private void commit(ServerPlayer player,ServerLevel level,Store.Pending p){var host=InstrumentHosts.at(level,BlockPos.of(p.position()));if(host==null||host.identity()!=p.key().host()||player.serverLevel()!=level||store.revision(host.identity())!=p.expectedRevision())return;var hand=p.offhand()?InteractionHand.OFF_HAND:InteractionHand.MAIN_HAND;var held=player.getItemInHand(hand);if(!permission(player,host,held))return;if(!p.offhand()&&player.getInventory().selected!=p.slot()||exactStacks.containsKey(p.request())&&held!=exactStacks.get(p.request()))return;
+        if(p.type()==Instrument.Type.LEVEL_GAUGE){
+            var mount=InstrumentHosts.LevelGauge.of(host);
+            if(mount==null||!mount.id().equals(p.key().mount())||!InstrumentHosts.reachable(player,host,mount))return;
+            if(p.install()){
+                if(!held.is(ModItems.LIQUID_LEVEL_GAUGE.get())||!InstrumentHosts.clear(level,host,mount)||store.installFitting(p)==null)return;
+                if(!player.isCreative())held.shrink(1);
+            }else{
+                var old=store.legacy(host.identity());
+                if(!held.is(ModItems.ACCESSORY_WRENCH.get())||old==null||old.type()!=Instrument.Type.LEVEL_GAUGE||!old.instance().equals(p.instance()))return;
+                var recovered=store.removeLegacy(host.identity(),p.instance());if(recovered==null)return;
+                refund(player,level,host.entity().getBlockPos(),item(recovered.type()));
+            }
+        }else{
+            var mount=host.mount(p.key().mount());
+            if(p.install()){if((!(held.getItem() instanceof GaugeItem gauge)||gauge.kind()!=p.settings().kind())||!p.settings().equals(held.get(ModItems.GAUGE_SETTINGS.get()))||mount==null||host.occupied(mount)||!InstrumentHosts.clear(level,host,mount)||!mount.kinds().contains(p.settings().kind())||host.pipe()&&!store.host(host.identity()).isEmpty()||!(host.pipe()?InstrumentHosts.pipeReachable(player,host):InstrumentHosts.reachable(player,host,mount)))return;if(store.install(p)==null)return;if(!player.isCreative())held.shrink(1);}
+            else {if(!held.is(ModItems.ACCESSORY_WRENCH.get()))return;if(p.type()==Instrument.Type.PRESSURE||p.type()==Instrument.Type.TEMPERATURE){if(mount==null||!InstrumentHosts.reachable(player,host,mount))return;var removed=store.remove(p.key(),p.instance());if(removed==null)return;refund(player,level,host.entity().getBlockPos(),item(removed));samples.remove(removed.instance());}else{if(InstrumentHosts.legacy(host.entity().getBlockState())!=p.type()||!(host.entity() instanceof com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity pipe)||InstrumentHosts.PipeAccessory.of(pipe)==null||!InstrumentHosts.reachable(player,host,InstrumentHosts.PipeAccessory.of(pipe))||store.legacy(host.identity())==null||!store.legacy(host.identity()).instance().equals(p.instance())||!world.removePipeAccessory(host.identity()))return;var recovered=store.removeLegacy(host.identity(),p.instance());if(recovered==null)return;recoverSensors(host.identity(),player,level,host.entity().getBlockPos(),true);clearLegacy(host);refund(player,level,host.entity().getBlockPos(),item(recovered.type()));}}
+        }
         sync(host);world.markViewDirty(host.identity());player.inventoryMenu.broadcastChanges();
     }
     public void requestSensor(ServerPlayer player,InteractionHand hand,Sensor.Kind kind){
@@ -52,80 +86,100 @@ public final class InstrumentService {
         InstrumentHosts.Host chosen=null;Instrument.Mount mount=null;double nearest=player.blockInteractionRange();
         var eye=player.getEyePosition();var end=eye.add(player.getLookAngle().scale(nearest));
         for(var host:hosts)for(var m:Sensor.mounts(host,kind)){var hit=m.bounds().clip(eye,end);if(hit.isPresent()&&hit.get().distanceTo(eye)<=nearest){chosen=host;mount=m;nearest=hit.get().distanceTo(eye);}}
-        if(chosen==null&&player.pick(player.blockInteractionRange(),0,false) instanceof net.minecraft.world.phys.BlockHitResult hit){
-            var host=InstrumentHosts.at(player.level(),hit.getBlockPos());if(host!=null){var mounts=Sensor.mounts(host,kind);if(!mounts.isEmpty()){chosen=host;mount=mounts.stream().min(Comparator.comparingDouble(m->m.centre().distanceToSqr(eye))).orElseThrow();}}
+        if(player.pick(player.blockInteractionRange(),0,false) instanceof net.minecraft.world.phys.BlockHitResult hit&&hit.getType()==net.minecraft.world.phys.HitResult.Type.BLOCK){
+            var host=InstrumentHosts.at(player.level(),hit.getBlockPos());
+            if(host!=null&&(chosen==null||host.pipe()&&chosen.identity()==host.identity())){
+                var mounts=Sensor.mounts(host,kind);
+                if(!mounts.isEmpty()){
+                    chosen=host;
+                    var toward=eye.subtract(hit.getBlockPos().getCenter());
+                    mount=host.pipe()?mounts.stream().max(Comparator.comparingDouble(m->m.normal().dot(toward))).orElseThrow():mounts.stream().min(Comparator.comparingDouble(m->m.centre().distanceToSqr(eye))).orElseThrow();
+                }
+            }
         }
-        if(chosen==null||mount==null||!permission(player,chosen,player.getItemInHand(hand)))return;
-        queueSensor(player,hand,chosen,mount,kind,false);
+        if(chosen==null||mount==null){sensorNotice(player,"unsupported");return;}
+        if(!permission(player,chosen,player.getItemInHand(hand)))return;
+        boolean pipeTap=chosen.pipe()&&mount.id().startsWith("pipe_");
+        if(!InstrumentHosts.reachable(player,chosen,mount)&&!(pipeTap&&InstrumentHosts.pipeReachable(player,chosen))){sensorNotice(player,"reach");return;}
+        var key=new Instrument.Key(chosen.identity(),mount.id());
+        if(store.sensor(key)!=null||store.get(key)!=null||pipeTap&&occupied(chosen.identity())){sensorNotice(player,"occupied");return;}
+        if(!InstrumentHosts.clear(player.level(),chosen,mount)){sensorNotice(player,"blocked");return;}
+        changeSensor(player,hand,chosen,mount,kind,false);
     }
     private boolean requestSensorRemoval(ServerPlayer player,InteractionHand hand){
         if(!player.getItemInHand(hand).is(ModItems.ACCESSORY_WRENCH.get())||player.isSpectator()||!player.mayBuild())return false;
         double reach=player.blockInteractionRange();var eye=player.getEyePosition();var end=eye.add(player.getLookAngle().scale(reach));
         for(var host:InstrumentHosts.nearby(player.level(),eye,8))for(var sensor:store.sensors(host.identity()))for(var mount:Sensor.mounts(host,sensor.kind())){
-            if(!mount.id().equals(sensor.key().mount())||mount.bounds().clip(eye,end).isEmpty())continue;
-            queueSensor(player,hand,host,mount,sensor.kind(),true);return true;
+            if(!mount.id().equals(sensor.key().mount())||mount.bounds().clip(eye,end).isEmpty()||!InstrumentHosts.reachable(player,host,mount))continue;
+            changeSensor(player,hand,host,mount,sensor.kind(),true);return true;
         }
         return false;
     }
-    private void queueSensor(ServerPlayer player,InteractionHand hand,InstrumentHosts.Host host,Instrument.Mount mount,Sensor.Kind kind,boolean remove){
+    private static void sensorNotice(ServerPlayer player,String reason){player.displayClientMessage(net.minecraft.network.chat.Component.translatable("message.icheme.sensor."+reason),true);}
+    /** Physical attachment is immediate; the resulting process edits still enter the engine's queues. */
+    private void changeSensor(ServerPlayer player,InteractionHand hand,InstrumentHosts.Host host,Instrument.Mount mount,Sensor.Kind kind,boolean remove){
+        var held=player.getItemInHand(hand);
+        if(held.isEmpty()||!permission(player,host,held))return;
         var key=new Instrument.Key(host.identity(),mount.id());
-        if(sensorOperations.size()>=4096||sensorOperations.containsKey(key))return;
-        sensorOperations.put(key,new SensorOperation(player.getUUID(),key,kind,player.getItemInHand(hand),hand,remove,store.revision(host.identity()),player.level().dimension().location().toString(),host.entity().getBlockPos().asLong()));
-    }
-    private void commitSensors(){
-        var operations=List.copyOf(sensorOperations.values());sensorOperations.clear();
-        for(var op:operations){
-            var player=server.getPlayerList().getPlayer(op.player());var level=level(op.dimension());if(player==null||level==null||player.level()!=level||player.getItemInHand(op.hand())!=op.held())continue;
-            var host=InstrumentHosts.at(level,BlockPos.of(op.position()));
-            if(host==null||host.identity()!=op.key().host()||store.revision(host.identity())!=op.revision()||!permission(player,host,op.held()))continue;
-            var mount=Sensor.mounts(host,op.kind()).stream().filter(m->m.id().equals(op.key().mount())).findFirst().orElse(null);
-            if(mount==null||!InstrumentHosts.reachable(player,host,mount))continue;
-            var old=store.sensor(op.key());Sensor.Installed value;
-            if(op.remove()){
-                if(!op.held().is(ModItems.ACCESSORY_WRENCH.get())||old==null)continue;
-                value=store.removeSensor(op.key(),old.instance());if(value==null)continue;sensorSamples.remove(value.instance());refund(player,level,host.entity().getBlockPos(),sensorItem(value.kind()));
-            }else{
-                if(!(op.held().getItem() instanceof SensorItem item)||item.kind()!=op.kind()||!InstrumentHosts.clear(level,host,mount))continue;
-                value=store.installSensor(op.key(),UUID.randomUUID(),op.kind(),op.revision());if(value==null)continue;
-                if(!player.isCreative())op.held().shrink(1);
-            }
-            if(op.key().mount().equals("valve_sensor")){
-                var record=world.registrations().get(host.identity());
-                if(record!=null){var source=op.remove()?com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.NONE:op.kind()==Sensor.Kind.PRESSURE?com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.PRESSURE:com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.VOLUME_FLOW;
-                    double target=source==com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.VOLUME_FLOW?.01:200000;
-                    if(record.device().control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.ControlValve previous&&(op.remove()||previous.source()==source))target=previous.target();
-                    var next=record.device().control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.ControlValve previous?previous.withSource(op.remove()?previous.source():source,op.remove()?null:value.instance(),store.revision(host.identity())):new com.wormzjl.icheme.science.fluid.network.FlowControl.ControlValve(source,target,op.remove()?null:value.instance(),store.revision(host.identity()));
-                    editSensorValve(record,next);
-                }
-            }
-            if(op.kind()==Sensor.Kind.FLOW){world.flowmeter(host.identity(),!op.remove());metered(host);}
-            sync(host);world.markViewDirty(host.identity());player.inventoryMenu.broadcastChanges();
+        var old=store.sensor(key);Sensor.Installed value;
+        if(remove){
+            if(!held.is(ModItems.ACCESSORY_WRENCH.get())||old==null)return;
+            value=store.removeSensor(key,old.instance());if(value==null)return;
+            sensorSamples.remove(value.instance());refund(player,player.serverLevel(),host.entity().getBlockPos(),sensorItem(value.kind()));
+        }else{
+            if(!(held.getItem() instanceof SensorItem item)||item.kind()!=kind)return;
+            if(!InstrumentHosts.clear(player.level(),host,mount)){sensorNotice(player,"blocked");return;}
+            value=store.installSensor(key,UUID.randomUUID(),kind,store.revision(host.identity()));
+            if(value==null){sensorNotice(player,"occupied");return;}
+            if(!player.isCreative())held.shrink(1);
         }
+        if(key.mount().equals("valve_sensor")){
+            var record=world.registrations().get(host.identity());
+            if(record!=null){var source=remove?com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.NONE:kind==Sensor.Kind.PRESSURE?com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.PRESSURE:com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.VOLUME_FLOW;
+                double target=source==com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.VOLUME_FLOW?.01:200000;
+                if(record.device().control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.ControlValve previous&&(remove||previous.source()==source))target=previous.target();
+                var next=record.device().control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.ControlValve previous?previous.withSource(remove?previous.source():source,remove?null:value.instance(),store.revision(host.identity())):new com.wormzjl.icheme.science.fluid.network.FlowControl.ControlValve(source,target,remove?null:value.instance(),store.revision(host.identity()));
+                editSensorValve(record,next);
+            }
+        }
+        if(kind==Sensor.Kind.FLOW){world.flowmeter(host.identity(),!remove);metered(host);}
+        // A speed pickup binds or frees its turbine's governor valve through a queued shaft event.
+        if(kind==Sensor.Kind.SPEED)governor(host.identity(),remove?null:value.instance());
+        sync(host);world.markViewDirty(host.identity());player.inventoryMenu.broadcastChanges();
+        sensorNotice(player,remove?"removed":"installed");
     }
     private void editSensorValve(WorldTopologyLedger.Registration record,com.wormzjl.icheme.science.fluid.network.FlowControl.ControlValve control){
         var d=record.device();world.edit(d.id(),record.revision(),d.withControl(control),record.spec());
     }
-    private void recoverSensors(long host,ServerPlayer player,Level level,BlockPos position,boolean drop){for(var sensor:store.sensors(host))if(store.removeSensor(sensor.key(),sensor.instance())!=null){sensorSamples.remove(sensor.instance());if(sensor.kind()==Sensor.Kind.FLOW)world.forgetFlowmeter(host);if(drop)refund(player,level,position,sensorItem(sensor.kind()));}}
+    private void recoverSensors(long host,ServerPlayer player,Level level,BlockPos position,boolean drop){for(var sensor:store.sensors(host))if(store.removeSensor(sensor.key(),sensor.instance())!=null){sensorSamples.remove(sensor.instance());if(sensor.kind()==Sensor.Kind.FLOW)world.forgetFlowmeter(host);if(sensor.kind()==Sensor.Kind.SPEED)governor(host,null);if(drop)refund(player,level,position,sensorItem(sensor.kind()));}}
+    /** Queues turbine {@code host}'s governor binding (W3): {@code sensor} installed, or null removed. */
+    private void governor(long host,UUID sensor){world.shafts().queue(new ShaftTrains.Governor(host,sensor));}
+    /** The speed pickup installed on turbine {@code host}, or null (W3). */
+    public UUID speedSensor(long host){for(var s:store.sensors(host))if(s.kind()==Sensor.Kind.SPEED)return s.instance();return null;}
     private void recoverInvalidSensors(){for(var sensor:store.allSensors()){
         var host=world.instrumentHost(sensor.key().host());if(host==null)continue;
         if(Sensor.mounts(host,sensor.kind()).stream().anyMatch(m->m.id().equals(sensor.key().mount())))continue;
-        if(store.removeSensor(sensor.key(),sensor.instance())!=null){sensorSamples.remove(sensor.instance());if(sensor.kind()==Sensor.Kind.FLOW){world.flowmeter(host.identity(),false);metered(host);}refund(null,host.entity().getLevel(),host.entity().getBlockPos(),sensorItem(sensor.kind()));sync(host);world.markViewDirty(host.identity());}
+        if(store.removeSensor(sensor.key(),sensor.instance())!=null){sensorSamples.remove(sensor.instance());if(sensor.kind()==Sensor.Kind.FLOW){world.flowmeter(host.identity(),false);metered(host);}if(sensor.kind()==Sensor.Kind.SPEED)governor(host.identity(),null);refund(null,host.entity().getLevel(),host.entity().getBlockPos(),sensorItem(sensor.kind()));sync(host);world.markViewDirty(host.identity());}
     }}
-    public static ItemStack sensorItem(Sensor.Kind kind){return new ItemStack(switch(kind){case PRESSURE->ModItems.PRESSURE_PROBE.get();case TEMPERATURE->ModItems.TEMPERATURE_PROBE.get();case FLOW->ModItems.FLOWMETER.get();case LEVEL->ModItems.DIGITAL_LEVEL_METER.get();});}
-    public List<Sensor.Reading> sensorReadings(long host,FluidView view){var pipe=world.instrumentPipeReading(host);return store.sensors(host).stream().map(s->{var reading=Sensor.read(s,view,pipe,sensorSamples.get(s.instance()));sensorSamples.put(s.instance(),reading);return reading;}).toList();}
+    public static ItemStack sensorItem(Sensor.Kind kind){return new ItemStack(switch(kind){case PRESSURE->ModItems.PRESSURE_PROBE.get();case TEMPERATURE->ModItems.TEMPERATURE_PROBE.get();case FLOW->ModItems.FLOWMETER.get();case LEVEL->ModItems.DIGITAL_LEVEL_METER.get();case SPEED->ModItems.SPEED_SENSOR.get();});}
+    public List<Sensor.Reading> sensorReadings(long host,FluidView view){var pipe=world.instrumentPipeReading(host);return store.sensors(host).stream().map(s->{var reading=s.kind()==Sensor.Kind.SPEED?speedReading(s,view):Sensor.read(s,view,pipe,sensorSamples.get(s.instance()));sensorSamples.put(s.instance(),reading);return reading;}).toList();}
+    /** A speed pickup reads its turbine's shaft speed, rpm, as the trains last decided it (W3): a read of engine state. */
+    private Sensor.Reading speedReading(Sensor.Installed s,FluidView view){double rpm=world.shafts().speed(s.key().host());
+        return new Sensor.Reading(s.instance(),s.kind(),s.key().mount(),Double.isFinite(rpm)?rpm:0,0,0,view.committedTick(),Double.isFinite(rpm)?Instrument.Availability.AVAILABLE:Instrument.Availability.UNAVAILABLE);}
     private ServerLevel level(String name){return server.getLevel(ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION,ResourceLocation.parse(name)));}
     /** A flowmeter installed or removed (W8): an assembly whose walk read that pipe reverts, as for a fitting. */
     private static void metered(InstrumentHosts.Host host){if(host.entity().getLevel() instanceof net.minecraft.server.level.ServerLevel level)com.wormzjl.icheme.runtime.assembly.AssemblyService.metered(level,host.entity().getBlockPos());}
-    private void sync(InstrumentHosts.Host host){host.metadata().sensors(store.sensors(host.identity()));host.metadata().set(store.host(host.identity()),store.revision(host.identity()));host.entity().setChanged();InstrumentHosts.loaded(host.entity());var l=host.entity().getLevel();var pos=host.entity().getBlockPos();l.sendBlockUpdated(pos,host.entity().getBlockState(),host.entity().getBlockState(),Block.UPDATE_CLIENTS);}
+    private void sync(InstrumentHosts.Host host){host.metadata().sensors(store.sensors(host.identity()));host.metadata().set(store.host(host.identity()),store.revision(host.identity()),host.pipe()?null:store.legacy(host.identity()));world.controls().bind(host);host.entity().setChanged();InstrumentHosts.loaded(host.entity());var l=host.entity().getLevel();var pos=host.entity().getBlockPos();l.sendBlockUpdated(pos,host.entity().getBlockState(),host.entity().getBlockState(),Block.UPDATE_CLIENTS);}
     /** Saved registrations include unloaded valves; reconciliation queues edits without touching their chunks. */
     public void reconcileLegacyValves(){for(var record:List.copyOf(world.registrations().values()))if(record.device().control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.PressureValve legacy)editSensorValve(record,store.convertLegacyValve(record.device().id(),legacy));}
-    public void bind(InstrumentHosts.Host host){if(host==null)return;
+    public java.util.List<Sensor.Installed> allSensors(){return store.allSensors();}
+    public void bind(InstrumentHosts.Host host){if(host==null)return;world.controls().bind(host);
         var record=world.registrations().get(host.identity());
         if(host.pipe()&&record!=null&&record.device().control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.PressureValve legacy){
             var control=store.convertLegacyValve(host.identity(),legacy);
             editSensorValve(record,control);
         }
-        if(!host.metadata().sensors().equals(store.sensors(host.identity()))||!host.metadata().installed().equals(store.host(host.identity()))||host.metadata().revision()!=store.revision(host.identity()))sync(host);
+        if(!host.metadata().sensors().equals(store.sensors(host.identity()))||!host.metadata().installed().equals(store.host(host.identity()))||!Objects.equals(host.metadata().fitting(),host.pipe()?null:store.legacy(host.identity()))||host.metadata().revision()!=store.revision(host.identity()))sync(host);
     }
     public void recoverHost(long id){var host=world.instrumentHost(id);if(host!=null)recover(id,host.entity().getLevel(),host.entity().getBlockPos(),host.pipe()?InstrumentHosts.legacy(host.entity().getBlockState()):null,host.metadata().recoverOnBreak());}
     public void recover(long id,Level level,BlockPos position,Instrument.Type legacy,boolean drop){recoverSensors(id,null,level,position,drop);for(var i:store.host(id))if(store.remove(i.key(),i.instance())!=null){if(drop)refund(null,level,position,item(i));samples.remove(i.instance());}var fitting=store.legacy(id);if(fitting!=null&&store.removeLegacy(id,fitting.instance())!=null&&drop)refund(null,level,position,item(fitting.type()));forget(id);}
@@ -133,7 +187,7 @@ public final class InstrumentService {
     public void recoverLegacy(long host,Level level,BlockPos position){var old=store.legacy(host);if(old!=null&&store.removeLegacy(host,old.instance())!=null){refund(null,level,position,item(old.type()));bind(world.instrumentHost(host));}}
     private static void clearLegacy(InstrumentHosts.Host host){var e=host.entity();var s=e.getBlockState().setValue(FluidDeviceBlock.SIGHT_GLASS,false).setValue(FluidDeviceBlock.SHUTOFF,FluidDeviceBlock.Shutoff.NONE).setValue(FluidDeviceBlock.PRESSURE_CONTROL,false).setValue(FluidDeviceBlock.INLINE_FILTER,false).setValue(FluidDeviceBlock.INLINE_MOVER,FluidDeviceBlock.InlineMover.NONE);s=FluidDeviceBlock.connectedState(s,e.getLevel(),e.getBlockPos());e.getLevel().setBlock(e.getBlockPos(),s,Block.UPDATE_ALL);if(e instanceof com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity pipe)pipe.refreshGeometry(pipe.bore(),true);}
     public static ItemStack item(Instrument.Installed i){var stack=item(i.settings().kind()==GaugeSettings.Kind.PRESSURE?Instrument.Type.PRESSURE:Instrument.Type.TEMPERATURE);stack.set(ModItems.GAUGE_SETTINGS.get(),i.settings());return stack;}
-    public static ItemStack item(Instrument.Type type){return new ItemStack(switch(type){case PRESSURE->ModItems.PRESSURE_GAUGE.get();case TEMPERATURE->ModItems.TEMPERATURE_GAUGE.get();case SIGHT_GLASS->ModItems.PIPELINE_SIGHT_GLASS.get();case SHUTOFF->ModItems.PIPELINE_SHUTOFF_VALVE.get();case CHECK->ModItems.PIPELINE_CHECK_VALVE.get();case PRESSURE_VALVE->ModItems.PRESSURE_CONTROL_VALVE.get();case FILTER->ModItems.INLINE_FILTER.get();case PUMP->ModItems.FLUID_PUMP.get();case COMPRESSOR->ModItems.FLUID_COMPRESSOR.get();});}
+    public static ItemStack item(Instrument.Type type){return new ItemStack(switch(type){case LEVEL_GAUGE->ModItems.LIQUID_LEVEL_GAUGE.get();case PRESSURE->ModItems.PRESSURE_GAUGE.get();case TEMPERATURE->ModItems.TEMPERATURE_GAUGE.get();case SIGHT_GLASS->ModItems.PIPELINE_SIGHT_GLASS.get();case SHUTOFF->ModItems.PIPELINE_SHUTOFF_VALVE.get();case CHECK->ModItems.PIPELINE_CHECK_VALVE.get();case PRESSURE_VALVE->ModItems.PRESSURE_CONTROL_VALVE.get();case FILTER->ModItems.INLINE_FILTER.get();case PUMP->ModItems.FLUID_PUMP.get();case COMPRESSOR->ModItems.FLUID_COMPRESSOR.get();});}
     private static void refund(ServerPlayer player,Level level,BlockPos pos,ItemStack stack){if(player!=null){if(player.getInventory().add(stack))return;player.drop(stack,false);}else Block.popResource(level,pos,stack);}
     public void watch(ServerPlayer player,List<FluidNetwork.InstrumentTarget> add,List<FluidNetwork.InstrumentTarget> remove){var set=watchers.computeIfAbsent(player.getUUID(),k->new HashSet<>());for(var t:remove){set.remove(t);world.instrumentObservationChanged(t.key().host());}for(var t:add){if(set.size()>=64||!valid(player,t))continue;set.add(t);world.instrumentObservationChanged(t.key().host());var sample=samples.get(t.instance());if(sample!=null)FluidNetwork.sendInstrument(player,t,sample,world.onlineTick());}}
     private boolean valid(ServerPlayer p,FluidNetwork.InstrumentTarget t){var i=store.get(t.key());var host=world.instrumentHost(t.key().host());var mount=host==null?null:host.mount(t.key().mount());return i!=null&&i.instance().equals(t.instance())&&host!=null&&host.entity().getLevel()==p.serverLevel()&&host.entity().getBlockPos().equals(t.position())&&mount!=null&&mount.centre().distanceToSqr(p.position())<=128*128;}
@@ -153,12 +207,17 @@ public final class InstrumentService {
      */
     public static final class Store extends SavedData {
         public static final String DATA_NAME="icheme_accessories";
-        public record Legacy(Instrument.Key key,UUID instance,long revision,Instrument.Type type) {
-            public Legacy{Objects.requireNonNull(key);Objects.requireNonNull(instance);Objects.requireNonNull(type);if(!key.mount().equals("pipe_accessory")||revision<=0||type==Instrument.Type.PRESSURE||type==Instrument.Type.TEMPERATURE)throw new IllegalArgumentException("Invalid pipe accessory");}
-        }
         public record Pending(UUID request,UUID player,Instrument.Key key,UUID instance,long expectedRevision,
                               boolean install,Instrument.Type type,GaugeSettings settings,String dimension,long position,int slot,boolean offhand) {
-            public Pending{Objects.requireNonNull(request);Objects.requireNonNull(player);Objects.requireNonNull(key);Objects.requireNonNull(instance);Objects.requireNonNull(type);Objects.requireNonNull(dimension);if(expectedRevision<0||slot<0||slot>8||net.minecraft.resources.ResourceLocation.tryParse(dimension)==null||install&&settings==null)throw new IllegalArgumentException("Invalid accessory operation");if(install&&type!=Instrument.Type.PRESSURE&&type!=Instrument.Type.TEMPERATURE||settings!=null&&(type!=Instrument.Type.PRESSURE&&type!=Instrument.Type.TEMPERATURE||(type==Instrument.Type.PRESSURE)!=(settings.kind()==GaugeSettings.Kind.PRESSURE)))throw new IllegalArgumentException("Accessory settings mismatch");}
+            public Pending{
+                Objects.requireNonNull(request);Objects.requireNonNull(player);Objects.requireNonNull(key);Objects.requireNonNull(instance);Objects.requireNonNull(type);Objects.requireNonNull(dimension);
+                boolean dial=type==Instrument.Type.PRESSURE||type==Instrument.Type.TEMPERATURE;
+                if(expectedRevision<0||slot<0||slot>8||net.minecraft.resources.ResourceLocation.tryParse(dimension)==null||install&&dial&&settings==null)throw new IllegalArgumentException("Invalid accessory operation");
+                if(install&&!dial&&type!=Instrument.Type.LEVEL_GAUGE||settings!=null&&(!dial||(type==Instrument.Type.PRESSURE)!=(settings.kind()==GaugeSettings.Kind.PRESSURE)))throw new IllegalArgumentException("Accessory settings mismatch");
+                if(dial){
+                    if(key.mount().equals("tank_level")||key.mount().equals("pipe_accessory")||key.mount().startsWith("pressure_")&&type!=Instrument.Type.PRESSURE||key.mount().startsWith("temperature_")&&type!=Instrument.Type.TEMPERATURE)throw new IllegalArgumentException("Invalid dial mount");
+                }else if(!key.mount().equals(Instrument.Fitting.mount(type)))throw new IllegalArgumentException("Invalid fitting mount");
+            }
         }
         private long nextDue;
         public long nextDue(){return nextDue;}
@@ -185,12 +244,18 @@ public final class InstrumentService {
         }
         public Sensor.Installed removeSensor(Instrument.Key key,UUID instance){var old=sensors.get(key);if(old==null||!old.instance().equals(instance))return null;sensors.remove(key);advance(key.host());setDirty();return old;}
         private final Map<Instrument.Key,Instrument.Installed> installed=new LinkedHashMap<>();
-        private final Map<Long,Legacy> legacy=new LinkedHashMap<>();
-        public Legacy legacy(long host){return legacy.get(host);}
-        public Legacy installLegacy(long host,Instrument.Type type){var old=legacy.get(host);if(old!=null){if(old.type()!=type)throw new IllegalStateException("Occupied accessory slot");return old;}if(!host(host).isEmpty()||!sensors(host).isEmpty())throw new IllegalStateException("Occupied pipe");var value=new Legacy(new Instrument.Key(host,"pipe_accessory"),UUID.randomUUID(),Math.addExact(revision(host),1),type);revisions.put(host,value.revision());legacy.put(host,value);setDirty();return value;}
-        public Legacy removeLegacy(long host,UUID instance){var old=legacy.get(host);if(old==null||!old.instance().equals(instance))return null;advance(host);legacy.remove(host);setDirty();return old;}
+        private final Map<Long,Instrument.Fitting> legacy=new LinkedHashMap<>();
+        public Instrument.Fitting legacy(long host){return legacy.get(host);}
+        public Instrument.Fitting installLegacy(long host,Instrument.Type type){var old=legacy.get(host);if(old!=null){if(old.type()!=type)throw new IllegalStateException("Occupied accessory slot");return old;}if(!canFit(host,type))throw new IllegalStateException("Occupied accessory host");var value=new Instrument.Fitting(new Instrument.Key(host,Instrument.Fitting.mount(type)),UUID.randomUUID(),Math.addExact(revision(host),1),type);revisions.put(host,value.revision());legacy.put(host,value);setDirty();return value;}
+        private boolean canFit(long host,Instrument.Type type){return type==Instrument.Type.LEVEL_GAUGE?host(host).stream().noneMatch(i->i.key().mount().startsWith("pipe_"))&&sensors(host).stream().noneMatch(i->i.key().mount().startsWith("pipe_")):host(host).isEmpty()&&sensors(host).isEmpty();}
+        public Instrument.Fitting installFitting(Pending p){
+            if(!p.equals(pending.get(p.request()))||!p.install()||p.type()!=Instrument.Type.LEVEL_GAUGE||p.expectedRevision()!=revision(p.key().host())||legacy.containsKey(p.key().host())||!canFit(p.key().host(),p.type()))return null;
+            var value=new Instrument.Fitting(p.key(),p.instance(),advance(p.key().host()),p.type());legacy.put(p.key().host(),value);setDirty();return value;
+        }
+        public Instrument.Fitting removeLegacy(long host,UUID instance){var old=legacy.get(host);if(old==null||!old.instance().equals(instance))return null;advance(host);legacy.remove(host);setDirty();return old;}
         private final Map<Long,Long> revisions=new LinkedHashMap<>();
         private final Map<UUID,Pending> pending=new LinkedHashMap<>();
+        public Collection<Instrument.Fitting> fittings(){return List.copyOf(legacy.values());}
         public Collection<Instrument.Installed> installed(){return List.copyOf(installed.values());}
         public Instrument.Installed get(Instrument.Key key){return installed.get(key);}
         public List<Instrument.Installed> host(long host){return installed.values().stream().filter(i->i.key().host()==host).toList();}
@@ -199,7 +264,7 @@ public final class InstrumentService {
         public List<Pending> pending(){return List.copyOf(pending.values());}
         public boolean queue(Pending p){if(pending.containsKey(p.request)||p.expectedRevision!=revision(p.key.host())||pending.size()>=4096||pending.values().stream().anyMatch(v->v.key.equals(p.key)))return false;pending.put(p.request,p);setDirty();return true;}
         public void finish(UUID request){if(pending.remove(request)!=null)setDirty();}
-        public Instrument.Installed install(Pending p){if(!p.equals(pending.get(p.request))||!p.install||revision(p.key.host())!=p.expectedRevision||installed.containsKey(p.key)||sensors.containsKey(p.key)||!sensors(p.key.host()).isEmpty()&&p.key.mount().startsWith("pipe_")||legacy.containsKey(p.key.host())||p.key.mount().startsWith("pipe_")&&!host(p.key.host()).isEmpty())return null;long rev=Math.addExact(revision(p.key.host()),1);var i=new Instrument.Installed(p.key,p.instance,rev,p.settings);revisions.put(p.key.host(),rev);installed.put(p.key,i);setDirty();return i;}
+        public Instrument.Installed install(Pending p){if(p.type()==Instrument.Type.LEVEL_GAUGE||!p.equals(pending.get(p.request))||!p.install||revision(p.key.host())!=p.expectedRevision||installed.containsKey(p.key)||sensors.containsKey(p.key)||!sensors(p.key.host()).isEmpty()&&p.key.mount().startsWith("pipe_")||legacy.containsKey(p.key.host())&&(legacy.get(p.key.host()).type()!=Instrument.Type.LEVEL_GAUGE||p.key.mount().startsWith("pipe_"))||p.key.mount().startsWith("pipe_")&&!host(p.key.host()).isEmpty())return null;long rev=Math.addExact(revision(p.key.host()),1);var i=new Instrument.Installed(p.key,p.instance,rev,p.settings);revisions.put(p.key.host(),rev);installed.put(p.key,i);setDirty();return i;}
         public Instrument.Installed remove(Instrument.Key key,UUID instance){var old=installed.get(key);if(old==null||!old.instance().equals(instance))return null;advance(key.host());installed.remove(key);setDirty();return old;}
         public void changed(long host){advance(host);setDirty();}
         private long advance(long host){long next=Math.addExact(revision(host),1);revisions.put(host,next);return next;}
@@ -231,7 +296,7 @@ public final class InstrumentService {
                 if(i.revision()>s.revision(host)||i.key().mount().startsWith("pipe_")&&!s.host(host).isEmpty()||s.host(host).stream().anyMatch(existing->existing.key().mount().startsWith("pipe_"))||s.installed.put(i.key(),i)!=null)
                     throw root.invalid("the gauge at "+i.key()+" conflicts with its host's records");}
             for(var v:root.list("fittings")){var f=AccessoryFacts.fitting(v);long host=f.key().host();
-                if(f.revision()>s.revision(host)||!s.host(host).isEmpty()||s.legacy.put(host,f)!=null)throw root.invalid("the fitting on host "+host+" conflicts with its host's records");}
+                if(f.revision()>s.revision(host)||!s.canFit(host,f.type())||s.legacy.put(host,f)!=null)throw root.invalid("the fitting on host "+host+" conflicts with its host's records");}
             var instances=new HashSet<UUID>();s.installed.values().forEach(i->instances.add(i.instance()));s.legacy.values().forEach(i->instances.add(i.instance()));
             for(var v:root.list("sensors",List.of())){var sensor=Sensor.load(v);long host=sensor.key().host();
                 var fitting=s.legacy(host);

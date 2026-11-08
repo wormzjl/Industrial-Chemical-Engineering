@@ -8,6 +8,8 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 
 | Folder | Purpose | Batch | Status |
 |---|---|---|---|
+| [equipment-drawings/](equipment-drawings/README.md) | Native equipment drawings and labelled interface proposals | `2026-11-06-simulator-sizing` | In use since 2026-11-08 |
+| [simulator-sizing/](simulator-sizing/README.md) | Sizing, shared-line audits, control/FE and equipment probes | `2026-11-06-simulator-sizing` | Retained since 2026-11-08 |
 | [crude-grades/](crude-grades/README.md) | Generator of the four open crude grades, the Twu cut viscosity tables, the ECCC mixture refit and draft presets | `2026-11-04-open-thermo-data` | In use since 2026-11-04 |
 | [open-thermo-data/](open-thermo-data/README.md) | NIST-derived values re-derived from CoolProp, CEA, IAPWS; the neural sidecar's trained physics as values; oracle and column probes | `2026-11-04-open-thermo-data` | In progress since 2026-11-04 |
 | [neural-retrain/](neural-retrain/README.md) | Open-data retrain of the column's learned start: design, label, feature and fixture probe, Python twin and trainer, re-iteration and qualification harnesses | `2026-11-05-neural-retrain` | In progress since 2026-11-05 |
@@ -16,6 +18,11 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 | [process-simulator/](process-simulator/README.md) | Plain-JVM probes: a client can run the column and flashes; the design sheets' sample flowsheet solved by hand | `2026-11-02-process-simulator` | In use since 2026-11-02 |
 | [device-names/](device-names/README.md) | Nameplate placement probe and plate-look renders | `2026-11-02-process-simulator` | In use since 2026-11-03 |
 | [simulator-bench/](simulator-bench/README.md) | Process simulator CPU, allocation, heap and draw-call bench on the bundled crude unit, with JFR | `2026-11-02-process-simulator` | In use since 2026-11-04 |
+| [rotating-machinery/](rotating-machinery/README.md) | Machine-law quick checks and campaigns, worked numbers, W2 hold traces and probes | `2026-11-03-rotating-machinery` | In use since 2026-11-04 |
+| [pump-sprites/](pump-sprites/README.md) | Machinery/control sprites and normal/low-detail render probes | `2026-11-03-rotating-machinery`, `2026-11-06-simulator-sizing` | In use since 2026-11-04 |
+| [machine-parts/](machine-parts/README.md) | Flat 16 x 16 machine part item icons (the pump repair kit) | `2026-11-03-rotating-machinery` | In use since 2026-11-04 |
+| [machine-sounds/](machine-sounds/README.md) | Original pump, compressor, motor and steam-turbine loops (authoring only) | `2026-11-03-rotating-machinery` | In use since 2026-11-04 |
+| [machine-nozzle-probe/](machine-nozzle-probe/README.md) | Which nozzle pipe blocks move when machines lose their drawn drivers | `2026-11-03-rotating-machinery` | In use since 2026-11-03 |
 | [localization/](localization/README.md) | Missing-key scan and translation checks for the lang files | `2026-11-03-localization` | Implemented 2026-11-03 |
 | [dry-ice-cost/](dry-ice-cost/README.md) | Per-job cost, shadow flashes and prototypes of the cold crystal worlds | `2026-11-02-dry-ice-cost` | Implemented 2026-11-03 |
 | [cooling-towers/](cooling-towers/README.md) | Tower verification lane, fill forms, relief sprites, polygon counts | `2026-10-30-water-cooling-tower` | Implemented 2026-11-02 |
@@ -25,7 +32,7 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 | [valve-hold-probes/](valve-hold-probes/README.md) | Trace and job-path replays of a column outlet's held jobs | `2026-11-02-valve-hold` | Implemented 2026-11-02 |
 | [drum-outlet-sweep/](drum-outlet-sweep/README.md) | Sweep of lying boot drums' oil-outlet placement (head fallbacks, options A and B) | `2026-10-28-drum-outlet-placement` | Implemented 2026-10-28 |
 | [heat-exchanger-design/](heat-exchanger-design/README.md) | Exchanger coupling, cell-count, 1-2 shell, per-phase film, zero-wall relay and game-timing study harnesses; owner-test probe of the review world; the merge lane | `2026-10-27-heat-exchanger-design` | Implemented 2026-10-28 (0.17.0) |
-| [heat-gui-renders/](heat-gui-renders/README.md) | PNG software renders of the heat Control pages and flowsheet, and the other screens' prototypes | `2026-10-27-heat-exchanger-design`, `2026-10-28-gui-toolkit`, `2026-10-28-column-operation`, `2026-11-02-process-simulator` | In use since 2026-10-28 |
+| [heat-gui-renders/](heat-gui-renders/README.md) | PNG software renders of the heat Control pages and flowsheet, and the other screens' prototypes | `2026-10-27-heat-exchanger-design`, `2026-10-28-gui-toolkit`, `2026-10-28-column-operation`, `2026-11-02-process-simulator`, `2026-11-03-rotating-machinery`, `2026-11-06-simulator-sizing` | In use since 2026-10-28 |
 | [old-mover-removal/](old-mover-removal/README.md) | Writer of the removed-movers corpus image (a world with one-block movers) | `2026-10-28-old-mover-removal` | Implemented 2026-10-28 |
 | [native-column-default/](native-column-default/README.md) | Probes comparing the C++ and the Java outer pass of the inside-out trial, solver and calculator | `2026-10-28-native-column-default` | Implemented 2026-11-02 |
 | [column-operation/](column-operation/README.md) | C1 bench (the split table against drift, homogeneity, warm solve, rule B cost) and the review world's layout probe | `2026-10-28-column-operation` | Implemented 2026-11-02 |
@@ -69,6 +76,7 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 | [stale-worktrees-archive/](stale-worktrees-archive/README.md) | Restore kit of the 2026-10-21 branch and worktree cleanup (36 branch tips, 11 dirty worktrees) | housekeeping 2026-10-21 | Archived 2026-10-21 |
 | [test-archive-2026-10-21/](test-archive-2026-10-21/README.md) | Tests archived by the test review, with source copies and a re-attach patch | `2026-10-21-test-review` | Archived 2026-10-21 (`d13e72d1`) |
 | [test-archive-2026-11-02/](test-archive-2026-11-02/README.md) | Tests archived by the test suite review, with source copies and a re-attach patch | `2026-11-02-test-suite-optimization` | Archived 2026-11-02 (`c1b35ce2d`) |
+| [test-archive-2026-11-08/](test-archive-2026-11-08/README.md) | Tests archived by the simulator-sizing consolidation review, with source copies and a re-attach patch | `2026-11-06-simulator-sizing` | Archived 2026-11-08 (`da982f268`) |
 | [floating-roof-tanks/](floating-roof-tanks/README.md) | Open-vessel solver impact: bundled hold fuzz with open tanks, traces and prototypes | `2026-10-21-floating-roof-tanks` | Concluded 2026-10-26 (batch in 0.12.0) |
 | [storage-vessel-renders/](storage-vessel-renders/README.md) | Software renders of the floating-roof tank and the storage sphere | `2026-10-21-floating-roof-tanks` | Concluded 2026-10-26 (batch in 0.12.0) |
 | [crystal-junction-holds/](crystal-junction-holds/README.md) | Thread t56: rule-off patches, form switch, 743 trace probes and logs | `2026-10-20-crystal-junction-holds` | Implemented 2026-10-20 |

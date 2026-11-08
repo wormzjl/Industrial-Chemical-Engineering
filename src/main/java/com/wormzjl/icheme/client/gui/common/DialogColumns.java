@@ -74,7 +74,10 @@ public final class DialogColumns {
     // ---- The pipeline tools ----
 
     /** A pipeline tool: whether it paints (the laying tool); the channel edited (0 the primary, 1 the secondary) and whether it is bare steel; whether the bore draft is a size. */
-    public record PipelineTool(boolean paints, int channel, boolean bare, boolean valid) {
+    public record PipelineTool(boolean paints, int channel, boolean bare, boolean valid,boolean data,boolean power) {
+        public boolean conduit(){return data||power;}
+        public PipelineTool(boolean paints,int channel,boolean bare,boolean valid,boolean data){this(paints,channel,bare,valid,data,false);}
+        public PipelineTool(boolean paints,int channel,boolean bare,boolean valid){this(paints,channel,bare,valid,false,false);}
     }
 
     /** The palette's rows under the channel selector, and a swatch's height and the gap between two (PaintSwatch). */
@@ -88,9 +91,13 @@ public final class DialogColumns {
      */
     public static List<Column.Row> pipelineTool(PipelineTool in, HeatControlColumn.Texts t) {
         var rows = new ArrayList<Column.Row>();
-        rows.add(new Column.Group(t.get("pipeline_tool.size"), null,
+        if(in.paints()) rows.add(new Column.Group(t.get("pipeline_tool.mode"),null,List.of(new Column.Buttons(List.of(
+                position("mode:pipe",t.get("pipeline_tool.mode.pipe"),!in.conduit(),t.get("pipeline_tool.mode.pipe.hint")),
+                position("mode:data",t.get("pipeline_tool.mode.data"),in.data(),t.get("pipeline_tool.mode.data.hint")),
+                position("mode:power",t.get("pipeline_tool.mode.power"),in.power(),t.get("pipeline_tool.mode.power.hint")))))));
+        if(!in.conduit()) rows.add(new Column.Group(t.get("pipeline_tool.size"), null,
                 List.of(new Column.Field("bore", t.get("pipeline_tool.bore"), "m", t.get("pipeline_tool.bore.hint")))));
-        if (in.paints())
+        if (in.paints()&&!in.conduit())
             rows.add(new Column.Group(t.get("pipeline_tool.paint"), t.get("pipeline_tool.paint.hint"), List.of(
                     new Column.Buttons(List.of(
                             position("channel:0", t.get("pipeline_tool.paint.primary"), in.channel() == 0, t.get("pipeline_tool.paint.primary.hint")),
@@ -98,7 +105,7 @@ public final class DialogColumns {
                     new Column.Gap(SWATCH_ROWS * (SWATCH + SWATCH_GAP)),
                     new Column.Field("custom", t.get("pipeline_tool.paint.custom"), "RGB", t.get("pipeline_tool.paint.custom.hint")),
                     new Column.Buttons(List.of(position("bare", t.get("pipeline_tool.paint.bare"), in.bare(), t.get("pipeline_tool.paint.bare.hint")))))));
-        if (!in.valid()) rows.add(new Column.Line(t.get("pipeline_tool.invalid"), Palette.WARN));
+        if (!in.valid()&&!in.conduit()) rows.add(new Column.Line(t.get("pipeline_tool.invalid"), Palette.WARN));
         return rows;
     }
 

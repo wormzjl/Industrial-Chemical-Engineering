@@ -15,6 +15,25 @@ class LineGeometryTest {
     private static final int DOWN = 0, UP = 1, NORTH = 2, SOUTH = 3, WEST = 4, EAST = 5;
     private static final double[] SIZES = {1 / 16.0, .15, .4, 1};
 
+    @Test
+    void junctionPreviewKeepsTheHostSizeFlangesAndOtherFacePoints() {
+        var before = key(Kind.PIPE, EAST, .4, new int[]{WEST, EAST}, .15, 1 << EAST, true);
+        before = new Key(before.kind(), before.facing(), before.connections(), before.outside(), before.faces(),
+                before.flanged(), before.spool(), Key.offsets(WEST, 3, -2));
+        var tee = before.withConnection(NORTH, PipeSizes.code(.0625), -4, 5);
+        assertEquals(before.outside(), tee.outside());
+        assertEquals(before.face(WEST), tee.face(WEST));
+        assertEquals(before.face(EAST), tee.face(EAST));
+        assertEquals(before.flanged(), tee.flanged());
+        assertEquals(3, tee.offset(WEST, 0));
+        assertEquals(-2, tee.offset(WEST, 1));
+        assertEquals(-4, tee.offset(NORTH, 0));
+        assertEquals(5, tee.offset(NORTH, 1));
+        assertEquals(PipeSizes.code(.0625), tee.face(NORTH));
+        assertEquals(3, Integer.bitCount(tee.connections()));
+        assertFalse(LineGeometry.polygons(tee).isEmpty());
+    }
+
     /** A key whose connected faces meet lines of {@code met} outside (0: own size), flanged where {@code flanged} says. */
     private static Key key(Kind kind, int facing, double own, int[] faces, double met, int flanged, boolean spool) {
         int connections = 0;
@@ -39,7 +58,8 @@ class LineGeometryTest {
         for (var kind : Kind.values()) {
             // A heat side is a unit's passage (batch 2026-10-27-heat-exchanger-design), never a line block.
             // A pump or compressor is an in-line mover on a pipe (InlineMoverGeometry); no block draws one alone.
-            if (kind == Kind.PIPE || kind == Kind.HEAT_SIDE || kind == Kind.PUMP || kind == Kind.COMPRESSOR) continue;
+            // A turbine is a machine's cell (batch 2026-11-03-rotating-machinery, W3, A37), never a line block.
+            if (kind == Kind.PIPE || kind == Kind.HEAT_SIDE || kind == Kind.PUMP || kind == Kind.COMPRESSOR || kind == Kind.TURBINE) continue;
             for (int facing : new int[]{NORTH, EAST, UP})
                 for (double od : SIZES) {
                     int a = facing & ~1;
@@ -67,8 +87,9 @@ class LineGeometryTest {
                     double v=polygon.positions()[i],lo=0,hi=1;
                     // Only the pressure actuator's stem direction may overhang its host cell.
                     if(key.kind()==Kind.VALVE) {
-                        if(key.facing()<2&&i%3==2)lo=-1.1;
-                        else if(key.facing()>=2&&i%3==1)hi=2.1;
+                        // The reviewed full diaphragm/yoke reaches 1.7 m from the pipe axis at maximum bore.
+                        if(key.facing()<2&&i%3==2)lo=-1.2;
+                        else if(key.facing()>=2&&i%3==1)hi=2.2;
                     }
                     // The scalable filter body and diagonal service cover retain their decorative overhang.
                     if(key.kind()==Kind.FILTER){lo=-1;hi=2;}
@@ -300,6 +321,47 @@ class LineGeometryTest {
             assertEquals(expected, rimRadius(pipe, 0, 1, Material.FLANGE), 1e-9, "pipe " + od);
             assertEquals(expected, rimRadius(strainer, 0, 0, Material.FLANGE), 1e-9, "strainer " + od);
         }
+    }
+
+    @Test
+    void sourceAndSinkHaveSixEqualCoversAndNoPlacementFacing() {
+        for (var kind : new Kind[]{Kind.GENERATOR, Kind.VOID}) {
+            var material = kind == Kind.GENERATOR ? Material.FEED : Material.DRAIN;
+            var original = LineGeometry.polygons(Key.item(kind));
+            var covers = original.stream().filter(p -> p.material() == material).toList();
+            assertEquals(6, covers.size());
+            double coverDistance = Double.NaN;
+            for (int face = 0; face < 6; face++) {
+                int axis = LineGeometry.axis(face), sign = (face & 1) == 0 ? -1 : 1;
+                var cover = covers.stream().filter(p -> sign * p.normals()[axis] > .99).findFirst().orElseThrow();
+                var centre = centroid(List.of(cover), material);
+                for (int k = 0; k < 3; k++) if (k != axis) assertEquals(.5, centre[k], 1e-9);
+                double distance = Math.abs(centre[axis] - .5);
+                if (Double.isNaN(coverDistance)) coverDistance = distance;
+                assertEquals(coverDistance, distance, 1e-9, "top and bottom equal the side covers");
+            }
+            for (int facing = 0; facing < 6; facing++) {
+                var rotated = LineGeometry.polygons(key(kind, facing, .15, new int[0], 0, 0, false));
+                assertEquals(original.size(), rotated.size());
+                for (int i = 0; i < original.size(); i++) {
+                    assertArrayEquals(original.get(i).positions(), rotated.get(i).positions());
+                    assertArrayEquals(original.get(i).uvs(), rotated.get(i).uvs());
+                }
+            }
+        }
+    }
+
+    @Test
+    void sourceAndSinkFlangesMatchThePipeOnEveryFace() {
+        for (var kind : new Kind[]{Kind.GENERATOR, Kind.VOID})
+            for (int face = 0; face < 6; face++) for (double bore : new double[]{.001, .05, .25, .6, .8}) {
+                double outside = PipeSizes.outside(bore);
+                var device = key(kind, NORTH, .1, new int[]{face}, outside, 1 << face, false);
+                var pipe = key(Kind.PIPE, face, outside, new int[]{face ^ 1}, outside, 1 << (face ^ 1), false);
+                int axis = LineGeometry.axis(face), plane = face & 1;
+                assertEquals(rimRadius(pipe, axis, 1 - plane, Material.FLANGE),
+                        rimRadius(device, axis, plane, Material.FLANGE), 1e-9, device.toString());
+            }
     }
 
     @Test

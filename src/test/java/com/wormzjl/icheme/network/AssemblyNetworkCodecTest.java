@@ -27,6 +27,12 @@ import static org.junit.jupiter.api.Assertions.*;
 class AssemblyNetworkCodecTest {
     private static final long COLUMN = new BlockPos(120, 64, -30).asLong(), DRUM = new BlockPos(131, 80, -30).asLong();
 
+    @Test void aConfigurationMismatchCrossesWithItsPosition() {
+        var report=new AssemblyReport(List.of(new SlotReport(ColumnBlueprint.CONDENSER,State.CONFIGURATION,AssemblyReport.NONE,DRUM,"EXCHANGER")),List.of(),Set.of(),List.of());
+        var view=new AssemblyView(AssemblyView.Status.CHECKED,report,AssemblyReport.NONE);
+        assertEquals(view,roundTrip(view));
+    }
+
     private static AssemblyView roundTrip(AssemblyView view) {
         var buffer = new RegistryFriendlyByteBuf(Unpooled.buffer(), RegistryAccess.EMPTY);
         try {

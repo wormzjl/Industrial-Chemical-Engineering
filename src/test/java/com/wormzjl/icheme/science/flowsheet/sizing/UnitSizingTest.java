@@ -45,8 +45,31 @@ final class UnitSizingTest {
         assertSame(Limit.PUMP_FLOW, PumpSizing.rate(new PumpSizing.Load(40000, 71, 204.5, 80.), size).closest().limit());
         assertEquals(Lamp.RED, PumpSizing.rate(new PumpSizing.Load(40000, 71, 204.5, 80.), size).lamp());
         assertEquals(Lamp.RED, PumpSizing.rate(new PumpSizing.Load(731, 210, 204.5, 80.), size).lamp());
+        // Owner decision D21 and option O4: the world's in-line pump for 731 m³/h needs 3.3 m, so it starves under 0.85 × 3.3 m
+        // and the margin row asks for 4.3 m.
+        assertEquals(3.3, PumpSizing.requiredNpsh(731), 1e-9);
         assertEquals(Lamp.RED, PumpSizing.rate(new PumpSizing.Load(731, 71, 204.5, 0.), size).lamp(), "NPSH on 0 misses");
-        assertEquals(Lamp.YELLOW, PumpSizing.rate(new PumpSizing.Load(731, 71, 204.5, .5), size).lamp());
+        assertEquals(Lamp.RED, PumpSizing.rate(new PumpSizing.Load(731, 71, 204.5, 2.8), size).lamp(), "under the world's floor, 2.805 m");
+        assertEquals(Lamp.YELLOW, PumpSizing.rate(new PumpSizing.Load(731, 71, 204.5, 2.81), size).lamp(), "over the floor, under the margin");
+        assertEquals(Lamp.YELLOW, PumpSizing.rate(new PumpSizing.Load(731, 71, 204.5, 4.2), size).lamp());
+        assertEquals(Lamp.GREEN, PumpSizing.rate(new PumpSizing.Load(731, 71, 204.5, 4.3), size).lamp(), "NPSH3 plus 1 m meets it");
+        assertEquals(1.7, PumpSizing.requiredNpsh(36), .05, "the default in-line pump, 0.01 m³/s at 2950 rpm");
+    }
+
+    /** W8 (batch 2026-11-03-rotating-machinery, D43): the duty a column's door reads, the plan's worked example: 100 m³/h of water at 80 m. */
+    @Test void aPumpsRatingCarriesItsDuty() {
+        var load = new PumpSizing.Load(100, 80, 204.5, null, 1000);
+        var duty = PumpSizing.Duty.of(PumpSizing.rate(load, new PumpSizing.Size(.1)));
+        assertNotNull(duty);
+        assertEquals(100, duty.flow(), 0);
+        assertEquals(80, duty.head(), 0);
+        assertEquals(31.1e3, duty.shaft(), .1e3, "21.8 kW hydraulic at Corripio's 0.70");
+        assertEquals(3.3, duty.npsh(), 1e-9);
+        assertEquals(45e3, duty.motor(), 0, "1.2 × 31.1 kW = 37.4 kW: the next standard motor is 45 kW");
+        var dry = PumpSizing.Duty.of(PumpSizing.rate(PUMP, new PumpSizing.Size(.3)));
+        assertNotNull(dry);
+        assertTrue(Double.isNaN(dry.shaft()) && Double.isNaN(dry.motor()), "no density, no shaft power");
+        assertNull(PumpSizing.Duty.of(Rating.NONE));
     }
 
     @Test void aPumpWithNoHeightReadsNoNpshAtAll() {
@@ -108,17 +131,29 @@ final class UnitSizingTest {
         assertSame(Limit.EXCHANGER_SURFACE, down.closest().limit());
     }
 
-    /** A gas shell asks for a wide bundle: one shell meets its drop only far past the need, so the cap sends Auto to more shells. */
-    @Test void theSurfaceStaysUnderTwiceTheNeed() {
+    /** A gas shell needs a wide bundle: enlarge it before paying for parallel shells, even past the surface advisory. */
+    @Test void excessSurfaceDoesNotForceParallelShells() {
         var tube = liquid(100, 900, 1e-3);
         var shell = liquid(50, 12, 1.5e-5);
         var noCap = exchanger(1, tube, shell, Limit.EXCHANGER_DROP_GAS);
         double least = exchangers().stream().filter(size -> size.shells() == 1 && ExchangerSizing.rate(noCap, size).readings().stream().filter(reading -> reading.limit() != Limit.EXCHANGER_OVER_NEED).allMatch(Reading::met)).mapToDouble(ExchangerSizing.Size::surface).min().orElseThrow();
         var load = exchanger(least / 2.2, tube, shell, Limit.EXCHANGER_DROP_GAS);
         var choice = ExchangerSizing.auto(load);
-        assertEquals(Lamp.GREEN, choice.rating().lamp());
-        assertTrue(choice.size().shells() > 1, "one shell meets its drops only past the cap");
-        assertTrue(choice.size().surface() < 2 * load.needed());
+        assertEquals(Lamp.YELLOW, choice.rating().lamp());
+        assertEquals(1, choice.size().shells());
+        assertTrue(choice.size().surface() > 2 * load.needed());
+        assertTrue(choice.rating().reading(Limit.EXCHANGER_DROP_GAS).met());
+        assertFalse(choice.rating().reading(Limit.EXCHANGER_OVER_NEED).met(), "excess stays visible");
+        var tight = new ExchangerSizing.Load(false, tube, shell, load.tubeDrop(), load.shellDrop(), load.needed(), load.duty(), 8, 6, 6, 46., null);
+        assertEquals(choice.size(), ExchangerSizing.auto(tight).size(), "unchangeable temperature notices must not favor extra shells");
+    }
+
+    @Test void parallelShellsStartWhenOneCannotHoldTheSpare() {
+        double largest = exchangers().stream().filter(size -> size.shells() == 1 && UnitSize.built(size) != null).mapToDouble(ExchangerSizing.Size::surface).max().orElseThrow();
+        var load = exchanger(largest, liquid(1, 900, 1e-3), liquid(1, 800, 1e-3), Limit.EXCHANGER_DROP_LIQUID);
+        var choice = ExchangerSizing.auto(load);
+        assertEquals(2, choice.size().shells());
+        assertTrue(choice.size().surface() >= SPARE * largest);
     }
 
     @Test void curvesThatTouchAreRedAndAutoStillAnswers() {
@@ -149,10 +184,11 @@ final class UnitSizingTest {
         var steam = liquid(10, 4, 1.5e-5);
         var load = new ExchangerSizing.Load(true, steam, null, Limit.EXCHANGER_DROP_GAS, null, 100, 6e6, 40, 30, 30, null, null);
         var choice = ExchangerSizing.auto(load);
-        assertEquals(Lamp.GREEN, choice.rating().lamp());
+        assertEquals(Lamp.YELLOW, choice.rating().lamp());
         assertTrue(choice.size().kettle());
+        assertEquals(1, choice.size().shells());
         assertNull(choice.rating().reading(Limit.EXCHANGER_DROP_LIQUID));
-        assertSame(Limit.KETTLE_FLUX, choice.rating().closest().limit(), "the flux asks more surface than the duty's need");
+        assertTrue(choice.rating().reading(Limit.KETTLE_FLUX).met(), "the flux asks more surface than the duty's need");
         assertTrue(choice.size().surface() >= 6e3 / 38);
         var tight = ExchangerSizing.rate(load, new ExchangerSizing.Size(true, 1, .5, 3));
         assertFalse(tight.reading(Limit.KETTLE_FLUX).met());
@@ -422,7 +458,9 @@ final class UnitSizingTest {
     @Test void aCompressorsWorldLimitsAreRed() {
         var size = new CompressorSizing.Size(UnitType.PISTON, .5, 4);
         assertEquals(Lamp.RED, CompressorSizing.rate(gas(1000, 11), size).lamp());
-        assertEquals(Lamp.RED, CompressorSizing.rate(new CompressorSizing.Load(1000, 3, 2, 310, .25, 0), size).lamp(), "wet at the suction");
+        // The world compresses a wet suction since request 11 of batch 2026-11-03-rotating-machinery (W10a), so a wet suction
+        // is a SHOULD row; W10b's liquid knock trips a piston machine and makes it the world's (red) again.
+        assertEquals(Lamp.YELLOW, CompressorSizing.rate(new CompressorSizing.Load(1000, 3, 2, 310, .25, 0), size).lamp(), "wet at the suction");
         var small = CompressorSizing.rate(gas(6000, 3), new CompressorSizing.Size(UnitType.TURBO, .3, 2));
         assertEquals(Lamp.RED, small.lamp(), "under the smallest frame");
         assertSame(Limit.TYPE_TURBO, small.closest().limit());

@@ -2,6 +2,9 @@ modLoader = "javafml"
 loaderVersion = "${loader_version_range}"
 license = "${mod_license}"
 
+[[mixins]]
+config = "icheme.mixins.json"
+
 [[mods]]
 modId = "${mod_id}"
 version = "${mod_version}"
@@ -25,14 +28,14 @@ side = "BOTH"
 
 [[dependencies."${mod_id}"]]
 modId = "create"
-type = "required"
+type = "optional"
 versionRange = "${create_version_range}"
 ordering = "AFTER"
 side = "BOTH"
 
 [[dependencies."${mod_id}"]]
 modId = "kubejs"
-type = "required"
+type = "optional"
 versionRange = "${kubejs_version_range}"
 ordering = "AFTER"
 side = "BOTH"
