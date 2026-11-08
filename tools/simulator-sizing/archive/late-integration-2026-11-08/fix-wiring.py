@@ -1,0 +1,11 @@
+from pathlib import Path
+p=Path('src/main/java/com/wormzjl/icheme/science/equipment/InstrumentWiring.java');s=p.read_text(encoding='utf-8')
+s=s.replace('int axis=roof?0:shape.kind()==EquipmentShape.Kind.TANK?0:2;','int axis=roof||shape.kind()==EquipmentShape.Kind.TANK||shape.kind().coolingTower()?0:2;')
+s=s.replace('if(shape.kind()==EquipmentShape.Kind.TANK)baseline[1]=target[1];','if(shape.kind()==EquipmentShape.Kind.TANK||shape.kind().coolingTower())baseline[1]=target[1];if(shape.kind()==EquipmentShape.Kind.EXCHANGER){var skin=surface.bounds(Set.of(Material.SHELL));baseline[1]=Math.clamp(baseline[1],skin[1]+.05,skin[4]-.05);}')
+s=s.replace('if(roof)exit=Math.clamp','if(roof&&shape.kind()!=EquipmentShape.Kind.SPHERE)exit=Math.clamp')
+s=s.replace('int fixed=roof?2:shape.kind()==EquipmentShape.Kind.TANK?1:1;','int fixed=roof?2:1;')
+s=s.replace('if(roof){var wanted=','if(roof&&shape.kind()!=EquipmentShape.Kind.SPHERE){var wanted=')
+s=s.replace('int sectionAxis=roof?2:axis;','int sectionAxis=shape.kind()==EquipmentShape.Kind.SPHERE?0:roof?2:axis;')
+s=s.replace('if(kind==EquipmentShape.Kind.TANK)return surface.ray(2,point,-1,PROCESS);return nearest(surface.polygons,point);','if(kind==EquipmentShape.Kind.TANK||kind.coolingTower())return surface.ray(2,point,-1,PROCESS);if(kind==EquipmentShape.Kind.EXCHANGER)return surface.ray(0,point,1,Set.of(Material.SHELL,Material.HEAD));return nearest(surface.polygons,point);')
+s=s.replace('var nearest=nearest(carriers,end);add(runs,"controller",section(carriers,roofExit,nearest,sectionAxis),.025);','var nearest=end;add(runs,"controller",section(carriers,roofExit,nearest,sectionAxis),.025);')
+p.write_text(s,encoding='utf-8')

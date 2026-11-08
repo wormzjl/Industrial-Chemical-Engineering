@@ -34,8 +34,12 @@ Scale-up-first Auto sizing, constructor-style Manual sizing, Standard/Low-dP cro
 
 - 2026-11-07: `4682156e` unifies controller/DCS/sensor industrial finishes; `76ad7889` repairs shared offset junctions, places drum shell pads and clarifies connected level control/IDs; `f6d02add` updates all four translations; `68294ece` avoids full registry copies per controller view. Combined 68 affected checks pass through filtered runs; all source/assets are in the refreshed 0.22.0 jar.
 
+- 2026-11-07–08: `417d70417`/`349099167`/`3d09e6188` consolidate line session, commands, admission and derived collision; `1edbc055f` builds the two-block DCS; `5b84b9ec6` preserves GUI scale; `c15dfcecc` adds ID/location hover, main-door nozzles and RPM controls. Initially compiled/rendered while owner tested; fresh-server/JUnit qualification completed in this readiness pass.
+- 2026-11-08: `616fe7a1c` implements the reviewed native service/probe plans with matching equipment paint; `fd5603249` corrects total-feed probe mass basis. Native route/extreme/heading/Normal-Low and saved-probe gates pass. Current drawing workflow is tracked under `tools/equipment-drawings/`.
+- 2026-11-08: translations `429fe26b1` bring four locales to 2949 keys. Readiness code `050cd1098` fixes crossed-cell cursor handling, direct cable items and cabinet collision. Combined 206 focused JUnit and 25 dedicated-server methods pass; native drawings, guide, archive inventories and the 0.22.0 package refreshed. See [MERGE_REVIEW](MERGE_REVIEW.md) and [PIPE_FRAMEWORK_REVIEW](PIPE_FRAMEWORK_REVIEW.md).
+
 ## Code areas and open items
 
 `science/flowsheet`, `science/equipment`, `science/fluid/network`, `science/machine`, `runtime/{fluid,control,power,instrument}`, equipment/pipe/rack blocks, shared laying/client models, GUI and network payloads. The column operation’s V3 duty/energy contract is unchanged.
 
-Open: owner’s in-game acceptance and later merge instruction. Merge preparation, final lane, filtered corrections and release jar are complete. No dev client is launched for merge preparation. No unmerged output is deleted.
+Open: owner’s in-game acceptance and later merge instruction. The once-run final lane and affected later follow-ups are recorded separately; current merge preparation and the release jar are complete. No dev client is launched for merge preparation. No unmerged output is deleted.

@@ -1,6 +1,11 @@
 # Process simulator: the flowsheet, its run, sizing and the block
 
-**Snapshot:** 3515b1ff (branch `codex/simulator-sizing`), 2026-11-07. Batch `2026-11-06-simulator-sizing`, prepared for 0.22.0; not merged. Earlier snapshots and release history are in Git and the batch READMEs.
+**Snapshot:** 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, prepared for owner-approved 0.22.0; not merged.
+
+## Current viewport and constructor handoff (0.22.0)
+
+The screen retains the player's GUI scale; `WindowScale` is removed. Layout and scrolling use the actual GUI viewport. Equipment type/count/dimensions remain separate from Auto/Manual sizing method, with constructor-style Manual controls and build requirements emphasized. Constructor nozzle controls now join its main door; no separate Nozzles navigation is required. Pump/generator constructors display rated/design RPM, not a pole selector. Sizing facts and dormant saved dimensions remain facts; these GUI changes do not alter the V3 solve or Send-to-block duty contract.
+
 
 ## Sizing and exchanger configurations (0.22.0)
 
@@ -182,7 +187,7 @@ The file keeps fields it does not know and refuses a newer format and an older o
 
 `client/gui/screens/inventory/ProcessSimulatorScreen` is the only Minecraft class of the screen. `IChemEClient.registerScreens` registers it on `ModMenus.PROCESS_SIMULATOR`. It is a plain `Screen` on a `ProcessSimulatorMenu` (`MenuAccess`), not an `AbstractContainerScreen`, so it has no slots and a typed E is text. A close, a disconnect and the block going all end it. It forwards events and draws. Everything it shows is built Minecraft-free in `client/gui/flowsheet/`, so `tools/heat-gui-renders/SimulatorRender.java` draws the same pages from shipped code.
 
-- **Window:** `WindowScale.apply` at design height 480. The least window is 464 × 254 (`SimulatorFrame.LEAST_W`, `LEAST_H`). A door takes 790 × 524 (`DOOR_W`, `DOOR_H`). `removed()` restores the scale.
+- **Window:** current Minecraft GUI scale, native viewport layout/scrolling; opening or closing the screen does not change the global scale.
 - **Frame and tabs:** `SimulatorFrame` gives the rectangles: title, tabs and file keys, the one status display, the canvas's well, the palette and the footer. `keys(third)` puts Close in the footer and the tab's two keys (the second `third(tab)` wide), then Undo and Redo, in two pairs 12 px apart (the owner, 2026-11-04: "regroup these buttons"): centred on the tab row between the tabs and the file keys where they fit (`keysOnTabRow`: every wide window, a compact one from 662 px), else centred on the title row, no further left than the title's plate (`SimulatorFrame(w, h, title)` takes the title's width). The tabs and file keys keep their wide widths only where the pairs still fit between them (`wideKeys`, from 856 px; Size all's 84 px measures the room, so no tab moves the row). `recesses(tab)`: the tabs, each pair, the file keys and the theme key each stand in a recess 3 px round (`Skin.recess`, drawn by `SimulatorPage.back`); the footer keeps Close bare and the display keys' engraved tray (the owner: "Revert to the original design on the bottom"). The P, T key (`conditionsKey`, a push button latched while shown, the owner's "Individual button on the bottom beside mole") stands in its own recess (`conditionsRecess`) 6 px left of the tray; `SheetUnits.conditions` carries it from `ClientConfig.streamConditions`, and `SheetPainter.draw` then puts each stream's T and P (`SheetContext.conditions`: the run's, or a feed's set values before a run) under its name or its pill, both lines or neither, plates then texts in one batch. The screen hit-tests them, and the render tool draws them. The tabs (`SimulatorFrame.Tab`) are FLOWSHEET, RESULTS, SIZING and BASIS. The Sizing tab opens only once the sheet can be sized (`SizingPage.open`). `SimulatorPage` says which keys stand where on each page.
 - **The sheet:**
   - `SheetLayout` places boxes, ports and routes and answers hit tests.

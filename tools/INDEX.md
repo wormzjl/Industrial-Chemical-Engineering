@@ -9,7 +9,7 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 | Folder | Purpose | Batch | Status |
 |---|---|---|---|
 | [equipment-drawings/](equipment-drawings/README.md) | Native equipment drawings and labelled interface proposals | `2026-11-06-simulator-sizing` | In use since 2026-11-08 |
-| [simulator-sizing/](simulator-sizing/README.md) | Sizing, connected control, conduit stress and equipment render probes | `2026-11-06-simulator-sizing` | Retained since 2026-11-07 |
+| [simulator-sizing/](simulator-sizing/README.md) | Sizing, shared-line audits, control/FE and equipment probes | `2026-11-06-simulator-sizing` | Retained since 2026-11-08 |
 | [process-simulator/](process-simulator/README.md) | Plain-JVM probes: a client can run the column and flashes; the design sheets' sample flowsheet solved by hand | `2026-11-02-process-simulator` | In use since 2026-11-02 |
 | [device-names/](device-names/README.md) | Nameplate placement probe and plate-look renders | `2026-11-02-process-simulator` | In use since 2026-11-03 |
 | [simulator-bench/](simulator-bench/README.md) | Process simulator CPU, allocation, heap and draw-call bench on the bundled crude unit, with JFR | `2026-11-02-process-simulator` | In use since 2026-11-04 |

@@ -1,6 +1,13 @@
 # Column operation: the column running in the built plant
 
-**Snapshot:** 3515b1ff (branch `codex/simulator-sizing`), 2026-11-07. Batch `2026-11-06-simulator-sizing`, prepared for 0.22.0; not merged. Earlier snapshots and release history are in Git and the batch READMEs.
+**Snapshot:** 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, prepared for owner-approved 0.22.0; not merged.
+
+## Accepted instrumentation (0.22.0)
+
+`ColumnSolve.Solved` carries the already accepted `V3ColumnInspection` to the scheduled application boundary. `ColumnOperation` reduces it to `ColumnUnit.Probes`: top/bottom/reflux pressure and temperature, and internal mass-per-total-feed coefficients. The denominator is `reference.alpha * reference.setpoints.designFeedRate`, including feed water; V3's hydrocarbon-only vector is not that basis. The latest accepted cycle supplies actual throughput. Stream boundary readings use existing accepted cycle accounts and conditions.
+
+`FluidFacts.columnState` round-trips this bounded snapshot as rebuildable state, not player facts. Restoring it runs no solver. A state without the snapshot can keep its split table while the normal engine deadline asks for a refresh. `FluidWorldAuthority.columnInstrument` is read-only; opening a controller never advances a column. The duty/energy/heat-in-transit contract is unchanged. Pumparound specifications currently prescribe heat only, so no fictitious circulation flow or return temperature is created. `ColumnProbeTest` covers the wet-feed mass basis; `ColumnRunTest` covers saved-reading reload and continuing operation.
+
 
 ## Exchanger configuration integration (0.22.0)
 

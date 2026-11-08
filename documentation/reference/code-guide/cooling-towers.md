@@ -1,8 +1,13 @@
 # Water cooling towers
 
-**Snapshot:** 238c136b (branch `codex/simulator-sizing`), 2026-11-07. Batch `2026-11-06-simulator-sizing`, prepared for 0.22.0; not merged. Earlier snapshots and release history are in Git and the batch READMEs.
+**Snapshot:** 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, prepared for owner-approved 0.22.0; not merged.
 
 Optional client Low detail caps the shell's angular samples at 24 and uses the same coarse basin-water boundary. `EquipmentBodyRenderer`/`LoadedEquipment` now also serve other coarse equipment bodies. Normal tower drawing, basin volume/level, structural collision and process duty remain unchanged. The mode is absent from server facts and packets.
+
+## Factory instrument locations (0.22.0)
+
+Both drafts now own inlet/basin temperature probes and a built-in basin level head at the retained gauge location. They have no new player-installed equipment sensor mounts. `EquipmentInstruments` provides their datums and `InstrumentWiring` the reinforced roots, protected drops and surface finish to the supported service enclosure. Factory level includes liquids plus solids and excludes gas. `BuiltInInputs` exposes accepted water inlet/outlet P/T and basin level through C1; no fresh Merkel/property solve occurs when a controller opens. Preview, placed heads and native drawings share these locations.
+
 
 ## Service ports and shared visuals (0.22.0)
 

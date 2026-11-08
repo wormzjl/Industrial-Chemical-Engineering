@@ -1,9 +1,16 @@
 # Rotating machinery: machine laws, shaft trains, drivers, electricity, wear and the Create coupling
 
-**Snapshot:** 238c136b (branch `codex/simulator-sizing`), 2026-11-07. Batch `2026-11-06-simulator-sizing`, prepared for 0.22.0; not merged. Earlier snapshots and release history are in Git and the batch READMEs.
+**Snapshot:** 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, prepared for owner-approved 0.22.0; not merged.
 
 Normal casing-cover nuts are raised geometry over a plain cover sprite, recessed within the existing envelope. Optional client Low detail uses textured flat nuts and capped round meshes while retaining all mechanical frames, hex shafts, published RPM and animation clocks. See [equipment.md](equipment.md).
 Up: [code guide](README.md)
+
+## Service side, factory probes and RPM controls (0.22.0)
+
+Constructed rotating equipment uses internal inlet/outlet P/T, flow and shaft-speed channels rather than manual sensor mounts. `EquipmentServices.serviceSide` derives the DATA side from shaft power flow, so connected driver/driven machines present it on the same service side; FE is opposite. Small pump/compressor cases fit the drive-end deck, large motor/generator enclosures are matched, and turbine sockets reuse its governor housing. Case/cover finishes follow equipment body paint.
+
+Constructor controls expose rated/design RPM and no longer offer a 2/4-pole selector. Internal/saved pole fields are not a user-facing design choice. Motors remain frequency-controlled with the 3000 rpm ceiling. The governor and accepted shaft/runtime power laws are unchanged by the interface work; instrumentation is read-only. `VisualRotation` remains the common nonlinear visual-speed law, independent of process RPM.
+
 
 ## VFD demand, supply and shared rotation (0.22.0)
 

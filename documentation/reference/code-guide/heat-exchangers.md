@@ -1,6 +1,11 @@
 # Heat exchangers: heat sides, the coupling across islands and built-in control
 
-**Snapshot:** 3515b1ff (branch `codex/simulator-sizing`), 2026-11-07. Batch `2026-11-06-simulator-sizing`, prepared for 0.22.0; not merged. Earlier snapshots and release history are in Git and the batch READMEs.
+**Snapshot:** 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, prepared for owner-approved 0.22.0; not merged.
+
+## Factory probes and one physical data interface (0.22.0)
+
+Both exchanger types have four equipment-owned temperature probe roots on the actual nozzle necks. `EquipmentInstruments` rebuilds these datums from live nozzle size codes, and `InstrumentWiring` follows the real nozzle/body facets. The mounted service enclosure and one C1 are shared by rendering, physical layout and registration; each heat-side fluid ID aliases to that physical host for controller visibility. Accepted P/T/flow readings remain per named process/utility role. Factory probes appear in constructor previews; manual exchanger sensor placement is disabled. This adds no thermal routing, pressure-law or column duty change.
+
 
 ## Standard and Low-dP crossflow (0.22.0)
 

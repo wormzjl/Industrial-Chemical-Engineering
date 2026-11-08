@@ -2,14 +2,25 @@
 
 **Process control (batch 2026-10-26-process-control, 0.14.1):** process sensors and the control valve's modules; the contracts are in [process-control.md](process-control.md).
 
-Sensors use `Sensor.Installed` (host/mount, UUID, revision and kind), `Sensor.Reading` (SI units, accepted tick and availability), and `SensorItem`. They have closed housings and placement ghosts; readings exist only in the process GUI. P/T probes share analog sockets. Horizontal drums have shared P/T sockets and separate rear body/boot level pads. Ordinary pipes retain one accessory; a Control Valve permits one P or flow module. `InstrumentHosts` snapshots its bounds-aware loaded index under `INDEX_LOCK`, and never loads chunks.
-`InstrumentService` queues sensor installation/removal to its 100-online-tick transaction deadline, revalidates exact held stack, mount/revision, reach and permissions, and consumes/refunds once. Store facts schema 2 adds `sensors` and `modular_valves` tombstones; old lists default empty. Duplicate sensor instances or occupied mounts refuse damaged facts. Legacy pressure-valve registrations, including unloaded ones, queue equivalent probe/valve conversions once. Removing the probe never recreates it. A sensor on a valve's `valve_sensor` mount sets the valve's control by one registry edit, `PhysicalFluidTopology.Device.withControl` (`editSensorValve`), so a laid pipe keeps its joints and lane. An installed or removed flowmeter calls `FluidWorldAuthority.flowmeter(host, installed)`, which queues the host's registration at its next revision so its island recompiles the tap; a recovered host's flowmeter is only forgotten (`forgetFlowmeter`), since the host's removal recompiles. Static metadata is disposable and rebound from the store. Samples are disposable; temperature retains its last accepted flowing value/time as NO_FLOW.
+Sensors use `Sensor.Installed` (host/mount, UUID, revision and kind), `Sensor.Reading` (SI units, accepted tick and availability), and `SensorItem`. They have closed housings and placement ghosts; readings exist only in the process GUI. P/T probes share analog sockets. Horizontal drums have distinct top P/T sockets and separate body/boot level identities. Ordinary pipes retain one accessory; a Control Valve permits one P or flow module. `InstrumentHosts` snapshots its bounds-aware loaded index under `INDEX_LOCK`, and never loads chunks.
+`InstrumentService` installs/removes structural sensors immediately on interaction, revalidates exact held stack, mount/revision, reach and permissions, and consumes/refunds once. Store facts schema 2 adds `sensors` and `modular_valves` tombstones; old lists default empty. Duplicate sensor instances or occupied mounts refuse damaged facts. Legacy pressure-valve registrations, including unloaded ones, queue equivalent probe/valve conversions once. Removing the probe never recreates it. A sensor on a valve's `valve_sensor` mount sets the valve's control by one registry edit, `PhysicalFluidTopology.Device.withControl` (`editSensorValve`), so a laid pipe keeps its joints and lane. An installed or removed flowmeter calls `FluidWorldAuthority.flowmeter(host, installed)`, which queues the host's registration at its next revision so its island recompiles the tap; a recovered host's flowmeter is only forgotten (`forgetFlowmeter`), since the host's removal recompiles. Static metadata is disposable and rebound from the store. Samples are disposable; temperature retains its last accepted flowing value/time as NO_FLOW.
 
 
-**Feature branch:** `b1477c09` (`codex/liquid-gauge-accessory`), 2026-10-26, based on main `600549d9`. Floating-roof tank level gauge is an optional item/accessory;24 focused checks/package and8 native views pass. Main merge pending. [Contracts](../../2026-10-26-liquid-level-gauge-accessory/LEVEL_GAUGE_CONTRACTS.md).
+**Feature branch:** `b1477c09` (`codex/liquid-gauge-accessory`), 2026-10-26, based on main `600549d9`. Floating-roof tank level gauge is an optional item/accessory;24 focused checks/package and8 native views pass. Ported into this 0.22.0 branch; the batch is not merged. [Contracts](../../2026-10-26-liquid-level-gauge-accessory/LEVEL_GAUGE_CONTRACTS.md).
 
 
-**Snapshot:** 68294ece (branch `codex/simulator-sizing`), 2026-11-07. Batch `2026-11-06-simulator-sizing`, prepared for 0.22.0; not merged. Earlier snapshots and release history are in Git and the batch READMEs.
+**Snapshot:** 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, prepared for owner-approved 0.22.0; not merged.
+
+## Manual mounts and factory instruments (0.22.0)
+
+`EquipmentInstruments` supplies physical probe locations and eligibility. Standing drums have P/T/body-level taps on a front roof row, reserving rear F1/F2 footprints for future blanketing/PSV fittings. Horizontal drums have crown P/T/body-level taps and a separate boot level tap. Sphere P/T/level heads sit on supported top-platform mounts. Floating tanks retain grade-level P/T and their digital level mount beside the front service area; the mechanical liquid-level gauge remains optional.
+
+Rotating equipment, columns, exchangers, kettles, air coolers and fired heaters accept no new manual equipment probes. Their accepted internal channels are in `BuiltInInputs`. Both cooling towers own inlet/basin T probes and a built-in basin level head, at the retained level location. Level means liquid plus retained solid volume, excluding gas. Ordinary pipe/control-valve accessory rules remain separate.
+
+`InstrumentHosts.equipmentMount` and `Sensor.levelMounts` adapt this catalog for selection, reach, occupancy and bounds. Digital heads and analog gauges reuse `InstrumentGeometry`; protected process roots and surface leads come from `InstrumentWiring`. The renderer uses installed mount IDs, actual exchanger nozzle sizes and the selected detail profile; it never requests or computes process state. Removing a pipe's last sensor retires its socket through `ControlService.bind`, preserving the cable as an open end.
+
+Installed instruments retain accessory UUIDs and human IDs. Factory channel UUIDs derive from physical equipment identity plus channel name, with no accessory allocation; locations are hover information and never identity. Missing/unsupported quantities are unavailable, not zero. Old installed facts are retained or recovered by the existing accessory lifecycle, rather than replaced by factory allocations.
+
 
 ## Installed sensors, IDs and optional gauge (0.22.0)
 
@@ -20,8 +31,8 @@ Sensors use `Sensor.Installed` (host/mount, UUID, revision and kind), `Sensor.Re
 | Pressure sensor | Straight pipe, control valve or equipment pressure tap |
 | Temperature sensor | Straight pipe or equipment temperature tap |
 | Flow sensor | Straight pipe/control valve; equipment uses its nozzle pipe |
-| Digital level sensor | Drum, floating-roof tank, sphere or cooling basin |
-| Speed sensor | Steam turbine output coupling |
+| Digital level sensor | Drum, floating-roof tank or sphere; cooling-basin level is factory fitted |
+| Speed sensor | No manual rotating-equipment mount; use the factory shaft-speed channel |
 | Liquid level gauge accessory | Floating-roof tank only |
 
 Actual mounts come from `Instrument`, `Sensor` and equipment geometry; a generic equipment face is not automatically a valid process tap. Pressure/temperature/level metadata survives equipment reconstruction. Accessory facts schema is 4; the compatibility corpus preserves older fittings and the optional tank gauge. Data socket registration follows the eligible host and installed sensors, with casing/cabinet mounts instead of attaching an equipment socket to its fluid nozzle. See [wired-control-power.md](wired-control-power.md).

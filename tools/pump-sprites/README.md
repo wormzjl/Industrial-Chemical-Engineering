@@ -70,3 +70,5 @@ java -Djava.awt.headless=true -Djava.io.tmpdir=tmp/<task> -cp tmp/<task>/classes
 - `probes/PumpRender.java` accepts `-Ddetail=NORMAL|LOW` and also renders COLUMN (length = trays), DRUM, TANK and SPHERE. Other arguments/views remain unchanged.
 - `probes/DetailSheet.java <render-folder> <sheet-name> <kind>...` pairs existing `<kind>-normal-iso2.png` and `<kind>-low-iso2.png` images. Run with `-Djava.awt.headless=true`; outputs stay in the supplied indexed worktree `tmp/` folder.
 - Final figures/manifest/jar: canonical main `research/2026-11-06-simulator-sizing/evidence/low-poly/`; compressed verification logs at main `tools/simulator-sizing/logs/simulator-sizing-low-poly-logs-2026-11-07.tar.gz`. Originals and prior release evidence remain.
+
+- 2026-11-08: `050cd109` makes local-controller model authoring read `DcsGeometry.localParts`, the same bounds used for physical collision. Existing model coordinates/textures remain unchanged; isolated cabinet-resource and all-heading socket checks qualify the shared table. Compile `DcsGeometry.java` with the authoring sources or include `build/classes/java/main` on javac/java classpaths.

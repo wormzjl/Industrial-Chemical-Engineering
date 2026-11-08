@@ -1,22 +1,29 @@
 # Build, tests and gates
 
-**Water cooling towers:** `CoolingTowerTest`, `CoolingTowerGeometryTest`, `CoolingTowerRuntimeTest` and `LoadedEquipmentTest` run in `test`, `CoolingTowerGameTests` with the fluid GameTests. `tools/cooling-towers/verify.ps1` runs the final lane with its output under `tmp/`. Details: [cooling-towers.md](cooling-towers.md).
+**Water cooling towers:** `CoolingTowerTest`, `CoolingTowerRuntimeTest` and `LoadedEquipmentTest` run in `test`; `CoolingTowerGeometryTest` runs in `equipmentGates`, `CoolingTowerGameTests` with the fluid GameTests. `tools/cooling-towers/verify.ps1` runs the final lane with its output under `tmp/`. Details: [cooling-towers.md](cooling-towers.md).
 
 **Process control (batch 2026-10-26-process-control, 0.14.1):** the batch's tests; the contracts are in [process-control.md](process-control.md).
 
 Added `VesselGeometryTest`, `ProcessOutletTest`, `FlowControlTest` coverage, `FlowmeterObservationTest`, `SensorReadingTest` and `SensorStoreTest`. Gates cover independent volume/height calculations, geometry round trips and native shape capacities, equal-volume draws/depletion, conservative competing boot outlets, 1/.5/.2-second weir steps, local gas-volume sampling without hydraulic perturbation, targets/limits, dependent-loop opening fallback, identity/revision persistence and one-time legacy conversion/refund. Existing save images remain; the accessory image `compat/accessories/schema-2.snbt` and the fluid image `compat/fluid/schema-3/` (written by the merged code; `FluidFactsCompatTest` also counts `shaped` vessels and `controlValves`) are added. The review fixes added `VesselGeometryTest.bootHeadStandsOverTheBodyBottom`, `ProcessOutletTest.aSlurryHeadWeighsItsSolids` and `aTraceFilmDoesNotTurnTheBottomStreamHalfOil`, runtime `TracePhaseFoldTest.aCrudeTraceInAWaterFullVesselHasNoPhaseOfItsOwn` and `waterThroughATankHoldingACrudeTraceKeepsUp` (bundled seed 236 minimized), runtime `PipelineFittingTest.aFlowmeterTapsItsPipeOnTheEngineScheduleAndAgainAfterAReload` and `aRestingIslandKeepsItsTapThroughItsRestoredCertificate`, and `FlowControlTest.aFlowValveRestsWhenNothingDrivesThroughIt`. `ProcessControlGameTests.modularValveKeepsItsFittingAcrossGeometryRefresh` tests projected and committed fitting/direction. Post-client server gates pass 24/24. After cleanup/current-bore refinement, quick 1477 and slow 187 pass without skips/errors. See the batch review for final quick/slow counts, the 33 junction lines, printed reference output, exact chain-100 replay, fresh fluid GameTests, campaign counters/classification and the single MCP session.
 
 
-**Feature branch:** `b1477c09` (`codex/liquid-gauge-accessory`), 2026-10-26, based on main `600549d9`. Floating-roof tank level gauge is an optional item/accessory;24 focused checks/package and8 native views pass. Main merge pending. [Contracts](../../2026-10-26-liquid-level-gauge-accessory/LEVEL_GAUGE_CONTRACTS.md).
+**Feature branch:** `b1477c09` (`codex/liquid-gauge-accessory`), 2026-10-26, based on main `600549d9`. Floating-roof tank level gauge is an optional item/accessory;24 focused checks/package and8 native views pass. Ported into the 0.22.0 branch; this batch is not merged. [Contracts](../../2026-10-26-liquid-level-gauge-accessory/LEVEL_GAUGE_CONTRACTS.md).
 
 
-**Snapshot:** 238c136b (branch `codex/simulator-sizing`), 2026-11-07. Batch `2026-11-06-simulator-sizing`, prepared for 0.22.0; not merged. Earlier snapshots and release history are in Git and the batch READMEs.
+**Snapshot:** 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, prepared for owner-approved 0.22.0; not merged.
+
+## Later 0.22.0 readiness follow-ups (2026-11-08)
+
+The one canonical final lane at `891c8acf5` remains the batch baseline. Do not run a second full lane or replay unchanged tests/campaigns. The later scope includes shared line commands/derived lead collision, the two-block DCS, viewport scale preservation, main-door nozzle/RPM controls and native service/probe geometry. Use affected filtered JUnit and dedicated-server selections, plus the existing geometry/drawing workflow. Translation-only changes run `LanguageFilesTest` and `UnitTextTest` after the four-locale commit.
+
+Current permanent checks include `LineContractTest`, `LineToolSessionTest`, `DcsGeometryTest`, `BuiltInInputsTest`, `EquipmentServicesTest` and `ColumnProbeTest`. `DeterministicMathSourceTest` scans new native geometry too; use the existing facade for trigonometry/powers. `EquipmentLayoutGoldenTest` owns layout corpus updates. `tools/equipment-drawings` exports native solids/ports/probes and actual-sprite light/dark Normal/Low proofs; a software render does not qualify live chunk sync or lighting. Latest readiness resolves 206 distinct JUnit and 25 distinct dedicated-server methods, including the first-crossed-cell clearance regression and direct BlockItem/cabinet entry paths. See the batch merge review for the release jar and retained evidence.
+
 
 ## Simulator sizing and wired integration batch (0.22.0)
 
 The final lane is `tools/merge-lane/lane.sh head`, once on final code: `test slowGates`, chain-100 exact, fresh-world fluid GameTests and the input-dependent 1000-seed/8-worker campaign. `columnGates` now explicitly includes `ExchangerType`, `HeatRouting` and `PipeResistance`, which `ColumnComponents` can load. No group is broadened to all production code. Subsequent fixes use affected filtered tests only; never replay the whole lane for documentation.
 
-`ConduitLayingGameTests` (five) and `CreativePowerGameTests` (one) use `icheme_fluid_test`, so the standard lane includes them. Existing fluid-pipe checks are not duplicated. Crossflow kernel/geometry/sizing, Auto/Manual GUI, control/data/power, compatibility, layouts, motor supply and shared rotation tests remain in their normal groups. `LanguageFilesTest` and `UnitTextTest` run after the four-locale translation commit.
+`ConduitLayingGameTests` (twelve) and `CreativePowerGameTests` (one) use `icheme_fluid_test`, so the standard lane includes them. Existing fluid-pipe checks are not duplicated. Crossflow kernel/geometry/sizing, Auto/Manual GUI, control/data/power, compatibility, layouts, motor supply and shared rotation tests remain in their normal groups. `LanguageFilesTest` and `UnitTextTest` run after the four-locale translation commit.
 
 Current corpus additions include fluid schema 13/14, shape fields 9/10, constructor designs, control formats 1–3 including six-sided creative RF and crossflow layout images. Use corpus images, never player worlds. Reachability at `db322f04f`: 638/638 production classes reachable, versus 583/583 on main. Offline tools live in `tools/simulator-sizing/`, outside source sets; model authoring remains `tools/pump-sprites/`. The lane found 17 stale/geometry assertions; focused corrections at `3515b1ff` passed, including nine fresh-world paths across the focused runs. The batch [merge review](../../2026-11-06-simulator-sizing/MERGE_REVIEW.md) is the authority for actual final-lane results, failures and limitations; older counts below are historical.
 
@@ -52,6 +59,8 @@ When CMake is found, `processResources` obtains the platform library through `na
 The offline export/trace/fixture tools live in `tools/vacuum-column-test/`, with all run outputs under registered worktree `tmp/`. This column batch does not change fluid physics and does not run a fluid campaign or in-game GUI check. Full quick/slow suite counts and limitations are recorded in the [batch review](../../2026-10-28-vacuum-column/VACUUM_FIX_REVIEW.md).
 
 ## Source sets and tasks
+
+The historical per-class counts below describe their original batch; the current merge review records this branch's actual results. Source-set exclusions in `build.gradle` are authoritative.
 
 All tasks are defined in [build.gradle](../../../build.gradle) unless noted. `test` and `fluidScienceTest` depend on `jar` and pass its path as `-Dfluid.modJar` (only `PackagedSparseLuTest` reads it); `-PtestForks=1..8` sets `maxParallelForks` (default 1) for every `Test` task.
 

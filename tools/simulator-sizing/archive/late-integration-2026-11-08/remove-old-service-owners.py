@@ -1,0 +1,5 @@
+from pathlib import Path
+p=Path('src/main/java/com/wormzjl/icheme/science/equipment/MotorDesign.java');s=p.read_text(encoding='utf-8');start=s.index('        if(kw>LOW_VOLTAGE){',s.index('        u.terminal = u.terminalBox;'));end=s.index('        double face =',start);s=s[:start]+s[end:];p.write_text(s,encoding='utf-8')
+p=Path('src/main/java/com/wormzjl/icheme/science/equipment/ProcessUnit.java');s=p.read_text(encoding='utf-8');s='\n'.join(l for l in s.splitlines() if 'DataSocketGeometry.Socket dataSocket;' not in l and 'DataSocketGeometry.Socket powerSocket;' not in l and 'dataSocket=new DataSocketGeometry.Socket' not in l)+'\n';p.write_text(s,encoding='utf-8')
+p=Path('src/main/java/com/wormzjl/icheme/science/equipment/DataSocketGeometry.java');s=p.read_text(encoding='utf-8');start=s.find('    public static double centered');s=s[:start]+'}\n' if start>=0 else s;p.write_text(s,encoding='utf-8')
+p=Path('src/test/java/com/wormzjl/icheme/science/equipment/ConduitGeometryTest.java');s=p.read_text(encoding='utf-8');start=s.index('    @Test void mountsPreferBlockFaceCentres');end=s.index('    @Test',start+5);s=s[:start]+s[end:];p.write_text(s,encoding='utf-8')

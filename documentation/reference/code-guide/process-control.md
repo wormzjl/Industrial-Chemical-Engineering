@@ -1,6 +1,11 @@
 # Process sensors and ideal regulation
 
-**Snapshot:** 3515b1ff (branch `codex/simulator-sizing`), 2026-11-07. Batch `2026-11-06-simulator-sizing`, prepared for 0.22.0; not merged. Earlier snapshots and release history are in Git and the batch READMEs.
+**Snapshot:** 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, prepared for owner-approved 0.22.0; not merged.
+
+## Manual and equipment-owned signal sources (0.22.0)
+
+The current placement catalog is `EquipmentInstruments`: vessel roof/top-platform mounts are manual; rotating, column, thermal and tower instruments are built in. `ControlInput`/`BuiltInInputs` add stable equipment/channel identities without allocating accessory facts. Physical instruments retain their saved UUIDs. Level measurements include liquid plus solid volume, excluding gas. Controller/DCS choices are limited to equipment connected to the selected controller (including column assembly members through its C1), with location/EQ ID on hover. See [instrument-accessories.md](instrument-accessories.md) and [wired-control-power.md](wired-control-power.md) for the actual sources and availability limits.
+
 
 ## Wired controller boxes and DCS (0.22.0)
 

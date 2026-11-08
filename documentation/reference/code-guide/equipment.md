@@ -5,13 +5,24 @@
 **Process control (batch 2026-10-26-process-control, 0.14.1):** a vessel's fluid geometry and the sensor sockets; the contracts are in [process-control.md](process-control.md).
 
 `EquipmentShape.fluidGeometry()` derives cylinder, sphere, vertical/horizontal 2:1-head drum and boot geometry from existing saved dimensions. It preserves `volume()`, fill height, origin, paint, nozzles and layout. Spheres pass zero tangent length to the sphere geometry. `EquipmentStructure` registers geometry and boot-specific outlet roles; on load a legacy registration queues an edit without forcing neighboring chunks.
-`InstrumentGeometry.levelSockets()` gives separate body/boot pads on the rear shell; `sockets()` adds horizontal-drum P/T pads. `transmitter()` is a cached six-face blank enclosure, with no needle, numbers or world display. Interaction lookup uses each loaded shape's actual bounds, including the rear pads on large vessels.
+`EquipmentInstruments` owns vessel probe placement; the `InstrumentGeometry` socket APIs are adapters. Body and boot level IDs remain distinct. Upright closed transmitter housings and bounds-aware interaction use the same native pose, including top-platform instruments on spheres.
 
 
-**Feature branch:** `b1477c09` (`codex/liquid-gauge-accessory`), 2026-10-26, based on main `600549d9`. Floating-roof tank level gauge is an optional item/accessory;24 focused checks/package and8 native views pass. Main merge pending. [Contracts](../../2026-10-26-liquid-level-gauge-accessory/LEVEL_GAUGE_CONTRACTS.md).
+**Feature branch:** `b1477c09` (`codex/liquid-gauge-accessory`), 2026-10-26, based on main `600549d9`. Floating-roof tank level gauge is an optional item/accessory;24 focused checks/package and8 native views pass. Ported into this 0.22.0 branch; the batch is not merged. [Contracts](../../2026-10-26-liquid-level-gauge-accessory/LEVEL_GAUGE_CONTRACTS.md).
 
 
-**Snapshot:** 68294ece (branch `codex/simulator-sizing`), 2026-11-07. Batch `2026-11-06-simulator-sizing`, prepared for 0.22.0; not merged. Earlier snapshots and release history are in Git and the batch READMEs.
+**Snapshot:** 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, prepared for owner-approved 0.22.0; not merged.
+
+## Native service housings, probes and finish (0.22.0)
+
+`EquipmentServices` owns the physical enclosure, mounting brackets, DATA/FE datums and solids. `ServiceSurface` queries native facets; it does not substitute an equipment bounding box for a support. The plan is imported by `ShapeRasterizer` before placement/collision tables are made. Rendering, constructor ghosts, world registration and the drawing exporter read that same plan. Coarse meshes retain Normal case/socket datums and reproject bracket contacts onto their own facets.
+
+Horizontal drums use a saddle side; spheres use a clamped service leg; floating tanks use the front gauge/service area. Heater mounts avoid native ladder clearance. Pump/compressor cases fit the drive-end deck. Rotating DATA sides follow shaft power flow, with FE opposite; large motor/generator cases are matched. The turbine reuses its existing governor enclosure. Inline movers have integrated terminal necks and the control valve a side-facing positioner. `SERVICE_CASE` and `SERVICE_COVER` use equipment BODY paint; connector identity rings and instrument steel keep their own finishes.
+
+`EquipmentInstruments` is the single probe-location/manual-policy catalog. `InstrumentGeometry` adapts it for mounts and supplies shared transmitter poses/preview heads. `InstrumentWiring` supplies reinforced roots, short 20 mm protected metallic drops and long surface-textured runs. `SurfaceSection`/`SurfaceJoints` follow actual facets and connected supports. Branches share an orthogonal baseline; curved-facet strips retain full width and a continuous texture station. These finishes add no process nodes or physical collision. Long-run geometry is built lazily for rendering, not by server process ticks.
+
+Constructor previews include factory caps and level heads. Manual instruments remain accessory facts and appear when fitted; drawings explicitly show those mount options fitted for review. The native book/exporter is `tools/equipment-drawings/`; historical Python proposals are labelled separately and are not overlaid on implemented geometry. The 96-entry layout corpus records 14 cell/stamp changes from this native-interface addition, with equipment boxes, process-nozzle cells and shaft terminals retained.
+
 
 ## Construction and layout additions (0.22.0)
 
@@ -23,7 +34,7 @@ Manway openings use 500 mm below shell D 1.25 m, 600 mm generally and 750 mm at 
 
 Short reducer stencils use their available exposed surface and are omitted on a side whose corners meet the casing. The geometric probes follow the actual reducer radius and shortened hub; retained placement frames may have empty edge cells after approved platform/coolant removal.
 
-`LineGeometry` draws off-centre tees/crosses with fitted branch sweeps to their saved face coordinates; centred junctions retain their existing path. `DataSocketGeometry.drum` gives standing/lying drums separate shell terminal pads; wired remounts preserve the old entry UUID/cell/face/offsets. Cabinet and sensor finishes are generated by `ControlAssets` in the workstation palette; this changes no equipment envelope.
+`LineGeometry` draws off-centre tees/crosses with fitted branch sweeps to their saved face coordinates; centred junctions retain their existing path. `DataSocketGeometry` reads the shared service housing sockets; wired remounts preserve the old entry UUID/cell/face/offsets. Cabinet and sensor finishes are generated by `ControlAssets` in the workstation palette; this changes no equipment envelope.
 
 Constructor initial dimensions are interior defaults and its paint scheme is user-specific. Its collision warning stays visible away from the aimed cell. Constructor/simulator models are authored in `tools/pump-sprites/`, with matching collision boxes and four facing variants. `ModelledBlockEntity` centralises geometry/model-data refresh for equipment, pipes, racks and conduits. Data/FE service mounts are on casings or cabinets with clearance; see [wired-control-power.md](wired-control-power.md).
 
