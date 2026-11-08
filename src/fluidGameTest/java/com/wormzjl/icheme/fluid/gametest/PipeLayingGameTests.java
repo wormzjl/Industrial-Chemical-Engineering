@@ -80,7 +80,7 @@ public final class PipeLayingGameTests {
             int registered = world.registrations().size();
             helper.assertTrue(cells.stream().allMatch(c -> level.getBlockState(c).canBeReplaced()), "The path is not clear: " + cells.stream().map(c -> c.toShortString() + "=" + level.getBlockState(c)).toList());
             var refused = lay(player, west, Direction.EAST, east, Direction.WEST, cells);
-            helper.assertTrue(refused != null && refused.getString().equals(PipeLaying.message("items", 4).getString()), "Laid four blocks with three pipe items: " + refused);
+            helper.assertTrue(refused != null && refused.getString().equals(net.minecraft.network.chat.Component.translatable("message.icheme.conduit.items",4,ModItems.FLUID_PIPE.get().getDescription()).getString()), "Laid four blocks with three pipe items: " + refused);
             helper.assertTrue(level.getBlockState(cells.getFirst()).isAir() && world.registrations().size() == registered,
                     "A refused lay changed the world: " + level.getBlockState(cells.getFirst()) + ", registrations " + registered + " -> " + world.registrations().size());
             player.getInventory().add(new ItemStack(ModItems.FLUID_PIPE.get(), 1));

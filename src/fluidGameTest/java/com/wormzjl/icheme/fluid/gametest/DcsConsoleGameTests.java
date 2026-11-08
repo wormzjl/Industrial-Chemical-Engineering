@@ -49,6 +49,9 @@ public final class DcsConsoleGameTests {
     @GameTest(template="empty",timeoutTicks=80,batch="dcs-console")
     public static void twoHalvesShareOneIdentityAndOpenTheSameDcs(GameTestHelper helper){
         var level=helper.getLevel();var at=helper.absolutePos(new BlockPos(1,2,1));var player=player(helper,at);
+        // NeoForge FakePlayer deliberately refuses every menu. Use a real server menu owner with its inert connection.
+        var menuPlayer=new ServerPlayer(level.getServer(),level,new GameProfile(UUID.randomUUID(),"DcsMenu"),net.minecraft.server.level.ClientInformation.createDefault());
+        menuPlayer.connection=player.connection;menuPlayer.setGameMode(GameType.SURVIVAL);menuPlayer.setPos(player.position());
         level.setBlock(at,Blocks.AIR.defaultBlockState(),3);level.setBlock(at.above(),Blocks.AIR.defaultBlockState(),3);
         var item=new ItemStack(ModItems.DCS.get(),2);player.setItemInHand(InteractionHand.MAIN_HAND,item);
         helper.assertTrue(ModItems.DCS.get().place(context(helper,player,at)).consumesAction(),"DCS placement failed");
@@ -59,8 +62,8 @@ public final class DcsConsoleGameTests {
         var world=FluidWorldAuthority.find(level.getServer()).orElseThrow();world.controls().loaded(box);
         var port=box.dataPort();helper.assertTrue(port!=null&&port.owner().equals(at)&&port.centre().y==at.getY()+.5,"DCS moved the existing lower data connection");
         for(var cell:new BlockPos[]{at,at.above()}){
-            level.getBlockState(cell).useWithoutItem(level,player,new BlockHitResult(cell.getCenter(),Direction.NORTH,cell,false));
-            helper.assertTrue(player.containerMenu instanceof ControlPanelMenu menu&&menu.dcs()&&menu.panel().equals(identity),"Both console halves must open the same DCS");player.closeContainer();
+            level.getBlockState(cell).useWithoutItem(level,menuPlayer,new BlockHitResult(cell.getCenter(),Direction.NORTH,cell,false));
+            helper.assertTrue(menuPlayer.containerMenu instanceof ControlPanelMenu menu&&menu.dcs()&&menu.panel().equals(identity),"Both console halves must open the same DCS");menuPlayer.closeContainer();
         }
         helper.assertTrue(world.controls().facts().panels().stream().filter(p->p.position().equals(at)||p.position().equals(at.above())).count()==1,"Console registered twice");
         level.removeBlock(at,false);helper.succeed();

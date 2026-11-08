@@ -73,7 +73,7 @@ public final class LinePlacement {
     }
     private static Component checkLeads(Level level,List<Lead> leads,Set<BlockPos> retained){
         for(int i=0;i<leads.size();i++)for(int j=0;j<i;j++)if(!leads.get(i).equals(leads.get(j)))for(var a:bounds(leads.get(i)))for(var b:bounds(leads.get(j)))if(a.deflate(1e-6).intersects(b.deflate(1e-6)))return PipeLaying.message("occupied",BlockPos.containing(a.getCenter()).toShortString());
-        for(var lead:leads)for(var box:bounds(lead))for(var pos:BlockPos.betweenClosedStream(box).toList()){
+        for(var lead:leads)for(var box:bounds(lead))for(var pos:BlockPos.betweenClosedStream(box).map(BlockPos::immutable).toList()){
             if(!level.hasChunkAt(pos)||level.isOutsideBuildHeight(pos)||!level.getWorldBorder().isWithinBounds(pos))return PipeLaying.message("anchor.outside");
             var state=level.getBlockState(pos);
             if(state.canBeReplaced())continue;

@@ -44,8 +44,8 @@ public final class ModItems {
     }
 
     public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(IChemE.MOD_ID);
-        public static final DeferredItem<net.minecraft.world.item.Item> DATA_CABLE=ITEMS.registerSimpleItem("data_cable");
-    public static final DeferredItem<net.minecraft.world.item.Item> POWER_CABLE=ITEMS.registerSimpleItem("power_cable");
+    public static final DeferredItem<BlockItem> DATA_CABLE=ITEMS.registerSimpleBlockItem(ModBlocks.DATA_CABLE);
+    public static final DeferredItem<BlockItem> POWER_CABLE=ITEMS.registerSimpleBlockItem(ModBlocks.POWER_CABLE);
     public static final DeferredItem<net.minecraft.world.item.BlockItem> LOCAL_CONTROLLER=ITEMS.registerSimpleBlockItem(ModBlocks.LOCAL_CONTROLLER);
     public static final DeferredItem<net.minecraft.world.item.BlockItem> DCS=ITEMS.registerSimpleBlockItem(ModBlocks.DCS);
     public static final DeferredItem<BlockItem> FLUID_RESERVOIR=ITEMS.registerSimpleBlockItem("fluid_reservoir",ModBlocks.FLUID_RESERVOIR);

@@ -31,8 +31,12 @@ public final class DcsGeometry {
             box("top cover",.75,31.5,9.75,15.25,32,12.75,Finish.CASE));
     private static final List<Part> LOWER=PARTS.stream().filter(p->p.Y<=16).toList();
     private static final List<Part> UPPER=PARTS.stream().filter(p->p.y>=16).map(p->p.moveDown(16)).toList();
+    private static final List<Part> LOCAL=List.of(
+            box("steel mounting foot",3,0,5,13,2,12,Finish.METAL),
+            front(box("local loop controller",2,2,3,14,15,13,Finish.CASE),Finish.FRONT));
     private DcsGeometry(){}
     public static List<Part> parts(){return PARTS;}
+    public static List<Part> localParts(){return LOCAL;}
     public static List<Part> parts(boolean upper){return upper?UPPER:LOWER;}
     /** Bounds after clockwise horizontal quarter turns, still local to this half. */
     public static double[] bounds(Part part,int turns){

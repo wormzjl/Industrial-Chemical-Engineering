@@ -21,6 +21,7 @@ import net.minecraft.world.phys.BlockHitResult;
 public class ControlPanelBlock extends BaseEntityBlock {
     public static final MapCodec<ControlPanelBlock> CODEC=simpleCodec(ControlPanelBlock::new);
     public static final DirectionProperty FACING=HorizontalDirectionalBlock.FACING;
+    private static final net.minecraft.world.phys.shapes.VoxelShape[] SHAPES=localShapes();
     public ControlPanelBlock(Properties properties){super(properties);registerDefaultState(stateDefinition.any().setValue(FACING,Direction.NORTH));}
     @Override protected MapCodec<? extends BaseEntityBlock> codec(){return CODEC;}
     @Override protected void createBlockStateDefinition(StateDefinition.Builder<Block,BlockState> builder){builder.add(FACING);}
@@ -29,6 +30,21 @@ public class ControlPanelBlock extends BaseEntityBlock {
     @Override protected BlockState mirror(BlockState state,Mirror mirror){return state.rotate(mirror.getRotation(state.getValue(FACING)));}
     @Override public BlockEntity newBlockEntity(BlockPos pos,BlockState state){return new ControlPanelBlockEntity(pos,state);}
     @Override protected RenderShape getRenderShape(BlockState state){return RenderShape.MODEL;}
+    @Override protected net.minecraft.world.phys.shapes.VoxelShape getShape(BlockState state,BlockGetter level,BlockPos pos,net.minecraft.world.phys.shapes.CollisionContext context){
+        return LinePieces.shape(level,pos,SHAPES[state.getValue(FACING).get2DDataValue()]);
+    }
+    private static net.minecraft.world.phys.shapes.VoxelShape[] localShapes(){
+        var shapes=new net.minecraft.world.phys.shapes.VoxelShape[4];
+        for(var facing:Direction.Plane.HORIZONTAL){
+            int turns=switch(facing){case NORTH->0;case EAST->1;case SOUTH->2;case WEST->3;default->throw new IllegalStateException("Vertical panel");};
+            var shape=net.minecraft.world.phys.shapes.Shapes.empty();
+            for(var part:com.wormzjl.icheme.science.equipment.DcsGeometry.localParts()){
+                var b=com.wormzjl.icheme.science.equipment.DcsGeometry.bounds(part,turns);
+                shape=net.minecraft.world.phys.shapes.Shapes.or(shape,Block.box(b[0],b[1],b[2],b[3],b[4],b[5]));
+            }
+            shapes[facing.get2DDataValue()]=shape.optimize();
+        }return shapes;
+    }
     @Override protected InteractionResult useWithoutItem(BlockState state,Level level,BlockPos pos,Player player,BlockHitResult hit){
         if(player instanceof ServerPlayer server)ControlPanelMenu.open(server,pos);
         return InteractionResult.sidedSuccess(level.isClientSide());

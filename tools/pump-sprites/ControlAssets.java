@@ -30,14 +30,7 @@ public final class ControlAssets {
     }
 
     static List<ConstructorAssets.Box> boxes(boolean dcs) {
-        if(dcs)return dcsBoxes(DcsGeometry.parts());
-        var boxes=new ArrayList<ConstructorAssets.Box>();
-        boxes.add(dcs?ConstructorAssets.box("steel plinth",1,0,2,15,2,14,"metal"):
-                ConstructorAssets.box("steel mounting foot",3,0,5,13,2,12,"metal"));
-        if(dcs) boxes.add(cabinet("lower service cabinet",2,2,7,14,10,14,"door"));
-        boxes.add(dcs?cabinet("DCS operator terminal",1,9,3,15,16,13,"front"):
-                cabinet("local loop controller",2,2,3,14,15,13,"front"));
-        return List.copyOf(boxes);
+        return dcsBoxes(dcs?DcsGeometry.parts():DcsGeometry.localParts());
     }
 
     private static List<ConstructorAssets.Box> dcsBoxes(List<DcsGeometry.Part> parts){
@@ -47,7 +40,7 @@ public final class ControlAssets {
             box.faces().put("north",new ConstructorAssets.Face(p.front().name().toLowerCase(java.util.Locale.ROOT)));
             box.faces().put("up",new ConstructorAssets.Face(p.top().name().toLowerCase(java.util.Locale.ROOT)));
             if(p.top()==DcsGeometry.Finish.KEYBOARD)box.faces().put("up",new ConstructorAssets.Face("keyboard",new double[]{16,16,0,0}));
-            if(p.name().equals("lower service cabinet")||p.name().equals("monitor enclosure")){
+            if(p.name().equals("lower service cabinet")||p.name().equals("monitor enclosure")||p.name().equals("local loop controller")){
                 box.faces().put("south",new ConstructorAssets.Face("rear"));
                 for(var face:List.of("east","west"))box.faces().put(face,new ConstructorAssets.Face("side"));
             }

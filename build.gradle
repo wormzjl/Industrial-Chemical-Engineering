@@ -538,7 +538,9 @@ def equipmentGates = gateGroup('equipment', 'science/equipment',
         ['science/column/v3/V3TestInputs*', 'science/column/v3/HollandB12Thermo*', 'science/column/v3/HollandExample32Data*', 'science/column/v3/V3HollandExample32*'],
         ['column/**', 'compat/**', 'materials/**'], ['assets/icheme/parts/**', 'assets/icheme/lang/**',
          'assets/icheme/models/block/dcs*.json', 'assets/icheme/models/item/dcs.json', 'assets/icheme/blockstates/dcs.json',
+         'assets/icheme/models/block/local_controller.json',
          'assets/icheme/textures/block/dcs_*.png', 'assets/icheme/textures/block/control_panel_*.png',
+         'assets/icheme/textures/block/controller_front.png',
          'assets/icheme/textures/block/pump_casting.png', 'assets/icheme/textures/block/equipment_steelwork.png'])
 
 // The slow gates (3 s or more each): the everyday `test` leaves them out and `holdGates` runs them. `slowGates` runs those

@@ -9,6 +9,10 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class DcsGeometryTest {
+    @Test void theLocalControllerUsesItsAuthoredCabinetBounds()throws Exception{
+        check(model("models/block/local_controller.json"),DcsGeometry.localParts());
+        for(var part:DcsGeometry.localParts())for(int turn=0;turn<4;turn++)assertArrayEquals(DcsGeometry.bounds(part,turn),DcsGeometry.bounds(part,turn+4));
+    }
     private static JsonObject model(String path)throws Exception{
         try(var in=DcsGeometryTest.class.getResourceAsStream("/assets/icheme/"+path)){
             assertNotNull(in,path);return JsonParser.parseReader(new InputStreamReader(in,StandardCharsets.UTF_8)).getAsJsonObject();

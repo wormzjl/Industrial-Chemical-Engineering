@@ -62,7 +62,8 @@ public final class LinePieces {
     /** Same conservative swept envelope is used for preflight, occupied cells and collision/selection. */
     public static Map<BlockPos,VoxelShape> slices(LinePlacement.Lead lead){
         var parts=new HashMap<BlockPos,VoxelShape>();
-        for(var box:LinePlacement.bounds(lead))for(var at:BlockPos.betweenClosedStream(box.deflate(1e-7)).toList()){
+        // Minecraft's stream reuses one mutable cursor; materialise immutable positions before retaining it.
+        for(var box:LinePlacement.bounds(lead))for(var at:BlockPos.betweenClosedStream(box.deflate(1e-7)).map(BlockPos::immutable).toList()){
             var cut=box.intersect(new AABB(at));if(cut.getXsize()<=1e-7||cut.getYsize()<=1e-7||cut.getZsize()<=1e-7)continue;
             parts.merge(at.immutable(),Shapes.create(cut.move(-at.getX(),-at.getY(),-at.getZ())),Shapes::or);
         }return Map.copyOf(parts);

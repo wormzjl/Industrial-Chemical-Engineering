@@ -73,7 +73,7 @@ public final class DcsBlock extends ControlPanelBlock {
     }
     @Override protected VoxelShape getShape(BlockState state,BlockGetter level,BlockPos pos,CollisionContext context){
         int turn=switch(state.getValue(FACING)){case NORTH->0;case EAST->1;case SOUTH->2;case WEST->3;default->throw new IllegalStateException("Vertical console");};
-        return SHAPES[state.getValue(HALF)==DoubleBlockHalf.UPPER?1:0][turn];
+        return LinePieces.shape(level,pos,SHAPES[state.getValue(HALF)==DoubleBlockHalf.UPPER?1:0][turn]);
     }
     private static VoxelShape[][] shapes(){
         var shapes=new VoxelShape[2][4];

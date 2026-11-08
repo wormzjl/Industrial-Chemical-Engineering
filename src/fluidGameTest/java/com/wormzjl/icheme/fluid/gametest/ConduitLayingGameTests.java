@@ -51,9 +51,12 @@ public final class ConduitLayingGameTests {
             var at=helper.absolutePos(new BlockPos(1,2,1+medium.ordinal()*4));var item=(medium==CableMedium.POWER?ModItems.POWER_CABLE:ModItems.DATA_CABLE).get();
             player.setItemInHand(InteractionHand.MAIN_HAND,new ItemStack(item,8));
             for(var cell:List.of(at,at.east(),at.north())){
+                // The empty GameTest template can contain boundary barriers; this fixture requires free target cells.
+                level.setBlock(cell,Blocks.AIR.defaultBlockState(),3);
                 level.setBlock(cell.below(),Blocks.STONE.defaultBlockState(),3);player.setPos(cell.getX()+.5,cell.getY(),cell.getZ()+2);
                 var hit=new BlockHitResult(cell.below().getCenter().add(0,.5,0),Direction.UP,cell.below(),false);
-                helper.assertTrue(item.useOn(new net.minecraft.world.item.context.UseOnContext(player,InteractionHand.MAIN_HAND,hit)).consumesAction(),"BlockItem refused: "+medium);
+                var action=item.useOn(new net.minecraft.world.item.context.UseOnContext(player,InteractionHand.MAIN_HAND,hit));
+                helper.assertTrue(action.consumesAction(),"BlockItem refused: "+medium+" / "+cell+" / "+item.getClass().getName()+" / "+action+" / "+level.getBlockState(cell));
             }
             var first=(ConduitBlockEntity)level.getBlockEntity(at);var second=(ConduitBlockEntity)level.getBlockEntity(at.east());var parallel=(ConduitBlockEntity)level.getBlockEntity(at.north());
             helper.assertTrue(CableConnections.meets(first.cable(),Direction.EAST,second.cable()),"Hand-placed blocks do not join: "+medium);
@@ -189,9 +192,18 @@ public final class ConduitLayingGameTests {
     public static void controllersAndInlineMoversUseTheirAvailableConnectionSpace(GameTestHelper helper){
         var level=helper.getLevel();var at=helper.absolutePos(new BlockPos(1,2,1));
         for(var block:List.of(ModBlocks.LOCAL_CONTROLLER,ModBlocks.DCS))for(var face:Direction.Plane.HORIZONTAL){
+            level.setBlock(at.relative(face.getOpposite()),Blocks.AIR.defaultBlockState(),3);
             level.setBlock(at,block.get().defaultBlockState().setValue(ControlPanelBlock.FACING,face),3);
             var port=DataPorts.panel((ControlPanelBlockEntity)level.getBlockEntity(at));
             helper.assertTrue(port.u()==0&&port.v()==0,"A controller's unobstructed connector must use the block-face centre");
+            var panel=(ControlPanelBlockEntity)level.getBlockEntity(at);FluidWorldAuthority.find(level.getServer()).orElseThrow().controls().loaded(panel);
+            var anchor=LayingTestCommands.resolve(level,end(panel.dataPort()),Map.of(panel.dataPort().id(),panel.dataPort()),CableMedium.DATA);
+            var leadRefusal=anchor==null?null:LinePlacement.checkLeads(level,LineLaying.leads(anchor,anchor));
+            helper.assertTrue(anchor!=null&&leadRefusal==null,"The authored cabinet collision blocks its own data entry: "+block.get()+" / "+face+" / "+panel.dataPort()+" / "+leadRefusal+" / "+level.getBlockState(at).getCollisionShape(level,at));
+            if(block==ModBlocks.LOCAL_CONTROLLER){
+                var bounds=level.getBlockState(at).getCollisionShape(level,at).bounds();
+                helper.assertTrue(bounds.getXsize()<1&&bounds.getZsize()<1,"The local cabinet still collides as a full block");
+            }
             level.removeBlock(at,false);
         }
         for(var mover:List.of(FluidDeviceBlock.InlineMover.PUMP,FluidDeviceBlock.InlineMover.COMPRESSOR))for(var face:Direction.Plane.HORIZONTAL){

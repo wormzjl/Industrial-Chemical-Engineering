@@ -1,5 +1,7 @@
 package com.wormzjl.icheme.science.equipment;
 
+import com.wormzjl.icheme.science.math.DeterministicMath;
+
 import java.util.*;
 import static com.wormzjl.icheme.science.equipment.Mesh.*;
 
@@ -57,10 +59,10 @@ public final class EquipmentInstruments {
                 var p=SphereDesign.Plan.of(d,shape.support());double y=p.level()+Access.DECK,r=p.rp()+.085;var zones=EquipmentServices.clearances(north,unit);
                 String[] ids={"pressure_top","temperature_top","level_body"};Quantity[] kinds={Quantity.PRESSURE,Quantity.TEMPERATURE,Quantity.LEVEL};double[] preferred={-Math.PI/4,-3*Math.PI/4,-Math.PI/2};
                 for(int index=0;index<3;index++) {
-                    int which=index;var angles=new ArrayList<Double>();for(int i=0;i<72;i++)angles.add(i*Math.PI/36);angles.sort(Comparator.comparingDouble(a->Math.abs(Math.atan2(Math.sin(a-preferred[which]),Math.cos(a-preferred[which])))));
+                    int which=index;var angles=new ArrayList<Double>();for(int i=0;i<72;i++)angles.add(i*Math.PI/36);angles.sort(Comparator.comparingDouble(a->Math.abs(DeterministicMath.atan2(DeterministicMath.sin(a-preferred[which]),DeterministicMath.cos(a-preferred[which])))));
                     boolean found=false;
                     for(double angle:angles) {
-                        var n=new double[]{Math.cos(angle),0,Math.sin(angle)};var centre=north.transform().point(new double[]{p.a()+r*n[0],y+.85,p.a()+r*n[2]});
+                        var n=new double[]{DeterministicMath.cos(angle),0,DeterministicMath.sin(angle)};var centre=north.transform().point(new double[]{p.a()+r*n[0],y+.85,p.a()+r*n[2]});
                         if(points.stream().anyMatch(q->dot(sub(q.centre,centre),sub(q.centre,centre))<.49))continue;
                         if(surface.overlaps(sub(centre,new double[]{.17,.15,.17}),plus(centre,new double[]{.17,.15,.17}),Set.of(Material.HEAD,Material.GRATING))||!ServiceSurface.clear(centre,zones))continue;
                         try {
@@ -93,7 +95,7 @@ public final class EquipmentInstruments {
     }
     private static Probe top(ServiceSurface surface,String id,Quantity quantity,double x,double z,double[] normal,double cx,double cz,double radius) {
         var head=new double[]{x,0,z};double[] tap;
-        try{tap=surface.ray(1,head,1,BODY);}catch(IllegalArgumentException outside){double dx=x-cx,dz=z-cz,length=Math.hypot(dx,dz),scale=Math.min(1,.68*radius/length);tap=surface.ray(1,new double[]{cx+dx*scale,0,cz+dz*scale},1,BODY);}
+        try{tap=surface.ray(1,head,1,BODY);}catch(IllegalArgumentException outside){double dx=x-cx,dz=z-cz,length=Math.sqrt(dx*dx+dz*dz),scale=Math.min(1,.68*radius/length);tap=surface.ray(1,new double[]{cx+dx*scale,0,cz+dz*scale},1,BODY);}
         // Small heads use a supported short process extension to keep the three readouts apart.
         head[1]=tap[1]+.55;double[] tip=quantity==Quantity.TEMPERATURE?plus(surface.ray(1,tap,-1,BODY),new double[]{0,.20,0}):null;
         return new Probe(id,quantity,head,tap,normal,true,true,true,tip,null);

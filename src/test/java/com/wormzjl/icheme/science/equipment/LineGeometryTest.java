@@ -87,8 +87,9 @@ class LineGeometryTest {
                     double v=polygon.positions()[i],lo=0,hi=1;
                     // Only the pressure actuator's stem direction may overhang its host cell.
                     if(key.kind()==Kind.VALVE) {
-                        if(key.facing()<2&&i%3==2)lo=-1.1;
-                        else if(key.facing()>=2&&i%3==1)hi=2.1;
+                        // The reviewed full diaphragm/yoke reaches 1.7 m from the pipe axis at maximum bore.
+                        if(key.facing()<2&&i%3==2)lo=-1.2;
+                        else if(key.facing()>=2&&i%3==1)hi=2.2;
                     }
                     // The scalable filter body and diagonal service cover retain their decorative overhang.
                     if(key.kind()==Kind.FILTER){lo=-1;hi=2;}

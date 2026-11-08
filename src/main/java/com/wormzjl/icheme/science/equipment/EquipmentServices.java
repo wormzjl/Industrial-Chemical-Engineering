@@ -1,5 +1,7 @@
 package com.wormzjl.icheme.science.equipment;
 
+import com.wormzjl.icheme.science.math.DeterministicMath;
+
 import java.util.*;
 import static com.wormzjl.icheme.science.equipment.Mesh.*;
 
@@ -137,7 +139,7 @@ public final class EquipmentServices {
     private static void bar(Mesh mesh,double[] a,double[] b,double r){double[] lo=new double[3],hi=new double[3];for(int i=0;i<3;i++){lo[i]=Math.min(a[i],b[i])-r;hi[i]=Math.max(a[i],b[i])+r;}mesh.box(lo,hi,ALL_FACES,Material.SERVICE_CASE);}
     private static double[] mountingPoint(ServiceSurface surface,int axis,double[] wanted,int sign,Set<Material> materials,double centre){
         try{return surface.ray(axis,wanted,sign,materials);}catch(IllegalArgumentException interrupted){
-            double best=Double.POSITIVE_INFINITY;double[] chosen=null;for(var polygon:surface.polygons){if(!materials.contains(polygon.material()))continue;var v=polygon.positions();var n=cross(sub(Arrays.copyOfRange(v,3,6),Arrays.copyOfRange(v,0,3)),sub(Arrays.copyOfRange(v,6,9),Arrays.copyOfRange(v,0,3)));if(sign*n[axis]<1e-10)continue;var p=new double[3];for(int i=0;i<v.length;i++)p[i%3]+=v[i]/polygon.size();double score=0;for(int a=0;a<3;a++)if(a!=axis)score+=Math.pow(p[a]-wanted[a],2);if(score<best){best=score;chosen=p;}}
+            double best=Double.POSITIVE_INFINITY;double[] chosen=null;for(var polygon:surface.polygons){if(!materials.contains(polygon.material()))continue;var v=polygon.positions();var n=cross(sub(Arrays.copyOfRange(v,3,6),Arrays.copyOfRange(v,0,3)),sub(Arrays.copyOfRange(v,6,9),Arrays.copyOfRange(v,0,3)));if(sign*n[axis]<1e-10)continue;var p=new double[3];for(int i=0;i<v.length;i++)p[i%3]+=v[i]/polygon.size();double score=0;for(int a=0;a<3;a++)if(a!=axis)score+=DeterministicMath.pow(p[a]-wanted[a],2);if(score<best){best=score;chosen=p;}}
             if(chosen!=null)return surface.rayNear(axis,chosen,sign,materials,chosen[axis]);throw interrupted;
         }
     }

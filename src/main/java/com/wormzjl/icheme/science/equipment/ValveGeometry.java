@@ -1,5 +1,7 @@
 package com.wormzjl.icheme.science.equipment;
 
+import com.wormzjl.icheme.science.math.DeterministicMath;
+
 import java.util.ArrayList;
 import java.util.List;
 import static com.wormzjl.icheme.science.equipment.Mesh.*;
@@ -144,7 +146,7 @@ public final class ValveGeometry {
         mesh.frustum(positioner,.105,.095,.125,.205,16,Material.SERVICE_CASE);
         if(!accessory)arms(mesh,key,h,od,PipeSizes.sides(od));
     }
-    private static void positioner(Mesh mesh,Frame frame,double width,double height,double back,double front,double radius,Material material){var a=new ArrayList<double[]>();var b=new ArrayList<double[]>();var vertical=cross(frame.axis(),frame.ref());for(double[] corner:new double[][]{{width-radius,height-radius,0},{-width+radius,height-radius,Math.PI/2},{-width+radius,-height+radius,Math.PI},{width-radius,-height+radius,3*Math.PI/2}})for(int j=0;j<4;j++){double angle=corner[2]+j*Math.PI/6;var offset=plus(scale(frame.ref(),corner[0]+radius*Math.cos(angle)),scale(vertical,corner[1]+radius*Math.sin(angle)));a.add(plus(frame.along(back),offset));b.add(plus(frame.along(front),offset));}mesh.flat(a,neg(frame.axis()),material);mesh.flat(b,frame.axis(),material);for(int i=0;i<a.size();i++)mesh.add(List.of(a.get(i),a.get((i+1)%a.size()),b.get((i+1)%a.size()),b.get(i)),frame.along((back+front)/2),FLAT,material,null,null);}
+    private static void positioner(Mesh mesh,Frame frame,double width,double height,double back,double front,double radius,Material material){var a=new ArrayList<double[]>();var b=new ArrayList<double[]>();var vertical=cross(frame.axis(),frame.ref());for(double[] corner:new double[][]{{width-radius,height-radius,0},{-width+radius,height-radius,Math.PI/2},{-width+radius,-height+radius,Math.PI},{width-radius,-height+radius,3*Math.PI/2}})for(int j=0;j<4;j++){double angle=corner[2]+j*Math.PI/6;var offset=plus(scale(frame.ref(),corner[0]+radius*DeterministicMath.cos(angle)),scale(vertical,corner[1]+radius*DeterministicMath.sin(angle)));a.add(plus(frame.along(back),offset));b.add(plus(frame.along(front),offset));}mesh.flat(a,neg(frame.axis()),material);mesh.flat(b,frame.axis(),material);for(int i=0;i<a.size();i++)mesh.add(List.of(a.get(i),a.get((i+1)%a.size()),b.get((i+1)%a.size()),b.get(i)),frame.along((back+front)/2),FLAT,material,null,null);}
 
     /** A placed valve block's own flanged arms to both ends of its run, from the casting's end faces at {@code half}. */
     private static void arms(Mesh mesh,LineGeometry.Key key,double half,double od,int sides) {

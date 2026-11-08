@@ -18,6 +18,21 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 @PrefixGameTestTemplate(false)
 public final class ProcessControlGameTests {
     private ProcessControlGameTests(){}
+    @GameTest(template="empty",timeoutTicks=80,batch="sensor-clearance")
+    public static void instrumentClearanceChecksTheFirstCrossedCellAsWellAsTheLast(GameTestHelper helper){
+        var level=helper.getLevel();var pos=helper.absolutePos(new BlockPos(2,2,2));
+        level.setBlock(pos,ModBlocks.FLUID_PIPE.get().defaultBlockState(),3);
+        var host=com.wormzjl.icheme.runtime.instrument.InstrumentHosts.at(level,pos);
+        var obstacle=pos.west();level.setBlock(obstacle,net.minecraft.world.level.block.Blocks.STONE.defaultBlockState(),3);
+        var extent=new Instrument.Selectable(){
+            public String id(){return "clearance";}
+            public net.minecraft.world.phys.AABB bounds(){return new net.minecraft.world.phys.AABB(pos.getX()-.8,pos.getY()+.2,pos.getZ()+.2,pos.getX()+1.8,pos.getY()+.8,pos.getZ()+.8);}
+        };
+        helper.assertTrue(!com.wormzjl.icheme.runtime.instrument.InstrumentHosts.clear(level,host,extent),"First crossed cell's obstruction was skipped");
+        level.removeBlock(obstacle,false);
+        helper.assertTrue(com.wormzjl.icheme.runtime.instrument.InstrumentHosts.clear(level,host,extent),"Clear crossed cells were refused");
+        level.removeBlock(pos,false);helper.succeed();
+    }
     @GameTest(template="empty",timeoutTicks=80,batch="sensor-socket")
     public static void removingTheLastPipeSensorRetiresItsSocketButKeepsTheCable(GameTestHelper helper){
         var level=helper.getLevel();var world=FluidWorldAuthority.find(level.getServer()).orElseThrow();
