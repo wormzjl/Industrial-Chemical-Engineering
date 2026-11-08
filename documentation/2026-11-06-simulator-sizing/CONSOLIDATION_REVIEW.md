@@ -27,6 +27,7 @@ Reviewed `3107ecc90` (code as `050cd1098`) against `main` `f1db3a892`: 85 commit
 | `da982f268`, `2414c4e3a` | Archived `ControlSystemTest.removingOneCable…` (A2) and `PowerGridTest.anUnpoweredBus…` (A3), trimmed `ConduitGeometryTest.fixedPowerDiameter…` to its mesh checks (A3), removed 5 prints. `tools/test-archive-2026-11-08/` holds the sources and a checked re-attach patch. |
 | `181ddcabe` | GUI skill, the `FluidDeviceScreen` comment, tool READMEs, this batch; code guide `equipment.md`, `pipe-laying.md`, `wired-control-power.md`, `verification.md`. |
 | `3efffdb2d` | `ControlService` split by duty (owner: "Yes, split it"): `ControlHosts` (ports, bindings, aliases, wiring queries, inputs), `ControlLaw` (one controller's decision, returned as a `Decision`), `ControlPlans` (the setpoints `apply` puts on a slice), `ControlPublication` (watched menus, replay cache, snapshot). It keeps the public API, wiring registration, edit queue and cadence: 1,031 → 311 lines. |
+| `e4749cdb6` | `ControlLoopGameTests` (owner: "Yes, add it"): a local controller, wired by cable facts to a flowmeter and an unconfigured valve on a nitrogen line, takes a target of half the free flow through its menu; the cadence decides CONTROLLING, the flow settles on the target with the valve's saved law unchanged, and the open menu receives status, answer and reading; switched off, the free flow returns. In a fresh world it passes in about 600 of 4000 ticks; with `ControlPlans.apply` returning its graph unchanged it times out at the target (0.319 kg/s against 0.159). |
 
 ## Verification
 
@@ -42,9 +43,8 @@ Reviewed `3107ecc90` (code as `050cd1098`) against `main` `f1db3a892`: 85 commit
 ## Owner options (not done)
 
 1. `tools/simulator-sizing/archive/` keeps 188 scratch `.py` codemod and audit scripts; they could be deleted.
-2. No test drives a local controller (an edit, CONTROLLING, the valve plan, the publication); a GameTest would.
-3. The formatter cut some `//` comments into fragments; a reflow, checked by bytecode, would join them.
-4. Files the branch modifies but did not add stay dense, so the unmerged refinery and save-corruption branches still
+2. The formatter cut some `//` comments into fragments; a reflow, checked by bytecode, would join them.
+3. Files the branch modifies but did not add stay dense, so the unmerged refinery and save-corruption branches still
    merge; format them after those land. `codex/simulator-sizing` should take no more commits, or rebase onto this.
-5. Left as they are: the rack picking shared by the two line clients, the three line-piece holders (shape rebuild and
+4. Left as they are: the rack picking shared by the two line clients, the three line-piece holders (shape rebuild and
    update flags differ), the `MachineAnimation` and `TankRenderer` buffers.

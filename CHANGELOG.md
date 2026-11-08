@@ -21,7 +21,7 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ### Changed
 
-- Simulator-sizing consolidation review: socket geometry, cabinet shapes and line-tool helpers consolidated (`df24eb6ac`), the branch's new Java files formatted (`658861333`), three redundant tests and five probe prints archived to `tools/test-archive-2026-11-08/` (`da982f268`, `2414c4e3a`), GUI rules brought in line with the preserved GUI scale, `ControlService` split by duty into four package-private parts (`3efffdb2d`) (batch `2026-11-06-simulator-sizing`).
+- Simulator-sizing consolidation review: socket geometry, cabinet shapes and line-tool helpers consolidated (`df24eb6ac`), the branch's new Java files formatted (`658861333`), three redundant tests and five probe prints archived to `tools/test-archive-2026-11-08/` (`da982f268`, `2414c4e3a`), GUI rules brought in line with the preserved GUI scale, `ControlService` split by duty into four package-private parts (`3efffdb2d`), a GameTest that drives a local controller end to end (`e4749cdb6`) (batch `2026-11-06-simulator-sizing`).
 
 ## [0.21.0] - 2026-11-05
 

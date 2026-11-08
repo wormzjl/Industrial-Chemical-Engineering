@@ -1,6 +1,6 @@
 # Wired controllers, data links and FE power
 
-**Snapshot:** 3efffdb2d (branch `claude/simulator-sizing-refactor-6bacab`, the consolidation review of `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, prepared for owner-approved 0.22.0; not merged.
+**Snapshot:** e4749cdb6 (branch `claude/simulator-sizing-refactor-6bacab`, the consolidation review of `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, prepared for owner-approved 0.22.0; not merged.
 
 Local controller boxes own automatic loops. The DCS selects a linked box and edits its settings; it does not run a second controller. Data cable carries connectivity rather than fluid or a packet stream simulation. Power conduit transports ordinary NeoForge FE through capabilities. Both use the pipe laying tool's anchors, routes, validation and rack framework.
 
@@ -62,4 +62,4 @@ Motors require usable stored energy and live FE supply. Their buffer is 10 s of 
 
 `ControlFacts` formats 1–3 and accessory facts schema 4 have corpus images; missing old conduit medium means the original data medium. Sockets/endpoint IDs, settings and cable positions are facts; compiled graphs, loop samples, pending edits and caches rebuild. Damaged facts refuse load. Existing wired endpoints are retained across visual/layout changes rather than silently reattached.
 
-`ControlSystemTest`, `PowerGridTest`, `ConduitGeometryTest`, layout/compatibility tests and the standard-namespace `ConduitLayingGameTests`/`CreativePowerGameTests` cover the core paths. Historical CPU/RAM and draw probes live in `tools/simulator-sizing/`; the batch merge review records final verification. Change routing in the common line classes, process laws in science, capability transfer in power, and scheduling/ID policy in control. Do not add another parallel placement engine.
+`ControlSystemTest`, `PowerGridTest`, `ConduitGeometryTest`, layout/compatibility tests and the standard-namespace `ConduitLayingGameTests`/`CreativePowerGameTests` cover the core paths. `ControlLoopGameTests` drives one local flow loop end to end: an edit through the controller's menu, the cadence's decision, the valve plan on the slice (the saved valve law unchanged) and the publication to the open menu. Historical CPU/RAM and draw probes live in `tools/simulator-sizing/`; the batch merge review records final verification. Change routing in the common line classes, process laws in science, capability transfer in power, and scheduling/ID policy in control. Do not add another parallel placement engine.
