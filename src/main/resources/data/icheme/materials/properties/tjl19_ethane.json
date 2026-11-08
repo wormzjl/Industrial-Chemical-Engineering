@@ -47,6 +47,23 @@
     "source": "ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Ethane\" (ChemSep index 2, CAS 74-84-0): melting point, triple point temperature and pressure, heat of fusion at the melting point. Data only: never a validity floor or a range end.",
     "revision": "chemsep-8.3-r1"
   },
+  "thermochemistry": {
+    "formation_enthalpy_j_per_mol": -83820,
+    "elements": {
+      "C": 2,
+      "H": 6
+    },
+    "estimated": false,
+    "source": "Ideal-gas heat of formation at 298.15 K and formula C2H6 (molar mass 30.07 g/mol) of ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Ethane\" (ChemSep index 2, CAS 74-84-0). Heats of reaction follow by Hess's law. Data only.",
+    "revision": "chemsep-8.3-hf-r1"
+  },
+  "flammability": {
+    "lfl_volume_fraction": 0.03,
+    "ufl_volume_fraction": 0.124,
+    "estimated": false,
+    "source": "M. G. Zabetakis, Flammability Characteristics of Combustible Gases and Vapors, US Bureau of Mines Bulletin 627 (1965), Table A-1, p. 115, entry \"Ethane\": L25 and U25 in air at 25 C and atmospheric pressure. A US Government work (17 U.S.C. 105). Constant with temperature (owner decision E23).",
+    "revision": "npg-b627-r1"
+  },
   "viscosity": {
     "liquid": {
       "type": "log_table",

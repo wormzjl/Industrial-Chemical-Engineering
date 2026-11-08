@@ -66,6 +66,53 @@ public final class MaterialCatalog {
         public double anchorTemperature() { return triplePointTemperature != null ? triplePointTemperature : normalMeltingTemperature; }
     }
     /**
+     * A dataset's thermochemistry, its optional {@code thermochemistry} sub-record (O9 of batch 2026-11-04-open-thermo-data,
+     * owner decision E23, form S2): the standard formation enthalpy of the ideal gas at 298.15 K (J/mol; 0 for an element
+     * in its reference state, O2 and N2) and the element formula (atoms of C, H, N, O and S per molecule; a cut's are
+     * estimated and need not be whole), whether they are estimated, their source and the sub-record's own revision. The
+     * water model may carry one too. Heats of reaction follow by Hess's law from these records alone: the net heat of
+     * combustion, the water formed, the oxygen demand and the flue gas (fuel to CO2, H2O, SO2 and N2) are not stored.
+     *
+     * <p>Data for later models only, as {@link Freezing}: no model reads it, so it has its own revision and is in no
+     * identity ({@link Package#scientificRevision}, {@link MaterialCatalog#fluidRevision}, {@link MaterialCatalog#spineRevision},
+     * {@link MaterialCatalog#physicsContent}), and an edit moves no world, result or neural model. It is apart from a
+     * reference spine's {@code formation_enthalpy}, which is a spine package's ideal-gas source. The formula is not checked
+     * against the record's molar mass at load, so an edit of the dataset is never refused for it; the import tools check
+     * it, and a data gate checks the shipped records.</p>
+     */
+    public record Thermochemistry(double formationEnthalpy, Map<String, Double> elements, boolean estimated, String source, String revision) {
+        /** The elements a formula may name, with their standard atomic weights, g/mol. */
+        public static final Map<String, Double> ATOMIC_WEIGHTS = Map.of("C", 12.011, "H", 1.008, "N", 14.007, "O", 15.999, "S", 32.06);
+        public Thermochemistry {
+            Objects.requireNonNull(source); Objects.requireNonNull(revision);
+            if (!Double.isFinite(formationEnthalpy)) throw new IllegalArgumentException("formation_enthalpy_j_per_mol: nonfinite");
+            elements = Map.copyOf(elements);
+            if (elements.isEmpty()) throw new IllegalArgumentException("elements: at least one element required");
+            for (var e : elements.entrySet()) {
+                if (!ATOMIC_WEIGHTS.containsKey(e.getKey())) throw new IllegalArgumentException("elements: " + e.getKey() + " is not C, H, N, O or S");
+                if (!(e.getValue() > 0) || !Double.isFinite(e.getValue())) throw new IllegalArgumentException("elements." + e.getKey() + ": must be positive and finite");
+            }
+        }
+        /** The formula's molar mass, kg/mol. */
+        public double molarMass() {
+            double grams = 0; for (var e : elements.entrySet()) grams += e.getValue() * ATOMIC_WEIGHTS.get(e.getKey()); return grams / 1000;
+        }
+    }
+    /**
+     * A dataset's flammability limits in air, its optional {@code flammability} sub-record (O9, E23, form S2): the lower
+     * and, where known, the upper limit (volume fractions, constant with temperature), whether they are estimated, their
+     * source and the sub-record's own revision. A compound or cut that does not burn has none; a cut has no upper limit.
+     * Kept apart from {@link Thermochemistry}: the limits come from other sources (NIOSH, Bureau of Mines Bulletin 627,
+     * estimates) and are corrected on their own revision, which moves no thermochemistry. Data only, in no identity.
+     */
+    public record Flammability(double lowerLimit, Double upperLimit, boolean estimated, String source, String revision) {
+        public Flammability {
+            Objects.requireNonNull(source); Objects.requireNonNull(revision);
+            if (!(lowerLimit > 0 && lowerLimit < 1)) throw new IllegalArgumentException("lfl_volume_fraction: must lie in (0, 1)");
+            if (upperLimit != null && !(upperLimit > lowerLimit && upperLimit < 1)) throw new IllegalArgumentException("ufl_volume_fraction: must lie in (lfl_volume_fraction, 1)");
+        }
+    }
+    /**
      * The free-water model of a package. {@code ice} is its ice below the melting line (WP4 of batch
      * 2026-09-24-coolprop-low-temperature), null for a record without one (a frozen fixture): the fluid network needs it.
      */
@@ -114,7 +161,8 @@ public final class MaterialCatalog {
      * viscosities, each by its own revision, the water's ice and the fluid reference data in
      * {@link MaterialCatalog#fluidRevision}, and the spine and crystal records (the column refuses such packages) record by
      * record in {@link MaterialCatalog#spineRevision}. Assays are compositions, not physics: no identity carries them, and
-     * neither does a dataset's freezing sub-record ({@link Freezing}), which no model reads yet.</p>
+     * neither do a dataset's freezing, thermochemistry and flammability sub-records ({@link Freezing}, {@link Thermochemistry},
+     * {@link Flammability}), which no model reads yet.</p>
      */
     public record Package(String id, String revision, String model, List<String> components,
             List<Property> properties, List<List<Double>> interactions, List<NrtlPair> nrtlPairs,
@@ -306,6 +354,34 @@ public final class MaterialCatalog {
         }
         return Optional.ofNullable(records.freezing().get(p.properties().get(index).id()));
     }
+    /**
+     * A compound's thermochemistry in a package: the {@code thermochemistry} sub-record of the dataset the package takes for
+     * it, or of the package's water model for the water ({@link Thermochemistry}); absent where the record has none.
+     */
+    public Optional<Thermochemistry> thermochemistry(String packageId, String componentId) {
+        Package p = requirePackage(packageId);
+        String id = p.canonicalId(Objects.requireNonNull(componentId, "componentId"));
+        int index = p.components().indexOf(id);
+        String key;
+        if (index >= 0) key = "properties/" + p.properties().get(index).id();
+        else if (id.equals("Water")) key = "water/" + waterModels.get(packageId);
+        else throw new IllegalArgumentException("Component is outside package: " + componentId);
+        return Optional.ofNullable(records.thermochemistry().get(key));
+    }
+    /**
+     * A compound's flammability limits in a package: the {@code flammability} sub-record of the dataset the package takes for
+     * it ({@link Flammability}); absent for a dataset without one (a compound that does not burn) and for the water.
+     */
+    public Optional<Flammability> flammability(String packageId, String componentId) {
+        Package p = requirePackage(packageId);
+        String id = p.canonicalId(Objects.requireNonNull(componentId, "componentId"));
+        int index = p.components().indexOf(id);
+        if (index < 0) {
+            if (id.equals("Water")) return Optional.empty();
+            throw new IllegalArgumentException("Component is outside package: " + componentId);
+        }
+        return Optional.ofNullable(records.flammability().get(p.properties().get(index).id()));
+    }
 
     private static JsonObject propertyScience(Property property) {
         var json=new Gson().toJsonTree(property).getAsJsonObject();json.remove("id");return json;
@@ -448,6 +524,8 @@ public final class MaterialCatalog {
         var crystals = new HashMap<String, CrystalReference>();
         var propertyRevisions = new HashMap<String, String>();
         var freezing = new HashMap<String, Freezing>();
+        var thermochemistry = new HashMap<String, Thermochemistry>();
+        var flammability = new HashMap<String, Flammability>();
         for (var o : group(groups,"components").values()) checked(origins,o,() -> {
             JsonObject cut = o.has("cut") ? object(o,"cut") : null;
             String id=text(o,"id"), kind=text(o,"kind");
@@ -524,6 +602,8 @@ public final class MaterialCatalog {
                             +" is anchored at "+crystal.anchor().temperature()+" K; they must agree within "+Freezing.CRYSTAL_ANCHOR_TOLERANCE+" K");
                 freezing.put(id,f);
             }
+            if (o.has("thermochemistry")) thermochemistry.put("properties/"+id,readThermochemistry(object(o,"thermochemistry")));
+            if (o.has("flammability")) flammability.put(id,readFlammability(object(o,"flammability")));
         });
         for (var o : group(groups,"water").values()) checked(origins,o,() -> {
             viscosities.put("water/" + text(o,"id"), readViscosities(o));
@@ -548,6 +628,7 @@ public final class MaterialCatalog {
                     positive(o,"reference_vaporization_enthalpy"),positive(o,"watson_exponent"),counted(o,"saturation_coefficients",6),counted(o,"shomate_coefficients",7),ice);
             range(w.triplePoint(),w.boilingTemperature(),"water boiling"); range(w.boilingTemperature(),w.criticalTemperature(),"water critical");
             range(w.triplePoint(),w.maximumTemperature(),"water enthalpy"); require(names,"Water","component"); waters.put(text(o,"id"),w);
+            if (o.has("thermochemistry")) thermochemistry.put("water/"+text(o,"id"),readThermochemistry(object(o,"thermochemistry")));
         });
         for (var o : group(groups,"interactions").values()) checked(origins,o,() -> validateInteractions(o,names,matrices));
         // A compound's default dataset is one of its own property records.
@@ -567,7 +648,7 @@ public final class MaterialCatalog {
         var spinesByComponent=new HashMap<String,List<String>>();
         for(var spine:spines.values())spinesByComponent.computeIfAbsent(spine.component(),unused->new ArrayList<>()).add(spine.id());
         var records=new Records(names,properties,propertyRevisions,waters,group(groups,"interactions"),matrices,spines,
-                spinesByComponent,crystals,aliases,assayRecords,propertyValidity,viscosities,freezing,fluidData,defaults);
+                spinesByComponent,crystals,aliases,assayRecords,propertyValidity,viscosities,freezing,thermochemistry,flammability,fluidData,defaults);
         var definitions=new HashMap<String,Definition>();
         for (var o : group(groups,"packages").values()) checked(origins,o,() -> {
             // A package is a property method and a list of compounds (batch 2026-11-04-refinery-compounds): every number comes
@@ -674,6 +755,21 @@ public final class MaterialCatalog {
                     o.has("fusion_enthalpy_j_per_mol")?positive(o,"fusion_enthalpy_j_per_mol"):null,
                     bool(o,"estimated"),text(o,"source"),revision(o,"revision"));
         } catch (RuntimeException invalid) { throw new IllegalArgumentException("freezing."+invalid.getMessage(),invalid); }
+    }
+    /** A dataset's or water model's {@code thermochemistry} sub-record ({@link Thermochemistry}); a refusal names the field. */
+    private static Thermochemistry readThermochemistry(JsonObject o) {
+        try {
+            JsonObject formula=object(o,"elements");var elements=new HashMap<String,Double>();
+            for(String element:formula.keySet())elements.put(element,number(formula,element));
+            return new Thermochemistry(number(o,"formation_enthalpy_j_per_mol"),elements,bool(o,"estimated"),text(o,"source"),revision(o,"revision"));
+        } catch (RuntimeException invalid) { throw new IllegalArgumentException("thermochemistry."+invalid.getMessage(),invalid); }
+    }
+    /** A dataset's {@code flammability} sub-record ({@link Flammability}); a refusal names the field. */
+    private static Flammability readFlammability(JsonObject o) {
+        try {
+            return new Flammability(number(o,"lfl_volume_fraction"),o.has("ufl_volume_fraction")?number(o,"ufl_volume_fraction"):null,
+                    bool(o,"estimated"),text(o,"source"),revision(o,"revision"));
+        } catch (RuntimeException invalid) { throw new IllegalArgumentException("flammability."+invalid.getMessage(),invalid); }
     }
     private static void validateInteractions(JsonObject o,Map<String,MaterialName> names,Map<String,GroupInteractionMatrix> matrices) {
         String model=text(o,"model"); text(o,"source"); revision(o,"revision");
@@ -823,9 +919,11 @@ public final class MaterialCatalog {
             Map<String,GroupInteractionMatrix> matrices,Map<String,ReferenceSpine> spines,Map<String,List<String>> spinesByComponent,
             Map<String,CrystalReference> crystals,Map<String,String> aliases,Map<String,AssayRecord> assays,
             Map<String,Validity> propertyValidity,Map<String,Map<ViscosityCorrelation.Phase,ViscosityCorrelation>> viscosities,
-            Map<String,Freezing> freezing,FluidData fluidData,Map<String,String> defaults) {
+            Map<String,Freezing> freezing,Map<String,Thermochemistry> thermochemistry,Map<String,Flammability> flammability,
+            FluidData fluidData,Map<String,String> defaults) {
         Records {
             defaults=Map.copyOf(defaults); names=Map.copyOf(names); properties=Map.copyOf(properties); propertyRevisions=Map.copyOf(propertyRevisions); freezing=Map.copyOf(freezing);
+            thermochemistry=Map.copyOf(thermochemistry); flammability=Map.copyOf(flammability);
             waters=Map.copyOf(waters); libraries=Map.copyOf(libraries); matrices=Map.copyOf(matrices);
             spines=Map.copyOf(spines); crystals=Map.copyOf(crystals); aliases=Map.copyOf(aliases); assays=Map.copyOf(assays);
             propertyValidity=Map.copyOf(propertyValidity); viscosities=Map.copyOf(viscosities);

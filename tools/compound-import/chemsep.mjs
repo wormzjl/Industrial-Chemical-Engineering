@@ -9,6 +9,7 @@ const SCALARS = {
   omega: 'AcentricityFactor', mw: 'MolecularWeight', tb: 'NormalBoilingPointTemperature',
   tm: 'NormalMeltingPointTemperature', tt: 'TriplePointTemperature', pt: 'TriplePointPressure',
   hfus: 'HeatOfFusionAtMeltingPoint', sg: 'SpecificGravity', zra: 'RacketParameter',
+  hf: 'HeatOfFormation', // ideal-gas heat of formation at 298.15 K, J/kmol
 };
 const CORRELATIONS = {
   cp: 'IdealGasHeatCapacityCp', rho: 'LiquidDensity', psat: 'VaporPressure',

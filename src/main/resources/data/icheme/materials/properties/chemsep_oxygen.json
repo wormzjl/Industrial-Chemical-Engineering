@@ -38,6 +38,15 @@
       "acentric_factor": 0.022
     }
   },
+  "thermochemistry": {
+    "formation_enthalpy_j_per_mol": 0,
+    "elements": {
+      "O": 2
+    },
+    "estimated": false,
+    "source": "0 by definition: O2 is an element in its reference state (ChemSep agrees). Ideal-gas heat of formation at 298.15 K and formula O2 (molar mass 31.998 g/mol) of ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Oxygen\" (ChemSep index 901, CAS 7782-44-7). Heats of reaction follow by Hess's law. Data only.",
+    "revision": "chemsep-8.3-hf-r1"
+  },
   "viscosity": {
     "liquid": {
       "type": "log_table",

@@ -5,6 +5,7 @@
 //
 // Writes, under <out dir>: components/<file>.json, properties/chemsep_<file>.json, interactions/<pair library>.json,
 // transport/<volume reference>.json, freezing/<record>.json (freezing sub-records for existing datasets),
+// thermochemistry/<record>.json and flammability/<record>.json (for existing datasets; insert-subrecord.mjs writes them in),
 // lang-en_us.json (suggested English lines) and report.json; prints the fit errors, the pair sources and a
 // cross-check table against the batch data document. Deterministic: fixed ordering, JSON number formatting.
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
@@ -218,6 +219,61 @@ function freezingRecord(c, override, note) {
   return record;
 }
 
+// ---------------------------------------------------------------------------------------------------- thermochemistry (O9, E23 form S2)
+const ATOMIC_WEIGHT = { C: 12.011, H: 1.008, N: 14.007, O: 15.999, S: 32.06 };
+/** Element counts of a molecular formula of C, H, N, O and S ("C2H6S"), in that order, zero counts left out. */
+function elements(formula) {
+  const n = { C: 0, H: 0, N: 0, O: 0, S: 0 };
+  const rest = formula.replace(/([A-Z][a-z]?)(\d*)/g, (_, e, k) => {
+    if (!(e in n)) throw new Error(`formula ${formula}: element ${e} is not C, H, N, O or S`);
+    n[e] += k === '' ? 1 : Number(k); return '';
+  });
+  if (rest !== '') throw new Error('formula ' + formula + ': unreadable');
+  return Object.fromEntries(Object.entries(n).filter(([, v]) => v > 0));
+}
+/** A finite number in (0, 1) from a volume percent, without binary noise in its decimal form (1.6 % -> 0.016). */
+const fraction = (percent) => Number((percent / 100).toPrecision(12));
+const tooLong = (component, record) => {
+  for (const [k, v] of Object.entries(record)) if (typeof v === 'string' && v.length > 2048) throw new Error(`${component}: ${k} longer than 2048 characters`);
+  return record;
+};
+/**
+ * A thermochemistry sub-record (form S2): ChemSep's ideal-gas heat of formation at 298.15 K (J/kmol to J/mol) and the
+ * element formula, whose molar mass must match ChemSep's within 0.02 g/mol. An element in its reference state
+ * ("reference_element") is 0 by definition, and ChemSep must agree. Heats of reaction are left to Hess's law.
+ */
+function thermochemistryRecord(c, e) {
+  const n = elements(e.formula);
+  const mw = Object.entries(n).reduce((s, [k, v]) => s + v * ATOMIC_WEIGHT[k], 0);
+  if (Math.abs(mw - c.mw) > 0.02) throw new Error(`${e.component}: formula ${e.formula} gives ${mw} g/mol, ChemSep ${c.mw}`);
+  if (c.hf === null) throw new Error(e.component + ': ChemSep has no heat of formation');
+  const hf = c.hf / 1000;
+  if (e.reference_element && hf !== 0) throw new Error(e.component + ': an element in its reference state, but ChemSep gives ' + hf);
+  return tooLong(e.component, {
+    formation_enthalpy_j_per_mol: hf,
+    elements: n,
+    estimated: false,
+    source: (e.reference_element ? `0 by definition: ${e.formula} is an element in its reference state (ChemSep agrees). ` : '')
+      + `Ideal-gas heat of formation at 298.15 K and formula ${e.formula} (molar mass ${+mw.toFixed(4)} g/mol) of ${credit(c)}.`
+      + (e.note ? ' ' + e.note : '') + ' Heats of reaction follow by Hess\'s law. Data only.',
+    revision: selection.thermochemistry_revision,
+  });
+}
+/** A flammability sub-record (form S2): the entry's limits as volume fractions with the selection's source text. */
+function flammabilityRecord(e) {
+  const l = e.limits, template = selection.limit_sources?.[l.source];
+  if (!template) throw new Error(e.component + ': unknown limit source ' + l.source);
+  if (!(l.lfl_volume_percent > 0 && l.lfl_volume_percent < 100)) throw new Error(e.component + ': LFL out of range');
+  if (l.ufl_volume_percent !== undefined && !(l.ufl_volume_percent > l.lfl_volume_percent && l.ufl_volume_percent < 100))
+    throw new Error(e.component + ': UFL out of range');
+  const record = { lfl_volume_fraction: fraction(l.lfl_volume_percent) };
+  if (l.ufl_volume_percent !== undefined) record.ufl_volume_fraction = fraction(l.ufl_volume_percent);
+  record.estimated = false;
+  record.source = template.replaceAll('{entry}', l.entry).replaceAll('{ref}', l.ref) + (l.note ? ' ' + l.note : '');
+  record.revision = selection.flammability_revision;
+  return tooLong(e.component, record);
+}
+
 /** The saturated liquid at Tr = 0.7: eq. 105 density and eq. 101 vapour pressure, with the PR78 checks. */
 function liquidReference(c) {
   const t = 0.7 * c.tc, p = evaluate(c.psat, t), rho = evaluate(c.rho, t); // Pa, kmol/m3
@@ -252,8 +308,12 @@ const estimateFreezingRevision = selection.estimate_freezing_revision ?? selecti
 const crystalFreezingRevision = selection.crystal_freezing_revision ?? selection.freezing_revision;
 for (const r of [selection.properties_revision, selection.viscosity_revision, selection.freezing_revision, estimateFreezingRevision, crystalFreezingRevision])
   if (!REVISION.test(r)) throw new Error('invalid revision token ' + r);
+const TOKEN = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
+if (selection.thermochemistry_only?.length || selection.compounds.some((s) => s.thermochemistry))
+  for (const r of [selection.thermochemistry_revision, selection.flammability_revision])
+    if (!TOKEN.test(r ?? '')) throw new Error('invalid thermochemistry or flammability revision ' + r);
 
-const report = { compounds: [], pairs: [], freezing_only: [], notes: [] };
+const report = { compounds: [], pairs: [], freezing_only: [], thermochemistry_only: [], notes: [] };
 const lang = {};
 const references = [];
 // A selection entry may replace ChemSep constants ("constants": {tc, pc, omega, omit: [field], source, freezing_note})
@@ -325,6 +385,12 @@ for (const s of selection.compounds) {
   property.freezing = s.from_crystal ? crystalFreezing(s.id, s.from_crystal, s.freezing_note)
     : freezingRecord(c, s.freezing_override, s.constants?.freezing_note);
   crystalGap(s.id, s.from_crystal, property.freezing);
+  // An entry may carry "thermochemistry": {formula, reference_element, limits} (the thermochemistry_only form).
+  if (s.thermochemistry) {
+    const e = { component: s.id, ...s.thermochemistry };
+    property.thermochemistry = thermochemistryRecord(c, e);
+    if (e.limits) property.flammability = flammabilityRecord(e);
+  }
   write(`properties/${propertiesId.replace(/^[a-z0-9_.-]+:/, '')}.json`, property);
 
   references.push({
@@ -433,6 +499,17 @@ for (const e of selection.freezing_only ?? []) {
   crystalGap(e.component, e.from_crystal ?? e.crystal, record);
   write(`freezing/${e.properties_file}`, { properties: e.properties, component: e.component, freezing: record });
   report.freezing_only.push({ component: e.component, properties: e.properties, ...record, source: undefined });
+}
+// Wrappers name their record by id and path (relative to the materials folder): a dataset, or the water model.
+for (const e of selection.thermochemistry_only ?? []) {
+  const path = e.path ?? 'properties/' + e.properties_file, name = path.split('/').pop();
+  const target = { id: e.properties, path, ...(e.path ? {} : { component: e.component }) };
+  const record = thermochemistryRecord(chemsep(e.cas), e);
+  write(`thermochemistry/${name}`, { ...target, thermochemistry: record });
+  const flammability = e.limits ? flammabilityRecord(e) : null;
+  if (flammability) write(`flammability/${name}`, { ...target, flammability });
+  report.thermochemistry_only.push({ component: e.component, formation_enthalpy_j_per_mol: record.formation_enthalpy_j_per_mol,
+    elements: record.elements, lfl: flammability?.lfl_volume_fraction ?? null, ufl: flammability?.ufl_volume_fraction ?? null });
 }
 
 write('lang-en_us.json', lang);

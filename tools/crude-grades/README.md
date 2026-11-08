@@ -20,6 +20,7 @@ node tools/crude-grades/grades.mjs       # 3  assays/<id>.json, grades.json
 node tools/crude-grades/method.mjs       # 4  crude_pr78.liquid_mixture.json (needs 2)
 node tools/crude-grades/presets.mjs      # 5  presets/mixturepreset, presets/columnpreset, presets/README.json (needs 3)
 node tools/crude-grades/validate.mjs     # 6  validation.md, validation.json (needs 2, 3)
+node tools/crude-grades/thermochemistry.mjs  # 7  thermochemistry/ and flammability/crude_pcNN.json wrappers (O9)
 ```
 
 **Inputs:**
@@ -43,6 +44,7 @@ node tools/crude-grades/validate.mjs     # 6  validation.md, validation.json (ne
 | `method.mjs` | Writes the proposed `liquid_mixture` block (`cut_pair_v1`, revision `eccc-cut-pair-r1`) and its exact equivalent for the current Java. |
 | `presets.mjs` | Writes the mixture and column preset drafts. These need a solver check. |
 | `validate.mjs` | Writes the per-grade validation against the ECCC references, and each cut table's ratio to the Dalia table. |
+| `thermochemistry.mjs` | O9 form S2: the cuts' thermochemistry and flammability sub-records, estimated: formula CHx from Cragoe 1929 hydrogen at the cut's molar mass, formation enthalpy back-computed so that Hess gives Cragoe's net heat; Burgess-Wheeler lower limit (LFL x LHV = 4319 vol% kJ/mol), no upper limit. Revisions `cragoe-1929-chx-r1`, `burgess-wheeler-r1`. `tools/compound-import/insert-subrecord.mjs <key> <out>/<key> src/main/resources/data/icheme/materials` writes them in. |
 | `lib/materials.mjs` | Loads the records and evaluates the game's `log_table` and its liquid-source rule. |
 | `lib/correlations.mjs` | API gravity, Twu 1985, ASTM D341 and the Rackett density. |
 | `lib/grades.mjs` | The Riazi distribution, the cut bins, the light-end split, the yields and the solvers. |
@@ -58,3 +60,4 @@ node tools/crude-grades/validate.mjs     # 6  validation.md, validation.json (ne
   - G was refitted on the full ECCC crude set.
 - 2026-11-04: O4 applied the outputs: the 12 cut tables (`twu-1985-d341-r1`) into `properties/crude_pc01..12.json` and the proposed block (`cut_pair_v1`, G = 1.0956, `eccc-cut-pair-r1`) into `methods/crude_pr78.json`. A re-run on 50d6c506f gave every output byte for byte.
 - 2026-11-05: O3 applied the outputs: the four assays (`generated-r1`) into `assays/`, the medium grade's column draft as the default column preset `presets/column_medium_crude.json` (unchanged after the solver check, CRUDE_GRADES_APPLY_REVIEW.md), and the client drafts into `assets/icheme/columnpreset/` and `mixturepreset/` with their en_us names. The Tia Juana client templates left `src/main`, so `presets.mjs` reads their copies in `reference/`; a re-run of `presets.mjs` on the same `grades.json` gave every preset output byte for byte.
+- 2026-11-08 (O9 form S2, decision E23): `thermochemistry.mjs` added; its 12 + 12 wrappers (`tmp/o9-combustion/s2-crude/`; Hess gives R3's F1 heat for every cut) inserted into `properties/crude_pc01..12.json` by `tools/compound-import/insert-subrecord.mjs`. See COMBUSTION_DATA_APPLY_REVIEW.md.

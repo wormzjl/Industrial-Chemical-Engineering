@@ -38,6 +38,17 @@
       "acentric_factor": 0.0978
     }
   },
+  "thermochemistry": {
+    "formation_enthalpy_j_per_mol": -138410,
+    "elements": {
+      "C": 1,
+      "O": 1,
+      "S": 1
+    },
+    "estimated": false,
+    "source": "Ideal-gas heat of formation at 298.15 K and formula COS (molar mass 60.07 g/mol) of ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Carbonyl sulfide\" (ChemSep index 1893, CAS 463-58-1). No limits: Bulletin 627 Table A-1 has no carbonyl sulfide entry, and the values entered from memory (12 and 29 vol%) are unverified. Heats of reaction follow by Hess's law. Data only.",
+    "revision": "chemsep-8.3-hf-r1"
+  },
   "viscosity": {
     "liquid": {
       "type": "log_table",
