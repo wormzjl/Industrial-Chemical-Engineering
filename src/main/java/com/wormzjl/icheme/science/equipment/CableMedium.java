@@ -1,25 +1,24 @@
 package com.wormzjl.icheme.science.equipment;
 
-/** Saved by name. Both metallic cable enclosures use the same fixed outside diameter. */
+/**
+ * Saved by name. Both metallic cable enclosures use the same fixed outside diameter; the colour is
+ * the medium's identification (blue data, orange FE).
+ */
 public enum CableMedium {
-    DATA(1 / 8.0, "power_cable", 0x69b9db),
-    POWER(1 / 8.0, "power_cable", 0xd89455);
-    private final double outside;
-    private final String texture;
+    DATA(0x69b9db),
+    POWER(0xd89455);
+
+    /** The outside diameter of either conduit, m. */
+    public static final double OUTSIDE = 1 / 8.0;
+
     private final int colour;
 
-    CableMedium(double outside, String texture, int colour) {
-        this.outside = outside;
-        this.texture = texture;
+    CableMedium(int colour) {
         this.colour = colour;
     }
 
     public double outside() {
-        return outside;
-    }
-
-    public String texture() {
-        return texture;
+        return OUTSIDE;
     }
 
     public int colour() {

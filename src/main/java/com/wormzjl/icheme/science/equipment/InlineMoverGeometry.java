@@ -11,7 +11,7 @@ public final class InlineMoverGeometry {
     private record MotorLayout(double radius,double low,double height,double gearBottom,double split,double gearTop,double lid,double wetRadius) {}
     private static MotorLayout motorLayout(LineGeometry.Key key,boolean compressor){double od=PipeSizes.outsideOf(key.outside()),r=Math.max(compressor?.15:.12,(compressor?.78:.72)*od+.04),lid=Math.max(.57*r,.53*od);double bottom=lid+.025+.035*od,split=bottom+.95*r,top=split+.18+.40*r;return new MotorLayout(Math.max(compressor?.155:.145,(compressor?.32:.27)*od+.06),compressor?top+.15+.20*od:lid+.025+.10+.15*od,(compressor?.42:.30)+(compressor?.66:.45)*od,bottom,split,top,lid,r);}
     /** Matched integrated terminal necks, perpendicular to the process run. */
-    public static DataSocketGeometry.Socket socket(LineGeometry.Key key,boolean compressor,boolean power){var p=motorLayout(key,compressor);var run=LineGeometry.step(key.facing());var n=cross(UP,run);if(power)n=neg(n);var q=plus(plus(CENTRE,new double[]{0,p.low+.50*p.height,0}),scale(n,p.radius+.025));return new DataSocketGeometry.Socket(q[0],q[1],q[2],EquipmentServices.face(n),false);}
+    public static SocketGeometry.Socket socket(LineGeometry.Key key,boolean compressor,boolean power){var p=motorLayout(key,compressor);var run=LineGeometry.step(key.facing());var n=cross(UP,run);if(power)n=neg(n);var q=plus(plus(CENTRE,new double[]{0,p.low+.50*p.height,0}),scale(n,p.radius+.025));return new SocketGeometry.Socket(q[0],q[1],q[2],EquipmentServices.face(n),false);}
     /** Straight, end or isolated sections, with a horizontal run axis. */
     public static boolean supports(int mask,int facing){
         if(!SightGlassGeometry.supports(mask))return false;

@@ -40,14 +40,14 @@ public final class EquipmentServices {
 
     public static final class Plan {
         private final List<Enclosure> cases;
-        private final DataSocketGeometry.Socket data, power;
+        private final SocketGeometry.Socket data, power;
         private final List<Polygon> polygons;
         private final double[] entry;
 
         private Plan(
                 List<Enclosure> cases,
-                DataSocketGeometry.Socket data,
-                DataSocketGeometry.Socket power,
+                SocketGeometry.Socket data,
+                SocketGeometry.Socket power,
                 List<Polygon> polygons,
                 double[] entry) {
             this.cases = List.copyOf(cases);
@@ -61,11 +61,11 @@ public final class EquipmentServices {
             return cases;
         }
 
-        public DataSocketGeometry.Socket data() {
+        public SocketGeometry.Socket data() {
             return data;
         }
 
-        public DataSocketGeometry.Socket power() {
+        public SocketGeometry.Socket power() {
             return power;
         }
 
@@ -225,7 +225,7 @@ public final class EquipmentServices {
                 var c = north.transform().point(unit.terminalBox);
                 if (shape.duty().power() > MotorDesign.LOW_VOLTAGE) {
                     var f = serviceSide(north);
-                    DataSocketGeometry.Socket data = null, power = null;
+                    SocketGeometry.Socket data = null, power = null;
                     for (boolean electrical : new boolean[] {false, true}) {
                         var n = electrical ? neg(f) : f;
                         int sign = n[0] > 0 ? 1 : -1;
@@ -340,7 +340,7 @@ public final class EquipmentServices {
         double[] dataSide = serviceSide(north);
         if (dataSide == null) dataSide = LineGeometry.step(front);
         var data = socket(low, high, dataSide);
-        DataSocketGeometry.Socket power = null;
+        SocketGeometry.Socket power = null;
         if (powered(kind)) {
             if (kind != EquipmentShape.Kind.MOTOR && kind != EquipmentShape.Kind.GENERATOR)
                 data =
@@ -375,8 +375,8 @@ public final class EquipmentServices {
 
     private static Plan finish(
             List<Enclosure> cases,
-            DataSocketGeometry.Socket data,
-            DataSocketGeometry.Socket power,
+            SocketGeometry.Socket data,
+            SocketGeometry.Socket power,
             Mesh mesh,
             Transform turn,
             double[] entry) {
@@ -402,11 +402,11 @@ public final class EquipmentServices {
                 entry == null ? null : turn.point(entry));
     }
 
-    private static DataSocketGeometry.Socket turn(
-            DataSocketGeometry.Socket socket, Transform turn) {
+    private static SocketGeometry.Socket turn(
+            SocketGeometry.Socket socket, Transform turn) {
         if (socket == null) return null;
         var p = turn.point(new double[] {socket.x(), socket.y(), socket.z()});
-        return new DataSocketGeometry.Socket(
+        return new SocketGeometry.Socket(
                 p[0], p[1], p[2], face(turn.direction(LineGeometry.step(socket.face()))), false);
     }
 
@@ -414,14 +414,14 @@ public final class EquipmentServices {
         return n[0] > .5 ? 5 : n[0] < -.5 ? 4 : n[2] > .5 ? 3 : 2;
     }
 
-    static DataSocketGeometry.Socket socket(double[] low, double[] high, double[] normal) {
+    static SocketGeometry.Socket socket(double[] low, double[] high, double[] normal) {
         int axis = Math.abs(normal[0]) > .5 ? 0 : 2;
         var p =
                 new double[] {
                     (low[0] + high[0]) / 2, (low[1] + high[1]) / 2, (low[2] + high[2]) / 2
                 };
         p[axis] = (normal[axis] > 0 ? high[axis] : low[axis]) + normal[axis] * .04;
-        return new DataSocketGeometry.Socket(p[0], p[1], p[2], face(normal), false);
+        return new SocketGeometry.Socket(p[0], p[1], p[2], face(normal), false);
     }
 
     private static double[] serviceSide(EquipmentShape shape) {

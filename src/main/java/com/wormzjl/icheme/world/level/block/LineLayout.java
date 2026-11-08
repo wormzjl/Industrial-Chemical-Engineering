@@ -75,7 +75,7 @@ public record LineLayout(
             if (after < 0)
                 return new HostChanges(
                         List.of(),
-                        PipeLaying.message(
+                        LineLaying.message(
                                 host.lane() > 0 ? "anchor.lane_closed" : "anchor.junction"));
             edits.put(
                     host.site(),

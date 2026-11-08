@@ -25,7 +25,11 @@ import net.minecraft.world.phys.BlockHitResult;
 public class ControlPanelBlock extends BaseEntityBlock {
     public static final MapCodec<ControlPanelBlock> CODEC = simpleCodec(ControlPanelBlock::new);
     public static final DirectionProperty FACING = HorizontalDirectionalBlock.FACING;
-    private static final net.minecraft.world.phys.shapes.VoxelShape[] SHAPES = localShapes();
+    private static final java.util.Map<Direction, net.minecraft.world.phys.shapes.VoxelShape> SHAPES =
+            HorizontalShapes.byFacing(
+                    com.wormzjl.icheme.science.equipment.DcsGeometry.localParts().stream()
+                            .map(com.wormzjl.icheme.science.equipment.DcsGeometry.Part::box)
+                            .toList());
 
     public ControlPanelBlock(Properties properties) {
         super(properties);
@@ -73,30 +77,7 @@ public class ControlPanelBlock extends BaseEntityBlock {
             BlockGetter level,
             BlockPos pos,
             net.minecraft.world.phys.shapes.CollisionContext context) {
-        return LinePieces.shape(level, pos, SHAPES[state.getValue(FACING).get2DDataValue()]);
-    }
-
-    private static net.minecraft.world.phys.shapes.VoxelShape[] localShapes() {
-        var shapes = new net.minecraft.world.phys.shapes.VoxelShape[4];
-        for (var facing : Direction.Plane.HORIZONTAL) {
-            int turns =
-                    switch (facing) {
-                        case NORTH -> 0;
-                        case EAST -> 1;
-                        case SOUTH -> 2;
-                        case WEST -> 3;
-                        default -> throw new IllegalStateException("Vertical panel");
-                    };
-            var shape = net.minecraft.world.phys.shapes.Shapes.empty();
-            for (var part : com.wormzjl.icheme.science.equipment.DcsGeometry.localParts()) {
-                var b = com.wormzjl.icheme.science.equipment.DcsGeometry.bounds(part, turns);
-                shape =
-                        net.minecraft.world.phys.shapes.Shapes.or(
-                                shape, Block.box(b[0], b[1], b[2], b[3], b[4], b[5]));
-            }
-            shapes[facing.get2DDataValue()] = shape.optimize();
-        }
-        return shapes;
+        return LinePieces.shape(level, pos, SHAPES.get(state.getValue(FACING)));
     }
 
     @Override

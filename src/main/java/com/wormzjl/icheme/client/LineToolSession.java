@@ -1,9 +1,9 @@
 package com.wormzjl.icheme.client;
 
 import com.wormzjl.icheme.IChemE;
+import com.wormzjl.icheme.science.equipment.PipeRoute;
 import com.wormzjl.icheme.world.item.PipeLayingToolItem;
 import com.wormzjl.icheme.world.level.block.*;
-import com.wormzjl.icheme.world.level.block.PipeLaying;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
@@ -33,6 +33,41 @@ public final class LineToolSession<C, S, P> {
 
     record View<C, S, P>(
             C click, S start, C hovered, P plan, Component refusal, boolean pending, int age) {}
+
+    /**
+     * The HUD line for a found route: both ends, its blocks and elbows, the size and the items it
+     * takes. {@code material} names a conduit's item; a pipe passes null.
+     */
+    static Component routeHud(
+            PipeAnchor start,
+            PipeAnchor end,
+            PipeRoute.Result route,
+            double diameter,
+            boolean creative,
+            Component material) {
+        int count = route.cells().size(),
+                elbows = PipeRoute.elbows(route.cells(), start.end(), end.end());
+        var size = String.format(Locale.ROOT, "%.3f", diameter);
+        var items = Component.literal(creative ? "—" : Integer.toString(count));
+        if (material == null)
+            return LineLaying.message(
+                    "hud.route",
+                    LineLaying.describe(start),
+                    LineLaying.describe(end),
+                    count,
+                    elbows,
+                    size,
+                    items);
+        return Component.translatable(
+                "message.icheme.conduit.route",
+                LineLaying.describe(start),
+                LineLaying.describe(end),
+                count,
+                elbows,
+                size,
+                material,
+                items);
+    }
 
     interface Adapter<C, S, P> {
         C aimed();
@@ -118,7 +153,7 @@ public final class LineToolSession<C, S, P> {
                 && adapter.cell(click).getCenter().distanceToSqr(context.position())
                         > DROP_RANGE * DROP_RANGE) {
             reset();
-            adapter.message(PipeLaying.message("dropped"));
+            adapter.message(LineLaying.message("dropped"));
         }
     }
 
@@ -145,7 +180,7 @@ public final class LineToolSession<C, S, P> {
         if (context.shift()) {
             if (selected != null) {
                 reset();
-                adapter.message(PipeLaying.message("cancelled"));
+                adapter.message(LineLaying.message("cancelled"));
             } else if (aim != null && adapter.removable(aim)) {
                 if (!pending) {
                     begin();

@@ -3,7 +3,6 @@ package com.wormzjl.icheme.runtime.control;
 import com.wormzjl.icheme.runtime.instrument.InstrumentHosts;
 import com.wormzjl.icheme.runtime.instrument.Sensor;
 import com.wormzjl.icheme.science.equipment.*;
-import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler;
 import com.wormzjl.icheme.world.level.block.ControlPanelBlock;
 import com.wormzjl.icheme.world.level.block.FluidDeviceBlock;
 import com.wormzjl.icheme.world.level.block.entity.ControlPanelBlockEntity;
@@ -24,27 +23,14 @@ public final class DataPorts {
 
     private static Mount equipmentMount(InstrumentHosts.Host host) {
         if (host.entity() instanceof EquipmentShellBlockEntity shell && shell.shape() != null) {
-            var socket = DataSocketGeometry.equipment(shell.shape());
+            var socket = SocketGeometry.data(shell.shape());
             if (socket != null)
-                return new Mount(
-                        new Vec3(
-                                socket.x() + shell.origin().getX(),
-                                socket.y() + shell.origin().getY(),
-                                socket.z() + shell.origin().getZ()),
-                        Direction.values()[socket.face()]);
+                return new Mount(at(socket, shell.origin()), Direction.values()[socket.face()]);
         }
         if (host.pipe()) {
             if (host.entity() instanceof FluidDeviceBlockEntity pipe) {
                 var state = pipe.getBlockState();
-                var key =
-                        new LineGeometry.Key(
-                                TopologyCompiler.Kind.PIPE,
-                                state.getValue(FluidDeviceBlock.FACING).ordinal(),
-                                FluidDeviceBlock.connectionMask(state),
-                                PipeSizes.code(PipeSizes.outside(pipe.bore())),
-                                0,
-                                0,
-                                false);
+                var key = fittingKey(pipe);
                 var socket =
                         FluidDeviceBlock.hasPressureValve(state)
                                 ? ValveGeometry.socket(key)
@@ -55,11 +41,7 @@ public final class DataPorts {
                                         : null;
                 if (socket != null)
                     return new Mount(
-                            new Vec3(
-                                    socket.x() + pipe.getBlockPos().getX(),
-                                    socket.y() + pipe.getBlockPos().getY(),
-                                    socket.z() + pipe.getBlockPos().getZ()),
-                            Direction.values()[socket.face()]);
+                            at(socket, pipe.getBlockPos()), Direction.values()[socket.face()]);
             }
             for (var sensor : host.metadata().sensors())
                 for (var mount : Sensor.mounts(host, sensor.kind()))
@@ -102,18 +84,14 @@ public final class DataPorts {
             DataPort old, InstrumentHosts.Host host, java.util.function.Predicate<UUID> wired) {
         var m = equipmentMount(host);
         boolean connected = wired.test(old.id());
+        // A wired drum terminal keeps the side it was built on while its socket stays on that side.
         if (connected
                 && host.entity() instanceof EquipmentShellBlockEntity shell
-                && shell.shape() != null) {
-            var socket = DataSocketGeometry.drum(shell.shape(), old.face().getOpposite().ordinal());
-            if (socket != null)
-                m =
-                        new Mount(
-                                new Vec3(
-                                        socket.x() + shell.origin().getX(),
-                                        socket.y() + shell.origin().getY(),
-                                        socket.z() + shell.origin().getZ()),
-                                old.face().getOpposite());
+                && shell.shape() != null
+                && shell.shape().kind() == EquipmentShape.Kind.DRUM) {
+            var socket = SocketGeometry.data(shell.shape());
+            if (socket != null && socket.face() == old.outward().ordinal())
+                m = new Mount(at(socket, shell.origin()), old.outward());
         }
         return remount(
                 old,
@@ -149,19 +127,9 @@ public final class DataPorts {
                 wired ? old.v() : current.v());
     }
 
-    public static Direction outward(Level level, DataPort port) {
-        // A live mount can move within its face, but remount never flips a wired connector to
-        // another side.
-        return port.face().getOpposite();
-    }
-
     public static DataPort motor(
             EquipmentShellBlockEntity cell, com.wormzjl.icheme.runtime.fluid.ShaftUnit unit) {
         return equipment(new InstrumentHosts.Host(unit.id(), cell, List.of(), false), true);
-    }
-
-    public static DataPort panel(ControlPanelBlockEntity panel) {
-        return panel(panel, panel.identity());
     }
 
     public static DataPort panel(ControlPanelBlockEntity panel, UUID identity) {
@@ -214,9 +182,8 @@ public final class DataPorts {
                         axis == 2 ? boundary : (int) Math.floor(centre.z));
         var first = cell;
         // Only clear cells belonging to this casting. An unrelated wall must remain an obstacle,
-        // never become a
-        // long invisible jump to the first empty cell beyond it. The complete lead is checked by
-        // LinePlacement.
+        // never become a long invisible jump to the first empty cell beyond it. The complete lead
+        // is checked by LinePlacement.
         var casting =
                 level.getBlockEntity(owner) instanceof EquipmentShellBlockEntity shell
                         ? shell
@@ -251,6 +218,28 @@ public final class DataPorts {
                 outward.getOpposite(),
                 u,
                 v);
+    }
+
+    /**
+     * The line key an inline fitting's sockets are placed by: the pipe's run, joints and size
+     * (the socket geometry reads only the run and the size).
+     */
+    public static LineGeometry.Key fittingKey(FluidDeviceBlockEntity pipe) {
+        var state = pipe.getBlockState();
+        return new LineGeometry.Key(
+                pipe.kind(),
+                state.getValue(FluidDeviceBlock.FACING).ordinal(),
+                FluidDeviceBlock.connectionMask(state),
+                PipeSizes.code(PipeSizes.outside(pipe.bore())),
+                0,
+                0,
+                false);
+    }
+
+    /** A socket datum in world coordinates, for an owner whose local frame starts at {@code origin}. */
+    public static Vec3 at(SocketGeometry.Socket socket, BlockPos origin) {
+        return new Vec3(
+                socket.x() + origin.getX(), socket.y() + origin.getY(), socket.z() + origin.getZ());
     }
 
     public static int packed(DataPort port) {

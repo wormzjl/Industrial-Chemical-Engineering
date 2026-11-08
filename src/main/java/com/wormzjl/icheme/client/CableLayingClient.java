@@ -184,7 +184,7 @@ public final class CableLayingClient {
                                                 + (medium() == CableMedium.POWER ? "power" : "data")
                                                 + ".started");
                             var p = Minecraft.getInstance().player;
-                            return LineToolFeedback.route(
+                            return LineToolSession.routeHud(
                                     plan.from() == null ? null : plan.from().placement(),
                                     plan.to() == null ? null : plan.to().placement(),
                                     plan.route(),

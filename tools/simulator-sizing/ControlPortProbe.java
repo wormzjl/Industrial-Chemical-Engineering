@@ -21,10 +21,10 @@ public final class ControlPortProbe {
         PowerLookRender.render(quads,new double[]{-1,-.8,1.3},output.resolve("offset-junction.png").toString());
         for(var orientation:new EquipmentShape.Orientation[]{EquipmentShape.Orientation.VERTICAL,EquipmentShape.Orientation.HORIZONTAL}){
             var shape=EquipmentShape.drum(2.5,6,orientation,EquipmentShape.Heading.NORTH,EquipmentShape.defaultSupport(2.5,orientation));
-            var socket=DataSocketGeometry.equipment(shape);double[] p={socket.x(),socket.y(),socket.z()};
+            var socket=SocketGeometry.data(shape);double[] p={socket.x(),socket.y(),socket.z()};
             int axis=socket.face()<2?1:socket.face()<4?2:0;var normal=new double[3];normal[axis]=(socket.face()&1)==0?-1:1;
             quads.clear();for(var polygon:ShapeRasterizer.renderPreview(shape,RenderDetail.NORMAL))PowerLookRender.mesh(quads,polygon);
-            for(var polygon:DataPortGeometry.polygons(p,normal,true))PowerLookRender.mesh(quads,polygon,polygon.material()==Mesh.Material.GUARD?CableMedium.DATA.colour():0);
+            for(var polygon:SocketGeometry.polygons(p,normal,true,CableMedium.DATA,RenderDetail.NORMAL))PowerLookRender.mesh(quads,polygon,polygon.material()==Mesh.Material.GUARD?CableMedium.DATA.colour():0);
             PowerLookRender.crop=new double[]{p[0]-.65,p[1]-.65,p[2]-.65,p[0]+.65,p[1]+.65,p[2]+.65};
             double[] view={-normal[0]+.35*normal[2],-.45,-normal[2]-.35*normal[0]};
             PowerLookRender.render(quads,view,output.resolve("drum-"+orientation.name().toLowerCase()+".png").toString());

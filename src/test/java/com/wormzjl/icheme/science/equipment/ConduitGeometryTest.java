@@ -73,7 +73,7 @@ class ConduitGeometryTest {
                                         orientation,
                                         heading,
                                         EquipmentShape.defaultSupport(diameter, orientation));
-                        var socket = DataSocketGeometry.equipment(s);
+                        var socket = SocketGeometry.data(s);
                         assertNotNull(socket);
                         var n = LineGeometry.step(socket.face());
                         var back =
@@ -119,8 +119,8 @@ class ConduitGeometryTest {
             for (var heading : EquipmentShape.Heading.values())
                 for (double size : new double[] {.75, 22, 400, 500, 1000, 20000}) {
                     var shape = EquipmentShape.unit(kind, size, 1, heading, 0);
-                    var data = DataSocketGeometry.equipment(shape);
-                    var power = DataSocketGeometry.power(shape);
+                    var data = SocketGeometry.data(shape);
+                    var power = SocketGeometry.power(shape);
                     assertNotNull(data, shape.toString());
                     assertNotNull(power, shape.toString());
                     assertEquals(data.face() ^ 1, power.face(), shape.toString());
@@ -268,8 +268,8 @@ class ConduitGeometryTest {
         var buried = new java.util.ArrayList<String>();
         for (var shape : EquipmentLayoutGoldenTest.shapes()) {
             kinds.add(shape.kind());
-            var data = DataSocketGeometry.equipment(shape);
-            var power = DataSocketGeometry.power(shape);
+            var data = SocketGeometry.data(shape);
+            var power = SocketGeometry.power(shape);
             if (data != null) {
                 checkClear(shape, data, buried);
                 nativeData++;
@@ -339,7 +339,7 @@ class ConduitGeometryTest {
     }
 
     private static void checkClear(
-            EquipmentShape shape, DataSocketGeometry.Socket socket, java.util.List<String> buried) {
+            EquipmentShape shape, SocketGeometry.Socket socket, java.util.List<String> buried) {
         assertTrue(Double.isFinite(socket.x() + socket.y() + socket.z()), shape.toString());
         var n = LineGeometry.step(socket.face());
         if (ShapeRasterizer.inside(

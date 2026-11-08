@@ -3,17 +3,26 @@ package com.wormzjl.icheme.client;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.*;
 import java.util.function.ToDoubleFunction;
 
-/** Common pipe/data/power marker geometry, bounds and outline ownership. Client thread only. */
+/**
+ * Common pipe/data/power marker geometry, bounds and outline ownership. A frame of marks is drawn
+ * between {@link #begin} and {@link #end}; a slot not drawn in the frame is removed. Client thread
+ * only.
+ */
 final class LineToolMarkers {
     static final int RANGE = 48,
             MAX_MARKS = 256,
             OPEN = 0xFFDD33,
             START = 0x55FF55,
             REFUSED = 0xFF5555;
+
+    /** Outline widths: marks and slots are thin, the start, route and removal outlines bold. */
+    static final float THIN = 1 / 32F, BOLD = 1 / 16F;
+
     private final Set<Object> slots = new HashSet<>();
     private Set<Object> shown = new HashSet<>();
 
@@ -22,17 +31,21 @@ final class LineToolMarkers {
     }
 
     void box(Object slot, AABB bounds, int colour) {
-        shown.add(slot);
-        Outlines.box(slot, bounds, colour, 1 / 32F);
+        box(slot, bounds, colour, THIN);
     }
 
-    void line(
-            Object slot,
-            net.minecraft.world.phys.Vec3 from,
-            net.minecraft.world.phys.Vec3 to,
-            int colour) {
+    void box(Object slot, AABB bounds, int colour, float width) {
         shown.add(slot);
-        Outlines.line(slot, from, to, colour, 1 / 32F);
+        Outlines.box(slot, bounds, colour, width);
+    }
+
+    void line(Object slot, Vec3 from, Vec3 to, int colour) {
+        line(slot, from, to, colour, THIN);
+    }
+
+    void line(Object slot, Vec3 from, Vec3 to, int colour, float width) {
+        shown.add(slot);
+        Outlines.line(slot, from, to, colour, width);
     }
 
     void end() {
@@ -45,11 +58,6 @@ final class LineToolMarkers {
         for (var slot : slots) Outlines.remove(slot);
         slots.clear();
         shown.clear();
-    }
-
-    void adopt(Set<Object> current) {
-        shown = new HashSet<>(current);
-        end();
     }
 
     static <T> List<T> nearest(List<T> marks, ToDoubleFunction<T> distance) {

@@ -129,12 +129,12 @@ public final class LinePlacement {
             double outside,
             List<Lead> leads) {
         var fit = PipeAnchor.refuses(start, end, outside);
-        if (fit != null) return PipeLaying.refusal(fit);
+        if (fit != null) return LineLaying.refusal(fit);
         var cells = path.stream().map(PipeAnchor::cell).toList();
         var refusal =
                 PipeRoute.check(
                         cells, options, start.end(), end.end(), PipeRoute.Limits.DEFAULT.cells());
-        if (refusal != null) return PipeLaying.refusal(refusal);
+        if (refusal != null) return LineLaying.refusal(refusal);
         int blocked =
                 PipeRoute.blocked(
                         cells,
@@ -146,7 +146,7 @@ public final class LinePlacement {
                         space(level, leads));
         return blocked < 0
                 ? null
-                : PipeLaying.message("occupied", path.get(blocked).toShortString());
+                : LineLaying.message("occupied", path.get(blocked).toShortString());
     }
 
     private static PipeRoute.Space space(Level level, List<Lead> leads) {
@@ -199,7 +199,7 @@ public final class LinePlacement {
                     for (var a : bounds(leads.get(i)))
                         for (var b : bounds(leads.get(j)))
                             if (a.deflate(1e-6).intersects(b.deflate(1e-6)))
-                                return PipeLaying.message(
+                                return LineLaying.message(
                                         "occupied",
                                         BlockPos.containing(a.getCenter()).toShortString());
         for (var lead : leads)
@@ -209,7 +209,7 @@ public final class LinePlacement {
                     if (!level.hasChunkAt(pos)
                             || level.isOutsideBuildHeight(pos)
                             || !level.getWorldBorder().isWithinBounds(pos))
-                        return PipeLaying.message("anchor.outside");
+                        return LineLaying.message("anchor.outside");
                     var state = level.getBlockState(pos);
                     if (state.canBeReplaced()) continue;
                     if (state.getBlock() instanceof LinePieceBlock
@@ -266,7 +266,7 @@ public final class LinePlacement {
                                         BooleanOp.ONLY_FIRST);
                     if (Shapes.joinIsNotEmpty(
                             occupied, Shapes.create(box.deflate(1e-6)), BooleanOp.AND))
-                        return PipeLaying.message("occupied", pos.toShortString());
+                        return LineLaying.message("occupied", pos.toShortString());
                 }
         return null;
     }
@@ -301,7 +301,7 @@ public final class LinePlacement {
         var refused = check(player.level(), plan);
         if (refused != null) return refused;
         for (var pos : touched(plan))
-            if (!editable(player, pos)) return PipeLaying.message("not_allowed");
+            if (!editable(player, pos)) return LineLaying.message("not_allowed");
         if (!player.getAbilities().instabuild && !take(player, material, count)) return missing;
         apply(player.level(), prepare.get());
         LinePieces.flush(player.server);

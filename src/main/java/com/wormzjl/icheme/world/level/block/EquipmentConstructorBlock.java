@@ -22,11 +22,9 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.shapes.CollisionContext;
-import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.EnumMap;
 import java.util.Map;
 
 /**
@@ -50,21 +48,7 @@ public final class EquipmentConstructorBlock extends BaseEntityBlock {
                 {.7, 12, 10.6, 3.3, 12.5, 13.4}, {12.7, 12, 10.6, 15.3, 12.5, 13.4},
                 {4.5, 12, 3.5, 11.5, 12.35, 8.5}
         };
-        var shapes = new EnumMap<Direction, VoxelShape>(Direction.class);
-        for (var facing : Direction.Plane.HORIZONTAL) {
-            VoxelShape shape = Shapes.empty();
-            for (var p : parts) {
-                var part = switch (facing) {
-                    case EAST -> Block.box(16 - p[5], p[1], p[0], 16 - p[2], p[4], p[3]);
-                    case SOUTH -> Block.box(16 - p[3], p[1], 16 - p[5], 16 - p[0], p[4], 16 - p[2]);
-                    case WEST -> Block.box(p[2], p[1], 16 - p[3], p[5], p[4], 16 - p[0]);
-                    default -> Block.box(p[0], p[1], p[2], p[3], p[4], p[5]);
-                };
-                shape = Shapes.or(shape, part);
-            }
-            shapes.put(facing, shape.optimize());
-        }
-        return Map.copyOf(shapes);
+        return HorizontalShapes.byFacing(java.util.List.of(parts));
     }
 
     public EquipmentConstructorBlock(Properties properties) {

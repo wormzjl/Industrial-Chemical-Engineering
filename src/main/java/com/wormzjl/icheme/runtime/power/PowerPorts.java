@@ -42,33 +42,19 @@ public final class PowerPorts {
         Direction outward;
         DataPort.Kind kind = DataPort.Kind.POWER_INPUT;
         if (be instanceof EquipmentShellBlockEntity shell) {
-            var socket = DataSocketGeometry.power(shell.shape());
+            var socket = SocketGeometry.power(shell.shape());
             if (socket == null) return null;
-            centre =
-                    new Vec3(
-                            socket.x() + shell.origin().getX(),
-                            socket.y() + shell.origin().getY(),
-                            socket.z() + shell.origin().getZ());
+            centre = DataPorts.at(socket, shell.origin());
             outward = Direction.values()[socket.face()];
             if (shell.shape().kind() == EquipmentShape.Kind.GENERATOR)
                 kind = DataPort.Kind.POWER_OUTPUT;
         } else if (be instanceof FluidDeviceBlockEntity pipe) {
-            var s = pipe.getBlockState();
-            var key =
-                    new LineGeometry.Key(
-                            pipe.kind(),
-                            s.getValue(FluidDeviceBlock.FACING).ordinal(),
-                            FluidDeviceBlock.connectionMask(s),
-                            PipeSizes.code(PipeSizes.outside(pipe.bore())),
-                            0,
-                            0,
-                            false);
-            var socket = InlineMoverGeometry.socket(key, FluidDeviceBlock.hasCompressor(s), true);
-            centre =
-                    new Vec3(
-                            pipe.getBlockPos().getX() + socket.x(),
-                            pipe.getBlockPos().getY() + socket.y(),
-                            pipe.getBlockPos().getZ() + socket.z());
+            var socket =
+                    InlineMoverGeometry.socket(
+                            DataPorts.fittingKey(pipe),
+                            FluidDeviceBlock.hasCompressor(pipe.getBlockState()),
+                            true);
+            centre = DataPorts.at(socket, pipe.getBlockPos());
             outward = Direction.values()[socket.face()];
         } else {
             centre = be.getBlockPos().getCenter().add(.52, 0, 0);

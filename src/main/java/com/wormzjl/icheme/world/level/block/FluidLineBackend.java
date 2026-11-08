@@ -269,7 +269,7 @@ final class FluidLineBackend implements LineBackend {
                             .orElse(null);
             if (r == null
                     || r.device().kind() != TopologyCompiler.Kind.PIPE
-                    || r.device().id() != h.identity()) return PipeLaying.message("anchor.fitting");
+                    || r.device().id() != h.identity()) return LineLaying.message("anchor.fitting");
         }
         return null;
     }

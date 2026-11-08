@@ -25,7 +25,6 @@ import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.level.block.state.properties.EnumProperty;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.shapes.CollisionContext;
-import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
 /**
@@ -152,29 +151,17 @@ public final class DcsBlock extends ControlPanelBlock {
     @Override
     protected VoxelShape getShape(
             BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
-        int turn =
-                switch (state.getValue(FACING)) {
-                    case NORTH -> 0;
-                    case EAST -> 1;
-                    case SOUTH -> 2;
-                    case WEST -> 3;
-                    default -> throw new IllegalStateException("Vertical console");
-                };
+        int turn = HorizontalShapes.turns(state.getValue(FACING));
         return LinePieces.shape(
                 level, pos, SHAPES[state.getValue(HALF) == DoubleBlockHalf.UPPER ? 1 : 0][turn]);
     }
 
     private static VoxelShape[][] shapes() {
         var shapes = new VoxelShape[2][4];
-        for (int half = 0; half < 2; half++)
-            for (int turn = 0; turn < 4; turn++) {
-                var shape = Shapes.empty();
-                for (var part : DcsGeometry.parts(half == 1)) {
-                    var b = DcsGeometry.bounds(part, turn);
-                    shape = Shapes.or(shape, Block.box(b[0], b[1], b[2], b[3], b[4], b[5]));
-                }
-                shapes[half][turn] = shape.optimize();
-            }
+        for (int half = 0; half < 2; half++) {
+            var boxes = DcsGeometry.parts(half == 1).stream().map(DcsGeometry.Part::box).toList();
+            for (int turn = 0; turn < 4; turn++) shapes[half][turn] = HorizontalShapes.shape(boxes, turn);
+        }
         return shapes;
     }
 }

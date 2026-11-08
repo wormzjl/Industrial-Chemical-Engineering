@@ -66,16 +66,16 @@ public class EngineeringExport {
   if((s.kind()==EquipmentShape.Kind.MOTOR||s.kind()==EquipmentShape.Kind.GENERATOR)&&s.duty().power()<=MotorDesign.LOW_VOLTAGE){double r=ProcessUnit.motorDiameter(s.duty().power())/2;var c=s.transform().point(ProcessUnit.of(s).terminalBox);double y=ShapeRasterizer.shafts(s).getFirst().cell().y()+.5;data.put("nativeTerminalBounds",Map.of("min",new double[]{c[0]-.35*r,y+(s.kind()==EquipmentShape.Kind.GENERATOR?.76*r:r-.02),c[2]-.275*r},"max",new double[]{c[0]+.35*r,y+1.45*r,c[2]+.275*r}));}
   data.put("power",Set.of(EquipmentShape.Kind.MOTOR,EquipmentShape.Kind.GENERATOR,EquipmentShape.Kind.AIR_COOLER,EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER).contains(s.kind()));
   data.put("builtIn",EquipmentInstruments.automatic(s.kind()));
-  var socket=DataSocketGeometry.equipment(s);if(socket!=null)data.put("existingData",socket);
-  var power=DataSocketGeometry.power(s);if(power!=null)data.put("existingPower",power);
+  var socket=SocketGeometry.data(s);if(socket!=null)data.put("existingData",socket);
+  var power=SocketGeometry.power(s);if(power!=null)data.put("existingPower",power);
   var taps=new ArrayList<InstrumentGeometry.Socket>();for(var node:ShapeRasterizer.fluidCells(s))taps.addAll(InstrumentGeometry.sockets(s,node));taps.addAll(InstrumentGeometry.levelSockets(s));data.put("sensorMounts",taps.stream().distinct().toList());
   if(s.designed()&&s.kind().unit()){var u=ProcessUnit.of(s);if(u.terminalBox!=null)data.put("terminal",s.transform().point(u.terminalBox));}
   appendServiceGeometry(data,socket,power);
   finish(id,data);
  }
- static void appendServiceGeometry(Map<String,Object> data,DataSocketGeometry.Socket socket,DataSocketGeometry.Socket power){
+ static void appendServiceGeometry(Map<String,Object> data,SocketGeometry.Socket socket,SocketGeometry.Socket power){
   var example=new ArrayList<Map<String,Object>>();
-  for(boolean electrical:new boolean[]{false,true}){var gland=electrical?power:socket;if(gland==null)continue;var q=new double[]{gland.x(),gland.y(),gland.z()};var n=LineGeometry.step(gland.face());var pieces=electrical?PowerPortGeometry.polygons(q,n,false):DataPortGeometry.polygons(q,n,false);
+  for(boolean electrical:new boolean[]{false,true}){var gland=electrical?power:socket;if(gland==null)continue;var q=new double[]{gland.x(),gland.y(),gland.z()};var n=LineGeometry.step(gland.face());var pieces=SocketGeometry.polygons(q,n,false,electrical?CableMedium.POWER:CableMedium.DATA,RenderDetail.NORMAL);
    @SuppressWarnings("unchecked") var body=(List<Map<String,Object>>)data.get("polygons");for(var p:pieces)body.add(Map.of("v",p.positions(),"m",p.material()==Mesh.Material.GUARD?"DATA":p.material()==Mesh.Material.ACTUATOR?"FE":p.material().name()));
    var away=Mesh.plus(q,Mesh.scale(n,.55));var down=away.clone();down[1]=Math.max(.18,q[1]-.65);var end=Mesh.plus(down,Mesh.scale(n,.65));for(var p:ConduitGeometry.path(List.of(q,away,down,end)))example.add(Map.of("v",p.positions(),"m",electrical?"CABLE_FE":"CABLE_DATA"));
   }data.put("cableExamplePolygons",example);

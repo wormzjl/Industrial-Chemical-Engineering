@@ -98,7 +98,7 @@ public final class ValveGeometry {
     private static double[] stem(int facing){return (facing&~1)==0?new double[]{0,0,-1}:new double[]{0,1,0};}
     private static double positionerSeat(LineGeometry.Key key){double od=PipeSizes.outsideOf(key.outside());return pressureRadius(od)+Math.max(.075,.19*od);}
     /** Cable entry on the positioner's outward side, perpendicular to its process pipe. */
-    public static DataSocketGeometry.Socket socket(LineGeometry.Key key){var up=stem(key.facing());var run=LineGeometry.step(key.facing()|1);var n=cross(run,up);var q=plus(CENTRE,plus(scale(up,positionerSeat(key)+.18),scale(n,.245)));return new DataSocketGeometry.Socket(q[0],q[1],q[2],EquipmentServices.face(n),false);}
+    public static SocketGeometry.Socket socket(LineGeometry.Key key){var up=stem(key.facing());var run=LineGeometry.step(key.facing()|1);var n=cross(run,up);var q=plus(CENTRE,plus(scale(up,positionerSeat(key)+.18),scale(n,.245)));return new SocketGeometry.Socket(q[0],q[1],q[2],EquipmentServices.face(n),false);}
 
     private static void pressureBody(Mesh mesh,LineGeometry.Key key,boolean accessory) {
         double od=PipeSizes.outsideOf(key.outside()),r=pressureRadius(od),h=pressureHalf(od);int sides=Math.max(16,PipeSizes.sides(2*r));

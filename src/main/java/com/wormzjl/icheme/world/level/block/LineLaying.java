@@ -66,6 +66,28 @@ public final class LineLaying {
 
     private LineLaying() {}
 
+    /** A line-laying message ({@code message.icheme.pipe_laying.<key>}); every medium shares them. */
+    public static Component message(String key, Object... args) {
+        return Component.translatable("message.icheme.pipe_laying." + key, args);
+    }
+
+    public static Component refusal(PipeAnchor.Refusal reason) {
+        return message("anchor." + name(reason));
+    }
+
+    public static Component refusal(PipeRoute.Refusal reason) {
+        return message("route." + name(reason));
+    }
+
+    /** What an anchor is, for the HUD: a nozzle, a pipe end, a rack lane, a free block. */
+    public static Component describe(PipeAnchor anchor) {
+        return message("end." + name(anchor.kind()));
+    }
+
+    private static String name(Enum<?> value) {
+        return value.name().toLowerCase(Locale.ROOT);
+    }
+
     public static Design search(
             Level level, LineTarget first, LineTarget last, LineProfile.Settings settings) {
         first = LinePieces.target(level, first, settings.profile());
@@ -75,7 +97,7 @@ public final class LineLaying {
         if (a.anchor() == null || b.anchor() == null)
             return new Design(
                     null,
-                    PipeLaying.refusal(a.anchor() == null ? a.refusal() : b.refusal()),
+                    LineLaying.refusal(a.anchor() == null ? a.refusal() : b.refusal()),
                     null,
                     a.anchor(),
                     b.anchor());
@@ -84,7 +106,7 @@ public final class LineLaying {
                 PipeAnchor.refuses(
                         a.anchor().placement(), b.anchor().placement(), settings.outside());
         if (refused != null)
-            return new Design(null, PipeLaying.refusal(refused), null, a.anchor(), b.anchor());
+            return new Design(null, LineLaying.refusal(refused), null, a.anchor(), b.anchor());
         var leadFailure = LinePlacement.checkLeads(level, leads);
         if (leadFailure != null) return new Design(null, leadFailure, null, a.anchor(), b.anchor());
         var route =
@@ -96,7 +118,7 @@ public final class LineLaying {
                         leads);
         if (!route.found())
             return new Design(
-                    null, PipeLaying.refusal(route.refusal()), route, a.anchor(), b.anchor());
+                    null, LineLaying.refusal(route.refusal()), route, a.anchor(), b.anchor());
         var built = LineLayout.build(level, a.anchor(), b.anchor(), route, settings);
         return new Design(built.layout(), built.refusal(), route, a.anchor(), b.anchor());
     }
@@ -115,18 +137,18 @@ public final class LineLaying {
      */
     public static Design attachment(Level level, LineTarget target, LineProfile.Settings settings) {
         if (!level.hasChunkAt(target.clicked()))
-            return failed(PipeLaying.message("anchor.outside"));
+            return failed(LineLaying.message("anchor.outside"));
         var backend = LineBackend.of(settings.profile());
         var found = backend.socket(level, target, settings);
         var port = found.socket();
         if (port == null || port.id() == null || !level.hasChunkAt(port.cell()))
-            return failed(PipeLaying.message("anchor.fitting"));
+            return failed(LineLaying.message("anchor.fitting"));
         var host =
                 backend.hosts(level, port.cell(), settings.profile()).stream()
                         .filter(h -> h.lane() == 0)
                         .findFirst()
                         .orElse(null);
-        if (host == null) return failed(PipeLaying.message("anchor.fitting"));
+        if (host == null) return failed(LineLaying.message("anchor.fitting"));
         var edits =
                 LineLayout.mergeHosts(
                         List.of(
@@ -135,7 +157,7 @@ public final class LineLaying {
         if (edits.refusal() != null) return failed(edits.refusal());
         var bound = backend.binding(level, host, port.face().ordinal());
         if (bound != null && !bound.equals(port.id()))
-            return failed(PipeLaying.message("anchor.fitting"));
+            return failed(LineLaying.message("anchor.fitting"));
         var spatial =
                 new LinePlacement.Plan(
                         null,
@@ -173,19 +195,19 @@ public final class LineLaying {
                 || !player.mayBuild()
                 || request.profile() == LineProfile.FLUID
                         && tool.get(ModItems.PIPE_LAYING_SETTINGS.get()) == null)
-            return result(request, PipeLaying.message("not_allowed"), 0);
+            return result(request, LineLaying.message("not_allowed"), 0);
         var level = player.serverLevel();
         var world = FluidWorldAuthority.find(player.server).orElse(null);
-        if (world == null) return result(request, PipeLaying.message("not_allowed"), 0);
+        if (world == null) return result(request, LineLaying.message("not_allowed"), 0);
         if (!level.hasChunkAt(request.first().clicked())
                 || !level.hasChunkAt(request.last().clicked()))
-            return result(request, PipeLaying.message("anchor.outside"), 0);
+            return result(request, LineLaying.message("anchor.outside"), 0);
         var settings = request.profile().settings(tool);
         var backend = LineBackend.of(request.profile());
         if (request.first().clicked().getCenter().distanceToSqr(player.position())
                         > START_RANGE * START_RANGE
                 || !reachable(player, request.last(), settings))
-            return result(request, PipeLaying.message("out_of_reach"), 0);
+            return result(request, LineLaying.message("out_of_reach"), 0);
         if (request.action() == Action.DISMANTLE)
             return result(request, dismantle(player, world, request.first(), settings), 0);
         Design design;
@@ -205,10 +227,10 @@ public final class LineLaying {
             if (a.anchor() == null || b.anchor() == null)
                 return result(
                         request,
-                        PipeLaying.refusal(a.anchor() == null ? a.refusal() : b.refusal()),
+                        LineLaying.refusal(a.anchor() == null ? a.refusal() : b.refusal()),
                         0);
             if (request.path().isEmpty())
-                return result(request, PipeLaying.message("not_allowed"), 0);
+                return result(request, LineLaying.message("not_allowed"), 0);
             var spatial =
                     new LinePlacement.Plan(
                             a.anchor().placement(),
@@ -274,10 +296,10 @@ public final class LineLaying {
         var level = player.serverLevel();
         if (!player.canInteractWithBlock(target.clicked(), 1)
                 || !LinePlacement.editable(player, target.clicked()))
-            return PipeLaying.message("not_allowed");
+            return LineLaying.message("not_allowed");
         target = LinePieces.target(level, target, settings.profile());
         if (!LinePlacement.editable(player, target.clicked()))
-            return PipeLaying.message("not_allowed");
+            return LineLaying.message("not_allowed");
         var backend = LineBackend.of(settings.profile());
         var hosts = backend.hosts(level, target.clicked(), settings.profile());
         int lane = target.lane();
@@ -291,16 +313,16 @@ public final class LineLaying {
         }
         int selected = lane;
         var host = hosts.stream().filter(h -> h.lane() == selected).findFirst().orElse(null);
-        if (host == null) return PipeLaying.message("not_a_pipe");
+        if (host == null) return LineLaying.message("not_a_pipe");
         for (var piece : LinePieces.at(level, host.cell()))
             if (piece.parent().cell().equals(host.cell()) && piece.parent().lane() == host.lane())
                 for (var cell : piece.cells().keySet())
                     if (!LinePlacement.editable(player, cell))
-                        return PipeLaying.message("not_allowed");
+                        return LineLaying.message("not_allowed");
         if (host.lane() == 0) {
             boolean done = player.gameMode.destroyBlock(host.cell());
             LinePieces.flush(player.server);
-            return done ? null : PipeLaying.message("not_allowed");
+            return done ? null : LineLaying.message("not_allowed");
         }
         backend.forgetLane(level, world, host);
         backend.refresh(level, List.of(host.cell()));
@@ -456,7 +478,7 @@ public final class LineLaying {
                 refusal == null,
                 refusal != null
                         ? refusal
-                        : PipeLaying.message(
+                        : LineLaying.message(
                                 request.action() == Action.DISMANTLE ? "dismantled" : "laid",
                                 count),
                 count);

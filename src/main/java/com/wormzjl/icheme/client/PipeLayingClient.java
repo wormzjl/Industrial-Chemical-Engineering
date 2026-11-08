@@ -17,7 +17,6 @@ import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler;
 import com.wormzjl.icheme.world.item.PipeLayingToolItem;
 import com.wormzjl.icheme.world.level.block.FluidDeviceBlock;
 import com.wormzjl.icheme.world.level.block.PipeAnchor;
-import com.wormzjl.icheme.world.level.block.PipeLaying;
 import com.wormzjl.icheme.world.level.block.*;
 import com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity;
 import com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity;
@@ -44,12 +43,9 @@ import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Objects;
-import java.util.Set;
 
 /**
  * Fluid anchor, plan and drawing adapter for {@link LineToolSession}. The shared session owns presses, cancellation,
@@ -98,13 +94,13 @@ public final class PipeLayingClient {
             var mc=Minecraft.getInstance();double outside=PipeSizes.outside(settingsDiameter(mc.player));
             var resolved=PipeAnchor.resolve(mc.level,click,outside);
             var reason=resolved.anchor()==null?resolved.refusal():resolved.anchor().refuses(outside);
-            return reason==null?new LineToolSession.Selected<>(new Start(click,resolved.anchor()),null):new LineToolSession.Selected<>(null,PipeLaying.refusal(reason));
+            return reason==null?new LineToolSession.Selected<>(new Start(click,resolved.anchor()),null):new LineToolSession.Selected<>(null,LineLaying.refusal(reason));
         }
         public Plan plan(Start selected,PipeAnchor.Click end){var mc=Minecraft.getInstance();return PipeLayingClient.plan(mc.level,end,settingsDiameter(mc.player),selected);}
         public boolean same(PipeAnchor.Click a,PipeAnchor.Click b){var mc=Minecraft.getInstance();return PipeLayingClient.same(mc.level,a,b,PipeSizes.outside(settingsDiameter(mc.player)));}
         public Component refusal(Plan plan){return plan.refusal();}
-        public Component started(Start selected){return PipeLaying.message("started",PipeLaying.describe(selected.anchor()));}
-        public Component hud(Start selected,Plan plan){var p=Minecraft.getInstance().player;return plan==null?PipeLaying.message("hud.aim",PipeLaying.describe(selected.anchor())):LineToolFeedback.route(selected.anchor(),plan.anchor(),plan.route(),settingsDiameter(p),p.getAbilities().instabuild,null);}
+        public Component started(Start selected){return LineLaying.message("started",LineLaying.describe(selected.anchor()));}
+        public Component hud(Start selected,Plan plan){var p=Minecraft.getInstance().player;return plan==null?LineLaying.message("hud.aim",LineLaying.describe(selected.anchor())):LineToolSession.routeHud(selected.anchor(),plan.anchor(),plan.route(),settingsDiameter(p),p.getAbilities().instabuild,null);}
         public void show(LineToolSession.View<PipeAnchor.Click,Start,Plan> view){project(view);}
         public void message(Component message){var p=Minecraft.getInstance().player;if(p!=null)say(p,message);}
         public boolean removable(PipeAnchor.Click click){return PipeLayingClient.removable(Minecraft.getInstance().level,click)!=null;}
@@ -128,19 +124,19 @@ public final class PipeLayingClient {
         if(plan!=null&&view.refusal()!=null)plan=new Plan(plan.end,plan.anchor,plan.route,view.refusal(),plan.layout,plan.junctions);
         if(player==null||mc.level==null||!holding(player)||mc.screen!=null){start=null;plan=null;slot=null;markers.clear();return;}
         var hit=view.hovered();double outside=PipeSizes.outside(settingsDiameter(player));
-        var shown=new HashSet<Object>();
+        markers.begin();
         if(start!=null){
-            shown.add(START_SLOT);Outlines.box(START_SLOT,new AABB(start.anchor.cell()),START_COLOUR,1/16F);
-            if(view.refusal()!=null&&hit!=null){shown.add(ROUTE_SLOT);Outlines.line(ROUTE_SLOT,start.anchor.cell().getCenter(),(plan!=null&&plan.anchor!=null?plan.anchor.cell():hit.clicked()).getCenter(),REFUSED_COLOUR,1/16F);}
+            markers.box(START_SLOT,new AABB(start.anchor.cell()),START_COLOUR,LineToolMarkers.BOLD);
+            if(view.refusal()!=null&&hit!=null){markers.line(ROUTE_SLOT,start.anchor.cell().getCenter(),(plan!=null&&plan.anchor!=null?plan.anchor.cell():hit.clicked()).getCenter(),REFUSED_COLOUR,LineToolMarkers.BOLD);}
         }
         var removed=start==null&&player.isShiftKeyDown()&&hit!=null?removable(mc.level,hit):null;
-        for(int i=0;removed!=null&&i<REMOVE_SLOTS.length&&i<removed.size();i++){shown.add(REMOVE_SLOTS[i]);Outlines.box(REMOVE_SLOTS[i],removed.get(i),REFUSED_COLOUR,1/16F);}
+        for(int i=0;removed!=null&&i<REMOVE_SLOTS.length&&i<removed.size();i++){markers.box(REMOVE_SLOTS[i],removed.get(i),REFUSED_COLOUR,LineToolMarkers.BOLD);}
         if(start==null&&hit!=null&&view.age()%HUD_TICKS==0){var label=portLabel(mc.level,hit);if(label!=null)say(player,label);}
         boolean routeRefused=view.refusal()!=null;
         slot=hit!=null&&!player.isShiftKeyDown()&&(start==null||plan==null||routeRefused)?slot(mc.level,hit,outside,routeRefused):null;
-        ports(mc.level,player,shown);openEnds(mc.level,player,shown);freeSlots(mc.level,hit,shown);
-        if(slot!=null){var aimed=slot;shown.add(AIM_SLOT);Outlines.box(AIM_SLOT,square(aimed.cell,Direction.values()[aimed.through],RackGeometry.facePoint(aimed.frame,aimed.lane,aimed.through),Math.min(.45,aimed.lane.diameter()/2+.04)),aimed.refused?REFUSED_COLOUR:START_COLOUR,1/32F);}
-        markers.adopt(shown);
+        ports(mc.level,player);openEnds(mc.level,player);freeSlots(mc.level,hit);
+        if(slot!=null){var aimed=slot;markers.box(AIM_SLOT,square(aimed.cell,Direction.values()[aimed.through],RackGeometry.facePoint(aimed.frame,aimed.lane,aimed.through),Math.min(.45,aimed.lane.diameter()/2+.04)),aimed.refused?REFUSED_COLOUR:START_COLOUR,LineToolMarkers.THIN);}
+        markers.end();
     }
 
     /**
@@ -225,7 +221,7 @@ public final class PipeLayingClient {
         boolean connected = connected(level, hit.clicked(), hit.face());
         // The largest bore, down to the centimetre (a column's nozzle takes what its place clears, NozzleBore).
         var largest = java.math.BigDecimal.valueOf(Math.floor(shell.largestBore(hit.face()) * 100 + 1e-9) / 100).stripTrailingZeros().toPlainString();
-        var label = PipeLaying.message("port", roleName, PipeLaying.message(connected ? "port.connected" : "port.free"), largest);
+        var label = LineLaying.message("port", roleName, LineLaying.message(connected ? "port.connected" : "port.free"), largest);
         // A watched assembly's port: its line too (plan section 9).
         var line = AssemblyToolClient.line(shell, hit.face());
         return line == null ? label : label.copy().append(" · ").append(line);
@@ -247,7 +243,7 @@ public final class PipeLayingClient {
      * connected; other nozzles use their class colour, grey when connected. Re-shown from the client's port cells; at most
      * {@link #MAX_MARKS}, nearest first.
      */
-    private static void ports(Level level, LocalPlayer player, Set<Object> shown) {
+    private static void ports(Level level, LocalPlayer player) {
         var marks = new ArrayList<Mark>();
         for (var shell : EquipmentShellBlockEntity.clientPortCells()) {
             if (shell.isRemoved() || shell.getLevel() != level || shell.shape() == null) continue;
@@ -261,19 +257,17 @@ public final class PipeLayingClient {
         }
         for (var mark : LineToolMarkers.nearest(marks,Mark::distance)) {
             var slot = "icheme:port:" + mark.cell.asLong() + ":" + mark.face.ordinal();
-            shown.add(slot);
             var shell = level.getBlockEntity(mark.cell) instanceof EquipmentShellBlockEntity cell ? cell : null;
             boolean connected = connected(level, mark.cell, mark.face);
             int assemblyColour = shell == null ? -1 : AssemblyToolClient.colour(shell, mark.face);
             int colour = assemblyColour >= 0 ? assemblyColour : connected ? PortColours.CONNECTED : PortColours.of(mark.port);
-            Outlines.box(slot, square(mark.cell, mark.face, faceCentre(mark.face), .3), colour, 1 / 32F);
+            markers.box(slot, square(mark.cell, mark.face, faceCentre(mark.face), .3), colour);
             // A watched assembly's port: a frame round the square (AssemblyToolClient).
             int frame = shell == null ? -1 : AssemblyToolClient.frame(shell, mark.face);
             if (frame < 0 && assemblyColour >= 0 && connected) frame = PortColours.CONNECTED;
             if (frame < 0) continue;
             var framed = slot + ":frame";
-            shown.add(framed);
-            Outlines.box(framed, square(mark.cell, mark.face, faceCentre(mark.face), .4), frame, 1 / 32F);
+            markers.box(framed, square(mark.cell, mark.face, faceCentre(mark.face), .4), frame);
         }
     }
 
@@ -285,7 +279,7 @@ public final class PipeLayingClient {
      * open face of a pipe, and on each open face of a rack lane at the lane's point there; at most {@link #MAX_MARKS},
      * nearest first.
      */
-    private static void openEnds(Level level, LocalPlayer player, Set<Object> shown) {
+    private static void openEnds(Level level, LocalPlayer player) {
         var ends = new ArrayList<End>();
         for (var pipe : FluidDeviceBlockEntity.clientOpenEnds()) {
             if (pipe.isRemoved() || pipe.getLevel() != level) continue;
@@ -310,8 +304,7 @@ public final class PipeLayingClient {
         }
         for (var end : LineToolMarkers.nearest(ends,End::distance)) {
             var slot = "icheme:open:" + end.cell.asLong() + ":" + end.face.ordinal() + ":" + end.option;
-            shown.add(slot);
-            Outlines.box(slot, square(end.cell, end.face, end.point, Math.min(.45, end.outside / 2 + .04)), OPEN_COLOUR, 1 / 32F);
+            markers.box(slot, square(end.cell, end.face, end.point, Math.min(.45, end.outside / 2 + .04)), OPEN_COLOUR);
         }
     }
 
@@ -324,9 +317,9 @@ public final class PipeLayingClient {
     }
 
     /** While a rack is aimed, a small cube on each tier position no lane takes: where a new lane may go. */
-    private static void freeSlots(Level level, @Nullable PipeAnchor.Click hit, Set<Object> shown) {
+    private static void freeSlots(Level level, @Nullable PipeAnchor.Click hit) {
         if (hit == null || !(level.getBlockEntity(hit.clicked()) instanceof PipeRackBlockEntity rack)) return;
-        int position=0;for(var box:LayingToolAim.freeSlots(rack)){var key="icheme:free_slot:"+position++;shown.add(key);Outlines.box(key,box,FREE_COLOUR,1/32F);}
+        int position=0;for(var box:LayingToolAim.freeSlots(rack))markers.box("icheme:free_slot:"+position++,box,FREE_COLOUR);
     }
 
     /** A flat square {@code 2 half} blocks across on {@code face} of {@code cell}, centred at block-local {@code point} on that face. */

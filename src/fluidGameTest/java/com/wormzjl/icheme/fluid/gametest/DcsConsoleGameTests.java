@@ -246,7 +246,7 @@ public final class DcsConsoleGameTests {
                             id.equals(box.identity())
                                     && port.equals(box.dataPort())
                                     && facts.equals(world.controls().facts().panel(id))
-                                    && DataPorts.panel(box).cell().equals(port.cell()),
+                                    && DataPorts.panel(box, box.identity()).cell().equals(port.cell()),
                             "Console rebuild changed saved facts or the wired entry");
                     level.removeBlock(at, false);
                     helper.succeed();

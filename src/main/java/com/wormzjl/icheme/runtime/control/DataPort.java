@@ -86,6 +86,14 @@ public record DataPort(
             throw new IllegalArgumentException("Invalid port host");
     }
 
+    /**
+     * The way the socket faces, out of its owner. A wired socket never flips to another side
+     * ({@link DataPorts#remount}), so this is also the way its cable leaves.
+     */
+    public Direction outward() {
+        return face.getOpposite();
+    }
+
     public Vec3 cablePoint() {
         var p = new ConduitGeometry.Key(0, 0).connect(face.ordinal(), u, v).point(face.ordinal());
         return new Vec3(cell.getX() + p[0], cell.getY() + p[1], cell.getZ() + p[2]);

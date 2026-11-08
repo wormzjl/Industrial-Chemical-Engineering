@@ -151,7 +151,7 @@ public final class PipeRackBlock extends BaseEntityBlock {
         public static void refuse(BlockEvent.BreakEvent event) {
             if (!(event.getState().getBlock() instanceof PipeRackBlock) || !carries(event.getLevel(), event.getPos())) return;
             event.setCanceled(true);
-            event.getPlayer().displayClientMessage(PipeLaying.message("rack_carries"), true);
+            event.getPlayer().displayClientMessage(LineLaying.message("rack_carries"), true);
         }
     }
 

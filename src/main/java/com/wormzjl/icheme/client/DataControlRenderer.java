@@ -184,55 +184,7 @@ public final class DataControlRenderer {
         if (LEADS.size() > 2048) LEADS.clear();
         if (BAKED.size() > 2048) BAKED.clear();
         for (var port : ports(mc.level, mc.player.position(), 96).values()) {
-            var mesh =
-                    PORTS.computeIfAbsent(
-                            port,
-                            p -> {
-                                var out = DataPorts.outward(mc.level, p);
-                                boolean box = false;
-                                if (mc.level.getBlockEntity(p.owner())
-                                        instanceof EquipmentShellBlockEntity shell) {
-                                    box = true;
-                                    var socket =
-                                            shell.shape() == null
-                                                    ? null
-                                                    : p.kind().power()
-                                                            ? DataSocketGeometry.power(
-                                                                    shell.shape())
-                                                            : DataSocketGeometry.equipment(
-                                                                    shell.shape());
-                                    if (socket != null) {
-                                        var centre =
-                                                new Vec3(
-                                                        shell.origin().getX() + socket.x(),
-                                                        shell.origin().getY() + socket.y(),
-                                                        shell.origin().getZ() + socket.z());
-                                        if (centre.distanceToSqr(p.centre()) < 1e-12)
-                                            box = socket.junctionBox();
-                                    }
-                                }
-                                return new PortMesh(
-                                        p.kind().power()
-                                                ? PowerPortGeometry.polygons(
-                                                        new double[] {0, 0, 0},
-                                                        new double[] {
-                                                            out.getStepX(),
-                                                            out.getStepY(),
-                                                            out.getStepZ()
-                                                        },
-                                                        box,
-                                                        detail)
-                                                : DataPortGeometry.polygons(
-                                                        new double[] {0, 0, 0},
-                                                        new double[] {
-                                                            out.getStepX(),
-                                                            out.getStepY(),
-                                                            out.getStepZ()
-                                                        },
-                                                        box,
-                                                        detail),
-                                        out);
-                            });
+            var mesh = PORTS.computeIfAbsent(port, p -> portMesh(mc.level, p));
             draw(pose, buffers, camera, port.centre(), mesh.polygons(), 0, 255);
         }
         for (var piece : com.wormzjl.icheme.world.level.block.LinePieces.visible(mc.level))
@@ -266,6 +218,26 @@ public final class DataControlRenderer {
         buffers.endBatch(JACKET);
         buffers.endBatch(GHOST);
         buffers.endBatch(RenderType.lines());
+    }
+
+    /**
+     * A socket's gland, drawn around the origin. It sits on a junction box unless it is the
+     * equipment's own service-case socket, which the plan draws without one.
+     */
+    private static PortMesh portMesh(Level level, DataPort port) {
+        var out = port.outward();
+        var medium = port.kind().medium();
+        boolean box = false;
+        if (level.getBlockEntity(port.owner()) instanceof EquipmentShellBlockEntity shell) {
+            box = true;
+            var socket = shell.shape() == null ? null : SocketGeometry.of(shell.shape(), medium);
+            if (socket != null
+                    && DataPorts.at(socket, shell.origin()).distanceToSqr(port.centre()) < 1e-12)
+                box = socket.junctionBox();
+        }
+        var outward = new double[] {out.getStepX(), out.getStepY(), out.getStepZ()};
+        return new PortMesh(
+                SocketGeometry.polygons(new double[] {0, 0, 0}, outward, box, medium, detail), out);
     }
 
     /**

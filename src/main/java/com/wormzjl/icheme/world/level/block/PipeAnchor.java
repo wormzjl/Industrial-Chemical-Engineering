@@ -173,10 +173,6 @@ public record PipeAnchor(Kind kind, BlockPos cell, @Nullable Direction joint, @N
     public static Resolved socket(Level level,BlockPos cell,Direction joint,BlockPos owner,int point){
         return validate(level,new PipeAnchor(Kind.NOZZLE,cell,joint,owner,0,-1,joint.getOpposite(),point,Fit.ANY,null));
     }
-    /** An existing line or lane grows through its selected face; topology-specific facts stay with its adapter. */
-    public static Resolved continuation(Level level,BlockPos host,Direction face,int lane,int joints,int point){
-        return validate(level,new PipeAnchor(lane>0?Kind.LANE:Kind.PIPE,host.relative(face),face.getOpposite(),host,lane,joints,face,point,Fit.ANY,null));
-    }
     static Resolved validate(Level level,PipeAnchor anchor){
         if (level.isOutsideBuildHeight(anchor.cell) || !level.getWorldBorder().isWithinBounds(anchor.cell) || !level.hasChunkAt(anchor.cell)) return new Resolved(null, Refusal.OUTSIDE);
         // A rack cell takes the line as a lane: whether it has room for it is the route's to say.

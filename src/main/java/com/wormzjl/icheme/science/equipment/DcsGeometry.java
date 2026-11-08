@@ -31,6 +31,11 @@ public final class DcsGeometry {
             Finish body,
             Finish front,
             Finish top) {
+        /** The part's bounds {@code {x, y, z, X, Y, Z}} for a console facing north. */
+        public double[] box() {
+            return new double[] {x, y, z, X, Y, Z};
+        }
+
         public Part moveDown(double amount) {
             return new Part(name, x, y - amount, z, X, Y - amount, Z, body, front, top);
         }
@@ -138,14 +143,20 @@ public final class DcsGeometry {
 
     /** Bounds after clockwise horizontal quarter turns, still local to this half. */
     public static double[] bounds(Part part, int turns) {
-        double x = part.x, z = part.z, X = part.X, Z = part.Z;
-        for (int i = 0; i < Math.floorMod(turns, 4); i++) {
-            double oldX = x, oldMaxX = X;
-            x = 16 - Z;
-            X = 16 - z;
-            z = oldX;
-            Z = oldMaxX;
-        }
-        return new double[] {x, part.y, z, X, part.Y, Z};
+        return turned(part.box(), turns);
+    }
+
+    /**
+     * A box in block sixteenths {@code {x, y, z, X, Y, Z}}, drawn for a block facing north, after
+     * {@code turns} clockwise quarter turns about the block's vertical centre line (1 faces east).
+     */
+    public static double[] turned(double[] box, int turns) {
+        double x = box[0], y = box[1], z = box[2], X = box[3], Y = box[4], Z = box[5];
+        return switch (Math.floorMod(turns, 4)) {
+            case 1 -> new double[] {16 - Z, y, x, 16 - z, Y, X};
+            case 2 -> new double[] {16 - X, y, 16 - Z, 16 - x, Y, 16 - z};
+            case 3 -> new double[] {z, y, 16 - X, Z, Y, 16 - x};
+            default -> new double[] {x, y, z, X, Y, Z};
+        };
     }
 }

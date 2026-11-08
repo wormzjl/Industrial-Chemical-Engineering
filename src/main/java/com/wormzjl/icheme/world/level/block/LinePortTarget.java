@@ -59,7 +59,7 @@ public final class LinePortTarget {
                 range,
                 solid,
                 p -> hit != null && ownOccluder(level, hit.getBlockPos(), p),
-                p -> DataPorts.outward(level, p));
+                DataPort::outward);
     }
 
     private static boolean ownOccluder(Level level, BlockPos obstruction, DataPort port) {

@@ -194,10 +194,10 @@ public final class ConduitLayingGameTests {
                         .setValue(ControlPanelBlock.FACING, Direction.WEST),
                 3);
         var panel = (ControlPanelBlockEntity) level.getBlockEntity(owner);
-        var clear = DataPorts.panel(panel);
+        var clear = DataPorts.panel(panel, panel.identity());
         level.setBlock(clear.cell(), Blocks.STONE.defaultBlockState(), 3);
         helper.assertTrue(
-                DataPorts.panel(panel).cell().equals(clear.cell()),
+                DataPorts.panel(panel, panel.identity()).cell().equals(clear.cell()),
                 "Data socket jumped to the far side of a wall");
         var power =
                 com.wormzjl.icheme.runtime.control.DataPorts.power(
@@ -527,11 +527,11 @@ public final class ConduitLayingGameTests {
                         at,
                         block.get().defaultBlockState().setValue(ControlPanelBlock.FACING, face),
                         3);
-                var port = DataPorts.panel((ControlPanelBlockEntity) level.getBlockEntity(at));
+                var panel = (ControlPanelBlockEntity) level.getBlockEntity(at);
+                var port = DataPorts.panel(panel, panel.identity());
                 helper.assertTrue(
                         port.u() == 0 && port.v() == 0,
                         "A controller's unobstructed connector must use the block-face centre");
-                var panel = (ControlPanelBlockEntity) level.getBlockEntity(at);
                 FluidWorldAuthority.find(level.getServer()).orElseThrow().controls().loaded(panel);
                 var anchor =
                         LayingTestCommands.resolve(
@@ -739,8 +739,8 @@ public final class ConduitLayingGameTests {
         EquipmentStructure.place(level, origin, shape, Paint.DEFAULT, shape.sizeY());
         var socket =
                 medium == CableMedium.POWER
-                        ? DataSocketGeometry.power(shape)
-                        : DataSocketGeometry.equipment(shape);
+                        ? SocketGeometry.power(shape)
+                        : SocketGeometry.data(shape);
         var normal = Direction.values()[socket.face()];
         var centre =
                 new Vec3(

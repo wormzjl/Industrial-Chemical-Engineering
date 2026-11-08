@@ -29,7 +29,6 @@ import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.EnumMap;
 import java.util.Map;
 
 /** The process simulator's block (batch 2026-11-02-process-simulator, plan section 3.6): it holds a sheet and opens the screen. It solves nothing, as a run is the client's. */
@@ -45,21 +44,7 @@ public final class ProcessSimulatorBlock extends BaseEntityBlock {
                 {1, 8, 8, 15, 16, 15.2}, {1.75, 8.85, 7.64, 14.25, 15.6, 8},
                 {1, 15.6, 7.25, 15, 16, 8.05}, {2.5, 8, 1, 11.5, 8.25, 5.5}, {12, 8, 1.5, 14, 8.5, 4.5}
         };
-        var shapes = new EnumMap<Direction, VoxelShape>(Direction.class);
-        for (var facing : Direction.Plane.HORIZONTAL) {
-            VoxelShape shape = Shapes.empty();
-            for (var p : parts) {
-                var part = switch (facing) {
-                    case EAST -> Block.box(16 - p[5], p[1], p[0], 16 - p[2], p[4], p[3]);
-                    case SOUTH -> Block.box(16 - p[3], p[1], 16 - p[5], 16 - p[0], p[4], 16 - p[2]);
-                    case WEST -> Block.box(p[2], p[1], 16 - p[3], p[5], p[4], 16 - p[0]);
-                    default -> Block.box(p[0], p[1], p[2], p[3], p[4], p[5]);
-                };
-                shape = Shapes.or(shape, part);
-            }
-            shapes.put(facing, shape.optimize());
-        }
-        return Map.copyOf(shapes);
+        return HorizontalShapes.byFacing(java.util.List.of(parts));
     }
 
     public ProcessSimulatorBlock(BlockBehaviour.Properties properties) {
