@@ -4,6 +4,7 @@ import json, math, textwrap, html, os
 from datetime import datetime,timezone,timedelta
 import numpy as np
 import instrument_wiring
+import surface_textures
 from PIL import Image, ImageDraw
 from reportlab.pdfgen import canvas
 from reportlab.lib.colors import HexColor, Color
@@ -13,7 +14,7 @@ from reportlab.pdfbase import pdfmetrics
 REPO=Path(__file__).resolve().parents[3]
 ROOT=Path(os.environ['ICHEME_PROPOSAL_WORK']).resolve()
 RUN_DATE=datetime.now(timezone(timedelta(hours=8))).date().isoformat()
-OUT=ROOT/'drawings-l'; OUT.mkdir(exist_ok=True)
+OUT=ROOT/'drawings-m'; OUT.mkdir(exist_ok=True)
 VIEWS=OUT/'views'; VIEWS.mkdir(exist_ok=True)
 MAN=json.loads((ROOT/'geometry/manifest.json').read_text())
 ACTIVE='';REFRESH=set(os.environ.get('DRAW_REFRESH','').split(','))
@@ -92,8 +93,9 @@ def proposal(d,polys):
  return revised_layouts.build(d,polys,sys.modules[__name__])
 
 def palette(material,n):
+ material=surface_textures.base(material)
  n=np.abs(n);shade=.65+.20*n[1]+.11*n[2]+.04*n[0]
- if material.startswith(('METAL_CONDUIT_','SURFACE_CONDUIT_')):c=np.array([147,151,155])
+ if material.startswith('METAL_CONDUIT_'):c=np.array([147,151,155])
  elif material in ['WIRE_GLAND','WIRE_JUNCTION']:c=np.array([124,135,140])
  elif material.startswith('ARGB_'):c=np.array([int(material[5+i:7+i],16) for i in [0,2,4]])
  elif material=='PROPOSED' or material.startswith('PROPOSED_'):c=np.array([76,162,202])
@@ -134,7 +136,10 @@ def render(polys,basis,bounds,filename,pixels=1100):
    w=((c[1]-a[1])*(xx-c[0])+(a[0]-c[0])*(yy-c[1]))/den;k=1-u-w
    z=u*a[2]+w*b[2]+k*c[2];region=depth[y0:y1+1,x0:x1+1];mask=(u>=-1e-7)&(w>=-1e-7)&(k>=-1e-7)&(z>=region-1e-7)
    region[mask]=z[mask]
-   if m in instrument_wiring.TEXTURES:
+   shade=.65+.20*abs(n[1]/length)+.11*abs(n[2]/length)+.04*abs(n[0]/length)
+   if m in surface_textures.MATERIALS:
+    colours=surface_textures.shaded(m,v,[u,w,k],[0,j,j+1],colour,shade);image[y0:y1+1,x0:x1+1][mask]=colours[mask]
+   elif m in instrument_wiring.TEXTURES:
     colours=instrument_wiring.shaded(m,v,[u,w,k],[0,j,j+1],.65+.20*abs(n[1]/length)+.11*abs(n[2]/length)+.04*abs(n[0]/length));image[y0:y1+1,x0:x1+1][mask]=colours[mask]
    else:image[y0:y1+1,x0:x1+1][mask]=colour
    triangles+=1
@@ -188,7 +193,7 @@ def cable_polys(id):
   for q in r['polygons']:out.append((np.array(q['v']).reshape(-1,3),'CABLE_DATA' if r['medium']=='DATA' else 'CABLE_FE'))
  return out
 
-def context(c,d,p,polys,i,routes,fixtures=()):
+def context(c,d,p,polys,i,routes):
  allcables=cable_polys(d['id']);plo,phi=bbox(p['extra']+allcables)
  lo=plo-np.array([.65,.15,.65]);hi=phi+np.array([.65,.4,.65]);lo[1]=min(0.,lo[1])
  guide=[]
@@ -202,7 +207,7 @@ def context(c,d,p,polys,i,routes,fixtures=()):
      b=a^bit
      if b>a:
       delta=corners[b]-corners[a];length=np.linalg.norm(delta);guide+=cylinder(corners[a],delta/length,.006,0,length,'KEEP_CLEAR',4)
- native=clipped(polys,lo,hi);whole=native+p['extra']+allcables+clipped(fixtures,lo,hi)
+ whole=clipped(polys,lo,hi)+allcables
  whole+=guide
  direction=np.array([1,.8,-1]) if p['front']==2 else np.array([1,.8,1])
  if p['front']==5:direction=np.array([1,.8,-.65])
@@ -248,7 +253,7 @@ def titleblock(c,index,title,subtitle):
  txt(c,28,H-24,'IChemE  /  EQUIPMENT CONTROL INTERFACES',11,'#a8d8ec','Helvetica-Bold')
  txt(c,28,H-47,title,20,'#ffffff','Helvetica-Bold')
  txt(c,W-186,H-24,f'REVIEW DRAWING  {index:02d}',10,'#ffffff','Helvetica-Bold')
- txt(c,W-186,H-43,'REV L  |  '+MAN['snapshot']+'  |  '+RUN_DATE,8,'#cedde4')
+ txt(c,W-186,H-43,'REV M  |  '+MAN['snapshot']+'  |  '+RUN_DATE,8,'#cedde4')
  txt(c,28,H-80,subtitle,8.5)
  line(c,(26,42),(W-26,42),'#a9bac3',.6)
  txt(c,28,25,'PROPOSAL ONLY  |  Exact native geometry + dimensioned proposed interfaces  |  1 block = 1 m',8,MUTE)
@@ -266,11 +271,11 @@ def details(c,d,p,i,polys):
  dlo=p['low']-.18;dhi=p['high']+.18
  if d['kind']=='SPHERE':
   foot=np.array(d['supportLegs'][0]);r=d['legRadius'];dlo=np.minimum(dlo,[foot[0]-r-.05,1.2,foot[2]-r-.05]);dhi=np.maximum(dhi,[foot[0]+r+.05,1.8,foot[2]+r+.05])
- detail_polys=p['extra']+clipped(polys,dlo,dhi);frontnormal=np.array([1,0,0]) if p['front']==5 else np.array([-1,0,0]) if p['front']==4 else np.array([0,0,-1 if p['front']==2 else 1])
+ detail_polys=clipped(polys,dlo,dhi);frontnormal=np.array([1,0,0]) if p['front']==5 else np.array([-1,0,0]) if p['front']==4 else np.array([0,0,-1 if p['front']==2 else 1])
  detail_specs=[]
  for k,(medium,pt,n) in enumerate(p['ports']):
   if p.get('enclosures'):
-   e=next(e for e in p['enclosures'] if e['medium']==medium);detail_polys=clipped(p['extra']+polys,np.array(e['low'])-.18,np.array(e['high'])+.18)
+   e=next(e for e in p['enclosures'] if e['medium']==medium);detail_polys=clipped(polys,np.array(e['low'])-.18,np.array(e['high'])+.18)
   direction=frontnormal+n+np.array([0,.8,0])
   if p.get('enclosures'):direction=2*n+np.array([0,.8,0])+.5*np.cross([0,1,0],n)
   if np.linalg.norm(direction[[0,2]])<.1:direction=n+np.array([.7,.8,0])
@@ -414,7 +419,7 @@ def main():
  for i,e in enumerate(MAN['entries'],1):
   if e['id'] in ['SENSOR_HOUSING','LEVEL_SENSOR_HOUSING']:
    records.append(sensor_pages.hardware_page(c,__import__(__name__),e['id'],i));continue
-  d=json.loads((ROOT/'geometry'/e['file']).read_text());ACTIVE=d['id'];polys=raw(d);p=proposal(d,polys);instruments=sensor_layouts.plan(d,polys,__import__(__name__));sensor_polys=sensor_layouts.equipment_visuals(d,polys,p,instruments,__import__(__name__));allpolys=polys+p['extra']+sensor_polys;lo,hi=bbox(allpolys)
+  d=json.loads((ROOT/'geometry'/e['file']).read_text());ACTIVE=d['id'];polys=raw(d);p=proposal(d,polys);instruments=sensor_layouts.plan(d,polys,__import__(__name__));allpolys=sensor_layouts.equipment_scene(d,polys,p,instruments,__import__(__name__));lo,hi=bbox(allpolys)
   titleblock(c,i,TITLES[d['id']],parameters(d));line(c,(837,55),(837,744),'#bbcbd2',.6)
   txt(c,28,H-94,'MANUAL: '+sensor_layouts.permitted(instruments)+'  |  '+instruments['policy'],7.2,MUTE)
   # Fit all three orthographic views at one conventional drawing scale.
@@ -425,8 +430,8 @@ def main():
   txt(c,40,735,f'ORTHOGRAPHIC SCALE 1:{denom}  |  model envelope incl. proposed interfaces',8,MUTE)
   for basis,rect,path,title in [(FRONT,(50,434,338,260),f'{i:02d}-front.png','FRONT / FROM -Z  |  X right, Y up'),(SIDE,(455,434,338,260),f'{i:02d}-side.png','SIDE / FROM +X  |  Z right, Y up'),(TOP,(50,99,338,255),f'{i:02d}-top.png','TOP / FROM +Y  |  X right, -Z up')]:
    origin,sc=drawview(c,allpolys,basis,rect,scale,VIEWS/path,title,cab=p,fitpoints=reserved);sensor_pages.mark(c,instruments,basis,origin,sc,rect,__import__(__name__))
-  routes=revised_layouts.cable_routes(d,p);context(c,d,p,polys,i,routes,sensor_polys)
-  details(c,d,p,i,polys)
+  routes=revised_layouts.cable_routes(d,p);context(c,d,p,allpolys,i,routes)
+  details(c,d,p,i,allpolys)
   c.bookmarkPage(d['id']);c.addOutlineEntry(TITLES[d['id']],d['id'],level=0);c.showPage()
   rec={k:v.tolist() if isinstance(v,np.ndarray) else v for k,v in p.items() if k not in ['extra','ports']}
   original=[(np.array(q['v']).reshape(-1,3),q['m']) for q in d['polygons']+d.get('optionalGaugePolygons',[])]

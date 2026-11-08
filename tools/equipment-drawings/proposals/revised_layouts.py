@@ -159,6 +159,9 @@ def build(d,polys,k):
   # Two real continuous steel brackets from native surface to the back of the enclosure.
   for shift in [-.09,.09]:
    a=anchor.copy();a[other]+=shift;b=target.copy();b[other]+=shift
+   # Each foot seats on its own native facet. A tangent pad copied sideways
+   # from the centre floats off curved tank shells and round support legs.
+   a=surface(polys,axis,a,sign,{'SUPPORT','STEELWORK','CONCRETE','SHELL','TOWER_PANEL'})
    elbow=a.copy();elbow[axis]=b[axis];end=b.copy()
    extra+=k.box(np.minimum(a,elbow)-.018,np.maximum(a,elbow)+.018,'BRACKET')
    extra+=k.box(np.minimum(elbow,end)-.018,np.maximum(elbow,end)+.018,'BRACKET')

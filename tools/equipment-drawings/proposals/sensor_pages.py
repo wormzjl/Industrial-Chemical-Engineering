@@ -90,7 +90,7 @@ def table(c,d,cat,x,y,k):
  assert y>45,(d['id'],y)
 
 def layout_page(c,k,id,index):
- k.ACTIVE=id+'_INSTRUMENTS';d=json.loads((k.ROOT/'geometry'/f'{id}.json').read_text());native=k.raw(d);p=k.proposal(d,native);cat=sensor_layouts.plan(d,native,k);hardware=sensor_layouts.equipment_visuals(d,native,p,cat,k);allpolys=native+p['extra']+hardware
+ k.ACTIVE=id+'_INSTRUMENTS';d=json.loads((k.ROOT/'geometry'/f'{id}.json').read_text());native=k.raw(d);p=k.proposal(d,native);cat=sensor_layouts.plan(d,native,k);allpolys=sensor_layouts.equipment_scene(d,native,p,cat,k)
  title=k.TITLES[id]+' - instrument arrangement';k.titleblock(c,index,title,'Native reference equipment + dimensioned instrument proposal | Coordinates in metres | Installed digital examples shown')
  k.line(c,(818,55),(818,744),'#bbcbd2',.6);table(c,d,cat,840,724,k)
  if d['kind']=='EXCHANGER':
@@ -143,7 +143,7 @@ def basis_page(c,k,index):
  ('Pressure / R1','Use a short top vapour tapping for the revised drums and sphere. The head is accessible for service; its elevation is not a bottom hydrostatic-pressure measurement.'),
  ('Temperature / R2-R3','A top-mounted display needs a probe into the contents. The proposal shows a long top-entry immersion assembly. The existing game still reports one bulk temperature; this drawing does not add a temperature profile or a phase-selection solver.'),
  ('Level / R4','The drum level transmitter uses a separate vertical radar entry. Keep it clear of inlet nozzles and internal obstructions. The game value remains liquid-plus-solid height, excluding gas.'),
- ('Sphere access / R6','P/T heads are served from the actual top platform. Their roof nozzles stand beside the outside rim with short support brackets, preserving the walking path, manway, relief stacks and access opening. The small sphere level pad shifts clear of rear access; its logical slot is retained.'),
+ ('Sphere access / R6','P/T/L heads are served from the actual top platform on both sphere sizes. Their roof nozzles stand beside the outside rim with short support brackets, preserving the walking path, manway, relief stacks and access opening. L1 retains the level_body identity and liquid-plus-solid readout.'),
  ('Cooling towers / R5; owner revision J','Ti is at the hot-water inlet and Tb senses the cold basin. Both tower types have factory P/T and a factory L1 level gauge at its unchanged position; no manual tower sensor points remain.'),
  ('Network / current host contract','Equipment-mounted instruments share the equipment DATA port at C1. 20/25 mm metallic instrument conduits are fixed equipment parts, not another placeable cable size. Pipe-mounted sensors retain their direct network-adapter arrangement.')]
  for heading,text in notes:
@@ -241,7 +241,7 @@ def expansion_basis_page(c,k,index):
  k.ACTIVE='EXPANSION_BASIS';title='Roof reservations, boot levels and exchanger temperature points';k.titleblock(c,index,title,'Revision H arrangement basis | Game-layout proposal with native geometry | No new pressure-protection or phase solver')
  blocks=[
   ('VERTICAL DRUM / LEAVE ROOM TO GROW',[
-   'P1, T1 and L1 are grouped on the front half of the roof. F1 and F2 are separate rear service envelopes for a future blanketing valve and PSV. Current process nozzle and manway geometry remains native.',
+   'P1, L1 and T1 share one straight front service row. One common trunk crosses to a side aisle clear of F1 and F2, the separate rear reserves for future blanketing and PSV mounts. Process nozzles and manway remain native.',
    'Each dashed envelope is 1.0 x 1.0 m in plan and 1.5 m high at this reference size. These are provisional spatial allowances, not selected valve sizes, relief capacities, nozzle bores or a certified safety design. No future valve is depicted as already installed.',
    'Reserve independent process access for protection and blanketing. A blanketing regulator controls vapor-space pressure; it does not replace the required relief protection.']),
   ('HORIZONTAL DRUM / TWO DIFFERENT LEVEL CHANNELS',[

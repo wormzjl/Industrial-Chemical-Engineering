@@ -108,7 +108,7 @@ def top_point(d,native,k,tag,kind,mount,x,z,normal):
 def sphere_points(d,native,k):
  platform=d['topPlatform'];c=np.array(platform['centre']);radius=platform['radius'];rho=radius+.085;chosen=[]
  obstacles=[(v,m) for v,m in native if m not in ['HEAD','GRATING']]
- for tag,kind,mount,preferred in [('P1','P','pressure_top',-math.pi/4),('T1','T','temperature_top',-3*math.pi/4)]:
+ for tag,kind,mount,preferred in [('P1','P','pressure_top',-math.pi/4),('T1','T','temperature_top',-3*math.pi/4),('L1','L','level_body',-math.pi/2)]:
   angles=sorted(np.arange(72)*2*math.pi/72,key=lambda a:abs(math.atan2(math.sin(a-preferred),math.cos(a-preferred))))
   for angle in angles:
    n=np.array([math.cos(angle),0,math.sin(angle)]);tapxz=c+n*rho;centre=tapxz.copy();centre[1]=c[1]+.85
@@ -136,11 +136,11 @@ def plan(d,native,k):
   channels,internal=rotating_channels(d);note=instrument_policy.description(d)
  elif id=='VERTICAL':
   shell=[(v,m) for v,m in native if m in ['SHELL','HEAD']];lo,hi=k.bbox(shell);cx,cz=((lo+hi)/2)[[0,2]];r=min(.3*d['parameters']['size']/2,1.05)
-  for tag,typ,mount,x,z in [('P1','P','pressure_top',cx-r,cz-r),('T1','T','temperature_top',cx+r,cz-r),('L1','L','level_body',cx,cz-1.75*r)]:points.append(top_point(d,native,k,tag,typ,mount,x,z,[0,0,-1]))
+  for tag,typ,mount,x,z in [('P1','P','pressure_top',cx-r,cz-r),('T1','T','temperature_top',cx+r,cz-r),('L1','L','level_body',cx,cz-r)]:points.append(top_point(d,native,k,tag,typ,mount,x,z,[0,0,-1]))
   for tag,name,x in [('F1','Gas blanketing valve',cx-r),('F2','PSV',cx+r)]:
    tap=revised_layouts.surface(native,1,[x,0,cz+1.2*r],1,{'HEAD','SHELL'});lo=tap+[-.5,.08,-.5];hi=lo+[1.,1.5,1.]
    reserved.append(dict(tag=tag,name=name,tap=tap.tolist(),min=lo.tolist(),max=hi.tolist(),note='1.0 x 1.0 m service footprint; 1.5 m clear height. Provisional game-layout reserve, not device sizing.'))
-  note='P/T/L grouped on the front roof; rear F1 blanketing and F2 PSV service zones reserved.'
+  note='P/T/L aligned in one front roof service row; rear F1 blanketing and F2 PSV zones reserved.'
  elif id in ['LENGTHWISE','LENGTHWISE_BOOT']:
   shell=[(v,m) for v,m in native if m in ['SHELL','HEAD']];lo,hi=k.bbox(shell);cx=(lo[0]+hi[0])/2;middle=(lo[2]+hi[2])/2;length=d['parameters']['length']
   for tag,typ,mount,z in [('P1','P','pressure_top',middle+(.03 if d.get('boot') else -.20)*length),('T1','T','temperature_top',middle+(.16 if d.get('boot') else 0)*length),('L1','L','level_body',middle+(.28 if d.get('boot') else .20)*length)]:points.append(top_point(d,native,k,tag,typ,mount,cx,z,[1,0,0]))
@@ -149,7 +149,7 @@ def plan(d,native,k):
    b=d['boot'];p=top_point(d,native,k,'L2','L','level_boot',b['axis'][0],b['axis'][2],[1,0,0]);p['guidedTip']=(np.array(b['bottom'])+[0,.20,0]).tolist();p['note']='Top-mounted guided probe aligned with boot; separate boot heavy-liquid/allocated-solids level channel.';points.append(p)
    note='P/T/L1 on crown. L1 reads body non-gas height; L2 aligns with the boot and reads its distinct boot-level channel.'
  elif kind=='SPHERE':
-  points=sphere_points(d,native,k);note='P/T serviced from the top platform; existing body-level pad retained.'
+  points=sphere_points(d,native,k);note='P/T/L serviced from the top platform; manway, relief and access kept clear.'
  elif kind in signal_catalog.TOWER_KINDS:
   hot=next(p for p in d['processPorts'] if p['role']=='HOT_WATER_INLET');v=np.array([hot['cell'][a] for a in ['x','y','z']],float)+.5-.35*np.array(hot['normal']);tap=revised_layouts.surface(native,1,v,1,{'PIPE'})
   factory.append(point('Ti','T','builtin_inlet_T',tap+[0,.25,0],[1,0,0],tap,'top',False,'Factory hot-water inlet temperature'))
@@ -175,7 +175,7 @@ def plan(d,native,k):
   counts={'P':0,'T':0,'L':0}
   for s in d.get('sensorMounts',[]):
    typ='L' if s['id'].startswith('level_') else 'P' if s['pressure'] else 'T'
-   if id in ['VERTICAL','LENGTHWISE','LENGTHWISE_BOOT'] or kind=='SPHERE' and typ!='L' or id=='INDUCED_DRAFT_COOLING_TOWER' and typ!='L':continue
+   if id in ['VERTICAL','LENGTHWISE','LENGTHWISE_BOOT'] or kind=='SPHERE' or id=='INDUCED_DRAFT_COOLING_TOWER' and typ!='L':continue
    counts[typ]+=1;face=s['face'];n=np.array([1,0,0]) if face==5 else np.array([-1,0,0]) if face==4 else np.array([0,0,1]) if face==3 or face<0 and typ=='L' else np.array([0,0,-1])
    points.append(retained_point(d,native,k,typ+str(counts[typ]),typ,s,n))
   if 'mechanicalLevelBounds' in d:
@@ -227,9 +227,10 @@ def unit_vector(value):return value/np.linalg.norm(value)
 
 def geometry(catalog,k):return [poly for p in catalog['points']+catalog['factory'] for poly in hardware_point(p,k)]
 
-def equipment_visuals(d,native,proposal,catalog,k):
+def equipment_scene(d,native,proposal,catalog,k,hardware=None):
+ """One composition owner for every full, cropped and assembly drawing."""
  import instrument_wiring
- return geometry(catalog,k)+instrument_wiring.geometry(d,native,proposal,catalog,k)
+ return instrument_wiring.scene(d,native,proposal,catalog,k,geometry(catalog,k) if hardware is None else hardware)
 
 @lru_cache(maxsize=1)
 def connector_meshes(k):return json.loads((k.ROOT/'geometry/instrument-connector-meshes.json').read_text())

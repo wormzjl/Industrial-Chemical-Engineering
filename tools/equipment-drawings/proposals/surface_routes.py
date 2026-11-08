@@ -6,6 +6,7 @@ Coordinates on curved skins are projected only after routing intent is fixed.
 import heapq,itertools,math
 import numpy as np
 import revised_layouts
+CONTACT=.022
 
 def section_nearest(triangles,wanted,axis):
  """Closest actual skin point in one fixed station plane."""
@@ -45,10 +46,9 @@ def route_between(graph,start,end,forbidden=()):
 
 def baseline(graph,d,native,sources,target,blocked):
  points=np.array([s['desired'] for s in sources]);anchor=np.median(points,axis=0);kind=d['kind'];head=kind=='DRUM' and d['parameters']['orientation']=='VERTICAL'
- if head:axis=max([0,2],key=lambda a:np.ptp(points[:,a]))
+ if head or kind=='SPHERE':axis=max([0,2],key=lambda a:np.ptp(points[:,a]))
  elif kind in ['DRUM','EXCHANGER']:axis=2
  elif kind=='TANK':axis=0;anchor[1]=target[1]
- elif kind=='SPHERE':axis=1
  else:axis=2;anchor[0]=target[0];anchor[1]=target[1]
  allowed={'SHELL','HEAD'} if kind in ['DRUM','TANK','SPHERE','EXCHANGER'] else {'TOWER_PANEL','CONCRETE'}
  if kind in ['DRUM','EXCHANGER']:allowed.add('FLANGE')
@@ -66,12 +66,22 @@ def baseline(graph,d,native,sources,target,blocked):
  lo,hi=triangles.reshape(-1,3).min(0),triangles.reshape(-1,3).max(0)
  stations=np.clip(points[:,axis],lo[axis]+1e-6,hi[axis]-1e-6)
  low,high=stations.min(),stations.max();exit_station=float(np.clip(target[axis],low,high))
+ # A saddle-mounted cabinet gets a drop at the actual support station, rather
+ # than at the end of the probe cluster followed by an axial return detour.
+ if kind in ['DRUM','EXCHANGER'] and not head or kind in ['SPHERE','TANK']:
+  if lo[axis]<target[axis]<hi[axis]:exit_station=float(target[axis])
+  low=min(low,exit_station);high=max(high,exit_station)
+ if head:
+  # The controller drop passes beside, never through, the future service pads.
+  sign=1 if target[axis]>anchor[axis] else -1
+  exits=[high if sign>0 else low]+[zone['max' if sign>0 else 'min'][axis]+sign*.10 for zone in graph.zones]
+  exit_station=max(exits) if sign>0 else min(exits);low=min(low,exit_station);high=max(high,exit_station)
  profile_cache={}
  def profile(value):
   key=float(value)
   if key not in profile_cache:
    wanted=anchor.copy();wanted[axis]=value
-   if head:q=revised_layouts.surface(native,1,wanted,1,allowed)
+   if head or kind=='SPHERE':q=revised_layouts.surface(native,1,wanted,1,allowed)
    elif kind=='TANK':q=revised_layouts.surface(native,2,wanted,1 if anchor[2]>(lo[2]+hi[2])/2 else -1,allowed)
    else:q=section_nearest(triangles,wanted,axis)
    profile_cache[key]=q
@@ -89,7 +99,142 @@ def baseline(graph,d,native,sources,target,blocked):
  for a,b in zip(nodes,nodes[1:]):
   _,face=graph.nearest((graph.points[a]+graph.points[b])/2);graph.link(a,b,face)
  indices={value:i for i,value in enumerate(values)}
- return dict(axis=axis,points=skin,nodes=nodes,stations=values,joins={s['id']:indices[float(v)] for s,v in zip(sources,stations)},exit=indices[exit_station],head=head,projectionAxis=1 if head else 2 if kind=='TANK' else None)
+ return dict(axis=axis,points=skin,nodes=nodes,stations=values,joins={s['id']:indices[float(v)] for s,v in zip(sources,stations)},exit=indices[exit_station],head=head or kind=='SPHERE',projectionAxis=1 if head or kind=='SPHERE' else 2 if kind=='TANK' else None)
+
+def section_connection(graph,start,end,axis,blocked):
+ """Shortest supported connection in one real mounting cross-section.
+
+ Slice native faces first, split at physical intersections, then route. The
+ section cannot wander axially to another head/saddle or jump between skins.
+ """
+ station=end[axis];free=[i for i in range(3) if i!=axis];segments=[]
+ for triangle in graph.triangles:
+  values=triangle[:,axis]-station
+  if values.min()>1e-7 or values.max()<-1e-7:continue
+  hits=[]
+  for a,b in zip(triangle,np.roll(triangle,-1,axis=0)):
+   da=a[axis]-station;db=b[axis]-station
+   if abs(da)<1e-7:hits.append(a)
+   if da*db<-1e-16:hits.append(a+(b-a)*(-da/(db-da)))
+  unique={tuple(np.round(v,8)):v for v in hits};hits=list(unique.values())
+  for i,a in enumerate(hits):
+   for b in hits[i+1:]:
+    if np.linalg.norm(b-a)>1e-8:segments.append((a,b))
+ if not segments:raise ValueError('No native controller mounting section')
+ nodes=[];indices={};links=[]
+ def node(point):
+  point=np.array(point);key=tuple(np.round(point,7))
+  if key not in indices:indices[key]=len(nodes);nodes.append(point);links.append({})
+  return indices[key]
+ splits=[[0.,1.] for _ in segments];welds=[]
+ def cross(a,b):return a[0]*b[1]-a[1]*b[0]
+ for i,(a,b) in enumerate(segments):
+  r=(b-a)[free]
+  for j in range(i):
+   c,d=segments[j];s=(d-c)[free];den=cross(r,s);offset=(c-a)[free]
+   if abs(den)>1e-12:
+    t=cross(offset,s)/den;u=cross(offset,r)/den
+    if -1e-7<=t<=1+1e-7 and -1e-7<=u<=1+1e-7:splits[i].append(float(np.clip(t,0,1)));splits[j].append(float(np.clip(u,0,1)))
+   elif abs(cross(offset,r))<1e-8:
+    for point in [c,d]:
+     t=(point-a)@(b-a)/np.dot(b-a,b-a)
+     if 0<t<1:splits[i].append(float(t))
+    for point in [a,b]:
+     u=(point-c)@(d-c)/np.dot(d-c,d-c)
+     if 0<u<1:splits[j].append(float(u))
+   # Same small joined-face tolerance as the native surface graph. Such a
+   # transition remains inside the joint; it is never drawn as a floating lead.
+   for left,right in [(i,j),(j,i)]:
+    c,d=segments[right]
+    for point in segments[left]:
+     amount=float(np.clip((point-c)@(d-c)/np.dot(d-c,d-c),0,1));q=c+(d-c)*amount;gap=np.linalg.norm(q-point)
+     if 1e-7<gap<=CONTACT and not blocked(point,q,graph.zones):splits[right].append(amount);welds.append((point,q))
+ ends=[]
+ for point in [start,end]:
+  candidates=[]
+  for i,(a,b) in enumerate(segments):
+   t=float(np.clip((point-a)@(b-a)/np.dot(b-a,b-a),0,1));q=a+(b-a)*t;candidates.append((np.linalg.norm(point-q),i,t,q))
+  distance,i,t,q=min(candidates,key=lambda row:row[0])
+  if distance>.002:raise ValueError('Controller section misses its entry by '+str(distance))
+  splits[i].append(t);ends.append(node(q))
+ for (a,b),values in zip(segments,splits):
+  chain=[node(a+(b-a)*v) for v in sorted(set(values))]
+  for i,j in zip(chain,chain[1:]):
+   if i==j or blocked(nodes[i],nodes[j],graph.zones):continue
+   length=np.linalg.norm(nodes[j]-nodes[i]);links[i][j]=length;links[j][i]=length
+ joined=set()
+ for a,b in welds:
+  i,j=node(a),node(b)
+  if i==j:continue
+  length=np.linalg.norm(b-a);links[i][j]=length;links[j][i]=length;joined.add(tuple(sorted([i,j])))
+ distances={ends[0]:0.};parents={};queue=[(0.,ends[0])]
+ while queue:
+  cost,at=heapq.heappop(queue)
+  if cost!=distances[at]:continue
+  if at==ends[1]:break
+  for other,length in links[at].items():
+   trial=cost+length
+   if trial<distances.get(other,float('inf')):distances[other]=trial;parents[other]=at;heapq.heappush(queue,(trial,other))
+ if ends[1] not in distances:
+  other={ends[1]};queue=[ends[1]]
+  while queue:
+   for point in links[queue.pop()]:
+    if point not in other:other.add(point);queue.append(point)
+  nearest=min((np.linalg.norm(nodes[a]-nodes[b]),nodes[a].tolist(),nodes[b].tolist()) for a in distances for b in other)
+  raise ValueError('Disconnected native controller mounting section '+str(nearest))
+ route=[ends[1]]
+ while route[-1]!=ends[0]:route.append(parents[route[-1]])
+ result=[nodes[i] for i in route[::-1]]
+ hidden=[dict(a=nodes[a].tolist(),b=nodes[b].tolist(),length=float(np.linalg.norm(nodes[b]-nodes[a])),carrier='native joined surfaces',reason='embedded in joined support') for a,b in zip(route[::-1],route[-2::-1]) if tuple(sorted([a,b])) in joined]
+ # A native curve may change two world coordinates; its design is still one
+ # section drop (Y) plus the approach (X or Z), never a diagonal design line.
+ corner=start.copy();corner[1]=end[1];intent=[]
+ for a,b in [(start,corner),(corner,end)]:
+  if np.linalg.norm(b-a)>1e-8:intent.append((a.tolist(),b.tolist()))
+ return result,intent,hidden
+
+def controller(graph,d,native,shared,target,blocked):
+ start=shared['points'][shared['exit']]
+ if abs(start[shared['axis']]-target[shared['axis']])>1e-6 and not (d['kind']=='DRUM' and d['parameters']['orientation']=='VERTICAL'):return None
+ if d['kind']=='DRUM' and d['parameters']['orientation']=='VERTICAL':
+  # Front row -> clear side aisle across the roof -> one vertical shell/skirt
+  # section to the cabinet. Both roof plan legs are axis-aligned.
+  axis=2 if shared['axis']==0 else 0;wanted=start.copy();wanted[axis]=target[axis]
+  roof=revised_layouts.surface(native,1,wanted,1,{'HEAD','SHELL'})
+  points=[]
+  for t in np.linspace(0,1,max(2,int(abs(target[axis]-start[axis])/.025)+2)):
+   q=start+(wanted-start)*t;q=revised_layouts.surface(native,1,q,1,{'HEAD','SHELL'})
+   if points and blocked(points[-1],q,graph.zones):raise ValueError('Controller roof aisle enters reserved space')
+   points.append(q)
+  drop,intent,hidden=section_connection(graph,roof,target,axis,blocked)
+  leg=start.copy();leg[axis]=target[axis]
+  return points+drop[1:],[(start.tolist(),leg.tolist())]+intent,hidden
+ return section_connection(graph,start,target,shared['axis'],blocked)
+
+def native_projection(points,graph,hidden):
+ """Resolve facet transitions locally after H/V routing intent is fixed.
+
+ A sampled closest-surface projection can jump across a flange or intersecting
+ support. Follow the actual joined faces at that transition, without giving the
+ mesh permission to change the trunk or choose a new equipment-wide route.
+ """
+ invisible={tuple(sorted([tuple(np.round(v['a'],7)),tuple(np.round(v['b'],7))])) for v in hidden}
+ def gap(a,b):return max(np.linalg.norm((q:=a+(b-a)*t)-graph.nearest(q)[0]) for t in [.2,.4,.6,.8])
+ result=[points[0]]
+ for a,b in zip(points,points[1:]):
+  edge=tuple(sorted([tuple(np.round(a,7)),tuple(np.round(b,7))]))
+  if edge in invisible or np.linalg.norm(b-a)<1e-8 or gap(a,b)<.001:
+   result.append(b);continue
+  start,_=graph.attach(a);end,_=graph.attach(b);local=route_between(graph,start,end)
+  routed=[graph.points[node] for node in local];length=sum(np.linalg.norm(y-x) for x,y in zip(routed,routed[1:]))
+  if length>max(.5,4*np.linalg.norm(b-a)):raise ValueError('Facet projection needs a new routing design, not a local transition')
+  for x,y in zip(routed,routed[1:]):
+   if gap(x,y)>.001:
+    distance=np.linalg.norm(y-x)
+    if distance>CONTACT+1e-7:raise ValueError('Native facet graph contains an unsupported span')
+    hidden.append(dict(a=x.tolist(),b=y.tolist(),length=float(distance),carrier='native joined surfaces',reason='embedded in joined support'))
+  result.extend(routed[1:])
+ return result
 
 def orthogonal(points,graph,blocked,constant_axis=None,head_project=None,concealed=None):
  """Return only H/V design legs; curves arise from the carrier projection."""

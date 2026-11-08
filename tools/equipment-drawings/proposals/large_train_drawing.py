@@ -7,8 +7,8 @@ import instrument_wiring
 def build(k,instruments=True):
  def read(id):return json.loads((k.ROOT/'geometry'/f'{id}.json').read_text())
  pd=read('PUMP_BB2');md=read('MOTOR_LARGE');pp=k.proposal(pd,k.raw(pd));mp=k.proposal(md,k.raw(md))
- pump=k.raw(pd)+pp['extra']+(sensor_layouts.equipment_visuals(pd,k.raw(pd),pp,sensor_layouts.plan(pd,k.raw(pd),k),k) if instruments else [])
- motor=k.raw(md)+mp['extra']+(sensor_layouts.equipment_visuals(md,k.raw(md),mp,sensor_layouts.plan(md,k.raw(md),k),k) if instruments else [])
+ pump=sensor_layouts.equipment_scene(pd,k.raw(pd),pp,sensor_layouts.plan(pd,k.raw(pd),k),k) if instruments else k.raw(pd)+pp['extra']
+ motor=sensor_layouts.equipment_scene(md,k.raw(md),mp,sensor_layouts.plan(md,k.raw(md),k),k) if instruments else k.raw(md)+mp['extra']
  polys=pump+instrument_wiring.transform(motor,lambda v:opposed(v,3,9),'large-train')
  if (k.ROOT/'shaft-block.json').exists():
   for q in json.loads((k.ROOT/'shaft-block.json').read_text()):polys.append((np.array(q['v']).reshape(-1,3)+[1,1,4],q['m']))

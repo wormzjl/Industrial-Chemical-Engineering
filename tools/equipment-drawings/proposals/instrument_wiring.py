@@ -11,8 +11,9 @@ from PIL import Image
 import sensor_layouts
 import revised_layouts
 import surface_routes
+import surface_textures
 
-CONTACT=.022
+CONTACT=surface_routes.CONTACT
 TEXTURES={};_plans={}
 EXCLUDED={'BOLT','BOLT_FACE','OPENING','GRATING','HANDRAIL','ACCESS','SHAFT','FAN','BLADE','ROTOR','GUARD','DATA','FE','CABLE_DATA','CABLE_FE','DISPLAY','FLUID','GLASS','MARKING','ARROW','LABEL'}
 
@@ -190,7 +191,7 @@ def build(d,native,p,cat,k):
  if d['kind'] in ['SENSOR_HOUSING','LEVEL_SENSOR_HOUSING']:return dict(polys=[],paths=[],sources=0)
  sources=wire_sources(d,cat,p,native,k)
  if not sources:return dict(polys=[],paths=[],sources=0)
- carriers=native+p['extra'];stamp=hashlib.sha256(Path(__file__).read_bytes()+Path(sensor_layouts.__file__).read_bytes()+Path(surface_routes.__file__).read_bytes())
+ carriers=native+p['extra'];stamp=hashlib.sha256(Path(__file__).read_bytes()+Path(sensor_layouts.__file__).read_bytes()+Path(surface_routes.__file__).read_bytes()+Path(surface_textures.__file__).read_bytes())
  for v,m in carriers:stamp.update(v.tobytes());stamp.update(m.encode())
  stamp.update(json.dumps(cat,sort_keys=True).encode());signature=stamp.hexdigest();cache=k.ROOT/'metal-conduit-cache';cache.mkdir(exist_ok=True);file=cache/(key+'.json')
  if file.exists() and (data:=json.loads(file.read_text())).get('signature')==signature:
@@ -204,10 +205,20 @@ def build(d,native,p,cat,k):
   _,port,normal=next(v for v in p['ports'] if v[0]=='DATA');normal=np.array(normal);low=np.array(p['low']);high=np.array(p['high']);axis=int(np.argmax(abs(normal)));side=2 if axis==0 else 0;target=(low+high)/2
   approach=np.mean([s['desired'] for s in sources],axis=0);entry_normal=np.zeros(3);entry_normal[side]=1. if approach[side]>=target[side] else -1.
   target[1]=low[1]+min(.07,(high[1]-low[1])*.25);target[side]=(high[side] if entry_normal[side]>0 else low[side])+.003*entry_normal[side]
+  if p.get('anchor') is not None:
+   # Fixed instrument wiring enters the rear mounting pad, not a new external
+   # DATA gland. Put it over one real bracket, so the final span has support.
+   anchor=np.array(p['anchor']);rear=0 if p['front'] in [4,5] else 2;along=2 if rear==0 else 0
+   target[rear]=low[rear] if p['front'] in [3,5] else high[rear]
+   target[along]=anchor[along]+(.09 if approach[along]>=anchor[along] else -.09)
+   entry_normal=np.zeros(3);entry_normal[rear]=-1 if p['front'] in [3,5] else 1
   shared=surface_routes.baseline(graph,d,native,sources,target,blocked)
   end,end_face=graph.attach(target);ends=[(source,*graph.attach(source['desired'])) for source in sources]
   baseline_nodes=shared['nodes'];exit_node=baseline_nodes[shared['exit']]
-  cabinet=surface_routes.route_between(graph,exit_node,end,set(baseline_nodes)-{exit_node})
+  section=surface_routes.controller(graph,d,native,shared,target,blocked)
+  if section:
+   cabinet_points,cabinet_intent,cabinet_hidden=section;cabinet=[graph.node(v) for v in cabinet_points]
+  else:cabinet=surface_routes.route_between(graph,exit_node,end,set(baseline_nodes)-{exit_node})
   paths=[];hardware=[];failures=[];runs=[];surface=[];branches=[];concealed=[]
   def run(points,diameter):
    points=[np.array(v) for i,v in enumerate(points) if i==0 or np.linalg.norm(np.array(v)-points[i-1])>1e-6]
@@ -238,7 +249,10 @@ def build(d,native,p,cat,k):
     branch_points=constrained
    head_project=(1,lambda wanted:revised_layouts.surface(native,1,wanted,1,{'HEAD','SHELL'})) if shared['head'] else None
    hidden=[]
-   try:rendered,intent=surface_routes.orthogonal(branch_points,graph,blocked,constant,head_project,hidden)
+   try:
+    if not shared['head'] and constant is not None:
+     rendered,intent,hidden=surface_routes.section_connection(graph,branch_points[0],shared['points'][join_index],axis,blocked)
+    else:rendered,intent=surface_routes.orthogonal(branch_points,graph,blocked,constant,head_project,hidden)
    except ValueError:
     # A nozzle may meet its host outside the station plane. Keep its one pinned
     # join and H/V legs, but allow the required perpendicular approach around it.
@@ -246,34 +260,34 @@ def build(d,native,p,cat,k):
     try:rendered,intent=surface_routes.orthogonal(branch_points,graph,blocked,concealed=hidden)
     except ValueError as error:raise ValueError(d['id']+' '+src['id']+': '+str(error)) from error
    rendered[0]=graph.points[start];rendered[-1]=shared['points'][join_index]
+   rendered=surface_routes.native_projection(rendered,graph,hidden)
    emit(rendered,'branch',src['id'],hidden);concealed.extend(hidden);branches.append(dict(source=src['id'],joinIndex=join_index,join=shared['points'][join_index].tolist(),points=[v.tolist() for v in rendered],intent=intent,constantAxis=constant,concealed=hidden))
    direction=1 if join_index<=shared['exit'] else -1;trunk=[baseline_nodes[i] for i in range(join_index,shared['exit']+direction,direction)]
    nodes=branch+trunk[1:]+cabinet[1:]
    support=graph.points[start];n=support_normal(graph,face);entry=support+n*.001
    run(src['tail']+[entry],.020)
    paths.append(dict(source=src['id'],points=[graph.points[v].tolist() for v in nodes],tail=[np.array(v).tolist() for v in src['tail']]+[entry.tolist()],surfaceLength=sum(np.linalg.norm(graph.points[a]-graph.points[b]) for a,b in zip(nodes,nodes[1:])),joinIndex=join_index))
-  hidden=[];cabinet_points,cabinet_intent=surface_routes.orthogonal([graph.points[node] for node in cabinet],graph,blocked,concealed=hidden)
+  hidden=list(cabinet_hidden) if section else []
+  if section is None:cabinet_points,cabinet_intent=surface_routes.orthogonal([graph.points[node] for node in cabinet],graph,blocked,concealed=hidden)
+  cabinet_points=surface_routes.native_projection(cabinet_points,graph,hidden)
   emit(cabinet_points,'controller',hidden=hidden);concealed.extend(hidden)
   baseline=dict(axis=shared['axis'],points=[v.tolist() for v in shared['points']],parameters=shared['stations'],exitIndex=shared['exit'],projectionAxis=shared['projectionAxis'],definitionCount=1)
-  report=dict(paths=paths,sources=len(sources),connected=len(paths),failed=failures,concealedTransitions=concealed,gland=target.tolist(),glandNormal=entry_normal.tolist(),branchDiameter=.020,trunkDiameter=.025,uniqueSurfaceSegments=len(surface),conduitRuns=runs,surfaceRuns=surface,baseline=baseline,branches=branches,controllerIntent=cabinet_intent,texture='instrument-conduit.png')
+  report=dict(paths=paths,sources=len(sources),connected=len(paths),failed=failures,concealedTransitions=concealed,gland=target.tolist(),glandNormal=entry_normal.tolist(),branchDiameter=.020,trunkDiameter=.025,uniqueSurfaceSegments=len(surface),conduitRuns=runs,surfaceRuns=surface,baseline=baseline,branches=branches,controllerIntent=cabinet_intent,controllerPoints=[v.tolist() for v in cabinet_points],controllerSection=section is not None,texture='instrument-conduit.png')
   report['meshFingerprint']=hashlib.sha256(json.dumps(runs,sort_keys=True).encode()).hexdigest()
+  report['surfaceTexture']=surface_textures.coverage(carriers,surface)
   file.write_text(json.dumps(dict(signature=signature,report=report,hardware=[(v.tolist(),m) for v,m in hardware])))
  polys=list(hardware);meshes=native_meshes(k).get(key)
- for i,row in enumerate(report['surfaceRuns']):
-  a=np.array(row['a']);b=np.array(row['b']);n=np.array(row['normal']);tangent=unit(b-a);side=unit(np.cross(n,tangent));width=row['width'];name='SURFACE_CONDUIT_'+key+'_'+str(i)
-  TEXTURES[name]=dict(origin=a,along=tangent,across=side,width=width,type='surface',phase=row['phase'])
-  a=a+n*.001;b=b+n*.001;polys.append((np.array([a-side*width/2,a+side*width/2,b+side*width/2,b-side*width/2]),name))
  if meshes and meshes.get('fingerprint')==report['meshFingerprint']:
   for row in meshes['runs']:
    material='METAL_CONDUIT_'+row['id'];TEXTURES[material]=dict(points=np.array(row['points']),flex=row['flex'],type='mesh')
    polys.extend((np.array(q['v']).reshape(-1,3),material) for q in row['polygons'])
  result=dict(report,polys=polys,meshed=bool(meshes and meshes.get('fingerprint')==report['meshFingerprint']));_plans[key]=result;return result
 
-def geometry(d,native,p,cat,k):
+def scene(d,native,p,cat,k,hardware):
  result=build(d,native,p,cat,k)
  if result.get('failed'):raise ValueError('Unconnected fixed instrument conduits: '+d['id']+' '+str(result['failed']))
  if result.get('sources') and not result['meshed']:raise ValueError('Run --prepare-wiring then --mesh-export before rendering '+d['id'])
- return result['polys']
+ return surface_textures.paint(native+p['extra'],result.get('surfaceRuns',[]),d['id'])+hardware+result['polys']
 
 def prepare(k,only=None):
  texture(k.ROOT/'instrument-conduit.png')
@@ -289,14 +303,12 @@ def prepare(k,only=None):
 def transform(polys,move,label):
  result=[]
  for vertices,m in polys:
-  name=m
+  name=surface_textures.transform(m,move,label)
   if m in TEXTURES:
    name=m+'_'+label
    if name not in TEXTURES:
     meta=TEXTURES[m]
-    if meta['type']=='mesh':TEXTURES[name]=dict(points=move(meta['points']),flex=meta['flex'],type='mesh')
-    else:
-     origin=move(meta['origin']);TEXTURES[name]=dict(origin=origin,along=unit(move(meta['origin']+meta['along'])-origin),across=unit(move(meta['origin']+meta['across'])-origin),width=meta['width'],type='surface',phase=meta['phase'])
+    TEXTURES[name]=dict(points=move(meta['points']),flex=meta['flex'],type='mesh')
   result.append((move(vertices),name))
  return result
 
@@ -304,11 +316,6 @@ def reports():return {key:{k:v for k,v in p.items() if k!='polys'} for key,p in 
 
 def shaded(material,vertices,barycentric,tri_indices,shade=1.):
  meta=TEXTURES[material]
- if meta['type']=='surface':
-  along=(vertices-meta['origin'])@meta['along'];across=(vertices-meta['origin'])@meta['across'];u=sum(barycentric[i]*along[tri_indices[i]] for i in range(3));v=sum(barycentric[i]*across[tri_indices[i]] for i in range(3));edge=np.abs(v)/(meta['width']/2)
-  # A round metal highlight and narrow rim shadow, not a flat cable ribbon.
-  base=84+91*np.sqrt(np.clip(1-edge*edge,0,1));collar=np.mod(u+meta['phase'],1.0)<.028;base=np.where(collar,base*.78,base)
-  return np.clip(np.stack([base-4,base,base+4],-1)*shade,0,255).astype(np.uint8)
  path=meta['points'];lengths=np.linalg.norm(np.diff(path,axis=0),axis=1);distances=np.r_[0,np.cumsum(lengths)];along=[]
  for p in vertices:
   choices=[]

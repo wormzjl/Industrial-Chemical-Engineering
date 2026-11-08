@@ -6,11 +6,11 @@ import instrument_wiring
 def build(k,instruments=True):
  def read(id):return json.loads((k.ROOT/'geometry'/f'{id}.json').read_text())
  pd=read('PUMP_OH2');md=read('MOTOR_SMALL');pp=k.proposal(pd,k.raw(pd));mp=k.proposal(md,k.raw(md))
- pump=k.raw(pd)+pp['extra']+(sensor_layouts.equipment_visuals(pd,k.raw(pd),pp,sensor_layouts.plan(pd,k.raw(pd),k),k) if instruments else []);motor=[]
+ pump=sensor_layouts.equipment_scene(pd,k.raw(pd),pp,sensor_layouts.plan(pd,k.raw(pd),k),k) if instruments else k.raw(pd)+pp['extra']
  # One shaft block between opposed equipment faces at z=3 and z=4. Origins stay on the block grid.
  def move(v):
   return opposed(v,3,7)
- motor=instrument_wiring.transform(k.raw(md)+mp['extra']+(sensor_layouts.equipment_visuals(md,k.raw(md),mp,sensor_layouts.plan(md,k.raw(md),k),k) if instruments else []),move,'small-train')
+ motor=instrument_wiring.transform(sensor_layouts.equipment_scene(md,k.raw(md),mp,sensor_layouts.plan(md,k.raw(md),k),k) if instruments else k.raw(md)+mp['extra'],move,'small-train')
  polys=pump+motor
  if (k.ROOT/'shaft-block.json').exists():
   for q in json.loads((k.ROOT/'shaft-block.json').read_text()):polys.append((np.array(q['v']).reshape(-1,3)+[1,1,3],q['m']))

@@ -45,6 +45,7 @@ def main():
   k.main()
   import wiring_pages
   wiring_pages.baseline_detail(k)
+  wiring_pages.revision_previews(k)
   pages=k.OUT/'pages';pages.mkdir(exist_ok=True)
   subprocess.run(['pdftoppm','-r','100','-png',str(k.OUT/'equipment-control-interfaces.pdf'),str(pages/'sheet')],check=True)
   subprocess.run([sys.executable,str(TOOL/'package_drawings.py'),str(k.OUT)],check=True)
