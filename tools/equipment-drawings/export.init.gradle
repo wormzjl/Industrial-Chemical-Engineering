@@ -5,8 +5,11 @@ gradle.projectsEvaluated {
     if (!work.isPresent()) throw new GradleException('Use tools/equipment-drawings/update.py to supply the drawing workspace.')
     def drawingSources = p.sourceSets.create('equipmentDrawingTools') {
         java.srcDir p.file('tools/equipment-drawings')
+        java.srcDir p.file('tools/pump-sprites/probes')
         java.include 'EngineeringExport.java'
         java.include 'ProposalMeshes.java'
+        java.include 'ServiceRender.java'
+        java.include 'PumpRender.java'
         compileClasspath += p.sourceSets.main.output + p.sourceSets.main.compileClasspath
         runtimeClasspath += output + p.sourceSets.main.runtimeClasspath
     }
@@ -20,10 +23,19 @@ gradle.projectsEvaluated {
         dependsOn p.tasks.named(drawingSources.classesTaskName)
         classpath = drawingSources.runtimeClasspath
         mainClass = 'com.wormzjl.icheme.science.equipment.EngineeringExport'
-        args new File(work.get(), 'geometry').absolutePath,
+        args new File(p.file(work.get()), 'geometry').absolutePath,
                 p.providers.gradleProperty('equipmentDrawingSnapshot').getOrElse('working-tree'),
                 p.providers.gradleProperty('equipmentDrawingHeading').getOrElse('NORTH'),
                 p.providers.gradleProperty('equipmentDrawingOnly').getOrElse('*')
+        jvmArgs '-Djava.awt.headless=true'
+    }
+    p.tasks.register('renderEquipmentServices', JavaExec) {
+        group = 'documentation'
+        description = 'Render native service housings and instrument roots using PumpRender and the actual sprites.'
+        dependsOn p.tasks.named(drawingSources.classesTaskName)
+        classpath = drawingSources.runtimeClasspath
+        mainClass = 'com.wormzjl.icheme.science.equipment.ServiceRender'
+        args new File(p.file(work.get()), 'sprite-renders').absolutePath
         jvmArgs '-Djava.awt.headless=true'
     }
     p.tasks.register('exportEquipmentProposalMeshes', JavaExec) {
@@ -32,7 +44,7 @@ gradle.projectsEvaluated {
         dependsOn p.tasks.named(drawingSources.classesTaskName)
         classpath = drawingSources.runtimeClasspath
         mainClass = 'com.wormzjl.icheme.science.equipment.ProposalMeshes'
-        args work.get()
+        args p.file(work.get()).absolutePath
         jvmArgs '-Djava.awt.headless=true'
     }
 }

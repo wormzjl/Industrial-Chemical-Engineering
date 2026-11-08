@@ -25,12 +25,12 @@ class ConduitGeometryTest {
             for(double diameter:new double[]{.5,2,10})for(int length:new int[]{1,4,12}){
                 var s=EquipmentShape.drum(diameter,length,orientation,heading,EquipmentShape.defaultSupport(diameter,orientation));
                 var socket=DataSocketGeometry.equipment(s);assertNotNull(socket);
-                var n=LineGeometry.step(socket.face());var back=new double[]{socket.x()-.18*n[0],socket.y()-.18*n[1],socket.z()-.18*n[2]};
+                var n=LineGeometry.step(socket.face());var back=new double[]{socket.x()-.04*n[0],socket.y()-.04*n[1],socket.z()-.04*n[2]};
                 assertTrue(ShapeRasterizer.inside(s,back[0]-.02*n[0],back[1]-.02*n[1],back[2]-.02*n[2]),s.toString());
                 assertFalse(ShapeRasterizer.inside(s,back[0]+.06*n[0],back[1]+.06*n[1],back[2]+.06*n[2]),s.toString());
                 assertTrue(Double.isFinite(socket.x()+socket.y()+socket.z()));
                 int axis=LineGeometry.axis(socket.face());double[] p={socket.x(),socket.y(),socket.z()};
-                if(length>=2)for(int k=0;k<3;k++)if(k!=axis)assertEquals(.5,p[k]-Math.floor(p[k]),1e-9,"Broad drum pad should be centered: "+s);
+                var housing=ShapeRasterizer.services(s).enclosures().getFirst().centre();for(int k=0;k<3;k++)if(k!=axis)assertEquals(housing[k],p[k],1e-10,"Gland is centred on the actual enclosure face");
             }
     }
     @Test void motorAndGeneratorConnectorsFaceOppositeSidesAtEveryHeading(){
@@ -79,26 +79,6 @@ class ConduitGeometryTest {
                     power.stream().filter(p->p.material()==Mesh.Material.OPENING).map(p->java.util.Arrays.toString(p.positions())).toList(),"Power and data symbols differ geometrically");
         }
     }
-    @Test void mountsPreferBlockFaceCentresAndKeepOffsetsOnlyForSmallSpans(){
-        assertEquals(1.5,DataSocketGeometry.centered(1.3,.6,2.1));
-        assertEquals(.5,DataSocketGeometry.centered(.7,.1,.9));
-        assertEquals(.8,DataSocketGeometry.centered(.8,.7,.95));
-        var broad=new Mesh();broad.box(new double[]{0,.1,.1},new double[]{1,2.1,2.1},63,Mesh.Material.MACHINE);
-        var socket=DataSocketGeometry.surface(broad.facets().stream().map(Mesh::whole).toList());
-        assertNotNull(socket);assertEquals(.5,socket.y()%1,1e-12);assertEquals(.5,socket.z()%1,1e-12);
-        var small=new Mesh();small.box(new double[]{0,.68,.68},new double[]{.2,.92,.92},63,Mesh.Material.MACHINE);
-        socket=DataSocketGeometry.surface(small.facets().stream().map(Mesh::whole).toList());
-        assertNotNull(socket);assertEquals(.8,socket.y(),1e-12);assertEquals(.8,socket.z(),1e-12);
-        var choice=new Mesh();choice.box(new double[]{0,.2,.7},new double[]{1,2.8,.9},63,Mesh.Material.MACHINE);
-        choice.box(new double[]{0,.3,2.3},new double[]{1,.7,2.7},63,Mesh.Material.MACHINE);
-        socket=DataSocketGeometry.surface(choice.facets().stream().map(Mesh::whole).toList());
-        assertNotNull(socket);assertEquals(.5,socket.y(),1e-12);assertEquals(2.5,socket.z(),1e-12,"An available centered face takes precedence over a larger off-centre face");
-        for(var kind:new EquipmentShape.Kind[]{EquipmentShape.Kind.MOTOR,EquipmentShape.Kind.GENERATOR})for(var heading:EquipmentShape.Heading.values()){
-            socket=DataSocketGeometry.equipment(EquipmentShape.unit(kind,1000,1,heading,0));
-            int axis=LineGeometry.axis(socket.face());double[] p={socket.x(),socket.y(),socket.z()};
-            for(int k=0;k<3;k++)if(k!=axis)assertEquals(.5,p[k]%1,1e-12);
-        }
-    }
     @Test void wideningSavedRackCablesKeepsTheirEndCoordinates(){
         for(int facing=2;facing<6;facing++)for(int corner=RackGeometry.STRAIGHT;corner<=RackGeometry.TEE;corner++){
             var rack=new RackGeometry.Rack(facing,corner);int arms=RackGeometry.runs(rack);
@@ -140,15 +120,12 @@ class ConduitGeometryTest {
         System.out.printf("SERVICE_PORT_SWEEP shapes=%d native_data=%d power=%d%n",checked,nativeData,powered);
         assertTrue(buried.isEmpty(),"Sockets buried in castings:\n"+String.join("\n",buried));
     }
-    @Test void largeMotorPortsUseTheCabinetAndTheSolidStripBetweenVents(){
+    @Test void largeMotorPortsUseMatchedHousingsOnTheSolidCentreStrip(){
         for(var kind:new EquipmentShape.Kind[]{EquipmentShape.Kind.MOTOR,EquipmentShape.Kind.GENERATOR})for(double kw:new double[]{500,1000,20000}){
-            var shape=EquipmentShape.unit(kind,kw,1,EquipmentShape.Heading.NORTH,0);var u=ProcessUnit.of(shape);
-            var data=u.dataSocket;var power=u.powerSocket;double length=1.7*MotorDesign.frame(kw)+.2;
-            assertEquals(4,data.face());assertEquals(5,power.face());assertTrue(data.junctionBox());assertFalse(power.junctionBox());
-            assertTrue(data.z()-.14>=.35+.42*length-1e-9&&data.z()+.14<=.35+.58*length+1e-9,"Accessory box obstructs a vent or end cover: "+kw);
-            double terminal=Math.min(1.2,.3+.2*MotorDesign.frame(kw));
-            assertTrue(Math.abs(power.z()-u.terminalBox[2])+.11<=terminal/2+1e-9,"Power gland is outside the existing terminal cabinet");
-            assertTrue(Math.abs(power.y()-u.terminalBox[1])+.11<=.35*terminal+1e-9,"Power gland is outside the existing terminal cabinet");
+            var shape=EquipmentShape.unit(kind,kw,1,EquipmentShape.Heading.NORTH,0);var service=ShapeRasterizer.services(shape);var data=service.data();var power=service.power();
+            assertEquals(data.face()^1,power.face());assertFalse(data.junctionBox());assertFalse(power.junctionBox());assertEquals(2,service.enclosures().size());
+            var a=service.enclosures().getFirst();var b=service.enclosures().getLast();var lo=a.low();var hi=a.high();var low=b.low();var high=b.high();for(int k=0;k<3;k++)assertEquals(hi[k]-lo[k],high[k]-low[k],1e-10,"Matched DATA and FE housing sizes");
+            assertEquals(data.y(),power.y(),1e-10);assertEquals(data.z(),power.z(),1e-10);
         }
     }
     @Test void shortConnectorLeadsDoNotFoldBackAndOverlappingGlandsNeedNoExtraLead(){

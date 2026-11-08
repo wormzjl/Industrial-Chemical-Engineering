@@ -180,6 +180,7 @@ public final class EquipmentStructure {
         if (shape.fluidDevice() && rows >= shape.sizeY()) register(level, vessel);
         // A motor, generator or gearbox joins its shaft train whole (W3); a casing or turbine does once registered.
         else if (!shape.fluidDevice() && rows >= shape.sizeY()) ShaftParts.structure(level, origin, shape, 0);
+        if(shape.kind()==EquipmentShape.Kind.COLUMN&&rows>=shape.sizeY()){var c=layout.controller();if(level.getBlockEntity(origin.offset(c.x(),c.y(),c.z())) instanceof EquipmentShellBlockEntity cell)FluidWorldAuthority.find(level.getServer()).ifPresent(w->w.controls().bindColumn(cell));}
         reconnect(level, vessel);
         refreshNozzles(level, vessel);
         com.wormzjl.icheme.runtime.assembly.AssemblyService.placed(level, vessel);
@@ -644,6 +645,7 @@ public final class EquipmentStructure {
         try {
             if (level instanceof ServerLevel server) com.wormzjl.icheme.runtime.assembly.AssemblyService.removed(server, vessel);
             if (level instanceof ServerLevel server) com.wormzjl.icheme.runtime.assembly.AssemblyService.dismantled(server, vessel);
+            if(level instanceof ServerLevel server&&vessel.shape().kind()==EquipmentShape.Kind.COLUMN){var c=ShapeRasterizer.layout(vessel.shape()).controller();if(level.getBlockEntity(vessel.origin().offset(c.x(),c.y(),c.z())) instanceof EquipmentShellBlockEntity cell&&cell.instruments().dataPort()!=null)FluidWorldAuthority.find(server.getServer()).ifPresent(w->w.controls().removeHost(cell.instruments().dataPort().host()));}
             if (level instanceof ServerLevel server && vessel.shape().fluidDevice()) unregister(server, vessel);
             if (UnitDesign.shafted(vessel.shape().kind())) ShaftParts.remove(level, vessel.origin());
             var layout = ShapeRasterizer.layout(vessel.shape());

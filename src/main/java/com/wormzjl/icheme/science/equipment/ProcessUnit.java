@@ -704,10 +704,8 @@ public final class ProcessUnit {
     double @org.jetbrains.annotations.Nullable [] terminal;
     /** The last terminal box a motor drawing drew ({@link #motor}, {@link #largeMotor}): its centre in the frame. */
     double @org.jetbrains.annotations.Nullable [] terminalBox;
-    /** Optional native junction-box mount on a service housing, independent of process nozzles. */
-    DataSocketGeometry.Socket dataSocket;
-    /** Optional paired electrical mount, in the same native frame as the data socket. */
-    DataSocketGeometry.Socket powerSocket;
+    /** Existing governor/service enclosure, in the unit frame; a DATA socket reuses it. */
+    double @org.jetbrains.annotations.Nullable [] serviceHousing;
     /** Fixed roots and the room for their transition into the connected pipe, by nozzle index. */
     final Map<Integer, NozzleRoot> nozzleRoots = new HashMap<>();
     /** The sleeves through a closed skirt, by nozzle index: drawn with the nozzle at its pipe's size ({@link Sleeve}). */
@@ -1369,7 +1367,6 @@ public final class ProcessUnit {
         // The bearing housing: its oil sump, the round body finned behind it, the bolted end cover; the oiler on the sump,
         // the vent on top.
         double sump = zb0 + .45 * lb;
-        dataSocket=new DataSocketGeometry.Socket(a+rb+.12,y,DataSocketGeometry.centered((sump+zb1)/2,sump+.14,zb1-.14),5);
         box(new double[]{a - .9 * rb, y - 1.2 * rb, zb0}, new double[]{a + .9 * rb, y + .55 * rb, sump}, Material.PUMP_CASTING, false);
         mesh.prism(f, rb, zb0, sump, nb, Material.PUMP_CASTING);
         mesh.band(f, rb, rb, sump, zb1, nb, Material.PUMP_FINS);
@@ -1541,7 +1538,6 @@ public final class ProcessUnit {
                 box(new double[]{px - .09, top, z + .02}, new double[]{px + .09, y - .06, z + .23}, ALL_FACES & ~12, Material.STEELWORK, false);
             }
         // The brackets, seal chambers and finned bearing housings at both ends; the shaft through them.
-        dataSocket=new DataSocketGeometry.Socket(a+rb+.12,y,DataSocketGeometry.centered((zb0+zb1)/2,zb0+.14,zb1-.14),5);
         bracket(f, rb + .03, .45 * di, zf1, z0, n, Material.PUMP_CASTING);
         bracket(f, .45 * di, rb + .03, zk, zb0, n, Material.PUMP_CASTING);
         mesh.cylinder(f, .22 * di, z0 - .55 * lk, z0, n, Material.PUMP_CASTING);
@@ -1716,7 +1712,7 @@ public final class ProcessUnit {
         }
         mesh.cylinder(f,.30*r,z0-.04,z0,12,Material.MOTOR_PLAIN);
         double terminal=z0+.3*length,tc=terminal+.275*r;
-        motorBox(f,across,terminal,terminal+.55*r,y+.76*r,y+1.45*r,-.35*r,.35*r,Material.MOTOR_PLAIN,false);
+        if(shape.kind()!=EquipmentShape.Kind.GENERATOR)motorBox(f,across,terminal,terminal+.55*r,y+.76*r,y+1.45*r,-.35*r,.35*r,Material.MOTOR_PLAIN,false);
         terminalBox=new double[]{o[0]+tc*ax[0],y+1.215*r,o[2]+tc*ax[2]};
         for(int sign:new int[]{-1,1})for(double z:new double[]{z0+.08,z1-.25})
             motorBox(f,across,z,z+.17,y-r-.02,y-.55*r,Math.min(sign*.5*r,sign*.9*r),Math.max(sign*.5*r,sign*.9*r),Material.MOTOR_PLAIN,false);
@@ -1773,12 +1769,12 @@ public final class ProcessUnit {
             return;
         }
         double y = o[1];
-        motorBox(f, across, terminal, terminal + .55 * r, y + r - .02, y + 1.45 * r, -.35 * r, .35 * r, Material.MOTOR_PLAIN, false);
+        if(shape.kind()!=EquipmentShape.Kind.MOTOR)motorBox(f, across, terminal, terminal + .55 * r, y + r - .02, y + 1.45 * r, -.35 * r, .35 * r, Material.MOTOR_PLAIN, false);
         double tc = terminal + .275 * r;
         terminalBox = new double[]{o[0] + tc * ax[0], y + 1.215 * r, o[2] + tc * ax[2]};
         if (full) {
             double[] conduit = {o[0] + (terminal + .27 * r) * ax[0], y + 1.2 * r, o[2] + (terminal + .27 * r) * ax[2]};
-            mesh.cylinder(new Frame(conduit, across, top), .06 * r + .01, .35 * r, .35 * r + .05, 8, Material.MOTOR_PLAIN);
+            if(shape.kind()!=EquipmentShape.Kind.MOTOR)mesh.cylinder(new Frame(conduit, across, top), .06 * r + .01, .35 * r, .35 * r + .05, 8, Material.MOTOR_PLAIN);
             for (double z : new double[]{z0 + .12 * (z1 - z0), cowl - .1 * (z1 - z0)})
                 mesh.ring(new Frame(new double[]{o[0], y + rc + .02 + .02 * r, o[2]}, ax, ref), .02 + .02 * r, .04 + .03 * r, z - .01, z + .01, 8, 3, Material.MOTOR_PLAIN);
             for (int s = -1; s <= 1; s += 2)
@@ -2493,8 +2489,8 @@ public final class ProcessUnit {
         grilledFan(cowl, .85 * rf, -end, Math.min(.15, .6 * (c0 - end)), 12, PUMP_SPEED);
         // The terminal box on the right side, its conduit to the ground.
         double zt = (z0 + z1) / 2;
-        box(new double[]{x + r, y - .35 * r, zt - terminal / 2}, new double[]{x + r + .4 * terminal, y - .35 * r + .7 * terminal, zt + terminal / 2}, Material.MOTOR_PLAIN, false);
-        mesh.bar(new double[]{x + r + .2 * terminal, floor + .02, zt}, new double[]{x + r + .2 * terminal, y - .35 * r, zt}, .08, new double[]{1, 0, 0}, Material.PIPE);
+        framePoints.add(new double[]{x+r+.4*terminal,y-.35*r+.7*terminal,zt+terminal/2});
+
         terminalBox = new double[]{x + r + .2 * terminal, y - .35 * r + .35 * terminal, zt};
     }
 

@@ -184,14 +184,13 @@ final class MotorDesign extends UnitDesign {
         int h = u.shape.support();
         double floor = h == 0 ? PLINTH : h, deck = floor + BASEPLATE, front = .2;
         var role = generator ? EquipmentShape.ShaftEnd.Role.DRIVEN_INPUT : EquipmentShape.ShaftEnd.Role.DRIVER_OUTPUT;
-        double a, y, drive, half, socketRadius, plinth = PLINTH;
+        double a, y, drive, half, plinth = PLINTH;
         if (kw <= LOW_VOLTAGE) {
             // A TEFC motor: its fan cowl to the front, its drive end at the back, its shaft on the lowest cell centre
             // whose feet stand on the baseplate. At grade the concrete block rises to bring the baseplate up under its
             // feet, as a pump's does (its shaft's height is the cell centre's).
             double r = ProcessUnit.motorDiameter(kw) / 2, fin = .025 + .06 * r, length = 3.2 * r + .1;
             half = r + fin + .08;
-            socketRadius = generator ? 1.05 * r : r + fin;
             a = ProcessUnit.centre(half + .12);
             y = Math.ceil(deck + r + .04 - .5) + .5;
             if (h == 0) {
@@ -205,7 +204,6 @@ final class MotorDesign extends UnitDesign {
         } else {
             double across = frame(kw), r = across / 2, length = 1.7 * across + .2, terminal = Math.min(1.2, .3 + .2 * across);
             half = r + .4 * terminal + .05;
-            socketRadius = r + .02;
             a = ProcessUnit.centre(half + .12);
             y = Math.ceil(deck + r + .1 - .5) + .5;
             if (h == 0) {
@@ -219,21 +217,6 @@ final class MotorDesign extends UnitDesign {
             if(generator)u.largeGenerator(a,y,front,across,length,deck);else u.largeMotor(a, y, front, across, length, deck);
         }
         u.terminal = u.terminalBox;
-        if(kw>LOW_VOLTAGE){
-            double length=drive-front,r=frame(kw)/2,terminal=Math.min(1.2,.3+.4*r),middle=(front+drive)/2;
-            // Main power enters the existing terminal cabinet. The accessory box uses the opposite casing's
-            // solid centre strip: its ventilation panels end at 42% and resume at 58% of the body length.
-            double lowY=Math.max(y-.5*r+.14,y-.35*r+.11),highY=Math.min(y+.5*r-.14,y-.35*r+.7*terminal-.11);
-            double socketY=DataSocketGeometry.centered(u.terminalBox[1],lowY,highY);
-            double lowZ=Math.max(front+.42*length+.14,middle-terminal/2+.11),highZ=Math.min(front+.58*length-.14,middle+terminal/2-.11);
-            double socketZ=DataSocketGeometry.centered(middle,lowZ,highZ);
-            u.dataSocket=new DataSocketGeometry.Socket(a-r-.18,socketY,socketZ,4);
-            u.powerSocket=new DataSocketGeometry.Socket(a+r+.4*terminal+.04,socketY,socketZ,5,false);
-        }else{
-            double socketZ=DataSocketGeometry.centered((front+drive)/2,front+.14,drive-.14);
-            u.dataSocket=new DataSocketGeometry.Socket(a+socketRadius+.18,y,socketZ,5);
-            u.powerSocket=new DataSocketGeometry.Socket(a-socketRadius-.18,y,socketZ,4);
-        }
         double face = Math.ceil(drive + .2 + rs - 1e-9);
         u.coupling(a, y, drive, face, 1, rs, deck, ProcessUnit.shown(rpm), role);
         // The baseplate and the plinth or table under it.

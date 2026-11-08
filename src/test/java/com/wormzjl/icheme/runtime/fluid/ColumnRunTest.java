@@ -540,6 +540,8 @@ class ColumnRunTest {
         var f=new Fake(0);var r=rig(0,f);f.world=r.world();var world=r.world();
         f.runTo(1500);
         var before=r.ops().run(r.unit());assertNotNull(before.table);
+        var probes=new ColumnUnit.Probes(150000,370,180000,430,145000,330,.15,.3);before.probes=probes;
+        f.runTo(1600);
         double taken=world.ledger.column(r.unit()).totals().taken().total();assertTrue(taken>0,"it ran before the save");
         var bytes=FluidCheckpointCodec.encodeTopology(world.ledger.snapshot());
         var saved=FluidCheckpointCodec.decodeTopology(bytes,world.ledger.onlineTick(),k->world.model);
@@ -548,6 +550,7 @@ class ColumnRunTest {
         assertArrayEquals(before.table.products().getFirst().recovery(),state.table().products().getFirst().recovery());
         assertArrayEquals(before.enthalpy,state.enthalpy());
         assertEquals(before.tableTick,state.tableTick());
+        assertEquals(probes,state.probes(),"accepted probe readings round trip with rebuildable state");
         assertFalse(state.levels().isEmpty(),"the inlet's levels through the fence");
         var again=new EventPathWorld(1,saved,world.coordinator.snapshots());
         var g=new Fake(0);g.world=again;g.model=again.model;
@@ -557,6 +560,8 @@ class ColumnRunTest {
         g.runTo(again.ledger.onlineTick()+1000);
         assertTrue(g.asked(DriftBands.Trigger.START).isEmpty(),"no start solve: "+g.jobs);
         assertTrue(again.ledger.column(r.unit()).totals().taken().total()>taken+10,"it takes its feed on after the reload");
+        assertEquals(370,ops.instrument(r.unit(),"COLUMN:top",com.wormzjl.icheme.runtime.instrument.Sensor.Kind.TEMPERATURE).value());
+        assertEquals(.15*ops.run(r.unit()).last.feedMoles()/5,ops.instrument(r.unit(),"REFLUX",com.wormzjl.icheme.runtime.instrument.Sensor.Kind.FLOW).value(),1e-12,"internal flow follows accepted throughput after reload");
         // A stopped unit keeps no engine state.
         var u=again.ledger.column(r.unit());assertNull(u.withStations(false,u.stations().stream().map(s->s.withDevice(0)).toList()).state());
     }

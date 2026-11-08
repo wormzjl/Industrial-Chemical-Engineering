@@ -24,16 +24,14 @@ public final class DataPorts {
             if(socket!=null)return new Mount(new Vec3(socket.x()+shell.origin().getX(),socket.y()+shell.origin().getY(),socket.z()+shell.origin().getZ()),Direction.values()[socket.face()]);
         }
         if(host.pipe()){
-            for(var sensor:host.metadata().sensors())for(var mount:Sensor.mounts(host,sensor.kind()))if(mount.id().equals(sensor.key().mount()))
-                return new Mount(mount.point(.14,0,0),Direction.getNearest(mount.right().x,mount.right().y,mount.right().z));
             if(host.entity() instanceof FluidDeviceBlockEntity pipe){
                 var state=pipe.getBlockState();var key=new LineGeometry.Key(TopologyCompiler.Kind.PIPE,state.getValue(FluidDeviceBlock.FACING).ordinal(),FluidDeviceBlock.connectionMask(state),PipeSizes.code(PipeSizes.outside(pipe.bore())),0,0,false);
-                List<Mesh.Polygon> polygons=List.of();
-                if(FluidDeviceBlock.hasPressureValve(state))polygons=ValveGeometry.pressure(key,false);
-                else if(FluidDeviceBlock.hasPump(state)||FluidDeviceBlock.hasCompressor(state))polygons=InlineMoverGeometry.polygons(key,FluidDeviceBlock.hasCompressor(state),false);
-                var socket=DataSocketGeometry.surface(polygons);
+                var socket=FluidDeviceBlock.hasPressureValve(state)?ValveGeometry.socket(key):FluidDeviceBlock.hasPump(state)||FluidDeviceBlock.hasCompressor(state)?InlineMoverGeometry.socket(key,FluidDeviceBlock.hasCompressor(state),false):null;
                 if(socket!=null)return new Mount(new Vec3(socket.x()+pipe.getBlockPos().getX(),socket.y()+pipe.getBlockPos().getY(),socket.z()+pipe.getBlockPos().getZ()),Direction.values()[socket.face()]);
             }
+            for(var sensor:host.metadata().sensors())for(var mount:Sensor.mounts(host,sensor.kind()))if(mount.id().equals(sensor.key().mount()))
+                return new Mount(mount.point(.14,0,0),Direction.getNearest(mount.right().x,mount.right().y,mount.right().z));
+
         }
         var mount=host.mounts().stream().filter(m->!m.top()).findFirst().orElse(host.mounts().stream().findFirst().orElse(null));
         var outward=mount==null?Direction.NORTH:mount.face();
@@ -48,7 +46,7 @@ public final class DataPorts {
             var socket=DataSocketGeometry.drum(shell.shape(),old.face().getOpposite().ordinal());
             if(socket!=null)m=new Mount(new Vec3(socket.x()+shell.origin().getX(),socket.y()+shell.origin().getY(),socket.z()+shell.origin().getZ()),old.face().getOpposite());
         }
-        return remount(old,create(old.id(),old.kind(),old.host(),host.entity().getLevel(),old.owner(),m.centre(),m.outward()),connected);
+        return remount(old,create(old.id(),old.kind(),old.host(),host.entity().getLevel(),host.entity().getBlockPos(),m.centre(),m.outward()),connected);
     }
     /** Existing cable face points are built facts. Do not swap a wired connector to another side of its equipment. */
     public static DataPort remount(DataPort old,DataPort current,boolean wired){

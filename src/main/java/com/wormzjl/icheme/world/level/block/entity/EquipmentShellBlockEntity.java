@@ -256,6 +256,7 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
         if (stale()) EquipmentStructure.refreshLater(serverLevel, origin(), shape, box, worldPosition);
         else if (cell().equals(ShapeRasterizer.layout(shape).controller())) {
             com.wormzjl.icheme.runtime.assembly.AssemblyService.controllerLoaded(serverLevel, worldPosition, shape);
+            if(shape.kind()==EquipmentShape.Kind.COLUMN)FluidWorldAuthority.find(serverLevel.getServer()).ifPresent(w->w.controls().bindColumn(this));
             EquipmentStructure.restateLater(serverLevel, origin(), shape);
         }
         var here = fluidPosition();

@@ -65,19 +65,11 @@ public final class Sensor {
         return levelMounts(shell.shape(),shell.origin());
     }
     static List<Instrument.Mount> levelMounts(EquipmentShape shape,net.minecraft.core.BlockPos origin){
-        var n=shape.transform().direction(new double[]{0,0,1});var face=Direction.getNearest(n[0],n[1],n[2]);
-        return com.wormzjl.icheme.science.equipment.InstrumentGeometry.levelSockets(shape).stream().map(socket->new Instrument.Mount(socket.id(),new Vec3(socket.x()+origin.getX(),socket.y()+origin.getY(),socket.z()+origin.getZ()),socket.face()<0?face:Direction.values()[socket.face()],Set.of(GaugeSettings.Kind.PRESSURE),false)).toList();
+        return com.wormzjl.icheme.science.equipment.EquipmentInstruments.of(shape).probes().stream().filter(p->p.manual()&&p.quantity()==com.wormzjl.icheme.science.equipment.EquipmentInstruments.Quantity.LEVEL).map(p->InstrumentHosts.equipmentMount(p,origin)).toList();
     }
 
-    /** A steam turbine's speed pickup (W3): at its output coupling, on the face the shaft leaves by; none on another host. */
+    /** Rotating units expose their internal pickup through the equipment channel catalog. */
     static List<Instrument.Mount> speedPickup(InstrumentHosts.Host host){
-        if(host.pipe()||!(host.entity() instanceof EquipmentShellBlockEntity shell)||shell.shape()==null||shell.shape().kind()!=com.wormzjl.icheme.science.equipment.EquipmentShape.Kind.STEAM_TURBINE)return List.of();
-        for(var s:com.wormzjl.icheme.science.equipment.ShapeRasterizer.shafts(shell.shape())){
-            if(s.role()!=com.wormzjl.icheme.science.equipment.EquipmentShape.ShaftEnd.Role.DRIVER_OUTPUT)continue;
-            var face=Direction.fromDelta(s.dx(),s.dy(),s.dz());if(face==null||face.getAxis()==Direction.Axis.Y)continue;
-            var centre=new Vec3(shell.origin().getX()+s.cell().x()+.5+.45*s.dx(),shell.origin().getY()+s.cell().y()+.95,shell.origin().getZ()+s.cell().z()+.5+.45*s.dz());
-            return List.of(new Instrument.Mount(SPEED_PICKUP,centre,face,Set.of(),true));
-        }
         return List.of();
     }
     public static Reading read(Installed sensor,FluidView view,FluidWorldAuthority.InstrumentReading pipe){return read(sensor,view,pipe,null);}

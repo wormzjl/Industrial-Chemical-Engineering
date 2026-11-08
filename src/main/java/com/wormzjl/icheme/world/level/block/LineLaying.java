@@ -37,7 +37,7 @@ public final class LineLaying {
         var built=LineLayout.build(level,a.anchor(),b.anchor(),route,settings);
         return new Design(built.layout(),built.refusal(),route,a.anchor(),b.anchor());
     }
-    private static List<LinePlacement.Lead> leads(LineLayout.Anchor a,LineLayout.Anchor b){
+    public static List<LinePlacement.Lead> leads(LineLayout.Anchor a,LineLayout.Anchor b){
         var result=new ArrayList<LinePlacement.Lead>();for(var anchor:List.of(a,b))if(anchor.socket()!=null&&anchor.socket().lead()!=null)result.add(anchor.socket().lead());return List.copyOf(result);
     }
     /** Existing entry geometry is retained and merged by the same physical edit model as an ordinary lay. */

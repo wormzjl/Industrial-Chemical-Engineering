@@ -27,6 +27,7 @@ The Python entry point is equivalent and works on other platforms:
 ```text
 python tools/equipment-drawings/update.py --check
 python tools/equipment-drawings/update.py --only PUMP,EXCHANGER --heading NORTH
+python tools/equipment-drawings/update.py --only PUMP,EXCHANGER --sprites
 ```
 
 `-Only` / `--only` accepts scene IDs (such as `PUMP_OH2`, `PUMP_BB2`, `EXCHANGER_STANDARD`, `EXCHANGER_CROSSFLOW`, `LENGTHWISE_BOOT`, `MOTOR_SMALL`) or native equipment-kind names. Omit it for all references. Crosswise drums use the same native geometry turned to another heading. Scene sizes and variants are defined in `EngineeringExport.java`; add relevant min/max sizes or other variants there when a model change needs them. These references are not an exhaustive constructor-size sweep.
@@ -66,9 +67,9 @@ The default book draws actual `ShapeRasterizer` meshes. It does not apply unimpl
 
 The software rasterizer uses neutral engineering material colours and approximate lighting. It does not reproduce the Minecraft texture atlas. For a texture/finish change, supplement the updated sheet with the relevant existing asset-render workflow in [simulator-sizing](../simulator-sizing/README.md), [pump-sprites](../pump-sprites/README.md) or the subsystem's renderer. Record texture/render evidence alongside the sheet. Live lighting/chunk checks still follow `AGENTS.md` and require an owner-requested client check.
 
-### Reviewed interface proposal
+### Reviewed interface proposal (historical)
 
-`proposals/` contains the separate, explicitly labelled enclosure/instrument proposal and its fixed metallic-conduit finish. It does not implement these changes in the game. Start with a fresh native run containing the reference IDs below (do not reuse copied geometry after a game-source change):
+The approved revision M is implemented in the native `EquipmentServices`, `EquipmentInstruments` and `InstrumentWiring` owners. The default export reads those owners, includes fitted manual mount options for review, and adds service close-ups and cable approach examples. `proposals/` preserves the separately labelled historical proposal; it must not be overlaid again on the implemented native meshes. Start with a fresh native run containing the reference IDs below (do not reuse copied geometry after a game-source change):
 
 ```text
 VERTICAL,LENGTHWISE,LENGTHWISE_BOOT,COLUMN,FLOATING_ROOF_TANK,TANK_COMPACT,TANK_SLENDER,SPHERE,SPHERE_SMALL,EXCHANGER_STANDARD,EXCHANGER_CROSSFLOW,KETTLE,AIR_COOLER,PUMP_OH2,PUMP_BB2,COMPRESSOR,CENTRIFUGAL_COMPRESSOR,VERTICAL_HEATER,CABIN_HEATER,CABIN_HEATER_SINGLE,STEAM_TURBINE,INDUCED_DRAFT_COOLING_TOWER,NATURAL_DRAFT_COOLING_TOWER,MOTOR_SMALL,MOTOR_LARGE,GENERATOR_SMALL,GENERATOR_LARGE,INLINE_PUMP,INLINE_COMPRESSOR,CONTROL_VALVE,SENSOR_HOUSING,LEVEL_SENSOR_HOUSING
@@ -105,3 +106,8 @@ Proposal history: 2026-11-08, retained the reviewed enclosure/instrument/channel
 Revision L: `proposals/surface_routes.py` defines one shared native-surface baseline and pins every probe branch to it. It owns horizontal/vertical design legs before carrier projection; a mesh path cannot pick a separate trunk for each probe. The common trunk is emitted once. Inclined structural segments use explicitly recorded embedded wiring rather than exterior diagonal decals. The drawing audit checks baseline station alignment, pinned joins, unique trunk emission and every orthogonal design leg, in addition to retained reference interfaces.
 
 Revision M: the vertical-drum P/T/L heads share one front service row; both sphere L1 heads move to their top service platforms without changing channel identity. `surface_routes.py` connects a trunk to its mounting pad through an actual native cross-section, rather than returning axially toward another head or saddle. Small facet transitions follow joined native faces after the H/V intent is fixed; embedded joints are recorded separately. Curved bracket feet seat on their own native facets. `surface_textures.py` paints the long conduit finish directly on native carrier faces, with their original depth/occlusion and no floating ribbon geometry. Full sheets, crops and assembly views use `sensor_layouts.equipment_scene`. The reference audit additionally checks sub-width surface coverage, controller sections, top-level entries, the retained rear reservations and the exact limits on requested position changes. These remain proposal-only checks, not runtime qualification.
+
+
+`renderEquipmentServices` in `export.init.gradle` supplements the sheets with actual-sprite close-ups (light/dark body paint, normal/low meshes). It reuses `tools/pump-sprites/probes/PumpRender.java`; `ServiceRender.java` supplies only native meshes, socket colours and camera framing. Run it after the native export, supplying the same `-PequipmentDrawingWork=<run-folder>` property. It starts no client. The `service_details.py` pages add mounted enclosure crops, example cable approaches, top-probe plans and reinforced-root close-ups to the native book.
+
+Native interface implementation: the exporter now reads the shared service, probe and wiring owners, checks unresolved routes, and adds mounted-case, probe and cable approach details. The optional --sprites pass uses ServiceRender and the existing PumpRender rasterizer for light/dark paint and normal/low detail proofs. Generated artifacts remain ignored.

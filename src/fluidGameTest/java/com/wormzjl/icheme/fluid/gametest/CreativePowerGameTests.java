@@ -24,7 +24,7 @@ import java.util.*;
 @PrefixGameTestTemplate(false)
 public final class CreativePowerGameTests {
     private CreativePowerGameTests(){}
-    private static CableLaying.End end(DataPort port){return new CableLaying.End(port.id(),port.owner(),port.face().getOpposite(),new Vec3(.5,.5,.5),0);}
+    private static LineTarget end(DataPort port){return new LineTarget(port.id(),port.owner(),port.face().getOpposite(),new Vec3(.5,.5,.5),0);}
 
     @GameTest(template="empty",timeoutTicks=300)
     public static void creativeSupplyConnectsAndPowersEveryFaceTogether(GameTestHelper helper){
@@ -45,13 +45,13 @@ public final class CreativePowerGameTests {
                 var normal=Vec3.atLowerCornerOf(face.getNormal());var eye=port.centre().add(normal.scale(2.5));var look=normal.scale(-1);
                 helper.assertTrue(port.equals(LinePortTarget.aim(level,visible,eye,look,5,null)),"Socket picking missed "+face);
                 player.setPos(eye.x,eye.y-player.getEyeHeight(),eye.z);
-                var tip=at.relative(face,3);var free=new CableLaying.End(null,tip,face,new Vec3(.5,.5,.5),0);
-                var a=CableLaying.resolve(level,end(port),facts.ports(),CableMedium.POWER);var b=CableLaying.resolve(level,free,facts.ports(),CableMedium.POWER);
+                var tip=at.relative(face,3);var free=new LineTarget(null,tip,face,new Vec3(.5,.5,.5),0);
+                var a=LayingTestCommands.resolve(level,end(port),facts.ports(),CableMedium.POWER);var b=LayingTestCommands.resolve(level,free,facts.ports(),CableMedium.POWER);
                 helper.assertTrue(a!=null&&b!=null,"Socket cannot resolve on "+face);
-                var route=PipeRoute.search(a.end(),a.heading(),b.end(),CableMedium.POWER.outside(),PipeAnchor.space(level),PipeRoute.Limits.DEFAULT);
+                var route=LinePlacement.search(level,a.placement(),b.placement(),CableMedium.POWER.outside(),LineLaying.leads(a,b));
                 helper.assertTrue(route.found(),"No cable route from "+face);
-                var path=route.cells().stream().map(CableLaying::block).toList();
-                helper.assertTrue(CableLaying.lay(player,InteractionHand.MAIN_HAND,end(port),free,path,route.options(),CableMedium.POWER)==null,"Placement refused on "+face);
+                var path=route.cells().stream().map(LayingTestCommands::block).toList();
+                helper.assertTrue(LayingTestCommands.lay(player,InteractionHand.MAIN_HAND,end(port),free,path,route.options(),CableMedium.POWER)==null,"Placement refused on "+face);
                 paths.put(face,path);
                 var cap=level.getCapability(Capabilities.EnergyStorage.BLOCK,tip,face);
                 helper.assertTrue(cap!=null&&cap.extractEnergy(123,false)==123,"Cable cannot extract FE on "+face);

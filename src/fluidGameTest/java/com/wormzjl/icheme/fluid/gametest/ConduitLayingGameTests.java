@@ -67,8 +67,8 @@ public final class ConduitLayingGameTests {
     @GameTest(template="empty",timeoutTicks=80,batch="conduit-rack-anchor")
     public static void aStaleNamedRackLaneCannotTurnIntoANewSlot(GameTestHelper helper){
         var level=helper.getLevel();var at=helper.absolutePos(new BlockPos(1,1,1));level.setBlock(at,ModBlocks.PIPE_RACK.get().defaultBlockState(),3);
-        var stale=new CableLaying.End(null,at,Direction.NORTH,new Vec3(.5,.5,.5),99);
-        for(var medium:CableMedium.values())helper.assertTrue(CableLaying.resolve(level,stale,Map.of(),medium)==null,"Stale lane became a new slot: "+medium);
+        var stale=new LineTarget(null,at,Direction.NORTH,new Vec3(.5,.5,.5),RackGeometry.OPTIONS);
+        for(var medium:CableMedium.values())helper.assertTrue(LayingTestCommands.resolve(level,stale,Map.of(),medium)==null,"Stale lane became a new slot: "+medium);
         level.removeBlock(at,false);helper.succeed();
     }
     @GameTest(template="empty",timeoutTicks=500,batch="power-direct")
@@ -110,32 +110,32 @@ public final class ConduitLayingGameTests {
             if(level.getBlockEntity(owner) instanceof ControlPanelBlockEntity panel)panel.bind(port.id(),port);
             else ((CreativePowerBlockEntity)level.getBlockEntity(owner)).instruments().powerPort(port);
             world.controls().facts().port(port);
-            var start=end(port);var finish=new CableLaying.End(null,last,Direction.EAST,new Vec3(.5,.5,.5),0);
-            var a=CableLaying.resolve(level,start,world.controls().facts().ports(),medium);var b=CableLaying.resolve(level,finish,world.controls().facts().ports(),medium);
+            var start=end(port);var finish=new LineTarget(null,last,Direction.EAST,new Vec3(.5,.5,.5),0);
+            var a=LayingTestCommands.resolve(level,start,world.controls().facts().ports(),medium);var b=LayingTestCommands.resolve(level,finish,world.controls().facts().ports(),medium);
             helper.assertTrue(a!=null&&b!=null,"Clear socket anchors failed: "+medium);
-            var preview=LinePlacement.search(level,a.placement(),b.placement(),medium.outside(),CableLaying.leads(a,b));
+            var preview=LinePlacement.search(level,a.placement(),b.placement(),medium.outside(),LayingTestCommands.leads(a,b));
             helper.assertTrue(preview.found(),"Clear lead and route refused: "+medium);
             // Change the world after preview, outside every new route cell.
             level.setBlock(wall,Blocks.STONE.defaultBlockState(),3);
-            helper.assertTrue(!LinePlacement.search(level,a.placement(),b.placement(),medium.outside(),CableLaying.leads(a,b)).found(),"Preview ignored a blocked lead: "+medium);
+            helper.assertTrue(!LinePlacement.search(level,a.placement(),b.placement(),medium.outside(),LayingTestCommands.leads(a,b)).found(),"Preview ignored a blocked lead: "+medium);
             int inventory=player.getInventory().countItem(item),cables=world.controls().facts().cables().size();
-            var refusal=CableLaying.lay(player,InteractionHand.MAIN_HAND,start,finish,preview.cells().stream().map(CableLaying::block).toList(),preview.options(),medium);
+            var refusal=LayingTestCommands.lay(player,InteractionHand.MAIN_HAND,start,finish,preview.cells().stream().map(LayingTestCommands::block).toList(),preview.options(),medium);
             helper.assertTrue(refusal!=null&&player.getInventory().countItem(item)==inventory&&world.controls().facts().cables().size()==cables,
                     "A refused lead consumed items or changed wiring: "+medium);
-            helper.assertTrue(preview.cells().stream().allMatch(c->level.getBlockState(CableLaying.block(c)).isAir()),"A refused lead placed part of its route");
+            helper.assertTrue(preview.cells().stream().allMatch(c->level.getBlockState(LayingTestCommands.block(c)).isAir()),"A refused lead placed part of its route");
             level.setBlock(wall,ModBlocks.EQUIPMENT_INTERIOR.get().defaultBlockState().setValue(EquipmentInteriorBlock.OPEN,true),3);
-            helper.assertTrue(LinePlacement.checkLeads(level,CableLaying.leads(a,b))!=null,"A lead crossed a reserved open equipment interior: "+medium);
+            helper.assertTrue(LinePlacement.checkLeads(level,LayingTestCommands.leads(a,b))!=null,"A lead crossed a reserved open equipment interior: "+medium);
             EquipmentTestCleanup.remove(level,wall);level.setBlock(wall,Blocks.STONE.defaultBlockState(),3);
             // The zero-new-block attachment adapter must pass the same check and preserve the existing stub.
             level.setBlock(entry,(medium==CableMedium.POWER?ModBlocks.POWER_CABLE:ModBlocks.DATA_CABLE).get().defaultBlockState(),3);
             var stub=(ConduitBlockEntity)level.getBlockEntity(entry);var old=new DataBus.Cable(new DataBus.Site(port.dimension(),entry,0),new ConduitGeometry.Key(48,0,medium),0,Map.of());stub.configure(old);
-            helper.assertTrue(CableLaying.attach(player,InteractionHand.MAIN_HAND,start,medium)!=null&&old.equals(stub.cable()),"Attachment crossed a wall: "+medium);
+            helper.assertTrue(LayingTestCommands.attach(player,InteractionHand.MAIN_HAND,start,medium)!=null&&old.equals(stub.cable()),"Attachment crossed a wall: "+medium);
             level.removeBlock(wall,false);
-            helper.assertTrue(CableLaying.attach(player,InteractionHand.MAIN_HAND,start,medium)==null&&port.id().equals(stub.cable().endpoints().get(port.face())),"Clear existing end could not attach: "+medium);
+            helper.assertTrue(LayingTestCommands.attach(player,InteractionHand.MAIN_HAND,start,medium)==null&&port.id().equals(stub.cable().endpoints().get(port.face())),"Clear existing end could not attach: "+medium);
             helper.assertTrue(level.getBlockEntity(entry)==stub&&player.getInventory().countItem(item)==inventory,"Attachment replaced a stub or consumed a new cable");
             level.setBlock(owner,Blocks.STONE.defaultBlockState(),3);var bound=stub.cable();
-            helper.assertTrue(CableLaying.attachment(level,start,world.controls().facts().ports(),medium)==null
-                    &&CableLaying.attach(player,InteractionHand.MAIN_HAND,start,medium)!=null&&bound.equals(stub.cable()),"A stale registered socket remained connectable after its host was replaced: "+medium);
+            helper.assertTrue(LayingTestCommands.attachment(level,start,world.controls().facts().ports(),medium)==null
+                    &&LayingTestCommands.attach(player,InteractionHand.MAIN_HAND,start,medium)!=null&&bound.equals(stub.cable()),"A stale registered socket remained connectable after its host was replaced: "+medium);
             level.removeBlock(entry,false);level.removeBlock(owner,false);world.controls().facts().removePort(port.id());
         }
         helper.succeed();
@@ -177,8 +177,8 @@ public final class ConduitLayingGameTests {
             var path=preview.cells().stream().map(PipeAnchor::block).toList();
             level.setBlock(wall,Blocks.STONE.defaultBlockState(),3);
             int held=player.getInventory().countItem(item),fluids=world.registrations().size(),cables=world.controls().facts().cables().size();
-            var refusal=kind==0?PipeLaying.lay(player,InteractionHand.MAIN_HAND,start,finish,path,preview.options()):
-                    CableLaying.lay(player,InteractionHand.MAIN_HAND,new CableLaying.End(null,first,Direction.EAST,start.local(),0),new CableLaying.End(null,last,Direction.EAST,finish.local(),0),path,preview.options(),kind==1?CableMedium.DATA:CableMedium.POWER);
+            var refusal=kind==0?LayingTestCommands.lay(player,InteractionHand.MAIN_HAND,start,finish,path,preview.options()):
+                    LayingTestCommands.lay(player,InteractionHand.MAIN_HAND,new LineTarget(null,first,Direction.EAST,start.local(),0),new LineTarget(null,last,Direction.EAST,finish.local(),0),path,preview.options(),kind==1?CableMedium.DATA:CableMedium.POWER);
             helper.assertTrue(refusal!=null&&held==player.getInventory().countItem(item)&&fluids==world.registrations().size()&&cables==world.controls().facts().cables().size(),"Changed obstacle caused partial inventory/topology writes: "+kind);
             helper.assertTrue(path.stream().filter(p->!p.equals(wall)).allMatch(p->level.getBlockState(p).isAir()),"Changed obstacle caused partial placement: "+kind);
         }
@@ -253,7 +253,7 @@ public final class ConduitLayingGameTests {
         @Override protected void clientGeometryChanged(){hookRevision=revision;}
     }
 
-    private static CableLaying.End end(DataPort p){return new CableLaying.End(p.id(),p.owner(),p.face().getOpposite(),new Vec3(.5,.5,.5),0);}
+    private static LineTarget end(DataPort p){return new LineTarget(p.id(),p.owner(),p.face().getOpposite(),new Vec3(.5,.5,.5),0);}
     private static void exercise(GameTestHelper helper,CableMedium medium,boolean stub){
         var level=helper.getLevel();var world=FluidWorldAuthority.find(level.getServer()).orElseThrow();
         var origin=helper.absolutePos(new BlockPos(8,2,8));var shape=EquipmentShape.unit(EquipmentShape.Kind.MOTOR,1000,1,EquipmentShape.Heading.NORTH,0);
@@ -278,17 +278,17 @@ public final class ConduitLayingGameTests {
                 player.setPos(eye.x,eye.y-player.getEyeHeight(),eye.z);
                 var hit=level.clip(new ClipContext(eye,eye.add(look.scale(5)),ClipContext.Block.OUTLINE,ClipContext.Fluid.NONE,player));
                 helper.assertTrue(Objects.equals(motor,LinePortTarget.aim(level,List.of(motor),eye,look,5,hit)),"The visible motor socket was not selected");
-                helper.assertTrue(CableLaying.resolve(level,new CableLaying.End(null,motor.owner(),normal,new Vec3(.5,.5,.5),0),ports,medium)==null,"A casing click became a loose cable end");
-                var a=CableLaying.resolve(level,end(source),ports,medium);var b=CableLaying.resolve(level,end(motor),ports,medium);
+                helper.assertTrue(LayingTestCommands.resolve(level,new LineTarget(null,motor.owner(),normal,new Vec3(.5,.5,.5),0),ports,medium)==null,"A casing click became a loose cable end");
+                var a=LayingTestCommands.resolve(level,end(source),ports,medium);var b=LayingTestCommands.resolve(level,end(motor),ports,medium);
                 helper.assertTrue(a!=null&&b!=null,"Socket anchors must resolve");
-                var route=PipeRoute.search(a.end(),a.heading(),b.end(),medium.outside(),PipeAnchor.space(level),PipeRoute.Limits.DEFAULT);
+                var route=LinePlacement.search(level,a.placement(),b.placement(),medium.outside(),LineLaying.leads(a,b));
                 helper.assertTrue(route.found(),"No route between sockets");
-                var refusal=CableLaying.lay(player,InteractionHand.MAIN_HAND,end(source),end(motor),route.cells().stream().map(CableLaying::block).toList(),route.options(),medium);
-                helper.assertTrue(refusal==null,"Cable lay refused: "+refusal);placed.addAll(route.cells().stream().map(CableLaying::block).toList());
+                var refusal=LayingTestCommands.lay(player,InteractionHand.MAIN_HAND,end(source),end(motor),route.cells().stream().map(LayingTestCommands::block).toList(),route.options(),medium);
+                helper.assertTrue(refusal==null,"Cable lay refused: "+refusal);placed.addAll(route.cells().stream().map(LayingTestCommands::block).toList());
                 if(stub){
                     var wire=(ConduitBlockEntity)level.getBlockEntity(motor.cell());var built=wire.cable();var ends=new EnumMap<Direction,UUID>(Direction.class);ends.putAll(built.endpoints());ends.remove(motor.face());wire.configure(new DataBus.Cable(built.site(),built.geometry(),built.arms(),ends));
                     helper.assertTrue(!new DataBus(world.controls().facts().cables(),ports,medium).connected(source.id(),motor.id()),"The loose end was already bound");
-                    helper.assertTrue(CableLaying.lay(player,InteractionHand.MAIN_HAND,end(motor),end(motor),List.of(),List.of(),medium)==null,"Attaching the existing stub failed");
+                    helper.assertTrue(LayingTestCommands.lay(player,InteractionHand.MAIN_HAND,end(motor),end(motor),List.of(),List.of(),medium)==null,"Attaching the existing stub failed");
                     helper.assertTrue(level.getBlockEntity(motor.cell())==wire,"Attachment replaced the existing block entity");
                 }
                 for(var p:List.of(source,motor)){

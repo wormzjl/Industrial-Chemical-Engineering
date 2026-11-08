@@ -194,12 +194,20 @@ public final class ShapeRasterizer {
         return List.copyOf(out);
     }
 
+    /** Canonical physical service layout, shared by both render profiles and both wired media. */
+    public static EquipmentServices.Plan services(EquipmentShape shape) {return geometry(shape).services;}
+    public static EquipmentInstruments.Plan instruments(EquipmentShape shape) {return geometry(shape).instruments;}
+
     /** Constructor ghost: the complete neutral-pose drawing, including moving parts and unconnected nozzles. */
     public static List<Polygon> renderPreview(EquipmentShape shape, RenderDetail detail) {
         var g = geometry(shape, detail);
         var out = new ArrayList<Polygon>();
         for (var facet : g.mesh.facets()) out.addAll(Mesh.tiled(facet));
         for (int nozzle = 0; nozzle < g.nozzles.size(); nozzle++) for (var facet : g.nozzle(nozzle, 0).facets()) out.addAll(Mesh.tiled(facet));
+        if(g.instruments.probes().stream().anyMatch(p->!p.manual())){
+            out.addAll(instrumentWiring(shape,Set.of(),detail).polygons());
+            for(var probe:g.instruments.probes())if(!probe.manual()&&probe.display())out.addAll(InstrumentGeometry.previewHead(probe));
+        }
         return List.copyOf(out);
     }
 
@@ -603,8 +611,19 @@ public final class ShapeRasterizer {
         return GEOMETRIES.computeIfAbsent(shape, Geometry::new);
     }
 
+    /** Lazily built visual finish, keyed by the installed mount set. Never participates in server collision/layout. */
+    public static InstrumentWiring.Drawing instrumentWiring(EquipmentShape shape,Set<String> installed,RenderDetail detail){return instrumentWiring(shape,installed,detail,java.util.Collections.nCopies(shape.nozzles().size(),0));}
+    public static int nozzleCode(EquipmentShape shape,Cell cell,int nozzle,long codes){var reaching=geometry(shape).reaching(cell);for(int k=0;k<reaching.length;k++)if(reaching[k]==nozzle)return code(codes,k);return 0;}
+    private record WiringKey(Set<String> installed,List<Integer> codes){WiringKey{installed=Set.copyOf(installed);codes=List.copyOf(codes);}}
+    public static InstrumentWiring.Drawing instrumentWiring(EquipmentShape shape,Set<String> installed,RenderDetail detail,List<Integer> codes){
+        if(codes.size()!=shape.nozzles().size())throw new IllegalArgumentException("One size code per nozzle");
+        var g=geometry(shape,detail);var key=new WiringKey(installed,codes);
+        if(g.wiring.size()>16)g.wiring.clear();
+        return g.wiring.computeIfAbsent(key,k->{var carriers=new ArrayList<>(g.mesh.facets().stream().filter(f->f.part()<0).map(Mesh::whole).toList());for(int n=0;n<g.nozzles.size();n++)for(var f:g.nozzle(n,k.codes().get(n)).facets())carriers.add(Mesh.whole(f));var plan=shape.kind()==EquipmentShape.Kind.EXCHANGER?EquipmentInstruments.build(shape,carriers,g.unit):g.instruments;return InstrumentWiring.build(shape,carriers,g.services,plan,k.installed(),detail);});
+    }
     /** Per-shape tables (facet directions, head rings, plate and saddle layout), the static mesh, nozzles and layout. */
     private static final class Geometry {
+        private final Map<WiringKey,InstrumentWiring.Drawing> wiring=new ConcurrentHashMap<>();
         private final EquipmentShape shape;
         private final Transform transform;
         private final int n, contact;
@@ -655,6 +674,8 @@ public final class ShapeRasterizer {
         private final double[][] rings, bottomRings;
         private final double[] meridian, bottomMeridian;
         private final Mesh mesh;
+        private final EquipmentServices.Plan services;
+        private final EquipmentInstruments.Plan instruments;
         private final RenderDetail detail;
         private final List<EquipmentShape.Nozzle> nozzles;
         private final List<Set<Cell>> nozzleCells = new ArrayList<>();
@@ -756,6 +777,19 @@ public final class ShapeRasterizer {
                 irregularFrom = mesh.facets().size();
                 mesh.facets().addAll(ladders.facets());
             }
+            services=detail==RenderDetail.NORMAL?EquipmentServices.build(shape,mesh,unit):EquipmentServices.build(shape,mesh,unit,geometry(shape).services);
+            if(!services.polygons().isEmpty()) {
+                irregularFrom=Math.min(irregularFrom,mesh.facets().size());
+                mesh.transform(Transform.IDENTITY);
+                for(var polygon:services.polygons())mesh.include(polygon);
+                mesh.transform(transform);
+            }
+            if(detail!=RenderDetail.NORMAL)instruments=geometry(shape).instruments;
+            else if(shape.kind()==EquipmentShape.Kind.DRUM||shape.kind()==EquipmentShape.Kind.TANK||shape.kind()==EquipmentShape.Kind.SPHERE||shape.kind()==EquipmentShape.Kind.EXCHANGER||shape.kind().coolingTower()) {
+                var carriers=new ArrayList<>(mesh.facets().stream().filter(f->f.part()<0).map(Mesh::whole).toList());
+                for(int k=0;k<nozzles.size();k++)for(var facet:nozzle(k,0).facets())carriers.add(Mesh.whole(facet));
+                instruments=EquipmentInstruments.build(shape,carriers,unit);
+            }else instruments=new EquipmentInstruments.Plan(List.of(),List.of());
             if (detail != RenderDetail.NORMAL) {
                 // Reuse every physical decision, including maximum nozzle reach and registration cells.
                 var physical = geometry(shape);
@@ -1643,7 +1677,7 @@ public final class ShapeRasterizer {
 
         /** Inside the solid without its nozzles, at a frame point: the vessel, a column's access structure, a unit's parts, a manway. */
         private boolean solid(double[] p) {
-            return inVessel(p) || column != null && column.inside(p) || unit != null && unit.inside(p) || manway != null && manway.inside(p);
+            return services.inside(transform.point(p)) || inVessel(p) || column != null && column.inside(p) || unit != null && unit.inside(p) || manway != null && manway.inside(p);
         }
 
         /** Inside the vessel and its supports, at a frame point: what the interior cells fill. A unit has no vessel. */

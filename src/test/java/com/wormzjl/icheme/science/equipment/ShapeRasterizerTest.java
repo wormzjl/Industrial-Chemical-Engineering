@@ -171,7 +171,7 @@ class ShapeRasterizerTest {
             double facets = ShapeRasterizer.facetArea(shape);
             assertEquals(facets, area, 1e-9 * facets + 20 * Mesh.MIN_AREA, shape.toString());
             if (shape.drum() && !shape.skirt() && !shape.saddles())
-                assertEquals(vesselArea(shape), facets - ShapeRasterizer.nozzleArea(shape) - manwayArea(shape), 1e-9 * facets, shape.toString());
+                assertEquals(vesselArea(shape), facets - ShapeRasterizer.nozzleArea(shape) - manwayArea(shape) - ShapeRasterizer.services(shape).polygons().stream().mapToDouble(ShapeRasterizerTest::area).sum(), 1e-9 * facets, shape.toString());
         }
     }
 

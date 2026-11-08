@@ -22,6 +22,10 @@
     "feed": "icheme:block/equipment_feed",
     "drain": "icheme:block/equipment_drain",
     "guard": "icheme:block/equipment_guard",
-    "particle": "icheme:block/equipment_pipe"
+    "particle": "icheme:block/equipment_pipe",
+    "service_case": "icheme:block/control_panel_side",
+    "service_cover": "icheme:block/control_panel_service",
+    "instrument_steel": "icheme:block/equipment_pipe",
+    "instrument_conduit": "icheme:block/instrument_conduit"
   }
 }

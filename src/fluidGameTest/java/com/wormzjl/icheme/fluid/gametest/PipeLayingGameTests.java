@@ -101,12 +101,12 @@ public final class PipeLayingGameTests {
             helper.assertTrue(world.at(position(level, beside)).orElseThrow().device().joints() == PhysicalFluidTopology.ALL_FACES, "The hand-placed pipe lost its automatic joints");
 
             // One block out at once: its neighbours keep their joints towards it and show open ends.
-            helper.assertTrue(PipeLaying.dismantle(player, InteractionHand.MAIN_HAND, new PipeAnchor.Click(cells.get(1), Direction.UP)) == null, "The dismantle was refused");
+            helper.assertTrue(LayingTestCommands.dismantle(player, InteractionHand.MAIN_HAND, new PipeAnchor.Click(cells.get(1), Direction.UP)) == null, "The dismantle was refused");
             helper.assertTrue(level.getBlockState(cells.get(1)).isAir() && world.at(position(level, cells.get(1))).isEmpty(), "The dismantled block remains");
             helper.assertTrue(world.at(position(level, cells.get(0))).orElseThrow().device().joints() == ALONG_X && !connected(level, cells.get(0), Direction.EAST),
                     "The neighbour did not become an open end");
             helper.assertTrue(((FluidDeviceBlockEntity) level.getBlockEntity(cells.get(0))).openEnds() == 1 << Direction.EAST.ordinal(), "The open end is not marked towards the gap");
-            helper.assertTrue(PipeLaying.dismantle(player, InteractionHand.MAIN_HAND, new PipeAnchor.Click(west, Direction.UP)) != null, "Dismantled a tank");
+            helper.assertTrue(LayingTestCommands.dismantle(player, InteractionHand.MAIN_HAND, new PipeAnchor.Click(west, Direction.UP)) != null, "Dismantled a tank");
 
             // A one-block line between the two open ends joins them again; the ends need no edit.
             player.getInventory().add(new ItemStack(ModItems.FLUID_PIPE.get(), 1));
@@ -179,7 +179,7 @@ public final class PipeLayingGameTests {
             var options = route.options();
             helper.assertTrue(options.get(0) == -1 && options.get(4) == -1 && options.subList(1, 4).stream().allMatch(o -> o >= 0 && RackGeometry.tier(o) && RackGeometry.level(o) == RackGeometry.TIER),
                     "Not one lane through the racks: " + options);
-            helper.assertTrue(PipeLaying.lay(player, InteractionHand.MAIN_HAND, start, end, path, route.options()) == null, "The line was refused");
+            helper.assertTrue(LayingTestCommands.lay(player, InteractionHand.MAIN_HAND, start, end, path, route.options()) == null, "The line was refused");
             for (var cell : List.of(first, last))
                 helper.assertTrue(level.getBlockEntity(cell) instanceof FluidDeviceBlockEntity pipe && pipe.paint() == SKY_BLUE && pipe.secondary() == FLAME_RED, "Laid pipe " + cell.toShortString() + " not painted");
             for (var cell : List.of(straight, corner, turned)) {
@@ -217,7 +217,7 @@ public final class PipeLayingGameTests {
             helper.assertTrue(!player.gameMode.destroyBlock(straight) && level.getBlockState(straight).getBlock() instanceof PipeRackBlock && ((PipeRackBlockEntity) level.getBlockEntity(straight)).lanes().size() == 1,
                     "A rack with a lane was broken");
             var cornerRack = (PipeRackBlockEntity) level.getBlockEntity(corner);
-            helper.assertTrue(PipeLaying.dismantle(player, InteractionHand.MAIN_HAND, onLane(corner, cornerRack, 0)) == null, "The lane dismantle was refused");
+            helper.assertTrue(LayingTestCommands.dismantle(player, InteractionHand.MAIN_HAND, onLane(corner, cornerRack, 0)) == null, "The lane dismantle was refused");
             helper.assertTrue(cornerRack.lanes().isEmpty() && world.at(position(level, corner).withLane(options.get(2) + 1)).isEmpty(), "The corner lane remains");
             helper.assertTrue(level.getBlockState(corner).getValue(PipeRackBlock.SHAPE) == PipeRackBlock.Shape.FRONT_RIGHT, "The empty corner lost its shape");
             helper.assertTrue(player.getInventory().countItem(ModItems.FLUID_PIPE.get()) == 2, "The lane's pipe was not refunded");
@@ -228,7 +228,7 @@ public final class PipeLayingGameTests {
             helper.assertTrue(!joined(world, westTank, southTank), "The tanks are still joined across the gap");
 
             // A one-cell lane from one open end to the other: both lanes keep their joints, the gap lane takes the corner.
-            var refill = PipeLaying.lay(player, InteractionHand.MAIN_HAND, onLane(straight, straightRack, 0), onLane(turned, (PipeRackBlockEntity) level.getBlockEntity(turned), 0), List.of(corner), List.of(options.get(2)));
+            var refill = LayingTestCommands.lay(player, InteractionHand.MAIN_HAND, onLane(straight, straightRack, 0), onLane(turned, (PipeRackBlockEntity) level.getBlockEntity(turned), 0), List.of(corner), List.of(options.get(2)));
             helper.assertTrue(refill == null, "The gap was not refilled: " + refill);
             helper.assertTrue(cornerRack.lanes().getFirst().paint() == SKY_BLUE, "The refilled lane is not painted");
             helper.assertTrue(cornerRack.lanes().size() == 1 && cornerRack.lanes().getFirst().joints() == expected[1] && cornerRack.drawnLanes().getFirst().joined() == expected[1],
@@ -264,12 +264,12 @@ public final class PipeLayingGameTests {
                 helper.assertTrue(!queued(level, cell), "The rack's placing update is still queued");
                 // Both clicks on one slot of the tier: position 0, near the east face (as in the corner test).
                 var click = new PipeAnchor.Click(cell, Direction.UP, new net.minecraft.world.phys.Vec3(.9, .37, .3));
-                var refusal = PipeLaying.lay(player, InteractionHand.MAIN_HAND, click, click, List.of(cell), List.of(RackGeometry.option(0, RackGeometry.TIER)));
+                var refusal = LayingTestCommands.lay(player, InteractionHand.MAIN_HAND, click, click, List.of(cell), List.of(RackGeometry.option(0, RackGeometry.TIER)));
                 helper.assertTrue(refusal == null, "The one-block lane was refused: " + refusal);
                 var rack = (PipeRackBlockEntity) level.getBlockEntity(cell);
                 helper.assertTrue(rack.lanes().size() == 1 && rack.lanes().getFirst().joints() == 0 && rack.lanes().getFirst().arms() == ALONG_X, "The one-block lane: " + rack.lanes());
                 helper.assertTrue(queued(level, cell), "The one-block lane was not sent to the clients");
-                helper.assertTrue(PipeLaying.dismantle(player, InteractionHand.MAIN_HAND, onLane(cell, rack, 0)) == null, "The one-block lane did not come out");
+                helper.assertTrue(LayingTestCommands.dismantle(player, InteractionHand.MAIN_HAND, onLane(cell, rack, 0)) == null, "The one-block lane did not come out");
                 helper.killAllEntities();
                 helper.succeed();
             } finally {
@@ -340,7 +340,7 @@ public final class PipeLayingGameTests {
 
     /** A plain line laid with the tool in the main hand: no cell is a rack lane. */
     static net.minecraft.network.chat.Component lay(net.minecraft.server.level.ServerPlayer player, BlockPos start, Direction startFace, BlockPos end, Direction endFace, List<BlockPos> cells) {
-        return PipeLaying.lay(player, InteractionHand.MAIN_HAND, new PipeAnchor.Click(start, startFace), new PipeAnchor.Click(end, endFace), cells, java.util.Collections.nCopies(cells.size(), -1));
+        return LayingTestCommands.lay(player, InteractionHand.MAIN_HAND, new PipeAnchor.Click(start, startFace), new PipeAnchor.Click(end, endFace), cells, java.util.Collections.nCopies(cells.size(), -1));
     }
 
     private static boolean connected(net.minecraft.world.level.Level level, BlockPos at, Direction face) {

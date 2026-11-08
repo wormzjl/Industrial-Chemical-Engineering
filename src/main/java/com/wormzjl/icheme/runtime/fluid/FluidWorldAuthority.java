@@ -511,6 +511,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public com.wormzjl.icheme.science.column.operation.OperationView columnView(PhysicalFluidTopology.Position master,java.util.function.LongToDoubleFunction opening) {
         owned();var u=column(master);return u==null?null:columns.view(u.id(),topology.onlineTick(),opening);
     }
+    public record ColumnInstrument(double value,long tick,com.wormzjl.icheme.runtime.instrument.Instrument.Availability availability) {}
+    public ColumnInstrument columnInstrument(PhysicalFluidTopology.Position master,String role,com.wormzjl.icheme.runtime.instrument.Sensor.Kind kind){owned();var u=column(master);var sample=u==null?null:columns.instrument(u.id(),role,kind);return sample==null?null:new ColumnInstrument(sample.value(),sample.tick(),com.wormzjl.icheme.runtime.instrument.Instrument.Availability.AVAILABLE);}
     /** Stops column unit {@code unit} (plan 4.1), one queued ledger event: its held devices are released as they are and its
      * ports leave. Every account stays with the unit. Nothing when it is not running. */
     public void stopColumn(long unit) {
@@ -1106,6 +1108,18 @@ public final class FluidWorldAuthority implements AutoCloseable {
         for(var observed:snapshot.lastResult().get().observations())for(var sample:observed.flowSamples())if(sample.host()==id)
             return new InstrumentReading(sample.pressure(),observed.temperature(),observed.flowing(),sample.massFlow(),sample.volumeFlow());
         for(var mapping:registry.pipeViews(id)){if(!Double.isFinite(mapping.tap()))continue;for(var observed:snapshot.lastResult().get().observations())if(observed.pipe()==mapping.pipeId())return new InstrumentReading(observed.pressure(mapping.tap(),r.device().position().y(),!mapping.forward()),observed.temperature(),observed.flowing(),observed.massFlow()*(mapping.forward()?1:-1),observed.density()>0?observed.massFlow()/observed.density()*(mapping.forward()?1:-1):0);}return null;}
+    public InstrumentReading instrumentAt(PhysicalFluidTopology.Position position){owned();var r=at(position).orElse(null);return r==null?null:instrumentPipeReading(r.device().id());}
+    /** The accepted mover inlet/outlet, using the same node-to-stream reduction as heat-unit nozzles. */
+    public FluidView.Port instrumentMoverPort(long id,boolean outlet){
+        owned();Long owner=registry.owner(id);if(owner==null)return null;var snapshot=presented(owner);var result=snapshot.lastResult().orElse(null);if(result==null)return null;
+        var graph=snapshot.graph();for(int i=0;i<graph.pipes().size();i++){var pipe=graph.pipes().get(i);if(graph.reservoirs().get(pipe.first()).id()!=id||!(pipe.control() instanceof FlowControl.Mover||pipe.control() instanceof FlowControl.Turbine))continue;
+            var port=HeatPresentation.port(outlet?"outlet":"inlet",graph.reservoirs().get(outlet?pipe.second():pipe.first()),result.averageMassFlows()[i],heatSource(new HashMap<>()));if(outlet)for(var observation:result.observations())if(observation.pipe()==pipe.id())return new FluidView.Port(port.role(),port.temperature(),observation.firstPressure(),port.massFlow(),port.phaseMoles(),port.phaseVolumes());return port;}
+        return null;
+    }
+    /** Accepted inlet/outlet readings for a basin; no inferred temperature or fresh property evaluation. */
+    public List<FluidView.Port> instrumentVesselPorts(long id){owned();Long owner=registry.owner(id);if(owner==null)return List.of();var snapshot=presented(owner);return snapshot.lastResult().isEmpty()?List.of():HeatPresentation.poolPorts(id,snapshot,heatSource(new HashMap<>()));}
+    /** Structural ID allocation shares the world's existing identity namespace, without a process edit or solve. */
+    public long reserveControlIdentity(){owned();long id=topology.reserve(1);data.setDirty();return id;}
     public void markViewDirty(long id){owned();presentation.markDirty(id);}
     /** An open menu becomes a consumer of its device's bucket. The first delivery comes with that bucket. */
     public void subscribe(com.wormzjl.icheme.world.inventory.FluidDeviceMenu menu){owned();if(!closed)presentation.subscribe(menu,menu.identity());}

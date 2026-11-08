@@ -54,6 +54,7 @@ def main(argv=None):
     parser.add_argument('--output-dir',type=Path,help='New run directory below this checkout tmp/equipment-drawings/.')
     parser.add_argument('--dpi',type=int,default=100)
     parser.add_argument('--no-raster',action='store_true',help='Draft PDF only; visual verification remains pending.')
+    parser.add_argument('--sprites',action='store_true',help='Also render representative native interfaces with the actual game sprites.')
     args=parser.parse_args(argv)
     if not 40<=args.dpi<=300:parser.error('--dpi must be between 40 and 300')
     selection=args.only.upper().replace(' ','')
@@ -66,7 +67,8 @@ def main(argv=None):
     if not work.is_relative_to(base) or work==base:parser.error('--output-dir must be a new child of this checkout tmp/equipment-drawings/')
     if work.exists():parser.error('Output already exists; choose a new run directory to preserve prior evidence.')
     identity=source_identity();work.mkdir(parents=True)
-    command=gradle_wrapper()+['--offline','--no-daemon','--max-workers=2','--no-configuration-cache','--init-script',str(TOOL/'export.init.gradle'),'exportEquipmentDrawings','-PequipmentDrawingWork='+str(work),'-PequipmentDrawingSnapshot='+identity['snapshot'],'-PequipmentDrawingHeading='+args.heading,'-PequipmentDrawingOnly='+selection]
+    tasks=['exportEquipmentDrawings']+(['renderEquipmentServices'] if args.sprites else [])
+    command=gradle_wrapper()+['--offline','--no-daemon','--max-workers=2','--no-configuration-cache','--init-script',str(TOOL/'export.init.gradle')]+tasks+['-PequipmentDrawingWork='+str(work),'-PequipmentDrawingSnapshot='+identity['snapshot'],'-PequipmentDrawingHeading='+args.heading,'-PequipmentDrawingOnly='+('ALL' if selection=='*' else selection)]
     print('Compiling/exporting current game geometry (no tests or client).',flush=True)
     with (work/'export.log').open('w',encoding='utf-8') as log:
         result=subprocess.run(command,cwd=REPO,stdout=log,stderr=subprocess.STDOUT)

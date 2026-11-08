@@ -133,6 +133,7 @@ final class SteamTurbineTrain {
         u.box(new double[]{a - sx, base, z0}, new double[]{a + sx, top, zs}, Material.MACHINE, true);
         u.box(new double[]{a - .6 * sx, top, z0 + .25 * standard}, new double[]{a + .6 * sx, top + .02 + .04 * d, zs - .25 * standard}, Material.MACHINE, false);
         u.box(new double[]{a - ga, shaft + .02, z0 - .8 * ga}, new double[]{a + ga, shaft + .02 + 1.8 * ga, z0}, Material.ACTUATOR, true);
+        u.serviceHousing=new double[]{a-ga,shaft+.02,z0-.8*ga,a+ga,shaft+.02+1.8*ga,z0};
         m.cylinder(Frame.of(new double[]{a + .55 * sx, shaft - .05 * d - .05, 0}, 2, 1), .04 * d + .02, z0 - .05 * d - .03, z0, 10, Material.MACHINE);
 
         // The casing: the clad HP end wall, barrel and cone, the bare exhaust barrel and its end wall; the cladding's edge

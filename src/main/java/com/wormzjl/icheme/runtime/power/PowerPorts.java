@@ -33,7 +33,7 @@ public final class PowerPorts {
             if(shell.shape().kind()==EquipmentShape.Kind.GENERATOR)kind=DataPort.Kind.POWER_OUTPUT;
         }else if(be instanceof FluidDeviceBlockEntity pipe){
             var s=pipe.getBlockState();var key=new LineGeometry.Key(pipe.kind(),s.getValue(FluidDeviceBlock.FACING).ordinal(),FluidDeviceBlock.connectionMask(s),PipeSizes.code(PipeSizes.outside(pipe.bore())),0,0,false);
-            var socket=DataSocketGeometry.surface(InlineMoverGeometry.polygons(key,FluidDeviceBlock.hasCompressor(s),false).stream().filter(p->p.material()==Mesh.Material.MOTOR).toList(),Direction.WEST.ordinal());if(socket==null)return null;
+            var socket=InlineMoverGeometry.socket(key,FluidDeviceBlock.hasCompressor(s),true);
             centre=new Vec3(pipe.getBlockPos().getX()+socket.x(),pipe.getBlockPos().getY()+socket.y(),pipe.getBlockPos().getZ()+socket.z());outward=Direction.values()[socket.face()];
         }else{centre=be.getBlockPos().getCenter().add(.52,0,0);outward=Direction.EAST;kind=DataPort.Kind.POWER_OUTPUT;}
         return DataPorts.power(UUID.randomUUID(),kind,level,be.getBlockPos(),centre,outward);

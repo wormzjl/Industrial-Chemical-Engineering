@@ -3,6 +3,7 @@ package com.wormzjl.icheme.science.equipment;
 import com.wormzjl.icheme.science.math.DeterministicMath;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -66,7 +67,9 @@ public final class Mesh {
          */
         MOTOR_FRAME(1, Paint.BODY), MOTOR_SHIELD(1, Paint.BODY), MOTOR_PANEL(1, Paint.BODY), GENERATOR_PANEL(1, Paint.BODY), MOTOR_PLAIN(1, Paint.BODY),
         /** Fixed shaft role markings, independent of the equipment's paint. */
-        SHAFT_INPUT(1, -1), SHAFT_OUTPUT(1, -1);
+        SHAFT_INPUT(1, -1), SHAFT_OUTPUT(1, -1),
+        /** Equipment service cabinets and the protected, equipment-owned instrument raceway finish. */
+        SERVICE_CASE(1,Paint.BODY), SERVICE_COVER(1,Paint.BODY), INSTRUMENT_STEEL(1,-1), INSTRUMENT_CONDUIT(1,-1);
 
         private final double period;
         private final int channel;
@@ -445,6 +448,13 @@ public final class Mesh {
             facets.add(new Facet(List.copyOf(positions), transform.direction(f.normal()), min, max, shadings.computeIfAbsent(f.shading(), s -> s.map(transform)), f.material(),
                     uvs.computeIfAbsent(f.u(), u -> u.map(transform)), uvs.computeIfAbsent(f.v(), v -> v.map(transform)), f.part()));
         }
+    }
+
+    /** Imports the existing polygon's UV frame and normals without inventing another mesh convention. */
+    void include(Polygon polygon) {
+        var points=new double[polygon.size()][3];var normals=new double[polygon.size()][3];var uv=new double[polygon.size()][2];
+        for(int i=0;i<points.length;i++){System.arraycopy(polygon.positions(),3*i,points[i],0,3);System.arraycopy(polygon.normals(),3*i,normals[i],0,3);System.arraycopy(polygon.uvs(),2*i,uv[i],0,2);}
+        imported(points,Arrays.copyOf(points,3),Arrays.copyOf(uv,3),Arrays.copyOf(normals,3),polygon.material());
     }
 
     /** {min, max} corners of every facet, {x0, y0, z0, x1, y1, z1}; null when there is none. */

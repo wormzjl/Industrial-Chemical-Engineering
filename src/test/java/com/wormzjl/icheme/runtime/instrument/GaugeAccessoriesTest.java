@@ -77,7 +77,7 @@ class GaugeAccessoriesTest {
     @Test void nativeReservoirSocketsStayDistinctUprightAndStableAcrossHeadingsAndSizes(){
         for(var heading:EquipmentShape.Heading.values())for(double d:new double[]{.5,2,10}){
             var drum=EquipmentShape.drum(d,4,EquipmentShape.Orientation.VERTICAL,heading,0);var mounts=InstrumentHosts.reservoirMounts(drum,BlockPos.ZERO);
-            assertEquals(Set.of("pressure_top","pressure_bottom","temperature_bottom"),mounts.stream().map(Instrument.Mount::id).collect(java.util.stream.Collectors.toSet()));
+            assertEquals(Set.of("pressure_top","temperature_top"),mounts.stream().map(Instrument.Mount::id).collect(java.util.stream.Collectors.toSet()));
             for(var m:mounts){assertEquals(heading.name(),m.face().name());assertEquals(0,m.right().y);assertTrue(m.bounds().contains(m.centre()));}
             for(int i=0;i<mounts.size();i++)for(int j=i+1;j<mounts.size();j++)assertFalse(mounts.get(i).bounds().intersects(mounts.get(j).bounds()));
         }
@@ -85,7 +85,7 @@ class GaugeAccessoriesTest {
             var tank=EquipmentShape.storage(EquipmentShape.Kind.TANK,4,4,heading,0);assertEquals(List.of("pressure_bottom","temperature_bottom"),InstrumentHosts.reservoirMounts(tank,BlockPos.ZERO).stream().map(Instrument.Mount::id).toList());
             var sphere=EquipmentShape.storage(EquipmentShape.Kind.SPHERE,4,1,heading,2);assertEquals(List.of("pressure_top","temperature_top"),InstrumentHosts.reservoirMounts(sphere,BlockPos.ZERO).stream().map(Instrument.Mount::id).toList());
         }
-        assertEquals(3,InstrumentHosts.reservoirMounts(EquipmentShape.drum(2,4,EquipmentShape.Orientation.HORIZONTAL,EquipmentShape.Heading.NORTH,1),BlockPos.ZERO).size());
+        assertEquals(2,InstrumentHosts.reservoirMounts(EquipmentShape.drum(2,4,EquipmentShape.Orientation.HORIZONTAL,EquipmentShape.Heading.NORTH,1),BlockPos.ZERO).size());
     }
     @Test void tankDigitalLevelMountIsReachableAtGradeAndSeparateFromServiceTapsAndSightColumn(){
         var origin=new BlockPos(23,64,-41);

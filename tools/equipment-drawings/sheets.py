@@ -9,6 +9,7 @@ from pypdf import PdfReader
 from reportlab.pdfgen import canvas
 
 import rendering as r
+import service_details
 
 W,H=1190.551,841.89  # A3 landscape, PDF points.
 FRONT=np.array([[1,0,0],[0,1,0],[0,0,-1]])
@@ -33,7 +34,8 @@ def interfaces(d):
         if d.get(key):rows.append((label,[d[key][a] for a in ['x','y','z']],'socket datum'))
     for i,p in enumerate(d.get('shaftPorts',[]),1):
         rows.append((f'SHAFT #{i} / {p["role"]}',[p['cell'][a]+.5 for a in ['x','y','z']],'cell centre'))
-    for p in d.get('sensorMounts',[]):rows.append((p['id'],[p[a] for a in ['x','y','z']],'native mount option'))
+    for p in d.get('instrumentPlan',{}).get('probes',[]):rows.append((p['id'],p['centre'],'manual mount option' if p['manual'] else 'factory probe'))
+    for p in d.get('instrumentPlan',{}).get('reserved',[]):rows.append((p['id'],((np.array(p['low'])+p['high'])/2).tolist(),'reserved: '+p['purpose']))
     return rows
 
 def add_gallery(out):
@@ -76,6 +78,7 @@ def generate(work):
             r.txt(c,x,y,' / '.join(f'{float(v):.3f}' for v in xyz)+' | '+meaning,7.8);y-=18
         if not rows:r.txt(c,x,y,'No registered interfaces on this reference.',8.2)
         c.showPage()
+        page=service_details.pages(c,d,polys,views,manifest['snapshot'],page,header)
         records.append(dict(id=d['id'],kind=d['kind'],parameters=d['parameters'],nativeEnvelope=[lo.tolist(),hi.tolist()],scale=denominator,polygons=len(polys),interfaces=[dict(label=a,xyz=b,meaning=m) for a,b,m in rows]))
     c.save()
     reader=PdfReader(pdf)

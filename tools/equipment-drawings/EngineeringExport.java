@@ -8,7 +8,7 @@ public class EngineeringExport {
  static EquipmentShape.Heading heading;static Set<String> selected;static String snapshot;
  public static void main(String[] args)throws Exception{
   if(args.length!=4)throw new IllegalArgumentException("Expected geometry-directory, source snapshot, heading, comma-separated selection or *");
-  snapshot=args[1];heading=EquipmentShape.Heading.valueOf(args[2]);selected=args[3].equals("*")?Set.of():Set.of(args[3].toUpperCase(Locale.ROOT).split(","));
+  snapshot=args[1];heading=EquipmentShape.Heading.valueOf(args[2]);selected=args[3].equals("ALL")||args[3].equals("*")?Set.of():Set.of(args[3].toUpperCase(Locale.ROOT).split(","));
   out=Path.of(args[0]);Files.createDirectories(out);
   for(var form:VesselPlacement.Form.values()){
    if(form==VesselPlacement.Form.CROSSWISE)continue;
@@ -26,9 +26,9 @@ public class EngineeringExport {
   var horizontal=ConstructorDefaults.sizes(VesselPlacement.Form.LENGTHWISE);double bd=horizontal.diameter(),bl=horizontal.length();int bs=EquipmentShape.minimumBootSupport(bd,bl);
   emit("LENGTHWISE_BOOT",EquipmentShape.drum(bd,bl,EquipmentShape.Orientation.HORIZONTAL,heading,bs,EquipmentShape.defaultConnections(bd,bl,EquipmentShape.Orientation.HORIZONTAL,bs,true),true));
   var line=new LineGeometry.Key(com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.PIPE,5,48,PipeSizes.code(PipeSizes.outside(.15)),0,0,false);
-  extra("INLINE_PUMP",InlineMoverGeometry.polygons(line,false,false),true,false);
-  extra("INLINE_COMPRESSOR",InlineMoverGeometry.polygons(line,true,false),true,false);
-  extra("CONTROL_VALVE",ValveGeometry.pressure(line,false),false,true);
+  extra("INLINE_PUMP",InlineMoverGeometry.polygons(line,false,false),true,true);
+  extra("INLINE_COMPRESSOR",InlineMoverGeometry.polygons(line,true,false),true,true);
+  extra("CONTROL_VALVE",ValveGeometry.pressure(line,false),false,false);
   for(boolean level:new boolean[]{false,true}){var sensor=new ArrayList<Mesh.Polygon>();for(var q:InstrumentGeometry.transmitter(level)){var v=q.vertices();double[] uv=new double[v.length/3*2],n=new double[v.length];sensor.add(new Mesh.Polygon(v,uv,n,Mesh.Material.MACHINE));}extra(level?"LEVEL_SENSOR_HOUSING":"SENSOR_HOUSING",sensor,false,false);}
   var instrumentAssets=new LinkedHashMap<String,Object>();
   for(boolean thermometer:new boolean[]{false,true})instrumentAssets.put(thermometer?"temperature_connection":"pressure_connection",InstrumentGeometry.connection(new double[]{0,-.4,0},true,thermometer).stream().map(q->Map.of("v",q.vertices(),"colour",q.colour())).toList());
@@ -51,7 +51,10 @@ public class EngineeringExport {
  }
  static void emit(String id,EquipmentShape s)throws Exception{
   if(!selected.isEmpty()&&!selected.contains(id)&&!selected.contains(s.kind().name()))return;
-  var polygons=raw(s);var data=base(id,polygons);data.put("kind",s.kind().name());data.put("parameters",Map.of("size",s.diameter(),"length",s.tangentLength(),"support",s.support(),"orientation",s.orientation().name(),"heading",s.front().name(),"power_kw",s.duty().power()));
+  var polygons=raw(s);var probePlan=EquipmentInstruments.of(s);var active=new HashSet<String>();for(var p:probePlan.probes())if(p.manual())active.add(p.id());var wiring=ShapeRasterizer.instrumentWiring(s,active,RenderDetail.NORMAL);polygons.addAll(wiring.polygons());
+  for(var p:probePlan.probes())if(p.manual()||p.display())polygons.addAll(InstrumentGeometry.previewHead(p));
+  if(!wiring.unresolved().isEmpty())throw new IllegalStateException(id+" has unresolved native instrument wiring: "+wiring.unresolved());
+  System.out.println(id+" wiring "+wiring.runs().size()+" runs; unresolved="+wiring.unresolved());var data=base(id,polygons);data.put("instrumentPlan",probePlan);data.put("instrumentWiring",Map.of("runs",wiring.runs(),"unresolved",wiring.unresolved()));data.put("serviceEnclosures",ShapeRasterizer.services(s).enclosures());data.put("kind",s.kind().name());data.put("parameters",Map.of("size",s.diameter(),"length",s.tangentLength(),"support",s.support(),"orientation",s.orientation().name(),"heading",s.front().name(),"power_kw",s.duty().power()));
   data.put("axis",s.axis());if(s.kind()==EquipmentShape.Kind.TANK)data.put("planAxis",TankDesign.Plan.of(s.diameter(),(int)s.tangentLength()).a());if(s.kind()==EquipmentShape.Kind.SPHERE)data.put("planAxis",SphereDesign.Plan.of(s.diameter(),s.support()).a());
   if(s.kind()==EquipmentShape.Kind.SPHERE){var plan=SphereDesign.Plan.of(s.diameter(),s.support());var legs=new ArrayList<double[]>();for(int i=0;i<plan.n();i++)legs.add(s.transform().point(plan.at(plan.legs(),plan.leg(i),0)));data.put("supportLegs",legs);data.put("legRadius",plan.wl()/2);}
   data.put("shaftPorts",ShapeRasterizer.shafts(s));
@@ -62,14 +65,22 @@ public class EngineeringExport {
   var access=new ArrayList<Object>();for(var climb:ShapeRasterizer.climbs(s)){double[] min={Double.POSITIVE_INFINITY,Double.POSITIVE_INFINITY,Double.POSITIVE_INFINITY},max={Double.NEGATIVE_INFINITY,Double.NEGATIVE_INFINITY,Double.NEGATIVE_INFINITY};for(var corner:climb.footprint())for(double y:new double[]{climb.base()-.1,climb.top()+1.8}){var point=s.transform().point(new double[]{corner[0],y,corner[1]});for(int a=0;a<3;a++){double room=a==1?0:.3+1.0/(2*ShapeRasterizer.SOLID_RESOLUTION);min[a]=Math.min(min[a],point[a]-room);max[a]=Math.max(max[a],point[a]+room);}}access.add(Map.of("min",min,"max",max,"basis","native climb footprint plus standing player body and half collision voxel"));}data.put("accessClearance",access);
   if((s.kind()==EquipmentShape.Kind.MOTOR||s.kind()==EquipmentShape.Kind.GENERATOR)&&s.duty().power()<=MotorDesign.LOW_VOLTAGE){double r=ProcessUnit.motorDiameter(s.duty().power())/2;var c=s.transform().point(ProcessUnit.of(s).terminalBox);double y=ShapeRasterizer.shafts(s).getFirst().cell().y()+.5;data.put("nativeTerminalBounds",Map.of("min",new double[]{c[0]-.35*r,y+(s.kind()==EquipmentShape.Kind.GENERATOR?.76*r:r-.02),c[2]-.275*r},"max",new double[]{c[0]+.35*r,y+1.45*r,c[2]+.275*r}));}
   data.put("power",Set.of(EquipmentShape.Kind.MOTOR,EquipmentShape.Kind.GENERATOR,EquipmentShape.Kind.AIR_COOLER,EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER).contains(s.kind()));
-  data.put("builtIn",Set.of(EquipmentShape.Kind.COLUMN,EquipmentShape.Kind.EXCHANGER,EquipmentShape.Kind.KETTLE,EquipmentShape.Kind.AIR_COOLER,EquipmentShape.Kind.VERTICAL_HEATER,EquipmentShape.Kind.CABIN_HEATER,EquipmentShape.Kind.STEAM_TURBINE,EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER,EquipmentShape.Kind.MOTOR,EquipmentShape.Kind.GENERATOR).contains(s.kind()));
+  data.put("builtIn",EquipmentInstruments.automatic(s.kind()));
   var socket=DataSocketGeometry.equipment(s);if(socket!=null)data.put("existingData",socket);
   var power=DataSocketGeometry.power(s);if(power!=null)data.put("existingPower",power);
   var taps=new ArrayList<InstrumentGeometry.Socket>();for(var node:ShapeRasterizer.fluidCells(s))taps.addAll(InstrumentGeometry.sockets(s,node));taps.addAll(InstrumentGeometry.levelSockets(s));data.put("sensorMounts",taps.stream().distinct().toList());
   if(s.designed()&&s.kind().unit()){var u=ProcessUnit.of(s);if(u.terminalBox!=null)data.put("terminal",s.transform().point(u.terminalBox));}
+  appendServiceGeometry(data,socket,power);
   finish(id,data);
  }
- static void extra(String id,List<Mesh.Polygon> polygons,boolean power,boolean builtin)throws Exception{if(!selected.isEmpty()&&!selected.contains(id))return;var data=base(id,polygons);data.put("kind",id);data.put("parameters",Map.of("line_bore",.15));data.put("power",power);data.put("builtIn",builtin);finish(id,data);}
- static Map<String,Object> base(String id,List<Mesh.Polygon> polygons){var d=new LinkedHashMap<String,Object>();d.put("id",id);d.put("polygons",polygons.stream().map(p->Map.of("v",p.positions(),"m",p.material().name())).toList());return d;}
+ static void appendServiceGeometry(Map<String,Object> data,DataSocketGeometry.Socket socket,DataSocketGeometry.Socket power){
+  var example=new ArrayList<Map<String,Object>>();
+  for(boolean electrical:new boolean[]{false,true}){var gland=electrical?power:socket;if(gland==null)continue;var q=new double[]{gland.x(),gland.y(),gland.z()};var n=LineGeometry.step(gland.face());var pieces=electrical?PowerPortGeometry.polygons(q,n,false):DataPortGeometry.polygons(q,n,false);
+   @SuppressWarnings("unchecked") var body=(List<Map<String,Object>>)data.get("polygons");for(var p:pieces)body.add(Map.of("v",p.positions(),"m",p.material()==Mesh.Material.GUARD?"DATA":p.material()==Mesh.Material.ACTUATOR?"FE":p.material().name()));
+   var away=Mesh.plus(q,Mesh.scale(n,.55));var down=away.clone();down[1]=Math.max(.18,q[1]-.65);var end=Mesh.plus(down,Mesh.scale(n,.65));for(var p:ConduitGeometry.path(List.of(q,away,down,end)))example.add(Map.of("v",p.positions(),"m",electrical?"CABLE_FE":"CABLE_DATA"));
+  }data.put("cableExamplePolygons",example);
+ }
+ static void extra(String id,List<Mesh.Polygon> polygons,boolean power,boolean builtin)throws Exception{if(!selected.isEmpty()&&!selected.contains(id))return;var data=base(id,polygons);data.put("kind",id);data.put("parameters",Map.of("line_bore",.15));data.put("power",power);data.put("builtIn",builtin);if(Set.of("INLINE_PUMP","INLINE_COMPRESSOR","CONTROL_VALVE").contains(id)){var key=new LineGeometry.Key(com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.PIPE,5,48,PipeSizes.code(PipeSizes.outside(.15)),0,0,false);var dataSocket=id.equals("CONTROL_VALVE")?ValveGeometry.socket(key):InlineMoverGeometry.socket(key,id.equals("INLINE_COMPRESSOR"),false);var powerSocket=power?InlineMoverGeometry.socket(key,id.equals("INLINE_COMPRESSOR"),true):null;data.put("existingData",dataSocket);if(powerSocket!=null)data.put("existingPower",powerSocket);appendServiceGeometry(data,dataSocket,powerSocket);}finish(id,data);}
+ static Map<String,Object> base(String id,List<Mesh.Polygon> polygons){var d=new LinkedHashMap<String,Object>();d.put("id",id);d.put("polygons",new ArrayList<>(polygons.stream().map(p->Map.of("v",p.positions(),"m",p.material().name())).toList()));return d;}
  static void finish(String id,Map<String,Object> data)throws Exception{Files.writeString(out.resolve(id+".json"),gson.toJson(data));entries.add(Map.of("id",id,"file",id+".json","kind",data.get("kind"),"power",data.get("power"),"builtIn",data.get("builtIn")));System.out.println(id+" exported "+((List<?>)data.get("polygons")).size()+" polygons");}
 }

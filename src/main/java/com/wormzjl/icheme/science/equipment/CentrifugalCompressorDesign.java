@@ -261,7 +261,11 @@ final class CentrifugalCompressorDesign extends UnitDesign {
         }
         // One compact frame and the shared rotating coupling; no side cabinet or operating platform.
         double rs = ProcessUnit.shaftRadius(1000 * power(u.shape.duty()), speed(d)), face = Math.ceil(zb1 + .2 + rs - 1e-9);
-        double half = Math.max(cap + .2, Math.ceil(cap + .15) + .12);
+        double half = cap + .20;
+        // Compact the visible deck inside the existing placement frame: gas and shaft datums are built facts.
+        double priorHalf=Math.max(cap+.20,Math.ceil(cap+.15)+.12);
+        u.framePoints.add(new double[]{ax-priorHalf-.08,0,cover-.23});
+        u.framePoints.add(new double[]{ax+priorHalf+.08,h,face-.01});
         double x0 = ax - half, x1 = ax + half, z0 = cover - .15, z1 = face - .01;
         u.coupling(ax, ys, zb1, face, 1, rs, deck, ProcessUnit.shown(speed(d)), EquipmentShape.ShaftEnd.Role.DRIVEN_INPUT);
         u.baseplate(x0, x1, base + GROUT, deck, z0, z1);

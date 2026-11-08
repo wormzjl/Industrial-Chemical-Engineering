@@ -106,7 +106,8 @@ public record ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean r
      * cycles that asked and applied it, V3's condenser duty there (W), and the inlets' levels and outlets' credits the port
      * plans read through the fence. Rebuilt by the engine: a unit without it solves once before it takes anything.
      */
-    public record State(SplitTable table,double[][] enthalpy,long tableTick,long applied,double solvedCondenser,List<Level> levels,List<Credit> credits) {
+    public record State(SplitTable table,double[][] enthalpy,long tableTick,long applied,double solvedCondenser,List<Level> levels,List<Credit> credits,Probes probes) {
+        public State(SplitTable table,double[][] enthalpy,long tableTick,long applied,double solvedCondenser,List<Level> levels,List<Credit> credits){this(table,enthalpy,tableTick,applied,solvedCondenser,levels,credits,null);}
         public State {
             Objects.requireNonNull(table);enthalpy=com.wormzjl.icheme.science.column.operation.ColumnSolve.copy(enthalpy);levels=List.copyOf(levels);credits=List.copyOf(credits);
             if(enthalpy.length!=table.products().size())throw new IllegalArgumentException("One enthalpy row per product");
@@ -118,5 +119,14 @@ public record ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean r
         public record Level(long device,long tick,double held,double rate,double molarMass) {}
         /** A cycle's product credited to an outlet at {@code tick}. */
         public record Credit(long device,long tick,Account product) {public Credit{Objects.requireNonNull(product);}}
+    }
+    /** Accepted solve readings: Pa, K, and kg of internal stream per mol of hydrocarbon feed. Rebuildable state. */
+    public record Probes(double topPressure,double topTemperature,double bottomPressure,double bottomTemperature,
+                         double refluxPressure,double refluxTemperature,double refluxPerFeed,double vapourPerFeed) {
+        public Probes {
+            for(double value:new double[]{topPressure,topTemperature,bottomPressure,bottomTemperature,refluxPressure,refluxTemperature})
+                if(!(value>0)||!Double.isFinite(value))throw new IllegalArgumentException("Invalid accepted column reading");
+            if(!(refluxPerFeed>=0)||!Double.isFinite(refluxPerFeed)||!(vapourPerFeed>=0)||!Double.isFinite(vapourPerFeed))throw new IllegalArgumentException("Invalid internal stream ratio");
+        }
     }
 }
