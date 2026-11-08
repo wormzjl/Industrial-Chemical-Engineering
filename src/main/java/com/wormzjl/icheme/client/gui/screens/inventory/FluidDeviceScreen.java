@@ -750,7 +750,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         var d=menu.clientData().view().drive();if(d==null)return null;
         if(d.driver().isEmpty())return new DeviceColumn.Drive(tr("no_driver"),null,false,false);
         String kind=tr("driver."+d.driver().toLowerCase(Locale.ROOT)),rating=number(d.ratedPower()/1000);
-        String line=d.ratedPower()<=0?kind:d.poles()>0?tr("drive_line_poles",kind,rating,d.poles()):tr("drive_line",kind,rating);
+        String line=d.ratedPower()<=0?kind:tr("drive_line",kind,rating);
         return new DeviceColumn.Drive(line,tr("drive_state",d.status(),String.format(Locale.ROOT,"%.0f",d.speed())),true,d.fixed());
     }
     /** A fan unit's Power group (W7, reading A86): its draw, FE per tick and store; NO POWER or UNMETERED stay on the display. */

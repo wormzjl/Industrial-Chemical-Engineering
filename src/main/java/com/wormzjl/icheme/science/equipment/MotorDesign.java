@@ -128,10 +128,10 @@ final class MotorDesign extends UnitDesign {
     /** Power steps along the IEC list ({@link #POWERS}). */
     @Override
     public MachineDuty step(MachineDuty duty, String setting, int steps) {
-        if (setting.equals("base_speed") && !generator) return duty.withBaseSpeed(Math.clamp(duty.speed()+steps*100,300,com.wormzjl.icheme.science.machine.Motor.MAXIMUM_RPM));
+        if (setting.equals("base_speed")) return duty.withBaseSpeed(Math.clamp(UnitDesign.designSpeed(generator?EquipmentShape.Kind.GENERATOR:EquipmentShape.Kind.MOTOR,duty)+steps*100,300,com.wormzjl.icheme.science.machine.Motor.MAXIMUM_RPM));
         if (!setting.equals("power")) return duty;
         double power = MachineDuty.step(POWERS, duty.power(), steps);
-        return generator ? MachineDuty.generator(power, duty.poles()) : new MachineDuty(0,0,0,power,duty.poles(),duty.drive(),null,0,duty.baseSpeed());
+        return new MachineDuty(0,0,0,power,duty.poles(),duty.drive(),null,0,duty.baseSpeed());
     }
 
     private String name() {

@@ -326,6 +326,7 @@ public abstract class UnitDesign {
         var kind = shape.kind();
         boolean pump = kind == Kind.PUMP, motor = kind == Kind.MOTOR || kind == Kind.GENERATOR;
         if (!pump && !motor) return 0;
+        if(shape.duty()!=null&&shape.duty().baseSpeed()>0)return shape.duty().baseSpeed();
         int poles = shape.duty() == null ? 0 : shape.duty().poles();
         if (poles == 0) poles = pump ? 2 : 4;
         return com.wormzjl.icheme.science.machine.Motor.ratedSpeed(poles);
@@ -362,13 +363,21 @@ public abstract class UnitDesign {
     public static double designSpeed(EquipmentShape shape) {
         var duty = shape.duty();
         return switch (shape.kind()) {
-            case MOTOR -> duty.baseSpeed()>0 ? duty.baseSpeed() : com.wormzjl.icheme.science.machine.Motor.ratedSpeed(duty.poles()==0?2:duty.poles());
-            case PUMP -> com.wormzjl.icheme.science.machine.Motor.ratedSpeed(duty.poles() == 0 ? 2 : duty.poles());
-            case GENERATOR -> duty.poles() == 0 ? 3000 : duty.speed();
+            case MOTOR, PUMP, GENERATOR -> designSpeed(shape.kind(),duty);
             case CENTRIFUGAL_COMPRESSOR -> CentrifugalCompressorDesign.speed(shape.diameter());
             case COMPRESSOR -> ProcessUnit.compressorSpeed(shape.diameter());
             case STEAM_TURBINE -> SteamTurbineTrain.speed(shape.diameter());
             default -> 0;
+        };
+    }
+
+    /** Explicit constructor RPM takes precedence; absent RPM retains each legacy machine's speed convention. */
+    public static double designSpeed(EquipmentShape.Kind kind,MachineDuty duty){
+        if(duty.baseSpeed()>0)return duty.baseSpeed();
+        return switch(kind){
+            case MOTOR, PUMP -> com.wormzjl.icheme.science.machine.Motor.ratedSpeed(duty.poles()==0?2:duty.poles());
+            case GENERATOR -> duty.poles()==0?3000:duty.speed();
+            default -> throw new IllegalArgumentException("This machine derives its speed from its geometry");
         };
     }
 

@@ -752,9 +752,9 @@
   "gui.icheme.equipment_constructor.machine_table": "Table",
   "gui.icheme.equipment_constructor.machine_table.hint": "Height of the concrete table under the baseplate, 0 (on its plinth at grade) to 8 m in whole metres, so its shaft lines up with a machine on a deck",
   "gui.icheme.equipment_constructor.motor.rating": "%s kW, %s rpm, frame %s m",
-  "gui.icheme.equipment_constructor.motor.rating.hint": "Rated power, synchronous speed at 50 Hz (2, 4, 6 or 8 poles) and the frame's diameter",
+  "gui.icheme.equipment_constructor.motor.rating.hint": "Rated shaft power, design speed in rpm and the frame's diameter",
   "gui.icheme.equipment_constructor.generator.rating": "%s kW, %s rpm, frame %s m",
-  "gui.icheme.equipment_constructor.generator.rating.hint": "Rated output, synchronous speed at 50 Hz and the frame's diameter",
+  "gui.icheme.equipment_constructor.generator.rating.hint": "Rated power, design speed in rpm and the frame's diameter",
   "gui.icheme.equipment_constructor.gearbox.rating": "%s kW, shafts %s m apart",
   "gui.icheme.equipment_constructor.gearbox.rating.hint": "Rated power, and the offset between its input and output shafts",
   "gui.icheme.equipment_constructor.fcc_converter.regenerator": "Regenerator",
@@ -2941,5 +2941,11 @@
   "message.icheme.equipment.deconstruct.changed": "The equipment in front changed. Check the target and try again.",
   "message.icheme.equipment.deconstruct.unloaded": "Load every chunk of the equipment before deconstructing it.",
   "message.icheme.equipment.deconstruct.protected": "You do not have permission to deconstruct every cell of this equipment.",
-  "message.icheme.equipment.deconstruct.not_editable": "You cannot use this constructor here."
+  "message.icheme.equipment.deconstruct.not_editable": "You cannot use this constructor here.",
+  "gui.icheme.control.sensor_location": "Sensor block: %s, %s, %s",
+  "gui.icheme.control.sensor_host_location": "Equipment block: %s, %s, %s",
+  "gui.icheme.control.sensor_equipment": "Equipment: %s",
+  "gui.icheme.control.location_unknown": "Location unavailable",
+  "gui.icheme.equipment_constructor.rated_speed": "Rated speed",
+  "gui.icheme.equipment_constructor.rated_speed.hint": "Shaft speed at the rated design point, in rpm. The connected driver determines the running speed."
 }

@@ -227,6 +227,19 @@ public final class ControlService {
     }
     private String label(long id){var record=world.registrations().get(id);if(record==null)return "#"+id;if(record.device().control() instanceof FlowControl.ControlValve)return String.format(Locale.ROOT,"CV-%04d",id);var heat=record.device().heat();if(heat!=null)return String.format(Locale.ROOT,"%s-%04d / %s",switch(heat.unit()){case EXCHANGER->"HX";case KETTLE->"RB";case AIR_COOLER->"AC";case FIRED_HEATER->"FH";},id,heat.side());return record.device().kind().name()+" #"+id;}
     private static <T> List<T> page(List<T> values,int requested,int size){int page=Math.clamp(requested,0,Math.max(0,(values.size()-1)/size)),from=page*size;return new ArrayList<>(values.subList(from,Math.min(values.size(),from+size)));}
+    /** Structural location only; a cached menu publication never loads a chunk or samples the process. */
+    private void sensorLocation(CompoundTag tag,Sensor.Installed sensor){
+        long identity=sensor.key().host();var host=world.instrumentHost(identity);var registration=world.registrations().get(identity);
+        if(host!=null&&!host.pipe()||registration!=null&&registration.device().kind()!=com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.PIPE)tag.putLong("equipment",identity);
+        if(host!=null){
+            var mount=Sensor.mounts(host,sensor.kind()).stream().filter(m->m.id().equals(sensor.key().mount())).findFirst().orElse(null);
+            var cell=mount==null?host.entity().getBlockPos():BlockPos.containing(mount.centre());
+            tag.putLong("position",cell.asLong());tag.putBoolean("mountLocated",mount!=null);return;
+        }
+        var port=equipmentPorts.get(identity);
+        if(port!=null){tag.putLong("position",port.owner().asLong());return;}
+        if(registration!=null){var p=registration.device().position();tag.putLong("position",new BlockPos(p.x(),p.y(),p.z()).asLong());}
+    }
     private CompoundTag snapshot(ControlPanelMenu menu,Map<UUID,Sensor.Installed> sensors,Map<UUID,Sensor.Reading> readings){
         UUID owner=menu.panel();var root=new CompoundTag();var controllers=new ListTag();var station=facts.panel(owner);
         if(station==null)return root;
@@ -240,7 +253,7 @@ public final class ControlService {
             row.putInt("inputPages",Math.max(1,(inputChoices.size()+63)/64));row.putInt("inputPage",Math.clamp(menu.devicePage(),0,Math.max(0,(inputChoices.size()-1)/64)));
             var inputRows=page(inputChoices,menu.devicePage(),64);inputChoices.stream().filter(s->s.instance().equals(p.settings().sensor())&&!inputRows.contains(s)).findFirst().ifPresent(inputRows::add);
             var inputs=new ListTag();for(var s:inputRows){
-                var in=new CompoundTag();in.putUUID("id",s.instance());in.putString("label",facts.sensorId(s.instance()).label()+" / "+s.kind().name());in.putString("kind",s.kind().name());in.putString("unit",Sensor.primaryUnit(s.kind()).name());Sensor.secondaryUnit(s.kind()).ifPresent(u->in.putString("secondUnit",u.name()));
+                var in=new CompoundTag();in.putUUID("id",s.instance());in.putString("label",facts.sensorId(s.instance()).label()+" / "+s.kind().name());sensorLocation(in,s);in.putString("kind",s.kind().name());in.putString("unit",Sensor.primaryUnit(s.kind()).name());Sensor.secondaryUnit(s.kind()).ifPresent(u->in.putString("secondUnit",u.name()));
                 var r=readings.get(s.instance());if(r!=null){in.putDouble("value",r.value());in.putDouble("secondary",r.secondary());in.putDouble("span",r.span());in.putString("quality",r.availability().name());in.putString("unit",r.unit().name());if(r.secondaryUnit().isPresent())in.putString("secondUnit",r.secondaryUnit().get().name());}inputs.add(in);
             }row.put("inputs",inputs);
             var outputChoices=world.registrations().values().stream().filter(r->hostIds.contains(r.device().id())&&(r.device().control() instanceof FlowControl.ControlValve||r.device().heat()!=null&&r.device().heat().controllable())).sorted(Comparator.comparingLong(r->r.device().id())).toList();

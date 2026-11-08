@@ -349,7 +349,7 @@ class ConstructorColumnTest {
         var drum = ConstructorColumn.design(design(Form.VERTICAL, 2, 6, 3, 3, 0, 0), t);
         assertEquals(List.of("size", "size-", "size+", "length", "length-", "length+", "support", "support-", "support+", "forward", "forward-", "forward+", "right", "right-",
                 "right+", "up", "up-", "up+"), slots(drum));
-        assertEquals(List.of("nozzles", "paint", "build"), drum.footer().stream().map(Column.Button::key).toList());
+        assertEquals(List.of("paint", "build"), drum.footer().stream().map(Column.Button::key).toList());
         var lying = ConstructorColumn.design(design(Form.CROSSWISE, 2, 6, 3, 3, 0, 0), t);
         assertTrue(buttons(lying).get("axis:crosswise").latched() && buttons(lying).get("axis:lengthwise").active());
         var column = ConstructorColumn.design(design(Form.COLUMN, 2, 20, 3, 3, 0, 0), t);
@@ -359,8 +359,8 @@ class ConstructorColumnTest {
         var pump = ConstructorColumn.design(design(Form.PUMP, 0.1, 1, 0, 3, 0, 0), t);
         assertFalse(slots(pump).contains("support"), "a pump stands at grade");
         // A machine's design point (option A): its settings stepped, the sizes they give shown, its classes latched keys.
-        assertEquals(List.of("flow", "flow-", "flow+", "head", "head-", "head+", "size", "poles:2", "poles:4"), slots(pump).subList(0, 9));
-        assertTrue(buttons(pump).get("poles:2").latched() && buttons(pump).get("poles:4").active());
+        assertEquals(List.of("flow", "flow-", "flow+", "head", "head-", "head+", "size", "base_speed", "base_speed-", "base_speed+"), slots(pump).subList(0, 10));
+        assertFalse(slots(pump).stream().anyMatch(k->k.startsWith("poles:")));
         var motor = ConstructorColumn.design(design(Form.MOTOR, 250, 1, 2, 3, 0, 0), t);
         assertEquals(List.of("power","power-","power+","support","support-","support+","base_speed","base_speed-","base_speed+"),slots(motor).subList(0,9));
         assertFalse(slots(motor).stream().anyMatch(k->k.startsWith("poles:")||k.startsWith("drive:")));
@@ -401,6 +401,30 @@ class ConstructorColumnTest {
         var palette = DialogColumns.palette(Column.place(paint.rows(), ConstructorColumn.LEFT, DialogColumns.TOP, ConstructorColumn.WIDTH, M, Column.Metrics.COMPACT), 16);
         assertEquals(16, palette.size(), "the palette in the Paint group's gap");
         assertTrue(palette.stream().allMatch(r -> r.w() >= 16));
+    }
+
+    @Test void nozzleControlsStayOnTheMainDesignDoorWithOneFooter(){
+        var t=new HeatControlColumnTest.Recording("gui.icheme.");
+        for(var form:List.of(Form.VERTICAL,Form.CROSSWISE,Form.COLUMN)){
+            var in=design(form,2,6,3,3,0,0);
+            var page=ConstructorColumn.design(in,form.column()?null:connections(2,1,form.orientation().horizontal(),0,null,true,false,11),form.column()?nozzles("draw",true,true,14):null,t);
+            var keys=slots(page);assertTrue(keys.containsAll(List.of("forward","right","up",form.column()?"nozzle":"connection")));
+            assertEquals(List.of("paint","build"),page.footer().stream().map(Column.Button::key).toList());
+            assertFalse(buttons(page).containsKey("nozzles"));if(form.column())assertTrue(buttons(page).containsKey("reset"));
+            for(int width:new int[]{ConstructorColumn.WIDTH,ConstructorColumn.WIDTH-BAR}){
+                var column=Column.place(page.rows(),0,0,width,M,Column.Metrics.COMPACT);column.slots();DeviceColumnTest.assertInLine(column,"inline nozzles "+form);
+                for(var row:column.rows())for(var line:row.texts())assertTrue(M.width(line)<=row.rect().w(),line);
+            }
+        }
+        assertEquals(Set.of(),t.missing);
+    }
+    @Test void pumpMotorAndGeneratorUseDirectRpmWithoutPoleButtons(){
+        var t=new HeatControlColumnTest.Recording("gui.icheme.");
+        for(var form:List.of(Form.PUMP,Form.MOTOR,Form.GENERATOR)){
+            var d=UnitDesign.of(form.kind());var page=ConstructorColumn.design(design(form,d.minSize(),d.minLength(d.minSize()),0,3,0,0),t);
+            assertTrue(slots(page).containsAll(List.of("base_speed","base_speed-","base_speed+")));
+            assertFalse(slots(page).stream().anyMatch(k->k.startsWith("poles:")));
+        }
     }
 
     private static Map<String, Rect> widgets(ConstructorColumn.Page page, int width) {

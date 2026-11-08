@@ -49,4 +49,18 @@ class ControlColumnsTest {
         assertTrue(lines.containsAll(List.of("LT-0012","PT-0013","CV-0021")));
         assertEquals(Set.of(),text.missing);
     }
+    @Test void sensorHoversShowCoordinatesAndEquipmentIdWithoutChangingSelectionLabels(){
+        var text=new HeatControlColumnTest.Recording("gui.icheme.");
+        var hint=ControlColumns.sensorHint(new ControlColumns.SensorLocation(true,true,12,64,-30,7),text::get);
+        assertTrue(hint.contains("12, 64, -30"));assertTrue(hint.contains("#0007"));assertFalse(hint.contains("Dimension"));
+        var rows=ControlColumns.choices("Input",List.of(new ControlColumns.Choice("sensor:id","LT-0012 / LEVEL",true,hint)),text::get);
+        var list=Column.place(rows,10,30,210,Measure.fixed(6),Column.Metrics.COMPACT);
+        var choice=list.rows().stream().filter(p->p.row() instanceof Column.Choice).findFirst().orElseThrow();
+        assertEquals(hint,list.hover(choice.rect().x()+5,choice.rect().y()+3));assertTrue(choice.texts().contains("LT-0012 / LEVEL"));
+        var loop=Column.place(ControlColumns.loop(new ControlColumns.View(true,"m","%",true,"LT-0012 / LEVEL","25.0","CV-0013","CONTROLLING",true,ControlColumns.Variable.LEVEL),hint,text::get),10,30,210,Measure.fixed(6),Column.Metrics.COMPACT);
+        var label=loop.rows().stream().filter(p->p.row() instanceof Column.Paragraph para&&para.text().equals("LT-0012 / LEVEL")).findFirst().orElseThrow();
+        assertEquals(hint,loop.hover(label.rect().x()+5,label.rect().y()+3));
+        var pipe=ControlColumns.sensorHint(new ControlColumns.SensorLocation(true,false,1,2,3,0),text::get);assertFalse(pipe.contains("Equipment:"));
+        assertEquals(Set.of(),text.missing);
+    }
 }

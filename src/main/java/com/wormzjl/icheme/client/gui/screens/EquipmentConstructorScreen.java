@@ -80,7 +80,7 @@ import static com.wormzjl.icheme.science.equipment.UnitDesign.number;
 public final class EquipmentConstructorScreen extends Screen {
     /** The screen's pages: what to build, its design, a drum's side connections, a column's side nozzles, the paint, a column's templates and a simulator's designs. */
     private enum Page {
-        CHOOSE, DESIGN, CONNECTIONS, NOZZLES, PAINT, TEMPLATES, IMPORTS
+        CHOOSE, DESIGN, PAINT, TEMPLATES, IMPORTS
     }
 
     /** The schematic's width on its glass: the steam lines (90 pixels left of the axis) to the draw marks (39 right of it), and margins. */
@@ -282,28 +282,8 @@ public final class EquipmentConstructorScreen extends Screen {
             case CHOOSE -> ConstructorColumn.choose(category != null ? category : Equipment.of(form).category, Equipment.of(form), EquipmentNetwork.IMPORT_REACH, EquipmentConstructorScreen::tr);
             case DESIGN -> ConstructorColumn.design(new ConstructorColumn.Design(form, diameter, tangentLength, support, forward, right, up, bank,
                     form.column() ? new ConstructorColumn.Imported(column != null ? column.diameter() : diameter, shownTrays().trays() + 2, shownTrays().feed() + 1) : null,
-                    new ConstructorColumn.Outlet(outlets(), outlet(), words()), EquipmentNetwork.IMPORT_REACH,towerBank,duty,exchangerType), EquipmentConstructorScreen::tr);
-            case CONNECTIONS -> {
-                var c = connections.isEmpty() ? null : connection();
-                int[] stations = stations();
-                yield ConstructorColumn.connections(new ConstructorColumn.Connections(connections.size(), selected, c != null ? c.side() : 0, words(),
-                        c != null ? number(c.station() + .5) : "", form.orientation().horizontal(), c != null ? c.offset() : 0,
-                        c != null && c.offset() != 0 ? toward(c.across(), Integer.signum(c.offset())) : null,
-                        connections.size() < EquipmentShape.MAX_CONNECTIONS && stations[0] <= stations[1], EquipmentShape.bootFor(diameter, tangentLength) != null, hasBoot(),
-                        new ConstructorColumn.Outlet(outlets(), outlet(), words())), EquipmentConstructorScreen::tr);
-            }
-            case NOZZLES -> {
-                var sides = sideNozzles();
-                nozzle = clamp(nozzle, 0, Math.max(0, sides.size() - 1));
-                ConstructorColumn.Nozzle shown = null;
-                if (!sides.isEmpty()) {
-                    var n = sides.get(nozzle);
-                    shown = new ConstructorColumn.Nozzle(n.role().name().toLowerCase(Locale.ROOT), n.index(), n.placed(), n.placed() ? number(n.nozzle().base()[1]) : "-",
-                            place(n).where(), n.turned(), n.side(), n.home());
-                }
-                yield ConstructorColumn.nozzles(new ConstructorColumn.Nozzles(sides.size(), nozzle, shown, words(), (int) sides.stream().filter(ColumnDesign.SideNozzle::turned).count()),
-                        EquipmentConstructorScreen::tr);
-            }
+                    new ConstructorColumn.Outlet(outlets(), outlet(), words()), EquipmentNetwork.IMPORT_REACH,towerBank,duty,exchangerType),
+                    !form.designed()&&!form.column()?connectionInput():null,form.column()?nozzleInput():null,EquipmentConstructorScreen::tr);
             case PAINT -> ConstructorColumn.paint(channel, EquipmentConstructorScreen::tr);
             case TEMPLATES -> ConstructorColumn.templates(templateKeys(), templates.unreadable(), EquipmentConstructorScreen::tr);
             case IMPORTS -> ConstructorColumn.imports(importKeys(), EquipmentConstructorScreen::tr);
@@ -323,6 +303,17 @@ public final class EquipmentConstructorScreen extends Screen {
         }
         return ConstructorColumn.withRemoval(panel, new ConstructorColumn.Removal(target, at, cells, deconstructing,
                 deconstructionMessage == null ? null : deconstructionMessage.getString(), deconstructionFailed), EquipmentConstructorScreen::tr);
+    }
+
+    private ConstructorColumn.Connections connectionInput(){
+        var c=connections.isEmpty()?null:connection();int[] stations=stations();
+        return new ConstructorColumn.Connections(connections.size(),selected,c!=null?c.side():0,words(),c!=null?number(c.station()+.5):"",form.orientation().horizontal(),c!=null?c.offset():0,
+                c!=null&&c.offset()!=0?toward(c.across(),Integer.signum(c.offset())):null,connections.size()<EquipmentShape.MAX_CONNECTIONS&&stations[0]<=stations[1],EquipmentShape.bootFor(diameter,tangentLength)!=null,hasBoot(),new ConstructorColumn.Outlet(outlets(),outlet(),words()));
+    }
+    private ConstructorColumn.Nozzles nozzleInput(){
+        var sides=sideNozzles();nozzle=clamp(nozzle,0,Math.max(0,sides.size()-1));ConstructorColumn.Nozzle shown=null;
+        if(!sides.isEmpty()){var n=sides.get(nozzle);shown=new ConstructorColumn.Nozzle(n.role().name().toLowerCase(Locale.ROOT),n.index(),n.placed(),n.placed()?number(n.nozzle().base()[1]):"-",place(n).where(),n.turned(),n.side(),n.home());}
+        return new ConstructorColumn.Nozzles(sides.size(),nozzle,shown,words(),(int)sides.stream().filter(ColumnDesign.SideNozzle::turned).count());
     }
 
     /** The templates as their page lists them: a name cut to its key (its hover says it whole), whether it builds a column and why not. */
@@ -449,7 +440,6 @@ public final class EquipmentConstructorScreen extends Screen {
                 show(Page.DESIGN);
             }
             case "change" -> show(Page.CHOOSE);
-            case "nozzles" -> show(form.column() ? Page.NOZZLES : Page.CONNECTIONS);
             case "paint" -> show(Page.PAINT);
             case "build" -> build();
             case "deconstruct" -> deconstruct();
@@ -468,7 +458,6 @@ public final class EquipmentConstructorScreen extends Screen {
                 outlet = Integer.parseInt(at);
                 refresh();
             }
-            case "poles" -> machine(duty.withPoles(Integer.parseInt(at)));
             case "drive" -> machine(duty.withDrive(MachineDuty.Drive.valueOf(at.toUpperCase(Locale.ROOT))));
             case "steam" -> machine(duty.withSteam(MachineDuty.Steam.valueOf(at.toUpperCase(Locale.ROOT))));
             case "add" -> add();
@@ -983,7 +972,7 @@ public final class EquipmentConstructorScreen extends Screen {
         String k = ConstructorColumn.KEY;
         return String.join("\n", tr(k + held.key(), held.args()), tr(k + held.key() + ".hint"), tr(k + "extent", number(shape.topElevation()), number(shape.overallLength())),
                 tr(k + "cells", layout.shell().size(), layout.interior().size()),
-                tr(k + (page == Page.CONNECTIONS ? "clash.hint" : page == Page.NOZZLES ? "nozzle.status.hint" : "status.hint")));
+                tr(k + (form.column() ? "nozzle.status.hint" : !form.designed() ? "clash.hint" : "status.hint")));
     }
 
     /** No blur: the ghost in the world is half of this screen. The door, its title, column and message display; a column's schematic on its glass. */
@@ -1010,10 +999,10 @@ public final class EquipmentConstructorScreen extends Screen {
             skin.status(canvas, line, m.cut(status.text(), line.w()), status.warn() ? Palette.WARN : Palette.ACCENT);
             if (new Rect(line.x() - 4, line.y() - 5, line.w() + 8, 15).contains(mouseX, mouseY)) hovered = statusHint();
         }
-        if ((page == Page.DESIGN || page == Page.NOZZLES) && form.column()) {
+        if (page == Page.DESIGN && form.column()) {
             double marked = Double.NaN;
             var sides = sideNozzles();
-            if (page == Page.NOZZLES && !sides.isEmpty()) marked = place(sides.get(clamp(nozzle, 0, sides.size() - 1))).stage();
+            if (!sides.isEmpty()) marked = place(sides.get(clamp(nozzle, 0, sides.size() - 1))).stage();
             schematic(g, skin.well(canvas, new Rect(width - 16 - STRIP, 16, STRIP + 12, height - 32)), marked);
         }
     }

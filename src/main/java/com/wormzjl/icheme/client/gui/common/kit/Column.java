@@ -33,7 +33,8 @@ public final class Column {
     }
 
     /** Text wrapped to the width. */
-    public record Paragraph(String text, int colour) implements Row {
+    public record Paragraph(String text, int colour, @Nullable String hint) implements Row {
+        public Paragraph(String text,int colour){this(text,colour,null);}
     }
 
     /**
@@ -280,7 +281,7 @@ public final class Column {
             }
             case Paragraph p -> {
                 var lines = m.wrap(p.text(), w);
-                yield new Placed(row, new Rect(x, y, w, lines.size() * Measure.LINE + 4), slots, lines, lines.size(), null);
+                yield new Placed(row, new Rect(x, y, w, lines.size() * Measure.LINE + 4), slots, lines, lines.size(), p.hint());
             }
             case Choice c -> {
                 // The title wrapped beside the mark; what it does on hover.

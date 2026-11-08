@@ -208,7 +208,6 @@ public final class MachineColumn {
     public static List<String[]> nameplate(MachineView v, HeatControlColumn.Texts t) {
         var lines = new ArrayList<String[]>();
         if (v.ratedPower() > 0) lines.add(new String[]{t.get(KEY + "rating"), Format.number(v.ratedPower() / 1000) + " kW"});
-        if (v.poles() > 0 && v.kind()!=ShaftNetwork.Kind.MOTOR) lines.add(new String[]{t.get(KEY + "poles"), Integer.toString(v.poles())});
         if (v.kind() == ShaftNetwork.Kind.MOTOR) lines.add(new String[]{t.get(KEY + "drive"), t.get(KEY + "drive.variable")});
         if (v.coupling() != null) lines.add(new String[]{t.get(KEY + "stress_rate"), String.format(Locale.ROOT, "%.3f W/su", v.coupling().wattsPerStress())});
         if (v.designSpeed() > 0) lines.add(new String[]{t.get(KEY + "rated_speed"), String.format(Locale.ROOT, "%.0f rpm", v.designSpeed())});
