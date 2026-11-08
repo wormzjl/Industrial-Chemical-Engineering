@@ -14,9 +14,12 @@ public final class EquipmentPaints {
 
     private static Entry parse(String text) {
         var fields = text.split(":", -1);
-        if (fields.length != 3) throw new IllegalArgumentException("A paint preference holds an account and two colours");
+        if (fields.length != 3)
+            throw new IllegalArgumentException(
+                    "A paint preference holds an account and two colours");
         var player = UUID.fromString(fields[0]);
-        if (!player.toString().equalsIgnoreCase(fields[0])) throw new IllegalArgumentException("Invalid account UUID");
+        if (!player.toString().equalsIgnoreCase(fields[0]))
+            throw new IllegalArgumentException("Invalid account UUID");
         return new Entry(player, new Paint(Paint.parseHex(fields[1]), Paint.parseHex(fields[2])));
     }
 

@@ -1,12 +1,13 @@
 package com.wormzjl.icheme.client;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 import com.wormzjl.icheme.science.equipment.Paint;
+
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.UUID;
-
-import static org.junit.jupiter.api.Assertions.*;
 
 class EquipmentPaintsTest {
     @Test
@@ -31,7 +32,9 @@ class EquipmentPaintsTest {
     void missingOrInvalidPreferencesKeepTheDraftPaint() {
         var player = new UUID(1, 2);
         var draft = new Paint(0xFFFFFF, 0x123456);
-        assertEquals(draft, EquipmentPaints.find(List.of("bad", player + ":#BAD:#FFFFFF"), player, draft));
+        assertEquals(
+                draft,
+                EquipmentPaints.find(List.of("bad", player + ":#BAD:#FFFFFF"), player, draft));
         assertFalse(EquipmentPaints.valid(player + ":#GGGGGG:#FFFFFF"));
         assertFalse(EquipmentPaints.valid("1-2-3-4-5:#FFFFFF:#FFFFFF"));
         assertTrue(EquipmentPaints.valid(player + ":#ffffff:#123456"));

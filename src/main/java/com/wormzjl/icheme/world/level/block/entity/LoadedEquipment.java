@@ -2,6 +2,7 @@ package com.wormzjl.icheme.world.level.block.entity;
 
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.Paint;
+
 import net.minecraft.core.BlockPos;
 
 import java.util.Collection;
@@ -10,8 +11,9 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * The equipment structures of one client level that have a cell loaded. A structure's still parts are one mesh drawn from its origin
- * and it spans many chunks, so it stands while any of its cells is loaded, whichever chunks the view leaves out.
+ * The equipment structures of one client level that have a cell loaded. A structure's still parts
+ * are one mesh drawn from its origin and it spans many chunks, so it stands while any of its cells
+ * is loaded, whichever chunks the view leaves out.
  */
 public final class LoadedEquipment {
     /** One structure, with how many of its cells are loaded. */
@@ -40,7 +42,10 @@ public final class LoadedEquipment {
 
     private final Map<BlockPos, Structure> structures = new HashMap<>();
 
-    /** One more cell of the structure at {@code origin} is loaded; the structure takes the shape and paint it carries. */
+    /**
+     * One more cell of the structure at {@code origin} is loaded; the structure takes the shape and
+     * paint it carries.
+     */
     public Structure add(BlockPos origin, EquipmentShape shape, Paint paint) {
         var structure = structures.computeIfAbsent(origin.immutable(), Structure::new);
         structure.shape = shape;

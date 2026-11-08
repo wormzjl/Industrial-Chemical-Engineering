@@ -10,8 +10,9 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 
 /**
- * Chunk-baked geometry has one update lifecycle for equipment, pipes, rack lanes and conduits. Both an initial chunk tag and a
- * live packet load the new geometry before invalidating NeoForge's model-data cache and the rendered section.
+ * Chunk-baked geometry has one update lifecycle for equipment, pipes, rack lanes and conduits. Both
+ * an initial chunk tag and a live packet load the new geometry before invalidating NeoForge's
+ * model-data cache and the rendered section.
  */
 public abstract class ModelledBlockEntity extends BlockEntity {
     protected ModelledBlockEntity(BlockEntityType<?> type, BlockPos position, BlockState state) {
@@ -24,7 +25,10 @@ public abstract class ModelledBlockEntity extends BlockEntity {
     }
 
     @Override
-    public final void onDataPacket(Connection connection, ClientboundBlockEntityDataPacket packet, HolderLookup.Provider registries) {
+    public final void onDataPacket(
+            Connection connection,
+            ClientboundBlockEntityDataPacket packet,
+            HolderLookup.Provider registries) {
         super.onDataPacket(connection, packet, registries);
         refreshModelData();
     }
@@ -39,9 +43,13 @@ public abstract class ModelledBlockEntity extends BlockEntity {
     protected final void refreshModelData() {
         clientGeometryChanged();
         requestModelDataUpdate();
-        if (level != null && level.isClientSide) level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 0);
+        if (level != null && level.isClientSide)
+            level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 0);
     }
 
-    /** Refresh client-only indices after loading geometry, without replacing the shared cache invalidation. */
+    /**
+     * Refresh client-only indices after loading geometry, without replacing the shared cache
+     * invalidation.
+     */
     protected void clientGeometryChanged() {}
 }

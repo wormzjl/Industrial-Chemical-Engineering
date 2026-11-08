@@ -3,6 +3,7 @@ package com.wormzjl.icheme.client.model;
 import com.wormzjl.icheme.IChemE;
 import com.wormzjl.icheme.science.equipment.*;
 import com.wormzjl.icheme.world.level.block.entity.ConduitBlockEntity;
+
 import net.minecraft.client.renderer.*;
 import net.minecraft.client.renderer.block.model.*;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
@@ -15,53 +16,156 @@ import net.neoforged.neoforge.client.ChunkRenderTypeSet;
 import net.neoforged.neoforge.client.model.*;
 import net.neoforged.neoforge.client.model.data.ModelData;
 import net.neoforged.neoforge.client.model.geometry.*;
+
 import org.jetbrains.annotations.Nullable;
+
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
 public final class ConduitModel implements IDynamicBakedModel {
-    public static final ResourceLocation LOADER_ID=ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"data_cable");
-    public static final IGeometryLoader<Geometry> LOADER=(json,context)->new Geometry(json.has("medium")?CableMedium.valueOf(json.get("medium").getAsString()):CableMedium.DATA);
-    private static final ChunkRenderTypeSet SOLID=ChunkRenderTypeSet.of(RenderType.solid());
-    private static final Map<CableMedium,Finish> FINISHES=new ConcurrentHashMap<>();
-    /** Chunk blocks, rack sections and socket leads bake the same materials, tint and smooth-normal shade. */
+    public static final ResourceLocation LOADER_ID =
+            ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID, "data_cable");
+    public static final IGeometryLoader<Geometry> LOADER =
+            (json, context) ->
+                    new Geometry(
+                            json.has("medium")
+                                    ? CableMedium.valueOf(json.get("medium").getAsString())
+                                    : CableMedium.DATA);
+    private static final ChunkRenderTypeSet SOLID = ChunkRenderTypeSet.of(RenderType.solid());
+    private static final Map<CableMedium, Finish> FINISHES = new ConcurrentHashMap<>();
+
+    /**
+     * Chunk blocks, rack sections and socket leads bake the same materials, tint and smooth-normal
+     * shade.
+     */
     public static final class Finish {
         private final TextureAtlasSprite[] sprites;
         private final CableMedium medium;
-        private Finish(CableMedium medium,TextureAtlasSprite body,TextureAtlasSprite fitting,TextureAtlasSprite opening,TextureAtlasSprite marker){
-            this.medium=medium;sprites=new TextureAtlasSprite[Mesh.Material.values().length];Arrays.fill(sprites,body);
-            sprites[Mesh.Material.FLANGE.ordinal()]=fitting;sprites[Mesh.Material.BOLT.ordinal()]=fitting;
-            sprites[Mesh.Material.OPENING.ordinal()]=opening;sprites[Mesh.Material.GUARD.ordinal()]=marker;
+
+        private Finish(
+                CableMedium medium,
+                TextureAtlasSprite body,
+                TextureAtlasSprite fitting,
+                TextureAtlasSprite opening,
+                TextureAtlasSprite marker) {
+            this.medium = medium;
+            sprites = new TextureAtlasSprite[Mesh.Material.values().length];
+            Arrays.fill(sprites, body);
+            sprites[Mesh.Material.FLANGE.ordinal()] = fitting;
+            sprites[Mesh.Material.BOLT.ordinal()] = fitting;
+            sprites[Mesh.Material.OPENING.ordinal()] = opening;
+            sprites[Mesh.Material.GUARD.ordinal()] = marker;
         }
-        public List<BakedQuad> bake(List<Mesh.Polygon> polygons){return EquipmentShellModel.bake(polygons,sprites,m->-1,m->m==Mesh.Material.GUARD?medium.colour():0xffffff);}
+
+        public List<BakedQuad> bake(List<Mesh.Polygon> polygons) {
+            return EquipmentShellModel.bake(
+                    polygons,
+                    sprites,
+                    m -> -1,
+                    m -> m == Mesh.Material.GUARD ? medium.colour() : 0xffffff);
+        }
     }
-    public static Finish finish(CableMedium medium){return FINISHES.get(medium);}
+
+    public static Finish finish(CableMedium medium) {
+        return FINISHES.get(medium);
+    }
+
     private final CableMedium medium;
     private final TextureAtlasSprite sprite;
     private final Finish finish;
     private final ItemTransforms transforms;
-    private record Look(ConduitGeometry.Key geometry,boolean marked){}
-    private final Map<Look,List<BakedQuad>> cache=new ConcurrentHashMap<>();
-    private ConduitModel(CableMedium medium,TextureAtlasSprite sprite,TextureAtlasSprite fitting,TextureAtlasSprite opening,TextureAtlasSprite marker,ItemTransforms transforms){this.medium=medium;this.sprite=sprite;this.finish=new Finish(medium,sprite,fitting,opening,marker);FINISHES.put(medium,finish);this.transforms=transforms;}
-    @Override public List<BakedQuad> getQuads(@Nullable BlockState state,@Nullable Direction side,RandomSource random,ModelData data,@Nullable RenderType type){
-        if(side!=null)return List.of();
-        var key=data.get(ConduitBlockEntity.GEOMETRY);if(key==null)key=new ConduitGeometry.Key(0,0,medium);
-        if(cache.size()>2048)cache.clear();
-        var look=new Look(key,!Boolean.FALSE.equals(data.get(ConduitBlockEntity.MARKED)));
-        return cache.computeIfAbsent(look,l->finish.bake(ConduitGeometry.polygons(l.geometry(),l.marked())));
+
+    private record Look(ConduitGeometry.Key geometry, boolean marked) {}
+
+    private final Map<Look, List<BakedQuad>> cache = new ConcurrentHashMap<>();
+
+    private ConduitModel(
+            CableMedium medium,
+            TextureAtlasSprite sprite,
+            TextureAtlasSprite fitting,
+            TextureAtlasSprite opening,
+            TextureAtlasSprite marker,
+            ItemTransforms transforms) {
+        this.medium = medium;
+        this.sprite = sprite;
+        this.finish = new Finish(medium, sprite, fitting, opening, marker);
+        FINISHES.put(medium, finish);
+        this.transforms = transforms;
     }
-    @Override public ChunkRenderTypeSet getRenderTypes(BlockState state,RandomSource random,ModelData data){return SOLID;}
-    @Override public boolean useAmbientOcclusion(){return false;}
-    @Override public boolean isGui3d(){return true;}
-    @Override public boolean usesBlockLight(){return true;}
-    @Override public boolean isCustomRenderer(){return false;}
-    @Override public TextureAtlasSprite getParticleIcon(){return sprite;}
-    @Override public ItemTransforms getTransforms(){return transforms;}
-    @Override public ItemOverrides getOverrides(){return ItemOverrides.EMPTY;}
+
+    @Override
+    public List<BakedQuad> getQuads(
+            @Nullable BlockState state,
+            @Nullable Direction side,
+            RandomSource random,
+            ModelData data,
+            @Nullable RenderType type) {
+        if (side != null) return List.of();
+        var key = data.get(ConduitBlockEntity.GEOMETRY);
+        if (key == null) key = new ConduitGeometry.Key(0, 0, medium);
+        if (cache.size() > 2048) cache.clear();
+        var look = new Look(key, !Boolean.FALSE.equals(data.get(ConduitBlockEntity.MARKED)));
+        return cache.computeIfAbsent(
+                look, l -> finish.bake(ConduitGeometry.polygons(l.geometry(), l.marked())));
+    }
+
+    @Override
+    public ChunkRenderTypeSet getRenderTypes(
+            BlockState state, RandomSource random, ModelData data) {
+        return SOLID;
+    }
+
+    @Override
+    public boolean useAmbientOcclusion() {
+        return false;
+    }
+
+    @Override
+    public boolean isGui3d() {
+        return true;
+    }
+
+    @Override
+    public boolean usesBlockLight() {
+        return true;
+    }
+
+    @Override
+    public boolean isCustomRenderer() {
+        return false;
+    }
+
+    @Override
+    public TextureAtlasSprite getParticleIcon() {
+        return sprite;
+    }
+
+    @Override
+    public ItemTransforms getTransforms() {
+        return transforms;
+    }
+
+    @Override
+    public ItemOverrides getOverrides() {
+        return ItemOverrides.EMPTY;
+    }
+
     public record Geometry(CableMedium medium) implements IUnbakedGeometry<Geometry> {
-        @Override public BakedModel bake(IGeometryBakingContext context,ModelBaker baker,Function<Material,TextureAtlasSprite> sprites,ModelState state,ItemOverrides overrides){
-            return new ConduitModel(medium,sprites.apply(context.getMaterial("cable")),sprites.apply(context.getMaterial("fitting")),sprites.apply(context.getMaterial("opening")),sprites.apply(context.getMaterial("marker")),context.getTransforms());
+        @Override
+        public BakedModel bake(
+                IGeometryBakingContext context,
+                ModelBaker baker,
+                Function<Material, TextureAtlasSprite> sprites,
+                ModelState state,
+                ItemOverrides overrides) {
+            return new ConduitModel(
+                    medium,
+                    sprites.apply(context.getMaterial("cable")),
+                    sprites.apply(context.getMaterial("fitting")),
+                    sprites.apply(context.getMaterial("opening")),
+                    sprites.apply(context.getMaterial("marker")),
+                    context.getTransforms());
         }
     }
 }
