@@ -6,7 +6,7 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
 
 ## Documents
 
-- [OPEN_DATA_PLAN.md](OPEN_DATA_PLAN.md): expected behaviour, the data today, work packages O1 to O11 and decisions E1 to E31.
+- [OPEN_DATA_PLAN.md](OPEN_DATA_PLAN.md): expected behaviour, the data today, work packages O1 to O11 and decisions E1 to E33.
 - [NIST_REDERIVATION_REVIEW.md](NIST_REDERIVATION_REVIEW.md): O1 and O2, what the open re-derivation moved, the measurements and the owner decisions.
 - [CRUDE_GRADES_REVIEW.md](CRUDE_GRADES_REVIEW.md): research R1 and the production data. Grade specifications and the generation method on the shared cuts, cut viscosity candidates, the mixture rule and its open refit, the validation against ECCC records.
 - [CUT_VISCOSITY_REVIEW.md](CUT_VISCOSITY_REVIEW.md): O4, the Twu cut tables and the one-term mixture term, the bit-for-bit proof and what moved.
@@ -23,6 +23,7 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
   - The simulator-to-column energy gap: all water, from two water models.
   - Fix forms F1 to F1b, and gap options (a) to (c).
 - [CLASSICAL_STALL_APPLY_REVIEW.md](CLASSICAL_STALL_APPLY_REVIEW.md): E30 applied. Part 1, option (a): the column takes the network's water (wet revisions r32/r33), the gap per case, the moved pins, the network proof. Part 2: the stall fix, form H (landed), with every form tried.
+- [WARM_CARRYOVER_REVIEW.md](WARM_CARRYOVER_REVIEW.md): E32 and E33. The warm restart of carry-over columns, why it failed (the hydraulic profile; two steady states of a flowsheet) and the revert.
 - [CONDENSER_CARRYOVER_REVIEW.md](CONDENSER_CARRYOVER_REVIEW.md): E31. Tray 1's free water is carried over to the condenser drum. The review covers the null SAT lever, what was built, the entrainment limit (warn, option (a)) and the open choices.
 
 ## Code areas
@@ -115,6 +116,9 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
   - Main thread: the continuation steps to a bracket margin when the secant falls inside it (the heavy grade closes in 10 solves, not out of budget); `WetBoundaryTeacherProbe` releases at the prescribed drop; four test-construction fixes.
   - Measured: heavy crude carries 148.5 kmol/h (5 % of its limit, 25 % flood), dilbit 98.4 kmol/h (1 %, 51 %), the literature preset 88.5 kmol/h and grades WET with no warning; its distillate 697.72 to 708.47 kmol/h.
   - Re-pinned: the literature distillate, the heavy and dilbit draw targets, the `tjl20-wet-boundary` fixture, and 28 sample-sizing pins (the naphtha sphere 14 to 15 m). The broad run and the 15 re-pinned methods pass, except `ColumnSolveTest`: a carry-over seed is not warm-startable, so the column re-solves cold.
+- 2026-11-08: E32, the warm route for carry-over seeds (the owner's "A, via subagent"), was built by an Opus subagent and measured on the main thread, and then reverted ("B, revert E32", E33). See [WARM_CARRYOVER_REVIEW.md](WARM_CARRYOVER_REVIEW.md).
+  - Measured: it re-solved the literature preset warm at the prescribed drop. On the 8 m default column the warm pass failed (the seed's carried water belongs to the tray-hydraulics profile), and the furnace-on-duty sheet closed on two steady states (OFFGAS 2.57 against 2.03 kg/s).
+  - Landed: `ColumnSolveTest` asserts the cold route for its carry-over column, and a dry variant (top cooler halved) keeps the warm route's assertion. Both pass, with `ColumnRunTest` (32 tests, its first run on E31's code). The E32 code was never committed; it stays in `tmp/warm-carryover/warm.patch`.
 
 ## Open items
 
@@ -141,7 +145,8 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
   4. O5: done (`2f59caa62`, `4e2a77b9f`, `bc471a90c`, `b89cb024e`; [UNUSED_DATA_APPLY_REVIEW.md](UNUSED_DATA_APPLY_REVIEW.md)). Still waiting for E26: the neural files, and the manifest that hashes the removed `tools/neural/fit_methane.py`. Kept: `tools/spine-join-measurement/build-spine-records.mjs`, the generator the 4 spine records name. The Tia Juana `crude_unit.json` test copy is read by `UtilityRegulationTest`; it now lists CarbonDioxide.
   5. O9: combustion data (E22, E23). First, verify the Bulletin 627 values.
   6. The translation commit (en_us changed in O3 and later), then the final lane on the merged code (E19). It must re-check the fluid GameTests and the hold-gate sample sheets (`ColumnSizingSampleTest`, `SizeAllSampleTest`, `UnitSizingSampleTest`, `LineSizingSampleTest`, `UtilityRegulationTest`, `FlowsheetColumnTest`, `ColumnEjectorTest`).
-- E31 (condenser carry-over): the warm route for carry-over seeds waits for the owner, (A) extend it or (B) keep cold re-solves ([CONDENSER_CARRYOVER_REVIEW.md](CONDENSER_CARRYOVER_REVIEW.md) section 6, item 4). `ColumnSolveTest` fails until then.
+- E31 (condenser carry-over): the warm route is settled, carry-over columns re-solve cold (E33).
+  - The furnace-on-duty sheet has two steady states ([WARM_CARRYOVER_REVIEW.md](WARM_CARRYOVER_REVIEW.md) section 3). Cold re-solves always show one; which is stable was not measured.
   - Owner choices ([CONDENSER_CARRYOVER_REVIEW.md](CONDENSER_CARRYOVER_REVIEW.md) section 6):
     - the limit's form, `f·G` or the Fair ψ chart;
     - a drum without free water keeps the falling water;

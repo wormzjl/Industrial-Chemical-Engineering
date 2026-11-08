@@ -1,6 +1,6 @@
 # Condenser carry-over of tray 1's free water (E31)
 
-Status: built 2026-11-05, tested on lane 2 (`--max-workers=4`), committed 2026-11-08 in `81e8aafae`. Open: the warm route (section 6, item 4); `ColumnSolveTest` fails until it is settled. Owner choices: carry-over over a top-tray decant draw; above the entrainment limit, "Warn (a)".
+Status: built 2026-11-05, tested on lane 2 (`--max-workers=4`), committed 2026-11-08 in `81e8aafae`. The warm route is settled: carry-over columns re-solve cold (E33, after E32 failed; [WARM_CARRYOVER_REVIEW.md](WARM_CARRYOVER_REVIEW.md)). Owner choices: carry-over over a top-tray decant draw; above the entrainment limit, "Warn (a)".
 
 ## 1. Expected behaviour
 
@@ -33,17 +33,18 @@ Status: built 2026-11-05, tested on lane 2 (`--max-workers=4`), committed 2026-1
 - Literature preset (prescribed drop): WET_EQUILIBRIUM, no warning, 88.5 kmol/h carried, condenser -43.62 MW; distillate 697.72 to 708.47 kmol/h. The condensing water's heat lifts tray 1 to its dew point and sends more naphtha overhead.
 - Sample sheet (medium grade): NAPHTHA line drop 0.175 to 0.193 bar/100 m, naphtha sphere 14 to 15 m, condenser 522 to 508 m², air condenser 1327 to 1265 m² (still two banks), PA 1 need 202 to 198 m², reflux pump 74 to 78 % of rated; OFFGAS is decided by speed again. 22 smaller readings move; no other size changes.
 - `column-draw-volume-targets.json`: heavy crude and dilbit re-captured (up to 8.5e-3 relative); light and medium unchanged.
-- Warm route: `ColumnSolve.run` drops seeds with a wet tray and `retargetWarmSeed` refuses them, so a carry-over column re-solves cold: about 3.6 s (heavy), 11 s (dilbit), against 0.17 to 0.57 s warm (C1). `ColumnSolveTest.aStartSolvesTheDesign...` fails: route `cold/stage-continuation/...`.
+- Warm route: `ColumnSolve.run` drops seeds with a wet tray and `retargetWarmSeed` refuses them, so a carry-over column re-solves cold: about 3.6 s (heavy), 11 s (dilbit), against 0.17 to 0.57 s warm (C1). E33 keeps this; `ColumnSolveTest` asserts it, and the warm route on a dry variant.
 
 ## 6. Open owner choices
 
 1. The limit's form: `f·G` (built) or the Fair ψ chart.
 2. A drum without free water keeps tray 1's falling water and its warning (built).
 3. Generalisation: the top tray of any wet block carries its water up to the tray above.
-4. The warm route: (A) extend it to seeds whose only wet tray is a carry-over tray 1 (recommended), or (B) keep cold re-solves and change `ColumnSolveTest`.
+4. The warm route: decided (B), cold re-solves (E33), after (A) was built and measured (E32, [WARM_CARRYOVER_REVIEW.md](WARM_CARRYOVER_REVIEW.md)).
 
 ## 7. Tests (main thread, lane 2)
 
 - New classes `V3InteriorWetBlockTest`, `V3CondenserCarryOverTest`, `V3CarryOverEntrainmentTest`, `V3GradePresetCarryOverTest` (presets from `d72caf1e0`) pass after four construction fixes.
 - Broad run: 78 columnGates, 8 holdGates and 46 test classes that load the changed code. Failed: the literature distillate pin and the RegroupedCrude draw targets (both re-pinned, pass), 15 sample-sizing methods, `ColumnSolveTest` (section 5).
 - Soft pins (`O4SoftPins.mjs`): 243 pins, 28 moved. Re-pinned; the 15 methods pass (holdGates, 1 min 30 s). The final lane runs once per batch. Code guide at merge: column-v3 chapter.
+- E33 (2026-11-08): `ColumnSolveTest` (8 tests, with the dry variant) and `ColumnRunTest` (32, its first run on E31's code) pass.
