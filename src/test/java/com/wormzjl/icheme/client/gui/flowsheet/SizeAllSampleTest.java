@@ -84,13 +84,14 @@ class SizeAllSampleTest {
      * path 3.07 to 3.10 bar. No size moves.
      *
      * <p>O3 of the same batch runs the sample on the medium crude grade: PA 1 cooler 0.36 to 0.39, E-101 0.18 to 0.20, H-101 1.48 to
-     * 1.39, S-6 0.03 to 0.02; the path 3.10 to 3.06 bar.
+     * 1.39, S-6 0.03 to 0.02; the path 3.10 to 3.06 bar. With condenser carry-over (E31 of that batch) H-101 loses
+     * 1.385; the path stands.
      */
     @Test
     void p101sPathIsTheProbesStair() {
         var path = path(proposal, "P-101");
         String[] items = {"S-1", "T-101/pa 1 cooler", "S-2", "T-101/pa 2 cooler", "S-3", "T-101/pa 3 cooler", "S-4", "E-101", "S-5", "H-101", "S-6"};
-        double[] lost = {.12, .39, .10, .41, .04, .30, .04, .20, .04, 1.39, .02};
+        double[] lost = {.12, .39, .10, .41, .04, .30, .04, .20, .04, 1.385, .02};
         assertEquals(List.of(items), path.steps().stream().map(PressurePath.Step::item).toList());
         for (int i = 0; i < lost.length; i++) assertEquals(lost[i], path.steps().get(i).lost(), HUNDREDTH, items[i]);
         assertEquals(3.06, path.lost(), HUNDREDTH);
@@ -107,7 +108,8 @@ class SizeAllSampleTest {
      * bank, 0.07 bar where the probe's lost 0.05 (plan section 4). S4c's spare takes larger units on it: E-101's 1.25 m shell, whose
      * residue side loses 0.06, not 0.15, and E-102's 6 × 3 bays of 2.5 × 6 m, 0.04, not 0.07. The path loses 0.37; 0.38 since O4 of
      * batch 2026-11-04-open-thermo-data (crude cuts on Twu 1985 viscosity, the one-term mixture term), 0.375 against 0.37. On the
-     * medium crude grade (O3 of that batch) E-101's residue side loses 0.07 and the product line 0.16; the head 0.48, the path 0.38.
+     * medium crude grade (O3 of that batch) E-101's residue side loses 0.07 and the product line 0.16; the head 0.48, the path 0.38; 0.374 with
+     * condenser carry-over (E31 of that batch).
      */
     @Test
     void theResiduesPathIsTheProbes() {
@@ -118,7 +120,7 @@ class SizeAllSampleTest {
         assertEquals(.48, residue.head(), HUNDREDTH);
         assertEquals(2.21, residue.to(), HUNDREDTH);
         assertEquals(.98, residue.available(), HUNDREDTH);
-        assertEquals(.38, residue.lost(), HUNDREDTH);
+        assertEquals(.374, residue.lost(), HUNDREDTH);
         assertFalse(residue.set());
         assertSame(com.wormzjl.icheme.science.flowsheet.sizing.Rating.NONE, residue.rating());
     }
@@ -144,7 +146,8 @@ class SizeAllSampleTest {
      * and the feed reaches the column at 358.5 °C and 347.1 °C.
      *
      * <p>Since the column took the network's water (E30 (a)) its residue leaves a little lighter and cooler, so E-101 gives the
-     * crude less heat and the furnace fires 73.03 MW before sizing, not 73.00.
+     * crude less heat and the furnace fires 73.03 MW before sizing, not 73.00. With condenser
+     * carry-over (E31) it fires 73.08 MW before sizing and 67.60 after.
      */
     @Test
     void theSampleSizedMovesAsThePlanSays() {
@@ -153,8 +156,8 @@ class SizeAllSampleTest {
         assertEquals(FlowsheetRun.Status.STEADY, all.run().status());
         assertEquals(5.00, before.get("S-6").pressure() / 1e5, HUNDREDTH);
         assertEquals(11.9, after.get("S-6").pressure() / 1e5, .15);
-        assertEquals(73.03, run.reports().get("H-101").readings().get("duty") / 1e6, HUNDREDTH);
-        assertEquals(67.70, all.run().reports().get("H-101").readings().get("duty") / 1e6, .1);
+        assertEquals(73.08, run.reports().get("H-101").readings().get("duty") / 1e6, HUNDREDTH);
+        assertEquals(67.60, all.run().reports().get("H-101").readings().get("duty") / 1e6, .1);
         assertEquals(358.5, before.get("S-7").temperature() - 273.15, .1);
         assertEquals(347.1, after.get("S-7").temperature() - 273.15, .15);
         assertEquals(.67, run.reports().get("H-101").readings().get("vapour"), HUNDREDTH);

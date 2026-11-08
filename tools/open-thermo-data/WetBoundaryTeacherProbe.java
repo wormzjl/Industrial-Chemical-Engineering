@@ -44,7 +44,10 @@ class WetBoundaryTeacherProbe {
                 base.feedStageNumber(), base.topPressurePascal(), base.stagePressureDropPascal(),
                 base.specifications().stream().map(s -> s instanceof V3ColumnSpecification.CondenserOutletTemperature
                         ? (V3ColumnSpecification) new V3ColumnSpecification.CondenserOutletTemperature(temperature) : s).toList(),
-                base.sideDraws(), base.steamFeeds(), base.pumparounds(), base.columnDiameterMetres());
+                // At the prescribed drop, as V3WaterPhaseQualificationTest reads the fixture (E31): with condenser
+                // carry-over tray one's free water is the lever of its saturation row, so the release would follow the
+                // preset's hydraulic pressure profile to another root (14.05 mol/s instead of the 1 mol/s held here).
+                base.sideDraws(), base.steamFeeds(), base.pumparounds(), V3ColumnInput.PRESCRIBED_DROP_DIAMETER);
     }
 
     private static Parametric parametric(V3ColumnInput input, V3NeuralSeed snapshot, V3PengRobinsonThermo thermo, double hf) {
@@ -168,9 +171,9 @@ class WetBoundaryTeacherProbe {
         var accepted = ((V3ColumnOutcome.Success) result).result();
         json.add("acceptanceAudit", gson.toJsonTree(accepted.acceptanceAudit()));
         json.add("convergenceEvidence", gson.toJsonTree(accepted.convergenceEvidence()));
-        json.addProperty("provenance", json.get("provenance").getAsString() + " Re-made 2026-11-04 on the open thermo data (batch"
-                + " 2026-11-04-open-thermo-data O7) by the same teacher (tools/open-thermo-data/WetBoundaryTeacherProbe.java, a port of"
-                + " tools/neural/V3WetBoundaryTeacher.java): condenser outlet " + old + " -> " + now + " K, tray-1 free water "
+        json.addProperty("provenance", json.get("provenance").getAsString() + " Re-made 2026-11-05 for condenser carry-over"
+                + " (wet formulation r34/r35, E31 of batch 2026-11-04-open-thermo-data) by the same teacher, now at the prescribed"
+                + " drop the test reads it with: condenser outlet " + old + " -> " + now + " K, tray-1 free water "
                 + seed.freeWater()[1] + " mol/s.");
         write(out, json);
     }

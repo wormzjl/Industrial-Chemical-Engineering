@@ -30,8 +30,13 @@ public final class V3ColumnCalculator {
     public static final String FORMULATION_REVISION = "v3-dry-mesh-r24-flash-trace-phase-r1";
     private static final String LEGACY_FORMULATION_REVISION = "v3-dry-mesh-r23";
     public static final String ASSUMPTIONS_REVISION = "v3-dry-assumptions-r4";
-    /** r2: free water is allowed on a tray, is immiscible with the hydrocarbon liquid, and is not side-drawn. */
-    public static final String WET_ASSUMPTIONS_REVISION = "v3-wet-assumptions-r2";
+    /**
+     * r2: free water is allowed on a tray, is immiscible with the hydrocarbon liquid, and is not side-drawn.
+     * r3 (E31): under a drum that decants free water, tray one's free water is carried over to the drum as entrained
+     * liquid instead of falling to tray two; with a column diameter the carried water is read against an
+     * entrainment limit of flood fraction times vapour mass.
+     */
+    public static final String WET_ASSUMPTIONS_REVISION = "v3-wet-assumptions-r3";
     /**
      * Prescribed stage heat: a signed duty with positive adding heat, no circulating pumparound stream,
      * no return-temperature specification, and the {@link V3PumparoundSpec.Split} tray placement rule.
@@ -2639,7 +2644,12 @@ public final class V3ColumnCalculator {
             // r32/r33 (E30 of batch 2026-11-04-open-thermo-data): the water is the fluid network's, the steam its
             // second-virial gas at the steam's partial pressure and the liquid IF97 Region 1 at the tray's
             // pressure, so accepted wet states move by the steam's residual and the liquid's enthalpy difference.
-            return (heat ? "v3-wet-mesh-r33-steam" : "v3-wet-mesh-r32-steam")
+            // r34/r35 (E31 of the same batch): condenser carry-over. Under a drum that decants free water, tray
+            // one's free water leaves upward to the drum as entrained liquid, its vapour carries the steam less
+            // that water, and its saturation row has a lever, so a top tray below its water dew point is solved
+            // wet instead of published dry with the WATER_DEW_POINT warning; the condenser duty falls by the
+            // carried water's latent heat.
+            return (heat ? "v3-wet-mesh-r35-steam" : "v3-wet-mesh-r34-steam")
                     + (!input.sideDraws().isEmpty() ? "-side-draws" : "") + trace
                     + (heat ? HEAT_FORMULATION_SUFFIX : "");
         }

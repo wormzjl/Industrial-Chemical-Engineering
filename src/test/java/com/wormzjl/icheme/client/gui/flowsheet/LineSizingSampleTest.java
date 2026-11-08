@@ -35,6 +35,10 @@ import static org.junit.jupiter.api.Assertions.*;
  *
  * <p>Since the column took the network's water (E30 (a) of the same batch) the column sends a little more to its distillate, and
  * NAPHTHA's drop is 0.175 bar/100 m, not 0.174.
+ *
+ * <p>With condenser carry-over (E31 of the same batch) the column sends more again: NAPHTHA's drop is 0.193 bar/100 m,
+ * OFFGAS (0.070) is decided by its speed again, and WATER, DIESEL, S-10, RESIDUE and AGO move in the third place. Every
+ * service, bore, count and lamp stands.
  */
 class LineSizingSampleTest {
     /**
@@ -49,10 +53,10 @@ class LineSizingSampleTest {
             new Probe("S-3", Service.LIQUID, .35, Limit.LIQUID_SPEED, .086), new Probe("S-4", Service.LIQUID, .35, Limit.LIQUID_SPEED, .085), new Probe("S-5", Service.LIQUID, .35, Limit.LIQUID_SPEED, .087),
             // S-7: the probe's 0.056 at V-101's 2.72 bar; the sample sets 2.80 since S4c (0.054 on Tia Juana, 0.050 on the medium grade).
             new Probe("S-6", Service.TWO_PHASE, .7, Limit.TWO_PHASE_MOMENTUM, .050), new Probe("S-7", Service.TWO_PHASE, .8, Limit.TWO_PHASE_MOMENTUM, .050), new Probe("STEAM", Service.STEAM_SUPERHEATED, .35, Limit.STEAM_SUPERHEATED_SPEED, .063),
-            new Probe("CWS", Service.WATER, .6, Limit.WATER_SPEED, .086), new Probe("CWR", Service.WATER, .6, Limit.WATER_SPEED, .085), new Probe("OFFGAS", Service.GAS, .2, Limit.GAS_DROP, .075),
-            new Probe("NAPHTHA", Service.LIQUID, .1, Limit.LIQUID_SPEED, .175), new Probe("WATER", Service.WATER, .075, Limit.WATER_DROP, .279), new Probe("DIESEL", Service.LIQUID, .15, Limit.LIQUID_SPEED, .155),
-            new Probe("S-10", Service.LIQUID, .25, Limit.LIQUID_SPEED, .188), new Probe("RESIDUE", Service.LIQUID, .25, Limit.LIQUID_SPEED, .326), new Probe("KERO", Service.DRAW, .25, Limit.DRAW_SPEED, .008),
-            new Probe("AGO", Service.DRAW, .2, Limit.DRAW_SPEED, .008), new Probe("S-8", Service.DRAW, .25, Limit.DRAW_SPEED, .012), new Probe("S-9", Service.DRAW, .45, Limit.DRAW_SPEED, .010));
+            new Probe("CWS", Service.WATER, .6, Limit.WATER_SPEED, .086), new Probe("CWR", Service.WATER, .6, Limit.WATER_SPEED, .085), new Probe("OFFGAS", Service.GAS, .2, Limit.GAS_SPEED, .070),
+            new Probe("NAPHTHA", Service.LIQUID, .1, Limit.LIQUID_SPEED, .193), new Probe("WATER", Service.WATER, .075, Limit.WATER_DROP, .280), new Probe("DIESEL", Service.LIQUID, .15, Limit.LIQUID_SPEED, .157),
+            new Probe("S-10", Service.LIQUID, .25, Limit.LIQUID_SPEED, .186), new Probe("RESIDUE", Service.LIQUID, .25, Limit.LIQUID_SPEED, .324), new Probe("KERO", Service.DRAW, .25, Limit.DRAW_SPEED, .008),
+            new Probe("AGO", Service.DRAW, .2, Limit.DRAW_SPEED, .009), new Probe("S-8", Service.DRAW, .25, Limit.DRAW_SPEED, .012), new Probe("S-9", Service.DRAW, .45, Limit.DRAW_SPEED, .010));
 
     @Test
     void theSheetsLinesEqualTheProbes() {

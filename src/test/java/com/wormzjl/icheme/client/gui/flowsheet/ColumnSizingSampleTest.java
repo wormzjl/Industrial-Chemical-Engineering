@@ -114,6 +114,7 @@ class ColumnSizingSampleTest {
      * of 1.00 × 3 m do, on the curves' 782 m² against the probe's 862. A kept size stands at its door's count (S3b): the probe's
      * shells on a door of three, and the same size on a door of one, which is short of surface. On the medium crude grade (O3 of batch
      * 2026-11-04-open-thermo-data) the condenser takes less: four shells of 1.00 × 3 m on the curves' 522 m², 0.13 bar.
+     * With condenser carry-over (E31 of that batch) the same four shells stand on the curves' 508 m².
      */
     @Test
     void theCondenserIsSetByItsShellDrop() {
@@ -121,7 +122,7 @@ class ColumnSizingSampleTest {
         assertEquals(new ExchangerSizing.Size(false, 4, 1, 3), condenser.size());
         closest(condenser.rating(), Limit.EXCHANGER_DROP_GAS);
         assertEquals(.13, read(condenser.rating(), Limit.EXCHANGER_DROP_GAS), HUNDREDTH);
-        assertEquals(522, condenser.rating().reading(Limit.EXCHANGER_SURFACE).low(), 8);
+        assertEquals(508, condenser.rating().reading(Limit.EXCHANGER_SURFACE).low(), 8);
         var probe = new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of(SheetSizing.member(T, "condenser"), new SheetSizing.UnitEntry(new ExchangerSizing.Size(false, 3, 1.25, 4), null, null, false)));
         var three = size(door(sheet, json -> json.addProperty("condenser_units", 3)), run, thermo, probe).units().get(SheetSizing.member(T, "condenser"));
         assertEquals(new ExchangerSizing.Size(false, 3, 1.25, 4), three.size());
@@ -166,18 +167,18 @@ class ColumnSizingSampleTest {
         var pump = unit("reflux pump");
         assertEquals(new PumpSizing.Size(.2), pump.size());
         closest(pump.rating(), Limit.PUMP_RATED);
-        assertEquals(74, read(pump.rating(), Limit.PUMP_RATED), ONE, "119 on Tia Juana; the medium crude grade refluxes less (O3)");
+        assertEquals(78, read(pump.rating(), Limit.PUMP_RATED), ONE, "119 on Tia Juana; the medium crude grade refluxes less (O3); 74 before condenser carry-over (E31)");
     }
 
     /**
      * S4c: Auto holds 1.2 × the need where a size can. PA 1 and PA 2 need 222 and 223 m², so 267 m² with the spare: 4 m tubes,
      * 300 m², where the least that held the bare need was 3 m, 225 m². PA 3's 225 m² already holds 1.2 × its 117. On the medium
      * crude grade (O3 of batch 2026-11-04-open-thermo-data) the needs are 202, 240 and 153 m², 242, 288 and 184 with the spare: the
-     * same coolers and pumps.
+     * same coolers and pumps. With condenser carry-over (E31 of that batch) PA 1 needs 198 m², 238 with the spare.
      */
     @Test
     void eachPumparoundTakesItsCoolerAndPump() {
-        double[] needs = {202, 240, 153}, rated = {109, 107, 92}, pumps = {.25, .3, .25}, surfaces = {300, 300, 225};
+        double[] needs = {198, 240, 153}, rated = {109, 107, 92}, pumps = {.25, .3, .25}, surfaces = {300, 300, 225};
         int[] tubes = {4, 4, 3};
         for (int i = 0; i < 3; i++) {
             var cooler = unit("pa " + (i + 1) + " cooler");
@@ -211,7 +212,7 @@ class ColumnSizingSampleTest {
     @Test
     void p102ReadsItsDrawTraysHeight() {
         var pump = sized.units().get("P-102").rating();
-        assertEquals(32.3, read(pump, Limit.PUMP_NPSH), TENTH);
+        assertEquals(32.35, read(pump, Limit.PUMP_NPSH), TENTH, "32.3 before condenser carry-over (E31)");
         // O3 of batch 2026-11-04-open-thermo-data: on the medium crude grade P-102 runs at 69 % of its rated flow, under the lamp's 70 %.
         assertEquals(Lamp.YELLOW, pump.lamp(), () -> text(pump));
         assertSame(Limit.PUMP_RATED, pump.closest().limit(), () -> text(pump));
@@ -270,7 +271,8 @@ class ColumnSizingSampleTest {
      * An air-cooled condenser is S2's air cooler on the overhead; the cooling water's lines go with the exchanger. The sample's
      * overhead needs 1949 m² of bare surface at air 25 °C, more than the world's largest bank holds, 1468: one bank is red on its
      * surface, and Auto takes the fewest banks in parallel that condense it (S3b), two, each carrying half the overhead. On the medium
-     * crude grade (O3 of batch 2026-11-04-open-thermo-data) it needs 1327 m², 1592 with the spare: still two banks.
+     * crude grade (O3 of batch 2026-11-04-open-thermo-data) it needs 1327 m², 1592 with the spare: still two banks. With condenser carry-over (E31 of that
+     * batch) it needs 1265 m², 1518 with the spare: still two banks.
      */
     @Test
     void anAirCooledCondenserTakesAnAirCooler() {
@@ -284,7 +286,7 @@ class ColumnSizingSampleTest {
         var banks = assertInstanceOf(AirCoolerSizing.Size.class, condenser.size());
         assertEquals(2, banks.banks());
         assertNotEquals(Lamp.RED, condenser.rating().lamp(), () -> text(condenser.rating()));
-        assertEquals(1327, condenser.rating().reading(Limit.AIR_COOLER_SURFACE).low(), 10);
+        assertEquals(1265, condenser.rating().reading(Limit.AIR_COOLER_SURFACE).low(), 10);
         var kept = size(air, airRun, thermo, new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of(SheetSizing.member(T, "condenser"), new SheetSizing.UnitEntry(banks, null, null, false))))
                 .units().get(SheetSizing.member(T, "condenser"));
         assertEquals(banks.withBanks(1), kept.size(), "kept on a door of one bank");

@@ -149,39 +149,55 @@ class V3TrayHydraulicsTest {
      * The vapour leaving a tray carries the authored steam fed at or below it plus the free water from above.
      *
      * <p>This is the solver's own water bookkeeping, so the correlation sees exactly the vapour the energy and
-     * material balances placed there, and the tray's own free water stays in the liquid where it belongs.</p>
+     * material balances placed there, and the tray's own falling free water stays in the liquid where it belongs.
+     * The drum here decants free water, so tray one's free water is carried over (E31 of batch
+     * 2026-11-04-open-thermo-data): it crosses no weir and rises in no vapour, and tray one's vapour keeps the rest
+     * of the steam. The falling case is therefore pinned on tray two.</p>
      */
     @Test
     void trayTrafficCarriesTheAuthoredSteamAndTheFreeWaterOfTheTrayAbove() {
         V3ColumnProblem dry = problem(List.of(new V3SteamFeedSpec(4, STEAM_MOL_PER_SECOND, 520.0)));
-        boolean[] wet = new boolean[dry.topology().nodeCount()];
-        wet[1] = true;
-        V3ColumnProblem problem = V3ColumnProblemResolver.withTruncation(dry, dry.truncationSupport(),
-                V3WetTraySet.of(dry.topology(), wet));
+        V3ColumnProblem problem = wetOn(dry, 2);
         double[] freeWater = new double[problem.topology().nodeCount()];
-        freeWater[1] = 1.5;
+        freeWater[2] = 1.5;
         V3DryMeshState state = new V3DryMeshState(problem.topology(), 2, flows(problem, 3.0), flows(problem, 7.0),
                 temperatures(problem, 420.0), freeWater);
 
         V3TrayHydraulics.Tray[] trays = V3TrayHydraulics.traffic(problem, state, constants());
 
         // Component vapour is 2 x 7 mol/s everywhere; the sump feed rises through every tray.
-        assertEquals(14.0 + STEAM_MOL_PER_SECOND, trays[1].vaporMolarFlowMolPerSecond(), 1.0e-12);
-        assertEquals(14.0 + STEAM_MOL_PER_SECOND + 1.5, trays[2].vaporMolarFlowMolPerSecond(), 1.0e-12,
-                "tray two also carries the free water tray one shed");
+        assertEquals(14.0 + STEAM_MOL_PER_SECOND, trays[2].vaporMolarFlowMolPerSecond(), 1.0e-12);
+        assertEquals(14.0 + STEAM_MOL_PER_SECOND + 1.5, trays[3].vaporMolarFlowMolPerSecond(), 1.0e-12,
+                "tray three also carries the free water tray two shed");
         assertEquals(14.0 * 0.05 + (STEAM_MOL_PER_SECOND + 1.5) * 0.01801528,
-                trays[2].vaporMassFlowKgPerSecond(), 1.0e-12);
-        assertEquals(1.5, trays[1].freeWaterMolarFlowMolPerSecond(), 0.0);
-        assertEquals(0.0, trays[2].freeWaterMolarFlowMolPerSecond(), 0.0);
+                trays[3].vaporMassFlowKgPerSecond(), 1.0e-12);
+        assertEquals(1.5, trays[2].freeWaterMolarFlowMolPerSecond(), 0.0);
+        assertEquals(0.0, trays[3].freeWaterMolarFlowMolPerSecond(), 0.0);
         // Liquid is hydrocarbon only, on Kay's rule over the registered constants.
-        assertEquals(6.0 * 0.05, trays[1].liquidMassFlowKgPerSecond(), 1.0e-12);
-        assertEquals(650.0, trays[1].liquidCriticalTemperatureKelvin(), 1.0e-12);
-        assertEquals(0.45, trays[1].liquidAcentricFactor(), 1.0e-12);
-        assertEquals(420.0, trays[1].temperatureKelvin(), 0.0);
+        assertEquals(6.0 * 0.05, trays[2].liquidMassFlowKgPerSecond(), 1.0e-12);
+        assertEquals(650.0, trays[2].liquidCriticalTemperatureKelvin(), 1.0e-12);
+        assertEquals(0.45, trays[2].liquidAcentricFactor(), 1.0e-12);
+        assertEquals(420.0, trays[2].temperatureKelvin(), 0.0);
         // The free water joins the liquid volume of its own tray, never the vapour of it.
         V3TrayHydraulics hydraulics = V3TrayHydraulics.ofDiameter(8.0);
-        assertTrue(hydraulics.terms(trays[1], TOP_PRESSURE_PASCAL).liquidPascal()
-                > hydraulics.terms(trays[2], TOP_PRESSURE_PASCAL).liquidPascal());
+        assertTrue(hydraulics.terms(trays[2], TOP_PRESSURE_PASCAL).liquidPascal()
+                > hydraulics.terms(trays[3], TOP_PRESSURE_PASCAL).liquidPascal());
+
+        // Carry-over: tray one's free water is in neither tray one's liquid nor tray two's vapour.
+        V3ColumnProblem carrying = wetOn(dry, 1);
+        double[] carried = new double[carrying.topology().nodeCount()];
+        carried[1] = 1.5;
+        V3TrayHydraulics.Tray[] top = V3TrayHydraulics.traffic(carrying, new V3DryMeshState(carrying.topology(), 2,
+                flows(carrying, 3.0), flows(carrying, 7.0), temperatures(carrying, 420.0), carried), constants());
+        assertEquals(14.0 + STEAM_MOL_PER_SECOND - 1.5, top[1].vaporMolarFlowMolPerSecond(), 1.0e-12);
+        assertEquals(0.0, top[1].freeWaterMolarFlowMolPerSecond(), 0.0);
+        assertEquals(14.0 + STEAM_MOL_PER_SECOND, top[2].vaporMolarFlowMolPerSecond(), 1.0e-12);
+    }
+
+    private static V3ColumnProblem wetOn(V3ColumnProblem dry, int tray) {
+        boolean[] wet = new boolean[dry.topology().nodeCount()];
+        wet[tray] = true;
+        return V3ColumnProblemResolver.withTruncation(dry, dry.truncationSupport(), V3WetTraySet.of(dry.topology(), wet));
     }
 
     @Test

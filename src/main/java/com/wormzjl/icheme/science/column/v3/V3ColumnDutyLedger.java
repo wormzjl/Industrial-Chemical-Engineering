@@ -75,6 +75,10 @@ public record V3ColumnDutyLedger(
      *
      * <p>The condenser has no MESH energy equation, so this closes that node by definition and is negative
      * whenever heat is removed.</p>
+     *
+     * <p>Water carried over from tray one (E31) arrives as liquid at tray one's temperature, beside the vapour.
+     * Its latent heat was released on tray one, so the drum no longer condenses it and the duty falls by exactly
+     * that amount, while the decanted outlet is unchanged: the drum receives the same total water.</p>
      */
     static double condenserDutyWatts(
             V3ColumnProblem problem, V3DryMeshState state, V3MeshResidualEvaluator evaluator,
@@ -83,7 +87,9 @@ public record V3ColumnDutyLedger(
         V3MeshResidualEvaluator.LocalNodeTerms outlet = evaluator.localTerms(state, condenser, workspace);
         V3MeshResidualEvaluator.LocalNodeTerms trayOne = evaluator.localTerms(state, 1, workspace);
         double leaving = outlet.liquidPhaseEnergy() + outlet.vaporPhaseEnergy() + freeWaterEnergyWatts(problem, state);
-        return leaving - trayOne.vaporPhaseEnergy();
+        double arriving = trayOne.vaporPhaseEnergy();
+        if (problem.carriedOverWaterMolPerSecond(state) > 0.0) arriving += trayOne.freeWaterPhaseEnergy();
+        return leaving - arriving;
     }
 
     /** Decanted free water leaves the drum as liquid at the specified outlet temperature and the drum's pressure. */
