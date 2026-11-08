@@ -23,8 +23,17 @@ import java.util.Objects;
  * <p>where {@code R} is the sump. Whatever condenses on a tray reaches the tray below and comes straight back
  * up, so it changes only that one neighbour's vapour water; the net water passing a tray is the authored steam
  * minus whatever leaves the bottom. That identity is what keeps the Jacobian banded, and it is why
- * {@link V3ColumnProblem#waterVaporFlow} needs no sweep: {@code W_n} is the authored upward profile plus the
+ * {@link V3ColumnProblem#trayWaterVaporFlow} needs no sweep: {@code W_n} is the authored upward profile plus the
  * free water of the tray directly above.</p>
+ *
+ * <p><strong>Tray one carries over</strong> (E31 of batch 2026-11-04-open-thermo-data). The same identity gives the
+ * top tray of a wet block {@code W_n = (steam fed at or below n)} exactly: its own free water only circulates to
+ * the tray below and back, so its saturation row has no lever (measured near-null on 2026-09-08). On tray one,
+ * under a drum that decants free water, the excess leaves upward instead, as entrained liquid to the drum:
+ * {@code F_1} is then the carried water, {@code W_1 = (all steam) - F_1}, and nothing falls to tray two. The
+ * tray keeps one unknown and one row, the row is its saturation row, and its lever is direct. The carried water
+ * couples tray one's own block only, so the band does not widen. The top tray of an interior wet block keeps the
+ * circulating form; see {@link V3ColumnProblem#carriesTopTrayWaterOver}.</p>
  *
  * <p><strong>The sump is never wet</strong> (documented deviation from the plan). {@code F_R} is the one term
  * of that identity that every node above would see, so making it an unknown puts a dense column into an
@@ -149,7 +158,8 @@ final class V3WetTraySet {
      *
      * <p>The pass carries its own {@code F} downward so the set it produces is self-consistent: a tray that
      * turns wet immediately raises the water its neighbour below sees, which is exactly what makes a wet
-     * region spread over several trays instead of one per refresh. A tray that is wet in {@code problem}'s
+     * region spread over several trays instead of one per refresh. A carry-over tray one sheds nothing onto
+     * tray two, and its own ratio is read with all the steam that reaches it. A tray that is wet in {@code problem}'s
      * current set keeps its solved free water; a tray that is not becomes wet only when its saturation ratio
      * clears one by {@link #WET_ENTRY_HYSTERESIS}, and a wet tray goes dry when its solved free water falls
      * below {@link #DRY_EXIT_FRACTION} of the total steam.</p>
@@ -164,7 +174,7 @@ final class V3WetTraySet {
         boolean[] wet = new boolean[topology.nodeCount()];
         double carried = 0.0;
         for (int tray = 1; tray <= topology.trayCount(); tray++) {
-            double water = problem.waterVaporFlowMolPerSecond(tray) + carried;
+            double water = problem.trayWaterVaporFlow(tray, 0.0, carried);
             Saturation saturation = saturation(problem, state, tray, water);
             boolean previouslyWet = previous.isWet(tray);
             double solved = previouslyWet ? state.freeWaterFlow(tray) : 0.0;
@@ -208,9 +218,16 @@ final class V3WetTraySet {
         double[] freeWater = new double[topology.nodeCount()];
         for (int tray = 1; tray <= topology.trayCount(); tray++) {
             if (!wet[tray]) continue;
-            double water = problem.waterVaporFlowMolPerSecond(tray) + (tray >= 2 ? freeWater[tray - 1] : 0.0);
-            freeWater[tray] = freeWaterSeed(saturation(problem, state, tray, water), water,
-                    state.freeWaterFlow(tray), steamScale);
+            // Read with no water of its own: a carry-over tray one is seeded with exactly the water it must carry
+            // over to sit on the line, and every other tray with the water it must circulate.
+            double water = problem.trayWaterVaporFlow(tray, 0.0, tray >= 2 ? freeWater[tray - 1] : 0.0);
+            Saturation saturation = saturation(problem, state, tray, water);
+            freeWater[tray] = freeWaterSeed(saturation, water, state.freeWaterFlow(tray), steamScale);
+            // A carry-over tray one carries over less than the steam that reaches it, whatever an earlier steam
+            // rung solved there.
+            if (!problem.freeWaterFalls(tray) && !(freeWater[tray] < water)) {
+                freeWater[tray] = freeWaterSeed(saturation, water, 0.0, steamScale);
+            }
         }
         return V3ColumnInitializer.withFreeWater(state, topology, freeWater);
     }

@@ -76,6 +76,7 @@ final class V3AcceptanceAuditor {
             checks.add(waterProfile(state));
             checks.add(waterBalance(state));
             checks.add(waterDewPoint(state));
+            if (problem.carriedOverWaterMolPerSecond(state) > 0.0) checks.add(carryOver(state));
             if (problem.topology().condenserPhaseBranch() == V3CondenserPhaseBranch.TWO_PHASE
                     && problem.hasFreeWaterCondenser()) {
                 checks.add(freeWaterSplit(state));
@@ -123,7 +124,7 @@ final class V3AcceptanceAuditor {
         }
         if (problem.hasPumparounds()) advisoryEvidence = withCooledTrayAdvisory(advisoryEvidence, state);
         advisoryEvidence = withWetTrayAdvisory(advisoryEvidence, state);
-        advisoryEvidence = withDewPointAdvisory(advisoryEvidence, checks);
+        advisoryEvidence = withCheckWarnings(advisoryEvidence, checks);
         return new V3AcceptanceAudit(checks, advisoryEvidence);
     }
 
@@ -145,16 +146,20 @@ final class V3AcceptanceAuditor {
         V3ColumnTopology topology = problem.topology();
         double[] liquidEnergy = new double[topology.nodeCount()];
         double[] vaporEnergy = new double[topology.nodeCount()];
+        double carriedOver = 0.0;
         for (int node = 0; node < topology.nodeCount(); node++) {
             V3MeshResidualEvaluator.LocalNodeTerms terms = evaluator.localTerms(state, node, workspace);
             liquidEnergy[node] = terms.liquidPhaseEnergy();
             vaporEnergy[node] = terms.vaporPhaseEnergy();
+            if (node == 1 && problem.carriedOverWaterMolPerSecond(state) > 0.0) carriedOver = terms.freeWaterPhaseEnergy();
         }
         double[] stageHeat = V3PumparoundSpec.nodeDutyWatts(problem.input(), topology);
         double stageHeatTotal = 0.0;
         for (double duty : stageHeat) stageHeatTotal += duty;
         double freeWater = V3ColumnDutyLedger.freeWaterEnergyWatts(problem, state);
         double condenser = liquidEnergy[0] + vaporEnergy[0] + freeWater - vaporEnergy[1];
+        // Water carried over from tray one leaves the trays as liquid and reaches the drum beside the vapour.
+        if (carriedOver != 0.0) condenser -= carriedOver;
         double reflux = refluxRatio() / (1.0 + refluxRatio());
         double feed = problem.activeComponentBasis().totalFeedFlowMolPerSecond() * feedMolarEnthalpyJoulesPerMol;
         double reboiler = V3ColumnDutyLedger.reboilerDutyWatts(problem);
@@ -192,7 +197,8 @@ final class V3AcceptanceAuditor {
      * <p>Every term is rebuilt from the authored input, the candidate state, and direct property calls: the
      * hydrocarbon outlets and the arriving tray-one vapor use {@link V3ThermoModel#molarEnthalpy} on the
      * candidate flows, the water arriving at the condenser is the authored steam total, and the vapor and
-     * free-water outlets come from the auditor's own regime split. Nothing here reuses the residual
+     * free-water outlets come from the auditor's own regime split. Water a carry-over tray one sends to the drum
+     * arrives as liquid water at tray one's temperature and pressure instead of as steam. Nothing here reuses the residual
      * evaluator's condenser terms, so a condenser vapor outlet that drops or double-counts the water it
      * publishes fails this check instead of silently shifting the duty the ledger reports.</p>
      */
@@ -215,9 +221,14 @@ final class V3AcceptanceAuditor {
         double freeWaterOut = water.freeWaterFlowMolPerSecond() == 0.0 ? 0.0
                 : water.freeWaterFlowMolPerSecond() * V3WaterProperties.liquidMolarEnthalpy(outletTemperature, outletPressure);
         double arrivingWater = authoredWaterAtCondenser(problem);
+        // A carry-over tray one (E31) delivers part of that water as entrained liquid at its own temperature.
+        double carried = problem.carriedOverWaterMolPerSecond(state);
         double vaporIn = hydrocarbonPhaseEnergyWatts(problem, thermo, state, 1, false, workspace)
                 + V3WaterProperties.steamEnthalpyRate(state.temperatureKelvin(1), problem.nodePressurePascal(1),
-                        arrivingWater, V3WetTraySet.hydrocarbonVaporTotal(state, 1));
+                        carried == 0.0 ? arrivingWater : arrivingWater - carried, V3WetTraySet.hydrocarbonVaporTotal(state, 1));
+        if (carried != 0.0) {
+            vaporIn += carried * V3WaterProperties.liquidMolarEnthalpy(state.temperatureKelvin(1), problem.nodePressurePascal(1));
+        }
         double expected = liquidOut + vaporOut + waterVaporOut + freeWaterOut - vaporIn;
         double largest = 0.0;
         for (double term : new double[] {liquidOut, vaporOut, waterVaporOut, freeWaterOut, vaporIn, publishedCondenserWatts}) {
@@ -433,7 +444,7 @@ final class V3AcceptanceAuditor {
         }
         // A dry stage below its water dew point is an operating condition the column can be in, not a modelling
         // failure: the steam-laden vapour is supersaturated there and water will condense on the tray. The column
-        // is published, and the condition is reported as a warning (see withDewPointAdvisory).
+        // is published, and the condition is reported as a warning (see withCheckWarnings).
         return V3AcceptanceAudit.Check.pass("WATER_DEW_POINT", worstDry, 1.0,
                 "warning: " + waterDewPointDetail(state, worstDryNode, worstDryPartialPressure));
     }
@@ -467,6 +478,10 @@ final class V3AcceptanceAuditor {
      * leaves with the bottoms (always zero: the sump is never wet). Both closures are relative to the total
      * steam. This is what would catch a wet tray whose free water was created or destroyed rather than
      * circulated, which no other check can see.</p>
+     *
+     * <p>The drum closes too: tray one's vapour water plus the water it carries over (E31) must equal the drum's
+     * vapour and decanted outlets, so carried water that was lost or counted twice between tray one and the drum
+     * fails here.</p>
      */
     private V3AcceptanceAudit.Check waterBalance(V3DryMeshState state) {
         V3ColumnTopology topology = problem.topology();
@@ -477,12 +492,18 @@ final class V3AcceptanceAuditor {
         double maximum = 0.0;
         for (int node = 1; node <= topology.reboilerNode(); node++) {
             double vaporIn = node < topology.reboilerNode() ? problem.waterVaporFlow(state, node + 1) : 0.0;
-            double freeWaterIn = node >= 2 ? problem.freeWaterFlowMolPerSecond(state, node - 1) : 0.0;
+            double freeWaterIn = node >= 2 ? problem.fallingFreeWaterMolPerSecond(state, node - 1) : 0.0;
             double in = vaporIn + freeWaterIn + problem.nodeSteamFeedMolPerSecond(node);
             double out = problem.waterVaporFlow(state, node) + problem.freeWaterFlowMolPerSecond(state, node);
             maximum = Math.max(maximum, Math.abs(in - out) / totalSteam);
         }
         V3ColumnProblem.WaterCondenserSplit split = problem.waterCondenserSplit(state);
+        double carried = problem.carriedOverWaterMolPerSecond(state);
+        if (carried != 0.0) {
+            double drumIn = problem.waterVaporFlow(state, 1) + carried;
+            double drumOut = split.vaporFlowMolPerSecond() + split.freeWaterFlowMolPerSecond();
+            maximum = Math.max(maximum, Math.abs(drumIn - drumOut) / totalSteam);
+        }
         double bottomsFreeWater = problem.freeWaterFlowMolPerSecond(state, topology.reboilerNode());
         double leaving = split.vaporFlowMolPerSecond() + split.freeWaterFlowMolPerSecond() + bottomsFreeWater;
         maximum = Math.max(maximum, Math.abs(totalSteam - leaving) / totalSteam);
@@ -490,26 +511,66 @@ final class V3AcceptanceAuditor {
                 "steam in %.6g kmol/h; overhead vapor %.6g, decanted %.6g, bottoms free water %.6g kmol/h",
                 totalSteam * 3.6, split.vaporFlowMolPerSecond() * 3.6, split.freeWaterFlowMolPerSecond() * 3.6,
                 bottomsFreeWater * 3.6);
+        if (carried != 0.0) detail += String.format(Locale.ROOT, "; carried over from tray 2 %.6g kmol/h", carried * 3.6);
         return Double.isFinite(maximum) && maximum <= 1.0e-8
                 ? V3AcceptanceAudit.Check.pass("WATER_BALANCE", maximum, 1.0e-8, detail)
                 : V3AcceptanceAudit.Check.fail("WATER_BALANCE",
                         Double.isFinite(maximum) ? maximum : Double.MAX_VALUE, 1.0e-8, detail);
     }
 
-    /** Advisory only: which trays carry a free-water phase and how much water they circulate. */
-    /** Publishes a dry stage below its water dew point as a warning that names the tray; it never rejects the column. */
-    private List<String> withDewPointAdvisory(List<String> advisoryEvidence, List<V3AcceptanceAudit.Check> checks) {
-        if (advisoryEvidence.size() >= 16) return advisoryEvidence;
+    /**
+     * Publishes each passing check that carries a warning — a dry stage below its water dew point, water carried
+     * over above the entrainment limit — as advisory evidence that names the tray; it never rejects the column.
+     */
+    private List<String> withCheckWarnings(List<String> advisoryEvidence, List<V3AcceptanceAudit.Check> checks) {
+        List<String> evidence = null;
         for (V3AcceptanceAudit.Check check : checks) {
-            if (!check.family().equals("WATER_DEW_POINT") || !check.passed() || !check.detail().startsWith("warning: ")) continue;
-            List<String> evidence = new ArrayList<>(advisoryEvidence);
+            if (!check.passed() || !check.detail().startsWith("warning: ")) continue;
+            if (evidence == null) evidence = new ArrayList<>(advisoryEvidence);
+            if (evidence.size() >= 16) break;
             String warning = "Warning: " + check.detail().substring("warning: ".length());
             evidence.add(warning.length() <= 256 ? warning : warning.substring(0, 256));
-            return List.copyOf(evidence);
         }
-        return advisoryEvidence;
+        return evidence == null ? advisoryEvidence : List.copyOf(evidence);
     }
 
+    /**
+     * Condenser carry-over (E31): tray one sends its free water to the drum as entrained liquid.
+     *
+     * <p>Always a passing check: the carried water is a result the operator reads, not an acceptance condition.
+     * With a column diameter the vapour can lift only so much ({@link V3TrayHydraulics#entrainmentLimitMolPerSecond}
+     * on tray one's own traffic at its pressure, the same terms the published hydraulics read there); in
+     * prescribed-drop mode there are no hydraulics and the carry-over is unlimited. Above the limit the column is
+     * still published, with a warning that names the tray, the carried water and the limit.</p>
+     */
+    V3AcceptanceAudit.Check carryOver(V3DryMeshState state) {
+        double carried = problem.carriedOverWaterMolPerSecond(state);
+        String reading = String.format(Locale.ROOT,
+                "tray 2 carries %.1f kmol/h of free water over to the condenser drum", carried * 3.6);
+        if (!problem.input().usesTrayHydraulics() || !(thermo instanceof V3PengRobinsonThermo registered)) {
+            return V3AcceptanceAudit.Check.pass("CARRY_OVER", 0.0, 0.0,
+                    reading + "; no entrainment limit without a column diameter");
+        }
+        V3TrayHydraulics hydraulics = V3TrayHydraulics.ofDiameter(problem.input().columnDiameterMetres());
+        V3TrayHydraulics.Tray trayOne = V3TrayHydraulics.traffic(problem, state, V3TrayHydraulics.ComponentConstants.of(
+                registered, problem.input().componentBasis().componentCount()))[1];
+        double pressure = problem.nodePressurePascal(1);
+        double flood = hydraulics.terms(trayOne, pressure).floodFraction();
+        double limit = hydraulics.entrainmentLimitMolPerSecond(trayOne, pressure);
+        double value = limit > 0.0 && Double.isFinite(limit) ? carried / limit : Double.MAX_VALUE;
+        double reported = Double.isFinite(limit) && limit >= 0.0 ? limit : 0.0;
+        if (value <= 1.0) {
+            return V3AcceptanceAudit.Check.pass("CARRY_OVER", value, 1.0, reading + String.format(Locale.ROOT,
+                    ", %.0f%% of the %.1f kmol/h its vapor can lift at %.0f%% of flood", 100.0 * value,
+                    reported * 3.6, 100.0 * flood));
+        }
+        // The consequence of carry-over above the limit, in one place. Owner decision E31 (2026-11-05, option (a)):
+        // publish with a warning. The rejected option (b), a flooding failure, would be Check.fail on this line.
+        return V3AcceptanceAudit.Check.pass("CARRY_OVER", value, 1.0,
+                "warning: " + hydraulics.carryOverWarning(1, carried, reported, flood));
+    }
+
+    /** Advisory only: which trays carry a free-water phase and how much water they circulate. */
     private List<String> withWetTrayAdvisory(List<String> advisoryEvidence, V3DryMeshState state) {
         if (!problem.hasWetTrays() || advisoryEvidence.size() >= 16) return advisoryEvidence;
         List<String> evidence = new ArrayList<>(advisoryEvidence);

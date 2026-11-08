@@ -42,7 +42,7 @@ class CrystalPackageConsumersTest {
     @AfterEach void reset() { MaterialRuntime.reset(); }
 
     @Test void theColumnRefusesAPackageWithCrystalsTyped() {
-        for (MaterialCatalog catalog : List.of(MaterialCatalog.bundled(), PilotCryogenicTestCatalog.catalog())) {
+        for (MaterialCatalog catalog : List.of(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PilotCryogenicTestCatalog.catalog())) {
             var refused = assertThrows(CrystalPhasesUnavailable.class,
                     () -> MaterialRuntime.with(catalog, PILOT, () -> V3PengRobinsonThermo.fromRegisteredPackage(PILOT)));
             assertEquals(PILOT, refused.packageId());
@@ -51,11 +51,11 @@ class CrystalPackageConsumersTest {
             assertTrue(refused.getMessage().contains("crystal"), refused.getMessage());
         }
         // A column package builds as before.
-        var column = MaterialRuntime.with(MaterialCatalog.bundled(), "icheme:tjl20_methane",
+        var column = MaterialRuntime.with(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), "icheme:tjl20_methane",
                 () -> V3PengRobinsonThermo.fromRegisteredPackage("icheme:tjl20_methane"));
         assertEquals("icheme:tjl20_methane", column.packageId());
         // Only the pilot and the world's package admit a crystal, both CO2-I.
-        for (var p : MaterialCatalog.bundled().packages().values())
+        for (var p : com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot().packages().values())
             assertEquals(p.id().equals(PILOT) || p.id().equals(REFINERY) ? List.of(CO2_I) : List.of(), p.crystals(), p.id());
     }
 
@@ -80,7 +80,7 @@ class CrystalPackageConsumersTest {
     }
 
     @Test void theColumnRefusesOnlyARefineryViewThatHoldsCarbonDioxide() {
-        var catalog = MaterialCatalog.bundled();
+        var catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
         var co2 = catalog.restrict(REFINERY, List.of("Methane", "Ethane", "CarbonDioxide"));
         var refused = assertThrows(CrystalPhasesUnavailable.class,
                 () -> MaterialRuntime.with(co2, REFINERY, () -> V3PengRobinsonThermo.fromRegisteredPackage(REFINERY)));

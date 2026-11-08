@@ -168,12 +168,13 @@ class MaterialCatalogTest {
      * water has none (its water model holds its triple point and its ice).
      */
     @Test void freezingSubRecordsAreInNoIdentity() {
-        var bundled=MaterialCatalog.bundled();var resources=new HashMap<>(bundled.resources());int stripped=0;
+        // With the pilot test overlay (O5 of batch 2026-11-04-open-thermo-data), so the spine package and its datasets stay covered.
+        var bundled=PilotCryogenicTestCatalog.withPilot();var resources=new HashMap<>(bundled.resources());int stripped=0;
         for(var entry:resources.entrySet())if(entry.getKey().startsWith(ROOT+"properties/")) {
             var o=JsonParser.parseString(entry.getValue()).getAsJsonObject();
             assertTrue(o.has("freezing"),entry.getKey());o.remove("freezing");entry.setValue(o.toString());stripped++;
         }
-        assertEquals(49,stripped,"24 datasets, the 24 Tier 1 imports (W6) and the crude_pr78 CO2 (O11 of batch 2026-11-04-open-thermo-data)");
+        assertEquals(49,stripped,"20 bundled datasets and the pilot's 4, the 24 Tier 1 imports (W6) and the crude_pr78 CO2 (O11 of batch 2026-11-04-open-thermo-data)");
         var without=MaterialCatalog.parse(resources);
         for(var p:bundled.packages().values()) {
             assertEquals(p.scientificRevision(),without.requirePackage(p.id()).scientificRevision(),p.id());
@@ -199,13 +200,13 @@ class MaterialCatalogTest {
      * a compound with a crystal record agrees with that record's anchor within 0.005 K; a refusal names both records.
      */
     @Test void aFreezingSubRecordIsValidatedAndAgreesWithItsCrystalAnchor() {
-        String co2="properties/pilot_carbon_dioxide.json";
-        var far=assertThrows(IllegalArgumentException.class,()->MaterialCatalog.parse(changed(co2,o->o.getAsJsonObject("freezing").addProperty("triple_point_kelvin",216.6))));
+        String co2="properties/pilot_carbon_dioxide.json";var pilot=PilotCryogenicTestCatalog.withPilotResources();
+        var far=assertThrows(IllegalArgumentException.class,()->MaterialCatalog.parse(changed(pilot,co2,o->o.getAsJsonObject("freezing").addProperty("triple_point_kelvin",216.6))));
         assertTrue(far.getMessage().contains(co2)&&far.getMessage().contains("icheme:pilot_carbon_dioxide")&&far.getMessage().contains("icheme:crystal_carbon_dioxide_i"),far.getMessage());
-        var near=MaterialCatalog.parse(changed(co2,o->o.getAsJsonObject("freezing").addProperty("triple_point_kelvin",216.596)));
+        var near=MaterialCatalog.parse(changed(pilot,co2,o->o.getAsJsonObject("freezing").addProperty("triple_point_kelvin",216.596)));
         assertEquals(216.596,near.freezingPoint("icheme:pilot_cryogenic","CarbonDioxide").orElseThrow().anchorTemperature());
         // Without a triple point, the melting point is compared with the anchor.
-        var melting=assertThrows(IllegalArgumentException.class,()->MaterialCatalog.parse(changed(co2,o->{var f=o.getAsJsonObject("freezing");
+        var melting=assertThrows(IllegalArgumentException.class,()->MaterialCatalog.parse(changed(pilot,co2,o->{var f=o.getAsJsonObject("freezing");
             f.remove("triple_point_kelvin");f.addProperty("normal_melting_kelvin",194.7);})));
         assertTrue(melting.getMessage().contains("icheme:crystal_carbon_dioxide_i"),melting.getMessage());
         String pc07="properties/crude_pc07.json";

@@ -25,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * network's axis. An edit to another compound's records moves nothing the sheet stands on.
  */
 final class SheetCompoundsTest {
-    private static final MaterialCatalog CATALOG = MaterialCatalog.bundled();
+    private static final MaterialCatalog CATALOG = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
     private static final String NETWORK = CATALOG.presets().network().packageId();
     private static final FluidThermodynamics MODEL = MaterialRuntime.with(CATALOG, NETWORK, () -> FluidThermodynamics.forNetwork(CATALOG, NETWORK));
     private static final List<String> AXIS = MODEL.components();

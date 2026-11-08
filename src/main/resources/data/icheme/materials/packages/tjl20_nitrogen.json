@@ -8,7 +8,7 @@
     "Nitrogen"
   ],
   "advisory_evidence": [
-    "RECONSTRUCTED_PETROLEUM_PROPERTIES: frozen TJL19 reconstruction, not original HYSYS properties; 60 F standard-liquid basis assumed",
+    "RECONSTRUCTED_PETROLEUM_PROPERTIES: shared cuts from the project's DWSIM characterisation of Tia Juana Light (Ledezma-Martinez 2019), not original HYSYS properties; 60 F standard-liquid basis assumed",
     "ESTIMATED_HEAVY_RESIDUE: empirical critical-property extrapolation retained for flagged petroleum fractions",
     "THERMAL_FIT: degree-five Cp fit, analytic H relative to 298.15 K; validated over 298.15..900 K",
     "PR78_MODEL_DIFFERENCE: V3 low-omega coefficient 1.54226; reconstruction source 1.5422",
@@ -16,6 +16,6 @@
     "METHANE_ASSAY: synthetic 0.5 mol% methane blend; hypothetical liquid-density metadata is unused by the molar feed and PR equations",
     "NITROGEN_EXTENSION: initial charge is conserved inventory; nitrogen/hydrocarbon PR interactions estimated zero; no nitrogen dissolution in the separate free-water phase.",
     "NITROGEN_CRYOGENIC: valid from its 63.151 K triple point (ideal-gas Cp held below 273.16 K, within 0.05 % of Span et al. 2000; CoolProp viscosity tables); PR78 Psat at 77.355 K +1.21 %, liquid density -0.07 % against Span et al. 2000 (F4, P3 WP4)",
-    "ESTIMATED_REGROUPING: PC08-12 mass/volume-constrained Tia Juana reconstruction; heavy Tc/Pc extrapolated; global Dalia transport"
+    "ESTIMATED_REGROUPING: PC08-12 mass/volume-constrained Tia Juana reconstruction; heavy Tc/Pc extrapolated; cut liquid viscosity Twu 1985 + ASTM D341, one cut-pair mixture term fitted to ECCC whole crudes"
   ]
 }

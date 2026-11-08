@@ -9,9 +9,10 @@ import static org.junit.jupiter.api.Assertions.*;
 @org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.TiaJuanaExtension.class)
 class RegroupedCrudeTest {
     @Test void replacementHasTwelveConsistentCutsAndNoRetiredProductionBasis() {
-        // Two column packages, the network package icheme:refinery and the bundled pilot icheme:pilot_cryogenic (no column
-        // package); the literature package icheme:tjl19_dwsim is a test fixture since O3 of batch 2026-11-04-open-thermo-data.
-        var catalog=MaterialCatalog.bundled();assertEquals(4,catalog.packages().size());
+        // Two column packages and the network package icheme:refinery; the literature package icheme:tjl19_dwsim (O3) and the
+        // pilot icheme:pilot_cryogenic (O5, E25) are test fixtures since batch 2026-11-04-open-thermo-data.
+        var catalog=MaterialCatalog.bundled();assertEquals(3,catalog.packages().size());
+        assertFalse(catalog.packages().containsKey(PilotCryogenicTestCatalog.PACKAGE_ID));
         assertFalse(catalog.packages().containsKey("icheme:cdu17_tjl_acs2018"));
         var p=catalog.requirePackage("icheme:tjl20_methane");assertEquals(19,p.components().size());
         for(int i=1;i<=12;i++)assertEquals("crude_pc%02d".formatted(i),p.components().get(i+6));

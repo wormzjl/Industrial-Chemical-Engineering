@@ -48,7 +48,7 @@ class GroupContributionInteractionsTest {
 
     /** The bundled matrix record, read as the loader reads it. */
     private static GroupInteractionMatrix bundledMatrix() {
-        return GroupInteractionMatrix.read(JsonParser.parseString(MaterialCatalog.bundled().resources().get(MATRIX)).getAsJsonObject());
+        return GroupInteractionMatrix.read(JsonParser.parseString(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot().resources().get(MATRIX)).getAsJsonObject());
     }
 
     private static MaterialCatalog.Package pilot(MaterialCatalog catalog) { return catalog.requirePackage(PilotCryogenicTestCatalog.PACKAGE_ID); }
@@ -93,7 +93,7 @@ class GroupContributionInteractionsTest {
         assertEquals(1, zeroA);
         assertEquals(new GroupInteractionMatrix.Parameters(0.0, 0.0), matrix.parameters("CF3", "CF2").orElseThrow());
         // No bundled column or network package has a rule: their constants are what they were.
-        for (var p : MaterialCatalog.bundled().packages().values()) {
+        for (var p : com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot().packages().values()) {
             if (!p.id().equals(PilotCryogenicTestCatalog.PACKAGE_ID)) assertNull(p.groupContributions(), p.id());
         }
     }
@@ -290,7 +290,7 @@ class GroupContributionInteractionsTest {
 
     /** Every bundled package but the pilot is untouched by a group-matrix edit: its record and its physics. */
     private static void assertBundledPackagesHold(MaterialCatalog catalog) {
-        var bundled = MaterialCatalog.bundled();
+        var bundled = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
         for (var p : bundled.packages().values()) {
             if (p.id().equals(PilotCryogenicTestCatalog.PACKAGE_ID)) continue;
             assertEquals(p, catalog.requirePackage(p.id()), p.id());

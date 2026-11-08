@@ -1,7 +1,7 @@
 {
   "source_commit": "8396d8d98",
   "reference": "additive standard-liquid volume from selected component densities; accepted old-basis classical results",
-  "recaptured": "2026-11-05, batch 2026-11-04-open-thermo-data O3: captured on the four generated grades (their client templates on the default column), classical, prescribed drop; parent 8396d8d98 plus the O3 data; re-captured 2026-11-05 for the network's water (E30 of the same batch, wet formulation r32/r33): moves up to 3.9e-4",
+  "recaptured": "2026-11-05, batch 2026-11-04-open-thermo-data O3: captured on the four generated grades (their client templates on the default column), classical, prescribed drop; parent 8396d8d98 plus the O3 data; re-captured 2026-11-05 for the network's water (E30 of the same batch, wet formulation r32/r33): moves up to 3.9e-4; re-captured 2026-11-05 for condenser carry-over (E31 of the same batch, wet formulation r34/r35): heavy crude and oil-sand dilbit, whose tray 1 now carries its free water over, move up to 8.5e-3, light and medium are unchanged",
   "targets": [
     {
       "preset": "light_crude",
@@ -25,18 +25,18 @@
       "preset": "heavy_crude",
       "package": "icheme:tjl20_methane",
       "targets_m3_per_second": {
-        "side_liquid_tray_10": 0.017164562093737838,
-        "side_liquid_tray_18": 0.018585332627557877,
-        "side_liquid_tray_28": 0.008736483627647604
+        "side_liquid_tray_10": 0.017245590155231548,
+        "side_liquid_tray_18": 0.0186932608312932,
+        "side_liquid_tray_28": 0.008745076832022261
       }
     },
     {
       "preset": "oil_sand_dilbit",
       "package": "icheme:tjl20_methane",
       "targets_m3_per_second": {
-        "side_liquid_tray_10": 0.010087668208296907,
-        "side_liquid_tray_18": 0.009660398236660839,
-        "side_liquid_tray_28": 0.007060906881222291
+        "side_liquid_tray_10": 0.010120141802549117,
+        "side_liquid_tray_18": 0.009742322546532666,
+        "side_liquid_tray_28": 0.007111529683656045
       }
     }
   ]

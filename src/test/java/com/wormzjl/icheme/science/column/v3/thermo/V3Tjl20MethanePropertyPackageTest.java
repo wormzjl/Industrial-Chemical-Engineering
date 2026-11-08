@@ -43,7 +43,7 @@ class V3Tjl20MethanePropertyPackageTest {
         // (spine/methane.json: CoolProp's Setzmann-Wagner alpha0 to 425 K, the GERG-2008 ideal part above, decision D13) as
         // ReferenceSpine evaluates it (O7 of batch 2026-11-04-open-thermo-data, decision E16). O2 fitted the Setzmann-Wagner
         // alpha0 alone; before O2 it was the NIST WebBook Shomate expression. Fit worst 0.014 J/(mol K), 0.22 J/mol.
-        var spine = com.wormzjl.icheme.science.material.MaterialCatalog.bundled().requireSpine("icheme:pilot_cryogenic", "Methane");
+        var spine = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot().requireSpine("icheme:pilot_cryogenic", "Methane");
         assertEquals("spine-methane-r3", spine.revision());
         for (int point = 0; point <= 1000; point++) {
             double temperature = 298.15 + (900 - 298.15) * point / 1000;

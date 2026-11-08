@@ -33,7 +33,7 @@ class SlurryTankPumpTest {
     static final long VENT=1,TANK=3,PUMP=8,SIDE_VOID=12;
     static final int METHANE=1,CO2=3;
     static final PipeResistance.Geometry BLOCK=new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0);
-    final FluidThermodynamics pilot=FluidTestSupport.model(MaterialCatalog.bundled(),PILOT);
+    final FluidThermodynamics pilot=FluidTestSupport.model(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(),PILOT);
 
     static PhysicalFluidTopology.Device device(long id,int x,int y,int z,Kind kind,PhysicalFluidTopology.Direction facing,FlowControl control) {
         return new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position(DIMENSION,x,y,z),com.wormzjl.icheme.fluid.support.FluidTestSupport.mechanical(kind),facing,BLOCK,control);

@@ -32,7 +32,7 @@ import org.junit.jupiter.api.Test;
 class G3F7CarbonDioxideInLiquidMethaneTest {
     @Test
     void fluidStatesOfCarbonDioxideInLiquidMethaneAreResearchOnly() {
-        var catalog = MaterialCatalog.bundled();
+        var catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
         var evaluator = CubicPhaseEvaluator.forPackage(catalog, PILOT);
         FluidTpEquilibrium research = researchEngine(evaluator, "pilot-co2-in-liquid-methane");
         var production = new FluidTpEquilibrium(PhaseContract.forNetworkPackage(catalog, PILOT), evaluator, FluidTpEquilibrium.Settings.DEFAULT, null);
@@ -100,7 +100,7 @@ class G3F7CarbonDioxideInLiquidMethaneTest {
 
     /** P5: the pilot's crystal competition answers every F7 state; its own bound (class comment). */
     static void crystalCompetitionAnswersEveryState() {
-        var engine = FluidTpEquilibrium.forPackage(MaterialCatalog.bundled(), PILOT);
+        var engine = FluidTpEquilibrium.forPackage(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PILOT);
         var ws = engine.newWorkspace();
         var basis = engine.contract().components();
         var table = new Table("G3 F7 crystal competition (P5)", "T K", "P MPa", "x_CO2", "Classification", "crystal mol", "liquid x_CO2",

@@ -272,7 +272,7 @@ class FluidCheckpointCodecTest {
      * bytes. A crystal record and a custom solid never share an id, so an id names one record.
      */
     @Test void aCrystalIsReadBackAsItsRecordBesideACustomSolidAndAnIdNamingNoRecordIsRefused() {
-        var pilot=FluidTestSupport.model(MaterialCatalog.bundled(),PILOT);
+        var pilot=FluidTestSupport.model(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(),PILOT);
         var graph=depositedVessel(pilot);var solids=graph.reservoirs().getFirst().inventory().solids();
         assertEquals(1,solids.crystals().size(),"the refresh deposited CO2-I: "+solids);assertEquals(2,solids.populations().size(),"beside the particles: "+solids);
         var crystal=solids.crystals().getFirst().material();assertEquals("icheme:crystal_carbon_dioxide_i",crystal.id());

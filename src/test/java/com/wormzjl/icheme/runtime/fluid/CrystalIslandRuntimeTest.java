@@ -28,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class CrystalIslandRuntimeTest {
     private static final String PILOT="icheme:pilot_cryogenic";
-    private final FluidThermodynamics model=FluidTestSupport.model(MaterialCatalog.bundled(),PILOT);
+    private final FluidThermodynamics model=FluidTestSupport.model(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(),PILOT);
 
     /** A closed 0.1 m3 vessel, device 101 of island 1, holding {@code state}. */
     private static PassiveNetwork vessel(FluidThermodynamics.State state){return new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(101,0,state)),List.of());}

@@ -34,7 +34,7 @@ class FluidAppearanceTest {
         assertThrows(IllegalArgumentException.class, () -> catalog.componentAppearance(PACKAGE, "Unknown"));
         // An assay applies to every package that holds its compounds; the pilot holds no crude fraction.
         assertEquals(0x16120E, catalog.assayAppearance("icheme:tjl20_methane_nitrogen", "icheme:oil_sand_dilbit").rgb());
-        assertThrows(IllegalArgumentException.class, () -> catalog.assayAppearance("icheme:pilot_cryogenic", "icheme:oil_sand_dilbit"));
+        assertThrows(IllegalArgumentException.class, () -> PilotCryogenicTestCatalog.withPilot().assayAppearance("icheme:pilot_cryogenic", "icheme:oil_sand_dilbit"));
     }
 
     @Test void appearanceEditsPreserveThePackagesScienceAndTransport() {

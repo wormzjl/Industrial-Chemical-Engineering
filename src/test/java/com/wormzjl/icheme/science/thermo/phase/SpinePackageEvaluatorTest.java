@@ -30,7 +30,7 @@ class SpinePackageEvaluatorTest {
 
     @Test
     void theNetworkPhaseIsTheEvaluatorPhaseOnTheSensibleDatum() {
-        var catalog = MaterialCatalog.bundled();
+        var catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
         var evaluator = CubicPhaseEvaluator.forPackage(catalog, PILOT);
         var network = FluidTestSupport.model(catalog, PILOT).hydrocarbon;
         assertEquals(network.components(), evaluator.components());
@@ -107,7 +107,7 @@ class SpinePackageEvaluatorTest {
 
     @Test
     void theEvaluatorTakesEitherIdealGasAndContinuesOutsideIt() {
-        var catalog = MaterialCatalog.bundled();
+        var catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
         // A package without a spine takes its fits on the network's datum (decision E27; it was refused before).
         assertTrue(CubicPhaseEvaluator.forPackage(catalog, PhaseTestSupport.NETWORK).idealGas(0) instanceof CoefficientIdealGas);
         var evaluator = CubicPhaseEvaluator.forPackage(catalog, PILOT);
@@ -128,7 +128,7 @@ class SpinePackageEvaluatorTest {
 
     @Test
     void theContractCarriesThePackageSpineWaterAndCompetition() {
-        var catalog = MaterialCatalog.bundled();
+        var catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
         var pilot = catalog.requirePackage(PILOT);
         var contract = PhaseContract.forNetworkPackage(catalog, PILOT);
         assertEquals(catalog.spineRevision(PILOT), contract.identity().spineRevision());

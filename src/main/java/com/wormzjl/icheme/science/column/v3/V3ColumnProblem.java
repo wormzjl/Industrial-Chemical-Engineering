@@ -175,26 +175,80 @@ public final class V3ColumnProblem {
         return freeWaterFlowScaleMolPerSecond;
     }
 
-    /** Aqueous liquid leaving a tray downward; exactly zero unless the tray is in the frozen wet set. */
+    /**
+     * Aqueous liquid leaving a tray: downward to the tray below, or, on a carry-over tray one, upward to the drum
+     * ({@link #carriesTopTrayWaterOver}). Exactly zero unless the tray is in the frozen wet set.
+     */
     double freeWaterFlowMolPerSecond(V3DryMeshState state, int node) {
         return isWetTray(node) ? state.freeWaterFlow(node) : 0.0;
     }
 
     /**
+     * Whether tray one's free water leaves upward to the condenser drum instead of falling to tray two
+     * (condenser carry-over, E31 of batch 2026-11-04-open-thermo-data).
+     *
+     * <p>Water condensed on any other tray falls to the tray below and comes straight back up as vapour, so it
+     * cannot change the net water passing the tray that shed it ({@link V3WetTraySet}). On tray one that loop
+     * leaves the tray's saturation row without a lever. A drum that decants free water (the {@code FREE_WATER}
+     * regime, on either the two-phase or the total-condenser branch) takes tray one's excess as entrained liquid
+     * instead: the drum decants it with its own condensate, and tray one's vapour carries only the rest of the
+     * steam. A drum that cannot decant ({@code NONE}, {@code ALL_VAPOR}) receives no carry-over, and tray one keeps
+     * the falling free water and the {@code WATER_DEW_POINT} warning it had before.</p>
+     */
+    boolean carriesTopTrayWaterOver() {
+        return waterCondenserRegime == WaterCondenserRegime.FREE_WATER;
+    }
+
+    /** Whether a tray's free water falls to the tray below: every wet tray except a carry-over tray one. */
+    boolean freeWaterFalls(int node) {
+        return node != 1 || !carriesTopTrayWaterOver();
+    }
+
+    /** Free water falling from this tray onto the one below; zero on a dry tray and on a carry-over tray one. */
+    double fallingFreeWaterMolPerSecond(V3DryMeshState state, int node) {
+        return freeWaterFalls(node) ? freeWaterFlowMolPerSecond(state, node) : 0.0;
+    }
+
+    /** Free water tray one carries over to the drum as liquid; zero unless tray one is wet and the drum decants. */
+    double carriedOverWaterMolPerSecond(V3DryMeshState state) {
+        return carriesTopTrayWaterOver() ? freeWaterFlowMolPerSecond(state, 1) : 0.0;
+    }
+
+    /**
      * Water vapor rising out of a node, from the candidate state.
      *
-     * <p>The tray water balance {@code W_n = W_(n+1) + F_(n-1) + S_n - F_n} telescopes downward to
-     * {@code W_n = (steam fed at or below n) + F_(n-1) - F_R}, and the sump is never wet
-     * ({@link V3WetTraySet}), so {@code F_R} is zero and only the tray directly above contributes. Water that
-     * condenses on a tray reaches the tray below and comes straight back up, which is why it never changes the
-     * net water passing its own tray.</p>
-     *
-     * <p>At the condenser the water is not a balance but the drum's regime split, whose arriving water is
-     * {@code W_1} — the authored steam total, because nothing above tray one can shed free water into it.</p>
+     * <p>At the condenser the water is not a balance but the drum's regime split; see
+     * {@link #waterCondenserSplit}. On a tray it is {@link #trayWaterVaporFlow} of the state's free water.</p>
      */
     double waterVaporFlow(V3DryMeshState state, int node) {
         if (node == topology.condenserNode()) return waterCondenserSplit(state).vaporFlowMolPerSecond();
-        return waterVaporFlowMolPerSecond(node) + (node >= 2 ? freeWaterFlowMolPerSecond(state, node - 1) : 0.0);
+        return trayWaterVaporFlow(node, freeWaterFlowMolPerSecond(state, node),
+                node >= 2 ? freeWaterFlowMolPerSecond(state, node - 1) : 0.0);
+    }
+
+    /**
+     * Water vapor rising out of a tray or the sump, given that node's own free water and the free water of the
+     * tray above (each zero where the tray is dry): the one statement of the tray water balance.
+     *
+     * <p>The balance {@code W_n = W_(n+1) + F_(n-1) + S_n - F_n} telescopes downward to
+     * {@code W_n = (steam fed at or below n) + F_(n-1) - F_R}, and the sump is never wet ({@link V3WetTraySet}), so
+     * {@code F_R} is zero and only the tray directly above contributes. A carry-over tray one changes two terms:
+     * its free water leaves upward, so {@code W_1 = (all steam) - F_1}, and none of it reaches tray two, so
+     * {@code W_2} is the authored profile alone. {@link V3WetTraySet}, {@link V3FreeWaterContinuation} and the
+     * residual rows all read the water through here, with their own trial flows.</p>
+     *
+     * @throws IllegalArgumentException when tray one would carry over all the steam that reaches it: the vapour
+     *         water is then not positive and the saturation row has no logarithm (a rejected trial, not a hold)
+     */
+    double trayWaterVaporFlow(int node, double ownFreeWaterMolPerSecond, double freeWaterAboveMolPerSecond) {
+        if (node == 1 && carriesTopTrayWaterOver()) {
+            double water = waterVaporFlowMolPerSecond[1] - ownFreeWaterMolPerSecond;
+            if (!(water > 0.0)) {
+                throw new IllegalArgumentException("V3 tray one cannot carry over all the steam that reaches it");
+            }
+            return water;
+        }
+        return waterVaporFlowMolPerSecond[node] + (node == 2 && carriesTopTrayWaterOver() ? 0.0 : freeWaterAboveMolPerSecond);
     }
 
     public double waterVaporSlipCoefficient() {
@@ -218,10 +272,11 @@ public final class V3ColumnProblem {
      * separate free-water product. The molecular vapor allocation is capped by arriving water:
      * an unsaturated overhead cannot create water that was never fed to the column.
      *
-     * <p>The arriving water is {@code W_1}, which is the authored steam total whether or not the top trays
-     * carry free water: no free water is shed into tray one from above, so the water balance leaves
-     * {@code W_1} equal to the steam fed. The regime and the slip coefficient are therefore still resolved
-     * once from the authored total, and this split is exactly what it was before wet trays existed.</p>
+     * <p>The arriving water is the authored steam total whether or not the top trays carry free water: no free
+     * water is shed into tray one from above, so all of it reaches the drum, as tray one's vapour {@code W_1} and,
+     * on a carry-over tray one, as the entrained liquid {@code F_1} besides. The drum decants the two together, so
+     * the regime and the slip coefficient are still resolved once from the authored total, and this split is
+     * exactly what it was before wet trays existed.</p>
      */
     WaterCondenserSplit waterCondenserSplit(V3DryMeshState state) {
         state = Objects.requireNonNull(state, "state");

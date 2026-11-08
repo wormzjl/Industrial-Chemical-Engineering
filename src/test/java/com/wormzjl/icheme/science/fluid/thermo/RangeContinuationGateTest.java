@@ -21,7 +21,7 @@ import org.junit.jupiter.api.Test;
  */
 class RangeContinuationGateTest {
     private static final String NETWORK = "icheme:tjl20_methane_nitrogen";
-    private final MaterialCatalog catalog = MaterialCatalog.bundled();
+    private final MaterialCatalog catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
 
     /** Ideal gases: the spines, every {@code shifted_polynomial_5} fit of the network and the steam hold the end's c_p. */
     @Test

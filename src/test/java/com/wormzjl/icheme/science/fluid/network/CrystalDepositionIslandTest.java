@@ -47,7 +47,7 @@ class CrystalDepositionIslandTest {
     static final String PILOT="icheme:pilot_cryogenic";
     static final String CO2_I="icheme:crystal_carbon_dioxide_i";
     static final int NITROGEN=0,METHANE=1,CO2=3;
-    private static final MaterialCatalog CATALOG=MaterialCatalog.bundled();
+    private static final MaterialCatalog CATALOG=com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
     private final FluidThermodynamics model=FluidTestSupport.model(CATALOG,PILOT);
     private NetworkCrystals.Crystal co2(){return model.crystalSolids().all().getFirst();}
 

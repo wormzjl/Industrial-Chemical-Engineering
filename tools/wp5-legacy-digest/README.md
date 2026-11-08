@@ -5,9 +5,15 @@ Purpose: print the bitwise digest of the legacy (spine-less) network hydrocarbon
 Batch `2026-09-24-coolprop-low-temperature`, stage P3, WP5 (spine wiring). One-off; not a tracked harness.
 
 Contents:
-- `src/src/main/**`: `git archive 959ea0d src/main` (sources and resources), the closure listed in `sources.txt`.
 - `src/runner/PrintLegacyDigest.java`: prints `LegacyNetworkPathPinTest.digest` and the revision.
 - `sources.txt`: javac argument file (the 959ea0d closure, the pin test from the worktree, the runner).
+- `src/src/main/**` is not stored. It was `git archive 959ea0d src/main` (sources and resources), the closure listed in
+  `sources.txt`, and it held the five ExxonMobil assays (with their PDF URLs and SHA-256) and the NIST nitrogen record, so
+  O5 of batch 2026-11-04-open-thermo-data removed it (2026-11-05; rules R-XOM and NIST D-B). Recreate it first:
+
+      mkdir -p tools/wp5-legacy-digest/src && git archive 959ea0d src/main | tar -x -C tools/wp5-legacy-digest/src
+
+  Delete it again after the run; it must not be committed.
 
 Run (Git Bash, from the worktree root; JDK 21 = the Gradle toolchain; jars from the Gradle cache):
 

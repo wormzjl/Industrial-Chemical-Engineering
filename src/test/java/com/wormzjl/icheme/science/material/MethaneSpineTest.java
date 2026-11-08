@@ -42,7 +42,7 @@ class MethaneSpineTest {
     private static final double[] CEA_CH4 = {3.730042760e+06, -1.383501485e+04, 2.049107091e+01, -1.961974759e-03, 4.727313040e-07,
             -3.728814690e-11, 1.623737207e-15};
 
-    private static ReferenceSpine methane() { return MaterialCatalog.bundled().requireSpine(PilotCryogenicTestCatalog.PACKAGE_ID, "Methane"); }
+    private static ReferenceSpine methane() { return com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot().requireSpine(PilotCryogenicTestCatalog.PACKAGE_ID, "Methane"); }
 
     @Test
     void recordShapeGradeAndJoin() {

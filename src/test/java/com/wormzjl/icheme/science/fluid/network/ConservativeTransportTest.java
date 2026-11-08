@@ -48,7 +48,7 @@ class ConservativeTransportTest {
      * carry (a viscosity of 0/0), and the next interval's start flows were refused at every step size.
      */
     @Test void aVesselNothingReachesKeepsWhatItHoldsItsSolidsIncluded() {
-        var model=FluidTestSupport.model(MaterialCatalog.bundled(),"icheme:pilot_cryogenic");
+        var model=FluidTestSupport.model(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(),"icheme:pilot_cryogenic");
         var crystal=model.crystalSolids().all().getFirst();
         var lng=model.flashTP(120,3e5,new double[]{0,.995,0,.005,0},()->{});
         var tank=PassiveNetwork.emptyVessel(2,0,1,model);

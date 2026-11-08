@@ -22,8 +22,8 @@ public final class V3TestInputs {
      * condenser 59 C, reflux ratio 4.17, no external reboiler.
      *
      * <p>This reconstruction carries no side-stripper reboiler heat (18.1 MW in the source), so its top is about
-     * 10 C colder than the source and tray 1 sits below the water dew point of its steam-laden overhead; the
-     * condition is a result warning, not a rejection.</p>
+     * 10 C colder than the source and tray 1 sits below the water dew point of its steam-laden overhead; tray 1
+     * carries its free water over to the drum (condenser carry-over, E31 of batch 2026-11-04-open-thermo-data).</p>
      */
     public static V3ColumnInput literatureCduInput() {
         var catalog = tiaJuana("literature_tia_juana");

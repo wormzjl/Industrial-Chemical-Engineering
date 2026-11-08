@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class DataRangeContinuationTest {
     private static final String NETWORK="icheme:tjl20_methane_nitrogen";
-    private final MaterialCatalog catalog=MaterialCatalog.bundled();
+    private final MaterialCatalog catalog=com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
     private final FluidThermodynamics model=FluidThermodynamics.forNetwork(catalog,NETWORK);
     private int index(String component){return model.components().indexOf(component);}
     private double[] overall(Object... pairs){double[] n=new double[model.componentCount()];for(int i=0;i<pairs.length;i+=2)n[index((String)pairs[i])]=(Double)pairs[i+1];return n;}

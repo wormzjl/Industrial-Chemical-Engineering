@@ -38,7 +38,7 @@
     "icheme:crystal_carbon_dioxide_i"
   ],
   "advisory_evidence": [
-    "RECONSTRUCTED_PETROLEUM_PROPERTIES: frozen TJL19 reconstruction, not original HYSYS properties; 60 F standard-liquid basis assumed",
+    "RECONSTRUCTED_PETROLEUM_PROPERTIES: shared cuts from the project's DWSIM characterisation of Tia Juana Light (Ledezma-Martinez 2019), not original HYSYS properties; 60 F standard-liquid basis assumed",
     "ESTIMATED_HEAVY_RESIDUE: empirical critical-property extrapolation retained for flagged petroleum fractions",
     "THERMAL_FIT: degree-five Cp fit, analytic H relative to 298.15 K; validated over 298.15..900 K",
     "PR78_MODEL_DIFFERENCE: V3 low-omega coefficient 1.54226; reconstruction source 1.5422",
@@ -46,7 +46,7 @@
     "METHANE_ASSAY: synthetic 0.5 mol% methane blend; hypothetical liquid-density metadata is unused by the molar feed and PR equations",
     "NITROGEN_EXTENSION: initial charge is conserved inventory; nitrogen/hydrocarbon PR interactions estimated zero; no nitrogen dissolution in the separate free-water phase.",
     "NITROGEN_CRYOGENIC: valid from its 63.151 K triple point (ideal-gas Cp held below 273.16 K, within 0.05 % of Span et al. 2000; CoolProp viscosity tables); PR78 Psat at 77.355 K +1.21 %, liquid density -0.07 % against Span et al. 2000 (F4, P3 WP4)",
-    "ESTIMATED_REGROUPING: PC08-12 mass/volume-constrained Tia Juana reconstruction; heavy Tc/Pc extrapolated; global Dalia transport",
+    "ESTIMATED_REGROUPING: PC08-12 mass/volume-constrained Tia Juana reconstruction; heavy Tc/Pc extrapolated; cut liquid viscosity Twu 1985 + ASTM D341, one cut-pair mixture term fitted to ECCC whole crudes",
     "REFINERY_COMPOUNDS: the 24 Tier 1 compounds of REFINERY_COMPOUNDS_REVIEW.md P1 (batch 2026-11-04-refinery-compounds), ChemSep v8.3 records embedded in DWSIM 10.2.5 (Kooijman and Taylor, Artistic License 2.0), credited per record; tools/compound-import",
     "REFINERY_PAIRS: icheme:dwsim_refinery_pr78 holds only pairs with a new compound (D3): DWSIM kij_pr.dat, else the DECHEMA pr_ip.dat value nearest 300..600 K, else zero; Methane/HydrogenSulfide 0.08125 from ChemSep pr.ipd; existing pairs unchanged",
     "HYDROGEN_PAIRS_ZERO: every hydrogen pair is zero by rule (owner, 2026-11-04): the narrow-range DECHEMA fits would put hydrogen into the oil; H2 and H2S solubility in oil at k_ij = 0 is a known simplification",

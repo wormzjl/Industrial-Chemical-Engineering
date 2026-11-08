@@ -41,6 +41,10 @@ import static org.junit.jupiter.api.Assertions.*;
  *
  * <p>P-102 draws from T-101's tray, whose height the column's own layout gives, and an entry with the probe's height reads the same.
  * V-101's share and H-101's spare read P-101's pressure path, which ends at V-101's set outlet (S4a).
+ *
+ * <p>With condenser carry-over (E31 of batch 2026-11-04-open-thermo-data) the column sends more naphtha overhead and a little
+ * less residue: E-101 needs 568 m² (the probe's 574.3), E-102 732.5 (750.2), H-101 80.39 MW, and the naphtha takes a 15 m
+ * sphere, not 14. P-102 reads 131.6 m³/h and an NPSH of 32.35 m. Every other size stands.
  */
 class UnitSizingSampleTest {
     /** Probe values stand in the table's printed places. */
@@ -105,9 +109,9 @@ class UnitSizingSampleTest {
         assertEquals(Lamp.YELLOW, unit.rating().lamp());
         assertSame(Limit.PUMP_RATED, unit.rating().closest().limit());
         assertEquals(69, read(unit.rating(), Limit.PUMP_RATED), ONE);
-        assertEquals(131, read(unit.rating(), Limit.PUMP_FLOW), ONE);
+        assertEquals(131.6, read(unit.rating(), Limit.PUMP_FLOW), ONE);
         assertEquals(52, read(unit.rating(), Limit.PUMP_HEAD), ONE);
-        assertEquals(32.3, read(unit.rating(), Limit.PUMP_NPSH), TENTH, "the column's own layout gives the probe's height");
+        assertEquals(32.35, read(unit.rating(), Limit.PUMP_NPSH), TENTH, "the column's own layout gives the probe's height");
     }
 
     /**
@@ -123,12 +127,12 @@ class UnitSizingSampleTest {
         closest(unit.rating(), Limit.EXCHANGER_SURFACE);
         var surface = unit.rating().reading(Limit.EXCHANGER_SURFACE);
         assertEquals(703, surface.value(), ONE);
-        assertEquals(572, surface.low(), ONE, "the curves' surface");
-        assertEquals(578.5, probesSurface(), ONE, "the probe's one LMTD at U 1000, from the same streams");
-        assertEquals(67.3, read(unit.rating(), Limit.EXCHANGER_HOT_END), TENTH);
+        assertEquals(568, surface.low(), ONE, "the curves' surface");
+        assertEquals(574.3, probesSurface(), ONE, "the probe's one LMTD at U 1000, from the same streams");
+        assertEquals(67.96, read(unit.rating(), Limit.EXCHANGER_HOT_END), TENTH);
         assertEquals(32.7, read(unit.rating(), Limit.EXCHANGER_COLD_END), TENTH);
         assertEquals(32.7, read(unit.rating(), Limit.EXCHANGER_APPROACH), TENTH);
-        assertEquals(23, read(unit.rating(), Limit.EXCHANGER_OVER_NEED), ONE);
+        assertEquals(23.7, read(unit.rating(), Limit.EXCHANGER_OVER_NEED), ONE);
         var drops = unit.rating().readings().stream().filter(reading -> reading.limit() == Limit.EXCHANGER_DROP_LIQUID).toList();
         assertEquals(.20, drops.get(0).value(), HUNDREDTH, "the tube side, 0.44 on 1.00 × 6 m; 0.17 before O4's crude viscosity");
         assertEquals(.07, drops.get(1).value(), HUNDREDTH, "the shell side, 0.15 on 1.00 × 6 m");
@@ -152,7 +156,7 @@ class UnitSizingSampleTest {
         var drops = kept.rating().readings().stream().filter(reading -> reading.limit() == Limit.EXCHANGER_DROP_LIQUID).toList();
         assertEquals(1.31, drops.get(0).value(), HUNDREDTH, "1.29 before O4's crude viscosity");
         assertEquals(Lamp.YELLOW, drops.get(0).lamp());
-        assertEquals(.44, drops.get(1).value(), HUNDREDTH, "0.41 before O4's crude viscosity");
+        assertEquals(.432, drops.get(1).value(), HUNDREDTH, "0.41 before O4's crude viscosity, 0.44 before condenser carry-over (E31)");
     }
 
     /**
@@ -167,7 +171,7 @@ class UnitSizingSampleTest {
         closest(unit.rating(), Limit.HEATER_DUTY);
         var duty = unit.rating().reading(Limit.HEATER_DUTY);
         assertEquals(96.6, duty.value(), TENTH);
-        assertEquals(80.3, duty.low(), TENTH);
+        assertEquals(80.39, duty.low(), TENTH);
         assertEquals(path("P-101").spare(), read(unit.rating(), Limit.HEATER_SPARE), 0, "its path's spare, to V-101's set outlet");
     }
 
@@ -195,8 +199,8 @@ class UnitSizingSampleTest {
         closest(unit.rating(), Limit.AIR_COOLER_SURFACE);
         var surface = unit.rating().reading(Limit.AIR_COOLER_SURFACE);
         assertEquals(903, surface.value(), ONE);
-        assertEquals(738, surface.low(), ONE, "the curve's surface");
-        assertEquals(756, probesBareSurface(), ONE, "the probe's one capacity, from the same streams");
+        assertEquals(732.5, surface.low(), ONE, "the curve's surface");
+        assertEquals(750.2, probesBareSurface(), ONE, "the probe's one capacity, from the same streams");
         itsCapacityRises("S-10", run.streams().get("S-10").temperature(), run.streams().get("RESIDUE").temperature());
         assertEquals(45, read(unit.rating(), Limit.AIR_COOLER_OUTLET), TENTH);
         assertEquals(.045, read(unit.rating(), Limit.AIR_COOLER_DROP), HUNDREDTH);
@@ -227,7 +231,7 @@ class UnitSizingSampleTest {
     void theUnstabilisedNaphthaTakesASphereAndTheResidueARoof() {
         var naphtha = tile("NAPHTHA");
         assertEquals(2.299, naphtha.bubble(), 2.299 * .0005, "both bisect to a ratio of 1.0005, from other bounds");
-        assertEquals(new TankSizing.Size(UnitType.SPHERE, 1, 14, 1), TankSizing.auto(naphtha, null).size(), "17 m on Tia Juana; the medium grade makes less naphtha (O3)");
+        assertEquals(new TankSizing.Size(UnitType.SPHERE, 1, 15, 1), TankSizing.auto(naphtha, null).size(), "17 m on Tia Juana; the medium grade makes less naphtha (O3); 14 m before condenser carry-over (E31)");
         var residue = tile("RESIDUE");
         assertTrue(residue.bubble() < .015);
         assertEquals(new TankSizing.Size(UnitType.FLOATING_ROOF, 1, 30, 18), TankSizing.auto(residue, null).size());

@@ -25,7 +25,7 @@ class RefineryImportTest {
      * {@code tjl19_dwsim} since O3 of batch 2026-11-04-open-thermo-data.
      */
     private static MaterialCatalog before() {
-        var resources=new HashMap<>(TiaJuanaTestCatalog.catalog().resources());
+        var resources=new HashMap<>(after().resources());
         resources.entrySet().removeIf(e->{
             String path=e.getKey();if(!path.startsWith(ROOT))return false;
             if(path.equals(ROOT+"transport/chemsep_liquid_reference.json")||path.equals(ROOT+"interactions/dwsim_refinery_pr78.json")||path.equals(ROOT+"packages/refinery.json"))return true;
@@ -42,6 +42,12 @@ class RefineryImportTest {
             edit(resources,file,o->{var liquid=o.getAsJsonObject("viscosity").getAsJsonObject("liquid");liquid.addProperty("revision","dwsim-viscosity-api-r1");liquid.addProperty("estimated",false);});
         return MaterialCatalog.parse(resources);
     }
+    /**
+     * The bundled resources with the Tia Juana test fixture and the pilot package (a test overlay since O5 of batch
+     * 2026-11-04-open-thermo-data, bundled when the import was made).
+     */
+    private static MaterialCatalog after() { return AFTER; }
+    private static final MaterialCatalog AFTER=MaterialCatalog.parse(PilotCryogenicTestCatalog.over(TiaJuanaTestCatalog.resources()));
     private static void edit(Map<String,String> resources,String path,java.util.function.Consumer<JsonObject> change) {
         var o=JsonParser.parseString(Objects.requireNonNull(resources.get(ROOT+path),path)).getAsJsonObject();change.accept(o);resources.put(ROOT+path,o.toString());
     }
@@ -52,7 +58,7 @@ class RefineryImportTest {
     }
 
     @Test void theImportMovesNoColumnIdentityAndNoNumberOfTheOldPackages() {
-        var before=before();var after=TiaJuanaTestCatalog.catalog();
+        var before=before();var after=after();
         assertEquals(NETWORK,before.presets().network().packageId());
         assertEquals(REFINERY,after.presets().network().packageId());
         for(String id:OLD_PACKAGES) {
@@ -77,7 +83,7 @@ class RefineryImportTest {
      * of such a world loads EXACT); a view holding either moves in those two tokens only.
      */
     @Test void aNetworkViewKeepsItsIdentityUnlessItHoldsAFlaggedTable() {
-        var before=before();var after=TiaJuanaTestCatalog.catalog();var all=before.requirePackage(NETWORK).components();
+        var before=before();var after=after();var all=before.requirePackage(NETWORK).components();
         var views=List.of(List.of("Nitrogen","Methane"),List.of("Nitrogen","Ethane"),List.of("Nitrogen"),List.of("Methane","Ethane","Propane","N-butane","N-pentane"),
                 List.of("Nitrogen","crude_pc03","crude_pc12"),List.of("Nitrogen","Isobutane"),List.of("Nitrogen","Isopentane","crude_pc01"),all);
         for(var view:views) {
@@ -92,7 +98,7 @@ class RefineryImportTest {
 
     /** The pair library (D3): every pair names a new compound, no pair names hydrogen, and Methane/HydrogenSulfide is ChemSep's 2009 value. */
     @Test void thePairLibraryAddsOnlyPairsWithANewCompound() {
-        var after=TiaJuanaTestCatalog.catalog();var before=before();
+        var after=after();var before=before();
         var added=new HashSet<>(after.requirePackage(REFINERY).components());added.removeAll(before.requirePackage(NETWORK).components());
         assertEquals(25,added.size(),"the 24 Tier 1 compounds and CO2 (O11), whose pairs with the old compounds are their own library's");
         var library=JsonParser.parseString(after.resources().get(ROOT+"interactions/dwsim_refinery_pr78.json")).getAsJsonObject();

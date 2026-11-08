@@ -52,7 +52,7 @@ final class G3Support {
     static HelmholtzFluid oracle(int species) { return oracle(SPECIES[species]); }
 
     static synchronized FluidThermodynamics model(String packageId) {
-        return MODELS.computeIfAbsent(packageId, id -> FluidTestSupport.model(MaterialCatalog.bundled(), id));
+        return MODELS.computeIfAbsent(packageId, id -> FluidTestSupport.model(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), id));
     }
 
     static FluidThermodynamics pilot() { return model(PILOT); }

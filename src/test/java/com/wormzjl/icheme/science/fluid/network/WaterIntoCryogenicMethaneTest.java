@@ -32,7 +32,7 @@ class WaterIntoCryogenicMethaneTest {
     private static final int METHANE = 1;
     private static final int INTERVALS = 6;
     private static final String ICE = "icheme:crystal_ice_ih";
-    private final FluidThermodynamics model = FluidTestSupport.model(MaterialCatalog.bundled(), PILOT);
+    private final FluidThermodynamics model = FluidTestSupport.model(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PILOT);
 
     /** One cubic metre of {@code feed} (basis N2, CH4, C2H6, CO2, water) at (T, P), the engine's TP answer. */
     private FluidThermodynamics.State metre(double t, double p, double[] feed) {

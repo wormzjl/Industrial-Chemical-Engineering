@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "CarbonDioxide",
+  "kind": "chemical",
+  "translation_key": "material.icheme.carbon_dioxide",
+  "fallback": "CarbonDioxide",
+  "properties": "icheme:pilot_carbon_dioxide",
+  "appearance": {
+    "color": "#DCE8FA",
+    "transparency": 0.95,
+    "estimated": true
+  }
+}

@@ -41,7 +41,7 @@ import org.junit.jupiter.api.Test;
  */
 class G3F8ConservationAndDerivativeTest {
     static FluidTpEquilibrium engine() {
-        var catalog = MaterialCatalog.bundled();
+        var catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
         return new FluidTpEquilibrium(PhaseContract.forNetworkPackage(catalog, PILOT), CubicPhaseEvaluator.forPackage(catalog, PILOT), FluidTpEquilibrium.Settings.DEFAULT, null);
     }
 
@@ -101,7 +101,7 @@ class G3F8ConservationAndDerivativeTest {
 
     @Test
     void analyticDerivativesAgainstCentralDifferences() {
-        var evaluator = CubicPhaseEvaluator.forPackage(MaterialCatalog.bundled(), PILOT);
+        var evaluator = CubicPhaseEvaluator.forPackage(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PILOT);
         var ws = evaluator.newWorkspace();
         var d = new PhaseDerivatives(4);
         var plus = new PhaseState(4);
@@ -251,7 +251,7 @@ class G3F8ConservationAndDerivativeTest {
         double[] n = {1, 0, 0, 0, 0};
         var state = model.flashTP(300, 2e5, n, () -> { });
         double volume = state.volume(), energy = state.internalEnergy();
-        var spine = MaterialCatalog.bundled().requireSpine(PILOT, "Nitrogen");
+        var spine = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot().requireSpine(PILOT, "Nitrogen");
         // Energy to about 1143 K at fixed volume: the ideal-gas u(1143) - u(300).
         double target = spine.enthalpy(1143) - spine.enthalpy(300) - R * (1143 - 300);
         int steps = 40;
