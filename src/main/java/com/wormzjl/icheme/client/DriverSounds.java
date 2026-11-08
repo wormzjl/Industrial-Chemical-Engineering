@@ -87,7 +87,8 @@ public final class DriverSounds {
         }
         near.sort(Comparator.comparingDouble((BlockPos o)->o.distToCenterSqr(point)).thenComparingLong(BlockPos::asLong));
         var wanted=new LinkedHashSet<BlockPos>();for(var origin:near){if(wanted.size()>=FluidNetwork.MAXIMUM_WATCHED)break;wanted.add(origin);}
-        var unwatch=WATCHED.stream().filter(o->!wanted.contains(o)).toList();var watch=wanted.stream().filter(o->!WATCHED.contains(o)).toList();
+        // Registration is queued: retry until a newly placed driver's first speed publication arrives.
+        var unwatch=WATCHED.stream().filter(o->!wanted.contains(o)).toList();var watch=wanted.stream().filter(o->!WATCHED.contains(o)||!SPEEDS.containsKey(o)).toList();
         WATCHED.removeAll(unwatch);unwatch.forEach(DriverSounds::drop);WATCHED.addAll(watch);
         if(!watch.isEmpty()||!unwatch.isEmpty())request(watch,unwatch);
         for(var origin:List.copyOf(SPEEDS.keySet())) {

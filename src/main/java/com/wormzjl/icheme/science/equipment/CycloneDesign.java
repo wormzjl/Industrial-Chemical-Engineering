@@ -242,7 +242,8 @@ final class CycloneDesign extends UnitDesign {
                 double nut = .02 + .01 * d;
                 for (int j = 0; j < nuts; j++) {
                     var at = up.at(2 * Math.PI * (j + .5) / nuts, (r + jr) / 2, yJoint + .03);
-                    u.mesh.box(new double[]{at[0] - nut, at[1], at[2] - nut}, new double[]{at[0] + nut, at[1] + 1.4 * nut, at[2] + nut}, ALL_FACES & ~4, Material.BOLT);
+                    if (u.mesh.detail() == RenderDetail.LOW) u.mesh.nut(Frame.of(at, 1, 1), nut, 0, 1.4 * nut, 6, Material.BOLT);
+                    else u.mesh.box(new double[]{at[0] - nut, at[1], at[2] - nut}, new double[]{at[0] + nut, at[1] + 1.4 * nut, at[2] + nut}, ALL_FACES & ~4, Material.BOLT);
                 }
             }
             u.solids.add(Solid.rod(axis, 1, yJoint, yRoof, r, 0));

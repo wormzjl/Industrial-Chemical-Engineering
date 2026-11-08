@@ -135,8 +135,8 @@ class FluidPacketCodecTest {
      * the live payload as a solid with its crystal record and comes back equal; a crystal made of a component off the
      * menu's axis is refused. fluid-14 adds a tank's capacity and paired pressures; fluid-16 a heat unit's ports, lines and
      * actuator and a pipe's line reading (the heat GUI). */
-    @Test void theProtocolIsFluidEighteenWithDistinctStaticAndLivePayloads() {
-        assertEquals("fluid-18",FluidNetwork.PROTOCOL);
+    @Test void theProtocolIsFluidNineteenWithDistinctStaticAndLivePayloads() {
+        assertEquals("fluid-19",FluidNetwork.PROTOCOL);
         var ids=java.util.Set.of(FluidNetwork.EditPayload.TYPE.id(),FluidNetwork.RecoverPayload.TYPE.id(),FluidNetwork.StaticPayload.TYPE.id(),FluidNetwork.LivePayload.TYPE.id());
         assertEquals(4,ids.size());
         var base=generatorMenu("");int count=base.components().size();
@@ -206,7 +206,7 @@ class FluidPacketCodecTest {
     }
     /** W7: the machine page's view, edit and driver payloads round-trip; a view with a bad number is refused on read. */
     @Test void theMachinePayloadsRoundTripOnTheirOwnRegistrar() {
-        assertEquals("machine-2",com.wormzjl.icheme.network.MachineNetwork.PROTOCOL);
+        assertEquals("machine-3",com.wormzjl.icheme.network.MachineNetwork.PROTOCOL);
         var settings=new ShaftUnit.Settings(true,com.wormzjl.icheme.science.machine.ShaftTrain.Mode.REGULATE_FLOW,.8,0,0);
         var view=new MachineView(7,com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR,"RUNNING",2950,24900,26700,534,settings,
                 com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE,30000,2950,2,true,.72,370,"FV-101",0,2.9,40e5,4e5,null);

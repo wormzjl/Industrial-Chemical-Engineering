@@ -127,7 +127,19 @@ class SentDesignTagsTest {
                     assertTrue(read.whole(), file + ": " + read.repairs());
                     // Counts written before the water trim's read one trim shell.
                     var expected = UNITS_BEFORE_TRIM.matcher(entry.getString("Expected")).replaceAll("$1, trim=1]");
-                    var actual = read.designs().getFirst().toString();
+                    // Appended defaults leave the historical saved payload untouched.
+                    if (!expected.contains("baseSpeed=")) expected = expected.replaceAll("(exhaust=[0-9.Ee+-]+)\\]", "$1, baseSpeed=0.0]");
+                    if (!expected.contains("exchangerType=")) expected = expected.replace("], column=", ", exchangerType=STANDARD], column=");
+                    var design = read.designs().getFirst();
+                    if (!expected.contains("exchangers=Exchangers[") && design.shape().trays() != null && design.shape().trays().components() != null) {
+                        var pattern = java.util.regex.Pattern.compile("(units=Units\\[condenser=\\d+, kettle=\\d+, coolers=\\[[0-9, ]*\\], trim=\\d+\\])\\]");
+                        var match = pattern.matcher(expected);
+                        var upgraded = new StringBuilder();
+                        while (match.find()) match.appendReplacement(upgraded, java.util.regex.Matcher.quoteReplacement(match.group(1) + ", exchangers=" + design.shape().trays().components().exchangers() + "]"));
+                        match.appendTail(upgraded);
+                        expected = upgraded.toString();
+                    }
+                    var actual = design.toString();
                     if (!expected.contains("duty=")) actual = DUTY.matcher(actual).replaceAll("");
                     assertEquals(expected, actual, file.toString());
                 }

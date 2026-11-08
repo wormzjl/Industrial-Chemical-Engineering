@@ -1,0 +1,7 @@
+from pathlib import Path
+r=Path('src/main/java/com/wormzjl/icheme')
+p=r/'client/CableLayingClient.java';s=p.read_text().replace('click,settings()).anchor()','click,CableLayingClient.settings()).anchor()');s=s.replace('removal=false;request=ControlNetwork.cable(offHand,false,medium(),click,end,plan.route().cells().stream().map(CableLaying::block).toList(),plan.route().options());','LineToolSession.command(offHand,LineLaying.Action.LAY,click,end,plan.route().cells().stream().map(PipeAnchor::block).toList(),plan.route().options());');p.write_text(s)
+p=r/'network/FluidNetwork.java';s=p.read_text().replace('    private static void registerDisplays(', '    private static InteractionHand hand(boolean offHand){return offHand?InteractionHand.OFF_HAND:InteractionHand.MAIN_HAND;}\n    private static void registerDisplays(');p.write_text(s)
+# Native hand registration also belongs with the backend.
+p=r/'world/level/block/CableLaying.java';s=p.read_text();a=s.index('    private static ConduitGeometry.Key connect');b=s.rindex('}');hand=s[a:b];hand=hand.replace('cables(level,','ConduitLineBackend.cables(level,');q=r/'world/level/block/ConduitLineBackend.java';z=q.read_text();i=z.rindex('}');z=z[:i]+hand+z[i:];z=z.replace('import net.minecraft.world.level.Level;', 'import net.minecraft.world.level.Level;\nimport net.minecraft.server.level.ServerPlayer;\nimport net.minecraft.world.phys.Vec3;');q.write_text(z);p.unlink()
+p=r/'world/level/block/ConduitBlock.java';s=p.read_text().replace('CableLaying.handPlaced','ConduitLineBackend.handPlaced');p.write_text(s)

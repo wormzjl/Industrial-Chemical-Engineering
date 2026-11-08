@@ -55,7 +55,7 @@ import java.util.*;
  * {@link FluidView.Power} (the Power group; NO POWER and UNMETERED stay on the status).</p>
  */
 public final class FluidNetwork {
-    public static final String PROTOCOL="fluid-18";
+    public static final String PROTOCOL="fluid-19";
     private static final Gson JSON=new Gson();
     public static final int MAX_JSON=262144;
     public static final int MAX_EDIT_JSON=4096;
@@ -73,7 +73,8 @@ public final class FluidNetwork {
      * A menu's edit form. {@code heat} is a controllable heat side's control (batch 2026-10-27-heat-exchanger-design, W4: an
      * exchanger side's or an air cooler's mode, set point, low limit and manual share), null for any other device.
      */
-    public record Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio,Power power,FlowControl.ValveSource valveSource,double massFlow,HeatUnit.Control heat,com.wormzjl.icheme.science.fluid.network.CoolingTower tower) {
+    public record Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio,Power power,FlowControl.ValveSource valveSource,double massFlow,HeatUnit.Control heat,com.wormzjl.icheme.science.fluid.network.CoolingTower tower,boolean fixedMover) {
+        public Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio,Power power,FlowControl.ValveSource valveSource,double massFlow,HeatUnit.Control heat,com.wormzjl.icheme.science.fluid.network.CoolingTower tower){this(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,power,valveSource,massFlow,heat,tower,false);}
         public Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio,Power power,FlowControl.ValveSource valveSource,double massFlow){this(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,power,valveSource,massFlow,null,null);}
         public Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio,Power power){this(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,power,FlowControl.ValveSource.NONE,1);}
         public Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio){this(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,Power.ON);}
@@ -90,10 +91,12 @@ public final class FluidNetwork {
         }
         @Override public double[] composition(){return composition.clone();}
         public static Controls from(WorldTopologyLedger.Registration record) {
-            var d=record.device();double flow=d.control() instanceof FlowControl.Mover m?m.requestedVolumeFlow():.01;
+            var d=record.device();double flow=d.control() instanceof FlowControl.Machine m?m.law().ratedFlow():d.control() instanceof FlowControl.Mover m?m.requestedVolumeFlow():.01;
             double head=d.control() instanceof FlowControl.Pump p?p.maximumAddedPressure():500000;
             double ratio=d.control() instanceof FlowControl.Compressor c?c.maximumPressureRatio():DEFAULT_PRESSURE_RATIO;
-            double pressure=d.control() instanceof FlowControl.Valve v?v.targetPressure():record.spec().pressure();
+            double pressure=d.control() instanceof FlowControl.Valve v&&!(v instanceof FlowControl.Turbine)?v.targetPressure():record.spec().pressure();
+            if(d.control() instanceof FlowControl.Machine m&&m.setPressure()>0)pressure=m.setPressure();
+            if(d.control() instanceof FlowControl.Compressor c){if(c.setFlow()>0)flow=c.setFlow();if(c.setPressure()>0)pressure=c.setPressure();}
             var valve=d.control() instanceof FlowControl.ControlValve v?v:null;
             if(valve!=null)flow=valve.volumeTarget();
             // An air cooler's fans and a fired heater's burners are its power (batch 2026-10-27-heat-exchanger-design): on while
@@ -102,7 +105,7 @@ public final class FluidNetwork {
             var power=!d.generatorEnabled()||d.control() instanceof FlowControl.Mover m&&!m.enabled()||heat!=null&&(heat.fans()||heat.burners())&&heat.control().share()==0?Power.OFF:Power.ON;
             double temperature=heat!=null&&heat.burners()?heat.control().target():record.spec().temperature();
             return new Controls(temperature,pressure,d.geometry().diameter(),d.geometry().roughness(),flow,head,record.spec().composition(),record.spec().solids(),ratio,power,valve==null?(d.control() instanceof FlowControl.PressureValve?FlowControl.ValveSource.PRESSURE:FlowControl.ValveSource.NONE):valve.source(),valve==null?1:valve.massTarget(),
-                    heat!=null&&heat.controllable()?heat.control():null,record.spec().tower());
+                    heat!=null&&heat.controllable()?heat.control():null,record.spec().tower(),d.kind()==TopologyCompiler.Kind.PIPE&&d.control() instanceof FlowControl.Machine);
         }
     }
     /**
@@ -254,7 +257,7 @@ public final class FluidNetwork {
     public static double opening(FluidWorldAuthority world,long id){return world.stored(()->storedOpening(world,id));}
     private static double storedOpening(FluidWorldAuthority world,long id){var record=world.registrations().get(id);if(record==null)return Double.NaN;var data=valveData(world,record,world.view(id));return data==null||!data.configured()?Double.NaN:data.opening();}
     private static ValveData valveData(FluidWorldAuthority world,WorldTopologyLedger.Registration record,FluidView view){
-        if(!(record.device().control() instanceof FlowControl.Valve valve))return null;
+        if(!(record.device().control() instanceof FlowControl.Valve valve)||valve instanceof FlowControl.Turbine)return null;
         if(valve.bare())return new ValveData(false,1,"Lacking components");
         double head=view.devicePressureChange()==null?0:Math.max(0,view.devicePressureChange());
         double rho=view.state()==null?1:view.state().mass()/Math.max(1e-300,view.state().volume());
@@ -346,8 +349,8 @@ public final class FluidNetwork {
                 var geometry=d.geometry();var control=d.control();var spec=old.spec();var heat=d.heat();
                 switch(d.hydraulicKind()) {
                     case PIPE,FILTER->geometry=new PipeResistance.Geometry(geometry.length(),controls.diameter,PipeResistance.DEFAULT_ROUGHNESS_METRES,geometry.minorLoss());
-                    case PUMP->control=new FlowControl.Pump(controls.volumeFlow,controls.maximumAddedPressure,controls.power==Power.ON);
-                    case COMPRESSOR->control=new FlowControl.Compressor(controls.volumeFlow,controls.maximumPressureRatio,controls.power==Power.ON);
+                    case PUMP->{if(control instanceof FlowControl.Machine m)control=new FlowControl.Machine(m.law(),m.speed(),controls.power==Power.ON,d.kind()==TopologyCompiler.Kind.PIPE?0:controls.volumeFlow,d.kind()==TopologyCompiler.Kind.PIPE?0:controls.pressure);else control=new FlowControl.Pump(controls.volumeFlow,controls.maximumAddedPressure,controls.power==Power.ON);}
+                    case COMPRESSOR->{if(control instanceof FlowControl.Machine m)control=new FlowControl.Machine(m.law(),m.speed(),controls.power==Power.ON,d.kind()==TopologyCompiler.Kind.PIPE?0:controls.volumeFlow,d.kind()==TopologyCompiler.Kind.PIPE?0:controls.pressure);else if(control instanceof FlowControl.Compressor c&&world.shafts().unitOf(d.id()))control=new FlowControl.Compressor(c.requestedVolumeFlow(),c.maximumPressureRatio(),controls.power==Power.ON,controls.volumeFlow,controls.pressure);else control=new FlowControl.Compressor(controls.volumeFlow,controls.maximumPressureRatio,controls.power==Power.ON);}
                     case VALVE->{
                         if(control instanceof FlowControl.ControlValve valve){
                             if(valve.bare())throw new IllegalArgumentException("Lacking components");
@@ -573,10 +576,12 @@ public final class FluidNetwork {
         @Override public Type<? extends CustomPacketPayload> type(){return TYPE;}
     }
     /** Client to server: the pipeline tool's target diameter, and the laying tool's primary and secondary paint. Settings only: it does not read, edit or subscribe to a fluid process. */
-    public record PipelineToolSave(int menuId,double diameter,int paint,int secondary) implements CustomPacketPayload {
+    public record PipelineToolSave(int menuId,double diameter,int paint,int secondary,boolean data,boolean power) implements CustomPacketPayload {
+        public PipelineToolSave(int menuId,double diameter,int paint,int secondary){this(menuId,diameter,paint,secondary,false,false);}
+        public PipelineToolSave(int menuId,double diameter,int paint,int secondary,boolean data){this(menuId,diameter,paint,secondary,data,false);}
         public static final Type<PipelineToolSave> TYPE=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"pipeline_tool_save"));
         public static final StreamCodec<RegistryFriendlyByteBuf,PipelineToolSave> STREAM_CODEC=StreamCodec.composite(
-                ByteBufCodecs.VAR_INT,PipelineToolSave::menuId,ByteBufCodecs.DOUBLE,PipelineToolSave::diameter,ByteBufCodecs.INT,PipelineToolSave::paint,ByteBufCodecs.INT,PipelineToolSave::secondary,PipelineToolSave::new);
+                ByteBufCodecs.VAR_INT,PipelineToolSave::menuId,ByteBufCodecs.DOUBLE,PipelineToolSave::diameter,ByteBufCodecs.INT,PipelineToolSave::paint,ByteBufCodecs.INT,PipelineToolSave::secondary,ByteBufCodecs.BOOL,PipelineToolSave::data,ByteBufCodecs.BOOL,PipelineToolSave::power,PipelineToolSave::new);
         @Override public Type<? extends CustomPacketPayload> type(){return TYPE;}
     }
     /**
@@ -588,32 +593,9 @@ public final class FluidNetwork {
         public static final StreamCodec<RegistryFriendlyByteBuf,PipeLayingOpen> STREAM_CODEC=StreamCodec.composite(ByteBufCodecs.BOOL,PipeLayingOpen::offHand,PipeLayingOpen::new);
         @Override public Type<? extends CustomPacketPayload> type(){return TYPE;}
     }
-    /** Lay {@code cells}, a lane on {@code slots} where one is not -1, from the anchor clicked at {@code start} to the one clicked at {@code end}. */
-    public record PipeLay(boolean offHand,com.wormzjl.icheme.world.level.block.PipeAnchor.Click start,com.wormzjl.icheme.world.level.block.PipeAnchor.Click end,List<BlockPos> cells,List<Integer> slots) implements CustomPacketPayload {
-        public static final Type<PipeLay> TYPE=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"pipe_lay"));
-        public static final StreamCodec<RegistryFriendlyByteBuf,PipeLay> STREAM_CODEC=StreamCodec.composite(ByteBufCodecs.BOOL,PipeLay::offHand,com.wormzjl.icheme.world.level.block.PipeAnchor.Click.STREAM_CODEC,PipeLay::start,
-                com.wormzjl.icheme.world.level.block.PipeAnchor.Click.STREAM_CODEC,PipeLay::end,BlockPos.STREAM_CODEC.apply(ByteBufCodecs.list(com.wormzjl.icheme.science.equipment.PipeRoute.Limits.DEFAULT.cells())),PipeLay::cells,
-                ByteBufCodecs.VAR_INT.apply(ByteBufCodecs.list(com.wormzjl.icheme.science.equipment.PipeRoute.Limits.DEFAULT.cells())),PipeLay::slots,PipeLay::new);
-        @Override public Type<? extends CustomPacketPayload> type(){return TYPE;}
-    }
-    /** Server to client: the answer to a lay, for the action bar, and whether it was laid; the client keeps the line's start until it was. */
-    public record PipeLayAnswer(net.minecraft.network.chat.Component message,boolean laid) implements CustomPacketPayload {
-        public static final Type<PipeLayAnswer> TYPE=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"pipe_lay_answer"));
-        public static final StreamCodec<RegistryFriendlyByteBuf,PipeLayAnswer> STREAM_CODEC=StreamCodec.composite(net.minecraft.network.chat.ComponentSerialization.TRUSTED_STREAM_CODEC,PipeLayAnswer::message,
-                ByteBufCodecs.BOOL,PipeLayAnswer::laid,PipeLayAnswer::new);
-        @Override public Type<? extends CustomPacketPayload> type(){return TYPE;}
-    }
-    public record PipeDismantle(boolean offHand,com.wormzjl.icheme.world.level.block.PipeAnchor.Click click) implements CustomPacketPayload {
-        public static final Type<PipeDismantle> TYPE=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"pipe_dismantle"));
-        public static final StreamCodec<RegistryFriendlyByteBuf,PipeDismantle> STREAM_CODEC=StreamCodec.composite(ByteBufCodecs.BOOL,PipeDismantle::offHand,com.wormzjl.icheme.world.level.block.PipeAnchor.Click.STREAM_CODEC,PipeDismantle::click,PipeDismantle::new);
-        @Override public Type<? extends CustomPacketPayload> type(){return TYPE;}
-    }
     private static InteractionHand hand(boolean offHand){return offHand?InteractionHand.OFF_HAND:InteractionHand.MAIN_HAND;}
-    /** The server's answer to a dismantle, on the player's action bar (a lay's goes back as {@link PipeLayAnswer}). */
-    private static void answer(ServerPlayer player,net.minecraft.network.chat.Component refusal,net.minecraft.network.chat.Component done){player.displayClientMessage(refusal!=null?refusal:done,true);}
-
-    /** The requested displays and the item settings saves: the tanks' on the fluid registrar, the others each on its own version string. */
     private static void registerDisplays(RegisterPayloadHandlersEvent event,PayloadRegistrar fluid) {
+        RotationNetwork.register(event);
         fluid.playToServer(TankWatch.TYPE,TankWatch.STREAM_CODEC,(payload,context)->{
             if(context.player() instanceof ServerPlayer player)FluidWorldAuthority.find(player.server).ifPresent(world->world.watchTanks(player,payload.watch,payload.unwatch));
         });
@@ -638,27 +620,18 @@ public final class FluidNetwork {
         instruments.playToServer(InstrumentWatch.TYPE,InstrumentWatch.CODEC,(p,c)->{if(c.player() instanceof ServerPlayer player)FluidWorldAuthority.find(player.server).ifPresent(w->w.instruments().watch(player,p.watch,p.unwatch));});
         instruments.playToClient(InstrumentDisplay.TYPE,InstrumentDisplay.CODEC,(p,c)->com.wormzjl.icheme.client.InstrumentRenderer.accept(p));
         instruments.playToServer(GaugeSave.TYPE,GaugeSave.CODEC,(p,c)->{if(c.player() instanceof ServerPlayer player&&player.containerMenu instanceof GaugeMenu menu&&menu.containerId==p.menu&&menu.stillValid(player)&&menu.initial().kind()==p.settings.kind()){menu.save(p.settings);player.inventoryMenu.broadcastChanges();}});
-        var tools=event.registrar("pipeline-tool-2").executesOn(HandlerThread.MAIN);
+        var tools=event.registrar("pipeline-tool-5").executesOn(HandlerThread.MAIN);
         tools.playToServer(PipelineToolSave.TYPE,PipelineToolSave.STREAM_CODEC,(payload,context)->{
             if(!(context.player() instanceof ServerPlayer player)||!(player.containerMenu instanceof PipelineToolMenu menu)
                     ||menu.containerId!=payload.menuId()||!menu.stillValid(player)||!PipelineToolItem.Settings.valid(payload.diameter())||!com.wormzjl.icheme.science.equipment.Paint.line(payload.paint())||!com.wormzjl.icheme.science.equipment.Paint.line(payload.secondary()))return;
-            menu.save(new PipelineToolItem.Settings(payload.diameter()),payload.paint(),payload.secondary());
+            menu.save(new PipelineToolItem.Settings(payload.diameter()),payload.paint(),payload.secondary(),payload.data(),payload.power());
             // The screen closes after sending Save. Also sync the inventory menu so its cached copy carries the new target.
             player.inventoryMenu.broadcastChanges();
         });
         tools.playToServer(PipeLayingOpen.TYPE,PipeLayingOpen.STREAM_CODEC,(p,c)->{
             if(c.player() instanceof ServerPlayer player&&!player.isSpectator()&&player.getItemInHand(hand(p.offHand)).is(com.wormzjl.icheme.registry.ModItems.PIPE_LAYING_TOOL.get()))PipelineToolMenu.open(player,hand(p.offHand));
         });
-        tools.playToServer(PipeLay.TYPE,PipeLay.STREAM_CODEC,(p,c)->{
-            if(!(c.player() instanceof ServerPlayer player))return;
-            var refusal=com.wormzjl.icheme.world.level.block.PipeLaying.lay(player,hand(p.offHand),p.start,p.end,p.cells,p.slots);
-            PacketDistributor.sendToPlayer(player,new PipeLayAnswer(refusal!=null?refusal:com.wormzjl.icheme.world.level.block.PipeLaying.message("laid",p.cells.size()),refusal==null));
-        });
-        tools.playToClient(PipeLayAnswer.TYPE,PipeLayAnswer.STREAM_CODEC,(p,c)->com.wormzjl.icheme.client.PipeLayingClient.answered(p.message(),p.laid()));
-        tools.playToServer(PipeDismantle.TYPE,PipeDismantle.STREAM_CODEC,(p,c)->{
-            if(c.player() instanceof ServerPlayer player)answer(player,com.wormzjl.icheme.world.level.block.PipeLaying.dismantle(player,hand(p.offHand),p.click),
-                    com.wormzjl.icheme.world.level.block.PipeLaying.message("dismantled"));
-        });
+
     }
     /** Server: sends {@code glide} of the tank at {@code node} to {@code player}. */
     public static void sendTank(ServerPlayer player,BlockPos node,TankDisplay.Glide glide){PacketDistributor.sendToPlayer(player,new TankDisplayPayload(node,glide));}
@@ -675,9 +648,9 @@ public final class FluidNetwork {
     public static void requestInstruments(List<InstrumentTarget> watch,List<InstrumentTarget> unwatch){if(!watch.isEmpty()||!unwatch.isEmpty())PacketDistributor.sendToServer(new InstrumentWatch(watch,unwatch));}
     public static void saveGauge(int menu,GaugeSettings settings){PacketDistributor.sendToServer(new GaugeSave(menu,settings));}
     public static void savePipelineTool(int menuId,double diameter,int paint,int secondary){PacketDistributor.sendToServer(new PipelineToolSave(menuId,diameter,paint,secondary));}
+    public static void savePipelineTool(int menuId,double diameter,int paint,int secondary,boolean data,boolean power){PacketDistributor.sendToServer(new PipelineToolSave(menuId,diameter,paint,secondary,data,power));}
+    public static void savePipelineTool(int menuId,double diameter,int paint,int secondary,boolean data){PacketDistributor.sendToServer(new PipelineToolSave(menuId,diameter,paint,secondary,data));}
     public static void openPipeLaying(boolean offHand){PacketDistributor.sendToServer(new PipeLayingOpen(offHand));}
-    public static void layPipe(boolean offHand,com.wormzjl.icheme.world.level.block.PipeAnchor.Click start,com.wormzjl.icheme.world.level.block.PipeAnchor.Click end,List<BlockPos> cells,List<Integer> slots){PacketDistributor.sendToServer(new PipeLay(offHand,start,end,cells,slots));}
-    public static void dismantlePipe(boolean offHand,com.wormzjl.icheme.world.level.block.PipeAnchor.Click click){PacketDistributor.sendToServer(new PipeDismantle(offHand,click));}
 
     // ---- client: the last delivered view of each device ----
 

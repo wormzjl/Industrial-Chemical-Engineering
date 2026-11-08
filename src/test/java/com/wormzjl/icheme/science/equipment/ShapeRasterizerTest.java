@@ -171,7 +171,7 @@ class ShapeRasterizerTest {
             double facets = ShapeRasterizer.facetArea(shape);
             assertEquals(facets, area, 1e-9 * facets + 20 * Mesh.MIN_AREA, shape.toString());
             if (shape.drum() && !shape.skirt() && !shape.saddles())
-                assertEquals(vesselArea(shape), facets - ShapeRasterizer.nozzleArea(shape) - manwayArea(shape), 1e-9 * facets, shape.toString());
+                assertEquals(vesselArea(shape), facets - ShapeRasterizer.nozzleArea(shape) - manwayArea(shape) - ShapeRasterizer.services(shape).polygons().stream().mapToDouble(ShapeRasterizerTest::area).sum(), 1e-9 * facets, shape.toString());
         }
     }
 
@@ -354,8 +354,7 @@ class ShapeRasterizerTest {
                     max[a] = Math.max(max[a], c[a]);
                 }
             }
-            assertArrayEquals(new int[]{0, 0, 0}, min, shape.toString());
-            assertArrayEquals(new int[]{shape.sizeX() - 1, shape.sizeY() - 1, shape.sizeZ() - 1}, max, shape.toString());
+            ProcessUnitTest.occupiesPlacementFrame(shape, min, max);
         }
     }
 
@@ -1049,22 +1048,32 @@ class ShapeRasterizerTest {
     }
 
     /**
-     * Every size: its decks and its wound stair or ladders are walked (at frame level), its pipes kept one block apart. The
-     * wound stair from {@link TankDesign#STAIR_SIZE} and {@link SphereDesign#STAIR_SIZE} across, caged ladders under (owner
-     * change 2026-10-21); every tank's roof and rolling ladder drawn apart.
+     * Every size: its decks and access are walked (at frame level), its pipes kept one block apart. Tanks use straight
+     * ladders, spheres retain their wound stair from {@link SphereDesign#STAIR_SIZE}. Every tank's roof and any rolling
+     * ladder are drawn apart. Compact tanks omit the top platform,
+     * and neither compact nor tall narrow tanks have a rolling ladder.
      */
     @Test
     void everyStorageSizeIsWalkedAndKeepsItsPipesApart() {
         for (var shape : everyStorageSize()) {
             var unit = ProcessUnit.of(shape);
             ProcessUnitTest.walkedInFrame(unit);
-            boolean tank = shape.kind() == Kind.TANK, stair = shape.diameter() >= (tank ? TankDesign.STAIR_SIZE : SphereDesign.STAIR_SIZE);
+            boolean tank = shape.kind() == Kind.TANK, stair = !tank && shape.diameter() >= SphereDesign.STAIR_SIZE;
             assertEquals(stair ? 1 : 0, unit.woundStairs().size(), shape.toString());
             assertEquals(stair, unit.ladders().isEmpty(), shape.toString());
-            for (var l : unit.ladders()) assertTrue(l.top() - Access.LANDING - l.base() <= Access.MAX_CLIMB + Access.DECK + 1e-9, shape + " climbs from " + l.base());
+            if (!tank) for (var l : unit.ladders()) assertTrue(l.top() - Access.LANDING - l.base() <= Access.MAX_CLIMB + Access.DECK + 1e-9, shape + " climbs from " + l.base());
             if (tank) {
-                assertEquals(shape.fillHeight(), unit.floating.length(), 0, shape.toString());
-                innerRailFlanksTheLadder(shape, unit.floating);
+                assertEquals(1, unit.ladders().size(), "one continuous external ladder: " + shape);
+                assertEquals(0, unit.ladders().getFirst().base(), 0, "tank ladder starts at grade: " + shape);
+                boolean compact = shape.diameter() < 6 && shape.tangentLength() < 6;
+                boolean rolling = !compact && shape.tangentLength() <= shape.diameter();
+                assertEquals(rolling ? shape.fillHeight() : 0, unit.floating.length(), 0, shape.toString());
+                if (compact) assertTrue(unit.decks.isEmpty(), "compact tanks have no top platform");
+                if (rolling) innerRailFlanksTheLadder(shape, unit.floating);
+                else assertTrue(ShapeRasterizer.floating(shape).ladder().isEmpty(), "compact and tall narrow tanks have no rolling ladder");
+                var centre = unit.roofPlan.centre();
+                assertEquals(!rolling, unit.inside(new double[]{centre[0], shape.tangentLength() + Access.DECK / 2, centre[2]}),
+                        "tanks without a rolling ladder have a solid safety grating at the rim: " + shape);
             }
             var nozzles = shape.nozzles();
             assertEquals(shape.kind() == Kind.TANK ? 3 : 2, nozzles.size(), shape.toString());
@@ -1109,6 +1118,7 @@ class ShapeRasterizerTest {
         double roof = 0;
         for (var p : f.roof()) roof += area(p);
         assertTrue(roof > Math.PI * 100, "the roof's area " + roof);
+        assertTrue(f.roof().stream().anyMatch(p -> p.material() == Material.OPENING && p.normals()[1] > 0), "rim seal faces the opening above");
         assertNull(ShapeRasterizer.floating(EquipmentShape.storage(Kind.SPHERE, 14, 1, Heading.NORTH, 2)));
     }
 

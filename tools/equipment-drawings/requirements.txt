@@ -1,0 +1,5 @@
+# Offline authoring dependencies; no game/runtime dependency.
+numpy>=1.26,<3
+Pillow>=10,<13
+reportlab>=4,<5
+pypdf>=5,<7

@@ -1,5 +1,7 @@
 package com.wormzjl.icheme.science.equipment;
 
+import com.wormzjl.icheme.science.math.DeterministicMath;
+
 import java.util.ArrayList;
 import java.util.List;
 import static com.wormzjl.icheme.science.equipment.Mesh.*;
@@ -16,8 +18,9 @@ public final class ValveGeometry {
     private ValveGeometry(){}
 
     /** The check valve; its arrows paint the casting's axial facets. */
-    public static List<Polygon> check(LineGeometry.Key key,boolean accessory) {
-        var mesh=new Mesh();double od=PipeSizes.outsideOf(key.outside());
+    public static List<Polygon> check(LineGeometry.Key key,boolean accessory) { return check(key,accessory,RenderDetail.NORMAL); }
+    public static List<Polygon> check(LineGeometry.Key key,boolean accessory,RenderDetail detail) {
+        var mesh=new Mesh(detail);double od=PipeSizes.outsideOf(key.outside());
         if(accessory)od=Math.max(.40,od);
         int axis=key.facing()&~1,sides=Math.max(16,PipeSizes.sides(od));
         double radius=Math.min(.485,Math.max(.065,.64*od)),half=Math.min(.27,Math.max(.085,.48*od));
@@ -32,7 +35,7 @@ public final class ValveGeometry {
         mesh.hoop(body,radius,radius+.001,-.62*half,-.58*half,sides,Material.OPENING);
         double bolt=Math.min(.025,Math.max(.006,.05*od));
         for(int sign:new int[]{-1,1})for(int i=0;i<4;i++)
-            mesh.cylinder(new Frame(body.at(Math.PI/4+i*Math.PI/2,.90*radius,sign*half),new double[]{sign*run[0],sign*run[1],sign*run[2]},up),bolt,0,bolt,6,Material.BOLT);
+            mesh.nut(new Frame(body.at(Math.PI/4+i*Math.PI/2,.90*radius,sign*half),new double[]{sign*run[0],sign*run[1],sign*run[2]},up),bolt,0,bolt,6,Material.BOLT);
         if(!accessory)arms(mesh,key,half,od,sides);
         var out=new ArrayList<>(mesh.cell(0,0,0));
         boolean positive=(key.facing()&1)!=0;
@@ -41,8 +44,9 @@ public final class ValveGeometry {
     }
 
     /** The shutoff valve. Pure geometry; the open flag changes only the lever, never pipe diameter or collision. */
-    public static List<Polygon> shutoff(LineGeometry.Key key,boolean open,boolean accessory) {
-        var mesh=new Mesh();double od=PipeSizes.outsideOf(key.outside());
+    public static List<Polygon> shutoff(LineGeometry.Key key,boolean open,boolean accessory) { return shutoff(key,open,accessory,RenderDetail.NORMAL); }
+    public static List<Polygon> shutoff(LineGeometry.Key key,boolean open,boolean accessory,RenderDetail detail) {
+        var mesh=new Mesh(detail);double od=PipeSizes.outsideOf(key.outside());
         int axis=key.facing()&~1,sides=Math.max(16,PipeSizes.sides(od));
         double radius=Math.min(.495,Math.max(.065,.64*od)),half=Math.min(.31,Math.max(.085,.55*od));
         double[] run=LineGeometry.step(axis|1),stem=axis==0?new double[]{0,0,-1}:new double[]{0,1,0};
@@ -58,7 +62,7 @@ public final class ValveGeometry {
         double bolt=Math.min(.03,Math.max(.008,.065*od));
         for(int sign:new int[]{-1,1})for(int i=0;i<4;i++) {
             var cap=new Frame(body.at(Math.PI/4+i*Math.PI/2,.90*radius,sign*half),new double[]{sign*run[0],sign*run[1],sign*run[2]},stem);
-            mesh.cylinder(cap,bolt,0,1.2*bolt,6,Material.BOLT);
+            mesh.nut(cap,bolt,0,1.2*bolt,6,Material.BOLT);
         }
         var bonnet=new Frame(CENTRE,stem,run);double neck=Math.max(.016,.12*od),rise=Math.max(.055,.17*od);
         mesh.cylinder(bonnet,1.65*neck,.80*radius,radius+.30*rise,12,Material.FLANGE);
@@ -79,8 +83,9 @@ public final class ValveGeometry {
     }
 
     /** The pressure-control valve; its arrows paint the casting's diagonal facets, clear of the bonnet. */
-    public static List<Polygon> pressure(LineGeometry.Key key,boolean accessory) {
-        var mesh=new Mesh();pressureBody(mesh,key,accessory);
+    public static List<Polygon> pressure(LineGeometry.Key key,boolean accessory) { return pressure(key,accessory,RenderDetail.NORMAL); }
+    public static List<Polygon> pressure(LineGeometry.Key key,boolean accessory,RenderDetail detail) {
+        var mesh=new Mesh(detail);pressureBody(mesh,key,accessory);
         double half=pressureHalf(PipeSizes.outsideOf(key.outside()));
         var arrows=PortMarkings.fitting(mesh.cell(0,0,0),key.facing(),-.42*half,.42*half,Math.PI/4);
         pressureTop(mesh,key,accessory);var out=new ArrayList<>(LineGeometry.overhanging(mesh));out.addAll(arrows);
@@ -91,6 +96,9 @@ public final class ValveGeometry {
     private static double pressureRadius(double od){return Math.min(.495,Math.max(.105,.62*od+.06));}
     private static double pressureHalf(double od){return Math.min(.31,Math.max(.105,.20+.12*od));}
     private static double[] stem(int facing){return (facing&~1)==0?new double[]{0,0,-1}:new double[]{0,1,0};}
+    private static double positionerSeat(LineGeometry.Key key){double od=PipeSizes.outsideOf(key.outside());return pressureRadius(od)+Math.max(.075,.19*od);}
+    /** Cable entry on the positioner's outward side, perpendicular to its process pipe. */
+    public static SocketGeometry.Socket socket(LineGeometry.Key key){var up=stem(key.facing());var run=LineGeometry.step(key.facing()|1);var n=cross(run,up);var q=plus(CENTRE,plus(scale(up,positionerSeat(key)+.18),scale(n,.245)));return new SocketGeometry.Socket(q[0],q[1],q[2],EquipmentServices.face(n),false);}
 
     private static void pressureBody(Mesh mesh,LineGeometry.Key key,boolean accessory) {
         double od=PipeSizes.outsideOf(key.outside()),r=pressureRadius(od),h=pressureHalf(od);int sides=Math.max(16,PipeSizes.sides(2*r));
@@ -106,7 +114,7 @@ public final class ValveGeometry {
     private static void pressureTop(Mesh mesh,LineGeometry.Key key,boolean accessory) {
         double od=PipeSizes.outsideOf(key.outside()),r=pressureRadius(od),h=pressureHalf(od);
         int axis=key.facing()&~1;var run=LineGeometry.step(axis|1);var stem=stem(key.facing());var f=new Frame(CENTRE,stem,run);
-        double bonnet=Math.max(.075,.19*od),yoke=Math.max(.22,.42*od),casing=Math.min(.96,Math.max(.34,.30+.75*od));
+        double bonnet=Math.max(.075,.19*od),yoke=Math.max(.22,.42*od)+.14,casing=Math.min(.96,Math.max(.34,.30+.75*od));
         double shoulder=.82*r,seat=r+bonnet,top=seat+yoke,rc=casing/2;
         int n=Math.max(16,PipeSizes.sides(casing));
         mesh.frustum(f,.48*r,.30*r,shoulder,seat,12,Material.MACHINE);
@@ -131,9 +139,14 @@ public final class ValveGeometry {
         mesh.frustum(f,rc,.34*rc,edge,cap,n,Material.ACTUATOR);
         mesh.annulus(f,0,.34*rc,cap,n,1,Material.ACTUATOR);
         mesh.cylinder(f,.13*rc,cap,cap+.025,8,Material.BOLT);
-        for(int i=0;i<8;i++)mesh.cylinder(new Frame(f.at(i*Math.PI/4,.92*rc,edge),stem,run),Math.max(.007,.018*casing),0,.022,6,Material.BOLT);
+        for(int i=0;i<8;i++)mesh.nut(new Frame(f.at(i*Math.PI/4,.92*rc,edge),stem,run),Math.max(.007,.018*casing),0,.022,6,Material.BOLT);
+        var normal=cross(run,stem);var positioner=new Frame(plus(CENTRE,scale(stem,seat+.18)),normal,run);
+        positioner(mesh,positioner,.12,.13,.03,.23,.035,Material.SERVICE_CASE);
+        positioner(mesh,positioner,.109,.119,.228,.239,.028,Material.SERVICE_COVER);
+        mesh.frustum(positioner,.105,.095,.125,.205,16,Material.SERVICE_CASE);
         if(!accessory)arms(mesh,key,h,od,PipeSizes.sides(od));
     }
+    private static void positioner(Mesh mesh,Frame frame,double width,double height,double back,double front,double radius,Material material){var a=new ArrayList<double[]>();var b=new ArrayList<double[]>();var vertical=cross(frame.axis(),frame.ref());for(double[] corner:new double[][]{{width-radius,height-radius,0},{-width+radius,height-radius,Math.PI/2},{-width+radius,-height+radius,Math.PI},{width-radius,-height+radius,3*Math.PI/2}})for(int j=0;j<4;j++){double angle=corner[2]+j*Math.PI/6;var offset=plus(scale(frame.ref(),corner[0]+radius*DeterministicMath.cos(angle)),scale(vertical,corner[1]+radius*DeterministicMath.sin(angle)));a.add(plus(frame.along(back),offset));b.add(plus(frame.along(front),offset));}mesh.flat(a,neg(frame.axis()),material);mesh.flat(b,frame.axis(),material);for(int i=0;i<a.size();i++)mesh.add(List.of(a.get(i),a.get((i+1)%a.size()),b.get((i+1)%a.size()),b.get(i)),frame.along((back+front)/2),FLAT,material,null,null);}
 
     /** A placed valve block's own flanged arms to both ends of its run, from the casting's end faces at {@code half}. */
     private static void arms(Mesh mesh,LineGeometry.Key key,double half,double od,int sides) {

@@ -121,7 +121,7 @@ final class CoolingTowerDesign extends UnitDesign {
     private static void natural(ProcessUnit u,double d,double height){
         // Four-metre chords and eight-metre bands keep the shell smooth without sub-block GPU facets.
         double r=d/2,axis=r+.5,base=u.shape.coolingTower().shellBaseHeight();
-        int facets=naturalFacets(d);
+        int facets=u.mesh.detail().sides(naturalFacets(d));
         var frame=naturalFrame(d);
         u.mesh.annulus(frame,0,r,.2,facets,1,Material.TOWER_FLOOR);
         u.solids.add(ProcessUnit.Solid.rod(new double[]{axis,0,axis},1,0,.2,r,0));

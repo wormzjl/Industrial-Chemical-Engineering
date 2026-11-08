@@ -109,7 +109,7 @@ public final class PhysicalFluidTopology {
                 throw new IllegalArgumentException("A rack lane is a plain laid pipe with at most two joints");
             if(inlineFilter&&(kind!=TopologyCompiler.Kind.PIPE||cutoff!=Cutoff.NONE||!(control instanceof FlowControl.Passive)))throw new IllegalArgumentException("Invalid pipe filter accessory");
             if(kind!=TopologyCompiler.Kind.PIPE&&cutoff!=Cutoff.NONE)throw new IllegalArgumentException("Only a pipe has a cutoff accessory");
-            boolean valid=switch(kind) {case PUMP->control instanceof FlowControl.Mover mover&&mover.liquid();case COMPRESSOR->control instanceof FlowControl.Mover mover&&!mover.liquid();case VALVE->control instanceof FlowControl.Valve;case TURBINE->control instanceof FlowControl.Turbine;case PIPE->control instanceof FlowControl.Passive||control instanceof FlowControl.Valve||control instanceof FlowControl.Mover;default->control instanceof FlowControl.Passive;};
+            boolean valid=switch(kind) {case PUMP->control instanceof FlowControl.Mover mover&&mover.liquid();case COMPRESSOR->control instanceof FlowControl.Mover mover&&!mover.liquid();case VALVE->control instanceof FlowControl.Valve&&!(control instanceof FlowControl.Turbine);case TURBINE->control instanceof FlowControl.Turbine;case PIPE->control instanceof FlowControl.Passive||control instanceof FlowControl.Valve&&!(control instanceof FlowControl.Turbine)||control instanceof FlowControl.Mover;default->control instanceof FlowControl.Passive;};
             if(!valid)throw new IllegalArgumentException("Device/control mismatch");
             if(control instanceof FlowControl.Valve&&cutoff!=Cutoff.NONE)throw new IllegalArgumentException("A pressure valve cannot carry a cutoff accessory");
             if(kind==TopologyCompiler.Kind.PIPE&&control instanceof FlowControl.Mover&&(cutoff!=Cutoff.NONE||facing.y!=0))throw new IllegalArgumentException("An inline mover needs a horizontal pipe without a cutoff");
@@ -167,7 +167,13 @@ public final class PhysicalFluidTopology {
         }
         boolean actuator(){var hydraulic=hydraulicKind();return hydraulic==TopologyCompiler.Kind.PUMP||hydraulic==TopologyCompiler.Kind.COMPRESSOR||hydraulic==TopologyCompiler.Kind.VALVE||hydraulic==TopologyCompiler.Kind.TURBINE;}
         /** Copy edits preserve accessories, ports and the independent generator switch. */
-        public Device withGeometry(PipeResistance.Geometry value){return new Device(id,position,kind,facing,value,control,ports,generatorEnabled,cutoff,inlineFilter,joints,slots,points,heat,suspendedBy);}
+        public Device withGeometry(PipeResistance.Geometry value){
+            var changed=control;
+            if(kind==TopologyCompiler.Kind.PIPE&&control instanceof FlowControl.Machine m&&value.diameter()!=geometry.diameter()) {
+                var fixed=com.wormzjl.icheme.science.machine.InlineMachines.design(value.diameter(),m.liquid());changed=new FlowControl.Machine(fixed.law(),1,m.enabled());
+            }
+            return new Device(id,position,kind,facing,value,changed,ports,generatorEnabled,cutoff,inlineFilter,joints,slots,points,heat,suspendedBy);
+        }
         public Device withFacing(Direction value){return new Device(id,position,kind,value,geometry,control,ports,generatorEnabled,cutoff,inlineFilter,joints,slots,points,heat,suspendedBy);}
         public Device withControl(FlowControl value){return new Device(id,position,kind,facing,geometry,value,ports,generatorEnabled,cutoff,inlineFilter,joints,slots,points,heat,suspendedBy);}
         public Device withCutoff(Direction axis,Cutoff value){return new Device(id,position,kind,axis,geometry,control,ports,generatorEnabled,value,inlineFilter,joints,slots,points,heat,suspendedBy);}
@@ -563,7 +569,7 @@ public final class PhysicalFluidTopology {
     }
     private static FlowControl control(Device device,Set<Long> invalidPumps) {
         if(device.control instanceof FlowControl.Pump pump&&invalidPumps.contains(device.id))return new FlowControl.Pump(0,pump.maximumAddedPressure());
-        if(device.control instanceof FlowControl.Compressor compressor&&invalidPumps.contains(device.id))return new FlowControl.Compressor(0,compressor.maximumPressureRatio());
+        if(device.control instanceof FlowControl.Compressor compressor&&invalidPumps.contains(device.id))return compressor.withDisplacement(0);
         if(device.control instanceof FlowControl.Machine machine&&invalidPumps.contains(device.id))return machine.withSpeed(0);
         return device.control;
     }

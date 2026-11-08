@@ -126,6 +126,7 @@ public final class ExchangerRelay {
      */
     public static Wall wall(Stream a,Stream b,@Nullable double[] start) {
         int n=a.law.cells();if(b.law.cells()!=n)throw new IllegalArgumentException("The two sides of a wall need the same cells");
+        boolean routed=a.law.routing()!=HeatRouting.SERIES||b.law.routing()!=HeatRouting.SERIES;
         double[] t=new double[n],ha=new double[n],hb=new double[n];
         double ta=a.temperature(),tb=b.temperature();
         boolean warm=start!=null&&start.length==n;
@@ -135,17 +136,37 @@ public final class ExchangerRelay {
         enter(b,t,hb);
         for(int sweep=1;sweep<=MAXIMUM_SWEEPS;sweep++) {
             double change=Math.max(pass(a,b,t,ha,hb),pass(b,a,t,hb,ha));
-            if(change<TOLERANCE)return new Wall(warm&&sweep==1?kept:t,sweep,true);
+            if(change<(routed?TOLERANCE/100:TOLERANCE)&&(!routed||balanced(a,b,t)))
+                return new Wall(warm&&sweep==1&&(!routed||balanced(a,b,kept))?kept:t,sweep,true);
         }
         return new Wall(t,MAXIMUM_SWEEPS,false);
     }
+    private static boolean balanced(Stream a,Stream b,double[] wall) {
+        double qa=a.through()*(outlet(a,wall)-a.inlet),qb=b.through()*(outlet(b,wall)-b.inlet);
+        return Math.abs(qa+qb)<=Math.max(.01,1e-6*Math.max(Math.abs(qa),Math.abs(qb)));
+    }
     /** The enthalpy {@code s} enters each cell with against wall {@code t}. */
     private static void enter(Stream s,double[] t,double[] entering) {
+        if(s.law.routing()!=HeatRouting.SERIES) {
+            s.law.routing().visit(s.curve,s.inlet,s.through(),s.law.area(),t,s.massFlow>=0,entering,null);
+            return;
+        }
         int n=t.length;double h=s.inlet,through=s.through();
         for(int i=0;i<n;i++){int k=s.ascending()?i:n-1-i;entering[k]=h;h=s.curve.march(h,through,s.cell(),t[k]);}
     }
     /** One pass in {@code s}'s order: each cell solved against {@code o} as it last entered; returns the largest move, K. */
     private static double pass(Stream s,Stream o,double[] t,double[] hs,double[] ho) {
+        if(s.law.routing()!=HeatRouting.SERIES) {
+            double[] change={0};
+            s.law.routing().visit(s.curve,s.inlet,s.through(),s.law.area(),t,s.massFlow>=0,hs,(k,h,mass)-> {
+                double other=o.law.routing().laneFlow(o.through(),t.length);
+                double next=root(s.curve.temperatureAt(h),o.curve.temperatureAt(ho[k]),t[k],wall->
+                        mass*(s.curve.march(h,mass,s.cell(),wall)-h)+other*(o.curve.march(ho[k],other,o.cell(),wall)-ho[k]),TOLERANCE/1000);
+                change[0]=Math.max(change[0],Math.abs(next-t[k]));
+                return next;
+            });
+            return change[0];
+        }
         int n=t.length;double h=s.inlet,through=s.through(),change=0;
         for(int i=0;i<n;i++) {
             int k=s.ascending()?i:n-1-i;hs[k]=h;
@@ -168,7 +189,10 @@ public final class ExchangerRelay {
      * tenth of {@link #TOLERANCE}: an Illinois root from {@code guess}, an end where the balance does not change sign.
      */
     private static double root(double a,double b,double guess,java.util.function.DoubleUnaryOperator balance) {
-        double lo=Math.min(a,b),hi=Math.max(a,b),tolerance=TOLERANCE/10;
+        return root(a,b,guess,balance,TOLERANCE/10);
+    }
+    private static double root(double a,double b,double guess,java.util.function.DoubleUnaryOperator balance,double tolerance) {
+        double lo=Math.min(a,b),hi=Math.max(a,b);
         if(hi-lo<=tolerance)return (lo+hi)/2;
         // The balance rises with the wall: below both sides both are cooled, above both both are heated.
         double flo=balance.applyAsDouble(lo),fhi=balance.applyAsDouble(hi);
@@ -207,6 +231,7 @@ public final class ExchangerRelay {
     }
     /** The specific enthalpy {@code s} leaves its cells with against {@code wall} (in the wall's order), J/kg. */
     public static double outlet(Stream s,double[] wall) {
+        if(s.law.routing()!=HeatRouting.SERIES)return s.law.routing().visit(s.curve,s.inlet,s.through(),s.law.area(),wall,s.massFlow>=0,null,null);
         int n=wall.length;double h=s.inlet,through=s.through();
         for(int i=0;i<n;i++){int k=s.ascending()?i:n-1-i;h=s.curve.march(h,through,s.cell(),wall[k]);}
         return h;

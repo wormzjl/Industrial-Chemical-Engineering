@@ -438,11 +438,11 @@ final class StirredReactorDesign extends UnitDesign {
 
     /**
      * The manway at the head's front, its neck tilted 15° out: the flange, the domed cover with its ring of eight swing-bolt
-     * clamps, the hinge towards the drive and a handle; DN 600 on a large head, as large as fits on a small one, none under
-     * 0.2 m.
+     * clamps, the hinge towards the drive and a handle. Use the shared access sizes where they fit; a smaller fitted
+     * opening is an inspection hatch, none under 0.2 m.
      */
     private static void manway(ProcessUnit u, Plan p, double a, double fag, List<double[]> taken) {
-        double r = p.r, size = Math.floor(Math.min(Math.min(.6, .25 + .09 * p.d), (.9 * r - fag - .04) / 1.3) * 20) / 20;
+        double r = p.r, size = Math.floor(Math.min(Manway.preferredSize(p.d), (.9 * r - fag - .04) / 1.3) * 20 + 1e-9) / 20;
         double rho = 0;
         for (; size >= .2 - 1e-9; size -= .05) {
             rho = fag + .03 + .65 * size;

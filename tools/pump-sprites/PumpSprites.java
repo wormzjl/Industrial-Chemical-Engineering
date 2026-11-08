@@ -116,7 +116,8 @@ public class PumpSprites {
      * A bolted face seen square on, stretched across its diameter: a chamfered rim, a machined face with faint turning
      * rings, twelve nuts on their washers on a circle at 0.82 of the radius, a spigot ring round the middle.
      */
-    static double[][] disc() {
+    static double[][] disc() { return disc(true); }
+    static double[][] disc(boolean bolts) {
         int n = 64;
         double c = n / 2.0;
         var out = new double[n][n];
@@ -127,7 +128,7 @@ public class PumpSprites {
             else if (r > .92) v = BODY * (py < 0 ? 1.04 : .9);
             if (r > .33 && r < .37) v = BODY * (py < 0 ? 1.05 : .82);
             if (r <= .33) v = BODY * .97;
-            for (int k = 0; k < 12; k++) {
+            for (int k = 0; bolts && k < 12; k++) {
                 double t = 2 * Math.PI * (k + .5) / 12, nx = c * .82 * Math.cos(t), ny = c * .82 * Math.sin(t);
                 double dx = px - nx, dy = py - ny, rr = Math.hypot(dx, dy);
                 if (rr < 3.6) v = BODY * .78;
@@ -245,15 +246,14 @@ public class PumpSprites {
     }
 
     /**
-     * Bright machined steel for every turning shaft and hub, and the shaft block's model: turned streaks along the shaft
-     * (the sprite's columns; the shaft block samples columns 6 to 10), a highlight down its middle.
+     * Machined steel for every turning shaft and hub: faint grain without baked lighting bands. The rotating geometry
+     * supplies the highlights, so the same finish works on the hexagonal sides and their cut ends.
      */
     static int[][] shaft() {
         int n = 16;
         var out = new int[n][n];
         for (int y = 0; y < n; y++) for (int x = 0; x < n; x++) {
-            double v = .72 + .05 * Math.sin(2 * Math.PI * x / n * 3 + 1) + .04 * (grain(x, 0, 12) - .5) + .015 * (grain(x, y, 13) - .5);
-            if (x == 7 || x == 8) v += .08;
+            double v = .72 + .012 * (grain(x, 0, 12) - .5) + .008 * (grain(x, y, 13) - .5);
             int r = (int) Math.round(255 * Math.min(1, v * .97)), g = (int) Math.round(255 * Math.min(1, v * .99)), b = (int) Math.round(255 * Math.min(1, v * 1.03));
             out[y][x] = r << 16 | g << 8 | b;
         }
@@ -363,6 +363,42 @@ public class PumpSprites {
         return out;
     }
 
+    /** Fixed industrial IN/OUT tags, legible independently of the equipment's paint. */
+    static int[][] shaftPort(boolean input) {
+        int width = 80, height = 32, border = 0x26343C;
+        int colour = input ? 0x2271B3 : 0xF7B500, ink = input ? 0xF4F5F2 : 0x17232B;
+        var out = new int[height][width];
+        for (int y = 0; y < height; y++) for (int x = 0; x < width; x++)
+            out[y][x] = x < 2 || y < 2 || x >= width - 2 || y >= height - 2 ? border : colour;
+        String text = input ? "IN" : "OUT";
+        int scale = 3, left = (width - (6 * text.length() - 1) * scale) / 2, top = (height - 7 * scale) / 2;
+        for (int letter = 0; letter < text.length(); letter++) {
+            var rows = switch (text.charAt(letter)) {
+                case 'I' -> new String[]{"11111", "00100", "00100", "00100", "00100", "00100", "11111"};
+                case 'N' -> new String[]{"10001", "11001", "11001", "10101", "10011", "10011", "10001"};
+                case 'O' -> new String[]{"01110", "10001", "10001", "10001", "10001", "10001", "01110"};
+                case 'U' -> new String[]{"10001", "10001", "10001", "10001", "10001", "10001", "01110"};
+                case 'T' -> new String[]{"11111", "00100", "00100", "00100", "00100", "00100", "00100"};
+                default -> throw new IllegalArgumentException("Unknown shaft label");
+            };
+            for (int y = 0; y < 7; y++) for (int x = 0; x < 5; x++) if (rows[y].charAt(x) == '1')
+                for (int dy = 0; dy < scale; dy++) for (int dx = 0; dx < scale; dx++) out[top + y * scale + dy][left + (letter * 6 + x) * scale + dx] = ink;
+        }
+        return out;
+    }
+
+    /** One flush hex nut: the polygon supplies its outline, so no alpha/cutout pass is needed. */
+    static double[][] boltFace() {
+        int n = 32;
+        var out = new double[n][n];
+        for (int y = 0; y < n; y++) for (int x = 0; x < n; x++) {
+            double px = (x + .5 - n / 2.0) / (n / 2.0), py = (y + .5 - n / 2.0) / (n / 2.0);
+            double radial = Math.hypot(px, py);
+            out[y][x] = radial < .18 ? .64 : radial < .27 ? .30 : py < -.2 ? .60 : py > .2 ? .37 : .48;
+        }
+        return out;
+    }
+
     public static void main(String[] args) throws Exception {
         writeRgb(new File(args[0]), "motor_frame", motorFrame());
         writeRgb(new File(args[0]), "motor_shield", motorShield());
@@ -370,12 +406,16 @@ public class PumpSprites {
         writeRgb(new File(args[0]), "motor_plain", motorPlain());
         writeRgb(new File(args[0]), "coupling_guard", guard());
         writeRgb(new File(args[0]), "shaft_steel", shaft());
+        writeRgb(new File(args[0]), "shaft_input", shaftPort(true));
+        writeRgb(new File(args[0]), "shaft_output", shaftPort(false));
         var folder = new File(args[0]);
         write(folder, "pump_casting", casting());
         write(folder, "pump_volute", volute());
         write(folder, "pump_fins", fins());
         write(folder, "pump_joint", joint());
         write(folder, "pump_disc", disc());
+        write(folder, "pump_cover", disc(false));
+        write(folder, "equipment_bolt_face", boltFace());
         write(folder, "pump_base", base());
         write(folder, "pump_channel", channel());
     }

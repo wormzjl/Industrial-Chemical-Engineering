@@ -1,0 +1,7 @@
+gradle.projectsEvaluated {
+    def project = gradle.rootProject
+    project.extensions.getByName('neoForge').runs.named('fluidGameTestServer') {
+        gameDirectory = project.layout.projectDirectory.dir('tmp/rf-omni/world')
+        systemProperty 'neoforge.enabledGameTestNamespaces', 'icheme_power_test,icheme_cable_test'
+    }
+}

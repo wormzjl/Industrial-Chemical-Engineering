@@ -60,7 +60,7 @@ public final class MachineColumn {
 
         /** The speed entry's unit: a motor's share in %, a turbine's and a creative motor's rpm (reading A90). */
         public String speedUnit() {
-            return this == MOTOR ? "%" : "rpm";
+            return "rpm";
         }
     }
 
@@ -103,7 +103,7 @@ public final class MachineColumn {
 
         /** Whether the page sets a speed or regulates: a variable motor, a turbine, a creative motor. */
         public boolean regulates() {
-            return kind == Kind.MOTOR ? variable : kind.driver();
+            return kind.driver();
         }
     }
 
@@ -133,23 +133,21 @@ public final class MachineColumn {
     /** What an editor sets: a motor's drive and what it regulates, a turbine's or a creative motor's speed, a limit, a ratio. */
     static List<Column.Row> settings(Input in, HeatControlColumn.Texts t) {
         var rows = new ArrayList<Column.Row>();
-        if (in.kind() == Kind.MOTOR)
-            // The drive is the motor's design (the constructor's duty): shown where it stands, as a reader sees a selector.
-            rows.add(new Column.Group(t.get(KEY + "drive"), t.get(KEY + "drive.hint"), List.of(new Column.Buttons(List.of(
-                    new Column.Button("drive:fixed", t.get(KEY + "drive.fixed"), false, t.get(KEY + "drive.design"), !in.variable()),
-                    new Column.Button("drive:variable", t.get(KEY + "drive.variable"), false, t.get(KEY + "drive.design"), in.variable()))))));
         if (in.regulates()) {
             var regulate = new ArrayList<Column.Row>();
             var keys = new ArrayList<Column.Button>();
-            for (var m : Mode.values())
-                keys.add(position("regulate:" + m.name().toLowerCase(Locale.ROOT), t.get(KEY + "regulate." + m.name().toLowerCase(Locale.ROOT)),
-                        t.get(KEY + "regulate." + m.name().toLowerCase(Locale.ROOT) + ".hint"), in.mode() == m, true));
-            regulate.add(new Column.Buttons(keys));
+            boolean motor=in.kind()==Kind.MOTOR;
+            if(motor)regulate.add(new Column.Buttons(List.of(position("mode:manual",t.get(KEY+"mode.manual"),t.get(KEY+"regulate.speed.hint"),in.mode()==Mode.SPEED,true),position("mode:auto",t.get(KEY+"mode.auto"),t.get(KEY+"auto.hint"),in.mode()!=Mode.SPEED,true))));
+            if(!motor||in.mode()!=Mode.SPEED){
+                for(var m:Mode.values())if(!motor||m!=Mode.SPEED)
+                    keys.add(position("regulate:"+m.name().toLowerCase(Locale.ROOT),t.get(KEY+"regulate."+m.name().toLowerCase(Locale.ROOT)),t.get(KEY+"regulate."+m.name().toLowerCase(Locale.ROOT)+".hint"),in.mode()==m,true));
+                regulate.add(new Column.Buttons(keys));
+            }
             // Flow and pressure targets are the casing's own set points: their keys' hovers say so (panel rule 1).
-            if (in.mode() == Mode.SPEED) regulate.add(new Column.Field("speed", t.get(KEY + "speed"), in.kind().speedUnit(), t.get(KEY + "speed." + in.kind().speedUnit().replace("%", "share") + ".hint")));
+            if (in.mode() == Mode.SPEED) regulate.add(new Column.Field("speed", t.get(KEY + "speed"), in.kind().speedUnit(), t.get(KEY + "speed." + (in.kind()==Kind.MOTOR?"motor":in.kind().speedUnit().replace("%", "share")) + ".hint")));
             rows.add(new Column.Group(t.get(KEY + "regulate"), t.get(KEY + "regulate.hint"), regulate));
         }
-        if (in.kind() == Kind.CREATIVE_MOTOR)
+        if (in.kind() == Kind.CREATIVE_MOTOR || in.kind() == Kind.MOTOR)
             rows.add(new Column.Group(t.get(KEY + "limit"), null, List.of(new Column.Field("powerLimit", t.get(KEY + "power_limit"), "kW", t.get(KEY + "power_limit.hint")))));
         if (in.kind() == Kind.GENERATOR)
             rows.add(new Column.Group(t.get(KEY + "limit"), null, List.of(new Column.Field("powerLimit", t.get(KEY + "output_limit"), "kW", t.get(KEY + "output_limit.hint")))));
@@ -198,8 +196,8 @@ public final class MachineColumn {
             supply.add(new Meter("inlet", Format.number(v.inletPressure() / 1e5), "bar", null));
             supply.add(new Meter("exhaust", Format.number(v.exhaustPressure() / 1e5), "bar", null));
         }
-        // UNGOVERNED is a status word, said on the display (MachineView.of); the group names a bound valve only.
-        String governor = kind == Kind.STEAM_TURBINE && !v.governor().isEmpty() ? t.get(KEY + "governed", v.governor()) : null;
+        String governor = kind == Kind.STEAM_TURBINE ? v.governor().isEmpty()
+                ? t.get(KEY + "governor.internal") : t.get(KEY + "governed", v.governor()) : null;
         return new Input(kind, canEdit, running, v.variable(), mode, v.trip() != ShaftTrain.Trip.NONE && v.trip().latched(), governor, shaft, supply, lasts);
     }
 
@@ -210,8 +208,7 @@ public final class MachineColumn {
     public static List<String[]> nameplate(MachineView v, HeatControlColumn.Texts t) {
         var lines = new ArrayList<String[]>();
         if (v.ratedPower() > 0) lines.add(new String[]{t.get(KEY + "rating"), Format.number(v.ratedPower() / 1000) + " kW"});
-        if (v.poles() > 0) lines.add(new String[]{t.get(KEY + "poles"), Integer.toString(v.poles())});
-        if (v.kind() == ShaftNetwork.Kind.MOTOR) lines.add(new String[]{t.get(KEY + "drive"), t.get(KEY + (v.variable() ? "drive.variable" : "drive.fixed"))});
+        if (v.kind() == ShaftNetwork.Kind.MOTOR) lines.add(new String[]{t.get(KEY + "drive"), t.get(KEY + "drive.variable")});
         if (v.coupling() != null) lines.add(new String[]{t.get(KEY + "stress_rate"), String.format(Locale.ROOT, "%.3f W/su", v.coupling().wattsPerStress())});
         if (v.designSpeed() > 0) lines.add(new String[]{t.get(KEY + "rated_speed"), String.format(Locale.ROOT, "%.0f rpm", v.designSpeed())});
         return lines;
@@ -219,7 +216,7 @@ public final class MachineColumn {
 
     /** Whether the status word {@code status} shows in the warning tone: a trip, no power, a limit, an ungoverned turbine. */
     public static boolean warns(String status) {
-        return status.startsWith("TRIPPED") || status.contains("NO POWER") || status.contains("LIMITED") || status.equals("UNGOVERNED");
+        return status.startsWith("TRIPPED") || status.contains("NO POWER") || status.contains("LIMITED") || status.equals("UNGOVERNED") || status.contains("NO DATA LINK") || status.contains("MULTIPLE DUTIES") || status.contains("NO DUTY TARGET");
     }
 
     /**
@@ -250,7 +247,7 @@ public final class MachineColumn {
     public static double speedEntry(MachineView v) {
         double set = v.settings().setPoint();
         return switch (Kind.of(v.kind())) {
-            case MOTOR -> 100 * (set > 0 ? set : 1);
+            case MOTOR -> (set>0?set:1)*v.designSpeed();
             case STEAM_TURBINE -> (set > 0 ? set : 1) * v.designSpeed();
             case CREATIVE_MOTOR -> set > 0 ? set : ShaftTrain.CREATIVE_SPEED;
             case null, default -> 0;
@@ -260,7 +257,7 @@ public final class MachineColumn {
     /** The engine's set point for the speed entry {@code entry} of {@code kind} (the inverse of {@link #speedEntry}). */
     public static double setPoint(Kind kind, double entry, double designSpeed) {
         return switch (kind) {
-            case MOTOR -> entry / 100;
+            case MOTOR -> designSpeed>0?entry/designSpeed:0;
             case STEAM_TURBINE -> designSpeed > 0 ? entry / designSpeed : 0;
             default -> entry;
         };

@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
@@ -603,7 +604,7 @@ public final class ProcessUnit {
 
     final EquipmentShape shape;
     /** The mesh being drawn: the cached unit drops it once built; {@link #mesh()} draws the facets again. */
-    Mesh mesh = new Mesh();
+    Mesh mesh;
     final List<Solid> solids = new ArrayList<>(), volumes = new ArrayList<>();
     /** The moving parts, by the index their facets carry ({@link Mesh#part}). */
     final List<Motion> motions = new ArrayList<>();
@@ -652,7 +653,7 @@ public final class ProcessUnit {
      * legs, and the rolling ladder, drawn level from its pivot; null for any other shape.
      */
     Floating floating;
-    final Mesh roof = new Mesh(), ladder = new Mesh();
+    final Mesh roof, ladder;
     /** A floating-roof tank's roof as the world collides with it, in the frame; null for any other shape. */
     RoofPlan roofPlan;
 
@@ -681,6 +682,7 @@ public final class ProcessUnit {
 
         /** The ladder's turn down from level, radians, with its foot on the roof's deck at {@code level}: straight down where it cannot reach. */
         double pitch(double level) {
+            if (length <= 0) return 0;
             double drop = pivot[1] - (underside(level) + deck);
             return drop >= length ? Math.PI / 2 : drop <= 0 ? 0 : DeterministicMath.asin(drop / length);
         }
@@ -702,10 +704,32 @@ public final class ProcessUnit {
     double @org.jetbrains.annotations.Nullable [] terminal;
     /** The last terminal box a motor drawing drew ({@link #motor}, {@link #largeMotor}): its centre in the frame. */
     double @org.jetbrains.annotations.Nullable [] terminalBox;
-    /** Fixed casting radii at nozzle roots, by nozzle index: the pipe-sized nozzle blends into each casting. */
-    final Map<Integer, Double> nozzleRoots = new HashMap<>();
+    /** Existing governor/service enclosure, in the unit frame; a DATA socket reuses it. */
+    double @org.jetbrains.annotations.Nullable [] serviceHousing;
+    /** Fixed roots and the room for their transition into the connected pipe, by nozzle index. */
+    final Map<Integer, NozzleRoot> nozzleRoots = new HashMap<>();
     /** The sleeves through a closed skirt, by nozzle index: drawn with the nozzle at its pipe's size ({@link Sleeve}). */
     final Map<Integer, Sleeve> sleeves = new HashMap<>();
+
+    /** A casting blend or pipe reducer: its finish, length limit and how much standard flange hub it reserves. */
+    record NozzleRoot(double radius, double maxLength, double maxHub, Material material) {
+        NozzleRoot {
+            Objects.requireNonNull(material);
+        }
+
+        NozzleRoot(double radius, double maxLength, double maxHub) {
+            this(radius, maxLength, maxHub, Material.MACHINE);
+        }
+
+        NozzleRoot(double radius) {
+            this(radius, .12, Double.POSITIVE_INFINITY);
+        }
+
+        double end(double length, double outside) {
+            double hub = Math.min(PipeSizes.hub(outside), maxHub);
+            return .01 + Math.min(maxLength, length - PipeSizes.flangeThickness(outside) - hub - .01);
+        }
+    }
 
     /**
      * A nozzle's sleeve through a closed skirt (owner decision 2026-10-21: "Skirt hole needs to adapt to the size of the
@@ -719,12 +743,19 @@ public final class ProcessUnit {
 
     /** Fixed outline edges, {x0, y0, z0, x1, y1, z1}; round bodies outlined against the eye, {x, y, z on the axis, axis, radius, lo, hi}. */
     final List<double[]> edges = new ArrayList<>(), rounds = new ArrayList<>();
+    /** Reference points retained in the placement frame when optional steelwork is omitted. They occupy no cells. */
+    final List<double[]> framePoints = new ArrayList<>();
     private final double[] box;
     /** What draws the unit: its kind's design ({@link UnitDesign#build}), or a test's kit pieces. */
     private final Consumer<ProcessUnit> design;
 
-    private ProcessUnit(EquipmentShape s, Consumer<ProcessUnit> design, boolean drawing) {
+    private ProcessUnit(EquipmentShape s, Consumer<ProcessUnit> design, boolean drawing) { this(s, design, drawing, RenderDetail.NORMAL); }
+
+    private ProcessUnit(EquipmentShape s, Consumer<ProcessUnit> design, boolean drawing, RenderDetail detail) {
         shape = s;
+        mesh = new Mesh(detail);
+        roof = new Mesh(detail);
+        ladder = new Mesh(detail);
         this.design = design;
         design.accept(this);
         box = box(mesh.bounds());
@@ -745,9 +776,9 @@ public final class ProcessUnit {
     }
 
     /** The unit drawn afresh, its meshes kept: the chunk mesh's parts and a floating-roof tank's client-drawn ones. */
-    ProcessUnit drawing() {
-        return new ProcessUnit(shape, design, true);
-    }
+    ProcessUnit drawing() { return drawing(RenderDetail.NORMAL); }
+    ProcessUnit drawing(RenderDetail detail) { return new ProcessUnit(shape, design, true, detail); }
+    Mesh mesh(RenderDetail detail) { return drawing(detail).mesh; }
 
     List<Access.WoundStair> woundStairs() {
         return List.copyOf(woundStairs);
@@ -797,6 +828,10 @@ public final class ProcessUnit {
     private double top;
 
     double[] box(double[] bounds) {
+        for (var point : framePoints) for (int axis = 0; axis < 3; axis++) {
+            bounds[axis] = Math.min(bounds[axis], point[axis]);
+            bounds[axis + 3] = Math.max(bounds[axis + 3], point[axis]);
+        }
         double[] out = {Math.floor(bounds[0] + 1e-9), 0, Math.floor(bounds[2] + 1e-9), Math.ceil(bounds[3] - 1e-9), Math.ceil(bounds[4] - 1e-9), Math.ceil(bounds[5] - 1e-9)};
         top = bounds[4];
         for (var n : nozzles) {
@@ -899,19 +934,21 @@ public final class ProcessUnit {
     void exchanger() {
         double d = shape.diameter(), r = d / 2, y = shape.support() + r, a = centre(1.1 * r);
         int n = sides(d);
+        // A readable cover pattern at game scale: roughly 0.3 m pitch, in fours, with at least eight bolts.
+        int bolts = Math.max(8, 4 * (int) Math.ceil(Math.PI * d / 1.2));
         double channel = .5 * d + .2, zn = Math.ceil(.08 + channel / 2 - .5) + .5;
         double c0 = zn - channel / 2 - .08, ch1 = zn + channel / 2, s0 = ch1 + .1, s1 = s0 + .95 * shape.tangentLength(), end = s1 + .1;
         var f = new Frame(new double[]{a, y, 0}, new double[]{0, 0, 1}, new double[]{0, 1, 0});
         mesh.ring(f, 0, 1.1 * r, c0, c0 + .08, n, 3, Material.FLANGE);
-        mesh.bolts(f, d, r, 1.1 * r, c0, -1, Material.BOLT);
+        mesh.bolts(f, d, r, 1.1 * r, c0, -1, bolts, Material.BOLT);
         mesh.prism(f, r, c0 + .08, ch1, n, Material.SHELL);
         mesh.ring(f, r, 1.1 * r, ch1, s0, n, 3, Material.FLANGE);
-        mesh.bolts(f, d, r, 1.1 * r, ch1, -1, Material.BOLT);
-        mesh.bolts(f, d, r, 1.1 * r, s0, 1, Material.BOLT);
+        mesh.bolts(f, d, r, 1.1 * r, ch1, -1, bolts, Material.BOLT);
+        mesh.bolts(f, d, r, 1.1 * r, s0, 1, bolts, Material.BOLT);
         mesh.prism(f, r, s0, s1, n, Material.SHELL);
         mesh.ring(f, r, 1.08 * r, s1, end, n, 3, Material.FLANGE);
-        mesh.bolts(f, d, r, 1.08 * r, s1, -1, Material.BOLT);
-        mesh.bolts(f, d, r, 1.08 * r, end, 1, Material.BOLT);
+        mesh.bolts(f, d, r, 1.08 * r, s1, -1, bolts, Material.BOLT);
+        mesh.bolts(f, d, r, 1.08 * r, end, 1, bolts, Material.BOLT);
         mesh.head(f, r, end, d / 4, n, Material.HEAD);
         solids.add(Solid.rod(new double[]{a, y, 0}, 2, c0, end, 1.05 * r, d / 4));
         volumes.add(Solid.rod(new double[]{a, y, 0}, 2, c0 + .1, end, .94 * r, .9 * d / 4));
@@ -922,6 +959,11 @@ public final class ProcessUnit {
         nozzles.add(radial(Role.TUBE_OUTLET, a, y, r, n, zn, 1, ColumnStructure.size(.25 * d, tube)));
         // The shell nozzles near the tubesheets, two rows at least behind the channel's (one free block between pipes).
         double zIn = Math.max(Math.floor(s1 - flange / 2 - .1 - .5) + .5, zn + 2), zOut = Math.max(Math.ceil(s0 + flange / 2 + .1 - .5) + .5, zn + 2);
+        var layout=shape.exchangerType().layout();
+        if(layout.transverseShell()) {
+            // TEMA X-shell: distribution and collection are internal; the outer pressure shell stays cylindrical.
+            zIn=zOut=Math.max(zn+2,Math.floor((s0+s1)/2)+.5);
+        }
         nozzles.add(radial(Role.SHELL_INLET, a, y, r, n, zIn, 1, ColumnStructure.size(.3 * d, shellOd)));
         nozzles.add(radial(Role.SHELL_OUTLET, a, y, r, n, zOut, -1, ColumnStructure.size(.3 * d, shellOd)));
         // The saddles a fifth of the shell in from its ends, off the pipe blocks under the tube inlet and the shell outlet.
@@ -1411,7 +1453,7 @@ public final class ProcessUnit {
             root = bore / 2;
         } else at[axis] = from - sign * .01;
         nozzles.add(new Nozzle(role, at, axis, sign, sign * (face - at[axis]), bore, 0));
-        nozzleRoots.put(nozzles.size() - 1, root);
+        nozzleRoots.put(nozzles.size() - 1, new NozzleRoot(root));
     }
 
     /**
@@ -1504,6 +1546,8 @@ public final class ProcessUnit {
         for (int e = 0; e < 2; e++) {
             double h0 = e == 0 ? zf0 : zb0, h1 = e == 0 ? zf1 : zb1;
             mesh.band(f, rb, rb, h0, h1, nb, Material.PUMP_FINS);
+            // Close the housing behind its bracket; tuck the bore under the hexagonal shaft so the joint cannot leak light.
+            mesh.annulus(f, shaft * DeterministicMath.cos(Math.PI / ShaftGeometry.SIDES), rb + .03, e == 0 ? h1 : h0, n, e == 0 ? 1 : -1, Material.PUMP_CASTING);
             mesh.disc(f, rb, e == 0 ? zf0 : zb1, nb, e == 0 ? -1 : 1, Material.PUMP_DISC);
             mesh.cylinder(Frame.of(new double[]{a, 0, (h0 + h1) / 2}, 1, 1), .025 + .01 * di, y + rb - .01, y + rb + .05, 8, Material.PIPE);
         }
@@ -1595,6 +1639,7 @@ public final class ProcessUnit {
      * of its length and 100° of its round, drawn inside and out so the seal shows through.
      */
     void bracket(Frame f, double r0, double r1, double z0, double z1, int n, Material material) {
+        n = mesh.detail().sides(n);
         double t = .025, w0 = z0 + .2 * (z1 - z0), w1 = z0 + .8 * (z1 - z0), window = Math.toRadians(50);
         double[] stations = {z0, w0, w1, z1};
         for (int band = 0; band < 3; band++) {
@@ -1655,6 +1700,29 @@ public final class ProcessUnit {
      * fan's drive on its gearbox) it sits on its mounting flange at {@code z0}, its fins all round and its terminal box on
      * the front (frame -z).
      */
+    void generator(Frame f,double r,double z0,double z1,double floor) {
+        var o=f.origin();var ax=f.axis();var across=cross(new double[]{0,1,0},ax);double y=o[1],length=z1-z0;
+        // A broad alternator stator, enclosed end ventilation and bearing caps; no motor fins or external fan cowl.
+        motorBox(f,across,z0+.12*length,z1-.12*length,y-.80*r,y+.80*r,-1.05*r,1.05*r,Material.GENERATOR_PANEL,true);
+        for(double end:new double[]{z0,z1-.12*length}) {
+            // The vented discs close the casing; a closed cylinder would put plain caps in the same planes.
+            mesh.prism(f,.80*r,end,end+.12*length,12,Material.MOTOR_PLAIN);
+            mesh.disc(f,.80*r,end,12,-1,Material.GENERATOR_PANEL);
+            mesh.disc(f,.80*r,end+.12*length,12,1,Material.GENERATOR_PANEL);
+        }
+        mesh.cylinder(f,.30*r,z0-.04,z0,12,Material.MOTOR_PLAIN);
+        double terminal=z0+.3*length,tc=terminal+.275*r;
+        if(shape.kind()!=EquipmentShape.Kind.GENERATOR)motorBox(f,across,terminal,terminal+.55*r,y+.76*r,y+1.45*r,-.35*r,.35*r,Material.MOTOR_PLAIN,false);
+        terminalBox=new double[]{o[0]+tc*ax[0],y+1.215*r,o[2]+tc*ax[2]};
+        for(int sign:new int[]{-1,1})for(double z:new double[]{z0+.08,z1-.25})
+            motorBox(f,across,z,z+.17,y-r-.02,y-.55*r,Math.min(sign*.5*r,sign*.9*r),Math.max(sign*.5*r,sign*.9*r),Material.MOTOR_PLAIN,false);
+        if(y-r-.02>floor+.01)motorBox(f,across,z0+.02,z1-.02,floor,y-r-.02,-.95*r,.95*r,Material.STEELWORK,true);
+    }
+    private void generatorPanels(int first) {
+        var polygons=mesh.facets();
+        for(int i=first;i<polygons.size();i++) {var p=polygons.get(i);if(p.material()==Material.MOTOR_FRAME||p.material()==Material.MOTOR_PANEL)polygons.set(i,new Mesh.Facet(p.positions(),p.normal(),p.min(),p.max(),p.shading(),Material.GENERATOR_PANEL,p.u(),p.v(),p.part()));}
+    }
+    void largeGenerator(double x,double y,double z0,double across,double length,double floor){int first=mesh.facets().size();largeMotor(x,y,z0,across,length,floor);generatorPanels(first);}
     void motor(Frame f, double r, double z0, double z1, double shaft, double floor, MotorDetail detail) {
         double fin = detail == MotorDetail.PLAIN ? .03 : .025 + .06 * r;
         motor(f, r, fin, z0, z1 - .18 * (z1 - z0), z1, sides(2 * r), shaft, floor, detail);
@@ -1677,7 +1745,7 @@ public final class ProcessUnit {
         if (!standing) {
             mesh.disc(f, rb, z0, n, -1, Material.MOTOR_SHIELD);
             if (full) mesh.cylinder(f, .35 * r, z0 - .04, z0, n, Material.MOTOR_PLAIN);
-            if (shaft > 0) mesh.prism(f, shaft, z0 - .1, full ? z0 - .04 : z0, 8, Material.SHAFT);
+            if (shaft > 0) mesh.prism(f, shaft, z0 - .1, full ? z0 - .04 : z0, ShaftGeometry.SIDES, Material.SHAFT);
         }
         if (rc > rb) mesh.annulus(f, rb, rc, cowl, n, -1, Material.MOTOR_PLAIN);
         if (full) {
@@ -1701,12 +1769,12 @@ public final class ProcessUnit {
             return;
         }
         double y = o[1];
-        motorBox(f, across, terminal, terminal + .55 * r, y + r - .02, y + 1.45 * r, -.35 * r, .35 * r, Material.MOTOR_PLAIN, false);
+        if(shape.kind()!=EquipmentShape.Kind.MOTOR)motorBox(f, across, terminal, terminal + .55 * r, y + r - .02, y + 1.45 * r, -.35 * r, .35 * r, Material.MOTOR_PLAIN, false);
         double tc = terminal + .275 * r;
         terminalBox = new double[]{o[0] + tc * ax[0], y + 1.215 * r, o[2] + tc * ax[2]};
         if (full) {
             double[] conduit = {o[0] + (terminal + .27 * r) * ax[0], y + 1.2 * r, o[2] + (terminal + .27 * r) * ax[2]};
-            mesh.cylinder(new Frame(conduit, across, top), .06 * r + .01, .35 * r, .35 * r + .05, 8, Material.MOTOR_PLAIN);
+            if(shape.kind()!=EquipmentShape.Kind.MOTOR)mesh.cylinder(new Frame(conduit, across, top), .06 * r + .01, .35 * r, .35 * r + .05, 8, Material.MOTOR_PLAIN);
             for (double z : new double[]{z0 + .12 * (z1 - z0), cowl - .1 * (z1 - z0)})
                 mesh.ring(new Frame(new double[]{o[0], y + rc + .02 + .02 * r, o[2]}, ax, ref), .02 + .02 * r, .04 + .03 * r, z - .01, z + .01, 8, 3, Material.MOTOR_PLAIN);
             for (int s = -1; s <= 1; s += 2)
@@ -1871,6 +1939,11 @@ public final class ProcessUnit {
 
     /** A prism along z from {@code z0} to {@code z1} whose section is the convex polygon {@code outline} of (x, y) points, both ends drawn. */
     void extrude(List<double[]> outline, double z0, double z1, Material material) {
+        extrude(outline,z0,z1,material,3);
+    }
+
+    /** Extrusion with optional end caps (1 front, 2 back); adjoining covers can own the end faces instead. */
+    private void extrude(List<double[]> outline, double z0, double z1, Material material, int caps) {
         int m = outline.size();
         double cx = 0, cy = 0;
         for (var p : outline) {
@@ -1886,8 +1959,8 @@ public final class ProcessUnit {
             front.add(new double[]{p[0], p[1], z0});
             back.add(new double[]{p[0], p[1], z1});
         }
-        mesh.flat(front, new double[]{0, 0, -1}, material);
-        mesh.flat(back, new double[]{0, 0, 1}, material);
+        if((caps&1)!=0)mesh.flat(front, new double[]{0, 0, -1}, material);
+        if((caps&2)!=0)mesh.flat(back, new double[]{0, 0, 1}, material);
     }
 
     // ---- Reciprocating compressor -----------------------------------------------------------------------------------
@@ -2037,9 +2110,17 @@ public final class ProcessUnit {
         header(hd, new double[]{xl, ydb, head}, new double[]{xl, ydb, zd}, new double[]{xr, ydb, zd}, new double[]{xr, ydb, head});
         double start = zd + .03, face = Math.floor(zd - hd / 2 - NECK);
         nozzles.add(new Nozzle(Role.DISCHARGE, new double[]{a, ydb, start}, 2, -1, start - face, ColumnStructure.size(hd, hd), 0));
-        // The shaft end: the crankshaft's half coupling under its guard, on the table.
+        // The shaft end uses the pumps' coupling and guard. A large torque-sized hub needs a shelf below the table top
+        // to enclose its underside without raising the crankshaft or moving the existing shaft and process connections.
         double rpm = compressorSpeed(b), rs = shaftRadius(1000 * compressorPower(b, throwCount), rpm);
-        coupling(a, yc, end, Math.ceil(end + .2 + rs - 1e-9), 1, rs, h, shown(rpm), EquipmentShape.ShaftEnd.Role.DRIVEN_INPUT);
+        double driveFace = Math.ceil(end + .2 + rs - 1e-9), floor = Math.min(h, yc - couplingHubRadius(rs) - .1);
+        double mount = couplingHubRadius(rs) + .13;
+        baseplate(a - mount, a + mount, floor - .06, floor, end - .15, driveFace - .01);
+        for (int side = -1; side <= 1; side += 2) {
+            double x = a + side * (mount - .08);
+            box(new double[]{x - .05, floor - .18, end - .15}, new double[]{x + .05, floor - .06, driveFace - .01}, Material.STEELWORK, true);
+        }
+        coupling(a, yc, end, driveFace, 1, rs, floor, shown(rpm), EquipmentShape.ShaftEnd.Role.DRIVEN_INPUT);
     }
 
     /**
@@ -2085,12 +2166,12 @@ public final class ProcessUnit {
     /**
      * A shaft of radius {@code shaft} along frame {@code f} (its axis along z) over {@code spans} ({z0, z1} each), seen in
      * a pump's bracket windows, with a seal's drive collar and its four set screws centred at each of {@code collars}: a
-     * moving part turning at {@link #PUMP_SPEED} (owner answer 2026-10-18: the shaft and the motor's fan turn). A round
-     * shaft turning shows nothing; its screws show it.
+     * moving part (owner answer 2026-10-18: the shaft and the motor's fan turn). Its six-sided section and the collars'
+     * screws show the rotation; the client applies the shaft train's operating speed.
      */
     void shaft(Frame f, double shaft, double[][] spans, double... collars) {
         mesh.part(motions.size());
-        for (var s : spans) mesh.prism(f, shaft, s[0], s[1], 8, Material.SHAFT);
+        for (var s : spans) mesh.prism(f, shaft, s[0], s[1], ShaftGeometry.SIDES, Material.SHAFT);
         double rc = 1.7 * shaft + .01, w = .02 + shaft / 2;
         for (double zc : collars) {
             mesh.cylinder(f, rc, zc - w / 2, zc + w / 2, 12, Material.FLANGE);
@@ -2142,6 +2223,11 @@ public final class ProcessUnit {
         return Math.max(1, Math.round(Math.min(rpm, 120) / 60 * turns)) / turns;
     }
 
+    /** The half coupling's outside radius around a shaft of radius {@code rs}, m. */
+    private static double couplingHubRadius(double rs) {
+        return Math.max(rs + .04, 2.2 * rs);
+    }
+
     /**
      * A machine's shaft end along frame z (batch 2026-11-03-rotating-machinery, W4): its shaft of radius {@code rs} at
      * (x, y) from {@code from} (where it leaves its bearing) to the coupling face {@code face} (a block face, the shaft
@@ -2152,14 +2238,14 @@ public final class ProcessUnit {
      */
     void coupling(double x, double y, double from, double face, int sign, double rs, double floor, double speed, EquipmentShape.ShaftEnd.Role role) {
         var f = Frame.of(new double[]{x, y, 0}, 2, 1);
-        double hub = Math.max(rs + .04, 2.2 * rs), width = .06 + rs, s0 = Math.min(from, face), s1 = Math.max(from, face);
+        double hub = couplingHubRadius(rs), width = .06 + rs, s0 = Math.min(from, face), s1 = Math.max(from, face);
         double g = hub + .05, g0 = sign > 0 ? s0 + .02 : face + .01, g1 = sign > 0 ? face - .01 : s1 - .02;
         boolean guarded = g1 - g0 > .05 && y - floor > g;
         // Under a guard the hub stops 0.02 m short of the face, inside the guard's end plate.
         double inset = guarded ? .02 : 0, h0 = sign > 0 ? face - width - inset : face + inset, h1 = sign > 0 ? face - inset : face + width + inset;
         mesh.part(motions.size());
-        mesh.prism(f, rs, s0, s1, 8, Material.SHAFT);
-        mesh.disc(f, rs, face, 8, sign, Material.SHAFT);
+        mesh.prism(f, rs, s0, s1, ShaftGeometry.SIDES, Material.SHAFT);
+        mesh.disc(f, rs, face, ShaftGeometry.SIDES, sign, Material.SHAFT);
         mesh.cylinder(f, hub, h0, h1, 12, Material.SHAFT);
         // The hub's bolts show it turning.
         double ring = .75 * hub, zb = sign > 0 ? h0 - .015 : h1 + .015;
@@ -2293,7 +2379,8 @@ public final class ProcessUnit {
         mesh.part(-1);
         // The pivot's cell owns the animated part. Keep it inside the hub, including on a sparse/open structure.
         motions.add(Motion.turning(f.along((deep + shallow) / 2), f.axis(), speed, 0));
-        for (int k = 0; k < 8; k++) mesh.bar(f.at(k * Math.PI / 4, .15 * r, face - t / 2), f.at(k * Math.PI / 4, r, face - t / 2), t, f.axis(), material);
+        // Spokes sit behind the hoops, with their faces touching the hoops' backs instead of overlapping their fronts.
+        for (int k = 0; k < 8; k++) mesh.bar(f.at(k * Math.PI / 4, .15 * r, face - 1.5 * t), f.at(k * Math.PI / 4, r, face - 1.5 * t), t, f.axis(), material);
         for (double ring : new double[]{.45 * r, .75 * r}) mesh.ring(f, ring - t / 2, ring + t / 2, face - t, face, n, 3, material);
         mesh.cylinder(f, .15 * r, face - t, face, 10, material);
     }
@@ -2353,7 +2440,8 @@ public final class ProcessUnit {
             double t = Math.PI / 4 * k, c = DeterministicMath.cos(t), s = DeterministicMath.sin(t), u = -s, v = c;
             octagon.add(new double[]{x + r * c - corner * u, y + r * s - corner * v});
         }
-        extrude(octagon, z0 + .1, z1 - .1, Material.MOTOR_PANEL);
+        // The enlarged end bands close the stator. Keep the frame open at those same planes to avoid duplicate caps.
+        extrude(octagon, z0 + .1, z1 - .1, Material.MOTOR_PANEL,0);
         for (double zb : new double[]{z0 + .1, z1 - .22}) {
             var band = new ArrayList<double[]>();
             for (var p : octagon) band.add(new double[]{x + (p[0] - x) * (r + .04) / r, y + (p[1] - y) * (r + .04) / r});
@@ -2401,8 +2489,8 @@ public final class ProcessUnit {
         grilledFan(cowl, .85 * rf, -end, Math.min(.15, .6 * (c0 - end)), 12, PUMP_SPEED);
         // The terminal box on the right side, its conduit to the ground.
         double zt = (z0 + z1) / 2;
-        box(new double[]{x + r, y - .35 * r, zt - terminal / 2}, new double[]{x + r + .4 * terminal, y - .35 * r + .7 * terminal, zt + terminal / 2}, Material.MOTOR_PLAIN, false);
-        mesh.bar(new double[]{x + r + .2 * terminal, floor + .02, zt}, new double[]{x + r + .2 * terminal, y - .35 * r, zt}, .08, new double[]{1, 0, 0}, Material.PIPE);
+        framePoints.add(new double[]{x+r+.4*terminal,y-.35*r+.7*terminal,zt+terminal/2});
+
         terminalBox = new double[]{x + r + .2 * terminal, y - .35 * r + .35 * terminal, zt};
     }
 
@@ -2572,7 +2660,7 @@ public final class ProcessUnit {
      */
     void verticalLadder(double x, double z, double wall, double t, double base, double top, boolean walkThrough) {
         double rung = wall + Access.STANDOFF;
-        ladder(x + rung * DeterministicMath.cos(t), z + rung * DeterministicMath.sin(t), new double[]{DeterministicMath.cos(t), 0, DeterministicMath.sin(t)}, Access.STANDOFF + .12,
+        ladder(x + rung * DeterministicMath.cos(t), z + rung * DeterministicMath.sin(t), new double[]{DeterministicMath.cos(t), 0, DeterministicMath.sin(t)}, Access.roundLadderBack(wall, shape.facets()),
                 base, top, walkThrough);
     }
 
@@ -3568,6 +3656,7 @@ public final class ProcessUnit {
      * collide beyond them).
      */
     void fill(double x, double z, double half, double body, int sides, double level) {
+        sides = mesh.detail().sides(sides);
         double top = level + Access.DECK;
         for (int i = 0; i < sides; i++) {
             double t0 = 2 * Math.PI * i / sides, t1 = 2 * Math.PI * (i + 1) / sides;
@@ -3876,6 +3965,7 @@ public final class ProcessUnit {
      * reaches grade (a bay one walks into), then as drawn.
      */
     void skirt(double x, double z, double r, double y1, int n, double[]... openings) {
+        n = mesh.detail().sides(n);
         double[] axis = {x, 0, z}, up = {0, 1, 0}, down = {0, -1, 0};
         var outside = new Radial(axis, up);
         var inside = new Inward(axis, up);
@@ -3955,8 +4045,8 @@ public final class ProcessUnit {
             double t = 2 * Math.PI * (k + .5) / count;
             for (int s = -1; s <= 1; s += 2) {
                 var f = new Frame(Access.around(x, z, circle, t, s < 0 ? low : high), new double[]{0, s, 0}, new double[]{0, 0, 1});
-                mesh.cylinder(f, nut, 0, d, 6, Material.BOLT);
-                if (d >= .04) mesh.cylinder(f, d / 2, d, 1.5 * d, 6, Material.BOLT);
+                mesh.nut(f, nut, 0, d, 6, Material.BOLT);
+                if (mesh.detail() == RenderDetail.NORMAL && d >= .04) mesh.cylinder(f, d / 2, d, 1.5 * d, 6, Material.BOLT);
             }
         }
     }
@@ -3977,7 +4067,7 @@ public final class ProcessUnit {
         for (int k = 0; k < count; k++) {
             double t = 2 * Math.PI * (k + .5) / count;
             for (int s = -1; s <= 1; s += 2)
-                mesh.cylinder(new Frame(f.at(t, circle, station + s * (gap / 2 + tf)), s < 0 ? neg(axis) : axis, f.ref()), nut, 0, d, 6, Material.BOLT);
+                mesh.nut(new Frame(f.at(t, circle, station + s * (gap / 2 + tf)), s < 0 ? neg(axis) : axis, f.ref()), nut, 0, d, 6, Material.BOLT);
         }
     }
 

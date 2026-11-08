@@ -73,7 +73,7 @@ public final class Tiles {
         var tile = symbol(unit.type());
         if (tile == null) return null;
         var facts = sizing.unit(unit.id());
-        var type = facts.type() != null ? facts.type() : SizingFacts.UnitFacts.typeOf(facts.size());
+        var type = facts.mode()==SizingFacts.Mode.FIXED&&facts.type() != null ? facts.type() : SizingFacts.UnitFacts.typeOf(facts.size());
         if (!builtAs(unit.type(), type)) return tile;
         return switch (type) {
             case VERTICAL_HEATER -> Symbol.HEATER;

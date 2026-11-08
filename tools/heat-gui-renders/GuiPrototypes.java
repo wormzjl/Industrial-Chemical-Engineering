@@ -5,6 +5,7 @@ import com.wormzjl.icheme.client.gui.flowsheet.AssemblyBlock;
 import com.wormzjl.icheme.client.gui.common.CalculatorColumn;
 import com.wormzjl.icheme.client.gui.common.ConstructorColumn;
 import com.wormzjl.icheme.client.gui.common.DeviceColumn;
+import com.wormzjl.icheme.client.gui.common.ControlColumns;
 import com.wormzjl.icheme.client.gui.common.DialogColumns;
 import com.wormzjl.icheme.client.gui.common.HeatControlColumn;
 import com.wormzjl.icheme.client.gui.common.MachineColumnSamples;
@@ -18,7 +19,6 @@ import com.wormzjl.icheme.client.gui.common.kit.Palette;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
-import com.wormzjl.icheme.client.gui.common.kit.WindowScale;
 import com.wormzjl.icheme.client.gui.screens.inventory.FluidDeviceScreen.FluidGuiLayout;
 import com.wormzjl.icheme.science.assembly.AssemblyReport;
 import com.wormzjl.icheme.science.assembly.AssemblyView;
@@ -88,9 +88,59 @@ public final class GuiPrototypes {
         out.add(titleStrip());
         out.addAll(machines());
         out.addAll(machinePages());
+        out.add(exchangerTypes());
         out.addAll(pumpReadings());
         out.addAll(createCoupling());
+        out.addAll(controlPanels());
         return out;
+    }
+
+    static List<Prototype> controlPanels(){
+        var out=new ArrayList<Prototype>();
+        for(boolean dcs:new boolean[]{false,true})for(boolean compact:new boolean[]{false,true}){
+            var layout=ControlColumns.layout(compact?320:640,compact?240:480,dcs);
+            out.add(new Prototype((dcs?"control-dcs":"control-local")+(compact?"-compact":"-wide"),layout.width(),layout.height(),(d,s)->{
+            d.skin.title(d.c,10,10,dcs?"DCS":"Local controller");
+            var view=new ControlColumns.View(true,"m","%",true,"LT-0012 / LEVEL","37.0","CV-0021","CONTROLLING",true,ControlColumns.Variable.LEVEL);
+            // KitDoor shares the long loop column's scroll offset; this one-row controller list is above the end view.
+            if(layout.split()&&!d.end)doorColumn(d,ControlColumns.controllers(List.of(new ControlColumns.Choice("controller:1","Drum level",true)),DIALOG::get),layout.areas().getFirst(),Map.of(),"DCS controller list");
+            if(layout.chooser()!=null)d.skin.button(d.c,layout.chooser(),DIALOG.get("control.controllers"),Skin.Press.REST,false);
+            doorColumn(d,ControlColumns.loop(view,DIALOG::get),layout.areas().getLast(),Map.of("name","Drum level","target","25"),"Level control");
+            dialogFooter(d,DIALOG.get("control.close"),DIALOG.get("control.apply"));
+            },true));
+        }
+        var compact=ControlColumns.layout(320,240,true);
+        out.add(new Prototype("control-dcs-controller-list",compact.width(),compact.height(),(d,s)->{
+            d.skin.title(d.c,10,10,"DCS");
+            d.skin.button(d.c,compact.chooser(),DIALOG.get("control.back"),Skin.Press.REST,false);
+            doorColumn(d,ControlColumns.controllers(List.of(new ControlColumns.Choice("controller:1","Drum level",true),new ControlColumns.Choice("controller:2","Feed flow",false)),DIALOG::get),compact.areas().getFirst(),Map.of(),"Compact controller list");
+            dialogFooter(d,DIALOG.get("control.close"));
+        }));
+        out.add(new Prototype("control-instrument-ids",246,254,(d,s)->{
+            d.skin.title(d.c,10,10,"Drum instruments");
+            var rows=new ArrayList<Column.Row>();
+            rows.add(new Column.Group("Readings",null,List.of(new Column.Reading("level","Liquid level","25","%",null))));
+            rows.addAll(DeviceColumn.instrumentIds(List.of("LT-0012 / Liquid level","PT-0013 / Pressure probe"),TEXTS));
+            doorColumn(d,rows,new Rect(10,30,226,184),Map.of(),"Instrument IDs");
+            dialogFooter(d,"Close");
+        }));
+        return out;
+    }
+
+    static Prototype exchangerTypes() {
+        return new Prototype("exchanger-types",464,254,(d,s)-> {
+            var page=ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.EXCHANGER,2.25,7,2,3,0,0,ProcessUnit.Bank.ONE,null,
+                    new ConstructorColumn.Outlet(1,0,STANDING),16,com.wormzjl.icheme.science.equipment.TowerBank.ONE,MachineDuty.NONE,
+                    com.wormzjl.icheme.science.equipment.ExchangerType.CROSSFLOW),DIALOG);
+            constructorDoor(d,page,"Heat exchanger","change",DIALOG.get(CONSTRUCTOR+"surface","2,658"),Palette.ACCENT,Map.of());
+            var b=d.skin.well(d.c,new Rect(203,30,251,170));
+            d.c.text("Two tube passes",b.x()+8,b.y()+10,Palette.ACCENT);
+            d.c.text("Upper internal space",b.x()+8,b.y()+35,Palette.TEXT);
+            d.c.fill(b.x()+20,b.y()+55,b.x()+220,b.y()+65,Palette.LINE);
+            d.c.outline(b.x()+20,b.y()+50,200,80,Palette.ACCENT);
+            d.c.fill(b.x()+20,b.y()+116,b.x()+220,b.y()+126,Palette.LINE);
+            d.c.text("Lower internal space",b.x()+8,b.y()+139,Palette.TEXT);
+        },true);
     }
 
     // ---- W10d's pump readings and curve (batch 2026-11-03-rotating-machinery, decision D37; W10D_BUILD_PLAN.md) ----
@@ -171,10 +221,10 @@ public final class GuiPrototypes {
     /** A device page's frame around {@code rows} instead of a DeviceColumn.Input's (as {@link #devicePage}). */
     static Prototype devicePage(String file, int fw, int fh, List<Column.Row> rows, BiConsumer<Door, Skin> body) {
         var m = new HeatDiagramRender.Java2dCanvas(new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB).createGraphics()).measure();
-        WindowScale.Fit fit = (w, h) -> FluidGuiLayout.fits(w, h, iw -> Column.place(rows, 10, FluidGuiLayout.DOOR_TOP, FluidGuiLayout.side(iw) - 10, m, Column.Metrics.COMPACT).bounds().h());
-        int s = WindowScale.of(fw, fh, false, FluidGuiLayout.HEIGHT, fit), gw = -Math.floorDiv(-fw, s), gh = -Math.floorDiv(-fh, s);
-        System.out.printf(java.util.Locale.ROOT, "%-24s %d by %d window: scale %d (the design size's %d, the minimum %d), %d by %d GUI px%n", file, fw, fh, s, WindowScale.of(fw, fh, false), WindowScale.minimum(fw, fh, false), gw, gh);
-        return new Prototype(file, FluidGuiLayout.imageWidth(gw), FluidGuiLayout.imageHeight(gh), body, !fit.fits(gw, gh));
+        java.util.function.BiPredicate<Integer,Integer> fit = (w, h) -> FluidGuiLayout.fits(w, h, iw -> Column.place(rows, 10, FluidGuiLayout.DOOR_TOP, FluidGuiLayout.side(iw) - 10, m, Column.Metrics.COMPACT).bounds().h());
+        int s = Math.max(1, Integer.getInteger("guiScale", 3)), gw = -Math.floorDiv(-fw, s), gh = -Math.floorDiv(-fh, s);
+        System.out.printf(java.util.Locale.ROOT, "%-24s %d by %d window: player scale %d, %d by %d GUI px%n", file, fw, fh, s, gw, gh);
+        return new Prototype(file, FluidGuiLayout.imageWidth(gw), FluidGuiLayout.imageHeight(gh), body, !fit.test(gw, gh));
     }
 
     /**
@@ -194,11 +244,14 @@ public final class GuiPrototypes {
             if (p.row() instanceof Column.Field f) {
                 var r = p.slots().get(f.key());
                 if (view.visible(r)) d.skin.field(d.c, view.onScreen(r), drafts.getOrDefault(f.key(), ""), "", false);
+            } else if (p.row() instanceof Column.Wide wide) {
+                var r=p.slots().get(wide.key());
+                if(view.visible(r))d.skin.field(d.c,view.onScreen(r),drafts.getOrDefault(wide.key(),""),"",false);
             } else if (p.row() instanceof Column.Buttons b)
                 for (var spec : b.buttons()) {
                     var r = p.slots().get(spec.key());
                     if (!view.visible(r)) continue;
-                    if (spec.soft()) d.skin.softKey(d.c, view.onScreen(r), spec.text(), false);
+                    if (spec.soft()) d.skin.softKey(d.c, view.onScreen(r), spec.text(), spec.latched());
                     else d.skin.button(d.c, view.onScreen(r), spec.text(), spec.latched() ? Skin.Press.CURRENT : !spec.active() ? Skin.Press.OFF : Skin.Press.REST, false);
                 }
             else if (p.row() instanceof Column.Setting st && st.steps())
@@ -744,7 +797,9 @@ public final class GuiPrototypes {
         templates.add(new ConstructorColumn.Template("Two-tray pot", false, DIALOG.get(CONSTRUCTOR + "template.unusable", "Two-tray pot", "a column needs a tray")));
         templates.add(new ConstructorColumn.Template("My vacuum column", true, DIALOG.get(CONSTRUCTOR + "template.own", "My vacuum column")));
         var templatePage = ConstructorColumn.templates(templates, 0, DIALOG);
+        var removal = ConstructorColumn.withRemoval(drum, new ConstructorColumn.Removal("V-101 · Vertical drum", "12, 64, -8", 382, false), DIALOG);
         return List.of(
+                new Prototype("equipment-constructor-removal", 464, 254, (d, theme) -> constructorDoor(d, removal, "Vertical drum", "change", volume, Palette.ACCENT, Map.of()), true),
                 new Prototype("equipment-constructor-column-design", 464, 254, (d, s) -> {
                     constructorDoor(d, columnDesign, "Distillation column", "change", DIALOG.get(CONSTRUCTOR + "volume", "1696.5", "792.7"), Palette.ACCENT, Map.of());
                     columnDrawing(d, d.well(new Rect(d.w - 16 - 140, 16, 152, d.h - 32)));
@@ -991,16 +1046,16 @@ public final class GuiPrototypes {
 
     /**
      * A device's page as a window {@code fw} by {@code fh} screen px shows it: at the scale FluidDeviceScreen takes
-     * (WindowScale with the page's column as its fit), its image 8 px inside the window's GUI size; drawn scrolled to its
+     * (the explicit -DguiScale preview setting), its image 8 px inside the window's GUI size; drawn scrolled to its
      * end too where even that scale leaves the column a bar.
      */
     static Prototype devicePage(String file, int fw, int fh, DeviceColumn.Input in, BiConsumer<Door, Skin> body) {
         var m = new HeatDiagramRender.Java2dCanvas(new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB).createGraphics()).measure();
         var rows = DeviceColumn.rows(in, TEXTS);
-        WindowScale.Fit fit = (w, h) -> FluidGuiLayout.fits(w, h, iw -> Column.place(rows, 10, FluidGuiLayout.DOOR_TOP, FluidGuiLayout.side(iw) - 10, m, Column.Metrics.COMPACT).bounds().h());
-        int s = WindowScale.of(fw, fh, false, FluidGuiLayout.HEIGHT, fit), gw = -Math.floorDiv(-fw, s), gh = -Math.floorDiv(-fh, s);
-        System.out.printf(java.util.Locale.ROOT, "%-24s %d by %d window: scale %d (the design size's %d, the minimum %d), %d by %d GUI px%n", file, fw, fh, s, WindowScale.of(fw, fh, false), WindowScale.minimum(fw, fh, false), gw, gh);
-        return new Prototype(file, FluidGuiLayout.imageWidth(gw), FluidGuiLayout.imageHeight(gh), body, !fit.fits(gw, gh));
+        java.util.function.BiPredicate<Integer,Integer> fit = (w, h) -> FluidGuiLayout.fits(w, h, iw -> Column.place(rows, 10, FluidGuiLayout.DOOR_TOP, FluidGuiLayout.side(iw) - 10, m, Column.Metrics.COMPACT).bounds().h());
+        int s = Math.max(1, Integer.getInteger("guiScale", 3)), gw = -Math.floorDiv(-fw, s), gh = -Math.floorDiv(-fh, s);
+        System.out.printf(java.util.Locale.ROOT, "%-24s %d by %d window: player scale %d, %d by %d GUI px%n", file, fw, fh, s, gw, gh);
+        return new Prototype(file, FluidGuiLayout.imageWidth(gw), FluidGuiLayout.imageHeight(gh), body, !fit.test(gw, gh));
     }
 
     static Prototype pump() {

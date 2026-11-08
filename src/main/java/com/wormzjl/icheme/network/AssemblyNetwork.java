@@ -54,7 +54,7 @@ import java.util.*;
  * {@link WatchPayload}, which replays their stored views, and their changes come with the buckets ({@link WatchedPayload}).
  */
 public final class AssemblyNetwork {
-    public static final String PROTOCOL = "assembly-3";
+    public static final String PROTOCOL = "assembly-4";
     /** Bounds a view's read checks: slots, ports, members, characters of a slot's name or detail. */
     static final int MAX_SLOTS = 256, MAX_PORTS = 1024, MAX_MEMBERS = 256, MAX_TEXT = 1024;
 

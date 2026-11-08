@@ -1,0 +1,40 @@
+{
+  "parent": "minecraft:block/block",
+  "textures": {
+    "particle": "icheme:block/pump_casting",
+    "case": "icheme:block/pump_casting",
+    "metal": "icheme:block/equipment_steelwork",
+    "side": "icheme:block/control_panel_side",
+    "rear": "icheme:block/control_panel_rear",
+    "door": "icheme:block/control_panel_service",
+    "front": "icheme:block/controller_front"
+  },
+  "elements": [
+    {
+      "name": "steel mounting foot",
+      "from": [3.0, 0.0, 5.0],
+      "to": [13.0, 2.0, 12.0],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" }
+      }
+    },
+    {
+      "name": "local loop controller",
+      "from": [2.0, 2.0, 3.0],
+      "to": [14.0, 15.0, 13.0],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#front" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#side" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#rear" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#side" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#case" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#case" }
+      }
+    }
+  ]
+}

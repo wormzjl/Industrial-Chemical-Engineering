@@ -1,5 +1,7 @@
 package com.wormzjl.icheme.world.level.block.entity;
 
+import com.wormzjl.icheme.world.level.block.LinePieces;
+
 import com.wormzjl.icheme.IChemE;
 import com.wormzjl.icheme.registry.ModBlockEntities;
 import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
@@ -17,10 +19,7 @@ import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
-import net.minecraft.network.Connection;
-import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
@@ -53,7 +52,10 @@ import java.util.concurrent.ConcurrentHashMap;
  * that, the lane kept. Format rack-3 added the secondary paint, saved only when it differs from the paint; a rack-1
  * copy reads as it did.</p>
  */
-public final class PipeRackBlockEntity extends BlockEntity {
+public final class PipeRackBlockEntity extends ModelledBlockEntity implements LinePieces.Copy {
+    private List<LinePieces.Piece> pieces=List.of();
+    public List<LinePieces.Piece> linePieces(){return pieces;}
+    public void linePieces(List<LinePieces.Piece> value){if(pieces.equals(value))return;pieces=List.copyOf(value);setChanged();LinePieces.clientCopy(this,pieces);if(level!=null&&!level.isClientSide())level.sendBlockUpdated(worldPosition,getBlockState(),getBlockState(),2);}
     public static final String FORMAT = "rack-3";
 
     /**
@@ -118,7 +120,9 @@ public final class PipeRackBlockEntity extends BlockEntity {
      * and the flanges'), and {@code spools}, a bit per lane that carries a flange pair between spools here
      * ({@link RackGeometry#spool}).
      */
-    public record Drawn(RackGeometry.Rack rack, List<RackGeometry.Lane> lanes, List<Integer> paints, List<Integer> secondaries, int spools) {
+    public record Drawn(RackGeometry.Rack rack, List<RackGeometry.Lane> lanes, List<Integer> paints, List<Integer> secondaries, int spools,List<RackGeometry.Lane> occupied) {
+        public Drawn(RackGeometry.Rack rack,List<RackGeometry.Lane> lanes,List<Integer> paints,List<Integer> secondaries,int spools){this(rack,lanes,paints,secondaries,spools,lanes);}
+        public Drawn{lanes=List.copyOf(lanes);paints=List.copyOf(paints);secondaries=List.copyOf(secondaries);occupied=List.copyOf(occupied);}
     }
 
     public static final ModelProperty<Drawn> DRAWN = new ModelProperty<>();
@@ -127,6 +131,14 @@ public final class PipeRackBlockEntity extends BlockEntity {
     private static final Set<PipeRackBlockEntity> CLIENT_RACKS = Collections.newSetFromMap(new WeakHashMap<>());
 
     private List<Lane> lanes = List.of();
+    private List<com.wormzjl.icheme.runtime.control.DataBus.Cable> cables=List.of();
+    public List<com.wormzjl.icheme.runtime.control.DataBus.Cable> cables(){return cables;}
+    public void cables(List<com.wormzjl.icheme.runtime.control.DataBus.Cable> value){
+        cables=List.copyOf(value);shape=null;setChanged();
+        if(level!=null&&!level.isClientSide())level.sendBlockUpdated(worldPosition,getBlockState(),getBlockState(),2);
+    }
+    private void writeCables(CompoundTag tag){var list=new ListTag();cables.forEach(c->list.add(c.save()));tag.put("DataCables",list);}
+    public RackGeometry.Lane cableLane(com.wormzjl.icheme.runtime.control.DataBus.Cable cable){return new RackGeometry.Lane(cable.site().lane()-1,RackGeometry.width(cable.geometry().medium().outside()),cable.arms(),cable.geometry().joints(),PipeSizes.code(cable.geometry().medium().outside()));}
     private int[] joined = new int[0];
     /** The steel of a rack alone on the ground: a whole bent at each end, on pedestals. The item and a cell whose neighbours are not read yet draw it. */
     public static final int BARE = RackGeometry.BENT_BACK | RackGeometry.BENT_FRONT | RackGeometry.END_BACK | RackGeometry.END_FRONT | RackGeometry.GROUNDED;
@@ -154,13 +166,14 @@ public final class PipeRackBlockEntity extends BlockEntity {
 
     /** The cell's frame as drawn: its lane geometry, the steel its neighbours give it, and its beams beneath its lanes. */
     public RackGeometry.Rack frame() {
-        return RackGeometry.framed(rack(), frame, RackGeometry.beam(drawnLanes()));
+        return RackGeometry.framed(rack(), frame, RackGeometry.beam(layingLanes()));
     }
 
     /** The faces the lanes have joints on, a bit per face. */
     private int faces() {
         int faces = 0;
         for (var lane : lanes) faces |= lane.joints;
+        for(var cable:cables)faces|=cable.geometry().joints();
         return faces;
     }
 
@@ -168,8 +181,12 @@ public final class PipeRackBlockEntity extends BlockEntity {
     private List<RackGeometry.Lane> unjoined() {
         var out = new ArrayList<RackGeometry.Lane>(lanes.size());
         for (var lane : lanes) out.add(lane.drawn(0));
+        for(var cable:cables)out.add(cableLane(cable));
         return out;
     }
+
+    /** All laid lines take the same rack slots, regardless of the medium carried. */
+    public List<RackGeometry.Lane> layingLanes(){var out=new ArrayList<>(drawnLanes());for(var cable:cables)out.add(cableLane(cable));return List.copyOf(out);}
 
     /** The route search's view of this cell: its frame, its lanes, and the faces they have joints on. */
     public PipeRoute.Room room() {
@@ -200,6 +217,8 @@ public final class PipeRackBlockEntity extends BlockEntity {
         var out = frame(rack);
         for (var lane : drawnLanes())
             for (var box : RackGeometry.boxes(rack, lane)) out = Shapes.or(out, Shapes.box(box[0], box[1], box[2], box[3], box[4], box[5]));
+        for(var cable:cables)for(var box:com.wormzjl.icheme.science.equipment.ConduitGeometry.laneBoxes(rack,cableLane(cable),cable.geometry()))
+            out=Shapes.or(out,Shapes.box(box[0],box[1],box[2],box[3],box[4],box[5]));
         return shape = out.optimize();
     }
 
@@ -410,20 +429,21 @@ public final class PipeRackBlockEntity extends BlockEntity {
 
     @Override
     public void onLoad() {
-        super.onLoad();
+        super.onLoad();LinePieces.clientCopy(this,pieces);
         if (level != null && level.isClientSide()) CLIENT_RACKS.add(this);
         if (level instanceof ServerLevel serverLevel) FluidWorldAuthority.find(serverLevel.getServer()).ifPresent(this::bind);
+        if(level instanceof ServerLevel serverLevel)FluidWorldAuthority.find(serverLevel.getServer()).ifPresent(w->w.controls().loaded(this));
     }
 
     @Override
     public void onChunkUnloaded() {
-        super.onChunkUnloaded();
+        LinePieces.unloaded(this);super.onChunkUnloaded();
         CLIENT_RACKS.remove(this);
     }
 
     @Override
     public void setRemoved() {
-        super.setRemoved();
+        LinePieces.unloaded(this);super.setRemoved();
         CLIENT_RACKS.remove(this);
     }
 
@@ -444,11 +464,18 @@ public final class PipeRackBlockEntity extends BlockEntity {
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
         write(lanes, tag);
+        writeCables(tag);tag.put("LinePieces",LinePieces.save(pieces));
     }
 
     @Override
     protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
-        super.loadAdditional(tag, registries);
+        super.loadAdditional(tag, registries);pieces=LinePieces.load(tag);LinePieces.clientCopy(this,pieces);
+        var wires=new ArrayList<com.wormzjl.icheme.runtime.control.DataBus.Cable>();
+        try{
+            var saved=tag.getList("DataCables",10);if(saved.size()>RackGeometry.OPTIONS)throw new IllegalArgumentException("Too many rack cables");var options=new java.util.HashSet<Integer>();
+            for(var t:saved){var cable=com.wormzjl.icheme.runtime.control.DataBus.Cable.load((CompoundTag)t);if(cable.site().lane()==0||!cable.site().cell().equals(worldPosition)||!options.add(cable.site().lane()))throw new IllegalArgumentException("Invalid rack cable copy");wires.add(cable);}
+        }catch(IllegalArgumentException invalid){wires.clear();}
+        cables=List.copyOf(wires);
         var read = read(tag);
         int[] readJoined = null;
         if (tag.contains("Joined", Tag.TAG_INT_ARRAY) && tag.getIntArray("Joined").length == read.size()) readJoined = tag.getIntArray("Joined");
@@ -508,21 +535,10 @@ public final class PipeRackBlockEntity extends BlockEntity {
     @Override
     public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
         var tag = write(lanes, new CompoundTag());
+        writeCables(tag);tag.put("LinePieces",LinePieces.save(pieces));
         tag.putIntArray("Joined", joined.clone());
         tag.putInt("Frame", frame);
         return tag;
-    }
-
-    @Override
-    public ClientboundBlockEntityDataPacket getUpdatePacket() {
-        return ClientboundBlockEntityDataPacket.create(this);
-    }
-
-    @Override
-    public void onDataPacket(Connection connection, ClientboundBlockEntityDataPacket packet, HolderLookup.Provider registries) {
-        super.onDataPacket(connection, packet, registries);
-        requestModelDataUpdate();
-        if (level != null) level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 0);
     }
 
     @Override
@@ -531,6 +547,6 @@ public final class PipeRackBlockEntity extends BlockEntity {
         var drawn = drawnLanes();
         int along = along(), spools = 0;
         for (int i = 0; i < drawn.size(); i++) if (RackGeometry.spool(rack, drawn.get(i), along)) spools |= 1 << i;
-        return ModelData.of(DRAWN, new Drawn(rack, drawn, lanes.stream().map(Lane::paint).toList(), lanes.stream().map(Lane::secondary).toList(), spools));
+        return ModelData.of(DRAWN, new Drawn(rack, drawn, lanes.stream().map(Lane::paint).toList(), lanes.stream().map(Lane::secondary).toList(), spools,layingLanes()));
     }
 }

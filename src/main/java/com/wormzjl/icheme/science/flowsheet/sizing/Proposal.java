@@ -72,6 +72,12 @@ public final class Proposal {
         var door = ColumnDoor.of(unit.params());
         var json = unit.params().json().deepCopy();
         boolean moved = false;
+        for(var entry:proposal.units().entrySet()) {
+            String prefix=unit.id()+"/";
+            if(entry.getKey().startsWith(prefix)&&facts.unit(entry.getKey()).mode()==SizingFacts.Mode.AUTO&&entry.getValue().size() instanceof ExchangerSizing.Size exchanger&&!exchanger.kettle()) {
+                var before=json.deepCopy();ColumnDoor.exchanger(json,entry.getKey().substring(prefix.length()),exchanger.type());moved|=!before.equals(json);
+            }
+        }
         if (facts.unit(unit.id()).mode() == SizingFacts.Mode.AUTO && proposal.units().get(unit.id()) instanceof SizedUnit sized && sized.size() instanceof ColumnSizing.Size size
                 && size.diameter() != door.diameter()) {
             json.addProperty("diameter", size.diameter());

@@ -143,6 +143,12 @@ public final class PumpHealthGameTests {
         long sourceId = ((FluidDeviceBlockEntity) level.getBlockEntity(source)).fluidIdentity();
         long sinkId = ((FluidDeviceBlockEntity) level.getBlockEntity(sink)).fluidIdentity();
         long pumpId = ((FluidDeviceBlockEntity) level.getBlockEntity(pump)).fluidIdentity();
+        // This test owns a legacy set-flow fixture; supply its integral drive so sound tests a running pump.
+        boolean[] powered={false};
+        helper.onEachTick(()->{
+            var energy=level.getCapability(net.neoforged.neoforge.capabilities.Capabilities.EnergyStorage.BLOCK,pump,Direction.UP);
+            if(energy!=null)powered[0]|=energy.receiveEnergy(Integer.MAX_VALUE,false)>0;
+        });
         // Its default set flow, 0.01 m3/s, needs 1.68 m of NPSH3: the supply stands at twice that over the water's vapour pressure.
         double npsh3 = com.wormzjl.icheme.science.machine.Npsh.forDuty(.01, 2950).required(.01);
         TankCharge.run(world, sourceId, new FluidDeviceSpec(1, 298.15, 3169 + 2 * 997 * 9.81 * npsh3, water));
@@ -151,7 +157,7 @@ public final class PumpHealthGameTests {
         String[] failure = {null};
         helper.startSequence().thenWaitUntil(() -> {
             var state = world.publishedMover(pumpId);
-            helper.assertTrue(state != null && state.running() && !state.compressor() && state.crackle() > 0,
+            helper.assertTrue(powered[0] && state != null && state.running() && !state.compressor() && state.crackle() > 0,
                     "Waiting for the in-line pump's crackle: " + state + " / " + world.view(pumpId).status());
         }).thenExecute(() -> {
             var state = world.publishedMover(pumpId);

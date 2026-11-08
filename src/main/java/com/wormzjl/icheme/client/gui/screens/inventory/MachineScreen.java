@@ -1,5 +1,7 @@
 package com.wormzjl.icheme.client.gui.screens.inventory;
 
+import com.wormzjl.icheme.client.gui.common.DeviceColumn;
+
 import com.wormzjl.icheme.client.ClientConfig;
 import com.wormzjl.icheme.client.gui.common.MachineColumn;
 import com.wormzjl.icheme.client.gui.common.ProcessUi;
@@ -13,7 +15,6 @@ import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
 import com.wormzjl.icheme.client.gui.common.kit.SkinButton;
 import com.wormzjl.icheme.client.gui.common.kit.SkinField;
-import com.wormzjl.icheme.client.gui.common.kit.WindowScale;
 import com.wormzjl.icheme.client.gui.screens.inventory.FluidDeviceScreen.FluidGuiLayout;
 import com.wormzjl.icheme.network.MachineNetwork;
 import com.wormzjl.icheme.runtime.fluid.MachineView;
@@ -84,7 +85,9 @@ public final class MachineScreen extends AbstractContainerScreen<MachineMenu> {
     private List<Column.Row> rows() {
         var v = menu.view();
         if (v == null) return MachineColumn.rows(new MachineColumn.Input(kind(), false, running, true, mode, false, null, List.of(), List.of(), null), MachineScreen::tr);
-        return MachineColumn.rows(MachineColumn.input(v, canEdit(), running, mode, MachineScreen::tr), MachineScreen::tr);
+        var rows=new java.util.ArrayList<>(MachineColumn.rows(MachineColumn.input(v, canEdit(), running, mode, MachineScreen::tr), MachineScreen::tr));
+        rows.addAll(DeviceColumn.instrumentIds(com.wormzjl.icheme.client.InstrumentRenderer.identities(minecraft.level,menu.origin()),(key,args)->tr("fluid."+key,args)));
+        return java.util.List.copyOf(rows);
     }
 
     /** The structure's name, as its cells hold it (empty for a creative motor or none). */
@@ -97,19 +100,7 @@ public final class MachineScreen extends AbstractContainerScreen<MachineMenu> {
     }
 
     @Override
-    public void removed() {
-        super.removed();
-        WindowScale.restore(minecraft);
-    }
-
-    /** Whether the door fits a window {@code width} by {@code height} GUI px (WindowScale.Fit). */
-    private boolean fits(int width, int height) {
-        return FluidGuiLayout.fits(width, height, w -> Column.place(rows(), 10, FluidGuiLayout.DOOR_TOP, FluidGuiLayout.side(w) - 10, GuiCanvas.measure(font), Column.Metrics.COMPACT).bounds().h());
-    }
-
-    @Override
     protected void init() {
-        WindowScale.apply(minecraft, this, FluidGuiLayout.HEIGHT, this::fits);
         imageWidth = FluidGuiLayout.imageWidth(width);
         imageHeight = FluidGuiLayout.imageHeight(height);
         super.init();
@@ -195,6 +186,8 @@ public final class MachineScreen extends AbstractContainerScreen<MachineMenu> {
     private void act(String key) {
         message = "";
         if (key.equals("power:off") || key.equals("power:on")) running = key.equals("power:on");
+        else if(key.equals("mode:manual"))mode=MachineColumn.Mode.SPEED;
+        else if(key.equals("mode:auto")&&mode==MachineColumn.Mode.SPEED)mode=MachineColumn.Mode.FLOW;
         else if (key.startsWith("regulate:")) mode = MachineColumn.Mode.valueOf(key.substring(9).toUpperCase(Locale.ROOT));
         else if (key.equals("reset")) send(MachineNetwork.Action.RESET, Objects.requireNonNull(menu.view()).settings());
         rebuildWidgets();
@@ -210,7 +203,7 @@ public final class MachineScreen extends AbstractContainerScreen<MachineMenu> {
             double setPoint = v.settings().setPoint(), power = v.settings().powerLimit(), gear = v.settings().ratio();
             if (mode == MachineColumn.Mode.SPEED && kind().driver() && (kind() != MachineColumn.Kind.MOTOR || v.variable()))
                 setPoint = MachineColumn.setPoint(kind(), number(speed), v.designSpeed());
-            if (kind() == MachineColumn.Kind.CREATIVE_MOTOR || kind() == MachineColumn.Kind.GENERATOR) power = limit.isBlank() ? 0 : 1000 * number(limit);
+            if (kind() == MachineColumn.Kind.MOTOR || kind() == MachineColumn.Kind.CREATIVE_MOTOR || kind() == MachineColumn.Kind.GENERATOR) power = limit.isBlank() ? 0 : 1000 * number(limit);
             if (kind() == MachineColumn.Kind.GEARBOX) gear = number(ratio);
             send(MachineNetwork.Action.APPLY, new ShaftUnit.Settings(running, mode.engine(), setPoint, power, gear));
         } catch (IllegalArgumentException invalid) {
@@ -251,7 +244,6 @@ public final class MachineScreen extends AbstractContainerScreen<MachineMenu> {
         super.containerTick();
         follow();
         if (!signature(rows()).equals(signature)) rebuildWidgets();
-        else if (door.view().max() > 0 && WindowScale.lower(minecraft, FluidGuiLayout.HEIGHT, this::fits)) rebuildWidgets();
     }
 
     @Override
@@ -317,7 +309,10 @@ public final class MachineScreen extends AbstractContainerScreen<MachineMenu> {
         door.place(rows(), GuiCanvas.measure(font));
         String hint = door.draw(canvas, skin, hx, hy);
         if (hint != null) hovered = hint;
-        if (v != null) nameplate(canvas, v);
+        if (v != null) {
+            if(kind()==MachineColumn.Kind.MOTOR)com.wormzjl.icheme.client.gui.common.MotorCurve.draw(canvas,glass(),v.ratedPower(),v.designSpeed(),v.speed(),v.shaftPower(),MachineScreen::tr);
+            else nameplate(canvas,v);
+        }
     }
 
     /** The nameplate on the glass ({@link MachineColumn#nameplate}: rating, poles, drive, a coupling's stress rate, rated speed). */

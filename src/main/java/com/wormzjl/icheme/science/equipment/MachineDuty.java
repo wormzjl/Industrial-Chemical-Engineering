@@ -23,7 +23,14 @@ import java.util.Objects;
  * </ul>
  * Enums are saved by name. Mechanical numbers (a shaft's diameter, a frame's size) only size the drawing.
  */
-public record MachineDuty(double flow, double head, double polytropicHead, double power, int poles, Drive drive, @Nullable Steam steam, double exhaust) {
+public record MachineDuty(double flow, double head, double polytropicHead, double power, int poles, Drive drive, @Nullable Steam steam, double exhaust, double baseSpeed) {
+    /** Legacy facts have no explicit base speed: their pole-derived speed is retained. */
+    public MachineDuty(double flow,double head,double polytropicHead,double power,int poles,Drive drive,@Nullable Steam steam,double exhaust) {
+        this(flow,head,polytropicHead,power,poles,drive,steam,exhaust,0);
+    }
+    /** A VFD motor, with an explicit base speed in rpm. */
+    public static MachineDuty motor(double power,double rpm) { return new MachineDuty(0,0,0,power,4,Drive.VARIABLE,null,0,rpm); }
+    public MachineDuty withBaseSpeed(double rpm) { return new MachineDuty(flow,head,polytropicHead,power,poles,drive,steam,exhaust,rpm); }
     /** A shape whose kind has no design point. */
     public static final MachineDuty NONE = new MachineDuty(0, 0, 0, 0, 0, Drive.FIXED, null, 0);
 
@@ -68,7 +75,7 @@ public record MachineDuty(double flow, double head, double polytropicHead, doubl
 
     public MachineDuty {
         Objects.requireNonNull(drive, "drive");
-        for (double v : new double[]{flow, head, polytropicHead, power, exhaust})
+        for (double v : new double[]{flow, head, polytropicHead, power, exhaust, baseSpeed})
             if (!Double.isFinite(v) || v < 0) throw new IllegalArgumentException("A design point's values are finite and not negative, not " + v);
         if (poles != 0 && !POLES.contains(poles)) throw new IllegalArgumentException("An electric machine has 2, 4, 6 or 8 poles, not " + poles);
     }
@@ -105,7 +112,7 @@ public record MachineDuty(double flow, double head, double polytropicHead, doubl
 
     /** An electric machine's synchronous speed at 50 Hz, rpm (3000, 1500, 1000, 750); 0 without poles. */
     public double speed() {
-        return poles == 0 ? 0 : 6000.0 / poles;
+        return baseSpeed > 0 ? baseSpeed : poles == 0 ? 0 : 6000.0 / poles;
     }
 
     /** Whether a turbine exhausts to a condenser. */
@@ -115,19 +122,19 @@ public record MachineDuty(double flow, double head, double polytropicHead, doubl
 
     /** This design point with {@code value} poles. */
     public MachineDuty withPoles(int value) {
-        return new MachineDuty(flow, head, polytropicHead, power, value, drive, steam, exhaust);
+        return new MachineDuty(flow, head, polytropicHead, power, value, drive, steam, exhaust,baseSpeed);
     }
 
     /** This design point with drive {@code value}. */
     public MachineDuty withDrive(Drive value) {
-        return new MachineDuty(flow, head, polytropicHead, power, poles, value, steam, exhaust);
+        return new MachineDuty(flow, head, polytropicHead, power, poles, value, steam, exhaust,baseSpeed);
     }
 
     /** This turbine's design point at inlet class {@code value}, its exhaust lowered to the highest of {@link #EXHAUSTS} at most half the inlet where it stood above. */
     public MachineDuty withSteam(Steam value) {
         double e = exhaust;
         if (e > value.pressure / 2) for (double x : EXHAUSTS) if (x <= value.pressure / 2) e = x;
-        return new MachineDuty(flow, head, polytropicHead, power, poles, drive, value, e);
+        return new MachineDuty(flow, head, polytropicHead, power, poles, drive, value, e,baseSpeed);
     }
 
     /** The R10 preferred numbers (ISO 3: 1, 1.25, 1.6, 2, 2.5, 3.15, 4, 5, 6.3, 8 in each decade) between {@code min} and {@code max}, both ends included. */

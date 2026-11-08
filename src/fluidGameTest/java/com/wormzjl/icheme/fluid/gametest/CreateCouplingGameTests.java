@@ -3,6 +3,8 @@ package com.wormzjl.icheme.fluid.gametest;
 import com.wormzjl.icheme.registry.ModBlocks;
 import com.wormzjl.icheme.runtime.fluid.FluidDeviceSpec;
 import com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology;
+import com.wormzjl.icheme.runtime.fluid.ShaftTrains;
+import com.wormzjl.icheme.runtime.fluid.ShaftUnit;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.EquipmentShape.Role;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
@@ -68,7 +70,7 @@ public final class CreateCouplingGameTests {
             var world = plant.world;
             String[] failure = {null};
             long[] ids = new long[3];
-            BlockPos[] coupling = {null}, motor = {null};
+            BlockPos[] coupling = {null}, motor = {null}, gearOrigin = {null};
             var sequence = helper.startSequence();
             try {
                 plant.hold();
@@ -114,6 +116,7 @@ public final class CreateCouplingGameTests {
                 if (gear == null) throw new IllegalStateException("no gearbox heading faces the pump's driven end " + d);
                 var origin = pumpShaft.subtract(new BlockPos(fast.block().x(), fast.block().y(), fast.block().z()));
                 var gearbox = plant.place(gear, origin.getX() - plant.base.getX(), origin.getY() - plant.base.getY(), origin.getZ() - plant.base.getZ());
+                gearOrigin[0] = gearbox.origin();
                 // The slow end: a shaft block, the coupling facing away (Create's side out), Create's creative motor beyond it.
                 var e = Direction.fromDelta(slow.dx(), slow.dy(), slow.dz());
                 var slowShaft = at(gearbox.origin(), slow.block());
@@ -133,6 +136,14 @@ public final class CreateCouplingGameTests {
                 failure[0] = "build: " + ex;
             }
             if (failure[0] == null) {
+                // Auto is an explicit selection; new constructed gearboxes start at output/input = 4.
+                sequence = sequence.thenWaitUntil(() -> helper.assertTrue(world.shafts().unitAt(position(level, gearOrigin[0])) != null,
+                        "Waiting for the gearbox registration")).thenExecute(() -> {
+                    var unit = world.shafts().unitAt(position(level, gearOrigin[0]));
+                    helper.assertTrue(unit.settings().ratio() == 4, "A new gearbox starts with ratio 4");
+                    var settings = unit.settings();
+                    world.shafts().queue(new ShaftTrains.Configure(unit.id(), new ShaftUnit.Settings(settings.running(), settings.mode(), settings.setPoint(), settings.powerLimit(), 0)));
+                });
                 // The pump delivers at its geared speed, and Create's network carries the coupling's stress.
                 sequence = sequence.thenWaitUntil(() -> {
                     var view = world.view(ids[1]);

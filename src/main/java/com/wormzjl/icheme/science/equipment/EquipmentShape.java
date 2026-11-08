@@ -52,9 +52,16 @@ import java.util.Objects;
  * trickle-bed reactor's effluent on the sides its design leaves free ({@link #outlets}); 0 for every other shape.
  */
 public record EquipmentShape(Kind kind, double diameter, double tangentLength, Orientation orientation, Heading front, int support,
-                             @Nullable ColumnTrays trays, List<Connection> connections, ProcessUnit.Bank bank, boolean boot, int outlet, TowerBank towerBank, MachineDuty duty) {
+                             @Nullable ColumnTrays trays, List<Connection> connections, ProcessUnit.Bank bank, boolean boot, int outlet, TowerBank towerBank, MachineDuty duty, ExchangerType exchangerType) {
+    public EquipmentShape(Kind kind, double diameter, double tangentLength, Orientation orientation, Heading front, int support,
+                          @Nullable ColumnTrays trays, List<Connection> connections, ProcessUnit.Bank bank, boolean boot, int outlet, TowerBank towerBank, MachineDuty duty) {
+        this(kind,diameter,tangentLength,orientation,front,support,trays,connections,bank,boot,outlet,towerBank,duty,ExchangerType.STANDARD);
+    }
+    public EquipmentShape withExchangerType(ExchangerType value) {
+        return new EquipmentShape(kind,diameter,tangentLength,orientation,front,support,trays,connections,bank,boot,outlet,towerBank,duty,value);
+    }
     public EquipmentShape withTowerBank(TowerBank value) {
-        return new EquipmentShape(kind,diameter,tangentLength,orientation,front,support,trays,connections,bank,boot,outlet,value,duty);
+        return new EquipmentShape(kind,diameter,tangentLength,orientation,front,support,trays,connections,bank,boot,outlet,value,duty,exchangerType);
     }
     public com.wormzjl.icheme.science.fluid.network.CoolingTower coolingTower() {
         return kind==Kind.INDUCED_DRAFT_COOLING_TOWER
@@ -376,7 +383,7 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
      */
     public EquipmentShape withDuty(MachineDuty value) {
         var design = UnitDesign.of(kind);
-        return new EquipmentShape(kind, design.size(value), design.length(value), orientation, front, support, trays, connections, bank, boot, outlet, towerBank, value);
+        return new EquipmentShape(kind, design.size(value), design.length(value), orientation, front, support, trays, connections, bank, boot, outlet, towerBank, value, exchangerType);
     }
 
     /**
@@ -411,7 +418,7 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
 
     /** This drum with {@code connections} instead of its own. */
     public EquipmentShape withConnections(List<Connection> connections) {
-        return new EquipmentShape(kind, diameter, tangentLength, orientation, front, support, trays, connections, bank, boot, outlet, towerBank, duty);
+        return new EquipmentShape(kind, diameter, tangentLength, orientation, front, support, trays, connections, bank, boot, outlet, towerBank, duty, exchangerType);
     }
 
     /** A column: its bottoms leave through its skirt to the front (the owner leaves columns alone, 2026-10-25). */
@@ -534,6 +541,8 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
     }
 
     public EquipmentShape {
+        Objects.requireNonNull(exchangerType, "exchangerType");
+        if (kind != Kind.EXCHANGER && exchangerType != ExchangerType.STANDARD) throw new IllegalArgumentException("Only exchangers have a crossflow configuration");
         Objects.requireNonNull(kind, "kind");
         Objects.requireNonNull(orientation, "orientation");
         Objects.requireNonNull(front, "front");

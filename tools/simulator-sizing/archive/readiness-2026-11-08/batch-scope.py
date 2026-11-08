@@ -1,0 +1,30 @@
+from pathlib import Path
+p=Path('documentation/2026-11-06-simulator-sizing/IMPLEMENTATION_REVIEW.md')
+s=p.read_text();s+='''17. Final consolidation: `LineToolSession` owns interaction; `LineLaying` owns all commands/previews; `LineLayout` merges both endpoints; `LinePlacement` owns admission/permissions/inventory; `LinePieces` owns cross-cell socket lead collision/selection. Fluid and conduit backends only own medium facts. There is no parallel cable command engine.
+18. The DCS is two blocks tall with one lower-half identity/menu/socket. Existing one-block consoles wait for clear upper space without moving facts. All operator screens retain the player's GUI scale and use viewport scrolling/paging.
+19. Constructor nozzle controls join its main door. Sensor hover shows coordinates and attached EQ ID, without a dimension. Motor/pump/generator sizing displays design RPM; retained pole fields are not exposed as design selectors.
+20. `EquipmentServices` owns support-mounted cases and both socket datums. Rotating DATA is on the shared shaft-train side, FE opposite; small cases stay compact, larger DATA/FE cases match. Case/cover materials inherit equipment BODY paint. Native geometry feeds collision, constructor previews and drawings.
+21. `EquipmentInstruments` owns manual drum/sphere/tank mounts and factory thermal/tower probes. Reinforced short metallic leads join facet-conforming textured H/V baselines; the sphere/vertical drum head arrangements and exchanger probe/nozzle sizes use those owners. Rear future-service pads remain clear. Both towers have factory level instruments.
+22. `BuiltInInputs` exposes accepted internal channel IDs through one C1 and cached column assembly members. Bounded saved column probe state retains total-feed mass basis on reload; unavailable V3 circulating streams/air properties are not fabricated. No column energy/duty solver redesign was made.
+'''
+p.write_text(s)
+p=Path('documentation/2026-11-06-simulator-sizing/PIPE_FRAMEWORK_REVIEW.md')
+p.write_text('''# Pipe framework integration review
+
+- Scope: the owner's pipe/data/power consolidation requirement, including every pipe-related guide entry. The original 838-entry applicability matrix and owning-layer notes are retained in canonical local evidence; historical source readers are under `tools/simulator-sizing/archive/late-integration-2026-11-08/pipe-guide-audit/`.
+- Expected: identical placement decisions for fluid, DATA and FE wherever the medium does not force a difference. Off-centre sockets, rack lanes, occupied equipment, endpoint edits, picking, collision, open-end marks and refusal feedback must agree in preview and server commands.
+- Earlier code shared the route kernel but still owned duplicate client sessions/commands and missed conduit end marks, collision and some socket-lead cells. Helper reuse alone did not satisfy the requested approach.
+- Current command path: `LineToolSession` → `LineLaying.search/execute` → `LineAnchors`/`LineLayout`/`LinePlacement` → `LineBackend`. `LineNetwork` uses one bounded/correlated `lines-1` protocol. The server rechecks a supplied route; it never searches.
+- Shared owners cover use/cancel/pending replies, target/face/lane resolution, retained-host merge, A*, lead preflight, occupied-cell reservations, permission/inventory admission, physical edits, derived lead blocks, collision/picking, open-end marks, ghost/HUD and refresh packets.
+- Necessary differences: fluid uses queued process registrations/ledger joints and variable bore/paint; conduits use UUID structural bindings, fixed 0.125 m steel housing and DATA/standard FE networks. These differences remain backends, not alternate admission or transaction owners.
+- Fresh readiness checks caught a mutable `BlockPos` cursor collected before use. Immutable materialisation fixes every crossed-cell walk in lead collision, lead preflight and instrument clearance. Existing line contract tests reproduced the skipped cells; a new fresh-server instrument check covers an obstruction in the first crossed cell.
+- Saved cable endpoint facts are not rerouted or deleted. Derived lead copies rebuild. Sensor removal retires its connector while the built cable remains an open end. Full unrelated equipment cells remain reserved even where the drawn skirt is hollow.
+- Native drawing/collision contracts and test evidence are recorded in MERGE_REVIEW. Software renders are not evidence of live Minecraft shading or chunk delivery; owner acceptance remains separate.
+- No new fact field, geometry datum or protocol was introduced by the cursor correction. No second full integration lane/campaign was run.
+''')
+p=Path('CHANGELOG.md');s=p.read_text();s=s.replace('control-view allocation `68294ece`; batch','control-view allocation `68294ece`, shared line framework `3d09e6188`, operator controls `c15dfcecc`, native service/instrument integration `616fe7a1c`, total-feed readings `fd5603249`, final translations `429fe26b1`; batch')
+s=s.replace('explicit level-control guidance and all four translations;','explicit level-control guidance, one shared line command/session/collision framework, a two-block DCS, preserved GUI scale, main-door nozzles and RPM design controls, compact support-mounted equipment cases with matching paint, protected top/factory probes and shared surface conduit routes, accepted built-in/column-member telemetry, crossed-cell clearance fixes and all four translations;')
+p.write_text(s)
+p=Path('documentation/INDEX.md');s=p.read_text().replace('| Sizing, connected control/FE, industrial rendering and protected removal |','| Sizing, shared lines, control/FE, native interfaces and protected removal |');p.write_text(s)
+p=Path('tools/INDEX.md');s=p.read_text().replace('| Sizing, connected control, conduit stress and equipment render probes | `2026-11-06-simulator-sizing` | Retained since 2026-11-07 |','| Sizing, shared-line audits, control/FE and equipment probes | `2026-11-06-simulator-sizing` | Retained since 2026-11-08 |');p.write_text(s)
+print('Updated batch scope, line ownership review, changelog and index rows.')

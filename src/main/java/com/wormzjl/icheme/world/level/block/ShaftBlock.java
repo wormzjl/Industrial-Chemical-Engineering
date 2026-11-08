@@ -21,7 +21,7 @@ import java.util.Map;
  * pixels, shows its train's torque at three times the real shaft (2 to 8 px: {@code ProcessUnit.shaftPixels}); the
  * train sets it (W3), a placed shaft starts at {@link #DEFAULT_SIZE}. No block entity: the train lives in the engine.
  */
-public final class ShaftBlock extends RotatedPillarBlock {
+public class ShaftBlock extends RotatedPillarBlock {
     public static final MapCodec<ShaftBlock> CODEC = simpleCodec(ShaftBlock::new);
     /** The drawn diameter, px. */
     public static final IntegerProperty SIZE = IntegerProperty.create("size", 2, 8);

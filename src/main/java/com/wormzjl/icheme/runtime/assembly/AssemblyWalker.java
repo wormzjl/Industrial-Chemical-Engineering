@@ -99,7 +99,7 @@ public final class AssemblyWalker implements PortGraph {
             shells.put(o, shell);
             var shape = shell.shape();
             return new Unit(o, shape.kind(), shape.orientation().horizontal(), shape.boot(), shape.nozzles().stream().map(EquipmentShape.Nozzle::role).toList(),
-                    new Size(shape.diameter(), shape.tangentLength(), shape.bank()));
+                    new Size(shape.diameter(), shape.tangentLength(), shape.bank(),shape.exchangerType()));
         });
     }
 

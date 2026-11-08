@@ -158,14 +158,119 @@ class ShaftCouplingTest {
         return new PhysicalFluidTopology.Position(EventPathWorld.DIM, x, 64, 0);
     }
 
+    @Test
+    void newlyRegisteredMotorAndAutoGearboxWaitForPowerIncludingStartAndReset() {
+        var rig = new Rig();
+        var ledger = new WorldTopologyLedger(WorldTopologyLedger.Snapshot.empty(EventPathWorld.CATALOG));
+        var trains = new ShaftTrains(ledger, device -> null, rig.coordinator);
+        var stores = new ElectricStores(ledger, device -> null, rig.coordinator, () -> ElectricStores.Settings.DEFAULT);
+        trains.electric(stores);
+        var kind = com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR;
+        var gearbox = com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.GEARBOX;
+        var fixed = com.wormzjl.icheme.science.equipment.MachineDuty.Drive.FIXED;
+        var none = com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE;
+        trains.queue(new ShaftTrains.Put(cell(0), kind, id -> new ShaftUnit(id, kind, cell(0), 0,
+                List.of(new ShaftUnit.End(cell(0), 1, 0, 0, true)), 0, 11e3, 2950, 2, fixed, ShaftUnit.Settings.DEFAULT, none, null)));
+        trains.queue(new ShaftTrains.Put(cell(1), com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.SHAFT, id -> ShaftUnit.shaft(id, cell(1), 0)));
+        trains.queue(new ShaftTrains.Put(cell(2), gearbox, id -> new ShaftUnit(id, gearbox, cell(2), 0,
+                List.of(new ShaftUnit.End(cell(2), -1, 0, 0, false), new ShaftUnit.End(cell(2), 1, 0, 0, true)),
+                0, 0, 0, 0, fixed, ShaftUnit.Settings.DEFAULT, none, null)));
+        trains.apply();
+        long motor = trains.unitAt(cell(0)).id(), gear = trains.unitAt(cell(2)).id();
+        assertFalse(stores.powered(motor), "a newly registered consumer has no legacy free-power exemption");
+        assertEquals(0, trains.view(motor).speed());
+        assertEquals(0, trains.view(gear).speed());
+        trains.decide();
+        assertEquals(0, trains.view(motor).speed());
+        assertEquals(0, trains.view(gear).speed());
+        trains.queue(new ShaftTrains.Configure(motor, new ShaftUnit.Settings(false, com.wormzjl.icheme.science.machine.ShaftTrain.Mode.SPEED, 0, 0, 0)));
+        trains.apply();
+        trains.queue(new ShaftTrains.Configure(motor, ShaftUnit.Settings.DEFAULT));
+        trains.apply();
+        assertEquals(0, trains.view(motor).speed(), "Run arms the driver without inventing power");
+        ledger.shaft(ledger.shaft(motor).withTrip(com.wormzjl.icheme.science.machine.ShaftTrain.Trip.OVERLOAD));
+        trains.queue(new ShaftTrains.Reset(motor));
+        trains.apply();
+        assertEquals(none, trains.unit(motor).trip());
+        assertEquals(0, trains.view(motor).speed(), "Reset also waits for a power-backed step");
+    }
+
+    @Test void anUnloadedFullMotorNeedsALiveFeedAndKeepsItsOlderLargerSavedBuffer(){
+        var rig=new Rig();var ledger=new WorldTopologyLedger(WorldTopologyLedger.Snapshot.empty(EventPathWorld.CATALOG));
+        long id=ledger.reserve(1);
+        var kind=com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR;
+        var trip=com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE;
+        ledger.shaft(new ShaftUnit(id,kind,cell(0),0,List.of(new ShaftUnit.End(cell(0),1,0,0,true)),0,11e3,3000,2,
+                com.wormzjl.icheme.science.equipment.MachineDuty.Drive.VARIABLE,ShaftUnit.Settings.DEFAULT,trip,null));
+        double saved=com.wormzjl.icheme.science.machine.ElectricStore.capacity(com.wormzjl.icheme.science.machine.ElectricStore.motorDraw(11e3,2,true));
+        ledger.stores(Map.of(id,new com.wormzjl.icheme.science.machine.ElectricStore.Facts(saved,true)));
+        var stores=new ElectricStores(ledger,device->null,rig.coordinator,()->ElectricStores.Settings.DEFAULT);
+        boolean[] live={false};stores.supply(motor->live[0]);
+        var trains=new ShaftTrains(ledger,device->null,rig.coordinator);trains.electric(stores);
+        trains.host(ShaftTrains.Host.NONE);trains.decide();
+        assertEquals(0,trains.view(id).speed(),"Reloading a charged buffer does not invent a supply");
+        assertEquals(saved,stores.view(id).joules(),0,"A reduced buffer limit never deletes saved energy");
+        stores.receive(id,Integer.MAX_VALUE,true);
+        assertFalse(stores.restart(id),"An FE simulation cannot invent a supply");
+        live[0]=true;
+        for(int tick=1;tick<=300;tick++){
+            rig.epoch[0]=tick;rig.coordinator.tick();
+            assertEquals(0,stores.receive(id,Integer.MAX_VALUE,true),"A full buffer needs no transfer; its connected source still supplies it");
+            if(tick%100==0){stores.cadence();trains.cadence();}trains.decide();
+        }
+        assertTrue(trains.view(id).speed()>0,"An unloaded, full motor stays powered by the connected source");
+        assertEquals(0,trains.view(id).electricPower());
+        assertEquals(saved,stores.view(id).joules(),0,"Supply observation cannot change stored energy");
+        live[0]=false;
+        for(int tick=301;tick<=401;tick++){
+            rig.epoch[0]=tick;rig.coordinator.tick();
+            if(tick%100==0){stores.cadence();trains.cadence();}trains.decide();
+        }
+        assertEquals(0,trains.view(id).speed(),"Removing the live feed stops even a zero-load motor");
+        assertEquals("TRIPPED: NO POWER",trains.view(id).status());
+        assertEquals(saved,stores.view(id).joules(),0);
+        assertEquals(trip,ledger.shaft(id).trip(),"A feed interruption never latches a protection trip");
+    }
+
+    @Test
+    void turbineHasInternalAdmissionControlWithoutAnAccessoryAndStopClosesIt() {
+        var rig = new Rig();
+        var ledger = new WorldTopologyLedger(WorldTopologyLedger.Snapshot.empty(EventPathWorld.CATALOG));
+        var trains = new ShaftTrains(ledger, device -> null, rig.coordinator);
+        var kind = com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.STEAM_TURBINE;
+        var none = com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE;
+        trains.queue(new ShaftTrains.Put(cell(0), kind, id -> new ShaftUnit(id, kind, cell(0), 0,
+                List.of(new ShaftUnit.End(cell(0), 1, 0, 0, true)), 1, 1e6, 6000, 0,
+                com.wormzjl.icheme.science.equipment.MachineDuty.Drive.FIXED, ShaftUnit.Settings.DEFAULT, none, null)));
+        trains.apply();
+        var base = line();
+        var graph = new PassiveNetwork(base.reservoirs(), List.of(base.pipes().getFirst().withControl(
+                new FlowControl.Turbine(com.wormzjl.icheme.science.machine.SteamTurbine.rated(1e6)))));
+        var plan = trains.plans(1, graph).get(1L);
+        assertNotNull(plan, "no external speed sensor or valve is required");
+        assertEquals(ShaftPlan.Kind.GOVERNOR, plan.kind());
+        assertTrue(plan.value() > 0);
+        long turbine = trains.unitAt(cell(0)).id();
+        trains.decide();
+        assertEquals(0, trains.view(turbine).speed(), "open admission without booked steam work does not start the shaft");
+        assertEquals(none, trains.view(turbine).trip());
+        trains.queue(new ShaftTrains.Configure(turbine, new ShaftUnit.Settings(false, com.wormzjl.icheme.science.machine.ShaftTrain.Mode.SPEED, 0, 0, 0)));
+        trains.apply();
+        assertEquals(0, trains.plans(1, graph).get(1L).value(), "Stop closes internal admission");
+        trains.queue(new ShaftTrains.Configure(turbine, ShaftUnit.Settings.DEFAULT));
+        trains.apply();
+        assertTrue(trains.plans(1, graph).get(1L).value() > 0, "Run rearms admission");
+        assertEquals(0, trains.view(turbine).speed(), "rearming still waits for fluid work");
+    }
+
     /**
      * W5 (build plan section 7.4): an 11 kW motor drives the pump at node 1 through a shaft. Built from W5 on, its store
      * starts empty, so it stands (NO POWER) until its port is filled to one slice of its rated draw; it then runs, books
-     * its draw at its train's steps and on the cadence, runs short, stops (NO POWER, never saved as its trip) and restarts
+     * its draw at its train's steps and on the cadence, stops on feed loss (NO POWER, never saved as its trip) and restarts
      * by itself on a refill.
      */
     @Test
-    void aMotorRunsShortTripsNoPowerAndRestartsOnARefill() {
+    void aMotorStopsOnLostFeedWithEnergyLeftAndRestartsWhenTheFeedReturns() {
         var rig = new Rig();
         var ledger = new WorldTopologyLedger(WorldTopologyLedger.Snapshot.empty(EventPathWorld.CATALOG));
         long first = ledger.reserve(3);
@@ -183,7 +288,7 @@ class ShaftCouplingTest {
         trains.host(ShaftTrains.Host.NONE);
         rig.coordinator.register(new IslandCoordinator.Snapshot(1, 0, line(), new IslandClock.Snapshot(0, 0, 0, 100), Optional.empty(), "READY"), model);
         long motor = first;
-        double rated = com.wormzjl.icheme.science.machine.ElectricStore.motorDraw(11e3, 2, false);
+        double rated = com.wormzjl.icheme.science.machine.ElectricStore.motorDraw(11e3, 2, true);
         int[] feed = {0};
         Runnable tick = () -> {
             rig.epoch[0]++;
@@ -206,24 +311,26 @@ class ShaftCouplingTest {
         assertEquals(stores.receive(motor, Integer.MAX_VALUE, true), (int) Math.floor(2 * rated * .05 / 2.5 + 1e-9), "the port takes twice the rated draw per tick");
         for (int i = 0; i < 1000 && !trains.view(motor).status().equals("RUNNING"); i++) tick.run();
         assertEquals("RUNNING", trains.view(motor).status());
-        assertTrue(stores.view(motor).joules() >= com.wormzjl.icheme.science.machine.ElectricStore.restart(rated) - 2 * rated * .05 * 100, "it restarted near one slice of rated draw");
+        assertEquals(10*rated,stores.view(motor).capacity(),1e-9,"Only two presentation periods of motor buffer");
         for (int i = 0; i < 600; i++) tick.run();
         assertEquals(1, trains.share(1), 1e-9, "the pump turns at its design speed");
         double draw = trains.view(motor).electricPower();
         assertTrue(draw > 1e3 && draw < rated, "it draws the pump's shaft power over its efficiency: " + draw);
-        double full = com.wormzjl.icheme.science.machine.ElectricStore.capacity(rated);
-        assertTrue(stores.view(motor).joules() >= full - draw * com.wormzjl.icheme.science.machine.ElectricStore.SLICE_SECONDS, "the port kept it full within a slice's booking: " + stores.view(motor).joules() + " of " + full);
-        // The feed stops: the store drains at the draw, then the motor stops.
+        double full = stores.view(motor).capacity();
+        assertTrue(stores.view(motor).joules() >= full - draw * 5, "the port kept it full within a cadence's booking");
+        // The feed stops: the next cadence stops the drive without draining the remaining buffer.
         feed[0] = 0;
         double before = stores.view(motor).joules();
         long start = rig.epoch[0];
-        for (int i = 0; i < 20_000 && !trains.view(motor).status().equals("TRIPPED: NO POWER"); i++) tick.run();
+        for (int i = 0; i < 102 && !trains.view(motor).status().equals("TRIPPED: NO POWER"); i++) tick.run();
         assertEquals("TRIPPED: NO POWER", trains.view(motor).status());
-        assertEquals(0, stores.view(motor).joules(), "it booked what was left");
-        double seconds = (rig.epoch[0] - start) / 20.0;
-        assertEquals(before / draw, seconds, Math.max(10, .25 * before / draw), "it ran as long as its store held at its draw");
+        assertTrue(stores.view(motor).joules()>0,"Unplugging retains the remaining joules");
+        assertTrue(stores.view(motor).joules()<=before,"No energy is created at disconnection");
+        assertTrue(rig.epoch[0]-start<=102,"The drive stops by the next scheduled decision");
+        double retained=stores.view(motor).joules();
         for (int i = 0; i < 300; i++) tick.run();
         assertEquals(0, trains.share(1), "the pump stands without power");
+        assertEquals(retained,stores.view(motor).joules(),1e-9,"Stored energy cannot restart an unplugged motor");
         assertEquals(trip, ledger.shaft(motor).trip());
         // A refill restarts it by itself (D6), no reset.
         feed[0] = Integer.MAX_VALUE;

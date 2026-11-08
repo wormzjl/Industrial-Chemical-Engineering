@@ -1,0 +1,70 @@
+{
+  "parent": "minecraft:block/block",
+  "textures": {
+    "particle": "icheme:block/pump_casting",
+    "case": "icheme:block/pump_casting",
+    "metal": "icheme:block/equipment_steelwork",
+    "side": "icheme:block/control_panel_side",
+    "rear": "icheme:block/control_panel_rear",
+    "door": "icheme:block/control_panel_service",
+    "front": "icheme:block/dcs_front",
+    "bezel": "icheme:block/dcs_bezel",
+    "keyboard": "icheme:block/dcs_keyboard",
+    "label": "icheme:block/dcs_label",
+    "alarms": "icheme:block/dcs_alarms"
+  },
+  "elements": [
+    {
+      "name": "steel plinth",
+      "from": [1.0, 0.0, 2.0],
+      "to": [15.0, 2.0, 14.0],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" }
+      }
+    },
+    {
+      "name": "lower service cabinet",
+      "from": [2.0, 2.0, 7.0],
+      "to": [14.0, 14.0, 14.0],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#door" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#side" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#rear" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#side" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#case" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#case" }
+      }
+    },
+    {
+      "name": "worktop edge",
+      "from": [0.5, 14.0, 1.0],
+      "to": [15.5, 15.0, 15.0],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" }
+      }
+    },
+    {
+      "name": "operator worktop",
+      "from": [0.5, 15.0, 1.0],
+      "to": [15.5, 16.0, 15.0],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#case" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#case" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#case" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#case" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#case" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#case" }
+      }
+    }
+  ]
+}

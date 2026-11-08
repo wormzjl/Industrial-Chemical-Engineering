@@ -50,9 +50,11 @@ final class FluidFacts {
      *  {@code TURBINE}, the control valve source {@code SHAFT_SPEED}, and the world's shaft units (after the column units).
      *  11 (batch 2026-11-03-rotating-machinery, W5): the world's electric stores (after the shaft units), an air cooler side's
      *  fans, the shaft trip {@code NO_POWER} (never written: it is not latched).
-     *  12 (batch 2026-11-03-rotating-machinery, W10b): the pumps' health (after the electric stores), only pumps below 1. */
-    static final int SCHEMA=12;
-    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 12. */
+     *  12 (batch 2026-11-03-rotating-machinery, W10b): the pumps' health (after the electric stores), only pumps below 1.
+     *  13 (batch 2026-11-06-simulator-sizing): a heat unit's exchanger configuration, absent means Standard.
+     *  14 (the same batch): a shaft unit's explicit VFD base speed, absent means its legacy pole-derived speed. */
+    static final int SCHEMA=14;
+    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 14. */
     private static final Map<Class<?>,Map<String,String>> ALIASES=Map.of();
     private static final int MAXIMUM_FIELDS=256,MAXIMUM_ITEMS=1<<22,MAXIMUM_TEXTS=1<<20,MAXIMUM_ARRAY=4096,MAXIMUM_CHANNELS=1<<20;
     /** The cadence an island rebuilt from facts starts at (ticks): the shortest the clock allows, as after a merge. */
@@ -421,7 +423,7 @@ final class FluidFacts {
     private static void heatUnit(Fields f,HeatUnit h) {
         var c=h.control();
         f.name(h.unit()).name(h.side()).f64(h.area()).count(h.partner()).record(q->q.name(c.mode()).f64(c.target()).f64(c.lowLimit()).f64(c.share())).f64(h.transitJoule())
-                .count(h.fanCount());
+                .count(h.fanCount()).name(h.exchangerType());
     }
     private static HeatUnit heatUnit(Record f) {
         var unit=f.name(com.wormzjl.icheme.science.equipment.HeatSides.Unit.class,null);var side=f.name(com.wormzjl.icheme.science.equipment.HeatSides.Side.class,null);double area=f.f64(0);long partner=f.count(0);
@@ -432,7 +434,8 @@ final class FluidFacts {
         long fans=f.count(0);
         required(unit,f,"heat unit");required(side,f,"heat unit side");
         if(fans>HeatUnit.MAXIMUM_FANS)throw f.invalid("heat unit fans "+fans);
-        return valid(f,"heat unit",()->new HeatUnit(unit,side,area,partner,control,transit,(int)fans));
+        var type=f.name(com.wormzjl.icheme.science.equipment.ExchangerType.class,com.wormzjl.icheme.science.equipment.ExchangerType.STANDARD);
+        return valid(f,"heat unit",()->new HeatUnit(unit,side,area,partner,control,transit,(int)fans,type));
     }
     private static void geometry(Fields f,com.wormzjl.icheme.science.fluid.network.VesselGeometry g){f.name(g.form()).f64(g.capacity()).f64(g.height()).f64(g.diameter()).f64(g.length()).f64(g.bootDiameter()).f64(g.bootLength());}
     private static com.wormzjl.icheme.science.fluid.network.VesselGeometry geometry(Record f){var form=f.name(com.wormzjl.icheme.science.fluid.network.VesselGeometry.Form.class,null);double capacity=f.f64(0),height=f.f64(0),d=f.f64(0),l=f.f64(0),bd=f.f64(0),bl=f.f64(0);return valid(f,"vessel geometry",()->new com.wormzjl.icheme.science.fluid.network.VesselGeometry(form,capacity,height,d,l,bd,bl));}
@@ -440,7 +443,7 @@ final class FluidFacts {
         switch(control) {
             case FlowControl.Passive ignored->f.text("passive").f64(0).f64(0).bool(false).f64(0);
             case FlowControl.Pump pump->f.text("pump").f64(pump.requestedVolumeFlow()).f64(pump.maximumAddedPressure()).bool(pump.enabled()).f64(0);
-            case FlowControl.Compressor compressor->f.text("compressor").f64(compressor.requestedVolumeFlow()).f64(compressor.maximumPressureRatio()).bool(compressor.enabled()).f64(0);
+            case FlowControl.Compressor compressor->f.text("compressor").f64(compressor.requestedVolumeFlow()).f64(compressor.maximumPressureRatio()).bool(compressor.enabled()).f64(0).f64(compressor.setFlow()).f64(compressor.setPressure());
             // Schema 10 (W3): a casing on its curve, its set points, switch and law; its speed is its train's, a slice input.
             case FlowControl.Machine machine->{var law=machine.law();
                 f.text("machine").f64(machine.setFlow()).f64(machine.setPressure()).bool(machine.enabled()).f64(0)
@@ -457,7 +460,7 @@ final class FluidFacts {
         return valid(f,"control",()->switch(kind) {
             case "passive"->new FlowControl.Passive();
             case "pump"->new FlowControl.Pump(flow,limit,enabled);
-            case "compressor"->new FlowControl.Compressor(flow,limit,enabled);
+            case "compressor"->new FlowControl.Compressor(flow,limit,enabled,f.f64(0),f.f64(0));
             case "pressure_valve"->new FlowControl.PressureValve(target);
             case "control_valve"->{var source=f.name(FlowControl.ValveSource.class,null);var sensor=f.list(List.of(),FluidFacts::uuid);long revision=f.i64(0);if(sensor.size()>1)throw f.invalid("multiple control sources");double mass=f.f64(1),volume=f.f64(.01);yield new FlowControl.ControlValve(source,target,mass,volume,sensor.isEmpty()?null:sensor.getFirst(),revision);}
             case "machine"->{var law=f.record(null,q->{var type=q.text("");double rated=q.f64(0),head=q.f64(0),efficiency=q.f64(0),rpm=q.f64(0);
@@ -529,7 +532,8 @@ final class FluidFacts {
                 .doubles(held).list(Arrays.asList(s.enthalpy()),(q,row)->q.doubles(row)).i64(s.tableTick()).i64(s.applied()).f64(s.solvedCondenser())
                 .list(s.levels(),(q,l)->q.count(l.device()).i64(l.tick()).f64(l.held()).f64(l.rate()).f64(l.molarMass()))
                 .list(s.credits(),(q,c)->q.count(c.device()).i64(c.tick()).record(a->account(a,c.product())))
-                .f64(t.condenserWaterPerFeed()).f64(t.waterBelow()).doubles(t.airArea());
+                .f64(t.condenserWaterPerFeed()).f64(t.waterBelow()).doubles(t.airArea())
+                .record(q->{var p=s.probes();if(p!=null)q.f64(p.topPressure()).f64(p.topTemperature()).f64(p.bottomPressure()).f64(p.bottomTemperature()).f64(p.refluxPressure()).f64(p.refluxTemperature()).f64(p.refluxPerFeed()).f64(p.vapourPerFeed());});
     }
     /** A column unit's engine state as saved, or null where it does not validate. */
     private static ColumnUnit.State columnState(Record f) {
@@ -551,12 +555,13 @@ final class FluidFacts {
         double below=f.f64(Double.NaN);
         // The air condenser's surface per feed at each fan step (U2): a state written before it has no air the world models.
         var air=f.doubles(new double[0]);
+        var probes=f.record(null,q->{try{return new ColumnUnit.Probes(q.f64(0),q.f64(0),q.f64(0),q.f64(0),q.f64(0),q.f64(0),q.f64(-1),q.f64(-1));}catch(IllegalArgumentException invalid){return null;}});
         try {
             var kept=new boolean[held.length];for(int i=0;i<kept.length;i++)kept[i]=held[i]!=0;
             if(products.contains(null)||credits.contains(null))return null;
             var table=Double.isNaN(below)?new com.wormzjl.icheme.science.column.operation.SplitTable(axis,products,reboiler,pa,condenser,reference,kept,water)
                     :new com.wormzjl.icheme.science.column.operation.SplitTable(axis,products,reboiler,pa,condenser,reference,kept,water,below,air);
-            return new ColumnUnit.State(table,enthalpy,tableTick,applied,solved,levels,credits);
+            return new ColumnUnit.State(table,enthalpy,tableTick,applied,solved,levels,credits,probes);
         }catch(RuntimeException invalid){return null;}
     }
 

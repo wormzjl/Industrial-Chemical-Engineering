@@ -10,10 +10,20 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
   - **patch** (`0.x.y`) for a merge that contains fixes only.
 - The major version stays `0` until the owner declares a public release.
 - A work branch writes its entry under `[Unreleased]`; the merge moves it under a new version heading dated with the merge day.
-- One line per batch of work, with its main commits and the name of its batch folder in the local `documentation/` index (`documentation/INDEX.md`, not tracked).
+- One line per batch of work, with its main commits and the name of its batch folder in the local `documentation/` index (`documentation/INDEX.md`).
 - `0.1.0` is the state of `main` before this changelog existed. Its section was backfilled from `git log --first-parent main --date=short` since 2026-08-01. No git tags exist for these versions; they are identified by commit id (`0.1.0` = `3c27271`).
 
 ## [Unreleased]
+
+## [0.22.0] - 2026-11-08
+
+### Added
+
+- Simulator sizing and plant integration (sizing `6402aeb64`, crossflow `622e35bde`, gauge merge `0c5ce5224`, wired controls `47abf7bcb`, VFD/FE `2260953dd`, shared laying `a839f2c38`, motor supply `b7a90872e`, cable finish `7a6301da8`, workstation models `c45cea075`, translations `8a768d9d`, gate/tooling cleanup `db322f04f`, verified corrections `3515b1ff`, equipment protection `efa22cfe`, deconstruction translations `f13019d1`, client render detail `238c136b`, control/sensor finish `4682156e`, connected-control/junction fixes `76ad7889`, control translations `f6d02add`, control-view allocation `68294ece`, shared line framework `3d09e6188`, operator controls `c15dfcecc`, native service/instrument integration `616fe7a1c`, total-feed readings `fd5603249`, final translations `429fe26b1`, readiness fixes `050cd1098`; batch [2026-11-06-simulator-sizing](documentation/2026-11-06-simulator-sizing/README.md), prepared for owner-approved 0.22.0): scale-up-first Auto and constructor-style Manual sizing, a shared Standard/Low-dP crossflow exchanger family, local controller boxes and DCS over data cable, shared pipe/rack laying for data and standard-FE power conduits, six-faced creative RF, VFD demand control and native Create integration, powered inline movers, turbine admission regulation, optional tank gauge and safer access, industrial machinery/workstation models, unified nonlinear rotation, port/flange/texture fixes, GUI text/presentation fixes, Creative-only constructed-equipment breaking, permission-checked constructor deconstruction, restored raised casing nuts, optional client-only low polygon rendering, matching industrial control/sensor finishes, repaired off-center junction bodies, shell-mounted drum terminals, connected-only controller choices, visible instrument IDs, explicit level-control guidance, one shared line command/session/collision framework, a two-block DCS, preserved GUI scale, main-door nozzles and RPM design controls, compact support-mounted equipment cases with matching paint, protected top/factory probes and shared surface conduit routes, accepted built-in/column-member telemetry, crossed-cell clearance fixes and all four translations; investigation sources retained in `tools/simulator-sizing/`, with no test-only production code found.
+
+### Changed
+
+- Simulator-sizing consolidation review: socket geometry, cabinet shapes and line-tool helpers consolidated (`df24eb6ac`), the branch's new Java files formatted (`658861333`), three redundant tests and five probe prints archived to `tools/test-archive-2026-11-08/` (`da982f268`, `2414c4e3a`), GUI rules brought in line with the preserved GUI scale, `ControlService` split by duty into four package-private parts (`3efffdb2d`), a GameTest that drives a local controller end to end (`e4749cdb6`) (batch `2026-11-06-simulator-sizing`).
 
 ## [0.21.0] - 2026-11-05
 

@@ -50,7 +50,7 @@ static Prototype widget() {
 ## 2. A builder
 
 A class in `client/gui/common/` with no Minecraft classes. It may use `science.*`, `java.*`, `@Nullable` and the kit,
-except `KitDoor`, `KitWidgets`, `GuiCanvas`, `SkinButton`, `SkinField` and `WindowScale`, which hold Minecraft classes.
+except `KitDoor`, `KitWidgets`, `GuiCanvas`, `SkinButton` and `SkinField`, which hold Minecraft classes.
 The tools run with only the mod's classes, so a Minecraft import fails the render.
 
 - `KEY`: the keys' prefix under `gui.icheme.` (`ConstructorColumn.KEY`).
@@ -117,7 +117,6 @@ Worked example: `GaugeScreen` with `DialogColumns.gauge`.
 2. `init()`, in this order:
 
    ```java
-   WindowScale.apply(minecraft, this);
    var m = GuiCanvas.measure(font);
    var tallest = rows(false); // with its warning line, so the panel keeps its size while the player types
    int column = Column.place(tallest, 10, DialogColumns.TOP, WIDTH - 20, m, Column.Metrics.COMPACT).bounds().h();
@@ -130,7 +129,7 @@ Worked example: `GaugeScreen` with `DialogColumns.gauge`.
    door.place(leftPos, topPos);
    ```
 
-3. `removed()`: `super.removed()`, then `WindowScale.restore(minecraft)`.
+3. Nothing sets or restores the GUI scale: the screen keeps the player's (`fit-and-scale.md`).
 4. Each frame place the rows again for their texts, draw the door, take its hover, and draw it with `KitDoor.hint`.
    Pass the wheel, press, drag and release to `door`.
 5. A dialog has no `signature`. A key that changes a widget calls `rebuildWidgets()` itself (`switchDisplay`).
@@ -146,7 +145,8 @@ Worked example: `GaugeScreen` with `DialogColumns.gauge`.
 - `DeviceColumn.Input` is a long positional record, built in `FluidDeviceScreen`, `DeviceColumnTest` and
   `GuiPrototypes` (six times). A new field changes all of them; search first.
 - Rows with widgets come first, rows that follow the plant after them.
-- A page stays within 338 px (`fit-and-scale.md`). Each new line costs 11 px, each entry or button row 20.
+- Keep a page short: its door scrolls where the player's window is smaller (`fit-and-scale.md`). Each new line costs
+  11 px, each entry or button row 20.
 - `FluidDeviceScreen` and `ColumnCalculatorV3Screen` are written compactly, without spaces: match them there.
 - Gates: `DeviceColumnTest`, `FluidGuiConsistencyTest`. Prototype: `devicePage`, drawn with `device`.
 - A heat unit's Control page is `HeatControlColumn` with `HeatFlowsheet`, rendered by `HeatDiagramRender`.

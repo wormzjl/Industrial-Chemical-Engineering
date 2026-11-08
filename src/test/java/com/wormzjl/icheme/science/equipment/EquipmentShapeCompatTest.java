@@ -71,6 +71,10 @@ class EquipmentShapeCompatTest {
         shapes.add(EquipmentShape.unit(Kind.MOTOR, .75, 1, Heading.NORTH, 2).withDuty(MachineDuty.motor(4500, 6, MachineDuty.Drive.VARIABLE)));
         shapes.add(EquipmentShape.unit(Kind.GENERATOR, .75, 1, Heading.WEST, 0).withDuty(MachineDuty.generator(2000, 2)));
         shapes.add(EquipmentShape.unit(Kind.GEARBOX, .75, 1, Heading.EAST, 0).withDuty(MachineDuty.gearbox(5000)));
+        shapes.add(EquipmentShape.unit(Kind.EXCHANGER, 1.5, 6, Heading.EAST, 3).withExchangerType(ExchangerType.CROSSFLOW));
+        shapes.add(EquipmentShape.column(3, new ColumnTrays(20, 15, List.of(8), List.of(21), List.of(new ColumnTrays.Pumparound(8, 6)),
+                trimmed.withExchangers(new ColumnComponents.Exchangers(ExchangerType.CROSSFLOW, ExchangerType.CROSSFLOW, List.of(ExchangerType.CROSSFLOW)))),
+                Heading.NORTH, EquipmentShape.minimumSkirt(3)));
         return shapes;
     }
 
@@ -420,7 +424,10 @@ class EquipmentShapeCompatTest {
             old.remove("Duty");
             var read = EquipmentConstructorBlockEntity.readDesign(old, fresh, repair -> {
             });
-            assertEquals(design.duty(read.diameter(), read.tangentLength()), read.duty(), kind::name);
+            // Absence of Duty means the historical fixed-speed motor, not a new VFD default.
+            var legacy = kind == Kind.MOTOR ? MachineDuty.motor(read.diameter(), 4, MachineDuty.Drive.FIXED)
+                    : design.duty(read.diameter(), read.tangentLength());
+            assertEquals(legacy, read.duty(), kind::name);
         }
         assertTrue(checked > 60, "design points checked: " + checked);
     }
@@ -434,7 +441,7 @@ class EquipmentShapeCompatTest {
      * column's member counts; 7: a column's water trim count and its air-then-water condenser; 8: a machine's design
      * point).
      */
-    private static final int SHAPE_FIELDS = 8;
+    private static final int SHAPE_FIELDS = 10;
 
     /** A column's components as an image written before the member counts shows them. */
     private static final java.util.regex.Pattern COMPONENTS_BEFORE_UNITS = java.util.regex.Pattern.compile(
@@ -486,6 +493,13 @@ class EquipmentShapeCompatTest {
                     var expected = entry.getString("Expected");
                     if(!expected.contains("towerBank="))expected=expected.substring(0,expected.length()-1)+", towerBank=TowerBank[columns=1, rows=1]]";
                     expected = withUnits(expected);
+                    if (!expected.contains("exchangers=Exchangers[") && read.shape().trays() != null && read.shape().trays().components() != null) {
+                        var pattern = java.util.regex.Pattern.compile("(units=Units\\[condenser=\\d+, kettle=\\d+, coolers=\\[[0-9, ]*\\], trim=\\d+\\])\\]");
+                        var match = pattern.matcher(expected);
+                        var upgraded = new StringBuilder();
+                        while (match.find()) match.appendReplacement(upgraded, java.util.regex.Matcher.quoteReplacement(match.group(1) + ", exchangers=" + read.shape().trays().components().exchangers() + "]"));
+                        expected = match.appendTail(upgraded).toString();
+                    }
                     if (!expected.contains("duty=MachineDuty[")) {
                         // Shape fields 8: a machine saved before its design point takes its size's (decision A3); a
                         // condensing turbine is the steam turbine exhausting to a condenser (owner decision D5).
@@ -493,10 +507,13 @@ class EquipmentShapeCompatTest {
                         expected = expected.replace("kind=CONDENSING_TURBINE", "kind=STEAM_TURBINE");
                         var shape = read.shape();
                         var duty = shape.designed() ? UnitDesign.of(shape.kind()).duty(shape.diameter(), (int) shape.tangentLength()) : MachineDuty.NONE;
+                        if(shape.kind()==Kind.MOTOR)duty=MachineDuty.motor(shape.diameter(),4,MachineDuty.Drive.FIXED);
                         if (condensing) duty = MachineDuty.turbine(duty.power(), duty.steam(), SteamTurbineDesign.CONDENSING_EXHAUST);
                         expected = expected.substring(0, expected.length() - 1) + ", duty=" + duty + "]";
                     }
                     if (read.shape().column()) expected = expected.replaceFirst("tangentLength=[0-9.]+", "tangentLength=" + read.shape().tangentLength());
+                    if (!expected.contains("exchangerType=")) expected = expected.substring(0, expected.length() - 1) + ", exchangerType=STANDARD]";
+                    if(!expected.contains("baseSpeed="))expected=expected.replaceAll("(exhaust=[0-9.Ee+-]+)\\]","$1, baseSpeed=0.0]");
                     assertEquals(expected, read.shape().toString(), file.toString());
                 }
         }

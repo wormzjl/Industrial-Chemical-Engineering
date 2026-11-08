@@ -14,6 +14,30 @@ import java.util.TreeSet;
  * ExchangerRelay}: the films stand in series. Pure numbers, no flash.
  */
 public final class ExchangerRating {
+    /** A configuration's required surface; both arguments retain their physical side, even when the tube side is hot. */
+    public static Result required(com.wormzjl.icheme.science.equipment.ExchangerType type, Side tube, Side shell, double duty) {
+        boolean tubeHot=tube.curve.temperatureAt(tube.inlet)>shell.curve.temperatureAt(shell.inlet);
+        var counter=rate(tubeHot?tube:shell,tubeHot?shell:tube,duty);
+        if(type==com.wormzjl.icheme.science.equipment.ExchangerType.STANDARD||!Double.isFinite(counter.area())||!(duty>0))return counter;
+        double low=0,high=Math.max(1e-6,counter.area());double[] start=null;
+        com.wormzjl.icheme.science.fluid.network.CrossflowHeat.Result result=null;
+        for(int step=0;step<40;step++) {
+            result=crossflow(tube,shell,high,start);start=result.wall();
+            if(result.converged()&&Math.abs(result.intoTube())>=duty)break;
+            high*=2;
+            if(step==39||high>1e9)return new Result(Double.POSITIVE_INFINITY,result.approach());
+        }
+        for(int step=0;step<32;step++) {
+            double middle=(low+high)/2;
+            var at=crossflow(tube,shell,middle,start);start=at.wall();
+            if(at.converged()&&Math.abs(at.intoTube())>=duty){high=middle;result=at;}else low=middle;
+        }
+        return new Result(high,result.approach());
+    }
+
+    public static com.wormzjl.icheme.science.fluid.network.CrossflowHeat.Result crossflow(Side tube, Side shell, double area, double[] start) {
+        return com.wormzjl.icheme.science.fluid.network.CrossflowHeat.rate(tube.curve,tube.inlet,tube.massFlow,shell.curve,shell.inlet,shell.massFlow,area,start);
+    }
     /** Bisections of the duty, far past any tolerance of the run's. */
     private static final int STEPS = 60;
     /** Beyond each end of a curve, so the ends of the span are never its last knots (K). */

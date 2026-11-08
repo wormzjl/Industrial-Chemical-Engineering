@@ -22,7 +22,22 @@ import java.util.Objects;
  * @param units           how many identical units stand in parallel on each heat-transfer member step (batch
  *                        2026-11-02-process-simulator, S3b); one cooler count per pumparound
  */
-public record ColumnComponents(Condenser condenser, Pump refluxPump, List<Pump> pumparoundPumps, boolean ejector, boolean kettle, Units units) {
+public record ColumnComponents(Condenser condenser, Pump refluxPump, List<Pump> pumparoundPumps, boolean ejector, boolean kettle, Units units, Exchangers exchangers) {
+    public ColumnComponents(Condenser condenser,Pump refluxPump,List<Pump> pumparoundPumps,boolean ejector,boolean kettle,Units units) {
+        this(condenser,refluxPump,pumparoundPumps,ejector,kettle,units,Exchangers.STANDARD);
+    }
+    public ColumnComponents withExchangers(Exchangers value){return new ColumnComponents(condenser,refluxPump,pumparoundPumps,ejector,kettle,units,value);}
+
+    /** Configurations of the exchanger members, fitted by the same pumparound order as their counts. */
+    public record Exchangers(ExchangerType condenser,ExchangerType trim,List<ExchangerType> coolers) {
+        public static final Exchangers STANDARD=new Exchangers(ExchangerType.STANDARD,ExchangerType.STANDARD,List.of());
+        public Exchangers {Objects.requireNonNull(condenser);Objects.requireNonNull(trim);coolers=List.copyOf(coolers);if(coolers.size()>ColumnTrays.MAX_PUMPAROUNDS)throw new IllegalArgumentException("Too many cooler configurations");}
+        public ExchangerType cooler(int index){return index<coolers.size()?coolers.get(index):ExchangerType.STANDARD;}
+        public Exchangers fit(int count){var next=new ArrayList<ExchangerType>();for(int i=0;i<count;i++)next.add(cooler(i));return new Exchangers(condenser,trim,next);}
+        public Exchangers withCondenser(ExchangerType type){return new Exchangers(type,trim,coolers);}
+        public Exchangers withTrim(ExchangerType type){return new Exchangers(condenser,type,coolers);}
+        public Exchangers withCooler(int index,ExchangerType type){var next=new ArrayList<>(fit(Math.max(index+1,coolers.size())).coolers);next.set(index,type);return new Exchangers(condenser,trim,next);}
+    }
     /**
      * An air cooler, or an exchanger taking the vapour on its shell side (decision D15: its condensate drains only there), or
      * an air cooler that condenses the overhead to the split ({@link HeatSides#airSplit}) and a water exchanger, the trim,
@@ -123,6 +138,7 @@ public record ColumnComponents(Condenser condenser, Pump refluxPump, List<Pump> 
         if (units.coolers().size() > pumparoundPumps.size()) throw new IllegalArgumentException("More cooler counts than pumparounds");
         // A design saved before the counts existed reads one unit on every step.
         units = units.fit(pumparoundPumps.size());
+        exchangers=Objects.requireNonNull(exchangers).fit(pumparoundPumps.size());
     }
 
     /** A design of one unit on every member step: the design before the counts existed. */
@@ -134,11 +150,13 @@ public record ColumnComponents(Condenser condenser, Pump refluxPump, List<Pump> 
      * The player's choices: the condenser, the reflux pump, one pump per designed pumparound, and how many units each
      * heat-transfer step takes.
      */
-    public record Choices(Condenser condenser, Pump refluxPump, List<Pump> pumparoundPumps, Units units) {
+    public record Choices(Condenser condenser, Pump refluxPump, List<Pump> pumparoundPumps, Units units,Exchangers exchangers) {
+        public Choices(Condenser condenser,Pump refluxPump,List<Pump> pumparoundPumps,Units units){this(condenser,refluxPump,pumparoundPumps,units,Exchangers.STANDARD);}
         /** What a calculator without a saved design proposes: an air cooler and standard pumps, one unit each. */
         public static final Choices DEFAULT = new Choices(Condenser.AIR_COOLER, Pump.STANDARD, List.of());
 
         public Choices {
+            Objects.requireNonNull(exchangers);
             Objects.requireNonNull(condenser, "condenser");
             Objects.requireNonNull(refluxPump, "refluxPump");
             pumparoundPumps = List.copyOf(pumparoundPumps);
@@ -154,32 +172,35 @@ public record ColumnComponents(Condenser condenser, Pump refluxPump, List<Pump> 
         public Choices fit(int pumparounds) {
             var pumps = new ArrayList<Pump>();
             for (int i = 0; i < pumparounds; i++) pumps.add(i < pumparoundPumps.size() ? pumparoundPumps.get(i) : Pump.STANDARD);
-            return new Choices(condenser, refluxPump, pumps, units.fit(pumparounds));
+            return new Choices(condenser, refluxPump, pumps, units.fit(pumparounds),exchangers.fit(pumparounds));
         }
 
         public Choices withCondenser(Condenser next) {
-            return new Choices(next, refluxPump, pumparoundPumps, units);
+            return new Choices(next, refluxPump, pumparoundPumps, units,exchangers);
         }
 
         public Choices withRefluxPump(Pump next) {
-            return new Choices(condenser, next, pumparoundPumps, units);
+            return new Choices(condenser, next, pumparoundPumps, units,exchangers);
         }
 
         public Choices withUnits(Units next) {
-            return new Choices(condenser, refluxPump, pumparoundPumps, next);
+            return new Choices(condenser, refluxPump, pumparoundPumps, next,exchangers);
+        }
+        public Choices withExchangers(Exchangers next) {
+            return new Choices(condenser,refluxPump,pumparoundPumps,units,next);
         }
 
         /** These choices with pumparound {@code index}'s pump replaced (the list fitted to reach it). */
         public Choices withPumparoundPump(int index, Pump next) {
             var pumps = new ArrayList<>(fit(Math.max(pumparoundPumps.size(), index + 1)).pumparoundPumps());
             pumps.set(index, next);
-            return new Choices(condenser, refluxPump, pumps, units);
+            return new Choices(condenser, refluxPump, pumps, units,exchangers);
         }
     }
 
     /** The choices this design was saved with: what the Components page shows again. */
     public Choices choices() {
-        return new Choices(condenser, refluxPump, pumparoundPumps, units);
+        return new Choices(condenser, refluxPump, pumparoundPumps, units,exchangers);
     }
 
     /**
@@ -199,7 +220,7 @@ public record ColumnComponents(Condenser condenser, Pump refluxPump, List<Pump> 
     public static ColumnComponents resolve(Choices choices, double topPressurePascal, double reboilerDutyWatts, int pumparounds) {
         var fitted = choices.fit(pumparounds);
         return new ColumnComponents(fitted.condenser(), fitted.refluxPump(), fitted.pumparoundPumps(),
-                ejectorRequired(topPressurePascal), kettleRequired(reboilerDutyWatts), fitted.units());
+                ejectorRequired(topPressurePascal), kettleRequired(reboilerDutyWatts), fitted.units(),fitted.exchangers());
     }
 
     /**

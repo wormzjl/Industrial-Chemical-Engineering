@@ -61,6 +61,15 @@ class HeatPresentationTest {
     }
     private static WorldTopologyLedger.Registration registration(PhysicalFluidTopology.Device device){return new WorldTopologyLedger.Registration(device,FluidDeviceSpec.water(),1);}
 
+    @Test void acceptedPortVolumesAreRatesAtTheSameDensityAsTheirMassFlow(){
+        var state=water(310,200000);var node=new PassiveNetwork.Reservoir(10,0,state);var source=source(Map.of(),null,Map.of(),Map.of());
+        var publicState=FluidView.State.from(state,state.volume());
+        for(double flow:new double[]{-3,0,7}){
+            var port=HeatPresentation.port("OUTLET",node,flow,source);assertEquals(flow,port.massFlow());
+            assertEquals(Math.abs(flow)*state.volume()/publicState.mass(),Arrays.stream(port.phaseVolumes()).sum(),1e-10,"Volume rate must not be the node inventory");
+            double mass=0;var n=port.phaseMoles();var weights=model.molecularWeights();for(var phase:n)for(int c=0;c<phase.length;c++)mass+=phase[c]*weights[c];assertEquals(Math.abs(flow),mass,1e-10);
+        }
+    }
     /**
      * An air cooler's ports are its inlet node and its outlet junction at its own pipe's flow: their temperatures, and phases
      * whose mass per second is that flow. Its actuator is its fans, at the share they turn.

@@ -75,6 +75,8 @@ public final class ShaftParts {
      */
     public interface Coupling {
         void stressImpact(double suPerRpm);
+        default void output(double rpm,double watts) {}
+        default double nativeSpeed(){return 0;}
     }
 
     /** The part at {@code at} (a block, or a structure's origin) leaves. */
@@ -116,7 +118,7 @@ public final class ShaftParts {
         double rated = UnitDesign.ratedPower(shape), speed = UnitDesign.designSpeed(shape);
         var cell = position(level, origin);
         var drive = duty.drive();
-        queue(level, new ShaftTrains.Put(cell, kind, id -> new ShaftUnit(id, kind, cell, 0, ends, fluid, rated, speed, poles, drive, ShaftUnit.Settings.DEFAULT, ShaftTrain.Trip.NONE, null)));
+        queue(level, new ShaftTrains.Put(cell, kind, id -> new ShaftUnit(id, kind, cell, 0, ends, fluid, rated, speed, poles, drive, ShaftUnit.Settings.placed(kind), ShaftTrain.Trip.NONE, null)));
         for (var s : ShapeRasterizer.shafts(shape)) adopt(level, origin.offset(s.cell().x(), s.cell().y(), s.cell().z()), Direction.fromDelta(s.dx(), s.dy(), s.dz()));
     }
 

@@ -289,6 +289,7 @@ public final class FloatingRoofs {
     /** Whether a body whose feet are at {@code x}, {@code y}, {@code z} are on {@code tank}'s rolling ladder at game tick {@code tick}. */
     private static boolean onLadder(Tank tank, double x, double y, double z, long tick) {
         var roof = tank.roof;
+        if (roof.length() <= 0) return false;
         double pitch = roof.pitch(tank.level(tick)), c = DeterministicMath.cos(pitch), s = DeterministicMath.sin(pitch);
         double[] p = roof.pivot(), a = roof.along();
         double dx = a[0] * c, dy = -s, dz = a[2] * c;

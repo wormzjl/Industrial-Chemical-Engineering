@@ -28,16 +28,17 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
+import java.util.Set;
 
 /**
  * The ghosts of the vessels equipment constructors would build (owner request 2026-10-16: shown without aiming, gone
  * once built): every loaded constructor within {@link #RANGE} blocks shows its saved design until that vessel stands
  * where it would be built, and an open constructor screen shows its draft instead. The shell is drawn translucent on the
- * painted plate sprite in the design's paint (its other parts light grey); the cells the focused ghost (the screen's draft, or the aimed constructor's design) cannot take
- * are outlined in red ({@link Outlines}). Client only; the server checks again before it builds.
+ * painted plate sprite in the design's paint (its other parts light grey); the cells any visible ghost cannot take
+ * stay outlined in red ({@link Outlines}), without aiming at its constructor. Client only; the server checks again before it builds.
  * <p>The shell is drawn as translucent entity geometry on the block atlas ({@link #TYPE}), as {@link Outlines} draws its outlines:
  * the chunk type {@code RenderType.translucent()} drawn from a level-stage event is lost under an Iris shader pack, whose
  * terrain programs only take chunk geometry (owner report 2026-10-17, the preview vanished with shaders).
@@ -58,7 +59,10 @@ public final class EquipmentGhost {
     private static final RenderType TYPE = RenderType.entityTranslucentCull(InventoryMenu.BLOCK_ATLAS);
     /** Render thread only, like everything here. */
     private static List<Ghost> shown = List.of();
-    private static @Nullable EquipmentStructure.Vessel focused;
+    /** Collision results belong to visible previews, independently of the screen/crosshair's focus. */
+    private static Map<EquipmentStructure.Vessel, List<BlockPos>> collisions = Map.of();
+    private static Set<BlockPos> outlined = Set.of();
+    private static @Nullable ClientLevel checkedLevel;
     private static List<BlockPos> blocked = List.of();
     /** The focused design's vessel already stands where it would be built, so it shows no ghost. */
     private static boolean standing;
@@ -117,20 +121,29 @@ public final class EquipmentGhost {
         shown = List.copyOf(ghosts);
         standing = focusStanding;
         if (focusStanding) focus = null;
-        if (!Objects.equals(focus, focused)) {
-            focused = focus;
+
+        var visible = new LinkedHashSet<EquipmentStructure.Vessel>();
+        for (var ghost : shown) visible.add(ghost.vessel());
+        if (++age >= RECHECK_TICKS || checkedLevel != mc.level || !visible.equals(collisions.keySet())) {
             age = 0;
+            checkedLevel = mc.level;
+            var next = new LinkedHashMap<EquipmentStructure.Vessel, List<BlockPos>>();
+            var allBlocked = new LinkedHashSet<BlockPos>();
+            if (mc.level != null) for (var vessel : visible) {
+                var cells = List.copyOf(blocked(mc.level, vessel));
+                next.put(vessel, cells);
+                allBlocked.addAll(cells);
+            }
+            collisions = Map.copyOf(next);
+            if (!allBlocked.equals(outlined)) {
+                outlined = Set.copyOf(allBlocked);
+                // A cell shared by previews must be passed once: duplicate cells cancel a cluster's edges.
+                if (outlined.isEmpty()) Outlines.remove(BLOCKED_SLOT);
+                else Outlines.cluster(BLOCKED_SLOT, allBlocked, BLOCKED_COLOUR, 1 / 16F);
+            }
         }
-        if (focused == null) {
-            blocked = List.of();
-            Outlines.remove(BLOCKED_SLOT);
-            return;
-        }
-        if (age++ % RECHECK_TICKS == 0) {
-            blocked = blocked(mc.level, focused);
-            if (!blocked.isEmpty()) Outlines.cluster(BLOCKED_SLOT, blocked, BLOCKED_COLOUR, 1 / 16F);
-        }
-        if (blocked.isEmpty()) Outlines.remove(BLOCKED_SLOT);
+        blocked = focus == null ? List.of() : collisions.getOrDefault(focus, List.of());
+        if (outlined.isEmpty()) Outlines.remove(BLOCKED_SLOT);
         else Outlines.keep(BLOCKED_SLOT);
     }
 
@@ -189,7 +202,9 @@ public final class EquipmentGhost {
         if (mesh != null && mesh.sprite == sprite) return mesh;
         var out = new ArrayList<float[]>();
         // A tower's preview is its whole facets; anything else, its cells as the chunks draw them.
-        if (shape.kind().coolingTower())
+        if (com.wormzjl.icheme.client.model.EquipmentShellModel.detail() == com.wormzjl.icheme.science.equipment.RenderDetail.LOW)
+            for (var polygon : ShapeRasterizer.renderPreview(shape, com.wormzjl.icheme.science.equipment.RenderDetail.LOW)) quads(out, polygon, 0, 0, 0, sprite);
+        else if (shape.kind().coolingTower())
             for (var polygon : ShapeRasterizer.towerPreview(shape)) quads(out, polygon, 0, 0, 0, sprite);
         else for (var cell : layout(shape).shell())
             for (var polygon : ShapeRasterizer.surface(ShapeRasterizer.key(shape, cell.x(), cell.y(), cell.z())))

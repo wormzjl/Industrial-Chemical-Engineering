@@ -88,8 +88,11 @@ final class FlowsheetUnitsTest {
         }
 
         FlowsheetRun run() {
+            return run(com.wormzjl.icheme.science.flowsheet.sizing.SizingFacts.NONE);
+        }
+        FlowsheetRun run(com.wormzjl.icheme.science.flowsheet.sizing.SizingFacts facts) {
             var basis = new Flowsheet.Basis(PACKAGE, "test", AXIS);
-            return com.wormzjl.icheme.science.flowsheet.FlowsheetRuns.run(new Flowsheet(basis, units, streams, FlowsheetSolver.Settings.DEFAULT), CATALOG, () -> {
+            return com.wormzjl.icheme.science.flowsheet.FlowsheetRuns.run(new Flowsheet(basis, units, streams, FlowsheetSolver.Settings.DEFAULT).with(facts), CATALOG, () -> {
             });
         }
     }
@@ -264,6 +267,17 @@ final class FlowsheetUnitsTest {
         var byArea = closes(waterPair("{\"target\":\"area\",\"area\":" + area + "}").run());
         assertEquals(320, byArea.streams().get("hot out").temperature(), 1e-3);
         assertEquals(reading(byOutlet, "E/tube", "duty"), reading(byArea, "E", "duty"), 1e-3 * reading(byOutlet, "E/tube", "duty"));
+    }
+
+    @Test void crossflowAreaAndOutletSpecificationsUseTheSamePhysicalRouting() {
+        var size=new com.wormzjl.icheme.science.flowsheet.sizing.ExchangerSizing.Size(false,1,1,3,com.wormzjl.icheme.science.equipment.ExchangerType.CROSSFLOW);
+        var facts=com.wormzjl.icheme.science.flowsheet.sizing.SizingFacts.NONE.with("E",com.wormzjl.icheme.science.flowsheet.sizing.SizingFacts.UnitFacts.AUTO.with(size));
+        var outlet=closes(waterPair(HOT_WATER).run(facts));
+        double area=reading(outlet,"E/rating","area_needed");
+        assertTrue(area>reading(waterPair(HOT_WATER).run(),"E/rating","area_needed"));
+        var rated=closes(waterPair("{\"target\":\"area\",\"area\":"+area+"}").run(facts));
+        assertEquals(320,rated.streams().get("hot out").temperature(),.005);
+        assertEquals(reading(outlet,"E/tube","duty"),reading(rated,"E","duty"),.001*reading(outlet,"E/tube","duty"));
     }
 
     @Test void aHeatCrossWarnsAndStopsNothing() {

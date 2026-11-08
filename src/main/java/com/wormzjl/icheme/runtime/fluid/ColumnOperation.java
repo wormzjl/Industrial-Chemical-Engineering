@@ -85,6 +85,8 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     static final class Run {
         final long unit;
         SplitTable table;
+        ColumnUnit.Probes probes;
+        boolean rebuildProbes;
         /** Each product's partial molar enthalpies at its solved temperature and pressure, J/mol, in the table's order (ColumnSolve.Solved). */
         double[][] enthalpy;
         long nextCycle;
@@ -192,7 +194,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         var r=new Run(u.id(),firstCycle(u.id()));var s=u.state();
         if(s==null||!s.table().axis().equals(axis)||missingStation(u,s.table())!=null)return r;
         r.table=s.table();r.enthalpy=s.enthalpy();r.tableTick=s.tableTick();r.applied=s.applied();r.solvedCondenser=s.solvedCondenser();r.status="RUNNING";r.phase=com.wormzjl.icheme.science.column.operation.OperationView.Phase.RUNNING;
-        r.lastSolve=s.tableTick();
+        r.lastSolve=s.tableTick();r.probes=s.probes();r.rebuildProbes=s.probes()==null;
         for(var l:s.levels())r.levels.computeIfAbsent(l.device(),d->new ArrayDeque<>()).addLast(new Level(l.tick(),l.held(),l.rate(),l.molarMass()));
         for(var c:s.credits())r.credits.computeIfAbsent(c.device(),d->new ArrayDeque<>()).addLast(new Credit(c.tick(),c.product(),SolidInventory.EMPTY));
         return r;
@@ -206,7 +208,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         for(var e:new TreeMap<>(r.levels).entrySet()){asOf(e.getValue(),Level::tick,through);for(var l:e.getValue())levels.add(new ColumnUnit.State.Level(e.getKey(),l.tick(),l.held(),l.rate(),l.molarMass()));}
         var credits=new ArrayList<ColumnUnit.State.Credit>();
         for(var e:new TreeMap<>(r.credits).entrySet()){asOf(e.getValue(),Credit::tick,through);for(var c:e.getValue())credits.add(new ColumnUnit.State.Credit(e.getKey(),c.tick(),c.product()));}
-        topology.column(u.withState(new ColumnUnit.State(r.table,r.enthalpy,r.tableTick,r.applied,r.solvedCondenser,levels,credits)));
+        topology.column(u.withState(new ColumnUnit.State(r.table,r.enthalpy,r.tableTick,r.applied,r.solvedCondenser,levels,credits,r.probes)));
     }
     /** A unit's first cycle: the next multiple of the cycle after now, staggered by its identity. */
     private long firstCycle(long unit) {
@@ -293,6 +295,48 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         return new com.wormzjl.icheme.science.column.operation.OperationView(r.phase,step==null?ColumnCycle.Limit.NONE:step.limit(),step==null?0:step.alpha(),r.ruleA,
                 r.pending==null?null:r.pending.trigger,r.failed,r.status+water(u),true,true,set,streams,duties,solve);
     }
+    record InstrumentSample(double value,long tick) {}
+    ColumnUnit.Probes probes(com.wormzjl.icheme.science.column.v3.V3ColumnInspection accepted,SplitTable table){
+        if(accepted==null)return null;
+        var top=accepted.nodes().get(1);var bottom=accepted.nodes().getLast();var reflux=accepted.nodes().getFirst();
+        // The cycle meters total feed, including feed water; V3's component vector is hydrocarbon-only.
+        double feed=table.reference().alpha()*table.reference().setpoints().designFeedRate(),refluxMass=0,vapourMass=0;
+        if(!(feed>0))return null;
+        for(int c=0;c<accepted.input().componentBasis().componentCount();c++){
+            int k=axis.indexOf(accepted.input().componentBasis().componentId(c));
+            if(k<0)return null;
+            refluxMass+=reflux.liquidMolPerSecond()*reflux.liquidFractions().get(c)*weights[k];
+            vapourMass+=top.vaporMolPerSecond()*top.vaporFractions().get(c)*weights[k];
+        }
+        int water=axis.indexOf(SplitTable.WATER);if(water>=0)vapourMass+=top.waterVaporMolPerSecond()*weights[water];
+        return new ColumnUnit.Probes(top.pressurePascal(),top.temperatureKelvin(),bottom.pressurePascal(),bottom.temperatureKelvin(),reflux.pressurePascal(),reflux.temperatureKelvin(),refluxMass/feed,vapourMass/feed);
+    }
+    InstrumentSample instrument(long unit,String role,com.wormzjl.icheme.runtime.instrument.Sensor.Kind kind){
+        var u=topology.column(unit);var r=runs.get(unit);if(u==null||r==null||r.table==null||r.last==null||r.last.trip()!=null)return null;
+        double value=Double.NaN;long tick=r.applied;
+        if(role.startsWith("COLUMN:")){
+            if(r.probes==null)return null;boolean bottom=role.endsWith("bottom");
+            value=kind==com.wormzjl.icheme.runtime.instrument.Sensor.Kind.PRESSURE?(bottom?r.probes.bottomPressure():r.probes.topPressure()):(bottom?r.probes.bottomTemperature():r.probes.topTemperature());
+        }else if(role.equals("REFLUX")){
+            if(r.probes==null)return null;
+            if(kind==com.wormzjl.icheme.runtime.instrument.Sensor.Kind.PRESSURE)value=r.probes.refluxPressure();
+            else if(kind==com.wormzjl.icheme.runtime.instrument.Sensor.Kind.TEMPERATURE)value=r.probes.refluxTemperature();
+            else value=r.probes.refluxPerFeed()*r.last.feedMoles()/(CYCLE_TICKS/20.0);
+        }else if(role.startsWith("COLUMN_PORT:")){
+            var parts=role.split(":");int index=Integer.parseInt(parts[2]);
+            if(parts[1].equals("VAPOUR_OUTLET")){
+                if(r.probes==null)return null;
+                if(kind==com.wormzjl.icheme.runtime.instrument.Sensor.Kind.PRESSURE)value=r.probes.topPressure();else if(kind==com.wormzjl.icheme.runtime.instrument.Sensor.Kind.TEMPERATURE)value=r.probes.topTemperature();
+                else value=r.probes.vapourPerFeed()*r.last.feedMoles()/(CYCLE_TICKS/20.0);return Double.isFinite(value)?new InstrumentSample(value,tick):null;
+            }
+            Port port;try{port=Port.valueOf(parts[1]);}catch(IllegalArgumentException e){return null;}
+            var stream=view(unit,topology.onlineTick(),id->Double.NaN).streams().stream().filter(p->p.port()==port&&p.index()==index).findFirst().orElse(null);if(stream==null)return null;
+            if(kind==com.wormzjl.icheme.runtime.instrument.Sensor.Kind.PRESSURE)value=stream.pressure();
+            else if(kind==com.wormzjl.icheme.runtime.instrument.Sensor.Kind.TEMPERATURE)value=stream.temperature();
+            else {ColumnCycle.Account account=null;if(port==Port.FEED)account=r.last.feed();else if(port==Port.STEAM&&index<r.last.steam().size())account=r.last.steam().get(index);else {int k=r.table.product(port,index);if(k>=0&&k<r.last.products().size())account=r.last.products().get(k);}if(account!=null)value=mass(account.moles())/(CYCLE_TICKS/20.0);}
+        }
+        return Double.isFinite(value)?new InstrumentSample(value,tick):null;
+    }
     /** Installs a solved split table and its products' partial molar enthalpies (J/mol) for unit {@code unit} (C5). */
     public void table(long unit,SplitTable table,double[][] enthalpy) {
         var r=runs.get(unit);if(r==null)return;
@@ -336,7 +380,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         var u=topology.column(r.unit);
         String refused=p.outcome instanceof ColumnSolve.Solved s?missingStation(u,s.table()):null;
         if(p.outcome instanceof ColumnSolve.Solved s&&refused==null) {
-            r.before=r.table;r.table=s.table();r.enthalpy=s.enthalpy();r.seed=s.seed();r.tableTick=p.tick;r.applied=tick;r.solvedCondenser=s.solvedCondenser();r.failures=0;r.note=s.note();r.solvedBy=p.trigger;r.warm=s.route().contains("warm");r.failed=false;
+            r.before=r.table;r.table=s.table();r.enthalpy=s.enthalpy();r.seed=s.seed();r.probes=probes(s.inspection(),s.table());r.rebuildProbes=false;r.tableTick=p.tick;r.applied=tick;r.solvedCondenser=s.solvedCondenser();r.failures=0;r.note=s.note();r.solvedBy=p.trigger;r.warm=s.route().contains("warm");r.failed=false;
             // Only a solve of the short steam itself lifts rule A: one at A's own state says nothing of B's.
             if(p.trigger==DriftBands.Trigger.STEAM_RATIO)r.ruleA=false;
             return true;
@@ -438,6 +482,8 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
             request(r,u,tick,DriftBands.Trigger.START,null);
             levels(r,u,available,tick,false);return;
         }
+        // Old rebuildable state has no accepted probe snapshot. Rebuild on the ordinary engine deadline, keeping its table meanwhile.
+        if(r.rebuildProbes)request(r,u,tick,DriftBands.Trigger.START,null);
         var t=r.table;var feedStation=station(stations,Port.FEED,0);
         var feedAvailable=feedStation==null?Account.empty(weights.length):available.get(feedStation.device());
         var steam=new ArrayList<Account>();

@@ -262,7 +262,10 @@ public record PassiveNetwork(List<Reservoir> reservoirs,List<Pipe> pipes,List<Sc
             private static boolean worked(FlowControl.Valve valve){return valve instanceof FlowControl.ControlValve c&&PortPlan.COLUMN_SENSOR.equals(c.sensor());}
             private Identity controlled(FlowControl value){return new Identity(id,first,second,sections,value,blockedDirections,filter,firstPort,secondPort,forbiddenDirections,actuatorArea,heat);}
             /** This connection without a flow valve's set point: a new target on a running valve is the same line, and its point carries. */
-            Identity line(){return control instanceof FlowControl.ControlValve valve&&!valve.pressureControl()?new Identity(id,first,second,sections,valve.withTarget(0),blockedDirections,filter,firstPort,secondPort,forbiddenDirections,actuatorArea,heat):this;}
+            Identity line(){
+                if(control instanceof FlowControl.Turbine turbine)return controlled(new FlowControl.Turbine(turbine.design()));
+                return control instanceof FlowControl.ControlValve valve&&!valve.pressureControl()?new Identity(id,first,second,sections,valve.withTarget(0),blockedDirections,filter,firstPort,secondPort,forbiddenDirections,actuatorArea,heat):this;
+            }
         }
         /** The immutable half of an {@link InlineFilter}; the cake and its energy are the mutable half. */
         public record FilterSettings(double capacity,double cleanResistance) {}

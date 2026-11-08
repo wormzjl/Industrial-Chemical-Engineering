@@ -56,8 +56,8 @@ public final class EquipmentShellBlock extends BaseEntityBlock {
     /** Unbound cells (before their data arrives) are full blocks, so nothing falls through while a vessel loads. */
     @Override
     protected VoxelShape getShape(BlockState state, BlockGetter level, BlockPos position, CollisionContext context) {
-        return level.getBlockEntity(position) instanceof EquipmentShellBlockEntity shell && shell.key() != null
-                ? EquipmentStructure.collision(shell.key()) : Shapes.block();
+        return LinePieces.shape(level,position,level.getBlockEntity(position) instanceof EquipmentShellBlockEntity shell && shell.key() != null
+                ? EquipmentStructure.collision(shell.key()) : Shapes.block());
     }
 
     /**
@@ -169,11 +169,28 @@ public final class EquipmentShellBlock extends BaseEntityBlock {
             server.getServer().execute(() -> EquipmentStructure.refreshNozzlesAt(level, position));
     }
 
+    @Override
+    public boolean onDestroyedByPlayer(BlockState state, Level level, BlockPos position, Player player, boolean harvest,
+                                       net.minecraft.world.level.material.FluidState fluid) {
+        return EquipmentProtection.playerRemoval(level, position, player,
+                () -> super.onDestroyedByPlayer(state, level, position, player, harvest, fluid));
+    }
+
+    @Override
+    public boolean canEntityDestroy(BlockState state, BlockGetter level, BlockPos position, net.minecraft.world.entity.Entity entity) {
+        return false;
+    }
+
+    @Override
+    public void onBlockExploded(BlockState state, Level level, BlockPos position, net.minecraft.world.level.Explosion explosion) {
+        // Explosions never authorise deconstruction, even when a custom blast ignores resistance.
+    }
+
     @Override public BlockState playerWillDestroy(Level level,BlockPos pos,BlockState state,Player player){EquipmentStructure.breaking(level,pos,player);return super.playerWillDestroy(level,pos,state,player);}
 
     @Override
     protected void onRemove(BlockState state, Level level, BlockPos position, BlockState replacement, boolean moved) {
-        if (!state.is(replacement.getBlock()) && level.getBlockEntity(position) instanceof EquipmentShellBlockEntity shell && shell.shape() != null)
+        if (!state.is(replacement.getBlock()) && EquipmentProtection.editing(level, position) && level.getBlockEntity(position) instanceof EquipmentShellBlockEntity shell && shell.shape() != null)
             EquipmentStructure.dismantle(level, new EquipmentStructure.Vessel(shell.origin(), shell.shape()));
         super.onRemove(state, level, position, replacement, moved);
     }

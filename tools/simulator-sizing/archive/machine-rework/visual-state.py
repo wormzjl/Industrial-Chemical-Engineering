@@ -1,0 +1,11 @@
+from pathlib import Path
+b=Path('src/main/java/com/wormzjl/icheme')
+def edit(path,old,new):
+ p=b/path;s=p.read_text(encoding='utf-8');assert old in s,(path,old[:55]);p.write_text(s.replace(old,new),encoding='utf-8')
+edit('runtime/fluid/FluidWorldAuthority.java','double share=mover instanceof FlowControl.Machine||shafts.unitOf(id)?shafts.share(id):1;','''double share=shafts.unitOf(id)?shafts.share(id):record.device().kind()==TopologyCompiler.Kind.PIPE&&electric.generator(id)!=null?(electric.powered(id)?mover instanceof FlowControl.Machine m?m.speed():1:0):1;''')
+edit('runtime/fluid/FluidWorldAuthority.java','boolean running=record.device().suspendedBy()!=0||mover.enabled()&&(mover instanceof FlowControl.Machine||shafts.unitOf(id)?share>0:mover.requestedVolumeFlow()>0);','boolean running=record.device().suspendedBy()!=0||mover.enabled()&&share>0&&mover.requestedVolumeFlow()>0;')
+edit('compat/create/CreateBridgeBlockEntity.java','@Override protected void read(CompoundTag tag,HolderLookup.Provider registries,boolean packet){super.read(tag,registries,packet);impact=Math.max(0,lastStressApplied);}','''@Override protected void write(CompoundTag tag,HolderLookup.Provider registries,boolean packet){super.write(tag,registries,packet);tag.putFloat("EngineSpeed",generated);tag.putFloat("EngineCapacity",supplied);}
+    @Override protected void read(CompoundTag tag,HolderLookup.Provider registries,boolean packet){super.read(tag,registries,packet);impact=Math.max(0,lastStressApplied);if(packet){generated=tag.getFloat("EngineSpeed");supplied=tag.getFloat("EngineCapacity");}}''')
+# Keep physics class comments aligned with the implemented simplified model.
+p=b/'science/machine/Motor.java';s=p.read_text(encoding='utf-8');start=s.index('/**');end=s.index(' */',start)+3;s=s[:start]+'''/** VFD motor ratings, efficiency and continuous torque/power envelope. Legacy pole counts remain readable. */'''+s[end:];p.write_text(s,encoding='utf-8')
+p=b/'science/equipment/MotorDesign.java';s=p.read_text(encoding='utf-8');s=s.replace("its poles (2, 4, 6 or 8: its", "its explicit VFD base speed (legacy poles retain their").replace("synchronous speed at 50 Hz) and a motor's drive (fixed speed or a variable-speed drive).", "old meaning). New motors all use a variable-speed drive.");p.write_text(s,encoding='utf-8')

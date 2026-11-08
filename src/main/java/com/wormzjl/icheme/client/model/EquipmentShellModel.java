@@ -56,21 +56,30 @@ public final class EquipmentShellModel implements IDynamicBakedModel {
     private static final ChunkRenderTypeSet GLASS = ChunkRenderTypeSet.of(RenderType.solid(), RenderType.translucent());
     private final TextureAtlasSprite[] sprites;
     private final TextureAtlasSprite particle;
+    private final com.wormzjl.icheme.science.equipment.RenderDetail detail;
     /** Rebuilt with the model on every resource reload, since quads embed atlas coordinates. Meshing threads share them. */
     private final Map<ShapeRasterizer.CellKey, Layers> quads = new ConcurrentHashMap<>();
     /** The sprites of the model last baked, for parts drawn outside the chunk mesh ({@link #sprite}). */
-    private static volatile TextureAtlasSprite @Nullable [] current;
+    private record Active(TextureAtlasSprite[] sprites, com.wormzjl.icheme.science.equipment.RenderDetail detail) {}
+    private static volatile @Nullable Active current;
 
     private EquipmentShellModel(TextureAtlasSprite[] sprites, TextureAtlasSprite particle) {
         this.sprites = sprites;
+        detail = com.wormzjl.icheme.client.ClientConfig.renderDetail();
         this.particle = particle;
-        current = sprites;
+        current = new Active(sprites, detail);
     }
 
     /** The sprite of {@code material} in the model last baked, or null before the first bake. */
     public static @Nullable TextureAtlasSprite sprite(Mesh.Material material) {
-        var sprites = current;
-        return sprites == null ? null : sprites[material.ordinal()];
+        var active = current;
+        return active == null ? null : active.sprites()[material.ordinal()];
+    }
+
+    /** The profile of the atlas/model actually baked, so a config edit cannot mix old chunk meshes with new bodies. */
+    public static com.wormzjl.icheme.science.equipment.RenderDetail detail() {
+        var active = current;
+        return active == null ? com.wormzjl.icheme.science.equipment.RenderDetail.NORMAL : active.detail();
     }
 
     @Override
@@ -100,7 +109,7 @@ public final class EquipmentShellModel implements IDynamicBakedModel {
      * quads carry its paint channel as their tint index, so the cell's paint colours them as the chunk is meshed.
      */
     private Layers bake(ShapeRasterizer.CellKey key) {
-        return layers(ShapeRasterizer.chunkSurface(key), bake(PortMarkings.surface(key), sprites, true));
+        return layers(ShapeRasterizer.chunkSurface(key, detail), bake(PortMarkings.surface(key), sprites, true));
     }
 
     private Layers layers(List<Mesh.Polygon> polygons, List<BakedQuad> markings) {
@@ -126,11 +135,16 @@ public final class EquipmentShellModel implements IDynamicBakedModel {
 
     /** As {@link #bake(List, TextureAtlasSprite[], boolean)}, each material's quads with the tint index {@code tint} gives it (-1: none). */
     public static List<BakedQuad> bake(List<Mesh.Polygon> polygons, TextureAtlasSprite[] sprites, java.util.function.ToIntFunction<Mesh.Material> tints) {
+        return bake(polygons,sprites,tints,material->0xffffff);
+    }
+
+    /** Fixed material colours multiplied by the same lighting as uncoloured surfaces, without a block tint lookup. */
+    public static List<BakedQuad> bake(List<Mesh.Polygon> polygons, TextureAtlasSprite[] sprites, java.util.function.ToIntFunction<Mesh.Material> tints, java.util.function.ToIntFunction<Mesh.Material> colours) {
         var out = new ArrayList<BakedQuad>();
         for (var polygon : polygons) {
             int tint = tints.applyAsInt(polygon.material());
             for (int first = 1; first + 1 < polygon.size(); first += 2)
-                out.add(quad(polygon, sprites[polygon.material().ordinal()], tint, 0, first, first + 1, Math.min(first + 2, polygon.size() - 1)));
+                out.add(quad(polygon, sprites[polygon.material().ordinal()], tint, colours.applyAsInt(polygon.material()), 0, first, first + 1, Math.min(first + 2, polygon.size() - 1)));
         }
         return List.copyOf(out);
     }
@@ -209,7 +223,7 @@ public final class EquipmentShellModel implements IDynamicBakedModel {
         return Math.round(255 * Math.min(1, QuadLighter.calculateShade(nx, ny, nz, false) + (k > 0 ? sheen(k, nx, nz) : 0)));
     }
 
-    private static BakedQuad quad(Mesh.Polygon polygon, TextureAtlasSprite sprite, int tint, int... corners) {
+    private static BakedQuad quad(Mesh.Polygon polygon, TextureAtlasSprite sprite, int tint, int colour, int... corners) {
         double[] p = polygon.positions(), uv = polygon.uvs(), n = polygon.normals();
         // Face direction from the corners' winding (Newell), for vanilla's directional shade.
         double fx = 0, fy = 0, fz = 0;
@@ -231,7 +245,7 @@ public final class EquipmentShellModel implements IDynamicBakedModel {
         for (int c : corners) {
             int shade = shade(polygon, c);
             baker.addVertex((float) p[3 * c], (float) p[3 * c + 1], (float) p[3 * c + 2])
-                    .setColor(shade, shade, shade, 255)
+                      .setColor(shade*(colour>>16&255)/255, shade*(colour>>8&255)/255, shade*(colour&255)/255, 255)
                     .setUv(sprite.getU((float) uv[2 * c]), sprite.getV((float) uv[2 * c + 1]))
                     .setNormal((float) n[3 * c], (float) n[3 * c + 1], (float) n[3 * c + 2]);
         }

@@ -1,5 +1,7 @@
 # heat-gui-renders
 
+The 0.22.0 equipment-protection follow-up (`efa22cfe`, 2026-11-07) adds `equipment-constructor-removal` to `GuiPrototypes.java`: the shared constructor builder with its physical target and Deconstruct action, in both themes and at both scroll positions. Use `-Donly=equipment-constructor-removal` with the existing prototype recipe; output belongs in an indexed worktree `tmp/` folder.
+
 Purpose: software renders of the heat units' Control-tab flowsheet, so its layout is judged without a game client (owner: enough client testing).
 
 Batch: `2026-10-27-heat-exchanger-design`, the heat GUI task (`HEAT_GUI_PLAN.md` section 4), branch `claude/heat-gui-redesign-abb1db`; then `2026-10-28-gui-toolkit` (`GuiPrototypes.java`, the kit's renders). Status: in use since 2026-10-28; it draws the shipped screen code, so it stays as a check of later GUI work.
@@ -118,3 +120,5 @@ Flow basis: `SimulatorRender` draws in moles; add `-Dbasis=MASS` or `-Dbasis=VOL
 - 2026-11-04, batch 2026-11-03-rotating-machinery: W7 Q1 sheets machine-a/b/c; owner picked A, 2026-11-04 (decision D31). B and C left the tool; the `machine-*` sheets draw the shipped `MachineColumn` (motor, tripped motor, turbine, generator, gearbox, creative motor, reader) and a casing's `DeviceColumn` with its Drive group.
 - 2026-11-05, batch 2026-11-03-rotating-machinery (W8): the column door's pump duty sheets, A (meters in each pump group) and B (one table on the glass); the owner picked B (decision D43). A left the tool; `pump-duty-table`, `-narrow` and `-unrated` draw the shipped `CalculatorColumn.pumpDuties`, and `SimulatorRender -Donly=pump-duties` draws T-101's Equipment page from the shipped `ColumnDoors`, rated by a real Size all and before one, at 464, 380 and 790 wide, opened and scrolled.
 - 2026-11-05, batch 2026-11-03-rotating-machinery (tooling cleanup): the machine pages' illustrative cases (`cases`, `sample`, `couplingSample`) left `MachineColumn` for the test class `MachineColumnSamples`; `GuiPrototypes` now needs `build/classes/java/test` on its class path (after `./gradlew compileTestJava`).
+
+- 2026-11-07, batch 2026-11-06-simulator-sizing: `control-local`, `control-dcs` and `control-instrument-ids` use the shipped ControlColumns/DeviceColumn builders to show 25% level setup, valve-location guidance and stable IDs in both themes, opened and scrolled to the end. The scrolled-column renderer now draws Wide fields and latched unit keys; DCS shares the loop column scroll.

@@ -43,7 +43,8 @@ public interface PortGraph {
      * What makes units of one kind identical on a parallel step (S3b): the main size, the length and an air cooler's bank.
      * Identical units on one split and merge take equal shares of the stream.
      */
-    record Size(double diameter, double length, com.wormzjl.icheme.science.equipment.ProcessUnit.Bank bank) {
+    record Size(double diameter, double length, com.wormzjl.icheme.science.equipment.ProcessUnit.Bank bank,com.wormzjl.icheme.science.equipment.ExchangerType exchangerType) {
+        public Size(double diameter,double length,com.wormzjl.icheme.science.equipment.ProcessUnit.Bank bank){this(diameter,length,bank,com.wormzjl.icheme.science.equipment.ExchangerType.STANDARD);}
     }
 
     /** A unit's port: its nozzle role and which one of that role it is, from 0 in nozzle order. */

@@ -146,7 +146,9 @@ public final class PhysicalRegistry {
     }
     /** Reuses the existing mover actuator on a horizontal, axis-locked mechanical pipe. */
     public boolean installPipeMover(long id,PhysicalFluidTopology.Direction axis,TopologyCompiler.Kind kind){
-        var control=PhysicalFluidTopology.defaultMover(kind);var record=registrations().get(id);
+        var record=registrations().get(id);
+        if(record==null)return false;
+        var control=com.wormzjl.icheme.science.machine.InlineMachines.design(record.device().geometry().diameter(),kind==TopologyCompiler.Kind.PUMP);
         if(axis==null||axis.y!=0||!canInstallFitting(record,axis))return false;
         var d=record.device();var replacement=new PhysicalFluidTopology.Device(d.id(),d.position(),d.kind(),axis,d.geometry(),control,d.ports(),d.generatorEnabled(),d.cutoff(),d.inlineFilter(),d.joints());
         submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(replacement,record.spec(),Math.addExact(record.revision(),1)))),topology.nextIdentity(),null);return true;

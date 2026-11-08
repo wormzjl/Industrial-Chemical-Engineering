@@ -134,7 +134,7 @@ class MachineColumnTest {
     @Test
     void eachKindHasItsSetPointsAndAReaderNone() {
         var texts = new HeatControlColumnTest.Recording("gui.icheme.");
-        var fields = Map.of(MachineColumn.Kind.MOTOR, List.of("speed"), MachineColumn.Kind.STEAM_TURBINE, List.of("speed"), MachineColumn.Kind.GENERATOR, List.of("powerLimit"),
+        var fields = Map.of(MachineColumn.Kind.MOTOR, List.of("speed", "powerLimit"), MachineColumn.Kind.STEAM_TURBINE, List.of("speed"), MachineColumn.Kind.GENERATOR, List.of("powerLimit"),
                 MachineColumn.Kind.GEARBOX, List.of("ratio"), MachineColumn.Kind.CREATIVE_MOTOR, List.of("speed", "powerLimit"), MachineColumn.Kind.CREATE_COUPLING, List.of());
         for (var kind : MachineColumn.Kind.values()) {
             var editor = place(MachineColumnSamples.sample(kind, true, true, MachineColumn.Mode.SPEED, false, texts), texts, 464);
@@ -144,9 +144,9 @@ class MachineColumnTest {
             for (var p : reader.rows())
                 if (p.row() instanceof Column.Buttons b) for (var spec : b.buttons()) assertFalse(spec.active(), kind + " reader's key " + spec.key());
         }
-        // A fixed motor neither regulates nor sets a speed; a regulating one names the casing's target; Reset shows only while tripped (A94).
-        assertEquals(List.of(), keys(place(MachineColumnSamples.sample(MachineColumn.Kind.MOTOR, true, false, MachineColumn.Mode.SPEED, false, texts), texts, 464)));
-        assertEquals(List.of(), keys(place(MachineColumnSamples.sample(MachineColumn.Kind.MOTOR, true, true, MachineColumn.Mode.FLOW, false, texts), texts, 464)));
+        // Every motor is VFD-controlled; automatic control reads the wired casing. Reset shows only while tripped.
+        assertEquals(List.of("speed", "powerLimit"), keys(place(MachineColumnSamples.sample(MachineColumn.Kind.MOTOR, true, false, MachineColumn.Mode.SPEED, false, texts), texts, 464)));
+        assertEquals(List.of("powerLimit"), keys(place(MachineColumnSamples.sample(MachineColumn.Kind.MOTOR, true, true, MachineColumn.Mode.FLOW, false, texts), texts, 464)));
         assertTrue(widgets(place(MachineColumnSamples.sample(MachineColumn.Kind.MOTOR, true, true, MachineColumn.Mode.SPEED, true, texts), texts, 464)).containsKey("reset"));
         assertFalse(widgets(place(MachineColumnSamples.sample(MachineColumn.Kind.MOTOR, true, true, MachineColumn.Mode.SPEED, false, texts), texts, 464)).containsKey("reset"));
         assertFalse(widgets(place(MachineColumnSamples.sample(MachineColumn.Kind.GEARBOX, true, true, MachineColumn.Mode.SPEED, false, texts), texts, 464)).containsKey("power:on"),
@@ -178,8 +178,8 @@ class MachineColumnTest {
         assertEquals("24.9", in.shaft().get(1).value());
         assertEquals(List.of("26.7", "534", "72"), in.supply().stream().map(MachineColumn.Meter::value).toList());
         assertEquals("6 min 10 s", in.lasts());
-        assertEquals(80, MachineColumn.speedEntry(motor), 1e-9);
-        assertEquals(.8, MachineColumn.setPoint(MachineColumn.Kind.MOTOR, 80, 2950), 1e-12);
+        assertEquals(2360, MachineColumn.speedEntry(motor), 1e-9);
+        assertEquals(.8, MachineColumn.setPoint(MachineColumn.Kind.MOTOR, 2360, 2950), 1e-12);
         var turbine = view(ShaftNetwork.Kind.STEAM_TURBINE, .9, ShaftTrain.Trip.NONE);
         assertEquals(2655, MachineColumn.speedEntry(turbine), 1e-9);
         assertEquals(.9, MachineColumn.setPoint(MachineColumn.Kind.STEAM_TURBINE, 2655, 2950), 1e-12);

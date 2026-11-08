@@ -194,6 +194,8 @@ public final class IChemE {
         modEventBus.addListener(com.wormzjl.icheme.network.EquipmentNetwork::register);
         modEventBus.addListener(com.wormzjl.icheme.network.AssemblyNetwork::register);
         modEventBus.addListener(com.wormzjl.icheme.network.MachineNetwork::register);
+        modEventBus.addListener(com.wormzjl.icheme.network.ControlNetwork::register);
+        modEventBus.addListener(com.wormzjl.icheme.network.LineNetwork::register);
         modEventBus.addListener(IChemE::registerCapabilities);
         modContainer.registerConfig(ModConfig.Type.COMMON, CONFIG_SPEC, "icheme-common.toml");
         // The client's own settings (the process screens' panel theme); a dedicated server never loads them.
@@ -215,6 +217,9 @@ public final class IChemE {
     }
     /** The FE port of a structure's terminal box (W5): the shell block entity's energy capability, on its terminal cell only. */
     private static void registerCapabilities(net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent event) {
+        event.registerBlockEntity(net.neoforged.neoforge.capabilities.Capabilities.EnergyStorage.BLOCK,ModBlockEntities.DATA_CABLE.get(),(cable,side)->cable.energy());
+        event.registerBlockEntity(net.neoforged.neoforge.capabilities.Capabilities.EnergyStorage.BLOCK,ModBlockEntities.CREATIVE_POWER.get(),(source,side)->source);
+        event.registerBlockEntity(net.neoforged.neoforge.capabilities.Capabilities.EnergyStorage.BLOCK,ModBlockEntities.FLUID_DEVICE.get(),(pipe,side)->pipe.energy());
         event.registerBlockEntity(net.neoforged.neoforge.capabilities.Capabilities.EnergyStorage.BLOCK, ModBlockEntities.EQUIPMENT_SHELL.get(), (shell, side) -> shell.energy());
     }
     /** The floating roofs that rise this tick lift what stands on them (a read of each tank's glide; nothing solves). */
@@ -314,6 +319,8 @@ public final class IChemE {
         try {
             ProcessSolveCoordinator.drainCompletedCalculations(event.getServer());
             com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.tick(event.getServer());
+            com.wormzjl.icheme.world.level.block.LinePieces.flush(event.getServer());
+            com.wormzjl.icheme.runtime.power.PowerNetwork.of(event.getServer()).tick();
             com.wormzjl.icheme.runtime.assembly.AssemblyService.tick(event.getServer());
         } catch (RuntimeException exception) {
             LOGGER.error("process_solver lifecycle=DRAIN_FAILED", exception);
@@ -338,6 +345,7 @@ public final class IChemE {
         try {
             // ServerStopped can still fire after an abnormal lifecycle path that skipped ServerStopping.
             com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.forget(event.getServer());
+            com.wormzjl.icheme.runtime.power.PowerNetwork.forget(event.getServer());
             com.wormzjl.icheme.runtime.assembly.AssemblyService.forget(event.getServer());
             com.wormzjl.icheme.runtime.fluid.FluidRuntimeDiagnostics.Meter.forget(event.getServer());
             ProcessSolveCoordinator.stopCalculations(event.getServer());

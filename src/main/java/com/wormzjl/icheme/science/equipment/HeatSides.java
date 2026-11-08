@@ -119,8 +119,8 @@ public final class HeatSides {
         double d=shape.diameter(),l=shape.tangentLength();
         return switch(unit) {
             case EXCHANGER->{double area=ProcessUnit.tubeSurface(d,l);
-                yield List.of(new Definition(Side.TUBE,EquipmentShape.Role.TUBE_INLET,EquipmentShape.Role.TUBE_OUTLET,area,tubePassage(d,l)),
-                        new Definition(Side.SHELL,EquipmentShape.Role.SHELL_INLET,EquipmentShape.Role.SHELL_OUTLET,area,shellPassage(d,l)));}
+                yield List.of(new Definition(Side.TUBE,EquipmentShape.Role.TUBE_INLET,EquipmentShape.Role.TUBE_OUTLET,area,shape.exchangerType().tubePassage(d,l)),
+                        new Definition(Side.SHELL,EquipmentShape.Role.SHELL_INLET,EquipmentShape.Role.SHELL_OUTLET,area,shape.exchangerType().shellPassage(d,l)));}
             // A kettle's bundle (TEMA AKT): two tube passes as an exchanger's; its shell is a vessel ({@link #pool}).
             case KETTLE->List.of(new Definition(Side.TUBE,EquipmentShape.Role.TUBE_INLET,EquipmentShape.Role.TUBE_OUTLET,ProcessUnit.tubeSurface(d,l),tubePassage(d,l)));
             case AIR_COOLER->List.of(new Definition(Side.PROCESS,EquipmentShape.Role.PROCESS_INLET,EquipmentShape.Role.PROCESS_OUTLET,
@@ -198,9 +198,12 @@ public final class HeatSides {
      * {@link #CONVECTION_U}). Each names the other as its {@code partner}.</li></ul>
      */
     public static @Nullable HeatLaw heatSide(Unit unit,Side side,double area,double share,double target,long partner,@Nullable HeatControl control) {
+        return heatSide(unit,side,area,share,target,partner,control,ExchangerType.STANDARD);
+    }
+    public static @Nullable HeatLaw heatSide(Unit unit,Side side,double area,double share,double target,long partner,@Nullable HeatControl control,ExchangerType type) {
         return switch(unit) {
-            case KETTLE,EXCHANGER->{if(partner==0||unit==Unit.KETTLE&&side!=Side.TUBE)yield null;var wall=new double[EXCHANGER_CELLS];java.util.Arrays.fill(wall,AIR_TEMPERATURE);
-                yield new HeatSide(area,HeatCurve.Films.DEFAULT,wall,share,0,partner,1,control,HeatControl.Limit.NONE);}
+            case KETTLE,EXCHANGER->{if(partner==0||unit==Unit.KETTLE&&side!=Side.TUBE)yield null;var wall=new double[unit==Unit.EXCHANGER?type.cells():EXCHANGER_CELLS];java.util.Arrays.fill(wall,AIR_TEMPERATURE);
+                yield new HeatSide(area,HeatCurve.Films.DEFAULT,wall,share,0,partner,1,control,HeatControl.Limit.NONE,type.routing(side));}
             case AIR_COOLER->new AirCooled(area,AIR,AIR.draught(share),control,HeatControl.Limit.NONE);
             case FIRED_HEATER->side==Side.RADIANT?new FiredCoil(target,coilDuty(side,area,share),1,partner):new ConvectionCoil(CONVECTION_U*area,partner,0);
             default->null;

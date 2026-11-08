@@ -33,6 +33,10 @@ sourceSets {
     }
 }
 
+tasks.named('processFluidGameTestResources') {
+    from('src/test/resources') { include 'compat/control-blocks/**' }
+}
+
 repositories {
     mavenCentral()
     maven { url = 'https://maven.createmod.net' }
@@ -512,14 +516,15 @@ def columnGates = gateGroup('column', 'science/column/v3',
         ['science/material', 'science/math', 'science/equipment/ColumnDesign*', 'science/fluid/transport/MixtureViscosity*',
          'science/thermo/IdealGasFunction*', 'science/thermo/PairInteractions*', 'science/thermo/PengRobinsonKernel*',
          'science/thermo/ThermoComponent*', 'science/thermo/TraceTruncationPolicy*', 'network/ColumnWire*',
-         'science/equipment/ColumnComponents*'],
+         'science/equipment/ColumnComponents*', 'science/equipment/ExchangerType*',
+         'science/fluid/network/HeatRouting*', 'science/fluid/network/PipeResistance*'],
         ['network/ColumnCodecs*', 'science/material/CatalogScopedExtension*', 'science/material/Cdu17FixtureExtension*',
          'science/material/Cdu17TestCatalog*', 'science/material/MaterialTestBasis*', 'science/material/PilotCryogenicTestCatalog*',
          'science/material/TjlReferenceExtension*', 'science/thermo/PengRobinson78*', 'science/thermo/PhaseProperties*'],
         ['column/**', 'materials/**', 'science/column/**', 'compat/presets/**'], ['data/icheme/neural/**', 'natives/**', 'assets/icheme/columnpreset/**', 'assets/icheme/mixturepreset/**'])
 def equipmentGates = gateGroup('equipment', 'science/equipment',
-        ['science/material', 'science/math', 'science/fluid/topology/TopologyCompiler*', 'science/thermo/IdealGasFunction*',
-         'science/thermo/PengRobinsonKernel*', 'runtime/fluid/FluidView*', 'runtime/instrument/Instrument*',
+        ['science/material', 'science/math', 'science/machine', 'science/fluid/topology/TopologyCompiler*', 'science/thermo/IdealGasFunction*',
+         'science/thermo/PengRobinsonKernel*', 'runtime/fluid/FluidView*', 'runtime/instrument/Instrument*', 'runtime/control/DataPort*',
          'science/column/v3/V3ColumnInput*',
          'science/column/v3/V3ColumnOutcome*', 'science/column/v3/V3ColumnProblemResolver*', 'science/column/v3/V3ColumnSpecification*',
          'science/column/v3/V3ComponentBasis*', 'science/column/v3/V3InitializationOptions*',
@@ -527,11 +532,16 @@ def equipmentGates = gateGroup('equipment', 'science/equipment',
          'science/column/v3/thermo/V3ThermoModel*', 'science/column/v3/thermo/V3WaterProperties*',
          'science/fluid/network/CoolingTower*', 'science/fluid/network/AirCooled*', 'science/fluid/network/ConvectionCoil*', 'science/fluid/network/FiredCoil*',
          'science/fluid/network/HeatControl*', 'science/fluid/network/HeatCurve*', 'science/fluid/network/HeatLaw*',
-         'science/fluid/network/HeatSide*', 'science/fluid/network/PipeResistance*', 'science/fluid/network/VesselGeometry*',
+         'science/fluid/network/HeatSide*', 'science/fluid/network/HeatRouting*', 'science/fluid/network/PipeResistance*', 'science/fluid/network/VesselGeometry*',
          'world/level/block/entity/ColumnDesignTags*', 'world/level/block/entity/EquipmentConstructorBlockEntity*',
-         'world/level/block/entity/EquipmentShellBlockEntity*', 'world/level/block/entity/DeviceNames*'],
+         'world/level/block/entity/EquipmentShellBlockEntity*', 'world/level/block/entity/ModelledBlockEntity*', 'world/level/block/entity/DeviceNames*'],
         ['science/column/v3/V3TestInputs*', 'science/column/v3/HollandB12Thermo*', 'science/column/v3/HollandExample32Data*', 'science/column/v3/V3HollandExample32*'],
-        ['column/**', 'compat/**', 'materials/**'], ['assets/icheme/parts/**', 'assets/icheme/lang/**'])
+        ['column/**', 'compat/**', 'materials/**'], ['assets/icheme/parts/**', 'assets/icheme/lang/**',
+         'assets/icheme/models/block/dcs*.json', 'assets/icheme/models/item/dcs.json', 'assets/icheme/blockstates/dcs.json',
+         'assets/icheme/models/block/local_controller.json',
+         'assets/icheme/textures/block/dcs_*.png', 'assets/icheme/textures/block/control_panel_*.png',
+         'assets/icheme/textures/block/controller_front.png',
+         'assets/icheme/textures/block/pump_casting.png', 'assets/icheme/textures/block/equipment_steelwork.png'])
 
 // The slow gates (3 s or more each): the everyday `test` leaves them out and `holdGates` runs them. `slowGates` runs those
 // and the gate groups; `check` (so `build`) and the final lane run it with `test`.

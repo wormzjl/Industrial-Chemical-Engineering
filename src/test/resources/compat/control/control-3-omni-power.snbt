@@ -1,0 +1,7 @@
+{format:3,cables:[],ports:[
+{id:[I;0,0,0,600],kind:"POWER_OUTPUT",host:0L,dimension:"minecraft:overworld",owner:0L,x:1.02d,y:0.5d,z:0.5d,cell:274877906944L,face:"WEST",u:0,v:0},
+{id:[I;180508092,1230714030,-1161262500,1305599941],kind:"POWER_OUTPUT",host:0L,dimension:"minecraft:overworld",owner:0L,x:0.5d,y:-0.020000000000000018d,z:0.5d,cell:4095L,face:"UP",u:0,v:0},
+{id:[I;2129449358,-114868591,-1902957154,1557461716],kind:"POWER_OUTPUT",host:0L,dimension:"minecraft:overworld",owner:0L,x:0.5d,y:1.02d,z:0.5d,cell:1L,face:"DOWN",u:0,v:0},
+{id:[I;-1589973943,553137697,-1710362754,-686338309],kind:"POWER_OUTPUT",host:0L,dimension:"minecraft:overworld",owner:0L,x:-0.020000000000000018d,y:0.5d,z:0.5d,cell:-274877906944L,face:"EAST",u:0,v:0},
+{id:[I;-1108892963,-2409530,-1321565688,687357605],kind:"POWER_OUTPUT",host:0L,dimension:"minecraft:overworld",owner:0L,x:0.5d,y:0.5d,z:1.02d,cell:4096L,face:"NORTH",u:0,v:0},
+{id:[I;-520119342,-1943718961,-1619247991,-952352327],kind:"POWER_OUTPUT",host:0L,dimension:"minecraft:overworld",owner:0L,x:0.5d,y:0.5d,z:-0.020000000000000018d,cell:274877902848L,face:"SOUTH",u:0,v:0}],panels:[],sensorIds:[],nextSensorId:1L}

@@ -38,6 +38,11 @@ class EquipmentLayoutGoldenTest {
                 shapes.add(EquipmentShape.designed(kind, diameter, length, Heading.NORTH, ProcessUnit.defaultSupport(kind, diameter, length), ProcessUnit.Bank.ONE, 0));
             }
         }
+        for (double diameter : new double[]{.5, 1.5, 2.5}) {
+            int length = ProcessUnit.defaultLength(Kind.EXCHANGER, diameter);
+            shapes.add(EquipmentShape.unit(Kind.EXCHANGER, diameter, length, Heading.NORTH, ProcessUnit.defaultSupport(Kind.EXCHANGER, diameter, length))
+                    .withExchangerType(ExchangerType.CROSSFLOW));
+        }
         return shapes;
     }
 
@@ -48,7 +53,9 @@ class EquipmentLayoutGoldenTest {
     /** One table line: the shape, then what its layout places. */
     static String line(EquipmentShape shape) {
         var layout = ShapeRasterizer.layout(shape);
-        var b = new StringBuilder(shape.toString()).append(" | box ").append(shape.sizeX()).append(' ').append(shape.sizeY()).append(' ').append(shape.sizeZ())
+        var printed = shape.toString().replace(", baseSpeed=0.0]","]");
+        if (shape.exchangerType() == ExchangerType.STANDARD) printed = printed.replace(", exchangerType=STANDARD]", "]").replaceAll(", exchangers=Exchangers\\[condenser=STANDARD, trim=STANDARD, coolers=\\[[A-Z, ]*\\]\\]", "");
+        var b = new StringBuilder(printed).append(" | box ").append(shape.sizeX()).append(' ').append(shape.sizeY()).append(' ').append(shape.sizeZ())
                 .append(" | shell ").append(layout.shell().size()).append(" interior ").append(layout.interior().size())
                 .append(" | stamp ").append(Long.toHexString(ShapeRasterizer.stamp(shape))).append(" | pipes");
         for (var nozzle : ShapeRasterizer.ports(shape))

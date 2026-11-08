@@ -12,6 +12,9 @@ public final class ElectricStore {
     public static final double BUFFER_SECONDS = 40;
     /** One slice at the longest cadence, s: the restart threshold's span of rated draw (reading A62). */
     public static final double SLICE_SECONDS = 20;
+    /** Motors only bridge two presentation periods; their buffer is not a stand-alone power supply. */
+    public static final double MOTOR_BUFFER_SECONDS = 10;
+    public static final double MOTOR_RESTART_SECONDS = 5;
     /** The most a port takes or gives per tick, as a multiple of the rated draw (plan 7). */
     public static final double RATE = 2;
     /** A generator delivers within this share of its rated speed either way (reading A64). */

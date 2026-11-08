@@ -2,6 +2,7 @@ package com.wormzjl.icheme.science.flowsheet.sizing;
 
 import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
+import com.wormzjl.icheme.science.equipment.ExchangerType;
 import com.wormzjl.icheme.science.equipment.HeatSides;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
 import com.wormzjl.icheme.science.equipment.UnitDesign;
@@ -18,8 +19,9 @@ import java.util.List;
 /**
  * An exchanger or a kettle (batch 2026-11-02-process-simulator, {@code SIZING_PLAN.md} sections 3.4, 3.5 and 3.11). The surface a
  * duty needs comes from {@link ExchangerRating} on the world's two curves, and each side's drop from its {@link HeatSides} passage
- * at its inlet's flow, as the world's law prices it. Auto takes the fewest shells, then the least surface, that holds it under
- * twice the need and within both drops. A kettle's shell is a pool, so it has no shell drop and reads its flux.
+ * at its inlet's flow, as the world's law prices it. Auto takes the fewest shells, then the least surface, within both drops.
+ * Excess surface stays advisory: enlarge a shell before adding parallel shells. A kettle's shell is a pool, so it has no shell
+ * drop and reads its flux.
  */
 public final class ExchangerSizing {
     /** The most shells Auto tries: as many as a column member step takes in parallel (S3b). */
@@ -34,8 +36,9 @@ public final class ExchangerSizing {
         var sizes = new ArrayList<Size>();
         for (int shells = 1; shells <= MOST_SHELLS; shells++)
             for (double shell : UnitSize.grid(kind))
-                for (int tubes = design.minLength(shell); tubes <= design.maxLength(shell); tubes++) sizes.add(new Size(kind == EquipmentShape.Kind.KETTLE, shells, shell, tubes));
-        sizes.sort(Comparator.comparingInt(Size::shells).thenComparingDouble(Size::surface));
+                for (int tubes = design.minLength(shell); tubes <= design.maxLength(shell); tubes++)
+                    for(var type:kind==EquipmentShape.Kind.KETTLE?List.of(ExchangerType.STANDARD):ExchangerType.CATALOG) sizes.add(new Size(kind == EquipmentShape.Kind.KETTLE, shells, shell, tubes,type));
+        sizes.sort(Comparator.comparingInt(Size::shells).thenComparingDouble(Size::surface).thenComparing(Size::type));
         return List.copyOf(sizes);
     }
 
@@ -47,8 +50,11 @@ public final class ExchangerSizing {
      * @param shell  m, a kettle's bundle
      * @param tubes  m
      */
-    public record Size(boolean kettle, int shells, double shell, int tubes) implements UnitSize {
+    public record Size(boolean kettle, int shells, double shell, int tubes, ExchangerType type) implements UnitSize {
+        public Size(boolean kettle,int shells,double shell,int tubes){this(kettle,shells,shell,tubes,ExchangerType.STANDARD);}
         public Size {
+            java.util.Objects.requireNonNull(type);
+            if(kettle&&type!=ExchangerType.STANDARD)throw new IllegalArgumentException("A kettle has no crossflow shell");
             if (shells < 1 || !(shell > 0) || !Double.isFinite(shell) || tubes < 1) throw new IllegalArgumentException("Invalid exchanger size");
         }
 
@@ -58,7 +64,7 @@ public final class ExchangerSizing {
         }
 
         @Override public EquipmentShape shape() {
-            return UnitSize.unit(kettle ? EquipmentShape.Kind.KETTLE : EquipmentShape.Kind.EXCHANGER, shell, tubes, ProcessUnit.Bank.ONE);
+            return UnitSize.unit(kettle ? EquipmentShape.Kind.KETTLE : EquipmentShape.Kind.EXCHANGER, shell, tubes, ProcessUnit.Bank.ONE).withExchangerType(type);
         }
 
         @Override public int count() {
@@ -66,8 +72,9 @@ public final class ExchangerSizing {
         }
 
         public Size withShells(int next) {
-            return new Size(kettle, next, shell, tubes);
+            return new Size(kettle, next, shell, tubes,type);
         }
+        public Size withType(ExchangerType next){return new Size(kettle,shells,shell,tubes,next);}
     }
 
     /**
@@ -86,7 +93,15 @@ public final class ExchangerSizing {
      * @param tower     a free water side's tower water at design flow, null where both sides are the sheet's
      */
     public record Load(boolean kettle, LineSizing.Carried tube, LineSizing.@Nullable Carried shell, Limit tubeDrop, @Nullable Limit shellDrop, double needed, double duty, double hotEnd, double coldEnd, double approach, @Nullable Double waterOut,
-                       @Nullable Tower tower) {
+                       @Nullable Tower tower, @Nullable Curves curves, ExchangerType model) {
+        public Load(boolean kettle,LineSizing.Carried tube,LineSizing.@Nullable Carried shell,Limit tubeDrop,@Nullable Limit shellDrop,double needed,double duty,double hotEnd,double coldEnd,double approach,@Nullable Double waterOut,@Nullable Tower tower) {
+            this(kettle,tube,shell,tubeDrop,shellDrop,needed,duty,hotEnd,coldEnd,approach,waterOut,tower,null,ExchangerType.STANDARD);
+        }
+        Load forType(ExchangerType type) {
+            if(type==model)return this;
+            var rated=curves==null?new ExchangerRating.Result(Double.POSITIVE_INFINITY,approach):ExchangerRating.required(type,curves.tube,curves.shell,duty);
+            return new Load(kettle,tube,shell,tubeDrop,shellDrop,rated.area(),duty,hotEnd,coldEnd,rated.approach(),waterOut,tower,curves,type);
+        }
         /**
          * A free cooling side's load (C2, {@code COOLER_MODEL_PLAN.md} section 3 item 3): {@code in} cooled to {@code out} against
          * tower water from 25 °C to its return ({@link CoolerSizing#waterReturn}), on the tubes, the process on the shell; null
@@ -104,7 +119,7 @@ public final class ExchangerSizing {
             if (load == null) return null;
             double flow = basis.designFlow();
             var tower = new Tower(water.supply().mass() * flow, LineSizing.Carried.of(water.supply(), flow, thermo, scratch).volume() * 3600);
-            return new Load(load.kettle, load.tube, load.shell, load.tubeDrop, load.shellDrop, load.needed, load.duty, load.hotEnd, load.coldEnd, load.approach, load.waterOut, tower);
+            return new Load(load.kettle, load.tube, load.shell, load.tubeDrop, load.shellDrop, load.needed, load.duty, load.hotEnd, load.coldEnd, load.approach, load.waterOut, tower,load.curves,load.model);
         }
 
         /**
@@ -123,9 +138,11 @@ public final class ExchangerSizing {
             var coldOut = tubeHot ? shellOut : tubeOut;
             double flow = basis.designFlow(), duty = Math.abs(heat) * flow, hotEnd = hotIn.temperature() - coldOut.temperature(), coldEnd = hotOut.temperature() - coldIn.temperature();
             double needed = Double.POSITIVE_INFINITY, approach = Math.min(hotIn.temperature() - coldIn.temperature(), Math.min(hotEnd, coldEnd));
+            Curves curves=null;
             if (hotIn.temperature() > coldIn.temperature()) {
                 var hot = ExchangerRating.side(thermo, hotIn, coldIn.temperature(), hotIn.temperature()).at(flow);
                 var cold = ExchangerRating.side(thermo, coldIn, coldIn.temperature(), hotIn.temperature()).at(flow);
+                curves=new Curves(tubeHot?hot:cold,tubeHot?cold:hot);
                 var rated = ExchangerRating.rate(hot, cold, duty);
                 needed = rated.area();
                 approach = rated.approach();
@@ -133,7 +150,7 @@ public final class ExchangerSizing {
             var waterOut = Service.water(coldIn.state()) ? (Double) (coldOut.temperature() - 273.15) : null;
             var tube = LineSizing.Carried.of(tubeIn, flow, thermo, scratch);
             var shell = kettle ? null : LineSizing.Carried.of(shellIn, flow, thermo, scratch);
-            return new Load(kettle, tube, shell, drop(tubeIn, tubeOut, !tubeHot, thermo), kettle ? null : drop(shellIn, shellOut, tubeHot, thermo), needed, duty, hotEnd, coldEnd, approach, waterOut, null);
+            return new Load(kettle, tube, shell, drop(tubeIn, tubeOut, !tubeHot, thermo), kettle ? null : drop(shellIn, shellOut, tubeHot, thermo), needed, duty, hotEnd, coldEnd, approach, waterOut, null,curves,ExchangerType.STANDARD);
         }
 
         /** The row a side answers to, by the world's film along it: what boils, what comes in as a gas or to condense, or a liquid. */
@@ -152,10 +169,12 @@ public final class ExchangerSizing {
     /** A free side's tower water at design flow: kg/s, and m³/h. */
     public record Tower(double mass, double volume) {
     }
+    public record Curves(ExchangerRating.Side tube,ExchangerRating.Side shell) {}
 
     /** Every limit of {@code load} read at {@code size}, any size, and a free side's water beside them. Null load, nothing to read. */
     public static Rating rate(@Nullable Load load, Size size) {
         if (load == null) return Rating.NONE;
+        load=load.forType(size.type());
         double surface = size.surface();
         var readings = UnitSize.readings(UnitSize.built(size));
         readings.add(Limit.EXCHANGER_SURFACE.against(surface, load.needed()));
@@ -186,7 +205,11 @@ public final class ExchangerSizing {
      */
     public static Selection.Choice<Size> auto(@Nullable Load load) {
         if (load == null) return Selection.Choice.none();
-        double held = Selection.spared(load.needed());
-        return Selection.smallest(Selection.spareFirst(load.kettle() ? KETTLES : EXCHANGERS, Size::surface, held), size -> rate(load, size));
+        var loads=new java.util.EnumMap<ExchangerType,Load>(ExchangerType.class);
+        for(var type:load.kettle()?List.of(ExchangerType.STANDARD):ExchangerType.CATALOG)loads.put(type,load.forType(type));
+        var spare=new ArrayList<Size>();var rest=new ArrayList<Size>();
+        for(var size:load.kettle()?KETTLES:EXCHANGERS)(size.surface()>=Selection.spared(loads.get(size.type()).needed())?spare:rest).add(size);
+        spare.addAll(rest);
+        return Selection.smallest(spare,size->rate(loads.get(size.type()),size));
     }
 }

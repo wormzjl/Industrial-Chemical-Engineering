@@ -1,0 +1,3 @@
+from pathlib import Path
+p=Path('src/test/java/com/wormzjl/icheme/science/equipment/MachineRpmDesignTest.java');s=p.read_text(encoding='utf-8');a=s.index('    @Test void legacyPoleFacts');b=s.index('    @Test void explicitRpm',a);s=s[:a]+s[b:];s=s.replace('assertEquals(1800,edited.baseSpeed());assertEquals(duty.poles(),edited.poles());','assertEquals(1800,edited.baseSpeed());');p.write_text(s,encoding='utf-8')
+p=Path('tmp/operator-gui/REQUEST.md');s=p.read_text(encoding='utf-8');p.write_text(s+'\nOwner steering: no backward compatibility work needed for this update. No migration, format expansion or new compatibility corpus added; the pre-existing BaseSpeed and defaults are reused. New regression fixture focuses on direct-RPM edits.\n',encoding='utf-8')

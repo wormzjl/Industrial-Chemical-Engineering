@@ -34,6 +34,35 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class ConstructorColumnTest {
     private static final Measure M = Measure.fixed(6);
+
+    @Test void heatExchangerSubTypesShareTheOneMajorEquipmentEntry() {
+        var texts=new HeatControlColumnTest.Recording("gui.icheme.");
+        var type=com.wormzjl.icheme.science.equipment.ExchangerType.CROSSFLOW;
+        var design=new ConstructorColumn.Design(Form.EXCHANGER,1.5,6,2,3,0,0,ProcessUnit.Bank.ONE,null,
+                new ConstructorColumn.Outlet(1,0,STANDING),16,com.wormzjl.icheme.science.equipment.TowerBank.ONE,MachineDuty.NONE,type);
+        var buttons=ConstructorColumn.buttons(ConstructorColumn.design(design,texts).rows());
+        assertEquals(1,java.util.Arrays.stream(Equipment.values()).filter(e->e==Equipment.EXCHANGER).count());
+        for(var subtype:com.wormzjl.icheme.science.equipment.ExchangerType.CATALOG) {
+            var button=buttons.stream().filter(b->b.key().equals("exchanger:"+subtype.name())).findFirst().orElseThrow();
+            assertEquals(subtype==type,button.latched());
+        }
+    }
+    @Test void deconstructionNamesItsPhysicalTargetAndDisablesMissingOrPendingTargets() {
+        var t = new HeatControlColumnTest.Recording("gui.icheme.");
+        var page = ConstructorColumn.design(design(Form.VERTICAL, 2, 4, 2, 1, 0, 0), t);
+        for (var target : List.of(new ConstructorColumn.Removal(null, "", 0, false),
+                new ConstructorColumn.Removal("V-101 · Drum", "4, 64, 8", 382, false),
+                new ConstructorColumn.Removal("V-101 · Drum", "4, 64, 8", 382, true))) {
+            var shown = ConstructorColumn.withRemoval(page, target, t);
+            var button = ConstructorColumn.buttons(shown.rows()).stream().filter(b -> b.key().equals("deconstruct")).findFirst().orElseThrow();
+            assertEquals(target.target() != null && !target.waiting(), button.active());
+            for (int width : new int[]{ConstructorColumn.WIDTH, ConstructorColumn.WIDTH - BAR}) {
+                var placed = Column.place(shown.rows(), 0, 0, width, M, Column.Metrics.COMPACT);
+                assertTrue(placed.bounds().w() <= width);
+            }
+        }
+    }
+
     /** The door's height in the renders (464 by 254 GUI px), and the room the view's bar takes where a column scrolls. */
     private static final int HEIGHT = 254, BAR = ScrollView.BAR + 4;
     private static final List<String> STANDING = List.of("front", "right", "back", "left"), LYING = List.of("front", "top", "back", "bottom");
@@ -115,6 +144,12 @@ class ConstructorColumnTest {
         out.add(new Case("no templates, files unreadable", ConstructorColumn.templates(List.of(), 3, t)));
         out.add(new Case("imports", ConstructorColumn.imports(imports(t), t)));
         out.add(new Case("no imports", ConstructorColumn.imports(List.of(), t)));
+        var removal = new ConstructorColumn.Removal("V-101 · Vertical drum", "12, 64, -8", 382, false);
+        out.add(new Case("deconstruction on design", ConstructorColumn.withRemoval(ConstructorColumn.design(design(Form.VERTICAL, 2, 4, 2, 1, 0, 0), t), removal, t)));
+        out.add(new Case("deconstruction on choice", ConstructorColumn.withRemoval(ConstructorColumn.choose(Category.VESSELS, Equipment.COLUMN, 16, t), removal, t)));
+        var distant = new ConstructorColumn.Removal("V-101 · Very long equipment name at the world border", "-29999980, -64, 29999980", 1000000, false,
+                "You do not have permission to deconstruct every cell of this equipment.", true);
+        out.add(new Case("deconstruction at world border with error", ConstructorColumn.withRemoval(ConstructorColumn.choose(Category.VESSELS, Equipment.COLUMN, 16, t), distant, t)));
         return out;
     }
 
@@ -314,7 +349,7 @@ class ConstructorColumnTest {
         var drum = ConstructorColumn.design(design(Form.VERTICAL, 2, 6, 3, 3, 0, 0), t);
         assertEquals(List.of("size", "size-", "size+", "length", "length-", "length+", "support", "support-", "support+", "forward", "forward-", "forward+", "right", "right-",
                 "right+", "up", "up-", "up+"), slots(drum));
-        assertEquals(List.of("nozzles", "paint", "build"), drum.footer().stream().map(Column.Button::key).toList());
+        assertEquals(List.of("paint", "build"), drum.footer().stream().map(Column.Button::key).toList());
         var lying = ConstructorColumn.design(design(Form.CROSSWISE, 2, 6, 3, 3, 0, 0), t);
         assertTrue(buttons(lying).get("axis:crosswise").latched() && buttons(lying).get("axis:lengthwise").active());
         var column = ConstructorColumn.design(design(Form.COLUMN, 2, 20, 3, 3, 0, 0), t);
@@ -324,12 +359,11 @@ class ConstructorColumnTest {
         var pump = ConstructorColumn.design(design(Form.PUMP, 0.1, 1, 0, 3, 0, 0), t);
         assertFalse(slots(pump).contains("support"), "a pump stands at grade");
         // A machine's design point (option A): its settings stepped, the sizes they give shown, its classes latched keys.
-        assertEquals(List.of("flow", "flow-", "flow+", "head", "head-", "head+", "size", "poles:2", "poles:4"), slots(pump).subList(0, 9));
-        assertTrue(buttons(pump).get("poles:2").latched() && buttons(pump).get("poles:4").active());
+        assertEquals(List.of("flow", "flow-", "flow+", "head", "head-", "head+", "size", "base_speed", "base_speed-", "base_speed+"), slots(pump).subList(0, 10));
+        assertFalse(slots(pump).stream().anyMatch(k->k.startsWith("poles:")));
         var motor = ConstructorColumn.design(design(Form.MOTOR, 250, 1, 2, 3, 0, 0), t);
-        assertEquals(List.of("power", "power-", "power+", "support", "support-", "support+", "poles:2", "poles:4", "poles:6", "poles:8", "drive:fixed", "drive:variable"),
-                slots(motor).subList(0, 12));
-        assertTrue(buttons(motor).get("poles:4").latched() && buttons(motor).get("drive:fixed").latched() && buttons(motor).get("drive:variable").active());
+        assertEquals(List.of("power","power-","power+","support","support-","support+","base_speed","base_speed-","base_speed+"),slots(motor).subList(0,9));
+        assertFalse(slots(motor).stream().anyMatch(k->k.startsWith("poles:")||k.startsWith("drive:")));
         var turbine = ConstructorColumn.design(design(Form.STEAM_TURBINE, 1, 1, 0, 3, 0, 0), t);
         assertEquals(List.of("power", "power-", "power+", "size", "support", "support-", "support+", "steam:mp", "steam:hp", "steam:vhp", "exhaust", "exhaust-", "exhaust+"),
                 slots(turbine).subList(0, 13));
@@ -367,6 +401,30 @@ class ConstructorColumnTest {
         var palette = DialogColumns.palette(Column.place(paint.rows(), ConstructorColumn.LEFT, DialogColumns.TOP, ConstructorColumn.WIDTH, M, Column.Metrics.COMPACT), 16);
         assertEquals(16, palette.size(), "the palette in the Paint group's gap");
         assertTrue(palette.stream().allMatch(r -> r.w() >= 16));
+    }
+
+    @Test void nozzleControlsStayOnTheMainDesignDoorWithOneFooter(){
+        var t=new HeatControlColumnTest.Recording("gui.icheme.");
+        for(var form:List.of(Form.VERTICAL,Form.CROSSWISE,Form.COLUMN)){
+            var in=design(form,2,6,3,3,0,0);
+            var page=ConstructorColumn.design(in,form.column()?null:connections(2,1,form.orientation().horizontal(),0,null,true,false,11),form.column()?nozzles("draw",true,true,14):null,t);
+            var keys=slots(page);assertTrue(keys.containsAll(List.of("forward","right","up",form.column()?"nozzle":"connection")));
+            assertEquals(List.of("paint","build"),page.footer().stream().map(Column.Button::key).toList());
+            assertFalse(buttons(page).containsKey("nozzles"));if(form.column())assertTrue(buttons(page).containsKey("reset"));
+            for(int width:new int[]{ConstructorColumn.WIDTH,ConstructorColumn.WIDTH-BAR}){
+                var column=Column.place(page.rows(),0,0,width,M,Column.Metrics.COMPACT);column.slots();DeviceColumnTest.assertInLine(column,"inline nozzles "+form);
+                for(var row:column.rows())for(var line:row.texts())assertTrue(M.width(line)<=row.rect().w(),line);
+            }
+        }
+        assertEquals(Set.of(),t.missing);
+    }
+    @Test void pumpMotorAndGeneratorUseDirectRpmWithoutPoleButtons(){
+        var t=new HeatControlColumnTest.Recording("gui.icheme.");
+        for(var form:List.of(Form.PUMP,Form.MOTOR,Form.GENERATOR)){
+            var d=UnitDesign.of(form.kind());var page=ConstructorColumn.design(design(form,d.minSize(),d.minLength(d.minSize()),0,3,0,0),t);
+            assertTrue(slots(page).containsAll(List.of("base_speed","base_speed-","base_speed+")));
+            assertFalse(slots(page).stream().anyMatch(k->k.startsWith("poles:")));
+        }
     }
 
     private static Map<String, Rect> widgets(ConstructorColumn.Page page, int width) {

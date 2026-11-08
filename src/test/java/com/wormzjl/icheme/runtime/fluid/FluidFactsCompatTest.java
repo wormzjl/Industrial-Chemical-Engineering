@@ -404,6 +404,15 @@ class FluidFactsCompatTest {
 
     // ---------------- the corpus: one image per facts schema ----------------
 
+    private void crossflow(EventPathWorld world) {
+        var type=com.wormzjl.icheme.science.equipment.ExchangerType.CROSSFLOW;
+        long tube=world.ledger.nextIdentity(),shell=tube+1;var spec=FluidDeviceSpec.nitrogen(CATALOG);
+        world.registry.submit(List.of(
+                new WorldTopologyLedger.Edit(tube,new WorldTopologyLedger.Registration(heatSide(tube,80,0,type.tubePassage(1.5,6),new HeatUnit(HeatSides.Unit.EXCHANGER,HeatSides.Side.TUBE,1012.5,shell).withExchangerType(type).withTransit(73)),spec,0)),
+                new WorldTopologyLedger.Edit(shell,new WorldTopologyLedger.Registration(heatSide(shell,80,4,type.shellPassage(1.5,6),new HeatUnit(HeatSides.Unit.EXCHANGER,HeatSides.Side.SHELL,1012.5,tube).withExchangerType(type)),spec,0))),shell+1,null);
+        world.runTo(world.ledger.onlineTick()+20);
+    }
+
     private static final Path CORPUS=Path.of("src/test/resources/compat/fluid");
     @Test void towerSettingsSurviveBothExactAndFactsOnlyLoads(){
         var world=corpusWorld();var saved=image(world);
@@ -421,7 +430,7 @@ class FluidFactsCompatTest {
     @Test void everyCorpusImageRebuildsFromItsFactsToItsRecordedTotals() throws IOException {
         var current=CORPUS.resolve("schema-"+FluidFacts.SCHEMA);
         if(!Files.isDirectory(current)) {
-            var written=Path.of("build/compat/fluid/schema-"+FluidFacts.SCHEMA);write(image(corpusWorld()),written);
+            var written=Path.of("build/compat/fluid/schema-"+FluidFacts.SCHEMA);var world=corpusWorld();crossflow(world);write(image(world),written);
             fail("No corpus image of facts schema "+FluidFacts.SCHEMA+": copy "+written.toAbsolutePath()+" to "+current);
         }
         try(var images=Files.list(CORPUS)) {
@@ -597,6 +606,7 @@ class FluidFactsCompatTest {
             if(h!=null)text.append(":").append(h.unit()).append(":").append(h.side()).append(":").append(h.area()).append(":").append(h.partner()).append(":").append(h.control()).append(":").append(h.transitJoule());
             // Schema 11: an air cooler's fans, written only where known, as an older image has none.
             if(h!=null&&h.fanCount()>0)text.append(":fans=").append(h.fanCount());
+            if(h!=null&&h.exchangerType()!=com.wormzjl.icheme.science.equipment.ExchangerType.STANDARD)text.append(":type=").append(h.exchangerType());
         }
         return text.toString();
     }

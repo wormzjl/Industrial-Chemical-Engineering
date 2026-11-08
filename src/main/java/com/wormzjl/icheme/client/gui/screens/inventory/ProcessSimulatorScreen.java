@@ -13,7 +13,6 @@ import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
 import com.wormzjl.icheme.client.gui.common.kit.SkinButton;
 import com.wormzjl.icheme.client.gui.common.kit.SkinField;
-import com.wormzjl.icheme.client.gui.common.kit.WindowScale;
 import com.wormzjl.icheme.client.gui.flowsheet.BasisPage;
 import com.wormzjl.icheme.client.gui.flowsheet.ColumnDoors;
 import com.wormzjl.icheme.client.gui.flowsheet.Door;
@@ -75,12 +74,6 @@ import net.minecraft.world.entity.player.Inventory;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
-/**
- * The process simulator (batch 2026-11-02-process-simulator, W6_SCREEN_PLAN.md section 2): the whole window at {@link WindowScale}'s design height 480, with tabs, the canvas, the palette,
- * the doors. It only forwards events and draws: the sheet, its gestures and every page are Minecraft-free in {@code client.gui.flowsheet}, and {@link SimulatorHost} is the run and the
- * block. A change of what stands on screen rebuilds the widgets; the door's rows are placed again each frame for their texts. It stands on a menu, so a close, a disconnect and the block
- * going all end it, and it is no {@code AbstractContainerScreen}: a typed E is text here, and it has no slots.
- */
 public final class ProcessSimulatorScreen extends Screen implements MenuAccess<ProcessSimulatorMenu> {
     private static final int DESIGN_HEIGHT = 480;
     private static final String FOLDER = "IChemE/flowsheets";
@@ -291,7 +284,7 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
         super.removed();
         autosave();
         host.close();
-        WindowScale.restore(minecraft);
+
     }
 
     @Override public void tick() {
@@ -352,7 +345,7 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
     }
 
     @Override protected void init() {
-        WindowScale.apply(minecraft, this, DESIGN_HEIGHT, (w, h) -> h >= SimulatorFrame.LEAST_H && w >= SimulatorFrame.LEAST_W);
+
         frame = new SimulatorFrame(width, height, font.width(title));
         entries.clear();
         var x = context();

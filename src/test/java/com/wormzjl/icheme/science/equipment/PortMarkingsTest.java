@@ -63,13 +63,18 @@ class PortMarkingsTest {
                     if (code == 0) drawn++;
                     int axis = nozzle.axis();
                     double[] base = nozzle.base();
-                    double round = (code == 0 ? nozzle.defaultOd() : PipeSizes.outsideOf(code)) / 2 + .01;
+                    double od = code == 0 ? nozzle.defaultOd() : PipeSizes.outsideOf(code);
+                    var root = ShapeRasterizer.nozzleRoot(shape, k);
                     for (var facet : mesh.facets())
                         for (var p : facet.positions()) {
                             double s = (p[axis] - base[axis]) * nozzle.sign(), off = 0;
                             for (int a = 0; a < 3; a++) if (a != axis) off += (p[a] - base[a]) * (p[a] - base[a]);
                             var q = p.clone();
-                            for (int a = 0; a < 3; a++) if (a != axis) q[a] = base[a] + (p[a] - base[a]) * round / Math.sqrt(off);
+                            // Probe just outside the local neck radius, including a conical cast reducer.
+                            double radius = od / 2;
+                            if (root != null && s >= .01 && s < root.end(nozzle.length(), od))
+                                radius = root.radius() + (radius - root.radius()) * (s - .01) / (root.end(nozzle.length(), od) - .01);
+                            for (int a = 0; a < 3; a++) if (a != axis) q[a] = base[a] + (p[a] - base[a]) * (radius + .01) / Math.sqrt(off);
                             assertFalse(ShapeRasterizer.hides(shape, k, code, q), () -> shape + " " + nozzle.role() + " size " + code + " at " + s);
                         }
                     // An arrowhead's two base corners share a station along the neck; its tip lies beyond them, the way it points.

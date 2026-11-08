@@ -56,6 +56,18 @@ class AssemblyMatcherTest {
         return trays(Condenser.AIR_COOLER, false, true, List.of(18), Pump.STANDARD, 2, List.of(Pump.STANDARD, Pump.STANDARD));
     }
 
+    @Test void aColumnNamesAnExchangerConfigurationMismatch() {
+        var old=trays(Condenser.EXCHANGER,false,true,List.of(),Pump.STANDARD,0,List.of());
+        var plant=ideal(old);
+        assertTrue(plant.match().complete());
+        var requested=old.withComponents(old.components().withExchangers(new ColumnComponents.Exchangers(
+                com.wormzjl.icheme.science.equipment.ExchangerType.CROSSFLOW,
+                com.wormzjl.icheme.science.equipment.ExchangerType.STANDARD,List.of())));
+        var report=AssemblyMatcher.match(ColumnBlueprint.of(requested),plant.graph(),plant.unit("column"),Set.of());
+        assertEquals(State.CONFIGURATION,report.slot(new Slot("condenser",0)).state());
+        assertFalse(report.complete());
+    }
+
     /**
      * The plant {@code trays} asks for, piped as designed. The receiver's condensate enters its second side connection;
      * an even pumparound passes its cooler before its pump, and an In-line Pump of an even pumparound sits on its return.

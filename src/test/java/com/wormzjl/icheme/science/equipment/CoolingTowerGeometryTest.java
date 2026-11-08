@@ -26,8 +26,10 @@ class CoolingTowerGeometryTest {
             assertFalse(unit.inside(new double[]{axis,height*.75,axis}));
             assertTrue(unit.mesh().facets().size()<15000,"The shell has a bounded surface mesh");
             assertEquals(CoolingTowerDesign.naturalFacets(diameter),CoolingTowerBasin.surface(shape).size());
-            assertEquals(1,InstrumentGeometry.levelSockets(shape).size());
-            assertEquals(1,InstrumentGeometry.levelSockets(shape).getFirst().y());
+            assertTrue(InstrumentGeometry.levelSockets(shape).isEmpty(),"Basin level is factory instrumented");
+            var level=ShapeRasterizer.instruments(shape).probes().stream().filter(p->p.quantity()==EquipmentInstruments.Quantity.LEVEL).toList();
+            assertEquals(1,level.size());assertFalse(level.getFirst().manual());
+            assertEquals(1,level.getFirst().centre()[1]);
         }
     }
     @Test void naturalWaterSharesTheBasinInnerWallAtBothDiameterExtremesAndEveryRotation(){
@@ -86,7 +88,7 @@ class CoolingTowerGeometryTest {
             assertTrue(unit.mesh().facets().stream().noneMatch(f->f.material()==Mesh.Material.STEELWORK&&f.min()[1]==0),width+" m: no post stands away from the tower");
         }
     }
-    /** Shell, stack and fan at most 200 polygons a cell, whatever its width: nothing is cut at the block grid. */
+    /** Shell, stack and fan retain 200 polygons/cell; the shared service housing has its own bounded budget. */
     @Test void aFanCellDrawsWithinItsPolygonBudget(){
         var access=java.util.EnumSet.of(Mesh.Material.HANDRAIL,Mesh.Material.STEELWORK);
         for(int width=8;width<=14;width+=2)for(var bank:List.of(TowerBank.ONE,new TowerBank(3,2),new TowerBank(8,2))){
@@ -95,7 +97,9 @@ class CoolingTowerGeometryTest {
             long body=shell.stream().filter(p->!access.contains(p.material())).count()+ShapeRasterizer.moving(shape).stream().mapToLong(m->m.polygons().size()).sum();
             long ladder=shell.stream().filter(p->access.contains(p.material())).count(),chunks=0;
             for(var cell:ShapeRasterizer.layout(shape).shell())chunks+=ShapeRasterizer.chunkSurface(ShapeRasterizer.key(shape,cell.x(),cell.y(),cell.z())).size();
-            assertTrue(body<=200*bank.cells(),width+" m "+bank+": "+body);
+            long service=ShapeRasterizer.services(shape).polygons().stream().filter(p->!access.contains(p.material())).count();
+            assertTrue(service<=200,"One compact service housing: "+service);
+            assertTrue(body-service<=200*bank.cells(),width+" m "+bank+": body "+body+", service "+service);
             assertTrue(ladder<=1000+6*width*(bank.columns()+bank.rows()),width+" m "+bank+": "+ladder);
             assertTrue(chunks<=450,width+" m "+bank+": only the nozzles and the rest's grating stay in the chunks: "+chunks);
         }

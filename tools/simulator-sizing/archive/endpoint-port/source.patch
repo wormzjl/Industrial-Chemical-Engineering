@@ -1,0 +1,190 @@
+diff --git a/src/main/java/com/wormzjl/icheme/science/equipment/LineGeometry.java b/src/main/java/com/wormzjl/icheme/science/equipment/LineGeometry.java
+index b7bef0665..e9fc990a9 100644
+--- a/src/main/java/com/wormzjl/icheme/science/equipment/LineGeometry.java
++++ b/src/main/java/com/wormzjl/icheme/science/equipment/LineGeometry.java
+@@ -23,7 +23,7 @@ import static com.wormzjl.icheme.science.equipment.Mesh.*;
+  * <p>Pipeline devices draw their bodies from photographs (survey section 4): a globe control valve with its diaphragm
+  * actuator above a horizontal line or beside a vertical one; a vertical in-line pump with its motor up on a pedestal; a
+  * compressor barrel with its motor on a skid; a Y-strainer with its screen leg 45° down and downstream; a small
+- * vertical tank on legs; and the feed and drain boxes of the source and sink. Each draws a flanged nozzle at the size of
++ * vertical tank on legs; and symmetric six-faced source and sink housings. Each draws a flanged nozzle at the size of
+  * the line met at each connected face; an in-line device draws its two line nozzles even unconnected.
+  */
+ public final class LineGeometry {
+@@ -123,8 +123,8 @@ public final class LineGeometry {
+             case VALVE -> valve(m, key);
+             case FILTER -> strainer(m, key);
+             case RESERVOIR -> tank(m, key);
+-            case GENERATOR -> box(m, key, Material.FEED);
+-            case VOID -> box(m, key, Material.DRAIN);
++            case GENERATOR -> boundary(m, key, Material.FEED);
++            case VOID -> boundary(m, key, Material.DRAIN);
+         }
+         return m;
+     }
+@@ -612,11 +612,52 @@ public final class LineGeometry {
+         faceNozzles(m, key, new double[]{end, end, side, side, side, side});
+     }
+ 
+-    /** The source or sink: a painted box on the floor with a flanged nozzle to each line met. */
+-    private static void box(Mesh m, Key key, Material material) {
+-        m.box(new double[]{.18, 0, .18}, new double[]{.82, .7, .82}, ALL_FACES, material);
+-        m.box(new double[]{.15, .7, .15}, new double[]{.85, .76, .85}, ALL_FACES, Material.STEELWORK);
+-        faceNozzles(m, key, new double[]{.5, .25, .3, .3, .3, .3});
++    /** Six identical port covers on a bevelled steel housing; no preferred facing or floor. */
++    private static void boundary(Mesh m, Key key, Material material) {
++        double radius = .32, shoulder = .26;
++        for (int face = 0; face < 6; face++) {
++            var f = frame(face, ref(face));
++            var square = new ArrayList<double[]>(4);
++            for (int[] corner : new int[][]{{-1, -1}, {1, -1}, {1, 1}, {-1, 1}}) {
++                var p = f.along(radius);
++                for (int k = 0; k < 3; k++)
++                    p[k] += shoulder * (corner[0] * f.ref()[k] + corner[1] * f.side()[k]);
++                square.add(p);
++            }
++            m.flat(square, step(face), Material.PIPE);
++            m.prism(f, .24, radius, radius + .008, 8, Material.FLANGE);
++            m.disc(f, .24, radius + .008, 8, 1, material);
++            if (key.connected(face)) {
++                double size = key.face(face) == 0 ? NOZZLE : PipeSizes.outsideOf(key.face(face));
++                arm(m, face, .30, size, End.flanged(size, true), ref(face), PipeSizes.sides(size), true);
++            }
++        }
++        // The twelve edge bevels and eight corner bevels close the same housing along every axis.
++        for (int a = 0; a < 3; a++) for (int b = a + 1; b < 3; b++) {
++            int c = 3 - a - b;
++            for (int sa : new int[]{-1, 1}) for (int sb : new int[]{-1, 1}) {
++                var edge = new ArrayList<double[]>(4);
++                for (int[] end : new int[][]{{0, -1}, {1, -1}, {1, 1}, {0, 1}}) {
++                    var p = CENTRE.clone();
++                    p[a] += sa * (end[0] == 0 ? radius : shoulder);
++                    p[b] += sb * (end[0] == 0 ? shoulder : radius);
++                    p[c] += end[1] * shoulder;
++                    edge.add(p);
++                }
++                var normal = new double[3]; normal[a] = sa; normal[b] = sb;
++                m.flat(edge, normal, Material.FLANGE);
++            }
++        }
++        for (int sx : new int[]{-1, 1}) for (int sy : new int[]{-1, 1}) for (int sz : new int[]{-1, 1}) {
++            var corner = new ArrayList<double[]>(3);
++            int[] signs = {sx, sy, sz};
++            for (int axis = 0; axis < 3; axis++) {
++                var p = CENTRE.clone();
++                for (int k = 0; k < 3; k++) p[k] += signs[k] * (k == axis ? radius : shoulder);
++                corner.add(p);
++            }
++            m.flat(corner, new double[]{sx, sy, sz}, Material.FLANGE);
++        }
+     }
+ 
+     // ---- Frames ----------------------------------------------------------------------------------------------------
+diff --git a/src/main/resources/assets/icheme/textures/block/equipment_drain.png b/src/main/resources/assets/icheme/textures/block/equipment_drain.png
+index bbe6ec09f37a38cb74d9d37d212affff34558bd5..4eb62f27e52d318f303d70b952507a05b795c84e 100644
+GIT binary patch
+literal 639
+zcmV-_0)YLAP)<h;3K|Lk000e1NJLTq001BW001Be1^@s6b9#F80006;Nkl<ZcwWty
+zNv_;53`BK}Y=WGl=X3PD2|n<z6QJis_5pf6P;SDY8YqJ<Q?@ppWWg0_K1yOya+*%3
+zwpc7|y<XdVKDX6sWwY7LmdmC64PPn^e3vhk2GVyvpY3+L+4K3d>-B1n$HOj{i{0<{
+zmoN8SE@vtYB%lrMeI+^JOI?8;@ay}m$b4Z@PR~mva0MKXN84_<b~qetv)R~wzqixr
+z)QID*<lx|?9DM!p`7$O0V7J@Zcs#a#zi*?_$bSF)@v_NeVuQip<zr#|j(H+DcqxKo
+z<-P#G2_U@J>s19rKJ1Dw067&7UPFeu?K${xIIIeYeApH281v**lJtB^;Q+9J$mfrQ
+z`J#TP$<TLu8=PP@h4VW!Dsn~=t;x_!O&d;ER|@z20E0wB8B#I~)Fct01Wq6G>U^kV
+z$SH;(=v<Qk)CSPP)Q6l=GgdO>`5*|5qX2EVFJHgatZP@;j5?eu8FIEG2!lk=*c%Gd
+z0z5o24kzw(Lx!B+2twCt0&iHI7JyyRIBz*6R5J7f2wfYUE8*~I0V+}L6)J%{-H>6|
+z4DfLEX~Q8_eY~u=)Bm3gsRRZ_N{HaJHn`pi+1pT+Pzt9-@U|I{y$xAy)QmcuqK1p$
+zFooA-7&RlT?M^6NIpLkRp&!fsL6YkS77+OeXPyY&xD9<j=#z|ZKYt`FKpW1loOvR6
+zO@{hZVn6(|N2$&SFVQYzA9cYSGHeU%`VmoINzPD)xj_25;JNQ|Ia6uiyL_Pxqri9h
+Z{s1PK{-<~MX6^t0002ovPDHLkV1isnD#`!=
+
+literal 356
+zcmV-q0h|7bP)<h;3K|Lk000e1NJLTq000mG000mO0ssI2kdbIM0003iNkl<ZcwRly
+z1#$#23`Eg6OPChIc&ISb(eoyMYpP_Iu+@@1yzCyo?w!2tpMEc|p0*D^=NHU}%?0Ia
+zaVhHNc|SOlBVnk(%|-4v=5(=AKW69d=ba;pZ2rMvPf53H2h4f~{Bw9+XKj@Y0FWV!
+z$F1ev`b-n4%x-y#BMEDy#0$n<O=P0V)FjUIv48<ybubZA-$)HQWse2G1lTI^5o-oD
+zfLcSTLS!s}F#&*#Yun`4mcpqR#1O@hq7m=bQnwaR&1z^O#??G-W>^&v&hZ`KwH!uL
+zYk3p<UM+^>!!cS#c=e1@gHF#nZpmgCZ7Ig|8n)IxRo{d@G*ItVcfbTtgC@U6H><zY
+zT4+6%n1CN8JD$@Hnto^-w737?#sqI%A~kxHX)%9($=0TnSk~tN0000<MNUMnLSTZf
+CxtoOm
+
+diff --git a/src/main/resources/assets/icheme/textures/block/equipment_feed.png b/src/main/resources/assets/icheme/textures/block/equipment_feed.png
+index 0d6ad18415e670027087701c1fa554408ac02a21..56caca5bc4e0a9020811b9b9fe2d278178234e57 100644
+GIT binary patch
+literal 626
+zcmV-&0*(ENP)<h;3K|Lk000e1NJLTq001BW001Be1^@s6b9#F80006xNkl<ZcwWty
+zNp8b13`KRW%!lYIqjv?m?>V}2#w#@QNqQl+H1G}jo3exeX}jPir1)rwpHjkfI+ev@
+zAw^Nhd_I@eY9+JTOqR=~{Dv>&20qIdas%Nz9*=UlT;zVg%lUkk+wCT&(@Cz^Yvqfr
+zi{%WtfdF*DtuH61`a&wu0$x7ev&<Ie<+Qwz182Z~znArTExX-L%CeO0b}NU&p%sT+
+ziNTc@V({YituiE2z-F_N@pvr#eqTnTk(6Jbl}#oS84L!M4~1bJ@_2CN1rM%YZVOO2
+z0D$*;y}AI;r@LYc(3}icUQ33&?I}3S`i8?{wJW+~$P-gZ;PZI|4zqB3B*^FWLqmqP
+z+hcGG0NC?2dgZ54HK!-hh77ILxZylN*Oz<!pr#UaWeCY2kdt@-6yW)I9rE&gsAY&L
+zra`K6KJyfSeO#F4^qR4jA<jpGv~jrMJb*PWjMt$Vc{tTF#BA4~YQhn~nx_PNB%Wb7
+zVW(R%#QfGE?OIM?O}CbR^LC|S5hc_zv;#=HHYGI%a6j-mC;>a&l3~{j@Bn<~?Bk+w
+zSz)LDpA4Y{1X?A;04Tuo*>!v;L~lb@LKobVng{Qi0nytK)!JtCzMQQKuEy|&483Ml
+zi`@y2z>~M39n1DX66=Q?IP!S#)@^9}fuCe}`?1v2xZ&)VBaa7f$dI2(=!ZXhl=6JA
+z5=|NUC<SlHuq!b2M}&PjIb9jX0^v)+W9wo$LvG-+e69?=z-Rfs0r<ca7NAx%Z~y=R
+M07*qoM6N<$f>l*2m;e9(
+
+literal 373
+zcmV-*0gC>KP)<h;3K|Lk000e1NJLTq000mG000mO0ssI2kdbIM0003zNkl<ZcwSY~
+zX;MN#3<Tgg6N)}@_qQv!>zQ0YQ9(Q_-_X{SR;BVXnND|-H>G<Uu05aZd|nTxm*TDW
+z(eBqx|MhJ9<7#tq;m8iY?;ZE&ck3^wWp8%N6y#2<Y-4=hdpbtJ)I$qg$rop($)-{P
+zBLajXXhx8)1tJJg1rWg{kU<BaUguT81t^+yA8t5tx>pc-rlzEakR_Jo)5+1#W2CYV
+zzBr&s4-}aKB7zXHY>X!RH}qdi_q<hR^j`%Z7er8MiAUxd1$2HzGGqZtlgkp)iTcCE
+zL;hFB%?|6999rwtvs1ICvD~(P_^Kc!f^KmZ&1)mSC=(MYbg||wh2BVwzHKjkO4k37
+zhm_riEI&?@UQ`BXYpexXJW$kRyVd*aR*xzy$<(2>4xIsHEeECIHnBMGz!7W-cpxKR
+T=VC{A00000NkvXXu0mjfZd9Qv
+
+diff --git a/src/test/java/com/wormzjl/icheme/science/equipment/LineGeometryTest.java b/src/test/java/com/wormzjl/icheme/science/equipment/LineGeometryTest.java
+index 71a2872ef..6a3794948 100644
+--- a/src/test/java/com/wormzjl/icheme/science/equipment/LineGeometryTest.java
++++ b/src/test/java/com/wormzjl/icheme/science/equipment/LineGeometryTest.java
+@@ -303,6 +303,47 @@ class LineGeometryTest {
+         }
+     }
+ 
++    @Test
++    void sourceAndSinkHaveSixEqualCoversAndNoPlacementFacing() {
++        for (var kind : new Kind[]{Kind.GENERATOR, Kind.VOID}) {
++            var material = kind == Kind.GENERATOR ? Material.FEED : Material.DRAIN;
++            var original = LineGeometry.polygons(Key.item(kind));
++            var covers = original.stream().filter(p -> p.material() == material).toList();
++            assertEquals(6, covers.size());
++            double coverDistance = Double.NaN;
++            for (int face = 0; face < 6; face++) {
++                int axis = LineGeometry.axis(face), sign = (face & 1) == 0 ? -1 : 1;
++                var cover = covers.stream().filter(p -> sign * p.normals()[axis] > .99).findFirst().orElseThrow();
++                var centre = centroid(List.of(cover), material);
++                for (int k = 0; k < 3; k++) if (k != axis) assertEquals(.5, centre[k], 1e-9);
++                double distance = Math.abs(centre[axis] - .5);
++                if (Double.isNaN(coverDistance)) coverDistance = distance;
++                assertEquals(coverDistance, distance, 1e-9, "top and bottom equal the side covers");
++            }
++            for (int facing = 0; facing < 6; facing++) {
++                var rotated = LineGeometry.polygons(key(kind, facing, .15, new int[0], 0, 0, false));
++                assertEquals(original.size(), rotated.size());
++                for (int i = 0; i < original.size(); i++) {
++                    assertArrayEquals(original.get(i).positions(), rotated.get(i).positions());
++                    assertArrayEquals(original.get(i).uvs(), rotated.get(i).uvs());
++                }
++            }
++        }
++    }
++
++    @Test
++    void sourceAndSinkFlangesMatchThePipeOnEveryFace() {
++        for (var kind : new Kind[]{Kind.GENERATOR, Kind.VOID})
++            for (int face = 0; face < 6; face++) for (double bore : new double[]{.001, .05, .25, .6, .8}) {
++                double outside = PipeSizes.outside(bore);
++                var device = key(kind, NORTH, .1, new int[]{face}, outside, 1 << face, false);
++                var pipe = key(Kind.PIPE, face, outside, new int[]{face ^ 1}, outside, 1 << (face ^ 1), false);
++                int axis = LineGeometry.axis(face), plane = face & 1;
++                assertEquals(rimRadius(pipe, axis, 1 - plane, Material.FLANGE),
++                        rimRadius(device, axis, plane, Material.FLANGE), 1e-9, device.toString());
++            }
++    }
++
+     @Test
+     void devicesStandAsPhotographed() {
+         // A control valve's actuator above a horizontal line and beside a vertical one; a strainer's leg below the line

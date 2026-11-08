@@ -131,17 +131,29 @@ final class UnitSizingTest {
         assertSame(Limit.EXCHANGER_SURFACE, down.closest().limit());
     }
 
-    /** A gas shell asks for a wide bundle: one shell meets its drop only far past the need, so the cap sends Auto to more shells. */
-    @Test void theSurfaceStaysUnderTwiceTheNeed() {
+    /** A gas shell needs a wide bundle: enlarge it before paying for parallel shells, even past the surface advisory. */
+    @Test void excessSurfaceDoesNotForceParallelShells() {
         var tube = liquid(100, 900, 1e-3);
         var shell = liquid(50, 12, 1.5e-5);
         var noCap = exchanger(1, tube, shell, Limit.EXCHANGER_DROP_GAS);
         double least = exchangers().stream().filter(size -> size.shells() == 1 && ExchangerSizing.rate(noCap, size).readings().stream().filter(reading -> reading.limit() != Limit.EXCHANGER_OVER_NEED).allMatch(Reading::met)).mapToDouble(ExchangerSizing.Size::surface).min().orElseThrow();
         var load = exchanger(least / 2.2, tube, shell, Limit.EXCHANGER_DROP_GAS);
         var choice = ExchangerSizing.auto(load);
-        assertEquals(Lamp.GREEN, choice.rating().lamp());
-        assertTrue(choice.size().shells() > 1, "one shell meets its drops only past the cap");
-        assertTrue(choice.size().surface() < 2 * load.needed());
+        assertEquals(Lamp.YELLOW, choice.rating().lamp());
+        assertEquals(1, choice.size().shells());
+        assertTrue(choice.size().surface() > 2 * load.needed());
+        assertTrue(choice.rating().reading(Limit.EXCHANGER_DROP_GAS).met());
+        assertFalse(choice.rating().reading(Limit.EXCHANGER_OVER_NEED).met(), "excess stays visible");
+        var tight = new ExchangerSizing.Load(false, tube, shell, load.tubeDrop(), load.shellDrop(), load.needed(), load.duty(), 8, 6, 6, 46., null);
+        assertEquals(choice.size(), ExchangerSizing.auto(tight).size(), "unchangeable temperature notices must not favor extra shells");
+    }
+
+    @Test void parallelShellsStartWhenOneCannotHoldTheSpare() {
+        double largest = exchangers().stream().filter(size -> size.shells() == 1 && UnitSize.built(size) != null).mapToDouble(ExchangerSizing.Size::surface).max().orElseThrow();
+        var load = exchanger(largest, liquid(1, 900, 1e-3), liquid(1, 800, 1e-3), Limit.EXCHANGER_DROP_LIQUID);
+        var choice = ExchangerSizing.auto(load);
+        assertEquals(2, choice.size().shells());
+        assertTrue(choice.size().surface() >= SPARE * largest);
     }
 
     @Test void curvesThatTouchAreRedAndAutoStillAnswers() {
@@ -172,10 +184,11 @@ final class UnitSizingTest {
         var steam = liquid(10, 4, 1.5e-5);
         var load = new ExchangerSizing.Load(true, steam, null, Limit.EXCHANGER_DROP_GAS, null, 100, 6e6, 40, 30, 30, null, null);
         var choice = ExchangerSizing.auto(load);
-        assertEquals(Lamp.GREEN, choice.rating().lamp());
+        assertEquals(Lamp.YELLOW, choice.rating().lamp());
         assertTrue(choice.size().kettle());
+        assertEquals(1, choice.size().shells());
         assertNull(choice.rating().reading(Limit.EXCHANGER_DROP_LIQUID));
-        assertSame(Limit.KETTLE_FLUX, choice.rating().closest().limit(), "the flux asks more surface than the duty's need");
+        assertTrue(choice.rating().reading(Limit.KETTLE_FLUX).met(), "the flux asks more surface than the duty's need");
         assertTrue(choice.size().surface() >= 6e3 / 38);
         var tight = ExchangerSizing.rate(load, new ExchangerSizing.Size(true, 1, .5, 3));
         assertFalse(tight.reading(Limit.KETTLE_FLUX).met());

@@ -106,14 +106,15 @@ public final class ShapeRepair {
      * its steam class by name, as written (a missing number reads 0, a missing name null).
      */
     public record SavedDuty(double flow, double head, double polytropicHead, double power, int poles, @Nullable String drive, @Nullable String steam,
-                            double exhaust) {
+                            double exhaust,double baseSpeed) {
+        public SavedDuty(double flow,double head,double polytropicHead,double power,int poles,String drive,String steam,double exhaust) { this(flow,head,polytropicHead,power,poles,drive,steam,exhaust,0); }
         /** @throws IllegalArgumentException for a drive or a steam class this build does not have, or an invalid value */
         public MachineDuty resolve() {
             var namedDrive = drive == null ? MachineDuty.Drive.FIXED
                     : constant(MachineDuty.Drive.class, drive, DRIVE_ALIASES).orElseThrow(() -> new IllegalArgumentException("no drive " + drive));
             var namedSteam = steam == null ? null
                     : constant(MachineDuty.Steam.class, steam, STEAM_ALIASES).orElseThrow(() -> new IllegalArgumentException("no steam class " + steam));
-            return new MachineDuty(flow, head, polytropicHead, power, poles, namedDrive, namedSteam, exhaust);
+            return new MachineDuty(flow, head, polytropicHead, power, poles, namedDrive, namedSteam, exhaust,baseSpeed);
         }
     }
 
@@ -139,7 +140,10 @@ public final class ShapeRepair {
      * section 6), 1 where a design was saved before it.
      */
     public record SavedComponents(String condenser, String refluxPump, List<String> pumparoundPumps, boolean ejector, boolean kettle,
-                                  int condenserUnits, int kettleUnits, int[] coolerUnits, int trimUnits) {
+                                  int condenserUnits, int kettleUnits, int[] coolerUnits, int trimUnits,ColumnComponents.Exchangers exchangers) {
+        public SavedComponents(String condenser,String refluxPump,List<String> pumparoundPumps,boolean ejector,boolean kettle,int condenserUnits,int kettleUnits,int[] coolerUnits,int trimUnits) {
+            this(condenser,refluxPump,pumparoundPumps,ejector,kettle,condenserUnits,kettleUnits,coolerUnits,trimUnits,ColumnComponents.Exchangers.STANDARD);
+        }
         public SavedComponents {
             pumparoundPumps = List.copyOf(pumparoundPumps);
             coolerUnits = coolerUnits.clone();
@@ -168,7 +172,7 @@ public final class ShapeRepair {
             for (int i = 0; i < Math.min(coolerUnits.length, pumparoundPumps.size()); i++) coolers.add(count(coolerUnits[i], "pumparound cooler " + (i + 1) + " units", repairs));
             if (coolerUnits.length > pumparoundPumps.size()) repairs.accept("cooler units (" + coolerUnits.length + " for " + pumparoundPumps.size() + " pumparounds) -> " + pumparoundPumps.size());
             int trimCount = count(trimUnits, "trim units", repairs);
-            return ColumnComponents.named(condenser, refluxPump, pumparoundPumps, ejector, kettle, new ColumnComponents.Units(condenserCount, kettleCount, coolers, trimCount));
+            return ColumnComponents.named(condenser, refluxPump, pumparoundPumps, ejector, kettle, new ColumnComponents.Units(condenserCount, kettleCount, coolers, trimCount)).withExchangers(exchangers);
         }
 
         private static int count(int saved, String field, java.util.function.Consumer<String> repairs) {
@@ -312,7 +316,8 @@ public final class ShapeRepair {
                 repairs.add("bank (" + invalid.getMessage() + ") -> one bay");
             }
         }
-        MachineDuty duty = null;
+        MachineDuty duty = kind==Kind.MOTOR&&saved.duty()==null&&Double.isFinite(saved.diameter())
+                ?MachineDuty.motor(UnitDesign.of(kind).snap(saved.diameter()),4,MachineDuty.Drive.FIXED):null;
         if (saved.duty() != null && UnitDesign.of(kind).hasDuty())
             try {
                 duty = saved.duty().resolve();

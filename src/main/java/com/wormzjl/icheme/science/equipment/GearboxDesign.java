@@ -2,6 +2,7 @@ package com.wormzjl.icheme.science.equipment;
 
 import com.wormzjl.icheme.science.equipment.EquipmentShape.Orientation;
 import com.wormzjl.icheme.science.equipment.Mesh.Material;
+import com.wormzjl.icheme.science.machine.ShaftNetwork;
 
 import java.util.List;
 
@@ -17,7 +18,7 @@ import java.util.List;
  */
 final class GearboxDesign extends UnitDesign {
     /** The drawing's nominal slow-shaft speed, rpm, and ratio. */
-    static final double SLOW = 1500, RATIO = 4;
+    static final double SLOW = 1500, RATIO = ShaftNetwork.DEFAULT_GEARBOX_RATIO;
     /** The plinth at grade and the baseplate, m. */
     static final double PLINTH = .2, BASEPLATE = .08;
 
@@ -176,9 +177,22 @@ final class GearboxDesign extends UnitDesign {
         }
         u.coupling(a, y, z1 + .06, back, 1, rsSlow, deck, ProcessUnit.shown(SLOW), EquipmentShape.ShaftEnd.Role.DRIVEN_INPUT);
         u.coupling(b, y, z0 - .06, front, -1, rsFast, deck, ProcessUnit.shown(SLOW * RATIO), EquipmentShape.ShaftEnd.Role.DRIVER_OUTPUT);
+        // End-face plates beside the bearings stay legible even when a guard is too short for a word marking.
+        portPlate(u, a + 2 * rsSlow + .33, y + .15, z1 + .003, 1, Material.SHAFT_INPUT);
+        portPlate(u, b - 2 * rsFast - .33, y + .15, z0 - .003, -1, Material.SHAFT_OUTPUT);
         // The baseplate and the plinth or table under it.
         double p0 = front + .15, p1 = back - .2;
         u.box(new double[]{x0 - .15, floor, p0}, new double[]{x1 + .15, deck, p1}, Material.STEELWORK, true);
         u.driverBase(x0 - .25, x1 + .25, p0 - .1, p1 + .1, PLINTH, h);
+    }
+
+    /** A fixed, untinted role plate on the housing, clear of the bearing and coupling guard. */
+    private static void portPlate(ProcessUnit u, double x, double y, double z, int sign, Material marking) {
+        double width = .4, height = .16;
+        var across = new Mesh.Uv(new double[]{x - sign * width / 2, y + height / 2, z}, new double[]{sign, 0, 0}, 0, width);
+        var up = new Mesh.Uv(new double[]{x, y - height / 2, z}, new double[]{0, 1, 0}, 0, height);
+        u.mesh.add(List.of(new double[]{x - width / 2, y - height / 2, z}, new double[]{x + width / 2, y - height / 2, z},
+                        new double[]{x + width / 2, y + height / 2, z}, new double[]{x - width / 2, y + height / 2, z}),
+                new double[]{x, y, z - sign}, Mesh.FLAT, marking, across, up);
     }
 }

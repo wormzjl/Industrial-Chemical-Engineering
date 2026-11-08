@@ -29,7 +29,13 @@ public final class ModItems {
     public static final DeferredHolder<DataComponentType<?>, DataComponentType<Integer>> PIPE_LAYING_PAINT = linePaint("pipe_laying_paint");
     /** The secondary paint (their flanges), 0xRRGGBB or bare; absent: the primary paint, as the flanges took before it existed. */
     public static final DeferredHolder<DataComponentType<?>, DataComponentType<Integer>> PIPE_LAYING_SECONDARY = linePaint("pipe_laying_secondary");
+    /** Absent on existing tools: pipe mode. Pipe sizes and paints remain stored while laying data cables. */
+    public static final DeferredHolder<DataComponentType<?>,DataComponentType<Boolean>> PIPE_LAYING_DATA = COMPONENTS.register("pipe_laying_data",
+            ()->DataComponentType.<Boolean>builder().persistent(com.mojang.serialization.Codec.BOOL)
+                    .networkSynchronized(net.minecraft.network.codec.ByteBufCodecs.BOOL).build());
 
+    public static final DeferredHolder<DataComponentType<?>,DataComponentType<Boolean>> PIPE_LAYING_POWER = COMPONENTS.register("pipe_laying_power",
+            ()->DataComponentType.<Boolean>builder().persistent(com.mojang.serialization.Codec.BOOL).networkSynchronized(net.minecraft.network.codec.ByteBufCodecs.BOOL).build());
     private static DeferredHolder<DataComponentType<?>, DataComponentType<Integer>> linePaint(String name) {
         return COMPONENTS.register(name, () -> DataComponentType.<Integer>builder()
                 .persistent(com.mojang.serialization.Codec.INT.validate(rgb -> com.wormzjl.icheme.science.equipment.Paint.line(rgb) ? com.mojang.serialization.DataResult.success(rgb)
@@ -38,6 +44,10 @@ public final class ModItems {
     }
 
     public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(IChemE.MOD_ID);
+    public static final DeferredItem<BlockItem> DATA_CABLE=ITEMS.registerSimpleBlockItem(ModBlocks.DATA_CABLE);
+    public static final DeferredItem<BlockItem> POWER_CABLE=ITEMS.registerSimpleBlockItem(ModBlocks.POWER_CABLE);
+    public static final DeferredItem<net.minecraft.world.item.BlockItem> LOCAL_CONTROLLER=ITEMS.registerSimpleBlockItem(ModBlocks.LOCAL_CONTROLLER);
+    public static final DeferredItem<net.minecraft.world.item.BlockItem> DCS=ITEMS.registerSimpleBlockItem(ModBlocks.DCS);
     public static final DeferredItem<BlockItem> FLUID_RESERVOIR=ITEMS.registerSimpleBlockItem("fluid_reservoir",ModBlocks.FLUID_RESERVOIR);
     public static final DeferredItem<BlockItem> FLUID_PIPE=ITEMS.registerSimpleBlockItem("fluid_pipe",ModBlocks.FLUID_PIPE);
     public static final DeferredItem<PipelineFittingItem> FLUID_PUMP=fitting("fluid_pump",Instrument.Type.PUMP);
@@ -50,6 +60,7 @@ public final class ModItems {
     public static final DeferredItem<com.wormzjl.icheme.world.item.RecoveredSolidsItem> RECOVERED_SOLIDS=ITEMS.registerItem("recovered_solids",com.wormzjl.icheme.world.item.RecoveredSolidsItem::new);
     public static final DeferredItem<BlockItem> EQUIPMENT_CONSTRUCTOR=ITEMS.registerSimpleBlockItem("equipment_constructor",ModBlocks.EQUIPMENT_CONSTRUCTOR);
     public static final DeferredItem<BlockItem> SHAFT=ITEMS.registerSimpleBlockItem("shaft",ModBlocks.SHAFT);
+    public static final DeferredItem<BlockItem> CREATIVE_POWER=ITEMS.registerSimpleBlockItem("creative_power",ModBlocks.CREATIVE_POWER);
     public static final DeferredItem<BlockItem> CREATIVE_MOTOR=ITEMS.registerSimpleBlockItem("creative_motor",ModBlocks.CREATIVE_MOTOR);
     public static final DeferredItem<net.minecraft.world.item.Item> FLUID_DEBUGGER=ITEMS.registerSimpleItem("fluid_debugger",new net.minecraft.world.item.Item.Properties().stacksTo(1));
     public static final DeferredItem<PipelineToolItem> PIPELINE_TOOL =
@@ -78,6 +89,7 @@ public final class ModItems {
     /** A steam turbine's speed pickup (W3): mounted on its coupling guard, it works the turbine's governor valve. */
     public static final DeferredItem<com.wormzjl.icheme.world.item.SensorItem> SPEED_SENSOR=sensor("speed_sensor",com.wormzjl.icheme.runtime.instrument.Sensor.Kind.SPEED);
     private static DeferredItem<com.wormzjl.icheme.world.item.SensorItem> sensor(String name,com.wormzjl.icheme.runtime.instrument.Sensor.Kind kind){return ITEMS.registerItem(name,p->new com.wormzjl.icheme.world.item.SensorItem(p,kind));}
+    public static final DeferredItem<com.wormzjl.icheme.world.item.LiquidLevelGaugeItem> LIQUID_LEVEL_GAUGE = ITEMS.registerItem("liquid_level_gauge", com.wormzjl.icheme.world.item.LiquidLevelGaugeItem::new);
 
     private ModItems() {
     }
