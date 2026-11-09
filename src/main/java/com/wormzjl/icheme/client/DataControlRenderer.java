@@ -61,6 +61,16 @@ public final class DataControlRenderer {
     private static final Map<CableMesh, List<net.minecraft.client.renderer.block.model.BakedQuad>>
             BAKED = new HashMap<>();
 
+    /**
+     * Level of detail (batch 2026-11-09-lod-rendering, A3): a gland while its 0.15 m covers 2 px (58 m at 1080 lines),
+     * a lead or a rack's cables while a conduit's outside covers a pixel (96 m), each also in view.
+     */
+    private static final double GLAND = .15;
+
+    private static final RenderLod.Tiers<UUID> GLANDS = new RenderLod.Tiers<>(2),
+            LEADS_SEEN = new RenderLod.Tiers<>(1);
+    private static final RenderLod.Tiers<BlockPos> RACKS = new RenderLod.Tiers<>(1);
+
     private DataControlRenderer() {}
 
     public static void loaded(ControlPanelBlockEntity box) {
@@ -183,16 +193,35 @@ public final class DataControlRenderer {
         if (CABLES.size() > 2048) CABLES.clear();
         if (LEADS.size() > 2048) LEADS.clear();
         if (BAKED.size() > 2048) BAKED.clear();
+        var view =
+                ClientConfig.lodView(
+                        event.getProjectionMatrix().m11(), mc.getWindow().getHeight());
+        var frustum = event.getFrustum();
         for (var port : ports(mc.level, mc.player.position(), 96).values()) {
+            var at = port.centre();
+            if (GLANDS.of(port.id(), view.pixels(GLAND, at.distanceToSqr(camera))) != 0
+                    || !frustum.isVisible(new AABB(at, at).inflate(.3))) continue;
             var mesh = PORTS.computeIfAbsent(port, p -> portMesh(mc.level, p));
             draw(pose, buffers, camera, port.centre(), mesh.polygons(), 0, 255);
         }
-        for (var piece : com.wormzjl.icheme.world.level.block.LinePieces.visible(mc.level))
-            if (piece.port().centre().distanceToSqr(camera) < 96 * 96)
-                drawLead(pose, buffers, camera, piece.port(), false);
+        for (var piece : com.wormzjl.icheme.world.level.block.LinePieces.visible(mc.level)) {
+            var port = piece.port();
+            double d2 = port.centre().distanceToSqr(camera);
+            if (d2 < 96 * 96
+                    && LEADS_SEEN.of(port.id(), view.pixels(ConduitGeometry.OUTSIDE, d2)) == 0
+                    && frustum.isVisible(new AABB(port.centre(), port.cablePoint()).inflate(.2)))
+                drawLead(pose, buffers, camera, port, false);
+        }
         for (var rack : PipeRackBlockEntity.clientRacks())
             if (rack.getLevel() == mc.level
-                    && rack.getBlockPos().getCenter().distanceToSqr(camera) < 96 * 96)
+                    && rack.getBlockPos().getCenter().distanceToSqr(camera) < 96 * 96
+                    && RACKS.of(
+                                    rack.getBlockPos(),
+                                    view.pixels(
+                                            ConduitGeometry.OUTSIDE,
+                                            rack.getBlockPos().getCenter().distanceToSqr(camera)))
+                            == 0
+                    && frustum.isVisible(new AABB(rack.getBlockPos()).inflate(.5)))
                 for (var cable : rack.cables()) {
                     var at = rack.getBlockPos();
                     var key =

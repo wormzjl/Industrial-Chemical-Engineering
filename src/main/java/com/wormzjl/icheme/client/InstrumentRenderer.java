@@ -43,10 +43,27 @@ public final class InstrumentRenderer {
     private static final RenderType GHOST=RenderType.entityTranslucentCull(WHITE);
     private record Connector(List<Double> tap,boolean bottom,boolean temperature,double probeDepth){}
     private static final Map<Connector,List<InstrumentGeometry.Quad>> CONNECTORS=new HashMap<>();
+    // ---- level of detail (batch 2026-11-09-lod-rendering, LOD_RENDERING_PLAN.md A2): sizes in metres, tiers in pixels ----
+    /** A dial's face, a transmitter's head, a connector's stem and a wiring ribbon. */
+    private static final double DIAL=2*InstrumentGeometry.RADIUS,HEAD=.23,STEM=.028,WIRE=.025;
+    /** Dial: full (text, 48 sides), plain (24 sides, no text), far (12 sides, needle only), hidden. Connectors end with plain, where the stem reaches a pixel. */
+    private static final int FULL=0,PLAIN=1,FAR=2;
+    private static final RenderLod.Tiers<Seen> DIALS=new RenderLod.Tiers<>(48,12,3);
+    /** Transmitter: symbol and ID (to 4 m at 1080 lines), symbol (to 13 m), head only (to 59 m), hidden. */
+    private static final RenderLod.Tiers<Seen> HEADS=new RenderLod.Tiers<>(44,14,3);
+    /** A structure's wiring while its ribbon covers a pixel. */
+    private static final RenderLod.Tiers<Seen> WIRES=new RenderLod.Tiers<>(1);
+    private record Seen(long host,String mount){}
+    /** Hosts with installed instruments, gathered every {@link #HOST_TICKS} ticks while no placing item is held. */
+    private static final int HOST_TICKS=5;
+    private static List<InstrumentHosts.Host> shown=List.of();
+    private static long shownAt=Long.MIN_VALUE;
+    private static net.minecraft.world.level.Level shownIn;
     @SubscribeEvent public static void render(RenderLevelStageEvent event) {
         if(event.getStage()!=RenderLevelStageEvent.Stage.AFTER_PARTICLES)return;
         var mc=Minecraft.getInstance();if(mc.level==null||mc.player==null)return;
         var camera=event.getCamera().getPosition();var buffers=mc.renderBuffers().bufferSource();var pose=event.getPoseStack();
+        var view=ClientConfig.lodView(event.getProjectionMatrix().m11(),mc.getWindow().getHeight());var frustum=event.getFrustum();
         GaugeSettings draft=null;Sensor.Kind sensorDraft=null;boolean wrench=false,levelGauge=false;
         for(var hand:net.minecraft.world.InteractionHand.values()) {
             var stack=mc.player.getItemInHand(hand);
@@ -55,23 +72,31 @@ public final class InstrumentRenderer {
             if(stack.getItem() instanceof GaugeItem)draft=stack.get(ModItems.GAUGE_SETTINGS.get());
             if(stack.getItem() instanceof AccessoryWrenchItem&&mc.player.isShiftKeyDown())wrench=true;
         }
-        var hosts=InstrumentHosts.nearby(mc.level,mc.player.position(),120,draft==null&&sensorDraft==null&&!wrench&&!levelGauge);
+        boolean placing=draft!=null||sensorDraft!=null||wrench||levelGauge;
+        var hosts=placing?InstrumentHosts.nearby(mc.level,mc.player.position(),120,false):shownHosts(mc);
         var selected=draft==null?null:InstrumentHosts.select(hosts,mc.player.getEyePosition(),mc.player.getLookAngle(),mc.player.blockInteractionRange(),draft.kind(),false);
         for(var host:hosts) {
-            drawWiring(pose,buffers,host,camera);
-            for(var sensor:host.metadata().sensors())for(var mount:Sensor.mounts(host,sensor.kind()))if(mount.id().equals(sensor.key().mount()))drawSensor(pose,buffers,mount,camera,sensor.kind(),255,host.metadata().sensorIds().getOrDefault(sensor.instance(),""),!host.pipe());
+            if(host.entity().isRemoved())continue;
+            drawWiring(pose,buffers,host,camera,view,frustum);
+            for(var sensor:host.metadata().sensors())for(var mount:Sensor.mounts(host,sensor.kind()))if(mount.id().equals(sensor.key().mount())){
+                double d2=mount.centre().distanceToSqr(camera);int tier=HEADS.of(new Seen(host.identity(),mount.id()),view.pixels(HEAD,d2));
+                if(tier==HEADS.hidden()||!visible(frustum,mount))continue;
+                drawSensor(pose,buffers,mount,camera,sensor.kind(),255,host.metadata().sensorIds().getOrDefault(sensor.instance(),""),!host.pipe(),tier,view.pixels(STEM,d2)>=1);
+            }
             if(sensorDraft!=null)for(var mount:Sensor.mounts(host,sensorDraft)){
                 if(mount.centre().distanceToSqr(mc.player.getEyePosition())>64)continue;
                 boolean occupied=host.metadata().sensors().stream().anyMatch(s->s.key().mount().equals(mount.id()))||host.metadata().installed().stream().anyMatch(s->s.key().mount().equals(mount.id()))||host.pipe()&&!mount.id().equals("valve_sensor")&&host.occupied(mount);
                 boolean blocked=occupied||!InstrumentHosts.clear(mc.level,host,mount);
-                if(!occupied){drawSensor(pose,buffers,mount,camera,sensorDraft,70,"",!host.pipe());drawRootGhost(pose,buffers,host,mount,camera,0x779ba9,70);}
+                if(!occupied){drawSensor(pose,buffers,mount,camera,sensorDraft,70,"",!host.pipe(),FULL,true);drawRootGhost(pose,buffers,host,mount,camera,0x779ba9,70);}
                 outline(pose,buffers,mount,camera,blocked?0xad7770:0x73a38e);
             }
             for(var installed:host.metadata().installed()) {
                 var mount=host.mount(installed.key().mount());if(mount==null)continue;
+                int tier=DIALS.of(new Seen(host.identity(),mount.id()),view.pixels(DIAL,mount.centre().distanceToSqr(camera)));
+                if(tier==DIALS.hidden()||!visible(frustum,mount))continue;
                 var display=get(new FluidNetwork.InstrumentTarget(host.entity().getBlockPos(),installed.key(),installed.instance()));
                 double ratio=display==null||display.sample().availability()==Instrument.Availability.UNAVAILABLE?0:installed.settings().needle(display.sample().value());
-                draw(pose,buffers,mount,camera,installed.settings(),ratio,0,255,!host.pipe());
+                draw(pose,buffers,mount,camera,installed.settings(),ratio,0,255,!host.pipe(),tier);
             }
             if(levelGauge){
                 var mount=InstrumentHosts.LevelGauge.of(host);
@@ -88,7 +113,7 @@ public final class InstrumentRenderer {
                 boolean aimed=selected!=null&&selected.host().identity()==host.identity()&&selected.mount().id().equals(mount.id())&&InstrumentHosts.reachable(mc.player,host,mount);
                 int colour=blocked?0xad7770:aimed?0x73a38e:0x779ba9;
                 // Occupied instruments already supply the silhouette. An outline avoids coincident ghost/model planes.
-                if(!blocked){draw(pose,buffers,mount,camera,draft,.5,0,aimed?88:56,true);drawRootGhost(pose,buffers,host,mount,camera,colour,aimed?88:56);}
+                if(!blocked){draw(pose,buffers,mount,camera,draft,.5,0,aimed?88:56,true,FULL);drawRootGhost(pose,buffers,host,mount,camera,colour,aimed?88:56);}
                 outline(pose,buffers,mount,camera,colour);
             }
         }
@@ -103,19 +128,55 @@ public final class InstrumentRenderer {
         if(!(host.entity() instanceof com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity shell))return;
         EquipmentInstruments.of(shell.shape()).probes().stream().filter(p->p.id().equals(mount.id())).findFirst().ifPresent(p->DataControlRenderer.draw(pose,buffers,camera,Vec3.atLowerCornerOf(shell.origin()),InstrumentWiring.rootHardware(p,com.wormzjl.icheme.client.model.EquipmentShellModel.detail()),colour,alpha));
     }
-    private static Object wiringSprite;
-    private static final Map<InstrumentWiring.Drawing,List<net.minecraft.client.renderer.block.model.BakedQuad>> WIRING=new HashMap<>();
-    private static void drawWiring(PoseStack pose,MultiBufferSource buffers,InstrumentHosts.Host host,Vec3 camera){
+    /** A structure's baked wiring, kept while its shape, installed mounts, nozzle codes, detail and atlas hold. */
+    private record Wiring(EquipmentShape shape,Set<String> installed,List<Integer> codes,RenderDetail detail,Object atlas,List<net.minecraft.client.renderer.block.model.BakedQuad> quads){}
+    private static final Map<BlockPos,Wiring> WIRING=new HashMap<>();
+    private static void drawWiring(PoseStack pose,MultiBufferSource buffers,InstrumentHosts.Host host,Vec3 camera,RenderLod.View view,net.minecraft.client.renderer.culling.Frustum frustum){
         if(!(host.entity() instanceof com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity shell)||!shell.cell().equals(ShapeRasterizer.fluidCell(shell.shape())))return;
-        var installed=new HashSet<String>();host.metadata().installed().forEach(i->installed.add(i.key().mount()));host.metadata().sensors().forEach(i->installed.add(i.key().mount()));
-        var codes=new ArrayList<Integer>(java.util.Collections.nCopies(shell.shape().nozzles().size(),0));
-        if(shell.shape().kind()==EquipmentShape.Kind.EXCHANGER)for(var port:ShapeRasterizer.ports(shell.shape())){var c=port.cell();var at=shell.origin().offset(c.x(),c.y(),c.z());if(shell.getLevel().hasChunkAt(at)&&shell.getLevel().getBlockEntity(at) instanceof com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity piece)codes.set(port.nozzle(),ShapeRasterizer.nozzleCode(shell.shape(),piece.cell(),port.nozzle(),piece.nozzles()));}
-        var drawing=ShapeRasterizer.instrumentWiring(shell.shape(),installed,com.wormzjl.icheme.client.model.EquipmentShellModel.detail(),codes);if(drawing.polygons().isEmpty())return;
-        var sprites=new net.minecraft.client.renderer.texture.TextureAtlasSprite[Mesh.Material.values().length];for(var m:Mesh.Material.values()){sprites[m.ordinal()]=com.wormzjl.icheme.client.model.EquipmentShellModel.sprite(m);if(sprites[m.ordinal()]==null)return;}
-        if(wiringSprite!=sprites[0]){WIRING.clear();wiringSprite=sprites[0];}if(WIRING.size()>128)WIRING.clear();var quads=WIRING.computeIfAbsent(drawing,d->com.wormzjl.icheme.client.model.EquipmentShellModel.bake(d.polygons(),sprites,true));
-        var origin=shell.origin();pose.pushPose();pose.translate(origin.getX()-camera.x,origin.getY()-camera.y,origin.getZ()-camera.z);var consumer=buffers.getBuffer(RenderType.entityCutoutNoCull(net.minecraft.world.inventory.InventoryMenu.BLOCK_ATLAS));int light=LevelRenderer.getLightColor(Minecraft.getInstance().level,shell.getBlockPos());
-        for(var q:quads)consumer.putBulkData(pose.last(),q,1,1,1,1,light,OverlayTexture.NO_OVERLAY,true);pose.popPose();
-        for(var p:EquipmentInstruments.of(shell.shape()).probes())if(!p.manual()&&p.display())drawSensor(pose,buffers,InstrumentHosts.equipmentMount(p,shell.origin()),camera,Sensor.Kind.valueOf(p.quantity().name()),255,"EQ-"+host.identity(),true);
+        var shape=shell.shape();var origin=shell.origin();
+        double x0=origin.getX(),y0=origin.getY(),z0=origin.getZ(),x1=x0+shape.sizeX(),y1=y0+shape.sizeY(),z1=z0+shape.sizeZ();
+        if(WIRES.of(new Seen(host.identity(),""),view.pixels(WIRE,camera.x,camera.y,camera.z,x0,y0,z0,x1,y1,z1))==0&&frustum.isVisible(new net.minecraft.world.phys.AABB(x0,y0,z0,x1,y1,z1))){
+            var quads=wiring(shell);
+            if(quads!=null&&!quads.isEmpty()){
+                pose.pushPose();pose.translate(x0-camera.x,y0-camera.y,z0-camera.z);var consumer=buffers.getBuffer(RenderType.entityCutoutNoCull(net.minecraft.world.inventory.InventoryMenu.BLOCK_ATLAS));int light=LevelRenderer.getLightColor(Minecraft.getInstance().level,shell.getBlockPos());
+                for(var q:quads)consumer.putBulkData(pose.last(),q,1,1,1,1,light,OverlayTexture.NO_OVERLAY,true);pose.popPose();
+            }
+        }
+        for(var p:EquipmentInstruments.of(shape).probes())if(!p.manual()&&p.display()){
+            var mount=InstrumentHosts.equipmentMount(p,origin);
+            int tier=HEADS.of(new Seen(host.identity(),"factory:"+p.id()),view.pixels(HEAD,mount.centre().distanceToSqr(camera)));
+            if(tier==HEADS.hidden()||!visible(frustum,mount))continue;
+            drawSensor(pose,buffers,mount,camera,Sensor.Kind.valueOf(p.quantity().name()),255,"EQ-"+host.identity(),true,tier,false);
+        }
+    }
+    /** The wiring's quads, baked again only when what they are drawn from changed; null while a sprite is missing. */
+    private static List<net.minecraft.client.renderer.block.model.BakedQuad> wiring(com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity shell){
+        var shape=shell.shape();var host=shell.instruments();
+        var installed=new HashSet<String>();host.installed().forEach(i->installed.add(i.key().mount()));host.sensors().forEach(i->installed.add(i.key().mount()));
+        var codes=new ArrayList<Integer>(java.util.Collections.nCopies(shape.nozzles().size(),0));
+        if(shape.kind()==EquipmentShape.Kind.EXCHANGER)for(var port:ShapeRasterizer.ports(shape)){var c=port.cell();var at=shell.origin().offset(c.x(),c.y(),c.z());if(shell.getLevel().hasChunkAt(at)&&shell.getLevel().getBlockEntity(at) instanceof com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity piece)codes.set(port.nozzle(),ShapeRasterizer.nozzleCode(shape,piece.cell(),port.nozzle(),piece.nozzles()));}
+        var detail=com.wormzjl.icheme.client.model.EquipmentShellModel.detail();var atlas=com.wormzjl.icheme.client.model.EquipmentShellModel.sprite(Mesh.Material.values()[0]);if(atlas==null)return null;
+        var kept=WIRING.get(shell.getBlockPos());
+        if(kept!=null&&kept.atlas()==atlas&&kept.detail()==detail&&kept.shape().equals(shape)&&kept.installed().equals(installed)&&kept.codes().equals(codes))return kept.quads();
+        var drawing=ShapeRasterizer.instrumentWiring(shape,installed,detail,codes);List<net.minecraft.client.renderer.block.model.BakedQuad> quads=List.of();
+        if(!drawing.polygons().isEmpty()){
+            var sprites=new net.minecraft.client.renderer.texture.TextureAtlasSprite[Mesh.Material.values().length];for(var m:Mesh.Material.values()){sprites[m.ordinal()]=com.wormzjl.icheme.client.model.EquipmentShellModel.sprite(m);if(sprites[m.ordinal()]==null)return null;}
+            quads=com.wormzjl.icheme.client.model.EquipmentShellModel.bake(drawing.polygons(),sprites,true);
+        }
+        if(WIRING.size()>=256)WIRING.clear();
+        WIRING.put(shell.getBlockPos(),new Wiring(shape,Set.copyOf(installed),List.copyOf(codes),detail,atlas,quads));
+        return quads;
+    }
+    /** Whether a mount's dial or head, with its tap, can be on the screen. */
+    private static boolean visible(net.minecraft.client.renderer.culling.Frustum frustum,Instrument.Mount mount){
+        var c=mount.centre();var t=mount.tap();
+        return frustum.isVisible(new net.minecraft.world.phys.AABB(Math.min(c.x,t.x)-.2,Math.min(c.y,t.y)-.2,Math.min(c.z,t.z)-.2,Math.max(c.x,t.x)+.2,Math.max(c.y,t.y)+.2,Math.max(c.z,t.z)+.2));
+    }
+    /** Hosts with installed instruments near the player, gathered again every {@link #HOST_TICKS} ticks or on a new level. */
+    private static List<InstrumentHosts.Host> shownHosts(Minecraft mc){
+        long now=mc.level.getGameTime();
+        if(shownIn!=mc.level||now<shownAt||now-shownAt>=HOST_TICKS){shown=InstrumentHosts.nearby(mc.level,mc.player.position(),120,true);shownAt=now;shownIn=mc.level;}
+        return shown;
     }
     private static void outline(PoseStack pose,MultiBufferSource buffers,Instrument.Selectable selection,Vec3 camera,int colour) {
         var lines=buffers.getBuffer(RenderType.lines());
@@ -129,27 +190,29 @@ public final class InstrumentRenderer {
             }
         } else LevelRenderer.renderLineBox(pose,lines,selection.bounds().move(camera.scale(-1)),(colour>>16&255)/255f,(colour>>8&255)/255f,(colour&255)/255f,.53f);
     }
-    private static void drawSensor(PoseStack pose,MultiBufferSource buffers,Instrument.Mount mount,Vec3 camera,Sensor.Kind kind,int alpha){
-        drawSensor(pose,buffers,mount,camera,kind,alpha,"",false);
-    }
-    private static void drawSensor(PoseStack pose,MultiBufferSource buffers,Instrument.Mount mount,Vec3 camera,Sensor.Kind kind,int alpha,String id,boolean equipment){
-        var consumer=buffers.getBuffer(alpha==255?TYPE:GHOST);
-        for(var q:InstrumentGeometry.transmitter(kind==Sensor.Kind.LEVEL))quad(pose,consumer,mount,camera,q,0,alpha);
-        var tap=mount.localTap();var key=new Connector(List.of(tap[0],tap[1],tap[2]),mount.bottomEntry(),kind==Sensor.Kind.TEMPERATURE,mount.probeDepth());if(CONNECTORS.size()>2048)CONNECTORS.clear();
-        if(!equipment)for(var q:CONNECTORS.computeIfAbsent(key,k->InstrumentGeometry.connection(tap,k.bottom(),k.temperature(),k.probeDepth())))quad(pose,consumer,mount,camera,q,0,alpha);
+    /** A transmitter head at {@code tier} of {@link #HEADS}: text by tier, the connector while {@code stems}. */
+    private static void drawSensor(PoseStack pose,MultiBufferSource buffers,Instrument.Mount mount,Vec3 camera,Sensor.Kind kind,int alpha,String id,boolean equipment,int tier,boolean stems){
+        var consumer=buffers.getBuffer(alpha==255?TYPE:GHOST);var frame=frame(mount);int light=light(mount,0);
+        for(var q:InstrumentGeometry.transmitter(kind==Sensor.Kind.LEVEL))quad(pose,consumer,frame,camera,q,0,alpha,light);
+        if(!equipment&&stems){
+            var tap=mount.localTap();var key=new Connector(List.of(tap[0],tap[1],tap[2]),mount.bottomEntry(),kind==Sensor.Kind.TEMPERATURE,mount.probeDepth());if(CONNECTORS.size()>2048)CONNECTORS.clear();
+            for(var q:CONNECTORS.computeIfAbsent(key,k->InstrumentGeometry.connection(tap,k.bottom(),k.temperature(),k.probeDepth())))quad(pose,consumer,frame,camera,q,0,alpha,light);
+        }
         // Font rendering may flush the shared geometry buffer. Finish every connector before requesting font buffers.
-        if(alpha==255)text(pose,buffers,mount,camera,kind.symbol(),0,.038,.011f,.074,0xffa6d4d9);
-        if(alpha==255&&!id.isEmpty())text(pose,buffers,mount,camera,id,0,-.072,(float)Math.min(.0013,.15/Math.max(1,Minecraft.getInstance().font.width(id))),.074,0xff152126);
+        if(alpha==255&&tier<=PLAIN)text(pose,buffers,mount,camera,kind.symbol(),0,.038,.011f,.074,0xffa6d4d9);
+        if(alpha==255&&tier==FULL&&!id.isEmpty())text(pose,buffers,mount,camera,id,0,-.072,(float)Math.min(.0013,.15/Math.max(1,Minecraft.getInstance().font.width(id))),.074,0xff152126);
     }
-    private static void draw(PoseStack pose,MultiBufferSource buffers,Instrument.Mount mount,Vec3 camera,GaugeSettings settings,double ratio,int tint,int alpha){draw(pose,buffers,mount,camera,settings,ratio,tint,alpha,false);}
-    private static void draw(PoseStack pose,MultiBufferSource buffers,Instrument.Mount mount,Vec3 camera,GaugeSettings settings,double ratio,int tint,int alpha,boolean equipment){
-        var consumer=buffers.getBuffer(alpha==255?TYPE:GHOST);
-        for(var q:InstrumentGeometry.housing())quad(pose,consumer,mount,camera,q,tint,alpha);
-        var tap=mount.localTap();var key=new Connector(List.of(tap[0],tap[1],tap[2]),mount.bottomEntry(),settings.kind()==GaugeSettings.Kind.TEMPERATURE,mount.probeDepth());
-        if(CONNECTORS.size()>2048)CONNECTORS.clear();
-        if(!equipment)for(var q:CONNECTORS.computeIfAbsent(key,k->InstrumentGeometry.connection(new double[]{tap[0],tap[1],tap[2]},k.bottom,k.temperature,k.probeDepth)))quad(pose,consumer,mount,camera,q,tint,alpha);
-        quad(pose,consumer,mount,camera,InstrumentGeometry.needle(ratio),tint,alpha);
-        if(tint==0&&alpha==255){
+    /** A dial at {@code tier} of {@link #DIALS}: its housing, connector and text by tier, its needle always. */
+    private static void draw(PoseStack pose,MultiBufferSource buffers,Instrument.Mount mount,Vec3 camera,GaugeSettings settings,double ratio,int tint,int alpha,boolean equipment,int tier){
+        var consumer=buffers.getBuffer(alpha==255?TYPE:GHOST);var frame=frame(mount);int light=light(mount,tint);
+        for(var q:tier==FULL?InstrumentGeometry.housing():tier==PLAIN?InstrumentGeometry.housingPlain():InstrumentGeometry.housingFar())quad(pose,consumer,frame,camera,q,tint,alpha,light);
+        if(!equipment&&tier<=PLAIN){
+            var tap=mount.localTap();var key=new Connector(List.of(tap[0],tap[1],tap[2]),mount.bottomEntry(),settings.kind()==GaugeSettings.Kind.TEMPERATURE,mount.probeDepth());
+            if(CONNECTORS.size()>2048)CONNECTORS.clear();
+            for(var q:CONNECTORS.computeIfAbsent(key,k->InstrumentGeometry.connection(new double[]{tap[0],tap[1],tap[2]},k.bottom,k.temperature,k.probeDepth)))quad(pose,consumer,frame,camera,q,tint,alpha,light);
+        }
+        quad(pose,consumer,frame,camera,InstrumentGeometry.needle(ratio),tint,alpha,light);
+        if(tint==0&&alpha==255&&tier==FULL){
             text(pose,buffers,mount,camera,settings.label(),0,-.098,.0025f);
             for(int i=0;i<=4;i++){
                 double fraction=i/4.0,angle=Math.PI*(1.25-1.5*fraction);
@@ -160,7 +223,20 @@ public final class InstrumentRenderer {
         }
     }
     private static String compact(double value){return String.format(Locale.ROOT,Math.abs(value)>=10000?"%.1e":"%.3g",value);}
-    private static void quad(PoseStack pose,VertexConsumer consumer,Instrument.Mount mount,Vec3 camera,InstrumentGeometry.Quad q,int tint,int alpha){var normal=mount.normal();var centre=mount.centre();var v=InstrumentGeometry.pose(q,new double[]{centre.x,centre.y,centre.z},new double[]{normal.x,normal.y,normal.z}).vertices();Vec3 p0=new Vec3(v[0],v[1],v[2]),p1=new Vec3(v[3],v[4],v[5]),p2=new Vec3(v[6],v[7],v[8]);var n=p1.subtract(p0).cross(p2.subtract(p0)).normalize();int c=tint==0?q.colour():tint;for(int j=0;j<4;j++){var p=new Vec3(v[j*3],v[j*3+1],v[j*3+2]).subtract(camera);consumer.addVertex(pose.last(),(float)p.x,(float)p.y,(float)p.z).setColor(c>>16&255,c>>8&255,c&255,alpha).setUv(0,0).setOverlay(OverlayTexture.NO_OVERLAY).setLight(tint==0?LevelRenderer.getLightColor(Minecraft.getInstance().level,net.minecraft.core.BlockPos.containing(mount.centre())):LightTexture.FULL_BRIGHT).setNormal(pose.last(),(float)n.x,(float)n.y,(float)n.z);}}
+    /** A mount's centre and outward normal, the pose of every quad drawn on it. */
+    private record Frame(double[] centre,double[] normal){}
+    private static Frame frame(Instrument.Mount mount){var c=mount.centre();var n=mount.normal();return new Frame(new double[]{c.x,c.y,c.z},new double[]{n.x,n.y,n.z});}
+    /** One light per instrument, at its centre (each vertex used to read the same point); ghosts full bright. */
+    private static int light(Instrument.Mount mount,int tint){return tint==0?LevelRenderer.getLightColor(Minecraft.getInstance().level,net.minecraft.core.BlockPos.containing(mount.centre())):LightTexture.FULL_BRIGHT;}
+    private static void quad(PoseStack pose,VertexConsumer consumer,Frame frame,Vec3 camera,InstrumentGeometry.Quad q,int tint,int alpha,int light){
+        var v=InstrumentGeometry.pose(q,frame.centre(),frame.normal()).vertices();
+        double ax=v[3]-v[0],ay=v[4]-v[1],az=v[5]-v[2],bx=v[6]-v[0],by=v[7]-v[1],bz=v[8]-v[2];
+        double nx=ay*bz-az*by,ny=az*bx-ax*bz,nz=ax*by-ay*bx,length=Math.sqrt(nx*nx+ny*ny+nz*nz);
+        // As Vec3.normalize: a degenerate normal is zero.
+        if(length<1e-4){nx=0;ny=0;nz=0;}else{nx/=length;ny/=length;nz/=length;}
+        int c=tint==0?q.colour():tint;
+        for(int j=0;j<4;j++)consumer.addVertex(pose.last(),(float)(v[j*3]-camera.x),(float)(v[j*3+1]-camera.y),(float)(v[j*3+2]-camera.z)).setColor(c>>16&255,c>>8&255,c&255,alpha).setUv(0,0).setOverlay(OverlayTexture.NO_OVERLAY).setLight(light).setNormal(pose.last(),(float)nx,(float)ny,(float)nz);
+    }
     private static void text(PoseStack pose,MultiBufferSource buffers,Instrument.Mount m,Vec3 camera,String text,double x,double y,float scale){text(pose,buffers,m,camera,text,x,y,scale,InstrumentGeometry.LABEL,0xff252b2e);}
     private static void text(PoseStack pose,MultiBufferSource buffers,Instrument.Mount m,Vec3 camera,String text,double x,double y,float scale,double depth,int colour){var mc=Minecraft.getInstance();var p=m.point(x,y,depth).subtract(camera);pose.pushPose();pose.translate(p.x,p.y,p.z);float angle=(float)Math.toDegrees(Math.atan2(m.normal().x,m.normal().z));pose.mulPose(Axis.YP.rotationDegrees(angle));pose.scale(scale,-scale,scale);mc.font.drawInBatch(text,-mc.font.width(text)/2f,0,colour,false,pose.last().pose(),buffers,net.minecraft.client.gui.Font.DisplayMode.NORMAL,0,LightTexture.FULL_BRIGHT);pose.popPose();}
     private static void drawLevelGhost(PoseStack pose,MultiBufferSource buffers,InstrumentHosts.Host host,Vec3 camera,int tint,int alpha){
@@ -215,7 +291,7 @@ public final class InstrumentRenderer {
     public static FluidNetwork.InstrumentDisplay get(FluidNetwork.InstrumentTarget target){return CACHE.get(target);}
     public static void accept(FluidNetwork.InstrumentDisplay display){if(WATCHED.contains(display.target())){CACHE.put(display.target(),display);var mc=Minecraft.getInstance();if(mc.level!=null)RECEIVED.put(display.target(),mc.level.getGameTime());}}
     public static void forget(BlockPos pos){var removed=WATCHED.stream().filter(t->t.position().equals(pos)).toList();WATCHED.removeAll(removed);removed.forEach(CACHE::remove);removed.forEach(RECEIVED::remove);if(Minecraft.getInstance().getConnection()!=null)FluidNetwork.requestInstruments(List.of(),removed);}
-    public static void clear(){WIRING.clear();CACHE.clear();RECEIVED.clear();WATCHED.clear();level=null;ticks=0;}
+    public static void clear(){WIRING.clear();DIALS.clear();HEADS.clear();WIRES.clear();shown=List.of();shownIn=null;shownAt=Long.MIN_VALUE;CACHE.clear();RECEIVED.clear();WATCHED.clear();level=null;ticks=0;}
     @SubscribeEvent public static void tick(ClientTickEvent.Post event){var mc=Minecraft.getInstance();if(mc.level!=level){clear();level=mc.level;}if(mc.level==null||mc.player==null)return;if(++ticks%20!=0)return;var nearby=new ArrayList<FluidNetwork.InstrumentTarget>();var distances=new HashMap<FluidNetwork.InstrumentTarget,Double>();for(var h:InstrumentHosts.nearby(mc.level,mc.player.position(),120,true))for(var i:h.metadata().installed()){var mount=h.mount(i.key().mount());if(mount!=null&&mount.centre().distanceToSqr(mc.player.position())<=120*120){var target=new FluidNetwork.InstrumentTarget(h.entity().getBlockPos(),i.key(),i.instance());nearby.add(target);distances.put(target,mount.centre().distanceToSqr(mc.player.position()));}}nearby.sort(Comparator.comparingDouble(distances::get));var wanted=new HashSet<>(nearby.subList(0,Math.min(64,nearby.size())));var add=wanted.stream().filter(t->!WATCHED.contains(t)).toList();var remove=WATCHED.stream().filter(t->!wanted.contains(t)).toList();WATCHED.removeAll(remove);remove.forEach(CACHE::remove);remove.forEach(RECEIVED::remove);WATCHED.addAll(add);FluidNetwork.requestInstruments(add,remove);}
     @SubscribeEvent public static void logout(ClientPlayerNetworkEvent.LoggingOut event){clear();}
 }

@@ -14,12 +14,20 @@ public final class InstrumentGeometry {
     }
     /** Upright world pose shared by in-world instruments and native drawing tools. */
     public static Quad pose(Quad quad,double[] centre,double[] normal){var source=quad.vertices();var p=new double[source.length];var right=new double[]{normal[2],0,-normal[0]};for(int i=0;i<source.length;i+=3)for(int a=0;a<3;a++)p[i+a]=centre[a]+right[a]*source[i]+(a==1?source[i+1]:0)+normal[a]*source[i+2];return new Quad(p,quad.colour());}
-    private static final List<Quad> HOUSING=build();
+    private static final List<Quad> HOUSING=build(48,true),HOUSING_PLAIN=build(24,false),HOUSING_FAR=build(12,false);
     public static List<Quad> housing(){return HOUSING;}
-    private static List<Quad> build(){
+    /**
+     * Drawing only, for a dial seen from afar (batch 2026-11-09-lod-rendering): the same closed envelope with 24 sides and
+     * no ticks, used where the face covers under 48 px (past 5.5 m at 1080 lines): the outline differs by 1.5 mm, 0.2 px
+     * there, and a 3 mm tick is under half a pixel.
+     */
+    public static List<Quad> housingPlain(){return HOUSING_PLAIN;}
+    /** As {@link #housingPlain()} with 12 sides, used under 12 px (past 22 m): 5.8 mm off the circle, 0.2 px there. */
+    public static List<Quad> housingFar(){return HOUSING_FAR;}
+    private static List<Quad> build(int sides,boolean ticks){
         var q=new ArrayList<Quad>();double inner=.143,back=-.07;
-        for(int i=0;i<48;i++){
-            double a=i*2*Math.PI/48,b=(i+1)*2*Math.PI/48;
+        for(int i=0;i<sides;i++){
+            double a=i*2*Math.PI/sides,b=(i+1)*2*Math.PI/sides;
             double x=DeterministicMath.cos(a),y=DeterministicMath.sin(a),u=DeterministicMath.cos(b),v=DeterministicMath.sin(b);
             // Outer wall, front bezel, inner bezel wall, dial and rear cap form one closed envelope.
             q.add(quad(RADIUS*x,RADIUS*y,back,RADIUS*u,RADIUS*v,back,RADIUS*u,RADIUS*v,RIM,RADIUS*x,RADIUS*y,RIM,0xff8b949b));
@@ -28,7 +36,7 @@ public final class InstrumentGeometry {
             q.add(quad(0,0,FACE,inner*x,inner*y,FACE,inner*u,inner*v,FACE,0,0,FACE,0xfffaf7e8));
             q.add(quad(0,0,back,RADIUS*u,RADIUS*v,back,RADIUS*x,RADIUS*y,back,0,0,back,0xff59626a));
         }
-        for(int i=0;i<=20;i++){
+        for(int i=0;ticks&&i<=20;i++){
             double a=Math.PI*(1.25-i*1.5/20),x=DeterministicMath.cos(a),y=DeterministicMath.sin(a),r=i%5==0?.105:.119;
             double w=i%5==0?.003:.0022;
             q.add(quad(r*x-w*y,r*y+w*x,TICKS,.136*x-w*y,.136*y+w*x,TICKS,.136*x+w*y,.136*y-w*x,TICKS,r*x+w*y,r*y-w*x,TICKS,0xff101517).front());

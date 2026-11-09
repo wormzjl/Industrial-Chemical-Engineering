@@ -51,12 +51,12 @@ import java.util.WeakHashMap;
 public final class MachineAnimation {
     /** How far from the camera parts move, blocks: beyond it a part is a few pixels and not drawn at all. */
     public static final double RANGE = 96;
-    /** Part buffers kept, by unit, part and light; all are dropped when it fills. */
+    /** Part buffers kept, by unit, part and light: past 256 only those not drawn for a second close (batch 2026-11-09-lod-rendering, A4). */
     private static final int MAX_BUFFERS = 256;
     /** Client-owned clocks for fans and authored slow machinery, using the shaft animations' angle accumulator. */
     private static final Map<EquipmentShellBlockEntity, Map<Integer, VisualRotation.Clock>> CLOCKS = new WeakHashMap<>();
     private static boolean running = true;
-    private static final Map<Key, VertexBuffer> BUFFERS = new HashMap<>();
+    private static final VertexBufferCache<Key> BUFFERS = new VertexBufferCache<>(MAX_BUFFERS, 4096);
     private static final Map<ShaftLook, List<Mesh.Polygon>> SHAFT_POLYGONS = new HashMap<>();
     /** A sprite the buffers hold texture coordinates of: a resource reload makes them stale. */
     private static @Nullable TextureAtlasSprite builtWith;
@@ -184,9 +184,13 @@ public final class MachineAnimation {
                 if (shader.CHUNK_OFFSET != null) shader.CHUNK_OFFSET.set(0F, 0F, 0F);
                 shader.apply();
             }
-            int cached = BUFFERS.size();
-            var buffer = buffer(key, polygons);
-            if (BUFFERS.size() != cached) bound = null;
+            var buffer = BUFFERS.get(key);
+            if (buffer == null) {
+                // Uploading binds and unbinds the new buffer.
+                buffer = build(polygons, key.light());
+                if (buffer != null) BUFFERS.put(key, buffer);
+                bound = null;
+            }
             if (buffer == null || shader.MODEL_VIEW_MATRIX == null) return;
             shader.MODEL_VIEW_MATRIX.set(pose);
             shader.MODEL_VIEW_MATRIX.upload();
@@ -205,15 +209,6 @@ public final class MachineAnimation {
                 type.clearRenderState();
             }
         }
-    }
-
-    private static @Nullable VertexBuffer buffer(Key key, List<Mesh.Polygon> polygons) {
-        var buffer = BUFFERS.get(key);
-        if (buffer != null) return buffer;
-        if (BUFFERS.size() >= MAX_BUFFERS) release();
-        buffer = build(polygons, key.light());
-        if (buffer != null) BUFFERS.put(key, buffer);
-        return buffer;
     }
 
     /**
@@ -251,7 +246,6 @@ public final class MachineAnimation {
     }
 
     private static void release() {
-        BUFFERS.values().forEach(VertexBuffer::close);
         BUFFERS.clear();
     }
 

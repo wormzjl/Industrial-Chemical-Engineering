@@ -20,14 +20,13 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import org.joml.Matrix4f;
-import java.util.LinkedHashMap;
-import java.util.Map;
 
 /** Render thread only: a coarse equipment body (or the normal tower shell) uploads once and draws once, independent of its occupied block count. */
 @EventBusSubscriber(modid=IChemE.MOD_ID,value=Dist.CLIENT)
 public final class EquipmentBodyRenderer {
     private record Key(EquipmentShape shape,Paint paint,int light,com.wormzjl.icheme.science.equipment.RenderDetail detail) {}
-    private static final Map<Key,VertexBuffer> BUFFERS=new LinkedHashMap<>(16,.75f,true);
+    /** Past 64 meshes only those not drawn for a second close, so a view of more structures never rebuilds one each frame. */
+    private static final VertexBufferCache<Key> BUFFERS=new VertexBufferCache<>(64,1024);
     private static TextureAtlasSprite atlasMarker;
     private EquipmentBodyRenderer() {}
 
@@ -47,7 +46,6 @@ public final class EquipmentBodyRenderer {
             var key=new Key(shape,tower.paint(),light,detail);var buffer=BUFFERS.get(key);
             if(buffer==null){
                 buffer=build(shape,tower.paint(),light,detail);if(buffer==null)continue;
-                if(BUFFERS.size()>=64){var oldest=BUFFERS.entrySet().iterator();oldest.next().getValue().close();oldest.remove();}
                 BUFFERS.put(key,buffer);
             }
             if(shader==null){
@@ -86,5 +84,5 @@ public final class EquipmentBodyRenderer {
             var buffer=new VertexBuffer(VertexBuffer.Usage.STATIC);buffer.bind();buffer.upload(mesh);VertexBuffer.unbind();return buffer;
         }
     }
-    public static void release(){BUFFERS.values().forEach(VertexBuffer::close);BUFFERS.clear();}
+    public static void release(){BUFFERS.clear();}
 }

@@ -70,7 +70,8 @@ public final class TankRenderer {
      */
     private static final double BAND = TankGaugeGeometry.BAND_HALF, MARKER = TankGaugeGeometry.MARKER_HEIGHT;
     private static final int LEAST_ALPHA = 200, FLOAT = 0xFFB84432;
-    private static final Map<Key, VertexBuffer> BUFFERS = new HashMap<>();
+    /** Past 64 part meshes only those not drawn for a second close (batch 2026-11-09-lod-rendering, A4). */
+    private static final VertexBufferCache<Key> BUFFERS = new VertexBufferCache<>(MAX_BUFFERS, 1024);
     private static @Nullable TextureAtlasSprite builtWith;
     private static int age;
 
@@ -271,7 +272,6 @@ public final class TankRenderer {
     private static @Nullable VertexBuffer buffer(Key key, ShapeRasterizer.Floating f) {
         var buffer = BUFFERS.get(key);
         if (buffer != null) return buffer;
-        if (BUFFERS.size() >= MAX_BUFFERS) release();
         buffer = build(switch(key.part()){case ROOF->f.roof();case LADDER->f.ladder();case GAUGE->ShapeRasterizer.tankGauge(key.shape()).stream().filter(p->p.material()!=Mesh.Material.GLASS).toList();}, key.paint(), key.light());
         if (buffer != null) BUFFERS.put(key, buffer);
         return buffer;
@@ -313,7 +313,6 @@ public final class TankRenderer {
     }
 
     private static void release() {
-        BUFFERS.values().forEach(VertexBuffer::close);
         BUFFERS.clear();
     }
 

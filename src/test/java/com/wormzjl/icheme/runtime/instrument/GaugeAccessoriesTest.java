@@ -175,12 +175,18 @@ class GaugeAccessoriesTest {
         var missing=image.copy();missing.remove("pending");var none=InstrumentService.Store.load(missing);assertTrue(none.pending().isEmpty());assertEquals(store.host(7),none.host(7));
     }
     @Test void housingIsClosedAtObliqueAnglesAndEveryConnectorRemainsFinite(){
-        var edges=new HashMap<String,Integer>();
-        for(var q:InstrumentGeometry.housing()){
-            if(q.colour()==0xff101517)continue;var v=q.vertices();
-            for(int i=0;i<4;i++){int j=(i+1)%4;String x=vertex(v,3*i),y=vertex(v,3*j);if(!x.equals(y))edges.merge(x.compareTo(y)<0?x+"/"+y:y+"/"+x,1,Integer::sum);}
+        // The distance housings (batch 2026-11-09-lod-rendering) are the same envelope with fewer sides and no ticks.
+        for(var housing:List.of(InstrumentGeometry.housing(),InstrumentGeometry.housingPlain(),InstrumentGeometry.housingFar())){
+            var edges=new HashMap<String,Integer>();
+            for(var q:housing){
+                if(q.colour()==0xff101517)continue;var v=q.vertices();
+                for(int i=0;i<4;i++){int j=(i+1)%4;String x=vertex(v,3*i),y=vertex(v,3*j);if(!x.equals(y))edges.merge(x.compareTo(y)<0?x+"/"+y:y+"/"+x,1,Integer::sum);}
+                for(int i=0;i<12;i+=3)assertTrue(Math.hypot(v[i],v[i+1])<=InstrumentGeometry.RADIUS+1e-9,"inside the full housing's radius");
+            }
+            assertTrue(edges.values().stream().allMatch(n->n==2),"bezel, inner wall, dial, shell and back must share every boundary");
         }
-        assertTrue(edges.values().stream().allMatch(n->n==2),"bezel, inner wall, dial, shell and back must share every boundary");
+        assertEquals(261,InstrumentGeometry.housing().size(),"near housing unchanged: 48 sides of 5 faces and 21 ticks");
+        assertEquals(120,InstrumentGeometry.housingPlain().size());assertEquals(60,InstrumentGeometry.housingFar().size());
         assertTrue(InstrumentGeometry.FACE<InstrumentGeometry.TICKS&&InstrumentGeometry.TICKS<InstrumentGeometry.LABEL&&InstrumentGeometry.LABEL<InstrumentGeometry.NEEDLE&&InstrumentGeometry.NEEDLE<InstrumentGeometry.RIM);
         for(var axis:Direction.values())for(double bore:new double[]{.001,.05,1})for(var m:InstrumentHosts.pipeMounts(BlockPos.ZERO,bore,0,axis))for(boolean temperature:List.of(false,true)){
             var connector=InstrumentGeometry.connection(m.localTap(),m.bottomEntry(),temperature,m.probeDepth());assertTrue(m.probeDepth()<=.12);assertFalse(connector.isEmpty());for(var q:connector)for(double coordinate:q.vertices())assertTrue(Double.isFinite(coordinate));
