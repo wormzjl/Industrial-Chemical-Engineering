@@ -322,7 +322,7 @@ final class ControlHosts {
 
     DataBus bus() {
         if (busRevision != facts.topologyRevision()) {
-            bus = new DataBus(facts.cables(), facts.ports());
+            bus = new DataBus(facts.standing(), facts.ports());
             busRevision = facts.topologyRevision();
         }
         return bus;

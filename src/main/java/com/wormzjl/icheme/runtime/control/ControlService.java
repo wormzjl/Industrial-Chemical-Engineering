@@ -44,6 +44,44 @@ public final class ControlService {
         return facts;
     }
 
+    /** Cable sites whose chunk loaded, by dimension, each queued once until the re-alignment checks it (W5c C2). */
+    private final Map<String, ArrayDeque<DataBus.Site>> cableQueue = new HashMap<>();
+    private final Set<DataBus.Site> cableQueued = new HashSet<>();
+    /** Controllers and consoles whose chunk loaded, by dimension, each queued once (W5c C3). */
+    private final Map<String, ArrayDeque<UUID>> panelQueue = new HashMap<>();
+    private final Set<UUID> panelQueued = new HashSet<>();
+
+    /**
+     * Queues the cables (W5c C2) and the controllers and consoles (C3) of chunk {@code chunk} of
+     * {@code dimension} for the re-alignment (registry first).
+     */
+    public void loadedChunk(String dimension, long chunk) {
+        for (var site : facts.cablesIn(dimension, chunk))
+            if (cableQueued.add(site)) cableQueue.computeIfAbsent(dimension, k -> new ArrayDeque<>()).add(site);
+        for (var id : facts.panelsIn(dimension, chunk))
+            if (panelQueued.add(id)) panelQueue.computeIfAbsent(dimension, k -> new ArrayDeque<>()).add(id);
+    }
+
+    /** The next controller or console of {@code dimension} the re-alignment checks, taken off its queue, or null. */
+    public UUID nextPanel(String dimension) {
+        var queue = panelQueue.get(dimension);
+        if (queue == null) return null;
+        var id = queue.poll();
+        if (queue.isEmpty()) panelQueue.remove(dimension);
+        if (id != null) panelQueued.remove(id);
+        return id;
+    }
+
+    /** The next cable of {@code dimension} the re-alignment checks, taken off its queue, or null when none is queued. */
+    public DataBus.Site nextCable(String dimension) {
+        var queue = cableQueue.get(dimension);
+        if (queue == null) return null;
+        var site = queue.poll();
+        if (queue.isEmpty()) cableQueue.remove(dimension);
+        if (site != null) cableQueued.remove(site);
+        return site;
+    }
+
     /**
      * Immutable slice inputs. The original device settings remain facts and resume when the
      * controller is off.
@@ -84,6 +122,19 @@ public final class ControlService {
                                                                         .toString())
                                                 && c.site().cell().equals(rack.getBlockPos()))
                         .toList();
+        // Registry first (format 4, W5c C2): a lane whose fact holds no frame learns this cell's (a world saved
+        // before), unless another lane of the cell holds another: then this is not the cell the facts know.
+        var frame = com.wormzjl.icheme.world.level.block.PipeRackBlock.frame(rack.getBlockState());
+        if (wires.stream().anyMatch(c -> c.frame() == null)
+                && wires.stream().allMatch(c -> c.frame() == null || c.frame().equals(frame))) {
+            var framed = new ArrayList<DataBus.Cable>();
+            for (var c : wires) {
+                var next = c.frame() == null ? c.withFrame(frame) : c;
+                if (next != c) facts.cable(next);
+                framed.add(next);
+            }
+            wires = framed;
+        }
         rack.cables(wires);
         if (rack.getLevel() instanceof net.minecraft.server.level.ServerLevel server)
             for (var cable : wires)
@@ -232,7 +283,7 @@ public final class ControlService {
         var readings = new HashMap<UUID, Sensor.Reading>();
         var needed = new HashSet<Long>();
         for (var panel : facts.panels())
-            if (!panel.dcs() && panel.settings().enabled()) {
+            if (!panel.dcs() && panel.settings().enabled() && !facts.heldPanel(panel.id())) {
                 var s = sensors.get(panel.settings().sensor());
                 if (s != null && hosts.wired(panel.id(), s.key().host()))
                     needed.add(s.key().host());
@@ -263,7 +314,7 @@ public final class ControlService {
         var nextHeat = new HashMap<Long, Double>();
         var claims = new HashMap<Long, Integer>();
         for (var panel : facts.panels())
-            if (!panel.dcs() && panel.settings().enabled())
+            if (!panel.dcs() && panel.settings().enabled() && !facts.heldPanel(panel.id()))
                 claims.merge(panel.settings().output(), 1, Integer::sum);
         for (var panel :
                 facts.panels().stream()
@@ -271,8 +322,10 @@ public final class ControlService {
                         .toList())
             if (!panel.dcs()) {
                 var setting = panel.settings();
-                String state = "OFF";
-                if (setting.enabled()) {
+                // A held controller (W5c C3): no block stands for it, so it is off and its output resumes.
+                boolean blocked = facts.heldPanel(panel.id());
+                String state = blocked ? "HELD" : "OFF";
+                if (setting.enabled() && !blocked) {
                     ControlLaw.Decision decision;
                     if (claims.getOrDefault(setting.output(), 0) > 1)
                         decision = ControlLaw.Decision.noSetpoint("OUTPUT CONFLICT");

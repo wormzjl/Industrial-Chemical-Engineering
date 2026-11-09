@@ -1,7 +1,9 @@
 package com.wormzjl.icheme.runtime.fluid;
 
 import com.wormzjl.icheme.fluid.support.FluidTestSupport;
+import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.HeatSides;
+import com.wormzjl.icheme.science.equipment.Paint;
 import com.wormzjl.icheme.science.equipment.PipeSizes;
 import com.wormzjl.icheme.science.equipment.RackGeometry;
 import com.wormzjl.icheme.science.fluid.network.*;
@@ -103,7 +105,21 @@ class FluidFactsCompatTest {
         stores(world);
         world.runTo(840);
         health(world);
-        world.runTo(860);return world;
+        world.runTo(860);
+        // Facts schema 15: the build facts, the laid pipe painted on one side, the rack lane on both, and a drum's shape and paint.
+        var registered=world.registry.registrations().values();
+        long laid=registered.stream().filter(x->x.device().position().lane()==0&&x.device().joints()!=PhysicalFluidTopology.ALL_FACES).findFirst().orElseThrow().device().id();
+        long lane=registered.stream().filter(x->x.device().position().lane()!=0&&x.device().position().lane()<=PhysicalFluidTopology.RACK_PLACES).findFirst().orElseThrow().device().id();
+        world.ledger.paint(laid,new WorldTopologyLedger.LinePaint(0x2271B3,Paint.BARE));
+        world.ledger.paint(lane,new WorldTopologyLedger.LinePaint(0xE25303,0xF7B500));
+        world.ledger.structure(new PhysicalFluidTopology.Position(EventPathWorld.DIM,60,64,0),WorldTopologyLedger.Structure.of(
+                EquipmentShape.drum(2,6,EquipmentShape.Orientation.HORIZONTAL,EquipmentShape.Heading.EAST,EquipmentShape.defaultSupport(2,EquipmentShape.Orientation.HORIZONTAL)),
+                new Paint(0x587246,0x383E42),"V-101 Flash drum"));
+        // Facts schema 15: the rack lane's rack frame, the straight rack facing east it was laid on.
+        world.ledger.rack(lane,new WorldTopologyLedger.RackFrame(Direction.EAST,WorldTopologyLedger.RackShape.STRAIGHT));
+        // Facts schema 15, last: the laid pipe's name (W5c C4), with a letter outside ASCII.
+        world.ledger.name(laid,"Feed é line");
+        return world;
     }
     /**
      * Facts schema 12 (batch 2026-11-03-rotating-machinery W10b): the pumps' health, the first pump worn to 0.73, the
@@ -347,7 +363,7 @@ class FluidFactsCompatTest {
                     new ColumnUnit.Totals(new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(widen.apply(u.totals().taken().moles(),0.),u.totals().taken().energy()),
                             new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(widen.apply(u.totals().produced().moles(),0.),u.totals().produced().energy()),u.totals().reboiler(),u.totals().condenser(),u.totals().pumparounds()),u.condensers()));
         }
-        var wide=new FluidFacts.World(world.nextIdentity(),new WorldTopologyLedger.FluidBasis(world.basis().packageId(),ids,world.basis().revision()),registrations,total.apply(world.constructed()),total.apply(world.destroyed()),world.recoveries(),world.restated(),world.removedMovers(),columns);
+        var wide=new FluidFacts.World(world.nextIdentity(),new WorldTopologyLedger.FluidBasis(world.basis().packageId(),ids,world.basis().revision()),registrations,total.apply(world.constructed()),total.apply(world.destroyed()),world.recoveries(),world.restated(),world.removedMovers(),columns,world.shafts(),world.stores(),world.health(),world.builds());
         return FluidFacts.rebuild(wide,placed,core.epoch(),key->key.on(model),CATALOG,true,"test");
         };
         var rebuilt=restated.apply(1.5);
@@ -700,6 +716,8 @@ class FluidFactsCompatTest {
                 if(expected.getProperty("stores")==null)assertEquals(ledger.active().values().stream().filter(ElectricStores::powered).count()+ledger.shafts().values().stream().filter(ElectricStores::powered).count(),ledger.stores().size(),folder+": a store for each powered unit");
                 // Schema 12 wrote the pumps' health; an older image reads every pump new (health 1, no entry).
                 assertEquals(expected.getProperty("health",""),health(ledger),folder+": pump health");
+                // Schema 15 wrote the build facts; an older image reads none.
+                assertEquals(expected.getProperty("builds",""),builds(ledger),folder+": build facts");
                 long vessels=rebuilt.checkpoint().islands().stream().flatMap(e->e.snapshot().graph().reservoirs().stream()).filter(n->n.kind()==PassiveNetwork.NodeKind.RESERVOIR).count();
                 assertEquals(Long.parseLong(expected.getProperty("vessels")),vessels,folder+": vessels");
                 double total=Arrays.stream(moles(rebuilt.checkpoint(),model.componentCount())).sum();
@@ -835,6 +853,7 @@ class FluidFactsCompatTest {
         props.setProperty("shafts",shafts(loaded.world().orElseThrow()));
         props.setProperty("stores",stores(loaded.world().orElseThrow()));
         props.setProperty("health",health(loaded.world().orElseThrow()));
+        props.setProperty("builds",builds(loaded.world().orElseThrow()));
         props.setProperty("vessels",Long.toString(contents(loaded.checkpoint()).values().stream().filter(v->v instanceof PassiveNetwork.Inventory).count()));
         props.setProperty("moles",Double.toString(Arrays.stream(moles(loaded.checkpoint(),model.componentCount())).sum()));
         try(var out=Files.newBufferedWriter(folder.resolve("expected.properties"))){props.store(out,"Facts schema "+FluidFacts.SCHEMA+" corpus image, state format "+FluidCheckpointCodec.VERSION);}
@@ -868,6 +887,32 @@ class FluidFactsCompatTest {
             for(var s:u.stations())text.append(":").append(s.port()).append(s.index()).append("=").append(s.device()).append("/").append(s.valve()).append("/").append(s.account().total()).append("/").append(s.account().energy()).append("/").append(s.solids().massKg());
         }
         return text.toString();
+    }
+    /** Every line paint in identity order, then every structure in origin order (schema 8), then every rack frame in identity order (schema 9). */
+    private static String builds(WorldTopologyLedger.Snapshot world) {
+        var parts=new ArrayList<String>();
+        for(var e:new TreeMap<>(world.builds().paints()).entrySet())parts.add(e.getKey()+":"+Integer.toHexString(e.getValue().primary())+"/"+Integer.toHexString(e.getValue().secondary()));
+        var structures=new ArrayList<>(world.builds().structures().entrySet());structures.sort(Comparator.comparing(e->e.getKey().toString()));
+        for(var e:structures){var p=e.getKey();var s=e.getValue();parts.add(p.x()+","+p.y()+","+p.z()+":"+s.shape().kind()+":"+s.shape().diameter()+"x"+s.shape().tangentLength()+":"+Integer.toHexString(s.paint().body())+"/"+Integer.toHexString(s.paint().structure())+(s.name().isEmpty()?"":":"+s.name()));}
+        for(var e:new TreeMap<>(world.builds().racks()).entrySet())parts.add(e.getKey()+":"+e.getValue().facing()+"/"+e.getValue().shape());
+        for(var e:new TreeMap<>(world.builds().names()).entrySet())parts.add(e.getKey()+"=\""+e.getValue()+"\"");
+        return String.join(";",parts);
+    }
+    /** The build facts survive an exact load and a load from facts alone (batch 2026-11-03-save-corruption). */
+    @Test void buildFactsSurviveBothExactAndFactsOnlyLoads() {
+        var world=corpusWorld();var builds=world.ledger.snapshot().builds();var saved=image(world);
+        assertEquals(2,builds.paints().size());assertEquals(1,builds.structures().size());assertEquals(1,builds.racks().size());
+        for(var restored:List.of(load(saved,key->model,CATALOG),load(edited(saved,tag->tag.putInt("StateFormat",Integer.MAX_VALUE)),key->model,CATALOG)))
+            assertEquals(builds,restored.world().orElseThrow().builds(),restored.route().toString());
+    }
+    /** A structure whose shape does not read is a damaged fact: the topology's facts refuse. */
+    @Test void aStructureWhoseShapeDoesNotReadRefuses() {
+        var ledger=new WorldTopologyLedger(WorldTopologyLedger.Snapshot.empty(CATALOG));
+        var drum=EquipmentShape.drum(2,6,EquipmentShape.Orientation.HORIZONTAL,EquipmentShape.Heading.EAST,EquipmentShape.defaultSupport(2,EquipmentShape.Orientation.HORIZONTAL));
+        ledger.structure(new PhysicalFluidTopology.Position(EventPathWorld.DIM,0,64,0),new WorldTopologyLedger.Structure(drum,Paint.DEFAULT,"{Kind:\"drum\"",""));
+        var bytes=FluidFacts.world(ledger.snapshot());
+        var refusal=assertThrows(IllegalArgumentException.class,()->FluidFacts.world(bytes,0,bytes.length)).getMessage();
+        assertTrue(refusal.contains("does not read"),refusal);
     }
     private static long shaped(WorldTopologyLedger.Snapshot world){return world.active().values().stream().filter(r->r.spec().geometry().form()!=VesselGeometry.Form.PRISM).count();}
     /**

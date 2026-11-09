@@ -37,6 +37,26 @@ public final class EquipmentPermissionChecks {
         require((boolean) edit(level, position, () -> level.setBlock(position, state, flags)));
     }
 
+    /**
+     * Fixture only: a structure cell lost or changed outside the structure's lifecycle, as a damaged chunk or a save of
+     * another build leaves it (registry first, batch 2026-11-03-save-corruption). The registry is not told: the edit
+     * runs quietly ({@link com.wormzjl.icheme.world.level.block.FluidDeviceBlock#quietly}), so the structure keeps its
+     * record and registrations, as after a load.
+     */
+    static void lost(
+            ServerLevel level,
+            BlockPos position,
+            net.minecraft.world.level.block.state.BlockState state,
+            int flags) {
+        if (!EquipmentProtection.cell(level.getBlockState(position)))
+            throw new AssertionError("No structure cell at " + position.toShortString());
+        com.wormzjl.icheme.world.level.block.FluidDeviceBlock.quietly(
+                () -> {
+                    if (!(boolean) edit(level, position, () -> level.setBlock(position, state, flags)))
+                        throw new AssertionError("The cell at " + position.toShortString() + " did not change");
+                });
+    }
+
     public static void verify(ServerLevel level, BlockPos a, BlockPos b) {
         try {
             edit(

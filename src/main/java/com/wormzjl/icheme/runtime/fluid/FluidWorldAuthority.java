@@ -62,6 +62,14 @@ public final class FluidWorldAuthority implements AutoCloseable {
     private final Set<Long> unboundBindings=new HashSet<>();
     /** Equipment whose remaining chunks must load before its complete structure can be registered. */
     private final Map<PhysicalFluidTopology.Position,EquipmentStructure.Vessel> unboundStructures=new LinkedHashMap<>();
+    /** Registrations whose chunk loaded, by dimension, each queued once until the re-alignment checks it (REGISTRY_FIRST_PLAN.md 4.2). */
+    private final Map<String,ArrayDeque<Long>> realignment=new HashMap<>();
+    private final Set<Long> realigning=new HashSet<>();
+    /** The shaft parts whose chunk loaded, by dimension, each queued once until the re-alignment checks it (W5c C1). */
+    private final Map<String,ArrayDeque<Long>> shaftRealignment=new HashMap<>();
+    private final Set<Long> shaftRealigning=new HashSet<>();
+    /** The origins of the structures the registry records, by dimension and by chunk of their box: a chunk load queues them for their re-alignment (plan 4.4). */
+    private final Map<String,Map<Long,Set<PhysicalFluidTopology.Position>>> structureChunks=new HashMap<>();
     /** Engine-owned presentation: loaded devices and open menus, updated on their island's bucket only. */
     private final FluidPresentation<com.wormzjl.icheme.world.inventory.FluidDeviceMenu> presentation;
     /** Complete immutable snapshots from the last bucket; bounded by loaded/open devices, never player replies. */
@@ -101,6 +109,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         var savedTopology=data.world().orElseGet(()->WorldTopologyLedger.Snapshot.empty(catalog));savedTopology.basis().requireCurrent(catalog);
         FluidPropertyReloadGuard.validateSolids(catalog.solids(),data.checkpoint(),savedTopology);observedSolidData=catalog;
         topology=new WorldTopologyLedger(savedTopology);
+        topology.builds().structures().forEach((origin,structure)->indexStructure(origin,structure,true));
         presentation=new FluidPresentation<>(new PresentationHost(),topology.onlineTick());
         var settings=new IslandCoordinator.Settings(options.wallBudgetNanos(),options.wallBudgetNanos()*3/4,64,options.adaptiveCadence(),options.initialCadenceTicks(),options.certificates());
         // Island clocks read the world's online tick: one epoch increment per tick advances every island.
@@ -159,6 +168,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         var world=new FluidWorldAuthority(server);SERVERS.put(server,world);
         var early=EARLY_CHUNKS.remove(server);
         if(early!=null)for(var loaded:early)world.loadedChunk(loaded.dimension(),loaded.chunk());
+        world.holdWithoutLevel();
     }
     /** Retain early chunk loads as well as normal ones; called only on this server's thread. */
     public static void loadedChunk(MinecraftServer server,ResourceKey<Level> dimension,long chunk) {
@@ -221,6 +231,46 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public Map<Long,WorldTopologyLedger.Registration> registrations(){owned();return registry.registrations();}
     /** The registration at a position (every block-entity load and binding asks). */
     public Optional<WorldTopologyLedger.Registration> at(PhysicalFluidTopology.Position position){owned();return registry.at(position);}
+    // The build facts (batch 2026-11-03-save-corruption, REGISTRY_FIRST_PLAN.md 3.3 and 3.5): what the registry holds to
+    // place a build again. The blocks keep copies for drawing and take them from here when they bind.
+    /** The paint the registry holds for line {@code id}, or null for a bare line. */
+    public WorldTopologyLedger.LinePaint linePaint(long id){owned();return topology.paint(id);}
+    /** Paints line {@code id}; a bare paint clears it. A line the registry no longer has, or is removing, keeps none. */
+    public void paint(long id,int primary,int secondary) {
+        owned();if(!topology.latest().containsKey(id))return;
+        topology.paint(id,new WorldTopologyLedger.LinePaint(primary,secondary));data.setDirty();
+    }
+    /** The name the registry holds for one-block device {@code id} (N1), empty for none. */
+    public String deviceName(long id){owned();return topology.name(id);}
+    /** Names one-block device {@code id}; an empty name clears it. A device the registry no longer has, or is removing, keeps none. */
+    public void name(long id,String name) {
+        owned();if(!topology.latest().containsKey(id))return;
+        topology.name(id,name);data.setDirty();
+    }
+    /** The frame of the rack cell lane {@code id} lies in, as the registry holds it, or null. */
+    public WorldTopologyLedger.RackFrame rackFrame(long id){owned();return topology.rack(id);}
+    /** Records the frame of the rack cell lane {@code id} lies in. A lane the registry no longer has, or is removing, keeps none. */
+    public void rackFrame(long id,WorldTopologyLedger.RackFrame frame) {
+        owned();var lane=topology.latest().get(id);if(lane==null||lane.device().position().lane()<=0||lane.device().port())return;
+        topology.rack(id,frame);data.setDirty();
+    }
+    /** The registry's record of the structure whose origin is {@code origin}, or null. */
+    public WorldTopologyLedger.Structure structure(PhysicalFluidTopology.Position origin){owned();return topology.structure(origin);}
+    /** Records the structure whose origin is {@code origin}; null removes it. A load of a chunk of its box queues it for its re-alignment. */
+    public void structure(PhysicalFluidTopology.Position origin,WorldTopologyLedger.Structure structure) {
+        owned();var old=topology.structure(origin);if(old!=null)indexStructure(origin,old,false);
+        topology.structure(origin,structure);if(structure!=null)indexStructure(origin,structure,true);data.setDirty();
+    }
+    /** Adds or removes the structure at {@code origin} in the index of the chunks its box spans. */
+    private void indexStructure(PhysicalFluidTopology.Position origin,WorldTopologyLedger.Structure structure,boolean add) {
+        var shape=structure.shape();var chunks=structureChunks.computeIfAbsent(origin.dimension(),k->new HashMap<>());
+        for(int x=origin.x()>>4;x<=(origin.x()+shape.sizeX()-1)>>4;x++)for(int z=origin.z()>>4;z<=(origin.z()+shape.sizeZ()-1)>>4;z++) {
+            long chunk=net.minecraft.world.level.ChunkPos.asLong(x,z);
+            if(add)chunks.computeIfAbsent(chunk,k->new HashSet<>()).add(origin);
+            else{var at=chunks.get(chunk);if(at!=null&&at.remove(origin)&&at.isEmpty())chunks.remove(chunk);}
+        }
+    }
+
     /**
      * The faces the device registered at {@code position} draws joined (batch 2026-11-09-drawn-connections): its
      * as-built joins on the projected registry ({@link PhysicalFluidTopology#builtFaces}), so accepted input shows at once
@@ -265,9 +315,10 @@ public final class FluidWorldAuthority implements AutoCloseable {
     /**
      * Registers a laid line as one ledger event (batch 2026-10-26-pipe-laying-system, plan 4.4): a passive pipe of bore
      * {@code diameter} per cell, with its joints, and the new joints of the laid pipes it starts or ends at
-     * ({@code hosts}, by identity). Returns the new pipes' registrations in the order of {@code cells}.
+     * ({@code hosts}, by identity), each new pipe painted {@code primary} and {@code secondary}. Returns the new pipes'
+     * registrations in the order of {@code cells}.
      */
-    public List<WorldTopologyLedger.Registration> lay(List<Laid> cells,double diameter,Map<Long,Integer> hosts) {
+    public List<WorldTopologyLedger.Registration> lay(List<Laid> cells,double diameter,Map<Long,Integer> hosts,int primary,int secondary) {
         owned();
         if(cells.isEmpty())throw new IllegalArgumentException("An empty line");
         long first=topology.nextIdentity();var edits=new ArrayList<WorldTopologyLedger.Edit>();var placed=new ArrayList<WorldTopologyLedger.Registration>();
@@ -282,7 +333,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
             if(old==null||old.device().kind()!=TopologyCompiler.Kind.PIPE)throw new IllegalStateException("A laid line's host pipe is gone");
             edits.add(new WorldTopologyLedger.Edit(host.getKey(),new WorldTopologyLedger.Registration(old.device().withJoints(host.getValue()),old.spec(),Math.addExact(old.revision(),1))));
         }
-        submit(edits,Math.addExact(first,cells.size()));return placed;
+        submit(edits,Math.addExact(first,cells.size()));
+        for(var record:placed)paint(record.device().id(),primary,secondary);
+        return placed;
     }
     /** A rack lane registered again from its rack's copy (a chunk load after the D4 reset): its joints, width, face points and bore. */
     public WorldTopologyLedger.Registration placeLane(PhysicalFluidTopology.Position position,PhysicalFluidTopology.Direction facing,int joints,int slots,long points,double diameter) {
@@ -471,7 +524,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         while(!queue.isEmpty()) {
             var r=queue.removeFirst();var d=r.device();
             if(d.fixed())return "a generator or a void stands inside the column";
-            if(d.suspended()||d.port()||topology.pending(d.id()))return "a device inside the column is held or being edited";
+            if(d.suspended()||d.held()||d.port()||topology.pending(d.id()))return "a device inside the column is held or being edited";
             if(inside.size()>COLUMN_LIMIT)return "the column holds more than "+COLUMN_LIMIT+" devices";
             for(var contact:d.contacts()) {
                 var next=PhysicalFluidTopology.across(at,WorldTopologyLedger.Registration::device,d,contact.cell(),contact.direction());
@@ -606,6 +659,37 @@ public final class FluidWorldAuthority implements AutoCloseable {
     /** Reading committed static configuration never advances or materialises process state. */
     public Optional<PhysicalFluidTopology.Device> committedDevice(long id){owned();var record=topology.active().get(id);return record==null?Optional.empty():Optional.of(record.device());}
     public void remove(long id){owned();controls().removeHost(id);instruments.recoverHost(id);var old=registrations().get(id);if(old!=null)submit(List.of(new WorldTopologyLedger.Edit(id,null)),topology.nextIdentity(),old.device().filter()?new WorldTopologyLedger.Recovery(id,null):null);}
+    /**
+     * Holds registration {@code id}, or releases it (decision S11, REGISTRY_FIRST_PLAN.md 4.1): held, it keeps what it holds
+     * and joins nothing. A topology edit at its next revision, so its islands recompile on the engine's schedule. Whether an
+     * edit was queued: none for an unknown identity, a column's port, or one already so.
+     */
+    public boolean hold(long id,boolean held) {
+        owned();var r=registrations().get(id);if(r==null||r.device().port()||r.device().held()==held)return false;
+        submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(r.device().withHeld(held),r.spec(),Math.addExact(r.revision(),1)))),topology.nextIdentity());
+        return true;
+    }
+    /** Every held part (W5c C5): the held registrations, shaft parts, cables, controllers and consoles. */
+    public int heldCount() {
+        owned();int count=held().size();for(var u:topology.shafts().values())if(u.held())count++;
+        var facts=controls().facts();return count+facts.held().size()+facts.heldPanels().size();
+    }
+    /** The held registrations, queued holds included, by identity. */
+    public List<WorldTopologyLedger.Registration> held() {
+        owned();var held=new ArrayList<WorldTopologyLedger.Registration>();
+        for(var r:registrations().values())if(r.device().held())held.add(r);
+        held.sort(Comparator.comparingLong(r->r.device().id()));return held;
+    }
+    /**
+     * An operator drops held registration {@code id} (REGISTRY_FIRST_PLAN.md 4.5): it leaves as a broken device does, what
+     * it holds booked as removed, but nothing drops (decision S9): its block is not in the world. Its accessories leave the
+     * accessory store with it. Whether it was held.
+     */
+    public boolean drop(long id) {
+        owned();var r=registrations().get(id);if(r==null||!r.device().held())return false;
+        instruments.discardHost(id);submit(List.of(new WorldTopologyLedger.Edit(id,null)),topology.nextIdentity());
+        return true;
+    }
     /**
      * Queues a filter's solid recovery as a ledger event and returns it, as an edit is queued: nothing is applied or
      * delivered here. The engine applies it with the next batch of events, takes the cake the island holds then and
@@ -804,7 +888,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
     }
     /**
      * Rebind placed devices, queue missing registrations, then mark their presentation buckets. This also rebuilds an
-     * empty authority after a format reset, including equipment spanning chunks. Never loads a chunk or runs a solve.
+     * empty authority after a format reset, including equipment spanning chunks. The chunk's registrations, and the
+     * structures recorded over it, are queued for their re-alignment (REGISTRY_FIRST_PLAN.md 4.2, 4.4). Never loads a chunk
+     * or runs a solve.
      */
     public void loadedChunk(ResourceKey<Level> dimension,long chunk) {
         owned();if(closed)return;
@@ -822,7 +908,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
             else if(entity instanceof FluidDeviceBlockEntity pipe) {
                 var position=new PhysicalFluidTopology.Position(name,cell.getX(),cell.getY(),cell.getZ());
                 var record=registry.at(position).orElseGet(()->place(position,pipe.kind(),PhysicalFluidTopology.Direction.valueOf(pipe.getBlockState().getValue(FluidDeviceBlock.FACING).name()),FluidDeviceBlock.cutoff(pipe.getBlockState()),FluidDeviceBlock.hasPressureValve(pipe.getBlockState()),FluidDeviceBlock.hasFilter(pipe.getBlockState()),FluidDeviceBlock.hasMover(pipe.getBlockState())?pipe.getBlockState().getValue(FluidDeviceBlock.INLINE_MOVER).kind():TopologyCompiler.Kind.PIPE,pipe.kind()==TopologyCompiler.Kind.PIPE?pipe.joints():PhysicalFluidTopology.ALL_FACES));
-                if(pipe.fluidIdentity()!=record.device().id())pipe.bindIdentity(record.device().id());else deviceLoaded(record.device().id());
+                pipe.bind(this,record.device());
             } else if(entity instanceof EquipmentShellBlockEntity shell&&shell.shape()!=null&&(shell.shape().fluidDevice()||com.wormzjl.icheme.science.equipment.UnitDesign.shafted(shell.shape().kind()))) {
                 var origin=shell.origin();
                 unboundStructures.put(new PhysicalFluidTopology.Position(name,origin.getX(),origin.getY(),origin.getZ()),new EquipmentStructure.Vessel(origin,shell.shape()));
@@ -835,7 +921,45 @@ public final class FluidWorldAuthority implements AutoCloseable {
                     ||at.z<(origin.getZ()>>4)||at.z>((origin.getZ()+vessel.shape().sizeZ()-1)>>4))continue;
             if(EquipmentStructure.restoreFluidBinding(level,vessel))it.remove();
         }
-        for(long id:registry.chunk(name,chunk))presentation.markDirty(id);
+        var devices=registry.chunk(name,chunk);
+        if(!devices.isEmpty())FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.realignChunks);
+        for(long id:devices){presentation.markDirty(id);if(realigning.add(id))realignment.computeIfAbsent(name,k->new ArrayDeque<>()).add(id);}
+        for(long id:topology.shaftsIn(name,chunk))if(shaftRealigning.add(id))shaftRealignment.computeIfAbsent(name,k->new ArrayDeque<>()).add(id);
+        controls().loadedChunk(name,chunk);
+        var structures=structureChunks.getOrDefault(name,Map.of()).get(chunk);
+        if(structures!=null)for(var origin:structures)EquipmentStructure.realignLater(level,new net.minecraft.core.BlockPos(origin.x(),origin.y(),origin.z()));
+    }
+    /**
+     * The next registration of {@code dimension} the re-alignment checks, taken off its queue, or 0 when none is queued
+     * (registry first, REGISTRY_FIRST_PLAN.md 4.2). Each registration of a loaded chunk is queued once, at the load.
+     */
+    public long nextRealignment(String dimension) {
+        owned();var queue=closed?null:realignment.get(dimension);if(queue==null)return 0;
+        Long id=queue.poll();if(queue.isEmpty())realignment.remove(dimension);
+        if(id==null)return 0;realigning.remove(id);return id;
+    }
+    /** The next shaft part of {@code dimension} the re-alignment checks, taken off its queue, or 0 when none is queued (W5c C1). */
+    public long nextShaftRealignment(String dimension) {
+        owned();var queue=closed?null:shaftRealignment.get(dimension);if(queue==null)return 0;
+        Long id=queue.poll();if(queue.isEmpty())shaftRealignment.remove(dimension);
+        if(id==null)return 0;shaftRealigning.remove(id);return id;
+    }
+    /**
+     * Holds every registration whose dimension has no level (REGISTRY_FIRST_PLAN.md 4.2): no block can stand for it, so it
+     * keeps what it holds and joins nothing until a level of that dimension loads its chunk again. One queued event.
+     */
+    private void holdWithoutLevel() {
+        var levels=new HashSet<String>();for(var level:server.getAllLevels())levels.add(level.dimension().location().toString());
+        var edits=new ArrayList<WorldTopologyLedger.Edit>();
+        for(var r:registrations().values()) {
+            var d=r.device();
+            if(!d.port()&&!d.held()&&!levels.contains(d.position().dimension()))
+                edits.add(new WorldTopologyLedger.Edit(d.id(),new WorldTopologyLedger.Registration(d.withHeld(true),r.spec(),Math.addExact(r.revision(),1))));
+        }
+        if(edits.isEmpty())return;
+        edits.sort(Comparator.comparingLong(WorldTopologyLedger.Edit::id));
+        submit(edits,topology.nextIdentity());
+        IChemE.LOGGER.warn("fluid_realign held={} reason=NO_LEVEL: their dimensions have no level; /icheme devices held lists them",edits.size());
     }
     /** A device's block entity loaded or was bound: marked for its bucket, never presented at once. */
     public void deviceLoaded(long id){owned();if(!closed){presentation.deviceLoaded(id);if(instruments!=null)instruments.bind(instrumentHost(id));}}
@@ -1238,6 +1362,28 @@ public final class FluidWorldAuthority implements AutoCloseable {
     /** A device's view, as a presentation read: queued events are not applied (they apply on the engine's tick), and a
      * certified island is materialised to now but never woken by it. */
     /** A device in no island: the column that holds it and runs it (C7, plan section 13), or why it has none. */
+    /** The held registrations beside the network ({@link PhysicalRegistry#heldBeside}), derived again when the registry's facts change. */
+    private PhysicalRegistry.HeldBeside heldBeside=PhysicalRegistry.HeldBeside.NONE;
+    private long heldBesideVersion=-1;
+    /**
+     * The status clause that names the held registrations beside device {@code id}, or beside its island {@code owner}
+     * (registry first, REGISTRY_FIRST_PLAN.md 4.5): the position of the one of lowest identity and how many more, ending in
+     * " / "; empty when none is. Its words are the client's (FluidDeviceScreen).
+     */
+    private String heldClause(long id,Long owner) {
+        if(heldBesideVersion!=topology.version()) {
+            heldBesideVersion=topology.version();var held=new ArrayList<WorldTopologyLedger.Registration>();
+            for(var r:topology.active().values())if(r.device().held())held.add(r);
+            held.sort(Comparator.comparingLong(r->r.device().id()));
+            heldBeside=held.isEmpty()?PhysicalRegistry.HeldBeside.NONE:registry.heldBeside(held);
+        }
+        var near=heldBeside.of(id,owner);if(near.isEmpty())return "";
+        var first=topology.active().get(near.getFirst());if(first==null)return "";
+        var p=first.device().position();
+        return HELD_DEVICE+p.x()+", "+p.y()+", "+p.z()+(near.size()>1?" (and "+(near.size()-1)+" more)":"")+" / ";
+    }
+    /** The status clause of a held registration beside a device's network: its position, as {@link #heldClause} writes it. */
+    public static final String HELD_DEVICE="HELD DEVICE: ";
     private String islandless(PhysicalFluidTopology.Device d,long id){
         var u=d.suspendedBy()==0?null:topology.column(d.suspendedBy());
         if(u!=null)return "COLUMN: part of the column at "+u.master().x()+", "+u.master().y()+", "+u.master().z()+", running";
@@ -1256,7 +1402,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
     /** {@code islands} caches island reads, so one bucket reads each island once however many of its devices it presents. */
     private FluidView view(long id,Map<Long,IslandCoordinator.Snapshot> islands) {
         FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.viewBuilds);var registration=registrations().get(id);if(registration==null)return new FluidView(id,0,0,topology.onlineTick(),"REMOVED",null,0,List.of());
-        Long owner=registry.owner(id);if(owner==null)return new FluidView(id,registration.revision(),0,topology.onlineTick(),islandless(registration.device(),id),null,0,List.of(),null,0,List.of(),null);
+        Long owner=registry.owner(id);if(owner==null)return new FluidView(id,registration.revision(),0,topology.onlineTick(),heldClause(id,null)+islandless(registration.device(),id),null,0,List.of(),null,0,List.of(),null);
         var snapshot=islands.computeIfAbsent(owner,this::presented);FluidView.State state=null;int nodeIndex=-1;boolean empty=false;
         for(int i=0;i<snapshot.graph().reservoirs().size();i++)if(snapshot.graph().reservoirs().get(i).id()==id){nodeIndex=i;var node=snapshot.graph().reservoirs().get(i);empty=node.empty();if(!empty)state=FluidView.State.from(node.state(),node.kind()==PassiveNetwork.NodeKind.RESERVOIR?node.inventory().volume():node.state().volume());break;}
         InlineFilter filter=null;if(registration.device().filter()){state=null;for(var p:snapshot.graph().pipes())if(p.id()==PhysicalFluidTopology.filterIdentity(id))filter=p.filter();}
@@ -1320,6 +1466,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         if(registry.diagnostic(id)!=null)status=registry.diagnostic(id)+" / "+status;
         var active=topology.active().get(id);if(active==null||active.revision()!=registration.revision())status="WAITING: configuration event / "+status;
         if(unboundBindings.contains(id))status="UNBOUND: saved inventory retained / "+status;
+        status=heldClause(id,owner)+status;
         var routes=new ArrayList<FluidView.PipeRoute>();
         for(var historyEntry:history)for(var pipe:snapshot.graph().pipes())if(pipe.id()==historyEntry.pipeId()) {
             routes.add(new FluidView.PipeRoute(pipe.id(),nodeLabel(snapshot.graph().reservoirs().get(pipe.first()).id()),nodeLabel(snapshot.graph().reservoirs().get(pipe.second()).id())));
@@ -1585,7 +1732,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
             });
         }
     }
-    @Override public void close(){owned();if(closed)return;closed=true;unboundStructures.clear();publishedMenuData.clear();publishedSightGlasses.clear();publishedMovers.clear();driverWatchers.clear();publishedDrivers.clear();rotationWatchers.clear();publishedRotations.clear();runtime.close();data.setDirty();}
+    @Override public void close(){owned();if(closed)return;closed=true;unboundStructures.clear();realignment.clear();realigning.clear();shaftRealignment.clear();shaftRealigning.clear();structureChunks.clear();publishedMenuData.clear();publishedSightGlasses.clear();publishedMovers.clear();driverWatchers.clear();publishedDrivers.clear();rotationWatchers.clear();publishedRotations.clear();runtime.close();data.setDirty();}
 
     /**
      * Which players watch which open tanks, sight glasses or movers (the request path R-B of the engine-owned presentation

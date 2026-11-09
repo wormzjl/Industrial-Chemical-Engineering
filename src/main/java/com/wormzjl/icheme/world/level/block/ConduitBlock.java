@@ -116,7 +116,7 @@ public final class ConduitBlock extends BaseEntityBlock {
     @Override
     protected void onRemove(
             BlockState state, Level level, BlockPos pos, BlockState next, boolean moved) {
-        if (!state.is(next.getBlock()) && level instanceof ServerLevel server)
+        if (!FluidDeviceBlock.quiet() && !state.is(next.getBlock()) && level instanceof ServerLevel server)
             FluidWorldAuthority.find(server.getServer())
                     .ifPresent(
                             w ->

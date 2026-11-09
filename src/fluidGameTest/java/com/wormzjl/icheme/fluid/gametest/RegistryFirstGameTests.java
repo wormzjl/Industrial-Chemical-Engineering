@@ -1,0 +1,1057 @@
+package com.wormzjl.icheme.fluid.gametest;
+
+import com.mojang.authlib.GameProfile;
+import com.wormzjl.icheme.registry.ModBlocks;
+import com.wormzjl.icheme.registry.ModItems;
+import com.wormzjl.icheme.runtime.control.ControlFacts;
+import com.wormzjl.icheme.runtime.control.DataBus;
+import com.wormzjl.icheme.runtime.control.DataPort;
+import com.wormzjl.icheme.runtime.fluid.FluidDeviceSpec;
+import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
+import com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology;
+import com.wormzjl.icheme.runtime.fluid.WorldTopologyLedger;
+import com.wormzjl.icheme.runtime.instrument.Instrument;
+import com.wormzjl.icheme.science.equipment.CableMedium;
+import com.wormzjl.icheme.science.equipment.EquipmentShape;
+import com.wormzjl.icheme.science.equipment.Paint;
+import com.wormzjl.icheme.science.equipment.PipeRoute;
+import com.wormzjl.icheme.science.equipment.PipeSizes;
+import com.wormzjl.icheme.science.equipment.ShapeRasterizer;
+import com.wormzjl.icheme.science.fluid.network.PassiveNetwork;
+import com.wormzjl.icheme.world.item.PipelineToolItem;
+import com.wormzjl.icheme.world.level.block.ControlPanelBlock;
+import com.wormzjl.icheme.world.level.block.CreativeMotorBlock;
+import com.wormzjl.icheme.world.level.block.DcsBlock;
+import com.wormzjl.icheme.world.level.block.EquipmentStructure;
+import com.wormzjl.icheme.world.level.block.FluidDeviceBlock;
+import com.wormzjl.icheme.world.level.block.LinePlacement;
+import com.wormzjl.icheme.world.level.block.LineTarget;
+import com.wormzjl.icheme.world.level.block.PipeAnchor;
+import com.wormzjl.icheme.world.level.block.PipeRackBlock;
+import com.wormzjl.icheme.world.level.block.RegistryRealignment;
+import com.wormzjl.icheme.world.level.block.ShaftBlock;
+import com.wormzjl.icheme.world.level.block.entity.ConduitBlockEntity;
+import com.wormzjl.icheme.world.level.block.entity.ControlPanelBlockEntity;
+import com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity;
+import com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity;
+import com.wormzjl.icheme.world.level.block.entity.PipeRackBlockEntity;
+import net.minecraft.commands.CommandSource;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.gametest.framework.GameTest;
+import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.context.UseOnContext;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.Vec2;
+import net.minecraft.world.phys.Vec3;
+import net.neoforged.neoforge.common.util.FakePlayerFactory;
+import net.neoforged.neoforge.gametest.GameTestHolder;
+import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.List;
+import java.util.UUID;
+
+/**
+ * Registry first (batch 2026-11-03-save-corruption, REGISTRY_FIRST_PLAN.md section 7): the registry decides which IChemE
+ * devices exist, and the world is re-aligned to it. Each test edits the world or the registry directly and removes what it
+ * placed, its result held until then.
+ */
+@GameTestHolder("icheme_fluid_test")
+@PrefixGameTestTemplate(false)
+public final class RegistryFirstGameTests {
+    private RegistryFirstGameTests() {}
+
+    private static final int SKY_BLUE = 0x2271B3, FLAME_RED = 0xA72920;
+
+    /**
+     * Step 3 (decision S11): a held tank keeps what it holds and joins no flow, apart from the line it stood on; the
+     * operators' listing names it with what its cell holds; a drop removes it as a broken tank, what it held booked as
+     * removed, and refuses a device that is not held.
+     */
+    @GameTest(template = "empty", timeoutTicks = 200, batch = "registry-first-held")
+    public static void aHeldTankJoinsNoFlowIsListedAndDropped(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var world = FluidWorldAuthority.find(level.getServer()).orElseThrow();
+        var west = helper.absolutePos(new BlockPos(1, 1, 1));
+        var pipe = west.east();
+        var east = west.east(2);
+        level.setBlock(west, ModBlocks.FLUID_RESERVOIR.get().defaultBlockState(), 3);
+        level.setBlock(pipe, ModBlocks.FLUID_PIPE.get().defaultBlockState(), 3);
+        level.setBlock(east, ModBlocks.FLUID_RESERVOIR.get().defaultBlockState(), 3);
+        long westId = world.at(position(level, west)).orElseThrow().device().id();
+        long eastId = world.at(position(level, east)).orElseThrow().device().id();
+        String[] failure = {null};
+        double[] before = {0};
+        var said = new ArrayList<String>();
+        var operator = operator(level, west, said);
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(joined(world, westId, eastId), "Waiting for the line to join its tanks"))
+                .thenExecute(() -> {
+                    before[0] = moles(world, eastId);
+                    if (!world.hold(eastId, true) || world.hold(eastId, true)) failure[0] = "the hold was not queued once";
+                })
+                .thenWaitUntil(() -> helper.assertTrue(alone(world, eastId), "Waiting for the held tank to stand apart"))
+                .thenExecute(() -> {
+                    if (failure[0] == null && joined(world, westId, eastId)) failure[0] = "the held tank still joins the line";
+                    if (failure[0] == null && Math.abs(moles(world, eastId) - before[0]) > 1e-9 * Math.max(1, before[0]))
+                        failure[0] = "the held tank lost what it held: " + before[0] + " -> " + moles(world, eastId);
+                    said.clear();
+                    level.getServer().getCommands().performPrefixedCommand(operator, "icheme devices held");
+                    if (failure[0] == null && said.stream().noneMatch(line -> line.startsWith("#" + eastId + " reservoir at ") && line.contains("its cell holds icheme:")))
+                        failure[0] = "the listing does not name the held tank: " + said;
+                    said.clear();
+                    level.getServer().getCommands().performPrefixedCommand(operator, "icheme devices drop " + westId);
+                    if (failure[0] == null && (world.at(position(level, west)).isEmpty() || said.stream().noneMatch(line -> line.contains("is not held"))))
+                        failure[0] = "a device that is not held was dropped: " + said;
+                    said.clear();
+                    level.getServer().getCommands().performPrefixedCommand(operator, "icheme devices drop " + eastId);
+                    if (failure[0] == null && said.stream().noneMatch(line -> line.startsWith("Dropped #" + eastId)))
+                        failure[0] = "the drop was refused: " + said;
+                })
+                .thenWaitUntil(() -> helper.assertTrue(!world.registrations().containsKey(eastId) && world.held().stream().noneMatch(r -> r.device().id() == eastId),
+                        "Waiting for the dropped tank to leave"))
+                .thenExecute(() -> {
+                    if (failure[0] == null && !level.getBlockState(east).is(ModBlocks.FLUID_RESERVOIR.get())) failure[0] = "the drop touched the block in its cell";
+                    for (var at : List.of(west, pipe, east)) level.setBlock(at, Blocks.AIR.defaultBlockState(), 3);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(world.at(position(level, west)).isEmpty() && world.at(position(level, pipe)).isEmpty(), "Waiting for the line's registrations to leave"))
+                .thenExecute(() -> {
+                    if (failure[0] != null) helper.fail(failure[0]);
+                })
+                .thenSucceed();
+    }
+
+    /**
+     * Step 4 (plan 4.3): every one-block device stands as its registration. Each block, with each fitting, placed alone; the
+     * block {@link FluidDeviceBlock#stateFor} gives for what it registered is the block placed.
+     */
+    @GameTest(template = "empty", timeoutTicks = 200, batch = "registry-first-state")
+    public static void everyOneBlockDeviceStandsAsItsRegistration(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var world = FluidWorldAuthority.find(level.getServer()).orElseThrow();
+        var pipe = ModBlocks.FLUID_PIPE.get().defaultBlockState();
+        var placed = List.of(
+                ModBlocks.FLUID_RESERVOIR.get().defaultBlockState().setValue(FluidDeviceBlock.FACING, Direction.NORTH),
+                ModBlocks.FLUID_GENERATOR.get().defaultBlockState().setValue(FluidDeviceBlock.FACING, Direction.EAST),
+                ModBlocks.FLUID_VOID.get().defaultBlockState().setValue(FluidDeviceBlock.FACING, Direction.SOUTH),
+                ModBlocks.INLINE_FILTER.get().defaultBlockState().setValue(FluidDeviceBlock.FACING, Direction.WEST),
+                pipe.setValue(FluidDeviceBlock.FACING, Direction.UP),
+                pipe.setValue(FluidDeviceBlock.FACING, Direction.EAST).setValue(FluidDeviceBlock.SHUTOFF, FluidDeviceBlock.Shutoff.OPEN),
+                pipe.setValue(FluidDeviceBlock.FACING, Direction.NORTH).setValue(FluidDeviceBlock.SHUTOFF, FluidDeviceBlock.Shutoff.CLOSED),
+                pipe.setValue(FluidDeviceBlock.FACING, Direction.DOWN).setValue(FluidDeviceBlock.SHUTOFF, FluidDeviceBlock.Shutoff.CHECK),
+                pipe.setValue(FluidDeviceBlock.FACING, Direction.EAST).setValue(FluidDeviceBlock.PRESSURE_CONTROL, true),
+                pipe.setValue(FluidDeviceBlock.FACING, Direction.WEST).setValue(FluidDeviceBlock.INLINE_FILTER, true),
+                pipe.setValue(FluidDeviceBlock.FACING, Direction.NORTH).setValue(FluidDeviceBlock.INLINE_MOVER, FluidDeviceBlock.InlineMover.PUMP),
+                pipe.setValue(FluidDeviceBlock.FACING, Direction.SOUTH).setValue(FluidDeviceBlock.INLINE_MOVER, FluidDeviceBlock.InlineMover.COMPRESSOR));
+        var cells = new ArrayList<BlockPos>();
+        String[] failure = {null};
+        // Two blocks apart, so none connects.
+        for (int i = 0; i < placed.size(); i++) {
+            var at = helper.absolutePos(new BlockPos(1 + 2 * (i % 4), 1 + 2 * (i / 4), 1));
+            cells.add(at);
+            level.setBlock(at, placed.get(i), 3);
+            var stood = FluidDeviceBlock.stateFor(world.at(position(level, at)).orElseThrow().device());
+            if (failure[0] == null && !placed.get(i).equals(stood)) failure[0] = "placed " + placed.get(i) + ", stands as " + stood;
+        }
+        for (var at : cells) level.setBlock(at, Blocks.AIR.defaultBlockState(), 3);
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(cells.stream().allMatch(at -> world.at(position(level, at)).isEmpty()), "Waiting for the blocks' registrations to leave"))
+                .thenExecute(() -> {
+                    if (failure[0] != null) helper.fail(failure[0]);
+                })
+                .thenSucceed();
+    }
+
+    /**
+     * Step 4, GameTests a to c (plan section 7): blocks lost behind the authority's back, as in a chunk saved after the
+     * fluid store, are set back from the registry. An intact line re-aligns nothing. Then a pipe gone (a), the charged tank
+     * gone (b) and a filter where a pipe stood (c): each block comes back with its identity, the tank with its charge, the
+     * filter's block takes no pipe's registration, and nothing drops. The first pipe carries a sight glass: while its block
+     * does not draw it, an in-line filter is refused; the pipe comes back with it, and the glass leaves with the pipe (step 8).
+     */
+    @GameTest(template = "empty", timeoutTicks = 1200, batch = "registry-first-realign-line")
+    public static void aBrokenLineIsSetBackFromTheRegistry(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var world = FluidWorldAuthority.find(level.getServer()).orElseThrow();
+        var west = helper.absolutePos(new BlockPos(1, 1, 1));
+        var first = west.east();
+        var second = west.east(2);
+        var east = west.east(3);
+        var cells = List.of(west, first, second, east);
+        level.setBlock(west, ModBlocks.FLUID_RESERVOIR.get().defaultBlockState(), 3);
+        level.setBlock(first, ModBlocks.FLUID_PIPE.get().defaultBlockState(), 3);
+        level.setBlock(second, ModBlocks.FLUID_PIPE.get().defaultBlockState(), 3);
+        level.setBlock(east, ModBlocks.FLUID_RESERVOIR.get().defaultBlockState(), 3);
+        long[] ids = cells.stream().mapToLong(at -> world.at(position(level, at)).orElseThrow().device().id()).toArray();
+        var charge = new TankCharge(helper, world, east, Direction.SOUTH, 200000);
+        String[] failure = {null};
+        double[] before = {0};
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(charge.charged() && joined(world, ids[0], ids[3]), "Waiting for the charged line"))
+                .thenExecute(() -> {
+                    // As the fitting item installs it: the block draws the glass, the accessory store holds it.
+                    level.setBlock(first, level.getBlockState(first).setValue(FluidDeviceBlock.SIGHT_GLASS, true).setValue(FluidDeviceBlock.SIGHT_GLASS_AXIS, Direction.Axis.Y), 3);
+                    world.instruments().legacyInstalled(ids[1], Instrument.Type.SIGHT_GLASS);
+                    for (long id : ids) {
+                        var check = RegistryRealignment.realign(level, world, id);
+                        if (failure[0] == null && (check.outcome() != RegistryRealignment.Outcome.NOTHING || check.released())) failure[0] = "the intact line was re-aligned at #" + id + ": " + check;
+                    }
+                    // The block no longer draws the glass, its record kept: the fitting slot stays taken, and an in-line
+                    // filter is refused before it reaches the store.
+                    FluidDeviceBlock.quietly(() -> level.setBlock(first, level.getBlockState(first).setValue(FluidDeviceBlock.SIGHT_GLASS, false), 3));
+                    if (failure[0] == null && !world.instruments().occupied(ids[1])) failure[0] = "a pipe whose record holds a sight glass is not occupied";
+                    var fitter = FakePlayerFactory.get(level, new GameProfile(UUID.randomUUID(), "RegistryFirstFitter"));
+                    fitter.setGameMode(GameType.SURVIVAL);
+                    var item = new ItemStack(ModItems.INLINE_FILTER.get());
+                    fitter.setItemInHand(InteractionHand.MAIN_HAND, item);
+                    var fitted = item.getItem().onItemUseFirst(item, new UseOnContext(fitter, InteractionHand.MAIN_HAND, new BlockHitResult(Vec3.atCenterOf(first), Direction.UP, first, false)));
+                    if (failure[0] == null && (fitted.consumesAction() || item.getCount() != 1 || FluidDeviceBlock.hasFilter(level.getBlockState(first)) || world.registrations().get(ids[1]).device().inlineFilter()))
+                        failure[0] = "a filter was fitted on a pipe whose record holds a sight glass: " + fitted + ", " + level.getBlockState(first);
+                    ((FluidDeviceBlockEntity) level.getBlockEntity(east)).rename("T-1 Charge tank");
+                    if (failure[0] == null && !world.deviceName(ids[3]).equals("T-1 Charge tank")) failure[0] = "the registry does not hold the tank's name";
+                    before[0] = moles(world, ids[3]);
+                    FluidDeviceBlock.quietly(() -> {
+                        level.setBlock(first, Blocks.AIR.defaultBlockState(), 3);
+                        level.setBlock(east, Blocks.AIR.defaultBlockState(), 3);
+                        level.setBlock(second, ModBlocks.INLINE_FILTER.get().defaultBlockState().setValue(FluidDeviceBlock.FACING, Direction.EAST), 3);
+                    });
+                    for (int i = 0; i < ids.length && failure[0] == null; i++)
+                        if (world.at(position(level, cells.get(i))).map(r -> r.device().id()).orElse(0L) != ids[i]) failure[0] = "a block edited quietly touched the registry at " + cells.get(i).toShortString();
+                    var filter = (FluidDeviceBlockEntity) level.getBlockEntity(second);
+                    if (failure[0] == null && filter.bind(world, world.registrations().get(ids[2]).device())) failure[0] = "a filter block bound a pipe's registration";
+                    try {
+                        filter.bindIdentity(ids[2]);
+                        if (failure[0] == null) failure[0] = "a filter block took a pipe's identity";
+                    } catch (IllegalStateException expected) {
+                        // The kind check.
+                    }
+                    requeue(world, level, cells);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(stands(level, first, ids[1]) && stands(level, second, ids[2]) && stands(level, east, ids[3]), "Waiting for the line to be set back"))
+                .thenExecute(() -> {
+                    if (failure[0] == null && !level.getBlockState(second).is(ModBlocks.FLUID_PIPE.get())) failure[0] = "the filter block was not set back to a pipe";
+                    if (failure[0] == null && !level.getBlockState(east).is(ModBlocks.FLUID_RESERVOIR.get())) failure[0] = "the tank was not set back";
+                    if (failure[0] == null && !((FluidDeviceBlockEntity) level.getBlockEntity(east)).name().equals("T-1 Charge tank")) failure[0] = "the set-back tank lost its name";
+                    var glass = level.getBlockState(first);
+                    if (failure[0] == null && !(FluidDeviceBlock.hasSightGlass(glass) && glass.getValue(FluidDeviceBlock.SIGHT_GLASS_AXIS) != Direction.Axis.X))
+                        failure[0] = "the re-placed pipe does not show its sight glass across its run: " + glass;
+                    for (int i = 0; i < ids.length && failure[0] == null; i++)
+                        if (world.at(position(level, cells.get(i))).map(r -> r.device().id()).orElse(0L) != ids[i]) failure[0] = "the line's registrations changed at " + cells.get(i).toShortString();
+                    if (failure[0] == null && !(moles(world, ids[3]) > .99 * before[0])) failure[0] = "the tank lost its charge: " + before[0] + " -> " + moles(world, ids[3]);
+                    if (failure[0] == null && !level.getEntitiesOfClass(ItemEntity.class, new AABB(west).inflate(6)).isEmpty()) failure[0] = "a replaced block dropped an item";
+                    for (int i = 0; i + 1 < cells.size() && failure[0] == null; i++)
+                        if (!level.getBlockState(cells.get(i)).getValue(FluidDeviceBlock.connection(Direction.EAST)) || !level.getBlockState(cells.get(i + 1)).getValue(FluidDeviceBlock.connection(Direction.WEST)))
+                            failure[0] = "the line is not connected between " + cells.get(i).toShortString() + " and " + cells.get(i + 1).toShortString();
+                    for (var at : cells) level.setBlock(at, Blocks.AIR.defaultBlockState(), 3);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(cells.stream().allMatch(at -> world.at(position(level, at)).isEmpty()), "Waiting for the line's registrations to leave"))
+                .thenExecute(() -> {
+                    // The glass the break refunded.
+                    level.getEntitiesOfClass(ItemEntity.class, new AABB(west).inflate(6)).forEach(ItemEntity::discard);
+                    if (failure[0] == null && world.instruments().fitting(ids[1]) != null) failure[0] = "the sight glass record stayed after its pipe left";
+                    if (failure[0] != null) helper.fail(failure[0]);
+                })
+                .thenSucceed();
+    }
+
+    /**
+     * Step 4, GameTest d (decision S11): a pipe whose cell holds stone is held and listed, never the stone overwritten, and
+     * its tanks part; their status lines name it (step 7). Once the stone is gone and the chunk loads again, the pipe
+     * stands, is released, and joins them again.
+     */
+    @GameTest(template = "empty", timeoutTicks = 400, batch = "registry-first-realign-blocked")
+    public static void aBlockedCellHoldsItsPipeUntilItIsFree(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var world = FluidWorldAuthority.find(level.getServer()).orElseThrow();
+        var west = helper.absolutePos(new BlockPos(1, 1, 1));
+        var pipe = west.east();
+        var east = west.east(2);
+        var cells = List.of(west, pipe, east);
+        level.setBlock(west, ModBlocks.FLUID_RESERVOIR.get().defaultBlockState(), 3);
+        level.setBlock(pipe, ModBlocks.FLUID_PIPE.get().defaultBlockState(), 3);
+        level.setBlock(east, ModBlocks.FLUID_RESERVOIR.get().defaultBlockState(), 3);
+        long westId = world.at(position(level, west)).orElseThrow().device().id();
+        long pipeId = world.at(position(level, pipe)).orElseThrow().device().id();
+        long eastId = world.at(position(level, east)).orElseThrow().device().id();
+        String[] failure = {null};
+        var said = new ArrayList<String>();
+        var operator = operator(level, west, said);
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(joined(world, westId, eastId), "Waiting for the line to join its tanks"))
+                .thenExecute(() -> {
+                    FluidDeviceBlock.quietly(() -> level.setBlock(pipe, Blocks.STONE.defaultBlockState(), 3));
+                    requeue(world, level, cells);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(held(world, pipeId) && !joined(world, westId, eastId), "Waiting for the blocked pipe to be held"))
+                .thenExecute(() -> {
+                    if (failure[0] == null && !level.getBlockState(pipe).is(Blocks.STONE)) failure[0] = "the stone was overwritten";
+                    said.clear();
+                    level.getServer().getCommands().performPrefixedCommand(operator, "icheme devices held");
+                    if (failure[0] == null && said.stream().noneMatch(line -> line.startsWith("#" + pipeId + " pipe at ") && line.endsWith("its cell holds minecraft:stone")))
+                        failure[0] = "the listing does not name the blocked pipe: " + said;
+                    // Step 7 (plan 4.5): the status line of a tank beside it names the held pipe.
+                    var named = FluidWorldAuthority.HELD_DEVICE + pipe.getX() + ", " + pipe.getY() + ", " + pipe.getZ() + " / ";
+                    for (long tank : new long[]{westId, eastId})
+                        if (failure[0] == null && !world.view(tank).status().startsWith(named)) failure[0] = "tank #" + tank + "'s status does not name the held pipe: " + world.view(tank).status();
+                    level.setBlock(pipe, Blocks.AIR.defaultBlockState(), 3);
+                    requeue(world, level, cells);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(stands(level, pipe, pipeId) && !held(world, pipeId) && joined(world, westId, eastId), "Waiting for the pipe to stand and join its tanks again"))
+                .thenExecute(() -> {
+                    if (failure[0] == null && world.view(westId).status().contains(FluidWorldAuthority.HELD_DEVICE)) failure[0] = "the released pipe is still named: " + world.view(westId).status();
+                    for (var at : cells) level.setBlock(at, Blocks.AIR.defaultBlockState(), 3);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(cells.stream().allMatch(at -> world.at(position(level, at)).isEmpty()), "Waiting for the line's registrations to leave"))
+                .thenExecute(() -> {
+                    if (failure[0] != null) helper.fail(failure[0]);
+                })
+                .thenSucceed();
+    }
+
+    /**
+     * Step 5, GameTest e (plan 4.2 item 3): rack cells changed behind the authority's back are set back from the registry.
+     * A line laid through three racks, the middle one a corner: each lane holds its cell's frame, and an intact run
+     * re-aligns nothing. Then the corner cell is gone and the first rack faces the other way: the corner comes back as the
+     * corner it was, the first rack faces as it was laid, each with its lane and the joins it had, and the tanks stay one
+     * island. Once the line is gone, so are its frames.
+     */
+    @GameTest(template = "empty", timeoutTicks = 400, batch = "registry-first-realign-rack")
+    public static void aLostRackCellIsSetBackWithItsLanes(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var world = FluidWorldAuthority.find(level.getServer()).orElseThrow();
+        var west = helper.absolutePos(new BlockPos(0, 1, 1));
+        var first = west.east();
+        var straight = west.east(2);
+        var corner = west.east(3);
+        var turned = corner.south();
+        var last = turned.south();
+        var south = last.south();
+        var placed = List.of(west, first, straight, corner, turned, last, south);
+        var cells = List.of(straight, corner, turned);
+        for (var at : placed) level.setBlock(at, Blocks.AIR.defaultBlockState(), 3);
+        level.setBlock(west, ModBlocks.FLUID_RESERVOIR.get().defaultBlockState(), 3);
+        level.setBlock(south, ModBlocks.FLUID_RESERVOIR.get().defaultBlockState(), 3);
+        // As the laying test places them: one looking east, a corner at its end looking south, one more south of it.
+        var racks = ModBlocks.PIPE_RACK.get();
+        level.setBlock(straight, racks.placed(level, straight, Direction.EAST, false), 3);
+        level.setBlock(corner, racks.placed(level, corner, Direction.SOUTH, false), 3);
+        level.setBlock(turned, racks.placed(level, turned, Direction.SOUTH, false), 3);
+        var player = FakePlayerFactory.get(level, new GameProfile(UUID.randomUUID(), "RegistryFirstRack"));
+        player.setGameMode(GameType.SURVIVAL);
+        player.setPos(west.getX() + 2.5, west.getY(), west.getZ() - 1.5);
+        var tool = new ItemStack(ModItems.PIPE_LAYING_TOOL.get());
+        tool.set(ModItems.PIPE_LAYING_SETTINGS.get(), new PipelineToolItem.Settings(.1));
+        player.setItemInHand(InteractionHand.MAIN_HAND, tool);
+        player.getInventory().add(new ItemStack(ModItems.FLUID_PIPE.get(), 5));
+        var start = new PipeAnchor.Click(west, Direction.EAST);
+        var end = new PipeAnchor.Click(south, Direction.NORTH);
+        double outside = PipeSizes.outside(.1);
+        String[] failure = {null};
+        var from = PipeAnchor.resolve(level, start, outside);
+        var to = PipeAnchor.resolve(level, end, outside);
+        if (from.anchor() == null || to.anchor() == null) failure[0] = "the line's ends were refused: " + from.refusal() + ", " + to.refusal();
+        else {
+            var route = PipeRoute.search(from.anchor().end(), from.anchor().leaving(), to.anchor().end(), outside, PipeAnchor.space(level), PipeRoute.Limits.DEFAULT);
+            var refusal = route.found() ? LayingTestCommands.lay(player, InteractionHand.MAIN_HAND, start, end, List.of(first, straight, corner, turned, last), route.options()) : null;
+            if (!route.found()) failure[0] = "no route through the racks: " + route;
+            else if (refusal != null) failure[0] = "the line was refused: " + refusal.getString();
+        }
+        long[] lanes = new long[cells.size()];
+        var frames = new ArrayList<WorldTopologyLedger.RackFrame>();
+        for (int i = 0; i < cells.size() && failure[0] == null; i++) {
+            lanes[i] = ((PipeRackBlockEntity) level.getBlockEntity(cells.get(i))).lanes().getFirst().identity();
+            frames.add(PipeRackBlock.frame(level.getBlockState(cells.get(i))));
+            if (!frames.get(i).equals(world.rackFrame(lanes[i]))) failure[0] = "lane #" + lanes[i] + " holds no frame of its rack: " + world.rackFrame(lanes[i]);
+        }
+        int[] joins = {1 << Direction.WEST.ordinal() | 1 << Direction.EAST.ordinal(), 1 << Direction.WEST.ordinal() | 1 << Direction.SOUTH.ordinal(),
+                1 << Direction.NORTH.ordinal() | 1 << Direction.SOUTH.ordinal()};
+        long westTank = world.at(position(level, west)).orElseThrow().device().id();
+        long southTank = world.at(position(level, south)).orElseThrow().device().id();
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(failure[0] != null || joined(world, westTank, southTank), "Waiting for the line to join its tanks"))
+                .thenExecute(() -> {
+                    if (failure[0] != null) return;
+                    for (long id : lanes) {
+                        var check = RegistryRealignment.realign(level, world, id);
+                        if (failure[0] == null && (check.outcome() != RegistryRealignment.Outcome.NOTHING || check.released())) failure[0] = "the intact run was re-aligned at #" + id + ": " + check;
+                    }
+                    FluidDeviceBlock.quietly(() -> {
+                        level.setBlock(corner, Blocks.AIR.defaultBlockState(), 3);
+                        level.setBlock(straight, level.getBlockState(straight).setValue(PipeRackBlock.FACING, Direction.WEST), 3);
+                    });
+                    for (long id : lanes)
+                        if (failure[0] == null && !world.registrations().containsKey(id)) failure[0] = "a rack edited quietly removed lane #" + id;
+                    requeue(world, level, placed);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(failure[0] != null || java.util.stream.IntStream.range(0, cells.size()).allMatch(i -> level.getBlockEntity(cells.get(i)) instanceof PipeRackBlockEntity rack
+                        && rack.carries(lanes[i]) && PipeRackBlock.frame(level.getBlockState(cells.get(i))).equals(frames.get(i))), "Waiting for the rack cells to be set back"))
+                .thenExecute(() -> {
+                    for (int i = 0; i < cells.size() && failure[0] == null; i++) {
+                        var rack = (PipeRackBlockEntity) level.getBlockEntity(cells.get(i));
+                        if (rack.lanes().size() != 1 || rack.drawnLanes().getFirst().joined() != joins[i]) failure[0] = "rack " + cells.get(i).toShortString() + " draws " + rack.drawnLanes();
+                    }
+                    if (failure[0] == null && !joined(world, westTank, southTank)) failure[0] = "the tanks parted";
+                    if (failure[0] == null && !level.getEntitiesOfClass(ItemEntity.class, new AABB(west).inflate(6)).isEmpty()) failure[0] = "a rack cell dropped an item";
+                    for (var at : placed) level.removeBlock(at, false);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(Arrays.stream(lanes).allMatch(id -> world.committedDevice(id).isEmpty())
+                        && placed.stream().allMatch(at -> world.at(position(level, at)).isEmpty()), "Waiting for the lanes' removals to apply"))
+                .thenExecute(() -> {
+                    // The frames leave as the removals apply, as a line's paint does.
+                    for (long id : lanes)
+                        if (failure[0] == null && world.rackFrame(id) != null) failure[0] = "lane #" + id + "'s frame stayed after the lane left";
+                    if (failure[0] != null) helper.fail(failure[0]);
+                })
+                .thenSucceed();
+    }
+
+    /**
+     * Step 6, GameTest f (plan 4.4): a drum holding nitrogen whose cells were removed behind the authority's back is
+     * rebuilt from its structure record, with its identity, its paint and what it held. A cell another block holds is left
+     * out and the drum held; once the cell is free and the chunk loads again, the cell is placed and the drum released.
+     */
+    @GameTest(template = "empty", timeoutTicks = 1200, batch = "registry-first-realign-drum")
+    public static void aLostDrumIsRebuiltFromItsRecordWithWhatItHeld(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var world = FluidWorldAuthority.find(level.getServer()).orElseThrow();
+        var shape = EquipmentShape.drum(3, 3, EquipmentShape.Orientation.VERTICAL, EquipmentShape.Heading.NORTH, 0);
+        var origin = helper.absolutePos(new BlockPos(1, 1, 1));
+        var layout = ShapeRasterizer.layout(shape);
+        var cells = cells(origin, layout);
+        var node = cell(origin, ShapeRasterizer.fluidCell(shape));
+        var ports = ShapeRasterizer.ports(shape);
+        var nozzle = ports.stream().max(Comparator.comparingInt(ShapeRasterizer.Port::dy)).orElseThrow();
+        var face = Direction.fromDelta(nozzle.dx(), nozzle.dy(), nozzle.dz());
+        var nozzles = new HashSet<ShapeRasterizer.Cell>();
+        for (var port : ports) nozzles.add(port.cell());
+        var blocked = cell(origin, layout.shell().stream().filter(c -> !c.equals(ShapeRasterizer.fluidCell(shape)) && !nozzles.contains(c)).findFirst().orElseThrow());
+        var paint = new Paint(0x587246, 0x383E42);
+        // Items an earlier batch left here (a line tool's refund) are not the rebuild's.
+        var earlier = new HashSet<java.util.UUID>();
+        for (var e : level.getEntitiesOfClass(ItemEntity.class, new AABB(origin).inflate(8))) earlier.add(e.getUUID());
+        EquipmentStructure.place(level, origin, shape, paint, Integer.MAX_VALUE);
+        long id = world.at(position(level, node)).orElseThrow().device().id();
+        // Some nitrogen in the drum, through its top nozzle: a generator one pipe above it, until the drum holds 10 mol (a
+        // full charge of its 28 m³ takes thousands of ticks through one pipe).
+        var pipe = cell(origin, nozzle.cell()).relative(face);
+        var generator = pipe.relative(face);
+        level.setBlock(generator, ModBlocks.FLUID_GENERATOR.get().defaultBlockState(), 3);
+        var nitrogen = FluidDeviceSpec.nitrogen(com.wormzjl.icheme.science.material.MaterialRuntime.active()).composition();
+        TankCharge.run(world, ((FluidDeviceBlockEntity) level.getBlockEntity(generator)).fluidIdentity(), new FluidDeviceSpec(1, 298.15, 200000, nitrogen));
+        level.setBlock(pipe, ModBlocks.FLUID_PIPE.get().defaultBlockState(), 3);
+        String[] failure = {null};
+        double[] before = {0};
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(moles(world, id) > 10, "Waiting for nitrogen in the drum"))
+                .thenExecute(() -> {
+                    level.removeBlock(generator, false);
+                    level.removeBlock(pipe, false);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(world.capture().world().events().isEmpty() && alone(world, id), "Waiting for the drum to stand alone"))
+                .thenExecute(() -> {
+                    before[0] = moles(world, id);
+                    EquipmentStructure.rename(level, new EquipmentStructure.Vessel(origin, shape), "V-1 Nitrogen drum");
+                    // The cells are lost as a damaged chunk loses them (main's equipment protection admits no other edit).
+                    for (var at : cells) EquipmentPermissionChecks.lost(level, at, Blocks.AIR.defaultBlockState(), 3);
+                    if (world.at(position(level, node)).map(r -> r.device().id()).orElse(0L) != id || world.structure(position(level, origin)) == null)
+                        failure[0] = "cells removed quietly touched the registry";
+                    level.setBlock(blocked, Blocks.STONE.defaultBlockState(), 3);
+                    requeue(world, level, cells);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(held(world, id) && shellStands(level, node, id), "Waiting for the drum to be rebuilt round the stone and held"))
+                .thenExecute(() -> {
+                    if (failure[0] == null && !level.getBlockState(blocked).is(Blocks.STONE)) failure[0] = "the stone in a cell of the drum was overwritten";
+                    level.setBlock(blocked, Blocks.AIR.defaultBlockState(), 3);
+                    requeue(world, level, cells);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(!held(world, id) && standsAs(level, origin, shape) && !Double.isNaN(moles(world, id)), "Waiting for the drum to be whole and released"))
+                .thenExecute(() -> {
+                    if (failure[0] == null && world.at(position(level, node)).map(r -> r.device().id()).orElse(0L) != id) failure[0] = "the drum's registration changed";
+                    if (failure[0] == null && !(moles(world, id) > .99 * before[0])) failure[0] = "the drum lost what it held: " + before[0] + " -> " + moles(world, id);
+                    for (var c : layout.shell()) {
+                        var shell = (EquipmentShellBlockEntity) level.getBlockEntity(cell(origin, c));
+                        if (failure[0] == null && (shell.stale() || !shell.paint().equals(paint) || !shell.name().equals("V-1 Nitrogen drum")))
+                            failure[0] = "cell " + c + " was left stale or lost its paint or name";
+                    }
+                    var dropped = level.getEntitiesOfClass(ItemEntity.class, new AABB(origin).inflate(8), e -> !earlier.contains(e.getUUID()));
+                    if (failure[0] == null && !dropped.isEmpty())
+                        failure[0] = "the rebuild dropped an item: " + dropped.stream().map(e -> e.getItem() + " at " + e.blockPosition().subtract(origin).toShortString()).toList();
+                    EquipmentTestCleanup.remove(level, node);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(world.at(position(level, node)).isEmpty() && world.structure(position(level, origin)) == null, "Waiting for the drum and its record to leave"))
+                .thenExecute(() -> {
+                    if (failure[0] != null) helper.fail(failure[0]);
+                })
+                .thenSucceed();
+    }
+
+    /**
+     * Step 6, GameTest g (plan 4.4): a drum whose cells a taller drum of the same origin holds (one built there after the
+     * registry's last save) is rebuilt to its record: the cells only the taller drum had are cleared, every shell cell takes
+     * the record's shape and paint, and the drum keeps its registration.
+     */
+    @GameTest(template = "empty", timeoutTicks = 400, batch = "registry-first-realign-shape")
+    public static void aDrumOfAnotherShapeIsRebuiltToItsRecord(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var world = FluidWorldAuthority.find(level.getServer()).orElseThrow();
+        var recorded = EquipmentShape.drum(3, 3, EquipmentShape.Orientation.VERTICAL, EquipmentShape.Heading.NORTH, 0);
+        var built = EquipmentShape.drum(3, 5, EquipmentShape.Orientation.VERTICAL, EquipmentShape.Heading.NORTH, 0);
+        var origin = helper.absolutePos(new BlockPos(1, 1, 1));
+        var paint = new Paint(0xE25303, 0xF7B500);
+        var other = new Paint(0x587246, 0x383E42);
+        EquipmentStructure.place(level, origin, recorded, paint, Integer.MAX_VALUE);
+        var node = cell(origin, ShapeRasterizer.fluidCell(recorded));
+        long id = world.at(position(level, node)).orElseThrow().device().id();
+        var recordCells = cells(origin, ShapeRasterizer.layout(recorded));
+        var builtLayout = ShapeRasterizer.layout(built);
+        var builtCells = cells(origin, builtLayout);
+        var every = new HashSet<>(recordCells);
+        every.addAll(builtCells);
+        String[] failure = {null};
+        FluidDeviceBlock.quietly(() -> {
+            for (var at : recordCells) EquipmentPermissionChecks.lost(level, at, Blocks.AIR.defaultBlockState(), 3);
+            for (var c : builtLayout.shell()) {
+                var at = cell(origin, c);
+                level.setBlock(at, ModBlocks.EQUIPMENT_SHELL.get().defaultBlockState(), 3);
+                ((EquipmentShellBlockEntity) level.getBlockEntity(at)).bind(built, c, other, com.wormzjl.icheme.science.equipment.DeviceName.NONE);
+            }
+            for (var c : builtLayout.interior()) level.setBlock(cell(origin, c), ModBlocks.EQUIPMENT_INTERIOR.get().defaultBlockState(), 3);
+        });
+        var record = world.structure(position(level, origin));
+        if (record == null || !record.shape().equals(recorded) || world.at(position(level, node)).map(r -> r.device().id()).orElse(0L) != id)
+            failure[0] = "cells replaced quietly touched the registry";
+        requeue(world, level, builtCells);
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(standsAs(level, origin, recorded) && shellStands(level, node, id), "Waiting for the drum to be rebuilt to its record"))
+                .thenExecute(() -> {
+                    var kept = new HashSet<>(recordCells);
+                    for (var at : builtCells)
+                        if (failure[0] == null && !kept.contains(at) && !level.getBlockState(at).isAir()) failure[0] = "a cell only the taller drum had stands at " + at.toShortString();
+                    for (var c : ShapeRasterizer.layout(recorded).shell())
+                        if (failure[0] == null && !((EquipmentShellBlockEntity) level.getBlockEntity(cell(origin, c))).paint().equals(paint)) failure[0] = "cell " + c + " did not take the record's paint";
+                    if (failure[0] == null && world.at(position(level, node)).map(r -> r.device().id()).orElse(0L) != id) failure[0] = "the drum's registration changed";
+                    if (failure[0] == null && held(world, id)) failure[0] = "the whole drum is held";
+                    EquipmentTestCleanup.remove(level, node);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(world.at(position(level, node)).isEmpty() && world.structure(position(level, origin)) == null, "Waiting for the drum and its record to leave"))
+                .thenExecute(() -> {
+                    for (var at : every) if (failure[0] == null && !level.getBlockState(at).isAir()) failure[0] = "a ghost block at " + at.toShortString();
+                    if (failure[0] != null) helper.fail(failure[0]);
+                })
+                .thenSucceed();
+    }
+
+    /**
+     * Step 8, GameTests h and i (plan 3.4): a world saved before the registry held paints (schema 7) and rack frames
+     * (schema 8) fills them at its chunks' first load. A painted line laid through three racks loses its paints and frames
+     * from the registry, as such a facts read leaves them. At its chunks' next load its pipes and lanes teach the registry
+     * what they show, and the re-alignment that follows finds nothing to set back: no block placed, restated or held.
+     */
+    @GameTest(template = "empty", timeoutTicks = 400, batch = "registry-first-learning")
+    public static void aLineSavedBeforeTheRegistryHeldItsPaintTeachesItAtLoad(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var world = FluidWorldAuthority.find(level.getServer()).orElseThrow();
+        var west = helper.absolutePos(new BlockPos(0, 1, 1));
+        var first = west.east();
+        var straight = west.east(2);
+        var corner = west.east(3);
+        var turned = corner.south();
+        var last = turned.south();
+        var south = last.south();
+        var placed = List.of(west, first, straight, corner, turned, last, south);
+        var cells = List.of(straight, corner, turned);
+        for (var at : placed) level.setBlock(at, Blocks.AIR.defaultBlockState(), 3);
+        level.setBlock(west, ModBlocks.FLUID_RESERVOIR.get().defaultBlockState(), 3);
+        level.setBlock(south, ModBlocks.FLUID_RESERVOIR.get().defaultBlockState(), 3);
+        // The racks of GameTest e, and a painted tool.
+        var racks = ModBlocks.PIPE_RACK.get();
+        level.setBlock(straight, racks.placed(level, straight, Direction.EAST, false), 3);
+        level.setBlock(corner, racks.placed(level, corner, Direction.SOUTH, false), 3);
+        level.setBlock(turned, racks.placed(level, turned, Direction.SOUTH, false), 3);
+        var player = FakePlayerFactory.get(level, new GameProfile(UUID.randomUUID(), "RegistryFirstLearning"));
+        player.setGameMode(GameType.SURVIVAL);
+        player.setPos(west.getX() + 2.5, west.getY(), west.getZ() - 1.5);
+        var tool = new ItemStack(ModItems.PIPE_LAYING_TOOL.get());
+        tool.set(ModItems.PIPE_LAYING_SETTINGS.get(), new PipelineToolItem.Settings(.1));
+        tool.set(ModItems.PIPE_LAYING_PAINT.get(), SKY_BLUE);
+        tool.set(ModItems.PIPE_LAYING_SECONDARY.get(), FLAME_RED);
+        player.setItemInHand(InteractionHand.MAIN_HAND, tool);
+        player.getInventory().add(new ItemStack(ModItems.FLUID_PIPE.get(), 5));
+        var start = new PipeAnchor.Click(west, Direction.EAST);
+        var end = new PipeAnchor.Click(south, Direction.NORTH);
+        double outside = PipeSizes.outside(.1);
+        String[] failure = {null};
+        var from = PipeAnchor.resolve(level, start, outside);
+        var to = PipeAnchor.resolve(level, end, outside);
+        if (from.anchor() == null || to.anchor() == null) failure[0] = "the line's ends were refused: " + from.refusal() + ", " + to.refusal();
+        else {
+            var route = PipeRoute.search(from.anchor().end(), from.anchor().leaving(), to.anchor().end(), outside, PipeAnchor.space(level), PipeRoute.Limits.DEFAULT);
+            var refusal = route.found() ? LayingTestCommands.lay(player, InteractionHand.MAIN_HAND, start, end, List.of(first, straight, corner, turned, last), route.options()) : null;
+            if (!route.found()) failure[0] = "no route through the racks: " + route;
+            else if (refusal != null) failure[0] = "the line was refused: " + refusal.getString();
+        }
+        var paint = new WorldTopologyLedger.LinePaint(SKY_BLUE, FLAME_RED);
+        long[] lanes = new long[cells.size()];
+        var frames = new ArrayList<WorldTopologyLedger.RackFrame>();
+        for (int i = 0; i < cells.size() && failure[0] == null; i++) {
+            lanes[i] = ((PipeRackBlockEntity) level.getBlockEntity(cells.get(i))).lanes().getFirst().identity();
+            frames.add(PipeRackBlock.frame(level.getBlockState(cells.get(i))));
+        }
+        // The line's pipes and lanes, which the lay painted.
+        long[] line = failure[0] != null ? new long[0] : new long[]{((FluidDeviceBlockEntity) level.getBlockEntity(first)).fluidIdentity(), lanes[0], lanes[1], lanes[2],
+                ((FluidDeviceBlockEntity) level.getBlockEntity(last)).fluidIdentity()};
+        for (long id : line) if (failure[0] == null && !paint.equals(world.linePaint(id))) failure[0] = "the lay did not record line #" + id + "'s paint: " + world.linePaint(id);
+        long westTank = world.at(position(level, west)).orElseThrow().device().id();
+        long southTank = world.at(position(level, south)).orElseThrow().device().id();
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(failure[0] != null || joined(world, westTank, southTank), "Waiting for the line to join its tanks"))
+                .thenExecute(() -> {
+                    if (failure[0] != null) return;
+                    // As a facts read of schema 7 leaves them: the line bare, the lanes without frames.
+                    for (long id : line) world.paint(id, Paint.BARE, Paint.BARE);
+                    for (long id : lanes) world.rackFrame(id, null);
+                    requeue(world, level, placed);
+                    for (long id : line) if (failure[0] == null && !paint.equals(world.linePaint(id))) failure[0] = "line #" + id + " did not teach its paint: " + world.linePaint(id);
+                    for (int i = 0; i < lanes.length && failure[0] == null; i++)
+                        if (!frames.get(i).equals(world.rackFrame(lanes[i]))) failure[0] = "lane #" + lanes[i] + " did not teach its frame: " + world.rackFrame(lanes[i]);
+                    // What the queued checks find on the world the load left: nothing to set back.
+                    for (var at : placed) {
+                        long id = world.at(position(level, at)).map(r -> r.device().id()).orElse(0L);
+                        var check = id == 0 ? null : RegistryRealignment.realign(level, world, id);
+                        if (failure[0] == null && check != null && (check.outcome() != RegistryRealignment.Outcome.NOTHING || check.released())) failure[0] = "the learnt line was re-aligned at #" + id + ": " + check;
+                    }
+                    for (long id : lanes) {
+                        var check = RegistryRealignment.realign(level, world, id);
+                        if (failure[0] == null && (check.outcome() != RegistryRealignment.Outcome.NOTHING || check.released())) failure[0] = "the learnt run was re-aligned at #" + id + ": " + check;
+                    }
+                })
+                .thenIdle(5)
+                .thenExecute(() -> {
+                    for (var at : List.of(first, last))
+                        if (failure[0] == null && !(level.getBlockEntity(at) instanceof FluidDeviceBlockEntity pipe && pipe.paint() == SKY_BLUE && pipe.secondary() == FLAME_RED)) failure[0] = "pipe " + at.toShortString() + " lost its paint";
+                    for (int i = 0; i < cells.size() && failure[0] == null; i++) {
+                        var lane = ((PipeRackBlockEntity) level.getBlockEntity(cells.get(i))).lanes().getFirst();
+                        if (lane.paint() != SKY_BLUE || lane.secondary() != FLAME_RED || !PipeRackBlock.frame(level.getBlockState(cells.get(i))).equals(frames.get(i))) failure[0] = "rack " + cells.get(i).toShortString() + " changed";
+                    }
+                    if (failure[0] == null && !joined(world, westTank, southTank)) failure[0] = "the tanks parted";
+                    for (var at : placed) level.removeBlock(at, false);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(Arrays.stream(lanes).allMatch(id -> world.committedDevice(id).isEmpty())
+                        && placed.stream().allMatch(at -> world.at(position(level, at)).isEmpty()), "Waiting for the line's removals to apply"))
+                .thenExecute(() -> {
+                    for (long id : line) if (failure[0] == null && world.linePaint(id) != null) failure[0] = "line #" + id + "'s paint stayed after it left";
+                    if (failure[0] != null) helper.fail(failure[0]);
+                })
+                .thenSucceed();
+    }
+
+    /**
+     * W5c C1, GameTest k: a shaft line whose blocks were lost comes back from its parts. A creative motor drives three
+     * shafts. Behind the engine's back the motor and the middle shaft are lost and the first shaft is turned across. The
+     * re-alignment places the motor facing its end and the shaft on its axis at its drawn size, turns the first back, and
+     * the line turns whole with the same parts.
+     */
+    @GameTest(template = "empty", timeoutTicks = 1200, batch = "registry-first-modules")
+    public static void aLostShaftLineComesBackAndTurnsWhole(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var world = FluidWorldAuthority.find(level.getServer()).orElseThrow();
+        var motor = helper.absolutePos(new BlockPos(1, 1, 1));
+        var line = List.of(motor.east(), motor.east(2), motor.east(3));
+        var cells = new ArrayList<BlockPos>(List.of(motor));
+        cells.addAll(line);
+        shaftLine(level, motor, line);
+        String[] failure = {null};
+        long[] ids = new long[cells.size()];
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(turns(world, level, line.getLast()), "Waiting for the line to turn"))
+                .thenExecute(() -> {
+                    for (int i = 0; i < ids.length; i++) ids[i] = world.shafts().unitAt(position(level, cells.get(i))).id();
+                    FluidDeviceBlock.quietly(() -> {
+                        level.setBlock(motor, Blocks.AIR.defaultBlockState(), 3);
+                        level.setBlock(line.get(1), Blocks.AIR.defaultBlockState(), 3);
+                        level.setBlock(line.getFirst(), level.getBlockState(line.getFirst()).setValue(ShaftBlock.AXIS, Direction.Axis.Z), 3);
+                    });
+                    if (world.shafts().unitAt(position(level, motor)) == null) failure[0] = "the lost motor's part left";
+                    requeue(world, level, cells);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(level.getBlockState(motor).is(ModBlocks.CREATIVE_MOTOR.get())
+                        && level.getBlockState(motor).getValue(CreativeMotorBlock.FACING) == Direction.EAST
+                        && line.stream().allMatch(at -> level.getBlockState(at).is(ModBlocks.SHAFT.get()) && level.getBlockState(at).getValue(ShaftBlock.AXIS) == Direction.Axis.X),
+                        "Waiting for the line's blocks to stand again"))
+                .thenWaitUntil(() -> helper.assertTrue(turns(world, level, line.getLast()), "Waiting for the line to turn whole again"))
+                .thenExecute(() -> {
+                    for (int i = 0; i < ids.length; i++) {
+                        var u = world.shafts().unitAt(position(level, cells.get(i)));
+                        if (failure[0] == null && (u == null || u.id() != ids[i] || u.held())) failure[0] = "part " + i + " is not the part it was: " + u;
+                    }
+                    if (failure[0] == null && level.getBlockState(line.get(1)).getValue(ShaftBlock.SIZE) != world.shafts().drawnSize(ids[2]))
+                        failure[0] = "the shaft came back at size " + level.getBlockState(line.get(1)).getValue(ShaftBlock.SIZE) + ", drawn " + world.shafts().drawnSize(ids[2]);
+                    for (var at : cells) level.setBlock(at, Blocks.AIR.defaultBlockState(), 3);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(cells.stream().allMatch(at -> world.shafts().unitAt(position(level, at)) == null), "Waiting for the line's parts to leave"))
+                .thenExecute(() -> {
+                    if (failure[0] != null) helper.fail(failure[0]);
+                })
+                .thenSucceed();
+    }
+
+    /**
+     * W5c C1, GameTest n (option Q1): a stone where a shaft stood holds the shaft, and its train splits there: the shaft
+     * before it turns, the one past it stops, and the stone stays. Once the cell is free, the shaft stands again, is
+     * released, and the line turns whole.
+     */
+    @GameTest(template = "empty", timeoutTicks = 1200, batch = "registry-first-modules")
+    public static void aBlockedShaftCellSplitsItsTrainUntilItIsFree(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var world = FluidWorldAuthority.find(level.getServer()).orElseThrow();
+        var motor = helper.absolutePos(new BlockPos(1, 1, 3));
+        var line = List.of(motor.east(), motor.east(2), motor.east(3));
+        var cells = new ArrayList<BlockPos>(List.of(motor));
+        cells.addAll(line);
+        var middle = line.get(1);
+        shaftLine(level, motor, line);
+        String[] failure = {null};
+        long[] id = {0};
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(turns(world, level, line.getLast()), "Waiting for the line to turn"))
+                .thenExecute(() -> {
+                    id[0] = world.shafts().unitAt(position(level, middle)).id();
+                    FluidDeviceBlock.quietly(() -> level.setBlock(middle, Blocks.STONE.defaultBlockState(), 3));
+                    requeue(world, level, cells);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(heldShaft(world, id[0]) && turns(world, level, line.getFirst()) && !turns(world, level, line.getLast()),
+                        "Waiting for the blocked shaft to be held and its train to split"))
+                .thenExecute(() -> {
+                    if (!level.getBlockState(middle).is(Blocks.STONE)) failure[0] = "the stone was overwritten";
+                    var view = world.shafts().view(id[0]);
+                    if (failure[0] == null && (view == null || !view.status().equals("HELD"))) failure[0] = "the held shaft's page does not say HELD: " + view;
+                    var said = new ArrayList<String>();
+                    level.getServer().getCommands().performPrefixedCommand(operator(level, middle, said), "icheme devices held");
+                    if (failure[0] == null && said.stream().noneMatch(said1 -> said1.startsWith("#" + id[0] + " shaft at ") && said1.endsWith("its cell holds minecraft:stone")))
+                        failure[0] = "the listing does not name the held shaft: " + said;
+                    level.setBlock(middle, Blocks.AIR.defaultBlockState(), 3);
+                    requeue(world, level, cells);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(level.getBlockState(middle).is(ModBlocks.SHAFT.get()) && !heldShaft(world, id[0]) && turns(world, level, line.getLast()),
+                        "Waiting for the shaft to stand, be released and the line to turn whole"))
+                .thenExecute(() -> {
+                    for (var at : cells) level.setBlock(at, Blocks.AIR.defaultBlockState(), 3);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(cells.stream().allMatch(at -> world.shafts().unitAt(position(level, at)) == null), "Waiting for the line's parts to leave"))
+                .thenExecute(() -> {
+                    if (failure[0] != null) helper.fail(failure[0]);
+                })
+                .thenSucceed();
+    }
+
+    /**
+     * W5c C2, GameTest l: a data cable laid between two controllers is a fact of the control registry. Its cell at
+     * controller A, which holds A's endpoint, and a middle cell are lost behind the bus's back, and a stone stands in a
+     * third. The lost cells come back with their geometry, endpoint and line pieces; the stone holds its cable, the bus
+     * is cut, and the stone stays. Once the cell is free, the cable stands, is released, and the bus joins again.
+     */
+    @GameTest(template = "empty", timeoutTicks = 600, batch = "registry-first-modules")
+    public static void aLostDataCableComesBackAndABlockedOneCutsTheBus(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var world = FluidWorldAuthority.find(level.getServer()).orElseThrow();
+        var facts = world.controls().facts();
+        var a = helper.absolutePos(new BlockPos(1, 2, 6));
+        var b = a.east(8);
+        level.setBlock(a, ModBlocks.LOCAL_CONTROLLER.get().defaultBlockState().setValue(ControlPanelBlock.FACING, Direction.WEST), 3);
+        level.setBlock(b, ModBlocks.LOCAL_CONTROLLER.get().defaultBlockState().setValue(ControlPanelBlock.FACING, Direction.EAST), 3);
+        var player = FakePlayerFactory.get(level, new GameProfile(UUID.randomUUID(), "RegistryFirstCable"));
+        player.setGameMode(GameType.CREATIVE);
+        var tool = new ItemStack(ModItems.PIPE_LAYING_TOOL.get());
+        tool.set(ModItems.PIPE_LAYING_DATA.get(), true);
+        player.setItemInHand(InteractionHand.MAIN_HAND, tool);
+        player.setPos(a.getX() + 4.5, a.getY(), a.getZ() + 2.5);
+        String[] failure = {null};
+        DataPort[] ports = new DataPort[2];
+        var wires = new ArrayList<BlockPos>();
+        var before = new ArrayList<Object>();
+        helper.startSequence()
+                .thenWaitUntil(() -> {
+                    ports[0] = panelPort(facts, level, a);
+                    ports[1] = panelPort(facts, level, b);
+                    helper.assertTrue(ports[0] != null && ports[1] != null, "Waiting for the controllers' sockets");
+                })
+                .thenExecute(() -> {
+                    var from = LayingTestCommands.resolve(level, socket(ports[0]), facts.ports(), CableMedium.DATA);
+                    var to = LayingTestCommands.resolve(level, socket(ports[1]), facts.ports(), CableMedium.DATA);
+                    if (from == null || to == null) {
+                        failure[0] = "the sockets resolve to no anchor";
+                        return;
+                    }
+                    var route = LinePlacement.search(level, from.placement(), to.placement(), CableMedium.DATA.outside(), LayingTestCommands.leads(from, to));
+                    if (!route.found()) {
+                        failure[0] = "no route between the sockets";
+                        return;
+                    }
+                    var refusal = LayingTestCommands.lay(player, InteractionHand.MAIN_HAND, socket(ports[0]), socket(ports[1]),
+                            route.cells().stream().map(LayingTestCommands::block).toList(), route.options(), CableMedium.DATA);
+                    if (refusal != null) failure[0] = "the cable was refused: " + refusal.getString();
+                })
+                .thenWaitUntil(() -> helper.assertTrue(failure[0] != null || bus(facts, ports), "Waiting for the bus to join the controllers"))
+                .thenExecute(() -> {
+                    if (failure[0] != null) return;
+                    String dim = level.dimension().location().toString();
+                    facts.cables().stream().filter(c -> c.site().lane() == 0 && c.site().dimension().equals(dim) && c.site().cell().getY() == a.getY()
+                                    && c.site().cell().getZ() == a.getZ() && c.site().cell().getX() > a.getX() && c.site().cell().getX() < b.getX())
+                            .map(c -> c.site().cell()).sorted(Comparator.comparingInt(BlockPos::getX)).forEach(wires::add);
+                    if (wires.size() < 3 || !facts.cable(site(level, wires.getFirst())).endpoints().containsValue(ports[0].id())) {
+                        failure[0] = "the cable is not the straight run from A: " + wires;
+                        return;
+                    }
+                    before.add(((ConduitBlockEntity) level.getBlockEntity(wires.getFirst())).linePieces());
+                    var first = wires.getFirst();
+                    var middle = wires.get(wires.size() / 2);
+                    var blocked = wires.get(wires.size() / 2 + 1);
+                    FluidDeviceBlock.quietly(() -> {
+                        level.setBlock(first, Blocks.AIR.defaultBlockState(), 3);
+                        level.setBlock(middle, Blocks.AIR.defaultBlockState(), 3);
+                        level.setBlock(blocked, Blocks.STONE.defaultBlockState(), 3);
+                    });
+                    if (facts.cable(site(level, first)) == null) failure[0] = "the lost cable's fact left";
+                    requeue(world, level, wires);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(failure[0] != null || standsAsFact(facts, level, wires.getFirst()) && standsAsFact(facts, level, wires.get(wires.size() / 2))
+                                && facts.held(site(level, wires.get(wires.size() / 2 + 1))) && !bus(facts, ports)
+                                && before.getFirst().equals(((ConduitBlockEntity) level.getBlockEntity(wires.getFirst())).linePieces()),
+                        "Waiting for the lost cables to stand with their line pieces, and the blocked one to be held"))
+                .thenExecute(() -> {
+                    if (failure[0] != null) return;
+                    var blocked = wires.get(wires.size() / 2 + 1);
+                    if (!level.getBlockState(blocked).is(Blocks.STONE)) failure[0] = "the stone was overwritten";
+                    var said = new ArrayList<String>();
+                    level.getServer().getCommands().performPrefixedCommand(operator(level, blocked, said), "icheme devices held");
+                    var named = "data cable at " + level.dimension().location() + " " + blocked.getX() + ", " + blocked.getY() + ", " + blocked.getZ() + ": its cell holds minecraft:stone";
+                    if (failure[0] == null && !said.contains(named)) failure[0] = "the listing does not name the held cable: " + said;
+                    level.setBlock(blocked, Blocks.AIR.defaultBlockState(), 3);
+                    requeue(world, level, wires);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(failure[0] != null || standsAsFact(facts, level, wires.get(wires.size() / 2 + 1))
+                        && !facts.held(site(level, wires.get(wires.size() / 2 + 1))) && bus(facts, ports), "Waiting for the cable to stand, be released and the bus to join"))
+                .thenExecute(() -> {
+                    for (var at : wires) level.setBlock(at, Blocks.AIR.defaultBlockState(), 3);
+                    level.setBlock(a, Blocks.AIR.defaultBlockState(), 3);
+                    level.setBlock(b, Blocks.AIR.defaultBlockState(), 3);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(wires.stream().allMatch(at -> facts.cable(site(level, at)) == null)
+                        && panelPort(facts, level, a) == null && panelPort(facts, level, b) == null, "Waiting for the cable and the controllers to leave"))
+                .thenExecute(() -> {
+                    if (failure[0] != null) helper.fail(failure[0]);
+                })
+                .thenSucceed();
+    }
+
+    /**
+     * W5c C3, GameTest m: a local controller and a DCS console are facts of the control registry. Both are lost behind
+     * its back and come back facing away from their sockets, each with its identity and socket, the console with its top.
+     * Then a stone stands in the controller's cell: the controller is held, and the stone stays. Once the cell is free,
+     * the controller stands again and is released.
+     */
+    @GameTest(template = "empty", timeoutTicks = 400, batch = "registry-first-modules")
+    public static void aLostControllerAndConsoleComeBackFacingTheirSockets(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var world = FluidWorldAuthority.find(level.getServer()).orElseThrow();
+        var facts = world.controls().facts();
+        var controller = helper.absolutePos(new BlockPos(1, 2, 10));
+        var console = controller.east(3);
+        level.setBlock(controller, ModBlocks.LOCAL_CONTROLLER.get().defaultBlockState().setValue(ControlPanelBlock.FACING, Direction.EAST), 3);
+        level.setBlock(console, ModBlocks.DCS.get().defaultBlockState().setValue(ControlPanelBlock.FACING, Direction.SOUTH), 3);
+        String[] failure = {null};
+        DataPort[] ports = new DataPort[2];
+        helper.startSequence()
+                .thenWaitUntil(() -> {
+                    ports[0] = panelPort(facts, level, controller);
+                    ports[1] = panelPort(facts, level, console);
+                    helper.assertTrue(ports[0] != null && ports[1] != null && level.getBlockState(console.above()).is(ModBlocks.DCS.get()),
+                            "Waiting for the controller's and the console's sockets");
+                })
+                .thenExecute(() -> {
+                    FluidDeviceBlock.quietly(() -> {
+                        level.setBlock(controller, Blocks.AIR.defaultBlockState(), 3);
+                        level.setBlock(console.above(), Blocks.AIR.defaultBlockState(), 3);
+                        level.setBlock(console, Blocks.AIR.defaultBlockState(), 3);
+                    });
+                    if (panelPort(facts, level, controller) == null || panelPort(facts, level, console) == null) failure[0] = "a lost panel's facts left";
+                    requeue(world, level, List.of(controller, console));
+                })
+                .thenWaitUntil(() -> helper.assertTrue(standsAsPanel(facts, level, controller, ports[0], Direction.EAST) && standsAsPanel(facts, level, console, ports[1], Direction.SOUTH)
+                                && level.getBlockState(console.above()).is(ModBlocks.DCS.get())
+                                && level.getBlockState(console.above()).getValue(DcsBlock.HALF) == net.minecraft.world.level.block.state.properties.DoubleBlockHalf.UPPER,
+                        "Waiting for the controller and the console to stand facing away from their sockets: " + failure[0] + " | " + panelDetail(facts, level, controller, ports[0])
+                                + " | " + panelDetail(facts, level, console, ports[1]) + " | top " + level.getBlockState(console.above())))
+                .thenExecute(() -> {
+                    FluidDeviceBlock.quietly(() -> level.setBlock(controller, Blocks.STONE.defaultBlockState(), 3));
+                    requeue(world, level, List.of(controller));
+                })
+                .thenWaitUntil(() -> helper.assertTrue(facts.heldPanel(ports[0].id()), "Waiting for the blocked controller to be held"))
+                .thenExecute(() -> {
+                    if (!level.getBlockState(controller).is(Blocks.STONE)) failure[0] = "the stone was overwritten";
+                    var said = new ArrayList<String>();
+                    level.getServer().getCommands().performPrefixedCommand(operator(level, controller, said), "icheme devices held");
+                    if (failure[0] == null && said.stream().noneMatch(line -> line.startsWith("controller " + ports[0].id() + " at ") && line.endsWith("its cell holds minecraft:stone")))
+                        failure[0] = "the listing does not name the held controller: " + said;
+                    level.setBlock(controller, Blocks.AIR.defaultBlockState(), 3);
+                    requeue(world, level, List.of(controller));
+                })
+                .thenWaitUntil(() -> helper.assertTrue(!facts.heldPanel(ports[0].id()) && standsAsPanel(facts, level, controller, ports[0], Direction.EAST),
+                        "Waiting for the controller to stand and be released"))
+                .thenExecute(() -> {
+                    level.setBlock(controller, Blocks.AIR.defaultBlockState(), 3);
+                    level.setBlock(console, Blocks.AIR.defaultBlockState(), 3);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(panelPort(facts, level, controller) == null && panelPort(facts, level, console) == null,
+                        "Waiting for the controller and the console to leave"))
+                .thenExecute(() -> {
+                    if (failure[0] != null) helper.fail(failure[0]);
+                })
+                .thenSucceed();
+    }
+
+    /** What stands at {@code at} for the controller of {@code port}, for a failure message. */
+    private static String panelDetail(ControlFacts facts, ServerLevel level, BlockPos at, DataPort port) {
+        var box = level.getBlockEntity(at) instanceof ControlPanelBlockEntity b ? b : null;
+        return level.getBlockState(at) + " box=" + (box == null ? null : box.identity() + "/" + port.equals(box.dataPort())) + " fact=" + port.equals(facts.port(port.id()))
+                + " (" + facts.port(port.id()) + " vs " + port + ") panel=" + (facts.panel(port.id()) != null) + " held=" + facts.heldPanel(port.id());
+    }
+
+    /** Whether a controller or console stands at {@code at} facing {@code facing}, bound to {@code port}'s identity and socket. */
+    private static boolean standsAsPanel(ControlFacts facts, ServerLevel level, BlockPos at, DataPort port, Direction facing) {
+        var state = level.getBlockState(at);
+        return state.getBlock() instanceof ControlPanelBlock && state.getValue(ControlPanelBlock.FACING) == facing
+                && level.getBlockEntity(at) instanceof ControlPanelBlockEntity box && box.identity().equals(port.id()) && port.equals(box.dataPort())
+                && port.equals(facts.port(port.id()));
+    }
+
+    /** The socket of the controller at {@code at}, or null while it has none. */
+    private static DataPort panelPort(ControlFacts facts, ServerLevel level, BlockPos at) {
+        String dim = level.dimension().location().toString();
+        return facts.panels().stream().filter(p -> p.dimension().equals(dim) && p.position().equals(at)).findFirst().map(p -> facts.port(p.id())).orElse(null);
+    }
+
+    private static LineTarget socket(DataPort p) {
+        return new LineTarget(p.id(), p.owner(), p.face().getOpposite(), new Vec3(.5, .5, .5), 0);
+    }
+
+    /** Whether the data bus, built from the standing cables, joins the two sockets. */
+    private static boolean bus(ControlFacts facts, DataPort[] ports) {
+        return new DataBus(facts.standing(), facts.ports()).connected(ports[0].id(), ports[1].id());
+    }
+
+    private static DataBus.Site site(ServerLevel level, BlockPos at) {
+        return new DataBus.Site(level.dimension().location().toString(), at, 0);
+    }
+
+    /** Whether a cable block stands at {@code at} with the geometry and endpoints of its fact. */
+    private static boolean standsAsFact(ControlFacts facts, ServerLevel level, BlockPos at) {
+        var fact = facts.cable(site(level, at));
+        return fact != null && level.getBlockEntity(at) instanceof ConduitBlockEntity wire && wire.geometry().equals(fact.geometry())
+                && wire.cable().endpoints().equals(fact.endpoints());
+    }
+
+    /** A creative motor at {@code motor} facing east, and shafts along X at {@code line}, placed as a player places them. */
+    private static void shaftLine(ServerLevel level, BlockPos motor, List<BlockPos> line) {
+        level.setBlock(motor, ModBlocks.CREATIVE_MOTOR.get().defaultBlockState().setValue(CreativeMotorBlock.FACING, Direction.EAST), 3);
+        for (var at : line) level.setBlock(at, ModBlocks.SHAFT.get().defaultBlockState().setValue(ShaftBlock.AXIS, Direction.Axis.X), 3);
+    }
+
+    /** Whether the shaft part at {@code at} turns. */
+    private static boolean turns(FluidWorldAuthority world, ServerLevel level, BlockPos at) {
+        var u = world.shafts().unitAt(position(level, at));
+        var view = u == null ? null : world.shafts().view(u.id());
+        return view != null && view.speed() > 0;
+    }
+
+    private static boolean heldShaft(FluidWorldAuthority world, long id) {
+        var u = world.shafts().unit(id);
+        return u != null && u.held();
+    }
+
+    /** The cells of {@code layout} at {@code origin}, shell first. */
+    private static List<BlockPos> cells(BlockPos origin, ShapeRasterizer.Layout layout) {
+        var cells = new ArrayList<BlockPos>();
+        for (var list : List.of(layout.shell(), layout.interior()))
+            for (var c : list) cells.add(cell(origin, c));
+        return cells;
+    }
+
+    private static BlockPos cell(BlockPos origin, ShapeRasterizer.Cell c) {
+        return origin.offset(c.x(), c.y(), c.z());
+    }
+
+    /** Whether every cell of {@code shape}'s layout at {@code origin} stands as its own: a shell cell of that origin and shape, an interior cell. */
+    private static boolean standsAs(ServerLevel level, BlockPos origin, EquipmentShape shape) {
+        var layout = ShapeRasterizer.layout(shape);
+        for (var c : layout.shell())
+            if (!(level.getBlockEntity(cell(origin, c)) instanceof EquipmentShellBlockEntity shell) || !origin.equals(shell.origin()) || !shape.equals(shell.shape())) return false;
+        for (var c : layout.interior()) if (!level.getBlockState(cell(origin, c)).is(ModBlocks.EQUIPMENT_INTERIOR.get())) return false;
+        return true;
+    }
+
+    /** Whether the shell cell at {@code at} stands for registration {@code id}. */
+    private static boolean shellStands(ServerLevel level, BlockPos at, long id) {
+        return level.getBlockEntity(at) instanceof EquipmentShellBlockEntity shell && shell.fluidIdentity() == id;
+    }
+
+    /** Queues the registrations of the chunks of {@code cells} again, as their chunks' next load does. */
+    private static void requeue(FluidWorldAuthority world, ServerLevel level, List<BlockPos> cells) {
+        cells.stream().map(at -> new ChunkPos(at).toLong()).distinct().forEach(chunk -> world.loadedChunk(level.dimension(), chunk));
+    }
+
+    /** Whether the block at {@code at} is bound to registration {@code id}. */
+    private static boolean stands(ServerLevel level, BlockPos at, long id) {
+        return level.getBlockEntity(at) instanceof FluidDeviceBlockEntity entity && entity.fluidIdentity() == id;
+    }
+
+    private static boolean held(FluidWorldAuthority world, long id) {
+        var record = world.registrations().get(id);
+        return record != null && record.device().held();
+    }
+
+    private static PhysicalFluidTopology.Position position(ServerLevel level, BlockPos at) {
+        return new PhysicalFluidTopology.Position(level.dimension().location().toString(), at.getX(), at.getY(), at.getZ());
+    }
+
+    private static boolean joined(FluidWorldAuthority world, long a, long b) {
+        return world.diagnosticSnapshots().stream().anyMatch(s -> s.graph().reservoirs().stream().anyMatch(n -> n.id() == a) && s.graph().reservoirs().stream().anyMatch(n -> n.id() == b));
+    }
+
+    /** Whether {@code tank} is an island of its own: no pipe, no other vessel. */
+    private static boolean alone(FluidWorldAuthority world, long tank) {
+        return world.diagnosticSnapshots().stream().anyMatch(s -> s.graph().pipes().isEmpty() && !s.graph().reservoirs().isEmpty() && s.graph().reservoirs().stream().allMatch(n -> n.id() == tank));
+    }
+
+    private static double moles(FluidWorldAuthority world, long tank) {
+        for (var s : world.diagnosticSnapshots())
+            for (var n : s.graph().reservoirs())
+                if (n.id() == tank && n.kind() == PassiveNetwork.NodeKind.RESERVOIR) return Arrays.stream(n.inventory().moles()).sum();
+        return Double.NaN;
+    }
+
+    /** An operator at {@code at} whose command replies land in {@code said}. */
+    private static CommandSourceStack operator(ServerLevel level, BlockPos at, List<String> said) {
+        var sink = new CommandSource() {
+            @Override public void sendSystemMessage(Component message) {said.add(message.getString());}
+            @Override public boolean acceptsSuccess() {return true;}
+            @Override public boolean acceptsFailure() {return true;}
+            @Override public boolean shouldInformAdmins() {return false;}
+        };
+        return new CommandSourceStack(sink, Vec3.atCenterOf(at), Vec2.ZERO, level, 4, "registry-first", Component.literal("registry-first"), level.getServer(), null);
+    }
+}

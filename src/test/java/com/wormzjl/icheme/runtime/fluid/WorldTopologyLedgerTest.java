@@ -77,6 +77,106 @@ class WorldTopologyLedgerTest {
         assertThrows(IllegalStateException.class,()->ledger.queue(List.of(new WorldTopologyLedger.Edit(1,changed)),Set.of(1L),2));assertSame(snapshot,ledger.snapshot());
     }
     /**
+     * Build facts (batch 2026-11-03-save-corruption) cost a save nothing while they stand still. An edit leaves the
+     * registry's parts shared, so a snapshot copies no registration, and an unchanged ledger gives the same snapshot. The
+     * facts round-trip through the topology unit, and a bare line keeps no entry.
+     */
+    @Test void buildFactsShareTheRegistryAndRoundTripThroughTheTopologyUnit() {
+        var registration=record(1,Kind.PIPE);
+        var ledger=new WorldTopologyLedger(new WorldTopologyLedger.Snapshot(0,2,Map.of(1L,registration),List.of(),WorldTopologyLedger.MaterialTotal.empty(),WorldTopologyLedger.MaterialTotal.empty()));
+        var before=ledger.snapshot();
+        ledger.paint(1,new WorldTopologyLedger.LinePaint(0x2271B3,com.wormzjl.icheme.science.equipment.Paint.BARE));
+        var origin=new PhysicalFluidTopology.Position("minecraft:overworld",40,64,-8);
+        var drum=com.wormzjl.icheme.science.equipment.EquipmentShape.drum(2,6,com.wormzjl.icheme.science.equipment.EquipmentShape.Orientation.HORIZONTAL,
+                com.wormzjl.icheme.science.equipment.EquipmentShape.Heading.EAST,com.wormzjl.icheme.science.equipment.EquipmentShape.defaultSupport(2,com.wormzjl.icheme.science.equipment.EquipmentShape.Orientation.HORIZONTAL));
+        ledger.structure(origin,WorldTopologyLedger.Structure.of(drum,new com.wormzjl.icheme.science.equipment.Paint(0x587246,0x383E42)));
+        var after=ledger.snapshot();
+        assertSame(before.active(),after.active(),"a build edit copies no registration");assertNotSame(before.builds(),after.builds());
+        assertFalse(FluidCheckpointCodec.sameWorldBody(before,after),"a build edit rewrites the topology unit");
+        assertSame(after,ledger.snapshot(),"an unchanged ledger shares its snapshot");
+        var restored=FluidCheckpointCodec.decodeTopology(FluidCheckpointCodec.encodeTopology(after),after.onlineTick(),NO_RECOVERIES);
+        assertEquals(after.builds(),restored.builds());assertEquals(drum,restored.builds().structures().get(origin).shape());
+        ledger.paint(1,new WorldTopologyLedger.LinePaint(com.wormzjl.icheme.science.equipment.Paint.BARE,com.wormzjl.icheme.science.equipment.Paint.BARE));
+        assertTrue(ledger.snapshot().builds().paints().isEmpty(),"a bare line keeps no entry");
+        assertThrows(IllegalArgumentException.class,()->ledger.paint(9,new WorldTopologyLedger.LinePaint(0x2271B3,0x2271B3)),"only a registered identity is painted");
+    }
+    /**
+     * Holding is state (decision S11, REGISTRY_FIRST_PLAN.md 4.1): the topology unit's state section carries a hold, queued
+     * or applied, through an exact load, and its facts never carry one, so a load from facts releases every hold.
+     */
+    @Test void aHoldIsStateTheTopologyUnitCarriesAndItsFactsNever() {
+        var ledger=new WorldTopologyLedger(new WorldTopologyLedger.Snapshot(0,3,Map.of(1L,at(1,0),2L,at(2,20)),List.of(),WorldTopologyLedger.MaterialTotal.empty(),WorldTopologyLedger.MaterialTotal.empty()));
+        var held=new WorldTopologyLedger.Registration(at(1,0).device().withHeld(true),at(1,0).spec(),1);
+        ledger.commit(ledger.queue(List.of(new WorldTopologyLedger.Edit(1,held)),Set.of(1L),3));
+        var queued=ledger.snapshot();
+        var restored=FluidCheckpointCodec.decodeTopology(FluidCheckpointCodec.encodeTopology(queued),queued.onlineTick(),NO_RECOVERIES);
+        assertEquals(held,restored.events().getFirst().edits().getFirst().replacement(),"a queued hold survives the state");
+        assertFalse(restored.active().get(1L).device().held(),"until it applies");
+        ledger.commit(applyFirst(ledger,List.of(),List.of(),new double[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1],3));
+        var applied=ledger.snapshot();assertTrue(applied.active().get(1L).device().held());
+        var exact=FluidCheckpointCodec.decodeTopology(FluidCheckpointCodec.encodeTopology(applied),applied.onlineTick(),NO_RECOVERIES);
+        assertEquals(applied.active(),exact.active(),"an applied hold survives an exact load");
+        var unheld=new HashMap<>(applied.active());unheld.put(1L,new WorldTopologyLedger.Registration(at(1,0).device(),at(1,0).spec(),1));
+        var released=new WorldTopologyLedger.Snapshot(applied.onlineTick(),applied.nextIdentity(),unheld,List.of(),applied.constructed(),applied.destroyed(),applied.basis(),
+                applied.recoveries(),applied.restated(),applied.columns(),applied.shafts(),applied.stores(),applied.health(),applied.builds());
+        assertArrayEquals(FluidFacts.world(released),FluidFacts.world(applied),"a registration's facts never carry its hold");
+    }
+    /**
+     * A held shaft part (W5c C1) is state too: the topology unit carries it beside the held devices, by identity, through
+     * an exact load, and the facts never carry it.
+     */
+    @Test void aHeldShaftPartIsStateTheTopologyUnitCarries() {
+        var ledger=new WorldTopologyLedger(new WorldTopologyLedger.Snapshot(0,3,Map.of(1L,at(1,0),2L,at(2,20)),List.of(),WorldTopologyLedger.MaterialTotal.empty(),WorldTopologyLedger.MaterialTotal.empty()));
+        var cell=new PhysicalFluidTopology.Position(at(1,0).device().position().dimension(),5,70,5);
+        long free=ledger.reserve(1),held=ledger.reserve(1);
+        ledger.shaft(ShaftUnit.shaft(free,cell,0));ledger.shaft(ShaftUnit.shaft(held,new PhysicalFluidTopology.Position(cell.dimension(),6,70,5),0).withHeld(true));
+        var saved=ledger.snapshot();
+        var exact=FluidCheckpointCodec.decodeTopology(FluidCheckpointCodec.encodeTopology(saved),saved.onlineTick(),NO_RECOVERIES);
+        assertTrue(exact.shafts().get(held).held(),"a held part survives an exact load");
+        assertFalse(exact.shafts().get(free).held(),"a free part stays free");
+        var shafts=new HashMap<>(saved.shafts());shafts.put(held,shafts.get(held).withHeld(false));
+        var released=new WorldTopologyLedger.Snapshot(saved.onlineTick(),saved.nextIdentity(),saved.active(),List.of(),saved.constructed(),saved.destroyed(),saved.basis(),
+                saved.recoveries(),saved.restated(),saved.columns(),Map.copyOf(shafts),saved.stores(),saved.health(),saved.builds());
+        assertArrayEquals(FluidFacts.world(released),FluidFacts.world(saved),"a part's facts never carry its hold");
+    }
+    /**
+     * A line's paint leaves with its identity when the removal applies, whatever removed it (REGISTRY_FIRST_PLAN.md 3.3).
+     * A queued removal keeps it: a removal that never applies leaves the line, painted.
+     */
+    @Test void aLinesPaintLeavesWhenItsRemovalApplies() {
+        var ledger=new WorldTopologyLedger(new WorldTopologyLedger.Snapshot(0,3,Map.of(1L,at(1,0),2L,at(2,20)),List.of(),WorldTopologyLedger.MaterialTotal.empty(),WorldTopologyLedger.MaterialTotal.empty()));
+        var red=new WorldTopologyLedger.LinePaint(0xE25303,0xE25303);ledger.paint(1,red);ledger.paint(2,red);
+        ledger.commit(ledger.queue(List.of(new WorldTopologyLedger.Edit(1,null)),Set.of(1L),3));
+        assertEquals(red,ledger.paint(1),"a queued removal keeps the paint");
+        assertThrows(IllegalArgumentException.class,()->ledger.paint(1,red),"a line being removed takes no paint");
+        var before=ledger.snapshot();
+        ledger.commit(applyFirst(ledger,List.of(),List.of(),new double[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1],3));
+        assertNull(ledger.paint(1),"the applied removal took the paint");assertEquals(red,ledger.paint(2));
+        assertEquals(Map.of(2L,red),ledger.snapshot().builds().paints());assertNotSame(before.builds(),ledger.snapshot().builds());
+    }
+    /**
+     * Schema 9: a rack lane's rack frame is a build fact of its identity. Only a rack lane takes one; it survives a save,
+     * and it leaves with its lane when the removal applies, as a line's paint does.
+     */
+    @Test void aRackFrameIsALanesAndLeavesWhenItsRemovalApplies() {
+        var along=1<<PhysicalFluidTopology.Direction.WEST.ordinal()|1<<PhysicalFluidTopology.Direction.EAST.ordinal();
+        var old=at(2,20);
+        var lane=new WorldTopologyLedger.Registration(new PhysicalFluidTopology.Device(1,new PhysicalFluidTopology.Position("minecraft:overworld",0,12,0,3),Kind.PIPE,PhysicalFluidTopology.Direction.EAST,
+                old.device().geometry(),old.device().control(),List.of(),true,PhysicalFluidTopology.Cutoff.NONE,false,along,2,0),old.spec(),0);
+        var ledger=new WorldTopologyLedger(new WorldTopologyLedger.Snapshot(0,3,Map.of(1L,lane,2L,old),List.of(),WorldTopologyLedger.MaterialTotal.empty(),WorldTopologyLedger.MaterialTotal.empty()));
+        var tee=new WorldTopologyLedger.RackFrame(PhysicalFluidTopology.Direction.NORTH,WorldTopologyLedger.RackShape.TEE);
+        assertThrows(IllegalArgumentException.class,()->ledger.rack(2,tee),"a block takes no rack frame");
+        assertThrows(IllegalArgumentException.class,()->new WorldTopologyLedger.RackFrame(PhysicalFluidTopology.Direction.UP,WorldTopologyLedger.RackShape.STRAIGHT),"a rack faces a horizontal direction");
+        var before=ledger.snapshot();ledger.rack(1,tee);
+        assertEquals(tee,ledger.rack(1));assertNotSame(before.builds(),ledger.snapshot().builds());
+        var saved=ledger.snapshot();var restored=new WorldTopologyLedger(FluidCheckpointCodec.decodeTopology(FluidCheckpointCodec.encodeTopology(saved),saved.onlineTick(),NO_RECOVERIES));
+        assertEquals(Map.of(1L,tee),restored.snapshot().builds().racks(),"the frame survives a save");
+        ledger.commit(ledger.queue(List.of(new WorldTopologyLedger.Edit(1,null)),Set.of(1L),3));
+        assertEquals(tee,ledger.rack(1),"a queued removal keeps the frame");
+        ledger.commit(applyFirst(ledger,List.of(),List.of(),new double[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1],3));
+        assertNull(ledger.rack(1),"the applied removal took the frame");assertTrue(ledger.snapshot().builds().racks().isEmpty());
+    }
+    /**
      * A crystal is its component in another phase (owner decision D23): a pilot tank placed holding CO2 in N2 below its
      * frost point and broken after its refresh deposited CO2-I books the same component moles and total energy destroyed
      * as constructed. The dry ice enters the destroyed totals as CO2 moles with its true energy (its stored sensible part
@@ -112,6 +212,21 @@ class WorldTopologyLedgerTest {
         var ids=new ArrayList<>(MaterialCatalog.bundled().requirePackage("icheme:refinery").components());
         Collections.reverse(ids);record.add("components",FluidFactsCompatTest.entries(MaterialCatalog.bundled().requirePackage("icheme:refinery"),ids));resources.put(path,record.toString());
         return MaterialCatalog.parse(resources);
+    }
+    /**
+     * A load that names the current package on the same compounds ({@code withBasis}) keeps every fact. Main 0.23.4 kept
+     * only the column units: such a load dropped the shaft units, the electric stores and the pumps' health.
+     */
+    @Test void aNewNameForTheBasisKeepsEveryFact() {
+        var empty=WorldTopologyLedger.Snapshot.empty(MaterialCatalog.bundled());
+        var shaft=ShaftUnit.shaft(1,new PhysicalFluidTopology.Position("minecraft:overworld",0,64,0),0);
+        var saved=new WorldTopologyLedger.Snapshot(empty.onlineTick(),10,empty.active(),empty.events(),empty.constructed(),empty.destroyed(),empty.basis(),empty.recoveries(),
+                empty.restated(),empty.columns(),Map.of(1L,shaft),Map.of(1L,new com.wormzjl.icheme.science.machine.ElectricStore.Facts(5,true)),Map.of(2L,.5),
+                new WorldTopologyLedger.Builds(Map.of(3L,new WorldTopologyLedger.LinePaint(0x2271B3,0xA72920)),Map.of(),Map.of()));
+        var renamed=saved.withBasis(WorldTopologyLedger.FluidBasis.capture(FluidFactsCompatTest.renamed()));
+        assertNotEquals(saved.basis(),renamed.basis());
+        assertEquals(saved.shafts(),renamed.shafts(),"shaft units");assertEquals(saved.stores(),renamed.stores(),"electric stores");
+        assertEquals(saved.health(),renamed.health(),"pump health");assertEquals(saved.builds(),renamed.builds(),"build facts");
     }
     @Test void topologyWithoutAnyIslandStillRejectsAChangedIdentityAxis() {
         var original=MaterialCatalog.bundled();var saved=WorldTopologyLedger.Snapshot.empty(original);

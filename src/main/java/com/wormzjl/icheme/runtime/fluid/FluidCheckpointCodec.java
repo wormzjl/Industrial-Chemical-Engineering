@@ -194,7 +194,7 @@ public final class FluidCheckpointCodec {
      * totals, recoveries and identity counter) and its state (the queued events, the running columns' engine state), as a unit's two sections. It changes
      * only when the ledger commits, so a save keeps the unit of an unchanged ledger.
      */
-    public static byte[] encodeTopology(WorldTopologyLedger.Snapshot world){return sections(FluidFacts.world(world),FluidFacts.topologyState(world.events(),world.columns(),world.shafts()));}
+    public static byte[] encodeTopology(WorldTopologyLedger.Snapshot world){return sections(FluidFacts.world(world),FluidFacts.topologyState(world.events(),world.columns(),world.shafts(),world.active()));}
     /**
      * A topology {@link #encodeTopology} wrote, at {@code onlineTick}, validated as the ledger itself validates it. Its
      * pending recoveries' solids are read as records of its basis package, whose model {@code models} gives (asked only
@@ -216,13 +216,24 @@ public final class FluidCheckpointCodec {
         });
         // A running unit takes its engine state back; a state for a unit that is gone or stopped is dropped. A driver takes its
         // speed back (W3); one for a unit that is gone is dropped.
-        if(state.columns().isEmpty()&&state.shafts().isEmpty())return snapshot;
+        if(state.columns().isEmpty()&&state.shafts().isEmpty()&&state.held().isEmpty())return snapshot;
         var columns=new HashMap<>(snapshot.columns());
         state.columns().forEach((id,saved)->{var u=columns.get(id);if(u!=null&&u.running())columns.put(id,u.withState(saved));});
         var shafts=new HashMap<>(snapshot.shafts());
         state.shafts().forEach((id,saved)->{var u=shafts.get(id);if(u!=null)shafts.put(id,u.withState(saved));});
-        return new WorldTopologyLedger.Snapshot(snapshot.onlineTick(),snapshot.nextIdentity(),snapshot.active(),snapshot.events(),snapshot.constructed(),snapshot.destroyed(),snapshot.basis(),
-                snapshot.recoveries(),snapshot.restated(),Map.copyOf(columns),Map.copyOf(shafts),snapshot.stores(),snapshot.health());
+        // A held device or shaft part is held again (decision S11, W5c C1): the islands and trains were compiled with it apart.
+        var active=snapshot.active();
+        if(!state.held().isEmpty()) {
+            var holding=new HashMap<>(active);
+            for(long id:state.held()) {
+                var r=holding.get(id);
+                if(r==null){var u=shafts.get(id);if(u==null)throw new IllegalArgumentException("The topology's state holds device "+id+", which is not registered");shafts.put(id,u.withHeld(true));continue;}
+                holding.put(id,new WorldTopologyLedger.Registration(r.device().withHeld(true),r.spec(),r.revision()));
+            }
+            active=Map.copyOf(holding);
+        }
+        return new WorldTopologyLedger.Snapshot(snapshot.onlineTick(),snapshot.nextIdentity(),active,snapshot.events(),snapshot.constructed(),snapshot.destroyed(),snapshot.basis(),
+                snapshot.recoveries(),snapshot.restated(),Map.copyOf(columns),Map.copyOf(shafts),snapshot.stores(),snapshot.health(),snapshot.builds());
     }
     /** The facts of a topology unit; facts this build cannot read refuse the world. */
     static FluidFacts.World worldFacts(byte[] data,Sections s) {
@@ -233,7 +244,7 @@ public final class FluidCheckpointCodec {
      * immutable parts with the state it was taken from, so an unchanged ledger is the same objects. */
     public static boolean sameWorldBody(WorldTopologyLedger.Snapshot a,WorldTopologyLedger.Snapshot b) {
         return a.nextIdentity()==b.nextIdentity()&&a.active()==b.active()&&a.events()==b.events()&&a.constructed()==b.constructed()
-                &&a.destroyed()==b.destroyed()&&a.basis()==b.basis()&&a.recoveries()==b.recoveries()&&a.restated()==b.restated()&&a.columns()==b.columns();
+                &&a.destroyed()==b.destroyed()&&a.basis()==b.basis()&&a.recoveries()==b.recoveries()&&a.restated()==b.restated()&&a.columns()==b.columns()&&a.builds()==b.builds();
     }
     static byte[] topologyUnit(WorldTopologyLedger.Snapshot world,long generation) {
         var w=new Writer();header(w,TOPOLOGY,0,0,generation);w.raw(encodeTopology(world));return w.toByteArray();

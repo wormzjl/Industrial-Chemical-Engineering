@@ -127,7 +127,7 @@ public final class PowerNetwork {
         }
         if (revision != facts.topologyRevision()) {
             ports = facts.ports();
-            bus = new DataBus(facts.cables(), ports, CableMedium.POWER);
+            bus = new DataBus(facts.standing(), ports, CableMedium.POWER);
             grid = new PowerGrid(bus, ports, this::energy);
             revision = facts.topologyRevision();
         }

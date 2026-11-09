@@ -13,9 +13,11 @@ import java.util.Objects;
  * with shaft ends (its origin, its ends' world cells, its rated values, and for a casing or a turbine its fluid device
  * identity {@code fluid}). {@code settings} and {@code trip} are what the player set and what waits for the player's
  * reset; {@code state} is the engine's (a driver's speed), saved in the topology state section and rebuilt when dropped.
+ * {@code held} is the engine's too (registry first, batch 2026-11-03-save-corruption, W5c C1): the part's cell holds
+ * another block, so it joins no train until its block stands again. It is saved with the held devices, never as a fact.
  */
 public record ShaftUnit(long id,ShaftNetwork.Kind kind,PhysicalFluidTopology.Position position,int axis,List<End> ends,long fluid,
-                        double ratedPower,double designSpeed,int poles,MachineDuty.Drive drive,Settings settings,ShaftTrain.Trip trip,State state) {
+                        double ratedPower,double designSpeed,int poles,MachineDuty.Drive drive,Settings settings,ShaftTrain.Trip trip,State state,boolean held) {
     /** The most shaft ends a part has. */
     public static final int MAXIMUM_ENDS=8;
     /** A shaft end: the cell inside the coupling face, the face's outward step, and whether power leaves there. */
@@ -57,15 +59,21 @@ public record ShaftUnit(long id,ShaftNetwork.Kind kind,PhysicalFluidTopology.Pos
         for(var e:ends)if(!e.cell().dimension().equals(position.dimension()))throw new IllegalArgumentException("A shaft end in another dimension");
         if(!(ratedPower>=0)||!(designSpeed>=0)||!Double.isFinite(ratedPower+designSpeed)||poles!=0&&!MachineDuty.POLES.contains(poles))throw new IllegalArgumentException("Invalid shaft unit rating");
     }
+    /** A part that is not held. */
+    public ShaftUnit(long id,ShaftNetwork.Kind kind,PhysicalFluidTopology.Position position,int axis,List<End> ends,long fluid,
+                     double ratedPower,double designSpeed,int poles,MachineDuty.Drive drive,Settings settings,ShaftTrain.Trip trip,State state) {
+        this(id,kind,position,axis,ends,fluid,ratedPower,designSpeed,poles,drive,settings,trip,state,false);
+    }
     /** A shaft block. */
     public static ShaftUnit shaft(long id,PhysicalFluidTopology.Position cell,int axis) {
         return new ShaftUnit(id,ShaftNetwork.Kind.SHAFT,cell,axis,List.of(),0,0,0,0,MachineDuty.Drive.FIXED,Settings.DEFAULT,ShaftTrain.Trip.NONE,null);
     }
-    public ShaftUnit withSettings(Settings value){return new ShaftUnit(id,kind,position,axis,ends,fluid,ratedPower,designSpeed,poles,drive,value,trip,state);}
-    public ShaftUnit withTrip(ShaftTrain.Trip value){return new ShaftUnit(id,kind,position,axis,ends,fluid,ratedPower,designSpeed,poles,drive,settings,value,state);}
-    public ShaftUnit withState(State value){return new ShaftUnit(id,kind,position,axis,ends,fluid,ratedPower,designSpeed,poles,drive,settings,trip,value);}
+    public ShaftUnit withSettings(Settings value){return new ShaftUnit(id,kind,position,axis,ends,fluid,ratedPower,designSpeed,poles,drive,value,trip,state,held);}
+    public ShaftUnit withTrip(ShaftTrain.Trip value){return new ShaftUnit(id,kind,position,axis,ends,fluid,ratedPower,designSpeed,poles,drive,settings,value,state,held);}
+    public ShaftUnit withState(State value){return new ShaftUnit(id,kind,position,axis,ends,fluid,ratedPower,designSpeed,poles,drive,settings,trip,value,held);}
+    public ShaftUnit withHeld(boolean value){return value==held?this:new ShaftUnit(id,kind,position,axis,ends,fluid,ratedPower,designSpeed,poles,drive,settings,trip,state,value);}
     /** These facts without the engine's state: what a facts comparison reads. */
-    public ShaftUnit facts(){return state==null?this:withState(null);}
+    public ShaftUnit facts(){return state==null&&!held?this:new ShaftUnit(id,kind,position,axis,ends,fluid,ratedPower,designSpeed,poles,drive,settings,trip,null,false);}
     /** The part the train compiler reads. */
     public ShaftNetwork.Part part() {
         if(kind==ShaftNetwork.Kind.SHAFT)return ShaftNetwork.Part.shaft(id,cell(position),axis);

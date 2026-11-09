@@ -107,8 +107,9 @@ public final class FluidDeviceBlockEntity extends ModelledBlockEntity implements
     private int joints = PhysicalFluidTopology.ALL_FACES;
     /**
      * The paint of a laid line (batch 2026-10-26-pipe-laying-system), 0xRRGGBB, or bare steel: a fact the player chose
-     * with the laying tool, kept on the block as a vessel's paint is kept on its cells. Saved only when painted, so a
-     * pipe saved before paint existed reads bare, as it looked. This is the primary paint, the pipe's.
+     * with the laying tool. The registry holds it; the block keeps a copy to draw, taken at bind ({@link #restatePaint}).
+     * Saved only when painted, so a pipe saved before paint existed reads bare, as it looked. This is the primary paint,
+     * the pipe's.
      */
     private int paint = com.wormzjl.icheme.science.equipment.Paint.BARE;
     /**
@@ -130,13 +131,51 @@ public final class FluidDeviceBlockEntity extends ModelledBlockEntity implements
     public String name(){return name;}
     /** Whether this device opens a screen, and so takes a name: a pressure valve, a filter or a mover on a pipe, a pipe with sensors, every other kind. */
     public boolean nameable(){var state=getBlockState();return kind()!=TopologyCompiler.Kind.PIPE||FluidDeviceBlock.hasPressureValve(state)||FluidDeviceBlock.hasFilter(state)||FluidDeviceBlock.hasMover(state)||!instruments.sensors().isEmpty();}
-    /** Server: names this device {@code next} (cleaned) and sends it to the clients, as its paint: a drawing fact, not process state. */
-    public void rename(String next){String cleaned=com.wormzjl.icheme.science.equipment.DeviceName.clean(next);if(cleaned.equals(name))return;name=cleaned;sync();}
-    /** Server: paints this pipe (the laying tool's paints at a lay) and redraws it. */
-    public void paint(int primary,int secondary){
-        if(!com.wormzjl.icheme.science.equipment.Paint.line(primary)||!com.wormzjl.icheme.science.equipment.Paint.line(secondary))throw new IllegalArgumentException("A line's paint is 0xRRGGBB or bare");
-        if(paint==primary&&this.secondary==secondary)return;paint=primary;this.secondary=secondary;sync();
+    /**
+     * Server: names this device {@code next} (cleaned) and sends it to the clients, as its paint: a fact the registry holds
+     * (registry first, W5c C4), which this block keeps a copy of to draw.
+     */
+    public void rename(String next) {
+        String cleaned=com.wormzjl.icheme.science.equipment.DeviceName.clean(next);if(cleaned.equals(name))return;name=cleaned;
+        if(identity!=0&&level instanceof ServerLevel server)FluidWorldAuthority.find(server.getServer()).ifPresent(w->w.name(identity,cleaned));
+        sync();
     }
+    /**
+     * Server: the line's paint as the registry holds it, which this block keeps a copy of to draw (registry first, batch
+     * 2026-11-03-save-corruption). A painted block whose line the registry holds bare teaches it its paint: a world saved
+     * before the registry held paint, or a block registered from what it holds. Whether the copy changed.
+     */
+    /**
+     * Server: the device's name as the registry holds it, as {@link #restatePaint} does for paint. A named block whose
+     * device the registry holds unnamed teaches it its name: a world saved before the registry held names. Whether the
+     * copy changed.
+     */
+    private boolean restateName(FluidWorldAuthority world,long id) {
+        var held=world.deviceName(id);
+        if(held.isEmpty()){if(!name.isEmpty())world.name(id,name);return false;}
+        if(held.equals(name))return false;
+        name=held;return true;
+    }
+    private boolean restatePaint(FluidWorldAuthority world,long id) {
+        var held=world.linePaint(id);
+        if(held==null){if(paint!=com.wormzjl.icheme.science.equipment.Paint.BARE||secondary!=com.wormzjl.icheme.science.equipment.Paint.BARE)world.paint(id,paint,secondary);return false;}
+        if(held.primary()==paint&&held.secondary()==secondary)return false;
+        paint=held.primary();secondary=held.secondary();return true;
+    }
+    /**
+     * Server: binds registered device {@code d} at this block, or marks it loaded when already bound; either way the block
+     * takes its build facts. A device this block does not stand for, of another kind or not of one block, is not bound:
+     * the re-alignment sets the block the registry holds (REGISTRY_FIRST_PLAN.md 4.3). Whether it is bound.
+     */
+    public boolean bind(FluidWorldAuthority world,PhysicalFluidTopology.Device d) {
+        if(!standsFor(d))return false;
+        long id=d.id();
+        if(identity!=id){bindIdentity(id);return true;}
+        world.deviceLoaded(id);if(restatePaint(world,id)|restateName(world,id))sync();
+        return true;
+    }
+    /** Whether this block is the one {@code d} stands as: one block of {@code d}'s kind. */
+    public boolean standsFor(PhysicalFluidTopology.Device d){return d.kind()==kind()&&d.ports().isEmpty()&&d.position().lane()==0;}
     @Override public long fluidIdentity(){return identity;}
     public TopologyCompiler.Kind kind(){return ((FluidDeviceBlock)getBlockState().getBlock()).kind();}
     /** The bore the line has at this block: a pipe's or filter's own, else that of a pipe it meets (0 when none). */
@@ -150,8 +189,9 @@ public final class FluidDeviceBlockEntity extends ModelledBlockEntity implements
             var p=new PhysicalFluidTopology.Position(level.dimension().location().toString(),worldPosition.getX(),worldPosition.getY(),worldPosition.getZ());
             var record=world.at(p).orElseThrow();
             if(record.device().id()!=id)throw new IllegalStateException("Fluid identity belongs to a different position");
+            if(!standsFor(record.device()))throw new IllegalStateException("Fluid identity belongs to another kind of device");
             bore=record.device().geometry().diameter();joints=record.device().joints();
-            computeFaces();
+            restatePaint(world,id);restateName(world,id);computeFaces();
         }
         identity=id;com.wormzjl.icheme.runtime.instrument.InstrumentHosts.loaded(this);setChanged();
         if(level instanceof ServerLevel serverLevel){FluidWorldAuthority.find(serverLevel.getServer()).ifPresent(w->w.deviceLoaded(id));level.sendBlockUpdated(worldPosition,getBlockState(),getBlockState(),2);}
@@ -164,7 +204,7 @@ public final class FluidDeviceBlockEntity extends ModelledBlockEntity implements
         FluidWorldAuthority.find(serverLevel.getServer()).ifPresent(world->{
             var p=new PhysicalFluidTopology.Position(level.dimension().location().toString(),worldPosition.getX(),worldPosition.getY(),worldPosition.getZ());
             world.at(p).ifPresent(record->{
-                if(identity!=record.device().id())bindIdentity(record.device().id());else world.deviceLoaded(identity);
+                if(!bind(world,record.device()))return;
                 // Drawn geometry: onLoad runs once the chunk is in the level (Level.tickBlockEntities), so its loaded
                 // neighbours are readable; a neighbour loaded before this block drew no line here, so both sides refresh.
                 // The joints come from the registry, which knows a neighbour in a chunk that is not loaded
@@ -191,10 +231,7 @@ public final class FluidDeviceBlockEntity extends ModelledBlockEntity implements
                 if(joints!=d.joints()){joints=d.joints();jointsChanged=true;neighbours=true;}
                 // The fitting as the engine classifies it (batch 2026-11-09-drawn-connections): an in-line machine draws
                 // as the pump or compressor it is, whatever law it runs.
-                var hydraulic=d.hydraulicKind();
-                updated=updated.setValue(FluidDeviceBlock.PRESSURE_CONTROL,hydraulic==TopologyCompiler.Kind.VALVE)
-                        .setValue(FluidDeviceBlock.INLINE_FILTER,hydraulic==TopologyCompiler.Kind.FILTER)
-                        .setValue(FluidDeviceBlock.INLINE_MOVER,FluidDeviceBlock.InlineMover.of(hydraulic));
+                updated=FluidDeviceBlock.fitted(updated,d);
                 if(d.cutoff()==PhysicalFluidTopology.Cutoff.NONE)updated=updated.setValue(FluidDeviceBlock.SHUTOFF,FluidDeviceBlock.Shutoff.NONE);
                 else if(committed!=null&&committed.cutoff()!=PhysicalFluidTopology.Cutoff.NONE)
                     updated=updated.setValue(FluidDeviceBlock.SHUTOFF,FluidDeviceBlock.Shutoff.of(committed.cutoff()));
