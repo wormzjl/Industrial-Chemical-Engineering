@@ -122,6 +122,24 @@ class WorldTopologyLedgerTest {
         assertArrayEquals(FluidFacts.world(released),FluidFacts.world(applied),"a registration's facts never carry its hold");
     }
     /**
+     * A held shaft part (W5c C1) is state too: the topology unit carries it beside the held devices, by identity, through
+     * an exact load, and the facts never carry it.
+     */
+    @Test void aHeldShaftPartIsStateTheTopologyUnitCarries() {
+        var ledger=new WorldTopologyLedger(new WorldTopologyLedger.Snapshot(0,3,Map.of(1L,at(1,0),2L,at(2,20)),List.of(),WorldTopologyLedger.MaterialTotal.empty(),WorldTopologyLedger.MaterialTotal.empty()));
+        var cell=new PhysicalFluidTopology.Position(at(1,0).device().position().dimension(),5,70,5);
+        long free=ledger.reserve(1),held=ledger.reserve(1);
+        ledger.shaft(ShaftUnit.shaft(free,cell,0));ledger.shaft(ShaftUnit.shaft(held,new PhysicalFluidTopology.Position(cell.dimension(),6,70,5),0).withHeld(true));
+        var saved=ledger.snapshot();
+        var exact=FluidCheckpointCodec.decodeTopology(FluidCheckpointCodec.encodeTopology(saved),saved.onlineTick(),NO_RECOVERIES);
+        assertTrue(exact.shafts().get(held).held(),"a held part survives an exact load");
+        assertFalse(exact.shafts().get(free).held(),"a free part stays free");
+        var shafts=new HashMap<>(saved.shafts());shafts.put(held,shafts.get(held).withHeld(false));
+        var released=new WorldTopologyLedger.Snapshot(saved.onlineTick(),saved.nextIdentity(),saved.active(),List.of(),saved.constructed(),saved.destroyed(),saved.basis(),
+                saved.recoveries(),saved.restated(),saved.columns(),Map.copyOf(shafts),saved.stores(),saved.health(),saved.builds());
+        assertArrayEquals(FluidFacts.world(released),FluidFacts.world(saved),"a part's facts never carry its hold");
+    }
+    /**
      * A line's paint leaves with its identity when the removal applies, whatever removed it (REGISTRY_FIRST_PLAN.md 3.3).
      * A queued removal keeps it: a removal that never applies leaves the line, painted.
      */

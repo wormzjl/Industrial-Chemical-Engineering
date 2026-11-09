@@ -536,7 +536,8 @@ final class FluidFacts {
     }
     /**
      * The topology unit's state: its queued events, each with the registrations it would install; then the running column
-     * units' engine state ({@link ColumnUnit.State}), by unit; then the held devices of {@code active}, by identity. An
+     * units' engine state ({@link ColumnUnit.State}), by unit; then the held devices of {@code active} and the held shaft
+     * parts (W5c C1), by identity. An
      * event lists, after its recovery, the edits whose replacement is held. Holding is state (decision S11, batch
      * 2026-11-03-save-corruption): a registration's facts never carry it. A checkpoint written before the column states, or
      * before holding, has none.
@@ -548,7 +549,7 @@ final class FluidFacts {
     static byte[] topologyState(List<WorldTopologyLedger.Event> events,Map<Long,ColumnUnit> columns,Map<Long,ShaftUnit> shafts,Map<Long,WorldTopologyLedger.Registration> active) {
         var states=new ArrayList<ColumnUnit>();for(var u:columns.values())if(u.state()!=null)states.add(u);states.sort(Comparator.comparingLong(ColumnUnit::id));
         var speeds=new ArrayList<ShaftUnit>();for(var u:shafts.values())if(u.state()!=null)speeds.add(u);speeds.sort(Comparator.comparingLong(ShaftUnit::id));
-        var held=new ArrayList<Long>();for(var r:active.values())if(r.device().held())held.add(r.device().id());Collections.sort(held);
+        var held=new ArrayList<Long>();for(var r:active.values())if(r.device().held())held.add(r.device().id());for(var u:shafts.values())if(u.held())held.add(u.id());Collections.sort(held);
         return section(f->f.list(events,(q,event)->{uuid(q,event.id());q.count(event.tick());
             q.list(event.edits(),(e,edit)->e.count(edit.id()).list(edit.replacement()==null?List.<WorldTopologyLedger.Registration>of():List.of(edit.replacement()),FluidFacts::registration));
             var touched=new ArrayList<>(event.touched());Collections.sort(touched);q.list(touched,(t,id)->t.count(id));
@@ -561,7 +562,7 @@ final class FluidFacts {
     static byte[] events(List<WorldTopologyLedger.Event> events){return topologyState(events,Map.of());}
     /**
      * A topology unit's state: its events, the column states that validate (one that does not is dropped: that unit solves
-     * again), the shaft drivers' speeds (W3), and the identities of its held devices.
+     * again), the shaft drivers' speeds (W3), and the identities of its held devices and shaft parts.
      */
     record TopologyState(List<WorldTopologyLedger.Event> events,Map<Long,ColumnUnit.State> columns,Map<Long,ShaftUnit.State> shafts,Set<Long> held) {}
     static TopologyState topologyState(byte[] data,int offset,int length) {

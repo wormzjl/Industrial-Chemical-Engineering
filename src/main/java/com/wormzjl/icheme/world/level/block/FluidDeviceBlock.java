@@ -175,6 +175,8 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
     static boolean registered;
     /** Runs {@code change} with {@link #registered} set: block edits that follow the registry, never edit it. */
     public static void quietly(Runnable change){boolean was=registered;registered=true;try{change.run();}finally{registered=was;}}
+    /** Whether a block edit now follows the registry ({@link #quietly}): a shaft part block queues no part for it (W5c C1). */
+    public static boolean quiet(){return registered;}
     /**
      * The block state registered device {@code d} stands as (registry first, batch 2026-11-03-save-corruption,
      * REGISTRY_FIRST_PLAN.md 4.3): its kind's block with its facing and fittings, the inverse of what {@link #onPlace} and

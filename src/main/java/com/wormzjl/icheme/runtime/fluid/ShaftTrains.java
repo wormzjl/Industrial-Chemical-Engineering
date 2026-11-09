@@ -34,7 +34,15 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
     static final int GOVERNOR_WALK = 64;
 
     /** A queued change to the parts. */
-    public sealed interface Event permits Put, Remove, Configure, Reset, Governor, CreateInput {
+    public sealed interface Event permits Put, Remove, Configure, Reset, Governor, CreateInput, Hold {
+    }
+
+    /**
+     * Part {@code unit} is held, or released (registry first, batch 2026-11-03-save-corruption, W5c C1, option Q1): the
+     * re-alignment found another block in its cell, or found its block standing again. A held part joins no train, so its
+     * train splits there.
+     */
+    public record Hold(long unit, boolean on) implements Event {
     }
 
     /**
@@ -278,6 +286,14 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
                     fresh(u.id());
                 }
                 case Governor governor -> governors.add(governor);
+                case Hold hold -> {
+                    var u = topology.shaft(hold.unit());
+                    if (u == null || u.held() == hold.on()) continue;
+                    var next = u.withHeld(hold.on());
+                    topology.shaft(next);
+                    index.put(next.position(), next);
+                    recompile = true;
+                }
                 case CreateInput input -> {
                     // Create's speed or spare moved (W6b): the coupling's train steps at the next decision point. Its
                     // impact is sent again after it, in case the block entity reloaded since the last one (reading A147).
@@ -330,7 +346,8 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
     private void compile() {
         var units = topology.shafts();
         var oldLoads=Set.copyOf(createLoads);
-        var parts=new HashMap<Long,ShaftNetwork.Part>();units.values().forEach(u->parts.put(u.id(),u.part()));
+        // A held part stands for nothing physical, so its train splits there (W5c C1).
+        var parts=new HashMap<Long,ShaftNetwork.Part>();units.values().forEach(u->{if(!u.held())parts.put(u.id(),u.part());});
         // First find physical trains. A real industrial driver owns its train; connected Create endpoints are loads.
         var physical=ShaftNetwork.compile(parts.values());createDrivers.clear();createLoads.clear();
         for(var train:physical) {
@@ -852,7 +869,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         Long key = trainOf.get(unit);
         var run = key == null ? null : runs.get(key);
         var store = electric == null ? null : electric.view(unit);
-        if (run == null) return new View(unit, u.kind(), u.kind() == ShaftNetwork.Kind.SHAFT ? "LOOSE" : "NO DRIVER", 0, 0, 0, 0, 0, 0, 0, u.settings(), u.trip(), store);
+        if (run == null) return new View(unit, u.kind(), u.held() ? "HELD" : u.kind() == ShaftNetwork.Kind.SHAFT ? "LOOSE" : "NO DRIVER", 0, 0, 0, 0, 0, 0, 0, u.settings(), u.trip(), store);
         var train = run.train;
         var d = train.driver() == 0 ? null : topology.shaft(train.driver());
         double driverSpeed = train.fault() == ShaftNetwork.Fault.NONE && d != null && d.state() != null ? d.state().speed() : 0;
@@ -884,6 +901,11 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
     }
     public List<ShaftUnit> units() {
         return List.copyOf(topology.shafts().values());
+    }
+
+    /** The size shaft block {@code unit} was last drawn at, or the default before its train drew it (a read; the re-alignment places a lost block at it). */
+    public int drawnSize(long unit) {
+        return sizes.getOrDefault(unit, com.wormzjl.icheme.world.level.block.ShaftBlock.DEFAULT_SIZE);
     }
 
     /** Unit {@code unit} as the ledger holds it, or null (a read; W7's pages). */

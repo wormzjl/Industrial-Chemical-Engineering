@@ -472,6 +472,12 @@ public final class WorldTopologyLedger {
     public Map<Long,ShaftUnit> shafts(){owned();return Map.copyOf(shafts);}
     /** The shaft unit {@code id}, or null. */
     public ShaftUnit shaft(long id){owned();return shafts.get(id);}
+    /** The shaft units whose cell is in chunk {@code chunk} of {@code dimension}, by identity order of placement (registry first, W5c C1; a scan, as {@link #shaft(ShaftUnit)} makes). */
+    public List<Long> shaftsIn(String dimension,long chunk) {
+        owned();var out=new ArrayList<Long>();
+        for(var u:shafts.values())if(u.position().dimension().equals(dimension)&&PhysicalRegistry.chunkOf(u.position())==chunk)out.add(u.id());
+        return out;
+    }
     /** Installs or replaces a shaft unit. A new one takes an identity reserved below {@link #nextIdentity()}. */
     public void shaft(ShaftUnit unit) {
         owned();if(unit.id()>=nextIdentity||active.containsKey(unit.id())||latest.containsKey(unit.id())||columns.containsKey(unit.id()))throw new IllegalArgumentException("Invalid shaft unit identity");

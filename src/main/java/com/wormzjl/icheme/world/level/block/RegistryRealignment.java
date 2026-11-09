@@ -5,6 +5,8 @@ import com.wormzjl.icheme.registry.ModBlocks;
 import com.wormzjl.icheme.runtime.fluid.FluidRuntimeDiagnostics;
 import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
 import com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology;
+import com.wormzjl.icheme.runtime.fluid.ShaftTrains;
+import com.wormzjl.icheme.runtime.fluid.ShaftUnit;
 import com.wormzjl.icheme.runtime.fluid.WorldTopologyLedger;
 import com.wormzjl.icheme.runtime.instrument.Instrument;
 import com.wormzjl.icheme.science.equipment.RackGeometry;
@@ -39,6 +41,12 @@ import java.util.List;
  * A held registration whose block or lane stands again is released. A registration is served once its own chunk is
  * loaded. Its block draws the joints the network makes from the registry ({@link FluidDeviceBlock#connectedState}, batch
  * 2026-11-09-drawn-connections), so a neighbour in a chunk that is not loaded is known by its registration.
+ *
+ * <p>A shaft part (batch 2026-11-03-save-corruption, W5C_NEW_MODULES_PLAN.md C1) is checked at its cell after the devices,
+ * in the same budget: a shaft block on its axis, a creative motor facing its end, a Create coupling with its shaft side
+ * at its end (with Create loaded). Its block standing turned another way is turned back; a free cell gets its block, a shaft
+ * at the size its train drew it. Any other block there holds the part, which joins no train until its block stands again
+ * (option Q1). A structure's part is its structure's to re-align.</p>
  *
  * <p>A structure the registry records (plan 4.4) is checked once every chunk of its box and of the blocks beside it is
  * block-ticking, after the layout refresh when that has it queued: one whose cells stand as its record says is left as it
@@ -76,6 +84,14 @@ public final class RegistryRealignment {
             } catch (RuntimeException failed) {
                 tally.checked++;
                 IChemE.LOGGER.error("fluid_realign failed device={}", id, failed);
+            }
+        }
+        for (long id; tally.checked < DEVICES && System.nanoTime() - start < BUDGET_NANOS && (id = world.nextShaftRealignment(dimension)) != 0; ) {
+            try {
+                tally.add(shaft(level, world, id));
+            } catch (RuntimeException failed) {
+                tally.checked++;
+                IChemE.LOGGER.error("fluid_realign failed shaft={}", id, failed);
             }
         }
         EquipmentStructure.serveRealignment(level, world, start + BUDGET_NANOS, STRUCTURES, tally::add);
@@ -157,6 +173,59 @@ public final class RegistryRealignment {
             outcome = Outcome.PLACED;
         } else return hold(world, d);
         return new Check(outcome, d.held() && world.hold(d.id(), false));
+    }
+
+    /** Re-aligns the cell of shaft part {@code id} of {@code level}'s dimension to it (W5c C1). */
+    public static Check shaft(ServerLevel level, FluidWorldAuthority world, long id) {
+        var trains = world.shafts();
+        var u = trains.unit(id);
+        if (u == null || !u.position().dimension().equals(level.dimension().location().toString())) return Check.NONE;
+        var at = new BlockPos(u.position().x(), u.position().y(), u.position().z());
+        if (!level.hasChunkAt(at)) return Check.NONE;
+        var wanted = shaftState(u, trains.drawnSize(id));
+        if (wanted == null) return Check.NONE;
+        var present = level.getBlockState(at);
+        Outcome outcome;
+        if (present.getBlock() == wanted.getBlock()) {
+            boolean turned = u.kind() == com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.SHAFT ? present.getValue(ShaftBlock.AXIS) != wanted.getValue(ShaftBlock.AXIS)
+                    : facing(present) != facing(wanted);
+            if (turned) FluidDeviceBlock.quietly(() -> level.setBlock(at, wanted, Block.UPDATE_ALL));
+            outcome = turned ? Outcome.RESTATED : Outcome.NOTHING;
+        } else if (present.isAir() || present.canBeReplaced()) {
+            FluidDeviceBlock.quietly(() -> level.setBlock(at, wanted, Block.UPDATE_ALL));
+            outcome = Outcome.PLACED;
+        } else {
+            if (u.held()) return Check.NONE;
+            trains.queue(new ShaftTrains.Hold(id, true));
+            return new Check(Outcome.HELD, false);
+        }
+        if (u.held()) trains.queue(new ShaftTrains.Hold(id, false));
+        return new Check(outcome, u.held());
+    }
+
+    /**
+     * The block that stands for shaft part {@code u}, a shaft drawn at {@code size}: null for a structure's part, or for a
+     * coupling without Create (the load forgets those parts, ShaftTrains.forget).
+     */
+    private static @Nullable BlockState shaftState(ShaftUnit u, int size) {
+        return switch (u.kind()) {
+            case SHAFT -> ModBlocks.SHAFT.get().defaultBlockState().setValue(ShaftBlock.AXIS, Direction.Axis.values()[u.axis()]).setValue(ShaftBlock.SIZE, size);
+            case CREATIVE_MOTOR -> ModBlocks.CREATIVE_MOTOR.get().defaultBlockState().setValue(CreativeMotorBlock.FACING, end(u));
+            case CREATE_COUPLING -> ShaftParts.couplingState(end(u));
+            default -> null;
+        };
+    }
+
+    /** The direction part {@code u}'s one shaft end leaves along. */
+    private static Direction end(ShaftUnit u) {
+        var e = u.ends().getFirst();
+        return java.util.Objects.requireNonNull(Direction.fromDelta(e.dx(), e.dy(), e.dz()));
+    }
+
+    /** A creative motor's or a coupling's facing. */
+    private static @Nullable Direction facing(BlockState state) {
+        for (var p : state.getProperties()) if (p.getName().equals("facing") && p.getValueClass() == Direction.class) return (Direction) state.getValue(p);
+        return null;
     }
 
     private static Check hold(FluidWorldAuthority world, PhysicalFluidTopology.Device d) {

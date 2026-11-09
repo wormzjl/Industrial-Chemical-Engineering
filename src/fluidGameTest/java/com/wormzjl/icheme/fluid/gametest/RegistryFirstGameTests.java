@@ -15,11 +15,13 @@ import com.wormzjl.icheme.science.equipment.PipeSizes;
 import com.wormzjl.icheme.science.equipment.ShapeRasterizer;
 import com.wormzjl.icheme.science.fluid.network.PassiveNetwork;
 import com.wormzjl.icheme.world.item.PipelineToolItem;
+import com.wormzjl.icheme.world.level.block.CreativeMotorBlock;
 import com.wormzjl.icheme.world.level.block.EquipmentStructure;
 import com.wormzjl.icheme.world.level.block.FluidDeviceBlock;
 import com.wormzjl.icheme.world.level.block.PipeAnchor;
 import com.wormzjl.icheme.world.level.block.PipeRackBlock;
 import com.wormzjl.icheme.world.level.block.RegistryRealignment;
+import com.wormzjl.icheme.world.level.block.ShaftBlock;
 import com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity;
 import com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity;
 import com.wormzjl.icheme.world.level.block.entity.PipeRackBlockEntity;
@@ -645,6 +647,119 @@ public final class RegistryFirstGameTests {
                     if (failure[0] != null) helper.fail(failure[0]);
                 })
                 .thenSucceed();
+    }
+
+    /**
+     * W5c C1, GameTest k: a shaft line whose blocks were lost comes back from its parts. A creative motor drives three
+     * shafts. Behind the engine's back the motor and the middle shaft are lost and the first shaft is turned across. The
+     * re-alignment places the motor facing its end and the shaft on its axis at its drawn size, turns the first back, and
+     * the line turns whole with the same parts.
+     */
+    @GameTest(template = "empty", timeoutTicks = 1200, batch = "registry-first-modules")
+    public static void aLostShaftLineComesBackAndTurnsWhole(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var world = FluidWorldAuthority.find(level.getServer()).orElseThrow();
+        var motor = helper.absolutePos(new BlockPos(1, 1, 1));
+        var line = List.of(motor.east(), motor.east(2), motor.east(3));
+        var cells = new ArrayList<BlockPos>(List.of(motor));
+        cells.addAll(line);
+        shaftLine(level, motor, line);
+        String[] failure = {null};
+        long[] ids = new long[cells.size()];
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(turns(world, level, line.getLast()), "Waiting for the line to turn"))
+                .thenExecute(() -> {
+                    for (int i = 0; i < ids.length; i++) ids[i] = world.shafts().unitAt(position(level, cells.get(i))).id();
+                    FluidDeviceBlock.quietly(() -> {
+                        level.setBlock(motor, Blocks.AIR.defaultBlockState(), 3);
+                        level.setBlock(line.get(1), Blocks.AIR.defaultBlockState(), 3);
+                        level.setBlock(line.getFirst(), level.getBlockState(line.getFirst()).setValue(ShaftBlock.AXIS, Direction.Axis.Z), 3);
+                    });
+                    if (world.shafts().unitAt(position(level, motor)) == null) failure[0] = "the lost motor's part left";
+                    requeue(world, level, cells);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(level.getBlockState(motor).is(ModBlocks.CREATIVE_MOTOR.get())
+                        && level.getBlockState(motor).getValue(CreativeMotorBlock.FACING) == Direction.EAST
+                        && line.stream().allMatch(at -> level.getBlockState(at).is(ModBlocks.SHAFT.get()) && level.getBlockState(at).getValue(ShaftBlock.AXIS) == Direction.Axis.X),
+                        "Waiting for the line's blocks to stand again"))
+                .thenWaitUntil(() -> helper.assertTrue(turns(world, level, line.getLast()), "Waiting for the line to turn whole again"))
+                .thenExecute(() -> {
+                    for (int i = 0; i < ids.length; i++) {
+                        var u = world.shafts().unitAt(position(level, cells.get(i)));
+                        if (failure[0] == null && (u == null || u.id() != ids[i] || u.held())) failure[0] = "part " + i + " is not the part it was: " + u;
+                    }
+                    if (failure[0] == null && level.getBlockState(line.get(1)).getValue(ShaftBlock.SIZE) != world.shafts().drawnSize(ids[2]))
+                        failure[0] = "the shaft came back at size " + level.getBlockState(line.get(1)).getValue(ShaftBlock.SIZE) + ", drawn " + world.shafts().drawnSize(ids[2]);
+                    for (var at : cells) level.setBlock(at, Blocks.AIR.defaultBlockState(), 3);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(cells.stream().allMatch(at -> world.shafts().unitAt(position(level, at)) == null), "Waiting for the line's parts to leave"))
+                .thenExecute(() -> {
+                    if (failure[0] != null) helper.fail(failure[0]);
+                })
+                .thenSucceed();
+    }
+
+    /**
+     * W5c C1, GameTest n (option Q1): a stone where a shaft stood holds the shaft, and its train splits there: the shaft
+     * before it turns, the one past it stops, and the stone stays. Once the cell is free, the shaft stands again, is
+     * released, and the line turns whole.
+     */
+    @GameTest(template = "empty", timeoutTicks = 1200, batch = "registry-first-modules")
+    public static void aBlockedShaftCellSplitsItsTrainUntilItIsFree(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var world = FluidWorldAuthority.find(level.getServer()).orElseThrow();
+        var motor = helper.absolutePos(new BlockPos(1, 1, 3));
+        var line = List.of(motor.east(), motor.east(2), motor.east(3));
+        var cells = new ArrayList<BlockPos>(List.of(motor));
+        cells.addAll(line);
+        var middle = line.get(1);
+        shaftLine(level, motor, line);
+        String[] failure = {null};
+        long[] id = {0};
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(turns(world, level, line.getLast()), "Waiting for the line to turn"))
+                .thenExecute(() -> {
+                    id[0] = world.shafts().unitAt(position(level, middle)).id();
+                    FluidDeviceBlock.quietly(() -> level.setBlock(middle, Blocks.STONE.defaultBlockState(), 3));
+                    requeue(world, level, cells);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(heldShaft(world, id[0]) && turns(world, level, line.getFirst()) && !turns(world, level, line.getLast()),
+                        "Waiting for the blocked shaft to be held and its train to split"))
+                .thenExecute(() -> {
+                    if (!level.getBlockState(middle).is(Blocks.STONE)) failure[0] = "the stone was overwritten";
+                    var view = world.shafts().view(id[0]);
+                    if (failure[0] == null && (view == null || !view.status().equals("HELD"))) failure[0] = "the held shaft's page does not say HELD: " + view;
+                    level.setBlock(middle, Blocks.AIR.defaultBlockState(), 3);
+                    requeue(world, level, cells);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(level.getBlockState(middle).is(ModBlocks.SHAFT.get()) && !heldShaft(world, id[0]) && turns(world, level, line.getLast()),
+                        "Waiting for the shaft to stand, be released and the line to turn whole"))
+                .thenExecute(() -> {
+                    for (var at : cells) level.setBlock(at, Blocks.AIR.defaultBlockState(), 3);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(cells.stream().allMatch(at -> world.shafts().unitAt(position(level, at)) == null), "Waiting for the line's parts to leave"))
+                .thenExecute(() -> {
+                    if (failure[0] != null) helper.fail(failure[0]);
+                })
+                .thenSucceed();
+    }
+
+    /** A creative motor at {@code motor} facing east, and shafts along X at {@code line}, placed as a player places them. */
+    private static void shaftLine(ServerLevel level, BlockPos motor, List<BlockPos> line) {
+        level.setBlock(motor, ModBlocks.CREATIVE_MOTOR.get().defaultBlockState().setValue(CreativeMotorBlock.FACING, Direction.EAST), 3);
+        for (var at : line) level.setBlock(at, ModBlocks.SHAFT.get().defaultBlockState().setValue(ShaftBlock.AXIS, Direction.Axis.X), 3);
+    }
+
+    /** Whether the shaft part at {@code at} turns. */
+    private static boolean turns(FluidWorldAuthority world, ServerLevel level, BlockPos at) {
+        var u = world.shafts().unitAt(position(level, at));
+        var view = u == null ? null : world.shafts().view(u.id());
+        return view != null && view.speed() > 0;
+    }
+
+    private static boolean heldShaft(FluidWorldAuthority world, long id) {
+        var u = world.shafts().unit(id);
+        return u != null && u.held();
     }
 
     /** The cells of {@code layout} at {@code origin}, shell first. */

@@ -44,6 +44,7 @@ public final class CreateCompat {
         BLOCKS.register(modBus);
         ITEMS.register(modBus);
         BLOCK_ENTITIES.register(modBus);
+        com.wormzjl.icheme.world.level.block.ShaftParts.couplingBlock(facing -> COUPLING.get().defaultBlockState().setValue(CreateCouplingBlock.FACING, facing));
         modBus.addListener(CreateCompat::tab);
         if (FMLEnvironment.dist.isClient()) CreateCompatClient.register(modBus);
     }

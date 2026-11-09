@@ -65,6 +65,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
     /** Registrations whose chunk loaded, by dimension, each queued once until the re-alignment checks it (REGISTRY_FIRST_PLAN.md 4.2). */
     private final Map<String,ArrayDeque<Long>> realignment=new HashMap<>();
     private final Set<Long> realigning=new HashSet<>();
+    /** The shaft parts whose chunk loaded, by dimension, each queued once until the re-alignment checks it (W5c C1). */
+    private final Map<String,ArrayDeque<Long>> shaftRealignment=new HashMap<>();
+    private final Set<Long> shaftRealigning=new HashSet<>();
     /** The origins of the structures the registry records, by dimension and by chunk of their box: a chunk load queues them for their re-alignment (plan 4.4). */
     private final Map<String,Map<Long,Set<PhysicalFluidTopology.Position>>> structureChunks=new HashMap<>();
     /** Engine-owned presentation: loaded devices and open menus, updated on their island's bucket only. */
@@ -916,6 +919,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         var devices=registry.chunk(name,chunk);
         if(!devices.isEmpty())FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.realignChunks);
         for(long id:devices){presentation.markDirty(id);if(realigning.add(id))realignment.computeIfAbsent(name,k->new ArrayDeque<>()).add(id);}
+        for(long id:topology.shaftsIn(name,chunk))if(shaftRealigning.add(id))shaftRealignment.computeIfAbsent(name,k->new ArrayDeque<>()).add(id);
         var structures=structureChunks.getOrDefault(name,Map.of()).get(chunk);
         if(structures!=null)for(var origin:structures)EquipmentStructure.realignLater(level,new net.minecraft.core.BlockPos(origin.x(),origin.y(),origin.z()));
     }
@@ -927,6 +931,12 @@ public final class FluidWorldAuthority implements AutoCloseable {
         owned();var queue=closed?null:realignment.get(dimension);if(queue==null)return 0;
         Long id=queue.poll();if(queue.isEmpty())realignment.remove(dimension);
         if(id==null)return 0;realigning.remove(id);return id;
+    }
+    /** The next shaft part of {@code dimension} the re-alignment checks, taken off its queue, or 0 when none is queued (W5c C1). */
+    public long nextShaftRealignment(String dimension) {
+        owned();var queue=closed?null:shaftRealignment.get(dimension);if(queue==null)return 0;
+        Long id=queue.poll();if(queue.isEmpty())shaftRealignment.remove(dimension);
+        if(id==null)return 0;shaftRealigning.remove(id);return id;
     }
     /**
      * Holds every registration whose dimension has no level (REGISTRY_FIRST_PLAN.md 4.2): no block can stand for it, so it
@@ -1716,7 +1726,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
             });
         }
     }
-    @Override public void close(){owned();if(closed)return;closed=true;unboundStructures.clear();realignment.clear();realigning.clear();structureChunks.clear();publishedMenuData.clear();publishedSightGlasses.clear();publishedMovers.clear();driverWatchers.clear();publishedDrivers.clear();rotationWatchers.clear();publishedRotations.clear();runtime.close();data.setDirty();}
+    @Override public void close(){owned();if(closed)return;closed=true;unboundStructures.clear();realignment.clear();realigning.clear();shaftRealignment.clear();shaftRealigning.clear();structureChunks.clear();publishedMenuData.clear();publishedSightGlasses.clear();publishedMovers.clear();driverWatchers.clear();publishedDrivers.clear();rotationWatchers.clear();publishedRotations.clear();runtime.close();data.setDirty();}
 
     /**
      * Which players watch which open tanks, sight glasses or movers (the request path R-B of the engine-owned presentation

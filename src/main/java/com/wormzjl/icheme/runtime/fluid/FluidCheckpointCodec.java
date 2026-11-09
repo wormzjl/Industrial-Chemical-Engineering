@@ -221,12 +221,13 @@ public final class FluidCheckpointCodec {
         state.columns().forEach((id,saved)->{var u=columns.get(id);if(u!=null&&u.running())columns.put(id,u.withState(saved));});
         var shafts=new HashMap<>(snapshot.shafts());
         state.shafts().forEach((id,saved)->{var u=shafts.get(id);if(u!=null)shafts.put(id,u.withState(saved));});
-        // A held device is held again (decision S11): the islands were compiled with it apart.
+        // A held device or shaft part is held again (decision S11, W5c C1): the islands and trains were compiled with it apart.
         var active=snapshot.active();
         if(!state.held().isEmpty()) {
             var holding=new HashMap<>(active);
             for(long id:state.held()) {
-                var r=holding.get(id);if(r==null)throw new IllegalArgumentException("The topology's state holds device "+id+", which is not registered");
+                var r=holding.get(id);
+                if(r==null){var u=shafts.get(id);if(u==null)throw new IllegalArgumentException("The topology's state holds device "+id+", which is not registered");shafts.put(id,u.withHeld(true));continue;}
                 holding.put(id,new WorldTopologyLedger.Registration(r.device().withHeld(true),r.spec(),r.revision()));
             }
             active=Map.copyOf(holding);

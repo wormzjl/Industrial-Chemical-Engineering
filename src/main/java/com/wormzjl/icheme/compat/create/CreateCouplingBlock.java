@@ -63,14 +63,14 @@ public final class CreateCouplingBlock extends DirectionalKineticBlock implement
     @Override
     public void onPlace(BlockState state, Level level, BlockPos pos, BlockState oldState, boolean movedByPiston) {
         super.onPlace(state, level, pos, oldState, movedByPiston);
-        if (!level.isClientSide() && (!oldState.is(this) || oldState.getValue(FACING) != state.getValue(FACING)))
+        if (!level.isClientSide() && !com.wormzjl.icheme.world.level.block.FluidDeviceBlock.quiet() && (!oldState.is(this) || oldState.getValue(FACING) != state.getValue(FACING)))
             ShaftParts.coupling(level, pos, state.getValue(FACING).getOpposite());
     }
 
     /** A broken coupling queues its part's removal. */
     @Override
     public void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
-        if (!level.isClientSide() && !newState.is(this)) ShaftParts.remove(level, pos);
+        if (!level.isClientSide() && !com.wormzjl.icheme.world.level.block.FluidDeviceBlock.quiet() && !newState.is(this)) ShaftParts.remove(level, pos);
         super.onRemove(state, level, pos, newState, movedByPiston);
     }
 }

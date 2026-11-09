@@ -1114,6 +1114,7 @@ public final class EquipmentStructure {
         if (stands(level, vessel)) {
             boolean released = false;
             for (long id : members(world, level, vessel)) released |= world.hold(id, false);
+            released |= holdShaft(world, level, vessel, false);
             return new Realignment(new RegistryRealignment.Check(RegistryRealignment.Outcome.NOTHING, released), null);
         }
         var survey = survey(level, origin, origin, high, shell -> shell.shape() != null && origin.equals(shell.origin()), true);
@@ -1133,6 +1134,7 @@ public final class EquipmentStructure {
         restoreFluidBinding(level, vessel);
         boolean blocked = !plan.blocked().isEmpty(), changed = false;
         for (long id : members(world, level, vessel)) changed |= world.hold(id, blocked);
+        changed |= holdShaft(world, level, vessel, blocked);
         settle(level, vessel, touched);
         IChemE.LOGGER.warn("equipment_realign kind={} origin={} cleared={} placed={} blocked={} detail=rebuilt from the registry's record", shape.kind().name().toLowerCase(Locale.ROOT),
                 origin.toShortString(), plan.clear().size(), plan.shell().size() + plan.interior().size(), plan.blocked().size());
@@ -1152,6 +1154,19 @@ public final class EquipmentStructure {
     }
 
     /** The registrations of {@code vessel}: those at its nodes, and a heat unit's partner sides. */
+    /**
+     * Holds or releases the shaft part of {@code vessel}'s structure with its registrations (W5c C1, option Q1): a held
+     * motor, generator, gearbox, turbine or casing joins no train. Whether that changes it.
+     */
+    private static boolean holdShaft(FluidWorldAuthority world, ServerLevel level, Vessel vessel, boolean on) {
+        if (ShaftParts.kind(vessel.shape().kind()) == null) return false;
+        var o = vessel.origin();
+        var u = world.shafts().unitAt(new com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Position(level.dimension().location().toString(), o.getX(), o.getY(), o.getZ()));
+        if (u == null || u.held() == on) return false;
+        world.shafts().queue(new com.wormzjl.icheme.runtime.fluid.ShaftTrains.Hold(u.id(), on));
+        return true;
+    }
+
     private static List<Long> members(FluidWorldAuthority world, ServerLevel level, Vessel vessel) {
         if (!vessel.shape().fluidDevice()) return List.of();
         var ids = heldAtNodes(world, level, vessel);
