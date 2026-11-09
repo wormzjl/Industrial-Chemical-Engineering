@@ -57,6 +57,8 @@ final class ControlLaw {
             return Decision.noSetpoint("NOT SAME PROCESS");
         if (reading == null || reading.availability() != Instrument.Availability.AVAILABLE)
             return Decision.noSetpoint("NO SIGNAL");
+        // An alarm is read and shown, never regulated on (batch 2026-11-09-furnace-fuel-power).
+        if (sensor.kind() == Sensor.Kind.ALARM) return Decision.noSetpoint("SELECT A MEASUREMENT");
         if (sensor.physical() == null
                 && s.unit() == Sensor.Unit.CUBIC_METRE_PER_SECOND
                 && !BuiltInInputs.volumeAvailable(sensor))

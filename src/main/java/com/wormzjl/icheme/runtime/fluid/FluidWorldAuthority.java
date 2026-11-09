@@ -49,6 +49,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
     private final ShaftTrains shafts;
     /** The powered units' electric stores (W5). */
     private final ElectricStores electric;
+    private final FiredHeaters burners;
     /** The pumps' health (W10b). */
     private final PumpHealth health;
     /**
@@ -136,6 +137,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
         electric.supply(id->com.wormzjl.icheme.runtime.power.PowerNetwork.of(server).supplied(shafts.unit(id)));
         // The Create coupling (W6b): its stress rate; a world opened without Create lost its couplings' blocks, so their parts leave.
         shafts.stressPerFE(IChemE::stressPerFE);if(!net.neoforged.fml.ModList.get().isLoaded("create"))shafts.forget(com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.CREATE_COUPLING);
+        // The fired heaters' burners (batch 2026-11-09-furnace-fuel-power): the network's heating values in its conserved order.
+        burners=new FiredHeaters(topology,runtime.coordinator(),electric,heatingValues(catalog,model),model.molecularWeights());shafts.burners(burners);electric.moved(burners::powerMoved);
         health=new PumpHealth(topology,registry::owner,runtime.coordinator(),id->PumpHealth.pump(topology.active().get(id)),id->{var r=topology.active().get(id);return r==null?null:r.device().control();},IChemE::wearSettings);shafts.health(health);
         // Block entities whose chunks loaded before this authority existed never reported themselves: every device
         // in an already loaded chunk is marked once, and its bucket binds and presents it. Nothing is pushed here.
@@ -298,21 +301,42 @@ public final class FluidWorldAuthority implements AutoCloseable {
     /** A kettle's shell to place with its tubes (W7): a closed vessel at its pool's node, with its phase ports, its volume,
      * level height and geometry, and its heat unit ({@link HeatUnit#pool}; {@link #placeUnit} names the partner). */
     public record UnitVessel(PhysicalFluidTopology.Position node,List<PhysicalFluidTopology.Port> ports,double volume,double levelHeight,com.wormzjl.icheme.science.fluid.network.VesselGeometry geometry,HeatUnit heat){}
+    /**
+     * A fired heater's burners to place with its coils (batch 2026-11-09-furnace-fuel-power): the firebox, a void at the burner
+     * tips' back pressure ({@link com.wormzjl.icheme.science.fluid.network.Burners#PRESSURE}) behind the FUEL port, its fuel
+     * valve its control ({@link FlowControl.ValveSource#BURNER}); {@link #placeUnit} names the radiant coil its partner.
+     */
+    public record UnitBurners(PhysicalFluidTopology.Position node,List<PhysicalFluidTopology.Port> ports,HeatUnit heat){}
     /** {@link #placeUnit(List,UnitVessel)} of a unit without a vessel. */
     public List<WorldTopologyLedger.Registration> placeUnit(List<UnitSide> sides){return placeUnit(sides,null);}
+    public List<WorldTopologyLedger.Registration> placeUnit(List<UnitSide> sides,@org.jetbrains.annotations.Nullable UnitVessel vessel){return placeUnit(sides,vessel,null);}
+    /** A fired heater's burners, registered by themselves beside coils placed before they existed, partnered with {@code radiant}. */
+    public WorldTopologyLedger.Registration placeBurners(long radiant,UnitBurners burners) {
+        owned();var coil=registrations().get(radiant);
+        if(coil==null||coil.device().heat()==null||coil.device().heat().side()!=com.wormzjl.icheme.science.equipment.HeatSides.Side.RADIANT)throw new IllegalArgumentException("Burners need their radiant coil");
+        long id=topology.nextIdentity();var record=burnerRecord(id,burners,radiant);
+        submit(List.of(new WorldTopologyLedger.Edit(id,record)),Math.addExact(id,1));return record;
+    }
+    private WorldTopologyLedger.Registration burnerRecord(long id,UnitBurners burners,long radiant) {
+        var device=new PhysicalFluidTopology.Device(id,burners.node(),TopologyCompiler.Kind.VOID,PhysicalFluidTopology.Direction.NORTH,
+                new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),FlowControl.ControlValve.burner(),burners.ports(),true,PhysicalFluidTopology.Cutoff.NONE,false,
+                PhysicalFluidTopology.ALL_FACES,0,0,burners.heat().withPartner(radiant));
+        return new WorldTopologyLedger.Registration(device,new FluidDeviceSpec(1,com.wormzjl.icheme.science.fluid.network.Burners.AIR,com.wormzjl.icheme.science.fluid.network.Burners.PRESSURE,FluidDeviceSpec.nitrogen(catalog).composition()),0);
+    }
     /**
      * Registers a heat-exchanging unit's sides as one ledger event (batch 2026-10-27-heat-exchanger-design): each a heat
      * side at its node with its ports and passage, passive; two sides name each other as partners, so the pair is whole
      * from its first event. A kettle's tubes are partnered with its shell instead, a vessel placed empty in the same event
      * after them ({@code vessel}, W7). Returns the registrations in the order of {@code sides}, then the vessel's.
      */
-    public List<WorldTopologyLedger.Registration> placeUnit(List<UnitSide> sides,@org.jetbrains.annotations.Nullable UnitVessel vessel) {
+    public List<WorldTopologyLedger.Registration> placeUnit(List<UnitSide> sides,@org.jetbrains.annotations.Nullable UnitVessel vessel,@org.jetbrains.annotations.Nullable UnitBurners burners) {
         owned();
         if(sides.isEmpty()||sides.size()>2||vessel!=null&&sides.size()!=1)throw new IllegalArgumentException("A heat unit has one or two sides, a kettle one and its shell");
+        if(burners!=null&&(vessel!=null||sides.size()!=2))throw new IllegalArgumentException("Burners belong to a fired heater's two coils");
         long first=topology.nextIdentity();var edits=new ArrayList<WorldTopologyLedger.Edit>();var placed=new ArrayList<WorldTopologyLedger.Registration>();
-        int count=sides.size()+(vessel==null?0:1);
+        int pair=sides.size()+(vessel==null?0:1),count=pair+(burners==null?0:1);
         for(int i=0;i<sides.size();i++) {
-            var side=sides.get(i);long partner=count==2?first+1-i:0;
+            var side=sides.get(i);long partner=pair==2?first+1-i:0;
             var device=new PhysicalFluidTopology.Device(first+i,side.node(),TopologyCompiler.Kind.HEAT_SIDE,PhysicalFluidTopology.Direction.NORTH,side.passage(),new FlowControl.Passive(),
                     side.ports(),true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,side.heat().withPartner(partner));
             var record=new WorldTopologyLedger.Registration(device,FluidDeviceSpec.nitrogen(catalog),0);placed.add(record);edits.add(new WorldTopologyLedger.Edit(first+i,record));
@@ -324,6 +348,11 @@ public final class FluidWorldAuthority implements AutoCloseable {
                     PhysicalFluidTopology.ALL_FACES,0,0,vessel.heat().withPartner(first));
             var spec=new FluidDeviceSpec(vessel.volume(),298.15,com.wormzjl.icheme.science.fluid.solver.PhaseLayout.AMBIENT_PRESSURE,FluidDeviceSpec.nitrogen(catalog).composition(),SlurryFeed.NONE,vessel.levelHeight(),false,vessel.geometry(),null);
             var record=new WorldTopologyLedger.Registration(device,spec,0);placed.add(record);edits.add(new WorldTopologyLedger.Edit(id,record));
+        }
+        if(burners!=null) {
+            long radiant=-1;for(int i=0;i<sides.size();i++)if(sides.get(i).heat().side()==com.wormzjl.icheme.science.equipment.HeatSides.Side.RADIANT)radiant=first+i;
+            if(radiant<0)throw new IllegalArgumentException("Burners need their radiant coil");
+            long id=first+pair;var record=burnerRecord(id,burners,radiant);placed.add(record);edits.add(new WorldTopologyLedger.Edit(id,record));
         }
         submit(edits,Math.addExact(first,count));return placed;
     }
@@ -337,6 +366,16 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public ShaftTrains shafts(){owned();return shafts;}
     /** The electric stores (W5): the FE ports' side and their views are reads and the FE protocol only. */
     public ElectricStores electric(){owned();return electric;}
+    /** The fired heaters' burners: their views and alarms are reads. */
+    public FiredHeaters burners(){owned();return burners;}
+    /** The network package's lower heating values (J/mol) in {@code model}'s conserved order, by component name. */
+    static double[] heatingValues(MaterialCatalog catalog,FluidThermodynamics model) {
+        String id=com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(catalog);
+        var values=catalog.heatingValues(id);var names=new ArrayList<>(catalog.requirePackage(id).components());names.add("Water");
+        var out=new double[model.componentCount()];var components=model.components();
+        for(int c=0;c<out.length;c++){int i=names.indexOf(components.get(c));out[c]=i<0?0:values[i];}
+        return out;
+    }
     /** The pumps' health (W10b): a repair kit queues its event here. */
     public PumpHealth health(){owned();return health;}
     /**
@@ -1116,7 +1155,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public boolean controlReserved(long output){
         owned();var r=registrations().get(output);if(r==null)return false;
         if(r.device().control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.ControlValve valve
-                &&(valve.source()==com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.SHAFT_SPEED||com.wormzjl.icheme.science.fluid.network.PortPlan.COLUMN_SENSOR.equals(valve.sensor())))return true;
+                &&(valve.source().planned()||com.wormzjl.icheme.science.fluid.network.PortPlan.COLUMN_SENSOR.equals(valve.sensor())))return true;
         var heat=r.device().heat();if(heat!=null&&(heat.control().mode()==HeatUnit.Mode.COLUMN||heat.control().mode()==HeatUnit.Mode.RATIO))return true;
         for(var entry:lines.entrySet())if(entry.getValue().status()==Lines.Status.COMPLETE&&entry.getValue().valve()==output){var side=registrations().get(entry.getKey());if(side!=null&&side.device().heat()!=null&&side.device().heat().lines()!=com.wormzjl.icheme.science.assembly.ExchangerBlueprint.Lines.NONE)return true;}
         return false;
@@ -1359,6 +1398,17 @@ public final class FluidWorldAuthority implements AutoCloseable {
             view=view.withHeat(new FluidView.Heat(heat.unit().name(),heat.side().name(),heat.partner()!=0,outlet,seconds>0?joule/seconds:0,
                     heat.fans()?share:null,heat.fans()?com.wormzjl.icheme.science.equipment.HeatSides.fanPower(heat.area(),share):null,
                     heat.burners()?share:null,heat.burners()?heat.control().target():null,coil!=null?coil.duty():null,bypass));
+        }
+        // A fired heater's burners (batch 2026-11-09-furnace-fuel-power): fuel, fired heat, the fans' power and the alarms on both coils' pages.
+        if(heat!=null&&heat.burners()&&view.heat()!=null) {
+            long b=burners.burnersOf(heat.side()==com.wormzjl.icheme.science.equipment.HeatSides.Side.RADIANT?id:heat.partner());
+            var fired=b==0?null:burners.view(b);
+            if(fired!=null) {
+                var alarms=fired.alarms().stream().map(a->a.text).toList();
+                view=view.withHeat(view.heat().withFuel(new FluidView.Fuel(fired.fuelFlow(),fired.heatingValue(),fired.fired(),fired.asked(),fired.fanDraw(),alarms)));
+                var fans=electric.power(b);if(fans!=null)view=view.withPower(fans);
+                for(var a:alarms)if(!view.status().contains(a))view=view.withStatus(view.status()+" / "+a);
+            }
         }
         // A kettle's shell (W7): the heat its pool took over the interval, booked at its key, at the pool's temperature.
         if(heat!=null&&heat.pool()&&nodeIndex>=0) {

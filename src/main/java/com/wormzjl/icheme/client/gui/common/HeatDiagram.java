@@ -139,6 +139,7 @@ public final class HeatDiagram {
             case PROCESS -> List.of("PROCESS_INLET", "PROCESS_OUTLET");
             case CONVECTION -> List.of("CONVECTION_INLET", "CONVECTION_OUTLET");
             case RADIANT -> List.of("RADIANT_INLET", "RADIANT_OUTLET");
+            case BURNER -> List.of("FUEL");
         };
     }
 

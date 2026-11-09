@@ -27,6 +27,7 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
     private long sequence = -1;
     private final Map<UUID, ControlSettings> submitted = new HashMap<>();
     private List<CompoundTag> controllers = List.of();
+    private List<CompoundTag> alarms = List.of();
     private final Map<UUID, Draft> drafts = new HashMap<>();
     private boolean pending;
     private long ack;
@@ -109,6 +110,7 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
                 case METRE -> "m";
                 case HEIGHT_PERCENT -> "%";
                 case REVOLUTIONS_PER_MINUTE -> "rpm";
+                case STATE -> "";
             };
         } catch (IllegalArgumentException e) {
             return "";
@@ -247,12 +249,26 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
                 "controllers");
     }
 
+    /** The alarms group: last in the controller list on a DCS, last in the loop page on a controller box. */
+    private List<Column.Row> alarmRows() {
+        return ControlColumns.alarms(
+                alarms.stream().map(t -> new ControlColumns.Alarm(t.getString("label"), t.getString("alarm"), sensorHint(t))).toList(),
+                ControlPanelScreen::tr);
+    }
+
     private List<List<Column.Row>> rows() {
         var r = right();
-        if (!menu.dcs()) return List.of(r);
+        if (!menu.dcs()) {
+            if (!page.equals("loop")) return List.of(r);
+            var all = new ArrayList<>(r);
+            all.addAll(alarmRows());
+            return List.of(all);
+        }
+        var list = new ArrayList<>(controllerRows());
+        list.addAll(alarmRows());
         return layout.split()
-                ? List.of(controllerRows(), r)
-                : List.of(page.equals("controllers") ? controllerRows() : r);
+                ? List.of(list, r)
+                : List.of(page.equals("controllers") ? list : r);
     }
 
     private void receive() {
@@ -260,6 +276,7 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
         sequence = menu.sequence();
         var view = menu.snapshot();
         controllers = tags(view, "controllers");
+        alarms = tags(view, "alarms");
         controllerPage = view.getInt("controllerPage");
         controllerPages = Math.max(1, view.getInt("controllerPages"));
         if (view.getLong("ack") != ack) {

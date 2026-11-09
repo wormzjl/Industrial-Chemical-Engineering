@@ -386,7 +386,9 @@ public final class IslandCertificate {
                     // Fans without power (W5): a held fan limit is part of the law, named only below 1 (older signatures stand).
                     if(cooled.fanLimit()<1)d.real(cooled.fanLimit());}
                 case com.wormzjl.icheme.science.fluid.network.ConvectionCoil coil->{d.integer(4);d.real(coil.conductance());d.number(coil.radiant());d.real(coil.flue());}
-                case com.wormzjl.icheme.science.fluid.network.FiredCoil coil->{d.integer(2);d.real(coil.setTemperature());d.number(coil.partner());d.real(coil.duty());d.real(coil.firing());}
+                case com.wormzjl.icheme.science.fluid.network.FiredCoil coil->{d.integer(2);d.real(coil.setTemperature());d.number(coil.partner());d.real(coil.duty());d.real(coil.firing());
+                    // The burners short of fuel or air (batch 2026-11-09-furnace-fuel-power): named only below 1 (older signatures stand).
+                    if(coil.limit()<1)d.real(coil.limit());}
             }
             // What each end draws (PassiveNetwork.PhasePort): it changes the equations, so a replay holds only under it.
             d.integer(pipe.firstPort().ordinal());d.integer(pipe.secondPort().ordinal());

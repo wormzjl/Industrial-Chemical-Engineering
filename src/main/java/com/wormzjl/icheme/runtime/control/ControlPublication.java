@@ -169,6 +169,32 @@ final class ControlPublication {
         }
     }
 
+    /**
+     * The raised alarms of the equipment on {@code owner}'s data bus (batch 2026-11-09-furnace-fuel-power): each alarm channel
+     * whose reading is 1, by label, with its equipment's place. Read from the readings this publication already took.
+     */
+    private ListTag alarms(UUID owner, Map<UUID, ControlInput> sensors, Map<UUID, Sensor.Reading> readings) {
+        var reached = new HashSet<Long>();
+        for (var id : hosts.bus().connected(owner)) {
+            var port = facts.port(id);
+            if (port != null && port.host() > 0) reached.add(port.host());
+        }
+        var out = new ListTag();
+        sensors.values().stream()
+                .filter(s -> s.kind() == Sensor.Kind.ALARM && reached.contains(s.key().host()))
+                .sorted(Comparator.comparing(s -> s.label(facts)))
+                .forEach(s -> {
+                    var r = readings.get(s.instance());
+                    if (r == null || r.value() < .5) return;
+                    var tag = new CompoundTag();
+                    tag.putString("label", String.format(Locale.ROOT, "EQ-%04d", s.key().host()));
+                    tag.putString("alarm", s.role().substring(6));
+                    sensorLocation(tag, s);
+                    out.add(tag);
+                });
+        return out;
+    }
+
     private CompoundTag snapshot(
             ControlPanelMenu menu,
             Map<UUID, ControlInput> sensors,
@@ -246,6 +272,7 @@ final class ControlPublication {
                             .filter(
                                     r ->
                                             hostIds.contains(r.device().id())
+                                                    && !r.device().burner()
                                                     && (r.device().control()
                                                                     instanceof
                                                                     FlowControl.ControlValve
@@ -278,6 +305,7 @@ final class ControlPublication {
             controllers.add(row);
         }
         root.put("controllers", controllers);
+        root.put("alarms", alarms(owner, sensors, readings));
         return root;
     }
 }

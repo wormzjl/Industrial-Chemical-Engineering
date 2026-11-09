@@ -49,6 +49,12 @@
     "source": "Ideal-gas heat of formation at 298.15 K and formula COS (molar mass 60.07 g/mol) of ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Carbonyl sulfide\" (ChemSep index 1893, CAS 463-58-1). No limits: Bulletin 627 Table A-1 has no carbonyl sulfide entry, and the values entered from memory (12 and 29 vol%) are unverified. Heats of reaction follow by Hess's law. Data only.",
     "revision": "chemsep-8.3-hf-r1"
   },
+  "combustion": {
+    "lower_heating_value_j_per_mol": 551940,
+    "estimated": false,
+    "source": "Hess's law on this record's thermochemistry (chemsep-8.3-hf-r1): the formula burnt to CO2, H2O (gas), SO2 and N2 on the ideal-gas heats of formation at 298.15 K of icheme:chemsep_carbon_dioxide (chemsep-8.3-hf-r1), icheme:water (chemsep-8.3-hf-r1) and icheme:chemsep_sulfur_dioxide (chemsep-8.3-hf-r1). Computed by tools/heating-values/heating-values.mjs. Read by a fired heater's burners.",
+    "revision": "hess-lhv-r1"
+  },
   "viscosity": {
     "liquid": {
       "type": "log_table",

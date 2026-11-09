@@ -68,7 +68,8 @@ public final class ControlColumns {
         PRESSURE,
         FLOW,
         TEMPERATURE,
-        SPEED
+        SPEED,
+        ALARM
     }
 
     public record View(
@@ -123,6 +124,21 @@ public final class ControlColumns {
                             text.apply("control.no_controllers", new Object[0]), Palette.TEXT));
         return List.of(
                 new Column.Group(text.apply("control.controllers", new Object[0]), null, rows));
+    }
+
+    /** A raised alarm as the panel lists it: the equipment channel's label and the alarm's status word. */
+    public record Alarm(String label, String alarm, String hint) {}
+
+    /**
+     * The alarms group (batch 2026-11-09-furnace-fuel-power): each raised alarm of the equipment on the panel's data bus, red,
+     * its place on hover; "No alarms" when none. The group's texts follow the plant, so it is a column's last group.
+     */
+    public static List<Column.Row> alarms(List<Alarm> alarms, BiFunction<String, Object[], String> text) {
+        var rows = new ArrayList<Column.Row>();
+        for (var a : alarms)
+            rows.add(new Column.Paragraph(text.apply("control.alarm_line", new Object[] {a.label(), text.apply("control.alarm." + a.alarm().toLowerCase(java.util.Locale.ROOT), new Object[0])}), Palette.RED, a.hint()));
+        if (rows.isEmpty()) rows.add(new Column.Paragraph(text.apply("control.no_alarms", new Object[0]), Palette.TEXT));
+        return List.of(new Column.Group(text.apply("control.alarms", new Object[0]), null, rows));
     }
 
     public static List<Column.Row> choices(

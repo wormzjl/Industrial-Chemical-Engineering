@@ -282,8 +282,10 @@ public final class EquipmentStructure {
         // A kettle's shell (W7): a closed vessel at its pool's node, its phase ports the drum's, its surface its tubes'.
         var pool = HeatSides.pool(shape.kind()) ? new FluidWorldAuthority.UnitVessel(position(level, nodes.get(sides.size())), ports(level, vessel), shape.volume(), shape.levelHeight(),
                 shape.fluidGeometry(), new HeatUnit(unit, HeatSides.Side.SHELL, sides.getFirst().area(), 0)) : null;
+        // A fired heater's burners (batch 2026-11-09-furnace-fuel-power): the firebox behind its FUEL nozzle, after its coils.
+        var burners = HeatSides.burners(shape.kind()) ? burners(level, vessel, nodes.get(sides.size())) : null;
         FluidWorldAuthority.find(level.getServer()).ifPresent(world -> {
-            var records = world.placeUnit(placing, pool);
+            var records = world.placeUnit(placing, pool, burners);
             for (int i = 0; i < records.size(); i++)
                 if (level.getBlockEntity(nodes.get(i)) instanceof EquipmentShellBlockEntity entity) entity.bindIdentity(records.get(i).device().id());
         });
@@ -304,9 +306,24 @@ public final class EquipmentStructure {
         return ports;
     }
 
-    /** A heat unit's registrations: one per side, and a kettle's shell (W7). */
+    /** A heat unit's registrations: one per side, a kettle's shell (W7) and a fired heater's burners. */
     private static int registrations(EquipmentShape shape) {
-        return HeatSides.of(shape).size() + (HeatSides.pool(shape.kind()) ? 1 : 0);
+        return HeatSides.of(shape).size() + (HeatSides.pool(shape.kind()) ? 1 : 0) + (HeatSides.burners(shape.kind()) ? 1 : 0);
+    }
+
+    /** A fired heater's burners to place at {@code node}: the FUEL nozzle its one port (batch 2026-11-09-furnace-fuel-power). */
+    private static FluidWorldAuthority.UnitBurners burners(Level level, Vessel vessel, BlockPos node) {
+        var ports = new ArrayList<PhysicalFluidTopology.Port>();
+        var nozzles = vessel.shape().nozzles();
+        for (var port : ShapeRasterizer.ports(vessel.shape())) {
+            if (nozzles.get(port.nozzle()).role() != HeatSides.BURNER_ROLE) continue;
+            var cell = vessel.origin().offset(port.cell().x(), port.cell().y(), port.cell().z());
+            var face = PhysicalFluidTopology.Direction.valueOf(Direction.fromDelta(port.dx(), port.dy(), port.dz()).name());
+            ports.add(new PhysicalFluidTopology.Port(position(level, cell), face, PassiveNetwork.PhasePort.BULK, PhysicalFluidTopology.ConnectionRole.VESSEL));
+            break;
+        }
+        var radiant = HeatSides.of(vessel.shape()).stream().filter(s -> s.side() == HeatSides.Side.RADIANT).findFirst().orElseThrow();
+        return new FluidWorldAuthority.UnitBurners(position(level, node), ports, new HeatUnit(HeatSides.Unit.FIRED_HEATER, HeatSides.Side.BURNER, radiant.area(), 0));
     }
 
     /** The registrations of a unit's sides, by side: those held at {@code ids} and their partners. */
@@ -350,6 +367,11 @@ public final class EquipmentStructure {
     private static void restateUnit(ServerLevel level, Vessel vessel, FluidWorldAuthority world, java.util.Collection<Long> held) {
         var sides = HeatSides.of(vessel.shape());
         var records = unitRecords(world, held);
+        // A fired heater placed before its burners registered (batch 2026-11-09-furnace-fuel-power): its coils keep their
+        // identities, set point and burners' switch; the burners join them at their node, partnered with the radiant coil.
+        if (HeatSides.burners(vessel.shape().kind()) && !records.containsKey(HeatSides.Side.BURNER) && records.containsKey(HeatSides.Side.RADIANT)
+                && records.containsKey(HeatSides.Side.CONVECTION) && records.size() + 1 == registrations(vessel.shape()))
+            records.put(HeatSides.Side.BURNER, world.placeBurners(records.get(HeatSides.Side.RADIANT).device().id(), burners(level, vessel, nodes(vessel).get(sides.size()))));
         if (records.size() != registrations(vessel.shape())) {
             if (!records.isEmpty()) world.removeUnit(records.values().stream().map(r -> r.device().id()).toList());
             registerUnit(level, vessel);
@@ -370,6 +392,21 @@ public final class EquipmentStructure {
                 if (entity.fluidIdentity() != device.id()) entity.bindIdentity(device.id());
                 else world.deviceLoaded(device.id());
             }
+        }
+        if (HeatSides.burners(vessel.shape().kind())) {
+            // The burners move to their FUEL nozzle's node with it.
+            var record = records.get(HeatSides.Side.BURNER);
+            var node = nodes.get(sides.size());
+            var device = record.device();
+            var moved = device.withPlacement(position(level, node), burners(level, vessel, node).ports()).withHeat(device.heat().withArea(records.get(HeatSides.Side.RADIANT).device().heat().area()));
+            if (!moved.equals(device)) world.edit(device.id(), record.revision(), moved, record.spec());
+            for (var other : nodes)
+                if (!other.equals(node) && level.getBlockEntity(other) instanceof EquipmentShellBlockEntity stale && stale.fluidIdentity() == device.id()) stale.releaseIdentity();
+            if (level.getBlockEntity(node) instanceof EquipmentShellBlockEntity entity) {
+                if (entity.fluidIdentity() != device.id()) entity.bindIdentity(device.id());
+                else world.deviceLoaded(device.id());
+            }
+            return;
         }
         if (!HeatSides.pool(vessel.shape().kind())) return;
         // A kettle's shell (W7) moves to its pool's node with its ports, its vessel follows the datasheet, it keeps what it holds.

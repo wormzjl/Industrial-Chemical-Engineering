@@ -71,7 +71,8 @@ public final class MaterialCatalog {
      * in its reference state, O2 and N2) and the element formula (atoms of C, H, N, O and S per molecule; a cut's are
      * estimated and need not be whole), whether they are estimated, their source and the sub-record's own revision. The
      * water model may carry one too. Heats of reaction follow by Hess's law from these records alone: the net heat of
-     * combustion, the water formed, the oxygen demand and the flue gas (fuel to CO2, H2O, SO2 and N2) are not stored.
+     * combustion, the water formed, the oxygen demand and the flue gas (fuel to CO2, H2O, SO2 and N2) are not stored, but
+     * the net heat is prebuilt from it into the record's {@link Combustion} sub-record.
      *
      * <p>Data for later models only, as {@link Freezing}: no model reads it, so it has its own revision and is in no
      * identity ({@link Package#scientificRevision}, {@link MaterialCatalog#fluidRevision}, {@link MaterialCatalog#spineRevision},
@@ -106,6 +107,20 @@ public final class MaterialCatalog {
             Objects.requireNonNull(source); Objects.requireNonNull(revision);
             if (!(lowerLimit > 0 && lowerLimit < 1)) throw new IllegalArgumentException("lfl_volume_fraction: must lie in (0, 1)");
             if (upperLimit != null && !(upperLimit > lowerLimit && upperLimit < 1)) throw new IllegalArgumentException("ufl_volume_fraction: must lie in (lfl_volume_fraction, 1)");
+        }
+    }
+    /**
+     * A dataset's or water model's lower heating value, its optional {@code combustion} sub-record (batch
+     * 2026-11-09-furnace-fuel-power, owner decision F2): J/mol of the ideal gas at 298.15 K burnt to CO2, H2O (gas), SO2
+     * and N2, prebuilt from the record's {@link Thermochemistry} by {@code tools/heating-values}; 0 for a record that gives
+     * no heat. A fired heater's burners read it ({@link #heatingValues}). It enters no saved state (the burners' fired heat
+     * is engine state, rebuilt at every commit), so like {@link Thermochemistry} it is in no identity: an edit changes the
+     * next commit's firing, never a world's contents, a column result or a neural model. Its own revision.
+     */
+    public record Combustion(double lowerHeatingValue, boolean estimated, String source, String revision) {
+        public Combustion {
+            Objects.requireNonNull(source); Objects.requireNonNull(revision);
+            if (!(lowerHeatingValue >= 0) || !Double.isFinite(lowerHeatingValue)) throw new IllegalArgumentException("lower_heating_value_j_per_mol: must be finite and not negative");
         }
     }
     /**
@@ -200,14 +215,16 @@ public final class MaterialCatalog {
     /** Reference-spine and crystal records by record id (kinds {@code spine} and {@code crystals}). */
     private final Map<String, ReferenceSpine> spines;
     private final Map<String, CrystalReference> crystals;
+    /** Heating values by record ({@code properties/<id>}, {@code water/<id>}); see {@link Combustion}. */
+    private final Map<String, Combustion> combustion;
     private MaterialCatalog(Map<String, MaterialName> names, Map<String, Package> packages, Map<String, String> resources,
             Map<String, Map<ViscosityCorrelation.Phase, ViscosityCorrelation>> viscosities, Map<String, String> waterModels,
             Map<String, FluidAppearance> assayAppearances, Map<String, FluidAppearance> componentAppearances, Map<String, LiquidMixtureCorrection> liquidMixtures, MaterialPresets presets, FluidData fluidData,
             Map<String, Validity> propertyValidity, Map<String, Validity> packageValidity,
-            Map<String, ReferenceSpine> spines, Map<String, CrystalReference> crystals, SolidMaterialCatalog solids,
+            Map<String, ReferenceSpine> spines, Map<String, CrystalReference> crystals, Map<String, Combustion> combustion, SolidMaterialCatalog solids,
             Records records, Map<String, Definition> definitions) {
         this.propertyValidity = Map.copyOf(propertyValidity); this.packageValidity = Map.copyOf(packageValidity);
-        this.spines = Map.copyOf(spines); this.crystals = Map.copyOf(crystals);
+        this.spines = Map.copyOf(spines); this.crystals = Map.copyOf(crystals); this.combustion = Map.copyOf(combustion);
         this.records=Objects.requireNonNull(records); this.definitions=Map.copyOf(definitions);
         this.solids=Objects.requireNonNull(solids);
         // A solid population names its record by id (owner decision D23: crystals are solids), a crystal or a custom solid:
@@ -224,7 +241,7 @@ public final class MaterialCatalog {
     /** This catalog with its packages, liquid-mixture corrections and definitions replaced; a view, never published. */
     private MaterialCatalog derived(Map<String, Package> packages, Map<String, LiquidMixtureCorrection> liquidMixtures, Map<String, Definition> definitions) {
         return new MaterialCatalog(names,packages,resources,viscosities,waterModels,assayAppearances,componentAppearances,liquidMixtures,presets,
-                fluidData,propertyValidity,packageValidity,spines,crystals,solids,records,definitions);
+                fluidData,propertyValidity,packageValidity,spines,crystals,combustion,solids,records,definitions);
     }
     public Package requirePackage(String id) {
         Package p = packages.get(id);
@@ -475,6 +492,7 @@ public final class MaterialCatalog {
         var packageValidity = new HashMap<String, Validity>();
         var spines = new HashMap<String, ReferenceSpine>();
         var crystals = new HashMap<String, CrystalReference>();
+        var combustion = new HashMap<String, Combustion>();
         var propertyRevisions = new HashMap<String, String>();
         for (var o : group(groups,"components").values()) checked(origins,o,() -> {
             JsonObject cut = o.has("cut") ? object(o,"cut") : null;
@@ -553,6 +571,7 @@ public final class MaterialCatalog {
             }
             // Data for later models: each sub-record is validated as it is read, and no model reads it yet, so the catalog keeps none.
             if (o.has("thermochemistry")) readThermochemistry(object(o,"thermochemistry"));
+            if (o.has("combustion")) combustion.put("properties/"+id,readCombustion(object(o,"combustion")));
             if (o.has("flammability")) readFlammability(object(o,"flammability"));
         });
         for (var o : group(groups,"water").values()) checked(origins,o,() -> {
@@ -579,6 +598,7 @@ public final class MaterialCatalog {
             range(w.triplePoint(),w.boilingTemperature(),"water boiling"); range(w.boilingTemperature(),w.criticalTemperature(),"water critical");
             range(w.triplePoint(),w.maximumTemperature(),"water enthalpy"); require(names,"Water","component"); waters.put(text(o,"id"),w);
             if (o.has("thermochemistry")) readThermochemistry(object(o,"thermochemistry"));
+            if (o.has("combustion")) combustion.put("water/"+text(o,"id"),readCombustion(object(o,"combustion")));
         });
         for (var o : group(groups,"interactions").values()) checked(origins,o,() -> validateInteractions(o,names,matrices));
         // A compound's default dataset is one of its own property records.
@@ -623,7 +643,7 @@ public final class MaterialCatalog {
             throw new IllegalArgumentException(record.origin()+": no package holds every compound of assay "+record.id());
         if(packages.isEmpty()) throw new IllegalArgumentException("Material catalog has no packages");
         var result=new MaterialCatalog(names,packages,resources,viscosities,waterModels,assayAppearances,componentAppearances,liquidMixtures,MaterialPresets.read(group(groups,"presets"),group(groups,"networks"),origins,packages,names.keySet()),fluidData,
-                propertyValidity,packageValidity,spines,crystals,SolidMaterialCatalog.parse(resources),records,definitions);
+                propertyValidity,packageValidity,spines,crystals,combustion,SolidMaterialCatalog.parse(resources),records,definitions);
         for(var row:group(groups,"presets").values())if(text(row,"kind").equals("column"))checked(origins,row,()->
                 MaterialRuntime.with(result,text(row,"package"),()->{com.wormzjl.icheme.science.column.v3.V3ColumnProblemResolver.validateInput(result.presets().column(text(row,"id")).input(result));return null;}));
         for(var row:group(groups,"networks").values())checked(origins,row,()->{
@@ -713,6 +733,22 @@ public final class MaterialCatalog {
             for(String element:formula.keySet())elements.put(element,number(formula,element));
             return new Thermochemistry(number(o,"formation_enthalpy_j_per_mol"),elements,bool(o,"estimated"),text(o,"source"),revision(o,"revision"));
         } catch (RuntimeException invalid) { throw new IllegalArgumentException("thermochemistry."+invalid.getMessage(),invalid); }
+    }
+    /** A dataset's or water model's {@code combustion} sub-record ({@link Combustion}); a refusal names the field. */
+    static Combustion readCombustion(JsonObject o) {
+        try {
+            return new Combustion(number(o,"lower_heating_value_j_per_mol"),bool(o,"estimated"),text(o,"source"),revision(o,"revision"));
+        } catch (RuntimeException invalid) { throw new IllegalArgumentException("combustion."+invalid.getMessage(),invalid); }
+    }
+    /**
+     * Package {@code packageId}'s lower heating values, J/mol, in the fluid network's conserved order (its components, then
+     * the water; {@link Combustion}): 0 for a record without a {@code combustion} sub-record, which burns as an inert.
+     */
+    public double[] heatingValues(String packageId) {
+        var p=requirePackage(packageId);var out=new double[p.components().size()+1];
+        for(int i=0;i<p.properties().size();i++){var c=combustion.get("properties/"+p.properties().get(i).id());out[i]=c==null?0:c.lowerHeatingValue();}
+        var water=combustion.get("water/"+waterModels.get(packageId));out[out.length-1]=water==null?0:water.lowerHeatingValue();
+        return out;
     }
     /** A dataset's {@code flammability} sub-record ({@link Flammability}); a refusal names the field. */
     static Flammability readFlammability(JsonObject o) {

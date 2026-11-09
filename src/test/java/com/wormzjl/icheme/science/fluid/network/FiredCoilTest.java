@@ -44,6 +44,22 @@ class FiredCoilTest {
         assertEquals(1,coil.planned(BOILING,inlet,0).firing(),"no flow: nothing to limit");
         assertEquals(coil.shape(),short_.shape(),"the share is a slice input, not a shape");
     }
+    /** The burners' limit (batch 2026-11-09-furnace-fuel-power): the coil fires at most its duty times the share its fuel allows; 0 fires nothing. */
+    @Test void theBurnersLimitCapsTheDuty() {
+        var coil=new FiredCoil(450,1e6,1,0);
+        assertEquals(1,coil.limit());assertEquals(1e6,coil.available());
+        double inlet=BOILING.enthalpyAt(320),demand=BOILING.enthalpyAt(450)-inlet;
+        var half=coil.withLimit(.5);
+        assertEquals(5e5,half.available());
+        var planned=half.planned(BOILING,inlet,1);
+        assertEquals(5e5/demand,planned.firing(),1e-12,"short of the set point at half the duty");
+        assertEquals(5e5,planned.heat(BOILING,inlet,1),1e-6);
+        assertEquals(1,half.planned(BOILING,inlet,.1).firing(),"a small flow still reaches the set point");
+        assertEquals(0,coil.withLimit(0).planned(BOILING,inlet,1).firing(),"no fuel or no power: no heat");
+        assertEquals(coil.shape(),half.shape(),"the limit is a slice input, not a shape");
+        assertThrows(IllegalArgumentException.class,()->coil.withLimit(1.5));
+        assertThrows(IllegalArgumentException.class,()->coil.withLimit(-.1));
+    }
     @Test void aCoilValidatesItsFacts() {
         assertThrows(IllegalArgumentException.class,()->new FiredCoil(0,1,1,0));
         assertThrows(IllegalArgumentException.class,()->new FiredCoil(450,-1,1,0));

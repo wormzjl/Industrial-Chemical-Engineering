@@ -17,13 +17,15 @@ public final class Sensor {
     /** Saved by name. {@code SPEED} (accessory facts schema 3, batch 2026-11-03-rotating-machinery W3): a steam turbine's
      * speed pickup on its coupling guard, which works its governor valve (owner decision D27). */
     public enum Kind {
-        PRESSURE("P"), TEMPERATURE("T"), FLOW("F"), LEVEL("L"), SPEED("N");
+        PRESSURE("P"), TEMPERATURE("T"), FLOW("F"), LEVEL("L"), SPEED("N"),
+        /** An equipment's alarm (batch 2026-11-09-furnace-fuel-power): 1 while raised, 0 clear; an equipment channel, never an installed sensor. */
+        ALARM("A");
         private final String symbol;
         Kind(String symbol){this.symbol=symbol;}
         public String symbol(){return symbol;}
     }
-    public enum Unit { ABSOLUTE_PASCAL, KELVIN, KILOGRAM_PER_SECOND, CUBIC_METRE_PER_SECOND, METRE, HEIGHT_PERCENT, REVOLUTIONS_PER_MINUTE }
-    public static Unit primaryUnit(Kind kind){return switch(kind){case PRESSURE->Unit.ABSOLUTE_PASCAL;case TEMPERATURE->Unit.KELVIN;case FLOW->Unit.KILOGRAM_PER_SECOND;case LEVEL->Unit.METRE;case SPEED->Unit.REVOLUTIONS_PER_MINUTE;};}
+    public enum Unit { ABSOLUTE_PASCAL, KELVIN, KILOGRAM_PER_SECOND, CUBIC_METRE_PER_SECOND, METRE, HEIGHT_PERCENT, REVOLUTIONS_PER_MINUTE, STATE }
+    public static Unit primaryUnit(Kind kind){return switch(kind){case PRESSURE->Unit.ABSOLUTE_PASCAL;case TEMPERATURE->Unit.KELVIN;case FLOW->Unit.KILOGRAM_PER_SECOND;case LEVEL->Unit.METRE;case SPEED->Unit.REVOLUTIONS_PER_MINUTE;case ALARM->Unit.STATE;};}
     public static Optional<Unit> secondaryUnit(Kind kind){return switch(kind){case FLOW->Optional.of(Unit.CUBIC_METRE_PER_SECOND);case LEVEL->Optional.of(Unit.HEIGHT_PERCENT);default->Optional.empty();};}
     /** The speed pickup's mount on a steam turbine's coupling guard. */
     public static final String SPEED_PICKUP="speed_pickup";
@@ -47,6 +49,7 @@ public final class Sensor {
         case FLOW->mount.equals("valve_sensor")||mount.startsWith("pipe_")&&!mount.equals("pipe_accessory");
         case LEVEL->mount.equals("level_body")||mount.equals("level_boot");
         case SPEED->mount.equals(SPEED_PICKUP);
+        case ALARM->false;
     };}
     public static List<Instrument.Mount> mounts(InstrumentHosts.Host host,Kind kind){
         if(host.pipe()){
@@ -58,7 +61,7 @@ public final class Sensor {
             if(InstrumentHosts.legacy(host.entity().getBlockState())!=null||kind==Kind.LEVEL||kind==Kind.SPEED)return List.of();
             return host.mounts();
         }
-        if(kind==Kind.FLOW)return List.of();
+        if(kind==Kind.FLOW||kind==Kind.ALARM)return List.of();
         if(kind==Kind.SPEED)return speedPickup(host);
         if(kind!=Kind.LEVEL)return host.mounts().stream().filter(m->supports(kind,m.id())).toList();
         if(!(host.entity() instanceof EquipmentShellBlockEntity shell)||shell.shape()==null||!shell.shape().reservoir())return List.of();

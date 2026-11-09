@@ -92,9 +92,36 @@ public final class GuiPrototypes {
         out.addAll(pumpReadings());
         out.addAll(createCoupling());
         out.addAll(controlPanels());
+        out.addAll(firedHeater());
         return out;
     }
 
+    /**
+     * A fired heater's radiant coil page on a short fuel supply (batch 2026-11-09-furnace-fuel-power): its coil rows, then
+     * the burners' fuel flow, the heat fired against the heat asked for, and the combustion-air fans' draw.
+     */
+    static List<Prototype> firedHeater() {
+        var input = new DeviceColumn.Input(Kind.HEAT_SIDE, true, true, true, "bar", "°C", "/h", DeviceColumn.Valve.NONE, null, false, null, null, List.of(),
+                phases("volume", 0, 1, 0, 0), List.of(meter("temperature", "50.0", "°C"), meter("throughput", "1995.0", "kmol/h"),
+                meter("outlet_temperature", "112.4", "°C"), new DeviceColumn.Meter("duty", "1598.0", "kW", TEXTS.get("duty.fired")),
+                meter("set_temperature", "170.0", "°C"), new DeviceColumn.Meter("duty_available", "1598.0", "kW", TEXTS.get("duty_available.hint")),
+                new DeviceColumn.Meter("fuel_flow", "204.1", "kg/h", TEXTS.get("fuel_flow.hint", "50.0 MJ/kg")),
+                new DeviceColumn.Meter("fuel_fired", "2836.0", "kW", TEXTS.get("fuel_fired.hint", "6213.0 kW")),
+                new DeviceColumn.Meter("burner_fans", "2.3", "kW", TEXTS.get("burner_fans.hint"))));
+        return List.of(devicePage("fired-heater-low-fuel", WINDOW[0], WINDOW[1], input, (d, s) -> {
+            d.title("Fired heater, radiant coil");
+            d.name("H-101", true);
+            d.tabs(0, "Overview", "Control", "Datasheet");
+            d.status(Door.tr("gui.icheme.fluid.flowing") + " · LOW FUEL", Palette.RED);
+            var box = device(d, input, DeviceColumn.rows(input, TEXTS), Map.of());
+            contents(d, box, 1, List.of(new String[]{"Component", "Mole %", "kmol/h"}, new String[]{"Water", "100.0", "1995"}));
+            d.footer(2, "Close", "Apply", "Mole", "°C", "bar", "/h");
+        }));
+    }
+
+    /** Two raised alarms (batch 2026-11-09-furnace-fuel-power): the alarms group is last on a DCS's controller list and a controller box's loop page. */
+    static final List<ControlColumns.Alarm> ALARMS=List.of(new ControlColumns.Alarm("EQ-0007","NO_FUEL","Fired heater, 120, 64, -40"),new ControlColumns.Alarm("EQ-0012","LOW_FUEL","Fired heater, 96, 64, -12"));
+    static <T> List<T> plus(List<T> a,List<T> b){var out=new ArrayList<T>(a);out.addAll(b);return out;}
     static List<Prototype> controlPanels(){
         var out=new ArrayList<Prototype>();
         for(boolean dcs:new boolean[]{false,true})for(boolean compact:new boolean[]{false,true}){
@@ -103,9 +130,9 @@ public final class GuiPrototypes {
             d.skin.title(d.c,10,10,dcs?"DCS":"Local controller");
             var view=new ControlColumns.View(true,"m","%",true,"LT-0012 / LEVEL","37.0","CV-0021","CONTROLLING",true,ControlColumns.Variable.LEVEL);
             // KitDoor shares the long loop column's scroll offset; this one-row controller list is above the end view.
-            if(layout.split()&&!d.end)doorColumn(d,ControlColumns.controllers(List.of(new ControlColumns.Choice("controller:1","Drum level",true)),DIALOG::get),layout.areas().getFirst(),Map.of(),"DCS controller list");
+            if(layout.split()&&!d.end)doorColumn(d,plus(ControlColumns.controllers(List.of(new ControlColumns.Choice("controller:1","Drum level",true)),DIALOG::get),ControlColumns.alarms(ALARMS,DIALOG::get)),layout.areas().getFirst(),Map.of(),"DCS controller list");
             if(layout.chooser()!=null)d.skin.button(d.c,layout.chooser(),DIALOG.get("control.controllers"),Skin.Press.REST,false);
-            doorColumn(d,ControlColumns.loop(view,DIALOG::get),layout.areas().getLast(),Map.of("name","Drum level","target","25"),"Level control");
+            doorColumn(d,dcs?ControlColumns.loop(view,DIALOG::get):plus(ControlColumns.loop(view,DIALOG::get),ControlColumns.alarms(ALARMS,DIALOG::get)),layout.areas().getLast(),Map.of("name","Drum level","target","25"),"Level control");
             dialogFooter(d,DIALOG.get("control.close"),DIALOG.get("control.apply"));
             },true));
         }
@@ -113,7 +140,7 @@ public final class GuiPrototypes {
         out.add(new Prototype("control-dcs-controller-list",compact.width(),compact.height(),(d,s)->{
             d.skin.title(d.c,10,10,"DCS");
             d.skin.button(d.c,compact.chooser(),DIALOG.get("control.back"),Skin.Press.REST,false);
-            doorColumn(d,ControlColumns.controllers(List.of(new ControlColumns.Choice("controller:1","Drum level",true),new ControlColumns.Choice("controller:2","Feed flow",false)),DIALOG::get),compact.areas().getFirst(),Map.of(),"Compact controller list");
+            doorColumn(d,plus(ControlColumns.controllers(List.of(new ControlColumns.Choice("controller:1","Drum level",true),new ControlColumns.Choice("controller:2","Feed flow",false)),DIALOG::get),ControlColumns.alarms(ALARMS,DIALOG::get)),compact.areas().getFirst(),Map.of(),"Compact controller list");
             dialogFooter(d,DIALOG.get("control.close"));
         }));
         out.add(new Prototype("control-instrument-ids",246,254,(d,s)->{

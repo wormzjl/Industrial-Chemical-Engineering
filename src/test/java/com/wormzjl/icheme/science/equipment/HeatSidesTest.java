@@ -119,7 +119,10 @@ class HeatSidesTest {
             assertEquals(HeatSides.Side.RADIANT,radiant.side());assertEquals(EquipmentShape.Role.RADIANT_INLET,radiant.inlet());assertEquals(EquipmentShape.Role.RADIANT_OUTLET,radiant.outlet());
             assertEquals(.3*duty,HeatSides.coilDuty(HeatSides.Side.CONVECTION,convection.area(),1),1e-9*duty);
             assertEquals(.7*duty,HeatSides.coilDuty(HeatSides.Side.RADIANT,radiant.area(),1),1e-9*duty);
-            var cells=ShapeRasterizer.fluidCells(shape);assertEquals(2,cells.size());assertNotEquals(cells.get(0),cells.get(1));
+            // Two coil nodes, then the burners at the fuel nozzle (batch 2026-11-09-furnace-fuel-power).
+            var cells=ShapeRasterizer.fluidCells(shape);assertEquals(3,cells.size());assertEquals(3,new java.util.HashSet<>(cells).size());
+            var fuel=ShapeRasterizer.ports(shape).stream().filter(p->shape.nozzles().get(p.nozzle()).role()==HeatSides.BURNER_ROLE).findFirst().orElseThrow();
+            assertEquals(fuel.cell(),cells.getLast());assertTrue(HeatSides.burners(shape.kind()));
             var radiantCoil=assertInstanceOf(FiredCoil.class,HeatSides.heatSide(HeatSides.Unit.FIRED_HEATER,HeatSides.Side.RADIANT,radiant.area(),1,573.15,7,null));
             assertEquals(573.15,radiantCoil.setTemperature());assertEquals(.7*duty,radiantCoil.duty(),1e-9*duty);assertEquals(7,radiantCoil.partner());
             var convectionCoil=assertInstanceOf(ConvectionCoil.class,HeatSides.heatSide(HeatSides.Unit.FIRED_HEATER,HeatSides.Side.CONVECTION,convection.area(),0,573.15,8,null));

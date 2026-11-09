@@ -60,6 +60,12 @@
     "source": "Estimated, Burgess-Wheeler: LFL x LHV = 4319 vol% kJ/mol, the median over the 22 hydrocarbons of the world list (0.2 % bias, 7.5 % mean absolute error, 23 % largest; COMBUSTION_FLAMMABILITY_REVIEW.md), on the Hess heat of this record's estimated thermochemistry. Constant with temperature (owner decision E23). No upper limit: no correlation is good enough (Jones, 25 % mean absolute error).",
     "revision": "burgess-wheeler-r1"
   },
+  "combustion": {
+    "lower_heating_value_j_per_mol": 8432328.968521506,
+    "estimated": true,
+    "source": "Hess's law on this record's thermochemistry (cragoe-1929-chx-r1): the formula burnt to CO2, H2O (gas), SO2 and N2 on the ideal-gas heats of formation at 298.15 K of icheme:chemsep_carbon_dioxide (chemsep-8.3-hf-r1), icheme:water (chemsep-8.3-hf-r1) and icheme:chemsep_sulfur_dioxide (chemsep-8.3-hf-r1). Computed by tools/heating-values/heating-values.mjs. Read by a fired heater's burners.",
+    "revision": "hess-lhv-r1"
+  },
   "viscosity": {
     "liquid": {
       "type": "log_table",

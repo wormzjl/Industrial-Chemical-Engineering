@@ -48,6 +48,18 @@ public record FluidView(long identity,long inputRevision,long committedTick,long
      * (null for none), and its status word on the display ({@code NO POWER}, the notice {@code UNMETERED}, or empty). Null
      * for a device without fans.
      */
+    /**
+     * A fired heater's burners as its coils' pages show them (batch 2026-11-09-furnace-fuel-power): the fuel's mass flow
+     * into the firebox (kg/s) and its lower heating value (J/kg), the heat fired and asked for (W), the combustion-air fans'
+     * electric draw (W), and the alarms raised, by their status words.
+     */
+    public record Fuel(double massFlow,double heatingValue,double firedWatt,double askedWatt,double fanWatt,List<String> alarms) {
+        public Fuel {
+            alarms=List.copyOf(alarms);
+            if(!(massFlow>=0)||!(heatingValue>=0)||!(firedWatt>=0)||!(askedWatt>=0)||!(fanWatt>=0)||!Double.isFinite(massFlow+heatingValue+firedWatt+askedWatt+fanWatt)||alarms.size()>4)
+                throw new IllegalArgumentException("Invalid fuel presentation");
+        }
+    }
     public record Power(double draw,double perTick,Double store,String status) {
         public Power {
             Objects.requireNonNull(status);
@@ -167,7 +179,11 @@ public record FluidView(long identity,long inputRevision,long committedTick,long
      */
     public record Heat(String unit,String side,boolean paired,double outletTemperature,double heatWatt,Double fans,Double fanPowerWatt,
                        Double burners,Double setPoint,Double maximumWatt,Double bypass,
-                       String actuator,Double effort,String limit,List<Port> ports,Lines lines) {
+                       String actuator,Double effort,String limit,List<Port> ports,Lines lines,Fuel fuel) {
+        public Heat(String unit,String side,boolean paired,double outletTemperature,double heatWatt,Double fans,Double fanPowerWatt,Double burners,Double setPoint,Double maximumWatt,Double bypass,
+                    String actuator,Double effort,String limit,List<Port> ports,Lines lines) {
+            this(unit,side,paired,outletTemperature,heatWatt,fans,fanPowerWatt,burners,setPoint,maximumWatt,bypass,actuator,effort,limit,ports,lines,null);
+        }
         /** The actuators the screen names: an internal bypass, the real bypass valve, a ratio's feed valve, fans, burners, none. */
         public static final Set<String> ACTUATORS=Set.of("none","bypass","bypass_valve","feed_valve","fans","louvers","burners");
         /** An exchanger's four nozzles, a kettle's five; a little room for another unit's. */
@@ -187,8 +203,10 @@ public record FluidView(long identity,long inputRevision,long committedTick,long
         }
         /** This side with its control's actuator and effort, its limit, the unit's ports and lines. */
         public Heat with(String actuator,Double effort,String limit,List<Port> ports,Lines lines) {
-            return new Heat(unit,side,paired,outletTemperature,heatWatt,fans,fanPowerWatt,burners,setPoint,maximumWatt,bypass,actuator,effort,limit,ports,lines);
+            return new Heat(unit,side,paired,outletTemperature,heatWatt,fans,fanPowerWatt,burners,setPoint,maximumWatt,bypass,actuator,effort,limit,ports,lines,fuel);
         }
+        /** A fired heater's side with its burners' readings. */
+        public Heat withFuel(Fuel value){return new Heat(unit,side,paired,outletTemperature,heatWatt,fans,fanPowerWatt,burners,setPoint,maximumWatt,bypass,actuator,effort,limit,ports,lines,value);}
         /** The port of nozzle role {@code role}, or null. */
         public Port port(String role){for(var p:ports)if(p.role().equals(role))return p;return null;}
     }

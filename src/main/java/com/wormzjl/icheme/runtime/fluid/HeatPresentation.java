@@ -79,6 +79,7 @@ final class HeatPresentation {
             case PROCESS->new String[]{"PROCESS_INLET","PROCESS_OUTLET"};
             case CONVECTION->new String[]{"CONVECTION_INLET","CONVECTION_OUTLET"};
             case RADIANT->new String[]{"RADIANT_INLET","RADIANT_OUTLET"};
+            case BURNER->new String[]{"FUEL","FUEL"};
         };
     }
 

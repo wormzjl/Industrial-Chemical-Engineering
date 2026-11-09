@@ -663,13 +663,21 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             if(heat.fanPowerWatt()!=null)rows.add(new DeviceColumn.Meter("fan_power",value(heat.fanPowerWatt()/1000),"kW",tr("fan_power.hint")));
             if(heat.setPoint()!=null)rows.add(meter("set_temperature",temperatureValue(heat.setPoint()),t));
             if(heat.maximumWatt()!=null)rows.add(new DeviceColumn.Meter("duty_available",value(heat.maximumWatt()/1000),"kW",tr("duty_available.hint")));
+            // The burners (batch 2026-11-09-furnace-fuel-power): the fuel into the firebox, the heat it fires against the heat
+            // asked for, the combustion-air fans' draw. The alarms stand on the status display.
+            var fuel=heat.fuel();
+            if(fuel!=null){
+                rows.add(new DeviceColumn.Meter("fuel_flow",value(flowRateUnit.display(fuel.massFlow())),flowRateUnit.unit("kg"),tr("fuel_flow.hint",quantity(fuel.heatingValue()/1e6,"MJ/kg"))));
+                rows.add(new DeviceColumn.Meter("fuel_fired",value(fuel.firedWatt()/1000),"kW",tr("fuel_fired.hint",quantity(fuel.askedWatt()/1000,"kW"))));
+                rows.add(new DeviceColumn.Meter("burner_fans",value(fuel.fanWatt()/1000),"kW",tr("burner_fans.hint")));
+            }
         }
         // An instrument's main value on its meter, the other on hover: a flowmeter's mass flow (its volume flow), a level
         // gauge's share of its span (its height).
         for(var sensor:data.sensors()){
             // A turbine's speed pickup (W3) shows on its status line's shaft words; its meter comes with the W7 pages (reading A40).
-            if(sensor.kind()==com.wormzjl.icheme.runtime.instrument.Sensor.Kind.SPEED)continue;
-            String key=switch(sensor.kind()){case PRESSURE->"pressure_probe";case TEMPERATURE->"temperature_probe";case FLOW->"flowmeter";case LEVEL->sensor.mount().equals("level_boot")?"boot_level":"body_level";case SPEED->"";};
+            if(sensor.kind()==com.wormzjl.icheme.runtime.instrument.Sensor.Kind.SPEED||sensor.kind()==com.wormzjl.icheme.runtime.instrument.Sensor.Kind.ALARM)continue;
+            String key=switch(sensor.kind()){case PRESSURE->"pressure_probe";case TEMPERATURE->"temperature_probe";case FLOW->"flowmeter";case LEVEL->sensor.mount().equals("level_boot")?"boot_level":"body_level";case SPEED,ALARM->"";};
             var availability=sensor.availability();
             if(availability==com.wormzjl.icheme.runtime.instrument.Instrument.Availability.UNAVAILABLE){rows.add(new DeviceColumn.Meter(key,"—","",tr("reading.unavailable")));continue;}
             rows.add(switch(sensor.kind()){
@@ -677,7 +685,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
                 case TEMPERATURE->new DeviceColumn.Meter(key,temperatureValue(sensor.value()),t,availability==com.wormzjl.icheme.runtime.instrument.Instrument.Availability.NO_FLOW?tr("reading.still"):null);
                 case FLOW->new DeviceColumn.Meter(key,value(flowRateUnit.display(sensor.value())),flowRateUnit.unit("kg"),tr("reading.volume_flow",quantity(flowRateUnit.display(sensor.secondary()),flowRateUnit.unit("m³"))));
                 case LEVEL->new DeviceColumn.Meter(key,value(sensor.secondary()),"%",tr(sensor.value()<0||sensor.value()>sensor.span()?"reading.height_overrange":"reading.height",quantity(sensor.value(),"m")));
-                case SPEED->throw new IllegalStateException("A speed pickup has no meter");
+                case SPEED,ALARM->throw new IllegalStateException("A speed pickup or an alarm has no meter");
             });
         }
         return List.copyOf(rows);

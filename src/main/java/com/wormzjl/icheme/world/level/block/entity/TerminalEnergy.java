@@ -40,7 +40,8 @@ final class TerminalEnergy implements IEnergyStorage {
             var u = world.shafts().unitAt(new PhysicalFluidTopology.Position(level.dimension().location().toString(), origin.getX(), origin.getY(), origin.getZ()));
             if (u != null) id = u.id();
         } else {
-            var fluid = ShapeRasterizer.fluidCell(shape);
+            // A fired heater's FE is its burners' (their combustion-air fans), registered at its last node.
+            var fluid = com.wormzjl.icheme.science.equipment.HeatSides.burners(shape.kind()) ? ShapeRasterizer.fluidCells(shape).getLast() : ShapeRasterizer.fluidCell(shape);
             if (fluid != null && level.getBlockEntity(new BlockPos(origin.getX() + fluid.x(), origin.getY() + fluid.y(), origin.getZ() + fluid.z())) instanceof EquipmentShellBlockEntity node)
                 id = node.fluidIdentity();
         }

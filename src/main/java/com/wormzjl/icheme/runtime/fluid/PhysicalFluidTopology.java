@@ -99,17 +99,26 @@ public final class PhysicalFluidTopology {
             if((joints&~ALL_FACES)!=0)throw new IllegalArgumentException("Invalid pipe joints "+joints);
             if(joints!=ALL_FACES&&(kind!=TopologyCompiler.Kind.PIPE||!ports.isEmpty()))throw new IllegalArgumentException("Only a laid pipe has explicit joints");
             boolean onPortLane=position.lane()==PORT_LANE;
+            // A fired heater's burners (batch 2026-11-09-furnace-fuel-power): a void at the firebox behind its FUEL port, its
+            // heat unit's side BURNER, partnered with its radiant coil, and its fuel valve its control.
+            boolean burner=kind==TopologyCompiler.Kind.VOID&&heat!=null;
+            if(burner&&(heat.unit()!=com.wormzjl.icheme.science.equipment.HeatSides.Unit.FIRED_HEATER||heat.side()!=com.wormzjl.icheme.science.equipment.HeatSides.Side.BURNER
+                    ||heat.partner()==0||heat.partner()==id||!(control instanceof FlowControl.ControlValve valve&&valve.source()==FlowControl.ValveSource.BURNER)
+                    ||onPortLane||ports.size()!=1||ports.getFirst().port!=PassiveNetwork.PhasePort.BULK||ports.getFirst().role!=ConnectionRole.VESSEL))
+                throw new IllegalArgumentException("A burner is a fired heater's void with one bulk port and its fuel valve, partnered with its radiant coil");
+            if(heat!=null&&heat.side()==com.wormzjl.icheme.science.equipment.HeatSides.Side.BURNER&&!burner)throw new IllegalArgumentException("A burner side is a void");
             if(position.lane()==0||onPortLane?slots!=0||points!=0:!laneFits(position.lane(),slots)||(points>>>60)!=0)throw new IllegalArgumentException("Invalid rack lane "+position.lane()+" of "+slots+" positions");
             if(suspendedBy<0||onPortLane&&suspendedBy!=0)throw new IllegalArgumentException("Invalid column suspension");
             // A column's port (plan 4.2): a void or a generator meeting its valve through one face of its own cell.
-            if(onPortLane!=(TopologyCompiler.fixed(kind)&&!ports.isEmpty())
+            if(onPortLane!=(TopologyCompiler.fixed(kind)&&!ports.isEmpty()&&!burner)
                     ||onPortLane&&(ports.size()!=1||!ports.getFirst().cell.equals(position)||ports.getFirst().port!=PassiveNetwork.PhasePort.BULK||ports.getFirst().role!=ConnectionRole.VESSEL))
                 throw new IllegalArgumentException("A column port is a void or a generator with one port at its own cell, and only a port has ports of that kind");
             if(slots>0&&(joints==ALL_FACES||Integer.bitCount(joints)>2||cutoff!=Cutoff.NONE||inlineFilter||!(control instanceof FlowControl.Passive)))
                 throw new IllegalArgumentException("A rack lane is a plain laid pipe with at most two joints");
             if(inlineFilter&&(kind!=TopologyCompiler.Kind.PIPE||cutoff!=Cutoff.NONE||!(control instanceof FlowControl.Passive)))throw new IllegalArgumentException("Invalid pipe filter accessory");
             if(kind!=TopologyCompiler.Kind.PIPE&&cutoff!=Cutoff.NONE)throw new IllegalArgumentException("Only a pipe has a cutoff accessory");
-            boolean valid=switch(kind) {case PUMP->control instanceof FlowControl.Mover mover&&mover.liquid();case COMPRESSOR->control instanceof FlowControl.Mover mover&&!mover.liquid();case VALVE->control instanceof FlowControl.Valve&&!(control instanceof FlowControl.Turbine);case TURBINE->control instanceof FlowControl.Turbine;case PIPE->control instanceof FlowControl.Passive||control instanceof FlowControl.Valve&&!(control instanceof FlowControl.Turbine)||control instanceof FlowControl.Mover;default->control instanceof FlowControl.Passive;};
+            boolean valid=switch(kind) {case PUMP->control instanceof FlowControl.Mover mover&&mover.liquid();case COMPRESSOR->control instanceof FlowControl.Mover mover&&!mover.liquid();case VALVE->control instanceof FlowControl.Valve&&!(control instanceof FlowControl.Turbine);case TURBINE->control instanceof FlowControl.Turbine;case PIPE->control instanceof FlowControl.Passive||control instanceof FlowControl.Valve&&!(control instanceof FlowControl.Turbine)||control instanceof FlowControl.Mover;case VOID->burner||control instanceof FlowControl.Passive;default->control instanceof FlowControl.Passive;};
+            if(control instanceof FlowControl.ControlValve valve&&valve.source()==FlowControl.ValveSource.BURNER&&!burner)throw new IllegalArgumentException("Only a burner has a burner's fuel valve");
             if(!valid)throw new IllegalArgumentException("Device/control mismatch");
             if(control instanceof FlowControl.Valve&&cutoff!=Cutoff.NONE)throw new IllegalArgumentException("A pressure valve cannot carry a cutoff accessory");
             if(kind==TopologyCompiler.Kind.PIPE&&control instanceof FlowControl.Mover&&(cutoff!=Cutoff.NONE||facing.y!=0))throw new IllegalArgumentException("An inline mover needs a horizontal pipe without a cutoff");
@@ -127,7 +136,7 @@ public final class PhysicalFluidTopology {
             boolean pool=kind==TopologyCompiler.Kind.RESERVOIR&&heat!=null;
             if(pool&&(heat.unit()!=com.wormzjl.icheme.science.equipment.HeatSides.Unit.KETTLE||heat.side()!=com.wormzjl.icheme.science.equipment.HeatSides.Side.SHELL||heat.partner()==0||heat.partner()==id))
                 throw new IllegalArgumentException("A reservoir's heat unit is a kettle's shell, partnered with its tubes");
-            if(!pool&&(kind==TopologyCompiler.Kind.HEAT_SIDE)!=(heat!=null))throw new IllegalArgumentException("A heat side, and only a heat side or a kettle's shell, carries a heat unit");
+            if(!pool&&!burner&&(kind==TopologyCompiler.Kind.HEAT_SIDE)!=(heat!=null))throw new IllegalArgumentException("A heat side, and only a heat side or a kettle's shell, carries a heat unit");
             if(kind==TopologyCompiler.Kind.HEAT_SIDE&&heat.unit()==com.wormzjl.icheme.science.equipment.HeatSides.Unit.KETTLE&&heat.side()!=com.wormzjl.icheme.science.equipment.HeatSides.Side.TUBE)
                 throw new IllegalArgumentException("A kettle's heat side is its tubes");
             if(kind==TopologyCompiler.Kind.HEAT_SIDE) {
@@ -151,12 +160,14 @@ public final class PhysicalFluidTopology {
                         case DISCHARGE->discharge++;
                         case VESSEL->throw new IllegalArgumentException("A mover needs suction and discharge ports");
                     }
-                } else if(!onPortLane)throw new IllegalArgumentException("Only reservoirs, pumps, compressors, heat sides and column ports have ports");
+                } else if(!onPortLane&&!burner)throw new IllegalArgumentException("Only reservoirs, pumps, compressors, heat sides, burners and column ports have ports");
             }
-            if(!ports.isEmpty()&&kind!=TopologyCompiler.Kind.RESERVOIR&&kind!=TopologyCompiler.Kind.HEAT_SIDE&&!onPortLane&&(ports.size()!=2||suction!=1||discharge!=1))
+            if(!ports.isEmpty()&&kind!=TopologyCompiler.Kind.RESERVOIR&&kind!=TopologyCompiler.Kind.HEAT_SIDE&&!onPortLane&&!burner&&(ports.size()!=2||suction!=1||discharge!=1))
                 throw new IllegalArgumentException("A mover needs exactly one suction and one discharge port");
         }
         boolean boundary(){return kind==TopologyCompiler.Kind.RESERVOIR||kind==TopologyCompiler.Kind.GENERATOR||kind==TopologyCompiler.Kind.VOID;}
+        /** Whether this is a fired heater's burners (batch 2026-11-09-furnace-fuel-power): the run into it carries its fuel valve. */
+        public boolean burner(){return kind==TopologyCompiler.Kind.VOID&&heat!=null;}
         /** Includes an installed filter without changing the mechanical host identity. */
         public boolean filter(){return inlineFilter||kind==TopologyCompiler.Kind.FILTER;}
         /** Mechanical pipes compile through the existing valve or filter law when fitted. */
@@ -433,6 +444,27 @@ public final class PhysicalFluidTopology {
                 var sections=run.segments().stream().map(TopologyCompiler.Segment::geometry).toList();
                 int a=indices.get(run.first()),b=indices.get(run.second());
                 long pipeId=runIdentity(run,linkOwner,0);if(!pipeIdentities.add(pipeId))throw new IllegalStateException("Compiled pipe identity collision");
+                boolean burnerStart=start!=null&&start.burner(),burnerEnd=end!=null&&end.burner();
+                if(burnerStart||burnerEnd) {
+                    // A fired heater's burners (batch 2026-11-09-furnace-fuel-power): the run into the firebox carries the
+                    // burners' fuel valve, stated toward it; a valve, pump or compressor driving the run's other end keeps its
+                    // own half, as two driven ends do.
+                    var burner=burnerEnd?end:start;var feeder=burnerEnd?start:end;var feederLink=burnerEnd?startLink:endLink;
+                    int sink=burnerEnd?b:a,source=burnerEnd?a:b;var sourcePort=burnerEnd?startPort:endPort;
+                    boolean driven=feeder!=null&&feeder.actuator()&&outletLinks.contains(feederLink.id());
+                    if(driven) {
+                        int middle=reservoirs.size();reservoirs.add(new PassiveNetwork.Reservoir(virtual--,.5*(reservoirs.get(a).elevation()+reservoirs.get(b).elevation()),seed,PassiveNetwork.NodeKind.JUNCTION));
+                        var halves=sections.stream().map(g->scaled(g,.5)).toList();
+                        pipes.add(new PassiveNetwork.Pipe(pipeId,source,middle,halves,control(feeder,compiled.invalidPumpCycles())).withPorts(sourcePort,PassiveNetwork.PhasePort.BULK));mapViews(views,run,linkOwner,linkDirections,physical,islandIndex,pipeId,burnerEnd,true);
+                        pipeId=runIdentity(run,linkOwner,1);if(!pipeIdentities.add(pipeId))throw new IllegalStateException("Compiled pipe identity collision");
+                        pipes.add(new PassiveNetwork.Pipe(pipeId,middle,sink,halves,burner.control).withActuatorArea(halves.getLast().area()));mapViews(views,run,linkOwner,linkDirections,physical,islandIndex,pipeId,burnerEnd,true);
+                    } else {
+                        pipes.add(new PassiveNetwork.Pipe(pipeId,source,sink,sections,burner.control).withPorts(sourcePort,PassiveNetwork.PhasePort.BULK)
+                                .withForbiddenDirections(checkRestrictions(start,end,startLink,endLink,points,burnerStart)).withActuatorArea((burnerEnd?sections.getLast():sections.getFirst()).area()));
+                        mapViews(views,run,linkOwner,linkDirections,physical,islandIndex,pipeId,burnerEnd);
+                    }
+                    continue;
+                }
                 if(fromStart&&fromEnd) {
                     int middle=reservoirs.size();reservoirs.add(new PassiveNetwork.Reservoir(virtual--,.5*(reservoirs.get(a).elevation()+reservoirs.get(b).elevation()),seed,PassiveNetwork.NodeKind.JUNCTION));
                     var halves=sections.stream().map(g->scaled(g,.5)).toList();

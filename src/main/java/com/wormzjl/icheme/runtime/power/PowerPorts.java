@@ -28,7 +28,7 @@ public final class PowerPorts {
             return terminal != null
                     && terminal.equals(shell.cell())
                     && switch (shell.shape().kind()) {
-                        case MOTOR, GENERATOR, AIR_COOLER, INDUCED_DRAFT_COOLING_TOWER -> true;
+                        case MOTOR, GENERATOR, AIR_COOLER, INDUCED_DRAFT_COOLING_TOWER, VERTICAL_HEATER, CABIN_HEATER -> true;
                         default -> false;
                     };
         }

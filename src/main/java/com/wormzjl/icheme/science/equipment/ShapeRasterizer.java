@@ -834,6 +834,14 @@ public final class ShapeRasterizer {
                     box = new Cell(floor(at[0]), floor(at[1]), floor(at[2]));
                 }
             }
+            // A fired heater's FE port is its service enclosure's (batch 2026-11-09-furnace-fuel-power): the cell inside the
+            // enclosure behind its power gland, which stands 0.04 m out of the case's face.
+            if (box == null && HeatSides.burners(shape.kind()) && services.power() != null) {
+                var p = services.power();
+                int[][] normals = {{0, -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}};
+                var n = normals[p.face()];
+                box = new Cell(floor(p.x() - .1 * n[0]), floor(p.y() - .1 * n[1]), floor(p.z() - .1 * n[2]));
+            }
             terminal = box;
             for (var entry : byCell.entrySet()) {
                 if (entry.getValue().size() > KEYED_NOZZLES)
@@ -852,6 +860,13 @@ public final class ShapeRasterizer {
                     if (unit == null || unit.fluidPoint == null) throw new IllegalStateException("A kettle needs its pool's node");
                     var low = transform.point(unit.fluidPoint);
                     var all = new ArrayList<>(sides);all.add(new Cell(floor(low[0]), floor(low[1]), floor(low[2])));sides = List.copyOf(all);
+                }
+                // A fired heater's burners register after its coils, at their FUEL nozzle's cell (batch 2026-11-09-furnace-fuel-power).
+                if (HeatSides.burners(shape.kind())) {
+                    var fuel = ports.stream().filter(port -> nozzles.get(port.nozzle()).role() == HeatSides.BURNER_ROLE).findFirst()
+                            .orElseThrow(() -> new IllegalStateException("A fired heater needs its fuel nozzle")).cell();
+                    if (sides.contains(fuel)) throw new IllegalStateException("A fired heater's fuel nozzle shares a coil's node cell");
+                    var all = new ArrayList<>(sides);all.add(fuel);sides = List.copyOf(all);
                 }
                 node = sides.getFirst();
             } else if (shape.drum()) {

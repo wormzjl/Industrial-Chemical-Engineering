@@ -388,7 +388,8 @@ public final class EquipmentServices {
 
     static boolean powered(EquipmentShape.Kind kind) {
         return switch (kind) {
-            case MOTOR, GENERATOR, AIR_COOLER, INDUCED_DRAFT_COOLING_TOWER -> true;
+            // A fired heater's combustion-air fans (batch 2026-11-09-furnace-fuel-power).
+            case MOTOR, GENERATOR, AIR_COOLER, INDUCED_DRAFT_COOLING_TOWER, VERTICAL_HEATER, CABIN_HEATER -> true;
             default -> false;
         };
     }

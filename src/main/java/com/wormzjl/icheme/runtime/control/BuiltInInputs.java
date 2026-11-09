@@ -123,7 +123,36 @@ final class BuiltInInputs {
             out.add(
                     ControlInput.builtIn(
                             host, binding.node(0), "shaft_speed", Sensor.Kind.SPEED, "SPEED"));
+        alarms(out, binding);
         return List.copyOf(out);
+    }
+
+    /**
+     * An equipment's alarm channels (batch 2026-11-09-furnace-fuel-power): a fired heater's burners' (no power, no fuel, low
+     * fuel, fuel that does not burn), read from its burners' registration, its last node; every other powered unit's no
+     * power, read from its store (an air cooler's or induced tower's first node, a motor's shaft unit, the host).
+     */
+    private static void alarms(List<ControlInput> out, Binding binding) {
+        var kind = binding.shape().kind();
+        if (HeatSides.burners(kind)) {
+            long burners = binding.node(HeatSides.of(binding.shape()).size());
+            for (var alarm : FiredHeaters.Alarm.values())
+                out.add(ControlInput.builtIn(binding.host(), burners, "alarm_" + alarm.name().toLowerCase(Locale.ROOT), Sensor.Kind.ALARM, "ALARM:" + alarm.name()));
+        } else if (kind == EquipmentShape.Kind.AIR_COOLER || kind == EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER)
+            out.add(ControlInput.builtIn(binding.host(), binding.node(0), "alarm_no_power", Sensor.Kind.ALARM, "ALARM:NO_POWER"));
+        else if (kind == EquipmentShape.Kind.MOTOR)
+            out.add(ControlInput.builtIn(binding.host(), 0, "alarm_no_power", Sensor.Kind.ALARM, "ALARM:NO_POWER"));
+    }
+
+    /** Whether alarm channel {@code input} is raised: its burners' alarm, or its unit's store standing for want of power. */
+    static boolean raised(ControlInput input, FluidWorldAuthority world) {
+        var alarm = FiredHeaters.Alarm.valueOf(input.role().substring(6));
+        long unit = input.source() > 0 ? input.source() : input.host();
+        var heater = world.burners().alarms(unit);
+        if (world.registrations().containsKey(unit) && world.registrations().get(unit).device().burner()) return heater.contains(alarm);
+        if (alarm != FiredHeaters.Alarm.NO_POWER) return false;
+        var view = world.electric().view(unit);
+        return view != null && view.unpowered();
     }
 
     static List<ControlInput> inline(long host) {
@@ -168,6 +197,7 @@ final class BuiltInInputs {
 
     static boolean volumeAvailable(ControlInput input) {
         return !input.role().startsWith("COLUMN")
+                && !input.role().startsWith("ALARM:")
                 && !input.role().equals("REFLUX")
                 && !input.role().startsWith("AIR:")
                 && !input.role().startsWith("PORT:");
@@ -199,7 +229,11 @@ final class BuiltInInputs {
         long tick = view == null ? world.onlineTick() : view.committedTick();
         double value = 0, secondary = 0, span = 0;
         var quality = Instrument.Availability.UNAVAILABLE;
-        if (input.role().equals("SPEED")) {
+        if (input.role().startsWith("ALARM:")) {
+            value = raised(input, world) ? 1 : 0;
+            tick = world.onlineTick();
+            quality = Instrument.Availability.AVAILABLE;
+        } else if (input.role().equals("SPEED")) {
             var unit = world.shafts().unit(input.host());
             var drive = unit == null ? world.shafts().unitOfDevice(input.source()) : unit;
             var state = drive == null ? null : world.shafts().view(drive.id());
