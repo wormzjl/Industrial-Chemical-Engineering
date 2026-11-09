@@ -114,6 +114,10 @@ distiller in the process simulator.
   fired still has none. The liquid fuel connection is on the back face's right column. Baked sprites
   (`tools/still-sprites`): every process vessel and line in its heater tier's finish (copper, carbon steel, stainless);
   the setting brick, the doors cast iron. The layout table was re-recorded (still rows only).
+- 2026-11-09: owner faces (OWNER_FEEDBACK_REVIEW.md item 3): charge on the front, fuel on the right (−x, middle column,
+  the charge's row), drain on the back, condenser on the left (along z at x = 2.5); the electric still's terminal box on
+  the right face's middle column; the charge line bends in front of the axis, the drain jogs behind the pot. The still
+  renders gain a right view. Layout table re-recorded (still rows only).
 
 ## Open items
 

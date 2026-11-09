@@ -25,16 +25,16 @@ main thread (owner: "Here").
   drawn copper (solid), welded carbon steel and steel pipe (liquid, "iron-ish"), welded brushed stainless and stainless
   tube (electric). Cooling water and fuel stay plant pipe.
 
-## 3. Data port and fuel connection
+## 3. Data port and faces
 
 - Owner: only the electric still has a data box and port, so only the electric still takes a controller. A fired still
-  has none (`EquipmentServices`: no services for a fired still); its firing and reflux are set by hand. (A first reading
-  had added a box to the fired stills; removed.)
-- The liquid fuel flange moved from the front to the back face's right column, (2,0,3). The +x face would touch a
-  no-condenser still's vapour pipe (`everyNozzleLeavesAFreeBlockForItsPipe`).
-- Owner, later: the fuel may go on the −x face. Open: on stills up to 750 L the charge's pipe block (−1,1,1) touches all
-  three row-0 positions there. With the charge at row 2 the fuel fits at (−1,0,1), and the cooling water inlet rises from
-  row 3 to row 4 (100 to 750 L stills one block taller).
+  has none (`EquipmentServices`: no services for a fired still); its firing and reflux are set by hand.
+- Owner, then: charge on the front, fuel on the right, drain on the back, condenser on the left (seen from the firing
+  door; the right is −x). The condenser lies along z at x = 2.5. The fuel flange is on the right face's middle column, on
+  the charge's row: beside the setting a pipe's largest neck (0.27 m) does not fit from 200 L up. The electric still's
+  terminal box moved from the front corner to the right face's middle column, its gland outward (owner: a bad
+  location). The charge line bends into the pot in front of the axis and the drain jogs behind the pot, so neither meets
+  the fuel flange or the box. The pot node's point sits 0.01 m off the block edges (its own cell at every heading).
 
 ## 4. Pot volume against the drawing
 
@@ -45,6 +45,6 @@ main thread (owner: "Here").
 
 - Passed:
   - quick suite: `StillRuntimeTest`, `FluidFactsCompatTest`, `BatchStillTest`, `StillHeadTest`, `BatchStillUnitTest`;
-  - equipmentGates: the 23 affected classes, then the five geometry classes after the fixes.
+  - equipmentGates: the 23 affected classes, then the eight geometry classes after each layout change.
 - Layout table re-recorded; only still rows changed.
 - `UnitTextTest` fails on the flare stack's datasheet widths (417 > 411 px), outside this change.
