@@ -158,6 +158,11 @@ public final class EquipmentStructure {
         for (var cell : cells) if (!level.isLoaded(vessel.origin().offset(cell.x(), cell.y(), cell.z()))) return false;
         for (var cell : cells)
             if (level.getBlockEntity(vessel.origin().offset(cell.x(), cell.y(), cell.z())) instanceof EquipmentShellBlockEntity entity) entity.rename(name);
+        // The registry's record holds the name too (registry first, W5c C4): a structure placed again takes it.
+        var world = FluidWorldAuthority.find(level.getServer()).orElse(null);
+        var at = position(level, vessel.origin());
+        var held = world == null ? null : world.structure(at);
+        if (held != null) world.structure(at, held.withName(com.wormzjl.icheme.science.equipment.DeviceName.clean(name)));
         return true;
     }
 
@@ -186,7 +191,7 @@ public final class EquipmentStructure {
             placed++;
         }
         var vessel = new Vessel(origin, shape);
-        if (rows >= shape.sizeY()) record(level, origin, shape, paint);
+        if (rows >= shape.sizeY()) record(level, origin, shape, paint, name);
         if (shape.fluidDevice() && rows >= shape.sizeY()) register(level, vessel);
         // A motor, generator or gearbox joins its shaft train whole (W3); a casing or turbine does once registered.
         else if (!shape.fluidDevice() && rows >= shape.sizeY()) ShaftParts.structure(level, origin, shape, 0);
@@ -438,15 +443,15 @@ public final class EquipmentStructure {
      * 3.3): its shape and paint, or none when {@code shape} is null. The registry places the structure again from it. The
      * record's shape text is made only when the record changes.
      */
-    private static void record(ServerLevel level, BlockPos origin, @Nullable EquipmentShape shape, @Nullable Paint paint) {
+    private static void record(ServerLevel level, BlockPos origin, @Nullable EquipmentShape shape, @Nullable Paint paint, String name) {
         var world = FluidWorldAuthority.find(level.getServer()).orElse(null);
         if (world == null) return;
         var at = position(level, origin);
         var held = world.structure(at);
         if (shape == null) {
             if (held != null) world.structure(at, null);
-        } else if (held == null || !held.shape().equals(shape) || !held.paint().equals(paint))
-            world.structure(at, WorldTopologyLedger.Structure.of(shape, paint));
+        } else if (held == null || !held.shape().equals(shape) || !held.paint().equals(paint) || !held.name().equals(name))
+            world.structure(at, WorldTopologyLedger.Structure.of(shape, paint, name));
     }
 
     /**
@@ -456,18 +461,24 @@ public final class EquipmentStructure {
      * paint ({@link #place} and {@link #refresh} bind each with it), so the cells are walked only when the controller's
      * differs. A record of another shape waits for the re-alignment (plan 4.4).
      */
-    private static void restatePaint(ServerLevel level, BlockPos origin, EquipmentShape shape, Paint paint) {
+    private static void restatePaint(ServerLevel level, BlockPos origin, EquipmentShape shape, Paint paint, String name) {
         var world = FluidWorldAuthority.find(level.getServer()).orElse(null);
         if (world == null) return;
-        var held = world.structure(position(level, origin));
+        var at = position(level, origin);
+        var held = world.structure(at);
         if (held == null) {
-            record(level, origin, shape, paint);
+            record(level, origin, shape, paint, name);
             return;
         }
-        if (held.paint().equals(paint) || !held.shape().equals(shape)) return;
+        if (!held.shape().equals(shape)) return;
+        // A named vessel whose record holds no name teaches it (a world saved before the registry held names, W5c C4).
+        if (held.name().isEmpty() && !name.isEmpty()) world.structure(at, held = held.withName(name));
+        if (held.paint().equals(paint) && held.name().equals(name)) return;
         for (var cell : ShapeRasterizer.layout(shape).shell())
-            if (level.getBlockEntity(origin.offset(cell.x(), cell.y(), cell.z())) instanceof EquipmentShellBlockEntity shell && ours(shell, origin, shape))
+            if (level.getBlockEntity(origin.offset(cell.x(), cell.y(), cell.z())) instanceof EquipmentShellBlockEntity shell && ours(shell, origin, shape)) {
                 shell.repaint(held.paint());
+                shell.rename(held.name());
+            }
     }
 
     /** Reservoir nozzles keep their phase classes; movers register only their explicitly directed process pair; a kettle's
@@ -646,7 +657,7 @@ public final class EquipmentStructure {
         var controller = ShapeRasterizer.layout(shape).controller();
         if (!(level.getBlockEntity(origin.offset(controller.x(), controller.y(), controller.z())) instanceof EquipmentShellBlockEntity shell)
                 || !ours(shell, origin, shape) || shell.stale()) return;
-        restatePaint(level, origin, shape, shell.paint());
+        restatePaint(level, origin, shape, shell.paint(), shell.name());
         int changed = restateCells(level, origin, shape, Set.of(), Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE);
         if (changed == 0) return;
         waitForLight(level, origin, corner(origin, shape));
@@ -697,7 +708,7 @@ public final class EquipmentStructure {
             if (level instanceof ServerLevel server) com.wormzjl.icheme.runtime.assembly.AssemblyService.dismantled(server, vessel);
             if(level instanceof ServerLevel server&&vessel.shape().kind()==EquipmentShape.Kind.COLUMN){var c=ShapeRasterizer.layout(vessel.shape()).controller();if(level.getBlockEntity(vessel.origin().offset(c.x(),c.y(),c.z())) instanceof EquipmentShellBlockEntity cell&&cell.instruments().dataPort()!=null)FluidWorldAuthority.find(server.getServer()).ifPresent(w->w.controls().removeHost(cell.instruments().dataPort().host()));}
             if (level instanceof ServerLevel server && vessel.shape().fluidDevice()) unregister(server, vessel);
-            if (level instanceof ServerLevel server) record(server, vessel.origin(), null, null);
+            if (level instanceof ServerLevel server) record(server, vessel.origin(), null, null, com.wormzjl.icheme.science.equipment.DeviceName.NONE);
             if (UnitDesign.shafted(vessel.shape().kind())) ShaftParts.remove(level, vessel.origin());
             var layout = ShapeRasterizer.layout(vessel.shape());
             for (var list : java.util.List.of(layout.shell(), layout.interior()))
@@ -756,7 +767,7 @@ public final class EquipmentStructure {
         var world = FluidWorldAuthority.find(level.getServer()).orElse(null);
         for (var at : shells)
             if (world != null && level.getBlockEntity(at) instanceof EquipmentShellBlockEntity shell && shell.fluidIdentity() != 0) world.remove(shell.fluidIdentity());
-        record(level, origin, null, null);
+        record(level, origin, null, null, com.wormzjl.icheme.science.equipment.DeviceName.NONE);
         int flags = Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE;
         dismantling = true;
         try {
@@ -874,8 +885,8 @@ public final class EquipmentStructure {
         waitForLight(level, low, high);
         // The registry's record follows the structure to where its layout now stands, cells left out or not: the registry
         // holds the structure the player built.
-        if (!vessel.origin().equals(origin)) record(level, origin, null, null);
-        record(level, vessel.origin(), shape, survey.paint());
+        if (!vessel.origin().equals(origin)) record(level, origin, null, null, com.wormzjl.icheme.science.equipment.DeviceName.NONE);
+        record(level, vessel.origin(), shape, survey.paint(), survey.name());
         // A shaft unit stands at its structure's origin (W3): a moved origin's old unit leaves, the new one is queued here.
         if (UnitDesign.shafted(shape.kind()) && !vessel.origin().equals(origin)) ShaftParts.remove(level, origin);
         if (shape.fluidDevice()) reregister(level, vessel, survey.node(), survey.identities());
@@ -1058,7 +1069,7 @@ public final class EquipmentStructure {
             checked++;
             Realignment result;
             try {
-                result = realign(level, world, new Vessel(origin, record.shape()), record.paint(), high);
+                result = realign(level, world, new Vessel(origin, record.shape()), record.paint(), record.name(), high);
             } catch (RuntimeException failed) {
                 it.remove();
                 IChemE.LOGGER.error("fluid_realign failed structure={}", origin.toShortString(), failed);
@@ -1086,7 +1097,8 @@ public final class EquipmentStructure {
     }
 
     /**
-     * Registry first for {@code vessel}, the structure the registry records at its origin, painted {@code paint} (batch
+     * Registry first for {@code vessel}, the structure the registry records at its origin, painted {@code paint} and named
+     * {@code name} (batch
      * 2026-11-03-save-corruption, REGISTRY_FIRST_PLAN.md 4.4). A structure whose layout cells all stand as its own is left
      * as it is, and its registrations held before are released. Any other is rebuilt to its record where it stands (shift
      * 0: the registry holds the origin). Cells of its origin and another shape (a structure built there after the
@@ -1096,7 +1108,7 @@ public final class EquipmentStructure {
      * until a later load finds it whole. {@code high} is the far corner of the region read: the record's box, or wider
      * where cells of its origin reach further.
      */
-    private static Realignment realign(ServerLevel level, FluidWorldAuthority world, Vessel vessel, Paint paint, BlockPos high) {
+    private static Realignment realign(ServerLevel level, FluidWorldAuthority world, Vessel vessel, Paint paint, String name, BlockPos high) {
         var origin = vessel.origin();
         var shape = vessel.shape();
         if (stands(level, vessel)) {
@@ -1110,7 +1122,7 @@ public final class EquipmentStructure {
         com.wormzjl.icheme.runtime.assembly.AssemblyService.removed(level, vessel);
         var layout = ShapeRasterizer.layout(shape);
         var plan = EquipmentRefresh.plan(layout, survey.world(), new ShapeRasterizer.Cell(0, 0, 0));
-        var touched = write(level, vessel, paint, survey.name(), plan, true);
+        var touched = write(level, vessel, paint, name, plan, true);
         waitForLight(level, origin, high);
         // A shell cell that is no node of the record's shape stands for no registration.
         var nodes = new HashSet<>(nodes(vessel));

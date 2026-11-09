@@ -209,6 +209,8 @@ public final class RegistryFirstGameTests {
                     var fitted = item.getItem().onItemUseFirst(item, new UseOnContext(fitter, InteractionHand.MAIN_HAND, new BlockHitResult(Vec3.atCenterOf(first), Direction.UP, first, false)));
                     if (failure[0] == null && (fitted.consumesAction() || item.getCount() != 1 || FluidDeviceBlock.hasFilter(level.getBlockState(first)) || world.registrations().get(ids[1]).device().inlineFilter()))
                         failure[0] = "a filter was fitted on a pipe whose record holds a sight glass: " + fitted + ", " + level.getBlockState(first);
+                    ((FluidDeviceBlockEntity) level.getBlockEntity(east)).rename("T-1 Charge tank");
+                    if (failure[0] == null && !world.deviceName(ids[3]).equals("T-1 Charge tank")) failure[0] = "the registry does not hold the tank's name";
                     before[0] = moles(world, ids[3]);
                     FluidDeviceBlock.quietly(() -> {
                         level.setBlock(first, Blocks.AIR.defaultBlockState(), 3);
@@ -231,6 +233,7 @@ public final class RegistryFirstGameTests {
                 .thenExecute(() -> {
                     if (failure[0] == null && !level.getBlockState(second).is(ModBlocks.FLUID_PIPE.get())) failure[0] = "the filter block was not set back to a pipe";
                     if (failure[0] == null && !level.getBlockState(east).is(ModBlocks.FLUID_RESERVOIR.get())) failure[0] = "the tank was not set back";
+                    if (failure[0] == null && !((FluidDeviceBlockEntity) level.getBlockEntity(east)).name().equals("T-1 Charge tank")) failure[0] = "the set-back tank lost its name";
                     var glass = level.getBlockState(first);
                     if (failure[0] == null && !(FluidDeviceBlock.hasSightGlass(glass) && glass.getValue(FluidDeviceBlock.SIGHT_GLASS_AXIS) != Direction.Axis.X))
                         failure[0] = "the re-placed pipe does not show its sight glass across its run: " + glass;
@@ -449,6 +452,7 @@ public final class RegistryFirstGameTests {
                 .thenWaitUntil(() -> helper.assertTrue(world.capture().world().events().isEmpty() && alone(world, id), "Waiting for the drum to stand alone"))
                 .thenExecute(() -> {
                     before[0] = moles(world, id);
+                    EquipmentStructure.rename(level, new EquipmentStructure.Vessel(origin, shape), "V-1 Nitrogen drum");
                     // The cells are lost as a damaged chunk loses them (main's equipment protection admits no other edit).
                     for (var at : cells) EquipmentPermissionChecks.lost(level, at, Blocks.AIR.defaultBlockState(), 3);
                     if (world.at(position(level, node)).map(r -> r.device().id()).orElse(0L) != id || world.structure(position(level, origin)) == null)
@@ -468,7 +472,8 @@ public final class RegistryFirstGameTests {
                     if (failure[0] == null && !(moles(world, id) > .99 * before[0])) failure[0] = "the drum lost what it held: " + before[0] + " -> " + moles(world, id);
                     for (var c : layout.shell()) {
                         var shell = (EquipmentShellBlockEntity) level.getBlockEntity(cell(origin, c));
-                        if (failure[0] == null && (shell.stale() || !shell.paint().equals(paint))) failure[0] = "cell " + c + " was left stale or lost its paint";
+                        if (failure[0] == null && (shell.stale() || !shell.paint().equals(paint) || !shell.name().equals("V-1 Nitrogen drum")))
+                            failure[0] = "cell " + c + " was left stale or lost its paint or name";
                     }
                     var dropped = level.getEntitiesOfClass(ItemEntity.class, new AABB(origin).inflate(8), e -> !earlier.contains(e.getUUID()));
                     if (failure[0] == null && !dropped.isEmpty())

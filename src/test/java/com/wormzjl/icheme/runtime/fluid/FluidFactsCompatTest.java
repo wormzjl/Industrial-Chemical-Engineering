@@ -114,9 +114,11 @@ class FluidFactsCompatTest {
         world.ledger.paint(lane,new WorldTopologyLedger.LinePaint(0xE25303,0xF7B500));
         world.ledger.structure(new PhysicalFluidTopology.Position(EventPathWorld.DIM,60,64,0),WorldTopologyLedger.Structure.of(
                 EquipmentShape.drum(2,6,EquipmentShape.Orientation.HORIZONTAL,EquipmentShape.Heading.EAST,EquipmentShape.defaultSupport(2,EquipmentShape.Orientation.HORIZONTAL)),
-                new Paint(0x587246,0x383E42)));
-        // Facts schema 15, last: the rack lane's rack frame, the straight rack facing east it was laid on.
+                new Paint(0x587246,0x383E42),"V-101 Flash drum"));
+        // Facts schema 15: the rack lane's rack frame, the straight rack facing east it was laid on.
         world.ledger.rack(lane,new WorldTopologyLedger.RackFrame(Direction.EAST,WorldTopologyLedger.RackShape.STRAIGHT));
+        // Facts schema 15, last: the laid pipe's name (W5c C4), with a letter outside ASCII.
+        world.ledger.name(laid,"Feed é line");
         return world;
     }
     /**
@@ -891,8 +893,9 @@ class FluidFactsCompatTest {
         var parts=new ArrayList<String>();
         for(var e:new TreeMap<>(world.builds().paints()).entrySet())parts.add(e.getKey()+":"+Integer.toHexString(e.getValue().primary())+"/"+Integer.toHexString(e.getValue().secondary()));
         var structures=new ArrayList<>(world.builds().structures().entrySet());structures.sort(Comparator.comparing(e->e.getKey().toString()));
-        for(var e:structures){var p=e.getKey();var s=e.getValue();parts.add(p.x()+","+p.y()+","+p.z()+":"+s.shape().kind()+":"+s.shape().diameter()+"x"+s.shape().tangentLength()+":"+Integer.toHexString(s.paint().body())+"/"+Integer.toHexString(s.paint().structure()));}
+        for(var e:structures){var p=e.getKey();var s=e.getValue();parts.add(p.x()+","+p.y()+","+p.z()+":"+s.shape().kind()+":"+s.shape().diameter()+"x"+s.shape().tangentLength()+":"+Integer.toHexString(s.paint().body())+"/"+Integer.toHexString(s.paint().structure())+(s.name().isEmpty()?"":":"+s.name()));}
         for(var e:new TreeMap<>(world.builds().racks()).entrySet())parts.add(e.getKey()+":"+e.getValue().facing()+"/"+e.getValue().shape());
+        for(var e:new TreeMap<>(world.builds().names()).entrySet())parts.add(e.getKey()+"=\""+e.getValue()+"\"");
         return String.join(";",parts);
     }
     /** The build facts survive an exact load and a load from facts alone (batch 2026-11-03-save-corruption). */
@@ -906,7 +909,7 @@ class FluidFactsCompatTest {
     @Test void aStructureWhoseShapeDoesNotReadRefuses() {
         var ledger=new WorldTopologyLedger(WorldTopologyLedger.Snapshot.empty(CATALOG));
         var drum=EquipmentShape.drum(2,6,EquipmentShape.Orientation.HORIZONTAL,EquipmentShape.Heading.EAST,EquipmentShape.defaultSupport(2,EquipmentShape.Orientation.HORIZONTAL));
-        ledger.structure(new PhysicalFluidTopology.Position(EventPathWorld.DIM,0,64,0),new WorldTopologyLedger.Structure(drum,Paint.DEFAULT,"{Kind:\"drum\""));
+        ledger.structure(new PhysicalFluidTopology.Position(EventPathWorld.DIM,0,64,0),new WorldTopologyLedger.Structure(drum,Paint.DEFAULT,"{Kind:\"drum\"",""));
         var bytes=FluidFacts.world(ledger.snapshot());
         var refusal=assertThrows(IllegalArgumentException.class,()->FluidFacts.world(bytes,0,bytes.length)).getMessage();
         assertTrue(refusal.contains("does not read"),refusal);

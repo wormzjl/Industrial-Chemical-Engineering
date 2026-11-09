@@ -131,13 +131,31 @@ public final class FluidDeviceBlockEntity extends ModelledBlockEntity implements
     public String name(){return name;}
     /** Whether this device opens a screen, and so takes a name: a pressure valve, a filter or a mover on a pipe, a pipe with sensors, every other kind. */
     public boolean nameable(){var state=getBlockState();return kind()!=TopologyCompiler.Kind.PIPE||FluidDeviceBlock.hasPressureValve(state)||FluidDeviceBlock.hasFilter(state)||FluidDeviceBlock.hasMover(state)||!instruments.sensors().isEmpty();}
-    /** Server: names this device {@code next} (cleaned) and sends it to the clients, as its paint: a drawing fact, not process state. */
-    public void rename(String next){String cleaned=com.wormzjl.icheme.science.equipment.DeviceName.clean(next);if(cleaned.equals(name))return;name=cleaned;sync();}
+    /**
+     * Server: names this device {@code next} (cleaned) and sends it to the clients, as its paint: a fact the registry holds
+     * (registry first, W5c C4), which this block keeps a copy of to draw.
+     */
+    public void rename(String next) {
+        String cleaned=com.wormzjl.icheme.science.equipment.DeviceName.clean(next);if(cleaned.equals(name))return;name=cleaned;
+        if(identity!=0&&level instanceof ServerLevel server)FluidWorldAuthority.find(server.getServer()).ifPresent(w->w.name(identity,cleaned));
+        sync();
+    }
     /**
      * Server: the line's paint as the registry holds it, which this block keeps a copy of to draw (registry first, batch
      * 2026-11-03-save-corruption). A painted block whose line the registry holds bare teaches it its paint: a world saved
      * before the registry held paint, or a block registered from what it holds. Whether the copy changed.
      */
+    /**
+     * Server: the device's name as the registry holds it, as {@link #restatePaint} does for paint. A named block whose
+     * device the registry holds unnamed teaches it its name: a world saved before the registry held names. Whether the
+     * copy changed.
+     */
+    private boolean restateName(FluidWorldAuthority world,long id) {
+        var held=world.deviceName(id);
+        if(held.isEmpty()){if(!name.isEmpty())world.name(id,name);return false;}
+        if(held.equals(name))return false;
+        name=held;return true;
+    }
     private boolean restatePaint(FluidWorldAuthority world,long id) {
         var held=world.linePaint(id);
         if(held==null){if(paint!=com.wormzjl.icheme.science.equipment.Paint.BARE||secondary!=com.wormzjl.icheme.science.equipment.Paint.BARE)world.paint(id,paint,secondary);return false;}
@@ -153,7 +171,7 @@ public final class FluidDeviceBlockEntity extends ModelledBlockEntity implements
         if(!standsFor(d))return false;
         long id=d.id();
         if(identity!=id){bindIdentity(id);return true;}
-        world.deviceLoaded(id);if(restatePaint(world,id))sync();
+        world.deviceLoaded(id);if(restatePaint(world,id)|restateName(world,id))sync();
         return true;
     }
     /** Whether this block is the one {@code d} stands as: one block of {@code d}'s kind. */
@@ -173,7 +191,7 @@ public final class FluidDeviceBlockEntity extends ModelledBlockEntity implements
             if(record.device().id()!=id)throw new IllegalStateException("Fluid identity belongs to a different position");
             if(!standsFor(record.device()))throw new IllegalStateException("Fluid identity belongs to another kind of device");
             bore=record.device().geometry().diameter();joints=record.device().joints();
-            restatePaint(world,id);computeFaces();
+            restatePaint(world,id);restateName(world,id);computeFaces();
         }
         identity=id;com.wormzjl.icheme.runtime.instrument.InstrumentHosts.loaded(this);setChanged();
         if(level instanceof ServerLevel serverLevel){FluidWorldAuthority.find(serverLevel.getServer()).ifPresent(w->w.deviceLoaded(id));level.sendBlockUpdated(worldPosition,getBlockState(),getBlockState(),2);}

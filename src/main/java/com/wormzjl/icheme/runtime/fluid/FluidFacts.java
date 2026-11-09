@@ -247,9 +247,11 @@ final class FluidFacts {
             var builds=s.builds();
             f.list(new TreeMap<>(builds.paints()).entrySet(),(q,e)->q.count(e.getKey()).i32(e.getValue().primary()).i32(e.getValue().secondary()));
             var structures=new ArrayList<>(builds.structures().entrySet());structures.sort(Map.Entry.comparingByKey(ORIGIN_ORDER));
-            f.list(structures,(q,e)->{position(q,e.getKey());var t=e.getValue();q.text(t.text()).i32(t.paint().body()).i32(t.paint().structure());});
-            // Schema 15, last: each rack lane's rack frame, by identity.
+            f.list(structures,(q,e)->{position(q,e.getKey());var t=e.getValue();q.text(t.text()).i32(t.paint().body()).i32(t.paint().structure()).text(t.name());});
+            // Schema 15: each rack lane's rack frame, by identity.
             f.list(new TreeMap<>(builds.racks()).entrySet(),(q,e)->q.count(e.getKey()).name(e.getValue().facing()).name(e.getValue().shape()));
+            // Schema 15, last: each named one-block device's name (N1), by identity.
+            f.list(new TreeMap<>(builds.names()).entrySet(),(q,e)->q.count(e.getKey()).text(e.getValue()));
         });
     }
     private static final Comparator<PhysicalFluidTopology.Position> ORIGIN_ORDER=Comparator.comparing(PhysicalFluidTopology.Position::dimension)
@@ -259,7 +261,7 @@ final class FluidFacts {
      * repairs logged as a shell logs them. A shape of a kind this build retired is dropped: the shell's load removes the
      * structure whole (backward-compat decision D6), and the registry cannot place it again. Returns null for that.
      */
-    private static WorldTopologyLedger.Structure structure(Record q,PhysicalFluidTopology.Position origin,String text,int body,int structure) {
+    private static WorldTopologyLedger.Structure structure(Record q,PhysicalFluidTopology.Position origin,String text,int body,int structure,String name) {
         net.minecraft.nbt.CompoundTag tag;
         try{tag=net.minecraft.nbt.TagParser.parseTag(text);}
         catch(com.mojang.brigadier.exceptions.CommandSyntaxException invalid){throw q.invalid("structure at "+origin+": its shape does not read: "+invalid.getMessage());}
@@ -268,7 +270,8 @@ final class FluidFacts {
         if(read.shape()==null)throw q.invalid("structure at "+origin+": no shape");
         for(var repair:read.repairs())IChemE.LOGGER.warn("equipment_compat kind={} at={} repair={}",read.shape().kind().name().toLowerCase(Locale.ROOT),origin,repair);
         var paint=valid(q,"structure paint at "+origin,()->new com.wormzjl.icheme.science.equipment.Paint(body,structure));
-        return WorldTopologyLedger.Structure.of(read.shape(),paint);
+        if(!name.isEmpty()&&!WorldTopologyLedger.named(name))throw q.invalid("structure name at "+origin);
+        return WorldTopologyLedger.Structure.of(read.shape(),paint,name);
     }
     static World world(byte[] data,int offset,int length) {
         return read(data,offset,length,"facts of the topology unit",f->{
@@ -309,7 +312,8 @@ final class FluidFacts {
                 if(paints.put(e.getKey(),e.getValue())!=null)throw f.invalid("duplicate line paint "+e.getKey());
             var structures=new HashMap<PhysicalFluidTopology.Position,WorldTopologyLedger.Structure>();var origins=new HashSet<PhysicalFluidTopology.Position>();
             for(var e:f.list(List.<Map.Entry<PhysicalFluidTopology.Position,Optional<WorldTopologyLedger.Structure>>>of(),q->{var origin=required(position(q),q,"structure origin");var text=q.text("");
-                    int body=q.i32(0),structure=q.i32(0);if(origin.lane()!=0||text.isEmpty())throw q.invalid("structure at "+origin);return Map.entry(origin,Optional.ofNullable(structure(q,origin,text,body,structure)));})) {
+                    int body=q.i32(0),structure=q.i32(0);var name=q.text("");if(origin.lane()!=0||text.isEmpty())throw q.invalid("structure at "+origin);
+                    return Map.entry(origin,Optional.ofNullable(structure(q,origin,text,body,structure,name)));})) {
                 if(!origins.add(e.getKey()))throw f.invalid("duplicate structure at "+e.getKey());
                 e.getValue().ifPresent(s->structures.put(e.getKey(),s));
             }
@@ -318,9 +322,14 @@ final class FluidFacts {
             for(var e:f.list(List.<Map.Entry<Long,WorldTopologyLedger.RackFrame>>of(),q->{long id=q.count(0);var facing=q.name(PhysicalFluidTopology.Direction.class,null);var shape=q.name(WorldTopologyLedger.RackShape.class,null);
                     if(id<=0||facing==null||shape==null)throw q.invalid("rack frame of "+id);return Map.entry(id,valid(q,"rack frame of "+id,()->new WorldTopologyLedger.RackFrame(facing,shape)));}))
                 if(racks.put(e.getKey(),e.getValue())!=null)throw f.invalid("duplicate rack frame "+e.getKey());
+            // Schema 15, last: the device names. A record written before them holds none, and the blocks teach them at bind.
+            var names=new HashMap<Long,String>();
+            for(var e:f.list(List.<Map.Entry<Long,String>>of(),q->{long id=q.count(0);var name=q.text("");
+                    if(id<=0||!WorldTopologyLedger.named(name))throw q.invalid("device name of "+id);return Map.entry(id,name);}))
+                if(names.put(e.getKey(),e.getValue())!=null)throw f.invalid("duplicate device name "+e.getKey());
             required(basis,f,"basis");required(constructed,f,"constructed total");required(destroyed,f,"destroyed total");
             return new World(next,basis,registrations,constructed,destroyed,recoveries,restated,List.copyOf(removedMovers),columns,shafts,stores,health,
-                    new WorldTopologyLedger.Builds(paints,structures,racks));
+                    new WorldTopologyLedger.Builds(paints,structures,racks,names));
         });
     }
     private static void total(Fields f,WorldTopologyLedger.MaterialTotal t) {

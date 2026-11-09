@@ -82,7 +82,8 @@ public final class WorldTopologyLedger {
     /**
      * What the registry holds of a build beyond its physics, so that it can place the blocks again (batch
      * 2026-11-03-save-corruption, REGISTRY_FIRST_PLAN.md 3.1). It holds each painted line's paint by device identity
-     * (a pipe, a one-block device or a rack lane), and each equipment structure's shape and paint by its origin. These
+     * (a pipe, a one-block device or a rack lane), each one-block device's name by its identity (N1), and each equipment
+     * structure's shape, paint and name by its origin. These
      * are facts, and none changes a flow. A structure's cells, nozzles and registrations follow from its shape at its
      * origin. Its nozzle sizes follow from the bores of the pipes it meets.
      *
@@ -90,22 +91,28 @@ public final class WorldTopologyLedger {
      * changed. While they are unchanged, every snapshot shares one instance, so a save compares them by reference
      * ({@link FluidCheckpointCodec#sameWorldBody}).</p>
      */
-    public record Builds(Map<Long,LinePaint> paints,Map<PhysicalFluidTopology.Position,Structure> structures,Map<Long,RackFrame> racks) {
-        public static final Builds NONE=new Builds(Map.of(),Map.of(),Map.of());
+    public record Builds(Map<Long,LinePaint> paints,Map<PhysicalFluidTopology.Position,Structure> structures,Map<Long,RackFrame> racks,Map<Long,String> names) {
+        public static final Builds NONE=new Builds(Map.of(),Map.of(),Map.of(),Map.of());
+        /** Facts with no device names. */
+        public Builds(Map<Long,LinePaint> paints,Map<PhysicalFluidTopology.Position,Structure> structures,Map<Long,RackFrame> racks){this(paints,structures,racks,Map.of());}
         public Builds {
-            paints=Map.copyOf(paints);structures=Map.copyOf(structures);racks=Map.copyOf(racks);
+            paints=Map.copyOf(paints);structures=Map.copyOf(structures);racks=Map.copyOf(racks);names=Map.copyOf(names);
+            for(var e:names.entrySet())if(e.getKey()<=0||!named(e.getValue()))throw new IllegalArgumentException("Invalid device name of "+e.getKey());
             for(var e:paints.entrySet())if(e.getKey()<=0||e.getValue().bare())throw new IllegalArgumentException("Invalid line paint of "+e.getKey());
             for(var origin:structures.keySet())if(origin.lane()!=0)throw new IllegalArgumentException("A structure's origin is a block, not a rack lane");
             for(long id:racks.keySet())if(id<=0)throw new IllegalArgumentException("Invalid rack frame of "+id);
         }
-        public boolean empty(){return paints.isEmpty()&&structures.isEmpty()&&racks.isEmpty();}
-        /** These facts with the paints and rack frames of only the identities in {@code ids}. Unchanged: this. */
+        public boolean empty(){return paints.isEmpty()&&structures.isEmpty()&&racks.isEmpty()&&names.isEmpty();}
+        /** These facts with the paints, rack frames and names of only the identities in {@code ids}. Unchanged: this. */
         Builds keeping(Set<Long> ids) {
-            if(ids.containsAll(paints.keySet())&&ids.containsAll(racks.keySet()))return this;
+            if(ids.containsAll(paints.keySet())&&ids.containsAll(racks.keySet())&&ids.containsAll(names.keySet()))return this;
             var nextPaints=new HashMap<>(paints);nextPaints.keySet().retainAll(ids);var nextRacks=new HashMap<>(racks);nextRacks.keySet().retainAll(ids);
-            return new Builds(nextPaints,structures,nextRacks);
+            var nextNames=new HashMap<>(names);nextNames.keySet().retainAll(ids);
+            return new Builds(nextPaints,structures,nextRacks,nextNames);
         }
     }
+    /** Whether {@code name} is a device's name as its rule writes it ({@link com.wormzjl.icheme.science.equipment.DeviceName#clean}), and not empty. */
+    static boolean named(String name){return name!=null&&!name.isEmpty()&&com.wormzjl.icheme.science.equipment.DeviceName.clean(name).equals(name);}
     /** A rack cell's shape (schema 9), in {@code RackGeometry}'s corner order, by {@code PipeRackBlock.Shape}'s names. Saved by name: new shapes go last. */
     public enum RackShape { STRAIGHT, BACK_LEFT, BACK_RIGHT, FRONT_LEFT, FRONT_RIGHT, TEE }
     /**
@@ -128,15 +135,24 @@ public final class WorldTopologyLedger {
         public boolean bare(){return primary==com.wormzjl.icheme.science.equipment.Paint.BARE&&secondary==com.wormzjl.icheme.science.equipment.Paint.BARE;}
     }
     /**
-     * A placed equipment structure: its shape, its paint, and the shape as its shell writes it (SNBT, keys sorted). The
-     * text is made once per edit ({@link #of}), so a save writes it as it stands and encodes nothing.
+     * A placed equipment structure: its shape, its paint, the shape as its shell writes it (SNBT, keys sorted), and its
+     * name (N1; empty for none). The text is made once per edit ({@link #of}), so a save writes it as it stands and encodes
+     * nothing.
      */
-    public record Structure(com.wormzjl.icheme.science.equipment.EquipmentShape shape,com.wormzjl.icheme.science.equipment.Paint paint,String text) {
-        public Structure{Objects.requireNonNull(shape);Objects.requireNonNull(paint);Objects.requireNonNull(text);}
-        public static Structure of(com.wormzjl.icheme.science.equipment.EquipmentShape shape,com.wormzjl.icheme.science.equipment.Paint paint) {
-            var tag=new net.minecraft.nbt.CompoundTag();com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity.writeShape(tag,shape);
-            return new Structure(shape,paint,tag.toString());
+    public record Structure(com.wormzjl.icheme.science.equipment.EquipmentShape shape,com.wormzjl.icheme.science.equipment.Paint paint,String text,String name) {
+        public Structure{
+            Objects.requireNonNull(shape);Objects.requireNonNull(paint);Objects.requireNonNull(text);Objects.requireNonNull(name);
+            if(!name.isEmpty()&&!named(name))throw new IllegalArgumentException("Invalid structure name");
         }
+        public static Structure of(com.wormzjl.icheme.science.equipment.EquipmentShape shape,com.wormzjl.icheme.science.equipment.Paint paint) {
+            return of(shape,paint,com.wormzjl.icheme.science.equipment.DeviceName.NONE);
+        }
+        public static Structure of(com.wormzjl.icheme.science.equipment.EquipmentShape shape,com.wormzjl.icheme.science.equipment.Paint paint,String name) {
+            var tag=new net.minecraft.nbt.CompoundTag();com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity.writeShape(tag,shape);
+            return new Structure(shape,paint,tag.toString(),name);
+        }
+        /** This record named {@code next}; its text is kept. */
+        public Structure withName(String next){return next.equals(name)?this:new Structure(shape,paint,text,next);}
     }
     public record Snapshot(long onlineTick,long nextIdentity,Map<Long,Registration> active,List<Event> events,
                            MaterialTotal constructed,MaterialTotal destroyed,FluidBasis basis,Map<UUID,RecoveredSolid> recoveries,Restated restated,
@@ -272,6 +288,7 @@ public final class WorldTopologyLedger {
     private final HashMap<Long,LinePaint> paints=new HashMap<>();
     private final HashMap<PhysicalFluidTopology.Position,Structure> structures=new HashMap<>();
     private final HashMap<Long,RackFrame> racks=new HashMap<>();
+    private final HashMap<Long,String> names=new HashMap<>();
     private Builds builds;
     private Snapshot shared;private long sharedVersion;
     public WorldTopologyLedger(Snapshot restored) {
@@ -281,20 +298,20 @@ public final class WorldTopologyLedger {
         // Every queued event must apply to the registry before it, in order, as when it was queued.
         for(var event:restored.events){check(latest,latestAt,event.edits);apply(latest,latestAt,event.edits);events.add(event);}
         recoveries.putAll(restored.recoveries);columns.putAll(restored.columns);shafts.putAll(restored.shafts);stores=restored.stores;health=restored.health;
-        paints.putAll(restored.builds.paints());structures.putAll(restored.builds.structures());racks.putAll(restored.builds.racks());builds=restored.builds;
+        paints.putAll(restored.builds.paints());structures.putAll(restored.builds.structures());racks.putAll(restored.builds.racks());names.putAll(restored.builds.names());builds=restored.builds;
         shared=restored;sharedVersion=version;
     }
     private void owned(){if(Thread.currentThread()!=owner)throw new IllegalStateException("World topology belongs to the server thread");}
     /** The ledger as a checkpoint saves it. While the ledger is unchanged every snapshot shares the same immutable parts. */
     public Snapshot snapshot() {
         owned();
-        if(builds==null)builds=new Builds(paints,structures,racks);
+        if(builds==null)builds=new Builds(paints,structures,racks,names);
         if(sharedVersion!=version){shared=new Snapshot(onlineTick,nextIdentity,Map.copyOf(active),List.copyOf(events),constructed,destroyed,basis,Map.copyOf(recoveries),restated,Map.copyOf(columns),Map.copyOf(shafts),stores,health,builds);sharedVersion=version;}
         else if(shared.onlineTick!=onlineTick||shared.builds!=builds)shared=new Snapshot(onlineTick,shared.nextIdentity,shared.active,shared.events,shared.constructed,shared.destroyed,shared.basis,shared.recoveries,shared.restated,shared.columns,shared.shafts,shared.stores,shared.health,builds);
         return shared;
     }
     /** The build facts as the next snapshot holds them. */
-    public Builds builds(){owned();if(builds==null)builds=new Builds(paints,structures,racks);return builds;}
+    public Builds builds(){owned();if(builds==null)builds=new Builds(paints,structures,racks,names);return builds;}
     /** A count that moves with every change of the registry's facts (a commit, an identity, a recovery, a column), so a reader can tell when what it derived is stale. Build facts leave it alone. */
     public long version(){owned();return version;}
     /** The paint of line {@code id}, or null for a bare line: a live read, no copy. */
@@ -310,6 +327,18 @@ public final class WorldTopologyLedger {
         if(paint!=null&&paint.bare())paint=null;
         if(Objects.equals(paints.get(id),paint))return;
         if(paint==null)paints.remove(id);else paints.put(id,paint);builds=null;
+    }
+    /** The name of one-block device {@code id} (N1), empty for none: a live read, no copy. */
+    public String name(long id){owned();return names.getOrDefault(id,com.wormzjl.icheme.science.equipment.DeviceName.NONE);}
+    /**
+     * Names one-block device {@code id}, a registered or queued identity; an empty name removes its entry. A build fact: no
+     * flow changes, nothing is queued. The name leaves with its identity, as a line's paint does.
+     */
+    public void name(long id,String name) {
+        owned();if(!latest.containsKey(id))throw new IllegalArgumentException("Name of an unregistered identity "+id);
+        if(name==null||name.isEmpty()){if(names.remove(id)!=null)builds=null;return;}
+        if(!named(name))throw new IllegalArgumentException("Invalid device name of "+id);
+        if(!name.equals(names.put(id,name)))builds=null;
     }
     /** The frame of the rack cell lane {@code id} lies in, or null where none is held: a live read, no copy. */
     public RackFrame rack(long id){owned();return racks.get(id);}
@@ -469,7 +498,7 @@ public final class WorldTopologyLedger {
             var applied=Collections.newSetFromMap(new IdentityHashMap<Event,Boolean>());applied.addAll(prepared.applied);events.removeIf(applied::contains);
             for(var event:prepared.applied)apply(active,activeAt,event.edits);
             // A removed identity is never given again, so its line paint and its rack frame leave with it: one place for every removal path.
-            for(var event:prepared.applied)for(var edit:event.edits)if(edit.replacement==null&&(paints.remove(edit.id)!=null|racks.remove(edit.id)!=null))builds=null;
+            for(var event:prepared.applied)for(var edit:event.edits)if(edit.replacement==null&&(paints.remove(edit.id)!=null|racks.remove(edit.id)!=null|names.remove(edit.id)!=null))builds=null;
             constructed=prepared.constructed;destroyed=prepared.destroyed;recoveries.putAll(prepared.recoveries);
         }
         nextIdentity=prepared.nextIdentity;version++;
