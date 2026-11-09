@@ -15,6 +15,10 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+### Fixed
+
+- `BoundedCpuSolveServiceTest` waits for the shut-down worker thread to end before asserting it did (a race the 0.23.2 final lane hit; batch `2026-11-09-lod-rendering`).
+
 ## [0.23.2] - 2026-11-09
 
 ### Changed
