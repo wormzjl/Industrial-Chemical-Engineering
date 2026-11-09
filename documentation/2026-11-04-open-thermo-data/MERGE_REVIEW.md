@@ -1,52 +1,34 @@
 # Merge review: 0.23.0
 
-Branch `claude/refinery-compounds-thermos-252973`, three batches: `2026-11-04-refinery-compounds`, `2026-11-04-open-thermo-data` and `2026-11-05-neural-retrain` (its branch merged here by a fast-forward to `d54fe0fa0`). The owner, 2026-11-08: "Merge main in (Recommended)", not a rebase, so the tested commits and the commit ids the documents cite stay valid; version "0.23.0 (Recommended)"; subagents "Translations (Opus, high), Code guide (Opus, high)" (decision E35).
+Branch `claude/refinery-compounds-thermos-252973`, batches `2026-11-04-refinery-compounds`, `2026-11-04-open-thermo-data` and `2026-11-05-neural-retrain` (fast-forwarded in at `d54fe0fa0`). The owner, 2026-11-08 (E35): "Merge main in (Recommended)", not a rebase, so the cited commit ids stay valid; version 0.23.0; subagents for the translations and the code guide (Opus, high).
 
-## The merge of main
+## The merge of main and its follow-ups
 
-- Main `b794e2d41` (0.22.0) merged in `0d0499f11`. 13 files conflicted; the resolution keeps both sides' rules:
-  - `build.gradle`: the union of both gate lists.
-  - `FluidCheckpointCodec.VERSION` 40 (main 39, the branch 31: max + 1; a state format, so the state rebuilds). The fluid facts schema stays main's 14: the branch changed restatement, not the facts' layout.
-  - `FluidWorldAuthority`: main's control facts and cadence lines, then the branch's world model and column growth.
-  - `ColumnDoor`: the branch's components with main's `Exchangers` (the old constructor takes `Exchangers.STANDARD`).
-  - Tests: main's structure where main changed a law (pumps refuse no gas since request 11; the crossflow condenser), re-pinned on the merged code.
-  - `documentation/INDEX.md`, `tools/INDEX.md`, `CHANGELOG.md`: every row of both sides.
-- Compat gates on the merged code: `FluidFactsCompatTest` and `EquipmentShapeCompatTest` pass (main's schema-10 to -14 images with the branch's restatement, the branch's compound-basis and island-sets images with main's reader).
+- Main `b794e2d41` (0.22.0) merged in `0d0499f11`: 13 conflicts, both sides' rules kept. Gate lists united; `FluidCheckpointCodec.VERSION` 40 (a state format); fluid facts schema main's 14; indexes and CHANGELOG row by row. `FluidFactsCompatTest` and `EquipmentShapeCompatTest` pass on the merged code.
+- `fcde043f3`: 21 re-pins for main's D42 (a pump's shaft power heats its discharge: the crude reaches E-101 0.08 K warmer, E-101 569 m², H-101 73.06 MW), for Auto's single crossflow condenser shell, and `PumpRateWarmStartTest`'s source at 150 kPa (main's NPSH3 floor).
+- E36 (`6e5c4efae`, [COLD_FURNACE_STALL_REVIEW.md](COLD_FURNACE_STALL_REVIEW.md)): the cold furnace pin failed in V3's 30-stage rung. Form S2 releases a free point that sank below its floor to the support refresh: furnace 7 of 7 duties, medium grid 10/10 (8/10), polls 2,715k (5,904k), roots unchanged. Runs: columnGates v3 541/541 after the resume test moved to steam ×1.5, holdGates 64/64, `FlowsheetExamplesTest` 6/6.
+- Tooling cleanup `f4130065f`: `main-reach.pl` reaches 671 of 671 main classes; `MaterialCatalog.freezingPoint`, `thermochemistry` and `flammability` (test callers only) moved to the test helper `SubRecords`. Tool folders: `tools/compound-import/`, `tools/package-rework/`, `tools/crude-grades/`, `tools/open-thermo-data/` (E36's probes in `e36/`), `tools/neural-retrain/`.
+- Translations `2cd2a4a5d` (40 keys added, 56 removed in each of zh_cn, fr_fr, es_es, ja_jp). Code guide `06052fc6e` (eleven chapters at `f4130065f`; column-v3 and README at `6e5c4efae`). `mod_version` 0.23.0 and the CHANGELOG lines: `e079e9688`. MATERIALS.md brought to the 0.23.0 data (W8); no test reads it.
 
-## After the merge (`fcde043f3`)
+## Final lane (`e079e9688`, 2026-11-09)
 
-A soft-assert run (every mismatch recorded in one run) found 21 mismatches in five classes.
+`LANE_OUT=tmp/final-lane bash tools/merge-lane/lane.sh head`. Main's baseline: the simulator-sizing head lane at `891c8acf5` (archive `tools/simulator-sizing/logs/simulator-sizing-final-logs-2026-11-07.tar.gz`). Three PlateTectonics jobs used about 4.5 of the 16 cores during the gates and the campaign.
 
-- Main's D42 (batch 2026-11-03-rotating-machinery): a pump's shaft power is the ideal work over its best efficiency, and all of it heats the discharge. The crude reaches E-101 0.08 K warmer: E-101 needs 569 m² (568), H-101 fires 73.06 MW (73.08), the furnace-limit sheet asks 98.04 MW (98.08).
-- On the medium crude, Auto's single crossflow condenser shell is 2.00 × 6 m on 509 m² (2.25 × 7 m on 781 m² on Tia Juana), and the widest single standard shell now meets the gas drop.
-- `PumpRateWarmStartTest`: from 1 atm, 1 m below the pump, the heavy crude reaches the suction at some 92 kPa, under the 99 kPa its bubble point (68.6 kPa) and main's NPSH3 floor ask. The pump stood on its suction limit at every rate. The source stands at 150 kPa, as `PumpJunctionStartupTest`'s does: the law at 1 m³/s, the limit at 2.
-- Runs: holdGates `ColumnSizingSampleTest` 15/15, `SizeAllSampleTest` 7/7, `UnitSizingSampleTest` 11/11, `FlowsheetColumnTest` 9/10; test `PumpRateWarmStartTest` 2/2.
-- `FlowsheetColumnTest.aFurnaceOnADutyClosesColdAsFromAFirstEstimate` failed: see the next section.
+- `test slowGates`: 2978 tests, 5 failures.
+  - Ours, fixed in `5daeda5f3`: `DeterministicMathSourceTest` (`TrainedPhysics` called `Math.exp` and `Math.pow`) and `MaterialPresetsTest` (the example datapack lacked O9's sub-records). Re-run: those 2 classes, `GroupContributionInteractionsTest`, and columnGates `V3BundledModelTest`, `V3NeuralRegistryTest`, `CrystalPackageConsumersTest` (21/21): all pass.
+  - Main's, the same on `b794e2d41` (scratch worktree, removed): `PaintTest` (`SERVICE_CASE` is body-painted since `616fe7a1c`, after main's lane), `ProcessUnitTest.everyShaftEndMeetsAFreeBlockForItsShaft` (the generator's terminal box at its shaft end) and `.everyNozzleNeckAtItsLargestStandsClear` (two drums).
+- chain-100 exact: 0 deviation.
+- Fluid GameTests: 2 of 73 fail, the same on main: `aColumnRunsInItsPlantStopsAndLeaves` ("No room for the PUMP's creative motor"), then `registeredPipesAndReservoirsKeepSimulatingAcrossUnloadedChunks`, which waits for the first test's plant to be cleaned up.
+- Junction lines: integer counters identical on 29 of 33; three lines differ by one Newton solve; `MIXED_GAS_COST` 300 solves (299) and 163 MB (94 MB; the 45-compound world list gave 161 MB at V5).
+- Campaign, 1000 seeds at 8 workers, against main:
+  - Cold random 992 (992) and defaults 1000 (1000): the same hold sets; Newton solves +0.1 % and +0.4 %.
+  - Bundled random 989 (993), 990 after the replay; Newton solves 183.8k (166.7k, +10 %). Replayed alone: 678 clean (load), 431 its baseline class E6, 941 still F (wall deadline). Seed 6 (F on main) is clean.
+  - New holds: 514, E9 (a reservoir holds 6.7e-322 kg of nitrogen; the Wilke sum underflows to 0 and `MixtureViscosity.vapor` refuses 20 trials); 696 and 200, E5 (line search stalls; 696 pumps methane gas, which D42 heats from 304 K to 396 K); 941, F.
+- `git ls-files -i -c --exclude-standard`: empty.
 
-## The cold furnace sheet (E36, `6e5c4efae`)
+## Open for the owner
 
-- On the merged code, the pinned cold first pass (H-101 at 70.4 MW) failed. A probe across 69.9 to 70.9 MW solved 3 of 7 duties. Every failure stalled in V3's 30-stage rung: the heavy tails sank below their floor, and a damped descent over the dead coordinates settled 46 K hot (see [COLD_FURNACE_STALL_REVIEW.md](COLD_FURNACE_STALL_REVIEW.md)). Main's D42 only moved 70.4 MW across a basin edge. The owner: "Fix V3 first".
-- Fix, form S2 in `V3SimultaneousColumnSolver`: when the Newton step fails, a free point that sank below its floor releases the attempt to the support refresh.
-- Results: furnace 7 of 7; medium grid 10/10 (8/10), Tia Juana 10/10; polls 2,715k (5,904k) and 3,174k (5,523k); roots unchanged to 4 decimals. The owner validates the form before the merge.
-- Runs (lane 2, `--tests`, on `6e5c4efae`'s code):
-  - columnGates `science.column.v3.*` 83 classes, 541 tests: 540 pass.
-    - The one failure was `V3StageContinuationTest`'s resume test: the half-steam case now closes on its first sweep.
-    - The resume's contract moved to steam ×1.5, the one case of E30's five that still reaches it (`O10FixResumeProbe`).
-    - Re-run: `V3StageContinuationTest` 11/11.
-  - holdGates 8 column classes, 64/64, with `FlowsheetColumnTest.aFurnaceOnADutyClosesColdAsFromAFirstEstimate` passing.
-  - test `FlowsheetExamplesTest` 6/6.
-
-## Tooling cleanup (`f4130065f`)
-
-- `perl tools/merge-lane/main-reach.pl .`: 671 of 671 main classes reached. By method, `MaterialCatalog.freezingPoint`, `thermochemistry` and `flammability` had only test callers. They and their maps are removed; the loader still validates every sub-record; the test helper `SubRecords` reads them. Runs: `MaterialCatalogTest` 14/14, `MaterialThermochemistryTest` 4/4.
-- Tool folders of the three batches: `tools/compound-import/`, `tools/package-rework/`, `tools/crude-grades/`, `tools/open-thermo-data/` (E36's probes in `e36/`), `tools/neural-retrain/`. E36's scratch code left the tree before `6e5c4efae`; its probes were never committed to `src/`.
-
-## Translations, code guide, version
-
-- Translations: `2cd2a4a5d` (40 keys added, 0 rewritten, 56 removed in zh_cn, fr_fr, es_es and ja_jp).
-- Code guide: `06052fc6e`, eleven chapters at `f4130065f` (thermo-materials, fluid-runtime, fluid-science, equilibrium-engine, column-v3, column-operation, process-simulator, client-gui, heat-exchangers, verification, README). The column-v3 chapter and the README are now at `6e5c4efae` (E36's release).
-- `mod_version` 0.23.0 (minor: new compounds and data, a model batch).
-
-## Final lane
-
-(pending)
+- S2 (E36): validate, or revert it (one commit).
+- Main's five failures: fix them on this branch before the merge, or leave them to a main follow-up.
+- Seed 514's underflow: (A) mix on mole fractions always (every vapour viscosity moves in its last digits: chain-100 and the junction lines re-record, one campaign); (B) form mole fractions only when the amounts underflow (bit-identical elsewhere); (C) leave it held.
+- The bundled-random cost and holds (+10 % solves; seeds 200, 696, 941): accept, or trace further.
