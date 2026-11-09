@@ -29,3 +29,11 @@
 - Caveat: an integrated GPU is about 15 to 20 times slower. This scene's 0.67 ms GPU frame would be about 10–13 ms there, where triangles would matter. The decision holds for a discrete GPU. A weak-GPU lane, run by the owner on such a machine, would settle the rest.
 
 Logs: main checkout `tools/lod-rendering/logs/lod-heavy-bench-logs-2026-11-09.tar.gz`; shots `research/2026-11-09-lod-rendering/shots/fps-heavy-*-view.png`. Code guide: no change.
+
+## Option B tried (owner: "Optimize it now")
+
+- Built: each structure kept its mesh handle, light (read once a second), box and a reused matrix; a frame compared by reference and hashed no shape; equal structures bound a shared mesh once.
+- Heavy low lane on it (`heavy-low2`): view 387.6 FPS, p50 2.28 ms (2.33 before), GPU 0.95 ms (0.97); away 0.90 ms (1.01). System CPU 63 % (two other processes at 1.2 and 0.6 cores). No gain beyond the noise: the shape hashing was not the cost.
+- The likely cost (not profiled): low detail adds one draw call and a uniform upload per structure on top of the chunk meshes, about 2–3 µs each in the driver (0.5–0.75 ms for 250), and draws each whole body without the chunk renderer's section culling (GPU 0.95 against 0.67 ms).
+- Reverted: the change added a cache layer and a one-second light lag for no measured gain. The patch is in the logs archive (`lod-low-cache-logs-2026-11-09.tar.gz`, `body-cache.patch`, against `536ac69ec`).
+- What would help: merge the low-detail bodies into a few region meshes (one draw per region, as the chunk renderer batches), or accept that low detail trades CPU for GPU and suits weak GPUs only. Neither is measured.

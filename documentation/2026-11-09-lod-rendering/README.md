@@ -20,6 +20,7 @@ Reduce client rendering cost with tiers that follow an object's size on screen: 
 - 2026-11-09: FPS pair (owner request, plan L4) with `tools/lod-rendering/` (`fcf8ebc76`): 100 gauges, 40 drums, 10 columns at 1920 x 1080. Baseline 10.68 ms facing the scene and 10.65 ms facing away; Stage A 1.63 ms and 0.64 ms. The baseline spent about 10 ms a frame on 100 gauges. Proposed: L2 = B3; tier metric options A, B, C. Baseline scratch worktree removed after the run.
 - 2026-11-09: owner decision on the tier metric: A, keep straight-line distance (tiers stay put when the player turns; screen-edge objects lose detail up to 1.8x early). No code change.
 - 2026-11-09: heavy bench (owner: "bench harder") with `42dbfa1ba`: 50 columns, 200 drums, 100 gauges on Stage A. Normal detail 1.53 ms (GPU 0.67 ms); low detail 2.33 ms (GPU 0.97 ms). Proposed: L2 = B3 and close L3; `low_polygon_mode` per-structure cost options A or B.
+- 2026-11-09: option B (owner: "optimize it now"): per-structure mesh handles and light in `EquipmentBodyRenderer`. Heavy low lane 2.28 ms against 2.33 ms: no gain, so reverted; patch archived. Likely cost: one draw per structure and no section culling.
 
 ## Code areas
 
@@ -28,5 +29,5 @@ Reduce client rendering cost with tiers that follow an object's size on screen: 
 ## Open items
 
 - L2: proposed B3 (no body LOD), closing L3 (HEAVY_BENCH_REVIEW.md).
-- `low_polygon_mode` is slower on the heavy scene: leave it (A) or cut `EquipmentBodyRenderer`'s per-structure cost (B).
+- `low_polygon_mode` is slower on the heavy scene; option B (per-structure cost) gave nothing. Open: region-merged low-detail meshes, or leave low detail for weak GPUs only.
 - An in-game look at the switch points (owner-started).
