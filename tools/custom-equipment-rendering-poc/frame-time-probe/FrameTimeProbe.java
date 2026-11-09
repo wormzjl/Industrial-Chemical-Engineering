@@ -68,6 +68,9 @@ import java.util.function.Function;
  * (open {@code save}, {@code camera.txt}, {@code columns.txt}, {@code empty.txt}). {@code mode=simulator} creates a fresh flat
  * world named {@code save} (refused if it exists), places a process simulator, measures the world with no screen, opens the
  * block, loads the bundled crude unit, runs it to steady, then measures idle, panning, T-101's door and the Results tab, and quits.
+ * {@code mode=lod} (batch 2026-11-09-lod-rendering) creates a fresh flat world the same way, runs {@code scene.txt}, puts a
+ * pressure gauge on each pipe of the {@code grid.*} grid through the server's own install request, then measures
+ * {@code view.txt} and {@code away.txt}, and quits.
  */
 @EventBusSubscriber(modid = "icheme_mcp_compat", value = Dist.CLIENT)
 public final class FrameTimeProbe {
@@ -264,7 +267,8 @@ public final class FrameTimeProbe {
                 return;
             }
             String save = pilot.getProperty("save");
-            if (!"simulator".equals(pilot.getProperty("mode"))) {
+            boolean lod = "lod".equals(pilot.getProperty("mode"));
+            if (!lod && !"simulator".equals(pilot.getProperty("mode"))) {
                 LOGGER.info("FPS_AUTOPILOT opening save {}", save);
                 stage = 1;
                 mc.createWorldOpenFlows().openWorld(save, () -> LOGGER.error("FPS_AUTOPILOT could not open the save"));
@@ -276,13 +280,17 @@ public final class FrameTimeProbe {
                 return;
             }
             LOGGER.info("FPS_AUTOPILOT creating the flat world {}", save);
-            stage = 20;
+            stage = lod ? 40 : 20;
             var settings = new LevelSettings(save, GameType.CREATIVE, false, Difficulty.PEACEFUL, true, new GameRules(), WorldDataConfiguration.DEFAULT);
             mc.createWorldOpenFlows().createFreshLevel(save, settings, new WorldOptions(20261104L, false, false),
                     registry -> registry.registryOrThrow(Registries.WORLD_PRESET).getHolderOrThrow(WorldPresets.FLAT).value().createWorldDimensions(), mc.screen);
             return;
         }
         if (stage < 0) return;
+        if (stage >= 40) {
+            lod(mc);
+            return;
+        }
         if (stage >= 20) {
             simulator(mc);
             return;
@@ -340,6 +348,129 @@ public final class FrameTimeProbe {
             default -> {
             }
         }
+    }
+
+    /**
+     * The LOD lane (batch 2026-11-09-lod-rendering), stages 40 on: 10 s in the new world, {@code scene.txt}, 30 s for the
+     * pipes' fluid identities and the chunk meshes, the gauges, 10 s for them to reach the client, then the {@code view.txt}
+     * and {@code away.txt} windows ({@code warmup} s, then {@code measure} s each).
+     */
+    private static void lod(Minecraft mc) {
+        long now = System.nanoTime();
+        if (!COMMANDS.isEmpty()) {
+            if (mc.player != null) mc.player.connection.sendCommand(COMMANDS.poll());
+            return;
+        }
+        int warmup = Integer.parseInt(pilot.getProperty("warmup", "60")), measure = Integer.parseInt(pilot.getProperty("measure", "60"));
+        String name = pilot.getProperty("label", "lod");
+        switch (stage) {
+            case 40 -> {
+                if (mc.player == null || mc.level == null || mc.screen != null) return;
+                if (stageStarted == 0) stageStarted = now;
+                if (now - stageStarted < 10_000_000_000L) return;
+                queue(mc, "scene.txt");
+                stageStarted = 0;
+                stage = 41;
+            }
+            case 41 -> {
+                if (stageStarted == 0) stageStarted = now;
+                if (now - stageStarted < 30_000_000_000L) return;
+                installGauges(mc);
+                stageStarted = 0;
+                stage = 42;
+            }
+            case 42 -> {
+                if (stageStarted == 0) stageStarted = now;
+                if (now - stageStarted < 10_000_000_000L) return;
+                queue(mc, "view.txt");
+                stageStarted = 0;
+                stage = 43;
+            }
+            case 43 -> {
+                start(name + "-view", warmup, measure);
+                shot = false;
+                stage = 44;
+            }
+            case 44 -> {
+                if (!shot && now > warmupEnds - 5_000_000_000L) {
+                    Screenshot.grab(mc.gameDirectory, "fps-" + name + "-view.png", mc.getMainRenderTarget(), message -> {});
+                    shot = true;
+                }
+                if (active) return;
+                queue(mc, "away.txt");
+                stage = 45;
+            }
+            case 45 -> {
+                start(name + "-away", warmup, measure);
+                stage = 46;
+            }
+            case 46 -> {
+                if (active) return;
+                quit(mc);
+                stage = 47;
+            }
+            case 47 -> {
+                if (mc.level != null) return;
+                stage = 48;
+                mc.stop();
+            }
+            default -> {
+            }
+        }
+    }
+
+    /**
+     * Measurement only: a pressure gauge on each pipe of the grid {@code grid.x}, {@code grid.y}, {@code grid.z},
+     * {@code grid.nx}, {@code grid.nz}, {@code grid.step}, through the server's own install request (the item's use), the
+     * player put 1.8 m from the pipe on each side in turn until one mount takes it.
+     */
+    private static void installGauges(Minecraft mc) {
+        var server = mc.getSingleplayerServer();
+        if (server == null) {
+            LOGGER.error("FPS_AUTOPILOT the gauges need the integrated server");
+            return;
+        }
+        int x0 = Integer.parseInt(pilot.getProperty("grid.x", "0")), y = Integer.parseInt(pilot.getProperty("grid.y", "-58"));
+        int z0 = Integer.parseInt(pilot.getProperty("grid.z", "0")), nx = Integer.parseInt(pilot.getProperty("grid.nx", "10"));
+        int nz = Integer.parseInt(pilot.getProperty("grid.nz", "10")), step = Integer.parseInt(pilot.getProperty("grid.step", "3"));
+        server.execute(() -> {
+            var players = server.getPlayerList().getPlayers();
+            var world = com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.find(server).orElse(null);
+            if (players.isEmpty() || world == null) {
+                LOGGER.error("FPS_AUTOPILOT no player or no fluid world for the gauges");
+                return;
+            }
+            var player = players.get(0);
+            var level = player.serverLevel();
+            var stack = new net.minecraft.world.item.ItemStack(com.wormzjl.icheme.registry.ModItems.PRESSURE_GAUGE.get());
+            stack.set(com.wormzjl.icheme.registry.ModItems.GAUGE_SETTINGS.get(), com.wormzjl.icheme.world.item.GaugeSettings.PRESSURE);
+            player.setItemInHand(InteractionHand.MAIN_HAND, stack);
+            int done = 0, refused = 0, unbound = 0;
+            for (int i = 0; i < nx; i++)
+                for (int k = 0; k < nz; k++) {
+                    var pos = new BlockPos(x0 + i * step, y, z0 + k * step);
+                    if (!(level.getBlockEntity(pos) instanceof com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity pipe) || pipe.fluidIdentity() <= 0) {
+                        unbound++;
+                        continue;
+                    }
+                    boolean ok = false;
+                    for (var side : new Direction[]{Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST, Direction.UP}) {
+                        var centre = pos.getCenter();
+                        var eye = centre.add(side.getStepX() * 1.8, side.getStepY() * 1.8, side.getStepZ() * 1.8);
+                        var look = centre.subtract(eye).normalize();
+                        float yaw = (float) Math.toDegrees(Math.atan2(-look.x, look.z)), pitch = (float) Math.toDegrees(-Math.asin(look.y));
+                        player.teleportTo(level, eye.x, eye.y - player.getEyeHeight(), eye.z, yaw, pitch);
+                        world.instruments().request(player, InteractionHand.MAIN_HAND, false);
+                        if (world.instruments().occupied(pipe.fluidIdentity())) {
+                            ok = true;
+                            break;
+                        }
+                    }
+                    if (ok) done++;
+                    else refused++;
+                }
+            LOGGER.info("FPS_AUTOPILOT gauges installed {} refused {} without identity {}", done, refused, unbound);
+        });
     }
 
     /**

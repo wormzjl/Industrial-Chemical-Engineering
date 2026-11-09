@@ -19,6 +19,24 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 - Drawn pipe joints are the network's joins: pipes, one-block devices and rack lanes draw the faces the engine links as built, read from the registry (`PhysicalFluidTopology.builtFaces`); an item-installed In-line Pump or Compressor draws as a mover again, with its menu and sockets, and draws no branch to a pipe beside it; a standalone filter draws no flange the engine does not join; rack lanes join by their saved points (`8680edbb6`); batch `2026-11-09-drawn-connections`.
 
+## [0.23.3] - 2026-11-09
+
+### Fixed
+
+- `BoundedCpuSolveServiceTest` waits for the shut-down worker thread to end before asserting it did (a race the 0.23.2 final lane hit; batch `2026-11-09-lod-rendering`).
+
+## [0.23.2] - 2026-11-09
+
+### Changed
+
+- Rendering level of detail: gauges, transmitters, equipment wiring, cables and sight glasses draw only in view, in detail tiers by their size on screen (`RenderLod`, client setting `lod_scale`), one light lookup per instrument; body, moving-part and tank meshes are closed only when no frame drew them for a second; low-detail equipment bodies are drawn as one mesh per 32-block square. 100 gauges: 10.7 ms to 1.6 ms a frame; low detail on 250 structures 2.33 ms to 1.55 ms (Stage A `63454d60d`, region meshes `50d1cd9a4`, cleanup `e4d3d2d9b`; batch `2026-11-09-lod-rendering`).
+
+## [0.23.1] - 2026-11-09
+
+### Fixed
+
+- Main gate fixes: a service case is body-painted in the paint gate; a low-voltage motor's or generator's frame box holds its service case (motors 30-200 kW and generators 75-400 kW 3 blocks tall); pad service cases give way to nozzle necks at their largest pipe, and their brackets root behind the case; the column GameTest's rig stands on clear ground; the cooling-tower GameTest removes its bank (298b08694, 9da1d4084, f400da29d, 270c1ed5b; batch `2026-11-09-main-gate-fixes`).
+
 ## [0.23.0] - 2026-11-09
 
 ### Added

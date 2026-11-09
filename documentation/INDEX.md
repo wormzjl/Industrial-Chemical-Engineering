@@ -15,6 +15,8 @@ Status words:
 | Batch | Purpose | Status |
 |---|---|---|
 | [2026-11-09-drawn-connections/](2026-11-09-drawn-connections/README.md) | Drawn pipe joints are the network's joins; in-line machines drawn as movers | In progress since 2026-11-09 |
+| [2026-11-09-lod-rendering/](2026-11-09-lod-rendering/README.md) | Distance-based level of detail for instruments, cables and equipment bodies | Implemented 2026-11-09 |
+| [2026-11-09-main-gate-fixes/](2026-11-09-main-gate-fixes/README.md) | Five gate failures main 0.22.0 has: service-case paint, LV motor/generator case envelope, pad cases clear of necks, column GameTest rig on clear ground | Implemented 2026-11-09 |
 | [2026-11-06-simulator-sizing/](2026-11-06-simulator-sizing/README.md) | Sizing, shared lines, control/FE, native interfaces and protected removal | Implemented 2026-11-08 |
 | [2026-11-05-neural-retrain/](2026-11-05-neural-retrain/README.md) | Retrain the column's learned start on the open crude grades and today's column; remove the old model | Implemented 2026-11-09 |
 | [2026-11-04-open-thermo-data/](2026-11-04-open-thermo-data/README.md) | Generated crude grades, open viscosity source, NIST values re-derived from open sources, unused data removed | Implemented 2026-11-09 |

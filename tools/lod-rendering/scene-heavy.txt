@@ -1,0 +1,359 @@
+# Heavy LOD scene (batch 2026-11-09-lod-rendering, owner: "bench harder"): about 6x the vessel geometry of scene.txt.
+time set noon
+gamerule doDaylightCycle false
+gamerule doWeatherCycle false
+weather clear
+gamerule doMobSpawning false
+# The same 100 lone pipes (grid.*), each gets a pressure gauge.
+setblock 0 -58 0 icheme:fluid_pipe
+setblock 0 -58 3 icheme:fluid_pipe
+setblock 0 -58 6 icheme:fluid_pipe
+setblock 0 -58 9 icheme:fluid_pipe
+setblock 0 -58 12 icheme:fluid_pipe
+setblock 0 -58 15 icheme:fluid_pipe
+setblock 0 -58 18 icheme:fluid_pipe
+setblock 0 -58 21 icheme:fluid_pipe
+setblock 0 -58 24 icheme:fluid_pipe
+setblock 0 -58 27 icheme:fluid_pipe
+setblock 3 -58 0 icheme:fluid_pipe
+setblock 3 -58 3 icheme:fluid_pipe
+setblock 3 -58 6 icheme:fluid_pipe
+setblock 3 -58 9 icheme:fluid_pipe
+setblock 3 -58 12 icheme:fluid_pipe
+setblock 3 -58 15 icheme:fluid_pipe
+setblock 3 -58 18 icheme:fluid_pipe
+setblock 3 -58 21 icheme:fluid_pipe
+setblock 3 -58 24 icheme:fluid_pipe
+setblock 3 -58 27 icheme:fluid_pipe
+setblock 6 -58 0 icheme:fluid_pipe
+setblock 6 -58 3 icheme:fluid_pipe
+setblock 6 -58 6 icheme:fluid_pipe
+setblock 6 -58 9 icheme:fluid_pipe
+setblock 6 -58 12 icheme:fluid_pipe
+setblock 6 -58 15 icheme:fluid_pipe
+setblock 6 -58 18 icheme:fluid_pipe
+setblock 6 -58 21 icheme:fluid_pipe
+setblock 6 -58 24 icheme:fluid_pipe
+setblock 6 -58 27 icheme:fluid_pipe
+setblock 9 -58 0 icheme:fluid_pipe
+setblock 9 -58 3 icheme:fluid_pipe
+setblock 9 -58 6 icheme:fluid_pipe
+setblock 9 -58 9 icheme:fluid_pipe
+setblock 9 -58 12 icheme:fluid_pipe
+setblock 9 -58 15 icheme:fluid_pipe
+setblock 9 -58 18 icheme:fluid_pipe
+setblock 9 -58 21 icheme:fluid_pipe
+setblock 9 -58 24 icheme:fluid_pipe
+setblock 9 -58 27 icheme:fluid_pipe
+setblock 12 -58 0 icheme:fluid_pipe
+setblock 12 -58 3 icheme:fluid_pipe
+setblock 12 -58 6 icheme:fluid_pipe
+setblock 12 -58 9 icheme:fluid_pipe
+setblock 12 -58 12 icheme:fluid_pipe
+setblock 12 -58 15 icheme:fluid_pipe
+setblock 12 -58 18 icheme:fluid_pipe
+setblock 12 -58 21 icheme:fluid_pipe
+setblock 12 -58 24 icheme:fluid_pipe
+setblock 12 -58 27 icheme:fluid_pipe
+setblock 15 -58 0 icheme:fluid_pipe
+setblock 15 -58 3 icheme:fluid_pipe
+setblock 15 -58 6 icheme:fluid_pipe
+setblock 15 -58 9 icheme:fluid_pipe
+setblock 15 -58 12 icheme:fluid_pipe
+setblock 15 -58 15 icheme:fluid_pipe
+setblock 15 -58 18 icheme:fluid_pipe
+setblock 15 -58 21 icheme:fluid_pipe
+setblock 15 -58 24 icheme:fluid_pipe
+setblock 15 -58 27 icheme:fluid_pipe
+setblock 18 -58 0 icheme:fluid_pipe
+setblock 18 -58 3 icheme:fluid_pipe
+setblock 18 -58 6 icheme:fluid_pipe
+setblock 18 -58 9 icheme:fluid_pipe
+setblock 18 -58 12 icheme:fluid_pipe
+setblock 18 -58 15 icheme:fluid_pipe
+setblock 18 -58 18 icheme:fluid_pipe
+setblock 18 -58 21 icheme:fluid_pipe
+setblock 18 -58 24 icheme:fluid_pipe
+setblock 18 -58 27 icheme:fluid_pipe
+setblock 21 -58 0 icheme:fluid_pipe
+setblock 21 -58 3 icheme:fluid_pipe
+setblock 21 -58 6 icheme:fluid_pipe
+setblock 21 -58 9 icheme:fluid_pipe
+setblock 21 -58 12 icheme:fluid_pipe
+setblock 21 -58 15 icheme:fluid_pipe
+setblock 21 -58 18 icheme:fluid_pipe
+setblock 21 -58 21 icheme:fluid_pipe
+setblock 21 -58 24 icheme:fluid_pipe
+setblock 21 -58 27 icheme:fluid_pipe
+setblock 24 -58 0 icheme:fluid_pipe
+setblock 24 -58 3 icheme:fluid_pipe
+setblock 24 -58 6 icheme:fluid_pipe
+setblock 24 -58 9 icheme:fluid_pipe
+setblock 24 -58 12 icheme:fluid_pipe
+setblock 24 -58 15 icheme:fluid_pipe
+setblock 24 -58 18 icheme:fluid_pipe
+setblock 24 -58 21 icheme:fluid_pipe
+setblock 24 -58 24 icheme:fluid_pipe
+setblock 24 -58 27 icheme:fluid_pipe
+setblock 27 -58 0 icheme:fluid_pipe
+setblock 27 -58 3 icheme:fluid_pipe
+setblock 27 -58 6 icheme:fluid_pipe
+setblock 27 -58 9 icheme:fluid_pipe
+setblock 27 -58 12 icheme:fluid_pipe
+setblock 27 -58 15 icheme:fluid_pipe
+setblock 27 -58 18 icheme:fluid_pipe
+setblock 27 -58 21 icheme:fluid_pipe
+setblock 27 -58 24 icheme:fluid_pipe
+setblock 27 -58 27 icheme:fluid_pipe
+# 50 columns D 4 m, 30 trays, skirt 4 m: rows z 48, 58, 68, 78, 88, x -40..50.
+icheme equipment column -40 -60 48 4 30 4
+icheme equipment column -30 -60 48 4 30 4
+icheme equipment column -20 -60 48 4 30 4
+icheme equipment column -10 -60 48 4 30 4
+icheme equipment column 0 -60 48 4 30 4
+icheme equipment column 10 -60 48 4 30 4
+icheme equipment column 20 -60 48 4 30 4
+icheme equipment column 30 -60 48 4 30 4
+icheme equipment column 40 -60 48 4 30 4
+icheme equipment column 50 -60 48 4 30 4
+icheme equipment column -40 -60 58 4 30 4
+icheme equipment column -30 -60 58 4 30 4
+icheme equipment column -20 -60 58 4 30 4
+icheme equipment column -10 -60 58 4 30 4
+icheme equipment column 0 -60 58 4 30 4
+icheme equipment column 10 -60 58 4 30 4
+icheme equipment column 20 -60 58 4 30 4
+icheme equipment column 30 -60 58 4 30 4
+icheme equipment column 40 -60 58 4 30 4
+icheme equipment column 50 -60 58 4 30 4
+icheme equipment column -40 -60 68 4 30 4
+icheme equipment column -30 -60 68 4 30 4
+icheme equipment column -20 -60 68 4 30 4
+icheme equipment column -10 -60 68 4 30 4
+icheme equipment column 0 -60 68 4 30 4
+icheme equipment column 10 -60 68 4 30 4
+icheme equipment column 20 -60 68 4 30 4
+icheme equipment column 30 -60 68 4 30 4
+icheme equipment column 40 -60 68 4 30 4
+icheme equipment column 50 -60 68 4 30 4
+icheme equipment column -40 -60 78 4 30 4
+icheme equipment column -30 -60 78 4 30 4
+icheme equipment column -20 -60 78 4 30 4
+icheme equipment column -10 -60 78 4 30 4
+icheme equipment column 0 -60 78 4 30 4
+icheme equipment column 10 -60 78 4 30 4
+icheme equipment column 20 -60 78 4 30 4
+icheme equipment column 30 -60 78 4 30 4
+icheme equipment column 40 -60 78 4 30 4
+icheme equipment column 50 -60 78 4 30 4
+icheme equipment column -40 -60 88 4 30 4
+icheme equipment column -30 -60 88 4 30 4
+icheme equipment column -20 -60 88 4 30 4
+icheme equipment column -10 -60 88 4 30 4
+icheme equipment column 0 -60 88 4 30 4
+icheme equipment column 10 -60 88 4 30 4
+icheme equipment column 20 -60 88 4 30 4
+icheme equipment column 30 -60 88 4 30 4
+icheme equipment column 40 -60 88 4 30 4
+icheme equipment column 50 -60 88 4 30 4
+# 200 standing drums D 2.5 m, T/T 8 m, support 2 m: rows z 31, 36, 41 and 100, 105, 110, 115, 120, x -60..84.
+icheme equipment place -60 -60 31 2.5 8 vertical 2
+icheme equipment place -54 -60 31 2.5 8 vertical 2
+icheme equipment place -48 -60 31 2.5 8 vertical 2
+icheme equipment place -42 -60 31 2.5 8 vertical 2
+icheme equipment place -36 -60 31 2.5 8 vertical 2
+icheme equipment place -30 -60 31 2.5 8 vertical 2
+icheme equipment place -24 -60 31 2.5 8 vertical 2
+icheme equipment place -18 -60 31 2.5 8 vertical 2
+icheme equipment place -12 -60 31 2.5 8 vertical 2
+icheme equipment place -6 -60 31 2.5 8 vertical 2
+icheme equipment place 0 -60 31 2.5 8 vertical 2
+icheme equipment place 6 -60 31 2.5 8 vertical 2
+icheme equipment place 12 -60 31 2.5 8 vertical 2
+icheme equipment place 18 -60 31 2.5 8 vertical 2
+icheme equipment place 24 -60 31 2.5 8 vertical 2
+icheme equipment place 30 -60 31 2.5 8 vertical 2
+icheme equipment place 36 -60 31 2.5 8 vertical 2
+icheme equipment place 42 -60 31 2.5 8 vertical 2
+icheme equipment place 48 -60 31 2.5 8 vertical 2
+icheme equipment place 54 -60 31 2.5 8 vertical 2
+icheme equipment place 60 -60 31 2.5 8 vertical 2
+icheme equipment place 66 -60 31 2.5 8 vertical 2
+icheme equipment place 72 -60 31 2.5 8 vertical 2
+icheme equipment place 78 -60 31 2.5 8 vertical 2
+icheme equipment place 84 -60 31 2.5 8 vertical 2
+icheme equipment place -60 -60 36 2.5 8 vertical 2
+icheme equipment place -54 -60 36 2.5 8 vertical 2
+icheme equipment place -48 -60 36 2.5 8 vertical 2
+icheme equipment place -42 -60 36 2.5 8 vertical 2
+icheme equipment place -36 -60 36 2.5 8 vertical 2
+icheme equipment place -30 -60 36 2.5 8 vertical 2
+icheme equipment place -24 -60 36 2.5 8 vertical 2
+icheme equipment place -18 -60 36 2.5 8 vertical 2
+icheme equipment place -12 -60 36 2.5 8 vertical 2
+icheme equipment place -6 -60 36 2.5 8 vertical 2
+icheme equipment place 0 -60 36 2.5 8 vertical 2
+icheme equipment place 6 -60 36 2.5 8 vertical 2
+icheme equipment place 12 -60 36 2.5 8 vertical 2
+icheme equipment place 18 -60 36 2.5 8 vertical 2
+icheme equipment place 24 -60 36 2.5 8 vertical 2
+icheme equipment place 30 -60 36 2.5 8 vertical 2
+icheme equipment place 36 -60 36 2.5 8 vertical 2
+icheme equipment place 42 -60 36 2.5 8 vertical 2
+icheme equipment place 48 -60 36 2.5 8 vertical 2
+icheme equipment place 54 -60 36 2.5 8 vertical 2
+icheme equipment place 60 -60 36 2.5 8 vertical 2
+icheme equipment place 66 -60 36 2.5 8 vertical 2
+icheme equipment place 72 -60 36 2.5 8 vertical 2
+icheme equipment place 78 -60 36 2.5 8 vertical 2
+icheme equipment place 84 -60 36 2.5 8 vertical 2
+icheme equipment place -60 -60 41 2.5 8 vertical 2
+icheme equipment place -54 -60 41 2.5 8 vertical 2
+icheme equipment place -48 -60 41 2.5 8 vertical 2
+icheme equipment place -42 -60 41 2.5 8 vertical 2
+icheme equipment place -36 -60 41 2.5 8 vertical 2
+icheme equipment place -30 -60 41 2.5 8 vertical 2
+icheme equipment place -24 -60 41 2.5 8 vertical 2
+icheme equipment place -18 -60 41 2.5 8 vertical 2
+icheme equipment place -12 -60 41 2.5 8 vertical 2
+icheme equipment place -6 -60 41 2.5 8 vertical 2
+icheme equipment place 0 -60 41 2.5 8 vertical 2
+icheme equipment place 6 -60 41 2.5 8 vertical 2
+icheme equipment place 12 -60 41 2.5 8 vertical 2
+icheme equipment place 18 -60 41 2.5 8 vertical 2
+icheme equipment place 24 -60 41 2.5 8 vertical 2
+icheme equipment place 30 -60 41 2.5 8 vertical 2
+icheme equipment place 36 -60 41 2.5 8 vertical 2
+icheme equipment place 42 -60 41 2.5 8 vertical 2
+icheme equipment place 48 -60 41 2.5 8 vertical 2
+icheme equipment place 54 -60 41 2.5 8 vertical 2
+icheme equipment place 60 -60 41 2.5 8 vertical 2
+icheme equipment place 66 -60 41 2.5 8 vertical 2
+icheme equipment place 72 -60 41 2.5 8 vertical 2
+icheme equipment place 78 -60 41 2.5 8 vertical 2
+icheme equipment place 84 -60 41 2.5 8 vertical 2
+icheme equipment place -60 -60 100 2.5 8 vertical 2
+icheme equipment place -54 -60 100 2.5 8 vertical 2
+icheme equipment place -48 -60 100 2.5 8 vertical 2
+icheme equipment place -42 -60 100 2.5 8 vertical 2
+icheme equipment place -36 -60 100 2.5 8 vertical 2
+icheme equipment place -30 -60 100 2.5 8 vertical 2
+icheme equipment place -24 -60 100 2.5 8 vertical 2
+icheme equipment place -18 -60 100 2.5 8 vertical 2
+icheme equipment place -12 -60 100 2.5 8 vertical 2
+icheme equipment place -6 -60 100 2.5 8 vertical 2
+icheme equipment place 0 -60 100 2.5 8 vertical 2
+icheme equipment place 6 -60 100 2.5 8 vertical 2
+icheme equipment place 12 -60 100 2.5 8 vertical 2
+icheme equipment place 18 -60 100 2.5 8 vertical 2
+icheme equipment place 24 -60 100 2.5 8 vertical 2
+icheme equipment place 30 -60 100 2.5 8 vertical 2
+icheme equipment place 36 -60 100 2.5 8 vertical 2
+icheme equipment place 42 -60 100 2.5 8 vertical 2
+icheme equipment place 48 -60 100 2.5 8 vertical 2
+icheme equipment place 54 -60 100 2.5 8 vertical 2
+icheme equipment place 60 -60 100 2.5 8 vertical 2
+icheme equipment place 66 -60 100 2.5 8 vertical 2
+icheme equipment place 72 -60 100 2.5 8 vertical 2
+icheme equipment place 78 -60 100 2.5 8 vertical 2
+icheme equipment place 84 -60 100 2.5 8 vertical 2
+icheme equipment place -60 -60 105 2.5 8 vertical 2
+icheme equipment place -54 -60 105 2.5 8 vertical 2
+icheme equipment place -48 -60 105 2.5 8 vertical 2
+icheme equipment place -42 -60 105 2.5 8 vertical 2
+icheme equipment place -36 -60 105 2.5 8 vertical 2
+icheme equipment place -30 -60 105 2.5 8 vertical 2
+icheme equipment place -24 -60 105 2.5 8 vertical 2
+icheme equipment place -18 -60 105 2.5 8 vertical 2
+icheme equipment place -12 -60 105 2.5 8 vertical 2
+icheme equipment place -6 -60 105 2.5 8 vertical 2
+icheme equipment place 0 -60 105 2.5 8 vertical 2
+icheme equipment place 6 -60 105 2.5 8 vertical 2
+icheme equipment place 12 -60 105 2.5 8 vertical 2
+icheme equipment place 18 -60 105 2.5 8 vertical 2
+icheme equipment place 24 -60 105 2.5 8 vertical 2
+icheme equipment place 30 -60 105 2.5 8 vertical 2
+icheme equipment place 36 -60 105 2.5 8 vertical 2
+icheme equipment place 42 -60 105 2.5 8 vertical 2
+icheme equipment place 48 -60 105 2.5 8 vertical 2
+icheme equipment place 54 -60 105 2.5 8 vertical 2
+icheme equipment place 60 -60 105 2.5 8 vertical 2
+icheme equipment place 66 -60 105 2.5 8 vertical 2
+icheme equipment place 72 -60 105 2.5 8 vertical 2
+icheme equipment place 78 -60 105 2.5 8 vertical 2
+icheme equipment place 84 -60 105 2.5 8 vertical 2
+icheme equipment place -60 -60 110 2.5 8 vertical 2
+icheme equipment place -54 -60 110 2.5 8 vertical 2
+icheme equipment place -48 -60 110 2.5 8 vertical 2
+icheme equipment place -42 -60 110 2.5 8 vertical 2
+icheme equipment place -36 -60 110 2.5 8 vertical 2
+icheme equipment place -30 -60 110 2.5 8 vertical 2
+icheme equipment place -24 -60 110 2.5 8 vertical 2
+icheme equipment place -18 -60 110 2.5 8 vertical 2
+icheme equipment place -12 -60 110 2.5 8 vertical 2
+icheme equipment place -6 -60 110 2.5 8 vertical 2
+icheme equipment place 0 -60 110 2.5 8 vertical 2
+icheme equipment place 6 -60 110 2.5 8 vertical 2
+icheme equipment place 12 -60 110 2.5 8 vertical 2
+icheme equipment place 18 -60 110 2.5 8 vertical 2
+icheme equipment place 24 -60 110 2.5 8 vertical 2
+icheme equipment place 30 -60 110 2.5 8 vertical 2
+icheme equipment place 36 -60 110 2.5 8 vertical 2
+icheme equipment place 42 -60 110 2.5 8 vertical 2
+icheme equipment place 48 -60 110 2.5 8 vertical 2
+icheme equipment place 54 -60 110 2.5 8 vertical 2
+icheme equipment place 60 -60 110 2.5 8 vertical 2
+icheme equipment place 66 -60 110 2.5 8 vertical 2
+icheme equipment place 72 -60 110 2.5 8 vertical 2
+icheme equipment place 78 -60 110 2.5 8 vertical 2
+icheme equipment place 84 -60 110 2.5 8 vertical 2
+icheme equipment place -60 -60 115 2.5 8 vertical 2
+icheme equipment place -54 -60 115 2.5 8 vertical 2
+icheme equipment place -48 -60 115 2.5 8 vertical 2
+icheme equipment place -42 -60 115 2.5 8 vertical 2
+icheme equipment place -36 -60 115 2.5 8 vertical 2
+icheme equipment place -30 -60 115 2.5 8 vertical 2
+icheme equipment place -24 -60 115 2.5 8 vertical 2
+icheme equipment place -18 -60 115 2.5 8 vertical 2
+icheme equipment place -12 -60 115 2.5 8 vertical 2
+icheme equipment place -6 -60 115 2.5 8 vertical 2
+icheme equipment place 0 -60 115 2.5 8 vertical 2
+icheme equipment place 6 -60 115 2.5 8 vertical 2
+icheme equipment place 12 -60 115 2.5 8 vertical 2
+icheme equipment place 18 -60 115 2.5 8 vertical 2
+icheme equipment place 24 -60 115 2.5 8 vertical 2
+icheme equipment place 30 -60 115 2.5 8 vertical 2
+icheme equipment place 36 -60 115 2.5 8 vertical 2
+icheme equipment place 42 -60 115 2.5 8 vertical 2
+icheme equipment place 48 -60 115 2.5 8 vertical 2
+icheme equipment place 54 -60 115 2.5 8 vertical 2
+icheme equipment place 60 -60 115 2.5 8 vertical 2
+icheme equipment place 66 -60 115 2.5 8 vertical 2
+icheme equipment place 72 -60 115 2.5 8 vertical 2
+icheme equipment place 78 -60 115 2.5 8 vertical 2
+icheme equipment place 84 -60 115 2.5 8 vertical 2
+icheme equipment place -60 -60 120 2.5 8 vertical 2
+icheme equipment place -54 -60 120 2.5 8 vertical 2
+icheme equipment place -48 -60 120 2.5 8 vertical 2
+icheme equipment place -42 -60 120 2.5 8 vertical 2
+icheme equipment place -36 -60 120 2.5 8 vertical 2
+icheme equipment place -30 -60 120 2.5 8 vertical 2
+icheme equipment place -24 -60 120 2.5 8 vertical 2
+icheme equipment place -18 -60 120 2.5 8 vertical 2
+icheme equipment place -12 -60 120 2.5 8 vertical 2
+icheme equipment place -6 -60 120 2.5 8 vertical 2
+icheme equipment place 0 -60 120 2.5 8 vertical 2
+icheme equipment place 6 -60 120 2.5 8 vertical 2
+icheme equipment place 12 -60 120 2.5 8 vertical 2
+icheme equipment place 18 -60 120 2.5 8 vertical 2
+icheme equipment place 24 -60 120 2.5 8 vertical 2
+icheme equipment place 30 -60 120 2.5 8 vertical 2
+icheme equipment place 36 -60 120 2.5 8 vertical 2
+icheme equipment place 42 -60 120 2.5 8 vertical 2
+icheme equipment place 48 -60 120 2.5 8 vertical 2
+icheme equipment place 54 -60 120 2.5 8 vertical 2
+icheme equipment place 60 -60 120 2.5 8 vertical 2
+icheme equipment place 66 -60 120 2.5 8 vertical 2
+icheme equipment place 72 -60 120 2.5 8 vertical 2
+icheme equipment place 78 -60 120 2.5 8 vertical 2
+icheme equipment place 84 -60 120 2.5 8 vertical 2

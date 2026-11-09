@@ -8,6 +8,8 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 
 | Folder | Purpose | Batch | Status |
 |---|---|---|---|
+| [lod-rendering/](lod-rendering/README.md) | Frame-time pair of the LOD batch: gauge scene, view and away windows | `2026-11-09-lod-rendering` | Implemented 2026-11-09 |
+| [equipment-service-probes/](equipment-service-probes/README.md) | Gradle-free probes of service cases, nozzle necks, shaft ends and drawn area on the gated shapes | `2026-11-09-main-gate-fixes` | Implemented 2026-11-09 |
 | [equipment-drawings/](equipment-drawings/README.md) | Native equipment drawings and labelled interface proposals | `2026-11-06-simulator-sizing` | In use since 2026-11-08 |
 | [simulator-sizing/](simulator-sizing/README.md) | Sizing, shared-line audits, control/FE and equipment probes | `2026-11-06-simulator-sizing` | Retained since 2026-11-08 |
 | [crude-grades/](crude-grades/README.md) | Generator of the four open crude grades, the Twu cut viscosity tables, the ECCC mixture refit and draft presets | `2026-11-04-open-thermo-data` | In use since 2026-11-04 |

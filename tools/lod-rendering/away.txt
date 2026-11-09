@@ -1,0 +1,2 @@
+# The away window: the same place, facing north over empty ground; every gauge is behind the camera.
+tp @s 13.5 -57 -3 180 15
