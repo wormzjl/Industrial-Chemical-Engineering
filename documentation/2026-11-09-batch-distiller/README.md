@@ -24,6 +24,8 @@ distiller in the process simulator.
   controllers, the diverter valve, owner decisions O1 to O10.
 - [BATCH_STILL_GUI.md](BATCH_STILL_GUI.md): W6, the still's page, the constructor's still options, the animation, the diverter's and the
   electric still's sockets, owner questions G1 to G6.
+- [OWNER_FEEDBACK_REVIEW.md](OWNER_FEEDBACK_REVIEW.md): the owner's four items on the built still (condenser, textures,
+  data port and fuel, volume) and what was built.
 - Run output of B3 (local): `research/2026-11-09-batch-distiller/b3-column/` (`report.txt`, `snapshots.csv`).
 
 ## Code areas
@@ -106,6 +108,12 @@ distiller in the process simulator.
 - 2026-11-09: drawings (`update.ps1 -Only BATCH_STILL`, Python 3.13 and Poppler 25.07 installed): 5 stills, 10 sheets at
   5cb073213, inspected; run `tmp/equipment-drawings/20261109-135451-f050c6/` (local). The electric still's FE gland
   faces the pot at 0.5 m, under the heater conduit, opposite its data gland.
+- 2026-11-09: owner feedback on the drawings (OWNER_FEEDBACK_REVIEW.md), built on the main thread. Every condenser is the top
+  condenser; a pot still has no reflux valve (option A; `BatchStill.Design.refluxes` is the one rule for the law and the
+  engine). The condenser stands on two posts. The fired still's data box stands in front of the setting with a conduit to
+  the pot. The liquid fuel connection is on the back face's right column. Baked sprites (`tools/still-sprites`): the pot and
+  condenser are riveted copper, welded carbon steel or welded stainless by heater tier; the lines are drawn copper, the
+  setting brick, the doors cast iron. The layout table was re-recorded (still rows only).
 
 ## Open items
 
@@ -117,6 +125,8 @@ distiller in the process simulator.
   averaged over the cycle is slightly two-phase (cut 2 about 2 % vapour), as the distillate is not subcooled in the
   worm (phase-1 law answer 7).
 - An in-game check of the still's page and its effects, only if the owner asks.
+- Feedback item 4: the owner rechecks the pot's drawn volume against its design volume (measured within 3 %).
+- `UnitTextTest` fails on the flare stack's datasheet widths (417 > 411 px); not this batch's lines.
 - Engine options not built (BATCH_STILL_ENGINE.md section 6): a head-temperature reflux law (its gain is not set by the
   physics), a second diverter threshold for the second side outlet.
 - At the merge: move `BubblePointColumn`'s measurement harness to `tools/batch-still-column/` (tooling cleanup); code guide
