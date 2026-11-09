@@ -62,6 +62,8 @@
     "carbon_steel": "icheme:block/still_carbon_steel",
     "stainless": "icheme:block/still_stainless",
     "copper_line": "icheme:block/still_copper_line",
+    "carbon_steel_line": "icheme:block/still_carbon_steel_line",
+    "stainless_line": "icheme:block/still_stainless_line",
     "brick": "icheme:block/still_brick",
     "iron": "icheme:block/still_iron",
     "particle": "icheme:block/vessel_shell"

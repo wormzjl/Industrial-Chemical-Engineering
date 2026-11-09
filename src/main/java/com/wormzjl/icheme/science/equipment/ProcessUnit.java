@@ -3260,15 +3260,24 @@ public final class ProcessUnit {
         }
 
         /**
-         * The pot's and the condenser's finish, by the heater's tier (owner, 2026-11-09): hammered, riveted copper over a
-         * solid fire; welded carbon steel over a burner; welded, brushed stainless steel on an electric plate. The helmet,
-         * the column and the lines stay copper.
+         * The finish of every process vessel (pot, helmet, column, condenser, reflux pot) by the heater's tier (owner,
+         * 2026-11-09): hammered, riveted copper over a solid fire; welded carbon steel over a burner; welded, brushed
+         * stainless steel on an electric plate.
          */
         Material finish() {
             return switch (options.heater()) {
                 case SOLID -> Material.COPPER;
                 case LIQUID -> Material.CARBON_STEEL;
                 case ELECTRIC -> Material.STAINLESS;
+            };
+        }
+
+        /** The process lines' finish in the same tier (drawn copper, carbon-steel pipe, stainless tube); utilities stay plant pipe. */
+        Material line() {
+            return switch (options.heater()) {
+                case SOLID -> Material.COPPER_LINE;
+                case LIQUID -> Material.CARBON_STEEL_LINE;
+                case ELECTRIC -> Material.STAINLESS_LINE;
             };
         }
 
@@ -3328,11 +3337,9 @@ public final class ProcessUnit {
 
     /**
      * A fired still's brick setting under the pot, its coping, the flue in its back right corner, the iron firing door and
-     * ash-pit door at its front, a burner through the door for liquid fuel with its fuel line round the setting's right
-     * side to the fuel flange on the back face's right column, and the data junction box in front of the setting left of
-     * the door, centred on the front row, on brackets to the brick, its conduit up and over the coping to the pot's
-     * thermowell (owner, 2026-11-09: the electric still's data port and its fittings on every still; the fuel connection
-     * on a side).
+     * ash-pit door at its front, and a burner through the door for liquid fuel with its fuel line round the setting's right
+     * side to the fuel flange on the back face's right column. A fired still has no data port: only the electric still
+     * takes a controller (owner, 2026-11-09).
      */
     private void stillSetting(StillPlan p) {
         double x = StillPlan.POT_X, z = StillPlan.POT_Z, h = p.w() / 2, x0 = x - h, x1 = x + h, z0 = z - h, z1 = z + h, top = p.setting(), cope = top - .06;
@@ -3365,20 +3372,6 @@ public final class ProcessUnit {
                     new double[]{xf, .5, zb + .2});
             nozzles.add(end(Role.FUEL, new double[]{xf, .5, zb + .2}, 2, 1, .03));
         }
-        // The data junction box on the setting's front, left of the firing door, its cover on its front; the socket on its
-        // left side; the conduit from its top up the brick and over the coping to the thermowell in the pot's shell.
-        double bx = x0 + .2, r = d / 2, zb = StillPlan.FRONT;
-        double[] lo = {x0 + .06, .3, zb - .06}, hi = {x0 + .34, .7, zb + .06};
-        box(lo, hi, ALL_FACES, Material.SERVICE_CASE, true);
-        box(new double[]{lo[0] + .025, lo[1] + .025, lo[2] - .006}, new double[]{hi[0] - .025, hi[1] - .025, lo[2]}, ALL_FACES & ~32, Material.SERVICE_COVER, false);
-        serviceHousing = new double[]{lo[0], lo[1], lo[2], hi[0], hi[1], hi[2]};
-        if (z0 - hi[2] > .005)
-            for (double yb : new double[]{lo[1] + .06, hi[1] - .06})
-                for (double xb : new double[]{lo[0] + .05, hi[0] - .05})
-                    box(new double[]{xb - .015, yb - .015, hi[2]}, new double[]{xb + .015, yb + .015, z0}, ALL_FACES & ~48, Material.STEELWORK, false);
-        double[] well = {x - .74 * r, top + .03, z - .74 * r};
-        line(.012, 6, Material.INSTRUMENT_CONDUIT, new double[]{bx, hi[1], zb}, new double[]{bx, top + .03, zb}, new double[]{bx, top + .03, z0}, well);
-        box(new double[]{well[0] - .03, well[1] - .03, well[2] - .03}, new double[]{well[0] + .03, well[1] + .03, well[2] + .03}, Material.INSTRUMENT_STEEL, false);
     }
 
     /**
@@ -3411,10 +3404,10 @@ public final class ProcessUnit {
     private void stillCharge(StillPlan p) {
         double x = StillPlan.POT_X, z = StillPlan.POT_Z, y = p.charge(), r = p.d() / 2, rq = p.radiusAt(y), pr = .03 + .01 * p.d();
         double[] base = {.3, y, z};
-        if (rq > 0) pipe(pr, Material.COPPER_LINE, true, base, new double[]{x - rq + .02, y, z});
+        if (rq > 0) pipe(pr, p.line(), true, base, new double[]{x - rq + .02, y, z});
         else {
             double ex = x - .6 * r;
-            pipe(pr, Material.COPPER_LINE, true, base, new double[]{ex, y, z}, new double[]{ex, p.cylinder() + .8 * p.d() / 4 - .01, z});
+            pipe(pr, p.line(), true, base, new double[]{ex, y, z}, new double[]{ex, p.cylinder() + .8 * p.d() / 4 - .01, z});
         }
         nozzles.add(end(Role.CHARGE, base, 0, -1, 2 * pr));
     }
@@ -3423,7 +3416,7 @@ public final class ProcessUnit {
     private void stillDrain(StillPlan p) {
         double x = StillPlan.POT_X, z = StillPlan.POT_Z, r = p.d() / 2, pr = .03 + .01 * p.d();
         double[] base = {.5, .5, 2.7};
-        pipe(pr, Material.COPPER_LINE, true, new double[]{x - .4 * r, p.bottom() + .01, z + .4 * r}, new double[]{x - .4 * r, .5, z + .4 * r},
+        pipe(pr, p.line(), true, new double[]{x - .4 * r, p.bottom() + .01, z + .4 * r}, new double[]{x - .4 * r, .5, z + .4 * r},
                 new double[]{.5, .5, z + .4 * r}, base);
         nozzles.add(end(Role.DRAIN, base, 2, 1, 2 * pr));
     }
@@ -3433,9 +3426,9 @@ public final class ProcessUnit {
         double x = StillPlan.POT_X, z = StillPlan.POT_Z, rh = p.helmet(), y0 = p.apex() - .02, y1 = p.helmetTop() - rh / 2;
         int n = sides(2 * rh);
         var up = Frame.of(new double[]{x, 0, z}, 1, 1);
-        mesh.hoop(up, rh, rh + .02, y0, y0 + .04, n, Material.COPPER);
-        mesh.prism(up, rh, y0, y1, n, Material.COPPER);
-        mesh.head(up, rh, y1, rh / 2, n, Material.COPPER);
+        mesh.hoop(up, rh, rh + .02, y0, y0 + .04, n, p.finish());
+        mesh.prism(up, rh, y0, y1, n, p.finish());
+        mesh.head(up, rh, y1, rh / 2, n, p.finish());
         mesh.disc(new Frame(new double[]{x, (y0 + y1) / 2, z - rh - .004}, new double[]{0, 0, -1}, new double[]{1, 0, 0}), .4 * rh, 0, 12, 1, Material.GLASS);
         solids.add(Solid.rod(new double[]{x, 0, z}, 1, y0, y1, rh, rh / 2));
         round(x, z, y0, y1, rh, 1);
@@ -3463,25 +3456,25 @@ public final class ProcessUnit {
         solids.add(Solid.rod(new double[]{0, yk, zf}, 0, .85, 2.7, rk + .025, 0));
         round(new double[]{0, yk, zf}, 0, sx0, sx1, rk);
         double yg = yk + rk + .25;
-        line(ra, 12, Material.COPPER_LINE, new double[]{x, neck - .02, z}, new double[]{x, yg, z}, new double[]{1.25, yg, zf}, new double[]{1.25, yk + rk - .02, zf});
+        line(ra, 12, p.line(), new double[]{x, neck - .02, z}, new double[]{x, yg, z}, new double[]{1.25, yg, zf}, new double[]{1.25, yk + rk - .02, zf});
         double wr = .03 + .01 * d;
         pipe(wr, Material.PIPE, true, new double[]{.85, yk, zf}, new double[]{.3, yk, zf});
         nozzles.add(end(Role.WATER_INLET, new double[]{.3, yk, zf}, 0, -1, 2 * wr));
         nozzles.add(end(Role.WATER_OUTLET, new double[]{cx, yk, zf + .6 * rk}, 2, 1, 2 * wr));
         // The vent from the cold end, up and forward.
         double vr = .015 + .005 * d, lr = .015 + .005 * d;
-        pipe(vr, Material.COPPER_LINE, true, new double[]{2.15, yk + rk - .02, zf}, new double[]{2.15, yk + 1, zf}, new double[]{cx, yk + 1, zf}, new double[]{cx, yk + 1, .3});
+        pipe(vr, p.line(), true, new double[]{2.15, yk + rk - .02, zf}, new double[]{2.15, yk + 1, zf}, new double[]{cx, yk + 1, zf}, new double[]{cx, yk + 1, .3});
         nozzles.add(end(Role.VENT, new double[]{cx, yk + 1, .3}, 2, -1, 2 * vr));
         double rs = .02 + .01 * d, rg = 1.8 * rs, rp = .07 + .04 * d, yr1 = yk - rk - .1, yr0 = yr1 - .3;
         if (column) {
             // The reflux pot under the right end, the condensate into it.
-            line(lr, 8, Material.COPPER_LINE, new double[]{2.15, yk - rk + .02, zf}, new double[]{2.15, yr1 + .06, zf}, new double[]{cx, yr1 + .06, zf}, new double[]{cx, yr1 - .02, zf});
-            mesh.cylinder(Frame.of(new double[]{cx, 0, zf}, 1, 1), rp, yr0, yr1, 12, Material.COPPER);
+            line(lr, 8, p.line(), new double[]{2.15, yk - rk + .02, zf}, new double[]{2.15, yr1 + .06, zf}, new double[]{cx, yr1 + .06, zf}, new double[]{cx, yr1 - .02, zf});
+            mesh.cylinder(Frame.of(new double[]{cx, 0, zf}, 1, 1), rp, yr0, yr1, 12, p.finish());
             box(new double[]{cx - .015, yr0 + .04, zf - rp - .02}, new double[]{cx + .015, yr1 - .04, zf - rp + .01}, ALL_FACES & ~32, Material.GLASS, false);
             solids.add(Solid.rod(new double[]{cx, 0, zf}, 1, yr0, yr1, rp, 0));
             // The reflux valve under it, its hand wheel to the front.
             double yv = yr0 - .14, wz = zf - .17;
-            line(lr, 8, Material.COPPER_LINE, new double[]{cx, yr0, zf}, new double[]{cx, yv, zf});
+            line(lr, 8, p.line(), new double[]{cx, yr0, zf}, new double[]{cx, yv, zf});
             box(new double[]{cx - .05, yv - .05, zf - .05}, new double[]{cx + .05, yv + .05, zf + .05}, Material.IRON, true);
             mesh.bar(new double[]{cx, yv, zf - .05}, new double[]{cx, yv, wz}, .015, new double[]{0, 1, 0}, Material.IRON);
             var wheel = new Frame(new double[]{cx, yv, wz}, new double[]{0, 0, -1}, new double[]{1, 0, 0});
@@ -3492,18 +3485,18 @@ public final class ProcessUnit {
             // The reflux back to the column's top in one straight fall from the valve into the column's front right under
             // its top; the product down past a sight glass to the spout.
             double rc = p.column();
-            line(lr, 8, Material.COPPER_LINE, new double[]{cx - .05, yv, zf}, new double[]{x + .5 * rc, p.columnTop() - .12, z - .85 * rc});
-            pipe(rs, Material.COPPER_LINE, true, new double[]{cx, yv - .05, zf}, new double[]{cx, .5, zf}, new double[]{cx, .5, .3});
+            line(lr, 8, p.line(), new double[]{cx - .05, yv, zf}, new double[]{x + .5 * rc, p.columnTop() - .12, z - .85 * rc});
+            pipe(rs, p.line(), true, new double[]{cx, yv - .05, zf}, new double[]{cx, .5, zf}, new double[]{cx, .5, .3});
         } else {
             // A pot still's condensate from the cold end straight down to the spout.
-            pipe(rs, Material.COPPER_LINE, true, new double[]{2.15, yk - rk + .02, zf}, new double[]{2.15, yr1 + .06, zf}, new double[]{cx, yr1 + .06, zf}, new double[]{cx, .5, zf},
+            pipe(rs, p.line(), true, new double[]{2.15, yk - rk + .02, zf}, new double[]{2.15, yr1 + .06, zf}, new double[]{cx, yr1 + .06, zf}, new double[]{cx, .5, zf},
                     new double[]{cx, .5, .3});
         }
-        sightGlass(new double[]{cx, .78, zf}, new double[]{0, 1, 0}, rg, .15);
+        sightGlass(new double[]{cx, .78, zf}, new double[]{0, 1, 0}, rg, .15, p.line());
         mark("spout", new double[]{cx - rg, .78, zf - rg}, new double[]{cx + rg, .93, zf + rg});
         nozzles.add(end(Role.DISTILLATE, new double[]{cx, .5, .3}, 2, -1, 2 * rs));
         // The stand: a post under each end with its cradle (owner, 2026-11-09: no diagonal strut), and the reflux pot's
-        // bracket on the right post. The left post stands clear of the data box and the burner, in front of the setting.
+        // bracket on the right post. The left post stands clear of the electric still's terminal box and the burner.
         post(2.86, zf, 0, yk - rk - .04, .07, true);
         box(new double[]{2.45, yk - rk - .04, zf - .05}, new double[]{2.895, yk - .85 * rk, zf + .05}, Material.STEELWORK, false);
         post(.78, zf, 0, yk - rk - .04, .07, true);
@@ -3514,7 +3507,7 @@ public final class ProcessUnit {
     /** A pot still without a condenser: its swan neck over to the vapour flange on the right, on a post. */
     private void stillVapour(StillPlan p) {
         double x = StillPlan.POT_X, z = StillPlan.POT_Z, ra = p.arm(), yv = StillPlan.rowAtLeast(p.helmetTop() + .1);
-        line(ra, 12, Material.COPPER_LINE, new double[]{x, p.helmetTop() - .02, z}, new double[]{x, yv + .15, z}, new double[]{x + .35, yv + .17, z},
+        line(ra, 12, p.line(), new double[]{x, p.helmetTop() - .02, z}, new double[]{x, yv + .15, z}, new double[]{x + .35, yv + .17, z},
                 new double[]{2.7, yv, z});
         post(StillPlan.SPOUT_X, z, 0, yv - ra - .01, .06, true);
         nozzles.add(end(Role.VAPOUR_OUTLET, new double[]{2.7, yv, z}, 0, 1, 2 * ra));
@@ -3525,27 +3518,27 @@ public final class ProcessUnit {
         double d = p.d(), x = StillPlan.POT_X, z = StillPlan.POT_Z, rc = p.column(), y0 = p.columnBase(), yt = p.columnTop();
         int n = sides(2 * rc);
         var up = Frame.of(new double[]{x, 0, z}, 1, 1);
-        mesh.prism(up, rc, y0, yt, n, Material.COPPER);
-        mesh.head(up, rc, yt, rc / 2, n, Material.COPPER);
-        mesh.hoop(up, rc, rc + .025, y0, y0 + .04, n, Material.COPPER);
+        mesh.prism(up, rc, y0, yt, n, p.finish());
+        mesh.head(up, rc, yt, rc / 2, n, p.finish());
+        mesh.hoop(up, rc, rc + .025, y0, y0 + .04, n, p.finish());
         for (int k = 0; k < p.options().stages(); k++) {
             double yk = y0 + .25 + .3 * k;
-            mesh.hoop(up, rc, rc + .02, yk - .14, yk - .11, n, Material.COPPER);
+            mesh.hoop(up, rc, rc + .02, yk - .14, yk - .11, n, p.finish());
             var face = new Frame(new double[]{x, yk, z - rc - .006}, new double[]{0, 0, -1}, new double[]{1, 0, 0});
-            mesh.ring(face, .5 * rc, .62 * rc, -.006, .004, 12, 2, Material.COPPER);
+            mesh.ring(face, .5 * rc, .62 * rc, -.006, .004, 12, 2, p.finish());
             mesh.disc(face, .5 * rc, 0, 12, 1, Material.GLASS);
         }
         solids.add(Solid.rod(new double[]{x, 0, z}, 1, y0, yt, rc + .02, rc / 2));
         round(x, z, y0, yt, rc, 1);
     }
 
-    /** A sight glass on a line: a glass barrel of radius {@code r} from {@code start} along the unit {@code dir} for {@code length}, a copper collar at each end. */
-    private void sightGlass(double[] start, double[] dir, double r, double length) {
+    /** A sight glass on a line: a glass barrel of radius {@code r} from {@code start} along the unit {@code dir} for {@code length}, a {@code collar} at each end. */
+    private void sightGlass(double[] start, double[] dir, double r, double length, Material collar) {
         var ref = Math.abs(dir[1]) < .9 ? new double[]{0, 1, 0} : new double[]{1, 0, 0};
         var f = new Frame(start, dir, unit(cross(dir, ref)));
         mesh.cylinder(f, r, .02, length - .02, 12, Material.GLASS);
-        mesh.ring(f, .55 * r, 1.15 * r, 0, .02, 12, 3, Material.COPPER_LINE);
-        mesh.ring(f, .55 * r, 1.15 * r, length - .02, length, 12, 3, Material.COPPER_LINE);
+        mesh.ring(f, .55 * r, 1.15 * r, 0, .02, 12, 3, collar);
+        mesh.ring(f, .55 * r, 1.15 * r, length - .02, length, 12, 3, collar);
     }
 
     static double stackTop(double neck, double roof) {

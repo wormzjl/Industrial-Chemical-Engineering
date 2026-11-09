@@ -72,12 +72,12 @@ public final class Mesh {
         SERVICE_CASE(1,Paint.BODY), SERVICE_COVER(1,Paint.BODY), INSTRUMENT_STEEL(1,-1), INSTRUMENT_CONDUIT(1,-1),
         /**
          * A batch still's own finishes (batch 2026-11-09-batch-distiller), unpainted, baked by {@code tools/still-sprites}
-         * and tiled by the metre: the hammered, riveted copper sheet of its helmet and column, and of a solid-fired still's
-         * pot and condenser; a liquid-fired still's carbon steel and an electric still's brushed stainless steel (pot and
-         * condenser), both with welded seams; the drawn copper of its lines and fittings; its brick setting and flue; its
-         * cast-iron doors and valve.
+         * and tiled by the metre. Its process vessels and lines go by its heater's tier: riveted copper sheet and drawn
+         * copper (solid fuel), welded carbon steel and steel pipe (liquid fuel), welded brushed stainless and stainless tube
+         * (electric). Its brick setting and flue; its cast-iron doors and valve.
          */
-        COPPER(1, -1), CARBON_STEEL(1, -1), STAINLESS(1, -1), COPPER_LINE(1, -1), BRICK(1, -1), IRON(1, -1);
+        COPPER(1, -1), CARBON_STEEL(1, -1), STAINLESS(1, -1), COPPER_LINE(1, -1), CARBON_STEEL_LINE(1, -1), STAINLESS_LINE(1, -1),
+        BRICK(1, -1), IRON(1, -1);
 
         private final double period;
         private final int channel;

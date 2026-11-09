@@ -97,8 +97,14 @@ class EquipmentServicesTest {
                 var shape = still.withFront(heading);
                 var services = ShapeRasterizer.services(shape);
                 var data = services.data();
+                // Only the electric still has a data port and takes a controller (owner, 2026-11-09).
+                if (!EquipmentServices.electricStill(shape)) {
+                    assertNull(data, shape + ": no data port on a fired still");
+                    assertNull(services.power(), shape + ": no FE socket on a fired still");
+                    continue;
+                }
                 assertNotNull(data, shape.toString());
-                assertEquals(EquipmentServices.electricStill(shape), services.power() != null, shape + ": an FE socket on an electric still only (W6)");
+                assertNotNull(services.power(), shape + ": the electric still's FE socket (W6)");
                 double[] at = {data.x(), data.y(), data.z()}, size = {shape.sizeX(), shape.sizeY(), shape.sizeZ()};
                 var n = LineGeometry.step(data.face());
                 int axis = n[0] != 0 ? 0 : 2, across = 2 - axis;

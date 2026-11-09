@@ -182,6 +182,29 @@ public class StillSprites {
         return out;
     }
 
+    /** Carbon-steel pipe for a liquid-fired still's lines: the pot's mottle without its seams, a faint grain along the line. */
+    static int[][] carbonSteelLine() {
+        int n = 32;
+        var out = new int[n][n];
+        for (int y = 0; y < n; y++) for (int x = 0; x < n; x++) {
+            double a = 2 * Math.PI * x / n, b = 2 * Math.PI * y / n;
+            double v = 1 + .04 * Math.sin(a + b) + .03 * Math.sin(2 * a - b + 1) + (grain(x, 0, 61) - .5) * .04 + (grain(x, y, 62) - .5) * .05;
+            out[y][x] = rgb(98 * v, 101 * v, 108 * v);
+        }
+        return out;
+    }
+
+    /** Stainless tube for an electric still's lines: the pot's brushed grey without its seams, its grain along the line. */
+    static int[][] stainlessLine() {
+        int n = 32;
+        var out = new int[n][n];
+        for (int y = 0; y < n; y++) for (int x = 0; x < n; x++) {
+            double v = 1 + .06 * (grain(x, 0, 71) - .5) + .015 * (grain(x, y, 72) - .5) + .02 * Math.sin(2 * Math.PI * x / n * 3);
+            out[y][x] = rgb(174 * v, 179 * v, 185 * v);
+        }
+        return out;
+    }
+
     /** Drawn copper: an even tone, a faint grain along the line (the sprite's columns) and fine speckle. */
     static int[][] copperLine() {
         int n = 32;
@@ -255,6 +278,8 @@ public class StillSprites {
         write(folder, "still_carbon_steel", carbonSteel());
         write(folder, "still_stainless", stainless());
         write(folder, "still_copper_line", copperLine());
+        write(folder, "still_carbon_steel_line", carbonSteelLine());
+        write(folder, "still_stainless_line", stainlessLine());
         write(folder, "still_brick", brick());
         write(folder, "still_iron", iron());
     }

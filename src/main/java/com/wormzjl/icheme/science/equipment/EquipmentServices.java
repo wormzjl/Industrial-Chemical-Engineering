@@ -293,9 +293,11 @@ public final class EquipmentServices {
                 high = plus(low, new double[] {CASE_ACROSS, CASE_HEIGHT, CASE_ALONG});
                 front = 2;
             }
-            // A turbine's governor enclosure; a batch still's junction box set into its brick setting, or its electric
-            // heater's terminal box (batch 2026-11-09-batch-distiller): the socket on its left side, on the pot's row.
+            // A turbine's governor enclosure; an electric still's terminal box (batch 2026-11-09-batch-distiller): the
+            // socket on its left side, on the pot's row. A fired still has no data port: only the electric still takes a
+            // controller (owner, 2026-11-09).
             case STEAM_TURBINE, BATCH_STILL -> {
+                if (kind == EquipmentShape.Kind.BATCH_STILL && !electricStill(shape)) return empty();
                 if (unit == null || unit.serviceHousing == null)
                     throw new IllegalArgumentException("Missing native service enclosure: " + kind);
                 var b = unit.serviceHousing;
