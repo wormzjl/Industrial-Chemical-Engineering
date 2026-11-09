@@ -59,13 +59,13 @@ These rules apply to every agent working in this repository (Claude, Codex, suba
 - Run at most two Gradle invocations at a time on the machine, each in its own worktree, and only if neither measures time. A run that measures time (benchmarks, wall-time cost gates) runs alone. Never run a test suite while a dev client is running.
 - When two runs overlap, judge cost by counters. Replay a wall-clock budget hold alone before you count it.
 - Large solver campaigns use 8 to 10 worker threads and never overlap another campaign of that size. A run on the second Gradle lane uses at most 4 worker threads.
-- `./gradlew test` is the quick suite. `./gradlew test slowGates` (or `check`) runs everything. Only the final lane runs them whole, once per batch.
+- `./gradlew test` is the quick suite. `./gradlew test slowGates` (or `check`) runs everything. The final lane runs, once per batch, only the test classes that the batch's changes can reach: those whose recorded load set holds a change (`tools/merge-lane/affected.mjs`). `lane.sh head --all` runs everything; use it only when the owner asks.
 - `columnGates` and `equipmentGates` hold the column and equipment tests, which `test` leaves out. Each sees only what its tests load, so it runs only when one of those files changed. When a group fails with a class or resource missing, add it to the group's list in `build.gradle`.
 - Use the least measurement that decides the task:
   - Compare forms on the 200-seed quick check (all distributions). Compare at most three forms per task, then choose one.
   - Run one full campaign (1000 seeds, all distributions, 8 workers) for the chosen form only. Do not replay worse seeds alone. Replay alone only new budget-class holds (classes C and F not in the baseline), batched in one run.
   - List worse worlds by class with the campaign's classifier. Minimize and trace at most the two smallest new ones.
-  - Read references once, in one final lane (`tools/merge-lane/lane.sh`: `test slowGates` with the 33 junction lines, the printed lines and `MIXED_GAS_COST`; chain-100 exact; the fluid GameTests; the campaign, which the lane skips when nothing it loads changed since `main`). Do not run a second final lane. Do not copy the lane into a batch's tool folder.
+  - Read references once, in one final lane (`tools/merge-lane/lane.sh`: the affected test classes, with the 33 junction lines, the printed lines and `MIXED_GAS_COST` when their tests are among them; chain-100 exact and the fluid GameTests when what they load changed; the campaign when one of its inputs changed since `main`). A reference whose test the lane skips stands from the baseline lane. Do not run a second final lane. Do not copy the lane into a batch's tool folder.
   - To prove a gate test fails with its rule disabled, run that one test, not the suite.
   - Take counters from the campaign. Do not make separate per-seed Newton runs.
   - Split a hold class by mechanism only when the task targets that class, on the final code, with the existing classifier script.
@@ -79,7 +79,7 @@ These rules apply to every agent working in this repository (Claude, Codex, suba
   - A test removed, or test code left without a user removed: `compileTestJava` only. Prove the removal from the test names in the stored results.
   - A test added or edited: that test class.
   - Production code: the tests of the changed classes and the gates that name the rule.
-- Run a whole task (`test`, `slowGates`, `check`) only in the final lane, once per batch, when the code is final. Do not run one to confirm a fix, between commits, or after a cleanup or an archive.
+- Run a whole task (`test`, `slowGates`, `check`) only through the final lane, once per batch, when the code is final. Do not run one to confirm a fix, between commits, or after a cleanup or an archive.
 - Gradle reruns a whole task when one file of that task changes. Narrow the run with `--tests` instead of letting it.
 - Read stored results first: `build/test-results`, the lane's output, the batch review. If they answer the question, do not run.
 - Do not force a result again: no `--rerun-tasks`, `--no-build-cache`, `cleanTest` or deleted `build/`. An up-to-date or restored task counts as run.

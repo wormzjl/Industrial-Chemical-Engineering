@@ -52,6 +52,11 @@ for (const label of ['cold-random', 'bundled-random', 'bundled-defaults']) {
 // Wall time and allocation are machine noise: compare the lines without them.
 const strip = line => line.replace(/\bms=\d+(\.\d+)?,?\s*/g, '').replace(/\ballocatedMB=[\d.]+\s*/g, '')
     .replace(/,?\s*\bbytes=\d+/g, '').trim();
+// The lane leaves junction.txt out when it did not select the junction tests: the baseline's lines stand.
+if (read(headDir, 'junction.txt') == null) {
+  console.log('== junction lines and MIXED_GAS_COST: not run on head (nothing the junction tests load changed); the baseline stands');
+  process.exit(0);
+}
 const bj = (read(baseDir, 'junction.txt') || '').split('\n').filter(Boolean).map(strip);
 const hj = (read(headDir, 'junction.txt') || '').split('\n').filter(Boolean).map(strip);
 let same = 0;

@@ -28,7 +28,7 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 | [localization/](localization/README.md) | Missing-key scan and translation checks for the lang files | `2026-11-03-localization` | Implemented 2026-11-03 |
 | [dry-ice-cost/](dry-ice-cost/README.md) | Per-job cost, shadow flashes and prototypes of the cold crystal worlds | `2026-11-02-dry-ice-cost` | Implemented 2026-11-03 |
 | [cooling-towers/](cooling-towers/README.md) | Tower verification lane, fill forms, relief sprites, polygon counts | `2026-10-30-water-cooling-tower` | Implemented 2026-11-02 |
-| [merge-lane/](merge-lane/README.md) | The one final lane before a merge, with its campaign inputs | `2026-11-02-test-suite-optimization` | Implemented 2026-11-03 |
+| [merge-lane/](merge-lane/README.md) | The one final lane before a merge, with its campaign inputs | `2026-11-02-test-suite-optimization`, `2026-11-09-final-lane-selection` | Implemented 2026-11-09 |
 | [ph-false-root/](ph-false-root/README.md) | TP, PH and UV sweeps on wet feeds, final lanes of the false root and TP steam fixes | `2026-11-02-ph-false-root`, `2026-11-02-tp-steam-refusal` | Implemented 2026-11-02 |
 | [vacuum-column-test/](vacuum-column-test/README.md) | CDU/VDU convergence screens and feed checks | `2026-10-28-vacuum-column` | Implemented 2026-11-02 |
 | [valve-hold-probes/](valve-hold-probes/README.md) | Trace and job-path replays of a column outlet's held jobs | `2026-11-02-valve-hold` | Implemented 2026-11-02 |
