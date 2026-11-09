@@ -16,6 +16,7 @@ Status: In progress since 2026-11-03. Decisions S1-S11 were all taken on 2026-11
   - the AGENTS.md text, the owner decisions and the work packages, with the W6 proposal.
 - [REGISTRY_FIRST_PLAN.md](REGISTRY_FIRST_PLAN.md): W5a (facts schema 8 with line paints and structure records, the write paths, learning from blocks) and W5b (held registrations, the re-alignment queue, one-block, rack and structure placement, commands, notices), in eight steps with GameTests a to j. Section 6 is the lag budget.
 - [MAIN_CATCH_UP_REVIEW.md](MAIN_CATCH_UP_REVIEW.md): what main 0.20.0 to 0.23.4 means for W5: the merge's conflicts, schema numbers, the drawn-connections overlap (one defect after the merge, the review's owner decisions 1 and 2), main's new blocks outside W5, and the merge order.
+- [W5C_NEW_MODULES_PLAN.md](W5C_NEW_MODULES_PLAN.md): W5c, registry first for the modules main added: what each saves, the rule (a held part is absent to its network), work packages C1 to C5 (shafts, cables, controllers, device names, notices), owner decisions Q1 to Q4, GameTests k to o.
 
 ## Code areas
 
@@ -130,11 +131,13 @@ Status: In progress since 2026-11-03. Decisions S1-S11 were all taken on 2026-11
   - Main's equipment protection refuses a direct edit of a structure cell. W5's GameTests now lose cells through a fixture edit (`EquipmentPermissionChecks.lost`) and dismantle through the creative player (`EquipmentTestCleanup.remove`). GameTest f counts only items dropped after it starts: a fluid pipe a line tool batch left nearby failed it once.
   - Gates: `FluidFactsCompatTest` 18/18 (all 16 corpus images, the new schema 15 included), `WorldTopologyLedgerTest` 13/13, `PhysicalFluidTopologyTest` 34/34, `ShaftCouplingTest` 8/8, `AccessoryStoreCompatTest` 8/8, `GaugeAccessoriesTest` 14/14, `SensorStoreTest` 4/4, `LiquidLevelGaugeTest` 3/3, `LineContractTest` 8/8, `PipeLineCompatTest` 8/8, `EquipmentRefreshTest` 8/8 (equipmentGates); `check.js` on the four translations (2973 keys). Fluid GameTests 83/83 on the fresh run id `save-w5-merge-d`. The runs `save-w5-merge` to `-c` failed in W5's structure tests only, as above.
 
+- 2026-11-09: W5c plan, the commit that adds this line: [W5C_NEW_MODULES_PLAN.md](W5C_NEW_MODULES_PLAN.md). A survey of main's new modules: shaft units and control facts are saved apart from the blocks, but a lost block leaves a ghost the network still uses. Line pieces already follow their facts. Device names live only in block NBT. Waiting for the owner's Q1 to Q4.
+
 ## Open items
 
 - W5 is complete and carries main 0.23.4. W5c (the new modules) follows on this branch; the batch merges to main when everything is done (owner, 2026-11-09). Merge preparation then: bring in main again, final lane, CHANGELOG, version, code guide, tooling cleanup, the translation check.
 - Drawn connections' owner decisions: W5 answers 1 (ghosts are placed back or held and named, never pruned). Decision 2 (a block placed already as INLINE_MOVER gets the legacy Pump law) also governs W5's learning path (review 2.3, 2.4).
-- W5c: registry first for main's new blocks (shafts, data and FE cables, control panels and the DCS, device names), owner: "add support for new modules". Plan to come in this folder.
+- W5c: registry first for main's new blocks (owner: "add support for new modules"), planned in [W5C_NEW_MODULES_PLAN.md](W5C_NEW_MODULES_PLAN.md). Owner decisions Q1 (a held part is absent to its network), Q2 (rack frames for cable lanes, `ControlFacts` format 4), Q3 (device names in schema 15), Q4 (the simulator block and creative power out of scope).
 - Main now makes translations a pre-merge task (AGENTS.md: only en_us during a batch, one translation commit before the merge). Step 7 already updated all five files in its commit; the merge checks them again with `check.js` and `stale-translations.js`. The final lane now runs only the affected test classes (`tools/merge-lane/affected.mjs`).
 - One in-game check of a rebuilt structure (rendering, light) to offer the owner after step 6 (plan section 8); not started unasked.
 - Tooling cleanup before the merge: the rack-frame probe `tmp/rack-frame/ambiguity.jsh` (plan 3.1) moves to a `tools/` folder.
