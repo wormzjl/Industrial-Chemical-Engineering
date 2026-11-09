@@ -208,6 +208,7 @@ public final class SheetEditor {
                 p.addProperty("drop", 1e5);
             }
             case "mixer" -> p.addProperty("inlets", 2);
+            case "flare" -> p.addProperty("tip", com.wormzjl.icheme.science.flowsheet.unit.FlareUnit.TIP);
             case "splitter" -> {
                 p.addProperty("mode", "shares");
                 var rows = new JsonArray();

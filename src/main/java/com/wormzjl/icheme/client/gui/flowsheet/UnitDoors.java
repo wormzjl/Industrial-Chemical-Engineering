@@ -89,7 +89,7 @@ public final class UnitDoors {
                 case PRESSURE -> u.pressure().symbol();
                 case TEMPERATURE -> u.temperature().symbol();
                 case MEGAWATT -> "MW";
-                case PLAIN -> field.equals("area") ? "m²" : "";
+                case PLAIN -> field.equals("area") ? "m²" : field.equals("tip") ? "m" : "";
             });
         }
 
@@ -142,6 +142,12 @@ public final class UnitDoors {
                 else r.readings(Door.meter(x.text("door.sum"), r.reading("sum", .01, 1), "%"), Door.meter(x.text("door.rest"), rest.name(), ""));
             }
             case "filter" -> r.readings(Door.meter(x.text("door.solids"), r.reading("solids", 1, 2), "kg/s"));
+            // A flare stack (batch 2026-11-09-flare-stack, W4): its tip, then what its flame does with the gas.
+            case "flare" -> {
+                r.group("tip", r.entry("tip", x.text("door.tip"), Quantity.PLAIN), Door.meter(x.text("door.rated"), r.reading("rated", 1e6, 1), "MW"));
+                r.readings(Door.meter(x.text("door.heat_release"), r.reading("heat", 1e6, 2), "MW"), Door.meter(x.text("door.heating_value"), r.reading("heating_value", 1e6, 1), "MJ/m³"),
+                        Door.meter(x.text("door.flame"), Reader.of(x, id).temperature(u, "flame"), u.temperature().symbol()), Door.meter(x.text("door.most_flow"), r.reading("limit", 1, 2), "kg/s"));
+            }
             case "drum" -> {
                 r.group("pressure", r.choice("pressure_mode", "inlet", "inlet", "set"), r.text("pressure_mode", "inlet").equals("set") ? r.entry("pressure", x.text("door.pressure"), Quantity.PRESSURE) : r.entry("drop", x.text("door.drop"), Quantity.PRESSURE));
                 heat(r);

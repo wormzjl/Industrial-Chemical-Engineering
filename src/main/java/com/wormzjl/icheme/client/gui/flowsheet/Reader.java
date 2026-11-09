@@ -24,6 +24,12 @@ record Reader(@Nullable SheetResults results, String unit) {
         return Double.isNaN(value) ? "" : u.t(value);
     }
 
+    /** Temperature reading {@code key} in the player's unit. */
+    String temperature(SheetUnits u, String key) {
+        double value = value(key);
+        return Double.isNaN(value) ? "" : u.t(value);
+    }
+
     String pressure(SheetUnits u) {
         double value = value("pressure");
         return Double.isNaN(value) ? "" : u.p(value);

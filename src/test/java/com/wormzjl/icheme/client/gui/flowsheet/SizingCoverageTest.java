@@ -11,6 +11,7 @@ import com.wormzjl.icheme.science.flowsheet.sizing.CompressorSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.DrumSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.EjectorSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.ExchangerSizing;
+import com.wormzjl.icheme.science.flowsheet.sizing.FlareSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.HeaterSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.PumpSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.SizingCoverage;
@@ -62,6 +63,7 @@ public class SizingCoverageTest {
         out.add(new ColumnSizing.Size(4, new ColumnTrays(30, 20, List.of(10), List.of(31), List.of(new ColumnTrays.Pumparound(10, 8)), components)));
         out.add(new EjectorSizing.Size(UnitSize.grid(EquipmentShape.Kind.EJECTOR)[3]));
         out.add(new TurbineSizing.Size(1250, MachineDuty.Steam.HP, 350));
+        out.add(new FlareSizing.Size(UnitSize.grid(EquipmentShape.Kind.FLARE_STACK)[4]));
         out.add(new ValveSizing.Size(.3));
         return out;
     }

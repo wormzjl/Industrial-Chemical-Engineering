@@ -20,13 +20,14 @@ Owner, 2026-11-09: wire the fuel requirement into the furnace, working with the 
 
 ## History
 
-- 2026-11-09: plan; owner answers F1 (a), F2 prebuilt LHV in the material DB, F3 (b), F4 (a). Built W1 to W4; LHV tool run. Tests: `FiredHeaterFuelTest` (new), `BurnersTest` (new), `FiredCoilTest`, `MaterialThermochemistryTest`, `HeatSidesTest`, `ShapeRasterizerTest`, `EquipmentLayoutGoldenTest` (table updated). Targeted runs: 283 quick-suite and 65 equipment tests; fixed the test rig (one solver per island) and the layout table; `FiredHeaterFuelTest` 4/4: stiff supply coil 3500 kW (its duty) on 6278 kW fired, fans 5.1 kW; 2.016 bar supply fires 2836 kW, coil 1598 kW, LOW FUEL.
+- 2026-11-09: plan; owner answers F1 (a), F2 prebuilt LHV in the material DB, F3 (b), F4 (a). Built W1 to W4; LHV tool run. Tests: `FiredHeaterFuelTest` (new), `BurnersTest` (new), `FiredCoilTest`, `MaterialThermochemistryTest`, `HeatSidesTest`, `ShapeRasterizerTest`, `EquipmentLayoutGoldenTest` (table updated). Targeted runs: 283 quick-suite and 65 equipment tests; fixed the test rig (one solver per island) and the layout table; `FiredHeaterFuelTest` 4/4: stiff supply coil 3500 kW (its duty) on 6278 kW fired, fans 5.1 kW; 2.016 bar supply fires 2836 kW, coil 1598 kW, LOW FUEL. Committed `59278550b`.
+- 2026-11-09: owner: O1 accepted (combustion in no identity), O2 fix it, "Most duty" replaced. A segment that starts with no flows known and plans a fired coil or controlled air cooler now plans from one rate solve's flows (`PassiveIntervalSolver`, `PassiveStepSolver.plansHeat`). The heater row reads "Rated duty" with a hint naming what lowers the firing.
 
 ## Open items
 
-- O1 owner: the `combustion` sub-record is in no identity (as `thermochemistry`): an LHV edit changes the next commit's firing, never saved contents.
-- O2 owner: a fresh solver's first step has no carried flows, so a radiant coil plans full firing for it (pre-existing W6 rule, "fires fully where its end draws nothing"). After a restructure the coil can take more than its fuel gives for one step.
+- O1 closed 2026-11-09: the `combustion` sub-record stays in no identity (owner: yes).
+- O2 fixed 2026-11-09: a fresh solver's first step planned the coil at no flow (full firing) and overshot its duty and fuel by about 10 %; it now plans from one rate solve's flows.
 - O3: the burners' VOID device opens a void page when clicked; the heater's coil pages carry the fuel and fan rows.
-- O4 owner: GUI renders sent 2026-11-09 (`GuiPrototypes` gained `firedHeater()` and the alarms group on the control panels; the tool needs the Gson jar on its class path): approval open.
+- O4 owner: GUI renders sent 2026-11-09 (`GuiPrototypes` gained `firedHeater()` and the alarms group on the control panels; the tool needs the Gson jar on its class path): "Most duty" renamed "Rated duty" (owner); approval of the rest open.
 - O5: the process simulator's heater report does not show fuel or fan power yet.
 - O6: facts corpus image for a world with burners; translations; code guide; CHANGELOG; version.

@@ -50,6 +50,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
     /** The powered units' electric stores (W5). */
     private final ElectricStores electric;
     private final FiredHeaters burners;
+    private final Flares flares;
     /** The pumps' health (W10b). */
     private final PumpHealth health;
     /**
@@ -74,6 +75,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
     private final Watchers sightGlassWatchers=new Watchers();
     private final Map<Long,PipePresentation.SightGlass> publishedSightGlasses=new HashMap<>();
     private final Watchers moverWatchers=new Watchers();
+    /** The flares each player watches for their flames (batch 2026-11-09-flare-stack, W5), and what was last published. */
+    private final Watchers flareWatchers=new Watchers();
+    private final Map<Long,com.wormzjl.icheme.network.FluidNetwork.FlareState> publishedFlares=new HashMap<>();
     private final Map<Long,com.wormzjl.icheme.network.FluidNetwork.MoverState> publishedMovers=new HashMap<>();
     private final com.wormzjl.icheme.runtime.instrument.InstrumentService instruments;
     private final com.wormzjl.icheme.runtime.control.ControlFacts controlFacts;
@@ -139,6 +143,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         shafts.stressPerFE(IChemE::stressPerFE);if(!net.neoforged.fml.ModList.get().isLoaded("create"))shafts.forget(com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.CREATE_COUPLING);
         // The fired heaters' burners (batch 2026-11-09-furnace-fuel-power): the network's heating values in its conserved order.
         burners=new FiredHeaters(topology,runtime.coordinator(),electric,heatingValues(catalog,model),model.molecularWeights());shafts.burners(burners);electric.moved(burners::powerMoved);
+        flares=new Flares(topology,heatingValues(catalog,model),model.molecularWeights(),formulas(catalog,model));shafts.flares(flares);
         health=new PumpHealth(topology,registry::owner,runtime.coordinator(),id->PumpHealth.pump(topology.active().get(id)),id->{var r=topology.active().get(id);return r==null?null:r.device().control();},IChemE::wearSettings);shafts.health(health);
         // Block entities whose chunks loaded before this authority existed never reported themselves: every device
         // in an already loaded chunk is marked once, and its bucket binds and presents it. Nothing is pushed here.
@@ -317,6 +322,18 @@ public final class FluidWorldAuthority implements AutoCloseable {
         long id=topology.nextIdentity();var record=burnerRecord(id,burners,radiant);
         submit(List.of(new WorldTopologyLedger.Edit(id,record)),Math.addExact(id,1));return record;
     }
+    /**
+     * A flare stack's tip (batch 2026-11-09-flare-stack): a void at its gas inlet's cell with one bulk port, its geometry's
+     * diameter its tip's, its tip limit its control ({@link FlowControl.ValveSource#FLARE}).
+     */
+    public WorldTopologyLedger.Registration placeFlare(PhysicalFluidTopology.Position node,List<PhysicalFluidTopology.Port> ports,double tip) {
+        owned();long id=topology.nextIdentity();
+        var device=new PhysicalFluidTopology.Device(id,node,TopologyCompiler.Kind.VOID,PhysicalFluidTopology.Direction.NORTH,
+                new PipeResistance.Geometry(1,tip,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),FlowControl.ControlValve.flare(),ports,true,PhysicalFluidTopology.Cutoff.NONE,false,
+                PhysicalFluidTopology.ALL_FACES,0,0,null);
+        var record=new WorldTopologyLedger.Registration(device,new FluidDeviceSpec(1,com.wormzjl.icheme.science.fluid.network.Flare.AMBIENT,101325,FluidDeviceSpec.nitrogen(catalog).composition()),0);
+        submit(List.of(new WorldTopologyLedger.Edit(id,record)),Math.addExact(id,1));return record;
+    }
     private WorldTopologyLedger.Registration burnerRecord(long id,UnitBurners burners,long radiant) {
         var device=new PhysicalFluidTopology.Device(id,burners.node(),TopologyCompiler.Kind.VOID,PhysicalFluidTopology.Direction.NORTH,
                 new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),FlowControl.ControlValve.burner(),burners.ports(),true,PhysicalFluidTopology.Cutoff.NONE,false,
@@ -368,6 +385,16 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public ElectricStores electric(){owned();return electric;}
     /** The fired heaters' burners: their views and alarms are reads. */
     public FiredHeaters burners(){owned();return burners;}
+    /** The flare stacks: their views and alarms are reads. */
+    public Flares flares(){owned();return flares;}
+    /** The network package's formulas (atoms of C, H, N, O, S) in {@code model}'s conserved order, by component name. */
+    static double[][] formulas(MaterialCatalog catalog,FluidThermodynamics model) {
+        String id=com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(catalog);
+        var values=catalog.formulas(id);var names=new ArrayList<>(catalog.requirePackage(id).components());names.add("Water");
+        var out=new double[model.componentCount()][];var components=model.components();
+        for(int c=0;c<out.length;c++){int i=names.indexOf(components.get(c));out[c]=i<0?new double[MaterialCatalog.FORMULA_ELEMENTS.size()]:values[i];}
+        return out;
+    }
     /** The network package's lower heating values (J/mol) in {@code model}'s conserved order, by component name. */
     static double[] heatingValues(MaterialCatalog catalog,FluidThermodynamics model) {
         String id=com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(catalog);
@@ -710,6 +737,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         // The watched drivers' states at the presentation cadence (W3): a read of what the trains last decided.
         if(!driverWatchers.isEmpty()&&topology.onlineTick()%100==0)publishDrivers();
         if(!rotationWatchers.isEmpty()&&topology.onlineTick()%100==0)publishRotations();
+        if(topology.onlineTick()%100==0)publishFlares();
         if(topology.onlineTick()%ElectricStores.CADENCE==0&&propertyHold==null)health.cadence();
         // A generator's port pushes FE to its neighbours (the FE protocol, reading A65): stored FE only, nothing solves.
         pushGenerators();
@@ -926,7 +954,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         return new FluidView.Pump(finite(s.available()),finite(s.required()),finite(s.gas()),Math.clamp(h,0,1),curve);
     }
     private static Double finite(double value){return Double.isFinite(value)?value:null;}
-    public void forgetWatcher(UUID player){owned();driverWatchers.remove(player);rotationWatchers.remove(player);tankWatchers.forget(player);for(long id:sightGlassWatchers.devices(player))unwatchSightGlass(player,id);for(long id:moverWatchers.devices(player))unwatchMover(player,id);}
+    public void forgetWatcher(UUID player){owned();driverWatchers.remove(player);rotationWatchers.remove(player);tankWatchers.forget(player);for(long id:sightGlassWatchers.devices(player))unwatchSightGlass(player,id);for(long id:moverWatchers.devices(player))unwatchMover(player,id);flareWatchers.forget(player);}
 
     /** Requested shaft/machine speeds, keyed by dimension as well as cell; published values are presentation state only. */
     private final Map<UUID,Set<PhysicalFluidTopology.Position>> rotationWatchers=new HashMap<>();
@@ -1065,6 +1093,46 @@ public final class FluidWorldAuthority implements AutoCloseable {
             if(moverWatchers.watch(uuid,target.identity())) {
                 refreshObserved(target.identity());var state=publishedMovers.get(target.identity());
                 if(state!=null)com.wormzjl.icheme.network.FluidNetwork.sendMover(player,state);
+            }
+        }
+    }
+    /**
+     * A flare's flame subscription (W5): it replays the state last published, or the flare's last booked span (a read), and
+     * the presentation cadence keeps it current. It never reads or advances a process.
+     */
+    public void watchFlares(net.minecraft.server.level.ServerPlayer player,List<com.wormzjl.icheme.network.FluidNetwork.Target> watch,List<com.wormzjl.icheme.network.FluidNetwork.Target> unwatch) {
+        owned();if(closed)return;var uuid=player.getUUID();var level=player.serverLevel();
+        for(var target:unwatch)flareWatchers.unwatch(uuid,target.identity());
+        for(var target:watch) {
+            var pos=target.position();
+            if(!level.hasChunkAt(pos)||!moverRange(player,pos)||!(level.getBlockEntity(pos) instanceof FluidView.Receiver receiver)||receiver.fluidIdentity()!=target.identity())continue;
+            var record=registrations().get(target.identity());
+            if(record==null||!record.device().flare()||!cell(record).equals(pos)||!record.device().position().dimension().equals(level.dimension().location().toString()))continue;
+            if(flareWatchers.watch(uuid,target.identity())) {
+                var state=publishedFlares.get(target.identity());if(state==null)state=flareState(target);
+                if(state!=null)com.wormzjl.icheme.network.FluidNetwork.sendFlare(player,state);
+            }
+        }
+    }
+    /** Flare {@code target}'s flame from its last booked span (a read): its heat over its rating, its unburnt flow over its limit. */
+    private com.wormzjl.icheme.network.FluidNetwork.FlareState flareState(com.wormzjl.icheme.network.FluidNetwork.Target target) {
+        var view=flares.view(target.identity());if(view==null)return null;
+        boolean flame=view.status()==Flares.Status.FLARING||view.status()==Flares.Status.OVER_CAPACITY;
+        float share=(float)Math.clamp(view.heat()/view.rated(),0,1),plume=view.status()==Flares.Status.FLAME_OUT&&view.limit()>0?(float)Math.clamp(view.massFlow()/view.limit(),.05,1):0;
+        return new com.wormzjl.icheme.network.FluidNetwork.FlareState(target,view.status().ordinal(),flame?Math.max(share,.02f):0,plume);
+    }
+    /** The presentation cadence's flare states: one per watched flare, to its watchers only. */
+    private void publishFlares() {
+        publishedFlares.clear();
+        for(long id:flareWatchers.devices()) {
+            var record=registrations().get(id);
+            if(record==null||!record.device().flare()){flareWatchers.remove(id);continue;}
+            var pos=cell(record);var state=flareState(new com.wormzjl.icheme.network.FluidNetwork.Target(pos,id));if(state==null)continue;
+            publishedFlares.put(id,state);
+            for(var uuid:flareWatchers.watchers(id)) {
+                var player=server.getPlayerList().getPlayer(uuid);
+                if(player==null||player.hasDisconnected()||!player.serverLevel().dimension().location().toString().equals(record.device().position().dimension())||!moverRange(player,pos)){flareWatchers.unwatch(uuid,id);continue;}
+                com.wormzjl.icheme.network.FluidNetwork.sendFlare(player,state);
             }
         }
     }
@@ -1424,6 +1492,14 @@ public final class FluidWorldAuthority implements AutoCloseable {
             for(var pipe:snapshot.graph().pipes())if(own!=0&&pipe.id()==own)law=pipe.heat();
             view=view.withHeat(HeatPresentation.complete(view.heat(),id,heat,law,heatSource(islands)));
         }
+        // A flare stack (batch 2026-11-09-flare-stack): its flow, heat, gas and status; its alarms on the status line.
+        if(registration.device().flare()) {
+            var f=flares.view(id);
+            if(f!=null) {
+                view=view.withFlare(new FluidView.Flare(f.massFlow(),f.heat(),f.heatingValue(),f.flameTemperature(),f.limit(),f.rated(),registration.device().geometry().diameter(),f.status().name()));
+                for(var a:f.alarms())if(!view.status().contains(a.text))view=view.withStatus(view.status()+" / "+a.text);
+            }
+        }
         // A plain pipe's line reading (OWNER_TEST_REVIEW.md section 6): the stream it carries, as its gauge reads it.
         if(registration.device().kind()==TopologyCompiler.Kind.PIPE&&view.pipeInfo()!=null)view=view.withPipeInfo(view.pipeInfo().withReading(lineReading(id,view)));
         if(registration.device().kind()==TopologyCompiler.Kind.VOID) {
@@ -1635,7 +1711,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
             });
         }
     }
-    @Override public void close(){owned();if(closed)return;closed=true;unboundStructures.clear();publishedMenuData.clear();publishedSightGlasses.clear();publishedMovers.clear();driverWatchers.clear();publishedDrivers.clear();rotationWatchers.clear();publishedRotations.clear();runtime.close();data.setDirty();}
+    @Override public void close(){owned();if(closed)return;closed=true;unboundStructures.clear();publishedMenuData.clear();publishedSightGlasses.clear();publishedMovers.clear();publishedFlares.clear();driverWatchers.clear();publishedDrivers.clear();rotationWatchers.clear();publishedRotations.clear();runtime.close();data.setDirty();}
 
     /**
      * Which players watch which open tanks, sight glasses or movers (the request path R-B of the engine-owned presentation
@@ -1674,5 +1750,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         /** The devices {@code player} watches, a copy (empty for none). */
         public Set<Long> devices(UUID player){var devices=byPlayer.get(player);return devices==null?Set.of():Set.copyOf(devices);}
         public int watched(UUID player){var devices=byPlayer.get(player);return devices==null?0:devices.size();}
+        /** Every watched device, a copy. */
+        public Set<Long> devices(){return Set.copyOf(byDevice.keySet());}
     }
 }

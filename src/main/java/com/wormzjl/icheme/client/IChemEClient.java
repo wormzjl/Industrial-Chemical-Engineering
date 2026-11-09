@@ -34,6 +34,7 @@ public final class IChemEClient {
         SightGlassRenderer.clear();
         MoverSounds.clear();
         DriverSounds.clear();
+        FlareFlames.clear();
     }
 
 }

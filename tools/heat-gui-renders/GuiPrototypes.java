@@ -93,6 +93,39 @@ public final class GuiPrototypes {
         out.addAll(createCoupling());
         out.addAll(controlPanels());
         out.addAll(firedHeater());
+        out.addAll(flareStack());
+        return out;
+    }
+
+    /**
+     * A flare stack (batch 2026-11-09-flare-stack): its page flaring and with its flame out, its constructor design page, and
+     * the heat equipment's choice with the flare's tile.
+     */
+    static List<Prototype> flareStack() {
+        var out = new ArrayList<Prototype>();
+        for (boolean lit : new boolean[]{true, false}) {
+            var input = new DeviceColumn.Input(Kind.VOID, false, false, true, "bar", "°C", "/h", DeviceColumn.Valve.NONE, null, false, null, null, List.of(),
+                    phases("volume", 0, 0, 1, 0), List.of(meter("pressure", "1.013", "bar"), new DeviceColumn.Meter("throughput", lit ? "6120.0" : "5040.0", "kg/h", TEXTS.get("throughput.hint")),
+                    new DeviceColumn.Meter("flare_heat", lit ? "75.40" : "0.00", "MW", TEXTS.get("flare_heat.hint", "212.4 MW")),
+                    new DeviceColumn.Meter("flare_heating_value", lit ? "33.4" : "3.7", "MJ/m³", TEXTS.get("flare_heating_value.hint")),
+                    new DeviceColumn.Meter("flare_flame", lit ? "1958.9" : "1352.4", "°C", TEXTS.get("flare_flame.hint", "1426.9 °C")),
+                    new DeviceColumn.Meter("flare_limit", lit ? "15282.0" : "5040.0", "kg/h", TEXTS.get("flare_limit.hint", "0.3 m"))));
+            out.add(devicePage(lit ? "flare-stack-flaring" : "flare-stack-flame-out", WINDOW[0], WINDOW[1], input, (d, s) -> {
+                d.title("Flare stack");
+                d.name("FL-101", true);
+                d.tabs(0, "Overview", "Control", "Datasheet");
+                d.status(lit ? "FLARING" : "FLAME OUT", lit ? Palette.ACCENT : Palette.RED);
+                var box = device(d, input, DeviceColumn.rows(input, TEXTS), Map.of());
+                contents(d, box, 1, lit ? List.of(new String[]{"Component", "Mole %", "kg/h"}, new String[]{"Methane", "100.0", "6120"})
+                        : List.of(new String[]{"Component", "Mole %", "kg/h"}, new String[]{"Methane", "11.1", "254"}, new String[]{"Nitrogen", "88.9", "4786"}));
+                d.footer(2, "Close", "Mass", "°C", "bar", "/h");
+            }));
+        }
+        var outlet = new ConstructorColumn.Outlet(1, 0, STANDING);
+        var flare = ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.FLARE_STACK, .3, 1, 0, 0, 0, 0, new ProcessUnit.Bank(1, 1), null, outlet, 16, com.wormzjl.icheme.science.equipment.TowerBank.ONE), DIALOG);
+        out.add(new Prototype("equipment-constructor-flare", 464, 254, (d, s) -> constructorDoor(d, flare, "Flare stack", "change", DIALOG.get(CONSTRUCTOR + "flare_rating", "212.4", "32"), Palette.ACCENT, Map.of()), true));
+        out.add(new Prototype("equipment-constructor-choose-heat", 464, 254, (d, s) -> constructorDoor(d, ConstructorColumn.choose(ConstructorColumn.Category.HEAT,
+                ConstructorColumn.Equipment.FLARE_STACK, 16, DIALOG), "Equipment constructor", "back", null, 0, Map.of()), true));
         return out;
     }
 
@@ -104,7 +137,7 @@ public final class GuiPrototypes {
         var input = new DeviceColumn.Input(Kind.HEAT_SIDE, true, true, true, "bar", "°C", "/h", DeviceColumn.Valve.NONE, null, false, null, null, List.of(),
                 phases("volume", 0, 1, 0, 0), List.of(meter("temperature", "50.0", "°C"), meter("throughput", "1995.0", "kmol/h"),
                 meter("outlet_temperature", "112.4", "°C"), new DeviceColumn.Meter("duty", "1598.0", "kW", TEXTS.get("duty.fired")),
-                meter("set_temperature", "170.0", "°C"), new DeviceColumn.Meter("duty_available", "1598.0", "kW", TEXTS.get("duty_available.hint")),
+                meter("set_temperature", "170.0", "°C"), new DeviceColumn.Meter("duty_available", "3500.0", "kW", TEXTS.get("duty_available.hint")),
                 new DeviceColumn.Meter("fuel_flow", "204.1", "kg/h", TEXTS.get("fuel_flow.hint", "50.0 MJ/kg")),
                 new DeviceColumn.Meter("fuel_fired", "2836.0", "kW", TEXTS.get("fuel_fired.hint", "6213.0 kW")),
                 new DeviceColumn.Meter("burner_fans", "2.3", "kW", TEXTS.get("burner_fans.hint"))));

@@ -302,6 +302,8 @@ public final class SheetLayout {
                 default -> new int[]{w, h / 2, R};
             };
             case "mixer" -> in ? new int[]{0, stacked(order, ports.size() - 1, h), L} : new int[]{w, h / 2, R};
+            // A flare's gas enters its riser near the foot.
+            case "flare" -> new int[]{0, h - 8, L};
             case "splitter" -> in ? new int[]{0, h / 2, L} : new int[]{w, stacked(order, ports.size() - 1, h), R};
             case "drum", "storage_tank" -> switch (id) {
                 case "in" -> new int[]{0, h / 2, L};

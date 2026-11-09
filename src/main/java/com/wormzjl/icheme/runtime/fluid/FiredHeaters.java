@@ -33,14 +33,8 @@ import java.util.*;
 public final class FiredHeaters {
     /** A moved demand or fired heat wakes the other island past this share (plus 1 W). */
     static final double WAKE=1e-2;
-    /** The alarms a heater raises, by name; {@link #alarms} lists the active ones. */
-    public enum Alarm {
-        NO_POWER("NO POWER"), NO_FUEL("NO FUEL"), LOW_FUEL("LOW FUEL"), NOT_COMBUSTIBLE("FUEL NOT COMBUSTIBLE");
-        public final String text;
-        Alarm(String text){this.text=text;}
-    }
     /** A heater as its page shows it: its radiant demand, the fuel asked for and fired (W), the fuel's mass flow (kg/s) and heat (J/kg), the fans' draw (W), its alarms. */
-    public record View(double demand,double asked,double fired,double fuelFlow,double heatingValue,double fanDraw,List<Alarm> alarms) {}
+    public record View(double demand,double asked,double fired,double fuelFlow,double heatingValue,double fanDraw,List<EquipmentAlarm> alarms) {}
 
     private static final class Heater {
         final long burners;
@@ -158,22 +152,22 @@ public final class FiredHeaters {
     }
 
     /** Heater {@code burners}' active alarms, in their order. */
-    public List<Alarm> alarms(long burners) {
+    public List<EquipmentAlarm> alarms(long burners) {
         var h=ofBurners(burners);if(h==null)return List.of();
-        var out=new ArrayList<Alarm>();
+        var out=new ArrayList<EquipmentAlarm>();
         if(!lit(h))return out;
-        if(!electric.powered(h.burners)){out.add(Alarm.NO_POWER);return out;}
+        if(!electric.powered(h.burners)){out.add(EquipmentAlarm.NO_POWER);return out;}
         double asked=Burners.fired(h.demand);
         if(!(asked>0)||!h.demandSeen)return out;
-        if(h.flow>0&&h.perKilogram==0)out.add(Alarm.NOT_COMBUSTIBLE);
-        else if(!(h.fired>0))out.add(Alarm.NO_FUEL);
-        else if(h.fired<Burners.SHORT*asked)out.add(Alarm.LOW_FUEL);
+        if(h.flow>0&&h.perKilogram==0)out.add(EquipmentAlarm.NOT_COMBUSTIBLE);
+        else if(!(h.fired>0))out.add(EquipmentAlarm.NO_FUEL);
+        else if(h.fired<Burners.SHORT*asked)out.add(EquipmentAlarm.LOW_FUEL);
         return out;
     }
 
     /** Every heater with an active alarm, by its burners' identity. */
-    public Map<Long,List<Alarm>> alarms() {
-        var out=new TreeMap<Long,List<Alarm>>();
+    public Map<Long,List<EquipmentAlarm>> alarms() {
+        var out=new TreeMap<Long,List<EquipmentAlarm>>();
         for(long id:heaters.keySet()){var a=alarms(id);if(!a.isEmpty())out.put(id,a);}
         return out;
     }

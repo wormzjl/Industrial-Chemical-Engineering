@@ -115,6 +115,10 @@ final class BuiltInInputs {
             out.add(
                     ControlInput.builtIn(
                             host, binding.node(0), "flow_rate", Sensor.Kind.FLOW, "MOVER:OUTLET"));
+        } else if (kind == EquipmentShape.Kind.FLARE_STACK) {
+            // A flare (batch 2026-11-09-flare-stack): the mass flow it receives, and whether it is flaring (1) or not (0).
+            out.add(ControlInput.builtIn(host, binding.node(0), "flow_rate", Sensor.Kind.FLOW, "FLARE:FLOW"));
+            out.add(ControlInput.builtIn(host, binding.node(0), "flaring", Sensor.Kind.ALARM, "FLARE:FLARING"));
         }
         if (kind.mover()
                 || kind == EquipmentShape.Kind.STEAM_TURBINE
@@ -136,21 +140,25 @@ final class BuiltInInputs {
         var kind = binding.shape().kind();
         if (HeatSides.burners(kind)) {
             long burners = binding.node(HeatSides.of(binding.shape()).size());
-            for (var alarm : FiredHeaters.Alarm.values())
+            for (var alarm : com.wormzjl.icheme.runtime.fluid.EquipmentAlarm.HEATER)
                 out.add(ControlInput.builtIn(binding.host(), burners, "alarm_" + alarm.name().toLowerCase(Locale.ROOT), Sensor.Kind.ALARM, "ALARM:" + alarm.name()));
         } else if (kind == EquipmentShape.Kind.AIR_COOLER || kind == EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER)
             out.add(ControlInput.builtIn(binding.host(), binding.node(0), "alarm_no_power", Sensor.Kind.ALARM, "ALARM:NO_POWER"));
         else if (kind == EquipmentShape.Kind.MOTOR)
             out.add(ControlInput.builtIn(binding.host(), 0, "alarm_no_power", Sensor.Kind.ALARM, "ALARM:NO_POWER"));
+        else if (kind == EquipmentShape.Kind.FLARE_STACK)
+            for (var alarm : com.wormzjl.icheme.runtime.fluid.EquipmentAlarm.FLARE)
+                out.add(ControlInput.builtIn(binding.host(), binding.node(0), "alarm_" + alarm.name().toLowerCase(Locale.ROOT), Sensor.Kind.ALARM, "ALARM:" + alarm.name()));
     }
 
     /** Whether alarm channel {@code input} is raised: its burners' alarm, or its unit's store standing for want of power. */
     static boolean raised(ControlInput input, FluidWorldAuthority world) {
-        var alarm = FiredHeaters.Alarm.valueOf(input.role().substring(6));
+        var alarm = com.wormzjl.icheme.runtime.fluid.EquipmentAlarm.valueOf(input.role().substring(6));
         long unit = input.source() > 0 ? input.source() : input.host();
         var heater = world.burners().alarms(unit);
         if (world.registrations().containsKey(unit) && world.registrations().get(unit).device().burner()) return heater.contains(alarm);
-        if (alarm != FiredHeaters.Alarm.NO_POWER) return false;
+        if (world.registrations().containsKey(unit) && world.registrations().get(unit).device().flare()) return world.flares().alarms(unit).contains(alarm);
+        if (alarm != com.wormzjl.icheme.runtime.fluid.EquipmentAlarm.NO_POWER) return false;
         var view = world.electric().view(unit);
         return view != null && view.unpowered();
     }
@@ -198,6 +206,7 @@ final class BuiltInInputs {
     static boolean volumeAvailable(ControlInput input) {
         return !input.role().startsWith("COLUMN")
                 && !input.role().startsWith("ALARM:")
+                && !input.role().startsWith("FLARE:")
                 && !input.role().equals("REFLUX")
                 && !input.role().startsWith("AIR:")
                 && !input.role().startsWith("PORT:");
@@ -233,6 +242,14 @@ final class BuiltInInputs {
             value = raised(input, world) ? 1 : 0;
             tick = world.onlineTick();
             quality = Instrument.Availability.AVAILABLE;
+        } else if (input.role().startsWith("FLARE:")) {
+            var flare = world.flares().view(input.source());
+            if (flare != null) {
+                value = input.role().equals("FLARE:FLOW") ? flare.massFlow()
+                        : flare.status() == com.wormzjl.icheme.runtime.fluid.Flares.Status.FLARING || flare.status() == com.wormzjl.icheme.runtime.fluid.Flares.Status.OVER_CAPACITY ? 1 : 0;
+                tick = world.onlineTick();
+                quality = Instrument.Availability.AVAILABLE;
+            }
         } else if (input.role().equals("SPEED")) {
             var unit = world.shafts().unit(input.host());
             var drive = unit == null ? world.shafts().unitOfDevice(input.source()) : unit;

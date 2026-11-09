@@ -16,10 +16,11 @@ import java.util.Map;
  * pump repaired since, switched back on (an island keeps the controls its last slice solved with, and a machine's speed
  * plan restores a casing by itself). {@code BURNERS} (batch 2026-11-09-furnace-fuel-power): a radiant coil's limit
  * ({@link FiredCoil#limit}), keyed by the coil's device; {@code FUEL}: a fired heater's fuel valve's mass target, kg/s, keyed
- * by its burners, the node its run enters.
+ * by its burners, the node its run enters. {@code FLARE} (batch 2026-11-09-flare-stack): a flare's tip limit, kg/s, keyed by the
+ * flare, the node its run enters.
  */
 public record ShaftPlan(Kind kind, double value) {
-    public enum Kind { SPEED, DISPLACEMENT, GOVERNOR, FANS, FAILED, BURNERS, FUEL }
+    public enum Kind { SPEED, DISPLACEMENT, GOVERNOR, FANS, FAILED, BURNERS, FUEL, FLARE }
 
     public ShaftPlan {
         java.util.Objects.requireNonNull(kind);
@@ -47,10 +48,10 @@ public record ShaftPlan(Kind kind, double value) {
         }
         for (int e = 0; e < graph.pipes().size(); e++) {
             var pipe = graph.pipes().get(e);
-            // A fuel valve is keyed by the burners its run enters.
-            if (pipe.control() instanceof FlowControl.ControlValve fuel && fuel.source() == FlowControl.ValveSource.BURNER) {
+            // A fuel valve is keyed by the burners its run enters, a flare's tip limit by the flare.
+            if (pipe.control() instanceof FlowControl.ControlValve fuel && fuel.source().sink()) {
                 var plan = plans.get(graph.reservoirs().get(pipe.second()).id());
-                if (plan == null || plan.kind != Kind.FUEL) continue;
+                if (plan == null || plan.kind != (fuel.source() == FlowControl.ValveSource.BURNER ? Kind.FUEL : Kind.FLARE)) continue;
                 var next = Math.abs(plan.value - fuel.massTarget()) <= PassiveStepSolver.VALVE_DEADBAND * Math.max(plan.value, fuel.massTarget()) + 1e-9 && (plan.value > 0) == (fuel.massTarget() > 0)
                         ? fuel : fuel.withMassTarget(plan.value);
                 if (next == fuel) continue;

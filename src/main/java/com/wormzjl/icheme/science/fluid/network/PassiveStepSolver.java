@@ -2134,6 +2134,11 @@ public final class PassiveStepSolver {
      * partner and is planned per slice ({@link #couple}), as is a convection coil's flue gas from another island's radiant
      * coil. {@code graph} itself where nothing changes.
      */
+    /** Whether {@code graph} has a heat actuator {@link #plan} sets from the step's start flows: a fired coil or a controlled air cooler. */
+    static boolean plansHeat(PassiveNetwork graph) {
+        for(var pipe:graph.pipes())if(pipe.heat() instanceof FiredCoil||pipe.heat() instanceof AirCooled cooled&&cooled.control()!=null)return true;
+        return false;
+    }
     public PassiveNetwork plan(PassiveNetwork graph,double[] flows,Runnable checkpoint) {
         List<PassiveNetwork.Pipe> pipes=null;
         Map<Long,Double> radiant=null;

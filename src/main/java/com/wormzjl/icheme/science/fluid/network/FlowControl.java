@@ -265,12 +265,16 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
      * mass flow, its {@link ControlValve#massTarget}, which the engine sets once per slice from the train's power demand.
      * {@code BURNER} (batch 2026-11-09-furnace-fuel-power): a fired heater's fuel valve, on the run into its firebox; the engine
      * sets its mass target once per slice from the radiant coil's demand ({@link Burners}), 0 with the burners out or unpowered.
+     * {@code FLARE} (batch 2026-11-09-flare-stack): a flare's tip limit, on the run into its tip; the engine sets its mass
+     * target once per slice to the most the flare passes ({@link Flare#limit}), 0 while solids arrive.
      */
-    enum ValveSource { NONE, PRESSURE, MASS_FLOW, VOLUME_FLOW, SHAFT_SPEED, BURNER;
+    enum ValveSource { NONE, PRESSURE, MASS_FLOW, VOLUME_FLOW, SHAFT_SPEED, BURNER, FLARE;
         /** Whether a valve of this source regulates its mass flow. */
-        public boolean mass(){return this==MASS_FLOW||this==SHAFT_SPEED||this==BURNER;}
+        public boolean mass(){return this==MASS_FLOW||this==SHAFT_SPEED||this==BURNER||this==FLARE;}
         /** Whether the engine sets this valve's mass target each slice (a governor or a fuel valve), not the player. */
-        public boolean planned(){return this==SHAFT_SPEED||this==BURNER;}
+        public boolean planned(){return this==SHAFT_SPEED||this==BURNER||this==FLARE;}
+        /** Whether this is a valve the engine builds into a sink (a firebox or a flare tip), on the run into it. */
+        public boolean sink(){return this==BURNER||this==FLARE;}
     }
     /** Configured facts; source identity/revision invalidate endpoint carry when a component or target changes. */
     record ControlValve(ValveSource source,double targetPressure,double massTarget,double volumeTarget,java.util.UUID sensor,long revision) implements Valve {
@@ -285,10 +289,14 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
         public static final java.util.UUID BURNER_SENSOR=new java.util.UUID(0x6275726e65720000L,1);
         /** A fired heater's fuel valve, shut until its first slice plan. */
         public static ControlValve burner(){return new ControlValve(ValveSource.BURNER,200000,0,.01,BURNER_SENSOR,0);}
+        /** A flare's tip limit's source identity. */
+        public static final java.util.UUID FLARE_SENSOR=new java.util.UUID(0x666c617265000000L,1);
+        /** A flare's tip limit, shut until its first slice plan. */
+        public static ControlValve flare(){return new ControlValve(ValveSource.FLARE,200000,0,.01,FLARE_SENSOR,0);}
         @Override public boolean pressureControl(){return source==ValveSource.PRESSURE;}
         @Override public boolean massControl(){return source.mass();}
         @Override public boolean bare(){return sensor==null;}
-        public double target(){return switch(source){case NONE,PRESSURE->targetPressure;case MASS_FLOW,SHAFT_SPEED,BURNER->massTarget;case VOLUME_FLOW->volumeTarget;};}
+        public double target(){return switch(source){case NONE,PRESSURE->targetPressure;case MASS_FLOW,SHAFT_SPEED,BURNER,FLARE->massTarget;case VOLUME_FLOW->volumeTarget;};}
         @Override public double targetMassFlow(double density){return source.mass()?massTarget:volumeTarget*density;}
         public ControlValve withTarget(double value){return new ControlValve(source,source==ValveSource.PRESSURE?value:targetPressure,source.mass()?value:massTarget,source==ValveSource.VOLUME_FLOW?value:volumeTarget,sensor,Math.addExact(revision,1));}
         /** A governor valve's mass target for one slice (W3): a slice input, its revision kept, as a column's port plan is. */

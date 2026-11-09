@@ -50,6 +50,7 @@ public final class SizingCoverage {
             case VERTICAL_HEATER, CABIN_HEATER -> sized(HeaterSizing.Size.class);
             case EJECTOR -> sized(EjectorSizing.Size.class);
             case STEAM_TURBINE -> sized(TurbineSizing.Size.class);
+            case FLARE_STACK -> sized(FlareSizing.Size.class);
             case STIRRED_REACTOR, ADSORBER, TRICKLE_BED_REACTOR, EBULLATED_BED_REACTOR, MOTOR, GENERATOR, GEARBOX, CYCLONE, FCC_CONVERTER, DELAYED_COKER,
                  FLUIDIZED_BED_BOILER, FLUIDIZED_BED_GASIFIER, GRATE_BOILER, FIXED_BED_GASIFIER, INDUCED_DRAFT_COOLING_TOWER, NATURAL_DRAFT_COOLING_TOWER -> none(NO_MODEL);
         };

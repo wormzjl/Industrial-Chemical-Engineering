@@ -375,6 +375,7 @@ public final class SheetSizing {
                 case "drum" -> drum(id, entry);
                 case "storage_tank" -> tank(id, entry);
                 case "ejector" -> ejector(id, entry);
+                case "flare" -> flare(id, entry);
                 case "steam_turbine" -> turbine(id, entry, unit.params().number("exhaust", TurbineUnit.EXHAUST_PRESSURE));
                 default -> null;
             };
@@ -491,6 +492,14 @@ public final class SheetSizing {
 
         static SizedUnit ejector(UnitEntry entry, EjectorSizing.Load load) {
             return sized(entry, EjectorSizing.Size.class, size -> EjectorSizing.rate(load, size), () -> EjectorSizing.auto(load));
+        }
+
+        /** A flare on the gas its run took, with the heat, heating value, density and flame its reading gave (batch 2026-11-09-flare-stack). */
+        SizedUnit flare(String id, UnitEntry entry) {
+            var r = readings(id);
+            var load = FlareSizing.Load.of(stream(id, "in").mass(), r.getOrDefault("per_kilogram", 0.), r.getOrDefault("heating_value", 0.), r.getOrDefault("density", 0.),
+                    r.getOrDefault("flame", com.wormzjl.icheme.science.fluid.network.Flare.AMBIENT), basis);
+            return sized(entry, FlareSizing.Size.class, size -> FlareSizing.rate(load, size), () -> FlareSizing.auto(load));
         }
 
         /** A steam turbine on the shaft power its run gave, from its inlet to the tile's exhaust (Pa) (W8, D43). */

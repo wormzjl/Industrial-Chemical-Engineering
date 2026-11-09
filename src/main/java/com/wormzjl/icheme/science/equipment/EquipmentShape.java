@@ -143,7 +143,9 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
         STIRRED_REACTOR, ADSORBER, TRICKLE_BED_REACTOR, EBULLATED_BED_REACTOR, CENTRIFUGAL_COMPRESSOR, STEAM_TURBINE, CYCLONE,
         FCC_CONVERTER, DELAYED_COKER, FLUIDIZED_BED_BOILER, FLUIDIZED_BED_GASIFIER, GRATE_BOILER, FIXED_BED_GASIFIER, INDUCED_DRAFT_COOLING_TOWER, NATURAL_DRAFT_COOLING_TOWER,
         // Drivers and power transmission (batch 2026-11-03-rotating-machinery, W4): joined to the casings by shaft blocks.
-        MOTOR, GENERATOR, GEARBOX;
+        MOTOR, GENERATOR, GEARBOX,
+        // An elevated flare stack (batch 2026-11-09-flare-stack).
+        FLARE_STACK;
 
         public boolean coolingTower() { return this==INDUCED_DRAFT_COOLING_TOWER || this==NATURAL_DRAFT_COOLING_TOWER; }
 
@@ -237,7 +239,9 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
         VENT(PortClass.VAPOUR), EXHAUST(PortClass.VAPOUR), FLUE_GAS(PortClass.VAPOUR), RELIEF(PortClass.VAPOUR), SYNGAS(PortClass.VAPOUR),
         DRAIN(PortClass.LIQUID), CONDENSATE(PortClass.LIQUID), CATALYST_OUTLET(PortClass.LIQUID), SOLIDS_OUTLET(PortClass.LIQUID),
         // A floating-roof tank: centered front/back bottom nozzles, and the front overflow at the fill height.
-        BOTTOM(PortClass.LIQUID), OVERFLOW(PortClass.OVERFLOW), HOT_WATER_INLET(PortClass.BULK), COLD_WATER_OUTLET(PortClass.LIQUID);
+        BOTTOM(PortClass.LIQUID), OVERFLOW(PortClass.OVERFLOW), HOT_WATER_INLET(PortClass.BULK), COLD_WATER_OUTLET(PortClass.LIQUID),
+        // A flare stack's vent gas inlet (batch 2026-11-09-flare-stack): all it receives goes to the tip.
+        FLARE_GAS(PortClass.BULK);
 
         public final PortClass port;
 
@@ -808,7 +812,7 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
 
     /** Registers with the fluid engine when the whole structure has been built: a steam turbine too (W3, reading A37). */
     public boolean fluidDevice() {
-        return reservoir() || kind.mover() || kind == Kind.STEAM_TURBINE || HeatSides.unit(kind) != null;
+        return reservoir() || kind.mover() || kind == Kind.STEAM_TURBINE || kind == Kind.FLARE_STACK || HeatSides.unit(kind) != null;
     }
 
     /** A vessel's skirt; a designed shape's supports are its own parts. */

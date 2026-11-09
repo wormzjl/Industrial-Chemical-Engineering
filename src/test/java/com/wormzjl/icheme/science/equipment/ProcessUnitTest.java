@@ -244,6 +244,8 @@ class ProcessUnitTest {
                 Map.entry(Kind.EBULLATED_BED_REACTOR, Map.of(Role.EFFLUENT, "2-", Role.FEED, "2-", Role.HYDROGEN, "2+", Role.CATALYST_INLET, "1+", Role.CATALYST_OUTLET, "0+")),
                 Map.entry(Kind.CENTRIFUGAL_COMPRESSOR, Map.of(Role.SUCTION, "1+", Role.DISCHARGE, "1+")),
                 Map.entry(Kind.STEAM_TURBINE, Map.of(Role.STEAM, "0+", Role.EXHAUST, "1+")),
+                // A flare stack's vent gas towards the front (batch 2026-11-09-flare-stack).
+                Map.entry(Kind.FLARE_STACK, Map.of(Role.FLARE_GAS, "2-")),
                 Map.entry(Kind.MOTOR, Map.of()), Map.entry(Kind.GENERATOR, Map.of()), Map.entry(Kind.GEARBOX, Map.of()),
                 Map.entry(Kind.CYCLONE, Map.of(Role.FEED, "2-", Role.VAPOUR_OUTLET, "2+", Role.SOLIDS_OUTLET, "1-")),
                 Map.entry(Kind.FCC_CONVERTER, Map.of(Role.FEED, "2-", Role.STEAM, "2+", Role.AIR, "2-", Role.FUEL, "2-", Role.FLUE_GAS, "0-", Role.VAPOUR_OUTLET, "0+",
@@ -459,7 +461,8 @@ class ProcessUnitTest {
      * Batch 2026-11-03-rotating-machinery (W4): every machine's shaft end has its coupling's half in the machine and a
      * free block beyond its coupling face for the shaft block, level, off the ground and a block clear of every nozzle's
      * pipe; a gearbox has its input and its output, every other machine one end. A motor's and a generator's terminal box
-     * lies in the machine; an air cooler and an induced-draft tower have one too (W5); no other kind has one.
+     * lies in the machine; an air cooler and an induced-draft tower have one too (W5), and a fired heater for its burners' air fans
+     * (batch 2026-11-09-furnace-fuel-power); no other kind has one.
      */
     @Test
     void everyShaftEndMeetsAFreeBlockForItsShaft() {
@@ -467,7 +470,8 @@ class ProcessUnitTest {
         for (var shape : everySize()) {
             var shafts = ShapeRasterizer.shafts(shape);
             var terminal = ShapeRasterizer.terminal(shape);
-            boolean electric = shape.kind() == Kind.MOTOR || shape.kind() == Kind.GENERATOR || shape.kind() == Kind.AIR_COOLER || shape.kind() == Kind.INDUCED_DRAFT_COOLING_TOWER;
+            boolean electric = shape.kind() == Kind.MOTOR || shape.kind() == Kind.GENERATOR || shape.kind() == Kind.AIR_COOLER || shape.kind() == Kind.INDUCED_DRAFT_COOLING_TOWER
+                    || shape.kind() == Kind.VERTICAL_HEATER || shape.kind() == Kind.CABIN_HEATER;
             assertEquals(electric, terminal != null, shape.toString());
             if (!UnitDesign.of(shape.kind()).hasDuty() && shape.kind() != Kind.COMPRESSOR) {
                 assertEquals(List.of(), shafts, shape.toString());

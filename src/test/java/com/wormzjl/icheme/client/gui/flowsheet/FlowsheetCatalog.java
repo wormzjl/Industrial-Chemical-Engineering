@@ -25,7 +25,7 @@ public final class FlowsheetCatalog {
             AIR_COOLER = modelled("cooler"), HEATER = modelled("fired_heater"), PUMP = modelled("pump"), COMPRESSOR = modelled("compressor"), COOLING_TOWER = drawn("cooling_tower"),
             EJECTOR = modelled("ejector"), TURBINE = modelled("steam_turbine"), DRIVER = drawn("steam_turbine"), ADSORBER = drawn("adsorber"), CYCLONE = drawn("cyclone"), STIRRED = drawn("stirred_reactor"),
             TRICKLE = drawn("trickle_bed"), EBULLATED = drawn("ebullated_bed"), FCC = drawn("fcc_converter"), COKER = drawn("delayed_coker"), CFB = drawn("cfb_boiler"),
-            FLUID_BED = drawn("fluid_bed_gasifier"), GRATE = drawn("grate_boiler"), FIXED_BED = drawn("fixed_bed_gasifier");
+            FLUID_BED = drawn("fluid_bed_gasifier"), GRATE = drawn("grate_boiler"), FIXED_BED = drawn("fixed_bed_gasifier"), FLARE = modelled("flare");
 
     private FlowsheetCatalog() {
     }
@@ -66,6 +66,7 @@ public final class FlowsheetCatalog {
             case GRATE_BOILER -> GRATE;
             case FIXED_BED_GASIFIER -> FIXED_BED;
             case INDUCED_DRAFT_COOLING_TOWER, NATURAL_DRAFT_COOLING_TOWER -> COOLING_TOWER;
+            case FLARE_STACK -> FLARE;
         };
     }
 
@@ -81,6 +82,7 @@ public final class FlowsheetCatalog {
             case AIR_COOLER -> AIR_COOLER;
             case VERTICAL_HEATER, CABIN_HEATER -> HEATER;
             case INDUCED_DRAFT_COOLING_TOWER, NATURAL_DRAFT_COOLING_TOWER -> COOLING_TOWER;
+            case FLARE_STACK -> FLARE;
             case PUMP -> PUMP;
             case COMPRESSOR, CENTRIFUGAL_COMPRESSOR -> COMPRESSOR;
             case EJECTOR -> EJECTOR;

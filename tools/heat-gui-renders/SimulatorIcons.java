@@ -437,6 +437,12 @@ final class SimulatorIcons {
                 p.mark(line(9, 42, 41, 42));
                 p.dash(line(8, 47, 42, 47));
             }
+            // A flare stack: a tapered foot, the riser, the tip with its windshield, and the flame over it (batch 2026-11-09-flare-stack).
+            case FLARE -> {
+                p.body(poly(5, 60, 15, 60, 12, 52, 8, 52), rect(8.5, 20, 11.5, 52), rect(6, 16, 14, 20));
+                p.mark(line(8.5, 36, 11.5, 36), line(6, 18, 14, 18));
+                p.hot(flame(10, 15, 10, 14));
+            }
             case MISSING -> p.body(rect(0, 0, w, h));
         }
     }

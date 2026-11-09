@@ -217,14 +217,16 @@ public final class MaterialCatalog {
     private final Map<String, CrystalReference> crystals;
     /** Heating values by record ({@code properties/<id>}, {@code water/<id>}); see {@link Combustion}. */
     private final Map<String, Combustion> combustion;
+    /** Each dataset's and water model's formula, from its {@code thermochemistry} sub-record (C, H, N, O, S atoms per molecule), by its record key. */
+    private final Map<String, Map<String, Double>> formulas;
     private MaterialCatalog(Map<String, MaterialName> names, Map<String, Package> packages, Map<String, String> resources,
             Map<String, Map<ViscosityCorrelation.Phase, ViscosityCorrelation>> viscosities, Map<String, String> waterModels,
             Map<String, FluidAppearance> assayAppearances, Map<String, FluidAppearance> componentAppearances, Map<String, LiquidMixtureCorrection> liquidMixtures, MaterialPresets presets, FluidData fluidData,
             Map<String, Validity> propertyValidity, Map<String, Validity> packageValidity,
-            Map<String, ReferenceSpine> spines, Map<String, CrystalReference> crystals, Map<String, Combustion> combustion, SolidMaterialCatalog solids,
+            Map<String, ReferenceSpine> spines, Map<String, CrystalReference> crystals, Map<String, Combustion> combustion, Map<String, Map<String, Double>> formulas, SolidMaterialCatalog solids,
             Records records, Map<String, Definition> definitions) {
         this.propertyValidity = Map.copyOf(propertyValidity); this.packageValidity = Map.copyOf(packageValidity);
-        this.spines = Map.copyOf(spines); this.crystals = Map.copyOf(crystals); this.combustion = Map.copyOf(combustion);
+        this.spines = Map.copyOf(spines); this.crystals = Map.copyOf(crystals); this.combustion = Map.copyOf(combustion); this.formulas = Map.copyOf(formulas);
         this.records=Objects.requireNonNull(records); this.definitions=Map.copyOf(definitions);
         this.solids=Objects.requireNonNull(solids);
         // A solid population names its record by id (owner decision D23: crystals are solids), a crystal or a custom solid:
@@ -241,7 +243,7 @@ public final class MaterialCatalog {
     /** This catalog with its packages, liquid-mixture corrections and definitions replaced; a view, never published. */
     private MaterialCatalog derived(Map<String, Package> packages, Map<String, LiquidMixtureCorrection> liquidMixtures, Map<String, Definition> definitions) {
         return new MaterialCatalog(names,packages,resources,viscosities,waterModels,assayAppearances,componentAppearances,liquidMixtures,presets,
-                fluidData,propertyValidity,packageValidity,spines,crystals,combustion,solids,records,definitions);
+                fluidData,propertyValidity,packageValidity,spines,crystals,combustion,formulas,solids,records,definitions);
     }
     public Package requirePackage(String id) {
         Package p = packages.get(id);
@@ -493,6 +495,7 @@ public final class MaterialCatalog {
         var spines = new HashMap<String, ReferenceSpine>();
         var crystals = new HashMap<String, CrystalReference>();
         var combustion = new HashMap<String, Combustion>();
+        var formulas = new HashMap<String, Map<String, Double>>();
         var propertyRevisions = new HashMap<String, String>();
         for (var o : group(groups,"components").values()) checked(origins,o,() -> {
             JsonObject cut = o.has("cut") ? object(o,"cut") : null;
@@ -569,8 +572,9 @@ public final class MaterialCatalog {
                     throw new IllegalArgumentException("freezing: "+id+" gives "+f.anchorTemperature()+" K and crystal record "+crystal.id()
                             +" is anchored at "+crystal.anchor().temperature()+" K; they must agree within "+Freezing.CRYSTAL_ANCHOR_TOLERANCE+" K");
             }
-            // Data for later models: each sub-record is validated as it is read, and no model reads it yet, so the catalog keeps none.
-            if (o.has("thermochemistry")) readThermochemistry(object(o,"thermochemistry"));
+            // Data for later models: each sub-record is validated as it is read; the catalog keeps the formula (a flare's flame
+            // temperature, batch 2026-11-09-flare-stack) and the heating value (the burners), nothing else.
+            if (o.has("thermochemistry")) formulas.put("properties/"+id,Map.copyOf(readThermochemistry(object(o,"thermochemistry")).elements()));
             if (o.has("combustion")) combustion.put("properties/"+id,readCombustion(object(o,"combustion")));
             if (o.has("flammability")) readFlammability(object(o,"flammability"));
         });
@@ -597,7 +601,7 @@ public final class MaterialCatalog {
                     positive(o,"reference_vaporization_enthalpy"),positive(o,"watson_exponent"),counted(o,"saturation_coefficients",6),counted(o,"shomate_coefficients",7),ice);
             range(w.triplePoint(),w.boilingTemperature(),"water boiling"); range(w.boilingTemperature(),w.criticalTemperature(),"water critical");
             range(w.triplePoint(),w.maximumTemperature(),"water enthalpy"); require(names,"Water","component"); waters.put(text(o,"id"),w);
-            if (o.has("thermochemistry")) readThermochemistry(object(o,"thermochemistry"));
+            if (o.has("thermochemistry")) formulas.put("water/"+text(o,"id"),Map.copyOf(readThermochemistry(object(o,"thermochemistry")).elements()));
             if (o.has("combustion")) combustion.put("water/"+text(o,"id"),readCombustion(object(o,"combustion")));
         });
         for (var o : group(groups,"interactions").values()) checked(origins,o,() -> validateInteractions(o,names,matrices));
@@ -643,7 +647,7 @@ public final class MaterialCatalog {
             throw new IllegalArgumentException(record.origin()+": no package holds every compound of assay "+record.id());
         if(packages.isEmpty()) throw new IllegalArgumentException("Material catalog has no packages");
         var result=new MaterialCatalog(names,packages,resources,viscosities,waterModels,assayAppearances,componentAppearances,liquidMixtures,MaterialPresets.read(group(groups,"presets"),group(groups,"networks"),origins,packages,names.keySet()),fluidData,
-                propertyValidity,packageValidity,spines,crystals,combustion,SolidMaterialCatalog.parse(resources),records,definitions);
+                propertyValidity,packageValidity,spines,crystals,combustion,formulas,SolidMaterialCatalog.parse(resources),records,definitions);
         for(var row:group(groups,"presets").values())if(text(row,"kind").equals("column"))checked(origins,row,()->
                 MaterialRuntime.with(result,text(row,"package"),()->{com.wormzjl.icheme.science.column.v3.V3ColumnProblemResolver.validateInput(result.presets().column(text(row,"id")).input(result));return null;}));
         for(var row:group(groups,"networks").values())checked(origins,row,()->{
@@ -748,6 +752,24 @@ public final class MaterialCatalog {
         var p=requirePackage(packageId);var out=new double[p.components().size()+1];
         for(int i=0;i<p.properties().size();i++){var c=combustion.get("properties/"+p.properties().get(i).id());out[i]=c==null?0:c.lowerHeatingValue();}
         var water=combustion.get("water/"+waterModels.get(packageId));out[out.length-1]=water==null?0:water.lowerHeatingValue();
+        return out;
+    }
+    /**
+     * Package {@code packageId}'s formulas in the fluid network's conserved order (its components, then the water): atoms of
+     * C, H, N, O and S per molecule ({@link #FORMULA_ELEMENTS}), from each record's {@code thermochemistry}; all 0 for a
+     * record without one. A flare's flame temperature reads them (batch 2026-11-09-flare-stack).
+     */
+    public double[][] formulas(String packageId) {
+        var p=requirePackage(packageId);var out=new double[p.components().size()+1][];
+        for(int i=0;i<p.properties().size();i++)out[i]=atoms(formulas.get("properties/"+p.properties().get(i).id()));
+        out[out.length-1]=atoms(formulas.get("water/"+waterModels.get(packageId)));
+        return out;
+    }
+    /** The elements {@link #formulas} counts, in its order. */
+    public static final List<String> FORMULA_ELEMENTS=List.of("C","H","N","O","S");
+    private static double[] atoms(Map<String,Double> formula) {
+        var out=new double[FORMULA_ELEMENTS.size()];
+        if(formula!=null)for(int e=0;e<out.length;e++)out[e]=formula.getOrDefault(FORMULA_ELEMENTS.get(e),0.);
         return out;
     }
     /** A dataset's {@code flammability} sub-record ({@link Flammability}); a refusal names the field. */

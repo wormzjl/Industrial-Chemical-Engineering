@@ -230,6 +230,14 @@ public enum Limit {
      */
     EJECTOR_MOTIVE_SPARE(SHOULD, least(20), "%", "This plan", QUIET),
 
+    // ---- Flare stacks (batch 2026-11-09-flare-stack, W4) ----
+    /** The gas's stoichiometric flame temperature: below the owner's 1700 K (X1) the flame does not hold, at any tip. */
+    FLARE_FLAME(MUST, least(com.wormzjl.icheme.science.fluid.network.Flare.FLAME_LIMIT), "K", "World: `Flare.FLAME_LIMIT`"),
+    /** The gas at design flow against the most the tip passes of it: its rated heat or its stable exit velocity (X4). */
+    FLARE_CAPACITY(MUST, given(Sense.MOST), "kg/h", "World: `Flare.limit`", QUIET),
+    /** What the tip passes over the load, as {@link #AUTO_SPARE}'s 20 %: the owner's "always have enough excess". */
+    FLARE_SPARE(SHOULD, least(20), "%", "This plan", QUIET),
+
     // ---- Steam turbines (batch 2026-11-03-rotating-machinery, W8, D43) ----
     /** The rated power over the shaft power at design flow, at least a motor's {@link Motor#SPARE}: the owner's "always have enough excess". */
     TURBINE_SPARE(SHOULD, least(Motor.SPARE), "", "This plan: `Motor.SPARE`"),

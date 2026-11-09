@@ -181,7 +181,7 @@ final class ControlPublication {
         }
         var out = new ListTag();
         sensors.values().stream()
-                .filter(s -> s.kind() == Sensor.Kind.ALARM && reached.contains(s.key().host()))
+                .filter(s -> s.kind() == Sensor.Kind.ALARM && s.role().startsWith("ALARM:") && reached.contains(s.key().host()))
                 .sorted(Comparator.comparing(s -> s.label(facts)))
                 .forEach(s -> {
                     var r = readings.get(s.instance());
@@ -272,7 +272,7 @@ final class ControlPublication {
                             .filter(
                                     r ->
                                             hostIds.contains(r.device().id())
-                                                    && !r.device().burner()
+                                                    && !r.device().valvedSink()
                                                     && (r.device().control()
                                                                     instanceof
                                                                     FlowControl.ControlValve

@@ -132,6 +132,8 @@ class FiredHeaterFuelTest {
         PassiveIntervalSolver.Result radiantResult, fuelResult;
         /** One solver per island, as the engine keeps: a step plans the coil from the flows the last one carried. */
         final PassiveIntervalSolver radiantSolver = new PassiveIntervalSolver(model), fuelSolver = new PassiveIntervalSolver(model);
+        /** A fresh solver for every slice: each slice's first step starts with no flows known. */
+        boolean fresh;
 
         Rig(Islands islands) {
             var n2 = FluidDeviceSpec.nitrogen(catalog).composition();
@@ -160,7 +162,7 @@ class FiredHeaterFuelTest {
         private PassiveIntervalSolver.Result slice(PassiveIntervalSolver solver, PassiveNetwork graph, long island, long start) {
             var plans = new HashMap<Long, ShaftPlan>();
             heaters.plans(graph, plans);
-            var result = solver.solve(ShaftPlan.apply(graph, plans), 20, PassiveIntervalSolver.Settings.defaults(), () -> {
+            var result = (fresh ? new PassiveIntervalSolver(model) : solver).solve(ShaftPlan.apply(graph, plans), 20, PassiveIntervalSolver.Settings.defaults(), () -> {
             });
             heaters.booked(island, start, start + 400, result);
             return result;
@@ -194,10 +196,10 @@ class FiredHeaterFuelTest {
         var rig = new Rig(compile(pure("Methane", 300, 500_000)));
         assertFalse(rig.stores.powered(BURNERS), "a new heater waits for power");
         rig.run(3, true);
-        assertEquals(List.of(FiredHeaters.Alarm.NO_POWER), rig.heaters.alarms(BURNERS));
+        assertEquals(List.of(EquipmentAlarm.NO_POWER), rig.heaters.alarms(BURNERS));
         assertEquals(0, rig.heat(), 1, "no fans, no flame: the coil takes no heat");
         assertEquals(0, rig.heaters.view(BURNERS).fuelFlow(), 1e-9, "the fuel valve stays shut");
-        assertEquals(Map.of(BURNERS, List.of(FiredHeaters.Alarm.NO_POWER)), rig.heaters.alarms());
+        assertEquals(Map.of(BURNERS, List.of(EquipmentAlarm.NO_POWER)), rig.heaters.alarms());
     }
 
     @Test
@@ -230,7 +232,7 @@ class FiredHeaterFuelTest {
         var view = rig.heaters.view(BURNERS);
         System.out.printf(Locale.ROOT, "weak supply: asked %.0f kW, fired %.0f kW, coil %.0f kW (stiff %.0f kW)%n", view.asked() / 1e3, view.fired() / 1e3, rig.heat() / 1e3, full / 1e3);
         assertTrue(view.fired() > 0 && view.fired() < Burners.SHORT * view.asked(), "short of what was asked");
-        assertEquals(List.of(FiredHeaters.Alarm.LOW_FUEL), view.alarms());
+        assertEquals(List.of(EquipmentAlarm.LOW_FUEL), view.alarms());
         assertTrue(rig.heat() < .9 * full, "the coil works at a reduced duty: " + rig.heat());
         assertEquals(Burners.radiant(view.fired()), rig.heat(), .05 * rig.heat() + 1e3, "the radiant share of what was fired");
     }
@@ -240,13 +242,29 @@ class FiredHeaterFuelTest {
         var rig = new Rig(compile(pure("Methane", 300, 500_000)));
         rig.power();
         rig.run(3, false);
-        assertEquals(List.of(FiredHeaters.Alarm.NO_FUEL), rig.heaters.alarms(BURNERS));
+        assertEquals(List.of(EquipmentAlarm.NO_FUEL), rig.heaters.alarms(BURNERS));
         assertEquals(0, rig.heat(), 1, "nothing burns");
         var inert = new Rig(compile(pure("Nitrogen", 300, 500_000)));
         inert.power();
         inert.run(4, true);
         assertTrue(inert.heaters.view(BURNERS).fuelFlow() > 0, "nitrogen flows in");
-        assertEquals(List.of(FiredHeaters.Alarm.NOT_COMBUSTIBLE), inert.heaters.alarms(BURNERS));
+        assertEquals(List.of(EquipmentAlarm.NOT_COMBUSTIBLE), inert.heaters.alarms(BURNERS));
         assertEquals(0, inert.heat(), 1, "and does not burn");
+    }
+
+    /**
+     * A slice whose first step knows no flows (a fresh solver, a rebuilt island) plans the coil from one rate solve's flows
+     * (open item O2): planned at no flow, the coil fired fully for that step and took about 10 % more than its duty and its fuel.
+     */
+    @Test
+    void aFreshSolverDoesNotOverfireTheCoil() {
+        var rig = new Rig(compile(pure("Methane", 300, 500_000)));
+        rig.fresh = true;
+        rig.power();
+        rig.run(12, true);
+        var view = rig.heaters.view(BURNERS);
+        System.out.printf(Locale.ROOT, "fresh solvers: coil %.0f kW, fired %.0f kW%n", rig.heat() / 1e3, view.fired() / 1e3);
+        assertEquals(view.demand(), rig.heat(), .02 * view.demand() + 1e3, "the coil fires its duty, not more");
+        assertTrue(rig.heat() <= Burners.radiant(view.fired()) * 1.01, "nor more than its fuel gives");
     }
 }

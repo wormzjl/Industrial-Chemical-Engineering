@@ -672,6 +672,15 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
                 rows.add(new DeviceColumn.Meter("burner_fans",value(fuel.fanWatt()/1000),"kW",tr("burner_fans.hint")));
             }
         }
+        // A flare stack (batch 2026-11-09-flare-stack): the heat it releases against its rating, its gas's heating value and
+        // flame temperature, and the most it passes of that gas. Its status stands on the display.
+        var flare=view.flare();
+        if(flare!=null){
+            rows.add(new DeviceColumn.Meter("flare_heat",value(flare.heat()/1e6),"MW",tr("flare_heat.hint",quantity(flare.rated()/1e6,"MW"))));
+            rows.add(new DeviceColumn.Meter("flare_heating_value",value(flare.heatingValue()/1e6),"MJ/m³",tr("flare_heating_value.hint")));
+            rows.add(new DeviceColumn.Meter("flare_flame",temperatureValue(flare.flameTemperature()),t,tr("flare_flame.hint",temperatureValue(com.wormzjl.icheme.science.fluid.network.Flare.FLAME_LIMIT)+" "+t)));
+            rows.add(new DeviceColumn.Meter("flare_limit",value(flowRateUnit.display(flare.limit())),flowRateUnit.unit("kg"),tr("flare_limit.hint",quantity(flare.tip(),"m"))));
+        }
         // An instrument's main value on its meter, the other on hover: a flowmeter's mass flow (its volume flow), a level
         // gauge's share of its span (its height).
         for(var sensor:data.sensors()){

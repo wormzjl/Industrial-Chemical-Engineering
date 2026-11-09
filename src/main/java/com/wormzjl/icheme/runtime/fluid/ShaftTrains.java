@@ -202,6 +202,14 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
     /** The fired heaters' burners (batch 2026-11-09-furnace-fuel-power): book at the commits, plan their fuel and limit at dispatch. */
     private FiredHeaters burners;
 
+    /** The flare stacks (batch 2026-11-09-flare-stack): plan their tip limits at dispatch, book what they received. */
+    private Flares flares;
+
+    /** Installs the flare stacks. */
+    public void flares(Flares value) {
+        flares = Objects.requireNonNull(value);
+    }
+
     /** Installs the fired heaters' burners. */
     public void burners(FiredHeaters value) {
         burners = Objects.requireNonNull(value);
@@ -495,6 +503,15 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
                 plans.putAll(fired);
             }
         }
+        // The flares' tip limits.
+        if (flares != null) {
+            var tips = new HashMap<Long, ShaftPlan>();
+            flares.plans(graph, tips);
+            if (!tips.isEmpty()) {
+                if (plans == null) plans = new HashMap<>();
+                plans.putAll(tips);
+            }
+        }
         if (shares.isEmpty() && governorTargets.isEmpty()) return failures(plans, graph);
         for (var pipe : graph.pipes()) {
             long id = graph.reservoirs().get(pipe.first()).id();
@@ -544,6 +561,8 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         if (electric != null) electric.booked(island, start, end, result);
         // The burners' demand, fired heat and fans' draw.
         if (burners != null) burners.booked(island, start, end, result);
+        // The flares' flow, heat and status.
+        if (flares != null) flares.booked(start, end, result);
         // The pumps' wear over the span (W10b).
         if (health != null) health.booked(island, start, end, result);
         if (unitOfDevice.isEmpty()) return;

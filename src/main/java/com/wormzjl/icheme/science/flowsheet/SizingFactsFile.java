@@ -8,6 +8,7 @@ import com.wormzjl.icheme.science.flowsheet.sizing.CompressorSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.DesignBasis;
 import com.wormzjl.icheme.science.flowsheet.sizing.DrumSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.EjectorSizing;
+import com.wormzjl.icheme.science.flowsheet.sizing.FlareSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.ExchangerSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.HeaterSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.LineSizing;
@@ -91,6 +92,7 @@ final class SizingFactsFile {
                 case "DRUM" -> new DrumSizing.Size(fields.name("type", UnitType.class), fields.number("diameter"), fields.whole("length"), fields.bool("boot"));
                 case "TANK" -> new TankSizing.Size(fields.name("type", UnitType.class), fields.whole("count"), fields.number("diameter"), fields.whole("shell"));
                 case "EJECTOR" -> new EjectorSizing.Size(fields.number("suction"));
+                case "FLARE" -> new FlareSizing.Size(fields.number("tip"));
                 case "STEAM_TURBINE" -> new TurbineSizing.Size(fields.number("power"), fields.name("steam", MachineDuty.Steam.class), fields.number("exhaust"));
                 default -> throw JsonFields.damaged(fields.path + ".kind");
             };
@@ -188,6 +190,10 @@ final class SizingFactsFile {
             case EjectorSizing.Size ejector -> {
                 json.addProperty("kind", "EJECTOR");
                 json.addProperty("suction", ejector.suction());
+            }
+            case FlareSizing.Size flare -> {
+                json.addProperty("kind", "FLARE");
+                json.addProperty("tip", flare.tip());
             }
             case TurbineSizing.Size turbine -> {
                 json.addProperty("kind", "STEAM_TURBINE");

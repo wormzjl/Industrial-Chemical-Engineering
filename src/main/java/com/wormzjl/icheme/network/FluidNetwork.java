@@ -471,6 +471,8 @@ public final class FluidNetwork {
     public record Watch(Type<Watch> type,List<Target> watch,List<Target> unwatch) implements CustomPacketPayload {
         public static final Type<Watch> SIGHT_GLASSES=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"sight_glass_watch"));
         public static final Type<Watch> MOVERS=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"mover_watch"));
+        /** The flare stacks, at their gas inlet cells (batch 2026-11-09-flare-stack, W5). */
+        public static final Type<Watch> FLARES=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"flare_watch"));
         public Watch{Objects.requireNonNull(type);watch=List.copyOf(watch);unwatch=List.copyOf(unwatch);validate(watch);validate(unwatch);}
         static StreamCodec<RegistryFriendlyByteBuf,Watch> codec(Type<Watch> type){return new StreamCodec<>() {
             public Watch decode(RegistryFriendlyByteBuf b){return new Watch(type,targets(b),targets(b));}
@@ -504,6 +506,20 @@ public final class FluidNetwork {
         public static final StreamCodec<RegistryFriendlyByteBuf,MoverState> STREAM_CODEC=new StreamCodec<>() {
             public MoverState decode(RegistryFriendlyByteBuf b){return new MoverState(readTarget(b),flag(b),flag(b),b.readFloat(),b.readUnsignedByte(),b.readUnsignedByte(),b.readFloat());}
             public void encode(RegistryFriendlyByteBuf b,MoverState p){writeTarget(b,p.target);b.writeBoolean(p.compressor);b.writeBoolean(p.running);b.writeFloat(p.speed);b.writeByte(p.crackle);b.writeByte(p.churn);b.writeFloat(p.rpm);}
+        };
+        @Override public Type<? extends CustomPacketPayload> type(){return TYPE;}
+    }
+    /**
+     * Server to client: a flare stack's published state for its flame (batch 2026-11-09-flare-stack, W5): its status by
+     * {@code Flares.Status} ordinal, its flame (heat released over its rating, 0 to 1) and its plume of unburnt gas (the flow
+     * over the most it passes, 0 to 1, while the flame is out). No process inventory or solver results.
+     */
+    public record FlareState(Target target,int status,float flame,float plume) implements CustomPacketPayload {
+        public FlareState{Objects.requireNonNull(target);if(status<0||status>15||!(flame>=0&&flame<=1)||!(plume>=0&&plume<=1))throw new IllegalArgumentException("Invalid flare state");}
+        public static final Type<FlareState> TYPE=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"flare_state"));
+        public static final StreamCodec<RegistryFriendlyByteBuf,FlareState> STREAM_CODEC=new StreamCodec<>() {
+            public FlareState decode(RegistryFriendlyByteBuf b){return new FlareState(readTarget(b),b.readUnsignedByte(),b.readFloat(),b.readFloat());}
+            public void encode(RegistryFriendlyByteBuf b,FlareState p){writeTarget(b,p.target);b.writeByte(p.status);b.writeFloat(p.flame);b.writeFloat(p.plume);}
         };
         @Override public Type<? extends CustomPacketPayload> type(){return TYPE;}
     }
@@ -616,6 +632,12 @@ public final class FluidNetwork {
             if(context.player() instanceof ServerPlayer player)FluidWorldAuthority.find(player.server).ifPresent(world->world.watchDrivers(player,p.watch,p.unwatch));
         });
         mover.playToClient(DriverState.TYPE,DriverState.STREAM_CODEC,(p,context)->com.wormzjl.icheme.client.DriverSounds.accept(p.origin(),p.running(),p.speed()));
+        // flare-1 (batch 2026-11-09-flare-stack, W5): the flares' watch and their flame state.
+        var flare=event.registrar("flare-1").executesOn(HandlerThread.MAIN);
+        flare.playToServer(Watch.FLARES,Watch.codec(Watch.FLARES),(p,context)->{
+            if(context.player() instanceof ServerPlayer player)FluidWorldAuthority.find(player.server).ifPresent(world->world.watchFlares(player,p.watch,p.unwatch));
+        });
+        flare.playToClient(FlareState.TYPE,FlareState.STREAM_CODEC,(p,context)->com.wormzjl.icheme.client.FlareFlames.accept(p));
         var instruments=event.registrar("instruments-1").executesOn(HandlerThread.MAIN);
         instruments.playToServer(InstrumentWatch.TYPE,InstrumentWatch.CODEC,(p,c)->{if(c.player() instanceof ServerPlayer player)FluidWorldAuthority.find(player.server).ifPresent(w->w.instruments().watch(player,p.watch,p.unwatch));});
         instruments.playToClient(InstrumentDisplay.TYPE,InstrumentDisplay.CODEC,(p,c)->com.wormzjl.icheme.client.InstrumentRenderer.accept(p));
@@ -638,6 +660,7 @@ public final class FluidNetwork {
     public static void sendSightGlass(ServerPlayer player,Target target,PipePresentation.SightGlass sample){PacketDistributor.sendToPlayer(player,new SightGlassPayload(target,sample));}
     public static void sendMover(ServerPlayer player,MoverState state){PacketDistributor.sendToPlayer(player,state);}
     public static void sendDriver(ServerPlayer player,DriverState state){PacketDistributor.sendToPlayer(player,state);}
+    public static void sendFlare(ServerPlayer player,FlareState state){PacketDistributor.sendToPlayer(player,state);}
     /** Client: asks the server to watch and to stop watching drivers by their origins (W3). */
     public static void requestDrivers(List<BlockPos> watch,List<BlockPos> unwatch){if(!watch.isEmpty()||!unwatch.isEmpty())PacketDistributor.sendToServer(new DriverWatch(watch,unwatch));}
     public static void sendInstrument(ServerPlayer player,InstrumentTarget target,Instrument.Sample sample,long tick){PacketDistributor.sendToPlayer(player,new InstrumentDisplay(target,sample,tick));}
