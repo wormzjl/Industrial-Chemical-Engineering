@@ -10,6 +10,20 @@ import java.util.*;
 public final class EquipmentServices {
     private EquipmentServices() {}
 
+    /**
+     * A low-voltage motor's or generator's service case over its terminal box's point: across its
+     * axis, high and along it, m. {@link ProcessUnit} keeps its frame box round it.
+     */
+    static final double CASE_ACROSS = .4, CASE_HEIGHT = .3, CASE_ALONG = .3;
+
+    /**
+     * The case's floor above the shaft of a low-voltage machine of frame radius {@code r}: on a
+     * generator's stator panels, on a TEFC motor's fins.
+     */
+    static double caseFloor(EquipmentShape.Kind kind, double r) {
+        return kind == EquipmentShape.Kind.GENERATOR ? .76 * r : r - .02;
+    }
+
     public record Enclosure(double[] low, double[] high, int face) {
         public Enclosure {
             low = low.clone();
@@ -264,9 +278,9 @@ public final class EquipmentServices {
                 }
                 double r = ProcessUnit.motorDiameter(shape.duty().power()) / 2;
                 double shaftY = north.transform().point(unit.shaftEnds().getFirst().face())[1];
-                double base = shaftY + (kind == EquipmentShape.Kind.GENERATOR ? .76 * r : r - .02);
-                low = new double[] {c[0] - .20, base, c[2] - .15};
-                high = plus(low, new double[] {.4, .3, .3});
+                double base = shaftY + caseFloor(kind, r);
+                low = new double[] {c[0] - CASE_ACROSS / 2, base, c[2] - CASE_ALONG / 2};
+                high = plus(low, new double[] {CASE_ACROSS, CASE_HEIGHT, CASE_ALONG});
                 front = 2;
             }
             case STEAM_TURBINE -> {
@@ -287,10 +301,20 @@ public final class EquipmentServices {
                     h = Math.clamp(size * .5, .28, .4),
                     depth = Math.clamp(size * .4, .2, .3);
             var b = mount(surface, anchor, front, width, h, depth);
-            if (!fits(north, b) && kind != EquipmentShape.Kind.TANK) {
-                var fitted = fitPad(surface, north, anchor, front, width, h, depth, zones);
-                anchor = fitted[0];
-                b = new double[][] {fitted[1], fitted[2]};
+            // A nozzle's neck at its largest pipe keeps its room: the case gives way to it (owner decision 2026-10-21).
+            var necks = necks(north);
+            if (kind != EquipmentShape.Kind.TANK && !(fits(north, b) && clearOf(necks, b))) {
+                var fitted = fitPad(surface, north, anchor, front, width, h, depth, zones, necks);
+                // Where no pad clears the necks, the case stays where the frame holds it; the nozzle gate reports it.
+                if (fitted == null && !fits(north, b))
+                    fitted = fitPad(surface, north, anchor, front, width, h, depth, zones, List.of());
+                if (fitted == null && !fits(north, b))
+                    throw new IllegalArgumentException(
+                            "No native service pad inside the equipment placement frame: " + kind);
+                if (fitted != null) {
+                    anchor = fitted[0];
+                    b = new double[][] {fitted[1], fitted[2]};
+                }
             }
             low = b[0];
             high = b[1];
@@ -478,8 +502,8 @@ public final class EquipmentServices {
     }
 
     /**
-     * Keep an enclosure in the existing frame by moving along a real carrier, shrinking only when
-     * space requires it.
+     * Keep an enclosure in the existing frame and clear of the nozzle necks by moving along a real
+     * carrier, shrinking only when space requires it; null where no pad does.
      */
     private static double[][] fitPad(
             ServiceSurface surface,
@@ -489,29 +513,18 @@ public final class EquipmentServices {
             double width,
             double height,
             double depth,
-            List<double[]> zones) {
+            List<double[]> zones,
+            List<double[]> necks) {
         int axis = face == 5 ? 0 : 2, other = axis == 0 ? 2 : 0, sign = face == 5 ? 1 : -1;
-        for (var size :
+        var sizes =
                 List.of(
                         new double[] {width, height, depth},
                         new double[] {
                             Math.min(width, .3), Math.min(height, .3), Math.min(depth, .18)
                         },
-                        new double[] {.22, .28, .12}))
-            for (int step = 0; step <= 80; step++)
-                for (int side : new int[] {1, -1}) {
-                    var wanted = anchor.clone();
-                    wanted[other] += side * step * .025;
-                    double[] point;
-                    try {
-                        point = surface.ray(axis, wanted, sign, MOUNT);
-                    } catch (IllegalArgumentException missing) {
-                        continue;
-                    }
-                    var box = mount(surface, point, face, size[0], size[1], size[2]);
-                    if (fits(shape, box) && ServiceSurface.clear(point, zones))
-                        return new double[][] {point, box[0], box[1]};
-                }
+                        new double[] {.22, .28, .12});
+        var slid = slide(surface, shape, anchor, face, other, sizes, zones, necks);
+        if (slid != null) return slid;
         // A narrow frame may have no room outside its outer leg. Its inward-facing native leg face
         // is still a supported pad.
         double best = Double.POSITIVE_INFINITY;
@@ -535,14 +548,54 @@ public final class EquipmentServices {
                             Math.min(height, .3),
                             Math.min(depth, .18));
             double cost = dot(sub(point, anchor), sub(point, anchor));
-            if (cost < best && fits(shape, box) && ServiceSurface.clear(point, zones)) {
+            if (cost < best
+                    && fits(shape, box)
+                    && ServiceSurface.clear(point, zones)
+                    && clearOf(necks, box)) {
                 best = cost;
                 chosen = new double[][] {point, box[0], box[1]};
             }
         }
         if (chosen != null) return chosen;
-        throw new IllegalArgumentException(
-                "No native service pad inside the equipment placement frame: " + shape.kind());
+        // Where the necks fill the carrier's width at the case's height (a small vessel whose nozzles
+        // take pipes larger than itself), the case moves up or down the carrier, down to a small
+        // junction box.
+        var small = new ArrayList<>(sizes);
+        small.add(new double[] {.2, .16, .1});
+        return slide(surface, shape, anchor, face, 1, small, zones, necks);
+    }
+
+    /**
+     * The first pad, in {@code sizes} order, from {@code anchor} along frame axis {@code along} in
+     * 0.025 m steps either way, whose case fits the frame and clears the zones and the necks; null
+     * where none does.
+     */
+    private static double[][] slide(
+            ServiceSurface surface,
+            EquipmentShape shape,
+            double[] anchor,
+            int face,
+            int along,
+            List<double[]> sizes,
+            List<double[]> zones,
+            List<double[]> necks) {
+        int axis = face == 5 ? 0 : 2, sign = face == 5 ? 1 : -1;
+        for (var size : sizes)
+            for (int step = 0; step <= 80; step++)
+                for (int side : new int[] {1, -1}) {
+                    var wanted = anchor.clone();
+                    wanted[along] += side * step * .025;
+                    double[] point;
+                    try {
+                        point = surface.ray(axis, wanted, sign, MOUNT);
+                    } catch (IllegalArgumentException missing) {
+                        continue;
+                    }
+                    var box = mount(surface, point, face, size[0], size[1], size[2]);
+                    if (fits(shape, box) && ServiceSurface.clear(point, zones) && clearOf(necks, box))
+                        return new double[][] {point, box[0], box[1]};
+                }
+        return null;
     }
 
     private static void brackets(
@@ -555,19 +608,26 @@ public final class EquipmentServices {
         int axis = face == 5 ? 0 : 2, other = axis == 0 ? 2 : 0, sign = face == 5 ? 1 : -1;
         var target = new double[] {(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2};
         target[axis] = sign > 0 ? lo[axis] : hi[axis];
-        for (double shift : new double[] {-.09, .09}) {
+        // A bracket roots on the carrier behind the case's back; a face the ray meets in front of it (past a narrow
+        // carrier's edge) is no root. The brackets stay on the case: 0.09 m either side, less on a small junction box.
+        double across = Math.min(.09, (hi[other] - lo[other]) / 2 - .02), up = Math.min(.09, (hi[1] - lo[1]) / 2 - .02);
+        for (int side : new int[] {-1, 1}) {
             var a = anchor.clone();
-            a[other] += shift;
+            a[other] += side * across;
             var b = target.clone();
-            b[other] += shift;
+            b[other] += side * across;
             try {
                 a = surface.rayNear(axis, a, sign, MOUNT, anchor[axis]);
+                if ((a[axis] - target[axis]) * sign > 1e-9)
+                    throw new IllegalArgumentException("A bracket root in front of the case");
             } catch (IllegalArgumentException narrow) {
                 a = anchor.clone();
-                a[1] += shift;
+                a[1] += side * up;
                 b = target.clone();
-                b[1] += shift;
+                b[1] += side * up;
                 a = mountingPoint(surface, axis, a, sign, MOUNT, anchor[other]);
+                // Where the carrier's outermost face stands in front of the case, the bracket roots on the anchor's plane.
+                if ((a[axis] - target[axis]) * sign > 1e-9) a[axis] = anchor[axis];
             }
             var elbow = a.clone();
             elbow[axis] = b[axis];
@@ -640,6 +700,48 @@ public final class EquipmentServices {
                 }
             throw unavailable;
         }
+    }
+
+    /**
+     * The room each nozzle's neck and flange take at its largest pipe, boxes {x0, y0, z0, x1, y1, z1} in the
+     * frame: a column's nozzle takes what its place clears ({@link NozzleBore}), so a column has none.
+     */
+    static List<double[]> necks(EquipmentShape north) {
+        if (north.kind() == EquipmentShape.Kind.COLUMN) return List.of();
+        var result = new ArrayList<double[]>();
+        var t = north.transform();
+        for (int k = 0; k < north.nozzles().size(); k++) {
+            var nozzle = north.nozzles().get(k);
+            double od = PipeSizes.outside(NozzleBore.largest(north, k));
+            double flange = PipeSizes.flangeThickness(od) + PipeSizes.hub(od);
+            var start = nozzle.base().clone();
+            var collar = nozzle.face();
+            collar[nozzle.axis()] -= nozzle.sign() * Math.min(flange, nozzle.length());
+            result.add(neck(t.point(start), t.point(nozzle.face()), od / 2 + .01));
+            result.add(neck(t.point(collar), t.point(nozzle.face()), PipeSizes.flange(od) / 2 + .01));
+        }
+        return List.copyOf(result);
+    }
+
+    /** The box round the segment {@code a} to {@code b} along one axis, {@code r} across it. */
+    private static double[] neck(double[] a, double[] b, double r) {
+        var box = new double[6];
+        for (int i = 0; i < 3; i++) {
+            boolean along = Math.abs(a[i] - b[i]) > 1e-9;
+            box[i] = Math.min(a[i], b[i]) - (along ? 0 : r);
+            box[i + 3] = Math.max(a[i], b[i]) + (along ? 0 : r);
+        }
+        return box;
+    }
+
+    /** Whether the box {@code b} ({low, high}) overlaps none of the {@code boxes}. */
+    private static boolean clearOf(List<double[]> boxes, double[][] b) {
+        for (var z : boxes) {
+            boolean overlaps = true;
+            for (int i = 0; i < 3; i++) overlaps &= b[0][i] < z[i + 3] && b[1][i] > z[i];
+            if (overlaps) return false;
+        }
+        return true;
     }
 
     static List<double[]> clearances(EquipmentShape north, ProcessUnit unit) {
