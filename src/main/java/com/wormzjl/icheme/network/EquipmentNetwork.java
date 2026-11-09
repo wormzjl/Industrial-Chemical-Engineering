@@ -45,10 +45,10 @@ import java.util.Optional;
  * tower's cell bank rides on the form (protocol 15). A device's name (protocol 17, N1): {@link Rename} names a placed
  * structure or one-block device, and {@link ImportChoice} carries the name the Import page listed, which the built
  * structure takes. A machine's design point rides on the constructor's design too (protocol 18, batch
- * 2026-11-03-rotating-machinery).
+ * 2026-11-03-rotating-machinery), and a batch still's heater, condenser and stages (protocol 22, batch 2026-11-09-batch-distiller, W6).
  */
 public final class EquipmentNetwork {
-    public static final String PROTOCOL = "equipment-21";
+    public static final String PROTOCOL = "equipment-22";
     /** A player edits or builds only within this distance of the constructor, blocks. */
     private static final double REACH = 8;
     /** A process simulator's designs are imported from within this many blocks of the constructor. */
@@ -71,7 +71,10 @@ public final class EquipmentNetwork {
      * ({@link ColumnTrays#encodeTurns}), a machine's design point {@code duty}), and what to do with it.
      */
     public record ConstructorPayload(BlockPos position, double diameter, int tangentLength, int form, int support, int forward, int right, int up,
-                                     int[] trays, int[] connections, int[] paint, int[] bank, boolean boot, int outlet, int[] turns, Action action, int[] towerBank, MachineDuty duty,com.wormzjl.icheme.science.equipment.ExchangerType exchangerType) implements CustomPacketPayload {
+                                     int[] trays, int[] connections, int[] paint, int[] bank, boolean boot, int outlet, int[] turns, Action action, int[] towerBank, MachineDuty duty,com.wormzjl.icheme.science.equipment.ExchangerType exchangerType,com.wormzjl.icheme.science.equipment.BatchStillOptions still) implements CustomPacketPayload {
+        public ConstructorPayload(BlockPos position,double diameter,int tangentLength,int form,int support,int forward,int right,int up,int[] trays,int[] connections,int[] paint,int[] bank,boolean boot,int outlet,int[] turns,Action action,int[] towerBank,MachineDuty duty,com.wormzjl.icheme.science.equipment.ExchangerType exchangerType) {
+            this(position,diameter,tangentLength,form,support,forward,right,up,trays,connections,paint,bank,boot,outlet,turns,action,towerBank,duty,exchangerType,com.wormzjl.icheme.science.equipment.BatchStillOptions.DEFAULT);
+        }
         public ConstructorPayload(BlockPos position,double diameter,int tangentLength,int form,int support,int forward,int right,int up,int[] trays,int[] connections,int[] paint,int[] bank,boolean boot,int outlet,int[] turns,Action action,int[] towerBank,MachineDuty duty) {
             this(position,diameter,tangentLength,form,support,forward,right,up,trays,connections,paint,bank,boot,outlet,turns,action,towerBank,duty,com.wormzjl.icheme.science.equipment.ExchangerType.STANDARD);
         }
@@ -80,7 +83,7 @@ public final class EquipmentNetwork {
             public ConstructorPayload decode(RegistryFriendlyByteBuf b) {
                 return new ConstructorPayload(b.readBlockPos(), b.readDouble(), b.readVarInt(), b.readVarInt(), b.readVarInt(), b.readVarInt(), b.readVarInt(),
                         b.readVarInt(), b.readVarIntArray(ColumnTrays.MAX_ENCODED), b.readVarIntArray(3 * EquipmentShape.MAX_CONNECTIONS), b.readVarIntArray(2), b.readVarIntArray(2), b.readBoolean(), b.readVarInt(),
-                        b.readVarIntArray(3 * ColumnTrays.MAX_TURNS), b.readEnum(Action.class), b.readVarIntArray(2), readDuty(b),com.wormzjl.icheme.science.equipment.ExchangerType.valueOf(b.readUtf(64)));
+                        b.readVarIntArray(3 * ColumnTrays.MAX_TURNS), b.readEnum(Action.class), b.readVarIntArray(2), readDuty(b),com.wormzjl.icheme.science.equipment.ExchangerType.valueOf(b.readUtf(64)),readStill(b));
             }
 
             public void encode(RegistryFriendlyByteBuf b, ConstructorPayload p) {
@@ -102,6 +105,7 @@ public final class EquipmentNetwork {
                 b.writeEnum(p.action);b.writeVarIntArray(p.towerBank);
                 writeDuty(b, p.duty);
                 b.writeUtf(p.exchangerType.name(),64);
+                b.writeEnum(p.still.heater());b.writeEnum(p.still.condenser());b.writeVarInt(p.still.stages());
             }
         };
 
@@ -109,7 +113,7 @@ public final class EquipmentNetwork {
             var p = design.placement();
             return new ConstructorPayload(position, design.diameter(), design.tangentLength(), design.form().ordinal(), design.support(), p.forward(), p.right(), p.up(),
                     design.trays().encode(), EquipmentShape.Connection.encode(design.connections()), design.paint().encode(), design.bank().encode(), design.boot(), design.outlet(),
-                    ColumnTrays.encodeTurns(design.turns()), action,design.towerBank().encode(), design.duty(),design.exchangerType());
+                    ColumnTrays.encodeTurns(design.turns()), action,design.towerBank().encode(), design.duty(),design.exchangerType(),design.still());
         }
 
         /**
@@ -122,7 +126,7 @@ public final class EquipmentNetwork {
             if (form < 0 || form >= forms.length) throw new IllegalArgumentException("Unknown form " + form);
             return stored.keepingColumn(new EquipmentConstructorBlockEntity.Design(diameter, tangentLength, forms[form], support, new VesselPlacement(forward, right, up),
                     ColumnTrays.decode(trays), EquipmentShape.Connection.decode(connections), Paint.decode(paint), ProcessUnit.Bank.decode(bank), boot, outlet, null,
-                    ColumnTrays.decodeTurns(turns),com.wormzjl.icheme.science.equipment.TowerBank.decode(towerBank), duty).withExchangerType(exchangerType));
+                    ColumnTrays.decodeTurns(turns),com.wormzjl.icheme.science.equipment.TowerBank.decode(towerBank), duty).withExchangerType(exchangerType).withStill(still));
         }
 
         @Override
@@ -295,6 +299,15 @@ public final class EquipmentNetwork {
         b.writeVarInt(d.steam() == null ? 0 : d.steam().ordinal() + 1);
         b.writeDouble(d.exhaust());
         b.writeDouble(d.baseSpeed());
+    }
+
+    /** A batch still's options on the wire (protocol 22): its heater, condenser and stages, checked as the options check them. */
+    private static com.wormzjl.icheme.science.equipment.BatchStillOptions readStill(RegistryFriendlyByteBuf b) {
+        try {
+            return new com.wormzjl.icheme.science.equipment.BatchStillOptions(b.readEnum(com.wormzjl.icheme.science.equipment.BatchStillOptions.Heater.class), b.readEnum(com.wormzjl.icheme.science.equipment.BatchStillOptions.Condenser.class), b.readVarInt());
+        } catch (IllegalArgumentException invalid) {
+            throw new io.netty.handler.codec.DecoderException(invalid.getMessage());
+        }
     }
 
     private static MachineDuty readDuty(RegistryFriendlyByteBuf b) {

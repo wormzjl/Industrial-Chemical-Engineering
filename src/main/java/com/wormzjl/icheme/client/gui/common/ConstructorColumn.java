@@ -326,7 +326,11 @@ public final class ConstructorColumn {
      * the reach of a column's import in blocks, and a machine's design point ({@link MachineDuty#NONE} for another form).
      */
     public record Design(VesselPlacement.Form form, double diameter, int length, int support, int forward, int right, int up, ProcessUnit.Bank bank,
-                         @Nullable Imported column, Outlet outlet, int reach,com.wormzjl.icheme.science.equipment.TowerBank towerBank, MachineDuty duty,com.wormzjl.icheme.science.equipment.ExchangerType exchangerType) {
+                         @Nullable Imported column, Outlet outlet, int reach,com.wormzjl.icheme.science.equipment.TowerBank towerBank, MachineDuty duty,com.wormzjl.icheme.science.equipment.ExchangerType exchangerType,com.wormzjl.icheme.science.equipment.BatchStillOptions still) {
+        /** The draft of a form with the default still options. */
+        public Design(VesselPlacement.Form form,double diameter,int length,int support,int forward,int right,int up,ProcessUnit.Bank bank,@Nullable Imported column,Outlet outlet,int reach,com.wormzjl.icheme.science.equipment.TowerBank towerBank,MachineDuty duty,com.wormzjl.icheme.science.equipment.ExchangerType exchangerType) {
+            this(form,diameter,length,support,forward,right,up,bank,column,outlet,reach,towerBank,duty,exchangerType,com.wormzjl.icheme.science.equipment.BatchStillOptions.DEFAULT);
+        }
         public Design(VesselPlacement.Form form,double diameter,int length,int support,int forward,int right,int up,ProcessUnit.Bank bank,@Nullable Imported column,Outlet outlet,int reach,com.wormzjl.icheme.science.equipment.TowerBank towerBank,MachineDuty duty) {
             this(form,diameter,length,support,forward,right,up,bank,column,outlet,reach,towerBank,duty,com.wormzjl.icheme.science.equipment.ExchangerType.STANDARD);
         }
@@ -405,6 +409,7 @@ public final class ConstructorColumn {
         }
         if (form.designed() && UnitDesign.of(form.kind()).hasDuty()) rows.addAll(machine(in, t));
         else rows.add(new Column.Group(t.get(KEY + "group.size"), t.get(KEY + "shift"), size));
+        if (form.kind() == EquipmentShape.Kind.BATCH_STILL) rows.addAll(still(in.still(), t));
         // A bottom outlet leaving through the skirt turns where the design lets it (a trickle-bed reactor's effluent).
         if (form.designed() && Integer.bitCount(in.outlet().allowed()) > 1) rows.add(outlet(in.outlet(), t));
         var place = new ArrayList<Column.Row>();
@@ -433,6 +438,25 @@ public final class ConstructorColumn {
             rows.set(beforePlacement,new Column.Group(group.title(),group.hint(),controls));
         }
         return new Page(rows,base.footer(),base.display());
+    }
+
+    /**
+     * A batch still's options (batch 2026-11-09-batch-distiller, W6; shape fields 11): Heater (solid, liquid, electric:
+     * latched positions), Condenser (built-in or none) and the column's Stages (0 for none, 2 to 8, stepped; shown, not
+     * stepped, without the built-in condenser, which a column needs). Keys {@code still_heater:<heater>},
+     * {@code still_condenser:<condenser>}, the setting {@code stages} (its steppers {@code stages-}, {@code stages+}).
+     */
+    private static List<Column.Row> still(com.wormzjl.icheme.science.equipment.BatchStillOptions o, HeatControlColumn.Texts t) {
+        var heaters = new ArrayList<Column.Button>();
+        for (var h : com.wormzjl.icheme.science.equipment.BatchStillOptions.Heater.values())
+            heaters.add(position("still_heater:" + h.name(), t.get(KEY + "still.heater." + h.key()), h == o.heater(), t.get(KEY + "still.heater." + h.key() + ".hint")));
+        var condensers = new ArrayList<Column.Button>();
+        for (var c : com.wormzjl.icheme.science.equipment.BatchStillOptions.Condenser.values())
+            condensers.add(position("still_condenser:" + c.name(), t.get(KEY + "still.condenser." + c.key()), c == o.condenser(), t.get(KEY + "still.condenser." + c.key() + ".hint")));
+        String stages = Integer.toString(o.stages());
+        var column = o.condenses() ? step("stages", "still.stages", stages, "", t) : shown("stages", "still.stages", stages, "", t);
+        return List.of(new Column.Group(t.get(KEY + "group.still.heater"), t.get(KEY + "group.still.heater.hint"), List.of(new Column.Buttons(heaters))),
+                new Column.Group(t.get(KEY + "group.still.condenser"), t.get(KEY + "group.still.condenser.hint"), List.of(new Column.Buttons(condensers), column)));
     }
 
     private static Column.Button importKey(int reach, HeatControlColumn.Texts t) {

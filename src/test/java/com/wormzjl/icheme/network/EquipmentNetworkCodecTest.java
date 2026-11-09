@@ -59,7 +59,7 @@ class EquipmentNetworkCodecTest {
     }
 
     @Test void deconstructionRequestsRoundTrip() {
-        assertEquals("equipment-21", EquipmentNetwork.PROTOCOL);
+        assertEquals("equipment-22", EquipmentNetwork.PROTOCOL);
         var request = new EquipmentNetwork.Deconstruct(AT, AT.north(5), 12345, 99);
         assertEquals(request, roundTrip(EquipmentNetwork.Deconstruct.STREAM_CODEC, request));
 

@@ -29,6 +29,8 @@ public final class PowerPorts {
                     && terminal.equals(shell.cell())
                     && switch (shell.shape().kind()) {
                         case MOTOR, GENERATOR, AIR_COOLER, INDUCED_DRAFT_COOLING_TOWER, VERTICAL_HEATER, CABIN_HEATER -> true;
+                        // An electric batch still's terminal box (batch 2026-11-09-batch-distiller, W6).
+                        case BATCH_STILL -> com.wormzjl.icheme.science.equipment.EquipmentServices.electricStill(shell.shape());
                         default -> false;
                     };
         }

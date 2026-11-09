@@ -854,9 +854,9 @@ public final class ShapeRasterizer {
                     box = new Cell(floor(at[0]), floor(at[1]), floor(at[2]));
                 }
             }
-            // A fired heater's FE port is its service enclosure's (batch 2026-11-09-furnace-fuel-power): the cell inside the
+            // A fired heater's FE port (batch 2026-11-09-furnace-fuel-power) and an electric still's (W6) is its service enclosure's: the cell inside the
             // enclosure behind its power gland, which stands 0.04 m out of the case's face.
-            if (box == null && HeatSides.burners(shape.kind()) && services.power() != null) {
+            if (box == null && (HeatSides.burners(shape.kind()) || EquipmentServices.electricStill(shape)) && services.power() != null) {
                 var p = services.power();
                 int[][] normals = {{0, -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}};
                 var n = normals[p.face()];

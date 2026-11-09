@@ -167,8 +167,8 @@ public final class LineGeometry {
             case RESERVOIR -> tank(m, key);
             case GENERATOR -> boundary(m, key, Material.FEED);
             case VOID -> boundary(m, key, Material.DRAIN);
-            // A diverter valve (batch 2026-11-09-batch-distiller) draws as the pipe through its open pair until its own drawing.
-            case DIVERTER_VALVE -> pipe(m, key);
+            // A diverter valve (batch 2026-11-09-batch-distiller): the pipe through its open pair, its plug body and its actuator (W6).
+            case DIVERTER_VALVE -> diverter(m, key);
         }
         return m;
     }
@@ -638,6 +638,62 @@ public final class LineGeometry {
      */
     private static void valve(Mesh m, Key key) {
         ValveGeometry.pressure(m,key);
+    }
+
+    /**
+     * A diverter valve's outlets by its inlet face (Direction ordinals: down, up, north, south, west, east): straight
+     * through first, then the two side outlets ({@code PhysicalFluidTopology.diverterOutlets}).
+     */
+    private static final int[][] DIVERTER_OUTLETS = {{1, 2, 5}, {0, 2, 5}, {3, 4, 5}, {2, 5, 4}, {5, 3, 2}, {4, 2, 3}};
+
+    /** The three outlet faces of a diverter valve whose inlet is face {@code inlet}, straight through first. */
+    public static int[] diverterOutlets(int inlet) {
+        return DIVERTER_OUTLETS[inlet].clone();
+    }
+
+    /**
+     * The face of a diverter valve's actuator and data socket (owner decision O2): the top, unless its pipes take it (a
+     * vertical inlet), else the first face its inlet and outlets leave free, in Direction order.
+     */
+    public static int diverterSocketFace(int inlet) {
+        int used = 1 << inlet;
+        for (int o : DIVERTER_OUTLETS[inlet]) used |= 1 << o;
+        if ((used & 1 << UP) == 0) return UP;
+        for (int f = 0; f < 6; f++) if ((used & 1 << f) == 0) return f;
+        throw new IllegalStateException("A diverter valve has a free face");
+    }
+
+    /**
+     * A diverter valve (batch 2026-11-09-batch-distiller, W6): the pipe through its open pair, a plug body at the junction,
+     * and on its free face ({@link #diverterSocketFace}) a stem and an actuator case whose end carries the data socket the
+     * cable tool reaches ({@code DataPorts}: the gland stands 0.01 m out of the block face).
+     */
+    private static void diverter(Mesh m, Key key) {
+        pipe(m, key);
+        double od = PipeSizes.outsideOf(key.outside()), rb = Math.clamp(.62 * od, .04, .3);
+        int face = diverterSocketFace(key.facing()), n = Math.max(12, PipeSizes.sides(2 * rb));
+        var f = frame(face, ref(face));
+        m.prism(f, rb, -.8 * rb, .8 * rb, n, Material.FLANGE);
+        m.annulus(f, 0, rb, -.8 * rb, n, -1, Material.FLANGE);
+        m.annulus(f, 0, rb, .8 * rb, n, 1, Material.FLANGE);
+        double seat = Math.min(.36, .8 * rb + .12), top = .5;
+        m.cylinder(f, .018, .8 * rb, seat, 8, Material.FLANGE);
+        // The actuator case: square across its axis, from its seat to the block face.
+        var s = step(face);
+        double half = .085;
+        var lo = new double[3];
+        var hi = new double[3];
+        for (int a = 0; a < 3; a++) {
+            if (s[a] != 0) {
+                double p0 = .5 + s[a] * seat, p1 = .5 + s[a] * top;
+                lo[a] = Math.min(p0, p1);
+                hi[a] = Math.max(p0, p1);
+            } else {
+                lo[a] = .5 - half;
+                hi[a] = .5 + half;
+            }
+        }
+        m.box(lo, hi, ALL_FACES, Material.MACHINE);
     }
 
     /** A Y-strainer: a body on the line, its screen leg 45° down and downstream (the facing), closed by a blind flange. */

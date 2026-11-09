@@ -565,7 +565,7 @@ class ProcessUnitTest {
             var shafts = ShapeRasterizer.shafts(shape);
             var terminal = ShapeRasterizer.terminal(shape);
             boolean electric = shape.kind() == Kind.MOTOR || shape.kind() == Kind.GENERATOR || shape.kind() == Kind.AIR_COOLER || shape.kind() == Kind.INDUCED_DRAFT_COOLING_TOWER
-                    || shape.kind() == Kind.VERTICAL_HEATER || shape.kind() == Kind.CABIN_HEATER;
+                    || shape.kind() == Kind.VERTICAL_HEATER || shape.kind() == Kind.CABIN_HEATER || EquipmentServices.electricStill(shape);
             assertEquals(electric, terminal != null, shape.toString());
             if (!UnitDesign.of(shape.kind()).hasDuty() && shape.kind() != Kind.COMPRESSOR) {
                 assertEquals(List.of(), shafts, shape.toString());

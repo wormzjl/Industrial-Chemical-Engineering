@@ -80,6 +80,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
     /** The flares each player watches for their flames (batch 2026-11-09-flare-stack, W5), and what was last published. */
     private final Watchers flareWatchers=new Watchers();
     private final Map<Long,com.wormzjl.icheme.network.FluidNetwork.FlareState> publishedFlares=new HashMap<>();
+    /** The batch stills each player watches for their fires (batch 2026-11-09-batch-distiller, W6), and what was last published. */
+    private final Watchers stillWatchers=new Watchers();
+    private final Map<Long,com.wormzjl.icheme.network.FluidNetwork.StillState> publishedStills=new HashMap<>();
     private final Map<Long,com.wormzjl.icheme.network.FluidNetwork.MoverState> publishedMovers=new HashMap<>();
     private final com.wormzjl.icheme.runtime.instrument.InstrumentService instruments;
     private final com.wormzjl.icheme.runtime.control.ControlFacts controlFacts;
@@ -914,6 +917,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         if(!driverWatchers.isEmpty()&&topology.onlineTick()%100==0)publishDrivers();
         if(!rotationWatchers.isEmpty()&&topology.onlineTick()%100==0)publishRotations();
         if(topology.onlineTick()%100==0)publishFlares();
+        if(topology.onlineTick()%100==0)publishStills();
         if(topology.onlineTick()%ElectricStores.CADENCE==0&&propertyHold==null)health.cadence();
         // A generator's port pushes FE to its neighbours (the FE protocol, reading A65): stored FE only, nothing solves.
         pushGenerators();
@@ -1130,7 +1134,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         return new FluidView.Pump(finite(s.available()),finite(s.required()),finite(s.gas()),Math.clamp(h,0,1),curve);
     }
     private static Double finite(double value){return Double.isFinite(value)?value:null;}
-    public void forgetWatcher(UUID player){owned();driverWatchers.remove(player);rotationWatchers.remove(player);tankWatchers.forget(player);for(long id:sightGlassWatchers.devices(player))unwatchSightGlass(player,id);for(long id:moverWatchers.devices(player))unwatchMover(player,id);flareWatchers.forget(player);}
+    public void forgetWatcher(UUID player){owned();driverWatchers.remove(player);rotationWatchers.remove(player);tankWatchers.forget(player);for(long id:sightGlassWatchers.devices(player))unwatchSightGlass(player,id);for(long id:moverWatchers.devices(player))unwatchMover(player,id);flareWatchers.forget(player);stillWatchers.forget(player);}
 
     /** Requested shaft/machine speeds, keyed by dimension as well as cell; published values are presentation state only. */
     private final Map<UUID,Set<PhysicalFluidTopology.Position>> rotationWatchers=new HashMap<>();
@@ -1311,6 +1315,86 @@ public final class FluidWorldAuthority implements AutoCloseable {
                 com.wormzjl.icheme.network.FluidNetwork.sendFlare(player,state);
             }
         }
+    }
+    /**
+     * A batch still's fire subscription (W6), as a flare's: it replays the state last published, or the still's cached view
+     * (a read), and the presentation cadence keeps it current. It never reads or advances a process. A still is watched at
+     * its pot's cell, where its identity binds.
+     */
+    public void watchStills(net.minecraft.server.level.ServerPlayer player,List<com.wormzjl.icheme.network.FluidNetwork.Target> watch,List<com.wormzjl.icheme.network.FluidNetwork.Target> unwatch) {
+        owned();if(closed)return;var uuid=player.getUUID();var level=player.serverLevel();
+        for(var target:unwatch)stillWatchers.unwatch(uuid,target.identity());
+        for(var target:watch) {
+            var pos=target.position();
+            if(!level.hasChunkAt(pos)||!moverRange(player,pos)||!(level.getBlockEntity(pos) instanceof FluidView.Receiver receiver)||receiver.fluidIdentity()!=target.identity())continue;
+            var record=registrations().get(target.identity());
+            if(record==null||!record.device().stillPot()||!cell(record).equals(pos)||!record.device().position().dimension().equals(level.dimension().location().toString()))continue;
+            if(stillWatchers.watch(uuid,target.identity())) {
+                var state=publishedStills.get(target.identity());if(state==null)state=stillState(target);
+                if(state!=null)com.wormzjl.icheme.network.FluidNetwork.sendStill(player,state);
+            }
+        }
+    }
+    /** Still {@code target}'s fire from its cached view (a read): its heat over its rating, whether it boils, whether its spout drips. */
+    private com.wormzjl.icheme.network.FluidNetwork.StillState stillState(com.wormzjl.icheme.network.FluidNetwork.Target target) {
+        var u=topology.still(target.identity());var v=stills.view(target.identity());if(u==null||v==null)return null;
+        float fire=(float)Math.clamp(v.heat()/u.design().rating(),0,1);
+        var s=v.status();
+        boolean boiling=v.heat()>0&&(s==BatchStill.Status.DISTILLING||s==BatchStill.Status.BOILING||s==BatchStill.Status.FLOODING||s==BatchStill.Status.COOLING_LIMITED);
+        boolean dripping=u.condenser()&&v.distillateFlow()>com.wormzjl.icheme.network.FluidNetwork.StillState.DRIP;
+        return new com.wormzjl.icheme.network.FluidNetwork.StillState(target,u.heater().ordinal(),s.ordinal(),fire,boiling,dripping);
+    }
+    /** The presentation cadence's still states: one per watched still, to its watchers only. */
+    private void publishStills() {
+        publishedStills.clear();
+        for(long id:stillWatchers.devices()) {
+            var record=registrations().get(id);
+            if(record==null||!record.device().stillPot()){stillWatchers.remove(id);continue;}
+            var pos=cell(record);var state=stillState(new com.wormzjl.icheme.network.FluidNetwork.Target(pos,id));if(state==null)continue;
+            publishedStills.put(id,state);
+            for(var uuid:stillWatchers.watchers(id)) {
+                var player=server.getPlayerList().getPlayer(uuid);
+                if(player==null||player.hasDisconnected()||!player.serverLevel().dimension().location().toString().equals(record.device().position().dimension())||!moverRange(player,pos)){stillWatchers.unwatch(uuid,id);continue;}
+                com.wormzjl.icheme.network.FluidNetwork.sendStill(player,state);
+            }
+        }
+    }
+    /**
+     * Batch still {@code pot}'s page (W6), a read: the engine's cached view, the player's settings, what a data-network
+     * controller holds instead (where {@code Stills.firing} or {@code Stills.reflux} differs from the setting), and a solid
+     * still's fuel slot as its pot's cell holds it. Null for no still or none in the engine yet.
+     */
+    private FluidView.Still stillView(long pot) {
+        var u=topology.still(pot);var v=stills.view(pot);if(u==null||v==null)return null;
+        boolean column=u.condenser()&&u.stages()>0;
+        double firing=stills.firing(pot),reflux=stills.reflux(pot);
+        Double heldFiring=Double.isFinite(firing)&&firing!=u.firing()?Math.clamp(firing,0,1):null;
+        boolean heldValve=column&&!Double.isNaN(reflux)&&reflux!=u.reflux();
+        boolean heldClosed=heldValve&&reflux==Double.POSITIVE_INFINITY;
+        Double heldReflux=heldValve&&!heldClosed&&reflux>=0?reflux:null;
+        String fuel="";int count=0;double energy=0;
+        if(u.heater()==BatchStill.Heater.SOLID) {
+            var stack=stillFuel(pot);
+            if(!stack.isEmpty()){fuel=net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();count=Math.min(64,stack.getCount());energy=EquipmentShellBlockEntity.fuelEnergy(stack);}
+        }
+        double effective=v.reflux();
+        var alarms=v.alarms().stream().map(a->a.text).toList();
+        return new FluidView.Still(u.heater().name(),u.stages(),u.condenser(),u.design().rating(),u.firing(),u.closedValve()?StillUnit.DEFAULT_REFLUX:u.reflux(),u.closedValve(),
+                heldFiring,heldReflux,heldClosed,
+                positive(v.potTemperature()),positive(v.headTemperature()),Math.max(0,finiteOr(v.level())),Math.max(0,finiteOr(v.filled())),Math.max(0,finiteOr(v.heat())),
+                Math.max(0,finiteOr(v.distillateFlow())),Math.max(0,finiteOr(v.ventFlow())),Math.clamp(finiteOr(v.condensed()),0,1),
+                column&&Double.isFinite(effective)&&effective>=0?effective:null,v.status().name(),alarms,fuel,count,Math.max(0,finiteOr(energy)),Math.max(0,finiteOr(u.burning())));
+    }
+    /** A temperature, K, or null where unknown (NaN before the first slice or column answer). */
+    private static Double positive(double value){return Double.isFinite(value)&&value>0?value:null;}
+    private static double finiteOr(double value){return Double.isFinite(value)?value:0;}
+    /** What a solid still's fuel slot holds (a read of its pot's cell), or an empty stack when the cell is not loaded. */
+    private net.minecraft.world.item.ItemStack stillFuel(long pot) {
+        var r=registrations().get(pot);if(r==null)return net.minecraft.world.item.ItemStack.EMPTY;
+        var p=r.device().position();var level=server.getLevel(dimension(p.dimension()));
+        var at=new BlockPos(p.x(),p.y(),p.z());
+        if(level==null||!level.isLoaded(at)||!(level.getBlockEntity(at) instanceof EquipmentShellBlockEntity shell)||shell.fluidIdentity()!=pot)return net.minecraft.world.item.ItemStack.EMPTY;
+        var slot=shell.fuel();return slot==null?net.minecraft.world.item.ItemStack.EMPTY:slot.getStackInSlot(0);
     }
     private static boolean moverRange(net.minecraft.server.level.ServerPlayer player,BlockPos pos){return pos.distToCenterSqr(player.position())<=com.wormzjl.icheme.network.FluidNetwork.MOVER_RANGE*com.wormzjl.icheme.network.FluidNetwork.MOVER_RANGE;}
     private void refreshObserved(long id){if(moverWatchers.watchers(id).isEmpty()&&sightGlassWatchers.watchers(id).isEmpty()&&(instruments==null||!instruments.observes(id)))presentation.unobserve(id);else presentation.observe(id);}
@@ -1672,6 +1756,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
         // A batch still's pot (batch 2026-11-09-batch-distiller, W3): its status and alarms on the status line, an electric one's power.
         if(registration.device().stillPot()) {
             var line=stills.statusLine(id);if(!line.isEmpty()&&!view.status().contains(line))view=view.withStatus(view.status()+" / "+line);
+            // W6: the still's page, its settings, what a controller holds and its fuel slot.
+            var still=stillView(id);if(still!=null)view=view.withStill(still);
         }
         // A flare stack (batch 2026-11-09-flare-stack): its flow, heat, gas and status; its alarms on the status line.
         if(registration.device().flare()) {
@@ -1897,7 +1983,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
             });
         }
     }
-    @Override public void close(){owned();if(closed)return;closed=true;unboundStructures.clear();publishedMenuData.clear();publishedSightGlasses.clear();publishedMovers.clear();publishedFlares.clear();driverWatchers.clear();publishedDrivers.clear();rotationWatchers.clear();publishedRotations.clear();runtime.close();data.setDirty();}
+    @Override public void close(){owned();if(closed)return;closed=true;unboundStructures.clear();publishedMenuData.clear();publishedSightGlasses.clear();publishedMovers.clear();publishedFlares.clear();publishedStills.clear();driverWatchers.clear();publishedDrivers.clear();rotationWatchers.clear();publishedRotations.clear();runtime.close();data.setDirty();}
 
     /**
      * Which players watch which open tanks, sight glasses or movers (the request path R-B of the engine-owned presentation

@@ -53,9 +53,11 @@ import java.util.*;
  * <p>{@code fluid-18} (batch 2026-11-03-rotating-machinery, W7): a casing's or a turbine's view carries its
  * {@link FluidView.Drive} (the Drive group, in place of the status line's SHAFT clause), a fan unit's its
  * {@link FluidView.Power} (the Power group; NO POWER and UNMETERED stay on the status).</p>
+ * <p>{@code fluid-20} (batch 2026-11-09-batch-distiller, W6): a batch still's pot carries its {@link FluidView.Still} (its page),
+ * and the controls carry a still's settings ({@link StillControls}).</p>
  */
 public final class FluidNetwork {
-    public static final String PROTOCOL="fluid-19";
+    public static final String PROTOCOL="fluid-20";
     private static final Gson JSON=new Gson();
     public static final int MAX_JSON=262144;
     public static final int MAX_EDIT_JSON=4096;
@@ -69,11 +71,21 @@ public final class FluidNetwork {
     private static String plainNumber(double value){return java.math.BigDecimal.valueOf(value).stripTrailingZeros().toPlainString();}
     /** Required on the wire; a missing or unknown value is rejected by Controls validation. */
     public enum Power {ON,OFF}
+    /** A batch still's settings on its page (W6): the firing, 0 to 1 (the damper, the burners or the power), and its reflux valve, a ratio or closed. */
+    public record StillControls(double firing,double reflux,boolean closed) {
+        public StillControls{if(!(firing>=0&&firing<=1)||!(reflux>=0&&reflux<=MAXIMUM_REFLUX))throw new IllegalArgumentException("The firing lies between 0 and 100 %, the reflux ratio between 0 and "+(int)MAXIMUM_REFLUX);}
+        /** The ratio the engine takes: {@code +Infinity} for a closed valve. */
+        public double ratio(){return closed?Double.POSITIVE_INFINITY:reflux;}
+    }
+    /** The highest reflux ratio a still's page sets (beyond it, close the valve). */
+    public static final double MAXIMUM_REFLUX=100;
     /**
      * A menu's edit form. {@code heat} is a controllable heat side's control (batch 2026-10-27-heat-exchanger-design, W4: an
-     * exchanger side's or an air cooler's mode, set point, low limit and manual share), null for any other device.
+     * exchanger side's or an air cooler's mode, set point, low limit and manual share), null for any other device; {@code still} a batch still's settings (W6), null for any other device.
      */
-    public record Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio,Power power,FlowControl.ValveSource valveSource,double massFlow,HeatUnit.Control heat,com.wormzjl.icheme.science.fluid.network.CoolingTower tower,boolean fixedMover) {
+    public record Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio,Power power,FlowControl.ValveSource valveSource,double massFlow,HeatUnit.Control heat,com.wormzjl.icheme.science.fluid.network.CoolingTower tower,boolean fixedMover,StillControls still) {
+        public Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio,Power power,FlowControl.ValveSource valveSource,double massFlow,HeatUnit.Control heat,com.wormzjl.icheme.science.fluid.network.CoolingTower tower,boolean fixedMover){this(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,power,valveSource,massFlow,heat,tower,fixedMover,null);}
+        public Controls withStill(StillControls value){return new Controls(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,power,valveSource,massFlow,heat,tower,fixedMover,value);}
         public Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio,Power power,FlowControl.ValveSource valveSource,double massFlow,HeatUnit.Control heat,com.wormzjl.icheme.science.fluid.network.CoolingTower tower){this(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,power,valveSource,massFlow,heat,tower,false);}
         public Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio,Power power,FlowControl.ValveSource valveSource,double massFlow){this(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,power,valveSource,massFlow,null,null);}
         public Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio,Power power){this(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,power,FlowControl.ValveSource.NONE,1);}
@@ -298,6 +310,33 @@ public final class FluidNetwork {
             world.input(menu,event,refusal);
         });
     }
+    /**
+     * The fuel slot of a solid still's open pot page (W6): the same admission as an edit, then the item move at once, as a
+     * hopper's (the slot is the pot cell's item handler, not process state). Load fills the slot from the inventory, the
+     * slot's own item first, then the first stack that burns; Take out gives the slot's stack back, what does not fit
+     * staying in the slot. The slot wakes the pot's island, which reads the fire at its next slice.
+     */
+    public static void stillFuel(StillFuelPayload payload,ServerPlayer player) {
+        if(!(player.containerMenu instanceof FluidDeviceMenu menu))return;
+        if(menu.containerId!=payload.menuId||menu.identity()!=payload.identity||!menu.position().equals(payload.position)||!menu.stillValid(player)||menu.debug()||!player.mayBuild()||player.isSpectator()||!player.level().mayInteract(player,payload.position)||!menu.admitEdit(player.server.getTickCount()))return;
+        if(!(player.serverLevel().getBlockEntity(payload.position) instanceof com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity shell)||shell.fluidIdentity()!=payload.identity)return;
+        var slot=shell.fuel();if(slot==null)return;
+        var inventory=player.getInventory();
+        if(payload.load) {
+            var held=slot.getStackInSlot(0);
+            for(int pass=0;pass<2;pass++)for(int i=0;i<inventory.items.size();i++) {
+                var stack=inventory.items.get(i);
+                if(stack.isEmpty()||pass==0&&(held.isEmpty()||!net.minecraft.world.item.ItemStack.isSameItemSameComponents(stack,held)))continue;
+                var rest=slot.insertItem(0,stack,false);
+                if(rest.getCount()!=stack.getCount()){inventory.items.set(i,rest);held=slot.getStackInSlot(0);}
+                if(held.getCount()>=Math.min(held.getMaxStackSize(),slot.getSlotLimit(0)))break;
+            }
+        } else {
+            var taken=slot.extractItem(0,slot.getStackInSlot(0).getCount(),false);
+            if(!taken.isEmpty()&&!inventory.add(taken)&&!taken.isEmpty())slot.insertItem(0,taken,false);
+        }
+        player.inventoryMenu.broadcastChanges();
+    }
     public static void openPartner(FluidDeviceMenu menu){PacketDistributor.sendToServer(new PartnerPayload(menu.containerId,menu.position(),menu.identity()));}
     public static void checkLines(FluidDeviceMenu menu){PacketDistributor.sendToServer(new LinesPayload(menu.containerId,menu.position(),menu.identity()));}
     /**
@@ -365,6 +404,12 @@ public final class FluidNetwork {
                     case GENERATOR->spec=new FluidDeviceSpec(spec.volume(),controls.temperature,controls.pressure,controls.composition,controls.solids);
                     case VOID->spec=new FluidDeviceSpec(spec.volume(),spec.temperature(),controls.pressure,spec.composition());
                     case RESERVOIR->{
+                        // A batch still's pot (W6): its firing and reflux valve, a fact its islands read at their next slice.
+                        if(d.stillPot()&&controls.still!=null){
+                            String refused=world.stillSettings(d.id(),controls.still.firing(),controls.still.ratio());
+                            if(refused!=null)throw new IllegalArgumentException(refused);
+                            break;
+                        }
                         if(spec.tower()==null||controls.tower==null)throw new IllegalArgumentException("Reservoir contents are conserved; only cooling tower controls can be edited.");
                         var t=controls.tower;
                         world.model().domain().requireInputTemperature(t.setPoint());
@@ -473,6 +518,8 @@ public final class FluidNetwork {
         public static final Type<Watch> MOVERS=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"mover_watch"));
         /** The flare stacks, at their gas inlet cells (batch 2026-11-09-flare-stack, W5). */
         public static final Type<Watch> FLARES=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"flare_watch"));
+        /** The batch stills, at their pots' cells (batch 2026-11-09-batch-distiller, W6). */
+        public static final Type<Watch> STILLS=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"still_watch"));
         public Watch{Objects.requireNonNull(type);watch=List.copyOf(watch);unwatch=List.copyOf(unwatch);validate(watch);validate(unwatch);}
         static StreamCodec<RegistryFriendlyByteBuf,Watch> codec(Type<Watch> type){return new StreamCodec<>() {
             public Watch decode(RegistryFriendlyByteBuf b){return new Watch(type,targets(b),targets(b));}
@@ -520,6 +567,37 @@ public final class FluidNetwork {
         public static final StreamCodec<RegistryFriendlyByteBuf,FlareState> STREAM_CODEC=new StreamCodec<>() {
             public FlareState decode(RegistryFriendlyByteBuf b){return new FlareState(readTarget(b),b.readUnsignedByte(),b.readFloat(),b.readFloat());}
             public void encode(RegistryFriendlyByteBuf b,FlareState p){writeTarget(b,p.target);b.writeByte(p.status);b.writeFloat(p.flame);b.writeFloat(p.plume);}
+        };
+        @Override public Type<? extends CustomPacketPayload> type(){return TYPE;}
+    }
+    /**
+     * Server to client: a batch still's published state for its animation (batch 2026-11-09-batch-distiller, W6): its heater
+     * by {@code BatchStill.Heater} ordinal, its status by {@code BatchStill.Status} ordinal, its fire (heat into the pot over
+     * its rating, 0 to 1), whether it boils and whether its spout drips (distillate above {@link #DRIP} kg/s). No process
+     * inventory or solver results.
+     */
+    public record StillState(Target target,int heater,int status,float fire,boolean boiling,boolean dripping) implements CustomPacketPayload {
+        /** The least distillate flow that drips at the spout, kg/s (about one drop a second). */
+        public static final double DRIP=5e-5;
+        public StillState{Objects.requireNonNull(target);if(heater<0||heater>7||status<0||status>15||!(fire>=0&&fire<=1))throw new IllegalArgumentException("Invalid still state");}
+        public static final Type<StillState> TYPE=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"still_state"));
+        public static final StreamCodec<RegistryFriendlyByteBuf,StillState> STREAM_CODEC=new StreamCodec<>() {
+            public StillState decode(RegistryFriendlyByteBuf b){return new StillState(readTarget(b),b.readUnsignedByte(),b.readUnsignedByte(),b.readFloat(),flag(b),flag(b));}
+            public void encode(RegistryFriendlyByteBuf b,StillState p){writeTarget(b,p.target);b.writeByte(p.heater);b.writeByte(p.status);b.writeFloat(p.fire);b.writeBoolean(p.boiling);b.writeBoolean(p.dripping);}
+        };
+        @Override public Type<? extends CustomPacketPayload> type(){return TYPE;}
+    }
+    /**
+     * Client to server: the fuel slot of the solid still whose pot's page is open in menu {@code menuId} (W6): {@code load}
+     * moves fuel from the player's inventory into the slot (the slot's own item first), else the slot's stack goes back to
+     * the inventory. An item move, as a hopper's: no process state, done at once; the pot's island reads the fire again at
+     * its next slice, and the page's next bucket shows the slot.
+     */
+    public record StillFuelPayload(int menuId,BlockPos position,long identity,boolean load) implements CustomPacketPayload {
+        public static final Type<StillFuelPayload> TYPE=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"still_fuel"));
+        public static final StreamCodec<RegistryFriendlyByteBuf,StillFuelPayload> STREAM_CODEC=new StreamCodec<>() {
+            public StillFuelPayload decode(RegistryFriendlyByteBuf b){return new StillFuelPayload(b.readVarInt(),b.readBlockPos(),b.readLong(),b.readBoolean());}
+            public void encode(RegistryFriendlyByteBuf b,StillFuelPayload p){b.writeVarInt(p.menuId);b.writeBlockPos(p.position);b.writeLong(p.identity);b.writeBoolean(p.load);}
         };
         @Override public Type<? extends CustomPacketPayload> type(){return TYPE;}
     }
@@ -638,6 +716,13 @@ public final class FluidNetwork {
             if(context.player() instanceof ServerPlayer player)FluidWorldAuthority.find(player.server).ifPresent(world->world.watchFlares(player,p.watch,p.unwatch));
         });
         flare.playToClient(FlareState.TYPE,FlareState.STREAM_CODEC,(p,context)->com.wormzjl.icheme.client.FlareFlames.accept(p));
+        // still-1 (batch 2026-11-09-batch-distiller, W6): the stills' watch and their fire state, and the page's fuel slot.
+        var still=event.registrar("still-1").executesOn(HandlerThread.MAIN);
+        still.playToServer(Watch.STILLS,Watch.codec(Watch.STILLS),(p,context)->{
+            if(context.player() instanceof ServerPlayer player)FluidWorldAuthority.find(player.server).ifPresent(world->world.watchStills(player,p.watch,p.unwatch));
+        });
+        still.playToClient(StillState.TYPE,StillState.STREAM_CODEC,(p,context)->com.wormzjl.icheme.client.StillFires.accept(p));
+        still.playToServer(StillFuelPayload.TYPE,StillFuelPayload.STREAM_CODEC,(p,context)->{if(context.player() instanceof ServerPlayer player)stillFuel(p,player);});
         var instruments=event.registrar("instruments-1").executesOn(HandlerThread.MAIN);
         instruments.playToServer(InstrumentWatch.TYPE,InstrumentWatch.CODEC,(p,c)->{if(c.player() instanceof ServerPlayer player)FluidWorldAuthority.find(player.server).ifPresent(w->w.instruments().watch(player,p.watch,p.unwatch));});
         instruments.playToClient(InstrumentDisplay.TYPE,InstrumentDisplay.CODEC,(p,c)->com.wormzjl.icheme.client.InstrumentRenderer.accept(p));
@@ -661,6 +746,9 @@ public final class FluidNetwork {
     public static void sendMover(ServerPlayer player,MoverState state){PacketDistributor.sendToPlayer(player,state);}
     public static void sendDriver(ServerPlayer player,DriverState state){PacketDistributor.sendToPlayer(player,state);}
     public static void sendFlare(ServerPlayer player,FlareState state){PacketDistributor.sendToPlayer(player,state);}
+    public static void sendStill(ServerPlayer player,StillState state){PacketDistributor.sendToPlayer(player,state);}
+    /** Client: the open still page's fuel slot: load it from the inventory, or take its stack out (W6). */
+    public static void stillFuel(FluidDeviceMenu menu,boolean load){PacketDistributor.sendToServer(new StillFuelPayload(menu.containerId,menu.position(),menu.identity(),load));}
     /** Client: asks the server to watch and to stop watching drivers by their origins (W3). */
     public static void requestDrivers(List<BlockPos> watch,List<BlockPos> unwatch){if(!watch.isEmpty()||!unwatch.isEmpty())PacketDistributor.sendToServer(new DriverWatch(watch,unwatch));}
     public static void sendInstrument(ServerPlayer player,InstrumentTarget target,Instrument.Sample sample,long tick){PacketDistributor.sendToPlayer(player,new InstrumentDisplay(target,sample,tick));}

@@ -35,6 +35,7 @@ public final class IChemEClient {
         MoverSounds.clear();
         DriverSounds.clear();
         FlareFlames.clear();
+        StillFires.clear();
     }
 
 }

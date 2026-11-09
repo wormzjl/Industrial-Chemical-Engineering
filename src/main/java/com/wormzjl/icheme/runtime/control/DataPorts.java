@@ -59,19 +59,8 @@ public final class DataPorts {
                         == com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind
                                 .DIVERTER_VALVE) {
             var inlet = valve.getBlockState().getValue(FluidDeviceBlock.FACING);
-            var used = EnumSet.of(inlet);
-            for (var outlet :
-                    com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.diverterOutlets(
-                            com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Direction.valueOf(
-                                    inlet.name())))
-                used.add(Direction.valueOf(outlet.name()));
-            var face =
-                    used.contains(Direction.UP)
-                            ? Arrays.stream(Direction.values())
-                                    .filter(d -> !used.contains(d))
-                                    .findFirst()
-                                    .orElseThrow()
-                            : Direction.UP;
+            // The face its drawing puts the actuator on (LineGeometry.diverterSocketFace, W6), one rule for both.
+            var face = Direction.values()[LineGeometry.diverterSocketFace(inlet.ordinal())];
             return new Mount(
                     valve.getBlockPos()
                             .getCenter()

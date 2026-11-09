@@ -11,6 +11,7 @@ import com.wormzjl.icheme.client.gui.common.HeatControlColumn;
 import com.wormzjl.icheme.client.gui.common.MachineColumnSamples;
 import com.wormzjl.icheme.client.gui.common.MachineColumn;
 import com.wormzjl.icheme.client.gui.common.PumpCurve;
+import com.wormzjl.icheme.client.gui.common.StillDoor;
 import com.wormzjl.icheme.client.gui.common.kit.Canvas;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
 import com.wormzjl.icheme.client.gui.common.kit.Measure;
@@ -94,6 +95,58 @@ public final class GuiPrototypes {
         out.addAll(controlPanels());
         out.addAll(firedHeater());
         out.addAll(flareStack());
+        out.addAll(batchStill());
+        return out;
+    }
+
+    /**
+     * A batch still (batch 2026-11-09-batch-distiller, W6): its pot's page distilling on a solid fire with a column, its
+     * damper held by a controller; a liquid-fired pot still heating; an electric still boiled dry; and the constructor's
+     * still options.
+     */
+    static List<Prototype> batchStill() {
+        var out = new ArrayList<Prototype>();
+        record Still(String file, StillDoor.Heater heater, boolean column, String held, StillDoor.Fuel fuel, String status, int colour, List<DeviceColumn.Meter> meters,
+                     DeviceColumn.Power power) {}
+        var flow = "kg/h";
+        var stills = List.of(
+                new Still("batch-still-solid-column", StillDoor.Heater.SOLID, true, "63.0", new StillDoor.Fuel("Coal", "12", "1630", "27.7"), "DISTILLING", Palette.ACCENT,
+                        List.of(meter("still_pot_temperature", "118.4", "°C"), new DeviceColumn.Meter("still_head_temperature", "86.2", "°C", TEXTS.get("still_head_temperature.hint")),
+                                new DeviceColumn.Meter("still_level", "0.52", "m", TEXTS.get("still_level.hint", "61.0")), new DeviceColumn.Meter("still_heat", "20.2", "kW", TEXTS.get("still_heat.hint", "32.0", "63.0")),
+                                new DeviceColumn.Meter("still_distillate", "61.4", flow, TEXTS.get("still_distillate.hint")), new DeviceColumn.Meter("still_vent", "0.0", flow, TEXTS.get("still_vent.hint")),
+                                new DeviceColumn.Meter("still_condensed", "100.0", "%", TEXTS.get("still_condensed.hint")), new DeviceColumn.Meter("still_reflux_run", "2.0", "", TEXTS.get("still_reflux_run.hint"))), null),
+                new Still("batch-still-liquid", StillDoor.Heater.LIQUID, false, null, null, "HEATING", Palette.MUTED,
+                        List.of(meter("still_pot_temperature", "64.9", "°C"), new DeviceColumn.Meter("still_head_temperature", "—", "°C", TEXTS.get("still_head_temperature.hint")),
+                                new DeviceColumn.Meter("still_level", "0.61", "m", TEXTS.get("still_level.hint", "70.0")), new DeviceColumn.Meter("still_heat", "32.0", "kW", TEXTS.get("still_heat.hint", "32.0", "100.0")),
+                                new DeviceColumn.Meter("still_distillate", "0.0", flow, TEXTS.get("still_distillate.hint")), new DeviceColumn.Meter("still_vent", "0.0", flow, TEXTS.get("still_vent.hint")),
+                                new DeviceColumn.Meter("still_condensed", "100.0", "%", TEXTS.get("still_condensed.hint"))), null),
+                new Still("batch-still-electric-dry", StillDoor.Heater.ELECTRIC, false, null, null, "BOIL DRY", Palette.RED,
+                        List.of(meter("still_pot_temperature", "236.0", "°C"), new DeviceColumn.Meter("still_head_temperature", "198.3", "°C", TEXTS.get("still_head_temperature.hint")),
+                                new DeviceColumn.Meter("still_level", "0.03", "m", TEXTS.get("still_level.hint", "4.0")), new DeviceColumn.Meter("still_heat", "0.0", "kW", TEXTS.get("still_heat.hint", "32.0", "100.0"))),
+                        new DeviceColumn.Power("0.0", "0", "100")));
+        for (var s : stills) {
+            var door = StillDoor.rows(new StillDoor.Input(s.heater(), true, true, s.column(), true, s.held(), null, s.fuel()), TEXTS);
+            var input = new DeviceColumn.Input(Kind.RESERVOIR, true, false, true, "bar", "°C", "/h", DeviceColumn.Valve.NONE, null, false,
+                    new DeviceColumn.Level(0.61, "305.0", "500.0"), null, door, phases("volume", 61, 0, 39, 0), s.meters(), null, s.power());
+            out.add(devicePage(s.file(), WINDOW[0], WINDOW[1], input, (d, k) -> {
+                d.title("Batch still");
+                d.name("ST-1", true);
+                d.tabs(0, "Overview", "Outlets", "Datasheet");
+                d.status(s.status(), s.colour());
+                var box = device(d, input, DeviceColumn.rows(input, TEXTS), Map.of("stillFiring", "100", "stillReflux", "2"));
+                contents(d, box, 1, List.of(new String[]{"Component", "Mole %", "kmol"}, new String[]{"n-Hexane", "38.2", "0.71"}, new String[]{"Toluene", "61.8", "1.15"}));
+                d.footer(2, "Close", "Mole", "°C", "bar", "/h");
+            }));
+        }
+        var outlet = new ConstructorColumn.Outlet(1, 0, STANDING);
+        for (var options : List.of(new com.wormzjl.icheme.science.equipment.BatchStillOptions(com.wormzjl.icheme.science.equipment.BatchStillOptions.Heater.SOLID,
+                        com.wormzjl.icheme.science.equipment.BatchStillOptions.Condenser.BUILT_IN, 4),
+                new com.wormzjl.icheme.science.equipment.BatchStillOptions(com.wormzjl.icheme.science.equipment.BatchStillOptions.Heater.ELECTRIC,
+                        com.wormzjl.icheme.science.equipment.BatchStillOptions.Condenser.NONE, 0))) {
+            var page = ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.BATCH_STILL, 500, 1, 0, 1, 0, 0, new ProcessUnit.Bank(1, 1), null, outlet, 16,
+                    com.wormzjl.icheme.science.equipment.TowerBank.ONE, MachineDuty.NONE, com.wormzjl.icheme.science.equipment.ExchangerType.STANDARD, options), DIALOG);
+            out.add(new Prototype("equipment-constructor-still-" + options.heater().key(), 464, 254, (d, k) -> constructorDoor(d, page, "Batch still", "change", "", 0, Map.of()), true));
+        }
         return out;
     }
 

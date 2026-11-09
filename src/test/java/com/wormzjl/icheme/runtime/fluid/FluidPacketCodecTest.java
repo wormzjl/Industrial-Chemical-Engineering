@@ -139,7 +139,7 @@ class FluidPacketCodecTest {
      * menu's axis is refused. fluid-14 adds a tank's capacity and paired pressures; fluid-16 a heat unit's ports, lines and
      * actuator and a pipe's line reading (the heat GUI). */
     @Test void theProtocolIsFluidNineteenWithDistinctStaticAndLivePayloads() {
-        assertEquals("fluid-19",FluidNetwork.PROTOCOL);
+        assertEquals("fluid-20",FluidNetwork.PROTOCOL);
         var ids=java.util.Set.of(FluidNetwork.EditPayload.TYPE.id(),FluidNetwork.RecoverPayload.TYPE.id(),FluidNetwork.StaticPayload.TYPE.id(),FluidNetwork.LivePayload.TYPE.id());
         assertEquals(4,ids.size());
         var base=generatorMenu("");int count=base.components().size();

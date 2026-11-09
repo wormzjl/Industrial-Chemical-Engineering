@@ -98,7 +98,7 @@ class EquipmentServicesTest {
                 var services = ShapeRasterizer.services(shape);
                 var data = services.data();
                 assertNotNull(data, shape.toString());
-                assertNull(services.power(), shape + ": no FE socket before phase 2");
+                assertEquals(EquipmentServices.electricStill(shape), services.power() != null, shape + ": an FE socket on an electric still only (W6)");
                 double[] at = {data.x(), data.y(), data.z()}, size = {shape.sizeX(), shape.sizeY(), shape.sizeZ()};
                 var n = LineGeometry.step(data.face());
                 int axis = n[0] != 0 ? 0 : 2, across = 2 - axis;

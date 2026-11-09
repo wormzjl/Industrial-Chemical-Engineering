@@ -98,7 +98,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     /** Saves the typed name by the rename path (N1), as Apply does: Enter in the entry; a tank with contents has Copy in Apply's slot. */
     private void saveName(){if(canEdit()&&renames())com.wormzjl.icheme.network.EquipmentNetwork.rename(menu.position(),nameDraft);}
     /** Whether Apply sends this device's controls: every kind but a tank (an induced-draught tower's aside), a filter, and a heat side off its Control tab or with nothing to control. */
-    private boolean controlsApply(){var data=menu.clientData();return data!=null&&(data.kind()!=TopologyCompiler.Kind.RESERVOIR||tower()&&data.controls().tower().draft()==com.wormzjl.icheme.science.fluid.network.CoolingTower.Draft.INDUCED)&&data.kind()!=TopologyCompiler.Kind.FILTER&&(data.kind()!=TopologyCompiler.Kind.HEAT_SIDE||page==CONTROL&&(fans()||burners()||controllable()));}
+    private boolean controlsApply(){var data=menu.clientData();return data!=null&&(data.kind()!=TopologyCompiler.Kind.RESERVOIR||tower()&&data.controls().tower().draft()==com.wormzjl.icheme.science.fluid.network.CoolingTower.Draft.INDUCED||still()!=null)&&data.kind()!=TopologyCompiler.Kind.FILTER&&(data.kind()!=TopologyCompiler.Kind.HEAT_SIDE||page==CONTROL&&(fans()||burners()||controllable()));}
     private boolean constructedMover(){var data=menu.clientData();return data!=null&&datasheet!=null&&(data.kind()==TopologyCompiler.Kind.PUMP||data.kind()==TopologyCompiler.Kind.COMPRESSOR);}
     /** An air cooler's side: its fans switch as a mover does (batch 2026-10-27-heat-exchanger-design). */
     private boolean fans(){var data=menu.clientData();return data!=null&&data.view().heat()!=null&&data.view().heat().fans()!=null;}
@@ -110,6 +110,61 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private HeatUnit.Mode heatMode=HeatUnit.Mode.OFF;
     private boolean towerAuto;
     private boolean tower(){return menu.clientData()!=null&&menu.clientData().controls().tower()!=null;}
+    // A batch still's pot (batch 2026-11-09-batch-distiller, W6): its Firing, Reflux valve and Fuel lead its door column
+    // (StillDoor), its readings join the meters; the switches and set points are drafts until Apply.
+    private com.wormzjl.icheme.runtime.fluid.FluidView.Still still(){var data=menu.clientData();return data==null?null:data.view().still();}
+    private boolean stillFiring,stillOpen=true;
+    /** What the still's drafts and widgets last followed: its settings, what a controller holds and the slot's item. */
+    private String stillShown,stillDoor;
+    /** The drafts follow the still's settings when they change (no device revision moves with them); a controller's hold or a new item in the slot rebuilds the door. */
+    private void refreshStill(com.wormzjl.icheme.runtime.fluid.FluidView.Still s){
+        String door=s==null?"":s.heldFiring()+"/"+s.heldReflux()+"/"+s.heldClosed()+"/"+s.fuel();
+        if(!door.equals(stillDoor)){stillDoor=door;rebuildNext=true;}
+        String shown=s==null?"":s.firing()+"/"+s.reflux()+"/"+s.closed();
+        if(shown.equals(stillShown))return;
+        stillShown=shown;rebuildNext=true;if(s==null)return;
+        stillFiring=s.firing()>0;stillOpen=!s.closed();
+        // Off keeps the opening On returns to: full, where none was set.
+        fields.put("stillFiring",new NumericDraft(s.firing()>0?s.firing()*100:100));
+        fields.put("stillReflux",new NumericDraft(s.reflux()));
+    }
+    /** The still's settings as drafted: Off fires at 0, Closed sends the ratio drafted with the closed valve. */
+    private FluidNetwork.StillControls stillControls(){
+        double firing=stillFiring?fields.get("stillFiring").value()/100:0;
+        return new FluidNetwork.StillControls(firing,fields.get("stillReflux").value(),!stillOpen);
+    }
+    /** The still's groups' input (StillDoor): its heater, the drafts, what a controller holds, a solid still's slot. */
+    private StillDoor.Input stillInput(){
+        var s=still();var heater=StillDoor.Heater.valueOf(s.heater());
+        String heldFiring=s.heldFiring()==null?null:value(100*s.heldFiring());
+        String heldReflux=s.heldClosed()?tr("still_reflux.closed"):s.heldReflux()==null?null:value(s.heldReflux());
+        StillDoor.Fuel fuel=null;
+        if(heater==StillDoor.Heater.SOLID){
+            String item=null;
+            if(!s.fuel().isEmpty()){var id=net.minecraft.resources.ResourceLocation.tryParse(s.fuel());
+                var known=id==null?null:net.minecraft.core.registries.BuiltInRegistries.ITEM.getOptional(id).orElse(null);
+                item=known==null?s.fuel():new net.minecraft.world.item.ItemStack(known).getHoverName().getString();}
+            // The fire left: the slot's heat and the burning item's, at the heat it fires now over its efficiency.
+            double heat=s.fuelCount()*s.fuelEnergy()+s.burning(),draw=s.heat()/com.wormzjl.icheme.science.fluid.network.BatchStill.Heater.SOLID.efficiency();
+            fuel=new StillDoor.Fuel(item,Integer.toString(s.fuelCount()),draw>0?value(heat/draw/60):"—",value(heat/1e9));
+        }
+        return new StillDoor.Input(heater,canEdit(),stillFiring,s.stages()>0&&s.condenser(),stillOpen,heldFiring,heldReflux,fuel);
+    }
+    /** The still's readings: the pot's and the head's temperatures, the level, the heat, the firing it runs at, the flows, the condenser's share, the reflux. */
+    private void stillMeters(List<DeviceColumn.Meter> rows,com.wormzjl.icheme.runtime.fluid.FluidView.Still s){
+        String t=temperatureUnit.symbol();
+        rows.add(meter("still_pot_temperature",s.potTemperature()==null?"—":temperatureValue(s.potTemperature()),t));
+        rows.add(new DeviceColumn.Meter("still_head_temperature",s.headTemperature()==null?"—":temperatureValue(s.headTemperature()),t,tr("still_head_temperature.hint")));
+        rows.add(new DeviceColumn.Meter("still_level",value(s.level()),"m",tr("still_level.hint",value(100*s.filled()))));
+        double running=s.heldFiring()!=null?s.heldFiring():s.firing();
+        rows.add(new DeviceColumn.Meter("still_heat",value(s.heat()/1000),"kW",tr("still_heat.hint",value(s.rating()/1000),value(100*running))));
+        if(s.condenser()){
+            rows.add(new DeviceColumn.Meter("still_distillate",value(flowRateUnit.display(s.distillate())),flowRateUnit.unit("kg"),tr("still_distillate.hint")));
+            rows.add(new DeviceColumn.Meter("still_vent",value(flowRateUnit.display(s.vent())),flowRateUnit.unit("kg"),tr("still_vent.hint")));
+            rows.add(new DeviceColumn.Meter("still_condensed",value(100*s.condensed()),"%",tr("still_condensed.hint")));
+        }
+        if(s.stages()>0&&s.condenser())rows.add(new DeviceColumn.Meter("still_reflux_run",s.effectiveReflux()==null?"—":value(s.effectiveReflux()),"",tr("still_reflux_run.hint")));
+    }
     /** The target the switch's On holds: the drafted mode while On (OFF: an air cooler's fixed fan speed); for a side loaded Off, the outlet temperature. */
     private HeatUnit.Mode heatTarget=HeatUnit.Mode.OUTLET_TEMPERATURE;
     /** The door column's Off and On switch: a generator's or a built mover's. A heat unit's fans and burners are on its Control tab. */
@@ -158,6 +213,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             }
             if(selected!=phase){phase=selected;scroll.reset();rebuildNext=true;}
         }
+        refreshStill(data.view().still());
         if(data.view().inputRevision()==revision)return;
         revision=data.view().inputRevision();var c=data.controls();
         powerOn=c.power()==FluidNetwork.Power.ON;valveSource=c.valveSource();
@@ -183,6 +239,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         composition=new RelativeComposition(data.components(),data.molecularWeights(),c.composition());
         if(mass)composition.toggleBasis();
         loadSolids(c.solids());
+        stillShown=null;refreshStill(data.view().still());
         templates=false;scroll.reset();rebuildNext=true;
     }
     private void loadSolids(SlurryFeed solids){
@@ -426,6 +483,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
                 fields.get("diameter").value(),PipeResistance.DEFAULT_ROUGHNESS_METRES,fields.get("volumeFlow").si(),
                 fields.get("maximumAddedPressure").si(),composition.moleFractions(),solids(),fields.get("maximumPressureRatio").value(),powerOn?FluidNetwork.Power.ON:FluidNetwork.Power.OFF,valveSource,fields.get("massFlow").si(),
                 heatControl(),towerControl());
+            if(still()!=null)controls=controls.withStill(stillControls());
             FluidNetwork.sendEdit(menu,revision,controls);message=tr("waiting");
         }catch(IllegalArgumentException e){message=tr("invalid_input");}
     }
@@ -674,6 +732,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         }
         // A flare stack (batch 2026-11-09-flare-stack): the heat it releases against its rating, its gas's heating value and
         // flame temperature, and the most it passes of that gas. Its status stands on the display.
+        var still=view.still();if(still!=null)stillMeters(rows,still);
         var flare=view.flare();
         if(flare!=null){
             rows.add(new DeviceColumn.Meter("flare_heat",value(flare.heat()/1e6),"MW",tr("flare_heat.hint",quantity(flare.rated()/1e6,"MW"))));
@@ -733,7 +792,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         var opening=data.valve()==null?null:new DeviceColumn.Opening(data.valve().opening(),data.valve().status());
         String junction=pipe()&&view.pipeInfo().junction()?tr("junction",view.pipeInfo().connections().size()):null;
         // A paired heat side leads with its side selector, as its Control tab does.
-        var lead=tower()?DeviceColumn.towerControl(menu.clientData().controls().tower().draft()==com.wormzjl.icheme.science.fluid.network.CoolingTower.Draft.INDUCED,towerAuto,canEdit(),temperatureUnit.symbol(),FluidDeviceScreen::tr):heat()!=null?HeatControlColumn.sideSelector(controlInput(),FluidDeviceScreen::tr):List.<Column.Row>of();
+        var lead=still()!=null?StillDoor.rows(stillInput(),FluidDeviceScreen::tr):tower()?DeviceColumn.towerControl(menu.clientData().controls().tower().draft()==com.wormzjl.icheme.science.fluid.network.CoolingTower.Draft.INDUCED,towerAuto,canEdit(),temperatureUnit.symbol(),FluidDeviceScreen::tr):heat()!=null?HeatControlColumn.sideSelector(controlInput(),FluidDeviceScreen::tr):List.<Column.Row>of();
         var input=new DeviceColumn.Input(data.kind(),canEdit(),switchable(),powerOn,pressureUnit.symbol(),temperatureUnit.symbol(),flowRateUnit.suffix(),valve,opening,
             view.filter()!=null&&!view.filter().captured().empty(),level(),junction,lead,phases(),meters(),drive(),power(),suction());
         return data.controls().fixedMover()?input.withFixedDuty(tr(data.kind()==TopologyCompiler.Kind.PUMP?"inline.pump_rating":"inline.compressor_rating",value(data.controls().volumeFlow()*3600))):input;
@@ -1026,6 +1085,8 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         if(action.startsWith("side:"))FluidNetwork.openPartner(menu);
         else if(action.equals("open_driver"))com.wormzjl.icheme.network.MachineNetwork.openDriver(menu.containerId,menu.position(),menu.identity());
         else if(action.equals("recover")){FluidNetwork.recoverSolids(menu,revision);message=tr("waiting");}
+        // A solid still's fuel slot (W6): an item move, sent at once; the page's next bucket shows the slot.
+        else if(action.equals("still_fuel:load")||action.equals("still_fuel:unload")){FluidNetwork.stillFuel(menu,action.endsWith(":load"));message=tr("waiting");}
         else{
             switch(action){
                 case "tower:manual","tower:auto"->towerAuto=action.endsWith(":auto");
@@ -1033,6 +1094,8 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
                 case "power:off","power:on"->powerOn=action.endsWith(":on");
                 case "valve:mass"->valveSource=com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.MASS_FLOW;
                 case "valve:volume"->valveSource=com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.VOLUME_FLOW;
+                case "still_firing:off","still_firing:on"->stillFiring=action.endsWith(":on");
+                case "still_reflux:closed","still_reflux:open"->stillOpen=action.endsWith(":open");
                 default->{}
             }
             rebuild();

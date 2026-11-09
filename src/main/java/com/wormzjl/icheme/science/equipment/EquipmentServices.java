@@ -385,6 +385,10 @@ public final class EquipmentServices {
                                 high,
                                 front == 5 ? new double[] {0, 0, -1} : new double[] {-1, 0, 0});
             power = socket(low, high, neg(LineGeometry.step(data.face())));
+        } else if (electricStill(shape)) {
+            // An electric still's FE gland (batch 2026-11-09-batch-distiller, W6): as every powered unit's, on its terminal
+            // box's face opposite the data socket.
+            power = socket(low, high, neg(LineGeometry.step(data.face())));
         }
         double[] entry = null;
         if (anchor != null && !deck) {
@@ -404,6 +408,11 @@ public final class EquipmentServices {
             case MOTOR, GENERATOR, AIR_COOLER, INDUCED_DRAFT_COOLING_TOWER, VERTICAL_HEATER, CABIN_HEATER -> true;
             default -> false;
         };
+    }
+
+    /** Whether {@code shape} is a batch still heated electrically: its terminal box takes FE (batch 2026-11-09-batch-distiller, W6). */
+    public static boolean electricStill(EquipmentShape shape) {
+        return shape.kind() == EquipmentShape.Kind.BATCH_STILL && shape.still().heater() == BatchStillOptions.Heater.ELECTRIC;
     }
 
     private static Plan empty() {
