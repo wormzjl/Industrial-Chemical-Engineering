@@ -6,7 +6,7 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
 
 ## Documents
 
-- [OPEN_DATA_PLAN.md](OPEN_DATA_PLAN.md): expected behaviour, the data today, work packages O1 to O11 and decisions E1 to E34.
+- [OPEN_DATA_PLAN.md](OPEN_DATA_PLAN.md): expected behaviour, the data today, work packages O1 to O11 and decisions E1 to E36.
 - [NIST_REDERIVATION_REVIEW.md](NIST_REDERIVATION_REVIEW.md): O1 and O2, what the open re-derivation moved, the measurements and the owner decisions.
 - [CRUDE_GRADES_REVIEW.md](CRUDE_GRADES_REVIEW.md): research R1 and the production data. Grade specifications and the generation method on the shared cuts, cut viscosity candidates, the mixture rule and its open refit, the validation against ECCC records.
 - [CUT_VISCOSITY_REVIEW.md](CUT_VISCOSITY_REVIEW.md): O4, the Twu cut tables and the one-term mixture term, the bit-for-bit proof and what moved.
@@ -26,6 +26,8 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
 - [CLASSICAL_STALL_APPLY_REVIEW.md](CLASSICAL_STALL_APPLY_REVIEW.md): E30 applied. Part 1, option (a): the column takes the network's water (wet revisions r32/r33), the gap per case, the moved pins, the network proof. Part 2: the stall fix, form H (landed), with every form tried.
 - [WARM_CARRYOVER_REVIEW.md](WARM_CARRYOVER_REVIEW.md): E32 and E33. The warm restart of carry-over columns, why it failed (the hydraulic profile; two steady states of a flowsheet) and the revert.
 - [CONDENSER_CARRYOVER_REVIEW.md](CONDENSER_CARRYOVER_REVIEW.md): E31. Tray 1's free water is carried over to the condenser drum. The review covers the null SAT lever, what was built, the entrainment limit (warn, option (a)) and the open choices.
+- [COLD_FURNACE_STALL_REVIEW.md](COLD_FURNACE_STALL_REVIEW.md): E36. The cold furnace sheet's stage-30 stall after the merge of main: the heavy tails sink below their floor, and the damped descent over the dead coordinates settles 46 K hot. Forms S1 and S2 measured; S2 landed.
+- [MERGE_REVIEW.md](MERGE_REVIEW.md): the 0.23.0 merge preparation of the branch's three batches (E35). It covers the merge of main, the re-pins, E36, the tooling cleanup, the translations, the code guide, the version and the final lane.
 
 ## Code areas
 
@@ -124,14 +126,21 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
   - Bulletin 627, read from the page images: 6 of the 10 limits entered from memory are confirmed, and butene-1 and the 2-butenes are corrected. Carbonyl sulfide has no entry, and isopentane has no upper limit.
   - S1 (stored heat) and S2 (formation enthalpy and formula) give the same heats on all 41 records; only S2 gives O2 demand and flue gas. Each form passes its 21 tests.
   - The owner kept the cut heats on Cragoe's basis (A), and the limit gaps ship as built.
+- 2026-11-08 and 2026-11-09: merge preparation (E35, [MERGE_REVIEW.md](MERGE_REVIEW.md)).
+  - Main merged in `0d0499f11`; the re-pins for main's D42 in `fcde043f3`; translations in `2cd2a4a5d`.
+  - Tooling cleanup `f4130065f`: the sub-record lookups that only the data gates read moved to the test helper `SubRecords`. Code guide: `06052fc6e`.
+- 2026-11-09: E36 ([COLD_FURNACE_STALL_REVIEW.md](COLD_FURNACE_STALL_REVIEW.md)). After the merge, the cold furnace sheet failed at 4 of 7 duties.
+  - Form S2 landed in `6e5c4efae`: when the Newton step fails, a free point that sank below its floor releases the attempt to the support refresh.
+  - Results: furnace 7 of 7; medium grid 10/10 (8/10) at 2,715k polls (5,904k); Tia Juana 10/10.
+  - The steam resume's contract moved to steam ×1.5.
 
 ## Open items
 
 - Next:
   1. O10's stall fix (E30): landed as form H (`28d3bd420`, the owner's "Yes, land H"). [CLASSICAL_STALL_APPLY_REVIEW.md](CLASSICAL_STALL_APPLY_REVIEW.md) part 2 has the forms tried and the runs.
      - A partial fix: medium grid 5/10 to 8/10, no point lost that HEAD converges, polls -5 %, every root kept.
-     - Remaining limit: 636 and 644 K. Whole trace tails sink with nothing live beyond them, so no point is a cut path; after the refresh the state does not close (residual 1e-4 to 1e-3). Warm starts are unaffected.
-     - The steam resume is still reached on the half-steam wet preset; it stays.
+     - Remaining limit, closed by E36 (S2, `6e5c4efae`): 636 and 644 K. Whole trace tails sank with nothing live beyond them, so no point was a cut path, and the damped descent settled short of the root. Both now converge.
+     - The steam resume is reached on steam ×1.5 only (1 of E30's 5 cases, since E36); it stays.
   2. The retrain (E26) runs in its own session, `neural-retrain`: branch `claude/neural-retrain-open-data-712a75`, batch `2026-11-05-neural-retrain`. Its plan, `NEURAL_RETRAIN_PLAN.md`, with `NEURAL_RETRAIN_DATA.md` (`138b0024e`), was approved by the owner on 2026-11-05: "Approve all A" (D1 to D5). The owner also allowed the torch and numpy download. N0 and N1 run now, on lane 2. N2 waits until O10 states whether its fix changes a formulation revision. M1, the timing run, waits for a free machine. The same day the owner asked for four plan changes:
      - tolerate about 5 % unknown compounds, with research into a model structure that allows it;
      - a VDU data set;
@@ -148,8 +157,8 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
      The owner commands the session directly since 2026-11-05 ("I'll take command of the neuro thread directly"). This session no longer relays its decisions. The session uses Gradle lane 1 while this worktree builds on lane 2.
   3. O11: CO2 in the world list with its dry-ice crystal (E25), applied with option A (E27) and the `kij_pr.dat` erratum (E28); not merged. Open: the final lane (fluid GameTests, `equipmentGates`, `holdGates`, `test slowGates`) and the code guide chapters named in CO2_CRYSTAL_APPLY_REVIEW.md. The d3-r2 bump moves the identity of every view the library gives a pair (state only).
   4. O5: done (`2f59caa62`, `4e2a77b9f`, `bc471a90c`, `b89cb024e`; [UNUSED_DATA_APPLY_REVIEW.md](UNUSED_DATA_APPLY_REVIEW.md)). Still waiting for E26: the neural files, and the manifest that hashes the removed `tools/neural/fit_methane.py`. Kept: `tools/spine-join-measurement/build-spine-records.mjs`, the generator the 4 spine records name. The Tia Juana `crude_unit.json` test copy is read by `UtilityRegulationTest`; it now lists CarbonDioxide.
-  5. O9: done as form S2 (E34, `f9ff89dec`; [COMBUSTION_DATA_APPLY_REVIEW.md](COMBUSTION_DATA_APPLY_REVIEW.md)). At merge prep, `thermochemistry(...)`, `flammability(...)` and W5b's `freezingPoint(...)` have only test callers, so the rule that `src/main` holds only code the game reaches needs one decision for the three.
-  6. The translation commit (en_us changed in O3 and later), then the final lane on the merged code (E19). It must re-check the fluid GameTests and the hold-gate sample sheets (`ColumnSizingSampleTest`, `SizeAllSampleTest`, `UnitSizingSampleTest`, `LineSizingSampleTest`, `UtilityRegulationTest`, `FlowsheetColumnTest`, `ColumnEjectorTest`).
+  5. O9: done as form S2 (E34, `f9ff89dec`; [COMBUSTION_DATA_APPLY_REVIEW.md](COMBUSTION_DATA_APPLY_REVIEW.md)). At merge prep, `thermochemistry(...)`, `flammability(...)` and W5b's `freezingPoint(...)` have only test callers, so the rule that `src/main` holds only code the game reaches needs one decision for the three. Decided at the tooling cleanup: the three lookups moved to the test helper `SubRecords` (`f4130065f`).
+  6. The translation commit is `2cd2a4a5d` (en_us changed in O3 and later). The final lane on the merged code (E19) is next. It must re-check the fluid GameTests and the hold-gate sample sheets (`ColumnSizingSampleTest`, `SizeAllSampleTest`, `UnitSizingSampleTest`, `LineSizingSampleTest`, `UtilityRegulationTest`, `FlowsheetColumnTest`, `ColumnEjectorTest`).
 - E31 (condenser carry-over): the warm route is settled, carry-over columns re-solve cold (E33).
   - The furnace-on-duty sheet has two steady states ([WARM_CARRYOVER_REVIEW.md](WARM_CARRYOVER_REVIEW.md) section 3). Cold re-solves always show one; which is stable was not measured.
   - Owner choices ([CONDENSER_CARRYOVER_REVIEW.md](CONDENSER_CARRYOVER_REVIEW.md) section 6):
@@ -164,7 +173,7 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
 
   Until then the column refuses islands that hold a crystal. The open design points are in E29.
 - Fixed, 2026-11-05 (E21, `b96c1e810`): `FluidTpEquilibriumPhUvTest.freeWaterRoundTripsAndBoiling`, which failed from O7 step 1 (`570c8441c`).
-- Code guide, at merge: `documentation/reference/code-guide/equilibrium-engine.md` (line 191, and the table at lines 364-365) still describes the fixed point and the bisection, and names `PARTIAL_PRESSURE_BISECTIONS` and `PARTIAL_PRESSURE_FIXED_POINT_STEPS`. E21 deleted both. Since E21 the constants are `PARTIAL_PRESSURE_TRIALS` 70, `PARTIAL_PRESSURE_CLOSURE` 1e-13, `PARTIAL_PRESSURE_BRACKET_ULPS` 4, `PARTIAL_PRESSURE_TOLERANCE` 1e-8 and `PARTIAL_PRESSURE_ACCEPTANCE` 1e-6. Since O5, `thermo-materials.md` and the guide's `README.md` (line 183) must say that the pilot package is a test overlay.
+- Code guide: done in `06052fc6e`. `equilibrium-engine.md` describes E21's bracket and regula falsi and lists its constants (`PARTIAL_PRESSURE_TRIALS` 70, `PARTIAL_PRESSURE_CLOSURE` 1e-13, `PARTIAL_PRESSURE_BRACKET_ULPS` 4, `PARTIAL_PRESSURE_TOLERANCE` 1e-8, `PARTIAL_PRESSURE_ACCEPTANCE` 1e-6). `thermo-materials.md` and the guide's `README.md` say that the pilot package is a test overlay.
 - The neural model (E6, E26): the current model stays until a retrained one replaces it. It must not ship in a public release: its sidecar stores the ExxonMobil compositions. O8 shows it never helps today, and in the game it only spends its probe cap.
 - NIST copies: removed in O5 (`2f59caa62`, `4e2a77b9f`), except `build-spine-records.mjs` (kept, see item 4).
 - E11 limit: the dilbit reads API 29 and about 19 times too thin; a dense second cut family is the fix (CRUDE_GRADES_REVIEW.md 3.5-3).
@@ -172,4 +181,4 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
   - ExxonMobil values in git history;
   - the local assay PDFs in `research/`;
   - the 542 MB of tracked `tools/`.
-- O3 not run: the three edited fluid GameTests (`MaterialReloadGameTests`, `FluidPumpStartupGameTests`, `FluidServerBenchmark`); `LanguageFilesTest` and `UnitTextTest` wait for the translation commit.
+- O3 not run: the three edited fluid GameTests (`MaterialReloadGameTests`, `FluidPumpStartupGameTests`, `FluidServerBenchmark`), and `LanguageFilesTest` and `UnitTextTest` after the translation commit `2cd2a4a5d`. The final lane runs them.
