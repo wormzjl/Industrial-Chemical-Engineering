@@ -9,8 +9,12 @@ probe="$here/../custom-equipment-rendering-poc/frame-time-probe/FrameTimeProbe.j
 bridge="$here/../minecraft-mcp-bridge/minecraft-mcp-1.21.1-neoforge-v0.4.18.jar"
 mkdir -p "$logs"
 
-busy=$(powershell -NoProfile -Command "@(Get-CimInstance Win32_Process -Filter \"Name='java.exe'\" | Where-Object { \$_.CommandLine -match 'gradle-worker-classpath|fml.modFolders' }).Count" | tr -d '\r')
+# Test executors, GameTest servers and clients count; an idle compiler worker daemon (a build's leftover) does not, but
+# the machine's CPU over 5 s must also be low (16 threads: one busy Gradle worker is about 6 %).
+busy=$(powershell -NoProfile -Command "@(Get-CimInstance Win32_Process -Filter \"Name='java.exe'\" | Where-Object { \$_.CommandLine -match 'Gradle Test Executor|fml.modFolders' }).Count" | tr -d '\r')
 if [ "$busy" != "0" ]; then echo "lane.sh: $busy other test or game JVMs run; a timing lane runs alone" >&2; exit 2; fi
+cpu=$(powershell -NoProfile -Command "\$s=1..5|%{ (Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor -Filter \"Name='_Total'\").PercentProcessorTime; Start-Sleep 1 }; [math]::Round((\$s|Measure-Object -Average).Average)" | tr -d '\r')
+if [ "${cpu:-100}" -gt 25 ]; then echo "lane.sh: the machine's CPU is at ${cpu} %; a timing lane runs alone" >&2; exit 2; fi
 free=$(powershell -NoProfile -Command "[math]::Round((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory/1MB,1)" | tr -d '\r')
 echo "lane.sh: $label on $tree, free RAM ${free} GB"
 

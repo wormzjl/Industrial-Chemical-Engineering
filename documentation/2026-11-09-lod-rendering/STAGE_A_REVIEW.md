@@ -30,7 +30,7 @@ Each renderer keeps its old range as the upper bound, so no tier draws more than
 - `RenderLodTest` (new, quick suite): reference k, the plan's switch distances, scale and its bounds, hysteresis, per-object memory, box distance.
 - `GaugeAccessoriesTest.housingIsClosedAtObliqueAnglesAndEveryConnectorRemainsFinite`: the plain and far housings are closed envelopes inside the full radius; the near housing keeps 261 quads.
 - Not run: equipmentGates (no test there reads the housings; `InstrumentGeometry`'s static init is covered by `GaugeAccessoriesTest`), GameTests (server only; no client renderer loads there).
-- Not measured: frame time. The 10–20 ms per 100 dials remains an estimate until the owner's FPS pair (plan L4).
+- Frame time: measured afterwards in FPS_PAIR_REVIEW.md (100 gauges: 10.7 ms to 1.6 ms facing them, to 0.6 ms facing away).
 - Not seen in game: the switch points and any popping. Offered to the owner (AGENTS.md: one check per task, owner-started).
 
 Code guide: not updated (merge preparation waits for the owner).
