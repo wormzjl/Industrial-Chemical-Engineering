@@ -1688,8 +1688,9 @@ public final class V3ColumnCalculator {
             // triples the cost of every case that is on its way to a typed failure.
             //
             // A release is not a stall. The solve held a point at its floor and stopped earning steps because of
-            // it (STALLED_SUPPORT_FLOOR): the refresh that drops that point is the next step of the same
-            // solve, so it is neither counted against the stalled limit nor cut to the polish budget.
+            // it, or a free point sank below its floor and left no Newton step (STALLED_SUPPORT_FLOOR): the
+            // refresh that drops that point is the next step of the same solve, so it is neither counted against
+            // the stalled limit nor cut to the polish budget.
             boolean converged = attempt instanceof V3SimultaneousColumnSolver.Attempt.Converged;
             boolean released = attempt instanceof V3SimultaneousColumnSolver.Attempt.Failure heldFailure
                     && heldFailure.code().equals("STALLED_SUPPORT_FLOOR");

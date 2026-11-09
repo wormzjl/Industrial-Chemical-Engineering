@@ -54,6 +54,16 @@ final class V3SimultaneousColumnSolver {
      * PC8 vapour on tray 26 sank to ln -572 while PC8 was major on trays 0 to 25, and its drop pruned 52 live
      * phases. A point whose removal cuts nothing is a trace and is free: holding those (F1b) stalled 43
      * healthy cold solves whose traces pass below the floor on their way to a root.</p>
+     *
+     * <p>A free point that has sunk below this level is no longer an unknown either. When the Newton step fails
+     * while one is in the system (the LU is singular, or no Armijo step exists along the direction), the attempt
+     * goes to the support refresh ({@code STALLED_SUPPORT_FLOOR}), which removes it, instead of a damped descent
+     * over a system that still counts it. Measured (E36, batch 2026-11-04-open-thermo-data): on the furnace
+     * sheet's cold first pass the 30-stage rung's heavy tails sank 5 to 12 e-folds below their floor by
+     * iteration 9, the LU was singular for the remaining 119 iterations, and the damped descent settled 46 K hot
+     * on trays 12 to 22, short of the root at a scaled residual of 1.6e-4. Four of seven duties from 69.9 to
+     * 70.9 MW failed; with the release all seven converge. A point that began the solve below its floor, one the
+     * support keeps for a structural reason, never releases: the refresh would keep it.</p>
      */
     private static final double HELD_POINT_LOG_FLOW =
             DeterministicMath.log(V3TruncationSupport.TRACE_FLOOR_FRACTION) - 1.0e-3;
@@ -363,7 +373,7 @@ final class V3SimultaneousColumnSolver {
         int localBlockAttempts = 0;
         int consecutiveLocalBlockRejections = 0;
         boolean localBlocksDisabled = false;
-        SupportPoints points = SupportPoints.of(problem, coordinates);
+        SupportPoints points = SupportPoints.of(problem, coordinates, coordinates.encode(initialState));
         // Consecutive accepted steps that held a point, and the last window's residuals (a ring).
         int heldIterations = 0;
         double[] heldResiduals = new double[STALL_WINDOW_ITERATIONS + 1];
@@ -520,6 +530,13 @@ final class V3SimultaneousColumnSolver {
                 }
                 V3BandedPivotedSolver.Result.Failure failure = (V3BandedPivotedSolver.Result.Failure) linearResult;
                 double[] baseCoordinates = coordinates.encode(state);
+                // See HELD_POINT_LOG_FLOW: a free point that sank is not an unknown, so the refresh removes it.
+                if (points.sank(baseCoordinates)) {
+                    return new Attempt.Failure("STALLED_SUPPORT_FLOOR", state, new Evidence(iteration, maximumResidual,
+                            merit, 0.0, failure.pivotGrowth(),
+                            "a point that sank below its support floor left the Newton system singular",
+                            lastConvergenceEvidence));
+                }
                 AcceptedTrial descentTrial = dampedGaussNewtonTrial(
                         evaluator, coordinates, baseCoordinates, jacobian, residual, frozenScales, merit, layout, workspaceFactory,
                         maximumLineSearchSteps, control, budget, linearWorkspace, points);
@@ -549,6 +566,12 @@ final class V3SimultaneousColumnSolver {
                 frozenFineJacobianSteps = 0;
                 iteration--;
                 continue;
+            }
+            if (usedDescentFallback && points.sank(baseCoordinates)) {
+                return new Attempt.Failure("STALLED_SUPPORT_FLOOR", state, new Evidence(iteration, maximumResidual,
+                        merit, 0.0, linearSuccess.pivotGrowth(),
+                        "a point that sank below its support floor left no Armijo step along the Newton direction",
+                        lastConvergenceEvidence));
             }
             if (usedDescentFallback) {
                 acceptedTrial = dampedGaussNewtonTrial(
@@ -1021,21 +1044,24 @@ final class V3SimultaneousColumnSolver {
         private final double[] lift;
         private final boolean[] removed;
         private final boolean[] live;
+        /** The point began the solve live and away from the feed tray: one the refresh drops if it sinks. */
+        private final boolean[] startedLive;
 
         private SupportPoints(int[] first, int[] second, int[] node, int[][] byComponent,
-                              V3TruncationSupport.Reachability reachability, int nodeCount) {
+                              V3TruncationSupport.Reachability reachability, int nodeCount, boolean[] startedLive) {
             this.first = first;
             this.second = second;
             this.node = node;
             this.byComponent = byComponent;
             this.reachability = reachability;
+            this.startedLive = startedLive;
             level = new double[first.length];
             lift = new double[first.length];
             removed = new boolean[nodeCount];
             live = new boolean[nodeCount];
         }
 
-        static SupportPoints of(V3ColumnProblem problem, V3DryMeshCoordinateMap coordinates) {
+        static SupportPoints of(V3ColumnProblem problem, V3DryMeshCoordinateMap coordinates, double[] initialCoordinates) {
             int count = coordinates.coordinateCount();
             int components = problem.activeComponentBasis().componentCount();
             int[] first = new int[count];
@@ -1067,9 +1093,34 @@ final class V3SimultaneousColumnSolver {
             for (int point = 0; point < points; point++) {
                 byComponent[component[point]][filled[component[point]]++] = point;
             }
+            int feed = problem.topology().feedTrayNumber();
+            boolean[] startedLive = new boolean[points];
+            for (int point = 0; point < points; point++) {
+                startedLive[point] = node[point] != feed
+                        && level(initialCoordinates, first[point], second[point]) >= LIVE_LOG_FLOW;
+            }
             return new SupportPoints(Arrays.copyOf(first, points), Arrays.copyOf(second, points),
                     Arrays.copyOf(node, points), byComponent, problem.truncationSupport().reachability(problem),
-                    problem.topology().nodeCount());
+                    problem.topology().nodeCount(), startedLive);
+        }
+
+        /** A point's level: its larger phase, in the log-flow coordinates. */
+        private static double level(double[] coordinates, int liquid, int vapor) {
+            return vapor < 0 ? coordinates[liquid] : Math.max(coordinates[liquid], coordinates[vapor]);
+        }
+
+        /**
+         * Whether a point that began this solve live, away from the feed tray, now sits below the hold level: a
+         * free point that sank, since a held cut path stops on that level. The support refresh drops it, as it
+         * drops any point below its floor; the feed tray is left out because {@code V3TruncationSupport.derive}
+         * keeps it whole. The margin only absorbs the rounding of a held point's lift onto the level itself.
+         */
+        boolean sank(double[] coordinates) {
+            for (int point = 0; point < first.length; point++) {
+                if (startedLive[point]
+                        && level(coordinates, first[point], second[point]) < HELD_POINT_LOG_FLOW - 1.0e-9) return true;
+            }
+            return false;
         }
 
         /**
