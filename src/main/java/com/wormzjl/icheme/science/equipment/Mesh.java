@@ -69,7 +69,13 @@ public final class Mesh {
         /** Fixed shaft role markings, independent of the equipment's paint. */
         SHAFT_INPUT(1, -1), SHAFT_OUTPUT(1, -1),
         /** Equipment service cabinets and the protected, equipment-owned instrument raceway finish. */
-        SERVICE_CASE(1,Paint.BODY), SERVICE_COVER(1,Paint.BODY), INSTRUMENT_STEEL(1,-1), INSTRUMENT_CONDUIT(1,-1);
+        SERVICE_CASE(1,Paint.BODY), SERVICE_COVER(1,Paint.BODY), INSTRUMENT_STEEL(1,-1), INSTRUMENT_CONDUIT(1,-1),
+        /**
+         * A batch still's own finishes (batch 2026-11-09-batch-distiller), unpainted: its copper pot, helmet, column and
+         * lines, its brick setting and flue, its cast-iron doors, hoops and valve, its wooden worm tub; a block's texture
+         * a metre.
+         */
+        COPPER(1, -1), BRICK(1, -1), IRON(1, -1), WOOD(1, -1);
 
         private final double period;
         private final int channel;

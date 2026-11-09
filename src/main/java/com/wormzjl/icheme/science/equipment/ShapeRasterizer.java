@@ -508,6 +508,23 @@ public final class ShapeRasterizer {
         return geometry(shape).terminal;
     }
 
+    /**
+     * A design's named parts, for their animation (batch 2026-11-09-batch-distiller, phase 3): each part's box in the box's
+     * coordinates, low corner then high corner; empty for a shape that names none.
+     */
+    public static Map<String, double[]> marks(EquipmentShape shape) {
+        if (!shape.designed()) return Map.of();
+        var unit = ProcessUnit.of(shape);
+        var transform = shape.transform();
+        var out = new java.util.LinkedHashMap<String, double[]>();
+        unit.marks.forEach((name, b) -> {
+            var a = transform.point(new double[]{b[0], b[1], b[2]});
+            var c = transform.point(new double[]{b[3], b[4], b[5]});
+            out.put(name, new double[]{Math.min(a[0], c[0]), Math.min(a[1], c[1]), Math.min(a[2], c[2]), Math.max(a[0], c[0]), Math.max(a[1], c[1]), Math.max(a[2], c[2])});
+        });
+        return java.util.Collections.unmodifiableMap(out);
+    }
+
     /** The cells nozzle {@code k} may reach at its largest size: those whose keys carry its size. */
     public static Set<Cell> nozzleCells(EquipmentShape shape, int k) {
         return geometry(shape).nozzleCells.get(k);

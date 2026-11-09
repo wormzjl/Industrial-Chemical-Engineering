@@ -58,6 +58,10 @@
     "guard": "icheme:block/equipment_guard",
     "gauge_scale": "minecraft:block/white_concrete",
     "glass": "icheme:block/gauge_glass",
+    "copper": "minecraft:block/copper_block",
+    "brick": "minecraft:block/bricks",
+    "iron": "minecraft:block/anvil",
+    "wood": "minecraft:block/spruce_planks",
     "particle": "icheme:block/vessel_shell"
   }
 }

@@ -43,6 +43,12 @@ class EquipmentLayoutGoldenTest {
             shapes.add(EquipmentShape.unit(Kind.EXCHANGER, diameter, length, Heading.NORTH, ProcessUnit.defaultSupport(Kind.EXCHANGER, diameter, length))
                     .withExchangerType(ExchangerType.CROSSFLOW));
         }
+        // A batch still's other layouts (batch 2026-11-09-batch-distiller, W2), at its middle pot: a burner with the
+        // tallest column, an electric still without a condenser, and a fired one with the shortest column.
+        for (var options : List.of(new BatchStillOptions(BatchStillOptions.Heater.LIQUID, BatchStillOptions.Condenser.BUILT_IN, BatchStillOptions.MAX_STAGES),
+                new BatchStillOptions(BatchStillOptions.Heater.ELECTRIC, BatchStillOptions.Condenser.NONE, 0),
+                new BatchStillOptions(BatchStillOptions.Heater.SOLID, BatchStillOptions.Condenser.BUILT_IN, BatchStillOptions.MIN_STAGES)))
+            shapes.add(EquipmentShape.unit(Kind.BATCH_STILL, 500, 1, Heading.NORTH, 0).withStill(options));
         return shapes;
     }
 
@@ -54,6 +60,8 @@ class EquipmentLayoutGoldenTest {
     static String line(EquipmentShape shape) {
         var layout = ShapeRasterizer.layout(shape);
         var printed = shape.toString().replace(", baseSpeed=0.0]","]");
+        // Shape fields 11: a shape with the default still options prints as it did before they existed.
+        if (shape.still().equals(BatchStillOptions.DEFAULT)) printed = printed.replace(", still=" + BatchStillOptions.DEFAULT + "]", "]");
         if (shape.exchangerType() == ExchangerType.STANDARD) printed = printed.replace(", exchangerType=STANDARD]", "]").replaceAll(", exchangers=Exchangers\\[condenser=STANDARD, trim=STANDARD, coolers=\\[[A-Z, ]*\\]\\]", "");
         var b = new StringBuilder(printed).append(" | box ").append(shape.sizeX()).append(' ').append(shape.sizeY()).append(' ').append(shape.sizeZ())
                 .append(" | shell ").append(layout.shell().size()).append(" interior ").append(layout.interior().size())

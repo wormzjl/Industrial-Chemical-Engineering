@@ -293,9 +293,11 @@ public final class EquipmentServices {
                 high = plus(low, new double[] {CASE_ACROSS, CASE_HEIGHT, CASE_ALONG});
                 front = 2;
             }
-            case STEAM_TURBINE -> {
+            // A turbine's governor enclosure; a batch still's junction box set into its brick setting, or its electric
+            // heater's terminal box (batch 2026-11-09-batch-distiller): the socket on its left side, on the pot's row.
+            case STEAM_TURBINE, BATCH_STILL -> {
                 if (unit == null || unit.serviceHousing == null)
-                    throw new IllegalArgumentException("Missing native turbine governor enclosure");
+                    throw new IllegalArgumentException("Missing native service enclosure: " + kind);
                 var b = unit.serviceHousing;
                 low = north.transform().point(Arrays.copyOfRange(b, 0, 3));
                 high = north.transform().point(Arrays.copyOfRange(b, 3, 6));

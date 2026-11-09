@@ -16,22 +16,7 @@ class EquipmentServicesTest {
                 if (services.data() == null) continue;
                 assertFalse(services.enclosures().isEmpty(), shape.toString());
                 for (var heading : EquipmentShape.Heading.values()) {
-                    var s =
-                            new EquipmentShape(
-                                    shape.kind(),
-                                    shape.diameter(),
-                                    shape.tangentLength(),
-                                    shape.orientation(),
-                                    heading,
-                                    shape.support(),
-                                    shape.trays(),
-                                    shape.connections(),
-                                    shape.bank(),
-                                    shape.boot(),
-                                    shape.outlet(),
-                                    shape.towerBank(),
-                                    shape.duty(),
-                                    shape.exchangerType());
+                    var s = shape.withFront(heading);
                     var current = ShapeRasterizer.services(s);
                     assertNotNull(current.data(), s.toString());
                     var normal = ShapeRasterizer.renderBody(s, RenderDetail.NORMAL);
@@ -90,6 +75,38 @@ class EquipmentServicesTest {
                 assertEquals(.5, at[1], 1e-9, shape + ": on the bottom block");
                 assertEquals(Math.floor(at[across]) + .5, at[across], 1e-9, shape + ": centred on its block");
                 assertTrue(at[axis] > 0 && at[axis] < size[axis], shape + ": the gland inside the frame");
+                for (var c : services.enclosures())
+                    for (int a = 0; a < 3; a++)
+                        assertTrue(c.low()[a] >= 0 && c.high()[a] <= size[a], shape + ": its box inside the frame");
+            }
+    }
+
+    /**
+     * A batch still's data gland sits on its junction box (batch 2026-11-09-batch-distiller, W2): a fired still's on the
+     * brick setting's left side, an electric one's on its terminal box, on the centre of the bottom block's face it opens
+     * to, inside the frame, its box behind it and inside the frame, at every pot, option and heading.
+     */
+    @Test
+    void aStillsDataGlandSitsCentredOnItsBox() {
+        var kind = EquipmentShape.Kind.BATCH_STILL;
+        var stills = new ArrayList<EquipmentShape>();
+        for (double litres : ProcessUnit.sizes(kind)) stills.add(EquipmentShape.unit(kind, litres, 1, EquipmentShape.Heading.NORTH, 0));
+        stills.addAll(ProcessUnitTest.stillOptions());
+        for (var still : stills)
+            for (var heading : EquipmentShape.Heading.values()) {
+                var shape = still.withFront(heading);
+                var services = ShapeRasterizer.services(shape);
+                var data = services.data();
+                assertNotNull(data, shape.toString());
+                assertNull(services.power(), shape + ": no FE socket before phase 2");
+                double[] at = {data.x(), data.y(), data.z()}, size = {shape.sizeX(), shape.sizeY(), shape.sizeZ()};
+                var n = LineGeometry.step(data.face());
+                int axis = n[0] != 0 ? 0 : 2, across = 2 - axis;
+                assertEquals(0, n[1], shape + ": a side face");
+                assertEquals(.5, at[1], 1e-9, shape + ": on the bottom block");
+                assertEquals(Math.floor(at[across]) + .5, at[across], 1e-9, shape + ": centred on its block");
+                assertTrue(at[axis] > 0 && at[axis] < size[axis], shape + ": the gland inside the frame");
+                assertTrue(services.inside(new double[]{at[0] - n[0] * .06, at[1], at[2] - n[2] * .06}), shape + ": its box behind it");
                 for (var c : services.enclosures())
                     for (int a = 0; a < 3; a++)
                         assertTrue(c.low()[a] >= 0 && c.high()[a] <= size[a], shape + ": its box inside the frame");

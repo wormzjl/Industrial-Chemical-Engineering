@@ -130,6 +130,8 @@ class SentDesignTagsTest {
                     // Appended defaults leave the historical saved payload untouched.
                     if (!expected.contains("baseSpeed=")) expected = expected.replaceAll("(exhaust=[0-9.Ee+-]+)\\]", "$1, baseSpeed=0.0]");
                     if (!expected.contains("exchangerType=")) expected = expected.replace("], column=", ", exchangerType=STANDARD], column=");
+                    if (!expected.contains("still=")) expected = expected.replaceAll("(exchangerType=[A-Z_]+)\\], column=",
+                            "$1, " + java.util.regex.Matcher.quoteReplacement("still=" + com.wormzjl.icheme.science.equipment.BatchStillOptions.DEFAULT) + "], column=");
                     var design = read.designs().getFirst();
                     if (!expected.contains("exchangers=Exchangers[") && design.shape().trays() != null && design.shape().trays().components() != null) {
                         var pattern = java.util.regex.Pattern.compile("(units=Units\\[condenser=\\d+, kettle=\\d+, coolers=\\[[0-9, ]*\\], trim=\\d+\\])\\]");

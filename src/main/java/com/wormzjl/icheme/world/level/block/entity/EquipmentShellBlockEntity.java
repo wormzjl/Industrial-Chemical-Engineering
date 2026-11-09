@@ -589,6 +589,14 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
         }
         if (shape.kind() == EquipmentShape.Kind.AIR_COOLER) tag.putIntArray("Bank", shape.bank().encode());
         if(shape.kind()==EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER)tag.putIntArray("TowerBank",shape.towerBank().encode());
+        if (shape.kind() == EquipmentShape.Kind.BATCH_STILL) {
+            // A batch still's options (shape fields 11, batch 2026-11-09-batch-distiller): enums by name.
+            var still = new CompoundTag();
+            still.putString("Heater", shape.still().heater().key());
+            still.putString("Condenser", shape.still().condenser().key());
+            still.putInt("Stages", shape.still().stages());
+            tag.put("Still", still);
+        }
         if (shape.designed() && com.wormzjl.icheme.science.equipment.UnitDesign.of(shape.kind()).hasDuty()) tag.put("Duty", writeDuty(shape.duty()));
     }
 
@@ -599,6 +607,14 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
     public static ShapeRepair.Read readShape(CompoundTag tag) {
         var read=ShapeRepair.read(saved(tag));
         if(read.shape()!=null && tag.contains("ExchangerType")) read=new ShapeRepair.Read(read.shape().withExchangerType(com.wormzjl.icheme.science.equipment.ExchangerType.valueOf(tag.getString("ExchangerType"))),read.retired(),read.repairs());
+        if (read.shape() != null && read.shape().kind() == EquipmentShape.Kind.BATCH_STILL) {
+            // Shape fields 11: a still saved without its options is the default still; a refused field is repaired to its default.
+            var still = tag.getCompound("Still");
+            var repairs = new java.util.ArrayList<>(read.repairs());
+            var options = com.wormzjl.icheme.science.equipment.BatchStillOptions.read(still.contains("Heater") ? still.getString("Heater") : null,
+                    still.contains("Condenser") ? still.getString("Condenser") : null, still.contains("Stages") ? still.getInt("Stages") : null, repairs);
+            return new ShapeRepair.Read(read.shape().withStill(options), read.retired(), repairs);
+        }
         if(read.shape()==null||read.shape().kind()!=EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER)return read;
         try{return new ShapeRepair.Read(read.shape().withTowerBank(com.wormzjl.icheme.science.equipment.TowerBank.decode(tag.getIntArray("TowerBank"))),null,read.repairs());}
         catch(IllegalArgumentException invalid){var repairs=new java.util.ArrayList<>(read.repairs());repairs.add("structure bank -> one cell: "+invalid.getMessage());return new ShapeRepair.Read(read.shape(),null,repairs);}

@@ -38,7 +38,9 @@ public final class Tiles {
     public static final List<Category> CATEGORIES = List.of(
             new Category("streams", List.of(new Tile(FEED, Symbol.FEED, true), new Tile(PRODUCT, Symbol.PRODUCT, true))),
             new Category("piping", List.of(new Tile("valve", Symbol.VALVE, true), new Tile("mixer", Symbol.MIXER, true), new Tile("splitter", Symbol.SPLITTER, true), new Tile("filter", Symbol.FILTER, true))),
-            new Category("vessels", List.of(new Tile("column", Symbol.COLUMN_TOP, true), new Tile("drum", Symbol.DRUM, true), new Tile("storage_tank", Symbol.TANK, true), new Tile("adsorber", Symbol.ADSORBER, false), new Tile("cyclone", Symbol.CYCLONE, false))),
+            new Category("vessels", List.of(new Tile("column", Symbol.COLUMN_TOP, true), new Tile("drum", Symbol.DRUM, true), new Tile("storage_tank", Symbol.TANK, true), new Tile("adsorber", Symbol.ADSORBER, false), new Tile("cyclone", Symbol.CYCLONE, false),
+                    // The batch still (batch 2026-11-09-batch-distiller): drawn only, on the kettle's symbol until its own lands (W7).
+                    new Tile("batch_still", Symbol.KETTLE, false))),
             new Category("heat", List.of(new Tile("exchanger", Symbol.EXCHANGER, true), new Tile("kettle", Symbol.KETTLE, true), new Tile("cooler", Symbol.AIR_COOLER, true), new Tile("fired_heater", Symbol.HEATER, true), new Tile("cooling_tower", Symbol.COOLING_TOWER, false), new Tile("flare", Symbol.FLARE, true))),
             new Category("machines", List.of(new Tile("pump", Symbol.PUMP, true), new Tile("compressor", Symbol.COMPRESSOR, true), new Tile("ejector", Symbol.EJECTOR, true), new Tile("steam_turbine", Symbol.TURBINE, true))),
             new Category("reactors", List.of(new Tile("stirred_reactor", Symbol.REACTOR, false), new Tile("trickle_bed", Symbol.TRICKLE, false), new Tile("ebullated_bed", Symbol.EBULLATED, false), new Tile("fcc_converter", Symbol.FCC, false), new Tile("delayed_coker", Symbol.COKER, false))),
