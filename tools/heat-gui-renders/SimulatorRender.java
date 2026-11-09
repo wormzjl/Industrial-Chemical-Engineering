@@ -93,7 +93,7 @@ public final class SimulatorRender {
     private static StreamProps.Fluids fluids() {
         var model = MaterialRuntime.with(CATALOG, NETWORK, () -> FluidThermodynamics.forNetwork(CATALOG, NETWORK));
         var pack = CATALOG.requirePackage(NETWORK);
-        String key = "gui.icheme.flowsheet.basis.pack." + MaterialCatalog.Package.label(pack.id()).replace(':', '.');
+        String key = "gui.icheme.flowsheet.basis.pack." + pack.id().replace(':', '.');
         return new StreamProps.Fluids(model, pack, id -> CATALOG.name(id).english(), HeatDiagramRender.tr(key));
     }
 
@@ -669,7 +669,7 @@ public final class SimulatorRender {
             int chosen = ready;
             pages.add(page(FileColumns.W, FileColumns.H, skin, (d, s) -> list(d, FileColumns.open(entries, chosen, T))));
             pages.add(page(FileColumns.W, FileColumns.H, skin, (d, s) -> {
-                FileColumns.drawChanges(d.c, d.skin, T.get("flowsheet.file.changes_title", "Gas plant inlet"), FileColumns.changes(updated, FLUIDS, SimulatorRender::columnDoor, T), T.get("flowsheet.file.changes_foot"), d.w, d.h);
+                FileColumns.drawChanges(d.c, d.skin, T.get("flowsheet.file.changes_title", "Gas plant inlet"), FileColumns.changes(updated, FLUIDS, CATALOG, SimulatorRender::columnDoor, T), T.get("flowsheet.file.changes_foot"), d.w, d.h);
                 var slots = com.wormzjl.icheme.client.gui.common.DialogColumns.footer(d.w, d.h, 2);
                 d.skin.button(d.c, slots.get(0), T.get("flowsheet.file.cancel"), Skin.Press.REST, false);
                 d.skin.button(d.c, slots.get(1), T.get("flowsheet.file.open"), Skin.Press.PRIMARY, false);
@@ -1125,6 +1125,63 @@ public final class SimulatorRender {
         return new Flowsheet(sheet.basis(), units, sheet.streams(), sheet.settings(), sheet.sizing(), sheet.unknown());
     }
 
+    /** The law's naphtha (BatchStillTest) at 0.3 mol/s: over the still's 2 h cycle, 2,160 mol, a little over half its 500 L pot. */
+    private static Flowsheet.Feed stillNaphtha() {
+        var amounts = new LinkedHashMap<String, Double>();
+        amounts.put("Isopentane", .06);
+        amounts.put("N-pentane", .09);
+        amounts.put("crude_pc01", .075);
+        amounts.put("crude_pc02", .045);
+        amounts.put("crude_pc03", .03);
+        return new Flowsheet.Feed(300, 1.5e5, amounts, List.of());
+    }
+
+    /**
+     * The batch still (batch 2026-11-09-batch-distiller, W7), on sheets of their own: the Vessels tiles with the still lit and B-101
+     * selected, a pot still and a still with a four-stage column cutting the same naphtha; their Design doors, the column's Batch tab
+     * (the curve) and the pot's; and the Sizing rows after a real Size all. Prints each run's cuts and its closure.
+     */
+    private static void still(Path out) throws Exception {
+        // The editor's drop defaults (SheetEditor.defaults), so the doors show what a dropped still shows.
+        String dropped = "\"volume\":0.5,\"heater\":\"solid\",\"firing\":1,\"condenser\":\"built_in\",\"water\":298.15,\"cycle\":7200,";
+        String cuts = "\"cuts\":[{\"id\":\"1\",\"end\":\"head\",\"value\":333.15},{\"id\":\"2\",\"end\":\"head\",\"value\":393.15}]";
+        var sheet = new Sheet().unit("B-101", "batch_still", 140, 60, "{" + dropped + cuts + "}").feed("NAPHTHA", "B-101", "charge", stillNaphtha(), 40, 70)
+                .product("LIGHT", "B-101", "cut/1", 280, 50).product("HEAVY", "B-101", "cut/2", 280, 80).product("VENT", "B-101", "vent", 260, 20).product("RESIDUE", "B-101", "residue", 200, 130)
+                .unit("B-102", "batch_still", 140, 200, "{" + dropped + "\"stages\":4,\"reflux\":2," + cuts + "}").feed("NAPHTHA-2", "B-102", "charge", stillNaphtha(), 40, 210)
+                .product("LIGHT-2", "B-102", "cut/1", 280, 190).product("HEAVY-2", "B-102", "cut/2", 280, 220).product("VENT-2", "B-102", "vent", 260, 160).product("RESIDUE-2", "B-102", "residue", 200, 270).build();
+        long start = System.nanoTime();
+        var run = FlowsheetEngine.run(sheet, CATALOG, () -> {
+        }, null, FlowsheetSolver.Progress.NONE);
+        double seconds = (System.nanoTime() - start) / 1e9;
+        System.out.printf("still sheet: %s in %.2f s, mass gap %.3g, heat gap %.3g W, notes %s%n", run.status(), seconds, run.massGap(), run.heatGap(), com.wormzjl.icheme.client.gui.flowsheet.NoteText.all(run));
+        for (var id : List.of("B-101", "B-102")) {
+            var r = run.reports().get(id).readings();
+            System.out.printf("%s: batch %.2f h, heat %.1f kW, condenser %.1f kW, fill %.0f %%, distilled %.0f %%, pot end %.1f K, %s steps%n", id, r.get("batch") / 3600, r.get("duty") / 1e3,
+                    r.get("condenser") / 1e3, 100 * r.get("fill"), 100 * r.get("distilled"), r.get("pot_end"), r.get("steps").intValue());
+        }
+        var host = new Host(false, null);
+        sheet(out, "01-still-tile", W, H, List.of("The Vessels tiles: the batch still lit; B-101 selected, a pot still", "B-102 selected: four stages at reflux 2"),
+                List.of(scene(sheet, run, seconds, host, s -> {
+                    s.category = 2;
+                    s.gestures.select(new SheetGestures.Selection(true, "B-101"));
+                }), scene(sheet, run, seconds, host, s -> s.gestures.select(new SheetGestures.Selection(true, "B-102")))));
+        grid(out, "02-still-doors", DW, DH, List.of("B-101's design: pot, heater, worm tub, two head cuts", "B-102's design: the column's stages and reflux", "B-102's Batch tab: the curve",
+                        "B-101's Batch tab", "B-101's streams"),
+                List.of(unit(sheet, run, "B-101", 0), unit(sheet, run, "B-102", 0), unit(sheet, run, "B-102", 2), unit(sheet, run, "B-101", 2), unit(sheet, run, "B-101", 1)));
+        // The Sizing tab after Size all: each still's pot, with its heater's rating, its worm's area and its column's diameter beside the limits.
+        var thermo = new FlowThermo(FluidThermodynamics.forNetwork(CATALOG, NETWORK), CATALOG, NETWORK, () -> {
+        });
+        var all = MaterialRuntime.with(CATALOG, NETWORK, () -> Proposal.sizeAll(sheet, run, thermo, FlowsheetSolver.Progress.NONE));
+        for (var id : List.of("B-101", "B-102")) {
+            var unit = all.sized().units().get(id);
+            System.out.printf("sized %s: %s, lamp %s, closest %s%n", id, unit.size(), unit.rating().lamp(), unit.rating().closest());
+        }
+        var finished = new SimulatorHost.Finished(all.sheet(), all.run(), seconds);
+        var sized = new Sized(finished, new SimulatorRunner.Rated(all.sheet(), finished, all.sized(), true), null);
+        sheet(out, "03-still-sizing", W, H, List.of("B-101 after Size all: the smallest pot that holds the charge and the cycle's spare", "B-102: its column's flood and F-factor rows"),
+                List.of(sized(sized, s -> s.sizing.unit = "B-101"), sized(sized, s -> s.sizing.unit = "B-102")));
+    }
+
     public static void main(String[] args) throws Exception {
         HeatDiagramRender.lang = HeatDiagramRender.lang(Path.of(args[0]));
         FLUIDS = fluids();
@@ -1132,6 +1189,11 @@ public final class SimulatorRender {
         Files.createDirectories(out);
         var jar = Path.of(args.length > 2 ? args[2] : "build/moddev/artifacts/neoforge-21.1.219-client-extra-aka-minecraft-resources.jar");
         HeatDiagramRender.font = Files.exists(jar) ? HeatDiagramRender.GameFont.load(jar) : null;
+        // -Donly=still: the batch still's sheets alone (batch 2026-11-09-batch-distiller, W7).
+        if ("still".equals(System.getProperty("only"))) {
+            still(out);
+            return;
+        }
         // -Donly=ejector: W10's sheets alone, on a sheet of their own.
         if ("ejector".equals(System.getProperty("only"))) {
             ejector(out);
@@ -1318,7 +1380,7 @@ public final class SimulatorRender {
         sheet(out, "22-solve-alone", W, H, List.of("T-101's reflux edited: the loop greys, the column's own feed with it", "Solve alone: T-101 solved on what it had, and what lies after it waits for a Run"),
                 List.of(scene(sheet, null, 0, host, fresh), scene(sheet, null, 0, host, settled)));
         grid(out, "22-column-door-keys", DW, DH, List.of("Solve alone and Templates live", "No stream yet: the hover says why", "During a run"), List.of(doorKeys(sheet, run, host, "T-101", false), doorKeys(columnOnly(sheet), null, host, "T-101", true), doorKeys(sheet, run, running, "T-101", false)));
-        sheet(out, "23-revision-notice", W, H, List.of("A client on a dedicated server whose data differ: a notice, and nothing blocked"), List.of(scene(sheet, run, seconds, host, s -> s.differing = List.of(com.wormzjl.icheme.science.material.MaterialCatalog.Package.label(NETWORK)))));
+        sheet(out, "23-revision-notice", W, H, List.of("A client on a dedicated server whose data differ: a notice, and nothing blocked"), List.of(scene(sheet, run, seconds, host, s -> s.differing = List.of(NETWORK))));
         sheet(out, "18-missing-unit", W, H, List.of("A sheet after an update removed a unit"), List.of(scene(missing, missingRun, 1.2, host, s -> s.gestures.select(new SheetGestures.Selection(true, "H-101")))));
         sheet(out, "19-block-ports", 1450, 500, List.of("One block: the door's settings add the connection points"), List.of((d, s) -> blockPorts(d)));
         sheet(out, "21-other-blocks", W, 402, List.of("The same rule for every block"), List.of((d, s) -> otherBlocks(d)));

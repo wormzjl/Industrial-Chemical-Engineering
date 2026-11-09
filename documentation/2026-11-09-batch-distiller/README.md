@@ -19,6 +19,7 @@ distiller in the process simulator.
   W1 to W8, owner decisions B1 to B8, what the request leaves open, the B3 and B6 evaluations (section 7).
 - [BATCH_STILL_LAW.md](BATCH_STILL_LAW.md): W1, the law, the still's column and the solid-fuel records.
 - [BATCH_STILL_STRUCTURE.md](BATCH_STILL_STRUCTURE.md): W2, sizes, parts, nozzles and the data gland.
+- [BATCH_STILL_SIMULATOR.md](BATCH_STILL_SIMULATOR.md): W7, the simulator unit, its batch curve and sizing.
 - Run output of B3 (local): `research/2026-11-09-batch-distiller/b3-column/` (`report.txt`, `snapshots.csv`).
 
 ## Code areas
@@ -65,11 +66,23 @@ distiller in the process simulator.
   column takes hydrocarbons only. Structure: O1 a column needs the built-in condenser; O2 the column has an overhead
   tube condenser, the worm tub stays for the pot still; O3 placeholder textures; O4 the kettle symbol until W7; O5 the
   charge nozzle at row 2.5 from 750 L. Phase 2 started: still-engine (W3 to W5) and still-simulator (W7).
+- 2026-11-09: W7 landed (still-simulator): `BatchStillUnit` and `StillBatch` on the W1 law, `Report.Series` and
+  `SimulatorResults` format 2, `StillSizing` with its limits, the doors' Batch tab (`StillCurve`), `Symbol.STILL`, the
+  tile MODELLED. Tests: `BatchStillUnitTest` (8), the flowsheet sizing, block, frame, page, door, editor and column
+  classes, and `holdGates` `SimulatorRunTest`, all passing; renders in `tmp/still-render/`. Main-thread fixes: a
+  one-point series the round-trip test meant as empty; the condenser-sized checks on a heavier naphtha (C6 to xylene),
+  since a pentane-rich head on 25 °C water vents 65 to 79 % of its vapour; the render scene's stills with the drop
+  defaults. The diverter's simulator case waits for still-engine's `DIVERTER_VALVE`.
 
 ## Open items
 
 - The still-models session's style mapping (one firebox style per heater): owner's confirmation in that session; its
   concept doc and renderer are on `claude/batch-still-models-b3de99` (e82242bdb), not merged here.
+- W7 owner questions (built as option A; details in BATCH_STILL_SIMULATOR.md): water in the charge refused; a hot
+  charge's let-down booked as the still's duty; the condenser water a setting, not ports; a head cut ends late by up to
+  one step; defaults 2 h cycle and 25 °C water. Seen in the renders: a cut collected at each step's bubble point and
+  averaged over the cycle is slightly two-phase (cut 2 about 2 % vapour), as the distillate is not subcooled in the
+  worm (phase-1 law answer 7).
 - Drawings: `tools/equipment-drawings/update.ps1 -Only BATCH_STILL` needs Python with its requirements and Poppler.
 - Phase 2: wire `BatchStill`, `StillColumn` and `joulesPerBurnTick` into game code (main-reach rule); the electric
   still's FE socket.
