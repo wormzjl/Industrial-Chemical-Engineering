@@ -33,8 +33,8 @@ main thread (owner: "Here").
   door; the right is −x). The condenser lies along z at x = 2.5. The fuel flange is on the right face's middle column, on
   the charge's row: beside the setting a pipe's largest neck (0.27 m) does not fit from 200 L up. The electric still's
   terminal box moved from the front corner to the right face's middle column, its gland outward (owner: a bad
-  location). The charge line bends into the pot in front of the axis and the drain jogs behind the pot, so neither meets
-  the fuel flange or the box. The pot node's point sits 0.01 m off the block edges (its own cell at every heading).
+  location). The fuel line leaves the burner gun's right side, not its front (the air inlet). The charge line bends in
+  front of the axis and the drain jogs behind the pot. The pot node's point sits 0.01 m off the block edges.
 
 ## 4. Pot volume against the drawing
 

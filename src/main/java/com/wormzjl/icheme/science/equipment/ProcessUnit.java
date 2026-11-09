@@ -3363,7 +3363,8 @@ public final class ProcessUnit {
         box(new double[]{x - wd / 3, .05, z0 - .025}, new double[]{x + wd / 3, g - .05, z0}, ALL_FACES & ~32, Material.IRON, false);
         mark("fire_bed", new double[]{x - .3 * p.w(), g, z - .3 * p.w()}, new double[]{x + .3 * p.w(), g + .06, z + .3 * p.w()});
         if (p.options().heater() == BatchStillOptions.Heater.LIQUID) {
-            // A burner gun through the door, its air register, its fuel line along the front to the fuel flange.
+            // A burner gun through the door, its air register; its front face is the air inlet. The fuel line leaves the
+            // gun's right side (owner, 2026-11-09), in front of the register, and runs along the front to the fuel flange.
             double yb = g + hd / 2, rb = .04 + .02 * d, zg = z0 - .2;
             var gun = new Frame(new double[]{x, yb, z0 - .035}, new double[]{0, 0, -1}, new double[]{1, 0, 0});
             mesh.cylinder(gun, rb, 0, .165, 12, Material.MACHINE);
@@ -3375,7 +3376,8 @@ public final class ProcessUnit {
             // the face) does not fit from 200 L up, where the setting leaves 0.06 to 0.3 m. The line rises beside the brick,
             // clear of the coping's lip, crosses the coping and rises to the flange at 0.28 m, inside the 2000 L pot's 0.315.
             double xf = .28, xb = Math.min(xf, x0 - .045), yc = p.charge();
-            var fuel = new java.util.ArrayList<double[]>(List.of(new double[]{x, yb, zg}, new double[]{xb, yb, zg}, new double[]{xb, yb, z}));
+            double zs = z0 - .035 - .115;
+            var fuel = new java.util.ArrayList<double[]>(List.of(new double[]{x - rb + .005, yb, zs}, new double[]{xb, yb, zs}, new double[]{xb, yb, z}));
             if (xb < xf) {
                 fuel.add(new double[]{xb, top + .05, z});
                 fuel.add(new double[]{xf, top + .05, z});
