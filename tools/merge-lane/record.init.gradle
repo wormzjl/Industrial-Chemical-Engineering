@@ -1,0 +1,15 @@
+// Records what each test class loads (affected.mjs, README.md of this folder): one JVM per test class, its class loads in
+// <laneRecord>/<task>-<pid>-<time>.log. -PlaneRecord takes a folder relative to the worktree root (-Xlog splits a path at ':').
+// The logs are no declared output, so a recorded run never comes up to date or from the cache.
+def record = startParameter.projectProperties['laneRecord']
+if (record) allprojects {
+    tasks.withType(Test).configureEach { task ->
+        forkEvery = 1
+        // %t as well as %p: Windows reuses process ids, and filecount=0 stops -Xlog rotating an older file away.
+        jvmArgs "-Xlog:class+load=info:file=${record}/${task.name}-%p-%t.log:uptime,level,tags:filecount=0"
+        outputs.cacheIf { false }
+        outputs.upToDateWhen { false }
+        def folder = project.file(record)
+        doFirst { folder.mkdirs() }
+    }
+}

@@ -1,0 +1,4 @@
+# Readers that affected.mjs cannot see in string constants: a path built from separate pieces, or a file read by
+# a build step. One per line: a regular expression on the changed path, a space, the reading source file.
+^src/test/resources/fluid/regression/ src/test/java/com/wormzjl/icheme/fluid/benchmark/SolverRegressionHarness.java
+^src/main/cpp/ src/main/java/com/wormzjl/icheme/science/column/v3/NativeColumnSolver.java
