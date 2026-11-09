@@ -53,6 +53,7 @@ public final class IChemE {
     private static final ModConfigSpec.DoubleValue EQUIPMENT_SHEEN;
     private static final ModConfigSpec.DoubleValue ENERGY_JOULES_PER_FE;
     private static final ModConfigSpec.BooleanValue ENERGY_MACHINES_NEED_POWER;
+    private static final ModConfigSpec.DoubleValue ENERGY_JOULES_PER_BURN_TICK;
     private static final ModConfigSpec.DoubleValue CREATE_STRESS_PER_FE;
     private static final ModConfigSpec.BooleanValue WEAR_ENABLED;
     private static final ModConfigSpec.DoubleValue WEAR_CAVITATION_HOURS, WEAR_DRY_MINUTES;
@@ -161,6 +162,9 @@ public final class IChemE {
                 .defineInRange("joulesPerFE", 2.5, 0.01, 1e6);
         ENERGY_MACHINES_NEED_POWER = builder.comment("Whether motors, air cooler fans and cooling tower fans need FE at their terminal box. False: nothing is drawn, nothing stops for want of power, and the ports still accept FE (a pack without energy mods).")
                 .define("machinesNeedPower", true);
+        // Solid fuel without a fuel record (batch 2026-11-09-batch-distiller, owner B1 B).
+        ENERGY_JOULES_PER_BURN_TICK = builder.comment("Joules of heat per burn tick for a firebox item without a fuel record (materials/fuels): its furnace burn time times this. Default 1.45e6, the coal anchor: a coal item of 92.6 kg at 25 MJ/kg over its 1600 ticks. Items with a record burn at their mass times their heating value.")
+                .defineInRange("joulesPerBurnTick", com.wormzjl.icheme.science.fluid.network.BatchStill.JOULES_PER_BURN_TICK, 1.0, 1e12);
         builder.pop();
         // The Create coupling (batch 2026-11-03-rotating-machinery W6b, decision D7): read only with Create installed.
         builder.push("create");
@@ -245,6 +249,11 @@ public final class IChemE {
     /** Joules per FE (W5; default 2.5 before the config loads). */
     public static double joulesPerFE() {
         return CONFIG_SPEC.isLoaded() ? ENERGY_JOULES_PER_FE.get() : 2.5;
+    }
+
+    /** Joules per burn tick of a firebox item without a fuel record (batch 2026-11-09-batch-distiller; default before the config loads). */
+    public static double joulesPerBurnTick() {
+        return CONFIG_SPEC.isLoaded() ? ENERGY_JOULES_PER_BURN_TICK.get() : com.wormzjl.icheme.science.fluid.network.BatchStill.JOULES_PER_BURN_TICK;
     }
 
     /** The pumps' wear settings (W10b; the defaults before the config loads). */

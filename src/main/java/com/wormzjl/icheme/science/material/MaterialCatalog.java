@@ -200,6 +200,9 @@ public final class MaterialCatalog {
     private final Map<String, Definition> definitions;
     private final SolidMaterialCatalog solids;
     public SolidMaterialCatalog solids(){return solids;}
+    /** Solid fuel records (kind {@code fuels}, batch 2026-11-09-batch-distiller): a firebox item's heat. */
+    private final SolidFuelCatalog fuels;
+    public SolidFuelCatalog fuels(){return fuels;}
     private final FluidData fluidData;
     private final Map<String, MaterialName> names;
     private final Map<String, Package> packages;
@@ -224,11 +227,12 @@ public final class MaterialCatalog {
             Map<String, FluidAppearance> assayAppearances, Map<String, FluidAppearance> componentAppearances, Map<String, LiquidMixtureCorrection> liquidMixtures, MaterialPresets presets, FluidData fluidData,
             Map<String, Validity> propertyValidity, Map<String, Validity> packageValidity,
             Map<String, ReferenceSpine> spines, Map<String, CrystalReference> crystals, Map<String, Combustion> combustion, Map<String, Map<String, Double>> formulas, SolidMaterialCatalog solids,
-            Records records, Map<String, Definition> definitions) {
+            SolidFuelCatalog fuels, Records records, Map<String, Definition> definitions) {
         this.propertyValidity = Map.copyOf(propertyValidity); this.packageValidity = Map.copyOf(packageValidity);
         this.spines = Map.copyOf(spines); this.crystals = Map.copyOf(crystals); this.combustion = Map.copyOf(combustion); this.formulas = Map.copyOf(formulas);
         this.records=Objects.requireNonNull(records); this.definitions=Map.copyOf(definitions);
         this.solids=Objects.requireNonNull(solids);
+        this.fuels=Objects.requireNonNull(fuels);
         // A solid population names its record by id (owner decision D23: crystals are solids), a crystal or a custom solid:
         // the two kinds never share an id.
         for(String id:this.crystals.keySet())if(solids.materials().containsKey(id))throw new IllegalArgumentException("crystals: "+id+" is also a solid material record; a solid id names one record");
@@ -243,7 +247,7 @@ public final class MaterialCatalog {
     /** This catalog with its packages, liquid-mixture corrections and definitions replaced; a view, never published. */
     private MaterialCatalog derived(Map<String, Package> packages, Map<String, LiquidMixtureCorrection> liquidMixtures, Map<String, Definition> definitions) {
         return new MaterialCatalog(names,packages,resources,viscosities,waterModels,assayAppearances,componentAppearances,liquidMixtures,presets,
-                fluidData,propertyValidity,packageValidity,spines,crystals,combustion,formulas,solids,records,definitions);
+                fluidData,propertyValidity,packageValidity,spines,crystals,combustion,formulas,solids,fuels,records,definitions);
     }
     public Package requirePackage(String id) {
         Package p = packages.get(id);
@@ -466,7 +470,7 @@ public final class MaterialCatalog {
                 String path = entry.getKey(); int start = path.indexOf("materials/");
                 if (start < 0) throw new IllegalArgumentException("Expected materials resource path");
                 String kind = path.substring(start + 10).split("/")[0];
-                if (!Set.of("components","properties","interactions","methods","packages","assays","water","transport","presets","networks","solids","spine","crystals","group_interactions").contains(kind))
+                if (!Set.of("components","properties","interactions","methods","packages","assays","water","transport","presets","networks","solids","fuels","spine","crystals","group_interactions").contains(kind))
                     throw new IllegalArgumentException("Unknown record kind: " + kind + (kind.equals("bases") ? " (a package names its compounds and may extend another package)" : ""));
                 String id = text(o, "id");
                 if (!kind.equals("components") && !id.matches("[a-z][a-z0-9_.:-]{0,127}"))
@@ -647,7 +651,7 @@ public final class MaterialCatalog {
             throw new IllegalArgumentException(record.origin()+": no package holds every compound of assay "+record.id());
         if(packages.isEmpty()) throw new IllegalArgumentException("Material catalog has no packages");
         var result=new MaterialCatalog(names,packages,resources,viscosities,waterModels,assayAppearances,componentAppearances,liquidMixtures,MaterialPresets.read(group(groups,"presets"),group(groups,"networks"),origins,packages,names.keySet()),fluidData,
-                propertyValidity,packageValidity,spines,crystals,combustion,formulas,SolidMaterialCatalog.parse(resources),records,definitions);
+                propertyValidity,packageValidity,spines,crystals,combustion,formulas,SolidMaterialCatalog.parse(resources),SolidFuelCatalog.parse(resources),records,definitions);
         for(var row:group(groups,"presets").values())if(text(row,"kind").equals("column"))checked(origins,row,()->
                 MaterialRuntime.with(result,text(row,"package"),()->{com.wormzjl.icheme.science.column.v3.V3ColumnProblemResolver.validateInput(result.presets().column(text(row,"id")).input(result));return null;}));
         for(var row:group(groups,"networks").values())checked(origins,row,()->{
