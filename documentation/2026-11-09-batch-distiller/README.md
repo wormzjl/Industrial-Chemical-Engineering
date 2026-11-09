@@ -59,18 +59,17 @@ distiller in the process simulator.
   shape, service, golden and compat classes, all passing. Fixed on the way (this branch's flare and furnace work): the
   flare's `flare_gas` role and unit-support keys, the example datapack's methane `combustion` record. Drawings not run
   (no Python or Poppler on this machine).
+- 2026-11-09: owner kept every phase-1 answer as built (option A). Law: flood at F 1.8 Pa^0.5 (design 1.5 + 20 %); a
+  light naphtha head on ambient water vents its excess (COOLING LIMITED); an IDLE status; condenser capacity at the mean
+  of head and condensate temperatures; BOIL DRY at 5 % of the pot volume; the distillate leaves at its bubble point; the
+  column takes hydrocarbons only. Structure: O1 a column needs the built-in condenser; O2 the column has an overhead
+  tube condenser, the worm tub stays for the pot still; O3 placeholder textures; O4 the kettle symbol until W7; O5 the
+  charge nozzle at row 2.5 from 750 L. Phase 2 started: still-engine (W3 to W5) and still-simulator (W7).
 
 ## Open items
 
-- Phase 1 owner questions (each built as option A; details in the two notes):
-  - Law: flood limit F 1.8 Pa^0.5 (design 1.5 + 20 %); a light naphtha head near 27 °C on ambient water vents (COOLING
-    LIMITED) rather than a seven-fold condenser; an IDLE status; condenser capacity at the mean of head and condensate
-    temperatures; BOIL DRY at 5 % of the pot volume; the distillate leaves at its bubble point; the column takes
-    hydrocarbons only.
-  - Structure: O1 a column needs the built-in condenser; O2 the column has an overhead tube condenser, the worm tub stays
-    for the pot still; O3 placeholder textures; O4 the kettle symbol until W7; O5 the charge nozzle rises to row 2.5 from
-    750 L.
-  - The still-models session's style mapping (one firebox style per heater).
+- The still-models session's style mapping (one firebox style per heater): owner's confirmation in that session; its
+  concept doc and renderer are on `claude/batch-still-models-b3de99` (e82242bdb), not merged here.
 - Drawings: `tools/equipment-drawings/update.ps1 -Only BATCH_STILL` needs Python with its requirements and Poppler.
 - Phase 2: wire `BatchStill`, `StillColumn` and `joulesPerBurnTick` into game code (main-reach rule); the electric
   still's FE socket.
