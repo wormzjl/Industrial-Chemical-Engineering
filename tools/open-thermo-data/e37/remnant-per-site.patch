@@ -1,0 +1,168 @@
+diff --git a/src/main/java/com/wormzjl/icheme/science/fluid/thermo/FluidThermodynamics.java b/src/main/java/com/wormzjl/icheme/science/fluid/thermo/FluidThermodynamics.java
+index 4e13156c0..eed0b64f6 100644
+--- a/src/main/java/com/wormzjl/icheme/science/fluid/thermo/FluidThermodynamics.java
++++ b/src/main/java/com/wormzjl/icheme/science/fluid/thermo/FluidThermodynamics.java
+@@ -427,23 +427,32 @@ public final class FluidThermodynamics {
+     /**
+      * Frozen-phase isothermal acoustic bound used by the configured hydraulic velocity clamp: the node's compliance is
+      * {@code sum_phases V_phase kappa_phase}, the hydrocarbon liquid's and the free water's own isothermal
+-     * compressibility at the state (the equation of state's and Region 1's), and the gas's.
++     * compressibility at the state (the equation of state's and Region 1's), and the gas's. A remnant is read per unit
++     * volume ({@link #UNDERFLOW_VOLUME}).
+      */
+     public double isothermalAcousticBound(State state) {
+-        double compliance=state.waterVolume()*state.waterCompressibility();
+-        if(state.liquidVolume()>0)compliance+=state.liquidVolume()*state.liquidProperties().isothermalCompressibility();
++        double scale=remnantScale(state.volume());
++        double compliance=state.waterVolume()/scale*state.waterCompressibility();
++        if(state.liquidVolume()>0)compliance+=state.liquidVolume()/scale*state.liquidProperties().isothermalCompressibility();
+         if(state.vaporVolume()>0) {
+             double stiffness=steamStiffness(state);
+             if(state.vaporProperties()!=null){var gas=state.vaporProperties();stiffness+=-gas.molarVolume()/gas.volumePressureDerivative();}
+-            compliance+=state.vaporVolume()/stiffness;
++            compliance+=state.vaporVolume()/scale/stiffness;
+         }
+         // Solids are incompressible here: a state holding no fluid (a vessel holding only solids, D33) has no acoustic
+         // bound, and the configured clamp alone limits what would leave it (nothing does: its ends are dry).
+         if(compliance==0&&!holdsFluid(state))return Double.POSITIVE_INFINITY;
+-        double speed=state.volume()/Math.sqrt(state.mass()*compliance);
+-        if(!Double.isFinite(speed)||speed<=0)throw new IllegalArgumentException("Invalid acoustic flow-domain bound");
+-        return speed;
++        return acoustic(state.volume()/scale,state.mass()/scale,compliance);
+     }
++    /**
++     * Owner decision 2026-11-09, form B, as {@link MixtureViscosity}'s amounts: a volume below this, m³, is a remnant, and
++     * the acoustic bounds read it per unit volume. Bundled campaign seed 514's reservoir held 5.9e-322 m³ (6.7e-322 kg) of
++     * nitrogen: its compliance {@code V/stiffness} underflowed to 0 while it still held fluid, so its bound read
++     * {@code V/0} and 20 trials refused. Dividing by 1 is exact: every larger state reads its bounds to the bit as before.
++     */
++    static final double UNDERFLOW_VOLUME=1e-200;
++    /** The volume a state's acoustic bound is read per: its own volume for a remnant, else 1. */
++    private static double remnantScale(double volume){return volume>0&&volume<UNDERFLOW_VOLUME?volume:1;}
+     /**
+      * The gas's ideal-gas heat capacity ratio {@code k = c_p/(c_p − R)} at the state's temperature, for a compressor's
+      * polytropic exponent (batch 2026-11-03-rotating-machinery, plan section 3.2): the hydrocarbon vapour's components on the
+@@ -517,17 +526,19 @@ public final class FluidThermodynamics {
+         double n=state.waterVapor(),v=state.vaporVolume();
+         return n>0?state.waterPartialPressure()*v/(v-n*SteamVirial.secondVirial(state.temperature())):0;
+     }
+-    /** The vapour stream's velocity limit: {@code min(maximum, V_v/sqrt(M_v V_v/stiffness))}. */
++    /** The vapour stream's velocity limit: {@code min(maximum, V_v/sqrt(M_v V_v/stiffness))}, a remnant per unit volume. */
+     public double vaporVelocityLimit(State state) {
+         double stiffness=steamStiffness(state);
+         if(state.vaporProperties()!=null){var gas=state.vaporProperties();stiffness+=-gas.molarVolume()/gas.volumePressureDerivative();}
+-        return Math.min(maximumVelocity,acoustic(state.vaporVolume(),vaporMass(state),state.vaporVolume()/stiffness));
++        double volume=state.vaporVolume(),scale=remnantScale(volume);
++        return Math.min(maximumVelocity,acoustic(volume/scale,vaporMass(state)/scale,volume/scale/stiffness));
+     }
+     /**
+      * {@code V / sqrt(M C)}. The product of a phase's mass and compliance goes subnormal for a trace phase (a vanishing
+      * nitrogen vapour below about 2e-150 mol) and is zero below about 2e-158 mol, the bound then infinite; such a product
+      * is evaluated as {@code sqrt(V/M) sqrt(V/C)}, ratios of like-sized quantities, and every product at or above
+-     * {@link Double#MIN_NORMAL} takes the original expression, bit for bit.
++     * {@link Double#MIN_NORMAL} takes the original expression, bit for bit. Below {@link #UNDERFLOW_VOLUME} the compliance
++     * itself underflows; the callers pass such a remnant per unit volume, its mass then its density.
+      */
+     private static double acoustic(double volume,double mass,double compliance) {
+         double product=mass*compliance;
+diff --git a/src/main/java/com/wormzjl/icheme/science/fluid/transport/MixtureViscosity.java b/src/main/java/com/wormzjl/icheme/science/fluid/transport/MixtureViscosity.java
+index 0c564792a..9a94cb124 100644
+--- a/src/main/java/com/wormzjl/icheme/science/fluid/transport/MixtureViscosity.java
++++ b/src/main/java/com/wormzjl/icheme/science/fluid/transport/MixtureViscosity.java
+@@ -144,6 +144,8 @@ public final class MixtureViscosity {
+         return liquid(temperature,amounts,null);
+     }
+     public Result liquid(double temperature,double[] amounts,Prepared prepared) {
++        double total=total(amounts);
++        if(total>0&&total<UNDERFLOW_TOTAL)return liquid(temperature,fractions(amounts,total),prepared);
+         checkBasis(amounts);own(prepared,temperature);
+         var terms=prepared==null?prepare(temperature):prepared;
+         double sum=0,logSum=0,carrier=0,conditional=0;
+@@ -189,6 +191,8 @@ public final class MixtureViscosity {
+         return vapor(temperature,amounts,waterMoles,null,null);
+     }
+     public double vapor(double temperature,double[] amounts,double waterMoles,Workspace workspace,Prepared prepared) {
++        double total=total(amounts)+waterMoles;
++        if(total>0&&total<UNDERFLOW_TOTAL)return vapor(temperature,fractions(amounts,total),waterMoles/total,workspace,prepared);
+         checkBasis(amounts);own(prepared,temperature);
+         if(!Double.isFinite(waterMoles)||waterMoles<0)throw new IllegalArgumentException("Invalid water amount");
+         var terms=prepared==null?prepare(temperature):prepared;
+@@ -216,6 +220,21 @@ public final class MixtureViscosity {
+         if(amounts.length!=propertyPackage.components().size())throw new IllegalArgumentException("Transport basis mismatch");
+         for(double n:amounts)if(!Double.isFinite(n)||n<0)throw new IllegalArgumentException("Invalid transport amount");
+     }
++    /**
++     * A mixture whose amounts total below this, mol, is read on its mole fractions (owner decision of 2026-11-09, form B).
++     * Both mixing rules are homogeneous in the amounts, and the products of such amounts with a viscosity or its logarithm
++     * leave the normal floating-point range: campaign seed 514 held on a vessel's remnant of 6.7e-322 kg of nitrogen, whose
++     * Wilke sum underflowed to 0, and a liquid's sum of n ln(mu) would round to 0, which reads 1 Pa s. Above it the amounts
++     * are used as given, so every other result is unchanged to the bit.
++     */
++    static final double UNDERFLOW_TOTAL=1e-200;
++    private static double total(double[] amounts) {
++        double total=0;for(double n:amounts)total+=n;return total;
++    }
++    /** The mole fractions of an underflowing mixture: {@code amounts} over their {@code total}. */
++    private static double[] fractions(double[] amounts,double total) {
++        var x=new double[amounts.length];for(int i=0;i<x.length;i++)x[i]=amounts[i]/total;return x;
++    }
+     private static double positive(double value) {
+         if(!(value>0)||!Double.isFinite(value))throw new IllegalArgumentException("Invalid viscosity result");return value;
+     }
+diff --git a/src/test/java/com/wormzjl/icheme/science/fluid/thermo/FluidThermodynamicsTest.java b/src/test/java/com/wormzjl/icheme/science/fluid/thermo/FluidThermodynamicsTest.java
+index 7eb8a9d92..f0a93d197 100644
+--- a/src/test/java/com/wormzjl/icheme/science/fluid/thermo/FluidThermodynamicsTest.java
++++ b/src/test/java/com/wormzjl/icheme/science/fluid/thermo/FluidThermodynamicsTest.java
+@@ -46,4 +46,28 @@ class FluidThermodynamicsTest {
+         var n=pure(0);n[com.wormzjl.icheme.science.material.MaterialTestBasis.CRUDE]=.001;var state=model.flashTP(350,101325,n,()->{});closure(n,state);
+         assertEquals(0,state.waterLiquid());assertTrue(state.waterPartialPressure()<model.saturationPressure(350));
+     }
++    /**
++     * Owner decision 2026-11-09, form B: a remnant reads its acoustic bounds per unit volume. At 1e-250 of a mole every
++     * number is normal but the mass-compliance product is 0; at 6e-322 m³ (bundled campaign seed 514's reservoir) every
++     * extensive number is subnormal and the compliance itself is 0. Both read the mole's bounds.
++     */
++    @Test void aRemnantReadsItsAcousticBoundsPerUnitVolume() {
++        int water=com.wormzjl.icheme.science.material.MaterialTestBasis.CRUDE;
++        for(var state:new FluidThermodynamics.State[]{model.flashTP(300,101325,pure(0),()->{}),model.flashTP(300,1e6,pure(6),()->{}),model.flashTP(300,101325,pure(water),()->{})}) {
++            double bound=model.isothermalAcousticBound(state);
++            for(double f:new double[]{1e-250,6e-322/state.volume()}) {
++                var remnant=scaled(state,f);double tolerance=f<1e-300?2e-2:1e-13;
++                assertTrue(remnant.volume()>0&&remnant.volume()<FluidThermodynamics.UNDERFLOW_VOLUME);
++                assertEquals(1,model.isothermalAcousticBound(remnant)/bound,tolerance);
++                if(FluidThermodynamics.holdsVapor(state))assertEquals(model.vaporVelocityLimit(state),model.vaporVelocityLimit(remnant),tolerance*model.vaporVelocityLimit(state));
++            }
++        }
++    }
++    private static FluidThermodynamics.State scaled(FluidThermodynamics.State s,double f) {
++        double[] liquid=s.liquid(),vapor=s.vapor();
++        for(int i=0;i<liquid.length;i++){liquid[i]*=f;vapor[i]*=f;}
++        return new FluidThermodynamics.State(s.temperature(),s.pressure(),liquid,vapor,s.waterLiquid()*f,s.waterVapor()*f,s.hydrocarbonPartialPressure(),
++                s.waterPartialPressure(),s.volume()*f,s.enthalpy()*f,s.internalEnergy()*f,s.mass()*f,s.liquidVolume()*f,s.waterVolume()*f,s.vaporVolume()*f,
++                s.liquidProperties(),s.vaporProperties(),s.solids(),s.solidMoments(),s.waterCompressibility());
++    }
+ }
+diff --git a/src/test/java/com/wormzjl/icheme/science/fluid/transport/MixtureViscosityTest.java b/src/test/java/com/wormzjl/icheme/science/fluid/transport/MixtureViscosityTest.java
+index de1cb2ea9..49563e266 100644
+--- a/src/test/java/com/wormzjl/icheme/science/fluid/transport/MixtureViscosityTest.java
++++ b/src/test/java/com/wormzjl/icheme/science/fluid/transport/MixtureViscosityTest.java
+@@ -50,4 +50,19 @@ class MixtureViscosityTest {
+         double hot=model.liquid(1000,heavy).pascalSeconds();
+         assertTrue(hot>0&&Double.isFinite(hot),"continued crude liquid viscosity "+hot);
+     }
++    /** Owner decision of 2026-11-09, form B: a mixture whose amounts underflow mixes as its mole fractions. */
++    @Test void underflowingAmountsMixAsTheirMoleFractions() {
++        String id=com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.NETWORK_PACKAGE;var catalog=MaterialCatalog.bundled();
++        var model=new MixtureViscosity(catalog,id);var p=catalog.requirePackage(id);
++        int nitrogen=p.components().indexOf("Nitrogen"),methane=p.components().indexOf("Methane"),cut=p.components().indexOf("crude_pc06");
++        int width=p.components().size();
++        // Campaign seed 514: a vessel's subnormal remnant of nitrogen vapour, whose Wilke sum underflowed to 0.
++        double[] one=new double[width],remnant=new double[width];one[nitrogen]=1;remnant[nitrogen]=100*Double.MIN_VALUE;
++        assertEquals(model.vapor(298.15,one,0),model.vapor(298.15,remnant,0),0);
++        double[] mix=new double[width],small=new double[width];mix[nitrogen]=.25;mix[methane]=.75;small[nitrogen]=.25e-250;small[methane]=.75e-250;
++        double vapor=model.vapor(400,mix,.1);
++        assertEquals(vapor,model.vapor(400,small,.1e-250),vapor*1e-14);
++        double[] liquid=new double[width],trace=new double[width];liquid[cut]=1;trace[cut]=100*Double.MIN_VALUE;
++        assertEquals(model.liquid(400,liquid).pascalSeconds(),model.liquid(400,trace).pascalSeconds(),0);
++    }
+ }

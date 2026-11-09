@@ -26,9 +26,18 @@ Branch `claude/refinery-compounds-thermos-252973`, batches `2026-11-04-refinery-
   - New holds: 514, E9 (a reservoir holds 6.7e-322 kg of nitrogen; the Wilke sum underflows to 0 and `MixtureViscosity.vapor` refuses 20 trials); 696 and 200, E5 (line search stalls; 696 pumps methane gas, which D42 heats from 304 K to 396 K); 941, F.
 - `git ls-files -i -c --exclude-standard`: empty.
 
-## Open for the owner
+## Owner decisions (E37, 2026-11-09)
 
-- S2 (E36): validate, or revert it (one commit).
-- Main's five failures: fix them on this branch before the merge, or leave them to a main follow-up.
-- Seed 514's underflow: (A) mix on mole fractions always (every vapour viscosity moves in its last digits: chain-100 and the junction lines re-record, one campaign); (B) form mole fractions only when the amounts underflow (bit-identical elsewhere); (C) leave it held.
-- The bundled-random cost and holds (+10 % solves; seeds 200, 696, 941): accept, or trace further.
+- S2 (E36): "Keep S2 (Recommended)".
+- Main's five failures: "Main follow-up (Recommended)", in a session cut from main, and "Start now, Opus high (Recommended)". The app starts no session from an automated turn, so the session waits as a card.
+- Seed 514: "B: on underflow (Recommended)", measured on seed 514 alone:
+  - B (amounts under 1e-200 mol mix as their mole fractions) cleared the viscosity; the acoustic bound refused next (its compliance `V/stiffness` is 0).
+  - B's rule there (a state under 1e-200 m³ read per unit volume) cleared it; then `PipeResistance` refused the end's transport properties at the junction mint.
+  - Tests 18/18, chain-100 0 deviation. The owner then chose "Revert, 514 open (Recommended)": both reverted, the diff in `tools/open-thermo-data/e37/remnant-per-site.patch`.
+  - The structural fix, a remnant floor in the phase predicates (57 call sites, 39 direct volume tests), is its own batch with a campaign.
+- The bundled-random holds (200, 696, 941, 514) and +10 % Newton solves: "Accept, open item (Recommended)".
+- Code guide: `5daeda5f3` changes no chapter's text; thermo-materials' snapshot moves to it.
+
+## Open
+
+- The merge to main, the push, the index rows and the `tmp/` cleanup wait for the owner's go.

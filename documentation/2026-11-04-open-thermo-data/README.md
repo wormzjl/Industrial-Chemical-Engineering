@@ -6,7 +6,7 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
 
 ## Documents
 
-- [OPEN_DATA_PLAN.md](OPEN_DATA_PLAN.md): expected behaviour, the data today, work packages O1 to O11 and decisions E1 to E36.
+- [OPEN_DATA_PLAN.md](OPEN_DATA_PLAN.md): expected behaviour, the data today, work packages O1 to O11 and decisions E1 to E37.
 - [NIST_REDERIVATION_REVIEW.md](NIST_REDERIVATION_REVIEW.md): O1 and O2, what the open re-derivation moved, the measurements and the owner decisions.
 - [CRUDE_GRADES_REVIEW.md](CRUDE_GRADES_REVIEW.md): research R1 and the production data. Grade specifications and the generation method on the shared cuts, cut viscosity candidates, the mixture rule and its open refit, the validation against ECCC records.
 - [CUT_VISCOSITY_REVIEW.md](CUT_VISCOSITY_REVIEW.md): O4, the Twu cut tables and the one-term mixture term, the bit-for-bit proof and what moved.
@@ -134,6 +134,8 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
   - Results: furnace 7 of 7; medium grid 10/10 (8/10) at 2,715k polls (5,904k); Tia Juana 10/10.
   - The steam resume's contract moved to steam ×1.5.
 - 2026-11-09: the final lane on `e079e9688` ([MERGE_REVIEW.md](MERGE_REVIEW.md)). Fixes `5daeda5f3`: `TrainedPhysics` through `DeterministicMath`, the example datapack with O9's sub-records. Main fails the same three equipment tests and two fluid GameTests on `b794e2d41`. Bundled random 990 (main 993) after the replay of its F seeds alone. `tools/merge-lane/compare.mjs` added.
+- 2026-11-09: E37, the owner's answers to the final lane ([MERGE_REVIEW.md](MERGE_REVIEW.md)): S2 kept; main's five failures go to a session cut from main (a card); the bundled-random holds are accepted.
+  - Seed 514: form B and its rule on the acoustic bounds cleared two underflow sites, then a third refused. Both are reverted (`tools/open-thermo-data/e37/`), and 514 is an accepted open item.
 
 ## Open items
 
@@ -159,7 +161,8 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
   3. O11: CO2 in the world list with its dry-ice crystal (E25), applied with option A (E27) and the `kij_pr.dat` erratum (E28); not merged. Open: the final lane (fluid GameTests, `equipmentGates`, `holdGates`, `test slowGates`) and the code guide chapters named in CO2_CRYSTAL_APPLY_REVIEW.md. The d3-r2 bump moves the identity of every view the library gives a pair (state only).
   4. O5: done (`2f59caa62`, `4e2a77b9f`, `bc471a90c`, `b89cb024e`; [UNUSED_DATA_APPLY_REVIEW.md](UNUSED_DATA_APPLY_REVIEW.md)). Still waiting for E26: the neural files, and the manifest that hashes the removed `tools/neural/fit_methane.py`. Kept: `tools/spine-join-measurement/build-spine-records.mjs`, the generator the 4 spine records name. The Tia Juana `crude_unit.json` test copy is read by `UtilityRegulationTest`; it now lists CarbonDioxide.
   5. O9: done as form S2 (E34, `f9ff89dec`; [COMBUSTION_DATA_APPLY_REVIEW.md](COMBUSTION_DATA_APPLY_REVIEW.md)). At merge prep, `thermochemistry(...)`, `flammability(...)` and W5b's `freezingPoint(...)` have only test callers, so the rule that `src/main` holds only code the game reaches needs one decision for the three. Decided at the tooling cleanup: the three lookups moved to the test helper `SubRecords` (`f4130065f`).
-  6. The translation commit is `2cd2a4a5d` (en_us changed in O3 and later). The final lane on the merged code (E19) ran on 2026-11-09 ([MERGE_REVIEW.md](MERGE_REVIEW.md)): two of our failures fixed in `5daeda5f3`, five failures inherited from main, four new bundled-random holds; the owner decides. It must re-check the fluid GameTests and the hold-gate sample sheets (`ColumnSizingSampleTest`, `SizeAllSampleTest`, `UnitSizingSampleTest`, `LineSizingSampleTest`, `UtilityRegulationTest`, `FlowsheetColumnTest`, `ColumnEjectorTest`).
+  6. The translation commit is `2cd2a4a5d` (en_us changed in O3 and later). The final lane on the merged code (E19) ran on 2026-11-09 ([MERGE_REVIEW.md](MERGE_REVIEW.md)): two of our failures fixed in `5daeda5f3`, five failures inherited from main, four new bundled-random holds; the owner's answers are E37. The lane ran the fluid GameTests (71 of 73; both failures are main's); the hold-gate sample sheets ran with E36 (holdGates 64/64 at `6e5c4efae`).
+  7. Remnant floor (E37), its own batch: a phase at or below a floor volume holds nothing a flow can draw, and a state holding only remnants reads as an empty vessel (D33, D54); its inventory stays. Bundled seed 514 holds on 6.7e-322 kg of nitrogen. Per-site underflow fixes cleared the viscosity and the acoustic bound, then the pipe loss refused (`tools/open-thermo-data/e37/remnant-per-site.patch`). Scope: the four phase predicates, the 39 direct volume tests, a strict inventory test in `IslandSets`, and one campaign.
 - E31 (condenser carry-over): the warm route is settled, carry-over columns re-solve cold (E33).
   - The furnace-on-duty sheet has two steady states ([WARM_CARRYOVER_REVIEW.md](WARM_CARRYOVER_REVIEW.md) section 3). Cold re-solves always show one; which is stable was not measured.
   - Owner choices ([CONDENSER_CARRYOVER_REVIEW.md](CONDENSER_CARRYOVER_REVIEW.md) section 6):
