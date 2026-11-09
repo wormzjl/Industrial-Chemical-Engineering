@@ -2,7 +2,7 @@
 
 Purpose: thermo data under open terms. Generated light, medium, heavy and oil-sand crude grades replace the ExxonMobil and Tia Juana assays. The crude viscosity gets a new source. The NIST-derived values are re-derived from CoolProp, NASA CEA and IAPWS. Unused data is removed. This follows the decisions of [DATA_LICENSE_REVIEW.md](../2026-11-04-refinery-compounds/DATA_LICENSE_REVIEW.md).
 
-Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-252973` after the refinery-compounds batch. Index: [../INDEX.md](../INDEX.md).
+Status: Implemented 2026-11-09: merged to `main` as 0.23.0 from `claude/refinery-compounds-thermos-252973`, with batches `2026-11-04-refinery-compounds` and `2026-11-05-neural-retrain` (owner: "Yes, merge"). Not pushed. Index: [../INDEX.md](../INDEX.md).
 
 ## Documents
 
@@ -136,6 +136,7 @@ Status: In progress since 2026-11-04, on `claude/refinery-compounds-thermos-2529
 - 2026-11-09: the final lane on `e079e9688` ([MERGE_REVIEW.md](MERGE_REVIEW.md)). Fixes `5daeda5f3`: `TrainedPhysics` through `DeterministicMath`, the example datapack with O9's sub-records. Main fails the same three equipment tests and two fluid GameTests on `b794e2d41`. Bundled random 990 (main 993) after the replay of its F seeds alone. `tools/merge-lane/compare.mjs` added.
 - 2026-11-09: E37, the owner's answers to the final lane ([MERGE_REVIEW.md](MERGE_REVIEW.md)): S2 kept; main's five failures go to a session cut from main (a card); the bundled-random holds are accepted.
   - Seed 514: form B and its rule on the acoustic bounds cleared two underflow sites, then a third refused. Both are reverted (`tools/open-thermo-data/e37/`), and 514 is an accepted open item.
+- 2026-11-09: merged to `main` as 0.23.0 (owner: "Yes, merge"). The CHANGELOG entries moved under `[0.23.0] - 2026-11-09`; the INDEX rows, the tool rows and the code-guide snapshot lines read merged. Not pushed.
 
 ## Open items
 

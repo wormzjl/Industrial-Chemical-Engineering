@@ -1,6 +1,6 @@
 # Column operation: the column running in the built plant
 
-**Snapshot:** f4130065f (branch `claude/refinery-compounds-thermos-252973`), 2026-11-09. Batches `2026-11-04-refinery-compounds` (V4: a column solves on its feed island's compound list; a port grows its island before it gives a compound the island lacks), `2026-11-04-open-thermo-data` (condenser carry-over, the network's water in V3) and `2026-11-05-neural-retrain`, to merge as 0.23.0 · earlier: 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08, batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
+**Snapshot:** f4130065f (branch `claude/refinery-compounds-thermos-252973`), 2026-11-09. Batches `2026-11-04-refinery-compounds` (V4: a column solves on its feed island's compound list; a port grows its island before it gives a compound the island lacks), `2026-11-04-open-thermo-data` (condenser carry-over, the network's water in V3) and `2026-11-05-neural-retrain`, merged as 0.23.0 on 2026-11-09 · earlier: 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08, batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
 
 ## Accepted instrumentation (0.22.0)
 

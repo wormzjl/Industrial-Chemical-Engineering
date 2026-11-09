@@ -38,6 +38,7 @@ Branch `claude/refinery-compounds-thermos-252973`, batches `2026-11-04-refinery-
 - The bundled-random holds (200, 696, 941, 514) and +10 % Newton solves: "Accept, open item (Recommended)".
 - Code guide: `5daeda5f3` changes no chapter's text; thermo-materials' snapshot moves to it.
 
-## Open
+## Merge
 
-- The merge to main, the push, the index rows and the `tmp/` cleanup wait for the owner's go.
+- Merged to `main` on 2026-11-09 (owner: "Yes, merge"): the CHANGELOG entries under `[0.23.0] - 2026-11-09`; the three INDEX rows and the tool rows of `open-thermo-data/`, `neural-retrain/` and `compound-import/` Implemented; the code-guide snapshot lines read merged. Not pushed.
+- Open: the push, and the `tmp/` cleanup of this worktree.

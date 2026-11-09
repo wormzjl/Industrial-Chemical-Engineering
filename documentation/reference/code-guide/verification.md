@@ -10,7 +10,7 @@ Added `VesselGeometryTest`, `ProcessOutletTest`, `FlowControlTest` coverage, `Fl
 **Feature branch:** `b1477c09` (`codex/liquid-gauge-accessory`), 2026-10-26, based on main `600549d9`. Floating-roof tank level gauge is an optional item/accessory;24 focused checks/package and8 native views pass. Ported into the 0.22.0 branch; this batch is not merged. [Contracts](../../2026-10-26-liquid-level-gauge-accessory/LEVEL_GAUGE_CONTRACTS.md).
 
 
-**Snapshot:** f4130065f (branch `claude/refinery-compounds-thermos-252973`), 2026-11-09. Batches `2026-11-04-refinery-compounds`, `2026-11-04-open-thermo-data` and `2026-11-05-neural-retrain` (to merge as 0.23.0): the gate groups' lists (`WaterRegion1`, `SteamVirial`, the Tia Juana overlay), the two test overlays, the fluid corpus images `compound-basis` and `island-sets` · earlier: e4749cdb6 (branch `claude/simulator-sizing-refactor-6bacab`), 2026-11-08, batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
+**Snapshot:** f4130065f (branch `claude/refinery-compounds-thermos-252973`), 2026-11-09. Batches `2026-11-04-refinery-compounds`, `2026-11-04-open-thermo-data` and `2026-11-05-neural-retrain` (merged as 0.23.0 on 2026-11-09): the gate groups' lists (`WaterRegion1`, `SteamVirial`, the Tia Juana overlay), the two test overlays, the fluid corpus images `compound-basis` and `island-sets` · earlier: e4749cdb6 (branch `claude/simulator-sizing-refactor-6bacab`), 2026-11-08, batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
 
 ## Later 0.22.0 readiness follow-ups (2026-11-08)
 

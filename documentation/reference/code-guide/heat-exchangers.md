@@ -1,6 +1,6 @@
 # Heat exchangers: heat sides, the coupling across islands and built-in control
 
-**Snapshot:** f4130065f (branch `claude/refinery-compounds-thermos-252973`), 2026-11-09. Batch `2026-11-04-refinery-compounds` (with `2026-11-04-open-thermo-data` and `2026-11-05-neural-retrain`, to merge as 0.23.0): a partner read on its own island's model · earlier: 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08, batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
+**Snapshot:** f4130065f (branch `claude/refinery-compounds-thermos-252973`), 2026-11-09. Batch `2026-11-04-refinery-compounds` (with `2026-11-04-open-thermo-data` and `2026-11-05-neural-retrain`, merged as 0.23.0 on 2026-11-09): a partner read on its own island's model · earlier: 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08, batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
 
 ## Factory probes and one physical data interface (0.22.0)
 

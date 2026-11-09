@@ -1,6 +1,6 @@
 # Process simulator: the flowsheet, its run, sizing and the block
 
-**Snapshot:** f4130065f (branch `claude/refinery-compounds-thermos-252973`), 2026-11-09. Batches `2026-11-04-refinery-compounds` (W3, W4: each sheet runs on its own compound list, `SheetCompounds`; tokens and the file-open notice on the sheet's view), `2026-11-04-open-thermo-data` (the example on the medium grade) and `2026-11-05-neural-retrain` (the column unit's learned start), to merge as 0.23.0 · earlier: 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08, batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
+**Snapshot:** f4130065f (branch `claude/refinery-compounds-thermos-252973`), 2026-11-09. Batches `2026-11-04-refinery-compounds` (W3, W4: each sheet runs on its own compound list, `SheetCompounds`; tokens and the file-open notice on the sheet's view), `2026-11-04-open-thermo-data` (the example on the medium grade) and `2026-11-05-neural-retrain` (the column unit's learned start), merged as 0.23.0 on 2026-11-09 · earlier: 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08, batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
 
 ## Current viewport and constructor handoff (0.22.0)
 

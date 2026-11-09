@@ -15,6 +15,8 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-11-09
+
 ### Added
 
 - Refinery compounds and the package rework: a package is a method plus a compound list (W1 `f079f0564`), restricted package views and neural selection by compound list (V1, W2 `ffccb85c7`), each simulator sheet on its own compound list (W3 `2fd44dd6c`, `da38e7480`), the world basis saved by compound ids (W4 `66058ed18`, `5a7c8a3a1`), island compound sets with up to 99 compounds and water on the world list (V2, V3 `2925bdbfc`, `ca5fd533e`), an in-world column on its feed island's list (V4 `caf42849e`), a freezing point on every compound dataset (W5b `a12e7548f`), identities by physics fields and the 24 Tier 1 compounds in `icheme:refinery`, the network package (W6 `2231af409`, `4be96e3b6`); translations `1db3d01e4`, `2cd2a4a5d`; batch `2026-11-04-refinery-compounds`.

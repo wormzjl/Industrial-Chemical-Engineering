@@ -2,7 +2,7 @@
 
 Purpose: the major refinery compounds to add to the thermo package, their data and sources, and a freezing point for every compound; the package rework (a package is a method plus a compound list) and island compound sets on the fluid network.
 
-Status: In progress since 2026-11-04. Index: [../INDEX.md](../INDEX.md).
+Status: Implemented 2026-11-09: merged to `main` as 0.23.0 from `claude/refinery-compounds-thermos-252973`, with batches `2026-11-04-open-thermo-data` and `2026-11-05-neural-retrain` (owner: "Yes, merge"). Not pushed. Index: [../INDEX.md](../INDEX.md).
 
 ## Documents
 
@@ -54,6 +54,7 @@ Status: In progress since 2026-11-04. Index: [../INDEX.md](../INDEX.md).
   - Main merged in `0d0499f11`; re-pins for main's D42 in `fcde043f3`; translations in `2cd2a4a5d`; code guide in `06052fc6e`.
   - Tooling cleanup `f4130065f`: W5b's `MaterialCatalog.freezingPoint`, which only tests called, moved to the test helper `SubRecords` with O9's two lookups.
   - W8's MATERIALS.md: the package table, the `methods` kind, packages as a method plus a compound list, free assays, the three sub-records, the generated grades, the pilot as a test overlay, and sidecar schema 5.
+- 2026-11-09: merged to `main` as 0.23.0 (owner: "Yes, merge"). The CHANGELOG entries moved under `[0.23.0] - 2026-11-09`; the INDEX rows, the tool rows and the code-guide snapshot lines read merged. Not pushed.
 
 ## Open items
 
