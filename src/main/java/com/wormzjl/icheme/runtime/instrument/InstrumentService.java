@@ -29,7 +29,11 @@ public final class InstrumentService {
 
     /** {@code store} is the overworld's, opened by {@link Store#open} before the fluid authority starts anything. */
     public InstrumentService(MinecraftServer server,FluidWorldAuthority world,Store store){this.server=server;this.world=world;this.store=store;}
-    public boolean occupied(long host){return !store.sensors(host).isEmpty()||!store.host(host).isEmpty()||store.pending().stream().anyMatch(p->p.key().host()==host&&p.install());}
+    /**
+     * Whether {@code host} carries an accessory or has one on its way: a pipe fitting, a sensor, a gauge or a pending
+     * install. The store is the fact (registry first), so a fitting counts even where its block no longer draws it.
+     */
+    public boolean occupied(long host){return store.legacy(host)!=null||!store.sensors(host).isEmpty()||!store.host(host).isEmpty()||store.pending().stream().anyMatch(p->p.key().host()==host&&p.install());}
     public boolean observes(long host){return watchers.values().stream().anyMatch(set->set.stream().anyMatch(t->t.key().host()==host));}
     public void request(ServerPlayer player,InteractionHand hand,boolean remove){
         if(remove&&requestSensorRemoval(player,hand))return;
@@ -182,8 +186,12 @@ public final class InstrumentService {
         if(!host.metadata().sensors().equals(store.sensors(host.identity()))||!host.metadata().installed().equals(store.host(host.identity()))||!Objects.equals(host.metadata().fitting(),host.pipe()?null:store.legacy(host.identity()))||host.metadata().revision()!=store.revision(host.identity()))sync(host);
     }
     public void recoverHost(long id){var host=world.instrumentHost(id);if(host!=null)recover(id,host.entity().getLevel(),host.entity().getBlockPos(),host.pipe()?InstrumentHosts.legacy(host.entity().getBlockState()):null,host.metadata().recoverOnBreak());}
+    /** A registration that leaves with no block to stand on (a held device an operator drops): its accessories leave the store, and nothing drops. */
+    public void discardHost(long id){recover(id,null,null,null,false);}
     public void recover(long id,Level level,BlockPos position,Instrument.Type legacy,boolean drop){recoverSensors(id,null,level,position,drop);for(var i:store.host(id))if(store.remove(i.key(),i.instance())!=null){if(drop)refund(null,level,position,item(i));samples.remove(i.instance());}var fitting=store.legacy(id);if(fitting!=null&&store.removeLegacy(id,fitting.instance())!=null&&drop)refund(null,level,position,item(fitting.type()));forget(id);}
     public void legacyInstalled(long host,Instrument.Type type){store.installLegacy(host,type);if(type==Instrument.Type.PRESSURE_VALVE){store.modular.add(host);store.setDirty();}bind(world.instrumentHost(host));}
+    /** The type of the pipe fitting the store holds for {@code host}, or null: the fact a pipe block's fitting is drawn from. */
+    public Instrument.Type fitting(long host){var f=store.legacy(host);return f==null?null:f.type();}
     public void recoverLegacy(long host,Level level,BlockPos position){var old=store.legacy(host);if(old!=null&&store.removeLegacy(host,old.instance())!=null){refund(null,level,position,item(old.type()));bind(world.instrumentHost(host));}}
     private static void clearLegacy(InstrumentHosts.Host host){var e=host.entity();var s=e.getBlockState().setValue(FluidDeviceBlock.SIGHT_GLASS,false).setValue(FluidDeviceBlock.SHUTOFF,FluidDeviceBlock.Shutoff.NONE).setValue(FluidDeviceBlock.PRESSURE_CONTROL,false).setValue(FluidDeviceBlock.INLINE_FILTER,false).setValue(FluidDeviceBlock.INLINE_MOVER,FluidDeviceBlock.InlineMover.NONE);s=FluidDeviceBlock.connectedState(s,e.getLevel(),e.getBlockPos());e.getLevel().setBlock(e.getBlockPos(),s,Block.UPDATE_ALL);if(e instanceof com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity pipe)pipe.refreshGeometry(pipe.bore(),true);}
     public static ItemStack item(Instrument.Installed i){var stack=item(i.settings().kind()==GaugeSettings.Kind.PRESSURE?Instrument.Type.PRESSURE:Instrument.Type.TEMPERATURE);stack.set(ModItems.GAUGE_SETTINGS.get(),i.settings());return stack;}

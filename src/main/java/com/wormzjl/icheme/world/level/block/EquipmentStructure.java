@@ -58,13 +58,16 @@ import java.util.Map;
 import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 /**
  * Whole parametric vessels in the world: placement, removal of every cell when one goes (owner decision D5, batch
  * 2026-10-15-custom-equipment-rendering), lookup of the vessel a cell belongs to, and the collision shape of each cell
  * key. The equipment constructor places vessels; {@code /icheme equipment place} does too, for debugging. A vessel
  * whose cells an older layout of its shape placed is brought to the current layout after it loads ({@link #refreshLater},
- * {@link EquipmentRefresh}).
+ * {@link EquipmentRefresh}); one whose cells differ from the registry's record of it is rebuilt to the record
+ * ({@link #serveRealignment}).
  */
 @EventBusSubscriber(modid = IChemE.MOD_ID)
 public final class EquipmentStructure {
@@ -104,6 +107,12 @@ public final class EquipmentStructure {
 
     /** Loaded vessels whose interior cells are brought to the current state ({@link #restate}), by level and origin. */
     private static final Map<ServerLevel, Map<BlockPos, EquipmentShape>> RESTATE = new WeakHashMap<>();
+
+    /**
+     * Structures the registry records whose chunks loaded, waiting for their re-alignment (registry first, batch
+     * 2026-11-03-save-corruption), by level and origin, each with the far corner of the region it reads beyond its box.
+     */
+    private static final Map<ServerLevel, Map<BlockPos, BlockPos>> REALIGN = new WeakHashMap<>();
 
     private EquipmentStructure() {
     }
@@ -149,6 +158,11 @@ public final class EquipmentStructure {
         for (var cell : cells) if (!level.isLoaded(vessel.origin().offset(cell.x(), cell.y(), cell.z()))) return false;
         for (var cell : cells)
             if (level.getBlockEntity(vessel.origin().offset(cell.x(), cell.y(), cell.z())) instanceof EquipmentShellBlockEntity entity) entity.rename(name);
+        // The registry's record holds the name too (registry first, W5c C4): a structure placed again takes it.
+        var world = FluidWorldAuthority.find(level.getServer()).orElse(null);
+        var at = position(level, vessel.origin());
+        var held = world == null ? null : world.structure(at);
+        if (held != null) world.structure(at, held.withName(com.wormzjl.icheme.science.equipment.DeviceName.clean(name)));
         return true;
     }
 
@@ -177,6 +191,7 @@ public final class EquipmentStructure {
             placed++;
         }
         var vessel = new Vessel(origin, shape);
+        if (rows >= shape.sizeY()) record(level, origin, shape, paint, name);
         if (shape.fluidDevice() && rows >= shape.sizeY()) register(level, vessel);
         // A motor, generator or gearbox joins its shaft train whole (W3); a casing or turbine does once registered.
         else if (!shape.fluidDevice() && rows >= shape.sizeY()) ShaftParts.structure(level, origin, shape, 0);
@@ -471,6 +486,49 @@ public final class EquipmentStructure {
 
     private static PhysicalFluidTopology.Position position(Level level, BlockPos at) {
         return new PhysicalFluidTopology.Position(level.dimension().location().toString(), at.getX(), at.getY(), at.getZ());
+    }
+
+    /**
+     * The registry's record of the structure at {@code origin} (batch 2026-11-03-save-corruption, REGISTRY_FIRST_PLAN.md
+     * 3.3): its shape and paint, or none when {@code shape} is null. The registry places the structure again from it. The
+     * record's shape text is made only when the record changes.
+     */
+    private static void record(ServerLevel level, BlockPos origin, @Nullable EquipmentShape shape, @Nullable Paint paint, String name) {
+        var world = FluidWorldAuthority.find(level.getServer()).orElse(null);
+        if (world == null) return;
+        var at = position(level, origin);
+        var held = world.structure(at);
+        if (shape == null) {
+            if (held != null) world.structure(at, null);
+        } else if (held == null || !held.shape().equals(shape) || !held.paint().equals(paint) || !held.name().equals(name))
+            world.structure(at, WorldTopologyLedger.Structure.of(shape, paint, name));
+    }
+
+    /**
+     * The registry first for a current vessel's paint (REGISTRY_FIRST_PLAN.md 3.5): a vessel the registry holds no record
+     * of teaches it its shape and its controller's paint (a world saved before the registry held structures); a vessel
+     * whose record has its shape and another paint takes the record's paint on every shell cell. A vessel's cells share one
+     * paint ({@link #place} and {@link #refresh} bind each with it), so the cells are walked only when the controller's
+     * differs. A record of another shape waits for the re-alignment (plan 4.4).
+     */
+    private static void restatePaint(ServerLevel level, BlockPos origin, EquipmentShape shape, Paint paint, String name) {
+        var world = FluidWorldAuthority.find(level.getServer()).orElse(null);
+        if (world == null) return;
+        var at = position(level, origin);
+        var held = world.structure(at);
+        if (held == null) {
+            record(level, origin, shape, paint, name);
+            return;
+        }
+        if (!held.shape().equals(shape)) return;
+        // A named vessel whose record holds no name teaches it (a world saved before the registry held names, W5c C4).
+        if (held.name().isEmpty() && !name.isEmpty()) world.structure(at, held = held.withName(name));
+        if (held.paint().equals(paint) && held.name().equals(name)) return;
+        for (var cell : ShapeRasterizer.layout(shape).shell())
+            if (level.getBlockEntity(origin.offset(cell.x(), cell.y(), cell.z())) instanceof EquipmentShellBlockEntity shell && ours(shell, origin, shape)) {
+                shell.repaint(held.paint());
+                shell.rename(held.name());
+            }
     }
 
     /** Reservoir nozzles keep their phase classes; movers register only their explicitly directed process pair; a kettle's
@@ -785,18 +843,18 @@ public final class EquipmentStructure {
 
     /**
      * Sets every interior cell of the vessel at {@code origin} that holds another state than {@link #interior} gives
-     * (a save from before {@link EquipmentInteriorBlock#SKYLIGHT}) to it, and lets its chunks wait for their light. Only a
-     * vessel whose controller cell is its own and current: a stale one is refreshed instead, which restates it too.
+     * (a save from before {@link EquipmentInteriorBlock#SKYLIGHT}) to it, and lets its chunks wait for their light; its
+     * paint follows the registry ({@link #restatePaint}). Only a vessel whose controller cell is its own and current: a
+     * stale one is refreshed instead, which restates it too.
      */
     static void restate(ServerLevel level, BlockPos origin, EquipmentShape shape) {
         var controller = ShapeRasterizer.layout(shape).controller();
         if (!(level.getBlockEntity(origin.offset(controller.x(), controller.y(), controller.z())) instanceof EquipmentShellBlockEntity shell)
                 || !ours(shell, origin, shape) || shell.stale()) return;
+        restatePaint(level, origin, shape, shell.paint(), shell.name());
         int changed = restateCells(level, origin, shape, Set.of(), Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE);
         if (changed == 0) return;
-        var high = origin.offset(shape.sizeX() - 1, shape.sizeY() - 1, shape.sizeZ() - 1);
-        for (int x = origin.getX() >> 4; x <= high.getX() >> 4; x++)
-            for (int z = origin.getZ() >> 4; z <= high.getZ() >> 4; z++) level.getChunkSource().chunkMap.waitForLightBeforeSending(new ChunkPos(x, z), 0);
+        waitForLight(level, origin, corner(origin, shape));
         IChemE.LOGGER.info("equipment_restate kind={} origin={} interior={}", shape.kind().name().toLowerCase(Locale.ROOT), origin.toShortString(), changed);
     }
 
@@ -832,15 +890,19 @@ public final class EquipmentStructure {
 
     static void breaking(Level level,BlockPos position,net.minecraft.world.entity.player.Player player){var vessel=find(level,position);if(vessel==null||!vessel.shape().fluidDevice())return;var cell=ShapeRasterizer.fluidCell(vessel.shape());if(cell!=null&&level.getBlockEntity(vessel.origin().offset(cell.x(),cell.y(),cell.z())) instanceof EquipmentShellBlockEntity shell)shell.instruments().recoverOnBreak(!player.isCreative());}
 
-    /** Removes every remaining cell of the vessel; nothing drops. */
+    /**
+     * Removes every remaining cell of the vessel; nothing drops. Not while the registry restores the world ({@link
+     * FluidDeviceBlock#quietly}): a cell removed then keeps the structure's record and registrations.
+     */
     static void dismantle(Level level, Vessel vessel) {
-        if (dismantling || level.isClientSide()) return;
+        if (dismantling || FluidDeviceBlock.registered || level.isClientSide()) return;
         dismantling = true;
         try {
             if (level instanceof ServerLevel server) com.wormzjl.icheme.runtime.assembly.AssemblyService.removed(server, vessel);
             if (level instanceof ServerLevel server) com.wormzjl.icheme.runtime.assembly.AssemblyService.dismantled(server, vessel);
             if(level instanceof ServerLevel server&&vessel.shape().kind()==EquipmentShape.Kind.COLUMN){var c=ShapeRasterizer.layout(vessel.shape()).controller();if(level.getBlockEntity(vessel.origin().offset(c.x(),c.y(),c.z())) instanceof EquipmentShellBlockEntity cell&&cell.instruments().dataPort()!=null)FluidWorldAuthority.find(server.getServer()).ifPresent(w->w.controls().removeHost(cell.instruments().dataPort().host()));}
             if (level instanceof ServerLevel server && vessel.shape().fluidDevice()) unregister(server, vessel);
+            if (level instanceof ServerLevel server) record(server, vessel.origin(), null, null, com.wormzjl.icheme.science.equipment.DeviceName.NONE);
             if (UnitDesign.shafted(vessel.shape().kind())) ShaftParts.remove(level, vessel.origin());
             var layout = ShapeRasterizer.layout(vessel.shape());
             for (var list : java.util.List.of(layout.shell(), layout.interior()))
@@ -899,6 +961,7 @@ public final class EquipmentStructure {
         var world = FluidWorldAuthority.find(level.getServer()).orElse(null);
         for (var at : shells)
             if (world != null && level.getBlockEntity(at) instanceof EquipmentShellBlockEntity shell && shell.fluidIdentity() != 0) world.remove(shell.fluidIdentity());
+        record(level, origin, null, null, com.wormzjl.icheme.science.equipment.DeviceName.NONE);
         int flags = Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE;
         dismantling = true;
         try {
@@ -907,8 +970,7 @@ public final class EquipmentStructure {
         } finally {
             dismantling = false;
         }
-        for (int x = retired.low().getX() >> 4; x <= retired.high().getX() >> 4; x++)
-            for (int z = retired.low().getZ() >> 4; z <= retired.high().getZ() >> 4; z++) level.getChunkSource().chunkMap.waitForLightBeforeSending(new ChunkPos(x, z), 0);
+        waitForLight(level, retired.low(), retired.high());
         // Pipes that ran into the removed nozzles drop their connection.
         for (var list : List.of(shells, interior))
             for (var at : list)
@@ -1007,36 +1069,90 @@ public final class EquipmentStructure {
      * of before would keep it.
      */
     static void refresh(ServerLevel level, BlockPos origin, EquipmentShape shape, BlockPos low, BlockPos high) {
+        var survey = survey(level, origin, low, high, shell -> ours(shell, origin, shape), false);
+        if (survey.paint() == null) return;
+        // A rebuilt structure is a structural change to every assembly report that relied on it.
+        com.wormzjl.icheme.runtime.assembly.AssemblyService.removed(level, new Vessel(origin, shape));
+        var plan = EquipmentRefresh.plan(ShapeRasterizer.layout(shape), survey.world());
+        var vessel = new Vessel(origin.offset(plan.shift().x(), 0, plan.shift().z()), shape);
+        var touched = write(level, vessel, survey.paint(), survey.name(), plan, false);
+        waitForLight(level, low, high);
+        // The registry's record follows the structure to where its layout now stands, cells left out or not: the registry
+        // holds the structure the player built.
+        if (!vessel.origin().equals(origin)) record(level, origin, null, null, com.wormzjl.icheme.science.equipment.DeviceName.NONE);
+        record(level, vessel.origin(), shape, survey.paint(), survey.name());
+        // A shaft unit stands at its structure's origin (W3): a moved origin's old unit leaves, the new one is queued here.
+        if (UnitDesign.shafted(shape.kind()) && !vessel.origin().equals(origin)) ShaftParts.remove(level, origin);
+        if (shape.fluidDevice()) reregister(level, vessel, survey.node(), survey.identities());
+        else ShaftParts.structure(level, vessel.origin(), shape, 0);
+        settle(level, vessel, touched);
+        IChemE.LOGGER.info("equipment_refresh kind={} origin={} shift={},{} cleared={} placed={} blocked={}", shape.kind().name().toLowerCase(Locale.ROOT),
+                origin.toShortString(), plan.shift().x(), plan.shift().z(), plan.clear().size(), plan.shell().size() + plan.interior().size(), plan.blocked().size());
+        if (!plan.blocked().isEmpty()) {
+            var first = plan.blocked().getFirst();
+            IChemE.LOGGER.warn("equipment_refresh left {} cells out: other blocks stand there, first at {}", plan.blocked().size(),
+                    vessel.origin().offset(first.x(), first.y(), first.z()).toShortString());
+        }
+    }
+
+    /**
+     * What stands in a vessel's region ({@link #survey}): each cell's holding from the origin, free cells absent; the paint
+     * and name of the first of its own shell cells (paint null when none stands); the last of its own shell cells that holds a fluid
+     * identity, and the identities they hold; the far corner of the boxes its own cells were placed by.
+     */
+    private record Survey(Map<ShapeRasterizer.Cell, EquipmentRefresh.Holding> world, @Nullable Paint paint, String name, @Nullable BlockPos node, List<Long> identities,
+                          BlockPos far) {
+    }
+
+    /**
+     * Reads what stands between {@code low} and {@code high}, from {@code origin}. A shell cell is the vessel's own when
+     * {@code own} accepts it; an interior cell when a walk over interior cells reaches one of its own shell cells, or, with
+     * {@code orphans}, reaches none (an interior cell holds no data: one whose shell cells are gone is the vessel's whose
+     * region it lies in); a fluid device block is a pipe; any other block that is not replaceable is another owner's.
+     */
+    private static Survey survey(ServerLevel level, BlockPos origin, BlockPos low, BlockPos high, Predicate<EquipmentShellBlockEntity> own, boolean orphans) {
         var world = new HashMap<ShapeRasterizer.Cell, EquipmentRefresh.Holding>();
         Paint paint = null;
         String name = com.wormzjl.icheme.science.equipment.DeviceName.NONE;
-        BlockPos oldNode = null;
-        var held = new ArrayList<Long>();
+        BlockPos node = null;
+        var identities = new ArrayList<Long>();
+        var far = origin;
         for (var at : BlockPos.betweenClosed(low, high)) {
             var cell = new ShapeRasterizer.Cell(at.getX() - origin.getX(), at.getY() - origin.getY(), at.getZ() - origin.getZ());
             var state = level.getBlockState(at);
-            if (level.getBlockEntity(at) instanceof EquipmentShellBlockEntity shell && ours(shell, origin, shape)) {
+            if (level.getBlockEntity(at) instanceof EquipmentShellBlockEntity shell && own.test(shell)) {
                 world.put(cell, EquipmentRefresh.Holding.SHELL);
                 if (paint == null) {
                     paint = shell.paint();
                     name = shell.name();
                 }
                 if (shell.fluidIdentity() != 0) {
-                    oldNode = at.immutable();
-                    held.add(shell.fluidIdentity());
+                    node = at.immutable();
+                    identities.add(shell.fluidIdentity());
                 }
+                far = max(far, corner(origin, shell.shape()));
             } else if (state.is(ModBlocks.EQUIPMENT_INTERIOR.get())) {
                 var shell = shellReached(level, at);
-                world.put(cell, shell != null && ours(shell, origin, shape) ? EquipmentRefresh.Holding.INTERIOR : EquipmentRefresh.Holding.OTHER);
+                boolean owned = shell == null ? orphans : own.test(shell);
+                world.put(cell, owned ? EquipmentRefresh.Holding.INTERIOR : EquipmentRefresh.Holding.OTHER);
+                if (owned && shell != null) far = max(far, corner(origin, shell.shape()));
             } else if (state.getBlock() instanceof FluidDeviceBlock) world.put(cell, EquipmentRefresh.Holding.PIPE);
             else if (!state.canBeReplaced()) world.put(cell, EquipmentRefresh.Holding.OTHER);
         }
-        if (paint == null) return;
-        // A rebuilt structure is a structural change to every assembly report that relied on it.
-        com.wormzjl.icheme.runtime.assembly.AssemblyService.removed(level, new Vessel(origin, shape));
+        return new Survey(world, paint, name, node, identities, far);
+    }
+
+    /**
+     * Writes {@code plan} for {@code vessel}, whose origin is the old one moved by the plan's shift: clears the cells the
+     * plan drops, places the shell and interior cells it adds, binds every shell cell to the layout, and brings the interior
+     * cells it kept to their current state ({@link #restateCells}). A shell cell it kept keeps its own paint unless
+     * {@code repaint}; every shell cell takes {@code name} (N1). With cells left out where other blocks stand, the cells
+     * written keep no stamp, so the next load tries again. Returns the cells whose block or drawing changed.
+     */
+    private static List<BlockPos> write(ServerLevel level, Vessel vessel, Paint paint, String name, EquipmentRefresh.Plan plan, boolean repaint) {
+        var placed = vessel.origin();
+        var shape = vessel.shape();
         var layout = ShapeRasterizer.layout(shape);
-        var plan = EquipmentRefresh.plan(layout, world);
-        var placed = origin.offset(plan.shift().x(), 0, plan.shift().z());
         var placeShell = new HashSet<>(plan.shell());
         var blocked = new HashSet<>(plan.blocked());
         var touched = new ArrayList<BlockPos>();
@@ -1051,16 +1167,16 @@ public final class EquipmentStructure {
             for (var cell : layout.shell()) {
                 if (blocked.contains(cell)) continue;
                 var at = placed.offset(cell.x(), cell.y(), cell.z());
-                var cellPaint = paint;
                 if (placeShell.contains(cell)) {
                     setCell(level, at, ModBlocks.EQUIPMENT_SHELL.get().defaultBlockState(), flags);
                     touched.add(at);
                 }
                 if (level.getBlockEntity(at) instanceof EquipmentShellBlockEntity entity) {
                     var before = entity.key();
-                    if (!placeShell.contains(cell)) cellPaint = entity.paint();
+                    var paintBefore = entity.paint();
+                    var cellPaint = repaint || placeShell.contains(cell) ? paint : paintBefore;
                     entity.bind(shape, cell, cellPaint, name);
-                    if (!entity.key().equals(before)) {
+                    if (!entity.key().equals(before) || !cellPaint.equals(paintBefore)) {
                         level.sendBlockUpdated(at, entity.getBlockState(), entity.getBlockState(), Block.UPDATE_CLIENTS);
                         touched.add(at);
                     }
@@ -1076,14 +1192,14 @@ public final class EquipmentStructure {
         } finally {
             dismantling = false;
         }
-        for (int x = low.getX() >> 4; x <= high.getX() >> 4; x++)
-            for (int z = low.getZ() >> 4; z <= high.getZ() >> 4; z++) level.getChunkSource().chunkMap.waitForLightBeforeSending(new ChunkPos(x, z), 0);
-        var vessel = new Vessel(placed, shape);
-        // A shaft unit stands at its structure's origin (W3): a moved origin's old unit leaves, the new one is queued below.
-        if (UnitDesign.shafted(shape.kind()) && !placed.equals(origin)) ShaftParts.remove(level, origin);
-        if (shape.fluidDevice()) reregister(level, vessel, oldNode, held);
-        else ShaftParts.structure(level, placed, shape, 0);
-        // Pipes beside a dropped, added or redrawn cell take up or drop their connection (old nozzles included).
+        return touched;
+    }
+
+    /**
+     * After a rebuild: the pipes beside a dropped, added or redrawn cell take up or drop their connection (old nozzles
+     * included), the vessel's nozzles redraw at the sizes of their pipes, and the assemblies that rely on it learn of it.
+     */
+    private static void settle(ServerLevel level, Vessel vessel, List<BlockPos> touched) {
         for (var at : touched)
             for (var direction : Direction.values()) {
                 var next = at.relative(direction);
@@ -1093,13 +1209,163 @@ public final class EquipmentStructure {
         reconnect(level, vessel);
         refreshNozzles(level, vessel);
         com.wormzjl.icheme.runtime.assembly.AssemblyService.placed(level, vessel);
-        IChemE.LOGGER.info("equipment_refresh kind={} origin={} shift={},{} cleared={} placed={} blocked={}", shape.kind().name().toLowerCase(Locale.ROOT),
-                origin.toShortString(), plan.shift().x(), plan.shift().z(), plan.clear().size(), plan.shell().size() + plan.interior().size(), plan.blocked().size());
-        if (!plan.blocked().isEmpty()) {
-            var first = plan.blocked().getFirst();
-            IChemE.LOGGER.warn("equipment_refresh left {} cells out: other blocks stand there, first at {}", plan.blocked().size(),
-                    placed.offset(first.x(), first.y(), first.z()).toShortString());
+    }
+
+    /**
+     * Each chunk from {@code low} to {@code high} waits for its light before it is sent to a player: the server sends a
+     * player light changes only on the edge of its view, so a chunk sent with the light of before would keep it.
+     */
+    private static void waitForLight(ServerLevel level, BlockPos low, BlockPos high) {
+        for (int x = low.getX() >> 4; x <= high.getX() >> 4; x++)
+            for (int z = low.getZ() >> 4; z <= high.getZ() >> 4; z++) level.getChunkSource().chunkMap.waitForLightBeforeSending(new ChunkPos(x, z), 0);
+    }
+
+    /** The far corner of {@code shape}'s box at {@code origin}. */
+    private static BlockPos corner(BlockPos origin, EquipmentShape shape) {
+        return origin.offset(shape.sizeX() - 1, shape.sizeY() - 1, shape.sizeZ() - 1);
+    }
+
+    /**
+     * Server, from {@link FluidWorldAuthority#loadedChunk}: a chunk of the structure the registry records at {@code origin}
+     * loaded, and the structure is re-aligned to its record on a later tick ({@link #serveRealignment}).
+     */
+    public static void realignLater(ServerLevel level, BlockPos origin) {
+        REALIGN.computeIfAbsent(level, k -> new LinkedHashMap<>()).putIfAbsent(origin.immutable(), origin.immutable());
+    }
+
+    /**
+     * Serves {@code level}'s structures for this level tick ({@link RegistryRealignment#serve}): each is checked against its
+     * record ({@link #realign}) until {@code deadline} ({@link System#nanoTime}) or {@code limit} checks, and none after a
+     * rebuild. A structure waits while the layout refresh has it queued (the refresh comes first, plan section 8) and while
+     * a chunk of its region, or of the blocks beside it, is not block-ticking. One whose record is gone, or a chunk of
+     * whose box is not loaded, leaves the queue: its next chunk load queues it again. {@code done} takes each check.
+     */
+    static void serveRealignment(ServerLevel level, FluidWorldAuthority world, long deadline, int limit, Consumer<RegistryRealignment.Check> done) {
+        var queue = REALIGN.get(level);
+        if (queue == null || queue.isEmpty()) return;
+        var stale = STALE.get(level);
+        int checked = 0;
+        for (var it = queue.entrySet().iterator(); it.hasNext() && checked < limit && System.nanoTime() - deadline < 0; ) {
+            var entry = it.next();
+            var origin = entry.getKey();
+            var record = world.structure(position(level, origin));
+            if (record == null) {
+                it.remove();
+                continue;
+            }
+            var box = corner(origin, record.shape());
+            if (!loaded(level, origin, box)) {
+                it.remove();
+                continue;
+            }
+            var high = max(box, entry.getValue());
+            if (stale != null && stale.containsKey(origin) || !ready(level, origin.offset(-1, 0, -1), high.offset(1, 0, 1))) continue;
+            checked++;
+            Realignment result;
+            try {
+                result = realign(level, world, new Vessel(origin, record.shape()), record.paint(), record.name(), high);
+            } catch (RuntimeException failed) {
+                it.remove();
+                IChemE.LOGGER.error("fluid_realign failed structure={}", origin.toShortString(), failed);
+                continue;
+            }
+            if (result.wider() != null) {
+                entry.setValue(result.wider());
+                continue;
+            }
+            it.remove();
+            done.accept(result.check());
+            if (result.check().outcome() != RegistryRealignment.Outcome.NOTHING) return;
         }
+    }
+
+    /** Every chunk of the region is loaded. */
+    private static boolean loaded(ServerLevel level, BlockPos low, BlockPos high) {
+        for (int x = low.getX() >> 4; x <= high.getX() >> 4; x++)
+            for (int z = low.getZ() >> 4; z <= high.getZ() >> 4; z++) if (!level.hasChunk(x, z)) return false;
+        return true;
+    }
+
+    /** One structure's re-alignment: what it did, or the far corner of the wider region it reads first. */
+    private record Realignment(@Nullable RegistryRealignment.Check check, @Nullable BlockPos wider) {
+    }
+
+    /**
+     * Registry first for {@code vessel}, the structure the registry records at its origin, painted {@code paint} and named
+     * {@code name} (batch
+     * 2026-11-03-save-corruption, REGISTRY_FIRST_PLAN.md 4.4). A structure whose layout cells all stand as its own is left
+     * as it is, and its registrations held before are released. Any other is rebuilt to its record where it stands (shift
+     * 0: the registry holds the origin). Cells of its origin and another shape (a structure built there after the
+     * registry's last save) are its own to clear or rebind, as are interior cells no shell cell reaches; every shell cell
+     * takes the record's shape and paint, and its registrations bind as at a load ({@link #restoreFluidBinding}). A cell
+     * another block stands in is left out, never overwritten, and the structure's registrations are held (decision S11)
+     * until a later load finds it whole. {@code high} is the far corner of the region read: the record's box, or wider
+     * where cells of its origin reach further.
+     */
+    private static Realignment realign(ServerLevel level, FluidWorldAuthority world, Vessel vessel, Paint paint, String name, BlockPos high) {
+        var origin = vessel.origin();
+        var shape = vessel.shape();
+        if (stands(level, vessel)) {
+            boolean released = false;
+            for (long id : members(world, level, vessel)) released |= world.hold(id, false);
+            released |= holdShaft(world, level, vessel, false);
+            return new Realignment(new RegistryRealignment.Check(RegistryRealignment.Outcome.NOTHING, released), null);
+        }
+        var survey = survey(level, origin, origin, high, shell -> shell.shape() != null && origin.equals(shell.origin()), true);
+        var far = max(high, survey.far());
+        if (!far.equals(high)) return new Realignment(null, far);
+        com.wormzjl.icheme.runtime.assembly.AssemblyService.removed(level, vessel);
+        var layout = ShapeRasterizer.layout(shape);
+        var plan = EquipmentRefresh.plan(layout, survey.world(), new ShapeRasterizer.Cell(0, 0, 0));
+        var touched = write(level, vessel, paint, name, plan, true);
+        waitForLight(level, origin, high);
+        // A shell cell that is no node of the record's shape stands for no registration.
+        var nodes = new HashSet<>(nodes(vessel));
+        for (var cell : layout.shell()) {
+            var at = origin.offset(cell.x(), cell.y(), cell.z());
+            if (!nodes.contains(at) && level.getBlockEntity(at) instanceof EquipmentShellBlockEntity shell && shell.fluidIdentity() != 0) shell.releaseIdentity();
+        }
+        restoreFluidBinding(level, vessel);
+        boolean blocked = !plan.blocked().isEmpty(), changed = false;
+        for (long id : members(world, level, vessel)) changed |= world.hold(id, blocked);
+        changed |= holdShaft(world, level, vessel, blocked);
+        settle(level, vessel, touched);
+        IChemE.LOGGER.warn("equipment_realign kind={} origin={} cleared={} placed={} blocked={} detail=rebuilt from the registry's record", shape.kind().name().toLowerCase(Locale.ROOT),
+                origin.toShortString(), plan.clear().size(), plan.shell().size() + plan.interior().size(), plan.blocked().size());
+        return new Realignment(new RegistryRealignment.Check(blocked ? RegistryRealignment.Outcome.HELD : RegistryRealignment.Outcome.PLACED, !blocked && changed), null);
+    }
+
+    /** Whether every cell of {@code vessel}'s layout stands as its own: a shell cell of its origin and shape, an interior cell. Stamps are the layout refresh's. */
+    private static boolean stands(ServerLevel level, Vessel vessel) {
+        var layout = ShapeRasterizer.layout(vessel.shape());
+        for (var cell : layout.shell())
+            if (!(level.getBlockEntity(vessel.origin().offset(cell.x(), cell.y(), cell.z())) instanceof EquipmentShellBlockEntity shell) || !ours(shell, vessel.origin(), vessel.shape()))
+                return false;
+        var interior = ModBlocks.EQUIPMENT_INTERIOR.get();
+        for (var cell : layout.interior())
+            if (!level.getBlockState(vessel.origin().offset(cell.x(), cell.y(), cell.z())).is(interior)) return false;
+        return true;
+    }
+
+    /** The registrations of {@code vessel}: those at its nodes, and a heat unit's partner sides. */
+    /**
+     * Holds or releases the shaft part of {@code vessel}'s structure with its registrations (W5c C1, option Q1): a held
+     * motor, generator, gearbox, turbine or casing joins no train. Whether that changes it.
+     */
+    private static boolean holdShaft(FluidWorldAuthority world, ServerLevel level, Vessel vessel, boolean on) {
+        if (ShaftParts.kind(vessel.shape().kind()) == null) return false;
+        var o = vessel.origin();
+        var u = world.shafts().unitAt(new com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Position(level.dimension().location().toString(), o.getX(), o.getY(), o.getZ()));
+        if (u == null || u.held() == on) return false;
+        world.shafts().queue(new com.wormzjl.icheme.runtime.fluid.ShaftTrains.Hold(u.id(), on));
+        return true;
+    }
+
+    private static List<Long> members(FluidWorldAuthority world, ServerLevel level, Vessel vessel) {
+        if (!vessel.shape().fluidDevice()) return List.of();
+        var ids = heldAtNodes(world, level, vessel);
+        if (HeatSides.unit(vessel.shape().kind()) == null) return ids;
+        return unitRecords(world, ids).values().stream().map(r -> r.device().id()).toList();
     }
 
     private static boolean ours(EquipmentShellBlockEntity shell, BlockPos origin, EquipmentShape shape) {
@@ -1272,7 +1538,8 @@ public final class EquipmentStructure {
         }
         var unit = Commands.literal("unit").then(at);
         event.getDispatcher().register(Commands.literal("icheme").requires(source -> source.hasPermission(2))
-                .then(Commands.literal("equipment").then(place).then(column).then(unit)));
+                .then(Commands.literal("equipment").then(place).then(column).then(unit))
+                .then(com.wormzjl.icheme.runtime.fluid.HeldDevicesCommand.node()));
     }
 
     private static int place(CommandContext<CommandSourceStack> context, int rows, EquipmentShape.Orientation orientation, int support, EquipmentShape.Heading front, boolean boot,

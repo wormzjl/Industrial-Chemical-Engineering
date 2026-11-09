@@ -15,6 +15,18 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+## [0.23.6] - 2026-11-09
+
+### Fixed
+
+- The fluid GameTest `identityBindingOnAChunkLoadCarriesNoViewData` counts a reloaded device's bucket from the tick after the load, when the load's marks arrive; counted from the load's tick it failed 1 run in 100 (commit `8642e6308`, batch `2026-11-03-save-corruption`).
+
+## [0.23.5] - 2026-11-09
+
+### Added
+
+- Registry first: the fluid registry and the control facts decide which IChemE devices, equipment structures, shaft parts, cables and controllers exist, and the world is set back to them after a chunk loads (`RegistryRealignment`, within 32 checks and 1 ms a tick); a part whose cell another block holds is held, never overwritten, and absent to its network (a train splits, a bus is cut, a controller is off), named on a neighbour's status line and by `/icheme devices held` (`drop <id>`); the build facts (line paints, structure records, rack frames, device names) join fluid facts schema 15, and a rack lane's frame control facts format 4 (commits `7fffcb9fb`..`a010657c6`, W5; `ddfd9cbd3`, main 0.23.4 merged in; `58ff8e519`, `3215761bb`, `98ba842a2`, `3f7117d1b`, `2f86539b0`, W5c; batch `2026-11-03-save-corruption`).
+
 ## [0.23.4] - 2026-11-09
 
 ### Fixed

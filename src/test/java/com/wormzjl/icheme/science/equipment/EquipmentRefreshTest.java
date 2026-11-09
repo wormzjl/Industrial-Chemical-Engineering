@@ -138,6 +138,20 @@ class EquipmentRefreshTest {
     }
 
     @Test
+    void aRestoreKeepsTheOriginItIsGiven() {
+        // Registry first (batch 2026-11-03-save-corruption): the record holds the origin. The body one block east, which a
+        // layout refresh follows, is cleared, and the layout is placed where the record stands.
+        var layout = ShapeRasterizer.layout(drum(3, 6, Orientation.VERTICAL, Heading.NORTH, 4));
+        var world = new HashMap<Cell, Holding>();
+        for (var entry : held(layout).entrySet()) world.put(new Cell(entry.getKey().x() + 1, entry.getKey().y(), entry.getKey().z()), entry.getValue());
+        assertEquals(new Cell(1, 0, 0), EquipmentRefresh.plan(layout, world).shift());
+        var plan = EquipmentRefresh.plan(layout, world, new Cell(0, 0, 0));
+        assertEquals(new Cell(0, 0, 0), plan.shift());
+        assertTrue(plan.blocked().isEmpty(), plan.toString());
+        assertWorldAfter(layout, world, plan);
+    }
+
+    @Test
     void aPipeInANewCellIsLeftOutAsAnotherBlockIs() {
         var layout = ShapeRasterizer.layout(drum(3, 6, Orientation.VERTICAL, Heading.NORTH, 4));
         var world = held(layout);

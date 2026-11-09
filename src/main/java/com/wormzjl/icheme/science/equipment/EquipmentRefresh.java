@@ -48,7 +48,15 @@ public final class EquipmentRefresh {
 
     /** The plan that brings {@code world} (what stands in each cell of the region, from the old origin, free cells absent) to {@code layout}. */
     public static Plan plan(Layout layout, Map<Cell, Holding> world) {
-        var shift = anchor(layout, world);
+        return plan(layout, world, anchor(layout, world));
+    }
+
+    /**
+     * The plan with the layout's box at {@code shift} from the old origin. A restore from the registry's record keeps the
+     * origin the record holds (shift 0, batch 2026-11-03-save-corruption, REGISTRY_FIRST_PLAN.md 4.4); only a layout
+     * refresh looks for one ({@link #anchor}).
+     */
+    public static Plan plan(Layout layout, Map<Cell, Holding> world, Cell shift) {
         var shell = new HashSet<>(layout.shell());
         var interior = new HashSet<>(layout.interior());
         var clear = new ArrayList<Cell>();

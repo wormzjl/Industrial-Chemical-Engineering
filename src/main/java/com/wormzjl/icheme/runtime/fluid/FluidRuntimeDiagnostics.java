@@ -85,6 +85,11 @@ public final class FluidRuntimeDiagnostics {
     public static final LongAdder topologyBatches=new LongAdder();
     public static final LongAdder topologyEvents=new LongAdder();
     public static final LongAdder compiledDevices=new LongAdder();
+    /** Re-alignment (batch 2026-11-03-save-corruption, REGISTRY_FIRST_PLAN.md section 6): loaded chunks that queued
+     * registrations, registrations checked, blocks placed, blocks restated, registrations held and released, and the
+     * nanoseconds the serving ticks spent. */
+    public static final LongAdder realignChunks=new LongAdder(),realignChecked=new LongAdder(),realignPlaced=new LongAdder(),
+            realignRestated=new LongAdder(),realignHeld=new LongAdder(),realignReleased=new LongAdder(),realignNanos=new LongAdder();
 
     private static final Map<String,LongAdder> COUNTERS=counters();
     private static Map<String,LongAdder> counters() {
@@ -105,6 +110,8 @@ public final class FluidRuntimeDiagnostics {
         map.put("budgetHolds",budgetHolds);map.put("numericalHolds",numericalHolds);map.put("retriesDeferred",retriesDeferred);map.put("phaseHolds",phaseHolds);
         map.put("heldEventAcceptances",heldEventAcceptances);map.put("droppedHeldTicks",droppedHeldTicks);
         map.put("topologyBatches",topologyBatches);map.put("topologyEvents",topologyEvents);map.put("compiledDevices",compiledDevices);
+        map.put("realignChunks",realignChunks);map.put("realignChecked",realignChecked);map.put("realignPlaced",realignPlaced);map.put("realignRestated",realignRestated);
+        map.put("realignHeld",realignHeld);map.put("realignReleased",realignReleased);map.put("realignNanos",realignNanos);
         return Collections.unmodifiableMap(map);
     }
 

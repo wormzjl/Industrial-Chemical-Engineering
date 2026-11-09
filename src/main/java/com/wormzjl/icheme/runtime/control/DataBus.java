@@ -27,14 +27,27 @@ public final class DataBus {
 
     /**
      * lane 0 is a cable block; higher lanes are rack options + 1. Endpoints belong to individual
-     * faces.
+     * faces. {@code frame}: a rack lane's rack cell frame as laid (control facts format 4, registry
+     * first, batch 2026-11-03-save-corruption, W5c C2); null for a cable block, and for a lane saved
+     * before, whose cell's frame is derived from its lanes.
      */
     public record Cable(
-            Site site, ConduitGeometry.Key geometry, int arms, Map<Direction, UUID> endpoints) {
+            Site site,
+            ConduitGeometry.Key geometry,
+            int arms,
+            Map<Direction, UUID> endpoints,
+            com.wormzjl.icheme.runtime.fluid.WorldTopologyLedger.RackFrame frame) {
+        /** A cable with no frame: a cable block, or a lane before its frame is known. */
+        public Cable(Site site, ConduitGeometry.Key geometry, int arms, Map<Direction, UUID> endpoints) {
+            this(site, geometry, arms, endpoints, null);
+        }
+
         public Cable {
             Objects.requireNonNull(site);
             Objects.requireNonNull(geometry);
             endpoints = Map.copyOf(endpoints);
+            if (frame != null && site.lane() == 0)
+                throw new IllegalArgumentException("A cable block lies in no rack frame");
             if (site.lane() == 0 && Integer.bitCount(geometry.joints()) > 4
                     || (arms & ~63) != 0
                     || site.lane() > 0
@@ -49,7 +62,12 @@ public final class DataBus {
             var ends = new EnumMap<Direction, UUID>(Direction.class);
             ends.putAll(endpoints);
             if (endpoint != null) ends.put(Direction.values()[face], endpoint);
-            return new Cable(site, geometry.connect(face, u, v), arms, ends);
+            return new Cable(site, geometry.connect(face, u, v), arms, ends, frame);
+        }
+
+        /** This lane in a rack cell of frame {@code value}. */
+        public Cable withFrame(com.wormzjl.icheme.runtime.fluid.WorldTopologyLedger.RackFrame value) {
+            return new Cable(site, geometry, arms, endpoints, value);
         }
 
         public CompoundTag save() {
@@ -63,31 +81,24 @@ public final class DataBus {
             t.putLong("offsets", geometry.offsets());
             t.putInt("arms", arms);
             t.put("endpoints", saveEndpoints(endpoints));
+            if (frame != null) {
+                var f = new CompoundTag();
+                f.putString("facing", frame.facing().name());
+                f.putString("shape", frame.shape().name());
+                t.put("frame", f);
+            }
             return t;
         }
 
         public static Cable load(CompoundTag t) {
-            if (!t.getAllKeys()
-                            .equals(
-                                    t.contains("medium")
-                                            ? Set.of(
-                                                    "dimension",
-                                                    "cell",
-                                                    "lane",
-                                                    "joints",
-                                                    "offsets",
-                                                    "arms",
-                                                    "endpoints",
-                                                    "medium")
-                                            : Set.of(
-                                                    "dimension",
-                                                    "cell",
-                                                    "lane",
-                                                    "joints",
-                                                    "offsets",
-                                                    "arms",
-                                                    "endpoints"))
+            var keys =
+                    new HashSet<>(
+                            Set.of("dimension", "cell", "lane", "joints", "offsets", "arms", "endpoints"));
+            if (t.contains("medium")) keys.add("medium");
+            if (t.contains("frame")) keys.add("frame");
+            if (!t.getAllKeys().equals(keys)
                     || t.contains("medium") && !t.contains("medium", 8)
+                    || t.contains("frame") && !t.contains("frame", 10)
                     || !t.contains("dimension", 8)
                     || !t.contains("cell", 4)
                     || !t.contains("lane", 3)
@@ -109,7 +120,20 @@ public final class DataBus {
                                     ? CableMedium.valueOf(t.getString("medium"))
                                     : CableMedium.DATA),
                     t.getInt("arms"),
-                    ends);
+                    ends,
+                    loadFrame(t));
+        }
+
+        private static com.wormzjl.icheme.runtime.fluid.WorldTopologyLedger.RackFrame loadFrame(CompoundTag t) {
+            if (!t.contains("frame")) return null;
+            var f = t.getCompound("frame");
+            if (!f.getAllKeys().equals(Set.of("facing", "shape"))
+                    || !f.contains("facing", 8)
+                    || !f.contains("shape", 8))
+                throw new IllegalArgumentException("Damaged cable frame");
+            return new com.wormzjl.icheme.runtime.fluid.WorldTopologyLedger.RackFrame(
+                    com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Direction.valueOf(f.getString("facing")),
+                    com.wormzjl.icheme.runtime.fluid.WorldTopologyLedger.RackShape.valueOf(f.getString("shape")));
         }
     }
 

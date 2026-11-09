@@ -53,9 +53,12 @@ final class FluidFacts {
      *  12 (batch 2026-11-03-rotating-machinery, W10b): the pumps' health (after the electric stores), only pumps below 1.
      *  13 (batch 2026-11-06-simulator-sizing): a heat unit's exchanger configuration, absent means Standard.
      *  14 (the same batch): a shaft unit's explicit VFD base speed, absent means its legacy pole-derived speed.
-     *  15 (batch 2026-11-09-batch-distiller, W3 and W4): the world's batch stills (after the pumps' health); the control
+     *  15 (batch 2026-11-03-save-corruption, REGISTRY_FIRST_PLAN.md 3 and step 5): the registry's build facts, after the
+     *  pumps' health: each painted line's paints, each equipment structure's shape and paint, and each rack lane's rack
+     *  frame (the facing and shape of the cell it lies in), so that the registry can place their blocks again.
+     *  16 (batch 2026-11-09-batch-distiller, W3 and W4): the world's batch stills (after the build facts); the control
      *  valve source {@code STILL}; the {@code diverter} control. */
-    static final int SCHEMA=15;
+    static final int SCHEMA=16;
     /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 15. */
     private static final Map<Class<?>,Map<String,String>> ALIASES=Map.of();
     private static final int MAXIMUM_FIELDS=256,MAXIMUM_ITEMS=1<<22,MAXIMUM_TEXTS=1<<20,MAXIMUM_ARRAY=4096,MAXIMUM_CHANNELS=1<<20;
@@ -179,18 +182,24 @@ final class FluidFacts {
      */
     record World(long nextIdentity,WorldTopologyLedger.FluidBasis basis,List<WorldTopologyLedger.Registration> registrations,
                  WorldTopologyLedger.MaterialTotal constructed,WorldTopologyLedger.MaterialTotal destroyed,List<Recovery> recoveries,WorldTopologyLedger.Restated restated,
-                 List<String> removedMovers,List<ColumnUnit> columns,List<ShaftUnit> shafts,Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores,Map<Long,Double> health,List<StillUnit> stills) {
-        /** Facts without batch stills (a world before schema 15). */
+                 List<String> removedMovers,List<ColumnUnit> columns,List<ShaftUnit> shafts,Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores,Map<Long,Double> health,WorldTopologyLedger.Builds builds,List<StillUnit> stills) {
+        /** Facts without batch stills (a world before schema 16). */
+        World(long nextIdentity,WorldTopologyLedger.FluidBasis basis,List<WorldTopologyLedger.Registration> registrations,WorldTopologyLedger.MaterialTotal constructed,
+              WorldTopologyLedger.MaterialTotal destroyed,List<Recovery> recoveries,WorldTopologyLedger.Restated restated,List<String> removedMovers,List<ColumnUnit> columns,
+              List<ShaftUnit> shafts,Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores,Map<Long,Double> health,WorldTopologyLedger.Builds builds) {
+            this(nextIdentity,basis,registrations,constructed,destroyed,recoveries,restated,removedMovers,columns,shafts,stores,health,builds,List.of());
+        }
+        /** Facts without the build facts (a world before schema 15): the blocks teach them at their next bind. */
         World(long nextIdentity,WorldTopologyLedger.FluidBasis basis,List<WorldTopologyLedger.Registration> registrations,WorldTopologyLedger.MaterialTotal constructed,
               WorldTopologyLedger.MaterialTotal destroyed,List<Recovery> recoveries,WorldTopologyLedger.Restated restated,List<String> removedMovers,List<ColumnUnit> columns,
               List<ShaftUnit> shafts,Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores,Map<Long,Double> health) {
-            this(nextIdentity,basis,registrations,constructed,destroyed,recoveries,restated,removedMovers,columns,shafts,stores,health,List.of());
+            this(nextIdentity,basis,registrations,constructed,destroyed,recoveries,restated,removedMovers,columns,shafts,stores,health,WorldTopologyLedger.Builds.NONE,List.of());
         }
         /** Facts without pump health (a world before schema 12): every pump new. */
         World(long nextIdentity,WorldTopologyLedger.FluidBasis basis,List<WorldTopologyLedger.Registration> registrations,WorldTopologyLedger.MaterialTotal constructed,
               WorldTopologyLedger.MaterialTotal destroyed,List<Recovery> recoveries,WorldTopologyLedger.Restated restated,List<String> removedMovers,List<ColumnUnit> columns,
               List<ShaftUnit> shafts,Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores) {
-            this(nextIdentity,basis,registrations,constructed,destroyed,recoveries,restated,removedMovers,columns,shafts,stores,Map.of(),List.of());
+            this(nextIdentity,basis,registrations,constructed,destroyed,recoveries,restated,removedMovers,columns,shafts,stores,Map.of());
         }
         World {health=Map.copyOf(health);stills=List.copyOf(stills);}
         /** Facts without shaft units (a world before schema 10). */
@@ -218,7 +227,7 @@ final class FluidFacts {
             var units=new HashMap<Long,ColumnUnit>();for(var u:columns)if(units.put(u.id(),u)!=null)throw new IllegalArgumentException("Invalid saved topology: duplicate column unit "+u.id());
             var parts=new HashMap<Long,ShaftUnit>();for(var u:shafts)if(parts.put(u.id(),u)!=null)throw new IllegalArgumentException("Invalid saved topology: duplicate shaft unit "+u.id());
             var batch=new HashMap<Long,StillUnit>();for(var u:stills)if(batch.put(u.id(),u)!=null)throw new IllegalArgumentException("Invalid saved topology: duplicate batch still "+u.id());
-            var snapshot=new WorldTopologyLedger.Snapshot(onlineTick,nextIdentity,active,events,constructed,destroyed,basis,pending,restated,units,parts,electricStores(),health,batch);
+            var snapshot=new WorldTopologyLedger.Snapshot(onlineTick,nextIdentity,active,events,constructed,destroyed,basis,pending,restated,units,parts,electricStores(),health,builds,batch);
             new WorldTopologyLedger(snapshot);return snapshot;
         }
     }
@@ -242,9 +251,38 @@ final class FluidFacts {
             f.list(new TreeMap<>(s.stores()).entrySet(),(q,e)->q.count(e.getKey()).f64(e.getValue().joules()).bool(e.getValue().metered()));
             // Schema 12: the pumps' health, by device identity, only pumps below 1 (a pump without an entry is new).
             f.list(new TreeMap<>(s.health()).entrySet(),(q,e)->q.count(e.getKey()).f64(e.getValue()));
-            // Schema 15: the batch stills, by their pots' identities.
+            // Schema 15: the build facts, line paints by identity and structures by origin. A structure's shape is its
+            // shell's own SNBT, made once when it was recorded.
+            var builds=s.builds();
+            f.list(new TreeMap<>(builds.paints()).entrySet(),(q,e)->q.count(e.getKey()).i32(e.getValue().primary()).i32(e.getValue().secondary()));
+            var structures=new ArrayList<>(builds.structures().entrySet());structures.sort(Map.Entry.comparingByKey(ORIGIN_ORDER));
+            f.list(structures,(q,e)->{position(q,e.getKey());var t=e.getValue();q.text(t.text()).i32(t.paint().body()).i32(t.paint().structure()).text(t.name());});
+            // Schema 15: each rack lane's rack frame, by identity.
+            f.list(new TreeMap<>(builds.racks()).entrySet(),(q,e)->q.count(e.getKey()).name(e.getValue().facing()).name(e.getValue().shape()));
+            // Schema 15: each named one-block device's name (N1), by identity.
+            f.list(new TreeMap<>(builds.names()).entrySet(),(q,e)->q.count(e.getKey()).text(e.getValue()));
+            // Schema 16, last: the batch stills, by their pots' identities.
             f.list(new TreeMap<>(s.stills()).values(),FluidFacts::still);
         });
+    }
+    private static final Comparator<PhysicalFluidTopology.Position> ORIGIN_ORDER=Comparator.comparing(PhysicalFluidTopology.Position::dimension)
+            .thenComparingInt(PhysicalFluidTopology.Position::x).thenComparingInt(PhysicalFluidTopology.Position::y).thenComparingInt(PhysicalFluidTopology.Position::z);
+    /**
+     * Schema 8: a structure's record. Its shape reads through the shell's own reader and repairs ({@code ShapeRepair}),
+     * repairs logged as a shell logs them. A shape of a kind this build retired is dropped: the shell's load removes the
+     * structure whole (backward-compat decision D6), and the registry cannot place it again. Returns null for that.
+     */
+    private static WorldTopologyLedger.Structure structure(Record q,PhysicalFluidTopology.Position origin,String text,int body,int structure,String name) {
+        net.minecraft.nbt.CompoundTag tag;
+        try{tag=net.minecraft.nbt.TagParser.parseTag(text);}
+        catch(com.mojang.brigadier.exceptions.CommandSyntaxException invalid){throw q.invalid("structure at "+origin+": its shape does not read: "+invalid.getMessage());}
+        var read=com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity.readShape(tag);
+        if(read.retired()!=null){warn("structure at "+origin+" is a retired "+read.retired()+"; the registry drops it");return null;}
+        if(read.shape()==null)throw q.invalid("structure at "+origin+": no shape");
+        for(var repair:read.repairs())IChemE.LOGGER.warn("equipment_compat kind={} at={} repair={}",read.shape().kind().name().toLowerCase(Locale.ROOT),origin,repair);
+        var paint=valid(q,"structure paint at "+origin,()->new com.wormzjl.icheme.science.equipment.Paint(body,structure));
+        if(!name.isEmpty()&&!WorldTopologyLedger.named(name))throw q.invalid("structure name at "+origin);
+        return WorldTopologyLedger.Structure.of(read.shape(),paint,name);
     }
     static World world(byte[] data,int offset,int length) {
         return read(data,offset,length,"facts of the topology unit",f->{
@@ -278,10 +316,33 @@ final class FluidFacts {
             for(var e:f.list(List.<Map.Entry<Long,Double>>of(),q->{long id=q.count(0);double value=q.f64(1);
                 if(!(value>=0&&value<=1))throw q.invalid("pump health "+id+": "+value);return Map.entry(id,value);}))
                 if(health.put(e.getKey(),e.getValue())!=null)throw f.invalid("duplicate pump health "+e.getKey());
-            // A world written before schema 15 has no batch stills.
+            // Schema 15: the build facts. A record written before them holds none, and the blocks teach them later.
+            var paints=new HashMap<Long,WorldTopologyLedger.LinePaint>();
+            for(var e:f.list(List.<Map.Entry<Long,WorldTopologyLedger.LinePaint>>of(),q->{long id=q.count(0);int primary=q.i32(com.wormzjl.icheme.science.equipment.Paint.BARE),secondary=q.i32(primary);
+                    var paint=valid(q,"line paint of "+id,()->new WorldTopologyLedger.LinePaint(primary,secondary));if(id<=0||paint.bare())throw q.invalid("line paint of "+id);return Map.entry(id,paint);}))
+                if(paints.put(e.getKey(),e.getValue())!=null)throw f.invalid("duplicate line paint "+e.getKey());
+            var structures=new HashMap<PhysicalFluidTopology.Position,WorldTopologyLedger.Structure>();var origins=new HashSet<PhysicalFluidTopology.Position>();
+            for(var e:f.list(List.<Map.Entry<PhysicalFluidTopology.Position,Optional<WorldTopologyLedger.Structure>>>of(),q->{var origin=required(position(q),q,"structure origin");var text=q.text("");
+                    int body=q.i32(0),structure=q.i32(0);var name=q.text("");if(origin.lane()!=0||text.isEmpty())throw q.invalid("structure at "+origin);
+                    return Map.entry(origin,Optional.ofNullable(structure(q,origin,text,body,structure,name)));})) {
+                if(!origins.add(e.getKey()))throw f.invalid("duplicate structure at "+e.getKey());
+                e.getValue().ifPresent(s->structures.put(e.getKey(),s));
+            }
+            // Schema 15: the rack frames. A record written before them holds none, and the racks teach them at bind.
+            var racks=new HashMap<Long,WorldTopologyLedger.RackFrame>();
+            for(var e:f.list(List.<Map.Entry<Long,WorldTopologyLedger.RackFrame>>of(),q->{long id=q.count(0);var facing=q.name(PhysicalFluidTopology.Direction.class,null);var shape=q.name(WorldTopologyLedger.RackShape.class,null);
+                    if(id<=0||facing==null||shape==null)throw q.invalid("rack frame of "+id);return Map.entry(id,valid(q,"rack frame of "+id,()->new WorldTopologyLedger.RackFrame(facing,shape)));}))
+                if(racks.put(e.getKey(),e.getValue())!=null)throw f.invalid("duplicate rack frame "+e.getKey());
+            // Schema 15: the device names. A record written before them holds none, and the blocks teach them at bind.
+            var names=new HashMap<Long,String>();
+            for(var e:f.list(List.<Map.Entry<Long,String>>of(),q->{long id=q.count(0);var name=q.text("");
+                    if(id<=0||!WorldTopologyLedger.named(name))throw q.invalid("device name of "+id);return Map.entry(id,name);}))
+                if(names.put(e.getKey(),e.getValue())!=null)throw f.invalid("duplicate device name "+e.getKey());
+            // Schema 16: the batch stills. A world written before schema 16 has none.
             var stills=f.list(List.<StillUnit>of(),FluidFacts::still);
             required(basis,f,"basis");required(constructed,f,"constructed total");required(destroyed,f,"destroyed total");
-            return new World(next,basis,registrations,constructed,destroyed,recoveries,restated,List.copyOf(removedMovers),columns,shafts,stores,health,stills);
+            return new World(next,basis,registrations,constructed,destroyed,recoveries,restated,List.copyOf(removedMovers),columns,shafts,stores,health,
+                    new WorldTopologyLedger.Builds(paints,structures,racks,names),stills);
         });
     }
     private static void total(Fields f,WorldTopologyLedger.MaterialTotal t) {
@@ -510,24 +571,35 @@ final class FluidFacts {
     }
     /**
      * The topology unit's state: its queued events, each with the registrations it would install; then the running column
-     * units' engine state ({@link ColumnUnit.State}), by unit. A checkpoint written before the column states has none.
+     * units' engine state ({@link ColumnUnit.State}), by unit; then the held devices of {@code active} and the held shaft
+     * parts (W5c C1), by identity. An
+     * event lists, after its recovery, the edits whose replacement is held. Holding is state (decision S11, batch
+     * 2026-11-03-save-corruption): a registration's facts never carry it. A checkpoint written before the column states, or
+     * before holding, has none.
      */
     static byte[] topologyState(List<WorldTopologyLedger.Event> events,Map<Long,ColumnUnit> columns){return topologyState(events,columns,Map.of());}
     /** {@code shafts}: the shaft units whose engine state (a driver's speed, W3) is kept, after the column states. */
-    static byte[] topologyState(List<WorldTopologyLedger.Event> events,Map<Long,ColumnUnit> columns,Map<Long,ShaftUnit> shafts) {
+    static byte[] topologyState(List<WorldTopologyLedger.Event> events,Map<Long,ColumnUnit> columns,Map<Long,ShaftUnit> shafts){return topologyState(events,columns,shafts,Map.of());}
+    /** {@code active}: the registrations whose hold (registry first, decision S11) is kept, after the shaft states. */
+    static byte[] topologyState(List<WorldTopologyLedger.Event> events,Map<Long,ColumnUnit> columns,Map<Long,ShaftUnit> shafts,Map<Long,WorldTopologyLedger.Registration> active) {
         var states=new ArrayList<ColumnUnit>();for(var u:columns.values())if(u.state()!=null)states.add(u);states.sort(Comparator.comparingLong(ColumnUnit::id));
         var speeds=new ArrayList<ShaftUnit>();for(var u:shafts.values())if(u.state()!=null)speeds.add(u);speeds.sort(Comparator.comparingLong(ShaftUnit::id));
+        var held=new ArrayList<Long>();for(var r:active.values())if(r.device().held())held.add(r.device().id());for(var u:shafts.values())if(u.held())held.add(u.id());Collections.sort(held);
         return section(f->f.list(events,(q,event)->{uuid(q,event.id());q.count(event.tick());
             q.list(event.edits(),(e,edit)->e.count(edit.id()).list(edit.replacement()==null?List.<WorldTopologyLedger.Registration>of():List.of(edit.replacement()),FluidFacts::registration));
             var touched=new ArrayList<>(event.touched());Collections.sort(touched);q.list(touched,(t,id)->t.count(id));
             var recovery=event.recovery();
             q.list(recovery==null?List.<WorldTopologyLedger.Recovery>of():List.of(recovery),(r,v)->r.count(v.filterId()).list(v.player()==null?List.<UUID>of():List.of(v.player()),FluidFacts::uuid));
+            q.list(event.edits().stream().filter(edit->edit.replacement()!=null&&edit.replacement().device().held()).map(WorldTopologyLedger.Edit::id).toList(),(h,id)->h.count(id));
         }).list(states,(q,u)->columnState(q.count(u.id()),u.state()))
-          .list(speeds,(q,u)->shaftState(q.count(u.id()),u.state())));
+          .list(speeds,(q,u)->shaftState(q.count(u.id()),u.state())).list(held,(q,id)->q.count(id)));
     }
     static byte[] events(List<WorldTopologyLedger.Event> events){return topologyState(events,Map.of());}
-    /** A topology unit's state: its events, and the column states that validate (one that does not is dropped: that unit solves again). */
-    record TopologyState(List<WorldTopologyLedger.Event> events,Map<Long,ColumnUnit.State> columns,Map<Long,ShaftUnit.State> shafts) {}
+    /**
+     * A topology unit's state: its events, the column states that validate (one that does not is dropped: that unit solves
+     * again), the shaft drivers' speeds (W3), and the identities of its held devices and shaft parts.
+     */
+    record TopologyState(List<WorldTopologyLedger.Event> events,Map<Long,ColumnUnit.State> columns,Map<Long,ShaftUnit.State> shafts,Set<Long> held) {}
     static TopologyState topologyState(byte[] data,int offset,int length) {
         return read(data,offset,length,"state of the topology unit",f->{
             var events=f.list(List.<WorldTopologyLedger.Event>of(),q->{
@@ -536,7 +608,15 @@ final class FluidFacts {
                     return valid(e,"edit",()->new WorldTopologyLedger.Edit(device,replacement.isEmpty()?null:replacement.getFirst()));});
                 var touched=new HashSet<Long>();for(long t:q.list(List.<Long>of(),t->t.count(0)))if(!touched.add(t))throw q.invalid("duplicate touched device");
                 var recovery=q.list(List.of(),r->{long filter=r.count(0);var player=r.list(List.of(),FluidFacts::uuid);return valid(r,"recovery",()->new WorldTopologyLedger.Recovery(filter,player.isEmpty()?null:player.getFirst()));});
-                return valid(q,"event",()->new WorldTopologyLedger.Event(id,tick,edits,touched,recovery.isEmpty()?null:recovery.getFirst()));
+                var holding=new HashSet<Long>();for(long h:q.list(List.<Long>of(),h->h.count(0)))if(!holding.add(h))throw q.invalid("duplicate held edit");
+                var held=new ArrayList<WorldTopologyLedger.Edit>(edits.size());
+                for(var edit:edits) {
+                    if(!holding.remove(edit.id())){held.add(edit);continue;}
+                    var r=edit.replacement();if(r==null)throw q.invalid("a held removal of "+edit.id());
+                    held.add(valid(q,"held edit",()->new WorldTopologyLedger.Edit(edit.id(),new WorldTopologyLedger.Registration(r.device().withHeld(true),r.spec(),r.revision()))));
+                }
+                if(!holding.isEmpty())throw q.invalid("held edits of no edit "+holding);
+                return valid(q,"event",()->new WorldTopologyLedger.Event(id,tick,held,touched,recovery.isEmpty()?null:recovery.getFirst()));
             });
             var columns=new HashMap<Long,ColumnUnit.State>();
             for(var entry:f.list(List.<Map.Entry<Long,ColumnUnit.State>>of(),q->{long id=q.count(0);var state=columnState(q);return new AbstractMap.SimpleEntry<>(id,state);}))
@@ -546,7 +626,8 @@ final class FluidFacts {
             for(var entry:f.list(List.<Map.Entry<Long,ShaftUnit.State>>of(),q->{long id=q.count(0);double speed=q.f64(0),previous=q.f64(Double.NaN),measured=q.f64(Double.NaN);
                     ShaftUnit.State state;try{state=new ShaftUnit.State(speed,previous,measured);}catch(IllegalArgumentException invalid){state=null;}return new AbstractMap.SimpleEntry<>(id,state);}))
                 if(entry.getValue()!=null&&shafts.put(entry.getKey(),entry.getValue())!=null)throw new IllegalArgumentException("Invalid saved topology state: duplicate shaft unit "+entry.getKey());
-            return new TopologyState(events,columns,shafts);
+            var held=new HashSet<Long>();for(long id:f.list(List.<Long>of(),q->q.count(0)))if(!held.add(id))throw f.invalid("duplicate held device "+id);
+            return new TopologyState(events,columns,shafts,Set.copyOf(held));
         });
     }
     static List<WorldTopologyLedger.Event> events(byte[] data,int offset,int length){return topologyState(data,offset,length).events();}
@@ -853,8 +934,10 @@ final class FluidFacts {
             recoveries.put(r.id,new WorldTopologyLedger.RecoveredSolid(r.position,r.player,solids,r.energy));
         }
         var restatedTotal=world.restated.plus(new WorldTopologyLedger.Restated(energy,removed.moles,removed.solids));
+        // The build facts are kept whole: a paint of a device this rebuild left out goes with it.
         var shafts=new HashMap<Long,ShaftUnit>();for(var u:world.shafts)shafts.put(u.id(),u);
-        var snapshot=new WorldTopologyLedger.Snapshot(epoch,next,registrations,List.of(),axis.total(world.constructed),axis.total(world.destroyed),basis,recoveries,restatedTotal,columns,shafts,world.electricStores(),world.health(),stills);
+        var snapshot=new WorldTopologyLedger.Snapshot(epoch,next,registrations,List.of(),axis.total(world.constructed),axis.total(world.destroyed),basis,recoveries,restatedTotal,columns,shafts,world.electricStores(),world.health(),
+                world.builds.keeping(registrations.keySet()),stills);
         var ledger=new WorldTopologyLedger(snapshot);
         // A dismantled column whose release was still queued leaves now, its accounts booked as destroyed.
         for(var u:columns.values())if(u.leaving())ledger.removeColumn(u.id());

@@ -9,6 +9,7 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 | Folder | Purpose | Batch | Status |
 |---|---|---|---|
 | [heating-values/](heating-values/README.md) | Prebuilt lower heating values (Hess's law) into the material records' combustion sub-record | `2026-11-09-furnace-fuel-power` | In use since 2026-11-09 |
+| [rack-frame-probe/](rack-frame-probe/README.md) | jshell probe: how often a rack lane's face points leave its frame open | `2026-11-03-save-corruption` | Implemented 2026-11-09 |
 | [lod-rendering/](lod-rendering/README.md) | Frame-time pair of the LOD batch: gauge scene, view and away windows | `2026-11-09-lod-rendering` | Implemented 2026-11-09 |
 | [equipment-service-probes/](equipment-service-probes/README.md) | Gradle-free probes of service cases, nozzle necks, shaft ends and drawn area on the gated shapes | `2026-11-09-main-gate-fixes` | Implemented 2026-11-09 |
 | [equipment-drawings/](equipment-drawings/README.md) | Native equipment drawings and labelled interface proposals | `2026-11-06-simulator-sizing` | In use since 2026-11-08 |

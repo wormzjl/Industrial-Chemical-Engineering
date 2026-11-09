@@ -174,7 +174,16 @@ final class FluidLineBackend implements LineBackend {
                             lane == null ? 0 : lane.width(),
                             lane == null ? 0 : cell.points()));
         }
-        var records = world.lay(laid, settings.bore(), old);
+        // The new pipes and lanes take the tool's paints, the pipe's and the flanges', into the registry; the pipes and
+        // lanes the line starts or ends at keep theirs. The blocks copy them as they bind (registry first, batch
+        // 2026-11-03-save-corruption).
+        var records = world.lay(laid, settings.bore(), old, settings.paint(), settings.secondary());
+        // Each new lane's rack frame: the lanes' points do not fix it, so the registry keeps it to place a lost cell again.
+        for (int i = 0; i < layout.cells().size(); i++)
+            if (lanes.get(i) != null)
+                world.rackFrame(
+                        records.get(i).device().id(),
+                        PipeRackBlock.frame(level.getBlockState(layout.cells().get(i).site().cell())));
         var edits = new ArrayList<LinePlacement.Edit>();
         var touched = new LinkedHashSet<BlockPos>();
         for (int i = 0; i < layout.cells().size(); i++) {
@@ -212,9 +221,7 @@ final class FluidLineBackend implements LineBackend {
                                                 Direction.values()[cell.facing()]),
                                 Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE,
                                 entity -> {
-                                    var pipe = (FluidDeviceBlockEntity) entity;
-                                    pipe.paint(settings.paint(), settings.secondary());
-                                    pipe.bindIdentity(records.get(k).device().id());
+                                    ((FluidDeviceBlockEntity) entity).bindIdentity(records.get(k).device().id());
                                 }));
         }
         layout.hosts().forEach(e -> touched.add(e.before().cell()));

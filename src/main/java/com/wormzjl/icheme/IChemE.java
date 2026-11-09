@@ -216,8 +216,22 @@ public final class IChemE {
         gameEventBus.addListener(IChemE::onServerStopping);
         gameEventBus.addListener(IChemE::onServerStopped);
         gameEventBus.addListener(IChemE::onFluidChunkLoaded);
+        gameEventBus.addListener(IChemE::onPlayerLoggedIn);
         gameEventBus.addListener(IChemE::onPlayerLoggedOut);
         gameEventBus.addListener(IChemE::onLevelTickPost);
+    }
+    /**
+     * An operator who joins while parts are held (fluid devices, shaft parts, cables, controllers) is told how many, once
+     * (registry first, batch 2026-11-03-save-corruption, REGISTRY_FIRST_PLAN.md 4.5, W5c C5); {@code /icheme devices held}
+     * lists them.
+     */
+    private static void onPlayerLoggedIn(net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerLoggedInEvent event) {
+        if(!(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)||!player.server.isSameThread()||!player.hasPermissions(2))return;
+        com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.find(player.server).ifPresent(world->{
+            int held=world.heldCount();
+            if(held>0)player.sendSystemMessage(held==1?net.minecraft.network.chat.Component.translatable("message.icheme.device_held")
+                    :net.minecraft.network.chat.Component.translatable("message.icheme.devices_held",held));
+        });
     }
     /** The FE port of a structure's terminal box (W5): the shell block entity's energy capability, on its terminal cell only. */
     private static void registerCapabilities(net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent event) {
@@ -228,9 +242,14 @@ public final class IChemE {
         // A solid-fired batch still's fuel slot on every cell (batch 2026-11-09-batch-distiller, W4): hoppers feed its fire.
         event.registerBlockEntity(net.neoforged.neoforge.capabilities.Capabilities.ItemHandler.BLOCK, ModBlockEntities.EQUIPMENT_SHELL.get(), (shell, side) -> shell.fuel());
     }
-    /** The floating roofs that rise this tick lift what stands on them (a read of each tank's glide; nothing solves). */
+    /**
+     * The floating roofs that rise this tick lift what stands on them (a read of each tank's glide; nothing solves), and the
+     * re-alignment checks a few registrations of the chunks that loaded (registry first; it never solves either).
+     */
     private static void onLevelTickPost(net.neoforged.neoforge.event.tick.LevelTickEvent.Post event) {
-        if(!event.getLevel().isClientSide())com.wormzjl.icheme.world.level.block.FloatingRoofs.carry(event.getLevel());
+        if(event.getLevel().isClientSide())return;
+        com.wormzjl.icheme.world.level.block.FloatingRoofs.carry(event.getLevel());
+        if(event.getLevel() instanceof net.minecraft.server.level.ServerLevel level)com.wormzjl.icheme.world.level.block.RegistryRealignment.serve(level);
     }
     /** A player who leaves watches no tank any more. */
     private static void onPlayerLoggedOut(net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerLoggedOutEvent event) {

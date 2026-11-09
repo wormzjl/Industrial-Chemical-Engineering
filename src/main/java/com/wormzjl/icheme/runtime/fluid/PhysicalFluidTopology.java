@@ -77,10 +77,17 @@ public final class PhysicalFluidTopology {
      * joint faces, ten bits per face as the transition pipes' offsets pack them (two signed five-bit steps of 1/32 m along
      * the face's in-plane axes); 0 for every other device. Two lanes in neighbouring cells meet where their points on the
      * shared face coincide (RACK_LAYERS_PLAN I2), whatever their racks' facings.</p>
+     *
+     * <p>{@code held} (batch 2026-11-03-save-corruption, decision S11): the registry could not place the device's block,
+     * because another block stands in its cell. It keeps what it holds and joins nothing, as built or not, until the
+     * re-alignment places it and releases it. Holding is state: it is saved in the topology unit's state section, never
+     * in its facts, and a load from facts releases it until its chunk is re-aligned.</p>
      */
     public record Device(long id,Position position,TopologyCompiler.Kind kind,Direction facing,
                          PipeResistance.Geometry geometry,FlowControl control,List<Port> ports,boolean generatorEnabled,Cutoff cutoff,boolean inlineFilter,int joints,int slots,long points,HeatUnit heat,
-                         long suspendedBy) {
+                         long suspendedBy,boolean held) {
+        /** A device the registry has placed ({@code held} false). */
+        public Device(long id,Position position,TopologyCompiler.Kind kind,Direction facing,PipeResistance.Geometry geometry,FlowControl control,List<Port> ports,boolean generatorEnabled,Cutoff cutoff,boolean inlineFilter,int joints,int slots,long points,HeatUnit heat,long suspendedBy){this(id,position,kind,facing,geometry,control,ports,generatorEnabled,cutoff,inlineFilter,joints,slots,points,heat,suspendedBy,false);}
         /** A device no running column holds ({@code suspendedBy} 0). */
         public Device(long id,Position position,TopologyCompiler.Kind kind,Direction facing,PipeResistance.Geometry geometry,FlowControl control,List<Port> ports,boolean generatorEnabled,Cutoff cutoff,boolean inlineFilter,int joints,int slots,long points,HeatUnit heat){this(id,position,kind,facing,geometry,control,ports,generatorEnabled,cutoff,inlineFilter,joints,slots,points,heat,0);}
         /** A device without a heat unit: every kind but {@link TopologyCompiler.Kind#HEAT_SIDE} and a kettle's shell. */
@@ -125,6 +132,7 @@ public final class PhysicalFluidTopology {
             boolean sink=burner||flare||outlet||fired;
             if(position.lane()==0||onPortLane?slots!=0||points!=0:!laneFits(position.lane(),slots)||(points>>>60)!=0)throw new IllegalArgumentException("Invalid rack lane "+position.lane()+" of "+slots+" positions");
             if(suspendedBy<0||onPortLane&&suspendedBy!=0)throw new IllegalArgumentException("Invalid column suspension");
+            if(held&&onPortLane)throw new IllegalArgumentException("A column's port has no block to hold");
             // A column's port (plan 4.2): a void or a generator meeting its valve through one face of its own cell.
             if(onPortLane!=(TopologyCompiler.fixed(kind)&&!ports.isEmpty()&&!sink)
                     ||onPortLane&&(ports.size()!=1||!ports.getFirst().cell.equals(position)||ports.getFirst().port!=PassiveNetwork.PhasePort.BULK||ports.getFirst().role!=ConnectionRole.VESSEL))
@@ -216,21 +224,23 @@ public final class PhysicalFluidTopology {
             if(kind==TopologyCompiler.Kind.PIPE&&control instanceof FlowControl.Machine m&&value.diameter()!=geometry.diameter()) {
                 var fixed=com.wormzjl.icheme.science.machine.InlineMachines.design(value.diameter(),m.liquid());changed=new FlowControl.Machine(fixed.law(),1,m.enabled());
             }
-            return new Device(id,position,kind,facing,value,changed,ports,generatorEnabled,cutoff,inlineFilter,joints,slots,points,heat,suspendedBy);
+            return new Device(id,position,kind,facing,value,changed,ports,generatorEnabled,cutoff,inlineFilter,joints,slots,points,heat,suspendedBy,held);
         }
-        public Device withFacing(Direction value){return new Device(id,position,kind,value,geometry,control,ports,generatorEnabled,cutoff,inlineFilter,joints,slots,points,heat,suspendedBy);}
-        public Device withControl(FlowControl value){return new Device(id,position,kind,facing,geometry,value,ports,generatorEnabled,cutoff,inlineFilter,joints,slots,points,heat,suspendedBy);}
-        public Device withCutoff(Direction axis,Cutoff value){return new Device(id,position,kind,axis,geometry,control,ports,generatorEnabled,value,inlineFilter,joints,slots,points,heat,suspendedBy);}
-        public Device withInlineFilter(Direction axis,boolean installed){return new Device(id,position,kind,axis,geometry,control,ports,generatorEnabled,cutoff,installed,joints,slots,points,heat,suspendedBy);}
+        public Device withFacing(Direction value){return new Device(id,position,kind,value,geometry,control,ports,generatorEnabled,cutoff,inlineFilter,joints,slots,points,heat,suspendedBy,held);}
+        public Device withControl(FlowControl value){return new Device(id,position,kind,facing,geometry,value,ports,generatorEnabled,cutoff,inlineFilter,joints,slots,points,heat,suspendedBy,held);}
+        public Device withCutoff(Direction axis,Cutoff value){return new Device(id,position,kind,axis,geometry,control,ports,generatorEnabled,value,inlineFilter,joints,slots,points,heat,suspendedBy,held);}
+        public Device withInlineFilter(Direction axis,boolean installed){return new Device(id,position,kind,axis,geometry,control,ports,generatorEnabled,cutoff,installed,joints,slots,points,heat,suspendedBy,held);}
         /** The same device standing at {@code value} with {@code nozzles}: a layout refresh rebuilding a vessel or a machine (decision D7). */
-        public Device withPlacement(Position value,List<Port> nozzles){return new Device(id,value,kind,facing,geometry,control,nozzles,generatorEnabled,cutoff,inlineFilter,joints,slots,points,heat,suspendedBy);}
+        public Device withPlacement(Position value,List<Port> nozzles){return new Device(id,value,kind,facing,geometry,control,nozzles,generatorEnabled,cutoff,inlineFilter,joints,slots,points,heat,suspendedBy,held);}
         /** The same pipe with another joint set: a line laid to one of its faces (a tee or an extension). */
-        public Device withJoints(int value){return new Device(id,position,kind,facing,geometry,control,ports,generatorEnabled,cutoff,inlineFilter,value,slots,points,heat,suspendedBy);}
-        public Device withGeneratorEnabled(boolean value){return new Device(id,position,kind,facing,geometry,control,ports,value,cutoff,inlineFilter,joints,slots,points,heat,suspendedBy);}
+        public Device withJoints(int value){return new Device(id,position,kind,facing,geometry,control,ports,generatorEnabled,cutoff,inlineFilter,value,slots,points,heat,suspendedBy,held);}
+        public Device withGeneratorEnabled(boolean value){return new Device(id,position,kind,facing,geometry,control,ports,value,cutoff,inlineFilter,joints,slots,points,heat,suspendedBy,held);}
         /** The same heat side with {@code value}: a control or transit edit, or a partner found (batch 2026-10-27-heat-exchanger-design). */
-        public Device withHeat(HeatUnit value){return new Device(id,position,kind,facing,geometry,control,ports,generatorEnabled,cutoff,inlineFilter,joints,slots,points,value,suspendedBy);}
+        public Device withHeat(HeatUnit value){return new Device(id,position,kind,facing,geometry,control,ports,generatorEnabled,cutoff,inlineFilter,joints,slots,points,value,suspendedBy,held);}
         /** The same device held by the running column unit {@code unit} (0: released). */
-        public Device withSuspendedBy(long unit){return new Device(id,position,kind,facing,geometry,control,ports,generatorEnabled,cutoff,inlineFilter,joints,slots,points,heat,unit);}
+        public Device withSuspendedBy(long unit){return new Device(id,position,kind,facing,geometry,control,ports,generatorEnabled,cutoff,inlineFilter,joints,slots,points,heat,unit,held);}
+        /** The same device held out of the world ({@link #held}), or released. */
+        public Device withHeld(boolean value){return new Device(id,position,kind,facing,geometry,control,ports,generatorEnabled,cutoff,inlineFilter,joints,slots,points,heat,suspendedBy,value);}
         /**
          * Whether a running column holds this device (batch 2026-10-28-column-operation, plan 4.1): it stands where it was,
          * with what it holds, and joins nothing until the column stops; the column's ports take its place at the valves.
@@ -278,6 +288,8 @@ public final class PhysicalFluidTopology {
             // A device a running column holds joins nothing (plan 4.1): the column stands in its place. As built, it still does.
             // A port stands in for the pipe block inside its valve (plan 4.2), so it joins the valve as that pipe did.
             if(!built&&(suspended()||other.suspended()))return false;
+            // A held device has no block in the world (S11): it joins nothing, as built either.
+            if(held||other.held)return false;
             // Across a rack face (see across) the other device stands on another lane of the next cell: it meets there.
             var to=from.offset(direction);if(to.lane()!=other.position.lane())to=other.position;
             var back=opposite(direction);

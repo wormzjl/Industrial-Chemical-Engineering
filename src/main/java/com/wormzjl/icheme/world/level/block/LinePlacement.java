@@ -309,15 +309,16 @@ public final class LinePlacement {
     }
 
     public static void apply(Level level, Work work) {
-        boolean laying = FluidDeviceBlock.laying;
-        FluidDeviceBlock.laying = true;
+        // The blocks stand for registrations the work made itself (FluidDeviceBlock.registered).
+        boolean registered = FluidDeviceBlock.registered;
+        FluidDeviceBlock.registered = true;
         try {
             for (var edit : work.edits()) {
                 if (edit.state() != null) level.setBlock(edit.at(), edit.state(), edit.flags());
                 edit.bind().accept(level.getBlockEntity(edit.at()));
             }
         } finally {
-            FluidDeviceBlock.laying = laying;
+            FluidDeviceBlock.registered = registered;
         }
         work.finish().run();
     }

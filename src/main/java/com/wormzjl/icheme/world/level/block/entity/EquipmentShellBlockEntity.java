@@ -353,6 +353,14 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
         return new TerminalEnergy(server, this);
     }
 
+    /** Server: the vessel's paint as the registry holds it (registry first, batch 2026-11-03-save-corruption); redraws on a change. */
+    public void repaint(Paint paint) {
+        if (this.paint.equals(paint)) return;
+        this.paint = paint;
+        setChanged();
+        if (level != null) level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 2);
+    }
+
     /**
      * This cell's fuel slot (batch 2026-11-09-batch-distiller, W4): every cell of a solid-fired batch still offers its pot
      * cell's one slot, so a hopper on any face feeds the fire; null on any other structure, on a cell whose pot cell is not

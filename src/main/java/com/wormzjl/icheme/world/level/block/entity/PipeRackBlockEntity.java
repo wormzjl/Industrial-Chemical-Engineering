@@ -278,9 +278,10 @@ public final class PipeRackBlockEntity extends ModelledBlockEntity implements Li
 
     /**
      * Server: matches the copy to the ledger, which holds the fluid facts. A lane with a registration takes its identity;
-     * a lane without one registers again from the copy; a registration with no copy is adopted, bare. A lane this cell's
-     * shape does not take, or with no room beside the lanes before it, is dropped from the copy. Each lane keeps the
-     * copy's paint, which the ledger does not hold. Then every lane is drawn.
+     * a lane without one registers again from the copy; a registration with no copy is adopted. A lane this cell's
+     * shape does not take, or with no room beside the lanes before it, is dropped from the copy. Each lane takes its
+     * paint from the registry (registry first, batch 2026-11-03-save-corruption); a painted lane the registry holds bare
+     * teaches it its paint, as a pipe block does. Then every lane is drawn.
      */
     public void bind(FluidWorldAuthority world) {
         if (!(level instanceof ServerLevel)) return;
@@ -292,7 +293,8 @@ public final class PipeRackBlockEntity extends ModelledBlockEntity implements Li
                 record = world.placeLane(position(lane.option), PhysicalFluidTopology.Direction.values()[lane.facing()], lane.joints, lane.width, points(lane), lane.bore);
             var copied = record == null ? null : copy(record.device());
             if (copied != null && RackGeometry.fits(rack(), taken, copied.drawn(0))) {
-                next.add(copied.painted(lane.paint, lane.secondary));
+                if (world.linePaint(copied.identity) == null) world.paint(copied.identity, lane.paint, lane.secondary);
+                next.add(painted(world, copied));
                 taken.add(copied.drawn(0));
             }
         }
@@ -302,12 +304,59 @@ public final class PipeRackBlockEntity extends ModelledBlockEntity implements Li
             var record = world.at(position(option)).orElse(null);
             var copied = record == null ? null : copy(record.device());
             if (copied != null && RackGeometry.fits(rack(), taken, copied.drawn(0))) {
-                next.add(copied);
+                next.add(painted(world, copied));
                 taken.add(copied.drawn(0));
             }
         }
         setLanes(next, null);
+        // Registry first (schema 9): a lane whose frame the registry does not hold learns this cell's (a world saved before
+        // frames, or a lane registered from the copy), unless another lane of the cell holds another frame: then this is
+        // not the cell the registry knows, and the re-alignment sets it back (RegistryRealignment).
+        var frame = PipeRackBlock.frame(getBlockState());
+        boolean known = true;
+        for (int option = 0; option < RackGeometry.OPTIONS && known; option++) {
+            var record = world.at(position(option)).orElse(null);
+            var held = record == null ? null : world.rackFrame(record.device().id());
+            known = held == null || held.equals(frame);
+        }
+        if (known) for (var lane : lanes) if (world.rackFrame(lane.identity) == null) world.rackFrame(lane.identity, frame);
         refresh(true);
+    }
+
+    /** Whether lane {@code identity} is in this cell's copy. */
+    public boolean carries(long identity) {
+        for (var lane : lanes) if (lane.identity == identity) return true;
+        return false;
+    }
+
+    /**
+     * The frames a rack cell may have for its registered {@code lanes}: those that take each lane at its registered face
+     * points, straight cells first. Several where the points do not fix the frame (a straight cell and a tee's leg give
+     * the same points); none where no frame takes them all. For lanes saved before the registry kept their frame.
+     */
+    public static List<RackGeometry.Rack> frames(List<PhysicalFluidTopology.Device> lanes) {
+        var out = new ArrayList<RackGeometry.Rack>();
+        for (int corner = RackGeometry.STRAIGHT; corner <= RackGeometry.TEE; corner++)
+            for (int facing = 2; facing < 6; facing++) {
+                var rack = new RackGeometry.Rack(facing, corner);
+                boolean takes = !lanes.isEmpty();
+                for (var d : lanes) {
+                    try {
+                        var lane = new Lane(d.id(), d.position().lane() - 1, d.slots(), Lane.arms(d.joints(), d.facing().ordinal()), d.joints(), d.geometry().diameter());
+                        takes &= RackGeometry.valid(rack, lane.option, lane.width, lane.arms) && RackGeometry.points(rack, lane.drawn(0)) == d.points();
+                    } catch (IllegalArgumentException invalid) {
+                        takes = false;
+                    }
+                }
+                if (takes) out.add(rack);
+            }
+        return out;
+    }
+
+    /** A lane's copy in the paint the registry holds for it, bare when it holds none. */
+    private static Lane painted(FluidWorldAuthority world, Lane lane) {
+        var held = world.linePaint(lane.identity);
+        return held == null ? lane : lane.painted(held.primary(), held.secondary());
     }
 
     /** A registered lane as its copy, or null when the registration is no lane this cell can draw. */

@@ -30,6 +30,19 @@ public final class ShaftParts {
     private ShaftParts() {
     }
 
+    /** The coupling block facing a direction, set by the Create compat when Create is loaded; null without Create (W5c C1). */
+    private static java.util.function.Function<Direction, net.minecraft.world.level.block.state.BlockState> couplingBlock;
+
+    /** Installs the coupling block's state for a facing (the Create compat, at registration). */
+    public static void couplingBlock(java.util.function.Function<Direction, net.minecraft.world.level.block.state.BlockState> value) {
+        couplingBlock = java.util.Objects.requireNonNull(value);
+    }
+
+    /** The coupling block whose industrial shaft leaves its {@code shaftSide}, or null without Create. */
+    public static net.minecraft.world.level.block.state.@org.jetbrains.annotations.Nullable BlockState couplingState(Direction shaftSide) {
+        return couplingBlock == null ? null : couplingBlock.apply(shaftSide.getOpposite());
+    }
+
     private static PhysicalFluidTopology.Position position(Level level, BlockPos at) {
         return new PhysicalFluidTopology.Position(level.dimension().location().toString(), at.getX(), at.getY(), at.getZ());
     }

@@ -886,6 +886,12 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
      * advisory line, never a hold) follows the island's own status.
      */
     private String statusText(String status){
+        // A held device beside this network (registry first): named first, in words, before the rest of the status.
+        var held=HELD_DEVICE.matcher(status);
+        if(held.lookingAt()){
+            String words=held.group(4)==null?tr("status.held_device",held.group(1),held.group(2),held.group(3)):tr("status.held_devices",held.group(1),held.group(2),held.group(3),held.group(4));
+            String rest=status.substring(held.end());return rest.isBlank()?words:words+" · "+statusText(rest);
+        }
         String notice=com.wormzjl.icheme.science.fluid.thermo.DataRangeNotices.suffix(status);
         if(!notice.isEmpty())return statusText(status.substring(0,status.length()-notice.length()))+notice;
         if(status.contains("HELD")||status.contains("ERROR")||status.contains("WAITING")||status.contains("closed")||status.contains("UNBOUND"))return status;
@@ -895,7 +901,8 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     /** A held low limit and a heater's shortfall, as {@code FluidWorldAuthority} writes them (K). */
     private static final java.util.regex.Pattern LOW_LIMIT=java.util.regex.Pattern.compile("LOW LIMIT: the outlet is held at ([0-9.]+) K"),
         DUTY_SHORT=java.util.regex.Pattern.compile("DUTY INSUFFICIENT: outlet ([0-9.]+) K below the set point"),SINCE=java.util.regex.Pattern.compile("since ([0-9.]+) s"),
-        COLUMN=java.util.regex.Pattern.compile("COLUMN: part of the column at (-?[0-9]+), (-?[0-9]+), (-?[0-9]+), running");
+        COLUMN=java.util.regex.Pattern.compile("COLUMN: part of the column at (-?[0-9]+), (-?[0-9]+), (-?[0-9]+), running"),
+        HELD_DEVICE=java.util.regex.Pattern.compile(java.util.regex.Pattern.quote(com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.HELD_DEVICE)+"(-?[0-9]+), (-?[0-9]+), (-?[0-9]+)(?: \\(and ([0-9]+) more\\))?(?: / )?");
     private String clauseText(String clause){
         if(clause.startsWith("STEADY: no flow"))return tr("no_flow");
         if(clause.startsWith("STEADY:"))return tr("flowing");

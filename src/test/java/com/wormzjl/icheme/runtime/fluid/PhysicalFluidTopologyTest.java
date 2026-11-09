@@ -387,6 +387,29 @@ class PhysicalFluidTopologyTest {
         }
     }
 
+    /**
+     * A held device (decision S11, batch 2026-11-03-save-corruption) has no block in the world: it joins nothing, as built
+     * either. A held tank is an island of its own, its contents kept; a held pipe leaves dead ends on both sides, as a
+     * missing pipe block does. Every copy keeps the hold.
+     */
+    @Test void aHeldDeviceJoinsNothingAndAHeldTankIsAnIslandOfItsOwn() {
+        var line=new ArrayList<PhysicalFluidTopology.Device>(List.of(tank(1,0,0),tank(2,5,0)));
+        for(int x=1;x<=4;x++)line.add(pipe(10+x,x,0,PhysicalFluidTopology.ALL_FACES));
+        var stock=Map.of(1L,reservoir(1),2L,reservoir(2));
+        assertEquals(1,PhysicalFluidTopology.compile(line,stock).islands().size(),"the line joins its tanks");
+        var heldTank=new ArrayList<>(line);heldTank.set(1,tank(2,5,0).withHeld(true));
+        var compiled=PhysicalFluidTopology.compile(heldTank,stock);
+        assertTrue(compiled.islands().stream().anyMatch(i->i.physicalIds().equals(Set.of(2L))&&i.graph().pipes().isEmpty()),"the held tank is an island of its own: "+compiled.islands());
+        assertTrue(compiled.islands().stream().noneMatch(i->i.physicalIds().contains(1L)&&i.physicalIds().contains(2L)),"nothing reaches the held tank");
+        var heldPipe=new ArrayList<>(line);heldPipe.set(3,pipe(12,2,0,PhysicalFluidTopology.ALL_FACES).withHeld(true));
+        compiled=PhysicalFluidTopology.compile(heldPipe,stock);
+        assertTrue(compiled.islands().stream().noneMatch(i->i.physicalIds().contains(1L)&&i.physicalIds().contains(2L)),"a held pipe parts the line");
+        assertEquals("NO FLOW: unconnected pipe",compiled.diagnostics().get(12L));
+        var held=pipe(12,2,0,ALONG_X).withHeld(true);var next=pipe(13,3,0,ALONG_X);
+        assertFalse(held.mechanicallyJoins(next,held.position(),EAST)||next.mechanicallyJoins(held,next.position(),WEST),"held, it joins nothing as built");
+        assertTrue(held.withJoints(PhysicalFluidTopology.ALL_FACES).withGeometry(new PipeResistance.Geometry(1,.1,.000045,0)).held(),"every copy keeps the hold");
+    }
+
     /** Owner decision 2026-10-16: a valve's half of each link takes the bore of the pipe on that side. (A pump is an
      * in-line mover, a pipe of its own bore, since batch 2026-10-28-old-mover-removal.) */
     @Test void anActuatorTakesTheBoreOfThePipeOnEachSide() {
