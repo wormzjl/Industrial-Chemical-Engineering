@@ -376,6 +376,7 @@ public final class SheetSizing {
                 case "storage_tank" -> tank(id, entry);
                 case "ejector" -> ejector(id, entry);
                 case "flare" -> flare(id, entry);
+                case "batch_still" -> still(id, entry, unit.params());
                 case "steam_turbine" -> turbine(id, entry, unit.params().number("exhaust", TurbineUnit.EXHAUST_PRESSURE));
                 default -> null;
             };
@@ -500,6 +501,25 @@ public final class SheetSizing {
             var load = FlareSizing.Load.of(stream(id, "in").mass(), r.getOrDefault("per_kilogram", 0.), r.getOrDefault("heating_value", 0.), r.getOrDefault("density", 0.),
                     r.getOrDefault("flame", com.wormzjl.icheme.science.fluid.network.Flare.AMBIENT), basis);
             return sized(entry, FlareSizing.Size.class, size -> FlareSizing.rate(load, size), () -> FlareSizing.auto(load));
+        }
+
+        /**
+         * A batch still on what its batch read: the charge's volume, the heat over the cycle, its condenser's and its column's shares
+         * (batch 2026-11-09-batch-distiller, W7). A door the run refused sizes nothing.
+         */
+        @Nullable SizedUnit still(String id, UnitEntry entry, com.wormzjl.icheme.science.flowsheet.Params params) {
+            com.wormzjl.icheme.science.equipment.BatchStillOptions options;
+            try {
+                options = com.wormzjl.icheme.science.flowsheet.unit.BatchStillUnit.options(params);
+            } catch (com.wormzjl.icheme.science.flowsheet.FlowsheetFailure refused) {
+                return null;
+            }
+            var r = readings(id);
+            var load = StillSizing.Load.of(options, r.getOrDefault("charge_volume", 0.), r.getOrDefault("duty", 0.), r.getOrDefault("firing", 0.), r.getOrDefault("cycle", 0.),
+                    r.getOrDefault("condensed", 1.), r.getOrDefault("flooded", 0.), r.getOrDefault("f_factor", 0.), basis);
+            // The options are the door's: a kept pot takes them, so Send to block builds the still the run ran.
+            var held = entry.size() instanceof StillSizing.Size kept ? new UnitEntry(kept.withOptions(options), entry.type(), entry.hold(), entry.kept()) : entry;
+            return sized(held, StillSizing.Size.class, size -> StillSizing.rate(load, size), () -> StillSizing.auto(load));
         }
 
         /** A steam turbine on the shaft power its run gave, from its inlet to the tile's exhaust (Pa) (W8, D43). */

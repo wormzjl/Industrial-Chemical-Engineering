@@ -238,6 +238,22 @@ public enum Limit {
     /** What the tip passes over the load, as {@link #AUTO_SPARE}'s 20 %: the owner's "always have enough excess". */
     FLARE_SPARE(SHOULD, least(20), "%", "This plan", QUIET),
 
+    // ---- Batch stills (batch 2026-11-09-batch-distiller, W7) ----
+    /** The charge's volume over the pot's: the pot holds no more. */
+    STILL_VOLUME(MUST, most(100), "%", "World: the pot's volume"),
+    /** The usual charge, {@code BatchStill.FILL}: a fuller pot boils over into its neck (plan section 6, item 6). */
+    STILL_FILL(SHOULD, most(100 * com.wormzjl.icheme.science.fluid.network.BatchStill.FILL), "%", "This plan: `BatchStill.FILL`"),
+    /** The batch's time at the design flow against the cycle: a still that takes longer cannot keep up with its inlet. */
+    STILL_BATCH(MUST, given(Sense.MOST), "h", "World: `BatchStill.step`"),
+    /** The cycle over the batch's time, as {@link #AUTO_SPARE}'s 20 %: the owner's "always have enough excess". */
+    STILL_BATCH_SPARE(SHOULD, least(20), "%", "This plan"),
+    /** The least share of the head's vapour the condenser takes: short of it, the rest vents (COOLING LIMITED). The same at every pot. */
+    STILL_COOLING(SHOULD, least(100), "%", "World: `BatchStill.condenserCapacity`", QUIET),
+    /** The share of the batch the column runs under its flood, F {@code BatchStill.FLOOD_F_FACTOR}; past it the firing is held. The same at every pot. */
+    STILL_FLOOD(MUST, least(100), "%", "World: `BatchStill.FLOOD_F_FACTOR`", QUIET),
+    /** The column's highest F-factor against its design, {@code BatchStill.DESIGN_F_FACTOR} at the full boil-up. The same at every pot. */
+    STILL_F_FACTOR(SHOULD, most(com.wormzjl.icheme.science.fluid.network.BatchStill.DESIGN_F_FACTOR), "Pa^0.5", "This plan: `BatchStill.DESIGN_F_FACTOR`", QUIET),
+
     // ---- Steam turbines (batch 2026-11-03-rotating-machinery, W8, D43) ----
     /** The rated power over the shaft power at design flow, at least a motor's {@link Motor#SPARE}: the owner's "always have enough excess". */
     TURBINE_SPARE(SHOULD, least(Motor.SPARE), "", "This plan: `Motor.SPARE`"),

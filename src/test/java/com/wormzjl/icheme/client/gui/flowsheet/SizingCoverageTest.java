@@ -15,6 +15,8 @@ import com.wormzjl.icheme.science.flowsheet.sizing.FlareSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.HeaterSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.PumpSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.SizingCoverage;
+import com.wormzjl.icheme.science.flowsheet.sizing.StillSizing;
+import com.wormzjl.icheme.science.equipment.BatchStillOptions;
 import com.wormzjl.icheme.science.flowsheet.sizing.TankSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.TurbineSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.UnitSize;
@@ -64,6 +66,7 @@ public class SizingCoverageTest {
         out.add(new EjectorSizing.Size(UnitSize.grid(EquipmentShape.Kind.EJECTOR)[3]));
         out.add(new TurbineSizing.Size(1250, MachineDuty.Steam.HP, 350));
         out.add(new FlareSizing.Size(UnitSize.grid(EquipmentShape.Kind.FLARE_STACK)[4]));
+        out.add(new StillSizing.Size(StillSizing.pots().get(4), new BatchStillOptions(BatchStillOptions.Heater.LIQUID, BatchStillOptions.Condenser.BUILT_IN, 4)));
         out.add(new ValveSizing.Size(.3));
         return out;
     }
