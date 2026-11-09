@@ -1,0 +1,51 @@
+# Batch distiller
+
+Status: **In progress since 2026-11-09** (owner decisions B1 to B8 answered; build in three phases). Branch
+`claude/furnace-fuel-power-requirements-f7a46e`: it reuses the burners and FE draw of
+[2026-11-09-furnace-fuel-power](../2026-11-09-furnace-fuel-power/README.md).
+
+## Scope
+
+Owner, 2026-11-09: a batch distiller, less industrial than the columns and the step before them. The pot is heated by a
+solid- or liquid-fuelled firebox or an electric heater (no jacket) at a realistic efficiency. Solid fuel uses Minecraft's
+fuel values (burn ticks), converted at mod-market values with coal coke as a starting point; the item mass is free. The
+burner is animated. Options: a built-in water-cooled condenser (U constant, A by size, matched to the pot) and a small
+column with a reflux pot and a manual reflux valve. Dynamic batch runs with the distillate collected by hand, and a batch
+distiller in the process simulator.
+
+## Documents
+
+- [BATCH_DISTILLER_PLAN.md](BATCH_DISTILLER_PLAN.md): reference photos, physics in numbers, what the code has, proposal
+  W1 to W8, owner decisions B1 to B8, what the request leaves open, the B3 and B6 evaluations (section 7).
+- Run output of B3 (local): `research/2026-11-09-batch-distiller/b3-column/` (`report.txt`, `snapshots.csv`).
+
+## Code areas
+
+- `src/test/java/com/wormzjl/icheme/science/column/batch/`: `BubblePointColumn` (the B3 candidate, both forms) and
+  `BatchColumnComparisonTest` (a quick sanity test in `test`; the comparison runs only with `ICHEME_BATCH_COLUMN=1`).
+
+## History
+
+- 2026-11-09: research and plan; reference photos (Yoichi coal-fired pot stills, Koval's Kothe hybrid still, the 1880
+  Pioneer oil refinery, Coupier's still); schema drawn. No code.
+- 2026-11-09: owner: a block is 9 items and 1 m³, at bulk density. Solid fuel redone: one coal 93 kg, 2.31 GJ; B1 now
+  between burn ticks on a coal anchor (coke 4.63 GJ) and mass × LHV per material (coke 1.45 GJ).
+- 2026-11-09: owner chose B1 B, mass × LHV per material at bulk density; burn ticks × 1.45 MJ only without a record.
+- 2026-11-09: owner answers B2 to B8 (electric 90 %; B3 try a simpler column model against V3; B4 A plus an automatable
+  switching valve; B5, B7, B8 A; B6 evaluate the solver cost first). Plan section 7: the B3 experiment's design and the
+  B6 evaluation (no Newton cost; a never-resting island for about 5 to 7 h after each batch; fold the loss into the
+  efficiency instead).
+- 2026-11-09: B3 measured (plan section 7). The bubble-point method with its energy-balance flow update converges on
+  every pot step, about 13 × faster than V3 cold and 5 × warm, within 0.004 mole fraction and 0.01 K of V3; the
+  constant-molar-overflow form is off by up to 0.13 on crude. Found on the way: V3 refuses `icheme:refinery` (CO₂ crystal
+  phases), and a crude pot's own warming takes 2 to 2.7 times the boil-up heat (plan section 6, item 12).
+- 2026-11-09: owner adopted B3: the still's column is the energy-balance bubble-point form in pot mode on the network's
+  phase evaluator; V3 stays for the big columns; the constant-molar-overflow form is dropped.
+- 2026-11-09: owner chose B6 A: no heat loss to ambient, folded into the heater efficiency.
+- 2026-11-09: owner: start building. Phase 1 in two Opus sub-sessions, still-law (W1 and the fuel records) and
+  still-structure (W2); phase 2 still-engine (W3 to W5) and still-simulator (W7); phase 3 still-gui (W6). Each hands
+  back a diff; the main thread tests and commits.
+
+## Open items
+
+- At the merge: move `BubblePointColumn`'s measurement harness to `tools/batch-still-column/` (tooling cleanup).
