@@ -52,6 +52,12 @@ public class PumpRender {
             case TANK, SPHERE -> EquipmentShape.designed(kind,size,length,Heading.NORTH,support,ProcessUnit.Bank.ONE);
             default -> EquipmentShape.unit(kind, size, length, Heading.NORTH, support);
         };
+        // -Dstill=HEATER,CONDENSER,STAGES: a batch still's options (batch 2026-11-09-batch-distiller, tools/still-sprites).
+        var still = System.getProperty("still");
+        if (kind == Kind.BATCH_STILL && still != null) {
+            var o = still.split(",");
+            shape = shape.withStill(new BatchStillOptions(BatchStillOptions.Heater.valueOf(o[0]), BatchStillOptions.Condenser.valueOf(o[1]), Integer.parseInt(o[2])));
+        }
         var detail = RenderDetail.valueOf(System.getProperty("detail", "NORMAL"));
         var sprites = sprites();
         var triangles = new ArrayList<Triangle>();

@@ -85,18 +85,18 @@ class ProcessUnitTest {
     }
 
     /**
-     * A batch still's nozzle faces by its options: the charge to the left (-x), the drain to the back; the worm tub's
-     * distillate and vent to the front, its water in on top and out at the back; a column's condenser water in to the left
-     * and out at the back; without a condenser the vapour to the right; a liquid-fuel burner's fuel to the front.
+     * A batch still's nozzle faces by its options: the charge to the left (-x), the drain to the back; the top condenser's
+     * distillate and vent to the front, its water in to the left and out at the back, with or without a column (owner,
+     * 2026-11-09); without a condenser the vapour to the right; a liquid-fuel burner's fuel to the back.
      */
     private static Map<Role, String> stillSides(BatchStillOptions options) {
         var sides = new HashMap<Role, String>(Map.of(Role.CHARGE, "0-", Role.DRAIN, "2+"));
         if (!options.condenses()) sides.put(Role.VAPOUR_OUTLET, "0+");
         else {
             sides.putAll(Map.of(Role.DISTILLATE, "2-", Role.VENT, "2-", Role.WATER_OUTLET, "2+"));
-            sides.put(Role.WATER_INLET, options.column() ? "0-" : "1+");
+            sides.put(Role.WATER_INLET, "0-");
         }
-        if (options.heater() == BatchStillOptions.Heater.LIQUID) sides.put(Role.FUEL, "2-");
+        if (options.heater() == BatchStillOptions.Heater.LIQUID) sides.put(Role.FUEL, "2+");
         return sides;
     }
 

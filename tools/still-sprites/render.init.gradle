@@ -1,0 +1,40 @@
+// Offline still renders only (batch 2026-11-09-batch-distiller, tools/still-sprites). No production or test source set
+// changes, no client, no test suite. Usage, from the worktree root:
+//   ./gradlew --offline --init-script tools/still-sprites/render.init.gradle renderStills -PstillRenderOut=tmp/still-sprites
+gradle.projectsEvaluated {
+    def p = gradle.rootProject
+    def out = p.providers.gradleProperty('stillRenderOut')
+    def sources = p.sourceSets.create('stillRenderTools') {
+        java.srcDir p.file('tools/pump-sprites/probes')
+        java.include 'PumpRender.java'
+        compileClasspath += p.sourceSets.main.output + p.sourceSets.main.compileClasspath
+        runtimeClasspath += output + p.sourceSets.main.runtimeClasspath
+    }
+    p.tasks.named(sources.compileJavaTaskName) {
+        dependsOn p.tasks.named('classes')
+        options.compilerArgs.add('-proc:none')
+    }
+    def variants = [
+            [name: 'pot-solid', size: '500', still: 'SOLID,BUILT_IN,0'],
+            [name: 'pot-small-liquid', size: '100', still: 'LIQUID,BUILT_IN,0'],
+            [name: 'pot-electric', size: '500', still: 'ELECTRIC,BUILT_IN,0'],
+            [name: 'column-liquid', size: '500', still: 'LIQUID,BUILT_IN,5'],
+            [name: 'column-large-solid', size: '2000', still: 'SOLID,BUILT_IN,8'],
+            [name: 'vapour-electric', size: '500', still: 'ELECTRIC,NONE,0'],
+    ]
+    def all = p.tasks.register('renderStills') {
+        group = 'documentation'
+        description = 'Software renders of the batch still variants with the mod sprites (PumpRender).'
+    }
+    variants.each { v ->
+        def task = p.tasks.register('renderStill-' + v.name, JavaExec) {
+            dependsOn p.tasks.named(sources.classesTaskName)
+            classpath = sources.runtimeClasspath
+            mainClass = 'com.wormzjl.icheme.science.equipment.PumpRender'
+            workingDir = p.projectDir
+            args 'BATCH_STILL', v.size, '1', '0', new File(p.file(out.getOrElse('tmp/still-sprites')), v.name).absolutePath, 'iso,iso2,front,left'
+            jvmArgs '-Djava.awt.headless=true', '-Dstill=' + v.still, '-Dcap=200'
+        }
+        all.configure { dependsOn task }
+    }
+}

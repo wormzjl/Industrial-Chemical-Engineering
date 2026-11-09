@@ -123,7 +123,8 @@ public final class Stills implements IslandCoordinator.Ports {
     /** The firing still {@code u} runs at: its controller's, else its own setting. */
     private double firing(StillUnit u){double p=plans.firing(u.id());return Double.isNaN(p)?u.firing():p;}
     /** The reflux ratio still {@code u}'s valve is set to (+Infinity closed): its controller's, else its own setting. */
-    private double reflux(StillUnit u){double p=plans.reflux(u.id());return Double.isNaN(p)?u.closedValve()?Double.POSITIVE_INFINITY:u.reflux():p;}
+    /** The reflux ratio at the still's valve; 0 for a still without one ({@link BatchStill.Design#refluxes}). */
+    private double reflux(StillUnit u){if(!u.design().refluxes())return 0;double p=plans.reflux(u.id());return Double.isNaN(p)?u.closedValve()?Double.POSITIVE_INFINITY:u.reflux():p;}
 
     /** Rebuilds the lookups from the ledger's stills; cheap when nothing changed. */
     public void refresh() {
@@ -327,7 +328,7 @@ public final class Stills implements IslandCoordinator.Ports {
         double condensate=r.solved==null?r.potTemperature:r.solved.condensateTemperature();
         double liquid=StillHead.liquidShare(reflux(u),r.condensed);
         // Before the column's first answer the condensate stands at the pot's temperature.
-        var division=StillHead.divide(moles,energy,world,condensate,u.stages()==0?r.condensed:liquid,u.condenser());
+        var division=StillHead.divide(moles,energy,world,condensate,liquid,u.condenser());
         double total=0;for(double n:moles)total+=n;
         if(!(total>0)) {
             // Energy with no moles: a closed column's reflux, condensed and returned; the water (or the air) takes it now.
@@ -393,7 +394,7 @@ public final class Stills implements IslandCoordinator.Ports {
         promote(r,end);
         if(!u.condenser()&&u.stages()==0||r.pending||end<r.lastSubmit+SOLVE_TICKS||!(r.heat>0))return;
         condensed(u,r,end);
-        double reflux=u.condenser()?BatchStill.effectiveReflux(reflux(u),r.condensed):0;
+        double reflux=BatchStill.effectiveReflux(reflux(u),r.condensed);
         var warm=r.solved==null?null:r.solved.profile();
         var job=new StillHead.Job(node.inventory().moles(),node.state().temperature(),BatchStill.ATMOSPHERIC,u.stages(),reflux,warm,u.design().columnDiameter());
         long pot=u.id(),apply=end+APPLY_TICKS;
@@ -441,7 +442,7 @@ public final class Stills implements IslandCoordinator.Ports {
     /** Still {@code pot} as its page shows it (cached), or null for none. */
     public View view(long pot) {
         var u=topology.still(pot);var r=runs.get(pot);if(u==null||r==null)return null;
-        double reflux=u.condenser()&&u.stages()>0?BatchStill.effectiveReflux(reflux(u),r.condensed):0;
+        double reflux=BatchStill.effectiveReflux(reflux(u),r.condensed);
         return new View(r.potTemperature,r.level,r.filled,r.solved==null?Double.NaN:r.solved.headTemperature(),r.heat,r.distillateFlow,r.ventFlow,r.condensed,reflux,r.status,alarms(pot));
     }
     /** The still's status line: its status word, its alarms, and a failed column solve's reason. */
@@ -474,11 +475,11 @@ public final class Stills implements IslandCoordinator.Ports {
         var r=runs.get(pot);if(r!=null)r.lastSubmit=Long.MIN_VALUE/2;
     }
     /** Whether still {@code pot} has a reflux valve: a column over its condenser. */
-    public boolean refluxes(long pot){var u=topology.still(pot);return u!=null&&u.condenser()&&u.stages()>0;}
+    public boolean refluxes(long pot){var u=topology.still(pot);return u!=null&&u.design().refluxes();}
     /** The firing still {@code pot} runs at (its controller's, else its setting), NaN for no still. */
     public double firing(long pot){var u=topology.still(pot);return u==null?Double.NaN:firing(u);}
     /** The reflux ratio still {@code pot}'s valve is set to (+Infinity closed), NaN for no still; 0 with no condenser to return any. */
-    public double reflux(long pot){var u=topology.still(pot);return u==null?Double.NaN:u.condenser()?reflux(u):0;}
+    public double reflux(long pot){var u=topology.still(pot);return u==null?Double.NaN:reflux(u);}
     /** Forgets still {@code pot}'s engine state (its structure was removed). */
     public void removed(long pot){runs.remove(pot);refresh();}
 

@@ -177,6 +177,15 @@ public final class BatchStill {
         public double columnDiameter() {
             return stages > 0 ? BatchStill.columnDiameter(rating()) : 0;
         }
+
+        /**
+         * Whether the still has a reflux valve: a column under the built-in condenser. A pot still's condensate all goes to
+         * the distillate; returned to the pot it would only cut the distillate, as the pot is the one equilibrium stage
+         * (owner, 2026-11-09).
+         */
+        public boolean refluxes() {
+            return condenser && stages > 0;
+        }
     }
 
     /**
@@ -361,7 +370,7 @@ public final class BatchStill {
                              double dry, Inputs inputs, StillColumn.Split last, double dt) {
         boolean condenser = design.condenser() && inputs.cooling() != null;
         // A column with no condenser has no reflux: its trays run dry and pass the pot's vapour, one stage.
-        double nominal = condenser && design.stages() > 0 ? inputs.reflux() : 0, condensed = 1;
+        double nominal = condenser && design.refluxes() ? inputs.reflux() : 0, condensed = 1;
         var warm = last;
         Boil boil = null;
         for (int pass = 0; pass < 6; pass++) {
