@@ -41,6 +41,7 @@ public final class ClientConfig {
     public static final ModConfigSpec.BooleanValue STREAM_CONDITIONS;
     public static final ModConfigSpec.ConfigValue<List<? extends String>> EQUIPMENT_PAINTS;
     public static final ModConfigSpec.BooleanValue LOW_POLYGON_MODE;
+    public static final ModConfigSpec.DoubleValue LOD_SCALE;
 
     static {
         var builder = new ModConfigSpec.Builder();
@@ -58,6 +59,8 @@ public final class ClientConfig {
         builder.pop();
         builder.push("equipment");
         LOW_POLYGON_MODE = builder.comment("Drawing only: textured flange bolts and fewer round-surface facets. Placement, collision and process calculations keep their normal geometry. Reload resources (F3+T) after changing.").define("low_polygon_mode", false);
+        LOD_SCALE = builder.comment("Drawing only: how soon gauges, sensors, cables and sight glasses lose detail with distance. 1 follows what a pixel shows; 2 drops detail at half the distance, 0.5 at twice it. Each still stops at its own largest range.")
+                .defineInRange("lod_scale", 1.0, RenderLod.LEAST_SCALE, RenderLod.MOST_SCALE);
         EQUIPMENT_PAINTS = builder.comment("Constructor body and structure colours by player account: UUID:#RRGGBB:#RRGGBB. Remembered when the Paint page is edited.")
                 .defineListAllowEmpty("paint_schemes", List.<String>of(),
                         () -> new UUID(0, 0) + ":#A1A1A0:#5B686D", EquipmentPaints::valid);
@@ -125,6 +128,16 @@ public final class ClientConfig {
 
     public static com.wormzjl.icheme.science.equipment.RenderDetail renderDetail() {
         return get(LOW_POLYGON_MODE, false) ? com.wormzjl.icheme.science.equipment.RenderDetail.LOW : com.wormzjl.icheme.science.equipment.RenderDetail.NORMAL;
+    }
+
+    /** The level-of-detail scale, 1 before the config has loaded. */
+    public static double lodScale() {
+        return get(LOD_SCALE, 1.0);
+    }
+
+    /** This frame's level-of-detail view of a projection whose m11 is {@code m11} on a framebuffer {@code height} high. */
+    public static RenderLod.View lodView(double m11, int height) {
+        return RenderLod.View.of(m11, height, lodScale());
     }
 
     public static Paint equipmentPaint(UUID player, Paint fallback) {

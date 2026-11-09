@@ -9,7 +9,7 @@ Sensors use `Sensor.Installed` (host/mount, UUID, revision and kind), `Sensor.Re
 **Feature branch:** `b1477c09` (`codex/liquid-gauge-accessory`), 2026-10-26, based on main `600549d9`. Floating-roof tank level gauge is an optional item/accessory;24 focused checks/package and8 native views pass. Ported into this 0.22.0 branch; the batch is not merged. [Contracts](../../2026-10-26-liquid-level-gauge-accessory/LEVEL_GAUGE_CONTRACTS.md).
 
 
-**Snapshot:** 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
+**Snapshot:** e4d3d2d9b (branch `claude/lod-rendering-optimization-1ad1f9`), 2026-11-09. Batch `2026-11-09-lod-rendering`, merged as 0.23.2 on 2026-11-09: dial, transmitter and wiring detail tiers, frustum tests · earlier: 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08, batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
 
 ## Manual mounts and factory instruments (0.22.0)
 
@@ -76,8 +76,8 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
 | `FluidWorldAuthority.instrumentPipeReading`, `instrumentHost`, `instrumentObservationChanged` | Reads the owner island's last accepted observations; keeps the device observed while a gauge, sight glass or mover is watched | Server side of a reading |
 | **Wire and client** | | |
 | `network/FluidNetwork` (registrar `instruments-1`) | `InstrumentWatch` (C→S), `InstrumentDisplay` (S→C: target, sample, published tick), `GaugeSave` (C→S) | Packet fields |
-| `client/InstrumentRenderer` | Dials as solid entity geometry, placement ghosts (translucent) on reservoir sockets, one-line hover with the value and its unit; every 20 ticks it watches the nearest 64 installed gauges within 120 m | What the player sees |
-| `science/equipment/InstrumentGeometry` | Closed dial housing (`RADIUS` 0.17 m), needle, process connectors (upright shank, side elbow, temperature probe up to 0.12 m deep), reservoir `sockets(shape)` | Dial and socket geometry |
+| `client/InstrumentRenderer` | Dials as solid entity geometry, placement ghosts (translucent) on reservoir sockets, one-line hover with the value and its unit; every 20 ticks it watches the nearest 64 installed gauges within 120 m. Draws only mounts in view (centre and tap, 0.2 m margin), one light lookup per instrument, hosts gathered every 5 ticks (every frame while a placing item or the wrench is held). Tiers by screen size (`RenderLod`, k = 771 px at 1080 lines): a dial at 48 px or more (5.5 m) in full, 12–48 px `housingPlain` with connectors and no text, 3–12 px `housingFar` with its needle, under 3 px nothing; a transmitter's ID at 44 px, symbol at 14 px, head at 3 px; equipment wiring while the 25 mm ribbon covers a pixel at the structure box's nearest point, its quads baked per structure | What the player sees |
+| `science/equipment/InstrumentGeometry` | Closed dial housing (`RADIUS` 0.17 m; `housingPlain` 24 sides without ticks, `housingFar` 12 sides, for distant dials), needle, process connectors (upright shank, side elbow, temperature probe up to 0.12 m deep), reservoir `sockets(shape)` | Dial and socket geometry |
 
 ## Contracts
 
@@ -102,9 +102,9 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
 | Mounts, sockets, selection | `InstrumentHosts`, `InstrumentGeometry.sockets` | `GaugeAccessoriesTest` (`nativeReservoirSockets…`, `pipeSocketsRejectBendsAndJunctions…`) |
 | What a gauge reads | `PassiveStepSolver.PipeObservation`, `FluidWorldAuthority.instrumentPipeReading`, `InstrumentService.publish` | `GaugeAccessoriesTest` (`pressureUsesSectionLosses…`, `temperatureIsUnavailableUntilAcceptedFlow…`, `acceptedSolverObservationsReachTheInterval…`, `aStoppedConnectedLineStillPublishesPressure…`) |
 | Store, refunds, pending operations | `InstrumentService`, `InstrumentService.Store` | `GaugeAccessoriesTest` (`allExistingPipeAccessoriesPersistAnInstanceAndRecoverExactlyOnce`, `configuredAttachmentsAndPendingTransactionsPersistAndRefundOnlyOnce`) |
-| Dial housing and connectors | `InstrumentGeometry` | `GaugeAccessoriesTest.housingIsClosedAtObliqueAnglesAndEveryConnectorRemainsFinite` |
+| Dial housing and connectors | `InstrumentGeometry` | `GaugeAccessoriesTest.housingIsClosedAtObliqueAnglesAndEveryConnectorRemainsFinite` (the plain and far housings too) |
 | A fitting's hydraulics | `PhysicalRegistry.install*`, `PhysicalFluidTopology.Device` ([fluid-runtime.md](fluid-runtime.md)) | `runtime/fluid/PipelineFittingTest` |
-| Dial drawing, hover, client watches | `InstrumentRenderer` | none; dev client |
+| Dial drawing, hover, client watches | `InstrumentRenderer` | tiers: `client/RenderLodTest`; drawing: none; dev client |
 
 `GaugeAccessoriesTest` (13 tests), `AccessoryStoreCompatTest` (8), `SensorReadingTest` (4) and `SensorStoreTest` (4) are in `src/test/java/com/wormzjl/icheme/runtime/instrument/` and run under `test`; the flowmeter's tap is pinned in `runtime/fluid/PipelineFittingTest` ([fluid-runtime.md](fluid-runtime.md)). No GameTest covers gauges.
 

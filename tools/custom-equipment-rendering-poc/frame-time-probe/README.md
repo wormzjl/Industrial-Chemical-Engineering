@@ -5,4 +5,5 @@ Re-attach: copy the file to `src/mcpCompat/java/com/wormzjl/icheme/mcpcompat/Fra
 
 History:
 - 2026-10-15: removed from `src/mcpCompat/java/com/wormzjl/createcheme/mcpcompat/FrameTimeProbe.java` by commit 03be157b (parent 6cd0d020). `git show 6cd0d020:src/mcpCompat/java/com/wormzjl/createcheme/mcpcompat/FrameTimeProbe.java` equals that copy, which is also this file before the 2026-11-04 commit. `detach.patch` reverses 03be157b.
+- 2026-11-09 (batch 2026-11-09-lod-rendering): `mode=lod`: a fresh flat world, `scene.txt`, a pressure gauge on each pipe of the `grid.*` grid through the server's install request, then the `view` and `away` windows. Lane and scene: `../../lod-rendering/`.
 - 2026-11-04: the package changed to `icheme` (the mod rename). The probe gained GPU timestamps, the screen's CPU time, the load line and the simulator lane. It was attached uncommitted for one session on `a958cecd2` and removed after. The results are in `documentation/2026-11-02-process-simulator/FRAME_TIME_REVIEW.md`, and the logs in the main checkout's `../logs/frame-time-sim-logs-2026-11-04.tar.gz`.

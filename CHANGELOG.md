@@ -15,6 +15,12 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+## [0.23.2] - 2026-11-09
+
+### Changed
+
+- Rendering level of detail: gauges, transmitters, equipment wiring, cables and sight glasses draw only in view, in detail tiers by their size on screen (`RenderLod`, client setting `lod_scale`), one light lookup per instrument; body, moving-part and tank meshes are closed only when no frame drew them for a second; low-detail equipment bodies are drawn as one mesh per 32-block square. 100 gauges: 10.7 ms to 1.6 ms a frame; low detail on 250 structures 2.33 ms to 1.55 ms (Stage A `63454d60d`, region meshes `50d1cd9a4`, cleanup `e4d3d2d9b`; batch `2026-11-09-lod-rendering`).
+
 ## [0.23.1] - 2026-11-09
 
 ### Fixed

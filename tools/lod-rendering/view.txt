@@ -1,0 +1,3 @@
+# The view window: in front of the pipe grid (nearest row 3 m), facing south over the gauges to the drums and columns.
+gamemode spectator
+tp @s 13.5 -57 -3 0 15
