@@ -85,8 +85,15 @@ final class ControlHosts {
             }
         }
         var r = world.registrations().get(host.identity());
+        // An equipment whose shape has no data socket takes no controller (a fired still: owner, 2026-11-09, only the
+        // electric still has a data port), whatever its registration drives.
+        boolean socketless =
+                host.entity() instanceof EquipmentShellBlockEntity owner
+                        && owner.shape() != null
+                        && ShapeRasterizer.services(owner.shape()).data() == null;
         boolean actuator =
-                r != null
+                !socketless
+                        && r != null
                         && (r.device().control() instanceof FlowControl.ControlValve
                                 || r.device().control() instanceof FlowControl.Mover
                                 || r.device().heat() != null
@@ -101,7 +108,13 @@ final class ControlHosts {
         host.metadata().sensorIds(ids);
         // A pipe sensor carries its connector. Removing the last sensor removes that connector too;
         // the cable's built geometry and endpoint ID remain as a disconnected terminal.
-        if (host.pipe() && !actuator && host.metadata().sensors().isEmpty()) {
+        // So does a socketless equipment's actuator port, one an earlier layout gave it.
+        if ((host.pipe()
+                        || socketless
+                                && host.metadata().dataPort() != null
+                                && host.metadata().dataPort().kind() == DataPort.Kind.ACTUATOR)
+                && !actuator
+                && host.metadata().sensors().isEmpty()) {
             removeHost(host.identity());
             if (host.metadata().dataPort() != null || namesChanged) {
                 host.metadata().dataPort(null);

@@ -1,7 +1,6 @@
 # Owner feedback on the built still (2026-11-09)
 
-The owner reviewed the drawings (run `tmp/equipment-drawings/20261109-135451-f050c6/`) and gave four items. Built on the
-main thread (owner: "Here").
+The owner's items on the drawings (run `tmp/equipment-drawings/20261109-135451-f050c6/`) and in game; main thread.
 
 ## 1. One top condenser, with and without a column
 
@@ -14,7 +13,7 @@ main thread (owner: "Here").
   condenser over the helmet or the column. The worm tub and `WOOD` are gone. The water and vent nozzles of a condenser
   pot still moved up to the condenser, as the question stated.
 - Owner, on the renders: the diagonal strut, then the outboard posts, looked wrong. The shell rests on two saddles,
-  each on a steel H-frame (a leg either side, a cross beam under the saddle); the reflux line falls straight in.
+  each on a steel H-frame (a leg either side, a cross beam under the saddle); the reflux line runs square (owner).
 
 ## 2. Textures (`tools/still-sprites`)
 
@@ -28,7 +27,8 @@ main thread (owner: "Here").
 ## 3. Data port and faces
 
 - Owner: only the electric still has a data box and port, so only the electric still takes a controller. A fired still
-  has none (`EquipmentServices`: no services for a fired still); its firing and reflux are set by hand.
+  has none (`EquipmentServices`); its firing and reflux are set by hand. Found in game: `ControlHosts` gave every
+  heat registration an actuator port. Now a shell with no data socket gets none; an older port goes at its next bind.
 - Owner, then: charge on the front, fuel on the right, drain on the back, condenser on the left (seen from the firing
   door; the right is −x). The condenser lies along z at x = 2.5. The burner is the fuel connection, on the right face's
   middle column at ground level (owner: a small pipe connector is enough): at most 50 mm bore (`NozzleBore`); the

@@ -3512,10 +3512,13 @@ public final class ProcessUnit {
             mesh.bar(new double[]{cx - .07, yv, wz - .008}, new double[]{cx + .07, yv, wz - .008}, .012, new double[]{0, 0, 1}, Material.IRON);
             mesh.bar(new double[]{cx, yv - .07, wz - .008}, new double[]{cx, yv + .07, wz - .008}, .012, new double[]{0, 0, 1}, Material.IRON);
             mark("reflux_valve", new double[]{cx - .08, yv - .08, wz - .015}, new double[]{cx + .08, yv + .08, zc + .05});
-            // The reflux back to the column's top in one straight fall from the valve into the column's side under its
-            // top; the product down past a sight glass to the spout.
-            double rc = p.column();
-            line(lr, 8, p.line(), new double[]{cx - .05, yv, zc}, new double[]{x + .85 * rc, p.columnTop() - .12, z - .5 * rc});
+            // The reflux back to the column's top, run square as a plant's line (owner, 2026-11-10: no straight line from
+            // point to point): from the valve back along the cold end's line to beside the column, along to the column's
+            // line, down, and into the column's side square to it, under its top; the product down past a sight glass to
+            // the spout.
+            double rc = p.column(), xs = x + rc + .12, yi = p.columnTop() - .12;
+            line(lr, 8, p.line(), new double[]{cx - .05, yv, zc}, new double[]{xs, yv, zc}, new double[]{xs, yv, z}, new double[]{xs, yi, z},
+                    new double[]{x + rc - .02, yi, z});
             pipe(rs, p.line(), true, new double[]{cx, yv - .05, zc}, new double[]{cx, .5, zc}, new double[]{cx, .5, .3});
         } else {
             // A pot still's condensate from the cold end straight down to the spout.
@@ -3528,14 +3531,16 @@ public final class ProcessUnit {
         // under each a cross beam, its top just under the shell and over the reflux pot, on two legs 0.3 m either side.
         double yb = yk - rk - .05, xl = cx - .3, xr = cx + .3;
         for (double zs : new double[]{sz0 + .06, sz1 - .1}) {
-            box(new double[]{cx - .8 * rk, yb, zs - .03}, new double[]{cx + .8 * rk, yk - .7 * rk, zs + .03}, Material.STEELWORK, false);
-            beam(new double[]{xl - .03, yb - .04, zs - .03}, new double[]{xr + .03, yb, zs + .03});
+            // The saddle (its foot on the beam, not drawn) and the beam closed on every face: nothing covers its top.
+            box(new double[]{cx - .8 * rk, yb, zs - .03}, new double[]{cx + .8 * rk, yk - .7 * rk, zs + .03}, ALL_FACES & ~4, Material.STEELWORK, false);
+            box(new double[]{xl - .03, yb - .04, zs - .03}, new double[]{xr + .03, yb, zs + .03}, ALL_FACES, Material.STEELWORK, true);
             for (double xs : new double[]{xl, xr}) post(xs, zs, 0, yb - .04, .06, true);
         }
-        // The reflux pot's bracket from the front right leg.
+        // The reflux pot's bracket from the front right leg, square: back along the leg's side, then across to the pot.
         if (column) {
-            double zf = sz0 + .06, ux = xr - cx, uz = zf - zc, u = Math.hypot(ux, uz);
-            mesh.bar(new double[]{xr - .03, yr0 + .15, zf}, new double[]{cx + (rp - .01) * ux / u, yr0 + .15, zc + (rp - .01) * uz / u}, .04, new double[]{0, 1, 0}, Material.STEELWORK);
+            double zf = sz0 + .06, yh = yr0 + .15;
+            mesh.bar(new double[]{xr, yh, zf + .03}, new double[]{xr, yh, zc}, .04, new double[]{0, 1, 0}, Material.STEELWORK);
+            mesh.bar(new double[]{xr + .02, yh, zc}, new double[]{cx + rp - .01, yh, zc}, .04, new double[]{0, 1, 0}, Material.STEELWORK);
         }
     }
 

@@ -124,6 +124,11 @@ distiller in the process simulator.
   burner toward the fire bed (`StillFires`). The charge line jogs to the pot's line 0.15 m behind its flange and
   enters square to the shell or head, or drops onto the head (owner: the oblique entries looked wrong). The condenser
   rests on two saddles, each on a steel H-frame, not outboard posts (owner); the renders gain an electric column still.
+- 2026-11-10: owner, in game: the H-frame's beams lost their top face (full boxes now); the reflux line runs square
+  (back, across, down into the column's side); the page's `heat_side` keys added (`pot`, `water`, `burner`); a fired
+  still showed a data port: `ControlHosts` gave every heat registration an actuator port; a shell with no data socket
+  now gets none, an older one is removed at its next bind. Tests: the eight geometry classes, `ControlSystemTest`,
+  `BuiltInInputsTest`; the fluid GameTests that load `ControlHosts` run in the final lane.
 
 ## Open items
 
