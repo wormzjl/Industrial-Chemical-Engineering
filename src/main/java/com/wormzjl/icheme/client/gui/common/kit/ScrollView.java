@@ -28,6 +28,11 @@ public final class ScrollView {
         return offset;
     }
 
+    /** The content's height, as last laid out. */
+    public int content() {
+        return content;
+    }
+
     /** The largest offset: how much taller the content is than the viewport. */
     public int max() {
         return Math.max(0, content - viewport.h());

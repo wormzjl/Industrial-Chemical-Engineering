@@ -8,6 +8,7 @@ import com.wormzjl.icheme.science.equipment.ColumnDesign;
 import com.wormzjl.icheme.science.equipment.ColumnTrays;
 import com.wormzjl.icheme.science.equipment.ColumnTrays.Pumparound;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
+import com.wormzjl.icheme.science.equipment.EquipmentShape.Kind;
 import com.wormzjl.icheme.science.equipment.EquipmentShape.Role;
 import org.junit.jupiter.api.Test;
 
@@ -29,6 +30,10 @@ class ColumnBlueprintTest {
         return new ColumnTrays(20, 10, draws, steam, pumparounds, components);
     }
 
+    private static Link link(Blueprint blueprint, String name) {
+        return blueprint.links().stream().filter(l -> l.name().equals(name)).findFirst().orElseThrow(() -> new AssertionError("No link " + name));
+    }
+
     @Test
     void aPlainColumnAsksForItsOverheadSystemTheFeedAndTheBottoms() {
         var blueprint = ColumnBlueprint.of(trays(new ColumnComponents(Condenser.AIR_COOLER, Pump.STANDARD, List.of(), false, true), List.of(), List.of(), List.of()));
@@ -37,6 +42,44 @@ class ColumnBlueprintTest {
         assertEquals(COLUMN, blueprint.master());
         assertEquals(List.of("overhead", "condensate", "offgas", "water", "oil", "feed", "reboiler", "vapour_return", "bottoms"),
                 blueprint.links().stream().map(Link::name).toList());
+    }
+
+    /**
+     * An air-then-water condenser (COOLER_MODEL_PLAN.md section 6): the overhead passes the air cooler's banks, then the
+     * water trim's shells, and ends there; the condensate starts after the trim. The trim's water sides cool the condenser.
+     */
+    @Test
+    void anAirThenWaterCondenserRunsItsAirCoolerThenItsTrim() {
+        for (boolean ejector : new boolean[]{false, true}) {
+            var units = ColumnComponents.Units.ONE.withCondenser(3).withTrim(2);
+            var blueprint = ColumnBlueprint.of(trays(new ColumnComponents(Condenser.AIR_THEN_WATER, Pump.STANDARD, List.of(), ejector, true, units), List.of(), List.of(), List.of()));
+            int at = blueprint.slots().indexOf(CONDENSER);
+            assertEquals(TRIM_CONDENSER, blueprint.slots().get(at + 1), "the trim's slot after the condenser's");
+            var overhead = link(blueprint, "overhead");
+            assertEquals(ejector ? List.of(EJECTOR, CONDENSER, TRIM_CONDENSER) : List.of(CONDENSER, TRIM_CONDENSER), overhead.steps().stream().map(Step::slot).toList());
+            assertEquals(TRIM_CONDENSER, overhead.owner());
+            var air = overhead.steps().get(ejector ? 1 : 0);
+            var trim = overhead.steps().getLast();
+            assertEquals(new UnitForm(Kind.AIR_COOLER, false, Role.PROCESS_INLET, Role.PROCESS_OUTLET, Set.of()), air.form(), "the air cooler passes the overhead on");
+            assertEquals(3, air.count());
+            assertEquals(Kind.EXCHANGER, ((UnitForm) air.family().getFirst()).kind(), "an exchanger fills the air cooler's slot as the wrong kind");
+            var water = (UnitForm) trim.form();
+            assertEquals(Kind.EXCHANGER, water.kind());
+            assertEquals(Role.SHELL_INLET, water.in());
+            assertNull(water.out(), "the overhead link ends at the trim");
+            assertEquals(Set.of(Role.TUBE_INLET, Role.TUBE_OUTLET), water.utilities());
+            assertEquals(2, trim.count());
+            assertEquals(Start.after(TRIM_CONDENSER), link(blueprint, "condensate").start());
+        }
+        assertNull(ColumnBlueprint.waterCooled(Condenser.AIR_COOLER));
+        assertEquals(CONDENSER, ColumnBlueprint.waterCooled(Condenser.EXCHANGER));
+        assertEquals(TRIM_CONDENSER, ColumnBlueprint.waterCooled(Condenser.AIR_THEN_WATER));
+        // The other condensers take no trim, whatever its count.
+        for (var other : List.of(Condenser.AIR_COOLER, Condenser.EXCHANGER)) {
+            var blueprint = ColumnBlueprint.of(trays(new ColumnComponents(other, Pump.STANDARD, List.of(), false, true, ColumnComponents.Units.ONE.withTrim(4)), List.of(), List.of(), List.of()));
+            assertFalse(blueprint.slots().contains(TRIM_CONDENSER), other::name);
+            assertEquals(Start.after(CONDENSER), link(blueprint, "condensate").start(), other::name);
+        }
     }
 
     /**

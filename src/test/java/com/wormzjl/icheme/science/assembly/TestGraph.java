@@ -27,7 +27,60 @@ final class TestGraph implements PortGraph {
 
     private final Map<Key, Run> runs = new HashMap<>();
     private final Map<Long, List<Run>> branches = new HashMap<>();
+    /** Manifold junctions (S3b), by position: each its legs; a run arriving at one reads every leg but its own way back. */
+    private final Map<Long, Hub> hubs = new HashMap<>();
+    private final Map<Run, Run> back = new IdentityHashMap<>();
     private long nextOrigin = 1, nextPosition = 1_000_000;
+
+    /** A junction where several pipes meet: a split or a merge of units in parallel. */
+    static final class Hub {
+        final long at;
+        final List<Run> legs = new ArrayList<>();
+
+        private Hub(long at) {
+            this.at = at;
+        }
+    }
+
+    Hub hub() {
+        var hub = new Hub(nextPosition++);
+        hubs.put(hub.at, hub);
+        return hub;
+    }
+
+    /** A pipe from {@code hub} to {@code port}, fittings in order from the hub; the port's run ends at the hub. */
+    void leg(Hub hub, Port port, F... fittings) {
+        var run = line(fittings, new AtPort(port), 3 + 3 * fittings.length);
+        hub.legs.add(run);
+        var arriving = reverse(run, new Junction(hub.at, 2));
+        runs.put(Key.of(port), arriving);
+        back.put(arriving, run);
+    }
+
+    /** A pipe between two hubs. */
+    void join(Hub a, Hub b) {
+        var ab = line(new F[0], new Junction(b.at, 2), 3);
+        var ba = reverse(ab, new Junction(a.at, 2));
+        a.legs.add(ab);
+        b.legs.add(ba);
+        back.put(ab, ba);
+        back.put(ba, ab);
+    }
+
+    /** A pipe from {@code hub} through {@code fittings} to a tank outside. */
+    void outsideLeg(Hub hub, F... fittings) {
+        hub.legs.add(line(fittings, new Terminal(nextPosition + 100), 3 + 3 * fittings.length));
+    }
+
+    /** A pipe from {@code hub} that ends open. */
+    void openLeg(Hub hub) {
+        hub.legs.add(line(new F[0], new OpenEnd(nextPosition + 2), 3));
+    }
+
+    /** A unit of {@code kind} and {@code size}, for units in parallel. */
+    Unit unit(Kind kind, Size size, Role... nozzles) {
+        return new Unit(nextOrigin++, kind, false, false, List.of(nozzles), size);
+    }
 
     static F valve() {
         return new F(Fitting.CONTROL_VALVE, 1);
@@ -72,6 +125,13 @@ final class TestGraph implements PortGraph {
 
     @Override
     public List<Run> branches(Junction junction, Run arrived) {
+        var hub = hubs.get(junction.position());
+        if (hub != null) {
+            var way = back.get(arrived);
+            var out = new ArrayList<Run>();
+            for (var leg : hub.legs) if (leg != way) out.add(leg);
+            return out;
+        }
         return branches.getOrDefault(junction.position(), List.of());
     }
 

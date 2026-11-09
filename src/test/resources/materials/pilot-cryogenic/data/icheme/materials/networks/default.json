@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "icheme:default",
   "package": "icheme:pilot_cryogenic",
-  "default_column_preset": "tia_juana",
+  "default_column_preset": "medium_crude",
   "fluid_presets": [
     "water",
     "nitrogen",

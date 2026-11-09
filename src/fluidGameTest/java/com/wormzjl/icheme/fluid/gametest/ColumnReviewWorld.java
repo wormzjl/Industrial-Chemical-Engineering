@@ -110,6 +110,9 @@ public final class ColumnReviewWorld {
         plant.route(AssemblyGameTests.Plant.front(column, Role.BOTTOMS), AssemblyGameTests.Plant.front(kettle, Role.FEED));
         plant.route(AssemblyGameTests.Plant.front(kettle, Role.VAPOUR_OUTLET), AssemblyGameTests.Plant.front(column, Role.VAPOUR_RETURN));
         for (var valve : plant.valves.entrySet()) plant.install(valve.getKey(), valve.getValue());
+        // The casings turn only with their shaft trains (W3): a creative motor drives each pump.
+        plant.drive(refluxPump);
+        plant.drive(paPump);
     }
 
     /** Validates the plant complete, then leaves it for the reviewer: report back to not validated, spawn in front, noon. */

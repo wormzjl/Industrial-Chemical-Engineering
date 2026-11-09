@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "id": "icheme:oil_sand_dilbit",
+  "kind": "fluid",
+  "label": "Oil sand dilbit",
+  "assay": "icheme:oil_sand_dilbit"
+}

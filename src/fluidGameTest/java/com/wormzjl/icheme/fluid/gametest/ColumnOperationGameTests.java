@@ -108,9 +108,14 @@ public final class ColumnOperationGameTests {
 
         /** Every node's inventory, by device, as the islands hold it now. */
         Map<Long, double[]> contents() {
+            // On the world list by compound id: each island runs on its own list, which a Stop may change.
             var result = new HashMap<Long, double[]>();
-            for (var island : rig.plant.world.diagnosticSnapshots())
-                for (var node : island.graph().reservoirs()) result.put(node.id(), node.inventory().moles());
+            var world = rig.plant.world;
+            for (var island : world.diagnosticSnapshots()) {
+                var own = world.diagnosticModel(island.id());
+                for (var node : island.graph().reservoirs())
+                    result.put(node.id(), com.wormzjl.icheme.runtime.fluid.IslandSets.amounts(node.inventory().moles(), own, world.model()));
+            }
             return result;
         }
 

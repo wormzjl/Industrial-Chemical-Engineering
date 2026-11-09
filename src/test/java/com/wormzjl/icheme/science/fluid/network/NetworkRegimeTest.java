@@ -122,6 +122,6 @@ class NetworkRegimeTest {
                 new PassiveNetwork.Pipe(1,0,1,new PipeResistance.Geometry(.1,.01,0,0),new FlowControl.Compressor(1,6))));
         var capped=new PassiveStepSolver(model).solve(sonic,1,()->{});var upstream=sonic.reservoirs().getFirst().state();
         double expected=upstream.mass()/upstream.volume()*sonic.pipes().getFirst().minimumArea()*model.velocityLimit(upstream);
-        assertEquals(expected,capped.massFlows()[0],1e-10+expected*1e-8);assertEquals(FlowControl.Mode.PUMP_HEAD_LIMIT,capped.modes().getFirst());assertTrue(Math.abs(capped.massFlows()[0])<expected,"the saturated law stays under the cap");
+        assertEquals(expected,capped.massFlows()[0],1e-10+expected*1e-8);assertEquals(FlowControl.Mode.MOVER_LAW,capped.modes().getFirst());assertTrue(Math.abs(capped.massFlows()[0])<expected,"the saturated law stays under the cap");
     }
 }

@@ -56,7 +56,7 @@ final class HeatPresentation {
             case AIR_COOLER->{actuator="louvers";effort=law instanceof AirCooled cooled?cooled.draught():heat.fans();}
             default->{
                 if(unit.pool()){actuator="none";effort=null;}
-                else if(unit.control().mode()==HeatUnit.Mode.RATIO){actuator=complete?"feed_valve":"none";effort=null;}
+                else if(unit.control().mode()==HeatUnit.Mode.RATIO||unit.control().mode()==HeatUnit.Mode.COLUMN){actuator=complete?"feed_valve":"none";effort=null;}
                 else if(complete&&unit.lines()==ExchangerBlueprint.Lines.BYPASS) {
                     // The real bypass valve: the share of the side's feed it passes around the unit.
                     actuator="bypass_valve";
@@ -103,7 +103,7 @@ final class HeatPresentation {
 
     private static FluidView.Port empty(String role,double flow,int components){return new FluidView.Port(role,null,null,flow,new double[3][components],new double[3]);}
 
-    private static FluidView.Port port(String role,PassiveNetwork.Reservoir node,double flow,Source source) {
+    static FluidView.Port port(String role,PassiveNetwork.Reservoir node,double flow,Source source) {
         double[] weights=source.weights();
         if(node.empty())return empty(role,flow,weights.length);
         var state=FluidView.State.from(node.state(),Math.max(1e-12,node.state().volume()));
@@ -120,7 +120,7 @@ final class HeatPresentation {
      * VAPOUR_OUTLET vapour, the LIQUID_OUTLET liquid), with what it carried over the interval. An outflow is at the shell's
      * temperature and the port's pressure; the feed at its far end's.
      */
-    private static List<FluidView.Port> poolPorts(long id,IslandCoordinator.Snapshot island,Source source) {
+    static List<FluidView.Port> poolPorts(long id,IslandCoordinator.Snapshot island,Source source) {
         var graph=island.graph();int node=-1;
         for(int i=0;i<graph.reservoirs().size();i++)if(graph.reservoirs().get(i).id()==id)node=i;
         if(node<0)return List.of();

@@ -4,6 +4,10 @@
   "kind": "petroleum_fraction",
   "translation_key": "material.icheme.cdu17_pc11",
   "fallback": "Crude oil",
+  "properties": "icheme:cdu17_cdu17_pc11",
+  "aliases": [
+    "PC11"
+  ],
   "cut": {
     "estimated": true,
     "derivation": "adjacent_nbp_midpoints",

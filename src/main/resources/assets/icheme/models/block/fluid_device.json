@@ -10,6 +10,7 @@
     "painted_pipe": "icheme:block/painted_pipe",
     "painted_flange": "icheme:block/painted_flange",
     "bolt": "icheme:block/equipment_bolt",
+    "bolt_face": "icheme:block/equipment_bolt_face",
     "opening": "icheme:block/equipment_opening",
     "cladding": "icheme:block/equipment_cladding",
     "grating": "icheme:block/equipment_grating",
@@ -21,6 +22,10 @@
     "feed": "icheme:block/equipment_feed",
     "drain": "icheme:block/equipment_drain",
     "guard": "icheme:block/equipment_guard",
-    "particle": "icheme:block/equipment_pipe"
+    "particle": "icheme:block/equipment_pipe",
+    "service_case": "icheme:block/control_panel_side",
+    "service_cover": "icheme:block/control_panel_service",
+    "instrument_steel": "icheme:block/equipment_pipe",
+    "instrument_conduit": "icheme:block/instrument_conduit"
   }
 }

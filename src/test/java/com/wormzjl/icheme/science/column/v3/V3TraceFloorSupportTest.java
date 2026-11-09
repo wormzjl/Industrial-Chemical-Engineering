@@ -7,7 +7,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.wormzjl.icheme.science.column.v3.thermo.V3CrudeFeed;
 import com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo;
-import com.wormzjl.icheme.world.level.block.entity.ColumnCalculatorV3BlockEntity;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;

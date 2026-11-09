@@ -16,7 +16,7 @@ The owner's rules for every screen, from batch `documentation/2026-10-28-gui-too
    owner pick; build only the picked one.
 3. Build the rows in a builder class with no Minecraft classes (as `HeatControlColumn`, `DeviceColumn`,
    `DialogColumns`, `ConstructorColumn`, `AssemblyColumn`, `CalculatorColumn`), so the gates and the render tool place
-   the same rows the screen draws. A drawing with hit tests goes in its own Minecraft-free class (`AssemblyFlowsheet`).
+   the same rows the screen draws. A drawing with hit tests goes in its own Minecraft-free class (`AssemblyBlock`, `HeatFlowsheet`).
 4. Gate it (below), render the shipped code again, look at every sheet, then commit.
 5. No dev-client check unless the owner asks for one.
 
@@ -30,8 +30,8 @@ The steps for each kind of job are in `references/`. Read the one the job needs:
 
 ## The kit (`client/gui/common/kit/`)
 
-Builders, tests and the render tool use the Minecraft-free part. `KitDoor`, `KitWidgets`, `GuiCanvas`, `SkinButton`,
-`SkinField` and `WindowScale` hold Minecraft classes and belong to the screens.
+Builders, tests and the render tool use the Minecraft-free part. `KitDoor`, `KitWidgets`, `GuiCanvas`, `SkinButton`
+and `SkinField` hold Minecraft classes and belong to the screens.
 
 - `Column.place(rows, x, y, width, measure, Column.Metrics.COMPACT)`. Rows: `Group` (a framed function group under a
   plate), `Line`, `Paragraph`, `Choice` (a mark and a title, an action key), `Field` (an entry), `Reading` (a meter),
@@ -44,6 +44,9 @@ Builders, tests and the render tool use the Minecraft-free part. `KitDoor`, `Kit
   column's button), `SkinField`, `KitDoor` (a door's columns: one view, one bar where the window is short, kept
   widgets, drawing and hover; two columns side by side share the view and the bar, `layout(areas, bar, rows, m)`;
   used by the dialogs, the constructor, the assembly screen and the column calculator).
+- A loop of fills (a shape drawn dot by dot, row by row or segment by segment) draws inside `Canvas.batch`: one draw
+  call in the game, where each fill outside a batch is its own. `DrawCallTest` holds the counts; the render tools'
+  `-Dcount` prints each page's draw calls.
 - A dialog: title at (10, 10), column from `DialogColumns.TOP`, push buttons from `DialogColumns.footer` (two or more
   share the width, Save the primary one at the right; Done alone stands at the right; a dialog may have none). Tables
   go on the HMI glass, as the datasheet's.
@@ -69,11 +72,11 @@ Builders, tests and the render tool use the Minecraft-free part. `KitDoor`, `Kit
 7. The theme and the units are the client's (`icheme-client.toml`, `ClientConfig`), one switch for every screen, never
    sent to the server. Controls cross the network in SI. The theme key shows a sign (`Skin.Icon.THEME`), not a word.
 8. Every screen draws through the kit and the light or dark theme.
-9. Every screen takes its own whole scale (owner: "This should be scaled to window size"): `WindowScale.apply(minecraft,
-   this)` first in `init()`, `WindowScale.restore(minecraft)` in `removed()` (after `super.removed()`). Design and
-   render every screen at 464 by 254. A fluid device page has a design height of 480 (owner: "It should scale"): keep
-   it within 338 px, or tell the owner what keeps a bar. Never size a widget from the player's GUI scale. The calls,
-   the numbers and what to do with a page that does not fit are in `references/fit-and-scale.md`.
+9. Every screen keeps the player's GUI scale (owner, 2026-11-07: "Preserve the player's GUI scale across IChemE
+   screens"). Nothing sets it; `KitLayoutTest` fails on a `setGuiScale` call. A screen takes its size from the window
+   at that scale, and what does not fit scrolls in its door. Design and render every screen at 464 by 254, and check
+   it at the smallest GUI window, 320 by 240. Never size a widget from the player's GUI scale. The rule in code and
+   what to do with a page that does not fit are in `references/fit-and-scale.md`.
 
 ## When the owner comments on a screen
 
@@ -140,10 +143,10 @@ As in `HeatControlColumnTest`, `DeviceColumnTest`, `DialogColumnsTest`, `Constru
 
 ## Renders
 
-From the worktree root, after `./gradlew compileJava`:
+From the worktree root, after `./gradlew compileJava` (and `compileTestJava` for `GuiPrototypes`, whose machine pages take `MachineColumnSamples` from the test classes):
 
 ```
-java -Duser.language=en -Djava.awt.headless=true -cp build/classes/java/main tools/heat-gui-renders/GuiPrototypes.java src/main/resources/assets/icheme/lang/en_us.json tmp/gui-prototypes
+java -Duser.language=en -Djava.awt.headless=true -cp "build/classes/java/main;build/classes/java/test" tools/heat-gui-renders/GuiPrototypes.java src/main/resources/assets/icheme/lang/en_us.json tmp/gui-prototypes
 java -Duser.language=en -Djava.awt.headless=true -cp build/classes/java/main tools/heat-gui-renders/HeatDiagramRender.java src/main/resources/assets/icheme/lang/en_us.json tmp/heat-gui-renders
 ```
 

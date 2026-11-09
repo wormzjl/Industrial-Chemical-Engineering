@@ -1,0 +1,33 @@
+{
+  "comment": "O11 of batch 2026-11-04-open-thermo-data (owner decision E25): a crude_pr78 CO2 dataset in the Tier 1 form, its freezing data from the CO2-I crystal anchor. The partners are the eight pure compounds whose CO2 pairs no library gives yet; the 24 Tier 1 compounds' CO2 pairs are already in icheme:dwsim_refinery_pr78 (reproduced by the O11 check run). The pairs and the Tr = 0.7 point go to records of their own, so no view without CO2 changes its identity. Run with --materials <src/main/resources/data/icheme/materials>.",
+  "properties_prefix": "icheme:chemsep_",
+  "properties_revision": "chemsep-8.3-dwsim-10.2.5-r1",
+  "viscosity_revision": "chemsep-8.3-dwsim-10.2.5-r1",
+  "freezing_revision": "chemsep-8.3-r1",
+  "crystal_freezing_revision": "crystal-anchor-r1",
+  "form": {
+    "column_range_kelvin": [298.15, 900],
+    "cp_fit": { "low": "data", "high": 900, "grid_step_kelvin": 25, "include_low_end": true },
+    "fluid_domain": { "temperature_min": "cp_fit", "temperature_max": 900, "pressure_min_pascal": 100, "pressure_max_pascal": 2000000 },
+    "liquid_viscosity": { "low": "data", "high_reduced_temperature": 0.95, "above_data": "andrade" },
+    "vapor_viscosity": { "low": "fluid_domain", "high": 900 },
+    "tolerance": 0.0005
+  },
+  "existing": [
+    { "id": "Methane", "cas": "74-82-8" },
+    { "id": "Ethane", "cas": "74-84-0" },
+    { "id": "Propane", "cas": "74-98-6" },
+    { "id": "Isobutane", "cas": "75-28-5" },
+    { "id": "N-butane", "cas": "106-97-8" },
+    { "id": "Isopentane", "cas": "78-78-4" },
+    { "id": "N-pentane", "cas": "109-66-0" },
+    { "id": "Nitrogen", "cas": "7727-37-9" }
+  ],
+  "pair_library": { "id": "icheme:dwsim_refinery_pr78_co2", "file": "dwsim_refinery_pr78_co2", "revision": "dwsim-10.2.5-d3-r1" },
+  "volume_reference": { "id": "icheme:chemsep_carbon_dioxide_liquid_reference", "file": "chemsep_carbon_dioxide_liquid_reference", "revision": "chemsep-8.3-tr07-r1" },
+  "compounds": [
+    { "id": "CarbonDioxide", "cas": "124-38-9", "english": "Carbon dioxide", "appearance": { "color": "#DCE8FA", "transparency": 0.95 },
+      "from_crystal": "carbon_dioxide_i.json",
+      "freezing_note": "CO2 sublimes at 1 atm (194.7 K) and has no normal melting point: normal_melting_kelvin holds the triple point. The fusion enthalpy is the crystal's effective value, chosen for the pilot family (ChemSep's own heat of fusion is the same 9019 J/mol; its triple point 216.58 K, 518672 Pa)." }
+  ]
+}

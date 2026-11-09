@@ -185,11 +185,16 @@ public final class HeatDiagram {
         } else {
             wire(true, 104, 50, 195, 50, 195, 130);
             wire(true, 325, 130, 325, 50, 369, 50);
-            int x = 128;
-            if (shell == ExchangerBlueprint.Lines.RATIO) {
+            int x = shell == ExchangerBlueprint.Lines.FEED ? 116 : 128;
+            if (shell == ExchangerBlueprint.Lines.RATIO || shell == ExchangerBlueprint.Lines.FEED) {
                 valve("shell_feed_valve", x, 50);
                 meter("shell_feed_valve_meter", x + 24, 50);
                 x += 48;
+            }
+            // A flow station (U2): the meter its valve regulates by, beyond the valve on the same feed.
+            if (shell == ExchangerBlueprint.Lines.FEED) {
+                meter("shell_feed_meter", x - 4, 50);
+                x += 20;
             }
             if (design.tube() == ExchangerBlueprint.Lines.RATIO) meter("shell_meter", x, 50);
         }
@@ -215,11 +220,15 @@ public final class HeatDiagram {
         } else {
             wire(true, 84, 224, 158, 224, 158, 180);
             wire(true, 158, 136, 158, 100, 85, 100);
-            int x = 100;
-            if (tube == ExchangerBlueprint.Lines.RATIO) {
+            int x = tube == ExchangerBlueprint.Lines.FEED ? 92 : 100;
+            if (tube == ExchangerBlueprint.Lines.RATIO || tube == ExchangerBlueprint.Lines.FEED) {
                 valve("tube_feed_valve", x, 224);
                 meter("tube_feed_valve_meter", x + 20, 224);
                 x += 42;
+            }
+            if (tube == ExchangerBlueprint.Lines.FEED) {
+                meter("tube_feed_meter", x - 4, 224);
+                x += 18;
             }
             if (shell == ExchangerBlueprint.Lines.RATIO) meter("tube_meter", x, 224);
         }

@@ -6,6 +6,7 @@ import com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo;
 import com.wormzjl.icheme.science.column.v3.thermo.V3ThermoException;
 import com.wormzjl.icheme.science.column.v3.thermo.V3ThermoModel;
 import com.wormzjl.icheme.science.column.v3.thermo.V3ThermoWorkspace;
+import com.wormzjl.icheme.science.material.TrainedPhysics;
 import com.wormzjl.icheme.science.math.DeterministicMath;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel.Root;
 import com.wormzjl.icheme.science.thermo.TraceTruncationPolicy;
@@ -29,14 +30,18 @@ import java.util.Optional;
  */
 final class V3AnchorTransformerInitializer implements V3NeuralInitializer {
     private static final String REVISION = "v3-anchor-augmented-regrouped-2";
+    /** The owner's ceiling on unknown compounds a model may take (batch 2026-11-05-neural-retrain: "up to ~5% unknowns"). */
+    static final double MAXIMUM_OFF_AXIS_SHARE = 0.05;
     private static final V3CondenserPhaseBranch[] BRANCHES = {V3CondenserPhaseBranch.LIQUID_ONLY,
             V3CondenserPhaseBranch.TWO_PHASE, V3CondenserPhaseBranch.VAPOR_ONLY};
 
     private final Document model;
+    /** The physics the model was trained on, as values: its compounds in trained order (the sidecar's physics). */
+    private final TrainedPhysics physics;
     /** Decoder variant selected by the loading caller, never by the model bytes. */
     private final V3FactorizedNeuralFeatures.DecodeOptions decode;
-    private V3AnchorTransformerInitializer(Document model, V3FactorizedNeuralFeatures.DecodeOptions decode) {
-        this.model = model; this.decode = decode;
+    private V3AnchorTransformerInitializer(Document model, TrainedPhysics physics, V3FactorizedNeuralFeatures.DecodeOptions decode) {
+        this.model = model; this.physics = physics; this.decode = decode;
     }
 
     static V3AnchorTransformerInitializer read(InputStream stream, V3FactorizedNeuralFeatures.DecodeOptions decode) throws IOException {
@@ -47,7 +52,7 @@ final class V3AnchorTransformerInitializer implements V3NeuralInitializer {
         if (m == null || !REVISION.equals(m.featureRevision) || !"anchor-augmented".equals(m.modelType)
                 || !("compact".equals(m.anchorLayout) || "full".equals(m.anchorLayout))
                 || m.modelId == null || !m.modelId.matches("[A-Za-z0-9._:/-]{1,96}")
-                || m.packageId == null || m.propertyRevision == null || m.components == null || m.components.isEmpty() || m.components.size() > V3ComponentBasis.MAX_COMPONENTS
+                || m.components == null || m.components.isEmpty() || m.components.size() > V3ComponentBasis.MAX_COMPONENTS
                 || m.components.stream().anyMatch(s -> s == null || s.isBlank()) || m.components.stream().distinct().count() != m.components.size()
                 || m.formulationRevisions == null || m.formulationRevisions.isEmpty()
                 || m.branchesSeen == null || m.branchesSeen.length != 3 || !(m.branchesSeen[0] || m.branchesSeen[1] || m.branchesSeen[2])
@@ -66,17 +71,14 @@ final class V3AnchorTransformerInitializer implements V3NeuralInitializer {
                 || d.minimumNodePressurePascal <= 0 || d.maximumNodePressurePascal < d.minimumNodePressurePascal
                 || d.pumparoundSplits == null || d.pumparoundSplits.stream().anyMatch(s -> s == null))
             throw new IllegalArgumentException("Invalid design constraints");
-        if (m.compositionEdges == null || m.compositionEdges.length == 0 || m.compositionEdges.length > 128)
-            throw new IllegalArgumentException("Missing bounded composition domain");
-        for (double[][] edge : m.compositionEdges) {
-            if (edge == null || edge.length != 2) throw new IllegalArgumentException("Invalid composition edge");
-            for (double[] endpoint : edge) {
-                vector(endpoint, m.components.size(), false);
-                if (Arrays.stream(endpoint).anyMatch(v -> v < 0) || Math.abs(Arrays.stream(endpoint).sum()-1) > 1e-10)
-                    throw new IllegalArgumentException("Invalid composition endpoint");
-            }
-        }
-        var result = new V3AnchorTransformerInitializer(m, decode);
+        if (m.families == null || m.families.length == 0 || m.families.length > 4) throw new IllegalArgumentException("Invalid composition families");
+        for (Family f : m.families) f.validate(m.components.size());
+        if (m.offAxisLimit == null || !(m.offAxisLimit >= 0) || m.offAxisLimit > MAXIMUM_OFF_AXIS_SHARE
+                || m.lumpMap == null || m.lumpMap.size() > 128
+                || m.lumpMap.entrySet().stream().anyMatch(e -> e.getKey() == null || e.getKey().isBlank()
+                        || m.components.contains(e.getKey()) || !m.components.contains(e.getValue())))
+            throw new IllegalArgumentException("Invalid off-axis policy");
+        var result = new V3AnchorTransformerInitializer(m, physics(m), decode);
         result.checkLinear("embed", inputs(m), 64); result.checkNorm("output.0"); result.checkLinear("output.1", 64, outputWidth(m));
         result.checkLinear("branch.0", globalWidth(m), 64); result.checkLinear("branch.2", 64, 3);
         for (int i = 0; i < 2; i++) {
@@ -95,6 +97,18 @@ final class V3AnchorTransformerInitializer implements V3NeuralInitializer {
         return result;
     }
 
+    /**
+     * The trained physics (O7 of batch 2026-11-04-open-thermo-data): the values the model was trained on,
+     * its compounds in its trained order ({@link TrainedPhysics#read}).
+     */
+    private static TrainedPhysics physics(Document m) {
+        if (m.physics == null) throw new IllegalArgumentException("Invalid transformer physics: missing");
+        var physics = TrainedPhysics.read(m.physics);
+        if (!physics.components().equals(m.components))
+            throw new IllegalArgumentException("Invalid transformer physics: the model's compounds in trained order");
+        return physics;
+    }
+
     private static int globalWidth(Document m) { return V3GeneralNeuralFeatures.globalWidth(m.components.size()); }
     private static int nodeWidth(Document m) { return V3GeneralNeuralFeatures.nodeWidth(m.components.size())-3; }
     private static int outputWidth(Document m) { return V3FactorizedNeuralFeatures.outputWidth(m.components.size()); }
@@ -102,17 +116,30 @@ final class V3AnchorTransformerInitializer implements V3NeuralInitializer {
 
     @Override public String modelId() { return model.modelId; }
 
-    /** The property dataset this model's targets were labelled against; a mismatch is not corrected. */
+    /** The identity a prediction carries: the scientific revision of the request's package in the calculation's catalog. */
     String propertyRevision(String packageId) { return com.wormzjl.icheme.science.material.MaterialRuntime.current().requirePackage(packageId).scientificRevision(); }
 
     List<String> componentIds() { return List.copyOf(model.components); }
-    String referencePackage() { return model.packageId; }
+    /** The physics the model was trained on; a request binds only where its values on its active compounds are these. */
+    TrainedPhysics physics() { return physics; }
+    /** The largest off-axis mole share of a feed the model takes (U1, batch 2026-11-05-neural-retrain). */
+    double offAxisLimit() { return model.offAxisLimit; }
+    /** The axis compound each known off-axis compound is lumped into (U1). */
+    Map<String, String> lumpMap() { return Map.copyOf(model.lumpMap); }
 
     long parameterCount() { return parameterStorageBytes() / Double.BYTES; }
 
     @Override public Optional<V3NeuralSeed> predict(V3ColumnInput input, V3SolveControl control) {
+        return predict(input, input.feedComponentMolarFlowsMolPerSecond(), control);
+    }
+
+    /**
+     * A prediction for {@code input} on the model's axis whose composition gate reads {@code knownFeed}: the request's feed
+     * on the axis without its lumped off-axis compounds ({@link V3NeuralRegistry#bind}).
+     */
+    Optional<V3NeuralSeed> predict(V3ColumnInput input, double[] knownFeed, V3SolveControl control) {
         control.checkpoint();
-        if (!supported(input)) return Optional.empty();
+        if (!supported(input, knownFeed)) return Optional.empty();
         Raw raw = raw(input, control);
         int best = bestBranch(input, raw.branchLogits);
         if (best < 0 || !Double.isFinite(raw.branchLogits[best])) return Optional.empty();
@@ -129,20 +156,23 @@ final class V3AnchorTransformerInitializer implements V3NeuralInitializer {
         return best;
     }
 
-    boolean supported(V3ColumnInput input) {
+    /**
+     * Whether the model covers a request on its own compound list, in the calculation's catalog: the composition families, the
+     * topology and the global bounds. The physics is the binding's ({@link V3NeuralRegistry#bind}): the request reaches
+     * the model only through the lens of a request whose physics on its active compounds is the model's.
+     */
+    boolean supported(V3ColumnInput input) { return supported(input, input.feedComponentMolarFlowsMolPerSecond()); }
+
+    /** {@link #supported(V3ColumnInput)} with the composition gate on {@code knownFeed}, the feed without its lumped unknowns. */
+    boolean supported(V3ColumnInput input, double[] knownFeed) {
         var catalog=com.wormzjl.icheme.science.material.MaterialRuntime.current();
-        // The model was trained on the reference package's data identity (every record's declared revision); the input's physics on the model's axis
-        // must be the reference's, compared directly (owner decision 2026-10-26: no hash).
-        if (!catalog.packages().containsKey(input.packageId()) || !catalog.packages().containsKey(model.packageId)
-                || !input.componentBasis().componentIds().equals(model.components)
-                || !catalog.requirePackage(input.packageId()).components().equals(model.components)
-                || !catalog.requirePackage(model.packageId).scientificRevision().equals(model.propertyRevision)
-                || !catalog.samePhysics(input.packageId(),model.packageId,model.components)) return false;
-        if (!input.componentBasis().componentIds().equals(model.components)                || input.stageCount() < 2 || input.stageCount() > 64 || input.feedStageNumber() < 1 || input.feedStageNumber() > input.stageCount()
+        var registered=catalog.packages().get(input.packageId());
+        if (registered == null || !registered.components().equals(model.components)
+                || !input.componentBasis().componentIds().equals(model.components) || input.stageCount() < 2 || input.stageCount() > 64 || input.feedStageNumber() < 1 || input.feedStageNumber() > input.stageCount()
                 || input.pumparounds().size() > 4 || input.sideDraws().size() > 3 || input.steamFeeds().size() > 2
                 || !(model.formulationRevisions.contains(V3ColumnCalculator.initializationFormulationRevision(input))
                         || model.formulationRevisions.contains(V3ColumnCalculator.formulationRevision(input, 0)))) return false;
-        if (!compositionSupported(input.feedComponentMolarFlowsMolPerSecond())) return false;
+        if (knownFeed.length != model.components.size() || !compositionSupported(knownFeed)) return false;
         Design d = model.designConstraints;
         double bottom = input.topPressurePascal() + (input.stageCount() - 1) * input.stagePressureDropPascal();
         double slack = 1e-9 * Math.max(1, d.maximumNodePressurePascal);
@@ -157,22 +187,16 @@ final class V3AnchorTransformerInitializer implements V3NeuralInitializer {
         return true;
     }
 
-    /** Coverage is the explicitly qualified union of blend segments, not a feature bounding box. */
+    /**
+     * Coverage is an explicitly qualified composition domain, not a feature bounding box: the E7 family check (batch
+     * 2026-11-05-neural-retrain, decision D5 A), where a feed passes when one family holds it ({@link Family#holds}).
+     */
     private boolean compositionSupported(double[] feed) {
         double total = Arrays.stream(feed).sum();
         if (!(total > 0)) return false;
-        for (double[][] edge : model.compositionEdges) {
-            double numerator=0, denominator=0;
-            for (int i=0;i<feed.length;i++) {
-                double delta=edge[1][i]-edge[0][i];
-                numerator+=(feed[i]/total-edge[0][i])*delta; denominator+=delta*delta;
-            }
-            double t=denominator==0?0:Math.clamp(numerator/denominator,0,1);
-            boolean matches=true;
-            for (int i=0;i<feed.length;i++)
-                if (Math.abs(feed[i]/total-(edge[0][i]+t*(edge[1][i]-edge[0][i])))>1e-8) { matches=false; break; }
-            if (matches) return true;
-        }
+        double[] x = new double[feed.length];
+        for (int i = 0; i < x.length; i++) x[i] = feed[i] / total;
+        for (Family family : model.families) if (family.holds(x)) return true;
         return false;
     }
 
@@ -285,10 +309,56 @@ final class V3AnchorTransformerInitializer implements V3NeuralInitializer {
         if (x == null || x.length != size || Arrays.stream(x).anyMatch(v -> !Double.isFinite(v) || positive && v <= 0)) throw new IllegalArgumentException("Invalid model vector");
     }
     private static final class Tensor { int[] shape; double[] values; }
+    /**
+     * One feed family of the E7 check (sidecar schema 5): the mean and the principal-composition basis of its strict TRAIN
+     * compositions, those compositions' coordinates in the basis, and two limits taken from the trained spread. A composition
+     * belongs to the family when its residual off the basis plane is at most {@code outOfPlaneLimit} ("the same crude") and its
+     * coordinates lie within {@code inPlaneLimit} of a trained composition ("inside the blends the model saw").
+     */
+    static final class Family {
+        static final int MAXIMUM_POINTS = 2048;
+        String name; double[] mean; double[][] basis, points; double inPlaneLimit, outOfPlaneLimit;
+
+        void validate(int components) {
+            if (name == null || !name.matches("[a-z0-9_-]{1,32}")) throw new IllegalArgumentException("Invalid family name");
+            vector(mean, components, false);
+            if (basis == null || basis.length < 1 || basis.length > 3 || points == null || points.length < 1 || points.length > MAXIMUM_POINTS
+                    || !Double.isFinite(inPlaneLimit) || inPlaneLimit < 0 || !Double.isFinite(outOfPlaneLimit) || outOfPlaneLimit < 0)
+                throw new IllegalArgumentException("Invalid composition family: " + name);
+            for (int a = 0; a < basis.length; a++) {
+                vector(basis[a], components, false);
+                for (int b = 0; b <= a; b++) {
+                    double dot = 0; for (int i = 0; i < components; i++) dot += basis[a][i] * basis[b][i];
+                    if (Math.abs(dot - (a == b ? 1 : 0)) > 1e-6) throw new IllegalArgumentException("Family basis is not orthonormal: " + name);
+                }
+            }
+            for (double[] p : points) vector(p, basis.length, false);
+        }
+
+        boolean holds(double[] fractions) {
+            double[] d = new double[mean.length];
+            for (int i = 0; i < d.length; i++) d[i] = fractions[i] - mean[i];
+            double[] coordinates = new double[basis.length];
+            for (int a = 0; a < basis.length; a++) for (int i = 0; i < d.length; i++) coordinates[a] += basis[a][i] * d[i];
+            double residual = 0;
+            for (int i = 0; i < d.length; i++) {
+                double r = d[i]; for (int a = 0; a < basis.length; a++) r -= coordinates[a] * basis[a][i];
+                residual += r * r;
+            }
+            if (Math.sqrt(residual) > outOfPlaneLimit) return false;
+            double limit = inPlaneLimit * inPlaneLimit;
+            for (double[] p : points) {
+                double distance = 0; for (int a = 0; a < p.length; a++) distance += (coordinates[a] - p[a]) * (coordinates[a] - p[a]);
+                if (distance <= limit) return true;
+            }
+            return false;
+        }
+    }
     private static final class Design { double minimumNodePressurePascal, maximumNodePressurePascal; boolean steamAtSumpOnly; List<V3PumparoundSpec.Split> pumparoundSplits; }
     private static final class Document {
-        String featureRevision, modelType, modelId, packageId, propertyRevision, anchorLayout, baselineRevision;
-        double[][][] compositionEdges;
+        String featureRevision, modelType, modelId, anchorLayout, baselineRevision;
+        com.google.gson.JsonObject physics;
+        Family[] families; Double offAxisLimit; Map<String, String> lumpMap;
         List<String> components, formulationRevisions; boolean[] branchesSeen;
         double presenceThreshold, traceFloorFraction; double[] globalMin, globalMax;
         Map<String, double[]> normalization; Map<String, Tensor> weights; Design designConstraints;

@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "Isobutene",
+  "kind": "chemical",
+  "translation_key": "material.icheme.isobutene",
+  "fallback": "Isobutene",
+  "properties": "icheme:chemsep_isobutene",
+  "appearance": {
+    "color": "#F3F4EA",
+    "transparency": 0.85,
+    "estimated": true
+  },
+  "identifiers": {
+    "cas": "115-11-7",
+    "chemsep_id": "207",
+    "smiles": "C=C(C)C",
+    "formula": "CH2C(CH3)2"
+  }
+}

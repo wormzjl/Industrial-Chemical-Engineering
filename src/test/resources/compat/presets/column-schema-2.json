@@ -1,0 +1,56 @@
+{
+  "schema_version": 2,
+  "kind": "column",
+  "name": "Medium crude",
+  "translation_key": "gui.icheme.column_preset.medium_crude",
+  "tray_count": 42,
+  "feed_tray": 38,
+  "feed_flow_kmol_h": 2557.200107051911,
+  "feed_temperature_kelvin": 638.15,
+  "top_temperature_kelvin": 332.15,
+  "reboiler_duty_mw": 0,
+  "reflux_ratio": 4.17,
+  "top_pressure_bar": 2.5,
+  "diameter_m": 8,
+  "draws": [
+    {
+      "tray": 11,
+      "flow_kmol_h": 518.2782524502833
+    },
+    {
+      "tray": 19,
+      "flow_kmol_h": 476.4818052006589
+    },
+    {
+      "tray": 29,
+      "flow_kmol_h": 183.9985787075381
+    }
+  ],
+  "steam": [
+    {
+      "tray": 42,
+      "flow_kmol_h": 1190.5467382214426,
+      "temperature_kelvin": 533.15
+    }
+  ],
+  "pumparounds": [
+    {
+      "draw_tray": 11,
+      "return_tray": 9,
+      "cooling_mw": 13.093341597836321,
+      "split": "UNIFORM"
+    },
+    {
+      "draw_tray": 19,
+      "return_tray": 17,
+      "cooling_mw": 21.011905824410512,
+      "split": "UNIFORM"
+    },
+    {
+      "draw_tray": 29,
+      "return_tray": 27,
+      "cooling_mw": 13.238439005543654,
+      "split": "UNIFORM"
+    }
+  ]
+}

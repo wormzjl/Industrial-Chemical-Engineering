@@ -228,7 +228,7 @@ public final class OperationColumn {
         return out;
     }
 
-    /** The duties' table: what the last cycle booked against what the last solve gave at the set feed, MW. */
+    /** The duties' table: what the last cycle booked against what the last solve gave at the set feed, MW; an air condenser's fans in kW. */
     public static List<String[]> duties(OperationView v, HeatControlColumn.Texts t) {
         var out = new ArrayList<String[]>();
         out.add(new String[]{t.get(KEY + "column.duty"), t.get(KEY + "column.booked"), t.get(KEY + "column.solved")});
@@ -237,7 +237,9 @@ public final class OperationColumn {
         for (var d : v.duties()) {
             String kind = d.kind().name().toLowerCase(Locale.ROOT);
             String name = d.kind() == OperationView.DutyKind.PUMPAROUND && pumparounds > 1 ? t.get(KEY + "duty." + kind + ".n", d.index() + 1) : t.get(KEY + "duty." + kind);
-            out.add(new String[]{name, fixed(d.booked() / 1e6, 2), fixed(d.solved() / 1e6, 2)});
+            // The fans draw power, not heat: kW, which their row's name says, where the heads read MW (U2).
+            boolean fans = d.kind() == OperationView.DutyKind.FANS;
+            out.add(new String[]{name, fans ? fixed(d.booked() / 1e3, 1) : fixed(d.booked() / 1e6, 2), fans ? fixed(d.solved() / 1e3, 1) : fixed(d.solved() / 1e6, 2)});
         }
         return out;
     }

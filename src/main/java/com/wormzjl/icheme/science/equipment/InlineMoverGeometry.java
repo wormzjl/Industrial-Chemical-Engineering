@@ -8,6 +8,10 @@ import static com.wormzjl.icheme.science.equipment.Mesh.*;
 public final class InlineMoverGeometry {
     private static final double[] CENTRE={.5,.5,.5},UP={0,1,0};
     private InlineMoverGeometry(){}
+    private record MotorLayout(double radius,double low,double height,double gearBottom,double split,double gearTop,double lid,double wetRadius) {}
+    private static MotorLayout motorLayout(LineGeometry.Key key,boolean compressor){double od=PipeSizes.outsideOf(key.outside()),r=Math.max(compressor?.15:.12,(compressor?.78:.72)*od+.04),lid=Math.max(.57*r,.53*od);double bottom=lid+.025+.035*od,split=bottom+.95*r,top=split+.18+.40*r;return new MotorLayout(Math.max(compressor?.155:.145,(compressor?.32:.27)*od+.06),compressor?top+.15+.20*od:lid+.025+.10+.15*od,(compressor?.42:.30)+(compressor?.66:.45)*od,bottom,split,top,lid,r);}
+    /** Matched integrated terminal necks, perpendicular to the process run. */
+    public static SocketGeometry.Socket socket(LineGeometry.Key key,boolean compressor,boolean power){var p=motorLayout(key,compressor);var run=LineGeometry.step(key.facing());var n=cross(UP,run);if(power)n=neg(n);var q=plus(plus(CENTRE,new double[]{0,p.low+.50*p.height,0}),scale(n,p.radius+.025));return new SocketGeometry.Socket(q[0],q[1],q[2],EquipmentServices.face(n),false);}
     /** Straight, end or isolated sections, with a horizontal run axis. */
     public static boolean supports(int mask,int facing){
         if(!SightGlassGeometry.supports(mask))return false;
@@ -16,7 +20,8 @@ public final class InlineMoverGeometry {
     }
     /** Above approximately 0.2 m bore, use block-face joints at the model key's drawn-size precision. */
     public static boolean boundaryJoints(int outside){return outside>PipeSizes.code(PipeSizes.outside(.2));}
-    public static List<Polygon> polygons(LineGeometry.Key key,boolean compressor,boolean item){
+    public static List<Polygon> polygons(LineGeometry.Key key,boolean compressor,boolean item) { return polygons(key,compressor,item,RenderDetail.NORMAL); }
+    public static List<Polygon> polygons(LineGeometry.Key key,boolean compressor,boolean item,RenderDetail detail){
         if(!supports(key.connections(),key.facing()))throw new IllegalArgumentException("Inline movers require horizontal straight pipe");
         double od=PipeSizes.outsideOf(key.outside()),r=Math.max(compressor?.15:.12,(compressor?.78:.72)*od+.04);
         boolean boundary=boundaryJoints(key.outside());
@@ -24,16 +29,16 @@ public final class InlineMoverGeometry {
         double root=connection-thickness-(boundary?.04:0);
         double axial=Math.min(boundary?root-.02:.25,.96*r),low=Math.max(-.39,-Math.max(1.10*r,.65*od)),lid=Math.max(.57*r,.53*od);
         int n=Math.max(20,PipeSizes.sides(2*r)),axis=key.facing()&~1;var along=LineGeometry.step(key.facing());
-        var body=new Mesh();var up=new Frame(CENTRE,UP,along);
+        var body=new Mesh(detail);var up=new Frame(CENTRE,UP,along);
         // The wet end wraps around the vertical shaft; its horizontal nozzles enter below the top cover.
         volute(body,up,axial,r,low,lid,n);
-        var pads=new Mesh();
+        var pads=new Mesh(detail);
         for(int sign:new int[]{-1,1})pads.block(plus(up.along(.04*r),scale(up.side(),sign*1.02*r)),scale(along,.38*axial),scale(UP,.16*r),scale(up.side(),.09*r),Material.FLANGE);
         var arrows=PortMarkings.fittingOverhanging(LineGeometry.overhanging(pads),key.facing(),-.6*axial,.6*axial);
-        double motorBase;
+        var motor=motorLayout(key,compressor);double motorBase=motor.low;
         if(compressor){
             // LMC: a distinct lower gear barrel and wide horizontal split beneath the ribbed upper casting.
-            double gearBottom=lid+.025+.035*od,split=gearBottom+.95*r,gearTop=split+.18+.40*r;
+            double gearBottom=motor.gearBottom,split=motor.split,gearTop=motor.gearTop;
             body.frustum(up,.72*r,.82*r,lid,gearBottom,n,Material.MACHINE);
             body.frustum(up,.82*r,.94*r,gearBottom,gearBottom+.12*r,n,Material.MACHINE);
             body.prism(up,.94*r,gearBottom+.12*r,split-.025,n,Material.MACHINE);
@@ -45,10 +50,10 @@ public final class InlineMoverGeometry {
             body.annulus(up,0,.55*r,gearTop,n,1,Material.MACHINE);
             for(int i=0;i<8;i++)web(body,up,i*Math.PI/4,.56*r,.99*r,split+.020,gearTop-.022,Math.max(.010,.055*r),Material.MACHINE);
             gearboxDetails(body,up,r,gearBottom,split,od,along);
-            motorBase=gearTop+.15+.20*od;stand(body,up,.43*r,gearTop,motorBase,along);
+            stand(body,up,.43*r,gearTop,motorBase,along);
 
         }else{
-            double shoulder=lid+.025,neck=.10+.15*od;motorBase=shoulder+neck;
+            double shoulder=lid+.025;
             body.ring(up,.35*r,.66*r,lid+.008,shoulder,n,3,Material.MACHINE);
             stand(body,up,.48*r,shoulder,motorBase,along);
         }
@@ -68,8 +73,9 @@ public final class InlineMoverGeometry {
                 if(!item)LineGeometry.arm(body,face,connection+thickness-.002,od,end,LineGeometry.ref(face),PipeSizes.sides(od),false);
             }
         }
-        double rm=Math.max(compressor?.11:.09,(compressor?.32:.27)*od+.06),height=(compressor?.42:.30)+(compressor?.66:.45)*od;
+        double rm=motor.radius,height=motor.height;
         motor(body,up,rm,motorBase,height,along,n);
+        for(boolean power:new boolean[]{false,true}){var socket=socket(key,compressor,power);var normal=LineGeometry.step(socket.face());var f=new Frame(new double[]{socket.x(),socket.y(),socket.z()},normal,UP);body.frustum(f,Math.min(.14,rm*.94),.095,-.12,-.04,16,Material.MOTOR);}
         var result=new ArrayList<>(LineGeometry.overhanging(body));result.addAll(LineGeometry.overhanging(pads));result.addAll(arrows);return List.copyOf(result);
     }
     /** A compact pair of mating flanges belongs to the machine, followed by the host pipe's straight tails. */
@@ -97,7 +103,7 @@ public final class InlineMoverGeometry {
         ellipticalCap(m,up,1.04*axial,1.04*r,0,lid+.015,1,sides,Material.FLANGE);
         for(int i=0;i<8;i++){
             var at=ellipsePoint(up,.88*axial,.88*r,(i+.5)*Math.PI/4,lid+.015);
-            m.cylinder(new Frame(at,UP,up.ref()),Math.max(.004,.03*r),-.001,.012,6,Material.BOLT);
+            m.nut(new Frame(at,UP,up.ref()),Math.max(.004,.03*r),-.001,.012,6,Material.BOLT);
         }
     }
     private static void castingRing(Mesh m,Frame f,double major,double tube,double axialScale,int rings,int sides){
@@ -189,14 +195,14 @@ public final class InlineMoverGeometry {
         m.block(up.along(floor),scale(up.ref(),1.02*axial),scale(UP,thick/2),scale(up.side(),.96*r),Material.MACHINE);
         for(int a:new int[]{-1,1})for(int b:new int[]{-1,1}){
             var at=plus(plus(up.along(floor+thick/2),scale(up.ref(),a*.86*axial)),scale(up.side(),b*.82*r));
-            m.cylinder(new Frame(at,UP,up.ref()),Math.max(.004,.025*r),-.001,.011,6,Material.BOLT);
+            m.nut(new Frame(at,UP,up.ref()),Math.max(.004,.025*r),-.001,.011,6,Material.BOLT);
         }
     }
     private static void fasteners(Mesh m,Frame f,double pitch,double at,double radius,int count){
         for(int i=0;i<count;i++){
             var bolt=new Frame(f.at((i+.5)*2*Math.PI/count,pitch,at),f.axis(),f.ref());
             m.cylinder(bolt,1.3*radius,-.001,.003,12,Material.FLANGE);
-            m.cylinder(bolt,radius,.002,.012+radius,6,Material.BOLT);
+            m.nut(bolt,radius,.002,.012+radius,6,Material.BOLT);
         }
     }
     private static void gearboxDetails(Mesh m,Frame up,double r,double gearBottom,double split,double od,double[] along){
@@ -239,7 +245,5 @@ public final class InlineMoverGeometry {
         for(int i=0;i<16;i++)m.bar(up.at(i*Math.PI/8,radius+.002,low+.025),up.at(i*Math.PI/8,radius+.002,top-.015),Math.max(.009,.07*radius),along,Material.MOTOR);
         m.cylinder(up,1.045*radius,top-.02,top+cowl,sides,Material.MOTOR);
         m.cylinder(up,.92*radius,top+cowl,top+cowl+.018,sides,Material.MOTOR);
-        var box=up.at(Math.PI/2,radius+.045,low+.50*height);double w=Math.max(.045,.33*radius);
-        m.box(new double[]{box[0]-w,box[1]-w,box[2]-w},new double[]{box[0]+w,box[1]+w,box[2]+w},ALL_FACES,Material.MOTOR);
     }
 }

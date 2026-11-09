@@ -31,7 +31,8 @@ public final class MaterialPresets {
                     feedTemperature,stages,feedStage,pressure,pressureDrop,specifications,draws,steam,pumparounds,diameter);
         }
     }
-    public record Fluid(String id,String label,String component,String packageId,String assayId) {}
+    /** A pure {@code component} (a network compound or Water) or an {@code assay}, always resolved on the network package. */
+    public record Fluid(String id,String label,String component,String assayId) {}
     public record Network(String packageId,String defaultColumnPreset,List<String> fluidPresets) {
         public Network {fluidPresets=List.copyOf(fluidPresets);}
     }
@@ -45,8 +46,6 @@ public final class MaterialPresets {
     public Column column(String id){var value=columns.get(id);if(value==null)throw new IllegalArgumentException("Unknown column preset: "+id);return value;}
     public Fluid fluid(String id){var value=fluids.get(id);if(value==null)throw new IllegalArgumentException("Unknown fluid preset: "+id);return value;}
     public Network network(){if(network==null)throw new IllegalArgumentException("No fluid network configuration in material catalog");return network;}
-    public List<Descriptor> visibleColumns(){return columns.values().stream().filter(Column::visible)
-            .sorted(Comparator.comparingInt(Column::order).thenComparing(c->c.descriptor().id())).map(Column::descriptor).toList();}
     public static double[] moleFractions(MaterialCatalog.Package p,String assayId) {
         var a=p.assays().get(assayId);if(a==null)throw new IllegalArgumentException("Unknown assay "+assayId+" for "+p.id());
         double[] n=new double[p.components().size()];
@@ -91,8 +90,11 @@ public final class MaterialPresets {
             } else if(kind.equals("fluid")) {
                 if(row.has("component")) {
                     String idComponent=text(row,"component");if(row.has("package")||row.has("assay")||!components.contains(idComponent))throw new IllegalArgumentException("component: unknown or conflicting fluid source");
-                    fluids.put(id,new Fluid(id,label,idComponent,"",""));
-                } else {String pkg=text(row,"package"),assay=text(row,"assay");requireAssay(packages,pkg,assay);fluids.put(id,new Fluid(id,label,"",pkg,assay));}
+                    fluids.put(id,new Fluid(id,label,idComponent,""));
+                } else {
+                    if(row.has("package"))throw new IllegalArgumentException("package: a fluid preset's assay is resolved on the network package; remove the field");
+                    fluids.put(id,new Fluid(id,label,"",text(row,"assay")));
+                }
             } else throw new IllegalArgumentException("kind: expected column or fluid");
         } catch(RuntimeException invalid){throw new IllegalArgumentException(origins.get(row)+": "+invalid.getMessage(),invalid);}
         if(columns.size()>=MAX_PRESETS||fluids.size()>MAX_PRESETS)throw new IllegalArgumentException("Too many presets");

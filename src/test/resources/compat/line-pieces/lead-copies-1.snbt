@@ -1,0 +1,3 @@
+{Saved:{Joints:48,Offsets:0L,Medium:"DATA",Endpoints:[]},Expected:0}
+{Saved:{LinePieces:[{Port:{id:[I;0,0,0,71],kind:"SENSOR",host:7L,dimension:"minecraft:overworld",owner:16387L,x:0.9d,y:3.5d,z:4.5d,cell:274877923331L,face:"WEST",u:3,v:-2},Lane:0}]},Expected:1}
+{Saved:{LinePieces:[{Port:{id:[I;0,0,0,71],kind:"POWER_INPUT",host:0L,dimension:"minecraft:overworld",owner:16387L,x:0.9d,y:3.5d,z:4.5d,cell:274877923331L,face:"WEST",u:3,v:-2},Lane:0}]},Expected:1}

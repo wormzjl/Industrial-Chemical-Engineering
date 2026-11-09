@@ -5,9 +5,11 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
-/** The fresh-calculator preset is the literature column at its published duties; a cold top is a warning, not a rejection. */
+/** The fresh-calculator preset is the literature column at its published duties; a cold top carries its water over to the drum. */
+@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.TiaJuanaExtension.class)
 class V3LiteraturePresetTest {
     @Test
     void theLiteraturePresetIsTheFortyTrayThesisColumnWithItsCoolersAtTheDraws() {
@@ -37,44 +39,54 @@ class V3LiteraturePresetTest {
 
     /**
      * At the published duties tray 1 is below the water dew point of its steam-laden overhead (83 C against
-     * 87 C, ratio 1.16) because the reconstruction carries no side-stripper reboiler heat. The column solves,
-     * publishes, closes its water balance, and says so as a warning that names the tray. No free-water phase can
-     * lift that tray under these specifications, so no wet tray is admitted and the free-water continuation
-     * records why (see V3_FREE_WATER_CONTINUATION_REVIEW).
+     * 87 C, ratio 1.16 on the dry solve) because the reconstruction carries no side-stripper reboiler heat. Before
+     * E31 (batch 2026-11-04-open-thermo-data) no free-water phase could lift that tray and the column published dry
+     * with a dew-point warning. With condenser carry-over the excess water leaves tray 1 as entrained liquid, the
+     * drum decants it with its own condensate, tray 1 sits on its saturation line, and the accepted profile grades
+     * WET_EQUILIBRIUM with no warning.
      *
-     * <p>Pinned in the prescribed-drop mode the numbers were measured in. The shipped preset authors a column
-     * diameter, and the flow-dependent tray pressure drop moves every one of them; that published state is
-     * covered by {@link V3TrayHydraulicsColumnTest} instead.</p>
+     * <p>Pinned in the prescribed-drop mode the numbers were measured in, so the carry-over is unlimited. The shipped
+     * preset authors a column diameter, and the flow-dependent tray pressure drop moves every one of them; that
+     * published state is covered by {@link V3TrayHydraulicsColumnTest} instead.</p>
      */
     @Test
-    void theLiteraturePresetPublishesWithATrayOneWaterDewPointWarning() {
-        V3ColumnOutcome outcome = V3ColumnCalculator.calculate(
-                V3TestInputs.literatureCduInput().withColumnDiameter(0.0), () -> {}, 0.0, 0.0, V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO);
+    void theLiteraturePresetCarriesTrayOnesFreeWaterOverAndGradesWet() {
+        AtomicReference<V3NeuralSeed> profile = new AtomicReference<>();
+        V3ColumnOutcome outcome = V3ColumnCalculator.calculateWithAcceptedProfile(
+                V3TestInputs.literatureCduInput().withColumnDiameter(0.0), () -> {}, profile::set);
         V3ColumnOutcome.Success success = assertInstanceOf(V3ColumnOutcome.Success.class, outcome, outcome::toString);
         assertTrue(outcome.diagnostics().maximumScaledResidual() < 1.0e-10, outcome::toString);
         V3AcceptanceAudit audit = success.diagnostics().acceptanceAudit();
         assertTrue(audit.accepted(), () -> audit.checks().toString());
+        V3WaterPhaseQualification.Assessment water = V3WaterPhaseQualification.assess(profile.get());
+        assertEquals(V3WaterPhaseQualification.Grade.WET_EQUILIBRIUM, water.grade(), water::toString);
+        assertTrue(profile.get().wetTrays()[1] && profile.get().freeWater()[1] > 0.0, "tray 1 carries its water over");
         V3AcceptanceAudit.Check dewPoint = audit.checks().stream()
                 .filter(check -> check.family().equals("WATER_DEW_POINT")).findFirst().orElseThrow();
-        assertTrue(dewPoint.passed(), dewPoint.detail());
-        assertEquals(1.162, dewPoint.value(), 0.02, dewPoint.detail());
-        assertTrue(dewPoint.detail().startsWith("warning: tray 2 "), dewPoint.detail());
-        List<String> warnings = audit.advisoryEvidence().stream().filter(advisory -> advisory.startsWith("Warning: ")).toList();
-        assertEquals(1, warnings.size(), () -> String.join(" | ", audit.advisoryEvidence()));
-        assertTrue(warnings.getFirst().contains("tray 2") && warnings.getFirst().contains("below the water dew point"), warnings.getFirst());
-        assertTrue(audit.advisoryEvidence().stream().noneMatch(advisory -> advisory.startsWith("wet trays:")),
-                "no wet tray can be admitted for the top of the column");
-        assertTrue(outcome.diagnostics().events().stream()
-                .anyMatch(event -> event.contains("free-water continuation declined")), () -> String.join(" | ", outcome.diagnostics().events()));
-        assertTrue(audit.checks().stream().anyMatch(check -> check.family().equals("WATER_BALANCE") && check.passed()));
-        // Every mole of the 1,200 kmol/h of stripping steam decants in the drum at 59 C.
+        assertTrue(dewPoint.passed() && !dewPoint.detail().startsWith("warning: "), dewPoint.detail());
+        assertTrue(audit.advisoryEvidence().stream().noneMatch(advisory -> advisory.startsWith("Warning: ")),
+                () -> String.join(" | ", audit.advisoryEvidence()));
+        assertTrue(audit.advisoryEvidence().stream().anyMatch(advisory -> advisory.startsWith("wet trays: [1]")),
+                () -> String.join(" | ", audit.advisoryEvidence()));
+        V3AcceptanceAudit.Check carryOver = audit.checks().stream()
+                .filter(check -> check.family().equals("CARRY_OVER")).findFirst().orElseThrow();
+        assertTrue(carryOver.passed() && carryOver.detail().endsWith("no entrainment limit without a column diameter"),
+                carryOver.detail());
+        for (String family : new String[] {"WATER_BALANCE", "CONDENSER_ENERGY_BALANCE", "GLOBAL_ENERGY_BALANCE"}) {
+            assertTrue(audit.checks().stream().anyMatch(check -> check.family().equals(family) && check.passed()), family);
+        }
+        System.out.println("E31 literature preset: " + carryOver.detail() + "; condenser duty "
+                + success.result().dutyLedger().map(V3ColumnDutyLedger::condenserWatts).orElse(Double.NaN) + " W");
+        // Every mole of the 1,200 kmol/h of stripping steam still decants in the drum at 59 C.
         V3ColumnStreamProperties freeWater = success.result().streams().stream()
                 .filter(stream -> stream.streamId().equals("free_water")).findFirst().orElseThrow();
         assertEquals(1_200.0 / 3.6, freeWater.molarFlowMolPerSecond(), 1.0e-9);
         // Light naphtha follows from the specified reflux and condenser temperature; the source fixes it at 833.
         V3ColumnStreamProperties distillate = success.result().streams().stream()
                 .filter(stream -> stream.streamId().equals("distillate_liquid")).findFirst().orElseThrow();
-        assertEquals(697.7237911804497, distillate.molarFlowMolPerSecond() * 3.6, 1.0);
+        // E31: 697.72 kmol/h before carry-over, when tray 1 published dry below its dew point; it now carries 88.5 kmol/h
+        // of free water over to the drum.
+        assertEquals(708.4723928221498, distillate.molarFlowMolPerSecond() * 3.6, 1.0);
     }
 
     /** With the top cooler halved the same column clears the dew point and carries no warning. */

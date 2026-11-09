@@ -49,11 +49,12 @@ public final class PipeRackModel implements IDynamicBakedModel {
      * {@link Paint#STRUCTURE} its flanges), whose colours the block tint gives (tint index: twice the lane's option, plus
      * the channel); {@code spools}: a bit per lane with a flange pair between spools.
      */
-    private record Look(RackGeometry.Rack rack, List<RackGeometry.Lane> lanes, long painted, int spools) {
+    private record Look(RackGeometry.Rack rack, List<RackGeometry.Lane> lanes,List<RackGeometry.Lane> occupied, long painted, int spools) {
     }
 
     private final TextureAtlasSprite[][] paintedSprites;
     private final TextureAtlasSprite particle;
+    private final com.wormzjl.icheme.science.equipment.RenderDetail detail = com.wormzjl.icheme.client.ClientConfig.renderDetail();
     private final ItemTransforms transforms;
     private final Map<Look, List<BakedQuad>> quads = new ConcurrentHashMap<>();
 
@@ -71,8 +72,8 @@ public final class PipeRackModel implements IDynamicBakedModel {
         long painted = 0;
         if (drawn != null) for (int i = 0; i < drawn.paints().size(); i++)
             painted |= (long) EquipmentShellModel.painted(drawn.paints().get(i), drawn.secondaries().get(i)) << 2 * i;
-        var key = drawn == null ? new Look(RackGeometry.framed(bare, PipeRackBlockEntity.BARE, RackGeometry.BEAM_TOP), List.of(), 0, 0)
-                : new Look(drawn.rack(), drawn.lanes(), painted, drawn.spools());
+        var key = drawn == null ? new Look(RackGeometry.framed(bare, PipeRackBlockEntity.BARE, RackGeometry.BEAM_TOP), List.of(),List.of(), 0, 0)
+                : new Look(drawn.rack(), drawn.lanes(),drawn.occupied(), painted, drawn.spools());
         var cached = quads.get(key);
         if (cached == null) {
             if (quads.size() >= CACHE) quads.clear();
@@ -86,10 +87,10 @@ public final class PipeRackModel implements IDynamicBakedModel {
      * its painted channels with the neutral sprites, tinted by twice its option plus the channel.
      */
     private List<BakedQuad> bake(Look look) {
-        var out = new ArrayList<>(EquipmentShellModel.bake(RackGeometry.polygons(look.rack, look.lanes), paintedSprites[0], false));
+        var out = new ArrayList<>(EquipmentShellModel.bake(RackGeometry.polygons(look.rack, look.occupied), paintedSprites[0], false));
         for (int i = 0; i < look.lanes.size(); i++) {
             var lane = look.lanes.get(i);
-            var polygons = RackGeometry.lane(look.rack, lane, (look.spools >> i & 1) != 0);
+            var polygons = RackGeometry.lane(look.rack, lane, (look.spools >> i & 1) != 0, detail);
             int painted = (int) (look.painted >> 2 * i & 3);
             out.addAll(EquipmentShellModel.bake(polygons, paintedSprites[painted], EquipmentShellModel.lineTints(painted, 2 * lane.option())));
         }

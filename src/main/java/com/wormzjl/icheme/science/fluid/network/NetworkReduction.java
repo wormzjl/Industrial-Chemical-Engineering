@@ -123,8 +123,7 @@ public final class NetworkReduction {
      * <li>An island that holds no stock (no generator, no vessel holding anything) is at rest whatever its devices are
      * set to: a junction's buffer is never material (D46), and one no source reaches holds a placeholder (D55).</li>
      * <li>A pump or compressor that cannot move anything this slice (set to no flow, or refused for the slice,
-     * {@code refused}) is a closed connection; any other at its target moves its set flow whatever the pressures, and
-     * the island is solved.</li>
+     * {@code refused}) is a closed connection; any other runs on its law, and the island is solved.</li>
      * <li>Otherwise it is at rest when the gauge reads no drive and no flow (owner decisions D42, D43, D58). A gauge stands
      * where stock is; a junction holds no stock and no gauge. So: no connection between two stock nodes has a static drive
      * ({@link #drives}) above {@link #REST_RESOLUTION} in an allowed direction, no path of junctions between two such
@@ -347,7 +346,7 @@ public final class NetworkReduction {
     /** A stream's viscosity: its phases' own, volume-weighted (the solver's bulk average, without solids). A state holding
      * no fluid has no stream (its ends are dry); its end reads an empty vessel's, the ambient's ({@code PassiveStepSolver}'s
      * bulk viscosity). */
-    private static double viscosity(FluidThermodynamics model,FluidThermodynamics.State s,MixtureViscosity.Workspace scratch) {
+    public static double viscosity(FluidThermodynamics model,FluidThermodynamics.State s,MixtureViscosity.Workspace scratch) {
         if(!FluidThermodynamics.holdsFluid(s))return viscosity(model,ambient(model),scratch);
         double value=0,volume=0;
         for(int phase:new int[]{FluidThermodynamics.GAS,FluidThermodynamics.OIL,FluidThermodynamics.WATER})

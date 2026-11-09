@@ -77,6 +77,11 @@ public final class PipeSizes {
         return 4 * (int) Math.ceil(44 * inches / 48 / 4);
     }
 
+    /** Pipe and equipment flanges share the pipe's drawn diameter grid and at most twelve visible bolts. */
+    public static int drawnBolts(double outside) {
+        return Math.min(12, bolts(outsideOf(code(outside))));
+    }
+
     /** Diameter of those bolts, m. */
     public static double boltDiameter(double outside) {
         double inches = outside / INCH;

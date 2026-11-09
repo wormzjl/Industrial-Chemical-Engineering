@@ -58,7 +58,7 @@ class FluidPacketCodecTest {
         var data=new FluidNetwork.MenuData(TopologyCompiler.Kind.GENERATOR,view,controls,names,List.of(),"",Map.of("server_0",descriptor),weights(names.size()));
         var json=new Gson();var decoded=json.fromJson(json.toJson(data),FluidNetwork.MenuData.class);
         assertEquals(names,decoded.components());assertEquals(descriptor,decoded.materialNames().get("server_0"));assertArrayEquals(amounts,decoded.controls().composition());
-        double[] oversized=new double[66];oversized[0]=1;
+        double[] oversized=new double[com.wormzjl.icheme.science.material.MaterialAxis.MAX_CONSERVED_COMPONENTS+1];oversized[0]=1;
         assertThrows(IllegalArgumentException.class,()->new FluidNetwork.Controls(298.15,101325,.05,.000045,.01,500000,oversized));
     }
     @Test void maximumAdmittedAxisAndPresetCountsFitThePacketBudget() {
@@ -69,9 +69,12 @@ class FluidPacketCodecTest {
         for(int i=0;i<count;i++){String id="server_"+i;ids.add(id);descriptors.put(id,new com.wormzjl.icheme.science.material.MaterialName(id,"t".repeat(128),"l".repeat(128),"lump",null,null,false));}
         double[] amounts=new double[count];Arrays.fill(amounts,1.0/count);var presets=new ArrayList<FluidPresetCatalog.Preset>();
         for(int i=0;i<32;i++)presets.add(new FluidPresetCatalog.Preset("p".repeat(120)+i,"n".repeat(128),amounts));
-        var view=new FluidView(1,0,0,0,"READY",new FluidView.State(101325,298.15,1,1,new double[]{1,2,3},n,SolidInventory.EMPTY,1),0,history);
-        var data=new FluidNetwork.MenuData(TopologyCompiler.Kind.PIPE,view.withPipeInfo(FluidView.PipeInfo.empty(view.pipeHistory().getFirst().forward().componentMoles().length)),new FluidNetwork.Controls(298.15,101325,.05,.000045,.01,500000,amounts),ids,presets,"",descriptors,weights(ids.size()));
-        String json=new Gson().toJson(data);assertTrue(json.length()<FluidNetwork.MAX_JSON);
+        // The widest view (V2 stage 5): the state, the pipe's contents, 12 history pairs and a heat unit's 8 ports, 34 three-phase vectors.
+        var ports=new ArrayList<FluidView.Port>();for(int i=0;i<FluidView.Heat.MAXIMUM_PORTS;i++)ports.add(new FluidView.Port("PORT_"+i,300.,1e5,1,n,new double[]{1,2,3}));
+        var heat=new FluidView.Heat("unit","side",true,300,1,null,null,null,null,null,null).with("none",null,"NONE",ports,null);
+        var view=new FluidView(1,0,0,0,"READY",new FluidView.State(101325,298.15,1,1,new double[]{1,2,3},n,SolidInventory.EMPTY,1),0,history).withHeat(heat);
+        var data=new FluidNetwork.MenuData(TopologyCompiler.Kind.PIPE,view.withPipeInfo(new FluidView.PipeInfo(new PipeTransfer.Stream(1,n,new double[]{1,2,3}),List.of(),false,false,null)),new FluidNetwork.Controls(298.15,101325,.05,.000045,.01,500000,amounts),ids,presets,"",descriptors,weights(ids.size()));
+        // Only the two parts travel (fluid-6); the whole menu data never goes on the wire as one message.
         var buffer=new RegistryFriendlyByteBuf(Unpooled.buffer(),RegistryAccess.EMPTY);
         try {
             // fluid-6: the static part (axis, presets, names) and the live part (view, controls, reply) each fit on their own.
@@ -135,8 +138,8 @@ class FluidPacketCodecTest {
      * the live payload as a solid with its crystal record and comes back equal; a crystal made of a component off the
      * menu's axis is refused. fluid-14 adds a tank's capacity and paired pressures; fluid-16 a heat unit's ports, lines and
      * actuator and a pipe's line reading (the heat GUI). */
-    @Test void theProtocolIsFluidSeventeenWithDistinctStaticAndLivePayloads() {
-        assertEquals("fluid-17",FluidNetwork.PROTOCOL);
+    @Test void theProtocolIsFluidNineteenWithDistinctStaticAndLivePayloads() {
+        assertEquals("fluid-19",FluidNetwork.PROTOCOL);
         var ids=java.util.Set.of(FluidNetwork.EditPayload.TYPE.id(),FluidNetwork.RecoverPayload.TYPE.id(),FluidNetwork.StaticPayload.TYPE.id(),FluidNetwork.LivePayload.TYPE.id());
         assertEquals(4,ids.size());
         var base=generatorMenu("");int count=base.components().size();
@@ -154,6 +157,96 @@ class FluidPacketCodecTest {
         assertEquals(data.view().state().solids(),copy.view().state().solids(),"the dry ice and its crystal record, as sent");
         assertEquals("component_3",copy.view().state().solids().crystals().getFirst().material().crystal().component());
         assertTrue(assertThrows(IllegalArgumentException.class,()->tank.apply("CarbonDioxide")).getMessage().contains("off the fluid axis"));
+    }
+    /** fluid-18 (W7): a casing's Drive and a fan unit's Power ride the live payload and come back as sent; a bad one is refused. */
+    @Test void aCasingsDriveAndAFanUnitsPowerRoundTripTheLivePayload() {
+        var base=generatorMenu("");
+        var drive=new FluidView.Drive("MOTOR",30000,2,"RUNNING",2950,false,1,24900);
+        var power=new FluidView.Power(26700,534,.72,"");
+        var view=base.view().withDrive(drive).withPower(power);
+        var data=new FluidNetwork.MenuData(TopologyCompiler.Kind.GENERATOR,view,base.controls(),base.components(),base.presets(),"",base.materialNames(),base.molecularWeights());
+        var copy=FluidNetwork.decodeLive(new Gson().toJson(live(data)));
+        assertEquals(drive,copy.view().drive());assertEquals(power,copy.view().power());
+        var none=FluidNetwork.decodeLive(new Gson().toJson(live(base)));
+        assertNull(none.view().drive());assertNull(none.view().power());
+        assertThrows(IllegalArgumentException.class,()->new FluidView.Drive("MOTOR",-1,2,"RUNNING",0,false,0,0));
+        assertThrows(IllegalArgumentException.class,()->new FluidView.Power(0,0,1.5,""));
+    }
+    /**
+     * W10d: a pump's readings ride the live payload and come back as sent: a casing's with its curve's design, an in-line
+     * pump's with no curve and no reads (null, not NaN); a bad one is refused.
+     */
+    @Test void aPumpsReadingsRoundTripTheLivePayload() {
+        var base=generatorMenu("");
+        var casing=new FluidView.Pump(6.8,3.3,.004,.73,new FluidView.Curve(100/3600.0,80,.70,2950));
+        var inline=new FluidView.Pump(null,null,null,1,null);
+        for(var pump:List.of(casing,inline)) {
+            var data=new FluidNetwork.MenuData(TopologyCompiler.Kind.PUMP,base.view().withPump(pump),base.controls(),base.components(),base.presets(),"",base.materialNames(),base.molecularWeights());
+            var copy=FluidNetwork.decodeLive(new Gson().toJson(live(data)));
+            assertEquals(pump,copy.view().pump());
+        }
+        assertNull(FluidNetwork.decodeLive(new Gson().toJson(live(base))).view().pump());
+        assertThrows(IllegalArgumentException.class,()->new FluidView.Pump(1.0,-1.0,0.0,1,null));
+        assertThrows(IllegalArgumentException.class,()->new FluidView.Pump(1.0,1.0,1.5,1,null));
+        assertThrows(IllegalArgumentException.class,()->new FluidView.Pump(null,null,null,1.2,null));
+        assertThrows(IllegalArgumentException.class,()->new FluidView.Curve(0,80,.7,2950));
+    }
+    /** W10c: a mover's state round-trips with its crackle and churn bytes; a byte outside 0 to 255 is refused. */
+    @Test void aMoverStateRoundTripsItsCrackleAndChurn() {
+        var target=new FluidNetwork.Target(new BlockPos(3,70,-9),42);
+        var buffer=new RegistryFriendlyByteBuf(Unpooled.buffer(),RegistryAccess.EMPTY);
+        try{
+            // An in-line pump's state at its pipe block (W10c follow-up): the same payload, its speed 1, its crackle only.
+            var inline=new FluidNetwork.MoverState(new FluidNetwork.Target(new BlockPos(-120,64,33),Long.MAX_VALUE-5),false,true,1,201,0,1549.2f);
+            for(var state:List.of(new FluidNetwork.MoverState(target,false,true,.95f,255,128),new FluidNetwork.MoverState(target,false,true,1,0,7),new FluidNetwork.MoverState(target,true,false,0),inline)) {
+                FluidNetwork.MoverState.STREAM_CODEC.encode(buffer,state);assertEquals(state,FluidNetwork.MoverState.STREAM_CODEC.decode(buffer));
+            }
+        }finally{buffer.release();}
+        assertEquals(0,new FluidNetwork.MoverState(target,true,true,1).crackle());
+        assertThrows(IllegalArgumentException.class,()->new FluidNetwork.MoverState(target,false,true,1,256,0));
+        assertThrows(IllegalArgumentException.class,()->new FluidNetwork.MoverState(target,false,true,1,0,-1));
+        assertThrows(IllegalArgumentException.class,()->new FluidNetwork.MoverState(target,false,true,1,0,0,-1));
+    }
+    /** W7: the machine page's view, edit and driver payloads round-trip; a view with a bad number is refused on read. */
+    @Test void theMachinePayloadsRoundTripOnTheirOwnRegistrar() {
+        assertEquals("machine-3",com.wormzjl.icheme.network.MachineNetwork.PROTOCOL);
+        var settings=new ShaftUnit.Settings(true,com.wormzjl.icheme.science.machine.ShaftTrain.Mode.REGULATE_FLOW,.8,0,0);
+        var view=new MachineView(7,com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR,"RUNNING",2950,24900,26700,534,settings,
+                com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE,30000,2950,2,true,.72,370,"FV-101",0,2.9,40e5,4e5,null);
+        var state=new com.wormzjl.icheme.network.MachineNetwork.StatePayload(3,view,2,"");
+        var unread=new MachineView(8,com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.GENERATOR,"OFF SPEED",0,0,0,0,ShaftUnit.Settings.DEFAULT,
+                com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE,30000,2950,2,false,Double.NaN,Double.NaN,"",0,Double.NaN,Double.NaN,Double.NaN,null);
+        // W6b: a Create coupling's view carries its Create side; it round-trips, NaN impact included.
+        var coupling=new MachineView(9,com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.CREATE_COUPLING,"POWER LIMITED",228.2,18000,0,0,ShaftUnit.Settings.DEFAULT,
+                com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE,0,256,0,true,Double.NaN,Double.NaN,"",0,Double.NaN,Double.NaN,Double.NaN,
+                new MachineView.Coupling(256,12288,12287/256.,2629,1.465));
+        var unsent=new MachineView(10,com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.CREATE_COUPLING,"NO ROTATION",0,0,0,0,ShaftUnit.Settings.DEFAULT,
+                com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE,0,256,0,true,Double.NaN,Double.NaN,"",0,Double.NaN,Double.NaN,Double.NaN,
+                new MachineView.Coupling(0,0,Double.NaN,Double.NaN,1.465));
+        assertThrows(IllegalArgumentException.class,()->new MachineView(11,com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR,"RUNNING",0,0,0,0,ShaftUnit.Settings.DEFAULT,
+                com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE,0,256,0,true,Double.NaN,Double.NaN,"",0,Double.NaN,Double.NaN,Double.NaN,new MachineView.Coupling(0,0,0,0,1.465)),"a coupling view belongs to a coupling");
+        assertThrows(IllegalArgumentException.class,()->new MachineView.Coupling(-1,0,0,0,1.465));
+        var edit=new com.wormzjl.icheme.network.MachineNetwork.EditPayload(3,2,com.wormzjl.icheme.network.MachineNetwork.Action.APPLY,settings);
+        var open=new com.wormzjl.icheme.network.MachineNetwork.OpenDriverPayload(4,new BlockPos(-3,70,12),99);
+        var buffer=new RegistryFriendlyByteBuf(Unpooled.buffer(),RegistryAccess.EMPTY);
+        try{
+            com.wormzjl.icheme.network.MachineNetwork.StatePayload.STREAM_CODEC.encode(buffer,state);assertEquals(state,com.wormzjl.icheme.network.MachineNetwork.StatePayload.STREAM_CODEC.decode(buffer));
+            var copy=new com.wormzjl.icheme.network.MachineNetwork.StatePayload(1,unread,0,"refused");
+            com.wormzjl.icheme.network.MachineNetwork.StatePayload.STREAM_CODEC.encode(buffer,copy);
+            var back=com.wormzjl.icheme.network.MachineNetwork.StatePayload.STREAM_CODEC.decode(buffer);
+            assertTrue(Double.isNaN(back.view().storeShare())&&Double.isNaN(back.view().storeSeconds()));assertEquals("refused",back.refusal());
+            for(var v:new MachineView[]{coupling,unsent}){var p=new com.wormzjl.icheme.network.MachineNetwork.StatePayload(5,v,0,"");com.wormzjl.icheme.network.MachineNetwork.StatePayload.STREAM_CODEC.encode(buffer,p);assertEquals(p,com.wormzjl.icheme.network.MachineNetwork.StatePayload.STREAM_CODEC.decode(buffer));}
+            com.wormzjl.icheme.network.MachineNetwork.EditPayload.STREAM_CODEC.encode(buffer,edit);assertEquals(edit,com.wormzjl.icheme.network.MachineNetwork.EditPayload.STREAM_CODEC.decode(buffer));
+            com.wormzjl.icheme.network.MachineNetwork.OpenDriverPayload.STREAM_CODEC.encode(buffer,open);assertEquals(open,com.wormzjl.icheme.network.MachineNetwork.OpenDriverPayload.STREAM_CODEC.decode(buffer));
+            // A negative speed on the wire is refused at decode.
+            buffer.clear();
+            buffer.writeVarInt(1);buffer.writeLong(7);buffer.writeEnum(com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR);buffer.writeUtf("RUNNING");buffer.writeDouble(-1);
+            for(int i=0;i<3;i++)buffer.writeDouble(0);
+            buffer.writeBoolean(true);buffer.writeEnum(com.wormzjl.icheme.science.machine.ShaftTrain.Mode.SPEED);buffer.writeDouble(0);buffer.writeDouble(0);buffer.writeDouble(0);
+            buffer.writeEnum(com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE);buffer.writeDouble(0);buffer.writeDouble(0);buffer.writeVarInt(0);buffer.writeBoolean(false);
+            buffer.writeDouble(Double.NaN);buffer.writeDouble(Double.NaN);buffer.writeUtf("");buffer.writeDouble(0);for(int i=0;i<3;i++)buffer.writeDouble(Double.NaN);buffer.writeBoolean(false);buffer.writeVarInt(0);buffer.writeUtf("");
+            assertThrows(io.netty.handler.codec.DecoderException.class,()->com.wormzjl.icheme.network.MachineNetwork.StatePayload.STREAM_CODEC.decode(buffer));
+        }finally{buffer.release();}
     }
     /** The static part carries the axis, presets, names and kind only; the live part the view, controls and reply only; joined they are the menu state. */
     @Test void theStaticAndLivePayloadsSplitAndRejoinIntoTheSameMenuState() {
@@ -331,7 +424,7 @@ class FluidPacketCodecTest {
         // A setting outside the package envelope is replied with the input box's own text.
         var domain=assertThrows(IllegalArgumentException.class,
                 ()->new FluidDeviceSpec(1,298.15,1.2e7,n).validate(com.wormzjl.icheme.fluid.support.FluidTestSupport.networkModel(),TopologyCompiler.Kind.GENERATOR));
-        assertEquals("Pressure 1.2E7 Pa outside the package envelope 100.0..1.0E7 Pa (package icheme:tjl20_methane_nitrogen)",FluidNetwork.reason(domain));
+        assertEquals("Pressure 1.2E7 Pa outside the package envelope 100.0..1.0E7 Pa (package icheme:refinery)",FluidNetwork.reason(domain));
         assertEquals("Stale fluid controls",FluidNetwork.reason(new IllegalStateException("Stale fluid controls")));
         assertEquals("null",FluidNetwork.reason(new RuntimeException()));
     }

@@ -43,7 +43,7 @@ class HoldFuzzTest {
     static final MaterialCatalog CATALOG=MaterialCatalog.bundled();
     static final int COMPONENTS=MaterialTestBasis.NETWORK+1,WATER=MaterialTestBasis.NETWORK,NITROGEN=MaterialTestBasis.NITROGEN;
     static final int METHANE=CATALOG.requirePackage("icheme:tjl20_methane_nitrogen").components().indexOf("Methane");
-    static final double[] CRUDE=Arrays.copyOf(V3PengRobinsonThermo.fromRegisteredPackage("icheme:tjl20_methane_nitrogen").crudeFeed("icheme:tia_juana_light_methane").moleFractions(),COMPONENTS);
+    static final double[] CRUDE=Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo("icheme:tjl20_methane_nitrogen").crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(),COMPONENTS);
     static final ThreadLocal<FluidThermodynamics> MODELS=ThreadLocal.withInitial(FluidTestSupport::networkModel);
 
     record Block(int x,int y,int z,Kind kind,PhysicalFluidTopology.Direction facing,double bore,FlowControl control,FluidDeviceSpec spec,String fluid) {

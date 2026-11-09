@@ -23,7 +23,7 @@ import static com.wormzjl.icheme.science.equipment.Mesh.*;
  * <p>Pipeline devices draw their bodies from photographs (survey section 4): a globe control valve with its diaphragm
  * actuator above a horizontal line or beside a vertical one; a vertical in-line pump with its motor up on a pedestal; a
  * compressor barrel with its motor on a skid; a Y-strainer with its screen leg 45° down and downstream; a small
- * vertical tank on legs; and the feed and drain boxes of the source and sink. Each draws a flanged nozzle at the size of
+ * vertical tank on legs; and symmetric six-faced source and sink housings. Each draws a flanged nozzle at the size of
  * the line met at each connected face; an in-line device draws its two line nozzles even unconnected.
  */
 public final class LineGeometry {
@@ -80,6 +80,14 @@ public final class LineGeometry {
             return (flanged >> face & 1) != 0;
         }
 
+        /** Adds a welded branch at the actual neighbour's size and face point, preserving every other connection. */
+        public Key withConnection(int face, int code, int u, int v) {
+            if (face < 0 || face >= 6 || code <= 0 || code > 127) throw new IllegalArgumentException("Invalid pipe connection");
+            long nextFaces = (faces & ~(127L << 7 * face)) | (long) code << 7 * face;
+            long nextOffsets = (offsets & ~(1023L << 10 * face)) | offsets(face, u, v);
+            return new Key(kind, facing, connections | 1 << face, outside, nextFaces, flanged & ~(1 << face), spool, nextOffsets);
+        }
+
         /** An item's look: a pipe 0.25 m across lying north-south, a device on a 0.15 m line. */
         public static Key item(Kind kind) {
             if (kind == Kind.PIPE) {
@@ -94,14 +102,47 @@ public final class LineGeometry {
     }
 
     /** The block's polygons, cell-local. */
-    public static List<Polygon> polygons(Key key) {
-        if(key.kind()==Kind.VALVE)return ValveGeometry.pressure(key,false);
-        if(key.kind()==Kind.FILTER)return overhanging(mesh(key));
-        return mesh(key).cell(0, 0, 0);
+    public static List<Polygon> polygons(Key key) { return polygons(key, RenderDetail.NORMAL); }
+    public static List<Polygon> polygons(Key key, RenderDetail detail) {
+        if(key.kind()==Kind.VALVE)return ValveGeometry.pressure(key,false,detail);
+        if(key.kind()==Kind.FILTER)return overhanging(mesh(key,detail));
+        return mesh(key,detail).cell(0, 0, 0);
     }
 
+    /** Fixed-size electrical conduit uses the pipe mesher, including elbows, junctions and off-centre transitions. */
+    public static List<Polygon> conduit(int joints,long offsets,double outside) {
+        int drawn=joints;
+        if(Integer.bitCount(drawn)==0)drawn=48;
+        else if(Integer.bitCount(drawn)==1)drawn|=1<<(Integer.numberOfTrailingZeros(drawn)^1);
+        var key=new Key(Kind.PIPE,5,drawn,PipeSizes.code(outside),0,0,false,offsets);
+        var out=new ArrayList<>(polygons(key));var fittings=new Mesh();
+        for(int face=0;face<6;face++)if(key.connected(face)) {
+            var frame=new Frame(point(key,face),step(face),ref(face));
+            fittings.hoop(frame,outside/2,.60*outside,-.02,0,PipeSizes.sides(outside),Material.FLANGE);
+            // Insulated cable fills its enclosure. Recess the face so adjoining blocks never share coplanar caps.
+            fittings.disc(frame,outside/2,-.002,PipeSizes.sides(outside),1,Material.OPENING);
+        }
+        out.addAll(overhanging(fittings));return List.copyOf(out);
+    }
+
+    /** A conduit lead with face-normal end legs, swept by the same fitted-line mesher as rack pipes. */
+    public static List<Polygon> conduit(List<double[]> path,double outside) {
+        var points=new ArrayList<double[]>();
+        for(var p:path)if(points.isEmpty()||dot(sub(p,points.getLast()),sub(p,points.getLast()))>EPS)points.add(p);
+        if(points.size()<2)return List.of();
+        var end=new End(outside,false,0,0,true);var m=new Mesh();
+        var fitted=fitted(points,end,end,outside);
+        int a=face(neg(fitted.dirs()[0])),b=face(fitted.dirs()[fitted.dirs().length-1]);
+        if(fitted.dirs().length==1)m.prism(new Frame(fitted.points().getFirst(),fitted.dirs()[0],ref(a)),outside/2,0,fitted.lengths()[0],PipeSizes.sides(outside),Material.PIPE);
+        else line(m,fitted,a,b,outside,PipeSizes.sides(outside),false);
+        return overhanging(m);
+    }
+
+    private static int face(double[] v){int axis=0;for(int k=1;k<3;k++)if(Math.abs(v[k])>Math.abs(v[axis]))axis=k;return (axis==0?4:axis==1?0:2)+(v[axis]>0?1:0);}
+
     /** Native Y-strainer, sized from its host pipe and retaining overhanging screen geometry. */
-    public static List<Polygon> filterPolygons(Key pipe){return overhanging(mesh(new Key(Kind.FILTER,pipe.facing,pipe.connections,pipe.outside,pipe.faces,pipe.flanged,pipe.spool,pipe.offsets)));}
+    public static List<Polygon> filterPolygons(Key pipe){return filterPolygons(pipe,RenderDetail.NORMAL);}
+    public static List<Polygon> filterPolygons(Key pipe,RenderDetail detail){return overhanging(mesh(new Key(Kind.FILTER,pipe.facing,pipe.connections,pipe.outside,pipe.faces,pipe.flanged,pipe.spool,pipe.offsets),detail));}
 
     /** Keep decorative overhangs in their owning block model, with UV/cell clipping intact. */
     static List<Polygon> overhanging(Mesh mesh) {
@@ -116,15 +157,16 @@ public final class LineGeometry {
         return List.copyOf(out);
     }
 
-    static Mesh mesh(Key key) {
-        var m = new Mesh();
+    static Mesh mesh(Key key) { return mesh(key, RenderDetail.NORMAL); }
+    static Mesh mesh(Key key, RenderDetail detail) {
+        var m = new Mesh(detail);
         switch (key.kind()) {
             case PIPE -> pipe(m, key);
             case VALVE -> valve(m, key);
             case FILTER -> strainer(m, key);
             case RESERVOIR -> tank(m, key);
-            case GENERATOR -> box(m, key, Material.FEED);
-            case VOID -> box(m, key, Material.DRAIN);
+            case GENERATOR -> boundary(m, key, Material.FEED);
+            case VOID -> boundary(m, key, Material.DRAIN);
         }
         return m;
     }
@@ -171,6 +213,11 @@ public final class LineGeometry {
         for (int i = 0; i < 6; i++) if (key.connected(i)) arms.add(i);
         if (transition(key)) {
             transition(m, key, arms, od, sides);
+            return;
+        }
+        if (arms.size() > 2 && arms.stream().anyMatch(i -> !key.centred(i))) {
+            // A branch added to a transition retains each built face point. Centred tee arms cannot reach those ends.
+            offsetJunction(m, key, arms, od, sides);
             return;
         }
         if (arms.size() <= 1) {
@@ -311,6 +358,22 @@ public final class LineGeometry {
         m.prism(f, flange, .5 - t, .5 - seam, sides, Material.FLANGE);
         if (joined) m.prism(f, flange, .5 - seam, .5, sides, Material.OPENING);
         m.annulus(f, 0, flange, .5, sides, 1, Material.FLANGE);
+    }
+
+    /** Off-centre junction branches use the same fitted sweep as transition pipes, meeting inside one closed hub. */
+    private static void offsetJunction(Mesh m, Key key, List<Integer> arms, double od, int sides) {
+        ball(m, od, sides);
+        var centre = new double[]{.5, .5, .5};
+        for (int face : arms) {
+            if (key.centred(face)) {
+                arm(m, face, 0, od, end(key, face, od), ref(face), sides, true);
+                continue;
+            }
+            var outward = step(face);
+            var point = point(key, face);
+            var path = List.of(point, sub(point, scale(outward, .25)), plus(centre, scale(outward, .25)), centre);
+            line(m, fitted(path, end(key, face, od), new End(od, false, 0, 0, true), od), face, face ^ 1, od, sides);
+        }
     }
 
     // ---- Transition pipes ------------------------------------------------------------------------------------------
@@ -475,6 +538,10 @@ public final class LineGeometry {
      * fits, the corners are balls.
      */
     static void line(Mesh m, Fitted line, int a, int b, double od, int sides) {
+        line(m,line,a,b,od,sides,true);
+    }
+
+    private static void line(Mesh m, Fitted line, int a, int b, double od, int sides,boolean bounded) {
         var points = line.points();
         double[][] dirs = line.dirs();
         double[] lengths = line.lengths(), tans = line.tans();
@@ -487,7 +554,7 @@ public final class LineGeometry {
             for (int k = 1; k < legs; k++) {
                 var p = points.get(k);
                 double wall = Math.min(Math.min(Math.min(p[0], 1 - p[0]), Math.min(p[1], 1 - p[1])), Math.min(p[2], 1 - p[2]));
-                m.sphere(p, Math.min(wall, r / DeterministicMath.cos(Math.PI / sides)), sides, Material.PIPE);
+                m.sphere(p, Math.min(bounded?wall:Double.POSITIVE_INFINITY, r / DeterministicMath.cos(Math.PI / sides)), sides, Material.PIPE);
             }
             arm(m, originA, a, .5 - lengths[0], od, line.ea(), ref(a), sides, true);
             for (int k = 1; k < legs - 1; k++) {
@@ -612,11 +679,53 @@ public final class LineGeometry {
         faceNozzles(m, key, new double[]{end, end, side, side, side, side});
     }
 
-    /** The source or sink: a painted box on the floor with a flanged nozzle to each line met. */
-    private static void box(Mesh m, Key key, Material material) {
-        m.box(new double[]{.18, 0, .18}, new double[]{.82, .7, .82}, ALL_FACES, material);
-        m.box(new double[]{.15, .7, .15}, new double[]{.85, .76, .85}, ALL_FACES, Material.STEELWORK);
-        faceNozzles(m, key, new double[]{.5, .25, .3, .3, .3, .3});
+    /** Six identical port covers on a bevelled steel housing; no preferred facing or floor. */
+    private static void boundary(Mesh m, Key key, Material material) {
+        // Fill the device's 14/16-block collision width, with the same bevel proportions on all six sides.
+        double radius = 7 / 16.0, shoulder = .36, cover = .33;
+        for (int face = 0; face < 6; face++) {
+            var f = frame(face, ref(face));
+            var square = new ArrayList<double[]>(4);
+            for (int[] corner : new int[][]{{-1, -1}, {1, -1}, {1, 1}, {-1, 1}}) {
+                var p = f.along(radius);
+                for (int k = 0; k < 3; k++)
+                    p[k] += shoulder * (corner[0] * f.ref()[k] + corner[1] * f.side()[k]);
+                square.add(p);
+            }
+            m.flat(square, step(face), Material.PIPE);
+            m.prism(f, cover, radius, radius + .008, 8, Material.FLANGE);
+            m.disc(f, cover, radius + .008, 8, 1, material);
+            if (key.connected(face)) {
+                double size = key.face(face) == 0 ? NOZZLE : PipeSizes.outsideOf(key.face(face));
+                arm(m, face, radius - .02, size, End.flanged(size, true), ref(face), PipeSizes.sides(size), true);
+            }
+        }
+        // The twelve edge bevels and eight corner bevels close the same housing along every axis.
+        for (int a = 0; a < 3; a++) for (int b = a + 1; b < 3; b++) {
+            int c = 3 - a - b;
+            for (int sa : new int[]{-1, 1}) for (int sb : new int[]{-1, 1}) {
+                var edge = new ArrayList<double[]>(4);
+                for (int[] end : new int[][]{{0, -1}, {1, -1}, {1, 1}, {0, 1}}) {
+                    var p = CENTRE.clone();
+                    p[a] += sa * (end[0] == 0 ? radius : shoulder);
+                    p[b] += sb * (end[0] == 0 ? shoulder : radius);
+                    p[c] += end[1] * shoulder;
+                    edge.add(p);
+                }
+                var normal = new double[3]; normal[a] = sa; normal[b] = sb;
+                m.flat(edge, normal, Material.FLANGE);
+            }
+        }
+        for (int sx : new int[]{-1, 1}) for (int sy : new int[]{-1, 1}) for (int sz : new int[]{-1, 1}) {
+            var corner = new ArrayList<double[]>(3);
+            int[] signs = {sx, sy, sz};
+            for (int axis = 0; axis < 3; axis++) {
+                var p = CENTRE.clone();
+                for (int k = 0; k < 3; k++) p[k] += signs[k] * (k == axis ? radius : shoulder);
+                corner.add(p);
+            }
+            m.flat(corner, new double[]{sx, sy, sz}, Material.FLANGE);
+        }
     }
 
     // ---- Frames ----------------------------------------------------------------------------------------------------

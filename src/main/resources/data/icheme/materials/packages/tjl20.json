@@ -1,44 +1,36 @@
 {
   "schema_version": 1,
   "id": "icheme:tjl20_methane",
-  "revision": "crude-regrouped-r1",
-  "model": "pr78",
-  "interactions": "icheme:tjl20",
-  "missing_interactions": "zero",
-  "water_model": "icheme:water",
-  "temperature_min_kelvin": 298.15,
-  "temperature_max_kelvin": 900.0,
-  "pressure_min_pascal": 1000.0,
-  "pressure_max_pascal": 2000000.0,
-  "fluid_domain": {
-    "temperature_min_kelvin": 273.16,
-    "temperature_max_kelvin": 900,
-    "pressure_min_pascal": 100,
-    "pressure_max_pascal": 10000000,
-    "evidence": "Fluid network envelope, the package's data range: from the water model triple point (273.16 K), the lowest minimum of any component of this package, to the 900 K of the caloric fits; 100 Pa..10 MPa holds the methane record's declared range (P3 WP7); every other component keeps its own 2 MPa. A state past the range of a component it carries is carried, its properties continued and the island's status line noting it (owner rule of 2026-10-16); free water below its melting line freezes as ice Ih (WP4). Every phase at its own pressure (P3 WP4). Every component declares its own range inside it."
-  },
-  "aliases": {},
+  "revision": "crude-regrouped-r3",
+  "method": "icheme:crude_pr78",
+  "components": [
+    "Methane",
+    "Ethane",
+    "Propane",
+    "Isobutane",
+    "N-butane",
+    "Isopentane",
+    "N-pentane",
+    "crude_pc01",
+    "crude_pc02",
+    "crude_pc03",
+    "crude_pc04",
+    "crude_pc05",
+    "crude_pc06",
+    "crude_pc07",
+    "crude_pc08",
+    "crude_pc09",
+    "crude_pc10",
+    "crude_pc11",
+    "crude_pc12"
+  ],
   "advisory_evidence": [
-    "RECONSTRUCTED_PETROLEUM_PROPERTIES: frozen TJL19 reconstruction, not original HYSYS properties; 60 F standard-liquid basis assumed",
+    "RECONSTRUCTED_PETROLEUM_PROPERTIES: shared cuts from the project's DWSIM characterisation of Tia Juana Light (Ledezma-Martinez 2019), not original HYSYS properties; 60 F standard-liquid basis assumed",
     "ESTIMATED_HEAVY_RESIDUE: empirical critical-property extrapolation retained for flagged petroleum fractions",
     "THERMAL_FIT: degree-five Cp fit, analytic H relative to 298.15 K; validated over 298.15..900 K",
     "PR78_MODEL_DIFFERENCE: V3 low-omega coefficient 1.54226; reconstruction source 1.5422",
-    "METHANE_EXTENSION: NIST ideal-gas Cp fit; CoolProp PR constants; methane binary interactions assumed zero, not fitted",
+    "METHANE_EXTENSION: ideal-gas Cp fit to the CoolProp alpha0 (Setzmann and Wagner 1991); CoolProp PR constants; methane binary interactions assumed zero, not fitted",
     "METHANE_ASSAY: synthetic 0.5 mol% methane blend; hypothetical liquid-density metadata is unused by the molar feed and PR equations",
-    "ESTIMATED_REGROUPING: PC08-12 mass/volume-constrained Tia Juana reconstruction; heavy Tc/Pc extrapolated; global Dalia transport"
-  ],
-  "liquid_mixture": {
-    "type": "symmetric_pair_groups_v1",
-    "coefficients": [
-      0.7585241056539558,
-      0.45724340571290695,
-      0.08245501128109843,
-      0.05051713998043995
-    ],
-    "reference_kelvin": 323.15,
-    "slope_cap_kelvin": 373.15,
-    "source": "Global Dalia whole/residue fit; whole 40C and residue 60C held out; non-donor mismatch accepted",
-    "revision": "dalia-global-r1"
-  },
-  "basis": "icheme:crude_19"
+    "ESTIMATED_REGROUPING: PC08-12 mass/volume-constrained Tia Juana reconstruction; heavy Tc/Pc extrapolated; cut liquid viscosity Twu 1985 + ASTM D341, one cut-pair mixture term fitted to ECCC whole crudes"
+  ]
 }

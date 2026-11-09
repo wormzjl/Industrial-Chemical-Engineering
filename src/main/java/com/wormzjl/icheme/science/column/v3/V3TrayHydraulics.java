@@ -23,7 +23,7 @@ public final class V3TrayHydraulics {
     public static final String CORRELATION_REVISION = "v3-sieve-tray-bennett-r1";
 
     /** Fraction of the column cross-section taken by one downcomer; two of them bound the bubbling area. */
-    static final double DOWNCOMER_AREA_FRACTION = 0.10;
+    public static final double DOWNCOMER_AREA_FRACTION = 0.10;
     /** Perforated fraction of the bubbling area. */
     static final double HOLE_AREA_FRACTION = 0.10;
     static final double WEIR_HEIGHT_METRES = 0.05;
@@ -88,7 +88,9 @@ public final class V3TrayHydraulics {
      * The traffic leaving one tray, in the units the correlation consumes.
      *
      * <p>Water is accounted exactly as the solver does: the vapour carries the authored steam fed at or below this
-     * tray plus the free water that left the tray above, and the liquid carries this tray's own free water.</p>
+     * tray plus the free water that left the tray above, and the liquid carries this tray's own falling free water.
+     * Water a carry-over tray one sends to the drum is in neither: it does not cross the weir, and its vapour
+     * carries the rest of the steam.</p>
      */
     public record Tray(
             double vaporMolarFlowMolPerSecond,
@@ -186,9 +188,37 @@ public final class V3TrayHydraulics {
                     liquidVolume,
                     liquidMoles > 0.0 ? criticalTemperature / liquidMoles : EMPTY_TRAY_CRITICAL_TEMPERATURE,
                     liquidMoles > 0.0 ? acentricFactor / liquidMoles : EMPTY_TRAY_ACENTRIC_FACTOR,
-                    problem.freeWaterFlowMolPerSecond(state, tray));
+                    problem.fallingFreeWaterMolPerSecond(state, tray));
         }
         return trays;
+    }
+
+    /**
+     * The most free water the vapour leaving a tray can lift to the tray above as entrained liquid, in mol/s.
+     *
+     * <p>Game-level form (E31): the vapour lifts at most its own mass of liquid at flood, and in proportion to its
+     * flood fraction below it, so the limit is {@code f * G / M_water}. It is built only from the Fair flooding
+     * fraction this tray already reports, whose Souders-Brown capacity is the vapour velocity that suspends a
+     * droplet, and it falls to zero with the vapour load: a slow, oversized column cannot carry water over.</p>
+     */
+    public double entrainmentLimitMolPerSecond(Tray tray, double pressurePascal) {
+        return terms(tray, pressurePascal).floodFraction() * tray.vaporMassFlowKgPerSecond()
+                / WATER_MOLECULAR_WEIGHT_KG_PER_MOL;
+    }
+
+    /**
+     * The carry-over warning: which tray, the water it sends to the drum, the limit its vapour can lift, and what to do.
+     *
+     * <p>Like flooding, it is never a typed failure (owner decision E31, 2026-11-05): the column is published.</p>
+     */
+    public String carryOverWarning(int trayNode, double carriedMolPerSecond, double limitMolPerSecond,
+            double floodFraction) {
+        return String.format(Locale.ROOT,
+                "tray %d carries %.1f kmol/h of free water over to the condenser drum, above the %.1f kmol/h its "
+                        + "vapor can lift at %.0f%% of flood in a %.1f m column; warm the top (less top cooling or a "
+                        + "warmer condenser) or cut the stripping steam",
+                trayNode + 1, carriedMolPerSecond * 3.6, limitMolPerSecond * 3.6, 100.0 * floodFraction,
+                diameterMetres);
     }
 
     /**

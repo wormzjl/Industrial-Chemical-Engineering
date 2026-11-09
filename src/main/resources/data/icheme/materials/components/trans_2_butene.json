@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "Trans-2-butene",
+  "kind": "chemical",
+  "translation_key": "material.icheme.trans_2_butene",
+  "fallback": "Trans-2-butene",
+  "properties": "icheme:chemsep_trans_2_butene",
+  "appearance": {
+    "color": "#F3F4EA",
+    "transparency": 0.85,
+    "estimated": true
+  },
+  "identifiers": {
+    "cas": "624-64-6",
+    "chemsep_id": "206",
+    "smiles": "C/C=C/C",
+    "formula": "CH3CHCHCH3"
+  }
+}

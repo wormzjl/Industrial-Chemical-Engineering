@@ -1,0 +1,159 @@
+# LOD lane scene (batch 2026-11-09-lod-rendering). Flat world: the ground is y -60. Run by the probe's mode=lod, one command a tick.
+time set noon
+gamerule doDaylightCycle false
+gamerule doWeatherCycle false
+weather clear
+gamerule doMobSpawning false
+# 100 lone pipes, 3 m apart, 2 m over the ground: x 0..27, z 0..27 (autopilot grid.*); each gets a pressure gauge.
+setblock 0 -58 0 icheme:fluid_pipe
+setblock 0 -58 3 icheme:fluid_pipe
+setblock 0 -58 6 icheme:fluid_pipe
+setblock 0 -58 9 icheme:fluid_pipe
+setblock 0 -58 12 icheme:fluid_pipe
+setblock 0 -58 15 icheme:fluid_pipe
+setblock 0 -58 18 icheme:fluid_pipe
+setblock 0 -58 21 icheme:fluid_pipe
+setblock 0 -58 24 icheme:fluid_pipe
+setblock 0 -58 27 icheme:fluid_pipe
+setblock 3 -58 0 icheme:fluid_pipe
+setblock 3 -58 3 icheme:fluid_pipe
+setblock 3 -58 6 icheme:fluid_pipe
+setblock 3 -58 9 icheme:fluid_pipe
+setblock 3 -58 12 icheme:fluid_pipe
+setblock 3 -58 15 icheme:fluid_pipe
+setblock 3 -58 18 icheme:fluid_pipe
+setblock 3 -58 21 icheme:fluid_pipe
+setblock 3 -58 24 icheme:fluid_pipe
+setblock 3 -58 27 icheme:fluid_pipe
+setblock 6 -58 0 icheme:fluid_pipe
+setblock 6 -58 3 icheme:fluid_pipe
+setblock 6 -58 6 icheme:fluid_pipe
+setblock 6 -58 9 icheme:fluid_pipe
+setblock 6 -58 12 icheme:fluid_pipe
+setblock 6 -58 15 icheme:fluid_pipe
+setblock 6 -58 18 icheme:fluid_pipe
+setblock 6 -58 21 icheme:fluid_pipe
+setblock 6 -58 24 icheme:fluid_pipe
+setblock 6 -58 27 icheme:fluid_pipe
+setblock 9 -58 0 icheme:fluid_pipe
+setblock 9 -58 3 icheme:fluid_pipe
+setblock 9 -58 6 icheme:fluid_pipe
+setblock 9 -58 9 icheme:fluid_pipe
+setblock 9 -58 12 icheme:fluid_pipe
+setblock 9 -58 15 icheme:fluid_pipe
+setblock 9 -58 18 icheme:fluid_pipe
+setblock 9 -58 21 icheme:fluid_pipe
+setblock 9 -58 24 icheme:fluid_pipe
+setblock 9 -58 27 icheme:fluid_pipe
+setblock 12 -58 0 icheme:fluid_pipe
+setblock 12 -58 3 icheme:fluid_pipe
+setblock 12 -58 6 icheme:fluid_pipe
+setblock 12 -58 9 icheme:fluid_pipe
+setblock 12 -58 12 icheme:fluid_pipe
+setblock 12 -58 15 icheme:fluid_pipe
+setblock 12 -58 18 icheme:fluid_pipe
+setblock 12 -58 21 icheme:fluid_pipe
+setblock 12 -58 24 icheme:fluid_pipe
+setblock 12 -58 27 icheme:fluid_pipe
+setblock 15 -58 0 icheme:fluid_pipe
+setblock 15 -58 3 icheme:fluid_pipe
+setblock 15 -58 6 icheme:fluid_pipe
+setblock 15 -58 9 icheme:fluid_pipe
+setblock 15 -58 12 icheme:fluid_pipe
+setblock 15 -58 15 icheme:fluid_pipe
+setblock 15 -58 18 icheme:fluid_pipe
+setblock 15 -58 21 icheme:fluid_pipe
+setblock 15 -58 24 icheme:fluid_pipe
+setblock 15 -58 27 icheme:fluid_pipe
+setblock 18 -58 0 icheme:fluid_pipe
+setblock 18 -58 3 icheme:fluid_pipe
+setblock 18 -58 6 icheme:fluid_pipe
+setblock 18 -58 9 icheme:fluid_pipe
+setblock 18 -58 12 icheme:fluid_pipe
+setblock 18 -58 15 icheme:fluid_pipe
+setblock 18 -58 18 icheme:fluid_pipe
+setblock 18 -58 21 icheme:fluid_pipe
+setblock 18 -58 24 icheme:fluid_pipe
+setblock 18 -58 27 icheme:fluid_pipe
+setblock 21 -58 0 icheme:fluid_pipe
+setblock 21 -58 3 icheme:fluid_pipe
+setblock 21 -58 6 icheme:fluid_pipe
+setblock 21 -58 9 icheme:fluid_pipe
+setblock 21 -58 12 icheme:fluid_pipe
+setblock 21 -58 15 icheme:fluid_pipe
+setblock 21 -58 18 icheme:fluid_pipe
+setblock 21 -58 21 icheme:fluid_pipe
+setblock 21 -58 24 icheme:fluid_pipe
+setblock 21 -58 27 icheme:fluid_pipe
+setblock 24 -58 0 icheme:fluid_pipe
+setblock 24 -58 3 icheme:fluid_pipe
+setblock 24 -58 6 icheme:fluid_pipe
+setblock 24 -58 9 icheme:fluid_pipe
+setblock 24 -58 12 icheme:fluid_pipe
+setblock 24 -58 15 icheme:fluid_pipe
+setblock 24 -58 18 icheme:fluid_pipe
+setblock 24 -58 21 icheme:fluid_pipe
+setblock 24 -58 24 icheme:fluid_pipe
+setblock 24 -58 27 icheme:fluid_pipe
+setblock 27 -58 0 icheme:fluid_pipe
+setblock 27 -58 3 icheme:fluid_pipe
+setblock 27 -58 6 icheme:fluid_pipe
+setblock 27 -58 9 icheme:fluid_pipe
+setblock 27 -58 12 icheme:fluid_pipe
+setblock 27 -58 15 icheme:fluid_pipe
+setblock 27 -58 18 icheme:fluid_pipe
+setblock 27 -58 21 icheme:fluid_pipe
+setblock 27 -58 24 icheme:fluid_pipe
+setblock 27 -58 27 icheme:fluid_pipe
+# 40 standing drums D 2 m, T/T 6 m, support 2 m: rows z 36, 41, 62, 67, x -18..45.
+icheme equipment place -18 -60 36 2 6 vertical 2
+icheme equipment place -11 -60 36 2 6 vertical 2
+icheme equipment place -4 -60 36 2 6 vertical 2
+icheme equipment place 3 -60 36 2 6 vertical 2
+icheme equipment place 10 -60 36 2 6 vertical 2
+icheme equipment place 17 -60 36 2 6 vertical 2
+icheme equipment place 24 -60 36 2 6 vertical 2
+icheme equipment place 31 -60 36 2 6 vertical 2
+icheme equipment place 38 -60 36 2 6 vertical 2
+icheme equipment place 45 -60 36 2 6 vertical 2
+icheme equipment place -18 -60 41 2 6 vertical 2
+icheme equipment place -11 -60 41 2 6 vertical 2
+icheme equipment place -4 -60 41 2 6 vertical 2
+icheme equipment place 3 -60 41 2 6 vertical 2
+icheme equipment place 10 -60 41 2 6 vertical 2
+icheme equipment place 17 -60 41 2 6 vertical 2
+icheme equipment place 24 -60 41 2 6 vertical 2
+icheme equipment place 31 -60 41 2 6 vertical 2
+icheme equipment place 38 -60 41 2 6 vertical 2
+icheme equipment place 45 -60 41 2 6 vertical 2
+icheme equipment place -18 -60 62 2 6 vertical 2
+icheme equipment place -11 -60 62 2 6 vertical 2
+icheme equipment place -4 -60 62 2 6 vertical 2
+icheme equipment place 3 -60 62 2 6 vertical 2
+icheme equipment place 10 -60 62 2 6 vertical 2
+icheme equipment place 17 -60 62 2 6 vertical 2
+icheme equipment place 24 -60 62 2 6 vertical 2
+icheme equipment place 31 -60 62 2 6 vertical 2
+icheme equipment place 38 -60 62 2 6 vertical 2
+icheme equipment place 45 -60 62 2 6 vertical 2
+icheme equipment place -18 -60 67 2 6 vertical 2
+icheme equipment place -11 -60 67 2 6 vertical 2
+icheme equipment place -4 -60 67 2 6 vertical 2
+icheme equipment place 3 -60 67 2 6 vertical 2
+icheme equipment place 10 -60 67 2 6 vertical 2
+icheme equipment place 17 -60 67 2 6 vertical 2
+icheme equipment place 24 -60 67 2 6 vertical 2
+icheme equipment place 31 -60 67 2 6 vertical 2
+icheme equipment place 38 -60 67 2 6 vertical 2
+icheme equipment place 45 -60 67 2 6 vertical 2
+# 10 columns D 3 m, 20 trays, skirt 4 m: z 48, x -22..50.
+icheme equipment column -22 -60 48 3 20 4
+icheme equipment column -14 -60 48 3 20 4
+icheme equipment column -6 -60 48 3 20 4
+icheme equipment column 2 -60 48 3 20 4
+icheme equipment column 10 -60 48 3 20 4
+icheme equipment column 18 -60 48 3 20 4
+icheme equipment column 26 -60 48 3 20 4
+icheme equipment column 34 -60 48 3 20 4
+icheme equipment column 42 -60 48 3 20 4
+icheme equipment column 50 -60 48 3 20 4

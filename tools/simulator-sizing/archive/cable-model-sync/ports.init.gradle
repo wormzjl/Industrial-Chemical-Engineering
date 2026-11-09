@@ -1,0 +1,8 @@
+gradle.projectsEvaluated {
+    def project = gradle.rootProject
+    project.extensions.getByName('neoForge').runs.named('fluidGameTestServer') {
+        gameDirectory = project.layout.projectDirectory.dir('tmp/cable-model-sync/world-ports')
+        systemProperty 'neoforge.enabledGameTestNamespaces', 'icheme_cable_test'
+    }
+}
+

@@ -62,6 +62,13 @@ public final class SparseNewton {
         default void linearising(double[] base){}
         /** Ends the bracket {@link #linearising} opened. */
         default void linearised(){}
+        /**
+         * The norm of a residual the solve converges on ({@link Settings#tolerance}) and its line search descends in: the
+         * largest row. Equations whose rows mean different precision at one value weight them here (a taut vessel's
+         * balance and wall rows in the pressure they imply, owner decision D12); the rows stay what {@link #residual}
+         * returns.
+         */
+        default double residualNorm(double[] residual){return norm(residual);}
     }
     /**
      * The iteration limit of every Newton the fluid solver runs (a step's pass, its polish, a vessel's closure, the
@@ -173,7 +180,7 @@ public final class SparseNewton {
         var pattern=workspace.pattern;int calls=1,lastNonzeros=0,iterationsSinceRefresh=0;boolean refresh=!workspace.preconditioned();double[] x=initial.clone();
         boolean openedPreconditioned=!refresh;
         if(openedPreconditioned)SolverDiagnostics.count(SolverDiagnostics.newtonSolvesPreconditioned);
-        checkpoint.run();double[] f=evaluate(equations,x,n);double norm=norm(f);
+        checkpoint.run();double[] f=evaluate(equations,x,n);double norm=equations.residualNorm(f);
         // The phase hold the current iteration's line search met, if any: when that iteration is the one that fails, the
         // failure is the hold's and says so.
         ThermoHold hold=null;
@@ -205,7 +212,7 @@ public final class SparseNewton {
                 equations.project(x,candidate);
                 try {
                     calls++;SolverDiagnostics.count(fresh?SolverDiagnostics.newtonStepEvaluationsFresh:SolverDiagnostics.newtonStepEvaluationsStale);
-                    double[] next=evaluate(equations,candidate,n);double nextNorm=norm(next);
+                    double[] next=evaluate(equations,candidate,n);double nextNorm=equations.residualNorm(next);
                     // Natural (affine-invariant) merit prevents a nearly exact hydraulic row from
                     // forcing tiny steps while stiff liquid-volume/material rows still need correction.
                     // Acceptance is measured in the same linearized state coordinates as the Newton step.

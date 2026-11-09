@@ -9,7 +9,8 @@ import java.util.Objects;
  * state the network evaluates: the only bound a trial meets is the numerical box
  * ({@link com.wormzjl.icheme.science.thermo.NumericalBox}).
  *
- * <p>The package's {@code fluid_domain} is its envelope: the data range of the package as a whole, and the input box a
+ * <p>The package's envelope is the data range of the package as a whole: the hull of its compounds' dataset
+ * {@code fluid_domain} ranges and the water model's triple point, derived when the catalog loads. It is the input box a
  * device setting is checked against when the player sets it ({@link #requireInput}, decision 9 of the plan: an input
  * box, not a hold).</p>
  */
@@ -21,16 +22,17 @@ public final class FluidDomain {
         this.packageId=packageId;this.envelope=envelope;
     }
 
-    /** The data ranges of a package the fluid network is built on. A package without a {@code fluid_domain} is refused. */
+    /** The data ranges of a package the fluid network is built on. A package with a compound whose dataset has no
+     * {@code fluid_domain} has no envelope and is refused. */
     public static FluidDomain of(MaterialCatalog catalog,String packageId) {
         Objects.requireNonNull(catalog);Objects.requireNonNull(packageId);
         var envelope=catalog.fluidValidity(packageId).orElseThrow(()->new IllegalArgumentException(
-                "Package "+packageId+" declares no fluid_domain; the fluid network cannot read its data range"));
+                "Package "+packageId+" has a compound whose dataset declares no fluid_domain; the fluid network cannot read its data range"));
         return new FluidDomain(packageId,envelope);
     }
 
     public String packageId(){return packageId;}
-    /** The package's envelope: its {@code fluid_domain}. */
+    /** The package's envelope: the hull of its compounds' {@code fluid_domain} ranges. */
     public MaterialCatalog.Validity envelope(){return envelope;}
 
     /**

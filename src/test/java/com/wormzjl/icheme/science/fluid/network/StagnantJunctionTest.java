@@ -28,7 +28,7 @@ class StagnantJunctionTest {
     private static final String PILOT = "icheme:pilot_cryogenic";
     private static final int CO2 = 3;
     private static final double[] WARM_CO2 = {.9, 0, 0, .1, 0}, WARM_METHANE = {.9, .1, 0, 0, 0}, COLD_NITROGEN = {1, 0, 0, 0, 0};
-    private final FluidThermodynamics model = FluidTestSupport.model(MaterialCatalog.bundled(), PILOT);
+    private final FluidThermodynamics model = FluidTestSupport.model(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PILOT);
 
     private FluidThermodynamics.State charge(double t, double p, double[] z, double volume) {
         var unit = model.flashTP(t, p, z, () -> {});

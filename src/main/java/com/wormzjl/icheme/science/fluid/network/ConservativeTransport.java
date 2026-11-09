@@ -68,8 +68,10 @@ public final class ConservativeTransport {
     public record BoundaryTransfer(long nodeId,double[] moles,double totalEnergyJoule,SolidInventory solids,int solidDirection,Kind kind) {
         /** {@code HEAT}: the heat a heat-exchanging connection ({@link HeatSide}) took up over the step, energy alone,
          * booked at the connection's id: what crossed its wall (batch 2026-10-27-heat-exchanger-design); and a kettle's pool's
-         * ({@link Pool}), booked at its key (W7). */
-        public enum Kind { EXCHANGE, FLUSH, VENT, SPILL, HEAT, ATMOSPHERE }
+         * ({@link Pool}), booked at its key (W7). {@code SHAFT}: the work a steam turbine ({@link FlowControl.Turbine}) took out of
+         * its stream over the step, energy alone and negative, booked at the connection's id: what its shaft delivers (batch
+         * 2026-11-03-rotating-machinery, plan section 3.4). */
+        public enum Kind { EXCHANGE, FLUSH, VENT, SPILL, HEAT, ATMOSPHERE, SHAFT }
         public BoundaryTransfer(long nodeId,double[] moles,double totalEnergyJoule){this(nodeId,moles,totalEnergyJoule,SolidInventory.EMPTY,0);}
         public BoundaryTransfer(long nodeId,double[] moles,double totalEnergyJoule,SolidInventory solids,int solidDirection){this(nodeId,moles,totalEnergyJoule,solids,solidDirection,Kind.EXCHANGE);}
         public BoundaryTransfer{moles=moles.clone();Objects.requireNonNull(solids);Objects.requireNonNull(kind);if(solidDirection < -1||solidDirection > 1||!solids.empty()&&solidDirection==0)throw new IllegalArgumentException("Invalid solid boundary direction");}
@@ -116,6 +118,12 @@ public final class ConservativeTransport {
      * books and its flow: the Newton's own function ({@code PassiveStepSolver.Equations}), so the booking and the equation
      * gate read one number, as a mover's work does. */
     @FunctionalInterface public interface EdgeHeat {double heat(int edge,double specificEnthalpy,double massFlow);}
+    /** The power (W) mover connection {@code edge} gives what it moves at {@code massFlow} (kg/s) across {@code head} (Pa) on
+     * its suction's density and pressure: the Newton's own function ({@code PassiveStepSolver.moverPower}), which reads what
+     * the solve read of the suction (a centrifugal compressor's wet efficiency, request 11), so the booking and the energy
+     * rows read one number. A steam turbine's is negative, its shaft work out of the stream, its drop read down to
+     * {@code dischargePressure} (Pa), its exhaust node's pressure; a mover's reads no discharge pressure. */
+    @FunctionalInterface public interface MoverWork {double power(int edge,double massFlow,double head,double suctionDensity,double suctionPressure,double dischargePressure);}
     /**
      * {@code frozenJunctions} (rate evaluations only): every junction is held at its buffer's composition, as the
      * rate-only rows of {@code PassiveStepSolver.Equations.junctionInflow} hold it, and its accumulation over dt is held
@@ -135,18 +143,19 @@ public final class ConservativeTransport {
     public static Projection reconstruct(PassiveNetwork graph,List<FluidThermodynamics.State> candidate,double[] flows,double[] heads,
                                          double dt,FluidThermodynamics model,Runnable checkpoint,Workspace workspace,boolean frozenJunctions,double[][] draws,
                                          PhaseSupport[][] supports,Emptying[] emptying,OpenVessel.Releases[] releases) {
-        return reconstruct(graph,candidate,flows,heads,dt,model,checkpoint,workspace,frozenJunctions,draws,supports,emptying,releases,null);
+        return reconstruct(graph,candidate,flows,heads,dt,model,checkpoint,workspace,frozenJunctions,draws,supports,emptying,releases,null,null);
     }
     /** As above, with the heat the heat-exchanging connections take up ({@link EdgeHeat}; null where the graph has none),
-     * booked into each receiver and as a {@link BoundaryTransfer.Kind#HEAT} boundary at the connection. */
+     * booked into each receiver and as a {@link BoundaryTransfer.Kind#HEAT} boundary at the connection, and a machine's work
+     * ({@link MoverWork}; null: its own law's on the suction it meets). */
     public static Projection reconstruct(PassiveNetwork graph,List<FluidThermodynamics.State> candidate,double[] flows,double[] heads,
                                          double dt,FluidThermodynamics model,Runnable checkpoint,Workspace workspace,boolean frozenJunctions,double[][] draws,
-                                         PhaseSupport[][] supports,Emptying[] emptying,OpenVessel.Releases[] releases,EdgeHeat heat) {
+                                         PhaseSupport[][] supports,Emptying[] emptying,OpenVessel.Releases[] releases,EdgeHeat heat,MoverWork moverWork) {
         if(draws!=null&&draws.length!=flows.length)throw new IllegalArgumentException("Invalid phase draws");
         if(releases!=null&&releases.length!=graph.reservoirs().size())throw new IllegalArgumentException("Invalid open-vessel releases");
-        if(!SolverDiagnostics.ENABLED)return reconstruct0(graph,candidate,flows,heads,dt,model,checkpoint,workspace,frozenJunctions,draws,supports,emptying,releases,heat);
+        if(!SolverDiagnostics.ENABLED)return reconstruct0(graph,candidate,flows,heads,dt,model,checkpoint,workspace,frozenJunctions,draws,supports,emptying,releases,heat,moverWork);
         long started=System.nanoTime();boolean previous=SolverDiagnostics.enterReconstruct();
-        try{return reconstruct0(graph,candidate,flows,heads,dt,model,checkpoint,workspace,frozenJunctions,draws,supports,emptying,releases,heat);}
+        try{return reconstruct0(graph,candidate,flows,heads,dt,model,checkpoint,workspace,frozenJunctions,draws,supports,emptying,releases,heat,moverWork);}
         finally {
             SolverDiagnostics.leaveReconstruct(previous);
             SolverDiagnostics.reconstructNanos.add(System.nanoTime()-started);SolverDiagnostics.reconstructCalls.increment();
@@ -236,7 +245,7 @@ public final class ConservativeTransport {
     }
     private static Projection reconstruct0(PassiveNetwork graph,List<FluidThermodynamics.State> candidate,double[] solvedFlows,double[] heads,
                                          double dt,FluidThermodynamics model,Runnable checkpoint,Workspace workspace,boolean frozen,double[][] draws,
-                                         PhaseSupport[][] supports,Emptying[] emptying,OpenVessel.Releases[] releases,EdgeHeat heat) {
+                                         PhaseSupport[][] supports,Emptying[] emptying,OpenVessel.Releases[] releases,EdgeHeat heat,MoverWork moverWork) {
         int nodes=graph.reservoirs().size(),components=model.hydrocarbon.componentCount()+1;
         if(candidate.size()!=nodes||solvedFlows.length!=graph.pipes().size()||heads.length!=solvedFlows.length)throw new IllegalArgumentException("Invalid transport reconstruction");
         for(double q:solvedFlows)if(!Double.isFinite(q))throw new IllegalArgumentException("Nonfinite candidate flow/head");
@@ -563,19 +572,36 @@ public final class ConservativeTransport {
                 filters.put(pipe.id(),pipe.filter().add(movedSolids,capturedEnergy));deliveredEnergy-=capturedEnergy;}
             energy[receiver]+=deliveredEnergy;
             double work=0;
-            if(pipe.control() instanceof FlowControl.Mover mover&&flows[edge]>0){var suction=states.get(pipe.first());
+            boolean worked=pipe.control() instanceof FlowControl.Mover||pipe.control() instanceof FlowControl.Turbine;
+            if(worked&&flows[edge]>0){var suction=states.get(pipe.first());
                 // Metered on the suction stream's specific volume (the suction's bulk at a BULK end) and, for a compressor,
-                // the suction node's pressure (decision D8: ideal isothermal work on suction properties); the Newton's
-                // energy rows book the same power (PassiveStepSolver.Equations.nodeAccumulate).
+                // the suction node's pressure and the gas's heat capacity ratio on the step's start state (polytropic work,
+                // batch 2026-11-03-rotating-machinery); the Newton's energy rows book the same power
+                // (PassiveStepSolver.Equations.nodeAccumulate, PassiveStepSolver.kappa).
                 double specificVolume;
                 if(rates==null)specificVolume=suction.volume()/suction.mass();
                 else{specificVolume=0;for(int k:phases){var state=at(k,suction,graph.reservoirs().get(pipe.first()).state());specificVolume+=weight(rates,phases,k)*(FluidThermodynamics.phaseVolume(state,k%3)/model.phaseMass(state,k%3));}}
+                if(pipe.control() instanceof FlowControl.Turbine turbine) {
+                    // A steam turbine's shaft work leaves the stream and the island (plan section 3.4): the Newton's own power
+                    // (MoverWork, negative), from the inlet to the exhaust node's pressure, on the inlet's start-state k.
+                    double exhaust=states.get(pipe.second()).pressure();
+                    work=moverWork!=null?dt*moverWork.power(edge,flows[edge],0,1/specificVolume,suction.pressure(),exhaust)
+                            :-dt*turbine.shaftPower(flows[edge],1/specificVolume,suction.pressure(),exhaust,model.heatCapacityRatio(graph.reservoirs().get(pipe.first()).state()));
+                    energy[receiver]+=work;externalEnergy+=work;
+                    boundaries.add(new BoundaryTransfer(pipe.id(),new double[components],work,SolidInventory.EMPTY,0,BoundaryTransfer.Kind.SHAFT));
+                } else {
+                var mover=(FlowControl.Mover)pipe.control();
+                double kappa=mover.liquid()?1.4:model.heatCapacityRatio(graph.reservoirs().get(pipe.first()).state());
                 work=switch(mover) {
                     case FlowControl.Pump pump->rates==null?dt*flows[edge]*suction.volume()/suction.mass()*Math.max(0,heads[edge])
                             :dt*flows[edge]*specificVolume*Math.max(0,heads[edge]);
-                    case FlowControl.Compressor compressor->dt*compressor.power(flows[edge],heads[edge],1/specificVolume,suction.pressure());
+                    case FlowControl.Compressor compressor->dt*compressor.power(flows[edge],heads[edge],1/specificVolume,suction.pressure(),kappa);
+                    // A machine's work is the Newton's own (MoverWork): what the solve read of its suction, a wet compressor's
+                    // efficiency (request 11), enters it.
+                    case FlowControl.Machine machine->moverWork!=null?dt*moverWork.power(edge,flows[edge],heads[edge],1/specificVolume,suction.pressure(),Double.NaN)
+                            :dt*machine.power(flows[edge],heads[edge],1/specificVolume,suction.pressure(),kappa);
                 };
-                energy[receiver]+=work;pumpWork+=work;}
+                energy[receiver]+=work;pumpWork+=work;}}
             // A heat-exchanging side: the heat its stream took up crossing the wall, on the donor enthalpy booked above, into
             // the receiver, and out of the island at the connection (batch 2026-10-27-heat-exchanger-design).
             double heated=0;

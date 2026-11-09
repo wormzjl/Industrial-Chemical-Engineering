@@ -49,11 +49,32 @@ class EquipmentShapeCompatTest {
         // Shape fields 4 (batch 2026-10-28-column-operation): the operating point the calculator saved with the design.
         shapes.add(EquipmentShape.column(3, new ColumnTrays(20, 15, List.of(8), List.of(21), List.of(new ColumnTrays.Pumparound(8, 6)), COMPONENTS, TURNS,
                 OPERATING), Heading.WEST, EquipmentShape.minimumSkirt(3)));
+        // Shape fields 6 (batch 2026-11-02-process-simulator, S3b): two condenser shells, three kettles and two units on the pumparound's cooler.
+        var parallel = new ColumnComponents(ColumnComponents.Condenser.EXCHANGER, ColumnComponents.Pump.STANDARD, List.of(ColumnComponents.Pump.STANDARD), false, true,
+                new ColumnComponents.Units(2, 3, List.of(2)));
+        shapes.add(EquipmentShape.column(3, new ColumnTrays(20, 15, List.of(8), List.of(21), List.of(new ColumnTrays.Pumparound(8, 6)), parallel), Heading.SOUTH,
+                EquipmentShape.minimumSkirt(3)));
+        // Shape fields 7 (COOLER_MODEL_PLAN.md section 6): an air-then-water condenser, two air cooler banks and three trim shells.
+        var trimmed = new ColumnComponents(ColumnComponents.Condenser.AIR_THEN_WATER, ColumnComponents.Pump.STANDARD, List.of(ColumnComponents.Pump.STANDARD), false, true,
+                new ColumnComponents.Units(2, 1, List.of(1), 3));
+        shapes.add(EquipmentShape.column(3, new ColumnTrays(20, 15, List.of(8), List.of(21), List.of(new ColumnTrays.Pumparound(8, 6)), trimmed), Heading.EAST,
+                EquipmentShape.minimumSkirt(3)));
         for (var kind : Kind.values()) {
             if (!kind.designed()) continue;
             double size = ProcessUnit.minDiameter(kind);int length = ProcessUnit.defaultLength(kind, size);
             shapes.add(EquipmentShape.designed(kind, size, length, Heading.WEST, ProcessUnit.defaultSupport(kind, size, length), ProcessUnit.Bank.ONE, 0));
         }
+        // Shape fields 8 (batch 2026-11-03-rotating-machinery): machines' design points other than their size's.
+        shapes.add(EquipmentShape.unit(Kind.PUMP, .05, 1, Heading.EAST, 0).withDuty(MachineDuty.pump(120, 60, 4)));
+        shapes.add(EquipmentShape.unit(Kind.CENTRIFUGAL_COMPRESSOR, .3, 2, Heading.SOUTH, 6).withDuty(MachineDuty.compressor(20000, 150)));
+        shapes.add(EquipmentShape.unit(Kind.STEAM_TURBINE, .3, 1, Heading.NORTH, 0).withDuty(MachineDuty.turbine(2500, MachineDuty.Steam.MP, 10)));
+        shapes.add(EquipmentShape.unit(Kind.MOTOR, .75, 1, Heading.NORTH, 2).withDuty(MachineDuty.motor(4500, 6, MachineDuty.Drive.VARIABLE)));
+        shapes.add(EquipmentShape.unit(Kind.GENERATOR, .75, 1, Heading.WEST, 0).withDuty(MachineDuty.generator(2000, 2)));
+        shapes.add(EquipmentShape.unit(Kind.GEARBOX, .75, 1, Heading.EAST, 0).withDuty(MachineDuty.gearbox(5000)));
+        shapes.add(EquipmentShape.unit(Kind.EXCHANGER, 1.5, 6, Heading.EAST, 3).withExchangerType(ExchangerType.CROSSFLOW));
+        shapes.add(EquipmentShape.column(3, new ColumnTrays(20, 15, List.of(8), List.of(21), List.of(new ColumnTrays.Pumparound(8, 6)),
+                trimmed.withExchangers(new ColumnComponents.Exchangers(ExchangerType.CROSSFLOW, ExchangerType.CROSSFLOW, List.of(ExchangerType.CROSSFLOW)))),
+                Heading.NORTH, EquipmentShape.minimumSkirt(3)));
         return shapes;
     }
 
@@ -68,6 +89,50 @@ class EquipmentShapeCompatTest {
             assertEquals(shape, read.shape(), shape.kind().toString());
             assertTrue(read.repairs().isEmpty(), shape.kind() + ": " + read.repairs());
         }
+    }
+
+    /**
+     * Member counts (S3b, shape fields 6): a design saved before them reads one unit on every step; a count out of range
+     * reads 1 and is named, the kinds and the other counts kept.
+     */
+    @Test
+    void memberCountsReadOneWhenAbsentAndAreRepairedOneAtATime() {
+        var built = everyKind().stream().filter(s -> s.trays() != null && s.trays().components() != null && s.trays().components().units().condenser() > 1).findFirst().orElseThrow();
+        var tag = saved(built);
+        var components = tag.getCompound("Components");
+        assertEquals(2, components.getInt("CondenserUnits"));
+        var older = tag.copy();
+        for (var key : List.of("CondenserUnits", "KettleUnits", "CoolerUnits")) older.getCompound("Components").remove(key);
+        var read = EquipmentShellBlockEntity.readShape(older);
+        assertEquals(List.of(), read.repairs());
+        assertEquals(new ColumnComponents.Units(1, 1, List.of(1)), read.shape().trays().components().units(), "an older design: one unit on every step");
+        var wrong = tag.copy();
+        wrong.getCompound("Components").putInt("CondenserUnits", ColumnComponents.MAX_UNITS + 1);
+        wrong.getCompound("Components").putIntArray("CoolerUnits", new int[]{0});
+        read = EquipmentShellBlockEntity.readShape(wrong);
+        assertEquals(List.of("condenser units 7 -> 1", "pumparound cooler 1 units 0 -> 1"), read.repairs());
+        assertEquals(new ColumnComponents.Units(1, 3, List.of(1)), read.shape().trays().components().units(), "the kettle's count kept");
+        assertEquals(built.trays().components().condenser(), read.shape().trays().components().condenser());
+    }
+
+    /** The water trim's count (shape fields 7): a design saved before it reads one shell; a count out of range reads 1 and is named. */
+    @Test
+    void theTrimCountReadsOneWhenAbsentAndIsRepaired() {
+        var built = everyKind().stream().filter(s -> s.trays() != null && s.trays().components() != null
+                && s.trays().components().condenser() == ColumnComponents.Condenser.AIR_THEN_WATER).findFirst().orElseThrow();
+        var tag = saved(built);
+        assertEquals(3, tag.getCompound("Components").getInt("TrimUnits"));
+        assertEquals("AIR_THEN_WATER", tag.getCompound("Components").getString("Condenser"), "saved by name");
+        var older = tag.copy();
+        older.getCompound("Components").remove("TrimUnits");
+        var read = EquipmentShellBlockEntity.readShape(older);
+        assertEquals(List.of(), read.repairs());
+        assertEquals(1, read.shape().trays().components().units().trim(), "a design saved before the trim: one shell");
+        var wrong = tag.copy();
+        wrong.getCompound("Components").putInt("TrimUnits", 0);
+        read = EquipmentShellBlockEntity.readShape(wrong);
+        assertEquals(List.of("trim units 0 -> 1"), read.repairs());
+        assertEquals(new ColumnComponents.Units(2, 1, List.of(1), 1), read.shape().trays().components().units(), "the other counts kept");
     }
 
     @Test
@@ -97,6 +162,46 @@ class EquipmentShapeCompatTest {
         var read = EquipmentShellBlockEntity.readShape(tag);
         assertEquals(EquipmentShape.defaultConnections(3, 6, Orientation.VERTICAL, 4, false), read.shape().connections(), "the behaviour before the field existed");
         assertTrue(read.repairs().isEmpty(), read.repairs().toString());
+    }
+
+    /**
+     * A machine's design point (shape fields 8) reads by name; one this build cannot read (an unknown drive or steam
+     * class, a value out of its ranges) is dropped and named, and the machine takes its size's. A machine saved before
+     * the field takes its size's with no repair (decision A3); a condensing turbine is the steam turbine exhausting to a
+     * condenser at 10 kPa, its size kept (owner decision D5).
+     */
+    @Test
+    void aMachinesDesignPointReadsByNameAndAnUnreadableOneTakesItsSizes() {
+        var motor = EquipmentShape.unit(Kind.MOTOR, .75, 1, Heading.NORTH, 0).withDuty(MachineDuty.motor(250, 2, MachineDuty.Drive.VARIABLE));
+        var tag = saved(motor);
+        assertEquals("VARIABLE", tag.getCompound("Duty").getString("Drive"), "drives saved by name");
+        tag.getCompound("Duty").putString("Drive", "hydraulic");
+        var read = EquipmentShellBlockEntity.readShape(tag);
+        assertEquals(motor.withDuty(UnitDesign.of(Kind.MOTOR).duty(250, 1)), read.shape());
+        assertEquals(1, read.repairs().size(), read.repairs().toString());
+        assertTrue(read.repairs().getFirst().startsWith("duty (no drive hydraulic) -> its size's"), read.repairs().toString());
+        var pump = saved(EquipmentShape.unit(Kind.PUMP, .25, 1, Heading.NORTH, 0).withDuty(MachineDuty.pump(400, 80, 4)));
+        pump.getCompound("Duty").putDouble("Head", 5000);
+        var repaired = EquipmentShellBlockEntity.readShape(pump);
+        assertFalse(repaired.repairs().isEmpty());
+        assertEquals(UnitDesign.of(Kind.PUMP).duty(repaired.shape().diameter(), 1), repaired.shape().duty());
+        // Before the field: the size's design point, no repair.
+        var custom = EquipmentShape.unit(Kind.PUMP, .25, 1, Heading.NORTH, 0).withDuty(MachineDuty.pump(400, 80, 4));
+        var old = saved(custom);
+        old.remove("Duty");
+        var before = EquipmentShellBlockEntity.readShape(old);
+        assertEquals(EquipmentShape.unit(Kind.PUMP, custom.diameter(), 1, Heading.NORTH, 0), before.shape());
+        assertEquals(List.of(), before.repairs());
+        // A condensing turbine.
+        var turbine = saved(EquipmentShape.unit(Kind.STEAM_TURBINE, 1, 1, Heading.SOUTH, 0));
+        turbine.remove("Duty");
+        turbine.putString("Kind", "condensing_turbine");
+        var condensing = EquipmentShellBlockEntity.readShape(turbine);
+        assertEquals(Kind.STEAM_TURBINE, condensing.shape().kind());
+        assertEquals(1, condensing.shape().diameter(), 1e-9);
+        assertEquals(SteamTurbineDesign.CONDENSING_EXHAUST, condensing.shape().duty().exhaust());
+        assertTrue(condensing.shape().duty().vacuum());
+        assertEquals(List.of(), condensing.repairs());
     }
 
     /** Any saved value: the reader gives a valid shape or a retired kind, and never throws. */
@@ -277,14 +382,88 @@ class EquipmentShapeCompatTest {
         }
     }
 
+    /**
+     * A machine's design point as the constructor steps it (option A, batch 2026-11-03-rotating-machinery): every setting
+     * to both ends, every pole count, the variable drive and every steam class make a valid design whose sizes follow it,
+     * and it reads back as written. A design saved before it (no {@code Duty}) takes the design point its sizes give.
+     */
+    @Test
+    void aConstructorKeepsAMachinesDesignPointAcrossAReload() {
+        var fresh = EquipmentConstructorBlockEntity.Design.DEFAULT;
+        int checked = 0;
+        for (var kind : Kind.values()) {
+            if (!kind.designed() || !UnitDesign.of(kind).hasDuty()) continue;
+            var design = UnitDesign.of(kind);
+            var form = VesselPlacement.Form.valueOf(kind.name());
+            double d = ProcessUnit.sizes(kind).getFirst();
+            var start = design.duty(d, ProcessUnit.defaultLength(kind, d));
+            var points = new ArrayList<MachineDuty>();
+            for (int steps : new int[]{-1000, 1, 1000})
+                for (var setting : List.of("flow", "head", "power", "exhaust")) points.add(design.step(start, setting, steps));
+            if (start.poles() != 0) for (int poles : kind == Kind.PUMP ? List.of(2, 4) : MachineDuty.POLES) points.add(start.withPoles(poles));
+            if (kind == Kind.MOTOR) points.add(start.withDrive(MachineDuty.Drive.VARIABLE));
+            if (start.steam() != null)
+                for (var steam : MachineDuty.Steam.values()) points.add(design.step(design.step(start, "exhaust", 1000).withSteam(steam), "power", 1000));
+            for (var point : points) {
+                var made = new EquipmentConstructorBlockEntity.Design(0, 0, form, ProcessUnit.minSupport(kind, design.size(point), design.length(point)), fresh.placement(),
+                        fresh.trays(), List.of(), fresh.paint(), ProcessUnit.Bank.ONE, false, 0, null, List.of(), TowerBank.ONE, point);
+                assertEquals(point, made.duty(), kind::name);
+                assertEquals(design.size(point), made.diameter(), kind::name);
+                var tag = new CompoundTag();
+                EquipmentConstructorBlockEntity.writeDesign(tag, made);
+                var repairs = new ArrayList<String>();
+                assertEquals(made, EquipmentConstructorBlockEntity.readDesign(tag, fresh, repairs::add), kind::name);
+                assertEquals(List.of(), repairs, kind::name);
+                checked++;
+            }
+            // Saved before the constructor kept a design point: the one its sizes give.
+            var old = new CompoundTag();
+            EquipmentConstructorBlockEntity.writeDesign(old, new EquipmentConstructorBlockEntity.Design(0, 0, form, ProcessUnit.minSupport(kind, design.size(points.getLast()),
+                    design.length(points.getLast())), fresh.placement(), fresh.trays(), List.of(), fresh.paint(), ProcessUnit.Bank.ONE, false, 0, null, List.of(), TowerBank.ONE,
+                    points.getLast()));
+            old.remove("Duty");
+            var read = EquipmentConstructorBlockEntity.readDesign(old, fresh, repair -> {
+            });
+            // Absence of Duty means the historical fixed-speed motor, not a new VFD default.
+            var legacy = kind == Kind.MOTOR ? MachineDuty.motor(read.diameter(), 4, MachineDuty.Drive.FIXED)
+                    : design.duty(read.diameter(), read.tangentLength());
+            assertEquals(legacy, read.duty(), kind::name);
+        }
+        assertTrue(checked > 60, "design points checked: " + checked);
+    }
+
     // ---------------- the corpus: saved shell tags per shape-field change ----------------
 
     private static final Path CORPUS = Path.of("src/test/resources/compat/equipment");
     /**
      * The shape fields' revision: the corpus file this build's tags are kept in. Raise it with a shape-field change (2: a
-     * column's components; 3: a column's turned nozzles; 4: a column's operating point; 5: a tower's cell bank).
+     * column's components; 3: a column's turned nozzles; 4: a column's operating point; 5: a tower's cell bank; 6: a
+     * column's member counts; 7: a column's water trim count and its air-then-water condenser; 8: a machine's design
+     * point).
      */
-    private static final int SHAPE_FIELDS = 5;
+    private static final int SHAPE_FIELDS = 10;
+
+    /** A column's components as an image written before the member counts shows them. */
+    private static final java.util.regex.Pattern COMPONENTS_BEFORE_UNITS = java.util.regex.Pattern.compile(
+            "(ColumnComponents\\[condenser=\\w+, refluxPump=\\w+, pumparoundPumps=\\[([A-Z_, ]*)\\], ejector=\\w+, kettle=\\w+)\\]");
+
+    /** Member counts as an image written before the water trim's count shows them. */
+    private static final java.util.regex.Pattern UNITS_BEFORE_TRIM = java.util.regex.Pattern.compile("(Units\\[condenser=\\d+, kettle=\\d+, coolers=\\[[0-9, ]*\\])\\]");
+
+    /**
+     * {@code expected} as this build prints it: components written before the member counts read one unit on every step,
+     * and counts written before the trim's read one trim shell.
+     */
+    static String withUnits(String expected) {
+        var m = COMPONENTS_BEFORE_UNITS.matcher(expected);
+        var out = new StringBuilder();
+        while (m.find()) {
+            int pumps = m.group(2).isBlank() ? 0 : m.group(2).split(", ").length;
+            var units = new ColumnComponents.Units(1, 1, java.util.Collections.nCopies(pumps, 1));
+            m.appendReplacement(out, java.util.regex.Matcher.quoteReplacement(m.group(1) + ", units=" + units + "]"));
+        }
+        return UNITS_BEFORE_TRIM.matcher(m.appendTail(out).toString()).replaceAll("$1, trim=1]");
+    }
 
     /**
      * Every corpus file's saved shell tags read with no repair, to the shapes recorded beside them. The file of this
@@ -313,7 +492,28 @@ class EquipmentShapeCompatTest {
                     // (ColumnTrays.tangentLength; batch 2026-10-27-column-sump), and a placed column refreshes to it.
                     var expected = entry.getString("Expected");
                     if(!expected.contains("towerBank="))expected=expected.substring(0,expected.length()-1)+", towerBank=TowerBank[columns=1, rows=1]]";
+                    expected = withUnits(expected);
+                    if (!expected.contains("exchangers=Exchangers[") && read.shape().trays() != null && read.shape().trays().components() != null) {
+                        var pattern = java.util.regex.Pattern.compile("(units=Units\\[condenser=\\d+, kettle=\\d+, coolers=\\[[0-9, ]*\\], trim=\\d+\\])\\]");
+                        var match = pattern.matcher(expected);
+                        var upgraded = new StringBuilder();
+                        while (match.find()) match.appendReplacement(upgraded, java.util.regex.Matcher.quoteReplacement(match.group(1) + ", exchangers=" + read.shape().trays().components().exchangers() + "]"));
+                        expected = match.appendTail(upgraded).toString();
+                    }
+                    if (!expected.contains("duty=MachineDuty[")) {
+                        // Shape fields 8: a machine saved before its design point takes its size's (decision A3); a
+                        // condensing turbine is the steam turbine exhausting to a condenser (owner decision D5).
+                        boolean condensing = expected.contains("kind=CONDENSING_TURBINE");
+                        expected = expected.replace("kind=CONDENSING_TURBINE", "kind=STEAM_TURBINE");
+                        var shape = read.shape();
+                        var duty = shape.designed() ? UnitDesign.of(shape.kind()).duty(shape.diameter(), (int) shape.tangentLength()) : MachineDuty.NONE;
+                        if(shape.kind()==Kind.MOTOR)duty=MachineDuty.motor(shape.diameter(),4,MachineDuty.Drive.FIXED);
+                        if (condensing) duty = MachineDuty.turbine(duty.power(), duty.steam(), SteamTurbineDesign.CONDENSING_EXHAUST);
+                        expected = expected.substring(0, expected.length() - 1) + ", duty=" + duty + "]";
+                    }
                     if (read.shape().column()) expected = expected.replaceFirst("tangentLength=[0-9.]+", "tangentLength=" + read.shape().tangentLength());
+                    if (!expected.contains("exchangerType=")) expected = expected.substring(0, expected.length() - 1) + ", exchangerType=STANDARD]";
+                    if(!expected.contains("baseSpeed="))expected=expected.replaceAll("(exhaust=[0-9.Ee+-]+)\\]","$1, baseSpeed=0.0]");
                     assertEquals(expected, read.shape().toString(), file.toString());
                 }
         }

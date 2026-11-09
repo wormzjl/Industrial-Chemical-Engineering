@@ -1,0 +1,362 @@
+diff --git a/src/main/java/com/wormzjl/icheme/science/fluid/network/FlowControl.java b/src/main/java/com/wormzjl/icheme/science/fluid/network/FlowControl.java
+index db1a29b53..98d99bc7a 100644
+--- a/src/main/java/com/wormzjl/icheme/science/fluid/network/FlowControl.java
++++ b/src/main/java/com/wormzjl/icheme/science/fluid/network/FlowControl.java
+@@ -10,9 +10,9 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
+     /**
+      * A device that moves fluid from its connection's first end (its suction) to its second: the liquid pump and the gas
+      * compressor (decisions D1, D2, D7, D8 of documentation/2026-09-26-phase-ports-and-compressor). Every mover runs on its
+-     * own law, one row whose rise falls with the flow ({@link #lawResidual}, mode {@code MOVER_LAW}; batch
+-     * 2026-11-03-rotating-machinery, form F2b, the owner's choice of 2026-11-04). A set-flow pump or compressor is a
+-     * positive-displacement machine: its set flow is the displacement, its rise limit the relief rise
++     * own law, one row that ties its flow to its rise ({@link #lawResidual}, mode {@code MOVER_LAW}; batch
++     * 2026-11-03-rotating-machinery: the owner chose the law over the set-flow pair on 2026-11-04, form F2c). A set-flow pump
++     * or compressor is a positive-displacement machine: its set flow is the displacement, its rise limit the relief rise
+      * ({@link PositiveDisplacement}). A {@link Machine} is on its curve. Movers share the modes, the shutoff band and the
+      * carry; they differ in the law, the shaft work and the inlet phase they admit. A pump has one more mode,
+      * {@code PUMP_SUCTION_LIMIT} (cavitation); a compressor draws gas, which has no vapour pressure to fall below, and never
+@@ -44,13 +44,14 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
+          * batch); a compressor the polytropic work over its efficiency (plan section 4.4).
+          */
+         double power(double massFlow,double head,double suctionDensity,double suctionPressure,double k);
+-        /** The rise (Pa) the mover's law holds at suction volume flow {@code flow} (m3/s): finite at every flow, falling with
+-         * a forward flow. */
++        /** The rise (Pa) the mover's law holds at suction volume flow {@code flow} (m3/s), falling with a forward flow; negative
++         * infinity at a flow no rise passes (a set-flow mover above its displacement). */
+         double lawRise(double flow,double suctionDensity,double suctionPressure,double referenceDensity,double k);
+         /** {@code d(lawRise)/dQ}, Pa per m3/s. */
+         double lawRiseSlope(double flow,double suctionDensity,double suctionPressure,double referenceDensity,double k);
+-        /** The law as the {@code MOVER_LAW} row, Pa: the head less the law's rise at {@code flow}. Its head derivative is one,
+-         * so the row is never empty. */
++        /** The law as the {@code MOVER_LAW} row, Pa: zero on the law, rising with the flow and the head. By default the head
++         * less the law's rise at {@code flow}, whose head derivative is one, so the row is never empty; a set-flow mover
++         * states it in the flow form ({@link PositiveDisplacement#residual}), whose flow derivative is never zero. */
+         default double lawResidual(double flow,double head,double suctionDensity,double suctionPressure,double referenceDensity,double k) {
+             return head-lawRise(flow,suctionDensity,suctionPressure,referenceDensity,k);
+         }
+@@ -93,6 +94,9 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
+         @Override public double lawRiseSlope(double flow,double suctionDensity,double suctionPressure,double referenceDensity,double k) {
+             return corner(this,suctionDensity,suctionPressure,referenceDensity,k).riseSlope(flow,1);
+         }
++        @Override public double lawResidual(double flow,double head,double suctionDensity,double suctionPressure,double referenceDensity,double k) {
++            return corner(this,suctionDensity,suctionPressure,referenceDensity,k).residual(flow,head,1);
++        }
+         @Override public boolean refuses(InletPhase.Supply supply,boolean refused){return refusesSupply(supply,refused);}
+         /** A liquid machine's refusal: a dry suction, or vapour above {@link #VAPOUR_REFUSE} of the fluid volume. */
+         static boolean refusesSupply(InletPhase.Supply supply,boolean refused) {
+@@ -140,6 +144,9 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
+         @Override public double lawRiseSlope(double flow,double suctionDensity,double suctionPressure,double referenceDensity,double k) {
+             return corner(this,suctionDensity,suctionPressure,referenceDensity,k).riseSlope(flow,1);
+         }
++        @Override public double lawResidual(double flow,double head,double suctionDensity,double suctionPressure,double referenceDensity,double k) {
++            return corner(this,suctionDensity,suctionPressure,referenceDensity,k).residual(flow,head,1);
++        }
+         @Override public boolean refuses(InletPhase.Supply supply,boolean refused){return refusesSupply(supply,refused);}
+         /** A gas machine's refusal: a dry suction, a solid above the trace, or condensed phases above {@link #CONDENSED_REFUSE}
+          * of the mass. */
+@@ -185,7 +192,7 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
+         }
+         @Override public String deviceName(){return liquid()?"pump":"compressor";}
+     }
+-    /** The corner law of a set-flow mover (form F2b): its set flow is the displacement, its rise limit the relief rise. */
++    /** The corner law of a set-flow mover (form F2c): its set flow is the displacement, its rise limit the relief rise. */
+     private static PositiveDisplacement corner(Mover mover,double suctionDensity,double suctionPressure,double referenceDensity,double k) {
+         return new PositiveDisplacement(mover.targetVolumeFlow(),mover.riseLimit(suctionDensity,suctionPressure,referenceDensity,k));
+     }
+diff --git a/src/main/java/com/wormzjl/icheme/science/fluid/network/PassiveStepSolver.java b/src/main/java/com/wormzjl/icheme/science/fluid/network/PassiveStepSolver.java
+index f72f3714c..ab4135c94 100644
+--- a/src/main/java/com/wormzjl/icheme/science/fluid/network/PassiveStepSolver.java
++++ b/src/main/java/com/wormzjl/icheme/science/fluid/network/PassiveStepSolver.java
+@@ -2969,7 +2969,9 @@ public final class PassiveStepSolver {
+          * at static drive {@code drive} (Pa: the end pressures less the column), with the suction at {@code rho} and
+          * {@code pressure}: the law flow q of {@code loss(q) - drive - rise(saturated(q)) = 0}, the Newton's row, whose rise
+          * reads the flow the velocity cap lets through. Unique because the loss rises with the law flow and the rise falls.
+-         * Newton from the last flow found, bisection where a step leaves the bracket, as {@link #runFlow}.
++         * Newton from the last flow found, bisection where a step leaves the bracket, as {@link #runFlow}. A set-flow mover's
++         * rise is negative infinity above its displacement, which no drive passes: such a flow closes the bracket from above,
++         * so a drive larger than the loss at the displacement ends on the displacement.
+          */
+         private double curveFlow(int e,double drive,double rho,double pressure,double mu,double cap) {
+             if(!(cap>0))return 0;
+@@ -2978,6 +2980,7 @@ public final class PassiveStepSolver {
+             double lo=0,hi=Double.POSITIVE_INFINITY,q=lastQ[e][0]>0?lastQ[e][0]:nominal>0?Math.min(cap,nominal):cap;
+             for(int k=0;k<80;k++) {
+                 double moved=saturated(q,cap),rise=lawRise(graph,pipe,moved/rho,rho,pressure);
++                if(rise==Double.NEGATIVE_INFINITY){hi=q;q=.5*(lo+hi);if(hi-lo<=1e-14*hi)break;continue;}
+                 var loss=pipe.loss(q,rho,mu);double f=loss.pressureDrop()-drive-rise;
+                 if(Math.abs(f)<=1e-12*Math.max(Math.abs(drive),Math.abs(rise)))break;
+                 if(f>0)hi=q;else lo=q;
+@@ -4611,8 +4614,9 @@ public final class PassiveStepSolver {
+             f[edgeOffset+edge]=(driving-loss)/pressureScale;
+             if(boundaryClosed[edge]&&control<0)f[edgeOffset+edge]=flow;
+             if(control>=0)f[control]=switch(modes.get(edge)) {
+-                // A mover on its own law (batch 2026-11-03-rotating-machinery): the rise its law holds at its suction volume
+-                // flow, on the trial's suction density and pressure, so the Jacobian carries both: the block sweep re-evaluates
++                // A mover on its own law (batch 2026-11-03-rotating-machinery): its head against the law at its suction volume
++                // flow (a set-flow mover's in the flow form, FlowControl.Mover#lawResidual), on the trial's suction density
++                // and pressure, so the Jacobian carries both: the block sweep re-evaluates
+                 // this edge's rows for every perturbed column of its first node, and the sparsity already declares the
+                 // actuator row on both endpoints' columns (buildSparsity).
+                 case MOVER_LAW->lawResidual(graph,pipe,flow/suction.density,head,suction.density,st[a].pressure())/pressureScale;
+diff --git a/src/main/java/com/wormzjl/icheme/science/machine/PositiveDisplacement.java b/src/main/java/com/wormzjl/icheme/science/machine/PositiveDisplacement.java
+index c67631dc3..37f5575cf 100644
+--- a/src/main/java/com/wormzjl/icheme/science/machine/PositiveDisplacement.java
++++ b/src/main/java/com/wormzjl/icheme/science/machine/PositiveDisplacement.java
+@@ -1,57 +1,61 @@
+ package com.wormzjl.icheme.science.machine;
+ 
+ /**
+- * A positive-displacement machine: a reciprocating compressor, and the legacy and in-line movers under form F2 (batch
+- * 2026-11-03-rotating-machinery, plan section 3.3). It delivers its displacement {@code Q_d s} whatever the rise, until its
+- * relief valve lifts and passes the delivery back to the suction.
++ * A positive-displacement machine: a reciprocating compressor, and the set-flow pumps and compressors (batch
++ * 2026-11-03-rotating-machinery, plan section 3.3, form F2c). It delivers its displacement {@code Q_d s} whatever the
++ * rise until its relief valve opens, and nothing at its relief rise: {@code Q = Q_d s u(Δp/Δp_relief)} with
++ * {@code u(v) = 1 − v^64} on {@code 0 ≤ v ≤ 1}. At or below no rise it passes its displacement, as the set-flow mover
++ * always has; past the relief rise the law goes on along its slope there, a reverse flow the mover's reverse closure
++ * ends. 99.99994 % of the displacement at 80 % of the relief rise, 99.88 % at 90 %, 96.2 % at 95 %, 47 % at 99 %: the
++ * relief opens over the last tenth of its rise, as a relief valve's accumulation does.
+  *
+- * <p>As the row every law mover states, {@code head − rise(Q) = 0}: the corner {@code (Q/(Q_d s))^m + (Δp/Δp_relief)^m = 1}
+- * with m = 16, of the family of the velocity cap (98.7 % of the displacement at 90 % of the relief rise, none at the relief
+- * rise). At or below no flow the rise is the relief rise: a reverse flow stands there, passed back by the relief valve until
+- * the mover's reverse closure ends it. Past {@link #KNEE} of the displacement the rise goes on falling along a straight
+- * line with the corner's slope there, −47.9 {@code Δp_relief/(Q_d s)}: a suction above the discharge blows through, 1.5 %
+- * above the displacement at no rise. A finite rise at every flow holds the row's head derivative at one, so the row is
+- * never empty; the corner first written as a norm, {@code ‖(u⁺, v⁺)‖₁₆ − 1}, had no gradient at all at no flow and no rise,
+- * where a mover that cannot beat its discharge starts (W2's quick check, cold seed 200). A stopped machine is closed, so
+- * the law asks a speed above zero.
++ * <p>The law is a flow, C¹ with a bounded slope ({@code |du/dv| ≤ 64}), so its row ({@link #residual}), the flow less the
++ * law's flow at the head, has a flow derivative at every point and is never steep in the head. As a rise ({@link #rise},
++ * the balance's start flows read it) it is vertical at the displacement and has no finite value above it. The forms measured before it
++ * (W2_FORMS_REVIEW.md): F2, the corner {@code u^16 + v^16 = 1} as a norm, which had no gradient at no flow and no rise;
++ * F2b, that corner as a rise with a straight line past 0.999 of the displacement, which delivered up to 1.5 % above the
++ * displacement at every rise below 77 % of the relief rise.
+  *
+  * @param displacement Q_d, the suction volume flow at rated speed and no rise, m³/s
+  * @param reliefRise   Δp_relief, the rise at which the relief valve passes the whole delivery back, Pa
+  */
+ public record PositiveDisplacement(double displacement, double reliefRise) {
+-    /** The corner's exponent m. */
+-    public static final int EXPONENT = 16;
+-    /** The share of the displacement past which the rise falls along a straight line. */
+-    public static final double KNEE = .999;
+-    /** The corner's rise at the knee, a share of the relief rise (0.772), and its slope there, relief rises per
+-     * displacement (−47.9). */
+-    static final double KNEE_RISE = root16(1 - power16(KNEE)), KNEE_SLOPE = -fall(KNEE);
++    /** The law's exponent n, {@code u = 1 − v^n}: a power of two, so the power is squarings and the root square roots. */
++    public static final int EXPONENT = 64;
+ 
+     public PositiveDisplacement {
+         if (!(displacement > 0) || !(reliefRise > 0) || !Double.isFinite(displacement) || !Double.isFinite(reliefRise))
+             throw new IllegalArgumentException("Invalid displacement " + displacement + " m3/s or relief rise " + reliefRise + " Pa");
+     }
+ 
+-    /** The pressure rise, Pa, at suction volume flow {@code flow} (m³/s) and speed {@code speed}: the relief rise at or below
+-     * no flow, the corner up to the knee, then the straight line, zero at 1.0151 of the displacement and negative past it. */
+-    public double rise(double flow, double speed) {
+-        double u = Math.max(0, flow / capacity(speed));
+-        return reliefRise * (u <= KNEE ? root16(1 - power16(u)) : KNEE_RISE + KNEE_SLOPE * (u - KNEE));
++    /** The suction volume flow, m³/s, at pressure rise {@code rise} (Pa) and speed {@code speed}: the displacement at or below
++     * no rise, {@code 1 − v^64} of it up to the relief rise, a reverse flow past it. */
++    public double flow(double rise, double speed) {
++        return capacity(speed) * share(rise / reliefRise);
+     }
+ 
+-    /** {@code d(rise)/dQ}, Pa per m³/s: zero at or below no flow, the corner's slope up to the knee, the line's past it. */
+-    public double riseSlope(double flow, double speed) {
+-        double capacity = capacity(speed), u = Math.max(0, flow / capacity);
+-        if (!(u > 0)) return 0;
+-        return reliefRise / capacity * (u <= KNEE ? -fall(u) : KNEE_SLOPE);
++    /** The law as a row, Pa: the relief rise times the flow less the law's flow at {@code rise}, over the displacement. Zero on
++     * the law; its flow derivative is the relief rise over the displacement at every point, its rise derivative
++     * {@code 64 v^63}: none at or below no rise, 64 past the relief rise. */
++    public double residual(double flow, double rise, double speed) {
++        return reliefRise * (flow - flow(rise, speed)) / capacity(speed);
+     }
+ 
+-    /** The suction volume flow, m³/s, at pressure rise {@code rise} (Pa) and speed {@code speed}, the inverse of
+-     * {@link #rise}: none at or above the relief rise, more than the displacement below the knee's rise. */
+-    public double flow(double rise, double speed) {
+-        double capacity = capacity(speed), v = rise / reliefRise;
+-        if (v >= 1) return 0;
+-        return capacity * (v >= KNEE_RISE ? root16(1 - power16(v)) : KNEE + (v - KNEE_RISE) / KNEE_SLOPE);
++    /** The rise, Pa, at suction volume flow {@code flow} and speed {@code speed}, the inverse of {@link #flow}: the relief rise
++     * at no flow, above it for a reverse flow, none at the displacement, and negative infinity above the displacement,
++     * which no rise passes. */
++    public double rise(double flow, double speed) {
++        double u = flow / capacity(speed);
++        if (u > 1) return Double.NEGATIVE_INFINITY;
++        return reliefRise * (u <= 0 ? 1 - u / EXPONENT : root64(1 - u));
++    }
++
++    /** {@code d(rise)/dQ}, Pa per m³/s: {@code −v/(64 (1 − u))} relief rises per displacement on the law, {@code −1/64} for a
++     * reverse flow, negative infinity at and above the displacement. */
++    public double riseSlope(double flow, double speed) {
++        double capacity = capacity(speed), u = flow / capacity;
++        if (u >= 1) return Double.NEGATIVE_INFINITY;
++        return -reliefRise / capacity * (u <= 0 ? 1. / EXPONENT : root64(1 - u) / (EXPONENT * (1 - u)));
+     }
+ 
+     private double capacity(double speed) {
+@@ -59,19 +63,19 @@ public record PositiveDisplacement(double displacement, double reliefRise) {
+         return displacement * speed;
+     }
+ 
+-    /** The corner's fall, {@code −d(rise/Δp_relief)/du = (u/(1 − u^16)^(1/16))^15}, at a share {@code u} below one. */
+-    private static double fall(double u) {
+-        double t = u / root16(1 - power16(u)), t2 = t * t, t4 = t2 * t2, t8 = t4 * t4;
+-        return t8 * t4 * t2 * t;
++    /** The share of the displacement at a rise {@code v} relief rises. */
++    private static double share(double v) {
++        return v <= 0 ? 1 : v >= 1 ? -EXPONENT * (v - 1) : 1 - power64(v);
+     }
+ 
+-    private static double power16(double x) {
+-        double x2 = x * x, x4 = x2 * x2, x8 = x4 * x4;
+-        return x8 * x8;
++    /** {@code x^64} by six squarings: correctly rounded steps, the same on every JVM. */
++    private static double power64(double x) {
++        double x2 = x * x, x4 = x2 * x2, x8 = x4 * x4, x16 = x8 * x8, x32 = x16 * x16;
++        return x32 * x32;
+     }
+ 
+-    /** The sixteenth root by four square roots: correctly rounded steps, the same on every JVM. */
+-    private static double root16(double x) {
+-        return Math.sqrt(Math.sqrt(Math.sqrt(Math.sqrt(x))));
++    /** The 64th root by six square roots. */
++    private static double root64(double x) {
++        return Math.sqrt(Math.sqrt(Math.sqrt(Math.sqrt(Math.sqrt(Math.sqrt(x))))));
+     }
+ }
+diff --git a/src/test/java/com/wormzjl/icheme/science/fluid/network/MachineMoverTest.java b/src/test/java/com/wormzjl/icheme/science/fluid/network/MachineMoverTest.java
+index 7c9e9e54c..cc6c72732 100644
+--- a/src/test/java/com/wormzjl/icheme/science/fluid/network/MachineMoverTest.java
++++ b/src/test/java/com/wormzjl/icheme/science/fluid/network/MachineMoverTest.java
+@@ -104,21 +104,25 @@ class MachineMoverTest extends PortFixture {
+         double cp=3.470+1.450e-3*400+.121e5/(400.*400);
+         assertEquals(cp/(cp-1),model.heatCapacityRatio(model.flashTP(400,101325,n,NOOP)),1e-9,"steam at 400 K");
+     }
+-    /** Form F2's corner (plan 3.3) as a set-flow mover states it: the set flow is the displacement and the rise limit the
+-     * relief rise, so the law holds the limit at no flow, 98.7 % of it at 90 % of the set flow, and passes 1.5 % above the
+-     * set flow at no rise (the line past the knee); its row is the head less that rise, zero on the law and one per pascal
+-     * of head everywhere, at no flow and no rise too. */
++    /** Form F2c's corner (plan 3.3) as a set-flow mover states it: the set flow is the displacement and the rise limit the
++     * relief rise, so the law holds the limit at no flow, passes 99.88 % of the set flow at 90 % of the limit and the set
++     * flow at no rise, and no rise passes more; its row is the flow form, zero on the law, with the limit over the set flow
++     * per m3/s of flow at no rise, where its head derivative is none. */
+     @Test void aSetFlowMoversCornerIsItsSetFlowUpToItsRiseLimit() {
+         double rho=model.pumpReferenceDensity();
+         for(FlowControl.Mover mover:List.of(new FlowControl.Pump(.01,500000),new FlowControl.Compressor(.05,3))) {
+             double limit=mover.riseLimit(rho,1e5,rho,1.4),flow=mover.targetVolumeFlow();
+             assertEquals(mover.liquid()?500000:2e5,limit,1e-9*limit,mover.deviceName());
+             assertEquals(limit,mover.lawRise(0,rho,1e5,rho,1.4),1e-9*limit,mover.deviceName());
+-            assertEquals(.98727,mover.lawRise(.9*flow,rho,1e5,rho,1.4)/limit,1e-5,mover.deviceName());
+-            assertEquals(0,mover.lawRise(1.01513*flow,rho,1e5,rho,1.4)/limit,1e-3,mover.deviceName());
++            assertEquals(.9,mover.lawRise(.9988209815*flow,rho,1e5,rho,1.4)/limit,1e-8,mover.deviceName());
++            assertEquals(0,mover.lawRise(flow,rho,1e5,rho,1.4),0,mover.deviceName()+": no rise at the set flow");
++            assertEquals(Double.NEGATIVE_INFINITY,mover.lawRise(1.001*flow,rho,1e5,rho,1.4),0,mover.deviceName()+": none passes more");
+             double rise=mover.lawRise(.5*flow,rho,1e5,rho,1.4);
+-            assertEquals(0,mover.lawResidual(.5*flow,rise,rho,1e5,rho,1.4),0,mover.deviceName());
+-            assertEquals(1,mover.lawResidual(0,1,rho,1e5,rho,1.4)-mover.lawResidual(0,0,rho,1e5,rho,1.4),1e-9,mover.deviceName()+": a head derivative at no flow and no rise");
++            assertEquals(0,mover.lawResidual(.5*flow,rise,rho,1e5,rho,1.4),1e-12*limit,mover.deviceName());
++            assertEquals(0,mover.lawResidual(flow,0,rho,1e5,rho,1.4),0,mover.deviceName()+": on the law at the set flow and no rise");
++            assertEquals(limit/flow,(mover.lawResidual(1.001*flow,0,rho,1e5,rho,1.4)-mover.lawResidual(flow,0,rho,1e5,rho,1.4))/(.001*flow),1e-9*limit/flow,
++                    mover.deviceName()+": a flow derivative at no rise");
++            assertEquals(0,mover.lawResidual(flow,1,rho,1e5,rho,1.4)-mover.lawResidual(flow,0,rho,1e5,rho,1.4),0,mover.deviceName()+": no head derivative there");
+         }
+     }
+ 
+diff --git a/src/test/java/com/wormzjl/icheme/science/machine/PositiveDisplacementTest.java b/src/test/java/com/wormzjl/icheme/science/machine/PositiveDisplacementTest.java
+index ead2967f1..44838dfb2 100644
+--- a/src/test/java/com/wormzjl/icheme/science/machine/PositiveDisplacementTest.java
++++ b/src/test/java/com/wormzjl/icheme/science/machine/PositiveDisplacementTest.java
+@@ -4,47 +4,64 @@ import static org.junit.jupiter.api.Assertions.*;
+ 
+ import org.junit.jupiter.api.Test;
+ 
+-/** The corner law of plan section 3.3 as a rise (W2, form F2b): 10 l/s up to a 5 bar relief rise. */
++/** The corner law of plan section 3.3 in the flow form (W2, form F2c): 10 l/s up to a 5 bar relief rise. */
+ class PositiveDisplacementTest {
+     private static final double QD = .01, RELIEF = 5e5;
+     private static final PositiveDisplacement MACHINE = new PositiveDisplacement(QD, RELIEF);
+ 
+     @Test void deliversItsDisplacementUntilTheReliefLifts() {
+-        assertEquals(.98727, MACHINE.flow(.9 * RELIEF, 1) / QD, 1e-5, "98.7 % at 90 % of the relief rise");
+-        assertEquals(0, MACHINE.flow(RELIEF, 1), 0);
+-        assertEquals(0, MACHINE.flow(2 * RELIEF, 1), 0);
+-        assertEquals(1.0151, MACHINE.flow(0, 1) / QD, 1e-4, "1.5 % above the displacement at no rise, along the line past the knee");
+-        assertTrue(MACHINE.flow(-1e5, 1) > MACHINE.flow(0, 1), "a suction above the discharge blows through");
++        assertEquals(QD, MACHINE.flow(0, 1), 0, "the displacement at no rise");
++        assertEquals(QD, MACHINE.flow(-1e5, 1), 0, "and below it: a suction above the discharge does not blow through");
++        assertEquals(.9999993723, MACHINE.flow(.8 * RELIEF, 1) / QD, 1e-10, "99.99994 % at 80 % of the relief rise");
++        assertEquals(.9988209815, MACHINE.flow(.9 * RELIEF, 1) / QD, 1e-10, "99.88 % at 90 %");
++        assertEquals(.9624758608, MACHINE.flow(.95 * RELIEF, 1) / QD, 1e-10, "96.2 % at 95 %");
++        assertEquals(.4744035125, MACHINE.flow(.99 * RELIEF, 1) / QD, 1e-10, "47 % at 99 %");
++        assertEquals(0, MACHINE.flow(RELIEF, 1), 0, "nothing at the relief rise");
++        assertEquals(-.64, MACHINE.flow(1.01 * RELIEF, 1) / QD, 1e-12, "a reverse flow past it, on the slope at the relief rise");
++        for (double v = -.5; v < 1.5; v += .01)
++            assertTrue(MACHINE.flow(v * RELIEF, 1) <= QD, "never above the displacement, at " + v);
+         assertEquals(.5 * MACHINE.flow(.9 * RELIEF, 1), MACHINE.flow(.9 * RELIEF, .5), 1e-17, "flow with speed");
+     }
+ 
+-    @Test void theRiseIsTheFlowsInverseAndContinuousAtTheKnee() {
+-        for (double v = -.5; v < 1; v += .01)
+-            assertEquals(v * RELIEF, MACHINE.rise(MACHINE.flow(v * RELIEF, .8), .8), 1e-6 * RELIEF, "at " + v);
+-        assertEquals(RELIEF, MACHINE.rise(0, 1), 0);
+-        assertEquals(RELIEF, MACHINE.rise(-QD, 1), 0, "a reverse flow stands at the relief rise");
+-        assertEquals(.7719, MACHINE.rise(PositiveDisplacement.KNEE * QD, 1) / RELIEF, 1e-4, "the corner's rise at the knee");
+-        double knee = PositiveDisplacement.KNEE * QD, h = 1e-9 * QD;
+-        assertEquals(MACHINE.rise(knee - h, 1), MACHINE.rise(knee + h, 1), 1e-5 * RELIEF, "continuous at the knee");
+-        assertEquals(MACHINE.riseSlope(knee - h, 1), MACHINE.riseSlope(knee + h, 1), 1e-5 * Math.abs(MACHINE.riseSlope(knee, 1)), "with its slope");
+-        assertEquals(-47.88, MACHINE.riseSlope(knee + h, 1) * QD / RELIEF, .01, "the line's slope, relief rises per displacement");
+-        assertTrue(Double.isFinite(MACHINE.rise(10 * QD, 1)) && MACHINE.rise(10 * QD, 1) < 0, "finite and falling at every flow");
++    @Test void theRiseIsTheFlowsInverse() {
++        for (double u = -.5; u <= 1; u += .01) {
++            double flow = u * .8 * QD;
++            assertEquals(flow, MACHINE.flow(MACHINE.rise(flow, .8), .8), 1e-12 * QD, "at " + u + " of the displacement at 80 % speed");
++        }
++        assertEquals(RELIEF, MACHINE.rise(0, 1), 0, "the relief rise at no flow");
++        assertEquals(1.015625 * RELIEF, MACHINE.rise(-QD, 1), 1e-9 * RELIEF, "above it for a reverse flow");
++        assertEquals(.9892280132, MACHINE.rise(.5 * QD, 1) / RELIEF, 1e-10);
++        assertEquals(0, MACHINE.rise(QD, 1), 0, "no rise at the displacement");
++        assertEquals(Double.NEGATIVE_INFINITY, MACHINE.rise(1.000001 * QD, 1), 0, "no rise passes more");
+     }
+ 
+     @Test void theRiseSlopeIsTheRisesDerivative() {
+-        // The balance's Newton on a corner mover reads d(rise)/dQ: the corner's −(Δp_relief/(Q_d s)) (u/(1 − u^16)^(1/16))^15
+-        // up to the knee, the line's past it.
+-        for (double u = .1; u < 1.5; u += .1) {
+-            if (Math.abs(u - PositiveDisplacement.KNEE) < 1e-3) continue;
++        // The balance's Newton on a set-flow mover reads d(rise)/dQ: −(Δp_relief/(Q_d s)) (1 − u)^(1/64)/(64 (1 − u)) on the
++        // law, the reverse line's −1/64 below no flow.
++        for (double u = -.4; u < .95; u += .1) {
+             double flow = u * QD, h = 1e-6 * QD, difference = (MACHINE.rise(flow + h, 1) - MACHINE.rise(flow - h, 1)) / (2 * h);
+-            assertEquals(difference, MACHINE.riseSlope(flow, 1), 1e-6 * Math.abs(difference) + 1e-9 * RELIEF / QD, "at " + u);
++            assertEquals(difference, MACHINE.riseSlope(flow, 1), 1e-6 * Math.abs(difference), "at " + u);
++        }
++        assertEquals(-RELIEF / QD / 64, MACHINE.riseSlope(0, 1), 1e-12 * RELIEF / QD, "continuous at no flow");
++        assertEquals(Double.NEGATIVE_INFINITY, MACHINE.riseSlope(QD, 1), 0, "vertical at the displacement");
++    }
++
++    @Test void theRowHasAFlowDerivativeEverywhereAndABoundedRiseDerivative() {
++        double h = 1e-6;
++        for (double v = -.5; v < 1.5; v += .05) {
++            double rise = v * RELIEF, flow = MACHINE.flow(rise, 1);
++            assertEquals(0, MACHINE.residual(flow, rise, 1), 1e-12 * RELIEF, "on the law at " + v);
++            assertEquals(RELIEF / QD, (MACHINE.residual(flow + h * QD, rise, 1) - MACHINE.residual(flow, rise, 1)) / (h * QD),
++                    1e-6 * RELIEF / QD, "flow derivative at " + v);
++            double expected = v <= 0 ? 0 : v >= 1 ? 64 : 64 * Math.pow(v, 63);
++            double difference = (MACHINE.residual(flow, rise + h * RELIEF, 1) - MACHINE.residual(flow, rise - h * RELIEF, 1)) / (2 * h * RELIEF);
++            assertEquals(expected, difference, 1e-4 * 64, "rise derivative at " + v);
+         }
+-        assertEquals(0, MACHINE.riseSlope(0, 1), 0);
+-        assertEquals(0, MACHINE.riseSlope(-QD, 1), 0, "flat at the relief rise below no flow");
+     }
+ 
+     @Test void aStoppedMachineIsClosed() {
+         assertThrows(IllegalArgumentException.class, () -> MACHINE.flow(0, 0));
+         assertThrows(IllegalArgumentException.class, () -> MACHINE.rise(0, 0));
++        assertThrows(IllegalArgumentException.class, () -> MACHINE.residual(0, 0, 0));
+     }
+ }

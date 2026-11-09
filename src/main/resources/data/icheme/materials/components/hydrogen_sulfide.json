@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "HydrogenSulfide",
+  "kind": "chemical",
+  "translation_key": "material.icheme.hydrogen_sulfide",
+  "fallback": "HydrogenSulfide",
+  "properties": "icheme:chemsep_hydrogen_sulfide",
+  "appearance": {
+    "color": "#DCE8FA",
+    "transparency": 0.95,
+    "estimated": true
+  },
+  "identifiers": {
+    "cas": "7783-06-4",
+    "chemsep_id": "1922",
+    "smiles": "S",
+    "formula": "H2S"
+  }
+}

@@ -41,22 +41,27 @@ class PumpAheadOfFlowValveTest {
         return fail("no such connection");
     }
     private static void assertLine(EventPathWorld w,String name,double flow,FlowControl.Mode pump,FlowControl.Mode valve) {
+        assertLine(w,name,flow,java.util.EnumSet.of(pump),valve);
+    }
+    private static void assertLine(EventPathWorld w,String name,double flow,java.util.Set<FlowControl.Mode> pump,FlowControl.Mode valve) {
         w.assertKeptUp(name);
         var island=w.coordinator.snapshots().getFirst();var result=island.lastResult().orElseThrow();
         for(double f:result.averageMassFlows())assertEquals(flow,f,Math.max(1e-6*flow,1e-9),name);
-        assertEquals(pump,modeOf(result,island.graph(),FlowControl.Pump.class),name);
+        assertTrue(pump.contains(modeOf(result,island.graph(),FlowControl.Pump.class)),name+": "+modeOf(result,island.graph(),FlowControl.Pump.class));
         assertEquals(valve,modeOf(result,island.graph(),FlowControl.ControlValve.class),name);
     }
-    @Test void aTargetBelowThePumpsRateRegulatesWithThePumpOnItsHeadLimit() {
-        assertLine(line(5,true),"a pump ahead of the valve",5,FlowControl.Mode.PUMP_HEAD_LIMIT,FlowControl.Mode.VALVE_REGULATING);
+    @Test void aTargetBelowThePumpsRateRegulatesWithThePumpNearItsReliefRise() {
+        assertLine(line(5,true),"a pump ahead of the valve",5,FlowControl.Mode.MOVER_LAW,FlowControl.Mode.VALVE_REGULATING);
     }
+    /** A closed valve dead-heads the pump: it runs on its law at its relief rise, the relief passing its whole displacement
+     * back (batch 2026-11-03-rotating-machinery, form F2e), or the sealed pocket between them closes it (decision D58). */
     @Test void aClosedValveLeavesThePumpAtShutoff() {
-        assertLine(line(0,true),"a pump behind a closed valve",0,FlowControl.Mode.CLOSED,FlowControl.Mode.CLOSED);
+        assertLine(line(0,true),"a pump behind a closed valve",0,java.util.EnumSet.of(FlowControl.Mode.MOVER_LAW,FlowControl.Mode.CLOSED),FlowControl.Mode.CLOSED);
     }
     @Test void aTargetAboveThePumpsRateChangesNothing() {
         var w=line(50,true);w.assertKeptUp("above the pump's rate");
         var island=w.coordinator.snapshots().getFirst();var result=island.lastResult().orElseThrow();
-        assertEquals(FlowControl.Mode.PUMP_TARGET,modeOf(result,island.graph(),FlowControl.Pump.class));
+        assertEquals(FlowControl.Mode.MOVER_LAW,modeOf(result,island.graph(),FlowControl.Pump.class));
         assertEquals(FlowControl.Mode.VALVE_OPEN,modeOf(result,island.graph(),FlowControl.ControlValve.class));
         assertEquals(RATE*result.graph().reservoirs().getFirst().state().mass()/result.graph().reservoirs().getFirst().state().volume(),result.averageMassFlows()[0],.05);
     }
@@ -69,7 +74,7 @@ class PumpAheadOfFlowValveTest {
     /** A running line whose target moves past the pump's rate and back, as a column's cycle moves it: each change takes effect within its solve. */
     @Test void aRunningLineFollowsItsTargetPastThePumpsRate() {
         var model=FluidTestSupport.networkModel();var w=line(5,true);var solver=new RetainedSolver();var settings=PassiveIntervalSolver.Settings.defaults();
-        var committed=solver.solve(model,w.coordinator.snapshots().getFirst().graph(),5,settings,()->{});
+        var committed=solver.solve(model,w.worldGraph(w.coordinator.snapshots().getFirst()),5,settings,()->{});
         for(double target:new double[]{6,50,5,0,4,50}) {
             var pipes=new ArrayList<PassiveNetwork.Pipe>();
             for(var pipe:committed.graph().pipes())pipes.add(pipe.control() instanceof FlowControl.ControlValve?pipe.withControl(valve(target)):pipe);

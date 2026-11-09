@@ -94,7 +94,7 @@ public final class EquipmentCompatGameTests {
         }).thenIdle(10).thenExecute(()->{
             var learned=world.structure(at);
             if(failure[0]==null&&(learned==null||!learned.shape().equals(shape)||!learned.paint().equals(recorded)))failure[0]="the vessel did not teach the registry: "+learned;
-            var c=layout.controller();level.removeBlock(origin.offset(c.x(),c.y(),c.z()),false);
+            var c=layout.controller();EquipmentTestCleanup.remove(level,origin.offset(c.x(),c.y(),c.z()));
         }).thenWaitUntil(()->helper.assertTrue(world.at(nodePosition).isEmpty(),"Waiting for the drum's registration to leave"))
         .thenExecute(()->{
             if(failure[0]==null&&world.structure(at)!=null)failure[0]="the dismantle left the record";
@@ -137,7 +137,7 @@ public final class EquipmentCompatGameTests {
                 var shell=(EquipmentShellBlockEntity)level.getBlockEntity(at);
                 var tag=shell.saveWithoutMetadata(level.registryAccess());tag.putString("Kind","pressure_cooker");shell.loadWithComponents(tag,level.registryAccess());
             }
-            level.setBlock(blockedAt,Blocks.STONE.defaultBlockState(),3);level.setBlock(missingAt,Blocks.AIR.defaultBlockState(),3);
+            EquipmentTestCleanup.replace(level,blockedAt,Blocks.STONE.defaultBlockState());EquipmentTestCleanup.replace(level,missingAt,Blocks.AIR.defaultBlockState());
             helper.assertTrue(world.at(position).isPresent(),"the drum stands");
             reload.run();
         }).thenWaitUntil(()->helper.assertTrue(level.getBlockEntity(missingAt) instanceof EquipmentShellBlockEntity,"Waiting for the refresh to place the free cell"))
@@ -158,7 +158,7 @@ public final class EquipmentCompatGameTests {
             // The drum leaves with its registration. GameTest areas are not cleared between batches, and a later test may
             // need a world with no registration (FluidHarnessGameTests' cleanup check): whether the next test's clearing
             // happened to reach the drum depended on its grid slot.
-            level.removeBlock(nodeAt,false);
+            EquipmentTestCleanup.remove(level,nodeAt);
         }).thenWaitUntil(()->helper.assertTrue(world.at(position).isEmpty(),"Waiting for the drum's registration to leave"))
         .thenSucceed();
     }
@@ -196,7 +196,7 @@ public final class EquipmentCompatGameTests {
             // The interior as a save from before the property holds it: opaque.
             for(var c:layout.interior()) {
                 var at=origin.offset(c.x(),c.y(),c.z());
-                level.setBlock(at,level.getBlockState(at).setValue(EquipmentInteriorBlock.SKYLIGHT,false),Block.UPDATE_CLIENTS|Block.UPDATE_KNOWN_SHAPE);
+                EquipmentPermissionChecks.savedInterior(level,at,level.getBlockState(at).setValue(EquipmentInteriorBlock.SKYLIGHT,false),Block.UPDATE_CLIENTS|Block.UPDATE_KNOWN_SHAPE);
             }
             queued.run();
         }).thenWaitUntil(()->waitForLight(level,light[0]))
@@ -209,7 +209,7 @@ public final class EquipmentCompatGameTests {
         .thenExecute(()->{
             helper.assertTrue(level.getBrightness(LightLayer.SKY,floor)==level.getBrightness(LightLayer.SKY,above),"the floor's skylight comes back: "+level.getBrightness(LightLayer.SKY,floor));
             helper.assertTrue(world.at(position).isPresent(),"the drum keeps its registration");
-            level.removeBlock(nodeAt,false);
+            EquipmentTestCleanup.remove(level,nodeAt);
         }).thenWaitUntil(()->helper.assertTrue(world.at(position).isEmpty(),"Waiting for the drum's registration to leave"))
         .thenSucceed();
     }

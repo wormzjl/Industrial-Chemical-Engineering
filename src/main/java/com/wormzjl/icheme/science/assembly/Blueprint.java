@@ -47,7 +47,9 @@ public record Blueprint(Slot master, List<Slot> slots, List<Link> links) {
      * A unit of {@code kind}, entered at {@code in}; a stream passes it to {@code out} (null: the link ends at the unit).
      * {@code lyingWithBoot}: a drum must lie and carry a boot. {@code utilities}: its utility ports, advice only (D2).
      */
-    public record UnitForm(Kind kind, boolean lyingWithBoot, Role in, @Nullable Role out, Set<Role> utilities) implements Form {
+    public record UnitForm(Kind kind, boolean lyingWithBoot, Role in, @Nullable Role out, Set<Role> utilities,@Nullable com.wormzjl.icheme.science.equipment.ExchangerType exchangerType) implements Form {
+        public UnitForm(Kind kind,boolean lyingWithBoot,Role in,@Nullable Role out,Set<Role> utilities){this(kind,lyingWithBoot,in,out,utilities,null);}
+        public UnitForm withExchangerType(com.wormzjl.icheme.science.equipment.ExchangerType type){return new UnitForm(kind,lyingWithBoot,in,out,utilities,type);}
         public UnitForm {
             utilities = Set.copyOf(utilities);
         }
@@ -74,19 +76,32 @@ public record Blueprint(Slot master, List<Slot> slots, List<Link> links) {
     /**
      * A step of a link: the slot it fills, the designed form, and the other forms of the slot's family, which fill it as
      * the wrong kind (a standing drum for the receiver, a standard pump where the design has an In-line Pump).
-     * {@code anyOrder}: this step and the next may be met in either order (a pumparound's pump and cooler).
+     * {@code anyOrder}: this step and the next may be met in either order (a pumparound's pump and cooler). {@code count}:
+     * how many identical units of a unit form stand in parallel on the step, between a split and a merge on its link
+     * (batch 2026-11-02-process-simulator, S3b); 1 is one unit in line.
      */
-    public record Step(Slot slot, Form form, List<Form> family, boolean anyOrder) {
+    public record Step(Slot slot, Form form, List<Form> family, boolean anyOrder, int count) {
         public Step {
             family = List.copyOf(family);
+            if (count < 1) throw new IllegalArgumentException("A step takes at least one unit");
+            if (count > 1 && !(form instanceof UnitForm)) throw new IllegalArgumentException("Only a unit step takes units in parallel");
+        }
+
+        public Step(Slot slot, Form form, List<Form> family, boolean anyOrder) {
+            this(slot, form, family, anyOrder, 1);
         }
 
         public static Step of(Slot slot, Form form, Form... others) {
-            return new Step(slot, form, List.of(others), false);
+            return new Step(slot, form, List.of(others), false, 1);
         }
 
         public Step withAnyOrder() {
-            return new Step(slot, form, family, true);
+            return new Step(slot, form, family, true, count);
+        }
+
+        /** This step with {@code units} identical units in parallel. */
+        public Step withCount(int units) {
+            return new Step(slot, form, family, anyOrder, units);
         }
     }
 

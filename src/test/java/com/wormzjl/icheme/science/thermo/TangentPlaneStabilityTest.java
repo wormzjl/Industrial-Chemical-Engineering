@@ -52,8 +52,8 @@ class TangentPlaneStabilityTest {
 
     /** The Tia Juana light assay of the network package plus 5 mol% nitrogen: every component present. */
     static double[] crudeWithNitrogen() {
-        var pkg = MaterialCatalog.bundled().requirePackage(NETWORK);
-        var assay = pkg.assays().get("icheme:tia_juana_light_methane");
+        var pkg = com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog().requirePackage(NETWORK);
+        var assay = pkg.assays().get(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID);
         double[] z = new double[pkg.components().size()];
         for (int c = 0; c < assay.components().size(); c++) {
             z[pkg.components().indexOf(assay.components().get(c))] = assay.amounts().get(c);
@@ -100,7 +100,7 @@ class TangentPlaneStabilityTest {
             if (gap.applyAsDouble(middle) > 0.0) below = middle; else above = middle;
         }
         double saturation = 0.5 * (below + above);
-        // PR78's nitrogen saturation pressure at 77.355 K is +1.23 % against NIST's 101.325 kPa (package evidence).
+        // PR78's nitrogen saturation pressure at 77.355 K is +1.23 % against the 101.325 kPa of its normal boiling point (package evidence).
         assertEquals(101_325.0 * 1.0123, saturation, 0.002 * 101_325.0);
 
         for (double p : new double[] {90_000.0, 95_000.0, 100_000.0, saturation * (1.0 - 1.0e-9)}) {
@@ -188,7 +188,8 @@ class TangentPlaneStabilityTest {
     void networkPackageVerdictsMatchTheNetworkFlashPhaseCount() {
         var kernel = kernel(PengRobinsonKernel.Mixing.SPARSE_PAIRS);
         var test = new TangentPlaneStability(kernel, TangentPlaneStability.Settings.DEFAULT);
-        var fluid = FluidTestSupport.networkModel();
+        // The network model on the kernel's compounds, as an island holding only them runs (batch 2026-11-04-refinery-compounds, V2).
+        var fluid = FluidTestSupport.networkModel().on(MaterialCatalog.bundled().requirePackage(NETWORK).components());
         double[] z = crudeWithNitrogen();
         int n = kernel.componentCount();
         assertEquals(20, n);

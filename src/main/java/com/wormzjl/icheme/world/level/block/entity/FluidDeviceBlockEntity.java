@@ -11,12 +11,10 @@ import com.wormzjl.icheme.world.level.block.FluidDeviceBlock;
 import net.minecraft.core.*;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.server.level.*;
 import net.minecraft.world.MenuProvider;
 import net.minecraft.world.entity.player.*;
 import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.neoforge.client.model.data.ModelData;
 import net.neoforged.neoforge.client.model.data.ModelProperty;
@@ -34,14 +32,22 @@ import java.util.Arrays;
  * changes and when a topology commit applies an edit (the engine's schedule), and the update tag carries it like a
  * vessel cell's shape.
  */
-public final class FluidDeviceBlockEntity extends BlockEntity implements com.wormzjl.icheme.runtime.instrument.Instrument.Holder, FluidView.Receiver {
+public final class FluidDeviceBlockEntity extends ModelledBlockEntity implements com.wormzjl.icheme.runtime.instrument.Instrument.Holder, FluidView.Receiver {
     /** Accessed only by the client-thread lifecycle hooks and renderer, including in an integrated server. */
     private static final java.util.Set<FluidDeviceBlockEntity> CLIENT_GLASSES=java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
+    public net.neoforged.neoforge.energy.IEnergyStorage energy() {
+        if(!(level instanceof net.minecraft.server.level.ServerLevel server))return null;
+        var world=com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.find(server.getServer()).orElse(null);
+        return world==null||world.electric().generator(fluidIdentity())==null?null:new InlineEnergy(world.electric(),fluidIdentity());
+    }
     public static java.util.List<FluidDeviceBlockEntity> clientSightGlasses(){return java.util.List.copyOf(CLIENT_GLASSES);}
     /** Client: the pipes with an open end, which the pipe laying tool marks while it is held. Client thread only; weak, as above. */
     private static final java.util.Set<FluidDeviceBlockEntity> CLIENT_OPEN_ENDS=java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
     public static java.util.List<FluidDeviceBlockEntity> clientOpenEnds(){return java.util.List.copyOf(CLIENT_OPEN_ENDS);}
-    private void trackOpenEnds(){if(level!=null&&level.isClientSide()){if(openEnds()!=0)CLIENT_OPEN_ENDS.add(this);else CLIENT_OPEN_ENDS.remove(this);}}
+    private void trackOpenEnds(){if(level!=null&&level.isClientSide()){com.wormzjl.icheme.client.MoverSounds.track(this);if(openEnds()!=0)CLIENT_OPEN_ENDS.add(this);else CLIENT_OPEN_ENDS.remove(this);if(!name.isEmpty()&&nameable())CLIENT_NAMED.add(this);else CLIENT_NAMED.remove(this);}}
+    /** Client: the named devices, whose tags the client draws (N1). Client thread only; weak, as above. */
+    private static final java.util.Set<FluidDeviceBlockEntity> CLIENT_NAMED=java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
+    public static java.util.List<FluidDeviceBlockEntity> clientNamed(){return java.util.List.copyOf(CLIENT_NAMED);}
     /**
      * The faces where this pipe's line ends open: the blind-flanged end of a dead end (straight on from its one
      * connection, or both ends along its facing when it has none), and a laid pipe's joints that nothing meets any more.
@@ -56,6 +62,8 @@ public final class FluidDeviceBlockEntity extends BlockEntity implements com.wor
     }
     @Override public void setBlockState(BlockState state) {
         boolean before=FluidDeviceBlock.hasSightGlass(getBlockState());super.setBlockState(state);
+        com.wormzjl.icheme.runtime.power.PowerNetwork.loaded(this);
+        if(level!=null&&!level.isClientSide())level.invalidateCapabilities(worldPosition);
         if(level!=null&&level.isClientSide()) {
             if(FluidDeviceBlock.hasSightGlass(state))CLIENT_GLASSES.add(this);else CLIENT_GLASSES.remove(this);
             if(before&&!FluidDeviceBlock.hasSightGlass(state))com.wormzjl.icheme.client.SightGlassRenderer.forget(worldPosition);
@@ -109,11 +117,22 @@ public final class FluidDeviceBlockEntity extends BlockEntity implements com.wor
      * it differs from {@link #paint}, so a pipe saved before it existed reads with its flanges in its paint, as it looked.
      */
     private int secondary = com.wormzjl.icheme.science.equipment.Paint.BARE;
+    /**
+     * The device's name (batch 2026-11-02-process-simulator, N1), a fact the player chose, kept beside its paint: saved
+     * only when named, so a device saved before names reads unnamed. Only a device that opens a screen takes one.
+     */
+    private String name = com.wormzjl.icheme.science.equipment.DeviceName.NONE;
     public FluidDeviceBlockEntity(BlockPos pos,BlockState state){super(ModBlockEntities.FLUID_DEVICE.get(),pos,state);}
     /** The line's primary paint, its pipe's: 0xRRGGBB, or {@link com.wormzjl.icheme.science.equipment.Paint#BARE}. */
     public int paint(){return paint;}
     /** The line's secondary paint, its flanges': 0xRRGGBB, or {@link com.wormzjl.icheme.science.equipment.Paint#BARE}. */
     public int secondary(){return secondary;}
+    /** The device's name, empty when it has none. */
+    public String name(){return name;}
+    /** Whether this device opens a screen, and so takes a name: a pressure valve, a filter or a mover on a pipe, a pipe with sensors, every other kind. */
+    public boolean nameable(){var state=getBlockState();return kind()!=TopologyCompiler.Kind.PIPE||FluidDeviceBlock.hasPressureValve(state)||FluidDeviceBlock.hasFilter(state)||FluidDeviceBlock.hasMover(state)||!instruments.sensors().isEmpty();}
+    /** Server: names this device {@code next} (cleaned) and sends it to the clients, as its paint: a drawing fact, not process state. */
+    public void rename(String next){String cleaned=com.wormzjl.icheme.science.equipment.DeviceName.clean(next);if(cleaned.equals(name))return;name=cleaned;sync();}
     /**
      * Server: the line's paint as the registry holds it, which this block keeps a copy of to draw (registry first, batch
      * 2026-11-03-save-corruption). A painted block whose line the registry holds bare teaches it its paint: a world saved
@@ -170,7 +189,8 @@ public final class FluidDeviceBlockEntity extends BlockEntity implements com.wor
                 if(!bind(world,record.device()))return;
                 // Drawn geometry: onLoad runs once the chunk is in the level (Level.tickBlockEntities), so its loaded
                 // neighbours are readable; a neighbour loaded before this block drew no line here, so both sides refresh.
-                // Neighbours in unloaded chunks keep their saved joints (FluidDeviceBlock.connectedState).
+                // The joints come from the registry, which knows a neighbour in a chunk that is not loaded
+                // (FluidDeviceBlock.connectedState); only the sizes drawn at a face read the loaded neighbours.
                 refreshGeometry(record.device().geometry().diameter(),true);
             });
         });
@@ -186,18 +206,21 @@ public final class FluidDeviceBlockEntity extends BlockEntity implements com.wor
         var projected=world==null?null:world.registrations().get(identity);
         var committed=world==null?null:world.committedDevice(identity).orElse(null);
         boolean jointsChanged=false;
-        if(projected!=null&&projected.device().kind()==TopologyCompiler.Kind.PIPE){
-            var d=projected.device();var state=getBlockState();
-            // The joints follow accepted player input at once, as a fitting does: the connected faces below read them.
-            if(joints!=d.joints()){joints=d.joints();jointsChanged=true;neighbours=true;}
-            var updated=state.setValue(FluidDeviceBlock.PRESSURE_CONTROL,d.control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.Valve)
-                    .setValue(FluidDeviceBlock.INLINE_FILTER,d.inlineFilter())
-                    .setValue(FluidDeviceBlock.INLINE_MOVER,d.control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.Pump?FluidDeviceBlock.InlineMover.PUMP:d.control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.Compressor?FluidDeviceBlock.InlineMover.COMPRESSOR:FluidDeviceBlock.InlineMover.NONE);
-            if(d.cutoff()==PhysicalFluidTopology.Cutoff.NONE)updated=updated.setValue(FluidDeviceBlock.SHUTOFF,FluidDeviceBlock.Shutoff.NONE);
-            else if(committed!=null&&committed.cutoff()!=PhysicalFluidTopology.Cutoff.NONE)
-                updated=updated.setValue(FluidDeviceBlock.SHUTOFF,FluidDeviceBlock.Shutoff.of(committed.cutoff()));
-            if(d.inlineFilter()||d.control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.Mover||d.control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.Valve||d.cutoff()!=PhysicalFluidTopology.Cutoff.NONE)
-                updated=updated.setValue(FluidDeviceBlock.FACING,Direction.valueOf((d.cutoff()!=PhysicalFluidTopology.Cutoff.NONE&&committed!=null&&committed.cutoff()!=PhysicalFluidTopology.Cutoff.NONE?committed:d).facing().name()));
+        if(projected!=null){
+            var d=projected.device();var state=getBlockState();var updated=state;
+            if(d.kind()==TopologyCompiler.Kind.PIPE){
+                // The joints follow accepted player input at once, as a fitting does.
+                if(joints!=d.joints()){joints=d.joints();jointsChanged=true;neighbours=true;}
+                // The fitting as the engine classifies it (batch 2026-11-09-drawn-connections): an in-line machine draws
+                // as the pump or compressor it is, whatever law it runs.
+                updated=FluidDeviceBlock.fitted(updated,d);
+                if(d.cutoff()==PhysicalFluidTopology.Cutoff.NONE)updated=updated.setValue(FluidDeviceBlock.SHUTOFF,FluidDeviceBlock.Shutoff.NONE);
+                else if(committed!=null&&committed.cutoff()!=PhysicalFluidTopology.Cutoff.NONE)
+                    updated=updated.setValue(FluidDeviceBlock.SHUTOFF,FluidDeviceBlock.Shutoff.of(committed.cutoff()));
+                if(d.inlineFilter()||d.control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.Mover||d.control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.Valve||d.cutoff()!=PhysicalFluidTopology.Cutoff.NONE)
+                    updated=updated.setValue(FluidDeviceBlock.FACING,Direction.valueOf((d.cutoff()!=PhysicalFluidTopology.Cutoff.NONE&&committed!=null&&committed.cutoff()!=PhysicalFluidTopology.Cutoff.NONE?committed:d).facing().name()));
+            }
+            // Every device, a pipe or not, draws the faces the network joins it through.
             updated=FluidDeviceBlock.connectedState(updated,level,worldPosition);
             if(updated!=state){level.setBlock(worldPosition,updated,net.minecraft.world.level.block.Block.UPDATE_ALL);neighbours=true;}
         }
@@ -260,7 +283,7 @@ public final class FluidDeviceBlockEntity extends BlockEntity implements com.wor
     private void released() {
         com.wormzjl.icheme.runtime.instrument.InstrumentHosts.unloaded(this);
         if(level!=null&&level.isClientSide())com.wormzjl.icheme.client.InstrumentRenderer.forget(worldPosition);
-        if(level!=null&&level.isClientSide()){CLIENT_GLASSES.remove(this);CLIENT_OPEN_ENDS.remove(this);com.wormzjl.icheme.client.SightGlassRenderer.forget(worldPosition);}
+        if(level!=null&&level.isClientSide()){CLIENT_GLASSES.remove(this);CLIENT_OPEN_ENDS.remove(this);CLIENT_NAMED.remove(this);com.wormzjl.icheme.client.SightGlassRenderer.forget(worldPosition);com.wormzjl.icheme.client.MoverSounds.forget(this);}
         if(identity!=0&&level instanceof ServerLevel serverLevel&&serverLevel.getServer().isSameThread())FluidWorldAuthority.find(serverLevel.getServer()).ifPresent(world->world.deviceUnloaded(identity));
     }
     /** The engine's bucket hands over this device's view (the authority checked the identity); the block entity keeps it for server-side readers. */
@@ -276,7 +299,7 @@ public final class FluidDeviceBlockEntity extends BlockEntity implements com.wor
         if(player.containerMenu instanceof FluidDeviceMenu menu&&menu.identity()==identity)
             FluidWorldAuthority.find(player.server).ifPresent(world->world.replayOnOpen(menu));
     }
-    @Override protected void saveAdditional(CompoundTag tag,HolderLookup.Provider registries){super.saveAdditional(tag,registries);instruments.write(tag);tag.putLong("FluidIdentity",identity);writeLine(joints,paint,secondary,tag);}
+    @Override protected void saveAdditional(CompoundTag tag,HolderLookup.Provider registries){super.saveAdditional(tag,registries);instruments.write(tag);tag.putLong("FluidIdentity",identity);writeLine(joints,paint,secondary,tag);DeviceNames.write(tag,name);}
     /** Writes a pipe's line facts: its joints when not every face, its paint when painted, its secondary paint when it differs. */
     public static CompoundTag writeLine(int joints,int paint,int secondary,CompoundTag tag){
         if(joints!=PhysicalFluidTopology.ALL_FACES)tag.putByte("Joints",(byte)joints);
@@ -315,19 +338,15 @@ public final class FluidDeviceBlockEntity extends BlockEntity implements com.wor
     }
     @Override protected void loadAdditional(CompoundTag tag,HolderLookup.Provider registries){
         super.loadAdditional(tag,registries);instruments.read(tag);identity=tag.getLong("FluidIdentity");lastView=null;
-        joints=readJoints(tag);paint=readPaint(tag);secondary=readSecondary(tag,paint);
+        joints=readJoints(tag);paint=readPaint(tag);secondary=readSecondary(tag,paint);name=DeviceNames.read(tag,"pipe_compat at="+worldPosition.toShortString());
         if(tag.contains("Bore")){double read=tag.getDouble("Bore");if(read>0&&read<=com.wormzjl.icheme.science.equipment.PipeSizes.MAX_BORE)bore=read;}
         if(tag.contains("Faces")){var read=tag.getByteArray("Faces");if(read.length==6)for(int i=0;i<6;i++){int v=read[i]&255;faces[i]=(byte)(Math.min(64,v&127)|v&FLANGED);}}
         // Drawn state from the update tag only: ten bits a face, the bits past the six faces cleared.
         offsets=tag.getLong("Offsets")&(1L<<60)-1;
     }
-    @Override public CompoundTag getUpdateTag(HolderLookup.Provider registries){var tag=new CompoundTag();instruments.write(tag);tag.putLong("FluidIdentity",identity);tag.putDouble("Bore",bore);tag.putByteArray("Faces",faces.clone());if(offsets!=0)tag.putLong("Offsets",offsets);writeLine(joints,paint,secondary,tag);return tag;}
-    @Override public ClientboundBlockEntityDataPacket getUpdatePacket(){return ClientboundBlockEntityDataPacket.create(this);}
-    /** Drawn geometry that arrives after the block was meshed: refresh the model data and rebuild the section. */
-    @Override public void onDataPacket(net.minecraft.network.Connection connection,ClientboundBlockEntityDataPacket packet,HolderLookup.Provider registries) {
-        super.onDataPacket(connection,packet,registries);com.wormzjl.icheme.runtime.instrument.InstrumentHosts.loaded(this);requestModelDataUpdate();trackOpenEnds();
-        if(level!=null)level.sendBlockUpdated(worldPosition,getBlockState(),getBlockState(),0);
-    }
+    @Override public CompoundTag getUpdateTag(HolderLookup.Provider registries){var tag=new CompoundTag();instruments.write(tag);tag.putLong("FluidIdentity",identity);tag.putDouble("Bore",bore);tag.putByteArray("Faces",faces.clone());if(offsets!=0)tag.putLong("Offsets",offsets);writeLine(joints,paint,secondary,tag);DeviceNames.write(tag,name);return tag;}
+    @Override protected void clientGeometryChanged(){com.wormzjl.icheme.runtime.instrument.InstrumentHosts.loaded(this);trackOpenEnds();}
+    public long lineOffsets(){return offsets;}
     @Override public ModelData getModelData() {
         long packed=0;int flanged=0;
         for(int i=0;i<6;i++){packed|=(long)(faces[i]&127)<<(7*i);if((faces[i]&FLANGED)!=0)flanged|=1<<i;}

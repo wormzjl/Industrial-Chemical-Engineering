@@ -1,0 +1,104 @@
+package com.wormzjl.icheme.science.flowsheet.unit;
+
+import com.wormzjl.icheme.science.flowsheet.Board;
+import com.wormzjl.icheme.science.flowsheet.Calculation;
+import com.wormzjl.icheme.science.flowsheet.FlowStream;
+import com.wormzjl.icheme.science.flowsheet.FlowsheetFailure;
+import com.wormzjl.icheme.science.flowsheet.Note;
+import com.wormzjl.icheme.science.flowsheet.Params;
+import com.wormzjl.icheme.science.flowsheet.Passage;
+import com.wormzjl.icheme.science.flowsheet.Port;
+import com.wormzjl.icheme.science.flowsheet.Report;
+import com.wormzjl.icheme.science.flowsheet.UnitModel;
+import com.wormzjl.icheme.science.flowsheet.WiredUnit;
+
+import java.util.List;
+
+/**
+ * A fired heater (batch 2026-11-02-process-simulator, plan sections 3.2 and 3.11): target Outlet or Duty, with a duty limit, for
+ * the fuel stays off the sheet. Its coils in series are one pair. Set apart, the convection coil is a second pair with its own
+ * target, so steam can superheat there, and what it takes counts against the limit first. A coil at the limit falls short of its
+ * outlet, as a real one does at full fire, and one set below its inlet passes the stream, as with the fire out; each says so.
+ * The drops are typed until it has a size; then the coils' law gives them at the run's flow (sizing plan section 3.11, D19).
+ */
+public final class FiredHeaterUnit implements UnitModel {
+    private static final String CONVECTION_IN = "convection_in", CONVECTION_OUT = "convection_out", RADIANT_IN = "radiant_in", RADIANT_OUT = "radiant_out";
+    /** The passages, by the door's drops: both coils in series, or each set apart. */
+    public static final String COILS = "coils", CONVECTION_DROP = "convection_drop", RADIANT_DROP = "radiant_drop";
+
+    private static boolean apart(Params params) {
+        return params.text("coils", "series").equals("apart");
+    }
+
+    @Override public List<Port> ports(Params params) {
+        if (apart(params)) return List.of(Port.optionalIn(CONVECTION_IN), Port.out(CONVECTION_OUT), Port.in(RADIANT_IN), Port.out(RADIANT_OUT));
+        return List.of(Port.in("in"), Port.out("out"));
+    }
+
+    @Override public List<Passage> passages(Params params) {
+        return apart(params) ? List.of(Passage.named("convection"), Passage.named("radiant")) : List.of(Passage.THROUGH);
+    }
+
+    @Override public List<Calculation> calculations(WiredUnit u) {
+        var p = u.params();
+        double limit = p.number("limit", Double.POSITIVE_INFINITY);
+        if (!apart(p)) {
+            return List.of(u.through("in", "out", (board, report) -> radiant(u, board, report, "in", "out", limit, COILS, p.number(RADIANT_DROP, 0) + p.number(CONVECTION_DROP, 0))));
+        }
+        if (u.wire(CONVECTION_IN) == null) {
+            if (u.wire(CONVECTION_OUT) != null) throw new FlowsheetFailure("unit.free_inlet", CONVECTION_IN);
+            return List.of(u.through(RADIANT_IN, RADIANT_OUT, (board, report) -> radiant(u, board, report, RADIANT_IN, RADIANT_OUT, limit, RADIANT_DROP, p.number(RADIANT_DROP, 0))));
+        }
+        String taken = u.part("taken");
+        var convection = new Calculation(u.part("convection"), u.id(), List.of(u.wire(CONVECTION_IN)), List.of(u.out(CONVECTION_OUT)), List.of(), List.of(taken), Calculation.Kind.STEP, (board, report) -> {
+            var in = board.stream(u.wire(CONVECTION_IN));
+            var out = in.empty() ? in : fire(u, report, in, p.text("convection_target", "outlet"), "convection_temperature", "convection_duty", limit, CONVECTION_DROP, p.number(CONVECTION_DROP, 0));
+            u.write(board, report, CONVECTION_OUT, out);
+            board.link(taken, in.empty() ? 0 : out.enthalpy() - in.enthalpy());
+            report.reading("duty", in.empty() ? 0 : out.enthalpy() - in.enthalpy());
+        });
+        var radiant = new Calculation(u.part("radiant"), u.id(), List.of(u.wire(RADIANT_IN)), List.of(u.out(RADIANT_OUT)), List.of(taken), List.of(), Calculation.Kind.STEP, (board, report) -> {
+            var in = board.stream(u.wire(RADIANT_IN));
+            if (in.empty()) board.stream(u.out(RADIANT_OUT), in);
+            else radiant(u, board, report, RADIANT_IN, RADIANT_OUT, limit - board.link(taken), RADIANT_DROP, p.number(RADIANT_DROP, 0));
+        });
+        return List.of(convection, radiant);
+    }
+
+    /** The last coil, or both in series, fired to the door's target within {@code limit}. */
+    private static void radiant(WiredUnit u, Board board, Report report, String inlet, String outlet, double limit, String passage, double typed) {
+        var in = board.stream(u.wire(inlet));
+        var out = fire(u, report, in, u.params().text("target", "outlet"), "temperature", "duty", limit, passage, typed);
+        u.write(board, report, outlet, out);
+        report.reading("duty", out.enthalpy() - in.enthalpy());
+        report.reading("vapour", u.thermo().vapourShare(out));
+    }
+
+    /**
+     * One pair fired to its target, within {@code limit}. Its coils lose the door's {@code typed} drop, or once the heater has a
+     * size their law along the heat at the run's flow, which reads the outlet: the pressure is found first, then fired at.
+     */
+    private static FlowStream fire(WiredUnit u, Report report, FlowStream in, String target, String temperature, String duty, double limit, String passage, double typed) {
+        double pressure = u.passages().passage(passage) == null ? WiredUnit.after(in, typed)
+                : u.leaving(passage, in, typed, at -> held(u, in, limit, fired(u, in, target, temperature, duty, at)), report).pressure();
+        var out = fired(u, in, target, temperature, duty, pressure);
+        double heat = out.enthalpy() - in.enthalpy();
+        if (heat < 0 || heat > limit) {
+            report.note(heat < 0 ? Note.warning(u.id(), "heater.cools") : Note.warning(u.id(), "heater.limit", String.valueOf(heat), String.valueOf(limit)));
+            heat = heat < 0 ? 0 : limit;
+            out = u.thermo().heated(in, heat, pressure);
+        }
+        report.duty(heat);
+        return out;
+    }
+
+    private static FlowStream fired(WiredUnit u, FlowStream in, String target, String temperature, String duty, double pressure) {
+        return target.equals("duty") ? u.thermo().heated(in, u.params().number(duty), pressure) : u.thermo().atTemperature(u.params().number(temperature), pressure, in.amounts(), in.solids());
+    }
+
+    /** {@code out} as the fire can give it: none below the inlet, at most {@code limit}. */
+    private static FlowStream held(WiredUnit u, FlowStream in, double limit, FlowStream out) {
+        double heat = out.enthalpy() - in.enthalpy();
+        return heat < 0 || heat > limit ? u.thermo().heated(in, heat < 0 ? 0 : limit, out.pressure()) : out;
+    }
+}

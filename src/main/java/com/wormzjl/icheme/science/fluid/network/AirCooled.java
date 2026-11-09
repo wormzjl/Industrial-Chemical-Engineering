@@ -15,8 +15,11 @@ import org.jetbrains.annotations.Nullable;
  * is. Its heat is one exact march against the flat air temperature: no unknown, zero at no flow.
  *
  * @param limit why the planned effort stands where it does ({@link HeatControl.Limit#NONE} unplanned)
+ * @param fanLimit the most of full speed the fans may turn at this slice (batch 2026-11-03-rotating-machinery W5: 0 when
+ *                 the cooler's electric store runs empty, 1 otherwise): a dispatch input ({@link ShaftPlan}), not a fact; the
+ *                 louvers stay open, so the air falls to natural draught, and a controller short of its target reports it
  */
-public record AirCooled(double area,Air air,double draught,@Nullable HeatControl control,HeatControl.Limit limit) implements HeatLaw {
+public record AirCooled(double area,Air air,double draught,@Nullable HeatControl control,HeatControl.Limit limit,double fanLimit) implements HeatLaw {
     /**
      * The air of an air cooler's bank, per m² of its bundle face: at {@code temperature} K, over {@code barePerFace} m² of
      * bare tube; at full fans the air's film on the fins ({@code film}, W/K) and its heat capacity rate ({@code capacity},
@@ -52,26 +55,31 @@ public record AirCooled(double area,Air air,double draught,@Nullable HeatControl
     }
     /** The air share the films take for shut louvers: a curve's films are positive. */
     private static final double SHUT=1e-12;
+    public AirCooled(double area,Air air,double draught,@Nullable HeatControl control,HeatControl.Limit limit){this(area,air,draught,control,limit,1);}
     public AirCooled {
         Objects.requireNonNull(air);Objects.requireNonNull(limit);
-        if(!(area>0)||!Double.isFinite(area)||!(draught>=0&&draught<=1))throw new IllegalArgumentException("Invalid air cooler side");
+        if(!(area>0)||!Double.isFinite(area)||!(draught>=0&&draught<=1)||!(fanLimit>=0&&fanLimit<=1))throw new IllegalArgumentException("Invalid air cooler side");
     }
+    /** The air share the bank moves: its draught, at most what fans at {@link #fanLimit} with the louvers open give. */
+    public double airShare(){return Math.min(draught,air.draught(fanLimit));}
     /** The facts that shape the side's equations, without its actuator. */
     public record Shape(double area,Air air,HeatControl control) {}
     @Override public Shape shape(){return new Shape(area,air,control);}
     @Override public double coldest(){return air.temperature();}
     @Override public double hottest(){return air.temperature();}
-    @Override public HeatCurve.Films films(){return air.films(draught);}
+    @Override public HeatCurve.Films films(){return air.films(airShare());}
     @Override public double heat(HeatCurve curve,double inlet,double massFlow) {
         double mass=Math.abs(massFlow);
-        if(mass==0||draught==0)return 0;
+        if(mass==0||airShare()==0)return 0;
         return mass*(curve.march(inlet,mass,area,air.temperature())-inlet);
     }
     /** The fans' share of full speed: still until the louvers stand open. */
-    public double fans(){return Math.max(0,(draught-air.natural())/(1-air.natural()));}
+    public double fans(){return Math.max(0,(airShare()-air.natural())/(1-air.natural()));}
     /** The louvers' opening, 0 shut to 1 open: open once the fans turn. */
-    public double louvers(){return Math.min(1,draught/air.natural());}
-    public AirCooled withDraught(double value,HeatControl.Limit why){return new AirCooled(area,air,value,control,why);}
+    public double louvers(){return Math.min(1,airShare()/air.natural());}
+    public AirCooled withDraught(double value,HeatControl.Limit why){return new AirCooled(area,air,value,control,why,fanLimit);}
+    /** This side with its fans held at most at {@code value} of full speed (W5's dispatch input). */
+    public AirCooled withFanLimit(double value){return value==fanLimit?this:new AirCooled(area,air,draught,control,limit,value);}
     /**
      * This side with its louvers and fans planned for a step that starts drawing {@code massFlow} (kg/s) at {@code inlet}
      * (J/kg) on {@code curve}, a sampled curve with this side's films ({@link HeatControl#setting}: each trial share re-films
@@ -80,7 +88,12 @@ public record AirCooled(double area,Air air,double draught,@Nullable HeatControl
     public AirCooled planned(HeatCurve curve,double inlet,double massFlow) {
         if(control==null)return this;
         double mass=Math.abs(massFlow);
-        var setting=control.setting(u->u==0?0:mass*(curve.withFilms(air.films(u)).march(inlet,mass,area,air.temperature())-inlet),curve,inlet,mass,draught);
-        return withDraught(control.target()==HeatControl.Target.MANUAL?air.draught(setting.effort()):setting.effort(),setting.limit());
+        // Fans without power (W5) cap the effort at the louvers' natural draught: a target past it stands at its highest.
+        double most=air.draught(fanLimit);
+        var setting=control.setting(u->{double a=Math.min(u,most);return a==0?0:mass*(curve.withFilms(air.films(a)).march(inlet,mass,area,air.temperature())-inlet);},curve,inlet,mass,draught);
+        double effort=control.target()==HeatControl.Target.MANUAL?air.draught(setting.effort()):setting.effort();
+        var why=setting.limit();
+        if(effort>most){effort=most;if(why==HeatControl.Limit.NONE&&control.target()!=HeatControl.Target.MANUAL)why=HeatControl.Limit.HIGHEST;}
+        return withDraught(effort,why);
     }
 }

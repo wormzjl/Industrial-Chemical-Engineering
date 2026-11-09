@@ -18,7 +18,6 @@ import com.wormzjl.icheme.world.item.PipelineToolItem;
 import com.wormzjl.icheme.world.level.block.EquipmentStructure;
 import com.wormzjl.icheme.world.level.block.FluidDeviceBlock;
 import com.wormzjl.icheme.world.level.block.PipeAnchor;
-import com.wormzjl.icheme.world.level.block.PipeLaying;
 import com.wormzjl.icheme.world.level.block.PipeRackBlock;
 import com.wormzjl.icheme.world.level.block.RegistryRealignment;
 import com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity;
@@ -352,7 +351,7 @@ public final class RegistryFirstGameTests {
         if (from.anchor() == null || to.anchor() == null) failure[0] = "the line's ends were refused: " + from.refusal() + ", " + to.refusal();
         else {
             var route = PipeRoute.search(from.anchor().end(), from.anchor().leaving(), to.anchor().end(), outside, PipeAnchor.space(level), PipeRoute.Limits.DEFAULT);
-            var refusal = route.found() ? PipeLaying.lay(player, InteractionHand.MAIN_HAND, start, end, List.of(first, straight, corner, turned, last), route.options()) : null;
+            var refusal = route.found() ? LayingTestCommands.lay(player, InteractionHand.MAIN_HAND, start, end, List.of(first, straight, corner, turned, last), route.options()) : null;
             if (!route.found()) failure[0] = "no route through the racks: " + route;
             else if (refusal != null) failure[0] = "the line was refused: " + refusal.getString();
         }
@@ -426,6 +425,9 @@ public final class RegistryFirstGameTests {
         for (var port : ports) nozzles.add(port.cell());
         var blocked = cell(origin, layout.shell().stream().filter(c -> !c.equals(ShapeRasterizer.fluidCell(shape)) && !nozzles.contains(c)).findFirst().orElseThrow());
         var paint = new Paint(0x587246, 0x383E42);
+        // Items an earlier batch left here (a line tool's refund) are not the rebuild's.
+        var earlier = new HashSet<java.util.UUID>();
+        for (var e : level.getEntitiesOfClass(ItemEntity.class, new AABB(origin).inflate(8))) earlier.add(e.getUUID());
         EquipmentStructure.place(level, origin, shape, paint, Integer.MAX_VALUE);
         long id = world.at(position(level, node)).orElseThrow().device().id();
         // Some nitrogen in the drum, through its top nozzle: a generator one pipe above it, until the drum holds 10 mol (a
@@ -447,9 +449,8 @@ public final class RegistryFirstGameTests {
                 .thenWaitUntil(() -> helper.assertTrue(world.capture().world().events().isEmpty() && alone(world, id), "Waiting for the drum to stand alone"))
                 .thenExecute(() -> {
                     before[0] = moles(world, id);
-                    FluidDeviceBlock.quietly(() -> {
-                        for (var at : cells) level.setBlock(at, Blocks.AIR.defaultBlockState(), 3);
-                    });
+                    // The cells are lost as a damaged chunk loses them (main's equipment protection admits no other edit).
+                    for (var at : cells) EquipmentPermissionChecks.lost(level, at, Blocks.AIR.defaultBlockState(), 3);
                     if (world.at(position(level, node)).map(r -> r.device().id()).orElse(0L) != id || world.structure(position(level, origin)) == null)
                         failure[0] = "cells removed quietly touched the registry";
                     level.setBlock(blocked, Blocks.STONE.defaultBlockState(), 3);
@@ -469,8 +470,10 @@ public final class RegistryFirstGameTests {
                         var shell = (EquipmentShellBlockEntity) level.getBlockEntity(cell(origin, c));
                         if (failure[0] == null && (shell.stale() || !shell.paint().equals(paint))) failure[0] = "cell " + c + " was left stale or lost its paint";
                     }
-                    if (failure[0] == null && !level.getEntitiesOfClass(ItemEntity.class, new AABB(origin).inflate(8)).isEmpty()) failure[0] = "the rebuild dropped an item";
-                    level.removeBlock(node, false);
+                    var dropped = level.getEntitiesOfClass(ItemEntity.class, new AABB(origin).inflate(8), e -> !earlier.contains(e.getUUID()));
+                    if (failure[0] == null && !dropped.isEmpty())
+                        failure[0] = "the rebuild dropped an item: " + dropped.stream().map(e -> e.getItem() + " at " + e.blockPosition().subtract(origin).toShortString()).toList();
+                    EquipmentTestCleanup.remove(level, node);
                 })
                 .thenWaitUntil(() -> helper.assertTrue(world.at(position(level, node)).isEmpty() && world.structure(position(level, origin)) == null, "Waiting for the drum and its record to leave"))
                 .thenExecute(() -> {
@@ -503,11 +506,11 @@ public final class RegistryFirstGameTests {
         every.addAll(builtCells);
         String[] failure = {null};
         FluidDeviceBlock.quietly(() -> {
-            for (var at : recordCells) level.setBlock(at, Blocks.AIR.defaultBlockState(), 3);
+            for (var at : recordCells) EquipmentPermissionChecks.lost(level, at, Blocks.AIR.defaultBlockState(), 3);
             for (var c : builtLayout.shell()) {
                 var at = cell(origin, c);
                 level.setBlock(at, ModBlocks.EQUIPMENT_SHELL.get().defaultBlockState(), 3);
-                ((EquipmentShellBlockEntity) level.getBlockEntity(at)).bind(built, c, other);
+                ((EquipmentShellBlockEntity) level.getBlockEntity(at)).bind(built, c, other, com.wormzjl.icheme.science.equipment.DeviceName.NONE);
             }
             for (var c : builtLayout.interior()) level.setBlock(cell(origin, c), ModBlocks.EQUIPMENT_INTERIOR.get().defaultBlockState(), 3);
         });
@@ -525,7 +528,7 @@ public final class RegistryFirstGameTests {
                         if (failure[0] == null && !((EquipmentShellBlockEntity) level.getBlockEntity(cell(origin, c))).paint().equals(paint)) failure[0] = "cell " + c + " did not take the record's paint";
                     if (failure[0] == null && world.at(position(level, node)).map(r -> r.device().id()).orElse(0L) != id) failure[0] = "the drum's registration changed";
                     if (failure[0] == null && held(world, id)) failure[0] = "the whole drum is held";
-                    level.removeBlock(node, false);
+                    EquipmentTestCleanup.remove(level, node);
                 })
                 .thenWaitUntil(() -> helper.assertTrue(world.at(position(level, node)).isEmpty() && world.structure(position(level, origin)) == null, "Waiting for the drum and its record to leave"))
                 .thenExecute(() -> {
@@ -580,7 +583,7 @@ public final class RegistryFirstGameTests {
         if (from.anchor() == null || to.anchor() == null) failure[0] = "the line's ends were refused: " + from.refusal() + ", " + to.refusal();
         else {
             var route = PipeRoute.search(from.anchor().end(), from.anchor().leaving(), to.anchor().end(), outside, PipeAnchor.space(level), PipeRoute.Limits.DEFAULT);
-            var refusal = route.found() ? PipeLaying.lay(player, InteractionHand.MAIN_HAND, start, end, List.of(first, straight, corner, turned, last), route.options()) : null;
+            var refusal = route.found() ? LayingTestCommands.lay(player, InteractionHand.MAIN_HAND, start, end, List.of(first, straight, corner, turned, last), route.options()) : null;
             if (!route.found()) failure[0] = "no route through the racks: " + route;
             else if (refusal != null) failure[0] = "the line was refused: " + refusal.getString();
         }

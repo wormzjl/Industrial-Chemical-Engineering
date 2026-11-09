@@ -1,0 +1,139 @@
+{
+  "format": 2,
+  "basis": {
+    "package": "icheme:tjl20_methane_nitrogen",
+    "revision": "crude-regrouped-r1",
+    "components": ["Methane", "Ethane", "Propane", "Isobutane", "N-butane", "Isopentane", "N-pentane", "crude_pc01", "crude_pc02", "crude_pc03", "crude_pc04", "crude_pc05", "crude_pc06", "crude_pc07", "crude_pc08", "crude_pc09", "crude_pc10", "crude_pc11", "crude_pc12", "Retired_cut", "Nitrogen", "Water"],
+    "later": "a basis field of a later version"
+  },
+  "units": [
+    {
+      "id": "V-1",
+      "type": "valve",
+      "name": "FEED VALVE",
+      "x": 120,
+      "y": 80,
+      "params": {"pressure": 300000.0, "later": "a door field of a later version"},
+      "later": {"sizing": {"type": "globe"}}
+    },
+    {
+      "id": "D-1",
+      "type": "drum",
+      "name": "V-101",
+      "x": 240,
+      "y": 80,
+      "params": {}
+    },
+    {
+      "id": "X-1",
+      "type": "retired_gizmo",
+      "name": "GIZMO",
+      "x": 360,
+      "y": 40,
+      "params": {"bore": 0.2, "rows": [{"id": "1", "share": 0.5}]}
+    },
+    {
+      "id": "T-1",
+      "type": "column",
+      "name": "T-101",
+      "x": 480,
+      "y": 80,
+      "params": {
+        "package": "",
+        "assay": "",
+        "stages": 30,
+        "feed_stage": 15,
+        "top_pressure": 250000.0,
+        "stage_drop": 0.0,
+        "diameter": 6.0,
+        "condenser_temperature": 320.0,
+        "reflux": 1.5,
+        "reboiler_duty": 0.0,
+        "condenser": "EXCHANGER",
+        "condenser_drop": 30000.0,
+        "reboiler_drop": 0.0,
+        "draws": [{"id": "1", "tray": 8, "flow": 300.0}],
+        "steam": [{"id": "1", "stage": 30, "flow": 100.0, "temperature": 600.0}],
+        "pumparounds": [
+          {"id": "1", "return_tray": 6, "draw_tray": 8, "duty": -2.0E7, "split": "RETURN_TRAY", "drop": 100000.0},
+          {"id": "2", "return_tray": 16, "draw_tray": 18, "duty": -1.5E7, "split": "RETURN_TRAY", "drop": 100000.0}
+        ]
+      }
+    }
+  ],
+  "streams": [
+    {
+      "id": "F-1",
+      "name": "FEED",
+      "to": {"unit": "V-1", "port": "a", "later": "an end field of a later version"},
+      "feed": {
+        "temperature": 420.0,
+        "pressure": 800000.0,
+        "amounts": {"Methane": 10.0, "N-pentane": 30.0, "crude_pc05": 40.0, "Water": 20.0, "Retired_cut": 5.0},
+        "solids": [
+          {"material": "icheme:demo_particle", "micrometres": "100", "mass_flow": 0.5, "later": "a solid field of a later version"},
+          {"material": "icheme:retired_powder", "micrometres": "50", "mass_flow": 0.25}
+        ],
+        "later": "a feed field of a later version"
+      },
+      "route": [
+        {"x": 40, "y": 80},
+        {"x": 40, "y": 120, "later": "a corner field of a later version"}
+      ],
+      "later": "a stream field of a later version",
+      "later_still": null
+    },
+    {"id": "S-1", "name": "S-1", "from": {"unit": "V-1", "port": "b"}, "to": {"unit": "D-1", "port": "in"}},
+    {"id": "G-1", "name": "OFF GAS", "from": {"unit": "D-1", "port": "gas"}, "to": {"unit": "X-1", "port": "in"}},
+    {"id": "O-1", "name": "OIL", "from": {"unit": "D-1", "port": "oil"}},
+    {"id": "W-1", "name": "SOUR WATER", "from": {"unit": "D-1", "port": "water"}},
+    {
+      "id": "S-2",
+      "name": "S-2",
+      "from": {"unit": "X-1", "port": "out"},
+      "to": {"unit": "T-1", "port": "feed"},
+      "feed": {"temperature": 640.0, "pressure": 270000.0, "amounts": {"crude_pc05": 40.0}}
+    },
+    {
+      "id": "C-1",
+      "name": "CWS",
+      "to": {"unit": "T-1", "port": "condenser_a"},
+      "feed": {"temperature": 303.15, "pressure": 400000.0, "amounts": {"Water": 10000.0}}
+    },
+    {"id": "C-2", "name": "CWR", "from": {"unit": "T-1", "port": "condenser_b"}},
+    {
+      "id": "P-1",
+      "name": "PA 1 COOLANT",
+      "to": {"unit": "T-1", "port": "pa/1/a"},
+      "feed": {"temperature": 303.15, "pressure": 400000.0, "amounts": {"Water": 10000.0}}
+    },
+    {"id": "P-2", "name": "PA 1 RETURN", "from": {"unit": "T-1", "port": "pa/1/b"}},
+    {
+      "id": "P-3",
+      "name": "PA 2 COOLANT",
+      "to": {"unit": "T-1", "port": "pa/2/a"},
+      "feed": {"temperature": 303.15, "pressure": 400000.0, "amounts": {"Water": 10000.0}}
+    },
+    {"id": "P-4", "name": "PA 2 RETURN", "from": {"unit": "T-1", "port": "pa/2/b"}},
+    {
+      "id": "L-1",
+      "name": "STEAM",
+      "to": {"unit": "T-1", "port": "steam/1"},
+      "feed": {"temperature": 600.0, "pressure": 600000.0, "amounts": {"Water": 100.0}}
+    },
+    {"id": "T-2", "name": "OVERHEAD", "from": {"unit": "T-1", "port": "overhead"}},
+    {"id": "T-3", "name": "NAPHTHA", "from": {"unit": "T-1", "port": "distillate"}},
+    {"id": "T-4", "name": "TOP WATER", "from": {"unit": "T-1", "port": "water"}},
+    {"id": "T-5", "name": "RESIDUE", "from": {"unit": "T-1", "port": "bottoms"}},
+    {"id": "T-6", "name": "KERO", "from": {"unit": "T-1", "port": "draw/1"}}
+  ],
+  "settings": {
+    "flow_tolerance": 1.0E-4,
+    "temperature_tolerance": 0.01,
+    "max_passes": 30,
+    "lowest_factor": -5.0,
+    "highest_factor": 0.0,
+    "later": "a solver field of a later version"
+  },
+  "later": {"results": "a section of a later version"}
+}

@@ -18,13 +18,14 @@ import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
 import com.wormzjl.icheme.client.gui.common.kit.SkinButton;
 import com.wormzjl.icheme.client.gui.common.kit.SkinField;
-import com.wormzjl.icheme.client.gui.common.kit.WindowScale;
 import com.wormzjl.icheme.client.gui.screens.inventory.ColumnTemplates;
 import com.wormzjl.icheme.network.EquipmentNetwork;
 import com.wormzjl.icheme.science.equipment.ColumnDesign;
 import com.wormzjl.icheme.science.equipment.ColumnTrays;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
+import com.wormzjl.icheme.science.equipment.MachineDuty;
 import com.wormzjl.icheme.science.equipment.Paint;
+import com.wormzjl.icheme.science.equipment.SentDesign;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
 import com.wormzjl.icheme.science.equipment.ShapeRasterizer;
 import com.wormzjl.icheme.science.equipment.UnitDesign;
@@ -48,6 +49,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.function.IntUnaryOperator;
 
 import static com.wormzjl.icheme.science.equipment.UnitDesign.number;
@@ -59,11 +61,13 @@ import static com.wormzjl.icheme.science.equipment.UnitDesign.number;
  * design, on a panel door at the left beside the world and the vessel's ghost; a drum's side connections and every kind's
  * paint have pages of their own (owner requests 2026-10-16). It edits a local draft; the server receives the design when
  * the screen closes, or with a build request on Build. A column is imported whole (its diameter, trays, feed, draws,
- * pumparounds, steam and components) from the design saved in the nearest column calculator and built from it only
+ * pumparounds, steam and components) from a design the nearest process simulator holds and built from it only
  * (batch 2026-10-26-multi-machine-framework), or made from a column template on its Templates page (the calculator's
  * library: the bundled templates and the player's own, {@link ColumnTemplates}; owner request 2026-10-28); its
- * schematic is the calculator's ({@link ColumnDiagram}), on the HMI glass
- * beside the world. A bottom outlet leaving through a skirt turns to the sides its form allows (owner request
+ * schematic is the calculator's ({@link ColumnDiagram}), on the HMI glass beside the world. Import, on the choice page and a
+ * column's design page, lists the designs the nearest process simulator holds (its column door's saved design, then what Send to block stored; batch
+ * 2026-11-02-process-simulator, S5) and lands the chosen one on the draft: its form, sizes and type; the place and paint stay the
+ * player's. A bottom outlet leaving through a skirt turns to the sides its form allows (owner request
  * 2026-10-25, {@link EquipmentShape#outlets}): a standing drum's on its Nozzles page, a trickle-bed reactor's on its
  * design page. A column's side nozzles take their sides by themselves; its Nozzles page turns any of them to a side
  * the player picks (finding F3, owner decision 2026-10-27).
@@ -74,9 +78,9 @@ import static com.wormzjl.icheme.science.equipment.UnitDesign.number;
  * or where it stands rebuilds the page.
  */
 public final class EquipmentConstructorScreen extends Screen {
-    /** The screen's pages: what to build, its design, a drum's side connections, a column's side nozzles, the paint and a column's templates. */
+    /** The screen's pages: what to build, its design, a drum's side connections, a column's side nozzles, the paint, a column's templates and a simulator's designs. */
     private enum Page {
-        CHOOSE, DESIGN, CONNECTIONS, NOZZLES, PAINT, TEMPLATES
+        CHOOSE, DESIGN, PAINT, TEMPLATES, IMPORTS
     }
 
     /** The schematic's width on its glass: the steam lines (90 pixels left of the axis) to the draw marks (39 right of it), and margins. */
@@ -86,6 +90,8 @@ public final class EquipmentConstructorScreen extends Screen {
     private final BlockPos position;
     private final Direction facing;
     private Design saved;
+    /** The design's name (N1), which only an import sets; the built structure takes it. */
+    private String name = com.wormzjl.icheme.science.equipment.DeviceName.NONE;
     /** The screen opens on the choice page. */
     private Page page = Page.CHOOSE;
     /** The group the choice page shows: the current kind's until another is picked, again so each time the page opens. */
@@ -94,6 +100,9 @@ public final class EquipmentConstructorScreen extends Screen {
     /** The diameter (a unit's size), always on its kind's grid: 0.5 m steps for a vessel ({@link ProcessUnit#snap} for a unit). */
     private double diameter;
     private int tangentLength, support, forward, right, up;
+    /** A machine's design point, which its sizes follow ({@link UnitDesign#size}); {@link MachineDuty#NONE} for another form. */
+    private MachineDuty duty;
+    private com.wormzjl.icheme.science.equipment.ExchangerType exchangerType;
     private ColumnTrays trays;
     /** The column design imported from a column calculator, the only one a column is built from (plan 2026-10-26, section 4.5); null before an import. */
     private @Nullable ColumnDesign column;
@@ -109,6 +118,8 @@ public final class EquipmentConstructorScreen extends Screen {
     private int nozzle;
     /** The paint, and the channel the paint page edits ({@link Paint#BODY} or {@link Paint#STRUCTURE}). */
     private Paint paint;
+    private @Nullable UUID paintPlayer;
+    private @Nullable Paint editedPaint;
     /** An air cooler's bays in parallel and in series, kept for the other kinds. */
     private ProcessUnit.Bank bank;
     private com.wormzjl.icheme.science.equipment.TowerBank towerBank;
@@ -132,6 +143,16 @@ public final class EquipmentConstructorScreen extends Screen {
     private @Nullable Component refused;
     /** The column templates the Templates page lists, read again each time it opens. */
     private ColumnTemplates.Library templates = new ColumnTemplates.Library(List.of(), 0);
+    /** The designs the Import page lists, as the server last answered. */
+    private List<SentDesign> imports = List.of();
+    private static long nextDeconstructionRequest;
+    private long deconstructionRequest;
+    private boolean deconstructing;
+    private int targetAge;
+    private @Nullable com.wormzjl.icheme.world.level.block.EquipmentStructure.Vessel removalTarget;
+    private @Nullable Component deconstructionMessage;
+    private boolean deconstructionFailed;
+
     private boolean sent;
 
     public EquipmentConstructorScreen(BlockPos position, Direction facing, Design design) {
@@ -143,10 +164,13 @@ public final class EquipmentConstructorScreen extends Screen {
 
     private void load(Design design) {
         saved = design;
+        name = design.name();
         form = design.form();
         column = design.column();
         diameter = design.diameter();
         tangentLength = design.tangentLength();
+        duty = design.duty();
+        exchangerType=design.exchangerType();
         boot = design.boot();
         outlet = design.outlet();
         support = Math.max(design.support(), minimumSupport());
@@ -174,7 +198,7 @@ public final class EquipmentConstructorScreen extends Screen {
     /** The draft; always valid, because every stepper is clamped to the bounds of its parameter. */
     public Design design() {
         return new Design(diameter, tangentLength, form, support, new VesselPlacement(forward, right, up), trays, List.copyOf(connections), paint, bank, hasBoot(), outlet(),
-                column, List.copyOf(turns),towerBank);
+                column, List.copyOf(turns), towerBank, name, duty,exchangerType);
     }
 
     private static Skin skin() {
@@ -254,35 +278,42 @@ public final class EquipmentConstructorScreen extends Screen {
 
     /** The page's rows, footer and message display as the builder makes them from the draft. */
     private ConstructorColumn.Page panel() {
-        return switch (page) {
-            case CHOOSE -> ConstructorColumn.choose(category != null ? category : Equipment.of(form).category, Equipment.of(form), EquipmentConstructorScreen::tr);
+        var panel = switch (page) {
+            case CHOOSE -> ConstructorColumn.choose(category != null ? category : Equipment.of(form).category, Equipment.of(form), EquipmentNetwork.IMPORT_REACH, EquipmentConstructorScreen::tr);
             case DESIGN -> ConstructorColumn.design(new ConstructorColumn.Design(form, diameter, tangentLength, support, forward, right, up, bank,
                     form.column() ? new ConstructorColumn.Imported(column != null ? column.diameter() : diameter, shownTrays().trays() + 2, shownTrays().feed() + 1) : null,
-                    new ConstructorColumn.Outlet(outlets(), outlet(), words()), EquipmentNetwork.IMPORT_REACH,towerBank), EquipmentConstructorScreen::tr);
-            case CONNECTIONS -> {
-                var c = connections.isEmpty() ? null : connection();
-                int[] stations = stations();
-                yield ConstructorColumn.connections(new ConstructorColumn.Connections(connections.size(), selected, c != null ? c.side() : 0, words(),
-                        c != null ? number(c.station() + .5) : "", form.orientation().horizontal(), c != null ? c.offset() : 0,
-                        c != null && c.offset() != 0 ? toward(c.across(), Integer.signum(c.offset())) : null,
-                        connections.size() < EquipmentShape.MAX_CONNECTIONS && stations[0] <= stations[1], EquipmentShape.bootFor(diameter, tangentLength) != null, hasBoot(),
-                        new ConstructorColumn.Outlet(outlets(), outlet(), words())), EquipmentConstructorScreen::tr);
-            }
-            case NOZZLES -> {
-                var sides = sideNozzles();
-                nozzle = clamp(nozzle, 0, Math.max(0, sides.size() - 1));
-                ConstructorColumn.Nozzle shown = null;
-                if (!sides.isEmpty()) {
-                    var n = sides.get(nozzle);
-                    shown = new ConstructorColumn.Nozzle(n.role().name().toLowerCase(Locale.ROOT), n.index(), n.placed(), n.placed() ? number(n.nozzle().base()[1]) : "-",
-                            place(n).where(), n.turned(), n.side(), n.home());
-                }
-                yield ConstructorColumn.nozzles(new ConstructorColumn.Nozzles(sides.size(), nozzle, shown, words(), (int) sides.stream().filter(ColumnDesign.SideNozzle::turned).count()),
-                        EquipmentConstructorScreen::tr);
-            }
+                    new ConstructorColumn.Outlet(outlets(), outlet(), words()), EquipmentNetwork.IMPORT_REACH,towerBank,duty,exchangerType),
+                    !form.designed()&&!form.column()?connectionInput():null,form.column()?nozzleInput():null,EquipmentConstructorScreen::tr);
             case PAINT -> ConstructorColumn.paint(channel, EquipmentConstructorScreen::tr);
             case TEMPLATES -> ConstructorColumn.templates(templateKeys(), templates.unreadable(), EquipmentConstructorScreen::tr);
+            case IMPORTS -> ConstructorColumn.imports(importKeys(), EquipmentConstructorScreen::tr);
         };
+        if (page != Page.CHOOSE && page != Page.DESIGN) return panel;
+        String target = null, at = "";
+        int cells = 0;
+        if (removalTarget != null) {
+            var shape = removalTarget.shape();
+            target = tr("vessel.title." + shape.kind().name().toLowerCase(Locale.ROOT));
+            var shell = ShapeRasterizer.layout(shape).controller();
+            if (minecraft.level.getBlockEntity(removalTarget.origin().offset(shell.x(), shell.y(), shell.z())) instanceof com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity entity && !entity.name().isEmpty())
+                target = entity.name() + " · " + target;
+            at = removalTarget.origin().toShortString();
+            var layout = ShapeRasterizer.layout(shape);
+            cells = layout.shell().size() + layout.interior().size();
+        }
+        return ConstructorColumn.withRemoval(panel, new ConstructorColumn.Removal(target, at, cells, deconstructing,
+                deconstructionMessage == null ? null : deconstructionMessage.getString(), deconstructionFailed), EquipmentConstructorScreen::tr);
+    }
+
+    private ConstructorColumn.Connections connectionInput(){
+        var c=connections.isEmpty()?null:connection();int[] stations=stations();
+        return new ConstructorColumn.Connections(connections.size(),selected,c!=null?c.side():0,words(),c!=null?number(c.station()+.5):"",form.orientation().horizontal(),c!=null?c.offset():0,
+                c!=null&&c.offset()!=0?toward(c.across(),Integer.signum(c.offset())):null,connections.size()<EquipmentShape.MAX_CONNECTIONS&&stations[0]<=stations[1],EquipmentShape.bootFor(diameter,tangentLength)!=null,hasBoot(),new ConstructorColumn.Outlet(outlets(),outlet(),words()));
+    }
+    private ConstructorColumn.Nozzles nozzleInput(){
+        var sides=sideNozzles();nozzle=clamp(nozzle,0,Math.max(0,sides.size()-1));ConstructorColumn.Nozzle shown=null;
+        if(!sides.isEmpty()){var n=sides.get(nozzle);shown=new ConstructorColumn.Nozzle(n.role().name().toLowerCase(Locale.ROOT),n.index(),n.placed(),n.placed()?number(n.nozzle().base()[1]):"-",place(n).where(),n.turned(),n.side(),n.home());}
+        return new ConstructorColumn.Nozzles(sides.size(),nozzle,shown,words(),(int)sides.stream().filter(ColumnDesign.SideNozzle::turned).count());
     }
 
     /** The templates as their page lists them: a name cut to its key (its hover says it whole), whether it builds a column and why not. */
@@ -298,9 +329,26 @@ public final class EquipmentConstructorScreen extends Screen {
         return out;
     }
 
+    /** The designs as the Import page lists them ({@link ConstructorColumn#listed}): a name and count cut to its key, its hover whole. */
+    private List<ConstructorColumn.Listed> importKeys() {
+        var m = GuiCanvas.measure(font);
+        var out = new ArrayList<ConstructorColumn.Listed>();
+        for (var sent : imports) {
+            var listed = ConstructorColumn.listed(sent, EquipmentConstructorScreen::tr);
+            out.add(new ConstructorColumn.Listed(m.cut(listed.name(), ConstructorColumn.WIDTH - 12), listed.hint()));
+        }
+        return out;
+    }
+
     @Override
     protected void init() {
-        WindowScale.apply(minecraft, this);
+
+        updateRemovalTarget();
+        if (paintPlayer == null && minecraft.player != null) {
+            paintPlayer = minecraft.player.getUUID();
+            paint = ClientConfig.equipmentPaint(paintPlayer, paint);
+            follow();
+        }
         build = null;
         custom = null;
         var m = GuiCanvas.measure(font);
@@ -324,7 +372,7 @@ public final class EquipmentConstructorScreen extends Screen {
             var button = addRenderableWidget(SkinButton.of(spec, footer.get(i), this::act, EquipmentConstructorScreen::skin));
             if (spec.key().equals("build")) build = button.primary(true);
         }
-        if (page == Page.DESIGN || page == Page.CHOOSE || page == Page.TEMPLATES) {
+        if (page == Page.DESIGN || page == Page.CHOOSE || page == Page.TEMPLATES || page == Page.IMPORTS) {
             String key = page == Page.DESIGN ? "change" : "back";
             var spec = new Column.Button(key, tr(ConstructorColumn.KEY + key), true, tr(ConstructorColumn.KEY + key + ".hint"));
             addRenderableWidget(SkinButton.of(spec, ConstructorColumn.TITLE_KEY, this::act, EquipmentConstructorScreen::skin));
@@ -373,6 +421,7 @@ public final class EquipmentConstructorScreen extends Screen {
 
     /** A press on a key of the door, by its key ({@link ConstructorColumn}): a stepper's ends in - or +, a selector's names its position after a colon. */
     private void act(String key) {
+        deconstructionMessage = null;
         if (key.endsWith("-") || key.endsWith("+")) {
             step(key.substring(0, key.length() - 1), key.endsWith("+") ? 1 : -1);
             return;
@@ -380,6 +429,7 @@ public final class EquipmentConstructorScreen extends Screen {
         int colon = key.indexOf(':');
         String what = colon < 0 ? key : key.substring(0, colon), at = colon < 0 ? "" : key.substring(colon + 1);
         switch (what) {
+            case "exchanger" -> {exchangerType=com.wormzjl.icheme.science.equipment.ExchangerType.valueOf(at);rebuildWidgets();}
             case "category" -> {
                 category = Category.valueOf(at.toUpperCase(Locale.ROOT));
                 rebuildWidgets();
@@ -390,10 +440,11 @@ public final class EquipmentConstructorScreen extends Screen {
                 show(Page.DESIGN);
             }
             case "change" -> show(Page.CHOOSE);
-            case "nozzles" -> show(form.column() ? Page.NOZZLES : Page.CONNECTIONS);
             case "paint" -> show(Page.PAINT);
             case "build" -> build();
-            case "import" -> importColumn();
+            case "deconstruct" -> deconstruct();
+            case "import" -> listImports();
+            case "design" -> land(Integer.parseInt(at));
             case "templates" -> {
                 templates = ColumnTemplates.load(minecraft);
                 show(Page.TEMPLATES);
@@ -407,6 +458,8 @@ public final class EquipmentConstructorScreen extends Screen {
                 outlet = Integer.parseInt(at);
                 refresh();
             }
+            case "drive" -> machine(duty.withDrive(MachineDuty.Drive.valueOf(at.toUpperCase(Locale.ROOT))));
+            case "steam" -> machine(duty.withSteam(MachineDuty.Steam.valueOf(at.toUpperCase(Locale.ROOT))));
             case "add" -> add();
             case "remove" -> {
                 connections.remove(selected);
@@ -438,6 +491,7 @@ public final class EquipmentConstructorScreen extends Screen {
             case "default" -> {
                 // Rebuilt, so the custom field shows the edited channel's default colour.
                 paint = IChemE.defaultPaint();
+                editedPaint = paint;
                 follow();
                 rebuildWidgets();
             }
@@ -484,9 +538,23 @@ public final class EquipmentConstructorScreen extends Screen {
                 connections.set(selected, new EquipmentShape.Connection(c.side(), c.station(), clamp(c.offset() + step, -across, across)));
             }
             case "nozzle" -> nozzle = clamp(nozzle + step, 0, Math.max(0, sideNozzles().size() - 1));
+            case "flow", "head", "power", "exhaust", "base_speed" -> {
+                machine(UnitDesign.of(kind).step(duty, key, step));
+                return;
+            }
             default -> {
             }
         }
+        refresh();
+    }
+
+    /** Takes design point {@code next}: the machine's sizes follow it, its support at least the least they allow. */
+    private void machine(MachineDuty next) {
+        var design = UnitDesign.of(form.kind());
+        duty = next;
+        diameter = design.size(duty);
+        tangentLength = design.length(duty);
+        support = Math.max(support, minimumSupport());
         refresh();
     }
 
@@ -499,6 +567,7 @@ public final class EquipmentConstructorScreen extends Screen {
     private void colour(int rgb) {
         if (paint.colour(channel) == rgb) return;
         paint = paint.with(channel, rgb);
+        editedPaint = paint;
         refresh();
         if (custom != null && !custom.isFocused()) custom.setValue(rgb(rgb));
     }
@@ -633,7 +702,7 @@ public final class EquipmentConstructorScreen extends Screen {
     private void diameter(int steps) {
         if (form.designed()) {
             var kind = form.kind();
-            diameter = ProcessUnit.snap(kind, diameter + steps * ProcessUnit.diameterStep(kind));
+            diameter = com.wormzjl.icheme.science.equipment.UnitDesign.of(kind).step(diameter, steps);
             tangentLength = unitLength(kind, tangentLength);
             return;
         }
@@ -656,8 +725,8 @@ public final class EquipmentConstructorScreen extends Screen {
     }
 
     /**
-     * Goes to the design of {@code equipment}, keeping the draft's sizes within the new kind's ranges; a horizontal drum
-     * keeps its axis. A change between standing and lying, or to or from a unit, proposes that support's default height.
+     * A new kind starts at an interior size; reselecting the current kind keeps the player's dimensions. A horizontal
+     * drum keeps its axis, and an imported column keeps its specified dimensions.
      */
     private void choose(Equipment equipment) {
         var before = form;
@@ -667,16 +736,29 @@ public final class EquipmentConstructorScreen extends Screen {
             case HORIZONTAL_DRUM -> Equipment.of(form) == Equipment.HORIZONTAL_DRUM ? form : VesselPlacement.Form.LENGTHWISE;
             default -> VesselPlacement.Form.valueOf(equipment.name());
         };
+        boolean changedKind = before.kind() != form.kind();
+        if (changedKind && !(form.column() && column != null)) {
+            var sizes = com.wormzjl.icheme.science.equipment.ConstructorDefaults.sizes(form);
+            diameter = sizes.diameter();
+            tangentLength = sizes.length();
+        }
         if (form.designed()) {
             var kind = form.kind();
-            diameter = ProcessUnit.snap(kind, before.kind()!=kind&&kind.coolingTower()?(kind==EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER?8:60):diameter);
-            // A new kind starts at its design's second size and support; the same kind keeps the player's.
-            tangentLength = unitLength(kind, before.kind() != kind ? ProcessUnit.defaultLength(kind, diameter) : tangentLength);
-            if (before.kind() != kind) support = ProcessUnit.defaultSupport(kind, diameter, tangentLength);
+            diameter = ProcessUnit.snap(kind, diameter);
+            tangentLength = unitLength(kind, tangentLength);
+            if (changedKind) support = ProcessUnit.defaultSupport(kind, diameter, tangentLength);
+            // A machine keeps its design point; a new kind takes the one its starting sizes give, which its sizes follow.
+            var design = UnitDesign.of(kind);
+            duty = !design.hasDuty() ? MachineDuty.NONE : before.kind() != kind || duty.equals(MachineDuty.NONE) ? design.duty(diameter, tangentLength) : duty;
+            if (design.hasDuty()) {
+                diameter = design.size(duty);
+                tangentLength = design.length(duty);
+            }
         } else {
+            duty = MachineDuty.NONE;
             diameter = vesselDiameter(diameter);
             tangentLength = clamp(tangentLength, 1, (int) EquipmentShape.MAX_TANGENT_LENGTH);
-            if (before.designed() || before.orientation() != form.orientation()) support = EquipmentShape.defaultSupport(diameter, form.orientation());
+            if (changedKind || before.orientation() != form.orientation()) support = EquipmentShape.defaultSupport(diameter, form.orientation());
         }
         support = Math.max(support, minimumSupport());
         // A drum laid down or stood up takes that form's connection: its sides face other ways (a standing drum's left
@@ -690,12 +772,41 @@ public final class EquipmentConstructorScreen extends Screen {
         show(Page.DESIGN);
     }
 
-    /** Sends the draft with an import: the server keeps it, imports onto it and answers ({@link #answered}). */
-    private void importColumn() {
+    /** Sends the draft, then asks for the nearest process simulator's designs: the server answers with them ({@link #listed}). */
+    private void listImports() {
         importing = true;
         refused = null;
         saved = design();
-        EquipmentNetwork.send(position, saved, EquipmentNetwork.Action.IMPORT);
+        EquipmentNetwork.send(position, saved, EquipmentNetwork.Action.KEEP);
+        EquipmentNetwork.sendImportList(position);
+    }
+
+    /** Sends the draft, then lands design {@code index} of the listed ones on it: the server answers as an import does ({@link #answered}); the design page waits for it. */
+    private void land(int index) {
+        if (index < 0 || index >= imports.size()) return;
+        var sent = imports.get(index);
+        importing = true;
+        refused = null;
+        saved = design();
+        EquipmentNetwork.send(position, saved, EquipmentNetwork.Action.KEEP);
+        EquipmentNetwork.sendImportChoice(position, index, sent, ConstructorColumn.label(sent, EquipmentConstructorScreen::tr));
+        show(Page.DESIGN);
+    }
+
+    /**
+     * The server's list of designs. An open screen for that constructor stops waiting: it lists them on the Import page, or shows why there
+     * are none on its status line. Nothing lands until the player picks one.
+     */
+    public static void listed(BlockPos at, Component message, List<SentDesign> designs) {
+        var minecraft = Minecraft.getInstance();
+        if (!(minecraft.screen instanceof EquipmentConstructorScreen screen) || !screen.position.equals(at)) return;
+        screen.importing = false;
+        if (designs.isEmpty()) {
+            screen.refused = message;
+            return;
+        }
+        screen.imports = List.copyOf(designs);
+        screen.show(Page.IMPORTS);
     }
 
     /**
@@ -748,6 +859,7 @@ public final class EquipmentConstructorScreen extends Screen {
         refused = null;
         support = Math.max(support, minimumSupport());
         fitConnections();
+        updateRemovalTarget();
         var shape = design().shape(facing);
         if (!shape.equals(layout.shape())) layout = ShapeRasterizer.layout(shape);
         if (build != null) build.active = buildable();
@@ -763,6 +875,38 @@ public final class EquipmentConstructorScreen extends Screen {
         return Math.max(low, Math.min(high, value));
     }
 
+    private void updateRemovalTarget() {
+        if (deconstructing) return;
+        removalTarget = minecraft == null || minecraft.level == null ? null : com.wormzjl.icheme.world.level.block.EquipmentDeconstruction.target(
+                minecraft.level, position, facing, new VesselPlacement(forward, right, up));
+    }
+
+    private void deconstruct() {
+        if (removalTarget == null || deconstructing) return;
+        // Keep the shown target: a changed world must be reviewed rather than silently removing the next unit.
+        var target = removalTarget;
+        saved = design();
+        EquipmentNetwork.send(position, saved, EquipmentNetwork.Action.KEEP);
+        deconstructionRequest = ++nextDeconstructionRequest;
+        deconstructing = true;
+        deconstructionMessage = null;
+        EquipmentNetwork.sendDeconstruct(new EquipmentNetwork.Deconstruct(position, target.origin(),
+                com.wormzjl.icheme.world.level.block.EquipmentDeconstruction.stamp(target), deconstructionRequest));
+        refresh();
+    }
+
+    public static void deconstructed(EquipmentNetwork.DeconstructAnswer answer) {
+        var client = Minecraft.getInstance();
+        if (client.screen instanceof EquipmentConstructorScreen screen && screen.position.equals(answer.position())
+                && screen.deconstructing && screen.deconstructionRequest == answer.request()) {
+            screen.deconstructing = false;
+            screen.deconstructionMessage = answer.message();
+            screen.deconstructionFailed = !answer.done();
+            screen.updateRemovalTarget();
+            screen.refresh();
+        } else if (client.player != null) client.player.displayClientMessage(answer.message(), false);
+    }
+
     private void build() {
         EquipmentNetwork.send(position, design(), EquipmentNetwork.Action.BUILD);
         sent = true;
@@ -772,14 +916,20 @@ public final class EquipmentConstructorScreen extends Screen {
     @Override
     public void tick() {
         if (constructor() == null) onClose();
+        else if (!deconstructing && ++targetAge >= 20) {
+            targetAge = 0;
+            updateRemovalTarget();
+            refresh();
+        }
     }
 
     /** Closing keeps the draft as the constructor's design (unless Build already sent it). */
     @Override
     public void removed() {
+        if (editedPaint != null && paintPlayer != null) ClientConfig.rememberEquipmentPaint(paintPlayer, editedPaint);
         if (!sent && !design().equals(saved)) EquipmentNetwork.send(position, design(), EquipmentNetwork.Action.KEEP);
         sent = true;
-        WindowScale.restore(minecraft);
+
     }
 
     @Override
@@ -822,7 +972,7 @@ public final class EquipmentConstructorScreen extends Screen {
         String k = ConstructorColumn.KEY;
         return String.join("\n", tr(k + held.key(), held.args()), tr(k + held.key() + ".hint"), tr(k + "extent", number(shape.topElevation()), number(shape.overallLength())),
                 tr(k + "cells", layout.shell().size(), layout.interior().size()),
-                tr(k + (page == Page.CONNECTIONS ? "clash.hint" : page == Page.NOZZLES ? "nozzle.status.hint" : "status.hint")));
+                tr(k + (form.column() ? "nozzle.status.hint" : !form.designed() ? "clash.hint" : "status.hint")));
     }
 
     /** No blur: the ghost in the world is half of this screen. The door, its title, column and message display; a column's schematic on its glass. */
@@ -834,7 +984,8 @@ public final class EquipmentConstructorScreen extends Screen {
         skin.page(canvas, new Rect(0, 0, ConstructorColumn.PANEL, height));
         var equipment = Equipment.of(form);
         String title = page == Page.CHOOSE ? this.title.getString()
-                : ConstructorColumn.title(tr(ConstructorColumn.KEY + "equipment." + equipment.key()), tr(ConstructorColumn.KEY + "equipment." + equipment.key() + ".short"), m);
+                : ConstructorColumn.title(name, tr(ConstructorColumn.KEY + "equipment." + equipment.key()), tr(ConstructorColumn.KEY + "equipment." + equipment.key() + ".short"), m,
+                (n, kind) -> Component.translatable("gui.icheme.device.named", n, kind).getString());
         skin.title(canvas, 10, 10, title);
         // Placed again for this frame's texts and values; the widgets keep their slots.
         var shown = panel();
@@ -848,10 +999,10 @@ public final class EquipmentConstructorScreen extends Screen {
             skin.status(canvas, line, m.cut(status.text(), line.w()), status.warn() ? Palette.WARN : Palette.ACCENT);
             if (new Rect(line.x() - 4, line.y() - 5, line.w() + 8, 15).contains(mouseX, mouseY)) hovered = statusHint();
         }
-        if ((page == Page.DESIGN || page == Page.NOZZLES) && form.column()) {
+        if (page == Page.DESIGN && form.column()) {
             double marked = Double.NaN;
             var sides = sideNozzles();
-            if (page == Page.NOZZLES && !sides.isEmpty()) marked = place(sides.get(clamp(nozzle, 0, sides.size() - 1))).stage();
+            if (!sides.isEmpty()) marked = place(sides.get(clamp(nozzle, 0, sides.size() - 1))).stage();
             schematic(g, skin.well(canvas, new Rect(width - 16 - STRIP, 16, STRIP + 12, height - 32)), marked);
         }
     }
@@ -866,6 +1017,7 @@ public final class EquipmentConstructorScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double x, double y, int button) {
+        SkinField.clickOutside(this, x, y);
         return door.press(x, y, button) || super.mouseClicked(x, y, button);
     }
 

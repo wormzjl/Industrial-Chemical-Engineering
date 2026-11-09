@@ -139,9 +139,10 @@ final class FccConverterBuilder {
         double c = DeterministicMath.cos(t), s = DeterministicMath.sin(t);
         double[] out = {c, 0, s};
         var f = new Frame(p(x + (r - .1) * c, y, z + (r - .1) * s), out, UP);
-        m.prism(f, .3, 0, .45, 12, Material.SHELL);
-        m.cylinder(f, .4, .45, .53, 12, Material.FLANGE);
-        m.bar(f.at(Math.PI / 2, .35, .5), f.at(Math.PI / 2, .35, .7), .05, UP, Material.STEELWORK);
+        double size = Manway.preferredSize(2 * r), cover = Manway.COVER_RATIO * size / 2;
+        m.prism(f, size / 2, 0, .45, 12, Material.SHELL);
+        m.cylinder(f, cover, .45, .53, 12, Material.FLANGE);
+        m.bar(f.at(Math.PI / 2, .875 * cover, .5), f.at(Math.PI / 2, .875 * cover, .7), .05, UP, Material.STEELWORK);
     }
 
     /**

@@ -126,7 +126,7 @@ class G3F10QualifiedRegionTest {
                 }
             }
             var spine = net.hydrocarbon.propertyPackage();
-            var pilotSpine = com.wormzjl.icheme.science.material.MaterialCatalog.bundled().requireSpine(PILOT, SPECIES[s]);
+            var pilotSpine = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot().requireSpine(PILOT, SPECIES[s]);
             var fits = new StringBuilder();
             for (double t : new double[] {300, 600, 900}) {
                 var e = evaluate(net, t, 1.0, x, Root.VAPOR);

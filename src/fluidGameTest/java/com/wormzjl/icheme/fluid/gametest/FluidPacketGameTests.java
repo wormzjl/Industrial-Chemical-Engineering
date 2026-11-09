@@ -26,12 +26,20 @@ public final class FluidPacketGameTests {
     @GameTest(template="empty",timeoutTicks=100,batch="fluid-movement")
     public static void createAndVanillaMovementRejectEveryFluidBlock(GameTestHelper helper) {
         var level=helper.getLevel();var pos=helper.absolutePos(new BlockPos(0,1,0));
+        // Create is optional (batch 2026-11-03-rotating-machinery, W6a): its check runs only when Create is loaded.
+        boolean create=net.neoforged.fml.ModList.get().isLoaded("create");
         for(var block:java.util.List.of(ModBlocks.FLUID_RESERVOIR.get(),ModBlocks.FLUID_PIPE.get(),ModBlocks.FLUID_GENERATOR.get(),ModBlocks.FLUID_VOID.get())) {
             var state=block.defaultBlockState();
-            helper.assertTrue(!com.simibubi.create.api.contraption.BlockMovementChecks.isMovementAllowed(state,level,pos),"Create allowed moving "+block);
+            if(create) helper.assertTrue(!CreateChecks.movable(state,level,pos),"Create allowed moving "+block);
             helper.assertTrue(state.getPistonPushReaction()==net.minecraft.world.level.material.PushReaction.BLOCK,"Vanilla piston allowed moving "+block);
         }
         helper.succeed();
+    }
+    /** The only class here that names a Create type; it loads only when the test above calls it, with Create loaded. */
+    private static final class CreateChecks {
+        static boolean movable(net.minecraft.world.level.block.state.BlockState state,net.minecraft.world.level.Level level,BlockPos pos) {
+            return com.simibubi.create.api.contraption.BlockMovementChecks.isMovementAllowed(state,level,pos);
+        }
     }
     @GameTest(template="empty",timeoutTicks=3000,batch="fluid-menu-unload")
     public static void unloadedMenuDoesNotReloadItsChunkAndReplacementInvalidatesIdentity(GameTestHelper helper) {

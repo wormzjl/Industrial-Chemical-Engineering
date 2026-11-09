@@ -11,8 +11,7 @@ import java.util.*;
 /** Immutable, bounded, bundled-only model registry. Selection never performs neural inference. */
 public final class V3NeuralRegistry implements V3NeuralInitializer {
     private static final int MAX_ENTRIES=16;
-    record Entry(int priority,V3AnchorTransformerInitializer model,String pipelineSha256,
-            boolean allowExtraZeroComponents,boolean allowMissingZeroComponents) {
+    record Entry(int priority,V3AnchorTransformerInitializer model,String pipelineSha256) {
         Entry { Objects.requireNonNull(model);Objects.requireNonNull(pipelineSha256); }
     }
     @FunctionalInterface interface Resources { InputStream open(String path) throws IOException; }
@@ -59,8 +58,7 @@ public final class V3NeuralRegistry implements V3NeuralInitializer {
                     if(!loaded.initializer().modelId().equals(row.get("modelId").getAsString())
                             ||!loaded.pipelineSha256().equals(row.get("pipelineSha256").getAsString()))
                         throw new IllegalArgumentException("Neural registry identity mismatch");
-                    entries.add(new Entry(priority,loaded.initializer(),loaded.pipelineSha256(),
-                            loaded.allowExtraZeroComponents(),loaded.allowMissingZeroComponents()));
+                    entries.add(new Entry(priority,loaded.initializer(),loaded.pipelineSha256()));
                 }
             }
             return new V3NeuralRegistry(entries);
@@ -75,29 +73,85 @@ public final class V3NeuralRegistry implements V3NeuralInitializer {
         return path;
     }
     @Override public String modelId(){return "bundled-registry";}
+    /**
+     * The first model, by priority, that a request binds (plan section 3.3 of batch 2026-11-04-refinery-compounds): its
+     * active compounds A (the non-zero feed, as {@link V3ActiveComponentBasis} takes them) lie in the model's list M, and
+     * the request package's values on A are the model's trained values within the tolerances of decision E9
+     * ({@link TrainedPhysics}, the sidecar's physics since O7 of batch 2026-11-04-open-thermo-data): no record id or revision
+     * takes part. The model then reads the request on M through the lens ({@link MaterialCatalog#inferenceView}): A's records
+     * from the request, the rest of M from the request package or the catalog's default records. The composition,
+     * topology and global-bound gates are the model's own ({@link V3AnchorTransformerInitializer#supported}).
+     *
+     * <p>Unknown compounds (U1, batch 2026-11-05-neural-retrain): an active compound off the model's list binds when the
+     * model's lump map names it and the off-axis share of the feed is at most the model's limit. Its flow is lumped into its
+     * axis compound before inference ({@link Lumping}); the physics and composition checks read only the known part.</p>
+     */
     @Override public V3NeuralInitializer bind(MaterialCatalog catalog,V3ColumnInput input) {
         Objects.requireNonNull(catalog);Objects.requireNonNull(input);
         var source=catalog.packages().get(input.packageId());
         if(source==null||!source.components().equals(input.componentBasis().componentIds()))return UNAVAILABLE;
-        // A package that admits crystals (P6) is outside every model's physics: classical initialization, never a
-        // fluid-only projection of it.
-        if(!source.crystals().isEmpty())return UNAVAILABLE;
+        double[] flows=input.feedComponentMolarFlowsMolPerSecond();
         for(var entry:entries) {
-            var model=entry.model();var axis=new MaterialAxis(model.componentIds());
-            var original=new MaterialAxis(source.components());
-            if(!entry.allowExtraZeroComponents()&&!axis.ids().containsAll(original.ids()))continue;
-            if(!entry.allowMissingZeroComponents()&&!original.ids().containsAll(axis.ids()))continue;
+            var model=entry.model();var ids=model.componentIds();
+            var lumping=Lumping.of(source.components(),flows,ids,model.lumpMap(),model.offAxisLimit());
+            if(lumping==null)continue;
             try {
-                double[] feed=axis.project(original,input.feedComponentMolarFlowsMolPerSecond());
-                var view=catalog.inferenceView(input.packageId(),axis.ids(),model.referencePackage(),entry.allowMissingZeroComponents());
-                var projected=source.components().equals(axis.ids())?input:project(input,axis.ids(),feed);
-                if(!MaterialRuntime.with(view,input.packageId(),()->model.supported(projected)))continue;
-                return new Bound(entry,catalog,view,input,projected);
+                var view=catalog.inferenceView(input.packageId(),lumping.known(),model.physics()).orElse(null);
+                if(view==null)continue;
+                var projected=source.components().equals(ids)?input:project(input,ids,lumping.lumped());
+                if(!MaterialRuntime.with(view,input.packageId(),()->model.supported(projected,lumping.knownFeed())))continue;
+                return new Bound(entry,catalog,view,input,projected,lumping);
             } catch(IllegalArgumentException incompatible) {
-                // Unsupported identity/physics is ordinary registry exclusion, never a zero default.
+                // Unsupported physics or input is ordinary registry exclusion, never a zero default.
             }
         }
         return UNAVAILABLE;
+    }
+
+    /**
+     * A request's feed on a model's axis (U1, NEURAL_RETRAIN_DATA.md section 5 of batch 2026-11-05-neural-retrain).
+     *
+     * @param target for each request compound, its axis slot: its own on the axis, its lump's for a lumped off-axis compound,
+     *               -1 for an off-axis compound with no feed
+     * @param lumped the feed on the axis, each off-axis flow added to its lump
+     * @param knownFeed the feed on the axis without the off-axis flows
+     * @param known the active compounds on the axis, the ones the physics check reads
+     */
+    record Lumping(int[] target,double[] flows,double[] lumped,double[] knownFeed,List<String> known) {
+        /** The lumping, or null when an active compound has no lump, the off-axis share exceeds {@code limit}, or nothing known is fed. */
+        static Lumping of(List<String> request,double[] flows,List<String> axis,Map<String,String> lumps,double limit) {
+            int[] target=new int[request.size()];double[] lumped=new double[axis.size()],known=new double[axis.size()];
+            var knownIds=new ArrayList<String>();double total=0,offAxis=0;
+            for(int k=0;k<target.length;k++) {
+                String id=request.get(k);int at=axis.indexOf(id);total+=flows[k];
+                if(at>=0) {
+                    known[at]=flows[k];if(flows[k]!=0.0)knownIds.add(id);
+                } else if(flows[k]!=0.0) {
+                    String lump=lumps.get(id);
+                    if(lump==null)return null;
+                    at=axis.indexOf(lump);offAxis+=flows[k];
+                }
+                target[k]=at;
+                if(at>=0)lumped[at]+=flows[k];
+            }
+            if(knownIds.isEmpty()||!(offAxis<=limit*total))return null;
+            return new Lumping(target,flows.clone(),lumped,known,List.copyOf(knownIds));
+        }
+
+        /**
+         * A predicted node's compound flows on the request's list: each compound of a lump takes the lump's flow times its
+         * share of the lump's feed, so every member keeps the lump's recovery at every node; a compound on the axis with no
+         * fed lump keeps the model's value, an off-axis compound with no feed is zero.
+         */
+        double[] delump(double[] predicted) {
+            double[] out=new double[target.length];
+            for(int k=0;k<out.length;k++) {
+                int at=target[k];
+                // A lump of one fed compound keeps the predicted value exactly.
+                if(at>=0)out[k]=lumped[at]>0&&lumped[at]!=flows[k]?predicted[at]*(flows[k]/lumped[at]):predicted[at];
+            }
+            return out;
+        }
     }
     @Override public Optional<V3NeuralSeed> predict(V3ColumnInput input,V3SolveControl control) {
         control.checkpoint();return bind(MaterialRuntime.current(),input).predict(input,control);
@@ -109,18 +163,17 @@ public final class V3NeuralRegistry implements V3NeuralInitializer {
                 input.columnDiameterMetres());
     }
     private record Bound(Entry entry,MaterialCatalog originalCatalog,MaterialCatalog view,
-            V3ColumnInput original,V3ColumnInput projected) implements V3NeuralInitializer {
+            V3ColumnInput original,V3ColumnInput projected,Lumping lumping) implements V3NeuralInitializer {
         @Override public String modelId(){return entry.model().modelId();}
         @Override public Optional<V3NeuralSeed> predict(V3ColumnInput input,V3SolveControl control) {
             control.checkpoint();
             if(!input.equals(original))return Optional.empty();
-            return MaterialRuntime.with(view,projected.packageId(),()->entry.model().predict(projected,control)).map(seed->{
+            return MaterialRuntime.with(view,projected.packageId(),
+                    ()->entry.model().predict(projected,lumping.knownFeed(),control)).map(seed->{
                 if(projected==original)return seed;
-                var target=new MaterialAxis(original.componentBasis().componentIds());
-                var source=new MaterialAxis(projected.componentBasis().componentIds());
                 double[][] liquid=seed.liquid(),vapor=seed.vapor();
                 for(int n=0;n<liquid.length;n++) {
-                    control.checkpoint();liquid[n]=target.project(source,liquid[n]);vapor[n]=target.project(source,vapor[n]);
+                    control.checkpoint();liquid[n]=lumping.delump(liquid[n]);vapor[n]=lumping.delump(vapor[n]);
                 }
                 return new V3NeuralSeed(original,originalCatalog.requirePackage(original.packageId()).scientificRevision(),
                         seed.branch(),liquid,vapor,seed.temperatures(),seed.freeWater(),seed.wetTrays());
@@ -132,28 +185,28 @@ public final class V3NeuralRegistry implements V3NeuralInitializer {
     static final class TransformerArtifact {
         private static final Set<String> PAYLOAD = Set.of("schemaVersion", "featureRevision", "modelType",
                 "anchorLayout", "baselineRevision", "components", "normalization", "weights");
-        private static final Set<String> SIDECAR = Set.of("schemaVersion", "payloadSha256", "modelId", "packageId",
-                "propertyRevision", "formulationRevisions",
-                "allowExtraZeroComponents", "allowMissingZeroComponents",
+        /**
+         * Sidecar schema 5 (batch 2026-11-05-neural-retrain): the trained physics as values, the E7 composition families, the
+         * off-axis share the model takes and the lump map of U1.
+         */
+        private static final Set<String> SIDECAR = Set.of("schemaVersion", "payloadSha256", "modelId", "physics", "formulationRevisions",
                 "branchesSeen", "presenceThreshold", "traceFloorFraction", "globalMin", "globalMax",
-                "designConstraints", "compositionEdges", "decoder", "candidateRule", "correctionRule");
-        record Loaded(V3AnchorTransformerInitializer initializer, String pipelineSha256, boolean allowExtraZeroComponents, boolean allowMissingZeroComponents) {}
+                "designConstraints", "families", "offAxisLimit", "lumpMap", "decoder", "candidateRule", "correctionRule");
+        record Loaded(V3AnchorTransformerInitializer initializer, String pipelineSha256) {}
         private TransformerArtifact() {}
 
         static Loaded read(InputStream payloadStream, InputStream sidecarStream) throws IOException {
             byte[] payload = bounded(payloadStream, 8 * 1024 * 1024);
             byte[] sidecar = bounded(sidecarStream, 256 * 1024);
             try {
-                JsonObject weights = object(payload, PAYLOAD, 1), policy = object(sidecar, SIDECAR, 2);
+                JsonObject weights = object(payload, PAYLOAD, 1), policy = sidecar(sidecar);
                 if (!sha256(payload).equals(policy.get("payloadSha256").getAsString()))
                     throw new IllegalArgumentException("Transformer payload SHA-256 mismatch");
                 if (!"ZERO_PHASE_FLOOR_10".equals(policy.get("decoder").getAsString())
                         || !"SINGLE".equals(policy.get("candidateRule").getAsString())
                         || !"PROGRESS".equals(policy.get("correctionRule").getAsString()))
                     throw new IllegalArgumentException("Unsupported transformer inference policy");
-                for(String key : Set.of("allowExtraZeroComponents", "allowMissingZeroComponents"))
-                    if(!policy.get(key).isJsonPrimitive() || !policy.getAsJsonPrimitive(key).isBoolean())
-                        throw new IllegalArgumentException("Expected boolean " + key);
+                if(!policy.get("physics").isJsonObject())throw new IllegalArgumentException("Expected the trained physics object");
                 JsonObject document = new JsonObject();
                 weights.entrySet().stream().filter(e -> !e.getKey().equals("schemaVersion"))
                         .forEach(e -> document.add(e.getKey(), e.getValue()));
@@ -163,12 +216,13 @@ public final class V3NeuralRegistry implements V3NeuralInitializer {
                 var model = V3AnchorTransformerInitializer.read(new ByteArrayInputStream(
                         document.toString().getBytes(StandardCharsets.UTF_8)),
                         V3FactorizedNeuralFeatures.DecodeOptions.zeroPhaseFloor(10));
-                return new Loaded(model, sha256((sha256(payload) + ":" + sha256(sidecar)).getBytes(StandardCharsets.US_ASCII)),
-                        policy.get("allowExtraZeroComponents").getAsBoolean(), policy.get("allowMissingZeroComponents").getAsBoolean());
-            } catch (com.google.gson.JsonParseException | IllegalStateException | NullPointerException invalid) {
+                return new Loaded(model, sha256((sha256(payload) + ":" + sha256(sidecar)).getBytes(StandardCharsets.US_ASCII)));
+            } catch (com.google.gson.JsonParseException | IllegalStateException | NullPointerException | UnsupportedOperationException invalid) {
                 throw new IllegalArgumentException("Invalid transformer payload or sidecar", invalid);
             }
         }
+
+        private static JsonObject sidecar(byte[] bytes) { return object(bytes, SIDECAR, 5); }
 
         private static JsonObject object(byte[] bytes, Set<String> fields, int schema) {
             var result = JsonParser.parseString(new String(bytes, StandardCharsets.UTF_8)).getAsJsonObject();

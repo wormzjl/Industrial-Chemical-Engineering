@@ -4,12 +4,14 @@ import com.wormzjl.icheme.client.gui.common.HeatDiagram;
 import com.wormzjl.icheme.client.gui.common.HeatFlowsheet;
 import com.wormzjl.icheme.client.gui.common.kit.Canvas;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
+import com.wormzjl.icheme.client.gui.common.kit.HeldDraws;
 import com.wormzjl.icheme.client.gui.common.kit.Measure;
 import com.wormzjl.icheme.client.gui.common.kit.PanelSkin;
 import com.wormzjl.icheme.client.gui.common.kit.Palette;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
+import com.wormzjl.icheme.client.gui.common.kit.Sprite;
 import com.wormzjl.icheme.client.gui.screens.inventory.FluidDeviceScreen.FluidGuiLayout;
 import com.wormzjl.icheme.runtime.fluid.FluidView;
 import com.wormzjl.icheme.runtime.fluid.HeatUnit;
@@ -64,6 +66,7 @@ public final class HeatDiagramRender {
         var B = ExchangerBlueprint.Lines.BYPASS;
         var R = ExchangerBlueprint.Lines.RATIO;
         var N = ExchangerBlueprint.Lines.NONE;
+        var F = ExchangerBlueprint.Lines.FEED;
         var cases = List.of(
                 new Case("exchanger-plain", "EXCHANGER", "TUBE", true, ExchangerBlueprint.Design.NONE, HeatUnit.Mode.OFF, true, "bypass", 0.25, null, true),
                 new Case("exchanger-tube-bypass", "EXCHANGER", "TUBE", true, new ExchangerBlueprint.Design(B, N), HeatUnit.Mode.OUTLET_TEMPERATURE, true, "bypass", 0.3, lines("CHECKED", 1), true),
@@ -71,6 +74,8 @@ public final class HeatDiagramRender {
                 new Case("exchanger-both-bypass", "EXCHANGER", "SHELL", true, new ExchangerBlueprint.Design(B, B), HeatUnit.Mode.DUTY, true, "bypass", 0.1, lines("UNMETERED", 1), true),
                 new Case("exchanger-ratio", "EXCHANGER", "TUBE", true, new ExchangerBlueprint.Design(R, R), HeatUnit.Mode.RATIO, true, "feed_valve", null, lines("COMPLETE", 0), true),
                 new Case("exchanger-bypass-ratio", "EXCHANGER", "SHELL", true, new ExchangerBlueprint.Design(R, B), HeatUnit.Mode.OUTLET_TEMPERATURE, true, "bypass", 0.2, lines("NOT_VALIDATED", 0), true),
+                new Case("exchanger-feed", "EXCHANGER", "TUBE", true, new ExchangerBlueprint.Design(F, N), HeatUnit.Mode.COLUMN, true, "feed_valve", null, lines("COMPLETE", 0), true),
+                new Case("exchanger-feed-both", "EXCHANGER", "SHELL", true, new ExchangerBlueprint.Design(F, F), HeatUnit.Mode.COLUMN, true, "feed_valve", null, lines("CHECKED", 0), false),
                 new Case("air-cooler", "AIR_COOLER", "PROCESS", false, ExchangerBlueprint.Design.NONE, HeatUnit.Mode.OFF, true, "fans", 1.0, null, true),
                 new Case("air-cooler-reader", "AIR_COOLER", "PROCESS", false, ExchangerBlueprint.Design.NONE, HeatUnit.Mode.OUTLET_TEMPERATURE, true, "fans", 0.6, null, false),
                 new Case("fired-heater", "FIRED_HEATER", "RADIANT", true, ExchangerBlueprint.Design.NONE, HeatUnit.Mode.OFF, true, "burners", 0.7, null, true),
@@ -86,7 +91,7 @@ public final class HeatDiagramRender {
         var drawings = new ArrayList<BufferedImage>();
         var names = new ArrayList<String>();
         for (var c : cases)
-            if (List.of("exchanger-both-bypass", "air-cooler", "fired-heater", "kettle").contains(c.file())) {
+            if (List.of("exchanger-both-bypass", "exchanger-feed-both", "air-cooler", "fired-heater", "kettle").contains(c.file())) {
                 drawings.add(drawing(c));
                 names.add(c.file());
             }
@@ -106,6 +111,7 @@ public final class HeatDiagramRender {
         var sheet = new HeatFlowsheet(HeatDiagram.of(unit, side, c.design()), HeatDiagram.roles(unit, side));
         sheet.fit(pad, pad, HeatDiagram.WIDTH, HeatDiagram.HEIGHT);
         sheet.draw(canvas, data());
+        canvas.count(c.file() + " drawing");
         g.dispose();
         return image;
     }
@@ -291,6 +297,57 @@ public final class HeatDiagramRender {
         private final FontMetrics metrics;
         private final Measure measure;
 
+        /** The graphics under this canvas: the simulator sheets paint their vector symbols on it. */
+        Graphics2D graphics() {
+            return g;
+        }
+
+        private static final Map<String, BufferedImage> ATLASES = new HashMap<>(), TINTED = new HashMap<>();
+
+        /** The PNG the game's texture names, from the sources, white masks in alpha. */
+        private static BufferedImage atlas(String texture) {
+            return ATLASES.computeIfAbsent(texture, t -> {
+                try {
+                    var at = t.split(":");
+                    return ImageIO.read(Path.of("src/main/resources/assets", at[0], at[1]).toFile());
+                } catch (IOException missing) {
+                    throw new java.io.UncheckedIOException(missing);
+                }
+            });
+        }
+
+        /** The sprite's cell, tinted as the game's {@code setColor} does. */
+        private static BufferedImage tinted(Sprite s, int argb) {
+            return TINTED.computeIfAbsent(s + " " + argb, k -> {
+                var out = new BufferedImage(s.w(), s.h(), BufferedImage.TYPE_INT_ARGB);
+                var atlas = atlas(s.texture());
+                int a = argb >>> 24;
+                for (int y = 0; y < s.h(); y++)
+                    for (int x = 0; x < s.w(); x++) {
+                        int mask = atlas.getRGB(s.u() + x, s.v() + y) >>> 24;
+                        out.setRGB(x, y, (mask * a / 255) << 24 | argb & 0xFFFFFF);
+                    }
+                return out;
+            });
+        }
+
+        @Override
+        public void sprite(Sprite s, float x0, float y0, float x1, float y1, int argb) {
+            sprites++;
+            int before = held.draws();
+            held.sprite(x0, y0, x1, y1, () -> blit(s, x0, y0, x1, y1, argb));
+            site("sprite", before);
+        }
+
+        private void blit(Sprite s, float x0, float y0, float x1, float y1, int argb) {
+            var hint = g.getRenderingHint(RenderingHints.KEY_INTERPOLATION);
+            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            var at = java.awt.geom.AffineTransform.getTranslateInstance(x0, y0);
+            at.scale((x1 - x0) / s.w(), (y1 - y0) / s.h());
+            g.drawImage(tinted(s, argb), at, null);
+            if (hint != null) g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, hint);
+        }
+
         Java2dCanvas(Graphics2D g) {
             this.g = g;
             g.setFont(sans);
@@ -303,8 +360,57 @@ public final class HeatDiagramRender {
             return measure;
         }
 
+        /** {@code -Dcount}: print each page's draw calls as the game makes them; {@code -Dcount=sites} also by the drawing site that made each. */
+        static final boolean COUNT = System.getProperty("count") != null && !"false".equals(System.getProperty("count")), SITES = "sites".equals(System.getProperty("count"));
+        /** The page's draw calls by kind and site: the first caller outside the canvas. */
+        private final Map<String, int[]> sites = new HashMap<>();
+
+        /** Books the draw calls made since {@code before} to the site that called. */
+        private void site(String kind, int before) {
+            if (!SITES || held.draws() == before) return;
+            String at = StackWalker.getInstance().walk(s -> s.map(f -> f.getClassName().replaceFirst(".*[.]", "") + "." + f.getMethodName())
+                    .filter(n -> !n.startsWith("HeatDiagramRender$Java2dCanvas") && !n.startsWith("Canvas.")).findFirst().orElse("?"));
+            sites.computeIfAbsent(kind + " " + at, k -> new int[1])[0] += held.draws() - before;
+        }
+
+        /**
+         * What a batch holds back and the draw calls the game makes for what this canvas drew, as {@code GuiCanvas} does
+         * ({@link HeldDraws}): the texts and sprites are drawn in the order the game draws them, so a render shows its result.
+         */
+        private final HeldDraws held = new HeldDraws();
+        private int fills, texts, sprites;
+
+        /** This canvas's draw calls so far, with what made them. */
+        String draws() {
+            return String.format("%5d draws: %d fill runs, %d text runs, %d sprites (%d fills, %d texts)", held.draws(), held.fillDraws(), held.textDraws(), held.spriteDraws(), fills, texts);
+        }
+
+        /** Prints this canvas's draw calls for page {@code name} when {@code -Dcount} is set. */
+        void count(String name) {
+            if (COUNT) System.out.printf("DRAWS %-60s %s%n", name, draws());
+            if (SITES) sites.entrySet().stream().sorted((a, b) -> b.getValue()[0] - a.getValue()[0]).forEach(e -> System.out.printf("SITE  %-60s %5d %s%n", name, e.getValue()[0], e.getKey()));
+            sites.clear();
+        }
+
+        @Override
+        public void batch(Runnable body) {
+            held.begin(() -> {
+            });
+            try {
+                body.run();
+            } finally {
+                int before = held.draws();
+                held.end();
+                site("end", before);
+            }
+        }
+
         @Override
         public void fill(int x0, int y0, int x1, int y1, int argb) {
+            fills++;
+            int before = held.draws();
+            held.fill(Math.min(x0, x1), Math.min(y0, y1), Math.max(x0, x1), Math.max(y0, y1));
+            site("fill", before);
             if (x1 <= x0 || y1 <= y0) return;
             g.setColor(new Color(argb, true));
             g.fillRect(x0, y0, x1 - x0, y1 - y0);
@@ -317,6 +423,13 @@ public final class HeatDiagramRender {
 
         @Override
         public void text(String text, float x, float y, float scale, int argb) {
+            texts++;
+            int before = held.draws();
+            held.text(x, y, x + measure.width(text) * scale, y + measure.height() * scale, () -> draw(text, x, y, scale, argb));
+            site("text", before);
+        }
+
+        private void draw(String text, float x, float y, float scale, int argb) {
             if (font != null) {
                 font.draw(g, text, x, y, scale, new Color(argb, true));
                 return;
@@ -331,11 +444,17 @@ public final class HeatDiagramRender {
 
         @Override
         public void clip(Rect area) {
+            int before = held.draws();
+            held.clip();
+            site("clip", before);
             g.setClip(area.x(), area.y(), area.w(), area.h());
         }
 
         @Override
         public void unclip() {
+            int before = held.draws();
+            held.clip();
+            site("clip", before);
             g.setClip(null);
         }
     }
@@ -464,6 +583,7 @@ public final class HeatDiagramRender {
         view.drawBar(canvas, skin);
         if (!scrolled && skin == PanelSkin.LIGHT)
             System.out.printf(Locale.ROOT, "%-24s columns %3d px in a %d px view%s%n", c.file(), tall, controlBottom - controlTop, cutTexts(columns, m));
+        canvas.count(c.file() + " " + (skin == PanelSkin.LIGHT ? "light" : "dark") + (scrolled ? " end" : ""));
         g.dispose();
         return image;
     }

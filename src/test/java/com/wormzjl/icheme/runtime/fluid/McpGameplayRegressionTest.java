@@ -48,10 +48,13 @@ class McpGameplayRegressionTest {
             case "valve"->new FlowControl.PressureValve(p.control().target());default->throw new IllegalArgumentException("Unknown saved control");
         },0,null,PassiveNetwork.PhasePort.BULK,PassiveNetwork.PhasePort.BULK)).toList());
     }
+    /** The network model on the compound list the captures were saved on (the network package of 2026-09-16, {@code icheme:tjl20_methane_nitrogen}),
+     * as a saved island runs on its own list since batch 2026-11-04-refinery-compounds (V2). */
+    private static FluidThermodynamics archivedModel(){return FluidTestSupport.networkModel().on(MaterialCatalog.bundled().requirePackage("icheme:tjl20_methane_nitrogen").components());}
     /** The tank holds the capture's nitrogen trace and the water that fills its 1 m3 at the captured 298.16 K and
      * 150.66 kPa (997.06 kg, D27); 31.1 kg/s flows through it from the 200 kPa generator to the 1 atm void. */
     @Test void clampedDrainContinuesAfterTheTankBecomesAlmostLiquidFull() throws Exception {
-        var model=FluidTestSupport.networkModel();
+        var model=archivedModel();
         var graph=archivedGraph(archivedIsland("/fluid/mcp-clamped-liquid-full-checkpoint.json"),model);
         var result=new PassiveIntervalSolver(model).solve(graph,1,PassiveIntervalSolver.Settings.defaults(),()->{});
         assertEquals(1,result.advancedSeconds());assertTrue(result.graph().reservoirs().getFirst().inventory().moles()[com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN]>0);
@@ -60,7 +63,7 @@ class McpGameplayRegressionTest {
             var actual=result.graph().reservoirs().get(i);var expected=refined.graph().reservoirs().get(i);
             assertEquals(expected.state().pressure(),actual.state().pressure(),1+.001*expected.state().pressure());
             assertEquals(expected.state().temperature(),actual.state().temperature(),.1);
-            assertArrayEquals(expected.inventory().moles(),actual.inventory().moles(),1e-8*Math.max(1,expected.inventory().moles()[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK]));
+            assertArrayEquals(expected.inventory().moles(),actual.inventory().moles(),1e-8*Math.max(1,expected.inventory().moles()[model.componentCount()-1]));
         }
         for(int i=0;i<result.averageMassFlows().length;i++)assertEquals(refined.averageMassFlows()[i],result.averageMassFlows()[i],1e-10+.002*Math.abs(refined.averageMassFlows()[i]));
         // Continue past the first replay interval: the in-game failure moved a few seconds
@@ -69,18 +72,18 @@ class McpGameplayRegressionTest {
         assertTrue(continuing.reservoirs().getFirst().inventory().moles()[com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN]>0);
     }
     @Test void savedSonicRefusalAdvancesWithVelocityClampingAndKeepsCanonicalBalances() throws Exception {
-        var model=FluidTestSupport.networkModel();
+        var model=archivedModel();
         var saved=archivedIsland("/fluid/mcp-held-drain-checkpoint.json");var graph=archivedGraph(saved,model);
         assertTrue(saved.get("status").getAsString().contains("Unsupported sonic flow"));var result=new PassiveIntervalSolver(model).solve(graph,5,PassiveIntervalSolver.Settings.defaults(),()->{});
         assertEquals(5,result.advancedSeconds());assertTrue(Arrays.stream(result.averageMassFlows()).anyMatch(q->Math.abs(q)>1e-6));
-        double[] before=new double[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1],after=new double[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1],external=new double[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1];double beforeEnergy=0,afterEnergy=0,externalEnergy=0;
-        for(var boundary:result.boundaries()){var n=boundary.moles();for(int c=0;c<com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1;c++)external[c]+=n[c];externalEnergy+=boundary.totalEnergyJoule();}
+        double[] before=new double[model.componentCount()],after=new double[model.componentCount()],external=new double[model.componentCount()];double beforeEnergy=0,afterEnergy=0,externalEnergy=0;
+        for(var boundary:result.boundaries()){var n=boundary.moles();for(int c=0;c<model.componentCount();c++)external[c]+=n[c];externalEnergy+=boundary.totalEnergyJoule();}
         for(int i=0;i<graph.reservoirs().size();i++)if(graph.reservoirs().get(i).kind()==PassiveNetwork.NodeKind.RESERVOIR) {
             var a=graph.reservoirs().get(i);var b=result.graph().reservoirs().get(i);var na=a.inventory().moles();var nb=b.inventory().moles();
-            for(int c=0;c<com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1;c++){before[c]+=na[c];after[c]+=nb[c];}
+            for(int c=0;c<model.componentCount();c++){before[c]+=na[c];after[c]+=nb[c];}
             beforeEnergy+=a.inventory().internalEnergy();afterEnergy+=b.inventory().internalEnergy();
         }
-        for(int c=0;c<com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1;c++)assertEquals(before[c]+external[c],after[c],1e-10+1e-8*Math.max(before[c],after[c]));
+        for(int c=0;c<model.componentCount();c++)assertEquals(before[c]+external[c],after[c],1e-10+1e-8*Math.max(before[c],after[c]));
         assertEquals(beforeEnergy+externalEnergy+result.pumpWorkJoule(),afterEnergy,1e-4+1e-6*(Math.abs(beforeEnergy)+Math.abs(externalEnergy)));
     }
     @Test void belowSeaLevelNitrogenTankAcceptsWaterAfterAnIdlePeriodAndPressureEdit() {

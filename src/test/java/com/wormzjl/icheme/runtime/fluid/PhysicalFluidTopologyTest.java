@@ -576,4 +576,65 @@ class PhysicalFluidTopologyTest {
             assertEquals(laid,FluidFacts.events(bytes,0,bytes.length).getFirst().edits().getFirst().replacement());
         }
     }
+
+    // ---------------- drawn joints (batch 2026-11-09-drawn-connections) ----------------
+    /*
+     * A block draws joined the faces the network joins it through, as built (PhysicalFluidTopology.builtFaces on the
+     * registry, the drawing's only rule): the cases below are the compile's own, face by face.
+     */
+    private static final int FACE_W=1<<WEST.ordinal(),FACE_E=1<<EAST.ordinal(),FACE_N=1<<NORTH.ordinal();
+    private static int drawn(List<PhysicalFluidTopology.Device> devices,long id) {
+        var at=new HashMap<PhysicalFluidTopology.Position,PhysicalFluidTopology.Device>();for(var d:devices)for(var cell:d.cells())at.put(cell,d);
+        return PhysicalFluidTopology.builtFaces(at::get,devices.stream().filter(d->d.id()==id).findFirst().orElseThrow());
+    }
+
+    /** As {@link #equipmentSideBySideExchangesNothing}: a filter against a tank draws no flange there, the pipe after it both of its own. */
+    @Test void equipmentSideBySideDrawsNoJoint() {
+        var line=List.of(at(1,0,Kind.RESERVOIR,EAST),at(2,1,Kind.FILTER,EAST),at(3,2,Kind.PIPE,EAST),at(4,3,Kind.VOID,EAST));
+        assertEquals(0,drawn(line,1),"the tank draws no joint to the filter");
+        assertEquals(FACE_E,drawn(line,2),"the filter draws only its joint to the pipe");
+        assertEquals(FACE_W|FACE_E,drawn(line,3));
+        assertEquals(FACE_W,drawn(line,4));
+        assertTrue(islandOf(compile("RFPV"),1).isEmpty(),"and the network joins the tank to nothing");
+    }
+
+    /**
+     * An in-line machine (the item's install since 2260953dd) is a pump to the network, so it draws as one: along its axis
+     * only, and a pipe placed beside it draws no branch into it, as the network makes none.
+     */
+    @Test void anInLineMachineDrawsAsAPumpAlongItsAxisOnly() {
+        for(boolean liquid:new boolean[]{true,false}) {
+            var machine=new PhysicalFluidTopology.Device(2,new PhysicalFluidTopology.Position("minecraft:overworld",1,0,0),Kind.PIPE,EAST,new PipeResistance.Geometry(1,.05,.000045,0),
+                    com.wormzjl.icheme.science.machine.InlineMachines.design(.05,liquid));
+            var mover=liquid?com.wormzjl.icheme.world.level.block.FluidDeviceBlock.InlineMover.PUMP:com.wormzjl.icheme.world.level.block.FluidDeviceBlock.InlineMover.COMPRESSOR;
+            assertEquals(mover,com.wormzjl.icheme.world.level.block.FluidDeviceBlock.InlineMover.of(machine.hydraulicKind()),"the block's fitting is the engine's mover");
+            var devices=List.of(tank(5,-1,0),pipe(1,0,0,PhysicalFluidTopology.ALL_FACES),machine,pipe(3,2,0,PhysicalFluidTopology.ALL_FACES),tank(6,3,0),pipe(4,1,1,PhysicalFluidTopology.ALL_FACES));
+            assertEquals(FACE_W|FACE_E,drawn(devices,2),"along its axis only");
+            assertEquals(0,drawn(devices,4)&FACE_N,"the pipe beside it draws no branch into it");
+            var compiled=PhysicalFluidTopology.compile(devices,Map.of(5L,reservoir(5),6L,reservoir(6)));
+            assertTrue(compiled.islands().stream().noneMatch(i->i.physicalIds().contains(2L)&&i.physicalIds().contains(4L)),"and the network joins them nowhere");
+        }
+    }
+
+    /** Lanes draw joined where their saved points meet, as the network joins them; a point saved elsewhere draws apart. */
+    @Test void lanesDrawJoinedWhereTheirSavedPointsMeet() {
+        var met=List.of(tank(1,-1,0),pipe(10,0,0,ALONG_X),lane(11,1,0,2,1,ALONG_X),lane(12,2,0,2,1,ALONG_X),pipe(13,3,0,ALONG_X),tank(2,4,0));
+        assertEquals(FACE_W|FACE_E,drawn(met,11));assertEquals(FACE_W|FACE_E,drawn(met,12));
+        assertEquals(FACE_W|FACE_E,drawn(met,10),"a transition pipe draws its joint into the rack");
+        long moved=(long)99<<10*WEST.ordinal()|(long)(2*8+1)<<10*EAST.ordinal();
+        var apart=List.of(tank(1,-1,0),pipe(10,0,0,ALONG_X),lane(11,1,0,2,1,ALONG_X),lane(12,2,0,2,1,ALONG_X,moved),pipe(13,3,0,ALONG_X),tank(2,4,0));
+        assertEquals(FACE_W,drawn(apart,11),"no joint drawn where the saved points differ");
+        assertEquals(FACE_E,drawn(apart,12));
+        assertEquals(2,islands(apart,1,2),"as the network keeps the lanes apart");
+    }
+
+    /** Mechanical joints: a closed valve and a generator switched off stay bolted on, though no flow passes. */
+    @Test void aClosedValveAndAGeneratorSwitchedOffStayDrawnJoined() {
+        var off=new PhysicalFluidTopology.Device(1,new PhysicalFluidTopology.Position("minecraft:overworld",0,0,0),Kind.GENERATOR,EAST,new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Passive(),List.of(),false);
+        var closed=new PhysicalFluidTopology.Device(2,new PhysicalFluidTopology.Position("minecraft:overworld",1,0,0),Kind.PIPE,EAST,new PipeResistance.Geometry(1,.05,.000045,0),
+                new FlowControl.Passive(),List.of(),true,PhysicalFluidTopology.Cutoff.CLOSED,false);
+        var devices=List.of(off,closed,pipe(3,2,0,PhysicalFluidTopology.ALL_FACES));
+        assertEquals(FACE_E,drawn(devices,1),"a generator switched off");
+        assertEquals(FACE_W|FACE_E,drawn(devices,2),"a closed valve");
+    }
 }

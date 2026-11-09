@@ -46,11 +46,11 @@ class SpineNetworkPathTest {
         return ORACLES.computeIfAbsent(SPECIES[species], HelmholtzFluid::load);
     }
 
-    static HydrocarbonModel pilot() { return FluidTestSupport.model(MaterialCatalog.bundled(), PILOT).hydrocarbon; }
+    static HydrocarbonModel pilot() { return FluidTestSupport.model(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PILOT).hydrocarbon; }
 
     @Test
     void thePilotBuildsANetworkModelOnTheSpinePathWithItsAnchorsAndDatum() {
-        var catalog = MaterialCatalog.bundled();
+        var catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
         var model = FluidTestSupport.model(catalog, PILOT);
         var hydrocarbon = model.hydrocarbon;
         var eos = hydrocarbon.translated();
@@ -109,7 +109,7 @@ class SpineNetworkPathTest {
      */
     @Test
     void pureAndMixedStatesEvaluateAcrossTheEnvelope() {
-        var model = FluidTestSupport.model(MaterialCatalog.bundled(), PILOT);
+        var model = FluidTestSupport.model(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PILOT);
         double[][] feeds = {
                 {1, 0, 0, 0, 0}, {0, 1, 0, 0, 0}, {0, 0, 1, 0, 0}, {0, 0, 0, 1, 0},
                 {0.5, 0.5, 0, 0, 0}, {0.1, 0.7, 0.2, 0, 0}, {0, 0.8, 0, 0.2, 0}, {0.2, 0, 0, 0.8, 0}, {0, 0, 0.6, 0.4, 0},
@@ -435,7 +435,7 @@ class SpineNetworkPathTest {
 
     @Test
     void theNetworkRevisionIsTheThermodynamicIdentityAndMovesWithTheSpineAndTheInteractions() {
-        var catalog = MaterialCatalog.bundled();
+        var catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
         var model = pilot();
         // The network's revision is its package's identity on the network family (main keeps the revision, not the identity).
         var identity = ThermoIdentity.of(catalog, PILOT, HydrocarbonModel.NETWORK_FAMILY, catalog.spineRevision(PILOT),
@@ -499,7 +499,7 @@ class SpineNetworkPathTest {
         assertEquals("the V3 column", refused.consumer());
         assertTrue(refused.getMessage().contains("reference spine"), refused.getMessage());
         // A column package is unaffected.
-        var column = com.wormzjl.icheme.science.material.MaterialRuntime.with(MaterialCatalog.bundled(), "icheme:tjl20_methane",
+        var column = com.wormzjl.icheme.science.material.MaterialRuntime.with(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), "icheme:tjl20_methane",
                 () -> com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo.fromRegisteredPackage("icheme:tjl20_methane"));
         assertEquals("icheme:tjl20_methane", column.packageId());
     }

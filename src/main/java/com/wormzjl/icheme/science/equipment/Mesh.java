@@ -3,6 +3,7 @@ package com.wormzjl.icheme.science.equipment;
 import com.wormzjl.icheme.science.math.DeterministicMath;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -29,7 +30,7 @@ public final class Mesh {
         SHELL(4, Paint.BODY), HEAD(4, Paint.BODY), SUPPORT(2, Paint.STRUCTURE), PIPE(1, -1), FLANGE(1, -1), OPENING(1, -1), CLADDING(2, Paint.BODY),
         GRATING(1, -1), HANDRAIL(1, -1), STEELWORK(1, Paint.STRUCTURE), MACHINE(1, Paint.BODY), MOTOR(1, -1), ACTUATOR(1, -1), FEED(1, -1), DRAIN(1, -1),
         /** A flange's nuts and stud ends ({@link #bolts}). */
-        BOLT(1, -1),
+        BOLT(1, -1), BOLT_FACE(1, -1),
         /**
          * An air cooler's Blender parts (their own texture coordinates) and sprites: fan rotor, fan ring and guard, motor;
          * fins (the bundle, seen through the fan rings from below), headers, the plenum casing's sheet.
@@ -43,7 +44,32 @@ public final class Mesh {
         /** Neutral, unpainted level-instrument scale. */
         GAUGE_SCALE(1, -1),
         /** A tower's baked sprites, each a whole panel: casing, louvers, fan stack, deck, the spray seen through a fan, a natural shell's concrete. */
-        TOWER_PANEL(4, Paint.BODY), TOWER_LOUVER(4, Paint.BODY), TOWER_STACK(2, Paint.BODY), TOWER_DECK(4, -1), TOWER_DRIFT(4, -1), TOWER_CONCRETE(16, -1), TOWER_FILL(64, -1), TOWER_FLOOR(80, -1);
+        TOWER_PANEL(4, Paint.BODY), TOWER_LOUVER(4, Paint.BODY), TOWER_STACK(2, Paint.BODY), TOWER_DECK(4, -1), TOWER_DRIFT(4, -1), TOWER_CONCRETE(16, -1), TOWER_FILL(64, -1), TOWER_FLOOR(80, -1),
+        /**
+         * A pump's baked sprites (batch 2026-11-03-rotating-machinery, {@code tools/pump-sprites}): its coated cast surface
+         * (tiled by two metres, so its tiles meet at block faces), its volute's crown, its finned bearing housing, a bolted
+         * joint's rim and face, its baseplate's drain-rim deck and channel sides. All but the casting are stretched once
+         * over their part ({@link Mesh#band}, {@link Mesh#disc}).
+         */
+        PUMP_CASTING(2, Paint.BODY), PUMP_VOLUTE(.5, Paint.BODY), PUMP_FINS(1, Paint.BODY), PUMP_JOINT(1, Paint.BODY), PUMP_DISC(1, Paint.BODY), PUMP_COVER(1, Paint.BODY),
+        PUMP_BASE(1, Paint.STRUCTURE), PUMP_CHANNEL(1, Paint.STRUCTURE),
+        /**
+         * A coupling guard's framed expanded-metal panel in safety yellow, one sprite a panel ({@code ProcessUnit.guard}); its
+         * own sprite, so {@link #GUARD}'s plain yellow (valve handles, labels, derricks) stays as it is.
+         */
+        COUPLING_GUARD(1, -1),
+        /** Bright machined steel: every turning shaft and coupling hub, as the shaft block draws its shaft ({@code shaft_steel}). */
+        SHAFT(1, -1),
+        /**
+         * A TEFC motor's baked sprites, neutral greys its paint tints (owner request 2026-11-04): its finned frame and nameplate
+         * stretched over its body, its end shield's face, a large motor's bolted panels (tiled by the metre), the plain
+         * cast parts (cowl, terminal box, feet, caps).
+         */
+        MOTOR_FRAME(1, Paint.BODY), MOTOR_SHIELD(1, Paint.BODY), MOTOR_PANEL(1, Paint.BODY), GENERATOR_PANEL(1, Paint.BODY), MOTOR_PLAIN(1, Paint.BODY),
+        /** Fixed shaft role markings, independent of the equipment's paint. */
+        SHAFT_INPUT(1, -1), SHAFT_OUTPUT(1, -1),
+        /** Equipment service cabinets and the protected, equipment-owned instrument raceway finish. */
+        SERVICE_CASE(1,Paint.BODY), SERVICE_COVER(1,Paint.BODY), INSTRUMENT_STEEL(1,-1), INSTRUMENT_CONDUIT(1,-1);
 
         private final double period;
         private final int channel;
@@ -336,8 +362,11 @@ public final class Mesh {
     private Transform transform = Transform.IDENTITY;
     private int part = -1;
 
-    public Mesh() {
-    }
+    private final RenderDetail detail;
+
+    public Mesh() { this(RenderDetail.NORMAL); }
+    public Mesh(RenderDetail detail) { this.detail = java.util.Objects.requireNonNull(detail); }
+    RenderDetail detail() { return detail; }
 
     /** The transform applied to everything added from now on. */
     public void transform(Transform transform) {
@@ -421,6 +450,13 @@ public final class Mesh {
         }
     }
 
+    /** Imports the existing polygon's UV frame and normals without inventing another mesh convention. */
+    void include(Polygon polygon) {
+        var points=new double[polygon.size()][3];var normals=new double[polygon.size()][3];var uv=new double[polygon.size()][2];
+        for(int i=0;i<points.length;i++){System.arraycopy(polygon.positions(),3*i,points[i],0,3);System.arraycopy(polygon.normals(),3*i,normals[i],0,3);System.arraycopy(polygon.uvs(),2*i,uv[i],0,2);}
+        imported(points,Arrays.copyOf(points,3),Arrays.copyOf(uv,3),Arrays.copyOf(normals,3),polygon.material());
+    }
+
     /** {min, max} corners of every facet, {x0, y0, z0, x1, y1, z1}; null when there is none. */
     double[] bounds() {
         if (facets.isEmpty()) return null;
@@ -475,6 +511,7 @@ public final class Mesh {
 
     /** The side of a frustum from radius {@code r0} at {@code z0} to {@code r1} at {@code z1}, lit as a cone. */
     void frustum(Frame f, double r0, double r1, double z0, double z1, int n, Material material) {
+        n = detail.sides(n);
         if (z1 < z0) {
             frustum(f, r1, r0, z1, z0, n, material);
             return;
@@ -502,8 +539,51 @@ public final class Mesh {
         }
     }
 
+    /**
+     * The side of a frustum as {@link #frustum} draws it from {@code z0} to {@code z1} (z0 &lt; z1), its sprite stretched
+     * once round it and once along it (a pump's finned bearing housing, a bolted joint's rim): a baked sprite of the whole
+     * part, never cut where a tiled one would cross a tile.
+     */
+    void band(Frame f, double r0, double r1, double z0, double z1, int n, Material material) {
+        n = detail.sides(n);
+        double chord = 2 * Math.max(r0, r1) * DeterministicMath.sin(Math.PI / n), slope = (r0 - r1) / Math.max(EPS, z1 - z0);
+        Shading shading = r0 == r1 ? new Radial(f.origin, f.axis) : new Cone(f.origin, f.axis, slope);
+        var along = new Uv(f.along(z0), f.axis, 0, z1 - z0);
+        double rWide = Math.max(r0, r1), zWide = r0 >= r1 ? z0 : z1;
+        for (int i = 0; i < n; i++) {
+            double a0 = 2 * Math.PI * i / n, a1 = 2 * Math.PI * (i + 1) / n;
+            var w0 = f.at(a0, rWide, zWide);
+            var around = new Uv(w0, unit(sub(f.at(a1, rWide, zWide), w0)), i * chord, n * chord);
+            add(List.of(f.at(a0, r0, z0), f.at(a1, r0, z0), f.at(a1, r1, z1), f.at(a0, r1, z1)), f.along((z0 + z1) / 2), shading, material, around, along);
+        }
+    }
+
+    /**
+     * A flat disc of {@code n} corners and radius {@code r} at frame station {@code z}, facing along the axis
+     * ({@code sign} +1) or against it, its sprite stretched once across it (a bolted cover, a flange's back): one polygon.
+     */
+    void disc(Frame f, double r, double z, int n, int sign, Material material) {
+        n = detail.sides(n);
+        if (material == Material.PUMP_DISC && detail == RenderDetail.NORMAL) {
+            // Keep the previous cover envelope: relief sits in a shallow recess, its bolt ends on the old face.
+            double recess = Math.min(.025, .05 * r);
+            disc(f, r, z - sign * recess, n, sign, Material.PUMP_COVER);
+            bore(f, .96 * r, Math.min(z, z - sign * recess), Math.max(z, z - sign * recess), n, Material.PUMP_CASTING);
+            annulus(f, .96 * r, r, z, n, sign, Material.PUMP_CASTING);
+            var outward = new double[]{sign * f.axis[0], sign * f.axis[1], sign * f.axis[2]};
+            for (int k = 0; k < 12; k++) cylinder(new Frame(f.at(2 * Math.PI * (k + .5) / 12, .82 * r, z - sign * recess), outward, f.ref), .075 * r, 0, recess, 6, Material.BOLT);
+            return;
+        }
+        var polygon = new ArrayList<double[]>(n);
+        for (int i = 0; i < n; i++) polygon.add(f.at(2 * Math.PI * i / n, r, z));
+        var centre = f.along(z);
+        add(polygon, new double[]{centre[0] - sign * f.axis[0], centre[1] - sign * f.axis[1], centre[2] - sign * f.axis[2]}, FLAT, material,
+                new Uv(centre, f.ref, r, 2 * r), new Uv(centre, f.side(), r, 2 * r));
+    }
+
     /** The inside of a tube (seen from its axis), radius {@code r}, from {@code z0} to {@code z1}. */
     void bore(Frame f, double r, double z0, double z1, int n, Material material) {
+        n = detail.sides(n);
         double chord = 2 * r * DeterministicMath.sin(Math.PI / n);
         var along = new Uv(f.along(z0), f.axis, 0, material.period());
         for (int i = 0; i < n; i++) {
@@ -518,6 +598,7 @@ public final class Mesh {
 
     /** A flat ring from {@code rIn} to {@code rOut} at {@code z}, facing along the axis ({@code sign} +1) or against it (-1). */
     void annulus(Frame f, double rIn, double rOut, double z, int n, double sign, Material material) {
+        n = detail.sides(n);
         var outward = new double[]{sign * f.axis[0], sign * f.axis[1], sign * f.axis[2]};
         if (rIn <= EPS) {
             var polygon = new ArrayList<double[]>(n);
@@ -536,7 +617,7 @@ public final class Mesh {
 
     /**
      * The nuts on one side of a bolted flange (owner request 2026-10-16: "add bolts to all flanges") on frame {@code f}:
-     * the class 150 bolting of a line of outside diameter {@code od} ({@link PipeSizes#bolts}), each nut 1.6 bolt diameters
+     * the shared visible count of a line of outside diameter {@code od} ({@link PipeSizes#drawnBolts}), each nut 1.6 bolt diameters
      * across its flats and, with its stud's end, 1.2 d high, a closed hexagonal prism standing on the flange's surface at
      * {@code z} towards {@code sign} along the axis. They sit on a bolt circle half way from {@code inner} (the hub, the
      * neck or a cover's edge) to {@code outer} (the rim), straddling the frame's reference direction as flange bolt holes
@@ -544,12 +625,20 @@ public final class Mesh {
      * cover it everywhere (LineGeometryTest found its inside seen from outside without it).
      */
     void bolts(Frame f, double od, double inner, double outer, double z, int sign, Material material) {
+        bolts(f, od, inner, outer, z, sign, PipeSizes.drawnBolts(od), material);
+    }
+
+    /** The same bolt geometry with an explicit visual count for large equipment covers. */
+    void bolts(Frame f, double od, double inner, double outer, double z, int sign, int count, Material material) {
         double d = PipeSizes.boltDiameter(od), across = Math.max(1.6 * d, MIN_NUT);
         if (outer - inner < across) return;
-        int count = PipeSizes.bolts(od);
         double r = across / Math.sqrt(3), height = Math.max(1.2 * d, MIN_NUT), circle = (inner + outer) / 2;
         var axis = new double[]{sign * f.axis[0], sign * f.axis[1], sign * f.axis[2]};
-        for (int k = 0; k < count; k++) cylinder(new Frame(f.at(2 * Math.PI * (k + .5) / count, circle, z), axis, f.ref), r, 0, height, 6, material);
+        for (int k = 0; k < count; k++) {
+            var nut = new Frame(f.at(2 * Math.PI * (k + .5) / count, circle, z), axis, f.ref);
+            if (detail == RenderDetail.LOW) disc(nut, r, .0004, 6, 1, Material.BOLT_FACE);
+            else cylinder(nut, r, 0, height, 6, material);
+        }
     }
 
     /**
@@ -566,6 +655,8 @@ public final class Mesh {
      * a sixth of its sides, four at least).
      */
     void head(Frame f, double r, double at, double depth, int n, int bands, Material material) {
+        n = detail.sides(n);
+        bands = detail.bands(bands);
         var base = f.along(at);
         var spheroid = new Spheroid(base, f.axis(), r, depth);
         for (int k = 0; k < bands; k++) {
@@ -584,6 +675,12 @@ public final class Mesh {
                 add(polygon, base, spheroid, material, null, null);
             }
         }
+    }
+
+    /** A fastener rather than a dark cylindrical machine part; low detail uses its flush textured face. */
+    void nut(Frame f, double radius, double from, double to, int sides, Material material) {
+        if (detail == RenderDetail.LOW) disc(f, radius, Math.min(from, to) + .0004, 6, 1, Material.BOLT_FACE);
+        else cylinder(f, radius, from, to, sides, material);
     }
 
     /** A closed cylinder (prism with both ends). */
@@ -762,6 +859,7 @@ public final class Mesh {
      * straight pipe whose facet reference lies at that angle meets it vertex to vertex.
      */
     void torus(Frame f, double bend, double r, double a0, double a1, int segments, int n, double phase, Material material) {
+        n = detail.sides(n);
         var shading = new Torus(f.origin, f.axis, bend);
         double chord = 2 * r * DeterministicMath.sin(Math.PI / n);
         for (int s = 0; s < segments; s++) {
@@ -824,8 +922,9 @@ public final class Mesh {
 
     /** A sphere of {@code n} meridians and n/2 bands (a pipe junction's core, a cap). */
     void sphere(double[] centre, double r, int n, Material material) {
+        n = detail.sides(n);
         var f = Frame.of(centre, 1, 1);
-        int bands = Math.max(2, n / 2);
+        int bands = detail == RenderDetail.LOW ? Math.min(12, Math.max(2, n / 2)) : Math.max(2, n / 2);
         var shading = new Sphere(centre);
         for (int k = 0; k < bands; k++) {
             double lat0 = -Math.PI / 2 + Math.PI * k / bands, lat1 = -Math.PI / 2 + Math.PI * (k + 1) / bands;
@@ -914,8 +1013,20 @@ public final class Mesh {
         return out;
     }
 
+    /** Drawing polygons in world-local coordinates, split only at texture repeats. */
+    static List<Polygon> tiled(Facet facet) {
+        var out = new ArrayList<Polygon>();
+        for (var across : tiles(facet.positions(), facet.u)) for (var along : tiles(across.polygon, facet.v))
+            out.add(polygon(along.polygon, facet, 0, 0, 0, across.index, along.index, false));
+        return out;
+    }
+
     /** Cell-local polygon with texture coordinates in tile ({@code tileU}, {@code tileV}) of its sprite, and smooth normals. */
     private static Polygon polygon(List<double[]> clipped, Facet facet, int x, int y, int z, int tileU, int tileV) {
+        return polygon(clipped, facet, x, y, z, tileU, tileV, true);
+    }
+
+    private static Polygon polygon(List<double[]> clipped, Facet facet, int x, int y, int z, int tileU, int tileV, boolean cellLocal) {
         int m = clipped.size();
         var positions = new double[m * 3];
         var uvs = new double[m * 2];
@@ -923,7 +1034,7 @@ public final class Mesh {
         int[] cell = {x, y, z};
         for (int i = 0; i < m; i++) {
             var p = clipped.get(i);
-            for (int a = 0; a < 3; a++) positions[3 * i + a] = clamp(p[a] - cell[a]);
+            for (int a = 0; a < 3; a++) positions[3 * i + a] = cellLocal ? clamp(p[a] - cell[a]) : p[a];
             // The sprite's top row is the far end of the tile along v.
             uvs[2 * i] = clamp(facet.u.at(p) - tileU);
             uvs[2 * i + 1] = 1 - clamp(facet.v.at(p) - tileV);

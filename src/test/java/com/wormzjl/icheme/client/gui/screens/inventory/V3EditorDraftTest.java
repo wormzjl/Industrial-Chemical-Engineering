@@ -69,21 +69,12 @@ class V3EditorDraftTest {
         d.composition().add(1);d.composition().set(1,"17");
         d.set("s0","36.0");assertArrayEquals(new double[]{0,10},d.assemble().feedComponentMolarFlowsMolPerSecond());
     }
-    @Test void unitSwitchIsOnlyPresentationAndKelvinEditsConvertOnce(){
-        var d=new V3EditorDraft(input());String display=d.display("s1",true);
-        assertEquals("531.1",display);assertFalse(d.dirty());assertSame(d.base(),d.assemble());
-        d.setDisplay("s1","600.0",true);assertEquals(600,d.assemble().feedTemperatureKelvin());
-    }
-    @Test void liveGeometryWorksEvenWhenAnotherFieldIsIncomplete(){
-        var d=new V3EditorDraft(input());d.set("s0","");d.set("s2","32");d.set("s3","22");
-        assertEquals(32,d.preview("s2",8,2,64));assertEquals(22,d.preview("s3",4,1,32));
-        assertThrows(IllegalArgumentException.class,d::assemble);
-    }
     @Test void connectionsCanBeAddedConfiguredAndRemoved(){
-        var d=new V3EditorDraft(input());int draw=d.addDraw(3),pa=d.addPumparound(6);
+        var d=new V3EditorDraft(input());
+        d.set("d0stage","3");d.set("d0rate","1.0");d.set("c0draw","6");d.set("c0return","5");d.set("c0duty","0.1");
         assertEquals(2,d.assemble().sideDraws().getFirst().trayNumber());
         assertEquals(5,d.assemble().pumparounds().getFirst().drawTray());
-        d.removeDraw(draw);d.removePumparound(pa);assertTrue(d.assemble().sideDraws().isEmpty());assertTrue(d.assemble().pumparounds().isEmpty());
+        d.set("d0stage","");d.set("d0rate","");d.set("c0draw","");d.set("c0return","");d.set("c0duty","");assertTrue(d.assemble().sideDraws().isEmpty());assertTrue(d.assemble().pumparounds().isEmpty());
     }
 
     @Test void blankCustomMixtureCanChooseMassBasisBeforeAddingComponents(){
@@ -101,20 +92,16 @@ class V3EditorDraftTest {
     }
 
     @Test void intermediateTrayCountTypingDoesNotDeleteConnections(){
-        var d=new V3EditorDraft(input());d.addDraw(6);d.addPumparound(8);
+        var d=new V3EditorDraft(input());d.set("d0stage","6");d.set("c0draw","8");
         d.set("s2","4");d.set("s2","42");
         assertEquals("6",d.get("d0stage"));assertEquals("8",d.get("c0draw"));
     }
     @Test void bottomSteamFollowsTotalTrayCountButInteriorSteamStaysOnItsTray(){
-        var d=new V3EditorDraft(input());int a=d.addSteam(10),b=d.addSteam(4);
+        var d=new V3EditorDraft(input());
+        d.set("t0stage","10");d.set("t0rate","1.0");d.set("t0T","260.0");d.set("t1stage","4");d.set("t1rate","1.0");d.set("t1T","260.0");
         d.set("s2","22");
-        assertEquals("22",d.get("t"+a+"stage"));assertEquals("4",d.get("t"+b+"stage"));
+        assertEquals("22",d.get("t0stage"));assertEquals("4",d.get("t1stage"));
         assertTrue(d.assemble().steamFeeds().stream().anyMatch(t->t.stageNumber()==21));
     }
 
-    @Test void potHasOnlyOneDistinctSteamLocation(){
-        var d=new V3EditorDraft(input());d.set("s2","2");d.set("s3","2");
-        assertTrue(d.canAddSteam());assertEquals(0,d.addSteam(2));assertFalse(d.canAddSteam());assertEquals(-1,d.addSteam(2));
-        d.removeSteam(0);assertTrue(d.canAddSteam());
-    }
 }

@@ -11,16 +11,17 @@ import org.junit.jupiter.api.Test;
 /**
  * Regression from actual generator/pipe/pump/reservoir startup in the isolated Minecraft world.
  *
- * <p>The crude case is re-baselined for the liquid-only pump (decision D1 of the phase-ports batch): the Tia Juana Light
- * preset at 298.15 K and 1 atm is two-phase, 11.15 % vapour by volume by one flashTP, with its bubble point at 117.8 kPa,
- * so the pump refuses it there ({@code INLET_WRONG_PHASE}). Its generator and the nitrogen receiver now stand at 150 kPa,
+ * <p>The crude case is re-baselined for the liquid-only pump (decision D1 of the phase-ports batch): the medium crude
+ * preset (the default grade since O3 of batch 2026-11-04-open-thermo-data; Tia Juana Light read 11.15 % and 117.8 kPa) at
+ * 298.15 K and 1 atm is two-phase, 12.02 % vapour by volume by one flashTP, with its bubble point at 115.0 kPa,
+ * so the pump refused it there ({@code INLET_WRONG_PHASE}; gas at a pump is no refusal since request 11). Its generator and the nitrogen receiver now stand at 150 kPa,
  * above the bubble point, so the pump still starts a liquid through its zero-storage inlet into the receiver's own
  * pressure; the water case is unchanged at 1 atm.
  */
 class PumpJunctionStartupTest {
     @Test void waterAndAmbientCrudeStartThroughAZeroStoragePumpInletWithoutInventingUpstreamNitrogen() {
         var catalog=MaterialCatalog.bundled();var model=FluidThermodynamics.forNetwork(catalog,FluidMaterialCatalog.networkPackage(catalog));
-        for(String id:List.of("water","icheme:tia_juana_light_methane")) {
+        for(String id:List.of("water","icheme:medium_crude")) {
             var composition=FluidPresetCatalog.resolve(catalog).stream().filter(p->p.id().equals(id)).findFirst().orElseThrow().moleFractions();
             double pressure=id.equals("water")?101325:150000;
             var unit=model.flashTP(298.15,pressure,composition,()->{});for(int c=0;c<composition.length;c++)composition[c]/=unit.volume();

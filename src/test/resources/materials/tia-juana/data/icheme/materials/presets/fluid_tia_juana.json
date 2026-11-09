@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "id": "icheme:tia_juana_light_methane",
+  "kind": "fluid",
+  "label": "Tia Juana Light",
+  "assay": "icheme:tia_juana_light_methane"
+}

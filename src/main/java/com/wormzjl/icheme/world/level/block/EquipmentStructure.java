@@ -36,6 +36,7 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.shapes.BooleanOp;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
@@ -116,6 +117,11 @@ public final class EquipmentStructure {
     private EquipmentStructure() {
     }
 
+    /** All verified layout/removal writes share the same narrowly scoped authority. */
+    private static boolean setCell(Level level, BlockPos position, BlockState state, int flags) {
+        return EquipmentProtection.edit(level, position, () -> level.setBlock(position, state, flags));
+    }
+
     /** Collision and outline shape of a shell cell: its solid at 1/8 block. Both sides compute the same shape. */
     public static VoxelShape collision(ShapeRasterizer.CellKey key) {
         var shape = SHAPES.get(key);
@@ -139,6 +145,24 @@ public final class EquipmentStructure {
      * @throws IllegalStateException naming the first cell that blocks the vessel
      */
     public static int place(ServerLevel level, BlockPos origin, EquipmentShape shape, Paint paint, int rows) {
+        return place(level, origin, shape, paint, com.wormzjl.icheme.science.equipment.DeviceName.NONE, rows);
+    }
+
+    /**
+     * Names the structure {@code vessel} (N1): every shell cell takes {@code name} (cleaned), as every cell holds its
+     * paint, and sends itself to the clients. Nothing changes, and false, while a shell cell is not loaded: the name stays
+     * the same on every cell.
+     */
+    public static boolean rename(ServerLevel level, Vessel vessel, String name) {
+        var cells = ShapeRasterizer.layout(vessel.shape()).shell();
+        for (var cell : cells) if (!level.isLoaded(vessel.origin().offset(cell.x(), cell.y(), cell.z()))) return false;
+        for (var cell : cells)
+            if (level.getBlockEntity(vessel.origin().offset(cell.x(), cell.y(), cell.z())) instanceof EquipmentShellBlockEntity entity) entity.rename(name);
+        return true;
+    }
+
+    /** {@link #place(ServerLevel, BlockPos, EquipmentShape, Paint, int)}, every cell named {@code name} (N1: an imported design's tag). */
+    public static int place(ServerLevel level, BlockPos origin, EquipmentShape shape, Paint paint, String name, int rows) {
         var layout = ShapeRasterizer.layout(shape);
         for (var list : java.util.List.of(layout.shell(), layout.interior()))
             for (var cell : list) {
@@ -152,18 +176,21 @@ public final class EquipmentStructure {
         for (var cell : layout.shell()) {
             if (cell.y() >= rows) continue;
             var position = origin.offset(cell.x(), cell.y(), cell.z());
-            level.setBlock(position, ModBlocks.EQUIPMENT_SHELL.get().defaultBlockState(), flags);
-            if (level.getBlockEntity(position) instanceof EquipmentShellBlockEntity entity) entity.bind(shape, cell, paint);
+            setCell(level, position, ModBlocks.EQUIPMENT_SHELL.get().defaultBlockState(), flags);
+            if (level.getBlockEntity(position) instanceof EquipmentShellBlockEntity entity) entity.bind(shape, cell, paint, name);
             placed++;
         }
         for (var cell : layout.interior()) {
             if (cell.y() >= rows) continue;
-            level.setBlock(origin.offset(cell.x(), cell.y(), cell.z()), interior(shape), flags);
+            setCell(level, origin.offset(cell.x(), cell.y(), cell.z()), interior(shape), flags);
             placed++;
         }
         var vessel = new Vessel(origin, shape);
         if (rows >= shape.sizeY()) record(level, origin, shape, paint);
         if (shape.fluidDevice() && rows >= shape.sizeY()) register(level, vessel);
+        // A motor, generator or gearbox joins its shaft train whole (W3); a casing or turbine does once registered.
+        else if (!shape.fluidDevice() && rows >= shape.sizeY()) ShaftParts.structure(level, origin, shape, 0);
+        if(shape.kind()==EquipmentShape.Kind.COLUMN&&rows>=shape.sizeY()){var c=layout.controller();if(level.getBlockEntity(origin.offset(c.x(),c.y(),c.z())) instanceof EquipmentShellBlockEntity cell)FluidWorldAuthority.find(level.getServer()).ifPresent(w->w.controls().bindColumn(cell));}
         reconnect(level, vessel);
         refreshNozzles(level, vessel);
         com.wormzjl.icheme.runtime.assembly.AssemblyService.placed(level, vessel);
@@ -181,11 +208,13 @@ public final class EquipmentStructure {
             return;
         }
         var node = node(vessel);
-        if (vessel.shape().kind().mover()) {
-            var kind = vessel.shape().kind() == EquipmentShape.Kind.PUMP ? TopologyCompiler.Kind.PUMP : TopologyCompiler.Kind.COMPRESSOR;
+        if (vessel.shape().kind().mover() || turbine(vessel.shape())) {
+            // A casing on its curve, a frame at its displacement, a turbine on its steam (W3): each turns with its shaft train.
+            var kind = turbine(vessel.shape()) ? TopologyCompiler.Kind.TURBINE : vessel.shape().kind() == EquipmentShape.Kind.PUMP ? TopologyCompiler.Kind.PUMP : TopologyCompiler.Kind.COMPRESSOR;
             FluidWorldAuthority.find(level.getServer()).ifPresent(world -> {
-                var record = world.placeMover(position(level, node), kind, ports(level, vessel));
+                var record = world.placeMachine(position(level, node), kind, ports(level, vessel), machineControl(vessel.shape()));
                 if (level.getBlockEntity(node) instanceof EquipmentShellBlockEntity entity) entity.bindIdentity(record.device().id());
+                ShaftParts.structure(level, vessel.origin(), vessel.shape(), record.device().id());
             });
             return;
         }
@@ -206,7 +235,8 @@ public final class EquipmentStructure {
      * normal construction or the existing layout refresh handles them. No blocks are changed and nothing solves.
      */
     public static boolean restoreFluidBinding(ServerLevel level,Vessel vessel) {
-        if(!vessel.shape().fluidDevice())return true;
+        // A motor, generator or gearbox's shaft unit (W3); queued again on every load, a no-op when nothing changed.
+        if(!vessel.shape().fluidDevice()){ShaftParts.structure(level,vessel.origin(),vessel.shape(),0);return true;}
         var world=FluidWorldAuthority.find(level.getServer()).orElse(null);if(world==null)return false;
         boolean unit=HeatSides.unit(vessel.shape().kind())!=null;
         var heldIds=unit?heldAtNodes(world,level,vessel):List.<Long>of();
@@ -223,6 +253,10 @@ public final class EquipmentStructure {
             if(level.hasChunkAt(node)&&record.device().position().equals(held)&&!record.device().ports().isEmpty()
                     &&level.getBlockEntity(node) instanceof EquipmentShellBlockEntity shell&&ours(shell,vessel.origin(),vessel.shape())) {
                 if(vessel.shape().reservoir()&&!record.spec().geometry().equals(vessel.shape().fluidGeometry()))reregister(level,vessel,node,List.of());
+                // A casing saved before W3 (reading A29): its set-flow control becomes its machine, keeping its set flow.
+                var machine=restoredControl(vessel.shape(),record.device().control());
+                if(machine!=null)world.edit(record.device().id(),record.revision(),record.device().withControl(machine),record.spec());
+                ShaftParts.structure(level,vessel.origin(),vessel.shape(),record.device().id());
                 if(shell.fluidIdentity()!=record.device().id())shell.bindIdentity(record.device().id());else world.deviceLoaded(record.device().id());
             }
             return true;
@@ -253,7 +287,7 @@ public final class EquipmentStructure {
         var placing = new ArrayList<FluidWorldAuthority.UnitSide>();
         for (int i = 0; i < sides.size(); i++) {
             var side = sides.get(i);
-            placing.add(new FluidWorldAuthority.UnitSide(position(level, nodes.get(i)), sidePorts(level, vessel, side), side.passage(), new HeatUnit(unit, side.side(), side.area(), 0)));
+            placing.add(new FluidWorldAuthority.UnitSide(position(level, nodes.get(i)), sidePorts(level, vessel, side), side.passage(), new HeatUnit(unit, side.side(), side.area(), 0).withFans(HeatSides.fans(shape)).withExchangerType(shape.exchangerType())));
         }
         // A kettle's shell (W7): a closed vessel at its pool's node, its phase ports the drum's, its surface its tubes'.
         var pool = HeatSides.pool(shape.kind()) ? new FluidWorldAuthority.UnitVessel(position(level, nodes.get(sides.size())), ports(level, vessel), shape.volume(), shape.levelHeight(),
@@ -337,7 +371,8 @@ public final class EquipmentStructure {
             var record = records.get(side.side());
             var node = nodes.get(i);
             var device = record.device();
-            var moved = device.withPlacement(position(level, node), sidePorts(level, vessel, side)).withGeometry(side.passage()).withHeat(device.heat().withArea(side.area()));
+            // An air cooler's fans follow the drawing (W5), as its surface does.
+            var moved = device.withPlacement(position(level, node), sidePorts(level, vessel, side)).withGeometry(side.passage()).withHeat(device.heat().withArea(side.area()).withFans(HeatSides.fans(vessel.shape())));
             if (!moved.equals(device)) world.edit(device.id(), record.revision(), moved, record.spec());
             for (var other : nodes)
                 if (!other.equals(node) && level.getBlockEntity(other) instanceof EquipmentShellBlockEntity stale && stale.fluidIdentity() == device.id()) stale.releaseIdentity();
@@ -445,10 +480,11 @@ public final class EquipmentStructure {
         for (var port : ShapeRasterizer.ports(vessel.shape())) {
             if (passages.contains(nozzles.get(port.nozzle()).role())) continue;
             var role = PhysicalFluidTopology.ConnectionRole.VESSEL;
-            if (vessel.shape().kind().mover()) {
+            if (vessel.shape().kind().mover() || turbine(vessel.shape())) {
+                // A turbine's steam inlet is its suction, its exhaust its discharge (W3, reading A37).
                 role = switch (nozzles.get(port.nozzle()).role()) {
-                    case SUCTION -> PhysicalFluidTopology.ConnectionRole.SUCTION;
-                    case DISCHARGE -> PhysicalFluidTopology.ConnectionRole.DISCHARGE;
+                    case SUCTION, STEAM -> PhysicalFluidTopology.ConnectionRole.SUCTION;
+                    case DISCHARGE, EXHAUST -> PhysicalFluidTopology.ConnectionRole.DISCHARGE;
                     default -> null;
                 };
                 if (role == null) continue; // Oil-cooler and other auxiliary nozzles remain decorative.
@@ -461,6 +497,7 @@ public final class EquipmentStructure {
                 case BULK -> PassiveNetwork.PhasePort.BULK;
                 case OVERFLOW -> PassiveNetwork.PhasePort.OVERFLOW;
             };
+            if(turbine(vessel.shape()))phase=PassiveNetwork.PhasePort.BULK;
             if(vessel.shape().kind().coolingTower())phase=switch(nozzles.get(port.nozzle()).role()){case HOT_WATER_INLET->PassiveNetwork.PhasePort.SPRAY;default->phase;};
             if(vessel.shape().boot())phase=switch(nozzles.get(port.nozzle()).role()){case BOOT_DRAIN->PassiveNetwork.PhasePort.BOOT_WATER;case LIQUID_OUTLET->PassiveNetwork.PhasePort.BOOT_HC;default->phase;};
             ports.add(new PhysicalFluidTopology.Port(position(level, cell), face, phase, role));
@@ -557,6 +594,27 @@ public final class EquipmentStructure {
         return null;
     }
 
+    /**
+     * The name of the device at {@code position} (N1): a one-block device's, or the structure's whose cell or interior that
+     * is, read from its loaded cells; empty when it has none or none is loaded.
+     */
+    public static String name(BlockGetter level, BlockPos position) {
+        if (level.getBlockEntity(position) instanceof com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity device) return device.name();
+        var vessel = find(level, position);
+        return vessel == null ? com.wormzjl.icheme.science.equipment.DeviceName.NONE : name(level, vessel);
+    }
+
+    /** The name of {@code vessel}, from its first loaded shell cell (every cell holds it); empty when it has none or none is loaded. */
+    public static String name(BlockGetter level, Vessel vessel) {
+        var layout = ShapeRasterizer.layout(vessel.shape());
+        var controller = layout.controller();
+        if (level.getBlockEntity(vessel.origin().offset(controller.x(), controller.y(), controller.z())) instanceof EquipmentShellBlockEntity shell && shell.shape() != null)
+            return shell.name();
+        for (var cell : layout.shell())
+            if (level.getBlockEntity(vessel.origin().offset(cell.x(), cell.y(), cell.z())) instanceof EquipmentShellBlockEntity shell && shell.shape() != null) return shell.name();
+        return com.wormzjl.icheme.science.equipment.DeviceName.NONE;
+    }
+
     /** The longest walk over interior cells: across the widest body, a column's or a floating-roof tank's. */
     private static final int FIND_STEPS = (int) Math.ceil(Math.max(EquipmentShape.MAX_COLUMN_DIAMETER, UnitDesign.of(EquipmentShape.Kind.TANK).maxSize())) + 2;
 
@@ -607,7 +665,7 @@ public final class EquipmentStructure {
             var at = origin.offset(cell.x(), cell.y(), cell.z());
             var held = level.getBlockState(at);
             if (held.is(ModBlocks.EQUIPMENT_INTERIOR.get()) && held != state) {
-                level.setBlock(at, state, flags);
+                setCell(level, at, state, flags);
                 changed++;
             }
         }
@@ -637,8 +695,10 @@ public final class EquipmentStructure {
         try {
             if (level instanceof ServerLevel server) com.wormzjl.icheme.runtime.assembly.AssemblyService.removed(server, vessel);
             if (level instanceof ServerLevel server) com.wormzjl.icheme.runtime.assembly.AssemblyService.dismantled(server, vessel);
+            if(level instanceof ServerLevel server&&vessel.shape().kind()==EquipmentShape.Kind.COLUMN){var c=ShapeRasterizer.layout(vessel.shape()).controller();if(level.getBlockEntity(vessel.origin().offset(c.x(),c.y(),c.z())) instanceof EquipmentShellBlockEntity cell&&cell.instruments().dataPort()!=null)FluidWorldAuthority.find(server.getServer()).ifPresent(w->w.controls().removeHost(cell.instruments().dataPort().host()));}
             if (level instanceof ServerLevel server && vessel.shape().fluidDevice()) unregister(server, vessel);
             if (level instanceof ServerLevel server) record(server, vessel.origin(), null, null);
+            if (UnitDesign.shafted(vessel.shape().kind())) ShaftParts.remove(level, vessel.origin());
             var layout = ShapeRasterizer.layout(vessel.shape());
             for (var list : java.util.List.of(layout.shell(), layout.interior()))
                 for (var cell : list) {
@@ -646,7 +706,7 @@ public final class EquipmentStructure {
                     var state = level.getBlockState(position);
                     boolean ours = state.is(ModBlocks.EQUIPMENT_INTERIOR.get())
                             || level.getBlockEntity(position) instanceof EquipmentShellBlockEntity shell && vessel.origin().equals(shell.origin());
-                    if (ours) level.setBlock(position, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE);
+                    if (ours) setCell(level, position, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE);
                 }
             reconnect(level, vessel);
         } finally {
@@ -700,8 +760,8 @@ public final class EquipmentStructure {
         int flags = Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE;
         dismantling = true;
         try {
-            for (var at : interior) level.setBlock(at, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), flags);
-            for (var at : shells) level.setBlock(at, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), flags);
+            for (var at : interior) setCell(level, at, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), flags);
+            for (var at : shells) setCell(level, at, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), flags);
         } finally {
             dismantling = false;
         }
@@ -810,13 +870,16 @@ public final class EquipmentStructure {
         com.wormzjl.icheme.runtime.assembly.AssemblyService.removed(level, new Vessel(origin, shape));
         var plan = EquipmentRefresh.plan(ShapeRasterizer.layout(shape), survey.world());
         var vessel = new Vessel(origin.offset(plan.shift().x(), 0, plan.shift().z()), shape);
-        var touched = write(level, vessel, survey.paint(), plan, false);
+        var touched = write(level, vessel, survey.paint(), survey.name(), plan, false);
         waitForLight(level, low, high);
         // The registry's record follows the structure to where its layout now stands, cells left out or not: the registry
         // holds the structure the player built.
         if (!vessel.origin().equals(origin)) record(level, origin, null, null);
         record(level, vessel.origin(), shape, survey.paint());
+        // A shaft unit stands at its structure's origin (W3): a moved origin's old unit leaves, the new one is queued here.
+        if (UnitDesign.shafted(shape.kind()) && !vessel.origin().equals(origin)) ShaftParts.remove(level, origin);
         if (shape.fluidDevice()) reregister(level, vessel, survey.node(), survey.identities());
+        else ShaftParts.structure(level, vessel.origin(), shape, 0);
         settle(level, vessel, touched);
         IChemE.LOGGER.info("equipment_refresh kind={} origin={} shift={},{} cleared={} placed={} blocked={}", shape.kind().name().toLowerCase(Locale.ROOT),
                 origin.toShortString(), plan.shift().x(), plan.shift().z(), plan.clear().size(), plan.shell().size() + plan.interior().size(), plan.blocked().size());
@@ -829,10 +892,10 @@ public final class EquipmentStructure {
 
     /**
      * What stands in a vessel's region ({@link #survey}): each cell's holding from the origin, free cells absent; the paint
-     * of the first of its own shell cells (null when none stands); the last of its own shell cells that holds a fluid
+     * and name of the first of its own shell cells (paint null when none stands); the last of its own shell cells that holds a fluid
      * identity, and the identities they hold; the far corner of the boxes its own cells were placed by.
      */
-    private record Survey(Map<ShapeRasterizer.Cell, EquipmentRefresh.Holding> world, @Nullable Paint paint, @Nullable BlockPos node, List<Long> identities,
+    private record Survey(Map<ShapeRasterizer.Cell, EquipmentRefresh.Holding> world, @Nullable Paint paint, String name, @Nullable BlockPos node, List<Long> identities,
                           BlockPos far) {
     }
 
@@ -845,6 +908,7 @@ public final class EquipmentStructure {
     private static Survey survey(ServerLevel level, BlockPos origin, BlockPos low, BlockPos high, Predicate<EquipmentShellBlockEntity> own, boolean orphans) {
         var world = new HashMap<ShapeRasterizer.Cell, EquipmentRefresh.Holding>();
         Paint paint = null;
+        String name = com.wormzjl.icheme.science.equipment.DeviceName.NONE;
         BlockPos node = null;
         var identities = new ArrayList<Long>();
         var far = origin;
@@ -853,7 +917,10 @@ public final class EquipmentStructure {
             var state = level.getBlockState(at);
             if (level.getBlockEntity(at) instanceof EquipmentShellBlockEntity shell && own.test(shell)) {
                 world.put(cell, EquipmentRefresh.Holding.SHELL);
-                if (paint == null) paint = shell.paint();
+                if (paint == null) {
+                    paint = shell.paint();
+                    name = shell.name();
+                }
                 if (shell.fluidIdentity() != 0) {
                     node = at.immutable();
                     identities.add(shell.fluidIdentity());
@@ -867,17 +934,17 @@ public final class EquipmentStructure {
             } else if (state.getBlock() instanceof FluidDeviceBlock) world.put(cell, EquipmentRefresh.Holding.PIPE);
             else if (!state.canBeReplaced()) world.put(cell, EquipmentRefresh.Holding.OTHER);
         }
-        return new Survey(world, paint, node, identities, far);
+        return new Survey(world, paint, name, node, identities, far);
     }
 
     /**
      * Writes {@code plan} for {@code vessel}, whose origin is the old one moved by the plan's shift: clears the cells the
      * plan drops, places the shell and interior cells it adds, binds every shell cell to the layout, and brings the interior
      * cells it kept to their current state ({@link #restateCells}). A shell cell it kept keeps its own paint unless
-     * {@code repaint}. With cells left out where other blocks stand, the cells written keep no stamp, so the next load tries
-     * again. Returns the cells whose block or drawing changed.
+     * {@code repaint}; every shell cell takes {@code name} (N1). With cells left out where other blocks stand, the cells
+     * written keep no stamp, so the next load tries again. Returns the cells whose block or drawing changed.
      */
-    private static List<BlockPos> write(ServerLevel level, Vessel vessel, Paint paint, EquipmentRefresh.Plan plan, boolean repaint) {
+    private static List<BlockPos> write(ServerLevel level, Vessel vessel, Paint paint, String name, EquipmentRefresh.Plan plan, boolean repaint) {
         var placed = vessel.origin();
         var shape = vessel.shape();
         var layout = ShapeRasterizer.layout(shape);
@@ -889,28 +956,28 @@ public final class EquipmentStructure {
         try {
             for (var cell : plan.clear()) {
                 var at = placed.offset(cell.x(), cell.y(), cell.z());
-                level.setBlock(at, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), flags);
+                setCell(level, at, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), flags);
                 touched.add(at);
             }
             for (var cell : layout.shell()) {
                 if (blocked.contains(cell)) continue;
                 var at = placed.offset(cell.x(), cell.y(), cell.z());
                 if (placeShell.contains(cell)) {
-                    level.setBlock(at, ModBlocks.EQUIPMENT_SHELL.get().defaultBlockState(), flags);
+                    setCell(level, at, ModBlocks.EQUIPMENT_SHELL.get().defaultBlockState(), flags);
                     touched.add(at);
                 }
                 if (level.getBlockEntity(at) instanceof EquipmentShellBlockEntity entity) {
                     var before = entity.key();
                     var paintBefore = entity.paint();
                     var cellPaint = repaint || placeShell.contains(cell) ? paint : paintBefore;
-                    entity.bind(shape, cell, cellPaint);
+                    entity.bind(shape, cell, cellPaint, name);
                     if (!entity.key().equals(before) || !cellPaint.equals(paintBefore)) {
                         level.sendBlockUpdated(at, entity.getBlockState(), entity.getBlockState(), Block.UPDATE_CLIENTS);
                         touched.add(at);
                     }
                 }
             }
-            for (var cell : plan.interior()) level.setBlock(placed.offset(cell.x(), cell.y(), cell.z()), interior(shape), flags);
+            for (var cell : plan.interior()) setCell(level, placed.offset(cell.x(), cell.y(), cell.z()), interior(shape), flags);
             // The interior cells it kept take the current state too (restate); a blocked cell is another owner's.
             restateCells(level, placed, shape, blocked, flags);
             // Cells left out where other blocks stand: the cells written keep no stamp, so the next load tries again.
@@ -1043,7 +1110,7 @@ public final class EquipmentStructure {
         com.wormzjl.icheme.runtime.assembly.AssemblyService.removed(level, vessel);
         var layout = ShapeRasterizer.layout(shape);
         var plan = EquipmentRefresh.plan(layout, survey.world(), new ShapeRasterizer.Cell(0, 0, 0));
-        var touched = write(level, vessel, paint, plan, true);
+        var touched = write(level, vessel, paint, survey.name(), plan, true);
         waitForLight(level, origin, high);
         // A shell cell that is no node of the record's shape stands for no registration.
         var nodes = new HashSet<>(nodes(vessel));
@@ -1110,6 +1177,58 @@ public final class EquipmentStructure {
                 vessel.shape().kind().mover() ? spec : new FluidDeviceSpec(vessel.shape().volume(), spec.temperature(), spec.pressure(), spec.composition(), spec.solids(), vessel.shape().levelHeight(), open(vessel), vessel.shape().fluidGeometry(),spec.tower()));
         if (oldNode != null && !oldNode.equals(node) && level.getBlockEntity(oldNode) instanceof EquipmentShellBlockEntity old && old.fluidIdentity() == device.id()) old.releaseIdentity();
         if (level.getBlockEntity(node) instanceof EquipmentShellBlockEntity entity && entity.fluidIdentity() != device.id()) entity.bindIdentity(device.id());
+        ShaftParts.structure(level, vessel.origin(), vessel.shape(), device.id());
+    }
+
+    /** Whether a shape registers as a steam turbine (W3, reading A37). */
+    private static boolean turbine(EquipmentShape shape) {
+        return shape.kind() == EquipmentShape.Kind.STEAM_TURBINE;
+    }
+
+    /**
+     * A shaft-driven machine's control from its shape's design point (W3, readings A3 and A32): a pump on its curve at its
+     * duty, with Corripio's efficiency; a centrifugal compressor on its curve at its rating, efficiency 0.78; a reciprocating
+     * frame at its displacement; a steam turbine at its rated power and its size's efficiency. A machine's speed is its train's.
+     */
+    static com.wormzjl.icheme.science.fluid.network.FlowControl machineControl(EquipmentShape shape) {
+        return switch (shape.kind()) {
+            case PUMP -> {
+                var r = UnitDesign.pumpRating(shape);
+                yield new com.wormzjl.icheme.science.fluid.network.FlowControl.Machine(new com.wormzjl.icheme.science.machine.CentrifugalPump(r[0], r[1],
+                        com.wormzjl.icheme.science.machine.CentrifugalPump.bestEfficiency(r[0]), UnitDesign.designSpeed(shape)), 0, true);
+            }
+            case CENTRIFUGAL_COMPRESSOR -> {
+                var r = UnitDesign.compressorRating(shape);
+                yield new com.wormzjl.icheme.science.fluid.network.FlowControl.Machine(new com.wormzjl.icheme.science.machine.CentrifugalCompressor(r[0], r[1], .78), 0, true);
+            }
+            case COMPRESSOR -> new com.wormzjl.icheme.science.fluid.network.FlowControl.Compressor(frameDisplacement(shape), 3, true);
+            case STEAM_TURBINE -> new com.wormzjl.icheme.science.fluid.network.FlowControl.Turbine(com.wormzjl.icheme.science.machine.SteamTurbine.rated(Math.max(1e3, UnitDesign.ratedPower(shape))));
+            default -> throw new IllegalArgumentException("Not a shaft-driven machine: " + shape.kind());
+        };
+    }
+
+    private static double frameDisplacement(EquipmentShape shape) {
+        return Math.max(1e-4, Math.min(com.wormzjl.icheme.science.fluid.network.FlowControl.Mover.MAXIMUM_VOLUME_FLOW, UnitDesign.displacement(shape)));
+    }
+
+    /**
+     * The control a casing saved before W3 takes at its restore (reading A29), or null when it already has its own: a pump's
+     * or centrifugal compressor's set-flow control becomes its machine, its set flow kept as the machine's; a frame takes
+     * its displacement, keeping its pressure ratio and switch.
+     */
+    static @Nullable com.wormzjl.icheme.science.fluid.network.FlowControl restoredControl(EquipmentShape shape, com.wormzjl.icheme.science.fluid.network.FlowControl control) {
+        return switch (shape.kind()) {
+            case PUMP, CENTRIFUGAL_COMPRESSOR -> {
+                if (!(control instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.Pump) && !(control instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.Compressor)) yield null;
+                var mover = (com.wormzjl.icheme.science.fluid.network.FlowControl.Mover) control;
+                var machine = (com.wormzjl.icheme.science.fluid.network.FlowControl.Machine) machineControl(shape);
+                double set = Math.max(0, Math.min(com.wormzjl.icheme.science.fluid.network.FlowControl.Mover.MAXIMUM_VOLUME_FLOW, mover.requestedVolumeFlow()));
+                yield new com.wormzjl.icheme.science.fluid.network.FlowControl.Machine(machine.law(), 0, mover.enabled(), set, 0);
+            }
+            case COMPRESSOR -> control instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.Compressor c && c.requestedVolumeFlow() != frameDisplacement(shape)
+                    ? new com.wormzjl.icheme.science.fluid.network.FlowControl.Compressor(frameDisplacement(shape), c.maximumPressureRatio(), c.enabled()) : null;
+            default -> null;
+        };
     }
 
     private static BlockPos min(BlockPos a, BlockPos b) {

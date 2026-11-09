@@ -1,0 +1,505 @@
+{
+  "parent": "minecraft:block/block",
+  "textures": {
+    "particle": "icheme:block/pump_casting",
+    "cabinet": "icheme:block/pump_casting",
+    "frame": "icheme:block/equipment_flange",
+    "dark": "icheme:block/equipment_steelwork",
+    "black": "icheme:block/equipment_opening",
+    "bezel": "icheme:block/simulator_bezel",
+    "screen": "icheme:block/simulator_screen",
+    "keys": "icheme:block/simulator_keys",
+    "vents": "icheme:block/simulator_vents"
+  },
+  "elements": [
+    {
+      "name": "steel cabinet plinth",
+      "from": [0.75, 0.0, 0.75],
+      "to": [15.25, 2.0, 15.25],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" }
+      }
+    },
+    {
+      "name": "lower control cabinet",
+      "from": [1.0, 2.0, 3.0],
+      "to": [15.0, 7.0, 15.0],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" }
+      }
+    },
+    {
+      "name": "pressed console worktop",
+      "from": [1.0, 7.0, 0.0],
+      "to": [15.0, 8.0, 15.0],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" }
+      }
+    },
+    {
+      "name": "stainless worktop skin",
+      "from": [1.12, 7.88, 0.12],
+      "to": [14.88, 8.015, 7.9],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" }
+      }
+    },
+    {
+      "name": "operator terminal cabinet",
+      "from": [1.0, 8.0, 8.0],
+      "to": [15.0, 16.0, 15.0],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" }
+      }
+    },
+    {
+      "name": "HMI backplate",
+      "from": [1.75, 8.85, 7.9],
+      "to": [14.25, 15.6, 8.02],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" }
+      }
+    },
+    {
+      "name": "HMI left bezel",
+      "from": [1.75, 8.85, 7.7],
+      "to": [2.25, 15.6, 7.92],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" }
+      }
+    },
+    {
+      "name": "HMI right bezel",
+      "from": [13.75, 8.85, 7.7],
+      "to": [14.25, 15.6, 7.92],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" }
+      }
+    },
+    {
+      "name": "HMI bottom bezel",
+      "from": [2.25, 8.85, 7.7],
+      "to": [13.75, 9.35, 7.92],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" }
+      }
+    },
+    {
+      "name": "HMI top bezel",
+      "from": [2.25, 15.1, 7.7],
+      "to": [13.75, 15.6, 7.92],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" }
+      }
+    },
+    {
+      "name": "recessed flowsheet display",
+      "from": [2.25, 9.35, 7.82],
+      "to": [13.75, 15.1, 7.88],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#screen" }
+      }
+    },
+    {
+      "name": "screen hood",
+      "from": [1.0, 15.6, 7.25],
+      "to": [15.0, 16.0, 8.05],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" }
+      }
+    },
+    {
+      "name": "sealed panel keyboard",
+      "from": [2.5, 8.015, 1.0],
+      "to": [11.5, 8.25, 5.5],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#keys" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" }
+      }
+    },
+    {
+      "name": "trackball mounting plate",
+      "from": [12.0, 8.015, 1.5],
+      "to": [14.0, 8.18, 4.5],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" }
+      }
+    },
+    {
+      "name": "rubber trackball",
+      "from": [12.55, 8.18, 2.2],
+      "to": [13.45, 8.5, 3.1],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" }
+      }
+    },
+    {
+      "name": "left trackball key",
+      "from": [12.2, 8.18, 3.55],
+      "to": [12.9, 8.28, 4.2],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" }
+      }
+    },
+    {
+      "name": "right trackball key",
+      "from": [13.1, 8.18, 3.55],
+      "to": [13.8, 8.28, 4.2],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" }
+      }
+    },
+    {
+      "name": "lower service door gasket",
+      "from": [1.5, 2.4, 2.82],
+      "to": [14.5, 6.6, 3.02],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" }
+      }
+    },
+    {
+      "name": "lower service door",
+      "from": [1.7, 2.6, 2.7],
+      "to": [14.3, 6.4, 2.85],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" }
+      }
+    },
+    {
+      "name": "quarter-turn door latch",
+      "from": [13.2, 4.05, 2.55],
+      "to": [13.5, 4.8, 2.74],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#dark" }
+      }
+    },
+    {
+      "name": "service door hinge",
+      "from": [1.65, 3.1, 2.56],
+      "to": [2.05, 3.6500000000000004, 3.02],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" }
+      }
+    },
+    {
+      "name": "service door hinge",
+      "from": [1.65, 5.5, 2.56],
+      "to": [2.05, 6.05, 3.02],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" }
+      }
+    },
+    {
+      "name": "HMI captive screw",
+      "from": [1.95, 9.0, 7.64],
+      "to": [2.17, 9.22, 7.72],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" }
+      }
+    },
+    {
+      "name": "HMI captive screw",
+      "from": [1.95, 15.2, 7.64],
+      "to": [2.17, 15.42, 7.72],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" }
+      }
+    },
+    {
+      "name": "HMI captive screw",
+      "from": [13.8, 9.0, 7.64],
+      "to": [14.020000000000001, 9.22, 7.72],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" }
+      }
+    },
+    {
+      "name": "HMI captive screw",
+      "from": [13.8, 15.2, 7.64],
+      "to": [14.020000000000001, 15.42, 7.72],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#frame" }
+      }
+    },
+    {
+      "name": "rear access panel gasket",
+      "from": [1.75, 2.7, 14.99],
+      "to": [14.25, 15.3, 15.04],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" }
+      }
+    },
+    {
+      "name": "rear access panel",
+      "from": [2.0, 2.95, 15.025],
+      "to": [14.0, 15.05, 15.1],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#cabinet" }
+      }
+    },
+    {
+      "name": "rear ventilation louvre",
+      "from": [3.0, 9.2, 15.09],
+      "to": [13.0, 9.35, 15.16],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" }
+      }
+    },
+    {
+      "name": "rear ventilation louvre",
+      "from": [3.0, 9.75, 15.09],
+      "to": [13.0, 9.9, 15.16],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" }
+      }
+    },
+    {
+      "name": "rear ventilation louvre",
+      "from": [3.0, 10.299999999999999, 15.09],
+      "to": [13.0, 10.45, 15.16],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" }
+      }
+    },
+    {
+      "name": "rear ventilation louvre",
+      "from": [3.0, 10.85, 15.09],
+      "to": [13.0, 11.0, 15.16],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" }
+      }
+    },
+    {
+      "name": "rear ventilation louvre",
+      "from": [3.0, 11.399999999999999, 15.09],
+      "to": [13.0, 11.549999999999999, 15.16],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" }
+      }
+    },
+    {
+      "name": "rear ventilation louvre",
+      "from": [3.0, 11.95, 15.09],
+      "to": [13.0, 12.1, 15.16],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" }
+      }
+    },
+    {
+      "name": "side cooling louvre",
+      "from": [14.99, 3.3, 7.0],
+      "to": [15.06, 3.46, 12.5],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" }
+      }
+    },
+    {
+      "name": "side cooling louvre",
+      "from": [14.99, 3.8, 7.0],
+      "to": [15.06, 3.96, 12.5],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" }
+      }
+    },
+    {
+      "name": "side cooling louvre",
+      "from": [14.99, 4.3, 7.0],
+      "to": [15.06, 4.46, 12.5],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" }
+      }
+    },
+    {
+      "name": "side cooling louvre",
+      "from": [14.99, 4.8, 7.0],
+      "to": [15.06, 4.96, 12.5],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#black" }
+      }
+    }
+  ]
+}

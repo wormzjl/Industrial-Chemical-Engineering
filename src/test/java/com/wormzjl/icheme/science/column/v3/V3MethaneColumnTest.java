@@ -4,21 +4,19 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import com.google.gson.GsonBuilder;
 import com.wormzjl.icheme.network.ColumnCodecs;
-import com.wormzjl.icheme.world.level.block.entity.ColumnCalculatorV3BlockEntity;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
+@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.TiaJuanaExtension.class)
 class V3MethaneColumnTest {
     @Test void freshPresetAndSavedInputRetainTheMethaneAxis() throws Exception {
         var input = V3TestInputs.methaneCduInput();
-        assertEquals(input, ColumnCodecs.invoke(ColumnCalculatorV3BlockEntity.class, "freshInput", new Class<?>[0]));
-        assertEquals(input, ColumnCodecs.readInputNbt(ColumnCodecs.writeInputNbt(input)));
+        assertEquals(input, ColumnCodecs.wireRoundTrip(input));
         var original = V3TestInputs.literatureCduInput();
-        assertEquals(original, ColumnCodecs.readInputNbt(ColumnCodecs.writeInputNbt(original)),
-                "old saved feeds retain their 19-component axis");
+        assertEquals(original, ColumnCodecs.wireRoundTrip(original), "a 19-component feed keeps its axis");
         assertEquals(original.specifications(), input.specifications());
-        assertEquals(V3TestInputs.packagePreset(com.wormzjl.icheme.science.material.MaterialCatalog.bundled(),input.packageId()).draws().stream().map(V3SideDrawSpec::molarFlowMolPerSecond).toList(),input.sideDraws().stream().map(V3SideDrawSpec::molarFlowMolPerSecond).toList());
+        assertEquals(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog().presets().column("tia_juana").draws().stream().map(V3SideDrawSpec::molarFlowMolPerSecond).toList(),input.sideDraws().stream().map(V3SideDrawSpec::molarFlowMolPerSecond).toList());
         assertEquals(original.steamFeeds(), input.steamFeeds());
         assertEquals(original.pumparounds(), input.pumparounds());
     }

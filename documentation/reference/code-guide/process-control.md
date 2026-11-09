@@ -1,19 +1,29 @@
 # Process sensors and ideal regulation
 
-**Snapshot:** 0c88691e (branch `claude/test-suite-optimization-8fbeab`), 2026-11-03 · **Updated:** 2026-11-03 (batch 2026-11-02-test-suite-optimization: `ControlBinding` moves to `src/test`; batch 2026-10-26-multi-machine-framework: facts schema 4 named beside schema 3; the code of this chapter is unchanged) · earlier: 2026-10-27 (batch 2026-10-26-process-control: review findings 2-6 on the codex batch (the head over the body bottom with its solids, `PhaseDraw.mixedShares`, flowmeter taps kept across a reload, a flow valve's island at rest), the seed-236 trace rule, main 0.14.0 merged in: facts schema 3, `Device.withControl`) · earlier: 2026-10-27 (new chapter at `b92385c6`, `codex/process-control`, on main `600549d9`)
+**Snapshot:** 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
+
+## Manual and equipment-owned signal sources (0.22.0)
+
+The current placement catalog is `EquipmentInstruments`: vessel roof/top-platform mounts are manual; rotating, column, thermal and tower instruments are built in. `ControlInput`/`BuiltInInputs` add stable equipment/channel identities without allocating accessory facts. Physical instruments retain their saved UUIDs. Level measurements include liquid plus solid volume, excluding gas. Controller/DCS choices are limited to equipment connected to the selected controller (including column assembly members through its C1), with location/EQ ID on hover. See [instrument-accessories.md](instrument-accessories.md) and [wired-control-power.md](wired-control-power.md) for the actual sources and availability limits.
+
+
+## Wired controller boxes and DCS (0.22.0)
+
+[Wired control and FE power](wired-control-power.md) owns `runtime/control` and `runtime/power`: boxes run native ideal loops, DCS edits/monitors linked boxes, sensors have stable human IDs, and the common pipe/rack framework lays data/power lines. Structural sensor installation/removal is immediate without a solver; measurements and loop plans remain on the 100-online-tick engine cadence. The turbine also has internal admission regulation, so an external speed-sensor valve is optional. Current fluid/accessory/control formats are 14/4/3; older format introductions below are history.
+
 
 Sensor installation is a saved fact. A measurement and an accepted controller regime/opening are disposable state. The fluid worker regulates directly on its trial state, independent of GUI requests. There is no PID, tuning or actuator lag.
 
 | Owner | Contract |
 |---|---|
 | `runtime/instrument/Sensor` | Persistent host/mount/UUID/revision/kind; readings, units, accepted tick and availability; shared sockets |
-| `InstrumentService.Store` | Schema-2 installation/configuration facts, modular tombstones, strict reads and exactly-once removal |
+| `InstrumentService.Store` | Schema-3 (since batch 2026-11-03-rotating-machinery: sensor kind `SPEED`) installation/configuration facts, modular tombstones, strict reads and exactly-once removal |
 | `InstrumentService` | Scheduled admission/revalidation/recovery; legacy valve conversion; cached sensor publication; a sensor sets its valve by one registry edit, `Device.withControl` (a laid pipe keeps its joints and lane); a flowmeter installed or removed calls `FluidWorldAuthority.flowmeter`, a recovered host's `forgetFlowmeter` |
 | `VesselGeometry` | Cylinder/sphere/drum-head/boot V(h) and inverse, hydrostatic head over the body bottom (`head`), D/3 boot weir |
 | `PhaseDraw` / `PassiveStepSolver.Equations` | Mixed liquid draws, depletion/fallback segments, bounded weir water/gas split; `mixedShares`, the stream a LIQUID end holding both liquids draws at a vanishing flow |
 | `NetworkReduction.atRest` | A configured valve passes forward only: a pressure valve its drive above the set point, a flow valve its static drive (nothing at a zero target) |
-| `FlowControl.ControlValve` | Source identity/revision and independent pressure/mass/actual-volume settings |
-| `ControlConstraints` | Dependent mass-flow junction rows and shared pressure taps; accepted-opening fallback and affected-loop status |
+| `FlowControl.ControlValve` | Source identity/revision and independent pressure/mass/actual-volume settings; source `SHAFT_SPEED` (batch 2026-11-03-rotating-machinery W3, D27): a steam turbine's governor valve, a mass target the train sets each slice (`ShaftPlan.Kind.GOVERNOR`) from a speed sensor on the turbine ([rotating-machinery.md](rotating-machinery.md)) |
+| `ControlConstraints` | Dependent mass-flow junction rows and shared pressure taps; accepted-opening fallback and affected-loop status; `moverBounds`: the lowest set flow of a set-flow mover in a connection's series, above which a flow valve cannot regulate and starts open (D11, A1) |
 | `PhysicalFluidTopology` / worker observations | Installed flowmeter points on existing runs, accepted local actual-volume measurements |
 | `PhysicalRegistry` / `IslandCoordinator` | `flowmeters(hosts)` before `load`; `load` attaches the compiled taps to each restored island (`attachObservationPoints`, before its first slice); `flowmeter(host, installed)` queues the host's registration at its next revision, so its island recompiles on the engine schedule; `forgetFlowmeter` changes the set only (the host's removal recompiles); a certificate replay in `materialise` keeps the island's taps |
 | `ControlBinding` (in `src/test` until the cable batch uses it) | Later remote-level endpoint/target/action/status contract; no cable or remote regulator enabled |

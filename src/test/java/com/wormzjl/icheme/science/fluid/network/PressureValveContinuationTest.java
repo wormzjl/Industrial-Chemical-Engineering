@@ -20,11 +20,15 @@ class PressureValveContinuationTest extends PortFixture {
                             List<FlowControl.Mode> modes,double[] heads,double[] endpointFlows) {}
     private record Fixture(List<String> components,List<Node> nodes,List<Pipe> pipes,Endpoint endpoint) {}
     private record Start(PassiveNetwork graph,PassiveIntervalSolver.Result endpoint) {}
+    /** The network model on the fixture's own compound list, as an island holding only them runs (batch 2026-11-04-refinery-compounds, V2). */
+    PressureValveContinuationTest()throws IOException{super(com.wormzjl.icheme.fluid.support.FluidTestSupport.networkModel().on(fixture().components().stream().filter(id->!id.equals("Water")).toList()));}
+    private static Fixture fixture()throws IOException {
+        try(var input=Objects.requireNonNull(PressureValveContinuationTest.class.getResourceAsStream("/fluid/pressure-valve-continuation.json"));
+            var reader=new InputStreamReader(input,StandardCharsets.UTF_8)){return new Gson().fromJson(reader,Fixture.class);}
+    }
 
     private Start start()throws IOException {
-        Fixture fixture;
-        try(var input=Objects.requireNonNull(getClass().getResourceAsStream("/fluid/pressure-valve-continuation.json"));
-            var reader=new InputStreamReader(input,StandardCharsets.UTF_8)) {fixture=new Gson().fromJson(reader,Fixture.class);}
+        var fixture=fixture();
         assertEquals(model.components(),fixture.components());
         var nodes=new ArrayList<PassiveNetwork.Reservoir>();
         for(var n:fixture.nodes()) {

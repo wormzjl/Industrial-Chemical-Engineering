@@ -29,7 +29,7 @@ class HoldClassWorldsTest {
     private static final int METHANE=EventPathWorld.CATALOG.requirePackage("icheme:tjl20_methane_nitrogen").components().indexOf("Methane");
     /** The Tia Juana light crude with methane, on the network basis, as a 1 m3 generator's spec. */
     private static FluidDeviceSpec crude(double temperature,double pressure) {
-        double[] n=Arrays.copyOf(V3PengRobinsonThermo.fromRegisteredPackage("icheme:tjl20_methane_nitrogen").crudeFeed("icheme:tia_juana_light_methane").moleFractions(),
+        double[] n=Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo("icheme:tjl20_methane_nitrogen").crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(),
                 MaterialTestBasis.NETWORK+1);
         return new FluidDeviceSpec(1,temperature,pressure,n);
     }
@@ -53,7 +53,7 @@ class HoldClassWorldsTest {
      */
     @Test void aLowCrudeGeneratorInAValveIslandDoesNotHoldTheSteps() {
         var catalog=EventPathWorld.CATALOG;int components=FluidDeviceSpec.nitrogen(catalog).composition().length;
-        double[] crude=Arrays.copyOf(V3PengRobinsonThermo.fromRegisteredPackage("icheme:tjl20_methane_nitrogen").crudeFeed("icheme:tia_juana_light_methane").moleFractions(),components);
+        double[] crude=Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo("icheme:tjl20_methane_nitrogen").crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(),components);
         int methane=catalog.requirePackage("icheme:tjl20_methane_nitrogen").components().indexOf("Methane");
         var w=new EventPathWorld();w.runTo(105);var passive=new FlowControl.Passive();
         w.place(-1,-2,1,Kind.PIPE,NORTH,.05);w.place(2,0,0,Kind.PIPE,NORTH,.05);w.place(-1,-1,1,Kind.PIPE,NORTH,.02);w.place(-1,-2,3,Kind.PIPE,NORTH,.05);
@@ -154,7 +154,7 @@ class HoldClassWorldsTest {
      */
     @Test void aFilterBetweenTwoWanderingJunctionsConverges() {
         var w=new EventPathWorld();var passive=new FlowControl.Passive();
-        double[] water=new double[21];water[19]=1;double[] methane=new double[21];methane[0]=1;
+        double[] water=EventPathWorld.legacy(19);double[] methane=EventPathWorld.legacy(0);
         w.runTo(239);
         w.place(0,0,0,Kind.FILTER,SOUTH,passive,null,.01);
         w.place(0,0,4,Kind.PIPE,NORTH,passive,null,.01);
@@ -223,10 +223,10 @@ class HoldClassWorldsTest {
      */
     @Test void anEmptyTankLoopedToOneJunctionGivesNothing() {
         var w=new EventPathWorld();var passive=new FlowControl.Passive();
-        double[] water=new double[21];water[19]=1;
-        double[] crude={0.005000000000000001,0.0011908995509034748,0.010591918105298616,0.006510980717557732,0.0222592523684086,0.01663176428669243,
+        double[] water=EventPathWorld.legacy(19);
+        double[] crude=EventPathWorld.legacy(new double[]{0.005000000000000001,0.0011908995509034748,0.010591918105298616,0.006510980717557732,0.0222592523684086,0.01663176428669243,
                 0.024555314957131154,0.16629362769970432,0.12314847499525976,0.1177490756868832,0.10469103210175804,0.08701659237073239,0.07336455325619681,
-                0.06154184102834706,0.06057002423058549,0.06607465545777229,0.02967631275527244,0.015001342402485261,0.008132338029011052,0.0,0.0};
+                0.06154184102834706,0.06057002423058549,0.06607465545777229,0.02967631275527244,0.015001342402485261,0.008132338029011052,0.0,0.0});
         w.runTo(360);
         w.place(0,0,4,Kind.PIPE,NORTH,passive,null,.1);
         w.place(0,0,6,Kind.VALVE,NORTH,new FlowControl.PressureValve(200000),null,.01);
@@ -274,11 +274,11 @@ class HoldClassWorldsTest {
      */
     @Test void aResidueIsBookedWithoutAClosure() {
         var w=new EventPathWorld();var passive=new FlowControl.Passive();
-        double[] water=new double[21];water[20]=1;
-        double[] air=new double[21];air[19]=1;
-        double[] crude={0.005000000000000001,0.0011908995509034748,0.010591918105298616,0.006510980717557732,0.0222592523684086,0.01663176428669243,
+        double[] water=EventPathWorld.legacy(20);
+        double[] air=EventPathWorld.legacy(19);
+        double[] crude=EventPathWorld.legacy(new double[]{0.005000000000000001,0.0011908995509034748,0.010591918105298616,0.006510980717557732,0.0222592523684086,0.01663176428669243,
                 0.024555314957131154,0.16629362769970432,0.12314847499525976,0.1177490756868832,0.10469103210175804,0.08701659237073239,0.07336455325619681,
-                0.06154184102834706,0.06057002423058549,0.06607465545777229,0.02967631275527244,0.015001342402485261,0.008132338029011052,0.0,0.0};
+                0.06154184102834706,0.06057002423058549,0.06607465545777229,0.02967631275527244,0.015001342402485261,0.008132338029011052,0.0,0.0});
         w.runTo(142);
         w.place(0,-3,0,Kind.GENERATOR,NORTH,passive,new FluidDeviceSpec(1,326.6101199519573,371434.1948684311,crude),.02);
         w.place(0,0,2,Kind.PIPE,NORTH,passive,null,.05);
@@ -307,10 +307,10 @@ class HoldClassWorldsTest {
      */
     @Test void aRoundoffArrivalLeavesAnEmptyTankDry() {
         var w=new EventPathWorld();var passive=new FlowControl.Passive();
-        double[] water=new double[21];water[19]=1;
-        double[] crude={0.005000000000000001,0.0011908995509034748,0.010591918105298616,0.006510980717557732,0.0222592523684086,0.01663176428669243,
+        double[] water=EventPathWorld.legacy(19);
+        double[] crude=EventPathWorld.legacy(new double[]{0.005000000000000001,0.0011908995509034748,0.010591918105298616,0.006510980717557732,0.0222592523684086,0.01663176428669243,
                 0.024555314957131154,0.16629362769970432,0.12314847499525976,0.1177490756868832,0.10469103210175804,0.08701659237073239,0.07336455325619681,
-                0.06154184102834706,0.06057002423058549,0.06607465545777229,0.02967631275527244,0.015001342402485261,0.008132338029011052,0.0,0.0};
+                0.06154184102834706,0.06057002423058549,0.06607465545777229,0.02967631275527244,0.015001342402485261,0.008132338029011052,0.0,0.0});
         w.runTo(332);
         w.place(0,0,0,Kind.PIPE,NORTH,passive,null,.01);
         w.place(0,0,4,Kind.PIPE,NORTH,passive,null,.1);
@@ -502,8 +502,8 @@ class HoldClassWorldsTest {
      */
     @Test void aFullTankAboveItsGeneratorClosesTheGeneratorsLine() {
         var w=new EventPathWorld();var passive=new FlowControl.Passive();
-        double[] water=new double[21];water[20]=1;
-        double[] air=new double[21];air[19]=1;
+        double[] water=EventPathWorld.legacy(20);
+        double[] air=EventPathWorld.legacy(19);
         w.runTo(207);
         w.place(1,-2,-1,Kind.PIPE,NORTH,passive,null,.05);
         w.place(1,0,-1,Kind.PIPE,NORTH,passive,null,.05);

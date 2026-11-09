@@ -33,7 +33,7 @@ class PipelineFittingTest {
         var island=new IslandCoordinator.Snapshot(10,0,compiled.islands().getFirst().graph(),new IslandClock.Snapshot(0,0,100,100),Optional.empty(),"READY");
         var empty=WorldTopologyLedger.Snapshot.empty(EventPathWorld.CATALOG);
         var total=WorldTopologyLedger.MaterialTotal.empty(model.components().size()).plus(stock.values(),model.components(),model.molecularWeights());
-        return new EventPathWorld(0,new WorldTopologyLedger.Snapshot(0,11,records,List.of(),total,empty.destroyed(),empty.basis()),List.of(island));
+        return new EventPathWorld(0,new WorldTopologyLedger.Snapshot(0,11,records,List.of(),total,empty.destroyed(),empty.basis()),EventPathWorld.whole(List.of(island)));
     }
     private EventPathWorld line(Direction axis){return line(axis,350000,100000);}
     private static Device valve(EventPathWorld world){return world.registry.registrations().get(3L).device();}
@@ -41,7 +41,8 @@ class PipelineFittingTest {
     private static PassiveNetwork graph(EventPathWorld world){return world.coordinator.snapshots().stream().map(IslandCoordinator.Snapshot::graph).filter(g->g.reservoirs().stream().anyMatch(n->n.id()==1)).findFirst().orElseThrow();}
     private static Map<Long,PassiveNetwork.Inventory> stock(EventPathWorld world) {
         var out=new TreeMap<Long,PassiveNetwork.Inventory>();
-        for(var island:world.coordinator.snapshots())for(var n:island.graph().reservoirs())if(n.kind()==PassiveNetwork.NodeKind.RESERVOIR)out.put(n.id(),n.inventory());
+        // On the world list: a split island keeps only the compounds its part holds (V2).
+        for(var island:world.coordinator.snapshots())for(var n:world.onWorld(island).graph().reservoirs())if(n.kind()==PassiveNetwork.NodeKind.RESERVOIR)out.put(n.id(),n.inventory());
         return out;
     }
     private byte[] image(Device device) {
@@ -78,12 +79,12 @@ class PipelineFittingTest {
         world.registry.togglePipeCutoff(3);world.registry.togglePipeCutoff(3);
         assertEquals(Direction.WEST,valve(world).facing());assertEquals(.25,valve(world).geometry().diameter());
         assertEquals(Direction.EAST,world.ledger.active().get(3L).device().facing(),"committed direction changes only on the schedule");
-        var checkpoint=new FluidCheckpointCodec.Checkpoint(world.coordinator.snapshots().stream().map(s->new FluidCheckpointCodec.IslandEntry(DIM,"icheme:tjl20_methane_nitrogen",s)).toList());
-        var store=FluidCheckpointStore.memory();store.commit(store.prepare(checkpoint,Optional.of(world.ledger.snapshot()),world.ledger.onlineTick(),key->model));
-        var image=store.image();var loaded=FluidCheckpointStore.memory(image).load(image.core(),key->model);var saved=loaded.world().orElseThrow();
+        var checkpoint=new FluidCheckpointCodec.Checkpoint(world.entries());
+        var store=FluidCheckpointStore.memory();store.commit(store.prepare(checkpoint,Optional.of(world.ledger.snapshot()),world.ledger.onlineTick(),key->key.on(model)));
+        var image=store.image();var loaded=FluidCheckpointStore.memory(image).load(image.core(),key->key.on(model));var saved=loaded.world().orElseThrow();
         assertArrayEquals(FluidCheckpointCodec.encodeTopology(world.ledger.snapshot()),FluidCheckpointCodec.encodeTopology(saved));
         assertEquals(graph(world).pipes(),loaded.checkpoint().islands().getFirst().snapshot().graph().pipes(),"permanent scientific restrictions persist too");
-        var reload=new EventPathWorld(0,saved,loaded.checkpoint().islands().stream().map(FluidCheckpointCodec.IslandEntry::snapshot).toList());
+        var reload=new EventPathWorld(0,saved,loaded.checkpoint().islands());
         reload.registry.applyPending();assertEquals(Direction.WEST,valve(reload).facing());assertEquals(before,stock(reload));
         for(double flow:new PassiveStepSolver(model).solve(graph(reload),.1,NOOP).massFlows())assertEquals(0,flow,1e-10);
         assertTrue(reload.commands.isEmpty());
@@ -102,7 +103,7 @@ class PipelineFittingTest {
         var d=new Device(20,new Position(DIM,10,64,0),Kind.VOID,Direction.EAST,new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Passive());
         assertThrows(IllegalArgumentException.class,()->d.withCutoff(Direction.EAST,Cutoff.CHECK));
         var bad=CheckpointImages.renamed(image(valve(world)),"CHECK","CHECX");
-        assertTrue(assertThrows(IllegalArgumentException.class,()->FluidCheckpointCodec.decodeTopology(bad,0,key->model)).getMessage().contains("unknown Cutoff CHECX"));
+        assertTrue(assertThrows(IllegalArgumentException.class,()->FluidCheckpointCodec.decodeTopology(bad,0,key->key.on(model))).getMessage().contains("unknown Cutoff CHECX"));
     }
 
     @Test void checkNodesRetainPressureAndRestrictionsSurviveDrivenEndSwapping() {
@@ -165,14 +166,14 @@ class PipelineFittingTest {
         world.registry.togglePipeCutoff(3);world.registry.togglePipeCutoff(3);
         assertEquals(Cutoff.CLOSED,valve(world).cutoff());assertEquals(.25,valve(world).geometry().diameter());
         var snapshots=world.coordinator.snapshots();
-        var checkpoint=new FluidCheckpointCodec.Checkpoint(snapshots.stream().map(s->new FluidCheckpointCodec.IslandEntry(DIM,"icheme:tjl20_methane_nitrogen",s)).toList());
-        var store=FluidCheckpointStore.memory();store.commit(store.prepare(checkpoint,Optional.of(world.ledger.snapshot()),world.ledger.onlineTick(),key->model));
-        var image=store.image();var loaded=FluidCheckpointStore.memory(image).load(image.core(),key->model);
+        var checkpoint=new FluidCheckpointCodec.Checkpoint(world.entries());
+        var store=FluidCheckpointStore.memory();store.commit(store.prepare(checkpoint,Optional.of(world.ledger.snapshot()),world.ledger.onlineTick(),key->key.on(model)));
+        var image=store.image();var loaded=FluidCheckpointStore.memory(image).load(image.core(),key->key.on(model));
         var saved=loaded.world().orElseThrow();assertEquals(world.ledger.onlineTick(),saved.onlineTick());
         assertArrayEquals(FluidCheckpointCodec.encodeTopology(world.ledger.snapshot()),FluidCheckpointCodec.encodeTopology(saved),"material, active state and pending edits round-trip byte-for-byte");
         var restored=loaded.checkpoint().islands().stream().map(FluidCheckpointCodec.IslandEntry::snapshot).toList();
         assertEquals(snapshots.stream().map(IslandCoordinator.Snapshot::clock).toList(),restored.stream().map(IslandCoordinator.Snapshot::clock).toList());
-        var reload=new EventPathWorld(0,saved,restored);
+        var reload=new EventPathWorld(0,saved,loaded.checkpoint().islands());
         assertEquals(Cutoff.OPEN,reload.ledger.active().get(3L).device().cutoff());assertEquals(Cutoff.CLOSED,valve(reload).cutoff());
         reload.registry.applyPending();assertEquals(Cutoff.CLOSED,reload.ledger.active().get(3L).device().cutoff());
         assertNotEquals(reload.registry.owner(1),reload.registry.owner(5));assertEquals(before,stock(reload));
@@ -194,10 +195,10 @@ class PipelineFittingTest {
     @Test void malformedCodesAndCutoffsOnOtherDeviceKindsAreRejectedByTheReader() {
         var device=new Device(1,new Position(DIM,0,64,0),Kind.PIPE,Direction.EAST,new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Passive());
         var open=image(device.withCutoff(Direction.EAST,Cutoff.OPEN));var bad=CheckpointImages.renamed(open,"OPEN","OPEX");
-        assertTrue(assertThrows(IllegalArgumentException.class,()->FluidCheckpointCodec.decodeTopology(bad,0,key->model)).getMessage().contains("unknown Cutoff OPEX"));
+        assertTrue(assertThrows(IllegalArgumentException.class,()->FluidCheckpointCodec.decodeTopology(bad,0,key->key.on(model))).getMessage().contains("unknown Cutoff OPEX"));
         var other=new Device(1,device.position(),Kind.VOID,device.facing(),device.geometry(),device.control());
         var illegalKind=CheckpointImages.renamed(open,"PIPE","VOID");
-        assertTrue(assertThrows(IllegalArgumentException.class,()->FluidCheckpointCodec.decodeTopology(illegalKind,0,key->model)).getMessage().contains("Only a pipe"));
+        assertTrue(assertThrows(IllegalArgumentException.class,()->FluidCheckpointCodec.decodeTopology(illegalKind,0,key->key.on(model))).getMessage().contains("Only a pipe"));
         assertThrows(IllegalArgumentException.class,()->other.withCutoff(Direction.EAST,Cutoff.OPEN));
     }
     @Test void wrenchRemovalRestoresOrdinaryPipeAndPreservesPendingDiameterAndContents(){
@@ -249,13 +250,13 @@ class PipelineFittingTest {
         var record=world.registry.registrations().get(3L);var d=record.device();
         var edited=new Device(d.id(),d.position(),d.kind(),d.facing(),new PipeResistance.Geometry(1,.25,d.geometry().roughness(),0),new FlowControl.PressureValve(275000));
         world.registry.submit(List.of(new WorldTopologyLedger.Edit(3,new WorldTopologyLedger.Registration(edited,record.spec(),record.revision()+1))),world.ledger.nextIdentity(),null);
-        var snapshots=world.coordinator.snapshots();var checkpoint=new FluidCheckpointCodec.Checkpoint(snapshots.stream().map(s->new FluidCheckpointCodec.IslandEntry(DIM,"icheme:tjl20_methane_nitrogen",s)).toList());
-        var store=FluidCheckpointStore.memory();store.commit(store.prepare(checkpoint,Optional.of(world.ledger.snapshot()),world.ledger.onlineTick(),key->model));
-        var image=store.image();var loaded=FluidCheckpointStore.memory(image).load(image.core(),key->model);
+        var snapshots=world.coordinator.snapshots();var checkpoint=new FluidCheckpointCodec.Checkpoint(world.entries());
+        var store=FluidCheckpointStore.memory();store.commit(store.prepare(checkpoint,Optional.of(world.ledger.snapshot()),world.ledger.onlineTick(),key->key.on(model)));
+        var image=store.image();var loaded=FluidCheckpointStore.memory(image).load(image.core(),key->key.on(model));
         assertArrayEquals(FluidCheckpointCodec.encodeTopology(world.ledger.snapshot()),FluidCheckpointCodec.encodeTopology(loaded.world().orElseThrow()));
-        var restored=new EventPathWorld(0,loaded.world().orElseThrow(),loaded.checkpoint().islands().stream().map(FluidCheckpointCodec.IslandEntry::snapshot).toList());
+        var restored=new EventPathWorld(0,loaded.world().orElseThrow(),loaded.checkpoint().islands());
         restored.registry.applyPending();assertEquals(before,stock(restored));assertEquals(edited,restored.ledger.active().get(3L).device());
-        var active=FluidCheckpointCodec.decodeTopology(FluidCheckpointCodec.encodeTopology(restored.ledger.snapshot()),restored.ledger.onlineTick(),key->model);
+        var active=FluidCheckpointCodec.decodeTopology(FluidCheckpointCodec.encodeTopology(restored.ledger.snapshot()),restored.ledger.onlineTick(),key->key.on(model));
         assertEquals(edited,active.active().get(3L).device());
         assertThrows(IllegalArgumentException.class,()->edited.withCutoff(Direction.EAST,Cutoff.OPEN));
     }
@@ -292,7 +293,7 @@ class PipelineFittingTest {
         var solids=new com.wormzjl.icheme.science.fluid.state.SolidInventory(List.of(new com.wormzjl.icheme.science.fluid.state.SolidInventory.Population(EventPathWorld.CATALOG.solids().require("icheme:demo_particle"),com.wormzjl.icheme.science.fluid.state.ParticleSize.micrometres("100"),.25)));
         var cake=InlineFilter.empty().add(solids,125);var snapshot=world.coordinator.snapshots().getFirst();
         var pipes=snapshot.graph().pipes().stream().map(p->p.filter()==null?p:p.withFilter(cake)).toList();
-        var loaded=new EventPathWorld(0,world.ledger.snapshot(),List.of(new IslandCoordinator.Snapshot(snapshot.id(),snapshot.revision(),new PassiveNetwork(snapshot.graph().reservoirs(),pipes),snapshot.clock(),Optional.empty(),snapshot.status())));
+        var loaded=new EventPathWorld(0,world.ledger.snapshot(),List.of(world.coordinator.entry(DIM,FluidPresetCatalog.NETWORK_PACKAGE,new IslandCoordinator.Snapshot(snapshot.id(),snapshot.revision(),new PassiveNetwork(snapshot.graph().reservoirs(),pipes),snapshot.clock(),Optional.empty(),snapshot.status()))));
         var before=stock(loaded);assertTrue(loaded.registry.removePipeAccessory(3));assertTrue(loaded.registry.removePipeAccessory(3));loaded.registry.applyPending();
         assertEquals(before,stock(loaded));var recoveries=loaded.ledger.snapshot().recoveries();assertEquals(1,recoveries.size());var recovered=recoveries.values().iterator().next();assertEquals(solids,recovered.solids());assertEquals(125,recovered.energyJoule());assertNull(recovered.player());
         assertTrue(loaded.registry.removePipeAccessory(3));loaded.registry.applyPending();assertEquals(recoveries,loaded.ledger.snapshot().recoveries());
@@ -304,12 +305,12 @@ class PipelineFittingTest {
     private static List<PassiveNetwork.Pipe.ObservationPoint> taps(EventPathWorld world){return graph(world).pipes().stream().flatMap(p->p.observationPoints().stream()).toList();}
     /** {@code world} saved through the complete checkpoint and loaded with {@code flowmeters} installed, as the authority starts. */
     private EventPathWorld reloaded(EventPathWorld world,int workers,Collection<Long> flowmeters) {
-        var checkpoint=new FluidCheckpointCodec.Checkpoint(world.coordinator.snapshots().stream().map(s->new FluidCheckpointCodec.IslandEntry(DIM,"icheme:tjl20_methane_nitrogen",s)).toList());
-        var store=FluidCheckpointStore.memory();store.commit(store.prepare(checkpoint,Optional.of(world.ledger.snapshot()),world.ledger.onlineTick(),key->model));
-        var image=store.image();var loaded=FluidCheckpointStore.memory(image).load(image.core(),key->model);
+        var checkpoint=new FluidCheckpointCodec.Checkpoint(world.entries());
+        var store=FluidCheckpointStore.memory();store.commit(store.prepare(checkpoint,Optional.of(world.ledger.snapshot()),world.ledger.onlineTick(),key->key.on(model)));
+        var image=store.image();var loaded=FluidCheckpointStore.memory(image).load(image.core(),key->key.on(model));
         var islands=loaded.checkpoint().islands().stream().map(FluidCheckpointCodec.IslandEntry::snapshot).toList();
         assertTrue(islands.stream().allMatch(s->s.graph().pipes().stream().allMatch(p->p.observationPoints().isEmpty())),"a checkpoint carries no tap");
-        return new EventPathWorld(workers,loaded.world().orElseThrow(),islands,flowmeters);
+        return new EventPathWorld(workers,loaded.world().orElseThrow(),loaded.checkpoint().islands(),flowmeters);
     }
     @Test void aFlowmeterTapsItsPipeOnTheEngineScheduleAndAgainAfterAReload() {
         var world=line(Direction.EAST);var before=stock(world);assertTrue(taps(world).isEmpty());
@@ -341,7 +342,7 @@ class PipelineFittingTest {
             assertTrue(world.registry.installPipeMover(3,axis,kind));assertFalse(world.registry.installPipeMover(3,axis,kind));
             assertFalse(world.registry.installPipeFilter(3,axis));assertFalse(world.registry.installPipePressureValve(3,axis));assertFalse(world.registry.installPipeCutoff(3,axis));
             var installed=world.registry.registrations().get(3L);var d=installed.device();
-            assertEquals(Kind.PIPE,d.kind());assertEquals(kind,d.hydraulicKind());assertEquals(PhysicalFluidTopology.defaultMover(kind),d.control());assertEquals(old.spec(),installed.spec());assertEquals(old.device().geometry(),d.geometry());assertEquals(old.device().id(),d.id());
+            assertEquals(Kind.PIPE,d.kind());assertEquals(kind,d.hydraulicKind());assertEquals(com.wormzjl.icheme.science.machine.InlineMachines.design(old.device().geometry().diameter(),kind==Kind.PUMP),d.control());assertEquals(old.spec(),installed.spec());assertEquals(old.device().geometry(),d.geometry());assertEquals(old.device().id(),d.id());
             world.registry.applyPending();assertEquals(before,stock(world));
             // The one-block mover this was once compared with is gone (batch 2026-10-28-old-mover-removal): the in-line
             // mover is the only form, one driven pipe in the host's bore.
@@ -356,7 +357,7 @@ class PipelineFittingTest {
             var edited=new Device(d.id(),d.position(),d.kind(),d.facing(),new PipeResistance.Geometry(1,.25,.000045,0),control,d.ports(),true,d.cutoff(),false);
             world.registry.submit(List.of(new WorldTopologyLedger.Edit(3,new WorldTopologyLedger.Registration(edited,r.spec(),r.revision()+1))),world.ledger.nextIdentity(),null);
             var image=FluidCheckpointCodec.encodeTopology(world.ledger.snapshot());var loaded=FluidCheckpointCodec.decodeTopology(image,0,k->model);assertArrayEquals(image,FluidCheckpointCodec.encodeTopology(loaded));
-            var restored=new EventPathWorld(0,loaded,world.coordinator.snapshots());restored.registry.applyPending();assertEquals(edited,restored.ledger.active().get(3L).device());
+            var restored=new EventPathWorld(0,loaded,world.entries());restored.registry.applyPending();assertEquals(edited,restored.ledger.active().get(3L).device());
             var active=FluidCheckpointCodec.encodeTopology(restored.ledger.snapshot());assertArrayEquals(active,FluidCheckpointCodec.encodeTopology(FluidCheckpointCodec.decodeTopology(active,0,k->model)));
             assertTrue(restored.registry.removePipeAccessory(3));int events=restored.ledger.snapshot().events().size();assertTrue(restored.registry.removePipeAccessory(3));assertEquals(events,restored.ledger.snapshot().events().size());
             assertTrue(restored.registry.installPipeFilter(3,Direction.EAST));assertTrue(restored.registry.removePipeAccessory(3));restored.registry.applyPending();var ordinary=restored.registry.registrations().get(3L).device();assertEquals(3,ordinary.id());assertEquals(.25,ordinary.geometry().diameter());assertInstanceOf(FlowControl.Passive.class,ordinary.control());assertEquals(before,stock(restored));assertTrue(restored.commands.isEmpty());

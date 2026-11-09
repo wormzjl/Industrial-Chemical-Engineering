@@ -56,6 +56,7 @@ final class OperationPrototypes {
         var duties = new ArrayList<OperationView.Duty>();
         duties.add(new OperationView.Duty(OperationView.DutyKind.CONDENSER, 0, -8.51e6 * alpha, -8.51e6));
         for (int j = 0; j < pumparounds; j++) duties.add(new OperationView.Duty(OperationView.DutyKind.PUMPAROUND, j, p[j] * f, p[j] * design));
+        duties.add(new OperationView.Duty(OperationView.DutyKind.FANS, 0, 168.2e3 * alpha, 168.2e3));
         return new OperationView(OperationView.Phase.LIMITED, ColumnCycle.Limit.CONDENSER, alpha, false, null, false,
                 "LIMITED: condenser, 86 %", true, true, set, streams, duties, new OperationView.Solve(DriftBands.Trigger.ENTHALPY, true, 45));
     }

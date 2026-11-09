@@ -1,0 +1,183 @@
+{
+  "comment": "Freezing sub-records (plan 3.6) for the existing datasets: ChemSep values, except CO2 (the CO2-I crystal anchor) and the crude fractions (owner decision Q4: Riazi and Al-Sahhaf 1995 n-paraffin bound, estimated). Water has none: its water model holds 273.16 K and its ice. Run with --materials <src/main/resources/data/icheme/materials>.",
+  "properties_revision": "unused",
+  "viscosity_revision": "unused",
+  "freezing_revision": "chemsep-8.3-r1",
+  "estimate_freezing_revision": "riazi-al-sahhaf-1995-r1",
+  "crystal_freezing_revision": "crystal-anchor-r1",
+  "form": {
+    "column_range_kelvin": [
+      298.15,
+      900
+    ],
+    "cp_fit": {
+      "low": "data",
+      "high": 900,
+      "grid_step_kelvin": 25,
+      "include_low_end": true
+    },
+    "fluid_domain": {
+      "temperature_min": "cp_fit",
+      "temperature_max": 900,
+      "pressure_min_pascal": 100,
+      "pressure_max_pascal": 2000000
+    },
+    "liquid_viscosity": {
+      "low": "data",
+      "high_reduced_temperature": 0.95
+    },
+    "vapor_viscosity": {
+      "low": "fluid_domain",
+      "high": 900
+    },
+    "tolerance": 0.0005
+  },
+  "compounds": [],
+  "freezing_only": [
+    {
+      "component": "Methane",
+      "cas": "74-82-8",
+      "properties": "icheme:tjl20_methane",
+      "properties_file": "tjl20_methane.json"
+    },
+    {
+      "component": "Methane",
+      "cas": "74-82-8",
+      "properties": "icheme:pilot_methane",
+      "properties_file": "pilot_methane.json"
+    },
+    {
+      "component": "Ethane",
+      "cas": "74-84-0",
+      "properties": "icheme:tjl19_ethane",
+      "properties_file": "tjl19_ethane.json"
+    },
+    {
+      "component": "Ethane",
+      "cas": "74-84-0",
+      "properties": "icheme:pilot_ethane",
+      "properties_file": "pilot_ethane.json"
+    },
+    {
+      "component": "Propane",
+      "cas": "74-98-6",
+      "properties": "icheme:tjl19_propane",
+      "properties_file": "tjl19_propane.json"
+    },
+    {
+      "component": "Isobutane",
+      "cas": "75-28-5",
+      "properties": "icheme:tjl19_isobutane",
+      "properties_file": "tjl19_isobutane.json"
+    },
+    {
+      "component": "N-butane",
+      "cas": "106-97-8",
+      "properties": "icheme:tjl19_n_butane",
+      "properties_file": "tjl19_n_butane.json"
+    },
+    {
+      "component": "Isopentane",
+      "cas": "78-78-4",
+      "properties": "icheme:tjl19_isopentane",
+      "properties_file": "tjl19_isopentane.json"
+    },
+    {
+      "component": "N-pentane",
+      "cas": "109-66-0",
+      "properties": "icheme:tjl19_n_pentane",
+      "properties_file": "tjl19_n_pentane.json"
+    },
+    {
+      "component": "Nitrogen",
+      "cas": "7727-37-9",
+      "properties": "icheme:fluid_nitrogen",
+      "properties_file": "nitrogen.json"
+    },
+    {
+      "component": "Nitrogen",
+      "cas": "7727-37-9",
+      "properties": "icheme:pilot_nitrogen",
+      "properties_file": "pilot_nitrogen.json"
+    },
+    {
+      "component": "CarbonDioxide",
+      "properties": "icheme:pilot_carbon_dioxide",
+      "properties_file": "pilot_carbon_dioxide.json",
+      "from_crystal": "carbon_dioxide_i.json",
+      "note": "CO2 sublimes at 1 atm (194.7 K) and has no normal melting point: normal_melting_kelvin holds the triple point. The fusion enthalpy is the crystal's effective value for the pilot family."
+    },
+    {
+      "component": "crude_pc01",
+      "properties": "icheme:crude_pc01",
+      "properties_file": "crude_pc01.json",
+      "estimate": "riazi_al_sahhaf_1995"
+    },
+    {
+      "component": "crude_pc02",
+      "properties": "icheme:crude_pc02",
+      "properties_file": "crude_pc02.json",
+      "estimate": "riazi_al_sahhaf_1995"
+    },
+    {
+      "component": "crude_pc03",
+      "properties": "icheme:crude_pc03",
+      "properties_file": "crude_pc03.json",
+      "estimate": "riazi_al_sahhaf_1995"
+    },
+    {
+      "component": "crude_pc04",
+      "properties": "icheme:crude_pc04",
+      "properties_file": "crude_pc04.json",
+      "estimate": "riazi_al_sahhaf_1995"
+    },
+    {
+      "component": "crude_pc05",
+      "properties": "icheme:crude_pc05",
+      "properties_file": "crude_pc05.json",
+      "estimate": "riazi_al_sahhaf_1995"
+    },
+    {
+      "component": "crude_pc06",
+      "properties": "icheme:crude_pc06",
+      "properties_file": "crude_pc06.json",
+      "estimate": "riazi_al_sahhaf_1995"
+    },
+    {
+      "component": "crude_pc07",
+      "properties": "icheme:crude_pc07",
+      "properties_file": "crude_pc07.json",
+      "estimate": "riazi_al_sahhaf_1995"
+    },
+    {
+      "component": "crude_pc08",
+      "properties": "icheme:crude_pc08",
+      "properties_file": "crude_pc08.json",
+      "estimate": "riazi_al_sahhaf_1995"
+    },
+    {
+      "component": "crude_pc09",
+      "properties": "icheme:crude_pc09",
+      "properties_file": "crude_pc09.json",
+      "estimate": "riazi_al_sahhaf_1995"
+    },
+    {
+      "component": "crude_pc10",
+      "properties": "icheme:crude_pc10",
+      "properties_file": "crude_pc10.json",
+      "estimate": "riazi_al_sahhaf_1995"
+    },
+    {
+      "component": "crude_pc11",
+      "properties": "icheme:crude_pc11",
+      "properties_file": "crude_pc11.json",
+      "estimate": "riazi_al_sahhaf_1995"
+    },
+    {
+      "component": "crude_pc12",
+      "properties": "icheme:crude_pc12",
+      "properties_file": "crude_pc12.json",
+      "estimate": "riazi_al_sahhaf_1995"
+    }
+  ]
+}

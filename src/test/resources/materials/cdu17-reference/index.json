@@ -32,6 +32,7 @@
   "data/icheme/materials/components/cdu17_pc12.json",
   "data/icheme/materials/properties/cdu17_cdu17_pc12.json",
   "data/icheme/materials/interactions/cdu17.json",
+  "data/icheme/materials/methods/cdu17.json",
   "data/icheme/materials/packages/cdu17.json",
   "data/icheme/materials/assays/cdu17.json",
   "data/icheme/materials/water/water.json",

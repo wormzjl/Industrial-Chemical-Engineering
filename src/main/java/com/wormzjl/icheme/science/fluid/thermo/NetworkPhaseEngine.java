@@ -25,20 +25,22 @@ import java.util.List;
  *
  * <p>The evaluator carries the network's exact equation of state: on a package with a reference spine
  * {@link CubicPhaseEvaluator#forPackage} (the same {@link SpinePackageData} as {@link HydrocarbonModel}); on a package
- * without one the package's PR78 constants and constant interactions with {@link HydrocarbonModel}'s own translations
- * (they enter the vapour branch's shift and the gas volume of the free-water rule, so a translation-free evaluator would
- * put the partial pressure elsewhere). Volume and {@code ln phi} are then bit for bit the network's. The ideal-gas
- * functions of a spine-less package are its {@code shifted_polynomial_5} fits on the network's sensible datum (zero
- * enthalpy and entropy at 298.15 K and 1e5 Pa, the network's own ideal-gas enthalpy): the engine needs them for the
- * states it reports, which the network does not read, and for a junction's PH seed (its own rows then solve it); TP phase
- * decisions are the cubic's and the water rule's.</p>
+ * without one {@link HydrocarbonModel#coefficientEvaluator}, the package's PR78 constants and constant interactions with
+ * the model's own translations (they enter the vapour branch's shift and the gas volume of the free-water rule, so a
+ * translation-free evaluator would put the partial pressure elsewhere). Volume and {@code ln phi} are then bit for bit
+ * the network's. The ideal-gas functions of a spine-less package are its {@code shifted_polynomial_5} fits on the
+ * network's sensible datum ({@link CoefficientIdealGas}: zero enthalpy and entropy at 298.15 K and 1e5 Pa, the network's
+ * own ideal-gas enthalpy): the engine needs them for the states it reports, for a junction's PH seed (its own rows then
+ * solve it) and for the package's crystals, which they put on the network's datum (decision E27); TP decisions between
+ * fluid phases are the cubic's and the water rule's.</p>
  *
  * <p>The engine's workspaces are per-thread scratch ({@link FluidTpEquilibrium.Workspace}), kept in a thread-local of
  * this instance so a model shared by several island workers never shares one; the engine carries nothing between calls
  * but prepared temperatures, recomputed bit for bit.</p>
  */
 final class NetworkPhaseEngine {
-    /** The standard entropy of water vapour at 298.15 K and 1e5 Pa, J/(mol K) (JANAF): the steam's entropy anchor. */
+    /** The standard entropy of water vapour at 298.15 K and 1e5 Pa, J/(mol K) (CODATA key value, Cox, Wagman and Medvedev 1989;
+     * NASA CEA's H2O polynomial gives 188.829): the steam's entropy anchor. */
     static final double STEAM_STANDARD_ENTROPY=188.835;
     private final FluidTpEquilibrium engine;
     private final List<String> species;
@@ -52,23 +54,13 @@ final class NetworkPhaseEngine {
     /**
      * The engine of {@code fluid}'s package with {@code settings} ({@link FluidTpEquilibrium.Settings#DEFAULT} for the
      * network). A package that admits crystals gets its whole crystal set qualified ({@link PhaseContract#forPackage},
-     * D8/D17) and one evaluator per crystal; every other package keeps the fluid-only network contract.
+     * D8/D17) and one evaluator per crystal, anchored to this evaluator's family on either ideal-gas source
+     * ({@link CrystalPhaseEvaluator#forPackage}); every other package keeps the fluid-only network contract.
      */
     static NetworkPhaseEngine of(FluidThermodynamics fluid,MaterialCatalog catalog,String packageId,MaterialCatalog.Water water,
                                  FluidTpEquilibrium.Settings settings) {
         var propertyPackage=catalog.requirePackage(packageId);
-        CubicPhaseEvaluator evaluator;
-        if(!propertyPackage.spine().isEmpty())evaluator=CubicPhaseEvaluator.forPackage(catalog,packageId);
-        else {
-            var translated=fluid.hydrocarbon.translated();
-            int n=propertyPackage.components().size();double[] translations=new double[n];
-            List<IdealGasFunction> gas=new ArrayList<>(n);
-            for(int i=0;i<n;i++) {
-                translations[i]=translated.translation(i);
-                gas.add(new CoefficientIdealGas(propertyPackage.properties().get(i),translated.idealGasMinimumTemperature(i),translated.idealGasMaximumTemperature(i)));
-            }
-            evaluator=CubicPhaseEvaluator.fromPackage(propertyPackage,propertyPackage.components(),translations,gas);
-        }
+        var evaluator=propertyPackage.spine().isEmpty()?fluid.hydrocarbon.coefficientEvaluator():CubicPhaseEvaluator.forPackage(catalog,packageId);
         var crystals=fluid.crystals();
         if(!crystals.isEmpty()) {
             var contract=PhaseContract.forPackage(catalog,packageId);
@@ -183,74 +175,5 @@ final class NetworkPhaseEngine {
         }
         @Override public double minimumTemperature(){return minimum;}
         @Override public double maximumTemperature(){return maximum;}
-    }
-
-    /**
-     * A {@code shifted_polynomial_5} ideal-gas fit as an {@link IdealGasFunction} on the network's sensible datum:
-     * {@code c_p = sum a_k (T - 298.15)^k}, the enthalpy its integral from 298.15 K (the network's own ideal-gas
-     * enthalpy), the entropy {@code integral c_p/T dT} from 298.15 K minus {@code R ln(P/1e5)}. Past the fit's range
-     * {@code [minimum, maximum]} (the translated model's own, {@link TranslatedPengRobinson#idealGasMinimumTemperature},
-     * so both continue at the same ends) the heat capacity is held at the end value and the enthalpy and entropy
-     * integrate it (owner rule of 2026-10-16), as {@link TranslatedPengRobinson}'s coefficient path does.
-     */
-    static final class CoefficientIdealGas implements IdealGasFunction {
-        private static final double REFERENCE=298.15;
-        private final double[] main,mainPowers;
-        private final double minimum,maximum;
-        CoefficientIdealGas(MaterialCatalog.Property property,double minimum,double maximum) {
-            main=property.cp().stream().mapToDouble(Double::doubleValue).toArray();
-            mainPowers=powers(main);
-            this.minimum=minimum;this.maximum=maximum;
-        }
-        @Override public double heatCapacity(double t) {
-            return fitHeatCapacity(edge(t));
-        }
-        @Override public double enthalpy(double t) {
-            double e=edge(t),h=antiderivative(main,e);
-            return e==t?h:h+fitHeatCapacity(e)*(t-e);
-        }
-        @Override public double entropy(double t,double p) {
-            double e=edge(t);if(!(p>0))throw new IllegalArgumentException("Ideal-gas entropy needs a positive pressure");
-            double integral=entropyIntegral(mainPowers,e);
-            if(e!=t)integral+=fitHeatCapacity(e)*DeterministicMath.log(t/e);
-            return integral-FluidThermodynamics.R*DeterministicMath.log(p/1.0e5);
-        }
-        @Override public double minimumTemperature(){return minimum;}
-        @Override public double maximumTemperature(){return maximum;}
-        private double fitHeatCapacity(double t) {
-            double delta=t-REFERENCE,cp=0;
-            for(int k=main.length-1;k>=0;k--)cp=cp*delta+main[k];
-            return cp;
-        }
-        /** {@code t} inside the fit's range, the nearer end outside it; a temperature that is not positive is refused. */
-        private double edge(double t) {
-            if(!(t>0)||!Double.isFinite(t))throw new IllegalArgumentException("Ideal-gas temperature must be positive and finite: "+t);
-            return t<minimum?minimum:t>maximum?maximum:t;
-        }
-        /** {@code integral_298.15^T c_p dT}, the Horner form the translated model uses. */
-        private static double antiderivative(double[] a,double t) {
-            double delta=t-REFERENCE,h=0;
-            for(int k=a.length-1;k>=0;k--)h=h*delta+a[k]/(k+1);
-            return h*delta;
-        }
-        /** The same polynomial in powers of {@code T}: {@code sum_m p_m T^m}. */
-        private static double[] powers(double[] a) {
-            double[] p=new double[a.length];
-            for(int k=0;k<a.length;k++) {
-                double binomial=1;
-                for(int m=0;m<=k;m++) {
-                    p[m]+=a[k]*binomial*DeterministicMath.pow(-REFERENCE,k-m);
-                    binomial=binomial*(k-m)/(m+1);
-                }
-            }
-            return p;
-        }
-        /** {@code integral_298.15^T c_p/T dT} of the polynomial in powers of {@code T}. */
-        private static double entropyIntegral(double[] p,double t) {
-            double integral=p[0]*DeterministicMath.log(t/REFERENCE);
-            double tm=1,rm=1;
-            for(int m=1;m<p.length;m++){tm*=t;rm*=REFERENCE;integral+=p[m]*(tm-rm)/m;}
-            return integral;
-        }
     }
 }

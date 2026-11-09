@@ -20,19 +20,31 @@ public interface PortGraph {
     List<Run> branches(Junction junction, Run arrived);
 
     /**
-     * A structure: its origin (its identity), its kind, whether it lies and has a boot (a drum's), and its nozzle roles
-     * in nozzle order.
+     * A structure: its origin (its identity), its kind, whether it lies and has a boot (a drum's), its nozzle roles in
+     * nozzle order, and its size, which tells identical units in parallel apart from others (null where not known).
      */
-    record Unit(long origin, Kind kind, boolean lying, boolean boot, List<Role> nozzles) {
+    record Unit(long origin, Kind kind, boolean lying, boolean boot, List<Role> nozzles, @org.jetbrains.annotations.Nullable Size size) {
         public Unit {
             Objects.requireNonNull(kind, "kind");
             nozzles = List.copyOf(nozzles);
+        }
+
+        public Unit(long origin, Kind kind, boolean lying, boolean boot, List<Role> nozzles) {
+            this(origin, kind, lying, boot, nozzles, null);
         }
 
         /** How many nozzles of {@code role} the unit has. */
         public int count(Role role) {
             return (int) nozzles.stream().filter(r -> r == role).count();
         }
+    }
+
+    /**
+     * What makes units of one kind identical on a parallel step (S3b): the main size, the length and an air cooler's bank.
+     * Identical units on one split and merge take equal shares of the stream.
+     */
+    record Size(double diameter, double length, com.wormzjl.icheme.science.equipment.ProcessUnit.Bank bank,com.wormzjl.icheme.science.equipment.ExchangerType exchangerType) {
+        public Size(double diameter,double length,com.wormzjl.icheme.science.equipment.ProcessUnit.Bank bank){this(diameter,length,bank,com.wormzjl.icheme.science.equipment.ExchangerType.STANDARD);}
     }
 
     /** A unit's port: its nozzle role and which one of that role it is, from 0 in nozzle order. */

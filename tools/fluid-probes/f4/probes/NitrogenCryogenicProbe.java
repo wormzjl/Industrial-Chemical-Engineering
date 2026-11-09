@@ -6,7 +6,7 @@ import java.util.Locale;
 
 /**
  * F4 probe: the network's nitrogen model at cryogenic states, read through the translated PR78 directly so the
- * domain checks do not stand in the way, against the NIST points in ../nist/. Prints saturation pressure,
+ * domain checks do not stand in the way, against the NIST points in D:/Minecraft/Modding/1.21/CreateChemE/research/2026-09-23-fluid-followups/f4-nist/ (moved out of the tracked tree, batch 2026-11-04-open-thermo-data O1). Prints saturation pressure,
  * saturated liquid density, vapour Cp and ideal-gas Cp. The network liquid is PR78 at the 2 MPa reference with
  * the global compressibility response (HydrocarbonModel.phase); the "pure PR" line evaluates the liquid at P.
  */
@@ -33,8 +33,8 @@ public final class NitrogenCryogenicProbe {
             double numeric=(up.molarEnthalpy()-dn.molarEnthalpy())/(2*h);
             System.out.printf(Locale.ROOT,"Cp_V(%.0f K, 101325 Pa) analytic=%.5f numeric=%.5f NIST=%.5f J/mol/K err=%.3f%%%n",row[0],v.heatCapacity(),numeric,row[1],100*(v.heatCapacity()/row[1]-1));
         }
-        // Saturation sweep against the NIST table (../nist/sat-triple-to-critical.tsv), every fifth kelvin or so.
-        try{var rows=java.nio.file.Files.readAllLines(java.nio.file.Path.of(args.length>0?args[0]:"../nist/sat-triple-to-critical.tsv"));double last=-10;
+        // Saturation sweep against the NIST table (D:/Minecraft/Modding/1.21/CreateChemE/research/2026-09-23-fluid-followups/f4-nist/sat-triple-to-critical.tsv), every fifth kelvin or so.
+        try{var rows=java.nio.file.Files.readAllLines(java.nio.file.Path.of(args.length>0?args[0]:"D:/Minecraft/Modding/1.21/CreateChemE/research/2026-09-23-fluid-followups/f4-nist/sat-triple-to-critical.tsv"));double last=-10;
             System.out.println("T_K  Psat_NIST_Pa  Psat_model_Pa  err_%  rhoL_NIST  rhoL_model(at NIST Psat)  err_%");
             for(String row:rows.subList(1,rows.size())){var c=row.split("\t");double ts=Double.parseDouble(c[0]);if(ts-last<5&&ts<126)continue;if(ts>122)break;last=ts;
                 double pn=Double.parseDouble(c[1])*1000,rn=Double.parseDouble(c[2]);double pm=saturation(eos,response,ts,x,nitrogen,true);double rm=mw/liquid(eos,response,ts,pn,x).molarVolume();

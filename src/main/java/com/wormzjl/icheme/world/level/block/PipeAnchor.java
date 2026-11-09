@@ -117,6 +117,8 @@ public record PipeAnchor(Kind kind, BlockPos cell, @Nullable Direction joint, @N
         var refusal = start.refuses(outside);
         return refusal != null ? refusal : end.refuses(outside);
     }
+    /** A rack continues through the aimed open arm, otherwise its first open arm; never creates a rack junction. */
+    public static int openArm(int open,int aimed){return open==0?-1:(open&1<<aimed)!=0?aimed:Integer.numberOfTrailingZeros(open);}
 
     /**
      * The face a line starting here leaves along: the clicked face; or for a slot aimed on a rack, the face opposite the
@@ -149,71 +151,29 @@ public record PipeAnchor(Kind kind, BlockPos cell, @Nullable Direction joint, @N
      * other lane of its rack uses (plan 5.2); a nozzle and a device meet plain cells only.
      */
     public static Resolved resolve(Level level, Click click, double outside) {
-        var clicked = click.clicked;
-        var face = click.face;
-        var state = level.getBlockState(clicked);
-        var next = clicked.relative(face);
+        var resolved=LineAnchors.resolve(level,LineTarget.of(click),new LineProfile.Settings(LineProfile.FLUID,.05,outside,0,0));
+        return new Resolved(resolved.anchor()==null?null:resolved.anchor().placement(),resolved.refusal());
+    }
+    /** Free surfaces and rack slots follow the same resolution for pipes, data and power. */
+    public static Resolved open(Level level,Click click,double outside){
+        var clicked=click.clicked();var face=click.face();var next=clicked.relative(face);var state=level.getBlockState(clicked);
         PipeAnchor anchor;
-        if (level.getBlockEntity(clicked) instanceof PipeRackBlockEntity rack) {
-            var pick = rack.pick(click.local.x, click.local.y, click.local.z);
-            if (pick.lane() < 0) {
-                var resolved = rack(clicked, rack, click.local, outside);
-                if (resolved.anchor == null) return resolved;
-                anchor = resolved.anchor;
-            } else {
-                var lane = rack.lanes().get(pick.lane());
-                int open = rack.openFaces(pick.lane());
-                if (open == 0) return new Resolved(null, Refusal.LANE_CLOSED);
-                var out = Direction.values()[(open >> pick.face() & 1) != 0 ? pick.face() : Integer.numberOfTrailingZeros(open)];
-                var beyond = clicked.relative(out);
-                boolean continued = level.hasChunkAt(beyond) && level.getBlockEntity(beyond) instanceof PipeRackBlockEntity;
-                for (var other : rack.lanes())
-                    if (!continued && other != lane && (other.joints() >> out.ordinal() & 1) != 0) return new Resolved(null, Refusal.FACE_TAKEN);
-                int edit = (lane.joints() >> out.ordinal() & 1) != 0 ? -1 : lane.joints() | 1 << out.ordinal();
-                // On into the next rack the lane keeps its point, width and height; into a plain cell, a line no wider than
-                // the lane fits its off-centre point.
-                var fit = continued ? new Fit(lane.width(), lane.width(), RackGeometry.height(lane.outside())) : new Fit(1, lane.width(), -1);
-                anchor = new PipeAnchor(Kind.LANE, beyond, out.getOpposite(), clicked, lane.option() + 1, edit, out, continued ? rack.point(lane, out.ordinal()) : -1, fit, null);
-            }
-        } else if (state.getBlock() instanceof FluidDeviceBlock block) {
-            if (!FluidDeviceBlock.face(state, face)) return new Resolved(null, block.kind() == TopologyCompiler.Kind.PIPE ? Refusal.FITTING : Refusal.DEVICE_FACE);
-            if (block.kind() == TopologyCompiler.Kind.PIPE) {
-                var entity = level.getBlockEntity(clicked) instanceof FluidDeviceBlockEntity e ? e : null;
-                int joints = entity != null ? entity.joints() : PhysicalFluidTopology.ALL_FACES;
-                int edit = -1;
-                if (joints != PhysicalFluidTopology.ALL_FACES && (joints >> face.ordinal() & 1) == 0) {
-                    if (FluidDeviceBlock.hasFitting(state)) return new Resolved(null, Refusal.FITTING);
-                    if (Integer.bitCount(joints) > 3) return new Resolved(null, Refusal.JUNCTION);
-                    edit = joints | 1 << face.ordinal();
-                }
-                var fit = Fit.ANY;
-                boolean intoRack = level.hasChunkAt(next) && level.getBlockEntity(next) instanceof PipeRackBlockEntity;
-                if (intoRack) {
-                    if (((PipeRackBlockEntity) level.getBlockEntity(next)).laneTowards(face.getOpposite()) != null) return new Resolved(null, Refusal.FACE_TAKEN);
-                    // The pipe becomes a transition pipe at the new lane's point: the lane is at least as wide as it.
-                    fit = new Fit(RackGeometry.width(PipeSizes.drawn(entity != null ? entity.bore() : .05)), RackGeometry.MAX_WIDTH, -1);
-                }
-                // A pipe that meets a lane, or will, stays a transition pipe: laid, of two joints at most, and with no
-                // fitting or gauge, as its run bends.
-                if ((intoRack || meetsLane(level, clicked, joints)) && (!FluidDeviceBlock.transition(state, edit >= 0 ? edit : joints)
-                        || entity != null && !entity.instruments().installed().isEmpty())) return new Resolved(null, Refusal.TRANSITION);
-                anchor = new PipeAnchor(Kind.PIPE, next, face.getOpposite(), clicked, 0, edit, face, -1, fit, null);
-            } else anchor = new PipeAnchor(Kind.DEVICE, next, face.getOpposite(), clicked, 0, -1, face, -1, Fit.ANY, null);
-        } else if (state.getBlock() instanceof EquipmentShellBlock && level.getBlockEntity(clicked) instanceof EquipmentShellBlockEntity shell && shell.nozzleFacing(face) != null) {
-            // A nozzle takes a pipe up to the largest its place clears (NozzleBore).
-            if (outside > PipeSizes.outside(shell.largestBore(face)) + 1e-9) return new Resolved(null, Refusal.NOZZLE_SIZE);
-            anchor = new PipeAnchor(Kind.NOZZLE, next, face.getOpposite(), clicked, 0, -1, face, -1, Fit.ANY, null);
-        } else {
-            boolean inside = state.canBeReplaced();
-            var target = inside ? clicked : next;
-            if (level.hasChunkAt(target) && level.getBlockEntity(target) instanceof PipeRackBlockEntity rack) {
-                // A click on the block face against a rack aims at the rack's tier from that face's point.
-                var local = inside ? click.local : click.local.subtract(face.getStepX(), face.getStepY(), face.getStepZ());
-                var resolved = rack(target, rack, local, outside);
-                if (resolved.anchor == null) return resolved;
-                anchor = resolved.anchor;
-            } else anchor = new PipeAnchor(Kind.FREE, target, null, null, 0, -1, face, -1, Fit.ANY, null);
-        }
+        boolean inside = state.canBeReplaced();
+        var target = inside ? clicked : next;
+        if (level.hasChunkAt(target) && level.getBlockEntity(target) instanceof PipeRackBlockEntity rack) {
+            // A click on the block face against a rack aims at the rack's tier from that face's point.
+            var local = inside ? click.local : click.local.subtract(face.getStepX(), face.getStepY(), face.getStepZ());
+            var resolved = rack(target, rack, local, outside);
+            if (resolved.anchor == null) return resolved;
+            anchor = resolved.anchor;
+        } else anchor = new PipeAnchor(Kind.FREE, target, null, null, 0, -1, face, -1, Fit.ANY, null);
+        return validate(level,anchor);
+    }
+    /** A registered physical socket/nozzle enters a particular face point of its first line cell. */
+    public static Resolved socket(Level level,BlockPos cell,Direction joint,BlockPos owner,int point){
+        return validate(level,new PipeAnchor(Kind.NOZZLE,cell,joint,owner,0,-1,joint.getOpposite(),point,Fit.ANY,null));
+    }
+    static Resolved validate(Level level,PipeAnchor anchor){
         if (level.isOutsideBuildHeight(anchor.cell) || !level.getWorldBorder().isWithinBounds(anchor.cell) || !level.hasChunkAt(anchor.cell)) return new Resolved(null, Refusal.OUTSIDE);
         // A rack cell takes the line as a lane: whether it has room for it is the route's to say.
         boolean rackCell = level.getBlockEntity(anchor.cell) instanceof PipeRackBlockEntity;
@@ -230,7 +190,7 @@ public record PipeAnchor(Kind kind, BlockPos cell, @Nullable Direction joint, @N
      * A new lane in {@code rack} in the slot aimed at cell-local {@code local} ({@link #aimed}); refused where the slot is
      * taken, or where the rack takes no lane of {@code outside}.
      */
-    private static Resolved rack(BlockPos at, PipeRackBlockEntity rack, Vec3 local, double outside) {
+    public static Resolved rack(BlockPos at, PipeRackBlockEntity rack, Vec3 local, double outside) {
         var aim = aimed(rack, local, outside);
         if (aim == null) return new Resolved(null, Refusal.LANE_SIZE);
         if (!aim.fits()) return new Resolved(null, Refusal.SLOT_TAKEN);
@@ -239,18 +199,7 @@ public record PipeAnchor(Kind kind, BlockPos cell, @Nullable Direction joint, @N
 
     /** The slot on {@code rack}'s tier that a click at cell-local {@code local} aims at, for a line of {@code outside} ({@link RackGeometry#aim}). */
     public static @Nullable RackGeometry.Aim aimed(PipeRackBlockEntity rack, Vec3 local, double outside) {
-        return RackGeometry.aim(rack.rack(), rack.drawnLanes(), outside, new double[]{local.x, local.y, local.z});
-    }
-
-    /** Whether the laid pipe at {@code pipe} with {@code joints} meets a rack lane through one of them. */
-    private static boolean meetsLane(Level level, BlockPos pipe, int joints) {
-        if (joints == PhysicalFluidTopology.ALL_FACES) return false;
-        for (var direction : Direction.values()) {
-            var at = pipe.relative(direction);
-            if ((joints >> direction.ordinal() & 1) != 0 && level.hasChunkAt(at) && level.getBlockEntity(at) instanceof PipeRackBlockEntity rack
-                    && rack.laneTowards(direction.getOpposite()) != null) return true;
-        }
-        return false;
+        return RackGeometry.aim(rack.rack(), rack.layingLanes(), outside, new double[]{local.x, local.y, local.z});
     }
 
     /** A cell a line may take: loaded, inside the world and replaceable (air, plants, fluids). */

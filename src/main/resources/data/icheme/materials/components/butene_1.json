@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "Butene-1",
+  "kind": "chemical",
+  "translation_key": "material.icheme.butene_1",
+  "fallback": "Butene-1",
+  "properties": "icheme:chemsep_butene_1",
+  "appearance": {
+    "color": "#F3F4EA",
+    "transparency": 0.85,
+    "estimated": true
+  },
+  "identifiers": {
+    "cas": "106-98-9",
+    "chemsep_id": "204",
+    "smiles": "C=CCC",
+    "formula": "CH2CHCH2CH3"
+  }
+}

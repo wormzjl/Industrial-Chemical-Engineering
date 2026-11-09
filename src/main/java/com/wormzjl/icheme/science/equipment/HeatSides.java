@@ -30,6 +30,38 @@ public final class HeatSides {
     /** The air an air cooler's fans blow through its bundle, K: a constant 25 °C (owner Q11), no weather, biome or altitude. */
     public static final double AIR_TEMPERATURE=298.15;
     /**
+     * The lowest outlet an air cooler is practical to, K: the air plus a 15 K approach, 40 °C (batch 2026-11-02-process-simulator,
+     * {@code COOLER_MODEL_PLAN.md} sections 1 and 6; the sizing stage's {@code AIR_COOLER_OUTLET} row). An air-then-water
+     * condenser hands the overhead from air to water here, and the simulator proposes a cooler's type by it.
+     */
+    public static final double AIR_SPLIT_TEMPERATURE=AIR_TEMPERATURE+15;
+    /**
+     * Tower water as it comes to a cooler, K: 25 °C, what the world's cooling tower is calibrated to give back from 35 °C water on
+     * 25 °C air at 50 % humidity (batch 2026-11-02-process-simulator, {@code COOLER_MODEL_PLAN.md} section 1). The simulator gives
+     * it to every free cooling side; no cooler takes a stream below its coolant's inlet.
+     */
+    public static final double TOWER_WATER_TEMPERATURE=298.15;
+    /**
+     * Cooling water's rise across a cooler, K, and the least difference it keeps below the process side's cold end (batch
+     * 2026-11-02-process-simulator, {@code COOLER_MODEL_PLAN.md} sections 3 and 8): a 10 K range, a 5 K approach.
+     */
+    public static final double WATER_RANGE=10,WATER_APPROACH=5;
+    /**
+     * Where cooling water that comes in at {@code inlet} leaves a regulated side whose process cold end stands at {@code coldEnd},
+     * K: its full range, but {@link #WATER_APPROACH} under the cold end ({@code COOLER_MODEL_PLAN.md} section 8). At or under the
+     * inlet, the water cannot hold that cold end at any flow.
+     */
+    public static double coolingWaterOutlet(double inlet,double coldEnd){
+        return Math.min(inlet+WATER_RANGE,coldEnd-WATER_APPROACH);
+    }
+    /**
+     * Where an air-then-water condenser's air hands the overhead to its water trim, K: the split, but never below the
+     * receiver (the trim then has no duty) nor above the top vapour (the air then has none).
+     */
+    public static double airSplit(double topVapour,double receiver){
+        return Math.min(topVapour,Math.max(receiver,AIR_SPLIT_TEMPERATURE));
+    }
+    /**
      * An air cooler per m² of bundle face (plan section 4): 5 m² of bare tube (four rows of 1" finned tubes), 50 m² of
      * finned surface (fin ratio 10) under a 100 W/m²K gas film, and at full fans air at 3 m/s, whose heat capacity rate is
      * 3.5 kW/K and which 1 kW of fan power drives (3 m³/s through 200 Pa at 60 %).
@@ -87,12 +119,12 @@ public final class HeatSides {
         double d=shape.diameter(),l=shape.tangentLength();
         return switch(unit) {
             case EXCHANGER->{double area=ProcessUnit.tubeSurface(d,l);
-                yield List.of(new Definition(Side.TUBE,EquipmentShape.Role.TUBE_INLET,EquipmentShape.Role.TUBE_OUTLET,area,tubePassage(d,l)),
-                        new Definition(Side.SHELL,EquipmentShape.Role.SHELL_INLET,EquipmentShape.Role.SHELL_OUTLET,area,shellPassage(d,l)));}
+                yield List.of(new Definition(Side.TUBE,EquipmentShape.Role.TUBE_INLET,EquipmentShape.Role.TUBE_OUTLET,area,shape.exchangerType().tubePassage(d,l)),
+                        new Definition(Side.SHELL,EquipmentShape.Role.SHELL_INLET,EquipmentShape.Role.SHELL_OUTLET,area,shape.exchangerType().shellPassage(d,l)));}
             // A kettle's bundle (TEMA AKT): two tube passes as an exchanger's; its shell is a vessel ({@link #pool}).
             case KETTLE->List.of(new Definition(Side.TUBE,EquipmentShape.Role.TUBE_INLET,EquipmentShape.Role.TUBE_OUTLET,ProcessUnit.tubeSurface(d,l),tubePassage(d,l)));
             case AIR_COOLER->List.of(new Definition(Side.PROCESS,EquipmentShape.Role.PROCESS_INLET,EquipmentShape.Role.PROCESS_OUTLET,
-                    BARE_PER_FACE*shape.bank().bays()*ProcessUnit.bundleFace(d,l),airCoolerPassage(d,l,shape.bank())));
+                    airCoolerSurface(d,l,shape.bank()),airCoolerPassage(d,l,shape.bank())));
             case FIRED_HEATER->{double duty=ProcessUnit.heaterDuty(shape.kind(),d,l);
                 double convection=coilArea(Side.CONVECTION,duty),radiant=coilArea(Side.RADIANT,duty);
                 yield List.of(new Definition(Side.CONVECTION,EquipmentShape.Role.CONVECTION_INLET,EquipmentShape.Role.CONVECTION_OUTLET,convection,heaterPassage(convection,duty)),
@@ -100,6 +132,8 @@ public final class HeatSides {
             default->List.of();
         };
     }
+    /** An air cooler bank's bare tube surface, m², bays {@code width} by {@code length} m. */
+    public static double airCoolerSurface(double width,double length,ProcessUnit.Bank bank){return BARE_PER_FACE*bank.bays()*ProcessUnit.bundleFace(width,length);}
     /** A fired heater coil's bare tube, m², for the heater's duty {@code duty} (MW): its share of the duty at its mean flux. */
     static double coilArea(Side coil,double duty) {
         return coil==Side.RADIANT?ProcessUnit.RADIANT_SHARE*duty*1000/ProcessUnit.RADIANT_FLUX:(1-ProcessUnit.RADIANT_SHARE)*duty*1000/CONVECTION_FLUX;
@@ -126,8 +160,9 @@ public final class HeatSides {
         return new PipeResistance.Geometry(2*tubes,.0148,TUBE_ROUGHNESS,8,channels(630*shell*shell));
     }
     /**
-     * An exchanger's shell side: an equivalent passage of 18 mm hydraulic diameter and 0.1 D² crossflow area, one shell
-     * diameter per baffle crossing with baffles 0.4 D apart, so 2.5 L long.
+     * An exchanger's shell side: an equivalent passage of 18 mm hydraulic diameter and 0.1 D² crossflow area, 2.5 L long,
+     * with a pipe's friction. Its drop equals Kern's with baffles about 0.93 D apart, so this prices a wide-baffle shell;
+     * Kern at 0.4 D gives 10 times it (batch 2026-11-02-process-simulator, D18).
      */
     public static PipeResistance.Geometry shellPassage(double shell,double tubes) {
         return new PipeResistance.Geometry(2.5*tubes,.018,TUBE_ROUGHNESS,0,channels(.1*shell*shell/(Math.PI*.018*.018/4)));
@@ -163,9 +198,12 @@ public final class HeatSides {
      * {@link #CONVECTION_U}). Each names the other as its {@code partner}.</li></ul>
      */
     public static @Nullable HeatLaw heatSide(Unit unit,Side side,double area,double share,double target,long partner,@Nullable HeatControl control) {
+        return heatSide(unit,side,area,share,target,partner,control,ExchangerType.STANDARD);
+    }
+    public static @Nullable HeatLaw heatSide(Unit unit,Side side,double area,double share,double target,long partner,@Nullable HeatControl control,ExchangerType type) {
         return switch(unit) {
-            case KETTLE,EXCHANGER->{if(partner==0||unit==Unit.KETTLE&&side!=Side.TUBE)yield null;var wall=new double[EXCHANGER_CELLS];java.util.Arrays.fill(wall,AIR_TEMPERATURE);
-                yield new HeatSide(area,HeatCurve.Films.DEFAULT,wall,share,0,partner,1,control,HeatControl.Limit.NONE);}
+            case KETTLE,EXCHANGER->{if(partner==0||unit==Unit.KETTLE&&side!=Side.TUBE)yield null;var wall=new double[unit==Unit.EXCHANGER?type.cells():EXCHANGER_CELLS];java.util.Arrays.fill(wall,AIR_TEMPERATURE);
+                yield new HeatSide(area,HeatCurve.Films.DEFAULT,wall,share,0,partner,1,control,HeatControl.Limit.NONE,type.routing(side));}
             case AIR_COOLER->new AirCooled(area,AIR,AIR.draught(share),control,HeatControl.Limit.NONE);
             case FIRED_HEATER->side==Side.RADIANT?new FiredCoil(target,coilDuty(side,area,share),1,partner):new ConvectionCoil(CONVECTION_U*area,partner,0);
             default->null;
@@ -180,6 +218,11 @@ public final class HeatSides {
      * still, 0.63, 0.65 and 0.29.
      */
     public static HeatCurve.Films airFilms(double fans){return AIR.films(AIR.draught(fans));}
+    /** An air cooler's fans, each on its own motor (batch 2026-11-03-rotating-machinery W5, reading A70): its bays' fans as drawn; 0 for another kind. */
+    public static int fans(EquipmentShape shape) {
+        if(shape.kind()!=EquipmentShape.Kind.AIR_COOLER)return 0;
+        return shape.bank().bays()*ProcessUnit.fans(shape.diameter(),shape.tangentLength()).count();
+    }
     /** An air cooler's fan power, W, over bare tube surface {@code area} (m²) with its fans at {@code fans} of full speed (the fan laws: the cube of the speed). */
     public static double fanPower(double area,double fans){return FAN_POWER*area/BARE_PER_FACE*fans*fans*fans;}
 }

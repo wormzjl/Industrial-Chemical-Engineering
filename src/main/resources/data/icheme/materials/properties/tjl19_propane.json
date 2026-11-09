@@ -38,6 +38,32 @@
       "acentric_factor": 0.152
     }
   },
+  "freezing": {
+    "normal_melting_kelvin": 85.47,
+    "triple_point_kelvin": 85.47,
+    "triple_point_pascal": 0.0001685,
+    "fusion_enthalpy_j_per_mol": 3524,
+    "estimated": false,
+    "source": "ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Propane\" (ChemSep index 3, CAS 74-98-6): melting point, triple point temperature and pressure, heat of fusion at the melting point. Data only: never a validity floor or a range end.",
+    "revision": "chemsep-8.3-r1"
+  },
+  "thermochemistry": {
+    "formation_enthalpy_j_per_mol": -104680,
+    "elements": {
+      "C": 3,
+      "H": 8
+    },
+    "estimated": false,
+    "source": "Ideal-gas heat of formation at 298.15 K and formula C3H8 (molar mass 44.097 g/mol) of ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Propane\" (ChemSep index 3, CAS 74-98-6). Heats of reaction follow by Hess's law. Data only.",
+    "revision": "chemsep-8.3-hf-r1"
+  },
+  "flammability": {
+    "lfl_volume_fraction": 0.021,
+    "ufl_volume_fraction": 0.095,
+    "estimated": false,
+    "source": "NIOSH Pocket Guide to Chemical Hazards, Propane (npgd0524, https://www.cdc.gov/niosh/npg/npgd0524.html, read 2026-11-05): LEL and UEL in air. CDC material, in the public domain. Constant with temperature (owner decision E23).",
+    "revision": "npg-b627-r1"
+  },
   "viscosity": {
     "liquid": {
       "type": "log_table",

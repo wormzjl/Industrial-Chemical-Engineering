@@ -33,11 +33,15 @@ public record AssemblyReport(List<SlotReport> slots, List<PortReport> ports, Set
         TEAL, YELLOW, RED
     }
 
-    /** A slot's state (plan section 5.3), ordered by how much it needs the player: a later state outranks an earlier one. */
+    /**
+     * A slot's state (plan section 5.3), ordered by how much it needs the player: a later state outranks an earlier one.
+     * {@code UNIT_SHAPES}: the units in parallel on a step are not all of one size; {@code UNIT_COUNT}: another number of
+     * units stands in parallel than the design asks for, its detail {@code found:wanted} (S3b).
+     */
     public enum State {
         OK(Colour.TEAL), SHARED(Colour.YELLOW), WRONG_ORDER(Colour.YELLOW), BRANCHED(Colour.YELLOW), EXTRA_VALVE(Colour.YELLOW),
-        VALVE_REVERSED(Colour.YELLOW), WRONG_PORT(Colour.YELLOW), WRONG_KIND(Colour.YELLOW), NOT_LOADED(Colour.RED), OPEN_END(Colour.RED),
-        MISSING(Colour.RED);
+        VALVE_REVERSED(Colour.YELLOW), WRONG_PORT(Colour.YELLOW), UNIT_SHAPES(Colour.YELLOW), UNIT_COUNT(Colour.YELLOW), WRONG_KIND(Colour.YELLOW), CONFIGURATION(Colour.YELLOW),
+        NOT_LOADED(Colour.RED), OPEN_END(Colour.RED), MISSING(Colour.RED);
 
         public final Colour colour;
 
@@ -49,13 +53,28 @@ public record AssemblyReport(List<SlotReport> slots, List<PortReport> ports, Set
     /**
      * A slot's state, the unit's origin or the fitting's position that fills it ({@link #NONE} when nothing does), where
      * its fault lies ({@link #NONE} when nowhere in particular), and a detail for its text: a kind or a role by name, or
-     * a word such as {@code backwards}.
+     * a word such as {@code backwards}; and the origins of the further units that stand in parallel with {@code member} on
+     * the slot's step (S3b), empty for a single unit or a fitting.
      */
-    public record SlotReport(Slot slot, State state, long member, long at, String detail) {
+    public record SlotReport(Slot slot, State state, long member, long at, String detail, List<Long> parallel) {
         public SlotReport {
             Objects.requireNonNull(slot, "slot");
             Objects.requireNonNull(state, "state");
             Objects.requireNonNull(detail, "detail");
+            parallel = List.copyOf(parallel);
+        }
+
+        public SlotReport(Slot slot, State state, long member, long at, String detail) {
+            this(slot, state, member, at, detail, List.of());
+        }
+
+        /** Every unit that fills the slot: its member, then those in parallel with it; none for a fitting or an empty slot. */
+        public List<Long> units() {
+            if (member == NONE) return List.of();
+            var out = new java.util.ArrayList<Long>(1 + parallel.size());
+            out.add(member);
+            out.addAll(parallel);
+            return out;
         }
     }
 

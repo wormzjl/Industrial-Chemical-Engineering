@@ -18,7 +18,7 @@ public record FluidDeviceSpec(double volume,double temperature,double pressure,d
     public FluidDeviceSpec withGeometry(com.wormzjl.icheme.science.fluid.network.VesselGeometry geometry){return new FluidDeviceSpec(volume,temperature,pressure,composition,solids,levelHeight,open,geometry,tower);}
     /** The largest vessel volume, m³ (a floating-roof tank 40 m across with 23 m of fill holds about 28,900 m³, owner
      * decision FR6), and the tallest level height, m. */
-    public static final double MAX_VOLUME=30_000,MAX_LEVEL_HEIGHT=128;
+    public static final double MAX_VOLUME=com.wormzjl.icheme.science.equipment.EquipmentShape.MAX_VOLUME,MAX_LEVEL_HEIGHT=128;
     public FluidDeviceSpec(double volume,double temperature,double pressure,double[] composition,SlurryFeed solids,double levelHeight){this(volume,temperature,pressure,composition,solids,levelHeight,false);}
     public FluidDeviceSpec(double volume,double temperature,double pressure,double[] composition){this(volume,temperature,pressure,composition,SlurryFeed.NONE);}
     public FluidDeviceSpec(double volume,double temperature,double pressure,double[] composition,SlurryFeed solids){this(volume,temperature,pressure,composition,solids,com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.LEVEL_HEAD_HEIGHT);}

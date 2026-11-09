@@ -128,9 +128,9 @@ class HydraulicReferenceQualificationTest {
     // stands 1.7e-3 from the dilute reference (measured, logs es09). The test is in the history at 50145147.
 
     private FluidThermodynamics.State state(boolean water, double pressure) {
-        double[] n = new double[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1]; n[water ? com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK : com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN] = 1;
+        double[] n = new double[model.componentCount()]; n[water ? model.componentCount()-1 : com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN] = 1;
         var unit = model.flashTP(350, pressure, n, () -> {});
-        n[water ? com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK : com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN] /= unit.volume();
+        n[water ? model.componentCount()-1 : com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN] /= unit.volume();
         return model.flashTP(350, pressure, n, () -> {});
     }
 

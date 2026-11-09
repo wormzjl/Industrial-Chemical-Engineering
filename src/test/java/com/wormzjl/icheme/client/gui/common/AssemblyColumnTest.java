@@ -10,7 +10,6 @@ import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
 import com.wormzjl.icheme.science.assembly.AssemblyReport;
 import com.wormzjl.icheme.science.assembly.AssemblyReport.State;
 import com.wormzjl.icheme.science.assembly.AssemblyView;
-import com.wormzjl.icheme.science.assembly.Blueprint.Slot;
 import com.wormzjl.icheme.science.assembly.ColumnBlueprint;
 import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.equipment.ColumnComponents.Condenser;
@@ -134,7 +133,8 @@ class AssemblyColumnTest {
                         }
                 var display = AssemblyColumn.display(width);
                 for (var s : statuses) assertTrue(M.width(s) <= display.w(), at + ": the status cut: " + s);
-                assertTrue(M.width(t.get("assembly.title")) <= AssemblyColumn.title(width) && AssemblyColumn.theme(width).right() == width - 10, at + ": the title row");
+                assertEquals(t.get("assembly.title"), TitleStrip.place(width, AssemblyColumn.theme(width).w(), t.get("assembly.title"), M).kind(), at + ": the title whole");
+                assertEquals(width - 10, AssemblyColumn.theme(width).right(), at + ": the theme key");
                 var tabs = AssemblyColumn.tabs(false, false, t);
                 var tabSlots = AssemblyColumn.tabSlots(width);
                 for (int i = 0; i < tabs.size(); i++) {
@@ -149,6 +149,28 @@ class AssemblyColumnTest {
                     assertTrue(r.x() >= 10 && r.right() <= width - 10 && r.y() > height - AssemblyColumn.DIVIDER && M.width(buttons.get(i).text()) <= r.w() - 6, at + ": a footer key " + r);
                 }
             }
+    }
+
+    /**
+     * N1: where a player may build, the column's name stands in the title strip (TitleStripTest), and the Structure page's
+     * footer holds Close, Datasheet and Apply (on while the typed name differs), each whole in its slot at every width.
+     */
+    @Test
+    void aNamingFooterAddsApply() {
+        var t = new HeatControlColumnTest.Recording("gui.icheme.");
+        assertEquals(List.of("close", "datasheet", "apply"), AssemblyColumn.footerButtons(true, t).stream().map(Column.Button::key).toList());
+        assertTrue(AssemblyColumn.footerButtons(true, t).getLast().active() && !AssemblyColumn.footerButtons(false, t).getLast().active(), "Apply on while the name differs");
+        for (int width = 320; width <= 760; width += 7)
+            for (int height : HEIGHTS) {
+                String at = width + " by " + height;
+                var footer = AssemblyColumn.footer(width, height, 3);
+                var keys = AssemblyColumn.footerButtons(true, t);
+                for (int i = 0; i < keys.size(); i++) {
+                    var r = footer.get(i);
+                    assertTrue(r.x() >= 10 && r.right() <= width - 10 && r.y() > height - AssemblyColumn.DIVIDER && M.width(keys.get(i).text()) <= r.w() - 6, at + ": a footer key " + r);
+                }
+            }
+        assertEquals(Set.of(), t.missing);
     }
 
     private static Map<String, Column.Button> buttons(List<Column.Row> rows) {
@@ -328,7 +350,7 @@ class AssemblyColumnTest {
         for (var p : parts(null)) assertEquals(Palette.RED, p.colour(), "every part red before the first report");
     }
 
-    /** The glass: the drawing and the list inside it, apart; the list at least its narrowest where the glass allows, at most its widest; the drawing fitted inside its part. */
+    /** The glass: the drawing and the list inside it, apart; the list at least its narrowest where the glass allows, at most its widest (the block's fit: AssemblyBlockTest). */
     @Test
     void theGlassSplitsBetweenTheDrawingAndTheList() {
         var canvas = new Recording();
@@ -340,45 +362,6 @@ class AssemblyColumnTest {
                 assertTrue(split.drawing().inside(box) && split.list().inside(box) && !split.drawing().overlaps(split.list()), at);
                 assertTrue(split.list().w() >= AssemblyColumn.LIST_MIN && split.list().w() <= AssemblyColumn.LIST_MAX, at + ": the list " + split.list());
                 assertEquals(box.right(), split.list().right(), at);
-                var sheet = new AssemblyFlowsheet(AssemblyDiagram.of(designs().getLast()));
-                sheet.fit(split.drawing());
-                int[] origin = sheet.onCanvas(0, 0), end = sheet.onCanvas(AssemblyDiagram.WIDTH, AssemblyDiagram.HEIGHT);
-                assertTrue(origin[0] >= split.drawing().x() && origin[1] >= split.drawing().y() && end[0] <= split.drawing().right() + 1 && end[1] <= split.drawing().bottom() + 1,
-                        at + ": the drawing inside its part");
-            }
-    }
-
-    /** A click or a hover on a part's middle finds that part, on a port's square that port, at the sizes the screen draws; the drawing draws every state. */
-    @Test
-    void theDrawingAnswersItsOwnPartsAndPorts() {
-        for (var trays : designs())
-            for (var box : List.of(new Rect(11, 77, 125, 132), new Rect(11, 77, 267, 278))) {
-                var sheet = new AssemblyFlowsheet(AssemblyDiagram.of(trays));
-                sheet.fit(box);
-                for (var part : sheet.diagram.parts()) {
-                    int[] c = sheet.onCanvas(part.x() + part.w() / 2, part.y() + part.h() / 2);
-                    var found = sheet.part(c[0], c[1]);
-                    assertNotNull(found, part::toString);
-                    assertEquals(part.slot(), found.slot(), () -> part + " at " + box);
-                }
-                for (var port : sheet.diagram.ports()) {
-                    int[] c = sheet.onCanvas(port.x(), port.y());
-                    var found = sheet.port(c[0], c[1]);
-                    assertNotNull(found, port::toString);
-                    assertEquals(List.of(port.x(), port.y()), List.of(found.x(), found.y()), port::toString);
-                }
-                for (var pill : sheet.diagram.pills()) {
-                    int[] c = sheet.onCanvas(pill.x() + pill.w() / 2, pill.y());
-                    assertEquals(pill, sheet.pill(c[0], c[1]));
-                }
-                var t = new HeatControlColumnTest.Recording("gui.icheme.");
-                for (var report : Arrays.asList(null, report(trays, false), report(trays, true))) {
-                    var canvas = new Recording();
-                    Slot selected = ColumnBlueprint.REFLUX_PUMP;
-                    sheet.draw(canvas, report, selected, text -> AssemblyColumn.text(text, t));
-                    assertFalse(canvas.fills.isEmpty());
-                }
-                assertEquals(Set.of(), t.missing);
             }
     }
 }

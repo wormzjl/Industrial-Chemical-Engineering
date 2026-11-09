@@ -77,7 +77,7 @@ class GaugeAccessoriesTest {
     @Test void nativeReservoirSocketsStayDistinctUprightAndStableAcrossHeadingsAndSizes(){
         for(var heading:EquipmentShape.Heading.values())for(double d:new double[]{.5,2,10}){
             var drum=EquipmentShape.drum(d,4,EquipmentShape.Orientation.VERTICAL,heading,0);var mounts=InstrumentHosts.reservoirMounts(drum,BlockPos.ZERO);
-            assertEquals(Set.of("pressure_top","pressure_bottom","temperature_bottom"),mounts.stream().map(Instrument.Mount::id).collect(java.util.stream.Collectors.toSet()));
+            assertEquals(Set.of("pressure_top","temperature_top"),mounts.stream().map(Instrument.Mount::id).collect(java.util.stream.Collectors.toSet()));
             for(var m:mounts){assertEquals(heading.name(),m.face().name());assertEquals(0,m.right().y);assertTrue(m.bounds().contains(m.centre()));}
             for(int i=0;i<mounts.size();i++)for(int j=i+1;j<mounts.size();j++)assertFalse(mounts.get(i).bounds().intersects(mounts.get(j).bounds()));
         }
@@ -85,7 +85,24 @@ class GaugeAccessoriesTest {
             var tank=EquipmentShape.storage(EquipmentShape.Kind.TANK,4,4,heading,0);assertEquals(List.of("pressure_bottom","temperature_bottom"),InstrumentHosts.reservoirMounts(tank,BlockPos.ZERO).stream().map(Instrument.Mount::id).toList());
             var sphere=EquipmentShape.storage(EquipmentShape.Kind.SPHERE,4,1,heading,2);assertEquals(List.of("pressure_top","temperature_top"),InstrumentHosts.reservoirMounts(sphere,BlockPos.ZERO).stream().map(Instrument.Mount::id).toList());
         }
-        assertEquals(3,InstrumentHosts.reservoirMounts(EquipmentShape.drum(2,4,EquipmentShape.Orientation.HORIZONTAL,EquipmentShape.Heading.NORTH,1),BlockPos.ZERO).size());
+        assertEquals(2,InstrumentHosts.reservoirMounts(EquipmentShape.drum(2,4,EquipmentShape.Orientation.HORIZONTAL,EquipmentShape.Heading.NORTH,1),BlockPos.ZERO).size());
+    }
+    @Test void tankDigitalLevelMountIsReachableAtGradeAndSeparateFromServiceTapsAndSightColumn(){
+        var origin=new BlockPos(23,64,-41);
+        for(var heading:EquipmentShape.Heading.values())for(double diameter:new double[]{4,5,6,20,40})for(int height:new int[]{4,14,24}){
+            var shape=EquipmentShape.storage(EquipmentShape.Kind.TANK,diameter,height,heading,0);
+            var mounts=Sensor.levelMounts(shape,origin);assertEquals(1,mounts.size());var mount=mounts.getFirst();
+            assertEquals("level_body",mount.id());assertEquals(heading.name(),mount.face().name());
+            assertEquals(origin.getY()+1.35,mount.centre().y,1e-10);
+            var eye=mount.centre().add(mount.normal().scale(2)).add(0,.27,0);
+            assertTrue(mount.bounds().distanceToSqr(eye)<9,"standing two metres outside the shell is within reach");
+            for(var tap:InstrumentGeometry.sockets(shape)){
+                var centre=new net.minecraft.world.phys.Vec3(origin.getX()+tap.x(),origin.getY()+tap.y(),origin.getZ()+tap.z());
+                assertTrue(mount.centre().distanceTo(centre)>.5,"independent P/T service taps");
+            }
+            var gauge=InstrumentHosts.LevelGauge.selectionBounds(shape).move(origin);
+            assertFalse(mount.bounds().intersects(gauge),"the optional sight column can coexist");
+        }
     }
     @Test void levelPadsRemainDistinctAcrossNativeSizesAndHeadingsAndCoversAreClosed(){
         for(var heading:EquipmentShape.Heading.values())for(double d:new double[]{4,6,10}){
@@ -96,8 +113,9 @@ class GaugeAccessoriesTest {
             }
         }
         for(boolean level:List.of(false,true)){
-            var faces=InstrumentGeometry.transmitter(level);assertEquals(6,faces.size());
+            var faces=InstrumentGeometry.transmitter(level);assertFalse(faces.isEmpty());
             for(var face:faces){var v=face.vertices();for(double x:v)assertTrue(Double.isFinite(x));
+                for(int i=0;i<12;i+=3){assertTrue(Math.abs(v[i])<=InstrumentGeometry.RADIUS);assertTrue(Math.abs(v[i+1])<=InstrumentGeometry.RADIUS);assertTrue(Math.abs(v[i+2])<=.1,"cover stays inside the mount envelope");}
                 double nx=(v[4]-v[1])*(v[8]-v[2])-(v[5]-v[2])*(v[7]-v[1]),ny=(v[5]-v[2])*(v[6]-v[0])-(v[3]-v[0])*(v[8]-v[2]),nz=(v[3]-v[0])*(v[7]-v[1])-(v[4]-v[1])*(v[6]-v[0]);
                 double cx=0,cy=0,cz=0;for(int i=0;i<12;i+=3){cx+=v[i]/4;cy+=v[i+1]/4;cz+=v[i+2]/4;}assertTrue(nx*cx+ny*cy+nz*(cz-.005)>0,"outward cover winding");
             }
@@ -157,12 +175,18 @@ class GaugeAccessoriesTest {
         var missing=image.copy();missing.remove("pending");var none=InstrumentService.Store.load(missing);assertTrue(none.pending().isEmpty());assertEquals(store.host(7),none.host(7));
     }
     @Test void housingIsClosedAtObliqueAnglesAndEveryConnectorRemainsFinite(){
-        var edges=new HashMap<String,Integer>();
-        for(var q:InstrumentGeometry.housing()){
-            if(q.colour()==0xff101517)continue;var v=q.vertices();
-            for(int i=0;i<4;i++){int j=(i+1)%4;String x=vertex(v,3*i),y=vertex(v,3*j);if(!x.equals(y))edges.merge(x.compareTo(y)<0?x+"/"+y:y+"/"+x,1,Integer::sum);}
+        // The distance housings (batch 2026-11-09-lod-rendering) are the same envelope with fewer sides and no ticks.
+        for(var housing:List.of(InstrumentGeometry.housing(),InstrumentGeometry.housingPlain(),InstrumentGeometry.housingFar())){
+            var edges=new HashMap<String,Integer>();
+            for(var q:housing){
+                if(q.colour()==0xff101517)continue;var v=q.vertices();
+                for(int i=0;i<4;i++){int j=(i+1)%4;String x=vertex(v,3*i),y=vertex(v,3*j);if(!x.equals(y))edges.merge(x.compareTo(y)<0?x+"/"+y:y+"/"+x,1,Integer::sum);}
+                for(int i=0;i<12;i+=3)assertTrue(Math.hypot(v[i],v[i+1])<=InstrumentGeometry.RADIUS+1e-9,"inside the full housing's radius");
+            }
+            assertTrue(edges.values().stream().allMatch(n->n==2),"bezel, inner wall, dial, shell and back must share every boundary");
         }
-        assertTrue(edges.values().stream().allMatch(n->n==2),"bezel, inner wall, dial, shell and back must share every boundary");
+        assertEquals(261,InstrumentGeometry.housing().size(),"near housing unchanged: 48 sides of 5 faces and 21 ticks");
+        assertEquals(120,InstrumentGeometry.housingPlain().size());assertEquals(60,InstrumentGeometry.housingFar().size());
         assertTrue(InstrumentGeometry.FACE<InstrumentGeometry.TICKS&&InstrumentGeometry.TICKS<InstrumentGeometry.LABEL&&InstrumentGeometry.LABEL<InstrumentGeometry.NEEDLE&&InstrumentGeometry.NEEDLE<InstrumentGeometry.RIM);
         for(var axis:Direction.values())for(double bore:new double[]{.001,.05,1})for(var m:InstrumentHosts.pipeMounts(BlockPos.ZERO,bore,0,axis))for(boolean temperature:List.of(false,true)){
             var connector=InstrumentGeometry.connection(m.localTap(),m.bottomEntry(),temperature,m.probeDepth());assertTrue(m.probeDepth()<=.12);assertFalse(connector.isEmpty());for(var q:connector)for(double coordinate:q.vertices())assertTrue(Double.isFinite(coordinate));

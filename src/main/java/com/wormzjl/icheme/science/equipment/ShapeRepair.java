@@ -18,9 +18,14 @@ import org.jetbrains.annotations.Nullable;
  * no longer has is {@link Read#retired}: its structure is removed whole (owner decision D6).
  */
 public final class ShapeRepair {
-    /** Renamed or removed constants, by their saved name: the current name. None yet. */
-    static final Map<String, String> KIND_ALIASES = Map.of(), HEADING_ALIASES = Map.of(), ORIENTATION_ALIASES = Map.of(), FORM_ALIASES = Map.of(),
-            ROLE_ALIASES = Map.of();
+    /** The saved name of the retired condensing turbine kind: it reads as a steam turbine exhausting to a condenser. */
+    static final String CONDENSING_TURBINE = "CONDENSING_TURBINE";
+    /**
+     * Renamed or removed constants, by their saved name: the current name. The condensing turbine is the steam turbine
+     * with a vacuum exhaust (owner decision D5, batch 2026-11-03-rotating-machinery): the kind and the constructor's form.
+     */
+    static final Map<String, String> KIND_ALIASES = Map.of(CONDENSING_TURBINE, "STEAM_TURBINE"), HEADING_ALIASES = Map.of(), ORIENTATION_ALIASES = Map.of(),
+            FORM_ALIASES = Map.of(CONDENSING_TURBINE, "STEAM_TURBINE"), ROLE_ALIASES = Map.of();
     /** A column a repair falls back to: twenty trays, fed in the middle (the constructor's new column). */
     private static final ColumnTrays DEFAULT_TRAYS = ColumnTrays.simple(20, 10);
 
@@ -34,9 +39,16 @@ public final class ShapeRepair {
      */
     public record Saved(String kind, String front, @Nullable String orientation, double diameter, double length, int support, int @Nullable [] trays,
                         int @Nullable [] connections, boolean boot, int outlet, int @Nullable [] bank, @Nullable SavedComponents components,
-                        List<SavedTurn> turns, @Nullable SavedOperating operating) {
+                        List<SavedTurn> turns, @Nullable SavedOperating operating, @Nullable SavedDuty duty) {
         public Saved {
             turns = List.copyOf(turns);
+        }
+
+        /** A shape saved before shape fields 8: a machine without its design point. */
+        public Saved(String kind, String front, @Nullable String orientation, double diameter, double length, int support, int @Nullable [] trays,
+                     int @Nullable [] connections, boolean boot, int outlet, int @Nullable [] bank, @Nullable SavedComponents components,
+                     List<SavedTurn> turns, @Nullable SavedOperating operating) {
+            this(kind, front, orientation, diameter, length, support, trays, connections, boot, outlet, bank, components, turns, operating, null);
         }
 
         /** A shape saved before its column could carry an operating point. */
@@ -89,6 +101,26 @@ public final class ShapeRepair {
         }
     }
 
+    /**
+     * A machine's design point as saved (shape fields 8, batch 2026-11-03-rotating-machinery): its numbers, its drive and
+     * its steam class by name, as written (a missing number reads 0, a missing name null).
+     */
+    public record SavedDuty(double flow, double head, double polytropicHead, double power, int poles, @Nullable String drive, @Nullable String steam,
+                            double exhaust,double baseSpeed) {
+        public SavedDuty(double flow,double head,double polytropicHead,double power,int poles,String drive,String steam,double exhaust) { this(flow,head,polytropicHead,power,poles,drive,steam,exhaust,0); }
+        /** @throws IllegalArgumentException for a drive or a steam class this build does not have, or an invalid value */
+        public MachineDuty resolve() {
+            var namedDrive = drive == null ? MachineDuty.Drive.FIXED
+                    : constant(MachineDuty.Drive.class, drive, DRIVE_ALIASES).orElseThrow(() -> new IllegalArgumentException("no drive " + drive));
+            var namedSteam = steam == null ? null
+                    : constant(MachineDuty.Steam.class, steam, STEAM_ALIASES).orElseThrow(() -> new IllegalArgumentException("no steam class " + steam));
+            return new MachineDuty(flow, head, polytropicHead, power, poles, namedDrive, namedSteam, exhaust,baseSpeed);
+        }
+    }
+
+    /** Renamed or removed drives and steam classes, by their saved name: the current name. None yet. */
+    static final Map<String, String> DRIVE_ALIASES = Map.of(), STEAM_ALIASES = Map.of();
+
     /** Renamed or removed pumparound splits, by their saved name: the current name. None yet. */
     static final Map<String, String> SPLIT_ALIASES = Map.of();
 
@@ -101,15 +133,62 @@ public final class ShapeRepair {
         }
     }
 
-    /** A column's component design as saved: its kinds by name and its two flags (batch 2026-10-26-multi-machine-framework). */
-    public record SavedComponents(String condenser, String refluxPump, List<String> pumparoundPumps, boolean ejector, boolean kettle) {
+    /**
+     * A column's component design as saved: its kinds by name and its two flags (batch 2026-10-26-multi-machine-framework);
+     * its member counts (batch 2026-11-02-process-simulator, S3b; shape fields 6), as written: a design saved before them
+     * reads 1 on every step, and a cooler count not saved reads 1; the water trim's count (shape fields 7, {@code COOLER_MODEL_PLAN.md}
+     * section 6), 1 where a design was saved before it.
+     */
+    public record SavedComponents(String condenser, String refluxPump, List<String> pumparoundPumps, boolean ejector, boolean kettle,
+                                  int condenserUnits, int kettleUnits, int[] coolerUnits, int trimUnits,ColumnComponents.Exchangers exchangers) {
+        public SavedComponents(String condenser,String refluxPump,List<String> pumparoundPumps,boolean ejector,boolean kettle,int condenserUnits,int kettleUnits,int[] coolerUnits,int trimUnits) {
+            this(condenser,refluxPump,pumparoundPumps,ejector,kettle,condenserUnits,kettleUnits,coolerUnits,trimUnits,ColumnComponents.Exchangers.STANDARD);
+        }
         public SavedComponents {
             pumparoundPumps = List.copyOf(pumparoundPumps);
+            coolerUnits = coolerUnits.clone();
         }
 
-        /** @throws IllegalArgumentException naming a kind this build does not have, or too many pumps */
+        /** A design saved before its member counts. */
+        public SavedComponents(String condenser, String refluxPump, List<String> pumparoundPumps, boolean ejector, boolean kettle) {
+            this(condenser, refluxPump, pumparoundPumps, ejector, kettle, 1, 1, new int[0], 1);
+        }
+
+        /** @throws IllegalArgumentException naming a kind this build does not have, too many pumps, or a count out of range */
         public ColumnComponents resolve() {
-            return ColumnComponents.named(condenser, refluxPump, pumparoundPumps, ejector, kettle);
+            return resolve(repair -> {
+                throw new IllegalArgumentException(repair);
+            });
+        }
+
+        /**
+         * The design, a count out of range read as 1 and named to {@code repairs}: the kinds and the other counts stay.
+         *
+         * @throws IllegalArgumentException naming a kind this build does not have, or too many pumps
+         */
+        public ColumnComponents resolve(java.util.function.Consumer<String> repairs) {
+            int condenserCount = count(condenserUnits, "condenser units", repairs), kettleCount = count(kettleUnits, "kettle units", repairs);
+            var coolers = new ArrayList<Integer>();
+            for (int i = 0; i < Math.min(coolerUnits.length, pumparoundPumps.size()); i++) coolers.add(count(coolerUnits[i], "pumparound cooler " + (i + 1) + " units", repairs));
+            if (coolerUnits.length > pumparoundPumps.size()) repairs.accept("cooler units (" + coolerUnits.length + " for " + pumparoundPumps.size() + " pumparounds) -> " + pumparoundPumps.size());
+            int trimCount = count(trimUnits, "trim units", repairs);
+            return ColumnComponents.named(condenser, refluxPump, pumparoundPumps, ejector, kettle, new ColumnComponents.Units(condenserCount, kettleCount, coolers, trimCount)).withExchangers(exchangers);
+        }
+
+        private static int count(int saved, String field, java.util.function.Consumer<String> repairs) {
+            if (saved >= 1 && saved <= ColumnComponents.MAX_UNITS) return saved;
+            repairs.accept(field + " " + saved + " -> 1");
+            return 1;
+        }
+
+        @Override public boolean equals(Object o) {
+            return o instanceof SavedComponents s && condenser.equals(s.condenser) && refluxPump.equals(s.refluxPump) && pumparoundPumps.equals(s.pumparoundPumps)
+                    && ejector == s.ejector && kettle == s.kettle && condenserUnits == s.condenserUnits && kettleUnits == s.kettleUnits && Arrays.equals(coolerUnits, s.coolerUnits)
+                    && trimUnits == s.trimUnits;
+        }
+
+        @Override public int hashCode() {
+            return Objects.hash(condenser, refluxPump, pumparoundPumps, ejector, kettle, condenserUnits, kettleUnits, Arrays.hashCode(coolerUnits), trimUnits);
         }
     }
 
@@ -163,12 +242,18 @@ public final class ShapeRepair {
         return turns;
     }
 
-    /** The fields one repair step works on. */
+    /** The fields one repair step works on; a machine's design point, or null for the one its sizes give ({@link UnitDesign#duty}). */
     private record Fields(Kind kind, Heading front, Orientation orientation, double diameter, double length, int support, @Nullable ColumnTrays trays,
-                          List<Connection> connections, boolean boot, int outlet, ProcessUnit.Bank bank) {
+                          List<Connection> connections, boolean boot, int outlet, ProcessUnit.Bank bank, @Nullable MachineDuty duty) {
         EquipmentShape build() {
             if (kind == Kind.COLUMN) return EquipmentShape.column(diameter, trays, front, support);
-            if (kind.designed()) return EquipmentShape.designed(kind, diameter, length, front, support, bank, outlet);
+            if (kind.designed()) {
+                var design = UnitDesign.of(kind);
+                if (!design.hasDuty()) return EquipmentShape.designed(kind, diameter, length, front, support, bank, outlet);
+                // A machine's sizes follow its design point: the saved one, or the one its saved sizes give.
+                var point = duty != null ? duty : design.duty(diameter, (int) length);
+                return EquipmentShape.designed(kind, design.size(point), design.length(point), front, support, bank, outlet).withDuty(point);
+            }
             return EquipmentShape.drum(diameter, length, orientation, front, support, connections, boot, outlet);
         }
     }
@@ -201,7 +286,7 @@ public final class ShapeRepair {
             }
             if (saved.components() != null)
                 try {
-                    trays = trays.withComponents(saved.components().resolve());
+                    trays = trays.withComponents(saved.components().resolve(repairs::add));
                 } catch (IllegalArgumentException invalid) {
                     repairs.add("components (" + invalid.getMessage() + ") -> none");
                 }
@@ -231,7 +316,19 @@ public final class ShapeRepair {
                 repairs.add("bank (" + invalid.getMessage() + ") -> one bay");
             }
         }
-        var fields = new Fields(kind, front, orientation, saved.diameter(), saved.length(), saved.support(), trays, connections, saved.boot(), saved.outlet(), bank);
+        MachineDuty duty = kind==Kind.MOTOR&&saved.duty()==null&&Double.isFinite(saved.diameter())
+                ?MachineDuty.motor(UnitDesign.of(kind).snap(saved.diameter()),4,MachineDuty.Drive.FIXED):null;
+        if (saved.duty() != null && UnitDesign.of(kind).hasDuty())
+            try {
+                duty = saved.duty().resolve();
+            } catch (IllegalArgumentException invalid) {
+                repairs.add("duty (" + invalid.getMessage() + ") -> its size's");
+            }
+        // A condensing turbine saved before shape fields 8 was the steam turbine exhausting to a condenser (owner decision D5).
+        if (duty == null && CONDENSING_TURBINE.equalsIgnoreCase(saved.kind()) && Double.isFinite(saved.diameter()))
+            duty = MachineDuty.turbine(1000 * SteamTurbineTrain.power(ProcessUnit.snap(kind, saved.diameter())), SteamTurbineDesign.DEFAULT_STEAM,
+                    SteamTurbineDesign.CONDENSING_EXHAUST);
+        var fields = new Fields(kind, front, orientation, saved.diameter(), saved.length(), saved.support(), trays, connections, saved.boot(), saved.outlet(), bank, duty);
         for (var step : LADDER) {
             try {
                 return new Read(fields.build(), null, repairs);
@@ -247,9 +344,10 @@ public final class ShapeRepair {
 
     /** The repairs, in order; the last gives the kind's default size. */
     private static final List<UnaryOperator<Fields>> LADDER = List.of(ShapeRepair::sizes, ShapeRepair::support, ShapeRepair::connections,
-            f -> new Fields(f.kind, f.front, f.orientation, f.diameter, f.length, f.support, f.trays, f.connections, f.boot, 0, f.bank),
-            f -> new Fields(f.kind, f.front, f.orientation, f.diameter, f.length, f.support, f.trays, f.connections, false, f.outlet, f.bank),
-            f -> new Fields(f.kind, f.front, f.orientation, f.diameter, f.length, f.support, f.trays, f.connections, f.boot, f.outlet, ProcessUnit.Bank.ONE),
+            f -> new Fields(f.kind, f.front, f.orientation, f.diameter, f.length, f.support, f.trays, f.connections, f.boot, 0, f.bank, f.duty),
+            f -> new Fields(f.kind, f.front, f.orientation, f.diameter, f.length, f.support, f.trays, f.connections, false, f.outlet, f.bank, f.duty),
+            f -> new Fields(f.kind, f.front, f.orientation, f.diameter, f.length, f.support, f.trays, f.connections, f.boot, f.outlet, ProcessUnit.Bank.ONE, f.duty),
+            f -> new Fields(f.kind, f.front, f.orientation, f.diameter, f.length, f.support, f.trays, f.connections, f.boot, f.outlet, f.bank, null),
             ShapeRepair::defaults);
 
     /** The diameter on the kind's grid and inside its range, the length a whole number inside its range. */
@@ -264,7 +362,7 @@ public final class ShapeRepair {
             diameter = Double.isFinite(f.diameter) ? clamp(Math.rint(f.diameter * 2) / 2, EquipmentShape.MIN_DIAMETER, maximum) : 2;
             length = Double.isFinite(f.length) ? clamp(Math.rint(f.length), 1, EquipmentShape.MAX_TANGENT_LENGTH) : 4;
         }
-        return new Fields(f.kind, f.front, f.orientation, diameter, length, f.support, f.trays, f.connections, f.boot, f.outlet, f.bank);
+        return new Fields(f.kind, f.front, f.orientation, diameter, length, f.support, f.trays, f.connections, f.boot, f.outlet, f.bank, f.duty);
     }
 
     /** The support inside the range the kind, its orientation and its sizes allow. */
@@ -277,7 +375,7 @@ public final class ShapeRepair {
         else support = f.orientation.horizontal() ? (int) clamp(f.support, 1, EquipmentShape.MAX_SUPPORT) : 0;
         if (f.boot && f.kind == Kind.DRUM && EquipmentShape.bootFor(f.diameter, f.length) != null)
             support = Math.max(support, Math.min(EquipmentShape.MAX_SUPPORT, EquipmentShape.minimumBootSupport(f.diameter, f.length)));
-        return new Fields(f.kind, f.front, f.orientation, f.diameter, f.length, support, f.trays, f.connections, f.boot, f.outlet, f.bank);
+        return new Fields(f.kind, f.front, f.orientation, f.diameter, f.length, support, f.trays, f.connections, f.boot, f.outlet, f.bank, f.duty);
     }
 
     /** The side connections that still lie on the shell, at most {@link EquipmentShape#MAX_CONNECTIONS}. */
@@ -287,18 +385,18 @@ public final class ShapeRepair {
         int across = EquipmentShape.maximumOffset(f.diameter);
         var kept = f.connections.stream().filter(c -> c.station() >= range[0] && c.station() <= range[1] && Math.abs(c.offset()) <= across)
                 .limit(EquipmentShape.MAX_CONNECTIONS).toList();
-        return new Fields(f.kind, f.front, f.orientation, f.diameter, f.length, f.support, f.trays, kept, f.boot, f.outlet, f.bank);
+        return new Fields(f.kind, f.front, f.orientation, f.diameter, f.length, f.support, f.trays, kept, f.boot, f.outlet, f.bank, f.duty);
     }
 
     /** The kind's default size, as a new constructor proposes it, with the saved front. */
     private static Fields defaults(Fields f) {
         if (f.kind.designed()) {
             double diameter = ProcessUnit.minDiameter(f.kind);int length = ProcessUnit.defaultLength(f.kind, diameter);
-            return new Fields(f.kind, f.front, f.orientation, diameter, length, ProcessUnit.defaultSupport(f.kind, diameter, length), null, List.of(), false, 0, ProcessUnit.Bank.ONE);
+            return new Fields(f.kind, f.front, f.orientation, diameter, length, ProcessUnit.defaultSupport(f.kind, diameter, length), null, List.of(), false, 0, ProcessUnit.Bank.ONE, null);
         }
-        if (f.kind == Kind.COLUMN) return new Fields(f.kind, f.front, f.orientation, 2, 1, EquipmentShape.minimumSkirt(2), DEFAULT_TRAYS, List.of(), false, 0, ProcessUnit.Bank.ONE);
+        if (f.kind == Kind.COLUMN) return new Fields(f.kind, f.front, f.orientation, 2, 1, EquipmentShape.minimumSkirt(2), DEFAULT_TRAYS, List.of(), false, 0, ProcessUnit.Bank.ONE, null);
         int support = EquipmentShape.defaultSupport(2, f.orientation);
-        return new Fields(f.kind, f.front, f.orientation, 2, 4, support, null, EquipmentShape.defaultConnections(2, 4, f.orientation, support, false), false, 0, ProcessUnit.Bank.ONE);
+        return new Fields(f.kind, f.front, f.orientation, 2, 4, support, null, EquipmentShape.defaultConnections(2, 4, f.orientation, support, false), false, 0, ProcessUnit.Bank.ONE, null);
     }
 
     private static double clamp(double value, double low, double high) {
@@ -315,5 +413,6 @@ public final class ShapeRepair {
         if (from.outlet != to.outlet) repairs.add("outlet " + from.outlet + " -> " + to.outlet);
         if (from.boot != to.boot) repairs.add("boot -> none");
         if (!from.bank.equals(to.bank)) repairs.add("bank -> one bay");
+        if (from.duty != null && to.duty == null) repairs.add("duty -> its size's");
     }
 }

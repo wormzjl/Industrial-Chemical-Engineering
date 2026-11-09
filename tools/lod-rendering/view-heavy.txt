@@ -1,0 +1,3 @@
+# Heavy view: 15 m up behind the gauge grid, facing south over the whole field.
+gamemode spectator
+tp @s 13.5 -45 -15 0 25

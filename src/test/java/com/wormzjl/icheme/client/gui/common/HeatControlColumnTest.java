@@ -90,11 +90,14 @@ class HeatControlColumnTest {
                 if (mode == HeatUnit.Mode.FIRING) continue;
                 var applied = new HeatUnit.Control(mode, 330, 0, 0.25);
                 for (var side : List.of("TUBE", "SHELL")) {
-                    String actuator = mode == HeatUnit.Mode.RATIO ? "feed_valve" : "bypass";
-                    out.add(new Case("exchanger " + side + " " + mode + (edit ? "" : " reader"), new HeatControlColumn.Input(heat("EXCHANGER", side, true, actuator, mode == HeatUnit.Mode.RATIO ? null : 0.25, null, List.of()), applied, edit, true, mode, true, "C")));
+                    String actuator = mode == HeatUnit.Mode.RATIO || mode == HeatUnit.Mode.COLUMN ? "feed_valve" : "bypass";
+                    out.add(new Case("exchanger " + side + " " + mode + (edit ? "" : " reader"), new HeatControlColumn.Input(heat("EXCHANGER", side, true, actuator, actuator.equals("feed_valve") ? null : 0.25, null, List.of()), applied, edit, true, mode, true, "C")));
                 }
-                if (mode != HeatUnit.Mode.RATIO) {
+                if (mode != HeatUnit.Mode.RATIO && mode != HeatUnit.Mode.COLUMN) {
                     out.add(new Case("air cooler " + mode, new HeatControlColumn.Input(heat("AIR_COOLER", "PROCESS", false, "fans", 0.5, null, List.of()), applied, edit, true, mode, true, "C")));
+                    // W7 (reading A86): a fan unit's Power group, its store shown.
+                    out.add(new Case("air cooler powered " + mode, new HeatControlColumn.Input(heat("AIR_COOLER", "PROCESS", false, "fans", 0.5, null, List.of()), applied, edit, true, mode, true, "C",
+                            new DeviceColumn.Power("26.7", "534", "72"))));
                     if (mode == HeatUnit.Mode.OFF)
                         out.add(new Case("air cooler still", new HeatControlColumn.Input(heat("AIR_COOLER", "PROCESS", false, "fans", 0.0, null, List.of()), applied, edit, true, mode, false, "C")));
                     out.add(new Case("kettle tubes " + mode, new HeatControlColumn.Input(heat("KETTLE", "TUBE", true, "bypass", 0.1, null, List.of()), applied, edit, true, mode, true, "K")));
@@ -120,6 +123,19 @@ class HeatControlColumnTest {
             }
         assertEquals(Set.of(), texts.missing);
         assertTrue(texts.asked.size() > 30, "the cases ask for the column's texts: " + texts.asked.size());
+    }
+
+    /** W7 (reading A86): a fan unit's draw, FE per tick and store stand in a Power group of LED meters, last on the right; none without power. */
+    @Test
+    void aFanUnitsPowerIsAGroupOfMeters() {
+        var texts = new Recording();
+        var heat = heat("AIR_COOLER", "PROCESS", false, "fans", 0.5, null, List.of());
+        var right = HeatControlColumn.columns(new HeatControlColumn.Input(heat, null, true, true, HeatUnit.Mode.OFF, true, "C", new DeviceColumn.Power("26.7", "534", null)), texts).right();
+        var power = (Column.Group) right.getLast();
+        assertEquals(texts.get("device_group.power"), power.title());
+        assertEquals(List.of("power:draw", "power:fe"), power.rows().stream().map(r -> ((Column.Reading) r).key()).toList(), "no store, no store meter");
+        assertTrue(HeatControlColumn.columns(new HeatControlColumn.Input(heat, null, true, true, HeatUnit.Mode.OFF, true, "C"), texts).right().stream()
+                .noneMatch(r -> r instanceof Column.Group g && g.title().equals(texts.get("device_group.power"))));
     }
 
     /** Layout C's two columns, or one on a narrow screen, as FluidDeviceScreen.buildControl places them. */
@@ -175,10 +191,10 @@ class HeatControlColumnTest {
     @Test
     void eachSideHasItsSwitchItsTargetsAndItsSettings() {
         var texts = new Recording();
-        // An exchanger's tube side held at its outlet: the switch at On, three targets, the outlet's set point.
+        // An exchanger's tube side held at its outlet: the switch at On, four targets, the outlet's set point.
         var tube = new HeatControlColumn.Input(heat("EXCHANGER", "TUBE", true, "bypass", 0.25, null, List.of()), new HeatUnit.Control(HeatUnit.Mode.OUTLET_TEMPERATURE, 330, 0, 0), true, true, HeatUnit.Mode.OUTLET_TEMPERATURE, true, "C");
         var rows = HeatControlColumn.rows(tube, texts);
-        assertEquals(List.of("target:outlet_temperature", "target:duty", "target:ratio"), choices(rows).stream().map(Column.Choice::action).toList());
+        assertEquals(List.of("target:outlet_temperature", "target:duty", "target:ratio", "target:column"), choices(rows).stream().map(Column.Choice::action).toList());
         assertTrue(choices(rows).getFirst().selected());
         assertTrue(choices(rows).getFirst().hint().contains(texts.get("heat_actuator.bypass")), "a target's hover names what it works");
         assertEquals(List.of("side:0", "side:1", "power:off", "power:on", "heatTemperature", "lowLimit"), keys(rows));
@@ -257,6 +273,25 @@ class HeatControlColumnTest {
         var checkedRows = HeatControlColumn.rows(checked, texts);
         assertTrue(flat(checkedRows).stream().anyMatch(r -> r instanceof Column.Paragraph p && p.text().equals(texts.get("lines_note.ratio.checked", 2)) && p.colour() == Palette.WARN));
         assertTrue(groups(checkedRows).contains(texts.get("heat_group.lines")), "nothing acts: the lines' own group");
+    }
+
+    /**
+     * U2: a column condenser's water in the column's mode: no set point and no low limit (the column sets the flow), its feed's
+     * flow on the feed valve's plate, and while its flow station is incomplete the station's own note.
+     */
+    @Test
+    void theColumnsModeSetsNothingAndShowsTheFlowItsColumnSets() {
+        var texts = new Recording();
+        var ports = List.of(port("TUBE_INLET", 950.8), port("TUBE_OUTLET", 950.8), port("SHELL_INLET", 40), port("SHELL_OUTLET", 40));
+        var lines = new FluidView.Lines("COMPLETE", 0, List.of());
+        var in = new HeatControlColumn.Input(heat("EXCHANGER", "TUBE", true, "feed_valve", null, lines, ports), new HeatUnit.Control(HeatUnit.Mode.COLUMN, 0, 0, 0), true, true, HeatUnit.Mode.COLUMN, true, "C");
+        var column = HeatControlColumn.rows(in, texts);
+        assertTrue(choices(column).getLast().selected(), "the column's target, last");
+        assertEquals(List.of("side:0", "side:1", "power:off", "power:on", "check_lines"), keys(column), "nothing to set");
+        assertTrue(flat(column).stream().anyMatch(r -> r instanceof Column.Line l && l.text().equals(texts.get("heat_effort.column", "950.8"))), "the flow its column sets");
+        assertTrue(groups(column).contains(texts.get("heat_acting.feed_valve")));
+        var checked = new HeatControlColumn.Input(in.heat().with("none", null, "NONE", ports, new FluidView.Lines("CHECKED", 1, List.of())), in.applied(), true, true, HeatUnit.Mode.COLUMN, true, "C");
+        assertTrue(flat(HeatControlColumn.rows(checked, texts)).stream().anyMatch(r -> r instanceof Column.Paragraph p && p.text().equals(texts.get("lines_note.column.checked", 1))));
     }
 
     /** The rows, a group followed by its own rows. */

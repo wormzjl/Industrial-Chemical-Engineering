@@ -1,0 +1,397 @@
+package com.wormzjl.icheme.client.gui.flowsheet;
+
+import com.wormzjl.icheme.client.gui.common.CalculatorColumn;
+import com.wormzjl.icheme.client.gui.common.kit.Canvas;
+import com.wormzjl.icheme.client.gui.common.kit.Column;
+import com.wormzjl.icheme.client.gui.common.kit.Palette;
+import com.wormzjl.icheme.client.gui.common.kit.Rect;
+import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
+import com.wormzjl.icheme.client.gui.common.kit.Skin;
+import com.wormzjl.icheme.science.flowsheet.FlowStream;
+import com.wormzjl.icheme.science.flowsheet.Flowsheet;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import org.jetbrains.annotations.Nullable;
+
+/**
+ * A stream's door (batch 2026-11-02-process-simulator, sheets 07, 08, 10). A feed is the Fluid Generator's page: set point, flow, phases; its Composition tab
+ * is the calculator's feed table, Amount a part of the whole, and the flow holds as a part changes. A stream a unit makes is a reader, every value a
+ * meter. Copy and Paste use {@link SheetClipboard}.
+ */
+public final class StreamDoors {
+    private static final int TOP_SEARCH = 24;
+
+    private StreamDoors() {
+    }
+
+    public static Door door(SheetContext x, String id, Door.View view) {
+        var stream = x.editor().stream(id);
+        return stream.feed() != null && stream.from() == null ? feed(x, stream, view) : product(x, stream, view);
+    }
+
+    /** The phase keys, named in full (the owner, 2026-11-04: "these names should not be shortened"): the glass gives each at least 62 px. */
+    private static List<String> phaseKeys(SheetContext x) {
+        return List.of(x.text("phase.organic"), x.text("phase.aqueous"), x.text("phase.gas"), x.text("phase.solid"));
+    }
+
+    /**
+     * The phase keys, then the phase's table: its components, or on the Solid key the solids the run carries (the owner,
+     * 2026-11-04, "Fill Solid key, drop tab"). Until the player picks a key, the door shows the phase that holds the most (the
+     * owner: OFFGAS, 99.6 % gas, opened on a trace liquid's composition; "The largest phase").
+     */
+    static Door.Glass contents(SheetContext x, Flowsheet.Stream stream, Door.View view) {
+        var keys = phaseKeys(x);
+        if (!view.phasePicked) view.phase = largest(x, stream);
+        return new Door.Glass() {
+            @Override public void draw(Canvas c, Skin skin, Rect box) {
+                var u = x.units();
+                var solved = x.solved(stream);
+                var below = new Rect(box.x(), box.y() + 20, box.w(), box.h() - 20);
+                if (view.phase == 3) {
+                    Door.table(c, below, new int[]{box.w() - 120, 60, 60}, solidRows(x, solved));
+                    return;
+                }
+                var table = new ArrayList<String[]>();
+                table.add(new String[]{x.text("label.component"), x.text("label.mole_percent"), u.molesUnit()});
+                for (var part : StreamProps.parts(solved, x.fluids(), view.phase)) if (part.percent() >= .005) table.add(new String[]{part.name(), SheetUnits.number(2, part.percent()), u.moles(part.moles())});
+                Door.table(c, below, new int[]{box.w() - 120, 60, 60}, table);
+            }
+
+            @Override public List<Door.Slot> slots(Rect box) {
+                var slots = new ArrayList<Door.Slot>();
+                int n = keys.size(), tw = (box.w() - 3 * (n - 1)) / n;
+                for (int i = 0; i < n; i++) slots.add(Door.Slot.key("phase/" + i, new Rect(box.x() + i * (tw + 3), box.y(), tw, 16), keys.get(i), i == view.phase));
+                return slots;
+            }
+        };
+    }
+
+    /** The phase with the most moles: organic, aqueous or gas; Solid where the stream carries solids and no fluid; organic before a run. */
+    private static int largest(SheetContext x, Flowsheet.Stream stream) {
+        var props = x.props(stream);
+        if (props == null) return 0;
+        var p = props.phases();
+        double[] shares = {p.organic(), p.aqueous(), p.gas()};
+        int best = 0;
+        for (int i = 1; i < shares.length; i++) if (shares[i] > shares[best]) best = i;
+        if (shares[best] > 0) return best;
+        var solved = x.solved(stream);
+        return solved != null && !solved.solids().populations().isEmpty() ? 3 : 0;
+    }
+
+    /** The solids a solved stream carries: a crystal by its component's name, a custom solid by its id; size in µm, kg/s. */
+    private static List<String[]> solidRows(SheetContext x, @Nullable FlowStream solved) {
+        var rows = new ArrayList<String[]>();
+        rows.add(new String[]{x.text("door.material"), x.text("door.size"), "kg/s"});
+        if (solved == null) return rows;
+        for (var p : solved.solids().populations()) {
+            var crystal = p.material().crystal();
+            String name = crystal == null ? p.material().id() : x.t().get("fluid.crystal_name", x.fluids().names().apply(crystal.component()));
+            rows.add(new String[]{name, SheetUnits.number(0, p.size().diameterMetres() * 1e6) + " µm", SheetUnits.reading(2, p.massKg())});
+        }
+        return rows;
+    }
+
+    // ---- A feed ----
+
+    private static double total(Flowsheet.Feed feed) {
+        return SheetContext.total(feed);
+    }
+
+    /** The feed's Flow entry on the display key's basis; in Volume with no density, with a hover that says why it is blank. */
+    static Column.Field flowEntry(SheetContext x, Flowsheet.Stream stream) {
+        var entry = Door.entry("flow", x.text("door.flow"), x.units().flowUnit());
+        return x.feedFlowKnown(stream) ? entry : new Column.Field(entry.key(), entry.label(), entry.unit(), x.text("door.volume_unknown"));
+    }
+
+    private static Door feed(SheetContext x, Flowsheet.Stream stream, Door.View view) {
+        var feed = stream.feed();
+        var u = x.units();
+        var values = new LinkedHashMap<String, String>();
+        var rows = new ArrayList<Column.Row>();
+        Door.Glass glass;
+        if (view.tab == 0) {
+            rows.add(Door.name(x.text("door.name")));
+            values.put("name", stream.name());
+            rows.add(Door.group(x.text("door.group.set_point"), Door.entry("pressure", x.text("door.pressure"), u.pressure().symbol()), Door.entry("temperature", x.text("door.temperature"), u.temperature().symbol())));
+            values.put("pressure", u.p(feed.pressure()));
+            values.put("temperature", u.t(feed.temperature()));
+            var props = x.props(stream);
+            var flow = new ArrayList<Column.Row>(List.of(flowEntry(x, stream)));
+            // A unit that sets this feed's flow (U1): the entry is its first guess, and the readings show the flow the run gave it.
+            String setBy = setBy(x, stream);
+            if (setBy != null) flow.add(new Column.Line(setBy, Palette.ACCENT));
+            rows.add(Door.group(x.text("door.group.flow"), flow.toArray(Column.Row[]::new)));
+            values.put("flow", x.feedFlow(stream));
+            rows.add(Door.phases(x.text("door.group.phases"), props == null ? StreamProps.Phases.NONE : props.phases(), x.t()));
+            rows.add(Door.group(x.text("door.group.readings"), Door.meter(x.text("door.mass_flow"), props == null ? "" : u.tonnes(props.mass()), u.tonnesUnit()), Door.meter(x.text("door.density"), props == null ? "" : SheetUnits.number(1, props.density()), "kg/m³"),
+                    Door.meter(x.text("door.mean_weight"), props == null ? "" : SheetUnits.number(1, props.weight()), "kg/kmol")));
+            glass = contents(x, stream, view);
+        } else if (view.tab == 1) {
+            rows.add(Door.group(x.text("door.group.mixture"), new Column.Buttons(List.of(Door.key("templates", x.text("door.templates"), true, null), Door.key("save", x.text("file.save_as"), total(feed) > 0, x.text("hint.clipboard"))))));
+            var held = SheetClipboard.held();
+            boolean full = held != null;
+            rows.add(Door.group(x.text("door.group.clipboard"), new Column.Line(full ? held.source() : x.text("door.clipboard_empty"), full ? Palette.ACCENT : Palette.MUTED), new Column.Line(full ? x.text("door.clipboard_holds", u.t(held.temperature()), u.temperature().symbol(), u.p(held.pressure()), u.pressure().symbol(), held.amounts().size()) : "", Palette.MUTED), new Column.Buttons(List.of(Door.key("copy", x.text("door.copy"), total(feed) > 0, null), Door.key("paste", x.text("door.paste"), full, x.text("hint.clipboard")))),
+                    new Column.Buttons(List.of(Door.key("paste_state", x.text("door.paste_state"), full, x.text("hint.clipboard"))))));
+            rows.add(Door.group(x.text("door.group.total"), Door.meter(x.text("door.parts"), Integer.toString(feed.amounts().size()), ""), Door.meter(x.text("door.share"), feed.amounts().isEmpty() ? "" : "100.0", "%")));
+            glass = table(x, stream);
+        } else {
+            rows.add(Door.group(x.text("door.group.solids"), new Column.Line(feed.solids().isEmpty() ? x.text("door.no_solids") : x.text("door.solids_count", feed.solids().size()), Palette.MUTED)));
+            glass = solids(x, feed.solids());
+        }
+        var status = view.said != null ? view.said : feedStatus(x, stream);
+        return new Door(x.text("door.feed"), Door.tabs(view.tab, x.t().get("fluid.overview"), x.t().get("fluid.composition"), x.t().get("fluid.solids")), view.tab, status, Palette.ACCENT, false, List.of(rows), values, glass, List.of(), new Door.Actions() {
+            @Override public void entry(String key, String text) {
+                writeFeed(x, stream.id(), key, text);
+            }
+
+            @Override public void button(String key) {
+                if (view.press(key)) return;
+                if (key.startsWith("remove/")) removePart(x, stream.id(), key.substring(7));
+                else if (key.equals("copy")) view.said = copy(x, stream);
+                else if (key.equals("paste")) view.said = paste(x, stream.id(), false);
+                else if (key.equals("paste_state")) view.said = paste(x, stream.id(), true);
+            }
+        });
+    }
+
+    /** What the last run says of a unit that set this feed's flow (U1's {@code flow.set_by}), without the stream's own name, or null where none did. */
+    static @Nullable String setBy(SheetContext x, Flowsheet.Stream stream) {
+        var results = x.state().results();
+        if (results == null) return null;
+        for (var note : NoteText.all(results.run()))
+            if (note.key().equals("flow.set_by") && note.subject().equals(stream.id())) return x.text("flow.set_by", NoteText.subject(note.arguments().getFirst(), x.editor().sheet()));
+        return null;
+    }
+
+    private static String feedStatus(SheetContext x, Flowsheet.Stream stream) {
+        var feed = stream.feed();
+        var u = x.units();
+        var props = x.props(stream);
+        String shown = x.feedFlow(stream), flow = (shown.isEmpty() ? "—" : shown) + " " + u.flowUnit(), t = u.t(feed.temperature()) + " " + u.temperature().symbol(), p = u.p(feed.pressure()) + " " + u.pressure().symbol();
+        if (total(feed) == 0) return x.text("door.status.no_flow");
+        return x.text("door.status.feed", props == null ? x.text("door.status.not_solved_short") : phaseName(x, props), flow, t, p);
+    }
+
+    /** One word for a stream's phases. */
+    static String phaseName(SheetContext x, StreamProps props) {
+        var p = props.phases();
+        return p.gas() >= 100 ? x.text("phase.gas_word") : p.gas() > 0 ? x.text("phase.two_word") : x.text("phase.liquid_word");
+    }
+
+    /** What the feed's panel and door type, one path for both: a flow on the display key's basis goes back to moles in {@link SheetContext#feedMoles}. */
+    static void writeFeed(SheetContext x, String id, String key, String text) {
+        var stream = x.editor().stream(id);
+        var feed = stream.feed();
+        String step = "entry " + id + " " + key;
+        if (key.equals("name")) {
+            x.editor().rename(id, text);
+            return;
+        }
+        if (key.equals("add")) {
+            add(x, id, text);
+            return;
+        }
+        var value = SheetContext.number(text);
+        if (value == null) return;
+        var u = x.units();
+        Flowsheet.Feed next;
+        switch (key) {
+            case "pressure" -> next = new Flowsheet.Feed(feed.temperature(), u.pressure().si(value), feed.amounts(), feed.solids(), feed.unknown());
+            case "temperature" -> next = new Flowsheet.Feed(u.temperature().si(value), feed.pressure(), feed.amounts(), feed.solids(), feed.unknown());
+            case "flow" -> {
+                double wanted = x.feedMoles(stream, value);
+                if (!(wanted >= 0)) return;
+                double scale = wanted / total(feed);
+                var amounts = new LinkedHashMap<String, Double>();
+                for (var e : feed.amounts().entrySet()) amounts.put(e.getKey(), e.getValue() * scale);
+                next = new Flowsheet.Feed(feed.temperature(), feed.pressure(), amounts, feed.solids(), feed.unknown());
+            }
+            default -> {
+                if (!key.startsWith("part/") || value < 0) return;
+                next = part(feed, key.substring(5), value);
+            }
+        }
+        x.editor().setFeed(id, next, step);
+    }
+
+    /** A component's part of the whole, the flow held. With no flow yet, a part is that many kmol/h, for the mixture must start somewhere. */
+    private static Flowsheet.Feed part(Flowsheet.Feed feed, String component, double percent) {
+        double total = total(feed);
+        var amounts = new LinkedHashMap<>(feed.amounts());
+        if (total == 0) amounts.put(component, percent * SheetUnits.KMOL_PER_HOUR);
+        else {
+            double others = total - amounts.getOrDefault(component, 0.0), share = Math.min(percent, 100) / 100;
+            double scale = others == 0 ? 1 : (1 - share) / (others / total);
+            for (var e : feed.amounts().entrySet()) amounts.put(e.getKey(), e.getValue() * scale);
+            amounts.put(component, share * total);
+        }
+        return new Flowsheet.Feed(feed.temperature(), feed.pressure(), amounts, feed.solids(), feed.unknown());
+    }
+
+    /** Adds the one component the text names, as the player types it. */
+    private static void add(SheetContext x, String id, String text) {
+        var feed = x.editor().stream(id).feed();
+        String want = text.strip().toLowerCase(Locale.ROOT);
+        if (want.isEmpty()) return;
+        String found = null;
+        for (var component : x.fluids().axis()) {
+            if (feed.amounts().containsKey(component) || !x.fluids().names().apply(component).toLowerCase(Locale.ROOT).startsWith(want)) continue;
+            if (found != null) return;
+            found = component;
+        }
+        if (found == null) return;
+        var amounts = new LinkedHashMap<>(feed.amounts());
+        amounts.put(found, 0.0);
+        x.editor().setFeed(id, new Flowsheet.Feed(feed.temperature(), feed.pressure(), amounts, feed.solids(), feed.unknown()), null);
+    }
+
+    private static void removePart(SheetContext x, String id, String component) {
+        var feed = x.editor().stream(id).feed();
+        var amounts = new LinkedHashMap<>(feed.amounts());
+        amounts.remove(component);
+        x.editor().setFeed(id, new Flowsheet.Feed(feed.temperature(), feed.pressure(), amounts, feed.solids(), feed.unknown()), null);
+    }
+
+    /**
+     * Loads a stream template as a paste ({@link SheetClipboard#paste}): its mixture at its own flow or the feed's (100 kmol/h with none yet), its T and P where it has them;
+     * a component the sheet does not hold stays out, and the rest take the whole flow.
+     */
+    public static void template(SheetContext x, String id, FileColumns.StreamTemplate template) {
+        var held = new SheetClipboard.Held(template.name(), template.amounts(), template.temperature(), template.pressure());
+        var pasted = SheetClipboard.paste(held, x.editor().stream(id).feed(), x.fluids().axis(), template.flow(), true);
+        x.editor().setFeed(id, pasted.feed(), null);
+    }
+
+    /** Puts a stream on the clipboard, and says what went: a feed as set, any other as solved. */
+    public static @Nullable String copy(SheetContext x, Flowsheet.Stream stream) {
+        var u = x.units();
+        var solved = x.solved(stream);
+        boolean set = stream.feed() != null && stream.from() == null;
+        if (!set && solved == null) return null;
+        var held = set ? SheetClipboard.feed(x.text("door.clipboard_stream", stream.name()), stream.feed()) : SheetClipboard.stream(x.text("door.clipboard_stream", stream.name()), solved, x.fluids().axis());
+        SheetClipboard.copy(held);
+        return x.text("door.copied", held.amounts().size(), u.t(held.temperature()), u.temperature().symbol(), u.p(held.pressure()), u.pressure().symbol());
+    }
+
+    /** Lays the clipboard on a feed, and says what happened: what it placed, where it came from, and what it could not place, by name. */
+    private static @Nullable String paste(SheetContext x, String id, boolean conditions) {
+        var held = SheetClipboard.held();
+        if (held == null) return null;
+        var pasted = SheetClipboard.paste(held, x.editor().stream(id).feed(), x.fluids().axis(), conditions);
+        if (!x.editor().setFeed(id, pasted.feed(), null)) return null;
+        String said = x.text(conditions ? "door.pasted_state" : "door.pasted", pasted.placed(), held.source());
+        if (pasted.left().isEmpty()) return said;
+        var left = new ArrayList<String>();
+        for (var component : pasted.left()) left.add(x.fluids().names().apply(component));
+        return said + " " + x.text("door.paste_left", String.join(", ", left));
+    }
+
+    private record Table(CalculatorColumn.FeedTable table, Map<Integer, String> components, Rect area) {
+    }
+
+    private static Table placed(SheetContext x, Flowsheet.Stream stream, Rect box) {
+        var feed = stream.feed();
+        var u = x.units();
+        double total = total(feed);
+        var rows = new ArrayList<CalculatorColumn.FeedRow>();
+        var components = new LinkedHashMap<Integer, String>();
+        var axis = x.fluids().axis();
+        for (var e : feed.amounts().entrySet()) {
+            int row = rows.size();
+            double share = total == 0 ? 0 : 100 * e.getValue() / total, weight = x.fluids().weight(axis.indexOf(e.getKey()));
+            rows.add(new CalculatorColumn.FeedRow(row, x.fluids().names().apply(e.getKey()), SheetUnits.number(1, share), u.moles(e.getValue()), u.tonnes(e.getValue() * weight)));
+            components.put(row, e.getKey());
+        }
+        var area = new Rect(box.x() + 2, box.y() + TOP_SEARCH, box.w() - 8 - ScrollView.BAR, box.h() - TOP_SEARCH - 2);
+        var header = List.of(x.text("door.component"), x.text("door.amount"), x.text("label.mole_percent"), u.molesUnit(), u.tonnesUnit());
+        return new Table(CalculatorColumn.feedTable(header, rows, area, x.m()), components, area);
+    }
+
+    /** The calculator's feed table, under a search box that adds a component. */
+    private static Door.Glass table(SheetContext x, Flowsheet.Stream stream) {
+        return new Door.Glass() {
+            @Override public void draw(Canvas c, Skin skin, Rect box) {
+                var t = placed(x, stream, box);
+                c.clip(t.area());
+                CalculatorColumn.draw(c, t.table(), t.area(), 0);
+                c.unclip();
+                var view = new ScrollView();
+                view.layout(new Rect(box.x(), t.area().y(), box.w(), t.area().h()), box.right() - ScrollView.BAR, t.table().height());
+                view.drawBar(c, skin);
+            }
+
+            @Override public List<Door.Slot> slots(Rect box) {
+                var t = placed(x, stream, box);
+                var slots = new ArrayList<Door.Slot>();
+                slots.add(Door.Slot.entry("add", new Rect(box.x() + 3, box.y() + 3, box.w() - 6, 16), "", x.text("door.add_component")));
+                double total = total(stream.feed());
+                for (var e : t.table().entries()) {
+                    if (e.amount().bottom() > t.area().bottom()) break;
+                    String component = t.components().get(e.row().id());
+                    double share = total == 0 ? 0 : 100 * stream.feed().amounts().get(component) / total;
+                    slots.add(Door.Slot.entry("part/" + component, e.amount(), SheetUnits.number(2, share), null));
+                    slots.add(Door.Slot.key("remove/" + component, e.remove(), "x", false));
+                }
+                return slots;
+            }
+        };
+    }
+
+    private static Door.Glass solids(SheetContext x, List<Flowsheet.Solid> solids) {
+        return (c, skin, box) -> {
+            var rows = new ArrayList<String[]>();
+            rows.add(new String[]{x.text("door.material"), x.text("door.size"), "kg/s"});
+            for (var solid : solids) rows.add(new String[]{solid.material(), solid.micrometres() + " µm", SheetUnits.number(2, solid.massFlow())});
+            Door.table(c, box, new int[]{box.w() - 120, 60, 60}, rows);
+        };
+    }
+
+    // ---- A stream a unit makes ----
+
+    private static @Nullable String from(SheetContext x, Flowsheet.Stream stream) {
+        if (stream.from() == null) return null;
+        var unit = x.editor().unit(stream.from().unit());
+        return unit == null ? null : x.text("door.status.from", unit.name(), Door.lower(portName(x, x.role(stream.from(), false))));
+    }
+
+    /** A port's name for the player. */
+    public static String portName(SheetContext x, String port) {
+        var parts = port.split("/");
+        return switch (parts[0]) {
+            case "pa" -> x.text("port.pa_" + parts[2], parts[1]);
+            case "in", "out" -> parts.length > 1 ? x.text("port." + parts[0] + "_row", parts[1]) : x.text("port." + port);
+            case "steam", "draw" -> x.text("port." + parts[0] + "_row", parts[1]);
+            default -> x.text("port." + port);
+        };
+    }
+
+    private static Door product(SheetContext x, Flowsheet.Stream stream, Door.View view) {
+        var u = x.units();
+        var p = x.props(stream);
+        var rows = new ArrayList<Column.Row>();
+        rows.add(Door.name(x.text("door.name")));
+        rows.add(Door.group(x.text("door.group.conditions"), Door.meter(x.text("door.pressure"), p == null ? "" : u.p(p.pressure()), u.pressure().symbol()), Door.meter(x.text("door.temperature"), p == null ? "" : u.t(p.temperature()), u.temperature().symbol())));
+        rows.add(Door.group(x.text("door.group.flow"), Door.meter(x.text("door.mole_flow"), p == null ? "" : u.moles(p.moles()), u.molesUnit()), Door.meter(x.text("door.mass_flow"), p == null ? "" : u.tonnes(p.mass()), u.tonnesUnit()),
+                Door.meter(x.text("door.liquid_volume"), p == null ? "" : SheetUnits.reading(1, u.time().display(p.liquidVolume())), u.time().unit("m³"))));
+        rows.add(Door.phases(x.text("door.group.phases"), p == null ? StreamProps.Phases.NONE : p.phases(), x.t()));
+        rows.add(Door.group(x.text("door.group.readings"), Door.meter(x.text("door.density"), p == null ? "" : SheetUnits.number(1, p.density()), "kg/m³"), Door.meter(x.text("door.viscosity"), p == null ? "" : SheetUnits.number(2, p.liquidMu() * 1e3), "mPa s"),
+                Door.meter(x.text("door.mean_weight"), p == null ? "" : SheetUnits.number(1, p.weight()), "kg/kmol"), Door.meter(x.text("door.enthalpy"), p == null ? "" : SheetUnits.number(1, p.enthalpy() / 1e3), "kJ/kg")));
+        String origin = from(x, stream);
+        String status = view.said != null ? view.said : p == null ? x.text("door.status.not_solved") : origin == null ? x.text("door.status.open") : origin;
+        boolean wired = stream.to() != null;
+        return new Door(x.text(wired ? "door.stream" : "door.product"), List.of(), 0, status, p == null ? Palette.MUTED : Palette.ACCENT, false, List.of(rows), Map.of("name", stream.name()),
+                contents(x, stream, view), List.of(Door.key("copy", x.text("door.copy"), p != null, x.text("hint.clipboard"))), new Door.Actions() {
+            @Override public void entry(String key, String text) {
+                if (key.equals("name")) x.editor().rename(stream.id(), text);
+            }
+
+            @Override public void button(String key) {
+                if (!view.press(key) && key.equals("copy")) view.said = copy(x, stream);
+            }
+        });
+    }
+}

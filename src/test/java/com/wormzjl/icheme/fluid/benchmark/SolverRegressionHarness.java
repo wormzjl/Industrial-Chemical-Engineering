@@ -24,7 +24,7 @@ import java.util.*;
  * (quiet-11312, quiet-11324, cold-11312) left with their snapshot (references deleted in b5ed4079).
  *
  * <p>References live in {@code src/test/resources/fluid/regression} and are captured on the
- * configured network basis ({@code tjl20_methane_nitrogen}). Regenerate with
+ * chain island's own list ({@link #chainModel}: the compounds of {@code tjl20_methane_nitrogen}). Regenerate with
  * {@code gradlew fluidSolverRegression -PfluidRegressionCapture=true}.
  */
 final class SolverRegressionHarness {
@@ -89,9 +89,20 @@ final class SolverRegressionHarness {
      * the basis size, so a package that gains or loses a component moves the reference states,
      * never the fixture's ability to build.
      */
+    /**
+     * The model an island holding the chain runs on (batch 2026-11-04-refinery-compounds, V2): the network package on
+     * nitrogen and the assay's compounds, in the package's order, water last, as {@code IslandSets} gives an island its
+     * list. The references hold the 21 entries of that list, so a compound the network package gains moves nothing.
+     */
+    static FluidThermodynamics chainModel(FluidThermodynamics network) {
+        var crude=com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo("icheme:tjl20_methane");
+        var ids=new ArrayList<String>();ids.add("Nitrogen");
+        for(int c=0;c<crude.crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions().length;c++)ids.add(crude.componentBasis().componentId(c));
+        return network.on(ids);
+    }
     static PassiveNetwork cosineChain(FluidThermodynamics model,int count) {
-        var crude=V3PengRobinsonThermo.fromRegisteredPackage("icheme:tjl20_methane");
-        var feed=crude.crudeFeed("icheme:tia_juana_light_methane").moleFractions();
+        var crude=com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo("icheme:tjl20_methane");
+        var feed=crude.crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions();
         var composition=new double[model.componentCount()];
         for(int c=0;c<feed.length;c++)composition[model.components().indexOf(crude.componentBasis().componentId(c))]=feed[c];
         composition[model.components().indexOf("Nitrogen")]=.1;composition[model.components().indexOf("Water")]=.2;

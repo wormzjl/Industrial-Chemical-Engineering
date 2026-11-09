@@ -30,14 +30,16 @@ class FluidAppearanceTest {
             for (String component : p.components()) assertTrue(catalog.componentAppearance(p.id(), component).estimated());
             for (String assay : p.assays().keySet()) assertTrue(catalog.assayAppearance(p.id(), assay).estimated());
         }
-        assertEquals(0x171615, catalog.assayAppearance("icheme:cold_lake_blend_tjl20", "icheme:cold_lake_blend").rgb());
+        assertEquals(0x16120E, catalog.assayAppearance(PACKAGE, "icheme:oil_sand_dilbit").rgb());
         assertThrows(IllegalArgumentException.class, () -> catalog.componentAppearance(PACKAGE, "Unknown"));
-        assertThrows(IllegalArgumentException.class, () -> catalog.assayAppearance(PACKAGE, "icheme:cold_lake_blend"));
+        // An assay applies to every package that holds its compounds; the pilot holds no crude fraction.
+        assertEquals(0x16120E, catalog.assayAppearance("icheme:tjl20_methane_nitrogen", "icheme:oil_sand_dilbit").rgb());
+        assertThrows(IllegalArgumentException.class, () -> PilotCryogenicTestCatalog.withPilot().assayAppearance("icheme:pilot_cryogenic", "icheme:oil_sand_dilbit"));
     }
 
     @Test void appearanceEditsPreserveThePackagesScienceAndTransport() {
         var original = MaterialCatalog.bundled();
-        for (String path : new String[]{"components/crude_pc07.json", "assays/tjl20.json"}) {
+        for (String path : new String[]{"components/crude_pc07.json", "assays/medium_crude.json"}) {
             var changed = MaterialCatalog.parse(MaterialCatalogTest.changed(path, o -> o.add("appearance", appearance("#123456", .4))));
             assertEquals(original.requirePackage(PACKAGE), changed.requirePackage(PACKAGE), "the package record, its assays included");
             assertEquals(original.liquidMixture(PACKAGE), changed.liquidMixture(PACKAGE));
@@ -45,20 +47,20 @@ class FluidAppearanceTest {
                 for (var phase : ViscosityCorrelation.Phase.values())
                     assertEquals(original.viscosity(PACKAGE, component, phase), changed.viscosity(PACKAGE, component, phase), component);
             var result = path.startsWith("components") ? changed.componentAppearance(PACKAGE, "crude_pc07")
-                    : changed.assayAppearance(PACKAGE, "icheme:tia_juana_light_methane");
+                    : changed.assayAppearance(PACKAGE, "icheme:medium_crude");
             assertEquals(new MaterialCatalog.FluidAppearance(0x123456, .4, true), result);
         }
     }
 
     @Test void recordsWithoutAppearanceAreRefused() {
-        for (String path : new String[]{"components/water.json", "assays/tjl20.json"})
+        for (String path : new String[]{"components/water.json", "assays/medium_crude.json"})
             assertThrows(IllegalArgumentException.class, () -> MaterialCatalog.parse(MaterialCatalogTest.changed(path, o -> o.remove("appearance"))), path);
     }
 
     @Test void invalidAppearanceIdentifiesResourceAndRetainsPublishedSnapshot() {
         var original = MaterialCatalog.bundled();
         MaterialRuntime.publish(original);
-        for (String path : new String[]{"components/water.json", "assays/tjl20.json"}) {
+        for (String path : new String[]{"components/water.json", "assays/medium_crude.json"}) {
             for (JsonObject appearance : new JsonObject[]{appearance("blue", .5), appearance("#00112233", .5),
                     appearance("#123456", -.1), appearance("#123456", 1.1)}) {
                 var resources = MaterialCatalogTest.changed(path, o -> o.add("appearance", appearance));

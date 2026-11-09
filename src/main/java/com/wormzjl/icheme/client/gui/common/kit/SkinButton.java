@@ -10,12 +10,13 @@ import net.minecraft.network.chat.Component;
  * The game's button drawn by a {@link Skin} (GUI_TOOLKIT_PLAN.md section 10): it keeps the vanilla button's clicks,
  * keys, tooltip and narration. A button marked latched reads so ({@link Skin.Press#CURRENT}: the page or the side
  * shown); most latched keys do not act, and one that does acts on the position it shows (the constructor's current kind
- * opens its design). An inactive button that is not latched reads as switched off; a primary one is the confirm button.
+ * opens its design). An inactive button that is not latched reads as switched off; a primary one is the confirm button,
+ * lit amber while it is due ({@link Skin.Press#DUE}); a sign stands before its word ({@link Skin#signButton}).
  */
 public final class SkinButton extends Button {
     private final Supplier<Skin> skin;
-    private boolean latched, primary, soft;
-    private Skin.Icon icon;
+    private boolean latched, primary, soft, due;
+    private Skin.Icon icon, sign;
 
     public SkinButton(int x, int y, int width, int height, Component message, OnPress onPress, Supplier<Skin> skin) {
         super(x, y, width, height, message, onPress, DEFAULT_NARRATION);
@@ -46,6 +47,18 @@ public final class SkinButton extends Button {
         return this;
     }
 
+    /** The confirm button lit because its action is due (Run while the results are out of date); while active only. */
+    public SkinButton due(boolean value) {
+        due = value;
+        return this;
+    }
+
+    /** A sign before its word ({@link Skin#signButton}): Run's ▶. */
+    public SkinButton sign(Skin.Icon value) {
+        sign = value;
+        return this;
+    }
+
     /** A display key (a unit, a basis): it changes what the screens show, not the plant ({@link Skin#softKey}). */
     public SkinButton soft(boolean value) {
         soft = value;
@@ -70,7 +83,8 @@ public final class SkinButton extends Button {
             skin.get().softKey(canvas, r, getMessage().getString(), isHoveredOrFocused());
             return;
         }
-        var press = latched ? Skin.Press.CURRENT : !active ? Skin.Press.OFF : primary ? Skin.Press.PRIMARY : Skin.Press.REST;
-        skin.get().button(canvas, r, getMessage().getString(), press, isHoveredOrFocused());
+        var press = latched ? Skin.Press.CURRENT : !active ? Skin.Press.OFF : due ? Skin.Press.DUE : primary ? Skin.Press.PRIMARY : Skin.Press.REST;
+        if (sign != null) skin.get().signButton(canvas, r, sign, getMessage().getString(), press, isHoveredOrFocused());
+        else skin.get().button(canvas, r, getMessage().getString(), press, isHoveredOrFocused());
     }
 }

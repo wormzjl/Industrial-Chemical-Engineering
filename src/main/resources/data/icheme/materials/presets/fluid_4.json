@@ -1,8 +1,7 @@
 {
   "schema_version": 1,
-  "id": "icheme:cold_lake_blend",
+  "id": "icheme:heavy_crude",
   "kind": "fluid",
-  "label": "Cold Lake Blend",
-  "package": "icheme:cold_lake_blend_tjl20",
-  "assay": "icheme:cold_lake_blend"
+  "label": "Heavy crude",
+  "assay": "icheme:heavy_crude"
 }

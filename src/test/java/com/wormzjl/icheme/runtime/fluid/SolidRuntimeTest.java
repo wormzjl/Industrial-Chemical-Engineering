@@ -49,8 +49,8 @@ class SolidRuntimeTest {
         var cake=new InlineFilter(.01,1e6,stock(4),1234);
         var graph=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,source),new PassiveNetwork.Reservoir(2,0,model.initialNitrogenCharge(1,298.15,101325,()->{}))),
                 List.of(new PassiveNetwork.Pipe(3,0,1,new PipeResistance.Geometry(1,.05,0,0)).withFilter(cake)));
-        var json=FluidCheckpointCodec.encode(checkpoint(graph),key->model);
-        var restored=FluidCheckpointCodec.decode(json,key->model).islands().getFirst().snapshot().graph();
+        var json=FluidCheckpointCodec.encode(checkpoint(graph),key->key.on(model));
+        var restored=FluidCheckpointCodec.decode(json,key->key.on(model)).islands().getFirst().snapshot().graph();
         assertEquals(cake,restored.pipes().getFirst().filter());
         assertEquals(source.solids(),restored.reservoirs().getFirst().inventory().solids());
         var changed=FluidThermodynamics.forNetwork(catalog,FluidPresetCatalog.NETWORK_PACKAGE,100,1e-6,new SlurryTransport.Settings(100,1e-8,12,.0001,2e6));
@@ -62,8 +62,8 @@ class SolidRuntimeTest {
         var solids=stock(10);var state=model.solidState(310,101325,solids);
         var inventory=new PassiveNetwork.Inventory(1,new double[model.componentCount()],state.internalEnergy(),solids);
         var graph=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,state,PassiveNetwork.NodeKind.RESERVOIR,inventory)),List.of());
-        var saved=FluidCheckpointCodec.encode(checkpoint(graph),key->model);
-        var loaded=FluidCheckpointCodec.decode(saved,key->model).islands().getFirst().snapshot().graph();
+        var saved=FluidCheckpointCodec.encode(checkpoint(graph),key->key.on(model));
+        var loaded=FluidCheckpointCodec.decode(saved,key->key.on(model)).islands().getFirst().snapshot().graph();
         var result=new PassiveIntervalSolver(model).solve(loaded,5,PassiveIntervalSolver.Settings.defaults(),()->{});
         assertEquals(inventory,result.graph().reservoirs().getFirst().inventory());
         assertEquals(310,result.graph().reservoirs().getFirst().state().temperature(),1e-10);

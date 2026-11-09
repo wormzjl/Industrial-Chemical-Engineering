@@ -54,7 +54,7 @@ import java.util.*;
  * {@link WatchPayload}, which replays their stored views, and their changes come with the buckets ({@link WatchedPayload}).
  */
 public final class AssemblyNetwork {
-    public static final String PROTOCOL = "assembly-3";
+    public static final String PROTOCOL = "assembly-4";
     /** Bounds a view's read checks: slots, ports, members, characters of a slot's name or detail. */
     static final int MAX_SLOTS = 256, MAX_PORTS = 1024, MAX_MEMBERS = 256, MAX_TEXT = 1024;
 
@@ -80,6 +80,8 @@ public final class AssemblyNetwork {
             b.writeLong(s.member());
             b.writeLong(s.at());
             b.writeUtf(s.detail(), MAX_TEXT);
+            b.writeVarInt(s.parallel().size());
+            for (long unit : s.parallel()) b.writeLong(unit);
         }
         b.writeVarInt(report.ports().size());
         for (var p : report.ports()) {
@@ -207,7 +209,12 @@ public final class AssemblyNetwork {
         for (int i = 0, n = count(b, MAX_SLOTS); i < n; i++) {
             String part = b.readUtf(MAX_TEXT);
             int index = b.readVarInt();
-            slots.add(new SlotReport(new Slot(part, index), b.readEnum(State.class), b.readLong(), b.readLong(), b.readUtf(MAX_TEXT)));
+            var state = b.readEnum(State.class);
+            long member = b.readLong(), at = b.readLong();
+            var detail = b.readUtf(MAX_TEXT);
+            var parallel = new ArrayList<Long>();
+            for (int k = 0, m = count(b, com.wormzjl.icheme.science.equipment.ColumnComponents.MAX_UNITS - 1); k < m; k++) parallel.add(b.readLong());
+            slots.add(new SlotReport(new Slot(part, index), state, member, at, detail, parallel));
         }
         var ports = new ArrayList<PortReport>();
         for (int i = 0, n = count(b, MAX_PORTS); i < n; i++) {

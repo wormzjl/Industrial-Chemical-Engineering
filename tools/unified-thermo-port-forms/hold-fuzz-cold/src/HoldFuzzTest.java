@@ -59,7 +59,7 @@ class HoldFuzzTest {
     static List<String> basis(){var ids=new ArrayList<>(CATALOG.requirePackage(PACKAGE).components());ids.add("Water");return List.copyOf(ids);}
     static final int COMPONENTS=BASIS.size(),WATER=COMPONENTS-1,NITROGEN=BASIS.indexOf("Nitrogen");
     static final int METHANE=BASIS.indexOf("Methane"),ETHANE=BASIS.indexOf("Ethane"),CO2=BASIS.indexOf("CarbonDioxide");
-    static final double[] CRUDE=Arrays.copyOf(V3PengRobinsonThermo.fromRegisteredPackage("icheme:tjl20_methane_nitrogen").crudeFeed("icheme:tia_juana_light_methane").moleFractions(),MaterialTestBasis.NETWORK+1);
+    static final double[] CRUDE=Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo("icheme:tjl20_methane_nitrogen").crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(),MaterialTestBasis.NETWORK+1);
     static final ThreadLocal<FluidThermodynamics> MODELS=ThreadLocal.withInitial(()->COLD?FluidThermodynamics.forNetwork(CATALOG,PACKAGE):FluidTestSupport.networkModel());
     /** One seed's run, inside the cold catalog's context when {@link #COLD}. */
     static Outcome runSeed(long seed,int slices,boolean verbose){return COLD?MaterialRuntime.with(CATALOG,PACKAGE,()->run(seed,slices,verbose)):run(seed,slices,verbose);}

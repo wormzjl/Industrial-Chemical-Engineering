@@ -1,0 +1,16 @@
+from pathlib import Path
+exec(Path('tmp/power-conduit/integration.py').read_text().split("edit('registry/ModBlocks.java'")[0])
+f='client/DataControlRenderer.java'
+edit(f,'        for(var p:InstrumentHosts.dataPorts(level,centre,radius))ports.put(p.id(),p);','        for(var p:InstrumentHosts.dataPorts(level,centre,radius))ports.put(p.id(),p);\n        for(var p:InstrumentHosts.powerPorts(level,centre,radius))ports.put(p.id(),p);')
+edit(f,'    public static DataPort aim(','    public static Map<UUID,DataPort> ports(Level level,Vec3 centre,double radius,CableMedium medium){var result=new HashMap<UUID,DataPort>();ports(level,centre,radius).forEach((id,p)->{if(p.kind().medium()==medium)result.put(id,p);});return Map.copyOf(result);}\n    public static DataPort aim(')
+edit(f,'for(var c:wires)if((c.geometry()','for(var c:wires)if(c.geometry().medium()==port.kind().medium()&&(c.geometry()')
+edit(f,'ports(mc.level,mc.player.getEyePosition(),mc.player.blockInteractionRange()+1)','ports(mc.level,mc.player.getEyePosition(),mc.player.blockInteractionRange()+1,CableLayingClient.medium())')
+edit(f,'String text=net.minecraft.network.chat.Component.translatable("gui.icheme.data.port",id).getString();','String text=port.kind().power()?net.minecraft.network.chat.Component.translatable("gui.icheme.power."+switch(port.kind()){case POWER_INPUT->"input";case POWER_OUTPUT->"output";default->"both";}).getString():net.minecraft.network.chat.Component.translatable("gui.icheme.data.port",id).getString();')
+edit(f,'if(mc.level.getBlockEntity(port.owner()) instanceof','if(!port.kind().power()&&mc.level.getBlockEntity(port.owner()) instanceof')
+edit(f,'return new PortMesh(DataPortGeometry.polygons(new double[]{0,0,0},new double[]{out.getStepX(),out.getStepY(),out.getStepZ()},box),out);','return new PortMesh(p.kind().power()?PowerPortGeometry.polygons(new double[]{0,0,0},new double[]{out.getStepX(),out.getStepY(),out.getStepZ()},box):DataPortGeometry.polygons(new double[]{0,0,0},new double[]{out.getStepX(),out.getStepY(),out.getStepZ()},box),out);')
+edit(f,'new double[]{-port.face().getStepX(),-port.face().getStepY(),-port.face().getStepZ()}));','new double[]{-port.face().getStepX(),-port.face().getStepY(),-port.face().getStepZ()},port.kind().medium()),port.kind().medium());')
+edit(f,'if(CableLayingClient.holding(mc.player))LevelRenderer','if(CableLayingClient.holding(mc.player)&&port.kind().medium()==CableLayingClient.medium())LevelRenderer')
+edit(f,'ConduitGeometry.lane(rack.rack(),rack.cableLane(cable)));','ConduitGeometry.lane(rack.rack(),rack.cableLane(cable)),cable.geometry().medium());')
+edit(f,'List<Mesh.Polygon> polygons){\n        var mc=', 'List<Mesh.Polygon> polygons,CableMedium medium){\n        var mc=')
+edit(f,'atlas.getSprite(CABLE_TEXTURE)','atlas.getSprite(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"block/"+medium.texture()))')
+edit(f,'case GUARD->0xb99d38;','case GUARD->0xb99d38;case ACTUATOR->0xc68239;')

@@ -56,6 +56,18 @@ class AssemblyMatcherTest {
         return trays(Condenser.AIR_COOLER, false, true, List.of(18), Pump.STANDARD, 2, List.of(Pump.STANDARD, Pump.STANDARD));
     }
 
+    @Test void aColumnNamesAnExchangerConfigurationMismatch() {
+        var old=trays(Condenser.EXCHANGER,false,true,List.of(),Pump.STANDARD,0,List.of());
+        var plant=ideal(old);
+        assertTrue(plant.match().complete());
+        var requested=old.withComponents(old.components().withExchangers(new ColumnComponents.Exchangers(
+                com.wormzjl.icheme.science.equipment.ExchangerType.CROSSFLOW,
+                com.wormzjl.icheme.science.equipment.ExchangerType.STANDARD,List.of())));
+        var report=AssemblyMatcher.match(ColumnBlueprint.of(requested),plant.graph(),plant.unit("column"),Set.of());
+        assertEquals(State.CONFIGURATION,report.slot(new Slot("condenser",0)).state());
+        assertFalse(report.complete());
+    }
+
     /**
      * The plant {@code trays} asks for, piped as designed. The receiver's condensate enters its second side connection;
      * an even pumparound passes its cooler before its pump, and an In-line Pump of an even pumparound sits on its return.
@@ -86,6 +98,14 @@ class AssemblyMatcherTest {
             condenser = g.unit(Kind.AIR_COOLER, PROCESS_INLET, PROCESS_OUTLET);
             g.pipe(overhead, port(condenser, PROCESS_INLET));
             condensate = port(condenser, PROCESS_OUTLET);
+        } else if (c.condenser() == Condenser.AIR_THEN_WATER) {
+            // The air cooler, then the water trim on its shell side (COOLER_MODEL_PLAN.md section 6).
+            condenser = g.unit(Kind.AIR_COOLER, PROCESS_INLET, PROCESS_OUTLET);
+            g.pipe(overhead, port(condenser, PROCESS_INLET));
+            var trim = g.unit(Kind.EXCHANGER, TUBE_INLET, TUBE_OUTLET, SHELL_INLET, SHELL_OUTLET);
+            units.put("trim_condenser", trim);
+            g.pipe(port(condenser, PROCESS_OUTLET), port(trim, SHELL_INLET));
+            condensate = port(trim, SHELL_OUTLET);
         } else {
             condenser = g.unit(Kind.EXCHANGER, TUBE_INLET, TUBE_OUTLET, SHELL_INLET, SHELL_OUTLET);
             g.pipe(overhead, port(condenser, SHELL_INLET));
@@ -183,7 +203,7 @@ class AssemblyMatcherTest {
                                 assertEquals(plant.units().size(), report.members().size(), trays::toString);
                                 cases++;
                             }
-        assertEquals(8680, cases);
+        assertEquals(8680 * Condenser.values().length / 2, cases);
     }
 
     @Test

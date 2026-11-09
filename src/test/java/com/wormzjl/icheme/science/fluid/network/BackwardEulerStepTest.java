@@ -57,7 +57,7 @@ class BackwardEulerStepTest {
         assertEquals(energy,next.internalEnergy()-old.internalEnergy(),1e-3);
     }
     @Test void aCompressorsWorkIsHeatInTheDischargeAndTheInternalEnergyLedgerHoldsIt() {
-        // Nitrogen is lifted 10 m by a compressor (decision D2): its ideal isothermal shaft work (D37 S6) is booked as heat
+        // Nitrogen is lifted 10 m by a compressor (decision D2): its polytropic gas power (batch 2026-11-03-rotating-machinery) is booked as heat
         // into the discharge (decision D8), and the internal energy holds that work exactly: no stream carries potential
         // energy (D37 S1; before, the ledger added the lifted mass's m g z).
         // Above the ambient: drawn at 1 atm, the suction tank (a bag, decision D54) would go slack and take the ambient's
@@ -81,7 +81,8 @@ class BackwardEulerStepTest {
     @Test void aPumpedTenMetreLiftOfWaterDeliversItsLiftWorkAsHeat() {
         double lift=10,gz=PassiveStepSolver.GRAVITY*lift;
         var lifted=pumpedLine(lift);var flat=pumpedLine(0);
-        assertEquals(flat.moved(),lifted.moved(),1e-9*lifted.moved(),"both lines run at the pump's target flow");
+        // Both lines run on the pump's law: the lift's 98 kPa of the 300 kPa limit costs a third of the slip (form F2e).
+        assertEquals(flat.moved(),lifted.moved(),com.wormzjl.icheme.science.machine.PositiveDisplacement.SLIP*lifted.moved(),"both lines run at the pump's set flow, less its slip");
         int water=model.components().indexOf("Water");
         double cp=(model.waterLiquid(298.16,2e5).molarEnthalpy()-model.waterLiquid(298.14,2e5).molarEnthalpy())/.02/model.molecularWeights()[water];
         double extraWork=lifted.work()-flat.work(),warmer=(lifted.heat()-flat.heat())/lifted.moved()/cp;
@@ -165,7 +166,7 @@ class BackwardEulerStepTest {
         assertEquals(0,blocked.massFlows()[0],1e-10);
     }
     @Test void aThreePhaseWetCrudeFeedCanEnterNitrogenWithoutLosingAnyComponent() {
-        String id="icheme:tjl20_methane_nitrogen";var n=Arrays.copyOf(V3PengRobinsonThermo.fromRegisteredPackage(id).crudeFeed("icheme:tia_juana_light_methane").moleFractions(),com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1);n[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK]=.2;
+        String id="icheme:tjl20_methane_nitrogen";var n=Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo(id).crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(),com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1);n[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK]=.2;
         var source=new PassiveNetwork.Reservoir(1,0,model.flashTP(350,200000,n,()->{}),PassiveNetwork.NodeKind.GENERATOR);
         var initial=model.initialNitrogenCharge(1,298.15,101325,()->{});
         var graph=new PassiveNetwork(List.of(source,new PassiveNetwork.Reservoir(2,0,initial)),List.of(pipe()));

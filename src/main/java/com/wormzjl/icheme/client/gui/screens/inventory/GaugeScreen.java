@@ -10,7 +10,6 @@ import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
 import com.wormzjl.icheme.client.gui.common.kit.SkinButton;
 import com.wormzjl.icheme.client.gui.common.kit.SkinField;
-import com.wormzjl.icheme.client.gui.common.kit.WindowScale;
 import com.wormzjl.icheme.network.FluidNetwork;
 import com.wormzjl.icheme.science.display.DisplayUnit;
 import com.wormzjl.icheme.world.inventory.GaugeMenu;
@@ -64,14 +63,7 @@ public final class GaugeScreen extends AbstractContainerScreen<GaugeMenu> {
     }
 
     @Override
-    public void removed() {
-        super.removed();
-        WindowScale.restore(minecraft);
-    }
-
-    @Override
     protected void init() {
-        WindowScale.apply(minecraft, this);
         var m = GuiCanvas.measure(font);
         // Sized for the column with its warning line, so the panel keeps its size while the player types.
         var tallest = rows(false);
@@ -181,6 +173,7 @@ public final class GaugeScreen extends AbstractContainerScreen<GaugeMenu> {
 
     @Override
     public boolean mouseClicked(double x, double y, int button) {
+        SkinField.clickOutside(this, x, y);
         return door.press(x - leftPos, y - topPos, button) || super.mouseClicked(x, y, button);
     }
 

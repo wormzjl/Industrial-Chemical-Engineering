@@ -27,7 +27,7 @@ class VesselPhaseSeedTest {
     static final String DIMENSION="minecraft:overworld",PILOT="icheme:pilot_cryogenic";
     static final long VENT=1,TANK=3,GENERATOR=5;
     static final int METHANE=1,CO2=3;
-    final FluidThermodynamics pilot=FluidTestSupport.model(MaterialCatalog.bundled(),PILOT);
+    final FluidThermodynamics pilot=FluidTestSupport.model(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(),PILOT);
 
     static PhysicalFluidTopology.Device device(long id,int x,int y,int z,Kind kind,double diameter) {
         return new PhysicalFluidTopology.Device(id,new PhysicalFluidTopology.Position(DIMENSION,x,y,z),kind,NORTH,

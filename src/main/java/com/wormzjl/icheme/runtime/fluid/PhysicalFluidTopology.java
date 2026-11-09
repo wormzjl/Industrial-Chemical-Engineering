@@ -117,7 +117,7 @@ public final class PhysicalFluidTopology {
                 throw new IllegalArgumentException("A rack lane is a plain laid pipe with at most two joints");
             if(inlineFilter&&(kind!=TopologyCompiler.Kind.PIPE||cutoff!=Cutoff.NONE||!(control instanceof FlowControl.Passive)))throw new IllegalArgumentException("Invalid pipe filter accessory");
             if(kind!=TopologyCompiler.Kind.PIPE&&cutoff!=Cutoff.NONE)throw new IllegalArgumentException("Only a pipe has a cutoff accessory");
-            boolean valid=switch(kind) {case PUMP->control instanceof FlowControl.Pump;case COMPRESSOR->control instanceof FlowControl.Compressor;case VALVE->control instanceof FlowControl.Valve;case PIPE->control instanceof FlowControl.Passive||control instanceof FlowControl.Valve||control instanceof FlowControl.Mover;default->control instanceof FlowControl.Passive;};
+            boolean valid=switch(kind) {case PUMP->control instanceof FlowControl.Mover mover&&mover.liquid();case COMPRESSOR->control instanceof FlowControl.Mover mover&&!mover.liquid();case VALVE->control instanceof FlowControl.Valve&&!(control instanceof FlowControl.Turbine);case TURBINE->control instanceof FlowControl.Turbine;case PIPE->control instanceof FlowControl.Passive||control instanceof FlowControl.Valve&&!(control instanceof FlowControl.Turbine)||control instanceof FlowControl.Mover;default->control instanceof FlowControl.Passive;};
             if(!valid)throw new IllegalArgumentException("Device/control mismatch");
             if(control instanceof FlowControl.Valve&&cutoff!=Cutoff.NONE)throw new IllegalArgumentException("A pressure valve cannot carry a cutoff accessory");
             if(kind==TopologyCompiler.Kind.PIPE&&control instanceof FlowControl.Mover&&(cutoff!=Cutoff.NONE||facing.y!=0))throw new IllegalArgumentException("An inline mover needs a horizontal pipe without a cutoff");
@@ -125,6 +125,7 @@ public final class PhysicalFluidTopology {
             ports=List.copyOf(ports);
             // The one-block pump and compressor are gone (batch 2026-10-28-old-mover-removal): a mover is either constructed,
             // with ports, or in-line, a pipe carrying its control.
+            if(ports.isEmpty()&&kind==TopologyCompiler.Kind.TURBINE)throw new IllegalArgumentException("A steam turbine is a constructed machine with ports");
             if(ports.isEmpty()&&(kind==TopologyCompiler.Kind.PUMP||kind==TopologyCompiler.Kind.COMPRESSOR))throw new IllegalArgumentException("A pump or compressor without ports is an in-line mover: a pipe carrying its control");
             if(ports.isEmpty()&&control instanceof FlowControl.Mover mover&&!mover.enabled())throw new IllegalArgumentException("Only constructed movers have a power switch");
             if(ports.size()>MAXIMUM_PORTS)throw new IllegalArgumentException("Too many device ports: "+ports.size());
@@ -151,7 +152,7 @@ public final class PhysicalFluidTopology {
                 if(port.role==ConnectionRole.INLET||port.role==ConnectionRole.OUTLET)throw new IllegalArgumentException("Only a heat side has inlet and outlet ports");
                 if(kind==TopologyCompiler.Kind.RESERVOIR) {
                     if(port.role!=ConnectionRole.VESSEL)throw new IllegalArgumentException("A reservoir needs vessel ports");
-                } else if(kind==TopologyCompiler.Kind.PUMP||kind==TopologyCompiler.Kind.COMPRESSOR) {
+                } else if(kind==TopologyCompiler.Kind.PUMP||kind==TopologyCompiler.Kind.COMPRESSOR||kind==TopologyCompiler.Kind.TURBINE) {
                     if(port.port!=PassiveNetwork.PhasePort.BULK)throw new IllegalArgumentException("A mover needs bulk ports");
                     switch(port.role) {
                         case SUCTION->{suction++;if(!port.cell.equals(position))throw new IllegalArgumentException("A mover's node must be its suction cell");}
@@ -169,12 +170,18 @@ public final class PhysicalFluidTopology {
         /** Mechanical pipes compile through the existing valve or filter law when fitted. */
         public TopologyCompiler.Kind hydraulicKind(){
             if(inlineFilter)return TopologyCompiler.Kind.FILTER;
-            if(kind==TopologyCompiler.Kind.PIPE)return switch(control){case FlowControl.Pump p->TopologyCompiler.Kind.PUMP;case FlowControl.Compressor c->TopologyCompiler.Kind.COMPRESSOR;case FlowControl.Valve v->TopologyCompiler.Kind.VALVE;default->kind;};
+            if(kind==TopologyCompiler.Kind.PIPE)return switch(control){case FlowControl.Mover m->m.liquid()?TopologyCompiler.Kind.PUMP:TopologyCompiler.Kind.COMPRESSOR;case FlowControl.Valve v->TopologyCompiler.Kind.VALVE;default->kind;};
             return kind;
         }
-        boolean actuator(){var hydraulic=hydraulicKind();return hydraulic==TopologyCompiler.Kind.PUMP||hydraulic==TopologyCompiler.Kind.COMPRESSOR||hydraulic==TopologyCompiler.Kind.VALVE;}
+        boolean actuator(){var hydraulic=hydraulicKind();return hydraulic==TopologyCompiler.Kind.PUMP||hydraulic==TopologyCompiler.Kind.COMPRESSOR||hydraulic==TopologyCompiler.Kind.VALVE||hydraulic==TopologyCompiler.Kind.TURBINE;}
         /** Copy edits preserve accessories, ports and the independent generator switch. */
-        public Device withGeometry(PipeResistance.Geometry value){return new Device(id,position,kind,facing,value,control,ports,generatorEnabled,cutoff,inlineFilter,joints,slots,points,heat,suspendedBy,held);}
+        public Device withGeometry(PipeResistance.Geometry value){
+            var changed=control;
+            if(kind==TopologyCompiler.Kind.PIPE&&control instanceof FlowControl.Machine m&&value.diameter()!=geometry.diameter()) {
+                var fixed=com.wormzjl.icheme.science.machine.InlineMachines.design(value.diameter(),m.liquid());changed=new FlowControl.Machine(fixed.law(),1,m.enabled());
+            }
+            return new Device(id,position,kind,facing,value,changed,ports,generatorEnabled,cutoff,inlineFilter,joints,slots,points,heat,suspendedBy,held);
+        }
         public Device withFacing(Direction value){return new Device(id,position,kind,value,geometry,control,ports,generatorEnabled,cutoff,inlineFilter,joints,slots,points,heat,suspendedBy,held);}
         public Device withControl(FlowControl value){return new Device(id,position,kind,facing,geometry,value,ports,generatorEnabled,cutoff,inlineFilter,joints,slots,points,heat,suspendedBy,held);}
         public Device withCutoff(Direction axis,Cutoff value){return new Device(id,position,kind,axis,geometry,control,ports,generatorEnabled,value,inlineFilter,joints,slots,points,heat,suspendedBy,held);}
@@ -566,6 +573,25 @@ public final class PhysicalFluidTopology {
         }
         return joints;
     }
+    /**
+     * The faces {@code device} meets a neighbour through as built (batch 2026-11-09-drawn-connections), a bit per
+     * {@link Direction} ordinal: each face it connects through mechanically where the device {@link #across} finds there
+     * {@link Device#mechanicallyJoins} it, as {@link #compile} links them, whatever valves, cutoffs and switches say. A
+     * running column's ports are left out, so a column that starts or stops changes nothing here. A block draws joined
+     * exactly these faces: the drawing has no rule of its own. A device with ports meets pipes at its ports, which its own
+     * cells draw, so it has none here. Reads the registry alone, never a block.
+     */
+    public static int builtFaces(java.util.function.Function<Position,Device> at,Device device) {
+        if(!device.ports.isEmpty())return 0;
+        java.util.function.Function<Position,Device> built=p->p.lane()==PORT_LANE?null:at.apply(p);
+        int faces=0;
+        for(var d:Direction.values()) {
+            if(!device.mechanicallyConnects(d))continue;
+            var other=across(built,x->x,device,device.position,d);
+            if(other!=null&&device.mechanicallyJoins(other,device.position,d))faces|=1<<d.ordinal();
+        }
+        return faces;
+    }
     /** Independent edits must not renumber a different island's last-interval debug history. */
     private static long runIdentity(TopologyCompiler.Run run,Map<Long,Long> owners,int part) {
         long hash=0xcbf29ce484222325L;hash=(hash^run.first())*0x100000001b3L;hash=(hash^run.second())*0x100000001b3L;
@@ -574,7 +600,8 @@ public final class PhysicalFluidTopology {
     }
     private static FlowControl control(Device device,Set<Long> invalidPumps) {
         if(device.control instanceof FlowControl.Pump pump&&invalidPumps.contains(device.id))return new FlowControl.Pump(0,pump.maximumAddedPressure());
-        if(device.control instanceof FlowControl.Compressor compressor&&invalidPumps.contains(device.id))return new FlowControl.Compressor(0,compressor.maximumPressureRatio());
+        if(device.control instanceof FlowControl.Compressor compressor&&invalidPumps.contains(device.id))return compressor.withDisplacement(0);
+        if(device.control instanceof FlowControl.Machine machine&&invalidPumps.contains(device.id))return machine.withSpeed(0);
         return device.control;
     }
     private static boolean positiveSide(Device device,Point neighbor){var p=device.position;var d=device.facing;return (neighbor.x-p.x)*d.x+(neighbor.y-p.y)*d.y+(neighbor.z-p.z)*d.z>0;}

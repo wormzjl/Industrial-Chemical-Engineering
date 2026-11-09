@@ -5,8 +5,8 @@ import java.util.Objects;
 
 /**
  * A consumer without crystal equations was given a package that admits crystal phases (P6, batch
- * 2026-09-24-coolprop-low-temperature): a package whose {@code crystals} list is not empty, such as the pilot
- * {@code icheme:pilot_cryogenic} with its CO2-I crystal. The V3 column is a vapour-liquid algorithm, and a projected
+ * 2026-09-24-coolprop-low-temperature): a package whose {@code crystals} list is not empty, such as the network package
+ * {@code icheme:refinery} with its CO2-I crystal (or the test-only pilot {@code icheme:pilot_cryogenic}). The V3 column is a vapour-liquid algorithm, and a projected
  * neural inference view is a PR78 axis without crystal records; each refuses such a package with this type rather than
  * running it fluid-only, where a crystal could form that it would never see (plan P6: "do not feed crystals to a VLE-only
  * column algorithm without corresponding equations; give a meaningful unsupported-phase result").

@@ -6,15 +6,15 @@ import java.util.regex.Pattern;
 
 /**
  * A control panel door (GUI_TOOLKIT_PLAN.md sections 9 to 13; owner: "Both 3a and 3c, configurable as light and dark"):
- * flat engraved legend plates for the title and the function groups, an engraved line round each group, engraved text,
+ * flat engraved legend plates for the title and the function groups, an engraved line round each group, plain text,
  * push buttons in a black bezel with a chrome ring (lit from behind when latched), flat display keys in an engraved tray,
  * pilot lights with a glow, 7-segment LCD set-point windows for the entries and LED panel meters for the readings, an LED
  * bar graph with a top zone, a message display for the status, the HMI screen in its bezel with a power LED, a
  * quarter-turn latch.
  * Panel legends keep their colour; the lamps show state. Button colours follow IEC 60073: black general, green running
- * (latched), blue confirm. {@link #LIGHT} is door 3a, {@link #DARK} door 3c.
+ * (latched), blue confirm, amber a confirm that is due (attention: Run while the results are out of date). {@link #LIGHT} is door 3a, {@link #DARK} door 3c.
  */
-public record PanelSkin(Door door, Face legend, int emboss, boolean shadow, Face key, Face lit, Face confirm, Face dim, int bezel, int chrome,
+public record PanelSkin(Door door, Face legend, Face key, Face lit, Face confirm, Face due, Face dim, int bezel, int chrome,
                         Window meter, int lampOn, int lampOff, Window bar, int barTop, Window display, int alarm, Window screen, int screenBezel,
                         Ink ink) implements Skin {
     /** A face of a push button or a legend plate: its colour, its top-left and bottom-right edges, and its legend's colour. */
@@ -36,21 +36,23 @@ public record PanelSkin(Door door, Face legend, int emboss, boolean shadow, Face
     private static final Face BLACK_KEY = new Face(0xFF262626, 0xFF4A4A4A, 0xFF141414, 0xFFF0F0F0);
     private static final Face GREEN_LIT = new Face(0xFF2DB34A, 0xFF8BE89A, 0xFF1B7A30, 0xFF06200C);
     private static final Face BLUE_CONFIRM = new Face(0xFF1F5FBF, 0xFF6A9BE8, 0xFF143F80, 0xFFFFFFFF);
+    /** The confirm lit because it is due: amber on the light door, a deeper amber on the dark one, so neither glares. */
+    private static final Face AMBER_DUE = new Face(0xFFF0A800, 0xFFFFD670, 0xFF9A6A00, 0xFF1A1A1A), AMBER_DUE_DARK = new Face(0xFFD99A00, 0xFFF5C55A, 0xFF8A5E00, 0xFF141414);
     private static final Window SCREEN = new Window(0xFF10161B, 0xFF3BE060, 0);
     /** The entries' reflective LCD: grey-green glass, near-black segments, faint unlit ones. */
     private static final Window LCD = new Window(0xFFB3BEA2, 0xFF1A2016, 0xFF9AA58A);
 
     /** Door 3a: RAL 7035 light grey, white legend plates (black ones read as buttons), green lamps, red LED meters, a green bar graph. */
     public static final PanelSkin LIGHT = new PanelSkin(new Door(0xFFC9CCC8, 0xFFE2E5E1, 0xFFA5A8A4, 0xFF6E716D),
-            new Face(0xFFF4F4F0, 0xFFFFFFFF, 0xFF6E716D, 0xFF1A1A1A), 0xFFE9ECE8, false,
-            BLACK_KEY, GREEN_LIT, BLUE_CONFIRM, new Face(0xFF8A8D89, 0xFF9C9F9B, 0xFF767975, 0xFFC4C7C3), 0xFF111111, 0xFFA9ACA8,
+            new Face(0xFFF4F4F0, 0xFFFFFFFF, 0xFF6E716D, 0xFF1A1A1A),
+            BLACK_KEY, GREEN_LIT, BLUE_CONFIRM, AMBER_DUE, new Face(0xFF8A8D89, 0xFF9C9F9B, 0xFF767975, 0xFFC4C7C3), 0xFF111111, 0xFFA9ACA8,
             new Window(0xFF0A0A0A, 0xFFFF3B1F, 0xFF2A0D08), 0xFF3BE060, 0xFF1F3A26, new Window(0xFF0A0A0A, 0xFF3BE060, 0xFF12301A), 0xFFFFB000,
             new Window(0xFF06100D, 0xFF6CF0C2, 0), 0xFFFFB347, SCREEN, 0xFF1A1A1A, new Ink(0xFF1A1A1A, 0xFF3C3F3B, 0xFF1E7A34, 0xFF9A6A00));
 
     /** Door 3c: RAL 7016 anthracite, aluminium legend plates, amber LED meters and bar graph with a red top zone. */
     public static final PanelSkin DARK = new PanelSkin(new Door(0xFF383E42, 0xFF4F565B, 0xFF24282B, 0xFF121416),
-            new Face(0xFFB9BDC0, 0xFFDDE1E4, 0xFF6E7275, 0xFF111111), 0xA0000000, true,
-            new Face(0xFF1A1C1E, 0xFF3A3E42, 0xFF0C0D0E, 0xFFE6E6E6), GREEN_LIT, BLUE_CONFIRM,
+            new Face(0xFFB9BDC0, 0xFFDDE1E4, 0xFF6E7275, 0xFF111111),
+            new Face(0xFF1A1C1E, 0xFF3A3E42, 0xFF0C0D0E, 0xFFE6E6E6), GREEN_LIT, BLUE_CONFIRM, AMBER_DUE_DARK,
             new Face(0xFF2C3134, 0xFF363B3F, 0xFF22262A, 0xFF6E757A), 0xFF0A0B0C, 0xFF8E9396,
             new Window(0xFF080808, 0xFFFFB000, 0xFF2A1E05), 0xFF3BE060, 0xFF1A2A1F, new Window(0xFF080808, 0xFFFFB000, 0xFF2A1E05), 0xFFFF4A2A,
             new Window(0xFF05090C, 0xFF7FD7FF, 0), 0xFFFFB000, SCREEN, 0xFF0E0F10, new Ink(0xFFE6E8EA, 0xFFA9AFB4, 0xFF7EE29A, 0xFFFFC24A));
@@ -64,10 +66,9 @@ public record PanelSkin(Door door, Face legend, int emboss, boolean shadow, Face
         return p == Palette.TEXT ? ink.text() : p == Palette.MUTED ? ink.dim() : p == Palette.ACCENT ? ink.accent() : p == Palette.WARN ? ink.warn() : p;
     }
 
-    /** Engraved: a highlight under the text on a light door, a shadow on a dark one. */
+    /** Body text uses one glyph pass, as the legend plates do, so live readings have no offset ghost. */
     @Override
     public void text(Canvas c, String text, int x, int y, int palette) {
-        c.text(text, shadow ? x + 1 : x, y + 1, emboss);
         c.text(text, x, y, tone(palette));
     }
 
@@ -136,14 +137,24 @@ public record PanelSkin(Door door, Face legend, int emboss, boolean shadow, Face
         c.fill(r.x() + 1, r.y() + 1, r.right() - 1, r.bottom() - 1, glass);
     }
 
-    @Override
-    public void button(Canvas c, Rect r, String text, Press press, boolean hover) {
-        var f = switch (press) {
+    private Face face(Press press) {
+        return switch (press) {
             case REST -> key;
             case OFF -> dim;
             case CURRENT -> lit;
             case PRIMARY -> confirm;
+            case DUE -> due;
         };
+    }
+
+    @Override
+    public int legend(Press press) {
+        return face(press).text();
+    }
+
+    @Override
+    public void button(Canvas c, Rect r, String text, Press press, boolean hover) {
+        var f = face(press);
         int x0 = r.x(), y0 = r.y(), x1 = r.right(), y1 = r.bottom();
         c.fill(x0 + 1, y0, x1 - 1, y1, bezel);
         c.fill(x0, y0 + 1, x1, y1 - 1, bezel);
@@ -152,7 +163,7 @@ public record PanelSkin(Door door, Face legend, int emboss, boolean shadow, Face
         c.fill(x0 + 1, y0 + 1, x1 - 1, y0 + 2, mix(chrome, 0xFFFFFFFF, 0.5));
         c.fill(x0 + 1, y1 - 2, x1 - 1, y1 - 1, mix(chrome, 0xFF000000, 0.35));
         // The pointer on a button that acts lights its face a little.
-        boolean lifted = hover && (press == Press.REST || press == Press.PRIMARY);
+        boolean lifted = hover && press.acts();
         c.fill(x0 + 2, y0 + 2, x1 - 2, y1 - 2, lifted ? mix(f.face(), f.light(), 0.35) : f.face());
         c.fill(x0 + 2, y0 + 2, x1 - 3, y0 + 3, f.light());
         c.fill(x0 + 2, y0 + 3, x0 + 3, y1 - 3, f.light());
@@ -181,6 +192,20 @@ public record PanelSkin(Door door, Face legend, int emboss, boolean shadow, Face
         c.fill(r.x(), r.y(), r.x() + 1, r.bottom() - 1, door.dark());
         c.fill(r.x(), r.bottom() - 1, r.right(), r.bottom(), door.light());
         c.fill(r.right() - 1, r.y(), r.right(), r.bottom(), door.light());
+    }
+
+    /**
+     * A recess under a group of push buttons (the owner, 2026-11-04: "encircle it with something", "regroup these buttons",
+     * "look homogeneous"): a floor darker than the door, its top and left edges in shadow, its bottom and right lit.
+     */
+    @Override
+    public void recess(Canvas c, Rect r) {
+        int x0 = r.x(), y0 = r.y(), x1 = r.right(), y1 = r.bottom(), shadow = mix(door.dark(), door.edge(), 0.75);
+        c.fill(x0, y0, x1, y1, mix(door.sheet(), door.dark(), 0.7));
+        c.fill(x0, y0, x1, y0 + 2, shadow);
+        c.fill(x0, y0, x0 + 2, y1, shadow);
+        c.fill(x0 + 1, y1 - 1, x1, y1, door.light());
+        c.fill(x1 - 1, y0 + 1, x1, y1, door.light());
     }
 
     /** A display key: flat and black in a thin rim, no chrome ring; the pointer lights its face as a push button's. */
@@ -238,19 +263,22 @@ public record PanelSkin(Door door, Face legend, int emboss, boolean shadow, Face
         return digits * 8 - 2 + (text.length() - digits) * 2;
     }
 
+    /** One batch for the whole reading: its unlit and lit segments are one draw call in the game. */
     private static void segments(Canvas c, String text, int right, int top, int on, int off) {
-        int x = right - segmentsWidth(text);
-        for (int i = 0; i < text.length(); i++) {
-            char ch = text.charAt(i);
-            if (ch == '.') {
-                c.fill(x - 1, top + 9, x + 1, top + 11, on);
-                x += 2;
-                continue;
+        c.batch(() -> {
+            int x = right - segmentsWidth(text);
+            for (int i = 0; i < text.length(); i++) {
+                char ch = text.charAt(i);
+                if (ch == '.') {
+                    c.fill(x - 1, top + 9, x + 1, top + 11, on);
+                    x += 2;
+                    continue;
+                }
+                digit(c, x, top, 0b1111111, off);
+                digit(c, x, top, bits(ch), on);
+                x += 8;
             }
-            digit(c, x, top, 0b1111111, off);
-            digit(c, x, top, bits(ch), on);
-            x += 8;
-        }
+        });
     }
 
     private static void digit(Canvas c, int x, int y, int bits, int argb) {
@@ -325,11 +353,13 @@ public record PanelSkin(Door door, Face legend, int emboss, boolean shadow, Face
     public void bar(Canvas c, Rect r, double share) {
         window(c, r, bar.glass());
         int x0 = r.x() + 2, n = (r.w() - 3) / 3, lit = (int) Math.round(n * share);
-        for (int s = 0; s < n; s++) {
-            boolean top = s >= n * 9 / 10;
-            int on = top ? barTop : bar.on(), off = top ? mix(bar.glass(), barTop, 0.22) : bar.off();
-            c.fill(x0 + 3 * s, r.y() + 2, x0 + 3 * s + 2, r.bottom() - 2, s < lit ? on : off);
-        }
+        c.batch(() -> {
+            for (int s = 0; s < n; s++) {
+                boolean top = s >= n * 9 / 10;
+                int on = top ? barTop : bar.on(), off = top ? mix(bar.glass(), barTop, 0.22) : bar.off();
+                c.fill(x0 + 3 * s, r.y() + 2, x0 + 3 * s + 2, r.bottom() - 2, s < lit ? on : off);
+            }
+        });
     }
 
     /** A split bar in the bar graph's window: its shares lit side by side. */

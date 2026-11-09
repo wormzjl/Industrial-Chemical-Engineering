@@ -10,15 +10,31 @@ import java.util.*;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
-/** Fresh configured WTI loop; no saved-world fixture or altered physical law. */
+/**
+ * Fresh configured heavy-crude loop; no saved-world fixture or altered physical law. The heavy grade is liquid at 298.15 K
+ * and 1 atm (bubble point 68.6 kPa), as WTI was; the light grade boils there (138 kPa). At 2 m³/s the pump outruns the
+ * junction it draws from, so it stands on its suction limit at the oil's bubble pressure (owner decision D14 of the
+ * rotating-machinery batch; the root used to flash the suction junction on the pump's law); at 1 m³/s it runs on its law.
+ * The start is 1 m³/s: on WTI the NPSH3 floor (owner decisions D20 Q11 A and D21) made the pump cavitate from 1.5 m³/s,
+ * and the more viscous heavy grade meets the pump's 5 bar head limit at 1.5 already (O3 of batch 2026-11-04-open-thermo-data).
+ * The source stands at 150 kPa, as {@link PumpJunctionStartupTest}'s does: from 1 atm, 1 m below the pump, the heavy grade
+ * reaches the suction at some 92 kPa before any line loss, under the 99 kPa its bubble point and the NPSH3 floor ask, so
+ * the pump stood on its suction limit at every rate.
+ */
 class PumpRateWarmStartTest extends PortFixture {
+    /** The generator's pressure: enough suction head for the law at 1 m³/s; the line still starves the pump at 2. */
+    private static final double SOURCE=150000;
+
     private FluidThermodynamics.State oil(double volume) {
-        var n=FluidPresetCatalog.resolve(MaterialCatalog.bundled()).stream().filter(p->p.id().equals("icheme:wti_light_export")).findFirst().orElseThrow().moleFractions();
-        var unit=model.flashTP(298.15,101325,n,NOOP);for(int c=0;c<n.length;c++)n[c]*=volume/unit.volume();
-        return model.flashTP(298.15,101325,n,NOOP);
+        return oil(volume,101325);
+    }
+    private FluidThermodynamics.State oil(double volume,double pressure) {
+        var n=FluidPresetCatalog.resolve(MaterialCatalog.bundled()).stream().filter(p->p.id().equals("icheme:heavy_crude")).findFirst().orElseThrow().moleFractions();
+        var unit=model.flashTP(298.15,pressure,n,NOOP);for(int c=0;c<n.length;c++)n[c]*=volume/unit.volume();
+        return model.flashTP(298.15,pressure,n,NOOP);
     }
     private PassiveNetwork loop(double rate) {
-        var source=oil(1);var fill=oil(24);var junction=oil(1/source.mass());
+        var source=oil(1,SOURCE);var fill=oil(24);var junction=oil(1/source.mass());
         var stock=new PassiveNetwork.Inventory(200,PhaseLayout.totalAmounts(fill),fill.internalEnergy(),SolidInventory.EMPTY,4,true);
         var nodes=List.of(new PassiveNetwork.Reservoir(1,0,fill,PassiveNetwork.NodeKind.RESERVOIR,stock),
                 new PassiveNetwork.Reservoir(2,0,junction,PassiveNetwork.NodeKind.JUNCTION),
@@ -35,22 +51,21 @@ class PumpRateWarmStartTest extends PortFixture {
     @Test void repeatedRateCallsKeepTheFlashedPumpLimitConvergent() {
         var graph=loop(2);var solver=new PassiveStepSolver(model);
         var first=solver.portRate(graph,NOOP);var repeated=solver.portRate(graph,NOOP);assertNotNull(first);assertNotNull(repeated);
-        assertEquals(FlowControl.Mode.PUMP_HEAD_LIMIT,first.modes().getFirst());assertEquals(first.modes(),repeated.modes());
-        assertTrue(first.states().get(3).vaporVolume()>0,"the rate root changes the input's liquid-only phase layout");
+        assertEquals(FlowControl.Mode.PUMP_SUCTION_LIMIT,first.modes().getFirst());assertEquals(first.modes(),repeated.modes());
         assertArrayEquals(first.massFlows(),repeated.massFlows(),1e-6);
         assertEquals(0,graph.reservoirs().get(3).state().vaporVolume(),0,"rate queries leave their input untouched");
     }
 
     @Test void increasingTheSetpointAdvancesOnItsLimitWithConservedMaterialAndEnergy() {
-        var graph=loop(1.5);var solver=new PassiveIntervalSolver(model);
+        var graph=loop(1.0);var solver=new PassiveIntervalSolver(model);
         var previous=solver.solve(graph,3.2,PassiveIntervalSolver.Settings.defaults(),NOOP);
-        assertEquals(FlowControl.Mode.PUMP_TARGET,previous.endpointModes().getFirst());graph=previous.graph();
+        assertEquals(FlowControl.Mode.MOVER_LAW,previous.endpointModes().getFirst());graph=previous.graph();
         var pipes=new ArrayList<>(graph.pipes());var p=pipes.getFirst();pipes.set(0,new PassiveNetwork.Pipe(p.id(),p.first(),p.second(),p.sections(),new FlowControl.Pump(2,500000),p.blockedDirections(),p.filter(),p.firstPort(),p.secondPort()));
         graph=new PassiveNetwork(graph.reservoirs(),pipes);
         var before=owned(graph);double energy=ownedEnergy(graph),externalEnergy=0,energyTurnover=0;var external=new double[mw.length];var turnover=new double[mw.length];
         for(int interval=0;interval<11;interval++) {
             solver.replayStart(graph,previous);var result=solver.solve(graph,3.2,PassiveIntervalSolver.Settings.defaults(),NOOP);
-            assertEquals(3.2,result.advancedSeconds(),0);assertEquals(FlowControl.Mode.PUMP_HEAD_LIMIT,result.endpointModes().getFirst());
+            assertEquals(3.2,result.advancedSeconds(),0);assertEquals(FlowControl.Mode.PUMP_SUCTION_LIMIT,result.endpointModes().getFirst());
             for(var b:result.boundaries()){var n=b.moles();for(int c=0;c<n.length;c++){external[c]+=n[c];turnover[c]+=Math.abs(n[c]);}externalEnergy+=b.totalEnergyJoule();energyTurnover+=Math.abs(b.totalEnergyJoule());}
             externalEnergy+=result.pumpWorkJoule();energyTurnover+=Math.abs(result.pumpWorkJoule());graph=result.graph();previous=result;
             ConservationAssertions.components(before,owned(graph),external,turnover);ConservationAssertions.energy(energy,ownedEnergy(graph),externalEnergy,energyTurnover);

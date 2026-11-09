@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "Toluene",
+  "kind": "chemical",
+  "translation_key": "material.icheme.toluene",
+  "fallback": "Toluene",
+  "properties": "icheme:chemsep_toluene",
+  "appearance": {
+    "color": "#F3F4EA",
+    "transparency": 0.85,
+    "estimated": true
+  },
+  "identifiers": {
+    "cas": "108-88-3",
+    "chemsep_id": "502",
+    "smiles": "c1ccccc1(C)",
+    "formula": "(C6H5)CH3"
+  }
+}

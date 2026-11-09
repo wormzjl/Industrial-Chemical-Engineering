@@ -1,0 +1,2 @@
+# Heavy away: the same point facing north over empty ground.
+tp @s 13.5 -45 -15 180 25

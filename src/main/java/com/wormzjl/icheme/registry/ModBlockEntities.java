@@ -1,7 +1,7 @@
 package com.wormzjl.icheme.registry;
 
 import com.wormzjl.icheme.IChemE;
-import com.wormzjl.icheme.world.level.block.entity.ColumnCalculatorV3BlockEntity;
+import com.wormzjl.icheme.world.level.block.entity.ProcessSimulatorBlockEntity;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.neoforged.bus.api.IEventBus;
@@ -11,15 +11,23 @@ import net.neoforged.neoforge.registries.DeferredRegister;
 public final class ModBlockEntities {
     public static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITY_TYPES =
             DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, IChemE.MOD_ID);
+    public static final DeferredHolder<BlockEntityType<?>,BlockEntityType<com.wormzjl.icheme.world.level.block.entity.CreativePowerBlockEntity>> CREATIVE_POWER=BLOCK_ENTITY_TYPES.register("creative_power",
+            ()->BlockEntityType.Builder.of(com.wormzjl.icheme.world.level.block.entity.CreativePowerBlockEntity::new,ModBlocks.CREATIVE_POWER.get()).build(null));
+    public static final DeferredHolder<BlockEntityType<?>,BlockEntityType<com.wormzjl.icheme.world.level.block.entity.LinePieceBlockEntity>> LINE_PIECE=BLOCK_ENTITY_TYPES.register("line_piece",
+            ()->BlockEntityType.Builder.of(com.wormzjl.icheme.world.level.block.entity.LinePieceBlockEntity::new,ModBlocks.LINE_PIECE.get()).build(null));
+    public static final DeferredHolder<BlockEntityType<?>,BlockEntityType<com.wormzjl.icheme.world.level.block.entity.ConduitBlockEntity>> DATA_CABLE=BLOCK_ENTITY_TYPES.register("data_cable",
+            ()->BlockEntityType.Builder.of(com.wormzjl.icheme.world.level.block.entity.ConduitBlockEntity::new,ModBlocks.DATA_CABLE.get(),ModBlocks.POWER_CABLE.get()).build(null));
+    public static final DeferredHolder<BlockEntityType<?>,BlockEntityType<com.wormzjl.icheme.world.level.block.entity.ControlPanelBlockEntity>> CONTROL_PANEL=BLOCK_ENTITY_TYPES.register("control_panel",
+            ()->BlockEntityType.Builder.of(com.wormzjl.icheme.world.level.block.entity.ControlPanelBlockEntity::new,ModBlocks.LOCAL_CONTROLLER.get(),ModBlocks.DCS.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>,BlockEntityType<com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity>> FLUID_DEVICE=BLOCK_ENTITY_TYPES.register("fluid_device",()->BlockEntityType.Builder.of(com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity::new,
             ModBlocks.FLUID_RESERVOIR.get(),ModBlocks.FLUID_PIPE.get(),ModBlocks.FLUID_GENERATOR.get(),ModBlocks.FLUID_VOID.get(),ModBlocks.INLINE_FILTER.get()).build(null));
 
-    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<ColumnCalculatorV3BlockEntity>>
-            COLUMN_CALCULATOR_V3 = BLOCK_ENTITY_TYPES.register(
-                    "column_calculator_v3",
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<ProcessSimulatorBlockEntity>>
+            PROCESS_SIMULATOR = BLOCK_ENTITY_TYPES.register(
+                    "process_simulator",
                     () -> BlockEntityType.Builder.of(
-                            ColumnCalculatorV3BlockEntity::new,
-                            ModBlocks.COLUMN_CALCULATOR_V3.get()
+                            ProcessSimulatorBlockEntity::new,
+                            ModBlocks.PROCESS_SIMULATOR.get()
                     ).build(null)
             );
 
@@ -48,6 +56,7 @@ public final class ModBlockEntities {
                     () -> BlockEntityType.Builder.of(com.wormzjl.icheme.world.level.block.entity.PipeRackBlockEntity::new, ModBlocks.PIPE_RACK.get()).build(null));
 
     public static void register(IEventBus modEventBus) {
+        BLOCK_ENTITY_TYPES.addAlias(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID, "column_calculator_v3"), PROCESS_SIMULATOR.getId());
         BLOCK_ENTITY_TYPES.register(modEventBus);
     }
 }

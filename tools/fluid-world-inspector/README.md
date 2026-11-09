@@ -3,7 +3,7 @@
 Batch: `2026-10-23-valve-regime-convergence`. Diagnosis snapshot: `232b0466`; production validation: `83e88bd0` on `codex/valve-regime-validation`. Tools remain offline and ignored; the feature's three permanent regression tests live in the normal quick suite.
 
 - `inspect_world.py <world>/data`: read-only parser for checkpoint 16 / unit 9 only. Validates per-unit SHA-256; reads active registrations, main graph, controls and accepted endpoint history. Topology parsing stops after active registrations/pending count, and island parsing stops before transfer histories/certificates; it is an inspection tool, not a save writer or full codec substitute.
-- `world-inspection.json`: frozen numeric inspection of the current-format case, epoch 11999 / island 99 committed 7435. Kept so reproductions never touch a live world.
+- `world-inspection.json`: frozen numeric inspection of the current-format case, epoch 11999 / island 99 committed 7435. Kept so reproductions never touch a live world. It holds the WTI (ExxonMobil) composition, so since O5 of batch 2026-11-04-open-thermo-data (2026-11-05) it is in the main checkout's git-ignored `research/2026-11-04-open-thermo-data/xom-copies/tools-fluid-world-inspector/`, where `run_audit.ps1` reads it.
 - `PropertyAudit.java`: compares carried phase states with TP/UV equilibrium and the vessel's existing own-split check; never advances an interval.
 - `StepAudit.java`: reconstructs the copied graph and endpoint history and runs bounded single-step/interval diagnostic replays. It asserts no solids/filter/mover in this particular case; does not handle arbitrary equipment.
 - `AuditTrace.java`, `prepare_trace.py`: prepare trace-only copies of PassiveStepSolver, PassiveIntervalSolver and SparseNewton into `trace-src/` and compile them into `trace-classes/`. They do not edit or enter the production classpath. Logging uses existing numeric values only.
@@ -43,8 +43,9 @@ Status: Archived 2026-10-23. Index: [../INDEX.md](../INDEX.md).
 
 ### Entry points
 
-`README.md`, `run_audit.ps1`, `inspect_world.py`, `world-inspection.json`, `validate_campaign.py`, `capture_deferred_hold.py`, `deferred-hold-capture.json`, `logs/valve-regime-logs-2026-10-23.tar.gz`, `logs/valve-validation-logs-2026-10-23.tar.gz`
+`README.md`, `run_audit.ps1`, `inspect_world.py`, `world-inspection.json` (in research/ since 2026-11-05), `validate_campaign.py`, `capture_deferred_hold.py`, `deferred-hold-capture.json`, `logs/valve-regime-logs-2026-10-23.tar.gz`, `logs/valve-validation-logs-2026-10-23.tar.gz`
 
 ### History
 
 - Archived 2026-10-23 (validated `19117af7`; new `beb5c2fc` hold evidence recorded, debugging deferred)
+- 2026-11-05: `world-inspection.json` moved to the main checkout's research/ (ExxonMobil WTI composition; O5 of batch 2026-11-04-open-thermo-data)

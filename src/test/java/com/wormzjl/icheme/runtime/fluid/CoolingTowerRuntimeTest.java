@@ -48,7 +48,7 @@ class CoolingTowerRuntimeTest {
             int pump=java.util.stream.IntStream.range(0,snapshot.graph().pipes().size()).filter(e->snapshot.graph().pipes().get(e).control() instanceof FlowControl.Pump).findFirst().orElseThrow();
             assertTrue(last.averageMassFlows()[pump]>0,"the pump circulates: "+last.endpointModes());
             assertTrue(rates.waterLoss()>0,"the fill runs: "+rates);
-            assertFalse(new IslandCertificate.Summary(new IslandCertificate.Interval(0,100,snapshot.graph(),last),w.model.molecularWeights()).flushed,"Evaporation is a rate a steady tower repeats, not a flush");
+            assertFalse(new IslandCertificate.Summary(new IslandCertificate.Interval(0,100,snapshot.graph(),last),w.coordinator.model(snapshot.id()).molecularWeights()).flushed,"Evaporation is a rate a steady tower repeats, not a flush");
         }
     }
 
@@ -85,8 +85,8 @@ class CoolingTowerRuntimeTest {
         var solved=new PassiveIntervalSolver(model).solve(basin(),.1,new PassiveIntervalSolver.Settings(.1,.1,32),()->{});
         var snapshot=new IslandCoordinator.Snapshot(1,0,solved.graph(),new IslandClock.Snapshot(2,2,4,20),Optional.of(solved),"FULL");
         var checkpoint=new FluidCheckpointCodec.Checkpoint(List.of(new FluidCheckpointCodec.IslandEntry("minecraft:overworld","icheme:tjl20_methane_nitrogen",snapshot)));
-        var image=FluidCheckpointCodec.encode(checkpoint,key->model);
-        var loaded=FluidCheckpointCodec.decode(image,key->model);
+        var image=FluidCheckpointCodec.encode(checkpoint,key->key.on(model));
+        var loaded=FluidCheckpointCodec.decode(image,key->key.on(model));
         var restored=loaded.islands().getFirst().snapshot();
         assertEquals(solved.graph().reservoirs().getFirst().inventory(),restored.graph().reservoirs().getFirst().inventory());
         assertEquals(solved.towers(),restored.lastResult().orElseThrow().towers());
@@ -94,7 +94,7 @@ class CoolingTowerRuntimeTest {
         assertEquals(boundary.kind(),loadedBoundary.kind());
         assertArrayEquals(boundary.moles(),loadedBoundary.moles());
         assertEquals(boundary.totalEnergyJoule(),loadedBoundary.totalEnergyJoule());
-        FluidCheckpointCodecTest.assertSameImage(image,FluidCheckpointCodec.encode(loaded,key->model),"populated tower");
+        FluidCheckpointCodecTest.assertSameImage(image,FluidCheckpointCodec.encode(loaded,key->key.on(model)),"populated tower");
     }
 
     @Test void certificateReplayScalesRecordedAtmosphericAndInventoryDeltas(){

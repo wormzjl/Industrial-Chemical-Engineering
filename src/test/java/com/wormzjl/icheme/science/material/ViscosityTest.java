@@ -127,7 +127,7 @@ class ViscosityTest {
         int verified=0;
         for (var p:catalog.packages().values()) for (var property:p.properties()) {
             var row=exported.get(property.id());
-            // Nitrogen's curves are NIST isobar tables, not DWSIM API samples, so the exported
+            // Nitrogen's curves are CoolProp tables, not DWSIM API samples, so the exported
             // comparison report carries no record for that property at all.
             if(row==null||!row.has("checks"))continue;
             for(var phase:ViscosityCorrelation.Phase.values()) {

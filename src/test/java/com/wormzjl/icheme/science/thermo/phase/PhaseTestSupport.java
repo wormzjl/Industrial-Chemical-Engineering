@@ -173,7 +173,7 @@ final class PhaseTestSupport {
      * and {@code state} use: its saturation pressure, its liquid water at (T, P), its ideal-gas steam enthalpy and its
      * steam partial-pressure limit. The steam's heat capacity is the same Shomate polynomial's derivative
      * ({@code V3WaterProperties.dVaporMolarEnthalpyDT}); its entropy is that polynomial's Shomate entropy, anchored at the
-     * standard entropy of water vapour, 188.835 J/(mol K) at 298.15 K and 1e5 Pa (JANAF), minus {@code R ln(P/1e5)}. Past the
+     * standard entropy of water vapour, 188.835 J/(mol K) at 298.15 K and 1e5 Pa (CODATA key value), minus {@code R ln(P/1e5)}. Past the
      * record's range the heat capacity is held at the end value and the entropy integrates it, as the network's steam
      * (owner rule of 2026-10-16).
      */
@@ -228,8 +228,8 @@ final class PhaseTestSupport {
     }
 
     static double[] crudeWithNitrogen(PhaseContract contract) {
-        var pkg = network();
-        var assay = pkg.assays().get("icheme:tia_juana_light_methane");
+        var pkg = com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog().requirePackage(NETWORK);
+        var assay = pkg.assays().get(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID);
         double[] z = new double[contract.components().size()];
         for (int c = 0; c < assay.components().size(); c++) z[contract.index(assay.components().get(c))] = assay.amounts().get(c);
         z[contract.index("Nitrogen")] = 0.05;

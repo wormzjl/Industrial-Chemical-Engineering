@@ -725,7 +725,7 @@ public final class RackGeometry {
      * turn at mid-block up, down or out flat, or a rise or drop to a crossing level at mid-block and out sideways; a
      * tee's lane as its leg lays it.
      */
-    static List<double[]> path(Rack rack, Lane lane) {
+    public static List<double[]> path(Rack rack, Lane lane) {
         if (rack.tee()) {
             var leg = leg(rack, lane);
             return path(leg.rack, leg.lane);
@@ -754,8 +754,9 @@ public final class RackGeometry {
     }
 
     /** One lane's polygons, cell-local, its spool flanges where {@code spool} says ({@link #spool}): the rack draws each lane apart for its paints. */
-    public static List<Polygon> lane(Rack rack, Lane lane, boolean spool) {
-        var m = new Mesh();
+    public static List<Polygon> lane(Rack rack, Lane lane, boolean spool) { return lane(rack,lane,spool,RenderDetail.NORMAL); }
+    public static List<Polygon> lane(Rack rack, Lane lane, boolean spool,RenderDetail detail) {
+        var m = new Mesh(detail);
         lane(m, rack, lane, spool);
         return m.cell(0, 0, 0);
     }

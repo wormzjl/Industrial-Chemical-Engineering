@@ -42,7 +42,7 @@ import java.util.function.Function;
  * island unit's facts are its vessels' contents and filters' cakes, and a certified island's drift ({@link FluidFacts#island});
  * its state is its dimension and package, status and fences, the graph's topology once (node identities, elevations,
  * kinds, volumes, level heights and open flags, pipe ends, sections, controls as tag 0 passive, 1 pump, 2 valve,
- * 3 compressor, the two ends' phase ports and the forbidden-direction mask) and its state; the last solved interval with
+ * 3 compressor, 4 control valve, 5 machine on its curve, the two ends' phase ports and the forbidden-direction mask) and its state; the last solved interval with
  * its end flows, which the island's next job starts from; and, for a certified island, its certificate signature and the
  * graph its certified interval started from. A certified island's unit records its certificate base, so while it stays
  * certified its unit never changes. Solids (every stock, stream, cake and pending recovery): each population as its
@@ -51,7 +51,10 @@ import java.util.function.Function;
  * saved constants that are not the record's (the facts path then reads the current record). An exact load reads both
  * sections and checks that they agree ({@link FluidFacts#disagreement}).</p>
  *
- * <p>State formats: 23 (batch 2026-10-27-heat-exchanger-design) gives each pipe section its channel count. 20 (batch 2026-10-26-backward-compat) put the envelope and the facts around state format 19's
+ * <p>State formats: 40 (batch 2026-11-04-refinery-compounds, V3; written as 31 on its branch and numbered after main's 39 at
+ * the merge) keys the package table by package and compound list and names each island's list in its unit, so each island
+ * runs on its own compounds; an older world rebuilds from its facts.
+ * 23 (batch 2026-10-27-heat-exchanger-design) gives each pipe section its channel count. 20 (batch 2026-10-26-backward-compat) put the envelope and the facts around state format 19's
  * units; the registry and the topology unit's totals left its state for its facts. Format 19, unit format 12, added
  * validated pipe-filter registrations (active and pending), batch 2026-10-25-accessory-refinements; 18, unit 11, CHECK
  * cutoff registrations and permanent per-connection direction masks, batch 2026-10-24-pipeline-check-valve; 17, unit 10,
@@ -82,11 +85,24 @@ import java.util.function.Function;
  * <p>29 (batch 2026-10-27-heat-exchanger-design, the owner's test of 2026-10-28): tag 2 is a fired heater's radiant coil (its
  * set temperature, duty, firing and partner's connection id; the reach is gone), tag 4 its convection coil (its conductance,
  * its radiant coil's connection id and its flue gas), and an air cooler's actuator is its draught (louvers and fans).</p>
+ *
+ * <p>31 (batch 2026-11-03-rotating-machinery, W2): control tag 5 is a machine on its curve (its law's liquid flag, rated
+ * flow, head and efficiency, its speed and enabled flag).</p>
+ *
+ * <p>32 (the same batch, form F2b): the endpoint modes lose {@code PUMP_TARGET} and {@code PUMP_HEAD_LIMIT}, every mover
+ * running on its law, so the mode ordinals move.</p>
+ *
+ * <p>33 (the same batch, W10a): a machine on its curve that is a pump carries its rated speed after its efficiency (its
+ * NPSH3 design point, owner decision D20 Q11 A).</p>
+ *
+ * <p>34 (the same batch, plan section 3.4): control tag 6 is a steam turbine (its rated power and isentropic efficiency),
+ * and a boundary transfer may be of kind {@code SHAFT}, a turbine's work out of the island.</p>
+ * <p>37: a turbine's computed admission target follows its design in state; its saved facts still carry the design only.</p>
  */
 public final class FluidCheckpointCodec {
     /** The state format: the core record's {@code StateFormat} and every unit's state section. */
-    public static final int VERSION=30;
-    /** The most wall cells a saved heat side holds (an exchanger's 8; an air cooler's flat wall 1). */
+    public static final int VERSION=40;
+    /** The most wall cells a saved heat side holds (crossflow 64, Standard 8, an air cooler's flat wall 1). */
     private static final int MAXIMUM_WALL_CELLS=64;
     /** The envelope: the core record's frame, the unit header and the section layout. Frozen. */
     public static final int ENVELOPE=1;
@@ -108,10 +124,16 @@ public final class FluidCheckpointCodec {
     private static final PassiveNetwork.PhasePort[] PHASE_PORTS=PassiveNetwork.PhasePort.values();
     private FluidCheckpointCodec() {}
 
-    public record IslandEntry(String dimension,String packageId,IslandCoordinator.Snapshot snapshot) {
-        public IslandEntry {Objects.requireNonNull(dimension);Objects.requireNonNull(packageId);Objects.requireNonNull(snapshot);if(dimension.isBlank()||packageId.isBlank())throw new IllegalArgumentException("Invalid saved package");}
-        /** The model key this island's package resolves to. */
-        public PackageKey key(){return new PackageKey(packageId);}
+    /**
+     * One island as a save holds it: its dimension, the package it runs on and its own compound list (batch
+     * 2026-11-04-refinery-compounds, V3: the island's model is the package on that list; null for the package's whole list,
+     * which a world never writes), and its snapshot.
+     */
+    public record IslandEntry(String dimension,String packageId,List<String> compounds,IslandCoordinator.Snapshot snapshot) {
+        public IslandEntry(String dimension,String packageId,IslandCoordinator.Snapshot snapshot){this(dimension,packageId,null,snapshot);}
+        public IslandEntry {Objects.requireNonNull(dimension);Objects.requireNonNull(packageId);Objects.requireNonNull(snapshot);if(dimension.isBlank()||packageId.isBlank())throw new IllegalArgumentException("Invalid saved package");compounds=PackageKey.list(compounds);}
+        /** The model key this island's package and compound list resolve to. */
+        public PackageKey key(){return new PackageKey(packageId,compounds);}
     }
     /** The islands a save captures, each owning its reservoirs' inventory in its dimension. */
     public record Checkpoint(List<IslandEntry> islands) {
@@ -124,8 +146,24 @@ public final class FluidCheckpointCodec {
             }
         }
     }
-    public record PackageKey(String packageId) {
-        public PackageKey {Objects.requireNonNull(packageId);if(packageId.isBlank())throw new IllegalArgumentException("Invalid saved package");}
+    /**
+     * A model's key: a package and a compound list on it (state format 40, batch 2026-11-04-refinery-compounds, V3), water not
+     * named; a null list is the package's whole list.
+     */
+    public record PackageKey(String packageId,List<String> compounds) {
+        /** The most compounds a saved list names. */
+        static final int MAXIMUM_COMPOUNDS=4096;
+        public PackageKey(String packageId){this(packageId,null);}
+        public PackageKey {Objects.requireNonNull(packageId);if(packageId.isBlank())throw new IllegalArgumentException("Invalid saved package");compounds=list(compounds);}
+        static List<String> list(List<String> compounds) {
+            if(compounds==null)return null;
+            var copy=List.copyOf(compounds);
+            if(copy.isEmpty()||copy.size()>MAXIMUM_COMPOUNDS||new HashSet<>(copy).size()!=copy.size()||copy.contains("Water")||copy.stream().anyMatch(String::isBlank))
+                throw new IllegalArgumentException("Invalid saved compound list "+copy);
+            return copy;
+        }
+        /** The model this key names on {@code network}, its package's whole model: that model, or its view on the key's compounds. */
+        public FluidThermodynamics on(FluidThermodynamics network){return compounds==null?network:network.on(compounds);}
     }
 
 
@@ -156,7 +194,7 @@ public final class FluidCheckpointCodec {
      * totals, recoveries and identity counter) and its state (the queued events, the running columns' engine state), as a unit's two sections. It changes
      * only when the ledger commits, so a save keeps the unit of an unchanged ledger.
      */
-    public static byte[] encodeTopology(WorldTopologyLedger.Snapshot world){return sections(FluidFacts.world(world),FluidFacts.topologyState(world.events(),world.columns(),world.active()));}
+    public static byte[] encodeTopology(WorldTopologyLedger.Snapshot world){return sections(FluidFacts.world(world),FluidFacts.topologyState(world.events(),world.columns(),world.shafts(),world.active()));}
     /**
      * A topology {@link #encodeTopology} wrote, at {@code onlineTick}, validated as the ledger itself validates it. Its
      * pending recoveries' solids are read as records of its basis package, whose model {@code models} gives (asked only
@@ -176,10 +214,13 @@ public final class FluidCheckpointCodec {
             if(model[0]==null)model[0]=Objects.requireNonNull(models.apply(new PackageKey(world.basis().packageId())));
             return record(new SolidMaterial(saved.id(),saved.revision(),saved.density(),saved.heatCapacity()),model[0]);
         });
-        if(state.columns().isEmpty()&&state.held().isEmpty())return snapshot;
-        // A running unit takes its engine state back; a state for a unit that is gone or stopped is dropped.
+        // A running unit takes its engine state back; a state for a unit that is gone or stopped is dropped. A driver takes its
+        // speed back (W3); one for a unit that is gone is dropped.
+        if(state.columns().isEmpty()&&state.shafts().isEmpty()&&state.held().isEmpty())return snapshot;
         var columns=new HashMap<>(snapshot.columns());
         state.columns().forEach((id,saved)->{var u=columns.get(id);if(u!=null&&u.running())columns.put(id,u.withState(saved));});
+        var shafts=new HashMap<>(snapshot.shafts());
+        state.shafts().forEach((id,saved)->{var u=shafts.get(id);if(u!=null)shafts.put(id,u.withState(saved));});
         // A held device is held again (decision S11): the islands were compiled with it apart.
         var active=snapshot.active();
         if(!state.held().isEmpty()) {
@@ -191,7 +232,7 @@ public final class FluidCheckpointCodec {
             active=Map.copyOf(holding);
         }
         return new WorldTopologyLedger.Snapshot(snapshot.onlineTick(),snapshot.nextIdentity(),active,snapshot.events(),snapshot.constructed(),snapshot.destroyed(),snapshot.basis(),
-                snapshot.recoveries(),snapshot.restated(),Map.copyOf(columns),snapshot.builds());
+                snapshot.recoveries(),snapshot.restated(),Map.copyOf(columns),Map.copyOf(shafts),snapshot.stores(),snapshot.health(),snapshot.builds());
     }
     /** The facts of a topology unit; facts this build cannot read refuse the world. */
     static FluidFacts.World worldFacts(byte[] data,Sections s) {
@@ -275,6 +316,8 @@ public final class FluidCheckpointCodec {
         if(!graph.scheduledTransfers().isEmpty())throw new IllegalArgumentException("Request-scoped transfers must be resolved into the committed ledger before saving");
         var w=new Writer();
         w.varint(strings.ref(entry.dimension));w.varint(strings.ref(entry.packageId));
+        // Format 40: the island's compound list (0 for the package's whole list, else its count plus one, then each id).
+        if(entry.compounds==null)w.varint(0);else{w.varint(entry.compounds.size()+1);for(var id:entry.compounds)w.varint(strings.ref(id));}
         w.text(s.status());
         var fences=new TreeMap<>(s.fences());w.varint(fences.size());
         for(var fence:fences.entrySet()){w.i64(fence.getKey().getMostSignificantBits());w.i64(fence.getKey().getLeastSignificantBits());w.i64(fence.getValue());}
@@ -357,10 +400,12 @@ public final class FluidCheckpointCodec {
             for(var g:p.sections()){w.f64(g.length());w.f64(g.diameter());w.f64(g.roughness());w.f64(g.minorLoss());w.varint(g.channels());}
             switch(p.control()) {
                 case FlowControl.Passive ignored->w.u8(0);
+                case FlowControl.Turbine turbine->{w.u8(6);w.f64(turbine.design().ratedPower());w.f64(turbine.design().efficiency());w.f64(turbine.massTarget());}
                 case FlowControl.Pump pump->{w.u8(1);w.f64(pump.requestedVolumeFlow());w.f64(pump.maximumAddedPressure());w.bool(pump.enabled());}
                 case FlowControl.PressureValve valve->{w.u8(2);w.f64(valve.targetPressure());}
                 case FlowControl.ControlValve valve->{w.u8(4);w.text(valve.source().name());w.f64(valve.targetPressure());w.f64(valve.massTarget());w.f64(valve.volumeTarget());w.bool(valve.sensor()!=null);if(valve.sensor()!=null){w.i64(valve.sensor().getMostSignificantBits());w.i64(valve.sensor().getLeastSignificantBits());}w.i64(valve.revision());}
-                case FlowControl.Compressor compressor->{w.u8(3);w.f64(compressor.requestedVolumeFlow());w.f64(compressor.maximumPressureRatio());w.bool(compressor.enabled());}
+                case FlowControl.Compressor compressor->{w.u8(3);w.f64(compressor.requestedVolumeFlow());w.f64(compressor.maximumPressureRatio());w.bool(compressor.enabled());w.f64(compressor.setFlow());w.f64(compressor.setPressure());}
+                case FlowControl.Machine machine->{var law=machine.law();w.u8(5);w.bool(law.liquid());w.f64(law.ratedFlow());w.f64(law.ratedHead());w.f64(law.efficiency());if(law instanceof com.wormzjl.icheme.science.machine.CentrifugalPump pump)w.f64(pump.ratedSpeed());w.f64(machine.speed());w.bool(machine.enabled());w.f64(machine.setFlow());w.f64(machine.setPressure());}
             }
             // Format 6: the port of each end (PassiveNetwork.PhasePort ordinal), after the control.
             w.u8(p.firstPort().ordinal());w.u8(p.secondPort().ordinal());w.varint(p.forbiddenDirections());w.f64(p.actuatorArea());
@@ -371,7 +416,7 @@ public final class FluidCheckpointCodec {
                 case com.wormzjl.icheme.science.fluid.network.HeatSide heat->{var films=heat.films();var wall=heat.wall();w.u8(1);
                     w.f64(heat.area());w.f64(films.liquid());w.f64(films.twoPhase());w.f64(films.gas());
                     w.varint(wall.length);for(double t:wall)w.f64(t);w.f64(heat.bypass());w.f64(heat.giveBack());w.i64(heat.partner());w.f64(heat.active());
-                    control(w,heat.control());w.u8(heat.limit().ordinal());}
+                    control(w,heat.control());w.u8(heat.limit().ordinal());w.text(heat.routing().name());}
                 case com.wormzjl.icheme.science.fluid.network.AirCooled cooled->{var air=cooled.air();w.u8(3);w.f64(cooled.area());
                     w.f64(air.temperature());w.f64(air.barePerFace());w.f64(air.film());w.f64(air.capacity());w.f64(air.natural());
                     w.f64(cooled.draught());control(w,cooled.control());w.u8(cooled.limit().ordinal());}
@@ -439,7 +484,17 @@ public final class FluidCheckpointCodec {
         double area=r.f64();var films=new com.wormzjl.icheme.science.fluid.network.HeatCurve.Films(r.f64(),r.f64(),r.f64());
         var wall=new double[r.varint(MAXIMUM_WALL_CELLS)];for(int k=0;k<wall.length;k++)wall[k]=r.f64();
         double bypass=r.f64(),giveBack=r.f64();long partner=r.i64();double active=r.f64();var control=control(r);
-        return new com.wormzjl.icheme.science.fluid.network.HeatSide(area,films,wall,bypass,giveBack,partner,active,control,limit(r));
+        var why=limit(r);var routing=com.wormzjl.icheme.science.fluid.network.HeatRouting.valueOf(r.text());
+        return new com.wormzjl.icheme.science.fluid.network.HeatSide(area,films,wall,bypass,giveBack,partner,active,control,why,routing);
+    }
+    /** Tag 5: a machine on its curve, its law (liquid flag, rated flow, head and efficiency, a pump's rated speed), speed,
+     * enabled flag and (format 35, W3) set flow and set discharge pressure. */
+    private static FlowControl.Machine machine(Reader r) {
+        boolean liquid=r.bool();double flow=r.f64(),head=r.f64(),efficiency=r.f64();
+        com.wormzjl.icheme.science.machine.MachineLaw law=liquid?new com.wormzjl.icheme.science.machine.CentrifugalPump(flow,head,efficiency,r.f64())
+                :new com.wormzjl.icheme.science.machine.CentrifugalCompressor(flow,head,efficiency);
+        double speed=r.f64();boolean enabled=r.bool();double setFlow=r.f64(),setPressure=r.f64();
+        return new FlowControl.Machine(law,speed,enabled,setFlow,setPressure);
     }
     private static PassiveNetwork.PhasePort port(Reader r){int port=r.u8();if(port>=PHASE_PORTS.length)throw r.invalid("unknown pipe port "+port);return PHASE_PORTS[port];}
 
@@ -480,8 +535,10 @@ public final class FluidCheckpointCodec {
     private static IslandEntry islandState(byte[] data,Sections s,IndexRow row,long epoch,Strings strings,Map<PackageKey,FluidThermodynamics> models) {
         long id=row.id;var r=new Reader(data,s.stateOffset(),s.stateLength(),"state of island "+id);
         String dimension=strings.get(r.varint(Integer.MAX_VALUE),"unit of island "+id),packageId=strings.get(r.varint(Integer.MAX_VALUE),"unit of island "+id);
-        var model=models.get(new PackageKey(packageId));
-        if(model==null)throw new IllegalArgumentException("Island "+id+": its package "+packageId+" is not in the checkpoint's package table");
+        int listed=r.varint(PackageKey.MAXIMUM_COMPOUNDS+1);List<String> compounds=null;
+        if(listed>0){var ids=new ArrayList<String>(listed-1);for(int i=1;i<listed;i++)ids.add(strings.get(r.varint(Integer.MAX_VALUE),"unit of island "+id));compounds=PackageKey.list(ids);}
+        var model=models.get(new PackageKey(packageId,compounds));
+        if(model==null)throw new IllegalArgumentException("Island "+id+": its package "+packageId+(compounds==null?"":" on "+compounds)+" is not in the checkpoint's package table");
         String status=r.text();
         int fenceCount=r.varint(MAXIMUM_FENCES);var fences=new LinkedHashMap<UUID,Long>();
         for(int i=0;i<fenceCount;i++) {
@@ -522,7 +579,7 @@ public final class FluidCheckpointCodec {
         long generation=IslandCoordinator.freshPayloadGeneration();
         if(row.base==AWAKE) {
             if(row.since!=0||row.start!=0||row.horizon!=0||signature!=null)throw new IllegalArgumentException("Awake island "+id+" carries a certificate");
-            return new IslandEntry(dimension,packageId,new IslandCoordinator.Snapshot(id,row.revision,graph,clock,result,status,fences,Optional.empty(),generation));
+            return new IslandEntry(dimension,packageId,compounds,new IslandCoordinator.Snapshot(id,row.revision,graph,clock,result,status,fences,Optional.empty(),generation));
         }
         if(row.base<0)throw new IllegalArgumentException("Island "+id+": invalid certificate base tick "+row.base);
         if(signature==null||result.isEmpty())throw new IllegalArgumentException("Certified island "+id+" lacks its certificate record");
@@ -533,7 +590,7 @@ public final class FluidCheckpointCodec {
         // The island at its saved committed tick: its base inventory plus the replayed fraction, never a solve.
         var rebuilt=IslandCertificate.rebuild(persisted,model.molecularWeights());
         var certified=new IslandCoordinator.Certified(rebuilt.drift(),row.since,row.base,row.horizon,rebuilt.largestFlow(),Optional.of(persisted));
-        return new IslandEntry(dimension,packageId,new IslandCoordinator.Snapshot(id,row.revision,rebuilt.graphAt(row.committed),clock,result,status,fences,Optional.of(certified),generation));
+        return new IslandEntry(dimension,packageId,compounds,new IslandCoordinator.Snapshot(id,row.revision,rebuilt.graphAt(row.committed),clock,result,status,fences,Optional.of(certified),generation));
     }
     private static PassiveNetwork related(Reader r,int flag,PassiveNetwork main,Topology topology,FluidThermodynamics model) {
         return switch(flag) {
@@ -560,7 +617,7 @@ public final class FluidCheckpointCodec {
             var list=new ArrayList<PipeResistance.Geometry>(count);for(int s=0;s<count;s++)list.add(new PipeResistance.Geometry(r.f64(),r.f64(),r.f64(),r.f64(),r.varint(1<<20)));
             sections.add(List.copyOf(list));
             controls.add(switch(r.u8()){case 0->new FlowControl.Passive();case 1->new FlowControl.Pump(r.f64(),r.f64(),r.bool());case 2->new FlowControl.PressureValve(r.f64());
-                case 3->new FlowControl.Compressor(r.f64(),r.f64(),r.bool());case 4->new FlowControl.ControlValve(FlowControl.ValveSource.valueOf(r.text()),r.f64(),r.f64(),r.f64(),r.bool()?new java.util.UUID(r.i64(),r.i64()):null,r.i64());default->throw new IllegalArgumentException("Unknown saved control");});
+                case 3->new FlowControl.Compressor(r.f64(),r.f64(),r.bool(),r.f64(),r.f64());case 5->machine(r);case 6->new FlowControl.Turbine(new com.wormzjl.icheme.science.machine.SteamTurbine(r.f64(),r.f64()),r.f64());case 4->new FlowControl.ControlValve(FlowControl.ValveSource.valueOf(r.text()),r.f64(),r.f64(),r.f64(),r.bool()?new java.util.UUID(r.i64(),r.i64()):null,r.i64());default->throw new IllegalArgumentException("Unknown saved control");});
             firstPorts[p]=port(r);secondPorts[p]=port(r);forbiddenDirections[p]=r.varint(3);actuatorAreas[p]=r.f64();heats[p]=heat(r);
         }
         return new Topology(ids,elevations,kinds,volumes,heights,opens,geometries,pools,towers,pipeIds,first,second,sections,controls,firstPorts,secondPorts,forbiddenDirections,actuatorAreas,heats);
@@ -622,12 +679,17 @@ public final class FluidCheckpointCodec {
 
     // ---------------- the core record ----------------
 
-    /** The property identity every unit of one package was written under: its thermodynamic revision and energy reference. */
-    record PackageRecord(String packageId,String propertyRevision,String energyRevision,List<String> energyComponents) {
-        PackageKey key(){return new PackageKey(packageId);}
+    /**
+     * The property identity every unit of one package and compound list was written under (state format 40: the table is
+     * keyed by both, batch 2026-11-04-refinery-compounds, V3): its thermodynamic revision and energy reference. A null list is
+     * the package's whole list.
+     */
+    record PackageRecord(String packageId,List<String> compounds,String propertyRevision,String energyRevision,List<String> energyComponents) {
+        PackageRecord{compounds=PackageKey.list(compounds);}
+        PackageKey key(){return new PackageKey(packageId,compounds);}
         static PackageRecord of(PackageKey key,FluidThermodynamics model) {
             var reference=EnergyReference.sensible(model.components());
-            return new PackageRecord(key.packageId(),model.thermodynamicRevision(),reference.revision(),List.copyOf(reference.components()));
+            return new PackageRecord(key.packageId(),key.compounds(),model.thermodynamicRevision(),reference.revision(),List.copyOf(reference.components()));
         }
     }
     record CoreRecord(int stateFormat,int factsSchema,long epoch,Strings strings,List<PackageRecord> packages,long[] packs,long[] packBytes,long nextPack,long nextGeneration,
@@ -642,6 +704,7 @@ public final class FluidCheckpointCodec {
         for(var p:core.packages) {
             var entry=new CompoundTag();entry.putString("Package",p.packageId);entry.putString("PropertyRevision",p.propertyRevision);
             entry.putString("EnergyRevision",p.energyRevision);var components=new ListTag();for(var c:p.energyComponents)components.add(StringTag.valueOf(c));entry.put("EnergyComponents",components);
+            if(p.compounds!=null){var compounds=new ListTag();for(var c:p.compounds)compounds.add(StringTag.valueOf(c));entry.put("Compounds",compounds);}
             packages.add(entry);
         }
         tag.put("Packages",packages);
@@ -708,9 +771,11 @@ public final class FluidCheckpointCodec {
         for(int i=0;i<packageList.size();i++) {
             var p=packageList.getCompound(i);
             if(!(p.get("EnergyComponents") instanceof ListTag components)||!components.isEmpty()&&components.getElementType()!=Tag.TAG_STRING)throw new IllegalArgumentException("Missing or mistyped fluid package field EnergyComponents");
-            var record=new PackageRecord(requireString(p,"Package","package"),requireString(p,"PropertyRevision","package"),requireString(p,"EnergyRevision","package"),
+            List<String> compounds=null;
+            if(p.contains("Compounds")){if(!(p.get("Compounds") instanceof ListTag list)||!list.isEmpty()&&list.getElementType()!=Tag.TAG_STRING)throw new IllegalArgumentException("Mistyped fluid package field Compounds");compounds=list.stream().map(Tag::getAsString).toList();}
+            var record=new PackageRecord(requireString(p,"Package","package"),compounds,requireString(p,"PropertyRevision","package"),requireString(p,"EnergyRevision","package"),
                     components.stream().map(Tag::getAsString).toList());
-            if(!keys.add(record.key()))throw new IllegalArgumentException("Duplicate saved package "+record.packageId);
+            if(!keys.add(record.key()))throw new IllegalArgumentException("Duplicate saved package "+record.packageId+(compounds==null?"":" on "+compounds));
             packages.add(record);
         }
         if(packs.length!=packBytes.length)throw new IllegalArgumentException("Fluid pack list and pack sizes disagree");
@@ -766,6 +831,8 @@ public final class FluidCheckpointCodec {
             d.text(requireString(p,"Package","package"));d.text(requireString(p,"PropertyRevision","package"));d.text(requireString(p,"EnergyRevision","package"));
             if(!(p.get("EnergyComponents") instanceof ListTag components))throw new IllegalArgumentException("Missing or mistyped fluid package field EnergyComponents");
             d.number(components.size());for(int c=0;c<components.size();c++)d.text(components.getString(c));
+            if(p.get("Compounds") instanceof ListTag compounds){d.text("compounds");d.number(compounds.size());for(int c=0;c<compounds.size();c++)d.text(compounds.getString(c));}
+            else if(p.contains("Compounds"))throw new IllegalArgumentException("Mistyped fluid package field Compounds");
         }
         d.longs(requireLongs(tag,"Packs","checkpoint"));d.longs(requireLongs(tag,"PackBytes","checkpoint"));d.number(requireLong(tag,"NextPack","checkpoint"));d.number(requireLong(tag,"NextGeneration","checkpoint"));
         if(tag.get("Topology") instanceof CompoundTag topology) {

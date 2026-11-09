@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "icheme:chemsep_carbon_dioxide_liquid_reference",
+  "type": "liquid_volume_reference_points",
+  "revision": "chemsep-8.3-tr07-r1",
+  "source": "ChemSep v8.3 (Kooijman and Taylor, Artistic License 2.0) as embedded in DWSIM 10.2.5: each point is the saturated liquid at Tr = 0.7 from the compound's liquid density (eq. 105) and vapour pressure (eq. 101); individual sources per point.",
+  "points": [
+    {
+      "component": "CarbonDioxide",
+      "temperatureKelvin": 212.94699999999997,
+      "pressurePascal": 440390.2562512578,
+      "molarVolumeCubicMetres": 0.000036864241502819477,
+      "source": "ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Carbon dioxide\" (ChemSep index 909, CAS 124-38-9): saturated liquid at Tr = 0.7 (212.94699999999997 K), molar volume from liquid density eq. 105 (A=2.768, B=0.26212, C=304.21, D=0.2908, E=0; data 216.58..304.21 K), pressure from vapour pressure eq. 101 (A=95.478, B=-4070, C=-12.07, D=0.000029505, E=2; data 216.4..304.21 K)"
+    }
+  ]
+}

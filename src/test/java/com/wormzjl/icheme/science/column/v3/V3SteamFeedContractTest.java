@@ -151,29 +151,45 @@ class V3SteamFeedContractTest {
         ZeroEnthalpyThermo thermo = new ZeroEnthalpyThermo(input.componentBasis());
         V3MeshResidualEvaluator evaluator = new V3MeshResidualEvaluator(problem, thermo, 0.0);
         V3ThermoWorkspace workspace = thermo.newWorkspace();
-        double steamProductEnergy = 4.0 * V3WaterProperties.vaporMolarEnthalpy(condenserTemperature);
-        double arrivingWaterEnergy = 4.0 * V3WaterProperties.vaporMolarEnthalpy(450.0);
+        // The steam product is pure water at the drum's pressure; tray 1's steam is at its partial pressure beside
+        // 10 mol/s of hydrocarbon vapour (the network's virial steam, E30 of batch 2026-11-04-open-thermo-data).
+        double steamProductEnergy = 4.0 * V3WaterProperties.steamMolarEnthalpy(condenserTemperature, topPressure);
+        double arrivingWaterEnergy = V3WaterProperties.steamEnthalpyRate(450.0, problem.nodePressurePascal(1), 4.0, 10.0);
         V3MeshResidualEvaluator.LocalNodeTerms condenser = evaluator.localTerms(state, 0, workspace);
         assertEquals(0.0, condenser.liquidPhaseEnergy());
         assertEquals(steamProductEnergy, condenser.vaporPhaseEnergy(), 1.0e-9 * steamProductEnergy);
         assertEquals(steamProductEnergy - arrivingWaterEnergy,
                 V3ColumnDutyLedger.condenserDutyWatts(problem, state, evaluator, workspace), 1.0e-9 * arrivingWaterEnergy);
 
-        // The tray energy rows never see the condenser vapor term, so the wet MESH residual is unaffected.
+        // The tray energy rows never see the condenser vapor term, so the wet MESH residual is unaffected: a 10 K
+        // warmer drum moves that term by about 1.4 kW and leaves every row where it was. The rows are not zero. The
+        // steam enters alone at its stage's pressure and rises at its partial pressure beside the hydrocarbon
+        // vapour, a pressure lower by tray, so each row reads the virial residual's difference (0.8 W on tray 1).
+        V3DryMeshState warmer = manufacturedWetState(problem, condenserTemperature + 10.0);
+        assertTrue(4.0 * (V3WaterProperties.steamMolarEnthalpy(condenserTemperature + 10.0, topPressure)
+                - V3WaterProperties.steamMolarEnthalpy(condenserTemperature, topPressure)) > 1.0e3);
         V3MeshResidual residual = evaluator.evaluate(state, workspace);
-        for (V3MeshResidual.Row row : residual.rows()) {
+        V3MeshResidual warmerResidual = evaluator.evaluate(warmer, workspace);
+        for (int index = 0; index < residual.rows().size(); index++) {
+            V3MeshResidual.Row row = residual.rows().get(index);
             if (row.equation().family() == V3DegreeOfFreedomLedger.EquationFamily.ENERGY_BALANCE) {
-                assertEquals(0.0, row.physicalValue(), 1.0e-9 * arrivingWaterEnergy, row::toString);
+                assertEquals(row.physicalValue(), warmerResidual.rows().get(index).physicalValue(),
+                        1.0e-9 * arrivingWaterEnergy, row::toString);
             }
         }
         // The whole-column closure adds the condenser vapor outlet inside the condenser duty and subtracts it again
-        // as a product, so it is blind to this term and passes with or without the fix; the condenser-duty
-        // assertion above is the guard for the published number.
+        // as a product, so it is blind to this term, with or without the fix; the condenser-duty assertion above is
+        // the guard for the published number. It reads the steam's expansion from its injection pressure alone to its
+        // partial pressure on tray 1, the sum of the rows.
         V3AcceptanceAudit audit = new V3AcceptanceAuditor(problem, thermo, 0.0).audit(state, workspace, V3SolveControl.UNBOUNDED);
         V3AcceptanceAudit.Check closure = audit.checks().stream()
                 .filter(check -> check.family().equals("GLOBAL_ENERGY_BALANCE")).findFirst().orElseThrow();
-        assertTrue(closure.passed(), closure::toString);
-        assertEquals(0.0, closure.value(), 1.0e-9 * arrivingWaterEnergy);
+        V3AcceptanceAudit.Check warmerClosure = new V3AcceptanceAuditor(problem, thermo, 0.0)
+                .audit(warmer, workspace, V3SolveControl.UNBOUNDED).checks().stream()
+                .filter(check -> check.family().equals("GLOBAL_ENERGY_BALANCE")).findFirst().orElseThrow();
+        assertEquals(closure.value(), warmerClosure.value(), 1.0e-9 * arrivingWaterEnergy);
+        assertEquals(Math.abs(V3ColumnDutyLedger.steamEnthalpyWatts(problem) - arrivingWaterEnergy), closure.value(),
+                1.0e-9 * arrivingWaterEnergy);
         V3AcceptanceAudit.Check condenserClosure = audit.checks().stream()
                 .filter(check -> check.family().equals("CONDENSER_ENERGY_BALANCE")).findFirst().orElseThrow();
         assertTrue(condenserClosure.passed(), condenserClosure::toString);
@@ -194,7 +210,7 @@ class V3SteamFeedContractTest {
         ZeroEnthalpyThermo thermo = new ZeroEnthalpyThermo(input.componentBasis());
         V3MeshResidualEvaluator evaluator = new V3MeshResidualEvaluator(problem, thermo, 0.0);
         V3ThermoWorkspace workspace = thermo.newWorkspace();
-        double steamProductEnergy = 4.0 * V3WaterProperties.vaporMolarEnthalpy(condenserTemperature);
+        double steamProductEnergy = 4.0 * V3WaterProperties.steamMolarEnthalpy(condenserTemperature, 50_000.0);
         double published = V3ColumnDutyLedger.condenserDutyWatts(problem, state, evaluator, workspace);
 
         V3AcceptanceAudit.Check consistent = V3AcceptanceAuditor.condenserEnergyBalance(

@@ -11,20 +11,22 @@ Batch `2026-10-24-wti-pumping-rate-hold`. Initial source **beb5c2fc**. All code 
 - prototype-src/: initial broader phase-validity-query prototype.
 - entry-prototype-src/: selected narrow rate-entry cache invalidation. proposal.patch is its diff against beb5c2fc. It preserves within-pass reuse and all physical laws.
 - summary.json and logs/wti-rate-trace-logs-2026-10-24.tar.gz: provenance, proposal, numeric graph and reproduction/trace/selected-prototype logs. Do not interpret one-case results as campaign qualification.
+- snapshot.json, the frozen world the audit reads, holds the WTI (ExxonMobil) composition. Since O5 of batch 2026-11-04-open-thermo-data (2026-11-05) it is in the main checkout's git-ignored `research/2026-11-04-open-thermo-data/xom-copies/tools-wti-pumping-rate-hold/` (`$taskCase` below).
 
 Use JDK 21.0.11 and an owned checkout built at beb5c2fc (`gradlew.bat jar --max-workers=4`). Cached libraries: Gson 2.10.1 and EJML 0.44.0. The prior tool's classpath.txt contains these pinned paths; product classes/resources must precede its older helper-class directory. No dev client/world is needed.
 
 ```powershell
 $taskTool = 'D:\Minecraft\Modding\1.21\CreateChemE\tools\wti-pumping-rate-hold'
+$taskCase = 'D:\Minecraft\Modding\1.21\CreateChemE\research\2026-11-04-open-thermo-data\xom-copies\tools-wti-pumping-rate-hold\snapshot.json'
 $taskJava = 'C:\Program Files\Java\jdk-21.0.11\bin'
 $taskDeps = (Get-Content 'D:\Minecraft\Modding\1.21\CreateChemE\tools\fluid-world-inspector\classpath.txt' -Raw).Trim()
 $taskClasspath = "$taskTool/classes;build/classes/java/main;build/resources/main;$taskDeps"
 & "$taskJava\javac.exe" -cp $taskClasspath -d "$taskTool/classes" "$taskTool/RateHoldAudit.java"
-& "$taskJava\java.exe" -Xmx1g -cp $taskClasspath com.wormzjl.icheme.science.fluid.network.RateHoldAudit "$taskTool/snapshot.json" 1.5 3.2
-& "$taskJava\java.exe" -Xmx1g -cp $taskClasspath com.wormzjl.icheme.science.fluid.network.RateHoldAudit "$taskTool/snapshot.json" 2 3.2
-& "$taskJava\java.exe" -Xmx1g '-Dwti.repeatPort=true' -cp $taskClasspath com.wormzjl.icheme.science.fluid.network.RateHoldAudit "$taskTool/snapshot.json" 2 3.2
+& "$taskJava\java.exe" -Xmx1g -cp $taskClasspath com.wormzjl.icheme.science.fluid.network.RateHoldAudit $taskCase 1.5 3.2
+& "$taskJava\java.exe" -Xmx1g -cp $taskClasspath com.wormzjl.icheme.science.fluid.network.RateHoldAudit $taskCase 2 3.2
+& "$taskJava\java.exe" -Xmx1g '-Dwti.repeatPort=true' -cp $taskClasspath com.wormzjl.icheme.science.fluid.network.RateHoldAudit $taskCase 2 3.2
 & "$taskJava\javac.exe" -cp $taskClasspath -d "$taskTool/entry-prototype-classes" "$taskTool/entry-prototype-src/com/wormzjl/icheme/science/fluid/network/PassiveStepSolver.java"
-& "$taskJava\java.exe" -Xmx1g -cp "$taskTool/entry-prototype-classes;$taskClasspath" com.wormzjl.icheme.science.fluid.network.RateHoldAudit "$taskTool/snapshot.json" 2 3.2 94 10
+& "$taskJava\java.exe" -Xmx1g -cp "$taskTool/entry-prototype-classes;$taskClasspath" com.wormzjl.icheme.science.fluid.network.RateHoldAudit $taskCase 2 3.2 94 10
 ```
 
 Flags wti.singleStep and wti.rateOnly select a fresh direct step/rate solve; wti.portRate selects the port graph. Arguments after duration are island id (default 94) and additional interval count (default 0). Compile all trace-src Java files to trace-classes and put that directory first with `-Dfluid.audit.trace=true` for the logging lane. Never put prototype/trace classes on a production or broad-test classpath.
@@ -92,6 +94,7 @@ Status: Concluded 2026-10-26 (batch in 0.12.0). Index: [../INDEX.md](../INDEX.md
 - form 2 rejected
 - owner monotonicity approval, combined-branch resolution and clean-branch merge qualification pending
 - client retained)
+- 2026-11-05: `snapshot.json` moved to the main checkout's research/ (ExxonMobil WTI composition; O5 of batch 2026-11-04-open-thermo-data)
 
 ### Notes
 

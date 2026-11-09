@@ -109,13 +109,35 @@ public final class ColumnOperationReviewWorld {
         }).thenSucceed();
     }
 
-    /** The plant's rig north of the test's own structure block, on the ground. */
+    /**
+     * The plant's rig north of the test's own structure block, on clear ground. The test grid grows east and south from its
+     * first test, and the structures of the tests that ran before stay standing: where the test's own row is not the first,
+     * the plant's box reaches back over earlier rows. The rig moves north a plant's depth at a time until no block stands
+     * above the ground anywhere in its box.
+     */
     static Rig rig(GameTestHelper helper) {
         var level = helper.getLevel();
         var corner = helper.absolutePos(new BlockPos(48, 0, -64));
-        level.getChunk(corner.getX() >> 4, corner.getZ() >> 4);
-        var base = new BlockPos(corner.getX(), level.getHeight(Heightmap.Types.WORLD_SURFACE, corner.getX(), corner.getZ()), corner.getZ());
-        return new Rig(new AssemblyGameTests.Plant(helper, base, new BlockPos(-34, 0, -32), new BlockPos(24, 44, 36)));
+        var below = new BlockPos(-34, 0, -32);
+        var above = new BlockPos(24, 44, 36);
+        for (int k = 0; k <= 16; k++) {
+            var at = corner.north(k * (above.getZ() - below.getZ() + 1));
+            level.getChunk(at.getX() >> 4, at.getZ() >> 4);
+            int ground = level.getHeight(Heightmap.Types.WORLD_SURFACE, at.getX(), at.getZ());
+            if (clear(level, at.offset(below), at.offset(above), ground))
+                return new Rig(new AssemblyGameTests.Plant(helper, new BlockPos(at.getX(), ground, at.getZ()), below, above));
+        }
+        throw new IllegalStateException("No clear ground for the column plant north of " + corner.toShortString());
+    }
+
+    /** Whether every column from {@code low} to {@code high} has its surface at {@code ground}: nothing stands on it. */
+    private static boolean clear(net.minecraft.server.level.ServerLevel level, BlockPos low, BlockPos high, int ground) {
+        for (int x = low.getX(); x <= high.getX(); x++)
+            for (int z = low.getZ(); z <= high.getZ(); z++) {
+                level.getChunk(x >> 4, z >> 4);
+                if (level.getHeight(Heightmap.Types.WORLD_SURFACE, x, z) != ground) return false;
+            }
+        return true;
     }
 
     /** The default template at {@code scale} of its feed, its draws, steam and pumparound duties, its column area in step. */
@@ -217,6 +239,9 @@ public final class ColumnOperationReviewWorld {
                     plant.world.resizeLine(id(front(column, role, 0).relative(out(column, role, 0), k)), (double) line[1], d -> PipeSizes.MAX_BORE);
             }
             for (var valve : plant.valves.entrySet()) plant.install(valve.getKey(), valve.getValue());
+            // The casings turn only with their shaft trains (W3): a creative motor drives each pump.
+            plant.drive(refluxPump);
+            for (var pump : pumps) plant.drive(pump);
 
             // The supplies and the sinks.
             supply(feed, FEED_BORE, new FluidDeviceSpec(1, input.feedTemperatureKelvin(), SUPPLY, crude(catalog)));

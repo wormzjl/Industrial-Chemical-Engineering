@@ -45,9 +45,12 @@ class ExchangerCouplingTest {
     private List<PhysicalFluidTopology.Device> exchanger(){return exchanger(HeatUnit.Control.OFF);}
     /** The same with the cold side under {@code cold} (W4). */
     private List<PhysicalFluidTopology.Device> exchanger(HeatUnit.Control cold) {
+        return exchanger(cold,com.wormzjl.icheme.science.equipment.ExchangerType.STANDARD);
+    }
+    private List<PhysicalFluidTopology.Device> exchanger(HeatUnit.Control cold,com.wormzjl.icheme.science.equipment.ExchangerType type) {
         var devices=new ArrayList<PhysicalFluidTopology.Device>();
-        devices.addAll(line(1,HOT,2,0,HeatSides.tubePassage(SHELL,TUBES),new HeatUnit(HeatSides.Unit.EXCHANGER,HeatSides.Side.TUBE,AREA,COLD)));
-        devices.addAll(line(3,COLD,4,5,HeatSides.shellPassage(SHELL,TUBES),new HeatUnit(HeatSides.Unit.EXCHANGER,HeatSides.Side.SHELL,AREA,HOT).withControl(cold)));
+        devices.addAll(line(1,HOT,2,0,type.tubePassage(SHELL,TUBES),new HeatUnit(HeatSides.Unit.EXCHANGER,HeatSides.Side.TUBE,AREA,COLD).withExchangerType(type)));
+        devices.addAll(line(3,COLD,4,5,type.shellPassage(SHELL,TUBES),new HeatUnit(HeatSides.Unit.EXCHANGER,HeatSides.Side.SHELL,AREA,HOT).withControl(cold).withExchangerType(type)));
         return devices;
     }
 
@@ -86,9 +89,9 @@ class ExchangerCouplingTest {
          * the heat in transit as the facts carry it (the transit as booked). */
         Rig reloaded() {
             var saved=coordinator.snapshots();
-            var image=FluidCheckpointCodec.encode(new FluidCheckpointCodec.Checkpoint(saved.stream().map(x->new FluidCheckpointCodec.IslandEntry("minecraft:overworld",model.domain().packageId(),x)).toList()),key->model);
+            var image=FluidCheckpointCodec.encode(new FluidCheckpointCodec.Checkpoint(saved.stream().map(x->new FluidCheckpointCodec.IslandEntry("minecraft:overworld",model.domain().packageId(),x)).toList()),key->key.on(model));
             var copy=new Rig(policy);copy.epoch[0]=epoch[0];copy.hotIsland=hotIsland;copy.coldIsland=coldIsland;copy.heat.putAll(heat);
-            for(var entry:FluidCheckpointCodec.decode(image,key->model).islands()){copy.coordinator.register(entry.snapshot(),model);copy.committed.put(entry.snapshot().id(),entry.snapshot().clock().committedTick());}
+            for(var entry:FluidCheckpointCodec.decode(image,key->key.on(model)).islands()){copy.coordinator.register(entry.snapshot(),model);copy.committed.put(entry.snapshot().id(),entry.snapshot().clock().committedTick());}
             copy.coordinator.transit(PhysicalFluidTopology.sideIdentity(Math.min(HOT,COLD)),booked());
             return copy;
         }
@@ -154,12 +157,46 @@ class ExchangerCouplingTest {
     /** Hot water at 90 °C from 2 bar and cold water at 20 °C from 1.5 bar, each through its side into a 1 atm void. */
     private Rig waterPair(int hotCadence,int coldCadence,CertificatePolicy policy){return waterPair(hotCadence,coldCadence,policy,HeatUnit.Control.OFF);}
     private Rig waterPair(int hotCadence,int coldCadence,CertificatePolicy policy,HeatUnit.Control cold) {
-        var compiled=PhysicalFluidTopology.compile(exchanger(cold),Map.of(1L,source(1,water(363.15,200_000)),2L,sink(2,101_325),3L,source(3,water(293.15,150_000)),4L,sink(4,101_325)));
+        return waterPair(hotCadence,coldCadence,policy,cold,com.wormzjl.icheme.science.equipment.ExchangerType.STANDARD);
+    }
+    private Rig waterPair(int hotCadence,int coldCadence,CertificatePolicy policy,HeatUnit.Control cold,com.wormzjl.icheme.science.equipment.ExchangerType type) {
+        var compiled=PhysicalFluidTopology.compile(exchanger(cold,type),Map.of(1L,source(1,water(363.15,200_000)),2L,sink(2,101_325),3L,source(3,water(293.15,150_000)),4L,sink(4,101_325)));
         assertEquals(2,compiled.islands().size(),"each side in its own island");
         var rig=new Rig(policy);rig.hotIsland=islandOf(compiled,HOT);rig.coldIsland=islandOf(compiled,COLD);
         rig.register(rig.hotIsland,compiled.islands().get((int)rig.hotIsland-1).graph(),hotCadence);
         rig.register(rig.coldIsland,compiled.islands().get((int)rig.coldIsland-1).graph(),coldCadence);
         return rig;
+    }
+
+    @Test void crossflowKeepsItsRoutingAndLedgerAcrossAStoppedPartnerAndBypassControl() {
+        var rig=waterPair(100,400,CertificatePolicy.disabled(),new HeatUnit.Control(HeatUnit.Mode.OUTLET_TEMPERATURE,310,0,0),
+                com.wormzjl.icheme.science.equipment.ExchangerType.CROSSFLOW);
+        rig.run(300);
+        var hot=seen(rig.island(rig.hotIsland),HOT);var cold=seen(rig.island(rig.coldIsland),COLD);
+        assertEquals(HeatRouting.TWO_PASS_TUBES,hot.law.routing());
+        assertEquals(HeatRouting.MIXED_CROSSFLOW,cold.law.routing());
+        assertEquals(64,cold.law.cells());
+        assertEquals(310,cold.out.temperature(),.15);
+        assertTrue(cold.law.bypass()>0&&cold.law.bypass()<1);
+        assertLedger(rig,0,"crossflow under control");
+        rig.failing=id->id==rig.coldIsland;rig.run(40);
+        assertLedger(rig,0,"crossflow partner held");
+        rig.failing=id->false;rig.run(300);
+        assertEquals(310,seen(rig.island(rig.coldIsland),COLD).out.temperature(),.15);
+        assertLedger(rig,0,"crossflow resumed");
+    }
+
+    @Test void crossflowCheckpointRetainsTheGridAndContinuesTheSameHeatTransfer() {
+        var rig=waterPair(100,400,CertificatePolicy.disabled(),HeatUnit.Control.OFF,com.wormzjl.icheme.science.equipment.ExchangerType.CROSSFLOW);
+        rig.run(90);var loaded=rig.reloaded();
+        assertEquals(HeatRouting.TWO_PASS_TUBES,seen(loaded.island(loaded.hotIsland),HOT).law.routing());
+        assertEquals(HeatRouting.MIXED_CROSSFLOW,seen(loaded.island(loaded.coldIsland),COLD).law.routing());
+        assertEquals(64,seen(loaded.island(loaded.hotIsland),HOT).law.cells());
+        for(int i=0;i<10;i++) {
+            rig.run(2);loaded.run(2);
+            assertEquals(seen(rig.island(rig.hotIsland),HOT).out.temperature(),seen(loaded.island(loaded.hotIsland),HOT).out.temperature(),.01);
+        }
+        assertLedger(loaded,0,"crossflow checkpoint");
     }
     private void assertSteady(Rig rig,double tolerance,String label){assertSteady(rig,HOT,COLD,tolerance,label);}
     private void assertSteady(Rig rig,long hotSide,long coldSide,double tolerance,String label) {

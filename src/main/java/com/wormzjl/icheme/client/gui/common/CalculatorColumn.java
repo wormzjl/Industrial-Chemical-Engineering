@@ -8,8 +8,8 @@ import com.wormzjl.icheme.client.gui.common.kit.Palette;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
 import com.wormzjl.icheme.client.gui.screens.inventory.FluidDeviceScreen.FluidGuiLayout;
+import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.equipment.ColumnComponents.Condenser;
-import com.wormzjl.icheme.science.equipment.ColumnComponents.Pump;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -290,18 +290,19 @@ public final class CalculatorColumn {
                 button("keep_draft", "keep_draft", true, t, "keep_draft"))));
     }
 
-    /** The Feed group: the flow, the temperature in {@code unit}, the tray. Keys {@code s0}, {@code s1}, {@code s3}. */
-    private static Column.Group feedGroup(String unit, HeatControlColumn.Texts t) {
-        return group("feed", t, field("s0", "flow", "kmol/h", "feed_flow", t), field("s1", "temperature", unit, "feed_temperature", t),
+    /** The Feed group: the flow in {@code flow}, the temperature in {@code unit}, the tray. Keys {@code s0}, {@code s1}, {@code s3}. */
+    private static Column.Group feedGroup(String unit, String flow, HeatControlColumn.Texts t) {
+        return group("feed", t, field("s0", "flow", flow, "feed_flow", t), field("s1", "temperature", unit, "feed_temperature", t),
                 field("s3", "tray", "", "feed_tray", t));
     }
 
     /**
-     * What the Column page reads: the draft conflict; whether the draft takes edits; the temperature unit; the selected
+     * What the Column page reads: the draft conflict; whether the draft takes edits; the temperature, pressure and molar flow
+     * units (bar and kmol/h on the column block; the display keys' units on the simulator's door); the selected
      * connection and its index; a pumparound's cooling spread over its trays (else at its return tray); whether a draw,
      * a pumparound and a steam feed can be added.
      */
-    public record ColumnInput(boolean conflict, boolean editable, String unit, Connection selected, int index, boolean spread, boolean addDraw,
+    public record ColumnInput(boolean conflict, boolean editable, String unit, String pressure, String flow, Connection selected, int index, boolean spread, boolean addDraw,
                               boolean addPa, boolean addSteam) {
     }
 
@@ -317,8 +318,8 @@ public final class CalculatorColumn {
         var left = new ArrayList<Column.Row>();
         if (in.conflict()) left.add(draft(t));
         left.add(group("column", t, field("s2", "trays", "", "tray_count", t), field("s9", "diameter", "m", "diameter", t),
-                field("s7", "top_pressure", "bar", "top_pressure", t)));
-        left.add(feedGroup(in.unit(), t));
+                field("s7", "top_pressure", in.pressure(), "top_pressure", t)));
+        left.add(feedGroup(in.unit(), in.flow(), t));
         var right = new ArrayList<Column.Row>();
         right.add(group("condenser", t, field("s4", "outlet", in.unit(), "top_temperature", t), field("s6", "reflux", "", "reflux", t)));
         right.add(group("reboiler", t, field("s5", "duty", "MW", "duty", t)));
@@ -327,7 +328,7 @@ public final class CalculatorColumn {
         int i = in.index();
         switch (in.selected()) {
             case DRAW -> right.add(new Column.Group(t.get(KEY + "group.draw", i + 1), t.get(KEY + "group.draw.hint"), List.of(
-                    field("d" + i + "rate", "flow", "kmol/h", "draw_flow", t), field("d" + i + "stage", "tray", "", "draw_tray", t),
+                    field("d" + i + "rate", "flow", in.flow(), "draw_flow", t), field("d" + i + "stage", "tray", "", "draw_tray", t),
                     new Column.Buttons(List.of(button("remove", "remove", in.editable(), t, "remove_draw"))))));
             case PA -> right.add(new Column.Group(t.get(KEY + "group.pa", i + 1), t.get(KEY + "group.pa.hint"), List.of(
                     field("c" + i + "duty", "cooling", "MW", "cooling", t), field("c" + i + "draw", "draw_tray", "", "draw_tray", t),
@@ -336,7 +337,7 @@ public final class CalculatorColumn {
                             position("split:return", t.get(KEY + "return_heat"), !in.spread(), in.editable(), t.get(KEY + "return_heat.hint")))),
                     new Column.Buttons(List.of(button("remove", "remove", in.editable(), t, "remove_pa"))))));
             case STEAM -> right.add(new Column.Group(t.get(KEY + "group.steam", i + 1), t.get(KEY + "group.steam.hint"), List.of(
-                    field("t" + i + "rate", "flow", "kmol/h", "steam_flow", t), field("t" + i + "stage", "tray", "", "injection_tray", t),
+                    field("t" + i + "rate", "flow", in.flow(), "steam_flow", t), field("t" + i + "stage", "tray", "", "injection_tray", t),
                     field("t" + i + "T", "temperature", in.unit(), "steam_temperature", t),
                     new Column.Buttons(List.of(button("remove", "remove", in.editable(), t, "remove_steam"))))));
             case NONE -> {
@@ -349,7 +350,7 @@ public final class CalculatorColumn {
     public static Rows feed(boolean conflict, boolean editable, String unit, HeatControlColumn.Texts t) {
         var rows = new ArrayList<Column.Row>();
         if (conflict) rows.add(draft(t));
-        rows.add(feedGroup(unit, t));
+        rows.add(feedGroup(unit, "kmol/h", t));
         rows.add(group("mixture", t, new Column.Buttons(List.of(button("clear", "clear_mixture", editable, t, "clear_mixture")))));
         return new Rows(List.of(), rows);
     }
@@ -401,35 +402,99 @@ public final class CalculatorColumn {
         return new Rows(List.of(), rows);
     }
 
-    /** What the Equipment page reads: the draft conflict; the condenser, the reflux pump and each pumparound's pump chosen; whether the design saves. */
-    public record EquipmentInput(boolean conflict, Condenser condenser, Pump reflux, List<Pump> pumparounds, boolean saves) {
-        public EquipmentInput {
-            pumparounds = List.copyOf(pumparounds);
+    /**
+     * What the Equipment page reads: the draft conflict; the condenser chosen; how many pumparounds the design has; whether
+     * the design saves; how many units stand in parallel on each heat-transfer step (S3b), and whether the design has a
+     * kettle, whose count shows only then. The design names no pump kind (batch 2026-11-03-rotating-machinery, D42): its
+     * pumps' duties stand on the glass ({@link #pumpDuties}).
+     */
+    public record EquipmentInput(boolean conflict, Condenser condenser, int pumparounds, boolean saves, ColumnComponents.Units units, boolean kettle) {
+        /** One unit on every step and no kettle: the page before the counts. */
+        public EquipmentInput(boolean conflict, Condenser condenser, int pumparounds, boolean saves) {
+            this(conflict, condenser, pumparounds, saves, ColumnComponents.Units.ONE, false);
         }
     }
 
-    private static Column.Buttons pumps(String key, Pump chosen, HeatControlColumn.Texts t) {
-        return new Column.Buttons(List.of(position(key + ":standard", t.get(KEY + "pump.standard"), chosen == Pump.STANDARD, true, null),
-                position(key + ":in_line", t.get(KEY + "pump.in_line"), chosen == Pump.IN_LINE, true, null)));
+    /** A member count's setting, stepped by {@code key-} and {@code key+}: {@code units/condenser}, {@code units/trim}, {@code units/kettle}, {@code units/pa<i>}. */
+    private static Column.Setting units(String key, String label, int count, HeatControlColumn.Texts t) {
+        return new Column.Setting("units/" + key, t.get(KEY + label), Integer.toString(count), "", t.get(KEY + "units.hint"), true);
     }
 
     /**
-     * The Equipment page: Condenser (air cooler, exchanger), Reflux pump and each pumparound's pump (standard, in-line),
-     * latched selectors in place of the cycle buttons; Design (Save design). The derived components and the design's
-     * state stand on the glass. Buttons {@code condenser:air_cooler}, {@code condenser:exchanger}, {@code reflux:<pump>},
-     * {@code pa<i>:<pump>}, {@code save_design}.
+     * The Equipment page: Condenser (air cooler, exchanger, or air then water, and its banks or shells; the water trim's
+     * shells after an air cooler), the Kettle's shells where the design has one, and each pumparound's cooler shells;
+     * latched selectors in place of the cycle buttons, counts stepped; Design (Save design). The pumps' duties and the
+     * design's state stand on the glass. Buttons {@code condenser:air_cooler}, {@code condenser:exchanger},
+     * {@code condenser:air_then_water}, {@code save_design}; settings {@code units/condenser}, {@code units/trim},
+     * {@code units/kettle}, {@code units/pa<i>}.
      */
     public static Rows equipment(EquipmentInput in, HeatControlColumn.Texts t) {
         var rows = new ArrayList<Column.Row>();
         if (in.conflict()) rows.add(draft(t));
-        rows.add(new Column.Group(t.get(KEY + "component_condenser"), t.get(KEY + "condenser.hint"), List.of(new Column.Buttons(List.of(
+        var condenser = new ArrayList<Column.Row>();
+        condenser.add(new Column.Buttons(List.of(
                 position("condenser:air_cooler", t.get(KEY + "condenser.air_cooler"), in.condenser() == Condenser.AIR_COOLER, true, null),
-                position("condenser:exchanger", t.get(KEY + "condenser.exchanger"), in.condenser() == Condenser.EXCHANGER, true, null))))));
-        rows.add(new Column.Group(t.get(KEY + "component_reflux_pump"), t.get(KEY + "pump.hint"), List.of(pumps("reflux", in.reflux(), t))));
-        for (int i = 0; i < in.pumparounds().size(); i++)
-            rows.add(new Column.Group(t.get(KEY + "component_pa_pump", i + 1), t.get(KEY + "pump.hint"), List.of(pumps("pa" + i, in.pumparounds().get(i), t))));
+                position("condenser:exchanger", t.get(KEY + "condenser.exchanger"), in.condenser() == Condenser.EXCHANGER, true, null),
+                position("condenser:air_then_water", t.get(KEY + "condenser.air_then_water"), in.condenser() == Condenser.AIR_THEN_WATER, true, null))));
+        // The condenser's own count is an air cooler's banks; an air-then-water condenser's water trim counts its shells after it.
+        condenser.add(units("condenser", in.condenser() == Condenser.EXCHANGER ? "units.shells" : "units.banks", in.units().condenser(), t));
+        if (in.condenser() == Condenser.AIR_THEN_WATER) condenser.add(units("trim", "units.trim_shells", in.units().trim(), t));
+        rows.add(new Column.Group(t.get(KEY + "component_condenser"), t.get(KEY + "condenser.hint"), condenser));
+        if (in.kettle()) rows.add(new Column.Group(t.get(KEY + "component_kettle"), t.get(KEY + "units.hint"), List.of(units("kettle", "units.shells", in.units().kettle(), t))));
+        for (int i = 0; i < in.pumparounds(); i++)
+            rows.add(new Column.Group(t.get(KEY + "component_pa", i + 1), t.get(KEY + "component_pa.hint"), List.of(units("pa" + i, "units.cooler_shells", in.units().cooler(i), t))));
         rows.add(group("design", t, new Column.Buttons(List.of(button("save_design", "save_design", in.saves(), t, "save_design")))));
         return new Rows(List.of(), rows);
+    }
+
+    /**
+     * One pump of the design on the Equipment page's glass (batch 2026-11-03-rotating-machinery, W8, D43), as the sheet's
+     * sizing gives it at design flow: its name; flow, m³/h; head, m; shaft power, W; NPSH3, m; the proposed motor, W. NaN
+     * where the sizing has no number yet.
+     */
+    public record PumpDuty(String name, double flow, double head, double shaft, double npsh, double motor) {
+        /** A pump the sizing has not rated yet. */
+        public static PumpDuty unknown(String name) {
+            return new PumpDuty(name, Double.NaN, Double.NaN, Double.NaN, Double.NaN, Double.NaN);
+        }
+    }
+
+    /** What a number not known yet shows. */
+    public static final String NONE = "—";
+
+    /**
+     * The pumps' duties as one table {@code width} wide (D43): Pump, Flow m³/h, Head m, Shaft kW, NPSH3 m, Motor kW, the
+     * quantity over its unit; a row a pump, every second one on a band. Where the glass is too narrow for the numbers side
+     * by side, each pump is its name over a readout a quantity, on one band. Where no pump has a duty yet, its numbers read
+     * {@link #NONE} and a note under the table says when they come.
+     */
+    public static Sheet pumpDuties(List<PumpDuty> pumps, int width, Measure m, HeatControlColumn.Texts t) {
+        var header = List.of(t.get(KEY + "duty.pump"), t.get(KEY + "duty.flow"), t.get(KEY + "duty.head"), t.get(KEY + "duty.shaft"), t.get(KEY + "duty.npsh"),
+                t.get(KEY + "duty.motor"));
+        var units = List.of("", "m³/h", "m", "kW", "m", "kW");
+        var rows = new ArrayList<List<String>>();
+        boolean known = false;
+        for (var p : pumps) {
+            known |= !Double.isNaN(p.flow());
+            rows.add(List.of(p.name(), fixed(0, p.flow()), fixed(1, p.head()), fixed(1, p.shaft() / 1e3), fixed(1, p.npsh()), fixed(0, p.motor() / 1e3)));
+        }
+        var sheet = new SheetBuilder(width, m);
+        var numbers = new ArrayList<List<String>>(rows);
+        numbers.add(units);
+        if (SheetBuilder.fits(header, numbers, width, m))
+            sheet.table(header, units, rows);
+        else
+            for (var r : rows) {
+                var pairs = new ArrayList<List<String>>();
+                for (int i = 1; i < r.size(); i++) pairs.add(List.of(header.get(i), units.get(i).isEmpty() ? r.get(i) : r.get(i) + " " + units.get(i)));
+                sheet.entry(r.getFirst(), pairs);
+            }
+        if (!known) sheet.blank().note(t.get(KEY + "duty.none"), Palette.MUTED);
+        return sheet.build();
+    }
+
+    private static String fixed(int digits, double value) {
+        return Double.isNaN(value) ? NONE : String.format(Locale.ROOT, "%." + digits + "f", value);
     }
 
     /**
@@ -695,26 +760,31 @@ public final class CalculatorColumn {
     }
 
     /**
-     * Each tray's pressure drop as a bar ({@code drops}: kPa a node, the interior trays' from node 1), the trays
-     * numbered at the first, the last and every fifth, 0 and the largest drop under it.
+     * Each tray's pressure drop as a bar ({@code drops}: a node's, the interior trays' from node 1, in any one unit), the trays
+     * numbered at the first, the last and every fifth, 0 and the largest drop under it as {@code label} writes it.
      */
-    public static void drops(Canvas c, Rect plot, double[] drops) {
+    public static void drops(Canvas c, Rect plot, double[] drops, java.util.function.DoubleFunction<String> label) {
         int n = drops.length - 2, x = plot.x(), y = plot.y(), w = plot.w(), h = plot.h();
         if (n < 2 || h < 16) return;
         double max = 0.001;
         for (int i = 2; i <= n; i++) max = Math.max(max, drops[i]);
         c.fill(x, y, x + w, y + h, Palette.PANEL);
         var m = c.measure();
-        int numbered = Integer.MIN_VALUE, last = y + (n - 2) * h / (n - 1);
-        for (int i = 2; i <= n; i++) {
-            int py = y + (i - 2) * h / (n - 1), next = y + (i - 1) * h / (n - 1);
-            c.fill(x, py, x + (int) Math.round(drops[i] / max * w), Math.max(py + 1, next - 1), Palette.ACCENT);
-            if (i == 2 || i == n || (i + 1) % 5 == 0 && py - numbered >= PITCH && last - py >= PITCH) {
-                c.text(Integer.toString(i + 1), x - 4 - m.width(Integer.toString(i + 1)), py, Palette.MUTED);
-                numbered = py;
+        int last = y + (n - 2) * h / (n - 1);
+        double top = max;
+        // The bars run in one batch between their tray numbers.
+        c.batch(() -> {
+            int numbered = Integer.MIN_VALUE;
+            for (int i = 2; i <= n; i++) {
+                int py = y + (i - 2) * h / (n - 1), next = y + (i - 1) * h / (n - 1);
+                c.fill(x, py, x + (int) Math.round(drops[i] / top * w), Math.max(py + 1, next - 1), Palette.ACCENT);
+                if (i == 2 || i == n || (i + 1) % 5 == 0 && py - numbered >= PITCH && last - py >= PITCH) {
+                    c.text(Integer.toString(i + 1), x - 4 - m.width(Integer.toString(i + 1)), py, Palette.MUTED);
+                    numbered = py;
+                }
             }
-        }
-        String high = Format.number(max) + " kPa";
+        });
+        String high = label.apply(max);
         c.text("0", x, y + h + 5, Palette.MUTED);
         c.text(high, x + w - m.width(high), y + h + 5, Palette.MUTED);
     }
@@ -732,24 +802,41 @@ public final class CalculatorColumn {
 
     private static void line(Canvas c, int x0, int y0, int x1, int y1, int colour) {
         int steps = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0));
-        for (int i = 0; i <= steps; i++) {
-            double f = steps == 0 ? 0 : (double) i / steps;
-            int x = (int) Math.round(x0 + (x1 - x0) * f), y = (int) Math.round(y0 + (y1 - y0) * f);
-            c.fill(x, y, x + 1, y + 1, colour);
-        }
+        c.batch(() -> {
+            for (int i = 0; i <= steps; i++) {
+                double f = steps == 0 ? 0 : (double) i / steps;
+                int x = (int) Math.round(x0 + (x1 - x0) * f), y = (int) Math.round(y0 + (y1 - y0) * f);
+                c.fill(x, y, x + 1, y + 1, colour);
+            }
+        });
     }
 
     // ---- Readouts and tables on the glass ----
 
-    /** A line's kind on the glass: a note (one cell at the left), a readout (its label at the left, its value at the right), a table's header or row, a blank line. */
+    /**
+     * A line's kind on the glass: a note (one cell at the left), a readout (its label at the left, its value at the right), a table's header, the
+     * units under its header where it has them, or a row; a grid's header line or row line ({@link SheetBuilder#grid}, its cells placed); a blank line.
+     */
     public enum Kind {
-        NOTE, PAIR, HEADER, ROW, BLANK
+        NOTE, PAIR, HEADER, UNITS, ROW, BLANK, GRID_HEADER, GRID_ROW
     }
 
-    /** A line on the glass: its kind, its cells, a note's tone, and the entry it belongs to (-1 for a header or a blank line), so a wrapped entry shares its band. */
-    public record Line(Kind kind, List<String> cells, int palette, int entry) {
+    /** A grid's cell as placed: its text, its x from the sheet's text edge, its tone. */
+    public record Cell(String text, int x, int tone) {
+    }
+
+    /**
+     * A line on the glass: its kind, its cells, a note's tone, and the entry it belongs to (-1 for a header or a blank line), so a wrapped entry
+     * shares its band; a grid line's cells as placed ({@link #cells} their texts), empty for the other kinds.
+     */
+    public record Line(Kind kind, List<String> cells, int palette, int entry, List<Cell> placed) {
         public Line {
             cells = List.copyOf(cells);
+            placed = List.copyOf(placed);
+        }
+
+        public Line(Kind kind, List<String> cells, int palette, int entry) {
+            this(kind, cells, palette, entry, List.of());
         }
     }
 
@@ -798,6 +885,20 @@ public final class CalculatorColumn {
             return this;
         }
 
+        /** One entry on one band: {@code title} (wrapped), then a readout a pair of label and value, each as {@link #pair} lays it. */
+        public SheetBuilder entry(String title, List<List<String>> pairs) {
+            for (var line : m.wrap(title, width - 6)) lines.add(new Line(Kind.NOTE, List.of(line), Palette.TEXT, entry));
+            for (var p : pairs) {
+                if (m.width(p.get(0)) + 8 + m.width(p.get(1)) <= width - 6) lines.add(new Line(Kind.PAIR, p, Palette.TEXT, entry));
+                else {
+                    for (var line : m.wrap(p.get(0), width - 6)) lines.add(new Line(Kind.NOTE, List.of(line), Palette.MUTED, entry));
+                    for (var line : m.wrap(p.get(1), width - 6)) lines.add(new Line(Kind.NOTE, List.of(line), Palette.ACCENT, entry));
+                }
+            }
+            entry++;
+            return this;
+        }
+
         public SheetBuilder blank() {
             if (!lines.isEmpty()) lines.add(new Line(Kind.BLANK, List.of(""), Palette.TEXT, -1));
             return this;
@@ -805,11 +906,20 @@ public final class CalculatorColumn {
 
         /** The table: its header, then a row a name; the first cell a name, the others numbers. One table a sheet. */
         public SheetBuilder table(List<String> header, List<List<String>> rows) {
+            return table(header, null, rows);
+        }
+
+        /**
+         * The table with a second header line, {@code units} under the quantities (the first cell blank), ruled under it
+         * instead of under the first. One table a sheet.
+         */
+        public SheetBuilder table(List<String> header, @Nullable List<String> units, List<List<String>> rows) {
             int n = header.size();
             int[] w = new int[n];
             int numbers = 0;
             for (int i = 1; i < n; i++) {
                 int most = m.width(header.get(i));
+                if (units != null) most = Math.max(most, m.width(units.get(i)));
                 for (var r : rows) most = Math.max(most, m.width(r.get(i)));
                 w[i] = most + 8;
                 numbers += w[i];
@@ -819,6 +929,7 @@ public final class CalculatorColumn {
             w[0] = stacked ? width - 6 : name;
             widths = w;
             lines.add(new Line(Kind.HEADER, header, Palette.MUTED, -1));
+            if (units != null) lines.add(new Line(Kind.UNITS, units, Palette.MUTED, -1));
             var blank = new ArrayList<String>();
             for (int i = 1; i < n; i++) blank.add("");
             for (var r : rows) {
@@ -838,6 +949,76 @@ public final class CalculatorColumn {
                 entry++;
             }
             return this;
+        }
+
+        /**
+         * A grid (D44, the column door's connection points): a name, then {@code texts - 1} text columns (left-aligned), then number columns
+         * (right-aligned); a row a name, every second one on a band. A long name wraps in its column. Where the columns do not fit side by side, a
+         * row stacks: its first line holds the name and the columns after it that fit beside the name's longest word, and each further line the
+         * next columns that fit, at the right; the header stacks alike, so each value stands under its heading. A stacked line with nothing to show
+         * is left out. A text column wider than the glass (a name the player typed) is cut to it. One grid a sheet, with no table.
+         */
+        public SheetBuilder grid(List<String> header, List<List<String>> rows, int texts) {
+            int n = header.size(), room = width - 6;
+            int[] w = new int[n];
+            for (int i = 1; i < n; i++) {
+                int most = m.width(header.get(i));
+                for (var r : rows) most = Math.max(most, m.width(r.get(i)));
+                w[i] = Math.min(room, most + 8);
+            }
+            int word = 0;
+            for (var name : rows.stream().map(List::getFirst).toList()) for (var part : name.split(" ")) word = Math.max(word, m.width(part));
+            for (var part : header.getFirst().split(" ")) word = Math.max(word, m.width(part));
+            // The lines' columns: the first after the name while they fit beside its longest word, then each line as many as fit.
+            var spans = new ArrayList<int[]>();
+            int used = Math.min(word, room), next = 1;
+            while (next < n && used + w[next] <= room) used += w[next++];
+            spans.add(new int[]{1, next});
+            while (next < n) {
+                int from = next, sum = w[next++];
+                while (next < n && sum + w[next] <= room) sum += w[next++];
+                spans.add(new int[]{from, next});
+            }
+            int nameWidth = room;
+            for (int i = spans.getFirst()[0]; i < spans.getFirst()[1]; i++) nameWidth -= w[i];
+            gridLines(header, true, w, spans, nameWidth, texts);
+            for (var r : rows) {
+                gridLines(r, false, w, spans, nameWidth, texts);
+                entry++;
+            }
+            return this;
+        }
+
+        /** One grid row (or its header) as its lines: the name's wrapped lines, its first line with the first span's cells, then the other spans. */
+        private void gridLines(List<String> row, boolean header, int[] w, List<int[]> spans, int nameWidth, int texts) {
+            Kind kind = header ? Kind.GRID_HEADER : Kind.GRID_ROW;
+            int band = header ? -1 : entry;
+            var names = m.wrap(row.getFirst(), nameWidth);
+            for (int j = 0; j < names.size(); j++) {
+                var placed = new ArrayList<Cell>();
+                placed.add(new Cell(names.get(j), 0, header ? Palette.MUTED : Palette.TEXT));
+                if (j == 0) placeSpan(placed, row, header, w, spans.getFirst(), texts);
+                lines.add(new Line(kind, placed.stream().map(Cell::text).toList(), Palette.TEXT, band, placed));
+            }
+            for (int s = 1; s < spans.size(); s++) {
+                var placed = new ArrayList<Cell>();
+                placeSpan(placed, row, header, w, spans.get(s), texts);
+                if (placed.isEmpty()) continue;
+                lines.add(new Line(kind, placed.stream().map(Cell::text).toList(), Palette.TEXT, band, placed));
+            }
+        }
+
+        /** A span's cells from the right edge: a text column at its column's left, a number at its right; blank cells left out. */
+        private void placeSpan(List<Cell> placed, List<String> row, boolean header, int[] w, int[] span, int texts) {
+            int end = width - 6;
+            var out = new ArrayList<Cell>();
+            for (int i = span[1] - 1; i >= span[0]; i--) {
+                String text = i < texts ? m.cut(row.get(i), w[i] - 8) : row.get(i);
+                int tone = header ? Palette.MUTED : i < texts ? Palette.MUTED : Palette.ACCENT;
+                if (!text.isEmpty()) out.addFirst(new Cell(text, i < texts ? end - w[i] + 8 : end - m.width(text), tone));
+                end -= w[i];
+            }
+            placed.addAll(out);
         }
 
         /** Whether a table of {@code header} and {@code rows} fits {@code width}: its numbers and its header's first cell side by side. */
@@ -864,7 +1045,8 @@ public final class CalculatorColumn {
     public static void draw(Canvas c, Sheet sheet, Rect box, int offset) {
         var m = c.measure();
         int y = box.y() + 2 - offset, right = box.right() - 3;
-        for (var line : sheet.lines()) {
+        for (int at = 0; at < sheet.lines().size(); at++) {
+            var line = sheet.lines().get(at);
             if (y + PITCH > box.y() && y < box.bottom()) {
                 if (line.entry() % 2 == 1) c.fill(box.x(), y - 1, box.right(), y + PITCH - 1, DialogColumns.BAND);
                 var cells = line.cells();
@@ -874,15 +1056,20 @@ public final class CalculatorColumn {
                         c.text(cells.get(0), box.x() + 3, y, Palette.MUTED);
                         c.text(cells.get(1), right - m.width(cells.get(1)), y, Palette.ACCENT);
                     }
-                    case HEADER, ROW -> {
-                        boolean header = line.kind() == Kind.HEADER;
+                    case HEADER, UNITS, ROW -> {
+                        boolean header = line.kind() != Kind.ROW, ruled = header && (at + 1 == sheet.lines().size() || sheet.lines().get(at + 1).kind() != Kind.UNITS);
                         c.text(cells.getFirst(), box.x() + 3, y, header ? Palette.MUTED : Palette.TEXT);
                         int end = right;
                         for (int i = cells.size() - 1; i >= 1; i--) {
                             c.text(cells.get(i), end - m.width(cells.get(i)), y, header ? Palette.MUTED : Palette.ACCENT);
                             end -= sheet.widths()[i];
                         }
-                        if (header) c.hLine(box.x() + 2, box.right() - 2, y + 10, Palette.LINE);
+                        if (ruled) c.hLine(box.x() + 2, box.right() - 2, y + 10, Palette.LINE);
+                    }
+                    case GRID_HEADER, GRID_ROW -> {
+                        for (var cell : line.placed()) c.text(cell.text(), box.x() + 3 + cell.x(), y, cell.tone());
+                        if (line.kind() == Kind.GRID_HEADER && (at + 1 == sheet.lines().size() || sheet.lines().get(at + 1).kind() != Kind.GRID_HEADER))
+                            c.hLine(box.x() + 2, box.right() - 2, y + 10, Palette.LINE);
                     }
                     case BLANK -> {
                     }

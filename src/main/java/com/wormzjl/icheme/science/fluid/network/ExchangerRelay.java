@@ -31,7 +31,11 @@ public final class ExchangerRelay {
      * its heat side, whose surface, films and bypass it passes the cells with. A kettle's pool (W7) is read as its vessel's
      * contents alone ({@link #pool(PassiveNetwork.Reservoir)}): no stream, no heat side.
      */
-    public record Partner(FluidThermodynamics.State donor,PassiveNetwork.PhasePort port,double volume,double massFlow,@Nullable HeatSide law,@Nullable Bath bath) {
+    public record Partner(FluidThermodynamics.State donor,PassiveNetwork.PhasePort port,double volume,double massFlow,@Nullable HeatSide law,@Nullable Bath bath,@Nullable FluidThermodynamics model) {
+        public Partner(FluidThermodynamics.State donor,PassiveNetwork.PhasePort port,double volume,double massFlow,@Nullable HeatSide law,@Nullable Bath bath){this(donor,port,volume,massFlow,law,bath,null);}
+        /** This read with the model of the island it was taken from (batch 2026-11-04-refinery-compounds, V2: an island carries its own
+         * compound list, so the reading side evaluates its partner's stream on the partner's model); null reads it on the reader's own. */
+        public Partner withModel(@Nullable FluidThermodynamics value){return new Partner(donor,port,volume,massFlow,law,bath,value);}
         public Partner {Objects.requireNonNull(donor);Objects.requireNonNull(port);if(!Double.isFinite(massFlow)||!(volume>=0)||(law==null)==(bath==null)||bath!=null&&massFlow!=0)throw new IllegalArgumentException("Invalid partner read");}
         public Partner(FluidThermodynamics.State donor,PassiveNetwork.PhasePort port,double volume,double massFlow,HeatSide law){this(donor,port,volume,massFlow,law,null);}
         /** A kettle's pool as its tube side reads it: vessel {@code node}'s contents at its temperature and film ({@link Pool#film}),
@@ -53,12 +57,18 @@ public final class ExchangerRelay {
      * W8, plan section 7): the control valve whose node is {@code valve} (its registration), regulating the mass flow of the
      * connection it drives. A bypass valve ({@code feed} false) takes the share of the side's stream its controller plans
      * for the internal bypass, which then stays shut; a feed valve ({@code feed} true) holds the side's feed at {@code ratio}
-     * times the other side's flow as read.
+     * times the other side's flow as read, or, on a column condenser's water side ({@code rise} above 0, U2 of batch
+     * 2026-11-02-process-simulator), the flow that carries the heat the column asks for ({@link Read#heatRate}) with the water
+     * rising {@code rise} K, never past the column's ceiling ({@link Read#ceiling}).
      */
-    public record Operation(long valve,boolean feed,double ratio) {
-        public Operation {if(feed&&!(ratio>0&&Double.isFinite(ratio))||!feed&&ratio!=0)throw new IllegalArgumentException("Invalid exchanger operation");}
-        public static Operation bypass(long valve){return new Operation(valve,false,0);}
-        public static Operation feed(long valve,double ratio){return new Operation(valve,true,ratio);}
+    public record Operation(long valve,boolean feed,double ratio,double rise) {
+        public Operation {if(feed&&!((ratio>0)!=(rise>0)&&Double.isFinite(ratio+rise)&&ratio>=0&&rise>=0)||!feed&&(ratio!=0||rise!=0))throw new IllegalArgumentException("Invalid exchanger operation");}
+        public static Operation bypass(long valve){return new Operation(valve,false,0,0);}
+        public static Operation feed(long valve,double ratio){return new Operation(valve,true,ratio,0);}
+        /** A column condenser's water side: its feed valve set by the column, the water rising {@code rise} K at most. */
+        public static Operation column(long valve,double rise){return new Operation(valve,true,0,rise);}
+        /** Whether a column sets this feed valve. */
+        public boolean column(){return rise>0;}
     }
     public record Bath(double temperature,double film) {
         public Bath {if(!(temperature>0)||!(film>0)||!Double.isFinite(temperature+film))throw new IllegalArgumentException("Invalid bath");}
@@ -72,13 +82,18 @@ public final class ExchangerRelay {
      * the exchanger's lines complete (W8, plan section 7), {@code operation} names the valve the side's control works. A fired
      * heater's convection coil reads only {@code heatRate}: its radiant coil's heat (W) as of the slice start (F1). A side
      * whose other side is a running column's condenser (batch 2026-10-28-column-operation, C6b) reads no stream but a
-     * {@code ceiling} (K, 0 for none): it takes the heat in transit the column owes it, its outlet no warmer than that.
+     * {@code ceiling} (K, 0 for none): it takes the heat in transit the column owes it, its outlet no warmer than that; its
+     * {@code heatRate} is then the heat the column asks its water to take, W, which a feed valve the column sets carries (U2).
      */
     public record Read(@Nullable Partner partner,boolean stopped,double transitDue,double partnerSeconds,double sitOut,@Nullable Operation operation,double heatRate,double ceiling) {
         public Read {if(!Double.isFinite(transitDue)||!(partnerSeconds>=0)||!Double.isFinite(partnerSeconds)||!(sitOut>=0&&sitOut<=1)||!Double.isFinite(heatRate)||!(ceiling>=0)||!Double.isFinite(ceiling))throw new IllegalArgumentException("Invalid side read");}
         public Read(@Nullable Partner partner,boolean stopped,double transitDue,double partnerSeconds,double sitOut,@Nullable Operation operation,double heatRate){this(partner,stopped,transitDue,partnerSeconds,sitOut,operation,heatRate,0);}
         /** A running column's condenser read by its water side: the heat it owes (J) as of the slice start, the outlet's ceiling (K). */
-        public static Read column(double transitDue,double seconds,double ceiling){if(!(ceiling>0))throw new IllegalArgumentException("A column partner has a ceiling");return new Read(null,false,transitDue,seconds,0,null,0,ceiling);}
+        public static Read column(double transitDue,double seconds,double ceiling){return column(transitDue,seconds,ceiling,0);}
+        /** {@link #column(double,double,double)} with the heat the column asks its water to take over the slice, W (U2). */
+        public static Read column(double transitDue,double seconds,double ceiling,double heatRate){if(!(ceiling>0)||!(heatRate>=0))throw new IllegalArgumentException("A column partner has a ceiling");return new Read(null,false,transitDue,seconds,0,null,heatRate,ceiling);}
+        /** This read with the real valve {@code value} a side's control works (W8; U2: a column's water side). */
+        public Read withOperation(@Nullable Operation value){return new Read(partner,stopped,transitDue,partnerSeconds,sitOut,value,heatRate,ceiling);}
         public Read(@Nullable Partner partner,boolean stopped,double transitDue,double partnerSeconds,double sitOut,@Nullable Operation operation){this(partner,stopped,transitDue,partnerSeconds,sitOut,operation,0);}
         public Read(@Nullable Partner partner,boolean stopped,double transitDue,double partnerSeconds,double sitOut){this(partner,stopped,transitDue,partnerSeconds,sitOut,null);}
         /** A convection coil's read of its radiant coil in another island (the owner's test of 2026-10-28, F1): the radiant
@@ -115,6 +130,7 @@ public final class ExchangerRelay {
      */
     public static Wall wall(Stream a,Stream b,@Nullable double[] start) {
         int n=a.law.cells();if(b.law.cells()!=n)throw new IllegalArgumentException("The two sides of a wall need the same cells");
+        boolean routed=a.law.routing()!=HeatRouting.SERIES||b.law.routing()!=HeatRouting.SERIES;
         double[] t=new double[n],ha=new double[n],hb=new double[n];
         double ta=a.temperature(),tb=b.temperature();
         boolean warm=start!=null&&start.length==n;
@@ -124,17 +140,37 @@ public final class ExchangerRelay {
         enter(b,t,hb);
         for(int sweep=1;sweep<=MAXIMUM_SWEEPS;sweep++) {
             double change=Math.max(pass(a,b,t,ha,hb),pass(b,a,t,hb,ha));
-            if(change<TOLERANCE)return new Wall(warm&&sweep==1?kept:t,sweep,true);
+            if(change<(routed?TOLERANCE/100:TOLERANCE)&&(!routed||balanced(a,b,t)))
+                return new Wall(warm&&sweep==1&&(!routed||balanced(a,b,kept))?kept:t,sweep,true);
         }
         return new Wall(t,MAXIMUM_SWEEPS,false);
     }
+    private static boolean balanced(Stream a,Stream b,double[] wall) {
+        double qa=a.through()*(outlet(a,wall)-a.inlet),qb=b.through()*(outlet(b,wall)-b.inlet);
+        return Math.abs(qa+qb)<=Math.max(.01,1e-6*Math.max(Math.abs(qa),Math.abs(qb)));
+    }
     /** The enthalpy {@code s} enters each cell with against wall {@code t}. */
     private static void enter(Stream s,double[] t,double[] entering) {
+        if(s.law.routing()!=HeatRouting.SERIES) {
+            s.law.routing().visit(s.curve,s.inlet,s.through(),s.law.area(),t,s.massFlow>=0,entering,null);
+            return;
+        }
         int n=t.length;double h=s.inlet,through=s.through();
         for(int i=0;i<n;i++){int k=s.ascending()?i:n-1-i;entering[k]=h;h=s.curve.march(h,through,s.cell(),t[k]);}
     }
     /** One pass in {@code s}'s order: each cell solved against {@code o} as it last entered; returns the largest move, K. */
     private static double pass(Stream s,Stream o,double[] t,double[] hs,double[] ho) {
+        if(s.law.routing()!=HeatRouting.SERIES) {
+            double[] change={0};
+            s.law.routing().visit(s.curve,s.inlet,s.through(),s.law.area(),t,s.massFlow>=0,hs,(k,h,mass)-> {
+                double other=o.law.routing().laneFlow(o.through(),t.length);
+                double next=root(s.curve.temperatureAt(h),o.curve.temperatureAt(ho[k]),t[k],wall->
+                        mass*(s.curve.march(h,mass,s.cell(),wall)-h)+other*(o.curve.march(ho[k],other,o.cell(),wall)-ho[k]),TOLERANCE/1000);
+                change[0]=Math.max(change[0],Math.abs(next-t[k]));
+                return next;
+            });
+            return change[0];
+        }
         int n=t.length;double h=s.inlet,through=s.through(),change=0;
         for(int i=0;i<n;i++) {
             int k=s.ascending()?i:n-1-i;hs[k]=h;
@@ -157,7 +193,10 @@ public final class ExchangerRelay {
      * tenth of {@link #TOLERANCE}: an Illinois root from {@code guess}, an end where the balance does not change sign.
      */
     private static double root(double a,double b,double guess,java.util.function.DoubleUnaryOperator balance) {
-        double lo=Math.min(a,b),hi=Math.max(a,b),tolerance=TOLERANCE/10;
+        return root(a,b,guess,balance,TOLERANCE/10);
+    }
+    private static double root(double a,double b,double guess,java.util.function.DoubleUnaryOperator balance,double tolerance) {
+        double lo=Math.min(a,b),hi=Math.max(a,b);
         if(hi-lo<=tolerance)return (lo+hi)/2;
         // The balance rises with the wall: below both sides both are cooled, above both both are heated.
         double flo=balance.applyAsDouble(lo),fhi=balance.applyAsDouble(hi);
@@ -196,6 +235,7 @@ public final class ExchangerRelay {
     }
     /** The specific enthalpy {@code s} leaves its cells with against {@code wall} (in the wall's order), J/kg. */
     public static double outlet(Stream s,double[] wall) {
+        if(s.law.routing()!=HeatRouting.SERIES)return s.law.routing().visit(s.curve,s.inlet,s.through(),s.law.area(),wall,s.massFlow>=0,null,null);
         int n=wall.length;double h=s.inlet,through=s.through();
         for(int i=0;i<n;i++){int k=s.ascending()?i:n-1-i;h=s.curve.march(h,through,s.cell(),wall[k]);}
         return h;

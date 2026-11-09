@@ -18,17 +18,25 @@ import java.util.Objects;
  * name it ({@link PhysicalFluidTopology.Device#suspendedBy}). {@code master} is the column's origin. An inlet's account holds
  * what its port took from the network and the column has not used yet; an outlet's what the column made and its port has
  * not given yet. Both stay while the column is stopped: a station's {@code device} is then 0, and on a running column
- * where its design lost that port. {@code condenser} is the registration of its water-cooled condenser's water side,
- * outside the column (C6b: the column is its heat partner), or 0. {@code leaving}: the column was dismantled, and its unit
- * goes once its ports have left.</p>
+ * where its design lost that port. {@code condensers} are the registrations of its water-cooled condenser's water sides,
+ * outside the column (C6b: the column is their heat partner), one a shell in parallel (S3b, facts schema 8), or none.
+ * {@code leaving}: the column was dismantled, and its unit goes once its ports have left. {@code airSurface}: the bare tube of
+ * its air condenser's banks as its Start found them, m², whose fans hold the air's duty (U2, batch 2026-11-02-process-simulator,
+ * facts schema 9); 0 where it has none or a save before it, whose air then takes any duty, as before.</p>
  */
-public record ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean running,Setpoints setpoints,List<Station> stations,Totals totals,long condenser,State state,boolean leaving) {
+public record ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean running,Setpoints setpoints,List<Station> stations,Totals totals,List<Long> condensers,State state,boolean leaving,double airSurface) {
     /** The most stations a saved unit may hold. A column has at most eleven today (ColumnTrays): a feed, two steams, an off-gas, a sour water, a distillate, four draws, a bottoms. */
     public static final int MAXIMUM_STATIONS=16;
+    /** The most condenser water sides: one a shell, as many as a design's condenser count allows. */
+    public static final int MAXIMUM_CONDENSERS=com.wormzjl.icheme.science.equipment.ColumnComponents.MAX_UNITS;
     /** Without engine state: one solve before it runs. */
-    public ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean running,Setpoints setpoints,List<Station> stations,Totals totals){this(id,master,running,setpoints,stations,totals, 0,null,false);}
+    public ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean running,Setpoints setpoints,List<Station> stations,Totals totals){this(id,master,running,setpoints,stations,totals,List.of(),null,false);}
+    /** Without engine state, one condenser water side or none (0). */
+    public ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean running,Setpoints setpoints,List<Station> stations,Totals totals,long condenser){this(id,master,running,setpoints,stations,totals,condenser==0?List.of():List.of(condenser),null,false);}
     /** Without engine state. */
-    public ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean running,Setpoints setpoints,List<Station> stations,Totals totals,long condenser){this(id,master,running,setpoints,stations,totals,condenser,null,false);}
+    public ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean running,Setpoints setpoints,List<Station> stations,Totals totals,List<Long> condensers){this(id,master,running,setpoints,stations,totals,condensers,null,false);}
+    /** Without an air condenser's surface. */
+    public ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean running,Setpoints setpoints,List<Station> stations,Totals totals,List<Long> condensers,State state,boolean leaving){this(id,master,running,setpoints,stations,totals,condensers,state,leaving,0);}
     public ColumnUnit {
         Objects.requireNonNull(master);Objects.requireNonNull(setpoints);Objects.requireNonNull(totals);stations=List.copyOf(stations);
         if(id<=0||master.lane()!=0||stations.size()>MAXIMUM_STATIONS)throw new IllegalArgumentException("Invalid column unit");
@@ -40,8 +48,13 @@ public record ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean r
         }
         if(width>=0&&(totals.taken().moles().length!=width||totals.produced().moles().length!=width))throw new IllegalArgumentException("Column totals on the accounts' axis");
         if(state!=null&&!running)throw new IllegalArgumentException("A stopped column has no engine state");
-        if(condenser<0)throw new IllegalArgumentException("Invalid condenser side");
+        condensers=List.copyOf(condensers);
+        if(condensers.size()>MAXIMUM_CONDENSERS||condensers.stream().anyMatch(c->c<=0)||new HashSet<>(condensers).size()!=condensers.size())throw new IllegalArgumentException("Invalid condenser sides");
+        if(!(airSurface>=0)||!Double.isFinite(airSurface))throw new IllegalArgumentException("Invalid air condenser surface");
     }
+
+    /** The first condenser water side, or 0 for none. */
+    public long condenser(){return condensers.isEmpty()?0:condensers.getFirst();}
 
     /**
      * One port of the column: its kind, which one of that kind (from 0), its registered port device (0 while stopped), the
@@ -82,18 +95,19 @@ public record ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean r
         return kept;
     }
     /** These stations, running or not; a stopped column forgets its engine state. */
-    public ColumnUnit withStations(boolean value,List<Station> next){return new ColumnUnit(id,master,value,setpoints,next,totals,condenser,value?state:null,leaving);}
-    public ColumnUnit withSetpoints(Setpoints value){return new ColumnUnit(id,master,running,value,stations,totals,condenser,state,leaving);}
-    public ColumnUnit withTotals(Totals value){return new ColumnUnit(id,master,running,setpoints,stations,value,condenser,state,leaving);}
-    public ColumnUnit withState(State value){return new ColumnUnit(id,master,running,setpoints,stations,totals,condenser,value,leaving);}
-    public ColumnUnit leave(){return new ColumnUnit(id,master,running,setpoints,stations,totals,condenser,state,true);}
+    public ColumnUnit withStations(boolean value,List<Station> next){return new ColumnUnit(id,master,value,setpoints,next,totals,condensers,value?state:null,leaving,airSurface);}
+    public ColumnUnit withSetpoints(Setpoints value){return new ColumnUnit(id,master,running,value,stations,totals,condensers,state,leaving,airSurface);}
+    public ColumnUnit withTotals(Totals value){return new ColumnUnit(id,master,running,setpoints,stations,value,condensers,state,leaving,airSurface);}
+    public ColumnUnit withState(State value){return new ColumnUnit(id,master,running,setpoints,stations,totals,condensers,value,leaving,airSurface);}
+    public ColumnUnit leave(){return new ColumnUnit(id,master,running,setpoints,stations,totals,condensers,state,true,airSurface);}
 
     /**
      * A running unit's engine state (plan section 12): its split table and the products' partial molar enthalpies (J/mol), the
      * cycles that asked and applied it, V3's condenser duty there (W), and the inlets' levels and outlets' credits the port
      * plans read through the fence. Rebuilt by the engine: a unit without it solves once before it takes anything.
      */
-    public record State(SplitTable table,double[][] enthalpy,long tableTick,long applied,double solvedCondenser,List<Level> levels,List<Credit> credits) {
+    public record State(SplitTable table,double[][] enthalpy,long tableTick,long applied,double solvedCondenser,List<Level> levels,List<Credit> credits,Probes probes) {
+        public State(SplitTable table,double[][] enthalpy,long tableTick,long applied,double solvedCondenser,List<Level> levels,List<Credit> credits){this(table,enthalpy,tableTick,applied,solvedCondenser,levels,credits,null);}
         public State {
             Objects.requireNonNull(table);enthalpy=com.wormzjl.icheme.science.column.operation.ColumnSolve.copy(enthalpy);levels=List.copyOf(levels);credits=List.copyOf(credits);
             if(enthalpy.length!=table.products().size())throw new IllegalArgumentException("One enthalpy row per product");
@@ -105,5 +119,14 @@ public record ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean r
         public record Level(long device,long tick,double held,double rate,double molarMass) {}
         /** A cycle's product credited to an outlet at {@code tick}. */
         public record Credit(long device,long tick,Account product) {public Credit{Objects.requireNonNull(product);}}
+    }
+    /** Accepted solve readings: Pa, K, and kg of internal stream per mol of total feed. Rebuildable state. */
+    public record Probes(double topPressure,double topTemperature,double bottomPressure,double bottomTemperature,
+                         double refluxPressure,double refluxTemperature,double refluxPerFeed,double vapourPerFeed) {
+        public Probes {
+            for(double value:new double[]{topPressure,topTemperature,bottomPressure,bottomTemperature,refluxPressure,refluxTemperature})
+                if(!(value>0)||!Double.isFinite(value))throw new IllegalArgumentException("Invalid accepted column reading");
+            if(!(refluxPerFeed>=0)||!Double.isFinite(refluxPerFeed)||!(vapourPerFeed>=0)||!Double.isFinite(vapourPerFeed))throw new IllegalArgumentException("Invalid internal stream ratio");
+        }
     }
 }

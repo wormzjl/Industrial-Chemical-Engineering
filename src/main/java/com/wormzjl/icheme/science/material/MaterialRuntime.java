@@ -28,13 +28,4 @@ public final class MaterialRuntime {
     public static <T> T pinned(String packageId,Supplier<T> action) {
         return with(current(),packageId,action);
     }
-    /** Cached and completed results are current only for the exact resolved scientific dataset. */
-    public static boolean isCurrent(String packageId, String scientificRevision) {
-        var p=current().packages().get(packageId);
-        return p!=null && p.scientificRevision().equals(scientificRevision);
-    }
-    public static MaterialName name(String packageId,String componentId) {
-        var p=current().packages().get(packageId);
-        return current().name(p==null?componentId:p.canonicalId(componentId));
-    }
 }

@@ -7,7 +7,7 @@ These rules apply to every agent working in this repository (Claude, Codex, suba
 - Saved fluid and equipment data holds facts and state. Facts are what the player built and put in: device registrations and settings, node contents, captured solids, ledger totals, the world clock, accessories, equipment shapes, paint and nozzle sizes. State is what the engine can compute again: solved intervals, junction seeds, certificates, cadence, caches, pending events.
 - A code or data change never discards a fact. State formats change freely: a mismatch drops the state, and the engine rebuilds it on its schedule.
 - Fact and shape fields are append-only. A new field has a default equal to the behaviour before the field existed. A field never changes meaning or unit. Enums are saved by name; a renamed or removed constant gets an alias.
-- Material data are identified by declared revisions, never by hashes. A change to a material record's values bumps that record's own `revision`; a viscosity edit bumps the viscosity's own `revision`. Bump a package's `revision` only when the package record changes: its identities list the revisions of the records it names (`MaterialCatalog.Package.scientificRevision` for the column, `MaterialCatalog.fluidRevision` for the fluid network). A revision is a token of letters, digits, `_`, `.` and `-`, at most 64 characters.
+- Material data are identified by declared revisions, never by hashes. A change to a material record's values bumps that record's own `revision`; a viscosity edit bumps the viscosity's own `revision`; a freezing-point edit bumps the freezing point's own `revision`. Bump a package's `revision` only when the package record changes: its identities list the revisions of the records it names (`MaterialCatalog.Package.scientificRevision` for the column, `MaterialCatalog.fluidRevision` for the fluid network), and name the method by its physics fields, not by its revision. A revision is a token of letters, digits, `_`, `.` and `-`, at most 64 characters.
 - After a material or model change, contents keep their amounts and temperature. An engine job recomputes energy and pressure. The ledger books the energy difference and every removed component; the island's status line names them.
 - After a placed equipment structure loads, rebuild it to the current layout if another layout placed its cells (`EquipmentRefresh`, `EquipmentStructure.refreshLater`). Keep nozzle pipe blocks in place first, then cells. Keep the origin, paint, nozzle sizes and the fluid identity. Never overwrite another block. Remove a structure whose kind no longer exists whole, with every one of its cells. A layout change updates the layout table (`EquipmentLayoutGoldenTest`); a moved nozzle pipe block needs the owner's approval.
 - Every format validates what it reads and round-trips what it carries. A damaged facts section refuses the world and leaves its files untouched.
@@ -24,6 +24,7 @@ These rules apply to every agent working in this repository (Claude, Codex, suba
 - Player inputs and network changes are queued engine events. Their acknowledgements and results arrive on the engine schedule. Packet handlers, block-entity loads and menu opens never force a process update.
 - Do not calculate process state on Minecraft's per-tick loop. Due simulation deadlines, dependency changes and worker completions drive the work. The tick hook only checks what is due, drains completions and flushes a presentation bucket.
 - Simulated time is online ticks at a nominal 20 TPS. There is no wall-clock or offline advancement.
+- The process simulator's run is a client tool outside this schedule. It runs on the client and reads and writes no process state. The server only stores the sheet and its results, and the block opens them as a replay.
 
 ## Physics and defects
 
@@ -58,13 +59,13 @@ These rules apply to every agent working in this repository (Claude, Codex, suba
 - Run at most two Gradle invocations at a time on the machine, each in its own worktree, and only if neither measures time. A run that measures time (benchmarks, wall-time cost gates) runs alone. Never run a test suite while a dev client is running.
 - When two runs overlap, judge cost by counters. Replay a wall-clock budget hold alone before you count it.
 - Large solver campaigns use 8 to 10 worker threads and never overlap another campaign of that size. A run on the second Gradle lane uses at most 4 worker threads.
-- `./gradlew test` is the quick suite. `./gradlew test slowGates` (or `check`) runs everything. Only the final lane runs them whole, once per batch.
+- `./gradlew test` is the quick suite. `./gradlew test slowGates` (or `check`) runs everything. The final lane runs, once per batch, only the test classes that the batch's changes can reach: those whose recorded load set holds a change (`tools/merge-lane/affected.mjs`). `lane.sh head --all` runs everything; use it only when the owner asks.
 - `columnGates` and `equipmentGates` hold the column and equipment tests, which `test` leaves out. Each sees only what its tests load, so it runs only when one of those files changed. When a group fails with a class or resource missing, add it to the group's list in `build.gradle`.
 - Use the least measurement that decides the task:
   - Compare forms on the 200-seed quick check (all distributions). Compare at most three forms per task, then choose one.
   - Run one full campaign (1000 seeds, all distributions, 8 workers) for the chosen form only. Do not replay worse seeds alone. Replay alone only new budget-class holds (classes C and F not in the baseline), batched in one run.
   - List worse worlds by class with the campaign's classifier. Minimize and trace at most the two smallest new ones.
-  - Read references once, in one final lane (`tools/merge-lane/lane.sh`: `test slowGates` with the 33 junction lines, the printed lines and `MIXED_GAS_COST`; chain-100 exact; the fluid GameTests; the campaign, which the lane skips when nothing it loads changed since `main`). Do not run a second final lane. Do not copy the lane into a batch's tool folder.
+  - Read references once, in one final lane (`tools/merge-lane/lane.sh`: the affected test classes, with the 33 junction lines, the printed lines and `MIXED_GAS_COST` when their tests are among them; chain-100 exact and the fluid GameTests when what they load changed; the campaign when one of its inputs changed since `main`). A reference whose test the lane skips stands from the baseline lane. Do not run a second final lane. Do not copy the lane into a batch's tool folder.
   - To prove a gate test fails with its rule disabled, run that one test, not the suite.
   - Take counters from the campaign. Do not make separate per-seed Newton runs.
   - Split a hold class by mechanism only when the task targets that class, on the final code, with the existing classifier script.
@@ -78,7 +79,7 @@ These rules apply to every agent working in this repository (Claude, Codex, suba
   - A test removed, or test code left without a user removed: `compileTestJava` only. Prove the removal from the test names in the stored results.
   - A test added or edited: that test class.
   - Production code: the tests of the changed classes and the gates that name the rule.
-- Run a whole task (`test`, `slowGates`, `check`) only in the final lane, once per batch, when the code is final. Do not run one to confirm a fix, between commits, or after a cleanup or an archive.
+- Run a whole task (`test`, `slowGates`, `check`) only through the final lane, once per batch, when the code is final. Do not run one to confirm a fix, between commits, or after a cleanup or an archive.
 - Gradle reruns a whole task when one file of that task changes. Narrow the run with `--tests` instead of letting it.
 - Read stored results first: `build/test-results`, the lane's output, the batch review. If they answer the question, do not run.
 - Do not force a result again: no `--rerun-tasks`, `--no-build-cache`, `cleanTest` or deleted `build/`. An up-to-date or restored task counts as run.
@@ -92,15 +93,21 @@ These rules apply to every agent working in this repository (Claude, Codex, suba
 - Never send real desktop keyboard or mouse input (`robot.ps1`, SendKeys) unless the owner is watching. If a check needs typed values and only desktop input can supply them, stop and report.
 - Make at most one in-game check per task. Judge drawing-only changes by gates, sweeps and software renders.
 
+## New equipment
+
+- Every new `EquipmentShape.Kind`, `ConstructorColumn.Equipment` and `TopologyCompiler.Kind` constant joins the process simulator. Add its case to `FlowsheetCatalog`: MODELLED, or DRAWING_ONLY while no model exists.
+- `FlowsheetPaletteCoverageTest` checks that each has a tile, a port rule and a lang line. One tile may hold several kinds.
+
 ## Translations
 
-- Every change to `src/main/resources/assets/icheme/lang/en_us.json` updates every other lang file in the same commit (`zh_cn`, `fr_fr`, `es_es`, `ja_jp`, and any language added later):
+- During a batch, change only `src/main/resources/assets/icheme/lang/en_us.json`. Do not edit the other lang files between commits.
+- Before the batch merges, bring every other lang file up to date with en_us in one translation commit (`zh_cn`, `fr_fr`, `es_es`, `ja_jp`, and any language added later):
   - add each new key;
   - rewrite the translation of each line whose English changed, also when only the wording changed;
   - remove each key that en_us removes.
 - Keep each file in en_us key order. Keep the arguments (`%s`, `%n$s`, `%%`) and the line breaks that en_us has. Keep the server's status words (LIMITED, LOW LIMIT, DUTY INSUFFICIENT) in English.
 - Use the terms that each file already uses. `tools/localization/glossary.md` lists them for fr, es and ja.
-- Check offline with `tools/localization/`: `check.js` for keys and arguments, `width.js` for label widths, and `stale-translations.js <locale>` after the commit, for translations whose English changed. `LanguageFilesTest` (quick suite) and `UnitTextTest` (equipmentGates) are the gates.
+- Check offline with `tools/localization/`: `check.js` for keys and arguments, `width.js` for label widths, and `stale-translations.js <locale>` before the translation commit, for translations whose English changed. `LanguageFilesTest` (quick suite) and `UnitTextTest` (equipmentGates) are the gates. They fail until the translation commit; do not run them before it. The final lane runs them.
 
 ## Git and worktrees
 
@@ -138,6 +145,7 @@ Every merge to `main` includes, in the same merge:
   - patch for fixes, cleanups and consolidation;
   - minor only for a new feature or a solver or model batch.
   - Propose the version and let the owner choose. Do not jump versions fast.
+- The translation commit (see Translations), when the batch changed `en_us.json`.
 - A code guide update (see below).
 - The tooling cleanup (see below).
 

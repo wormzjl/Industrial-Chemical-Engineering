@@ -147,6 +147,9 @@ public final class IslandCoordinator {
         // The last attempt that closed was held (not accepted): a topology event fenced on the island is accepted at its
         // committed tick instead of waiting for a solve (acceptAtFence). Cleared by an accepted interval. Ephemeral.
         private boolean held;
+        // A capability limit the island cannot run past (V2: more compounds than an island carries), set when it is formed:
+        // it solves nothing and accepts the next topology event at its fence, which replaces it. Null for none.
+        private String capability;
         private String warnedHoldKey;
         private long warnedHoldAt=Long.MIN_VALUE;
         // Ephemeral solver caches for this island's jobs; replaced, never mutated, on a revision
@@ -194,6 +197,7 @@ public final class IslandCoordinator {
         private long fence(){return fences.values().stream().mapToLong(Long::longValue).min().orElse(Long.MAX_VALUE);}
     }
     private static final class Pending {
+        private PassiveNetwork dispatched;
         private final Attempt attempt;
         private ProcessSolveServices.FluidIslandSolveResult result;
         private boolean terminal,closed;
@@ -250,6 +254,31 @@ public final class IslandCoordinator {
         };
     }
     private Ports ports=Ports.NONE;
+    /**
+     * The shaft trains (batch 2026-11-03-rotating-machinery W3, build plan section 2): each island's slice inputs at dispatch
+     * (a machine's speed, a frame's displacement, a governor valve's target; reads, no solve), the power its machines took
+     * at each commit and replay ({@code booked} records only), and the drivers' step at the engine's decision points
+     * ({@code decide}, after commits and due deadlines; never in a presentation read). Arithmetic only, on the server thread.
+     */
+    public interface Shafts {
+        Map<Long,com.wormzjl.icheme.science.fluid.network.ShaftPlan> plans(long island,PassiveNetwork graph);
+        void booked(long island,PassiveNetwork graph,long start,long end,PassiveIntervalSolver.Result result);
+        void decide();
+        Shafts NONE=new Shafts(){
+            public Map<Long,com.wormzjl.icheme.science.fluid.network.ShaftPlan> plans(long island,PassiveNetwork graph){return Map.of();}
+            public void booked(long island,PassiveNetwork graph,long start,long end,PassiveIntervalSolver.Result result){}
+            public void decide(){}
+        };
+    }
+    private Shafts shafts=Shafts.NONE;
+    private java.util.function.UnaryOperator<PassiveNetwork> controls=java.util.function.UnaryOperator.identity();
+    public void controls(java.util.function.UnaryOperator<PassiveNetwork> value){owned();controls=Objects.requireNonNull(value);}
+    public void controlsMoved(Collection<Long> changed){owned();for(long id:changed)if(islands.containsKey(id))toWake.add(id);}
+    /** Installs the shaft trains. */
+    public void shafts(Shafts value){owned();shafts=Objects.requireNonNull(value);}
+    /** A shaft train's speed, trip or start changed (a dependency change, plan 5.2): the islands it drives end their
+     * certificates at the next decision point and read the new speed at their next dispatch. */
+    public void shaftsMoved(Collection<Long> moved){owned();for(long id:moved)if(islands.containsKey(id))toWake.add(id);}
     /** Installs the running columns' ports. */
     public void ports(Ports value){owned();ports=Objects.requireNonNull(value);}
     /** A running column's plan for {@code island} moved: a certified island ends its certificate at the next decision point. */
@@ -297,6 +326,8 @@ public final class IslandCoordinator {
         owned();if(stopped||islands.containsKey(saved.id))throw new IllegalStateException("Stopped/duplicate island");
         if(saved.graph.reservoirs().stream().anyMatch(n->n.kind()==PassiveNetwork.NodeKind.PORT))throw new IllegalArgumentException("Internal ports cannot own world state");
         var island=new Island(saved,model,epoch);
+        // A loaded island past the compound cap holds as it held when it was formed (V2, a capability limit).
+        if(model.compounds().size()>IslandSets.MAXIMUM_COMPOUNDS){island.capability="an island carries at most "+IslandSets.MAXIMUM_COMPOUNDS+" compounds and water; this one carries "+model.compounds().size()+": separate its parts to run it";island.held=true;island.status="HELD: "+island.capability;}
         var persisted=saved.certificate.flatMap(Certified::saved);
         if(persisted.isPresent())restore(island,persisted.orElseThrow());
         islands.put(saved.id,island);ready.register(saved.id,false);index(island);indexStock(island);reconsider(island);
@@ -335,6 +366,10 @@ public final class IslandCoordinator {
             FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.certificatesDiscarded);
         }
     }
+    /** The model island {@code id} runs on: the network package on its own compound list (batch 2026-11-04-refinery-compounds, V2). */
+    public FluidThermodynamics model(long id){owned();return require(id).model;}
+    /** Snapshot {@code s} of a live island as a checkpoint entry: on the island's own compound list, named in full, so a compound added to the package later moves no island's model (V3). */
+    public FluidCheckpointCodec.IslandEntry entry(String dimension,String packageId,Snapshot s){return new FluidCheckpointCodec.IslandEntry(dimension,packageId,model(s.id()).compounds(),s);}
     /** A certified island is materialised first, so what is read (a view, a save) is current. */
     public Snapshot snapshot(long id){owned();var island=require(id);materialise(island);return island.snapshot();}
     public Optional<Metrics> metrics(long id){owned();return Optional.ofNullable(require(id).metrics);}
@@ -441,7 +476,7 @@ public final class IslandCoordinator {
     public void resumeQualifiedProperties() {
         owned();if(stopped||suspension==null)return;suspension=null;
         for(var island:islands.values()) {
-            island.holdTick=Long.MAX_VALUE;island.suspended=false;island.status="WAITING: full solve after property reload";inputsChanged(island);
+            island.holdTick=Long.MAX_VALUE;island.suspended=false;island.status=island.capability!=null?"HELD: "+island.capability:"WAITING: full solve after property reload";inputsChanged(island);
             if(island.certificate!=null){island.certificate=null;island.certifiedSince=-1;island.signature=null;island.retained=new RetainedSolver();FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.certificateWakes);}
             island.lastInterval=null;island.streak=0;
             island.touch();reconsider(island);
@@ -496,7 +531,7 @@ public final class IslandCoordinator {
                 default->throw new IllegalStateException("No handler for deadline "+due.kind());
             }
         }
-        flushWakes();
+        shafts.decide();flushWakes();
     }
     /**
      * The O(1) check the tick hooks make: pumps only when a pump would act, that is when a state change made
@@ -536,14 +571,17 @@ public final class IslandCoordinator {
                 // The job starts from the committed interval, not from the solver's history; see RetainedSolver.
                 island.retained.committed(island.lastResult.orElse(null));
                 var reads=reads(island,slice);
-                var command=new ProcessSolveServices.FluidIslandCommand(island.model,island.graph,slice.seconds(),PassiveIntervalSolver.Settings.defaults(),settings.hardBudgetNanos,island.retained,reads,ports.plans(island.id,island.graph,slice));
+                // The shaft trains' slice inputs (W3), read here as a heat side's partner is.
+                var controlled=controls.apply(island.graph);
+                var dispatched=com.wormzjl.icheme.science.fluid.network.ShaftPlan.apply(controlled,shafts.plans(island.id,controlled));
+                var command=new ProcessSolveServices.FluidIslandCommand(island.model,dispatched,slice.seconds(),PassiveIntervalSolver.Settings.defaults(),settings.hardBudgetNanos,island.retained,reads,ports.plans(island.id,dispatched,slice));
                 if(!dispatcher.submit(attempt,command)) {island.status="WAITING: shared worker capacity";island.touch();break;}
                 island.clock.admitted(slice);island.status="SOLVING";island.touch();FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.solvesDispatched);
-                var entry=new Pending(attempt,island.clock.snapshot().onlineTick(),nanoClock.getAsLong());entry.reads=reads;pending.put(request,entry);island.pendingEntries++;admitted.add(entry);dispatchedThisTick++;
+                var entry=new Pending(attempt,island.clock.snapshot().onlineTick(),nanoClock.getAsLong());entry.dispatched=dispatched;entry.reads=reads;pending.put(request,entry);island.pendingEntries++;admitted.add(entry);dispatchedThisTick++;
                 reconsider(island);
             }
             if(!admitted.isEmpty()){var round=new Round(roundSequence=Math.addExact(roundSequence,1),List.copyOf(admitted),roundStarted);rounds.add(round);scheduleRoundTimeout(round,settings.hardBudgetNanos);}
-            flushWakes();
+            shafts.decide();flushWakes();
         } finally {
             // Owners that became ready during this pump were offered to it; any left over wait for capacity,
             // which pumpIfUseful checks directly, so no request survives the pump.
@@ -574,7 +612,7 @@ public final class IslandCoordinator {
             boolean accept=entry.terminal&&outcome!=null&&outcome.candidate().isPresent()&&attempt.revision==island.revision;
             if(accept) {
                 var candidate=outcome.candidate().orElseThrow();
-                accept=validCandidate(island,attempt,candidate);
+                accept=validCandidate(island,attempt,candidate,entry.dispatched);
                 if(!accept)refusal="candidate identity or interval mismatch";
                 else {
                     island.graph=candidate.graph();island.lastResult=Optional.of(candidate);
@@ -611,7 +649,7 @@ public final class IslandCoordinator {
         }
         FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.islandsPublished,changed.size());
         publisher.published(List.copyOf(changed));
-        flushWakes();
+        shafts.decide();flushWakes();
     }
     /** The longest a held island waits between retries at the shortest slice, in cadences: 2^6 = 64. */
     static final int MAXIMUM_RETRY_DOUBLINGS=6;
@@ -696,14 +734,16 @@ public final class IslandCoordinator {
      */
     private static boolean sameControl(FlowControl a,FlowControl b) {
         if(a.equals(b))return true;
+        // A shaft train's slice input (W3): a machine's speed, a frame's displacement, a governor valve's target.
+        if(com.wormzjl.icheme.science.fluid.network.ShaftPlan.planned(a,b))return true;
         // A boundary valve a running column works (batch 2026-10-28-column-operation): its planned mass flow, whatever the valve's own control.
         if(b instanceof FlowControl.ControlValve y&&y.source()==FlowControl.ValveSource.MASS_FLOW&&com.wormzjl.icheme.science.fluid.network.PortPlan.COLUMN_SENSOR.equals(y.sensor())
                 &&a instanceof FlowControl.Valve x)return x.targetPressure()==y.targetPressure();
         return a instanceof FlowControl.ControlValve x&&b instanceof FlowControl.ControlValve y&&y.source()==FlowControl.ValveSource.MASS_FLOW
                 &&x.targetPressure()==y.targetPressure()&&x.volumeTarget()==y.volumeTarget()&&java.util.Objects.equals(x.sensor(),y.sensor())&&x.revision()==y.revision();
     }
-    private static boolean validCandidate(Island island,Attempt attempt,PassiveIntervalSolver.Result result) {
-        if(result.advancedSeconds()!=attempt.slice.seconds()||!sameConnections(island.graph.pipes(),result.graph().pipes())||!result.graph().scheduledTransfers().isEmpty())return false;
+    private static boolean validCandidate(Island island,Attempt attempt,PassiveIntervalSolver.Result result,PassiveNetwork dispatched) {
+        if(result.advancedSeconds()!=attempt.slice.seconds()||!sameConnections(dispatched.pipes(),result.graph().pipes())||!result.graph().scheduledTransfers().isEmpty())return false;
         var old=island.graph.reservoirs();var next=result.graph().reservoirs();if(old.size()!=next.size())return false;
         for(int i=0;i<old.size();i++) {
             var a=old.get(i);var b=next.get(i);
@@ -760,7 +800,15 @@ public final class IslandCoordinator {
         owned();if(!aligned(event,affected))throw new IllegalStateException("Event owners have not aligned");
         for(long id:affected){var i=require(id);removeFence(i,event);inputsChanged(i);i.touch();reconsider(i);}
     }
-    public record Replacement(long id,PassiveNetwork graph) {
+    /**
+     * A replacement island: its identity, its graph and the model it runs on, the network package on its own compound list
+     * (batch 2026-11-04-refinery-compounds, V2; null: the change's model). {@code held} is a capability limit the island
+     * cannot run past (an island of more than {@link IslandSets#MAXIMUM_COMPOUNDS} compounds, owner decision 2026-11-04): it
+     * holds with that status and solves nothing until a topology change replaces it; null for none.
+     */
+    public record Replacement(long id,PassiveNetwork graph,FluidThermodynamics model,String held) {
+        public Replacement(long id,PassiveNetwork graph){this(id,graph,null,null);}
+        public Replacement(long id,PassiveNetwork graph,FluidThermodynamics model){this(id,graph,model,null);}
         public Replacement {if(id<=0)throw new IllegalArgumentException("Invalid replacement identity");Objects.requireNonNull(graph);}
     }
     /**
@@ -775,11 +823,12 @@ public final class IslandCoordinator {
         if(stopped||committed<0||online<committed||!aligned(events,affected))throw new IllegalStateException("Topology event is not ready");
         var originals=affected.stream().map(this::require).toList();
         long revision=0;int cadence=originals.isEmpty()?settings.initialCadenceTicks:20;
-        var stock=new HashMap<Long,PassiveNetwork.Reservoir>();var fences=new HashMap<UUID,Long>();
+        // Each original's stock with the model it is held on: islands carry their own compound lists (V2), so stock is compared by id.
+        var stock=new HashMap<Long,PassiveNetwork.Reservoir>();var stockModels=new HashMap<Long,FluidThermodynamics>();var fences=new HashMap<UUID,Long>();
         for(var old:originals) {
-            if(old.clock.committedTick()!=committed||old.clock.snapshot().onlineTick()!=online||!old.model.revision().equals(model.revision()))throw new IllegalStateException("Incompatible clocks or property packages");
+            if(old.clock.committedTick()!=committed||old.clock.snapshot().onlineTick()!=online||!old.model.whole().revision().equals(model.whole().revision()))throw new IllegalStateException("Incompatible clocks or property packages");
             revision=Math.max(revision,old.revision);cadence=Math.max(cadence,old.clock.snapshot().cadenceTicks());
-            for(var node:old.graph.reservoirs())if(node.kind()==PassiveNetwork.NodeKind.RESERVOIR&&stock.putIfAbsent(node.id(),node)!=null)throw new IllegalStateException("Duplicate stock ownership");
+            for(var node:old.graph.reservoirs())if(node.kind()==PassiveNetwork.NodeKind.RESERVOIR){if(stock.putIfAbsent(node.id(),node)!=null)throw new IllegalStateException("Duplicate stock ownership");stockModels.put(node.id(),old.model);}
             for(var fence:old.fences.entrySet())if(!events.contains(fence.getKey())) {
                 Long prior=fences.putIfAbsent(fence.getKey(),fence.getValue());if(prior!=null&&!prior.equals(fence.getValue()))throw new IllegalStateException("Conflicting event timestamps");
             }
@@ -788,18 +837,21 @@ public final class IslandCoordinator {
         for(var entry:additions.entrySet()) {
             var node=entry.getValue();
             if(node.id()!=entry.getKey()||node.kind()!=PassiveNetwork.NodeKind.RESERVOIR||stock.putIfAbsent(node.id(),node)!=null||removals.contains(node.id()))throw new IllegalStateException("Invalid constructed stock identity");
+            stockModels.put(node.id(),model);
             Long holder=stockOwners.get(node.id());if(holder!=null&&!affected.contains(holder))throw new IllegalStateException("Constructed stock already exists");
         }
         revision=Math.addExact(revision,1);var seen=new HashSet<Long>();var ids=new HashSet<Long>();var staged=new ArrayList<Island>();
         for(var replacement:replacements) {
             if(!ids.add(replacement.id)||islands.containsKey(replacement.id)&&!affected.contains(replacement.id))throw new IllegalStateException("Replacement island identity collision");
+            var own=replacement.model==null?model:replacement.model;
+            if(!own.whole().revision().equals(model.whole().revision()))throw new IllegalStateException("A replacement island runs on another property package");
             for(var node:replacement.graph.reservoirs()) {
                 if(node.kind()==PassiveNetwork.NodeKind.PORT)throw new IllegalArgumentException("Internal port in topology");
                 if(node.kind()!=PassiveNetwork.NodeKind.RESERVOIR)continue;
                 // What a vessel holds is conserved; where it stands and its geometry follow the registry (a layout refresh
                 // rebuilds it, decision D7), and no ledger carries potential energy (D37, S1).
                 var old=stock.get(node.id());
-                if(!seen.add(node.id())||old==null||!old.inventory().sameContents(node.inventory()))throw new IllegalStateException("Topology event changed stock");
+                if(!seen.add(node.id())||old==null||!sameContents(old.inventory(),stockModels.get(node.id()),node.inventory(),own))throw new IllegalStateException("Topology event changed stock");
             }
             // Owner decision of 2026-10-19 (t46's trace of bundled 483): a replacement whose graph is one original's (the same pipe
             // identities and node ids) carries that island's committed junction states and interval endpoint, the warm carry
@@ -808,8 +860,11 @@ public final class IslandCoordinator {
             // state by the mint's rule (t48's trace of bundled 145).
             PassiveNetwork graph=replacement.graph;Optional<PassiveIntervalSolver.Result> carried=Optional.empty();
             var same=originals.stream().filter(old->old.lastResult.isPresent()&&PassiveNetwork.sameLines(old.graph,replacement.graph)).toList();
-            if(same.size()==1){var old=same.get(0);graph=PassiveNetwork.withJunctionStates(replacement.graph,old.graph,model);carried=old.lastResult;}
-            var island=new Island(new Snapshot(replacement.id,revision,graph,new IslandClock.Snapshot(online,committed,0,cadence),carried,"WAITING: full solve after topology change",fences),model,epoch);
+            // The carry moves to the replacement's compound list by id (V2): its list holds the original's, so nothing is cut.
+            if(same.size()==1){var old=same.get(0);graph=PassiveNetwork.withJunctionStates(replacement.graph,IslandSets.graph(old.graph,old.model,own),own);carried=old.lastResult.map(r->IslandSets.result(r,old.model,own));}
+            var island=new Island(new Snapshot(replacement.id,revision,graph,new IslandClock.Snapshot(online,committed,0,cadence),carried,
+                    replacement.held==null?"WAITING: full solve after topology change":"HELD: "+replacement.held,fences),own,epoch);
+            if(replacement.held!=null){island.capability=replacement.held;island.held=true;}
             // A topology change starts the island cold: its first slice is one tick and each accepted full interval
             // doubles it back to the cadence (as after a budget hold). Whatever the player just built - a pump
             // filling dry tanks, a valve opening - starts its transient here, and its first milliseconds can cost
@@ -834,6 +889,13 @@ public final class IslandCoordinator {
         // A side no island holds any more keeps no relay state; its unit's heat in transit stays until the unit is removed.
         coupled.keySet().removeIf(pipe->!sideOwners.containsKey(pipe));
         publisher.published(staged.stream().map(Island::snapshot).toList());
+    }
+    /** Whether vessel inventory {@code b} on {@code to} holds exactly what {@code a} on {@code from} holds, compared by compound id. */
+    private static boolean sameContents(PassiveNetwork.Inventory a,FluidThermodynamics from,PassiveNetwork.Inventory b,FluidThermodynamics to) {
+        if(from==to||from.compounds().equals(to.compounds()))return a.sameContents(b);
+        double[] moles;
+        try{moles=IslandSets.amounts(a.moles(),from,to);}catch(IllegalStateException lost){return false;}
+        return Double.doubleToLongBits(a.internalEnergy())==Double.doubleToLongBits(b.internalEnergy())&&Arrays.equals(moles,b.moles())&&a.solids().equals(b.solids());
     }
     /** Stops admission; unresolved proposals are held. Actual execution capacity is owned by the shared pool. */
     public void stop() {
@@ -864,7 +926,7 @@ public final class IslandCoordinator {
                 if(wake!=Long.MAX_VALUE&&island.fence()>=wake)due=island.clock.epochTickAt(wake);
             }
         }
-        else if(!stopped&&suspension==null&&island.pendingEntries==0) {
+        else if(!stopped&&suspension==null&&island.pendingEntries==0&&island.capability==null) {
             long fence=island.fence();
             // Behind the coupling fence a slice waits for its exchangers' other sides, whose commits re-derive it (below).
             if(island.clock.nextSlice(1,fence,island.maximumSliceTicks).isPresent())eligible=coupledThrough(island);
@@ -979,13 +1041,13 @@ public final class IslandCoordinator {
     }
     /** {@code pipe}'s stream in {@code graph}, drawn at {@code flows} (kg/s per connection; null where none is known: no flow);
      * a kettle's pool's contents for a pool's key (W7), null where it holds no fluid. */
-    private static ExchangerRelay.Partner stream(PassiveNetwork graph,double[] flows,long pipe) {
-        for(var n:graph.reservoirs())if(n.inventory().pool()!=null&&n.inventory().pool().id()==pipe)return ExchangerRelay.Partner.pool(n);
+    private static ExchangerRelay.Partner stream(PassiveNetwork graph,double[] flows,long pipe,FluidThermodynamics model) {
+        for(var n:graph.reservoirs())if(n.inventory().pool()!=null&&n.inventory().pool().id()==pipe){var pool=ExchangerRelay.Partner.pool(n);return pool==null?null:pool.withModel(model);}
         var pipes=graph.pipes();
         for(int e=0;e<pipes.size();e++) {
             var p=pipes.get(e);if(p.id()!=pipe||!(p.heat() instanceof HeatSide law))continue;
             double flow=flows!=null&&flows.length==pipes.size()?flows[e]:0;int donor=flow>=0?p.first():p.second();
-            return new ExchangerRelay.Partner(graph.reservoirs().get(donor).state(),p.portAt(donor),p.volume(),flow,law);
+            return new ExchangerRelay.Partner(graph.reservoirs().get(donor).state(),p.portAt(donor),p.volume(),flow,law).withModel(model);
         }
         return null;
     }
@@ -1028,7 +1090,8 @@ public final class IslandCoordinator {
         for(long pipe:island.sides) {
             var side=coupled.get(pipe);if(side==null||side.kind==SideKind.RADIANT)continue;
             var held=ports.heatRead(pipe,side.partner,start,slice.seconds(),transits.getOrDefault(side.pair(),0.));
-            if(held!=null){reads.put(pipe,held);continue;}
+            // A column's condenser read by its water side carries the valve the column sets, where its lines are complete (U2).
+            if(held!=null){reads.put(pipe,held.ceiling()>0&&held.operation()==null?held.withOperation(operations.get(pipe)):held);continue;}
             var other=other(side);var otherSide=coupled.get(side.partner);
             if(other!=null&&other!=island&&other.certificate!=null&&other.clock.committedTick()<start)materialise(other);
             // A convection coil reads its radiant coil's heat as of the slice start (F1); one in this island plans it per step.
@@ -1048,6 +1111,7 @@ public final class IslandCoordinator {
      */
     private void booked(Island island,long start,long end,PassiveIntervalSolver.Result result,Map<Long,ExchangerRelay.Read> reads) {
         ports.booked(island.id,island.graph,start,end,result);
+        shafts.booked(island.id,island.graph,start,end,result);
         for(long pipe:island.sides) {
             var side=coupled.get(pipe);if(side==null)continue;
             double joule=heat(result,pipe);
@@ -1055,7 +1119,7 @@ public final class IslandCoordinator {
             var other=other(side);side.prune(other==null?end-KEEP_UNREAD_TICKS:other.clock.committedTick());side.book(start,end,joule);
             var read=reads==null?null:reads.get(pipe);
             if(read!=null){if(read.stopped())side.stopped(start,end);side.read=true;side.readUsed=read.partner();side.rateUsed=read.heatRate();side.heatRate=joule/((end-start)/20.0);}
-            side.record(new SideRecord(end,stream(island.graph,result.endpointFlows(),pipe),joule/((end-start)/20.0)));
+            side.record(new SideRecord(end,stream(island.graph,result.endpointFlows(),pipe,island.model),joule/((end-start)/20.0)));
             if(other!=null&&other!=island&&other.certificate!=null&&moved(side,coupled.get(side.partner),other))toWake.add(other.id);
         }
     }
@@ -1115,6 +1179,8 @@ public final class IslandCoordinator {
         operations=Map.copyOf(next);
         for(long id:changed){Long owner=sideOwners.get(id);if(owner!=null)toWake.add(owner);}
     }
+    /** The real valve side connection {@code side}'s control works (W8), or null for none. */
+    public @org.jetbrains.annotations.Nullable ExchangerRelay.Operation operation(long side){owned();return operations.get(side);}
     /** The heat each exchanger holds in transit, J (the energy owed to its streams), by pair key: the lower of its two sides' connection ids. */
     public Map<Long,Double> transits(){owned();return Map.copyOf(transits);}
     /**
@@ -1294,7 +1360,7 @@ public final class IslandCoordinator {
             var side=coupled.computeIfAbsent(pipe,p->new Coupled(p,partnerOf(island.graph,p),kindOf(island.graph,p)));
             if(side.current==null){
                 double rate=island.lastResult.map(last->last.advancedSeconds()>0?heat(last,pipe)/last.advancedSeconds():0.).orElse(0.);
-                side.record(new SideRecord(island.clock.committedTick(),stream(island.graph,island.lastResult.map(PassiveIntervalSolver.Result::endpointFlows).orElse(null),pipe),rate));
+                side.record(new SideRecord(island.clock.committedTick(),stream(island.graph,island.lastResult.map(PassiveIntervalSolver.Result::endpointFlows).orElse(null),pipe,island.model),rate));
                 // Its last span from its last interval (a loaded island's; a certified one replays that interval's rate up to its committed
                 // tick): behind the fence the only span its other side may still read past its own start.
                 island.lastResult.ifPresent(last->{long end=island.clock.committedTick(),start=Math.max(0,end-Math.round(last.advancedSeconds()*20));if(end>start)side.book(start,end,heat(last,pipe));});
@@ -1322,7 +1388,7 @@ public final class IslandCoordinator {
                     if(wake!=Long.MAX_VALUE&&island.fence()>=wake)due=island.clock.epochTickAt(wake);
                 }
             }
-            else if(!stopped&&suspension==null&&island.pendingEntries==0) {
+            else if(!stopped&&suspension==null&&island.pendingEntries==0&&island.capability==null) {
                 long fence=island.fence();
                 if(island.clock.nextSlice(1,fence,island.maximumSliceTicks).isPresent())eligible=coupledThrough(island);
                 else{long at=island.clock.readyAtTick(fence,island.maximumSliceTicks);if(at!=Long.MAX_VALUE)due=island.clock.epochTickAt(at);}

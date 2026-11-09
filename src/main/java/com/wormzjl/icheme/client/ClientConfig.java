@@ -5,7 +5,11 @@ import com.wormzjl.icheme.client.gui.common.kit.Skin;
 import com.wormzjl.icheme.science.display.DisplayUnit.FlowRateUnit;
 import com.wormzjl.icheme.science.display.DisplayUnit.PressureUnit;
 import com.wormzjl.icheme.science.display.DisplayUnit.TemperatureUnit;
+import com.wormzjl.icheme.science.equipment.Paint;
 import net.neoforged.neoforge.common.ModConfigSpec;
+
+import java.util.List;
+import java.util.UUID;
 
 /**
  * The client's own settings, {@code icheme-client.toml} (batch 2026-10-28-gui-toolkit): the process screens' panel
@@ -20,9 +24,12 @@ public final class ClientConfig {
         LIGHT, DARK
     }
 
-    /** The basis the composition tables and flows show. */
+    /**
+     * The basis the composition tables and flows show. VOLUME is the process simulator's: a stream's flow in m³ at its own
+     * temperature and pressure; the fluid device screen, which keys only MOLE and MASS, reads it as MOLE.
+     */
     public enum Basis {
-        MOLE, MASS
+        MOLE, MASS, VOLUME
     }
 
     public static final ModConfigSpec SPEC;
@@ -31,18 +38,32 @@ public final class ClientConfig {
     public static final ModConfigSpec.EnumValue<PressureUnit> PRESSURE;
     public static final ModConfigSpec.EnumValue<FlowRateUnit> FLOW_TIME;
     public static final ModConfigSpec.EnumValue<Basis> BASIS;
+    public static final ModConfigSpec.BooleanValue STREAM_CONDITIONS;
+    public static final ModConfigSpec.ConfigValue<List<? extends String>> EQUIPMENT_PAINTS;
+    public static final ModConfigSpec.BooleanValue LOW_POLYGON_MODE;
+    public static final ModConfigSpec.DoubleValue LOD_SCALE;
 
     static {
         var builder = new ModConfigSpec.Builder();
         builder.push("gui");
         THEME = builder.comment("The process screens' control panel: LIGHT (a RAL 7035 grey door with red LED meters) or DARK (a RAL 7016 anthracite door with amber LED meters). The theme key on a screen's title row switches it too.")
                 .defineEnum("theme", Theme.LIGHT);
+        STREAM_CONDITIONS = builder.comment("Whether the process simulator's canvas shows each stream's temperature and pressure under its name. The P, T key at the simulator's foot switches it too.")
+                .define("stream_conditions", false);
         builder.pop();
         builder.comment("The units every process screen shows; the unit keys at a screen's foot switch them too. Display only: the server keeps SI.").push("units");
         TEMPERATURE = builder.comment("CELSIUS or KELVIN.").defineEnum("temperature", TemperatureUnit.CELSIUS);
         PRESSURE = builder.comment("PASCAL, KILOPASCAL, BAR or MEGAPASCAL.").defineEnum("pressure", PressureUnit.KILOPASCAL);
         FLOW_TIME = builder.comment("Flows per second (PER_SECOND), per minute (PER_MINUTE) or per hour (PER_HOUR).").defineEnum("flow_time", FlowRateUnit.PER_SECOND);
-        BASIS = builder.comment("Compositions and flows in moles (MOLE) or in mass (MASS).").defineEnum("basis", Basis.MOLE);
+        BASIS = builder.comment("Compositions and flows in moles (MOLE) or in mass (MASS); VOLUME shows the process simulator's stream flows in m³ at the stream's own temperature and pressure, and the fluid device screens read it as MOLE.").defineEnum("basis", Basis.MOLE);
+        builder.pop();
+        builder.push("equipment");
+        LOW_POLYGON_MODE = builder.comment("Drawing only: textured flange bolts and fewer round-surface facets. Placement, collision and process calculations keep their normal geometry. Reload resources (F3+T) after changing.").define("low_polygon_mode", false);
+        LOD_SCALE = builder.comment("Drawing only: how soon gauges, sensors, cables and sight glasses lose detail with distance. 1 follows what a pixel shows; 2 drops detail at half the distance, 0.5 at twice it. Each still stops at its own largest range.")
+                .defineInRange("lod_scale", 1.0, RenderLod.LEAST_SCALE, RenderLod.MOST_SCALE);
+        EQUIPMENT_PAINTS = builder.comment("Constructor body and structure colours by player account: UUID:#RRGGBB:#RRGGBB. Remembered when the Paint page is edited.")
+                .defineListAllowEmpty("paint_schemes", List.<String>of(),
+                        () -> new UUID(0, 0) + ":#A1A1A0:#5B686D", EquipmentPaints::valid);
         builder.pop();
         SPEC = builder.build();
     }
@@ -96,13 +117,44 @@ public final class ClientConfig {
         set(BASIS, basis);
     }
 
+    /** Whether the process simulator's canvas shows each stream's temperature and pressure; off before the config has loaded. */
+    public static boolean streamConditions() {
+        return get(STREAM_CONDITIONS, false);
+    }
+
+    public static void streamConditions(boolean shown) {
+        set(STREAM_CONDITIONS, shown);
+    }
+
+    public static com.wormzjl.icheme.science.equipment.RenderDetail renderDetail() {
+        return get(LOW_POLYGON_MODE, false) ? com.wormzjl.icheme.science.equipment.RenderDetail.LOW : com.wormzjl.icheme.science.equipment.RenderDetail.NORMAL;
+    }
+
+    /** The level-of-detail scale, 1 before the config has loaded. */
+    public static double lodScale() {
+        return get(LOD_SCALE, 1.0);
+    }
+
+    /** This frame's level-of-detail view of a projection whose m11 is {@code m11} on a framebuffer {@code height} high. */
+    public static RenderLod.View lodView(double m11, int height) {
+        return RenderLod.View.of(m11, height, lodScale());
+    }
+
+    public static Paint equipmentPaint(UUID player, Paint fallback) {
+        return EquipmentPaints.find(get(EQUIPMENT_PAINTS, List.of()), player, fallback);
+    }
+
+    public static void rememberEquipmentPaint(UUID player, Paint paint) {
+        set(EQUIPMENT_PAINTS, EquipmentPaints.remember(get(EQUIPMENT_PAINTS, List.of()), player, paint));
+    }
+
     /** The value set, {@code fallback} before the config has loaded. */
-    private static <T extends Enum<T>> T get(ModConfigSpec.EnumValue<T> value, T fallback) {
+    private static <T> T get(ModConfigSpec.ConfigValue<T> value, T fallback) {
         return SPEC.isLoaded() ? value.get() : fallback;
     }
 
     /** Sets the value and saves it to the file; nothing before the config has loaded. */
-    private static <T extends Enum<T>> void set(ModConfigSpec.EnumValue<T> value, T next) {
+    private static <T> void set(ModConfigSpec.ConfigValue<T> value, T next) {
         if (!SPEC.isLoaded()) return;
         value.set(next);
         value.save();

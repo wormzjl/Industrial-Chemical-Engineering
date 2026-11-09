@@ -613,8 +613,8 @@ class IslandCertificateTest {
     private static double[] benchmarkComposition() {
         var catalog=MaterialCatalog.bundled();
         var z=Arrays.copyOf(com.wormzjl.icheme.science.material.MaterialRuntime.with(catalog,FluidPresetCatalog.NETWORK_PACKAGE,
-                ()->com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo.fromRegisteredPackage(FluidPresetCatalog.NETWORK_PACKAGE)
-                        .crudeFeed("icheme:tia_juana_light_methane").moleFractions()),
+                ()->com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo(FluidPresetCatalog.NETWORK_PACKAGE)
+                        .crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions()),
                 com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.conservedCount());
         z[com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.nitrogenIndex()]=.1;z[com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.waterIndex()]=.2;
         return z;

@@ -110,7 +110,11 @@ public final class ColumnDesignTags {
         return tag.get(key) instanceof net.minecraft.nbt.NumericTag n ? n.getAsDouble() : Double.NaN;
     }
 
-    /** The components' fields: the condenser, the reflux pump, the pumparound pumps by name, and the two flags. */
+    /**
+     * The components' fields: the condenser, the reflux pump, the pumparound pumps by name, and the two flags; the member
+     * counts (shape fields 6): the condenser's, the kettle's and each pumparound cooler's units in parallel; the water trim's
+     * shells (shape fields 7).
+     */
     public static CompoundTag writeComponents(ColumnComponents components) {
         var tag = new CompoundTag();
         tag.putString("Condenser", components.condenser().name());
@@ -120,6 +124,11 @@ public final class ColumnDesignTags {
         tag.put("PumparoundPumps", pumps);
         tag.putBoolean("Ejector", components.ejector());
         tag.putBoolean("Kettle", components.kettle());
+        tag.putInt("CondenserUnits", components.units().condenser());
+        tag.putInt("KettleUnits", components.units().kettle());
+        tag.putIntArray("CoolerUnits", components.units().coolers().stream().mapToInt(Integer::intValue).toArray());
+        tag.putInt("TrimUnits", components.units().trim());
+        tag.put("Exchangers",writeExchangers(components.exchangers()));
         return tag;
     }
 
@@ -160,12 +169,39 @@ public final class ColumnDesignTags {
         return saved(parent.contains(key, Tag.TAG_COMPOUND) ? parent.getCompound(key) : new CompoundTag());
     }
 
-    /** The component fields of {@code tag} as written, before any rule reads them; a missing kind reads as an empty name. */
+    /**
+     * The component fields of {@code tag} as written, before any rule reads them; a missing kind reads as an empty name, a
+     * missing count as 1 (a design saved before the counts), a count of another type as 0, which the reader names.
+     */
     private static ShapeRepair.SavedComponents saved(CompoundTag tag) {
         var pumps = new ArrayList<String>();
         if (tag.get("PumparoundPumps") instanceof ListTag list)
             for (int i = 0; i < Math.min(list.size(), ColumnTrays.MAX_PUMPAROUNDS + 1); i++)
                 pumps.add(list.get(i) instanceof StringTag name ? name.getAsString() : String.valueOf(list.get(i)));
-        return new ShapeRepair.SavedComponents(tag.getString("Condenser"), tag.getString("RefluxPump"), pumps, tag.getBoolean("Ejector"), tag.getBoolean("Kettle"));
+        int[] coolers = tag.get("CoolerUnits") instanceof net.minecraft.nbt.IntArrayTag array ? array.getAsIntArray() : tag.contains("CoolerUnits") ? new int[] {0} : new int[0];
+        if (coolers.length > ColumnTrays.MAX_PUMPAROUNDS + 1) coolers = java.util.Arrays.copyOf(coolers, ColumnTrays.MAX_PUMPAROUNDS + 1);
+        return new ShapeRepair.SavedComponents(tag.getString("Condenser"), tag.getString("RefluxPump"), pumps, tag.getBoolean("Ejector"), tag.getBoolean("Kettle"),
+                count(tag, "CondenserUnits"), count(tag, "KettleUnits"), coolers, count(tag, "TrimUnits"),readExchangers(tag));
+    }
+
+    public static CompoundTag writeExchangers(ColumnComponents.Exchangers types) {
+        var tag=new CompoundTag();tag.putString("Condenser",types.condenser().name());tag.putString("Trim",types.trim().name());
+        var coolers=new ListTag();for(var type:types.coolers())coolers.add(StringTag.valueOf(type.name()));tag.put("Coolers",coolers);return tag;
+    }
+    public static ColumnComponents.Exchangers readExchangers(CompoundTag parent) {
+        if(!parent.contains("Exchangers"))return ColumnComponents.Exchangers.STANDARD;
+        if(!parent.contains("Exchangers",Tag.TAG_COMPOUND))throw new IllegalArgumentException("Invalid exchanger configurations");
+        var tag=parent.getCompound("Exchangers");
+        var condenser=com.wormzjl.icheme.science.equipment.ExchangerType.valueOf(tag.getString("Condenser"));
+        var trim=com.wormzjl.icheme.science.equipment.ExchangerType.valueOf(tag.getString("Trim"));
+        var coolers=new ArrayList<com.wormzjl.icheme.science.equipment.ExchangerType>();
+        if(!(tag.get("Coolers") instanceof ListTag list)||list.size()>ColumnTrays.MAX_PUMPAROUNDS)throw new IllegalArgumentException("Invalid cooler configurations");
+        for(var value:list)coolers.add(com.wormzjl.icheme.science.equipment.ExchangerType.valueOf(value.getAsString()));
+        return new ColumnComponents.Exchangers(condenser,trim,coolers);
+    }
+
+    private static int count(CompoundTag tag, String key) {
+        if (!tag.contains(key)) return 1;
+        return tag.get(key) instanceof net.minecraft.nbt.IntTag n ? n.getAsInt() : 0;
     }
 }

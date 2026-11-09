@@ -10,11 +10,12 @@ public final class CoolingTowerBasin {
     public record Point(double x,double z) {}
     public record Triangle(Point a,Point b,Point c) {}
 
-    public static List<Triangle> surface(EquipmentShape shape){
+    public static List<Triangle> surface(EquipmentShape shape){return surface(shape,RenderDetail.NORMAL);}
+    public static List<Triangle> surface(EquipmentShape shape,RenderDetail detail){
         if(shape.kind()!=EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER)throw new IllegalArgumentException("Only a natural tower's basin shows");
         var tower=shape.coolingTower();
         var triangles=new ArrayList<Triangle>();
-        double radius=tower.width()/2;int facets=CoolingTowerDesign.naturalFacets(tower.width());
+        double radius=tower.width()/2;int facets=detail.sides(CoolingTowerDesign.naturalFacets(tower.width()));
         var frame=CoolingTowerDesign.naturalFrame(tower.width());
         var centre=point(shape,frame.origin()[0],frame.origin()[2]);
         for(int segment=0;segment<facets;segment++){

@@ -68,7 +68,7 @@ class V3SimultaneousColumnSolverTest {
     @Test
     void registeredTiaJuanaPrNewtonAttemptIsBoundedAndRecordsItsActualConvergenceState() {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light");
+        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
         V3ColumnProblem problem = V3ColumnProblemResolver.resolve(realCrudeInput(crude), V3CondenserPhaseBranch.TWO_PHASE);
         V3FlashResult feedFlash = thermo.flashTP(problem.input().feedTemperatureKelvin(),
                 problem.nodePressurePascal(problem.topology().feedTrayNumber()), crude.moleFractions(), thermo.newWorkspace());

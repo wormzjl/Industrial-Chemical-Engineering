@@ -1,9 +1,7 @@
 [
-  "tia_juana.json",
+  "medium_crude.json",
   "pot.json",
-  "bonga.json",
-  "cold_lake_blend.json",
-  "dalia.json",
-  "upper_zakum.json",
-  "wti_light_export.json"
+  "light_crude.json",
+  "heavy_crude.json",
+  "oil_sand_dilbit.json"
 ]

@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "SulfurDioxide",
+  "kind": "chemical",
+  "translation_key": "material.icheme.sulfur_dioxide",
+  "fallback": "SulfurDioxide",
+  "properties": "icheme:chemsep_sulfur_dioxide",
+  "appearance": {
+    "color": "#DCE8FA",
+    "transparency": 0.95,
+    "estimated": true
+  },
+  "identifiers": {
+    "cas": "7446-09-5",
+    "chemsep_id": "910",
+    "smiles": "O=[S]=O",
+    "formula": "OSO"
+  }
+}

@@ -8,16 +8,33 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 
 | Folder | Purpose | Batch | Status |
 |---|---|---|---|
+| [lod-rendering/](lod-rendering/README.md) | Frame-time pair of the LOD batch: gauge scene, view and away windows | `2026-11-09-lod-rendering` | Implemented 2026-11-09 |
+| [equipment-service-probes/](equipment-service-probes/README.md) | Gradle-free probes of service cases, nozzle necks, shaft ends and drawn area on the gated shapes | `2026-11-09-main-gate-fixes` | Implemented 2026-11-09 |
+| [equipment-drawings/](equipment-drawings/README.md) | Native equipment drawings and labelled interface proposals | `2026-11-06-simulator-sizing` | In use since 2026-11-08 |
+| [simulator-sizing/](simulator-sizing/README.md) | Sizing, shared-line audits, control/FE and equipment probes | `2026-11-06-simulator-sizing` | Retained since 2026-11-08 |
+| [crude-grades/](crude-grades/README.md) | Generator of the four open crude grades, the Twu cut viscosity tables, the ECCC mixture refit and draft presets | `2026-11-04-open-thermo-data` | In use since 2026-11-04 |
+| [open-thermo-data/](open-thermo-data/README.md) | NIST-derived values re-derived from CoolProp, CEA, IAPWS; the neural sidecar's trained physics as values; oracle and column probes | `2026-11-04-open-thermo-data` | Implemented 2026-11-09 |
+| [neural-retrain/](neural-retrain/README.md) | Open-data retrain of the column's learned start: design, label, feature and fixture probe, Python twin and trainer, re-iteration and qualification harnesses | `2026-11-05-neural-retrain` | Implemented 2026-11-09 |
+| [compound-import/](compound-import/README.md) | DWSIM/ChemSep data extract and compound record import | `2026-11-04-refinery-compounds` | Implemented 2026-11-09 |
+| [package-rework/](package-rework/README.md) | Package snapshot probe, W1 data migrations, sidecar schema 3, wire-width probe | `2026-11-04-refinery-compounds` | Kept for reference since 2026-11-04 |
+| [process-simulator/](process-simulator/README.md) | Plain-JVM probes: a client can run the column and flashes; the design sheets' sample flowsheet solved by hand | `2026-11-02-process-simulator` | In use since 2026-11-02 |
+| [device-names/](device-names/README.md) | Nameplate placement probe and plate-look renders | `2026-11-02-process-simulator` | In use since 2026-11-03 |
+| [simulator-bench/](simulator-bench/README.md) | Process simulator CPU, allocation, heap and draw-call bench on the bundled crude unit, with JFR | `2026-11-02-process-simulator` | In use since 2026-11-04 |
+| [rotating-machinery/](rotating-machinery/README.md) | Machine-law quick checks and campaigns, worked numbers, W2 hold traces and probes | `2026-11-03-rotating-machinery` | In use since 2026-11-04 |
+| [pump-sprites/](pump-sprites/README.md) | Machinery/control sprites and normal/low-detail render probes | `2026-11-03-rotating-machinery`, `2026-11-06-simulator-sizing` | In use since 2026-11-04 |
+| [machine-parts/](machine-parts/README.md) | Flat 16 x 16 machine part item icons (the pump repair kit) | `2026-11-03-rotating-machinery` | In use since 2026-11-04 |
+| [machine-sounds/](machine-sounds/README.md) | Original pump, compressor, motor and steam-turbine loops (authoring only) | `2026-11-03-rotating-machinery` | In use since 2026-11-04 |
+| [machine-nozzle-probe/](machine-nozzle-probe/README.md) | Which nozzle pipe blocks move when machines lose their drawn drivers | `2026-11-03-rotating-machinery` | In use since 2026-11-03 |
 | [localization/](localization/README.md) | Missing-key scan and translation checks for the lang files | `2026-11-03-localization` | Implemented 2026-11-03 |
 | [dry-ice-cost/](dry-ice-cost/README.md) | Per-job cost, shadow flashes and prototypes of the cold crystal worlds | `2026-11-02-dry-ice-cost` | Implemented 2026-11-03 |
 | [cooling-towers/](cooling-towers/README.md) | Tower verification lane, fill forms, relief sprites, polygon counts | `2026-10-30-water-cooling-tower` | Implemented 2026-11-02 |
-| [merge-lane/](merge-lane/README.md) | The one final lane before a merge, with its campaign inputs | `2026-11-02-test-suite-optimization` | Implemented 2026-11-03 |
+| [merge-lane/](merge-lane/README.md) | The one final lane before a merge, with its campaign inputs | `2026-11-02-test-suite-optimization`, `2026-11-09-final-lane-selection` | Implemented 2026-11-09 |
 | [ph-false-root/](ph-false-root/README.md) | TP, PH and UV sweeps on wet feeds, final lanes of the false root and TP steam fixes | `2026-11-02-ph-false-root`, `2026-11-02-tp-steam-refusal` | Implemented 2026-11-02 |
 | [vacuum-column-test/](vacuum-column-test/README.md) | CDU/VDU convergence screens and feed checks | `2026-10-28-vacuum-column` | Implemented 2026-11-02 |
 | [valve-hold-probes/](valve-hold-probes/README.md) | Trace and job-path replays of a column outlet's held jobs | `2026-11-02-valve-hold` | Implemented 2026-11-02 |
 | [drum-outlet-sweep/](drum-outlet-sweep/README.md) | Sweep of lying boot drums' oil-outlet placement (head fallbacks, options A and B) | `2026-10-28-drum-outlet-placement` | Implemented 2026-10-28 |
 | [heat-exchanger-design/](heat-exchanger-design/README.md) | Exchanger coupling, cell-count, 1-2 shell, per-phase film, zero-wall relay and game-timing study harnesses; owner-test probe of the review world; the merge lane | `2026-10-27-heat-exchanger-design` | Implemented 2026-10-28 (0.17.0) |
-| [heat-gui-renders/](heat-gui-renders/README.md) | PNG software renders of the heat Control pages and flowsheet, and the other screens' prototypes | `2026-10-27-heat-exchanger-design`, `2026-10-28-gui-toolkit`, `2026-10-28-column-operation` | In use since 2026-10-28 |
+| [heat-gui-renders/](heat-gui-renders/README.md) | PNG software renders of the heat Control pages and flowsheet, and the other screens' prototypes | `2026-10-27-heat-exchanger-design`, `2026-10-28-gui-toolkit`, `2026-10-28-column-operation`, `2026-11-02-process-simulator`, `2026-11-03-rotating-machinery`, `2026-11-06-simulator-sizing` | In use since 2026-10-28 |
 | [old-mover-removal/](old-mover-removal/README.md) | Writer of the removed-movers corpus image (a world with one-block movers) | `2026-10-28-old-mover-removal` | Implemented 2026-10-28 |
 | [native-column-default/](native-column-default/README.md) | Probes comparing the C++ and the Java outer pass of the inside-out trial, solver and calculator | `2026-10-28-native-column-default` | Implemented 2026-11-02 |
 | [column-operation/](column-operation/README.md) | C1 bench (the split table against drift, homogeneity, warm solve, rule B cost) and the review world's layout probe | `2026-10-28-column-operation` | Implemented 2026-11-02 |
@@ -46,10 +63,10 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 | [pressure-valve-accessory/](pressure-valve-accessory/README.md) | Production previews, focused/full verification and WIP-preserving integration | `2026-10-24-pressure-valve-accessory` | Archived 2026-10-24 |
 | [mover-equipment-arrows/](mover-equipment-arrows/README.md) | Depth-tested equipment/pipe software renders and before/after pump connection fingerprint | `2026-10-24-mover-equipment-arrows` | Archived 2026-10-24 |
 | [pipeline-check-valve/](pipeline-check-valve/README.md) | Actual-mesh renders, focused/full merge evidence and local-file-preserving integration | `2026-10-24-pipeline-check-valve` | Archived 2026-10-24 |
-| [wti-pumping-rate-hold/](wti-pumping-rate-hold/README.md) | Format-17 reader, replays and traces, hold inventories, cold 430/431 validation | `2026-10-24-wti-pumping-rate-hold` | Concluded 2026-10-26 (batch in 0.12.0) |
+| [wti-pumping-rate-hold/](wti-pumping-rate-hold/README.md) | Format-17 reader, replays and traces, hold inventories, cold 430/431 validation | `2026-10-24-wti-pumping-rate-hold` | Concluded 2026-10-26 (batch in 0.12.0); world dump to research/ 2026-11-05 (O5) |
 | [fluid-display-followups/](fluid-display-followups/README.md) | Actual item mesh/GUI-transform slot bounds and fresh WTI feed volume/mass calculation | `2026-10-23-fluid-display-followups` | Archived 2026-10-23 |
 | [pipeline-shutoff-valve/](pipeline-shutoff-valve/README.md) | Actual production-mesh valve render sheets, targeted test/package and resource evidence | `2026-10-23-pipeline-shutoff-valve` | Archived 2026-10-23 |
-| [fluid-world-inspector/](fluid-world-inspector/README.md) | Read-only format-16/17 world inspection, accepted-mode validation, deferred-hold capture | `2026-10-23-valve-regime-convergence`, `2026-10-23-deferred-fluid-hold` | Archived 2026-10-23 |
+| [fluid-world-inspector/](fluid-world-inspector/README.md) | Read-only format-16/17 world inspection, accepted-mode validation, deferred-hold capture | `2026-10-23-valve-regime-convergence`, `2026-10-23-deferred-fluid-hold` | Archived 2026-10-23; world dump to research/ 2026-11-05 (O5) |
 | [fluid-device-controls-display/](fluid-device-controls-display/README.md) | Compressed compile/package evidence only; no harness | `2026-10-23-fluid-device-controls-display` | Archived 2026-10-23 |
 | [mover-port-markings/](mover-port-markings/README.md) | Production equipment/pipe arrow software renders and preview sheet, no game or solver work | `2026-10-23-mover-port-markings` | Archived 2026-10-23 |
 | [fluid-format-reset/](fluid-format-reset/README.md) | Compressed owner crash, compile/package, integration preservation and startup evidence; no harness | `2026-10-23-fluid-format-reset` | Archived 2026-10-23 |
@@ -61,6 +78,7 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 | [stale-worktrees-archive/](stale-worktrees-archive/README.md) | Restore kit of the 2026-10-21 branch and worktree cleanup (36 branch tips, 11 dirty worktrees) | housekeeping 2026-10-21 | Archived 2026-10-21 |
 | [test-archive-2026-10-21/](test-archive-2026-10-21/README.md) | Tests archived by the test review, with source copies and a re-attach patch | `2026-10-21-test-review` | Archived 2026-10-21 (`d13e72d1`) |
 | [test-archive-2026-11-02/](test-archive-2026-11-02/README.md) | Tests archived by the test suite review, with source copies and a re-attach patch | `2026-11-02-test-suite-optimization` | Archived 2026-11-02 (`c1b35ce2d`) |
+| [test-archive-2026-11-08/](test-archive-2026-11-08/README.md) | Tests archived by the simulator-sizing consolidation review, with source copies and a re-attach patch | `2026-11-06-simulator-sizing` | Archived 2026-11-08 (`da982f268`) |
 | [floating-roof-tanks/](floating-roof-tanks/README.md) | Open-vessel solver impact: bundled hold fuzz with open tanks, traces and prototypes | `2026-10-21-floating-roof-tanks` | Concluded 2026-10-26 (batch in 0.12.0) |
 | [storage-vessel-renders/](storage-vessel-renders/README.md) | Software renders of the floating-roof tank and the storage sphere | `2026-10-21-floating-roof-tanks` | Concluded 2026-10-26 (batch in 0.12.0) |
 | [crystal-junction-holds/](crystal-junction-holds/README.md) | Thread t56: rule-off patches, form switch, 743 trace probes and logs | `2026-10-20-crystal-junction-holds` | Implemented 2026-10-20 |
@@ -114,7 +132,7 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 | [wp7c-hot-gas-label/](wp7c-hot-gas-label/README.md) | P3 WP7c probes and envelope scans of the hot-gas phase label | `2026-09-24-coolprop-low-temperature` | Concluded 2026-09-25 (P3 WP7c) |
 | [wp7b-engine-fixed-point/](wp7b-engine-fixed-point/README.md) | P3 WP7b probes and logs of the fixed-point wet flash start | `2026-09-24-coolprop-low-temperature` | Concluded 2026-09-25 (P3 WP7b) |
 | [wp7-network-integration/](wp7-network-integration/README.md) | P3 WP7 probes, record-edit scripts, logs and engine patch of the network integration | `2026-09-24-coolprop-low-temperature` | Concluded 2026-09-25 (P3 WP7) |
-| [wp5-legacy-digest/](wp5-legacy-digest/README.md) | Printer of the legacy network thermo path digest (`LegacyNetworkPathPinTest`) | `2026-09-24-coolprop-low-temperature` | Concluded 2026-09-25 (P3 WP5) |
+| [wp5-legacy-digest/](wp5-legacy-digest/README.md) | Printer of the legacy network thermo path digest (`LegacyNetworkPathPinTest`) | `2026-09-24-coolprop-low-temperature` | Concluded 2026-09-25 (P3 WP5); data copy removed 2026-11-05 (O5) |
 | [wp4-runtime-diagnosis/](wp4-runtime-diagnosis/README.md) | P3 WP4 probes, patches and outputs behind the two runtime failures | `2026-09-24-coolprop-low-temperature` | Concluded 2026-09-25 |
 | [gerg-bubble-points/](gerg-bubble-points/README.md) | GERG-2008 bubble- and dew-point references of the six pilot binaries (CoolProp) | `2026-09-24-coolprop-low-temperature` | Concluded 2026-09-24 (P3 WP8) |
 | [methane-ideal-gas/](methane-ideal-gas/README.md) | Methane ideal-gas Cp from ExoMol energy levels, cross-checked | `2026-09-24-coolprop-low-temperature` | Concluded 2026-09-24 (P3 WP10) |
@@ -158,6 +176,4 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 | `examples/Fluid-Benchmarks.py` | Fluid benchmark audit, summary and memory subcommands (the default jar is `build/libs/createcheme-<mod_version>.jar`, read from `gradle.properties` since `5f866a9`) |
 | `examples/test_fluid_benchmark_summary.py` | Evidence-gate regressions for `Fluid-Benchmarks.py` |
 | `examples/Generate-Hydraulic-References.py` | Decimal reference table for `src/test/resources/fluid/reference/hydraulic-friction.json` |
-| `examples/Fetch-FluidSteamReferences.py` | Reproduces the NIST vapor compressibility checkpoints |
-| `examples/Build-NitrogenFluidProperties.py` | Builds the versioned nitrogen data for the fluid package |
 | `examples/Generate-Fluid-Models.py` | Deterministic prototype block models from Minecraft textures |

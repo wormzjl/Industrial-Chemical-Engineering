@@ -5,6 +5,7 @@
    "id": "Ethane",
    "kind": "lump",
    "fallback": "Ethane",
+   "properties": "test:tjl_ethane",
    "translation_key": "test.ethane",
    "schema_version": 1,
    "appearance": {
@@ -57,6 +58,7 @@
    "id": "Propane",
    "kind": "lump",
    "fallback": "Propane",
+   "properties": "test:tjl_propane",
    "translation_key": "test.propane",
    "schema_version": 1,
    "appearance": {
@@ -109,6 +111,7 @@
    "id": "Isobutane",
    "kind": "lump",
    "fallback": "Isobutane",
+   "properties": "test:tjl_isobutane",
    "translation_key": "test.isobutane",
    "schema_version": 1,
    "appearance": {
@@ -161,6 +164,7 @@
    "id": "N-butane",
    "kind": "lump",
    "fallback": "N-butane",
+   "properties": "test:tjl_n_butane",
    "translation_key": "test.n_butane",
    "schema_version": 1,
    "appearance": {
@@ -213,6 +217,7 @@
    "id": "Isopentane",
    "kind": "lump",
    "fallback": "Isopentane",
+   "properties": "test:tjl_isopentane",
    "translation_key": "test.isopentane",
    "schema_version": 1,
    "appearance": {
@@ -265,6 +270,7 @@
    "id": "N-pentane",
    "kind": "lump",
    "fallback": "N-pentane",
+   "properties": "test:tjl_n_pentane",
    "translation_key": "test.n_pentane",
    "schema_version": 1,
    "appearance": {
@@ -317,6 +323,7 @@
    "id": "tjl19_pc01",
    "kind": "lump",
    "fallback": "tjl19_pc01",
+   "properties": "test:tjl_tjl19_pc01",
    "translation_key": "test.tjl19_pc01",
    "schema_version": 1,
    "appearance": {
@@ -369,6 +376,7 @@
    "id": "tjl19_pc02",
    "kind": "lump",
    "fallback": "tjl19_pc02",
+   "properties": "test:tjl_tjl19_pc02",
    "translation_key": "test.tjl19_pc02",
    "schema_version": 1,
    "appearance": {
@@ -421,6 +429,7 @@
    "id": "tjl19_pc03",
    "kind": "lump",
    "fallback": "tjl19_pc03",
+   "properties": "test:tjl_tjl19_pc03",
    "translation_key": "test.tjl19_pc03",
    "schema_version": 1,
    "appearance": {
@@ -473,6 +482,7 @@
    "id": "tjl19_pc04",
    "kind": "lump",
    "fallback": "tjl19_pc04",
+   "properties": "test:tjl_tjl19_pc04",
    "translation_key": "test.tjl19_pc04",
    "schema_version": 1,
    "appearance": {
@@ -525,6 +535,7 @@
    "id": "tjl19_pc05",
    "kind": "lump",
    "fallback": "tjl19_pc05",
+   "properties": "test:tjl_tjl19_pc05",
    "translation_key": "test.tjl19_pc05",
    "schema_version": 1,
    "appearance": {
@@ -577,6 +588,7 @@
    "id": "tjl19_pc06",
    "kind": "lump",
    "fallback": "tjl19_pc06",
+   "properties": "test:tjl_tjl19_pc06",
    "translation_key": "test.tjl19_pc06",
    "schema_version": 1,
    "appearance": {
@@ -629,6 +641,7 @@
    "id": "tjl19_pc07",
    "kind": "lump",
    "fallback": "tjl19_pc07",
+   "properties": "test:tjl_tjl19_pc07",
    "translation_key": "test.tjl19_pc07",
    "schema_version": 1,
    "appearance": {
@@ -681,6 +694,7 @@
    "id": "tjl19_pc08",
    "kind": "lump",
    "fallback": "tjl19_pc08",
+   "properties": "test:tjl_tjl19_pc08",
    "translation_key": "test.tjl19_pc08",
    "schema_version": 1,
    "appearance": {
@@ -733,6 +747,7 @@
    "id": "tjl19_pc09",
    "kind": "lump",
    "fallback": "tjl19_pc09",
+   "properties": "test:tjl_tjl19_pc09",
    "translation_key": "test.tjl19_pc09",
    "schema_version": 1,
    "appearance": {
@@ -785,6 +800,7 @@
    "id": "tjl19_pc10",
    "kind": "lump",
    "fallback": "tjl19_pc10",
+   "properties": "test:tjl_tjl19_pc10",
    "translation_key": "test.tjl19_pc10",
    "schema_version": 1,
    "appearance": {
@@ -837,6 +853,7 @@
    "id": "tjl19_pc11",
    "kind": "lump",
    "fallback": "tjl19_pc11",
+   "properties": "test:tjl_tjl19_pc11",
    "translation_key": "test.tjl19_pc11",
    "schema_version": 1,
    "appearance": {
@@ -889,6 +906,7 @@
    "id": "tjl19_pc12",
    "kind": "lump",
    "fallback": "tjl19_pc12",
+   "properties": "test:tjl_tjl19_pc12",
    "translation_key": "test.tjl19_pc12",
    "schema_version": 1,
    "appearance": {
@@ -941,6 +959,7 @@
    "id": "tjl19_pc13",
    "kind": "lump",
    "fallback": "tjl19_pc13",
+   "properties": "test:tjl_tjl19_pc13",
    "translation_key": "test.tjl19_pc13",
    "schema_version": 1,
    "appearance": {
@@ -988,97 +1007,29 @@
   }
  },
  {
-  "path": "data/icheme/materials/packages/tjl19.json",
+  "path": "data/icheme/materials/methods/test_tjl_pr78.json",
   "record": {
    "schema_version": 1,
-   "id": "icheme:tjl19_dwsim",
-   "revision": "tjl19-dwsim-10.2.3-r1",
+   "id": "test:tjl_pr78",
+   "revision": "test-tjl-pr78-r1",
    "model": "pr78",
-   "components": [
-    "Ethane",
-    "Propane",
-    "Isobutane",
-    "N-butane",
-    "Isopentane",
-    "N-pentane",
-    "tjl19_pc01",
-    "tjl19_pc02",
-    "tjl19_pc03",
-    "tjl19_pc04",
-    "tjl19_pc05",
-    "tjl19_pc06",
-    "tjl19_pc07",
-    "tjl19_pc08",
-    "tjl19_pc09",
-    "tjl19_pc10",
-    "tjl19_pc11",
-    "tjl19_pc12",
-    "tjl19_pc13"
+   "ideal_gas": "fit",
+   "interactions": [
+    "icheme:tjl20"
    ],
-   "properties": [
-    "test:tjl_ethane",
-    "test:tjl_propane",
-    "test:tjl_isobutane",
-    "test:tjl_n_butane",
-    "test:tjl_isopentane",
-    "test:tjl_n_pentane",
-    "test:tjl_tjl19_pc01",
-    "test:tjl_tjl19_pc02",
-    "test:tjl_tjl19_pc03",
-    "test:tjl_tjl19_pc04",
-    "test:tjl_tjl19_pc05",
-    "test:tjl_tjl19_pc06",
-    "test:tjl_tjl19_pc07",
-    "test:tjl_tjl19_pc08",
-    "test:tjl_tjl19_pc09",
-    "test:tjl_tjl19_pc10",
-    "test:tjl_tjl19_pc11",
-    "test:tjl_tjl19_pc12",
-    "test:tjl_tjl19_pc13"
-   ],
-   "interactions": "icheme:tjl19",
    "missing_interactions": "zero",
    "water_model": "icheme:water",
-   "aliases": {},
-   "advisory_evidence": [
-    "RECONSTRUCTED_PETROLEUM_PROPERTIES: frozen TJL19 reconstruction, not original HYSYS properties; 60 F standard-liquid basis assumed",
-    "ESTIMATED_HEAVY_RESIDUE: empirical critical-property extrapolation retained for flagged petroleum fractions",
-    "THERMAL_FIT: degree-five Cp fit, analytic H relative to 298.15 K; validated over 298.15..900 K",
-    "PR78_MODEL_DIFFERENCE: V3 low-omega coefficient 1.54226; reconstruction source 1.5422"
-   ],
-   "temperature_min_kelvin": 298.15,
-   "temperature_max_kelvin": 900,
    "pressure_min_pascal": 50000,
    "pressure_max_pascal": 2000000
   }
  },
  {
-  "path": "data/icheme/materials/assays/tjl19.json",
+  "path": "data/icheme/materials/packages/tjl19.json",
   "record": {
-   "amounts": [
-    0.0011953330290416187,
-    0.010631349673918511,
-    0.006535219781756949,
-    0.022342119062473517,
-    0.016693680980932407,
-    0.024646729427776546,
-    0.1669127052384942,
-    0.12360693185774074,
-    0.11818743167790562,
-    0.10508077563783608,
-    0.08734053754279895,
-    0.07363767464811377,
-    0.06177094885408543,
-    0.04954248954495828,
-    0.062030660966335194,
-    0.036799695421777606,
-    0.023401025034590673,
-    0.00826687586735154,
-    0.001377815752112468
-   ],
    "schema_version": 1,
-   "id": "icheme:tia_juana_light",
-   "package": "icheme:tjl19_dwsim",
+   "id": "icheme:tjl19_dwsim",
+   "revision": "tjl19-dwsim-10.2.3-r2",
+   "method": "test:tjl_pr78",
    "components": [
     "Ethane",
     "Propane",
@@ -1100,6 +1051,40 @@
     "tjl19_pc12",
     "tjl19_pc13"
    ],
+   "advisory_evidence": [
+    "RECONSTRUCTED_PETROLEUM_PROPERTIES: frozen TJL19 reconstruction, not original HYSYS properties; 60 F standard-liquid basis assumed",
+    "ESTIMATED_HEAVY_RESIDUE: empirical critical-property extrapolation retained for flagged petroleum fractions",
+    "THERMAL_FIT: degree-five Cp fit, analytic H relative to 298.15 K; validated over 298.15..900 K",
+    "PR78_MODEL_DIFFERENCE: V3 low-omega coefficient 1.54226; reconstruction source 1.5422"
+   ]
+  }
+ },
+ {
+  "path": "data/icheme/materials/assays/tjl19.json",
+  "record": {
+   "amounts_by_component": {
+    "Ethane": 0.0011953330290416187,
+    "Propane": 0.010631349673918511,
+    "Isobutane": 0.006535219781756949,
+    "N-butane": 0.022342119062473517,
+    "Isopentane": 0.016693680980932407,
+    "N-pentane": 0.024646729427776546,
+    "tjl19_pc01": 0.1669127052384942,
+    "tjl19_pc02": 0.12360693185774074,
+    "tjl19_pc03": 0.11818743167790562,
+    "tjl19_pc04": 0.10508077563783608,
+    "tjl19_pc05": 0.08734053754279895,
+    "tjl19_pc06": 0.07363767464811377,
+    "tjl19_pc07": 0.06177094885408543,
+    "tjl19_pc08": 0.04954248954495828,
+    "tjl19_pc09": 0.062030660966335194,
+    "tjl19_pc10": 0.036799695421777606,
+    "tjl19_pc11": 0.023401025034590673,
+    "tjl19_pc12": 0.00826687586735154,
+    "tjl19_pc13": 0.001377815752112468
+   },
+   "schema_version": 1,
+   "id": "icheme:tia_juana_light",
    "basis": "mole",
    "appearance": {
     "color": "#FFFFFF",
@@ -1114,6 +1099,7 @@
    "id": "Methane",
    "kind": "lump",
    "fallback": "Methane",
+   "properties": "test:tjl_methane",
    "translation_key": "test.methane",
    "schema_version": 1,
    "appearance": {
@@ -1129,8 +1115,8 @@
    "schema_version": 1,
    "id": "test:tjl_methane",
    "component": "Methane",
-   "revision": "tjl20-methane-nist-r1",
-   "source": "Independent frozen Java numerical oracle",
+   "revision": "tjl20-methane-spine-r3",
+   "source": "Independent frozen Java numerical oracle; ideal-gas Cp = icheme:tjl20_methane tjl20-methane-spine-r3 (the reference spine fit, batch 2026-11-04-open-thermo-data O7; the NIST Shomate fit tjl20-methane-nist-r1 replaced in O5)",
    "molecular_weight_kg_per_mol": 0.0160428,
    "normal_boiling_point_kelvin": 111.66,
    "standard_liquid_density_kg_per_m3": 356.07,
@@ -1143,12 +1129,12 @@
     "type": "shifted_polynomial_5",
     "reference_kelvin": 298.15,
     "coefficients": [
-     35.605746481777615,
-     0.037000414354219455,
-     0.0001459299391720176,
-     -4.216765855568231e-7,
-     5.351033897511078e-10,
-     -2.715203964835217e-13
+     35.70208138851616,
+     0.03726345646011474,
+     0.00014293988221306974,
+     -3.9756267315253727e-7,
+     4.89673847734574e-10,
+     -2.420339184420931e-13
     ]
    },
    "models": {
@@ -1166,6 +1152,7 @@
    "id": "Ethane",
    "kind": "lump",
    "fallback": "Ethane",
+   "properties": "test:tjl_ethane",
    "translation_key": "test.ethane",
    "schema_version": 1,
    "appearance": {
@@ -1218,6 +1205,7 @@
    "id": "Propane",
    "kind": "lump",
    "fallback": "Propane",
+   "properties": "test:tjl_propane",
    "translation_key": "test.propane",
    "schema_version": 1,
    "appearance": {
@@ -1270,6 +1258,7 @@
    "id": "Isobutane",
    "kind": "lump",
    "fallback": "Isobutane",
+   "properties": "test:tjl_isobutane",
    "translation_key": "test.isobutane",
    "schema_version": 1,
    "appearance": {
@@ -1322,6 +1311,7 @@
    "id": "N-butane",
    "kind": "lump",
    "fallback": "N-butane",
+   "properties": "test:tjl_n_butane",
    "translation_key": "test.n_butane",
    "schema_version": 1,
    "appearance": {
@@ -1374,6 +1364,7 @@
    "id": "Isopentane",
    "kind": "lump",
    "fallback": "Isopentane",
+   "properties": "test:tjl_isopentane",
    "translation_key": "test.isopentane",
    "schema_version": 1,
    "appearance": {
@@ -1426,6 +1417,7 @@
    "id": "N-pentane",
    "kind": "lump",
    "fallback": "N-pentane",
+   "properties": "test:tjl_n_pentane",
    "translation_key": "test.n_pentane",
    "schema_version": 1,
    "appearance": {
@@ -1478,6 +1470,7 @@
    "id": "tjl19_pc01",
    "kind": "lump",
    "fallback": "tjl19_pc01",
+   "properties": "test:tjl_tjl19_pc01",
    "translation_key": "test.tjl19_pc01",
    "schema_version": 1,
    "appearance": {
@@ -1530,6 +1523,7 @@
    "id": "tjl19_pc02",
    "kind": "lump",
    "fallback": "tjl19_pc02",
+   "properties": "test:tjl_tjl19_pc02",
    "translation_key": "test.tjl19_pc02",
    "schema_version": 1,
    "appearance": {
@@ -1582,6 +1576,7 @@
    "id": "tjl19_pc03",
    "kind": "lump",
    "fallback": "tjl19_pc03",
+   "properties": "test:tjl_tjl19_pc03",
    "translation_key": "test.tjl19_pc03",
    "schema_version": 1,
    "appearance": {
@@ -1634,6 +1629,7 @@
    "id": "tjl19_pc04",
    "kind": "lump",
    "fallback": "tjl19_pc04",
+   "properties": "test:tjl_tjl19_pc04",
    "translation_key": "test.tjl19_pc04",
    "schema_version": 1,
    "appearance": {
@@ -1686,6 +1682,7 @@
    "id": "tjl19_pc05",
    "kind": "lump",
    "fallback": "tjl19_pc05",
+   "properties": "test:tjl_tjl19_pc05",
    "translation_key": "test.tjl19_pc05",
    "schema_version": 1,
    "appearance": {
@@ -1738,6 +1735,7 @@
    "id": "tjl19_pc06",
    "kind": "lump",
    "fallback": "tjl19_pc06",
+   "properties": "test:tjl_tjl19_pc06",
    "translation_key": "test.tjl19_pc06",
    "schema_version": 1,
    "appearance": {
@@ -1790,6 +1788,7 @@
    "id": "tjl19_pc07",
    "kind": "lump",
    "fallback": "tjl19_pc07",
+   "properties": "test:tjl_tjl19_pc07",
    "translation_key": "test.tjl19_pc07",
    "schema_version": 1,
    "appearance": {
@@ -1842,6 +1841,7 @@
    "id": "tjl19_pc08",
    "kind": "lump",
    "fallback": "tjl19_pc08",
+   "properties": "test:tjl_tjl19_pc08",
    "translation_key": "test.tjl19_pc08",
    "schema_version": 1,
    "appearance": {
@@ -1894,6 +1894,7 @@
    "id": "tjl19_pc09",
    "kind": "lump",
    "fallback": "tjl19_pc09",
+   "properties": "test:tjl_tjl19_pc09",
    "translation_key": "test.tjl19_pc09",
    "schema_version": 1,
    "appearance": {
@@ -1946,6 +1947,7 @@
    "id": "tjl19_pc10",
    "kind": "lump",
    "fallback": "tjl19_pc10",
+   "properties": "test:tjl_tjl19_pc10",
    "translation_key": "test.tjl19_pc10",
    "schema_version": 1,
    "appearance": {
@@ -1998,6 +2000,7 @@
    "id": "tjl19_pc11",
    "kind": "lump",
    "fallback": "tjl19_pc11",
+   "properties": "test:tjl_tjl19_pc11",
    "translation_key": "test.tjl19_pc11",
    "schema_version": 1,
    "appearance": {
@@ -2050,6 +2053,7 @@
    "id": "tjl19_pc12",
    "kind": "lump",
    "fallback": "tjl19_pc12",
+   "properties": "test:tjl_tjl19_pc12",
    "translation_key": "test.tjl19_pc12",
    "schema_version": 1,
    "appearance": {
@@ -2102,6 +2106,7 @@
    "id": "tjl19_pc13",
    "kind": "lump",
    "fallback": "tjl19_pc13",
+   "properties": "test:tjl_tjl19_pc13",
    "translation_key": "test.tjl19_pc13",
    "schema_version": 1,
    "appearance": {
@@ -2153,8 +2158,8 @@
   "record": {
    "schema_version": 1,
    "id": "icheme:tjl20_methane",
-   "revision": "tjl20-methane-nist-r1",
-   "model": "pr78",
+   "revision": "tjl20-methane-nist-r2",
+   "method": "test:tjl_pr78",
    "components": [
     "Methane",
     "Ethane",
@@ -2177,32 +2182,6 @@
     "tjl19_pc12",
     "tjl19_pc13"
    ],
-   "properties": [
-    "test:tjl_methane",
-    "test:tjl_ethane",
-    "test:tjl_propane",
-    "test:tjl_isobutane",
-    "test:tjl_n_butane",
-    "test:tjl_isopentane",
-    "test:tjl_n_pentane",
-    "test:tjl_tjl19_pc01",
-    "test:tjl_tjl19_pc02",
-    "test:tjl_tjl19_pc03",
-    "test:tjl_tjl19_pc04",
-    "test:tjl_tjl19_pc05",
-    "test:tjl_tjl19_pc06",
-    "test:tjl_tjl19_pc07",
-    "test:tjl_tjl19_pc08",
-    "test:tjl_tjl19_pc09",
-    "test:tjl_tjl19_pc10",
-    "test:tjl_tjl19_pc11",
-    "test:tjl_tjl19_pc12",
-    "test:tjl_tjl19_pc13"
-   ],
-   "interactions": "icheme:tjl20",
-   "missing_interactions": "zero",
-   "water_model": "icheme:water",
-   "aliases": {},
    "advisory_evidence": [
     "RECONSTRUCTED_PETROLEUM_PROPERTIES: frozen TJL19 reconstruction, not original HYSYS properties; 60 F standard-liquid basis assumed",
     "ESTIMATED_HEAVY_RESIDUE: empirical critical-property extrapolation retained for flagged petroleum fractions",
@@ -2210,63 +2189,36 @@
     "PR78_MODEL_DIFFERENCE: V3 low-omega coefficient 1.54226; reconstruction source 1.5422",
     "METHANE_EXTENSION: NIST ideal-gas Cp fit; CoolProp PR constants; methane binary interactions assumed zero, not fitted",
     "METHANE_ASSAY: synthetic 0.5 mol% methane blend; hypothetical liquid-density metadata is unused by the molar feed and PR equations"
-   ],
-   "temperature_min_kelvin": 298.15,
-   "temperature_max_kelvin": 900,
-   "pressure_min_pascal": 50000,
-   "pressure_max_pascal": 2000000
+   ]
   }
  },
  {
   "path": "data/icheme/materials/assays/tjl20.json",
   "record": {
-   "amounts": [
-    0.005,
-    0.0011893563638964108,
-    0.010578192925548919,
-    0.006502543682848165,
-    0.02223040846716115,
-    0.016610212576027746,
-    0.02452349578063766,
-    0.16607814171230173,
-    0.12298889719845203,
-    0.11759649451951609,
-    0.1045553717596469,
-    0.08690383485508496,
-    0.0732694862748732,
-    0.061462094109815006,
-    0.04929477709723349,
-    0.06172050766150352,
-    0.03661569694466872,
-    0.02328401990941772,
-    0.008225541488014783,
-    0.0013709266733519057
-   ],
+   "amounts_by_component": {
+    "Methane": 0.005,
+    "Ethane": 0.0011893563638964108,
+    "Propane": 0.010578192925548919,
+    "Isobutane": 0.006502543682848165,
+    "N-butane": 0.02223040846716115,
+    "Isopentane": 0.016610212576027746,
+    "N-pentane": 0.02452349578063766,
+    "tjl19_pc01": 0.16607814171230173,
+    "tjl19_pc02": 0.12298889719845203,
+    "tjl19_pc03": 0.11759649451951609,
+    "tjl19_pc04": 0.1045553717596469,
+    "tjl19_pc05": 0.08690383485508496,
+    "tjl19_pc06": 0.0732694862748732,
+    "tjl19_pc07": 0.061462094109815006,
+    "tjl19_pc08": 0.04929477709723349,
+    "tjl19_pc09": 0.06172050766150352,
+    "tjl19_pc10": 0.03661569694466872,
+    "tjl19_pc11": 0.02328401990941772,
+    "tjl19_pc12": 0.008225541488014783,
+    "tjl19_pc13": 0.0013709266733519057
+   },
    "schema_version": 1,
    "id": "icheme:tia_juana_light_methane",
-   "package": "icheme:tjl20_methane",
-   "components": [
-    "Methane",
-    "Ethane",
-    "Propane",
-    "Isobutane",
-    "N-butane",
-    "Isopentane",
-    "N-pentane",
-    "tjl19_pc01",
-    "tjl19_pc02",
-    "tjl19_pc03",
-    "tjl19_pc04",
-    "tjl19_pc05",
-    "tjl19_pc06",
-    "tjl19_pc07",
-    "tjl19_pc08",
-    "tjl19_pc09",
-    "tjl19_pc10",
-    "tjl19_pc11",
-    "tjl19_pc12",
-    "tjl19_pc13"
-   ],
    "basis": "mole",
    "appearance": {
     "color": "#FFFFFF",

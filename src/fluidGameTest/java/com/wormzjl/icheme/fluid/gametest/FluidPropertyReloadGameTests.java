@@ -42,8 +42,8 @@ public final class FluidPropertyReloadGameTests {
                 helper.assertTrue(world.view(id).status().contains("property data changed"),"Loaded view hides the property-data hold");
                 var capture=world.capture();
                 var model=FluidThermodynamics.forNetwork(original,FluidPresetCatalog.NETWORK_PACKAGE);
-                var encoded=FluidCheckpointCodec.encode(capture.checkpoint(),capture.world().onlineTick(),key->model);
-                var roundTrip=FluidCheckpointCodec.decode(encoded,key->model);
+                var encoded=FluidCheckpointCodec.encode(capture.checkpoint(),capture.world().onlineTick(),key->key.on(model));
+                var roundTrip=FluidCheckpointCodec.decode(encoded,key->key.on(model));
                 boolean refused=false;try{FluidCheckpointCodec.decode(encoded,key->FluidThermodynamics.forNetwork(changed,key.packageId()));}
                 catch(IllegalArgumentException expected){refused=true;}
                 helper.assertTrue(refused,"Restart could silently reinterpret saved energy under changed science");

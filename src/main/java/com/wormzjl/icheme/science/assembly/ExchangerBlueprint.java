@@ -18,14 +18,16 @@ import org.jetbrains.annotations.Nullable;
  * its branches is the feed (outside), the other the bypass line through a control valve to an outlet tee, whose
  * branches are the line to the side's outlet and the product (outside).</li>
  * <li>{@link Lines#RATIO}: a control valve on the side's feed, and a flowmeter on the other side's feed (the reference).</li>
+ * <li>{@link Lines#FEED} (a column condenser's water side, U2 of batch 2026-11-02-process-simulator): a control valve on the
+ * side's feed, and a flowmeter beyond it on the same feed, which the valve regulates by; the column sets its flow.</li>
  * </ul>
  *
  * Shutoffs, strainers and a flowmeter no step asks for pass the line on, as on a column's lines. Minecraft-free.
  */
 public final class ExchangerBlueprint {
-    /** What a side's lines are, from its control: none, a bypass around it, or a ratio station on its feed. */
+    /** What a side's lines are, from its control: none, a bypass around it, a ratio station on its feed, or a flow station on its feed a column sets. */
     public enum Lines {
-        NONE, BYPASS, RATIO
+        NONE, BYPASS, RATIO, FEED
     }
 
     /** The lines of the exchanger's tube and shell sides. */
@@ -78,6 +80,11 @@ public final class ExchangerBlueprint {
         return new Slot(name(side) + "_meter", 0);
     }
 
+    /** The flowmeter on {@code side}'s own feed, beyond its feed valve: what the valve of a flow station regulates by. */
+    public static Slot feedMeter(HeatSides.Side side) {
+        return new Slot(name(side) + "_feed_meter", 0);
+    }
+
     /** The side's inlet nozzle. */
     public static Role inlet(HeatSides.Side side) {
         return side == HeatSides.Side.TUBE ? Role.TUBE_INLET : Role.SHELL_INLET;
@@ -97,7 +104,7 @@ public final class ExchangerBlueprint {
         return switch (lines) {
             case NONE -> null;
             case BYPASS -> bypassValve(side);
-            case RATIO -> feedValve(side);
+            case RATIO, FEED -> feedValve(side);
         };
     }
 
@@ -128,6 +135,11 @@ public final class ExchangerBlueprint {
                     slots.addAll(List.of(valve, meter));
                     links.add(new Link(name(side) + "_feed", Start.at(EXCHANGER, inlet(side), 0), List.of(Step.of(valve, VALVE)), new Outside(), true, valve));
                     links.add(new Link(name(other(side)) + "_reference", Start.at(EXCHANGER, inlet(other(side)), 0), List.of(Step.of(meter, METER)), new Outside(), true, meter));
+                }
+                case FEED -> {
+                    Slot valve = feedValve(side), meter = feedMeter(side);
+                    slots.addAll(List.of(valve, meter));
+                    links.add(new Link(name(side) + "_feed", Start.at(EXCHANGER, inlet(side), 0), List.of(Step.of(valve, VALVE), Step.of(meter, METER)), new Outside(), true, valve));
                 }
             }
         }

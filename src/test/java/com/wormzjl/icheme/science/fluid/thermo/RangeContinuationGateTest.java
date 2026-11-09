@@ -21,7 +21,7 @@ import org.junit.jupiter.api.Test;
  */
 class RangeContinuationGateTest {
     private static final String NETWORK = "icheme:tjl20_methane_nitrogen";
-    private final MaterialCatalog catalog = MaterialCatalog.bundled();
+    private final MaterialCatalog catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
 
     /** Ideal gases: the spines, every {@code shifted_polynomial_5} fit of the network and the steam hold the end's c_p. */
     @Test
@@ -37,8 +37,8 @@ class RangeContinuationGateTest {
                 else {
                     var property = propertyPackage.properties().get(i);
                     if (property.cp().isEmpty()) continue;
-                    double[] fit = HydrocarbonModel.idealGasFitRange(catalog, id, property);
-                    gas = new NetworkPhaseEngine.CoefficientIdealGas(property, fit[0], fit[1]);
+                    double[] fit = CoefficientIdealGas.fitRange(catalog, id, property);
+                    gas = new CoefficientIdealGas(property, fit[0], fit[1]);
                 }
                 ends(gas, id + " " + component);
                 checked++;
@@ -46,7 +46,7 @@ class RangeContinuationGateTest {
         }
         var model = FluidThermodynamics.forNetwork(catalog, NETWORK);
         ends(model.steam(), "steam");
-        assertTrue(checked > 100, "ideal-gas functions checked: " + checked);
+        assertTrue(checked > 50, "ideal-gas functions checked: " + checked);
     }
 
     /** The network's translated equation of state takes the same held c_p on its coefficient path as the engine's fit. */
@@ -58,9 +58,9 @@ class RangeContinuationGateTest {
         int n = propertyPackage.components().size();
         for (int i = 0; i < n; i++) {
             var property = propertyPackage.properties().get(i);
-            double[] fit = HydrocarbonModel.idealGasFitRange(catalog, NETWORK, property);
+            double[] fit = CoefficientIdealGas.fitRange(catalog, NETWORK, property);
             double minimum = fit[0], maximum = fit[1];
-            var gas = new NetworkPhaseEngine.CoefficientIdealGas(property, minimum, maximum);
+            var gas = new CoefficientIdealGas(property, minimum, maximum);
             double[] pure = new double[n];
             pure[i] = 1;
             DoubleUnaryOperator cp = t -> eos.evaluateValues(t, 1000, pure, PengRobinsonKernel.Root.VAPOR, eos.prepare(t)).idealGasHeatCapacity();

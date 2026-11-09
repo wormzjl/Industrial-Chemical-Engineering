@@ -24,6 +24,11 @@ import java.util.Objects;
  * by the same 57.6 kW: the free-water unknown, being nearly free, absorbed the energy common mode instead of
  * the temperatures resolving it (see {@code documentation/V3_FREE_WATER_TRAYS_REVIEW.md} section 5).</p>
  *
+ * <p>Tray one under a drum that decants free water is the exception (condenser carry-over, E31): its free water
+ * leaves for the drum, so {@code W_1 = (all steam) - F_1} and its saturation row reads its own flow directly. The
+ * same root find closes it, opened from the water it holds above the line and capped below the steam that
+ * reaches it.</p>
+ *
  * <h2>The split</h2>
  *
  * <p>Freeze {@code F} instead. A <em>parametric</em> wet set ({@link V3WetTraySet#parametric}) carries the
@@ -123,6 +128,8 @@ final class V3FreeWaterContinuation {
         private V3ColumnProblem problem;
         private int solves;
         private int admitted;
+        /** The margin the last bracketed trial stepped to: -1 the low end's, 1 the high end's, 0 none. */
+        private int lastMarginStep;
         private String note = "no sensitivity measured";
 
         Continuation(V3ColumnProblem untruncated, V3TruncationSupport support, V3PengRobinsonThermo thermo,
@@ -173,10 +180,12 @@ final class V3FreeWaterContinuation {
             CLOSED,
             /**
              * The saturation ratio did not fall as the free water was ramped to the search cap. This is the
-             * signature of the <em>topmost</em> tray of a wet block: the telescoped water balance gives it
-             * {@code W_n = (steam fed at or below n)} exactly, with no {@code F} in it, so its saturation can
-             * only move through {@code T_n} and its hydrocarbon vapour — and the free water it sheds is an
-             * exchange cycle with the tray below, which absorbs it without moving either.
+             * signature of the <em>topmost</em> tray of a wet block whose water falls: the telescoped water
+             * balance gives it {@code W_n = (steam fed at or below n)} exactly, with no {@code F} in it, so its
+             * saturation can only move through {@code T_n} and its hydrocarbon vapour — and the free water it
+             * sheds is an exchange cycle with the tray below, which absorbs it without moving either. That is an
+             * interior block's top tray, or tray one under a drum that cannot decant; a carry-over tray one
+             * reaches it only if it stays supersaturated while carrying over nearly all of its steam.
              */
             UNCONTROLLABLE,
             /** No parametric solve converged near the bracket. */
@@ -201,9 +210,10 @@ final class V3FreeWaterContinuation {
          *
          * <p>{@code SAT(n)} is positive on a supersaturated tray and falls as its free water rises, so the
          * bracket opens at the current flow and is grown geometrically until the sign turns; from then on the
-         * step is a secant kept strictly inside the bracket, and a secant that leaves it or a parametric solve
-         * that fails falls back to bisection. Each evaluation is one converged parametric solve, warm-started
-         * from the previous one.</p>
+         * step is a secant kept strictly inside the bracket. A secant that falls inside the margin of one end
+         * steps to that margin instead, and a margin step that misses the root, a secant that leaves the
+         * bracket, or a parametric solve that fails falls back to bisection. Each evaluation is one converged
+         * parametric solve, warm-started from the previous one.</p>
          *
          * <p>A ramp that reaches the search cap with the tray still supersaturated is reported as
          * {@link Closure#UNCONTROLLABLE} together with the sensitivity it measured, rather than being pushed
@@ -211,6 +221,7 @@ final class V3FreeWaterContinuation {
          */
         private Closure closeTray(int tray) {
             double target = SATURATION_TARGET_FRACTION * closureTolerance;
+            lastMarginStep = 0;
             double flow = freeWater[tray];
             double residual = saturationResidual(tray);
             double openingFlow = flow;
@@ -229,7 +240,7 @@ final class V3FreeWaterContinuation {
                         lowFlow = flow;
                         lowResidual = residual;
                     }
-                    if (flow >= searchCap) {
+                    if (flow >= cap(tray)) {
                         recordSensitivity(tray, openingFlow, openingResidual, flow, residual);
                         return Closure.UNCONTROLLABLE;
                     }
@@ -246,7 +257,7 @@ final class V3FreeWaterContinuation {
                     double extrapolated = falling
                             ? flow + residual * (flow - previousFlow) / (previousResidual - residual)
                             : Double.POSITIVE_INFINITY;
-                    if (!(extrapolated <= searchCap)) {
+                    if (!(extrapolated <= cap(tray))) {
                         recordSensitivity(tray, openingFlow, openingResidual, flow, residual);
                         return Closure.UNCONTROLLABLE;
                     }
@@ -301,9 +312,21 @@ final class V3FreeWaterContinuation {
                 double span = highFlow - lowFlow;
                 double lowest = lowFlow + BRACKET_MARGIN * span;
                 double highest = highFlow - BRACKET_MARGIN * span;
+                // A margin step that did not straddle the root (it landed on the side it stepped from) says the
+                // secant misjudged where the root is: bisect once before stepping to a margin again.
+                boolean marginStepMissed = lastMarginStep < 0 && residual > 0.0 || lastMarginStep > 0 && residual <= 0.0;
+                lastMarginStep = 0;
                 if (Double.isFinite(lowResidual) && Double.isFinite(highResidual) && lowResidual != highResidual) {
                     double secant = lowFlow + span * lowResidual / (lowResidual - highResidual);
                     if (secant > lowest && secant < highest) return secant;
+                    // A secant inside the margin of one end puts the root there: step to that margin, which
+                    // straddles the root and shrinks the bracket twentyfold, instead of bisecting the estimate
+                    // away (heavy crude grade, 2026-11-05: ln(ratio) 9.4e-7 at the low end, then seven bisections
+                    // from the high side, and the budget spent).
+                    if (!marginStepMissed && secant > lowFlow && secant < highFlow) {
+                        lastMarginStep = secant < lowest ? -1 : 1;
+                        return lastMarginStep < 0 ? lowest : highest;
+                    }
                 }
                 if (Double.isFinite(previousResidual) && previousResidual != residual && previousFlow != flow) {
                     double secant = flow - residual * (flow - previousFlow) / (residual - previousResidual);
@@ -316,9 +339,22 @@ final class V3FreeWaterContinuation {
                 return 0.5 * highFlow;
             }
             // Still supersaturated everywhere tried. Open the bracket from the water the tray holds above
-            // saturation — the right magnitude even though the mechanism is thermal — and then double.
+            // saturation — the right magnitude even though the mechanism is thermal — and then double. A
+            // carry-over tray one's mechanism is not thermal: the water above its line is what it would carry
+            // over if its temperature held. Its own condensation heat raises the line, so the step overshoots
+            // and brackets the root at once (heavy crude grade, 2026-11-05: 351 kmol/h against a root of 149).
+            if (!untruncated.freeWaterFalls(tray)) return Math.min(cap(tray), flow + excessWater(tray));
             double opening = flow > 0.0 ? BRACKET_GROWTH * flow : excessWater(tray);
             return Math.min(searchCap, opening);
+        }
+
+        /**
+         * Upper search limit of one tray's free water: the column-wide cap, or, on a carry-over tray one, a margin
+         * below the steam that reaches it, which its vapour must keep.
+         */
+        private double cap(int tray) {
+            return untruncated.freeWaterFalls(tray) ? searchCap
+                    : Math.min(searchCap, (1.0 - BRACKET_MARGIN) * untruncated.waterVaporFlowMolPerSecond(tray));
         }
 
         /** The water this tray's vapour carries above its saturation line, floored into the positive domain. */
@@ -337,13 +373,14 @@ final class V3FreeWaterContinuation {
          *
          * <p>A parametric tray changes no unknown and no row, so admitting one costs nothing structurally and
          * the wet zone can be discovered to its full depth inside one continuation instead of one tray per
-         * refresh. The tray below a wet one is the only candidate: it is the tray the free water falls onto.</p>
+         * refresh. The tray below a wet one is the only candidate: it is the tray the free water falls onto, so a
+         * carry-over tray one, whose water goes to the drum, admits nothing below it.</p>
          */
         private Integer admitNextTray(List<Integer> trays) {
             if (admitted >= MAXIMUM_ADMITTED_TRAYS) return null;
             for (int tray = 1; tray < untruncated.topology().trayCount(); tray++) {
                 int candidate = tray + 1;
-                if (!wet[tray] || wet[candidate]) continue;
+                if (!wet[tray] || wet[candidate] || !untruncated.freeWaterFalls(tray)) continue;
                 V3WetTraySet.Saturation saturation = V3WetTraySet.saturation(
                         problem, state, candidate, waterVaporFlow(candidate));
                 if (saturation == null || !(saturation.ratio() > 1.0 + V3WetTraySet.WET_ENTRY_HYSTERESIS)) continue;
@@ -366,8 +403,13 @@ final class V3FreeWaterContinuation {
             return saturation == null ? Double.NaN : DeterministicMath.log(saturation.ratio());
         }
 
+        /** The node's vapour water at the current free-water vector; zero where no positive water is left. */
         private double waterVaporFlow(int node) {
-            return untruncated.waterVaporFlowMolPerSecond(node) + (node >= 2 ? freeWater[node - 1] : 0.0);
+            try {
+                return untruncated.trayWaterVaporFlow(node, freeWater[node], node >= 2 ? freeWater[node - 1] : 0.0);
+            } catch (IllegalArgumentException carriedOverEverything) {
+                return 0.0;
+            }
         }
 
         /** Solves the dry-shaped system with the current free water frozen, warm-started from the last state. */

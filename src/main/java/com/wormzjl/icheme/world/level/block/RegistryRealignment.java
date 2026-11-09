@@ -37,8 +37,8 @@ import java.util.List;
  * A rack lane is checked at its rack cell: the cell takes the frame the registry holds for its lanes, or a free cell gets
  * a rack of that frame, and its copy rebuilds the lanes from their registrations; a lane the cell cannot carry is held.
  * A held registration whose block or lane stands again is released. A registration is served once its own chunk is
- * loaded: neighbours in a chunk that is not loaded keep their saved joints, and their own load settles both sides
- * (FluidDeviceBlock.connectedState).
+ * loaded. Its block draws the joints the network makes from the registry ({@link FluidDeviceBlock#connectedState}, batch
+ * 2026-11-09-drawn-connections), so a neighbour in a chunk that is not loaded is known by its registration.
  *
  * <p>A structure the registry records (plan 4.4) is checked once every chunk of its box and of the blocks beside it is
  * block-ticking, after the layout refresh when that has it queued: one whose cells stand as its record says is left as it
@@ -216,7 +216,7 @@ public final class RegistryRealignment {
 
     /**
      * Places {@code d}'s block at {@code at}, which is free or holds another fluid device block. The block takes its joints
-     * from the registration before any neighbour reads them, as the laying tool places a line (PipeLaying.lay); then it
+     * from the registration before any neighbour reads them, as the laying tool places a line (LinePlacement.apply); then it
      * connects, takes the sight glass its accessory record holds ({@link #sightGlass}), and its neighbours redraw.
      */
     private static void place(ServerLevel level, FluidWorldAuthority world, BlockPos at, BlockState wanted, PhysicalFluidTopology.Device d) {

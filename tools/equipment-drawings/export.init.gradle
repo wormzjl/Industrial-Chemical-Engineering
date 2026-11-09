@@ -1,0 +1,50 @@
+// Offline drawing tools only. No production/test source set or client run is changed.
+gradle.projectsEvaluated {
+    def p = gradle.rootProject
+    def work = p.providers.gradleProperty('equipmentDrawingWork')
+    if (!work.isPresent()) throw new GradleException('Use tools/equipment-drawings/update.py to supply the drawing workspace.')
+    def drawingSources = p.sourceSets.create('equipmentDrawingTools') {
+        java.srcDir p.file('tools/equipment-drawings')
+        java.srcDir p.file('tools/pump-sprites/probes')
+        java.include 'EngineeringExport.java'
+        java.include 'ProposalMeshes.java'
+        java.include 'ServiceRender.java'
+        java.include 'PumpRender.java'
+        compileClasspath += p.sourceSets.main.output + p.sourceSets.main.compileClasspath
+        runtimeClasspath += output + p.sourceSets.main.runtimeClasspath
+    }
+    p.tasks.named(drawingSources.compileJavaTaskName) {
+        dependsOn p.tasks.named('classes')
+        options.compilerArgs.add('-proc:none')
+    }
+    p.tasks.register('exportEquipmentDrawings', JavaExec) {
+        group = 'documentation'
+        description = 'Export current native equipment meshes and interfaces for offline drawings; never starts a client or test suite.'
+        dependsOn p.tasks.named(drawingSources.classesTaskName)
+        classpath = drawingSources.runtimeClasspath
+        mainClass = 'com.wormzjl.icheme.science.equipment.EngineeringExport'
+        args new File(p.file(work.get()), 'geometry').absolutePath,
+                p.providers.gradleProperty('equipmentDrawingSnapshot').getOrElse('working-tree'),
+                p.providers.gradleProperty('equipmentDrawingHeading').getOrElse('NORTH'),
+                p.providers.gradleProperty('equipmentDrawingOnly').getOrElse('*')
+        jvmArgs '-Djava.awt.headless=true'
+    }
+    p.tasks.register('renderEquipmentServices', JavaExec) {
+        group = 'documentation'
+        description = 'Render native service housings and instrument roots using PumpRender and the actual sprites.'
+        dependsOn p.tasks.named(drawingSources.classesTaskName)
+        classpath = drawingSources.runtimeClasspath
+        mainClass = 'com.wormzjl.icheme.science.equipment.ServiceRender'
+        args new File(p.file(work.get()), 'sprite-renders').absolutePath
+        jvmArgs '-Djava.awt.headless=true'
+    }
+    p.tasks.register('exportEquipmentProposalMeshes', JavaExec) {
+        group = 'documentation'
+        description = 'Export native instrument connectors and fixed network meshes for the explicitly labelled design proposals.'
+        dependsOn p.tasks.named(drawingSources.classesTaskName)
+        classpath = drawingSources.runtimeClasspath
+        mainClass = 'com.wormzjl.icheme.science.equipment.ProposalMeshes'
+        args p.file(work.get()).absolutePath
+        jvmArgs '-Djava.awt.headless=true'
+    }
+}

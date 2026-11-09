@@ -62,6 +62,13 @@ class FluidPumpedFillLineTest {
     }
     private static List<PassiveNetwork.Reservoir> tanks(PassiveNetwork graph){return graph.reservoirs().stream().filter(n->n.kind()==PassiveNetwork.NodeKind.RESERVOIR).toList();}
     private static double liquidFraction(FluidThermodynamics.State s){return (s.liquidVolume()+s.waterVolume())/s.volume();}
+    /** The mover on connection 1 at its shutoff: on its law with no net flow, its relief passing its whole displacement back
+     * (batch 2026-11-03-rotating-machinery, form F2e), or closed; a millionth of its 10 kg/s at most. */
+    private static void assertAtShutoff(IslandCoordinator.Snapshot island,String device) {
+        var result=island.lastResult().orElseThrow();var mode=result.endpointModes().get(1);
+        assertTrue(mode==FlowControl.Mode.MOVER_LAW||mode==FlowControl.Mode.CLOSED,device+" stands at its shutoff: "+mode);
+        assertEquals(0,result.averageMassFlows()[1],1e-5,device+" passes nothing");
+    }
 
     /** One placed line under the real coordinator; see the class comment. */
     private final class Rig {
@@ -92,6 +99,12 @@ class FluidPumpedFillLineTest {
             }
         }
         IslandCoordinator.Snapshot island(){return coordinator.snapshot(1);}
+        /** The share of its set flow the mover on connection {@code edge} moved over the last slice, on its suction's density:
+         * one on its law short of its relief rise (batch 2026-11-03-rotating-machinery, form F2b). */
+        double delivered(int edge) {
+            var island=island();var pipe=island.graph().pipes().get(edge);var drawn=island.graph().reservoirs().get(pipe.first()).state();
+            return island.lastResult().orElseThrow().averageMassFlows()[edge]/(drawn.mass()/drawn.volume())/((FlowControl.Mover)pipe.control()).targetVolumeFlow();
+        }
         String describe() {
             var s=coordinator.observe(1);var text=new StringBuilder(String.format("online %d, committed %d, %d jobs, %.1f s of work, %s, %s",
                     online,s.clock().committedTick(),jobs,work/1e9,s.status(),s.certificate()));
@@ -128,7 +141,7 @@ class FluidPumpedFillLineTest {
 
     /**
      * {@code fill100}'s line: water pumped into a closed chain of three nitrogen tanks. It fills until the pump stands
-     * at its 500 kPa limit over the generator (601,325 Pa), where it closes, and the island certifies STEADY.
+     * at its 500 kPa limit over the generator (601,325 Pa), where it passes nothing, and the island certifies STEADY.
      */
     @Test void aPumpedThreeTankChainFillsToThePumpsShutoffAndCertifies() {
         var rig=new Rig("GPUPRPRPR");rig.run(20*420,s->s.certificate().isPresent());
@@ -136,7 +149,7 @@ class FluidPumpedFillLineTest {
         var island=rig.island();
         assertTrue(island.certificate().isPresent(),"the filled chain certifies: "+rig.describe());
         for(var tank:tanks(island.graph()))assertEquals(601325,tank.state().pressure(),1,"every tank at the pump's shutoff: "+rig.describe());
-        assertEquals(FlowControl.Mode.CLOSED,island.lastResult().orElseThrow().endpointModes().get(1),"the pump is closed at its shutoff corner");
+        assertAtShutoff(island,"the pump");
         assertTrue(liquidFraction(tanks(island.graph()).getFirst().state())>.95,rig.describe());
         assertTrue(rig.work<20_000_000_000L,"the whole fill costs less than 20 s of worker time: "+rig.describe());
     }
@@ -149,7 +162,8 @@ class FluidPumpedFillLineTest {
         var island=rig.island();var result=island.lastResult().orElseThrow();
         assertTrue(island.status().startsWith("FULL"),rig.describe());
         assertTrue(island.clock().committedTick()>=20*590,"the island keeps up with online time: "+rig.describe());
-        assertEquals(FlowControl.Mode.PUMP_TARGET,result.endpointModes().get(1));
+        assertEquals(FlowControl.Mode.MOVER_LAW,result.endpointModes().get(1));
+        assertEquals(1,rig.delivered(1),.005,"the pump holds its set flow: "+rig.describe());
         double[] flows=result.averageMassFlows();
         assertTrue(flows[flows.length-1]>.8*flows[1],"through-flow reaches the void: "+Arrays.toString(flows));
         assertTrue(liquidFraction(tanks(island.graph()).getFirst().state())>.95,rig.describe());
@@ -164,13 +178,14 @@ class FluidPumpedFillLineTest {
         var rig=new Rig("GPUPRPRPRPRPRPR");rig.run(20*120,s->s.clock().committedTick()>=40);
         System.out.println("six-tank fill: "+rig.describe());
         assertTrue(rig.island().clock().committedTick()>=40,"past its first two seconds: "+rig.describe());
-        assertEquals(FlowControl.Mode.PUMP_TARGET,rig.island().lastResult().orElseThrow().endpointModes().get(1));
+        assertEquals(FlowControl.Mode.MOVER_LAW,rig.island().lastResult().orElseThrow().endpointModes().get(1));
+        assertEquals(1,rig.delivered(1),.005,"on at the pump's set flow: "+rig.describe());
     }
 
     /**
      * A compressor moving nitrogen from one closed tank to another (decision D2: a liquid-only pump refuses the gas, D1). Its
-     * limit is a pressure ratio (decision D7): it reaches the discharge at {@code r_max} times the suction and then its
-     * shutoff within a few seconds, and the island certifies. The suction tank is a bag (decision D54): it gives its gas
+     * limit is a pressure ratio (decision D7): it raises the discharge to {@code r_max} times the suction, where it passes
+     * nothing, and the island certifies. The suction tank is a bag (decision D54): it gives its gas
      * at the ambient and at its own temperature, shrinking as the gas leaves, so it stays at 298.15 K and 101325 Pa; the
      * discharge tank, a full bag, rises to {@code r_max} times that. (Before D54 the suction tank was rigid and cooled a
      * fraction of a kelvin by its expansion. Test name kept from the pump it was: the pump held its density-scaled limit,
@@ -183,7 +198,7 @@ class FluidPumpedFillLineTest {
         System.out.println("gas transfer (compressor): "+rig.describe());
         var island=rig.island();var suction=tanks(island.graph()).getFirst().state();var discharge=tanks(island.graph()).getLast().state();
         assertTrue(island.certificate().isPresent(),"the closed transfer certifies: "+rig.describe());
-        assertEquals(FlowControl.Mode.CLOSED,island.lastResult().orElseThrow().endpointModes().get(1),"the compressor is closed at its shutoff");
+        assertAtShutoff(island,"the compressor");
         assertEquals(298.15,suction.temperature(),1e-6,"the suction bag gives its gas at its own temperature (D54): "+rig.describe());
         assertEquals(101325,suction.pressure(),1e-3,"the suction bag stays at the ambient (D54): "+rig.describe());
         assertEquals(COMPRESSOR_RATIO*suction.pressure(),discharge.pressure(),3,"the compressor holds its ratio limit: "+rig.describe());

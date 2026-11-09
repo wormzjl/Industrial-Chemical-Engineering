@@ -171,9 +171,10 @@ final class FluidizedBedGasifierLayout {
         }
         // The top manway on the head's right shoulder (over the top deck); the bottom outlet's neck.
         double mx = a - .5 * r, my = yt + hd * Math.sqrt(1 - .25) - .1;
-        u.mesh.cylinder(Frame.of(new double[]{mx, 0, za}, 1, 1), .35, my, my + .45, 12, Material.SHELL);
-        u.mesh.cylinder(Frame.of(new double[]{mx, 0, za}, 1, 1), .45, my + .45, my + .58, 12, Material.FLANGE);
-        u.mesh.annulus(Frame.of(new double[]{mx, 0, za}, 1, 1), 0, .45, my + .58, 12, 1, Material.FLANGE);
+        double manway = Math.max(.7, Manway.preferredSize(id)), cover = manway * .45 / .7;
+        u.mesh.cylinder(Frame.of(new double[]{mx, 0, za}, 1, 1), manway / 2, my, my + .45, 12, Material.SHELL);
+        u.mesh.cylinder(Frame.of(new double[]{mx, 0, za}, 1, 1), cover, my + .45, my + .58, 12, Material.FLANGE);
+        u.mesh.annulus(Frame.of(new double[]{mx, 0, za}, 1, 1), 0, cover, my + .58, 12, 1, Material.FLANGE);
         double ra = outlet();
         u.mesh.cylinder(Frame.of(axis, 1, 1), ra, yb - hd - .4, yb - hd + .1, 12, Material.SHELL);
         u.mesh.cylinder(Frame.of(axis, 1, 1), ra + .1, yb - hd - .4, yb - hd - .28, 12, Material.FLANGE);

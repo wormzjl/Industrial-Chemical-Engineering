@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import org.junit.jupiter.api.Test;
 
+@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.TiaJuanaExtension.class)
 class V3Tjl20MethanePropertyPackageTest {
     private static final String TJL19 = "icheme:tjl19_dwsim", TJL19_ASSAY = "icheme:tia_juana_light";
     private static final String TJL20 = "icheme:tjl20_methane", TJL20_ASSAY = "icheme:tia_juana_light_methane";
@@ -32,19 +33,22 @@ class V3Tjl20MethanePropertyPackageTest {
         for (int component = 0; component < base.componentBasis().componentCount(); component++) assertEquals(oldFeed[component] * 0.995, feed[component + 1], 1e-15);
     }
 
-    @Test void methaneThermalFitMatchesIndependentNistShomateAndDifferentiatesConsistently() {
+    @Test void methaneThermalFitMatchesTheReferenceSpineAndDifferentiatesConsistently() {
         var methane = V3CatalogPropertyPackage.require(TJL20).component(0);
         assertEquals(190.564, methane.criticalTemperatureKelvin());
         assertEquals(4_599_200, methane.criticalPressurePascal());
         assertEquals(0.01142, methane.acentricFactor());
         assertEquals(0, methane.idealGasEnthalpy(298.15));
-        // The reference is the published rational Shomate expression, not the fitted polynomial.
+        // The reference is what the record was fitted to, not the fitted polynomial: the bundled methane reference spine
+        // (spine/methane.json: CoolProp's Setzmann-Wagner alpha0 to 425 K, the GERG-2008 ideal part above, decision D13) as
+        // ReferenceSpine evaluates it (O7 of batch 2026-11-04-open-thermo-data, decision E16). O2 fitted the Setzmann-Wagner
+        // alpha0 alone; before O2 it was the NIST WebBook Shomate expression. Fit worst 0.014 J/(mol K), 0.22 J/mol.
+        var spine = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot().requireSpine("icheme:pilot_cryogenic", "Methane");
+        assertEquals("spine-methane-r3", spine.revision());
         for (int point = 0; point <= 1000; point++) {
             double temperature = 298.15 + (900 - 298.15) * point / 1000;
-            double t = temperature / 1000;
-            double cp = -0.703029 + 108.4773 * t - 42.52157 * t * t + 5.862788 * t * t * t + 0.678565 / (t * t);
-            assertEquals(cp, methane.idealGasHeatCapacity(temperature), 0.05, "Cp at " + temperature);
-            assertEquals(shomateIntegral(t) - shomateIntegral(0.29815), methane.idealGasEnthalpy(temperature), 0.5,
+            assertEquals(spine.heatCapacity(temperature), methane.idealGasHeatCapacity(temperature), 0.05, "Cp at " + temperature);
+            assertEquals(spine.enthalpy(temperature) - spine.enthalpy(298.15), methane.idealGasEnthalpy(temperature), 0.5,
                     "H relative to 298.15 K at " + temperature);
             double derivative = (methane.idealGasEnthalpy(temperature + 0.001)
                     - methane.idealGasEnthalpy(temperature - 0.001)) / 0.002;
@@ -72,10 +76,5 @@ class V3Tjl20MethanePropertyPackageTest {
         for (int component = 0; component < feed.length; component++) {
             assertEquals(feed[component], (1 - flash.vaporFraction()) * x[component] + flash.vaporFraction() * y[component], 1e-10);
         }
-    }
-
-    private static double shomateIntegral(double t) {
-        return 1000 * (-0.703029 * t + 108.4773 * t * t / 2 - 42.52157 * t * t * t / 3
-                + 5.862788 * t * t * t * t / 4 - 0.678565 / t);
     }
 }

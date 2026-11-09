@@ -346,7 +346,7 @@ public final class IslandCertificate {
     }
     /** The digest of what replay takes to be fixed about an island: everything but its finite inventories and states. */
     static String graphIdentity(PassiveNetwork graph) {
-        var d=new Digest();d.text("icheme-certificate-graph-identity-9");d.integer(graph.reservoirs().size());
+        var d=new Digest();d.text("icheme-certificate-graph-identity-10");d.integer(graph.reservoirs().size());
         for(var node:graph.reservoirs()) {
             d.number(node.id());d.text(node.kind().name());d.real(node.elevation());
             // A junction's volume is a numerical placeholder that a solve may move; a vessel's is its identity.
@@ -367,8 +367,10 @@ public final class IslandCertificate {
             for(var section:pipe.sections()){d.real(section.length());d.real(section.diameter());d.real(section.roughness());d.real(section.minorLoss());d.integer(section.channels());}
             switch(pipe.control()) {
                 case FlowControl.Passive ignored->d.text("passive");
+                case FlowControl.Turbine turbine->{d.text("turbine");d.real(turbine.design().ratedPower());d.real(turbine.design().efficiency());d.real(turbine.massTarget());}
                 case FlowControl.Pump pump->{d.text("pump");d.real(pump.requestedVolumeFlow());d.real(pump.maximumAddedPressure());d.integer(pump.enabled()?1:0);}
                 case FlowControl.Compressor compressor->{d.text("compressor");d.real(compressor.requestedVolumeFlow());d.real(compressor.maximumPressureRatio());d.integer(compressor.enabled()?1:0);}
+                case FlowControl.Machine machine->{var law=machine.law();d.text("machine");d.integer(law.liquid()?1:0);d.real(law.ratedFlow());d.real(law.ratedHead());d.real(law.efficiency());if(law instanceof com.wormzjl.icheme.science.machine.CentrifugalPump pump)d.real(pump.ratedSpeed());d.real(machine.speed());d.integer(machine.enabled()?1:0);}
                 case FlowControl.PressureValve valve->{d.text("valve");d.real(valve.targetPressure());}
                 case FlowControl.ControlValve valve->{d.text("control_valve");d.text(valve.source().name());d.real(valve.target());d.text(String.valueOf(valve.sensor()));d.number(valve.revision());d.real(valve.targetPressure());d.real(valve.massTarget());d.real(valve.volumeTarget());}
             }
@@ -378,9 +380,11 @@ public final class IslandCertificate {
                 case null->d.integer(0);
                 case com.wormzjl.icheme.science.fluid.network.HeatSide side->{d.integer(1);d.real(side.area());d.real(side.films().liquid());d.real(side.films().twoPhase());d.real(side.films().gas());
                     d.integer(side.wall().length);for(double t:side.wall())d.real(t);d.real(side.bypass());d.real(side.giveBack());d.number(side.partner());d.real(side.active());
-                    control(d,side.control());d.integer(side.limit().ordinal());}
+                    control(d,side.control());d.integer(side.limit().ordinal());d.text(side.routing().name());}
                 case com.wormzjl.icheme.science.fluid.network.AirCooled cooled->{var air=cooled.air();d.integer(3);d.real(cooled.area());d.real(air.temperature());d.real(air.barePerFace());d.real(air.film());d.real(air.capacity());d.real(air.natural());
-                    d.real(cooled.draught());control(d,cooled.control());d.integer(cooled.limit().ordinal());}
+                    d.real(cooled.draught());control(d,cooled.control());d.integer(cooled.limit().ordinal());
+                    // Fans without power (W5): a held fan limit is part of the law, named only below 1 (older signatures stand).
+                    if(cooled.fanLimit()<1)d.real(cooled.fanLimit());}
                 case com.wormzjl.icheme.science.fluid.network.ConvectionCoil coil->{d.integer(4);d.real(coil.conductance());d.number(coil.radiant());d.real(coil.flue());}
                 case com.wormzjl.icheme.science.fluid.network.FiredCoil coil->{d.integer(2);d.real(coil.setTemperature());d.number(coil.partner());d.real(coil.duty());d.real(coil.firing());}
             }

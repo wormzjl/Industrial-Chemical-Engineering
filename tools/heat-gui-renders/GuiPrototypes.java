@@ -1,11 +1,16 @@
 import com.wormzjl.icheme.client.gui.common.AssemblyColumn;
+import com.wormzjl.icheme.client.gui.common.TitleStrip;
 import com.wormzjl.icheme.client.gui.common.AssemblyDiagram;
-import com.wormzjl.icheme.client.gui.common.AssemblyFlowsheet;
+import com.wormzjl.icheme.client.gui.flowsheet.AssemblyBlock;
 import com.wormzjl.icheme.client.gui.common.CalculatorColumn;
 import com.wormzjl.icheme.client.gui.common.ConstructorColumn;
 import com.wormzjl.icheme.client.gui.common.DeviceColumn;
+import com.wormzjl.icheme.client.gui.common.ControlColumns;
 import com.wormzjl.icheme.client.gui.common.DialogColumns;
 import com.wormzjl.icheme.client.gui.common.HeatControlColumn;
+import com.wormzjl.icheme.client.gui.common.MachineColumnSamples;
+import com.wormzjl.icheme.client.gui.common.MachineColumn;
+import com.wormzjl.icheme.client.gui.common.PumpCurve;
 import com.wormzjl.icheme.client.gui.common.kit.Canvas;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
 import com.wormzjl.icheme.client.gui.common.kit.Measure;
@@ -14,7 +19,6 @@ import com.wormzjl.icheme.client.gui.common.kit.Palette;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
-import com.wormzjl.icheme.client.gui.common.kit.WindowScale;
 import com.wormzjl.icheme.client.gui.screens.inventory.FluidDeviceScreen.FluidGuiLayout;
 import com.wormzjl.icheme.science.assembly.AssemblyReport;
 import com.wormzjl.icheme.science.assembly.AssemblyView;
@@ -23,6 +27,7 @@ import com.wormzjl.icheme.science.assembly.ColumnBlueprint;
 import com.wormzjl.icheme.science.equipment.ColumnComponents;
 import com.wormzjl.icheme.science.equipment.ColumnTrays;
 import com.wormzjl.icheme.science.equipment.Paint;
+import com.wormzjl.icheme.science.equipment.MachineDuty;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
 import com.wormzjl.icheme.science.equipment.UnitDesign;
 import com.wormzjl.icheme.science.equipment.VesselPlacement;
@@ -80,7 +85,363 @@ public final class GuiPrototypes {
         out.addAll(constructor());
         out.addAll(List.of(pipelineTool(), gauge(), thermometer(), vessel(), unit()));
         out.addAll(OperationPrototypes.operation());
+        out.add(titleStrip());
+        out.addAll(machines());
+        out.addAll(machinePages());
+        out.add(exchangerTypes());
+        out.addAll(pumpReadings());
+        out.addAll(createCoupling());
+        out.addAll(controlPanels());
         return out;
+    }
+
+    static List<Prototype> controlPanels(){
+        var out=new ArrayList<Prototype>();
+        for(boolean dcs:new boolean[]{false,true})for(boolean compact:new boolean[]{false,true}){
+            var layout=ControlColumns.layout(compact?320:640,compact?240:480,dcs);
+            out.add(new Prototype((dcs?"control-dcs":"control-local")+(compact?"-compact":"-wide"),layout.width(),layout.height(),(d,s)->{
+            d.skin.title(d.c,10,10,dcs?"DCS":"Local controller");
+            var view=new ControlColumns.View(true,"m","%",true,"LT-0012 / LEVEL","37.0","CV-0021","CONTROLLING",true,ControlColumns.Variable.LEVEL);
+            // KitDoor shares the long loop column's scroll offset; this one-row controller list is above the end view.
+            if(layout.split()&&!d.end)doorColumn(d,ControlColumns.controllers(List.of(new ControlColumns.Choice("controller:1","Drum level",true)),DIALOG::get),layout.areas().getFirst(),Map.of(),"DCS controller list");
+            if(layout.chooser()!=null)d.skin.button(d.c,layout.chooser(),DIALOG.get("control.controllers"),Skin.Press.REST,false);
+            doorColumn(d,ControlColumns.loop(view,DIALOG::get),layout.areas().getLast(),Map.of("name","Drum level","target","25"),"Level control");
+            dialogFooter(d,DIALOG.get("control.close"),DIALOG.get("control.apply"));
+            },true));
+        }
+        var compact=ControlColumns.layout(320,240,true);
+        out.add(new Prototype("control-dcs-controller-list",compact.width(),compact.height(),(d,s)->{
+            d.skin.title(d.c,10,10,"DCS");
+            d.skin.button(d.c,compact.chooser(),DIALOG.get("control.back"),Skin.Press.REST,false);
+            doorColumn(d,ControlColumns.controllers(List.of(new ControlColumns.Choice("controller:1","Drum level",true),new ControlColumns.Choice("controller:2","Feed flow",false)),DIALOG::get),compact.areas().getFirst(),Map.of(),"Compact controller list");
+            dialogFooter(d,DIALOG.get("control.close"));
+        }));
+        out.add(new Prototype("control-instrument-ids",246,254,(d,s)->{
+            d.skin.title(d.c,10,10,"Drum instruments");
+            var rows=new ArrayList<Column.Row>();
+            rows.add(new Column.Group("Readings",null,List.of(new Column.Reading("level","Liquid level","25","%",null))));
+            rows.addAll(DeviceColumn.instrumentIds(List.of("LT-0012 / Liquid level","PT-0013 / Pressure probe"),TEXTS));
+            doorColumn(d,rows,new Rect(10,30,226,184),Map.of(),"Instrument IDs");
+            dialogFooter(d,"Close");
+        }));
+        return out;
+    }
+
+    static Prototype exchangerTypes() {
+        return new Prototype("exchanger-types",464,254,(d,s)-> {
+            var page=ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.EXCHANGER,2.25,7,2,3,0,0,ProcessUnit.Bank.ONE,null,
+                    new ConstructorColumn.Outlet(1,0,STANDING),16,com.wormzjl.icheme.science.equipment.TowerBank.ONE,MachineDuty.NONE,
+                    com.wormzjl.icheme.science.equipment.ExchangerType.CROSSFLOW),DIALOG);
+            constructorDoor(d,page,"Heat exchanger","change",DIALOG.get(CONSTRUCTOR+"surface","2,658"),Palette.ACCENT,Map.of());
+            var b=d.skin.well(d.c,new Rect(203,30,251,170));
+            d.c.text("Two tube passes",b.x()+8,b.y()+10,Palette.ACCENT);
+            d.c.text("Upper internal space",b.x()+8,b.y()+35,Palette.TEXT);
+            d.c.fill(b.x()+20,b.y()+55,b.x()+220,b.y()+65,Palette.LINE);
+            d.c.outline(b.x()+20,b.y()+50,200,80,Palette.ACCENT);
+            d.c.fill(b.x()+20,b.y()+116,b.x()+220,b.y()+126,Palette.LINE);
+            d.c.text("Lower internal space",b.x()+8,b.y()+139,Palette.TEXT);
+        },true);
+    }
+
+    // ---- W10d's pump readings and curve (batch 2026-11-03-rotating-machinery, decision D37; W10D_BUILD_PLAN.md) ----
+
+    /**
+     * The constructed pump P-101 (as machine-casing) with the shipped Suction and Health groups (DeviceColumn) and the shipped
+     * curve on the glass (PumpCurve), cavitating: NPSH available 6.8 m between NPSH3 3.3 m and 4 x NPSH3 13.2 m (σ about 2);
+     * the same pump at 70 % speed running quiet; and an in-line pump with the readings only and its composition table.
+     */
+    static List<Prototype> pumpReadings() {
+        double rated = 100 / 3600.0;
+        var pump = new com.wormzjl.icheme.science.machine.CentrifugalPump(rated, 80, 0.70, 2950);
+        String required = com.wormzjl.icheme.client.gui.common.kit.Format.number(pump.npsh(1).required(rated));
+        var casing = casingInput().withSuction(new DeviceColumn.Suction("6.8", required, "0.4", "73.0"));
+        var casingRows = DeviceColumn.rows(casing, TEXTS);
+        double slow = .7, flow = .7 * rated, head = pump.head(flow, slow);
+        String slowRequired = com.wormzjl.icheme.client.gui.common.kit.Format.number(pump.npsh(slow).required(flow));
+        var quiet = casingInput().withSuction(new DeviceColumn.Suction("12.0", slowRequired, "0.0", "73.0"));
+        var inline = new DeviceColumn.Input(Kind.PUMP, true, true, true, "bar", "°C", "/h", DeviceColumn.Valve.NONE, null, false, null, null, List.of(),
+                phases("volume", 0, 1, 0, 0), List.of(meter("temperature", "25.0", "°C"), meter("suction_pressure", "1.10", "bar"),
+                meter("throughput", "1995.0", "kmol/h"), meter("pressure_change", "2.40", "bar"))).withSuction(new DeviceColumn.Suction("9.5", "1.7", "0.0", "100.0"));
+        var inlineRows = DeviceColumn.rows(inline, TEXTS);
+        return List.of(
+                devicePage("pump-readings-casing", WINDOW[0], WINDOW[1], casing, (d, s) -> {
+                    d.title("Centrifugal pump");
+                    d.name("P-101", true);
+                    d.tabs(0, "Overview", "Datasheet");
+                    d.status(Door.tr("gui.icheme.fluid.flowing") + " · CAVITATION", Palette.MUTED);
+                    var box = device(d, casing, casingRows, Map.of("volumeFlow", "100.0", "maximumAddedPressure", "10.0"));
+                    d.c.clip(box);
+                    PumpCurve.draw(d.c, box, new PumpCurve.Input(pump, 1.0, rated, 80, 6.8, 3600, "m³/h"), TEXTS);
+                    d.c.unclip();
+                    d.footer(2, "Close", "Apply", "Mole", "°C", "bar", "/h");
+                }),
+                devicePage("pump-readings-quiet", WINDOW[0], WINDOW[1], quiet, (d, s) -> {
+                    d.title("Centrifugal pump");
+                    d.name("P-101", true);
+                    d.tabs(0, "Overview", "Datasheet");
+                    d.status(Door.tr("gui.icheme.fluid.flowing"), Palette.MUTED);
+                    var box = device(d, quiet, DeviceColumn.rows(quiet, TEXTS), Map.of("volumeFlow", "70.0", "maximumAddedPressure", "10.0"));
+                    d.c.clip(box);
+                    PumpCurve.draw(d.c, box, new PumpCurve.Input(pump, slow, flow, head, 12.0, 3600, "m³/h"), TEXTS);
+                    d.c.unclip();
+                    d.footer(2, "Close", "Apply", "Mole", "°C", "bar", "/h");
+                }),
+                devicePage("pump-readings-inline", WINDOW[0], WINDOW[1], inline, (d, s) -> {
+                    d.title("In-line pump");
+                    d.name("P-102", true);
+                    d.tabs(0, "Overview", "Datasheet");
+                    d.status(Door.tr("gui.icheme.fluid.flowing"), Palette.MUTED);
+                    var box = device(d, inline, inlineRows, Map.of("volumeFlow", "36.0", "maximumAddedPressure", "5.00"));
+                    contents(d, box, 1, List.of(new String[]{"Component", "Mole %", "kmol/h"}, new String[]{"Water", "100.0", "1995"}));
+                    d.footer(2, "Close", "Apply", "Mole", "°C", "bar", "/h");
+                }));
+    }
+
+    // ---- W7's machine pages (batch 2026-11-03-rotating-machinery, owner decision D31: option A, each machine its own page) ----
+
+    static final String MACHINE = MachineColumn.KEY;
+
+    /** A machine text under {@code gui.icheme.machine.}. */
+    static String mt(String key, Object... args) {
+        return DIALOG.get(MACHINE + key, args);
+    }
+
+    /**
+     * A pump casing's page with the Drive group (the shipped DeviceColumn): a 30 kW 2-pole motor on a variable drive at 2950
+     * rpm driving P-101, 100 m³/h at 80 m, efficiency 70 %, speed 100 %.
+     */
+    static DeviceColumn.Input casingInput() {
+        return new DeviceColumn.Input(Kind.PUMP, true, true, true, "bar", "°C", "/h", DeviceColumn.Valve.NONE, null, false, null, null, List.of(),
+                phases("volume", 0, 1, 0, 0), List.of(meter("temperature", "25.0", "°C"), meter("suction_pressure", "1.20", "bar"), meter("throughput", "5530.0", "kmol/h"),
+                meter("pressure_change", "7.83", "bar"), new DeviceColumn.Meter("head", "80.0", "m", TEXTS.get("head.hint")), meter("speed_share", "100.0", "%"),
+                meter("shaft_power", "24.9", "kW"), new DeviceColumn.Meter("efficiency", "70.0", "%", TEXTS.get("efficiency.hint"))),
+                new DeviceColumn.Drive(TEXTS.get("drive_line_poles", TEXTS.get("driver.motor"), "30.0", 2), TEXTS.get("drive_state", "RUNNING", "2950"), true, false), null);
+    }
+
+    /** A device page's frame around {@code rows} instead of a DeviceColumn.Input's (as {@link #devicePage}). */
+    static Prototype devicePage(String file, int fw, int fh, List<Column.Row> rows, BiConsumer<Door, Skin> body) {
+        var m = new HeatDiagramRender.Java2dCanvas(new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB).createGraphics()).measure();
+        java.util.function.BiPredicate<Integer,Integer> fit = (w, h) -> FluidGuiLayout.fits(w, h, iw -> Column.place(rows, 10, FluidGuiLayout.DOOR_TOP, FluidGuiLayout.side(iw) - 10, m, Column.Metrics.COMPACT).bounds().h());
+        int s = Math.max(1, Integer.getInteger("guiScale", 3)), gw = -Math.floorDiv(-fw, s), gh = -Math.floorDiv(-fh, s);
+        System.out.printf(java.util.Locale.ROOT, "%-24s %d by %d window: player scale %d, %d by %d GUI px%n", file, fw, fh, s, gw, gh);
+        return new Prototype(file, FluidGuiLayout.imageWidth(gw), FluidGuiLayout.imageHeight(gh), body, !fit.test(gw, gh));
+    }
+
+    /**
+     * {@code rows} in a door column's view {@code area} (narrowed for its bar where taller), scrolled to its end where the door
+     * asks, with their widgets; fields show {@code drafts}. Prints the column's height against the view as {@code what}.
+     */
+    static void doorColumn(Door d, List<Column.Row> rows, Rect area, Map<String, String> drafts, String what) {
+        int tall = Column.place(rows, area.x(), area.y(), area.w(), d.m, Column.Metrics.COMPACT).bounds().h();
+        int width = tall > area.h() ? area.w() - ScrollView.BAR - 4 : area.w();
+        var column = Column.place(rows, area.x(), area.y(), width, d.m, Column.Metrics.COMPACT);
+        var view = new ScrollView();
+        view.layout(new Rect(area.x() - 2, area.y(), width + 4, area.h()), area.x() + width + 3, column.bounds().h());
+        while (d.end && view.offset() < view.max()) view.wheel(view.viewport().x() + 2, view.viewport().y() + 2, -1);
+        d.c.clip(view.viewport());
+        column.draw(d.c, -view.offset(), d.skin);
+        for (var p : column.rows()) {
+            if (p.row() instanceof Column.Field f) {
+                var r = p.slots().get(f.key());
+                if (view.visible(r)) d.skin.field(d.c, view.onScreen(r), drafts.getOrDefault(f.key(), ""), "", false);
+            } else if (p.row() instanceof Column.Wide wide) {
+                var r=p.slots().get(wide.key());
+                if(view.visible(r))d.skin.field(d.c,view.onScreen(r),drafts.getOrDefault(wide.key(),""),"",false);
+            } else if (p.row() instanceof Column.Buttons b)
+                for (var spec : b.buttons()) {
+                    var r = p.slots().get(spec.key());
+                    if (!view.visible(r)) continue;
+                    if (spec.soft()) d.skin.softKey(d.c, view.onScreen(r), spec.text(), spec.latched());
+                    else d.skin.button(d.c, view.onScreen(r), spec.text(), spec.latched() ? Skin.Press.CURRENT : !spec.active() ? Skin.Press.OFF : Skin.Press.REST, false);
+                }
+            else if (p.row() instanceof Column.Setting st && st.steps())
+                for (var spec : List.of(st.minus(), st.plus())) {
+                    var r = p.slots().get(spec.key());
+                    if (view.visible(r)) d.skin.button(d.c, view.onScreen(r), spec.text(), Skin.Press.REST, false);
+                }
+        }
+        d.c.unclip();
+        view.drawBar(d.c, d.skin);
+        if (!d.end && d.skin == PanelSkin.LIGHT) System.out.printf(java.util.Locale.ROOT, "%-24s column %3d px in a %d px view%n", what, column.bounds().h(), area.h());
+    }
+
+    /** A device page's door column (x 10 to {@code FluidGuiLayout.side}), its divider and the glass; returns the glass's inner box. */
+    static Rect deviceDoor(Door d, List<Column.Row> rows, Map<String, String> drafts, String what) {
+        int side = FluidGuiLayout.side(d.w), top = FluidGuiLayout.DOOR_TOP, bottom = d.h - FluidGuiLayout.DOOR_FOOT;
+        doorColumn(d, rows, new Rect(10, top, side - 10, bottom - top), drafts, what);
+        d.skin.vDivider(d.c, side + 13, top, bottom);
+        return d.well(new Rect(side + 15, 72, d.w - side - 20, d.h - 50 - 72));
+    }
+
+    /** Push buttons at the footer's left under its divider, as MachineScreen places them: Close 50 px, the others 60, {@code primary} the confirm one (-1: none). */
+    static void pushFooter(Door d, int primary, String... texts) {
+        d.skin.hDivider(d.c, 8, d.w - 8, d.h - 35);
+        int x = 10;
+        for (int i = 0; i < texts.length; i++) {
+            int w = i == 0 ? 50 : 60;
+            d.skin.button(d.c, new Rect(x, d.h - 27, w, 18), texts[i], i == primary ? Skin.Press.PRIMARY : Skin.Press.REST, false);
+            x += w + 6;
+        }
+    }
+
+    /** The nameplate on the glass, as MachineScreen draws it. */
+    static void nameplate(Door d, Rect box, List<String[]> lines) {
+        int x = box.x() + 6, y = box.y() + 6, w = Math.min(box.w() - 12, 240);
+        var all = new ArrayList<String[]>();
+        all.add(new String[]{mt("nameplate"), ""});
+        all.addAll(lines);
+        for (int i = 0; i < all.size() && y + 10 <= box.bottom(); i++, y += 12) {
+            d.c.text(d.m.cut(all.get(i)[0], w - 80), x, y, i == 0 ? Palette.MUTED : Palette.TEXT);
+            d.c.text(all.get(i)[1], x + w - d.m.width(all.get(i)[1]), y, Palette.ACCENT);
+            if (i == 0) d.c.hLine(x - 2, x + w + 2, y + 10, Palette.LINE);
+        }
+    }
+
+    /** One machine's page from the shipped MachineColumn: its title strip, the one tab, the status once, the door, the nameplate, the footer. */
+    static Prototype machinePage(String file, MachineColumn.Input in, String name, String status, Map<String, String> drafts, List<String[]> plate, boolean datasheet) {
+        var rows = MachineColumn.rows(in, DIALOG);
+        return devicePage(file, WINDOW[0], WINDOW[1], rows, (d, s) -> {
+            d.title(mt("kind." + in.kind().name().toLowerCase(java.util.Locale.ROOT)));
+            if (!name.isEmpty()) d.name(name, in.canEdit());
+            d.tabs(0, TEXTS.get("overview"));
+            d.status(status, MachineColumn.warns(status) ? Palette.WARN : Palette.MUTED);
+            var box = deviceDoor(d, rows, drafts, file);
+            nameplate(d, box, plate);
+            boolean apply = in.canEdit() && in.kind().settable();
+            if (datasheet) pushFooter(d, apply ? 2 : -1, apply ? new String[]{TEXTS.get("close"), TEXTS.get("datasheet"), TEXTS.get("apply")} : new String[]{TEXTS.get("close"), TEXTS.get("datasheet")});
+            else pushFooter(d, apply ? 1 : -1, apply ? new String[]{TEXTS.get("close"), TEXTS.get("apply")} : new String[]{TEXTS.get("close")});
+        });
+    }
+
+    /** Each machine's page (motor, motor tripped, steam turbine, generator, gearbox, creative motor, a reader) and the casing with its Drive group. */
+    static List<Prototype> machinePages() {
+        var t = DIALOG;
+        var motorPlate = List.of(new String[]{mt("rating"), "30.0 kW"}, new String[]{mt("poles"), "2"}, new String[]{mt("drive"), mt("drive.variable")},
+                new String[]{mt("rated_speed"), "2950 rpm"});
+        var casing = casingInput();
+        return List.of(
+                machinePage("machine-motor", MachineColumnSamples.sample(MachineColumn.Kind.MOTOR, true, true, MachineColumn.Mode.SPEED, false, t), "M-101", "RUNNING",
+                        Map.of("speed", "100"), motorPlate, true),
+                machinePage("machine-motor-tripped", MachineColumnSamples.sample(MachineColumn.Kind.MOTOR, true, false, MachineColumn.Mode.SPEED, true, t), "M-102", "TRIPPED: OVERLOAD",
+                        Map.of(), List.of(new String[]{mt("rating"), "30.0 kW"}, new String[]{mt("poles"), "2"}, new String[]{mt("drive"), mt("drive.fixed")},
+                                new String[]{mt("rated_speed"), "2950 rpm"}), true),
+                machinePage("machine-turbine", MachineColumnSamples.sample(MachineColumn.Kind.STEAM_TURBINE, true, true, MachineColumn.Mode.FLOW, false, t), "KT-101", "RUNNING",
+                        Map.of(), List.of(new String[]{mt("rating"), "2500.0 kW"}, new String[]{mt("rated_speed"), "4200 rpm"}), true),
+                machinePage("machine-turbine-tripped", MachineColumnSamples.sample(MachineColumn.Kind.STEAM_TURBINE, true, true, MachineColumn.Mode.SPEED, true, t), "KT-102", "TRIPPED: OVERSPEED",
+                        Map.of("speed", "4200"), List.of(new String[]{mt("rating"), "2500.0 kW"}, new String[]{mt("rated_speed"), "4200 rpm"}), true),
+                machinePage("machine-generator", MachineColumnSamples.sample(MachineColumn.Kind.GENERATOR, true, true, MachineColumn.Mode.SPEED, false, t), "G-101", "RUNNING",
+                        Map.of("powerLimit", ""), List.of(new String[]{mt("rating"), "30.0 kW"}, new String[]{mt("poles"), "2"}, new String[]{mt("rated_speed"), "2950 rpm"}), true),
+                machinePage("machine-gearbox", MachineColumnSamples.sample(MachineColumn.Kind.GEARBOX, true, true, MachineColumn.Mode.SPEED, false, t), "GB-101", "RUNNING",
+                        Map.of("ratio", "0"), List.<String[]>of(new String[]{mt("rated_speed"), "12600 rpm"}), true),
+                machinePage("machine-creative-motor", MachineColumnSamples.sample(MachineColumn.Kind.CREATIVE_MOTOR, true, true, MachineColumn.Mode.SPEED, false, t), "", "RUNNING",
+                        Map.of("speed", "2950", "powerLimit", ""), List.<String[]>of(new String[]{mt("rated_speed"), "2950 rpm"}), false),
+                machinePage("machine-motor-reader", MachineColumnSamples.sample(MachineColumn.Kind.MOTOR, false, true, MachineColumn.Mode.SPEED, false, t), "M-101", "RUNNING",
+                        Map.of(), motorPlate, true),
+                devicePage("machine-casing", WINDOW[0], WINDOW[1], casing, (d, s) -> {
+                    d.title("Centrifugal pump");
+                    d.name("P-101", true);
+                    d.tabs(0, "Overview", "Datasheet");
+                    d.status(Door.tr("gui.icheme.fluid.flowing"), Palette.MUTED);
+                    var box = device(d, casing, Map.of("volumeFlow", "100.0", "maximumAddedPressure", "10.0"));
+                    contents(d, box, 1, List.of(new String[]{"Component", "Mole %", "kmol/h"}, new String[]{"Water", "100.0", "5530"}));
+                    d.footer(2, "Close", "Apply", "Mole", "°C", "bar", "/h");
+                }));
+    }
+
+    // ---- W6b's Create coupling page (batch 2026-11-03-rotating-machinery, form A, decision D40; -Donly=create-coupling) ----
+
+    /**
+     * The Create coupling's page as the game draws it (D41): a published MachineView through MachineColumn.input and its
+     * nameplate, no switches, no Apply: the 30 kW pump train of W6B_BUILD_PLAN
+     * section 1 behind an auto gearbox (11.52), 24.9 kW at the pump, 25.4 kW at the coupling over the gear's 98 %, so 17,345 su at
+     * 1.465 W per su. RUNNING on 40 large water wheels (20,480 su, 3,135 spare); POWER LIMITED on 24 (12,288 su, all drawn: the
+     * train slows to 2629 rpm, 18.0 kW by the cube law); NO ROTATION with Create at rest.
+     */
+    static List<Prototype> createCoupling() {
+        var t = DIALOG;
+        return List.of(
+                coupling("create-coupling-running", MachineColumnSamples.couplingSample("RUNNING", 256, 2950, 17345, 20480, 25.41e3), t),
+                coupling("create-coupling-limited", MachineColumnSamples.couplingSample("POWER LIMITED", 256, 2629, 12287, 12288, 18.0e3), t),
+                coupling("create-coupling-no-rotation", MachineColumnSamples.couplingSample("NO ROTATION", 0, 0, 0, 0, 0), t));
+    }
+
+    /** One coupling sheet from view {@code v}, for a player who may build (as MachineScreen: the coupling's rows, its nameplate, Close only). */
+    static Prototype coupling(String file, com.wormzjl.icheme.runtime.fluid.MachineView v, HeatControlColumn.Texts t) {
+        return machinePage(file, MachineColumn.input(v, true, true, MachineColumn.Mode.SPEED, t), "", v.status(), Map.of(), MachineColumn.nameplate(v, t), false);
+    }
+
+    // ---- N1's title strip (the owner 2026-11-03: "You can put the equipment name here") ----
+
+    /** A 32-character name of the widest letters, and a 32-character name as a plant would write it. */
+    static final String WIDEST = "W".repeat(32), LONG = "CDU-1 crude charge pump P-101A/B";
+
+    /** One strip a row: the screen, its width, its theme key, the kind, the name, an editor's entry or a reader's text. */
+    record StripCase(String screen, int width, int key, String kind, String name, boolean editor) {
+    }
+
+    static final List<StripCase> STRIPS = List.of(
+            new StripCase("device", 448, 18, "Centrifugal pump", "P-101", true),
+            new StripCase("device", 448, 18, "Centrifugal pump", "", true),
+            new StripCase("device", 448, 18, "Centrifugal pump", WIDEST, true),
+            new StripCase("device", 448, 18, "Centrifugal pump", LONG, false),
+            new StripCase("device", 448, 18, "Circulating fluidized-bed boiler", LONG, true),
+            new StripCase("device", 790, 18, "Natural-draft cooling tower", LONG, true),
+            new StripCase("assembly", 448, 18, "Distillation column", "T-101", true),
+            new StripCase("datasheet", 400, 0, "Circulating fluidized-bed boiler", WIDEST, true),
+            new StripCase("datasheet", 400, 0, "Drum", "", false));
+
+    /** Each case on its own band of door, its screen and width beside it; prints each name place's width (STRIP). */
+    static Prototype titleStrip() {
+        int band = 30;
+        return new Prototype("title-strip", 1000, STRIPS.size() * (band + 6) + 4 + band + 6, (d, s) -> {
+            for (int i = 0; i <= STRIPS.size(); i++) {
+                int dy = 4 + i * (band + 6);
+                if (i == STRIPS.size()) {
+                    // The constructor's header as built: its 200 px panel holds the kind and Change, no room for the entry.
+                    d.skin.page(d.c, new Rect(0, dy, ConstructorColumn.PANEL, band));
+                    String title = ConstructorColumn.title(LONG, "Horizontal drum", "Drum", d.m, (nm, k) -> nm + " · " + k);
+                    d.skin.title(d.c, 10, dy + 10, title);
+                    d.c.text("constructor 200 px, as built (no room for a " + TitleStrip.NAME + " px entry)", 810, dy + 10, Palette.MUTED);
+                    continue;
+                }
+                var k = STRIPS.get(i);
+                d.skin.page(d.c, new Rect(0, dy, k.width(), band));
+                var strip = TitleStrip.place(k.width(), k.key(), k.kind(), d.m);
+                d.skin.title(d.c, TitleStrip.TITLE_X, TitleStrip.TITLE_Y + dy, strip.kind());
+                if (k.key() > 0) d.skin.iconKey(d.c, new Rect(k.width() - 10 - k.key(), 5 + dy, k.key(), 18), Skin.Icon.THEME, false);
+                var place = strip.name() == null ? null : strip.name().moved(0, dy);
+                if (place != null && k.editor()) d.skin.field(d.c, place, k.name(), TEXTS.get("name"), false);
+                else if (place != null) {
+                    int[] at = TitleStrip.textAt(place);
+                    d.skin.text(d.c, TitleStrip.text(k.name(), place, d.m), at[0], at[1], Palette.TEXT);
+                }
+                d.c.text(k.screen() + " " + k.width() + " px, " + (k.editor() ? "editor" : "reader"), 810, dy + 10, Palette.MUTED);
+                if (d.skin == PanelSkin.LIGHT) System.out.printf(java.util.Locale.ROOT, "STRIP %-9s %3d px %-34s name place %s px%n", k.screen(), k.width(), k.kind(),
+                        strip.name() == null ? "none" : Integer.toString(strip.name().w()));
+            }
+        });
+    }
+
+    // ---- A machine's design point (batch 2026-11-03-rotating-machinery, option A, owner pick 2026-11-04) ----
+
+    /** The shipped design page of a pump, a motor and a steam turbine: Duty, then Speed and Drive or Inlet steam and Exhaust, then Place. */
+    static List<Prototype> machines() {
+        var outlet = new ConstructorColumn.Outlet(1, 0, STANDING);
+        var one = com.wormzjl.icheme.science.equipment.TowerBank.ONE;
+        var bank = new ProcessUnit.Bank(1, 1);
+        var pump = ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.PUMP, UnitDesign.of(com.wormzjl.icheme.science.equipment.EquipmentShape.Kind.PUMP).size(MachineDuty.pump(200, 100, 2)), 1, 0, 3, 0, 0, bank, null, outlet, 16, one,
+                MachineDuty.pump(200, 100, 2)), DIALOG);
+        var motor = ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.MOTOR, 250, 1, 2, 3, 0, 0, bank, null, outlet, 16, one,
+                MachineDuty.motor(250, 4, MachineDuty.Drive.FIXED)), DIALOG);
+        var turbine = ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.STEAM_TURBINE, UnitDesign.of(com.wormzjl.icheme.science.equipment.EquipmentShape.Kind.STEAM_TURBINE).size(MachineDuty.turbine(2500, MachineDuty.Steam.HP, 450)), 1, 2, 3, 0, 0, bank, null, outlet, 16, one,
+                MachineDuty.turbine(2500, MachineDuty.Steam.HP, 450)), DIALOG);
+        return List.of(
+                new Prototype("equipment-constructor-pump", 464, 254, (d, s) -> constructorDoor(d, pump, "Pump", "change",
+                        DIALOG.get(CONSTRUCTOR + "pump_flow", "200", "100", "78"), Palette.ACCENT, Map.of()), true),
+                new Prototype("equipment-constructor-motor", 464, 254, (d, s) -> constructorDoor(d, motor, "Motor", "change",
+                        DIALOG.get(CONSTRUCTOR + "motor.rating", "250", "1,500", "0.75"), Palette.ACCENT, Map.of()), true),
+                new Prototype("equipment-constructor-turbine", 464, 254, (d, s) -> constructorDoor(d, turbine, "Steam turbine", "change",
+                        DIALOG.get(CONSTRUCTOR + "steam_turbine.power", "2,500", "4,200", "450"), Palette.ACCENT, Map.of()), true));
     }
 
     // ---- The column calculator: the shipped CalculatorColumn on its door (GUI_REVIEW.md order 5) ----
@@ -91,7 +452,14 @@ public final class GuiPrototypes {
                 new Prototype("column-calculator-narrow", 380, 254, (d, s) -> calculatorDoor(d, CalculatorColumn.Page.COLUMN, CalculatorColumn.Metric.TEMPERATURE), true),
                 new Prototype("column-calculator-wide", 533, 280, (d, s) -> calculatorDoor(d, CalculatorColumn.Page.COLUMN, CalculatorColumn.Metric.TEMPERATURE)),
                 new Prototype("column-calculator-results", 464, 254, (d, s) -> calculatorDoor(d, CalculatorColumn.Page.RESULTS, CalculatorColumn.Metric.TEMPERATURE)),
-                new Prototype("column-calculator-results-wide", 533, 280, (d, s) -> calculatorDoor(d, CalculatorColumn.Page.RESULTS, CalculatorColumn.Metric.TRAFFIC)));
+                new Prototype("column-calculator-results-wide", 533, 280, (d, s) -> calculatorDoor(d, CalculatorColumn.Page.RESULTS, CalculatorColumn.Metric.TRAFFIC)),
+                // C1 (COOLER_MODEL_PLAN.md section 6): the condenser's third choice, air then water, with its banks and its trim's shells.
+                new Prototype("column-calculator-air-then-water", 464, 254, (d, s) -> calculatorDoor(d, CalculatorColumn.Page.EQUIPMENT, CalculatorColumn.Metric.TEMPERATURE), true),
+                new Prototype("column-calculator-air-then-water-narrow", 380, 254, (d, s) -> calculatorDoor(d, CalculatorColumn.Page.EQUIPMENT, CalculatorColumn.Metric.TEMPERATURE), true),
+                // W8 (rotating machinery, D43, option B as built): the pump keys gone, the pumps' duties as one table on the glass, rated and before a rating.
+                new Prototype("pump-duty-table", 464, 254, (d, s) -> calculatorDoor(d, CalculatorColumn.Page.EQUIPMENT, CalculatorColumn.Metric.TEMPERATURE, twoPumparounds(), GuiPrototypes::dutyTable), true),
+                new Prototype("pump-duty-table-narrow", 380, 254, (d, s) -> calculatorDoor(d, CalculatorColumn.Page.EQUIPMENT, CalculatorColumn.Metric.TEMPERATURE, twoPumparounds(), GuiPrototypes::dutyTable), true),
+                new Prototype("pump-duty-table-unrated", 464, 254, (d, s) -> calculatorDoor(d, CalculatorColumn.Page.EQUIPMENT, CalculatorColumn.Metric.TEMPERATURE, twoPumparounds(), GuiPrototypes::unratedTable)));
     }
 
     /** The draft's entries as the door shows them. */
@@ -124,8 +492,53 @@ public final class GuiPrototypes {
      * Templates, Solve (primary) and Save; the basis and temperature keys.
      */
     static void calculatorDoor(Door d, CalculatorColumn.Page page, CalculatorColumn.Metric metric) {
+        calculatorDoor(d, page, metric, null);
+    }
+
+    /** The shipped Equipment page of a crude column with two pumparounds, an air-then-water condenser and a kettle. */
+    static CalculatorColumn.Rows twoPumparounds() {
+        return CalculatorColumn.equipment(new CalculatorColumn.EquipmentInput(false, ColumnComponents.Condenser.AIR_THEN_WATER, 2, true, new ColumnComponents.Units(2, 1, List.of(1, 2), 3), true), DIALOG);
+    }
+
+    /**
+     * W8 (batch 2026-11-03-rotating-machinery, D43): the pumps' duties on the glass through the shipped builder
+     * ({@link CalculatorColumn#pumpDuties}), at sample duties: reflux 60 m³/h and 55 m of naphtha (700 kg/m³); PA 1 250 m³/h and 45 m of
+     * kerosene (760); PA 2 350 m³/h and 50 m of gas oil (820), each through {@link com.wormzjl.icheme.science.flowsheet.sizing.PumpSizing#duty}.
+     */
+    static void dutyTable(Door d, Rect box) {
         var t = DIALOG;
-        d.skin.title(d.c, 10, 10, d.m.cut(HeatDiagramRender.tr("block.icheme.column_calculator_v3"), CalculatorColumn.title(d.w)));
+        var pumps = List.of(sampleDuty(t.get("column.component_reflux_pump"), 60, 55, 700), sampleDuty(t.get("column.component_pa", 1), 250, 45, 760),
+                sampleDuty(t.get("column.component_pa", 2), 350, 50, 820));
+        drawDuties(d, box, pumps, "pump duty table");
+    }
+
+    /** The same table before the sheet has a rating: each number a dash, and the note under it. */
+    static void unratedTable(Door d, Rect box) {
+        var t = DIALOG;
+        drawDuties(d, box, List.of(CalculatorColumn.PumpDuty.unknown(t.get("column.component_reflux_pump")), CalculatorColumn.PumpDuty.unknown(t.get("column.component_pa", 1)),
+                CalculatorColumn.PumpDuty.unknown(t.get("column.component_pa", 2))), "pump duty table, unrated");
+    }
+
+    static void drawDuties(Door d, Rect box, List<CalculatorColumn.PumpDuty> pumps, String what) {
+        var sheet = CalculatorColumn.pumpDuties(pumps, box.w(), d.m, DIALOG);
+        CalculatorColumn.draw(d.c, sheet, box, 0);
+        if (d.skin == PanelSkin.LIGHT && !d.end)
+            System.out.printf(java.util.Locale.ROOT, "%-28s glass %d by %d: table %d px tall, %d lines%n", what, box.w(), box.h(), sheet.height(), sheet.lines().size());
+    }
+
+    static CalculatorColumn.PumpDuty sampleDuty(String name, double flow, double head, double density) {
+        var duty = com.wormzjl.icheme.science.flowsheet.sizing.PumpSizing.duty(new com.wormzjl.icheme.science.flowsheet.sizing.PumpSizing.Load(flow, head, 0, null, density));
+        return new CalculatorColumn.PumpDuty(name, duty.flow(), duty.head(), duty.shaft(), duty.npsh(), duty.motor());
+    }
+
+    static void calculatorDoor(Door d, CalculatorColumn.Page page, CalculatorColumn.Metric metric, CalculatorColumn.Rows override) {
+        calculatorDoor(d, page, metric, override, null);
+    }
+
+    /** The calculator door with {@code override}'s rows, and {@code glass} painting the Equipment page's glass (null: left empty, as the screen leaves it). */
+    static void calculatorDoor(Door d, CalculatorColumn.Page page, CalculatorColumn.Metric metric, CalculatorColumn.Rows override, BiConsumer<Door, Rect> glass) {
+        var t = DIALOG;
+        d.skin.title(d.c, 10, 10, d.m.cut(HeatDiagramRender.tr("block.icheme.process_simulator"), CalculatorColumn.title(d.w)));
         d.skin.iconKey(d.c, CalculatorColumn.theme(d.w), Skin.Icon.THEME, false);
         var tabs = CalculatorColumn.tabs(page, t);
         var tabSlots = CalculatorColumn.tabSlots(d.w);
@@ -135,8 +548,10 @@ public final class GuiPrototypes {
         }
         var status = CalculatorColumn.status(new CalculatorColumn.StatusInput(false, false, "", "", false, false, false, null, true, false, null), t);
         d.skin.status(d.c, CalculatorColumn.display(d.w), status.text(), status.palette());
-        var rows = page == CalculatorColumn.Page.COLUMN
-                ? CalculatorColumn.column(new CalculatorColumn.ColumnInput(false, true, "°C", CalculatorColumn.Connection.DRAW, 0, true, true, true, true), t)
+        var rows = override != null ? override : page == CalculatorColumn.Page.COLUMN
+                ? CalculatorColumn.column(new CalculatorColumn.ColumnInput(false, true, "°C", "bar", "kmol/h", CalculatorColumn.Connection.DRAW, 0, true, true, true, true), t)
+                : page == CalculatorColumn.Page.EQUIPMENT
+                ? CalculatorColumn.equipment(new CalculatorColumn.EquipmentInput(false, ColumnComponents.Condenser.AIR_THEN_WATER, 1, true, new ColumnComponents.Units(2, 1, List.of(1), 3), true), t)
                 : CalculatorColumn.results(new CalculatorColumn.ResultsInput(false, CalculatorColumn.View.PROFILES, metric, List.of(), 0, 13, 20), t);
         boolean two = rows.two();
         d.skin.hDivider(d.c, 8, d.w - 8, d.h - CalculatorColumn.DIVIDER);
@@ -150,6 +565,9 @@ public final class GuiPrototypes {
             var in = new CalculatorColumn.DrawingInput(20, 7, List.of(new CalculatorColumn.Mark(0, 13, 0)), List.of(new CalculatorColumn.Mark(0, 10, 8)),
                     List.of(new CalculatorColumn.Mark(0, 21, 0)), 13, CalculatorColumn.Connection.DRAW, 0, shares);
             CalculatorColumn.draw(d.c, CalculatorColumn.drawing(in, box, 0, d.m, t, node -> ""), t);
+        } else if (page == CalculatorColumn.Page.EQUIPMENT) {
+            // The derived components' glass is the screen's own; the sheet shows the door (or a prototype's glass).
+            if (glass != null) glass.accept(d, box);
         } else {
             var legend = metric == CalculatorColumn.Metric.TRAFFIC ? List.of(new CalculatorColumn.Legend(t.get("column.traffic.organic"), CalculatorColumn.TRAFFIC[0]),
                     new CalculatorColumn.Legend(t.get("column.traffic.vapor"), CalculatorColumn.TRAFFIC[1]), new CalculatorColumn.Legend(t.get("column.traffic.water"), CalculatorColumn.TRAFFIC[2]),
@@ -226,18 +644,37 @@ public final class GuiPrototypes {
         c.text("Tray 14", box.x() + 8, dy + 4, Palette.TEXT);
     }
 
-    // ---- The assembly check: the shipped AssemblyColumn and AssemblyFlowsheet on the door (GUI_REVIEW.md order 4) ----
+    // ---- The assembly check: the shipped AssemblyColumn and AssemblyBlock on the door (GUI_REVIEW.md order 4) ----
 
     /** A column with a kettle, one side draw and one pumparound. */
     static final ColumnTrays ASSEMBLY = new ColumnTrays(20, 10, List.of(6), List.of(), List.of(new ColumnTrays.Pumparound(8, 6)),
             new ColumnComponents(ColumnComponents.Condenser.EXCHANGER, ColumnComponents.Pump.STANDARD, List.of(ColumnComponents.Pump.STANDARD), false, true));
 
+    /**
+     * S3b: the same column asking for three condenser shells, two kettles and two shells on its PA cooler. Two condenser shells
+     * stand in parallel (a count fault), the kettles are in place, and one PA cooler shell is another size.
+     */
+    static final ColumnTrays COUNTED = new ColumnTrays(20, 10, List.of(6), List.of(), List.of(new ColumnTrays.Pumparound(8, 6)),
+            new ColumnComponents(ColumnComponents.Condenser.EXCHANGER, ColumnComponents.Pump.STANDARD, List.of(ColumnComponents.Pump.STANDARD), false, true,
+                    new ColumnComponents.Units(3, 2, List.of(2))));
+
     /** A check of {@link #ASSEMBLY}: an in-line pump where the reflux pump goes (misplaced), no feed valve, the PA cooler's line open; the rest in place. */
     static AssemblyReport assemblyReport() {
-        var slots = ColumnBlueprint.of(ASSEMBLY).slots();
-        var faults = Map.of(ColumnBlueprint.REFLUX_PUMP, new AssemblyReport.SlotReport(ColumnBlueprint.REFLUX_PUMP, AssemblyReport.State.WRONG_KIND, 1003, AssemblyReport.NONE, "INLINE_PUMP"),
+        return assemblyReport(ASSEMBLY, Map.of(ColumnBlueprint.REFLUX_PUMP, new AssemblyReport.SlotReport(ColumnBlueprint.REFLUX_PUMP, AssemblyReport.State.WRONG_KIND, 1003, AssemblyReport.NONE, "INLINE_PUMP"),
                 ColumnBlueprint.FEED_VALVE, new AssemblyReport.SlotReport(ColumnBlueprint.FEED_VALVE, AssemblyReport.State.MISSING, AssemblyReport.NONE, AssemblyReport.NONE, ""),
-                ColumnBlueprint.pumparoundCooler(1), new AssemblyReport.SlotReport(ColumnBlueprint.pumparoundCooler(1), AssemblyReport.State.OPEN_END, 1012, AssemblyReport.NONE, "unconnected"));
+                ColumnBlueprint.pumparoundCooler(1), new AssemblyReport.SlotReport(ColumnBlueprint.pumparoundCooler(1), AssemblyReport.State.OPEN_END, 1012, AssemblyReport.NONE, "unconnected")));
+    }
+
+    /** A check of {@link #COUNTED}: two condenser shells where the design asks for three, the kettles in parallel, a PA cooler shell of another size. */
+    static AssemblyReport countedReport() {
+        return assemblyReport(COUNTED, Map.of(ColumnBlueprint.CONDENSER, new AssemblyReport.SlotReport(ColumnBlueprint.CONDENSER, AssemblyReport.State.UNIT_COUNT, 1001, AssemblyReport.NONE, "2:3", List.of(1101L)),
+                ColumnBlueprint.REBOILER, new AssemblyReport.SlotReport(ColumnBlueprint.REBOILER, AssemblyReport.State.OK, 1002, AssemblyReport.NONE, "", List.of(1102L)),
+                ColumnBlueprint.pumparoundCooler(1), new AssemblyReport.SlotReport(ColumnBlueprint.pumparoundCooler(1), AssemblyReport.State.UNIT_SHAPES, 1012, 1112, "", List.of(1112L))));
+    }
+
+    /** A check of {@code trays}: {@code faults} where they are, every other slot in place. */
+    static AssemblyReport assemblyReport(ColumnTrays trays, Map<Slot, AssemblyReport.SlotReport> faults) {
+        var slots = ColumnBlueprint.of(trays).slots();
         var reports = new ArrayList<AssemblyReport.SlotReport>();
         var members = new ArrayList<Long>();
         for (int i = 0; i < slots.size(); i++) {
@@ -248,17 +685,39 @@ public final class GuiPrototypes {
         }
         // Each drawn port of a unit in place is connected; a faulted unit's still need their pipes.
         var ports = new ArrayList<AssemblyReport.PortReport>();
-        for (var m : AssemblyDiagram.of(ASSEMBLY).ports())
+        for (var m : AssemblyDiagram.of(trays).ports())
             for (var r : reports)
                 if (r.slot().equals(m.slot()) && r.member() != AssemblyReport.NONE)
-                    ports.add(new AssemblyReport.PortReport(r.member(), m.role(), Math.max(0, m.ordinal()), r.state() == AssemblyReport.State.OK ? AssemblyReport.PortState.CONNECTED : AssemblyReport.PortState.NEEDED));
+                    for (long unit : r.units())
+                        ports.add(new AssemblyReport.PortReport(unit, m.role(), Math.max(0, m.ordinal()), r.state() == AssemblyReport.State.OK ? AssemblyReport.PortState.CONNECTED : AssemblyReport.PortState.NEEDED));
         return new AssemblyReport(reports, ports, java.util.Set.of(), members);
     }
 
-    /** Nothing selected after a check; then the reflux pump selected while the next check is queued. */
+    /** Nothing selected after a check; then the reflux pump selected while the next check is queued; then S3b's members in parallel, the condenser selected. */
     static List<Prototype> assembly() {
         return List.of(new Prototype("assembly", 464, 254, (d, s) -> assemblyDoor(d, null, false)),
-                new Prototype("assembly-selected", 464, 254, (d, s) -> assemblyDoor(d, ColumnBlueprint.REFLUX_PUMP, true)));
+                new Prototype("assembly-selected", 464, 254, (d, s) -> assemblyDoor(d, ColumnBlueprint.REFLUX_PUMP, true)),
+                // At a 1600 by 900 window's size, where the block's labels draw (scale 0.5 and up).
+                new Prototype("assembly-wide", 760, 400, (d, s) -> assemblyDoor(d, ASSEMBLY, assemblyReport(), ColumnBlueprint.REFLUX_PUMP, false)),
+                new Prototype("assembly-member-counts", 760, 400, (d, s) -> assemblyDoor(d, COUNTED, countedReport(), ColumnBlueprint.CONDENSER, false)),
+                new Prototype("assembly-air-then-water", 760, 400, (d, s) -> assemblyDoor(d, TRIMMED, assemblyReport(TRIMMED, Map.of()), ColumnBlueprint.TRIM_CONDENSER, false)),
+                // The drawing alone, with an ejector, the trim selected, to read the pair's labels and lines.
+                new Prototype("assembly-air-then-water-drawing", 360, 420, (d, s) -> {
+                    var box = d.well(new Rect(8, 8, 344, 404));
+                    var vacuum = new ColumnTrays(TRIMMED.trays(), TRIMMED.feed(), TRIMMED.draws(), TRIMMED.steam(), TRIMMED.pumparounds(), new ColumnComponents(ColumnComponents.Condenser.AIR_THEN_WATER, ColumnComponents.Pump.STANDARD, List.of(ColumnComponents.Pump.STANDARD), true, true, TRIMMED.components().units()));
+                    var block = new AssemblyBlock(vacuum);
+                    block.fit(box);
+                    block.draw(d.c, box, assemblyReport(vacuum, Map.of()), ColumnBlueprint.TRIM_CONDENSER, "T-101", DIALOG);
+                }));
+    }
+
+    /** C1 (COOLER_MODEL_PLAN.md section 6): the same column with an air-then-water condenser, two air cooler banks and three trim shells, all in place. */
+    static final ColumnTrays TRIMMED = new ColumnTrays(20, 10, List.of(6), List.of(), List.of(new ColumnTrays.Pumparound(8, 6)),
+            new ColumnComponents(ColumnComponents.Condenser.AIR_THEN_WATER, ColumnComponents.Pump.STANDARD, List.of(ColumnComponents.Pump.STANDARD), false, true,
+                    new ColumnComponents.Units(2, 1, List.of(1), 3)));
+
+    static void assemblyDoor(Door d, Slot selected, boolean queued) {
+        assemblyDoor(d, ASSEMBLY, assemblyReport(), selected, queued);
     }
 
     /**
@@ -266,12 +725,12 @@ public final class GuiPrototypes {
      * Operation off until the structure is complete), the status once, the glass with the drawing and the parts list, the
      * door column, the footer under its divider.
      */
-    static void assemblyDoor(Door d, Slot selected, boolean queued) {
+    static void assemblyDoor(Door d, ColumnTrays trays, AssemblyReport report, Slot selected, boolean queued) {
         var t = DIALOG;
-        var report = assemblyReport();
-        var diagram = AssemblyDiagram.of(ASSEMBLY);
-        var slots = ColumnBlueprint.of(ASSEMBLY).slots();
+        var diagram = AssemblyDiagram.of(trays);
+        var slots = ColumnBlueprint.of(trays).slots();
         d.title(t.get(AssemblyColumn.KEY + "title"));
+        d.name("T-101", true);
         var tabs = AssemblyColumn.tabs(false, false, t);
         var tabSlots = AssemblyColumn.tabSlots(d.w);
         for (int i = 0; i < tabs.size(); i++) {
@@ -283,10 +742,11 @@ public final class GuiPrototypes {
         d.skin.hDivider(d.c, 8, d.w - 8, d.h - AssemblyColumn.DIVIDER);
         var box = d.well(AssemblyColumn.glass(d.w, d.h, true));
         var split = AssemblyColumn.split(box);
-        var sheet = new AssemblyFlowsheet(diagram);
-        sheet.fit(split.drawing());
+        // The drawing as the process simulator draws a column (owner's option A, 2026-11-03), the parts list beside it.
+        var block = new AssemblyBlock(trays);
+        block.fit(split.drawing());
         d.c.clip(split.drawing());
-        sheet.draw(d.c, report, selected, x -> AssemblyColumn.text(x, t));
+        block.draw(d.c, split.drawing(), report, selected, "T-101", t);
         d.c.unclip();
         var area = split.list();
         d.c.vLine(area.x() - AssemblyColumn.GAP / 2, box.y() - 1, box.bottom(), Palette.LINE);
@@ -298,18 +758,19 @@ public final class GuiPrototypes {
         AssemblyColumn.draw(d.c, parts, lines, 0, selected == null ? -1 : slots.indexOf(selected));
         d.c.unclip();
         listView.drawBar(d.c, d.skin);
+        if (d.skin == PanelSkin.LIGHT) System.out.printf(java.util.Locale.ROOT, "%-24s block at scale %.2f in %d by %d px%n", "assembly " + d.w + "x" + d.h, block.scale(), split.drawing().w(), split.drawing().h());
         // The door column, narrowed for its bar where it is taller than its area (KitDoor).
         String name = selected == null ? null : AssemblyColumn.text(diagram.part(selected).name(), t);
+        // N1 (the owner 2026-11-03): a player who may build names the column in the title strip, sent with the footer's Apply.
         var rows = AssemblyColumn.rows(AssemblyColumn.input(slots.size(), report, queued, name, selected != null), t);
         var door = AssemblyColumn.area(d.w, d.h);
         int tall = Column.place(rows, door.x(), door.y(), door.w(), d.m, Column.Metrics.COMPACT).bounds().h();
         d.column(rows, door.x(), door.y(), tall > door.h() ? door.w() - ScrollView.BAR - 4 : door.w(), Map.of());
-        var footer = AssemblyColumn.footer(d.w, d.h);
-        var keys = AssemblyColumn.footerButtons(t);
-        for (int i = 0; i < keys.size(); i++) d.skin.button(d.c, footer.get(i), keys.get(i).text(), Skin.Press.REST, false);
+        var footer = AssemblyColumn.footer(d.w, d.h, 3);
+        var keys = AssemblyColumn.footerButtons(true, t);
+        for (int i = 0; i < keys.size(); i++) d.skin.button(d.c, footer.get(i), keys.get(i).text(), keys.get(i).key().equals("apply") ? Skin.Press.PRIMARY : Skin.Press.REST, false);
         if (d.skin == PanelSkin.LIGHT)
-            System.out.printf(java.util.Locale.ROOT, "%-24s column %3d px in a %d px view, list %d lines in %d px%n", "assembly" + (selected == null ? "" : " selected"), tall, door.h(),
-                    parts.lines().size(), lines.h());
+            System.out.printf(java.util.Locale.ROOT, "%-24s column %3d px in a %d px view%n", "assembly" + (selected == null ? "" : " selected"), tall, door.h());
     }
 
     // ---- The equipment constructor: the shipped ConstructorColumn on its door left of the world (GUI_REVIEW.md order 3) ----
@@ -320,8 +781,8 @@ public final class GuiPrototypes {
 
     static List<Prototype> constructor() {
         var outlet = new ConstructorColumn.Outlet(1, 0, STANDING);
-        var drum = ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.VERTICAL, 2, 6, 3, 3, 0, 0, new ProcessUnit.Bank(1, 1), null, outlet, 16), DIALOG);
-        var lying = ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.CROSSWISE, 2.5, 8, 2, 4, -2, 0, new ProcessUnit.Bank(1, 1), null, outlet, 16), DIALOG);
+        var drum = ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.VERTICAL, 2, 6, 3, 3, 0, 0, new ProcessUnit.Bank(1, 1), null, outlet, 16, com.wormzjl.icheme.science.equipment.TowerBank.ONE), DIALOG);
+        var lying = ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.CROSSWISE, 2.5, 8, 2, 4, -2, 0, new ProcessUnit.Bank(1, 1), null, outlet, 16, com.wormzjl.icheme.science.equipment.TowerBank.ONE), DIALOG);
         var connections = ConstructorColumn.connections(new ConstructorColumn.Connections(2, 1, 1, STANDING, "4.5", false, -1, "back", true, false, false,
                 new ConstructorColumn.Outlet(0b1011, 0, STANDING)), DIALOG);
         var nozzles = ConstructorColumn.nozzles(new ConstructorColumn.Nozzles(7, 2, new ConstructorColumn.Nozzle("pumparound_draw", 1, true, "18.5",
@@ -329,21 +790,23 @@ public final class GuiPrototypes {
         String volume = DIALOG.get(CONSTRUCTOR + "volume", "20.9", "46.4");
         // A column's design page with Import and Templates, and its Templates page: the bundled templates, the pot off, one of the player's.
         var columnDesign = ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.COLUMN, 8, 6, 10, 3, 0, 0, new ProcessUnit.Bank(1, 1),
-                new ConstructorColumn.Imported(8, 42, 38), outlet, 16), DIALOG);
+                new ConstructorColumn.Imported(8, 42, 38), outlet, 16, com.wormzjl.icheme.science.equipment.TowerBank.ONE), DIALOG);
         var templates = new ArrayList<ConstructorColumn.Template>();
         for (var name : List.of("Bonga", "Cold Lake Blend", "Dalia", "Tia Juana Light (default)", "Upper Zakum", "WTI Light - Export"))
             templates.add(new ConstructorColumn.Template(name, true, DIALOG.get(CONSTRUCTOR + "template.bundled", name)));
         templates.add(new ConstructorColumn.Template("Two-tray pot", false, DIALOG.get(CONSTRUCTOR + "template.unusable", "Two-tray pot", "a column needs a tray")));
         templates.add(new ConstructorColumn.Template("My vacuum column", true, DIALOG.get(CONSTRUCTOR + "template.own", "My vacuum column")));
         var templatePage = ConstructorColumn.templates(templates, 0, DIALOG);
+        var removal = ConstructorColumn.withRemoval(drum, new ConstructorColumn.Removal("V-101 · Vertical drum", "12, 64, -8", 382, false), DIALOG);
         return List.of(
+                new Prototype("equipment-constructor-removal", 464, 254, (d, theme) -> constructorDoor(d, removal, "Vertical drum", "change", volume, Palette.ACCENT, Map.of()), true),
                 new Prototype("equipment-constructor-column-design", 464, 254, (d, s) -> {
                     constructorDoor(d, columnDesign, "Distillation column", "change", DIALOG.get(CONSTRUCTOR + "volume", "1696.5", "792.7"), Palette.ACCENT, Map.of());
                     columnDrawing(d, d.well(new Rect(d.w - 16 - 140, 16, 152, d.h - 32)));
                 }, true),
                 new Prototype("equipment-constructor-templates", 464, 254, (d, s) -> constructorDoor(d, templatePage, "Distillation column", "back", null, 0, Map.of()), true),
                 new Prototype("equipment-constructor-choose", 464, 254, (d, s) -> constructorDoor(d, ConstructorColumn.choose(ConstructorColumn.Category.VESSELS,
-                        ConstructorColumn.Equipment.VERTICAL_DRUM, DIALOG), "Equipment constructor", "back", null, 0, Map.of()), true),
+                        ConstructorColumn.Equipment.VERTICAL_DRUM, 16, DIALOG), "Equipment constructor", "back", null, 0, Map.of()), true),
                 new Prototype("equipment-constructor", 464, 254, (d, s) -> constructorDoor(d, drum, "Vertical drum", "change", volume, Palette.ACCENT, Map.of()), true),
                 new Prototype("equipment-constructor-lying", 464, 254, (d, s) -> constructorDoor(d, lying, "Horizontal drum", "change",
                         DIALOG.get(CONSTRUCTOR + "blocked", 3), Palette.WARN, Map.of()), true),
@@ -480,16 +943,21 @@ public final class GuiPrototypes {
 
     /** A datasheet: the door's sizes and switch, the glass's notes and nozzles, as VesselScreen draws them. */
     static void datasheet(Door d, String title, DialogColumns.Sheet sheet, boolean moving) {
-        d.skin.title(d.c, 10, 10, title);
+        // N1 (the owner 2026-11-03): the name in the title strip, sent with Apply beside Done; the datasheet has no theme key.
+        d.title(title, 0);
+        d.name(moving ? "AC-101" : "D-101", true);
         var values = new java.util.HashMap<String, String>();
         for (var size : sheet.sizes()) values.put(size.key(), size.value());
-        d.column(DialogColumns.vessel(sheet.sizes(), moving, true, DIALOG), 10, DialogColumns.TOP, 150, values);
+        var rows = DialogColumns.vessel(sheet.sizes(), moving, true, DIALOG);
+        d.column(rows, 10, DialogColumns.TOP, 150, values);
+        if (d.skin == PanelSkin.LIGHT) System.out.printf(java.util.Locale.ROOT, "%-24s column %3d px in a %d px view%n", "datasheet" + (moving ? " unit" : ""),
+                Column.place(rows, 10, DialogColumns.TOP, 150, d.m, Column.Metrics.COMPACT).bounds().h(), d.h - DialogColumns.TOP - DialogColumns.FOOTER);
         var box = d.well(new Rect(166, 25, d.w - 171, d.h - 60));
         var glass = DialogColumns.glass(sheet, false, box.w() - ScrollView.BAR - 2, d.m, DIALOG);
         d.c.clip(box);
         DialogColumns.draw(d.c, glass, new Rect(box.x(), box.y(), box.w() - ScrollView.BAR - 2, box.h()), 0);
         d.c.unclip();
-        dialogFooter(d, "Done");
+        dialogFooter(d, "Done", TEXTS.get("apply"));
     }
 
     static Prototype vessel() {
@@ -527,8 +995,16 @@ public final class GuiPrototypes {
      * asks for it. Fields show {@code drafts} by key. Returns the glass's inner box.
      */
     static Rect device(Door d, DeviceColumn.Input in, Map<String, String> drafts) {
+        // N1 (the owner 2026-11-03): the name in the title strip, an entry for an editor of a device that takes one (a plain pipe takes none).
+        // A tank with contents holds Copy where Apply would stand: its name reads as text (an open item).
+        if (in.kind() != Kind.PIPE) d.name(NAMES.getOrDefault(in.kind(), ""), in.canEdit() && in.kind() != Kind.RESERVOIR);
+        return device(d, in, DeviceColumn.rows(in, TEXTS), drafts);
+    }
+
+    /** As {@link #device(Door, DeviceColumn.Input, Map)} with {@code rows} in place of the input's own (a prototype's added groups); the name is the caller's. */
+    static Rect device(Door d, DeviceColumn.Input in, List<Column.Row> rows, Map<String, String> drafts) {
         int side = FluidGuiLayout.side(d.w), top = FluidGuiLayout.DOOR_TOP, bottom = d.h - FluidGuiLayout.DOOR_FOOT;
-        var column = Column.place(DeviceColumn.rows(in, TEXTS), 10, top, side - 10, d.m, Column.Metrics.COMPACT);
+        var column = Column.place(rows, 10, top, side - 10, d.m, Column.Metrics.COMPACT);
         var view = new ScrollView();
         view.layout(new Rect(8, top, side - 6, bottom - top), side + 3, column.bounds().h());
         while (d.end && view.offset() < view.max()) view.wheel(view.viewport().x() + 2, view.viewport().y() + 2, -1);
@@ -570,16 +1046,16 @@ public final class GuiPrototypes {
 
     /**
      * A device's page as a window {@code fw} by {@code fh} screen px shows it: at the scale FluidDeviceScreen takes
-     * (WindowScale with the page's column as its fit), its image 8 px inside the window's GUI size; drawn scrolled to its
+     * (the explicit -DguiScale preview setting), its image 8 px inside the window's GUI size; drawn scrolled to its
      * end too where even that scale leaves the column a bar.
      */
     static Prototype devicePage(String file, int fw, int fh, DeviceColumn.Input in, BiConsumer<Door, Skin> body) {
         var m = new HeatDiagramRender.Java2dCanvas(new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB).createGraphics()).measure();
         var rows = DeviceColumn.rows(in, TEXTS);
-        WindowScale.Fit fit = (w, h) -> FluidGuiLayout.fits(w, h, iw -> Column.place(rows, 10, FluidGuiLayout.DOOR_TOP, FluidGuiLayout.side(iw) - 10, m, Column.Metrics.COMPACT).bounds().h());
-        int s = WindowScale.of(fw, fh, false, FluidGuiLayout.HEIGHT, fit), gw = -Math.floorDiv(-fw, s), gh = -Math.floorDiv(-fh, s);
-        System.out.printf(java.util.Locale.ROOT, "%-24s %d by %d window: scale %d (the design size's %d, the minimum %d), %d by %d GUI px%n", file, fw, fh, s, WindowScale.of(fw, fh, false), WindowScale.minimum(fw, fh, false), gw, gh);
-        return new Prototype(file, FluidGuiLayout.imageWidth(gw), FluidGuiLayout.imageHeight(gh), body, !fit.fits(gw, gh));
+        java.util.function.BiPredicate<Integer,Integer> fit = (w, h) -> FluidGuiLayout.fits(w, h, iw -> Column.place(rows, 10, FluidGuiLayout.DOOR_TOP, FluidGuiLayout.side(iw) - 10, m, Column.Metrics.COMPACT).bounds().h());
+        int s = Math.max(1, Integer.getInteger("guiScale", 3)), gw = -Math.floorDiv(-fw, s), gh = -Math.floorDiv(-fh, s);
+        System.out.printf(java.util.Locale.ROOT, "%-24s %d by %d window: player scale %d, %d by %d GUI px%n", file, fw, fh, s, gw, gh);
+        return new Prototype(file, FluidGuiLayout.imageWidth(gw), FluidGuiLayout.imageHeight(gh), body, !fit.test(gw, gh));
     }
 
     static Prototype pump() {
@@ -632,6 +1108,10 @@ public final class GuiPrototypes {
             d.footer(2, "Close", "Apply", "Mole", "°C", "bar", "/s");
         });
     }
+
+    /** The names the device pages' title strips show (N1), by kind. */
+    static final Map<Kind, String> NAMES = Map.of(Kind.PUMP, "P-101", Kind.COMPRESSOR, "K-101", Kind.VALVE, "FV-101", Kind.GENERATOR, "F-101", Kind.RESERVOIR, "TK-101",
+            Kind.VOID, "FL-101", Kind.FILTER, "S-101", Kind.HEAT_SIDE, "E-101");
 
     /** The valve, the tallest page, in a {@link #WINDOW} window; and in a 1366 by 768 one, where scale 2 still leaves it a bar. */
     static List<Prototype> valve() {
@@ -691,6 +1171,7 @@ public final class GuiPrototypes {
         var door = new Door(canvas, skin, p.width(), p.height(), end);
         skin.page(canvas, new Rect(0, 0, p.width(), p.height()));
         p.body().accept(door, skin);
+        canvas.count(p.file() + " " + (skin == PanelSkin.LIGHT ? "light" : skin == PanelSkin.DARK ? "dark" : "plain") + (end ? " end" : ""));
         g.dispose();
         return image;
     }
@@ -717,10 +1198,29 @@ public final class GuiPrototypes {
             return HeatDiagramRender.tr(key, args);
         }
 
+        /** The title strip as last placed: the kind's plate and the name's place (N1). */
+        TitleStrip.Strip strip;
+
         /** The title plate and the theme key with its contrast sign, as FluidDeviceScreen draws them. */
         void title(String text) {
-            skin.title(c, 10, 10, text);
-            skin.iconKey(c, new Rect(w - 28, 5, 18, 18), Skin.Icon.THEME, false);
+            title(text, 18);
+        }
+
+        /** The title strip (N1): the kind's plate, the theme key {@code key} px wide at the right (0: none, as the datasheet). */
+        void title(String text, int key) {
+            strip = TitleStrip.place(w, key, text, m);
+            skin.title(c, TitleStrip.TITLE_X, TitleStrip.TITLE_Y, strip.kind());
+            if (key > 0) skin.iconKey(c, new Rect(w - 10 - key, 5, key, 18), Skin.Icon.THEME, false);
+        }
+
+        /** The name in the title strip (N1): an editor's LCD entry (its hint while empty), a reader's text. */
+        void name(String name, boolean editor) {
+            if (strip == null || strip.name() == null) return;
+            if (editor) skin.field(c, strip.name(), name, TEXTS.get("name"), false);
+            else {
+                int[] at = TitleStrip.textAt(strip.name());
+                skin.text(c, TitleStrip.text(name, strip.name(), m), at[0], at[1], Palette.TEXT);
+            }
         }
 
         /** Tabs side by side at y 29, {@code current} latched. */
@@ -764,6 +1264,7 @@ public final class GuiPrototypes {
             column.draw(c, 0, skin);
             for (var p : column.rows()) {
                 if (p.row() instanceof Column.Field f) skin.field(c, p.slots().get(f.key()), values.getOrDefault(f.key(), ""), "off", false);
+                else if (p.row() instanceof Column.Wide wide) skin.field(c, p.slots().get(wide.key()), values.getOrDefault(wide.key(), ""), "", false);
                 else if (p.row() instanceof Column.Buttons b)
                     for (var spec : b.buttons())
                         skin.button(c, p.slots().get(spec.key()), spec.text(), spec.latched() ? Skin.Press.CURRENT : !spec.active() ? Skin.Press.OFF : Skin.Press.REST, false);

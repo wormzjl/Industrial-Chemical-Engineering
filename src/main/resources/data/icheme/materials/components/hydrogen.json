@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "Hydrogen",
+  "kind": "chemical",
+  "translation_key": "material.icheme.hydrogen",
+  "fallback": "Hydrogen",
+  "properties": "icheme:chemsep_hydrogen",
+  "appearance": {
+    "color": "#DCE8FA",
+    "transparency": 0.95,
+    "estimated": true
+  },
+  "identifiers": {
+    "cas": "1333-74-0",
+    "chemsep_id": "902",
+    "smiles": "[H][H]",
+    "formula": "H2"
+  }
+}

@@ -35,14 +35,16 @@ class PumpRiseScalingTest {
     @Test void theReferenceIsThisModelsOwnWaterAtRoomConditions() {
         double rho=model.waterMolecularWeight/model.waterLiquid(298.15,101325).molarVolume();
         assertEquals(rho,model.pumpReferenceDensity(),1e-12*rho);
-        // IF97 Region 1 at 298.15 K and 1 atm itself: 997.048 kg/m3 (NIST 997.05; the retired 2 MPa reference carried to
+        // IF97 Region 1 at 298.15 K and 1 atm itself: 997.048 kg/m3 (IAPWS-95 997.047; the retired 2 MPa reference carried to
         // 1 atm by the global 1e-9 1/Pa compressibility gave 996.0).
         assertEquals(997.048,model.pumpReferenceDensity(),.001);
     }
 
     /**
-     * Nitrogen compressed out of a closed tank into another (decision D7): the compressor reaches its ratio limit, the
-     * discharge standing at {@code r_max} times the suction, and then its shutoff within a second. The suction tank is a
+     * Nitrogen compressed out of a closed tank into another (decision D7): the compressor reaches its ratio limit within a
+     * second, the discharge standing at {@code r_max} times the suction, and passes nothing there: it runs on its law with
+     * its relief passing its whole displacement back (batch 2026-11-03-rotating-machinery, form F2e), or stands closed, as
+     * the set-flow pair closed it at its shutoff. The suction tank is a
      * bag at the ambient (decision D54): it gives its gas at its own temperature and shrinks at the ambient pressure, the
      * atmosphere's work on it replacing the flow work of the gas that leaves, so it stays at 298.15 K and 101325 Pa; the
      * discharge, a full bag, is warmer by its compression and the shaft work booked as heat (decision D8) - and never
@@ -51,18 +53,20 @@ class PumpRiseScalingTest {
      * Jacobian of A423 left the suction 6e-12 K above it. Test name kept from the pump it was: the pump's 575 Pa
      * density-scaled shutoff became the ratio limit.)
      */
-    @Test void aGasTransferBetweenClosedTanksClosesWithinASecond() {
-        var graph=transfer(model);var solver=new PassiveIntervalSolver(model);double time=0,step=.05,work=0;
-        PassiveIntervalSolver.Result result=null;double closedAt=Double.NaN;
-        for(int k=0;k<40;k++) {
-            result=solver.solve(graph,.05,PassiveIntervalSolver.Settings.defaults(),()->{},step);graph=result.graph();step=solver.nextStepEstimate();time+=.05;work+=result.pumpWorkJoule();
-            if(Double.isNaN(closedAt)&&result.endpointModes().getFirst()==FlowControl.Mode.CLOSED)closedAt=time;
+    @Test void aGasTransferBetweenClosedTanksReachesItsRatioLimitWithinASecond() {
+        var graph=transfer(model);var solver=new PassiveIntervalSolver(model);double step=.05,work=0;
+        PassiveIntervalSolver.Result result=null;int reachedAt=-1;
+        for(int k=1;k<=40;k++) {
+            result=solver.solve(graph,.05,PassiveIntervalSolver.Settings.defaults(),()->{},step);graph=result.graph();step=solver.nextStepEstimate();work+=result.pumpWorkJoule();
+            if(reachedAt<0&&Math.abs(graph.reservoirs().get(1).state().pressure()-RATIO*graph.reservoirs().get(0).state().pressure())<=3)reachedAt=k;
         }
         var suction=graph.reservoirs().get(0).state();var discharge=graph.reservoirs().get(1).state();double rise=result.endpointHeads()[0];
-        System.out.printf(Locale.ROOT,"gas transfer (compressor, ratio %.2f): closed at %.2f s, suction %.6f K %.3f Pa, discharge %.6f K %.3f Pa, rise at shutoff %.4f Pa, limit %.4f Pa, work %.3f J%n",
-                RATIO,closedAt,suction.temperature(),suction.pressure(),discharge.temperature(),discharge.pressure(),rise,(RATIO-1)*suction.pressure(),work);
-        assertTrue(closedAt<=1,"the compressor reaches its shutoff within a second: "+closedAt);
-        assertEquals(FlowControl.Mode.CLOSED,result.endpointModes().getFirst());assertEquals(0,result.averageMassFlows()[0]);
+        System.out.printf(Locale.ROOT,"gas transfer (compressor, ratio %.2f): at its limit after %d slices of 0.05 s, %s, flow %.3e kg/s, suction %.6f K %.3f Pa, discharge %.6f K %.3f Pa, rise %.4f Pa, limit %.4f Pa, work %.3f J%n",
+                RATIO,reachedAt,result.endpointModes().getFirst(),result.averageMassFlows()[0],suction.temperature(),suction.pressure(),discharge.temperature(),discharge.pressure(),rise,(RATIO-1)*suction.pressure(),work);
+        assertTrue(reachedAt>0&&reachedAt<=20,"the compressor reaches its ratio limit within a second: slice "+reachedAt);
+        var mode=result.endpointModes().getFirst();
+        assertTrue(mode==FlowControl.Mode.MOVER_LAW||mode==FlowControl.Mode.CLOSED,"on its law at the limit, or closed: "+mode);
+        assertEquals(0,result.averageMassFlows()[0],1e-9*TARGET*suction.mass()/suction.volume(),"it passes nothing at its limit");
         // The pump's landing tolerance (3 Pa) on the limit; the head a closed device holds is the whole difference.
         assertEquals((RATIO-1)*suction.pressure(),rise,3,"the rise at shutoff is the ratio limit on the suction pressure");
         assertEquals(discharge.pressure()-suction.pressure(),rise,.05,"the compressor holds the whole pressure difference at shutoff");

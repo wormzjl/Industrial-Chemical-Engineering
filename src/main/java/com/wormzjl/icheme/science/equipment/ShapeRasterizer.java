@@ -54,6 +54,7 @@ public final class ShapeRasterizer {
     private static final int CODE_BITS = 7, KEYED_NOZZLES = 9;
     private static final int GEOMETRY_CACHE = 64, GEOMETRY_FACETS = 300_000;
     private static final Map<EquipmentShape, Geometry> GEOMETRIES = new ConcurrentHashMap<>();
+    private static final Map<EquipmentShape, Geometry> LOW_GEOMETRIES = new ConcurrentHashMap<>();
     /**
      * Whether geometries keep their facets to draw cells ({@link #surface}, {@link #facetArea}). A dedicated server never draws:
      * once a vessel's layout is known it keeps only the cell tables, the ports and the solid test ({@link #serverOnly}).
@@ -72,6 +73,7 @@ public final class ShapeRasterizer {
     static void drawing(boolean on) {
         drawing = on;
         GEOMETRIES.clear();
+        LOW_GEOMETRIES.clear();
     }
 
     public record Cell(int x, int y, int z) {
@@ -114,6 +116,17 @@ public final class ShapeRasterizer {
      * at {@code cell + (dx, dy, dz)}), its port class and its index among the shape's nozzles.
      */
     public record Port(Cell cell, int dx, int dy, int dz, EquipmentShape.PortClass port, int nozzle) {
+    }
+
+    /**
+     * A machine's shaft end in the box (batch 2026-11-03-rotating-machinery): the cell inside its coupling face, the
+     * face's outward direction and which way power passes it. Its shaft block stands in {@link #block()}.
+     */
+    public record Shaft(Cell cell, int dx, int dy, int dz, EquipmentShape.ShaftEnd.Role role) {
+        /** The cell beyond the coupling face, where a shaft block joins the machine. */
+        public Cell block() {
+            return new Cell(cell.x() + dx, cell.y() + dy, cell.z() + dz);
+        }
     }
 
     private ShapeRasterizer() {
@@ -173,6 +186,59 @@ public final class ShapeRasterizer {
         return surface(key.shape(),c[0],c[1],c[2],key.nozzles(),false,true);
     }
 
+    /** Separate drawing mesh: coarse facets may cross interior/empty cells, so they are never clipped to the placed shell. */
+    public static List<Polygon> renderBody(EquipmentShape shape, RenderDetail detail) {
+        var g = geometry(shape, detail);
+        var out = new ArrayList<Polygon>();
+        for (var facet : g.mesh.facets()) if (facet.part() < 0 && facet.material() != Material.GLASS) out.addAll(Mesh.tiled(facet));
+        return List.copyOf(out);
+    }
+
+    /** Canonical physical service layout, shared by both render profiles and both wired media. */
+    public static EquipmentServices.Plan services(EquipmentShape shape) {return geometry(shape).services;}
+    public static EquipmentInstruments.Plan instruments(EquipmentShape shape) {return geometry(shape).instruments;}
+
+    /** Constructor ghost: the complete neutral-pose drawing, including moving parts and unconnected nozzles. */
+    public static List<Polygon> renderPreview(EquipmentShape shape, RenderDetail detail) {
+        var g = geometry(shape, detail);
+        var out = new ArrayList<Polygon>();
+        for (var facet : g.mesh.facets()) out.addAll(Mesh.tiled(facet));
+        for (int nozzle = 0; nozzle < g.nozzles.size(); nozzle++) for (var facet : g.nozzle(nozzle, 0).facets()) out.addAll(Mesh.tiled(facet));
+        if(g.instruments.probes().stream().anyMatch(p->!p.manual())){
+            out.addAll(instrumentWiring(shape,Set.of(),detail).polygons());
+            for(var probe:g.instruments.probes())if(!probe.manual()&&probe.display())out.addAll(InstrumentGeometry.previewHead(probe));
+        }
+        return List.copyOf(out);
+    }
+
+    /** Low mode leaves interfaces in the chunk mesh; body and access structures use the single whole-equipment mesh. */
+    public static List<Polygon> chunkSurface(CellKey key, RenderDetail detail) {
+        if (detail == RenderDetail.NORMAL) return chunkSurface(key);
+        var physical = geometry(key.shape());
+        var rendered = geometry(key.shape(), detail);
+        int[] c = cell(key);
+        var at = new Cell(c[0], c[1], c[2]);
+        var out = new ArrayList<Polygon>();
+        for (var facet : physical.facetsIn(at)) if (facet.part() < 0 && facet.material() == Material.GLASS)
+            physical.mesh.cell(facet, c[0], c[1], c[2], out);
+        var reaching = physical.reaching(at);
+        for (int j = 0; j < reaching.length; j++) {
+            var nozzle = rendered.nozzle(reaching[j], code(key.nozzles(), j));
+            for (var facet : nozzle.facets()) nozzle.cell(facet, c[0], c[1], c[2], out);
+        }
+        return List.copyOf(out);
+    }
+
+    private static Geometry geometry(EquipmentShape shape, RenderDetail detail) {
+        if (detail == RenderDetail.NORMAL) return geometry(shape);
+        if (!drawing) throw new IllegalStateException("A dedicated server keeps no drawing geometry");
+        var cached = LOW_GEOMETRIES.get(shape);
+        if (cached != null) return cached;
+        long facets = LOW_GEOMETRIES.values().stream().mapToLong(g -> g.mesh.facets().size()).sum();
+        if (LOW_GEOMETRIES.size() >= 16 || facets >= GEOMETRY_FACETS) LOW_GEOMETRIES.clear();
+        return LOW_GEOMETRIES.computeIfAbsent(shape, k -> new Geometry(k, detail));
+    }
+
     public static List<Polygon> towerShell(EquipmentShape shape){
         if(!shape.kind().coolingTower())return List.of();
         var g=geometry(shape);var polygons=new ArrayList<Polygon>();
@@ -226,9 +292,10 @@ public final class ShapeRasterizer {
     }
 
     /** A unit's moving parts in the box, by index ({@link ProcessUnit.Motion}); none for a vessel, a column or a unit without any. */
-    public static List<Moving> moving(EquipmentShape shape) {
+    public static List<Moving> moving(EquipmentShape shape) { return moving(shape, RenderDetail.NORMAL); }
+    public static List<Moving> moving(EquipmentShape shape, RenderDetail detail) {
         if (!drawing) throw new IllegalStateException("A dedicated server keeps no surfaces");
-        return geometry(shape).moving();
+        return geometry(shape, detail).moving();
     }
 
     /**
@@ -255,10 +322,14 @@ public final class ShapeRasterizer {
         }
     }
 
+    /** Cached accessory geometry in equipment-local world axes; not part of the bare tank's shell/collision. */
+    public static List<Polygon> tankGauge(EquipmentShape shape){if(!drawing)throw new IllegalStateException("A dedicated server keeps no accessory surfaces");return shape.kind()==EquipmentShape.Kind.TANK?geometry(shape).tankGauge():List.of();}
+
     /** A floating-roof tank's client-drawn parts in the box, or null for any other shape. */
-    public static @Nullable Floating floating(EquipmentShape shape) {
+    public static @Nullable Floating floating(EquipmentShape shape) { return floating(shape, RenderDetail.NORMAL); }
+    public static @Nullable Floating floating(EquipmentShape shape, RenderDetail detail) {
         if (!drawing) throw new IllegalStateException("A dedicated server keeps no surfaces");
-        return geometry(shape).floating();
+        return geometry(shape, detail).floating();
     }
 
     /**
@@ -283,6 +354,7 @@ public final class ShapeRasterizer {
 
         /** The ladder's turn down from level, radians, its foot on the deck ({@link Floating#pitch}). */
         public double pitch(double level) {
+            if (length <= 0) return 0;
             double drop = pivot[1] - (underside(level) + deck);
             return drop >= length ? Math.PI / 2 : drop <= 0 ? 0 : DeterministicMath.asin(drop / length);
         }
@@ -324,6 +396,22 @@ public final class ShapeRasterizer {
     /** Whether a box-local point lies inside the faceted solid (vessel, supports, unconnected nozzles, a column's decks and rails). */
     public static boolean inside(EquipmentShape shape, double x, double y, double z) {
         return geometry(shape).inside(x, y, z, 0);
+    }
+
+    /** The solid test of one shape, box-local points as {@link #inside}. */
+    interface Solid {
+        boolean inside(double x, double y, double z);
+    }
+
+    /**
+     * {@code shape}'s solid for a caller's own questions: the cached geometry where the world holds one, else a geometry built for
+     * the caller and not kept. A size the process simulator proposes is a shape no world places, and each new one would otherwise
+     * stay in the cache (12 MB a column) until the facet bound clears the world's shapes with it.
+     */
+    static Solid solid(EquipmentShape shape) {
+        var cached = GEOMETRIES.get(shape);
+        var g = cached != null ? cached : new Geometry(shape);
+        return (x, y, z) -> g.inside(x, y, z, 0);
     }
 
     /** Whether a box-local point lies in the vessel, its supports or an unconnected nozzle: the solid without a column's access structure. */
@@ -410,14 +498,30 @@ public final class ShapeRasterizer {
         return geometry(shape).ports;
     }
 
+    /** A machine's shaft ends, in its design's order; none for a vessel or a unit without a shaft. */
+    public static List<Shaft> shafts(EquipmentShape shape) {
+        return geometry(shape).shafts;
+    }
+
+    /** The cell of an electric machine's terminal box (its RF port, batch 2026-11-03-rotating-machinery W5), or null. */
+    public static @Nullable Cell terminal(EquipmentShape shape) {
+        return geometry(shape).terminal;
+    }
+
     /** The cells nozzle {@code k} may reach at its largest size: those whose keys carry its size. */
     public static Set<Cell> nozzleCells(EquipmentShape shape, int k) {
         return geometry(shape).nozzleCells.get(k);
     }
 
+    /** The fixed casting and transition shared by a nozzle's surface, collision and flow stencil. */
+    static @Nullable ProcessUnit.NozzleRoot nozzleRoot(EquipmentShape shape, int k) {
+        var unit = geometry(shape).unit;
+        return unit != null ? unit.nozzleRoots.get(k) : null;
+    }
+
     /**
      * A drum's shell cell at its lowest inside point, where its fluid node stands: the bottom apex, or a lying drum's
-     * bottom line; a mover's suction nozzle cell; null for other columns and units.
+     * bottom line; a mover's suction nozzle cell, a steam turbine's steam inlet cell (W3); null for other columns and units.
      */
     public static @Nullable Cell fluidCell(EquipmentShape shape) {
         return geometry(shape).fluidCell;
@@ -507,8 +611,19 @@ public final class ShapeRasterizer {
         return GEOMETRIES.computeIfAbsent(shape, Geometry::new);
     }
 
+    /** Lazily built visual finish, keyed by the installed mount set. Never participates in server collision/layout. */
+    public static InstrumentWiring.Drawing instrumentWiring(EquipmentShape shape,Set<String> installed,RenderDetail detail){return instrumentWiring(shape,installed,detail,java.util.Collections.nCopies(shape.nozzles().size(),0));}
+    public static int nozzleCode(EquipmentShape shape,Cell cell,int nozzle,long codes){var reaching=geometry(shape).reaching(cell);for(int k=0;k<reaching.length;k++)if(reaching[k]==nozzle)return code(codes,k);return 0;}
+    private record WiringKey(Set<String> installed,List<Integer> codes){WiringKey{installed=Set.copyOf(installed);codes=List.copyOf(codes);}}
+    public static InstrumentWiring.Drawing instrumentWiring(EquipmentShape shape,Set<String> installed,RenderDetail detail,List<Integer> codes){
+        if(codes.size()!=shape.nozzles().size())throw new IllegalArgumentException("One size code per nozzle");
+        var g=geometry(shape,detail);var key=new WiringKey(installed,codes);
+        if(g.wiring.size()>16)g.wiring.clear();
+        return g.wiring.computeIfAbsent(key,k->{var carriers=new ArrayList<>(g.mesh.facets().stream().filter(f->f.part()<0).map(Mesh::whole).toList());for(int n=0;n<g.nozzles.size();n++)for(var f:g.nozzle(n,k.codes().get(n)).facets())carriers.add(Mesh.whole(f));var plan=shape.kind()==EquipmentShape.Kind.EXCHANGER?EquipmentInstruments.build(shape,carriers,g.unit):g.instruments;return InstrumentWiring.build(shape,carriers,g.services,plan,k.installed(),detail);});
+    }
     /** Per-shape tables (facet directions, head rings, plate and saddle layout), the static mesh, nozzles and layout. */
     private static final class Geometry {
+        private final Map<WiringKey,InstrumentWiring.Drawing> wiring=new ConcurrentHashMap<>();
         private final EquipmentShape shape;
         private final Transform transform;
         private final int n, contact;
@@ -558,13 +673,19 @@ public final class ShapeRasterizer {
         /** Each head's rings, {height over the tangent line, radius}, and its meridian lengths to them: the top head's (clad on a column) and the bottom head's (bare). */
         private final double[][] rings, bottomRings;
         private final double[] meridian, bottomMeridian;
-        private final Mesh mesh = new Mesh();
+        private final Mesh mesh;
+        private final EquipmentServices.Plan services;
+        private final EquipmentInstruments.Plan instruments;
+        private final RenderDetail detail;
         private final List<EquipmentShape.Nozzle> nozzles;
         private final List<Set<Cell>> nozzleCells = new ArrayList<>();
         /** The nozzles reaching each cell, in nozzle order. */
         private final Map<Cell, int[]> reaching = new HashMap<>();
         private final Map<Integer, Mesh> nozzleMeshes = new ConcurrentHashMap<>();
         private final List<Port> ports = new ArrayList<>();
+        private final List<Shaft> shafts = new ArrayList<>();
+        /** An electric machine's terminal box cell, its RF port; null without one. */
+        private final Cell terminal;
         private final Layout layout;
         private final Cell fluidCell;
         /** One node cell per registration: the fluid cell, or each heat side's first inlet cell (batch 2026-10-27-heat-exchanger-design). */
@@ -572,11 +693,14 @@ public final class ShapeRasterizer {
         /** The layout's {@link #stamp}, 0 until first asked. */
         private volatile long stamp;
 
-        Geometry(EquipmentShape shape) {
+        Geometry(EquipmentShape shape) { this(shape, RenderDetail.NORMAL); }
+        Geometry(EquipmentShape shape, RenderDetail detail) {
             this.shape = shape;
+            this.detail = detail;
+            mesh = new Mesh(detail);
             transform = shape.transform();
             mesh.transform(transform);
-            n = shape.facets();
+            n = detail.sides(shape.facets());
             axis = shape.axis();
             radius = shape.radius();
             outer = shape.outerRadius();
@@ -635,7 +759,7 @@ public final class ShapeRasterizer {
 
             if (unit != null) {
                 // The design's facets one for one: those from its irregular index on cross its body rows (a tank's stair).
-                mesh.include(unit.mesh());
+                mesh.include(unit.mesh(detail));
                 irregularFrom = unit.irregularFrom;
             } else {
                 build();
@@ -647,11 +771,37 @@ public final class ShapeRasterizer {
             }
             skylight = unit != null ? unit.openSkirt : hollow;
             if (column != null) {
-                var ladders = new Mesh();
+                var ladders = new Mesh(detail);
                 ladders.transform(transform);
                 column.build(mesh, ladders, nozzles);
                 irregularFrom = mesh.facets().size();
                 mesh.facets().addAll(ladders.facets());
+            }
+            services=detail==RenderDetail.NORMAL?EquipmentServices.build(shape,mesh,unit):EquipmentServices.build(shape,mesh,unit,geometry(shape).services);
+            if(!services.polygons().isEmpty()) {
+                irregularFrom=Math.min(irregularFrom,mesh.facets().size());
+                mesh.transform(Transform.IDENTITY);
+                for(var polygon:services.polygons())mesh.include(polygon);
+                mesh.transform(transform);
+            }
+            if(detail!=RenderDetail.NORMAL)instruments=geometry(shape).instruments;
+            else if(shape.kind()==EquipmentShape.Kind.DRUM||shape.kind()==EquipmentShape.Kind.TANK||shape.kind()==EquipmentShape.Kind.SPHERE||shape.kind()==EquipmentShape.Kind.EXCHANGER||shape.kind().coolingTower()) {
+                var carriers=new ArrayList<>(mesh.facets().stream().filter(f->f.part()<0).map(Mesh::whole).toList());
+                for(int k=0;k<nozzles.size();k++)for(var facet:nozzle(k,0).facets())carriers.add(Mesh.whole(facet));
+                instruments=EquipmentInstruments.build(shape,carriers,unit);
+            }else instruments=new EquipmentInstruments.Plan(List.of(),List.of());
+            if (detail != RenderDetail.NORMAL) {
+                // Reuse every physical decision, including maximum nozzle reach and registration cells.
+                var physical = geometry(shape);
+                reaching.putAll(physical.reaching);
+                nozzleCells.addAll(physical.nozzleCells);
+                ports.addAll(physical.ports);
+                shafts.addAll(physical.shafts);
+                terminal = physical.terminal;
+                layout = physical.layout;
+                fluidCell = physical.fluidCell;
+                fluidCells = physical.fluidCells;
+                return;
             }
             // Every nozzle takes the pipe's size. Reservoir ports and a mover's suction/discharge also join the engine.
             var byCell = new HashMap<Cell, List<Integer>>();
@@ -668,6 +818,23 @@ public final class ShapeRasterizer {
                 var out = transform.direction(nozzle.direction());
                 ports.add(new Port(new Cell(floor(inner[0]), floor(inner[1]), floor(inner[2])), (int) out[0], (int) out[1], (int) out[2], nozzle.role().port, k));
             }
+            Cell box = null;
+            if (unit != null) {
+                for (var end : unit.shaftEnds()) {
+                    var face = end.face();
+                    var direction = new double[3];
+                    direction[end.axis()] = end.sign();
+                    var inner = transform.point(new double[]{face[0] - direction[0] * .01, face[1] - direction[1] * .01, face[2] - direction[2] * .01});
+                    var out = transform.direction(direction);
+                    shafts.add(new Shaft(new Cell(floor(inner[0]), floor(inner[1]), floor(inner[2])), (int) out[0], (int) out[1], (int) out[2], end.role()));
+                }
+                var centre = unit.terminal();
+                if (centre != null) {
+                    var at = transform.point(centre);
+                    box = new Cell(floor(at[0]), floor(at[1]), floor(at[2]));
+                }
+            }
+            terminal = box;
             for (var entry : byCell.entrySet()) {
                 if (entry.getValue().size() > KEYED_NOZZLES)
                     throw new IllegalStateException(entry.getValue().size() + " nozzles reach cell " + entry.getKey() + " of " + shape + ": a key carries " + KEYED_NOZZLES);
@@ -695,6 +862,10 @@ public final class ShapeRasterizer {
             } else if (shape.kind().mover()) {
                 node = ports.stream().filter(port -> nozzles.get(port.nozzle()).role() == EquipmentShape.Role.SUCTION)
                         .findFirst().orElseThrow(() -> new IllegalStateException("A mover needs a suction nozzle")).cell();
+            } else if (shape.kind() == EquipmentShape.Kind.STEAM_TURBINE) {
+                // A turbine registers at its steam inlet's cell (W3, reading A37), as a mover at its suction's.
+                node = ports.stream().filter(port -> nozzles.get(port.nozzle()).role() == EquipmentShape.Role.STEAM)
+                        .findFirst().orElseThrow(() -> new IllegalStateException("A turbine needs a steam inlet")).cell();
             } else if (unit != null && unit.fluidPoint != null) {
                 var low = transform.point(unit.fluidPoint);
                 node = new Cell(floor(low[0]), floor(low[1]), floor(low[2]));
@@ -711,7 +882,7 @@ public final class ShapeRasterizer {
 
         /** A head's rings from its tangent line (k = 0) to its apex: {height over the line, radius} at equal latitude steps. */
         private double[][] rings(double r, double depth) {
-            int bands = shape.bands();
+            int bands = detail.bands(shape.bands());
             var out = new double[bands + 1][];
             for (int k = 0; k <= bands; k++) {
                 double phi = Math.PI / 2 * k / bands;
@@ -1113,7 +1284,7 @@ public final class ShapeRasterizer {
             return nozzleMeshes.computeIfAbsent(k * 128 + code, key -> {
                 var nozzle = nozzles.get(k);
                 double od = code == 0 ? nozzle.defaultOd() : PipeSizes.outsideOf(code);
-                var m = new Mesh();
+                var m = new Mesh(detail);
                 m.transform(transform);
                 var dir = nozzle.direction();
                 var ref = new double[3];
@@ -1127,13 +1298,14 @@ public final class ShapeRasterizer {
                 double taper = length - t - hub, neckStart = 0;
                 var root = unit != null ? unit.nozzleRoots.get(k) : null;
                 if (root != null) {
-                    double end = .01 + Math.min(.12, taper - .01);
-                    m.frustum(f, root, r, .01, end, sides, Material.MACHINE);
-                    if (root > r) m.annulus(f, r, root, .01, sides, 1, Material.MACHINE);
+                    double end = root.end(length, od);
+                    m.frustum(f, root.radius(), r, .01, end, sides, root.material());
+                    if (root.radius() > r) m.annulus(f, r, root.radius(), .01, sides, 1, root.material());
                     neckStart = end;
+                    taper = Math.max(taper, end);
                 }
                 // The neck's taper into the flange: a weld-neck hub.
-                m.prism(f, r, neckStart, taper, sides, Material.PIPE);
+                if (taper > neckStart) m.prism(f, r, neckStart, taper, sides, Material.PIPE);
                 m.frustum(f, r, hubR, taper, length - t, sides, Material.PIPE);
                 m.annulus(f, hubR, flange, length - t, sides, -1, Material.FLANGE);
                 m.bolts(f, od, hubR, flange, length - t, -1, Material.BOLT);
@@ -1186,9 +1358,9 @@ public final class ShapeRasterizer {
             double length = nozzle.length(), radius = od / 2;
             var root = unit != null ? unit.nozzleRoots.get(k) : null;
             if (root != null) {
-                double end = .01 + Math.min(.12, length - t - PipeSizes.hub(od) - .01);
-                if (s >= .01 && s <= end) {
-                    double r = root + (radius - root) * (s - .01) / (end - .01);
+                double end = root.end(length, od);
+                if (s >= 0 && s <= end) {
+                    double r = root.radius() + (radius - root.radius()) * (Math.max(.01, s) - .01) / (end - .01);
                     return rho2 <= r * r;
                 }
             }
@@ -1371,6 +1543,14 @@ public final class ShapeRasterizer {
             return reach;
         }
 
+        private volatile List<Polygon> tankGauge;
+        private List<Polygon> tankGauge(){
+            var result=tankGauge;if(result!=null)return result;
+            var accessory=new Mesh(detail);accessory.transform(transform);
+            TankDesign.gauge(accessory,TankDesign.Plan.of(shape.diameter(),(int)shape.tangentLength()));
+            var polygons=new ArrayList<Polygon>();cut(accessory,accessory.facets(),new double[3],polygons);
+            return tankGauge=List.copyOf(polygons);
+        }
         private volatile Floating floating;
         private volatile Roof roof;
 
@@ -1389,13 +1569,13 @@ public final class ShapeRasterizer {
         @Nullable Floating floating() {
             var out = floating;
             if (out != null || unit == null || unit.floating == null) return out;
-            var drawn = unit.drawing();
+            var drawn = unit.drawing(detail);
             var f = drawn.floating;
             var pivot = transform.point(f.pivot());
             var roof = new ArrayList<Polygon>();
             var ladder = new ArrayList<Polygon>();
             for (var part : List.of(drawn.roof, drawn.ladder)) {
-                var m = new Mesh();
+                var m = new Mesh(detail);
                 m.transform(transform);
                 m.include(part);
                 cut(m, m.facets(), part == drawn.roof ? new double[3] : pivot, part == drawn.roof ? roof : ladder);
@@ -1497,7 +1677,7 @@ public final class ShapeRasterizer {
 
         /** Inside the solid without its nozzles, at a frame point: the vessel, a column's access structure, a unit's parts, a manway. */
         private boolean solid(double[] p) {
-            return inVessel(p) || column != null && column.inside(p) || unit != null && unit.inside(p) || manway != null && manway.inside(p);
+            return services.inside(transform.point(p)) || inVessel(p) || column != null && column.inside(p) || unit != null && unit.inside(p) || manway != null && manway.inside(p);
         }
 
         /** Inside the vessel and its supports, at a frame point: what the interior cells fill. A unit has no vessel. */

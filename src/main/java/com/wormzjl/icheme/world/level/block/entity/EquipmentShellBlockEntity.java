@@ -26,9 +26,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.neoforge.client.model.data.ModelData;
 import net.neoforged.neoforge.client.model.data.ModelProperty;
@@ -52,7 +50,7 @@ import java.util.WeakHashMap;
  * fluid identity and is its presentation binding, as a device block entity is for a one-block tank. Nothing of the
  * drum's contents is kept here.
  */
-public final class EquipmentShellBlockEntity extends BlockEntity implements com.wormzjl.icheme.runtime.instrument.Instrument.Holder, FluidView.Receiver {
+public final class EquipmentShellBlockEntity extends ModelledBlockEntity implements com.wormzjl.icheme.runtime.instrument.Instrument.Holder, FluidView.Receiver {
     /** Model data read by the shell model while the chunk is meshed. */
     public static final ModelProperty<ShapeRasterizer.CellKey> CELL = new ModelProperty<>();
     /** A saved cell or box beyond this many cells along any side is corrupt (the largest unit is under 100). */
@@ -62,6 +60,11 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
     private long nozzles;
     /** The vessel's paint, the same on every cell; the client tints the cell's painted parts with it. */
     private Paint paint = Paint.DEFAULT;
+    /**
+     * The structure's name, the same on every cell, as its paint ({@link com.wormzjl.icheme.science.equipment.DeviceName}, batch
+     * 2026-11-02-process-simulator, N1): a fact, saved only when named, so a cell saved before names reads unnamed.
+     */
+    private String name = com.wormzjl.icheme.science.equipment.DeviceName.NONE;
     private @Nullable ShapeRasterizer.CellKey key;
     /** The equipment's fluid identity, on its node cell only (0 elsewhere and while unregistered). */
     private long identity;
@@ -104,11 +107,13 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
      * 2026-10-26-pipe-laying-system). Render thread only; weak, as above.
      */
     private static final Set<EquipmentShellBlockEntity> CLIENT_PORTS = Collections.newSetFromMap(new WeakHashMap<>());
-    /** Client: the cooling towers with a cell loaded, by level. Render thread only; weak, as above. */
-    private static final java.util.Map<Level, LoadedTowers> CLIENT_TOWERS = new WeakHashMap<>();
-    /** Client: the tower this cell counts towards, and the level's index it counts in. */
-    private LoadedTowers.@Nullable Tower tower;
-    private @Nullable LoadedTowers towers;
+    /** Client: the controller cells of named structures, whose nameplates the client draws (N1). Render thread only; weak, as above. */
+    private static final Set<EquipmentShellBlockEntity> CLIENT_NAMED = Collections.newSetFromMap(new WeakHashMap<>());
+    /** Client: equipment structures with a cell loaded, by level. Render thread only; weak, as above. */
+    private static final java.util.Map<Level, LoadedEquipment> CLIENT_STRUCTURES = new WeakHashMap<>();
+    /** Client: the structure this cell counts towards, and the level's index it counts in. */
+    private LoadedEquipment.@Nullable Structure structure;
+    private @Nullable LoadedEquipment structures;
 
     public EquipmentShellBlockEntity(BlockPos position, BlockState state) {
         super(ModBlockEntities.EQUIPMENT_SHELL.get(), position, state);
@@ -166,20 +171,25 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
         return List.copyOf(CLIENT_TANKS);
     }
 
-    /** Client: the cooling towers of {@code level} with a cell loaded. */
-    public static java.util.Collection<LoadedTowers.Tower> clientTowers(Level level) {
-        var index = CLIENT_TOWERS.get(level);
+    /** Client: equipment structures of {@code level} with a cell loaded. */
+    public static java.util.Collection<LoadedEquipment.Structure> clientStructures(Level level) {
+        var index = CLIENT_STRUCTURES.get(level);
         return index == null ? List.of() : index.all();
     }
 
-    private void leaveTower() {
-        if (tower != null) towers.remove(tower);
-        tower = null;
+    private void leaveStructure() {
+        if (structure != null) structures.remove(structure);
+        structure = null;
     }
 
     /** Client: the cells holding a nozzle's flange face in the client's level. */
     public static List<EquipmentShellBlockEntity> clientPortCells() {
         return List.copyOf(CLIENT_PORTS);
+    }
+
+    /** Client: the controller cells of the named structures in the client's level. */
+    public static List<EquipmentShellBlockEntity> clientNamedCells() {
+        return List.copyOf(CLIENT_NAMED);
     }
 
     /**
@@ -188,16 +198,19 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
      */
     private void trackMoving() {
         if(level!=null&&level.isClientSide())com.wormzjl.icheme.client.MoverSounds.track(this);
+        if(level!=null&&level.isClientSide())com.wormzjl.icheme.client.DriverSounds.track(this);
         moving = new int[0];
         CLIENT_MOVING.remove(this);
         CLIENT_TANKS.remove(this);
         CLIENT_PORTS.remove(this);
-        leaveTower();
+        CLIENT_NAMED.remove(this);
+        leaveStructure();
         if (shape == null || level == null || !level.isClientSide) return;
         if ((shape.kind() == EquipmentShape.Kind.TANK || shape.kind().coolingTower()) && cell().equals(ShapeRasterizer.fluidCell(shape))) CLIENT_TANKS.add(this);
-        if (shape.kind().coolingTower()) {
-            towers = CLIENT_TOWERS.computeIfAbsent(level, k -> new LoadedTowers());
-            tower = towers.add(origin(), shape, paint);
+        if (!name.isEmpty() && cell().equals(ShapeRasterizer.layout(shape).controller())) CLIENT_NAMED.add(this);
+        {
+            structures = CLIENT_STRUCTURES.computeIfAbsent(level, k -> new LoadedEquipment());
+            structure = structures.add(origin(), shape, paint);
         }
         for (var port : ShapeRasterizer.ports(shape))
             if (port.cell().equals(cell())) {
@@ -243,6 +256,7 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
         if (stale()) EquipmentStructure.refreshLater(serverLevel, origin(), shape, box, worldPosition);
         else if (cell().equals(ShapeRasterizer.layout(shape).controller())) {
             com.wormzjl.icheme.runtime.assembly.AssemblyService.controllerLoaded(serverLevel, worldPosition, shape);
+            if(shape.kind()==EquipmentShape.Kind.COLUMN)FluidWorldAuthority.find(serverLevel.getServer()).ifPresent(w->w.controls().bindColumn(this));
             EquipmentStructure.restateLater(serverLevel, origin(), shape);
         }
         var here = fluidPosition();
@@ -271,10 +285,12 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
         com.wormzjl.icheme.runtime.instrument.InstrumentHosts.unloaded(this);
         if(level!=null&&level.isClientSide())com.wormzjl.icheme.client.InstrumentRenderer.forget(worldPosition);
         if(level!=null&&level.isClientSide())com.wormzjl.icheme.client.MoverSounds.forget(this);
+        if(level!=null&&level.isClientSide())com.wormzjl.icheme.client.DriverSounds.forget(this);
         CLIENT_MOVING.remove(this);
         CLIENT_TANKS.remove(this);
         CLIENT_PORTS.remove(this);
-        leaveTower();
+        CLIENT_NAMED.remove(this);
+        leaveStructure();
         if (level != null) FloatingRoofs.of(level).remove(worldPosition);
         if (identity != 0 && level instanceof ServerLevel serverLevel && serverLevel.getServer().isSameThread())
             FluidWorldAuthority.find(serverLevel.getServer()).ifPresent(world -> world.deviceUnloaded(identity));
@@ -310,13 +326,28 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
             FluidWorldAuthority.find(player.server).ifPresent(world -> world.replayOnOpen(menu));
     }
 
-    public void bind(EquipmentShape shape, ShapeRasterizer.Cell cell, Paint paint) {
+    public void bind(EquipmentShape shape, ShapeRasterizer.Cell cell, Paint paint, String name) {
         assign(shape, cell, 0);
         this.paint = paint;
+        this.name = com.wormzjl.icheme.science.equipment.DeviceName.clean(name);
         stamp = ShapeRasterizer.stamp(shape);
         box = new int[]{shape.sizeX(), shape.sizeY(), shape.sizeZ()};
         setChanged();
         trackRoof();
+        // The cell may have become (or stopped being) a terminal box (W5): cached FE ports look again.
+        if (level != null && !level.isClientSide()) level.invalidateCapabilities(worldPosition);
+        com.wormzjl.icheme.runtime.instrument.InstrumentHosts.loaded(this);
+    }
+
+    /**
+     * This cell's FE port (batch 2026-11-03-rotating-machinery W5, readings A56, A57): on every face of its structure's
+     * terminal cell, receive-only for a consumer, extract-only for a generator; null on any other cell and on the client.
+     */
+    public net.neoforged.neoforge.energy.@Nullable IEnergyStorage energy() {
+        if (shape == null || !(level instanceof ServerLevel server)) return null;
+        var terminal = ShapeRasterizer.terminal(shape);
+        if (terminal == null || !terminal.equals(cell())) return null;
+        return new TerminalEnergy(server, this);
     }
 
     /** Server: the vessel's paint as the registry holds it (registry first, batch 2026-11-03-save-corruption); redraws on a change. */
@@ -383,6 +414,20 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
 
     public Paint paint() {
         return paint;
+    }
+
+    /** The structure's name, empty when it has none. */
+    public String name() {
+        return name;
+    }
+
+    /** Server: names this cell's structure {@code next} (cleaned) and sends the cell to the clients, as paint: a drawing fact, not process state. */
+    public void rename(String next) {
+        String cleaned = com.wormzjl.icheme.science.equipment.DeviceName.clean(next);
+        if (shape == null || cleaned.equals(name)) return;
+        name = cleaned;
+        setChanged();
+        if (level != null) level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 2);
     }
 
     public @Nullable ShapeRasterizer.CellKey key() {
@@ -459,6 +504,7 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
         shape = null;
         key = null;
         paint = Paint.DEFAULT;
+        name = DeviceNames.read(tag, "equipment_compat at=" + worldPosition.toShortString());
         stamp = 0;
         box = new int[3];
         identity = tag.getLong("FluidIdentity");
@@ -517,6 +563,7 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
         tag.putIntArray("Cell", new int[]{cellX, cellY, cellZ});
         tag.putLong("Nozzles", nozzles);
         tag.putIntArray("Paint", paint.encode());
+        DeviceNames.write(tag, name);
         tag.putLong("Layout", stamp);
         tag.putIntArray("Box", box);
         if (roofLevel > 0) tag.putFloat("RoofLevel", roofLevel);
@@ -529,6 +576,7 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
      * boot, an air cooler's bank; a drum's and a designed shape's bottom outlet turns (a column's leaves to the front).
      */
     public static void writeShape(CompoundTag tag, EquipmentShape shape) {
+        if (shape.kind() == EquipmentShape.Kind.EXCHANGER) tag.putString("ExchangerType", shape.exchangerType().name());
         tag.putString("Kind", shape.kind().name().toLowerCase(Locale.ROOT));
         tag.putDouble("Diameter", shape.diameter());
         tag.putDouble("TangentLength", shape.tangentLength());
@@ -549,6 +597,7 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
         }
         if (shape.kind() == EquipmentShape.Kind.AIR_COOLER) tag.putIntArray("Bank", shape.bank().encode());
         if(shape.kind()==EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER)tag.putIntArray("TowerBank",shape.towerBank().encode());
+        if (shape.designed() && com.wormzjl.icheme.science.equipment.UnitDesign.of(shape.kind()).hasDuty()) tag.put("Duty", writeDuty(shape.duty()));
     }
 
     /**
@@ -557,9 +606,36 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
      */
     public static ShapeRepair.Read readShape(CompoundTag tag) {
         var read=ShapeRepair.read(saved(tag));
+        if(read.shape()!=null && tag.contains("ExchangerType")) read=new ShapeRepair.Read(read.shape().withExchangerType(com.wormzjl.icheme.science.equipment.ExchangerType.valueOf(tag.getString("ExchangerType"))),read.retired(),read.repairs());
         if(read.shape()==null||read.shape().kind()!=EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER)return read;
         try{return new ShapeRepair.Read(read.shape().withTowerBank(com.wormzjl.icheme.science.equipment.TowerBank.decode(tag.getIntArray("TowerBank"))),null,read.repairs());}
-        catch(IllegalArgumentException invalid){var repairs=new java.util.ArrayList<>(read.repairs());repairs.add("tower bank -> one cell: "+invalid.getMessage());return new ShapeRepair.Read(read.shape(),null,repairs);}
+        catch(IllegalArgumentException invalid){var repairs=new java.util.ArrayList<>(read.repairs());repairs.add("structure bank -> one cell: "+invalid.getMessage());return new ShapeRepair.Read(read.shape(),null,repairs);}
+    }
+
+    /**
+     * A machine's design point (shape fields 8, batch 2026-11-03-rotating-machinery): its numbers, its drive and its steam
+     * class by name (the steam class only where it has one).
+     */
+    public static CompoundTag writeDuty(com.wormzjl.icheme.science.equipment.MachineDuty duty) {
+        var tag = new CompoundTag();
+        tag.putDouble("Flow", duty.flow());
+        tag.putDouble("Head", duty.head());
+        tag.putDouble("PolytropicHead", duty.polytropicHead());
+        tag.putDouble("Power", duty.power());
+        tag.putInt("Poles", duty.poles());
+        tag.putString("Drive", duty.drive().name());
+        if (duty.steam() != null) tag.putString("Steam", duty.steam().name());
+        tag.putDouble("Exhaust", duty.exhaust());
+        tag.putDouble("BaseSpeed", duty.baseSpeed());
+        return tag;
+    }
+
+    /** A design point as saved, or null where the shape has none (a machine saved before shape fields 8, or a field that is not a compound). */
+    public static ShapeRepair.@org.jetbrains.annotations.Nullable SavedDuty savedDuty(CompoundTag tag) {
+        if (!tag.contains("Duty", net.minecraft.nbt.Tag.TAG_COMPOUND)) return null;
+        var d = tag.getCompound("Duty");
+        return new ShapeRepair.SavedDuty(d.getDouble("Flow"), d.getDouble("Head"), d.getDouble("PolytropicHead"), d.getDouble("Power"), d.getInt("Poles"),
+                d.contains("Drive") ? d.getString("Drive") : null, d.contains("Steam") ? d.getString("Steam") : null, d.getDouble("Exhaust"),d.getDouble("BaseSpeed"));
     }
 
     /** The shape fields of {@code tag} as written, before any rule reads them. */
@@ -568,7 +644,7 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
                 tag.getDouble("Diameter"), tag.getDouble("TangentLength"), tag.getInt("Support"), tag.contains("Trays") ? tag.getIntArray("Trays") : null,
                 tag.contains("Connections") ? tag.getIntArray("Connections") : null, tag.getBoolean("Boot"), tag.getInt("Outlet"),
                 tag.contains("Bank") ? tag.getIntArray("Bank") : null, ColumnDesignTags.saved(tag, "Components"), ColumnDesignTags.savedTurns(tag, "Turns"),
-                ColumnDesignTags.savedOperating(tag, "Operating"));
+                ColumnDesignTags.savedOperating(tag, "Operating"), savedDuty(tag));
     }
 
     @Override
@@ -580,18 +656,9 @@ public final class EquipmentShellBlockEntity extends BlockEntity implements com.
     }
 
     @Override
-    public ClientboundBlockEntityDataPacket getUpdatePacket() {
-        return ClientboundBlockEntityDataPacket.create(this);
-    }
-
-    /** Data that arrives after the block was meshed: refresh the model data and rebuild the section. */
-    @Override
-    public void onDataPacket(net.minecraft.network.Connection connection, ClientboundBlockEntityDataPacket packet, HolderLookup.Provider registries) {
-        super.onDataPacket(connection, packet, registries);
-        requestModelDataUpdate();
+    protected void clientGeometryChanged() {
         trackMoving();
         trackRoof();
-        if (level != null) level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 0);
     }
 
     @Override

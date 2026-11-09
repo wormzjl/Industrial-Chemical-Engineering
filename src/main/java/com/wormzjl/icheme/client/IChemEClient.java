@@ -1,7 +1,7 @@
 package com.wormzjl.icheme.client;
 
 import com.wormzjl.icheme.IChemE;
-import com.wormzjl.icheme.client.gui.screens.inventory.ColumnCalculatorV3Screen;
+import com.wormzjl.icheme.client.gui.screens.inventory.ProcessSimulatorScreen;
 import com.wormzjl.icheme.registry.ModMenus;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -16,10 +16,12 @@ public final class IChemEClient {
 
     @SubscribeEvent
     public static void registerScreens(RegisterMenuScreensEvent event) {
-        event.register(ModMenus.COLUMN_CALCULATOR_V3.get(), ColumnCalculatorV3Screen::new);
+        event.register(ModMenus.PROCESS_SIMULATOR.get(), ProcessSimulatorScreen::new);
         event.register(ModMenus.FLUID_DEVICE.get(),com.wormzjl.icheme.client.gui.screens.inventory.FluidDeviceScreen::new);
+        event.register(ModMenus.CONTROL_PANEL.get(),com.wormzjl.icheme.client.gui.screens.inventory.ControlPanelScreen::new);
         event.register(ModMenus.GAUGE.get(), com.wormzjl.icheme.client.gui.screens.inventory.GaugeScreen::new);
         event.register(ModMenus.ASSEMBLY.get(), com.wormzjl.icheme.client.gui.screens.inventory.AssemblyScreen::new);
+        event.register(ModMenus.MACHINE.get(), com.wormzjl.icheme.client.gui.screens.inventory.MachineScreen::new);
         event.register(ModMenus.PIPELINE_TOOL.get(), com.wormzjl.icheme.client.gui.screens.inventory.PipelineToolScreen::new);
     }
 
@@ -28,8 +30,10 @@ public final class IChemEClient {
     public static void loggingOut(ClientPlayerNetworkEvent.LoggingOut event) {
         com.wormzjl.icheme.network.FluidNetwork.forgetDelivered();
         TankRenderer.clear();
+        EquipmentBodyRenderer.release();
         SightGlassRenderer.clear();
         MoverSounds.clear();
+        DriverSounds.clear();
     }
 
 }

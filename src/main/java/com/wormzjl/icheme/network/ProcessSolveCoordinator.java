@@ -4,8 +4,6 @@ import com.wormzjl.icheme.IChemE;
 import com.wormzjl.icheme.runtime.ProcessSolveServices;
 import com.wormzjl.icheme.runtime.ProcessSolveServices.ProcessSolveCompletion;
 import com.wormzjl.icheme.runtime.ProcessSolveServices.ProcessSolveRequest;
-import com.wormzjl.icheme.runtime.ProcessSolveServices.V3ColumnCompletion;
-import com.wormzjl.icheme.runtime.ProcessSolveServices.V3ColumnRequest;
 import net.minecraft.server.MinecraftServer;
 
 import java.util.List;
@@ -14,7 +12,7 @@ import java.util.Objects;
 /**
  * The sole main-thread completion router for the shared process-solve service.
  *
- * <p>The V3 packet handlers may not drain the shared completion queue on their own.
+ * <p>Nothing else may drain the shared completion queue.
  * This coordinator is called once per logical-server lifecycle edge by
  * {@link IChemE}.</p>
  */
@@ -69,7 +67,6 @@ public final class ProcessSolveCoordinator {
     private static void route(MinecraftServer server, List<ProcessSolveCompletion> completions) {
         for (ProcessSolveCompletion completion : completions) {
             switch (completion) {
-                case V3ColumnCompletion v3 -> ColumnV3Network.handleRoutedCompletion(server, v3);
                 case ProcessSolveServices.FluidIslandCompletion fluid -> fluid.request().handler().completed(fluid);
                 case ProcessSolveServices.ColumnUnitCompletion column -> column.request().handler().accept(column.outcome());
             }
@@ -78,7 +75,6 @@ public final class ProcessSolveCoordinator {
 
     private static void routeAbandoned(MinecraftServer server, ProcessSolveRequest request) {
         switch (request) {
-            case V3ColumnRequest v3 -> ColumnV3Network.handleRoutedAbandoned(server, v3);
             case ProcessSolveServices.FluidIslandRequest fluid -> fluid.handler().abandoned(fluid);
             case ProcessSolveServices.ColumnUnitRequest column -> column.handler().accept(new com.wormzjl.icheme.science.column.operation.ColumnSolve.Failed("SERVER_SHUTDOWN"));
         }

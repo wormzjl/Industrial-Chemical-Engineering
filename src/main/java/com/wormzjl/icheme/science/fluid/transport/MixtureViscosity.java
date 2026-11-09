@@ -155,7 +155,7 @@ public final class MixtureViscosity {
         if(!(sum>0) || !Double.isFinite(sum) || !(carrier>0)) {
             throw new IllegalArgumentException("Liquid mixture needs a supported carrier; no pure-liquid claim for conditional solutes");
         }
-        return new Result(positive(DeterministicMath.exp(logSum/sum+liquidMixture.logCorrection(temperature,amounts))),conditional>0);
+        return new Result(positive(DeterministicMath.exp(logSum/sum+liquidMixture.logCorrection(amounts))),conditional>0);
     }
 
     public double waterLiquid(double temperature) {

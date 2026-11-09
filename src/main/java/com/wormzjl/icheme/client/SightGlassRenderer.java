@@ -37,9 +37,15 @@ public final class SightGlassRenderer {
     private static final ResourceLocation WHITE=ResourceLocation.withDefaultNamespace("block/white_concrete");
     private record Surface(List<Mesh.Polygon> liquid,SightGlassGeometry.Window window){}
     private static final Map<SightGlassGeometry.Key,Surface> SURFACES=new HashMap<>();
+    /**
+     * Level of detail (batch 2026-11-09-lod-rendering, A3), by the window's diameter in pixels: liquid and bubbles at
+     * 12 px or more (a bubble is a tenth of the window, a pixel there), liquid alone down to 2 px, then nothing.
+     */
+    private static final RenderLod.Tiers<BlockPos> GLASSES=new RenderLod.Tiers<>(12,2);
     private static final float[][] RING=ring();
     private static ClientLevel world;
     private static int age;
+    private static com.wormzjl.icheme.science.equipment.RenderDetail detail;
     private SightGlassRenderer(){}
 
     @SubscribeEvent public static void tick(ClientTickEvent.Post event) {
@@ -57,9 +63,12 @@ public final class SightGlassRenderer {
         // Liquid must be drawn before the terrain's translucent glass writes depth in front of it.
         if(event.getStage()!=RenderLevelStageEvent.Stage.AFTER_BLOCK_ENTITIES)return;
         var mc=Minecraft.getInstance();var level=mc.level;if(level==null)return;
+        var selected=com.wormzjl.icheme.client.model.EquipmentShellModel.detail();
+        if(selected!=detail){SURFACES.clear();detail=selected;}
         var sprite=mc.getModelManager().getAtlas(InventoryMenu.BLOCK_ATLAS).getSprite(WHITE);
         float u=sprite.getU(.5F),v=sprite.getV(.5F);var camera=event.getCamera().getPosition();
         var pose=event.getPoseStack();var buffers=mc.renderBuffers().bufferSource();VertexConsumer consumer=null;
+        var view=ClientConfig.lodView(event.getProjectionMatrix().m11(),mc.getWindow().getHeight());
         for(var entity:FluidDeviceBlockEntity.clientSightGlasses()) {
             var sample=display(entity);int argb=sample.argb();var pos=entity.getBlockPos();
             if(argb>>>24==0||entity.isRemoved()||entity.getLevel()!=level||!FluidDeviceBlock.hasSightGlass(entity.getBlockState())
@@ -67,7 +76,9 @@ public final class SightGlassRenderer {
             var key=FluidDeviceModel.sightGlassKey(entity.getBlockState(),entity.getModelData());
             if(!SightGlassGeometry.supports(key.pipe().connections()))continue;
             if(SURFACES.size()>=256)SURFACES.clear();
-            var surface=SURFACES.computeIfAbsent(key,k->new Surface(SightGlassGeometry.build(k,false).liquid(),SightGlassGeometry.window(k)));
+            var surface=SURFACES.computeIfAbsent(key,k->new Surface(SightGlassGeometry.build(k,false,selected).liquid(),SightGlassGeometry.window(k)));
+            int tier=GLASSES.of(pos,view.pixels(2*surface.window().radius(),pos.distToCenterSqr(camera)));
+            if(tier==GLASSES.hidden())continue;
             int light=LevelRenderer.getLightColor(level,pos);
             if(consumer==null)consumer=buffers.getBuffer(LIQUID);
             pose.pushPose();pose.translate(pos.getX()-camera.x,pos.getY()-camera.y,pos.getZ()-camera.z);
@@ -78,7 +89,7 @@ public final class SightGlassRenderer {
                             .setColor(argb>>16&255,argb>>8&255,argb&255,argb>>>24).setUv(u,v).setOverlay(OverlayTexture.NO_OVERLAY).setLight(light)
                             .setNormal(pose.last(),(float)n[3*corner],(float)n[3*corner+1],(float)n[3*corner+2]);
                 }
-            if(sample.bubbles()>0){
+            if(tier==0&&sample.bubbles()>0){
                 double ticks=level.getGameTime()+event.getPartialTick().getGameTimeDeltaPartialTick(false);
                 var direction=sample.flowDirection();
                 var run=switch(direction){case DOWN,UP->SightGlassGeometry.Axis.Y;case NORTH,SOUTH->SightGlassGeometry.Axis.Z;case WEST,EAST->SightGlassGeometry.Axis.X;};

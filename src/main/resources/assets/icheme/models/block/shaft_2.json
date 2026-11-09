@@ -1,0 +1,9 @@
+{
+  "parent": "block/block",
+  "loader": "icheme:shaft",
+  "size": 2,
+  "textures": {
+    "particle": "icheme:block/shaft_steel",
+    "shaft": "icheme:block/shaft_steel"
+  }
+}
