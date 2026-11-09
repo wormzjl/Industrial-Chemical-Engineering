@@ -1,6 +1,6 @@
 # Distance-based level of detail (LOD) for equipment and instruments
 
-- Status: Planned 2026-11-09. Read from `main` `b794e2d41` (0.22.0). Owner decisions L1–L4 open. No code changed.
+- Status: Planned 2026-11-09; Stage A implemented 2026-11-09 (`63454d60d`, [STAGE_A_REVIEW.md](STAGE_A_REVIEW.md)). Read from `main` `b794e2d41` (0.22.0). L1 approved; L2–L4 open.
 - Owner request 2026-11-09: reduce rendering stress, maybe with low-poly models and no instruments beyond a distance.
 
 ## 1. Expected behaviour, in pixels
