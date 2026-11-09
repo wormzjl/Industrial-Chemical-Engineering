@@ -1,6 +1,6 @@
 # Distance-based level of detail (LOD) for equipment and instruments
 
-- Status: Planned 2026-11-09; Stage A implemented 2026-11-09 (`63454d60d`, [STAGE_A_REVIEW.md](STAGE_A_REVIEW.md)). Read from `main` `b794e2d41` (0.22.0). L1 approved; L4 measured (FPS_PAIR_REVIEW.md); L2, L3 open.
+- Status: Planned 2026-11-09; Stage A implemented 2026-11-09 (`63454d60d`, [STAGE_A_REVIEW.md](STAGE_A_REVIEW.md)). Read from `main` `b794e2d41` (0.22.0). L1 approved; L4 measured (FPS_PAIR_REVIEW.md); L2 = B3 and L3 closed (owner, 2026-11-09).
 - Owner request 2026-11-09: reduce rendering stress, maybe with low-poly models and no instruments beyond a distance.
 
 ## 1. Expected behaviour, in pixels
@@ -55,6 +55,6 @@ Estimate, not measured: 100 pipe dials in range make about 140,000 light lookups
 ## 5. Owner decisions
 
 - L1. Stage A tiers and `lod_scale` as above.
-- L2. Body route: B1, B2 or B3.
-- L3. What FAR drops (list above), and whether LOW and FAR thresholds follow section 1 (1 px outline error).
+- L2. Body route: B1, B2 or B3. **Owner 2026-11-09: B3**, no body LOD (HEAVY_BENCH_REVIEW.md: bodies are not the load on a discrete GPU; region meshes bring low detail level with normal).
+- L3. What FAR drops (list above), and whether LOW and FAR thresholds follow section 1 (1 px outline error). **Closed with L2**: no FAR tier.
 - L4. The FPS pair: scene, lanes, and whether to run it before Stage A as a baseline.

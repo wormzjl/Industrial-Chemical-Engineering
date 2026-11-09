@@ -1,6 +1,6 @@
 # Distance-based level of detail (LOD) rendering
 
-Status: **In progress since 2026-11-09** on `claude/lod-rendering-optimization-1ad1f9`. Stage A implemented (`63454d60d`, owner approved L1); L2–L4 open; not merged.
+Status: **In progress since 2026-11-09** on `claude/lod-rendering-optimization-1ad1f9`. Stage A implemented (`63454d60d`, owner approved L1); L2 = B3 (no body LOD), L3 closed, L4 measured; region meshes for low detail (`50d1cd9a4`); not merged.
 
 ## Scope
 
@@ -22,6 +22,7 @@ Reduce client rendering cost with tiers that follow an object's size on screen: 
 - 2026-11-09: heavy bench (owner: "bench harder") with `42dbfa1ba`: 50 columns, 200 drums, 100 gauges on Stage A. Normal detail 1.53 ms (GPU 0.67 ms); low detail 2.33 ms (GPU 0.97 ms). Proposed: L2 = B3 and close L3; `low_polygon_mode` per-structure cost options A or B.
 - 2026-11-09: option B (owner: "optimize it now"): per-structure mesh handles and light in `EquipmentBodyRenderer`. Heavy low lane 2.28 ms against 2.33 ms: no gain, so reverted; patch archived. Likely cost: one draw per structure and no section culling.
 - 2026-11-09: region meshes (owner: "try region meshes"): `EquipmentBodyRenderer` merges the bodies of each 32-block square into one mesh, one draw per square; light read once a second. Heavy low lane 1.55 ms (GPU 0.64 ms) against 2.33 ms; normal detail 1.53 ms. Kept. No test loads the class: compile only.
+- 2026-11-09: owner decision L2 = B3: no distance tier for equipment bodies; L3 (FAR content) closed with it. `low_polygon_mode` stays the only body switch. No code change.
 
 ## Code areas
 
@@ -29,6 +30,5 @@ Reduce client rendering cost with tiers that follow an object's size on screen: 
 
 ## Open items
 
-- L2: proposed B3 (no body LOD), closing L3 (HEAVY_BENCH_REVIEW.md).
 - Code guide at the merge: `cooling-towers.md` and `equipment.md` still describe one body mesh per structure.
 - An in-game look at the switch points (owner-started).
