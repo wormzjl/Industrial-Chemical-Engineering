@@ -3355,12 +3355,13 @@ public final class ProcessUnit {
         double x = StillPlan.POT_X, z = StillPlan.POT_Z, h = p.w() / 2, x0 = x - h, x1 = x + h, z0 = z - h, z1 = z + h, top = p.setting(), cope = top - .06;
         box(new double[]{x0, 0, z0}, new double[]{x1, cope, z1}, ALL_FACES & ~4, Material.BRICK, true);
         box(new double[]{x0 - .03, cope, z0 - .03}, new double[]{x1 + .03, top, z1 + .03}, ALL_FACES, Material.BRICK, true);
-        // The flue: up from the coping in the back right corner, a cap at its top, its mouth dark.
-        double s = p.flue(), fx = x1 - s, fz = z1 - s, ft = p.flueTop();
-        box(new double[]{fx, top, fz}, new double[]{x1, ft - .08, z1}, ALL_FACES & ~4, Material.BRICK, true);
-        box(new double[]{fx - .03, ft - .08, fz - .03}, new double[]{x1 + .03, ft, z1 + .03}, ALL_FACES, Material.BRICK, true);
-        box(new double[]{fx + .05, ft, fz + .05}, new double[]{x1 - .05, ft + .002, z1 - .05}, 8, Material.OPENING, false);
-        mark("flue_top", new double[]{fx + .05, ft, fz + .05}, new double[]{x1 - .05, ft + .05, z1 - .05});
+        // The flue: up from the coping in the back right corner seen from the front (frame -x, +z; owner, 2026-11-10), a
+        // cap at its top, its mouth dark.
+        double s = p.flue(), fx = x0 + s, fz = z1 - s, ft = p.flueTop();
+        box(new double[]{x0, top, fz}, new double[]{fx, ft - .08, z1}, ALL_FACES & ~4, Material.BRICK, true);
+        box(new double[]{x0 - .03, ft - .08, fz - .03}, new double[]{fx + .03, ft, z1 + .03}, ALL_FACES, Material.BRICK, true);
+        box(new double[]{x0 + .05, ft, fz + .05}, new double[]{fx - .05, ft + .002, z1 - .05}, 8, Material.OPENING, false);
+        mark("flue_top", new double[]{x0 + .05, ft, fz + .05}, new double[]{fx - .05, ft + .05, z1 - .05});
         // The firing door in its frame, its handle; the ash-pit door under it; the grate behind.
         double d = p.d(), wd = .25 + .12 * d, hd = .22 + .1 * d, g = p.grate();
         box(new double[]{x - wd / 2 - .03, g - .03, z0 - .015}, new double[]{x + wd / 2 + .03, g + hd + .03, z0}, ALL_FACES & ~32, Material.IRON, false);

@@ -139,6 +139,8 @@ distiller in the process simulator.
   (`EquipmentServices`); the 2000 L skirt is held 7 mm round its pot, without a ring, clear of the corner blocks. The
   setting is 0.35 m round every pot again (the burner's room cap went). New gate: a cable reaches both sockets. Layout
   table re-recorded (still rows only: boxes 4 wide, every nozzle one block left but the fuel).
+- 2026-11-10: owner, on the top views: the chimney in the back right corner (it stood back left, against its own
+  comment). Tests: the eight geometry classes; layout table re-recorded (fired still rows, cells only).
 
 ## Open items
 

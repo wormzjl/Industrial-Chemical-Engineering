@@ -32,10 +32,10 @@ The owner's items on the drawings (run `tmp/equipment-drawings/20261109-135451-f
 - Owner, then: charge on the front, fuel on the right, drain on the back, condenser on the left (seen from the firing
   door; the right is −x). The burner is the fuel connection on the right wall at ground level, at most 50 mm
   (`NozzleBore`; owner: a small pipe connector is enough). No gun at the door. Entries square to the wall (owner).
-- Owner, in game (2026-11-10): the electric still's FE socket faced the skirt; every still one block wider (owner's
-  sketch): 4 × 3, the condenser in the left column, a free column, the pot on the third column's centre, the right
-  column free. Charge and drain run straight on the pot's line; the terminal box stands in the right column's centre,
-  data socket to the front, FE to the back; the 2000 L skirt is held 7 mm round its pot so both open on free blocks.
+- Owner, in game (2026-11-10): the FE socket faced the skirt; every still one block wider (owner's sketch): 4 × 3,
+  the condenser in the left column, a free column, the pot on the third column's centre, the right column free, the
+  chimney in the back right corner. Charge and drain run straight on the pot's line; the terminal box stands in the
+  right column's centre, data to the front, FE to the back; the 2000 L skirt is held 7 mm round its pot (free blocks).
 
 ## 4. Pot volume against the drawing
 
