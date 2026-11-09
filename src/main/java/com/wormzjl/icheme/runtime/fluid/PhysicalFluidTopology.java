@@ -561,6 +561,25 @@ public final class PhysicalFluidTopology {
         }
         return joints;
     }
+    /**
+     * The faces {@code device} meets a neighbour through as built (batch 2026-11-09-drawn-connections), a bit per
+     * {@link Direction} ordinal: each face it connects through mechanically where the device {@link #across} finds there
+     * {@link Device#mechanicallyJoins} it, as {@link #compile} links them, whatever valves, cutoffs and switches say. A
+     * running column's ports are left out, so a column that starts or stops changes nothing here. A block draws joined
+     * exactly these faces: the drawing has no rule of its own. A device with ports meets pipes at its ports, which its own
+     * cells draw, so it has none here. Reads the registry alone, never a block.
+     */
+    public static int builtFaces(java.util.function.Function<Position,Device> at,Device device) {
+        if(!device.ports.isEmpty())return 0;
+        java.util.function.Function<Position,Device> built=p->p.lane()==PORT_LANE?null:at.apply(p);
+        int faces=0;
+        for(var d:Direction.values()) {
+            if(!device.mechanicallyConnects(d))continue;
+            var other=across(built,x->x,device,device.position,d);
+            if(other!=null&&device.mechanicallyJoins(other,device.position,d))faces|=1<<d.ordinal();
+        }
+        return faces;
+    }
     /** Independent edits must not renumber a different island's last-interval debug history. */
     private static long runIdentity(TopologyCompiler.Run run,Map<Long,Long> owners,int part) {
         long hash=0xcbf29ce484222325L;hash=(hash^run.first())*0x100000001b3L;hash=(hash^run.second())*0x100000001b3L;

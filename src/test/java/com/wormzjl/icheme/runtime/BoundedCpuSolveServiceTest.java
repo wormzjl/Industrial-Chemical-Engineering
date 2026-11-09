@@ -330,6 +330,9 @@ class BoundedCpuSolveServiceTest {
             assertFalse(report.callerInterrupted());
             await(interruptObserved);
             assertTrue(service.isTerminated());
+            // The pool terminates once its last worker leaves the worker set; that thread still returns from run()
+            // afterwards, so wait for it: a leaked worker would still be alive after the timeout.
+            workerThread.get().join(TEST_TIMEOUT.toMillis());
             assertFalse(workerThread.get().isAlive());
             assertEquals(Admission.STOPPING, service.trySubmit(
                     stamp(60L, 3L, "later"),

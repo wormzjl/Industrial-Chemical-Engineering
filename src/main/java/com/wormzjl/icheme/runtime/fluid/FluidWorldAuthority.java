@@ -221,6 +221,27 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public Map<Long,WorldTopologyLedger.Registration> registrations(){owned();return registry.registrations();}
     /** The registration at a position (every block-entity load and binding asks). */
     public Optional<WorldTopologyLedger.Registration> at(PhysicalFluidTopology.Position position){owned();return registry.at(position);}
+    /**
+     * The faces the device registered at {@code position} draws joined (batch 2026-11-09-drawn-connections): its
+     * as-built joins on the projected registry ({@link PhysicalFluidTopology#builtFaces}), so accepted input shows at once
+     * and a block draws what the network joins. -1 where no device without ports stands. Reads no block and loads no
+     * chunk: a neighbour in a chunk that is not loaded is known by its registration.
+     */
+    public int drawnFaces(PhysicalFluidTopology.Position position){
+        owned();var record=topology.latestAt(position);
+        if(record==null||!record.device().position().equals(position)||!record.device().ports().isEmpty())return -1;
+        return PhysicalFluidTopology.builtFaces(this::latestDevice,record.device());
+    }
+    /**
+     * The faces a block of {@code kind} placed at {@code position} facing {@code facing} will draw joined once registered:
+     * a hand-placed block, every face a joint and no fitting, as {@link #place} registers it.
+     */
+    public int placedFaces(PhysicalFluidTopology.Position position,TopologyCompiler.Kind kind,PhysicalFluidTopology.Direction facing){
+        owned();
+        var placed=new PhysicalFluidTopology.Device(Long.MAX_VALUE,position,kind,facing,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive(),List.of(),kind!=TopologyCompiler.Kind.GENERATOR);
+        return PhysicalFluidTopology.builtFaces(p->p.equals(position)?placed:latestDevice(p),placed);
+    }
+    private PhysicalFluidTopology.Device latestDevice(PhysicalFluidTopology.Position position){var record=topology.latestAt(position);return record==null?null:record.device();}
     /** Applied events that did nothing for the player who asked (a recovery that found no cake or a full inventory), by event, for their reply. Bounded. */
     private final LinkedHashMap<UUID,String> refusedEvents=new LinkedHashMap<>();
     private void refuseEvent(UUID event,String reason){refusedEvents.put(event,reason);if(refusedEvents.size()>WorldTopologyLedger.MAXIMUM_EVENTS)refusedEvents.remove(refusedEvents.keySet().iterator().next());}

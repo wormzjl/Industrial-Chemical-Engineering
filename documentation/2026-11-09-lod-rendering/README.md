@@ -24,6 +24,7 @@ Reduce client rendering cost with tiers that follow an object's size on screen: 
 - 2026-11-09: region meshes (owner: "try region meshes"): `EquipmentBodyRenderer` merges the bodies of each 32-block square into one mesh, one draw per square; light read once a second. Heavy low lane 1.55 ms (GPU 0.64 ms) against 2.33 ms; normal detail 1.53 ms. Kept. No test loads the class: compile only.
 - 2026-11-09: owner decision L2 = B3: no distance tier for equipment bodies; L3 (FAR content) closed with it. `low_polygon_mode` stays the only body switch. No code change.
 - 2026-11-09: merge preparation (owner: "merge", version 0.23.2). `8aeaa8d64` merges main 0.23.1 (INDEX rows kept on both sides); `e4d3d2d9b` drops `VertexBufferCache.size` (no caller); code guide `cef706408` (client-gui, instrument-accessories, equipment, cooling-towers, README); `ec78e91ba` mod_version and CHANGELOG. Final lane below.
+- 2026-11-09: after the merge (owner: "yes, fix it"): `BoundedCpuSolveServiceTest.twoPhaseShutdown...` joins the worker thread (3 s) before asserting it ended. `ThreadPoolExecutor` reports terminated once its last worker leaves the worker set, while that thread still returns from `run()`. Its class passes 8 of 8. Merged as 0.23.3 (test only: no final lane, since nothing else changed since the 0.23.2 lane; code guide: no change).
 
 ## Code areas
 
@@ -32,7 +33,6 @@ Reduce client rendering cost with tiers that follow an object's size on screen: 
 ## Open items
 
 - An in-game look at the switch points (owner-started).
-- `BoundedCpuSolveServiceTest.twoPhaseShutdown...` races (main's test, see Merge): wait for the worker thread to end before asserting.
 
 ## Merge
 
