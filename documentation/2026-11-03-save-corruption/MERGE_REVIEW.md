@@ -39,4 +39,5 @@ Branch `claude/save-corruption-prevention-2bd7ac`, batch `2026-11-03-save-corrup
 
 - Expected: the load marks the device, and the view arrives at the device's first bucket after the mark.
 - What happened: within one server tick, a GameTest ticks inside `tickChildren`, before `ServerTickEvent.Post`; the authority's tick there advances the online tick to v+1 and flushes the bucket of v+1. The test reloads the chunk and reads online tick v. The load's two marks come after that flush: the chunk-load handler is a queued `TickTask` (49e57860), and the block entity's `onLoad` runs on the next level tick. So the device's first bucket after the mark is the first after v+1. The test counted from v: when the device's bucket was v+1 (1 in 100 runs), it expected the view at v+1, and the view came at v+101. The engine follows its rule; the test's count was one tick early.
-- Fix: the test counts the bucket from the tick it reads the mark (v+1). No product change.
+- Fix: the test counts the bucket from the tick it reads the mark (v+1). No product change. `8642e6308`; fluid GameTests 87/87 (run id `presentation-flake-fix`).
+- Merged to `main` as 0.23.6 on 2026-11-09 (owner: "Merge as 0.23.6"). Not pushed. No second lane: nothing else changed. Scratch log archived in the main checkout, `tools/merge-lane/logs/presentation-flake-scratch-logs-2026-11-09.tar.gz`.

@@ -2,7 +2,7 @@
 
 Purpose: how save corruption can damage an IChemE world, and how to stop it from causing total data loss, as an extension of the backward-compat facts/state system (owner 2026-11-03: "Research about how to handle eventual save corruption to prevent total data loss"; "I'd imagine it will be somehow combined with the backward compat system").
 
-Status: Implemented 2026-11-09, released as 0.23.5 (branch `claude/save-corruption-prevention-2bd7ac`, main 0.23.4 merged in): registry first, W5 and W5c. Decisions S1-S11 (2026-11-03) and Q1-Q4 (2026-11-09). The W1-W4 plan (corruption ladder) and W6 (save encoding off the server thread) are not built: owner to decide. Not pushed. Merge review: [MERGE_REVIEW.md](MERGE_REVIEW.md). Index: [../INDEX.md](../INDEX.md).
+Status: Implemented 2026-11-09, released as 0.23.5 and, with the presentation GameTest fix, 0.23.6 (branch `claude/save-corruption-prevention-2bd7ac`, main 0.23.4 merged in): registry first, W5 and W5c. Decisions S1-S11 (2026-11-03) and Q1-Q4 (2026-11-09). The W1-W4 plan (corruption ladder) and W6 (save encoding off the server thread) are not built: owner to decide. Not pushed. Merge review: [MERGE_REVIEW.md](MERGE_REVIEW.md). Index: [../INDEX.md](../INDEX.md).
 
 ## Documents
 
@@ -176,10 +176,10 @@ Status: Implemented 2026-11-09, released as 0.23.5 (branch `claude/save-corrupti
   - Expected: a reloaded device's view arrives at its first bucket after the load's mark.
   - Found: the load's marks (a queued `TickTask`, the block entity's `onLoad` on the next level tick) come after the flush of the tick the reload happened in, because a GameTest ticks before `ServerTickEvent.Post`. The test counted the bucket from the reload's tick, one tick early: 1 run in 100 failed. My guess at the merge (the island's first publication) was wrong.
   - Fixed: `identityBindingOnAChunkLoadCarriesNoViewData` counts from the tick it reads the mark. No product change. A pitfall line in the code guide (fluid-runtime.md). Fluid GameTests 87/87 on the fresh run id `presentation-flake-fix`.
+- 2026-11-09: merged as 0.23.6 (owner: "Merge as 0.23.6"), the commit that adds this line: `mod_version`, CHANGELOG, statuses, the fluid-runtime snapshot. No lane: the fix changes one fluid GameTest, which passed on this code; the version bump changes no test input. Code guide: fluid-runtime.md (the pitfall line, snapshot `8642e6308`). Tooling cleanup: nothing to detach.
 
 ## Open items
 
-- The flaky presentation test fix (after the 0.23.5 merge) is on the branch, not on main: a follow-up merge needs a patch version (0.23.6), or it rides with the next batch. Owner to decide.
 - Drawn connections' owner decisions: W5 answers 1 (ghosts are placed back or held and named, never pruned). Decision 2 (a block placed already as INLINE_MOVER gets the legacy Pump law) also governs W5's learning path (review 2.3, 2.4).
 - W5c is built (C1 to C5, [W5C_NEW_MODULES_PLAN.md](W5C_NEW_MODULES_PLAN.md), owner's Q1 to Q4). Two choices of mine, reversible until the merge: a held shaft part is saved with the held devices; a held cable or controller is not saved (`icheme_control` holds facts only), so after a load its network joins until its chunk is checked again.
 - Decided (owner, 2026-11-09: "Keep main's rule"): a world opened without Create still forgets every Create coupling's shaft unit (`ShaftTrains.forget`, W6b), although that discards a fact the player built. W5c's hold was the option not taken. The re-alignment checks no coupling without Create.
