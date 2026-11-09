@@ -3418,25 +3418,19 @@ public final class ProcessUnit {
     }
 
     /**
-     * The charge line in at the front, in the right-hand column seen from the front (owner, 2026-11-09), on its row: back
-     * into the shell or the head where its row meets them, else over and down onto the head. Where it turns toward the
-     * axis, it turns in front of the axis's line, so its bend stays clear of the fuel flange on the right face, which is
-     * on the same row and on the axis's line.
+     * The charge line in at the front, in the right-hand column seen from the front (owner, 2026-11-09), on its row: over to
+     * the pot's line just behind its flange, then straight back along the pot's front meridian, into the shell or the head
+     * square to its wall where its row meets them, else down onto the head at 0.6 of its radius (owner, 2026-11-09: the
+     * oblique entries looked wrong).
      */
     private void stillCharge(StillPlan p) {
         double x = StillPlan.POT_X, z = StillPlan.POT_Z, y = p.charge(), r = p.d() / 2, rq = p.radiusAt(y), pr = .03 + .01 * p.d(), xc = .5;
         double[] base = {xc, y, .3};
-        double off = x - xc;
-        if (rq > off) pipe(pr, p.line(), true, base, new double[]{xc, y, z - Math.sqrt(rq * rq - off * off) + .02});
-        else if (rq > 0) {
-            // In at 60 degrees from the front: the bend 0.87 of the radius in front of the axis.
-            double zt = z - .866 * rq;
-            pipe(pr, p.line(), true, base, new double[]{xc, y, zt}, new double[]{x - .5 * rq + .02, y, zt});
-        } else {
-            // Down onto the head at 0.6 of its radius, as before, 0.55 of the radius in front of the axis.
-            double ex = x - .25 * r, zt = z - .55 * r;
-            pipe(pr, p.line(), true, base, new double[]{xc, y, zt}, new double[]{ex, y, zt}, new double[]{ex, p.cylinder() + .8 * p.d() / 4 - .01, zt});
-        }
+        // The jog 0.15 m behind the flange's base, in front of every pot (its front is 0.8 m in at 2000 L).
+        double zj = .45;
+        if (rq > 0) pipe(pr, p.line(), true, base, new double[]{xc, y, zj}, new double[]{x, y, zj}, new double[]{x, y, z - rq + .02});
+        else pipe(pr, p.line(), true, base, new double[]{xc, y, zj}, new double[]{x, y, zj}, new double[]{x, y, z - .6 * r},
+                new double[]{x, p.cylinder() + .8 * p.d() / 4 - .01, z - .6 * r});
         nozzles.add(end(Role.CHARGE, base, 2, -1, 2 * pr));
     }
 
