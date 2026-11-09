@@ -121,7 +121,8 @@ distiller in the process simulator.
   itself, a small connection (at most 50 mm, `BatchStillDesign.FUEL_BORE`, `NozzleBore`) through the right wall at
   ground level; the setting at most 1.686 m wide (`StillPlan.FUEL_ROOM`, owner: smaller), the flue clear of the pot;
   no burner gun at the front; the flame jet runs from the
-  burner toward the fire bed (`StillFires`).
+  burner toward the fire bed (`StillFires`). The charge line jogs to the pot's line 0.15 m behind its flange and
+  enters square to the shell or head, or drops onto the head (owner: the oblique entries looked wrong).
 
 ## Open items
 

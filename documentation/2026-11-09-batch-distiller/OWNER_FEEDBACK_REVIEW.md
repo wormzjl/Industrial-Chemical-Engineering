@@ -33,8 +33,9 @@ main thread (owner: "Here").
   door; the right is −x). The condenser lies along z at x = 2.5. The burner is the fuel connection, on the right face's
   middle column at ground level (owner: a small pipe connector is enough): at most 50 mm bore (`NozzleBore`); the
   setting is at most 1.686 m wide to leave it 0.157 m (owner), the flue shrinks to clear the pot. No gun at the door. The electric still's terminal box moved from
-  the front corner to the right face's middle column, gland outward (owner: a bad location). The charge line bends in
-  front of the axis and the drain jogs behind the pot. The pot node's point sits 0.01 m off the block edges.
+  the front corner to the right face's middle column, gland outward (owner: a bad location). The charge line jogs to
+  the pot's line behind its flange and enters square to the wall (owner: oblique entries looked wrong); the drain jogs
+  behind the pot.
 
 ## 4. Pot volume against the drawing
 
@@ -45,6 +46,6 @@ main thread (owner: "Here").
 
 - Passed:
   - quick suite: `StillRuntimeTest`, `FluidFactsCompatTest`, `BatchStillTest`, `StillHeadTest`, `BatchStillUnitTest`;
-  - equipmentGates: the 23 affected classes, then the eight geometry classes after each layout change.
-- Layout table re-recorded; only still rows changed.
+  - equipmentGates: the 23 affected classes, then the eight geometry classes after each layout change; the burner's
+    bore: `StillSizingTest`, `SheetSizingTest`, `LineSizingTest`, `SizingCoverageTest`. Layout table: still rows only.
 - `UnitTextTest` fails on the flare stack's datasheet widths (417 > 411 px), outside this change.
