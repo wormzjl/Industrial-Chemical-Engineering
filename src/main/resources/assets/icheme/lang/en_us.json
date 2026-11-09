@@ -2091,7 +2091,7 @@
   "gui.icheme.vessel.title.flare_stack": "Flare stack",
   "gui.icheme.vessel.kind.flare_stack": "Elevated flare stack, unassisted",
   "gui.icheme.vessel.flare_stack": "Tip %s m across on a stack %s m high",
-  "gui.icheme.vessel.flare_stack.duty": "Rated heat release %s MW; burns while the flame temperature is at least %s K",
+  "gui.icheme.vessel.flare_stack.duty": "Rated heat release %s MW; burns while its flame is at least %s K",
   "gui.icheme.equipment_constructor.equipment.batch_still": "Batch still",
   "gui.icheme.equipment_constructor.equipment.batch_still.short": "Batch still",
   "gui.icheme.equipment_constructor.equipment.batch_still.hint": "A copper pot still for small batches: charge the pot, heat it and draw the distillate off its spout, then drain the residue. A brick firebox for solid or liquid fuel, or an electric heater; its own worm-tub condenser, a column of 2 to 8 stages with a reflux valve, or a vapour outlet to your own condenser.",
