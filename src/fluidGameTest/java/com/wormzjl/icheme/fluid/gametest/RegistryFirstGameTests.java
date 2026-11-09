@@ -21,6 +21,7 @@ import com.wormzjl.icheme.science.fluid.network.PassiveNetwork;
 import com.wormzjl.icheme.world.item.PipelineToolItem;
 import com.wormzjl.icheme.world.level.block.ControlPanelBlock;
 import com.wormzjl.icheme.world.level.block.CreativeMotorBlock;
+import com.wormzjl.icheme.world.level.block.DcsBlock;
 import com.wormzjl.icheme.world.level.block.EquipmentStructure;
 import com.wormzjl.icheme.world.level.block.FluidDeviceBlock;
 import com.wormzjl.icheme.world.level.block.LinePlacement;
@@ -30,6 +31,7 @@ import com.wormzjl.icheme.world.level.block.PipeRackBlock;
 import com.wormzjl.icheme.world.level.block.RegistryRealignment;
 import com.wormzjl.icheme.world.level.block.ShaftBlock;
 import com.wormzjl.icheme.world.level.block.entity.ConduitBlockEntity;
+import com.wormzjl.icheme.world.level.block.entity.ControlPanelBlockEntity;
 import com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity;
 import com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity;
 import com.wormzjl.icheme.world.level.block.entity.PipeRackBlockEntity;
@@ -846,6 +848,83 @@ public final class RegistryFirstGameTests {
                     if (failure[0] != null) helper.fail(failure[0]);
                 })
                 .thenSucceed();
+    }
+
+    /**
+     * W5c C3, GameTest m: a local controller and a DCS console are facts of the control registry. Both are lost behind
+     * its back and come back facing away from their sockets, each with its identity and socket, the console with its top.
+     * Then a stone stands in the controller's cell: the controller is held, and the stone stays. Once the cell is free,
+     * the controller stands again and is released.
+     */
+    @GameTest(template = "empty", timeoutTicks = 400, batch = "registry-first-modules")
+    public static void aLostControllerAndConsoleComeBackFacingTheirSockets(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var world = FluidWorldAuthority.find(level.getServer()).orElseThrow();
+        var facts = world.controls().facts();
+        var controller = helper.absolutePos(new BlockPos(1, 2, 10));
+        var console = controller.east(3);
+        level.setBlock(controller, ModBlocks.LOCAL_CONTROLLER.get().defaultBlockState().setValue(ControlPanelBlock.FACING, Direction.EAST), 3);
+        level.setBlock(console, ModBlocks.DCS.get().defaultBlockState().setValue(ControlPanelBlock.FACING, Direction.SOUTH), 3);
+        String[] failure = {null};
+        DataPort[] ports = new DataPort[2];
+        helper.startSequence()
+                .thenWaitUntil(() -> {
+                    ports[0] = panelPort(facts, level, controller);
+                    ports[1] = panelPort(facts, level, console);
+                    helper.assertTrue(ports[0] != null && ports[1] != null && level.getBlockState(console.above()).is(ModBlocks.DCS.get()),
+                            "Waiting for the controller's and the console's sockets");
+                })
+                .thenExecute(() -> {
+                    FluidDeviceBlock.quietly(() -> {
+                        level.setBlock(controller, Blocks.AIR.defaultBlockState(), 3);
+                        level.setBlock(console.above(), Blocks.AIR.defaultBlockState(), 3);
+                        level.setBlock(console, Blocks.AIR.defaultBlockState(), 3);
+                    });
+                    if (panelPort(facts, level, controller) == null || panelPort(facts, level, console) == null) failure[0] = "a lost panel's facts left";
+                    requeue(world, level, List.of(controller, console));
+                })
+                .thenWaitUntil(() -> helper.assertTrue(standsAsPanel(facts, level, controller, ports[0], Direction.EAST) && standsAsPanel(facts, level, console, ports[1], Direction.SOUTH)
+                                && level.getBlockState(console.above()).is(ModBlocks.DCS.get())
+                                && level.getBlockState(console.above()).getValue(DcsBlock.HALF) == net.minecraft.world.level.block.state.properties.DoubleBlockHalf.UPPER,
+                        "Waiting for the controller and the console to stand facing away from their sockets: " + failure[0] + " | " + panelDetail(facts, level, controller, ports[0])
+                                + " | " + panelDetail(facts, level, console, ports[1]) + " | top " + level.getBlockState(console.above())))
+                .thenExecute(() -> {
+                    FluidDeviceBlock.quietly(() -> level.setBlock(controller, Blocks.STONE.defaultBlockState(), 3));
+                    requeue(world, level, List.of(controller));
+                })
+                .thenWaitUntil(() -> helper.assertTrue(facts.heldPanel(ports[0].id()), "Waiting for the blocked controller to be held"))
+                .thenExecute(() -> {
+                    if (!level.getBlockState(controller).is(Blocks.STONE)) failure[0] = "the stone was overwritten";
+                    level.setBlock(controller, Blocks.AIR.defaultBlockState(), 3);
+                    requeue(world, level, List.of(controller));
+                })
+                .thenWaitUntil(() -> helper.assertTrue(!facts.heldPanel(ports[0].id()) && standsAsPanel(facts, level, controller, ports[0], Direction.EAST),
+                        "Waiting for the controller to stand and be released"))
+                .thenExecute(() -> {
+                    level.setBlock(controller, Blocks.AIR.defaultBlockState(), 3);
+                    level.setBlock(console, Blocks.AIR.defaultBlockState(), 3);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(panelPort(facts, level, controller) == null && panelPort(facts, level, console) == null,
+                        "Waiting for the controller and the console to leave"))
+                .thenExecute(() -> {
+                    if (failure[0] != null) helper.fail(failure[0]);
+                })
+                .thenSucceed();
+    }
+
+    /** What stands at {@code at} for the controller of {@code port}, for a failure message. */
+    private static String panelDetail(ControlFacts facts, ServerLevel level, BlockPos at, DataPort port) {
+        var box = level.getBlockEntity(at) instanceof ControlPanelBlockEntity b ? b : null;
+        return level.getBlockState(at) + " box=" + (box == null ? null : box.identity() + "/" + port.equals(box.dataPort())) + " fact=" + port.equals(facts.port(port.id()))
+                + " (" + facts.port(port.id()) + " vs " + port + ") panel=" + (facts.panel(port.id()) != null) + " held=" + facts.heldPanel(port.id());
+    }
+
+    /** Whether a controller or console stands at {@code at} facing {@code facing}, bound to {@code port}'s identity and socket. */
+    private static boolean standsAsPanel(ControlFacts facts, ServerLevel level, BlockPos at, DataPort port, Direction facing) {
+        var state = level.getBlockState(at);
+        return state.getBlock() instanceof ControlPanelBlock && state.getValue(ControlPanelBlock.FACING) == facing
+                && level.getBlockEntity(at) instanceof ControlPanelBlockEntity box && box.identity().equals(port.id()) && port.equals(box.dataPort())
+                && port.equals(facts.port(port.id()));
     }
 
     /** The socket of the controller at {@code at}, or null while it has none. */

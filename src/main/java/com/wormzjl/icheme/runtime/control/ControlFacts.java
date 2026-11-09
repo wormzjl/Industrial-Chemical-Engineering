@@ -91,6 +91,8 @@ public final class ControlFacts extends SavedData {
      * them out. Engine state, never saved: a chunk load checks them again.
      */
     private final Set<DataBus.Site> held = new HashSet<>();
+    /** The controllers and consoles whose cell another block holds (W5c C3): a held controller is off. Never saved. */
+    private final Set<UUID> heldPanels = new HashSet<>();
 
     private static long chunk(BlockPos cell) {
         return net.minecraft.world.level.ChunkPos.asLong(cell.getX() >> 4, cell.getZ() >> 4);
@@ -133,6 +135,28 @@ public final class ControlFacts extends SavedData {
         if (on ? !cables.containsKey(site) || !held.add(site) : !held.remove(site)) return false;
         topologyRevision = Math.addExact(topologyRevision, 1);
         return true;
+    }
+
+    /** The controllers and consoles whose position is in chunk {@code chunk} of {@code dimension} (a scan). */
+    public List<UUID> panelsIn(String dimension, long chunk) {
+        var out = new ArrayList<UUID>();
+        for (var p : panels.values()) if (p.dimension().equals(dimension) && chunk(p.position()) == chunk) out.add(p.id());
+        return out;
+    }
+
+    /** Whether controller or console {@code id} is held. */
+    public boolean heldPanel(UUID id) {
+        return heldPanels.contains(id);
+    }
+
+    /** The held controllers and consoles. */
+    public Set<UUID> heldPanels() {
+        return Set.copyOf(heldPanels);
+    }
+
+    /** Holds or releases controller or console {@code id}. Whether that changes it. */
+    public boolean holdPanel(UUID id, boolean on) {
+        return on ? panels.containsKey(id) && heldPanels.add(id) : heldPanels.remove(id);
     }
 
     /** The cables the buses join: all but the held ones. */
@@ -268,6 +292,7 @@ public final class ControlFacts extends SavedData {
 
     public void removePanel(UUID id) {
         if (panels.remove(id) != null) {
+            heldPanels.remove(id);
             removePort(id);
             changed();
         }

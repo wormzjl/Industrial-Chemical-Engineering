@@ -422,4 +422,22 @@ class ControlSystemTest {
         assertTrue(new DataBus(facts.standing(), facts.ports(), power).connected(new UUID(0, 1), new UUID(0, 2)));
         assertFalse(facts.hold(new DataBus.Site(site.dimension(), site.cell().above(), 0), true), "no fact, no hold");
     }
+    /** W5c C3 (option Q1): a held controller is state, never a fact, and it leaves with its facts. */
+    @Test
+    void aHeldControllerIsNeverAFact() throws Exception {
+        var facts =
+                ControlFacts.load(
+                        TagParser.parseTag(
+                                Files.readString(
+                                        Path.of("src/test/resources/compat/control/control-2.snbt"))));
+        var id = facts.panels().iterator().next().id();
+        var before = facts.save(new CompoundTag(), null);
+        assertTrue(facts.holdPanel(id, true));
+        assertFalse(facts.holdPanel(id, true), "held once");
+        assertTrue(facts.heldPanel(id));
+        assertEquals(before, facts.save(new CompoundTag(), null), "a hold is never saved");
+        assertFalse(facts.holdPanel(new UUID(7, 7), true), "no facts, no hold");
+        facts.removePanel(id);
+        assertFalse(facts.heldPanel(id), "the hold leaves with the controller");
+    }
 }

@@ -36,7 +36,7 @@ The registry is the fact, and the block draws it, as W5 does for fluid devices:
   - Rack lanes: W5's lane path also places the rack for a cell that holds only cable lanes, with the frame the facts hold (option Q2). `controls().loaded(rack)` then restores the lanes.
   - Held: the bus leaves the cable out.
 - **C3. Controllers.** A panel index by chunk.
-  - A `ControlPanelBlock`, or both cells of a `DcsBlock`, facing away from its socket's face (`DataPorts.panel`: outward = facing.opposite). No new field is needed.
+  - A `ControlPanelBlock`, or both cells of a `DcsBlock`, facing its socket's `face` (the socket leaves the block's back, `DataPorts.panel`, and `DataPort.face` is the cable's face toward it; corrected at the build, 2026-11-09). No new field is needed.
   - `ControlPanelBlock.onRemove` follows the quiet flag.
   - Held: the controller is off until its block stands.
 - **C4. Device names.** Schema 15 is not on main yet, so names join W5's build facts there and need no new schema:

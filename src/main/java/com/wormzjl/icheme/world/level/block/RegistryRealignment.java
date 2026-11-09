@@ -57,6 +57,11 @@ import java.util.List;
  * pieces; a cable block of the other medium is replaced. A lost rack comes back with the frame its lanes hold, or one
  * derived from them for lanes saved before frames. Any other block there holds the cable, which its bus leaves out.</p>
  *
+ * <p>A local controller or a DCS console (W5c C3) is checked at its cell after the cables, facing as its socket says (the
+ * socket leaves the block's back, {@code DataPorts.panel}, and its face is the cable's); a console takes its top where the cell above
+ * is free. Its copy takes its identity and socket at its load ({@code ControlService.loaded}). Any other block there
+ * holds it, and a held controller is off.</p>
+ *
  * <p>A structure the registry records (plan 4.4) is checked once every chunk of its box and of the blocks beside it is
  * block-ticking, after the layout refresh when that has it queued: one whose cells stand as its record says is left as it
  * is; any other is rebuilt to its record where the record puts it, its cells placed where the world is free; with a cell
@@ -110,6 +115,14 @@ public final class RegistryRealignment {
             } catch (RuntimeException failed) {
                 tally.checked++;
                 IChemE.LOGGER.error("fluid_realign failed cable={}", site, failed);
+            }
+        }
+        for (java.util.UUID id; tally.checked < DEVICES && System.nanoTime() - start < BUDGET_NANOS && (id = controls.nextPanel(dimension)) != null; ) {
+            try {
+                tally.add(panel(level, world, id));
+            } catch (RuntimeException failed) {
+                tally.checked++;
+                IChemE.LOGGER.error("fluid_realign failed panel={}", id, failed);
             }
         }
         EquipmentStructure.serveRealignment(level, world, start + BUDGET_NANOS, STRUCTURES, tally::add);
@@ -284,6 +297,50 @@ public final class RegistryRealignment {
             outcome = Outcome.PLACED;
         } else return holdCable(facts, site, held);
         if (held) facts.hold(site, false);
+        return new Check(outcome, held);
+    }
+
+    /** Re-aligns the cell of controller or console {@code id} of {@code level}'s dimension to its facts (W5c C3). */
+    public static Check panel(ServerLevel level, FluidWorldAuthority world, java.util.UUID id) {
+        var facts = world.controls().facts();
+        var panel = facts.panel(id);
+        var port = facts.port(id);
+        if (panel == null || port == null || !panel.dimension().equals(level.dimension().location().toString())) return Check.NONE;
+        var at = panel.position();
+        if (!level.hasChunkAt(at)) return Check.NONE;
+        var block = panel.dcs() ? ModBlocks.DCS.get() : ModBlocks.LOCAL_CONTROLLER.get();
+        // The socket leaves the block's back (DataPorts.panel), and its face is the cable's, toward the block: the block faces it.
+        var facing = port.face();
+        var wanted = block.defaultBlockState().setValue(ControlPanelBlock.FACING, facing);
+        var present = level.getBlockState(at);
+        boolean held = facts.heldPanel(id);
+        Outcome outcome;
+        if (present.is(block) && (!panel.dcs() || present.getValue(DcsBlock.HALF) == net.minecraft.world.level.block.state.properties.DoubleBlockHalf.LOWER)) {
+            boolean turned = present.getValue(ControlPanelBlock.FACING) != facing;
+            if (turned) FluidDeviceBlock.quietly(() -> level.setBlock(at, present.setValue(ControlPanelBlock.FACING, facing), Block.UPDATE_ALL));
+            outcome = turned ? Outcome.RESTATED : Outcome.NOTHING;
+        } else if (present.isAir() || present.canBeReplaced() || present.getBlock() instanceof ControlPanelBlock) {
+            // Its copy takes its identity and socket at its load (ControlService.loaded).
+            FluidDeviceBlock.quietly(() -> level.setBlock(at, wanted, Block.UPDATE_ALL));
+            outcome = Outcome.PLACED;
+        } else {
+            if (held) return Check.NONE;
+            facts.holdPanel(id, true);
+            return new Check(Outcome.HELD, false);
+        }
+        if (panel.dcs()) {
+            // A console's top stands where the cell above is free, as an old one-block console gains it (DcsBlock.complete).
+            var above = at.above();
+            var top = level.getBlockState(above);
+            var upper = wanted.setValue(DcsBlock.HALF, net.minecraft.world.level.block.state.properties.DoubleBlockHalf.UPPER);
+            if (!top.equals(upper) && (top.isAir() || top.canBeReplaced() || top.is(block))) {
+                FluidDeviceBlock.quietly(() -> level.setBlock(above, upper, Block.UPDATE_ALL));
+                if (outcome == Outcome.NOTHING) outcome = Outcome.RESTATED;
+            }
+        }
+        if (level.getBlockEntity(at) instanceof com.wormzjl.icheme.world.level.block.entity.ControlPanelBlockEntity box
+                && (!id.equals(box.identity()) || !port.equals(box.dataPort()))) world.controls().loaded(box);
+        if (held) facts.holdPanel(id, false);
         return new Check(outcome, held);
     }
 
