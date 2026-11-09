@@ -3,6 +3,7 @@ package com.wormzjl.icheme.science.material;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.wormzjl.icheme.science.math.DeterministicMath;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -81,12 +82,12 @@ public record TrainedPhysics(String model, double minimumTemperature, double max
             double theta = 1 - t / criticalTemperature, root = Math.sqrt(theta), cube = theta * theta * theta;
             double sum = saturation.get(0) * theta + saturation.get(1) * theta * root + saturation.get(2) * cube + saturation.get(3) * cube * root
                     + saturation.get(4) * cube * theta + saturation.get(5) * cube * cube * theta * root;
-            return criticalPressure * Math.exp(criticalTemperature / t * sum);
+            return criticalPressure * DeterministicMath.exp(criticalTemperature / t * sum);
         }
         /** Watson latent heat, J/mol, zero at and above the critical point. */
         public double vaporizationEnthalpy(double t) {
             if (t >= criticalTemperature) return 0;
-            return vaporizationEnthalpy * Math.pow((1 - t / criticalTemperature) / (1 - boilingTemperature / criticalTemperature), watsonExponent);
+            return vaporizationEnthalpy * DeterministicMath.pow((1 - t / criticalTemperature) / (1 - boilingTemperature / criticalTemperature), watsonExponent);
         }
         /** Vapour heat capacity, J/(mol K). */
         public double vaporHeatCapacity(double t) {
