@@ -103,6 +103,9 @@ distiller in the process simulator.
   test read a no-argument line with arguments.
 - 2026-11-09: owner kept G1 to G4 as built (option A): the controls on the pot's Overview, Load and Take out for the
   fuel, Off sends 0 % (the opening kept on screen only), vanilla particles and sounds.
+- 2026-11-09: drawings (`update.ps1 -Only BATCH_STILL`, Python 3.13 and Poppler 25.07 installed): 5 stills, 10 sheets at
+  5cb073213, inspected; run `tmp/equipment-drawings/20261109-135451-f050c6/` (local). The electric still's FE gland
+  faces the pot at 0.5 m, under the heater conduit, opposite its data gland.
 
 ## Open items
 
@@ -113,7 +116,6 @@ distiller in the process simulator.
   one step; defaults 2 h cycle and 25 °C water. Seen in the renders: a cut collected at each step's bubble point and
   averaged over the cycle is slightly two-phase (cut 2 about 2 % vapour), as the distillate is not subcooled in the
   worm (phase-1 law answer 7).
-- Drawings: `tools/equipment-drawings/update.ps1 -Only BATCH_STILL` needs Python with its requirements and Poppler.
 - An in-game check of the still's page and its effects, only if the owner asks.
 - Engine options not built (BATCH_STILL_ENGINE.md section 6): a head-temperature reflux law (its gain is not set by the
   physics), a second diverter threshold for the second side outlet.
