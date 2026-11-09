@@ -15,6 +15,10 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+### Fixed
+
+- Main gate fixes: a service case is body-painted in the paint gate; a low-voltage motor's or generator's frame box holds its service case (motors 30-200 kW and generators 75-400 kW 3 blocks tall); pad service cases give way to nozzle necks at their largest pipe, and their brackets root behind the case; the column GameTest's rig stands on clear ground; the cooling-tower GameTest removes its bank (batch `2026-11-09-main-gate-fixes`).
+
 ## [0.23.0] - 2026-11-09
 
 ### Added
