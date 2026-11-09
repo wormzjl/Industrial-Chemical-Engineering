@@ -1,6 +1,6 @@
 # Main gate fixes (0.22.0 failures)
 
-Status: **In progress since 2026-11-09** on `claude/modest-montalcini-bad40d`, cut from `main` `b794e2d41` (0.22.0), fast-forwarded to `main` `f1697692c` (0.23.0) on 2026-11-09; 0.23.0 changes no equipment code and not the column rig, and the five failures are the same there. Code committed (298b08694, 9da1d4084, f400da29d, 270c1ed5b) and tested; not merged.
+Status: **Implemented 2026-11-09**, merged as 0.23.1. Branch `claude/modest-montalcini-bad40d`, cut from `main` `b794e2d41` (0.22.0) and fast-forwarded to `main` `f1697692c` (0.23.0) on 2026-11-09; 0.23.0 changes no equipment code and not the column rig, and the five failures are the same there.
 
 ## Scope
 
@@ -28,7 +28,15 @@ The final lane of `claude/refinery-compounds-thermos-252973` (2026-11-09) found 
 
 - 2026-11-09: diagnosis from the refinery lane's stored results, and probes on its compiled classes (`tmp/gate-fixes/`, no Gradle). Fixes 1-4 written. Branch fast-forwarded to `f1697692c` (0.23.0); the fixes re-applied without conflict but for the CHANGELOG's `[Unreleased]` entry. Owner chose fix 2 option A. Tests are for the orchestrating session.
 - 2026-11-09: first test run (orchestrator): fixes 1, 2 and 4 pass; `surfacePiecesAddUpToTheFacetedArea` fails on the moved boot-drum case; the chunk test still fails. Fix 6 (bracket roots) and the cooling-tower cleanup (fix 5) written.
-- 2026-11-09: second test run (orchestrator): `equipmentGates` ShapeRasterizerTest, EquipmentServicesTest, ProcessUnitTest, EquipmentLayoutGoldenTest, ConduitGeometryTest, CoolingTowerGeometryTest 90 of 90; `runFluidGameTestServer` (run id gate-fixes-1109b) all 73 pass. PaintTest, EquipmentShapeCompatTest and ConstructorColumnTest passed on the first run and load nothing changed since. Owner accepted the junction-box size. Commits 298b08694 (paint gate), 9da1d4084 (service cases), f400da29d (column rig), 270c1ed5b (cooling-tower cleanup).
+- 2026-11-09: second test run (orchestrator): `equipmentGates` ShapeRasterizerTest, EquipmentServicesTest, ProcessUnitTest, EquipmentLayoutGoldenTest, ConduitGeometryTest, CoolingTowerGeometryTest 90 of 90; `runFluidGameTestServer` (run id gate-fixes-1109b) all 73 pass. PaintTest, EquipmentShapeCompatTest and ConstructorColumnTest passed on the first run and load nothing changed since. Owner accepted the junction-box size. Commits 298b08694 (paint gate), 9da1d4084 (service cases), f400da29d (column rig), 270c1ed5b (cooling-tower cleanup), f47e33eb5 (docs).
+- 2026-11-09: merge preparation (owner: 0.23.1). de3b3da07: `mod_version` 0.23.1 and the CHANGELOG heading. Final lane on de3b3da07 (see Merge). The probes moved to `tools/equipment-service-probes/`; the scratch archived.
+
+## Merge
+
+- Version 0.23.1 (patch: fixes only; owner, 2026-11-09). No `en_us.json` change, so no translation commit.
+- Final lane, once, on de3b3da07 (`tools/merge-lane/lane.sh head test campaign`): `test slowGates` 2978 tests, 0 failures (the 0.23.0 lane: 5 failures, the ones this batch fixes). The 33 junction lines are identical to the 0.23.0 lane, floats included; `MIXED_GAS_COST` counters identical (newtonSolves 300, 163.4 MB). The campaign skipped itself: nothing it loads changed since `main`. The fluid GameTests passed on the final code (run id gate-fixes-1109b, 73 of 73) and were not repeated; the version bump changes no test input they read. chain-100 loads no changed code and did not run.
+- Code guide: `equipment.md` (service housings: necks, `fitPad`, bracket roots, the low-voltage case) at 9da1d4084; `verification.md` (the column rig on clear ground, the cooling-tower cleanup) at 270c1ed5b.
+- Tooling cleanup: `src/main` holds no test-only code (`main-reach.pl`: 0 unreachable). Tool folder: `tools/equipment-service-probes/` (the probes). The edit scripts, copied classes, overlays, run logs and the final lane are archived in the main checkout at `tools/merge-lane/logs/main-gate-fixes-scratch-logs-2026-11-09.tar.gz`; the final lane there is the next merge's baseline.
 
 ## Open items
 
