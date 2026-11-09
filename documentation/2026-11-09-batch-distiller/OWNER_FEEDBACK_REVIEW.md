@@ -13,8 +13,8 @@ main thread (owner: "Here").
   `refluxes` and `view`; the `stages()==0` branch in `arrive` is gone. `ProcessUnit.stillCondenser` draws the same
   condenser over the helmet or the column. The worm tub and `WOOD` are gone. The water and vent nozzles of a condenser
   pot still moved up to the condenser, as the question stated.
-- Owner, on the renders: the diagonal strut looked wrong. The condenser now stands on a post with a cradle at each end, and
-  the reflux line falls straight from the valve into the column's front.
+- Owner, on the renders: the diagonal strut, then the outboard posts, looked wrong. The shell rests on two saddles,
+  each on a steel H-frame (a leg either side, a cross beam under the saddle); the reflux line falls straight in.
 
 ## 2. Textures (`tools/still-sprites`)
 
