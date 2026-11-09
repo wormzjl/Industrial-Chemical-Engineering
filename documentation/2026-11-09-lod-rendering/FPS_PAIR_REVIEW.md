@@ -25,7 +25,7 @@
 ## Proposals for the owner
 
 - L2, body route: **B3 (no body LOD) for now.** With the gauges tiered, the whole view with 10 columns and 40 drums takes 1.63 ms, and the GPU frame is 1.45 ms at p50. On this GPU the chunk-baked bodies are not a cost worth a second mesh path. Revisit B1 only if a weaker GPU shows vertex-bound frames.
-- Distance against view depth, for the tiers (a choice the physics does not force):
+- Distance against view depth, for the tiers (a choice the physics does not force). **Owner decision 2026-11-09: A, keep distance.**
   - A. Keep distance (now). Tiers do not change when the player turns. Objects at the screen's edge lose detail up to 1.8× earlier than their size on screen asks.
   - B. Use view depth, the distance along the view axis. Exact on-screen size, but tiers change as the player turns (the 15 % hysteresis damps it). Costs one dot product per object.
   - C. Keep distance and lower the thresholds by 1.5× (FULL from 32 px). Edge objects keep their detail; centred objects keep theirs 1.5× longer than needed. Gives back part of Stage A's gain.

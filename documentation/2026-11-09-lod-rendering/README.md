@@ -17,6 +17,7 @@ Reduce client rendering cost with tiers that follow an object's size on screen: 
 - 2026-11-09: plan written from `main` `b794e2d41` (0.22.0). Main finding: `InstrumentRenderer` draws every gauge within 120 m with no frustum test, six text strings per dial and a light lookup per vertex (estimate 10–20 ms a frame for 100 dials, not measured); static chunk meshes measured near zero frame time in the proof of concept. Code guide: no change.
 - 2026-11-09: owner approved Stage A. `63454d60d` adds `RenderLod`, `lod_scale`, dial and transmitter tiers, frustum and size culls for instruments, cables and sight glasses, and `VertexBufferCache` for body, moving-part and tank meshes. Passed: `RenderLodTest` (5), `GaugeAccessoriesTest` (14). FPS and the in-game look not checked.
 - 2026-11-09: FPS pair (owner request, plan L4) with `tools/lod-rendering/` (`fcf8ebc76`): 100 gauges, 40 drums, 10 columns at 1920 x 1080. Baseline 10.68 ms facing the scene and 10.65 ms facing away; Stage A 1.63 ms and 0.64 ms. The baseline spent about 10 ms a frame on 100 gauges. Proposed: L2 = B3; tier metric options A, B, C. Baseline scratch worktree removed after the run.
+- 2026-11-09: owner decision on the tier metric: A, keep straight-line distance (tiers stay put when the player turns; screen-edge objects lose detail up to 1.8x early). No code change.
 
 ## Code areas
 
@@ -26,4 +27,3 @@ Reduce client rendering cost with tiers that follow an object's size on screen: 
 
 - L2 (body route; proposed B3) and L3 (FAR content, only with B1 or B2).
 - An in-game look at the switch points (owner-started).
-- Tier metric: distance (now), view depth, or distance with 1.5x lower thresholds (FPS_PAIR_REVIEW.md).
