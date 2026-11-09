@@ -119,11 +119,13 @@ public final class StillFires {
                     if(random.nextDouble()<.15*fire){var at=d.add(across.scale((random.nextDouble()-.5)*w*.6)).add(0,h*.85,0).add(out.scale(.04));
                         level.addParticle(ParticleTypes.SMALL_FLAME,true,at.x,at.y,at.z,out.x*.02,.03,out.z*.02);}
                 } else {
-                    // The burner's flame at the door: a short jet along the gun, its length with the firing.
+                    // The burner's flame: a short jet from the burner toward the fire bed, its length with the firing.
                     var gun=part(cell,"burner");var at=gun==null?d:centre(gun);
+                    var jet=new Vec3(b.x-at.x,0,b.z-at.z);jet=jet.lengthSqr()<1e-6?out.scale(-1):jet.normalize();
+                    var side=new Vec3(-jet.z,0,jet.x);
                     int n=1+(int)Math.round(3*fire);
-                    for(int i=0;i<n;i++){double along=random.nextDouble()*(.15+.25*fire);var p=at.add(out.scale(-along)).add(across.scale((random.nextDouble()-.5)*.08));
-                        level.addParticle(ParticleTypes.FLAME,true,p.x,p.y+(random.nextDouble()-.5)*.06,p.z,-out.x*.02,.005,-out.z*.02);}
+                    for(int i=0;i<n;i++){double along=random.nextDouble()*(.15+.25*fire);var p=at.add(jet.scale(along)).add(side.scale((random.nextDouble()-.5)*.08));
+                        level.addParticle(ParticleTypes.FLAME,true,p.x,p.y+(random.nextDouble()-.5)*.06,p.z,jet.x*.02,.005,jet.z*.02);}
                 }
             }
             // Smoke from the flue, thicker at a high fire.

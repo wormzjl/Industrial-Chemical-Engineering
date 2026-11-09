@@ -55,7 +55,11 @@ public final class NozzleBore {
         if (shape.kind() != EquipmentShape.Kind.COLUMN) {
             // A boot drum's oil outlet beside its front saddle keeps its flange clear of it (EquipmentShape.bootFor).
             var boot = shape.bootPlace();
-            return boot != null && !Double.isNaN(boot.outlet()) && shape.nozzles().get(k).role() == EquipmentShape.Role.LIQUID_OUTLET ? boot.largest() : PipeSizes.MAX_BORE;
+            var role = shape.nozzles().get(k).role();
+            if (boot != null && !Double.isNaN(boot.outlet()) && role == EquipmentShape.Role.LIQUID_OUTLET) return boot.largest();
+            // A liquid-fired still's burner takes a small fuel line (BatchStillDesign.FUEL_BORE).
+            if (shape.kind() == EquipmentShape.Kind.BATCH_STILL && role == EquipmentShape.Role.FUEL) return BatchStillDesign.FUEL_BORE;
+            return PipeSizes.MAX_BORE;
         }
         var bores = BORES.get(shape);
         if (bores == null) {

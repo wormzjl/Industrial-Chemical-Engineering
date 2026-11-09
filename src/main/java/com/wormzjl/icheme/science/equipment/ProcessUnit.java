@@ -3245,10 +3245,24 @@ public final class ProcessUnit {
         static final double POT_X = 1, POT_Z = 1.5, SPOUT_X = 2.5;
         /** The line (frame z) of the condenser's cold end: the reflux pot, the valve, the sight glass and the spout's drop. */
         static final double COLD_END = .75;
+        /**
+         * The room a fired still's setting leaves on the right face (frame -x), m: the burner's fuel nozzle, a flange and
+         * hub at the largest fuel line ({@link BatchStillDesign#FUEL_BORE}) and its port plate (owner, 2026-11-09: a small
+         * connector at ground level; the setting may be smaller).
+         */
+        static final double FUEL_ROOM = fuelNeck() + .01;
+
+        /** The fuel nozzle's least neck, m: its flange and hub at the largest fuel line and 0.03 m each side ({@link ProcessUnit#end}'s rule). */
+        static double fuelNeck() {
+            double od = PipeSizes.outside(BatchStillDesign.FUEL_BORE);
+            return .03 + PipeSizes.hub(od) + PipeSizes.flangeThickness(od) + .03;
+        }
 
         static StillPlan of(EquipmentShape shape) {
             var o = shape.still();
-            double d = BatchStillDesign.potDiameter(shape.diameter()), w = Math.min(1.88, d + .7);
+            // The setting: 0.35 m of brick round the pot, at most what leaves the burner its room on the right face (from
+            // 1000 L up, 0.30 to 0.16 m round the pot).
+            double d = BatchStillDesign.potDiameter(shape.diameter()), w = Math.min(d + .7, 2 * (POT_X - FUEL_ROOM));
             double bottom = .3 + .6 * d, setting = bottom + .3 * d, cylinder = bottom + .85 * d, apex = cylinder + d / 4;
             // The charge's row: a pipe's largest neck, 0.41 m round its centre line, clears the setting's coping or the skirt.
             double helmet = .22 * d, charge = rowAtLeast(setting + PipeSizes.MAX_OUTSIDE / 2 + .02);
@@ -3256,7 +3270,9 @@ public final class ProcessUnit {
             double helmetTop = apex + .3 * d + helmet / 2;
             // At least two rows over the spout, so the water inlet's pipe block clears the spout's on the front face.
             double condenser = o.condenses() ? Math.max(rowAtLeast((o.column() ? columnTop : helmetTop) + shell + .5), 2.5) : 0;
-            return new StillPlan(o, d, w, .1 + .2 * d, bottom, setting, cylinder, apex, helmet, helmetTop, .15 + .2 * d,
+            // The flue in the setting's back right corner, its inner corner 0.03 m clear of the pot's wall.
+            double flue = Math.min(.15 + .2 * d, w / 2 - (d / 2 + .03) / Math.sqrt(2));
+            return new StillPlan(o, d, w, .1 + .2 * d, bottom, setting, cylinder, apex, helmet, helmetTop, flue,
                     Math.ceil((apex + 1.2) * 4) / 4, .06 * d + .01, charge, column, columnBase, columnTop, shell, condenser);
         }
 
@@ -3340,9 +3356,9 @@ public final class ProcessUnit {
 
     /**
      * A fired still's brick setting under the pot, its coping, the flue in its back right corner, the iron firing door and
-     * ash-pit door at its front, and a burner through the door for liquid fuel with its fuel line round the setting to the
-     * fuel flange on the right side seen from the front, on the charge's row. A fired still has no data port: only the
-     * electric still takes a controller (owner, 2026-11-09).
+     * ash-pit door at its front, and for liquid fuel the burner: its small fuel connection on the setting's right wall
+     * (seen from the front) at ground level, the fuel nozzle itself. A fired still has no data port: only the electric
+     * still takes a controller (owner, 2026-11-09).
      */
     private void stillSetting(StillPlan p) {
         double x = StillPlan.POT_X, z = StillPlan.POT_Z, h = p.w() / 2, x0 = x - h, x1 = x + h, z0 = z - h, z1 = z + h, top = p.setting(), cope = top - .06;
@@ -3363,33 +3379,13 @@ public final class ProcessUnit {
         box(new double[]{x - wd / 3, .05, z0 - .025}, new double[]{x + wd / 3, g - .05, z0}, ALL_FACES & ~32, Material.IRON, false);
         mark("fire_bed", new double[]{x - .3 * p.w(), g, z - .3 * p.w()}, new double[]{x + .3 * p.w(), g + .06, z + .3 * p.w()});
         if (p.options().heater() == BatchStillOptions.Heater.LIQUID) {
-            // A burner gun through the door, its air register at the door; its front face is the air inlet, open and dark.
-            // The fuel comes in on the gun's right side (owner, 2026-11-09): a union on its side, 0.14 m out, from which
-            // the fuel line runs to the right along the front to the fuel flange.
-            double yb = g + hd / 2, rb = .04 + .02 * d, length = .22, zg = z0 - .035 - length, zs = z0 - .035 - .14;
-            var gun = new Frame(new double[]{x, yb, z0 - .035}, new double[]{0, 0, -1}, new double[]{1, 0, 0});
-            mesh.prism(gun, rb, 0, length, 12, Material.MACHINE);
-            mesh.ring(gun, rb, rb + .06, .02, .05, 12, 3, Material.MACHINE);
-            mesh.annulus(gun, .6 * rb, rb, length, 12, 1, Material.MACHINE);
-            mesh.bore(gun, .6 * rb, length - .03, length, 12, Material.MACHINE);
-            mesh.disc(gun, .6 * rb, length - .03, 12, 1, Material.OPENING);
-            var union = new Frame(new double[]{x - rb, yb, zs}, new double[]{-1, 0, 0}, new double[]{0, 0, 1});
-            mesh.ring(union, .015, .03, 0, .04, 6, 3, Material.MACHINE);
-            solids.add(Solid.rod(new double[]{x, yb, 0}, 2, zg, z0 - .035, rb + .06, 0));
-            mark("burner", new double[]{x - .06, yb - .06, z0}, new double[]{x + .06, yb + .06, z0 + .15});
-            // The fuel line round the setting's front corner and along its side to the fuel flange on the right (owner,
-            // 2026-11-09), in the middle column on the charge's row: beside the setting a pipe's largest neck (0.27 m from
-            // the face) does not fit from 200 L up, where the setting leaves 0.06 to 0.3 m. The line rises beside the brick,
-            // clear of the coping's lip, crosses the coping and rises to the flange at 0.28 m, inside the 2000 L pot's 0.315.
-            double xf = .28, xb = Math.min(xf, x0 - .045), yc = p.charge();
-            var fuel = new java.util.ArrayList<double[]>(List.of(new double[]{x - rb + .005, yb, zs}, new double[]{xb, yb, zs}, new double[]{xb, yb, z}));
-            if (xb < xf) {
-                fuel.add(new double[]{xb, top + .05, z});
-                fuel.add(new double[]{xf, top + .05, z});
-            }
-            fuel.add(new double[]{xf, yc, z});
-            pipe(.015, Material.PIPE, true, fuel.toArray(double[][]::new));
-            nozzles.add(end(Role.FUEL, new double[]{xf, yc, z}, 0, -1, .03));
+            // The burner (owner, 2026-11-09: it faces right with the fuel connection, a small pipe connector is enough, at
+            // ground level, the setting smaller): an iron port plate on the right wall in the middle row, the fuel nozzle
+            // on its face; the setting leaves it StillPlan.FUEL_ROOM.
+            double yn = .5;
+            box(new double[]{x0 - .01, yn - .06, z - .06}, new double[]{x0, yn + .06, z + .06}, ALL_FACES & ~2, Material.IRON, false);
+            mark("burner", new double[]{x0, yn - .06, z - .06}, new double[]{x0 + .15, yn + .06, z + .06});
+            nozzles.add(new Nozzle(Role.FUEL, new double[]{x0 - .01, yn, z}, 0, -1, x0 - .01, .03, 0));
         }
     }
 

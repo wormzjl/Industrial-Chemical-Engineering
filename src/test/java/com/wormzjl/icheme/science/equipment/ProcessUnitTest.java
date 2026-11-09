@@ -443,7 +443,8 @@ class ProcessUnitTest {
      * nozzle takes the largest pipe, in {@link NozzleBore#STEP}s, whose neck stands clear by this test's own {@link
      * NozzleRoom} (the next step does not), never less than its design pipe; every other kind takes a pipe's largest. On
      * the gated columns: the 3 m column's reflux 0.55 m (a ladder beside it), the 1.5 m column's 0.7 m, the 0.5 m column's
-     * side nozzles 0.25 m (the neck wider than the column's cladding), its top outlet a pipe's largest.
+     * side nozzles 0.25 m (the neck wider than the column's cladding), its top outlet a pipe's largest. A liquid-fired
+     * still's burner takes {@link BatchStillDesign#FUEL_BORE} (owner, 2026-11-09: a small pipe connector is enough).
      */
     @Test
     void aColumnNozzleTakesTheLargestPipeItsPlaceClears() {
@@ -456,7 +457,9 @@ class ProcessUnitTest {
                 double largest = NozzleBore.largest(shape, k);
                 String at = shape + " " + nozzle.role();
                 if (shape.kind() != Kind.COLUMN) {
-                    assertEquals(PipeSizes.MAX_BORE, largest, at);
+                    // A liquid-fired still's burner takes a small fuel line (owner, 2026-11-09).
+                    boolean burner = shape.kind() == Kind.BATCH_STILL && nozzle.role() == Role.FUEL;
+                    assertEquals(burner ? BatchStillDesign.FUEL_BORE : PipeSizes.MAX_BORE, largest, at);
                     continue;
                 }
                 assertTrue(largest >= nozzle.defaultOd() / 1.1 - 1e-9, at + ": under its design pipe");

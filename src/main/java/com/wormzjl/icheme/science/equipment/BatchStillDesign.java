@@ -22,6 +22,12 @@ final class BatchStillDesign extends UnitDesign {
      */
     static final double POT_EXPONENT = DeterministicMath.log(2.74) / DeterministicMath.log(20);
 
+    /**
+     * The largest bore of a liquid-fired still's fuel connection, its burner, m (owner, 2026-11-09: a small pipe connector
+     * is enough). A 2000 L still burns about 4 g/s of oil; a 50 mm line carries it at under 0.01 m/s.
+     */
+    static final double FUEL_BORE = .05;
+
     /** The pot's heated surface over D²: its bottom and the lower wall the flue gas sweeps (0.3 D high). */
     static final double HEATED_AREA = 1.73;
 
