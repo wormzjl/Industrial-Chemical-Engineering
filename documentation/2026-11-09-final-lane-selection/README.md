@@ -1,6 +1,6 @@
 # Final lane: affected tests only
 
-Status: **In progress since 2026-11-09**. Branch `claude/pre-merge-final-lane-optimization-f1e5d1`, cut from `main` `6181a0f79` (0.23.2). Tools and `AGENTS.md` only: a documentation-only merge.
+Status: **Implemented 2026-11-09** (documentation-only merge, no version). Branch `claude/pre-merge-final-lane-optimization-f1e5d1`, cut from `main` `6181a0f79` (0.23.2). Tools and `AGENTS.md` only: a documentation-only merge.
 
 ## Scope
 
@@ -28,6 +28,8 @@ A final lane proves that the batch's changes break nothing. A test whose code an
 
 - 2026-11-09: selector, recorder and lane written. Bootstrap: `lane.sh head test regression` on `6181a0f79`, one fork, recorded: 2983 tests, 0 failures, 770 s (the unrecorded 0.23.2 lane: 654 s), chain-100 exact identical. Windows reused process ids, so 15 load sets were first lost to log rotation; the log names now carry the time, and the 451 load sets are in the map.
 - 2026-11-09: replays on today's load sets (`affected.mjs select --since A..B`): LOD rendering (0.23.2) 5 classes, 28 s of test time (was 2983 tests, 654 s); main gate fixes (0.23.1) 67 classes, 722 test-s, equipment code that the sizing gates load; the race fix (0.23.3) 1 class; refinery (0.23.0) everything (`build.gradle` changed).
+- 2026-11-09: parallel check, `lane.sh head --all test` on `6181a0f79`, recorded, 4 forks per task, 8 workers: 2983 tests, 0 failures, 436 s (one fork: 770 s); the wall-clock budget tests held. All 450 classes got a load set from the time-stamped logs.
+- 2026-11-09: merge preparation (owner: "get ready for merge"). `c515b94e7` the change, `7c911c235` wording and snapshot, `c8bda18fa` merges main 0.23.4 (INDEX rows and code guide snapshot lines kept from both sides). Documentation-only merge (`tools/`, `documentation/`, `AGENTS.md`): no CHANGELOG entry, version, translation or tooling cleanup. No final lane: these paths select no test. `git ls-files -i -c --exclude-standard` empty. Code guide: `verification.md` (the `slowGates` row, snapshot).
 
 ## Documents
 
@@ -39,5 +41,5 @@ A final lane proves that the batch's changes break nothing. A test whose code an
 
 ## Open items
 
-- The parallel full run (4 forks, 8 workers, recorded) had not finished when the merge was prepared: its wall time and whether wall-clock budget tests hold under parallel load are open. The first real lane after the merge shows both.
+- None.
 - No final lane for this batch: it changes only `tools/`, `documentation/` and `AGENTS.md`, which select no test.
