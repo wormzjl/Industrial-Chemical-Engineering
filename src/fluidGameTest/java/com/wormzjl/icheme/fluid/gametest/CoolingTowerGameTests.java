@@ -23,14 +23,19 @@ public final class CoolingTowerGameTests {
         EquipmentStructure.place(level,origin,shape,Paint.DEFAULT,shape.sizeY());
         var cell=ShapeRasterizer.fluidCell(shape);var node=origin.offset(cell.x(),cell.y(),cell.z());
         var position=new PhysicalFluidTopology.Position(level.dimension().location().toString(),node.getX(),node.getY(),node.getZ());
+        var world=FluidWorldAuthority.find(level.getServer()).orElseThrow();
         helper.startSequence().thenWaitUntil(()->{
-            var world=FluidWorldAuthority.find(level.getServer()).orElseThrow();
             var registration=world.at(position).orElseThrow();
             helper.assertTrue(registration.spec().open(),"The basin is open to the atmosphere");
             helper.assertTrue(registration.spec().tower().cells()==2,"Both parallel cells share this basin");
             helper.assertTrue(registration.spec().volume()==128,"Capacity comes from both cell footprints");
             helper.assertTrue(registration.device().ports().size()==2,"Two bank nozzles");
             helper.assertTrue(registration.device().ports().stream().anyMatch(p->p.port()==PassiveNetwork.PhasePort.SPRAY),"Hot return is an atmospheric spray inlet");
-        }).thenSucceed();
+        })
+        // The bank leaves with its registration: GameTest areas are not cleared between batches, and a later test needs a
+        // world with no registration (FluidHarnessGameTests' cleanup check; the basin stayed as a live island before).
+        .thenExecute(()->EquipmentTestCleanup.remove(level,node))
+        .thenWaitUntil(()->helper.assertTrue(world.at(position).isEmpty(),"Waiting for the basin's registration to leave"))
+        .thenSucceed();
     }
 }
