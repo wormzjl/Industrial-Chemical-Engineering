@@ -167,7 +167,8 @@ public final class FluidDeviceBlockEntity extends ModelledBlockEntity implements
                 if(identity!=record.device().id())bindIdentity(record.device().id());else world.deviceLoaded(identity);
                 // Drawn geometry: onLoad runs once the chunk is in the level (Level.tickBlockEntities), so its loaded
                 // neighbours are readable; a neighbour loaded before this block drew no line here, so both sides refresh.
-                // Neighbours in unloaded chunks keep their saved joints (FluidDeviceBlock.connectedState).
+                // The joints come from the registry, which knows a neighbour in a chunk that is not loaded
+                // (FluidDeviceBlock.connectedState); only the sizes drawn at a face read the loaded neighbours.
                 refreshGeometry(record.device().geometry().diameter(),true);
             });
         });
@@ -183,18 +184,24 @@ public final class FluidDeviceBlockEntity extends ModelledBlockEntity implements
         var projected=world==null?null:world.registrations().get(identity);
         var committed=world==null?null:world.committedDevice(identity).orElse(null);
         boolean jointsChanged=false;
-        if(projected!=null&&projected.device().kind()==TopologyCompiler.Kind.PIPE){
-            var d=projected.device();var state=getBlockState();
-            // The joints follow accepted player input at once, as a fitting does: the connected faces below read them.
-            if(joints!=d.joints()){joints=d.joints();jointsChanged=true;neighbours=true;}
-            var updated=state.setValue(FluidDeviceBlock.PRESSURE_CONTROL,d.control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.Valve)
-                    .setValue(FluidDeviceBlock.INLINE_FILTER,d.inlineFilter())
-                    .setValue(FluidDeviceBlock.INLINE_MOVER,d.control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.Pump?FluidDeviceBlock.InlineMover.PUMP:d.control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.Compressor?FluidDeviceBlock.InlineMover.COMPRESSOR:FluidDeviceBlock.InlineMover.NONE);
-            if(d.cutoff()==PhysicalFluidTopology.Cutoff.NONE)updated=updated.setValue(FluidDeviceBlock.SHUTOFF,FluidDeviceBlock.Shutoff.NONE);
-            else if(committed!=null&&committed.cutoff()!=PhysicalFluidTopology.Cutoff.NONE)
-                updated=updated.setValue(FluidDeviceBlock.SHUTOFF,FluidDeviceBlock.Shutoff.of(committed.cutoff()));
-            if(d.inlineFilter()||d.control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.Mover||d.control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.Valve||d.cutoff()!=PhysicalFluidTopology.Cutoff.NONE)
-                updated=updated.setValue(FluidDeviceBlock.FACING,Direction.valueOf((d.cutoff()!=PhysicalFluidTopology.Cutoff.NONE&&committed!=null&&committed.cutoff()!=PhysicalFluidTopology.Cutoff.NONE?committed:d).facing().name()));
+        if(projected!=null){
+            var d=projected.device();var state=getBlockState();var updated=state;
+            if(d.kind()==TopologyCompiler.Kind.PIPE){
+                // The joints follow accepted player input at once, as a fitting does.
+                if(joints!=d.joints()){joints=d.joints();jointsChanged=true;neighbours=true;}
+                // The fitting as the engine classifies it (batch 2026-11-09-drawn-connections): an in-line machine draws
+                // as the pump or compressor it is, whatever law it runs.
+                var hydraulic=d.hydraulicKind();
+                updated=updated.setValue(FluidDeviceBlock.PRESSURE_CONTROL,hydraulic==TopologyCompiler.Kind.VALVE)
+                        .setValue(FluidDeviceBlock.INLINE_FILTER,hydraulic==TopologyCompiler.Kind.FILTER)
+                        .setValue(FluidDeviceBlock.INLINE_MOVER,FluidDeviceBlock.InlineMover.of(hydraulic));
+                if(d.cutoff()==PhysicalFluidTopology.Cutoff.NONE)updated=updated.setValue(FluidDeviceBlock.SHUTOFF,FluidDeviceBlock.Shutoff.NONE);
+                else if(committed!=null&&committed.cutoff()!=PhysicalFluidTopology.Cutoff.NONE)
+                    updated=updated.setValue(FluidDeviceBlock.SHUTOFF,FluidDeviceBlock.Shutoff.of(committed.cutoff()));
+                if(d.inlineFilter()||d.control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.Mover||d.control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.Valve||d.cutoff()!=PhysicalFluidTopology.Cutoff.NONE)
+                    updated=updated.setValue(FluidDeviceBlock.FACING,Direction.valueOf((d.cutoff()!=PhysicalFluidTopology.Cutoff.NONE&&committed!=null&&committed.cutoff()!=PhysicalFluidTopology.Cutoff.NONE?committed:d).facing().name()));
+            }
+            // Every device, a pipe or not, draws the faces the network joins it through.
             updated=FluidDeviceBlock.connectedState(updated,level,worldPosition);
             if(updated!=state){level.setBlock(worldPosition,updated,net.minecraft.world.level.block.Block.UPDATE_ALL);neighbours=true;}
         }

@@ -11,7 +11,6 @@ import com.wormzjl.icheme.science.equipment.PipeRoute;
 import com.wormzjl.icheme.science.equipment.PipeSizes;
 import com.wormzjl.icheme.science.equipment.RackGeometry;
 import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler;
-import com.wormzjl.icheme.world.level.block.FluidDeviceBlock;
 import com.wormzjl.icheme.world.level.block.PipeRackBlock;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -352,35 +351,18 @@ public final class PipeRackBlockEntity extends ModelledBlockEntity implements Li
     }
 
     /**
-     * Server: the drawn state from the loaded neighbours. Which joints of each lane meet a line next door: a lane of the
-     * next rack with the opposite joint at the same point, or a pipe connected towards this rack; a face whose neighbour
-     * is in an unloaded chunk keeps what it showed (reading it would load the chunk). And the steel ({@link
-     * RackGeometry#steel}, along the run counted in world coordinates). True when anything changed.
+     * Server: the drawn state. Which joints of each lane meet a line next door: the faces its registration joins as built
+     * (batch 2026-11-09-drawn-connections, {@link FluidWorldAuthority#drawnFaces}), the network's own rule with the face
+     * points the lanes saved, whether or not the neighbour's chunk is loaded; a lane with no registration meets nothing.
+     * Before the world's authority opens, the lanes keep what they showed. And the steel from the loaded neighbours
+     * ({@link RackGeometry#steel}, along the run counted in world coordinates). True when anything changed.
      */
     private boolean refreshDrawn() {
-        if (level == null || level.isClientSide()) return false;
+        if (!(level instanceof ServerLevel server) || !server.getServer().isSameThread()) return false;
+        var world = FluidWorldAuthority.find(server.getServer()).orElse(null);
         var next = new int[lanes.size()];
-        for (int i = 0; i < lanes.size(); i++) {
-            var lane = lanes.get(i);
-            for (var direction : Direction.values()) {
-                int face = direction.ordinal();
-                if ((lane.joints >> face & 1) == 0) continue;
-                var at = worldPosition.relative(direction);
-                if (!level.isLoaded(at)) {
-                    next[i] |= (i < joined.length ? joined[i] : 0) & 1 << face;
-                    continue;
-                }
-                var neighbour = level.getBlockEntity(at);
-                boolean meets = false;
-                if (neighbour instanceof PipeRackBlockEntity rack) {
-                    int point = point(lane, face);
-                    for (var other : rack.lanes)
-                        if ((other.joints >> (face ^ 1) & 1) != 0 && rack.point(other, face ^ 1) == point) meets = true;
-                } else if (neighbour instanceof FluidDeviceBlockEntity pipe && pipe.kind() == TopologyCompiler.Kind.PIPE)
-                    meets = pipe.getBlockState().getValue(FluidDeviceBlock.connection(direction.getOpposite()));
-                if (meets) next[i] |= 1 << face;
-            }
-        }
+        for (int i = 0; i < lanes.size(); i++)
+            next[i] = world == null ? i < joined.length ? joined[i] : 0 : Math.max(world.drawnFaces(position(lanes.get(i).option)), 0);
         int drawn = steel();
         if (Arrays.equals(next, joined) && drawn == frame) return false;
         joined = next;

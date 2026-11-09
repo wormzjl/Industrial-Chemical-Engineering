@@ -33,6 +33,12 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
         NONE,PUMP,COMPRESSOR;
         @Override public String getSerializedName(){return name().toLowerCase(java.util.Locale.ROOT);}
         public TopologyCompiler.Kind kind(){return this==NONE?TopologyCompiler.Kind.PIPE:TopologyCompiler.Kind.valueOf(name());}
+        /**
+         * The mover a pipe of hydraulic kind {@code kind} carries ({@link PhysicalFluidTopology.Device#hydraulicKind}): the
+         * engine's own classification, whatever law it runs (batch 2026-11-09-drawn-connections: an in-line machine is a
+         * pump or a compressor as much as the legacy laws are).
+         */
+        public static InlineMover of(TopologyCompiler.Kind kind){return switch(kind){case PUMP->PUMP;case COMPRESSOR->COMPRESSOR;default->NONE;};}
     }
     public static final EnumProperty<InlineMover> INLINE_MOVER=EnumProperty.create("inline_mover",InlineMover.class);
     public static final BooleanProperty INLINE_FILTER=BooleanProperty.create("inline_filter");
@@ -85,15 +91,24 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
     /** Small movers carry compact internal joints; larger movers flange at the block faces. */
     public static boolean hasBoundaryFitting(BlockState state,double bore){return hasFitting(state)&&(!hasMover(state)||com.wormzjl.icheme.science.equipment.InlineMoverGeometry.boundaryJoints(com.wormzjl.icheme.science.equipment.PipeSizes.code(com.wormzjl.icheme.science.equipment.PipeSizes.outside(bore))));}
     /**
-     * Mechanical joints stay connected when a valve closes hydraulically. A face whose neighbour lies in a chunk that is not
-     * loaded keeps its saved joint: on a server, reading that neighbour would load its chunk on the main thread, and a
-     * pipe on the loaded area's edge would load the next chunk on each load, along the whole run (review
-     * 2026-10-26-chunk-loading-review, D1). The neighbour's own load settles both sides.
+     * The block drawn joined through the faces its registration joins (batch 2026-11-09-drawn-connections): {@link
+     * FluidWorldAuthority#drawnFaces}, the network's own as-built rule, so what is drawn bolted together is what the network
+     * joins. Mechanical joints stay drawn when a valve closes or a generator switches off. The state comes back as it is on
+     * a client, off the server thread and where nothing is registered yet (the registration draws it). No block is read, so
+     * no chunk loads (review 2026-10-26-chunk-loading-review, D1): a neighbour in a chunk that is not loaded is known by its
+     * registration.
      */
     public static BlockState connectedState(BlockState state,LevelReader level,BlockPos position) {
-        for(var direction:Direction.values()){var at=position.relative(direction);if(!level.hasChunkAt(at))continue;state=state.setValue(CONNECTIONS.get(direction),connects(state,level,at,level.getBlockState(at),direction));}
-        return state;
+        if(!(level instanceof ServerLevel server))return state;
+        var world=authority(server);if(world==null)return state;
+        int faces=world.drawnFaces(position(server,position));
+        return faces<0?state:withFaces(state,faces);
     }
+    /** {@code state} drawn joined through exactly {@code faces}, a bit per {@link Direction} ordinal. */
+    public static BlockState withFaces(BlockState state,int faces){for(var direction:Direction.values())state=state.setValue(CONNECTIONS.get(direction),(faces>>direction.ordinal()&1)!=0);return state;}
+    /** The level's fluid authority on the server thread; null off it or before the world opened it. */
+    private static @Nullable FluidWorldAuthority authority(ServerLevel level){return level.getServer().isSameThread()?FluidWorldAuthority.find(level.getServer()).orElse(null):null;}
+    private static PhysicalFluidTopology.Position position(Level level,BlockPos position){return new PhysicalFluidTopology.Position(level.dimension().location().toString(),position.getX(),position.getY(),position.getZ());}
     @Override public RenderShape getRenderShape(BlockState state){return RenderShape.MODEL;}
     /**
      * A device's shape: its block less a texel at the sides. A full cube would make the chunk renderer light every flat
@@ -116,45 +131,28 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
     @Override public @Nullable BlockEntity newBlockEntity(BlockPos position,BlockState state){return new FluidDeviceBlockEntity(position,state);}
     /** Only pipes and valves may stand in a vertical line (owner decision 2026-10-16); every other device faces a horizontal direction. */
     public static boolean vertical(TopologyCompiler.Kind kind){return kind==TopologyCompiler.Kind.PIPE||kind==TopologyCompiler.Kind.VALVE;}
+    /**
+     * Facing from the look, and drawn joined where the network will join the block once {@link #onPlace} registers it
+     * (batch 2026-11-09-drawn-connections, {@link FluidWorldAuthority#placedFaces}). A client draws no joint until the
+     * server's state arrives: it has no registry, and the drawing has no rule of its own.
+     */
     @Override public @Nullable BlockState getStateForPlacement(BlockPlaceContext context) {
         var facing=vertical(kind)?context.getNearestLookingDirection().getOpposite():context.getHorizontalDirection().getOpposite();
         var state=defaultBlockState().setValue(FACING,facing);
-        for(var direction:Direction.values()){var at=context.getClickedPos().relative(direction);state=state.setValue(CONNECTIONS.get(direction),connects(state,context.getLevel(),at,context.getLevel().getBlockState(at),direction));}
-        return state;
+        if(!(context.getLevel() instanceof ServerLevel server))return state;
+        var world=authority(server);
+        return world==null?state:withFaces(state,world.placedFaces(position(server,context.getClickedPos()),kind,PhysicalFluidTopology.Direction.valueOf(facing.name())));
     }
     public static BooleanProperty connection(Direction direction){return CONNECTIONS.get(direction);}
-    private static boolean boundary(TopologyCompiler.Kind kind){return kind==TopologyCompiler.Kind.RESERVOIR||kind==TopologyCompiler.Kind.GENERATOR||kind==TopologyCompiler.Kind.VOID;}
+    /** Whether a line may meet this block through {@code direction}: a fitting or a filter takes lines only along its axis (the laying tool's ends). */
     static boolean face(BlockState state,Direction direction) {
         if(hasAxialAccessory(state)&&state.getValue(FACING).getAxis()!=direction.getAxis())return false;
         var block=(FluidDeviceBlock)state.getBlock();return block.kind!=TopologyCompiler.Kind.VALVE&&block.kind!=TopologyCompiler.Kind.FILTER||state.getValue(FACING).getAxis()==direction.getAxis();
     }
-    /**
-     * The faces the fluid block at {@code position} may connect through (batch 2026-10-26-pipe-laying-system): a laid
-     * pipe's joints from its block entity; every face for any other block, and for a block not yet placed.
-     */
-    public static int joints(BlockGetter level,BlockPos position){return level.getBlockEntity(position) instanceof FluidDeviceBlockEntity entity?entity.joints():PhysicalFluidTopology.ALL_FACES;}
-    private static boolean joint(BlockGetter level,BlockPos position,Direction direction){return (joints(level,position)>>direction.ordinal()&1)!=0;}
-    /**
-     * Whether a pipe of this state and {@code joints} may meet a rack lane (plan 6, as {@link PhysicalFluidTopology.Device#transitionPipe}):
-     * laid, of at most two joints, without fittings, so its run can bend to the lane's off-centre point.
-     */
-    public static boolean transition(BlockState state,int joints){return joints!=PhysicalFluidTopology.ALL_FACES&&Integer.bitCount(joints)<=2&&!hasFitting(state);}
-    /**
-     * Whether this block meets its neighbour towards {@code direction}: another device by the rules above, or, for a pipe,
-     * a vessel nozzle facing it or a rack lane with a joint towards it (plan 5.2) where it is a transition pipe (see
-     * {@link #transition}). Each side must have a joint on the shared face, so a laid line never joins a block it was only
-     * laid beside.
-     */
-    private static boolean connects(BlockState state,BlockGetter level,BlockPos neighborPosition,BlockState neighbor,Direction direction) {
-        var position=neighborPosition.relative(direction.getOpposite());
-        if(!joint(level,position,direction))return false;
-        if(neighbor.getBlock() instanceof FluidDeviceBlock other)return !(boundary(((FluidDeviceBlock)state.getBlock()).kind)&&boundary(other.kind))&&face(state,direction)&&face(neighbor,direction.getOpposite())&&joint(level,neighborPosition,direction.getOpposite());
-        if(((FluidDeviceBlock)state.getBlock()).kind!=TopologyCompiler.Kind.PIPE||!face(state,direction))return false;
-        if(neighbor.getBlock() instanceof PipeRackBlock)return transition(state,joints(level,position))&&level.getBlockEntity(neighborPosition) instanceof com.wormzjl.icheme.world.level.block.entity.PipeRackBlockEntity rack&&rack.laneTowards(direction.getOpposite())!=null;
-        return neighbor.getBlock() instanceof EquipmentShellBlock&&level.getBlockEntity(neighborPosition) instanceof com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity shell&&shell.nozzleFacing(direction.getOpposite())!=null;
-    }
     @Override protected BlockState updateShape(BlockState state,Direction direction,BlockState neighbor,LevelAccessor level,BlockPos position,BlockPos neighborPosition) {
-        var connected=state.setValue(CONNECTIONS.get(direction),connects(state,level,neighborPosition,neighbor,direction));
+        // A neighbour placed or broken has registered or removed itself by now (onPlace, onRemove run before the shape
+        // updates), so every face is drawn from the network's rule; a client keeps its state until the server's arrives.
+        var connected=connectedState(state,level,position);
         // Defer removal until the new connection state is installed. Several neighbour updates share one scheduled tick.
         if(level instanceof ServerLevel&&kind==TopologyCompiler.Kind.PIPE&&connected.getValue(SIGHT_GLASS)&&!supportsSightGlass(connected))level.scheduleTick(position,this,1);
         // The drawn faces follow the new connections once the state is in the world.
