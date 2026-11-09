@@ -20,13 +20,18 @@ distiller in the process simulator.
 - [BATCH_STILL_LAW.md](BATCH_STILL_LAW.md): W1, the law, the still's column and the solid-fuel records.
 - [BATCH_STILL_STRUCTURE.md](BATCH_STILL_STRUCTURE.md): W2, sizes, parts, nozzles and the data gland.
 - [BATCH_STILL_SIMULATOR.md](BATCH_STILL_SIMULATOR.md): W7, the simulator unit, its batch curve and sizing.
+- [BATCH_STILL_ENGINE.md](BATCH_STILL_ENGINE.md): W3 to W5, the still in the fluid engine, its fuel, its data channels and
+  controllers, the diverter valve, owner decisions O1 to O10.
 - Run output of B3 (local): `research/2026-11-09-batch-distiller/b3-column/` (`report.txt`, `snapshots.csv`).
 
 ## Code areas
 
 - `science/fluid/network/BatchStill` (the law), `StillColumn` (bubble point, energy balance, pot mode, on the network's
   phase evaluator), `science/material/SolidFuelCatalog` and `materials/fuels/`; config `energy.joulesPerBurnTick`.
-  Not reached by game code until phase 2.
+  Reached by game code since phase 2.
+- `runtime/fluid/Stills`, `StillUnit` (fluid facts schema 15), `science/fluid/network/StillHead`, the diverter valve
+  (`TopologyCompiler.Kind.DIVERTER_VALVE`, its block), the still's controllers (`runtime/control/ControlLaw`,
+  `ControlPlans`, `ControlService`), `EquipmentStructure` (register, refresh in place, the fuel slot).
 - `science/equipment/BatchStillDesign`, `BatchStillOptions` (shape fields 11), `ProcessUnit` (pot, firebox or skirt,
   worm tub, column), `EquipmentServices` (data gland); the constructor entry and a DRAWING_ONLY simulator tile.
 
@@ -73,6 +78,16 @@ distiller in the process simulator.
   one-point series the round-trip test meant as empty; the condenser-sized checks on a heavier naphtha (C6 to xylene),
   since a pentane-rich head on 25 °C water vents 65 to 79 % of its vapour; the render scene's stills with the drop
   defaults. The diverter's simulator case waits for still-engine's `DIVERTER_VALVE`.
+- 2026-11-09: phase 2's engine landed (still-engine, fixed and finished on the main thread: owner, "Fix here instead"). W3
+  to W5: the fired pot, the column head on the worker, the outlets and their accounts, the condenser's water coupling,
+  solid, liquid and electric fuel, the data channels; the diverter valve (fluid facts schema 15, state format 42; corpus
+  image schema-15). Owner kept O3 to O8 and O10 as built; O1, O2 and O9 built as option A (BATCH_STILL_ENGINE.md
+  sections 4 and 5): a controller on the pot holds the distillate flow by its firing (action INLET) or its reflux (OUTLET),
+  one correction per 42 s response; a controller switches a diverter at its target (straight below, first side at or
+  above); a refresh moves the still's devices in place, keeping identities, facts and contents. Main-thread fixes: a
+  closed reflux valve saved as a flag (the facts refuse +Infinity); the corpus still moved off the crossflow exchanger's
+  cell; the pentane rig's basis with nitrogen; the water side's first read before the pot's (NaN ceiling); the refresh
+  had left the old outlets and burners registered. The diverter is the simulator's splitter (FlowsheetCatalog).
 
 ## Open items
 
@@ -84,7 +99,9 @@ distiller in the process simulator.
   averaged over the cycle is slightly two-phase (cut 2 about 2 % vapour), as the distillate is not subcooled in the
   worm (phase-1 law answer 7).
 - Drawings: `tools/equipment-drawings/update.ps1 -Only BATCH_STILL` needs Python with its requirements and Poppler.
-- Phase 2: wire `BatchStill`, `StillColumn` and `joulesPerBurnTick` into game code (main-reach rule); the electric
-  still's FE socket.
+- Phase 3 (still-gui, W6): the still's page (settings, readings, alarms), the diverter's data socket drawing, the
+  electric still's FE socket drawing. Needs the owner's go-ahead for its session.
+- Engine options not built (BATCH_STILL_ENGINE.md section 6): a head-temperature reflux law (its gain is not set by the
+  physics), a second diverter threshold for the second side outlet.
 - At the merge: move `BubblePointColumn`'s measurement harness to `tools/batch-still-column/` (tooling cleanup); code guide
   rows for `BatchStill`, `StillColumn` (fluid-science.md) and `fuels` (thermo-materials.md).
