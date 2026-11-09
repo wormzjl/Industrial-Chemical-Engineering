@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.science.flowsheet;
 
+import com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import java.util.ArrayList;
 import java.util.List;
@@ -26,14 +27,36 @@ public final class RevisionNotice {
         return tokens;
     }
 
-    /** The tokens of the packages {@code sheet} runs on, what its results stand on: the sheet's own, and each column's. */
+    /**
+     * The token of what {@code sheet} runs on, what its results stand on: the network package's view of the sheet's compounds
+     * ({@link SheetCompounds}), for its streams and its columns alike. The view's identity names only its compounds' records, so an
+     * edit to another compound's data leaves the sheet's results and its columns' warm starts standing.
+     */
     public static Map<String, String> tokens(Flowsheet sheet, MaterialCatalog catalog) {
-        var packs = new TreeSet<String>();
-        packs.add(sheet.basis().packageId());
-        for (var unit : sheet.units()) if (unit.type().equals("column") && !unit.params().text("package", "").isEmpty()) packs.add(unit.params().text("package", ""));
-        var tokens = new TreeMap<String, String>();
-        for (var pack : packs) if (catalog.packages().containsKey(pack)) tokens.put(pack, catalog.fluidRevision(pack));
-        return tokens;
+        String network = FluidMaterialCatalog.networkPackage(catalog);
+        return Map.of(network, catalog.restrict(network, SheetCompounds.of(sheet, catalog)).fluidRevision(network));
+    }
+
+    /** The identity of the data {@code sheet}'s compounds run on: its view's token ({@link #tokens(Flowsheet, MaterialCatalog)}). */
+    public static String data(Flowsheet sheet, MaterialCatalog catalog) {
+        return tokens(sheet, catalog).values().iterator().next();
+    }
+
+    /**
+     * {@code sheet} as its file holds it: its basis names the network package and the identity of the data its compounds run on
+     * ({@link #data}), which the file-open notice compares ({@code FileColumns.changes}). An edit to a package record, or to a
+     * compound the sheet does not feed, leaves it standing.
+     */
+    public static Flowsheet stamped(Flowsheet sheet, MaterialCatalog catalog) {
+        String network = FluidMaterialCatalog.networkPackage(catalog), data = data(sheet, catalog);
+        var basis = sheet.basis();
+        if (basis.packageId().equals(network) && basis.revision().equals(data)) return sheet;
+        return sheet.with(new Flowsheet.Basis(network, data, basis.components(), basis.unknown().deepCopy()));
+    }
+
+    /** Whether the data {@code sheet}'s compounds run on moved since its file was written ({@link #stamped}). */
+    public static boolean moved(Flowsheet sheet, MaterialCatalog catalog) {
+        return !sheet.basis().revision().equals(data(sheet, catalog));
     }
 
     /** The packages whose data differ between client and server; none with no word from a server, which is what a single player has. */
@@ -42,7 +65,7 @@ public final class RevisionNotice {
         if (server == null) return differ;
         var packs = new TreeSet<>(client.keySet());
         packs.addAll(server.keySet());
-        for (var pack : packs) if (!Objects.equals(client.get(pack), server.get(pack))) differ.add(MaterialCatalog.Package.label(pack));
+        for (var pack : packs) if (!Objects.equals(client.get(pack), server.get(pack))) differ.add(pack);
         return differ;
     }
 

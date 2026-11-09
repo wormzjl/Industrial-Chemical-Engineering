@@ -179,6 +179,18 @@ class FlowsheetSolverTest {
         assertEquals(Outcome.SOLVED, run.outcomes().get("feed fresh"));
     }
 
+    /** A unit that cannot take the first pass's empty tear fails that pass, and the log says the loop starts from a first estimate. */
+    @Test void aFirstPassThatFailsAsksForAFirstEstimate() {
+        var run = run(List.of(feed("fresh", 10, 300), mix("fresh", "back", "mixed"), curve("mixed", "out", x -> {
+            if (x == 0) throw new FlowsheetFailure("test.refused", "mixed");
+            return x;
+        }), split("out", .5, "back", "product")));
+        assertEquals(Status.FAILED, run.status());
+        assertEquals(1, run.loops().getFirst().passes());
+        var tear = run.loops().getFirst().tears().getFirst();
+        assertTrue(run.log().stream().anyMatch(n -> n.key().equals("loop.first_estimate") && n.subject().equals(tear) && n.arguments().equals(List.of("curve out"))), run.log().toString());
+    }
+
     /** A loop that loses pressure each pass, with no pump to give it back, never closes, and the Log says it was the pressure. */
     @Test void aLoopWithNoPumpNamesThePressure() {
         var run = run(List.of(Calculation.of("drop", List.of("loop"), List.of("out"), (board, report) -> {

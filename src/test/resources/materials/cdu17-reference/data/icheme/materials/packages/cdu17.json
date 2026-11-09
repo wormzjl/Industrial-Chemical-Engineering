@@ -1,12 +1,21 @@
 {
   "schema_version": 1,
   "id": "icheme:cdu17_tjl_acs2018",
-  "revision": "cdu17-tjl-kl1976-r2",
-  "model": "pr78",
+  "revision": "cdu17-tjl-kl1976-r3",
+  "method": "icheme:cdu17_pr78",
   "components": [
-    "Methane",
-    "Ethane",
-    "Propane",
+    {
+      "id": "Methane",
+      "properties": "icheme:cdu17_methane"
+    },
+    {
+      "id": "Ethane",
+      "properties": "icheme:cdu17_ethane"
+    },
+    {
+      "id": "Propane",
+      "properties": "icheme:cdu17_propane"
+    },
     "cdu17_c4",
     "cdu17_pc01",
     "cdu17_pc02",
@@ -21,49 +30,6 @@
     "cdu17_pc11",
     "cdu17_pc12"
   ],
-  "properties": [
-    "icheme:cdu17_methane",
-    "icheme:cdu17_ethane",
-    "icheme:cdu17_propane",
-    "icheme:cdu17_cdu17_c4",
-    "icheme:cdu17_cdu17_pc01",
-    "icheme:cdu17_cdu17_pc02",
-    "icheme:cdu17_cdu17_pc03",
-    "icheme:cdu17_cdu17_pc04",
-    "icheme:cdu17_cdu17_pc05",
-    "icheme:cdu17_cdu17_pc06",
-    "icheme:cdu17_cdu17_pc07",
-    "icheme:cdu17_cdu17_pc08",
-    "icheme:cdu17_cdu17_pc09",
-    "icheme:cdu17_cdu17_pc10",
-    "icheme:cdu17_cdu17_pc11",
-    "icheme:cdu17_cdu17_pc12"
-  ],
-  "interactions": "icheme:cdu17",
-  "missing_interactions": "zero",
-  "water_model": "icheme:water",
-  "temperature_min_kelvin": 298.15,
-  "temperature_max_kelvin": 900.0,
-  "pressure_min_pascal": 50000.0,
-  "pressure_max_pascal": 2000000.0,
-  "aliases": {
-    "methane": "Methane",
-    "ethane": "Ethane",
-    "propane": "Propane",
-    "C4_CDU": "cdu17_c4",
-    "PC01": "cdu17_pc01",
-    "PC02": "cdu17_pc02",
-    "PC03": "cdu17_pc03",
-    "PC04": "cdu17_pc04",
-    "PC05": "cdu17_pc05",
-    "PC06": "cdu17_pc06",
-    "PC07": "cdu17_pc07",
-    "PC08": "cdu17_pc08",
-    "PC09": "cdu17_pc09",
-    "PC10": "cdu17_pc10",
-    "PC11": "cdu17_pc11",
-    "PC12": "cdu17_pc12"
-  },
   "advisory_evidence": [
     "ESTIMATED_HEAVY_RESIDUE: PC12 properties are extrapolated; no hard-coded phase restriction"
   ]

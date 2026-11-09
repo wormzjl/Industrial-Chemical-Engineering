@@ -1,0 +1,333 @@
+diff --git a/src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnCalculator.java b/src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnCalculator.java
+index 413d8739c..35541dad3 100644
+--- a/src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnCalculator.java
++++ b/src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnCalculator.java
+@@ -165,6 +165,24 @@ public final class V3ColumnCalculator {
+ 
+     private V3ColumnCalculator() {}
+ 
++    /** O10 scratch: one Newton correction of {@code input} from an accepted seed of a neighbouring input, wet set kept. */
++    static V3ColumnOutcome o10Warm(V3ColumnInput input, V3NeuralSeed source) {
++        return com.wormzjl.icheme.science.material.MaterialRuntime.pinned(input.packageId(), () -> V3SolveScratch.within(() -> {
++            V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage(input.packageId());
++            V3ColumnProblem problem = V3ColumnProblemResolver.resolve(input, source.branch());
++            V3NeuralSeed re = new V3NeuralSeed(input, source.propertyRevision(), source.branch(), source.liquid(), source.vapor(),
++                    source.temperatures(), source.freeWater(), source.wetTrays());
++            V3SolvePass pass = solveSingleProblem(problem, thermo, re.stateFor(problem), V3SolveControl.UNBOUNDED, "o10/warm",
++                    ContinuationJacobianPolicy.STAGE_LOCAL_BLOCKS, MAXIMUM_NEWTON_ITERATIONS, SolvePolicy.OFF,
++                    V3SimultaneousColumnSolver.RungBudget.DEFAULT, V3WetTraySet.of(problem.topology(), source.wetTrays()));
++            if (publishesSuccess(pass.attempt(), pass.audit()))
++                return publishAccepted(input, pass, thermo, SolvePolicy.OFF, V3SolveControl.UNBOUNDED, "o10/warm", pass.solverEvents());
++            return new V3ColumnOutcome.Failure(V3SolverFailureCode.NONCONVERGENCE, "o10 warm failed: "
++                    + (pass.attempt() instanceof V3SimultaneousColumnSolver.Attempt.Failure f ? f.code() + " " + f.evidence().termination() : "audit")
++                    + " res=" + pass.attempt().evidence().maximumScaledResidual(), diagnostics(pass.attempt(), pass.audit(), "o10/warm", List.of(), SolvePolicy.OFF));
++        }));
++    }
++
+     /** Offline export hook: called only after the requested state passes every publication gate. */
+     public static V3ColumnOutcome calculateWithAcceptedProfile(V3ColumnInput input, V3SolveControl control,
+             java.util.function.Consumer<V3NeuralSeed> observer) {
+@@ -1682,14 +1700,16 @@ public final class V3ColumnCalculator {
+             }
+             control.checkpoint();
+             audit = audit(attemptProblem, thermo, feedMolarEnthalpy, attempt.state(), control, policy);
++            if (V3SimultaneousColumnSolver.O10 != null) V3SimultaneousColumnSolver.o10("ATTEMPT " + solvePath + " trays=" + attemptProblem.topology().trayCount() + " feedTray=" + attemptProblem.topology().feedTrayNumber() + " wet=" + prepared.wetTrays().wetTrayCount() + " support=" + (prepared.support().totalPointCount() - prepared.support().truncatedPointCount()) + "/" + prepared.support().totalPointCount() + " -> " + (attempt instanceof V3SimultaneousColumnSolver.Attempt.Failure f0 ? f0.code() + ":" + f0.evidence().termination() : "CONVERGED") + " it=" + attempt.evidence().iterations() + " res=" + attempt.evidence().maximumScaledResidual() + " auditFail=" + audit.checks().stream().filter(c -> !c.passed()).map(c -> c.family()).toList() + " | state" + V3SimultaneousColumnSolver.o10State(attempt.state()));
+             // A stalled attempt is refreshed too, and measurably must be: a stall is often exactly the state
+             // that has just dried a point out or started feeding a removed one, and one repeat from the
+             // corrected support is what converges the rung. Only one, though: a second stall in a row is a
+             // rung the continuation is going to subdivide or abandon anyway, and re-solving it three times
+             // triples the cost of every case that is on its way to a typed failure.
+             boolean converged = attempt instanceof V3SimultaneousColumnSolver.Attempt.Converged;
++            boolean floorExit = attempt instanceof V3SimultaneousColumnSolver.Attempt.Failure fx && fx.code().equals("STALLED_SUPPORT_FLOOR");
+             boolean floorBudget = refreshes < floorRefreshLimit
+-                    && (converged || stalledRefreshes < MAXIMUM_STALLED_FLOOR_SUPPORT_REFRESHES);
++                    && (converged || floorExit || stalledRefreshes < MAXIMUM_STALLED_FLOOR_SUPPORT_REFRESHES);
+             // The wet set is re-derived only from a state that solved its own equations, and carries its own
+             // small budget so it never has to compete with the support refreshes for one. How far a tray sits
+             // below the water dew point, and how much water it must therefore shed, are readings of a
+@@ -1705,14 +1725,14 @@ public final class V3ColumnCalculator {
+             // A refresh that only removes — points from the support, trays from the wet set — carries no
+             // information the stalled state did not already have. One that adds a wet tray does: the water
+             // that tray sheds is a degree of freedom the stalled solve never had, so it keeps the full budget.
+-            nextIterations = !converged
++            nextIterations = !converged && !floorExit
+                     && refreshed.support().presentPhaseCount() <= prepared.support().presentPhaseCount()
+                     && refreshed.wetTrays().wetTrayCount() <= prepared.wetTrays().wetTrayCount()
+                     ? Math.min(maximumIterations, STALLED_DROP_REFRESH_ITERATIONS)
+                     : maximumIterations;
+             if (!refreshed.support().sameRetention(prepared.support())) {
+                 refreshes++;
+-                if (!converged) stalledRefreshes++;
++                if (!converged && !floorExit) stalledRefreshes++;
+             }
+             if (!refreshed.wetTrays().sameSet(prepared.wetTrays())) {
+                 wetTrayRefreshes++;
+diff --git a/src/main/java/com/wormzjl/icheme/science/column/v3/V3SimultaneousColumnSolver.java b/src/main/java/com/wormzjl/icheme/science/column/v3/V3SimultaneousColumnSolver.java
+index eccfa2513..547574b60 100644
+--- a/src/main/java/com/wormzjl/icheme/science/column/v3/V3SimultaneousColumnSolver.java
++++ b/src/main/java/com/wormzjl/icheme/science/column/v3/V3SimultaneousColumnSolver.java
+@@ -33,6 +33,73 @@ final class V3SimultaneousColumnSolver {
+ 
+     private V3SimultaneousColumnSolver() {}
+ 
++    /** O10 scratch instrumentation (never merged). */
++    static volatile java.util.function.Consumer<String> O10 = null;
++    /** O10 fix form under measurement: 0 baseline, 1 floor projection, 2 fraction-to-boundary, 3 sub-floor exit. */
++    static final int O10_FORM = o10Form();
++    static final double O10_LN_FLOOR = Math.log(V3TruncationSupport.TRACE_FLOOR_FRACTION);
++    static final int MAXIMUM_ITERATIONS_HINT = 128;
++    static final ThreadLocal<Integer> O10_LIFTED = ThreadLocal.withInitial(() -> 0);
++    private static int o10Form() {
++        try {
++            return Integer.parseInt(java.nio.file.Files.readString(java.nio.file.Path.of(
++                    "D:/Minecraft/Modding/1.21/CreateChemE/.claude/worktrees/cleanup-stale-branches-worktrees-9bc4aa/tmp/open-thermo-o10/form.txt")).trim());
++        } catch (Exception e) { return 0; }
++    }
++    /** For each flow coordinate the other phase's coordinate of the same stage point, or -1. */
++    static int[] o10Partner(V3DryMeshCoordinateMap c) {
++        int n = c.coordinateCount();
++        int[] partner = new int[n];
++        java.util.Arrays.fill(partner, -1);
++        java.util.Map<Long, Integer> seen = new java.util.HashMap<>();
++        for (int k = 0; k < n; k++) {
++            if (!o10IsFlow(c, k)) continue;
++            var id = c.unknowns().get(k).id();
++            long key = (long) id.node() * 1000 + id.component();
++            Integer other = seen.putIfAbsent(key, k);
++            if (other != null) { partner[k] = other; partner[other] = k; }
++        }
++        return partner;
++    }
++    static double o10PointMax(double[] x, int[] partner, int k) {
++        return partner[k] < 0 ? x[k] : Math.max(x[k], x[partner[k]]);
++    }
++    static double alphaOf(double base, double d) {
++        if (d >= 0.0) return base >= O10_LN_FLOOR ? Double.POSITIVE_INFINITY : 0.0;
++        return base <= O10_LN_FLOOR ? 0.0 : (O10_LN_FLOOR - base) / d;
++    }
++    static boolean o10IsFlow(V3DryMeshCoordinateMap c, int k) {
++        var f = c.unknowns().get(k).id().family();
++        return f == V3DegreeOfFreedomLedger.UnknownFamily.LIQUID_COMPONENT_FLOW || f == V3DegreeOfFreedomLedger.UnknownFamily.VAPOR_COMPONENT_FLOW;
++    }
++    static void o10(String line) { var c = O10; if (c != null) c.accept(line); }
++    static String o10Arg(V3MeshResidual r) {
++        int best = 0; double m = -1;
++        for (int i = 0; i < r.size(); i++) { double a = Math.abs(r.scaledValue(i)); if (!(a <= m)) { m = a; best = i; } }
++        var e = r.equation(best);
++        return e.family().name().substring(0, 4) + "@" + e.node() + "/" + e.component() + "=" + String.format("%.3g", r.scaledValue(best));
++    }
++    static String o10State(V3DryMeshState s) {
++        StringBuilder b = new StringBuilder();
++        for (int n = 0; n < s.nodeCount(); n++) {
++            double l = 0, v = 0;
++            for (int c = 0; c < s.componentCount(); c++) { l += s.liquidFlow(n, c); v += s.vaporFlow(n, c); }
++            b.append(String.format(" [%d T=%.1f L=%.1f V=%.1f W=%.2f]", n, s.temperatureKelvin(n), l, v, s.freeWaterFlow(n)));
++        }
++        // spike scan: largest log-curvature of any component liquid/vapour profile at an interior node
++        double worst = 0; String where = "";
++        for (int c = 0; c < s.componentCount(); c++) for (int ph = 0; ph < 2; ph++) for (int n = 2; n < s.nodeCount() - 1; n++) {
++            double a = ph == 0 ? s.liquidFlow(n - 1, c) : s.vaporFlow(n - 1, c), m = ph == 0 ? s.liquidFlow(n, c) : s.vaporFlow(n, c),
++                    z = ph == 0 ? s.liquidFlow(n + 1, c) : s.vaporFlow(n + 1, c);
++            if (a > 0 && m > 0 && z > 0) {
++                double k = Math.abs(Math.log(m) - 0.5 * (Math.log(a) + Math.log(z)));
++                if (k > worst) { worst = k; where = (ph == 0 ? "L" : "V") + " c" + c + " n" + n + String.format(" %.3e/%.3e/%.3e", a, m, z); }
++            }
++        }
++        b.append(String.format("\n   spike maxLogCurv=%.2f at %s", worst, where));
++        return b.toString();
++    }
++
+     static Attempt solve(
+             V3ColumnProblem problem, V3MeshResidualEvaluator evaluator, V3DryMeshCoordinateMap coordinates,
+             V3DryMeshState initialState, V3FiniteDifferenceJacobian.V3ThermoWorkspaceFactory workspaceFactory,
+@@ -319,6 +386,10 @@ final class V3SimultaneousColumnSolver {
+         int localBlockAttempts = 0;
+         int consecutiveLocalBlockRejections = 0;
+         boolean localBlocksDisabled = false;
++        double[] o10Initial = null;
++        int held = 0;
++        double[] heldHistory = null;
++        O10_LIFTED.set(0);
+         for (int iteration = 0; iteration <= maximumIterations; iteration++) {
+             control.checkpoint();
+             V3MeshResidual residual;
+@@ -339,6 +410,41 @@ final class V3SimultaneousColumnSolver {
+             double[] frozenScales = residual.scales();
+             double merit = scaledSquaredNorm(residual);
+             trace.sampledState(iteration, state, residual, merit);
++            if (O10_FORM == 4) {
++                held = iteration > 0 && O10_LIFTED.get() > 0 ? held + 1 : 0;
++                O10_LIFTED.set(0);
++                if (heldHistory == null) heldHistory = new double[4 * MAXIMUM_ITERATIONS_HINT];
++                if (iteration < heldHistory.length) heldHistory[iteration] = maximumResidual;
++                // release only a hold that has stopped earning: 8 held iterations without halving the residual
++                if (held >= 8 && iteration < heldHistory.length && maximumResidual > 0.5 * heldHistory[iteration - 8]) {
++                    o10("  HELD exit at it " + iteration);
++                    return new Attempt.Failure("STALLED_SUPPORT_FLOOR", state, new Evidence(iteration, maximumResidual, merit, 0.0, 0.0,
++                            "retained points held at their support floor", lastConvergenceEvidence));
++                }
++            }
++            if (O10_FORM == 3 && iteration == 0) o10Initial = coordinates.encode(state);
++            if (O10_FORM == 3 && iteration > 0) {
++                double[] cc = coordinates.encode(state);
++                int[] pp = o10Partner(coordinates);
++                for (int k = 0; k < cc.length; k++) if (o10IsFlow(coordinates, k) && o10PointMax(cc, pp, k) < O10_LN_FLOOR - Math.log(10.0)
++                        && o10PointMax(o10Initial, pp, k) >= O10_LN_FLOOR - Math.log(10.0)) {
++                    o10("  SUPPORT_FLOOR exit at it " + iteration + " " + coordinates.unknowns().get(k).id());
++                    return new Attempt.Failure("STALLED_SUPPORT_FLOOR", state, new Evidence(iteration, maximumResidual, merit, 0.0, 0.0,
++                            "a retained point fell below its support floor", lastConvergenceEvidence));
++                }
++            }
++            if (O10 != null) {
++                double[] cc = coordinates.encode(state); double lo = Double.POSITIVE_INFINITY; String loId = "";
++                for (int k = 0; k < cc.length; k++) {
++                    var uid = coordinates.unknowns().get(k).id();
++                    if (uid.family() == V3DegreeOfFreedomLedger.UnknownFamily.LIQUID_COMPONENT_FLOW || uid.family() == V3DegreeOfFreedomLedger.UnknownFamily.VAPOR_COMPONENT_FLOW) {
++                        double f = uid.family() == V3DegreeOfFreedomLedger.UnknownFamily.LIQUID_COMPONENT_FLOW ? state.liquidFlow(uid.node(), uid.component()) : state.vaporFlow(uid.node(), uid.component());
++                        if (f < lo) { lo = f; loId = uid.family().name().charAt(0) + "@" + uid.node() + "/" + uid.component(); }
++                    }
++                }
++                o10("  minflow " + String.format("%.2e", lo) + " " + loId);
++            }
++            if (O10 != null) o10("  it " + iteration + " res=" + String.format("%.3e", maximumResidual) + " merit=" + String.format("%.3e", merit) + " arg=" + o10Arg(residual));
+             if (maximumResidual <= scaledTolerance && lastConvergenceEvidence.satisfiesGates(scaledTolerance)) {
+                 return new Attempt.Converged(state, new Evidence(iteration, maximumResidual, merit, 0.0, 0.0,
+                         "residual and final-step tolerances", lastConvergenceEvidence));
+@@ -408,7 +514,7 @@ final class V3SimultaneousColumnSolver {
+                         if (localTrial != null) {
+                             localBlockAccepted = true;
+                             consecutiveLocalBlockRejections = 0;
+-                            trace.localBlockDirection(iteration, true);
++                            trace.localBlockDirection(iteration, true); o10("    local ACCEPT step=" + localTrial.step());
+                             state = localTrial.state();
+                             lastMerit = localTrial.merit();
+                             cachedFineJacobian = null;
+@@ -421,7 +527,7 @@ final class V3SimultaneousColumnSolver {
+                     // The full coloured finite-difference Jacobian remains the authoritative fallback when a local
+                     // one-sided PR probe crosses a property/root boundary.
+                 }
+-                if (!localBlockAccepted) trace.localBlockDirection(iteration, false);
++                if (!localBlockAccepted) { trace.localBlockDirection(iteration, false); o10("    local reject"); }
+                 if (!localBlockAccepted && ++consecutiveLocalBlockRejections
+                         >= MAXIMUM_CONSECUTIVE_LOCAL_BLOCK_REJECTIONS) localBlocksDisabled = true;
+             }
+@@ -460,6 +566,7 @@ final class V3SimultaneousColumnSolver {
+                     continue;
+                 }
+                 V3BandedPivotedSolver.Result.Failure failure = (V3BandedPivotedSolver.Result.Failure) linearResult;
++                if (O10 != null) { var mm = java.util.regex.Pattern.compile("at ([0-9]+)").matcher(failure.detail()); String who = ""; if (mm.find()) { int ix = Integer.parseInt(mm.group(1)); var id = coordinates.unknowns().get(ix).id(); who = " unknown=" + id; if (id.component() >= 0) { StringBuilder pf = new StringBuilder(); for (int n = 0; n < state.nodeCount(); n++) pf.append(String.format(" %d:%.2e/%.2e", n, state.liquidFlow(n, id.component()), state.vaporFlow(n, id.component()))); who += " profileL/V" + pf; } } o10("    LINEAR " + failure.code() + " " + failure.detail() + " growth=" + failure.pivotGrowth() + who); }
+                 double[] baseCoordinates = coordinates.encode(state);
+                 AcceptedTrial descentTrial = dampedGaussNewtonTrial(
+                         evaluator, coordinates, baseCoordinates, jacobian, residual, frozenScales, merit, layout, workspaceFactory,
+@@ -484,6 +591,8 @@ final class V3SimultaneousColumnSolver {
+                     evaluator, coordinates, baseCoordinates, linearSuccess.solution(), frozenScales, merit, workspaceFactory,
+                     maximumLineSearchSteps, control);
+             boolean usedDescentFallback = acceptedTrial == null;
++            if (O10 != null) o10("    newton growth=" + String.format("%.2e", linearSuccess.pivotGrowth()) + " bwd=" + String.format("%.2e", linearSuccess.backwardError())
++                    + " frozen=" + usesFrozenFineJacobian + " step=" + (acceptedTrial == null ? "REJECT" : String.valueOf(acceptedTrial.step())));
+             if (usedDescentFallback && usesFrozenFineJacobian) {
+                 cachedFineJacobian = null;
+                 frozenFineJacobianSteps = 0;
+@@ -500,7 +609,9 @@ final class V3SimultaneousColumnSolver {
+                             maximumLineSearchSteps, control);
+                 }
+             }
++            if (usedDescentFallback) o10("    descent step=" + (acceptedTrial == null ? "NONE" : String.valueOf(acceptedTrial.step())));
+             if (acceptedTrial == null) {
++                o10("  LSE state" + o10State(state));
+                 return new Attempt.Failure("LINE_SEARCH_EXHAUSTED", state,
+                         new Evidence(iteration, maximumResidual, merit, 0.0, linearSuccess.pivotGrowth(),
+                                 "no admissible Armijo-reducing Newton or descent step", lastConvergenceEvidence));
+@@ -716,15 +827,48 @@ final class V3SimultaneousColumnSolver {
+             double[] direction, double[] frozenScales, double merit,
+             V3FiniteDifferenceJacobian.V3ThermoWorkspaceFactory workspaceFactory,
+             int maximumLineSearchSteps, V3SolveControl control) {
++        double alphaMax = 1.0;
++        int[] pp = O10_FORM == 1 || O10_FORM == 2 || O10_FORM == 4 ? o10Partner(coordinates) : null;
++        if (O10_FORM == 2) {
++            direction = direction.clone();
++            for (int k = 0; k < direction.length; k++) {
++                if (!o10IsFlow(coordinates, k) || (pp[k] >= 0 && pp[k] < k)) continue;
++                int p = pp[k];
++                if (o10PointMax(baseCoordinates, pp, k) <= O10_LN_FLOOR) {
++                    direction[k] = Math.max(direction[k], 0.0);
++                    if (p >= 0) direction[p] = Math.max(direction[p], 0.0);
++                    continue;
++                }
++                // the point stays supported while either phase is above the floor
++                double reach = alphaOf(baseCoordinates[k], direction[k]);
++                if (p >= 0) reach = Math.max(reach, alphaOf(baseCoordinates[p], direction[p]));
++                alphaMax = Math.min(alphaMax, reach);
++            }
++        }
+         for (int lineSearch = 0; lineSearch < maximumLineSearchSteps; lineSearch++) {
+             control.checkpoint();
+-            double step = Math.scalb(1.0, -lineSearch);
++            double step = alphaMax * Math.scalb(1.0, -lineSearch);
+             try {
+                 double[] candidateCoordinates = addScaled(baseCoordinates, direction, step);
++                int lifted = 0;
++                if (O10_FORM == 1 || O10_FORM == 4) for (int k = 0; k < candidateCoordinates.length; k++) {
++                    if (!o10IsFlow(coordinates, k) || (pp[k] >= 0 && pp[k] < k)) continue;
++                    // form 4 holds a point just under its floor, so the refresh that follows drops it
++                    double hold = O10_FORM == 4 ? O10_LN_FLOOR - 1.0e-3 : O10_LN_FLOOR;
++                    double bound = Math.min(o10PointMax(baseCoordinates, pp, k), hold);
++                    double now = o10PointMax(candidateCoordinates, pp, k);
++                    if (now < bound) {
++                        // lift the point as a whole (both phases, so its K ratio stands) back to the floor
++                        candidateCoordinates[k] += bound - now;
++                        if (pp[k] >= 0) candidateCoordinates[pp[k]] += bound - now;
++                        lifted++;
++                    }
++                }
+                 V3DryMeshState candidate = coordinates.decode(candidateCoordinates);
+                 double candidateMerit = frozenSquaredNorm(
+                         evaluator.evaluate(candidate, workspaceFactory.newWorkspace()), frozenScales);
+                 if (candidateMerit <= merit * (1.0 - ARMIJO_COEFFICIENT * step)) {
++                    O10_LIFTED.set(lifted);
+                     return new AcceptedTrial(candidate, candidateCoordinates, candidateMerit, step);
+                 }
+             } catch (IllegalArgumentException | V3ThermoException ignored) {
+diff --git a/src/main/java/com/wormzjl/icheme/science/column/v3/linalg/V3BandedPivotedSolver.java b/src/main/java/com/wormzjl/icheme/science/column/v3/linalg/V3BandedPivotedSolver.java
+index e78b2e469..92a4e0953 100644
+--- a/src/main/java/com/wormzjl/icheme/science/column/v3/linalg/V3BandedPivotedSolver.java
++++ b/src/main/java/com/wormzjl/icheme/science/column/v3/linalg/V3BandedPivotedSolver.java
+@@ -65,7 +65,7 @@ public final class V3BandedPivotedSolver {
+                 }
+             }
+             if (!Double.isFinite(pivotMagnitude) || pivotMagnitude <= PIVOT_TOLERANCE) {
+-                return new Result.Failure(FailureCode.SINGULAR, "V3 banded LU encountered a zero or tiny pivot",
++                return new Result.Failure(FailureCode.SINGULAR, "V3 banded LU encountered a zero or tiny pivot at " + pivot + " mag=" + pivotMagnitude,
+                         finiteOrZero(minimumPivot), maximumPivot, pivotSwaps, pivotGrowth(maximumDuringFactorization, initialMaximum));
+             }
+             // Rows reaching this pivot hold nothing beyond this column, so it also bounds the fill they take on.
+diff --git a/src/main/java/com/wormzjl/icheme/science/flowsheet/unit/ColumnBlockSolve.java b/src/main/java/com/wormzjl/icheme/science/flowsheet/unit/ColumnBlockSolve.java
+index 97ac29154..6d72b6403 100644
+--- a/src/main/java/com/wormzjl/icheme/science/flowsheet/unit/ColumnBlockSolve.java
++++ b/src/main/java/com/wormzjl/icheme/science/flowsheet/unit/ColumnBlockSolve.java
+@@ -29,7 +29,7 @@ import static com.wormzjl.icheme.science.flowsheet.unit.ColumnUnit.*;
+  * The column block's own solve ({@link ColumnUnit}). It keeps the last state, so each pass starts from it, and leaves it on its
+  * report, so a run that starts from a steady one starts the column where it ended there (owner 2026-11-04, P2).
+  */
+-final class ColumnBlockSolve implements Calculation.Law {
++public final class ColumnBlockSolve implements Calculation.Law {
+     /**
+      * The feed is flashed to its tray's pressure, which only a solve can say, so it starts at the stream's own and goes round
+      * while that moves the feed by more than this (K), at most this often. A stream at its tray's pressure solves once.
+@@ -44,6 +44,8 @@ final class ColumnBlockSolve implements Calculation.Law {
+     private record Ejected(FlowStream steam, FlowStream water, double heat) {
+     }
+ 
++    /** O10 scratch hook. */
++    public static volatile java.util.function.Consumer<Object[]> O10 = null;
+     private final WiredUnit u;
+     private final ColumnDoor door;
+     private final int components;
+@@ -165,6 +167,7 @@ final class ColumnBlockSolve implements Calculation.Law {
+             heatIn += ejected.steam().enthalpy();
+             heatOut += ejected.water().enthalpy() - product(FREE_WATER, result).enthalpy();
+         }
++        if (O10 != null) { var o10p = new java.util.LinkedHashMap<String, FlowStream>(); for (var product : result.streams()) o10p.put(product.streamId(), product(product.streamId(), result)); O10.accept(new Object[] {result, flashed, valved, supplies, o10p, heatIn + ledger.condenserWatts() - motiveHeat + ledger.reboilerWatts() + ledger.stageHeatTotalWatts() - heatOut}); }
+         report.reading("energy_gap", heatIn + ledger.condenserWatts() - motiveHeat + ledger.reboilerWatts() + ledger.stageHeatTotalWatts() - heatOut);
+     }
+ 

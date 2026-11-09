@@ -56,11 +56,11 @@ class OpenTankRuntimeTest {
         assertTrue(snapshot.status().contains("venting"),"the status line names the vent: "+snapshot.status());
         var last=snapshot.lastResult().orElseThrow();
         assertTrue(last.boundaries().stream().anyMatch(b->b.kind()==Kind.VENT&&b.nodeId()==tank),"the last interval vents at the tank");
-        var view=TankOutlets.tank(w.model,node,last);
+        var view=TankOutlets.tank(w.coordinator.model(island),node,last);
         assertTrue(view.open()&&view.ventKgPerSecond()>0&&view.spillKgPerSecond()==0,"the tank view: "+view);
         // The island's unit round-trips the open inventory and the vent's kind.
-        var image=FluidCheckpointCodec.encode(new FluidCheckpointCodec.Checkpoint(List.of(new FluidCheckpointCodec.IslandEntry(EventPathWorld.DIM,"icheme:tjl20_methane_nitrogen",snapshot))),key->w.model);
-        var after=FluidCheckpointCodec.decode(image,key->w.model).islands().getFirst().snapshot();
+        var image=FluidCheckpointCodec.encode(new FluidCheckpointCodec.Checkpoint(List.of(w.coordinator.entry(EventPathWorld.DIM,"icheme:tjl20_methane_nitrogen",snapshot))),key->key.on(w.model));
+        var after=FluidCheckpointCodec.decode(image,key->key.on(w.model)).islands().getFirst().snapshot();
         assertEquals(snapshot.graph().reservoirs().stream().map(PassiveNetwork.Reservoir::inventory).toList(),after.graph().reservoirs().stream().map(PassiveNetwork.Reservoir::inventory).toList(),"inventories with their open flag");
         assertEquals(snapshot.graph().pipes(),after.graph().pipes(),"the OVERFLOW port");
         assertEquals(last.boundaries().stream().map(b->b.kind()).toList(),after.lastResult().orElseThrow().boundaries().stream().map(b->b.kind()).toList(),"the boundary kinds");

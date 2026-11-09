@@ -282,7 +282,7 @@ class V3PengRobinsonDerivativesTest {
             for (int i = 0; i < count; i++) fractions[i] /= total;
             states.add(new State(point[0], point[1], fractions));
         }
-        double[] feed = thermo.crudeFeed("icheme:tia_juana_light").moleFractions();
+        double[] feed = thermo.crudeFeed(com.wormzjl.icheme.science.material.Cdu17TestCatalog.tiaJuanaAssay(thermo.packageId())).moleFractions();
         states.add(new State(420.0, 250_000.0, feed));
         states.add(new State(560.0, 250_000.0, feed));
         return states;

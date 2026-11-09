@@ -1,8 +1,8 @@
 {
   "format": 2,
   "basis": {
-    "package": "icheme:tjl20_methane_nitrogen",
-    "revision": "crude-regrouped-r1",
+    "package": "icheme:refinery",
+    "revision": "method=model:pr78,ideal-gas:fit,missing-interactions:zero,pressure-pascal:1000..2000000,liquid-mixture:eccc-cut-pair-r1;properties=icheme:tjl20_methane@tjl20-methane-spine-r3,icheme:tjl19_ethane@tjl19-dwsim-10.2.3-r1,icheme:tjl19_propane@tjl19-dwsim-10.2.3-r1,icheme:tjl19_isobutane@tjl19-dwsim-10.2.3-r1,icheme:tjl19_n_butane@tjl19-dwsim-10.2.3-r1,icheme:tjl19_isopentane@tjl19-dwsim-10.2.3-r1,icheme:tjl19_n_pentane@tjl19-dwsim-10.2.3-r1,icheme:crude_pc01@crude-regrouped-r1,icheme:crude_pc02@crude-regrouped-r1,icheme:crude_pc03@crude-regrouped-r1,icheme:crude_pc04@crude-regrouped-r1,icheme:crude_pc05@crude-regrouped-r1,icheme:crude_pc06@crude-regrouped-r1,icheme:crude_pc07@crude-regrouped-r1,icheme:crude_pc08@crude-regrouped-r1,icheme:crude_pc09@crude-regrouped-r1,icheme:crude_pc10@crude-regrouped-r1,icheme:crude_pc11@crude-regrouped-r1,icheme:crude_pc12@crude-regrouped-r1;interactions=icheme:tjl20@tjl20-frozen-kij-r1;water=icheme:water@water-iapws95-shomate-r3;viscosity=icheme:tjl20_methane/liquid@dwsim-viscosity-api-r1,icheme:tjl20_methane/vapor@dwsim-viscosity-api-ambient-r2,icheme:tjl19_ethane/liquid@dwsim-viscosity-api-r1,icheme:tjl19_ethane/vapor@dwsim-viscosity-api-ambient-r2,icheme:tjl19_propane/liquid@dwsim-viscosity-api-r1,icheme:tjl19_propane/vapor@dwsim-viscosity-api-ambient-r2,icheme:tjl19_isobutane/liquid@dwsim-viscosity-api-r2,icheme:tjl19_isobutane/vapor@dwsim-viscosity-api-ambient-r2,icheme:tjl19_n_butane/liquid@dwsim-viscosity-api-r1,icheme:tjl19_n_butane/vapor@dwsim-viscosity-api-ambient-r2,icheme:tjl19_isopentane/liquid@dwsim-viscosity-api-r2,icheme:tjl19_isopentane/vapor@dwsim-viscosity-api-ambient-r2,icheme:tjl19_n_pentane/liquid@dwsim-viscosity-api-r1,icheme:tjl19_n_pentane/vapor@dwsim-viscosity-api-ambient-r2,icheme:crude_pc01/liquid@twu-1985-d341-r1,icheme:crude_pc01/vapor@dwsim-viscosity-api-ambient-r2,icheme:crude_pc02/liquid@twu-1985-d341-r1,icheme:crude_pc02/vapor@dwsim-viscosity-api-ambient-r2,icheme:crude_pc03/liquid@twu-1985-d341-r1,icheme:crude_pc03/vapor@dwsim-viscosity-api-ambient-r2,icheme:crude_pc04/liquid@twu-1985-d341-r1,icheme:crude_pc04/vapor@dwsim-viscosity-api-ambient-r2,icheme:crude_pc05/liquid@twu-1985-d341-r1,icheme:crude_pc05/vapor@dwsim-viscosity-api-ambient-r2,icheme:crude_pc06/liquid@twu-1985-d341-r1,icheme:crude_pc06/vapor@dwsim-viscosity-api-ambient-r2,icheme:crude_pc07/liquid@twu-1985-d341-r1,icheme:crude_pc07/vapor@dwsim-viscosity-api-ambient-r2,icheme:crude_pc08/liquid@twu-1985-d341-r1,icheme:crude_pc08/vapor@crude-regrouped-r1-vapor,icheme:crude_pc09/liquid@twu-1985-d341-r1,icheme:crude_pc09/vapor@crude-regrouped-r1-vapor,icheme:crude_pc10/liquid@twu-1985-d341-r1,icheme:crude_pc10/vapor@crude-regrouped-r1-vapor,icheme:crude_pc11/liquid@twu-1985-d341-r1,icheme:crude_pc11/vapor@crude-regrouped-r1-vapor,icheme:crude_pc12/liquid@twu-1985-d341-r1,icheme:crude_pc12/vapor@crude-regrouped-r1-vapor,icheme:water/liquid@iapws-sr6-2011-viscosity-r1;ice=icheme:crystal_ice_ih@crystal-ice-ih-r1;fluid-data=conditional_solute_log_tables@dwsim-conditional-solute-ambient-v2,liquid_volume_reference_points@coolprop-8.0.0-liquid-calibration-r1",
     "components": [
       "Methane",
       "Ethane",
@@ -24,6 +24,31 @@
       "crude_pc11",
       "crude_pc12",
       "Nitrogen",
+      "Hydrogen",
+      "HydrogenSulfide",
+      "CarbonMonoxide",
+      "Oxygen",
+      "Ammonia",
+      "SulfurDioxide",
+      "CarbonylSulfide",
+      "Ethylene",
+      "Propylene",
+      "Butene-1",
+      "Isobutene",
+      "Cis-2-butene",
+      "Trans-2-butene",
+      "Butadiene",
+      "N-hexane",
+      "Cyclohexane",
+      "Benzene",
+      "Toluene",
+      "Ethylbenzene",
+      "O-xylene",
+      "M-xylene",
+      "P-xylene",
+      "MethylMercaptan",
+      "EthylMercaptan",
+      "CarbonDioxide",
       "Water"
     ]
   },
@@ -47,8 +72,7 @@
       "x": 372,
       "y": 20,
       "params": {
-        "package": "icheme:tjl20_methane",
-        "assay": "icheme:tia_juana_light_methane",
+        "assay": "icheme:medium_crude",
         "stages": 40,
         "feed_stage": 37,
         "top_pressure": 250000.0,
@@ -62,24 +86,24 @@
           {
             "id": "1",
             "tray": 10,
-            "flow": 136.46221820029854
+            "flow": 143.96618123618978
           },
           {
             "id": "2",
             "tray": 18,
-            "flow": 143.16163238752443
+            "flow": 132.35605700018303
           },
           {
             "id": "3",
             "tray": 28,
-            "flow": 45.87851513484432
+            "flow": 51.11071630764947
           }
         ],
         "steam": [
           {
             "id": "1",
             "stage": 41,
-            "flow": 333.3333333333333,
+            "flow": 330.70742728373403,
             "temperature": 533.15
           }
         ],
@@ -88,7 +112,7 @@
             "id": "1",
             "return_tray": 8,
             "draw_tray": 10,
-            "duty": -1.284E7,
+            "duty": -13093341.597836321,
             "split": "UNIFORM",
             "drop": 30000.0
           },
@@ -96,7 +120,7 @@
             "id": "2",
             "return_tray": 16,
             "draw_tray": 18,
-            "duty": -1.789E7,
+            "duty": -21011905.824410513,
             "split": "UNIFORM",
             "drop": 30000.0
           },
@@ -104,7 +128,7 @@
             "id": "3",
             "return_tray": 26,
             "draw_tray": 28,
-            "duty": -1.12E7,
+            "duty": -13238439.005543655,
             "split": "UNIFORM",
             "drop": 30000.0
           }
@@ -194,25 +218,25 @@
         "temperature": 298.15,
         "pressure": 800000.0,
         "amounts": {
-          "Methane": 3.68372287921612,
-          "Ethane": 0.8773887845022663,
-          "Propane": 7.803538211854392,
-          "Isobutane": 4.796929727080481,
-          "N-butane": 16.39938344475047,
-          "Isopentane": 12.253362124923694,
-          "N-pentane": 18.090995102788362,
-          "crude_pc01": 122.51592820504965,
-          "crude_pc02": 90.72897097612251,
-          "crude_pc03": 86.75099282286442,
-          "crude_pc04": 77.13055004039906,
-          "crude_pc05": 64.10900243749795,
-          "crude_pc06": 54.05093667066433,
-          "crude_pc07": 45.34061756504067,
-          "crude_pc08": 44.6246368105765,
-          "crude_pc09": 48.6801440092236,
-          "crude_pc10": 21.86386245347405,
-          "crude_pc11": 11.052157645397973,
-          "crude_pc12": 5.991455931797466
+          "Methane": 2.484331824052762,
+          "Ethane": 5.301883743134286,
+          "Propane": 13.557686201117136,
+          "Isobutane": 6.857214383989879,
+          "N-butane": 15.085871644777733,
+          "Isopentane": 11.60058992439216,
+          "N-pentane": 14.91504418850421,
+          "crude_pc01": 47.408751023718324,
+          "crude_pc02": 87.35160689056457,
+          "crude_pc03": 92.60611965467268,
+          "crude_pc04": 88.1300229105713,
+          "crude_pc05": 77.3150483396575,
+          "crude_pc06": 63.88839538456183,
+          "crude_pc07": 56.34874577965046,
+          "crude_pc08": 50.99679789100965,
+          "crude_pc09": 39.588868218246354,
+          "crude_pc10": 20.96319589255257,
+          "crude_pc11": 10.203146953245708,
+          "crude_pc12": 5.7300422215561735
         }
       },
       "route": [
@@ -335,7 +359,7 @@
         "temperature": 533.15,
         "pressure": 350000.0,
         "amounts": {
-          "Water": 333.3333333333333
+          "Water": 330.70742728373403
         }
       },
       "route": [

@@ -126,7 +126,8 @@ class V3CondenserPhaseAuditTest {
 
         assertTrue(condenserClosure.passed(), condenserClosure::toString);
         double expectedFreeWaterOut = split.freeWaterFlowMolPerSecond()
-                * com.wormzjl.icheme.science.column.v3.thermo.V3WaterProperties.liquidMolarEnthalpy(400.0);
+                * com.wormzjl.icheme.science.column.v3.thermo.V3WaterProperties.liquidMolarEnthalpy(400.0,
+                        wetProblem.nodePressurePascal(wetProblem.topology().condenserNode()));
         assertTrue(condenserClosure.detail().contains(String.format(java.util.Locale.ROOT, "free water out=%.6g W",
                 expectedFreeWaterOut)), condenserClosure::detail);
     }

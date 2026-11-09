@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "Ammonia",
+  "kind": "chemical",
+  "translation_key": "material.icheme.ammonia",
+  "fallback": "Ammonia",
+  "properties": "icheme:chemsep_ammonia",
+  "appearance": {
+    "color": "#DCE8FA",
+    "transparency": 0.95,
+    "estimated": true
+  },
+  "identifiers": {
+    "cas": "7664-41-7",
+    "chemsep_id": "1911",
+    "smiles": "N",
+    "formula": "NH3"
+  }
+}

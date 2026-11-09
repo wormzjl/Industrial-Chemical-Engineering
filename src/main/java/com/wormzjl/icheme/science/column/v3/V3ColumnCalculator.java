@@ -30,8 +30,13 @@ public final class V3ColumnCalculator {
     public static final String FORMULATION_REVISION = "v3-dry-mesh-r24-flash-trace-phase-r1";
     private static final String LEGACY_FORMULATION_REVISION = "v3-dry-mesh-r23";
     public static final String ASSUMPTIONS_REVISION = "v3-dry-assumptions-r4";
-    /** r2: free water is allowed on a tray, is immiscible with the hydrocarbon liquid, and is not side-drawn. */
-    public static final String WET_ASSUMPTIONS_REVISION = "v3-wet-assumptions-r2";
+    /**
+     * r2: free water is allowed on a tray, is immiscible with the hydrocarbon liquid, and is not side-drawn.
+     * r3 (E31): under a drum that decants free water, tray one's free water is carried over to the drum as entrained
+     * liquid instead of falling to tray two; with a column diameter the carried water is read against an
+     * entrainment limit of flood fraction times vapour mass.
+     */
+    public static final String WET_ASSUMPTIONS_REVISION = "v3-wet-assumptions-r3";
     /**
      * Prescribed stage heat: a signed duty with positive adding heat, no circulating pumparound stream,
      * no return-temperature specification, and the {@link V3PumparoundSpec.Split} tray placement rule.
@@ -84,13 +89,6 @@ public final class V3ColumnCalculator {
     /** Free-water tray-set refreshes within one attempt; only a converged attempt spends one. */
     private static final int MAXIMUM_WET_TRAY_REFRESHES = 3;
     /**
-     * A large wet request has to run the classical steam/heat ramp after a learned seed is rejected.  The bundled
-     * model's correction is not trained for that high-dimensional wet lane and can spend its whole two-second
-     * allowance before handing back the unchanged classical route.  Give it a short probe instead; a candidate that
-     * closes quickly is still accepted, while a poor candidate falls back almost immediately.
-     */
-    private static final int LARGE_WET_NEURAL_PROBE_MILLISECONDS = 100;
-    /**
      * Newton budget of the one refresh that follows a stalled attempt and only removes points.
      *
      * <p>Measured on the 40 MW return-tray case: all four such refreshes stalled again with a worse final
@@ -116,7 +114,8 @@ public final class V3ColumnCalculator {
      * from 0.058 to 0.042, with 786 line-search trials and four entries into the damped normal-equation cascade
      * at doubled bandwidth: 2.6 s of a 13.0 s solve for a state the ramp discards.</p>
      *
-     * <p>So an intermediate steam rung stops as soon as its residual has not halved over twelve iterations —
+     * <p>So an intermediate steam rung stops as soon as its residual has not halved over twelve iterations (the
+     * solver's one stall rule, {@link V3SimultaneousColumnSolver#STALL_WINDOW_ITERATIONS}) —
      * well outside the quadratic tail, and floored at 1e-3 so a rung merely closing slowly is never cut off —
      * and keeps only the first two dampings of the cascade with no gradient fallback and no certificate cascade
      * behind them.</p>
@@ -133,7 +132,8 @@ public final class V3ColumnCalculator {
      * free-water continuation all keep {@link V3SimultaneousColumnSolver.RungBudget#DEFAULT}.</p>
      */
     private static final V3SimultaneousColumnSolver.RungBudget INTERMEDIATE_RUNG_BUDGET =
-            new V3SimultaneousColumnSolver.RungBudget(2, false, 0, 12, 0.5, 1.0e-3);
+            new V3SimultaneousColumnSolver.RungBudget(2, false, 0, V3SimultaneousColumnSolver.STALL_WINDOW_ITERATIONS,
+                    V3SimultaneousColumnSolver.STALL_FACTOR, 1.0e-3);
     /**
      * How far above its own material row a seeded point may sit before {@link #capOversizedPoint} resets it.
      *
@@ -259,12 +259,13 @@ public final class V3ColumnCalculator {
         if (unsuppliedDraws != null) return unsuppliedDraws;
         V3ColumnOutcome.Failure coolingFailure = staticCoolingAdmission(input);
         if (coolingFailure != null) return coolingFailure;
-        long started = System.nanoTime();
-        int neuralBudgetMilliseconds = neuralBudgetMilliseconds(input, options);
+        // The learned route spends at most options.budgetPolls() control polls (owner decision D2, batch
+        // 2026-11-05-neural-retrain): a counter, so the same request takes the same route on any machine.
+        java.util.concurrent.atomic.AtomicLong neuralPolls = new java.util.concurrent.atomic.AtomicLong();
         NeuralProgress progress = new NeuralProgress(trace);
         V3SolveControl neuralControl = () -> {
             control.checkpoint(); // Whole-request cancellation always wins over the local neural budget.
-            if (System.nanoTime() - started >= neuralBudgetMilliseconds * 1_000_000L)
+            if (neuralPolls.incrementAndGet() > options.budgetPolls())
                 throw new NeuralBudgetExceeded();
         };
         String reason = "model unavailable or outside coverage";
@@ -329,14 +330,12 @@ public final class V3ColumnCalculator {
             if (observer != null) observer.accept(Objects.requireNonNull(selectedProfile));
             return initializationEvent(selected, "initializer=LNN; model=" + modelId + "; wet=" + options.wetStart()
                     + "; mode=" + options.mode() + "; candidates=" + candidatesTried
-                    + "; neuralMs=" + (System.nanoTime() - started) / 1_000_000);
+                    + "; neuralPolls=" + neuralPolls.get());
         }
         if (lastFailure != null && (lastFailure.code() == V3SolverFailureCode.PROPERTY_OUT_OF_RANGE
                 || lastFailure.code() == V3SolverFailureCode.INFEASIBLE_SPECIFICATION)) return lastFailure;
         String event = "initializer=" + (options.mode() == V3InitializationOptions.Mode.LNN_ONLY ? "LNN_FAILED" : "CURRENT_BACKUP")
-                + "; model=" + modelId + "; neuralMs=" + (System.nanoTime() - started) / 1_000_000
-                + (neuralBudgetMilliseconds == options.budgetMilliseconds()
-                ? "" : "; neuralBudgetMs=" + neuralBudgetMilliseconds)
+                + "; model=" + modelId + "; neuralPolls=" + neuralPolls.get() + "/" + options.budgetPolls()
                 + "; " + reason;
         if (options.mode() == V3InitializationOptions.Mode.LNN_ONLY)
             return initializationEvent(lastFailure != null ? lastFailure
@@ -1687,9 +1686,16 @@ public final class V3ColumnCalculator {
             // corrected support is what converges the rung. Only one, though: a second stall in a row is a
             // rung the continuation is going to subdivide or abandon anyway, and re-solving it three times
             // triples the cost of every case that is on its way to a typed failure.
+            //
+            // A release is not a stall. The solve held a point at its floor and stopped earning steps because of
+            // it, or a free point sank below its floor and left no Newton step (STALLED_SUPPORT_FLOOR): the
+            // refresh that drops that point is the next step of the same solve, so it is neither counted against
+            // the stalled limit nor cut to the polish budget.
             boolean converged = attempt instanceof V3SimultaneousColumnSolver.Attempt.Converged;
+            boolean released = attempt instanceof V3SimultaneousColumnSolver.Attempt.Failure heldFailure
+                    && heldFailure.code().equals("STALLED_SUPPORT_FLOOR");
             boolean floorBudget = refreshes < floorRefreshLimit
-                    && (converged || stalledRefreshes < MAXIMUM_STALLED_FLOOR_SUPPORT_REFRESHES);
+                    && (converged || released || stalledRefreshes < MAXIMUM_STALLED_FLOOR_SUPPORT_REFRESHES);
             // The wet set is re-derived only from a state that solved its own equations, and carries its own
             // small budget so it never has to compete with the support refreshes for one. How far a tray sits
             // below the water dew point, and how much water it must therefore shed, are readings of a
@@ -1705,14 +1711,14 @@ public final class V3ColumnCalculator {
             // A refresh that only removes — points from the support, trays from the wet set — carries no
             // information the stalled state did not already have. One that adds a wet tray does: the water
             // that tray sheds is a degree of freedom the stalled solve never had, so it keeps the full budget.
-            nextIterations = !converged
+            nextIterations = !converged && !released
                     && refreshed.support().presentPhaseCount() <= prepared.support().presentPhaseCount()
                     && refreshed.wetTrays().wetTrayCount() <= prepared.wetTrays().wetTrayCount()
                     ? Math.min(maximumIterations, STALLED_DROP_REFRESH_ITERATIONS)
                     : maximumIterations;
             if (!refreshed.support().sameRetention(prepared.support())) {
                 refreshes++;
-                if (!converged) stalledRefreshes++;
+                if (!converged && !released) stalledRefreshes++;
             }
             if (!refreshed.wetTrays().sameSet(prepared.wetTrays())) {
                 wetTrayRefreshes++;
@@ -2544,15 +2550,6 @@ public final class V3ColumnCalculator {
         return !input.sideDraws().isEmpty() || !input.steamFeeds().isEmpty() || !input.pumparounds().isEmpty();
     }
 
-    private static int neuralBudgetMilliseconds(V3ColumnInput input, V3InitializationOptions options) {
-        if (options.mode() != V3InitializationOptions.Mode.LNN_FIRST
-                || input.stageCount() < 32
-                || !featureRampRequired(input)) {
-            return options.budgetMilliseconds();
-        }
-        return Math.min(options.budgetMilliseconds(), LARGE_WET_NEURAL_PROBE_MILLISECONDS);
-    }
-
     private static V3SolvePass withRampEvents(V3SolvePass pass, List<String> events) {
         if (events.isEmpty()) return pass;
         return new V3SolvePass(pass.attempt(), pass.audit(), pass.feedMolarEnthalpyJoulesPerMol(), pass.solvePath(),
@@ -2628,7 +2625,15 @@ public final class V3ColumnCalculator {
             // r30/r31: a tray below the water dew point carries a free-water phase. Water vapour is a
             // function of the state rather than a parameter, wet trays gain a free-water unknown and a
             // saturation row, and the tray energy rows carry the aqueous liquid in and out.
-            return (heat ? "v3-wet-mesh-r31-steam" : "v3-wet-mesh-r30-steam")
+            // r32/r33 (E30 of batch 2026-11-04-open-thermo-data): the water is the fluid network's, the steam its
+            // second-virial gas at the steam's partial pressure and the liquid IF97 Region 1 at the tray's
+            // pressure, so accepted wet states move by the steam's residual and the liquid's enthalpy difference.
+            // r34/r35 (E31 of the same batch): condenser carry-over. Under a drum that decants free water, tray
+            // one's free water leaves upward to the drum as entrained liquid, its vapour carries the steam less
+            // that water, and its saturation row has a lever, so a top tray below its water dew point is solved
+            // wet instead of published dry with the WATER_DEW_POINT warning; the condenser duty falls by the
+            // carried water's latent heat.
+            return (heat ? "v3-wet-mesh-r35-steam" : "v3-wet-mesh-r34-steam")
                     + (!input.sideDraws().isEmpty() ? "-side-draws" : "") + trace
                     + (heat ? HEAT_FORMULATION_SUFFIX : "");
         }
@@ -2821,7 +2826,8 @@ public final class V3ColumnCalculator {
      * upward for the vapour the tray below delivers, each pass reading the values the earlier lifts wrote.
      * A profile that re-enters over several trays is therefore restored in one pass; reading the unlifted
      * state instead made reinsertion a front that could only advance one tray per refresh, which is what
-     * exhausted the refresh cap on the wet TJL19 case and lost it entirely at a cap of one.</p>
+     * exhausted the refresh cap on the wet TJL19 case (a Tia Juana test fixture since 2026-11-05) and lost it entirely
+     * at a cap of one.</p>
      *
      * <p>The same two sweeps also run the opposite rule, {@link #capOversizedPoint}: a retained point the seed
      * put far <em>above</em> the material its neighbours deliver is brought back down to that material. The two
@@ -3123,7 +3129,7 @@ public final class V3ColumnCalculator {
      * existing case moves. Above 30 the schedule gains 30, then 60: a request of 40 becomes 4-8-15-30-40 and
      * a request of 64 becomes 4-8-15-30-60-64.</p>
      *
-     * <p>Measured on the plain TJL19 40-tray literature column (feed tray 37, 250 kPa, reflux 4.17, condenser
+     * <p>Measured on the plain TJL19 40-tray literature column (a Tia Juana test fixture since 2026-11-05; feed tray 37, 250 kPa, reflux 4.17, condenser
      * 332.15 K, 8 MW reboiler): the 15 to 40 jump hands Newton a seed whose energy rows are all short by the
      * same 285 kW and whose first direction the line search rejects at iteration 0, so the request fails after
      * 287 s. With the intermediate 30-stage grid the same column converges in 5.4 s.</p>

@@ -14,7 +14,7 @@ class ConservativeTransportTest {
         var model=com.wormzjl.icheme.fluid.support.FluidTestSupport.model(MaterialCatalog.bundled(),"icheme:tjl20_methane");
         var nodes=new ArrayList<PassiveNetwork.Reservoir>();
         for(int component:new int[]{0,1,1}) {
-            double[] n=new double[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK];n[component]=1/model.hydrocarbon.molecularWeight(component);
+            double[] n=new double[model.componentCount()];n[component]=1/model.hydrocarbon.molecularWeight(component);
             nodes.add(new PassiveNetwork.Reservoir(nodes.size()+1,0,model.flashTP(350,101325,n,()->{})));
         }
         var geometry=new PipeResistance.Geometry(10,.05,.000045,0);
@@ -48,7 +48,7 @@ class ConservativeTransportTest {
      * carry (a viscosity of 0/0), and the next interval's start flows were refused at every step size.
      */
     @Test void aVesselNothingReachesKeepsWhatItHoldsItsSolidsIncluded() {
-        var model=FluidTestSupport.model(MaterialCatalog.bundled(),"icheme:pilot_cryogenic");
+        var model=FluidTestSupport.model(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(),"icheme:pilot_cryogenic");
         var crystal=model.crystalSolids().all().getFirst();
         var lng=model.flashTP(120,3e5,new double[]{0,.995,0,.005,0},()->{});
         var tank=PassiveNetwork.emptyVessel(2,0,1,model);

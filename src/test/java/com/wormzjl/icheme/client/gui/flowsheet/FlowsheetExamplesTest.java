@@ -44,7 +44,8 @@ final class FlowsheetExamplesTest {
         }
     }
 
-    /** A material revision bump moves the package's revision; the example then needs writing again on the new one. */
+    /** An example holds the identity of the data its compounds run on (its view's, {@code RevisionNotice.stamped}), so it opens with nothing
+     * to say; a bump of a dataset it feeds moves that identity, and the example then needs writing again on the new data. */
     @Test void eachExampleIsTheCurrentFormatOnTheCurrentPackage() throws IOException {
         var basis = SheetFixture.basis();
         for (var name : FlowsheetExamples.index(BUNDLED)) {
@@ -56,7 +57,8 @@ final class FlowsheetExamplesTest {
         for (var example : FlowsheetExamples.read(BUNDLED)) {
             assertNotNull(example.sheet(), () -> example.stem() + " reads: " + example.refused());
             assertEquals(basis.packageId(), example.sheet().basis().packageId(), example.stem() + ": the network package changed, re-record the example on it");
-            assertEquals(basis.revision(), example.sheet().basis().revision(), example.stem() + ": the package's revision moved, re-record the example (write it again on the new revision and run the sample gates)");
+            String data = com.wormzjl.icheme.science.flowsheet.RevisionNotice.data(example.sheet(), SheetFixture.CATALOG);
+            assertEquals(data, example.sheet().basis().revision(), example.stem() + ": the data its compounds run on moved, re-record the example (write it again on the new data, revision " + data + ", and run the sample gates)");
             assertEquals(basis.components(), example.sheet().basis().components(), example.stem() + ": the package's components changed, re-record the example");
         }
     }

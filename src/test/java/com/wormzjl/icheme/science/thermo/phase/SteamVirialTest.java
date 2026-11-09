@@ -48,7 +48,10 @@ class SteamVirialTest {
             if (t == If97Region2.FLOOR) continue;
             double slope = (SteamVirial.secondVirial(t + 1e-3) - SteamVirial.secondVirial(t - 1e-3)) / 2e-3;
             assertEquals(slope, SteamVirial.temperatureDerivative(t), 1e-6 * Math.abs(slope), t + " K: dB/dT");
+            double capacity = (SteamVirial.residualEnthalpy(t + 1e-3, 1e6) - SteamVirial.residualEnthalpy(t - 1e-3, 1e6)) / 2e-3;
+            assertEquals(capacity, SteamVirial.residualHeatCapacity(t, 1e6), 1e-6 * Math.abs(capacity), t + " K: c_p,res");
         }
+        assertEquals(0.0, SteamVirial.residualHeatCapacity(SteamVirial.MINIMUM_TEMPERATURE - 10, 1e3), "B linear below the floor");
         // Below Region 2's floor B continues linearly, value and slope continuous.
         double floor = SteamVirial.MINIMUM_TEMPERATURE;
         assertEquals(SteamVirial.secondVirial(floor) - 10 * SteamVirial.temperatureDerivative(floor), SteamVirial.secondVirial(floor - 10), 1e-15);
@@ -124,6 +127,31 @@ class SteamVirialTest {
         assertEquals(saturation, wet.waterPartialPressure(), 1e-6 * saturation, "the gas saturated over the free water");
         assertEquals(total, wet.hydrocarbonPartialPressure() + wet.waterPartialPressure(), 1e-6 * total, "Dalton's closure");
         assertEquals(SteamVirial.moles(saturation, hot, wet.vaporVolume()), wet.waterVapor(), 1e-6 * wet.waterVapor());
+    }
+
+    /**
+     * One water model (decision E30 of batch 2026-11-04-open-thermo-data): the column prices its steam and its free water
+     * with the network's functions, bit for bit: the steam the ideal gas plus the virial's residual at its partial
+     * pressure, the liquid IF97 Region 1 at the pressure on the network's water datum.
+     */
+    @Test
+    void theColumnPricesWaterAsTheNetworkDoes() {
+        var catalog = com.wormzjl.icheme.science.material.MaterialCatalog.bundled();
+        String network = catalog.presets().network().packageId();
+        var model = FluidThermodynamics.forNetwork(catalog, network);
+        var water = com.wormzjl.icheme.science.material.MaterialRuntime.with(catalog, network,
+                com.wormzjl.icheme.science.material.MaterialRuntime::water);
+        for (double t : new double[] {280, 332.15, 400, 533.15, 640}) {
+            for (double p : new double[] {5e3, 2.5e5, 1e6}) {
+                double tt = t, pp = p;
+                double steam = com.wormzjl.icheme.science.material.MaterialRuntime.with(catalog, network,
+                        () -> com.wormzjl.icheme.science.column.v3.thermo.V3WaterProperties.steamMolarEnthalpy(tt, pp));
+                assertEquals(model.vaporWaterEnthalpy(t) + SteamVirial.residualEnthalpy(t, p), steam, 0.0, t + " K, " + p + " Pa: steam");
+                assertEquals(model.waterLiquid(t, p).molarEnthalpy(),
+                        com.wormzjl.icheme.science.column.v3.thermo.V3WaterProperties.liquidMolarEnthalpy(water, t, p), 0.0,
+                        t + " K, " + p + " Pa: liquid");
+            }
+        }
     }
 
     /** {@code v_virial / v_IF97 - 1}: the compressibilities' ratio, R and the molar mass cancelling. */

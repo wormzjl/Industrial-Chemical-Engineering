@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class VelocityClampTest {
     private FluidThermodynamics model(double limit){return FluidThermodynamics.forNetwork(MaterialCatalog.bundled(),"icheme:tjl20_methane_nitrogen",limit, FluidThermodynamics.DEFAULT_TRACE_CUTOFF_MOLE_FRACTION);}
     private FluidThermodynamics.State state(FluidThermodynamics model,double pressure,boolean wet) {
-        double[] n=new double[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1];if(wet){n=Arrays.copyOf(V3PengRobinsonThermo.fromRegisteredPackage("icheme:tjl20_methane_nitrogen").crudeFeed("icheme:tia_juana_light_methane").moleFractions(),com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1);n[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK]=.2;}else n[com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN]=1;
+        double[] n=new double[model.componentCount()];if(wet){n=Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo("icheme:tjl20_methane_nitrogen").crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(),model.componentCount());n[model.componentCount()-1]=.2;}else n[com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN]=1;
         var unit=model.flashTP(350,pressure,n,()->{});for(int c=0;c<n.length;c++)n[c]/=unit.volume();return model.flashTP(350,pressure,n,()->{});
     }
     private PassiveNetwork graph(FluidThermodynamics model,boolean reverse,boolean wet,FlowControl control,boolean finite) {
@@ -38,7 +38,7 @@ class VelocityClampTest {
             for(int j=0;j<60;j++){double mid=(lo+hi)/2;if(pipe.pressureDrop(mid,rho,mu)>driving)hi=mid;else lo=mid;}
             assertEquals(PassiveStepSolver.saturated((lo+hi)/2,cap),Math.abs(q),1e-6*cap,"the transported flow is the saturated law's");
             assertEquals(FlowControl.Mode.PASSIVE,result.modes().getFirst());
-            assertArrayEquals(new double[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1],result.externalMoles(),1e-9);assertEquals(0,result.externalEnergyJoule(),1e-6);
+            assertArrayEquals(new double[model.componentCount()],result.externalMoles(),1e-9);assertEquals(0,result.externalEnergyJoule(),1e-6);
             assertEquals(350,result.states().getFirst().temperature()); // fixed boundary, not a clamp-imposed temperature
         }
     }
@@ -53,7 +53,7 @@ class VelocityClampTest {
             var stream=result.pipeTransfers().getFirst().forward();for(double volume:stream.phaseVolumes())assertTrue(volume>0);
             double[] moved=stream.componentMoles();var donor=graph.reservoirs().getFirst();var n=donor.inventory().moles();
             for(int c=0;c<n.length;c++)assertEquals(stream.massKg()*n[c]/donor.state().mass(),moved[c],1e-10+1e-8*Math.abs(moved[c]));
-            assertArrayEquals(new double[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1],result.externalMoles(),1e-9);assertEquals(-result.pumpWorkJoule(),result.externalEnergyJoule(),1e-4);
+            assertArrayEquals(new double[model.componentCount()],result.externalMoles(),1e-9);assertEquals(-result.pumpWorkJoule(),result.externalEnergyJoule(),1e-4);
         }
     }
     @Test void finiteReservoirTemperatureComesFromConservedEnergyAndEosAtTheClampedRate() {

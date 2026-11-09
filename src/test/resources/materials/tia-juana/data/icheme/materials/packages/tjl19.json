@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "id": "icheme:tjl19_dwsim",
+  "revision": "crude-regrouped-r2",
+  "method": "icheme:crude_pr78",
+  "components": [
+    "Ethane",
+    "Propane",
+    "Isobutane",
+    "N-butane",
+    "Isopentane",
+    "N-pentane",
+    "crude_pc01",
+    "crude_pc02",
+    "crude_pc03",
+    "crude_pc04",
+    "crude_pc05",
+    "crude_pc06",
+    "crude_pc07",
+    "crude_pc08",
+    "crude_pc09",
+    "crude_pc10",
+    "crude_pc11",
+    "crude_pc12"
+  ],
+  "advisory_evidence": [
+    "RECONSTRUCTED_PETROLEUM_PROPERTIES: frozen TJL19 reconstruction, not original HYSYS properties; 60 F standard-liquid basis assumed",
+    "ESTIMATED_HEAVY_RESIDUE: empirical critical-property extrapolation retained for flagged petroleum fractions",
+    "THERMAL_FIT: degree-five Cp fit, analytic H relative to 298.15 K; validated over 298.15..900 K",
+    "PR78_MODEL_DIFFERENCE: V3 low-omega coefficient 1.54226; reconstruction source 1.5422",
+    "ESTIMATED_REGROUPING: PC08-12 mass/volume-constrained Tia Juana reconstruction; heavy Tc/Pc extrapolated; global Dalia transport"
+  ]
+}

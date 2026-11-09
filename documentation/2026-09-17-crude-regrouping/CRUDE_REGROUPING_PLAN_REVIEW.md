@@ -45,7 +45,7 @@ Resolve F1-F5 in the plan text (each is a decision plus a gate, not a redesign),
 | Stage counts 2-64; 50 kPa package floor | `:168`; `pressure_min_pascal: 50000` in every package |
 | Campaign settings (10 workers, 30 s, 2 s neural, 16 base iterations, no overlap), three seeds, TF32 off, stage-count folds, two reversed blocks | `documentation/V4_TRANSFORMER_TRAINING_GUIDE.md:63,84-86,112,398,517` |
 | `fluidScienceTest`, `fluidRuntimeTest`, `runFluidGameTestServer`, isolated run id, conditional `tools/development.gradle` with `generalNeuralExperiment` | `build.gradle:89-96,259-268,420`; `tools/development.gradle:31` |
-| Viscosity screen: 7 temperatures, 13 cuts, scores 0.01266 / 0.18895 / 0.22392 / 1.55683 / 2.18774, Dalia heavy cut 2.525 Pa s at 100 C | `viscosity-selection.json`; recomputed |
+| Viscosity screen: 7 temperatures, 13 cuts, scores 0.01266 / 0.18895 / 0.22392 / 1.55683 / 2.18774, Dalia heavy cut viscosity at 100 C (value removed, see the note at the end) | `viscosity-selection.json`; recomputed |
 | Liquid mixture rule is logarithmic (mole-weighted) | `MixtureViscosity.java:116-128` |
 | `research/crude-assays/source-data.json` and `research/viscosity-tools/source-feed.dwxml` exist | directory listing |
 
@@ -198,29 +198,22 @@ The README's 0.874 % / 3.87 % figures were obtained **with four fitted Grunberg-
 crude**. The plan drops those (correctly, for a shared family) and notes the old scores "will not carry
 over", but never states what error replaces them or what result would reject the choice. Recomputed on the
 existing 13-cut curves with the production rule (log-mole average, no interaction term), ratio
-predicted / assay-reported dynamic viscosity:
-
-| Crude | Whole 20-50 C, Dalia family | Residue 50-100 C, Dalia family | Whole, current production | Residue, current production |
-|---|---|---|---|---|
-| Dalia (donor) | 0.50-0.55 | 0.72-0.82 | 0.21-0.27 | 0.16-0.26 |
-| Upper Zakum | 0.65-0.74 | 1.10-1.44 | 0.42 | 0.32-0.34 |
-| Bonga | 0.60-0.61 | 0.30-0.57 | 0.31-0.39 | 0.08-0.26 |
-| WTI Light | 0.73-0.74 | **2.32-4.94** | 0.49-0.57 | 1.08-1.37 |
-| Cold Lake Blend | **0.04-0.11** | **0.03-0.11** | 0.02-0.06 | 0.01-0.03 |
+predicted / assay-reported dynamic viscosity, for the whole crude (20-50 C) and the residue (50-100 C) of
+Dalia (donor), Upper Zakum, Bonga, WTI Light and Cold Lake Blend, on the Dalia family and on the current
+production family. (The table of ratios is removed, see the note at the end.)
 
 Reading: the Dalia family is better than today's DWSIM family on 8 of 10 rows, so the direction is right.
-But (i) even the donor's own whole-crude viscosity comes out at half the measured value - that is the
-mixing rule, not the family; (ii) WTI residue regresses from about 1.2x to 2.3-4.9x; (iii) Cold Lake stays
-10-30x too thin, which matters for a pipeline/pump game loop. A mass-weighted log rule is not a fix
-(6-15x too thick for the donor) - checked.
+But (i) even the donor's own whole-crude viscosity comes out well below the measured value - that is the
+mixing rule, not the family; (ii) WTI residue regresses from slightly too viscous to several times too
+viscous; (iii) Cold Lake stays an order of magnitude too thin, which matters for a pipeline/pump game loop.
+A mass-weighted log rule is not a fix (several times too thick for the donor) - checked.
 
 The mole-weighted result depends on the new MWs from section 2, so family and characterization are coupled
 and the check has to run after the MWs are frozen.
 
 Also: with five donors, two of them outliers, the pointwise median **is** one of the three central donors at
 every point. Dalia's 0.0127 means "Dalia is the median almost everywhere", not "Dalia agrees with a consensus
-to 1.3 %". It is a valid tie-break between three near-equivalent donors (heavy cut at 100 C: 2.37 / 2.52 /
-2.87 Pa s); it should not be quoted as agreement. The 40-150 C window was not varied.
+to 1.3 %". It is a valid tie-break between three near-equivalent donors (their heavy cuts at 100 C lie close together; values removed); it should not be quoted as agreement. The 40-150 C window was not varied.
 
 Fix direction: put the table above (recomputed on the new grid) in the plan as the accepted baseline; add a
 donor round-trip gate through the production lookup route (Dalia assay -> Dalia whole/residue/source-cut
@@ -242,11 +235,11 @@ bundled 25 C caloric fits down to 20 C" was qualified for the old Cp records onl
 
 All six crude packages reference the same property records (`createcheme:tjl19_tjl19_pcNN`; evidence string
 `SHARED_COMPONENT_SURROGATE`). Plan 2.4 says "weighted source moments" without saying whose. The 750 C+
-content differs by two orders of magnitude between crudes (PC13 alone: WTI 0.03 %, Dalia 0.79 %, Tia Juana
-1.41 %, Cold Lake 1.88 % by mass) and the within-cut mean of an open cut depends on each crude's tail.
+content differs by two orders of magnitude between crudes (PC13 alone; the per-crude mass shares are
+removed, see the note at the end) and the within-cut mean of an open cut depends on each crude's tail.
 Fix: state that H1-H5 are Tia Juana-derived (consistent with today) or pooled with stated weights, that the
 producer crudes remain surrogates, and add a sanity gate against the one independent datum available -
-assay-reported 370 C+ residue MW and density (Dalia reports 528 g/mol, 963.2 kg/m3).
+assay-reported 370 C+ residue MW and density (the Dalia assay reports both; values removed).
 
 ### F8 (MAJOR, PLAUSIBLE) - rebinning cdu17 costs more than it gains
 
@@ -579,19 +572,12 @@ same two streams - and got 0.6 % and 1.0 %. A 10 % / 20 % gate on such points ch
 not the mixing model. It will pass for almost any smooth form.
 
 The informative evidence is what one Dalia-fitted correction does to the other crudes. Applying the
-existing Dalia coefficients (0.700, 0.403, 0.073, 0.046) globally with the Dalia family on the current
-13-cut grid, predicted / reported:
-
-| Crude | Whole, uncorrected -> corrected | Residue, uncorrected -> corrected | mean abs ln ratio |
-|---|---|---|---|
-| Dalia (donor) | 0.50-0.55 -> 1.00-1.01 | 0.72-0.82 -> 1.00-1.01 | 0.454 -> 0.003 |
-| Bonga | 0.60-0.61 -> 1.13-1.20 | 0.30-0.57 -> 0.41-0.71 | 0.718 -> 0.400 |
-| Upper Zakum | 0.65-0.74 -> 1.23-1.47 | 1.10-1.44 -> **1.34-2.01** | 0.312 -> **0.407** |
-| WTI Light | 0.73-0.74 -> 1.36-1.40 | 2.32-4.94 -> **2.88-6.80** | 0.793 -> **0.936** |
-| Cold Lake | 0.04-0.11 -> 0.07-0.20 | 0.03-0.11 -> 0.04-0.14 | 2.842 -> 2.375 |
+existing four Dalia coefficients (values removed) globally with the Dalia family on the current 13-cut
+grid gives predicted / reported ratios for the whole crude and the residue of each crude, uncorrected and
+corrected, with the mean absolute ln ratio. (The table is removed, see the note at the end.)
 
 So the correction fixes the donor, helps Bonga and (slightly) Cold Lake, and makes WTI and Upper Zakum
-worse; WTI residue ends 3-7x too viscous. WTI is one of the three pumpable generator presets.
+worse; WTI residue ends several times too viscous. WTI is one of the three pumpable generator presets.
 
 Ask of the plan: (a) register the coefficient count against the six points (four coefficients leave two
 degrees of freedom - say so, or use fewer); (b) make the corrected-versus-uncorrected table for all five
@@ -683,3 +669,7 @@ costs little and avoids touching them twice. Optional; the chosen ordering is wo
 Sound to start once R1-R3 are written in: R3 has to happen before any data is replaced, R2 decides how much
 of the test suite moves at once, and R1 is a decision about accepting worse WTI / Upper Zakum transport in
 exchange for a correct donor.
+
+## Note on removed values (2026-11-05)
+
+O5 of batch [2026-11-04-open-thermo-data](../2026-11-04-open-thermo-data/README.md) removed the values this review quoted from or computed against the ExxonMobil assays (rule R-XOM, DATA_LICENSE_REVIEW.md 3.1): the Dalia residue molar mass and density, the per-crude PC13 shares, the Dalia family's heavy-cut viscosities, the four Dalia mixture coefficients and the two tables of predicted / assay-reported viscosity ratios. The reasoning and the findings stay. Git history before that date holds the original text.

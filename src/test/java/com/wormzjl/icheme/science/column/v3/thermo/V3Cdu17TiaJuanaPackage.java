@@ -10,7 +10,7 @@ import java.util.List;
 final class V3Cdu17TiaJuanaPackage implements V3PropertyPackage {
     static final String PACKAGE_ID = "icheme:cdu17_tjl_acs2018";
     static final String DATASET_REVISION = "cdu17-tjl-kl1976-r2";
-    static final String ASSAY_ID = "icheme:tia_juana_light";
+    static final String ASSAY_ID = "icheme:tia_juana_light_kl1976";
     static final V3Cdu17TiaJuanaPackage INSTANCE = new V3Cdu17TiaJuanaPackage();
     static final double ACS_STANDARD_VOLUME_CUBIC_METRES_PER_HOUR = 662.464;
     static final double PC12_NBP_KELVIN = 1_035.975246548323;

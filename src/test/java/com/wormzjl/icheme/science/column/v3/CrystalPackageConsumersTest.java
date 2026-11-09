@@ -2,13 +2,11 @@ package com.wormzjl.icheme.science.column.v3;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-import com.google.gson.JsonParser;
 import com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo;
 import com.wormzjl.icheme.science.material.CrystalPhasesUnavailable;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.material.MaterialRuntime;
 import com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog;
-import java.util.HashMap;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -24,25 +22,27 @@ import org.junit.jupiter.api.Test;
  * on the bundled catalog and on the dev override that selects the pilot as the network package; column packages build.</li>
  * <li>The neural binding is classical for a crystal package (no model is bound), and a projected inference view of it is
  * refused typed rather than dropping its crystals.</li>
- * <li>The loader refuses a package that declares crystals without a reference spine (the crystal's anchor), so the
- * network, whose crystal competition needs the spine, can never run such a package fluid-only.</li>
- * <li>Presets: a network configuration that selects the pilot cannot carry a crude-assay fluid preset (its physics differ);
+ * <li>The world's package {@code icheme:refinery} admits the CO2-I crystal on its fit ideal gas (decision E27 of batch
+ * 2026-11-04-open-thermo-data; the loader refused crystals without a spine before): the column refuses a view that
+ * holds CO2 and builds a view without it, whose package admits no crystal.</li>
+ * <li>Presets: a network configuration that selects the pilot cannot carry a crude-assay fluid preset (the assay holds compounds the pilot lacks);
  * the pilot has no assay, so no column preset can name it.</li>
  * </ul>
  *
- * The eight bundled packages admit no crystal, so none of these guards changes them (their pins are unmoved:
+ * The column packages admit no crystal, so none of these guards changes them (their pins are unmoved:
  * {@code bundledPackageRevisionsAndSharedPhysicsAreUnchanged}, {@code LegacyNetworkPathPinTest}). Ported from the branch's
  * {@code 7bf22842} in milestone M4 of the unified thermo port (main's registry is {@link V3NeuralRegistry}).
  */
 class CrystalPackageConsumersTest {
     private static final String PILOT = "icheme:pilot_cryogenic";
     private static final String CO2_I = "icheme:crystal_carbon_dioxide_i";
+    private static final String REFINERY = "icheme:refinery";
     private static final String PACKAGE = "data/icheme/materials/packages/pilot_cryogenic.json";
 
     @AfterEach void reset() { MaterialRuntime.reset(); }
 
     @Test void theColumnRefusesAPackageWithCrystalsTyped() {
-        for (MaterialCatalog catalog : List.of(MaterialCatalog.bundled(), PilotCryogenicTestCatalog.catalog())) {
+        for (MaterialCatalog catalog : List.of(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PilotCryogenicTestCatalog.catalog())) {
             var refused = assertThrows(CrystalPhasesUnavailable.class,
                     () -> MaterialRuntime.with(catalog, PILOT, () -> V3PengRobinsonThermo.fromRegisteredPackage(PILOT)));
             assertEquals(PILOT, refused.packageId());
@@ -51,11 +51,12 @@ class CrystalPackageConsumersTest {
             assertTrue(refused.getMessage().contains("crystal"), refused.getMessage());
         }
         // A column package builds as before.
-        var column = MaterialRuntime.with(MaterialCatalog.bundled(), "icheme:tjl20_methane",
+        var column = MaterialRuntime.with(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), "icheme:tjl20_methane",
                 () -> V3PengRobinsonThermo.fromRegisteredPackage("icheme:tjl20_methane"));
         assertEquals("icheme:tjl20_methane", column.packageId());
-        // No bundled package other than the pilot admits a crystal.
-        for (var p : MaterialCatalog.bundled().packages().values()) assertEquals(p.id().equals(PILOT), !p.crystals().isEmpty(), p.id());
+        // Only the pilot and the world's package admit a crystal, both CO2-I.
+        for (var p : com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot().packages().values())
+            assertEquals(p.id().equals(PILOT) || p.id().equals(REFINERY) ? List.of(CO2_I) : List.of(), p.crystals(), p.id());
     }
 
     @Test void theNeuralBindingIsClassicalForAPackageWithCrystalsAndItsProjectionIsRefused() {
@@ -66,28 +67,33 @@ class CrystalPackageConsumersTest {
                 List.of(new V3ColumnSpecification.CondenserOutletTemperature(200), new V3ColumnSpecification.OrganicRefluxRatio(2),
                         new V3ColumnSpecification.ReboilerDuty(0)), List.of());
         assertSame(V3NeuralInitializer.UNAVAILABLE, V3NeuralRegistry.bundled().bind(catalog, input), "no model binds a crystal package");
+        // A lens of a request whose view on its active compounds admits a crystal is refused, never projected fluid-only.
+        var cp = List.of(30.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        var physics = new com.wormzjl.icheme.science.material.TrainedPhysics("pr78", 298.15, 700, List.of(
+                new com.wormzjl.icheme.science.material.TrainedPhysics.Compound("Nitrogen", 126.2, 3.4e6, 0.04, cp),
+                new com.wormzjl.icheme.science.material.TrainedPhysics.Compound("Methane", 190.6, 4.6e6, 0.01, cp),
+                new com.wormzjl.icheme.science.material.TrainedPhysics.Compound("CarbonDioxide", 304.1, 7.4e6, 0.22, cp)), List.of(),
+                com.wormzjl.icheme.science.material.TrainedPhysics.Water.of(pilot.water()));
         var projection = assertThrows(CrystalPhasesUnavailable.class,
-                () -> catalog.inferenceView(PILOT, List.of("Nitrogen", "Methane"), "icheme:tjl20_methane_nitrogen", true));
+                () -> catalog.inferenceView(PILOT, List.of("Nitrogen", "Methane", "CarbonDioxide"), physics));
         assertEquals("a neural inference projection", projection.consumer());
     }
 
-    @Test void theLoaderRefusesCrystalsWithoutTheirSpine() {
-        var resources = new HashMap<>(MaterialCatalog.bundled().resources());
-        String path = "data/icheme/materials/packages/tjl20_nitrogen.json";
-        var record = JsonParser.parseString(resources.get(path)).getAsJsonObject();
-        assertFalse(record.has("spine"));
-        var list = new com.google.gson.JsonArray();
-        list.add(CO2_I);
-        record.add("crystals", list);
-        resources.put(path, record.toString());
-        var refused = assertThrows(IllegalArgumentException.class, () -> MaterialCatalog.parse(resources));
-        assertTrue(refused.getMessage().contains("declares crystals without a reference spine"), refused.getMessage());
+    @Test void theColumnRefusesOnlyARefineryViewThatHoldsCarbonDioxide() {
+        var catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
+        var co2 = catalog.restrict(REFINERY, List.of("Methane", "Ethane", "CarbonDioxide"));
+        var refused = assertThrows(CrystalPhasesUnavailable.class,
+                () -> MaterialRuntime.with(co2, REFINERY, () -> V3PengRobinsonThermo.fromRegisteredPackage(REFINERY)));
+        assertEquals(List.of(CO2_I), refused.crystals());
+        var dry = catalog.restrict(REFINERY, List.of("Methane", "Ethane", "HydrogenSulfide"));
+        assertTrue(dry.requirePackage(REFINERY).crystals().isEmpty());
+        assertEquals(REFINERY, MaterialRuntime.with(dry, REFINERY, () -> V3PengRobinsonThermo.fromRegisteredPackage(REFINERY)).packageId());
     }
 
     @Test void aPilotNetworkCarriesNoCrudeAssayPreset() {
         var refused = assertThrows(IllegalArgumentException.class, () -> PilotCryogenicTestCatalog.parseWith(PilotCryogenicTestCatalog.NETWORK,
-                o -> o.getAsJsonArray("fluid_presets").add("icheme:tia_juana_light_methane")));
-        assertTrue(refused.getMessage().contains("physics differ"), refused.getMessage());
+                o -> o.getAsJsonArray("fluid_presets").add("icheme:medium_crude")));
+        assertTrue(refused.getMessage().contains("holds compounds outside the network package"), refused.getMessage());
         assertTrue(PilotCryogenicTestCatalog.catalog().requirePackage(PILOT).assays().isEmpty(), "no assay: no column preset can name the pilot");
         assertTrue(PilotCryogenicTestCatalog.parseWith(PACKAGE, o -> {}).requirePackage(PILOT).crystals().contains(CO2_I));
     }

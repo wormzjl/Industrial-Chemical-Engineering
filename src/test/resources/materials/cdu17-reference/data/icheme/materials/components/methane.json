@@ -4,6 +4,9 @@
   "kind": "chemical",
   "translation_key": "material.icheme.methane",
   "fallback": "Methane",
+  "aliases": [
+    "methane"
+  ],
   "appearance": {
     "color": "#F3F4EA",
     "transparency": 0.85,

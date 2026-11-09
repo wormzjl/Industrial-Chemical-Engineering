@@ -398,7 +398,7 @@ class V3PumparoundCalculatorTest {
 
     private static V3ColumnInput v1ScaleInput(String packageId, List<V3PumparoundSpec> pumparounds) {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage(packageId);
-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light");
+        V3CrudeFeed crude = thermo.crudeFeed(com.wormzjl.icheme.science.material.Cdu17TestCatalog.tiaJuanaAssay(packageId));
         double[] flows = crude.moleFractions();
         double totalFlow = 2_610.7 * 1_000.0 / 3_600.0;
         for (int component = 0; component < flows.length; component++) flows[component] *= totalFlow;

@@ -1,0 +1,20 @@
+diff --git a/src/test/java/com/wormzjl/icheme/science/flowsheet/FlowsheetColumnTest.java b/src/test/java/com/wormzjl/icheme/science/flowsheet/FlowsheetColumnTest.java
+index 4bd59b129..882937e2a 100644
+--- a/src/test/java/com/wormzjl/icheme/science/flowsheet/FlowsheetColumnTest.java
++++ b/src/test/java/com/wormzjl/icheme/science/flowsheet/FlowsheetColumnTest.java
+@@ -316,6 +316,15 @@ final class FlowsheetColumnTest {
+         }
+     }
+ 
++    @Test void probeColdDuties() {
++        System.setProperty("icheme.formg2", "true");
++        for (double mw : new double[]{69.9, 70.2, 70.35, 70.4, 70.45, 70.6, 70.9}) {
++            System.out.println("PROBE start " + mw);
++            var run = onDuty(mw * 1e6).run();
++            System.out.println("PROBE end " + mw + " " + run.status() + " passes " + (run.loops().isEmpty() ? "-" : run.loops().getFirst().passes()));
++        }
++    }
++
+     @Test void aFifteenPercentRecycleCloses() {
+         var run = sample(HOLDS).unit("M-1", "mixer", "{}").unit("S-1R", "splitter", "{\"outlets\":[{\"id\":\"back\",\"share\":0.15},{\"id\":\"on\"}]}")
+                 .feed("CRUDE", "M-1", "in/1", crude(298.15, 8e5)).line("MIXED", "M-1", "out", "P-101", "in").line("S-11", "E-102", "b", "S-1R", "in")

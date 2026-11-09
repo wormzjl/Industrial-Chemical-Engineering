@@ -9,6 +9,7 @@ import java.util.concurrent.CancellationException;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
+@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.TiaJuanaExtension.class)
 class V3NeuralInitializationTest {
     private static V3ColumnInput input() {
         var thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:tjl19_dwsim");
@@ -20,7 +21,7 @@ class V3NeuralInitializationTest {
     }
 
     private static V3InitializationOptions options(V3InitializationOptions.Mode mode) {
-        return new V3InitializationOptions(mode,V3InitializationOptions.WetStart.AUTO,16,5_000,
+        return new V3InitializationOptions(mode,V3InitializationOptions.WetStart.AUTO,16,800_000,
                 V3InitializationOptions.Correction.PROGRESS);
     }
 
@@ -120,8 +121,7 @@ class V3NeuralInitializationTest {
      * Newton iterations, which reads as a seed rejected before its first step. It is a reporting artefact:
      * the exception unwinds the attempt and the published failure used to carry a zero placeholder. The
      * calibration run below uses the observation trace to find the exact checkpoint at which the second
-     * Newton iteration starts, so the stall that follows lands inside the solve on any machine rather than
-     * at a wall-clock guess.</p>
+     * Newton iteration starts, and a poll budget of that size runs out inside the solve.</p>
      */
     @Test void exhaustedBudgetPublishesTheInFlightIterationCount() {
         V3ColumnInput input = input();
@@ -133,7 +133,7 @@ class V3NeuralInitializationTest {
         List<int[]> samples = new java.util.ArrayList<>();
         V3SimultaneousColumnSolver.NewtonTrace calibration = (iteration,residual,merit) -> samples.add(new int[]{iteration,checkpoints[0]});
         V3ColumnCalculator.calculateWithNeuralTrace(input,()->checkpoints[0]++,
-                new V3InitializationOptions(V3InitializationOptions.Mode.LNN_ONLY,V3InitializationOptions.WetStart.AUTO,16,60_000,
+                new V3InitializationOptions(V3InitializationOptions.Mode.LNN_ONLY,V3InitializationOptions.WetStart.AUTO,16,10_000_000,
                         V3InitializationOptions.Correction.PROGRESS),
                 model,calibration, null);
         // A Newton attempt restarts its iteration counter from zero, so the first run of increasing indices
@@ -144,12 +144,12 @@ class V3NeuralInitializationTest {
         assertEquals(1,samples.get(1)[0]);
         int stallAt = samples.get(1)[1];
 
-        int[] seen = {0};
-        // The production two-second allowance, spent by a stall the checkpoint sequence places inside the solve.
+        // A poll budget the checkpoint sequence places inside the second Newton iteration. The learned route counts only
+        // its own polls, never more than the request's, so it runs out at or after that checkpoint, inside the attempt.
         var budgeted = new V3InitializationOptions(V3InitializationOptions.Mode.LNN_ONLY,
-                V3InitializationOptions.WetStart.AUTO,16,2_000,V3InitializationOptions.Correction.PROGRESS);
+                V3InitializationOptions.WetStart.AUTO,16,stallAt,V3InitializationOptions.Correction.PROGRESS);
         var failure = assertInstanceOf(V3ColumnOutcome.Failure.class,V3ColumnCalculator.calculate(input,
-                ()->{ if (seen[0]++==stallAt) pause(2_500); },0,0,budgeted,model, V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO));
+                ()->{},0,0,budgeted,model, V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO));
         String events = String.join(" | ",failure.diagnostics().events());
         assertTrue(events.contains("neural budget exhausted"),events);
         assertTrue(failure.diagnostics().newtonIterations()>=1,events);
@@ -202,10 +202,6 @@ class V3NeuralInitializationTest {
         }
         return new V3NeuralSeed(seed.input(),seed.propertyRevision(),seed.branch(),liquid,vapor,temperatures,
                 seed.freeWater(),seed.wetTrays());
-    }
-
-    private static void pause(long millis) {
-        try { Thread.sleep(millis); } catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
     }
 
     private static V3NeuralInitializer fixed(V3NeuralSeed seed) {

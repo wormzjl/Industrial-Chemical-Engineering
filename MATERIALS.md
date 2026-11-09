@@ -1,15 +1,15 @@
 # Material data packs
 
 Production material values are JSON resources. Java implements equations and validation, not component tables.
-The active crude family has 12 pseudocomponents (`crude_pc01`–`crude_pc12`): 19 hydrocarbons with methane, 18 without, and 20 non-water species in the nitrogen network extension. CDU17 is a test-only reference. Exact chemicals and water retain their data. PR78 is the only equilibrium model that runs; the bundled pilot package adds reference spines, temperature-dependent E-PPR78 interactions, volume-translation anchors and a crystal. NRTL parameter records can be loaded and validated; selecting an NRTL package for a column calculation reports `Thermodynamic solver unavailable: nrtl`, and the fluid network accepts PR78 packages only.
+The bundled data holds 45 compounds and water: seven light ends (Methane to N-pentane), twelve crude cuts (`crude_pc01`–`crude_pc12`, shared by every crude), Nitrogen, and 25 refinery compounds, Hydrogen to the xylenes and mercaptans, with CarbonDioxide and its crystal CO2-I. The four generated crude grades are compositions on these compounds. CDU17 is a test-only reference. Exact chemicals and water retain their data. PR78 is the only equilibrium model that runs. NRTL parameter records can be loaded and validated; selecting an NRTL package for a column calculation reports `Thermodynamic solver unavailable: nrtl`, and the fluid network accepts PR78 packages only.
 
-| Bundled package | Components | Used by |
+| Bundled package | Compounds | Used by |
 |---|---|---|
-| `icheme:tjl20_methane` | basis `icheme:crude_19`: Methane, Ethane, Propane, Isobutane, N-butane, Isopentane, N-pentane, `crude_pc01`–`crude_pc12` | default column preset `tia_juana`, Tia Juana fluid preset, the neural model |
-| `icheme:tjl19_dwsim` | basis `icheme:crude_18`: the same without Methane | hidden literature column preset |
-| `icheme:tjl20_methane_nitrogen` | basis `icheme:network`: `crude_19` plus Nitrogen | the fluid network, column preset `tia_juana_nitrogen` |
-| `icheme:<crude>_tjl20` for `wti_light_export`, `upper_zakum`, `bonga`, `dalia`, `cold_lake_blend` | basis `icheme:crude_19` | one column preset each; WTI and Cold Lake also fluid presets |
-| `icheme:pilot_cryogenic` | Nitrogen, Methane, Ethane, CarbonDioxide | the fluid network, when selected (see "Selecting the pilot package") |
+| `icheme:tjl20_methane` | Methane, Ethane, Propane, Isobutane, N-butane, Isopentane, N-pentane, `crude_pc01`–`crude_pc12` | the column preset `medium_crude` |
+| `icheme:tjl20_methane_nitrogen` | extends `tjl20_methane` with Nitrogen | the parent of `icheme:refinery` |
+| `icheme:refinery` | extends `tjl20_methane_nitrogen` with the 25 refinery compounds; admits the crystal `icheme:crystal_carbon_dioxide_i` | the fluid network (`networks/default.json`) |
+
+All three run on the method `icheme:crude_pr78`. The assays `icheme:light_crude`, `icheme:medium_crude`, `icheme:heavy_crude` and `icheme:oil_sand_dilbit` apply to every package that holds their compounds (see "Generated crude grades"). Tia Juana Light and the pilot package `icheme:pilot_cryogenic` are test overlays under `src/test/resources/materials/` (see "The pilot package").
 
 ## Installing and editing
 
@@ -17,15 +17,15 @@ Copy `examples/material-override` into a world's `datapacks` directory, enable i
 `/reload`. The example replaces the property record `icheme:tjl20_methane` to give methane an illustrative
 standard-liquid density (357.0 instead of 356.07 kg/m³); it is an editing example, not a measured reference dataset.
 Its other fields are the bundled record's (a test keeps them so), except its `revision`
-(`tjl20-methane-nist-r1-example-density`): an edit declares itself with a bump of the edited record's revision. Methane
+(`tjl20-methane-spine-r3-example-density`): an edit declares itself with a bump of the edited record's revision. Methane
 belongs to the network package, so the bumped revision changes the network's fluid identity: on a running world the
 reload holds the fluid network until the data is restored or the world is reopened (see "Reloads"); a new world starts
 on the edited record.
 
 Records live under `data/<namespace>/materials/<kind>/<filename>.json`. Minecraft chooses the highest-priority
 resource at each path. A replacement is a **whole record**, not a field merge. Different resource paths declaring
-the same ID within one kind are errors. Assay IDs are unique within a package, so `icheme:tjl20_methane` and
-`icheme:tjl20_methane_nitrogen` both declare `icheme:tia_juana_light_methane`.
+the same ID within one kind are errors. An assay ID is unique in the catalog, and the assay applies to every package
+that holds its non-zero compounds.
 
 Every record requires `schema_version: 1`. File/resource identifiers follow Minecraft's lowercase
 resource-location rules. Component IDs are separate case-sensitive identifiers, up to 64 characters matching
@@ -33,13 +33,15 @@ resource-location rules. Component IDs are separate case-sensitive identifiers, 
 
 ## Record schema and units
 
-The bundled files are complete examples of all 14 record kinds: `components`, `properties`, `interactions`, `group_interactions`, `spine`, `crystals`, `packages`, `bases`, `assays`, `water`, `solids`, `transport`, `presets` and `networks`; any other kind directory fails loading. Numeric data is finite and in SI units, except the group-interaction matrix, which keeps the published MPa. There are no user-defined executable expressions. A new equation form requires a registered Java implementation and corresponding validation; arbitrary equation-type strings fail loading.
+There are 14 record kinds: `components`, `properties`, `interactions`, `group_interactions`, `spine`, `crystals`, `methods`, `packages`, `assays`, `water`, `solids`, `transport`, `presets` and `networks`; any other kind directory fails loading. The bundled files are complete examples of every kind but `group_interactions` and `spine`, whose only records are in the pilot test overlay. Numeric data is finite and in SI units, except the group-interaction matrix, which keeps the published MPa. There are no user-defined executable expressions. A new equation form requires a registered Java implementation and corresponding validation; arbitrary equation-type strings fail loading.
 
 ### `components`
 
 Required: `id`, `kind`, `translation_key`, `fallback`, `appearance` (see "Fluid color and transparency"). Kinds are `chemical`, `petroleum_fraction`, and `lump`.
 For a chemical, the English fallback must exactly equal its internal ID. Ordinary lumps have independent
 descriptive labels. Component identity does not imply that every source dataset has identical property estimates.
+
+Optional: `properties`, the compound's default dataset (a `properties` record of this compound), which a package uses unless it names another; `aliases`, old IDs that resolve to this compound in every package that holds it (an alias names one compound and is not itself a component ID); and `identifiers`, text such as a CAS number, which is provenance only.
 
 Petroleum fractions additionally require `cut`:
 
@@ -80,24 +82,30 @@ Physical fields:
 Coefficient n has units J/(mol·K^(n+1)). Ideal-gas enthalpy is its analytic integral from 298.15 K, in J/mol,
 with zero enthalpy at that datum. Existing cubic fits retain their original evaluation order when E and F are zero.
 
-An optional `temperature_min_kelvin` gives the fit's own lower end where it lies above the record's (it must lie above the record's `temperature_min_kelvin` and at most 298.15 K). On the fluid network the fit's data range is the component's `fluid_domain` temperature range (else the record's own), raised to this end; past it the heat capacity is held at the end value and integrated, so enthalpy and entropy stay continuous with their slopes. Nitrogen declares 273.16 K: its fit's value there, 29.111 J/(mol·K), is within 0.05 % of the NIST zero-pressure Cp down to its 63.151 K triple point (owner decision D37). The column evaluates the polynomial itself, inside its package's range.
+An optional `temperature_min_kelvin` gives the fit's own lower end where it lies above the record's (it must lie above the record's `temperature_min_kelvin` and at most 298.15 K). On the fluid network the fit's data range is the component's `fluid_domain` temperature range (else the record's own), raised to this end; past it the heat capacity is held at the end value and integrated, so enthalpy and entropy stay continuous with their slopes. Nitrogen declares 273.16 K: its fit passes through the Span et al. 2000 ideal-gas value there, 29.116 J/(mol·K), within 0.05 % of the zero-pressure Cp down to its 63.151 K triple point (owner decision D37). The column evaluates the polynomial itself, inside its package's range.
 
 `models` is required and may contain only `pr78`, with `critical_temperature_kelvin`, `critical_pressure_pascal`, and
 dimensionless `acentric_factor`. A PR78 package requires those fields for each selected property dataset. NRTL is a mixture
 activity model: its binary parameters belong in an interaction set, not in this pure-component record.
 
-`volume_translation` (optional, needs `pr78`) gives `type: "saturated_liquid_reduced_temperature"`, `reduced_temperature` in (0, 1), `temperature_kelvin` (that fraction of the record's PR78 critical temperature), `pressure_pascal` and `molar_volume_m3_per_mol` of the reference saturated liquid there, and the texts `reference`, `oracle` and `source`. It sets a constant shift c = v_ref − v_PR,L(T, P); a record whose PR78 has no separate liquid root there fails loading. Only spine packages read it, ahead of the global calibration point (`transport`); the four `icheme:pilot_*` records carry one at Tr = 0.8.
+`volume_translation` (optional, needs `pr78`) gives `type: "saturated_liquid_reduced_temperature"`, `reduced_temperature` in (0, 1), `temperature_kelvin` (that fraction of the record's PR78 critical temperature), `pressure_pascal` and `molar_volume_m3_per_mol` of the reference saturated liquid there, and the texts `reference`, `oracle` and `source`. It sets a constant shift c = v_ref − v_PR,L(T, P); a record whose PR78 has no separate liquid root there fails loading. Only spine packages read it, ahead of the global calibration point (`transport`); the pilot overlay's four `icheme:pilot_*` records carry one at Tr = 0.8.
 
-Separate datasets may reference the same component. The bundled crude packages share their selected property records; the methane-free package omits Methane, the network package adds Nitrogen (`icheme:fluid_nitrogen`), and the pilot has its own `icheme:pilot_*` records.
+Separate datasets may reference the same component. The bundled packages use each compound's default dataset (Nitrogen's is `icheme:fluid_nitrogen`, the refinery compounds' `icheme:chemsep_*`); the pilot overlay has its own `icheme:pilot_*` records.
 
-`fluid_domain` (fluid network only) gives the component's data range on the network: `temperature_min_kelvin`, `temperature_max_kelvin`, `pressure_min_pascal`, `pressure_max_pascal` and `evidence`. It is separate from the record's own range, which is the column's, and the column's physics comparison (`samePhysics`) leaves it out; like every field of the record, an edit of it bumps the record's `revision`. In a package without spines its temperature range sets the `ideal_gas_cp` fit's data range (above); in a spine package the ideal-gas data range comes from the spine segments instead. Leaving it never refuses a state. The bundled crude and light records declare 293.15..900 K (the ambient continuation of their 298.15 K fits), nitrogen 63.151..900 K and the pilot records their triple point..1200 K.
+`fluid_domain` (fluid network only) gives the component's data range on the network: `temperature_min_kelvin`, `temperature_max_kelvin`, `pressure_min_pascal`, `pressure_max_pascal` and `evidence`. It is separate from the record's own range, which is the column's, and the column's physics comparison (`samePhysics`) leaves it out; like every field of the record, an edit of it bumps the record's `revision`. In a package without spines its temperature range sets the `ideal_gas_cp` fit's data range (above); in a spine package the ideal-gas data range comes from the spine segments instead. Leaving it never refuses a state. The bundled crude and light records declare 293.15..900 K (the ambient continuation of their 298.15 K fits), nitrogen 63.151..900 K, the refinery compounds from the higher of their ChemSep Cp data start and their triple point to 900 K at 100 Pa..2 MPa, and the pilot records their triple point..1200 K.
+
+Three optional sub-records hold data for later models. No model reads them yet, so each has its own `revision`, no identity carries them, and an edit moves no world, result or neural model. Each also has `estimated` and `source`:
+
+- `freezing`: `normal_melting_kelvin`, and optional `triple_point_kelvin`, `triple_point_pascal` and `fusion_enthalpy_j_per_mol`. A compound with a crystal record must agree with the crystal's anchor within 0.005 K (its triple point if the sub-record gives one, else its melting point). A freezing point is never a validity bound.
+- `thermochemistry` (also on the water model): `formation_enthalpy_j_per_mol` of the ideal gas at 298.15 K (0 for an element in its reference state) and `elements`, the positive atom counts of C, H, N, O and S per molecule (a cut's are estimated and need not be whole). Heats of combustion, oxygen demand and flue gas follow by Hess's law and are not stored.
+- `flammability`: `lfl_volume_fraction` in (0, 1) and, where known, `ufl_volume_fraction` above it, in air and constant with temperature. A compound or cut that does not burn has none.
 
 ### `interactions`
 
 Required: `id`, `model`, `source`, `pairs`. Each pair names `first` and `second`. Self-pairs and duplicate unordered
 pairs are errors. A PR78 pair supplies dimensionless `kij`; the evaluator uses the same value in both directions.
 
-A `pr78` record may add `rule: {"type": "eppr78", "group_interactions": <record id>}`: each pair without an explicit pair then gets the E-PPR78 kij(T) (Jaubert et al. 2022) from that matrix and the group counts of the package's spines; an explicit pair keeps its constant kij. The rule needs a package `spine`. A group scheme other than the matrix's, an unknown group, a needed group pair missing from the matrix, or a term with A = 0 and B ≠ 0 fails loading. The bundled record `icheme:pilot_cryogenic` lists no pairs and resolves all six pilot pairs this way.
+A `pr78` record may add `rule: {"type": "eppr78", "group_interactions": <record id>}`: each pair without an explicit pair then gets the E-PPR78 kij(T) (Jaubert et al. 2022) from that matrix and the group counts of the package's spines; an explicit pair keeps its constant kij. The rule needs a package `spine`. A group scheme other than the matrix's, an unknown group, a needed group pair missing from the matrix, or a term with A = 0 and B ≠ 0 fails loading. The pilot overlay's record `icheme:pilot_cryogenic` lists no pairs and resolves all six pilot pairs this way. The bundled libraries are `icheme:tjl20`, the crude family's frozen matrix, and `icheme:dwsim_refinery_pr78` and `icheme:dwsim_refinery_pr78_co2` for the pairs that involve a refinery compound (DWSIM 10.2.5 `kij_pr.dat`, else the DECHEMA Peng-Robinson value in ChemSep).
 
 An NRTL pair supplies all of:
 
@@ -119,35 +127,42 @@ Package temperature limits must fit within every selected pair's validity interv
 
 ### `group_interactions`
 
-The symmetric A_kl/B_kl matrix of a group-contribution rule. Required: `id`, `revision`, `source`, `provenance` (an object, not interpreted), `scheme`, `units` (exactly `MPa`, as published), `groups` (1–64 `{number, name}` numbered 1..n in order) and `pairs` (`{first, second, a_mpa, b_mpa}`, two different groups, each unordered pair at most once). Scheme `eppr78-2022` must list the 40 E-PPR78 groups by number and name. The bundled `icheme:eppr78_2022` is Table S4 of the supporting information of Jaubert et al. (2022).
+The symmetric A_kl/B_kl matrix of a group-contribution rule. Required: `id`, `revision`, `source`, `provenance` (an object, not interpreted), `scheme`, `units` (exactly `MPa`, as published), `groups` (1–64 `{number, name}` numbered 1..n in order) and `pairs` (`{first, second, a_mpa, b_mpa}`, two different groups, each unordered pair at most once). Scheme `eppr78-2022` must list the 40 E-PPR78 groups by number and name. The pilot overlay's `icheme:eppr78_2022` is Table S4 of the supporting information of Jaubert et al. (2022).
 
 ### `spine`
 
 One species' ideal gas and formation data; in a package that lists spines they are the only ideal-gas source (decision D6). Required: `id`, `component`, `revision` (a revision token, see "Reloads, scientific identity, and verification"), `source`, `molar_mass_kg_per_mol`, `formation_enthalpy` (`value_j_per_mol`, `uncertainty_j_per_mol`, `temperature_kelvin` = 298.15, `source`), `standard_entropy` (`value_j_per_mol_kelvin`, `pressure_pascal` = 100000, `source`, optional `uncertainty_j_per_mol_kelvin`), `ideal_gas`, `groups` (`scheme: "eppr78-2022"` and `counts`, a positive integer per group name) and `coverage` (`grade` `qualified`, `estimated_declared_error`, `research_only` or `unavailable`, and `evidence`).
 
-`ideal_gas.segments` holds 1–16 contiguous segments that contain 298.15 K, each with `type`, `temperature_min_kelvin`, `temperature_max_kelvin`, `source`, `revision` and an optional own `coverage`: `helmholtz_ideal_terms` (CoolProp's ideal-gas Helmholtz terms: `reducing_temperature_kelvin`, `gas_constant_j_per_mol_kelvin` and 1–16 `terms` of type `log_tau`, `power`, `planck_einstein`, `planck_einstein_function_t` or `planck_einstein_cosh`), or the NASA polynomials `nasa9`/`nasa7` (nine or seven `coefficients`; the gas constant defaults to CEA's 8.31451 J/(mol·K), which a `cea-` revision must use). Every gas constant is the molar gas constant within 1e-5 relative. Enthalpy and entropy are integrated in closed form and chained so that h(298.15 K) is the formation enthalpy and s(298.15 K, 1e5 Pa) the standard entropy; a Cp step at a join above `ideal_gas.maximum_cp_step_fraction` (default 0.005) fails loading. Past the segments Cp is held and integrated. The four bundled spines belong to the pilot.
+`ideal_gas.segments` holds 1–16 contiguous segments that contain 298.15 K, each with `type`, `temperature_min_kelvin`, `temperature_max_kelvin`, `source`, `revision` and an optional own `coverage`: `helmholtz_ideal_terms` (CoolProp's ideal-gas Helmholtz terms: `reducing_temperature_kelvin`, `gas_constant_j_per_mol_kelvin` and 1–16 `terms` of type `log_tau`, `power`, `planck_einstein`, `planck_einstein_function_t` or `planck_einstein_cosh`), or the NASA polynomials `nasa9`/`nasa7` (nine or seven `coefficients`; the gas constant defaults to CEA's 8.31451 J/(mol·K), which a `cea-` revision must use). Every gas constant is the molar gas constant within 1e-5 relative. Enthalpy and entropy are integrated in closed form and chained so that h(298.15 K) is the formation enthalpy and s(298.15 K, 1e5 Pa) the standard entropy; a Cp step at a join above `ideal_gas.maximum_cp_step_fraction` (default 0.005) fails loading. Past the segments Cp is held and integrated. The only spines are the pilot overlay's four.
 
 ### `crystals`
 
-One pure crystal of a component, anchored at its triple point to the fluid model of the package that uses it (g_s = μ_liquid and h_s = h_liquid − ΔH_fus there). Required: `id`, `component`, `crystal` (a description), `revision`, `source`, `coverage`, `anchor` (`type: "triple_point"`, `temperature_kelvin`, `pressure_pascal`, `fusion_enthalpy_j_per_mol`, `source`, optional `estimated`) and one model. Either `heat_capacity.segments` (1–16 contiguous segments, each with its range and `source`: a `polynomial`, Cp = Σ c_k T^k with 1–8 `coefficients`, or a `table` of 2–256 `temperatures_kelvin` and `values_j_per_mol_kelvin` interpolated linearly), `molar_volume` (`value_m3_per_mol` at `reference_temperature_kelvin` and `reference_pressure_pascal`, `thermal_expansion_per_kelvin`, `isothermal_compressibility_per_pascal`, a temperature and pressure range, `source`) and `transitions` (`temperature_kelvin`, `enthalpy_j_per_mol`, `volume_change_m3_per_mol`, `to_crystal`); or a `gibbs_function` of `type: "jaeger_span_2012"` (CO2-I, Jaeger and Span 2012), whose integration constants are solved from the anchor. A record that lacks the expansion, compressibility or volume range, or whose data do not reach its anchor, loads only as `research_only` or `unavailable` and refuses evaluation. Past the declared ranges Cp and the volume slopes are held. Bundled: `icheme:crystal_carbon_dioxide_i` (fusion enthalpy 9019 J/mol, admitted by the pilot) and `icheme:crystal_ice_ih` (fitted to IAPWS R10-06 over 10–273.16 K; the water model's ice). On the fluid network a crystal is a solid population of a vessel, exchanging mass with its component only at the vessel's refresh; a crystal and a `solids` record never share an ID (owner decision D23: crystals are solids).
+One pure crystal of a component, anchored at its triple point to the fluid model of the package that uses it (g_s = μ_liquid and h_s = h_liquid − ΔH_fus there). Required: `id`, `component`, `crystal` (a description), `revision`, `source`, `coverage`, `anchor` (`type: "triple_point"`, `temperature_kelvin`, `pressure_pascal`, `fusion_enthalpy_j_per_mol`, `source`, optional `estimated`) and one model. Either `heat_capacity.segments` (1–16 contiguous segments, each with its range and `source`: a `polynomial`, Cp = Σ c_k T^k with 1–8 `coefficients`, or a `table` of 2–256 `temperatures_kelvin` and `values_j_per_mol_kelvin` interpolated linearly), `molar_volume` (`value_m3_per_mol` at `reference_temperature_kelvin` and `reference_pressure_pascal`, `thermal_expansion_per_kelvin`, `isothermal_compressibility_per_pascal`, a temperature and pressure range, `source`) and `transitions` (`temperature_kelvin`, `enthalpy_j_per_mol`, `volume_change_m3_per_mol`, `to_crystal`); or a `gibbs_function` of `type: "jaeger_span_2012"` (CO2-I, Jaeger and Span 2012), whose integration constants are solved from the anchor. A record that lacks the expansion, compressibility or volume range, or whose data do not reach its anchor, loads only as `research_only` or `unavailable` and refuses evaluation. Past the declared ranges Cp and the volume slopes are held. Bundled: `icheme:crystal_carbon_dioxide_i` (fusion enthalpy 9019 J/mol, admitted by `icheme:refinery` and the pilot overlay) and `icheme:crystal_ice_ih` (fitted to IAPWS R10-06 over 10–273.16 K; the water model's ice). On the fluid network a crystal is a solid population of a vessel, exchanging mass with its component only at the vessel's refresh; a crystal and a `solids` record never share an ID (owner decision D23: crystals are solids).
+
+### `methods`
+
+A method is the property model that packages run on. Required: `id`, `revision`, `model` (`pr78`; `nrtl` loads but does not run), `ideal_gas` (`fit`, each dataset's `ideal_gas_cp`, or `spine`), `interactions` (the pair libraries in priority order, each named once and of the method's model; at most one may carry a `rule`, which needs `ideal_gas: spine`), `missing_interactions`, `water_model`, and `pressure_min_pascal` and `pressure_max_pascal` (the column's pressure range). Optional: `advisory_evidence` and `liquid_mixture` (see "Crude cuts, transport and saves").
+
+`missing_interactions` is explicitly `zero` or `error`. The bundled method uses `zero`, keeping the crude family's original
+assumptions; the pilot overlay uses `error`, and pairs its `rule` resolves count as present. NRTL requires `error` and a complete pair set; absent pair data never means ideal behavior.
+
+The bundled `icheme:crude_pr78` is PR78 on the datasets' fits, with the libraries `icheme:tjl20`, `icheme:dwsim_refinery_pr78` and `icheme:dwsim_refinery_pr78_co2`, `zero`, `icheme:water`, 1 kPa to 2 MPa, and the `cut_pair_v1` liquid-mixture term.
 
 ### `packages`
 
-Required: `id`, `revision` (a revision token), `model`, ordered `components`, parallel ordered `properties` references (or a `basis`, see "Shared bases"), `interactions`, `missing_interactions`, `water_model`, `aliases`, `advisory_evidence` (at most 32 entries of 256 characters), `temperature_min_kelvin`, `temperature_max_kelvin`, `pressure_min_pascal`, and `pressure_max_pascal`. There must be 1–64 unique components. Each property record must describe the component at the same index. Package ranges must fit selected property ranges; they are the column's domain and bound column preset operating values. Optional: `liquid_mixture`, `fluid_domain`, `spine`, `crystals`.
+A package is a method and an ordered compound list. Required: `id`, `revision` (a revision token), `method` and `components`. Optional: `extends` (one package whose compounds come first; a cycle fails loading), `crystals` (the crystal records the package admits, each of a compound in the package) and `advisory_evidence` (with the method's, at most 32 entries of 256 characters). A `components` entry is a compound ID, on its default dataset, or an object with `id` and an optional `properties` (another dataset of that compound) or `spine`. A package holds 1 to 99 distinct compounds besides water; an island of the fluid network carries at most 64 of them.
 
-A package the fluid network is built on declares a `fluid_domain` (same fields): its envelope, the data range of the package as a whole and the input box of device settings. A generator's or void's temperature and pressure and a valve's set pressure are refused outside it when the player sets them; a state the network reaches by itself may leave it. No range has to lie inside another. The bundled packages declare 273.16..900 K and 100 Pa..10 MPa (`tjl19_dwsim` 2 MPa), the network package 63.151..900 K and the pilot 63.151..1200 K.
+The rest is derived from the records. The column range is the temperature range that every member dataset covers, at the method's pressures; a package that extends another keeps its parent's range. Package ranges bound column preset operating values. The fluid envelope is the hull of the datasets' `fluid_domain` ranges and the water's triple point, and is absent when a dataset declares none. The aliases are its compounds' aliases, and the assays are every assay whose non-zero compounds it holds. A field that belongs to the method or to a compound (`model`, `basis`, `properties`, `interactions`, `missing_interactions`, `water_model`, the temperature and pressure ranges, `fluid_domain`, `liquid_mixture`, `aliases`, `spine`) fails loading with a message that says where it belongs.
 
-`spine` lists one `spine` record per component, in order; each must name that component and match the property's molecular weight within 1e-4 relative. The fluid network then subtracts each spine's formation enthalpy, so its enthalpies stay sensible (zero at 298.15 K). `crystals` lists the crystal records the package admits; it needs `spine`, and each crystal's component must be in the package. Spines and crystals are hashed into a separate `spineFingerprint` and never move the physics fingerprint. The V3 column refuses a package with spines (`IdealGasFitUnavailable`) or crystals (`CrystalPhasesUnavailable`).
+The fluid network and the process simulator run on views. `MaterialCatalog.restrict(packageId, ids)` builds a package on some of its compounds with the loader's own code. A view keeps the package's method, datasets, water model, column range and fluid envelope, and holds only the pairs, spines, crystals and assays of its compounds. Each island and each simulator sheet runs on its own compound list.
 
-`missing_interactions` is explicitly `zero` or `error`. The migrated PR packages use `zero`, preserving their original
-assumptions; the pilot uses `error`, and pairs its `rule` resolves count as present. NRTL requires `error` and a complete pair set; absent pair data never means ideal behavior.
-`aliases` maps historical component IDs to current IDs within this package. Multiple old spellings can refer to one
-identity; an alias must target a package component and cannot remap a different current ID. The bundled packages declare none.
+On the fluid network the envelope is the data range of the package as a whole and the input box of device settings. A generator's or void's temperature and pressure and a valve's set pressure are refused outside it when the player sets them; a state the network reaches by itself may leave it. The envelope of `icheme:refinery` is 54.361 K (oxygen's data) to 900 K and 100 Pa to 10 MPa.
+
+In a spine method each compound takes the `spine` record its entry names, else its only spine record. The spine must name that compound and match its dataset's molecular weight within 1e-4 relative. The fluid network then subtracts each spine's formation enthalpy, so its enthalpies stay sensible (zero at 298.15 K). Spine and crystal records are identified record by record in `catalog.spineRevision(packageId)`. The V3 column refuses a package or view with spines (`IdealGasFitUnavailable`) or crystals (`CrystalPhasesUnavailable`); a view of `icheme:refinery` without CarbonDioxide admits no crystal.
 
 ### `assays`
 
-Required: `id`, `package`, ordered `components`, `basis`, parallel nonnegative `amounts` with a finite positive
-sum, and `appearance`. Assay order must exactly match its package. `basis` is `mole`, `mass`, or `standard_liquid_volume`.
+An assay is a composition by compound. Required: `id`, `basis`, `amounts_by_component` (nonnegative amounts by compound ID with a finite positive sum) and `appearance`. `basis` is `mole`, `mass`, or `standard_liquid_volume`. An assay applies to every package that holds its non-zero compounds, on that package's axis (an absent compound is zero). An unknown compound, an assay that no package holds, a `package` field and the positional `components`/`amounts` form fail loading. `provenance` and `revision` document the record; no identity carries an assay.
 
 - Mole amounts are normalized directly.
 - Mass amounts are divided by selected molecular weights, then normalized.
@@ -155,7 +170,7 @@ sum, and `appearance`. Assay order must exactly match its package. `basis` is `m
 
 Volume assays also require `standard_temperature_kelvin` and `standard_pressure_pascal`, matching the selected
 density reference conditions. Optional positive `volume_scale` and `amount_total` default to 1; volume is evaluated
-as `volume_scale * amount / amount_total`. The regrouped Tia Juana assay conserves the original mass, standard liquid volume and ideal caloric moments; its pseudomole total changes. The methane assay retains the synthetic 0.5 mol% convention.
+as `volume_scale * amount / amount_total`. The four bundled grades are mass assays (see "Generated crude grades").
 
 ### `water`
 
@@ -167,7 +182,7 @@ six dimensionless `saturation_coefficients`, and seven `shomate_coefficients`. A
 Saturation coefficient order corresponds to reduced-temperature exponents [1, 1.5, 3, 3.5, 4, 7.5] in the
 Wagner–Pruss auxiliary equation. Shomate order is [A,B,C,D,E,F,−H] using t = T/1000: vapor enthalpy is
 1000 × (At + Bt²/2 + Ct³/3 + Dt⁴/4 − E/t + F − H) J/mol. The final array entry already contains −H.
-The existing NIST fit's lower-temperature continuation and reference-consistent Watson liquid enthalpy are preserved.
+The bundled A..E are a fit to the IAPWS-95 ideal-gas heat capacity over the record's 273.16 to 900 K, and F and H follow from the ATcT formation enthalpy so that the enthalpy is zero at 298.15 K (revision `water-iapws95-shomate-r3`, batch 2026-11-04-open-thermo-data; the NIST H2O(g) Shomate before). The reference-consistent Watson liquid enthalpy is preserved.
 
 Optional `ice` names a usable `crystal` of `Water` anchored at the record's `triple_point` and gives its `sublimation_pressure` (`type: "iapws_r14_08"`, three `coefficients`, three `exponents`, `source`; IAPWS R14-08 equation 6). On every package, free water below its melting line freezes as that crystal. The ice crystal record's revision is part of the fluid identity only, not of the column's identity: the column never reaches the water's melting line. On the network the record also supplies the saturation pressure and the ideal steam; liquid water is IAPWS-IF97 Region 1 in Java. The bundled `icheme:water` uses `icheme:crystal_ice_ih`. The water model of the network package must carry `ice`: loading, and so a `/reload`, refuses data without it, naming the water file and the field.
 
@@ -177,7 +192,7 @@ Inert particle materials: `id` (namespaced, lowercase), `revision`, positive `de
 
 ## Data ranges on the fluid network
 
-Leaving a data range never holds an island (owner rule of 2026-10-16), and a freezing point is never a lower bound. Every property continues past its data, continuous at the edge: ideal-gas and crystal heat capacities are held at the end value and integrated, viscosity continues as described under "Viscosity", and outside the water's triple point..623.15 K free liquid water's Region 1 properties are held at the nearer end, volume and enthalpy continuing with the held slopes. After each committed interval the island's status line carries one advisory suffix, `; outside data range: <what> extrapolated below|above <bound> at <node>` and a count of further notices, for the package envelope, each carried component's ideal-gas and viscosity data, free water's and steam's ranges, and each crystal's record. Only numerical guards refuse a state, as rejected trials inside the solvers: the numerical box (10 to 6000 K, 1 Pa to 1 GPa) and states the equations cannot evaluate; holds remain for capability limits only (a phase set the network cannot carry, or no convergence in a declared critical band). The pilot carries CO2 below its 216.592 K triple point in a gas or a methane-rich liquid beside its CO2-I crystal.
+Leaving a data range never holds an island (owner rule of 2026-10-16), and a freezing point is never a lower bound. Every property continues past its data, continuous at the edge: ideal-gas and crystal heat capacities are held at the end value and integrated, viscosity continues as described under "Viscosity", and outside the water's triple point..623.15 K free liquid water's Region 1 properties are held at the nearer end, volume and enthalpy continuing with the held slopes. After each committed interval the island's status line carries one advisory suffix, `; outside data range: <what> extrapolated below|above <bound> at <node>` and a count of further notices, for the package envelope, each carried component's ideal-gas and viscosity data, free water's and steam's ranges, and each crystal's record. Only numerical guards refuse a state, as rejected trials inside the solvers: the numerical box (10 to 6000 K, 1 Pa to 1 GPa) and states the equations cannot evaluate; holds remain for capability limits only (a phase set the network cannot carry, or no convergence in a declared critical band). The network package and the pilot overlay carry CO2 below its 216.592 K triple point in a gas or a methane-rich liquid beside its CO2-I crystal.
 
 ## Viscosity
 
@@ -214,7 +229,7 @@ The bundled water model includes the [IAPWS SR6-08(2011) liquid-water correlatio
 equation 7/table 5, with coefficients converted from μPa·s to Pa·s. Its data range is the 0.1 MPa reference isobar
 and 253.15–383.15 K. This interval includes metastable liquid below freezing and above boiling; it is not a vapor
 correlation. The verification tests use independent table 8 values at 260, 298.15, and 375 K.
-The light-hydrocarbon records (`tjl19_*`, `tjl20_methane`) retain the installed DWSIM API curves and independent check points; nitrogen's tables come from the NIST WebBook and the pilot records' from CoolProp 8.0.0. The 12 active petroleum cuts use the shared Dalia liquid family described below. The five regrouped heavy vapor curves were re-evaluated through `AUX_VAPVISCi` with their reconstructed properties; all are estimated. The retired CDU17 data is available only to independent tests.
+The light-hydrocarbon records (`tjl19_*`, `tjl20_methane`) retain the installed DWSIM API curves and independent check points; nitrogen's and the pilot records' tables come from CoolProp 8.0.0 (nitrogen's from the NIST WebBook until batch 2026-11-04-open-thermo-data); the refinery compounds' (`chemsep_*`) liquid and vapor tables come from the ChemSep v8.3 pure-component data. The 12 active petroleum cuts take their liquid tables from the Twu 1985 correlation, described below. The five regrouped heavy vapor curves were re-evaluated through `AUX_VAPVISCi` with their reconstructed properties; all are estimated. The retired CDU17 data is available only to independent tests.
 
 DWSIM liquid curves sample `AUX_LIQVISCi(name,T,100000 Pa)`; vapor curves sample the dilute-gas auxiliary
 `AUX_VAPVISCi(component,T)`. Both declare the 0.1 MPa isobar in the catalog. These are conditional phase
@@ -282,8 +297,7 @@ Use `catalog.componentAppearance(packageId, componentId)` (supports package alia
 `catalog.assayAppearance(packageId, assayId)` for immutable values. Use the calling calculation's captured
 catalog when snapshot consistency matters. `FluidAppearance.argb()` supplies a packed AARRGGBB value for future
 consumers. Put an appearance object in a whole-record override using the usual data-pack replacement rules.
-The five crude conversion presets retain their visual settings in `research/crude-assays/appearances.json`,
-separate from scientific source transcriptions, so rerunning the converter preserves them.
+The generated grades take their visual settings from `tools/crude-grades/grades.mjs`, which writes the records.
 
 ## Localization and saved data
 
@@ -299,7 +313,7 @@ The first argument is the base name; remaining arguments are Celsius bounds disp
 The server sends bounded naming descriptors, so clients do not need the server's scientific data pack.
 Composition cells show localized labels; hovering a clipped label shows it in full, and the component search matches labels and internal IDs. Missing translations use
 English fallbacks. Package and assay IDs remain stable. Retired saved axes are rejected. Current-format saved results remain presentation-only and require recalculation.
-The column protocol is version 11 (wire schema 16), and the fluid protocol is `fluid-10`; client and server must run compatible mod versions.
+The fluid protocol is `fluid-19`; client and server must run compatible mod versions.
 
 ## Reloads, scientific identity, and verification
 
@@ -316,16 +330,19 @@ loading refuses another, naming the record's file. An edit without a bump is not
 running world does not hold. Assays, names, cut-label metadata, translations and source texts are in no identity.
 
 A package's column identity, `Package.scientificRevision`, lists the declared revisions of the records the column reads:
-`<package>@<revision>;properties=<id>@<revision>,…;interactions=<id>@<revision>[;group-interactions=<id>@<revision>];water=<id>@<revision>`.
+`method=model:<model>,ideal-gas:<fit|spine>,missing-interactions:<policy>,pressure-pascal:<min>..<max>[,liquid-mixture:<revision>];properties=<id>@<revision>,…;interactions=<id>@<revision>,…[;group-interactions=<id>@<revision>];water=<id>@<revision>`.
+The method appears by its physics fields, never by its record's revision (owner decision D7), and only the pair libraries
+that give a pair among the package's compounds appear. The package record is no part of it, so a compound or pair library
+added for other compounds moves no identity of a view that does not hold them.
 The fluid identity, `catalog.fluidRevision(packageId)`, adds what only the fluid network reads:
 `;viscosity=<id>/<phase>@<revision>,…` (in component order, then the water), `;ice=<crystal>@<revision>` and
 `;fluid-data=<type>@<revision>,…`. Spine and crystal records are identified record by record in
-`catalog.spineRevision(packageId)`. The calculator shows an identity's first part, `<package>@<revision>`.
+`catalog.spineRevision(packageId)`.
 
 Results and neural seeds carry the column identity. Completed results preserve their original identity and become stale
 when it differs from the live package. Open calculators refresh after publication; closed ones check when reopened.
-The bundled neural registry pins its reference package's column identity. A changed identity disables that model; the
-normal LNN_FIRST mode uses numerical fallback (explicit LNN_ONLY retains its existing failure semantics).
+The neural model is bound by the values it was trained on, not by an identity (see "Bundled neural registry"); a request
+it does not bind runs the classical initializer.
 A running fluid world keeps the catalog it started with: a reload that changes its network package's fluid or spine identity holds the fluid network with `HELD: property data changed; save and reopen the world to restate the fluid network on the new data`. Restoring the data resumes it; a reopened world restates its contents on the new data.
 
 `MaterialCatalog.bundled()` uses the same parser with `materials-index.json` for standalone tools/tests. Add new bundled
@@ -334,73 +351,63 @@ catalog snapshots immutable and keep all numeric arrays and model workspaces loc
 
 Run `gradlew.bat test fluidScienceTest fluidRuntimeTest` for numerical parity, codec, concurrency, neural, and solver regressions.
 Run `gradlew.bat runFluidGameTestServer -PfluidGameTestRunId=<fresh-id>` for actual Minecraft fluid and reload tests, and
-`gradlew.bat runColumnGameTestServer -PcolumnGameTestRunId=<fresh-id>` separately for calculator service tests
-(`ColumnRegroupingGameTests`). The fluid run's reload test (`MaterialReloadGameTests.materialReloadIsAtomic`) applies a
+`gradlew.bat runColumnGameTestServer -PcolumnGameTestRunId=<fresh-id>` separately for the process simulator's service tests
+(`ProcessSimulatorGameTests`). The fluid run's reload test (`MaterialReloadGameTests.materialReloadIsAtomic`) applies a
 higher-priority override, rejects an invalid replacement without publishing it, and restores the original selection. The former hardcoded package tables remain test-only regression references: TJL19 and TJL20-methane as records in `src/test/resources/column/v3/tjl-reference-resources.json`, and the CDU17 package `V3Cdu17TiaJuanaPackage`.
 
-## Five additional crude feeds
+## Generated crude grades
 
-WTI Light - Export, Upper Zakum, Bonga, Dalia, and Cold Lake Blend have separate packages and mass-basis assays
-on the existing TJL20 component/property basis. See the local research report `research/crude-regrouping/notes/CRUDE_ASSAY_CONVERSION.md`
-for mole/mass tables, source links, the reproducible converter, and limitations. These are approximate feed mappings;
-they do not fit new crude-specific physical or viscosity properties. Each unmeasured tail above 590°C is marked
-estimated and constrained by that crude's published residue mean boiling point. Whole-crude nitrogen, sulfur,
-and metals remain provenance metadata, without contaminant speciation. The regrouped TJL feeds preserve physical feed volume; their pseudomole amounts change with characterization.
+The four bundled grades, light, medium, heavy and oil sand dilbit, are generated mass assays on the shared compounds, not measured crudes. `tools/crude-grades/grades.mjs` writes them (batch 2026-11-04-open-thermo-data, decisions E10 and E14), and each record's `provenance` gives the method and its advisory evidence. They replace the assays of earlier versions: Tia Juana Light, and WTI Light Export, Upper Zakum, Bonga, Dalia and Cold Lake Blend, with their packages and presets. Tia Juana Light remains a test overlay (`src/test/resources/materials/tia-juana/`).
 
-Each crude's catalog column preset uses the Tia Juana column's 40 stages, feed stage, temperature, pressure, steam, and pumparound duties, with its captured physical feed volume and the qualified draw settings: starting points, not optimized refinery operations. The column calculator does not list catalog column presets (the server preset packet was removed with wire schema 16; `default_column_preset` gives a new calculator its input). Its preset browser loads client JSON instead: column templates (operating settings and connections) and mixtures (a `package` and component amounts), bundled under `assets/icheme/columnpreset/` and `assets/icheme/mixturepreset/` and read from the client's `IChemE/columnpreset/` and `IChemE/mixturepreset/` folders. They are not material data: a mixture must name a package the server offers, and the server checks each calculation's input against its own package. Fluid generator menus list the catalog's fluid presets and the client mixtures whose components the network carries.
+The column preset `medium_crude` (the network's `default_column_preset`) is a starting point, not an optimized refinery operation. The column calculator does not list catalog column presets (the server preset packet was removed with wire schema 16; `default_column_preset` gives a new calculator its input). Its preset browser loads client JSON instead: column templates (operating settings and connections) and mixtures (a `package` and component amounts), bundled under `assets/icheme/columnpreset/` and `assets/icheme/mixturepreset/` and read from the client's `IChemE/columnpreset/` and `IChemE/mixturepreset/` folders. They are not material data: a mixture must name a package the server offers, and the server checks each calculation's input against its own package. Fluid generator menus list the catalog's fluid presets and the client mixtures whose components the network carries.
 
 Additional transport properties, fitted NRTL datasets/calculations, and an in-game editor are outside this release.
 
 
-## Regrouped crude transport and development saves
+## Crude cuts, transport and saves
 
-PC01–PC12 use one Dalia source-cut liquid-viscosity family over 293.15–900 K. The three 550°C+ cuts share the same unresolved pure-liquid curve. This is an estimated transport surrogate for every crude, not a claim that their measured viscosity profiles agree. Light-cut priors are estimated. Liquid tables outside measured temperatures are continuations, not phase-stability predictions. No wax, gel, elemental or reaction state is introduced for the cuts.
+PC01–PC12 are the project's DWSIM 10.2.3 characterisation of Tia Juana Light (`tjl-ledezma2019-dwsim1023-13pc-r1`), from the TBP data in Ledezma-Martinez, *Design of Crude Oil Distillation Systems with Preflash Units*, PhD thesis, University of Manchester (2019), which takes them from Watkins (1979) via Chen (2008): Riazi-Daubert Tc and Pc, PR78 acentric factors fitted to the normal boiling points. PC01–PC07 are its cuts unchanged; PC08–PC12 are regrouped from its heavy cuts. Each record's `source` gives this.
 
-A property may carry `liquid_mixture_descriptor` with `participation` and `residue_retention` in [0,1], and a finite nonnegative `activation_slope`; a nonparticipating component has zero retention and slope. Absent descriptors mean zero participation, retention and slope. `activation_slope` is dimensionless: Δln(μ)/(1000 K × Δ(1/T)) between 313.15 and 323.15 K. Retention describes an ideal 370°C+ split. Nonparticipating gases and exact chemicals still dilute participating mole fractions.
+Their liquid viscosity (`twu-1985-d341-r1`, generated by `tools/crude-grades/cut-tables.mjs`) is Twu, Ind. Eng. Chem. Process Des. Dev. 24 (1985) 1287: the kinematic viscosity at 100 °F and 210 °F from each record's normal boiling point and standard density, continued in temperature by the ASTM D341 two-point (Walther) form, times the Rackett saturated-liquid density anchored at the standard density, as a 608-node table over 293.15–900 K, capped at 10¹² Pa·s. It is a correlation estimate with no measured data, and PC11 and PC12 (specific gravity at or above 1.0) lie past the correlation's fitted range; PC12 reaches the cap below 307 K. Liquid tables outside that range are continuations, not phase-stability predictions. No wax, gel, elemental or reaction state is introduced for the cuts.
 
-Packages may select `liquid_mixture` with `type: symmetric_pair_groups_v1`, four finite `coefficients`, positive `reference_kelvin` and `slope_cap_kelvin >= reference_kelvin`; without one the coefficients are zero. For normalized amounts x, p=participation and h=retention, let a=xp and b=ah. The correction to Σx ln(μ) is:
+A method may select `liquid_mixture` with `type: cut_pair_v1`, a finite `coefficient` G, the `components` that take part (distinct compound ids), a `source` and its own `revision`, which the method's identity names; without one there is no correction. For mole fractions x over every liquid component, C the participating components the package holds, the correction to Σx ln(μ) is:
 
 ```
-F(a) = (Σa)² − Σa²
-E(a) = (Σa)(Σa activation_slope) − Σ(a² activation_slope)
-q = 1000 K × (1/min(T, slope_cap_kelvin) − 1/reference_kelvin)
-Δln(μ) = c0(F(a)−F(b)) + c1 F(b) + q[c2(E(a)−E(b)) + c3 E(b)]
+Δln(μ) = G ((Σ_C x)² − Σ_C x²)
 ```
 
 The crude components' fluid data start at 293.15 K (20°C). Colder states are continued from those ranges (heat capacity held, liquid viscosity continued in 1/T) and reported on the island's status line; nothing is clamped or held. Reaching a data boundary is not a viscosity or solidification criterion.
 
-All pair terms vanish for a pure component. The implementation evaluates factored sums in O(component count). These coefficients and descriptors belong to the package and property records: an edit bumps the record's `revision`. The bundled coefficients are a global fit to Dalia whole crude and its 370°C+ residue, holding out whole crude at 40°C and residue at 60°C for verification. Other crudes' discrepancies are accepted and reported as a global approximation.
+The term vanishes for a pure component; nonparticipating gases and exact chemicals still dilute the participating mole fractions. The implementation evaluates factored sums in O(component count). A property record no longer carries `liquid_mixture_descriptor` (refused at loading). The bundled `icheme:crude_pr78` term (`eccc-cut-pair-r1`, owner decision E12 of batch 2026-11-04-open-thermo-data) takes the 12 cuts with G = 1.0956, fitted by least squares in ln(μ) to 23 whole-crude viscosities at 0 and 15 °C of the 13 crudes the cuts represent (`tools/crude-grades/fit-g.mjs`), from Environment and Climate Change Canada, *Crude Oil and Petroleum Product Database* (2021-01-22), under the Open Government Licence – Canada: rms factor 1.89. It has no temperature dependence.
 
-Column operating values reside in `presets` records. `operating.feedStandardVolumeCubicMetresPerSecond` is the positive feed volume at the selected property density reference; molar throughput is derived from the current assay and molecular weights. `operating.sideDraws` contains explicit tray numbers and mol/s rates. Captured pre-regrouping physical throughputs are retained, and gameplay draws are recalibrated against accepted pre-regrouping volume targets. The hidden literature preset retains its published molar rates. Cold Lake has no accepted old yield targets and retains its authored rates.
+Column operating values reside in `presets` records. `operating.feedStandardVolumeCubicMetresPerSecond` is the positive feed volume at the selected property density reference; molar throughput is derived from the current assay and molecular weights. `operating.sideDraws` contains explicit tray numbers and mol/s rates.
 
-This development change breaks the old component basis. Production packages have no old pseudocomponent aliases. Saved column data uses version 12; a calculator whose saved data has another version or component axis discards it and starts from a fresh input. A fluid world saved under another checkpoint format or property basis is refused. Use a fresh development world; no migration is provided. Independent old numerical oracles exist only in test scope. Obsolete learned weights are retired; an unavailable qualified model leaves the classical initializer usable.
+Production packages have no old pseudocomponent aliases. Saved fluid data keeps facts and state apart: after a material or model change a world keeps its facts (what the player built and put in) and its contents keep their amounts and temperature; an engine job recomputes energy and pressure, the ledger books the difference, and the state rebuilds (AGENTS.md, "Saves and data formats"). A calculator whose saved data has another version or component axis discards it and starts from a fresh input. Independent old numerical oracles exist only in test scope. An unavailable qualified model leaves the classical initializer usable.
 
 
-## Shared bases, sparse assays, and catalog presets
+## Presets and the network
 
-`bases` records contain ordered `components` and selected `properties`. Optional `extends` names one base whose entries precede the new entries. Missing references, cycles, duplicates, invalid unused bases and more than 64 non-water components fail validation. A package selects `basis` or supplies both inline lists; mixing these forms is rejected. Expansion happens before validation and publication. A higher-priority pack still replaces the whole record; extension is explicit composition, not field merging.
+`presets` have `schema_version`, stable `id`, `kind` (`column` or `fluid`), and `label`. Column presets additionally declare `translation_key`, integer `order`, boolean `visible`, `package`, `assay`, and an `operating` object. See the bundled `column_medium_crude.json` for the complete SI fields: standard-volume feed rate, feed temperature, stage/feed-stage numbers, top pressure/drop, condenser temperature, reflux ratio, reboiler watts, side draws (mol/s), steam feeds (mol/s, K), pumparounds (watts and explicit split rule), and `columnDiameterMetres` (above 0, at most 15 m; the tray hydraulics give the pressure profile, the drop is the first solve's guess). Numerical definitions and stage geometry (2–64 stages, values inside the package ranges) are validated before publication. A catalog holds at most 31 column and 32 fluid presets.
 
-An assay can use `amounts_by_component` instead of positional `components`/`amounts`. Missing IDs become zero on the selected package axis. Unknown IDs, including unknown zero entries, fail. Sparse and positional forms cannot coexist. Amounts keep the assay's declared mole, mass or standard-liquid-volume basis and reference conditions. `verifyMaterialIndex` checks bundled index completeness and uniqueness during resource processing; datapacks remain dynamically discovered.
+Fluid presets select either a pure `component` (a network component or `Water`) or an `assay` that the network package holds. At most one `networks` record selects the global `package`, `default_column_preset` (a visible column preset) and ordered `fluid_presets`; gameplay needs it, pure column-only standalone catalogs do not. The network package must be PR78 with Nitrogen and separate Water, nitrogen viscosity for both phases, and a dataset with a `fluid_domain` for every compound; its water model needs `ice` (refused at loading). The menu receives each preset as an ID, a label and mole fractions. The bundled fluid menu offers Water, Nitrogen, the four grades and Carbon dioxide, plus a 10 % water slurry of `icheme:demo_particle`. A world saves its fluid basis by compound IDs, and running ledgers keep their captured axis through a reload.
 
-`presets` have `schema_version`, stable `id`, `kind` (`column` or `fluid`), and `label`. Column presets additionally declare `translation_key`, integer `order`, boolean `visible`, `package`, `assay`, and an `operating` object. See the bundled `column_tia_juana.json` for the complete SI fields: standard-volume feed rate, feed temperature, stage/feed-stage numbers, top pressure/drop, condenser temperature, reflux ratio, reboiler watts, side draws (mol/s), steam feeds (mol/s, K), pumparounds (watts and explicit split rule), and `columnDiameterMetres` (above 0, at most 15 m; the tray hydraulics give the pressure profile, the drop is the first solve's guess). Numerical definitions and stage geometry (2–64 stages, values inside the package ranges) are validated before publication. A catalog holds at most 31 column and 32 fluid presets.
+`verifyMaterialIndex` checks bundled index completeness and uniqueness during resource processing; datapacks remain dynamically discovered.
 
-Fluid presets select either a pure `component` (a network component or `Water`) or a `package` and `assay`. At most one `networks` record selects the global `package`, `default_column_preset` (a visible column preset) and ordered `fluid_presets`; gameplay needs it, pure column-only standalone catalogs do not. The network package must be PR78 with Nitrogen and separate Water, nitrogen viscosity for both phases and a `fluid_domain`; its water model needs `ice` (refused at loading). Package-based fluid presets are projected by exact ID; their selected physical properties, interactions, water model, package ranges, component `fluid_domain` and viscosity/correction data must agree with the corresponding network sub-basis. The menu receives each as an ID, a label and mole fractions. Reordering or extending a network is a breaking development-world change, not a save migration. The fluid checkpoint (format 12, `FluidCheckpointCodec.VERSION`) stores the topology with the network's package, component IDs and qualified fluid fingerprint even with no active hydraulic islands; a restart rejects a changed contract. Running ledgers retain their captured axis through reload. The bundled fluid menu exposes Water, Nitrogen, Tia Juana, WTI and Cold Lake, plus a 10 % water slurry of `icheme:demo_particle`.
+### The pilot package
 
-### Selecting the pilot package
-
-`icheme:pilot_cryogenic` runs the fluid network on its reference spines, E-PPR78 kij(T) for all six pairs, Tr = 0.8 volume anchors and the CO2-I crystal, in a 63.151–1200 K, 100 Pa–10 MPa envelope. A datapack selects it by replacing `data/icheme/materials/networks/default.json` (a second network record fails loading). Crude presets cannot share its physics, so its menu lists component presets only, each a `presets` record of kind `fluid`. The tests' override (`src/test/resources/materials/pilot-cryogenic/`) is:
+`icheme:pilot_cryogenic` runs the fluid network on reference spines, E-PPR78 kij(T) for all six pairs, Tr = 0.8 volume anchors and the CO2-I crystal, in a 63.151–1200 K, 100 Pa–10 MPa envelope. Since batch 2026-11-04-open-thermo-data (O5) it is a test overlay: its records are in `src/test/resources/materials/pilot-cryogenic/`, which the tests read through `PilotCryogenicTestCatalog.withPilot()`, and the game ships no spine, group matrix or E-PPR78 package (the record kinds and their code stay). A datapack that carries those records and replaces `data/icheme/materials/networks/default.json` selects it (a second network record fails loading). The overlay's network record is:
 
 ```json
 {
   "schema_version": 1,
   "id": "icheme:default",
   "package": "icheme:pilot_cryogenic",
-  "default_column_preset": "tia_juana",
+  "default_column_preset": "medium_crude",
   "fluid_presets": ["water", "nitrogen", "methane", "ethane", "carbon_dioxide"]
 }
 ```
 
-with presets such as `{"schema_version": 1, "id": "carbon_dioxide", "kind": "fluid", "label": "Carbon dioxide", "component": "CarbonDioxide"}`. It changes the world's fluid basis: use a fresh world. The column refuses the pilot; `default_column_preset` still names a column package's preset.
+Crude presets cannot share its physics, so its menu lists component presets only, each a `presets` record of kind `fluid`, such as `{"schema_version": 1, "id": "carbon_dioxide", "kind": "fluid", "label": "Carbon dioxide", "component": "CarbonDioxide"}`. It changes the world's fluid basis: use a fresh world. The column refuses the pilot; `default_column_preset` still names a column package's preset.
 
 ## Reloadable fluid reference records
 
@@ -410,19 +417,19 @@ A fluid model captures these immutable records with its catalog. Volume referenc
 
 ## Bundled neural registry
 
-`data/icheme/neural/registry.json` is a bounded classpath registry, not a datapack weight loader. Schema 1 permits up to 16 entries with `priority`, `modelId`, `payload`, `sidecar` and `pipelineSha256`. Highest priority wins; equal priorities are resolved by model ID. Duplicate IDs, unsafe resource paths, wrong hashes, malformed shapes or unsupported policies reject the registry. An empty or unavailable registry preserves classical fallback.
+`data/icheme/neural/registry.json` is a bounded classpath registry, not a datapack weight loader. Schema 1 permits up to 16 entries with `priority`, `modelId`, `payload`, `sidecar` and `pipelineSha256`. Highest priority wins; equal priorities are resolved by model ID. Duplicate IDs, unsafe resource paths, wrong hashes, malformed shapes or unsupported policies reject the registry. An empty or unavailable registry preserves classical fallback. The bundled entry is `icheme:v3-column-open-r34-u1-v2` (priority 100), trained on the generated grades and the current column (batch 2026-11-05-neural-retrain); its learned route has a budget of 300,000 control polls.
 
-The trained payload uses schema 1 and contains immutable weights, normalization, component axis and encoding/anchor revisions. Sidecar schema 2 contains `propertyRevision` (the reference package's column identity), reference package, model ID, formulation/branch coverage, composition blend segments, numerical bounds, decoder/candidate/correction policy, and explicit `allowExtraZeroComponents` / `allowMissingZeroComponents` flags. The pipeline hash is SHA-256 of the ASCII string `payloadSha256:sidecarSha256`. Altering metadata does not rewrite weights, but requires whole-pipeline requalification.
+The trained payload uses schema 1 and contains immutable weights, normalization, component axis and encoding/anchor revisions. Sidecar schema 5 contains `physics` (the values the model was trained on: each compound's PR78 constants and `shifted_polynomial_5` ideal-gas Cp, the non-zero constant pairs, the water's saturation, latent-heat and vapour Shomate coefficients, and the trained temperature range), model ID, formulation/branch coverage, the composition `families` (decision E7), the off-axis share `offAxisLimit` and the `lumpMap`, numerical bounds and decoder/candidate/correction policy. The pipeline hash is SHA-256 of the ASCII string `payloadSha256:sidecarSha256`. Altering metadata does not rewrite weights, but requires whole-pipeline requalification.
 
-Physics eligibility is the reference package's current column identity equal to the sidecar's `propertyRevision`, and the requested package's values on the model's axis equal to the reference's (`samePhysics`, a direct comparison: ordered component properties, EOS/interactions and water/caloric data; not assays, labels, provenance text, transport or declared revisions). Actual feed composition must still belong to the model's qualified composition domain. Every nonzero feed species must be represented. Reordering is by exact ID; discarding extra zero species and filling missing zero species require the respective explicit qualification flag. A missing species draws properties and cross-interactions only from the named reference package, and the complete projected physics must match (`samePhysics`). No missing interaction is inferred as zero. A package with crystals or rule interactions is never projected. The deployed regrouped model keeps both padding flags disabled; methane-free and nitrogen-extended requests use classical initialization.
+Physics eligibility compares values, never record ids or revisions (owner decision E8, batch 2026-11-04-open-thermo-data): every nonzero feed compound must be on the model's axis or join one of its compounds by the `lumpMap` (below), and the request package's values on those compounds must equal the trained values within 1 % (Tc, Pc, omega; the ideal-gas Cp and the water's saturation pressure, latent heat, vapour Cp and vapour enthalpy on a 201-point grid over the trained range), pairs among them within 0.001 absolute (`TrainedPhysics`). Molar mass, boiling point, standard density, range bounds and transport are not compared: no step of the prediction reads them. Actual feed composition must still belong to the model's qualified composition domain. Reordering is by exact ID. A compound of the model the request does not feed takes the request package's record, else the catalog's default record (none: no model), and its pairs the trained values. A package with crystals or rule interactions is never projected. An off-axis compound, such as nitrogen, joins the compound that the `lumpMap` names, up to the model's `offAxisLimit` share of the feed, and the seed is split back by feed share; a request with more, or with an off-axis compound that has no lump, runs the classical initializer.
 
 Selection binds one model and one immutable catalog when a job is admitted. Native anchors run against that captured view, predictions scatter back to the request axis, and returned seeds retain the original request identity. Reloads cannot change running jobs. This projection is only an inference operation, never an old-save conversion. Result freshness remains tied to the original full scientific dataset.
 
 ## Adding a compound
 
-1. Add a component ID with localized descriptor and appearance, sourced or explicitly estimated physical/PR data, an `ideal_gas_cp` fit or (in a spine package) a `spine` record, supported transport curves and reference conditions. New correlations require tested Java implementations; no executable expressions are accepted.
-2. Add it to a shared basis and qualify all selected interaction and water treatment. Explicitly update sparse assays, operating presets, network selection and conditional/calibration records where scientifically applicable. Unknown sparse IDs and incompatible preset/network physics must fail validation.
-3. Update the bundled index and run catalog/property/flash/derivative, current-format serialization, packet, column and fluid tests. Axes are bounded at 64 non-water species plus water, and packet validation uses the server-provided axis rather than the client's local catalog. A structural fixture adds a synthetic nitrogen-like component and moves nitrogen without array-width edits; it does not establish experimental properties for a new real substance.
+1. Add a component ID with localized descriptor and appearance, sourced or explicitly estimated physical/PR data, an `ideal_gas_cp` fit or (in a spine package) a `spine` record, the `freezing`, `thermochemistry` and `flammability` sub-records where known, supported transport curves and reference conditions. New correlations require tested Java implementations; no executable expressions are accepted.
+2. Add it to a package's `components` (or to a package that `extends` the network package) and qualify its pairs in the method's libraries and its water treatment. Explicitly update sparse assays, operating presets, network selection and conditional/calibration records where scientifically applicable. Unknown sparse IDs and incompatible preset/network physics must fail validation.
+3. Update the bundled index and run catalog/property/flash/derivative, current-format serialization, packet, column and fluid tests. A package holds at most 99 compounds plus water, and an island at most 64 plus water, and packet validation uses the server-provided axis rather than the client's local catalog. A structural fixture adds a synthetic nitrogen-like component and moves nitrogen without array-width edits; it does not establish experimental properties for a new real substance.
 4. Qualify native column/pipeline behavior and fresh-world reload behavior. Old worlds are intentionally unsupported after an axis/property change; a fresh world is required.
 5. Existing models remain eligible only for their exact qualified physics and composition domain. Train additional specialists from qualified labels, generate independent parity fixtures, run native selection/holdout gates, then add a registry entry with explicit priority and hashes. Never expand a sidecar's eligibility merely to bypass missing scientific qualification.
 

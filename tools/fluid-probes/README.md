@@ -22,7 +22,7 @@ Each package folder is `<package>/{probes,scripts,instrumentation,dev-edits,run-
 | `f1/` | F1, pumped fills and holds | four probe tests, trace classifiers, two trace-instrumentation patches, gate and paced scripts |
 | `f2/` | F2, placement cost | the placement profile probe (before and after), the per-phase timing patch, the extraction and edit scripts, the gate script |
 | `f3/` | F3, checkpoint storage | payload-breakdown and save-timing probes, the atomic-write probe, the detached byte-counter hook, the probe runner and its init script |
-| `f4/` | F4, pump P1 and thermo domain | fingerprint, cryogenic-nitrogen and pump-line probes, the NIST data and fit scripts, the `sci.sh` runner, the gate script |
+| `f4/` | F4, pump P1 and thermo domain | fingerprint, cryogenic-nitrogen and pump-line probes, the fit scripts (the NIST data they read is in the main checkout, `research/2026-09-23-fluid-followups/f4-nist/`, since 2026-11-04), the `sci.sh` runner, the gate script |
 
 The folder depth matches the batch layout (`<package>/<sub>/<file>`). Scripts that address the repository root as `../../../..` (`f2/scripts/apply-edits.js`, `f4/probes/sci.sh`, `f4/probes/build-nitrogen-viscosity-tables.js`) therefore work unchanged from here.
 

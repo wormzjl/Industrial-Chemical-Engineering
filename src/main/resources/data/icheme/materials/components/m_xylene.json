@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "M-xylene",
+  "kind": "chemical",
+  "translation_key": "material.icheme.m_xylene",
+  "fallback": "M-xylene",
+  "properties": "icheme:chemsep_m_xylene",
+  "appearance": {
+    "color": "#F3F4EA",
+    "transparency": 0.85,
+    "estimated": true
+  },
+  "identifiers": {
+    "cas": "108-38-3",
+    "chemsep_id": "506",
+    "smiles": "c1(C)cc(C)ccc1",
+    "formula": "CH3(C6H4)CH3"
+  }
+}

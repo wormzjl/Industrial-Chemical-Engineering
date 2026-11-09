@@ -4,6 +4,7 @@
   "kind": "chemical",
   "translation_key": "material.icheme.n_pentane",
   "fallback": "N-pentane",
+  "properties": "icheme:tjl19_n_pentane",
   "appearance": {
     "color": "#F3F4EA",
     "transparency": 0.85,

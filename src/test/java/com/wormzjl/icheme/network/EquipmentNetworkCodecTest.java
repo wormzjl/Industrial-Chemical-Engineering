@@ -81,10 +81,10 @@ class EquipmentNetworkCodecTest {
     @Test
     void aColumnTemplateCrossesWithItsNameAndInput() {
         var c = com.wormzjl.icheme.science.material.MaterialCatalog.bundled();
-        var input = c.presets().column("tia_juana").input(c);
-        var read = roundTrip(EquipmentNetwork.TemplatePayload.STREAM_CODEC, new EquipmentNetwork.TemplatePayload(AT, "Tia Juana Light (default)", input));
+        var input = c.presets().column(c.presets().network().defaultColumnPreset()).input(c);
+        var read = roundTrip(EquipmentNetwork.TemplatePayload.STREAM_CODEC, new EquipmentNetwork.TemplatePayload(AT, "Medium crude (default)", input));
         assertEquals(AT, read.position());
-        assertEquals("Tia Juana Light (default)", read.name());
+        assertEquals("Medium crude (default)", read.name());
         assertEquals(input, read.input());
     }
 

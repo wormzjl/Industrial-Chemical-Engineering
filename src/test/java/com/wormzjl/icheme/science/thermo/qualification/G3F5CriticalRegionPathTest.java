@@ -50,7 +50,7 @@ class G3F5CriticalRegionPathTest {
     static final java.util.Set<String> KNOWN_UNTYPED = java.util.Set.of();
 
     static FluidTpEquilibrium engine() {
-        var catalog = MaterialCatalog.bundled();
+        var catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
         return new FluidTpEquilibrium(PhaseContract.forNetworkPackage(catalog, PILOT), CubicPhaseEvaluator.forPackage(catalog, PILOT), FluidTpEquilibrium.Settings.DEFAULT, null);
     }
 

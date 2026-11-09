@@ -187,7 +187,7 @@ class V3LiquidSupplyScreenTest {
 
     private static V3InitializationOptions lnnOnly() {
         return new V3InitializationOptions(V3InitializationOptions.Mode.LNN_ONLY,
-                V3InitializationOptions.WetStart.AUTO, 8, 500, V3InitializationOptions.Correction.PROGRESS);
+                V3InitializationOptions.WetStart.AUTO, 8, 80_000, V3InitializationOptions.Correction.PROGRESS);
     }
 
     private static List<V3ColumnSpecification> specifications() {

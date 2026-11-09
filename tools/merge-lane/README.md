@@ -22,9 +22,11 @@ A step list after the side runs only those steps, for example `lane.sh head camp
 
 - `lane.sh`: the steps. Logs, results, the printed lines (`printed.txt`, by `tools/floating-roof-tanks/final-lane/printed.sh`), the 33 junction lines (`junction.txt`) and the campaign reports land in `tmp/merge-lane/<side>/`, or `$LANE_OUT/<side>`.
 - `main-reach.pl`: the classes of `src/main` the game cannot reach, by name from the mod's entry points: `perl tools/merge-lane/main-reach.pl .`. Name a class after the root to cut a suspect link. It does not look at single methods. AGENTS.md, Tooling cleanup.
+- `compare.mjs`: a head lane against a baseline lane, by folder: `node tools/merge-lane/compare.mjs <base> <head>`. Per campaign the clean count, refusals, Newton counters, new, fixed and moved holds by class, and the new budget-class (C, F) holds; the junction lines' integer counters and `MIXED_GAS_COST`.
 - `campaign-inputs.txt`: the campaign's inputs as path patterns, one per line. A test JVM loads 206 production sources for a run of the campaign, some only because JUnit reads every test class. The list keeps the packages the solver needs. It is wider than the loaded set on purpose: a rarely loaded class in these packages must still run the campaign.
 
 ## History
 
 - 2026-11-02: written from `tools/ph-false-root/lane.sh` and `tools/heat-exchanger-design/merge-lane/lane.sh`. Inputs measured with `-Xlog:class+load` on 80 seeds, cold and bundled.
 - 2026-11-03: `main-reach.pl` added for the rule that `src/main` holds only code the game reaches.
+- 2026-11-09: `compare.mjs` added at the 0.23.0 final lane (batch 2026-11-04-open-thermo-data, MERGE_REVIEW.md).

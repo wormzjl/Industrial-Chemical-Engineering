@@ -121,6 +121,11 @@ public record FlowsheetRun(Status status, Map<String, FlowStream> streams, Map<S
         return new FlowsheetRun(status, streams, outcomes, reports, loops, log, massIn, massOut, heatIn, heatOut, duties, order, passes);
     }
 
+    /** This run with {@code streams} for its streams: the same streams on another axis ({@link SheetCompounds}). */
+    FlowsheetRun on(Map<String, FlowStream> streams) {
+        return new FlowsheetRun(status, streams, outcomes, reports, loops, log, massIn, massOut, heatIn, heatOut, duties, order, passes);
+    }
+
     /** This run without its columns' warm starts ({@link Report.Warm}): a run that starts from it starts its loops here, its columns from the learned start. */
     public FlowsheetRun cold() {
         if (this.reports.values().stream().allMatch(report -> report.warm() == null)) return this;

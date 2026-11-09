@@ -1,0 +1,18 @@
+{
+  "comment": "Owner exceptions to decision D3 (2026-11-04). import.mjs applies them before the D3 order: zero_compounds first (no pair is written), then overrides.",
+  "zero_compounds": [
+    {
+      "cas": "1333-74-0",
+      "name": "Hydrogen",
+      "reason": "Every hydrogen pair is zero (no pair written): the DECHEMA H2 values are narrow-range fits (H2/Toluene -0.51, H2/N-butane -0.397, H2/Propane -0.131) that would put H2 into the oil; zero is DWSIM's own default without data and the treatment H2 gets with the crude fractions."
+    }
+  ],
+  "overrides": [
+    {
+      "first_cas": "74-82-8",
+      "second_cas": "7783-06-4",
+      "kij": 0.08125,
+      "source": "Owner exception to D3: ChemSep 2009 PR table pr.ipd, \"Methane/Hydrogen Sulfide T=40,100,160 F, Reamer et al data, fit by R.Taylor\" (Kooijman and Taylor, Artistic License 2.0). kij_pr.dat's 0.1356 equals the DECHEMA Methane/SulfurDioxide value (pr_ip.dat line 115) and is taken as a transcription error."
+    }
+  ]
+}

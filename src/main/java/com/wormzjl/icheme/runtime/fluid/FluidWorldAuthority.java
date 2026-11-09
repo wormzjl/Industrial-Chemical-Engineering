@@ -32,7 +32,6 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public static void listen(EditListener listener){LISTENERS.add(Objects.requireNonNull(listener));}
     private final MinecraftServer server;
     private final MaterialCatalog catalog;
-    private final Map<FluidCheckpointCodec.PackageKey,FluidThermodynamics> models=new HashMap<>();
     private final FluidThermodynamics model;
     private final FluidPropertyReloadGuard propertyReload;
     private String propertyHold;
@@ -94,8 +93,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
         controlFacts=com.wormzjl.icheme.runtime.control.ControlFacts.open(server);
         com.wormzjl.icheme.world.level.block.LinePieces.watch(server,controlFacts);
         controlFacts.requireSensorIds(accessories.allSensors());
+        // The world model (the network package's whole list) first: every island's model is a view of it (V2).
+        model=FluidThermodynamics.forNetwork(catalog,com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(catalog),options.maximumVelocity(),options.traceCutoffMoleFraction(),options.solids());
         data=FluidSavedData.open(server,this::model,catalog);
-        model=model(new FluidCheckpointCodec.PackageKey(com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(catalog)));
         propertyReload=new FluidPropertyReloadGuard(catalog,com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(catalog),model);
         presetCache=FluidPresetCatalog.resolve(catalog);componentNames=model.components();
         var savedTopology=data.world().orElseGet(()->WorldTopologyLedger.Snapshot.empty(catalog));savedTopology.basis().requireCurrent(catalog);
@@ -118,10 +118,14 @@ public final class FluidWorldAuthority implements AutoCloseable {
         columns.solves(new ColumnOperation.Solves() {
             @Override public com.wormzjl.icheme.science.column.v3.V3ColumnInput design(ColumnUnit unit){return columnDesign(unit.master());}
             @Override public com.wormzjl.icheme.science.equipment.ColumnComponents.Condenser condenser(ColumnUnit unit){return columnCondenser(unit.master());}
+            /** The job runs on its feed island's model (V4), taken here on the engine thread; a feed port in no island yet waits for the next cycle. */
             @Override public boolean submit(long unit,com.wormzjl.icheme.science.column.operation.ColumnSolve.Job job,java.util.function.Consumer<com.wormzjl.icheme.science.column.operation.ColumnSolve.Outcome> done) {
-                var dimension=net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION,net.minecraft.resources.ResourceLocation.parse(topology.column(unit).master().dimension()));
+                var u=topology.column(unit);var feed=u.station(com.wormzjl.icheme.science.column.operation.Port.FEED,0);
+                Long island=feed==null||feed.device()==0?null:registry.owner(feed.device());
+                if(island==null)return false;
+                var dimension=net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION,net.minecraft.resources.ResourceLocation.parse(u.master().dimension()));
                 var request=new com.wormzjl.icheme.runtime.ProcessSolveServices.ColumnUnitRequest(com.wormzjl.icheme.runtime.ProcessSolveServices.nextRequestId(),new com.wormzjl.icheme.runtime.ProcessSolveServices.ColumnUnitTarget(dimension,unit),0,done);
-                return com.wormzjl.icheme.runtime.ProcessSolveServices.submitColumnUnit(server,request,new com.wormzjl.icheme.runtime.ProcessSolveServices.ColumnUnitCommand(job,model,catalog,IChemE.columnV3LiquidSupplyScreenRatio())).accepted();
+                return com.wormzjl.icheme.runtime.ProcessSolveServices.submitColumnUnit(server,request,new com.wormzjl.icheme.runtime.ProcessSolveServices.ColumnUnitCommand(job,runtime.coordinator().model(island),IChemE.columnV3LiquidSupplyScreenRatio())).accepted();
             }
         });
         instruments=new com.wormzjl.icheme.runtime.instrument.InstrumentService(server,this,accessories);
@@ -183,8 +187,14 @@ public final class FluidWorldAuthority implements AutoCloseable {
     private void owned(){if(!server.isSameThread())throw new IllegalStateException("Fluid authority requires the logical server thread");}
     /** Every island of this world solves on a model built from the same captured options, so the
      * configured trace cutoff is one value for every worker and every retained solver: a retained
-     * solver is replaced whenever its model identity changes, and the model is the cutoff's home. */
-    private FluidThermodynamics model(FluidCheckpointCodec.PackageKey key){return models.computeIfAbsent(key,k->FluidThermodynamics.forNetwork(catalog,k.packageId(),options.maximumVelocity(),options.traceCutoffMoleFraction(),options.solids()));}
+     * solver is replaced whenever its model identity changes, and the model is the cutoff's home. A saved island's key
+     * names the network package it was saved on: it runs on the current network package whatever id the save names (the
+     * load compares the data by compound ids and identity, batch 2026-11-04-refinery-compounds, W4), on the island's own
+     * compound list (V3; {@link FluidThermodynamics#on} refuses a compound the package no longer has, and the load then
+     * restates). */
+    private FluidThermodynamics model(FluidCheckpointCodec.PackageKey saved) {
+        return saved.on(model);
+    }
     private static ResourceKey<Level> dimension(String name){return ResourceKey.create(Registries.DIMENSION,ResourceLocation.parse(name));}
     public List<FluidPresetCatalog.Preset> presets(){owned();return presetCache;}
     public List<String> components(){owned();return componentNames;}
@@ -197,6 +207,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
     /** Every island as stored, without materialising certified ones: a diagnostic read that advances no island. The
      * events queued since the last application are applied first, so the islands they create are among them. */
     public List<IslandCoordinator.Snapshot> diagnosticSnapshots(){owned();flush();return runtime.coordinator().observe();}
+    /** The model island {@code island} runs on, its own compound list (batch 2026-11-04-refinery-compounds, V2): the axis of
+     * its {@link #diagnosticSnapshots} entry, which {@link IslandSets#amounts} maps onto the world list ({@link #model()}) by id. */
+    public FluidThermodynamics diagnosticModel(long island){owned();return runtime.coordinator().model(island);}
     /** Materialises every certified island to now, as a save does; the observer receives the replayed accounting. */
     public void materialiseAll(){owned();flush();runtime.coordinator().snapshots();}
     /** The rest and steady-flow certificate policy captured at server start. */
@@ -618,6 +631,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
         holdValves();
         // Sample electrical supply before this cadence's shaft decisions and presentation, including idle trains.
         if(topology.onlineTick()%ElectricStores.CADENCE==0&&propertyHold==null){electric.cadence();shafts.cadence();}
+        // A running column's port whose account holds a compound its island lacks grows that island (V2): one queued edit.
+        columns.grow(edits->submit(edits,topology.nextIdentity()));
         runtime.tick();
         if(topology.hasPendingEvents()){applyPending();runtime.coordinator().pumpIfUseful();}
         // Shaft events apply after the devices they name (W3), then their trains recompile and wake what moved.
@@ -1151,7 +1166,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
         for(var snapshot:snapshots) {
             if(registry.members(snapshot.id()).isEmpty())throw new IllegalStateException("Fluid island "+snapshot.id()+" holds no device; refusing to save it");
             String dimension=world.active().get(registry.members(snapshot.id()).getFirst()).device().position().dimension();
-            islands.add(new FluidCheckpointCodec.IslandEntry(dimension,com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(catalog),snapshot));
+            // Each island's own compound list (V3), named in full, so a compound added to the package moves no island's model.
+            islands.add(runtime.coordinator().entry(dimension,com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(catalog),snapshot));
         }
         return new FluidSavedData.Capture(new FluidCheckpointCodec.Checkpoint(islands),world);
     }
@@ -1179,7 +1195,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
     private HeatPresentation.Source heatSource(Map<Long,IslandCoordinator.Snapshot> islands) {
         return new HeatPresentation.Source() {
             @Override public WorldTopologyLedger.Registration registration(long id){return registrations().get(id);}
-            @Override public IslandCoordinator.Snapshot island(long device){Long owner=registry.owner(device);return owner==null?null:islands.computeIfAbsent(owner,runtime.coordinator()::presentation);}
+            @Override public IslandCoordinator.Snapshot island(long device){Long owner=registry.owner(device);return owner==null?null:islands.computeIfAbsent(owner,FluidWorldAuthority.this::presentation);}
             @Override public Lines lines(long side){return lines.get(side);}
             @Override public WorldTopologyLedger.Registration at(PhysicalFluidTopology.Position position){return registry.at(position).orElse(null);}
             @Override public FluidView view(long device){return FluidWorldAuthority.this.view(device,islands);}
@@ -1211,7 +1227,11 @@ public final class FluidWorldAuthority implements AutoCloseable {
     private boolean storedOnly;
     /** {@code read} of views and instruments from the islands as they are stored, advancing none: a column's Operation tab, which a menu open reads (a replay runs no engine work). */
     public <T> T stored(java.util.function.Supplier<T> read){owned();storedOnly=true;try{return read.get();}finally{storedOnly=false;}}
-    private IslandCoordinator.Snapshot presented(long island){return storedOnly?runtime.coordinator().observe(island):runtime.coordinator().presentation(island);}
+    private IslandCoordinator.Snapshot presented(long island){return storedOnly?onWorldList(island,runtime.coordinator().observe(island)):presentation(island);}
+    /** Island {@code island} as a presentation reads it, on the world list (V2 stage 5): every view, display and wire vector
+     * stays on the network package's whole list whatever the island carries. */
+    private IslandCoordinator.Snapshot presentation(long island){return onWorldList(island,runtime.coordinator().presentation(island));}
+    private IslandCoordinator.Snapshot onWorldList(long island,IslandCoordinator.Snapshot snapshot){return IslandSets.presented(snapshot,runtime.coordinator().model(island),model);}
     /** {@code islands} caches island reads, so one bucket reads each island once however many of its devices it presents. */
     private FluidView view(long id,Map<Long,IslandCoordinator.Snapshot> islands) {
         FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.viewBuilds);var registration=registrations().get(id);if(registration==null)return new FluidView(id,0,0,topology.onlineTick(),"REMOVED",null,0,List.of());
@@ -1256,7 +1276,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         // A generator or a void in several islands (owner decision D17) reads the status of its owner (the lowest island) and
         // the net flow of all of them.
         if(registration.device().fixed())for(long other:registry.islands(id))if(other!=owner) {
-            var shared=islands.computeIfAbsent(other,runtime.coordinator()::presentation);if(shared.lastResult().isEmpty())continue;var q=shared.lastResult().orElseThrow().averageMassFlows();
+            var shared=islands.computeIfAbsent(other,this::presentation);if(shared.lastResult().isEmpty())continue;var q=shared.lastResult().orElseThrow().averageMassFlows();
             int index=-1;for(int i=0;i<shared.graph().reservoirs().size();i++)if(shared.graph().reservoirs().get(i).id()==id)index=i;
             for(int i=0;i<shared.graph().pipes().size();i++){var pipe=shared.graph().pipes().get(i);if(pipe.first()==index)flow+=q[i];if(pipe.second()==index)flow-=q[i];}
         }
@@ -1337,7 +1357,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         if(registration.device().kind()==TopologyCompiler.Kind.PIPE&&view.pipeInfo()!=null)view=view.withPipeInfo(view.pipeInfo().withReading(lineReading(id,view)));
         if(registration.device().kind()==TopologyCompiler.Kind.VOID) {
             var sources=new ArrayList<IslandCoordinator.Snapshot>();
-            for(long island:registry.islands(id))sources.add(islands.computeIfAbsent(island,runtime.coordinator()::presentation));
+            for(long island:registry.islands(id))sources.add(islands.computeIfAbsent(island,this::presentation));
             // Independent boundary islands can have different intervals: combine rates, expressed as one second of transport.
             view=view.withPipeInfo(PipePresentation.boundaryInflow(id,sources,componentNames.size()),1);
         }
@@ -1501,6 +1521,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
             runtime.topology(dimension(name),events,affected,replacements,model,committed,online,additions,removals,releasedFilters,commit);
         }
         public boolean acceptsRecovery(UUID player){var online=server.getPlayerList().getPlayer(player);return online!=null&&online.getInventory().getFreeSlot()>=0;}
+        @Override public Set<String> portCompounds(long port){return columns==null?Set.of():columns.compounds(port);}
         public void refused(UUID event,String reason){refuseEvent(event,reason);}
         public void committed(Set<Long> removed,Set<Long> recompiled) {
             // A removed exchanger takes its heat in transit along (plan section 5.2): its sides leave in one event, keyed by the lower.

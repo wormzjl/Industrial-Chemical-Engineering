@@ -50,7 +50,6 @@ import com.wormzjl.icheme.science.flowsheet.RevisionNotice;
 import com.wormzjl.icheme.science.flowsheet.SheetBody;
 import com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
-import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.material.MaterialRuntime;
 import com.wormzjl.icheme.world.inventory.ProcessSimulatorMenu;
 import java.io.IOException;
@@ -147,6 +146,8 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
     private List<String> differing = List.of();
     private final Map<String, String> clientRevisions;
     private @Nullable Flowsheet opening;
+    /** What {@link #opening} changed on opening, read once: its notice reads the data of the sheet's view. */
+    private List<FileColumns.Change> openingChanges = List.of();
     private String openingName = "";
     /** The file name the sheet in {@link #opening} keeps once loaded: none for an example. */
     private @Nullable String openingFile;
@@ -174,9 +175,9 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
         // A sheet flashes on the world's own package, whatever it names: a stream's page reads that thermo.
         String network = catalog.presets().network().packageId();
         var pack = catalog.requirePackage(network);
-        String packName = Component.translatableWithFallback("gui.icheme.flowsheet.basis.pack." + MaterialCatalog.Package.label(pack.id()).replace(':', '.'), MaterialCatalog.Package.label(pack.id())).getString();
+        String packName = Component.translatableWithFallback("gui.icheme.flowsheet.basis.pack." + pack.id().replace(':', '.'), pack.id()).getString();
         fluids = new StreamProps.Fluids(FluidThermodynamics.forNetwork(catalog, network), pack, id -> ProcessUi.materialName(catalog.name(id)), packName);
-        var sheet = new Flowsheet(new Flowsheet.Basis(network, pack.revision(), fluids.axis()), List.of(), List.of(), FlowsheetSolver.Settings.DEFAULT);
+        var sheet = RevisionNotice.stamped(new Flowsheet(new Flowsheet.Basis(network, pack.revision(), fluids.axis()), List.of(), List.of(), FlowsheetSolver.Settings.DEFAULT), catalog);
         editor = new SheetEditor(sheet, measure(), ProcessSimulatorScreen::columnDefaults);
         clientRevisions = RevisionNotice.tokens(catalog);
         host.lock(editor);
@@ -341,7 +342,8 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
         var sheet = editor.sheet();
         if (host.reader() || sheet == autosaved) return;
         autosaved = sheet;
-        SheetAutosave.CLIENT.save(FileColumns.autosave(folder(), fileName, menu.opening().sheet().toString()), sheet, unsaved::set);
+        // The file holds the identity of the data the sheet's compounds run on; a failed write hands back the sheet asked for.
+        SheetAutosave.CLIENT.save(FileColumns.autosave(folder(), fileName, menu.opening().sheet().toString()), RevisionNotice.stamped(sheet, MaterialRuntime.active()), failed -> unsaved.set(sheet));
     }
 
     @Override protected void init() {
@@ -774,7 +776,7 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
                 }
                 default -> {
                     Files.createDirectories(folder());
-                    FlowsheetFile.save(FileColumns.file(folder(), name), editor.sheet());
+                    FlowsheetFile.save(FileColumns.file(folder(), name), RevisionNotice.stamped(editor.sheet(), MaterialRuntime.active()));
                     fileName = name;
                     dialog = Dialog.NONE;
                 }
@@ -812,7 +814,7 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
             return;
         }
         if (key.equals("to_clipboard")) {
-            minecraft.keyboardHandler.setClipboard(new String(FlowsheetFile.write(editor.sheet()), StandardCharsets.UTF_8));
+            minecraft.keyboardHandler.setClipboard(new String(FlowsheetFile.write(RevisionNotice.stamped(editor.sheet(), MaterialRuntime.active())), StandardCharsets.UTF_8));
             dialog = Dialog.NONE;
             host.say(new SimulatorHost.Said("file.on_clipboard", List.of(), false));
             return;
@@ -875,8 +877,10 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
                 if (!entry.opens()) return;
                 try {
                     var opened = FileColumns.opened(entry);
-                    if (!FileColumns.changes(opened.sheet(), fluids, ProcessSimulatorScreen::columnDefaults, ProcessSimulatorScreen::lang).isEmpty()) {
+                    var changes = FileColumns.changes(opened.sheet(), fluids, MaterialRuntime.active(), ProcessSimulatorScreen::columnDefaults, ProcessSimulatorScreen::lang);
+                    if (!changes.isEmpty()) {
                         opening = opened.sheet();
+                        openingChanges = changes;
                         openingName = entry.name();
                         openingFile = opened.name();
                         dialog = Dialog.CHANGES;
@@ -1083,7 +1087,7 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
         if (dialog.names()) skin().title(canvas, 10, 10, lang(dialog == Dialog.SAVE_AS ? "flowsheet.file.save_title" : dialog == Dialog.SAVE_TEMPLATE ? "flowsheet.file.template_title" : "flowsheet.file.column_title"));
         else if (dialog == Dialog.UNSAVED) FileColumns.drawChanges(canvas, skin(), lang("flowsheet.file.unsaved_title"), FileColumns.unsaved(ProcessSimulatorScreen::lang), lang("flowsheet.file.unsaved_foot"), w, h);
         else if (dialog == Dialog.DELETE && deleting != null) FileColumns.drawChanges(canvas, skin(), lang("flowsheet.file.delete_title", deleting.name()), FileColumns.deleting(ProcessSimulatorScreen::lang), "", w, h);
-        else if (dialog == Dialog.CHANGES && opening != null) FileColumns.drawChanges(canvas, skin(), lang("flowsheet.file.changes_title", openingName), FileColumns.changes(opening, fluids, ProcessSimulatorScreen::columnDefaults, ProcessSimulatorScreen::lang), lang("flowsheet.file.changes_foot"), w, h);
+        else if (dialog == Dialog.CHANGES && opening != null) FileColumns.drawChanges(canvas, skin(), lang("flowsheet.file.changes_title", openingName), openingChanges, lang("flowsheet.file.changes_foot"), w, h);
         else FileColumns.draw(canvas, skin(), listing(x), w, h);
         g.pose().popPose();
     }

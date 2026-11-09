@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Test;
  * near 1.1 MPa, sixty times thinner at 1 atm, where the fluid phases alone refuse it (the two-liquid window).
  */
 class BalanceTablesTest {
-    private final FluidThermodynamics model=FluidTestSupport.model(MaterialCatalog.bundled(),"icheme:pilot_cryogenic");
+    private final FluidThermodynamics model=FluidTestSupport.model(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(),"icheme:pilot_cryogenic");
     private final PipeResistance.Geometry geometry=new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0);
     private final double[] lng={.002242095,.9497475,.02145535,.02655503,0};
 

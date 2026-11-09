@@ -78,7 +78,7 @@ public final class HydrocarbonModel {
             for(int j=0;j<count;j++) interactions[i][j]=propertyPackage.interactions().get(i).get(j);
             var property=propertyPackage.properties().get(i);
             for(int j=0;j<6;j++) cp[i][j]=property.cp().get(j);
-            double[] fit=idealGasFitRange(catalog,packageId,property);
+            double[] fit=CoefficientIdealGas.fitRange(catalog,packageId,property);
             fitMinimum[i]=fit[0];fitMaximum[i]=fit[1];
         }
         var calibrations=catalog.fluidData().volumeReferences();
@@ -101,23 +101,28 @@ public final class HydrocarbonModel {
         // single vapour-like root there would translate the component by a gas volume.
         for(int i=0;i<count;i++)requireLiquidRoot(packageId,components.get(i),i,anchorT[i],anchorP[i]);
         // The free water's formulation and revision, as a spine package's identity carries them (WP4: its ice).
+        // A package that admits crystals adds their records' revisions (MaterialCatalog.spineRevision), as a spine package's
+        // identity does (E27); a view without them keeps its revision.
+        String crystals=propertyPackage.crystals().isEmpty()?"":":"+catalog.spineRevision(packageId);
         revision=catalog.fluidRevision(packageId)+":"+FORMULATION+":"+ThermoIdentity.SEPARATE_FREE_WATER_FORMULATION+":"+propertyPackage.water().revision()
-                +":fluid-domain-data-v1:catalog-volume-reference-v1";
+                +":fluid-domain-data-v1:catalog-volume-reference-v1"+crystals;
     }
 
     /**
-     * The data range of a coefficient record's ideal-gas fit on package {@code packageId}, K, as {@code {minimum,
-     * maximum}}: the component's fluid range where it declares one (the fit qualified there), its record's otherwise,
-     * raised to the fit's own lower end where the record declares one (nitrogen's 273.16 K, owner decision D37,
-     * simplification S4: the heat capacity held below it is within 0.05 % of NIST's zero-pressure value down to the
-     * triple point). Past it the translated model, and the phase engine's ideal gas of the same fit
-     * ({@link NetworkPhaseEngine.CoefficientIdealGas}, which reads the translated model's ends), hold the heat capacity.
+     * The phase engine's evaluator of this model's coefficient path (a package without a reference spine): the package's
+     * PR78 constants and constant interactions over its whole basis in package order, this model's translations and the
+     * {@link CoefficientIdealGas} fits over this model's own ranges, so volume and {@code ln phi} are bit for bit this
+     * model's and the ideal gas is on its datum. A spine package's evaluator is {@link CubicPhaseEvaluator#forPackage}.
      */
-    static double[] idealGasFitRange(MaterialCatalog catalog,String packageId,MaterialCatalog.Property property) {
-        var range=catalog.fluidValidity(packageId,property.component());
-        double minimum=range.map(MaterialCatalog.Validity::minimumTemperature).orElse(property.minimumTemperature());
-        if(property.idealGasMinimumTemperature()!=null)minimum=Math.max(minimum,property.idealGasMinimumTemperature());
-        return new double[]{minimum,range.map(MaterialCatalog.Validity::maximumTemperature).orElse(property.maximumTemperature())};
+    public CubicPhaseEvaluator coefficientEvaluator() {
+        if(spine!=null)throw new IllegalStateException("Package "+propertyPackage.id()+" takes its ideal gas from its reference spine");
+        int n=propertyPackage.components().size();double[] translations=new double[n];
+        var gas=new java.util.ArrayList<com.wormzjl.icheme.science.thermo.IdealGasFunction>(n);
+        for(int i=0;i<n;i++) {
+            translations[i]=translated.translation(i);
+            gas.add(new CoefficientIdealGas(propertyPackage.properties().get(i),translated.idealGasMinimumTemperature(i),translated.idealGasMaximumTemperature(i)));
+        }
+        return CubicPhaseEvaluator.fromPackage(propertyPackage,propertyPackage.components(),translations,gas);
     }
 
     /** A liquid root of pure component {@code i} at its volume anchor's own state ({@code t}, {@code p}), on either path. */

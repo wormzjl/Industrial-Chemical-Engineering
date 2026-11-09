@@ -23,7 +23,7 @@ class V3ColumnInitializerTest {
     @Test
     void registeredTiaJuanaCrudeFlashesAndBuildsAnExactZeroAwareFiniteSeed() {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage(CDU17);
-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light");
+        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
         double[] feedFlows = crude.moleFractions();
         for (int component = 0; component < feedFlows.length; component++) feedFlows[component] *= 100.0;
         V3ColumnInput input = V3TestInputs.dry(V3ColumnInput.SCHEMA_VERSION, crude.packageId(), crude.assayId(),

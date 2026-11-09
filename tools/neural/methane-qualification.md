@@ -24,7 +24,7 @@ saved inputs and reproduction of the 19-component neural pilot.
 - Ideal-gas heat capacity uses a degree-five fit in `T - 298.15` to the
   [NIST Shomate correlation](https://webbook.nist.gov/cgi/cbook.cgi?ID=C74828&Mask=1&Type=JANAFG&Table=on).
   Enthalpy is its analytic integral with zero at 298.15 K, consistent with the existing package datum.
-  `fit_methane.py` reproduces the fit using 1,201 uniform points over 298.15..900 K. On 10,001 check
+  `fit_methane.py` (moved on 2026-11-04 to the main checkout, `research/2026-11-04-open-thermo-data/nist-copies/tools-neural/`, because it carries the NIST Shomate coefficients verbatim; the record now takes an open fit, `tools/open-thermo-data/`) reproduced the fit using 1,201 uniform points over 298.15..900 K. On 10,001 check
   points the maximum Cp error is **0.04270 J/(mol K)** and the maximum enthalpy error is
   **0.44686 J/mol**. Tests compare against the original rational correlation and verify `dH/dT = Cp`.
 - Methane binary interactions are explicitly **assumed zero**, including the petroleum fractions;
@@ -57,7 +57,7 @@ physics remain limitations for later qualification.
 ## Reproduction and saved inputs
 
 ```powershell
-python tools/neural/fit_methane.py
+python D:/Minecraft/Modding/1.21/CreateChemE/research/2026-11-04-open-thermo-data/nist-copies/tools-neural/fit_methane.py
 .\gradlew.bat test --tests '*V3Tjl20MethanePropertyPackageTest' --tests '*V3MethaneColumnTest' --offline
 ```
 

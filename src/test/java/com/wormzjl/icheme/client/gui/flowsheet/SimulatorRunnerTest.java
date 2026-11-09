@@ -362,7 +362,7 @@ class SimulatorRunnerTest {
             }
 
             @Override public com.wormzjl.icheme.science.flowsheet.sizing.SheetSizing.Sized rate(Flowsheet sheet, FlowsheetRun run, MaterialCatalog catalog, Runnable checkpoint) {
-                return null;
+                return new com.wormzjl.icheme.science.flowsheet.sizing.SheetSizing.Sized(Map.of(), Map.of(), List.of());
             }
         });
         var sheet = SheetFixture.water();
@@ -575,7 +575,6 @@ class SimulatorRunnerTest {
         var applied = ColumnDoor.of(ColumnDoor.template(door, template));
         assertEquals(7e4, applied.condenserDrop(), "not the template's to say");
         assertEquals(ColumnDoor.of(door).condenser(), applied.condenser());
-        assertEquals(ColumnDoor.of(door).packageId(), applied.packageId());
         assertEquals(firstId, applied.pumparounds().getFirst().id(), "so a stream on that row stays on its port");
         assertEquals(3e4, applied.pumparounds().getFirst().drop());
         assertTrue(applied.draws().isEmpty());
@@ -660,10 +659,10 @@ class SimulatorRunnerTest {
 
     @Test
     void aMovedPackageRevisionDropsResults() {
+        // A sheet of water alone holds no network compound: it runs on the network's placeholder, nitrogen (W3, SheetCompounds).
         var ran = RevisionNotice.tokens(SheetFixture.water(), SheetFixture.CATALOG);
-        assertEquals(Map.of(SheetFixture.NETWORK, SheetFixture.CATALOG.fluidRevision(SheetFixture.NETWORK)), ran);
+        assertEquals(Map.of(SheetFixture.NETWORK, SheetFixture.CATALOG.restrict(SheetFixture.NETWORK, List.of("Nitrogen")).fluidRevision(SheetFixture.NETWORK)), ran);
         assertFalse(RevisionNotice.dropsResults(ran, ran));
-        assertFalse(RevisionNotice.dropsResults(ran, RevisionNotice.tokens(SheetFixture.CATALOG)), "another package moving leaves them");
         assertTrue(RevisionNotice.dropsResults(ran, Map.of(SheetFixture.NETWORK, "moved")));
         assertTrue(RevisionNotice.dropsResults(ran, Map.of()), "a package gone");
     }

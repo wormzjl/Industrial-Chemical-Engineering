@@ -97,6 +97,19 @@ final class SheetFixture {
         return example("crude_unit");
     }
 
+    /**
+     * The sample as it stood on the Tia Juana assay before batch 2026-11-04-open-thermo-data (O3), read as the game reads a bundled
+     * example: the utility gates pin the simulator's regulation on it, since the classical start does not close the medium grade at
+     * every feed they try (CRUDE_GRADES_APPLY_REVIEW.md).
+     */
+    static Flowsheet tiaJuanaSample() {
+        var example = FlowsheetExamples.read(name -> name.equals(FlowsheetExamples.INDEX)
+                ? new java.io.ByteArrayInputStream("[\"crude_unit.json\"]".getBytes(StandardCharsets.UTF_8))
+                : SheetFixture.class.getResourceAsStream("/materials/tia-juana/flowsheet/crude_unit.json")).getFirst();
+        if (example.sheet() == null) throw new IllegalStateException("the Tia Juana sample does not read: " + example.refused());
+        return example.sheet();
+    }
+
     /** A bundled example's sheet, read as the game reads it. */
     static Flowsheet example(String stem) {
         var example = FlowsheetExamples.read(name -> SheetFixture.class.getResourceAsStream("/" + name)).stream().filter(e -> e.stem().equals(stem)).findFirst().orElseThrow();

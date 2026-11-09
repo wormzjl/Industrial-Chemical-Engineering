@@ -130,6 +130,8 @@ public final class WaterRegion1 {
         public Workspace() {}
         public double specificVolume(){return specificVolume;}
         public double specificEnthalpy(){return specificEnthalpy;}
+        /** c_p, J/(kg K): the region's at the evaluated temperature, the held end value past its range. */
+        public double specificHeatCapacity(){return specificHeatCapacity;}
         public double volumePressureDerivative(){return volumePressureDerivative;}
         /** A copy of the last evaluation as the immutable record. */
         public State state() {

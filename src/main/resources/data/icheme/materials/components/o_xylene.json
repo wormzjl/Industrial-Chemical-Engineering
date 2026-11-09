@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "O-xylene",
+  "kind": "chemical",
+  "translation_key": "material.icheme.o_xylene",
+  "fallback": "O-xylene",
+  "properties": "icheme:chemsep_o_xylene",
+  "appearance": {
+    "color": "#F3F4EA",
+    "transparency": 0.85,
+    "estimated": true
+  },
+  "identifiers": {
+    "cas": "95-47-6",
+    "chemsep_id": "505",
+    "smiles": "c1(C)ccccc1(C)",
+    "formula": "CH3(C6H4)CH3"
+  }
+}

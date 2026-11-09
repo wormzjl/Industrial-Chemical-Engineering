@@ -4,6 +4,7 @@
   "kind": "chemical",
   "translation_key": "material.icheme.nitrogen",
   "fallback": "Nitrogen",
+  "properties": "icheme:fluid_nitrogen",
   "appearance": {
     "color": "#DCE8FA",
     "transparency": 0.95,

@@ -1,0 +1,18 @@
+diff --git a/src/test/java/com/wormzjl/icheme/science/thermo/phase/FluidTpEquilibriumPhUvTest.java b/src/test/java/com/wormzjl/icheme/science/thermo/phase/FluidTpEquilibriumPhUvTest.java
+index c7d84174e..6642b3028 100644
+--- a/src/test/java/com/wormzjl/icheme/science/thermo/phase/FluidTpEquilibriumPhUvTest.java
++++ b/src/test/java/com/wormzjl/icheme/science/thermo/phase/FluidTpEquilibriumPhUvTest.java
+@@ -104,7 +104,12 @@ class FluidTpEquilibriumPhUvTest {
+         assertEquals(t, temperature(uv), ROUND_TRIP * t, at + " UV temperature");
+         // The pressure follows from the recovered temperature at the specified volume: a stiff answer (a liquid) moves its
+         // pressure by T (dP/dT)_V / P times the temperature's relative error (about 230 for liquid water at 320 K, 1 MPa).
+-        assertEquals(p, pressure(uv), isochoricStiffness(service, workspace, species, amounts, t, p) * ROUND_TRIP * p, at + " UV pressure");
++        // Option C (probe): plus the TP answers' own volume noise where all water is steam beside hydrocarbons, whose
++        // partial-pressure closure stops at PARTIAL_PRESSURE_TOLERANCE P (two answers differ by up to twice that in ln V).
++        double closure = tp.freeWater() != null && tp.freeWater().liquidWater() == 0.0 && tp.freeWater().waterVapor() > 0.0
++                && tp.freeWater().hydrocarbonPressure() < p ? 2.0 * FluidTpEquilibrium.PARTIAL_PRESSURE_TOLERANCE : 0.0;
++        assertEquals(p, pressure(uv), (isochoricStiffness(service, workspace, species, amounts, t, p) * ROUND_TRIP + closure) * p,
++                at + " UV pressure");
+         assertEquals(u, uv.internalEnergy(), 1.0e-6 * n * R * t, at + " UV energy");
+         assertEquals(v, uv.volume(), 1.0e-6 * v, at + " UV volume");
+         assertTrue(uv.diagnostics().specificationResidual() <= FluidTpEquilibrium.SPECIFICATION_TOLERANCE, at);

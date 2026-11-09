@@ -227,7 +227,10 @@ class WorkerTrajectoryEquivalenceTest {
                     new PipeResistance.Geometry(100+5*index,diameter,.000045,index%2));
             var graph=new PassiveNetwork(List.of(first,second),List.of(pipe));
             if(fluid==FluidTestSupport.Mixture.WET_CRUDE) {
-                assertTrue(Arrays.stream(first.inventory().moles()).allMatch(amount->amount>0),"wet-crude fixture must exercise all 22 gameplay components");
+                // Every compound of the crude package with nitrogen, and water; the network's other compounds stay absent.
+                var crude=new java.util.HashSet<>(com.wormzjl.icheme.science.material.MaterialCatalog.bundled().requirePackage("icheme:tjl20_methane_nitrogen").components());crude.add("Water");
+                var moles=first.inventory().moles();
+                for(int c=0;c<moles.length;c++)assertEquals(crude.contains(model.components().get(c)),moles[c]>0,"wet-crude fixture must exercise every crude, nitrogen and water component: "+model.components().get(c));
                 assertTrue(first.state().vaporVolume()>0&&first.state().liquidVolume()+first.state().waterVolume()>0,
                         "wet-crude fixture must remain multiphase");
             }

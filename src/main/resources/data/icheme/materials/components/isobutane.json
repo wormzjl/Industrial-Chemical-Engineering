@@ -4,6 +4,7 @@
   "kind": "chemical",
   "translation_key": "material.icheme.isobutane",
   "fallback": "Isobutane",
+  "properties": "icheme:tjl19_isobutane",
   "appearance": {
     "color": "#F3F4EA",
     "transparency": 0.85,

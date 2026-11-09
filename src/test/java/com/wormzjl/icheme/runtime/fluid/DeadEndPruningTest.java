@@ -32,7 +32,7 @@ class DeadEndPruningTest {
     }
 
     @Test void aFilterWithNothingPastItLeavesTheCrudeGeneratorsIslandAlone() {
-        double[] crude=Arrays.copyOf(V3PengRobinsonThermo.fromRegisteredPackage("icheme:tjl20_methane_nitrogen").crudeFeed("icheme:tia_juana_light_methane").moleFractions(),
+        double[] crude=Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo("icheme:tjl20_methane_nitrogen").crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(),
                 FluidDeviceSpec.nitrogen(EventPathWorld.CATALOG).composition().length);
         var w=new EventPathWorld();w.runTo(662);var nitrogen=EventPathWorld.pure(MaterialTestBasis.NITROGEN,298.15,101325);
         w.place(0,0,-2,Kind.VOID,NORTH,PASSIVE,nitrogen,.1);w.place(0,0,-1,Kind.PIPE,NORTH,.1);w.place(0,1,1,Kind.PIPE,NORTH,.1);

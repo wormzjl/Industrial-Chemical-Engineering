@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "Propylene",
+  "kind": "chemical",
+  "translation_key": "material.icheme.propylene",
+  "fallback": "Propylene",
+  "properties": "icheme:chemsep_propylene",
+  "appearance": {
+    "color": "#F3F4EA",
+    "transparency": 0.85,
+    "estimated": true
+  },
+  "identifiers": {
+    "cas": "115-07-1",
+    "chemsep_id": "202",
+    "smiles": "C=CC",
+    "formula": "CH2CHCH3"
+  }
+}

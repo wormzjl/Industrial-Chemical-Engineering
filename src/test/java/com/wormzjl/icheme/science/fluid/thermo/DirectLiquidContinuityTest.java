@@ -123,12 +123,11 @@ class DirectLiquidContinuityTest {
     private static FluidThermodynamics.State solve(FluidThermodynamics model,FluidThermodynamics.State previous,double volume,double energy,double[] n) {
         return FluidTestSupport.inventoryState(model,previous,new PassiveNetwork.Inventory(volume,n,energy));
     }
+    /** The nitrogen dataset's ceiling raised; the package envelope is the hull of its compounds' ranges and follows it. */
     private FluidThermodynamics widenedNitrogen(double ceiling) {
-        var resources=new HashMap<>(catalog.resources());
-        for(String key:List.of("data/icheme/materials/properties/nitrogen.json","data/icheme/materials/packages/tjl20_nitrogen.json")) {
-            var o=JsonParser.parseString(resources.get(key)).getAsJsonObject();o.getAsJsonObject("fluid_domain").addProperty("pressure_max_pascal",ceiling);
-            resources.put(key,o.toString());
-        }
+        var resources=new HashMap<>(catalog.resources());String key="data/icheme/materials/properties/nitrogen.json";
+        var o=JsonParser.parseString(resources.get(key)).getAsJsonObject();o.getAsJsonObject("fluid_domain").addProperty("pressure_max_pascal",ceiling);
+        resources.put(key,o.toString());
         return FluidThermodynamics.forNetwork(MaterialCatalog.parse(resources),NETWORK);
     }
 }

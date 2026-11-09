@@ -263,9 +263,10 @@ final class V3MeshResidualEvaluator {
      * Gibbs--Duhem says they must.</p>
      *
      * <p>The water a node's vapour carries is not one of that node's unknowns anywhere except the condenser,
-     * whose regime can make it a capped multiple of the overhead hydrocarbon vapour; on every tray it is the
-     * authored steam plus the free water of the tray above, and that cross-node coupling is written in closed
-     * form by the assembler instead.</p>
+     * whose regime can make it a capped multiple of the overhead hydrocarbon vapour, and a carry-over tray one,
+     * whose vapour carries the steam less its own free water ({@link V3ColumnProblem#trayWaterVaporFlow}); on
+     * every other tray it is the authored steam plus the free water of the tray above, and that cross-node
+     * coupling is written in closed form by the assembler instead.</p>
      */
     LocalNodeDerivatives localDerivatives(V3DryMeshState state, int node, V3ThermoWorkspace workspace) {
         state = Objects.requireNonNull(state, "state");
@@ -349,16 +350,23 @@ final class V3MeshResidualEvaluator {
             }
         }
         if (water != 0.0) {
-            vaporEnergyByTemperature += water * V3WaterProperties.dVaporMolarEnthalpyDT(temperature);
-            double vaporEnthalpy = V3WaterProperties.vaporMolarEnthalpy(temperature);
-            for (int j = 0; j < components; j++) vaporEnergyByVaporFlow[j] += waterByVaporFlow[j] * vaporEnthalpy;
+            // The steam is at its Dalton partial pressure P W / (V + W), so its virial residual moves with the
+            // hydrocarbon vapour V as well as with W and T.
+            vaporEnergyByTemperature += V3WaterProperties.steamEnthalpyRateByTemperature(
+                    temperature, pressure, water, vaporTotal);
+            double byWater = V3WaterProperties.steamEnthalpyRateByWater(temperature, pressure, water, vaporTotal);
+            double byHydrocarbon = V3WaterProperties.steamEnthalpyRateByHydrocarbon(
+                    temperature, pressure, water, vaporTotal);
+            for (int j = 0; j < components; j++) {
+                vaporEnergyByVaporFlow[j] += waterByVaporFlow[j] * byWater + state.vaporFlow(node, j) * byHydrocarbon;
+            }
         }
 
         double freeWater = problem.freeWaterFlowMolPerSecond(state, node);
         double freeWaterEnergyByFreeWaterFlow = freeWater == 0.0
-                ? 0.0 : freeWater * V3WaterProperties.liquidMolarEnthalpy(temperature);
+                ? 0.0 : freeWater * V3WaterProperties.liquidMolarEnthalpy(temperature, pressure);
         double freeWaterEnergyByTemperature = freeWater == 0.0
-                ? 0.0 : freeWater * V3WaterProperties.dLiquidMolarEnthalpyDT(temperature);
+                ? 0.0 : freeWater * V3WaterProperties.dLiquidMolarEnthalpyDT(temperature, pressure);
 
         double[] waterSaturationByVaporFlow = new double[components];
         double waterSaturationByTemperature = 0.0;
@@ -369,10 +377,26 @@ final class V3MeshResidualEvaluator {
                         - (state.vaporFlow(node, j) + waterByVaporFlow[j]) / (vaporTotal + water);
             }
         }
+
+        // A carry-over tray one is the one node whose own free water is in its vapour: W_1 = S - F_1, so
+        // dW_1/d(log coordinate) = -F_1 reaches the dilution of every equilibrium row, the steam enthalpy leaving
+        // with the vapour, and the saturation row, whose lever it is.
+        double ownWaterByFreeWaterFlow = problem.hasFreeWaterUnknown(node) && !problem.freeWaterFalls(node)
+                ? -freeWater : 0.0;
+        double equilibriumByFreeWaterFlow = 0.0;
+        double vaporEnergyByFreeWaterFlow = 0.0;
+        double waterSaturationByFreeWaterFlow = 0.0;
+        if (ownWaterByFreeWaterFlow != 0.0) {
+            equilibriumByFreeWaterFlow = -ownWaterByFreeWaterFlow / (vaporTotal + water);
+            vaporEnergyByFreeWaterFlow = ownWaterByFreeWaterFlow
+                    * V3WaterProperties.steamEnthalpyRateByWater(temperature, pressure, water, vaporTotal);
+            waterSaturationByFreeWaterFlow = ownWaterByFreeWaterFlow * (1.0 / water - 1.0 / (vaporTotal + water));
+        }
         return new LocalNodeDerivatives(equilibriumByLiquidFlow, equilibriumByVaporFlow, equilibriumByTemperature,
                 liquidEnergyByLiquidFlow, liquidEnergyByTemperature, vaporEnergyByVaporFlow, vaporEnergyByTemperature,
                 freeWaterEnergyByFreeWaterFlow, freeWaterEnergyByTemperature, waterSaturationByVaporFlow,
-                waterSaturationByTemperature);
+                waterSaturationByTemperature, equilibriumByFreeWaterFlow, vaporEnergyByFreeWaterFlow,
+                waterSaturationByFreeWaterFlow);
     }
 
     /**
@@ -472,10 +496,15 @@ final class V3MeshResidualEvaluator {
      * latent heat released where water condenses and absorbed where it re-evaporates appears without a term
      * of its own. Free water is <em>not</em> withdrawn by a side draw: the aqueous phase is immiscible and
      * decants, so the {@code 1 - w} retention factor applies to the hydrocarbon liquid only.</p>
+     *
+     * <p>A carry-over tray one books the same way: its free water leaves as liquid at its own temperature and
+     * its vapour carries {@code W_1 = S - F_1}, so the latent heat of the carried water stays on tray one, and
+     * tray two receives none of it. The drum, which has no energy row, takes it in the condenser duty
+     * ({@link V3ColumnDutyLedger#condenserDutyWatts}).</p>
      */
     private double energyResidual(V3DryMeshState state, int node, NodeProperties[] properties) {
         V3ColumnTopology topology = problem.topology();
-        double freeWaterIn = node >= 2 ? freeWaterEnergy(state, node - 1) : 0.0;
+        double freeWaterIn = node >= 2 && problem.freeWaterFalls(node - 1) ? freeWaterEnergy(state, node - 1) : 0.0;
         if (node <= topology.trayCount()) {
             double liquidIn = node == 1
                     ? (topology.hasLiquidPhase(0) ? organicRefluxFraction() * phaseEnergy(state, 0, true, properties) : 0.0)
@@ -495,11 +524,11 @@ final class V3MeshResidualEvaluator {
                 - phaseEnergy(state, node, true, properties) - phaseEnergy(state, node, false, properties);
     }
 
-    /** Enthalpy rate of the aqueous liquid leaving one tray downward; zero unless the tray is wet. */
+    /** Enthalpy rate of the aqueous liquid leaving one tray (downward, or carried over from tray one); zero unless the tray is wet. */
     private double freeWaterEnergy(V3DryMeshState state, int node) {
         double freeWater = problem.freeWaterFlowMolPerSecond(state, node);
         return freeWater == 0.0 ? 0.0
-                : freeWater * V3WaterProperties.liquidMolarEnthalpy(state.temperatureKelvin(node));
+                : freeWater * V3WaterProperties.liquidMolarEnthalpy(state.temperatureKelvin(node), problem.nodePressurePascal(node));
     }
 
     /**
@@ -532,7 +561,8 @@ final class V3MeshResidualEvaluator {
         // pure-water overhead product, and that product's enthalpy belongs to the condenser vapor outlet.
         if (!liquid && problem.hasSteamFeeds()) {
             double water = waterVaporFlow(state, node);
-            if (water != 0.0) energy += water * V3WaterProperties.vaporMolarEnthalpy(state.temperatureKelvin(node));
+            if (water != 0.0) energy += V3WaterProperties.steamEnthalpyRate(state.temperatureKelvin(node),
+                    problem.nodePressurePascal(node), water, totalFlow);
         }
         return energy;
     }
@@ -756,7 +786,9 @@ final class V3MeshResidualEvaluator {
      * combination the rows do not couple is stored as an exact zero rather than left out, so a caller reads
      * the same array shape whatever the node is and cannot mistake an absent coupling for a missing one: a
      * hydrocarbon liquid flow does not change the vapour enthalpy leaving the node, a node's own free water
-     * does not change its own equilibrium, and a dry tray has no saturation row to differentiate.</p>
+     * does not change its own equilibrium (except on a carry-over tray one, whose vapour water it is: the three
+     * {@code ...ByFreeWaterFlow} terms, zero on every other node), and a dry tray has no saturation row to
+     * differentiate.</p>
      */
     record LocalNodeDerivatives(
             double[][] equilibriumByLiquidFlow,
@@ -769,7 +801,10 @@ final class V3MeshResidualEvaluator {
             double freeWaterEnergyByFreeWaterFlow,
             double freeWaterEnergyByTemperature,
             double[] waterSaturationByVaporFlow,
-            double waterSaturationByTemperature) {
+            double waterSaturationByTemperature,
+            double equilibriumByFreeWaterFlow,
+            double vaporEnergyByFreeWaterFlow,
+            double waterSaturationByFreeWaterFlow) {
         LocalNodeDerivatives {
             Objects.requireNonNull(equilibriumByLiquidFlow, "equilibriumByLiquidFlow");
             Objects.requireNonNull(equilibriumByVaporFlow, "equilibriumByVaporFlow");
@@ -784,7 +819,7 @@ final class V3MeshResidualEvaluator {
                 case LIQUID_COMPONENT_FLOW -> equilibriumByLiquidFlow[row][column];
                 case VAPOR_COMPONENT_FLOW -> equilibriumByVaporFlow[row][column];
                 case TEMPERATURE -> equilibriumByTemperature[row];
-                case FREE_WATER_FLOW -> 0.0;
+                case FREE_WATER_FLOW -> equilibriumByFreeWaterFlow;
             };
         }
 
@@ -800,7 +835,8 @@ final class V3MeshResidualEvaluator {
             return switch (family) {
                 case VAPOR_COMPONENT_FLOW -> vaporEnergyByVaporFlow[column];
                 case TEMPERATURE -> vaporEnergyByTemperature;
-                case LIQUID_COMPONENT_FLOW, FREE_WATER_FLOW -> 0.0;
+                case FREE_WATER_FLOW -> vaporEnergyByFreeWaterFlow;
+                case LIQUID_COMPONENT_FLOW -> 0.0;
             };
         }
 
@@ -816,7 +852,8 @@ final class V3MeshResidualEvaluator {
             return switch (family) {
                 case VAPOR_COMPONENT_FLOW -> waterSaturationByVaporFlow[column];
                 case TEMPERATURE -> waterSaturationByTemperature;
-                case LIQUID_COMPONENT_FLOW, FREE_WATER_FLOW -> 0.0;
+                case FREE_WATER_FLOW -> waterSaturationByFreeWaterFlow;
+                case LIQUID_COMPONENT_FLOW -> 0.0;
             };
         }
     }

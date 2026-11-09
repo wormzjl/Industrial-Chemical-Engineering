@@ -19,7 +19,7 @@ import org.junit.jupiter.api.Test;
  * 1e-12 to 1e-7 after 7 k to 94 k kernel calls.
  */
 class NearPureCrystalStepTest {
-    static final FluidTpEquilibrium SERVICE = FluidTpEquilibrium.forPackage(MaterialCatalog.bundled(), "icheme:pilot_cryogenic");
+    static final FluidTpEquilibrium SERVICE = FluidTpEquilibrium.forPackage(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), "icheme:pilot_cryogenic");
     static final List<String> BASIS = SERVICE.contract().components();
     static final int N2 = BASIS.indexOf("Nitrogen");
     static final int CO2 = BASIS.indexOf("CarbonDioxide");

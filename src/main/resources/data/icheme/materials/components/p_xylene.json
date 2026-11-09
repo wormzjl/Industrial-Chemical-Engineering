@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "P-xylene",
+  "kind": "chemical",
+  "translation_key": "material.icheme.p_xylene",
+  "fallback": "P-xylene",
+  "properties": "icheme:chemsep_p_xylene",
+  "appearance": {
+    "color": "#F3F4EA",
+    "transparency": 0.85,
+    "estimated": true
+  },
+  "identifiers": {
+    "cas": "106-42-3",
+    "chemsep_id": "507",
+    "smiles": "c1(C)ccc(C)cc1",
+    "formula": "CH3(C6H4)CH3"
+  }
+}

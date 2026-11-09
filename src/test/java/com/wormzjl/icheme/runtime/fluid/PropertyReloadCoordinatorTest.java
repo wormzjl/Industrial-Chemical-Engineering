@@ -44,7 +44,7 @@ class PropertyReloadCoordinatorTest {
         attempts.remove(2L);coordinator.completed(second,Optional.of(new ProcessSolveServices.FluidIslandSolveResult(Optional.of(oldResult),"FULL",10)));
         assertEquals(0,coordinator.pendingCount());coordinator.pump();assertTrue(attempts.isEmpty());
         var saved=coordinator.snapshot(1);var checkpoint=new FluidCheckpointCodec.Checkpoint(List.of(new FluidCheckpointCodec.IslandEntry("minecraft:overworld",FluidPresetCatalog.NETWORK_PACKAGE,saved)));
-        var restored=FluidCheckpointCodec.decode(FluidCheckpointCodec.encode(checkpoint,key->model),key->model).islands().getFirst().snapshot();
+        var restored=FluidCheckpointCodec.decode(FluidCheckpointCodec.encode(checkpoint,key->key.on(model)),key->key.on(model)).islands().getFirst().snapshot();
         assertEquals(saved.clock(),restored.clock());assertEquals(saved.status(),restored.status());
         coordinator.resumeQualifiedProperties();coordinator.pump();assertEquals(2,attempts.size());
         for(var attempt:List.copyOf(attempts.values())) {

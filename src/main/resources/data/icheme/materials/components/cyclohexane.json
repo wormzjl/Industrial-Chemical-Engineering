@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "Cyclohexane",
+  "kind": "chemical",
+  "translation_key": "material.icheme.cyclohexane",
+  "fallback": "Cyclohexane",
+  "properties": "icheme:chemsep_cyclohexane",
+  "appearance": {
+    "color": "#F3F4EA",
+    "transparency": 0.85,
+    "estimated": true
+  },
+  "identifiers": {
+    "cas": "110-82-7",
+    "chemsep_id": "137",
+    "smiles": "C1CCCCC1",
+    "formula": "-(CH2)6-"
+  }
+}

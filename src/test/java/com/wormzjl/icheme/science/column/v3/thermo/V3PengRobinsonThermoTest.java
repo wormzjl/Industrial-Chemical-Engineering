@@ -13,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.Cdu17FixtureExtension.class)
 class V3PengRobinsonThermoTest {
     private static final String PACKAGE_ID = "icheme:cdu17_tjl_acs2018";
-    private static final String ASSAY_ID = "icheme:tia_juana_light";
+    private static final String ASSAY_ID = "icheme:tia_juana_light_kl1976";
 
     @Test
     void registeredSampleCrudeHasTheDeclaredSixteenHydrocarbonBasisAndDefensiveAssayVector() {

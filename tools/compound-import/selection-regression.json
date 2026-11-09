@@ -1,0 +1,26 @@
+{
+  "comment": "Regression form: the six bundled light ends (properties/tjl19_*.json), imported in the bundled form (Cp fit on the 25 K grid 300..900 K, fluid domain 293.15..900 K, liquid viscosity 0.5..0.95 Tc, vapour viscosity 298.15..900 K plus a 293.15 K node). Compare with regression.mjs.",
+  "properties_prefix": "icheme:regression_",
+  "properties_revision": "regression-r1",
+  "viscosity_revision": "regression-r1",
+  "freezing_revision": "regression-r1",
+  "form": {
+    "column_range_kelvin": [298.15, 900],
+    "cp_fit": { "low": 298.15, "high": 900, "grid_step_kelvin": 25, "include_low_end": false },
+    "fluid_domain": { "temperature_min": 293.15, "temperature_max": 900, "pressure_min_pascal": 100, "pressure_max_pascal": 2000000,
+      "evidence": "Regression form of the bundled light ends." },
+    "liquid_viscosity": { "low": "half_tc", "high_reduced_temperature": 0.95, "above_data": "equation" },
+    "vapor_viscosity": { "low": 298.15, "high": 900, "extra_low_nodes": [293.15] },
+    "tolerance": 0.0005
+  },
+  "existing": [],
+  "pair_library": { "id": "icheme:regression_pairs", "file": "regression_pairs", "revision": "regression-r1" },
+  "compounds": [
+    { "id": "Ethane", "cas": "74-84-0", "file": "ethane", "bundled": "tjl19_ethane.json" },
+    { "id": "Propane", "cas": "74-98-6", "file": "propane", "bundled": "tjl19_propane.json" },
+    { "id": "Isobutane", "cas": "75-28-5", "file": "isobutane", "bundled": "tjl19_isobutane.json" },
+    { "id": "N-butane", "cas": "106-97-8", "file": "n_butane", "bundled": "tjl19_n_butane.json" },
+    { "id": "Isopentane", "cas": "78-78-4", "file": "isopentane", "bundled": "tjl19_isopentane.json" },
+    { "id": "N-pentane", "cas": "109-66-0", "file": "n_pentane", "bundled": "tjl19_n_pentane.json" }
+  ]
+}

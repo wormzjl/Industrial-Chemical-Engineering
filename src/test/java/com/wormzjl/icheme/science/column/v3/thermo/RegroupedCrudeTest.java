@@ -1,16 +1,18 @@
 package com.wormzjl.icheme.science.column.v3.thermo;
 
 import com.wormzjl.icheme.science.material.*;
-import com.wormzjl.icheme.science.fluid.transport.MixtureViscosity;
 import com.wormzjl.icheme.science.column.v3.*;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
+@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.TiaJuanaExtension.class)
 class RegroupedCrudeTest {
     @Test void replacementHasTwelveConsistentCutsAndNoRetiredProductionBasis() {
-        // Three column/network packages plus the bundled pilot icheme:pilot_cryogenic (no column package).
-        var catalog=MaterialCatalog.bundled();assertEquals(4,catalog.packages().size());
+        // Two column packages and the network package icheme:refinery; the literature package icheme:tjl19_dwsim (O3) and the
+        // pilot icheme:pilot_cryogenic (O5, E25) are test fixtures since batch 2026-11-04-open-thermo-data.
+        var catalog=MaterialCatalog.bundled();assertEquals(3,catalog.packages().size());
+        assertFalse(catalog.packages().containsKey(PilotCryogenicTestCatalog.PACKAGE_ID));
         assertFalse(catalog.packages().containsKey("icheme:cdu17_tjl_acs2018"));
         var p=catalog.requirePackage("icheme:tjl20_methane");assertEquals(19,p.components().size());
         for(int i=1;i<=12;i++)assertEquals("crude_pc%02d".formatted(i),p.components().get(i+6));
@@ -24,7 +26,7 @@ class RegroupedCrudeTest {
         assertTrue(p.aliases().isEmpty());
     }
     @Test void reconstructedFeedConservesIndependentOriginalMassVolumeAndCaloricMoments() {
-        var current=MaterialCatalog.bundled().requirePackage("icheme:tjl19_dwsim");
+        var current=TiaJuanaTestCatalog.catalog().requirePackage("icheme:tjl19_dwsim");
         var amounts=current.assays().get("icheme:tia_juana_light").amounts();
         double mass=0,volume=0;
         for(int i=0;i<amounts.size();i++) {
@@ -50,35 +52,54 @@ class RegroupedCrudeTest {
             assertEquals(oldH,newH,Math.max(1e-8,Math.abs(oldH)*1e-11));
         }
     }
-    @Test void productionTransportMeetsTheUnusedDaliaChecksAndSharesTheUnresolvedTail() {
-        var catalog=MaterialCatalog.bundled();String id="icheme:tjl20_methane";
-        var p=catalog.requirePackage(id);var thermo=V3PengRobinsonThermo.fromRegisteredPackage(id);
-        var whole=thermo.crudeFeed("icheme:dalia").moleFractions();var residue=whole.clone();
-        for(int i=0;i<residue.length;i++) {
-            var name=catalog.name(p.components().get(i));
-            double retained=0;
-            if(name.kind().equals("petroleum_fraction")) {
-                double lo=name.lowerKelvin()==null?Double.NEGATIVE_INFINITY:name.lowerKelvin(),hi=name.upperKelvin()==null?Double.POSITIVE_INFINITY:name.upperKelvin();
-                retained=lo>=643.15?1:hi<=643.15?0:(hi-643.15)/(hi-lo);
+    /**
+     * Each cut's liquid table is its published correlation, evaluated here apart from the generator
+     * (tools/crude-grades/cut-tables.mjs): Twu, Ind. Eng. Chem. Process Des. Dev. 24 (1985) 1287, the kinematic viscosity
+     * at 100 F and 210 F from the record's normal boiling point and specific gravity 60/60 F; the ASTM D341 two-point
+     * (Walther) line through them, with the low-viscosity terms of its 2009 form; times the Rackett saturated-liquid
+     * density (Spencer and Danner 1972, Yamada and Gunn Z_RA = 0.29056 - 0.08775 omega) anchored at the record's standard
+     * density and held at its critical value above Tc; capped at 1e12 Pa s. Compared at table nodes (1 K apart, from
+     * 293.15 K), within 1e-9; between them the table interpolates ln(mu) linearly.
+     */
+    @Test void cutLiquidViscosityIsTwu1985WithAstmD341() {
+        var catalog=MaterialCatalog.bundled();String id="icheme:tjl20_methane";var p=catalog.requirePackage(id);
+        double previous=0;
+        for(int k=1;k<=12;k++) {
+            String cut="crude_pc%02d".formatted(k);var record=p.properties().get(p.components().indexOf(cut));
+            var table=catalog.viscosity(id,cut,ViscosityCorrelation.Phase.LIQUID).orElseThrow();
+            for(double t:new double[]{293.15,311.15,323.15,372.15,450.15,600.15,800.15,900}) {
+                double expected=twu(record,t),actual=table.dynamicViscosityPascalSeconds(t,ViscosityCorrelation.Phase.LIQUID);
+                assertEquals(expected,actual,expected*1e-9,cut+" at "+t+" K");
             }
-            residue[i]*=retained;
-        }
-        var viscosity=new MixtureViscosity(catalog,id);
-        double wholeObserved=.0423044914004914,residueObserved=.4893037324285021;
-        double wholeError=Math.abs(viscosity.liquid(313.15,whole).pascalSeconds()/wholeObserved-1);
-        double residueError=Math.abs(viscosity.liquid(333.15,residue).pascalSeconds()/residueObserved-1);
-        assertTrue((wholeError+residueError)/2<=.1);assertTrue(Math.max(wholeError,residueError)<=.2);
-        for(double t:new double[]{293.15,298.15,373.15,773.15,900}) {
-            double last=catalog.viscosity(id,"crude_pc12",ViscosityCorrelation.Phase.LIQUID).orElseThrow().dynamicViscosityPascalSeconds(t,ViscosityCorrelation.Phase.LIQUID);
-            assertEquals(last,catalog.viscosity(id,"crude_pc11",ViscosityCorrelation.Phase.LIQUID).orElseThrow().dynamicViscosityPascalSeconds(t,ViscosityCorrelation.Phase.LIQUID),last*1e-12);
-            assertEquals(last,catalog.viscosity(id,"crude_pc10",ViscosityCorrelation.Phase.LIQUID).orElseThrow().dynamicViscosityPascalSeconds(t,ViscosityCorrelation.Phase.LIQUID),last*1e-12);
+            // Heavier cuts are more viscous near 100 F: no shared tail.
+            double at100F=table.dynamicViscosityPascalSeconds(311.15,ViscosityCorrelation.Phase.LIQUID);
+            assertTrue(at100F>previous,cut);previous=at100F;
         }
     }
+    private static double twu(MaterialCatalog.Property record,double kelvin) {
+        double tb=record.normalBoilingPoint()*1.8,sg=record.density()/999.016;
+        double tc0=tb/(.533272+.191017e-3*tb+.779681e-7*tb*tb-.284376e-10*tb*tb*tb+.959468e28/Math.pow(tb,13));
+        double a=1-tb/tc0,sg0=.843593-.128624*a-3.36159*Math.pow(a,3)-13749.5*Math.pow(a,12);
+        double v2ref=Math.exp(4.73227-27.0975*a+49.4491*a*a-50.4706*Math.pow(a,4))-1.5,v1ref=Math.exp(.801621+1.37179*Math.log(v2ref));
+        double d=sg-sg0,x=Math.abs(1.99873-56.7394/Math.sqrt(tb));
+        double f1=1.33932*x*d-21.1141*d*d/Math.sqrt(tb),f2=x*d-21.1141*d*d/Math.sqrt(tb);
+        double v100=Math.exp(Math.log(v1ref+450/tb)*Math.pow((1+2*f1)/(1-2*f1),2))-450/tb;
+        double v210=Math.exp(Math.log(v2ref+450/tb)*Math.pow((1+2*f2)/(1-2*f2),2))-450/tb;
+        double y1=Math.log10(Math.log10(walther(v100))),y2=Math.log10(Math.log10(walther(v210)));
+        double slope=(y1-y2)/(Math.log10(372.0389)-Math.log10(310.9278)),intercept=y1+slope*Math.log10(310.9278);
+        double z=Math.pow(10,Math.pow(10,intercept-slope*Math.log10(kelvin))),y=z-.7;
+        double centistokes=y<20?y-Math.exp(-.7487-3.295*y+.6119*y*y-.3193*y*y*y):y;
+        double tc=record.pr().criticalTemperature(),zra=.29056-.08775*record.pr().acentricFactor();
+        double density=record.density()*Math.pow(zra,Math.pow(1-Math.min(record.standardTemperature()/tc,1),2./7)-Math.pow(1-Math.min(kelvin/tc,1),2./7));
+        return Math.min(centistokes*1e-6*density,1e12);
+    }
+    private static double walther(double centistokes) { return centistokes+.7+Math.exp(-1.47-1.84*centistokes-.51*centistokes*centistokes); }
     @Test void gameplayDrawsRetainTheCapturedPhysicalVolumeTargets() throws Exception {
         var catalog=MaterialCatalog.bundled();
         try(var stream=getClass().getResourceAsStream("/materials/column-draw-volume-targets.json")) {
             assertNotNull(stream);
             var targets=com.google.gson.JsonParser.parseReader(new java.io.InputStreamReader(stream,java.nio.charset.StandardCharsets.UTF_8)).getAsJsonObject();
+            var missed=new java.util.ArrayList<String>();
             for(var element:targets.getAsJsonArray("targets")) {
                 var row=element.getAsJsonObject();String crude=row.get("preset").getAsString();
                 // Captured in the prescribed-drop mode; the shipped diameter marches a per-tray profile that
@@ -93,14 +114,16 @@ class RegroupedCrudeTest {
                         if(index>=0)volume+=product.molarFlowMolPerSecond()*fraction.moleFraction()*properties.properties().get(index).molecularWeight()/properties.properties().get(index).density();
                     }
                     double expected=target.getValue().getAsDouble();
-                    assertEquals(expected,volume,expected*1e-5,crude+" "+target.getKey());
+                    System.out.println("draw volume target "+crude+" "+target.getKey()+": "+volume+" m3/s (target "+expected+", "+(volume/expected-1)+")");
+                    if(!(Math.abs(volume-expected)<=expected*1e-5))missed.add(crude+" "+target.getKey()+": "+volume+" against "+expected);
                 }
             }
+            assertTrue(missed.isEmpty(),String.join("; ",missed));
         }
     }
 
     @Test void previouslyDifficultCrudesPublishAuditedClassicalSolutionsWithoutLearnedSeeds() {
-        for(String crude:List.of("bonga","cold_lake_blend")) {
+        for(String crude:List.of("heavy_crude","oil_sand_dilbit")) {
             var input=V3TestInputs.crude(MaterialCatalog.bundled(),crude);long start=System.nanoTime();
             var result=V3ColumnCalculator.calculate(input,()->{
                 if(System.nanoTime()-start>45_000_000_000L)throw new java.util.concurrent.CancellationException("Regrouped preset deadline");

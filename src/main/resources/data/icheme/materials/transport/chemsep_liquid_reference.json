@@ -1,0 +1,177 @@
+{
+  "schema_version": 1,
+  "id": "icheme:chemsep_liquid_reference",
+  "type": "liquid_volume_reference_points",
+  "revision": "chemsep-8.3-tr07-r1",
+  "source": "ChemSep v8.3 (Kooijman and Taylor, Artistic License 2.0) as embedded in DWSIM 10.2.5: each point is the saturated liquid at Tr = 0.7 from the compound's liquid density (eq. 105) and vapour pressure (eq. 101); individual sources per point.",
+  "points": [
+    {
+      "component": "Hydrogen",
+      "temperatureKelvin": 23.232999999999997,
+      "pressurePascal": 215538.57658359536,
+      "molarVolumeCubicMetres": 0.00003006776237445394,
+      "source": "ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Hydrogen\" (ChemSep index 902, CAS 1333-74-0): saturated liquid at Tr = 0.7 (23.232999999999997 K), molar volume from liquid density eq. 105 (A=2.9613, B=0.25981, C=33.19, D=0.19104, E=0; data 13.84..33.18 K), pressure from vapour pressure eq. 101 (A=13.05, B=-97.534, C=1.0355, D=0.00031816, E=2; data 13.08..33.19 K)"
+    },
+    {
+      "component": "HydrogenSulfide",
+      "temperatureKelvin": 261.47099999999995,
+      "pressurePascal": 729127.5527766509,
+      "molarVolumeCubicMetres": 0.00003969089375680503,
+      "source": "ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Hydrogen sulfide\" (ChemSep index 1922, CAS 7783-06-4): saturated liquid at Tr = 0.7 (261.47099999999995 K), molar volume from liquid density eq. 105 (A=2.3565, B=0.25354, C=373.53, D=0.26514, E=0; data 187.66..373.4 K), pressure from vapour pressure eq. 101 (A=48.34868, B=-3078.428, C=-4.229632, D=0.000006844234, E=2; data 177.19..373.56 K)"
+    },
+    {
+      "component": "CarbonMonoxide",
+      "temperatureKelvin": 92.99499999999999,
+      "pressurePascal": 312095.69117595244,
+      "molarVolumeCubicMetres": 0.000037828111903611856,
+      "source": "ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Carbon monoxide\" (ChemSep index 908, CAS 630-08-0): saturated liquid at Tr = 0.7 (92.99499999999999 K), molar volume from liquid density eq. 105 (A=2.2423, B=0.2437, C=132.93, D=0.24196, E=0; data 68.13..132.92 K), pressure from vapour pressure eq. 101 (A=42.283, B=-1035.1, C=-4.2012, D=0.000062546, E=2; data 64.07..132.92 K)"
+    },
+    {
+      "component": "Oxygen",
+      "temperatureKelvin": 108.206,
+      "pressurePascal": 479277.08326411835,
+      "molarVolumeCubicMetres": 0.000030548498788176424,
+      "source": "ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Oxygen\" (ChemSep index 901, CAS 7782-44-7): saturated liquid at Tr = 0.7 (108.206 K), molar volume from liquid density eq. 105 (A=2.6097, B=0.23614, C=154.78, D=0.23695, E=0; data 54.35..154.77 K), pressure from vapour pressure eq. 101 (A=40.55487, B=-1120.543, C=-3.776114, D=0.0000485344, E=2; data 54.35..154.8 K)"
+    },
+    {
+      "component": "Ammonia",
+      "temperatureKelvin": 283.78,
+      "pressurePascal": 626579.860666029,
+      "molarVolumeCubicMetres": 0.000027373940282054977,
+      "source": "ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Ammonia\" (ChemSep index 1911, CAS 7664-41-7): saturated liquid at Tr = 0.7 (283.78 K), molar volume from liquid density eq. 105 (A=4.0518, B=0.27129, C=405.4, D=0.31349, E=0; data 195..405.15 K), pressure from vapour pressure eq. 101 (A=62.8849, B=-4136.862, C=-6.320663, D=0.000009203947, E=2; data 191.24..406.05 K)"
+    },
+    {
+      "component": "SulfurDioxide",
+      "temperatureKelvin": 301.525,
+      "pressurePascal": 447530.3584941911,
+      "molarVolumeCubicMetres": 0.00004720045732850134,
+      "source": "ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Sulfur dioxide\" (ChemSep index 910, CAS 7446-09-5): saturated liquid at Tr = 0.7 (301.525 K), molar volume from liquid density eq. 105 (A=1.8477, B=0.24254, C=430.75, D=0.27051, E=0; data 197.67..430.75 K), pressure from vapour pressure eq. 101 (A=53.52766, B=-4260.124, C=-4.670429, D=0.0000030272, E=2; data 195.12..430.75 K)"
+    },
+    {
+      "component": "CarbonylSulfide",
+      "temperatureKelvin": 265.13899999999995,
+      "pressurePascal": 500874.34170274483,
+      "molarVolumeCubicMetres": 0.00005520928272838321,
+      "source": "ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Carbonyl sulfide\" (ChemSep index 1893, CAS 463-58-1): saturated liquid at Tr = 0.7 (265.13899999999995 K), molar volume from liquid density eq. 105 (A=1.8896, B=0.27226, C=378.81, D=0.25315, E=0; data 134.3..378.8 K), pressure from vapour pressure eq. 101 (A=74.34266, B=-3813.497, C=-8.620386, D=0.0000180431, E=2; data 134.3..378.8 K)"
+    },
+    {
+      "component": "Ethylene",
+      "temperatureKelvin": 197.63799999999998,
+      "pressurePascal": 412651.0720865353,
+      "molarVolumeCubicMetres": 0.00005443809093740255,
+      "source": "ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Ethylene\" (ChemSep index 201, CAS 74-85-1): saturated liquid at Tr = 0.7 (197.63799999999998 K), molar volume from liquid density eq. 105 (A=2.3782, B=0.29542, C=282.36, D=0.32456, E=0; data 103.18..282.35 K), pressure from vapour pressure eq. 101 (A=54.53229, B=-2458.42, C=-5.660037, D=0.0000194185, E=2; data 104..282.35 K)"
+    },
+    {
+      "component": "Propylene",
+      "temperatureKelvin": 255.395,
+      "pressurePascal": 331120.9858785045,
+      "molarVolumeCubicMetres": 0.00007336944832385473,
+      "source": "ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Propylene\" (ChemSep index 202, CAS 115-07-1): saturated liquid at Tr = 0.7 (255.395 K), molar volume from liquid density eq. 105 (A=0.98129, B=0.22226, C=365.58, D=0.24039, E=0; data 87.89..365.57 K), pressure from vapour pressure eq. 101 (A=55.10362, B=-3330.452, C=-5.40588, D=0.0000093641, E=2; data 87.89..365.57 K)"
+    },
+    {
+      "component": "Butene-1",
+      "temperatureKelvin": 293.65,
+      "pressurePascal": 266483.4036001297,
+      "molarVolumeCubicMetres": 0.00009438452488308334,
+      "source": "ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"1-butene\" (ChemSep index 204, CAS 106-98-9): saturated liquid at Tr = 0.7 (293.65 K), molar volume from liquid density eq. 105 (A=0.98, B=0.25169, C=419.54, D=0.26645, E=0; data 87.8..419.53 K), pressure from vapour pressure eq. 101 (A=41.66588, B=-3605.004, C=-2.983562, D=6.665773e-7, E=2; data 87.8..419.5 K)"
+    },
+    {
+      "component": "Isobutene",
+      "temperatureKelvin": 292.53,
+      "pressurePascal": 256005.13806802782,
+      "molarVolumeCubicMetres": 0.00009412678643237281,
+      "source": "ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Isobutene\" (ChemSep index 207, CAS 115-11-7): saturated liquid at Tr = 0.7 (292.53 K), molar volume from liquid density eq. 105 (A=1.01, B=0.25611, C=417.9, D=0.2642, E=0; data 132.81..417.9 K), pressure from vapour pressure eq. 101 (A=47.13879, B=-3682.162, C=-3.952514, D=0.000004044185, E=2; data 132.81..417.9 K)"
+    },
+    {
+      "component": "Cis-2-butene",
+      "temperatureKelvin": 304.84999999999997,
+      "pressurePascal": 264027.7062772533,
+      "molarVolumeCubicMetres": 0.00009209555926192343,
+      "source": "ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Cis-2-butene\" (ChemSep index 205, CAS 590-18-1): saturated liquid at Tr = 0.7 (304.84999999999997 K), molar volume from liquid density eq. 105 (A=1.1591, B=0.27085, C=435.5, D=0.28116, E=0; data 134.26..435.5 K), pressure from vapour pressure eq. 101 (A=82.92441, B=-5022.628, C=-9.652369, D=0.0000133961, E=2; data 134.26..435.58 K)"
+    },
+    {
+      "component": "Trans-2-butene",
+      "temperatureKelvin": 300.02,
+      "pressurePascal": 247840.7455594329,
+      "molarVolumeCubicMetres": 0.00009396520721935948,
+      "source": "ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Trans-2-butene\" (ChemSep index 206, CAS 624-64-6): saturated liquid at Tr = 0.7 (300.02 K), molar volume from liquid density eq. 105 (A=1.1523, B=0.27235, C=428.6, D=0.28543, E=0; data 167.62..428.6 K), pressure from vapour pressure eq. 101 (A=56.602, B=-4026.7, C=-5.5178, D=0.0000079176, E=2; data 167.62..428.63 K)"
+    },
+    {
+      "component": "Butadiene",
+      "temperatureKelvin": 297.5,
+      "pressurePascal": 278449.28195408103,
+      "molarVolumeCubicMetres": 0.00008786582832802478,
+      "source": "ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"1,3-butadiene\" (ChemSep index 303, CAS 106-99-0): saturated liquid at Tr = 0.7 (297.5 K), molar volume from liquid density eq. 105 (A=1.3314, B=0.28213, C=425, D=0.30137, E=0; data 164.2..413.1 K), pressure from vapour pressure eq. 101 (A=64.81816, B=-4314.788, C=-6.766483, D=0.000008589719, E=2; data 164..425.1 K)"
+    },
+    {
+      "component": "N-hexane",
+      "temperatureKelvin": 355.32,
+      "pressurePascal": 152117.6397700554,
+      "molarVolumeCubicMetres": 0.0001431026389389378,
+      "source": "ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"N-hexane\" (ChemSep index 11, CAS 110-54-3): saturated liquid at Tr = 0.7 (355.32 K), molar volume from liquid density eq. 105 (A=0.55661, B=0.23506, C=507.6, D=0.24183, E=0; data 177.83..507.35 K), pressure from vapour pressure eq. 101 (A=71.56625, B=-5848.968, C=-7.46028, D=0.0000050823, E=2; data 174.15..507.6 K)"
+    },
+    {
+      "component": "Cyclohexane",
+      "temperatureKelvin": 387.45,
+      "pressurePascal": 250231.08048342436,
+      "molarVolumeCubicMetres": 0.00012277814823406373,
+      "source": "ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Cyclohexane\" (ChemSep index 137, CAS 110-82-7): saturated liquid at Tr = 0.7 (387.45 K), molar volume from liquid density eq. 105 (A=0.93459, B=0.28022, C=553.5, D=0.29409, E=0; data 279.69..539.37 K), pressure from vapour pressure eq. 101 (A=79.82965, B=-6246.688, C=-8.778766, D=0.000006933726, E=2; data 263.06..553.8 K)"
+    },
+    {
+      "component": "Benzene",
+      "temperatureKelvin": 393.43499999999995,
+      "pressurePascal": 301363.09733598196,
+      "molarVolumeCubicMetres": 0.00010158102970088452,
+      "source": "ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Benzene\" (ChemSep index 501, CAS 71-43-2): saturated liquid at Tr = 0.7 (393.43499999999995 K), molar volume from liquid density eq. 105 (A=0.99938, B=0.26348, C=562.05, D=0.27856, E=0; data 273.1..562.05 K), pressure from vapour pressure eq. 101 (A=88.368, B=-6712.9, C=-10.022, D=0.000007694, E=2; data 272.04..562.16 K)"
+    },
+    {
+      "component": "Toluene",
+      "temperatureKelvin": 414.22499999999997,
+      "pressurePascal": 229775.37935693143,
+      "molarVolumeCubicMetres": 0.00012348180985166348,
+      "source": "ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Toluene\" (ChemSep index 502, CAS 108-88-3): saturated liquid at Tr = 0.7 (414.22499999999997 K), molar volume from liquid density eq. 105 (A=0.89799, B=0.27359, C=591.75, D=0.30006, E=0; data 163.1..589.8 K), pressure from vapour pressure eq. 101 (A=32.89891, B=-5013.81, C=-1.348918, D=-0.000001869928, E=2; data 178.18..592.15 K)"
+    },
+    {
+      "component": "Ethylbenzene",
+      "temperatureKelvin": 432.00499999999994,
+      "pressurePascal": 177228.9575156912,
+      "molarVolumeCubicMetres": 0.0001440862654750128,
+      "source": "ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Ethylbenzene\" (ChemSep index 504, CAS 100-41-4): saturated liquid at Tr = 0.7 (432.00499999999994 K), molar volume from liquid density eq. 105 (A=0.66155, B=0.25394, C=617.21, D=0.27883, E=0; data 163.1..617.2 K), pressure from vapour pressure eq. 101 (A=137.5088, B=-9745.069, C=-17.34457, D=0.0000127987, E=2; data 178.2..617.2 K)"
+    },
+    {
+      "component": "O-xylene",
+      "temperatureKelvin": 441.2099999999999,
+      "pressurePascal": 182031.51757428667,
+      "molarVolumeCubicMetres": 0.0001423616252295201,
+      "source": "ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"O-xylene\" (ChemSep index 505, CAS 95-47-6): saturated liquid at Tr = 0.7 (441.2099999999999 K), molar volume from liquid density eq. 105 (A=0.69962, B=0.26143, C=630.3, D=0.27365, E=0; data 247.98..630.3 K), pressure from vapour pressure eq. 101 (A=88.08217, B=-7844.793, C=-9.738423, D=0.000005713756, E=2; data 247.98..630.33 K)"
+    },
+    {
+      "component": "M-xylene",
+      "temperatureKelvin": 431.9,
+      "pressurePascal": 167097.2499317466,
+      "molarVolumeCubicMetres": 0.00014420134311168454,
+      "source": "ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"M-xylene\" (ChemSep index 506, CAS 108-38-3): saturated liquid at Tr = 0.7 (431.9 K), molar volume from liquid density eq. 105 (A=0.68902, B=0.26086, C=617, D=0.27479, E=0; data 225.3..617 K), pressure from vapour pressure eq. 101 (A=97.968, B=-8164.7, C=-11.269, D=0.0000072101, E=2; data 225.3..617.05 K)"
+    },
+    {
+      "component": "P-xylene",
+      "temperatureKelvin": 431.34000000000003,
+      "pressurePascal": 168486.97148313356,
+      "molarVolumeCubicMetres": 0.0001449298169140445,
+      "source": "ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"P-xylene\" (ChemSep index 507, CAS 106-42-3): saturated liquid at Tr = 0.7 (431.34000000000003 K), molar volume from liquid density eq. 105 (A=0.67752, B=0.25887, C=616.2, D=0.27596, E=0; data 286.41..616.2 K), pressure from vapour pressure eq. 101 (A=97.352, B=-8082.1, C=-11.197, D=0.0000072605, E=2; data 282.99..616.23 K)"
+    },
+    {
+      "component": "MethylMercaptan",
+      "temperatureKelvin": 329,
+      "pressurePascal": 502001.72744493035,
+      "molarVolumeCubicMetres": 0.000058830204093848874,
+      "source": "ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Methyl mercaptan\" (ChemSep index 1801, CAS 74-93-1): saturated liquid at Tr = 0.7 (329 K), molar volume from liquid density eq. 105 (A=1.954, B=0.28171, C=470, D=0.28737, E=0; data 150.18..453.12 K), pressure from vapour pressure eq. 101 (A=115.1598, B=-6300.053, C=-14.66478, D=0.0000195265, E=2; data 150.18..469.95 K)"
+    },
+    {
+      "component": "EthylMercaptan",
+      "temperatureKelvin": 349.29999999999995,
+      "pressurePascal": 355945.48810457235,
+      "molarVolumeCubicMetres": 0.0000807454935538496,
+      "source": "ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Ethyl mercaptan\" (ChemSep index 1802, CAS 75-08-1): saturated liquid at Tr = 0.7 (349.29999999999995 K), molar volume from liquid density eq. 105 (A=1.203, B=0.25909, C=499.16, D=0.26567, E=0; data 125.26..499.15 K), pressure from vapour pressure eq. 101 (A=65.4773, B=-5020.82, C=-6.678317, D=0.000006449817, E=2; data 125.26..499.15 K)"
+    }
+  ]
+}

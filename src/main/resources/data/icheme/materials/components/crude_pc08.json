@@ -4,6 +4,7 @@
   "kind": "petroleum_fraction",
   "translation_key": "material.icheme.crude_pc08",
   "fallback": "Crude oil",
+  "properties": "icheme:crude_pc08",
   "cut": {
     "estimated": true,
     "series": "crude-tia-juana-r1",

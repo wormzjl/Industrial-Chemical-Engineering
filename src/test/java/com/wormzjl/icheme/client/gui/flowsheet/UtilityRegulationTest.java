@@ -43,7 +43,7 @@ class UtilityRegulationTest {
 
     @BeforeAll
     static void runTheSample() {
-        sheet = SheetFixture.sample();
+        sheet = SheetFixture.tiaJuanaSample();
         run = steady(sheet);
         thermo = new FlowThermo(SheetFixture.FLUIDS.model(), SheetFixture.CATALOG, SheetFixture.NETWORK, () -> {
         });

@@ -1,0 +1,78 @@
+diff --git a/src/main/java/com/wormzjl/icheme/science/thermo/phase/FluidTpEquilibrium.java b/src/main/java/com/wormzjl/icheme/science/thermo/phase/FluidTpEquilibrium.java
+index 304df9012..09a7c8c7b 100644
+--- a/src/main/java/com/wormzjl/icheme/science/thermo/phase/FluidTpEquilibrium.java
++++ b/src/main/java/com/wormzjl/icheme/science/thermo/phase/FluidTpEquilibrium.java
+@@ -1579,6 +1579,7 @@ public final class FluidTpEquilibrium {
+         }
+         p = Math.clamp(p, w.minimumP, w.maximumP);
+         EquilibriumResult answer = newtonUv(t, p, first, u, v, competition, w, settings.maximumOuterIterations());
++        if (answer == null) trace("  newton null -> nestedUv");
+         return answer != null ? answer : nestedUv(u, v, competition, w);
+     }
+ 
+@@ -1680,8 +1681,13 @@ public final class FluidTpEquilibrium {
+      * {@code |F|^2} decreases. Null when it does not converge within its budget: the nested search takes over from its
+      * best temperature.
+      */
++    /** PROBE (scratch only): UV trace sink. */
++    static java.util.function.Consumer<String> uvTrace;
++    private static void trace(String s) { if (uvTrace != null) uvTrace.accept(s); }
++
+     private EquilibriumResult newtonUv(double t, double p, EquilibriumResult start, double u, double v,
+                                        PhaseCompetition competition, Workspace w, int budget) {
++        trace("newtonUv start t=" + t + " p=" + p + " budget=" + budget + " start=" + (start != null));
+         double tolerance = settings.outerTolerance();
+         EquilibriumResult current = start != null ? start : outerTp(t, p, competition, w);
+         if (!usable(current)) return null;
+@@ -1709,7 +1715,8 @@ public final class FluidTpEquilibrium {
+             if (!Double.isFinite(d0) || !Double.isFinite(d1)) return null;
+             double size = Math.max(Math.abs(d0), Math.abs(d1));
+             boolean met = Math.abs(f0) <= SPECIFICATION_TOLERANCE && Math.abs(f1) <= SPECIFICATION_TOLERANCE;
+-            if (met && size <= tolerance) return outerAnswer(Specification.UV, current, u, v, false, null, w);
++            trace(String.format(java.util.Locale.ROOT, "  it eval=%d fresh=%b t=%.17g p=%.17g f0=%.3e f1=%.3e d0=%.3e d1=%.3e size=%.3e J=[%.6e %.6e; %.6e %.6e]", w.outerEvaluations, fresh, t, p, f0, f1, d0, d1, size, j[0], j[1], j[2], j[3]));
++            if (met && size <= tolerance) { trace("  EXIT newton-converged eval=" + w.outerEvaluations + " fresh=" + fresh); return outerAnswer(Specification.UV, current, u, v, false, null, w); }
+             double x0 = DeterministicMath.log(t);
+             double x1 = DeterministicMath.log(p);
+             double alpha = Math.min(1.0, Math.min(TEMPERATURE_STEP_CAP / Math.abs(d0), PRESSURE_STEP_CAP / Math.abs(d1)));
+@@ -1745,9 +1752,10 @@ public final class FluidTpEquilibrium {
+             }
+             if (!accepted) {
+                 // At the noise floor of the TP answers a converged point cannot be improved.
+-                if (met && size <= 10.0 * tolerance) return outerAnswer(Specification.UV, current, u, v, false, null, w);
++                if (met && size <= 10.0 * tolerance) { trace("  EXIT noise-floor eval=" + w.outerEvaluations + " fresh=" + fresh + " size=" + size); return outerAnswer(Specification.UV, current, u, v, false, null, w); }
+                 if (!fresh) {
+                     refresh = true;
++                    trace("  line search failed on Broyden J: refresh");
+                     continue;
+                 }
+                 return null;
+@@ -1912,11 +1920,13 @@ public final class FluidTpEquilibrium {
+             if (!(slope > 0.0) || !Double.isFinite(slope)) slope = idealHeatCapacity(t, true, w);
+             double step = -residual / slope;
+             if (Math.abs(residual) <= scale && Math.abs(step) <= tolerance * t) {
++                trace("  EXIT nested-converged t=" + t + " step=" + step + " residual/scale=" + residual / scale);
+                 return outerAnswer(Specification.UV, result, u, v, coexistence, null, w);
+             }
+             if (s.bracketed() && s.width() <= tolerance * t) {
+                 // U(T) at fixed volume is continuous (through a coexistence too): a jump here is no state of the model.
+                 if (s.upperResidual - s.lowerResidual <= scale && s.best() != null) {
++                    trace("  EXIT nested-bracket-closed width=" + s.width());
+                     return outerAnswer(Specification.UV, s.best(), u, v, s.bestCoexistence(), null, w);
+                 }
+                 // An end known only by its pressure leaving the window (P3 WP7d): the bracket closed against the box, on
+@@ -5684,6 +5694,7 @@ public final class FluidTpEquilibrium {
+                 if (!(gasVolume > 0.0)) break;
+                 double partial = SteamVirial.partialPressure(water, t, gasVolume);
+                 if (Math.abs(guess + partial - p) < PARTIAL_PRESSURE_TOLERANCE * p) {
++                    trace("      wet fixed-point step=" + step + " r/P=" + (guess + partial - p) / p + " t=" + t + " p=" + p);
+                     return wetResult(t, p, guess, outcome, water, 0.0, saturation, partial, frozen, competition, w);
+                 }
+                 guess = p - partial;
+@@ -5727,6 +5738,7 @@ public final class FluidTpEquilibrium {
+             }
+         }
+         double partial = gasVolume > 0.0 ? SteamVirial.partialPressure(water, t, gasVolume) : p;
++        trace("      wet bisection root=" + root + " r/P=" + (pc + partial - p) / p + " t=" + t + " p=" + p);
+         if (Math.abs(pc + partial - p) > PARTIAL_PRESSURE_ACCEPTANCE * p) {
+             w.failure = "the hydrocarbon partial pressure closing the gas volume was not found (pc " + pc + " Pa, p_w "
+                     + partial + " Pa at " + p + " Pa)";

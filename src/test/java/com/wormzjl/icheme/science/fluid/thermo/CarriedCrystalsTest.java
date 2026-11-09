@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class CarriedCrystalsTest {
     private static final PhaseCompetition CARRIED = PhaseCompetition.FLUID_CARRYING_CRYSTALS;
-    private final FluidThermodynamics pilot = FluidTestSupport.model(MaterialCatalog.bundled(), "icheme:pilot_cryogenic");
+    private final FluidThermodynamics pilot = FluidTestSupport.model(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), "icheme:pilot_cryogenic");
 
     private EquilibriumResult carried(double t, double p, double... overall) {
         var answer = pilot.phaseEngine().tp(t, p, overall, CARRIED);

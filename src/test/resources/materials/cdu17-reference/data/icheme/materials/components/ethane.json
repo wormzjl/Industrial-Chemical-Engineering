@@ -4,6 +4,9 @@
   "kind": "chemical",
   "translation_key": "material.icheme.ethane",
   "fallback": "Ethane",
+  "aliases": [
+    "ethane"
+  ],
   "appearance": {
     "color": "#F3F4EA",
     "transparency": 0.85,

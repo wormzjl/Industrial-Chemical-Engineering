@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.science.thermo.phase;
 
+import com.wormzjl.icheme.science.fluid.thermo.CoefficientIdealGas;
 import com.wormzjl.icheme.science.material.CrystalReference;
 import com.wormzjl.icheme.science.material.JaegerSpanGibbsFunction;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
@@ -16,7 +17,7 @@ import java.util.Objects;
  * and s_s(T_t, P_t) = (h_L - mu_L)/T_t - dH_fus/T_t (Jaeger and Span's equations 19 and 20), which for a Gibbs-function
  * record fix its integration constants g0 and g1. The evaluator fills a one-component {@link PhaseKind#SOLID} state
  * naming the record's id: v, h and s of the anchored crystal, split against the species' ideal gas (the package's
- * spine) as {@code h = h_ig(T) + (h - h_ig)} and {@code s = s_ig(T, P) + (s - s_ig)}, and
+ * spine or fit, {@link #forPackage}) as {@code h = h_ig(T) + (h - h_ig)} and {@code s = s_ig(T, P) + (s - s_ig)}, and
  * {@code ln phi = (g_s - g_ig(T, P)) / (R T)}, so that {@link PhaseState#chemicalPotential(int)} equals g_s and compares
  * directly with a fluid phase's. Past the record's range and the ideal-gas function's, both continue; an unusable
  * record is refused at construction. {@link #anchored(TriplePointAnchor)} solves the integration constants once and
@@ -48,18 +49,26 @@ public final class CrystalPhaseEvaluator implements SolidPhaseEvaluator {
         return new CrystalPhaseEvaluator(crystal, idealGas);
     }
 
-    /** A crystal the package declares, with the package's reference spine of its species as the ideal gas. */
+    /**
+     * A crystal the package declares, with the package's ideal gas of its species: its reference spine on a spine package,
+     * its {@code shifted_polynomial_5} fit on the network's datum ({@link CoefficientIdealGas}) on any other, the same
+     * function {@link CubicPhaseEvaluator#forPackage} gives the species (decision E27 of batch 2026-11-04-open-thermo-data:
+     * one crystal rule for both ideal-gas sources). Anchored to that evaluator's liquid ({@link #anchor}), the crystal is on
+     * the family's own datum.
+     */
     public static CrystalPhaseEvaluator forPackage(MaterialCatalog catalog, String packageId, String crystalId) {
         var pkg = catalog.requirePackage(packageId);
         if (!pkg.crystals().contains(crystalId)) throw new IllegalArgumentException("Package " + packageId + " does not declare crystal " + crystalId);
         CrystalReference record = catalog.crystals().get(crystalId);
-        return new CrystalPhaseEvaluator(record, catalog.requireSpine(packageId, record.component()));
+        IdealGasFunction idealGas = pkg.spine().isEmpty() ? CoefficientIdealGas.of(catalog, packageId, record.component())
+                : catalog.requireSpine(packageId, record.component());
+        return new CrystalPhaseEvaluator(record, idealGas);
     }
 
     /** The record this evaluator anchors. */
     public CrystalReference record() { return crystal; }
 
-    /** The species' ideal-gas function the state is split against (the package's spine): {@code ln phi} refers to it. */
+    /** The species' ideal-gas function the state is split against (the package's spine or fit): {@code ln phi} refers to it. */
     public IdealGasFunction idealGas() { return idealGas; }
 
     public String family() { return family; }
@@ -156,7 +165,7 @@ public final class CrystalPhaseEvaluator implements SolidPhaseEvaluator {
                     s.heatCapacity(), s.expansion(), s.compressibility());
         }
 
-        /** {@code g_s(T, P)}, J/mol on the spine's reference: the crystal's chemical potential. */
+        /** {@code g_s(T, P)}, J/mol on the fluid family's reference: the crystal's chemical potential. */
         public double chemicalPotential(double temperature, double pressure) {
             if (function == null) return properties(temperature, pressure).gibbs();
             return function.evaluate(temperature, pressure, g0, g1).gibbs();

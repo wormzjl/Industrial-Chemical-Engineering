@@ -2,8 +2,14 @@ package com.wormzjl.icheme.science.column.v3;
 
 import java.util.Objects;
 
-/** Immutable admission snapshot. Neural budgets never replace the caller's overall deadline. */
-public record V3InitializationOptions(Mode mode, WetStart wetStart, int maximumIterations, int budgetMilliseconds,
+/**
+ * Immutable admission snapshot. Neural budgets never replace the caller's overall deadline.
+ *
+ * <p>{@code budgetPolls} bounds the learned route (binding, inference, anchor and correction) in control polls, the counter
+ * every solve already checks, so whether a learned seed is used never depends on the machine's speed (owner decision D2 of
+ * batch 2026-11-05-neural-retrain; it replaced a 2,000 ms allowance and a 100 ms probe for large wet columns).</p>
+ */
+public record V3InitializationOptions(Mode mode, WetStart wetStart, int maximumIterations, int budgetPolls,
         Correction correction) {
     public enum Mode { LNN_FIRST, LNN_ONLY, CURRENT_ONLY }
     public enum WetStart { AUTO, DRY_START, PREDICTED_WET }
@@ -34,7 +40,7 @@ public record V3InitializationOptions(Mode mode, WetStart wetStart, int maximumI
          *
          * <p>Extension blocks of eight iterations up to a cap of forty-eight, and an early stop when the
          * maximum scaled residual has not fallen below nine tenths of its value eight iterations ago while
-         * still above 1e-6. The base cap of sixteen and the two-second allowance are unchanged.</p>
+         * still above 1e-6. The base cap of sixteen is unchanged; the extension spends only what the poll budget allows.</p>
          *
          * <p>The contraction factor is <b>1.0</b>: an attempt that reaches its cap is extended unless its
          * residual actually rose over the window. The neural-budget study registered 0.5 — the residual had
@@ -43,7 +49,7 @@ public record V3InitializationOptions(Mode mode, WetStart wetStart, int maximumI
          * raising it to 1.0 is +2 strict LNN_ONLY and +2 strict LNN_FIRST in both blocks, three stable
          * gains against one stable loss, for 0.6 ms on the pooled all-case LNN_FIRST mean against a 119 ms
          * between-block noise band. The extension can still only spend time the attempt was already allowed
-         * to spend, because the two-second allowance did not move.</p>
+         * to spend, because the route's whole allowance (two seconds then, the poll budget now) did not move.</p>
          */
         public static final Correction PROGRESS = new Correction(8, 48, 8, 1.0, 8, 0.9, 1e-6);
 
@@ -58,16 +64,26 @@ public record V3InitializationOptions(Mode mode, WetStart wetStart, int maximumI
         }
     }
 
+    /**
+     * The learned route's default budget (owner, 2026-11-08: "Ship v2, 300k budget"). Measured in batch 2026-11-05-neural-retrain
+     * (N4, the bundled model on its holdout at a 2 M budget): learned labels need p50 35k, p90 92k, p95 153k polls, 272 of 276
+     * within 300k; a failed learned attempt ends by itself at a median 84k, max 380k. A failed attempt costs at most this budget,
+     * about half the median classical label (589k).
+     */
+    public static final int DEFAULT_BUDGET_POLLS = 300_000;
+    /** Ceiling of any authored budget: 20 M polls, about two minutes of solving. */
+    public static final int MAXIMUM_BUDGET_POLLS = 20_000_000;
+
     /** The classical route. It runs no learned correction, so its progress rule is never consulted. */
     public static final V3InitializationOptions CURRENT =
-            new V3InitializationOptions(Mode.CURRENT_ONLY, WetStart.DRY_START, 16, 2_000, Correction.PROGRESS);
+            new V3InitializationOptions(Mode.CURRENT_ONLY, WetStart.DRY_START, 16, DEFAULT_BUDGET_POLLS, Correction.PROGRESS);
 
     public V3InitializationOptions {
         Objects.requireNonNull(mode, "mode");
         Objects.requireNonNull(wetStart, "wetStart");
         Objects.requireNonNull(correction, "correction");
         if (maximumIterations < 1 || maximumIterations > V3ColumnCalculator.MAXIMUM_NEWTON_ITERATIONS
-                || budgetMilliseconds < 1 || budgetMilliseconds > 60_000) {
+                || budgetPolls < 1 || budgetPolls > MAXIMUM_BUDGET_POLLS) {
             throw new IllegalArgumentException("Invalid neural initialization budget");
         }
         if (correction.extensionMaximumIterations() < maximumIterations) {

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "icheme:pilot_eppr78",
+  "revision": "pilot-eppr78-r1",
+  "model": "pr78",
+  "ideal_gas": "spine",
+  "interactions": [
+    "icheme:pilot_cryogenic"
+  ],
+  "missing_interactions": "error",
+  "water_model": "icheme:water",
+  "pressure_min_pascal": 100,
+  "pressure_max_pascal": 10000000
+}

@@ -79,6 +79,15 @@ public final class SteamVirial {
         return p * (secondVirial(t) - t * temperatureDerivative(t));
     }
 
+    /**
+     * The residual molar heat capacity at constant partial pressure {@code p}, {@code d h_res/dT = -p T d2B/dT2},
+     * J/(mol K); zero below {@link #MINIMUM_TEMPERATURE}, where {@code B} continues linearly.
+     */
+    public static double residualHeatCapacity(double t, double p) {
+        require(t);
+        return t < MINIMUM_TEMPERATURE ? 0.0 : -p * t * polynomialCurvature(t);
+    }
+
     /** The residual molar entropy at the steam's partial pressure {@code p}, {@code -p dB/dT}, J/(mol K). */
     public static double residualEntropy(double t, double p) {
         return -p * temperatureDerivative(t);
@@ -103,6 +112,18 @@ public final class SteamVirial {
             if (J[i] > 0) slope += N[i] * J[i] * power(s, J[i] - 1);
         }
         return R / REDUCING_PRESSURE * (f - tau * slope);
+    }
+
+    /**
+     * {@code d2B/dT2 = (R / p*) tau^2 f'' / T}: the derivative of {@link #polynomialSlope}'s {@code f - tau f'}, whose
+     * {@code tau f'} terms cancel.
+     */
+    private static double polynomialCurvature(double t) {
+        double tau = TAU_TEMPERATURE / t, s = tau - 0.5, curvature = 0.0;
+        for (int i = 0; i < N.length; i++) {
+            if (J[i] > 1) curvature += N[i] * J[i] * (J[i] - 1) * power(s, J[i] - 2);
+        }
+        return R / REDUCING_PRESSURE * tau * tau * curvature / t;
     }
 
     private static double power(double x, int n) {

@@ -70,9 +70,9 @@ import java.util.Objects;
  * With both, when
  * {@code P > p_sat + 1e-6 Pa} the hydrocarbons are split at {@code (P, P - p_sat)} and the steam that saturates the gas,
  * {@code p_sat V_gas/(R T + p_sat B)}, is taken from the water if there is that much; otherwise all water is steam and {@code pc}
- * solves {@code pc + n_w R T / (V_gas(pc) - n_w B) = P}: up to {@link #PARTIAL_PRESSURE_FIXED_POINT_STEPS} fixed-point steps, each
- * accepted only on the bisection's stop test, else a bisection on {@code [1e-6 Pa, P]}
- * ({@link #PARTIAL_PRESSURE_BISECTIONS} halvings, stop at {@link #PARTIAL_PRESSURE_TOLERANCE}, accepted within
+ * solves {@code pc + n_w R T / (V_gas(pc) - n_w B) = P}, closed to {@link #PARTIAL_PRESSURE_CLOSURE} inside
+ * {@code (1e-6 Pa, P)} by {@link PartialPressureClosure} (from the saturated split's gas scaled to the root, a fixed-point
+ * step, then an Illinois regula falsi; a root below {@link #PARTIAL_PRESSURE_TOLERANCE}, accepted within
  * {@link #PARTIAL_PRESSURE_ACCEPTANCE}). {@code V_gas(pc)} can step over that root: one hydrocarbon is all vapour under its
  * own vapour pressure and all liquid over it, and a mixture's vapour fraction ends at the flash's resolution. There the
  * steam's own volume at {@code P - pc} closes the gas: the vapour of the step's open end, scaled to that volume, beside
@@ -155,15 +155,25 @@ public final class FluidTpEquilibrium {
     // The fluid network's free-water rule (FluidThermodynamics.flashTP and HydrocarbonModel at commit 5100233).
     /** Liquid water with hydrocarbons needs {@code P > p_sat + SATURATION_MARGIN}. */
     public static final double SATURATION_MARGIN = 1.0e-6;
-    /** Lower end of the hydrocarbon partial-pressure bisection: the box's floor of a partial pressure. */
+    /** Lower end of the hydrocarbon partial-pressure closure's bracket: the box's floor of a partial pressure. */
     public static final double PARTIAL_PRESSURE_FLOOR = NumericalBox.MINIMUM_PARTIAL_PRESSURE;
-    public static final int PARTIAL_PRESSURE_BISECTIONS = 70;
-    /** The bisection stops at {@code |pc + p_w - P| < PARTIAL_PRESSURE_TOLERANCE P}. */
+    /** Trials of the closure ({@link PartialPressureClosure}), each one hydrocarbon split at its {@code pc}. */
+    public static final int PARTIAL_PRESSURE_TRIALS = 70;
+    /**
+     * The closure runs to {@code |pc + p_w - P| <= PARTIAL_PRESSURE_CLOSURE P}, rounding of the hydrocarbon split's gas
+     * volume: a looser stop leaves each TP answer a residual that changes with the halving path, a staircase in
+     * {@code V(T, P)} that a UV search inverts as an error (E21: 1.3e-8 in P at 460 K, 0.5 MPa, as much water as crude).
+     */
+    public static final double PARTIAL_PRESSURE_CLOSURE = 1.0e-13;
+    /** And it stops on a bracket of {@code PARTIAL_PRESSURE_BRACKET_ULPS} ulp of {@code P}. */
+    public static final int PARTIAL_PRESSURE_BRACKET_ULPS = 4;
+    /**
+     * Its last trial is a root at {@code |pc + p_w - P| < PARTIAL_PRESSURE_TOLERANCE P}; a bracket that closes without
+     * one closed on a step of {@code V_gas(pc)}.
+     */
     public static final double PARTIAL_PRESSURE_TOLERANCE = 1.0e-8;
     /** And its result is accepted within {@code PARTIAL_PRESSURE_ACCEPTANCE P}. */
     public static final double PARTIAL_PRESSURE_ACCEPTANCE = 1.0e-6;
-    /** Fixed-point steps {@code pc = P - n_w R T / V_gas(pc)} tried before the bisection (P3 WP7b). */
-    public static final int PARTIAL_PRESSURE_FIXED_POINT_STEPS = 3;
     /**
      * A feed whose stability test ends unresolved (a trial out of its budget without proving instability) is tested once
      * more with this many times the per-trial budget: next to a mixture critical point a trial can crawl towards the
@@ -702,6 +712,8 @@ public final class FluidTpEquilibrium {
         private double startMinimumT, startMaximumT;
         private final Search search = new Search();
         private final Search inner = new Search();
+        /** The free water's hydrocarbon partial-pressure closure ({@link #solveWet}, {@link #solveWetWithCrystals}). */
+        private final PartialPressureClosure partialPressure = new PartialPressureClosure();
         private int outerEvaluations, outerKernel, outerDerivative;
         private final PhaseDerivatives slope;
         private final double[] jacobian = new double[4];
@@ -941,6 +953,88 @@ public final class FluidTpEquilibrium {
             if (!Double.isFinite(step)) return x;
             return Math.clamp(x + Math.clamp(step, -cap, cap), minimum, maximum);
         }
+    }
+
+    /**
+     * The closure of the hydrocarbon partial pressure when all water is steam ({@link #solveWet},
+     * {@link #solveWetWithCrystals}): the root of {@code r(pc) = pc + p_w(V_gas(pc)) - P} in
+     * {@code (PARTIAL_PRESSURE_FLOOR, P)}, negative at the floor (the gas is all hydrocarbon vapour, huge) and positive at
+     * {@code P}. A higher {@code pc} leaves less hydrocarbon gas ({@code V_gas} falls, across its steps too), which raises
+     * the steam's {@code p_w}: {@code r} rises at least as fast as {@code pc}, so the fixed-point step
+     * {@code pc - r = P - p_w} from a trial reaches or passes the root. The trials: the caller's start (the fixed point's
+     * start, inside the bracket or at {@code P}, else the midpoint); while one end of the bracket has a finite residual, the
+     * fixed-point step from it; then the Illinois regula falsi through the ends (an end kept twice in a row has its
+     * residual halved). The midpoint replaces a trial outside the open bracket, and follows two trials in a row that did
+     * not halve the smallest residual yet (a step of {@code V_gas}, where the falsi crawls). It closes at
+     * {@link #PARTIAL_PRESSURE_CLOSURE} or a bracket of {@link #PARTIAL_PRESSURE_BRACKET_ULPS} ulp of {@code P}; the caller
+     * reads its last trial against {@link #PARTIAL_PRESSURE_TOLERANCE}. For a trace of water {@code r} rises as {@code pc}
+     * does and the first fixed-point step lands on the root (P3 WP7b). Measured on crude with nitrogen at 460 to 580 K,
+     * 0.5 to 1.4 MPa (E21): 330 to 580 kernel evaluations per TP up to water 1e-3 of the feed, 490 to 850 from 1e-2 to as
+     * much water as feed, where the bisection to 1e-8 took 1,800 to 2,800.
+     */
+    private static final class PartialPressureClosure {
+        private double p, low, high, lowResidual, highResidual, trial, start, lastResidual, best;
+        private int side, stalls;
+        private boolean closed;
+
+        void reset(double p, double start) {
+            this.p = p;
+            this.start = start;
+            low = PARTIAL_PRESSURE_FLOOR;
+            high = p;
+            lowResidual = highResidual = lastResidual = Double.NaN;
+            best = Double.POSITIVE_INFINITY;
+            trial = Double.NaN;
+            side = 0;
+            stalls = 0;
+            closed = false;
+        }
+
+        /** The next partial pressure to try. */
+        double next() {
+            double candidate;
+            if (Double.isNaN(trial)) {
+                candidate = start > low && start <= high ? start : Double.NaN;
+            } else if (stalls >= 2) {
+                candidate = Double.NaN;
+            } else if (Double.isFinite(lowResidual) && Double.isFinite(highResidual)) {
+                candidate = low - lowResidual * (high - low) / (highResidual - lowResidual);
+                if (!(candidate > low && candidate < high)) candidate = Double.NaN;
+            } else {
+                // One end with a finite residual: the fixed-point step from it.
+                candidate = Double.isFinite(lowResidual) ? low - lowResidual : high - highResidual;
+                if (!(candidate > low && candidate < high)) candidate = Double.NaN;
+            }
+            trial = Double.isNaN(candidate) ? 0.5 * (low + high) : candidate;
+            return trial;
+        }
+
+        /** The residual {@code r} at the last trial ({@code +infinity} where the steam's co-volume fills the gas). */
+        void record(double residual) {
+            stalls = Double.isFinite(best) && !(Math.abs(residual) <= 0.5 * best) ? stalls + 1 : 0;
+            if (Math.abs(residual) < best) best = Math.abs(residual);
+            lastResidual = residual;
+            if (residual > 0.0) {
+                high = trial;
+                highResidual = residual;
+                if (side == 1 && Double.isFinite(lowResidual)) lowResidual *= 0.5;
+                side = 1;
+            } else {
+                low = trial;
+                lowResidual = residual;
+                if (side == -1 && Double.isFinite(highResidual)) highResidual *= 0.5;
+                side = -1;
+            }
+            closed = Math.abs(residual) <= PARTIAL_PRESSURE_CLOSURE * p || high - low <= PARTIAL_PRESSURE_BRACKET_ULPS * Math.ulp(p);
+        }
+
+        boolean closed() { return closed; }
+
+        /** Whether the last trial is a root, within {@link #PARTIAL_PRESSURE_TOLERANCE}. */
+        boolean root() { return Math.abs(lastResidual) < PARTIAL_PRESSURE_TOLERANCE * p; }
+
+        /** The bracket's lower end: the last trial with a residual at or below zero, or the floor. */
+        double low() { return low; }
     }
 
     public EquilibriumResult tp(EquilibriumRequest request, Workspace workspace) {
@@ -2883,9 +2977,10 @@ public final class FluidTpEquilibrium {
      * {@link #solveWithCrystals}. No crystal forms: that answer, the solids assessed. Otherwise the hydrocarbons and their
      * crystal are solved as a dry feed at the hydrocarbon partial pressure {@code pc = P - p_w}, where their vapour lies,
      * and the water is laid around them by its rule (the steam in their vapour at the condensed water's vapour pressure
-     * and the rest condensed, or all steam where that leaves the gas unsaturated); {@code pc} then follows the new gas
-     * (the fixed point of {@link #solveWet}), started at the rule's own {@code pc}. The liquid and the crystal are
-     * restated at the state pressure: solving them at {@code pc} moves their chemical potentials by
+     * and the rest condensed, or all steam where that leaves the gas unsaturated); {@code pc} then closes on the new gas
+     * by {@link #solveWet}'s closure ({@link PartialPressureClosure}), started at the rule's own {@code pc}; a bracket
+     * that closes without a root fails. The liquid and the crystal are restated at the state pressure: solving them at
+     * {@code pc} moves their chemical potentials by
      * {@code v p_w / (R T)}, below 1e-7 where a crystal forms beside ice, 2e-5 for a liquid beside liquid water at 280 K.
      * A wet pure hydrocarbon at its crystal's own coexistence is the typed {@link EquilibriumResult#CRYSTAL_STEP} failure.
      */
@@ -2911,8 +3006,12 @@ public final class FluidTpEquilibrium {
         }
         double saturation = wet != null ? wet.saturationPressure() : frozen ? freeWater.ice().fugacity(t, p) : freeWater.saturationPressure(t);
         double water = w.waterTotal;
-        double pc = wet != null ? wet.hydrocarbonPressure() : p > saturation + SATURATION_MARGIN ? p - saturation : p;
-        for (int step = 0; ; step++) {
+        PartialPressureClosure closure = w.partialPressure;
+        closure.reset(p, wet != null ? wet.hydrocarbonPressure() : p > saturation + SATURATION_MARGIN ? p - saturation : p);
+        double pc = p;
+        double next = p;
+        for (int trial = 0; trial < PARTIAL_PRESSURE_TRIALS && !closure.closed(); trial++) {
+            pc = closure.next();
             EquilibriumResult dry = dryWithCrystals(t, pc, competition, w);
             if (!dry.converged()) return dry;
             if (dry.classification() == Classification.PURE_COEXISTENCE_UNDERDETERMINED) {
@@ -2928,7 +3027,6 @@ public final class FluidTpEquilibrium {
             double gasVolume = vapour == null ? 0.0 : vapour.total() * vapour.state().molarVolume();
             double steam;
             double partial;
-            double next;
             if (!(gasVolume > 0.0)) {
                 // No hydrocarbon gas: the water by the pure water's rule, condensed at or above its vapour pressure.
                 steam = p >= saturation ? 0.0 : water;
@@ -2940,17 +3038,14 @@ public final class FluidTpEquilibrium {
                 partial = SteamVirial.partialPressure(steam, t, gasVolume);
                 next = p - partial;
             }
-            if (Math.abs(next - pc) > PARTIAL_PRESSURE_TOLERANCE * p) {
-                if (step >= PARTIAL_PRESSURE_FIXED_POINT_STEPS || !(next > PARTIAL_PRESSURE_FLOOR)) {
-                    w.failure = "the hydrocarbon partial pressure beside the crystal and the steam was not found (pc " + pc + " Pa, next "
-                            + next + " Pa at " + p + " Pa)";
-                    return failed(t, p, competition, w);
-                }
-                pc = next;
-                continue;
+            closure.record(pc - next);
+            if (closure.closed() && closure.root()) {
+                return wetAround(dry, vapour, t, p, pc, saturation, partial, steam, water - steam, frozen, competition, w);
             }
-            return wetAround(dry, vapour, t, p, pc, saturation, partial, steam, water - steam, frozen, competition, w);
         }
+        w.failure = "the hydrocarbon partial pressure beside the crystal and the steam was not found (pc " + pc + " Pa, next "
+                + next + " Pa at " + p + " Pa)";
+        return failed(t, p, competition, w);
     }
 
     /**
@@ -5669,47 +5764,25 @@ public final class FluidTpEquilibrium {
             saturatedGas = gasVolume;
         }
         // The gas is unsaturated: all water is steam, and pc solves pc + p_w(V_gas(pc)) = P, the virial steam's
-        // p_w = n_w R T / (V_gas - n_w B). Its fixed point first (P3 WP4 runtime diagnosis, section 2.6; WP7b): started
-        // from the saturated split's gas volume scaled to the root as an ideal gas, then pc = P - p_w(V_gas(pc)); a point
-        // is accepted only on the bisection's own stop test (tighter than its acceptance), otherwise the bisection below
-        // decides. For a trace of water the fixed point is the root to rounding after one split, where the bisection needs
-        // about 27.
-        if (saturatedGas > 0.0) {
-            double guess = p / (1.0 + water * R * t / (saturatedGas * saturatedPc));
-            for (int step = 0; step < PARTIAL_PRESSURE_FIXED_POINT_STEPS && guess > PARTIAL_PRESSURE_FLOOR; step++) {
-                setBranches(t, p, guess, w);
-                int outcome = hydrocarbon(t, w);
-                if (outcome == FAILED) break;
-                double gasVolume = hydrocarbonVapour(t, outcome, w);
-                if (!(gasVolume > 0.0)) break;
-                double partial = SteamVirial.partialPressure(water, t, gasVolume);
-                if (Math.abs(guess + partial - p) < PARTIAL_PRESSURE_TOLERANCE * p) {
-                    return wetResult(t, p, guess, outcome, water, 0.0, saturation, partial, frozen, competition, w);
-                }
-                guess = p - partial;
-            }
-        }
-        // All water is steam; the hydrocarbon partial pressure closes the gas volume (the network's bisection).
-        double low = PARTIAL_PRESSURE_FLOOR;
-        double high = p;
-        double pc = high;
+        // p_w = n_w R T / (V_gas - n_w B), by the closure (P3 WP4 runtime diagnosis, section 2.6; WP7b; E21). It starts
+        // from the saturated split's gas volume scaled to the root as an ideal gas, and from the midpoint without one.
+        PartialPressureClosure closure = w.partialPressure;
+        closure.reset(p, saturatedGas > 0.0 ? p / (1.0 + water * R * t / (saturatedGas * saturatedPc)) : Double.NaN);
+        double pc = p;
         int outcome = FAILED;
         double gasVolume = 0.0;
-        boolean root = false;
-        for (int iteration = 0; iteration < PARTIAL_PRESSURE_BISECTIONS && !root; iteration++) {
-            pc = (low + high) * 0.5;
+        for (int trial = 0; trial < PARTIAL_PRESSURE_TRIALS && !closure.closed(); trial++) {
+            pc = closure.next();
             setBranches(t, p, pc, w);
             outcome = hydrocarbon(t, w);
             if (outcome == FAILED) return failed(t, p, competition, w);
             gasVolume = hydrocarbonVapour(t, outcome, w);
             // A gas volume the steam's co-volume fills (V <= n_w B, a positive B) is too small: infinite, pc too high.
-            double residual = gasVolume > 0.0 ? pc + SteamVirial.partialPressure(water, t, gasVolume) - p : Double.POSITIVE_INFINITY;
-            root = Math.abs(residual) < PARTIAL_PRESSURE_TOLERANCE * p;
-            if (residual > 0.0) high = pc; else low = pc;
+            closure.record(gasVolume > 0.0 ? pc + SteamVirial.partialPressure(water, t, gasVolume) - p : Double.POSITIVE_INFINITY);
         }
-        if (!root) {
+        if (!closure.root()) {
             // The bracket closed on a step of V_gas(pc): the steam's own volume closes the gas, in the vapour of its open end.
-            pc = low;
+            pc = closure.low();
             setBranches(t, p, pc, w);
             outcome = hydrocarbon(t, w);
             if (outcome == FAILED) return failed(t, p, competition, w);

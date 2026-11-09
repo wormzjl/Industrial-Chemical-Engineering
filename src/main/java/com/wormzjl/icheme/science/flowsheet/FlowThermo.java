@@ -12,7 +12,8 @@ import java.util.concurrent.CancellationException;
 
 /**
  * The stream thermo of a run (batch 2026-11-02-process-simulator, plan section 3.2): the world's own flash, on the network's
- * package, as streams. Run it inside {@code MaterialRuntime.with}. Minecraft-free.
+ * package, as streams. A run's is the package's view of the sheet's compounds ({@link SheetCompounds}), whose id it keeps. Run it
+ * inside {@code MaterialRuntime.with}. Minecraft-free.
  *
  * <p>A stream is what the world's TP flash says at the temperature that holds its enthalpy, and {@link #atEnthalpy} searches
  * along that flash. The engine's PH answers only on a true step of H(T). Measured: on water under its melting line it answers
@@ -52,7 +53,7 @@ public final class FlowThermo implements StreamThermo {
         return catalog;
     }
 
-    /** The sheet's package. */
+    /** The sheet's package: the network package, or in a run its view of the sheet's compounds, under the same id. */
     public String packageId() {
         return packageId;
     }
