@@ -17,9 +17,17 @@ distiller in the process simulator.
 
 - [BATCH_DISTILLER_PLAN.md](BATCH_DISTILLER_PLAN.md): reference photos, physics in numbers, what the code has, proposal
   W1 to W8, owner decisions B1 to B8, what the request leaves open, the B3 and B6 evaluations (section 7).
+- [BATCH_STILL_LAW.md](BATCH_STILL_LAW.md): W1, the law, the still's column and the solid-fuel records.
+- [BATCH_STILL_STRUCTURE.md](BATCH_STILL_STRUCTURE.md): W2, sizes, parts, nozzles and the data gland.
 - Run output of B3 (local): `research/2026-11-09-batch-distiller/b3-column/` (`report.txt`, `snapshots.csv`).
 
 ## Code areas
+
+- `science/fluid/network/BatchStill` (the law), `StillColumn` (bubble point, energy balance, pot mode, on the network's
+  phase evaluator), `science/material/SolidFuelCatalog` and `materials/fuels/`; config `energy.joulesPerBurnTick`.
+  Not reached by game code until phase 2.
+- `science/equipment/BatchStillDesign`, `BatchStillOptions` (shape fields 11), `ProcessUnit` (pot, firebox or skirt,
+  worm tub, column), `EquipmentServices` (data gland); the constructor entry and a DRAWING_ONLY simulator tile.
 
 - `src/test/java/com/wormzjl/icheme/science/column/batch/`: `BubblePointColumn` (the B3 candidate, both forms) and
   `BatchColumnComparisonTest` (a quick sanity test in `test`; the comparison runs only with `ICHEME_BATCH_COLUMN=1`).
@@ -45,7 +53,26 @@ distiller in the process simulator.
 - 2026-11-09: owner: start building. Phase 1 in two Opus sub-sessions, still-law (W1 and the fuel records) and
   still-structure (W2); phase 2 still-engine (W3 to W5) and still-simulator (W7); phase 3 still-gui (W6). Each hands
   back a diff; the main thread tests and commits.
+- 2026-11-09: phase 1 landed. W1 (still-law): the law, `StillColumn` and five fuel records; `BatchStillTest`. W2
+  (still-structure): `BATCH_STILL` with heater, condenser and column options, 6 new layout lines, shapes corpus image 11.
+  Tests: `BatchStillTest`, `science.material.*`, the GUI and codec classes the patches reach, and the equipment gates'
+  shape, service, golden and compat classes, all passing. Fixed on the way (this branch's flare and furnace work): the
+  flare's `flare_gas` role and unit-support keys, the example datapack's methane `combustion` record. Drawings not run
+  (no Python or Poppler on this machine).
 
 ## Open items
 
-- At the merge: move `BubblePointColumn`'s measurement harness to `tools/batch-still-column/` (tooling cleanup).
+- Phase 1 owner questions (each built as option A; details in the two notes):
+  - Law: flood limit F 1.8 Pa^0.5 (design 1.5 + 20 %); a light naphtha head near 27 °C on ambient water vents (COOLING
+    LIMITED) rather than a seven-fold condenser; an IDLE status; condenser capacity at the mean of head and condensate
+    temperatures; BOIL DRY at 5 % of the pot volume; the distillate leaves at its bubble point; the column takes
+    hydrocarbons only.
+  - Structure: O1 a column needs the built-in condenser; O2 the column has an overhead tube condenser, the worm tub stays
+    for the pot still; O3 placeholder textures; O4 the kettle symbol until W7; O5 the charge nozzle rises to row 2.5 from
+    750 L.
+  - The still-models session's style mapping (one firebox style per heater).
+- Drawings: `tools/equipment-drawings/update.ps1 -Only BATCH_STILL` needs Python with its requirements and Poppler.
+- Phase 2: wire `BatchStill`, `StillColumn` and `joulesPerBurnTick` into game code (main-reach rule); the electric
+  still's FE socket.
+- At the merge: move `BubblePointColumn`'s measurement harness to `tools/batch-still-column/` (tooling cleanup); code guide
+  rows for `BatchStill`, `StillColumn` (fluid-science.md) and `fuels` (thermo-materials.md).
