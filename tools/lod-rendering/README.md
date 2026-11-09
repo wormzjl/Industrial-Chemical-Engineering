@@ -18,3 +18,4 @@ tools/lod-rendering/lane.sh stage-a . tmp/lod-rendering
 
 History:
 - 2026-11-09: written for the Stage A pair (plan L4). Results in `documentation/2026-11-09-lod-rendering/FPS_PAIR_REVIEW.md`.
+- 2026-11-09: heavy scene and `[normal|low]` detail switch for the heavy bench (`HEAVY_BENCH_REVIEW.md`).
