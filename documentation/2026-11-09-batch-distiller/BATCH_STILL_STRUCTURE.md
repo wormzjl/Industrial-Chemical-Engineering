@@ -33,7 +33,8 @@ repair. A column without the built-in condenser loses the column.
 
 Phase 1 as built. The owner's feedback changed it (OWNER_FEEDBACK_REVIEW.md): one top condenser along z at x 2.5 on two
 posts for every condenser still, no worm tub and no `WOOD`, baked sprites in each heater tier's finish, the fuel on the
-right face, the electric still's terminal box on the right face, and no data port on a fired still. The nozzle table
+right face with the liquid still's burner (a small fuel connection through the right wall at ground level), the
+electric still's terminal box on the right face, and no data port on a fired still. The nozzle table
 below is the current one.
 
 - Every still: a copper pot (shell, dished bottom, head, seam hoop) and its charge and drain lines. The worm option adds
@@ -66,7 +67,7 @@ below is the current one.
 |---|---|---|---|---|
 | CHARGE | always | (0.5, row, 0) | z− | (0, row−.5, −1) |
 | DRAIN | always | (0.5, 0.5, 3) | z+ | (0, 0, 3) |
-| FUEL | LIQUID | (0, row, 1.5) | x− | (−1, row−.5, 1) |
+| FUEL | LIQUID | (0, 0.5, 1.5) | x− | (−1, 0, 1) |
 | DISTILLATE | condenser | (2.5, 0.5, 0) | z− | (2, 0, −1) |
 | WATER_INLET | condenser | (2.5, yk, 0) | z− | (2, yk−.5, −1) |
 | WATER_OUTLET | condenser | (2.5, yk, 3) | z+ | (2, yk−.5, 3) |
@@ -75,8 +76,8 @@ below is the current one.
 
 - The charge row is the lowest cell centre at least 0.42 m over the setting or skirt top. A pipe's largest neck then
   clears the coping.
-- yk, the condenser row, is at least 0.5 m over the column or helmet top and at least 2.5 m. FUEL is on the charge's row:
-  beside the setting a pipe's largest neck does not fit from 200 L up.
+- yk, the condenser row, is at least 0.5 m over the column or helmet top and at least 2.5 m. FUEL is the burner, at most
+  a 50 mm line; the setting, at most 1.686 m wide, leaves its neck 0.157 m.
 - yv is the first cell centre over the helmet top.
 - Each face is on its block face and on its pipe block's centre line. The pipe blocks are at least two blocks apart, and
   every neck clears the unit at a pipe's largest.

@@ -30,10 +30,10 @@ main thread (owner: "Here").
 - Owner: only the electric still has a data box and port, so only the electric still takes a controller. A fired still
   has none (`EquipmentServices`: no services for a fired still); its firing and reflux are set by hand.
 - Owner, then: charge on the front, fuel on the right, drain on the back, condenser on the left (seen from the firing
-  door; the right is −x). The condenser lies along z at x = 2.5. The fuel flange is on the right face's middle column, on
-  the charge's row: beside the setting a pipe's largest neck (0.27 m) does not fit from 200 L up. The electric still's
-  terminal box moved from the front corner to the right face's middle column, its gland outward (owner: a bad
-  location). The fuel line leaves the burner gun's right side, not its front (the air inlet). The charge line bends in
+  door; the right is −x). The condenser lies along z at x = 2.5. The burner is the fuel connection, on the right face's
+  middle column at ground level (owner: a small pipe connector is enough): at most 50 mm bore (`NozzleBore`); the
+  setting is at most 1.686 m wide to leave it 0.157 m (owner), the flue shrinks to clear the pot. No gun at the door. The electric still's terminal box moved from
+  the front corner to the right face's middle column, gland outward (owner: a bad location). The charge line bends in
   front of the axis and the drain jogs behind the pot. The pot node's point sits 0.01 m off the block edges.
 
 ## 4. Pot volume against the drawing

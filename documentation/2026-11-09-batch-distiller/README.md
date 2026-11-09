@@ -117,8 +117,11 @@ distiller in the process simulator.
 - 2026-11-09: owner faces (OWNER_FEEDBACK_REVIEW.md item 3): charge on the front, fuel on the right (−x, middle column,
   the charge's row), drain on the back, condenser on the left (along z at x = 2.5); the electric still's terminal box on
   the right face's middle column; the charge line bends in front of the axis, the drain jogs behind the pot. The still
-  renders gain a right view. Layout table re-recorded (still rows only). Owner, then: the fuel comes in on the burner
-  gun's right side through a union; the gun is longer and its front face is an open, dark air inlet.
+  renders gain a right view. Layout table re-recorded (still rows only). Owner, then: the burner is the fuel nozzle
+  itself, a small connection (at most 50 mm, `BatchStillDesign.FUEL_BORE`, `NozzleBore`) through the right wall at
+  ground level; the setting at most 1.686 m wide (`StillPlan.FUEL_ROOM`, owner: smaller), the flue clear of the pot;
+  no burner gun at the front; the flame jet runs from the
+  burner toward the fire bed (`StillFires`).
 
 ## Open items
 
