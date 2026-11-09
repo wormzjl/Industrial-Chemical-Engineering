@@ -513,6 +513,15 @@ class ProcessUnitTest {
                 assertTrue(occupied.contains(port.cell()), shape + " " + role);
                 assertFalse(occupied.contains(pipe), shape + " " + role + ": no room for a pipe at " + pipe);
                 assertTrue(pipe.y() >= 0, shape + " " + role + " pipe under the ground");
+                // The nozzle meets its pipe: its face on the block face, its centre line through the pipe block's (batch
+                // 2026-11-09-flare-stack). The delayed coker's feed, steam and water stand 0.05 to 0.35 m off: an open item.
+                if (shape.kind() == Kind.DELAYED_COKER) continue;
+                var face = shape.transform().point(shape.nozzles().get(port.nozzle()).face());
+                int axis = port.dx() != 0 ? 0 : port.dy() != 0 ? 1 : 2;
+                int[] at = {pipe.x(), pipe.y(), pipe.z()};
+                for (int a = 0; a < 3; a++)
+                    if (a == axis) assertEquals(Math.rint(face[a]), face[a], 1e-9, shape + " " + role + ": its face off the block face");
+                    else assertEquals(at[a] + .5, face[a], 1e-9, shape + " " + role + ": its centre line off its pipe's, axis " + a);
             }
             pipesApart(shape);
             // Flanges at their largest stand clear of each other.

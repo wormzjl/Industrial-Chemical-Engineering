@@ -3187,13 +3187,23 @@ public final class ProcessUnit {
      * inlet at the front, its centre 1.5 m up. No ladder: a flare's tip is reached from a crane while it is down. The
      * flame is the client's ({@code FlareFlames}), drawn while the flare works.
      */
+    /**
+     * A flare stack's plinth radius at least, m, and its gas inlet's centre, m (batch 2026-11-09-flare-stack): on the cell
+     * centre of the second block, where its pipe's centre line runs.
+     */
+    static final double FLARE_PLINTH = .45, FLARE_INLET = 1.5;
+
     void flareStack() {
         double tip = shape.diameter(), od = tip + .1, r = od / 2, a = .5, top = com.wormzjl.icheme.science.fluid.network.Flare.stackHeight(tip);
-        int n = sides(od);
+        // The foot: a straight plinth to 2 m that takes the gas inlet and the data socket, then a taper to the riser at 3 m.
+        double plinth = Math.max(2 * r, FLARE_PLINTH);
+        int n = sides(od), m = sides(2 * plinth);
         var up = Frame.of(new double[]{a, 0, a}, 1, 1);
-        mesh.frustum(up, 2 * r, r, 0, 3, n, Material.SUPPORT);
-        mesh.annulus(up, 0, 2 * r, 0, n, -1, Material.SUPPORT);
-        solids.add(Solid.rod(new double[]{a, 0, a}, 1, 0, 3, 2 * r, 0));
+        mesh.prism(up, plinth, 0, 2, m, Material.SUPPORT);
+        mesh.annulus(up, 0, plinth, 0, m, -1, Material.SUPPORT);
+        mesh.frustum(up, plinth, r, 2, 3, m, Material.SUPPORT);
+        solids.add(Solid.rod(new double[]{a, 0, a}, 1, 0, 2, plinth, 0));
+        solids.add(Solid.rod(new double[]{a, 0, a}, 1, 2, 3, (plinth + r) / 2, 0));
         stack(a, a, od, n, 3, top, Material.STEELWORK, null, false);
         // The tip: its windshield round the riser's mouth, the pilots up its side.
         double shield = r + .15;
@@ -3206,8 +3216,8 @@ public final class ProcessUnit {
             double t = 2 * Math.PI * k / 3 + Math.PI / 2, x = a + (shield + .08) * DeterministicMath.cos(t), z = a + (shield + .08) * DeterministicMath.sin(t);
             mesh.bar(new double[]{x, top - 2, z}, new double[]{x, top + 1.3, z}, .05, new double[]{1, 0, 0}, Material.PIPE);
         }
-        // The gas inlet over the tapered foot, so a pipe's largest neck clears it.
-        nozzles.add(radialSide(Role.FLARE_GAS, a, 4, a, r, n, -1, od));
+        // The vent gas enters the plinth 1.5 m up, towards the front, as a flare header arrives near grade.
+        nozzles.add(radialSide(Role.FLARE_GAS, a, FLARE_INLET, a, plinth, m, -1, od));
     }
 
     static double stackTop(double neck, double roof) {
