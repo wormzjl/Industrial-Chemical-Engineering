@@ -685,6 +685,24 @@ public final class Mesh {
         }
     }
 
+    /**
+     * The least height over its tangent line of the head {@link #head(Frame, double, double, double, int, Material)} draws,
+     * at {@code rho} from its axis: a facet's middle, where its bands' chords sag furthest inside the ellipsoid. A part
+     * that stands on the head (a still's helmet) starts under it, so no gap opens at its foot.
+     */
+    double headHeight(double r, double depth, int n, double rho) {
+        int bands = detail.bands(Math.max(3, n / 4));
+        double c = DeterministicMath.cos(Math.PI / detail.sides(n));
+        for (int k = 0; k < bands; k++) {
+            double p0 = Math.PI / 2 * k / bands, p1 = Math.PI / 2 * (k + 1) / bands;
+            double r0 = c * r * DeterministicMath.cos(p0), r1 = k + 1 == bands ? 0 : c * r * DeterministicMath.cos(p1);
+            if (rho > r0 || rho < r1) continue;
+            double z0 = depth * DeterministicMath.sin(p0), z1 = depth * DeterministicMath.sin(p1);
+            return z0 + (z1 - z0) * (r0 - rho) / (r0 - r1);
+        }
+        return 0;
+    }
+
     /** A fastener rather than a dark cylindrical machine part; low detail uses its flush textured face. */
     void nut(Frame f, double radius, double from, double to, int sides, Material material) {
         if (detail == RenderDetail.LOW) disc(f, radius, Math.min(from, to) + .0004, 6, 1, Material.BOLT_FACE);

@@ -129,6 +129,9 @@ distiller in the process simulator.
   still showed a data port: `ControlHosts` gave every heat registration an actuator port; a shell with no data socket
   now gets none, an older one is removed at its next bind. Tests: the eight geometry classes, `ControlSystemTest`,
   `BuiltInInputsTest`; the fluid GameTests that load `ControlHosts` run in the final lane.
+- 2026-11-10: owner, in game: a seam under the helmet's collar. The head's facets sag 1.5 to 28 mm under the ellipsoid
+  at the collar's rim; the helmet's foot now starts 1 cm under the drawn head (`Mesh.headHeight`). The column stood
+  deep enough already. Tests: the eight geometry classes (layout table unchanged).
 
 ## Open items
 

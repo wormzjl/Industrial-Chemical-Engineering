@@ -3447,9 +3447,14 @@ public final class ProcessUnit {
         nozzles.add(end(Role.DRAIN, base, 2, 1, 2 * pr));
     }
 
-    /** A pot still's helmet on the head's apex, its collar and a sight glass on its front. */
+    /**
+     * A pot still's helmet on the head's apex, its collar and a sight glass on its front. Its foot starts a centimetre
+     * under the drawn head at its collar's rim (the head's facets sag up to 28 mm under the ellipsoid there; owner,
+     * 2026-11-10: a seam showed under the collar).
+     */
     private void stillHelmet(StillPlan p) {
-        double x = StillPlan.POT_X, z = StillPlan.POT_Z, rh = p.helmet(), y0 = p.apex() - .02, y1 = p.helmetTop() - rh / 2;
+        double x = StillPlan.POT_X, z = StillPlan.POT_Z, rh = p.helmet(), y1 = p.helmetTop() - rh / 2;
+        double y0 = p.cylinder() + mesh.headHeight(p.d() / 2, p.d() / 4, sides(p.d()), rh + .02) - .01;
         int n = sides(2 * rh);
         var up = Frame.of(new double[]{x, 0, z}, 1, 1);
         mesh.hoop(up, rh, rh + .02, y0, y0 + .04, n, p.finish());
