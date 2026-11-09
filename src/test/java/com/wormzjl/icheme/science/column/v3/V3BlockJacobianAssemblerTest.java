@@ -52,6 +52,10 @@ class V3BlockJacobianAssemblerTest {
         V3ColumnProblem wet = wetProblem();
         assertTrue(wet.hasWetTrays(), "fixture must carry a free-water tray");
         assertLocalBlocksMatchFiniteDifference(wet, wetState(wet));
+        // Tray one's water is carried over to the drum, a node-local lever; tray two's falls to tray three.
+        V3ColumnProblem falling = wetProblem(2);
+        assertTrue(falling.freeWaterFalls(2) && !wet.freeWaterFalls(1));
+        assertLocalBlocksMatchFiniteDifference(falling, wetState(falling));
     }
 
     @Test
@@ -138,7 +142,7 @@ class V3BlockJacobianAssemblerTest {
     @EnumSource(value = V3CondenserPhaseBranch.class, names = {"TWO_PHASE", "LIQUID_ONLY"})
     void localStageBlocksMatchTheColoredReferenceForRealCrudeCondenserBranches(V3CondenserPhaseBranch branch) {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light");
+        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
         V3ColumnInput input = realCrudeInput(crude, 100_000.0);
         V3ColumnProblem problem = V3ColumnProblemResolver.resolve(input, branch);
         V3DryMeshState state = V3ColumnInitializer.initialize(
@@ -189,7 +193,7 @@ class V3BlockJacobianAssemblerTest {
      * 4.8e-8 at the fine one.</p>
      */
     @ParameterizedTest
-    @ValueSource(strings = {"plain", "draw", "heat", "steam", "wet", "capped-condenser"})
+    @ValueSource(strings = {"plain", "draw", "heat", "steam", "wet", "wet-below", "capped-condenser"})
     void analyticStageBlocksMatchTheColoredReferenceOnEveryRowFeature(String feature) {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
         V3ColumnProblem dry = V3ColumnProblemResolver.resolve(
@@ -198,15 +202,19 @@ class V3BlockJacobianAssemblerTest {
                 dry, thermo, thermo.newWorkspace(), V3ColumnInitializer.Mode.SEQUENTIAL_MATERIAL_VLE).state();
         V3ColumnInput input = featuredInput(feature);
         V3ColumnProblem problem = V3ColumnProblemResolver.resolve(input, V3CondenserPhaseBranch.TWO_PHASE);
-        if (feature.equals("wet")) {
+        if (feature.startsWith("wet")) {
+            // "wet": tray one carries its free water over to the decanting drum (E31), a node-local lever;
+            // "wet-below": tray two's falls to tray three, the cross-node coupling written in closed form.
+            int tray = feature.equals("wet") ? 1 : 2;
             boolean[] wet = new boolean[problem.topology().nodeCount()];
-            wet[1] = true;
+            wet[tray] = true;
             problem = V3ColumnProblemResolver.withTruncation(problem, problem.truncationSupport(),
                     V3WetTraySet.of(problem.topology(), wet));
             double[] freeWater = new double[problem.topology().nodeCount()];
-            freeWater[1] = 3.0;
+            freeWater[tray] = 3.0;
             state = V3ColumnInitializer.withFreeWater(state, problem.topology(), freeWater);
-            assertTrue(problem.hasFreeWaterUnknown(1), "the wet fixture must carry a free-water unknown");
+            assertTrue(problem.hasFreeWaterUnknown(tray), "the wet fixture must carry a free-water unknown");
+            assertEquals(tray == 1, !problem.freeWaterFalls(tray), "the decanting drum takes tray one's water only");
         }
         V3FlashResult feed = thermo.flashTP(input.feedTemperatureKelvin(),
                 problem.nodePressurePascal(problem.topology().feedTrayNumber()),
@@ -244,7 +252,7 @@ class V3BlockJacobianAssemblerTest {
     @Test
     void analyticStageBlocksMatchTheColoredReferenceOnAVaporOnlyCondenser() {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light");
+        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
         double[] flows = crude.moleFractions();
         double totalFlowMolPerSecond = 2_000.0 * 1_000.0 / 3_600.0;
         for (int component = 0; component < flows.length; component++) flows[component] *= totalFlowMolPerSecond;
@@ -298,14 +306,14 @@ class V3BlockJacobianAssemblerTest {
 
     private static V3ColumnInput featuredInput(String feature) {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light");
+        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
         double[] flows = crude.moleFractions();
         double totalFlowMolPerSecond = 2_000.0 * 1_000.0 / 3_600.0;
         for (int component = 0; component < flows.length; component++) flows[component] *= totalFlowMolPerSecond;
         List<V3SideDrawSpec> draws = feature.equals("draw") ? List.of(new V3SideDrawSpec(10, 40.0)) : List.of();
         List<V3SteamFeedSpec> steam = switch (feature) {
             case "steam" -> List.of(new V3SteamFeedSpec(31, 20.0, 533.15));
-            case "wet" -> List.of(new V3SteamFeedSpec(31, 60.0, 533.15));
+            case "wet", "wet-below" -> List.of(new V3SteamFeedSpec(31, 60.0, 533.15));
             case "capped-condenser" -> List.of(new V3SteamFeedSpec(31, 2.0, 533.15));
             default -> List.of();
         };
@@ -332,7 +340,7 @@ class V3BlockJacobianAssemblerTest {
     @Test
     void everyProbeOfTheRealCrudeFixtureDecodesAndEvaluatesBitwiseAsTheWholeVectorProbeDid() {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light");
+        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
         V3ColumnInput input = realCrudeInput(crude, 100_000.0);
         V3ColumnProblem problem = V3ColumnProblemResolver.resolve(input, V3CondenserPhaseBranch.TWO_PHASE);
         V3DryMeshState state = V3ColumnInitializer.initialize(
@@ -372,7 +380,7 @@ class V3BlockJacobianAssemblerTest {
     @Test
     void anInadmissibleProbeStepIsRefusedIdenticallyByBothDecodes() {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light");
+        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
         V3ColumnProblem problem = V3ColumnProblemResolver.resolve(
                 realCrudeInput(crude, 100_000.0), V3CondenserPhaseBranch.TWO_PHASE);
         V3DryMeshState state = V3ColumnInitializer.initialize(
@@ -551,9 +559,13 @@ class V3BlockJacobianAssemblerTest {
     /**
      * The manufactured binary at 1.5 MPa with 10 mol/s of sump steam: at 410 K the water saturation pressure
      * is 349 kPa and the tray-one vapour would carry 10 of 40 mol/s of water at 1.5 MPa, so tray one is
-     * supersaturated and takes a free-water phase.
+     * supersaturated and takes a free-water phase. The drum at 400 K decants, so tray one carries it over (E31).
      */
     private static V3ColumnProblem wetProblem() {
+        return wetProblem(1);
+    }
+
+    private static V3ColumnProblem wetProblem(int tray) {
         V3ColumnInput input = new V3ColumnInput(V3ColumnInput.SCHEMA_VERSION, "test:manufactured", "test:binary",
                 new V3ComponentBasis(List.of("component-a", "component-b")), new double[] {30.0, 60.0}, 400.0,
                 4, 2, 1_500_000.0, 750.0, List.of(
@@ -563,14 +575,15 @@ class V3BlockJacobianAssemblerTest {
                 List.of(new V3SteamFeedSpec(5, 10.0, 520.0)), List.of(), V3ColumnInput.PRESCRIBED_DROP_DIAMETER);
         V3ColumnProblem dry = V3ColumnProblemResolver.resolve(input, V3CondenserPhaseBranch.TWO_PHASE);
         boolean[] wet = new boolean[dry.topology().nodeCount()];
-        wet[1] = true;
+        wet[tray] = true;
         return V3ColumnProblemResolver.withTruncation(dry, dry.truncationSupport(),
                 V3WetTraySet.of(dry.topology(), wet));
     }
 
+    /** 2.5 mol/s of free water on every wet tray of the problem. */
     private static V3DryMeshState wetState(V3ColumnProblem problem) {
         double[] freeWater = new double[problem.topology().nodeCount()];
-        freeWater[1] = 2.5;
+        for (int tray : problem.wetTraySet().wetTrays()) freeWater[tray] = 2.5;
         return V3ColumnInitializer.withFreeWater(state(problem.topology()), problem.topology(), freeWater);
     }
 

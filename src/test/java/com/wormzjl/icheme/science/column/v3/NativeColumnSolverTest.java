@@ -126,7 +126,7 @@ class NativeColumnSolverTest {
     void separatingColumnPublishesTheSameProductsWithEitherOuterPass() {
         assumeTrue(NativeColumnSolver.available());
         V3CrudeFeed crude = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018")
-                .crudeFeed("icheme:tia_juana_light");
+                .crudeFeed("icheme:tia_juana_light_kl1976");
         double[] flows = crude.moleFractions();
         for (int component = 0; component < flows.length; component++) flows[component] *= 2_610.7 * 1_000.0 / 3_600.0;
         V3ColumnInput input = V3TestInputs.dry(V3ColumnInput.SCHEMA_VERSION, crude.packageId(), crude.assayId(),

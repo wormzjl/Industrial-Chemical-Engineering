@@ -1,0 +1,62 @@
+diff --git a/src/main/java/com/wormzjl/icheme/science/thermo/phase/FluidTpEquilibrium.java b/src/main/java/com/wormzjl/icheme/science/thermo/phase/FluidTpEquilibrium.java
+index 304df9012..675d054c9 100644
+--- a/src/main/java/com/wormzjl/icheme/science/thermo/phase/FluidTpEquilibrium.java
++++ b/src/main/java/com/wormzjl/icheme/science/thermo/phase/FluidTpEquilibrium.java
+@@ -164,6 +164,8 @@ public final class FluidTpEquilibrium {
+     public static final double PARTIAL_PRESSURE_ACCEPTANCE = 1.0e-6;
+     /** Fixed-point steps {@code pc = P - n_w R T / V_gas(pc)} tried before the bisection (P3 WP7b). */
+     public static final int PARTIAL_PRESSURE_FIXED_POINT_STEPS = 3;
++    /** PROBE option A1: the closure the regula falsi runs to, relative to P. */
++    static final double PROBE_CLOSURE = 1.0e-13;
+     /**
+      * A feed whose stability test ends unresolved (a trial out of its budget without proving instability) is tested once
+      * more with this many times the per-trial budget: next to a mixture critical point a trial can crawl towards the
+@@ -5683,7 +5685,7 @@ public final class FluidTpEquilibrium {
+                 double gasVolume = hydrocarbonVapour(t, outcome, w);
+                 if (!(gasVolume > 0.0)) break;
+                 double partial = SteamVirial.partialPressure(water, t, gasVolume);
+-                if (Math.abs(guess + partial - p) < PARTIAL_PRESSURE_TOLERANCE * p) {
++                if (Math.abs(guess + partial - p) <= PROBE_CLOSURE * p) {
+                     return wetResult(t, p, guess, outcome, water, 0.0, saturation, partial, frozen, competition, w);
+                 }
+                 guess = p - partial;
+@@ -5696,8 +5698,18 @@ public final class FluidTpEquilibrium {
+         int outcome = FAILED;
+         double gasVolume = 0.0;
+         boolean root = false;
+-        for (int iteration = 0; iteration < PARTIAL_PRESSURE_BISECTIONS && !root; iteration++) {
++        // PROBE option A1: Illinois regula falsi inside the bisection's bracket, run to PROBE_CLOSURE (the old
++        // PARTIAL_PRESSURE_TOLERANCE still decides whether a root was found or the bracket closed on a step).
++        double lowResidual = Double.NaN;
++        double highResidual = Double.NaN;
++        int side = 0;
++        boolean tight = false;
++        for (int iteration = 0; iteration < PARTIAL_PRESSURE_BISECTIONS && !tight; iteration++) {
+             pc = (low + high) * 0.5;
++            if (Double.isFinite(lowResidual) && Double.isFinite(highResidual) && highResidual != lowResidual) {
++                double falsi = low - lowResidual * (high - low) / (highResidual - lowResidual);
++                if (falsi > low && falsi < high) pc = falsi;
++            }
+             setBranches(t, p, pc, w);
+             outcome = hydrocarbon(t, w);
+             if (outcome == FAILED) return failed(t, p, competition, w);
+@@ -5705,7 +5717,18 @@ public final class FluidTpEquilibrium {
+             // A gas volume the steam's co-volume fills (V <= n_w B, a positive B) is too small: infinite, pc too high.
+             double residual = gasVolume > 0.0 ? pc + SteamVirial.partialPressure(water, t, gasVolume) - p : Double.POSITIVE_INFINITY;
+             root = Math.abs(residual) < PARTIAL_PRESSURE_TOLERANCE * p;
+-            if (residual > 0.0) high = pc; else low = pc;
++            tight = Math.abs(residual) <= PROBE_CLOSURE * p || high - low <= 4.0 * Math.ulp(p);
++            if (residual > 0.0) {
++                high = pc;
++                highResidual = residual;
++                if (side == 1 && Double.isFinite(lowResidual)) lowResidual *= 0.5;
++                side = 1;
++            } else {
++                low = pc;
++                lowResidual = residual;
++                if (side == -1 && Double.isFinite(highResidual)) highResidual *= 0.5;
++                side = -1;
++            }
+         }
+         if (!root) {
+             // The bracket closed on a step of V_gas(pc): the steam's own volume closes the gas, in the vapour of its open end.

@@ -34,13 +34,13 @@ import java.util.List;
  * @param ejector        the ejector on the vapour line where the top is under ambient pressure (W10): {@code ejector_discharge} and
  *                       {@code ejector_motive}, the tile's defaults where absent
  */
-public record ColumnDoor(String packageId, String assayId, int stages, int feedStage, double topPressure, double stageDrop, double diameter,
+public record ColumnDoor(String assayId, int stages, int feedStage, double topPressure, double stageDrop, double diameter,
                          double condenserTemperature, double reflux, double reboilerDuty, ColumnComponents.Condenser condenser, double condenserDrop, double reboilerDrop,
                          List<Draw> draws, List<Steam> steam, List<Pumparound> pumparounds, ColumnComponents.Units units, Ejector ejector, ColumnComponents.Exchangers exchangers) {
-    public ColumnDoor(String packageId, String assayId, int stages, int feedStage, double topPressure, double stageDrop, double diameter,
+    public ColumnDoor(String assayId, int stages, int feedStage, double topPressure, double stageDrop, double diameter,
                          double condenserTemperature, double reflux, double reboilerDuty, ColumnComponents.Condenser condenser, double condenserDrop, double reboilerDrop,
                          List<Draw> draws, List<Steam> steam, List<Pumparound> pumparounds, ColumnComponents.Units units, Ejector ejector) {
-        this(packageId,assayId,stages,feedStage,topPressure,stageDrop,diameter,condenserTemperature,reflux,reboilerDuty,condenser,condenserDrop,reboilerDrop,draws,steam,pumparounds,units,ejector,ColumnComponents.Exchangers.STANDARD);
+        this(assayId,stages,feedStage,topPressure,stageDrop,diameter,condenserTemperature,reflux,reboilerDuty,condenser,condenserDrop,reboilerDrop,draws,steam,pumparounds,units,ejector,ColumnComponents.Exchangers.STANDARD);
     }
 
     /** A side draw on {@code tray} (mol/s). */
@@ -85,7 +85,7 @@ public record ColumnDoor(String packageId, String assayId, int stages, int feedS
             pumparounds.add(new Pumparound(id(row, "pa", ids), (int) row.number("return_tray"), (int) row.number("draw_tray"), row.number("duty"), split(row), row.number("drop", 0)));
             coolers.add(units(row, UNITS));
         }
-        return new ColumnDoor(p.text("package", ""), p.text("assay", ""), (int) p.number("stages"), (int) p.number("feed_stage"), p.number("top_pressure"), p.number("stage_drop"), p.number("diameter", 0),
+        return new ColumnDoor(p.text("assay", ""), (int) p.number("stages"), (int) p.number("feed_stage"), p.number("top_pressure"), p.number("stage_drop"), p.number("diameter", 0),
                 p.number("condenser_temperature"), p.number("reflux"), p.number("reboiler_duty"), condenser(p), p.number("condenser_drop", 0), p.number("reboiler_drop", 0), draws, steam, pumparounds,
                 new ColumnComponents.Units(units(p, CONDENSER_UNITS), units(p, KETTLE_UNITS), coolers, units(p, TRIM_UNITS)),
                 new Ejector(p.number(EJECTOR_DISCHARGE, EjectorUnit.DISCHARGE_PRESSURE), p.number(EJECTOR_MOTIVE, EjectorUnit.MOTIVE_PRESSURE)),readExchangers(p.json()));
@@ -160,7 +160,6 @@ public record ColumnDoor(String packageId, String assayId, int stages, int feedS
     /** The door a calculator's input fills in, its rows numbered from 1 in the input's order: the feed stays behind. */
     public static Params from(V3ColumnInput input, ColumnComponents.Condenser condenser) {
         var door = new JsonObject();
-        door.addProperty("package", input.packageId());
         door.addProperty("assay", input.assayId());
         door.addProperty("stages", input.stageCount());
         door.addProperty("feed_stage", input.feedStageNumber());

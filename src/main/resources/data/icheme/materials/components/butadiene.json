@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "Butadiene",
+  "kind": "chemical",
+  "translation_key": "material.icheme.butadiene",
+  "fallback": "Butadiene",
+  "properties": "icheme:chemsep_butadiene",
+  "appearance": {
+    "color": "#F3F4EA",
+    "transparency": 0.85,
+    "estimated": true
+  },
+  "identifiers": {
+    "cas": "106-99-0",
+    "chemsep_id": "303",
+    "smiles": "C=CC=C",
+    "formula": "CH2CHCHCH2"
+  }
+}

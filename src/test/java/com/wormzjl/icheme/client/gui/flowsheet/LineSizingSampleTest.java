@@ -23,6 +23,22 @@ import static org.junit.jupiter.api.Assertions.*;
  * {@code sizing-sample.tsv} holds them. Its ten member lines (Overhead, Receiver out, Pump out, Reflux, the PA draws and returns)
  * stay for S3, which owns the circulation they need. The probe labelled WATER as Liquid by hand; the rule makes it Water, whose
  * row holds the same limits, so its size stands.
+ *
+ * <p>Since O4 of batch 2026-11-04-open-thermo-data (crude cuts on Twu 1985 viscosity, the one-term mixture term) the drops are
+ * the run's, not the probe's table: eight crude lines moved at the third place, by -0.8 to +2.2 % (CRUDE 0.058 to 0.059, S-1
+ * 0.233 to 0.236, S-2 0.196 to 0.199, S-3 0.085 to 0.086, S-4 0.084 to 0.085, DIESEL 0.165 to 0.166, S-10 0.179 to 0.183,
+ * RESIDUE 0.345 to 0.342); every bore, count and deciding limit stands.
+ *
+ * <p>Since O3 of the same batch the sample runs the medium crude grade, and every value is the run's. Four bores moved (CWS and
+ * CWR 0.7 to 0.6 m on the condenser's smaller duty; KERO 0.2 to 0.25 m and AGO 0.15 to 0.2 m on the larger draws) and two
+ * deciding limits (OFFGAS speed to drop, NAPHTHA drop to speed); every service, count and lamp stands.
+ *
+ * <p>Since the column took the network's water (E30 (a) of the same batch) the column sends a little more to its distillate, and
+ * NAPHTHA's drop is 0.175 bar/100 m, not 0.174.
+ *
+ * <p>With condenser carry-over (E31 of the same batch) the column sends more again: NAPHTHA's drop is 0.193 bar/100 m,
+ * OFFGAS (0.070) is decided by its speed again, and WATER, DIESEL, S-10, RESIDUE and AGO move in the third place. Every
+ * service, bore, count and lamp stands.
  */
 class LineSizingSampleTest {
     /**
@@ -33,14 +49,14 @@ class LineSizingSampleTest {
     private record Probe(String line, Service service, double bore, Limit decides, double drop) {
     }
 
-    private static final List<Probe> PROBE = List.of(new Probe("CRUDE", Service.SUCTION_COLD, .4, Limit.SUCTION_COLD_SPEED, .058), new Probe("S-1", Service.LIQUID, .3, Limit.LIQUID_SPEED, .233), new Probe("S-2", Service.LIQUID, .3, Limit.LIQUID_SPEED, .196),
-            new Probe("S-3", Service.LIQUID, .35, Limit.LIQUID_SPEED, .085), new Probe("S-4", Service.LIQUID, .35, Limit.LIQUID_SPEED, .084), new Probe("S-5", Service.LIQUID, .35, Limit.LIQUID_SPEED, .086),
-            // S-7: the probe's 0.056 at V-101's 2.72 bar; the sample sets 2.80 since S4c, and the denser, less flashed feed loses 0.054.
-            new Probe("S-6", Service.TWO_PHASE, .7, Limit.TWO_PHASE_MOMENTUM, .055), new Probe("S-7", Service.TWO_PHASE, .8, Limit.TWO_PHASE_MOMENTUM, .054), new Probe("STEAM", Service.STEAM_SUPERHEATED, .35, Limit.STEAM_SUPERHEATED_SPEED, .064),
-            new Probe("CWS", Service.WATER, .7, Limit.WATER_SPEED, .062), new Probe("CWR", Service.WATER, .7, Limit.WATER_SPEED, .062), new Probe("OFFGAS", Service.GAS, .2, Limit.GAS_SPEED, .028),
-            new Probe("NAPHTHA", Service.LIQUID, .1, Limit.LIQUID_DROP, .427), new Probe("WATER", Service.WATER, .075, Limit.WATER_DROP, .287), new Probe("DIESEL", Service.LIQUID, .15, Limit.LIQUID_SPEED, .165),
-            new Probe("S-10", Service.LIQUID, .25, Limit.LIQUID_SPEED, .179), new Probe("RESIDUE", Service.LIQUID, .25, Limit.LIQUID_SPEED, .345), new Probe("KERO", Service.DRAW, .2, Limit.DRAW_SPEED, .019),
-            new Probe("AGO", Service.DRAW, .15, Limit.DRAW_SPEED, .029), new Probe("S-8", Service.DRAW, .25, Limit.DRAW_SPEED, .013), new Probe("S-9", Service.DRAW, .45, Limit.DRAW_SPEED, .009));
+    private static final List<Probe> PROBE = List.of(new Probe("CRUDE", Service.SUCTION_COLD, .4, Limit.SUCTION_COLD_SPEED, .061), new Probe("S-1", Service.LIQUID, .3, Limit.LIQUID_SPEED, .243), new Probe("S-2", Service.LIQUID, .3, Limit.LIQUID_SPEED, .202),
+            new Probe("S-3", Service.LIQUID, .35, Limit.LIQUID_SPEED, .086), new Probe("S-4", Service.LIQUID, .35, Limit.LIQUID_SPEED, .085), new Probe("S-5", Service.LIQUID, .35, Limit.LIQUID_SPEED, .087),
+            // S-7: the probe's 0.056 at V-101's 2.72 bar; the sample sets 2.80 since S4c (0.054 on Tia Juana, 0.050 on the medium grade).
+            new Probe("S-6", Service.TWO_PHASE, .7, Limit.TWO_PHASE_MOMENTUM, .050), new Probe("S-7", Service.TWO_PHASE, .8, Limit.TWO_PHASE_MOMENTUM, .050), new Probe("STEAM", Service.STEAM_SUPERHEATED, .35, Limit.STEAM_SUPERHEATED_SPEED, .063),
+            new Probe("CWS", Service.WATER, .6, Limit.WATER_SPEED, .086), new Probe("CWR", Service.WATER, .6, Limit.WATER_SPEED, .085), new Probe("OFFGAS", Service.GAS, .2, Limit.GAS_SPEED, .070),
+            new Probe("NAPHTHA", Service.LIQUID, .1, Limit.LIQUID_SPEED, .193), new Probe("WATER", Service.WATER, .075, Limit.WATER_DROP, .280), new Probe("DIESEL", Service.LIQUID, .15, Limit.LIQUID_SPEED, .157),
+            new Probe("S-10", Service.LIQUID, .25, Limit.LIQUID_SPEED, .186), new Probe("RESIDUE", Service.LIQUID, .25, Limit.LIQUID_SPEED, .324), new Probe("KERO", Service.DRAW, .25, Limit.DRAW_SPEED, .008),
+            new Probe("AGO", Service.DRAW, .2, Limit.DRAW_SPEED, .009), new Probe("S-8", Service.DRAW, .25, Limit.DRAW_SPEED, .012), new Probe("S-9", Service.DRAW, .45, Limit.DRAW_SPEED, .010));
 
     @Test
     void theSheetsLinesEqualTheProbes() {

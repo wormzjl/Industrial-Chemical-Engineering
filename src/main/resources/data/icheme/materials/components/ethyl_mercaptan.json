@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "EthylMercaptan",
+  "kind": "chemical",
+  "translation_key": "material.icheme.ethyl_mercaptan",
+  "fallback": "EthylMercaptan",
+  "properties": "icheme:chemsep_ethyl_mercaptan",
+  "appearance": {
+    "color": "#F3F4EA",
+    "transparency": 0.85,
+    "estimated": true
+  },
+  "identifiers": {
+    "cas": "75-08-1",
+    "chemsep_id": "1802",
+    "smiles": "CCS",
+    "formula": "CH3CH2SH"
+  }
+}

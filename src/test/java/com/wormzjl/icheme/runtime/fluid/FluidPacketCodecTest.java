@@ -58,7 +58,7 @@ class FluidPacketCodecTest {
         var data=new FluidNetwork.MenuData(TopologyCompiler.Kind.GENERATOR,view,controls,names,List.of(),"",Map.of("server_0",descriptor),weights(names.size()));
         var json=new Gson();var decoded=json.fromJson(json.toJson(data),FluidNetwork.MenuData.class);
         assertEquals(names,decoded.components());assertEquals(descriptor,decoded.materialNames().get("server_0"));assertArrayEquals(amounts,decoded.controls().composition());
-        double[] oversized=new double[66];oversized[0]=1;
+        double[] oversized=new double[com.wormzjl.icheme.science.material.MaterialAxis.MAX_CONSERVED_COMPONENTS+1];oversized[0]=1;
         assertThrows(IllegalArgumentException.class,()->new FluidNetwork.Controls(298.15,101325,.05,.000045,.01,500000,oversized));
     }
     @Test void maximumAdmittedAxisAndPresetCountsFitThePacketBudget() {
@@ -69,9 +69,12 @@ class FluidPacketCodecTest {
         for(int i=0;i<count;i++){String id="server_"+i;ids.add(id);descriptors.put(id,new com.wormzjl.icheme.science.material.MaterialName(id,"t".repeat(128),"l".repeat(128),"lump",null,null,false));}
         double[] amounts=new double[count];Arrays.fill(amounts,1.0/count);var presets=new ArrayList<FluidPresetCatalog.Preset>();
         for(int i=0;i<32;i++)presets.add(new FluidPresetCatalog.Preset("p".repeat(120)+i,"n".repeat(128),amounts));
-        var view=new FluidView(1,0,0,0,"READY",new FluidView.State(101325,298.15,1,1,new double[]{1,2,3},n,SolidInventory.EMPTY,1),0,history);
-        var data=new FluidNetwork.MenuData(TopologyCompiler.Kind.PIPE,view.withPipeInfo(FluidView.PipeInfo.empty(view.pipeHistory().getFirst().forward().componentMoles().length)),new FluidNetwork.Controls(298.15,101325,.05,.000045,.01,500000,amounts),ids,presets,"",descriptors,weights(ids.size()));
-        String json=new Gson().toJson(data);assertTrue(json.length()<FluidNetwork.MAX_JSON);
+        // The widest view (V2 stage 5): the state, the pipe's contents, 12 history pairs and a heat unit's 8 ports, 34 three-phase vectors.
+        var ports=new ArrayList<FluidView.Port>();for(int i=0;i<FluidView.Heat.MAXIMUM_PORTS;i++)ports.add(new FluidView.Port("PORT_"+i,300.,1e5,1,n,new double[]{1,2,3}));
+        var heat=new FluidView.Heat("unit","side",true,300,1,null,null,null,null,null,null).with("none",null,"NONE",ports,null);
+        var view=new FluidView(1,0,0,0,"READY",new FluidView.State(101325,298.15,1,1,new double[]{1,2,3},n,SolidInventory.EMPTY,1),0,history).withHeat(heat);
+        var data=new FluidNetwork.MenuData(TopologyCompiler.Kind.PIPE,view.withPipeInfo(new FluidView.PipeInfo(new PipeTransfer.Stream(1,n,new double[]{1,2,3}),List.of(),false,false,null)),new FluidNetwork.Controls(298.15,101325,.05,.000045,.01,500000,amounts),ids,presets,"",descriptors,weights(ids.size()));
+        // Only the two parts travel (fluid-6); the whole menu data never goes on the wire as one message.
         var buffer=new RegistryFriendlyByteBuf(Unpooled.buffer(),RegistryAccess.EMPTY);
         try {
             // fluid-6: the static part (axis, presets, names) and the live part (view, controls, reply) each fit on their own.
@@ -421,7 +424,7 @@ class FluidPacketCodecTest {
         // A setting outside the package envelope is replied with the input box's own text.
         var domain=assertThrows(IllegalArgumentException.class,
                 ()->new FluidDeviceSpec(1,298.15,1.2e7,n).validate(com.wormzjl.icheme.fluid.support.FluidTestSupport.networkModel(),TopologyCompiler.Kind.GENERATOR));
-        assertEquals("Pressure 1.2E7 Pa outside the package envelope 100.0..1.0E7 Pa (package icheme:tjl20_methane_nitrogen)",FluidNetwork.reason(domain));
+        assertEquals("Pressure 1.2E7 Pa outside the package envelope 100.0..1.0E7 Pa (package icheme:refinery)",FluidNetwork.reason(domain));
         assertEquals("Stale fluid controls",FluidNetwork.reason(new IllegalStateException("Stale fluid controls")));
         assertEquals("null",FluidNetwork.reason(new RuntimeException()));
     }

@@ -433,12 +433,11 @@ public final class ProcessSolveServices {
     public record ColumnUnitRequest(long requestId,ColumnUnitTarget target,long inputRevision,java.util.function.Consumer<com.wormzjl.icheme.science.column.operation.ColumnSolve.Outcome> handler) implements ProcessSolveRequest {
         public ColumnUnitRequest {Objects.requireNonNull(target);Objects.requireNonNull(handler);if(requestId<=0||inputRevision<0)throw new IllegalArgumentException("Invalid column unit request stamp");}
     }
-    /** A column unit's solve: the job and the network's model, read on the server at admission. */
-    public record ColumnUnitCommand(com.wormzjl.icheme.science.column.operation.ColumnSolve.Job job,FluidThermodynamics model,
-                                    com.wormzjl.icheme.science.material.MaterialCatalog catalog,double liquidSupplyScreenRatio) implements ProcessSolveCommand {
-        public ColumnUnitCommand {Objects.requireNonNull(job);Objects.requireNonNull(model);Objects.requireNonNull(catalog);}
+    /** A column unit's solve: the job and its feed island's model (its compound list's view, which V3 reads too), read on the server at admission. */
+    public record ColumnUnitCommand(com.wormzjl.icheme.science.column.operation.ColumnSolve.Job job,FluidThermodynamics model,double liquidSupplyScreenRatio) implements ProcessSolveCommand {
+        public ColumnUnitCommand {Objects.requireNonNull(job);Objects.requireNonNull(model);}
         @Override public ProcessSolveResult solve(BoundedCpuSolveService.CancellationToken cancellationToken) {
-            return new ColumnUnitSolveResult(com.wormzjl.icheme.science.column.operation.ColumnSolve.run(job,model,catalog,liquidSupplyScreenRatio,cancellationToken::throwIfCancellationRequested));
+            return new ColumnUnitSolveResult(com.wormzjl.icheme.science.column.operation.ColumnSolve.run(job,model,liquidSupplyScreenRatio,cancellationToken::throwIfCancellationRequested));
         }
     }
     public record ColumnUnitSolveResult(com.wormzjl.icheme.science.column.operation.ColumnSolve.Outcome outcome) implements ProcessSolveResult {

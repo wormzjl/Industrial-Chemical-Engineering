@@ -1,7 +1,6 @@
 package com.wormzjl.icheme.science.flowsheet;
 
 import com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog;
-import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.material.MaterialRuntime;
 import java.util.ArrayList;
@@ -20,14 +19,17 @@ public final class FlowsheetEngine {
 
     /**
      * {@code last}, this sheet's last run if it has one, starts its loops (see {@link FlowsheetCompiler#estimates}) and, where it
-     * stood steady, its columns where their solves there ended ({@link Report.Warm}). A stream flashes on the world's own package, so
-     * a sheet drawn on another, or on one since removed, asks for it. Amounts go by component id, so a sheet given that package keeps
-     * every one it has a place for.
+     * stood steady, its columns where their solves there ended ({@link Report.Warm}). A stream flashes on the world's own package's
+     * view of the sheet's compounds ({@link SheetCompounds}), whatever package the sheet was drawn on: amounts go by component id, so
+     * a sheet drawn on another package, or on one since removed, runs on the network's records and keeps every amount it has a place
+     * for. A stream of {@code last} that holds a compound the sheet no longer feeds starts nothing.
      */
     public static FlowsheetRun run(Flowsheet sheet, MaterialCatalog catalog, Runnable checkpoint, @Nullable FlowsheetRun last, FlowsheetSolver.Progress progress) {
-        return solving(sheet, catalog, thermo -> {
-            var calculations = FlowsheetCompiler.compile(sheet, thermo, last);
-            var estimates = FlowsheetCompiler.estimates(sheet, thermo, last);
+        return solving(sheet, catalog, view -> {
+            var thermo = view.thermo();
+            var before = view.down(last);
+            var calculations = FlowsheetCompiler.compile(sheet, thermo, before);
+            var estimates = FlowsheetCompiler.estimates(sheet, thermo, before);
             return FlowsheetSolver.run(calculations, thermo.axis(), thermo, sheet.settings(), checkpoint, estimates, progress, Map.of());
         }, checkpoint);
     }
@@ -35,10 +37,12 @@ public final class FlowsheetEngine {
     /**
      * Solves {@code unit} alone on the streams it has now, {@code streams}, as Solve alone asks (plan section 3.3). Nothing else
      * runs: a stream that starts on the sheet's own feed reaches it, and a heat side runs only if its line has a stream. A column
-     * starts from the learned start.
+     * starts from the learned start. A stream that holds a compound the sheet no longer feeds is not one it has.
      */
-    public static FlowsheetRun alone(Flowsheet sheet, String unit, MaterialCatalog catalog, Runnable checkpoint, Map<String, FlowStream> streams, FlowsheetSolver.Progress progress) {
-        return solving(sheet, catalog, thermo -> {
+    public static FlowsheetRun alone(Flowsheet sheet, String unit, MaterialCatalog catalog, Runnable checkpoint, Map<String, FlowStream> shown, FlowsheetSolver.Progress progress) {
+        return solving(sheet, catalog, view -> {
+            var thermo = view.thermo();
+            var streams = view.down(shown);
             var all = FlowsheetCompiler.compile(sheet, thermo, null);
             var known = new HashSet<>(streams.keySet());
             var reads = new HashSet<String>();
@@ -64,19 +68,20 @@ public final class FlowsheetEngine {
     }
 
     private interface Solving {
-        FlowsheetRun on(FlowThermo thermo);
+        FlowsheetRun on(SheetCompounds view);
     }
 
+    /** {@code solving} on the network package's view of the sheet's compounds ({@link SheetCompounds}); its run comes back on the network's axis. */
     private static FlowsheetRun solving(Flowsheet sheet, MaterialCatalog catalog, Solving solving, Runnable checkpoint) {
-        String network = sheet.basis().packageId();
-        String world = FluidMaterialCatalog.networkPackage(catalog);
-        if (!network.equals(world)) return FlowsheetRun.refused(Note.error("sheet", "basis.package", network, world));
-        return MaterialRuntime.with(catalog, network, () -> {
+        String network = FluidMaterialCatalog.networkPackage(catalog);
+        return SheetCompounds.on(sheet, catalog, checkpoint, axes -> {
+            FlowsheetRun run;
             try {
-                return solving.on(new FlowThermo(FluidThermodynamics.forNetwork(catalog, network), catalog, network, checkpoint));
+                run = solving.on(axes);
             } catch (CancellationException stop) {
                 return FlowsheetRun.stopped();
             }
+            return MaterialRuntime.with(catalog, network, () -> axes.up(run));
         });
     }
 }

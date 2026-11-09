@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "id": "icheme:pilot_cryogenic",
+  "revision": "pilot-cryogenic-p3-r3",
+  "method": "icheme:pilot_eppr78",
+  "components": [
+    {
+      "id": "Nitrogen",
+      "properties": "icheme:pilot_nitrogen"
+    },
+    {
+      "id": "Methane",
+      "properties": "icheme:pilot_methane"
+    },
+    {
+      "id": "Ethane",
+      "properties": "icheme:pilot_ethane"
+    },
+    "CarbonDioxide"
+  ],
+  "crystals": [
+    "icheme:crystal_carbon_dioxide_i"
+  ],
+  "advisory_evidence": [
+    "P3_PILOT_PACKAGE: bundled pilot of batch 2026-09-24-coolprop-low-temperature (D9); not a column package; selected by a networks/default.json override only",
+    "SPINE_IDEAL_GAS: the reference spines are the only ideal-gas source (no shifted_polynomial_5 fits, D6); methane above 375 K carries its declared conflict with the RRHO-like tables (NASA CEA 1.2 to 1.7 % above the spine at 1000 to 1200 K, MethaneSpineTest)",
+    "EPPR78_KIJ: all six pairs kij(T) from the E-PPR78 rule and icheme:eppr78_2022, Table S4 of the supporting information of Jaubert et al. 2022 (the six pilot pairs equal the earlier Clapeyron.jl transcription)",
+    "TR08_ANCHORS: each liquid is translated at its Tr = 0.8 saturated liquid from the Java Helmholtz oracle (volume_translation)",
+    "COLUMN_RANGE: temperature_min/max here are the column-style intersection of the property ranges (216.592..1200 K); the fluid network uses fluid_domain",
+    "CO2_CRYSTAL_JAEGER_SPAN: the CO2-I crystal is the Jaeger-Span 2012 Gibbs function anchored at the triple point to this family's CO2 liquid, dH_fus 9019 J/mol (D16, D19); read by the engine and the pilot network (G4, G5); the V3 column refuses it"
+  ]
+}

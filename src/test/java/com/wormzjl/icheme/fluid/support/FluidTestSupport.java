@@ -13,7 +13,7 @@ import java.util.Objects;
 
 /** Shared, independent fixture-basis and finite-ledger calculations for fluid tests. */
 public final class FluidTestSupport {
-    private static final String NETWORK_PACKAGE = "icheme:tjl20_methane_nitrogen";
+    private static final String NETWORK_PACKAGE = com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.NETWORK_PACKAGE;
     private static final int NITROGEN = com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN;
     private static final int WATER = com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK;
 
@@ -61,8 +61,8 @@ public final class FluidTestSupport {
             case NITROGEN -> amounts[NITROGEN] = 1;
             case WATER -> amounts[WATER] = 1;
             case WET_CRUDE -> {
-                amounts = Arrays.copyOf(V3PengRobinsonThermo.fromRegisteredPackage(NETWORK_PACKAGE)
-                        .crudeFeed("icheme:tia_juana_light_methane").moleFractions(), WATER+1);
+                amounts = Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo(NETWORK_PACKAGE)
+                        .crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(), WATER+1);
                 amounts[NITROGEN] = .1;
                 amounts[WATER] = .2;
             }

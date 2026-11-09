@@ -43,7 +43,11 @@ class V3PumparoundSteamCalculatorTest {
         assertPassed(success, "WATER_PROFILE");
         V3ColumnDutyLedger ledger = success.result().dutyLedger().orElseThrow();
         assertEquals(0.0, ledger.stageHeatTotalWatts());
-        assertEquals(SUMP_STEAM_MOL_PER_SECOND * V3WaterProperties.vaporMolarEnthalpy(SUMP_STEAM_TEMPERATURE_KELVIN),
+        // The sump steam enters alone at the sump's pressure: the network's virial steam there (E30 of batch
+        // 2026-11-04-open-thermo-data), about 148 J/mol below the ideal gas at 533 K and 2.7 bar.
+        V3ColumnProblem problem = success.result().problem();
+        assertEquals(SUMP_STEAM_MOL_PER_SECOND * V3WaterProperties.steamMolarEnthalpy(SUMP_STEAM_TEMPERATURE_KELVIN,
+                        problem.nodePressurePascal(problem.input().steamFeeds().getFirst().stageNumber())),
                 ledger.steamEnthalpyWatts(), 1.0e-6 * Math.abs(ledger.steamEnthalpyWatts()));
         assertTrue(ledger.condenserWatts() < 0.0, () -> "condenser duty " + ledger.condenserWatts());
         assertLedgerCloses(success);
@@ -205,13 +209,15 @@ class V3PumparoundSteamCalculatorTest {
             V3ColumnStreamProperties stream, V3PengRobinsonThermo thermo, V3ThermoWorkspace workspace,
             int componentCount) {
         if (stream.streamId().equals("free_water")) {
-            return stream.molarFlowMolPerSecond() * V3WaterProperties.liquidMolarEnthalpy(stream.temperatureKelvin());
+            return stream.molarFlowMolPerSecond()
+                    * V3WaterProperties.liquidMolarEnthalpy(stream.temperatureKelvin(), stream.pressurePascal());
         }
         List<V3ColumnStreamProperties.ComponentFraction> fractions = stream.moleFractions();
         boolean carriesWater = fractions.size() == componentCount + 1;
         double waterFraction = carriesWater ? fractions.get(componentCount).moleFraction() : 0.0;
         double waterFlow = stream.molarFlowMolPerSecond() * waterFraction;
-        double water = waterFlow * V3WaterProperties.vaporMolarEnthalpy(stream.temperatureKelvin());
+        double water = V3WaterProperties.steamEnthalpyRate(stream.temperatureKelvin(), stream.pressurePascal(),
+                waterFlow, stream.molarFlowMolPerSecond() - waterFlow);
         double hydrocarbonFlow = stream.molarFlowMolPerSecond() - waterFlow;
         if (!(hydrocarbonFlow > 0.0)) return water;
         double[] composition = new double[componentCount];
@@ -255,7 +261,7 @@ class V3PumparoundSteamCalculatorTest {
             String packageId, double reboilerDutyWatts, List<V3PumparoundSpec> pumparounds,
             List<V3SideDrawSpec> sideDraws) {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage(packageId);
-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light");
+        V3CrudeFeed crude = thermo.crudeFeed(com.wormzjl.icheme.science.material.Cdu17TestCatalog.tiaJuanaAssay(packageId));
         double[] flows = crude.moleFractions();
         double totalFlow = 2_610.7 * 1_000.0 / 3_600.0;
         for (int component = 0; component < flows.length; component++) flows[component] *= totalFlow;

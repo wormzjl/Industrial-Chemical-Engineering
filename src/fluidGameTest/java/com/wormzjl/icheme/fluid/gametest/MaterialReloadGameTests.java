@@ -19,7 +19,7 @@ public class MaterialReloadGameTests {
         var server=helper.getLevel().getServer();
         var original=MaterialRuntime.active();
         var feedPackage=original.requirePackage("icheme:tjl20_methane");
-        for (String crude : List.of("wti_light_export", "upper_zakum", "bonga", "dalia", "cold_lake_blend")) {
+        for (String crude : List.of("light_crude", "medium_crude", "heavy_crude", "oil_sand_dilbit")) {
             var assay=feedPackage.assays().get("icheme:"+crude);
             if (assay==null || !assay.basis().equals("mass")) {
                 helper.fail("Bundled regrouped crude assay was not loaded: "+crude);return;

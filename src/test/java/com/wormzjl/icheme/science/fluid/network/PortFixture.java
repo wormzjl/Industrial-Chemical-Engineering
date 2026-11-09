@@ -11,9 +11,12 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 abstract class PortFixture {
     static final Runnable NOOP=()->{};
-    final FluidThermodynamics model=FluidTestSupport.networkModel();
-    final double[] mw=model.molecularWeights();
-    final int water=index("Water"),nitrogen=index("Nitrogen");
+    final FluidThermodynamics model;
+    final double[] mw;
+    final int water,nitrogen;
+    PortFixture(){this(FluidTestSupport.networkModel());}
+    /** The fixture on {@code model}: the network model, or one of its views (an island's own compound list). */
+    PortFixture(FluidThermodynamics model){this.model=model;mw=model.molecularWeights();water=index("Water");nitrogen=index("Nitrogen");}
 
     int index(String component){int i=model.components().indexOf(component);assertTrue(i>=0,component);return i;}
     /** A 1 m3 nitrogen charge at 298.15 K. */

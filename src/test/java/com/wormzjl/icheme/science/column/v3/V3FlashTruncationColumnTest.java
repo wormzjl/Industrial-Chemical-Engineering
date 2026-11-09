@@ -13,7 +13,7 @@ class V3FlashTruncationColumnTest {
     @Test
     void positiveCutoffFeedFlashIsObservableWithoutRelaxingTheColumnAudit() {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light");
+        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
         double[] flows = crude.moleFractions();
         for (int component = 0; component < flows.length; component++) flows[component] *= 2610.7 * 1000.0 / 3600.0;
         V3ColumnInput input = V3TestInputs.dry(V3ColumnInput.SCHEMA_VERSION, crude.packageId(), crude.assayId(),

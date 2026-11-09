@@ -75,7 +75,7 @@ class V3ColdStartTest {
     @Test
     void v1ScaleRealCrudeColdMatrixReportsInitialResidualsAndBoundedOutcomes() {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage(CDU17);
-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light");
+        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
         List<RealCrudeCase> cases = List.of(
                 new RealCrudeCase("two_stage", 2, 1),
                 new RealCrudeCase("four_stage", 4, 3),
@@ -134,7 +134,7 @@ class V3ColdStartTest {
     }
 
     private static V3ColumnInput lowPressureInput(double topPressurePascal) {
-        V3CrudeFeed crude = V3PengRobinsonThermo.fromRegisteredPackage(CDU17).crudeFeed("icheme:tia_juana_light");
+        V3CrudeFeed crude = V3PengRobinsonThermo.fromRegisteredPackage(CDU17).crudeFeed("icheme:tia_juana_light_kl1976");
         double[] flows = crude.moleFractions();
         double totalFlowMolPerSecond = 2_000.0 * 1_000.0 / 3_600.0;
         for (int component = 0; component < flows.length; component++) flows[component] *= totalFlowMolPerSecond;

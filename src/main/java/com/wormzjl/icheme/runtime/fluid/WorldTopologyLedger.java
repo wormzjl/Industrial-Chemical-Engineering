@@ -114,6 +114,11 @@ public final class WorldTopologyLedger {
             }
             return changed==null?this:new Snapshot(onlineTick,nextIdentity,changed,events,constructed,destroyed,basis,recoveries,restated,columns,shafts,stores,health);
         }
+        /** These facts on {@code basis}, which holds the same compounds ({@link FluidBasis#sameAs}): a load names the current package. */
+        public Snapshot withBasis(FluidBasis basis){
+            if(!this.basis.sameAs(basis))throw new IllegalArgumentException("Another basis needs a restatement, not a new name");
+            return new Snapshot(onlineTick,nextIdentity,active,events,constructed,destroyed,basis,recoveries,restated,columns);
+        }
         public Snapshot {
             FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.topologySnapshots);
             recoveries=Map.copyOf(recoveries);columns=Map.copyOf(columns);shafts=Map.copyOf(shafts);stores=Map.copyOf(stores);health=Map.copyOf(health);if(recoveries.size()>MAXIMUM_EVENTS)throw new IllegalArgumentException("Recovery queue is full");
@@ -409,6 +414,9 @@ public final class WorldTopologyLedger {
      * Persisted identity for topology/accounting even when a world has no active hydraulic islands. {@code revision} is
      * the network package's data identity, the declared revision of every record it reads
      * ({@link MaterialCatalog#fluidRevision}); a world written before the field existed reads "" and restates once.
+     * {@code packageId} names the package the world was saved on; it is a label only: a basis is the same as another when
+     * it holds the same compound ids in the same order and the same fluid identity ({@link #sameAs}), so a renamed
+     * network package keeps a world's state (batch 2026-11-04-refinery-compounds, W4).
      */
     public record FluidBasis(String packageId,List<String> components,String revision) {
         public FluidBasis {
@@ -421,8 +429,12 @@ public final class WorldTopologyLedger {
             String id=FluidMaterialCatalog.networkPackage(catalog);var ids=new ArrayList<>(catalog.requirePackage(id).components());ids.add("Water");
             return new FluidBasis(id,ids,catalog.fluidRevision(id));
         }
+        /** The same compound ids in the same order and the same fluid identity, whatever package id each names. */
+        public boolean sameAs(FluidBasis other){return components.equals(other.components)&&revision.equals(other.revision);}
+        /** A world runs only on the current basis: a load restates one saved on another ({@code FluidCheckpointStore.load}). */
         public void requireCurrent(MaterialCatalog catalog) {
-            if(!equals(capture(catalog)))throw new IllegalArgumentException("Incompatible saved fluid topology basis; use a fresh development world");
+            var current=capture(catalog);
+            if(!sameAs(current))throw new IllegalArgumentException("The fluid topology basis "+components+" ("+revision+") is not the network's "+current.components+" ("+current.revision+"); only a load restates a world onto other data");
         }
     }
 }

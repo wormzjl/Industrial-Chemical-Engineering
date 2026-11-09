@@ -4,6 +4,7 @@
   "kind": "chemical",
   "translation_key": "material.icheme.isopentane",
   "fallback": "Isopentane",
+  "properties": "icheme:tjl19_isopentane",
   "appearance": {
     "color": "#F3F4EA",
     "transparency": 0.85,

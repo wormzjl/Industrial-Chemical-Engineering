@@ -1,0 +1,1502 @@
+diff --git a/build.gradle b/build.gradle
+index eb63ca7af..341f0b07f 100644
+--- a/build.gradle
++++ b/build.gradle
+@@ -493,6 +493,7 @@ def gateGroup = { String name, String tests, List<String> main, List<String> hel
+ }
+ def columnGates = gateGroup('column', 'science/column/v3',
+         ['science/material', 'science/math', 'science/equipment/ColumnDesign*', 'science/fluid/transport/MixtureViscosity*',
++         'science/fluid/thermo/WaterRegion1*', 'science/thermo/phase/SteamVirial*',
+          'science/thermo/IdealGasFunction*', 'science/thermo/PairInteractions*', 'science/thermo/PengRobinsonKernel*',
+          'science/thermo/ThermoComponent*', 'science/thermo/TraceTruncationPolicy*', 'network/ColumnWire*',
+          'science/equipment/ColumnComponents*'],
+@@ -509,6 +510,7 @@ def equipmentGates = gateGroup('equipment', 'science/equipment',
+          'science/column/v3/V3ComponentBasis*', 'science/column/v3/V3InitializationOptions*',
+          'science/column/v3/V3PumparoundSpec*', 'science/column/v3/V3SideDrawSpec*', 'science/column/v3/V3SteamFeedSpec*',
+          'science/column/v3/thermo/V3ThermoModel*', 'science/column/v3/thermo/V3WaterProperties*',
++         'science/fluid/thermo/WaterRegion1*', 'science/thermo/phase/SteamVirial*',
+          'science/fluid/network/CoolingTower*', 'science/fluid/network/AirCooled*', 'science/fluid/network/ConvectionCoil*', 'science/fluid/network/FiredCoil*',
+          'science/fluid/network/HeatControl*', 'science/fluid/network/HeatCurve*', 'science/fluid/network/HeatLaw*',
+          'science/fluid/network/HeatSide*', 'science/fluid/network/PipeResistance*', 'science/fluid/network/VesselGeometry*',
+diff --git a/src/main/java/com/wormzjl/icheme/science/column/v3/V3AcceptanceAuditor.java b/src/main/java/com/wormzjl/icheme/science/column/v3/V3AcceptanceAuditor.java
+index 6adf41898..a96e69d55 100644
+--- a/src/main/java/com/wormzjl/icheme/science/column/v3/V3AcceptanceAuditor.java
++++ b/src/main/java/com/wormzjl/icheme/science/column/v3/V3AcceptanceAuditor.java
+@@ -208,13 +208,16 @@ final class V3AcceptanceAuditor {
+         double vaporOut = topology.hasVaporPhase(condenser)
+                 ? hydrocarbonPhaseEnergyWatts(problem, thermo, state, condenser, false, workspace) : 0.0;
+         IndependentWaterSplit water = independentCondenserWaterSplit(problem, state);
+-        double waterVaporOut = water.vaporFlowMolPerSecond() == 0.0 ? 0.0
+-                : water.vaporFlowMolPerSecond() * V3WaterProperties.vaporMolarEnthalpy(outletTemperature);
++        double outletPressure = problem.nodePressurePascal(condenser);
++        double waterVaporOut = V3WaterProperties.steamEnthalpyRate(outletTemperature, outletPressure,
++                water.vaporFlowMolPerSecond(), topology.hasVaporPhase(condenser)
++                        ? V3WetTraySet.hydrocarbonVaporTotal(state, condenser) : 0.0);
+         double freeWaterOut = water.freeWaterFlowMolPerSecond() == 0.0 ? 0.0
+-                : water.freeWaterFlowMolPerSecond() * V3WaterProperties.liquidMolarEnthalpy(outletTemperature);
++                : water.freeWaterFlowMolPerSecond() * V3WaterProperties.liquidMolarEnthalpy(outletTemperature, outletPressure);
+         double arrivingWater = authoredWaterAtCondenser(problem);
+         double vaporIn = hydrocarbonPhaseEnergyWatts(problem, thermo, state, 1, false, workspace)
+-                + (arrivingWater == 0.0 ? 0.0 : arrivingWater * V3WaterProperties.vaporMolarEnthalpy(state.temperatureKelvin(1)));
++                + V3WaterProperties.steamEnthalpyRate(state.temperatureKelvin(1), problem.nodePressurePascal(1),
++                        arrivingWater, V3WetTraySet.hydrocarbonVaporTotal(state, 1));
+         double expected = liquidOut + vaporOut + waterVaporOut + freeWaterOut - vaporIn;
+         double largest = 0.0;
+         for (double term : new double[] {liquidOut, vaporOut, waterVaporOut, freeWaterOut, vaporIn, publishedCondenserWatts}) {
+diff --git a/src/main/java/com/wormzjl/icheme/science/column/v3/V3BlockJacobianAssembler.java b/src/main/java/com/wormzjl/icheme/science/column/v3/V3BlockJacobianAssembler.java
+index 20ba35819..1b90d7bb9 100644
+--- a/src/main/java/com/wormzjl/icheme/science/column/v3/V3BlockJacobianAssembler.java
++++ b/src/main/java/com/wormzjl/icheme/science/column/v3/V3BlockJacobianAssembler.java
+@@ -217,8 +217,11 @@ final class V3BlockJacobianAssembler {
+             double free = state.freeWaterFlow(source);
+             double water = problem.waterVaporFlow(state, node);
+             double hydrocarbon = V3WetTraySet.hydrocarbonVaporTotal(state, node);
++            // The steam's marginal enthalpy: its own, plus the shift of its virial residual as F_m raises its
++            // partial pressure.
+             double vaporEnthalpy = com.wormzjl.icheme.science.column.v3.thermo.V3WaterProperties
+-                    .vaporMolarEnthalpy(state.temperatureKelvin(node));
++                    .steamEnthalpyRateByWater(state.temperatureKelvin(node), problem.nodePressurePascal(node),
++                            water, hydrocarbon);
+             if (!(water > 0.0) || !Double.isFinite(hydrocarbon) || !Double.isFinite(vaporEnthalpy)) {
+                 throw new IllegalArgumentException("V3 local block free-water coupling has no physical water state");
+             }
+diff --git a/src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnCalculator.java b/src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnCalculator.java
+index 413d8739c..541d61ca2 100644
+--- a/src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnCalculator.java
++++ b/src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnCalculator.java
+@@ -47,8 +47,6 @@ public final class V3ColumnCalculator {
+     private static final int HEAT_BEARING_DRAW_RAMP_STEPS = 8;
+     private static final int MAXIMUM_HEAT_SUBDIVISIONS = 4;
+     private static final int MAXIMUM_HEAT_SUBDIVISIONS_PER_RUNG = 2;
+-    /** Steam-rung halvings the second, full-budget sweep of one feature ramp may spend. */
+-    private static final int MAXIMUM_STEAM_SUBDIVISIONS = 2;
+     public static final int MAXIMUM_NEWTON_ITERATIONS = 128;
+     public static final double SCALED_RESIDUAL_TOLERANCE = 1.0e-8;
+     /** Fast interactive requests use the admitted gameplay closure; strict/offline requests retain 1e-8. */
+@@ -116,7 +114,8 @@ public final class V3ColumnCalculator {
+      * from 0.058 to 0.042, with 786 line-search trials and four entries into the damped normal-equation cascade
+      * at doubled bandwidth: 2.6 s of a 13.0 s solve for a state the ramp discards.</p>
+      *
+-     * <p>So an intermediate steam rung stops as soon as its residual has not halved over twelve iterations —
++     * <p>So an intermediate steam rung stops as soon as its residual has not halved over twelve iterations (the
++     * solver's one stall rule, {@link V3SimultaneousColumnSolver#STALL_WINDOW_ITERATIONS}) —
+      * well outside the quadratic tail, and floored at 1e-3 so a rung merely closing slowly is never cut off —
+      * and keeps only the first two dampings of the cascade with no gradient fallback and no certificate cascade
+      * behind them.</p>
+@@ -133,7 +132,8 @@ public final class V3ColumnCalculator {
+      * free-water continuation all keep {@link V3SimultaneousColumnSolver.RungBudget#DEFAULT}.</p>
+      */
+     private static final V3SimultaneousColumnSolver.RungBudget INTERMEDIATE_RUNG_BUDGET =
+-            new V3SimultaneousColumnSolver.RungBudget(2, false, 0, 12, 0.5, 1.0e-3);
++            new V3SimultaneousColumnSolver.RungBudget(2, false, 0, V3SimultaneousColumnSolver.STALL_WINDOW_ITERATIONS,
++                    V3SimultaneousColumnSolver.STALL_FACTOR, 1.0e-3);
+     /**
+      * How far above its own material row a seeded point may sit before {@link #capOversizedPoint} resets it.
+      *
+@@ -1687,9 +1687,15 @@ public final class V3ColumnCalculator {
+             // corrected support is what converges the rung. Only one, though: a second stall in a row is a
+             // rung the continuation is going to subdivide or abandon anyway, and re-solving it three times
+             // triples the cost of every case that is on its way to a typed failure.
++            //
++            // A release is not a stall. The solve held a point at its floor and stopped earning steps because of
++            // it (STALLED_SUPPORT_FLOOR): the refresh that drops that point is the next step of the same
++            // solve, so it is neither counted against the stalled limit nor cut to the polish budget.
+             boolean converged = attempt instanceof V3SimultaneousColumnSolver.Attempt.Converged;
++            boolean released = attempt instanceof V3SimultaneousColumnSolver.Attempt.Failure heldFailure
++                    && heldFailure.code().equals("STALLED_SUPPORT_FLOOR");
+             boolean floorBudget = refreshes < floorRefreshLimit
+-                    && (converged || stalledRefreshes < MAXIMUM_STALLED_FLOOR_SUPPORT_REFRESHES);
++                    && (converged || released || stalledRefreshes < MAXIMUM_STALLED_FLOOR_SUPPORT_REFRESHES);
+             // The wet set is re-derived only from a state that solved its own equations, and carries its own
+             // small budget so it never has to compete with the support refreshes for one. How far a tray sits
+             // below the water dew point, and how much water it must therefore shed, are readings of a
+@@ -1705,14 +1711,14 @@ public final class V3ColumnCalculator {
+             // A refresh that only removes — points from the support, trays from the wet set — carries no
+             // information the stalled state did not already have. One that adds a wet tray does: the water
+             // that tray sheds is a degree of freedom the stalled solve never had, so it keeps the full budget.
+-            nextIterations = !converged
++            nextIterations = !converged && !released
+                     && refreshed.support().presentPhaseCount() <= prepared.support().presentPhaseCount()
+                     && refreshed.wetTrays().wetTrayCount() <= prepared.wetTrays().wetTrayCount()
+                     ? Math.min(maximumIterations, STALLED_DROP_REFRESH_ITERATIONS)
+                     : maximumIterations;
+             if (!refreshed.support().sameRetention(prepared.support())) {
+                 refreshes++;
+-                if (!converged) stalledRefreshes++;
++                if (!converged && !released) stalledRefreshes++;
+             }
+             if (!refreshed.wetTrays().sameSet(prepared.wetTrays())) {
+                 wetTrayRefreshes++;
+@@ -1957,16 +1963,6 @@ public final class V3ColumnCalculator {
+         double[] rungFeedEnthalpy = {Double.NaN, Double.NaN};
+         double acceptedHeatFraction = 0.0;
+         boolean condenserBoundChecked = false;
+-        // The bounded second sweep: the steam rung whose reduced budget stopped the schedule, the last state
+-        // the schedule accepted before it, the fractions that state belongs to, and whether the sweep has
+-        // already been spent. See the block that arms it at the requested rung.
+-        RampStep stoppedSteamStep = null;
+-        V3SolvePass stoppedSteamAccepted = null;
+-        double resumeHeatFraction = 0.0;
+-        double resumeSteamFraction = 0.0;
+-        double resumeAcceptedHeatFraction = 0.0;
+-        boolean fullBudgetSteamRungs = false;
+-        int steamSubdivisions = 0;
+         for (int index = 0; index < rampSteps.size(); index++) {
+             RampStep rampStep = rampSteps.get(index);
+             if (intermediateFailed && !rampStep.requested(input)) continue;
+@@ -2042,46 +2038,14 @@ public final class V3ColumnCalculator {
+             int rungIterations = requestedRung
+                     ? DRAW_RAMP_REQUESTED_MAXIMUM_ITERATIONS : DRAW_RAMP_INTERMEDIATE_MAXIMUM_ITERATIONS;
+             V3SimultaneousColumnSolver.RungBudget budget =
+-                    rampRungBudget(rampStep.steamRung(), requestedRung, fullBudgetSteamRungs);
++                    rampRungBudget(rampStep.steamRung(), requestedRung);
+             V3SolvePass pass = solveSingleProblem(problem, thermo, seed, control,
+-                    rampPath + (fullBudgetSteamRungs ? "/full-budget/" : "/") + rampStep.pathLabel()
++                    rampPath + "/" + rampStep.pathLabel()
+                             + "-" + rampStep.progress(),
+                     ContinuationJacobianPolicy.STAGE_LOCAL_BLOCKS, rungIterations, rampPolicy, budget);
+             pass = correctCondenserPhase(pass, thermo, control, rampPolicy, rampAttempts).pass();
+             if (!publishesSuccess(pass.attempt(), pass.audit())) {
+                 if (requestedRung) {
+-                    // A reduced intermediate budget is a bet that a steam rung either closes cheaply or
+-                    // cannot be closed at all. When the bet loses, the ramp abandons its schedule and hands
+-                    // this rung whatever state the stopped rung left — a different seed, and therefore a
+-                    // different basin. Measured on the wet literature CDU, three perturbations (top 200 kPa,
+-                    // steam x0.5, steam x1.5) are lost exactly this way, one of them skipping ahead from a
+-                    // *lower* residual than the full budget ever reaches on that rung, so the residual level
+-                    // is not what decides; the seed is. Spending the declined fallbacks eagerly recovers all
+-                    // three, but it also costs the flagship preset 1.7 s -> 3.0 s for the same digest, because
+-                    // its own schedule stalls at 0.625 and skips ahead to an answer anyway.
+-                    //
+-                    // So the second sweep is bought only once the first one has failed where it matters: at
+-                    // the rung that publishes. Resume from the last state the schedule accepted, replay from
+-                    // the rung that stopped with the full damped cascade, the gradient direction and no stall
+-                    // stop, and let the schedule continue if that rung now closes. A ramp whose requested rung
+-                    // succeeds never reaches here and is bit-identical; a ramp that would have failed pays one
+-                    // extra sweep, once.
+-                    int resumeIndex = stoppedSteamStep == null ? -1 : rampSteps.indexOf(stoppedSteamStep);
+-                    if (resumeIndex >= 0 && !fullBudgetSteamRungs) {
+-                        fullBudgetSteamRungs = true;
+-                        rampEvents.add(boundedEvent(rampStep.description()
+-                                + " failed at the requested input: " + rampEvidence(pass)
+-                                + "; resuming the steam schedule at " + stoppedSteamStep.progress()
+-                                + " on the full rung budget"));
+-                        previous = stoppedSteamAccepted;
+-                        seedHeatFraction = resumeHeatFraction;
+-                        seedSteamFraction = resumeSteamFraction;
+-                        acceptedHeatFraction = resumeAcceptedHeatFraction;
+-                        seedAccepted = true;
+-                        intermediateFailed = false;
+-                        index = resumeIndex - 1;
+-                        continue;
+-                    }
+                     // Preserve the ordinary ramp and its successful basins exactly. Only a request
+                     // that exhausted both schedules gets a bounded fresh correction of its terminal
+                     // state; no acceptance limit, physical specification or previous label is changed.
+@@ -2124,33 +2088,6 @@ public final class V3ColumnCalculator {
+                     index--;
+                     continue;
+                 }
+-                // Inside the second sweep the calculus above is different, because the alternative is no
+-                // longer a cheap skip-ahead to an answer: the requested rung has already been tried from the
+-                // skipped-ahead state and failed. A stopped rung that the full budget cannot close either is
+-                // then worth halving, at the cost of a rung the first sweep never pays for. Bounded to
+-                // {@link #MAXIMUM_STEAM_SUBDIVISIONS} halvings so a schedule that stalls at every fraction
+-                // cannot walk the interval.
+-                if (fullBudgetSteamRungs && rampStep.steamRung()
+-                        && steamSubdivisions < MAXIMUM_STEAM_SUBDIVISIONS) {
+-                    RampStep steamMidpoint = midpointSteamStep(rampStep, seedSteamFraction);
+-                    if (steamMidpoint != null) {
+-                        steamSubdivisions++;
+-                        rampSteps.add(index, steamMidpoint);
+-                        index--;
+-                        continue;
+-                    }
+-                }
+-                // Remember where a reduced budget gave up, and on what state, so the requested rung can buy a
+-                // second sweep from here if it needs one. Only the first such rung is remembered: it is the
+-                // one whose seed the whole rest of the schedule depends on.
+-                if (stoppedSteamStep == null && seedAccepted
+-                        && !budget.equals(V3SimultaneousColumnSolver.RungBudget.DEFAULT)) {
+-                    stoppedSteamStep = rampStep;
+-                    stoppedSteamAccepted = previous;
+-                    resumeHeatFraction = seedHeatFraction;
+-                    resumeSteamFraction = seedSteamFraction;
+-                    resumeAcceptedHeatFraction = acceptedHeatFraction;
+-                }
+                 // A failed intermediate fraction is still a finite fixed-geometry seed. The authored
+                 // full-rate problem must be attempted before returning a terminal diagnostic.
+                 previous = pass;
+@@ -2282,8 +2219,8 @@ public final class V3ColumnCalculator {
+         /**
+          * The predictor's own line first, then the ramp's, bounded by the published event contract.
+          *
+-         * <p>The bound is applied on both branches. A ramp that stops rungs, subdivides them and then resumes
+-         * its steam schedule on the full budget writes more lines than one that walks its schedule cleanly,
++         * <p>The bound is applied on both branches. A ramp that stops and subdivides rungs writes more lines
++         * than one that walks its schedule cleanly,
+          * and {@link V3SolverDiagnostics} rejects a list longer than {@link V3SolverDiagnostics#MAX_EVENTS}
+          * outright rather than truncating it for the caller.</p>
+          */
+@@ -2416,46 +2353,11 @@ public final class V3ColumnCalculator {
+      * <p>The rung that reaches the authored input publishes the result, so it keeps every fallback and the full
+      * final-Newton certificate cascade unchanged. See {@link #INTERMEDIATE_RUNG_BUDGET} for why heat and draw
+      * rungs keep it too.</p>
+-     *
+-     * <p>Once the ramp has resumed on the full budget there is no reduced rung left anywhere in the schedule:
+-     * the whole point of the resumed sweep is that the fallbacks the first sweep declined are what it is
+-     * buying, so the flag wins over every other consideration.</p>
+      */
+-    static V3SimultaneousColumnSolver.RungBudget rampRungBudget(
+-            boolean steamRung, boolean requested, boolean fullBudgetSweep) {
+-        if (fullBudgetSweep) return V3SimultaneousColumnSolver.RungBudget.DEFAULT;
++    static V3SimultaneousColumnSolver.RungBudget rampRungBudget(boolean steamRung, boolean requested) {
+         return steamRung && !requested ? INTERMEDIATE_RUNG_BUDGET : V3SimultaneousColumnSolver.RungBudget.DEFAULT;
+     }
+ 
+-    /**
+-     * Halves the remaining steam increment; null when the increment can no longer be split.
+-     *
+-     * <p>Only the second, full-budget sweep uses this. On the first sweep the measured trade is the other way
+-     * round: halving a stopped 0.625 rung to 0.458 stalls again for another 1.2 s and then costs the requested
+-     * rung 3.6 s instead of 2.5 s for the same accepted answer, because the skip-ahead was going to succeed
+-     * anyway. Once the requested rung has failed from the skipped-ahead state, that comparison no longer
+-     * applies and the smaller increment is the only unexplored seed left.</p>
+-     */
+-    private static RampStep midpointSteamStep(RampStep failed, double acceptedSteamFraction) {
+-        double midpoint = steamRampMidpointFraction(acceptedSteamFraction, failed.steamFraction());
+-        if (Double.isNaN(midpoint)) return null;
+-        return new RampStep(midpoint, failed.heatFraction(), failed.drawFraction(), midpoint,
+-                failed.pathLabel(), failed.description());
+-    }
+-
+-    /**
+-     * The steam fraction halfway between an accepted rung and the rung that stopped, or NaN.
+-     *
+-     * <p>NaN is returned whenever the halving would not actually produce a new rung strictly inside the
+-     * interval — a zero-width interval, or one so narrow that the midpoint rounds onto an endpoint in double
+-     * arithmetic — which is what keeps the subdivision from re-queueing a fraction it has already solved.</p>
+-     */
+-    static double steamRampMidpointFraction(double acceptedSteamFraction, double failedSteamFraction) {
+-        double midpoint = 0.5 * (acceptedSteamFraction + failedSteamFraction);
+-        if (!(midpoint > acceptedSteamFraction) || !(midpoint < failedSteamFraction)) return Double.NaN;
+-        return midpoint;
+-    }
+-
+     /** Halves the remaining heat increment; null when the increment can no longer be split. */
+     private static RampStep midpointHeatStep(RampStep failed, double acceptedHeatFraction) {
+         double midpoint = 0.5 * (acceptedHeatFraction + failed.heatFraction());
+@@ -2628,7 +2530,10 @@ public final class V3ColumnCalculator {
+             // r30/r31: a tray below the water dew point carries a free-water phase. Water vapour is a
+             // function of the state rather than a parameter, wet trays gain a free-water unknown and a
+             // saturation row, and the tray energy rows carry the aqueous liquid in and out.
+-            return (heat ? "v3-wet-mesh-r31-steam" : "v3-wet-mesh-r30-steam")
++            // r32/r33 (E30 of batch 2026-11-04-open-thermo-data): the water is the fluid network's, the steam its
++            // second-virial gas at the steam's partial pressure and the liquid IF97 Region 1 at the tray's
++            // pressure, so accepted wet states move by the steam's residual and the liquid's enthalpy difference.
++            return (heat ? "v3-wet-mesh-r33-steam" : "v3-wet-mesh-r32-steam")
+                     + (!input.sideDraws().isEmpty() ? "-side-draws" : "") + trace
+                     + (heat ? HEAT_FORMULATION_SUFFIX : "");
+         }
+diff --git a/src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnDutyLedger.java b/src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnDutyLedger.java
+index fc7d3efd9..1cfa68bd4 100644
+--- a/src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnDutyLedger.java
++++ b/src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnDutyLedger.java
+@@ -86,13 +86,14 @@ public record V3ColumnDutyLedger(
+         return leaving - trayOne.vaporPhaseEnergy();
+     }
+ 
+-    /** Decanted free water leaves the drum as saturated liquid at the specified outlet temperature. */
++    /** Decanted free water leaves the drum as liquid at the specified outlet temperature and the drum's pressure. */
+     static double freeWaterEnergyWatts(V3ColumnProblem problem, V3DryMeshState state) {
+         if (!problem.hasSteamFeeds()) return 0.0;
+         double freeWater = problem.waterCondenserSplit(state).freeWaterFlowMolPerSecond();
+         if (freeWater == 0.0) return 0.0;
++        int condenser = problem.topology().condenserNode();
+         return freeWater * V3WaterProperties.liquidMolarEnthalpy(
+-                state.temperatureKelvin(problem.topology().condenserNode()));
++                state.temperatureKelvin(condenser), problem.nodePressurePascal(condenser));
+     }
+ 
+     static double reboilerDutyWatts(V3ColumnProblem problem) {
+diff --git a/src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnProblem.java b/src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnProblem.java
+index 527399e19..c0f0b3d75 100644
+--- a/src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnProblem.java
++++ b/src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnProblem.java
+@@ -39,9 +39,11 @@ public final class V3ColumnProblem {
+         }
+         this.nodeSteamFeedMolPerSecond = V3SteamFeedSpec.nodeFeedFlows(input, topology);
+         this.nodeSteamFeedEnthalpyWatts = new double[topology.nodeCount()];
++        // Steam enters alone at its node's pressure, the injection pressure the resolver checks its superheat at.
+         for (V3SteamFeedSpec feed : input.steamFeeds()) {
+             this.nodeSteamFeedEnthalpyWatts[feed.stageNumber()] = feed.molarFlowMolPerSecond()
+-                    * V3WaterProperties.vaporMolarEnthalpy(feed.temperatureKelvin());
++                    * V3WaterProperties.steamMolarEnthalpy(feed.temperatureKelvin(),
++                            this.nodePressuresPascal[feed.stageNumber()]);
+         }
+         this.nodeHeatDutyWatts = V3PumparoundSpec.nodeDutyWatts(input, topology);
+         this.waterVaporFlowMolPerSecond = V3SteamFeedSpec.upwardVaporProfile(nodeSteamFeedMolPerSecond, topology);
+diff --git a/src/main/java/com/wormzjl/icheme/science/column/v3/V3HeatFeasibility.java b/src/main/java/com/wormzjl/icheme/science/column/v3/V3HeatFeasibility.java
+index a6c556f8e..051aed085 100644
+--- a/src/main/java/com/wormzjl/icheme/science/column/v3/V3HeatFeasibility.java
++++ b/src/main/java/com/wormzjl/icheme/science/column/v3/V3HeatFeasibility.java
+@@ -48,9 +48,13 @@ final class V3HeatFeasibility {
+         double available = totalFeed * (feedFlash.referenceMolarEnthalpyJoulesPerMol() - coldLiquid)
+                 + specification(input, V3ColumnSpecification.ReboilerDuty.class).watts();
+         for (V3SteamFeedSpec steam : input.steamFeeds()) {
+-            available += steam.molarFlowMolPerSecond() * (V3WaterProperties.vaporMolarEnthalpy(steam.temperatureKelvin())
++            double injectionPressure = input.topPressurePascal()
++                    + Math.max(0, Math.min(steam.stageNumber(), input.stageCount()) - 1) * input.stagePressureDropPascal();
++            available += steam.molarFlowMolPerSecond()
++                    * (V3WaterProperties.steamMolarEnthalpy(steam.temperatureKelvin(), injectionPressure)
+                     - V3WaterProperties.liquidMolarEnthalpy(Math.max(V3WaterProperties.triplePoint(),
+-                            Math.min(condenserTemperature, V3WaterProperties.criticalTemperature() - 1.0))));
++                            Math.min(condenserTemperature, V3WaterProperties.criticalTemperature() - 1.0)),
++                            input.topPressurePascal()));
+         }
+         return available;
+     }
+@@ -108,8 +112,9 @@ final class V3HeatFeasibility {
+         if (problem.hasSteamFeeds()) {
+             double water = problem.waterVaporFlowMolPerSecond(source);
+             if (water > 0.0) {
+-                capacity += water * (V3WaterProperties.vaporMolarEnthalpy(state.temperatureKelvin(source))
+-                        - V3WaterProperties.vaporMolarEnthalpy(state.temperatureKelvin(tray)));
++                double partialPressure = problem.nodePressurePascal(source) * water / (total + water);
++                capacity += water * (V3WaterProperties.steamMolarEnthalpy(state.temperatureKelvin(source), partialPressure)
++                        - V3WaterProperties.steamMolarEnthalpy(state.temperatureKelvin(tray), partialPressure));
+             }
+         }
+         return Double.isFinite(capacity) && capacity > 0.0 ? capacity : 0.0;
+diff --git a/src/main/java/com/wormzjl/icheme/science/column/v3/V3MeshResidualEvaluator.java b/src/main/java/com/wormzjl/icheme/science/column/v3/V3MeshResidualEvaluator.java
+index 7d3e4bd96..cfa021720 100644
+--- a/src/main/java/com/wormzjl/icheme/science/column/v3/V3MeshResidualEvaluator.java
++++ b/src/main/java/com/wormzjl/icheme/science/column/v3/V3MeshResidualEvaluator.java
+@@ -349,16 +349,23 @@ final class V3MeshResidualEvaluator {
+             }
+         }
+         if (water != 0.0) {
+-            vaporEnergyByTemperature += water * V3WaterProperties.dVaporMolarEnthalpyDT(temperature);
+-            double vaporEnthalpy = V3WaterProperties.vaporMolarEnthalpy(temperature);
+-            for (int j = 0; j < components; j++) vaporEnergyByVaporFlow[j] += waterByVaporFlow[j] * vaporEnthalpy;
++            // The steam is at its Dalton partial pressure P W / (V + W), so its virial residual moves with the
++            // hydrocarbon vapour V as well as with W and T.
++            vaporEnergyByTemperature += V3WaterProperties.steamEnthalpyRateByTemperature(
++                    temperature, pressure, water, vaporTotal);
++            double byWater = V3WaterProperties.steamEnthalpyRateByWater(temperature, pressure, water, vaporTotal);
++            double byHydrocarbon = V3WaterProperties.steamEnthalpyRateByHydrocarbon(
++                    temperature, pressure, water, vaporTotal);
++            for (int j = 0; j < components; j++) {
++                vaporEnergyByVaporFlow[j] += waterByVaporFlow[j] * byWater + state.vaporFlow(node, j) * byHydrocarbon;
++            }
+         }
+ 
+         double freeWater = problem.freeWaterFlowMolPerSecond(state, node);
+         double freeWaterEnergyByFreeWaterFlow = freeWater == 0.0
+-                ? 0.0 : freeWater * V3WaterProperties.liquidMolarEnthalpy(temperature);
++                ? 0.0 : freeWater * V3WaterProperties.liquidMolarEnthalpy(temperature, pressure);
+         double freeWaterEnergyByTemperature = freeWater == 0.0
+-                ? 0.0 : freeWater * V3WaterProperties.dLiquidMolarEnthalpyDT(temperature);
++                ? 0.0 : freeWater * V3WaterProperties.dLiquidMolarEnthalpyDT(temperature, pressure);
+ 
+         double[] waterSaturationByVaporFlow = new double[components];
+         double waterSaturationByTemperature = 0.0;
+@@ -499,7 +506,7 @@ final class V3MeshResidualEvaluator {
+     private double freeWaterEnergy(V3DryMeshState state, int node) {
+         double freeWater = problem.freeWaterFlowMolPerSecond(state, node);
+         return freeWater == 0.0 ? 0.0
+-                : freeWater * V3WaterProperties.liquidMolarEnthalpy(state.temperatureKelvin(node));
++                : freeWater * V3WaterProperties.liquidMolarEnthalpy(state.temperatureKelvin(node), problem.nodePressurePascal(node));
+     }
+ 
+     /**
+@@ -532,7 +539,8 @@ final class V3MeshResidualEvaluator {
+         // pure-water overhead product, and that product's enthalpy belongs to the condenser vapor outlet.
+         if (!liquid && problem.hasSteamFeeds()) {
+             double water = waterVaporFlow(state, node);
+-            if (water != 0.0) energy += water * V3WaterProperties.vaporMolarEnthalpy(state.temperatureKelvin(node));
++            if (water != 0.0) energy += V3WaterProperties.steamEnthalpyRate(state.temperatureKelvin(node),
++                    problem.nodePressurePascal(node), water, totalFlow);
+         }
+         return energy;
+     }
+diff --git a/src/main/java/com/wormzjl/icheme/science/column/v3/V3SimultaneousColumnSolver.java b/src/main/java/com/wormzjl/icheme/science/column/v3/V3SimultaneousColumnSolver.java
+index eccfa2513..2df58483e 100644
+--- a/src/main/java/com/wormzjl/icheme/science/column/v3/V3SimultaneousColumnSolver.java
++++ b/src/main/java/com/wormzjl/icheme/science/column/v3/V3SimultaneousColumnSolver.java
+@@ -4,6 +4,10 @@ import com.wormzjl.icheme.science.column.v3.linalg.V3BandedMatrix;
+ import com.wormzjl.icheme.science.column.v3.linalg.V3BandedPivotedSolver;
+ import com.wormzjl.icheme.science.column.v3.thermo.V3ThermoException;
+ import com.wormzjl.icheme.science.column.v3.thermo.V3ThermoWorkspace;
++import com.wormzjl.icheme.science.math.DeterministicMath;
++import java.util.Arrays;
++import java.util.HashMap;
++import java.util.Map;
+ import java.util.Objects;
+ 
+ /** Damped dry-MESH Newton correction path that emits attempt evidence only; it cannot publish a V3 success. */
+@@ -30,6 +34,37 @@ final class V3SimultaneousColumnSolver {
+             "V3 Newton Jacobian contains an unexpected off-band coupling";
+     private static final String DAMPED_NORMAL_OFF_BAND_MESSAGE =
+             V3NormalEquations.OFF_BAND_MESSAGE;
++    /**
++     * Where a trial step holds a sinking point: just under the support floor, in the log-flow coordinates.
++     *
++     * <p>A point is a stage component with its retained phases. Inside one Newton solve the floor support is
++     * frozen, and a point below its floor ({@link V3TruncationSupport#TRACE_FLOOR_FRACTION} of the
++     * component's flow scale) is not an unknown the solve can move: its finite-difference column vanishes
++     * and the LU is singular. Measured (O10, batch 2026-11-04-open-thermo-data): one accepted step took the
++     * medium grade's PC11 liquid on tray 2 to 5.9e-210 mol/s beside neighbours at 1e-8 to 1e-14, and every
++     * following iteration was SINGULAR. So every trial step (Newton, local block, damped and gradient
++     * directions) keeps each point at or above the lesser of where it was and this level, lifting its phases
++     * together so its K ratio stands. Just under the floor rather than on it, so the support refresh that
++     * follows the solve drops the point.</p>
++     */
++    private static final double HELD_POINT_LOG_FLOW =
++            DeterministicMath.log(V3TruncationSupport.TRACE_FLOOR_FRACTION) - 1.0e-3;
++    /**
++     * The stall rule: a solve whose maximum scaled residual has not fallen to {@link #STALL_FACTOR} of its value
++     * {@code STALL_WINDOW_ITERATIONS} iterations ago is not converging. The intermediate steam rungs' stall stop
++     * ({@code V3ColumnCalculator.INTERMEDIATE_RUNG_BUDGET}) and the held-point release below are this one rule.
++     *
++     * <p>The release: a solve whose accepted steps have held a point for the window in a row without halving the
++     * residual over them is handed to the support refresh ({@code STALLED_SUPPORT_FLOOR}): the held point is what
++     * it cannot move, and the refreshed support no longer has it. Measured (E30, batch
++     * 2026-11-04-open-thermo-data; the medium grade and Tia Juana at ten feed temperatures from 622 to 644 K,
++     * classical start): a release after 12 held iterations converged 20 of 20 in 9,668k control polls against
++     * the unheld solve's 15 of 20 in 12,830k; after 8, 19 of 20 (medium 640 K failed); after 3 (O10), the
++     * medium grade 6 of 10; never releasing (O10), 10 of 10 but every rung's first attempt ran 128 held
++     * iterations (54,140k on the medium grade).</p>
++     */
++    static final int STALL_WINDOW_ITERATIONS = 12;
++    static final double STALL_FACTOR = 0.5;
+ 
+     private V3SimultaneousColumnSolver() {}
+ 
+@@ -319,6 +354,10 @@ final class V3SimultaneousColumnSolver {
+         int localBlockAttempts = 0;
+         int consecutiveLocalBlockRejections = 0;
+         boolean localBlocksDisabled = false;
++        SupportPoints points = SupportPoints.of(coordinates);
++        // Consecutive accepted steps that held a point, and the last window's residuals (a ring).
++        int heldIterations = 0;
++        double[] heldResiduals = new double[STALL_WINDOW_ITERATIONS + 1];
+         for (int iteration = 0; iteration <= maximumIterations; iteration++) {
+             control.checkpoint();
+             V3MeshResidual residual;
+@@ -390,6 +429,16 @@ final class V3SimultaneousColumnSolver {
+                                     + earlier + " and " + maximumResidual + " now", lastConvergenceEvidence));
+                 }
+             }
++            heldResiduals[iteration % heldResiduals.length] = maximumResidual;
++            if (heldIterations >= STALL_WINDOW_ITERATIONS) {
++                double earlier = heldResiduals[(iteration - STALL_WINDOW_ITERATIONS) % heldResiduals.length];
++                if (maximumResidual > STALL_FACTOR * earlier) {
++                    return new Attempt.Failure("STALLED_SUPPORT_FLOOR", state, new Evidence(iteration, maximumResidual,
++                            merit, 0.0, 0.0, "a point held at its support floor for " + heldIterations
++                                    + " iterations; maximum scaled residual " + earlier + " then and "
++                                    + maximumResidual + " now", lastConvergenceEvidence));
++                }
++            }
+             if (!localBlocksDisabled && maximumLocalBlockAttempts > localBlockAttempts
+                     && differenceScale == V3FiniteDifferenceJacobian.DifferenceScale.FINE
+                     && coordinates.coordinateCount() >= LOCAL_BLOCK_JACOBIAN_MINIMUM_COORDINATES) {
+@@ -404,11 +453,12 @@ final class V3SimultaneousColumnSolver {
+                         double[] baseCoordinates = coordinates.encode(state);
+                         AcceptedTrial localTrial = armijoTrial(
+                                 evaluator, coordinates, baseCoordinates, localSuccess.solution(), frozenScales, merit, workspaceFactory,
+-                                maximumLineSearchSteps, control);
++                                maximumLineSearchSteps, control, points);
+                         if (localTrial != null) {
+                             localBlockAccepted = true;
+                             consecutiveLocalBlockRejections = 0;
+                             trace.localBlockDirection(iteration, true);
++                            heldIterations = localTrial.heldPoints() > 0 ? heldIterations + 1 : 0;
+                             state = localTrial.state();
+                             lastMerit = localTrial.merit();
+                             cachedFineJacobian = null;
+@@ -463,17 +513,18 @@ final class V3SimultaneousColumnSolver {
+                 double[] baseCoordinates = coordinates.encode(state);
+                 AcceptedTrial descentTrial = dampedGaussNewtonTrial(
+                         evaluator, coordinates, baseCoordinates, jacobian, residual, frozenScales, merit, layout, workspaceFactory,
+-                        maximumLineSearchSteps, control, budget, linearWorkspace);
++                        maximumLineSearchSteps, control, budget, linearWorkspace, points);
+                 if (descentTrial == null && budget.gradientFallback()) {
+                     descentTrial = armijoTrial(evaluator, coordinates, baseCoordinates,
+                             normalizedNegativeGradient(jacobian, residual, coordinates), frozenScales, merit, workspaceFactory,
+-                            maximumLineSearchSteps, control);
++                            maximumLineSearchSteps, control, points);
+                 }
+                 if (descentTrial == null) {
+                     return new Attempt.Failure("LINEAR_" + failure.code(), state,
+                             new Evidence(iteration, maximumResidual, merit, 0.0, failure.pivotGrowth(), failure.detail(),
+                                     lastConvergenceEvidence));
+                 }
++                heldIterations = descentTrial.heldPoints() > 0 ? heldIterations + 1 : 0;
+                 state = descentTrial.state();
+                 lastMerit = descentTrial.merit();
+                 lastConvergenceEvidence = V3ConvergenceEvidence.unavailable(V3ConvergenceEvidence.closureOf(scaledTolerance));
+@@ -482,7 +533,7 @@ final class V3SimultaneousColumnSolver {
+             double[] baseCoordinates = coordinates.encode(state);
+             AcceptedTrial acceptedTrial = armijoTrial(
+                     evaluator, coordinates, baseCoordinates, linearSuccess.solution(), frozenScales, merit, workspaceFactory,
+-                    maximumLineSearchSteps, control);
++                    maximumLineSearchSteps, control, points);
+             boolean usedDescentFallback = acceptedTrial == null;
+             if (usedDescentFallback && usesFrozenFineJacobian) {
+                 cachedFineJacobian = null;
+@@ -493,11 +544,11 @@ final class V3SimultaneousColumnSolver {
+             if (usedDescentFallback) {
+                 acceptedTrial = dampedGaussNewtonTrial(
+                         evaluator, coordinates, baseCoordinates, jacobian, residual, frozenScales, merit, layout, workspaceFactory,
+-                        maximumLineSearchSteps, control, budget, linearWorkspace);
++                        maximumLineSearchSteps, control, budget, linearWorkspace, points);
+                 if (acceptedTrial == null && budget.gradientFallback()) {
+                     acceptedTrial = armijoTrial(evaluator, coordinates, baseCoordinates,
+                             normalizedNegativeGradient(jacobian, residual, coordinates), frozenScales, merit, workspaceFactory,
+-                            maximumLineSearchSteps, control);
++                            maximumLineSearchSteps, control, points);
+                 }
+             }
+             if (acceptedTrial == null) {
+@@ -505,6 +556,7 @@ final class V3SimultaneousColumnSolver {
+                         new Evidence(iteration, maximumResidual, merit, 0.0, linearSuccess.pivotGrowth(),
+                                 "no admissible Armijo-reducing Newton or descent step", lastConvergenceEvidence));
+             }
++            heldIterations = acceptedTrial.heldPoints() > 0 ? heldIterations + 1 : 0;
+             state = acceptedTrial.state();
+             lastMerit = acceptedTrial.merit();
+             if (usedDescentFallback) {
+@@ -710,22 +762,26 @@ final class V3SimultaneousColumnSolver {
+      * same scales, so the sufficient-decrease test compares like with like on the system the Jacobian was
+      * assembled for. Re-scaling each candidate by its own local throughput would let a step be accepted for
+      * enlarging a denominator instead of closing a balance.</p>
++     *
++     * <p>Every candidate holds its sinking points first ({@link #HELD_POINT_LOG_FLOW}); the accepted trial
++     * reports how many it held.</p>
+      */
+     private static AcceptedTrial armijoTrial(
+             V3MeshResidualEvaluator evaluator, V3DryMeshCoordinateMap coordinates, double[] baseCoordinates,
+             double[] direction, double[] frozenScales, double merit,
+             V3FiniteDifferenceJacobian.V3ThermoWorkspaceFactory workspaceFactory,
+-            int maximumLineSearchSteps, V3SolveControl control) {
++            int maximumLineSearchSteps, V3SolveControl control, SupportPoints points) {
+         for (int lineSearch = 0; lineSearch < maximumLineSearchSteps; lineSearch++) {
+             control.checkpoint();
+             double step = Math.scalb(1.0, -lineSearch);
+             try {
+                 double[] candidateCoordinates = addScaled(baseCoordinates, direction, step);
++                int held = points.hold(baseCoordinates, candidateCoordinates);
+                 V3DryMeshState candidate = coordinates.decode(candidateCoordinates);
+                 double candidateMerit = frozenSquaredNorm(
+                         evaluator.evaluate(candidate, workspaceFactory.newWorkspace()), frozenScales);
+                 if (candidateMerit <= merit * (1.0 - ARMIJO_COEFFICIENT * step)) {
+-                    return new AcceptedTrial(candidate, candidateCoordinates, candidateMerit, step);
++                    return new AcceptedTrial(candidate, candidateCoordinates, candidateMerit, step, held);
+                 }
+             } catch (IllegalArgumentException | V3ThermoException ignored) {
+                 // An inadmissible coordinate or PR-domain trial is an ordinary rejected line-search point.
+@@ -771,7 +827,7 @@ final class V3SimultaneousColumnSolver {
+             V3FiniteDifferenceJacobian.Jacobian jacobian, V3MeshResidual residual, double[] frozenScales, double merit,
+             V3StageBlockLayout layout, V3FiniteDifferenceJacobian.V3ThermoWorkspaceFactory workspaceFactory,
+             int maximumLineSearchSteps, V3SolveControl control, RungBudget budget,
+-            V3BandedPivotedSolver.Workspace linearWorkspace) {
++            V3BandedPivotedSolver.Workspace linearWorkspace, SupportPoints points) {
+         if (budget.maximumDampingSteps() == 0) return null;
+         V3NormalEquations normal;
+         try {
+@@ -797,7 +853,7 @@ final class V3SimultaneousColumnSolver {
+             if (result instanceof V3BandedPivotedSolver.Result.Success success) {
+                 AcceptedTrial trial = armijoTrial(
+                         evaluator, coordinates, baseCoordinates, success.solution(), frozenScales, merit, workspaceFactory,
+-                        maximumLineSearchSteps, control);
++                        maximumLineSearchSteps, control, points);
+                 if (trial != null) return trial;
+             }
+             damping *= 10.0;
+@@ -937,7 +993,56 @@ final class V3SimultaneousColumnSolver {
+         }
+     }
+ 
+-    private record AcceptedTrial(V3DryMeshState state, double[] coordinates, double merit, double step) {}
++    private record AcceptedTrial(V3DryMeshState state, double[] coordinates, double merit, double step, int heldPoints) {}
++
++    /**
++     * The retained points of one solve's coordinates: for each, its liquid and vapour flow coordinates, the
++     * second {@code -1} for a one-phase point.
++     */
++    private record SupportPoints(int[] first, int[] second) {
++        static SupportPoints of(V3DryMeshCoordinateMap coordinates) {
++            int count = coordinates.coordinateCount();
++            int[] first = new int[count];
++            int[] second = new int[count];
++            int points = 0;
++            Map<Long, Integer> byStageComponent = new HashMap<>();
++            for (int index = 0; index < count; index++) {
++                V3DegreeOfFreedomLedger.UnknownId id = coordinates.unknowns().get(index).id();
++                if (id.family() != V3DegreeOfFreedomLedger.UnknownFamily.LIQUID_COMPONENT_FLOW
++                        && id.family() != V3DegreeOfFreedomLedger.UnknownFamily.VAPOR_COMPONENT_FLOW) continue;
++                Integer point = byStageComponent.putIfAbsent(((long) id.node() << 32) | id.component(), points);
++                if (point == null) {
++                    first[points] = index;
++                    second[points++] = -1;
++                } else {
++                    second[point] = index;
++                }
++            }
++            return new SupportPoints(Arrays.copyOf(first, points), Arrays.copyOf(second, points));
++        }
++
++        /**
++         * Lifts each point of {@code candidate} that sank below the lesser of its {@code base} level and
++         * {@link #HELD_POINT_LOG_FLOW} back to that bound, both phases by the same log step; a point's level is
++         * its larger phase. Returns the number of points held.
++         */
++        int hold(double[] base, double[] candidate) {
++            int held = 0;
++            for (int point = 0; point < first.length; point++) {
++                int liquid = first[point];
++                int vapor = second[point];
++                double bound = Math.min(vapor < 0 ? base[liquid] : Math.max(base[liquid], base[vapor]),
++                        HELD_POINT_LOG_FLOW);
++                double level = vapor < 0 ? candidate[liquid] : Math.max(candidate[liquid], candidate[vapor]);
++                if (level < bound) {
++                    candidate[liquid] += bound - level;
++                    if (vapor >= 0) candidate[vapor] += bound - level;
++                    held++;
++                }
++            }
++            return held;
++        }
++    }
+ 
+     private record VerifiedFinalNewton(
+             V3DryMeshState state,
+diff --git a/src/main/java/com/wormzjl/icheme/science/column/v3/thermo/V3WaterProperties.java b/src/main/java/com/wormzjl/icheme/science/column/v3/thermo/V3WaterProperties.java
+index cc80156c4..f417bb572 100644
+--- a/src/main/java/com/wormzjl/icheme/science/column/v3/thermo/V3WaterProperties.java
++++ b/src/main/java/com/wormzjl/icheme/science/column/v3/thermo/V3WaterProperties.java
+@@ -1,16 +1,22 @@
+ package com.wormzjl.icheme.science.column.v3.thermo;
+ 
++import com.wormzjl.icheme.science.fluid.thermo.WaterRegion1;
+ import com.wormzjl.icheme.science.math.DeterministicMath;
+ 
+ import com.wormzjl.icheme.science.material.MaterialCatalog;
++import com.wormzjl.icheme.science.thermo.phase.SteamVirial;
+ 
+ /**
+- * Pinned, dependency-free pure-water correlations for V3's free-water steam contract.
++ * The water of the column and of the fluid network: one model (decision E30 of batch 2026-11-04-open-thermo-data).
+  *
+- * <p>The saturation-pressure relation is the IAPWS Wagner--Pruss auxiliary equation. Vapor
+- * enthalpy integrates the water record's Shomate-form heat capacity (a fit to the IAPWS-95 ideal-gas Cp); its reference cancels
+- * in column energy differences. Liquid enthalpy is deliberately reference-consistent through the
+- * vaporization enthalpy correlation.</p>
++ * <p>The saturation-pressure relation is the IAPWS Wagner--Pruss auxiliary equation. The steam is the network's
++ * second-virial gas: the ideal-gas enthalpy integrates the water record's Shomate-form heat capacity (a fit to the
++ * IAPWS-95 ideal-gas Cp), and {@link SteamVirial} adds IF97 Region 2's residual at the steam's partial pressure. The
++ * liquid is the network's, IF97 Region 1 at the pressure ({@link WaterRegion1}), on the water datum: liquid water at
++ * 298.15 K and 1 atm sits one Watson vaporization enthalpy below the ideal-gas steam ({@link #liquidEnthalpyOffset}).
++ * The datum cancels in column energy differences. Before E30 the column priced steam as an ideal gas and liquid water
++ * as the steam less the Watson enthalpy at every temperature, 136 J/mol (533 K, 2.5 bar) and 285 J/mol (332 K) off the
++ * network's.</p>
+  *
+  * <p>Every correlation exists twice: once resolving the water data from the calculation context,
+  * which is what V3 and the legacy callers use, and once taking that data explicitly. They compute
+@@ -156,37 +162,104 @@ public final class V3WaterProperties {
+     }
+ 
+     /**
+-     * The Watson correlation's temperature slope in J/(mol K); zero from the critical point upward.
+-     *
+-     * <p>Zero above the critical temperature is the derivative of the constant zero the value returns there,
+-     * and is the correct one-sided answer at the critical point itself, where the true slope is unbounded.
+-     * Approaching it from below the slope does diverge, which is a property of the correlation and not of this
+-     * derivative: the free water that uses it exists only where liquid water does.</p>
++     * Steam at its partial pressure {@code p}, J/mol: the ideal-gas steam ({@link #vaporMolarEnthalpy}) plus the
++     * second virial's residual {@code p (B - T dB/dT)} ({@link SteamVirial#residualEnthalpy}), the network's steam.
+      */
+-    public static double dVaporizationEnthalpyDT(MaterialCatalog.Water water, double temperatureKelvin) {
+-        requireEnthalpyTemperature(water, temperatureKelvin);
+-        if (temperatureKelvin >= water.criticalTemperature()) return 0.0;
+-        double span = 1.0 - water.boilingTemperature() / water.criticalTemperature();
+-        double reduced = (1.0 - temperatureKelvin / water.criticalTemperature()) / span;
+-        return water.vaporizationEnthalpy() * water.watsonExponent()
+-                * DeterministicMath.pow(reduced, water.watsonExponent() - 1.0) * (-1.0 / (water.criticalTemperature() * span));
++    public static double steamMolarEnthalpy(double temperatureKelvin, double partialPressurePascal) {
++        return vaporMolarEnthalpy(temperatureKelvin) + SteamVirial.residualEnthalpy(temperatureKelvin, partialPressurePascal);
++    }
++
++    /** {@code dh/dT} of {@link #steamMolarEnthalpy} at constant partial pressure, J/(mol K). */
++    public static double dSteamMolarEnthalpyDT(double temperatureKelvin, double partialPressurePascal) {
++        return dVaporMolarEnthalpyDT(temperatureKelvin)
++                + SteamVirial.residualHeatCapacity(temperatureKelvin, partialPressurePascal);
++    }
++
++    /**
++     * The enthalpy rate of {@code water} mol/s of steam in a gas with {@code hydrocarbon} mol/s of hydrocarbon vapour at
++     * total pressure {@code pressurePascal}, W: the steam at its Dalton partial pressure {@code P W / (V + W)}. Zero
++     * without steam.
++     */
++    public static double steamEnthalpyRate(double temperatureKelvin, double pressurePascal, double water, double hydrocarbon) {
++        if (water == 0.0) return 0.0;
++        return water * steamMolarEnthalpy(temperatureKelvin, pressurePascal * water / (hydrocarbon + water));
++    }
++
++    /** {@code d/dW} of {@link #steamEnthalpyRate} at constant T, P and V: {@code h + W (dh/dp) P V / (V + W)^2}. */
++    public static double steamEnthalpyRateByWater(
++            double temperatureKelvin, double pressurePascal, double water, double hydrocarbon) {
++        double gas = hydrocarbon + water;
++        return steamMolarEnthalpy(temperatureKelvin, pressurePascal * water / gas)
++                + water * steamPressureSlope(temperatureKelvin) * pressurePascal * hydrocarbon / (gas * gas);
++    }
++
++    /** {@code d/dV} of {@link #steamEnthalpyRate} at constant T, P and W: {@code -W (dh/dp) P W / (V + W)^2}. */
++    public static double steamEnthalpyRateByHydrocarbon(
++            double temperatureKelvin, double pressurePascal, double water, double hydrocarbon) {
++        if (water == 0.0) return 0.0;
++        double gas = hydrocarbon + water;
++        return -water * steamPressureSlope(temperatureKelvin) * pressurePascal * water / (gas * gas);
+     }
+ 
+-    public static double liquidMolarEnthalpy(double temperatureKelvin) {
+-        return liquidMolarEnthalpy(data(), temperatureKelvin);
++    /** {@code d/dT} of {@link #steamEnthalpyRate} at constant P, W and V. */
++    public static double steamEnthalpyRateByTemperature(
++            double temperatureKelvin, double pressurePascal, double water, double hydrocarbon) {
++        if (water == 0.0) return 0.0;
++        return water * dSteamMolarEnthalpyDT(temperatureKelvin, pressurePascal * water / (hydrocarbon + water));
+     }
+ 
+-    public static double liquidMolarEnthalpy(MaterialCatalog.Water water, double temperatureKelvin) {
+-        return vaporMolarEnthalpy(water, temperatureKelvin) - vaporizationEnthalpy(water, temperatureKelvin);
++    /** {@code dh/dp} of the steam at constant T, J/(mol Pa): {@code B - T dB/dT}; the residual is linear in p. */
++    private static double steamPressureSlope(double temperatureKelvin) {
++        return SteamVirial.residualEnthalpy(temperatureKelvin, 1.0);
+     }
+ 
+-    /** The liquid-water heat capacity in J/(mol K), consistent with {@link #liquidMolarEnthalpy} by construction. */
+-    public static double dLiquidMolarEnthalpyDT(double temperatureKelvin) {
+-        return dLiquidMolarEnthalpyDT(data(), temperatureKelvin);
++    /**
++     * Liquid water at {@code (T, p)}, J/mol: the network's, IF97 Region 1 at the pressure and its continuation past
++     * its range ({@link WaterRegion1#evaluateLiquid}), on the water datum ({@link #liquidEnthalpyOffset}).
++     */
++    public static double liquidMolarEnthalpy(double temperatureKelvin, double pressurePascal) {
++        return liquidMolarEnthalpy(data(), temperatureKelvin, pressurePascal);
++    }
++
++    public static double liquidMolarEnthalpy(MaterialCatalog.Water water, double temperatureKelvin, double pressurePascal) {
++        LiquidScratch scratch = LIQUID.get();
++        WaterRegion1.evaluateLiquid(water, temperatureKelvin, pressurePascal, scratch.region);
++        return scratch.region.specificEnthalpy() * water.molarMass() + scratch.offset(water);
+     }
+ 
+-    public static double dLiquidMolarEnthalpyDT(MaterialCatalog.Water water, double temperatureKelvin) {
+-        return dVaporMolarEnthalpyDT(water, temperatureKelvin) - dVaporizationEnthalpyDT(water, temperatureKelvin);
++    /** {@code dh/dT} of {@link #liquidMolarEnthalpy} at constant pressure, J/(mol K): Region 1's c_p, held past its range. */
++    public static double dLiquidMolarEnthalpyDT(double temperatureKelvin, double pressurePascal) {
++        MaterialCatalog.Water water = data();
++        LiquidScratch scratch = LIQUID.get();
++        WaterRegion1.evaluateLiquid(water, temperatureKelvin, pressurePascal, scratch.region);
++        return scratch.region.specificHeatCapacity() * water.molarMass();
++    }
++
++    /**
++     * The water datum, J/mol: what moves Region 1's enthalpy (its own datum) onto the steam's, so that liquid water at
++     * 298.15 K and 1 atm sits one Watson vaporization enthalpy below the ideal-gas steam at 298.15 K. The network's
++     * liquid water ({@code FluidThermodynamics.waterLiquid}) and the column's take this one offset.
++     */
++    public static double liquidEnthalpyOffset(MaterialCatalog.Water water) {
++        return vaporMolarEnthalpy(water, 298.15) - vaporizationEnthalpy(water, 298.15)
++                - WaterRegion1.evaluate(water, 298.15, 101325).specificEnthalpy() * water.molarMass();
++    }
++
++    /** Per-thread Region 1 scratch and the last water record's datum, so a residual evaluation allocates nothing. */
++    private static final ThreadLocal<LiquidScratch> LIQUID = ThreadLocal.withInitial(LiquidScratch::new);
++
++    private static final class LiquidScratch {
++        private final WaterRegion1.Workspace region = new WaterRegion1.Workspace();
++        private MaterialCatalog.Water water;
++        private double offset;
++
++        private double offset(MaterialCatalog.Water record) {
++            if (record != water) {
++                offset = liquidEnthalpyOffset(record);
++                water = record;
++            }
++            return offset;
++        }
+     }
+ 
+     private static void requireSaturationTemperature(MaterialCatalog.Water water, double temperatureKelvin) {
+diff --git a/src/main/java/com/wormzjl/icheme/science/fluid/thermo/FluidThermodynamics.java b/src/main/java/com/wormzjl/icheme/science/fluid/thermo/FluidThermodynamics.java
+index 8b962c0a4..7514c8c67 100644
+--- a/src/main/java/com/wormzjl/icheme/science/fluid/thermo/FluidThermodynamics.java
++++ b/src/main/java/com/wormzjl/icheme/science/fluid/thermo/FluidThermodynamics.java
+@@ -127,7 +127,7 @@ public final class FluidThermodynamics {
+         crystalCeiling=ceiling;
+         // Region 1 at 298.15 K and 1 atm itself, the stable liquid: the network's water datum and the pump's density.
+         var reference=WaterRegion1.evaluate(water,298.15,101325);
+-        waterEnthalpyOffset=V3WaterProperties.liquidMolarEnthalpy(water,298.15)-reference.specificEnthalpy()*waterMolecularWeight;
++        waterEnthalpyOffset=V3WaterProperties.liquidEnthalpyOffset(water);
+         pumpReferenceDensity=waterMolecularWeight/(reference.specificVolume()*waterMolecularWeight);
+         // The free water's ice (WP4): its record anchored to this model's liquid water at the triple point, on the network's
+         // water datum, with this model's steam; below the melting line the free water is ice, on every package.
+diff --git a/src/main/java/com/wormzjl/icheme/science/fluid/thermo/WaterRegion1.java b/src/main/java/com/wormzjl/icheme/science/fluid/thermo/WaterRegion1.java
+index add0da8b3..9d9dd73cd 100644
+--- a/src/main/java/com/wormzjl/icheme/science/fluid/thermo/WaterRegion1.java
++++ b/src/main/java/com/wormzjl/icheme/science/fluid/thermo/WaterRegion1.java
+@@ -130,6 +130,8 @@ public final class WaterRegion1 {
+         public Workspace() {}
+         public double specificVolume(){return specificVolume;}
+         public double specificEnthalpy(){return specificEnthalpy;}
++        /** c_p, J/(kg K): the region's at the evaluated temperature, the held end value past its range. */
++        public double specificHeatCapacity(){return specificHeatCapacity;}
+         public double volumePressureDerivative(){return volumePressureDerivative;}
+         /** A copy of the last evaluation as the immutable record. */
+         public State state() {
+diff --git a/src/main/java/com/wormzjl/icheme/science/thermo/phase/SteamVirial.java b/src/main/java/com/wormzjl/icheme/science/thermo/phase/SteamVirial.java
+index e4310ee62..19cbf1be7 100644
+--- a/src/main/java/com/wormzjl/icheme/science/thermo/phase/SteamVirial.java
++++ b/src/main/java/com/wormzjl/icheme/science/thermo/phase/SteamVirial.java
+@@ -79,6 +79,15 @@ public final class SteamVirial {
+         return p * (secondVirial(t) - t * temperatureDerivative(t));
+     }
+ 
++    /**
++     * The residual molar heat capacity at constant partial pressure {@code p}, {@code d h_res/dT = -p T d2B/dT2},
++     * J/(mol K); zero below {@link #MINIMUM_TEMPERATURE}, where {@code B} continues linearly.
++     */
++    public static double residualHeatCapacity(double t, double p) {
++        require(t);
++        return t < MINIMUM_TEMPERATURE ? 0.0 : -p * t * polynomialCurvature(t);
++    }
++
+     /** The residual molar entropy at the steam's partial pressure {@code p}, {@code -p dB/dT}, J/(mol K). */
+     public static double residualEntropy(double t, double p) {
+         return -p * temperatureDerivative(t);
+@@ -105,6 +114,18 @@ public final class SteamVirial {
+         return R / REDUCING_PRESSURE * (f - tau * slope);
+     }
+ 
++    /**
++     * {@code d2B/dT2 = (R / p*) tau^2 f'' / T}: the derivative of {@link #polynomialSlope}'s {@code f - tau f'}, whose
++     * {@code tau f'} terms cancel.
++     */
++    private static double polynomialCurvature(double t) {
++        double tau = TAU_TEMPERATURE / t, s = tau - 0.5, curvature = 0.0;
++        for (int i = 0; i < N.length; i++) {
++            if (J[i] > 1) curvature += N[i] * J[i] * (J[i] - 1) * power(s, J[i] - 2);
++        }
++        return R / REDUCING_PRESSURE * tau * tau * curvature / t;
++    }
++
+     private static double power(double x, int n) {
+         double result = 1.0;
+         for (int k = 0; k < n; k++) result *= x;
+diff --git a/src/test/java/com/wormzjl/icheme/science/column/v3/V3CondenserPhaseAuditTest.java b/src/test/java/com/wormzjl/icheme/science/column/v3/V3CondenserPhaseAuditTest.java
+index 47aa871cc..5060113a7 100644
+--- a/src/test/java/com/wormzjl/icheme/science/column/v3/V3CondenserPhaseAuditTest.java
++++ b/src/test/java/com/wormzjl/icheme/science/column/v3/V3CondenserPhaseAuditTest.java
+@@ -126,7 +126,8 @@ class V3CondenserPhaseAuditTest {
+ 
+         assertTrue(condenserClosure.passed(), condenserClosure::toString);
+         double expectedFreeWaterOut = split.freeWaterFlowMolPerSecond()
+-                * com.wormzjl.icheme.science.column.v3.thermo.V3WaterProperties.liquidMolarEnthalpy(400.0);
++                * com.wormzjl.icheme.science.column.v3.thermo.V3WaterProperties.liquidMolarEnthalpy(400.0,
++                        wetProblem.nodePressurePascal(wetProblem.topology().condenserNode()));
+         assertTrue(condenserClosure.detail().contains(String.format(java.util.Locale.ROOT, "free water out=%.6g W",
+                 expectedFreeWaterOut)), condenserClosure::detail);
+     }
+diff --git a/src/test/java/com/wormzjl/icheme/science/column/v3/V3FreeWaterTrayTest.java b/src/test/java/com/wormzjl/icheme/science/column/v3/V3FreeWaterTrayTest.java
+index 9a41fe3cf..99c35a73f 100644
+--- a/src/test/java/com/wormzjl/icheme/science/column/v3/V3FreeWaterTrayTest.java
++++ b/src/test/java/com/wormzjl/icheme/science/column/v3/V3FreeWaterTrayTest.java
+@@ -83,10 +83,16 @@ class V3FreeWaterTrayTest {
+         V3MeshResidualEvaluator evaluator = new V3MeshResidualEvaluator(
+                 problem, new AffineEnthalpyThermo(), 0.0);
+ 
+-        double latent = V3WaterProperties.vaporMolarEnthalpy(base.temperatureKelvin(2))
+-                - V3WaterProperties.liquidMolarEnthalpy(base.temperatureKelvin(1));
+-        // Free water leaves tray one as liquid and comes back up out of tray two as vapour, so admitting one
+-        // more mole of it moves exactly one latent heat from the tray below into the wet tray.
++        // The steam is at its partial pressure on tray two, which the extra water raises, so its enthalpy is the
++        // difference of two rates rather than one molar value.
++        double water = problem.waterVaporFlow(base, 2);
++        double hydrocarbon = V3WetTraySet.hydrocarbonVaporTotal(base, 2);
++        double pressure = problem.nodePressurePascal(2);
++        double latent = (V3WaterProperties.steamEnthalpyRate(base.temperatureKelvin(2), pressure, water + increment, hydrocarbon)
++                - V3WaterProperties.steamEnthalpyRate(base.temperatureKelvin(2), pressure, water, hydrocarbon)) / increment
++                - V3WaterProperties.liquidMolarEnthalpy(base.temperatureKelvin(1), problem.nodePressurePascal(1));
++        // Free water leaves tray one as liquid and comes back up out of tray two as vapour, so admitting more of it
++        // moves exactly its latent heat from the tray below into the wet tray.
+         assertEquals(increment * latent, energy(evaluator, raised, 1) - energy(evaluator, base, 1), 1.0e-6);
+         assertEquals(-increment * latent, energy(evaluator, raised, 2) - energy(evaluator, base, 2), 1.0e-6);
+         // Nothing below the tray that receives it sees the circulation at all.
+diff --git a/src/test/java/com/wormzjl/icheme/science/column/v3/V3PumparoundSteamCalculatorTest.java b/src/test/java/com/wormzjl/icheme/science/column/v3/V3PumparoundSteamCalculatorTest.java
+index 303cd4d8c..163be0715 100644
+--- a/src/test/java/com/wormzjl/icheme/science/column/v3/V3PumparoundSteamCalculatorTest.java
++++ b/src/test/java/com/wormzjl/icheme/science/column/v3/V3PumparoundSteamCalculatorTest.java
+@@ -205,13 +205,15 @@ class V3PumparoundSteamCalculatorTest {
+             V3ColumnStreamProperties stream, V3PengRobinsonThermo thermo, V3ThermoWorkspace workspace,
+             int componentCount) {
+         if (stream.streamId().equals("free_water")) {
+-            return stream.molarFlowMolPerSecond() * V3WaterProperties.liquidMolarEnthalpy(stream.temperatureKelvin());
++            return stream.molarFlowMolPerSecond()
++                    * V3WaterProperties.liquidMolarEnthalpy(stream.temperatureKelvin(), stream.pressurePascal());
+         }
+         List<V3ColumnStreamProperties.ComponentFraction> fractions = stream.moleFractions();
+         boolean carriesWater = fractions.size() == componentCount + 1;
+         double waterFraction = carriesWater ? fractions.get(componentCount).moleFraction() : 0.0;
+         double waterFlow = stream.molarFlowMolPerSecond() * waterFraction;
+-        double water = waterFlow * V3WaterProperties.vaporMolarEnthalpy(stream.temperatureKelvin());
++        double water = V3WaterProperties.steamEnthalpyRate(stream.temperatureKelvin(), stream.pressurePascal(),
++                waterFlow, stream.molarFlowMolPerSecond() - waterFlow);
+         double hydrocarbonFlow = stream.molarFlowMolPerSecond() - waterFlow;
+         if (!(hydrocarbonFlow > 0.0)) return water;
+         double[] composition = new double[componentCount];
+diff --git a/src/test/java/com/wormzjl/icheme/science/column/v3/V3StageContinuationTest.java b/src/test/java/com/wormzjl/icheme/science/column/v3/V3StageContinuationTest.java
+index 704d2f993..98c4d9a93 100644
+--- a/src/test/java/com/wormzjl/icheme/science/column/v3/V3StageContinuationTest.java
++++ b/src/test/java/com/wormzjl/icheme/science/column/v3/V3StageContinuationTest.java
+@@ -7,7 +7,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
+ import static org.junit.jupiter.api.Assertions.assertTrue;
+ 
+ import com.wormzjl.icheme.science.column.v3.thermo.V3CrudeFeed;
+-import com.wormzjl.icheme.science.column.v3.thermo.V3FlashResult;
+ import com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo;
+ import java.util.List;
+ import org.junit.jupiter.api.Test;
+@@ -20,94 +19,43 @@ class V3StageContinuationTest {
+     private static final long THIRTY_STAGE_BUDGET_NANOS = 60_000_000_000L;
+     private static final long FORTY_STAGE_BUDGET_NANOS = 60_000_000_000L;
+ 
++    /**
++     * The real-crude stage continuation, 4 to 8, 4 to 8 to 15 and 4 to 8 to 15 to 30 stages, as the calculator runs it:
++     * each accepted grid seeds the next, and every grid is solved with its floor-support refreshes.
++     *
++     * <p>A frozen-support Newton solve alone is not the contract. Since O10 (batch 2026-11-04-open-thermo-data) a
++     * solve holds a point that would sink below its floor and hands a solve held there back to the support refresh
++     * ({@code STALLED_SUPPORT_FLOOR}); the refresh is what converges it, so the rungs are asserted where it runs.</p>
++     */
+     @Test
+     void acceptedFourStageRealCrudeProfileCanSeedAFreshEightStageCorrection() {
+-        V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
+-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
+-        V3ColumnProblem fourStage = V3ColumnProblemResolver.resolve(input(crude, 4, 3), V3CondenserPhaseBranch.TWO_PHASE);
+-        V3SimultaneousColumnSolver.Attempt.Converged acceptedFourStage = assertInstanceOf(
+-                V3SimultaneousColumnSolver.Attempt.Converged.class, solve(thermo, fourStage,
+-                        V3ColumnInitializer.initialize(fourStage, thermo, thermo.newWorkspace(),
+-                                V3ColumnInitializer.Mode.SEQUENTIAL_MATERIAL_VLE).state(), V3SolveControl.UNBOUNDED));
+-        V3FlashResult fourFeedFlash = feedFlash(thermo, fourStage);
+-        assertTrue(new V3AcceptanceAuditor(fourStage, thermo, fourFeedFlash.molarEnthalpyJoulesPerMol())
+-                .audit(acceptedFourStage.state(), thermo.newWorkspace(), V3SolveControl.UNBOUNDED).accepted());
+-
+-        V3ColumnProblem eightStage = V3ColumnProblemResolver.resolve(input(crude, 8, 6), V3CondenserPhaseBranch.TWO_PHASE);
+-        V3DryMeshState continuationSeed = interpolate(acceptedFourStage.state(), eightStage);
+-        long started = System.nanoTime();
+-        V3SimultaneousColumnSolver.Attempt.Converged converged = assertInstanceOf(
+-                V3SimultaneousColumnSolver.Attempt.Converged.class, solve(thermo, eightStage, continuationSeed, () -> {
+-                    if (System.nanoTime() - started >= TARGET_BUDGET_NANOS) {
+-                        throw new AssertionError("eight-stage continuation exceeded its 15-second cold-test budget");
+-                    }
+-                }));
+-        V3FlashResult eightFeedFlash = feedFlash(thermo, eightStage);
+-        V3AcceptanceAudit audit = new V3AcceptanceAuditor(eightStage, thermo,
+-                eightFeedFlash.molarEnthalpyJoulesPerMol()).audit(converged.state(), thermo.newWorkspace(), V3SolveControl.UNBOUNDED);
+-        System.out.println("V3 Stage continuation 4->8: " + converged + "; audit=" + audit);
+-        assertTrue(converged.evidence().convergenceEvidence().satisfiesGates());
+-        assertTrue(audit.accepted());
++        assertStageContinuation(8, 6, "4-8", TARGET_BUDGET_NANOS);
+     }
+ 
+     @Test
+     void certifiedEightStageRealCrudeProfileCanSeedAFreshFifteenStageCorrection() {
+-        V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
+-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
+-        V3ColumnProblem fourStage = V3ColumnProblemResolver.resolve(input(crude, 4, 3), V3CondenserPhaseBranch.TWO_PHASE);
+-        V3SimultaneousColumnSolver.Attempt.Converged convergedFourStage = assertInstanceOf(
+-                V3SimultaneousColumnSolver.Attempt.Converged.class, solve(thermo, fourStage,
+-                        V3ColumnInitializer.initialize(fourStage, thermo, thermo.newWorkspace(),
+-                                V3ColumnInitializer.Mode.SEQUENTIAL_MATERIAL_VLE).state(), V3SolveControl.UNBOUNDED));
+-
+-        V3ColumnProblem eightStage = V3ColumnProblemResolver.resolve(input(crude, 8, 6), V3CondenserPhaseBranch.TWO_PHASE);
+-        V3SimultaneousColumnSolver.Attempt.Converged convergedEightStage = assertInstanceOf(
+-                V3SimultaneousColumnSolver.Attempt.Converged.class,
+-                solveWithin(thermo, eightStage, interpolate(convergedFourStage.state(), eightStage), TARGET_BUDGET_NANOS));
+-
+-        V3ColumnProblem fifteenStage = V3ColumnProblemResolver.resolve(input(crude, 15, 12), V3CondenserPhaseBranch.TWO_PHASE);
+-        V3SimultaneousColumnSolver.Attempt.Converged convergedFifteenStage = assertInstanceOf(
+-                V3SimultaneousColumnSolver.Attempt.Converged.class,
+-                solveWithin(thermo, fifteenStage, interpolate(convergedEightStage.state(), fifteenStage),
+-                        FIFTEEN_STAGE_BUDGET_NANOS));
+-        V3FlashResult fifteenFeedFlash = feedFlash(thermo, fifteenStage);
+-        V3AcceptanceAudit audit = new V3AcceptanceAuditor(fifteenStage, thermo,
+-                fifteenFeedFlash.molarEnthalpyJoulesPerMol()).audit(convergedFifteenStage.state(), thermo.newWorkspace(), V3SolveControl.UNBOUNDED);
+-        System.out.println("V3 Stage continuation 4->8->15: " + convergedFifteenStage + "; audit=" + audit);
+-        assertTrue(convergedFifteenStage.evidence().convergenceEvidence().satisfiesGates());
+-        assertTrue(audit.accepted());
++        assertStageContinuation(15, 12, "4-8-15", FIFTEEN_STAGE_BUDGET_NANOS);
+     }
+ 
+     @Test
+     void certifiedFifteenStageRealCrudeProfileCanSeedAFreshThirtyStageCorrection() {
++        assertStageContinuation(30, 24, "4-8-15-30", THIRTY_STAGE_BUDGET_NANOS);
++    }
++
++    private static void assertStageContinuation(int stages, int feedStage, String schedule, long budgetNanos) {
+         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
+         V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
+-        V3ColumnProblem fourStage = V3ColumnProblemResolver.resolve(input(crude, 4, 3), V3CondenserPhaseBranch.TWO_PHASE);
+-        V3SimultaneousColumnSolver.Attempt.Converged convergedFourStage = assertInstanceOf(
+-                V3SimultaneousColumnSolver.Attempt.Converged.class, solve(thermo, fourStage,
+-                        V3ColumnInitializer.initialize(fourStage, thermo, thermo.newWorkspace(),
+-                                V3ColumnInitializer.Mode.SEQUENTIAL_MATERIAL_VLE).state(), V3SolveControl.UNBOUNDED));
+-        V3ColumnProblem eightStage = V3ColumnProblemResolver.resolve(input(crude, 8, 6), V3CondenserPhaseBranch.TWO_PHASE);
+-        V3SimultaneousColumnSolver.Attempt.Converged convergedEightStage = assertInstanceOf(
+-                V3SimultaneousColumnSolver.Attempt.Converged.class,
+-                solveWithin(thermo, eightStage, interpolate(convergedFourStage.state(), eightStage), TARGET_BUDGET_NANOS));
+-        V3ColumnProblem fifteenStage = V3ColumnProblemResolver.resolve(input(crude, 15, 12), V3CondenserPhaseBranch.TWO_PHASE);
+-        V3SimultaneousColumnSolver.Attempt.Converged convergedFifteenStage = assertInstanceOf(
+-                V3SimultaneousColumnSolver.Attempt.Converged.class,
+-                solveWithin(thermo, fifteenStage, interpolate(convergedEightStage.state(), fifteenStage),
+-                        FIFTEEN_STAGE_BUDGET_NANOS));
+-
+-        V3ColumnProblem thirtyStage = V3ColumnProblemResolver.resolve(input(crude, 30, 24), V3CondenserPhaseBranch.TWO_PHASE);
+-        V3SimultaneousColumnSolver.Attempt.Converged convergedThirtyStage = assertInstanceOf(
+-                V3SimultaneousColumnSolver.Attempt.Converged.class,
+-                solveWithin(thermo, thirtyStage, interpolate(convergedFifteenStage.state(), thirtyStage),
+-                        THIRTY_STAGE_BUDGET_NANOS));
+-        V3FlashResult thirtyFeedFlash = feedFlash(thermo, thirtyStage);
+-        V3AcceptanceAudit audit = new V3AcceptanceAuditor(thirtyStage, thermo,
+-                thirtyFeedFlash.molarEnthalpyJoulesPerMol()).audit(convergedThirtyStage.state(), thermo.newWorkspace(), V3SolveControl.UNBOUNDED);
+-        System.out.println("V3 Stage continuation 4->8->15->30: " + convergedThirtyStage + "; audit=" + audit);
+-        assertTrue(convergedThirtyStage.evidence().convergenceEvidence().satisfiesGates());
+-        assertTrue(audit.accepted());
++        long started = System.nanoTime();
++        V3ColumnOutcome outcome = V3ColumnCalculator.calculate(input(crude, stages, feedStage), () -> {
++            if (System.nanoTime() - started >= budgetNanos) {
++                throw new AssertionError("the " + schedule + " stage continuation exceeded its cold-test budget");
++            }
++        }, 0, 0, V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO);
++        System.out.println("V3 Stage continuation " + schedule + ": " + outcome.diagnostics().solvePath());
++        V3ColumnOutcome.Success success = assertInstanceOf(V3ColumnOutcome.Success.class, outcome, outcome::toString);
++        assertTrue(success.result().acceptanceAudit().accepted());
++        assertTrue(success.diagnostics().solvePath().startsWith("cold/stage-continuation/" + schedule + "/"),
++                success.diagnostics()::solvePath);
+     }
+ 
+     @Test
+@@ -170,80 +118,37 @@ class V3StageContinuationTest {
+     @Test
+     void onlyAnIntermediateSteamRungGivesUpItsFallbacksAndItsCertificateCascade() {
+         V3SimultaneousColumnSolver.RungBudget full = V3SimultaneousColumnSolver.RungBudget.DEFAULT;
+-        assertEquals(full, V3ColumnCalculator.rampRungBudget(true, true, false), "the requested steam rung publishes");
+-        assertEquals(full, V3ColumnCalculator.rampRungBudget(false, false, false), "a heat or draw rung is never reduced");
+-        assertEquals(full, V3ColumnCalculator.rampRungBudget(false, true, false));
++        assertEquals(full, V3ColumnCalculator.rampRungBudget(true, true), "the requested steam rung publishes");
++        assertEquals(full, V3ColumnCalculator.rampRungBudget(false, false), "a heat or draw rung is never reduced");
++        assertEquals(full, V3ColumnCalculator.rampRungBudget(false, true));
+ 
+-        V3SimultaneousColumnSolver.RungBudget reduced = V3ColumnCalculator.rampRungBudget(true, false, false);
++        V3SimultaneousColumnSolver.RungBudget reduced = V3ColumnCalculator.rampRungBudget(true, false);
+         assertEquals(2, reduced.maximumDampingSteps());
+         assertFalse(reduced.gradientFallback());
+         assertEquals(0, reduced.verificationDampingSteps(),
+                 "an intermediate rung produces a seed, not a published certificate");
+         assertEquals(12, reduced.stallWindow());
+         assertEquals(0.5, reduced.stallFactor(), 0.0);
++        assertEquals(V3SimultaneousColumnSolver.STALL_WINDOW_ITERATIONS, reduced.stallWindow(),
++                "the stall stop and the held-point release are one rule");
+         assertEquals(1.0e-3, reduced.stallResidualFloor(), 0.0);
+ 
+         assertEquals(8, full.maximumDampingSteps());
+         assertTrue(full.gradientFallback());
+         assertEquals(8, full.verificationDampingSteps());
+         assertEquals(0, full.stallWindow(), "no published attempt may be stopped by the stall detector");
+-
+-        for (boolean steamRung : new boolean[] {true, false}) {
+-            for (boolean requested : new boolean[] {true, false}) {
+-                assertEquals(full, V3ColumnCalculator.rampRungBudget(steamRung, requested, true),
+-                        () -> "the resumed sweep exists to spend the fallbacks the first sweep declined, so"
+-                                + " every rung in it runs on the full budget: steamRung=" + steamRung
+-                                + " requested=" + requested);
+-            }
+-        }
+     }
+ 
+     /**
+-     * The resumed sweep's halving may only ever queue a fraction strictly inside the interval it splits.
++     * The wet literature preset at half the authored steam converges on its first steam schedule.
+      *
+-     * <p>That is what bounds it together with the halving count: a midpoint that landed on either endpoint
+-     * would re-queue a rung the schedule has already solved or already failed, and the loop would not make
+-     * progress. The narrow interval below is the arithmetic limit — its midpoint rounds onto the lower
+-     * endpoint — and is rejected rather than accepted as a degenerate rung.</p>
++     * <p>Its first sweep used to stall-stop the last steam rung and the requested rung then died on a zero pivot; a
++     * full-budget second sweep of the steam schedule was built to recover it. Since the held-point release (E30,
++     * batch 2026-11-04-open-thermo-data) the first sweep converges it, and so do steam x1.5, top 200 kPa and
++     * condenser +5 K, with no resume anywhere; the second sweep was deleted.</p>
+      */
+     @Test
+-    void aResumedSteamRungHalvingOnlyEverQueuesAFractionStrictlyInsideItsInterval() {
+-        assertEquals(0.375, V3ColumnCalculator.steamRampMidpointFraction(0.25, 0.5), 0.0);
+-        // The literature preset's own halving: the doubling schedule's 7/24 and 15/24 rungs meet at 11/24,
+-        // which is the 0.4583333333333334 the recovered condenser +5 K case actually solves.
+-        assertEquals(11.0 / 24.0, V3ColumnCalculator.steamRampMidpointFraction(7.0 / 24.0, 15.0 / 24.0), 1.0e-15);
+-        assertEquals(0.5, V3ColumnCalculator.steamRampMidpointFraction(0.0, 1.0), 0.0);
+-
+-        assertTrue(Double.isNaN(V3ColumnCalculator.steamRampMidpointFraction(0.5, 0.5)),
+-                "a zero-width interval has no interior rung");
+-        assertTrue(Double.isNaN(V3ColumnCalculator.steamRampMidpointFraction(0.75, 0.25)),
+-                "an inverted interval has no interior rung");
+-        assertTrue(Double.isNaN(V3ColumnCalculator.steamRampMidpointFraction(0.5, Math.nextUp(0.5))),
+-                "an interval one ulp wide has no interior rung in double arithmetic");
+-
+-        double accepted = 1.0 / 24.0;
+-        double failed = 3.0 / 24.0;
+-        for (int halving = 0; halving < 8; halving++) {
+-            double upper = failed;
+-            double midpoint = V3ColumnCalculator.steamRampMidpointFraction(accepted, upper);
+-            if (Double.isNaN(midpoint)) break;
+-            assertTrue(midpoint > accepted && midpoint < upper,
+-                    () -> "halving " + accepted + " -> " + upper + " produced " + midpoint);
+-            failed = midpoint;
+-        }
+-    }
+-
+-    /**
+-     * The wet literature preset at half the authored steam: the case the second sweep exists for.
+-     *
+-     * <p>Its first sweep stall-stops the last steam rung at a scaled residual of 0.153 and skips ahead, and the
+-     * requested rung then dies on a zero pivot after 31 iterations. Resuming that rung on the full budget and,
+-     * when it stops again, halving it once, puts the requested rung in the basin that publishes. The assertions
+-     * are on the contract rather than on the numbers: the sweep is entered at most once, it is announced in the
+-     * published events, and every rung it solves is on the {@code /full-budget/} path.</p>
+-     */
+-    @Test
+-    void theWetPresetAtHalfSteamIsRecoveredByOneFullBudgetResumeOfItsSteamSchedule() {
++    void theWetPresetAtHalfSteamConvergesOnItsFirstSteamSchedule() {
+         V3ColumnInput input = wetLiteraturePreset(0.5);
+ 
+         long started = System.nanoTime();
+@@ -254,52 +159,9 @@ class V3StageContinuationTest {
+         }, 0, 0, V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO);
+         System.out.println("V3 wet literature preset at half steam: " + (System.nanoTime() - started) / 1.0e9 + " s; "
+                 + outcome.diagnostics().solvePath());
+-        outcome.diagnostics().events().forEach(event -> System.out.println("  event: " + event));
+ 
+         V3ColumnOutcome.Success success = assertInstanceOf(V3ColumnOutcome.Success.class, outcome, outcome::toString);
+         assertTrue(success.result().acceptanceAudit().accepted());
+-        assertTrue(success.diagnostics().solvePath().contains("/full-budget/"),
+-                success.diagnostics()::solvePath);
+-
+-        long resumes = success.diagnostics().events().stream()
+-                .filter(event -> event.contains("resuming the steam schedule")).count();
+-        assertEquals(1, resumes, () -> "the resumed sweep is bought once and only once: "
+-                + success.diagnostics().events());
+-        assertTrue(success.diagnostics().events().stream()
+-                        .anyMatch(event -> event.contains("resuming the steam schedule at")
+-                                && event.contains("on the full rung budget")),
+-                () -> "the resume must say where it restarts and on what budget: "
+-                        + success.diagnostics().events());
+-    }
+-
+-    /**
+-     * A ramp whose requested rung succeeds on the first sweep never buys the second one.
+-     *
+-     * <p>This is the speed contract of the resume: the flagship preset's own schedule stall-stops at 0.625 and
+-     * skips ahead to an accepted answer, so it must reach that answer without a single full-budget rung.
+-     * Recovering the perturbations eagerly instead — retrying every stopped rung as soon as it stops — was
+-     * measured at 1.74 s to 3.02 s on this case for the same input digest, which is what this asserts against.</p>
+-     */
+-    @Test
+-    void theWetLiteraturePresetItselfNeverEntersTheFullBudgetSweep() {
+-        V3ColumnInput input = wetLiteraturePreset(1.0);
+-
+-        long started = System.nanoTime();
+-        V3ColumnOutcome outcome = V3ColumnCalculator.calculate(input, () -> {
+-            if (System.nanoTime() - started >= FORTY_STAGE_BUDGET_NANOS) {
+-                throw new AssertionError("the wet literature preset exceeded its 60-second cold budget");
+-            }
+-        }, 0, 0, V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO);
+-        System.out.println("V3 wet literature preset: " + (System.nanoTime() - started) / 1.0e9 + " s; "
+-                + outcome.diagnostics().solvePath());
+-
+-        V3ColumnOutcome.Success success = assertInstanceOf(V3ColumnOutcome.Success.class, outcome, outcome::toString);
+-        assertTrue(success.result().acceptanceAudit().accepted());
+-        assertFalse(success.diagnostics().solvePath().contains("full-budget"), success.diagnostics()::solvePath);
+-        assertTrue(success.diagnostics().events().stream()
+-                        .noneMatch(event -> event.contains("resuming the steam schedule")),
+-                () -> "a ramp that publishes on its first sweep must not pay for a second: "
+-                        + success.diagnostics().events());
+     }
+ 
+     /** The 40-tray Ledezma-Martinez column with its three draws, sump steam and three pumparounds. */
+@@ -359,68 +221,6 @@ class V3StageContinuationTest {
+         assertTrue(success.diagnostics().solvePath().contains("4-8-15-30-40"), success.diagnostics()::solvePath);
+     }
+ 
+-    private static V3SimultaneousColumnSolver.Attempt solve(
+-            V3PengRobinsonThermo thermo, V3ColumnProblem problem, V3DryMeshState seed, V3SolveControl control) {
+-        V3FlashResult feedFlash = feedFlash(thermo, problem);
+-        V3MeshResidualEvaluator evaluator = new V3MeshResidualEvaluator(
+-                problem, thermo, feedFlash.molarEnthalpyJoulesPerMol());
+-        return V3SimultaneousColumnSolver.solveWithContinuationLocalBlocks(problem, evaluator, new V3DryMeshCoordinateMap(problem), seed,
+-                thermo::newWorkspace, V3ColumnCalculator.MAXIMUM_NEWTON_ITERATIONS,
+-                V3ColumnCalculator.SCALED_RESIDUAL_TOLERANCE, control, V3SimultaneousColumnSolver.NewtonTrace.NONE);
+-    }
+-
+-    private static V3SimultaneousColumnSolver.Attempt solveWithin(
+-            V3PengRobinsonThermo thermo, V3ColumnProblem problem, V3DryMeshState seed, long budgetNanos) {
+-        long started = System.nanoTime();
+-        return solve(thermo, problem, seed, () -> {
+-            if (System.nanoTime() - started >= budgetNanos) {
+-                throw new AssertionError("Stage continuation exceeded its cold-test budget");
+-            }
+-        });
+-    }
+-
+-    private static V3FlashResult feedFlash(V3PengRobinsonThermo thermo, V3ColumnProblem problem) {
+-        return thermo.flashTP(problem.input().feedTemperatureKelvin(),
+-                problem.nodePressurePascal(problem.topology().feedTrayNumber()),
+-                problem.input().feedComponentMolarFlowsMolPerSecond(), thermo.newWorkspace());
+-    }
+-
+-    private static V3DryMeshState interpolate(V3DryMeshState source, V3ColumnProblem target) {
+-        int nodes = target.topology().nodeCount();
+-        int components = source.componentCount();
+-        double[][] liquid = new double[nodes][components];
+-        double[][] vapor = new double[nodes][components];
+-        double[] temperatures = new double[nodes];
+-        for (int node = 0; node < nodes; node++) {
+-            double position = node * (source.nodeCount() - 1.0) / (nodes - 1.0);
+-            int lower = (int) Math.floor(position);
+-            int upper = Math.min(source.nodeCount() - 1, lower + 1);
+-            double fraction = position - lower;
+-            temperatures[node] = source.temperatureKelvin(lower)
+-                    + fraction * (source.temperatureKelvin(upper) - source.temperatureKelvin(lower));
+-            for (int component = 0; component < components; component++) {
+-                liquid[node][component] = source.liquidFlow(lower, component)
+-                        + fraction * (source.liquidFlow(upper, component) - source.liquidFlow(lower, component));
+-                vapor[node][component] = source.vaporFlow(lower, component)
+-                        + fraction * (source.vaporFlow(upper, component) - source.vaporFlow(lower, component));
+-            }
+-        }
+-        temperatures[target.topology().condenserNode()] = specification(
+-                target.input(), V3ColumnSpecification.CondenserOutletTemperature.class).kelvin();
+-        V3DryMeshState interpolated = new V3DryMeshState(target.topology(), components, liquid, vapor, temperatures);
+-        V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage(target.input().packageId());
+-        try {
+-            return V3ColumnInitializer.projectMaterialBalancesAtFixedTemperature(
+-                    target, thermo, thermo.newWorkspace(), interpolated);
+-        } catch (com.wormzjl.icheme.science.column.v3.thermo.V3ThermoException | IllegalArgumentException failure) {
+-            return interpolated;
+-        }
+-    }
+-
+-    private static <S extends V3ColumnSpecification> S specification(V3ColumnInput input, Class<S> type) {
+-        return input.specifications().stream().filter(type::isInstance).map(type::cast).findFirst().orElseThrow();
+-    }
+-
+     private static V3ColumnInput input(V3CrudeFeed crude, int stages, int feedStage) {
+         double[] flows = crude.moleFractions();
+         double totalFlow = 2_610.7 * 1_000.0 / 3_600.0;
+diff --git a/src/test/java/com/wormzjl/icheme/science/column/v3/thermo/V3WaterPropertyDerivativesTest.java b/src/test/java/com/wormzjl/icheme/science/column/v3/thermo/V3WaterPropertyDerivativesTest.java
+index 068431e85..f5949e497 100644
+--- a/src/test/java/com/wormzjl/icheme/science/column/v3/thermo/V3WaterPropertyDerivativesTest.java
++++ b/src/test/java/com/wormzjl/icheme/science/column/v3/thermo/V3WaterPropertyDerivativesTest.java
+@@ -2,22 +2,19 @@ package com.wormzjl.icheme.science.column.v3.thermo;
+ 
+ import static org.junit.jupiter.api.Assertions.assertEquals;
+ import static org.junit.jupiter.api.Assertions.assertThrows;
+-import static org.junit.jupiter.api.Assertions.assertTrue;
+ 
+ import org.junit.jupiter.api.Test;
+ 
+ /**
+- * Holds each pinned water correlation's temperature derivative against a difference of the value it belongs to.
++ * Holds each water function's derivative against a difference of the value it belongs to.
+  *
+  * <p>A step of a milli-kelvin is small enough that the truncation of a central difference — which grows as the
+  * square of the step — stays far below the tolerance, and large enough that the cancellation between two
+- * nearly equal values stays near the {@code 1e-13} level of relative rounding. The Watson vaporisation
+- * enthalpy is the one correlation whose slope diverges, at its own critical point, so the sweep below stops
+- * short of it and the behaviour at and beyond it is asserted separately.</p>
++ * nearly equal values stays near the {@code 1e-13} level of relative rounding.</p>
+  *
+- * <p>Observed maxima at the time of writing, relative to the value of the derivative itself:
+- * {@code d ln(P_sat)/dT} 1.2e-10, vapour heat capacity 3.8e-10, vaporisation enthalpy slope 5.6e-10, and
+- * liquid heat capacity 4.7e-10.</p>
++ * <p>Observed maxima before E30 (batch 2026-11-04-open-thermo-data), relative to the value of the derivative itself:
++ * {@code d ln(P_sat)/dT} 1.2e-10 and vapour heat capacity 3.8e-10. Since E30 the steam is the network's virial gas and
++ * the liquid the network's Region 1 water; their derivatives are held the same way.</p>
+  */
+ class V3WaterPropertyDerivativesTest {
+     private static final double STEP_KELVIN = 1.0e-3;
+@@ -44,34 +41,83 @@ class V3WaterPropertyDerivativesTest {
+         }
+     }
+ 
++    /** The virial steam's heat capacity at constant partial pressure, at a vacuum tray's, a column's and 10 bar. */
+     @Test
+-    void vaporisationEnthalpySlopeMatchesACentralDifferenceBelowTheCriticalPoint() {
+-        for (double temperature = 280.0; temperature <= 630.0; temperature += 5.0) {
+-            double difference = (V3WaterProperties.vaporizationEnthalpy(temperature + STEP_KELVIN)
+-                    - V3WaterProperties.vaporizationEnthalpy(temperature - STEP_KELVIN)) / (2.0 * STEP_KELVIN);
+-            assertEquals(difference, V3WaterProperties.dVaporizationEnthalpyDT(com.wormzjl.icheme.science.material.MaterialRuntime.water(), temperature),
+-                    TOLERANCE * Math.abs(difference), "T=" + temperature);
+-            assertTrue(V3WaterProperties.dVaporizationEnthalpyDT(com.wormzjl.icheme.science.material.MaterialRuntime.water(), temperature) < 0.0, "T=" + temperature);
++    void steamHeatCapacityMatchesACentralDifferenceOfItsEnthalpy() {
++        for (double pressure : new double[] {5.0e3, 2.5e5, 1.0e6}) {
++            for (double temperature = 280.0; temperature <= 890.0; temperature += 5.0) {
++                double difference = (V3WaterProperties.steamMolarEnthalpy(temperature + STEP_KELVIN, pressure)
++                        - V3WaterProperties.steamMolarEnthalpy(temperature - STEP_KELVIN, pressure)) / (2.0 * STEP_KELVIN);
++                assertEquals(difference, V3WaterProperties.dSteamMolarEnthalpyDT(temperature, pressure),
++                        TOLERANCE * Math.abs(difference), "T=" + temperature + ", p=" + pressure);
++            }
++        }
++    }
++
++    /**
++     * The steam's enthalpy rate in a tray's gas: its derivatives in the steam, the hydrocarbon vapour and the temperature,
++     * which the local block Jacobian carries, against relative central differences.
++     */
++    @Test
++    void steamEnthalpyRateDerivativesMatchCentralDifferences() {
++        double pressure = 2.5e5;
++        for (double temperature : new double[] {330.0, 450.0, 600.0}) {
++            for (double[] flows : new double[][] {{300.0, 3000.0}, {300.0, 30.0}, {1.0e-3, 500.0}}) {
++                double water = flows[0], hydrocarbon = flows[1];
++                double dw = 1.0e-4 * water, dv = 1.0e-4 * (water + hydrocarbon);
++                double rate = V3WaterProperties.steamEnthalpyRate(temperature, pressure, water, hydrocarbon);
++                double byWater = (V3WaterProperties.steamEnthalpyRate(temperature, pressure, water + dw, hydrocarbon)
++                        - V3WaterProperties.steamEnthalpyRate(temperature, pressure, water - dw, hydrocarbon)) / (2.0 * dw);
++                assertEquals(byWater, V3WaterProperties.steamEnthalpyRateByWater(temperature, pressure, water, hydrocarbon),
++                        TOLERANCE * Math.abs(byWater), "dW at T=" + temperature);
++                double byHydrocarbon = (V3WaterProperties.steamEnthalpyRate(temperature, pressure, water, hydrocarbon + dv)
++                        - V3WaterProperties.steamEnthalpyRate(temperature, pressure, water, hydrocarbon - dv)) / (2.0 * dv);
++                // Only the virial residual depends on V, a part in 1e3 of the rate: the difference is held to the
++                // rate's own rounding where that is the larger.
++                assertEquals(byHydrocarbon,
++                        V3WaterProperties.steamEnthalpyRateByHydrocarbon(temperature, pressure, water, hydrocarbon),
++                        Math.max(1.0e-6 * Math.abs(byHydrocarbon), 1.0e-14 * Math.abs(rate) / dv), "dV at T=" + temperature);
++                double byTemperature = (V3WaterProperties.steamEnthalpyRate(temperature + STEP_KELVIN, pressure, water, hydrocarbon)
++                        - V3WaterProperties.steamEnthalpyRate(temperature - STEP_KELVIN, pressure, water, hydrocarbon))
++                        / (2.0 * STEP_KELVIN);
++                assertEquals(byTemperature,
++                        V3WaterProperties.steamEnthalpyRateByTemperature(temperature, pressure, water, hydrocarbon),
++                        TOLERANCE * Math.abs(byTemperature), "dT at T=" + temperature);
++            }
+         }
++        assertEquals(0.0, V3WaterProperties.steamEnthalpyRate(450.0, pressure, 0.0, 10.0), 0.0, "no steam, no rate");
+     }
+ 
++    /**
++     * Region 1's heat capacity up to the boiling point at each pressure (free water exists only below it), at 20 MPa also
++     * past the region's 623.15 K boundary, where the enthalpy continues with the held c_p.
++     */
+     @Test
+     void liquidWaterHeatCapacityMatchesACentralDifferenceOfItsEnthalpy() {
+-        for (double temperature = 280.0; temperature <= 630.0; temperature += 5.0) {
+-            double difference = (V3WaterProperties.liquidMolarEnthalpy(temperature + STEP_KELVIN)
+-                    - V3WaterProperties.liquidMolarEnthalpy(temperature - STEP_KELVIN)) / (2.0 * STEP_KELVIN);
+-            assertEquals(difference, V3WaterProperties.dLiquidMolarEnthalpyDT(temperature),
+-                    TOLERANCE * Math.abs(difference), "T=" + temperature);
++        for (double pressure : new double[] {1.0e5, 2.5e5, 3.0e6, 2.0e7}) {
++            double boiling = V3WaterProperties.saturationTemperatureKelvin(pressure);
++            for (double temperature = 280.0; temperature <= boiling; temperature += 5.0) {
++                double difference = (V3WaterProperties.liquidMolarEnthalpy(temperature + STEP_KELVIN, pressure)
++                        - V3WaterProperties.liquidMolarEnthalpy(temperature - STEP_KELVIN, pressure)) / (2.0 * STEP_KELVIN);
++                assertEquals(difference, V3WaterProperties.dLiquidMolarEnthalpyDT(temperature, pressure),
++                        TOLERANCE * Math.abs(difference), "T=" + temperature + ", p=" + pressure);
++            }
+         }
+     }
+ 
+-    /** Above the critical point the vaporisation enthalpy is the constant zero, and so is its slope. */
++    /** The water datum: liquid water at 298.15 K and 1 atm sits one Watson vaporization enthalpy below the ideal-gas steam. */
++    @Test
++    void theLiquidSitsOneVaporizationEnthalpyBelowTheSteamAtTheDatum() {
++        double gap = V3WaterProperties.vaporMolarEnthalpy(298.15) - V3WaterProperties.liquidMolarEnthalpy(298.15, 101325.0);
++        assertEquals(V3WaterProperties.vaporizationEnthalpy(298.15), gap, 1.0e-9 * gap);
++    }
++
++    /** Above the critical point the vaporisation enthalpy is the constant zero. */
+     @Test
+-    void vaporisationEnthalpySlopeIsZeroFromTheCriticalPointUpward() {
++    void vaporisationEnthalpyIsZeroFromTheCriticalPointUpward() {
+         for (double temperature : new double[] {
+                 V3WaterProperties.criticalTemperature(), 700.0, V3WaterProperties.maximumTemperature()}) {
+             assertEquals(0.0, V3WaterProperties.vaporizationEnthalpy(temperature), 0.0);
+-            assertEquals(0.0, V3WaterProperties.dVaporizationEnthalpyDT(com.wormzjl.icheme.science.material.MaterialRuntime.water(), temperature), 0.0);
+         }
+     }
+ 
+@@ -82,12 +128,15 @@ class V3WaterPropertyDerivativesTest {
+             assertThrows(IllegalArgumentException.class, () -> V3WaterProperties.vaporMolarEnthalpy(outside));
+             assertThrows(IllegalArgumentException.class, () -> V3WaterProperties.dVaporMolarEnthalpyDT(outside));
+             assertThrows(IllegalArgumentException.class, () -> V3WaterProperties.vaporizationEnthalpy(outside));
+-            assertThrows(IllegalArgumentException.class, () -> V3WaterProperties.dVaporizationEnthalpyDT(com.wormzjl.icheme.science.material.MaterialRuntime.water(), outside));
+-            assertThrows(IllegalArgumentException.class, () -> V3WaterProperties.dLiquidMolarEnthalpyDT(outside));
++            assertThrows(IllegalArgumentException.class, () -> V3WaterProperties.steamMolarEnthalpy(outside, 1.0e5));
++            assertThrows(IllegalArgumentException.class, () -> V3WaterProperties.dSteamMolarEnthalpyDT(outside, 1.0e5));
+         }
+         for (double outside : new double[] {273.0, 648.0, Double.NaN}) {
+             assertThrows(IllegalArgumentException.class, () -> V3WaterProperties.saturationPressurePascal(outside));
+             assertThrows(IllegalArgumentException.class, () -> V3WaterProperties.dLogSaturationPressureDT(outside));
+         }
++        // The liquid continues past Region 1's range (owner rule of 2026-10-16) and refuses only a state that is not one.
++        assertThrows(IllegalArgumentException.class, () -> V3WaterProperties.liquidMolarEnthalpy(Double.NaN, 1.0e5));
++        assertThrows(IllegalArgumentException.class, () -> V3WaterProperties.dLiquidMolarEnthalpyDT(300.0, 0.0));
+     }
+ }
+diff --git a/src/test/java/com/wormzjl/icheme/science/thermo/phase/SteamVirialTest.java b/src/test/java/com/wormzjl/icheme/science/thermo/phase/SteamVirialTest.java
+index a83647734..e1b5eae1d 100644
+--- a/src/test/java/com/wormzjl/icheme/science/thermo/phase/SteamVirialTest.java
++++ b/src/test/java/com/wormzjl/icheme/science/thermo/phase/SteamVirialTest.java
+@@ -48,7 +48,10 @@ class SteamVirialTest {
+             if (t == If97Region2.FLOOR) continue;
+             double slope = (SteamVirial.secondVirial(t + 1e-3) - SteamVirial.secondVirial(t - 1e-3)) / 2e-3;
+             assertEquals(slope, SteamVirial.temperatureDerivative(t), 1e-6 * Math.abs(slope), t + " K: dB/dT");
++            double capacity = (SteamVirial.residualEnthalpy(t + 1e-3, 1e6) - SteamVirial.residualEnthalpy(t - 1e-3, 1e6)) / 2e-3;
++            assertEquals(capacity, SteamVirial.residualHeatCapacity(t, 1e6), 1e-6 * Math.abs(capacity), t + " K: c_p,res");
+         }
++        assertEquals(0.0, SteamVirial.residualHeatCapacity(SteamVirial.MINIMUM_TEMPERATURE - 10, 1e3), "B linear below the floor");
+         // Below Region 2's floor B continues linearly, value and slope continuous.
+         double floor = SteamVirial.MINIMUM_TEMPERATURE;
+         assertEquals(SteamVirial.secondVirial(floor) - 10 * SteamVirial.temperatureDerivative(floor), SteamVirial.secondVirial(floor - 10), 1e-15);
+@@ -126,6 +129,31 @@ class SteamVirialTest {
+         assertEquals(SteamVirial.moles(saturation, hot, wet.vaporVolume()), wet.waterVapor(), 1e-6 * wet.waterVapor());
+     }
+ 
++    /**
++     * One water model (decision E30 of batch 2026-11-04-open-thermo-data): the column prices its steam and its free water
++     * with the network's functions, bit for bit: the steam the ideal gas plus the virial's residual at its partial
++     * pressure, the liquid IF97 Region 1 at the pressure on the network's water datum.
++     */
++    @Test
++    void theColumnPricesWaterAsTheNetworkDoes() {
++        var catalog = com.wormzjl.icheme.science.material.MaterialCatalog.bundled();
++        String network = catalog.presets().network().packageId();
++        var model = FluidThermodynamics.forNetwork(catalog, network);
++        var water = com.wormzjl.icheme.science.material.MaterialRuntime.with(catalog, network,
++                com.wormzjl.icheme.science.material.MaterialRuntime::water);
++        for (double t : new double[] {280, 332.15, 400, 533.15, 640}) {
++            for (double p : new double[] {5e3, 2.5e5, 1e6}) {
++                double tt = t, pp = p;
++                double steam = com.wormzjl.icheme.science.material.MaterialRuntime.with(catalog, network,
++                        () -> com.wormzjl.icheme.science.column.v3.thermo.V3WaterProperties.steamMolarEnthalpy(tt, pp));
++                assertEquals(model.vaporWaterEnthalpy(t) + SteamVirial.residualEnthalpy(t, p), steam, 0.0, t + " K, " + p + " Pa: steam");
++                assertEquals(model.waterLiquid(t, p).molarEnthalpy(),
++                        com.wormzjl.icheme.science.column.v3.thermo.V3WaterProperties.liquidMolarEnthalpy(water, t, p), 0.0,
++                        t + " K, " + p + " Pa: liquid");
++            }
++        }
++    }
++
+     /** {@code v_virial / v_IF97 - 1}: the compressibilities' ratio, R and the molar mass cancelling. */
+     private static double error(double t, double p) {
+         return SteamVirial.molarVolume(t, p) * p / (R * t) / If97Region2.compressibility(t, p) - 1;

@@ -26,6 +26,13 @@ import java.util.Objects;
  * at the state the column actually took, solved by V3 on the network's package, and the split table of the answer with
  * each product's specific enthalpy on the network's basis. Runs on a worker; reads no world.
  *
+ * <p>The solve runs on its feed island's compound list (batch 2026-11-04-refinery-compounds, V4): the model is that island's,
+ * a view of the network package on its list ({@link FluidThermodynamics#on}), and V3 reads the same view, so the column's
+ * public basis is the island's compounds, at most 64 whatever the network package holds. What the column took and what it
+ * gives stay on the world list (the accounts'), mapped by compound id. A compound the list does not carry (a steam inlet's
+ * hydrocarbon from another island) has no feed in the solve and takes the row of the nearest boiling solved compound, as
+ * every compound without feed does ({@link SplitTable#of}), and its product's specific enthalpy.
+ *
  * <p>The table's condenser duty per feed is the closure on the network's basis at the solved state, not V3's own duty:
  * the cycle closes its energy with the network's enthalpies, and V3's package differs from them by a few tenths of a
  * percent of the throughput's enthalpy (C1 review, limits), which is several percent of a small condenser. The closure
@@ -51,7 +58,7 @@ public final class ColumnSolve {
     /**
      * What the column took, as rates.
      *
-     * @param feed         mol/s on the network's axis (water last); the steam ports' hydrocarbons are feed (plan 11)
+     * @param feed         mol/s on the world list (the network package's compounds, water last); the steam ports' hydrocarbons are feed (plan 11)
      * @param feedEnthalpy J/mol on the network's basis; NaN at a start, which solves at the design's feed temperature
      * @param steam        one per steam inlet of the design
      */
@@ -97,7 +104,7 @@ public final class ColumnSolve {
     /**
      * An accepted solve.
      *
-     * @param enthalpy        each product's partial molar enthalpies on the axis, J/mol, network basis, at its solved temperature and
+     * @param enthalpy        each product's partial molar enthalpies on the world list, J/mol, network basis, at its solved temperature and
      *                        pressure: a product of moles n holds the energy sum n_i h_i, exact at its solved composition and
      *                        first order beside it (plan 5.3: its actual composition, not the solved one's specific enthalpy)
      * @param solvedCondenser V3's own condenser duty, W (column sign)
@@ -123,23 +130,32 @@ public final class ColumnSolve {
     public record Failed(String reason) implements Outcome {
     }
 
-    /** Solves {@code job} with the network's model; {@code screen} is V3's liquid-supply screen ratio. */
-    public static Outcome run(Job job, FluidThermodynamics model, MaterialCatalog catalog, double screen, Runnable checkpoint) {
+    /**
+     * Solves {@code job} on {@code model}, its feed island's model (a view of the network package, or the whole package),
+     * taken on the engine thread; {@code screen} is V3's liquid-supply screen ratio. V3 reads the model's own catalog.
+     */
+    public static Outcome run(Job job, FluidThermodynamics model, double screen, Runnable checkpoint) {
         String packageId = model.domain().packageId();
         try {
-            return MaterialRuntime.with(catalog, packageId, () -> solve(job, model, catalog, packageId, screen, checkpoint));
+            return MaterialRuntime.with(model.catalog(), packageId, () -> solve(job, model, packageId, screen, checkpoint));
         } catch (IllegalArgumentException refused) {
             return new Failed(refused.getMessage());
         }
     }
 
-    private static Outcome solve(Job job, FluidThermodynamics model, MaterialCatalog catalog, String packageId, double screen, Runnable checkpoint) {
+    private static Outcome solve(Job job, FluidThermodynamics model, String packageId, double screen, Runnable checkpoint) {
         var design = job.design();
+        // The model's list (the feed island's compounds, water last) and the world list the accounts are on.
         var axis = model.components();
+        var world = model.whole().components();
         int m = axis.size(), water = axis.indexOf(SplitTable.WATER);
+        int[] at = new int[m];
+        for (int i = 0; i < m; i++) at[i] = world.indexOf(axis.get(i));
         var taken = job.taken();
-        double[] feed = taken.feed();
-        if (feed.length != m) throw new IllegalArgumentException("The feed taken is on the network's axis");
+        double[] worldFeed = taken.feed();
+        if (worldFeed.length != world.size()) throw new IllegalArgumentException("The feed taken is on the world list");
+        double[] feed = new double[m];
+        for (int i = 0; i < m; i++) feed[i] = worldFeed[at[i]];
         double rate = taken.feedRate();
         if (!(rate > 0)) return new Failed("no feed");
         double feedPressure = design.topPressurePascal() + design.feedStageNumber() * design.stagePressureDropPascal();
@@ -148,7 +164,7 @@ public final class ColumnSolve {
         double t = temperature(model, feed, feedPressure, h, design.feedTemperatureKelvin(), checkpoint);
         if (Double.isNaN(t)) return new Failed("the feed's enthalpy has no temperature");
         double feedSlope = specific(model, t + .5, feedPressure, feed, checkpoint) - specific(model, t - .5, feedPressure, feed, checkpoint);
-        // The V3 input: the network's package, the feed by component id, the design's trays and ratios at the taken rate.
+        // The V3 input: the network's package on the model's list, the feed by component id, the design's trays and ratios at the taken rate.
         var basis = V3PengRobinsonThermo.fromRegisteredPackage(packageId).componentBasis();
         double[] flows = new double[basis.componentCount()];
         for (int c = 0; c < flows.length; c++) {
@@ -196,8 +212,10 @@ public final class ColumnSolve {
                         new V3ColumnSpecification.ReboilerDuty(setpoints.reboilerPerFeed() * rate)),
                 draws, steamFeeds, pumparounds, design.columnDiameterMetres());
         // A seed with modelled free water is refused by the warm route and sends a seeded solve down the strict cold chain
-        // (C1 review, section 3): such a table solves with no seed, the fast first solve.
+        // (C1 review, section 3): such a table solves with no seed, the fast first solve. A seed on another compound list
+        // (the feed island grew since) is dropped too: it is state, and the warm route needs the same basis.
         var seed = job.seed();
+        if (seed != null && !seed.input().componentBasis().equals(basis)) seed = null;
         if (seed != null) for (boolean wet : seed.wetTrays()) if (wet) {
             seed = null;
             break;
@@ -205,20 +223,21 @@ public final class ColumnSolve {
         var outcome = V3ColumnCalculator.calculateWithStrategy(input, checkpoint::run, V3SolveStrategy.AGGRESSIVE, seed, screen);
         if (outcome instanceof V3ColumnOutcome.Failure failure) return new Failed(failure.code().name() + ": " + failure.summary());
         var success = (V3ColumnOutcome.Success) outcome;
-        // The table on the network's axis, its reference the state taken.
-        double[] z = new double[m];
-        for (int i = 0; i < m; i++) z[i] = feed[i] / rate;
+        // The table on the world list, its reference the state taken.
+        int worldWater = world.indexOf(SplitTable.WATER);
+        double[] z = new double[world.size()];
+        for (int i = 0; i < z.length; i++) z[i] = worldFeed[i] / rate;
         var reference = new SplitTable.Reference(z, h, feedSlope, steamRatios, rate / setpoints.designFeedRate(), setpoints, t, steamT);
-        var solved = SplitTable.of(axis, boilingPoints(catalog, packageId, axis), input, success.result(), reference);
+        var solved = SplitTable.of(world, boilingPoints(model.whole().catalog(), packageId, world), input, success.result(), reference);
         // Each product's partial molar enthalpies and the closure on the network's basis.
-        double[] pooled = feed.clone();
+        double[] pooled = worldFeed.clone();
         double in = h * rate;
         for (int j = 0; j < designSteam.size(); j++) {
             var s = taken.steam().get(j);
             if (!(s.rate() > 0) || water < 0) continue;
             double[] steam = new double[m];
             steam[water] = s.rate();
-            pooled[water] += s.rate();
+            pooled[worldWater] += s.rate();
             double p = design.topPressurePascal() + designSteam.get(j).stageNumber() * design.stagePressureDropPascal();
             in += Double.isNaN(s.enthalpy()) ? model.flashTP(steamT[j], p, steam, checkpoint).enthalpy() : s.enthalpy() * s.rate();
         }
@@ -228,8 +247,19 @@ public final class ColumnSolve {
         for (int k = 0; k < split.length; k++) {
             var product = solved.products().get(k);
             double n = Arrays.stream(split[k]).sum();
-            enthalpy[k] = partial(model, product.temperature(), product.pressure(), n > 0 ? split[k] : pooled, checkpoint);
-            for (int i = 0; i < m; i++) out += enthalpy[k][i] * split[k][i];
+            double[] moles = n > 0 ? split[k] : pooled, own = new double[m];
+            for (int i = 0; i < m; i++) own[i] = moles[at[i]];
+            double[] hi = partial(model, product.temperature(), product.pressure(), own, checkpoint);
+            // A compound off the list takes the product's specific enthalpy, as one whose difference does not flash.
+            double held = 0, energy = 0;
+            for (int i = 0; i < m; i++) {
+                held += own[i];
+                energy += hi[i] * own[i];
+            }
+            enthalpy[k] = new double[world.size()];
+            Arrays.fill(enthalpy[k], energy / held);
+            for (int i = 0; i < m; i++) enthalpy[k][at[i]] = hi[i];
+            for (int i = 0; i < world.size(); i++) out += enthalpy[k][i] * split[k][i];
         }
         double[] pa = solved.pumparoundPerFeed();
         double paTotal = 0;

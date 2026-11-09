@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "Oxygen",
+  "kind": "chemical",
+  "translation_key": "material.icheme.oxygen",
+  "fallback": "Oxygen",
+  "properties": "icheme:chemsep_oxygen",
+  "appearance": {
+    "color": "#B7D3F0",
+    "transparency": 0.9,
+    "estimated": true
+  },
+  "identifiers": {
+    "cas": "7782-44-7",
+    "chemsep_id": "901",
+    "smiles": "O=O",
+    "formula": "O2"
+  }
+}

@@ -174,7 +174,7 @@ class V3EnergyShiftPredictorTest {
     /** The source arrangement on the 30-tray CDU17 column at the source operating point, without side draws. */
     private static V3ColumnInput threeCoolerNoDrawInput() {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light");
+        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
         double[] flows = crude.moleFractions();
         double totalFlow = 2_610.7 * 1_000.0 / 3_600.0;
         for (int component = 0; component < flows.length; component++) flows[component] *= totalFlow;

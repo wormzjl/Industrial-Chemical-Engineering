@@ -106,11 +106,11 @@ class WorldTopologyLedgerTest {
     // The fluid basis (merged from FluidBasisTest).
     @org.junit.jupiter.api.AfterEach void resetMaterials(){com.wormzjl.icheme.science.material.MaterialRuntime.reset();}
     private static MaterialCatalog reordered() {
-        var resources=new HashMap<>(MaterialCatalog.bundled().resources());String path="data/icheme/materials/bases/network.json";
-        var basis=com.google.gson.JsonParser.parseString(resources.get(path)).getAsJsonObject();basis.remove("extends");
-        var original=MaterialCatalog.bundled().requirePackage("icheme:tjl20_methane_nitrogen");
-        var ids=new ArrayList<>(original.components());var properties=new ArrayList<>(original.properties().stream().map(MaterialCatalog.Property::id).toList());
-        Collections.reverse(ids);Collections.reverse(properties);basis.add("components",new com.google.gson.Gson().toJsonTree(ids));basis.add("properties",new com.google.gson.Gson().toJsonTree(properties));resources.put(path,basis.toString());
+        // The network package's own compound list, reversed: each compound keeps its dataset in the package.
+        var resources=new HashMap<>(MaterialCatalog.bundled().resources());String path="data/icheme/materials/packages/refinery.json";
+        var record=com.google.gson.JsonParser.parseString(resources.get(path)).getAsJsonObject();record.remove("extends");
+        var ids=new ArrayList<>(MaterialCatalog.bundled().requirePackage("icheme:refinery").components());
+        Collections.reverse(ids);record.add("components",FluidFactsCompatTest.entries(MaterialCatalog.bundled().requirePackage("icheme:refinery"),ids));resources.put(path,record.toString());
         return MaterialCatalog.parse(resources);
     }
     @Test void topologyWithoutAnyIslandStillRejectsAChangedIdentityAxis() {
@@ -118,6 +118,12 @@ class WorldTopologyLedgerTest {
         var decoded=FluidCheckpointCodec.decodeTopology(FluidCheckpointCodec.encodeTopology(saved),saved.onlineTick(),NO_RECOVERIES);assertEquals(saved.basis(),decoded.basis());
         decoded.basis().requireCurrent(original);
         assertThrows(IllegalArgumentException.class,()->decoded.basis().requireCurrent(reordered()));
+        // By compound ids and identity, not by package id (batch 2026-11-04-refinery-compounds, W4).
+        var renamed=FluidFactsCompatTest.renamed();decoded.basis().requireCurrent(renamed);
+        assertTrue(decoded.basis().sameAs(WorldTopologyLedger.FluidBasis.capture(renamed)));assertNotEquals(decoded.basis(),WorldTopologyLedger.FluidBasis.capture(renamed));
+        assertThrows(IllegalArgumentException.class,()->decoded.basis().requireCurrent(FluidFactsCompatTest.lacking("Propane")));
+        assertThrows(IllegalArgumentException.class,()->saved.withBasis(WorldTopologyLedger.FluidBasis.capture(reordered())),"another basis is a restatement, not a new name");
+        assertEquals(WorldTopologyLedger.FluidBasis.capture(renamed),saved.withBasis(WorldTopologyLedger.FluidBasis.capture(renamed)).basis());
         // The basis lies near the end of the topology: one cut short of it is refused, never read without it.
         var bytes=FluidCheckpointCodec.encodeTopology(saved);
         assertThrows(IllegalArgumentException.class,()->FluidCheckpointCodec.decodeTopology(Arrays.copyOf(bytes,bytes.length-2),0,NO_RECOVERIES));

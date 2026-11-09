@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "Cis-2-butene",
+  "kind": "chemical",
+  "translation_key": "material.icheme.cis_2_butene",
+  "fallback": "Cis-2-butene",
+  "properties": "icheme:chemsep_cis_2_butene",
+  "appearance": {
+    "color": "#F3F4EA",
+    "transparency": 0.85,
+    "estimated": true
+  },
+  "identifiers": {
+    "cas": "590-18-1",
+    "chemsep_id": "205",
+    "smiles": "C/C=C\\C",
+    "formula": "CH3CHCHCH3"
+  }
+}

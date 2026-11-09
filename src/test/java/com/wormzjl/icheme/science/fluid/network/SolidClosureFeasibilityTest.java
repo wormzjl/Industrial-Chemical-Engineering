@@ -130,8 +130,10 @@ class SolidClosureFeasibilityTest {
         assertTrue(heavy >= 0);
         var amounts = new double[model.hydrocarbon.componentCount()];
         amounts[heavy] = 1;
-        // Prescribed cooling is a probe fixture, not a new heater or reservoir thermal model.
-        java.util.function.DoubleUnaryOperator viscosity = seconds -> model.viscosity.liquid(340 - seconds, amounts).pascalSeconds();
+        // Prescribed cooling is a probe fixture, not a new heater or reservoir thermal model. It starts above crude_pc12's
+        // 100 Pa s crossing: 382.4 K on its Twu 1985 table since O4 of batch 2026-11-04-open-thermo-data (333.9 K on the Dalia
+        // table, when it started at 340 K).
+        java.util.function.DoubleUnaryOperator viscosity = seconds -> model.viscosity.liquid(390 - seconds, amounts).pascalSeconds();
         double mobile = 0, immobile = 10;
         assertFalse(SlurryTransport.immobile(viscosity.applyAsDouble(mobile), 100));
         assertTrue(SlurryTransport.immobile(viscosity.applyAsDouble(immobile), 100));
@@ -143,7 +145,7 @@ class SolidClosureFeasibilityTest {
         assertTrue(viscosity.applyAsDouble(mobile) <= 100);
         assertTrue(viscosity.applyAsDouble(immobile) > 100);
         assertEquals(100, viscosity.applyAsDouble(mobile), 1e-4);
-        System.out.printf("solid closure: viscosity crossing=[%.9f, %.9f] K%n", 340 - immobile, 340 - mobile);
+        System.out.printf("solid closure: viscosity crossing=[%.9f, %.9f] K%n", 390 - immobile, 390 - mobile);
     }
 
     private SolidInventory particles(double mass) {

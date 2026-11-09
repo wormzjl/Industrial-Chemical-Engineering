@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "Benzene",
+  "kind": "chemical",
+  "translation_key": "material.icheme.benzene",
+  "fallback": "Benzene",
+  "properties": "icheme:chemsep_benzene",
+  "appearance": {
+    "color": "#F3F4EA",
+    "transparency": 0.85,
+    "estimated": true
+  },
+  "identifiers": {
+    "cas": "71-43-2",
+    "chemsep_id": "501",
+    "smiles": "c1ccccc1",
+    "formula": "-CHCHCHCHCHCH-"
+  }
+}

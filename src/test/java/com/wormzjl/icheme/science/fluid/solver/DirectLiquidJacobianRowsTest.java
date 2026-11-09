@@ -25,8 +25,8 @@ class DirectLiquidJacobianRowsTest {
     private final FluidThermodynamics model=FluidThermodynamics.forNetwork(catalog,NETWORK);
 
     private double[] assay(boolean cutsOnly) {
-        var crude=V3PengRobinsonThermo.fromRegisteredPackage("icheme:tjl20_methane");
-        var feed=crude.crudeFeed("icheme:tia_juana_light_methane").moleFractions();
+        var crude=com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo("icheme:tjl20_methane");
+        var feed=crude.crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions();
         double[] n=new double[model.componentCount()];
         for(int c=0;c<feed.length;c++){String id=crude.componentBasis().componentId(c);if(!cutsOnly||id.startsWith("crude_"))n[model.components().indexOf(id)]=feed[c];}
         return n;

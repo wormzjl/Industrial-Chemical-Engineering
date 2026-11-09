@@ -256,7 +256,7 @@ class JunctionSeedingGateTest {
         void runTo(long tick){while(w.ledger.onlineTick()<tick){w.tick();read();}}
         void read() {
             for(var s:w.coordinator.snapshots())for(var node:s.graph().reservoirs()) {
-                if(!node.junction())continue;double kg=node.inventory().moles()[MaterialTestBasis.NETWORK]*w.model.waterMolecularWeight;
+                if(!node.junction())continue;var n=node.inventory().moles();double kg=n[n.length-1]*w.model.waterMolecularWeight;
                 var owner=life.get(node.id());
                 // A junction id in another island is a new buffer life (a placement replaced the island): minted, not committed.
                 if(owner==null||owner[0]!=s.id()){life.put(node.id(),new long[]{s.id(),lives.size()});lives.add(new double[]{kg,kg});continue;}

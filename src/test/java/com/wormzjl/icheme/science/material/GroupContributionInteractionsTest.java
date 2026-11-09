@@ -48,7 +48,7 @@ class GroupContributionInteractionsTest {
 
     /** The bundled matrix record, read as the loader reads it. */
     private static GroupInteractionMatrix bundledMatrix() {
-        return GroupInteractionMatrix.read(JsonParser.parseString(MaterialCatalog.bundled().resources().get(MATRIX)).getAsJsonObject());
+        return GroupInteractionMatrix.read(JsonParser.parseString(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot().resources().get(MATRIX)).getAsJsonObject());
     }
 
     private static MaterialCatalog.Package pilot(MaterialCatalog catalog) { return catalog.requirePackage(PilotCryogenicTestCatalog.PACKAGE_ID); }
@@ -93,7 +93,7 @@ class GroupContributionInteractionsTest {
         assertEquals(1, zeroA);
         assertEquals(new GroupInteractionMatrix.Parameters(0.0, 0.0), matrix.parameters("CF3", "CF2").orElseThrow());
         // No bundled column or network package has a rule: their constants are what they were.
-        for (var p : MaterialCatalog.bundled().packages().values()) {
+        for (var p : com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot().packages().values()) {
             if (!p.id().equals(PilotCryogenicTestCatalog.PACKAGE_ID)) assertNull(p.groupContributions(), p.id());
         }
     }
@@ -245,12 +245,12 @@ class GroupContributionInteractionsTest {
         refused(INTERACTIONS, o -> o.getAsJsonObject("rule").addProperty("type", "ppr78"), "rule.type: expected eppr78");
         refused(INTERACTIONS, o -> o.getAsJsonObject("rule").addProperty("group_interactions", "icheme:eppr78_2017"),
                 "rule.group_interactions: unresolved icheme:eppr78_2017");
-        // A rule on the constant interactions of the spine-less column and network packages.
+        // A rule in the pair library of the crude method, which takes the datasets' fits and no spines.
         refused("data/icheme/materials/interactions/tjl20.json", o -> {
             var rule = new JsonObject();
             rule.addProperty("type", "eppr78"); rule.addProperty("group_interactions", "icheme:eppr78_2022");
             o.add("rule", rule);
-        }, "the package declares no spine");
+        }, "this method takes no spines");
         // missing_interactions: error still refuses a pair neither listed nor resolvable (no rule).
         refused(INTERACTIONS, o -> o.remove("rule"), "Missing interaction: Nitrogen / Methane");
     }
@@ -277,13 +277,20 @@ class GroupContributionInteractionsTest {
         var unused = PilotCryogenicTestCatalog.parseWith(MATRIX, o -> { firstPair(o).addProperty("a_mpa", 65.55); o.addProperty("source", "edited text"); });
         assertEquals(physics, unused.physicsContent(p.id(), p.components()));
         assertBundledPackagesHold(unused);
-        // A projected inference view would drop the pair terms: refused.
-        assertThrows(IllegalArgumentException.class, () -> base.inferenceView(p.id(), nitrogenMethane, p.id(), false));
+        // A lens carries constant pairs only: a model trained on a constant-pair package's values (the network package's
+        // nitrogen and methane) reads no request whose view resolves a pair by the rule, so no lens is built.
+        var network = base.requirePackage("icheme:tjl20_methane_nitrogen");
+        var compounds = nitrogenMethane.stream().map(id -> {
+            var r = network.properties().get(network.components().indexOf(id));
+            return new TrainedPhysics.Compound(id, r.pr().criticalTemperature(), r.pr().criticalPressure(), r.pr().acentricFactor(), r.cp());
+        }).toList();
+        var constant = new TrainedPhysics("pr78", 298.15, 700, compounds, List.of(), TrainedPhysics.Water.of(p.water()));
+        assertTrue(base.inferenceView(p.id(), nitrogenMethane, constant).isEmpty());
     }
 
     /** Every bundled package but the pilot is untouched by a group-matrix edit: its record and its physics. */
     private static void assertBundledPackagesHold(MaterialCatalog catalog) {
-        var bundled = MaterialCatalog.bundled();
+        var bundled = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
         for (var p : bundled.packages().values()) {
             if (p.id().equals(PilotCryogenicTestCatalog.PACKAGE_ID)) continue;
             assertEquals(p, catalog.requirePackage(p.id()), p.id());

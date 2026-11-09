@@ -29,6 +29,9 @@ public final class PhysicalRegistry {
                       Map<Long,PassiveNetwork.Reservoir> additions,Set<Long> removals,Map<Long,InlineFilter> releasedFilters,Runnable commit);
         /** Whether a recovery's player can take its item now (online, with a free slot). */
         boolean acceptsRecovery(UUID player);
+        /** The compounds the running column holding port {@code port} may deliver through it (V2: they join its island's
+         * compound list before the port gives them); empty for none. */
+        default Set<String> portCompounds(long port){return Set.of();}
         /** An applied event did nothing for the player who asked; the reason reaches them with the reply to their input. */
         void refused(UUID event,String reason);
         /** An application committed; {@code removed} are the devices it took out of the registry, {@code recompiled} the
@@ -52,8 +55,13 @@ public final class PhysicalRegistry {
      * reaches through devices that are not fixed boundaries. An edit of the boundary itself changes all of them.
      */
     private final Map<Long,TreeSet<Long>> fixedOwners=new HashMap<>();
-    /** The state of every applied fixed boundary, the one every island holding it carries (nothing changes it). */
+    /** The state of every applied fixed boundary, the one every island holding it carries (nothing changes it), with the model
+     * it is held on (V2: on its spec's model when the registry built it, else on the island model it was read from). */
     private final Map<Long,PassiveNetwork.Reservoir> fixedStates=new HashMap<>();
+    private final Map<Long,FluidThermodynamics> fixedModels=new HashMap<>();
+    /** The most compounds an island carries besides water (owner decision 2026-11-04); tests lower it. */
+    private int compoundCap=IslandSets.MAXIMUM_COMPOUNDS;
+    void compoundCap(int cap){if(cap<1)throw new IllegalArgumentException("cap");compoundCap=cap;}
     private final Map<Long,List<Long>> members=new HashMap<>();
     private final Map<ChunkKey,Set<Long>> chunkMembers=new HashMap<>();
     private int unapplied;
@@ -85,17 +93,18 @@ public final class PhysicalRegistry {
         var islands=host.coordinator().snapshots();
         // A saved island is found again by what only it holds: its connections (compiled pipe identities, filters included),
         // its tanks, and for an island with no connection its one boundary. A generator or a void may be in several islands.
-        var stock=new HashMap<Long,PassiveNetwork.Reservoir>();var cakes=new HashMap<Long,InlineFilter>();var byPipe=new HashMap<Long,Long>();var byTank=new HashMap<Long,Long>();var byLone=new HashMap<Long,Long>();
+        var stock=new HashMap<Long,PassiveNetwork.Reservoir>();var stockModels=new HashMap<Long,FluidThermodynamics>();var cakes=new HashMap<Long,InlineFilter>();var byPipe=new HashMap<Long,Long>();var byTank=new HashMap<Long,Long>();var byLone=new HashMap<Long,Long>();
         for(var island:islands) {
+            var islandModel=host.coordinator().model(island.id());
             for(var node:island.graph().reservoirs())if(!node.junction()&&node.id()>0) {
-                stock.put(node.id(),node);if(node.kind()==PassiveNetwork.NodeKind.RESERVOIR)byTank.put(node.id(),island.id());
+                stock.put(node.id(),node);stockModels.put(node.id(),islandModel);if(node.kind()==PassiveNetwork.NodeKind.RESERVOIR)byTank.put(node.id(),island.id());
                 if(island.graph().pipes().isEmpty())byLone.put(node.id(),island.id());
             }
             for(var pipe:island.graph().pipes()){byPipe.put(pipe.id(),island.id());if(pipe.filter()!=null)cakes.put(pipe.id()-Long.MIN_VALUE,pipe.filter());}
         }
         for(var r:topology.latest().values())if(r.device().filter())cakes.putIfAbsent(r.device().id(),emptyFilter);
         var active=topology.active();
-        for(var entry:stock.entrySet()){var r=active.get(entry.getKey());if(r!=null&&r.device().fixed())fixedStates.put(entry.getKey(),entry.getValue());}
+        for(var entry:stock.entrySet()){var r=active.get(entry.getKey());if(r!=null&&r.device().fixed()){fixedStates.put(entry.getKey(),entry.getValue());fixedModels.put(entry.getKey(),stockModels.get(entry.getKey()));}}
         // A disconnected filter's ports stand at the ambient (NetworkReduction.ambient), as an empty vessel does.
         var compiled=PhysicalFluidTopology.compile(active.values().stream().map(WorldTopologyLedger.Registration::device).toList(),stock,cakes,
                 com.wormzjl.icheme.science.fluid.network.NetworkReduction.ambient(model),flowmeters);
@@ -337,13 +346,14 @@ public final class PhysicalRegistry {
     private boolean apply(Batch batch) {
         var coordinator=host.coordinator();var events=batch.events();var affected=batch.affected();var active=topology.active();
         // What the affected islands hold - boundary stock and filter cakes - read once each, already aligned.
-        var stock=new HashMap<Long,PassiveNetwork.Reservoir>();var cakes=new HashMap<Long,InlineFilter>();
+        // Each node is held on its island's model (V2: an island carries its own compound list); {@code models} says which.
+        var stock=new HashMap<Long,PassiveNetwork.Reservoir>();var models=new HashMap<Long,FluidThermodynamics>();var cakes=new HashMap<Long,InlineFilter>();
         // A junction's buffer is not inventory (owner decision D46): the junctions of an island the batch replaces leave
         // with it and the recompile mints new ones, and the ledger books neither. A junction's composition therefore
         // resets at a topology edit.
         for(long island:affected) {
-            var graph=coordinator.snapshot(island).graph();
-            for(var node:graph.reservoirs())if(!node.junction()&&node.id()>0)stock.put(node.id(),node);
+            var graph=coordinator.snapshot(island).graph();var islandModel=coordinator.model(island);
+            for(var node:graph.reservoirs())if(!node.junction()&&node.id()>0){stock.put(node.id(),node);models.put(node.id(),islandModel);}
             for(var pipe:graph.pipes())if(pipe.filter()!=null)cakes.put(pipe.id()-Long.MIN_VALUE,pipe.filter());
         }
         WorldTopologyLedger.RecoveredSolid recovered=null;InlineFilter released=null;long recoveredFilter=0;
@@ -364,7 +374,7 @@ public final class PhysicalRegistry {
             var old=current(changed,active,edit.id());var replacement=edit.replacement();
             if(replacement==null) {
                 changed.put(edit.id(),Optional.empty());var previous=stock.remove(edit.id());
-                if(previous!=null&&previous.kind()==PassiveNetwork.NodeKind.RESERVOIR){destroyed.add(previous);if(additions.remove(edit.id())==null)removed.put(edit.id(),previous);}
+                if(previous!=null&&previous.kind()==PassiveNetwork.NodeKind.RESERVOIR){destroyed.add(IslandSets.paddedNode(previous,models.get(edit.id()),model));if(additions.remove(edit.id())==null)removed.put(edit.id(),previous);}
             } else {
                 changed.put(edit.id(),Optional.of(replacement));
                 boolean moved=old!=null&&!old.device().position().equals(replacement.device().position()),respecified=old==null||!old.spec().equals(replacement.spec());
@@ -382,7 +392,7 @@ public final class PhysicalRegistry {
                     }
                 } else if(moved&&replacement.device().boundary()&&!respecified&&stock.containsKey(edit.id())){var node=stock.get(edit.id());stock.put(edit.id(),new PassiveNetwork.Reservoir(node.id(),replacement.device().position().y(),node.state(),node.kind(),node.inventory()));}
                 else if(replacement.device().boundary()&&respecified) {
-                    var initialized=replacement.spec().initialize(replacement.device(),model,()->{});stock.put(edit.id(),initialized);
+                    var initialized=replacement.spec().initialize(replacement.device(),model,()->{});stock.put(edit.id(),initialized);models.put(edit.id(),model);
                     if(initialized.kind()==PassiveNetwork.NodeKind.RESERVOIR){constructed.add(initialized);additions.put(edit.id(),initialized);}
                 }
             }
@@ -405,14 +415,18 @@ public final class PhysicalRegistry {
                 if(neighbor!=null&&record.device().joins(neighbor.device(),contact.cell(),contact.direction())&&component.putIfAbsent(neighbor.device().id(),neighbor)==null)queue.add(neighbor);
             }
         }
-        var componentStock=new HashMap<Long,PassiveNetwork.Reservoir>();var componentCakes=new HashMap<Long,InlineFilter>();
+        // The compile reads every boundary on the world model's list (each node evaluated there from its own amounts), so the
+        // junctions it seeds from one are on it too; each replacement then takes its own list (V2), every node read from
+        // {@code origins}, the stock as it was held.
+        var componentStock=new HashMap<Long,PassiveNetwork.Reservoir>();var componentCakes=new HashMap<Long,InlineFilter>();var origins=new HashMap<Long,IslandSets.Origin>();
         for(var record:component.values()) {
             long id=record.device().id();
             if(record.device().boundary()) {
                 // A fixed boundary's state is the same in every island that holds it and nothing changes it: one met at the
                 // edge of the walk, whose islands the batch does not replace, is read from the registry's copy.
-                var state=stock.get(id);if(state==null&&record.device().fixed())state=fixedStates.get(id);
-                if(state==null)throw new IllegalStateException("Topology event reached boundary "+id+" outside the islands it fenced");componentStock.put(id,state);
+                var state=stock.get(id);var on=models.get(id);if(state==null&&record.device().fixed()){state=fixedStates.get(id);on=fixedModels.get(id);}
+                if(state==null)throw new IllegalStateException("Topology event reached boundary "+id+" outside the islands it fenced");
+                origins.put(id,new IslandSets.Origin(state,on));componentStock.put(id,IslandSets.node(state,on,model));
             }
             if(record.device().filter()) {
                 var cake=cakes.get(id);
@@ -428,6 +442,14 @@ public final class PhysicalRegistry {
                 com.wormzjl.icheme.science.fluid.network.NetworkReduction.ambient(model),flowmeters);
         FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.topologyBatches);FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.topologyEvents,events.size());
         FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.compiledDevices,component.size());
+        // The islands this batch splits: an original whose devices land in two or more of the new islands (owner decision
+        // 2026-11-04: only a split's parts drop the compounds that are exactly zero everywhere in them).
+        var partsOf=new HashMap<Long,Set<Integer>>();
+        for(int k=0;k<compiled.islands().size();k++) {
+            var island=compiled.islands().get(k);if(island.physicalIds().stream().noneMatch(selected::contains))continue;
+            for(long device:island.physicalIds()){if(fixedDevice(device))continue;Long holder=owners.get(device);if(holder!=null&&affected.contains(holder))partsOf.computeIfAbsent(holder,x->new HashSet<>()).add(k);}
+        }
+        var split=new HashSet<Long>();partsOf.forEach((holder,parts)->{if(parts.size()>1)split.add(holder);});
         var replacements=new ArrayList<IslandCoordinator.Replacement>();var replacementMembers=new LinkedHashMap<Long,List<Long>>();long nextId=topology.nextIdentity();
         for(var island:compiled.islands())if(island.physicalIds().stream().anyMatch(selected::contains)) {
             // A fixed boundary the compile left alone (no connection in the part it compiled) keeps any island of it the
@@ -438,8 +460,13 @@ public final class PhysicalRegistry {
             }
             for(long device:island.physicalIds()){Long holder=owners.get(device);if(holder!=null&&!affected.contains(holder)&&!fixedDevice(device))
                 throw new IllegalStateException("Topology event reached device "+device+" outside the islands it fenced");}
-            // The recompile's junctions are minted here (start state, decision D37, and buffer size, D25); nothing is booked (D46).
-            long id=nextId++;replacements.add(new IslandCoordinator.Replacement(id,PassiveNetwork.mintJunctions(island.graph(),model)));replacementMembers.put(id,island.physicalIds().stream().sorted().toList());
+            // The island's own compound list (V2) and its graph on it; the recompile's junctions are minted there (start state,
+            // decision D37, and buffer size, D25); nothing is booked (D46).
+            var compounds=compounds(island,affected,split,origins);
+            String held=compounds.size()>compoundCap?"an island carries at most "+compoundCap+" compounds and water; joined, this one would carry "+compounds.size()
+                    +": separate its parts to run it":null;
+            var own=model.on(compounds);
+            long id=nextId++;replacements.add(new IslandCoordinator.Replacement(id,PassiveNetwork.mintJunctions(IslandSets.onto(island.graph(),model,own,origins),own),own,held));replacementMembers.put(id,island.physicalIds().stream().sorted().toList());
         }
         var eventIds=new LinkedHashSet<UUID>();for(var event:events)eventIds.add(event.id());
         var preparation=topology.applyBatch(List.copyOf(eventIds),constructed,destroyed,weights,nextId);
@@ -450,9 +477,9 @@ public final class PhysicalRegistry {
         host.topology(batch.dimension(),eventIds,affected,replacements,batch.tick(),topology.onlineTick(),additions,removed.keySet(),recovered==null?Map.of():Map.of(PhysicalFluidTopology.filterIdentity(recoveredFilter),released),()->{
             topology.commit(prepared);
             for(long id:component.keySet()){diagnostics.remove(id);pipeViews.remove(id);tankFaces.remove(id);}
-            for(long id:removedDevices){diagnostics.remove(id);pipeViews.remove(id);tankFaces.remove(id);owners.remove(id);fixedOwners.remove(id);fixedStates.remove(id);}
+            for(long id:removedDevices){diagnostics.remove(id);pipeViews.remove(id);tankFaces.remove(id);owners.remove(id);fixedOwners.remove(id);fixedStates.remove(id);fixedModels.remove(id);}
             diagnostics.putAll(compiled.diagnostics());pipeViews.putAll(compiled.pipeViews());tankFaces.putAll(compiled.tankFaces());
-            for(var entry:componentStock.entrySet())if(fixedDevice(entry.getKey()))fixedStates.put(entry.getKey(),entry.getValue());
+            for(var entry:origins.entrySet())if(fixedDevice(entry.getKey())){fixedStates.put(entry.getKey(),entry.getValue().node());fixedModels.put(entry.getKey(),entry.getValue().model());}
             for(long island:affected){var devices=members.remove(island);if(devices!=null)for(long device:devices)unbind(device,island);}
             replacementMembers.forEach((island,devices)->{members.put(island,devices);for(long device:devices)bind(device,island);});
             for(var record:removedRecords)chunkRemove(record);for(var record:addedRecords)chunkAdd(record);
@@ -469,6 +496,22 @@ public final class PhysicalRegistry {
                 if(fresh.contains(owner)&&!coordinator.hasFence(owner,future.id()))coordinator.fence(future.id(),future.tick(),List.of(owner));
         }
         return recovered!=null;
+    }
+    /**
+     * A new island's compound list (batch 2026-11-04-refinery-compounds, V2; owner decisions 2026-11-04): nitrogen (the
+     * ambient and the junction placeholder), every compound its stock holds (a vessel's or a boundary's amounts, a crystal's
+     * compound, a filter cake's crystals), every compound a running column's port in it may deliver, and the whole list of
+     * every island it takes a device from, unless the batch splits that island: a list only grows while its island lives.
+     * Water is on every list. In any order; the model puts it in the package's.
+     */
+    private List<String> compounds(PhysicalFluidTopology.Island island,Set<Long> affected,Set<Long> split,Map<Long,IslandSets.Origin> origins) {
+        var set=IslandSets.held(island.graph(),model,origins);
+        for(long device:island.physicalIds()) {
+            if(fixedDevice(device)){set.addAll(host.portCompounds(device));continue;}
+            Long holder=owners.get(device);
+            if(holder!=null&&affected.contains(holder)&&!split.contains(holder))set.addAll(host.coordinator().model(holder).compounds());
+        }
+        return new ArrayList<>(set);
     }
     /**
      * The owners of the applied devices reached from an event's touched devices (those of them in {@code within}, a union

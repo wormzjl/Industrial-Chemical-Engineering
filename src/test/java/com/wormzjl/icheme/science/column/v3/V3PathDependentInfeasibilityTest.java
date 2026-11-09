@@ -93,7 +93,7 @@ class V3PathDependentInfeasibilityTest {
     /** The same v1-scale TJL CDU case the pumparound suite uses, so the bound is exercised where it is tuned. */
     private static V3ColumnInput v1ScaleInput(List<V3PumparoundSpec> pumparounds) {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light");
+        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
         double[] flows = crude.moleFractions();
         double totalFlow = 2_610.7 * 1_000.0 / 3_600.0;
         for (int component = 0; component < flows.length; component++) flows[component] *= totalFlow;

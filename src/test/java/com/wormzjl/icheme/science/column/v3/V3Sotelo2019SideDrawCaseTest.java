@@ -98,7 +98,7 @@ class V3Sotelo2019SideDrawCaseTest {
                 throw new IllegalArgumentException("Sotelo side-draw scale must be finite and positive");
             }
             V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-            V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light");
+            V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
             double[] feed = crude.moleFractions();
             for (int component = 0; component < feed.length; component++) {
                 feed[component] *= MODEL_FEED_KMOL_PER_HOUR / 3.6;

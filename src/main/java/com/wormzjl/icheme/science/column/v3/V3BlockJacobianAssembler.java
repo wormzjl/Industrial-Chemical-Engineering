@@ -194,6 +194,11 @@ final class V3BlockJacobianAssembler {
      * thermodynamic probe — which perturbs a node's own columns — cannot see them; they are written here in
      * closed form instead. Every one lands in the diagonal or the immediate lower block, which is why a wet
      * tray does not widen the band. The uncoloured finite-difference assembler above remains the oracle.</p>
+     *
+     * <p>A carry-over tray one has nothing here: its free water leaves for the drum, which has no energy row and
+     * whose rows read only the authored steam total, so {@code F_1} reaches tray one's own rows alone, through
+     * {@code W_1 = S - F_1}. That is a node-local dependence, and the local probe or the analytic derivative
+     * writes it into the diagonal block like any other of the node's columns.</p>
      */
     private static void assembleExactFreeWaterCouplings(
             V3ColumnProblem problem,
@@ -207,7 +212,7 @@ final class V3BlockJacobianAssembler {
             double[][][] upper) {
         if (!problem.hasWetTrays()) return;
         for (int source = 1; source <= problem.topology().trayCount(); source++) {
-            if (!problem.hasFreeWaterUnknown(source)) continue;
+            if (!problem.hasFreeWaterUnknown(source) || !problem.freeWaterFalls(source)) continue;
             Integer column = coordinateIndexes.get(new V3DegreeOfFreedomLedger.UnknownId(
                     V3DegreeOfFreedomLedger.UnknownFamily.FREE_WATER_FLOW, source, -1));
             if (column == null) continue;
@@ -217,8 +222,11 @@ final class V3BlockJacobianAssembler {
             double free = state.freeWaterFlow(source);
             double water = problem.waterVaporFlow(state, node);
             double hydrocarbon = V3WetTraySet.hydrocarbonVaporTotal(state, node);
+            // The steam's marginal enthalpy: its own, plus the shift of its virial residual as F_m raises its
+            // partial pressure.
             double vaporEnthalpy = com.wormzjl.icheme.science.column.v3.thermo.V3WaterProperties
-                    .vaporMolarEnthalpy(state.temperatureKelvin(node));
+                    .steamEnthalpyRateByWater(state.temperatureKelvin(node), problem.nodePressurePascal(node),
+                            water, hydrocarbon);
             if (!(water > 0.0) || !Double.isFinite(hydrocarbon) || !Double.isFinite(vaporEnthalpy)) {
                 throw new IllegalArgumentException("V3 local block free-water coupling has no physical water state");
             }
@@ -485,9 +493,10 @@ final class V3BlockJacobianAssembler {
         addEnergyDerivative(problem, baseResidual, equationIndexes, layout, lower, diagonal, upper,
                 node, column, node, -(liquidDerivative + vaporDerivative + freeWaterDerivative));
         if (node + 1 <= problem.topology().reboilerNode()) {
-            // The immiscible aqueous liquid is not withdrawn by a side draw, so it falls with coefficient one.
+            // The immiscible aqueous liquid is not withdrawn by a side draw, so it falls with coefficient one;
+            // a carry-over tray one's goes to the drum instead, which has no energy row.
             addEnergyDerivative(problem, baseResidual, equationIndexes, layout, lower, diagonal, upper,
-                    node + 1, column, node, freeWaterDerivative);
+                    node + 1, column, node, problem.freeWaterFalls(node) ? freeWaterDerivative : 0.0);
         }
         if (node + 1 <= problem.topology().reboilerNode()) {
             double liquidInCoefficient = node == problem.topology().condenserNode()

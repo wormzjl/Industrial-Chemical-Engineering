@@ -3,10 +3,10 @@
   "entries": [
     {
       "priority": 100,
-      "modelId": "regrouped-seed-17041-epoch-160",
-      "payload": "/data/icheme/neural/v3-column-transformer-regrouped.payload.json",
-      "sidecar": "/data/icheme/neural/v3-column-transformer-regrouped.sidecar.json",
-      "pipelineSha256": "d4d790127a373fd1444e10cc419458978a30c118415b48212410915f114e3696"
+      "modelId": "icheme:v3-column-open-r34-u1-v2",
+      "payload": "/data/icheme/neural/v3-column-transformer-open.payload.json",
+      "sidecar": "/data/icheme/neural/v3-column-transformer-open.sidecar.json",
+      "pipelineSha256": "da7ef5cad866ecc055af337c5aadffe5daff9d7cde210af84ed03a5cb3d845f6"
     }
   ]
 }

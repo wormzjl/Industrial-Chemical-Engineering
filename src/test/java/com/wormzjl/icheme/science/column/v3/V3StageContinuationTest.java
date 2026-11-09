@@ -23,7 +23,7 @@ class V3StageContinuationTest {
     @Test
     void acceptedFourStageRealCrudeProfileCanSeedAFreshEightStageCorrection() {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light");
+        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
         V3ColumnProblem fourStage = V3ColumnProblemResolver.resolve(input(crude, 4, 3), V3CondenserPhaseBranch.TWO_PHASE);
         V3SimultaneousColumnSolver.Attempt.Converged acceptedFourStage = assertInstanceOf(
                 V3SimultaneousColumnSolver.Attempt.Converged.class, solve(thermo, fourStage,
@@ -53,7 +53,7 @@ class V3StageContinuationTest {
     @Test
     void certifiedEightStageRealCrudeProfileCanSeedAFreshFifteenStageCorrection() {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light");
+        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
         V3ColumnProblem fourStage = V3ColumnProblemResolver.resolve(input(crude, 4, 3), V3CondenserPhaseBranch.TWO_PHASE);
         V3SimultaneousColumnSolver.Attempt.Converged convergedFourStage = assertInstanceOf(
                 V3SimultaneousColumnSolver.Attempt.Converged.class, solve(thermo, fourStage,
@@ -81,7 +81,7 @@ class V3StageContinuationTest {
     @Test
     void certifiedFifteenStageRealCrudeProfileCanSeedAFreshThirtyStageCorrection() {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light");
+        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
         V3ColumnProblem fourStage = V3ColumnProblemResolver.resolve(input(crude, 4, 3), V3CondenserPhaseBranch.TWO_PHASE);
         V3SimultaneousColumnSolver.Attempt.Converged convergedFourStage = assertInstanceOf(
                 V3SimultaneousColumnSolver.Attempt.Converged.class, solve(thermo, fourStage,
@@ -234,25 +234,28 @@ class V3StageContinuationTest {
     }
 
     /**
-     * The wet literature preset at half the authored steam: the case the second sweep exists for.
+     * The wet literature preset at one and a half times the authored steam: the case the second sweep exists for.
      *
-     * <p>Its first sweep stall-stops the last steam rung at a scaled residual of 0.153 and skips ahead, and the
-     * requested rung then dies on a zero pivot after 31 iterations. Resuming that rung on the full budget and,
-     * when it stops again, halving it once, puts the requested rung in the basin that publishes. The assertions
-     * are on the contract rather than on the numbers: the sweep is entered at most once, it is announced in the
-     * published events, and every rung it solves is on the {@code /full-budget/} path.</p>
+     * <p>Its first sweep stall-stops a steam rung and skips ahead, and the requested rung then fails from the
+     * skipped-ahead state. Resuming the steam schedule on the full budget puts the requested rung in the basin
+     * that publishes. The half-steam preset was this case until E36 (batch 2026-11-04-open-thermo-data): its
+     * requested rung died on a zero pivot, which a free point sunk below its floor now hands to the support
+     * refresh, so it closes on its first sweep (below). Of E30's five perturbations only this one still reaches
+     * the resume. The assertions are on the contract rather than on the numbers: the sweep is entered at most
+     * once, it is announced in the published events, and every rung it solves is on the {@code /full-budget/}
+     * path.</p>
      */
     @Test
-    void theWetPresetAtHalfSteamIsRecoveredByOneFullBudgetResumeOfItsSteamSchedule() {
-        V3ColumnInput input = wetLiteraturePreset(0.5);
+    void theWetPresetAtOneAndAHalfSteamIsRecoveredByOneFullBudgetResumeOfItsSteamSchedule() {
+        V3ColumnInput input = wetLiteraturePreset(1.5);
 
         long started = System.nanoTime();
         V3ColumnOutcome outcome = V3ColumnCalculator.calculate(input, () -> {
             if (System.nanoTime() - started >= FORTY_STAGE_BUDGET_NANOS) {
-                throw new AssertionError("the half-steam wet literature preset exceeded its 60-second cold budget");
+                throw new AssertionError("the wet literature preset at 1.5 times its steam exceeded its 60-second cold budget");
             }
         }, 0, 0, V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO);
-        System.out.println("V3 wet literature preset at half steam: " + (System.nanoTime() - started) / 1.0e9 + " s; "
+        System.out.println("V3 wet literature preset at 1.5 times its steam: " + (System.nanoTime() - started) / 1.0e9 + " s; "
                 + outcome.diagnostics().solvePath());
         outcome.diagnostics().events().forEach(event -> System.out.println("  event: " + event));
 
@@ -278,28 +281,32 @@ class V3StageContinuationTest {
      * <p>This is the speed contract of the resume: the flagship preset's own schedule stall-stops at 0.625 and
      * skips ahead to an accepted answer, so it must reach that answer without a single full-budget rung.
      * Recovering the perturbations eagerly instead — retrying every stopped rung as soon as it stops — was
-     * measured at 1.74 s to 3.02 s on this case for the same input digest, which is what this asserts against.</p>
+     * measured at 1.74 s to 3.02 s on this case for the same input digest, which is what this asserts against.
+     * The half-steam preset is held to the same contract since E36, whose release closes it on its first sweep.</p>
      */
     @Test
     void theWetLiteraturePresetItselfNeverEntersTheFullBudgetSweep() {
-        V3ColumnInput input = wetLiteraturePreset(1.0);
+        for (double steamScale : new double[] {1.0, 0.5}) {
+            V3ColumnInput input = wetLiteraturePreset(steamScale);
 
-        long started = System.nanoTime();
-        V3ColumnOutcome outcome = V3ColumnCalculator.calculate(input, () -> {
-            if (System.nanoTime() - started >= FORTY_STAGE_BUDGET_NANOS) {
-                throw new AssertionError("the wet literature preset exceeded its 60-second cold budget");
-            }
-        }, 0, 0, V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO);
-        System.out.println("V3 wet literature preset: " + (System.nanoTime() - started) / 1.0e9 + " s; "
-                + outcome.diagnostics().solvePath());
+            long started = System.nanoTime();
+            V3ColumnOutcome outcome = V3ColumnCalculator.calculate(input, () -> {
+                if (System.nanoTime() - started >= FORTY_STAGE_BUDGET_NANOS) {
+                    throw new AssertionError("the wet literature preset at " + steamScale
+                            + " times its steam exceeded its 60-second cold budget");
+                }
+            }, 0, 0, V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO);
+            System.out.println("V3 wet literature preset at " + steamScale + " times its steam: "
+                    + (System.nanoTime() - started) / 1.0e9 + " s; " + outcome.diagnostics().solvePath());
 
-        V3ColumnOutcome.Success success = assertInstanceOf(V3ColumnOutcome.Success.class, outcome, outcome::toString);
-        assertTrue(success.result().acceptanceAudit().accepted());
-        assertFalse(success.diagnostics().solvePath().contains("full-budget"), success.diagnostics()::solvePath);
-        assertTrue(success.diagnostics().events().stream()
-                        .noneMatch(event -> event.contains("resuming the steam schedule")),
-                () -> "a ramp that publishes on its first sweep must not pay for a second: "
-                        + success.diagnostics().events());
+            V3ColumnOutcome.Success success = assertInstanceOf(V3ColumnOutcome.Success.class, outcome, outcome::toString);
+            assertTrue(success.result().acceptanceAudit().accepted());
+            assertFalse(success.diagnostics().solvePath().contains("full-budget"), success.diagnostics()::solvePath);
+            assertTrue(success.diagnostics().events().stream()
+                            .noneMatch(event -> event.contains("resuming the steam schedule")),
+                    () -> "a ramp that publishes on its first sweep must not pay for a second: "
+                            + success.diagnostics().events());
+        }
     }
 
     /** The 40-tray Ledezma-Martinez column with its three draws, sump steam and three pumparounds. */

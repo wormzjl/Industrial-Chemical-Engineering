@@ -1,0 +1,351 @@
+{
+  "schema_version": 1,
+  "id": "icheme:dwsim_refinery_pr78",
+  "model": "pr78",
+  "revision": "dwsim-10.2.5-d3-r2",
+  "source": "PR78 k_ij for the pairs that involve an imported compound (owner decision D3): DWSIM 10.2.5 kij_pr.dat; else the DECHEMA Peng-Robinson value of ChemSep pr_ip.dat (Kooijman and Taylor, Artistic License 2.0) whose fitted temperature range is nearest 300..600 K; else no pair (the method's zero). Owner exceptions (tools/compound-import/pair-exceptions.json): no Hydrogen pair; Methane/HydrogenSulfide from ChemSep pr.ipd 2009. Pairs between existing compounds are left to their own libraries.",
+  "pairs": [
+    {
+      "first": "Methane",
+      "second": "HydrogenSulfide",
+      "kij": 0.08125,
+      "source": "Owner exception to D3: ChemSep 2009 PR table pr.ipd, \"Methane/Hydrogen Sulfide T=40,100,160 F, Reamer et al data, fit by R.Taylor\" (Kooijman and Taylor, Artistic License 2.0). kij_pr.dat's 0.1356 equals the DECHEMA Methane/SulfurDioxide value (pr_ip.dat line 115) and is taken as a transcription error."
+    },
+    {
+      "first": "Methane",
+      "second": "CarbonMonoxide",
+      "kij": 0.03,
+      "source": "DECHEMA PR via ChemSep pr_ip.dat row 80: \"CarbonMonoxide/C1 p353\" (no stated temperature; nearest 300..600 K of 1)"
+    },
+    {
+      "first": "Methane",
+      "second": "SulfurDioxide",
+      "kij": 0.1356,
+      "source": "DECHEMA PR via ChemSep pr_ip.dat row 115: \"C1/SulfurDioxide p421\" (no stated temperature; nearest 300..600 K of 1)"
+    },
+    {
+      "first": "Methane",
+      "second": "CarbonylSulfide",
+      "kij": 0.0289,
+      "source": "DECHEMA PR via ChemSep pr_ip.dat row 110: \"C1/CarbonylSulfide p410\" (no stated temperature; nearest 300..600 K of 1)"
+    },
+    {
+      "first": "Methane",
+      "second": "Ethylene",
+      "kij": 0.0378,
+      "source": "DECHEMA PR via ChemSep pr_ip.dat row 95: \"C1/Ethylene T=198.15-248.15K p378\" (198.15..248.15 K; nearest 300..600 K of 3)"
+    },
+    {
+      "first": "Methane",
+      "second": "Propylene",
+      "kij": 0.033,
+      "source": "DECHEMA PR via ChemSep pr_ip.dat row 111: \"C1/Propylene p412\" (no stated temperature; nearest 300..600 K of 1)"
+    },
+    {
+      "first": "Methane",
+      "second": "N-hexane",
+      "kij": 0.04,
+      "source": "DWSIM 10.2.5 kij_pr.dat (Metano (C1) / n-Hexano (nC6))"
+    },
+    {
+      "first": "Methane",
+      "second": "Cyclohexane",
+      "kij": 0.0389,
+      "source": "DECHEMA PR via ChemSep pr_ip.dat row 130: \"C1/CycloHexane p466\" (no stated temperature; nearest 300..600 K of 1)"
+    },
+    {
+      "first": "Methane",
+      "second": "Benzene",
+      "kij": 0.0807,
+      "source": "DWSIM 10.2.5 kij_pr.dat (Metano (C1) / Benzeno)"
+    },
+    {
+      "first": "Methane",
+      "second": "Toluene",
+      "kij": 0.097,
+      "source": "DWSIM 10.2.5 kij_pr.dat (Metano (C1) / Tolueno)"
+    },
+    {
+      "first": "Methane",
+      "second": "M-xylene",
+      "kij": 0.0844,
+      "source": "DWSIM 10.2.5 kij_pr.dat (Metano (C1) / m-Xileno)"
+    },
+    {
+      "first": "Ethane",
+      "second": "HydrogenSulfide",
+      "kij": 0.0952,
+      "source": "DWSIM 10.2.5 kij_pr.dat (Etano (C2) / Sulfeto de Hidrognio (H2S))"
+    },
+    {
+      "first": "Ethane",
+      "second": "CarbonMonoxide",
+      "kij": -0.0226,
+      "source": "DECHEMA PR via ChemSep pr_ip.dat row 81: \"CarbonMonoxide/C2 p354\" (no stated temperature; nearest 300..600 K of 1)"
+    },
+    {
+      "first": "Ethane",
+      "second": "Ethylene",
+      "kij": 0.0089,
+      "source": "DECHEMA PR via ChemSep pr_ip.dat row 147: \"Ethylene/C2 T=263-293K P=18.5-48.5bar p510\" (263..293 K; nearest 300..600 K of 4)"
+    },
+    {
+      "first": "Ethane",
+      "second": "Propylene",
+      "kij": 0.0089,
+      "source": "DECHEMA PR via ChemSep pr_ip.dat row 164: \"C2/Propylene p537\" (no stated temperature; nearest 300..600 K of 1)"
+    },
+    {
+      "first": "Ethane",
+      "second": "N-hexane",
+      "kij": -0.04,
+      "source": "DWSIM 10.2.5 kij_pr.dat (Etano (C2) / n-Hexano (nC6))"
+    },
+    {
+      "first": "Ethane",
+      "second": "Cyclohexane",
+      "kij": 0.0178,
+      "source": "DECHEMA PR via ChemSep pr_ip.dat row 178: \"C2/CycloHexane p565\" (no stated temperature; nearest 300..600 K of 1)"
+    },
+    {
+      "first": "Ethane",
+      "second": "Benzene",
+      "kij": 0.0322,
+      "source": "DWSIM 10.2.5 kij_pr.dat (Etano (C2) / Benzeno)"
+    },
+    {
+      "first": "Propane",
+      "second": "HydrogenSulfide",
+      "kij": 0.0878,
+      "source": "DECHEMA PR via ChemSep pr_ip.dat row 218: \"HydrogenSulfide/C3 T=217-344K p644\" (217..344 K; nearest 300..600 K of 3)"
+    },
+    {
+      "first": "Propane",
+      "second": "CarbonMonoxide",
+      "kij": 0.0259,
+      "source": "DECHEMA PR via ChemSep pr_ip.dat row 83: \"CarbonMonoxide/C3 p358\" (no stated temperature; nearest 300..600 K of 1)"
+    },
+    {
+      "first": "Propane",
+      "second": "Propylene",
+      "kij": 0.0074,
+      "source": "DECHEMA PR via ChemSep pr_ip.dat row 227: \"Propylene/C3 T=260.93-360.93K P=3.416-41.613bar p657\" (260.93..360.93 K; nearest 300..600 K of 4)"
+    },
+    {
+      "first": "Propane",
+      "second": "N-hexane",
+      "kij": 0.0007,
+      "source": "DWSIM 10.2.5 kij_pr.dat (Propano (C3) / n-Hexano (nC6))"
+    },
+    {
+      "first": "Propane",
+      "second": "Benzene",
+      "kij": 0.0233,
+      "source": "DWSIM 10.2.5 kij_pr.dat (Propano (C3) / Benzeno)"
+    },
+    {
+      "first": "Isobutane",
+      "second": "HydrogenSulfide",
+      "kij": 0.0474,
+      "source": "DWSIM 10.2.5 kij_pr.dat (Isobutano (iC4) / Sulfeto de Hidrognio (H2S))"
+    },
+    {
+      "first": "Isobutane",
+      "second": "Propylene",
+      "kij": -0.0144,
+      "source": "DECHEMA PR via ChemSep pr_ip.dat row 229: \"Propylene/Iso-C4 p660\" (no stated temperature; nearest 300..600 K of 1)"
+    },
+    {
+      "first": "N-butane",
+      "second": "Ethylene",
+      "kij": 0.0922,
+      "source": "DECHEMA PR via ChemSep pr_ip.dat row 151: \"Ethylene/nC4 p518\" (no stated temperature; nearest 300..600 K of 1)"
+    },
+    {
+      "first": "N-butane",
+      "second": "Butene-1",
+      "kij": 0.0007,
+      "source": "DECHEMA PR via ChemSep pr_ip.dat row 246: \"1-Butene/nC4 T=311-411K P=3.55-34.89bar p699\" (311..411 K; nearest 300..600 K of 2)"
+    },
+    {
+      "first": "N-butane",
+      "second": "Butadiene",
+      "kij": 0.0141,
+      "source": "DECHEMA PR via ChemSep pr_ip.dat row 248: \"1.3-Butadiene/nC4 p702\" (no stated temperature; nearest 300..600 K of 1)"
+    },
+    {
+      "first": "N-butane",
+      "second": "N-hexane",
+      "kij": -0.0056,
+      "source": "DWSIM 10.2.5 kij_pr.dat (n-Butano (nC4) / n-Hexano (nC6))"
+    },
+    {
+      "first": "N-pentane",
+      "second": "HydrogenSulfide",
+      "kij": 0.063,
+      "source": "DWSIM 10.2.5 kij_pr.dat (n-Pentano (nC5) / Sulfeto de Hidrognio (H2S))"
+    },
+    {
+      "first": "N-pentane",
+      "second": "Cyclohexane",
+      "kij": 0.0037,
+      "source": "DECHEMA PR via ChemSep pr_ip.dat row 257: \"nC5/CycleHexane p719\" (no stated temperature; nearest 300..600 K of 1)"
+    },
+    {
+      "first": "N-pentane",
+      "second": "Benzene",
+      "kij": 0.0189,
+      "source": "DWSIM 10.2.5 kij_pr.dat (n-Pentano (nC5) / Benzeno)"
+    },
+    {
+      "first": "Nitrogen",
+      "second": "HydrogenSulfide",
+      "kij": 0.1652,
+      "source": "DWSIM 10.2.5 kij_pr.dat (Nitrognio (N2) / Dixido de Carbono (CO2), read as Sulfeto de Hidrognio (H2S): one-cell shift of the N2 row after the diagonal undone, decision E28; equals DECHEMA's N2/H2S, p318)"
+    },
+    {
+      "first": "Nitrogen",
+      "second": "CarbonMonoxide",
+      "kij": 0.03,
+      "source": "DECHEMA PR via ChemSep pr_ip.dat row 33: \"Nitrogen/CarbonMonoxide T=70.00-122.00K p267\" (70..122 K; nearest 300..600 K of 2)"
+    },
+    {
+      "first": "Nitrogen",
+      "second": "Oxygen",
+      "kij": -0.0133,
+      "source": "DWSIM 10.2.5 kij_pr.dat (Oxignio (O2) / Nitrognio (N2))"
+    },
+    {
+      "first": "Nitrogen",
+      "second": "Ammonia",
+      "kij": 0.2193,
+      "source": "DECHEMA PR via ChemSep pr_ip.dat row 66: \"Nitrogen/Ammonia p326\" (no stated temperature; nearest 300..600 K of 1)"
+    },
+    {
+      "first": "Nitrogen",
+      "second": "SulfurDioxide",
+      "kij": 0.08,
+      "source": "DECHEMA PR via ChemSep pr_ip.dat row 69: \"Nitrogen/SulfurDioxide p332\" (no stated temperature; nearest 300..600 K of 1)"
+    },
+    {
+      "first": "Nitrogen",
+      "second": "Ethylene",
+      "kij": 0.0856,
+      "source": "DECHEMA PR via ChemSep pr_ip.dat row 51: \"Nitrogen/Ethylene p298\" (no stated temperature; nearest 300..600 K of 1)"
+    },
+    {
+      "first": "Nitrogen",
+      "second": "Propylene",
+      "kij": 0.09,
+      "source": "DECHEMA PR via ChemSep pr_ip.dat row 63: \"Nitrogen/Propylene p320\" (no stated temperature; nearest 300..600 K of 1)"
+    },
+    {
+      "first": "Nitrogen",
+      "second": "N-hexane",
+      "kij": 0.1496,
+      "source": "DWSIM 10.2.5 kij_pr.dat (n-Hexano (nC6) / Nitrognio (N2))"
+    },
+    {
+      "first": "Nitrogen",
+      "second": "Benzene",
+      "kij": 0.1641,
+      "source": "DWSIM 10.2.5 kij_pr.dat (Benzeno / Nitrognio (N2))"
+    },
+    {
+      "first": "CarbonDioxide",
+      "second": "HydrogenSulfide",
+      "kij": 0.0967,
+      "source": "DECHEMA PR via ChemSep pr_ip.dat row 188: \"CarbonDioxide/HydrogenSulfide T=254-366K p583\" (254..366 K; nearest 300..600 K of 3)"
+    },
+    {
+      "first": "CarbonDioxide",
+      "second": "Ethylene",
+      "kij": 0.0541,
+      "source": "DECHEMA PR via ChemSep pr_ip.dat row 150: \"Ethylene/CarbonDioxide T=223-293K P=6.8-64.9bar p516\" (223..293 K; nearest 300..600 K of 2)"
+    },
+    {
+      "first": "CarbonDioxide",
+      "second": "Propylene",
+      "kij": 0.0933,
+      "source": "DECHEMA PR via ChemSep pr_ip.dat row 190: \"CarbonDioxide/Propylene p587\" (no stated temperature; nearest 300..600 K of 1)"
+    },
+    {
+      "first": "CarbonDioxide",
+      "second": "Butene-1",
+      "kij": 0.0593,
+      "source": "DECHEMA PR via ChemSep pr_ip.dat row 199: \"CarbonDioxide/1-Butene p605\" (no stated temperature; nearest 300..600 K of 1)"
+    },
+    {
+      "first": "CarbonDioxide",
+      "second": "N-hexane",
+      "kij": 0.11,
+      "source": "DWSIM 10.2.5 kij_pr.dat (n-Hexano (nC6) / Dixido de Carbono (CO2))"
+    },
+    {
+      "first": "CarbonDioxide",
+      "second": "Cyclohexane",
+      "kij": 0.1052,
+      "source": "DECHEMA PR via ChemSep pr_ip.dat row 212: \"CarbonDioxide/CycloHexane p629\" (no stated temperature; nearest 300..600 K of 1)"
+    },
+    {
+      "first": "CarbonDioxide",
+      "second": "Benzene",
+      "kij": 0.0774,
+      "source": "DWSIM 10.2.5 kij_pr.dat (Dixido de Carbono (CO2) / Benzeno)"
+    },
+    {
+      "first": "CarbonDioxide",
+      "second": "Toluene",
+      "kij": 0.1056,
+      "source": "DWSIM 10.2.5 kij_pr.dat (Dixido de Carbono (CO2) / Tolueno)"
+    },
+    {
+      "first": "HydrogenSulfide",
+      "second": "CarbonMonoxide",
+      "kij": 0.0544,
+      "source": "DECHEMA PR via ChemSep pr_ip.dat row 82: \"CarbonMonoxide/HydrogenSulfide p356\" (no stated temperature; nearest 300..600 K of 1)"
+    },
+    {
+      "first": "SulfurDioxide",
+      "second": "Benzene",
+      "kij": 0.0015,
+      "source": "DECHEMA PR via ChemSep pr_ip.dat row 244: \"SulfurDioxide/Benzene p696\" (no stated temperature; nearest 300..600 K of 1)"
+    },
+    {
+      "first": "Ethylene",
+      "second": "Benzene",
+      "kij": 0.0311,
+      "source": "DECHEMA PR via ChemSep pr_ip.dat row 152: \"Ethylene/Benzene p520\" (no stated temperature; nearest 300..600 K of 1)"
+    },
+    {
+      "first": "Propylene",
+      "second": "Butene-1",
+      "kij": 0.0004,
+      "source": "DECHEMA PR via ChemSep pr_ip.dat row 230: \"Propylene/1-C4 p661\" (no stated temperature; nearest 300..600 K of 1)"
+    },
+    {
+      "first": "Butene-1",
+      "second": "Butadiene",
+      "kij": 0.0022,
+      "source": "DECHEMA PR via ChemSep pr_ip.dat row 245: \"1-Butene/1.3-Butadiene p697\" (no stated temperature; nearest 300..600 K of 1)"
+    },
+    {
+      "first": "N-hexane",
+      "second": "Cyclohexane",
+      "kij": -0.0049,
+      "source": "DECHEMA PR via ChemSep pr_ip.dat row 272: \"nC6/CycloHexane T=273-298K P=0.041-0.203bar p743\" (273..298 K; nearest 300..600 K of 2)"
+    },
+    {
+      "first": "N-hexane",
+      "second": "Benzene",
+      "kij": 0.008,
+      "source": "DWSIM 10.2.5 kij_pr.dat (n-Hexano (nC6) / Benzeno)"
+    },
+    {
+      "first": "Cyclohexane",
+      "second": "Benzene",
+      "kij": 0.0126,
+      "source": "DECHEMA PR via ChemSep pr_ip.dat row 277: \"CycloHexane/Benzene p752\" (no stated temperature; nearest 300..600 K of 1)"
+    }
+  ]
+}

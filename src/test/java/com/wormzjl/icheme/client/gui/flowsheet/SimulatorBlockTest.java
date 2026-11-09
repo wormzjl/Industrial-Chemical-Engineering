@@ -432,11 +432,47 @@ class SimulatorBlockTest {
     }
 
     private static Flowsheet current(List<Flowsheet.Unit> units, List<Flowsheet.Stream> streams) {
-        return new Flowsheet(new Flowsheet.Basis(SheetFixture.NETWORK, SheetFixture.FLUIDS.pack().revision(), SheetFixture.FLUIDS.axis()), units, streams, FlowsheetSolver.Settings.DEFAULT);
+        return com.wormzjl.icheme.science.flowsheet.RevisionNotice.stamped(new Flowsheet(new Flowsheet.Basis(SheetFixture.NETWORK, SheetFixture.FLUIDS.pack().revision(), SheetFixture.FLUIDS.axis()), units, streams, FlowsheetSolver.Settings.DEFAULT), SheetFixture.CATALOG);
     }
 
     private static List<FileColumns.Change> changes(Flowsheet sheet, SheetFixture.Texts t) {
-        return FileColumns.changes(sheet, SheetFixture.FLUIDS, SheetFixture::column, t);
+        return changes(sheet, SheetFixture.CATALOG, t);
+    }
+
+    private static List<FileColumns.Change> changes(Flowsheet sheet, com.wormzjl.icheme.science.material.MaterialCatalog catalog, SheetFixture.Texts t) {
+        return FileColumns.changes(sheet, SheetFixture.FLUIDS, catalog, SheetFixture::column, t);
+    }
+
+    /** The catalog with one record of {@code path} edited by {@code edit}. */
+    private static com.wormzjl.icheme.science.material.MaterialCatalog edited(String path, java.util.function.Consumer<JsonObject> edit) {
+        var resources = new java.util.HashMap<>(SheetFixture.CATALOG.resources());
+        var record = com.google.gson.JsonParser.parseString(resources.get(path)).getAsJsonObject();
+        edit.accept(record);
+        resources.put(path, record.toString());
+        return com.wormzjl.icheme.science.material.MaterialCatalog.parse(resources);
+    }
+
+    /**
+     * The file-open notice compares the identity of the data the sheet's compounds run on, which the file holds since it was written
+     * (batch 2026-11-04-refinery-compounds, W4): a package record edit that changes no physics, or a dataset of a compound the sheet
+     * does not feed, says nothing; a dataset of a compound it feeds says its data moved.
+     */
+    @Test
+    void theDataNoticeComparesTheDataOfTheSheetsOwnCompounds() {
+        var t = new SheetFixture.Texts();
+        var amounts = new LinkedHashMap<String, Double>();
+        amounts.put("Methane", 1.0);
+        var feed = new Flowsheet.Stream("f", "F", null, null, new Flowsheet.Feed(300, 2e5, amounts, List.of()), List.of(new Flowsheet.Point(10, 70)), new JsonObject());
+        var sheet = current(List.of(), List.of(feed));
+        assertEquals(List.of(), changes(sheet, t));
+        java.util.function.Consumer<JsonObject> bump = r -> r.addProperty("revision", r.get("revision").getAsString() + "-edited");
+        String root = "data/icheme/materials/";
+        assertEquals(List.of(), changes(sheet, edited(root + "packages/tjl20_nitrogen.json", bump), t), "a package record edit changes no physics");
+        assertEquals(List.of(), changes(sheet, edited(root + "properties/crude_pc12.json", bump), t), "a compound the sheet does not feed");
+        var moved = changes(sheet, edited(root + "properties/tjl20_methane.json", bump), t);
+        assertEquals(List.of("Data"), moved.stream().map(FileColumns.Change::kind).toList());
+        assertEquals(t.get("flowsheet.file.change_revision"), moved.getFirst().text());
+        assertTrue(t.missing.isEmpty(), () -> "missing " + t.missing);
     }
 
     @Test
@@ -471,7 +507,7 @@ class SimulatorBlockTest {
         assertTrue(lines.get(0).text().startsWith("H-201 Old heater"), lines.get(0).text());
         assertEquals("Bitumen left the package: 1.00 mole % of FEED-2 parked, not solved.", lines.get(1).text());
         assertEquals("P-201 has a new setting, Rise: it starts at its default.", lines.get(2).text());
-        assertTrue(lines.get(3).text().startsWith("Package revision changed from r1 to "), lines.get(3).text());
+        assertEquals("The data of the sheet's compounds changed since it was saved. Results dropped: run again.", lines.get(3).text());
         assertEquals(List.of(true, true, false, false), lines.stream().map(FileColumns.Change::warn).toList(), "what left the solve warns; the rest only says");
         assertTrue(t.missing.isEmpty(), () -> "missing " + t.missing);
     }

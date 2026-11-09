@@ -91,7 +91,7 @@ class ColumnSizingSampleTest {
         var column = sized.units().get(T);
         assertEquals(8.0, ((ColumnSizing.Size) column.size()).diameter());
         closest(column.rating(), Limit.COLUMN_FLOOD);
-        assertEquals(71.3, read(column.rating(), Limit.COLUMN_FLOOD), FLOOD);
+        assertEquals(70.7, read(column.rating(), Limit.COLUMN_FLOOD), FLOOD);
         assertEquals(40, read(column.rating(), Limit.COLUMN_TRAYS));
     }
 
@@ -101,9 +101,9 @@ class ColumnSizingSampleTest {
         var kept = size(sheet, run, thermo, new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of(T, new SheetSizing.UnitEntry(new ColumnSizing.Size(7.5, size.layout()), null, null, false))));
         var rating = kept.units().get(T).rating();
         assertEquals(Lamp.YELLOW, rating.lamp(), () -> text(rating));
-        assertEquals(80.9, read(rating, Limit.COLUMN_FLOOD), FLOOD);
+        assertEquals(80.3, read(rating, Limit.COLUMN_FLOOD), FLOOD);
         assertEquals(1, read(rating, Limit.COLUMN_SOLVES));
-        // At one traffic flood goes as one over the area: 71.3 × (8 / 7.5)² is 81.1.
+        // At one traffic flood goes as one over the area: 70.7 × (8 / 7.5)² is 80.4 (71.3 and 81.1 on Tia Juana).
         assertEquals(read(sized.units().get(T).rating(), Limit.COLUMN_FLOOD) * 64 / 56.25, read(rating, Limit.COLUMN_FLOOD), 1);
     }
 
@@ -112,28 +112,31 @@ class ColumnSizingSampleTest {
      * denser; that inlet holds less heat than V3's condenser takes out. Heated back by that duty, the inlet is the gas the column
      * sends, faster through the shell. Auto enlarges shells before adding them, retaining excess surface as an advisory.
      * A kept size stands at its door's count (S3b): the probe's
-     * shells on a door of three, and the same size on a door of one, which is short of surface.
+     * shells on a door of three, and the same size on a door of one, which is short of surface. On the medium crude grade (O3 of
+     * batch 2026-11-04-open-thermo-data) with condenser carry-over (E31 of that batch) the condenser takes less: one crossflow
+     * shell of 2.00 × 6 m on the curves' 509 m² (2.25 × 7 m on 781 m² on Tia Juana), and the widest single standard shell,
+     * 2.50 × 8 m, now meets the gas drop too; Auto's crossflow shell is the least surface that meets every limit.
      */
     @Test
     void theCondenserIsSetByItsShellDrop() {
         var condenser = unit("condenser");
-        assertEquals(new ExchangerSizing.Size(false, 1, 2.25, 7, com.wormzjl.icheme.science.equipment.ExchangerType.CROSSFLOW), condenser.size(), "qualify scale-up before scaling out");
+        assertEquals(new ExchangerSizing.Size(false, 1, 2.0, 6, com.wormzjl.icheme.science.equipment.ExchangerType.CROSSFLOW), condenser.size(), "qualify scale-up before scaling out");
         assertEquals(Lamp.YELLOW, condenser.rating().lamp());
         assertTrue(condenser.rating().reading(Limit.EXCHANGER_DROP_GAS).met());
         assertTrue(condenser.rating().reading(Limit.EXCHANGER_DROP_LIQUID).met());
         assertTrue(condenser.rating().reading(Limit.EXCHANGER_SURFACE).met());
         assertFalse(condenser.rating().reading(Limit.EXCHANGER_OVER_NEED).met());
-        assertEquals(781, condenser.rating().reading(Limit.EXCHANGER_SURFACE).low(), 8);
+        assertEquals(509, condenser.rating().reading(Limit.EXCHANGER_SURFACE).low(), 8);
         assertTrue(condenser.rating().reading(Limit.EXCHANGER_SURFACE).value() >= 1.2*condenser.rating().reading(Limit.EXCHANGER_SURFACE).low());
         var single = new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of(SheetSizing.member(T, "condenser"), new SheetSizing.UnitEntry(new ExchangerSizing.Size(false, 1, 2.5, 8), null, null, false)));
         var singleRating = size(sheet, run, thermo, single).units().get(SheetSizing.member(T, "condenser")).rating();
-        assertFalse(singleRating.reading(Limit.EXCHANGER_DROP_GAS).met(), "the widest single shell still loses too much pressure");
+        assertTrue(singleRating.reading(Limit.EXCHANGER_DROP_GAS).met(), "the widest single standard shell meets the drop on the medium crude; it lost too much on Tia Juana");
         var probe = new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of(SheetSizing.member(T, "condenser"), new SheetSizing.UnitEntry(new ExchangerSizing.Size(false, 3, 1.25, 4), null, null, false)));
         var three = size(door(sheet, json -> json.addProperty("condenser_units", 3)), run, thermo, probe).units().get(SheetSizing.member(T, "condenser"));
         assertEquals(new ExchangerSizing.Size(false, 3, 1.25, 4), three.size());
         var kept = three.rating();
         assertEquals(Lamp.YELLOW, kept.lamp(), () -> text(kept));
-        assertTrue(read(kept, Limit.EXCHANGER_DROP_GAS) > .2);
+        assertEquals(.13, read(kept, Limit.EXCHANGER_DROP_GAS), HUNDREDTH, "over 0.20 on Tia Juana (O3)");
         var one = size(sheet, run, thermo, probe).units().get(SheetSizing.member(T, "condenser"));
         assertEquals(new ExchangerSizing.Size(false, 1, 1.25, 4), one.size(), "the door's one shell");
         assertEquals(Lamp.RED, one.rating().lamp(), () -> text(one.rating()));
@@ -145,7 +148,7 @@ class ColumnSizingSampleTest {
         var receiver = unit("receiver");
         assertEquals(new DrumSizing.Size(UnitType.LYING_DRUM, 4, 10, true), receiver.size());
         closest(receiver.rating(), Limit.DRUM_BOOT_HOLD);
-        assertEquals(7.7, read(receiver.rating(), Limit.DRUM_BOOT_HOLD), TENTH);
+        assertEquals(7.8, read(receiver.rating(), Limit.DRUM_BOOT_HOLD), TENTH);
     }
 
     /** What the world's flash makes of the top tray's vapour at V3's own temperature: printed for the batch's report. */
@@ -172,16 +175,18 @@ class ColumnSizingSampleTest {
         var pump = unit("reflux pump");
         assertEquals(new PumpSizing.Size(.2), pump.size());
         closest(pump.rating(), Limit.PUMP_RATED);
-        assertEquals(119, read(pump.rating(), Limit.PUMP_RATED), ONE);
+        assertEquals(78, read(pump.rating(), Limit.PUMP_RATED), ONE, "119 on Tia Juana; the medium crude grade refluxes less (O3); 74 before condenser carry-over (E31)");
     }
 
     /**
      * S4c: Auto holds 1.2 × the need where a size can. PA 1 and PA 2 need 222 and 223 m², so 267 m² with the spare: 4 m tubes,
-     * 300 m², where the least that held the bare need was 3 m, 225 m². PA 3's 225 m² already holds 1.2 × its 117.
+     * 300 m², where the least that held the bare need was 3 m, 225 m². PA 3's 225 m² already holds 1.2 × its 117. On the medium
+     * crude grade (O3 of batch 2026-11-04-open-thermo-data) the needs are 202, 240 and 153 m², 242, 288 and 184 with the spare: the
+     * same coolers and pumps. With condenser carry-over (E31 of that batch) PA 1 needs 198 m², 238 with the spare.
      */
     @Test
     void eachPumparoundTakesItsCoolerAndPump() {
-        double[] needs = {224, 223, 117}, rated = {110, 93, 78}, pumps = {.25, .3, .25}, surfaces = {300, 300, 225};
+        double[] needs = {198, 240, 153}, rated = {109, 107, 92}, pumps = {.25, .3, .25}, surfaces = {300, 300, 225};
         int[] tubes = {4, 4, 3};
         for (int i = 0; i < 3; i++) {
             var cooler = unit("pa " + (i + 1) + " cooler");
@@ -197,7 +202,9 @@ class ColumnSizingSampleTest {
 
     @Test
     void theMemberLinesTakeTheProbesBores() {
-        Object[][] probe = {{"overhead", Service.GAS, .8}, {"receiver out", Service.SUCTION_BOILING, .35}, {"pump out", Service.LIQUID, .25}, {"reflux", Service.LIQUID, .2},
+        // O3 of batch 2026-11-04-open-thermo-data: on the medium crude grade the overhead, receiver outlet and pump outlet take one
+        // bore less than the probe's .8, .35 and .25.
+        Object[][] probe = {{"overhead", Service.GAS, .7}, {"receiver out", Service.SUCTION_BOILING, .3}, {"pump out", Service.LIQUID, .2}, {"reflux", Service.LIQUID, .2},
                 {"pa 1 draw", Service.DRAW, .5}, {"pa 1 return", Service.LIQUID, .3}, {"pa 2 draw", Service.DRAW, .6}, {"pa 2 return", Service.LIQUID, .3},
                 {"pa 3 draw", Service.DRAW, .45}, {"pa 3 return", Service.LIQUID, .25}};
         var wrong = new ArrayList<String>();
@@ -213,8 +220,10 @@ class ColumnSizingSampleTest {
     @Test
     void p102ReadsItsDrawTraysHeight() {
         var pump = sized.units().get("P-102").rating();
-        assertEquals(31.1, read(pump, Limit.PUMP_NPSH), TENTH);
-        closest(pump, Limit.PUMP_RATED);
+        assertEquals(32.35, read(pump, Limit.PUMP_NPSH), TENTH, "32.3 before condenser carry-over (E31)");
+        // O3 of batch 2026-11-04-open-thermo-data: on the medium crude grade P-102 runs at 69 % of its rated flow, under the lamp's 70 %.
+        assertEquals(Lamp.YELLOW, pump.lamp(), () -> text(pump));
+        assertSame(Limit.PUMP_RATED, pump.closest().limit(), () -> text(pump));
     }
 
     @Test
@@ -269,7 +278,9 @@ class ColumnSizingSampleTest {
     /**
      * An air-cooled condenser is S2's air cooler on the overhead; the cooling water's lines go with the exchanger. The sample's
      * overhead needs 1949 m² of bare surface at air 25 °C, more than the world's largest bank holds, 1468: one bank is red on its
-     * surface, and Auto takes the fewest banks in parallel that condense it (S3b), two, each carrying half the overhead.
+     * surface, and Auto takes the fewest banks in parallel that condense it (S3b), two, each carrying half the overhead. On the medium
+     * crude grade (O3 of batch 2026-11-04-open-thermo-data) it needs 1327 m², 1592 with the spare: still two banks. With condenser carry-over (E31 of that
+     * batch) it needs 1265 m², 1518 with the spare: still two banks.
      */
     @Test
     void anAirCooledCondenserTakesAnAirCooler() {
@@ -283,7 +294,7 @@ class ColumnSizingSampleTest {
         var banks = assertInstanceOf(AirCoolerSizing.Size.class, condenser.size());
         assertEquals(2, banks.banks());
         assertNotEquals(Lamp.RED, condenser.rating().lamp(), () -> text(condenser.rating()));
-        assertEquals(1949, condenser.rating().reading(Limit.AIR_COOLER_SURFACE).low(), 10);
+        assertEquals(1265, condenser.rating().reading(Limit.AIR_COOLER_SURFACE).low(), 10);
         var kept = size(air, airRun, thermo, new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of(SheetSizing.member(T, "condenser"), new SheetSizing.UnitEntry(banks, null, null, false))))
                 .units().get(SheetSizing.member(T, "condenser"));
         assertEquals(banks.withBanks(1), kept.size(), "kept on a door of one bank");

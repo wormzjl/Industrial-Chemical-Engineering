@@ -11,6 +11,7 @@ import com.wormzjl.icheme.science.flowsheet.FlowStream;
 import com.wormzjl.icheme.science.flowsheet.FlowThermo;
 import com.wormzjl.icheme.science.flowsheet.Flowsheet;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetRun;
+import com.wormzjl.icheme.science.flowsheet.SheetCompounds;
 import com.wormzjl.icheme.science.flowsheet.Wiring;
 import com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor;
 import com.wormzjl.icheme.science.flowsheet.unit.ColumnUnit;
@@ -215,11 +216,13 @@ public final class SheetSizing {
     }
 
     /**
-     * One sizing of {@code run}'s streams on {@code sheet} at {@code entries}, read on {@code thermo}'s own package: what Auto
-     * proposes there, and every item rated. A column on Auto tries its diameters.
+     * One sizing of {@code run}'s streams on {@code sheet} at {@code entries}: what Auto proposes, and every item rated. A column on
+     * Auto tries its diameters. {@code thermo} is the network package's, on whose axis {@code run} stands; the sizing reads the run
+     * on the network's view of the sheet's compounds, as the run solved there ({@link SheetCompounds}), so it evaluates no compound
+     * the sheet does not hold.
      */
     public static Sized pass(Flowsheet sheet, FlowsheetRun run, FlowThermo thermo, Entries entries) {
-        return new Sizing(sheet, run, thermo, entries).all();
+        return SheetCompounds.on(sheet, thermo, view -> new Sizing(sheet, view.down(run), view.thermo(), entries).all());
     }
 
     /**

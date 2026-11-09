@@ -256,7 +256,7 @@ class PumpCavitationTest {
      */
     @Test void waterArrivingAtACavitatingSuctionStaysLiquid() {
         var w=new EventPathWorld();var passive=new FlowControl.Passive();
-        double[] n2=new double[21];n2[19]=1;double[] water=new double[21];water[20]=1;
+        double[] n2=EventPathWorld.legacy(19);double[] water=EventPathWorld.legacy(20);
         w.runTo(152);w.place(2,0,0,Kind.RESERVOIR,NORTH,passive,new FluidDeviceSpec(1.0,298.15,101325.0,n2),.01);
         w.runTo(194);w.place(-2,0,2,Kind.PIPE,NORTH,passive,null,.01);
         w.runTo(255);w.place(-1,0,1,Kind.PIPE,NORTH,passive,null,.02);

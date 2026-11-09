@@ -85,7 +85,7 @@ public final class FlowsheetCompiler {
             }
             if (last == null || last.status() != FlowsheetRun.Status.STEADY) continue;
             var solved = last.streams().get(stream.id());
-            if (solved != null && solved.amountsView().length == thermo.axis().size()) estimates.put(stream.id(), solved);
+            if (solved != null) estimates.put(stream.id(), solved);
         }
         return estimates;
     }

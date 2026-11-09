@@ -78,15 +78,23 @@ class SizeAllSampleTest {
      * bar, not 0.30 and 0.33. E-101 takes a 1.25 m shell with 5 m tubes, not 1.00 × 6 m: more tubes, shorter, 0.17, not 0.44. H-101's
      * cabin of 12.0 × 45 m holds 105.4 MW on 13 passes of 8 MW, not 87.6 on 11: each pass carries 11/13 of the crude on a pass 2 %
      * longer, 1.48 bar, not 2.11. The path loses 3.07 bar.
+     *
+     * <p>O4 of batch 2026-11-04-open-thermo-data (crude cuts on Twu 1985 viscosity, the one-term mixture term) makes the crude
+     * up to 15 % more viscous at the coolers' temperatures: PA 2 0.40 to 0.41, PA 3 0.29 to 0.30, E-101 0.17 to 0.18, the
+     * path 3.07 to 3.10 bar. No size moves.
+     *
+     * <p>O3 of the same batch runs the sample on the medium crude grade: PA 1 cooler 0.36 to 0.39, E-101 0.18 to 0.20, H-101 1.48 to
+     * 1.39, S-6 0.03 to 0.02; the path 3.10 to 3.06 bar. With condenser carry-over (E31 of that batch) H-101 loses
+     * 1.385; the path stands.
      */
     @Test
     void p101sPathIsTheProbesStair() {
         var path = path(proposal, "P-101");
         String[] items = {"S-1", "T-101/pa 1 cooler", "S-2", "T-101/pa 2 cooler", "S-3", "T-101/pa 3 cooler", "S-4", "E-101", "S-5", "H-101", "S-6"};
-        double[] lost = {.12, .36, .10, .40, .04, .29, .04, .17, .04, 1.48, .03};
+        double[] lost = {.12, .39, .10, .41, .04, .30, .04, .20, .04, 1.385, .02};
         assertEquals(List.of(items), path.steps().stream().map(PressurePath.Step::item).toList());
         for (int i = 0; i < lost.length; i++) assertEquals(lost[i], path.steps().get(i).lost(), HUNDREDTH, items[i]);
-        assertEquals(3.07, path.lost(), HUNDREDTH);
+        assertEquals(3.06, path.lost(), HUNDREDTH);
         assertEquals(14.00, path.from(), HUNDREDTH);
         assertTrue(path.set());
         assertEquals("V-101", path.taker());
@@ -98,18 +106,21 @@ class SizeAllSampleTest {
      * The residue's path: the probe's 0.99 bar, the sump's head with the doors' drops, to a product nothing holds. It loses 0.48,
      * not the probe's 0.47: S2's heat curves give E-102 724 m² where the probe's one heat capacity gave 741, which picks another
      * bank, 0.07 bar where the probe's lost 0.05 (plan section 4). S4c's spare takes larger units on it: E-101's 1.25 m shell, whose
-     * residue side loses 0.06, not 0.15, and E-102's 6 × 3 bays of 2.5 × 6 m, 0.04, not 0.07. The path loses 0.37.
+     * residue side loses 0.06, not 0.15, and E-102's 6 × 3 bays of 2.5 × 6 m, 0.04, not 0.07. The path loses 0.37; 0.38 since O4 of
+     * batch 2026-11-04-open-thermo-data (crude cuts on Twu 1985 viscosity, the one-term mixture term), 0.375 against 0.37. On the
+     * medium crude grade (O3 of that batch) E-101's residue side loses 0.07 and the product line 0.16; the head 0.48, the path 0.38; 0.374 with
+     * condenser carry-over (E31 of that batch).
      */
     @Test
     void theResiduesPathIsTheProbes() {
         var residue = proposal.paths().stream().filter(p -> p.start().equals("T-101") && p.end().equals("RESIDUE")).findFirst().orElseThrow();
         assertEquals(List.of("S-9", "E-101", "S-10", "E-102", "RESIDUE"), residue.steps().stream().map(PressurePath.Step::item).toList());
-        double[] lost = {.005, .06, .09, .045, .17};
+        double[] lost = {.005, .07, .09, .045, .16};
         for (int i = 0; i < lost.length; i++) assertEquals(lost[i], residue.steps().get(i).lost(), HUNDREDTH, residue.steps().get(i).item());
-        assertEquals(.49, residue.head(), HUNDREDTH);
-        assertEquals(2.22, residue.to(), HUNDREDTH);
-        assertEquals(.99, residue.available(), HUNDREDTH);
-        assertEquals(.37, residue.lost(), HUNDREDTH);
+        assertEquals(.48, residue.head(), HUNDREDTH);
+        assertEquals(2.21, residue.to(), HUNDREDTH);
+        assertEquals(.98, residue.available(), HUNDREDTH);
+        assertEquals(.374, residue.lost(), HUNDREDTH);
         assertFalse(residue.set());
         assertSame(com.wormzjl.icheme.science.flowsheet.sizing.Rating.NONE, residue.rating());
     }
@@ -129,6 +140,15 @@ class SizeAllSampleTest {
      *
      * <p>S4c also raises V-101's set outlet from 2.72 to 2.80 bar ("always have enough excess"): the feed flashes less across the
      * valve and reaches the column 0.24 K warmer, 359.70 °C before sizing and 350.02 after. Upstream of the valve nothing moves.
+     *
+     * <p>O3 of batch 2026-11-04-open-thermo-data runs the sample on the medium crude grade, lighter than Tia Juana: S-6 stands at
+     * the same 5.00 and 11.9 bar, the furnace fires 73.0 MW before sizing and 67.7 after, the coil's vapour share is 0.67 and 0.41,
+     * and the feed reaches the column at 358.5 °C and 347.1 °C.
+     *
+     * <p>Since the column took the network's water (E30 (a)) its residue leaves a little lighter and cooler, so E-101 gives the
+     * crude less heat and the furnace fires 73.03 MW before sizing, not 73.00. With condenser
+     * carry-over (E31) it fires 73.08 MW before sizing and 67.60 after. Since the pumps' losses heat the crude (D42 of batch
+     * 2026-11-03-rotating-machinery) it fires 73.06 MW before sizing and 67.58 after, and the sized coil's vapour share is 0.415.
      */
     @Test
     void theSampleSizedMovesAsThePlanSays() {
@@ -137,12 +157,12 @@ class SizeAllSampleTest {
         assertEquals(FlowsheetRun.Status.STEADY, all.run().status());
         assertEquals(5.00, before.get("S-6").pressure() / 1e5, HUNDREDTH);
         assertEquals(11.9, after.get("S-6").pressure() / 1e5, .15);
-        assertEquals(78.36, run.reports().get("H-101").readings().get("duty") / 1e6, HUNDREDTH);
-        assertEquals(73.93, all.run().reports().get("H-101").readings().get("duty") / 1e6, .1);
-        assertEquals(359.7, before.get("S-7").temperature() - 273.15, .1);
-        assertEquals(350.0, after.get("S-7").temperature() - 273.15, .15);
-        assertEquals(.71, run.reports().get("H-101").readings().get("vapour"), HUNDREDTH);
-        assertEquals(.52, all.run().reports().get("H-101").readings().get("vapour"), HUNDREDTH);
+        assertEquals(73.06, run.reports().get("H-101").readings().get("duty") / 1e6, HUNDREDTH);
+        assertEquals(67.58, all.run().reports().get("H-101").readings().get("duty") / 1e6, .1);
+        assertEquals(358.5, before.get("S-7").temperature() - 273.15, .1);
+        assertEquals(347.1, after.get("S-7").temperature() - 273.15, .15);
+        assertEquals(.67, run.reports().get("H-101").readings().get("vapour"), HUNDREDTH);
+        assertEquals(.415, all.run().reports().get("H-101").readings().get("vapour"), HUNDREDTH);
     }
 
     /** Nothing is sized twice: every Auto item holds the size Size all proposed, and that is the size its rating reads. */

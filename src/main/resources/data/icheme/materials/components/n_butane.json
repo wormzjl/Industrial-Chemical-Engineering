@@ -4,6 +4,7 @@
   "kind": "chemical",
   "translation_key": "material.icheme.n_butane",
   "fallback": "N-butane",
+  "properties": "icheme:tjl19_n_butane",
   "appearance": {
     "color": "#F3F4EA",
     "transparency": 0.85,

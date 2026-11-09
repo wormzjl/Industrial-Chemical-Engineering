@@ -207,8 +207,8 @@ class ConstructorColumnTest {
     }
 
     /** The Templates page as the screen fills it: the bundled crude templates and the pot (off), then one of the player's. */
-    private static final List<ConstructorColumn.Template> TEMPLATES = List.of(new ConstructorColumn.Template("Bonga", true, "Bonga, bundled"),
-            new ConstructorColumn.Template("Tia Juana Light (default)", true, "bundled"), new ConstructorColumn.Template("WTI Light - Export", true, "bundled"),
+    private static final List<ConstructorColumn.Template> TEMPLATES = List.of(new ConstructorColumn.Template("Heavy crude", true, "Heavy crude, bundled"),
+            new ConstructorColumn.Template("Medium crude (default)", true, "bundled"), new ConstructorColumn.Template("Light crude", true, "bundled"),
             new ConstructorColumn.Template("Two-tray pot", false, "builds no column"), new ConstructorColumn.Template("My column", true, "yours"));
 
     @Test

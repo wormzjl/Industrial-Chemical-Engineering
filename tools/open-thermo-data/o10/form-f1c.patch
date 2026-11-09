@@ -1,0 +1,271 @@
+diff --git a/src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnCalculator.java b/src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnCalculator.java
+index c8d4ecd6b..4f563d2ae 100644
+--- a/src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnCalculator.java
++++ b/src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnCalculator.java
+@@ -1687,9 +1687,15 @@ public final class V3ColumnCalculator {
+             // corrected support is what converges the rung. Only one, though: a second stall in a row is a
+             // rung the continuation is going to subdivide or abandon anyway, and re-solving it three times
+             // triples the cost of every case that is on its way to a typed failure.
++            //
++            // A release is not a stall. The stall stop found the window's every step holding a point at its floor
++            // (STALLED_SUPPORT_FLOOR): the refresh that drops that point is the next step of the same solve, so it
++            // is neither counted against the stalled limit nor cut to the polish budget.
+             boolean converged = attempt instanceof V3SimultaneousColumnSolver.Attempt.Converged;
++            boolean released = attempt instanceof V3SimultaneousColumnSolver.Attempt.Failure heldFailure
++                    && heldFailure.code().equals("STALLED_SUPPORT_FLOOR");
+             boolean floorBudget = refreshes < floorRefreshLimit
+-                    && (converged || stalledRefreshes < MAXIMUM_STALLED_FLOOR_SUPPORT_REFRESHES);
++                    && (converged || released || stalledRefreshes < MAXIMUM_STALLED_FLOOR_SUPPORT_REFRESHES);
+             // The wet set is re-derived only from a state that solved its own equations, and carries its own
+             // small budget so it never has to compete with the support refreshes for one. How far a tray sits
+             // below the water dew point, and how much water it must therefore shed, are readings of a
+@@ -1705,14 +1711,14 @@ public final class V3ColumnCalculator {
+             // A refresh that only removes — points from the support, trays from the wet set — carries no
+             // information the stalled state did not already have. One that adds a wet tray does: the water
+             // that tray sheds is a degree of freedom the stalled solve never had, so it keeps the full budget.
+-            nextIterations = !converged
++            nextIterations = !converged && !released
+                     && refreshed.support().presentPhaseCount() <= prepared.support().presentPhaseCount()
+                     && refreshed.wetTrays().wetTrayCount() <= prepared.wetTrays().wetTrayCount()
+                     ? Math.min(maximumIterations, STALLED_DROP_REFRESH_ITERATIONS)
+                     : maximumIterations;
+             if (!refreshed.support().sameRetention(prepared.support())) {
+                 refreshes++;
+-                if (!converged) stalledRefreshes++;
++                if (!converged && !released) stalledRefreshes++;
+             }
+             if (!refreshed.wetTrays().sameSet(prepared.wetTrays())) {
+                 wetTrayRefreshes++;
+diff --git a/src/main/java/com/wormzjl/icheme/science/column/v3/V3SimultaneousColumnSolver.java b/src/main/java/com/wormzjl/icheme/science/column/v3/V3SimultaneousColumnSolver.java
+index eccfa2513..292eed837 100644
+--- a/src/main/java/com/wormzjl/icheme/science/column/v3/V3SimultaneousColumnSolver.java
++++ b/src/main/java/com/wormzjl/icheme/science/column/v3/V3SimultaneousColumnSolver.java
+@@ -4,6 +4,10 @@ import com.wormzjl.icheme.science.column.v3.linalg.V3BandedMatrix;
+ import com.wormzjl.icheme.science.column.v3.linalg.V3BandedPivotedSolver;
+ import com.wormzjl.icheme.science.column.v3.thermo.V3ThermoException;
+ import com.wormzjl.icheme.science.column.v3.thermo.V3ThermoWorkspace;
++import com.wormzjl.icheme.science.math.DeterministicMath;
++import java.util.Arrays;
++import java.util.HashMap;
++import java.util.Map;
+ import java.util.Objects;
+ 
+ /** Damped dry-MESH Newton correction path that emits attempt evidence only; it cannot publish a V3 success. */
+@@ -30,6 +34,21 @@ final class V3SimultaneousColumnSolver {
+             "V3 Newton Jacobian contains an unexpected off-band coupling";
+     private static final String DAMPED_NORMAL_OFF_BAND_MESSAGE =
+             V3NormalEquations.OFF_BAND_MESSAGE;
++    /**
++     * Where a trial step holds a sinking point: just under the support floor, in the log-flow coordinates.
++     *
++     * <p>A point is a stage component with its retained phases. Inside one Newton solve the floor support is
++     * frozen, and a point below its floor ({@link V3TruncationSupport#TRACE_FLOOR_FRACTION} of the
++     * component's flow scale) is not an unknown the solve can move: its finite-difference column vanishes
++     * and the LU is singular. Measured (O10, batch 2026-11-04-open-thermo-data): one accepted step took the
++     * medium grade's PC11 liquid on tray 2 to 5.9e-210 mol/s beside neighbours at 1e-8 to 1e-14, and every
++     * following iteration was SINGULAR. So every trial step (Newton, local block, damped and gradient
++     * directions) keeps each point at or above the lesser of where it was and this level, lifting its phases
++     * together so its K ratio stands. Just under the floor rather than on it, so the support refresh that
++     * follows the solve drops the point.</p>
++     */
++    private static final double HELD_POINT_LOG_FLOW =
++            DeterministicMath.log(V3TruncationSupport.TRACE_FLOOR_FRACTION) - 1.0e-3;
+ 
+     private V3SimultaneousColumnSolver() {}
+ 
+@@ -319,6 +338,9 @@ final class V3SimultaneousColumnSolver {
+         int localBlockAttempts = 0;
+         int consecutiveLocalBlockRejections = 0;
+         boolean localBlocksDisabled = false;
++        SupportPoints points = SupportPoints.of(coordinates);
++        // Consecutive accepted steps that held a point.
++        int heldIterations = 0;
+         for (int iteration = 0; iteration <= maximumIterations; iteration++) {
+             control.checkpoint();
+             V3MeshResidual residual;
+@@ -385,6 +407,14 @@ final class V3SimultaneousColumnSolver {
+                 int earlier = iteration - budget.stallWindow();
+                 if (budget.stallWindow() > 0 && earlier >= 0 && maximumResidual > budget.stallResidualFloor()
+                         && maximumResidual > budget.stallFactor() * stallResiduals[earlier]) {
++                    // A stall whose every accepted step in the window held a point is a release: the held point
++                    // is what the frozen support cannot move, and the refresh that follows drops it.
++                    if (heldIterations >= budget.stallWindow()) {
++                        return new Attempt.Failure("STALLED_SUPPORT_FLOOR", state, new Evidence(iteration, maximumResidual,
++                                merit, 0.0, 0.0, "a point held at its support floor for " + heldIterations
++                                        + " iterations; maximum scaled residual " + stallResiduals[earlier] + " at iteration "
++                                        + earlier + " and " + maximumResidual + " now", lastConvergenceEvidence));
++                    }
+                     return new Attempt.Failure("STALLED", state, new Evidence(iteration, maximumResidual, merit,
+                             0.0, 0.0, "maximum scaled residual " + stallResiduals[earlier] + " at iteration "
+                                     + earlier + " and " + maximumResidual + " now", lastConvergenceEvidence));
+@@ -404,11 +434,12 @@ final class V3SimultaneousColumnSolver {
+                         double[] baseCoordinates = coordinates.encode(state);
+                         AcceptedTrial localTrial = armijoTrial(
+                                 evaluator, coordinates, baseCoordinates, localSuccess.solution(), frozenScales, merit, workspaceFactory,
+-                                maximumLineSearchSteps, control);
++                                maximumLineSearchSteps, control, points);
+                         if (localTrial != null) {
+                             localBlockAccepted = true;
+                             consecutiveLocalBlockRejections = 0;
+                             trace.localBlockDirection(iteration, true);
++                            heldIterations = localTrial.heldPoints() > 0 ? heldIterations + 1 : 0;
+                             state = localTrial.state();
+                             lastMerit = localTrial.merit();
+                             cachedFineJacobian = null;
+@@ -463,17 +494,18 @@ final class V3SimultaneousColumnSolver {
+                 double[] baseCoordinates = coordinates.encode(state);
+                 AcceptedTrial descentTrial = dampedGaussNewtonTrial(
+                         evaluator, coordinates, baseCoordinates, jacobian, residual, frozenScales, merit, layout, workspaceFactory,
+-                        maximumLineSearchSteps, control, budget, linearWorkspace);
++                        maximumLineSearchSteps, control, budget, linearWorkspace, points);
+                 if (descentTrial == null && budget.gradientFallback()) {
+                     descentTrial = armijoTrial(evaluator, coordinates, baseCoordinates,
+                             normalizedNegativeGradient(jacobian, residual, coordinates), frozenScales, merit, workspaceFactory,
+-                            maximumLineSearchSteps, control);
++                            maximumLineSearchSteps, control, points);
+                 }
+                 if (descentTrial == null) {
+                     return new Attempt.Failure("LINEAR_" + failure.code(), state,
+                             new Evidence(iteration, maximumResidual, merit, 0.0, failure.pivotGrowth(), failure.detail(),
+                                     lastConvergenceEvidence));
+                 }
++                heldIterations = descentTrial.heldPoints() > 0 ? heldIterations + 1 : 0;
+                 state = descentTrial.state();
+                 lastMerit = descentTrial.merit();
+                 lastConvergenceEvidence = V3ConvergenceEvidence.unavailable(V3ConvergenceEvidence.closureOf(scaledTolerance));
+@@ -482,7 +514,7 @@ final class V3SimultaneousColumnSolver {
+             double[] baseCoordinates = coordinates.encode(state);
+             AcceptedTrial acceptedTrial = armijoTrial(
+                     evaluator, coordinates, baseCoordinates, linearSuccess.solution(), frozenScales, merit, workspaceFactory,
+-                    maximumLineSearchSteps, control);
++                    maximumLineSearchSteps, control, points);
+             boolean usedDescentFallback = acceptedTrial == null;
+             if (usedDescentFallback && usesFrozenFineJacobian) {
+                 cachedFineJacobian = null;
+@@ -493,11 +525,11 @@ final class V3SimultaneousColumnSolver {
+             if (usedDescentFallback) {
+                 acceptedTrial = dampedGaussNewtonTrial(
+                         evaluator, coordinates, baseCoordinates, jacobian, residual, frozenScales, merit, layout, workspaceFactory,
+-                        maximumLineSearchSteps, control, budget, linearWorkspace);
++                        maximumLineSearchSteps, control, budget, linearWorkspace, points);
+                 if (acceptedTrial == null && budget.gradientFallback()) {
+                     acceptedTrial = armijoTrial(evaluator, coordinates, baseCoordinates,
+                             normalizedNegativeGradient(jacobian, residual, coordinates), frozenScales, merit, workspaceFactory,
+-                            maximumLineSearchSteps, control);
++                            maximumLineSearchSteps, control, points);
+                 }
+             }
+             if (acceptedTrial == null) {
+@@ -505,6 +537,7 @@ final class V3SimultaneousColumnSolver {
+                         new Evidence(iteration, maximumResidual, merit, 0.0, linearSuccess.pivotGrowth(),
+                                 "no admissible Armijo-reducing Newton or descent step", lastConvergenceEvidence));
+             }
++            heldIterations = acceptedTrial.heldPoints() > 0 ? heldIterations + 1 : 0;
+             state = acceptedTrial.state();
+             lastMerit = acceptedTrial.merit();
+             if (usedDescentFallback) {
+@@ -710,22 +743,26 @@ final class V3SimultaneousColumnSolver {
+      * same scales, so the sufficient-decrease test compares like with like on the system the Jacobian was
+      * assembled for. Re-scaling each candidate by its own local throughput would let a step be accepted for
+      * enlarging a denominator instead of closing a balance.</p>
++     *
++     * <p>Every candidate holds its sinking points first ({@link #HELD_POINT_LOG_FLOW}); the accepted trial
++     * reports how many it held.</p>
+      */
+     private static AcceptedTrial armijoTrial(
+             V3MeshResidualEvaluator evaluator, V3DryMeshCoordinateMap coordinates, double[] baseCoordinates,
+             double[] direction, double[] frozenScales, double merit,
+             V3FiniteDifferenceJacobian.V3ThermoWorkspaceFactory workspaceFactory,
+-            int maximumLineSearchSteps, V3SolveControl control) {
++            int maximumLineSearchSteps, V3SolveControl control, SupportPoints points) {
+         for (int lineSearch = 0; lineSearch < maximumLineSearchSteps; lineSearch++) {
+             control.checkpoint();
+             double step = Math.scalb(1.0, -lineSearch);
+             try {
+                 double[] candidateCoordinates = addScaled(baseCoordinates, direction, step);
++                int held = points.hold(baseCoordinates, candidateCoordinates);
+                 V3DryMeshState candidate = coordinates.decode(candidateCoordinates);
+                 double candidateMerit = frozenSquaredNorm(
+                         evaluator.evaluate(candidate, workspaceFactory.newWorkspace()), frozenScales);
+                 if (candidateMerit <= merit * (1.0 - ARMIJO_COEFFICIENT * step)) {
+-                    return new AcceptedTrial(candidate, candidateCoordinates, candidateMerit, step);
++                    return new AcceptedTrial(candidate, candidateCoordinates, candidateMerit, step, held);
+                 }
+             } catch (IllegalArgumentException | V3ThermoException ignored) {
+                 // An inadmissible coordinate or PR-domain trial is an ordinary rejected line-search point.
+@@ -771,7 +808,7 @@ final class V3SimultaneousColumnSolver {
+             V3FiniteDifferenceJacobian.Jacobian jacobian, V3MeshResidual residual, double[] frozenScales, double merit,
+             V3StageBlockLayout layout, V3FiniteDifferenceJacobian.V3ThermoWorkspaceFactory workspaceFactory,
+             int maximumLineSearchSteps, V3SolveControl control, RungBudget budget,
+-            V3BandedPivotedSolver.Workspace linearWorkspace) {
++            V3BandedPivotedSolver.Workspace linearWorkspace, SupportPoints points) {
+         if (budget.maximumDampingSteps() == 0) return null;
+         V3NormalEquations normal;
+         try {
+@@ -797,7 +834,7 @@ final class V3SimultaneousColumnSolver {
+             if (result instanceof V3BandedPivotedSolver.Result.Success success) {
+                 AcceptedTrial trial = armijoTrial(
+                         evaluator, coordinates, baseCoordinates, success.solution(), frozenScales, merit, workspaceFactory,
+-                        maximumLineSearchSteps, control);
++                        maximumLineSearchSteps, control, points);
+                 if (trial != null) return trial;
+             }
+             damping *= 10.0;
+@@ -937,7 +974,56 @@ final class V3SimultaneousColumnSolver {
+         }
+     }
+ 
+-    private record AcceptedTrial(V3DryMeshState state, double[] coordinates, double merit, double step) {}
++    private record AcceptedTrial(V3DryMeshState state, double[] coordinates, double merit, double step, int heldPoints) {}
++
++    /**
++     * The retained points of one solve's coordinates: for each, its liquid and vapour flow coordinates, the
++     * second {@code -1} for a one-phase point.
++     */
++    private record SupportPoints(int[] first, int[] second) {
++        static SupportPoints of(V3DryMeshCoordinateMap coordinates) {
++            int count = coordinates.coordinateCount();
++            int[] first = new int[count];
++            int[] second = new int[count];
++            int points = 0;
++            Map<Long, Integer> byStageComponent = new HashMap<>();
++            for (int index = 0; index < count; index++) {
++                V3DegreeOfFreedomLedger.UnknownId id = coordinates.unknowns().get(index).id();
++                if (id.family() != V3DegreeOfFreedomLedger.UnknownFamily.LIQUID_COMPONENT_FLOW
++                        && id.family() != V3DegreeOfFreedomLedger.UnknownFamily.VAPOR_COMPONENT_FLOW) continue;
++                Integer point = byStageComponent.putIfAbsent(((long) id.node() << 32) | id.component(), points);
++                if (point == null) {
++                    first[points] = index;
++                    second[points++] = -1;
++                } else {
++                    second[point] = index;
++                }
++            }
++            return new SupportPoints(Arrays.copyOf(first, points), Arrays.copyOf(second, points));
++        }
++
++        /**
++         * Lifts each point of {@code candidate} that sank below the lesser of its {@code base} level and
++         * {@link #HELD_POINT_LOG_FLOW} back to that bound, both phases by the same log step; a point's level is
++         * its larger phase. Returns the number of points held.
++         */
++        int hold(double[] base, double[] candidate) {
++            int held = 0;
++            for (int point = 0; point < first.length; point++) {
++                int liquid = first[point];
++                int vapor = second[point];
++                double bound = Math.min(vapor < 0 ? base[liquid] : Math.max(base[liquid], base[vapor]),
++                        HELD_POINT_LOG_FLOW);
++                double level = vapor < 0 ? candidate[liquid] : Math.max(candidate[liquid], candidate[vapor]);
++                if (level < bound) {
++                    candidate[liquid] += bound - level;
++                    if (vapor >= 0) candidate[vapor] += bound - level;
++                    held++;
++                }
++            }
++            return held;
++        }
++    }
+ 
+     private record VerifiedFinalNewton(
+             V3DryMeshState state,

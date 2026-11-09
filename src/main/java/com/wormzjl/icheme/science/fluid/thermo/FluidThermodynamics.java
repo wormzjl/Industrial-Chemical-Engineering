@@ -64,10 +64,11 @@ public final class FluidThermodynamics {
     private final TraceTruncationPolicy tracePolicy;
 
     /**
-     * The canonical gameplay basis, which includes nitrogen. {@code packageId} is resolved through
-     * {@link FluidMaterialCatalog#resolveNetworkPackage}, which accepts only the registered network package, and a
-     * package without nitrogen is refused rather than run on a shorter basis. No overload takes a single number after
-     * the package: the velocity limit comes with the trace cutoff.
+     * The gameplay model of the package the caller names: the world's network package
+     * ({@link FluidMaterialCatalog#networkPackage}, which the network configuration requires to hold nitrogen) or a view
+     * of it on fewer compounds (a simulator sheet's). A saved world is matched to it by compound ids and identity, never
+     * by package id; a model without nitrogen refuses a nitrogen charge ({@link #initialNitrogenCharge}). No overload
+     * takes a single number after the package: the velocity limit comes with the trace cutoff.
      */
     public static FluidThermodynamics forNetwork(MaterialCatalog catalog,String packageId) {
         return forNetwork(catalog,packageId,DEFAULT_MAXIMUM_VELOCITY,DEFAULT_TRACE_CUTOFF_MOLE_FRACTION);
@@ -80,7 +81,7 @@ public final class FluidThermodynamics {
     }
     public static FluidThermodynamics forNetwork(MaterialCatalog catalog,String packageId,double maximumVelocity,double traceCutoffMoleFraction,com.wormzjl.icheme.science.fluid.transport.SlurryTransport.Settings solidSettings) {
         TraceTruncationPolicy.requireCutoff(traceCutoffMoleFraction,MAX_TRACE_CUTOFF_MOLE_FRACTION);
-        return new FluidThermodynamics(catalog,FluidMaterialCatalog.resolveNetworkPackage(catalog,packageId),
+        return new FluidThermodynamics(catalog,packageId,
                 maximumVelocity,TraceTruncationPolicy.of(traceCutoffMoleFraction),solidSettings);
     }
 
@@ -94,6 +95,11 @@ public final class FluidThermodynamics {
     }
 
     public FluidThermodynamics(MaterialCatalog catalog,String packageId,double maximumVelocity,TraceTruncationPolicy tracePolicy,com.wormzjl.icheme.science.fluid.transport.SlurryTransport.Settings solidSettings) {
+        this(catalog,packageId,maximumVelocity,tracePolicy,solidSettings,null);
+    }
+    /** The model of a compound list (batch 2026-11-04-refinery-compounds, V2): {@code whole}'s package restricted to it. */
+    private FluidThermodynamics(MaterialCatalog catalog,String packageId,double maximumVelocity,TraceTruncationPolicy tracePolicy,com.wormzjl.icheme.science.fluid.transport.SlurryTransport.Settings solidSettings,FluidThermodynamics whole) {
+        this.whole=whole==null?this:whole;views=whole==null?new java.util.HashMap<>():null;
         this.solidSettings=Objects.requireNonNull(solidSettings);
         if(!Double.isFinite(maximumVelocity)||maximumVelocity<=0)throw new IllegalArgumentException("Positive finite maximum velocity required");
         TraceTruncationPolicy.requireCutoff(Objects.requireNonNull(tracePolicy,"tracePolicy").cutoffMoleFraction(),MAX_TRACE_CUTOFF_MOLE_FRACTION);
@@ -107,10 +113,10 @@ public final class FluidThermodynamics {
                 com.wormzjl.icheme.science.material.MaterialRuntime::water);
         steam=new NetworkPhaseEngine.Steam(water);
         domain=hydrocarbon.domain();
-        // The crystal competition: the package's admitted crystals, on a spine package only (a crystal is anchored to the
-        // spine family's liquid, and its enthalpy is moved to the network datum by the spine's formation enthalpies). None
-        // on every bundled network package: the fluid-only path is unchanged.
-        var admitted=hydrocarbon.spine().isPresent()?PhaseContract.admittedCrystals(catalog,packageId):List.<String>of();
+        // The crystal competition: the package's admitted crystals, on either ideal-gas source (E27). A crystal is anchored
+        // to this family's liquid at its triple point; a spine package's formation enthalpies move it to the network datum,
+        // a fit package's ideal gas is that datum (NetworkCrystals). A view without a crystal's compound admits none.
+        var admitted=PhaseContract.admittedCrystals(catalog,packageId);
         crystalIds=List.copyOf(admitted);crystalSpecies=new boolean[hydrocarbon.componentCount()];
         double ceiling=Double.POSITIVE_INFINITY;
         for(String crystal:admitted) {
@@ -121,7 +127,7 @@ public final class FluidThermodynamics {
         crystalCeiling=ceiling;
         // Region 1 at 298.15 K and 1 atm itself, the stable liquid: the network's water datum and the pump's density.
         var reference=WaterRegion1.evaluate(water,298.15,101325);
-        waterEnthalpyOffset=V3WaterProperties.liquidMolarEnthalpy(water,298.15)-reference.specificEnthalpy()*waterMolecularWeight;
+        waterEnthalpyOffset=V3WaterProperties.liquidEnthalpyOffset(water);
         pumpReferenceDensity=waterMolecularWeight/(reference.specificVolume()*waterMolecularWeight);
         // The free water's ice (WP4): its record anchored to this model's liquid water at the triple point, on the network's
         // water datum, with this model's steam; below the melting line the free water is ice, on every package.
@@ -145,6 +151,32 @@ public final class FluidThermodynamics {
      * table): the network's integrator, the hydrocarbon model's and the viscosity's revisions. Built once per model.
      */
     private final String thermodynamicRevision;
+    /** The model of the whole package this one is a view of (itself for a whole package), and, on the whole one, its views by compound list. */
+    private final FluidThermodynamics whole;
+    private final java.util.Map<List<String>,FluidThermodynamics> views;
+    /** The model this one is a view of: the package on its whole compound list, with the same settings. */
+    public FluidThermodynamics whole(){return whole;}
+    /** The compounds this model carries, in the package's order, water not among them. */
+    public List<String> compounds(){return hydrocarbon.components();}
+    /**
+     * This model's package on {@code compounds} (an island's own list, batch 2026-11-04-refinery-compounds, V2), with the same
+     * velocity limit, trace cutoff and solid settings: {@link MaterialCatalog#restrict} of the whole package, in its order, built
+     * once per list and kept by the whole model. Every compound must be one of the whole package's; water is never named.
+     * A state that holds none of the other compounds has the same numbers on it as on the whole package (V1).
+     */
+    public FluidThermodynamics on(java.util.Collection<String> compounds) {
+        var all=whole.compounds();var wanted=new java.util.HashSet<>(compounds);
+        for(String id:wanted)if(!all.contains(id))throw new IllegalArgumentException("Compound "+id+" is not in package "+domain.packageId());
+        var list=all.stream().filter(wanted::contains).toList();
+        if(list.size()==all.size())return whole;
+        if(list.equals(compounds()))return this;
+        synchronized(whole.views) {
+            var known=whole.views.get(list);
+            if(known!=null)return known;
+            var view=new FluidThermodynamics(whole.catalog.restrict(domain.packageId(),list),domain.packageId(),whole.maximumVelocity,whole.tracePolicy,whole.solidSettings,whole);
+            whole.views.put(list,view);return view;
+        }
+    }
     /**
      * The model's full revision: the thermodynamic one with the hydraulic acceptance law (the velocity clamp, the trace
      * cutoff, the solid settings). A certificate holds only under the revision it was issued with, and the world's
@@ -158,6 +190,8 @@ public final class FluidThermodynamics {
     public FreeWaterIce freeWaterIce(){return freeWaterIce;}
     /** The catalog this model was built from; the phase engine is built from it on first use. */
     private final MaterialCatalog catalog;
+    /** The catalog this model was built from: a view's is the whole one's restricted to its list, its package under the same id. */
+    public MaterialCatalog catalog(){return catalog;}
     /** The equilibrium engine that decides this model's phases; built on the first phase decision. */
     private volatile NetworkPhaseEngine phaseEngine;
     NetworkPhaseEngine phaseEngine() {
@@ -331,7 +365,7 @@ public final class FluidThermodynamics {
     private final double crystalCeiling;
     /**
      * The density a pump's "maximum pressure rise" is stated for: liquid water at 298.15 K and 101,325 Pa, from this
-     * model's own water (IF97 Region 1 at that state), 997.05 kg/m3 (NIST: 997.0). A
+     * model's own water (IF97 Region 1 at that state), 997.05 kg/m3 (IAPWS-95: 997.047). A
      * pump's rise limit on another fluid is the setting scaled by the density of
      * what it withdraws over this one: a head, so a pump that pushes water 500 kPa pushes nitrogen at 1 atm about
      * 575 Pa. See {@code PassiveStepSolver.riseLimit}.

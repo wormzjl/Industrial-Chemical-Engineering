@@ -29,7 +29,8 @@ import java.util.Objects;
  * transition, for CO2-I its normal sublimation point (194.6 K, 1571 kg/m3, 1.255 kJ/(kg K)), the state a slack tank of dry
  * ice sits at, for ice its normal melting point (273.1526 K, 916.7 kg/m3, 2.097 kJ/(kg K)). There the crystal's energy is
  * the model's exactly: {@code u0 = u_s(T_ref, P_amb) - c (T_ref - 298.15)} on the network's datum (an admitted crystal's
- * spine energy less the formation enthalpy, D10; the ice on the free water's own datum), so a refresh's latent heat is the
+ * spine energy less the formation enthalpy, D10; on a fit package and for the ice the model's energy itself, the family
+ * being on the network's datum, E27), so a refresh's latent heat is the
  * model's at {@code T_ref} and departs from it by the integral of the heat capacity's change elsewhere: for CO2-I 0.04
  * kJ/mol at its triple point (0.5 % of the fusion enthalpy), 0.17 kJ/mol at 150 K and 0.59 kJ/mol at 110 K (0.7 and 2.3 %
  * of the sublimation enthalpy); for ice 0.0 kJ/mol at 263 K and 1.7 kJ/mol at 111.6 K (14 % of the 12.0 kJ/mol water
@@ -84,8 +85,9 @@ public final class NetworkCrystals {
     /** The crystals of {@code model}'s package as solids: its engine's anchored crystals {@code ids}, then its free water's ice. */
     static NetworkCrystals of(FluidThermodynamics model,NetworkPhaseEngine engine,List<String> ids,String packageId) {
         var species=engine.species();var built=new ArrayList<Crystal>();
+        // The anchored model's datum: a spine package's formation datum (D10), a fit package's network datum itself (E27).
+        var formation=model.hydrocarbon.spine().map(SpinePackageData::formationReference).orElse(null);
         for(String id:ids) {
-            var formation=model.hydrocarbon.spine().orElseThrow(()->new IllegalStateException("Crystals compete on a spine package only")).formationReference();
             var anchored=engine.engine().anchoredCrystal(id);
             if(anchored==null)throw new IllegalStateException("The network's engine has no evaluator of crystal "+id);
             int component=model.hydrocarbon.components().indexOf(anchored.component());
@@ -101,7 +103,7 @@ public final class NetworkCrystals {
             double footT=anchored.anchor().temperature(),footP=anchored.anchor().pressure(),slope=0;
             var melting=engine.engine().depositionTemperature(id,MELTING_PRESSURE,species,pure,engine.engine().newWorkspace());
             if(melting.converged()&&MELTING_PRESSURE>footP)slope=(melting.temperature()-footT)/(MELTING_PRESSURE-footP);
-            built.add(crystal(anchored,anchored,component,molarMass,onset.temperature(),formation.offsetJoulesPerMole(component),packageId,footT,footP,slope));
+            built.add(crystal(anchored,anchored,component,molarMass,onset.temperature(),formation==null?0:formation.offsetJoulesPerMole(component),packageId,footT,footP,slope));
         }
         // The free water's ice, at its normal melting point; the free water is on the network's own datum (no formation).
         var ice=model.freeWaterIce();int water=model.hydrocarbon.componentCount();

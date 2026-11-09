@@ -33,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class PrecipitatedSolidsTest {
     static final String PILOT="icheme:pilot_cryogenic";
     static final int NITROGEN=0,METHANE=1,CO2=3;
-    private final FluidThermodynamics pilot=FluidTestSupport.model(MaterialCatalog.bundled(),PILOT);
+    private final FluidThermodynamics pilot=FluidTestSupport.model(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(),PILOT);
     private final FluidThermodynamics water=FluidTestSupport.networkModel();
     private NetworkCrystals.Crystal co2(){return pilot.crystalSolids().all().getFirst();}
 

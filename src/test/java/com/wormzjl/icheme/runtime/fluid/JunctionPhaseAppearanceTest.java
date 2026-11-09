@@ -23,7 +23,7 @@ class JunctionPhaseAppearanceTest {
         w.place(0,0,1,Kind.PIPE,NORTH,.02);w.place(0,1,1,Kind.VOID,NORTH,.02);w.place(0,0,2,Kind.PIPE,NORTH,.02);
         w.place(0,0,3,Kind.GENERATOR,NORTH,passive,EventPathWorld.pure(MaterialTestBasis.NITROGEN,333.2954119245145,366182.8050784859),.02);
         w.runTo(2000);w.assertKeptUp("nitrogen into a water-seeded junction");
-        var island=w.coordinator.snapshots().getFirst();
+        var island=w.onWorld(w.coordinator.snapshots().getFirst());
         var junction=island.graph().reservoirs().stream().filter(n->n.junction()).findFirst().orElseThrow().state();
         assertTrue(junction.vaporView()[MaterialTestBasis.NITROGEN]>0,"the junction carries the nitrogen in a vapour phase: "+junction);
     }

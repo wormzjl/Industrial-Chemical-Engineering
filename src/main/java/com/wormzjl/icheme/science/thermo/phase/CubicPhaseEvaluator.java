@@ -2,6 +2,7 @@ package com.wormzjl.icheme.science.thermo.phase;
 
 import com.wormzjl.icheme.science.math.DeterministicMath;
 
+import com.wormzjl.icheme.science.fluid.thermo.HydrocarbonModel;
 import com.wormzjl.icheme.science.fluid.thermo.SpinePackageData;
 import com.wormzjl.icheme.science.fluid.thermo.TranslatedPengRobinson;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
@@ -78,12 +79,14 @@ public final class CubicPhaseEvaluator {
     }
 
     /**
-     * The evaluator of a package that declares a reference spine, over its whole component basis in package order (P3
-     * WP5): the spines as the ideal-gas functions, the E-PPR78 pair interactions and the one-anchor-per-species
-     * translations, all from {@link SpinePackageData#of} exactly as the network's {@code HydrocarbonModel} takes them.
-     * A package without a spine is refused (it has no ideal-gas functions).
+     * The evaluator of a package over its whole component basis in package order, exactly as the network's
+     * {@code HydrocarbonModel} takes it. A package that declares a reference spine (P3 WP5): the spines as the ideal-gas
+     * functions, the E-PPR78 pair interactions and the one-anchor-per-species translations, all from
+     * {@link SpinePackageData#of}. A package without one: its {@code shifted_polynomial_5} fits on the network's datum,
+     * its constant interactions and the model's translations ({@link HydrocarbonModel#coefficientEvaluator}).
      */
     public static CubicPhaseEvaluator forPackage(MaterialCatalog catalog, String packageId) {
+        if (catalog.requirePackage(packageId).spine().isEmpty()) return new HydrocarbonModel(catalog, packageId).coefficientEvaluator();
         var data = SpinePackageData.of(catalog, packageId);
         return new CubicPhaseEvaluator(packageId, data.components(), data.interactions(), data.translations(), data.idealGas());
     }

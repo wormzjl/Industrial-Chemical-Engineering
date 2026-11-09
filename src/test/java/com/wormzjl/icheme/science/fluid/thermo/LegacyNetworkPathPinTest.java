@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.wormzjl.icheme.fluid.support.FluidTestSupport;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
-import com.wormzjl.icheme.science.thermo.IdealGasFunction;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel;
 import com.wormzjl.icheme.science.thermo.phase.CubicPhaseEvaluator;
 import com.wormzjl.icheme.science.thermo.phase.PhaseDerivatives;
@@ -14,9 +13,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.ArrayList;
 import java.util.HexFormat;
-import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -69,8 +66,15 @@ class LegacyNetworkPathPinTest {
      * {@code 37c1b7020d789e0d44041f8cc0a9b24ac8c694c63ef59e36214f08ccdccab1ee}): the wet flashes whose state holds steam
      * move, their gas volume, partial pressures, enthalpy and acoustic bound now those of {@code R T / p + B} steam; every
      * changed line runs only for a state or a phase holding water, so the dry probe states run no changed code.</p>
+     *
+     * <p>Re-pinned for the hydrocarbon partial pressure closed to {@code 1e-13 P} (owner decision E21, 2026-11-05; the
+     * value before, {@code 829a4af5d5fabb47d173294a1430d40ee5d815c25ae1949baeaa93d0d7e76b4a}): the old stop at
+     * {@code 1e-8 P} left each all-steam answer anywhere in that band. Point by point (the probe's wet flashes printed at
+     * both trees, batch 2026-11-04-open-thermo-data) only the 21 wet flashes whose water is all steam moved (350 K at
+     * 0.1 MPa, 450 and 700 K at every pressure): volume within 9.4e-9 relative, enthalpy within 1.6e-5 J, the same
+     * phases and water split; the other 42 flashes keep their bits, and the other stages run no changed code.</p>
      */
-    static final String DIGEST = "02fec125e6b5a3502bf79a257554be4b3588352edd914c4bb66b59c0895902b0";
+    static final String DIGEST = "1f535246354242c26385dd83ca6634406fe3e8ed623a8b3eb9c7834d61509f0b";
     /**
      * The revision string: the formulation tag {@code direct-liquid-v1:tp-engine-v1:range-continuation-v1} (the phases
      * decided by the equilibrium engine, every data range continued since the owner rule of 2026-10-16) and the fluid
@@ -81,12 +85,26 @@ class LegacyNetworkPathPinTest {
      * fingerprint is the nitrogen record r3's. Since 2026-10-26 nothing is hashed and each record declares its own
      * revision (owner decisions): the fingerprint (last {@code 7b222959...}) is every record's declared revision,
      * {@link MaterialCatalog#fluidRevision}: the column's identity, then each viscosity by its own revision, the ice and
-     * the fluid reference records. The nitrogen record's r3 is visible in it.
+     * the fluid reference records. The nitrogen record's r3 is visible in it. Since W1 of batch 2026-11-04-refinery-compounds
+     * a package is a property method and a compound list: the package record's revision is r2 and the method follows it
+     * ({@code method=icheme:crude_pr78@crude-pr78-r1}); every dataset, pair and water record, and so every number, is unchanged.
+     * Since option B of the varying-components review (2026-11-04) an identity is physics only: the package record
+     * ({@code icheme:tjl20_methane_nitrogen@crude-regrouped-r2}) left it, and the method leads; the fluid reference records stay,
+     * as both hold entries for the network's compounds. Since owner decision D7 (2026-11-04) the method is named by its
+     * physics fields (model, ideal gas, missing pairs, column pressures, the liquid-mixture correction's revision), not by
+     * {@code icheme:crude_pr78@crude-pr78-r1}: a pair library added for other compounds moves nothing here. Since W6 the
+     * isobutane and isopentane liquid viscosity tables are marked estimated past ChemSep's data end (r2). Since O2 of batch
+     * 2026-11-04-open-thermo-data the NIST-derived records are re-derived from CoolProp, IAPWS-95 and ATcT (methane r2, nitrogen
+     * r4 with the pilot's CoolProp viscosity tables, water r3, the liquid calibration points), an owner-approved physics change:
+     * the digest moves with them. Since O7 (decision E16) the methane Cp is fitted to the reference spine (methane r3, within
+     * 0.013 % of r2; the digest before, {@code 5dbe1a5b44708afa1d795d1bf4dfd052806dd6e4aeb69a0efd614d5f6680f155}).
+     * Since O4 (decisions E12, E14) the cuts' liquid viscosity is Twu 1985 + ASTM D341 ({@code twu-1985-d341-r1}) and the
+     * method's liquid-mixture term the one-term ECCC refit ({@code eccc-cut-pair-r1}): transport only, so the digest stays.
      */
     static final String REVISION = String.join(";",
-            "icheme:tjl20_methane_nitrogen@crude-regrouped-r1",
+            "method=model:pr78,ideal-gas:fit,missing-interactions:zero,pressure-pascal:1000..2000000,liquid-mixture:eccc-cut-pair-r1",
             "properties=" + String.join(",",
-                    "icheme:tjl20_methane@tjl20-methane-nist-r1",
+                    "icheme:tjl20_methane@tjl20-methane-spine-r3",
                     "icheme:tjl19_ethane@tjl19-dwsim-10.2.3-r1",
                     "icheme:tjl19_propane@tjl19-dwsim-10.2.3-r1",
                     "icheme:tjl19_isobutane@tjl19-dwsim-10.2.3-r1",
@@ -105,35 +123,35 @@ class LegacyNetworkPathPinTest {
                     "icheme:crude_pc10@crude-regrouped-r1",
                     "icheme:crude_pc11@crude-regrouped-r1",
                     "icheme:crude_pc12@crude-regrouped-r1",
-                    "icheme:fluid_nitrogen@fluid-nitrogen-nist-r3"),
+                    "icheme:fluid_nitrogen@fluid-nitrogen-coolprop-r4"),
             "interactions=icheme:tjl20@tjl20-frozen-kij-r1",
-            "water=icheme:water@water-iapws-shomate-r2",
+            "water=icheme:water@water-iapws95-shomate-r3",
             "viscosity=" + String.join(",",
                     viscosities("icheme:tjl20_methane", "dwsim-viscosity-api-r1", "dwsim-viscosity-api-ambient-r2"),
                     viscosities("icheme:tjl19_ethane", "dwsim-viscosity-api-r1", "dwsim-viscosity-api-ambient-r2"),
                     viscosities("icheme:tjl19_propane", "dwsim-viscosity-api-r1", "dwsim-viscosity-api-ambient-r2"),
-                    viscosities("icheme:tjl19_isobutane", "dwsim-viscosity-api-r1", "dwsim-viscosity-api-ambient-r2"),
+                    viscosities("icheme:tjl19_isobutane", "dwsim-viscosity-api-r2", "dwsim-viscosity-api-ambient-r2"),
                     viscosities("icheme:tjl19_n_butane", "dwsim-viscosity-api-r1", "dwsim-viscosity-api-ambient-r2"),
-                    viscosities("icheme:tjl19_isopentane", "dwsim-viscosity-api-r1", "dwsim-viscosity-api-ambient-r2"),
+                    viscosities("icheme:tjl19_isopentane", "dwsim-viscosity-api-r2", "dwsim-viscosity-api-ambient-r2"),
                     viscosities("icheme:tjl19_n_pentane", "dwsim-viscosity-api-r1", "dwsim-viscosity-api-ambient-r2"),
-                    viscosities("icheme:crude_pc01", "crude-regrouped-r1-dalia", "dwsim-viscosity-api-ambient-r2"),
-                    viscosities("icheme:crude_pc02", "crude-regrouped-r1-dalia", "dwsim-viscosity-api-ambient-r2"),
-                    viscosities("icheme:crude_pc03", "crude-regrouped-r1-dalia", "dwsim-viscosity-api-ambient-r2"),
-                    viscosities("icheme:crude_pc04", "crude-regrouped-r1-dalia", "dwsim-viscosity-api-ambient-r2"),
-                    viscosities("icheme:crude_pc05", "crude-regrouped-r1-dalia", "dwsim-viscosity-api-ambient-r2"),
-                    viscosities("icheme:crude_pc06", "crude-regrouped-r1-dalia", "dwsim-viscosity-api-ambient-r2"),
-                    viscosities("icheme:crude_pc07", "crude-regrouped-r1-dalia", "dwsim-viscosity-api-ambient-r2"),
-                    viscosities("icheme:crude_pc08", "crude-regrouped-r1-dalia", "crude-regrouped-r1-vapor"),
-                    viscosities("icheme:crude_pc09", "crude-regrouped-r1-dalia", "crude-regrouped-r1-vapor"),
-                    viscosities("icheme:crude_pc10", "crude-regrouped-r1-dalia", "crude-regrouped-r1-vapor"),
-                    viscosities("icheme:crude_pc11", "crude-regrouped-r1-dalia", "crude-regrouped-r1-vapor"),
-                    viscosities("icheme:crude_pc12", "crude-regrouped-r1-dalia", "crude-regrouped-r1-vapor"),
-                    viscosities("icheme:fluid_nitrogen", "nitrogen-nist-viscosity-r2", "nitrogen-nist-viscosity-r2"),
+                    viscosities("icheme:crude_pc01", "twu-1985-d341-r1", "dwsim-viscosity-api-ambient-r2"),
+                    viscosities("icheme:crude_pc02", "twu-1985-d341-r1", "dwsim-viscosity-api-ambient-r2"),
+                    viscosities("icheme:crude_pc03", "twu-1985-d341-r1", "dwsim-viscosity-api-ambient-r2"),
+                    viscosities("icheme:crude_pc04", "twu-1985-d341-r1", "dwsim-viscosity-api-ambient-r2"),
+                    viscosities("icheme:crude_pc05", "twu-1985-d341-r1", "dwsim-viscosity-api-ambient-r2"),
+                    viscosities("icheme:crude_pc06", "twu-1985-d341-r1", "dwsim-viscosity-api-ambient-r2"),
+                    viscosities("icheme:crude_pc07", "twu-1985-d341-r1", "dwsim-viscosity-api-ambient-r2"),
+                    viscosities("icheme:crude_pc08", "twu-1985-d341-r1", "crude-regrouped-r1-vapor"),
+                    viscosities("icheme:crude_pc09", "twu-1985-d341-r1", "crude-regrouped-r1-vapor"),
+                    viscosities("icheme:crude_pc10", "twu-1985-d341-r1", "crude-regrouped-r1-vapor"),
+                    viscosities("icheme:crude_pc11", "twu-1985-d341-r1", "crude-regrouped-r1-vapor"),
+                    viscosities("icheme:crude_pc12", "twu-1985-d341-r1", "crude-regrouped-r1-vapor"),
+                    viscosities("icheme:fluid_nitrogen", "coolprop-8.0.0-saturated-liquid-r1", "coolprop-8.0.0-dilute-gas-r1"),
                     "icheme:water/liquid@iapws-sr6-2011-viscosity-r1"),
             "ice=icheme:crystal_ice_ih@crystal-ice-ih-r1",
-            "fluid-data=conditional_solute_log_tables@dwsim-conditional-solute-ambient-v2,liquid_volume_reference_points@nist-liquid-calibration-20260915")
+            "fluid-data=conditional_solute_log_tables@dwsim-conditional-solute-ambient-v2,liquid_volume_reference_points@coolprop-8.0.0-liquid-calibration-r1")
             + ":direct-liquid-v1:tp-engine-v1:range-continuation-v1"
-            + ":separate-free-water-v3:water-iapws-shomate-r2:fluid-domain-data-v1:catalog-volume-reference-v1";
+            + ":separate-free-water-v3:water-iapws95-shomate-r3:fluid-domain-data-v1:catalog-volume-reference-v1";
 
     /** A property record's two viscosities in the fluid identity: {@code id/liquid@revision,id/vapor@revision}. */
     private static String viscosities(String id, String liquid, String vapor) {
@@ -158,22 +176,14 @@ class LegacyNetworkPathPinTest {
     }
 
     /**
-     * The engine's evaluator of a package without a spine, as {@link NetworkPhaseEngine} builds it: the package's PR78
-     * constants and constant interactions, the network model's own translations, and the {@code shifted_polynomial_5}
-     * fits on the network's datum over the translated model's fit ranges.
+     * The engine's evaluator of a package without a spine: {@link CubicPhaseEvaluator#forPackage}, which since decision
+     * E27 builds it as {@link NetworkPhaseEngine} does ({@link HydrocarbonModel#coefficientEvaluator}: the package's PR78
+     * constants and constant interactions, the model's own translations, and the {@link CoefficientIdealGas} fits on the
+     * network's datum over the translated model's fit ranges). The digest is unchanged by that move: the shared evaluator
+     * is bit for bit the one this test built itself before.
      */
     static CubicPhaseEvaluator evaluator(MaterialCatalog catalog, FluidThermodynamics model) {
-        var propertyPackage = catalog.requirePackage(NETWORK);
-        var translated = model.hydrocarbon.translated();
-        int n = propertyPackage.components().size();
-        double[] translations = new double[n];
-        List<IdealGasFunction> gas = new ArrayList<>(n);
-        for (int i = 0; i < n; i++) {
-            translations[i] = translated.translation(i);
-            gas.add(new NetworkPhaseEngine.CoefficientIdealGas(propertyPackage.properties().get(i),
-                    translated.idealGasMinimumTemperature(i), translated.idealGasMaximumTemperature(i)));
-        }
-        return CubicPhaseEvaluator.fromPackage(propertyPackage, propertyPackage.components(), translations, gas);
+        return CubicPhaseEvaluator.forPackage(catalog, NETWORK);
     }
 
     /** Every number of the probe, in a fixed order, as SHA-256 hex. */

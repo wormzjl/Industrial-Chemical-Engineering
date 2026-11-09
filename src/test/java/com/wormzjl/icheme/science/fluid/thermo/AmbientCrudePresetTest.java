@@ -13,7 +13,7 @@ class AmbientCrudePresetTest {
     @Test void crudePresetsFlashAndHaveFiniteTransportAtAmbientTemperature() {
         var catalog=MaterialCatalog.bundled();
         var model=FluidThermodynamics.forNetwork(catalog,FluidPresetCatalog.NETWORK_PACKAGE);
-        for (var preset:FluidPresetCatalog.resolve(catalog).subList(2,5)) {
+        for (var preset:FluidPresetCatalog.resolve(catalog).subList(2,6)) {
             for (double t:new double[]{293.15,298,298.15,300,350}) {
                 var state=assertDoesNotThrow(()->model.flashTP(t,101325,preset.moleFractions(),()->{}),preset.name()+" at "+t+" K");
                 assertEquals(t,state.temperature());
@@ -31,7 +31,7 @@ class AmbientCrudePresetTest {
         var geometry=new PipeResistance.Geometry(1,.05,.000045,0);
         var device=new PhysicalFluidTopology.Device(1,new PhysicalFluidTopology.Position("minecraft:overworld",0,0,0),
                 TopologyCompiler.Kind.GENERATOR,PhysicalFluidTopology.Direction.EAST,geometry,new FlowControl.Passive());
-        for(var preset:FluidPresetCatalog.resolve(catalog).subList(2,5)) {
+        for(var preset:FluidPresetCatalog.resolve(catalog).subList(2,6)) {
             var generator=new FluidDeviceSpec(1,298,200000,preset.moleFractions()).initialize(device,model,()->{});
             assertEquals(298,generator.state().temperature());
             var liquid=generator.state().liquid();

@@ -119,7 +119,7 @@ class NetworkPhaseEngineTest {
      */
     @Test
     void theWp5OpenCaseAndItsNeighbourhoodResolve() {
-        var pilot = FluidTestSupport.model(MaterialCatalog.bundled(), PILOT);
+        var pilot = FluidTestSupport.model(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PILOT);
         double[] feed = {0, 0.8, 0, 0.2, 0};
         var state = pilot.flashTP(230, 2e6, feed, () -> {});
         for (int i = 0; i < 4; i++) assertEquals(feed[i], state.liquidView()[i] + state.vaporView()[i], 1e-15);
@@ -143,11 +143,11 @@ class NetworkPhaseEngineTest {
      */
     @Test
     void aCriticalBandFailureIsTyped() {
-        var pilot = FluidTestSupport.model(MaterialCatalog.bundled(), PILOT);
+        var pilot = FluidTestSupport.model(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PILOT);
         var limited = new FluidTpEquilibrium.Settings(1.0e-10, 1000, 5, 1.0e-9, 1.0e-8, TangentPlaneStability.Settings.DEFAULT,
                 1, 1, 1.0e-8, 1.0e-2, 100, 1.0e-11);
-        var engine = NetworkPhaseEngine.of(pilot, MaterialCatalog.bundled(), PILOT, com.wormzjl.icheme.science.material.MaterialRuntime.with(
-                MaterialCatalog.bundled(), PILOT, com.wormzjl.icheme.science.material.MaterialRuntime::water), limited);
+        var engine = NetworkPhaseEngine.of(pilot, com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PILOT, com.wormzjl.icheme.science.material.MaterialRuntime.with(
+                com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PILOT, com.wormzjl.icheme.science.material.MaterialRuntime::water), limited);
         double[] nearCritical = {0.67, 0.33, 0, 0, 0}, ordinary = {0.5, 0.5, 0, 0, 0};
         var inside = engine.tp(150, 4.56e6, nearCritical, false);
         assertEquals(EquilibriumResult.Status.NOT_CONVERGED, inside.status(), inside.toString());
@@ -346,7 +346,7 @@ class NetworkPhaseEngineTest {
      */
     @Test
     void aLiquidLiquidSplitIsRefusedTypedByTheNetwork() {
-        var pilot = FluidTestSupport.model(MaterialCatalog.bundled(), PILOT);
+        var pilot = FluidTestSupport.model(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PILOT);
         double[] typeThree = {0.3, 0, 0.7, 0, 0};
         var answer = pilot.phaseEngine().tp(95, 2e6, typeThree, false);
         assertEquals(EquilibriumResult.Classification.LIQUID_LIQUID, answer.classification(), answer.toString());
@@ -396,7 +396,7 @@ class NetworkPhaseEngineTest {
      */
     @Test
     void aSplitWhoseProductStabilityIsUnresolvedIsHeldTyped() {
-        var pilot = FluidTestSupport.model(MaterialCatalog.bundled(), PILOT);
+        var pilot = FluidTestSupport.model(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PILOT);
         double t = 185.98296668278303, p = 2861811.264201872;
         double[] arrival = {0.3324767803012572, 17.82807635831462, 0.2742249567265616, 5.342048217743187, 0};
         var answer = pilot.phaseEngine().tp(t, p, arrival, false);
@@ -453,7 +453,10 @@ class NetworkPhaseEngineTest {
         double p = 2e5;
         double[] clean = new double[n];
         double[] crude = bundledCrude();
-        for (int i = n - 7; i < n - 2; i++) clean[i] = crude[i];
+        for (int c = 8; c <= 12; c++) {
+            int i = model.components().indexOf("crude_pc%02d".formatted(c));
+            clean[i] = crude[i];
+        }
         double total = sum(clean);
         for (int i = 0; i < n; i++) clean[i] *= 100 / total;
         clean[water] = 30;
@@ -605,8 +608,8 @@ class NetworkPhaseEngineTest {
     }
 
     private double[] bundledCrude() {
-        return Arrays.copyOf(V3PengRobinsonThermo.fromRegisteredPackage(FluidMaterialCatalog.NETWORK_PACKAGE)
-                .crudeFeed("icheme:tia_juana_light_methane").moleFractions(), n);
+        return Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo(FluidMaterialCatalog.NETWORK_PACKAGE)
+                .crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(), n);
     }
 
     /** The bundled crude with {@code ratio} mol of water per mol of crude, 100 mol in all. */

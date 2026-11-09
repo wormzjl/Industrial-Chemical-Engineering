@@ -56,7 +56,7 @@ public final class ColumnUnit implements UnitModel {
     /** Liquid water up to this share of a stream's moles is a trace, not a phase. */
     static final double TRACE = 1e-9;
     /** The calculator's learned start, on the budget the game ships with. */
-    private static final V3InitializationOptions START = new V3InitializationOptions(V3InitializationOptions.Mode.LNN_FIRST, V3InitializationOptions.WetStart.AUTO, 16, 2_000, V3InitializationOptions.Correction.PROGRESS);
+    private static final V3InitializationOptions START = new V3InitializationOptions(V3InitializationOptions.Mode.LNN_FIRST, V3InitializationOptions.WetStart.AUTO, 16, V3InitializationOptions.DEFAULT_BUDGET_POLLS, V3InitializationOptions.Correction.PROGRESS);
 
     public static String drawPort(ColumnDoor.Draw draw) {
         return DRAW + draw.id();
@@ -70,7 +70,7 @@ public final class ColumnUnit implements UnitModel {
     public static void add(double[] amounts, List<String> axis, String component, double fraction, double flow) {
         if (fraction == 0) return;
         int at = axis.indexOf(component);
-        if (at < 0) throw new FlowsheetFailure("column.component");
+        if (at < 0) throw new FlowsheetFailure("column.component", component);
         amounts[at] += fraction * flow;
     }
 

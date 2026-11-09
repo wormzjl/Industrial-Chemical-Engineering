@@ -4,6 +4,7 @@
   "kind": "chemical",
   "translation_key": "material.icheme.carbon_dioxide",
   "fallback": "CarbonDioxide",
+  "properties": "icheme:chemsep_carbon_dioxide",
   "appearance": {
     "color": "#DCE8FA",
     "transparency": 0.95,

@@ -60,7 +60,7 @@ class V3WaterPhaseQualificationTest {
             public Optional<V3NeuralSeed> predict(V3ColumnInput input, V3SolveControl control) { return Optional.of(seed); }
         };
         var outcome = V3ColumnCalculator.calculateWithAcceptedProfile(seed.input(), () -> {},
-                new V3InitializationOptions(V3InitializationOptions.Mode.LNN_ONLY, V3InitializationOptions.WetStart.PREDICTED_WET, 16, 10_000,
+                new V3InitializationOptions(V3InitializationOptions.Mode.LNN_ONLY, V3InitializationOptions.WetStart.PREDICTED_WET, 16, 1_600_000,
                         V3InitializationOptions.Correction.PROGRESS),
                 fixed, captured::set);
         assertInstanceOf(V3ColumnOutcome.Success.class, outcome, outcome::toString);

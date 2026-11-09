@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "kind": "mixture",
+  "name": "Light crude",
+  "translation_key": "gui.icheme.column_preset.light_crude",
+  "temperature_kelvin": 638.15,
+  "flow_kmol_h": 3284.2722320715925,
+  "basis": "mole",
+  "components": [
+    {
+      "id": "Methane",
+      "amount": 0.4128403889903703
+    },
+    {
+      "id": "Ethane",
+      "amount": 0.8810545055638241
+    },
+    {
+      "id": "Propane",
+      "amount": 2.25298423941926
+    },
+    {
+      "id": "Isobutane",
+      "amount": 1.1395156743025407
+    },
+    {
+      "id": "N-butane",
+      "amount": 2.5069344834655896
+    },
+    {
+      "id": "Isopentane",
+      "amount": 1.9277586071779584
+    },
+    {
+      "id": "N-pentane",
+      "amount": 2.4785467806573758
+    },
+    {
+      "id": "crude_pc01",
+      "amount": 10.016997281804978
+    },
+    {
+      "id": "crude_pc02",
+      "amount": 16.871572712534498
+    },
+    {
+      "id": "crude_pc03",
+      "amount": 16.2398504736618
+    },
+    {
+      "id": "crude_pc04",
+      "amount": 13.832063584455268
+    },
+    {
+      "id": "crude_pc05",
+      "amount": 10.674026985175052
+    },
+    {
+      "id": "crude_pc06",
+      "amount": 7.6290932872736805
+    },
+    {
+      "id": "crude_pc07",
+      "amount": 5.673023901085025
+    },
+    {
+      "id": "crude_pc08",
+      "amount": 4.095508997001067
+    },
+    {
+      "id": "crude_pc09",
+      "amount": 2.3025710615378876
+    },
+    {
+      "id": "crude_pc10",
+      "amount": 0.791684553627837
+    },
+    {
+      "id": "crude_pc11",
+      "amount": 0.2253966862367637
+    },
+    {
+      "id": "crude_pc12",
+      "amount": 0.04857579602924186
+    }
+  ]
+}

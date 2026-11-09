@@ -30,8 +30,9 @@ public final class FluidCheckpointGameTests {
     public static void aSavedRestingTankReloadsCertifiedWithItsStatusLineAndNoSolve(GameTestHelper helper) {
         var level=helper.getLevel();var server=level.getServer();var world=FluidWorldAuthority.find(server).orElseThrow();
         var options=com.wormzjl.icheme.IChemE.fluidOptions();
-        // The world's own model construction, so the restored certificate's signature is the one the world gives it.
-        java.util.function.Function<FluidCheckpointCodec.PackageKey,FluidThermodynamics> models=key->FluidThermodynamics.forNetwork(MaterialRuntime.active(),key.packageId(),options.maximumVelocity(),options.traceCutoffMoleFraction(),options.solids());
+        // The world's own model construction (FluidWorldAuthority.model(PackageKey)): each island on its own compound list, so the
+        // restored certificate's signature is the one the world gives it.
+        java.util.function.Function<FluidCheckpointCodec.PackageKey,FluidThermodynamics> models=key->key.on(world.model());
         var pos=helper.absolutePos(new BlockPos(0,1,0));level.setBlock(pos,ModBlocks.FLUID_RESERVOIR.get().defaultBlockState(),3);
         long device=((FluidDeviceBlockEntity)level.getBlockEntity(pos)).fluidIdentity();
         java.util.function.Supplier<IslandCoordinator.Snapshot> stored=()->world.diagnosticSnapshots().stream().filter(s->s.graph().reservoirs().stream().anyMatch(n->n.id()==device)).findFirst().orElseThrow();
@@ -71,12 +72,12 @@ public final class FluidCheckpointGameTests {
                     public void cancel(long requestId){}
                 };
                 restarted[0]=new IslandCoordinator(dispatcher,changed->{},System::nanoTime,new IslandCoordinator.Settings(options.wallBudgetNanos(),options.wallBudgetNanos()*3/4,64,false,options.initialCadenceTicks(),world.certificates()));
-                restarted[0].register(saved[0],models.apply(new FluidCheckpointCodec.PackageKey(entry.packageId())));
+                restarted[0].register(saved[0],models.apply(entry.key()));
                 var restored=restarted[0].observe(saved[0].id());
                 helper.assertTrue(restored.certificate().isPresent(),"The restarted tank was not restored certified: "+restored.status()+" / "+restarted[0].certificationRefusal(saved[0].id()));
                 helper.assertTrue(restored.status().equals(status[0]),"The status line did not continue: "+restored.status());
                 // The restarted store was seeded by the load: its first save writes no unit for the unchanged tank and no topology.
-                loaded.bindCapture(()->new FluidSavedData.Capture(new FluidCheckpointCodec.Checkpoint(restarted[0].snapshots().stream().map(s->new FluidCheckpointCodec.IslandEntry(entry.dimension(),entry.packageId(),s)).toList()),
+                loaded.bindCapture(()->new FluidSavedData.Capture(new FluidCheckpointCodec.Checkpoint(restarted[0].snapshots().stream().map(s->new FluidCheckpointCodec.IslandEntry(entry.dimension(),entry.packageId(),entry.compounds(),s)).toList()),
                         loaded.world().orElseThrow()));
                 loaded.save(new CompoundTag(),level.registryAccess());var first=loaded.lastSave();
                 helper.assertTrue(first.payloadsEncoded()==0&&first.payloadsReused()==1&&!first.topologyEncoded()&&first.stats().encodedBytes()==0,"The first save after the load encoded units: "+first.stats());

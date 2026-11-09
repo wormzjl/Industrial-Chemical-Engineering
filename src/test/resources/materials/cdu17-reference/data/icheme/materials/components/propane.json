@@ -4,6 +4,9 @@
   "kind": "chemical",
   "translation_key": "material.icheme.propane",
   "fallback": "Propane",
+  "aliases": [
+    "propane"
+  ],
   "appearance": {
     "color": "#F3F4EA",
     "transparency": 0.85,

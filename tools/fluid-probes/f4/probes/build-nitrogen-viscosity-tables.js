@@ -4,7 +4,7 @@
 // Vapour below 273.16 K: the 10 kPa isobar (near-dilute; below the 12.52 kPa triple-point pressure, so vapour from
 // the triple point up), joined to the existing 100 kPa table at its first node, 273.16 K, which is kept as it was.
 const fs=require('fs');
-const rows=f=>fs.readFileSync(__dirname+'/../nist/'+f,'utf8').trim().split('\n').slice(1).map(l=>l.split('\t'));
+const rows=f=>fs.readFileSync('D:/Minecraft/Modding/1.21/CreateChemE/research/2026-09-23-fluid-followups/f4-nist/'+f,'utf8').trim().split('\n').slice(1).map(l=>l.split('\t'));
 const sat=rows('sat-triple-to-critical.tsv').map(r=>[+r[0],+r[11]*1e-6]);
 const iso=rows('isobar-10kPa-63-273K.tsv').map(r=>[+r[0],+r[11]*1e-6]).filter(r=>r[0]<273.16-1);
 function pick(data,gap){const out=[data[0]];for(const r of data){if(r[0]-out[out.length-1][0]>=gap)out.push(r);}if(out[out.length-1]!==data[data.length-1])out.push(data[data.length-1]);return out;}

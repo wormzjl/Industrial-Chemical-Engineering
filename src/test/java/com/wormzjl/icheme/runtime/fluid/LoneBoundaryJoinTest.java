@@ -28,7 +28,7 @@ class LoneBoundaryJoinTest {
         assertEquals(java.util.Set.of(joined),w.registry.islands(vent),"the void is in the joined island only");
         assertEquals(1,w.coordinator.snapshots().size(),"one island: the joined one");
         everyIslandHoldsADevice(w,"the first save");
-        var reloaded=new EventPathWorld(1,w.ledger.snapshot(),w.coordinator.snapshots());
+        var reloaded=new EventPathWorld(1,w.ledger.snapshot(),w.entries());
         everyIslandHoldsADevice(reloaded,"the save after the reload");
         assertEquals(java.util.Set.of(reloaded.registry.owner(tank)),reloaded.registry.islands(generator));
     }

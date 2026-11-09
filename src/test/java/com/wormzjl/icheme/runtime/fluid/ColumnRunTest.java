@@ -30,7 +30,9 @@ class ColumnRunTest {
         final IslandCoordinator.Ports inner;final Map<Long,double[]> moles=new HashMap<>();final Map<Long,Double> heat=new HashMap<>(),solids=new HashMap<>(),energy=new HashMap<>();
         /** A condenser's read as before U2: no heat rate for a valve. */
         boolean before;
-        Counting(IslandCoordinator.Ports inner){this.inner=inner;}
+        /** The world list the counts lie on, and the islands whose own lists their boundaries lie on (V2). */
+        final com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics world;final IslandCoordinator islands;
+        Counting(IslandCoordinator.Ports inner,EventPathWorld w){this.inner=inner;world=w.model;islands=w.coordinator;}
         public boolean ready(long island,PassiveNetwork graph,long start){return inner.ready(island,graph,start);}
         public Map<Long,PortPlan> plans(long island,PassiveNetwork graph,IslandClock.Slice slice){return inner.plans(island,graph,slice);}
         public com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read heatRead(long side,long partner,long start,double seconds,double transit) {
@@ -39,7 +41,7 @@ class ColumnRunTest {
         }
         public void booked(long island,PassiveNetwork graph,long start,long end,PassiveIntervalSolver.Result result) {
             for(var b:result.boundaries())if(b.kind()==ConservativeTransport.BoundaryTransfer.Kind.HEAT)heat.merge(b.nodeId(),b.totalEnergyJoule(),Double::sum);
-            for(var b:result.boundaries())if(b.kind()==ConservativeTransport.BoundaryTransfer.Kind.EXCHANGE){var sum=moles.computeIfAbsent(b.nodeId(),id->new double[b.moles().length]);var n=b.moles();for(int i=0;i<n.length;i++)sum[i]+=n[i];solids.merge(b.nodeId(),b.solids().massKg(),Double::sum);energy.merge(b.nodeId(),b.totalEnergyJoule(),Double::sum);}
+            for(var b:result.boundaries())if(b.kind()==ConservativeTransport.BoundaryTransfer.Kind.EXCHANGE){var sum=moles.computeIfAbsent(b.nodeId(),id->new double[world.componentCount()]);var n=IslandSets.amounts(b.moles(),islands.model(island),world);for(int i=0;i<n.length;i++)sum[i]+=n[i];solids.merge(b.nodeId(),b.solids().massKg(),Double::sum);energy.merge(b.nodeId(),b.totalEnergyJoule(),Double::sum);}
             inner.booked(island,graph,start,end,result);
         }
     }
@@ -91,7 +93,7 @@ class ColumnRunTest {
             world.place(end,64,4+8*k,Kind.VOID,Direction.EAST,new FluidDeviceSpec(1,300,200000,water),.05);}
         // The steam line is sized for its 0.1 mol/s (1 cm): a 5 cm valve regulating 6 g/s from 3 to 1.5 bar holds its island (README, open items).
         if(steam){steamSource=world.place(0,64,2,Kind.GENERATOR,Direction.EAST,new FluidDeviceSpec(1,450,300000,water),.05);world.place(1,64,2,Kind.PIPE,Direction.EAST,.01);steamValve=world.place(2,64,2,Kind.VALVE,Direction.EAST,FluidDeviceSpec.nitrogen(world.catalog),.01);}
-        var ops=new ColumnOperation(world.ledger,world.registry,world.coordinator,model.components(),model.molecularWeights());var counting=new Counting(ops);world.coordinator.ports(counting);
+        var ops=new ColumnOperation(world.ledger,world.registry,world.coordinator,model.components(),model.molecularWeights());var counting=new Counting(ops,world);world.coordinator.ports(counting);
         world.runTo(40);
         // Start: a feed port inside the feed valve, a distillate port inside the product valve.
         long unit=world.ledger.reserve(1);long feed=world.ledger.nextIdentity(),product=feed+1,steamPort=feed+2,tube=condenser?feed+3:0,shell=condenser?feed+4:0;
@@ -318,7 +320,7 @@ class ColumnRunTest {
         long feedValve=world.place(2,64,0,Kind.VALVE,Direction.EAST),outletValve=world.place(11,64,0,Kind.VALVE,Direction.EAST),inletValve=outletValve;int inletAt=12;
         if(!shared){world.place(12,64,0,Kind.PIPE,Direction.EAST,.05);inletValve=world.place(13,64,0,Kind.VALVE,Direction.EAST);inletAt=14;}
         long productValve=world.place(inletAt+7,64,0,Kind.VALVE,Direction.EAST);world.place(inletAt+8,64,0,Kind.PIPE,Direction.EAST,.05);world.place(inletAt+9,64,0,Kind.RESERVOIR,Direction.EAST);
-        var ops=new ColumnOperation(world.ledger,world.registry,world.coordinator,model.components(),model.molecularWeights());var counting=new Counting(ops);world.coordinator.ports(counting);
+        var ops=new ColumnOperation(world.ledger,world.registry,world.coordinator,model.components(),model.molecularWeights());var counting=new Counting(ops,world);world.coordinator.ports(counting);
         world.runTo(40);
         long first=world.ledger.reserve(2),second=first+1,feed=world.ledger.nextIdentity(),outlet=feed+1,inlet=feed+2,product=feed+3;
         var g=new PipeResistanceGeometry(world.registry.registrations().get(feedValve).device().geometry());var none=new double[0];
@@ -451,7 +453,7 @@ class ColumnRunTest {
     /** A solver answering every job {@code delay} ticks after it was asked (0: at once): {@link #table}, or a failure where {@code fail} holds. */
     static final class Fake implements ColumnOperation.Solves {
         static final com.wormzjl.icheme.science.column.v3.V3ColumnInput DESIGN;
-        static{var c=MaterialCatalog.bundled();DESIGN=c.presets().column("tia_juana").input(c);}
+        static{var c=MaterialCatalog.bundled();DESIGN=c.presets().column(c.presets().network().defaultColumnPreset()).input(c);}
         com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics model;EventPathWorld world;final long delay;
         java.util.function.Predicate<ColumnSolve.Job> fail=j->false;
         final List<ColumnSolve.Job> jobs=new ArrayList<>();final List<Long> asked=new ArrayList<>();
@@ -552,7 +554,7 @@ class ColumnRunTest {
         assertEquals(before.tableTick,state.tableTick());
         assertEquals(probes,state.probes(),"accepted probe readings round trip with rebuildable state");
         assertFalse(state.levels().isEmpty(),"the inlet's levels through the fence");
-        var again=new EventPathWorld(1,saved,world.coordinator.snapshots());
+        var again=new EventPathWorld(1,saved,world.entries());
         var g=new Fake(0);g.world=again;g.model=again.model;
         var ops=new ColumnOperation(again.ledger,again.registry,again.coordinator,again.model.components(),again.model.molecularWeights());
         ops.solves(g);again.coordinator.ports(ops);ops.refresh();

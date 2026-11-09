@@ -33,7 +33,7 @@ class CrystalPhaseEvaluatorTest {
 
     @Test
     void anchorsToThePilotLiquidAndFillsAConsistentSolidState() {
-        MaterialCatalog catalog = MaterialCatalog.bundled();
+        MaterialCatalog catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
         var fluid = CubicPhaseEvaluator.forPackage(catalog, PILOT);
         var solid = CrystalPhaseEvaluator.forPackage(catalog, PILOT, CRYSTAL);
         assertEquals("crystal_jaeger_span_2012_triple_point_anchored_v1", solid.family());
@@ -85,7 +85,7 @@ class CrystalPhaseEvaluatorTest {
 
     @Test
     void refusesForeignAnchorsAndContinuesPastItsRange() {
-        MaterialCatalog catalog = MaterialCatalog.bundled();
+        MaterialCatalog catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
         var fluid = CubicPhaseEvaluator.forPackage(catalog, PILOT);
         var solid = CrystalPhaseEvaluator.forPackage(catalog, PILOT, CRYSTAL);
         var anchor = solid.anchor(fluid);
@@ -104,9 +104,10 @@ class CrystalPhaseEvaluatorTest {
         assertThrows(IllegalArgumentException.class, () -> solid.evaluate(0, 1e5, anchor, new PhaseState(1)));
         assertThrows(IllegalArgumentException.class, () -> solid.evaluate(180, 1e5, anchor, new PhaseState(2)));
         assertThrows(IllegalArgumentException.class, () -> CrystalPhaseEvaluator.forPackage(catalog, "icheme:tjl20_methane_nitrogen", CRYSTAL));
-        // An unusable record is refused at construction.
+        // An unusable record is refused at construction: its Gibbs function's range ends below the triple-point anchor. The
+        // anchor stays where the compound's freezing point is (the catalog's crystal-anchor check, batch 2026-11-04-refinery-compounds W5b).
         var incomplete = PilotCryogenicTestCatalog.parseWith(CRYSTAL_PATH, o -> {
-            o.getAsJsonObject("anchor").addProperty("temperature_kelvin", 310);
+            o.getAsJsonObject("gibbs_function").addProperty("temperature_max_kelvin", 200);
             o.getAsJsonObject("coverage").addProperty("grade", "research_only");
         });
         assertThrows(IllegalStateException.class, () -> CrystalPhaseEvaluator.forPackage(incomplete, PILOT, CRYSTAL));

@@ -12,7 +12,9 @@ import com.wormzjl.icheme.science.flowsheet.Flowsheet;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetFailure;
 import com.wormzjl.icheme.science.flowsheet.FlowsheetFile;
 import com.wormzjl.icheme.science.flowsheet.Params;
+import com.wormzjl.icheme.science.flowsheet.RevisionNotice;
 import com.wormzjl.icheme.science.flowsheet.UnitTypes;
+import com.wormzjl.icheme.science.material.MaterialCatalog;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -291,12 +293,13 @@ public final class FileColumns {
     }
 
     /**
-     * What changed on opening a sheet (sheet 17), by reading it against this version: nothing is written. A removed unit, what the package no longer has, each setting the file does not hold, and a
-     * revision other than the sheet's.
+     * What changed on opening a sheet (sheet 17), by reading it against this version: nothing is written. A removed unit, what the package no longer has, each setting the file does not hold, and
+     * data its compounds run on that moved since the file was written ({@link RevisionNotice#moved}: the identity of the sheet's own view, so an edit to a package record
+     * or to a compound it does not feed says nothing).
      *
      * @param column a new column's door, which holds a column's settings
      */
-    public static List<Change> changes(Flowsheet sheet, StreamProps.Fluids fluids, Supplier<Params> column, HeatControlColumn.Texts t) {
+    public static List<Change> changes(Flowsheet sheet, StreamProps.Fluids fluids, MaterialCatalog catalog, Supplier<Params> column, HeatControlColumn.Texts t) {
         var lines = new ArrayList<Change>();
         for (var unit : sheet.units()) if (Tiles.symbol(unit.type()) == null) lines.add(new Change(t.get("flowsheet.file.change_unit"), t.get("flowsheet.file.change_removed", unit.name(), Tiles.typeName(unit.type())), true));
         var parked = new LinkedHashMap<String, Parked>();
@@ -316,7 +319,7 @@ public final class FileColumns {
             if (UnitTypes.model(unit.type()) == null) continue;
             for (var key : SheetEditor.defaults(unit.type(), column).json().keySet()) if (!unit.params().json().has(key)) lines.add(new Change(t.get("flowsheet.file.change_field"), t.get("flowsheet.file.change_setting", unit.name(), Tiles.typeName(key)), false));
         }
-        if (!sheet.basis().revision().equals(fluids.pack().revision())) lines.add(new Change(t.get("flowsheet.file.change_data"), t.get("flowsheet.file.change_revision", sheet.basis().revision(), fluids.pack().revision()), false));
+        if (RevisionNotice.moved(sheet, catalog)) lines.add(new Change(t.get("flowsheet.file.change_data"), t.get("flowsheet.file.change_revision"), false));
         return lines;
     }
 

@@ -48,9 +48,13 @@ final class V3HeatFeasibility {
         double available = totalFeed * (feedFlash.referenceMolarEnthalpyJoulesPerMol() - coldLiquid)
                 + specification(input, V3ColumnSpecification.ReboilerDuty.class).watts();
         for (V3SteamFeedSpec steam : input.steamFeeds()) {
-            available += steam.molarFlowMolPerSecond() * (V3WaterProperties.vaporMolarEnthalpy(steam.temperatureKelvin())
+            double injectionPressure = input.topPressurePascal()
+                    + Math.max(0, Math.min(steam.stageNumber(), input.stageCount()) - 1) * input.stagePressureDropPascal();
+            available += steam.molarFlowMolPerSecond()
+                    * (V3WaterProperties.steamMolarEnthalpy(steam.temperatureKelvin(), injectionPressure)
                     - V3WaterProperties.liquidMolarEnthalpy(Math.max(V3WaterProperties.triplePoint(),
-                            Math.min(condenserTemperature, V3WaterProperties.criticalTemperature() - 1.0))));
+                            Math.min(condenserTemperature, V3WaterProperties.criticalTemperature() - 1.0)),
+                            input.topPressurePascal()));
         }
         return available;
     }
@@ -108,8 +112,9 @@ final class V3HeatFeasibility {
         if (problem.hasSteamFeeds()) {
             double water = problem.waterVaporFlowMolPerSecond(source);
             if (water > 0.0) {
-                capacity += water * (V3WaterProperties.vaporMolarEnthalpy(state.temperatureKelvin(source))
-                        - V3WaterProperties.vaporMolarEnthalpy(state.temperatureKelvin(tray)));
+                double partialPressure = problem.nodePressurePascal(source) * water / (total + water);
+                capacity += water * (V3WaterProperties.steamMolarEnthalpy(state.temperatureKelvin(source), partialPressure)
+                        - V3WaterProperties.steamMolarEnthalpy(state.temperatureKelvin(tray), partialPressure));
             }
         }
         return Double.isFinite(capacity) && capacity > 0.0 ? capacity : 0.0;

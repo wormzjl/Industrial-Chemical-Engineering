@@ -1712,11 +1712,24 @@ public final class ProcessUnit {
         }
         mesh.cylinder(f,.30*r,z0-.04,z0,12,Material.MOTOR_PLAIN);
         double terminal=z0+.3*length,tc=terminal+.275*r;
-        if(shape.kind()!=EquipmentShape.Kind.GENERATOR)motorBox(f,across,terminal,terminal+.55*r,y+.76*r,y+1.45*r,-.35*r,.35*r,Material.MOTOR_PLAIN,false);
         terminalBox=new double[]{o[0]+tc*ax[0],y+1.215*r,o[2]+tc*ax[2]};
+        serviceCase(ax,across,y+EquipmentServices.caseFloor(EquipmentShape.Kind.GENERATOR,r));
         for(int sign:new int[]{-1,1})for(double z:new double[]{z0+.08,z1-.25})
             motorBox(f,across,z,z+.17,y-r-.02,y-.55*r,Math.min(sign*.5*r,sign*.9*r),Math.max(sign*.5*r,sign*.9*r),Material.MOTOR_PLAIN,false);
         if(y-r-.02>floor+.01)motorBox(f,across,z0+.02,z1-.02,floor,y-r-.02,-.95*r,.95*r,Material.STEELWORK,true);
+    }
+    /**
+     * A low-voltage motor's or generator's service case ({@link EquipmentServices}) stands on its frame over the terminal
+     * box's point from {@code floor} up: the services draw it after the frame box is set, so its top corners hold the box
+     * round it, as a large machine's terminal cabinet does ({@link #largeMotor}).
+     */
+    private void serviceCase(double[] ax, double[] across, double floor) {
+        double top = floor + EquipmentServices.CASE_HEIGHT;
+        for (int s = -1; s <= 1; s += 2)
+            for (int t = -1; t <= 1; t += 2) {
+                double w = s * EquipmentServices.CASE_ACROSS / 2, l = t * EquipmentServices.CASE_ALONG / 2;
+                framePoints.add(new double[]{terminalBox[0] + w * across[0] + l * ax[0], top, terminalBox[2] + w * across[2] + l * ax[2]});
+            }
     }
     private void generatorPanels(int first) {
         var polygons=mesh.facets();
@@ -1772,6 +1785,7 @@ public final class ProcessUnit {
         if(shape.kind()!=EquipmentShape.Kind.MOTOR)motorBox(f, across, terminal, terminal + .55 * r, y + r - .02, y + 1.45 * r, -.35 * r, .35 * r, Material.MOTOR_PLAIN, false);
         double tc = terminal + .275 * r;
         terminalBox = new double[]{o[0] + tc * ax[0], y + 1.215 * r, o[2] + tc * ax[2]};
+        if (shape.kind() == EquipmentShape.Kind.MOTOR) serviceCase(ax, across, y + EquipmentServices.caseFloor(EquipmentShape.Kind.MOTOR, r));
         if (full) {
             double[] conduit = {o[0] + (terminal + .27 * r) * ax[0], y + 1.2 * r, o[2] + (terminal + .27 * r) * ax[2]};
             if(shape.kind()!=EquipmentShape.Kind.MOTOR)mesh.cylinder(new Frame(conduit, across, top), .06 * r + .01, .35 * r, .35 * r + .05, 8, Material.MOTOR_PLAIN);

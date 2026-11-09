@@ -1,4 +1,4 @@
-// F4: fits the nitrogen ideal-gas Cp segment below 273.16 K to the NIST zero-pressure Cp (../nist/cp0-zero-pressure-63-303K.tsv,
+// F4: fits the nitrogen ideal-gas Cp segment below 273.16 K to the NIST zero-pressure Cp (D:/Minecraft/Modding/1.21/CreateChemE/research/2026-09-23-fluid-followups/f4-nist/cp0-zero-pressure-63-303K.tsv,
 // Span et al. 2000 equation of state via the NIST WebBook, linear extrapolation of the 0.1 and 1 kPa isobars to zero pressure),
 // constrained to equal the existing 298.15..900 K fit at the joint so the heat capacity (and so the enthalpy's slope) is continuous.
 // Output: six coefficients in powers of (T - 298.15 K), the form the catalog reads.
@@ -6,7 +6,7 @@ const fs=require('fs');
 const high=[29.124372589504464,0.0005780310349492723,3.07622401005812e-06,4.1241579732790716e-08,-8.967281103873693e-11,5.418990171918791e-14];
 const horner=(c,x)=>{let v=0;for(let k=c.length-1;k>=0;k--)v=v*x+c[k];return v;};
 const joint=273.16, J=horner(high,joint-298.15);
-const rows=fs.readFileSync(__dirname+'/../nist/cp0-zero-pressure-63-303K.tsv','utf8').trim().split('\n').map(l=>l.split('\t').map(Number)).filter(r=>r[0]<=joint+1e-9);
+const rows=fs.readFileSync('D:/Minecraft/Modding/1.21/CreateChemE/research/2026-09-23-fluid-followups/f4-nist/cp0-zero-pressure-63-303K.tsv','utf8').trim().split('\n').map(l=>l.split('\t').map(Number)).filter(r=>r[0]<=joint+1e-9);
 // Cp_low(T) = J + sum_{k=1..3} a_k u^k, u=(T-joint)/100: the constraint holds for any a.
 const deg=3, A=[], b=[];
 for(const [t,cp] of rows){const u=(t-joint)/100;A.push([...Array(deg)].map((_,k)=>Math.pow(u,k+1)));b.push(cp-J);}

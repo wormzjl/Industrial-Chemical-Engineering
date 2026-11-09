@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "kind": "mixture",
+  "name": "Medium crude atmospheric residue (VDU feed)",
+  "translation_key": "gui.icheme.column_preset.medium_crude_residue",
+  "basis": "mole",
+  "components": [
+    {
+      "id": "crude_pc07",
+      "amount": 5
+    },
+    {
+      "id": "crude_pc08",
+      "amount": 38.003
+    },
+    {
+      "id": "crude_pc09",
+      "amount": 29.5017
+    },
+    {
+      "id": "crude_pc10",
+      "amount": 15.6218
+    },
+    {
+      "id": "crude_pc11",
+      "amount": 7.6034
+    },
+    {
+      "id": "crude_pc12",
+      "amount": 4.2701
+    }
+  ]
+}

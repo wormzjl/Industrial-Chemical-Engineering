@@ -106,7 +106,7 @@ class G3F2GergBubblePointTest {
 
     /** The E-PPR78 evaluator and the same package with zero interactions (the rule pairs' constant entries are 0.0). */
     static CubicPhaseEvaluator[] models() {
-        var catalog = MaterialCatalog.bundled();
+        var catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
         var eppr78 = CubicPhaseEvaluator.forPackage(catalog, PILOT);
         var pkg = catalog.requirePackage(PILOT);
         List<IdealGasFunction> spines = new ArrayList<>();

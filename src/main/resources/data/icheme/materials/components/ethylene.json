@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "Ethylene",
+  "kind": "chemical",
+  "translation_key": "material.icheme.ethylene",
+  "fallback": "Ethylene",
+  "properties": "icheme:chemsep_ethylene",
+  "appearance": {
+    "color": "#F3F4EA",
+    "transparency": 0.85,
+    "estimated": true
+  },
+  "identifiers": {
+    "cas": "74-85-1",
+    "chemsep_id": "201",
+    "smiles": "C=C",
+    "formula": "CH2CH2"
+  }
+}

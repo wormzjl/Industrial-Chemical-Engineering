@@ -41,7 +41,7 @@ final class ServiceTest {
     private static final double[] CRUDE = crude();
 
     private static double[] crude() {
-        var crude = Arrays.copyOf(V3PengRobinsonThermo.fromRegisteredPackage(PACKAGE).crudeFeed("icheme:tia_juana_light_methane").moleFractions(), AXIS.size());
+        var crude = Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo(PACKAGE).crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(), AXIS.size());
         crude[WATER] = 0;
         return crude;
     }

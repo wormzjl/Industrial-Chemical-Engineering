@@ -69,9 +69,9 @@ class ColumnTemplatesTest {
     void everyBundledCrudeTemplateBuildsAColumnAndThePotIsOff() {
         var library = templates();
         assertEquals(0, library.unreadable());
-        assertEquals(Set.of("Crude tower (Bonga)", "Crude tower (Cold Lake Blend)", "Crude tower (Dalia)", "Crude tower (Tia Juana Light)", "Crude tower (Upper Zakum)", "Crude tower (WTI Light)", "Two-tray pot"),
+        assertEquals(Set.of("Crude tower (Heavy crude)", "Crude tower (Light crude)", "Crude tower (Medium crude)", "Crude tower (Oil sand dilbit)", "Two-tray pot"),
                 library.templates().stream().map(ColumnTemplates.Template::name).collect(Collectors.toSet()));
-        assertEquals(7, library.templates().size());
+        assertEquals(5, library.templates().size());
         for (var template : library.templates()) {
             assertTrue(template.bundled(), template.name());
             if (template.name().equals("Two-tray pot")) {
@@ -93,7 +93,7 @@ class ColumnTemplatesTest {
     void aTemplateBuildsAtItsDesignFeed() {
         for (var template : templates().templates()) {
             double feed = java.util.Arrays.stream(template.input().feedComponentMolarFlowsMolPerSecond()).sum() * 3.6;
-            double design = template.name().equals("Two-tray pot") ? 360 : template.name().equals("Crude tower (Bonga)") ? 2650.277212975707 : feed;
+            double design = template.name().equals("Two-tray pot") ? 360 : template.name().equals("Crude tower (Heavy crude)") ? 1897.651207174458 : feed;
             assertEquals(design, feed, 1e-9, template.name());
             assertEquals(base().feedTemperatureKelvin(), template.input().feedTemperatureKelvin(), 1e-9, template.name());
         }
@@ -102,7 +102,7 @@ class ColumnTemplatesTest {
     @Test
     void aPlayersOwnTemplateFollowsTheBundledOnes() throws Exception {
         var bundled = templates().templates();
-        var own = bundled.stream().filter(t -> t.name().equals("Crude tower (Bonga)")).findFirst().orElseThrow();
+        var own = bundled.stream().filter(t -> t.name().equals("Crude tower (Heavy crude)")).findFirst().orElseThrow();
         var directory = library().directory(V3ClientPresets.Kind.COLUMN);
         Files.createDirectories(directory);
         Files.writeString(directory.resolve("my_column.json"), V3ClientPresets.columnJson("My column", own.input()));

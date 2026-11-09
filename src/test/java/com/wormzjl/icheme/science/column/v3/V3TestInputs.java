@@ -5,9 +5,9 @@ import java.util.List;
 
 /** Shared fixtures of the V3 column tests. */
 public final class V3TestInputs {
-    /** The learned route at the shipped walls (16 iterations, two seconds) and the qualified progress rule. */
+    /** The learned route at the shipped walls (16 iterations, the default poll budget) and the qualified progress rule. */
     static final V3InitializationOptions LEARNED = new V3InitializationOptions(V3InitializationOptions.Mode.LNN_FIRST,
-            V3InitializationOptions.WetStart.AUTO, 16, 2_000, V3InitializationOptions.Correction.PROGRESS);
+            V3InitializationOptions.WetStart.AUTO, 16, V3InitializationOptions.DEFAULT_BUDGET_POLLS, V3InitializationOptions.Correction.PROGRESS);
 
     /** The registered TJL19 DWSIM package of the literature CDU preset. */
     public static final String LITERATURE_PACKAGE = "icheme:tjl19_dwsim";
@@ -22,26 +22,35 @@ public final class V3TestInputs {
      * condenser 59 C, reflux ratio 4.17, no external reboiler.
      *
      * <p>This reconstruction carries no side-stripper reboiler heat (18.1 MW in the source), so its top is about
-     * 10 C colder than the source and tray 1 sits below the water dew point of its steam-laden overhead; the
-     * condition is a result warning, not a rejection.</p>
+     * 10 C colder than the source and tray 1 sits below the water dew point of its steam-laden overhead; tray 1
+     * carries its free water over to the drum (condenser carry-over, E31 of batch 2026-11-04-open-thermo-data).</p>
      */
     public static V3ColumnInput literatureCduInput() {
-        var catalog = com.wormzjl.icheme.science.material.MaterialRuntime.current();
+        var catalog = tiaJuana("literature_tia_juana");
         return catalog.presets().column("literature_tia_juana").input(catalog);
     }
 
     /** The methane-enriched Tia Juana CDU preset ({@code tia_juana}). */
     public static V3ColumnInput methaneCduInput() {
-        var catalog = com.wormzjl.icheme.science.material.MaterialRuntime.current();
+        var catalog = tiaJuana("tia_juana");
         return catalog.presets().column("tia_juana").input(catalog);
     }
 
     /**
+     * The catalog that holds a Tia Juana preset: the test-scoped one where it does (a frozen reference re-states it), else
+     * the Tia Juana test fixture (O3 of batch 2026-11-04-open-thermo-data: the game ships the generated grades).
+     */
+    private static com.wormzjl.icheme.science.material.MaterialCatalog tiaJuana(String preset) {
+        var catalog = com.wormzjl.icheme.science.material.MaterialRuntime.current();
+        return catalog.presets().columns().containsKey(preset) ? catalog : com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog();
+    }
+
+    /**
      * A crude as a player builds it (process simulator plan, section 3.7): its stream template's mixture, flow and
-     * temperature under its tower template. {@code name} names both files; the assay is the crude's where it has its own.
+     * temperature under its tower template, on the default preset's package. {@code name} names both files; the assay is the crude's where it has its own.
      */
     public static V3ColumnInput crude(com.wormzjl.icheme.science.material.MaterialCatalog catalog, String name) {
-        var base = catalog.presets().column("tia_juana").input(catalog);
+        var base = catalog.presets().column(catalog.presets().network().defaultColumnPreset()).input(catalog);
         var stream = bundled("assets/icheme/mixturepreset/" + name + ".json");
         double rate = stream.get("flow_kmol_h").getAsDouble();
         var tower = V3ColumnTemplate.read(bundled("assets/icheme/columnpreset/" + name + ".json")).scaledTo(rate);
@@ -71,16 +80,6 @@ public final class V3TestInputs {
         } catch (java.io.IOException e) {
             throw new java.io.UncheckedIOException(e);
         }
-    }
-
-    /** The unique authored column preset of a package. */
-    static com.wormzjl.icheme.science.material.MaterialPresets.Column packagePreset(
-            com.wormzjl.icheme.science.material.MaterialCatalog catalog, String packageId) {
-        catalog.requirePackage(packageId);
-        var choices = catalog.presets().columns().values().stream()
-                .filter(c -> c.descriptor().packageId().equals(packageId)).toList();
-        if (choices.size() != 1) throw new IllegalArgumentException("Select an explicit column preset for " + packageId);
-        return choices.getFirst();
     }
 
     /** A dry request: no side draws, steam, pumparounds or tray hydraulics (prescribed uniform drop). */

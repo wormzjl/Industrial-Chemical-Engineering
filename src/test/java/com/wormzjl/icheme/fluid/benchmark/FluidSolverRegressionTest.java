@@ -38,7 +38,7 @@ class FluidSolverRegressionTest {
     private static final Tolerance DECLARED=new Relative(1e-6,1e-4,1e-6,1e-3);
 
     @Test void replaySavedIslandsAgainstCapturedReferences() {
-        var model=SolverRegressionHarness.model();
+        var model=SolverRegressionHarness.chainModel(SolverRegressionHarness.model());
         var fixtures=fixtures(model);
         boolean capture=Boolean.getBoolean("fluid.regression.capture");
         var report=new JsonObject();var measured=new JsonArray();report.add("fixtures",measured);

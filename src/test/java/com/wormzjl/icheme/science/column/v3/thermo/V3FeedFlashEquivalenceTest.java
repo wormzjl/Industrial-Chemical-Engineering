@@ -53,7 +53,7 @@ class V3FeedFlashEquivalenceTest {
         int failures = 0;
         for (String packageId : new String[]{"icheme:cdu17_tjl_acs2018", "icheme:tjl19_dwsim"}) {
             V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage(packageId);
-            double[] overall = thermo.crudeFeed("icheme:tia_juana_light").moleFractions();
+            double[] overall = thermo.crudeFeed(com.wormzjl.icheme.science.material.Cdu17TestCatalog.tiaJuanaAssay(packageId)).moleFractions();
             for (double temperature : new double[]{298.15, 323.15, 500, 638.15, 900}) {
                 for (double pressure : new double[]{50_000, 110_000, 267_250}) {
                     V3ThermoWorkspace oldWorkspace = thermo.newWorkspace();

@@ -1,0 +1,322 @@
+diff --git a/src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnCalculator.java b/src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnCalculator.java
+index c8d4ecd6b..a08e12b2b 100644
+--- a/src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnCalculator.java
++++ b/src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnCalculator.java
+@@ -1681,6 +1681,18 @@ public final class V3ColumnCalculator {
+                         attempt.evidence().iterations(), attempt.evidence().maximumScaledResidual());
+             }
+             control.checkpoint();
++            // A solve whose Newton matrix died on phases below the support floor hands back its problem with
++            // exactly those phases dropped. That is the same solve continuing on the support it should have
++            // had, not a refresh: it resumes from the same state with the full budget, and neither the refresh
++            // nor the stall counters see it. Each drop removes at least one present phase, so it ends.
++            if (attempt instanceof V3SimultaneousColumnSolver.Attempt.Failure dropped
++                    && dropped.reducedProblem() != null) {
++                V3ColumnProblem reduced = dropped.reducedProblem();
++                prepared = new PreparedAttempt(reduced, reduced.truncationSupport(), prepared.wetTrays(),
++                        prepared.wetTrays().seed(reduced, reduced.truncationSupport().projectSeed(reduced, attempt.state())));
++                nextIterations = maximumIterations;
++                continue;
++            }
+             audit = audit(attemptProblem, thermo, feedMolarEnthalpy, attempt.state(), control, policy);
+             // A stalled attempt is refreshed too, and measurably must be: a stall is often exactly the state
+             // that has just dried a point out or started feeding a removed one, and one repeat from the
+diff --git a/src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnProblemResolver.java b/src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnProblemResolver.java
+index 071902557..5667d47e1 100644
+--- a/src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnProblemResolver.java
++++ b/src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnProblemResolver.java
+@@ -94,6 +94,30 @@ public final class V3ColumnProblemResolver {
+                 problem.condenserComponentPhases(), problem.nodePressuresPascal(), ledger, support, wetTraySet);
+     }
+ 
++    /**
++     * An attempt's problem with dead flow phases dropped from its frozen support
++     * ({@link V3TruncationSupport#withoutPhases}), the wet set unchanged; {@code null} when the drop removes
++     * nothing or its reduced ledger is invalid.
++     */
++    static V3ColumnProblem withoutPhases(
++            V3ColumnProblem problem, java.util.List<V3DegreeOfFreedomLedger.UnknownId> deadPhases) {
++        Objects.requireNonNull(problem, "problem");
++        V3TruncationSupport support;
++        try {
++            support = problem.truncationSupport().withoutPhases(problem, deadPhases);
++        } catch (IllegalArgumentException incompatible) {
++            return null;
++        }
++        if (support == problem.truncationSupport()) return null;
++        V3DegreeOfFreedomLedger ledger = V3DegreeOfFreedomLedger.create(problem.topology(),
++                problem.activeComponentBasis().componentCount(), problem.input().specifications(),
++                problem.condenserComponentPhases(), support, problem.input().sideDraws(), problem.wetTraySet());
++        if (!ledger.isValid()) return null;
++        return new V3ColumnProblem(problem.input(), problem.topology(), problem.activeComponentBasis(),
++                problem.condenserComponentPhases(), problem.nodePressuresPascal(), ledger, support,
++                problem.wetTraySet());
++    }
++
+     /** Validates the authored geometry and rates without assembling a numerical ledger or calling properties. */
+     public static void validateInput(V3ColumnInput input) {
+         validateInput(input, null);
+diff --git a/src/main/java/com/wormzjl/icheme/science/column/v3/V3SimultaneousColumnSolver.java b/src/main/java/com/wormzjl/icheme/science/column/v3/V3SimultaneousColumnSolver.java
+index eccfa2513..b5e2212bd 100644
+--- a/src/main/java/com/wormzjl/icheme/science/column/v3/V3SimultaneousColumnSolver.java
++++ b/src/main/java/com/wormzjl/icheme/science/column/v3/V3SimultaneousColumnSolver.java
+@@ -4,6 +4,9 @@ import com.wormzjl.icheme.science.column.v3.linalg.V3BandedMatrix;
+ import com.wormzjl.icheme.science.column.v3.linalg.V3BandedPivotedSolver;
+ import com.wormzjl.icheme.science.column.v3.thermo.V3ThermoException;
+ import com.wormzjl.icheme.science.column.v3.thermo.V3ThermoWorkspace;
++import com.wormzjl.icheme.science.math.DeterministicMath;
++import java.util.ArrayList;
++import java.util.List;
+ import java.util.Objects;
+ 
+ /** Damped dry-MESH Newton correction path that emits attempt evidence only; it cannot publish a V3 success. */
+@@ -30,6 +33,21 @@ final class V3SimultaneousColumnSolver {
+             "V3 Newton Jacobian contains an unexpected off-band coupling";
+     private static final String DAMPED_NORMAL_OFF_BAND_MESSAGE =
+             V3NormalEquations.OFF_BAND_MESSAGE;
++    /** The stop of a solve whose Newton matrix died on phases below the support floor; see {@link #deadPhases}. */
++    static final String STALLED_SUPPORT_FLOOR = "STALLED_SUPPORT_FLOOR";
++    /**
++     * The support floor in the log-flow coordinates: {@link V3TruncationSupport#TRACE_FLOOR_FRACTION} of the
++     * component's flow scale.
++     *
++     * <p>A flow coordinate below it is an ordinary state inside a solve: trace components whose root lies under
++     * the floor pass it on the way, and the refresh after the solve drops them (measured, batch
++     * 2026-11-04-open-thermo-data: 43 cold stage-continuation solves carry 1 to 37 such points and converge in
++     * 8 to 27 iterations; holding them at the floor stalled every one). Only where the Newton matrix is singular
++     * on such a coordinate is it dead: O10 measured the medium grade's PC11 liquid on tray 2 at 5.9e-210 mol/s,
++     * its finite-difference column exactly 0 and the LU SINGULAR on it for 50 iterations, while damped
++     * Gauss-Newton crept to a stationary point that is not a root.</p>
++     */
++    private static final double SUPPORT_FLOOR_LOG_FLOW = DeterministicMath.log(V3TruncationSupport.TRACE_FLOOR_FRACTION);
+ 
+     private V3SimultaneousColumnSolver() {}
+ 
+@@ -437,9 +455,10 @@ final class V3SimultaneousColumnSolver {
+                 frozenFineJacobianSteps = 0;
+             }
+             V3BandedPivotedSolver.Result linearResult;
++            V3BandedMatrix newtonMatrix = null;
+             try {
+-                linearResult = V3BandedPivotedSolver.solve(
+-                        toBandedMatrix(jacobian, layout, linearWorkspace), negativeScaledResidual(residual), linearWorkspace);
++                newtonMatrix = toBandedMatrix(jacobian, layout, linearWorkspace);
++                linearResult = V3BandedPivotedSolver.solve(newtonMatrix, negativeScaledResidual(residual), linearWorkspace);
+             } catch (IllegalStateException unavailable) {
+                 if (usesFrozenFineJacobian) {
+                     cachedFineJacobian = null;
+@@ -461,6 +480,18 @@ final class V3SimultaneousColumnSolver {
+                 }
+                 V3BandedPivotedSolver.Result.Failure failure = (V3BandedPivotedSolver.Result.Failure) linearResult;
+                 double[] baseCoordinates = coordinates.encode(state);
++                // A matrix singular on phases far below their support floor is the frozen support's limit, not
++                // the column's: those phases are not unknowns this solve can move. The support drops exactly
++                // them, and the caller that owns it resumes from this state; every other point stays as it is.
++                List<V3DegreeOfFreedomLedger.UnknownId> dead = deadPhases(failure, newtonMatrix, coordinates, baseCoordinates);
++                V3ColumnProblem reduced = dead.isEmpty() ? null : V3ColumnProblemResolver.withoutPhases(problem, dead);
++                if (reduced != null) {
++                    V3DegreeOfFreedomLedger.UnknownId first = dead.get(0);
++                    return new Attempt.Failure(STALLED_SUPPORT_FLOOR, state, new Evidence(iteration, maximumResidual,
++                            merit, 0.0, failure.pivotGrowth(), "Newton matrix singular on " + dead.size()
++                                    + " phase(s) below the support floor, first " + first.family() + " node "
++                                    + first.node() + " component " + first.component(), lastConvergenceEvidence), reduced);
++                }
+                 AcceptedTrial descentTrial = dampedGaussNewtonTrial(
+                         evaluator, coordinates, baseCoordinates, jacobian, residual, frozenScales, merit, layout, workspaceFactory,
+                         maximumLineSearchSteps, control, budget, linearWorkspace);
+@@ -675,6 +706,33 @@ final class V3SimultaneousColumnSolver {
+         return matrix;
+     }
+ 
++    /**
++     * The flow phases on which a SINGULAR Newton matrix has died: coordinates below the support floor
++     * ({@link #SUPPORT_FLOOR_LOG_FLOW}) that are the column whose pivot the LU could not take, or whose column
++     * is exactly zero. Empty for every other failure, and where no such coordinate lies below the floor.
++     */
++    private static List<V3DegreeOfFreedomLedger.UnknownId> deadPhases(
++            V3BandedPivotedSolver.Result.Failure failure, V3BandedMatrix matrix, V3DryMeshCoordinateMap coordinates,
++            double[] values) {
++        if (failure.code() != V3BandedPivotedSolver.FailureCode.SINGULAR) return List.of();
++        List<V3DegreeOfFreedomLedger.UnknownId> dead = new ArrayList<>();
++        for (int column = 0; column < values.length; column++) {
++            V3DegreeOfFreedomLedger.UnknownFamily family = coordinates.unknowns().get(column).id().family();
++            if ((family != V3DegreeOfFreedomLedger.UnknownFamily.LIQUID_COMPONENT_FLOW
++                    && family != V3DegreeOfFreedomLedger.UnknownFamily.VAPOR_COMPONENT_FLOW)
++                    || !(values[column] < SUPPORT_FLOOR_LOG_FLOW)) {
++                continue;
++            }
++            boolean zero = column != failure.singularColumn();
++            int lastRow = Math.min(matrix.size() - 1, column + matrix.lowerBandwidth());
++            for (int row = Math.max(0, column - matrix.upperBandwidth()); zero && row <= lastRow; row++) {
++                zero = matrix.get(row, column) == 0.0;
++            }
++            if (column == failure.singularColumn() || zero) dead.add(coordinates.unknowns().get(column).id());
++        }
++        return dead;
++    }
++
+     private static double[] negativeScaledResidual(V3MeshResidual residual) {
+         double[] rightHandSide = new double[residual.size()];
+         for (int row = 0; row < rightHandSide.length; row++) rightHandSide[row] = -residual.scaledValue(row);
+@@ -958,11 +1016,24 @@ final class V3SimultaneousColumnSolver {
+             }
+         }
+ 
+-        record Failure(String code, V3DryMeshState state, Evidence evidence) implements Attempt {
++        /**
++         * A solve that ended without a root. {@code reducedProblem} is set only on {@code STALLED_SUPPORT_FLOOR}:
++         * the attempt's problem with the dead phases dropped from its support, for the caller that owns the
++         * support to resume from {@code state}; it is {@code null} on every other failure.
++         */
++        record Failure(String code, V3DryMeshState state, Evidence evidence, V3ColumnProblem reducedProblem)
++                implements Attempt {
+             public Failure {
+                 if (code == null || code.isBlank() || code.length() > 64) throw new IllegalArgumentException("V3 Newton failure code is invalid");
+                 state = Objects.requireNonNull(state, "state");
+                 evidence = Objects.requireNonNull(evidence, "evidence");
++                if ((reducedProblem != null) != code.equals(STALLED_SUPPORT_FLOOR)) {
++                    throw new IllegalArgumentException("V3 support-floor stop must carry exactly its reduced problem");
++                }
++            }
++
++            public Failure(String code, V3DryMeshState state, Evidence evidence) {
++                this(code, state, evidence, null);
+             }
+         }
+     }
+diff --git a/src/main/java/com/wormzjl/icheme/science/column/v3/V3TruncationSupport.java b/src/main/java/com/wormzjl/icheme/science/column/v3/V3TruncationSupport.java
+index 123dfbebc..47062f510 100644
+--- a/src/main/java/com/wormzjl/icheme/science/column/v3/V3TruncationSupport.java
++++ b/src/main/java/com/wormzjl/icheme/science/column/v3/V3TruncationSupport.java
+@@ -219,14 +219,7 @@ final class V3TruncationSupport {
+                 phases[node][component] = (passesCutoff ? point : PointPhases.ABSENT).mask();
+             }
+         }
+-        breakEquilibriumFreeCycles(problem, phases);
+-        restoreEmptiedPhases(problem, phases);
+-        int pruned = pruneUnreachable(problem, phases);
+-        // Reachability has to be settled first: the guarantee is over the liquid the tray above actually
+-        // keeps, and pruning is what decides that. The repair only adds phases, so nothing it writes can
+-        // become unreachable, and a point it lifts out of ABSENT is reachable by the very edge that lifted it.
+-        ensureSideDrawLiquid(problem, phases);
+-        breakEquilibriumFreeCycles(problem, phases);
++        int pruned = settle(problem, phases);
+         if (!phasesNonempty(problem, phases)) {
+             return new V3TruncationSupport(problem, cutoffMoleFraction, null, pruned,
+                     "Stage-trace support fell back to identity: feed reachability emptied a structural phase");
+@@ -237,6 +230,69 @@ final class V3TruncationSupport {
+         return new V3TruncationSupport(problem, cutoffMoleFraction, phases, pruned, "");
+     }
+ 
++    /**
++     * This support with the given flow phases dropped, as {@link #derive} drops a phase below the floor; this
++     * support itself when the drop removes nothing.
++     *
++     * <p>Used inside a frozen-support solve for a phase whose Newton column has died: a log-flow coordinate
++     * far below the floor whose finite-difference column is exactly zero, so the Newton matrix is singular on
++     * it. Such a phase is not an unknown the solve can move, and the support's own rule says it is not one.
++     * Only the named phases are cleared; every other point keeps its presence, also one below the floor
++     * (a converging solve passes many of those, and the refresh after it decides them from a solved state).
++     * The structural repairs of {@link #derive} then run on the result, so the drop is exactly the support a
++     * refresh would freeze if those phases alone had fallen below the floor. A feed-tray point is never
++     * dropped, as {@code derive} never drops one.</p>
++     *
++     * <p>The result has strictly fewer present phases or is this support: a repair that restores a dropped
++     * phase, or a drop that would empty a structural phase, leaves nothing to drop.</p>
++     */
++    V3TruncationSupport withoutPhases(V3ColumnProblem problem, List<V3DegreeOfFreedomLedger.UnknownId> deadPhases) {
++        Objects.requireNonNull(problem, "problem");
++        if (problem.truncationSupport() != this) {
++            throw new IllegalArgumentException("V3 support drop must act on its own problem's support");
++        }
++        byte[][] next = new byte[topology.nodeCount()][componentCount];
++        for (int node = 0; node < next.length; node++) {
++            for (int component = 0; component < componentCount; component++) {
++                next[node][component] = pointPhases(node, component).mask();
++            }
++        }
++        boolean cleared = false;
++        for (V3DegreeOfFreedomLedger.UnknownId id : deadPhases) {
++            if (id.node() == topology.feedTrayNumber()) continue;
++            int bit = switch (id.family()) {
++                case LIQUID_COMPONENT_FLOW -> LIQUID_BIT;
++                case VAPOR_COMPONENT_FLOW -> VAPOR_BIT;
++                default -> throw new IllegalArgumentException("V3 support drops only component flow phases");
++            };
++            if ((next[id.node()][id.component()] & bit) == 0) continue;
++            next[id.node()][id.component()] &= (byte) ~bit;
++            cleared = true;
++        }
++        if (!cleared) return this;
++        int pruned = settle(problem, next);
++        if (!phasesNonempty(problem, next)) return this;
++        V3TruncationSupport dropped = new V3TruncationSupport(
++                problem, cutoffMoleFraction, next, closurePrunedCount + pruned, note);
++        return dropped.presentPhaseCount() < presentPhaseCount() ? dropped : this;
++    }
++
++    /**
++     * The structural repairs every frozen support passes, applied to a phase mask in place; returns the points
++     * reachability pruned.
++     */
++    private static int settle(V3ColumnProblem problem, byte[][] phases) {
++        breakEquilibriumFreeCycles(problem, phases);
++        restoreEmptiedPhases(problem, phases);
++        int pruned = pruneUnreachable(problem, phases);
++        // Reachability has to be settled first: the guarantee is over the liquid the tray above actually
++        // keeps, and pruning is what decides that. The repair only adds phases, so nothing it writes can
++        // become unreachable, and a point it lifts out of ABSENT is reachable by the very edge that lifted it.
++        ensureSideDrawLiquid(problem, phases);
++        breakEquilibriumFreeCycles(problem, phases);
++        return pruned;
++    }
++
+     PointPhases pointPhases(int node, int component) {
+         if (node < 0 || node >= topology.nodeCount() || component < 0 || component >= componentCount) {
+             throw new IndexOutOfBoundsException("V3 truncation point is outside the topology/component basis");
+diff --git a/src/main/java/com/wormzjl/icheme/science/column/v3/linalg/V3BandedPivotedSolver.java b/src/main/java/com/wormzjl/icheme/science/column/v3/linalg/V3BandedPivotedSolver.java
+index e78b2e469..8ca57eb6a 100644
+--- a/src/main/java/com/wormzjl/icheme/science/column/v3/linalg/V3BandedPivotedSolver.java
++++ b/src/main/java/com/wormzjl/icheme/science/column/v3/linalg/V3BandedPivotedSolver.java
+@@ -66,7 +66,8 @@ public final class V3BandedPivotedSolver {
+             }
+             if (!Double.isFinite(pivotMagnitude) || pivotMagnitude <= PIVOT_TOLERANCE) {
+                 return new Result.Failure(FailureCode.SINGULAR, "V3 banded LU encountered a zero or tiny pivot",
+-                        finiteOrZero(minimumPivot), maximumPivot, pivotSwaps, pivotGrowth(maximumDuringFactorization, initialMaximum));
++                        finiteOrZero(minimumPivot), maximumPivot, pivotSwaps, pivotGrowth(maximumDuringFactorization, initialMaximum),
++                        pivot);
+             }
+             // Rows reaching this pivot hold nothing beyond this column, so it also bounds the fill they take on.
+             int lastFilledColumn = Math.min(size - 1, pivot + fillBandwidth);
+@@ -254,19 +255,29 @@ public final class V3BandedPivotedSolver {
+             @Override public double[] solution() { return solution.clone(); }
+         }
+ 
++        /**
++         * A failed solve. {@code singularColumn} is the column whose pivot the elimination could not take (a
++         * {@link FailureCode#SINGULAR} factorization), and {@code -1} for every other failure; partial pivoting
++         * swaps rows only, so it is the caller's own unknown index.
++         */
+         record Failure(
+                 FailureCode code, String detail, double minimumPivotMagnitude, double maximumPivotMagnitude,
+-                int pivotSwaps, double pivotGrowth) implements Result {
++                int pivotSwaps, double pivotGrowth, int singularColumn) implements Result {
+             public Failure {
+                 code = Objects.requireNonNull(code, "code");
+                 detail = Objects.requireNonNull(detail, "detail");
+                 if (detail.isBlank() || detail.length() > 256 || !Double.isFinite(minimumPivotMagnitude)
+                         || minimumPivotMagnitude < 0.0 || !Double.isFinite(maximumPivotMagnitude)
+                         || maximumPivotMagnitude < 0.0 || pivotSwaps < 0 || !Double.isFinite(pivotGrowth)
+-                        || pivotGrowth < 0.0) {
++                        || pivotGrowth < 0.0 || singularColumn < -1) {
+                     throw new IllegalArgumentException("V3 failed banded solve evidence is invalid");
+                 }
+             }
++
++            public Failure(FailureCode code, String detail, double minimumPivotMagnitude, double maximumPivotMagnitude,
++                           int pivotSwaps, double pivotGrowth) {
++                this(code, detail, minimumPivotMagnitude, maximumPivotMagnitude, pivotSwaps, pivotGrowth, -1);
++            }
+         }
+     }
+ 

@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "id": "oil_sand_dilbit",
+  "kind": "column",
+  "label": "Oil sand dilbit",
+  "translation_key": "gui.icheme.column_preset.oil_sand_dilbit",
+  "order": 0,
+  "visible": true,
+  "package": "icheme:tjl20_methane",
+  "assay": "icheme:oil_sand_dilbit",
+  "operating": {
+    "feedTemperatureKelvin": 638.15,
+    "stageCount": 40,
+    "feedStageNumber": 37,
+    "topPressurePascal": 250000,
+    "stagePressureDropPascal": 0,
+    "columnDiameterMetres": 8,
+    "sideDraws": [
+      {
+        "trayNumber": 10,
+        "molarFlowMolPerSecond": 69.51670825236027
+      },
+      {
+        "trayNumber": 18,
+        "molarFlowMolPerSecond": 46.602169608155194
+      },
+      {
+        "trayNumber": 28,
+        "molarFlowMolPerSecond": 28.709890189446103
+      }
+    ],
+    "steamFeeds": [
+      {
+        "stageNumber": 41,
+        "molarFlowMolPerSecond": 411.77415698154243,
+        "temperatureKelvin": 533.15
+      }
+    ],
+    "pumparounds": [
+      {
+        "returnTray": 8,
+        "drawTray": 10,
+        "dutyWatts": -5973154.3540713545,
+        "split": "UNIFORM"
+      },
+      {
+        "returnTray": 16,
+        "drawTray": 18,
+        "dutyWatts": -7617343.823633521,
+        "split": "UNIFORM"
+      },
+      {
+        "returnTray": 26,
+        "drawTray": 28,
+        "dutyWatts": -7436290.421779018,
+        "split": "UNIFORM"
+      }
+    ],
+    "feedStandardVolumeCubicMetresPerSecond": 0.1832627693034672,
+    "condenserTemperatureKelvin": 332.15,
+    "organicRefluxRatio": 4.17,
+    "reboilerDutyWatts": 0
+  }
+}

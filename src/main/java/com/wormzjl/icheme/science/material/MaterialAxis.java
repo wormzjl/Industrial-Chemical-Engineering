@@ -4,7 +4,12 @@ import java.util.*;
 
 /** Immutable identity axis. Projection never discards nonzero material or guesses an alias. */
 public final class MaterialAxis {
-    public static final int MAX_CONSERVED_COMPONENTS=65;
+    /**
+     * The longest axis, water included: a world list of 99 compounds and water (batch 2026-11-04-refinery-compounds, V2; an
+     * island carries at most 64 and water). The menu wire carries it: a view of 34 three-phase vectors at the widest value
+     * fits MAX_JSON up to 104 entries (measured), and 100 leaves room for the names and messages.
+     */
+    public static final int MAX_CONSERVED_COMPONENTS=100;
     private final List<String> ids;
     private final Map<String,Integer> indices;
     public MaterialAxis(List<String> ids) {

@@ -49,21 +49,23 @@ public final class SimulatorRunner {
 
         FlowsheetRun alone(Flowsheet sheet, String unit, MaterialCatalog catalog, Runnable checkpoint, Map<String, FlowStream> streams, FlowsheetSolver.Progress progress);
 
-        /** Size all on {@code run}, or null where the world holds another package than the sheet's. Stop throws {@link CancellationException}. */
-        default SheetSizing.@Nullable SizeAll sizeAll(Flowsheet sheet, FlowsheetRun run, MaterialCatalog catalog, Runnable checkpoint, FlowsheetSolver.Progress progress) {
-            return thermo(sheet, catalog, checkpoint, thermo -> Proposal.sizeAll(sheet, run, thermo, progress));
+        /** Size all on {@code run}. Stop throws {@link CancellationException}. */
+        default SheetSizing.SizeAll sizeAll(Flowsheet sheet, FlowsheetRun run, MaterialCatalog catalog, Runnable checkpoint, FlowsheetSolver.Progress progress) {
+            return thermo(catalog, checkpoint, thermo -> Proposal.sizeAll(sheet, run, thermo, progress));
         }
 
-        /** Every item rated at its size on {@code run}, or null where the world holds another package than the sheet's. */
-        default SheetSizing.@Nullable Sized rate(Flowsheet sheet, FlowsheetRun run, MaterialCatalog catalog, Runnable checkpoint) {
-            return thermo(sheet, catalog, checkpoint, thermo -> SheetSizing.rate(sheet, run, thermo));
+        /** Every item rated at its size on {@code run}. */
+        default SheetSizing.Sized rate(Flowsheet sheet, FlowsheetRun run, MaterialCatalog catalog, Runnable checkpoint) {
+            return thermo(catalog, checkpoint, thermo -> SheetSizing.rate(sheet, run, thermo));
         }
     }
 
-    /** {@code on} with the thermo of {@code sheet}'s package, as a run reads it, or null where the world holds another. */
-    private static <T> @Nullable T thermo(Flowsheet sheet, MaterialCatalog catalog, Runnable checkpoint, Function<FlowThermo, T> on) {
-        String network = sheet.basis().packageId();
-        if (!network.equals(FluidMaterialCatalog.networkPackage(catalog))) return null;
+    /**
+     * {@code on} with the world package's thermo, on whose axis a run's streams stand. The sizing takes the network's view of the
+     * sheet's compounds from it, as the run does ({@code SheetSizing.pass}).
+     */
+    private static <T> T thermo(MaterialCatalog catalog, Runnable checkpoint, Function<FlowThermo, T> on) {
+        String network = FluidMaterialCatalog.networkPackage(catalog);
         return MaterialRuntime.with(catalog, network, () -> on.apply(new FlowThermo(FluidThermodynamics.forNetwork(catalog, network), catalog, network, checkpoint)));
     }
 
@@ -292,8 +294,7 @@ public final class SimulatorRunner {
             task = SheetState.Task.RATE;
             now = null;
             try {
-                var sized = engine.rate(sheet, run, catalog, this::checkpoint);
-                if (sized != null) made = new Rated(sheet, ran, sized, false);
+                made = new Rated(sheet, ran, engine.rate(sheet, run, catalog, this::checkpoint), false);
             } catch (CancellationException stop) {
                 // The run stands; the tab rates it when it opens.
             }
@@ -321,7 +322,6 @@ public final class SimulatorRunner {
             var shown = base;
             if (shown == null) return;
             var all = engine.sizeAll(sheet, shown.run(), catalog, this::checkpoint, this);
-            if (all == null) return;
             boolean ran = all.run() != shown.run();
             if (ran && all.run().status() == FlowsheetRun.Status.STEADY) steady = all.run();
             var after = ran ? new SimulatorHost.Finished(all.sheet(), all.run(), seconds(), null, RevisionNotice.tokens(all.sheet(), catalog))
@@ -335,8 +335,7 @@ public final class SimulatorRunner {
             var shown = base;
             if (shown == null) return;
             var run = SheetState.sameShape(sheet, shown.sheet()) ? shown.run() : FlowsheetRun.none();
-            var sized = engine.rate(sheet, run, catalog, this::checkpoint);
-            if (sized != null) made = new Rated(sheet, shown, sized, false);
+            made = new Rated(sheet, shown, engine.rate(sheet, run, catalog, this::checkpoint), false);
         }
     }
 

@@ -669,8 +669,13 @@ final class FluidFacts {
 
     // ---------------- the facts path ----------------
 
-    /** An island's facts and the committed tick its index row gives. */
-    record Placed(Island island,long committed) {}
+    /**
+     * An island's facts, the committed tick its index row gives, and whether its contents restate: an island restates only
+     * when the records of its own compounds moved or one of them is gone (V3); the two-argument form restates with the world.
+     */
+    record Placed(Island island,long committed,boolean restate) {
+        Placed(Island island,long committed){this(island,committed,true);}
+    }
     /** What a rebuild made: the islands, the world ledger, and what it restated. */
     record Rebuilt(FluidCheckpointCodec.Checkpoint checkpoint,WorldTopologyLedger.Snapshot world,int vessels,int restated) {}
 
@@ -680,15 +685,25 @@ final class FluidFacts {
      * minted, decision D37), awake at {@code epoch} with no solved interval. Generators and voids are initialised from
      * their specs, as the registry holds them.
      *
-     * <p>With {@code restate} the property data changed (AGENTS.md, "Saves and data formats"): every amount is mapped
+     * <p>The world rebuilds on the current basis of {@code catalog}: a saved basis names its compounds by id, and its
+     * package id is a label (batch 2026-11-04-refinery-compounds, W4). With {@code restate} the property data or the
+     * basis changed (AGENTS.md, "Saves and data formats"): every amount is mapped
      * onto the current axis by component id (through the package's aliases); a vessel keeps its moles, its volume, its
      * solids and its temperature, and the new data gives its energy, pressure and phase split (a TP flash at its saved
      * temperature and pressure). The energy difference and every component and solid the data no longer has are booked
      * in the ledger's {@link WorldTopologyLedger.Restated}, and the islands' status names them.</p>
+     *
+     * <p>Restatement is per island (V3): a vessel of an island that does not restate ({@link Placed#restate}) keeps its saved
+     * contents bit for bit, read on its own compound list as the state path reads it, whatever else changed (a compound
+     * added to the package restates no island). Each rebuilt island runs on its own list: nitrogen, the compounds its
+     * stock holds and those its column outlets' accounts hold (V2's registry compile; a list shrinks here to what is held).</p>
      */
     static Rebuilt rebuild(World world,List<Placed> islands,long epoch,Function<FluidCheckpointCodec.PackageKey,FluidThermodynamics> models,
                            MaterialCatalog catalog,boolean restate,String reason) {
-        var basis=restate?WorldTopologyLedger.FluidBasis.capture(catalog):world.basis;
+        // The world rebuilds on the current basis. Without a restatement the saved one holds the same compounds and identity
+        // (the load compares them, whatever else stops the state), and the world then names the current network package.
+        var basis=WorldTopologyLedger.FluidBasis.capture(catalog);
+        if(!restate&&!world.basis.sameAs(basis))throw new IllegalArgumentException("The saved fluid basis "+world.basis.components()+" is not the current "+basis.components()+"; its facts must be restated");
         var key=new FluidCheckpointCodec.PackageKey(basis.packageId());var model=Objects.requireNonNull(models.apply(key));
         if(!model.components().equals(basis.components()))throw new IllegalStateException("The network model's components "+model.components()+" are not the basis "+basis.components());
         var removed=new Removed();
@@ -727,16 +742,20 @@ final class FluidFacts {
         registrations.values().removeIf(r->r.device().port()&&!ports.contains(r.device().id()));
         // Vessel contents and filter cakes, by device identity.
         var stock=new HashMap<Long,PassiveNetwork.Reservoir>();var cakes=new HashMap<Long,InlineFilter>();int restated=0,vessels=0;
+        var origins=new HashMap<Long,IslandSets.Origin>();
         for(var placed:islands) {
             var island=placed.island;var from=new Axis(island.components,basis.components(),restate?catalog.requirePackage(basis.packageId()):null);
+            // The model the island's facts lie on, when it keeps its contents: its own compounds, all still in the package.
+            var held=restate&&placed.restate?null:own(island,basis,models);
             for(var v:island.at(placed.committed)) {
                 var r=registrations.get(v.id);
                 if(r==null||r.device().kind()!=TopologyCompiler.Kind.RESERVOIR){warn("vessel "+v.id+" is not a registered reservoir; its contents are dropped");removed.add(v,from);continue;}
                 double y=r.device().position().y();var solids=inventory(v.solids,solid);
                 PassiveNetwork.Reservoir node;
-                if(!restate&&from.identity()) {
-                    var state=Arrays.stream(v.moles).sum()==0&&!solids.empty()?model.solidState(v.temperature,v.pressure,solids):model.state(v.temperature,v.pressure,v.liquid,v.vapor,v.waterLiquid,v.waterVapor,v.hydrocarbonPressure).withSolids(solids);
-                    node=new PassiveNetwork.Reservoir(v.id,y,state,PassiveNetwork.NodeKind.RESERVOIR,new PassiveNetwork.Inventory(v.volume,v.moles,v.energy,solids,v.levelHeight,v.open,r.spec().geometry(),null,r.spec().tower()));
+                if(held!=null) {
+                    var state=Arrays.stream(v.moles).sum()==0&&!solids.empty()?held.solidState(v.temperature,v.pressure,solids):held.state(v.temperature,v.pressure,v.liquid,v.vapor,v.waterLiquid,v.waterVapor,v.hydrocarbonPressure).withSolids(solids);
+                    var kept=new PassiveNetwork.Reservoir(v.id,y,state,PassiveNetwork.NodeKind.RESERVOIR,new PassiveNetwork.Inventory(v.volume,v.moles,v.energy,solids,v.levelHeight,v.open,r.spec().geometry(),null,r.spec().tower()));
+                    origins.put(v.id,new IslandSets.Origin(kept,held));node=IslandSets.node(kept,held,model);
                 } else {
                     var moles=from.map(v.moles,removed);restated++;
                     if(Arrays.stream(moles).sum()==0&&solids.empty())node=r.spec().initialize(r.device(),model,()->{});
@@ -759,13 +778,21 @@ final class FluidFacts {
             if(d.kind()==TopologyCompiler.Kind.RESERVOIR)warn("vessel "+d.id()+" has no saved contents; it starts empty");
             stock.put(d.id(),initialised(r,model,catalog));
         }
+        // What each column outlet may deliver, on the current axis: its account's compounds join its island's list.
+        var delivers=new HashMap<Long,Set<String>>();
+        for(var u:columns.values())for(var st:u.stations()) {
+            if(st.device()==0||st.port().inlet())continue;var n=st.account().moles();
+            for(int i=0;i<n.length;i++)if(n[i]>0&&!basis.components().get(i).equals("Water"))delivers.computeIfAbsent(st.device(),ignored->new HashSet<>()).add(basis.components().get(i));
+        }
         var compiled=PhysicalFluidTopology.compile(devices,stock,cakes,NetworkReduction.ambient(model));
         long next=world.nextIdentity;var entries=new ArrayList<FluidCheckpointCodec.IslandEntry>();
         String status="WAITING: rebuilt from saved facts ("+reason+")"+(removed.empty()?"":"; removed by the property data: "+removed.summary());
         for(var island:compiled.islands()) {
-            var graph=PassiveNetwork.mintJunctions(island.graph(),model);long id=next++;
+            var set=IslandSets.held(island.graph(),model,origins);for(long device:island.physicalIds())set.addAll(delivers.getOrDefault(device,Set.of()));
+            var own=model.on(set);
+            var graph=PassiveNetwork.mintJunctions(IslandSets.onto(island.graph(),model,own,origins),own);long id=next++;
             var dimension=registrations.get(island.physicalIds().iterator().next()).device().position().dimension();
-            entries.add(new FluidCheckpointCodec.IslandEntry(dimension,key.packageId(),new IslandCoordinator.Snapshot(id,0,graph,new IslandClock.Snapshot(epoch,epoch,0,REBUILT_CADENCE),
+            entries.add(new FluidCheckpointCodec.IslandEntry(dimension,key.packageId(),own.compounds(),new IslandCoordinator.Snapshot(id,0,graph,new IslandClock.Snapshot(epoch,epoch,0,REBUILT_CADENCE),
                     Optional.empty(),status,Map.of(),Optional.empty(),0)));
         }
         var recoveries=new HashMap<UUID,WorldTopologyLedger.RecoveredSolid>();
@@ -783,6 +810,12 @@ final class FluidFacts {
         snapshot=ledger.snapshot();
         if(restate)IChemE.LOGGER.warn("fluid_checkpoint status=RESTATED vessels={} energy_delta_J={} removed={}",restated,energy,removed.empty()?"none":removed.summary());
         return new Rebuilt(new FluidCheckpointCodec.Checkpoint(entries),snapshot,vessels,restated);
+    }
+    /** The model island facts {@code island} lie on now: the network package on its own compounds (water not named), or null when one of them is gone. */
+    private static FluidThermodynamics own(Island island,WorldTopologyLedger.FluidBasis basis,Function<FluidCheckpointCodec.PackageKey,FluidThermodynamics> models) {
+        var compounds=island.components.stream().filter(c->!c.equals("Water")).toList();
+        try{var held=models.apply(new FluidCheckpointCodec.PackageKey(basis.packageId(),compounds));return held!=null&&held.components().equals(island.components)?held:null;}
+        catch(IllegalArgumentException gone){return null;}
     }
     /**
      * Unit {@code u} as what stands in {@code registrations} leaves it, queued events gone: a unit that is stopped, leaves or

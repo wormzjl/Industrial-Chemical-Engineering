@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "MethylMercaptan",
+  "kind": "chemical",
+  "translation_key": "material.icheme.methyl_mercaptan",
+  "fallback": "MethylMercaptan",
+  "properties": "icheme:chemsep_methyl_mercaptan",
+  "appearance": {
+    "color": "#F3F4EA",
+    "transparency": 0.85,
+    "estimated": true
+  },
+  "identifiers": {
+    "cas": "74-93-1",
+    "chemsep_id": "1801",
+    "smiles": "CS",
+    "formula": "CH3SH"
+  }
+}

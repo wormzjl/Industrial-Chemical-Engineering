@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "id": "medium_crude",
+  "kind": "column",
+  "label": "Medium crude (default)",
+  "translation_key": "gui.icheme.column_preset.medium_crude",
+  "order": 0,
+  "visible": true,
+  "package": "icheme:tjl20_methane",
+  "assay": "icheme:medium_crude",
+  "operating": {
+    "feedTemperatureKelvin": 638.15,
+    "stageCount": 40,
+    "feedStageNumber": 37,
+    "topPressurePascal": 250000.0,
+    "stagePressureDropPascal": 0.0,
+    "columnDiameterMetres": 8.0,
+    "sideDraws": [
+      {
+        "trayNumber": 10,
+        "molarFlowMolPerSecond": 143.96618123618978
+      },
+      {
+        "trayNumber": 18,
+        "molarFlowMolPerSecond": 132.35605700018303
+      },
+      {
+        "trayNumber": 28,
+        "molarFlowMolPerSecond": 51.11071630764947
+      }
+    ],
+    "steamFeeds": [
+      {
+        "stageNumber": 41,
+        "molarFlowMolPerSecond": 330.70742728373403,
+        "temperatureKelvin": 533.15
+      }
+    ],
+    "pumparounds": [
+      {
+        "returnTray": 8,
+        "drawTray": 10,
+        "dutyWatts": -13093341.597836321,
+        "split": "UNIFORM"
+      },
+      {
+        "returnTray": 16,
+        "drawTray": 18,
+        "dutyWatts": -21011905.824410513,
+        "split": "UNIFORM"
+      },
+      {
+        "returnTray": 26,
+        "drawTray": 28,
+        "dutyWatts": -13238439.005543655,
+        "split": "UNIFORM"
+      }
+    ],
+    "feedStandardVolumeCubicMetresPerSecond": 0.1832627693034672,
+    "condenserTemperatureKelvin": 332.15,
+    "organicRefluxRatio": 4.17,
+    "reboilerDutyWatts": 0
+  }
+}

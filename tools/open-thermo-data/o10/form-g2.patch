@@ -1,0 +1,184 @@
+diff --git a/src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnCalculator.java b/src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnCalculator.java
+index c8d4ecd6b..09d759c44 100644
+--- a/src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnCalculator.java
++++ b/src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnCalculator.java
+@@ -1687,9 +1687,15 @@ public final class V3ColumnCalculator {
+             // corrected support is what converges the rung. Only one, though: a second stall in a row is a
+             // rung the continuation is going to subdivide or abandon anyway, and re-solving it three times
+             // triples the cost of every case that is on its way to a typed failure.
++            //
++            // A release is not a stall. The solve ended on a Newton matrix singular at a point below its support
++            // floor (STALLED_SUPPORT_FLOOR): the refresh that drops that point is the next step of the same solve,
++            // so it is neither counted against the stalled limit nor cut to the polish budget.
+             boolean converged = attempt instanceof V3SimultaneousColumnSolver.Attempt.Converged;
++            boolean released = attempt instanceof V3SimultaneousColumnSolver.Attempt.Failure release
++                    && release.code().equals("STALLED_SUPPORT_FLOOR");
+             boolean floorBudget = refreshes < floorRefreshLimit
+-                    && (converged || stalledRefreshes < MAXIMUM_STALLED_FLOOR_SUPPORT_REFRESHES);
++                    && (converged || released || stalledRefreshes < MAXIMUM_STALLED_FLOOR_SUPPORT_REFRESHES);
+             // The wet set is re-derived only from a state that solved its own equations, and carries its own
+             // small budget so it never has to compete with the support refreshes for one. How far a tray sits
+             // below the water dew point, and how much water it must therefore shed, are readings of a
+@@ -1705,14 +1711,14 @@ public final class V3ColumnCalculator {
+             // A refresh that only removes — points from the support, trays from the wet set — carries no
+             // information the stalled state did not already have. One that adds a wet tray does: the water
+             // that tray sheds is a degree of freedom the stalled solve never had, so it keeps the full budget.
+-            nextIterations = !converged
++            nextIterations = !converged && !released
+                     && refreshed.support().presentPhaseCount() <= prepared.support().presentPhaseCount()
+                     && refreshed.wetTrays().wetTrayCount() <= prepared.wetTrays().wetTrayCount()
+                     ? Math.min(maximumIterations, STALLED_DROP_REFRESH_ITERATIONS)
+                     : maximumIterations;
+             if (!refreshed.support().sameRetention(prepared.support())) {
+                 refreshes++;
+-                if (!converged) stalledRefreshes++;
++                if (!converged && !released) stalledRefreshes++;
+             }
+             if (!refreshed.wetTrays().sameSet(prepared.wetTrays())) {
+                 wetTrayRefreshes++;
+diff --git a/src/main/java/com/wormzjl/icheme/science/column/v3/V3SimultaneousColumnSolver.java b/src/main/java/com/wormzjl/icheme/science/column/v3/V3SimultaneousColumnSolver.java
+index eccfa2513..c0ba44336 100644
+--- a/src/main/java/com/wormzjl/icheme/science/column/v3/V3SimultaneousColumnSolver.java
++++ b/src/main/java/com/wormzjl/icheme/science/column/v3/V3SimultaneousColumnSolver.java
+@@ -4,6 +4,7 @@ import com.wormzjl.icheme.science.column.v3.linalg.V3BandedMatrix;
+ import com.wormzjl.icheme.science.column.v3.linalg.V3BandedPivotedSolver;
+ import com.wormzjl.icheme.science.column.v3.thermo.V3ThermoException;
+ import com.wormzjl.icheme.science.column.v3.thermo.V3ThermoWorkspace;
++import com.wormzjl.icheme.science.math.DeterministicMath;
+ import java.util.Objects;
+ 
+ /** Damped dry-MESH Newton correction path that emits attempt evidence only; it cannot publish a V3 success. */
+@@ -30,6 +31,19 @@ final class V3SimultaneousColumnSolver {
+             "V3 Newton Jacobian contains an unexpected off-band coupling";
+     private static final String DAMPED_NORMAL_OFF_BAND_MESSAGE =
+             V3NormalEquations.OFF_BAND_MESSAGE;
++    /**
++     * The support floor in the log-flow coordinates: {@link V3TruncationSupport#TRACE_FLOOR_FRACTION} of the
++     * component's flow scale.
++     *
++     * <p>A flow coordinate below it is an ordinary state inside a solve: trace components whose root lies under
++     * the floor pass it on the way, and the refresh after the solve drops them (measured, batch
++     * 2026-11-04-open-thermo-data: 43 cold stage-continuation solves carry 1 to 37 such points and converge in
++     * 8 to 27 iterations; holding them at the floor stalled every one). Only where the Newton matrix is singular
++     * on such a point does the frozen support stop the solve: O10 measured the medium grade's PC11 liquid on
++     * tray 2 at 5.9e-210 mol/s, its finite-difference column exactly 0 and the LU SINGULAR on it for 50
++     * iterations, while damped Gauss-Newton crept to a stationary point that is not a root.</p>
++     */
++    private static final double SUPPORT_FLOOR_LOG_FLOW = DeterministicMath.log(V3TruncationSupport.TRACE_FLOOR_FRACTION);
+ 
+     private V3SimultaneousColumnSolver() {}
+ 
+@@ -437,9 +451,10 @@ final class V3SimultaneousColumnSolver {
+                 frozenFineJacobianSteps = 0;
+             }
+             V3BandedPivotedSolver.Result linearResult;
++            V3BandedMatrix newtonMatrix = null;
+             try {
+-                linearResult = V3BandedPivotedSolver.solve(
+-                        toBandedMatrix(jacobian, layout, linearWorkspace), negativeScaledResidual(residual), linearWorkspace);
++                newtonMatrix = toBandedMatrix(jacobian, layout, linearWorkspace);
++                linearResult = V3BandedPivotedSolver.solve(newtonMatrix, negativeScaledResidual(residual), linearWorkspace);
+             } catch (IllegalStateException unavailable) {
+                 if (usesFrozenFineJacobian) {
+                     cachedFineJacobian = null;
+@@ -461,6 +476,17 @@ final class V3SimultaneousColumnSolver {
+                 }
+                 V3BandedPivotedSolver.Result.Failure failure = (V3BandedPivotedSolver.Result.Failure) linearResult;
+                 double[] baseCoordinates = coordinates.encode(state);
++                // A matrix singular on a point below its support floor is the frozen support's limit, not the
++                // column's: the point is not an unknown this solve can move, and no damped step past it is a
++                // root. The refresh that follows drops it (STALLED_SUPPORT_FLOOR is its release).
++                int floorPoint = subFloorSingularCoordinate(failure, newtonMatrix, coordinates, baseCoordinates);
++                if (floorPoint >= 0) {
++                    V3DegreeOfFreedomLedger.UnknownId id = coordinates.unknowns().get(floorPoint).id();
++                    return new Attempt.Failure("STALLED_SUPPORT_FLOOR", state, new Evidence(iteration, maximumResidual,
++                            merit, 0.0, failure.pivotGrowth(), "Newton matrix singular on " + id.family() + " node "
++                                    + id.node() + " component " + id.component() + " at log flow "
++                                    + baseCoordinates[floorPoint] + ", below its support floor", lastConvergenceEvidence));
++                }
+                 AcceptedTrial descentTrial = dampedGaussNewtonTrial(
+                         evaluator, coordinates, baseCoordinates, jacobian, residual, frozenScales, merit, layout, workspaceFactory,
+                         maximumLineSearchSteps, control, budget, linearWorkspace);
+@@ -675,6 +701,36 @@ final class V3SimultaneousColumnSolver {
+         return matrix;
+     }
+ 
++    /**
++     * The flow coordinate below its support floor ({@link #SUPPORT_FLOOR_LOG_FLOW}) on which a SINGULAR Newton
++     * matrix fails, or {@code -1}: the column whose pivot the LU could not take, else any such coordinate whose
++     * column is exactly zero.
++     */
++    private static int subFloorSingularCoordinate(
++            V3BandedPivotedSolver.Result.Failure failure, V3BandedMatrix matrix, V3DryMeshCoordinateMap coordinates,
++            double[] values) {
++        if (failure.code() != V3BandedPivotedSolver.FailureCode.SINGULAR) return -1;
++        int pivot = failure.singularColumn();
++        if (pivot >= 0 && belowSupportFloor(coordinates, values, pivot)) return pivot;
++        for (int column = 0; column < values.length; column++) {
++            if (!belowSupportFloor(coordinates, values, column)) continue;
++            boolean zero = true;
++            int lastRow = Math.min(matrix.size() - 1, column + matrix.lowerBandwidth());
++            for (int row = Math.max(0, column - matrix.upperBandwidth()); zero && row <= lastRow; row++) {
++                zero = matrix.get(row, column) == 0.0;
++            }
++            if (zero) return column;
++        }
++        return -1;
++    }
++
++    private static boolean belowSupportFloor(V3DryMeshCoordinateMap coordinates, double[] values, int index) {
++        V3DegreeOfFreedomLedger.UnknownFamily family = coordinates.unknowns().get(index).id().family();
++        return (family == V3DegreeOfFreedomLedger.UnknownFamily.LIQUID_COMPONENT_FLOW
++                || family == V3DegreeOfFreedomLedger.UnknownFamily.VAPOR_COMPONENT_FLOW)
++                && values[index] < SUPPORT_FLOOR_LOG_FLOW;
++    }
++
+     private static double[] negativeScaledResidual(V3MeshResidual residual) {
+         double[] rightHandSide = new double[residual.size()];
+         for (int row = 0; row < rightHandSide.length; row++) rightHandSide[row] = -residual.scaledValue(row);
+diff --git a/src/main/java/com/wormzjl/icheme/science/column/v3/linalg/V3BandedPivotedSolver.java b/src/main/java/com/wormzjl/icheme/science/column/v3/linalg/V3BandedPivotedSolver.java
+index e78b2e469..8ca57eb6a 100644
+--- a/src/main/java/com/wormzjl/icheme/science/column/v3/linalg/V3BandedPivotedSolver.java
++++ b/src/main/java/com/wormzjl/icheme/science/column/v3/linalg/V3BandedPivotedSolver.java
+@@ -66,7 +66,8 @@ public final class V3BandedPivotedSolver {
+             }
+             if (!Double.isFinite(pivotMagnitude) || pivotMagnitude <= PIVOT_TOLERANCE) {
+                 return new Result.Failure(FailureCode.SINGULAR, "V3 banded LU encountered a zero or tiny pivot",
+-                        finiteOrZero(minimumPivot), maximumPivot, pivotSwaps, pivotGrowth(maximumDuringFactorization, initialMaximum));
++                        finiteOrZero(minimumPivot), maximumPivot, pivotSwaps, pivotGrowth(maximumDuringFactorization, initialMaximum),
++                        pivot);
+             }
+             // Rows reaching this pivot hold nothing beyond this column, so it also bounds the fill they take on.
+             int lastFilledColumn = Math.min(size - 1, pivot + fillBandwidth);
+@@ -254,19 +255,29 @@ public final class V3BandedPivotedSolver {
+             @Override public double[] solution() { return solution.clone(); }
+         }
+ 
++        /**
++         * A failed solve. {@code singularColumn} is the column whose pivot the elimination could not take (a
++         * {@link FailureCode#SINGULAR} factorization), and {@code -1} for every other failure; partial pivoting
++         * swaps rows only, so it is the caller's own unknown index.
++         */
+         record Failure(
+                 FailureCode code, String detail, double minimumPivotMagnitude, double maximumPivotMagnitude,
+-                int pivotSwaps, double pivotGrowth) implements Result {
++                int pivotSwaps, double pivotGrowth, int singularColumn) implements Result {
+             public Failure {
+                 code = Objects.requireNonNull(code, "code");
+                 detail = Objects.requireNonNull(detail, "detail");
+                 if (detail.isBlank() || detail.length() > 256 || !Double.isFinite(minimumPivotMagnitude)
+                         || minimumPivotMagnitude < 0.0 || !Double.isFinite(maximumPivotMagnitude)
+                         || maximumPivotMagnitude < 0.0 || pivotSwaps < 0 || !Double.isFinite(pivotGrowth)
+-                        || pivotGrowth < 0.0) {
++                        || pivotGrowth < 0.0 || singularColumn < -1) {
+                     throw new IllegalArgumentException("V3 failed banded solve evidence is invalid");
+                 }
+             }
++
++            public Failure(FailureCode code, String detail, double minimumPivotMagnitude, double maximumPivotMagnitude,
++                           int pivotSwaps, double pivotGrowth) {
++                this(code, detail, minimumPivotMagnitude, maximumPivotMagnitude, pivotSwaps, pivotGrowth, -1);
++            }
+         }
+     }
+ 

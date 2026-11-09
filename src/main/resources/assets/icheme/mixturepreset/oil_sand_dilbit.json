@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "kind": "mixture",
+  "name": "Oil sand dilbit",
+  "translation_key": "gui.icheme.column_preset.oil_sand_dilbit",
+  "temperature_kelvin": 638.15,
+  "flow_kmol_h": 2537.3811767811276,
+  "basis": "mole",
+  "components": [
+    {
+      "id": "Ethane",
+      "amount": 0.45694875745572305
+    },
+    {
+      "id": "Propane",
+      "amount": 1.8695748646990022
+    },
+    {
+      "id": "Isobutane",
+      "amount": 1.6547906524736682
+    },
+    {
+      "id": "N-butane",
+      "amount": 3.7823786342255272
+    },
+    {
+      "id": "Isopentane",
+      "amount": 5.71319867053321
+    },
+    {
+      "id": "N-pentane",
+      "amount": 7.617598227377613
+    },
+    {
+      "id": "crude_pc01",
+      "amount": 28.511001895670013
+    },
+    {
+      "id": "crude_pc02",
+      "amount": 9.09005762707092
+    },
+    {
+      "id": "crude_pc03",
+      "amount": 3.238605878365233
+    },
+    {
+      "id": "crude_pc04",
+      "amount": 3.169140232042411
+    },
+    {
+      "id": "crude_pc05",
+      "amount": 5.09567095027794
+    },
+    {
+      "id": "crude_pc06",
+      "amount": 5.091647523625169
+    },
+    {
+      "id": "crude_pc07",
+      "amount": 5.173197187262909
+    },
+    {
+      "id": "crude_pc08",
+      "amount": 5.43952522441592
+    },
+    {
+      "id": "crude_pc09",
+      "amount": 5.118797416238087
+    },
+    {
+      "id": "crude_pc10",
+      "amount": 3.471934950383024
+    },
+    {
+      "id": "crude_pc11",
+      "amount": 2.3096850423727604
+    },
+    {
+      "id": "crude_pc12",
+      "amount": 3.196246265510843
+    }
+  ]
+}

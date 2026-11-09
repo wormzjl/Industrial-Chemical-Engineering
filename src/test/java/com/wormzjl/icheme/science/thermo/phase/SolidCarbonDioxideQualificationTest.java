@@ -69,7 +69,7 @@ class SolidCarbonDioxideQualificationTest {
      */
     @Test
     void sublimationPressureOnThePilotFamily() {
-        var family = Family.of(MaterialCatalog.bundled());
+        var family = Family.of(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot());
         var co2 = HelmholtzFluid.load("CarbonDioxide");
         var reference = CrystalPhaseEvaluatorTest.jaegerSpanRecord();
         double[] oracle = oracleConstants(reference, co2);
@@ -104,7 +104,7 @@ class SolidCarbonDioxideQualificationTest {
      */
     @Test
     void meltingOnThePilotFamilyUpToItsPressureCeiling() {
-        var family = Family.of(MaterialCatalog.bundled());
+        var family = Family.of(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot());
         double worstKelvin = 0, worstSlope = 0, previous = TRIPLE_TEMPERATURE;
         System.out.println("T K | p pilot Pa | p SW Pa | slope ratio % | T_SW(p) - T K");
         for (double t = 216.6; ; t += 0.2) {
@@ -135,7 +135,7 @@ class SolidCarbonDioxideQualificationTest {
      */
     @Test
     void sublimationEnthalpyOnThePilotFamily() {
-        var family = Family.of(MaterialCatalog.bundled());
+        var family = Family.of(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot());
         for (double t : new double[] {140, 170, 194.67, 195}) {
             double dh = family.sublimationEnthalpy(t);
             System.out.printf("Pilot sublimation enthalpy at %.2f K: %.1f J/mol (%.3f %% from 25.2 kJ/mol)%n", t, dh, 100 * (dh / GIAUQUE_EGAN_SUBLIMATION_ENTHALPY - 1));
@@ -155,7 +155,7 @@ class SolidCarbonDioxideQualificationTest {
      */
     @Test
     void crystalPropertiesAgainstTrusler() {
-        var js = MaterialCatalog.bundled().crystals().get(CRYSTAL).gibbsFunction();
+        var js = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot().crystals().get(CRYSTAL).gibbsFunction();
         double worstVolume = 0, worstColdExpansion = 0, worstExpansion = 0;
         System.out.println("T K | v JS m3/mol | v Trusler 50 | % | alpha JS 1/K | alpha Trusler 50 | % | kappa JS 1/Pa | cp JS J/(mol K)");
         for (double t : new double[] {80, 100, 120, 140, 160, 180, 194.67, 200, 210, TRIPLE_TEMPERATURE}) {
@@ -188,7 +188,7 @@ class SolidCarbonDioxideQualificationTest {
      */
     @Test
     void fusionEnthalpyChoiceIsTheMeasuredBetterOne() {
-        var chosen = Family.of(MaterialCatalog.bundled());
+        var chosen = Family.of(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot());
         var jaegerSpan = Family.withFusionEnthalpy(8875);
         assertEquals(9019, chosen.solid().record().anchor().fusionEnthalpy(), 0.0);
         double chosenError = chosen.worstSublimationError(), jaegerSpanError = jaegerSpan.worstSublimationError();

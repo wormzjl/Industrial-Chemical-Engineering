@@ -89,9 +89,9 @@ class ExchangerCouplingTest {
          * the heat in transit as the facts carry it (the transit as booked). */
         Rig reloaded() {
             var saved=coordinator.snapshots();
-            var image=FluidCheckpointCodec.encode(new FluidCheckpointCodec.Checkpoint(saved.stream().map(x->new FluidCheckpointCodec.IslandEntry("minecraft:overworld",model.domain().packageId(),x)).toList()),key->model);
+            var image=FluidCheckpointCodec.encode(new FluidCheckpointCodec.Checkpoint(saved.stream().map(x->new FluidCheckpointCodec.IslandEntry("minecraft:overworld",model.domain().packageId(),x)).toList()),key->key.on(model));
             var copy=new Rig(policy);copy.epoch[0]=epoch[0];copy.hotIsland=hotIsland;copy.coldIsland=coldIsland;copy.heat.putAll(heat);
-            for(var entry:FluidCheckpointCodec.decode(image,key->model).islands()){copy.coordinator.register(entry.snapshot(),model);copy.committed.put(entry.snapshot().id(),entry.snapshot().clock().committedTick());}
+            for(var entry:FluidCheckpointCodec.decode(image,key->key.on(model)).islands()){copy.coordinator.register(entry.snapshot(),model);copy.committed.put(entry.snapshot().id(),entry.snapshot().clock().committedTick());}
             copy.coordinator.transit(PhysicalFluidTopology.sideIdentity(Math.min(HOT,COLD)),booked());
             return copy;
         }

@@ -1,0 +1,238 @@
+diff --git a/src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnCalculator.java b/src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnCalculator.java
+index 2d464bd24..621a3fbff 100644
+--- a/src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnCalculator.java
++++ b/src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnCalculator.java
+@@ -1749,6 +1749,55 @@ public final class V3ColumnCalculator {
+             }
+             prepared = refreshed;
+         }
++        // EXP-B (scratch, print only): a near-closed stall solved once more on the identity support.
++        if (Boolean.getBoolean("icheme.expb") && attempt instanceof V3SimultaneousColumnSolver.Attempt.Failure stuck
++                && stuck.evidence().maximumScaledResidual() < 1.0e-3 && !prepared.support().isIdentity()) {
++            V3TruncationSupport identity = prepared.support().fallbackToIdentity(untruncated, "EXP-B identity");
++            V3DryMeshState seedB = identity.projectSeed(untruncated, liftFloorSupport(untruncated, thermo, attempt.state()));
++            V3ColumnProblem fullProblem = V3ColumnProblemResolver.withTruncation(untruncated, identity, prepared.wetTrays());
++            var evaluatorB = new V3MeshResidualEvaluator(fullProblem, thermo, feedMolarEnthalpy);
++            var attemptB = V3SimultaneousColumnSolver.solveWithContinuationLocalBlocks(fullProblem, evaluatorB,
++                    new V3DryMeshCoordinateMap(fullProblem), prepared.wetTrays().seed(fullProblem, seedB), thermo::newWorkspace,
++                    maximumIterations, policy.closureTolerance(), control, V3SimultaneousColumnSolver.NewtonTrace.NONE);
++            System.out.println("EXPB " + solvePath + " stuck=" + stuck.code() + "@" + stuck.evidence().maximumScaledResidual()
++                    + " truncated=" + prepared.support().truncatedPointCount() + "/" + prepared.support().totalPointCount()
++                    + " -> " + (attemptB instanceof V3SimultaneousColumnSolver.Attempt.Failure fb
++                            ? fb.code() + "@" + fb.evidence().maximumScaledResidual() + " it=" + fb.evidence().iterations()
++                            : "CONVERGED it=" + attemptB.evidence().iterations() + " res=" + attemptB.evidence().maximumScaledResidual()));
++            // EXP-C (scratch, print only): where the identity root differs from the stuck truncated state.
++            if (attemptB instanceof V3SimultaneousColumnSolver.Attempt.Converged) {
++                V3DryMeshState s0 = attempt.state(), s1 = attemptB.state();
++                V3TruncationSupport sup = prepared.support();
++                V3ColumnTopology top = untruncated.topology();
++                int cc = untruncated.activeComponentBasis().componentCount();
++                StringBuilder dt = new StringBuilder("EXPC feed=" + top.feedTrayNumber() + " cond=" + top.condenserNode() + " reb=" + top.reboilerNode() + " dT");
++                for (int n = 0; n < top.nodeCount(); n++) dt.append(String.format(Locale.ROOT, " %d:%.3f", n, s1.temperatureKelvin(n) - s0.temperatureKelvin(n)));
++                System.out.println(dt);
++                StringBuilder tot = new StringBuilder("EXPC dL/dV");
++                for (int n = 0; n < top.nodeCount(); n++) {
++                    double l0 = 0, l1 = 0, v0 = 0, v1 = 0;
++                    for (int c = 0; c < cc; c++) { l0 += s0.liquidFlow(n, c); l1 += s1.liquidFlow(n, c); v0 += s0.vaporFlow(n, c); v1 += s1.vaporFlow(n, c); }
++                    tot.append(String.format(Locale.ROOT, " %d:%.4f/%.4f", n, l1 - l0, v1 - v0));
++                }
++                System.out.println(tot);
++                int miss = 0;
++                StringBuilder ms = new StringBuilder();
++                for (int c = 0; c < cc; c++) {
++                    double floor = componentFloor(untruncated, c);
++                    String id = untruncated.activeComponentBasis().publicBasis().componentId(untruncated.activeComponentBasis().publicIndex(c));
++                    StringBuilder pattern = new StringBuilder();
++                    for (int n = 0; n < top.nodeCount(); n++) {
++                        boolean hl = hasLiquidPhase(untruncated, n, c), hv = top.hasVaporPhase(n);
++                        boolean rl = sup.retainsLiquid(n, c), rv = sup.retainsVapor(n, c);
++                        pattern.append(!rl && !rv ? '.' : rl && rv ? 'B' : rl ? 'L' : 'V');
++                        if (hl && !rl && s1.liquidFlow(n, c) >= 10 * floor) { miss++; ms.append(String.format(Locale.ROOT, " L%d/%s=%.2e(st %.2e)", n, id, s1.liquidFlow(n, c) / floor, s0.liquidFlow(n, c) / floor)); }
++                        if (hv && !rv && s1.vaporFlow(n, c) >= 10 * floor) { miss++; ms.append(String.format(Locale.ROOT, " V%d/%s=%.2e(st %.2e)", n, id, s1.vaporFlow(n, c) / floor, s0.vaporFlow(n, c) / floor)); }
++                    }
++                    System.out.println(String.format(Locale.ROOT, "EXPC c%02d %-24s feed=%.4e %s", c, id, untruncated.activeComponentBasis().feedFlowMolPerSecond(c), pattern));
++                }
++                System.out.println("EXPC missing=" + miss + ms);
++            }
++        }
+         problem = prepared.problem();
+         List<String> events = telemetry.events();
+         if (refreshes > 0) {
+diff --git a/src/main/java/com/wormzjl/icheme/science/column/v3/V3SimultaneousColumnSolver.java b/src/main/java/com/wormzjl/icheme/science/column/v3/V3SimultaneousColumnSolver.java
+index 809ab334f..78b30c0df 100644
+--- a/src/main/java/com/wormzjl/icheme/science/column/v3/V3SimultaneousColumnSolver.java
++++ b/src/main/java/com/wormzjl/icheme/science/column/v3/V3SimultaneousColumnSolver.java
+@@ -364,9 +364,15 @@ final class V3SimultaneousColumnSolver {
+         int consecutiveLocalBlockRejections = 0;
+         boolean localBlocksDisabled = false;
+         SupportPoints points = SupportPoints.of(problem, coordinates);
++        points.feedNode = problem.topology().feedTrayNumber();
+         // Consecutive accepted steps that held a point, and the last window's residuals (a ring).
+         int heldIterations = 0;
++        int localBlockRun = 0;
++        final boolean FORM_A = Boolean.getBoolean("icheme.forma");
+         double[] heldResiduals = new double[STALL_WINDOW_ITERATIONS + 1];
++        final boolean TR = Boolean.getBoolean("icheme.trace30") && problem.input().stageCount() == 30;
++        int singularPrints = 0;
++        if (TR) System.out.println("TR begin coords=" + coordinates.coordinateCount() + " max=" + maximumIterations);
+         for (int iteration = 0; iteration <= maximumIterations; iteration++) {
+             control.checkpoint();
+             V3MeshResidual residual;
+@@ -387,6 +393,7 @@ final class V3SimultaneousColumnSolver {
+             double[] frozenScales = residual.scales();
+             double merit = scaledSquaredNorm(residual);
+             trace.sampledState(iteration, state, residual, merit);
++            if (TR) System.out.println(String.format(java.util.Locale.ROOT, "TR it=%d res=%.4e merit=%.4e T8=%.2f T15=%.2f T22=%.2f held=%d", iteration, residual.maximumAbsoluteScaledResidual(), merit, state.temperatureKelvin(8), state.temperatureKelvin(15), state.temperatureKelvin(22), heldIterations));
+             if (maximumResidual <= scaledTolerance && lastConvergenceEvidence.satisfiesGates(scaledTolerance)) {
+                 return new Attempt.Converged(state, new Evidence(iteration, maximumResidual, merit, 0.0, 0.0,
+                         "residual and final-step tolerances", lastConvergenceEvidence));
+@@ -448,6 +455,13 @@ final class V3SimultaneousColumnSolver {
+                                     + maximumResidual + " now", lastConvergenceEvidence));
+                 }
+             }
++            // FORM-A (scratch): accepted local-block steps that have not halved the residual over the stall window
++            // hand the attempt to the full Newton direction.
++            if (FORM_A && !localBlocksDisabled && localBlockRun >= STALL_WINDOW_ITERATIONS
++                    && maximumResidual > STALL_FACTOR * heldResiduals[(iteration - STALL_WINDOW_ITERATIONS) % heldResiduals.length]) {
++                localBlocksDisabled = true;
++                System.out.println("FORMA local blocks stalled at iteration " + iteration + " residual " + maximumResidual);
++            }
+             if (!localBlocksDisabled && maximumLocalBlockAttempts > localBlockAttempts
+                     && differenceScale == V3FiniteDifferenceJacobian.DifferenceScale.FINE
+                     && coordinates.coordinateCount() >= LOCAL_BLOCK_JACOBIAN_MINIMUM_COORDINATES) {
+@@ -465,9 +479,11 @@ final class V3SimultaneousColumnSolver {
+                                 maximumLineSearchSteps, control, points);
+                         if (localTrial != null) {
+                             localBlockAccepted = true;
++                            if (TR) System.out.println("TR  local step=" + localTrial.step() + " heldPts=" + localTrial.heldPoints());
+                             consecutiveLocalBlockRejections = 0;
+                             trace.localBlockDirection(iteration, true);
+                             heldIterations = localTrial.heldPoints() > 0 ? heldIterations + 1 : 0;
++                            localBlockRun++;
+                             state = localTrial.state();
+                             lastMerit = localTrial.merit();
+                             cachedFineJacobian = null;
+@@ -480,7 +496,10 @@ final class V3SimultaneousColumnSolver {
+                     // The full coloured finite-difference Jacobian remains the authoritative fallback when a local
+                     // one-sided PR probe crosses a property/root boundary.
+                 }
+-                if (!localBlockAccepted) trace.localBlockDirection(iteration, false);
++                if (!localBlockAccepted) {
++                    trace.localBlockDirection(iteration, false);
++                    localBlockRun = 0;
++                }
+                 if (!localBlockAccepted && ++consecutiveLocalBlockRejections
+                         >= MAXIMUM_CONSECUTIVE_LOCAL_BLOCK_REJECTIONS) localBlocksDisabled = true;
+             }
+@@ -519,6 +538,24 @@ final class V3SimultaneousColumnSolver {
+                     continue;
+                 }
+                 V3BandedPivotedSolver.Result.Failure failure = (V3BandedPivotedSolver.Result.Failure) linearResult;
++                if (TR && (singularPrints++ < 2 || iteration % 40 == 0)) {
++                    int n = jacobian.unknowns().size();
++                    double[] colMax = new double[n];
++                    for (int r = 0; r < n; r++) for (int c = jacobian.firstStoredColumn(r); c < jacobian.storedColumnEnd(r); c++) colMax[c] = Math.max(colMax[c], Math.abs(jacobian.value(r, c)));
++                    double[] enc = coordinates.encode(state);
++                    Integer[] order = new Integer[n];
++                    for (int i = 0; i < n; i++) order[i] = i;
++                    java.util.Arrays.sort(order, (a, b) -> Double.compare(colMax[a], colMax[b]));
++                    StringBuilder sb = new StringBuilder("TR  SINGULAR it=" + iteration + " smallest columns:");
++                    for (int k = 0; k < Math.min(8, n); k++) { var id = jacobian.unknowns().get(order[k]); sb.append(String.format(java.util.Locale.ROOT, " [%s n%d c%d max=%.2e x=%.2f]", id.family(), id.node(), id.component(), colMax[order[k]], enc[order[k]])); }
++                    System.out.println(sb);
++                }
++                if ((Boolean.getBoolean("icheme.formg") || Boolean.getBoolean("icheme.formg2")) && points.hasSunkPoint(coordinates.encode(state))) {
++                    if (TR) System.out.println("TR  FORMG release at it=" + iteration);
++                    return new Attempt.Failure("STALLED_SUPPORT_FLOOR", state, new Evidence(iteration, maximumResidual,
++                            merit, 0.0, failure.pivotGrowth(), "a point below its support floor left the Newton system singular",
++                            lastConvergenceEvidence));
++                }
+                 double[] baseCoordinates = coordinates.encode(state);
+                 AcceptedTrial descentTrial = dampedGaussNewtonTrial(
+                         evaluator, coordinates, baseCoordinates, jacobian, residual, frozenScales, merit, layout, workspaceFactory,
+@@ -533,6 +570,7 @@ final class V3SimultaneousColumnSolver {
+                             new Evidence(iteration, maximumResidual, merit, 0.0, failure.pivotGrowth(), failure.detail(),
+                                     lastConvergenceEvidence));
+                 }
++                if (TR) System.out.println("TR  singular-descent step=" + descentTrial.step() + " heldPts=" + descentTrial.heldPoints());
+                 heldIterations = descentTrial.heldPoints() > 0 ? heldIterations + 1 : 0;
+                 state = descentTrial.state();
+                 lastMerit = descentTrial.merit();
+@@ -550,6 +588,12 @@ final class V3SimultaneousColumnSolver {
+                 iteration--;
+                 continue;
+             }
++            if (usedDescentFallback && Boolean.getBoolean("icheme.formg2") && points.hasSunkPoint(baseCoordinates)) {
++                if (TR) System.out.println("TR  FORMG2 release at it=" + iteration);
++                return new Attempt.Failure("STALLED_SUPPORT_FLOOR", state, new Evidence(iteration, maximumResidual,
++                        merit, 0.0, linearSuccess.pivotGrowth(), "a point below its support floor left no Newton step",
++                        lastConvergenceEvidence));
++            }
+             if (usedDescentFallback) {
+                 acceptedTrial = dampedGaussNewtonTrial(
+                         evaluator, coordinates, baseCoordinates, jacobian, residual, frozenScales, merit, layout, workspaceFactory,
+@@ -565,6 +609,7 @@ final class V3SimultaneousColumnSolver {
+                         new Evidence(iteration, maximumResidual, merit, 0.0, linearSuccess.pivotGrowth(),
+                                 "no admissible Armijo-reducing Newton or descent step", lastConvergenceEvidence));
+             }
++            if (TR) System.out.println("TR  " + (usedDescentFallback ? "damped" : usesFrozenFineJacobian ? "frozen" : "newton") + " step=" + acceptedTrial.step() + " heldPts=" + acceptedTrial.heldPoints());
+             heldIterations = acceptedTrial.heldPoints() > 0 ? heldIterations + 1 : 0;
+             state = acceptedTrial.state();
+             lastMerit = acceptedTrial.merit();
+@@ -1017,6 +1062,7 @@ final class V3SimultaneousColumnSolver {
+         private final int[] node;
+         private final int[][] byComponent;
+         private final V3TruncationSupport.Reachability reachability;
++        int feedNode = -1;
+         private final double[] level;
+         private final double[] lift;
+         private final boolean[] removed;
+@@ -1080,6 +1126,15 @@ final class V3SimultaneousColumnSolver {
+          * settles the usual case, where they cut nothing together; only then is each tested alone. Returns the
+          * number of points held.
+          */
++        boolean hasSunkPoint(double[] coordinates) {
++            for (int point = 0; point < first.length; point++) {
++                if (node[point] == feedNode) continue;
++                double lvl = second[point] < 0 ? coordinates[first[point]] : Math.max(coordinates[first[point]], coordinates[second[point]]);
++                if (lvl < HELD_POINT_LOG_FLOW - 1.0e-9) return true;
++            }
++            return false;
++        }
++
+         int hold(double[] base, double[] candidate) {
+             boolean sinking = false;
+             for (int point = 0; point < first.length; point++) {
+diff --git a/src/main/java/com/wormzjl/icheme/science/flowsheet/unit/ColumnUnit.java b/src/main/java/com/wormzjl/icheme/science/flowsheet/unit/ColumnUnit.java
+index 5c4c2ebc5..a3a7d7be3 100644
+--- a/src/main/java/com/wormzjl/icheme/science/flowsheet/unit/ColumnUnit.java
++++ b/src/main/java/com/wormzjl/icheme/science/flowsheet/unit/ColumnUnit.java
+@@ -189,6 +189,9 @@ public final class ColumnUnit implements UnitModel {
+         return MaterialRuntime.with(catalog, input.packageId(), () -> {
+             var outcome = seed == null ? null : V3ColumnCalculator.calculateWithStrategy(input, checkpoint::run, V3SolveStrategy.AGGRESSIVE, seed, screen);
+             if (!(outcome instanceof V3ColumnOutcome.Success)) outcome = V3ColumnCalculator.calculate(input, checkpoint::run, 0, 0, START, V3NeuralRegistry.bundled().bind(catalog, input), screen);
++            var dg = outcome instanceof V3ColumnOutcome.Success ok ? ok.diagnostics() : ((V3ColumnOutcome.Failure) outcome).diagnostics();
++            System.out.println("ROUTE feedT=" + String.format(java.util.Locale.ROOT, "%.3f", input.feedTemperatureKelvin()) + " seed=" + (seed != null) + " outcome=" + outcome.getClass().getSimpleName()
++                    + " path=" + dg.solvePath() + " newton=" + dg.newtonIterations() + " res=" + dg.maximumScaledResidual() + " events=" + String.join(" | ", dg.events()));
+             return outcome;
+         });
+     }
+diff --git a/src/test/java/com/wormzjl/icheme/science/flowsheet/FlowsheetColumnTest.java b/src/test/java/com/wormzjl/icheme/science/flowsheet/FlowsheetColumnTest.java
+index 4bd59b129..882937e2a 100644
+--- a/src/test/java/com/wormzjl/icheme/science/flowsheet/FlowsheetColumnTest.java
++++ b/src/test/java/com/wormzjl/icheme/science/flowsheet/FlowsheetColumnTest.java
+@@ -316,6 +316,15 @@ final class FlowsheetColumnTest {
+         }
+     }
+ 
++    @Test void probeColdDuties() {
++        System.setProperty("icheme.formg2", "true");
++        for (double mw : new double[]{69.9, 70.2, 70.35, 70.4, 70.45, 70.6, 70.9}) {
++            System.out.println("PROBE start " + mw);
++            var run = onDuty(mw * 1e6).run();
++            System.out.println("PROBE end " + mw + " " + run.status() + " passes " + (run.loops().isEmpty() ? "-" : run.loops().getFirst().passes()));
++        }
++    }
++
+     @Test void aFifteenPercentRecycleCloses() {
+         var run = sample(HOLDS).unit("M-1", "mixer", "{}").unit("S-1R", "splitter", "{\"outlets\":[{\"id\":\"back\",\"share\":0.15},{\"id\":\"on\"}]}")
+                 .feed("CRUDE", "M-1", "in/1", crude(298.15, 8e5)).line("MIXED", "M-1", "out", "P-101", "in").line("S-11", "E-102", "b", "S-1R", "in")
