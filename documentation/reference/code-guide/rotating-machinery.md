@@ -1,6 +1,6 @@
 # Rotating machinery: machine laws, shaft trains, drivers, electricity, wear and the Create coupling
 
-**Snapshot:** 2f86539b0 (branch `claude/save-corruption-prevention-2bd7ac`, main 0.23.4 merged in), 2026-11-09. Batch `2026-11-03-save-corruption`, merged as @@VERSION@@ on 2026-11-09: registry first for shaft parts (W5c C1): a lost shaft, creative motor or Create coupling is placed back from its unit, and a held part (`ShaftUnit.held`, `ShaftTrains.Hold`) joins no train; facts schema 15 · earlier: 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
+**Snapshot:** 2f86539b0 (branch `claude/save-corruption-prevention-2bd7ac`, main 0.23.4 merged in), 2026-11-09. Batch `2026-11-03-save-corruption`, merged as 0.23.5 on 2026-11-09: registry first for shaft parts (W5c C1): a lost shaft, creative motor or Create coupling is placed back from its unit, and a held part (`ShaftUnit.held`, `ShaftTrains.Hold`) joins no train; facts schema 15 · earlier: 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
 
 Normal casing-cover nuts are raised geometry over a plain cover sprite, recessed within the existing envelope. Optional client Low detail uses textured flat nuts and capped round meshes while retaining all mechanical frames, hex shafts, published RPM and animation clocks. See [equipment.md](equipment.md).
 Up: [code guide](README.md)

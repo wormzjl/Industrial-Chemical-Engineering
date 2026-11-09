@@ -2,7 +2,7 @@
 
 Purpose: how save corruption can damage an IChemE world, and how to stop it from causing total data loss, as an extension of the backward-compat facts/state system (owner 2026-11-03: "Research about how to handle eventual save corruption to prevent total data loss"; "I'd imagine it will be somehow combined with the backward compat system").
 
-Status: In progress since 2026-11-03. Decisions S1-S11 were all taken on 2026-11-03. W5 (registry first) is built: steps 1 to 8 are done, and main 0.23.4 is merged into the branch (2026-11-09). W5c (registry first for the modules main added: shaft parts, data and FE cables, controllers and DCS consoles, device names) is built, C1 to C5 (2026-11-09); the batch merges to main when the owner says so (owner, 2026-11-09: "Final merge will be when everything's done"). The W1-W4 plan (corruption ladder) follows. W6 (save encoding off the server thread) is proposed. Index: [../INDEX.md](../INDEX.md).
+Status: Implemented 2026-11-09, released as 0.23.5 (branch `claude/save-corruption-prevention-2bd7ac`, main 0.23.4 merged in): registry first, W5 and W5c. Decisions S1-S11 (2026-11-03) and Q1-Q4 (2026-11-09). The W1-W4 plan (corruption ladder) and W6 (save encoding off the server thread) are not built: owner to decide. Not pushed. Merge review: [MERGE_REVIEW.md](MERGE_REVIEW.md). Index: [../INDEX.md](../INDEX.md).
 
 ## Documents
 
@@ -16,6 +16,7 @@ Status: In progress since 2026-11-03. Decisions S1-S11 were all taken on 2026-11
   - the AGENTS.md text, the owner decisions and the work packages, with the W6 proposal.
 - [REGISTRY_FIRST_PLAN.md](REGISTRY_FIRST_PLAN.md): W5a (facts schema 8 with line paints and structure records, the write paths, learning from blocks) and W5b (held registrations, the re-alignment queue, one-block, rack and structure placement, commands, notices), in eight steps with GameTests a to j. Section 6 is the lag budget.
 - [MAIN_CATCH_UP_REVIEW.md](MAIN_CATCH_UP_REVIEW.md): what main 0.20.0 to 0.23.4 means for W5: the merge's conflicts, schema numbers, the drawn-connections overlap (one defect after the merge, the review's owner decisions 1 and 2), main's new blocks outside W5, and the merge order.
+- [MERGE_REVIEW.md](MERGE_REVIEW.md): the 0.23.5 merge: translations, tooling cleanup, code guide, the final lane against the baselines, the flaky presentation GameTest.
 - [W5C_NEW_MODULES_PLAN.md](W5C_NEW_MODULES_PLAN.md): W5c, registry first for the modules main added: what each saves, the rule (a held part is absent to its network), work packages C1 to C5 (shafts, cables, controllers, device names, notices), owner decisions Q1 to Q4, GameTests k to o.
 
 ## Code areas
@@ -169,16 +170,16 @@ Status: In progress since 2026-11-03. Decisions S1-S11 were all taken on 2026-11
   - Built: `/icheme devices held` names each held shaft part (`#id shaft at ...`), cable (`data cable at ...`, with its lane in a rack) and controller or console (`controller <id> at ...`) with what stands in its cell, after the held fluid devices; the operator's join message counts them all. `drop` stays for fluid registrations.
   - Gates: fluid GameTests 87/87 on the fresh run id `save-w5c-notices`, the whole suite after W5c: l, m and n find their held part in the listing. `check.js` on the four translations (2973 keys); their wording of the two changed messages waits for the translation commit.
 
+- 2026-11-09: merge preparation (owner: "merge", version 0.23.5): translations `76817cbea`, tooling cleanup `b0e552913` (`tools/rack-frame-probe/`), code guide `17b3cb6ce` (eight chapters), then `mod_version`, CHANGELOG and statuses in the commit that adds this line. [MERGE_REVIEW.md](MERGE_REVIEW.md).
+  - Final lane at `17b3cb6ce`: 1005 unit tests of the affected classes, 0 failures; junction lines identical; campaign: no new holds. Fluid GameTests 85/87 (`identityBindingOnAChunkLoadCarriesNoViewData` once, and the cleanup wait it causes); 87/87 on the fresh run id `save-merge-recheck`.
+
 ## Open items
 
-- W5 and W5c are complete and carry main 0.23.4. The batch merges to main on the owner's word (owner, 2026-11-09). Merge preparation then: bring in main again, final lane, CHANGELOG, version, code guide, tooling cleanup, the translation check.
+- `identityBindingOnAChunkLoadCarriesNoViewData` failed once in 23 runs on unchanged code ("No view at the bucket"). Proposal: the test waits for its island's first publication before it unloads the chunk ([MERGE_REVIEW.md](MERGE_REVIEW.md)). Owner to decide.
 - Drawn connections' owner decisions: W5 answers 1 (ghosts are placed back or held and named, never pruned). Decision 2 (a block placed already as INLINE_MOVER gets the legacy Pump law) also governs W5's learning path (review 2.3, 2.4).
 - W5c is built (C1 to C5, [W5C_NEW_MODULES_PLAN.md](W5C_NEW_MODULES_PLAN.md), owner's Q1 to Q4). Two choices of mine, reversible until the merge: a held shaft part is saved with the held devices; a held cable or controller is not saved (`icheme_control` holds facts only), so after a load its network joins until its chunk is checked again.
 - Decided (owner, 2026-11-09: "Keep main's rule"): a world opened without Create still forgets every Create coupling's shaft unit (`ShaftTrains.forget`, W6b), although that discards a fact the player built. W5c's hold was the option not taken. The re-alignment checks no coupling without Create.
-- The translation commit must rewrite `message.icheme.device_held` and `message.icheme.devices_held` (W5c C5 changed their English: "device", "network"). Keys and arguments match (`check.js`).
-- Main now makes translations a pre-merge task (AGENTS.md: only en_us during a batch, one translation commit before the merge). Step 7 already updated all five files in its commit; the merge checks them again with `check.js` and `stale-translations.js`. The final lane now runs only the affected test classes (`tools/merge-lane/affected.mjs`).
 - One in-game check of a rebuilt structure (rendering, light) to offer the owner after step 6 (plan section 8); not started unasked.
-- Tooling cleanup before the merge: the rack-frame probe `tmp/rack-frame/ambiguity.jsh` (plan 3.1) moves to a `tools/` folder.
 - A restored sight glass faces the run's default axis, not the one its player chose: the fitting record keeps no axis. Option: an append-only axis field in the accessory facts, with a corpus image. Owner to decide.
 - GameTest i after a constructor edit (plan section 8) is not built.
 - W6 (save encoding off the server thread): proposed, owner to decide.
