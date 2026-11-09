@@ -203,10 +203,11 @@ public final class ConduitLineBackend implements LineBackend {
                                 if (entity instanceof ConduitBlockEntity block)
                                     block.configure(wire);
                                 else if (entity instanceof PipeRackBlockEntity rack) {
-                                    world.controls().cable(wire);
+                                    var framed = wire.withFrame(PipeRackBlock.frame(rack.getBlockState()));
+                                    world.controls().cable(framed);
                                     var all = new ArrayList<>(rack.cables());
-                                    all.removeIf(c -> c.site().equals(wire.site()));
-                                    all.add(wire);
+                                    all.removeIf(c -> c.site().equals(framed.site()));
+                                    all.add(framed);
                                     rack.cables(all);
                                 } else
                                     throw new IllegalStateException(

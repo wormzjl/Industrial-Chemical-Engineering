@@ -14,7 +14,8 @@ import java.util.*;
  * Connectivity is rebuilt.
  */
 public final class ControlFacts extends SavedData {
-    public static final int FORMAT = 3;
+    /** 4: a rack lane's frame (W5c C2); 3 and 2 read as before, their lanes with no frame. */
+    public static final int FORMAT = 4;
     public static final String NAME = "icheme_control";
 
     public record Panel(
@@ -83,6 +84,62 @@ public final class ControlFacts extends SavedData {
     private final Map<DataBus.Site, DataBus.Cable> cables = new HashMap<>();
     private final Map<UUID, DataPort> ports = new HashMap<>();
     private final Map<UUID, Panel> panels = new HashMap<>();
+    /** The cable sites by dimension and chunk: an index of the facts, never saved (registry first, W5c C2). */
+    private final Map<String, Map<Long, Set<DataBus.Site>>> cableChunks = new HashMap<>();
+    /**
+     * The cables the re-alignment found another block standing in (W5c C2, option Q1): the buses leave
+     * them out. Engine state, never saved: a chunk load checks them again.
+     */
+    private final Set<DataBus.Site> held = new HashSet<>();
+
+    private static long chunk(BlockPos cell) {
+        return net.minecraft.world.level.ChunkPos.asLong(cell.getX() >> 4, cell.getZ() >> 4);
+    }
+
+    private void index(DataBus.Site site) {
+        cableChunks
+                .computeIfAbsent(site.dimension(), k -> new HashMap<>())
+                .computeIfAbsent(chunk(site.cell()), k -> new LinkedHashSet<>())
+                .add(site);
+    }
+
+    private void unindex(DataBus.Site site) {
+        var chunks = cableChunks.get(site.dimension());
+        var sites = chunks == null ? null : chunks.get(chunk(site.cell()));
+        if (sites == null || !sites.remove(site) || !sites.isEmpty()) return;
+        chunks.remove(chunk(site.cell()));
+        if (chunks.isEmpty()) cableChunks.remove(site.dimension());
+    }
+
+    /** The cable sites in chunk {@code chunk} of {@code dimension}. */
+    public List<DataBus.Site> cablesIn(String dimension, long chunk) {
+        var chunks = cableChunks.get(dimension);
+        var sites = chunks == null ? null : chunks.get(chunk);
+        return sites == null ? List.of() : List.copyOf(sites);
+    }
+
+    /** Whether cable {@code site} is held. */
+    public boolean held(DataBus.Site site) {
+        return held.contains(site);
+    }
+
+    /** The held cable sites. */
+    public Set<DataBus.Site> held() {
+        return Set.copyOf(held);
+    }
+
+    /** Holds or releases cable {@code site}; its bus is rebuilt. Whether that changes it. */
+    public boolean hold(DataBus.Site site, boolean on) {
+        if (on ? !cables.containsKey(site) || !held.add(site) : !held.remove(site)) return false;
+        topologyRevision = Math.addExact(topologyRevision, 1);
+        return true;
+    }
+
+    /** The cables the buses join: all but the held ones. */
+    public Collection<DataBus.Cable> standing() {
+        if (held.isEmpty()) return cables();
+        return cables.values().stream().filter(c -> !held.contains(c.site())).toList();
+    }
     private final Map<UUID, SensorId> sensorIds = new HashMap<>();
     private long nextSensorId = 1;
 
@@ -168,7 +225,9 @@ public final class ControlFacts extends SavedData {
     }
 
     public void cable(DataBus.Cable cable) {
-        if (cable.equals(cables.put(cable.site(), cable))) return;
+        var old = cables.put(cable.site(), cable);
+        if (cable.equals(old)) return;
+        if (old == null) index(cable.site());
         wiredPorts = null;
         changed();
         lineChanges.accept(cable.site());
@@ -176,6 +235,8 @@ public final class ControlFacts extends SavedData {
 
     public void removeCable(DataBus.Site site) {
         if (cables.remove(site) != null) {
+            unindex(site);
+            held.remove(site);
             wiredPorts = null;
             changed();
             lineChanges.accept(site);
@@ -258,7 +319,10 @@ public final class ControlFacts extends SavedData {
                                                 "sensorIds",
                                                 "nextSensorId"))
                 || !tag.contains("format", 3)
-                || !legacy && tag.getInt("format") != 2 && tag.getInt("format") != FORMAT
+                || !legacy
+                        && tag.getInt("format") != 2
+                        && tag.getInt("format") != 3
+                        && tag.getInt("format") != FORMAT
                 || !tag.contains("cables", 9)
                 || !tag.contains("ports", 9)
                 || !tag.contains("panels", 9))
@@ -296,6 +360,9 @@ public final class ControlFacts extends SavedData {
             var cable = DataBus.Cable.load((CompoundTag) value);
             if (facts.cables.put(cable.site(), cable) != null)
                 throw new IllegalArgumentException("Duplicate cable facts");
+            if (cable.frame() != null && tag.getInt("format") < 4)
+                throw new IllegalArgumentException("A cable frame in control facts of format " + tag.getInt("format"));
+            facts.index(cable.site());
         }
         var hosts = new HashSet<Long>();
         for (var value : sockets) {

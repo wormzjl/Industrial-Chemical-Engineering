@@ -44,6 +44,26 @@ public final class ControlService {
         return facts;
     }
 
+    /** Cable sites whose chunk loaded, by dimension, each queued once until the re-alignment checks it (W5c C2). */
+    private final Map<String, ArrayDeque<DataBus.Site>> cableQueue = new HashMap<>();
+    private final Set<DataBus.Site> cableQueued = new HashSet<>();
+
+    /** Queues the cables of chunk {@code chunk} of {@code dimension} for the re-alignment (registry first, W5c C2). */
+    public void loadedChunk(String dimension, long chunk) {
+        for (var site : facts.cablesIn(dimension, chunk))
+            if (cableQueued.add(site)) cableQueue.computeIfAbsent(dimension, k -> new ArrayDeque<>()).add(site);
+    }
+
+    /** The next cable of {@code dimension} the re-alignment checks, taken off its queue, or null when none is queued. */
+    public DataBus.Site nextCable(String dimension) {
+        var queue = cableQueue.get(dimension);
+        if (queue == null) return null;
+        var site = queue.poll();
+        if (queue.isEmpty()) cableQueue.remove(dimension);
+        if (site != null) cableQueued.remove(site);
+        return site;
+    }
+
     /**
      * Immutable slice inputs. The original device settings remain facts and resume when the
      * controller is off.
@@ -84,6 +104,19 @@ public final class ControlService {
                                                                         .toString())
                                                 && c.site().cell().equals(rack.getBlockPos()))
                         .toList();
+        // Registry first (format 4, W5c C2): a lane whose fact holds no frame learns this cell's (a world saved
+        // before), unless another lane of the cell holds another: then this is not the cell the facts know.
+        var frame = com.wormzjl.icheme.world.level.block.PipeRackBlock.frame(rack.getBlockState());
+        if (wires.stream().anyMatch(c -> c.frame() == null)
+                && wires.stream().allMatch(c -> c.frame() == null || c.frame().equals(frame))) {
+            var framed = new ArrayList<DataBus.Cable>();
+            for (var c : wires) {
+                var next = c.frame() == null ? c.withFrame(frame) : c;
+                if (next != c) facts.cable(next);
+                framed.add(next);
+            }
+            wires = framed;
+        }
         rack.cables(wires);
         if (rack.getLevel() instanceof net.minecraft.server.level.ServerLevel server)
             for (var cable : wires)

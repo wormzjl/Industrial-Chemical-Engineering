@@ -920,6 +920,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         if(!devices.isEmpty())FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.realignChunks);
         for(long id:devices){presentation.markDirty(id);if(realigning.add(id))realignment.computeIfAbsent(name,k->new ArrayDeque<>()).add(id);}
         for(long id:topology.shaftsIn(name,chunk))if(shaftRealigning.add(id))shaftRealignment.computeIfAbsent(name,k->new ArrayDeque<>()).add(id);
+        controls().loadedChunk(name,chunk);
         var structures=structureChunks.getOrDefault(name,Map.of()).get(chunk);
         if(structures!=null)for(var origin:structures)EquipmentStructure.realignLater(level,new net.minecraft.core.BlockPos(origin.x(),origin.y(),origin.z()));
     }

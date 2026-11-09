@@ -2,6 +2,8 @@ package com.wormzjl.icheme.world.level.block;
 
 import com.wormzjl.icheme.IChemE;
 import com.wormzjl.icheme.registry.ModBlocks;
+import com.wormzjl.icheme.runtime.control.ControlFacts;
+import com.wormzjl.icheme.runtime.control.DataBus;
 import com.wormzjl.icheme.runtime.fluid.FluidRuntimeDiagnostics;
 import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
 import com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology;
@@ -11,6 +13,8 @@ import com.wormzjl.icheme.runtime.fluid.WorldTopologyLedger;
 import com.wormzjl.icheme.runtime.instrument.Instrument;
 import com.wormzjl.icheme.science.equipment.RackGeometry;
 import com.wormzjl.icheme.science.equipment.SightGlassGeometry;
+import com.wormzjl.icheme.science.equipment.CableMedium;
+import com.wormzjl.icheme.world.level.block.entity.ConduitBlockEntity;
 import com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity;
 import com.wormzjl.icheme.world.level.block.entity.PipeRackBlockEntity;
 import net.minecraft.core.BlockPos;
@@ -47,6 +51,11 @@ import java.util.List;
  * at its end (with Create loaded). Its block standing turned another way is turned back; a free cell gets its block, a shaft
  * at the size its train drew it. Any other block there holds the part, which joins no train until its block stands again
  * (option Q1). A structure's part is its structure's to re-align.</p>
+ *
+ * <p>A data or FE cable (W5c C2) is checked at its cell after the shaft parts: a cable block of its medium, or a rack
+ * lane. A lost block comes back and its copy takes the fact at its load ({@code ControlService.loaded}), with its line
+ * pieces; a cable block of the other medium is replaced. A lost rack comes back with the frame its lanes hold, or one
+ * derived from them for lanes saved before frames. Any other block there holds the cable, which its bus leaves out.</p>
  *
  * <p>A structure the registry records (plan 4.4) is checked once every chunk of its box and of the blocks beside it is
  * block-ticking, after the layout refresh when that has it queued: one whose cells stand as its record says is left as it
@@ -92,6 +101,15 @@ public final class RegistryRealignment {
             } catch (RuntimeException failed) {
                 tally.checked++;
                 IChemE.LOGGER.error("fluid_realign failed shaft={}", id, failed);
+            }
+        }
+        var controls = world.controls();
+        for (DataBus.Site site; tally.checked < DEVICES && System.nanoTime() - start < BUDGET_NANOS && (site = controls.nextCable(dimension)) != null; ) {
+            try {
+                tally.add(cable(level, world, site));
+            } catch (RuntimeException failed) {
+                tally.checked++;
+                IChemE.LOGGER.error("fluid_realign failed cable={}", site, failed);
             }
         }
         EquipmentStructure.serveRealignment(level, world, start + BUDGET_NANOS, STRUCTURES, tally::add);
@@ -225,6 +243,74 @@ public final class RegistryRealignment {
     /** A creative motor's or a coupling's facing. */
     private static @Nullable Direction facing(BlockState state) {
         for (var p : state.getProperties()) if (p.getName().equals("facing") && p.getValueClass() == Direction.class) return (Direction) state.getValue(p);
+        return null;
+    }
+
+    /** Re-aligns the cell of cable {@code site} of {@code level}'s dimension to its fact (W5c C2). */
+    public static Check cable(ServerLevel level, FluidWorldAuthority world, DataBus.Site site) {
+        var controls = world.controls();
+        var facts = controls.facts();
+        var cable = facts.cable(site);
+        if (cable == null || !site.dimension().equals(level.dimension().location().toString())) return Check.NONE;
+        var at = site.cell();
+        if (!level.hasChunkAt(at)) return Check.NONE;
+        var present = level.getBlockState(at);
+        boolean held = facts.held(site);
+        Outcome outcome;
+        if (site.lane() == 0) {
+            var wanted = (cable.geometry().medium() == CableMedium.POWER ? ModBlocks.POWER_CABLE : ModBlocks.DATA_CABLE).get();
+            if (present.is(wanted)) {
+                if (!(level.getBlockEntity(at) instanceof ConduitBlockEntity wire)) return Check.NONE;
+                boolean differs = !wire.geometry().equals(cable.geometry()) || !wire.cable().endpoints().equals(cable.endpoints());
+                if (differs) wire.configure(cable);
+                outcome = differs ? Outcome.RESTATED : Outcome.NOTHING;
+            } else if (present.isAir() || present.canBeReplaced() || present.getBlock() instanceof ConduitBlock) {
+                FluidDeviceBlock.quietly(() -> level.setBlock(at, wanted.defaultBlockState(), Block.UPDATE_ALL));
+                // Its copy took the fact at its load (ControlService.loaded), and queued its line pieces.
+                if (level.getBlockEntity(at) instanceof ConduitBlockEntity wire && !wire.geometry().equals(cable.geometry())) wire.configure(cable);
+                outcome = Outcome.PLACED;
+            } else return holdCable(facts, site, held);
+        } else if (present.getBlock() instanceof PipeRackBlock) {
+            if (!(level.getBlockEntity(at) instanceof PipeRackBlockEntity rack)) return Check.NONE;
+            if (!RackGeometry.valid(rack.rack(), site.lane() - 1, RackGeometry.width(cable.geometry().medium().outside()), cable.arms())) return holdCable(facts, site, held);
+            boolean carried = rack.cables().contains(cable);
+            if (!carried) controls.loaded(rack);
+            outcome = carried ? Outcome.NOTHING : Outcome.RESTATED;
+        } else if (present.isAir() || present.canBeReplaced()) {
+            var frame = cableFrame(facts, site);
+            if (frame == null) return holdCable(facts, site, held);
+            // Its copy takes the cell's lanes at its load (ControlService.loaded).
+            FluidDeviceBlock.quietly(() -> level.setBlock(at, ModBlocks.PIPE_RACK.get().stateFor(frame), Block.UPDATE_ALL));
+            outcome = Outcome.PLACED;
+        } else return holdCable(facts, site, held);
+        if (held) facts.hold(site, false);
+        return new Check(outcome, held);
+    }
+
+    private static Check holdCable(ControlFacts facts, DataBus.Site site, boolean held) {
+        if (held) return Check.NONE;
+        facts.hold(site, true);
+        return new Check(Outcome.HELD, false);
+    }
+
+    /**
+     * The frame of the rack cell of cable lane {@code site}: the first of its cell's lanes that holds one, or, for lanes
+     * saved before frames, the first frame that takes every lane of the cell, straight cells first. Null where none does.
+     */
+    private static WorldTopologyLedger.@Nullable RackFrame cableFrame(ControlFacts facts, DataBus.Site site) {
+        var lanes = new ArrayList<DataBus.Cable>();
+        for (int lane = 1; lane <= RackGeometry.OPTIONS; lane++) {
+            var c = facts.cable(new DataBus.Site(site.dimension(), site.cell(), lane));
+            if (c != null) lanes.add(c);
+        }
+        for (var c : lanes) if (c.frame() != null) return c.frame();
+        for (int corner = RackGeometry.STRAIGHT; corner <= RackGeometry.TEE; corner++)
+            for (int facing = 2; facing < 6; facing++) {
+                var rack = new RackGeometry.Rack(facing, corner);
+                boolean takes = !lanes.isEmpty();
+                for (var c : lanes) takes &= RackGeometry.valid(rack, c.site().lane() - 1, RackGeometry.width(c.geometry().medium().outside()), c.arms());
+                if (takes) return PipeRackBlock.frame(rack);
+            }
         return null;
     }
 

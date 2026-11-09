@@ -3,11 +3,15 @@ package com.wormzjl.icheme.fluid.gametest;
 import com.mojang.authlib.GameProfile;
 import com.wormzjl.icheme.registry.ModBlocks;
 import com.wormzjl.icheme.registry.ModItems;
+import com.wormzjl.icheme.runtime.control.ControlFacts;
+import com.wormzjl.icheme.runtime.control.DataBus;
+import com.wormzjl.icheme.runtime.control.DataPort;
 import com.wormzjl.icheme.runtime.fluid.FluidDeviceSpec;
 import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
 import com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology;
 import com.wormzjl.icheme.runtime.fluid.WorldTopologyLedger;
 import com.wormzjl.icheme.runtime.instrument.Instrument;
+import com.wormzjl.icheme.science.equipment.CableMedium;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.Paint;
 import com.wormzjl.icheme.science.equipment.PipeRoute;
@@ -15,13 +19,17 @@ import com.wormzjl.icheme.science.equipment.PipeSizes;
 import com.wormzjl.icheme.science.equipment.ShapeRasterizer;
 import com.wormzjl.icheme.science.fluid.network.PassiveNetwork;
 import com.wormzjl.icheme.world.item.PipelineToolItem;
+import com.wormzjl.icheme.world.level.block.ControlPanelBlock;
 import com.wormzjl.icheme.world.level.block.CreativeMotorBlock;
 import com.wormzjl.icheme.world.level.block.EquipmentStructure;
 import com.wormzjl.icheme.world.level.block.FluidDeviceBlock;
+import com.wormzjl.icheme.world.level.block.LinePlacement;
+import com.wormzjl.icheme.world.level.block.LineTarget;
 import com.wormzjl.icheme.world.level.block.PipeAnchor;
 import com.wormzjl.icheme.world.level.block.PipeRackBlock;
 import com.wormzjl.icheme.world.level.block.RegistryRealignment;
 import com.wormzjl.icheme.world.level.block.ShaftBlock;
+import com.wormzjl.icheme.world.level.block.entity.ConduitBlockEntity;
 import com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity;
 import com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity;
 import com.wormzjl.icheme.world.level.block.entity.PipeRackBlockEntity;
@@ -742,6 +750,128 @@ public final class RegistryFirstGameTests {
                     if (failure[0] != null) helper.fail(failure[0]);
                 })
                 .thenSucceed();
+    }
+
+    /**
+     * W5c C2, GameTest l: a data cable laid between two controllers is a fact of the control registry. Its cell at
+     * controller A, which holds A's endpoint, and a middle cell are lost behind the bus's back, and a stone stands in a
+     * third. The lost cells come back with their geometry, endpoint and line pieces; the stone holds its cable, the bus
+     * is cut, and the stone stays. Once the cell is free, the cable stands, is released, and the bus joins again.
+     */
+    @GameTest(template = "empty", timeoutTicks = 600, batch = "registry-first-modules")
+    public static void aLostDataCableComesBackAndABlockedOneCutsTheBus(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var world = FluidWorldAuthority.find(level.getServer()).orElseThrow();
+        var facts = world.controls().facts();
+        var a = helper.absolutePos(new BlockPos(1, 2, 6));
+        var b = a.east(8);
+        level.setBlock(a, ModBlocks.LOCAL_CONTROLLER.get().defaultBlockState().setValue(ControlPanelBlock.FACING, Direction.WEST), 3);
+        level.setBlock(b, ModBlocks.LOCAL_CONTROLLER.get().defaultBlockState().setValue(ControlPanelBlock.FACING, Direction.EAST), 3);
+        var player = FakePlayerFactory.get(level, new GameProfile(UUID.randomUUID(), "RegistryFirstCable"));
+        player.setGameMode(GameType.CREATIVE);
+        var tool = new ItemStack(ModItems.PIPE_LAYING_TOOL.get());
+        tool.set(ModItems.PIPE_LAYING_DATA.get(), true);
+        player.setItemInHand(InteractionHand.MAIN_HAND, tool);
+        player.setPos(a.getX() + 4.5, a.getY(), a.getZ() + 2.5);
+        String[] failure = {null};
+        DataPort[] ports = new DataPort[2];
+        var wires = new ArrayList<BlockPos>();
+        var before = new ArrayList<Object>();
+        helper.startSequence()
+                .thenWaitUntil(() -> {
+                    ports[0] = panelPort(facts, level, a);
+                    ports[1] = panelPort(facts, level, b);
+                    helper.assertTrue(ports[0] != null && ports[1] != null, "Waiting for the controllers' sockets");
+                })
+                .thenExecute(() -> {
+                    var from = LayingTestCommands.resolve(level, socket(ports[0]), facts.ports(), CableMedium.DATA);
+                    var to = LayingTestCommands.resolve(level, socket(ports[1]), facts.ports(), CableMedium.DATA);
+                    if (from == null || to == null) {
+                        failure[0] = "the sockets resolve to no anchor";
+                        return;
+                    }
+                    var route = LinePlacement.search(level, from.placement(), to.placement(), CableMedium.DATA.outside(), LayingTestCommands.leads(from, to));
+                    if (!route.found()) {
+                        failure[0] = "no route between the sockets";
+                        return;
+                    }
+                    var refusal = LayingTestCommands.lay(player, InteractionHand.MAIN_HAND, socket(ports[0]), socket(ports[1]),
+                            route.cells().stream().map(LayingTestCommands::block).toList(), route.options(), CableMedium.DATA);
+                    if (refusal != null) failure[0] = "the cable was refused: " + refusal.getString();
+                })
+                .thenWaitUntil(() -> helper.assertTrue(failure[0] != null || bus(facts, ports), "Waiting for the bus to join the controllers"))
+                .thenExecute(() -> {
+                    if (failure[0] != null) return;
+                    String dim = level.dimension().location().toString();
+                    facts.cables().stream().filter(c -> c.site().lane() == 0 && c.site().dimension().equals(dim) && c.site().cell().getY() == a.getY()
+                                    && c.site().cell().getZ() == a.getZ() && c.site().cell().getX() > a.getX() && c.site().cell().getX() < b.getX())
+                            .map(c -> c.site().cell()).sorted(Comparator.comparingInt(BlockPos::getX)).forEach(wires::add);
+                    if (wires.size() < 3 || !facts.cable(site(level, wires.getFirst())).endpoints().containsValue(ports[0].id())) {
+                        failure[0] = "the cable is not the straight run from A: " + wires;
+                        return;
+                    }
+                    before.add(((ConduitBlockEntity) level.getBlockEntity(wires.getFirst())).linePieces());
+                    var first = wires.getFirst();
+                    var middle = wires.get(wires.size() / 2);
+                    var blocked = wires.get(wires.size() / 2 + 1);
+                    FluidDeviceBlock.quietly(() -> {
+                        level.setBlock(first, Blocks.AIR.defaultBlockState(), 3);
+                        level.setBlock(middle, Blocks.AIR.defaultBlockState(), 3);
+                        level.setBlock(blocked, Blocks.STONE.defaultBlockState(), 3);
+                    });
+                    if (facts.cable(site(level, first)) == null) failure[0] = "the lost cable's fact left";
+                    requeue(world, level, wires);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(failure[0] != null || standsAsFact(facts, level, wires.getFirst()) && standsAsFact(facts, level, wires.get(wires.size() / 2))
+                                && facts.held(site(level, wires.get(wires.size() / 2 + 1))) && !bus(facts, ports)
+                                && before.getFirst().equals(((ConduitBlockEntity) level.getBlockEntity(wires.getFirst())).linePieces()),
+                        "Waiting for the lost cables to stand with their line pieces, and the blocked one to be held"))
+                .thenExecute(() -> {
+                    if (failure[0] != null) return;
+                    var blocked = wires.get(wires.size() / 2 + 1);
+                    if (!level.getBlockState(blocked).is(Blocks.STONE)) failure[0] = "the stone was overwritten";
+                    level.setBlock(blocked, Blocks.AIR.defaultBlockState(), 3);
+                    requeue(world, level, wires);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(failure[0] != null || standsAsFact(facts, level, wires.get(wires.size() / 2 + 1))
+                        && !facts.held(site(level, wires.get(wires.size() / 2 + 1))) && bus(facts, ports), "Waiting for the cable to stand, be released and the bus to join"))
+                .thenExecute(() -> {
+                    for (var at : wires) level.setBlock(at, Blocks.AIR.defaultBlockState(), 3);
+                    level.setBlock(a, Blocks.AIR.defaultBlockState(), 3);
+                    level.setBlock(b, Blocks.AIR.defaultBlockState(), 3);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(wires.stream().allMatch(at -> facts.cable(site(level, at)) == null)
+                        && panelPort(facts, level, a) == null && panelPort(facts, level, b) == null, "Waiting for the cable and the controllers to leave"))
+                .thenExecute(() -> {
+                    if (failure[0] != null) helper.fail(failure[0]);
+                })
+                .thenSucceed();
+    }
+
+    /** The socket of the controller at {@code at}, or null while it has none. */
+    private static DataPort panelPort(ControlFacts facts, ServerLevel level, BlockPos at) {
+        String dim = level.dimension().location().toString();
+        return facts.panels().stream().filter(p -> p.dimension().equals(dim) && p.position().equals(at)).findFirst().map(p -> facts.port(p.id())).orElse(null);
+    }
+
+    private static LineTarget socket(DataPort p) {
+        return new LineTarget(p.id(), p.owner(), p.face().getOpposite(), new Vec3(.5, .5, .5), 0);
+    }
+
+    /** Whether the data bus, built from the standing cables, joins the two sockets. */
+    private static boolean bus(ControlFacts facts, DataPort[] ports) {
+        return new DataBus(facts.standing(), facts.ports()).connected(ports[0].id(), ports[1].id());
+    }
+
+    private static DataBus.Site site(ServerLevel level, BlockPos at) {
+        return new DataBus.Site(level.dimension().location().toString(), at, 0);
+    }
+
+    /** Whether a cable block stands at {@code at} with the geometry and endpoints of its fact. */
+    private static boolean standsAsFact(ControlFacts facts, ServerLevel level, BlockPos at) {
+        var fact = facts.cable(site(level, at));
+        return fact != null && level.getBlockEntity(at) instanceof ConduitBlockEntity wire && wire.geometry().equals(fact.geometry())
+                && wire.cable().endpoints().equals(fact.endpoints());
     }
 
     /** A creative motor at {@code motor} facing east, and shafts along X at {@code line}, placed as a player places them. */

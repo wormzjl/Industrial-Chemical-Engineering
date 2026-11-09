@@ -365,4 +365,61 @@ class ControlSystemTest {
                                                 == com.wormzjl.icheme.science.equipment.CableMedium
                                                         .DATA));
     }
+    /** W5c C2 (option Q2): a rack lane keeps its rack cell's frame from format 4; a frame in an older format is refused. */
+    @Test
+    void aRackLanesFrameIsAFormat4Fact() throws Exception {
+        var tag =
+                TagParser.parseTag(
+                        Files.readString(Path.of("src/test/resources/compat/control/control-4.snbt")));
+        var lane =
+                ControlFacts.load(tag).cables().stream()
+                        .filter(c -> c.site().lane() > 0)
+                        .findFirst()
+                        .orElseThrow();
+        assertEquals(
+                new com.wormzjl.icheme.runtime.fluid.WorldTopologyLedger.RackFrame(
+                        com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Direction.EAST,
+                        com.wormzjl.icheme.runtime.fluid.WorldTopologyLedger.RackShape.STRAIGHT),
+                lane.frame());
+        var older = tag.copy();
+        older.putInt("format", 3);
+        assertThrows(IllegalArgumentException.class, () -> ControlFacts.load(older));
+        var three =
+                ControlFacts.load(
+                        TagParser.parseTag(
+                                Files.readString(
+                                        Path.of("src/test/resources/compat/control/control-3.snbt"))));
+        assertTrue(three.cables().stream().allMatch(c -> c.frame() == null), "format 3 lanes hold no frame");
+        assertThrows(
+                IllegalArgumentException.class,
+                () ->
+                        new DataBus.Cable(
+                                new DataBus.Site(lane.site().dimension(), lane.site().cell(), 0),
+                                new ConduitGeometry.Key(48, 0, com.wormzjl.icheme.science.equipment.CableMedium.DATA),
+                                0,
+                                Map.of(),
+                                lane.frame()),
+                "a cable block lies in no rack frame");
+    }
+
+    /** W5c C2 (option Q1): a held cable leaves the buses, never the facts. */
+    @Test
+    void aHeldCableLeavesTheBusAndNeverTheFacts() throws Exception {
+        var facts =
+                ControlFacts.load(
+                        TagParser.parseTag(
+                                Files.readString(
+                                        Path.of("src/test/resources/compat/control/control-3.snbt"))));
+        var power = com.wormzjl.icheme.science.equipment.CableMedium.POWER;
+        var site = facts.cables().iterator().next().site();
+        long revision = facts.topologyRevision();
+        assertTrue(facts.hold(site, true));
+        assertFalse(facts.hold(site, true), "held once");
+        assertTrue(facts.topologyRevision() > revision, "the buses are rebuilt");
+        assertFalse(new DataBus(facts.standing(), facts.ports(), power).connected(new UUID(0, 1), new UUID(0, 2)));
+        assertEquals(2, facts.save(new CompoundTag(), null).getList("cables", 10).size(), "the fact stays");
+        assertTrue(facts.hold(site, false));
+        assertTrue(new DataBus(facts.standing(), facts.ports(), power).connected(new UUID(0, 1), new UUID(0, 2)));
+        assertFalse(facts.hold(new DataBus.Site(site.dimension(), site.cell().above(), 0), true), "no fact, no hold");
+    }
 }
