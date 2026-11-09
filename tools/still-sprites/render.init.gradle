@@ -20,6 +20,7 @@ gradle.projectsEvaluated {
             [name: 'pot-electric', size: '500', still: 'ELECTRIC,BUILT_IN,0'],
             [name: 'column-liquid', size: '500', still: 'LIQUID,BUILT_IN,5'],
             [name: 'column-large-solid', size: '2000', still: 'SOLID,BUILT_IN,8'],
+            [name: 'column-electric', size: '1000', still: 'ELECTRIC,BUILT_IN,3'],
             [name: 'vapour-electric', size: '500', still: 'ELECTRIC,NONE,0'],
     ]
     def all = p.tasks.register('renderStills') {

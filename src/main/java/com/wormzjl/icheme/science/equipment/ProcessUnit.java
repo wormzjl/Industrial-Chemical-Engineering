@@ -3466,8 +3466,9 @@ public final class ProcessUnit {
      * over and down into its back half; cooling water in at its front end and out at its back end (against the vapour);
      * the vent from its cold front end straight up. A column's condensate falls into the reflux pot (a gauge glass on its
      * front) under the cold end, and the hand-wheel valve under the pot sends the reflux back to the column's top; a pot
-     * still's condensate runs straight down. The product passes a sight glass to the spout at the front. A steel post with
-     * its cradle under each end, outboard.
+     * still's condensate runs straight down. The product passes a sight glass to the spout at the front. The shell rests on
+     * two saddles, each on a steel H-frame: a leg either side of the shell's line and a cross beam under the saddle, so its
+     * weight goes straight down (owner, 2026-11-09: not on outboard posts); the spout's drop passes between the front legs.
      */
     private void stillCondenser(StillPlan p) {
         double d = p.d(), x = StillPlan.POT_X, z = StillPlan.POT_Z;
@@ -3523,12 +3524,19 @@ public final class ProcessUnit {
         sightGlass(new double[]{cx, .78, zc}, new double[]{0, 1, 0}, rg, .15, p.line());
         mark("spout", new double[]{cx - rg, .78, zc - rg}, new double[]{cx + rg, .93, zc + rg});
         nozzles.add(end(Role.DISTILLATE, new double[]{cx, .5, .3}, 2, -1, 2 * rs));
-        // The stand: a post with its cradle under each end, outboard of the spout's drop (and the reflux pot's bracket).
-        for (double zp : new double[]{zc, sz1}) {
-            post(2.86, zp, 0, yk - rk - .04, .07, true);
-            box(new double[]{2.45, yk - rk - .04, zp - .05}, new double[]{2.895, yk - .85 * rk, zp + .05}, Material.STEELWORK, false);
+        // The stand: a saddle near each end of the shell, clear of its girth hoops and the condensate outlet at the cold end;
+        // under each a cross beam, its top just under the shell and over the reflux pot, on two legs 0.3 m either side.
+        double yb = yk - rk - .05, xl = cx - .3, xr = cx + .3;
+        for (double zs : new double[]{sz0 + .06, sz1 - .1}) {
+            box(new double[]{cx - .8 * rk, yb, zs - .03}, new double[]{cx + .8 * rk, yk - .7 * rk, zs + .03}, Material.STEELWORK, false);
+            beam(new double[]{xl - .03, yb - .04, zs - .03}, new double[]{xr + .03, yb, zs + .03});
+            for (double xs : new double[]{xl, xr}) post(xs, zs, 0, yb - .04, .06, true);
         }
-        if (column) mesh.bar(new double[]{2.825, yr0 + .15, zc}, new double[]{cx + rp - .01, yr0 + .15, zc}, .04, new double[]{0, 1, 0}, Material.STEELWORK);
+        // The reflux pot's bracket from the front right leg.
+        if (column) {
+            double zf = sz0 + .06, ux = xr - cx, uz = zf - zc, u = Math.hypot(ux, uz);
+            mesh.bar(new double[]{xr - .03, yr0 + .15, zf}, new double[]{cx + (rp - .01) * ux / u, yr0 + .15, zc + (rp - .01) * uz / u}, .04, new double[]{0, 1, 0}, Material.STEELWORK);
+        }
     }
 
     /** A pot still without a condenser: its swan neck over to the vapour flange on the right, on a post. */

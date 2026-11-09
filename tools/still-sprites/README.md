@@ -27,8 +27,8 @@ From the worktree root:
 java -Djava.awt.headless=true tools/still-sprites/StillSprites.java src/main/resources/assets/icheme/textures/block
 ```
 
-Software renders of six still variants (pot stills with each heater, a small liquid-fired one, two columns, a still with no
-condenser), with the mod's sprites, into an indexed `tmp/` folder:
+Software renders of seven still variants (pot stills with each heater, a small liquid-fired one, a column with each
+heater, a still with no condenser), with the mod's sprites, into an indexed `tmp/` folder:
 
 ```bash
 ./gradlew --offline --init-script tools/still-sprites/render.init.gradle renderStills -PstillRenderOut=tmp/still-sprites
@@ -47,3 +47,4 @@ The init script compiles `tools/pump-sprites/probes/PumpRender.java` and runs it
 - 2026-11-09, batch `2026-11-09-batch-distiller`: first version. The `WOOD` finish went with the worm tub (one top
   condenser for every still); the lines got their own `COPPER_LINE` finish, so the sheet's seams stay on the vessels.
   Owner, the same day: a finish per heater tier (copper, carbon steel, stainless) for every process vessel and line.
+  Then a right view, and an electric column still (owner: drawings with columns).
