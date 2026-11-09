@@ -15,6 +15,12 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+## [0.23.6] - 2026-11-09
+
+### Fixed
+
+- The fluid GameTest `identityBindingOnAChunkLoadCarriesNoViewData` counts a reloaded device's bucket from the tick after the load, when the load's marks arrive; counted from the load's tick it failed 1 run in 100 (commit `8642e6308`, batch `2026-11-03-save-corruption`).
+
 ## [0.23.5] - 2026-11-09
 
 ### Added

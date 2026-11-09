@@ -24,15 +24,20 @@ Branch `claude/save-corruption-prevention-2bd7ac`, batch `2026-11-03-save-corrup
 - Fluid GameTests (run id `lane-1109-1518`): 85 of 87. The run id `save-merge-recheck` on the same code: 87 of 87.
   - `identityBindingOnAChunkLoadCarriesNoViewData`: "No view at the bucket 4438: null". The test passed in all 21 earlier runs of this batch (W5 and W5c code), and nothing it loads changed since its last pass (`2f86539b0`; only lang files, documents and tools since). The re-alignment did nothing to its reservoir (no `fluid_realign` line: the standing block takes the NOTHING path, which never touches the block entity).
   - `registeredPipesAndReservoirsKeepSimulatingAcrossUnloadedChunks`: "Waiting for all cleanup transactions". It follows from the first: the failed test left its reservoir, a second island the property-reload test holds (two HELD lines; one in green runs).
-  - Expected: a reloaded device's view arrives at the first bucket of its island after the load. Found: once in 23 runs it did not arrive at that bucket. A guess, not traced: the test unloads the chunk within about 20 ticks of placing the reservoir; if the island's first solve has not published by the bucket, the view waits for the next one, as the presentation rule allows. Proposal: the test waits for the island's first publication before it unloads the chunk. Open item, owner to decide.
+  - Expected: a reloaded device's view arrives at the first bucket of its island after the load. Found: once in 23 runs it did not arrive at that bucket. The guess at merge time (the island's first publication) was wrong; the cause is below.
 
 ## Open items carried to main
 
 - W1-W4 (the corruption ladder) and W6 (save encoding off the server thread): not built, owner to decide.
 - The sight glass axis, GameTest i, the `SolidMaterialCatalog.validate` text, one in-game check of a rebuilt structure: see [README.md](README.md), open items.
-- The flaky presentation test above.
-
 ## Merge
 
 - Merged to `main` as 0.23.5 on 2026-11-09 (owner: "merge"). Not pushed.
 - Lane outputs and the batch's scratch logs: archived in the main checkout, `tools/merge-lane/logs/save-corruption-scratch-logs-2026-11-09.tar.gz` (local); the final lane there is the next merge's baseline.
+
+## After the merge: the flaky presentation test (owner: "Yes, fix the test")
+
+- Expected: the load marks the device, and the view arrives at the device's first bucket after the mark.
+- What happened: within one server tick, a GameTest ticks inside `tickChildren`, before `ServerTickEvent.Post`; the authority's tick there advances the online tick to v+1 and flushes the bucket of v+1. The test reloads the chunk and reads online tick v. The load's two marks come after that flush: the chunk-load handler is a queued `TickTask` (49e57860), and the block entity's `onLoad` runs on the next level tick. So the device's first bucket after the mark is the first after v+1. The test counted from v: when the device's bucket was v+1 (1 in 100 runs), it expected the view at v+1, and the view came at v+101. The engine follows its rule; the test's count was one tick early.
+- Fix: the test counts the bucket from the tick it reads the mark (v+1). No product change. `8642e6308`; fluid GameTests 87/87 (run id `presentation-flake-fix`).
+- Merged to `main` as 0.23.6 on 2026-11-09 (owner: "Merge as 0.23.6"). Not pushed. No second lane: nothing else changed. Scratch log archived in the main checkout, `tools/merge-lane/logs/presentation-flake-scratch-logs-2026-11-09.tar.gz`.
