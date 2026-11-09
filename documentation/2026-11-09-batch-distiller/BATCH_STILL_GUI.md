@@ -42,7 +42,7 @@ lamp lit (amber dust); boiling, a bubbling sound at the pot; a drip of falling w
   at NO POWER. Fixed in the three places: a power gland on the terminal box's face opposite the data socket, the rule
   every powered unit keeps (`EquipmentServicesTest`). The electric still's layout gains the terminal cell (layout table).
 
-## 5. Owner questions (each built as option A)
+## 5. Owner questions (each built as option A; owner kept G1 to G4 as built, 2026-11-09)
 
 | # | Question | Built (A) | Other options |
 |---|---|---|---|

@@ -101,6 +101,8 @@ distiller in the process simulator.
   their corpus image `designs-2.snbt` (G5: the draft has a corpus); the layout table's electric still row gains its
   terminal cell (cells, stamp and pipes unchanged); the W2 and terminal tests now expect the FE socket; a key-presence
   test read a no-argument line with arguments.
+- 2026-11-09: owner kept G1 to G4 as built (option A): the controls on the pot's Overview, Load and Take out for the
+  fuel, Off sends 0 % (the opening kept on screen only), vanilla particles and sounds.
 
 ## Open items
 
@@ -112,7 +114,7 @@ distiller in the process simulator.
   averaged over the cycle is slightly two-phase (cut 2 about 2 % vapour), as the distillate is not subcooled in the
   worm (phase-1 law answer 7).
 - Drawings: `tools/equipment-drawings/update.ps1 -Only BATCH_STILL` needs Python with its requirements and Poppler.
-- W6 owner questions G1 to G4 (BATCH_STILL_GUI.md section 5), built as option A; an in-game check only if the owner asks.
+- An in-game check of the still's page and its effects, only if the owner asks.
 - Engine options not built (BATCH_STILL_ENGINE.md section 6): a head-temperature reflux law (its gain is not set by the
   physics), a second diverter threshold for the second side outlet.
 - At the merge: move `BubblePointColumn`'s measurement harness to `tools/batch-still-column/` (tooling cleanup); code guide
