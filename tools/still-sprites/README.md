@@ -35,7 +35,7 @@ condenser), with the mod's sprites, into an indexed `tmp/` folder:
 ```
 
 The init script compiles `tools/pump-sprites/probes/PumpRender.java` and runs it with `-Dstill=HEATER,CONDENSER,STAGES`
-(the still's options) and the views iso, iso2, front and left. It changes no source set of the build.
+(the still's options) and the views iso, iso2, front, left and right. It changes no source set of the build.
 
 ## Entry points
 
