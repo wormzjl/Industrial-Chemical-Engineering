@@ -22,6 +22,8 @@ distiller in the process simulator.
 - [BATCH_STILL_SIMULATOR.md](BATCH_STILL_SIMULATOR.md): W7, the simulator unit, its batch curve and sizing.
 - [BATCH_STILL_ENGINE.md](BATCH_STILL_ENGINE.md): W3 to W5, the still in the fluid engine, its fuel, its data channels and
   controllers, the diverter valve, owner decisions O1 to O10.
+- [BATCH_STILL_GUI.md](BATCH_STILL_GUI.md): W6, the still's page, the constructor's still options, the animation, the diverter's and the
+  electric still's sockets, owner questions G1 to G6.
 - Run output of B3 (local): `research/2026-11-09-batch-distiller/b3-column/` (`report.txt`, `snapshots.csv`).
 
 ## Code areas
@@ -89,6 +91,17 @@ distiller in the process simulator.
   cell; the pentane rig's basis with nitrogen; the water side's first read before the pot's (NaN ceiling); the refresh
   had left the old outlets and burners registered. The diverter is the simulator's splitter (FlowsheetCatalog).
 
+- 2026-11-09: W6 written (still-gui): the still's groups on its pot's page (Firing, Reflux valve, Fuel, a controller's
+  hold, the readings; `FluidView.Still`, `fluid-20`), the constructor's Heater, Condenser and Stages (`equipment-22`), the
+  fires, smoke, lamp, boiling and drip (`StillFires`, `still-1`), the diverter's actuator and data gland, and the electric
+  still's missing FE socket. Owner questions G1 to G6 built as option A (BATCH_STILL_GUI.md).
+- 2026-11-09: W6 landed (main thread): compiled and tested, 66 classes (47 test, 17 equipmentGates, 2 holdGates), 597 tests passing (the two corpus classes after their images were copied); renders in `tmp/still-gui-renders/` (three
+  still pages, two constructor pages). Main-thread fixes: a duplicate `finite` helper; the FE gland moved opposite the
+  data socket, the rule every powered unit keeps (G6 settled by that gate); the constructor draft's still options got
+  their corpus image `designs-2.snbt` (G5: the draft has a corpus); the layout table's electric still row gains its
+  terminal cell (cells, stamp and pipes unchanged); the W2 and terminal tests now expect the FE socket; a key-presence
+  test read a no-argument line with arguments.
+
 ## Open items
 
 - The still-models session's style mapping (one firebox style per heater): owner's confirmation in that session; its
@@ -99,8 +112,7 @@ distiller in the process simulator.
   averaged over the cycle is slightly two-phase (cut 2 about 2 % vapour), as the distillate is not subcooled in the
   worm (phase-1 law answer 7).
 - Drawings: `tools/equipment-drawings/update.ps1 -Only BATCH_STILL` needs Python with its requirements and Poppler.
-- Phase 3 (still-gui, W6): the still's page (settings, readings, alarms), the diverter's data socket drawing, the
-  electric still's FE socket drawing. Needs the owner's go-ahead for its session.
+- W6 owner questions G1 to G4 (BATCH_STILL_GUI.md section 5), built as option A; an in-game check only if the owner asks.
 - Engine options not built (BATCH_STILL_ENGINE.md section 6): a head-temperature reflux law (its gain is not set by the
   physics), a second diverter threshold for the second side outlet.
 - At the merge: move `BubblePointColumn`'s measurement harness to `tools/batch-still-column/` (tooling cleanup); code guide
