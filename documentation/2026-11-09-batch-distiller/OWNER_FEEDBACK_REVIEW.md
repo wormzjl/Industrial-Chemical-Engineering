@@ -39,8 +39,7 @@ main thread (owner: "Here").
 
 ## 4. Pot volume against the drawing
 
-- The drawn pot holds the design volume to within −1 to +3 %; the engine's node has the same volume and height. Open:
-  the owner will recheck.
+- The drawn pot holds the design volume within −1 to +3 %, as does the engine's node. Open: the owner will recheck.
 
 ## Tests
 
