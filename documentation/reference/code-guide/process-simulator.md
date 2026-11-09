@@ -1,6 +1,6 @@
 # Process simulator: the flowsheet, its run, sizing and the block
 
-**Snapshot:** 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
+**Snapshot:** f4130065f (branch `claude/refinery-compounds-thermos-252973`), 2026-11-09. Batches `2026-11-04-refinery-compounds` (W3, W4: each sheet runs on its own compound list, `SheetCompounds`; tokens and the file-open notice on the sheet's view), `2026-11-04-open-thermo-data` (the example on the medium grade) and `2026-11-05-neural-retrain` (the column unit's learned start), to merge as 0.23.0 · earlier: 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08, batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
 
 ## Current viewport and constructor handoff (0.22.0)
 
@@ -46,7 +46,8 @@ Paths are under `src/main/java/com/wormzjl/icheme/`. "pp" = package-private.
 | `Calculation` (record, `Kind` STEP/BLOCK/CHECK) | One graph node: reads, writes, needs (links), gives (links), a `Law` | How a unit becomes graph nodes |
 | `FlowGraph` (pp) | Strongly connected groups in order and the fewest tears (deterministic, `TRIALS` 200 000); links are never torn | Order and tears |
 | `FlowsheetSolver` | Runs the plan: a group without tears once; a torn group one plain pass, then bounded Wegstein (one factor per tear); closes mass and heat; `Settings` (flow tolerance 1e-4, temperature 0.01 K, 30 passes, Wegstein factor −5..0) | `run`, `result` |
-| `FlowsheetEngine` | The entry: refuses a sheet whose basis package is not the network's (`basis.package`), then works inside `MaterialRuntime.with` on a `FlowThermo`; `run`, `alone` (Solve alone), `rate` | Where a run starts |
+| `FlowsheetEngine` | The entry: runs the sheet on the network package's view of its own compounds (`SheetCompounds.on`), whatever package the sheet names, and brings the run back onto the network's axis by id; `run`, `alone` (Solve alone), `rate` | Where a run starts |
+| `SheetCompounds` | A sheet's compound list: the network package's compounds its feeds hold with a non-zero amount (by id or alias, a carried crystal's compound, a line's first estimate), in package order, water last; Nitrogen as placeholder when none; derived, never stored. `on(sheet, catalog, …)` gives the view (`MaterialCatalog.restrict`) and the maps between its axis and the network's; a feed compound the network lacks is parked with `basis.parked` | Why a sheet runs on fewer compounds than the world |
 | `FlowsheetRun` (record, `Status` STEADY/NOT_STEADY/FAILED/STOPPED) | Streams, outcomes, reports, loops, log, balances, order, passes | What the Results tab shows |
 | `Board` | The run's known stream states and link values | Reads and writes of a pass |
 | `Report`, `Note` | One calculation's readings, notes and boundary terms (enters, duty, leaves); a note's severity, subject, key (a suffix of `gui.icheme.flowsheet.`) and SI arguments | The log and door status |
@@ -57,7 +58,7 @@ Paths are under `src/main/java/com/wormzjl/icheme/`. "pp" = package-private.
 | `EjectorLaw` | The vacuum set's steam law S1 (K = 1.6) | Ejector steam |
 | `FlowsheetFailure` | A law's refusal, carrying a note key | Failing units |
 | `SheetBody`, `SheetStore` | One gzip body (sheet and results) in parts, with its bounds; the block's body, kept unreadable bodies and the holder | The block's storage |
-| `RevisionNotice` | Client and server catalog revision tokens; a mismatch is a notice, never a block | Dedicated servers |
+| `RevisionNotice` | Client and server catalog revision tokens; a mismatch is a notice, never a block. `tokens(sheet, catalog)`: the token of the sheet's view (its results and column warm starts stand on it); `data`, `stamped` (Save, autosave, the clipboard export and a new sheet write the view's identity into the file's basis `revision`) and `moved` (the file-open notice, read once by `FileColumns.changes`) | Dedicated servers; the data notice on opening a file |
 | **Units (`science/flowsheet/unit/`)** | | |
 | `ColumnUnit`, `ColumnDoor` (record), `ColumnSides` (pp), `ColumnBlockSolve` (pp) | The column as one BLOCK calculation (`ColumnBlockSolve`; `ColumnUnit.solve`: warm from the last seed, else the learned start; the first pass's seed is the steady run's `Report.Warm`, and the block leaves its own on its report) plus one calculation per heat side (`ColumnSides`); `ColumnUnit` holds the public port names and builders and `add` (a mole fraction onto the axis; an id the axis lacks fails the column); the condenser duty reaches its side as a link; regulated utility feeds (cooling water, kettle steam, stripping steam through its inlet valve); the steam CHECK | The column on the sheet |
 | `ExchangerUnit`, `ExchangerRating` | Exchanger or kettle, target Outlet, Duty or Area; counterflow surface and duty on the two heat curves | Heat units |
@@ -99,7 +100,7 @@ Paths are under `src/main/java/com/wormzjl/icheme/`. "pp" = package-private.
 ```mermaid
 flowchart TD
     A[Screen: Run] --> B[SimulatorRunner thread]
-    B --> C[FlowsheetEngine.run: package check, MaterialRuntime.with]
+    B --> C[FlowsheetEngine.run: SheetCompounds view, MaterialRuntime.with]
     C --> D[FlowsheetCompiler.compile + estimates]
     D --> E[FlowGraph.plan: groups, tears]
     E --> F[FlowsheetSolver: passes, Wegstein, result]
@@ -108,7 +109,7 @@ flowchart TD
 ```
 
 1. The Run key calls `SimulatorHost.run`, which hands a private copy of the sheet to `SimulatorRunner`. The runner starts its own daemon thread; one job runs at a time. Nothing runs on the client tick or in the server's workers.
-2. `FlowsheetEngine.run` refuses a sheet whose basis package differs from `FluidMaterialCatalog.networkPackage`, then works inside `MaterialRuntime.with` on a `FlowThermo`.
+2. `FlowsheetEngine.run` takes the sheet's compound list (`SheetCompounds`), solves on `MaterialCatalog.restrict(network package, list)` inside `MaterialRuntime.with` on a `FlowThermo`, and writes the streams back on the network package's axis by id, where the screens, the stored results, Solve alone and sizing read them. A sheet drawn on another or a removed package runs on the network by compound ids. Sizing works on the same view (`SheetSizing.pass` maps the run down by id).
 3. `FlowsheetCompiler.compile` makes the calculations and hands each unit its report from the last steady run (`WiredUnit.last`), where a column finds the seed its solve there ended on (`Report.Warm`: the V3 seed, the feed tray's and the steam rows' pressures; `current` while its package keeps that revision); `estimates` seeds torn streams from the same run. V3 judges whether the seed fits the column now (`warmCompatible`), else the learned start runs.
 4. `FlowGraph.plan` orders strongly connected groups and tears the fewest streams. Two calculations writing one stream or giving one link throw.
 5. `FlowsheetSolver.run`: a group without tears runs once. A torn group runs one plain pass, then bounded Wegstein. A tear that rises by the same step (`SAME_STEP` 0.01) on 3 passes stops with `loop.no_steady_state`; a Wegstein trial that fails a unit falls back to plain passes. `result()` closes mass and heat; a mass gap gives `run.mass_gap` and `NOT_STEADY`.
@@ -149,7 +150,7 @@ flowchart TD
 | Format | Version | Where | Kind |
 | --- | --- | --- | --- |
 | Flowsheet file and block body's sheet | `FlowsheetFile.FORMAT` = 2 (passage ends, option B) | `science/flowsheet/FlowsheetFile` | No compatibility (owner 2026-11-04): another format is refused; corpus `compat/flowsheet/format-2*.json` (`FlowsheetFileTest`) |
-| Bundled examples | Each a sheet file of the current `FORMAT`, on the current network package and revision | `assets/icheme/flowsheet_examples/` | A format or material revision change fails `FlowsheetExamplesTest`: write the example again on the new one (the sample gates run it) |
+| Bundled examples | Each a sheet file of the current `FORMAT`, on the current network package and the identity of its view's data (`crude_unit.json`: the medium grade on `icheme:refinery`'s 45 compounds; `FlowsheetExamplesTest` prints the value to write) | `assets/icheme/flowsheet_examples/` | A format or material revision change fails `FlowsheetExamplesTest`: write the example again on the new one (the sample gates run it) |
 | Block body | `SheetBody.FORMAT` = 1 | `science/flowsheet/SheetBody` | Fact (the sheet inside it) |
 | Run results | `SimulatorResults.FORMAT` = 1 | `network/SimulatorResults` | State: dropped on a mismatch, rebuilt by a run |
 | Sent designs | `SentDesignTags` (fields 2) | `world/level/block/entity/SentDesignTags` | Fact: corpus `compat/simulator/designs-<n>.snbt` (`SentDesignTagsTest`) |
@@ -175,7 +176,7 @@ The file keeps fields it does not know and refuses a newer format and an older o
 
 <details><summary>Traps</summary>
 
-- A run uses the client's bundled catalog, also on a dedicated server; `RevisionNotice` only shows a notice when the tokens differ.
+- A run uses the client's bundled catalog, also on a dedicated server; `RevisionNotice` only shows a notice when the tokens differ. A token is a view's identity, so an edit to a package record, or to a compound the sheet does not feed, moves nothing; a sheet file saved before batch 2026-11-04-refinery-compounds W4 holds a package revision and opens once with the data notice (`flowsheet.file.change_revision`).
 - Results carry no column warm start (`SimulatorResults` writes a report's readings, notes, start, duty, boundary and display, never `warm`), so the first run after opening starts its loops from the stored steady run and the column from the learned start. A run from a steady one is warm and prints other last digits than a cold one, within the loop's tolerance.
 - The Sizing tab's lamps are state and never saved; the screen rebuilds them with a quiet rate job.
 - A body still on its way counts as read-only. Network handlers run on the server thread; a store lands with its last part.
