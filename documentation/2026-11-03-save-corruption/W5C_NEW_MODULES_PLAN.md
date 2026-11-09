@@ -1,6 +1,6 @@
 # W5c: registry first for the modules main added (plan, 2026-11-09)
 
-Owner, 2026-11-09: "merge main to here and resolve conflict first, then add support for new modules. Final merge will be when everything's done". The merge is done (`ddfd9cbd3`). This plan applies W5's rule to main 0.20.0-0.23.4: the saved facts decide what exists, and the world is set back to them after a chunk loads. Read-only survey; nothing is built yet.
+Owner, 2026-11-09: "merge main to here and resolve conflict first, then add support for new modules. Final merge will be when everything's done". The merge is done (`ddfd9cbd3`). This plan applies W5's rule to main 0.20.0-0.23.4: the saved facts decide what exists, and the world is set back to them after a chunk loads. Status: built, C1 to C5 (2026-11-09; owner: "Yes, build W5c", the recommended Q1 to Q4); the history is in [README.md](README.md).
 
 ## 1. What each new module saves, and what W5 does for it today
 

@@ -669,6 +669,11 @@ public final class FluidWorldAuthority implements AutoCloseable {
         submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(r.device().withHeld(held),r.spec(),Math.addExact(r.revision(),1)))),topology.nextIdentity());
         return true;
     }
+    /** Every held part (W5c C5): the held registrations, shaft parts, cables, controllers and consoles. */
+    public int heldCount() {
+        owned();int count=held().size();for(var u:topology.shafts().values())if(u.held())count++;
+        var facts=controls().facts();return count+facts.held().size()+facts.heldPanels().size();
+    }
     /** The held registrations, queued holds included, by identity. */
     public List<WorldTopologyLedger.Registration> held() {
         owned();var held=new ArrayList<WorldTopologyLedger.Registration>();

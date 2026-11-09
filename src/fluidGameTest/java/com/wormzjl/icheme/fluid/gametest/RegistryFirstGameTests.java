@@ -739,6 +739,10 @@ public final class RegistryFirstGameTests {
                     if (!level.getBlockState(middle).is(Blocks.STONE)) failure[0] = "the stone was overwritten";
                     var view = world.shafts().view(id[0]);
                     if (failure[0] == null && (view == null || !view.status().equals("HELD"))) failure[0] = "the held shaft's page does not say HELD: " + view;
+                    var said = new ArrayList<String>();
+                    level.getServer().getCommands().performPrefixedCommand(operator(level, middle, said), "icheme devices held");
+                    if (failure[0] == null && said.stream().noneMatch(said1 -> said1.startsWith("#" + id[0] + " shaft at ") && said1.endsWith("its cell holds minecraft:stone")))
+                        failure[0] = "the listing does not name the held shaft: " + said;
                     level.setBlock(middle, Blocks.AIR.defaultBlockState(), 3);
                     requeue(world, level, cells);
                 })
@@ -832,6 +836,10 @@ public final class RegistryFirstGameTests {
                     if (failure[0] != null) return;
                     var blocked = wires.get(wires.size() / 2 + 1);
                     if (!level.getBlockState(blocked).is(Blocks.STONE)) failure[0] = "the stone was overwritten";
+                    var said = new ArrayList<String>();
+                    level.getServer().getCommands().performPrefixedCommand(operator(level, blocked, said), "icheme devices held");
+                    var named = "data cable at " + level.dimension().location() + " " + blocked.getX() + ", " + blocked.getY() + ", " + blocked.getZ() + ": its cell holds minecraft:stone";
+                    if (failure[0] == null && !said.contains(named)) failure[0] = "the listing does not name the held cable: " + said;
                     level.setBlock(blocked, Blocks.AIR.defaultBlockState(), 3);
                     requeue(world, level, wires);
                 })
@@ -895,6 +903,10 @@ public final class RegistryFirstGameTests {
                 .thenWaitUntil(() -> helper.assertTrue(facts.heldPanel(ports[0].id()), "Waiting for the blocked controller to be held"))
                 .thenExecute(() -> {
                     if (!level.getBlockState(controller).is(Blocks.STONE)) failure[0] = "the stone was overwritten";
+                    var said = new ArrayList<String>();
+                    level.getServer().getCommands().performPrefixedCommand(operator(level, controller, said), "icheme devices held");
+                    if (failure[0] == null && said.stream().noneMatch(line -> line.startsWith("controller " + ports[0].id() + " at ") && line.endsWith("its cell holds minecraft:stone")))
+                        failure[0] = "the listing does not name the held controller: " + said;
                     level.setBlock(controller, Blocks.AIR.defaultBlockState(), 3);
                     requeue(world, level, List.of(controller));
                 })
