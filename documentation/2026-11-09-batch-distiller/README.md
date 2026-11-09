@@ -141,6 +141,9 @@ distiller in the process simulator.
   table re-recorded (still rows only: boxes 4 wide, every nozzle one block left but the fuel).
 - 2026-11-10: owner, on the top views: the chimney in the back right corner (it stood back left, against its own
   comment). Tests: the eight geometry classes; layout table re-recorded (fired still rows, cells only).
+- 2026-11-10: equipment drawings regenerated at 7d44669d6 (`update.py --only BATCH_STILL --no-raster`, run
+  `tmp/equipment-drawings/20261109-164659-d37714/`, 6 sheets, 5 variants): PDF only, no Poppler on this machine, so the
+  sheets are not rasterized; the still renders (`tools/still-sprites`, with a top view) checked the same geometry.
 
 ## Open items
 
