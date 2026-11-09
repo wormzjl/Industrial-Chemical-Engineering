@@ -51,8 +51,9 @@ import java.util.function.Function;
  * saved constants that are not the record's (the facts path then reads the current record). An exact load reads both
  * sections and checks that they agree ({@link FluidFacts#disagreement}).</p>
  *
- * <p>State formats: 31 (batch 2026-11-04-refinery-compounds, V3) keys the package table by package and compound list and
- * names each island's list in its unit, so each island runs on its own compounds; a format-30 world rebuilds from its facts.
+ * <p>State formats: 40 (batch 2026-11-04-refinery-compounds, V3; written as 31 on its branch and numbered after main's 39 at
+ * the merge) keys the package table by package and compound list and names each island's list in its unit, so each island
+ * runs on its own compounds; an older world rebuilds from its facts.
  * 23 (batch 2026-10-27-heat-exchanger-design) gives each pipe section its channel count. 20 (batch 2026-10-26-backward-compat) put the envelope and the facts around state format 19's
  * units; the registry and the topology unit's totals left its state for its facts. Format 19, unit format 12, added
  * validated pipe-filter registrations (active and pending), batch 2026-10-25-accessory-refinements; 18, unit 11, CHECK
@@ -146,7 +147,7 @@ public final class FluidCheckpointCodec {
         }
     }
     /**
-     * A model's key: a package and a compound list on it (state format 31, batch 2026-11-04-refinery-compounds, V3), water not
+     * A model's key: a package and a compound list on it (state format 40, batch 2026-11-04-refinery-compounds, V3), water not
      * named; a null list is the package's whole list.
      */
     public record PackageKey(String packageId,List<String> compounds) {
@@ -305,7 +306,7 @@ public final class FluidCheckpointCodec {
         if(!graph.scheduledTransfers().isEmpty())throw new IllegalArgumentException("Request-scoped transfers must be resolved into the committed ledger before saving");
         var w=new Writer();
         w.varint(strings.ref(entry.dimension));w.varint(strings.ref(entry.packageId));
-        // Format 31: the island's compound list (0 for the package's whole list, else its count plus one, then each id).
+        // Format 40: the island's compound list (0 for the package's whole list, else its count plus one, then each id).
         if(entry.compounds==null)w.varint(0);else{w.varint(entry.compounds.size()+1);for(var id:entry.compounds)w.varint(strings.ref(id));}
         w.text(s.status());
         var fences=new TreeMap<>(s.fences());w.varint(fences.size());
@@ -669,7 +670,7 @@ public final class FluidCheckpointCodec {
     // ---------------- the core record ----------------
 
     /**
-     * The property identity every unit of one package and compound list was written under (state format 31: the table is
+     * The property identity every unit of one package and compound list was written under (state format 40: the table is
      * keyed by both, batch 2026-11-04-refinery-compounds, V3): its thermodynamic revision and energy reference. A null list is
      * the package's whole list.
      */
