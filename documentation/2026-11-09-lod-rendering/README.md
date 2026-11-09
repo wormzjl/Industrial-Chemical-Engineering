@@ -1,6 +1,6 @@
 # Distance-based level of detail (LOD) rendering
 
-Status: **In progress since 2026-11-09** on `claude/lod-rendering-optimization-1ad1f9`. Stage A implemented (`63454d60d`, owner approved L1); L2 = B3 (no body LOD), L3 closed, L4 measured; region meshes for low detail (`50d1cd9a4`); not merged.
+Status: **Implemented 2026-11-09** (0.23.2), from `claude/lod-rendering-optimization-1ad1f9`. Stage A (L1), L2 = B3 (no body LOD), L3 closed, L4 measured; region meshes for low detail.
 
 ## Scope
 
@@ -23,6 +23,7 @@ Reduce client rendering cost with tiers that follow an object's size on screen: 
 - 2026-11-09: option B (owner: "optimize it now"): per-structure mesh handles and light in `EquipmentBodyRenderer`. Heavy low lane 2.28 ms against 2.33 ms: no gain, so reverted; patch archived. Likely cost: one draw per structure and no section culling.
 - 2026-11-09: region meshes (owner: "try region meshes"): `EquipmentBodyRenderer` merges the bodies of each 32-block square into one mesh, one draw per square; light read once a second. Heavy low lane 1.55 ms (GPU 0.64 ms) against 2.33 ms; normal detail 1.53 ms. Kept. No test loads the class: compile only.
 - 2026-11-09: owner decision L2 = B3: no distance tier for equipment bodies; L3 (FAR content) closed with it. `low_polygon_mode` stays the only body switch. No code change.
+- 2026-11-09: merge preparation (owner: "merge", version 0.23.2). `8aeaa8d64` merges main 0.23.1 (INDEX rows kept on both sides); `e4d3d2d9b` drops `VertexBufferCache.size` (no caller); code guide `cef706408` (client-gui, instrument-accessories, equipment, cooling-towers, README); `ec78e91ba` mod_version and CHANGELOG. Final lane below.
 
 ## Code areas
 
@@ -30,5 +31,12 @@ Reduce client rendering cost with tiers that follow an object's size on screen: 
 
 ## Open items
 
-- Code guide at the merge: `cooling-towers.md` and `equipment.md` still describe one body mesh per structure.
 - An in-game look at the switch points (owner-started).
+- `BoundedCpuSolveServiceTest.twoPhaseShutdown...` races (main's test, see Merge): wait for the worker thread to end before asserting.
+
+## Merge
+
+- Final lane, once, on `ec78e91ba` (`LANE_OUT=tmp/final-lane tools/merge-lane/lane.sh head test gametest campaign`): `test slowGates` 2983 tests, 1 failure; the 33 junction lines identical to the 0.23.1 lane (`main-gate-fixes`), floats included; `MIXED_GAS_COST` counters identical (newtonSolves 300, 163.4 MB). Fluid GameTests 73 of 73 (run id `lod-final-1109`). The campaign skipped itself: nothing it loads changed since `main`. chain-100 not run: it loads none of the changed code (client renderers, `ClientConfig`, `InstrumentGeometry`).
+- The failure: `BoundedCpuSolveServiceTest.twoPhaseShutdownTerminalizesReadyWorkInterruptsRunningWorkAndLeaksNoWorker` line 333, `assertFalse(workerThread.isAlive())`. The batch changes nothing it loads; it passed in the 0.23.1 lane, and its class replayed alone passes 8 of 8. A race in the test: the worker counts down `interruptObserved` before its thread has exited. Main's own; open item.
+- Tooling cleanup: `main-reach.pl` 0 unreachable; `VertexBufferCache.size` removed (no caller). Tool folder: `tools/lod-rendering/` (the FPS lane); the probe's `mode=lod` is in `tools/custom-equipment-rendering-poc/frame-time-probe/`. Scratch and the final lane archived in the main checkout at `tools/lod-rendering/logs/lod-rendering-scratch-logs-2026-11-09.tar.gz`; that final lane is the next merge's baseline.
+- Code guide: client-gui, instrument-accessories, equipment, cooling-towers, README (snapshot `e4d3d2d9b`). No lang change: no translation commit.
