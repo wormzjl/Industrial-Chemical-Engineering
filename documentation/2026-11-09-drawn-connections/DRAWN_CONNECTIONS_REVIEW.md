@@ -38,5 +38,5 @@ Effect: findings 1, 3 and 4 are closed for the joints (rack offsets still come f
 - Unit: `PhysicalFluidTopologyTest`, four new tests (equipment side by side, an in-line machine on its axis only, rack lanes by saved points, a closed valve and a generator switched off).
 - GameTests: `ChunkLoadGameTests` D1 rewritten (the neighbour registered with no block draws joined, no block read); `DrawnJointGameTests` new (the item's pump path draws a pump and no branch).
 - Results at `8680edbb6`: `PhysicalFluidTopologyTest` 33 and `PipeLineCompatTest` 8 (it loads the rack's format), no failures. 11 focused GameTests on a fresh world (`tools/simulator-sizing/focused-gametests.init.gradle`), all passed: the two above, the four in `PipeLayingGameTests` (rack lanes, a column nozzle), the modular valve's redraw, in-line movers' sockets (`ConduitLayingGameTests`), two assembly reports and the flow controller's valve plan.
-- The whole quick suite, the gate groups and every fluid GameTest run in the final lane.
-- Code guide: `fluid-runtime.md` and `pipe-laying.md` at merge time.
+- Owner, 2026-11-09: merge with the affected tests only, no full suite and no final lane. On the merged tree (`fc8f928e5`, main 0.23.3 merged in) the same runs passed again: 33, 8, and 11 of 11.
+- Code guide: `fluid-runtime.md`, `pipe-laying.md`, `verification.md`, `equipment.md`. Tooling cleanup: the batch made no probe, rig or script, so nothing is detached.

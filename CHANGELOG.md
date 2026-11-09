@@ -15,6 +15,8 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+## [0.23.4] - 2026-11-09
+
 ### Fixed
 
 - Drawn pipe joints are the network's joins: pipes, one-block devices and rack lanes draw the faces the engine links as built, read from the registry (`PhysicalFluidTopology.builtFaces`); an item-installed In-line Pump or Compressor draws as a mover again, with its menu and sockets, and draws no branch to a pipe beside it; a standalone filter draws no flange the engine does not join; rack lanes join by their saved points (`8680edbb6`); batch `2026-11-09-drawn-connections`.
