@@ -88,7 +88,7 @@ old outlets and burners, which stand at nozzle cells, not nodes, stayed register
 
 | # | Question | Built | Other options |
 |---|---|---|---|
-| O1 | DCS inputs: firing and reflux | **A** (owner): the pot as a controller output, firing or reflux by action, holding a distillate flow (section 4) | B: reuse the valve output on the outlets; a head-temperature reflux law (its gain is not set by the physics) |
+| O1 | DCS inputs: firing and reflux | **A** (owner): the pot as a controller output, firing or reflux by action, holding a distillate flow (section 4); owner, 2026-11-09: only the electric still has a data port, so only it takes a controller | B: reuse the valve output on the outlets; a head-temperature reflux law (its gain is not set by the physics) |
 | O2 | Diverter data input | **A** (owner): a switch at the target, straight below, first side at or above (section 5) | a second threshold for the second side outlet |
 | O3 | Burning heat on break | lost | A: refund as a dropped item of equal energy |
 | O4 | Solid fuel in an unloaded chunk | no refill (NO FUEL) | A: move the slot into the fluid facts (the engine reads it anywhere) |

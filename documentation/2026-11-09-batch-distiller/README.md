@@ -110,10 +110,10 @@ distiller in the process simulator.
   faces the pot at 0.5 m, under the heater conduit, opposite its data gland.
 - 2026-11-09: owner feedback on the drawings (OWNER_FEEDBACK_REVIEW.md), built on the main thread. Every condenser is the top
   condenser; a pot still has no reflux valve (option A; `BatchStill.Design.refluxes` is the one rule for the law and the
-  engine). The condenser stands on two posts. The fired still's data box stands in front of the setting with a conduit to
-  the pot. The liquid fuel connection is on the back face's right column. Baked sprites (`tools/still-sprites`): the pot and
-  condenser are riveted copper, welded carbon steel or welded stainless by heater tier; the lines are drawn copper, the
-  setting brick, the doors cast iron. The layout table was re-recorded (still rows only).
+  engine). The condenser stands on two posts. Only the electric still has a data port and takes a controller (owner); a
+  fired still has none. The liquid fuel connection is on the back face's right column. Baked sprites
+  (`tools/still-sprites`): every process vessel and line in its heater tier's finish (copper, carbon steel, stainless);
+  the setting brick, the doors cast iron. The layout table was re-recorded (still rows only).
 
 ## Open items
 

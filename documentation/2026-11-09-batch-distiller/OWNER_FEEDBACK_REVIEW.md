@@ -20,21 +20,21 @@ main thread (owner: "Here").
 
 - Found: vanilla `copper_block`, `bricks`, `anvil` and `spruce_planks`.
 - Built: baked sprites tiled by the metre: riveted copper sheet, drawn copper for lines (`COPPER_LINE`), brick at a 62.5 mm
-  course, cast iron.
-- Owner: one pot finish per heater tier, with the condenser to match (`StillPlan.finish`): riveted copper (solid), welded
-  carbon steel (liquid, "iron-ish"), welded brushed stainless (electric). The helmet, column and lines stay copper.
-- Renders: task `renderStills` (`render.init.gradle`), output in `tmp/still-sprites/`.
+  course, cast iron. Renders: task `renderStills` (`render.init.gradle`), in `tmp/still-sprites/`.
+- Owner: one finish per heater tier for every process vessel and line (`StillPlan.finish`, `line`): riveted copper and
+  drawn copper (solid), welded carbon steel and steel pipe (liquid, "iron-ish"), welded brushed stainless and stainless
+  tube (electric). Cooling water and fuel stay plant pipe.
 
 ## 3. Data port and fuel connection
 
-- Owner: only the electric still had a data port and its fittings; a fired still's box sat flush in the brick.
-- Built: the fired still's junction box stands in front of the setting, left of the door, on brackets to the brick,
-  centred on the front row (the gate wants the gland centred on its block). Its conduit runs over the coping to a
-  thermowell in the pot.
+- Owner: only the electric still has a data box and port, so only the electric still takes a controller. A fired still
+  has none (`EquipmentServices`: no services for a fired still); its firing and reflux are set by hand. (A first reading
+  had added a box to the fired stills; removed.)
 - The liquid fuel flange moved from the front to the back face's right column, (2,0,3). The +x face would touch a
   no-condenser still's vapour pipe (`everyNozzleLeavesAFreeBlockForItsPipe`).
-- Owner, later: the fuel may go on the −x face the data box left. Open: on stills up to 750 L, the charge pipe at (−1,1,1)
-  touches every row-0 position there. The fuel fits only if the charge moves up a row (a nozzle move).
+- Owner, later: the fuel may go on the −x face. Open: on stills up to 750 L the charge's pipe block (−1,1,1) touches all
+  three row-0 positions there. With the charge at row 2 the fuel fits at (−1,0,1), and the cooling water inlet rises from
+  row 3 to row 4 (100 to 750 L stills one block taller).
 
 ## 4. Pot volume against the drawing
 
