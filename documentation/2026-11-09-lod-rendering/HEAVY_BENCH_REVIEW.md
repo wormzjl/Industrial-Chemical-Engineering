@@ -32,8 +32,19 @@ Logs: main checkout `tools/lod-rendering/logs/lod-heavy-bench-logs-2026-11-09.ta
 
 ## Option B tried (owner: "Optimize it now")
 
-- Built: each structure kept its mesh handle, light (read once a second), box and a reused matrix; a frame compared by reference and hashed no shape; equal structures bound a shared mesh once.
-- Heavy low lane on it (`heavy-low2`): view 387.6 FPS, p50 2.28 ms (2.33 before), GPU 0.95 ms (0.97); away 0.90 ms (1.01). System CPU 63 % (two other processes at 1.2 and 0.6 cores). No gain beyond the noise: the shape hashing was not the cost.
-- The likely cost (not profiled): low detail adds one draw call and a uniform upload per structure on top of the chunk meshes, about 2–3 µs each in the driver (0.5–0.75 ms for 250), and draws each whole body without the chunk renderer's section culling (GPU 0.95 against 0.67 ms).
-- Reverted: the change added a cache layer and a one-second light lag for no measured gain. The patch is in the logs archive (`lod-low-cache-logs-2026-11-09.tar.gz`, `body-cache.patch`, against `536ac69ec`).
-- What would help: merge the low-detail bodies into a few region meshes (one draw per region, as the chunk renderer batches), or accept that low detail trades CPU for GPU and suits weak GPUs only. Neither is measured.
+- Built: per-structure mesh handles, light read once a second, no shape hashing. Heavy low lane (`heavy-low2`): p50 2.28 ms (2.33 before), GPU 0.95 ms, away 0.90 ms (1.01); system CPU 63 %. No gain: the hashing was not the cost. Supposed instead: one draw call and uniform upload per structure, 2–3 µs each in the driver.
+- Reverted; patch in `lod-low-cache-logs-2026-11-09.tar.gz` (`body-cache.patch`, against `536ac69ec`).
+
+## Region meshes (owner: "Try region meshes")
+
+- Built: `EquipmentBodyRenderer` merges the bodies whose origins share a 32-block square into one static mesh, positioned from the square's corner, and draws each square in view with one call. A body's triangles (shaded, tinted, atlas UVs) are cached by shape, paint and detail, 32 bodies at most. A frame compares each square's members by identity (origin, shape, paint, light) and merges at most one changed square, one in view first; meanwhile its last mesh stands. Each structure's light is read once a second, the structures spread over the second.
+- Heavy low lane (`heavy-low3`), against the same scene before:
+
+| Build | Mean FPS | p50 ms | p95 ms | GPU p50 / p95 ms | Away p50 ms |
+|---|---|---|---|---|---|
+| normal detail (chunk meshes) | 589.8 | 1.53 | 2.64 | 0.67 / 1.47 | void |
+| low, one mesh per structure | 380.7 | 2.33 | 4.23 | 0.97 / 1.82 | 1.01 |
+| low, region meshes | 578.3 | 1.55 | 2.74 | 0.64 / 1.53 | 0.78 |
+
+- System CPU 41 % (another process at 1.3 cores; normal lane 39 %). The view shot is identical to the per-structure build's: every body is drawn. The 0.8 ms was the per-structure draw calls, as supposed. Low detail now costs what normal detail costs on this GPU, and keeps its 35–80 % fewer body triangles for weak GPUs. Kept. Option A/B of the proposals above is settled by this build.
+- Trade-offs: a light change shows up to about 1 s late; a change to one structure merges its whole square again (one square per frame, not timed); a square is culled as a whole. Normal-detail cooling-tower shells take the same path (about one tower per square: no change expected). Logs: `lod-region-mesh-logs-2026-11-09.tar.gz` (with `region-mesh.patch`, against `6fa179364`); shot `fps-heavy-low3-view.png`. Code guide: `cooling-towers.md` and `equipment.md` describe one mesh per structure; update at the merge.

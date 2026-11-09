@@ -11,7 +11,7 @@ Reduce client rendering cost with tiers that follow an object's size on screen: 
 - [LOD_RENDERING_PLAN.md](LOD_RENDERING_PLAN.md): pixel sizes of each detail by distance, the current renderers and their per-frame work, Stage A and the three body routes B1–B3, verification and the owner decisions.
 - [STAGE_A_REVIEW.md](STAGE_A_REVIEW.md): Stage A as built: rules per renderer, two deviations from the plan, tests run and what is not verified.
 - [FPS_PAIR_REVIEW.md](FPS_PAIR_REVIEW.md): the frame-time pair, baseline against Stage A, with the L2 proposal and the distance or view-depth options.
-- [HEAVY_BENCH_REVIEW.md](HEAVY_BENCH_REVIEW.md): the heavy scene (50 columns, 200 drums) at normal and low detail: bodies are not the load; low detail is slower.
+- [HEAVY_BENCH_REVIEW.md](HEAVY_BENCH_REVIEW.md): the heavy scene (50 columns, 200 drums) at normal and low detail: bodies are not the load; region meshes bring low detail level with normal.
 
 ## History
 
@@ -21,6 +21,7 @@ Reduce client rendering cost with tiers that follow an object's size on screen: 
 - 2026-11-09: owner decision on the tier metric: A, keep straight-line distance (tiers stay put when the player turns; screen-edge objects lose detail up to 1.8x early). No code change.
 - 2026-11-09: heavy bench (owner: "bench harder") with `42dbfa1ba`: 50 columns, 200 drums, 100 gauges on Stage A. Normal detail 1.53 ms (GPU 0.67 ms); low detail 2.33 ms (GPU 0.97 ms). Proposed: L2 = B3 and close L3; `low_polygon_mode` per-structure cost options A or B.
 - 2026-11-09: option B (owner: "optimize it now"): per-structure mesh handles and light in `EquipmentBodyRenderer`. Heavy low lane 2.28 ms against 2.33 ms: no gain, so reverted; patch archived. Likely cost: one draw per structure and no section culling.
+- 2026-11-09: region meshes (owner: "try region meshes"): `EquipmentBodyRenderer` merges the bodies of each 32-block square into one mesh, one draw per square; light read once a second. Heavy low lane 1.55 ms (GPU 0.64 ms) against 2.33 ms; normal detail 1.53 ms. Kept. No test loads the class: compile only.
 
 ## Code areas
 
@@ -29,5 +30,5 @@ Reduce client rendering cost with tiers that follow an object's size on screen: 
 ## Open items
 
 - L2: proposed B3 (no body LOD), closing L3 (HEAVY_BENCH_REVIEW.md).
-- `low_polygon_mode` is slower on the heavy scene; option B (per-structure cost) gave nothing. Open: region-merged low-detail meshes, or leave low detail for weak GPUs only.
+- Code guide at the merge: `cooling-towers.md` and `equipment.md` still describe one body mesh per structure.
 - An in-game look at the switch points (owner-started).
