@@ -62,10 +62,6 @@ final class VertexBufferCache<K> {
         if (replaced != null && replaced.buffer != buffer) replaced.buffer.close();
     }
 
-    int size() {
-        return entries.size();
-    }
-
     void clear() {
         entries.values().forEach(e -> e.buffer.close());
         entries.clear();
