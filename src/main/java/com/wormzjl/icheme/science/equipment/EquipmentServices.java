@@ -293,9 +293,9 @@ public final class EquipmentServices {
                 high = plus(low, new double[] {CASE_ACROSS, CASE_HEIGHT, CASE_ALONG});
                 front = 2;
             }
-            // A turbine's governor enclosure; an electric still's terminal box (batch 2026-11-09-batch-distiller): the
-            // socket on its left side, on the pot's row. A fired still has no data port: only the electric still takes a
-            // controller (owner, 2026-11-09).
+            // A turbine's governor enclosure; an electric still's terminal box (batch 2026-11-09-batch-distiller): its data
+            // socket to the front and its FE socket opposite, to the back, each on a free cell of the right column (owner,
+            // 2026-11-10). A fired still has no data port: only the electric still takes a controller (owner, 2026-11-09).
             case STEAM_TURBINE, BATCH_STILL -> {
                 if (kind == EquipmentShape.Kind.BATCH_STILL && !electricStill(shape)) return empty();
                 if (unit == null || unit.serviceHousing == null)
@@ -303,7 +303,7 @@ public final class EquipmentServices {
                 var b = unit.serviceHousing;
                 low = north.transform().point(Arrays.copyOfRange(b, 0, 3));
                 high = north.transform().point(Arrays.copyOfRange(b, 3, 6));
-                front = 4;
+                front = kind == EquipmentShape.Kind.BATCH_STILL ? 2 : 4;
                 reuse = true;
             }
             default -> {

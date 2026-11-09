@@ -33,7 +33,7 @@ gradle.projectsEvaluated {
             classpath = sources.runtimeClasspath
             mainClass = 'com.wormzjl.icheme.science.equipment.PumpRender'
             workingDir = p.projectDir
-            args 'BATCH_STILL', v.size, '1', '0', new File(p.file(out.getOrElse('tmp/still-sprites')), v.name).absolutePath, 'iso,iso2,front,left,right'
+            args 'BATCH_STILL', v.size, '1', '0', new File(p.file(out.getOrElse('tmp/still-sprites')), v.name).absolutePath, 'iso,iso2,front,left,right,top'
             jvmArgs '-Djava.awt.headless=true', '-Dstill=' + v.still, '-Dcap=200'
         }
         all.configure { dependsOn task }

@@ -132,6 +132,13 @@ distiller in the process simulator.
 - 2026-11-10: owner, in game: a seam under the helmet's collar. The head's facets sag 1.5 to 28 mm under the ellipsoid
   at the collar's rim; the helmet's foot now starts 1 cm under the drawn head (`Mesh.headHeight`). The column stood
   deep enough already. Tests: the eight geometry classes (layout table unchanged).
+- 2026-11-10: owner, in game: no cable could reach the electric still's FE socket (it faced the skirt); every still one
+  block wider, to the owner's sketch: 4 × 3, the condenser in the left column (x 3.5), a free column, the pot on the
+  centre of the third column (x 1.5), the right column free. Charge and drain run straight on the pot's line; the
+  terminal box stands in the right column's centre, data socket to the front and FE to the back
+  (`EquipmentServices`); the 2000 L skirt is held 7 mm round its pot, without a ring, clear of the corner blocks. The
+  setting is 0.35 m round every pot again (the burner's room cap went). New gate: a cable reaches both sockets. Layout
+  table re-recorded (still rows only: boxes 4 wide, every nozzle one block left but the fuel).
 
 ## Open items
 

@@ -3235,34 +3235,25 @@ public final class ProcessUnit {
      * corner to {@code flueTop}. A pot still's helmet, radius {@code helmet}, rises to {@code helmetTop}; its swan neck is
      * {@code arm} in radius. The charge enters at the front at row {@code charge}. A column, radius {@code column}, rises
      * from {@code columnBase} to {@code columnTop}. The condenser, a shell of radius {@code shell}, lies front to back in
-     * the third column ({@link #SPOUT_X}) at height {@code condenser}, beside the column or the helmet (0 without a
-     * condenser): the same top condenser for both (owner, 2026-11-09).
+     * the left column ({@link #SPOUT_X}) at height {@code condenser}, a free column from the pot (0 without a condenser):
+     * the same top condenser for both (owner, 2026-11-09).
      */
     record StillPlan(BatchStillOptions options, double d, double w, double grate, double bottom, double setting, double cylinder, double apex,
                      double helmet, double helmetTop, double flue, double flueTop, double arm, double charge,
                      double column, double columnBase, double columnTop, double shell, double condenser) {
-        /** The pot's axis in the frame, on the setting's two cells; the third column's line, where the condenser, the spout and the vent stand. */
-        static final double POT_X = 1, POT_Z = 1.5, SPOUT_X = 2.5;
+        /**
+         * The pot's axis in the frame, on the centre of the second of four columns from the right seen from the front, the
+         * right column free for the terminal box or the burner's line, a free column between the pot and the condenser
+         * (owner, 2026-11-10: every still one block wider); the left column's line, where the condenser, the spout and the
+         * vent stand.
+         */
+        static final double POT_X = 1.5, POT_Z = 1.5, SPOUT_X = 3.5;
         /** The line (frame z) of the condenser's cold end: the reflux pot, the valve, the sight glass and the spout's drop. */
         static final double COLD_END = .75;
-        /**
-         * The room a fired still's setting leaves on the right face (frame -x), m: the burner's fuel nozzle, a flange and
-         * hub at the largest fuel line ({@link BatchStillDesign#FUEL_BORE}) and its port plate (owner, 2026-11-09: a small
-         * connector at ground level; the setting may be smaller).
-         */
-        static final double FUEL_ROOM = fuelNeck() + .01;
-
-        /** The fuel nozzle's least neck, m: its flange and hub at the largest fuel line and 0.03 m each side ({@link ProcessUnit#end}'s rule). */
-        static double fuelNeck() {
-            double od = PipeSizes.outside(BatchStillDesign.FUEL_BORE);
-            return .03 + PipeSizes.hub(od) + PipeSizes.flangeThickness(od) + .03;
-        }
-
         static StillPlan of(EquipmentShape shape) {
             var o = shape.still();
-            // The setting: 0.35 m of brick round the pot, at most what leaves the burner its room on the right face (from
-            // 1000 L up, 0.30 to 0.16 m round the pot).
-            double d = BatchStillDesign.potDiameter(shape.diameter()), w = Math.min(d + .7, 2 * (POT_X - FUEL_ROOM));
+            // The setting: 0.35 m of brick round the pot; the right column leaves the burner's line at least 0.46 m.
+            double d = BatchStillDesign.potDiameter(shape.diameter()), w = d + .7;
             double bottom = .3 + .6 * d, setting = bottom + .3 * d, cylinder = bottom + .85 * d, apex = cylinder + d / 4;
             // The charge's row: a pipe's largest neck, 0.41 m round its centre line, clears the setting's coping or the skirt.
             double helmet = .22 * d, charge = rowAtLeast(setting + PipeSizes.MAX_OUTSIDE / 2 + .02);
@@ -3318,7 +3309,8 @@ public final class ProcessUnit {
      * fuel), or on a steel skirt with a terminal box (electric); a helmet, or a copper column with a porthole per stage;
      * the copper condenser overhead (a column's over a reflux pot and a hand-wheel valve), or a swan neck to a vapour
      * flange where it has no condenser of its own. Seen from the front (owner, 2026-11-09): its charge enters at the
-     * front, its drain leaves at the back, a liquid-fired still's fuel on the right; the condenser on the left, its
+     * front, its drain leaves at the back, a liquid-fired still's fuel on the right; the pot one column in from the right,
+     * a free column, the condenser on the left (owner, 2026-11-10: one block wider), its
      * distillate down to a sight glass and the spout at the front, its vent up. The firing door, the fire
      * bed, the flue top, the burner, the lamp, the spout and the reflux valve are named ({@link #marks}).
      */
@@ -3331,9 +3323,8 @@ public final class ProcessUnit {
         // The pot: a shell on a flat bottom over the fire, its head, a seam at the tangent line, in its tier's finish.
         var pot = p.finish();
         mesh.prism(up, r, p.bottom(), p.cylinder(), n, pot);
-        // The pot's node (W3): its lowest inside point, on its flat bottom, a centimetre inside its block (the axis runs on
-        // block edges, which a mirrored heading would round into the next block over).
-        fluidPoint = new double[]{x + .01, p.bottom() + .01, z + .01};
+        // The pot's node (W3): its lowest inside point, on its flat bottom, on its axis at a block's centre.
+        fluidPoint = new double[]{x, p.bottom() + .01, z};
         mesh.annulus(up, 0, r, p.bottom(), n, -1, pot);
         mesh.head(up, r, p.cylinder(), d / 4, n, pot);
         mesh.hoop(up, r, r + .015, p.cylinder() - .03, p.cylinder(), n, pot);
@@ -3380,8 +3371,8 @@ public final class ProcessUnit {
         mark("fire_bed", new double[]{x - .3 * p.w(), g, z - .3 * p.w()}, new double[]{x + .3 * p.w(), g + .06, z + .3 * p.w()});
         if (p.options().heater() == BatchStillOptions.Heater.LIQUID) {
             // The burner (owner, 2026-11-09: it faces right with the fuel connection, a small pipe connector is enough, at
-            // ground level, the setting smaller): an iron port plate on the right wall in the middle row, the fuel nozzle
-            // on its face; the setting leaves it StillPlan.FUEL_ROOM.
+            // ground level): an iron port plate on the right wall in the middle row, the fuel nozzle on its face, its neck
+            // across the right column to the frame's face.
             double yn = .5;
             box(new double[]{x0 - .01, yn - .06, z - .06}, new double[]{x0, yn + .06, z + .06}, ALL_FACES & ~2, Material.IRON, false);
             mark("burner", new double[]{x0, yn - .06, z - .06}, new double[]{x0 + .15, yn + .06, z + .06});
@@ -3390,60 +3381,55 @@ public final class ProcessUnit {
     }
 
     /**
-     * An electric still's steel skirt round the pot's heating plate, with louvres, and its terminal box on a stand on the
-     * right side seen from the front, in the middle column, clear of the charge line and the front (owner, 2026-11-09):
-     * its face, pilot lamp and data socket outward, a conduit straight into the skirt. The box is 0.2 m deep, so it
-     * clears the 2000 L skirt at 0.275 m from the face.
+     * An electric still's steel skirt round the pot's heating plate, with louvres, and its terminal box on a stand in the
+     * right column's centre seen from the front, on the middle row (owner, 2026-11-10: the FE socket faced the skirt, no
+     * cable could reach it): its pilot lamp outward, its data socket to the front and its FE socket to the back, each on
+     * a free cell of the right column, a conduit straight into the skirt.
      */
     private void stillSkirt(StillPlan p) {
-        double x = StillPlan.POT_X, z = StillPlan.POT_Z, rs = p.d() / 2 + .04, top = p.setting();
+        // The skirt 4 cm round the pot on a 3 cm base ring, both within 0.69 m of the axis, clear of the corner blocks
+        // round the pot's block (0.707 m): the terminal box's sockets open onto two of them (owner, 2026-11-10). Only the
+        // 2000 L skirt is held, 7 mm round its pot, without a ring.
+        double clear = .69, x = StillPlan.POT_X, z = StillPlan.POT_Z, rs = Math.min(p.d() / 2 + .04, clear), ring = Math.min(.03, clear - rs), top = p.setting();
         int n = sides(2 * rs);
         var up = Frame.of(new double[]{x, 0, z}, 1, 1);
         mesh.prism(up, rs, 0, top, n, Material.STEELWORK);
         mesh.annulus(up, p.d() / 2, rs, top, n, 1, Material.STEELWORK);
-        mesh.hoop(up, rs, rs + .03, 0, .05, n, Material.STEELWORK);
+        if (ring > 0) mesh.hoop(up, rs, rs + ring, 0, .05, n, Material.STEELWORK);
         for (int k = 0; k < 4; k++) {
             double t = Math.PI / 4 + k * Math.PI / 2;
             mesh.block(Access.around(x, z, rs + .002, t, top / 2), scale(outward(t), .003), new double[]{0, .25 * top, 0}, scale(tangential(t), .04), Material.OPENING);
         }
         solids.add(Solid.rod(new double[]{x, 0, z}, 1, 0, top, rs, 0));
         round(x, z, 0, top, rs, 1);
-        double[] lo = {.05, .2, z - .14}, hi = {.25, .8, z + .14};
-        box(new double[]{.09, 0, z - .08}, new double[]{.21, .2, z + .08}, ALL_FACES & ~4, Material.STEELWORK, true);
+        double[] lo = {.38, .2, z - .18}, hi = {.62, .8, z + .18};
+        box(new double[]{.44, 0, z - .1}, new double[]{.56, .2, z + .1}, ALL_FACES & ~4, Material.STEELWORK, true);
         box(lo, hi, ALL_FACES, Material.MACHINE, true);
-        mesh.disc(new Frame(new double[]{lo[0] - .002, .7, z + .08}, new double[]{-1, 0, 0}, new double[]{0, 0, 1}), .025, 0, 8, 1, Material.GLASS);
-        mark("lamp", new double[]{lo[0] - .01, .675, z + .055}, new double[]{lo[0], .725, z + .105});
+        mesh.disc(new Frame(new double[]{lo[0] - .002, .7, z}, new double[]{-1, 0, 0}, new double[]{0, 0, 1}), .025, 0, 8, 1, Material.GLASS);
+        mark("lamp", new double[]{lo[0] - .01, .675, z - .025}, new double[]{lo[0], .725, z + .025});
         line(.02, 6, Material.PIPE, new double[]{hi[0], .7, z}, new double[]{x - rs + .01, .7, z});
         serviceHousing = new double[]{lo[0], lo[1], lo[2], hi[0], hi[1], hi[2]};
     }
 
     /**
-     * The charge line in at the front, in the right-hand column seen from the front (owner, 2026-11-09), on its row: over to
-     * the pot's line just behind its flange, then straight back along the pot's front meridian, into the shell or the head
-     * square to its wall where its row meets them, else down onto the head at 0.6 of its radius (owner, 2026-11-09: the
-     * oblique entries looked wrong).
+     * The charge line in at the front on the pot's line (owner, 2026-11-10: the pot on a block's centre), on its row: straight
+     * back along the pot's front meridian, into the shell or the head square to its wall where its row meets them, else
+     * down onto the head at 0.6 of its radius (owner, 2026-11-09: the oblique entries looked wrong). Its end lies 5 cm in,
+     * past the faceted wall.
      */
     private void stillCharge(StillPlan p) {
-        double x = StillPlan.POT_X, z = StillPlan.POT_Z, y = p.charge(), r = p.d() / 2, rq = p.radiusAt(y), pr = .03 + .01 * p.d(), xc = .5;
-        double[] base = {xc, y, .3};
-        // The jog 0.15 m behind the flange's base, in front of every pot (its front is 0.8 m in at 2000 L).
-        double zj = .45;
-        if (rq > 0) pipe(pr, p.line(), true, base, new double[]{xc, y, zj}, new double[]{x, y, zj}, new double[]{x, y, z - rq + .02});
-        else pipe(pr, p.line(), true, base, new double[]{xc, y, zj}, new double[]{x, y, zj}, new double[]{x, y, z - .6 * r},
-                new double[]{x, p.cylinder() + .8 * p.d() / 4 - .01, z - .6 * r});
+        double x = StillPlan.POT_X, z = StillPlan.POT_Z, y = p.charge(), r = p.d() / 2, rq = p.radiusAt(y), pr = .03 + .01 * p.d();
+        double[] base = {x, y, .3};
+        if (rq > 0) pipe(pr, p.line(), true, base, new double[]{x, y, z - rq + .05});
+        else pipe(pr, p.line(), true, base, new double[]{x, y, z - .6 * r}, new double[]{x, p.cylinder() + .8 * p.d() / 4 - .01, z - .6 * r});
         nozzles.add(end(Role.CHARGE, base, 2, -1, 2 * pr));
     }
 
-    /**
-     * The drain from the pot's bottom, down inside the setting or skirt, back under the pot and out behind it, then over to
-     * the flange at the back, in the right-hand column, low. The jog runs behind the skirt (the 2000 L skirt reaches 2.17
-     * m there), clear of the electric still's terminal box on the right face.
-     */
+    /** The drain from the pot's bottom, down inside the setting or skirt, then straight back on the pot's line to the flange at the back, low. */
     private void stillDrain(StillPlan p) {
-        double x = StillPlan.POT_X, z = StillPlan.POT_Z, r = p.d() / 2, pr = .03 + .01 * p.d(), zj = 2.3;
-        double[] base = {.5, .5, 2.7};
-        pipe(pr, p.line(), true, new double[]{x - .4 * r, p.bottom() + .01, z + .4 * r}, new double[]{x - .4 * r, .5, z + .4 * r},
-                new double[]{x - .4 * r, .5, zj}, new double[]{.5, .5, zj}, base);
+        double x = StillPlan.POT_X, z = StillPlan.POT_Z, r = p.d() / 2, pr = .03 + .01 * p.d();
+        double[] base = {x, .5, 2.7};
+        pipe(pr, p.line(), true, new double[]{x, p.bottom() + .01, z + .4 * r}, new double[]{x, .5, z + .4 * r}, base);
         nozzles.add(end(Role.DRAIN, base, 2, 1, 2 * pr));
     }
 
@@ -3467,7 +3453,7 @@ public final class ProcessUnit {
 
     /**
      * The condenser overhead, the same for a pot still and a column (owner, 2026-11-09): a shell in the still's finish lying
-     * front to back on the left seen from the front (the third column), the gooseneck from the helmet or the column's top
+     * front to back on the left seen from the front (the left column), the gooseneck from the helmet or the column's top
      * over and down into its back half; cooling water in at its front end and out at its back end (against the vapour);
      * the vent from its cold front end straight up. A column's condensate falls into the reflux pot (a gauge glass on its
      * front) under the cold end, and the hand-wheel valve under the pot sends the reflux back to the column's top; a pot
@@ -3549,13 +3535,13 @@ public final class ProcessUnit {
         }
     }
 
-    /** A pot still without a condenser: its swan neck over to the vapour flange on the right, on a post. */
+    /** A pot still without a condenser: its swan neck over to the vapour flange on the left face, on a post in the left column. */
     private void stillVapour(StillPlan p) {
         double x = StillPlan.POT_X, z = StillPlan.POT_Z, ra = p.arm(), yv = StillPlan.rowAtLeast(p.helmetTop() + .1);
         line(ra, 12, p.line(), new double[]{x, p.helmetTop() - .02, z}, new double[]{x, yv + .15, z}, new double[]{x + .35, yv + .17, z},
-                new double[]{2.7, yv, z});
+                new double[]{StillPlan.SPOUT_X + .2, yv, z});
         post(StillPlan.SPOUT_X, z, 0, yv - ra - .01, .06, true);
-        nozzles.add(end(Role.VAPOUR_OUTLET, new double[]{2.7, yv, z}, 0, 1, 2 * ra));
+        nozzles.add(end(Role.VAPOUR_OUTLET, new double[]{StillPlan.SPOUT_X + .2, yv, z}, 0, 1, 2 * ra));
     }
 
     /** A still's column on the pot, a porthole on the front of each stage; its condenser is {@link #stillCondenser}'s. */

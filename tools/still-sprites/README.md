@@ -35,7 +35,7 @@ heater, a still with no condenser), with the mod's sprites, into an indexed `tmp
 ```
 
 The init script compiles `tools/pump-sprites/probes/PumpRender.java` and runs it with `-Dstill=HEATER,CONDENSER,STAGES`
-(the still's options) and the views iso, iso2, front, left and right. It changes no source set of the build.
+(the still's options) and the views iso, iso2, front, left, right and top. It changes no source set of the build.
 
 ## Entry points
 
@@ -48,3 +48,4 @@ The init script compiles `tools/pump-sprites/probes/PumpRender.java` and runs it
   condenser for every still); the lines got their own `COPPER_LINE` finish, so the sheet's seams stay on the vessels.
   Owner, the same day: a finish per heater tier (copper, carbon steel, stainless) for every process vessel and line.
   Then a right view, and an electric column still (owner: drawings with columns).
+  2026-11-10: a top view, to check the four-wide layout against the owner's sketch.

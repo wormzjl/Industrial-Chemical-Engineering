@@ -30,12 +30,12 @@ The owner's items on the drawings (run `tmp/equipment-drawings/20261109-135451-f
   has none (`EquipmentServices`); its firing and reflux are set by hand. Found in game: `ControlHosts` gave every
   heat registration an actuator port. Now a shell with no data socket gets none; an older port goes at its next bind.
 - Owner, then: charge on the front, fuel on the right, drain on the back, condenser on the left (seen from the firing
-  door; the right is −x). The condenser lies along z at x = 2.5. The burner is the fuel connection, on the right face's
-  middle column at ground level (owner: a small pipe connector is enough): at most 50 mm bore (`NozzleBore`); the
-  setting is at most 1.686 m wide to leave it 0.157 m (owner), the flue shrinks to clear the pot. No gun at the door. The electric still's terminal box moved from
-  the front corner to the right face's middle column, gland outward (owner: a bad location). The charge line jogs to
-  the pot's line behind its flange and enters square to the wall (owner: oblique entries looked wrong); the drain jogs
-  behind the pot.
+  door; the right is −x). The burner is the fuel connection on the right wall at ground level, at most 50 mm
+  (`NozzleBore`; owner: a small pipe connector is enough). No gun at the door. Entries square to the wall (owner).
+- Owner, in game (2026-11-10): the electric still's FE socket faced the skirt; every still one block wider (owner's
+  sketch): 4 × 3, the condenser in the left column, a free column, the pot on the third column's centre, the right
+  column free. Charge and drain run straight on the pot's line; the terminal box stands in the right column's centre,
+  data socket to the front, FE to the back; the 2000 L skirt is held 7 mm round its pot so both open on free blocks.
 
 ## 4. Pot volume against the drawing
 

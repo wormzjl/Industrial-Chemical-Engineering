@@ -82,9 +82,10 @@ class EquipmentServicesTest {
     }
 
     /**
-     * A batch still's data gland sits on its junction box (batch 2026-11-09-batch-distiller, W2): a fired still's on the
-     * brick setting's left side, an electric one's on its terminal box, on the centre of the bottom block's face it opens
-     * to, inside the frame, its box behind it and inside the frame, at every pot, option and heading.
+     * A batch still's data gland sits on its terminal box (batch 2026-11-09-batch-distiller, W2), on the centre of the
+     * bottom block's face it opens to, inside the frame, its box behind it and inside the frame, at every pot, option and
+     * heading; only the electric still has one. Its data and FE sockets each face a cell outside the shell, where a cable
+     * can reach them (owner, 2026-11-10: the FE socket faced the skirt).
      */
     @Test
     void aStillsDataGlandSitsCentredOnItsBox() {
@@ -116,6 +117,13 @@ class EquipmentServicesTest {
                 for (var c : services.enclosures())
                     for (int a = 0; a < 3; a++)
                         assertTrue(c.low()[a] >= 0 && c.high()[a] <= size[a], shape + ": its box inside the frame");
+                var shell = new HashSet<>(ShapeRasterizer.layout(shape).shell());
+                for (var socket : List.of(data, services.power())) {
+                    var m = LineGeometry.step(socket.face());
+                    var cell = new ShapeRasterizer.Cell((int) Math.floor(socket.x() - .01 * m[0]) + (int) m[0],
+                            (int) Math.floor(socket.y() - .01 * m[1]) + (int) m[1], (int) Math.floor(socket.z() - .01 * m[2]) + (int) m[2]);
+                    assertFalse(shell.contains(cell), shape + ": a cable reaches its socket on face " + socket.face());
+                }
             }
     }
 

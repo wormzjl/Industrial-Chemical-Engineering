@@ -18,8 +18,10 @@ the wall to the setting's top, π d · 0.3 d). The column diameter is 0.248 d.
 | 1000 | 1.09 | 2.06 | 270 | 2.5 | 3x4x3 | 3x4x3 / 3x4x3 | 3x6x3 | 3x7x3 |
 | 2000 | 1.37 | 3.25 | 340 | 2.5 | 3x5x3 | 3x5x3 / 3x4x3 | 3x6x3 | 3x8x3 |
 
-Box x × y × z, frame y up, front −z. The pot axis is at (1, 1.5); the worm tub's at (2.5, 1.5). The setting or skirt
-covers the two left columns.
+Box x × y × z, frame y up, front −z (phase 1 sizes; every still is now one block wider in x, see Parts). The pot axis is
+at (1.5, 1.5), on the second of four columns from the right seen from the front; the condenser's line is x 3.5. The
+right column is free for the terminal box or the burner's line, and one free column lies between the pot and the
+condenser (owner, 2026-11-10).
 
 ## Options (shape fields 11)
 
@@ -31,11 +33,12 @@ repair. A column without the built-in condenser loses the column.
 
 ## Parts
 
-Phase 1 as built. The owner's feedback changed it (OWNER_FEEDBACK_REVIEW.md): one top condenser along z at x 2.5 on two
-posts for every condenser still, no worm tub and no `WOOD`, baked sprites in each heater tier's finish, the fuel on the
-right face with the liquid still's burner (a small fuel connection through the right wall at ground level), the
-electric still's terminal box on the right face, and no data port on a fired still. The nozzle table
-below is the current one.
+Phase 1 as built. The owner's feedback changed it (OWNER_FEEDBACK_REVIEW.md): every still four blocks wide, one top
+condenser along z at x 3.5 on two H-frames for every condenser still, no worm tub and no `WOOD`, baked sprites in each
+heater tier's finish, the fuel on the right face with the liquid still's burner (a small fuel connection through the
+right wall at ground level, its neck across the right column), the electric still's terminal box in the right column's
+centre, the charge and drain straight on the pot's line, and no data port on a fired still. The nozzle table below is
+the current one.
 
 - Every still: a copper pot (shell, dished bottom, head, seam hoop) and its charge and drain lines. The worm option adds
   the helmet with a sight glass and the swan neck.
@@ -65,25 +68,25 @@ below is the current one.
 
 | Role | When | Face | Axis | Pipe block |
 |---|---|---|---|---|
-| CHARGE | always | (0.5, row, 0) | z− | (0, row−.5, −1) |
-| DRAIN | always | (0.5, 0.5, 3) | z+ | (0, 0, 3) |
+| CHARGE | always | (1.5, row, 0) | z− | (1, row−.5, −1) |
+| DRAIN | always | (1.5, 0.5, 3) | z+ | (1, 0, 3) |
 | FUEL | LIQUID | (0, 0.5, 1.5) | x− | (−1, 0, 1) |
-| DISTILLATE | condenser | (2.5, 0.5, 0) | z− | (2, 0, −1) |
-| WATER_INLET | condenser | (2.5, yk, 0) | z− | (2, yk−.5, −1) |
-| WATER_OUTLET | condenser | (2.5, yk, 3) | z+ | (2, yk−.5, 3) |
-| VENT | condenser | (2.5, ⌈yk + 1.47⌉, 0.5) | y+ | (2, ⌈yk + 1.47⌉, 0) |
-| VAPOUR_OUTLET | no condenser | (3, yv, 1.5) | x+ | (3, yv−.5, 1) |
+| DISTILLATE | condenser | (3.5, 0.5, 0) | z− | (3, 0, −1) |
+| WATER_INLET | condenser | (3.5, yk, 0) | z− | (3, yk−.5, −1) |
+| WATER_OUTLET | condenser | (3.5, yk, 3) | z+ | (3, yk−.5, 3) |
+| VENT | condenser | (3.5, ⌈yk + 1.47⌉, 0.5) | y+ | (3, ⌈yk + 1.47⌉, 0) |
+| VAPOUR_OUTLET | no condenser | (4, yv, 1.5) | x+ | (4, yv−.5, 1) |
 
 - The charge row is the lowest cell centre at least 0.42 m over the setting or skirt top. A pipe's largest neck then
   clears the coping.
 - yk, the condenser row, is at least 0.5 m over the column or helmet top and at least 2.5 m. FUEL is the burner, at most
-  a 50 mm line; the setting, at most 1.686 m wide, leaves its neck 0.157 m.
+  a 50 mm line; its neck crosses the right column from the setting's wall (0.46 m at 2000 L, 0.9 m at 100 L).
 - yv is the first cell centre over the helmet top.
 - Each face is on its block face and on its pipe block's centre line. The pipe blocks are at least two blocks apart, and
   every neck clears the unit at a pipe's largest.
-- Data gland (`EquipmentServices`, through `serviceHousing`): the electric still's only, on its terminal box at the right
-  face (−x), y 0.5, z 1.5, facing out; its FE gland on the box's opposite face. A fired still has none.
-- No FE socket and no terminal yet (phase 2).
+- Data gland (`EquipmentServices`, through `serviceHousing`): the electric still's only, on its terminal box in the right
+  column's centre, x 0.5, y 0.5, facing the front; its FE gland on the box's back face. Each opens on a cell outside the
+  shell (gate: `aStillsDataGlandSitsCentredOnItsBox`). A fired still has none.
 - Checked before hand-back on the gates' own helpers (`tmp/still-structure/probe`, javac only, 176 shapes × 4 headings):
   free block, centre line, pipes apart, flanges, frame fill, neck room, faces, gland and marks.
 
