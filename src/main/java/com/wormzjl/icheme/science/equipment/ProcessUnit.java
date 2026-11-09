@@ -3259,8 +3259,9 @@ public final class ProcessUnit {
             double helmet = .22 * d, charge = rowAtLeast(setting + PipeSizes.MAX_OUTSIDE / 2 + .02);
             double column = .124 * d, columnBase = apex - .03, columnTop = columnBase + .3 * o.stages() + .2, shell = .1 + .05 * d;
             double helmetTop = apex + .3 * d + helmet / 2;
-            // At least two rows over the spout, so the water inlet's pipe block clears the spout's on the front face.
-            double condenser = o.condenses() ? Math.max(rowAtLeast((o.column() ? columnTop : helmetTop) + shell + .5), 2.5) : 0;
+            // At least three rows over the spout: the water inlet's pipe block, a row under the condenser, keeps a free block
+            // from the spout's on the front face.
+            double condenser = o.condenses() ? Math.max(rowAtLeast((o.column() ? columnTop : helmetTop) + shell + .5), 3.5) : 0;
             // The flue in the setting's back right corner, its inner corner 0.03 m clear of the pot's wall.
             double flue = Math.min(.15 + .2 * d, w / 2 - (d / 2 + .03) / Math.sqrt(2));
             return new StillPlan(o, d, w, .1 + .2 * d, bottom, setting, cylinder, apex, helmet, helmetTop, flue,
@@ -3382,33 +3383,36 @@ public final class ProcessUnit {
     }
 
     /**
-     * An electric still's steel skirt round the pot's heating plate, with louvres, and its terminal box on a stand in the
-     * right column's centre seen from the front, on the middle row (owner, 2026-11-10: the FE socket faced the skirt, no
-     * cable could reach it): its pilot lamp outward, its data socket to the front and its FE socket to the back, each on
-     * a free cell of the right column, a conduit straight into the skirt.
+     * An electric still's skirt as a drum's (owner, 2026-11-10: a skirt with heating elements, as a drum's skirt): the
+     * steel plate flush with the pot's shell from grade to its flat bottom, the heating elements inside under it, a band at
+     * the junction, two vents under the band on the left, the base ring (no anchor chairs under 1.5 m, as a drum's). The
+     * ring stays within 0.69 m of the axis, clear of the corner blocks round the pot's block (0.707 m), where the terminal
+     * box's sockets open: the 1500 and 2000 L rings are narrower. The terminal box stands on a stand in
+     * the right column's centre seen from the front, on the middle row (owner, 2026-11-10: the FE socket faced the skirt,
+     * no cable could reach it): its pilot lamp outward, its data socket to the front and its FE socket to the back, a
+     * conduit straight into the skirt.
      */
     private void stillSkirt(StillPlan p) {
-        // The skirt 4 cm round the pot on a 3 cm base ring, both within 0.69 m of the axis, clear of the corner blocks
-        // round the pot's block (0.707 m): the terminal box's sockets open onto two of them (owner, 2026-11-10). Only the
-        // 2000 L skirt is held, 7 mm round its pot, without a ring.
-        double clear = .69, x = StillPlan.POT_X, z = StillPlan.POT_Z, rs = Math.min(p.d() / 2 + .04, clear), ring = Math.min(.03, clear - rs), top = p.setting();
-        int n = sides(2 * rs);
-        var up = Frame.of(new double[]{x, 0, z}, 1, 1);
-        mesh.prism(up, rs, 0, top, n, Material.STEELWORK);
-        mesh.annulus(up, p.d() / 2, rs, top, n, 1, Material.STEELWORK);
-        if (ring > 0) mesh.hoop(up, rs, rs + ring, 0, .05, n, Material.STEELWORK);
-        for (int k = 0; k < 4; k++) {
-            double t = Math.PI / 4 + k * Math.PI / 2;
-            mesh.block(Access.around(x, z, rs + .002, t, top / 2), scale(outward(t), .003), new double[]{0, .25 * top, 0}, scale(tangential(t), .04), Material.OPENING);
+        double x = StillPlan.POT_X, z = StillPlan.POT_Z, r = p.d() / 2, top = p.bottom();
+        int n = sides(p.d());
+        skirt(x, z, r, top, n);
+        baseRing(x, z, r, p.d(), n, .69);
+        mesh.hoop(Frame.of(new double[]{x, 0, z}, 1, 1), r, r + .02, top - .1, top, n, Material.FLANGE);
+        for (double t : new double[]{-Math.PI / 4, Math.PI / 4}) {
+            var vent = new Frame(Access.around(x, z, r, t, top - .25), outward(t), new double[]{0, 1, 0});
+            mesh.prism(vent, .05, -.03, .05, 8, Material.SUPPORT);
+            mesh.annulus(vent, .035, .05, .05, 8, 1, Material.SUPPORT);
+            mesh.bore(vent, .035, -.03, .05, 8, Material.SUPPORT);
+            mesh.annulus(vent, 0, .035, -.03, 8, 1, Material.OPENING);
         }
-        solids.add(Solid.rod(new double[]{x, 0, z}, 1, 0, top, rs, 0));
-        round(x, z, 0, top, rs, 1);
+        round(x, z, 0, top, r, 1);
         double[] lo = {.38, .2, z - .18}, hi = {.62, .8, z + .18};
         box(new double[]{.44, 0, z - .1}, new double[]{.56, .2, z + .1}, ALL_FACES & ~4, Material.STEELWORK, true);
         box(lo, hi, ALL_FACES, Material.MACHINE, true);
         mesh.disc(new Frame(new double[]{lo[0] - .002, .7, z}, new double[]{-1, 0, 0}, new double[]{0, 0, 1}), .025, 0, 8, 1, Material.GLASS);
         mark("lamp", new double[]{lo[0] - .01, .675, z - .025}, new double[]{lo[0], .725, z + .025});
-        line(.02, 6, Material.PIPE, new double[]{hi[0], .7, z}, new double[]{x - rs + .01, .7, z});
+        double yc = Math.min(.7, top - .15);
+        line(.02, 6, Material.PIPE, new double[]{hi[0], yc, z}, new double[]{x - r + .01, yc, z});
         serviceHousing = new double[]{lo[0], lo[1], lo[2], hi[0], hi[1], hi[2]};
     }
 
@@ -3472,20 +3476,24 @@ public final class ProcessUnit {
         mesh.prism(along, rk, sz0, sz1, sides(2 * rk), shell);
         mesh.cylinder(along, .92 * rk, ch0, sz0, 12, shell);
         mesh.cylinder(along, .92 * rk, sz1, ch1, 12, shell);
-        for (double at : new double[]{sz0, sz1}) mesh.hoop(along, rk, rk + .025, at - .02, at + .02, 12, shell);
+        // A tube sheet and flange at each end, closing the shell round its channel (owner, 2026-11-10: the open ring
+        // between shell and channel showed through).
+        for (double at : new double[]{sz0, sz1}) mesh.ring(along, .9 * rk, rk + .025, at - .02, at + .02, 12, 3, shell);
         solids.add(Solid.rod(new double[]{cx, yk, 0}, 2, ch0, ch1, rk + .025, 0));
         round(new double[]{cx, yk, 0}, 2, sz0, sz1, rk);
         double yg = yk + rk + .25;
         line(ra, 12, p.line(), new double[]{x, neck - .02, z}, new double[]{x, yg, z}, new double[]{cx, yg, z}, new double[]{cx, yk + rk - .02, z});
-        // Cooling water in at the cold front end, out at the back end.
-        double wr = .03 + .01 * d;
-        pipe(wr, Material.PIPE, true, new double[]{cx, yk, ch0}, new double[]{cx, yk, .3});
-        nozzles.add(end(Role.WATER_INLET, new double[]{cx, yk, .3}, 2, -1, 2 * wr));
+        // Cooling water in at the cold front end, from under its channel a row under the condenser (a free block from the
+        // vent's flange a row over it), out at the back end.
+        double wr = .03 + .01 * d, yw = yk - 1;
+        pipe(wr, Material.PIPE, true, new double[]{cx, yk - .9 * rk, .5}, new double[]{cx, yw, .5}, new double[]{cx, yw, .3});
+        nozzles.add(end(Role.WATER_INLET, new double[]{cx, yw, .3}, 2, -1, 2 * wr));
         pipe(wr, Material.PIPE, true, new double[]{cx, yk, ch1}, new double[]{cx, yk, 2.7});
         nozzles.add(end(Role.WATER_OUTLET, new double[]{cx, yk, 2.7}, 2, 1, 2 * wr));
-        // The vent from the cold end's channel straight up on its block's centre line, its flange on top of the row above.
-        double vr = .015 + .005 * d, lr = .015 + .005 * d, zv = .5, yt = yk + 1.2;
-        pipe(vr, p.line(), true, new double[]{cx, yk + rk - .02, zv}, new double[]{cx, yt, zv});
+        // The vent from the cold end's channel straight up on its block's centre line, its flange on the condenser's row's
+        // top (owner, 2026-11-10: the riser to the row above stuck out).
+        double vr = .015 + .005 * d, lr = .015 + .005 * d, zv = .5, yt = yk + .2;
+        pipe(vr, p.line(), true, new double[]{cx, yk + .9 * rk - .02, zv}, new double[]{cx, yt, zv});
         nozzles.add(end(Role.VENT, new double[]{cx, yt, zv}, 1, 1, 2 * vr));
         double rs = .02 + .01 * d, rg = 1.8 * rs, rp = .07 + .04 * d, yr1 = yk - rk - .1, yr0 = yr1 - .3;
         if (column) {
@@ -4350,7 +4358,15 @@ public final class ProcessUnit {
      * in an opening reaching down to them; an open skirt's floor plate inside. Openings as {@link #skirt}'s.
      */
     void baseRing(double x, double z, double r, double diameter, int n, double[]... openings) {
-        double plate = EquipmentShape.PLATE, ring = EquipmentShape.BASE_RING, chair = EquipmentShape.CHAIR;
+        baseRing(x, z, r, diameter, n, Double.POSITIVE_INFINITY, openings);
+    }
+
+    /**
+     * {@link #baseRing(double, double, double, double, int, double[]...)} with its ring within {@code reach} of the axis (a
+     * batch still's skirt, clear of its corner blocks; a still's pot is under 1.5 m, so it has no chairs).
+     */
+    void baseRing(double x, double z, double r, double diameter, int n, double reach, double[]... openings) {
+        double plate = EquipmentShape.PLATE, ring = Math.min(EquipmentShape.BASE_RING, reach - r), chair = EquipmentShape.CHAIR;
         mesh.ring(Frame.of(new double[]{x, 0, z}, 1, 1), openings.length > 0 ? 0 : r - EquipmentShape.SKIRT_WALL, r + ring, 0, plate, n, 2, Material.SUPPORT);
         int chairs = EquipmentShape.anchorChairs(diameter);
         for (int k = 0; k < chairs; k++) {

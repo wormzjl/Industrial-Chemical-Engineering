@@ -48,7 +48,8 @@ public class PumpRender {
         var views = args.length > 5 ? args[5].split(",") : new String[]{"iso", "front", "right", "top"};
         var shape = switch (kind) {
             case COLUMN -> EquipmentShape.column(size, ColumnTrays.simple(length, Math.max(1, length / 2)), Heading.NORTH, support);
-            case DRUM -> EquipmentShape.drum(size, length, EquipmentShape.Orientation.HORIZONTAL, Heading.NORTH, support);
+            // -Dorientation=VERTICAL: a standing drum (on its skirt when support > 0).
+            case DRUM -> EquipmentShape.drum(size, length, EquipmentShape.Orientation.valueOf(System.getProperty("orientation", "HORIZONTAL")), Heading.NORTH, support);
             case TANK, SPHERE -> EquipmentShape.designed(kind,size,length,Heading.NORTH,support,ProcessUnit.Bank.ONE);
             default -> EquipmentShape.unit(kind, size, length, Heading.NORTH, support);
         };

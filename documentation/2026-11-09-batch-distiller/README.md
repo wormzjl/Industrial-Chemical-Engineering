@@ -144,6 +144,12 @@ distiller in the process simulator.
 - 2026-11-10: equipment drawings regenerated at 7d44669d6 (`update.py --only BATCH_STILL --no-raster`, run
   `tmp/equipment-drawings/20261109-164659-d37714/`, 6 sheets, 5 variants): PDF only, no Poppler on this machine, so the
   sheets are not rasterized; the still renders (`tools/still-sprites`, with a top view) checked the same geometry.
+- 2026-11-10: owner, in game: the electric still's skirt is a drum's (`ProcessUnit.skirt`, `baseRing` with a reach:
+  plate flush with the pot to its bottom, junction band, two vents, base ring within 0.69 m of the axis); the
+  condenser's shell ends are closed by a tube sheet and flange (the open ring showed through); the vent's flange sits
+  on the condenser row's top (it rose a row higher), so the water inlet enters from under the front channel a row
+  lower, and the condenser stands at least 3.5 m up (100 to 300 L pot stills one row higher). Owner: merge when fixed.
+  Tests: the eight geometry classes; layout table re-recorded (still rows).
 
 ## Open items
 

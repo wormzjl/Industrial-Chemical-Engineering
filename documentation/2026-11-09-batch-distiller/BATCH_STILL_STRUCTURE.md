@@ -72,14 +72,15 @@ the current one.
 | DRAIN | always | (1.5, 0.5, 3) | z+ | (1, 0, 3) |
 | FUEL | LIQUID | (0, 0.5, 1.5) | x− | (−1, 0, 1) |
 | DISTILLATE | condenser | (3.5, 0.5, 0) | z− | (3, 0, −1) |
-| WATER_INLET | condenser | (3.5, yk, 0) | z− | (3, yk−.5, −1) |
+| WATER_INLET | condenser | (3.5, yk − 1, 0) | z− | (3, yk−1.5, −1) |
 | WATER_OUTLET | condenser | (3.5, yk, 3) | z+ | (3, yk−.5, 3) |
-| VENT | condenser | (3.5, ⌈yk + 1.47⌉, 0.5) | y+ | (3, ⌈yk + 1.47⌉, 0) |
+| VENT | condenser | (3.5, yk + .5, 0.5) | y+ | (3, yk + .5, 0) |
 | VAPOUR_OUTLET | no condenser | (4, yv, 1.5) | x+ | (4, yv−.5, 1) |
 
 - The charge row is the lowest cell centre at least 0.42 m over the setting or skirt top. A pipe's largest neck then
   clears the coping.
-- yk, the condenser row, is at least 0.5 m over the column or helmet top and at least 2.5 m. FUEL is the burner, at most
+- yk, the condenser row, is at least 0.5 m over the column or helmet top and at least 3.5 m (the water inlet a row
+  under it keeps a free block from the spout). FUEL is the burner, at most
   a 50 mm line; its neck crosses the right column from the setting's wall (0.46 m at 2000 L, 0.9 m at 100 L).
 - yv is the first cell centre over the helmet top.
 - Each face is on its block face and on its pipe block's centre line. The pipe blocks are at least two blocks apart, and
