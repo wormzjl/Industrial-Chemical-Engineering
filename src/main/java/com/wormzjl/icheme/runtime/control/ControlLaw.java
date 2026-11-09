@@ -3,35 +3,71 @@ package com.wormzjl.icheme.runtime.control;
 import com.wormzjl.icheme.runtime.fluid.*;
 import com.wormzjl.icheme.runtime.instrument.*;
 import com.wormzjl.icheme.science.fluid.network.*;
+import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler;
 
 import java.util.*;
 
 /**
- * One local controller's decision at a cadence: the valve law or the heat outlet target it asks
- * for, or the status that says why it asks for none. A level controller remembers its last
- * inventory sample between cadences.
+ * One local controller's decision at a cadence: the valve law, the heat outlet target, a batch
+ * still's firing or reflux, or a diverter valve's outlet it asks for, or the status that says why
+ * it asks for none. A level controller remembers its last inventory sample between cadences, and a
+ * still's its last correction.
  */
 final class ControlLaw {
-    /** A controller's result this cadence: its status and the setpoint it asks for, if any. */
-    record Decision(String status, FlowControl.ControlValve valve, Double heat) {
+    /**
+     * A controller's result this cadence: its status and the setpoint it asks for, if any: a valve
+     * law, a heat outlet target, a still's firing (0 to 1) or reflux ratio (+Infinity closed), or a
+     * diverter valve's outlet (0 to 2).
+     */
+    record Decision(
+            String status,
+            FlowControl.ControlValve valve,
+            Double heat,
+            Double firing,
+            Double reflux,
+            Integer outlet) {
         static Decision noSetpoint(String status) {
-            return new Decision(status, null, null);
+            return new Decision(status, null, null, null, null, null);
         }
 
         static Decision valveLaw(FlowControl.ControlValve law) {
-            return new Decision("CONTROLLING", law, null);
+            return new Decision("CONTROLLING", law, null, null, null, null);
         }
 
         static Decision outletTarget(double target) {
-            return new Decision("CONTROLLING", null, target);
+            return new Decision("CONTROLLING", null, target, null, null, null);
+        }
+
+        static Decision stillFiring(double firing) {
+            return new Decision("CONTROLLING", null, null, firing, null, null);
+        }
+
+        static Decision stillReflux(double reflux) {
+            return new Decision("CONTROLLING", null, null, null, reflux, null);
+        }
+
+        static Decision divert(int outlet) {
+            return new Decision("CONTROLLING", null, null, null, null, outlet);
+        }
+
+        /** Whether it asks for a setpoint. */
+        boolean sets() {
+            return valve != null || heat != null || firing != null || reflux != null || outlet != null;
         }
     }
 
     private record LevelSample(UUID sensor, long output, long tick, double volume) {}
 
+    /** A still controller's last correction: its pot, handle and target, the reading's tick and the setpoint. */
+    private record StillSample(long output, boolean firing, double target, long tick, double value) {}
+
+    /** Below this, kg/s, a still is taken to give no distillate. */
+    private static final double FLOWING = 1e-9;
+
     private final FluidWorldAuthority world;
     private final ControlHosts hosts;
     private final Map<UUID, LevelSample> levels = new HashMap<>();
+    private final Map<UUID, StillSample> stills = new HashMap<>();
 
     ControlLaw(FluidWorldAuthority world, ControlHosts hosts) {
         this.world = world;
@@ -44,6 +80,7 @@ final class ControlLaw {
      */
     void forget(UUID panel) {
         levels.remove(panel);
+        stills.remove(panel);
     }
 
     Decision decide(ControlFacts.Panel panel, ControlInput sensor, Sensor.Reading reading) {
@@ -53,7 +90,13 @@ final class ControlLaw {
         if (world.controlReserved(s.output())) return Decision.noSetpoint("OUTPUT RESERVED");
         if (!hosts.wired(panel.id(), sensor.key().host()) || !hosts.wired(panel.id(), s.output()))
             return Decision.noSetpoint("NO DATA LINK");
-        if (!world.controlCoupled(sensor.source(), s.output()))
+        // A still's firing and reflux and a diverter valve's outlet (batch 2026-11-09-batch-distiller,
+        // owner decisions O1 and O2) act on the reading at the cadence, not inside the solve: their
+        // sensor may be on another island (a cut's head temperature switches its line's diverter).
+        var device = record.device();
+        boolean cadenced =
+                device.stillPot() || device.kind() == TopologyCompiler.Kind.DIVERTER_VALVE;
+        if (!cadenced && !world.controlCoupled(sensor.source(), s.output()))
             return Decision.noSetpoint("NOT SAME PROCESS");
         if (reading == null || reading.availability() != Instrument.Availability.AVAILABLE)
             return Decision.noSetpoint("NO SIGNAL");
@@ -66,6 +109,11 @@ final class ControlLaw {
         if (s.unit() != reading.unit()
                 && reading.secondaryUnit().filter(u -> u == s.unit()).isEmpty())
             return Decision.noSetpoint("UNIT MISMATCH");
+        if (device.stillPot()) return still(panel, sensor, reading);
+        // A diverter valve: its straight outlet while the reading stands below the target, its first
+        // side outlet at or above it. Two in a line give three cuts.
+        if (device.kind() == TopologyCompiler.Kind.DIVERTER_VALVE)
+            return Decision.divert(measured(s, reading) < s.target() ? 0 : 1);
         if (sensor.kind() == Sensor.Kind.TEMPERATURE) {
             // Native outlet control already solves bypass/fans/firing against the finite heat
             // curves.
@@ -170,5 +218,54 @@ final class ControlLaw {
                 v = source == FlowControl.ValveSource.VOLUME_FLOW ? target : law.volumeTarget();
         return Decision.valveLaw(
                 new FlowControl.ControlValve(source, p, m, v, sensor.instance(), panel.revision()));
+    }
+
+    /** The reading in the settings' unit: its primary value, or its secondary one. */
+    private static double measured(ControlSettings s, Sensor.Reading reading) {
+        return s.unit() == reading.unit() ? reading.value() : reading.secondary();
+    }
+
+    /**
+     * A batch still's handle (owner decision O1), each holding the distillate flow its sensor
+     * reads at the target: action INLET sets the firing, action OUTLET the reflux valve. Boiling
+     * steadily, the distillate is the boil-up over R + 1 and the boil-up follows the heat, so the
+     * firing scales by target over measured and R + 1 by measured over target. Before any
+     * distillate, full fire and the valve open; a target of 0 puts the fire out or closes the valve.
+     * One correction per {@link Stills#RESPONSE_TICKS}, the time a change takes to show in the
+     * distillate; a new target corrects at once.
+     */
+    private Decision still(ControlFacts.Panel panel, ControlInput sensor, Sensor.Reading reading) {
+        var s = panel.settings();
+        if (sensor.kind() != Sensor.Kind.FLOW) return Decision.noSetpoint("SELECT DISTILLATE FLOW");
+        boolean firing = s.action() == ControlSettings.Action.INLET;
+        var stillsNow = world.stills();
+        if (!firing && !stillsNow.refluxes(s.output()))
+            return Decision.noSetpoint("NO REFLUX VALVE");
+        double now = firing ? stillsNow.firing(s.output()) : stillsNow.reflux(s.output());
+        if (Double.isNaN(now)) return Decision.noSetpoint("MISSING DEVICE");
+        var previous = stills.get(panel.id());
+        double next;
+        if (previous != null
+                && previous.output() == s.output()
+                && previous.firing() == firing
+                && previous.target() == s.target()
+                && reading.tick() < previous.tick() + Stills.RESPONSE_TICKS) next = previous.value();
+        else {
+            double measured = measured(s, reading), target = s.target();
+            if (firing)
+                next =
+                        !(target > 0)
+                                ? 0
+                                : measured > FLOWING ? Math.clamp(now * target / measured, 0, 1) : 1;
+            else
+                next =
+                        !(target > 0)
+                                ? Double.POSITIVE_INFINITY
+                                : measured > FLOWING
+                                        ? Math.max(0, (now + 1) * measured / target - 1)
+                                        : 0;
+            stills.put(panel.id(), new StillSample(s.output(), firing, target, reading.tick(), next));
+        }
+        return firing ? Decision.stillFiring(next) : Decision.stillReflux(next);
     }
 }

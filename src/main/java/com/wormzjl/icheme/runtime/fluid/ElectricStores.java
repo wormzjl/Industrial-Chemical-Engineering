@@ -47,7 +47,7 @@ public final class ElectricStores {
 
     /** What a store powers. */
     public enum Kind {
-        MOTOR, GENERATOR, FANS, TOWER, INLINE, BURNERS;
+        MOTOR, GENERATOR, FANS, TOWER, INLINE, BURNERS, STILL;
 
         public boolean generator() {
             return this == GENERATOR;
@@ -152,12 +152,19 @@ public final class ElectricStores {
         return tower != null && tower.draft() == CoolingTower.Draft.INDUCED;
     }
 
+    /** Whether batch still {@code u} is a powered unit: an electric one (batch 2026-11-09-batch-distiller, W4). */
+    public static boolean powered(StillUnit u) {
+        return u.heater() == com.wormzjl.icheme.science.fluid.network.BatchStill.Heater.ELECTRIC;
+    }
+
     /** Whether shaft unit {@code u} is a powered unit: a motor or a generator. */
     public static boolean powered(ShaftUnit u) {
         return u.kind() == ShaftNetwork.Kind.MOTOR || u.kind() == ShaftNetwork.Kind.GENERATOR;
     }
 
     private Kind kind(long id) {
+        var still = topology.still(id);
+        if (still != null) return powered(still) ? Kind.STILL : null;
         var u = topology.shaft(id);
         if (u != null) return u.kind() == ShaftNetwork.Kind.MOTOR ? Kind.MOTOR : u.kind() == ShaftNetwork.Kind.GENERATOR ? Kind.GENERATOR : null;
         var r = topology.active().get(id);
@@ -189,6 +196,10 @@ public final class ElectricStores {
                 yield r == null ? 0 : towerDraw(r.spec().tower(), 1);
             }
             case BURNERS -> burnerDraw(topology.active().get(id), FiredHeaters.designFired(topology.active().get(id)));
+            case STILL -> {
+                var u = topology.still(id);
+                yield u == null ? 0 : com.wormzjl.icheme.science.fluid.network.BatchStill.Heater.ELECTRIC.drawn(u.design().rating());
+            }
         };
     }
 
@@ -230,6 +241,8 @@ public final class ElectricStores {
         var seen = new HashSet<Long>();
         for (var r : topology.active().values()) if (powered(r)) seen.add(r.device().id());
         for (var u : topology.shafts().values()) if (powered(u)) seen.add(u.id());
+        // An electric batch still (batch 2026-11-09-batch-distiller, W4): its store is keyed by its pot.
+        for (var u : topology.stills().values()) if (powered(u)) seen.add(u.id());
         stores.keySet().retainAll(seen);
         long now = coordinator.now();
         for (long id : seen) {
@@ -497,7 +510,7 @@ public final class ElectricStores {
         for (var e : stores.entrySet()) {
             var s = e.getValue();
             long id = e.getKey();
-            if (s.kind == Kind.FANS || s.kind == Kind.TOWER || s.kind == Kind.INLINE || s.kind == Kind.BURNERS) {
+            if (s.kind == Kind.FANS || s.kind == Kind.TOWER || s.kind == Kind.INLINE || s.kind == Kind.BURNERS || s.kind == Kind.STILL) {
                 boolean changed = now - s.bookedTick >= CADENCE && draw(s, s.power, s.bookedTick, now, true);
                 if (s.shortfall) {
                     s.shortfall = false;

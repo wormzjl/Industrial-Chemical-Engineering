@@ -346,7 +346,7 @@ public final class BatchStill {
     }
 
     /** The column's reflux ratio when the condenser takes the share {@code condensed} of the top vapour at the valve's {@code reflux}. */
-    static double effectiveReflux(double reflux, double condensed) {
+    public static double effectiveReflux(double reflux, double condensed) {
         if (condensed >= 1) return reflux;
         if (!(condensed > 0)) return 0;
         if (reflux == Double.POSITIVE_INFINITY) return condensed / (1 - condensed);

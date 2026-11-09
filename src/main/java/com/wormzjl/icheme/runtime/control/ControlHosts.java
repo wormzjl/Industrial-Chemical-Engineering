@@ -89,7 +89,11 @@ final class ControlHosts {
                 r != null
                         && (r.device().control() instanceof FlowControl.ControlValve
                                 || r.device().control() instanceof FlowControl.Mover
-                                || r.device().heat() != null);
+                                || r.device().heat() != null
+                                // A diverter valve's outlet (owner decision O2).
+                                || r.device().kind()
+                                        == com.wormzjl.icheme.science.fluid.topology.TopologyCompiler
+                                                .Kind.DIVERTER_VALVE);
         var ids = new HashMap<UUID, String>();
         for (var sensor : host.metadata().sensors())
             ids.put(sensor.instance(), facts.identify(sensor).label());

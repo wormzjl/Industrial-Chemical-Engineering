@@ -75,6 +75,11 @@ public final class StillColumn {
                 p.pr().criticalPressure(), p.pr().acentricFactor(), p.molecularWeight())).toList();
     }
 
+    /** The critical temperature of component {@code i} of the column's basis, K. */
+    public double criticalTemperature(int i) {
+        return tc[i];
+    }
+
     public HydrocarbonModel model() {
         return model;
     }

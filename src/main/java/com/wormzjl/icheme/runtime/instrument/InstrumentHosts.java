@@ -27,7 +27,7 @@ public final class InstrumentHosts {
     private static final Object INDEX_LOCK=new Object();
     public static void loaded(BlockEntity be){
         com.wormzjl.icheme.runtime.power.PowerNetwork.loaded(be);
-        if(be.getLevel()==null||!(be instanceof FluidDeviceBlockEntity pipe&&pipe.getBlockState().getBlock() instanceof FluidDeviceBlock block&&block.kind()==TopologyCompiler.Kind.PIPE||be instanceof EquipmentShellBlockEntity shell&&shell.shape()!=null&&(shell.fluidIdentity()>0||shell.instruments().dataPort()!=null||shell.instruments().powerPort()!=null)||be instanceof CreativePowerBlockEntity))return;
+        if(be.getLevel()==null||!(be instanceof FluidDeviceBlockEntity pipe&&pipe.getBlockState().getBlock() instanceof FluidDeviceBlock block&&(block.kind()==TopologyCompiler.Kind.PIPE||block.kind()==TopologyCompiler.Kind.DIVERTER_VALVE)||be instanceof EquipmentShellBlockEntity shell&&shell.shape()!=null&&(shell.fluidIdentity()>0||shell.instruments().dataPort()!=null||shell.instruments().powerPort()!=null)||be instanceof CreativePowerBlockEntity))return;
         double extent=2;
         if(be instanceof EquipmentShellBlockEntity shell){var s=shell.shape();extent=Math.sqrt((double)s.sizeX()*s.sizeX()+(double)s.sizeY()*s.sizeY()+(double)s.sizeZ()*s.sizeZ())+2;}
         // The index and its equipped subset are published together; callers inspect hosts outside the lock.
@@ -68,6 +68,8 @@ public final class InstrumentHosts {
     }
     public static Host at(Level level,BlockPos position){if(!level.hasChunkAt(position))return null;var be=level.getBlockEntity(position);
         if(be instanceof FluidDeviceBlockEntity pipe&&pipe.getBlockState().getBlock() instanceof FluidDeviceBlock block&&block.kind()==TopologyCompiler.Kind.PIPE&&pipe.fluidIdentity()>0)return new Host(pipe.fluidIdentity(),pipe,pipe.transition()?List.of():pipeMounts(position,pipe.bore(),pipe.getBlockState()),true);
+        // A diverter valve (batch 2026-11-09-batch-distiller, owner decision O2): a host for its data port, no mounts.
+        if(be instanceof FluidDeviceBlockEntity valve&&valve.getBlockState().getBlock() instanceof FluidDeviceBlock block&&block.kind()==TopologyCompiler.Kind.DIVERTER_VALVE&&valve.fluidIdentity()>0)return new Host(valve.fluidIdentity(),valve,List.of(),false);
         if(be instanceof EquipmentShellBlockEntity shell&&shell.shape()!=null){
             var shape=shell.shape();
             if(shell.fluidIdentity()>0)return new Host(shell.fluidIdentity(),shell,reservoirMounts(shape,shell.origin(),shell.cell()),false);

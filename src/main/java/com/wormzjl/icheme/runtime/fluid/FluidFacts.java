@@ -52,9 +52,11 @@ final class FluidFacts {
      *  fans, the shaft trip {@code NO_POWER} (never written: it is not latched).
      *  12 (batch 2026-11-03-rotating-machinery, W10b): the pumps' health (after the electric stores), only pumps below 1.
      *  13 (batch 2026-11-06-simulator-sizing): a heat unit's exchanger configuration, absent means Standard.
-     *  14 (the same batch): a shaft unit's explicit VFD base speed, absent means its legacy pole-derived speed. */
-    static final int SCHEMA=14;
-    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 14. */
+     *  14 (the same batch): a shaft unit's explicit VFD base speed, absent means its legacy pole-derived speed.
+     *  15 (batch 2026-11-09-batch-distiller, W3 and W4): the world's batch stills (after the pumps' health); the control
+     *  valve source {@code STILL}; the {@code diverter} control. */
+    static final int SCHEMA=15;
+    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 15. */
     private static final Map<Class<?>,Map<String,String>> ALIASES=Map.of();
     private static final int MAXIMUM_FIELDS=256,MAXIMUM_ITEMS=1<<22,MAXIMUM_TEXTS=1<<20,MAXIMUM_ARRAY=4096,MAXIMUM_CHANNELS=1<<20;
     /** The cadence an island rebuilt from facts starts at (ticks): the shortest the clock allows, as after a merge. */
@@ -177,14 +179,20 @@ final class FluidFacts {
      */
     record World(long nextIdentity,WorldTopologyLedger.FluidBasis basis,List<WorldTopologyLedger.Registration> registrations,
                  WorldTopologyLedger.MaterialTotal constructed,WorldTopologyLedger.MaterialTotal destroyed,List<Recovery> recoveries,WorldTopologyLedger.Restated restated,
-                 List<String> removedMovers,List<ColumnUnit> columns,List<ShaftUnit> shafts,Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores,Map<Long,Double> health) {
+                 List<String> removedMovers,List<ColumnUnit> columns,List<ShaftUnit> shafts,Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores,Map<Long,Double> health,List<StillUnit> stills) {
+        /** Facts without batch stills (a world before schema 15). */
+        World(long nextIdentity,WorldTopologyLedger.FluidBasis basis,List<WorldTopologyLedger.Registration> registrations,WorldTopologyLedger.MaterialTotal constructed,
+              WorldTopologyLedger.MaterialTotal destroyed,List<Recovery> recoveries,WorldTopologyLedger.Restated restated,List<String> removedMovers,List<ColumnUnit> columns,
+              List<ShaftUnit> shafts,Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores,Map<Long,Double> health) {
+            this(nextIdentity,basis,registrations,constructed,destroyed,recoveries,restated,removedMovers,columns,shafts,stores,health,List.of());
+        }
         /** Facts without pump health (a world before schema 12): every pump new. */
         World(long nextIdentity,WorldTopologyLedger.FluidBasis basis,List<WorldTopologyLedger.Registration> registrations,WorldTopologyLedger.MaterialTotal constructed,
               WorldTopologyLedger.MaterialTotal destroyed,List<Recovery> recoveries,WorldTopologyLedger.Restated restated,List<String> removedMovers,List<ColumnUnit> columns,
               List<ShaftUnit> shafts,Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores) {
-            this(nextIdentity,basis,registrations,constructed,destroyed,recoveries,restated,removedMovers,columns,shafts,stores,Map.of());
+            this(nextIdentity,basis,registrations,constructed,destroyed,recoveries,restated,removedMovers,columns,shafts,stores,Map.of(),List.of());
         }
-        World {health=Map.copyOf(health);}
+        World {health=Map.copyOf(health);stills=List.copyOf(stills);}
         /** Facts without shaft units (a world before schema 10). */
         World(long nextIdentity,WorldTopologyLedger.FluidBasis basis,List<WorldTopologyLedger.Registration> registrations,WorldTopologyLedger.MaterialTotal constructed,
               WorldTopologyLedger.MaterialTotal destroyed,List<Recovery> recoveries,WorldTopologyLedger.Restated restated,List<String> removedMovers,List<ColumnUnit> columns) {
@@ -209,7 +217,8 @@ final class FluidFacts {
             for(var r:recoveries)if(pending.put(r.id,new WorldTopologyLedger.RecoveredSolid(r.position,r.player,inventory(r.solids,record),r.energy))!=null)throw new IllegalArgumentException("Invalid saved topology: duplicate recovery "+r.id);
             var units=new HashMap<Long,ColumnUnit>();for(var u:columns)if(units.put(u.id(),u)!=null)throw new IllegalArgumentException("Invalid saved topology: duplicate column unit "+u.id());
             var parts=new HashMap<Long,ShaftUnit>();for(var u:shafts)if(parts.put(u.id(),u)!=null)throw new IllegalArgumentException("Invalid saved topology: duplicate shaft unit "+u.id());
-            var snapshot=new WorldTopologyLedger.Snapshot(onlineTick,nextIdentity,active,events,constructed,destroyed,basis,pending,restated,units,parts,electricStores(),health);
+            var batch=new HashMap<Long,StillUnit>();for(var u:stills)if(batch.put(u.id(),u)!=null)throw new IllegalArgumentException("Invalid saved topology: duplicate batch still "+u.id());
+            var snapshot=new WorldTopologyLedger.Snapshot(onlineTick,nextIdentity,active,events,constructed,destroyed,basis,pending,restated,units,parts,electricStores(),health,batch);
             new WorldTopologyLedger(snapshot);return snapshot;
         }
     }
@@ -233,6 +242,8 @@ final class FluidFacts {
             f.list(new TreeMap<>(s.stores()).entrySet(),(q,e)->q.count(e.getKey()).f64(e.getValue().joules()).bool(e.getValue().metered()));
             // Schema 12: the pumps' health, by device identity, only pumps below 1 (a pump without an entry is new).
             f.list(new TreeMap<>(s.health()).entrySet(),(q,e)->q.count(e.getKey()).f64(e.getValue()));
+            // Schema 15: the batch stills, by their pots' identities.
+            f.list(new TreeMap<>(s.stills()).values(),FluidFacts::still);
         });
     }
     static World world(byte[] data,int offset,int length) {
@@ -267,8 +278,10 @@ final class FluidFacts {
             for(var e:f.list(List.<Map.Entry<Long,Double>>of(),q->{long id=q.count(0);double value=q.f64(1);
                 if(!(value>=0&&value<=1))throw q.invalid("pump health "+id+": "+value);return Map.entry(id,value);}))
                 if(health.put(e.getKey(),e.getValue())!=null)throw f.invalid("duplicate pump health "+e.getKey());
+            // A world written before schema 15 has no batch stills.
+            var stills=f.list(List.<StillUnit>of(),FluidFacts::still);
             required(basis,f,"basis");required(constructed,f,"constructed total");required(destroyed,f,"destroyed total");
-            return new World(next,basis,registrations,constructed,destroyed,recoveries,restated,List.copyOf(removedMovers),columns,shafts,stores,health);
+            return new World(next,basis,registrations,constructed,destroyed,recoveries,restated,List.copyOf(removedMovers),columns,shafts,stores,health,stills);
         });
     }
     private static void total(Fields f,WorldTopologyLedger.MaterialTotal t) {
@@ -387,6 +400,28 @@ final class FluidFacts {
         double design=q.f64(0),rate=q.f64(0),condenser=q.f64(0),reflux=q.f64(0),reboiler=q.f64(0);
         var steam=q.doubles(new double[0]);var draws=q.doubles(new double[0]);var pumparounds=q.doubles(new double[0]);
         return valid(q,"column setpoints",()->new com.wormzjl.icheme.science.column.operation.Setpoints(design,rate,condenser,reflux,reboiler,steam,draws,pumparounds));
+    }
+    /**
+     * A batch still (schema 15, batch 2026-11-09-batch-distiller): its pot's identity, its water side, distillate, vent and
+     * burners (0 for none), its design (pot volume, heater by name, built-in condenser, trays), its head's two accounts, the
+     * heat left in its burning item (J), its firing (0 to 1), its reflux valve (the ratio, then whether it is closed: a closed
+     * valve's ratio is +Infinity, which a facts number cannot hold, so it is written as the default ratio and the flag) and its
+     * totals (J).
+     */
+    private static void still(Fields f,StillUnit u) {
+        f.count(u.id()).count(u.water()).count(u.distillate()).count(u.vent()).count(u.burners())
+                .f64(u.volume()).name(u.heater()).bool(u.condenser()).count(u.stages())
+                .record(a->account(a,u.head())).record(a->account(a,u.venting()))
+                .f64(u.burning()).f64(u.firing()).f64(u.closedValve()?StillUnit.DEFAULT_REFLUX:u.reflux()).bool(u.closedValve()).f64(u.heated()).f64(u.condensed());
+    }
+    private static StillUnit still(Record f) {
+        long id=f.count(0),water=f.count(0),distillate=f.count(0),vent=f.count(0),burners=f.count(0);
+        double volume=f.f64(0);var heater=f.name(com.wormzjl.icheme.science.fluid.network.BatchStill.Heater.class,null);boolean condenser=f.bool(false);long stages=f.count(0);
+        var head=f.record(null,FluidFacts::account);var venting=f.record(null,FluidFacts::account);
+        double burning=f.f64(0),firing=f.f64(StillUnit.DEFAULT_FIRING),valve=f.f64(StillUnit.DEFAULT_REFLUX);double reflux=f.bool(false)?Double.POSITIVE_INFINITY:valve;double heated=f.f64(0),condensed=f.f64(0);
+        required(heater,f,"still heater");required(head,f,"still head account");required(venting,f,"still vent account");
+        if(stages>com.wormzjl.icheme.science.fluid.network.StillColumn.MAX_STAGES)throw f.invalid("still trays "+stages);
+        return valid(f,"batch still "+id,()->new StillUnit(id,water,distillate,vent,burners,volume,heater,condenser,(int)stages,head,venting,burning,firing,reflux,heated,condensed));
     }
     private static void account(Fields f,com.wormzjl.icheme.science.column.operation.ColumnCycle.Account a){f.doubles(a.moles()).f64(a.energy());}
     private static com.wormzjl.icheme.science.column.operation.ColumnCycle.Account account(Record f) {
@@ -737,6 +772,22 @@ final class FluidFacts {
             }
             columns.put(u.id(),settled(u,registrations));
         }
+        // The batch stills (schema 15), their head's accounts on the current axis as a column's are: a component the data
+        // no longer has leaves, booked as removed, with its molar share of the account's energy.
+        var stills=new HashMap<Long,StillUnit>();
+        for(var saved:world.stills) {
+            var u=saved;
+            if(!axis.identity()) {
+                var kept=new ArrayList<com.wormzjl.icheme.science.column.operation.ColumnCycle.Account>();
+                for(var held:List.of(u.head(),u.venting())) {
+                    var moles=axis.map(held.moles(),removed);
+                    double left=held.total()>0?held.energy()*Arrays.stream(moles).sum()/held.total():held.energy();
+                    energy+=left-held.energy();kept.add(new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(moles,left));
+                }
+                u=u.withAccounts(kept.get(0),kept.get(1));
+            }
+            stills.put(u.id(),u);
+        }
         var ports=new HashSet<Long>();
         for(var u:columns.values())for(var s:u.stations())if(s.device()!=0)ports.add(s.device());
         registrations.values().removeIf(r->r.device().port()&&!ports.contains(r.device().id()));
@@ -803,7 +854,7 @@ final class FluidFacts {
         }
         var restatedTotal=world.restated.plus(new WorldTopologyLedger.Restated(energy,removed.moles,removed.solids));
         var shafts=new HashMap<Long,ShaftUnit>();for(var u:world.shafts)shafts.put(u.id(),u);
-        var snapshot=new WorldTopologyLedger.Snapshot(epoch,next,registrations,List.of(),axis.total(world.constructed),axis.total(world.destroyed),basis,recoveries,restatedTotal,columns,shafts,world.electricStores(),world.health());
+        var snapshot=new WorldTopologyLedger.Snapshot(epoch,next,registrations,List.of(),axis.total(world.constructed),axis.total(world.destroyed),basis,recoveries,restatedTotal,columns,shafts,world.electricStores(),world.health(),stills);
         var ledger=new WorldTopologyLedger(snapshot);
         // A dismantled column whose release was still queued leaves now, its accounts booked as destroyed.
         for(var u:columns.values())if(u.leaving())ledger.removeColumn(u.id());

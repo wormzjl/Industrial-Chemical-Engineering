@@ -167,6 +167,8 @@ public final class LineGeometry {
             case RESERVOIR -> tank(m, key);
             case GENERATOR -> boundary(m, key, Material.FEED);
             case VOID -> boundary(m, key, Material.DRAIN);
+            // A diverter valve (batch 2026-11-09-batch-distiller) draws as the pipe through its open pair until its own drawing.
+            case DIVERTER_VALVE -> pipe(m, key);
         }
         return m;
     }

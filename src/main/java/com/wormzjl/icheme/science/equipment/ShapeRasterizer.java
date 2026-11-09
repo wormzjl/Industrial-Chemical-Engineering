@@ -545,6 +545,9 @@ public final class ShapeRasterizer {
     }
 
     /** Every node cell of {@code shape}, one per registration: a heat unit's in its sides' order ({@link HeatSides#of}), then a kettle's pool's. */
+    /** A batch still's devices after its pot, by the nozzle each stands at ({@link #fluidCells}): those it has, in this order. */
+    public static final List<EquipmentShape.Role> STILL_DEVICES = List.of(EquipmentShape.Role.WATER_INLET, EquipmentShape.Role.DISTILLATE, EquipmentShape.Role.VENT, EquipmentShape.Role.FUEL);
+
     public static List<Cell> fluidCells(EquipmentShape shape) {
         return geometry(shape).fluidCells;
     }
@@ -902,6 +905,19 @@ public final class ShapeRasterizer {
                 // A flare registers its tip at its vent gas inlet's cell (batch 2026-11-09-flare-stack), as the burners at their fuel's.
                 node = ports.stream().filter(port -> nozzles.get(port.nozzle()).role() == EquipmentShape.Role.FLARE_GAS)
                         .findFirst().orElseThrow(() -> new IllegalStateException("A flare needs its gas inlet")).cell();
+            } else if (shape.kind() == EquipmentShape.Kind.BATCH_STILL) {
+                // A batch still (batch 2026-11-09-batch-distiller, W3) registers its pot at its lowest inside point, then its
+                // condenser's water side at its WATER_INLET, its DISTILLATE and VENT outlets and its burners at their nozzles' cells.
+                if (unit == null || unit.fluidPoint == null) throw new IllegalStateException("A batch still needs its pot's node");
+                var low = transform.point(unit.fluidPoint);
+                node = new Cell(floor(low[0]), floor(low[1]), floor(low[2]));
+                var all = new ArrayList<Cell>();all.add(node);
+                for (var role : STILL_DEVICES)
+                    for (var port : ports) if (nozzles.get(port.nozzle()).role() == role) {
+                        if (all.contains(port.cell())) throw new IllegalStateException("A batch still's " + role + " nozzle shares a device's cell");
+                        all.add(port.cell());break;
+                    }
+                sides = List.copyOf(all);
             } else if (unit != null && unit.fluidPoint != null) {
                 var low = transform.point(unit.fluidPoint);
                 node = new Cell(floor(low[0]), floor(low[1]), floor(low[2]));

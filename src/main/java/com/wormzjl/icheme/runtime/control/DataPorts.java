@@ -51,6 +51,33 @@ public final class DataPorts {
                                 Direction.getNearest(
                                         mount.right().x, mount.right().y, mount.right().z));
         }
+        // A diverter valve (owner decision O2): its socket on a face its pipes leave free, on top
+        // for a level inlet.
+        if (host.entity() instanceof FluidDeviceBlockEntity valve
+                && valve.getBlockState().getBlock() instanceof FluidDeviceBlock block
+                && block.kind()
+                        == com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind
+                                .DIVERTER_VALVE) {
+            var inlet = valve.getBlockState().getValue(FluidDeviceBlock.FACING);
+            var used = EnumSet.of(inlet);
+            for (var outlet :
+                    com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.diverterOutlets(
+                            com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Direction.valueOf(
+                                    inlet.name())))
+                used.add(Direction.valueOf(outlet.name()));
+            var face =
+                    used.contains(Direction.UP)
+                            ? Arrays.stream(Direction.values())
+                                    .filter(d -> !used.contains(d))
+                                    .findFirst()
+                                    .orElseThrow()
+                            : Direction.UP;
+            return new Mount(
+                    valve.getBlockPos()
+                            .getCenter()
+                            .add(Vec3.atLowerCornerOf(face.getNormal()).scale(.51)),
+                    face);
+        }
         var mount =
                 host.mounts().stream()
                         .filter(m -> !m.top())

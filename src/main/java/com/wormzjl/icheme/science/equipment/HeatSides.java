@@ -19,9 +19,13 @@ import org.jetbrains.annotations.Nullable;
  */
 public final class HeatSides {
     private HeatSides() {}
-    public enum Unit { EXCHANGER, KETTLE, AIR_COOLER, FIRED_HEATER }
+    public enum Unit { EXCHANGER, KETTLE, AIR_COOLER, FIRED_HEATER,
+        /** A batch still (batch 2026-11-09-batch-distiller, W3): its fired pot and its condenser's water side. */
+        STILL }
     /** A unit's registrations: its passages, and a fired heater's {@code BURNER}s, the void behind its FUEL nozzle (batch 2026-11-09-furnace-fuel-power). */
-    public enum Side { TUBE, SHELL, PROCESS, CONVECTION, RADIANT, BURNER }
+    public enum Side { TUBE, SHELL, PROCESS, CONVECTION, RADIANT, BURNER,
+        /** A batch still's pot, a vessel heated from below, and its condenser's water passage (batch 2026-11-09-batch-distiller, W3). */
+        POT, WATER }
     /**
      * One side: its nozzles of role {@code inlet} and {@code outlet}, its heat-transfer surface (m²) and its passage.
      */
@@ -213,6 +217,10 @@ public final class HeatSides {
             case KETTLE,EXCHANGER->{if(partner==0||unit==Unit.KETTLE&&side!=Side.TUBE)yield null;var wall=new double[unit==Unit.EXCHANGER?type.cells():EXCHANGER_CELLS];java.util.Arrays.fill(wall,AIR_TEMPERATURE);
                 yield new HeatSide(area,HeatCurve.Films.DEFAULT,wall,share,0,partner,1,control,HeatControl.Limit.NONE,type.routing(side));}
             case AIR_COOLER->new AirCooled(area,AIR,AIR.draught(share),control,HeatControl.Limit.NONE);
+            // A still's condenser water side (batch 2026-11-09-batch-distiller, W3) takes the duty its still owes it (the column
+            // condenser's read, ExchangerRelay.Read.column): an exchanger's side against its pot; the pot has no passage.
+            case STILL->{if(partner==0||side!=Side.WATER)yield null;var wall=new double[EXCHANGER_CELLS];java.util.Arrays.fill(wall,AIR_TEMPERATURE);
+                yield new HeatSide(area,HeatCurve.Films.DEFAULT,wall,share,0,partner,1,control,HeatControl.Limit.NONE,ExchangerType.STANDARD.routing(side));}
             case FIRED_HEATER->side==Side.RADIANT?new FiredCoil(target,coilDuty(side,area,share),1,partner):side==Side.CONVECTION?new ConvectionCoil(CONVECTION_U*area,partner,0):null;
             default->null;
         };

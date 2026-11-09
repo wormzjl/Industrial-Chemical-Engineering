@@ -45,6 +45,7 @@ public final class ModCreativeTabs {
                 output.accept(ModItems.FLUID_COMPRESSOR.get());
                 output.accept(ModItems.PRESSURE_CONTROL_VALVE.get());
                 output.accept(ModItems.FLUID_GENERATOR.get());
+                output.accept(ModItems.DIVERTER_VALVE.get());
                 output.accept(ModItems.FLUID_VOID.get());
                 output.accept(ModItems.INLINE_FILTER.get());
                 output.accept(ModItems.RECOVERED_SOLIDS.get());

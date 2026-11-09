@@ -3290,6 +3290,8 @@ public final class ProcessUnit {
         var up = Frame.of(new double[]{x, 0, z}, 1, 1);
         // The pot: a copper shell on a flat bottom over the fire, its head, a seam at the tangent line.
         mesh.prism(up, r, p.bottom(), p.cylinder(), n, Material.COPPER);
+        // The pot's node (W3): its lowest inside point, on its flat bottom.
+        fluidPoint = new double[]{x, p.bottom() + .01, z};
         mesh.annulus(up, 0, r, p.bottom(), n, -1, Material.COPPER);
         mesh.head(up, r, p.cylinder(), d / 4, n, Material.COPPER);
         mesh.hoop(up, r, r + .015, p.cylinder() - .03, p.cylinder(), n, Material.COPPER);

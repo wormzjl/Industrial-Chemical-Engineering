@@ -51,6 +51,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
     private final ElectricStores electric;
     private final FiredHeaters burners;
     private final Flares flares;
+    /** The batch stills (batch 2026-11-09-batch-distiller, W3 to W5). */
+    private final Stills stills;
     /** The pumps' health (W10b). */
     private final PumpHealth health;
     /**
@@ -144,6 +146,21 @@ public final class FluidWorldAuthority implements AutoCloseable {
         // The fired heaters' burners (batch 2026-11-09-furnace-fuel-power): the network's heating values in its conserved order.
         burners=new FiredHeaters(topology,runtime.coordinator(),electric,heatingValues(catalog,model),model.molecularWeights());shafts.burners(burners);electric.moved(burners::powerMoved);
         flares=new Flares(topology,heatingValues(catalog,model),model.molecularWeights(),formulas(catalog,model));shafts.flares(flares);
+        // The batch stills (batch 2026-11-09-batch-distiller): their pots, heads and outlets share the port hooks with the columns.
+        stills=new Stills(topology,registry::owner,runtime.coordinator(),runtime.coordinator()::model,electric,model.components(),model.molecularWeights(),heatingValues(catalog,model));
+        stills.refresh();runtime.coordinator().ports(IslandCoordinator.Ports.both(columns,stills));
+        stills.solves((pot,island,job,done)->{
+            var at=registrations().get(pot);if(at==null)return false;
+            var dimension=net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION,net.minecraft.resources.ResourceLocation.parse(at.device().position().dimension()));
+            var request=new com.wormzjl.icheme.runtime.ProcessSolveServices.StillRequest(com.wormzjl.icheme.runtime.ProcessSolveServices.nextRequestId(),new com.wormzjl.icheme.runtime.ProcessSolveServices.StillTarget(dimension,pot),0,done);
+            return com.wormzjl.icheme.runtime.ProcessSolveServices.submitStill(server,request,new com.wormzjl.icheme.runtime.ProcessSolveServices.StillCommand(job,runtime.coordinator().model(island))).accepted();
+        });
+        stills.fuel(this::takeStillFuel);
+        // The data network's firing and reflux setpoints (owner decision O1): the control service's last cadence.
+        stills.plans(new Stills.Plans(){
+            public double firing(long pot){return controls==null?Double.NaN:controls.stillFiring(pot);}
+            public double reflux(long pot){return controls==null?Double.NaN:controls.stillReflux(pot);}
+        });
         health=new PumpHealth(topology,registry::owner,runtime.coordinator(),id->PumpHealth.pump(topology.active().get(id)),id->{var r=topology.active().get(id);return r==null?null:r.device().control();},IChemE::wearSettings);shafts.health(health);
         // Block entities whose chunks loaded before this authority existed never reported themselves: every device
         // in an already loaded chunk is marked once, and its bucket binds and presents it. Nothing is pushed here.
@@ -387,6 +404,142 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public FiredHeaters burners(){owned();return burners;}
     /** The flare stacks: their views and alarms are reads. */
     public Flares flares(){owned();return flares;}
+    /** The batch stills (batch 2026-11-09-batch-distiller). */
+    public Stills stills(){owned();return stills;}
+    /**
+     * A solid still's next item (W4): one taken from the fuel slot its pot's cell holds, its heat (J); 0 when the slot is
+     * empty or the pot's chunk is not loaded (the fire then burns out: NO FUEL).
+     */
+    private double takeStillFuel(long pot) {
+        var r=registrations().get(pot);if(r==null)return 0;
+        var p=r.device().position();var level=server.getLevel(dimension(p.dimension()));
+        var at=new BlockPos(p.x(),p.y(),p.z());
+        if(level==null||!level.isLoaded(at)||!(level.getBlockEntity(at) instanceof com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity shell)||shell.fluidIdentity()!=pot)return 0;
+        return shell.takeFuel();
+    }
+    /** The pressure a still's DISTILLATE and VENT generators stand at, Pa: a short liquid head over the atmosphere (an owner option, BATCH_STILL_ENGINE.md). */
+    public static final double STILL_OUTLET_PRESSURE=150000;
+    /**
+     * A batch still's devices to place (batch 2026-11-09-batch-distiller, W3): its pot (a vessel at its node with its phase
+     * ports, volume, level height, geometry and heat unit: its heated area), its condenser's water side (null without the
+     * built-in condenser), its DISTILLATE and VENT outlets (with the condenser) and its burners (a liquid-fired still), each
+     * its one port at its own cell; and its design.
+     */
+    public record StillDevices(UnitVessel pot,@org.jetbrains.annotations.Nullable UnitSide water,
+                               @org.jetbrains.annotations.Nullable PhysicalFluidTopology.Port distillate,@org.jetbrains.annotations.Nullable PhysicalFluidTopology.Port vent,
+                               @org.jetbrains.annotations.Nullable PhysicalFluidTopology.Port burners,com.wormzjl.icheme.science.fluid.network.BatchStill.Design design) {}
+    /**
+     * Registers a batch still as one ledger event, and its facts ({@link StillUnit}): the water side first (the lower identity
+     * keeps the pair's heat in transit), then the pot, the outlets and the burners. An open pot (the condenser built in) vents
+     * through its head. Returns the registrations in that order.
+     */
+    public List<WorldTopologyLedger.Registration> placeStill(StillDevices d){return placeStill(d,0);}
+    /** The identities of the still whose pot is {@code pot}: its pot, water side, outlets and burners that are registered. */
+    public java.util.Set<Long> stillDevices(long pot) {
+        owned();var u=topology.still(pot);if(u==null)return java.util.Set.of();
+        var ids=new java.util.HashSet<Long>();
+        for(long id:new long[]{u.id(),u.water(),u.distillate(),u.vent(),u.burners()})if(id>0&&registrations().containsKey(id))ids.add(id);
+        return ids;
+    }
+    /**
+     * {@link #placeStill(StillDevices)}, or with {@code former} a registered still's pot, the refresh of that still onto
+     * {@code d} as one ledger event (decision D7, owner decision O9): each device the still has keeps its identity, its
+     * controls and what it holds, and moves to its new cell with its new ports (the pot also takes its new volume, level
+     * height, opening and geometry, the water side its new passage and surface); a device the layout adds registers, one it
+     * no longer has leaves. Its facts stay on its pot. Returns the still's registrations: water side, pot, outlets, burners.
+     */
+    public List<WorldTopologyLedger.Registration> placeStill(StillDevices d,long former) {
+        owned();var u=former>0?topology.still(former):null;var formerPot=u==null?null:registrations().get(former);
+        if(u!=null&&formerPot!=null&&formerPot.device().stillPot())return moveStill(d,u,formerPot);
+        var design=d.design();
+        if(design.condenser()!=(d.water()!=null)||design.condenser()!=(d.distillate()!=null)||design.condenser()!=(d.vent()!=null))throw new IllegalArgumentException("A still's condenser has its water side and its outlets, and only it");
+        if((d.burners()!=null)!=(design.heater()==com.wormzjl.icheme.science.fluid.network.BatchStill.Heater.LIQUID))throw new IllegalArgumentException("A liquid-fired still has its burners, and only it");
+        long next=topology.nextIdentity();var edits=new ArrayList<WorldTopologyLedger.Edit>();var placed=new ArrayList<WorldTopologyLedger.Registration>();
+        long water=0,distillate=0,vent=0,fired=0;
+        if(d.water()!=null)water=next++;
+        long pot=next++;
+        if(d.water()!=null) {
+            var side=d.water();
+            var device=new PhysicalFluidTopology.Device(water,side.node(),TopologyCompiler.Kind.HEAT_SIDE,PhysicalFluidTopology.Direction.NORTH,side.passage(),new FlowControl.Passive(),
+                    side.ports(),true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,side.heat().withPartner(pot));
+            var record=new WorldTopologyLedger.Registration(device,FluidDeviceSpec.nitrogen(catalog),0);placed.add(record);edits.add(new WorldTopologyLedger.Edit(water,record));
+        }
+        var vessel=d.pot();
+        var potDevice=new PhysicalFluidTopology.Device(pot,vessel.node(),TopologyCompiler.Kind.RESERVOIR,PhysicalFluidTopology.Direction.NORTH,
+                new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive(),vessel.ports(),true,PhysicalFluidTopology.Cutoff.NONE,false,
+                PhysicalFluidTopology.ALL_FACES,0,0,vessel.heat().withPartner(0));
+        var potSpec=new FluidDeviceSpec(vessel.volume(),298.15,com.wormzjl.icheme.science.fluid.solver.PhaseLayout.AMBIENT_PRESSURE,FluidDeviceSpec.nitrogen(catalog).composition(),SlurryFeed.NONE,vessel.levelHeight(),design.condenser(),vessel.geometry(),null);
+        var potRecord=new WorldTopologyLedger.Registration(potDevice,potSpec,0);placed.add(potRecord);edits.add(new WorldTopologyLedger.Edit(pot,potRecord));
+        for(var port:new PhysicalFluidTopology.Port[]{d.distillate(),d.vent()}) {
+            if(port==null)continue;long id=next++;if(port==d.distillate())distillate=id;else vent=id;
+            var device=new PhysicalFluidTopology.Device(id,port.cell(),TopologyCompiler.Kind.GENERATOR,PhysicalFluidTopology.Direction.NORTH,
+                    new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),FlowControl.ControlValve.still(),List.of(port),true,PhysicalFluidTopology.Cutoff.NONE,false,
+                    PhysicalFluidTopology.ALL_FACES,0,0,null);
+            var record=new WorldTopologyLedger.Registration(device,new FluidDeviceSpec(1,298.15,STILL_OUTLET_PRESSURE,FluidDeviceSpec.nitrogen(catalog).composition()),0);placed.add(record);edits.add(new WorldTopologyLedger.Edit(id,record));
+        }
+        if(d.burners()!=null) {
+            fired=next++;var port=d.burners();
+            var device=new PhysicalFluidTopology.Device(fired,port.cell(),TopologyCompiler.Kind.VOID,PhysicalFluidTopology.Direction.NORTH,
+                    new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),FlowControl.ControlValve.still(),List.of(port),true,PhysicalFluidTopology.Cutoff.NONE,false,
+                    PhysicalFluidTopology.ALL_FACES,0,0,null);
+            var record=new WorldTopologyLedger.Registration(device,new FluidDeviceSpec(1,com.wormzjl.icheme.science.fluid.network.Burners.AIR,com.wormzjl.icheme.science.fluid.network.Burners.PRESSURE,FluidDeviceSpec.nitrogen(catalog).composition()),0);
+            placed.add(record);edits.add(new WorldTopologyLedger.Edit(fired,record));
+        }
+        submit(edits,next);
+        topology.still(StillUnit.built(pot,water,distillate,vent,fired,design,model.componentCount()));
+        stills.refresh();
+        return placed;
+    }
+    /** {@link #placeStill(StillDevices,long)} for registered still {@code u}, its pot {@code potRecord}. */
+    private List<WorldTopologyLedger.Registration> moveStill(StillDevices d,StillUnit u,WorldTopologyLedger.Registration potRecord) {
+        var design=d.design();
+        if(design.condenser()!=(d.water()!=null)||design.condenser()!=(d.distillate()!=null)||design.condenser()!=(d.vent()!=null))throw new IllegalArgumentException("A still's condenser has its water side and its outlets, and only it");
+        if((d.burners()!=null)!=(design.heater()==com.wormzjl.icheme.science.fluid.network.BatchStill.Heater.LIQUID))throw new IllegalArgumentException("A liquid-fired still has its burners, and only it");
+        long pot=u.id(),next=topology.nextIdentity();var edits=new ArrayList<WorldTopologyLedger.Edit>();var placed=new ArrayList<WorldTopologyLedger.Registration>();
+        var old=potRecord.spec();var vessel=d.pot();
+        var potDevice=potRecord.device().withPlacement(vessel.node(),vessel.ports()).withHeat(potRecord.device().heat().withArea(vessel.heat().area()));
+        var potSpec=new FluidDeviceSpec(vessel.volume(),old.temperature(),old.pressure(),old.composition(),old.solids(),vessel.levelHeight(),design.condenser(),vessel.geometry(),old.tower());
+        // A side, outlet or burner the still has moves; one the layout adds registers; one it no longer has leaves.
+        long water=0;WorldTopologyLedger.Registration waterRecord=null;
+        var held=u.water()>0?registrations().get(u.water()):null;
+        if(d.water()!=null) {
+            var side=d.water();
+            var device=held!=null?held.device().withPlacement(side.node(),side.ports()).withGeometry(side.passage()).withHeat(held.device().heat().withArea(side.heat().area()))
+                    :new PhysicalFluidTopology.Device(next,side.node(),TopologyCompiler.Kind.HEAT_SIDE,PhysicalFluidTopology.Direction.NORTH,side.passage(),new FlowControl.Passive(),
+                            side.ports(),true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,side.heat().withPartner(pot));
+            water=held!=null?held.device().id():next++;
+            waterRecord=held!=null&&device.equals(held.device())?held:new WorldTopologyLedger.Registration(device,held!=null?held.spec():FluidDeviceSpec.nitrogen(catalog),held!=null?Math.addExact(held.revision(),1):0);
+        }else if(held!=null)edits.add(new WorldTopologyLedger.Edit(held.device().id(),null));
+        if(waterRecord!=null){placed.add(waterRecord);if(waterRecord!=held)edits.add(new WorldTopologyLedger.Edit(water,waterRecord));}
+        var potNext=new WorldTopologyLedger.Registration(potDevice,potSpec,Math.addExact(potRecord.revision(),1));placed.add(potNext);
+        if(!potDevice.equals(potRecord.device())||!potSpec.equals(old))edits.add(new WorldTopologyLedger.Edit(pot,potNext));else placed.set(placed.size()-1,potRecord);
+        long[] ids=new long[3];var wanted=new PhysicalFluidTopology.Port[]{d.distillate(),d.vent(),d.burners()};long[] had={u.distillate(),u.vent(),u.burners()};
+        for(int k=0;k<3;k++) {
+            var port=wanted[k];var record=had[k]>0?registrations().get(had[k]):null;
+            if(port==null){if(record!=null)edits.add(new WorldTopologyLedger.Edit(record.device().id(),null));continue;}
+            WorldTopologyLedger.Registration moved;
+            if(record!=null) {
+                var device=record.device().withPlacement(port.cell(),List.of(port));ids[k]=record.device().id();
+                moved=device.equals(record.device())?record:new WorldTopologyLedger.Registration(device,record.spec(),Math.addExact(record.revision(),1));
+            }else {
+                ids[k]=next++;
+                var device=new PhysicalFluidTopology.Device(ids[k],port.cell(),k<2?TopologyCompiler.Kind.GENERATOR:TopologyCompiler.Kind.VOID,PhysicalFluidTopology.Direction.NORTH,
+                        new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),FlowControl.ControlValve.still(),List.of(port),true,PhysicalFluidTopology.Cutoff.NONE,false,
+                        PhysicalFluidTopology.ALL_FACES,0,0,null);
+                moved=k<2?new WorldTopologyLedger.Registration(device,new FluidDeviceSpec(1,298.15,STILL_OUTLET_PRESSURE,FluidDeviceSpec.nitrogen(catalog).composition()),0)
+                        :new WorldTopologyLedger.Registration(device,new FluidDeviceSpec(1,com.wormzjl.icheme.science.fluid.network.Burners.AIR,com.wormzjl.icheme.science.fluid.network.Burners.PRESSURE,FluidDeviceSpec.nitrogen(catalog).composition()),0);
+            }
+            placed.add(moved);if(moved!=record)edits.add(new WorldTopologyLedger.Edit(ids[k],moved));
+        }
+        if(!edits.isEmpty())submit(edits,next);
+        topology.still(new StillUnit(pot,water,ids[0],ids[1],ids[2],design.volume(),design.heater(),design.condenser(),design.stages(),u.head(),u.venting(),u.burning(),u.firing(),u.reflux(),u.heated(),u.condensed()));
+        stills.refresh();
+        return placed;
+    }
+    /** The player's settings for the still whose pot is {@code pot} (W5): firing 0 to 1, reflux ratio (+Infinity closed). Null, or why not. */
+    public @org.jetbrains.annotations.Nullable String stillSettings(long pot,double firing,double reflux){owned();if(closed)return "the fluid world is closed";return stills.settings(pot,firing,reflux);}
+    /** A solid still's slot changed: its pot's island reads the fire again at its next slice (a wake, no solve). */
+    public void stillFuelChanged(long pot){owned();Long island=registry.owner(pot);if(island!=null)runtime.coordinator().controlsMoved(List.of(island));}
     /** The network package's formulas (atoms of C, H, N, O, S) in {@code model}'s conserved order, by component name. */
     static double[][] formulas(MaterialCatalog catalog,FluidThermodynamics model) {
         String id=com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(catalog);
@@ -435,7 +588,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
         long id=topology.nextIdentity();FlowControl control=switch(kind){case PUMP,COMPRESSOR->PhysicalFluidTopology.defaultMover(kind);case VALVE->FlowControl.ControlValve.unconfigured();default->new FlowControl.Passive();};
         if(inlineMover!=TopologyCompiler.Kind.PIPE){if(kind!=TopologyCompiler.Kind.PIPE||pressureValve||filter)throw new IllegalArgumentException("Conflicting inline mover");control=PhysicalFluidTopology.defaultMover(inlineMover);}
         if(pressureValve)control=FlowControl.ControlValve.unconfigured();
-        double diameter=kind==TopologyCompiler.Kind.PIPE?placedPipeDiameter(position):.05;
+        double diameter=kind==TopologyCompiler.Kind.PIPE||kind==TopologyCompiler.Kind.DIVERTER_VALVE?placedPipeDiameter(position):.05;
+        // A diverter valve is placed open to its straight outlet (batch 2026-11-09-batch-distiller).
+        if(kind==TopologyCompiler.Kind.DIVERTER_VALVE&&joints==PhysicalFluidTopology.ALL_FACES)joints=PhysicalFluidTopology.diverterJoints(facing,0);
         var device=new PhysicalFluidTopology.Device(id,position,kind,facing,new PipeResistance.Geometry(1,diameter,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),control,ports,kind!=TopologyCompiler.Kind.GENERATOR,cutoff,filter,joints);
         var spec=kind==TopologyCompiler.Kind.GENERATOR?FluidDeviceSpec.water(catalog):FluidDeviceSpec.nitrogen(catalog);
         // A reservoir is placed empty (decision D54): of its settings only the capacity means anything.
@@ -668,6 +823,27 @@ public final class FluidWorldAuthority implements AutoCloseable {
     /** Rapid clicks toggle the latest queued value, never the older drawn lever. */
     public void togglePipeCutoff(long id) {
         owned();registry.togglePipeCutoff(id);
+    }
+    /**
+     * Sets diverter valve {@code id} to outlet {@code outlet} (0 straight through, 1 and 2 beside it; batch
+     * 2026-11-09-batch-distiller): a fact, one queued edit of its joints; its island recompiles on the engine's schedule.
+     * Null, or why not.
+     */
+    public @org.jetbrains.annotations.Nullable String divert(long id,int outlet) {
+        owned();if(closed)return "the fluid world is closed";
+        var r=topology.latest().get(id);
+        if(r==null||r.device().kind()!=TopologyCompiler.Kind.DIVERTER_VALVE)return "no diverter valve";
+        if(outlet<0||outlet>2)return "a diverter valve has three outlets";
+        int joints=PhysicalFluidTopology.diverterJoints(r.device().facing(),outlet);
+        if(joints==r.device().joints())return null;
+        if(topology.pending(id))return "the diverter valve is being edited";
+        edit(id,r.revision(),r.device().withJoints(joints),r.spec());
+        return null;
+    }
+    /** The open outlet of diverter valve {@code id} (0 to 2), or -1 for none. */
+    public int diverterOutlet(long id) {
+        owned();var r=topology.latest().get(id);
+        return r==null||r.device().kind()!=TopologyCompiler.Kind.DIVERTER_VALVE?-1:PhysicalFluidTopology.diverterOutlet(r.device().facing(),r.device().joints());
     }
     /** Reading committed static configuration never advances or materialises process state. */
     public Optional<PhysicalFluidTopology.Device> committedDevice(long id){owned();var record=topology.active().get(id);return record==null?Optional.empty():Optional.of(record.device());}
@@ -1218,7 +1394,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
     }
     /** Marks a device for its next bucket (a test or tool asking for a refresh gets it on the engine's schedule). */
     public com.wormzjl.icheme.runtime.instrument.InstrumentHosts.Host instrumentHost(long id){owned();var r=registrations().get(id);if(r==null)return null;var p=r.device().position();var level=server.getLevel(dimension(p.dimension()));if(level==null)return null;var h=com.wormzjl.icheme.runtime.instrument.InstrumentHosts.at(level,new BlockPos(p.x(),p.y(),p.z()));return h!=null&&h.identity()==id?h:null;}
-    public void controlInputsChanged(java.util.Collection<Long> devices){owned();runtime.coordinator().controlsMoved(devices.stream().map(registry::owner).filter(java.util.Objects::nonNull).distinct().toList());}
+    public void controlInputsChanged(java.util.Collection<Long> devices){owned();runtime.coordinator().controlsMoved(devices.stream().map(registry::owner).filter(java.util.Objects::nonNull).distinct().toList());
+        for(long d:devices)if(topology.still(d)!=null)stills.replanned(d);}
     public boolean controlCoupled(long sensor,long output){owned();var a=registry.owner(sensor);return a!=null&&a.equals(registry.owner(output));}
     public boolean controlReserved(long output){
         owned();var r=registrations().get(output);if(r==null)return false;
@@ -1492,6 +1669,10 @@ public final class FluidWorldAuthority implements AutoCloseable {
             for(var pipe:snapshot.graph().pipes())if(own!=0&&pipe.id()==own)law=pipe.heat();
             view=view.withHeat(HeatPresentation.complete(view.heat(),id,heat,law,heatSource(islands)));
         }
+        // A batch still's pot (batch 2026-11-09-batch-distiller, W3): its status and alarms on the status line, an electric one's power.
+        if(registration.device().stillPot()) {
+            var line=stills.statusLine(id);if(!line.isEmpty()&&!view.status().contains(line))view=view.withStatus(view.status()+" / "+line);
+        }
         // A flare stack (batch 2026-11-09-flare-stack): its flow, heat, gas and status; its alarms on the status line.
         if(registration.device().flare()) {
             var f=flares.view(id);
@@ -1668,13 +1849,18 @@ public final class FluidWorldAuthority implements AutoCloseable {
             runtime.topology(dimension(name),events,affected,replacements,model,committed,online,additions,removals,releasedFilters,commit);
         }
         public boolean acceptsRecovery(UUID player){var online=server.getPlayerList().getPlayer(player);return online!=null&&online.getInventory().getFreeSlot()>=0;}
-        @Override public Set<String> portCompounds(long port){return columns==null?Set.of():columns.compounds(port);}
+        @Override public Set<String> portCompounds(long port){
+            var column=columns==null?Set.<String>of():columns.compounds(port);var still=stills==null?Set.<String>of():stills.compounds(port);
+            if(still.isEmpty())return column;if(column.isEmpty())return still;var all=new java.util.TreeSet<>(column);all.addAll(still);return all;
+        }
         public void refused(UUID event,String reason){refuseEvent(event,reason);}
         public void committed(Set<Long> removed,Set<Long> recompiled) {
             // A removed exchanger takes its heat in transit along (plan section 5.2): its sides leave in one event, keyed by the lower.
             for(long device:removed)topology.removedHeat(runtime.coordinator().removeTransit(PhysicalFluidTopology.sideIdentity(device)));
             unboundBindings.removeAll(removed);publishedMenuData.keySet().removeAll(removed);publishedGlides.keySet().removeAll(removed);for(long device:removed){tankWatchers.remove(device);forgetSightGlass(device);forgetMover(device);}
             columns.committed();
+            // A batch still whose pot left takes its head's accounts along, booked as destroyed (batch 2026-11-09-batch-distiller).
+            for(long device:removed)if(topology.still(device)!=null){topology.removeStill(device);stills.removed(device);}
             // Every recompiled device's cached snapshot predates the change, and one left in no island (a pipe whose only
             // tank was broken) gets no publication that would mark it: each is marked for its next bucket, which presents
             // its new view (its replacement island, or "no hydraulic boundary"); an opening menu waits for that bucket.

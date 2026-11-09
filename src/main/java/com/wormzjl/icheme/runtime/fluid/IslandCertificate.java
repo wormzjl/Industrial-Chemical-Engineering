@@ -355,7 +355,10 @@ public final class IslandCertificate {
             // A kettle's pool's facts and slice inputs (W7): a replay holds them fixed.
             var pool=node.inventory().pool();
             if(pool==null)d.integer(0);
-            else{d.integer(1);d.number(pool.id());d.number(pool.partner());d.real(pool.area());d.real(pool.bottom());d.real(pool.bundle());d.integer(pool.cells());for(double t:pool.wall())d.real(t);d.real(pool.giveBack());d.real(pool.active());}
+            else{d.integer(1);d.number(pool.id());d.number(pool.partner());d.real(pool.area());d.real(pool.bottom());d.real(pool.bundle());d.integer(pool.cells());for(double t:pool.wall())d.real(t);d.real(pool.giveBack());d.real(pool.active());
+                // A still's column head (batch 2026-11-09-batch-distiller, W3): a slice input a replay holds fixed. Named only
+                // where there is one, so the signatures of kettles saved before it stand (within identity 9).
+                var head=pool.head();if(head!=null){d.integer(2);for(double r:head.recovery())d.real(r);d.real(head.returnEnthalpy());}}
             if(node.fixed()) {
                 var inventory=node.inventory();d.integer(inventory.moles().length);for(double n:inventory.moles())d.real(n);
                 d.real(inventory.internalEnergy());d.solids(inventory.solids());d.real(node.state().temperature());d.real(node.state().pressure());

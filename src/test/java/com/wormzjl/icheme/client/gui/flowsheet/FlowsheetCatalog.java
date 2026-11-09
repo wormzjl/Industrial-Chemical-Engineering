@@ -115,6 +115,9 @@ public final class FlowsheetCatalog {
             case PUMP -> PUMP;
             case VALVE -> modelled("valve");
             case FILTER -> modelled("filter");
+            // The diverter valve (batch 2026-11-09-batch-distiller): one inlet and three outlets, all its flow to the chosen one. On the sheet it is
+            // the splitter, whose chosen outlet takes the rest and whose other two take a share of none.
+            case DIVERTER_VALVE -> modelled("splitter");
             case COMPRESSOR -> COMPRESSOR;
             case HEAT_SIDE -> EXCHANGER;
             // A steam turbine registers as a fluid device (W3, reading A37).

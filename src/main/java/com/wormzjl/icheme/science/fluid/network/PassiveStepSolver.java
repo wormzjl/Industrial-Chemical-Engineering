@@ -2329,7 +2329,8 @@ public final class PassiveStepSolver {
     private PassiveNetwork pools(PassiveNetwork graph,Map<Long,ExchangerRelay.Read> reads,double seconds,Runnable checkpoint) {
         List<PassiveNetwork.Reservoir> nodes=null;
         for(int i=0;i<graph.reservoirs().size();i++) {
-            var node=graph.reservoirs().get(i);var pool=node.inventory().pool();if(pool==null)continue;
+            // A still's fired pot (batch 2026-11-09-batch-distiller, W3) has no tubes: the still plans its firing and head at dispatch.
+            var node=graph.reservoirs().get(i);var pool=node.inventory().pool();if(pool==null||pool.fired())continue;
             var read=reads.getOrDefault(pool.id(),ExchangerRelay.Read.NONE);var tube=read.partner();
             var contents=node.state();
             Pool planned;

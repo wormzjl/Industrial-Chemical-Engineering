@@ -54,6 +54,7 @@ public final class ModItems {
     public static final DeferredItem<PipelineFittingItem> FLUID_COMPRESSOR=fitting("fluid_compressor",Instrument.Type.COMPRESSOR);
     public static final DeferredItem<PipelineFittingItem> PRESSURE_CONTROL_VALVE=fitting("pressure_control_valve",Instrument.Type.PRESSURE_VALVE);
     public static final DeferredItem<BlockItem> FLUID_GENERATOR=ITEMS.registerSimpleBlockItem("fluid_generator",ModBlocks.FLUID_GENERATOR);
+    public static final DeferredItem<BlockItem> DIVERTER_VALVE=ITEMS.registerSimpleBlockItem("diverter_valve",ModBlocks.DIVERTER_VALVE);
     public static final DeferredItem<BlockItem> FLUID_VOID=ITEMS.registerSimpleBlockItem("fluid_void",ModBlocks.FLUID_VOID);
     public static final DeferredItem<PipelineFittingItem> INLINE_FILTER=fitting("inline_filter",Instrument.Type.FILTER);
     public static final DeferredItem<BlockItem> PIPE_RACK=ITEMS.registerSimpleBlockItem("pipe_rack",ModBlocks.PIPE_RACK);

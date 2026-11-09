@@ -247,6 +247,27 @@ public final class IslandCoordinator {
          * side reads the heat the column owes it, a side of a held member moves no heat; null where no column holds the partner.
          */
         default com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read heatRead(long side,long partner,long start,double seconds,double transit){return null;}
+        /**
+         * The slice inputs a unit sets on the island's own nodes and connections at dispatch, after the controls and the shaft
+         * plans (batch 2026-11-09-batch-distiller, W3: a still's fired pot and its head, its burners' fuel valve): a read, no solve.
+         */
+        default PassiveNetwork dispatch(long island,PassiveNetwork graph,IslandClock.Slice slice){return graph;}
+        /** Both {@code a} and {@code b}: ready when both are, their plans together, both booked; a side read by the first that answers. */
+        static Ports both(Ports a,Ports b) {
+            return new Ports() {
+                public boolean ready(long island,PassiveNetwork graph,long start){return a.ready(island,graph,start)&&b.ready(island,graph,start);}
+                public Map<Long,com.wormzjl.icheme.science.fluid.network.PortPlan> plans(long island,PassiveNetwork graph,IslandClock.Slice slice) {
+                    var first=a.plans(island,graph,slice);var second=b.plans(island,graph,slice);
+                    if(first.isEmpty())return second;if(second.isEmpty())return first;
+                    var all=new HashMap<>(first);all.putAll(second);return all;
+                }
+                public void booked(long island,PassiveNetwork graph,long start,long end,PassiveIntervalSolver.Result result){a.booked(island,graph,start,end,result);b.booked(island,graph,start,end,result);}
+                public com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read heatRead(long side,long partner,long start,double seconds,double transit) {
+                    var read=a.heatRead(side,partner,start,seconds,transit);return read!=null?read:b.heatRead(side,partner,start,seconds,transit);
+                }
+                public PassiveNetwork dispatch(long island,PassiveNetwork graph,IslandClock.Slice slice){return b.dispatch(island,a.dispatch(island,graph,slice),slice);}
+            };
+        }
         Ports NONE=new Ports(){
             public boolean ready(long island,PassiveNetwork graph,long start){return true;}
             public Map<Long,com.wormzjl.icheme.science.fluid.network.PortPlan> plans(long island,PassiveNetwork graph,IslandClock.Slice slice){return Map.of();}
@@ -573,7 +594,7 @@ public final class IslandCoordinator {
                 var reads=reads(island,slice);
                 // The shaft trains' slice inputs (W3), read here as a heat side's partner is.
                 var controlled=controls.apply(island.graph);
-                var dispatched=com.wormzjl.icheme.science.fluid.network.ShaftPlan.apply(controlled,shafts.plans(island.id,controlled));
+                var dispatched=ports.dispatch(island.id,com.wormzjl.icheme.science.fluid.network.ShaftPlan.apply(controlled,shafts.plans(island.id,controlled)),slice);
                 var command=new ProcessSolveServices.FluidIslandCommand(island.model,dispatched,slice.seconds(),PassiveIntervalSolver.Settings.defaults(),settings.hardBudgetNanos,island.retained,reads,ports.plans(island.id,dispatched,slice));
                 if(!dispatcher.submit(attempt,command)) {island.status="WAITING: shared worker capacity";island.touch();break;}
                 island.clock.admitted(slice);island.status="SOLVING";island.touch();FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.solvesDispatched);
@@ -1025,7 +1046,8 @@ public final class IslandCoordinator {
     private static long[] coupledSides(PassiveNetwork graph) {
         var sides=graph.pipes().stream().filter(p->p.heat() instanceof HeatSide side&&side.coupled()||p.heat() instanceof FiredCoil coil&&coil.partner()!=0
                 ||p.heat() instanceof ConvectionCoil coil&&coil.radiant()!=0).mapToLong(PassiveNetwork.Pipe::id);
-        var pools=graph.reservoirs().stream().filter(n->n.inventory().pool()!=null).mapToLong(n->n.inventory().pool().id());
+        // A still's fired pot (batch 2026-11-09-batch-distiller, W3) has no other side: its heat is its firing.
+        var pools=graph.reservoirs().stream().filter(n->n.inventory().pool()!=null&&!n.inventory().pool().fired()).mapToLong(n->n.inventory().pool().id());
         return java.util.stream.LongStream.concat(sides,pools).toArray();
     }
     private static SideKind kindOf(PassiveNetwork graph,long pipe) {

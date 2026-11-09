@@ -326,6 +326,13 @@ class ShapeRasterizerTest {
                     assertEquals(first.cell(), cells.get(i), shape.toString());
                 }
             }
+            // A batch still (batch 2026-11-09-batch-distiller, W3): its pot at a shell cell, then each device at its nozzle's port cell.
+            else if (shape.kind() == EquipmentShape.Kind.BATCH_STILL) {
+                var cells = ShapeRasterizer.fluidCells(shape);
+                assertTrue(ShapeRasterizer.layout(shape).shell().contains(cells.getFirst()), shape.toString());
+                for (int i = 1; i < cells.size(); i++) {var cell = cells.get(i);assertTrue(ShapeRasterizer.ports(shape).stream().anyMatch(p -> p.cell().equals(cell)), shape.toString());}
+                assertEquals(cells.size(), new java.util.HashSet<>(cells).size(), shape.toString());
+            }
             else assertNull(ShapeRasterizer.fluidCell(shape), shape.toString());
     }
 

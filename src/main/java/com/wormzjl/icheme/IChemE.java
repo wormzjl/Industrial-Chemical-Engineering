@@ -225,6 +225,8 @@ public final class IChemE {
         event.registerBlockEntity(net.neoforged.neoforge.capabilities.Capabilities.EnergyStorage.BLOCK,ModBlockEntities.CREATIVE_POWER.get(),(source,side)->source);
         event.registerBlockEntity(net.neoforged.neoforge.capabilities.Capabilities.EnergyStorage.BLOCK,ModBlockEntities.FLUID_DEVICE.get(),(pipe,side)->pipe.energy());
         event.registerBlockEntity(net.neoforged.neoforge.capabilities.Capabilities.EnergyStorage.BLOCK, ModBlockEntities.EQUIPMENT_SHELL.get(), (shell, side) -> shell.energy());
+        // A solid-fired batch still's fuel slot on every cell (batch 2026-11-09-batch-distiller, W4): hoppers feed its fire.
+        event.registerBlockEntity(net.neoforged.neoforge.capabilities.Capabilities.ItemHandler.BLOCK, ModBlockEntities.EQUIPMENT_SHELL.get(), (shell, side) -> shell.fuel());
     }
     /** The floating roofs that rise this tick lift what stands on them (a read of each tank's glide; nothing solves). */
     private static void onLevelTickPost(net.neoforged.neoforge.event.tick.LevelTickEvent.Post event) {

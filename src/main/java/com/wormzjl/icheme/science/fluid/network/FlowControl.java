@@ -267,12 +267,14 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
      * sets its mass target once per slice from the radiant coil's demand ({@link Burners}), 0 with the burners out or unpowered.
      * {@code FLARE} (batch 2026-11-09-flare-stack): a flare's tip limit, on the run into its tip; the engine sets its mass
      * target once per slice to the most the flare passes ({@link Flare#limit}), 0 while solids arrive.
+     * {@code STILL} (batch 2026-11-09-batch-distiller): a batch still's outlet valve, on the run out of its distillate or vent
+     * generator; the engine sets its mass target once per slice from what the still's head account holds.
      */
-    enum ValveSource { NONE, PRESSURE, MASS_FLOW, VOLUME_FLOW, SHAFT_SPEED, BURNER, FLARE;
+    enum ValveSource { NONE, PRESSURE, MASS_FLOW, VOLUME_FLOW, SHAFT_SPEED, BURNER, FLARE, STILL;
         /** Whether a valve of this source regulates its mass flow. */
-        public boolean mass(){return this==MASS_FLOW||this==SHAFT_SPEED||this==BURNER||this==FLARE;}
+        public boolean mass(){return this==MASS_FLOW||this==SHAFT_SPEED||this==BURNER||this==FLARE||this==STILL;}
         /** Whether the engine sets this valve's mass target each slice (a governor or a fuel valve), not the player. */
-        public boolean planned(){return this==SHAFT_SPEED||this==BURNER||this==FLARE;}
+        public boolean planned(){return this==SHAFT_SPEED||this==BURNER||this==FLARE||this==STILL;}
         /** Whether this is a valve the engine builds into a sink (a firebox or a flare tip), on the run into it. */
         public boolean sink(){return this==BURNER||this==FLARE;}
     }
@@ -293,10 +295,14 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
         public static final java.util.UUID FLARE_SENSOR=new java.util.UUID(0x666c617265000000L,1);
         /** A flare's tip limit, shut until its first slice plan. */
         public static ControlValve flare(){return new ControlValve(ValveSource.FLARE,200000,0,.01,FLARE_SENSOR,0);}
+        /** A batch still's outlet valve's source identity. */
+        public static final java.util.UUID STILL_SENSOR=new java.util.UUID(0x7374696c6c000000L,1);
+        /** A batch still's outlet valve, shut until its first slice plan. */
+        public static ControlValve still(){return new ControlValve(ValveSource.STILL,200000,0,.01,STILL_SENSOR,0);}
         @Override public boolean pressureControl(){return source==ValveSource.PRESSURE;}
         @Override public boolean massControl(){return source.mass();}
         @Override public boolean bare(){return sensor==null;}
-        public double target(){return switch(source){case NONE,PRESSURE->targetPressure;case MASS_FLOW,SHAFT_SPEED,BURNER,FLARE->massTarget;case VOLUME_FLOW->volumeTarget;};}
+        public double target(){return switch(source){case NONE,PRESSURE->targetPressure;case MASS_FLOW,SHAFT_SPEED,BURNER,FLARE,STILL->massTarget;case VOLUME_FLOW->volumeTarget;};}
         @Override public double targetMassFlow(double density){return source.mass()?massTarget:volumeTarget*density;}
         public ControlValve withTarget(double value){return new ControlValve(source,source==ValveSource.PRESSURE?value:targetPressure,source.mass()?value:massTarget,source==ValveSource.VOLUME_FLOW?value:volumeTarget,sensor,Math.addExact(revision,1));}
         /** A governor valve's mass target for one slice (W3): a slice input, its revision kept, as a column's port plan is. */

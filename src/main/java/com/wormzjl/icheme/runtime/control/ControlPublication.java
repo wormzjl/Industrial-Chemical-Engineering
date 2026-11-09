@@ -83,6 +83,9 @@ final class ControlPublication {
         if (record == null) return "#" + id;
         if (record.device().control() instanceof FlowControl.ControlValve)
             return String.format(Locale.ROOT, "CV-%04d", id);
+        if (record.device().kind()
+                == com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.DIVERTER_VALVE)
+            return String.format(Locale.ROOT, "DV-%04d", id);
         var heat = record.device().heat();
         if (heat != null)
             return String.format(
@@ -93,6 +96,7 @@ final class ControlPublication {
                         case KETTLE -> "RB";
                         case AIR_COOLER -> "AC";
                         case FIRED_HEATER -> "FH";
+                        case STILL -> "BS";
                     },
                     id,
                     heat.side());
@@ -279,7 +283,14 @@ final class ControlPublication {
                                                             || r.device().heat() != null
                                                                     && r.device()
                                                                             .heat()
-                                                                            .controllable()))
+                                                                            .controllable()
+                                                            // A batch still's pot and a diverter valve (owner decisions O1, O2).
+                                                            || r.device().stillPot()
+                                                            || r.device().kind()
+                                                                    == com.wormzjl.icheme.science
+                                                                            .fluid.topology
+                                                                            .TopologyCompiler.Kind
+                                                                            .DIVERTER_VALVE))
                             .sorted(Comparator.comparingLong(r -> r.device().id()))
                             .toList();
             row.putInt("outputPages", Math.max(1, (outputChoices.size() + 63) / 64));
