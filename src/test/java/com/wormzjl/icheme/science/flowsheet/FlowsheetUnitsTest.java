@@ -178,6 +178,20 @@ final class FlowsheetUnitsTest {
         assertTrue(logged(over, "splitter.over"), () -> "log " + over.log());
     }
 
+    /**
+     * The world's diverter valve (batch 2026-11-09-batch-distiller), one inlet and three outlets, sends all its flow to the chosen
+     * one. On the sheet it is the splitter: the chosen outlet takes the rest and the other two a share of none (FlowsheetCatalog).
+     */
+    @Test void aDiverterIsASplitterWhoseChosenOutletTakesAll() {
+        var run = closes(sheet().unit("S", "splitter", "{\"outlets\":[{\"id\":\"a\",\"share\":0},{\"id\":\"b\"},{\"id\":\"c\",\"share\":0}]}")
+                .feed("in", "S", "in", feed(420, 8e5, DRY_CRUDE, 100)).product("a", "S", "out/a").product("b", "S", "out/b").product("c", "S", "out/c").run());
+        assertEquals(0, run.streams().get("a").total());
+        assertEquals(100, run.streams().get("b").total(), 1e-9);
+        assertEquals(0, run.streams().get("c").total());
+        assertEquals(run.streams().get("in").temperature(), run.streams().get("b").temperature(), 1e-6);
+        assertEquals(1, reading(run, "S", "rest"), 1e-12);
+    }
+
     @Test void aFilterTakesTheSolidsAsCake() {
         var slurry = new Flowsheet.Feed(320, 3e5, feed(320, 3e5, PURE_WATER, 100).amounts(), List.of(new Flowsheet.Solid("icheme:demo_particle", "100", .5)));
         var run = closes(sheet().unit("F", "filter", "{}").feed("in", "F", "a", slurry).product("out", "F", "b").run());

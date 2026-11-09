@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.science.flowsheet;
 
+import com.wormzjl.icheme.science.flowsheet.unit.BatchStillUnit;
 import com.wormzjl.icheme.science.flowsheet.unit.CoolerUnit;
 import com.wormzjl.icheme.science.flowsheet.unit.ColumnUnit;
 import com.wormzjl.icheme.science.flowsheet.unit.EjectorUnit;
@@ -36,6 +37,7 @@ public final class UnitTypes {
             Map.entry("cooler", new CoolerUnit()),
             Map.entry("fired_heater", new FiredHeaterUnit()),
             Map.entry("flare", new FlareUnit()),
+            Map.entry("batch_still", new BatchStillUnit()),
             Map.entry("column", new ColumnUnit()),
             Map.entry("pump", new MoverUnit(new FlowControl.Pump(1, 1))),
             Map.entry("compressor", new MoverUnit(new FlowControl.Compressor(1, 2))),
