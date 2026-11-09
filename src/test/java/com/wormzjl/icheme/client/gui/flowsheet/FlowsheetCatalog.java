@@ -26,8 +26,8 @@ public final class FlowsheetCatalog {
             EJECTOR = modelled("ejector"), TURBINE = modelled("steam_turbine"), DRIVER = drawn("steam_turbine"), ADSORBER = drawn("adsorber"), CYCLONE = drawn("cyclone"), STIRRED = drawn("stirred_reactor"),
             TRICKLE = drawn("trickle_bed"), EBULLATED = drawn("ebullated_bed"), FCC = drawn("fcc_converter"), COKER = drawn("delayed_coker"), CFB = drawn("cfb_boiler"),
             FLUID_BED = drawn("fluid_bed_gasifier"), GRATE = drawn("grate_boiler"), FIXED_BED = drawn("fixed_bed_gasifier"), FLARE = modelled("flare"),
-            // The batch still (batch 2026-11-09-batch-distiller, W2) is drawn only until its model lands (W7).
-            STILL = drawn("batch_still");
+            // The batch still (batch 2026-11-09-batch-distiller): drawn only from W2, modelled since W7 (BatchStillUnit).
+            STILL = modelled("batch_still");
 
     private FlowsheetCatalog() {
     }

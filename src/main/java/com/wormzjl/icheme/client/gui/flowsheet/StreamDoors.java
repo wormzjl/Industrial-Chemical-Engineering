@@ -364,7 +364,7 @@ public final class StreamDoors {
         return switch (parts[0]) {
             case "pa" -> x.text("port.pa_" + parts[2], parts[1]);
             case "in", "out" -> parts.length > 1 ? x.text("port." + parts[0] + "_row", parts[1]) : x.text("port." + port);
-            case "steam", "draw" -> x.text("port." + parts[0] + "_row", parts[1]);
+            case "steam", "draw", "cut" -> x.text("port." + parts[0] + "_row", parts[1]);
             default -> x.text("port." + port);
         };
     }

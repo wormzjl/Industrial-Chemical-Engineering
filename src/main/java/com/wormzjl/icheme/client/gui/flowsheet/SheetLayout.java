@@ -262,6 +262,7 @@ public final class SheetLayout {
         int w = symbol.w, h = symbol.h;
         if (symbol == Symbol.MIXER) h = Math.max(h, (ports.size() - 2) * PITCH + 12);
         if (symbol == Symbol.SPLITTER) h = Math.max(h, (ports.size() - 2) * PITCH + 12);
+        if (symbol == Symbol.STILL) h = Math.max(h, (cuts(ports) - 1) * PITCH + 24);
         var at = new ArrayList<Place>();
         int inlets = 0, outlets = 0;
         for (var port : ports) {
@@ -305,6 +306,14 @@ public final class SheetLayout {
             // A flare's gas enters its riser near the foot.
             case "flare" -> new int[]{0, h - 8, L};
             case "splitter" -> in ? new int[]{0, h / 2, L} : new int[]{w, stacked(order, ports.size() - 1, h), R};
+            // A batch still (batch 2026-11-09-batch-distiller, W7): the charge into the pot, the drain under the firebox, the vent on the worm
+            // tub, the cuts down the tub's side.
+            case "batch_still" -> switch (id) {
+                case "charge" -> new int[]{0, h / 2, L};
+                case "residue" -> new int[]{16, h, B};
+                case "vent" -> new int[]{w - 9, 0, T};
+                default -> new int[]{w, stacked(order, cuts(ports), h), R};
+            };
             case "drum", "storage_tank" -> switch (id) {
                 case "in" -> new int[]{0, h / 2, L};
                 case "gas" -> new int[]{w / 2, 0, T};
@@ -340,6 +349,11 @@ public final class SheetLayout {
             };
             default -> new int[]{in ? 0 : w, h / 2, in ? L : R};
         };
+    }
+
+    /** A batch still's cut ports, which come first among its outlets. */
+    private static int cuts(List<Port> ports) {
+        return Math.max(1, (int) ports.stream().filter(p -> p.id().startsWith("cut/")).count());
     }
 
     /** The {@code order}th of {@code n} ports at {@link #PITCH}, about the middle of a box {@code h} high. */

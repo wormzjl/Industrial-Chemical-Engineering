@@ -443,6 +443,17 @@ final class SimulatorIcons {
                 p.mark(line(8.5, 36, 11.5, 36), line(6, 18, 14, 18));
                 p.hot(flame(10, 15, 10, 14));
             }
+            // A batch still (batch 2026-11-09-batch-distiller, W7): the pot on its firebox with the door's fire, the helmet, the swan neck
+            // falling to the worm tub on its legs, the worm's turns in the tub and the charge's level in the pot.
+            case STILL -> {
+                p.body(rect(2, 44, 30, 60), oval(3, 17, 29, 48), rect(13, 15, 19, 19), oval(9, 6, 23, 18));
+                p.body(poly(20, 8, 43, 19, 43, 23, 20, 12));
+                p.body(rect(36, 22, 50, 52), rect(37, 52, 39, 60), rect(47, 52, 49, 60));
+                p.mark(line(2, 44, 30, 44), rect(10, 49, 22, 57));
+                p.dash(line(4, 34, 28, 34));
+                for (int i = 0; i < 5; i++) p.fine(line(37, 26 + i * 5, 49, 28.5 + i * 5));
+                p.hot(flame(16, 57, 9, 7));
+            }
             case MISSING -> p.body(rect(0, 0, w, h));
         }
     }

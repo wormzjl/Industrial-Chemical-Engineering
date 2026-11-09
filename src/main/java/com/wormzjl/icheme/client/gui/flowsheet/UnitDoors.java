@@ -38,7 +38,9 @@ import org.jetbrains.annotations.Nullable;
 public final class UnitDoors {
     /** How an entry reads a setting. */
     private enum Quantity {
-        PRESSURE, TEMPERATURE, MEGAWATT, PLAIN
+        PRESSURE, TEMPERATURE, MEGAWATT, PLAIN,
+        /** A volume stored in m³, shown in litres; a time stored in s, shown in hours; a share stored 0 to 1, shown in percent. */
+        LITRES, HOURS, PERCENT
     }
 
     private UnitDoors() {
@@ -84,13 +86,21 @@ public final class UnitDoors {
                 case TEMPERATURE -> u.t(value);
                 case MEGAWATT -> SheetUnits.megawatts(value);
                 case PLAIN -> trim(value);
+                case LITRES -> trim(1000 * value);
+                case HOURS -> trim(value / 3600);
+                case PERCENT -> trim(100 * value);
             });
-            return Door.entry(field, label, switch (quantity) {
-                case PRESSURE -> u.pressure().symbol();
-                case TEMPERATURE -> u.temperature().symbol();
-                case MEGAWATT -> "MW";
-                case PLAIN -> field.equals("area") ? "m²" : field.equals("tip") ? "m" : "";
-            });
+            return Door.entry(field, label, symbol(quantity, field, u));
+        }
+
+        /** An entry on a still's cut row, {@code cut/<id>/value}: the head's temperature or the batch's time, in the player's unit. */
+        Column.Field cut(Params row, String label) {
+            String key = "cut/" + row.text("id", "") + "/value";
+            var quantity = row.text("end", "head").equals("time") ? Quantity.HOURS : Quantity.TEMPERATURE;
+            double value = row.number("value", Double.NaN);
+            entries.put(key, quantity);
+            values.put(key, Double.isNaN(value) ? "" : quantity == Quantity.HOURS ? trim(value / 3600) : x.units().t(value));
+            return Door.entry(key, label, symbol(quantity, key, x.units()));
         }
 
         Column.Buttons choice(String field, String fallback, String... options) {
@@ -113,6 +123,53 @@ public final class UnitDoors {
             return Reader.of(x, unit.id()).of(key, scale, digits);
         }
     }
+
+    private static String symbol(Quantity quantity, String field, SheetUnits u) {
+        return switch (quantity) {
+            case PRESSURE -> u.pressure().symbol();
+            case TEMPERATURE -> u.temperature().symbol();
+            case MEGAWATT -> "MW";
+            case PLAIN -> field.equals("area") ? "m²" : field.equals("tip") ? "m" : "";
+            case LITRES -> "L";
+            case HOURS -> "h";
+            case PERCENT -> "%";
+        };
+    }
+
+    /** A still's rows (batch 2026-11-09-batch-distiller, W7): the pot and cycle, the heater, the condenser and column, the cuts, the batch. */
+    private static void still(Rows r, SheetContext x, String id) {
+        var u = x.units();
+        var p = r.unit.params();
+        r.group("pot", r.entry("volume", x.text("door.pot"), Quantity.LITRES), r.entry("cycle", x.text("door.cycle"), Quantity.HOURS));
+        r.group("heater", r.choice("heater", "solid", "solid", "liquid", "electric"), r.entry("firing", x.text("door.firing"), Quantity.PERCENT));
+        boolean condenses = com.wormzjl.icheme.science.flowsheet.unit.BatchStillUnit.condenses(p);
+        if (condenses) {
+            int stages = p.integer("stages", 0);
+            var column = new ArrayList<Column.Row>(List.of(r.choice("condenser", "built_in", "built_in", "none"), r.entry("water", x.text("door.water"), Quantity.TEMPERATURE),
+                    new Column.Setting("stages", x.text("door.stages"), Integer.toString(stages), "", null, true)));
+            if (stages > 0) column.add(r.entry("reflux", x.text("door.reflux"), Quantity.PLAIN));
+            r.group("condenser", column.toArray(Column.Row[]::new));
+        } else r.group("condenser", r.choice("condenser", "built_in", "built_in", "none"));
+        var rows = com.wormzjl.icheme.science.flowsheet.unit.BatchStillUnit.cutRows(p);
+        int most = com.wormzjl.icheme.science.flowsheet.unit.StillBatch.MOST_CUTS;
+        r.group("cuts", new Column.Buttons(List.of(Door.key("add_cut", x.text("door.add_cut"), rows.size() < most, null), Door.key("remove_cut", x.text("door.remove_cut"), rows.size() > 1, null))));
+        for (var row : rows) {
+            String cut = row.text("id", ""), end = row.text("end", "head");
+            var keys = new Column.Buttons(List.of(Door.position("cut_end/" + cut + "/head", x.text("door.option.head"), end.equals("head")), Door.position("cut_end/" + cut + "/time", x.text("door.option.time"), end.equals("time"))));
+            r.rows.add(Door.group(x.text("door.cut", cut), keys, r.cut(row, x.text(end.equals("time") ? "door.cut_time" : "door.cut_head"))));
+        }
+        var meters = new ArrayList<Column.Row>(List.of(Door.meter(x.text("door.heat"), r.reading("duty", 1e3, 1), "kW")));
+        if (r.text("heater", "solid").equals("electric"))
+            meters.add(Door.meter(x.text("door.draw"), r.reading("fuel", 20 * x.host().joulesPerFE(), 0), "FE/t"));
+        else meters.add(Door.meter(x.text("door.fuel"), r.reading("fuel", 1e3, 1), "kW"));
+        if (condenses) meters.add(Door.meter(x.text("door.condenser"), r.reading("condenser", 1e3, 1), "kW"));
+        meters.add(Door.meter(x.text("door.batch"), r.reading("batch", 3600, 2), "h"));
+        meters.add(Door.meter(x.text("door.fill"), r.reading("fill", .01, 0), "%"));
+        meters.add(Door.meter(x.text("door.distilled"), r.reading("distilled", .01, 0), "%"));
+        meters.add(Door.meter("pot_end", x.text("door.pot_end"), Reader.of(x, id).temperature(u, "pot_end"), u.temperature().symbol()));
+        r.readings(meters.toArray(Column.Row[]::new));
+    }
+
 
     private static String trim(double value) {
         return value == Math.rint(value) ? Long.toString((long) value) : SheetUnits.number(2, value);
@@ -147,6 +204,11 @@ public final class UnitDoors {
                 r.group("tip", r.entry("tip", x.text("door.tip"), Quantity.PLAIN), Door.meter(x.text("door.rated"), r.reading("rated", 1e6, 1), "MW"));
                 r.readings(Door.meter(x.text("door.heat_release"), r.reading("heat", 1e6, 2), "MW"), Door.meter(x.text("door.heating_value"), r.reading("heating_value", 1e6, 1), "MJ/m³"),
                         Door.meter(x.text("door.flame"), Reader.of(x, id).temperature(u, "flame"), u.temperature().symbol()), Door.meter(x.text("door.most_flow"), r.reading("limit", 1, 2), "kg/s"));
+            }
+            // A batch still (batch 2026-11-09-batch-distiller, W7): its curve on a tab of its own.
+            case "batch_still" -> {
+                still(r, x, id);
+                if (view.tab == 2) glass = StillCurve.glass(x, unit);
             }
             case "drum" -> {
                 r.group("pressure", r.choice("pressure_mode", "inlet", "inlet", "set"), r.text("pressure_mode", "inlet").equals("set") ? r.entry("pressure", x.text("door.pressure"), Quantity.PRESSURE) : r.entry("drop", x.text("door.drop"), Quantity.PRESSURE));
@@ -221,7 +283,9 @@ public final class UnitDoors {
         var title = x.t().get(Tiles.name(unit.type()));
         var status = status(x, unit);
         var entries = r.entries;
-        return new Door(title, Door.tabs(view.tab, x.text("door.tab.design"), x.text("door.tab.streams")), view.tab, status.text(), status.tone(), false, List.of(r.rows), r.values, glass, List.of(), new Door.Actions() {
+        var tabs = unit.type().equals("batch_still") ? Door.tabs(view.tab, x.text("door.tab.design"), x.text("door.tab.streams"), x.text("door.tab.batch"))
+                : Door.tabs(view.tab, x.text("door.tab.design"), x.text("door.tab.streams"));
+        return new Door(title, tabs, view.tab, status.text(), status.tone(), false, List.of(r.rows), r.values, glass, List.of(), new Door.Actions() {
             @Override public void entry(String key, String text) {
                 write(x, id, key, text, entries);
             }
@@ -306,6 +370,8 @@ public final class UnitDoors {
             }
             case "valve" -> x.text("door.status.valve", SheetUnits.number(1, 100 * results.reading(unit.id(), "vapour")));
             case "ejector" -> x.text("door.status.ejector", SheetUnits.number(0, 3600 * results.reading(unit.id(), "motive")), SheetUnits.number(1, results.reading(unit.id(), "compression")));
+            case "batch_still" -> x.text("door.status.still", SheetUnits.number(2, results.reading(unit.id(), "batch") / 3600), SheetUnits.number(2, results.reading(unit.id(), "cycle") / 3600),
+                    SheetUnits.number(0, 100 * results.reading(unit.id(), "distilled")));
             default -> x.text("door.status.solved");
         }, Palette.ACCENT);
     }
@@ -343,6 +409,15 @@ public final class UnitDoors {
         }
         var quantity = entries.get(key);
         if (quantity == null) return;
+        if (key.startsWith("cut/")) {
+            if (value == null) return;
+            double si = quantity == Quantity.HOURS ? value * 3600 : x.units().temperature().si(value);
+            var json = cutsJson(x.editor().unit(id));
+            for (var element : json.getAsJsonArray("cuts"))
+                if (element.getAsJsonObject().get("id").getAsString().equals(key.split("/")[1])) element.getAsJsonObject().addProperty("value", si);
+            x.editor().setParams(id, new Params(json), step);
+            return;
+        }
         if (key.equals("limit") && text.isBlank()) {
             var json = x.editor().unit(id).params().json().deepCopy();
             json.remove("limit");
@@ -356,7 +431,69 @@ public final class UnitDoors {
             case TEMPERATURE -> u.temperature().si(value);
             case MEGAWATT -> value * 1e6;
             case PLAIN -> value;
+            case LITRES -> value / 1000;
+            case HOURS -> value * 3600;
+            case PERCENT -> value / 100;
         }, step);
+    }
+
+    /** A still's settings with its cut rows written out, a dropped still's two included. */
+    private static JsonObject cutsJson(Flowsheet.Unit unit) {
+        var json = unit.params().json().deepCopy();
+        if (!json.has("cuts") || !json.get("cuts").isJsonArray() || json.getAsJsonArray("cuts").isEmpty()) {
+            var rows = new JsonArray();
+            for (var row : com.wormzjl.icheme.science.flowsheet.unit.BatchStillUnit.cutRows(Params.none())) rows.add(row.json());
+            json.add("cuts", rows);
+        }
+        return json;
+    }
+
+    /** A still's keys: its stages stepped through none and 2 to 8, a cut added or the last removed, a cut's end, no condenser and so no column. */
+    private static boolean stillKey(SheetContext x, String id, String key) {
+        var unit = x.editor().unit(id);
+        if (!unit.type().equals("batch_still")) return false;
+        var json = cutsJson(unit);
+        var rows = json.getAsJsonArray("cuts");
+        switch (key) {
+            case "stages-", "stages+" -> {
+                int stages = unit.params().integer("stages", 0), most = com.wormzjl.icheme.science.fluid.network.StillColumn.MAX_STAGES;
+                int least = com.wormzjl.icheme.science.fluid.network.BatchStill.MIN_STAGES;
+                int next = key.endsWith("+") ? (stages == 0 ? least : Math.min(most, stages + 1)) : (stages <= least ? 0 : stages - 1);
+                json.addProperty("stages", next);
+            }
+            case "set/condenser/none" -> {
+                json.addProperty("condenser", "none");
+                json.addProperty("stages", 0);
+            }
+            case "add_cut" -> {
+                if (rows.size() >= com.wormzjl.icheme.science.flowsheet.unit.StillBatch.MOST_CUTS) return true;
+                var last = rows.get(rows.size() - 1).getAsJsonObject();
+                var row = new JsonObject();
+                row.addProperty("id", x.editor().rowId(id, "cuts"));
+                boolean time = last.has("end") && last.get("end").getAsString().equals("time");
+                row.addProperty("end", time ? "time" : "head");
+                double was = last.has("value") ? last.get("value").getAsDouble() : com.wormzjl.icheme.science.flowsheet.unit.BatchStillUnit.SECOND_CUT;
+                row.addProperty("value", time ? was + 1800 : was + 30);
+                rows.add(row);
+            }
+            case "remove_cut" -> {
+                if (rows.size() <= 1) return true;
+                rows.remove(rows.size() - 1);
+            }
+            default -> {
+                if (!key.startsWith("cut_end/")) return false;
+                var parts = key.split("/");
+                for (var element : rows) {
+                    var row = element.getAsJsonObject();
+                    if (!row.get("id").getAsString().equals(parts[1]) || row.get("end").getAsString().equals(parts[2])) continue;
+                    // A cut changed to the other end starts at that end's own default: an hour, or the second cut's head.
+                    row.addProperty("end", parts[2]);
+                    row.addProperty("value", parts[2].equals("time") ? 3600 : com.wormzjl.icheme.science.flowsheet.unit.BatchStillUnit.SECOND_CUT);
+                }
+            }
+        }
+        x.editor().setParams(id, new Params(json), null);
+        return true;
     }
 
     /** Sets one outlet row's value; blank makes it the row that takes the rest. */
@@ -374,6 +511,7 @@ public final class UnitDoors {
 
     private static void press(SheetContext x, String id, String key) {
         var unit = x.editor().unit(id);
+        if (stillKey(x, id, key)) return;
         if (key.startsWith("set/")) {
             var parts = key.split("/");
             x.editor().set(id, parts[1], parts[2], null);

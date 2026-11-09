@@ -18,7 +18,9 @@ public enum Symbol {
     FEED(40, 18), PRODUCT(40, 18), PUMP(30, 34), COMPRESSOR(34, 34), TURBO(34, 34), VALVE(24, 24), MIXER(22, 26), SPLITTER(22, 26), FILTER(30, 26), EXCHANGER(64, 28), KETTLE(70, 34), AIR_COOLER(60, 32),
     HEATER(58, 88), CABIN(74, 74), DRUM(28, 60), LYING(64, 28), BOOT_DRUM(64, 28), TANK(54, 42), SPHERE(44, 44), ADSORBER(26, 60), CYCLONE(26, 60),
     COLUMN_TOP(44, 15), COLUMN_TRAY(44, 16), COLUMN_FOOT(44, 15), EJECTOR(50, 20), TURBINE(34, 34), CONDENSING(34, 34),
-    REACTOR(34, 52), TRICKLE(26, 60), EBULLATED(26, 60), FCC(48, 56), COKER(44, 56), CFB(50, 60), GRATE(50, 60), FLUID_GAS(30, 60), FIXED_GAS(30, 60), COOLING_TOWER(50, 60), FLARE(20, 60);
+    REACTOR(34, 52), TRICKLE(26, 60), EBULLATED(26, 60), FCC(48, 56), COKER(44, 56), CFB(50, 60), GRATE(50, 60), FLUID_GAS(30, 60), FIXED_GAS(30, 60), COOLING_TOWER(50, 60), FLARE(20, 60),
+    // A batch still (batch 2026-11-09-batch-distiller, W7): the pot on its firebox, the helmet and swan neck. Last, so no other cell moves.
+    STILL(52, 60);
 
     /** A symbol's masks: the body takes the look's fill, the marks its stroke, the hot layer {@link #FLAME}, untinted by the look. */
     public enum Layer {
@@ -71,7 +73,7 @@ public enum Symbol {
 
     /** Whether it has a fire, in {@link #FLAME}. */
     public boolean hot() {
-        return this == HEATER || this == CABIN || this == CFB || this == GRATE || this == FIXED_GAS || this == FLARE;
+        return this == HEATER || this == CABIN || this == CFB || this == GRATE || this == FIXED_GAS || this == FLARE || this == STILL;
     }
 
     public List<Layer> layers() {
