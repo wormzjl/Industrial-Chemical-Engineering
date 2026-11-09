@@ -17,7 +17,7 @@ A final lane proves that the batch's changes break nothing. A test whose code an
 ## Change
 
 - Every test run of the lane records the classes each test class's JVM loads (`tools/merge-lane/record.init.gradle`: one JVM per test class, `-Xlog:class+load`). `affected.mjs save` keeps the load set of each class that passed, with its commit, in a load map shared by the worktrees (main checkout, `tools/merge-lane/logs/load-map.json.gz`, git-ignored).
-- `affected.mjs select` runs a test class when its load set (or its own source) holds a file changed since the load set's commit, when a loaded class names a changed constant holder or reads a changed resource, when it has no load set on this line of commits, or when a build file changed. The rules and the safety argument are in `tools/merge-lane/README.md`.
+- `affected.mjs select` runs a test class when its load set (or its own source) holds a file changed since the load set's commit, when a loaded class uses a constant whose value changed or reads a changed resource, when it has no load set on this line of commits, or when a build file changed. The rules and the safety argument are in `tools/merge-lane/README.md`.
 - chain-100 runs when `FluidSolverRegressionTest` is selected; the fluid GameTests when a non-client main source, a GameTest source or server data changed since main. The campaign rule is unchanged.
 - `compare.mjs` reports the junction lines as standing from the baseline when the head lane did not run them.
 - `AGENTS.md`: the final lane runs the affected tests; `--all` only when the owner asks; a reference whose test the lane skips stands from the baseline.
