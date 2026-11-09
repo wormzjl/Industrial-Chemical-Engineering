@@ -2018,6 +2018,8 @@
   "gui.icheme.vessel.kind.natural_draft_cooling_tower": "Natural-draft cooling tower",
   "gui.icheme.equipment_constructor.equipment.flare_stack": "Flare stack",
   "gui.icheme.equipment_constructor.equipment.flare_stack.short": "Flare stack",
+  "gui.icheme.vessel.role.flare_gas": "Flare gas inlet",
+  "gui.icheme.vessel.unit_support.flare_stack": "Stands at grade on its plinth",
   "gui.icheme.equipment_constructor.equipment.flare_stack.hint": "An elevated flare: it burns the vent gas piped to its inlet at the tip. The gas burns while its flame temperature with air is at least 1700 K; below that it leaves unburnt. Solids block it. Its tip sets how much it takes and how tall its stack stands.",
   "gui.icheme.equipment_constructor.flare_tip": "Tip",
   "gui.icheme.equipment_constructor.flare_tip.hint": "Flare tip diameter, 0.1 to 0.6 m in 0.05 m steps: methane at its stable exit velocity through the tip sets the rated heat release, and the stack is tall enough that the flame radiates at most 1.58 kW/m² at its base",
