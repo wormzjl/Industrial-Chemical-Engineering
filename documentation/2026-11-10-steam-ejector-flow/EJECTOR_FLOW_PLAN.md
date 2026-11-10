@@ -1,12 +1,43 @@
 # Steam ejector as a flow element, and its sound
 
-Batch 2026-11-10-steam-ejector-flow, on `claude/ecstatic-dubinsky-c24b8a` (built on `c05453b05` of `claude/custom-shader-system-caff9e`). Owner request 2026-11-10: "add sound for steam ejector as well"; owner option B: the ejector first becomes a real flow element, and its sound reads that flow, as a valve's does. Revision 2 (2026-11-10), after the owner's "Need a simplified model" and the choice **"Mover with a curve"**: suction to discharge on the mover row with a vendor-style capacity curve, motive steam drawn from the motive line, no new row type and no three-node row. Revision 1 (a passive motive passage through an equivalent throat, decisions E1 to E8) is in this file's history (commit 2cbdadb10).
+Batch 2026-11-10-steam-ejector-flow, on `claude/ecstatic-dubinsky-c24b8a` (built on `c05453b05` of `claude/custom-shader-system-caff9e`). Owner request 2026-11-10: "add sound for steam ejector as well"; owner option B: the ejector first becomes a real flow element, and its sound reads that flow, as a valve's does. Revision 2 (2026-11-10), after the owner's "Need a simplified model" and the choice **"Mover with a curve"**: suction to discharge on the mover row with a vendor-style capacity curve, motive steam drawn from the motive line, no new row type and no three-node row. Revision 1 (a passive motive passage through an equivalent throat, decisions E1 to E8) is in this file's history (commit 2cbdadb10). Revision 3 (2026-11-10), the owner's "Yes, correlation": sections 1a and 1b replace the rated point, the straight line and E2, E3; the rest stands where they do not contradict it.
 
 ## 1. Today
 
 - `EquipmentShape.Kind.EJECTOR` is drawing only: `EquipmentShape.fluidDevice()` leaves it out, and a pipe laid to its MOTIVE, SUCTION or DISCHARGE nozzle is a dead end.
 - `Noise.java`: ejectors make no noise. `ColumnStarts`: "a vacuum column cannot run yet".
 - The simulator's set law `EjectorLaw` (S1): steam `m = K c(P_m) [G ln(P_d/P_s) + W ln(P_c/P_s)⁺]`, K = 1.6, G the load as air (√(29/M) per kg), W its water; a free Motive port supplies that need.
+
+## 1a. Correlation form (revision 3)
+
+Owner, 2026-11-10: **"Yes, correlation"**. The set's curve is the sheet's own correlation, so a sheet-sized set runs its sheet duty in the world. This section replaces 2.1 to 2.3 (the rated point, the straight line, P_r, P_0) and decisions E2 and E3; E1 A stays (60 m/s from 5 kPa up).
+
+- Capacity, suction volume flow: `Q = f_m · A_suction · v(P_s)` (`SteamEjector.capacity`), with `v` the simulator's vacuum suction speed (`Limit.VACUUM_SPEED`): 60 m/s at P_s ≥ 5 kPa, `60 (5 kPa / P_s)^¼` below (68 m/s at 3 kPa, 90 at 1 kPa). `f_m = (P_m / 1 MPa) / EjectorLaw.motiveFactor(P_m)` (0.41 at 5 bar, 1 at 10 bar), times the share of the asked steam the nozzle got over the last booked slice.
+- Gas kind: the √(ρ_s / ρ_air) factor of 2.2 is dropped. The sheet sizes by actual volume at the suction's state, so the world does too; the gas kind enters through the law's steam (each kilogram counts √(29/M) of air, water on its own).
+- Steam: the sheet's law for the load the full curve holds at the suction's state, `EjectorLaw.steam(G, W, P_m, P_s, P_d, 2 P_sat(T))`, the gas as air component by component as `EjectorUnit` does. `Ejectors` sets it once per slice as the motive valve's mass target (`ValveSource.EJECTOR`, inside the set from its motive junction to its discharge junction).
+- MDP unchanged: `120 kPa × P_m / 1 MPa`, the relief line's last tenth the break.
+- Deleted: P_r, the straight line, P_0, the rated load, the equivalent throat, any design-pressure setting.
+- `Limit.VACUUM_SPEED` (the 90 / 75 / 60 m/s bands) takes the same smooth form: `Bound.Step.rising(.05, 60, .25)`, then 60.
+
+Check, a 0.1 m set on 10 bar to 1.2 bar (air at 300 K):
+
+| Suction | Speed | Air | Steam |
+|---|---|---|---|
+| 10 kPa | 60 m/s | 197 kg/h | 784 kg/h |
+| 3 kPa | 68 m/s | 67 kg/h | 396 kg/h |
+| 1 kPa | 90 m/s | 30 kg/h | 226 kg/h |
+
+References that move with the smooth `VACUUM_SPEED`: `LimitTest` (89.7 m/s at 0.01 bar where the band gave 75; 68.2 at 0.03 bar), `LineSizingTest`'s low vacuum side moves from 0.5 kPa to 1 kPa: below 0.65 kPa the row passes the world's 100 m/s cap, which then holds the line first. The sheet's ejector sizes at 3 kPa read 68 m/s where they read 75: a 10 % larger suction area for the same load.
+
+## 1b. In line with the column ejector
+
+Owner, 2026-11-10: "Make sure it's in-line with the column steam ejector".
+
+1. A sheet-sized set meets its sheet duty in the world at the column's own top pressure: the curve and the sheet read the same `VACUUM_SPEED` and the same area, and the steam is the sheet's law. Tests: `SteamEjectorTest.aSheetSizedSetMeetsItsSheetDutyAtTwoTopPressures` (10 kPa and 3 kPa, through `EjectorSizing.auto`) and `SteamEjectorRuntimeTest` (a placed set on a 10 kPa and a 3 kPa top: 189 and 64 kg/h of nitrogen, 728 and 375 kg/h of steam to 1.05 bar, all of it delivered).
+2. The column assembly's ejector (`ColumnBlueprint.EJECTOR_UNIT`) is a constructed `EJECTOR` structure: it registers through the same `EquipmentStructure` path as a lone one.
+3. Defaults: `SteamEjector.RATED_MOTIVE` and `RATED_DISCHARGE` are `EjectorUnit.MOTIVE_PRESSURE` (1e6 Pa) and `DISCHARGE_PRESSURE` (1.2e5 Pa), the column door's.
+
+A closed vessel cannot be pulled below the ambient: its wall row goes slack (decision D54, `PhaseLayout.wallRow`) and it stands at the ambient while the set empties it. The set therefore holds a vacuum only on a node that keeps its own pressure (a column's top, a generator); a vacuum drum is its own decision (open item).
 
 ## 2. Physics (expected behaviour)
 
@@ -128,13 +159,13 @@ Tests: targeted `--tests` only (the new science and solver tests, `NoiseTest`, t
 | | Question | Recommended |
 |---|---|---|
 | E1 | Rated suction speed | A: 60 m/s, the simulator's sizing limit (small 197 kg/h air on 784 kg/h steam) |
-| E2 | Deepest vacuum P_0 | A: 1 kPa |
-| E3 | Steam drawn | A: the nozzle's flow, ∝ P_m, whatever the load |
+| E2 | Deepest vacuum P_0 | superseded by 1a (no P_0) |
+| E3 | Steam drawn | superseded by 1a: the law's steam for the load the curve holds |
 | E4 | Motive control | A: always on; the player's own valve on the motive line |
 | E5 | Old worlds | A: old ejectors register and run if piped |
 | E6 | Vacuum column start | A: keep the refusal; its own batch |
 | E7 | Loop pitch | A: fixed |
 | E8 | Simulator | A: no sheet change now |
-| J | Loop candidate | owner listens to J1 to J3 (made in phase 2) |
+| J | Loop candidate | owner picked J2 (`ejector_J2_bright_screech.ogg`) |
 
 Fixed, not options: P_r 10 kPa, P_dr 120 kPa, MDP ∝ P_m, the motive factor from `EjectorLaw`, the 100 m/s caps (no choke law), zero shaft power.
