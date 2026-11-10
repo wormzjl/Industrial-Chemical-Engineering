@@ -26,8 +26,11 @@ import org.jetbrains.annotations.Nullable;
  * not even loaded before the first such call. The level load and unload events, which DH fires inside its own threads, run
  * through the same guard.
  * <ul>
- * <li>The client level's render register comes from DH's level load event, or, when the integration started after the
- * level loaded, from the loaded client level DH lists ({@link #poll}).</li>
+ * <li>The client level's render register comes from DH's level load event (a dedicated server's client), or from the
+ * client's current level as DH wraps it ({@link #poll}). In singleplayer DH fires the load event, and lists its levels,
+ * only for the integrated server's level wrapper (a {@code SERVER_LEVEL}), never a {@code CLIENT_LEVEL}; the client's own
+ * wrapper ({@code IDhApiWorldProxy.getSinglePlayerLevel}, on a client the wrapped client level) carries the render register
+ * there (bench 2026-11-10, FX_BENCH_REVIEW.md note 4: no register, so no group was ever registered).</li>
  * <li>A group is positioned at its structure's origin ({@code createRelativePositionedGroup}), resource location
  * {@link #RESOURCE}, registered inactive.</li>
  * </ul>
@@ -75,18 +78,27 @@ final class DhGroups {
         return chunks==null?0:Math.max(0,chunks)*16;
     }
 
-    /** The client level's render register; null before DH's renderer is ready. */
+    /**
+     * The client level's render register; null before DH's renderer is ready. A poll also follows the client to its current
+     * level (a dimension change in singleplayer fires no client-level unload).
+     */
     static @Nullable IDhApiCustomRenderRegister register(boolean poll) {
         var w=level;
-        if(w==null&&poll)level=w=poll();
+        if(poll){var current=poll();if(current!=null)level=w=current;}
+        // A wrapper whose DH level is gone (unloaded, a level change) has no register until the next poll finds the current one.
         return w==null?null:w.getRenderRegister();
     }
-    /** The loaded client level with a render register, if DH lists one. */
+    /**
+     * The client's current level as DH wraps it, if it has a render register: the client wrapper itself, or else a loaded
+     * client level DH lists. Null when DH has no world loaded.
+     */
     private static @Nullable IDhApiLevelWrapper poll() {
         var world=DhApi.Delayed.worldProxy;
         if(world==null)return null;
         try{
             if(!world.worldLoaded())return null;
+            var current=world.getSinglePlayerLevel();
+            if(current!=null&&current.getRenderRegister()!=null)return current;
             for(var w:world.getAllLoadedLevelWrappers())if(w!=null&&w.getLevelType()==EDhApiLevelType.CLIENT_LEVEL&&w.getRenderRegister()!=null)return w;
         }catch(IllegalStateException notYet){/* DH has no world loaded: try again later */}
         return null;
