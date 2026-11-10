@@ -46,8 +46,9 @@ import java.util.Locale;
  * (Tia Juana Light: 40 trays, three side draws, three pumparounds, sump steam) at a sixteenth of its feed on a quarter of
  * its column area, a 2 m column at the template's own tray loading, built with a water-cooled condenser (C6b), its
  * receiver, a reflux pump and each pumparound's pump and exchanger. The feed and the steam come from generators, the
- * condenser's water from a generator into a void; every product line ends at a void at the atmosphere. The build
- * validates the plant complete, starts the column and leaves it running.
+ * condenser's and each pumparound cooler's water from a generator into a void (W4: the column owes them their duties);
+ * every product line ends at a void at the atmosphere. The build validates the plant complete, starts the column and
+ * leaves it running.
  *
  * <p>Not a gate: its namespace runs only in {@code runReviewWorldServer}, which leaves the world in
  * {@code run/review-world/world} to be copied into a client's {@code saves}.
@@ -156,6 +157,8 @@ public final class ColumnOperationReviewWorld {
         final AssemblyGameTests.Plant plant;
         final List<BlockPos> sinks = new ArrayList<>();
         BlockPos feed, steam, water;
+        /** Each pumparound cooler's cooling-water generator (W4). */
+        final List<BlockPos> coolingWater = new ArrayList<>();
         V3ColumnInput input;
 
         Rig(AssemblyGameTests.Plant plant) {
@@ -199,17 +202,10 @@ public final class ColumnOperationReviewWorld {
             sinks.add(line(drum, Role.VAPOUR_OUTLET, 0, true, sink));
             sinks.add(line(drum, Role.BOOT_DRAIN, 0, true, sink));
             // The condenser's water: a generator into its tubes, out into a void.
-            var tubeIn = AssemblyGameTests.Plant.front(condenser, Role.TUBE_INLET);
-            plant.pipe(tubeIn);
-            water = plant.branch(tubeIn, AssemblyGameTests.Plant.out(condenser, Role.TUBE_INLET), false, generator);
-            var tubeOut = AssemblyGameTests.Plant.front(condenser, Role.TUBE_OUTLET);
-            plant.pipe(tubeOut);
-            sinks.add(plant.branch(tubeOut, AssemblyGameTests.Plant.out(condenser, Role.TUBE_OUTLET), true, sink));
-            // Branching pipes off the tube nozzles left valves on the water lines: the water runs free.
-            for (var q : Direction.values()) {
-                plant.valves.remove(tubeIn.relative(q, 2));
-                plant.valves.remove(tubeOut.relative(q, 2));
-            }
+            water = water(condenser, generator, sink);
+            // Each pumparound cooler's water the same way (W4: the column owes it the pumparound's duty; without it the column
+            // reads LIMITED: pumparound).
+            for (var cooler : coolers) coolingWater.add(water(cooler, generator, sink));
 
             // The overhead: column, condenser shell, receiver, reflux pump, the distillate's tee, the reflux back.
             plant.route(AssemblyGameTests.Plant.front(column, Role.VAPOUR_OUTLET), AssemblyGameTests.Plant.front(condenser, Role.SHELL_INLET));
@@ -248,11 +244,31 @@ public final class ColumnOperationReviewWorld {
             var waterFluid = FluidDeviceSpec.water(catalog).composition();
             supply(steam, STEAM_BORE, new FluidDeviceSpec(1, input.steamFeeds().getFirst().temperatureKelvin(), SUPPLY, waterFluid));
             TankCharge.run(plant.world, id(water), new FluidDeviceSpec(1, WATER_TEMPERATURE, WATER, waterFluid));
+            for (var at : coolingWater) TankCharge.run(plant.world, id(at), new FluidDeviceSpec(1, WATER_TEMPERATURE, WATER, waterFluid));
             for (var at : sinks) {
                 long id = id(at);
                 var r = plant.world.registrations().get(id);
                 plant.world.edit(id, r.revision(), r.device(), new FluidDeviceSpec(1, 298.15, ATMOSPHERE, waterFluid));
             }
+        }
+
+        /**
+         * Cooling water through {@code exchanger}'s tubes, straight out of its nozzles: a generator into the inlet, out into a
+         * void (a sink), the water running free (branching pipes off the tube nozzles left valves on the water lines: they go);
+         * returns the generator.
+         */
+        BlockPos water(Vessel exchanger, net.minecraft.world.level.block.state.BlockState generator, net.minecraft.world.level.block.state.BlockState sink) {
+            var in = AssemblyGameTests.Plant.front(exchanger, Role.TUBE_INLET);
+            plant.pipe(in);
+            var source = plant.branch(in, AssemblyGameTests.Plant.out(exchanger, Role.TUBE_INLET), false, generator);
+            var out = AssemblyGameTests.Plant.front(exchanger, Role.TUBE_OUTLET);
+            plant.pipe(out);
+            sinks.add(plant.branch(out, AssemblyGameTests.Plant.out(exchanger, Role.TUBE_OUTLET), true, sink));
+            for (var q : Direction.values()) {
+                plant.valves.remove(in.relative(q, 2));
+                plant.valves.remove(out.relative(q, 2));
+            }
+            return source;
         }
 
         /**
