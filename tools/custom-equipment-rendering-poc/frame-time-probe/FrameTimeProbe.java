@@ -921,7 +921,7 @@ public final class FrameTimeProbe {
     }
 
     // The sound solo (lane.sh 6-solo, a listening run, not a timing run): each sound alone, its name on screen.
-    private static final String SOLO_STEPS = "valve_gas,valve_liquid,valve_cavitating,valve_flashing,vent,fan,water_fall,burner,gear,kettle,pipe_knock,flare,still";
+    private static final String SOLO_STEPS = "valve_gas,valve_liquid,valve_cavitating,valve_flashing,vent,fan,water_fall,burner,gear,kettle,pipe_knock,ejector,flare,still";
     private static boolean solo;
     private static String[] soloSteps;
     private static int soloStep, soloFeedKind = -1;
@@ -961,6 +961,7 @@ public final class FrameTimeProbe {
                     case GEAR -> com.wormzjl.icheme.runtime.fluid.Noise.gear(5e5, 1);
                     case KETTLE -> com.wormzjl.icheme.runtime.fluid.Noise.kettle(2e6);
                     case PIPE_KNOCK -> com.wormzjl.icheme.runtime.fluid.Noise.knock(1000, 2);
+                    case EJECTOR -> com.wormzjl.icheme.runtime.fluid.Noise.ejector(.218, 5.1, 1e6, 1.2e5);
                 };
                 if (!Double.isFinite(level)) level = 90;
                 COMMANDS.add("tp @s " + x + " " + y + " " + z + " 0 0");
