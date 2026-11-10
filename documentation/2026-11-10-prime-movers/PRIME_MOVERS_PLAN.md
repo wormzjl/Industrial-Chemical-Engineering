@@ -172,3 +172,11 @@ Lowest stack temperature: the pinch from the feed water (`T_in + ΔT_p`); cold f
 | P12 | Steam turbine size | A: leave its 45 MW limit (two or three for an HD-300's steam); B: extend it to 150 MW (casing to 5.5 m) | A |
 | P13 | Sound | two synthesized loops, one candidate each; or three candidates each for the owner to pick | one each |
 | P14 | Simulator | A: MODELLED units (fuel in, rated power, fuel from LHV, exhaust heat, the coil's water to steam); B: DRAWING_ONLY tiles now, the units in a follow-up | A |
+
+### 12.1 The owner's answers (2026-11-10)
+
+Owner: **"It shall not overspeed, and keep the model simple. Others as recommended"**.
+
+- P11, neither A nor B: a prime mover never overspeeds. The governor never lets the speed pass the set speed; the speed setting tops out at the rated speed (share 1.0 at most, not the steam turbine's 1.05); a load loss cuts the fuel in the same quasi-steady step. No overspeed trip for these kinds: no `TRIP_SPEED` check, no latched trip, no reset, no `OVERSPEED` status. The steam turbine's trip stays as it is.
+- "Keep the model simple", for the whole build: the simplest form that keeps conservation and these decisions; no new modes, switches or special cases; a part that needs more machinery than the plan states goes to the owner as a decision first.
+- As recommended: P1 A, P2 (7 engines, 9 GTs), P3 A, P4 A, P5 A, P6 B, P7, P8 A, P9 A (to 400 MW, S1 efficiency, 12 poles, turbo look), P10 A, P12 A, P13 (one loop each), P14 A.
