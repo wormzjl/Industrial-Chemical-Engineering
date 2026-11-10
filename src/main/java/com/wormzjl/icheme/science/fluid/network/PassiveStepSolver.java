@@ -808,6 +808,12 @@ public final class PassiveStepSolver {
     private FlowControl.Mode nextMode(Equations equations,int i,FlowControl.Mode mode,double flow,double head,List<FluidThermodynamics.State> states,
                                       FluidThermodynamics.State up,Equations.Transport suction,double tolerance) {
         var graph=equations.graph;var pipe=graph.pipes().get(i);double rho=suction.density;var next=mode;
+        // Owner decision of 2026-11-10 (option A, batch 2026-11-10-custom-shader-system): a closed device never reopens toward
+        // a flow its own end forbids, a discharge into a generator or a suction from a void: it can never deliver there, so it
+        // stands dead-headed. Bundled random 575's pump into a 254 kPa gas generator reopened on its rise every step, stalled
+        // its Newton on the law (its suction junction pulled to 75 kPa) and closed again, 4 to 8 passes a step, and the step
+        // controller cut the steps to 6 ms until the island held on its wall deadline.
+        if(mode==FlowControl.Mode.CLOSED&&forwardForbidden(graph,pipe))return FlowControl.Mode.CLOSED;
         if(pipe.control() instanceof FlowControl.Mover pump) {
             double band=shutoffBand(equations.pressureScales[i],tolerance);
             // A mover on its own law (batch 2026-11-03-rotating-machinery): it closes on a reverse drive (its check valve; the
@@ -3799,6 +3805,10 @@ public final class PassiveStepSolver {
      * not out of a dry end ({@link #dryEnd}). A phase port never refuses a direction for want of its first phase (decision
      * D11): a vessel that lacks it draws the next one of the port's priority order ({@link PhaseDraw}).
      */
+    /** Whether a device's forward flow (first end to second) is one its ends forbid: into a generator, or out of a void. */
+    private static boolean forwardForbidden(PassiveNetwork graph,PassiveNetwork.Pipe pipe) {
+        return graph.reservoirs().get(pipe.second()).kind()==PassiveNetwork.NodeKind.GENERATOR||graph.reservoirs().get(pipe.first()).kind()==PassiveNetwork.NodeKind.VOID;
+    }
     static boolean boundaryAllowed(PassiveNetwork graph,PassiveNetwork.Pipe pipe,double flow) {
         var a=graph.reservoirs().get(pipe.first()).kind();var b=graph.reservoirs().get(pipe.second()).kind();
         return !pipe.blocked(flow)&&!(flow<0&&(a==PassiveNetwork.NodeKind.GENERATOR||b==PassiveNetwork.NodeKind.VOID)
