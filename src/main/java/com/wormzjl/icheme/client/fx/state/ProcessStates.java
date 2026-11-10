@@ -75,6 +75,7 @@ public final class ProcessStates {
         if(mc.level==null||mc.player==null||mc.getConnection()==null||mc.isPaused())return;
         if(age++%20!=0)return;
         var point=mc.player.position();
-        for(var w:ALL)w.request(mc.level,point);
+        long stored=0;for(var w:ALL){w.request(mc.level,point);stored+=w.stored();}
+        com.wormzjl.icheme.client.fx.FxStats.set(com.wormzjl.icheme.client.fx.FxStats.Counter.STATES,stored);
     }
 }

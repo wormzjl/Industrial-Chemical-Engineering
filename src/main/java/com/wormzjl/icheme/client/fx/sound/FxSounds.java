@@ -3,6 +3,7 @@ package com.wormzjl.icheme.client.fx.sound;
 import com.wormzjl.icheme.IChemE;
 import com.wormzjl.icheme.client.DriverSounds;
 import com.wormzjl.icheme.client.MoverSounds;
+import com.wormzjl.icheme.client.fx.FxStats;
 import com.wormzjl.icheme.client.fx.state.ProcessStates;
 import com.wormzjl.icheme.network.FluidNetwork;
 import com.wormzjl.icheme.runtime.fluid.Flares;
@@ -38,6 +39,8 @@ import net.neoforged.neoforge.client.event.ClientTickEvent;
  * <li>Four times a second, the choice ({@link SoundBudget#merge}, {@link SoundBudget#choose}): at most 12 loops, by level
  * at the listener, 3 dB of hysteresis, one kind merged within 6 m. A loop keeps its targets between choices: its
  * {@code tick()} only eases its volume and pitch toward them, over {@link #EASE} ticks, with no world or map lookups.</li>
+ * <li>Counters (FX_BENCH_PLAN.md, {@link FxStats}): the tick's time, the loops playing, the sources gathered and merged,
+ * the noise sources last answered.</li>
  * </ul>
  * The towers' and heaters' sounds come from the noise watch, whose levels carry their water flow and fan speed; their
  * plume and flue states ({@code ProcessStates.towers}, {@code heaters}) carry neither, so they add none.
@@ -62,7 +65,7 @@ public final class FxSounds {
     /** The noise watch's answer: the sources it plays from the next choice on; a knock plays now, once. */
     public static void accept(List<Noise.Source> sources) {
         var mc=Minecraft.getInstance();if(mc.level==null){noise=List.of();return;}
-        noise=sources.stream().filter(s->!s.kind().oneShot()).toList();
+        noise=sources.stream().filter(s->!s.kind().oneShot()).toList();FxStats.set(FxStats.Counter.NOISE,noise.size());
         long now=mc.level.getGameTime();KNOCKED.values().removeIf(t->now-t>KNOCK_TICKS||t>now);
         for(var s:sources) {
             if(!s.kind().oneShot()||KNOCKED.containsKey(s.position())||!audible(mc))continue;
@@ -84,6 +87,10 @@ public final class FxSounds {
     private static void stopAll(){var manager=Minecraft.getInstance().getSoundManager();for(var loop:LOOPS.values())manager.stop(loop);LOOPS.clear();}
 
     @SubscribeEvent public static void tick(ClientTickEvent.Post event) {
+        long started=System.nanoTime();
+        try{choose();}finally{FxStats.set(FxStats.Counter.SOUND_NS,System.nanoTime()-started);FxStats.set(FxStats.Counter.LOOPS,LOOPS.size());}
+    }
+    private static void choose() {
         var mc=Minecraft.getInstance();
         if(world!=mc.level){stopAll();noise=List.of();KNOCKED.clear();world=mc.level;age=0;}
         if(mc.level==null||mc.player==null||mc.getConnection()==null)return;
@@ -96,7 +103,8 @@ public final class FxSounds {
         flares(emitters);stills(emitters);
         MoverSounds.emitters(point,emitters);DriverSounds.emitters(point,emitters);
         var playing=new HashSet<String>();for(var e:LOOPS.entrySet())if(!e.getValue().fading&&mc.getSoundManager().isActive(e.getValue()))playing.add(e.getKey());
-        var chosen=SoundBudget.choose(SoundBudget.merge(emitters),point.x,point.y,point.z,playing);
+        var merged=SoundBudget.merge(emitters);var chosen=SoundBudget.choose(merged,point.x,point.y,point.z,playing);
+        FxStats.set(FxStats.Counter.SOUND_SOURCES,emitters.size());FxStats.set(FxStats.Counter.SOUND_GROUPS,merged.size());
         var keys=new HashSet<String>();
         for(var g:chosen) {
             keys.add(g.key());var loop=LOOPS.get(g.key());

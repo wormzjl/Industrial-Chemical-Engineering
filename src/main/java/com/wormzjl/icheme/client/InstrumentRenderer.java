@@ -61,7 +61,7 @@ public final class InstrumentRenderer {
     private static net.minecraft.world.level.Level shownIn;
     @SubscribeEvent public static void render(RenderLevelStageEvent event) {
         if(event.getStage()!=RenderLevelStageEvent.Stage.AFTER_PARTICLES)return;
-        var mc=Minecraft.getInstance();if(mc.level==null||mc.player==null)return;
+        var mc=Minecraft.getInstance();if(mc.level==null||mc.player==null)return;long started=System.nanoTime();
         var camera=event.getCamera().getPosition();var buffers=mc.renderBuffers().bufferSource();var pose=event.getPoseStack();
         var view=ClientConfig.lodView(event.getProjectionMatrix().m11(),mc.getWindow().getHeight());var frustum=event.getFrustum();
         GaugeSettings draft=null;Sensor.Kind sensorDraft=null;boolean wrench=false,levelGauge=false;
@@ -126,6 +126,7 @@ public final class InstrumentRenderer {
         }
         flushWiring(event,pose,buffers,camera);
         buffers.endBatch(TYPE);buffers.endBatch(GHOST);buffers.endBatch(RenderType.lines());
+        com.wormzjl.icheme.client.fx.FxStats.add(com.wormzjl.icheme.client.fx.FxStats.Counter.WIRING_NS,System.nanoTime()-started);
     }
     private static void drawRootGhost(PoseStack pose,MultiBufferSource buffers,InstrumentHosts.Host host,Instrument.Mount mount,Vec3 camera,int colour,int alpha){
         if(!(host.entity() instanceof com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity shell))return;
@@ -224,6 +225,7 @@ public final class InstrumentRenderer {
             var builder=new BufferBuilder(bytes,VertexFormat.Mode.QUADS,DefaultVertexFormat.NEW_ENTITY);
             for(var p:polygons)corners(p,(x,y,z,u,v,nx,ny,nz)->builder.addVertex(x,y,z).setColor(-1).setUv(u,v).setOverlay(OverlayTexture.NO_OVERLAY).setLight(0).setNormal(nx,ny,nz));
             var mesh=builder.build();if(mesh==null)return null;
+            com.wormzjl.icheme.client.fx.FxStats.add(com.wormzjl.icheme.client.fx.FxStats.Counter.WIRING_BYTES,mesh.vertexBuffer().remaining());
             buffer=new VertexBuffer(VertexBuffer.Usage.STATIC);buffer.bind();buffer.upload(mesh);VertexBuffer.unbind();
         }
         UPLOADED.put(key,buffer);return buffer;
@@ -253,6 +255,7 @@ public final class InstrumentRenderer {
         }
         if(WIRING.size()>=256)WIRING.clear();
         var wiring=new Wiring(shape,Set.copyOf(installed),List.copyOf(codes),detail,atlas,quads,Map.copyOf(finish),++wiringBuilds);
+        com.wormzjl.icheme.client.fx.FxStats.add(com.wormzjl.icheme.client.fx.FxStats.Counter.WIRING_BUILDS,1);
         WIRING.put(shell.getBlockPos(),wiring);
         return wiring;
     }
@@ -380,7 +383,7 @@ public final class InstrumentRenderer {
     public static FluidNetwork.InstrumentDisplay get(FluidNetwork.InstrumentTarget target){return CACHE.get(target);}
     public static void accept(FluidNetwork.InstrumentDisplay display){if(WATCHED.contains(display.target())){CACHE.put(display.target(),display);var mc=Minecraft.getInstance();if(mc.level!=null)RECEIVED.put(display.target(),mc.level.getGameTime());}}
     public static void forget(BlockPos pos){var removed=WATCHED.stream().filter(t->t.position().equals(pos)).toList();WATCHED.removeAll(removed);removed.forEach(CACHE::remove);removed.forEach(RECEIVED::remove);if(Minecraft.getInstance().getConnection()!=null)FluidNetwork.requestInstruments(List.of(),removed);}
-    public static void clear(){WIRING.clear();UPLOADED.clear();SHOWN.clear();DIALS.clear();HEADS.clear();WIRES.clear();shown=List.of();shownIn=null;shownAt=Long.MIN_VALUE;CACHE.clear();RECEIVED.clear();WATCHED.clear();level=null;ticks=0;}
+    public static void clear(){WIRING.clear();UPLOADED.clear();com.wormzjl.icheme.client.fx.FxStats.set(com.wormzjl.icheme.client.fx.FxStats.Counter.WIRING_BYTES,0);SHOWN.clear();DIALS.clear();HEADS.clear();WIRES.clear();shown=List.of();shownIn=null;shownAt=Long.MIN_VALUE;CACHE.clear();RECEIVED.clear();WATCHED.clear();level=null;ticks=0;}
     @SubscribeEvent public static void tick(ClientTickEvent.Post event){var mc=Minecraft.getInstance();if(mc.level!=level){clear();level=mc.level;}if(mc.level==null||mc.player==null)return;if(++ticks%20!=0)return;var nearby=new ArrayList<FluidNetwork.InstrumentTarget>();var distances=new HashMap<FluidNetwork.InstrumentTarget,Double>();for(var h:InstrumentHosts.nearby(mc.level,mc.player.position(),120,true))for(var i:h.metadata().installed()){var mount=h.mount(i.key().mount());if(mount!=null&&mount.centre().distanceToSqr(mc.player.position())<=120*120){var target=new FluidNetwork.InstrumentTarget(h.entity().getBlockPos(),i.key(),i.instance());nearby.add(target);distances.put(target,mount.centre().distanceToSqr(mc.player.position()));}}nearby.sort(Comparator.comparingDouble(distances::get));var wanted=new HashSet<>(nearby.subList(0,Math.min(64,nearby.size())));var add=wanted.stream().filter(t->!WATCHED.contains(t)).toList();var remove=WATCHED.stream().filter(t->!wanted.contains(t)).toList();WATCHED.removeAll(remove);remove.forEach(CACHE::remove);remove.forEach(RECEIVED::remove);WATCHED.addAll(add);FluidNetwork.requestInstruments(add,remove);}
     @SubscribeEvent public static void logout(ClientPlayerNetworkEvent.LoggingOut event){clear();}
 }

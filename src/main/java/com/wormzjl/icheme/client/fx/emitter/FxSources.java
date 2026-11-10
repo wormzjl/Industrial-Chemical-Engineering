@@ -7,6 +7,7 @@ import com.wormzjl.icheme.client.fx.FxGlide;
 import com.wormzjl.icheme.client.fx.FxGuard;
 import com.wormzjl.icheme.client.fx.FxKind;
 import com.wormzjl.icheme.client.fx.FxSink;
+import com.wormzjl.icheme.client.fx.FxStats;
 import com.wormzjl.icheme.client.fx.FxWind;
 import com.wormzjl.icheme.client.fx.state.CellWatch;
 import com.wormzjl.icheme.client.fx.state.ProcessStates;
@@ -107,6 +108,7 @@ public final class FxSources {
         var gone = new ArrayList<Target>();
         for (var target : SOURCES.keySet()) if (!seen.contains(target)) gone.add(target);
         for (var target : gone) SOURCES.remove(target).kill();
+        FxStats.set(FxStats.Counter.SOURCES, SOURCES.size());
     }
 
     @SuppressWarnings("unchecked")

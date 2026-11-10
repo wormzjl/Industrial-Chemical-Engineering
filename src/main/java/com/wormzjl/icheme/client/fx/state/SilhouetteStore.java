@@ -66,9 +66,10 @@ public final class SilhouetteStore {
         if(batch.reset())drop(true);
         for(var p:batch.placed()){KNOWN.put(p.origin(),p);tell(l->l.placed(p));}
         for(var origin:batch.removed())if(KNOWN.remove(origin)!=null)tell(l->l.removed(origin));
+        com.wormzjl.icheme.client.fx.FxStats.set(com.wormzjl.icheme.client.fx.FxStats.Counter.SILHOUETTES,KNOWN.size());
     }
 
-    private static void drop(boolean notify){KNOWN.clear();if(notify)tell(Listener::cleared);}
+    private static void drop(boolean notify){KNOWN.clear();com.wormzjl.icheme.client.fx.FxStats.set(com.wormzjl.icheme.client.fx.FxStats.Counter.SILHOUETTES,0);if(notify)tell(Listener::cleared);}
     private static void tell(java.util.function.Consumer<Listener> call) {
         var l=listener;if(l==null)return;
         try{call.accept(l);}

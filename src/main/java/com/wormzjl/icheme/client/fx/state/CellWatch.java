@@ -81,6 +81,8 @@ public final class CellWatch<S> {
         }
         return out;
     }
+    /** The states held now ({@code FxStats}). */
+    int stored(){return states.size();}
     /** The last state published for {@code target}, or null. */
     public @Nullable S state(Target target){return states.get(target);}
 

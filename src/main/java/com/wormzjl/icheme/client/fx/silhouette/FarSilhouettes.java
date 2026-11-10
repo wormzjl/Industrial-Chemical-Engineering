@@ -4,6 +4,7 @@ import com.wormzjl.icheme.IChemE;
 import com.wormzjl.icheme.client.ClientConfig;
 import com.wormzjl.icheme.client.fx.FxCompat;
 import com.wormzjl.icheme.client.fx.FxGuard;
+import com.wormzjl.icheme.client.fx.FxStats;
 import com.wormzjl.icheme.client.fx.state.SilhouetteStore;
 import com.wormzjl.icheme.runtime.fluid.Silhouettes;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
@@ -150,6 +151,8 @@ public final class FarSilhouettes implements SilhouetteStore.Listener {
             if(tier==SilhouetteBudget.Tier.NEAR){if(e.near==null)e.near=far.add(origin,e.built.near());}
             else if(e.near!=null){e.near.remove();e.near=null;}
         }
+        long boxes=0;for(var e:built)boxes+=(e.near!=null?e.built.near().size():0)+(e.hull!=null?e.built.far().size():0);
+        FxStats.set(FxStats.Counter.SILHOUETTE_BOXES,boxes);
     }
 
     /** Sets each group active or not for the player at (px, pz) with a vanilla render distance of {@code blocks}. */
@@ -180,7 +183,7 @@ public final class FarSilhouettes implements SilhouetteStore.Listener {
     @Override public void cleared() {
         GUARD.run(()->{
             for(var e:entries.values())e.drop();
-            entries.clear();results.clear();
+            entries.clear();results.clear();FxStats.set(FxStats.Counter.SILHOUETTE_BOXES,0);
             planX=stateX=Double.NaN;view=-1;replan=restate=false;
         });
     }

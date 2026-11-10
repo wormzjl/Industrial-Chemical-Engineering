@@ -50,6 +50,8 @@ import java.util.Set;
  * <li><b>Failures.</b> An emitter that throws turns off its type ({@link FxGuard#effect}); a failure in the batch itself
  * turns the batch off for the session. GL state and buffers are released in {@code finally}; no exception leaves the
  * event.</li>
+ * <li><b>Counters</b> (FX_BENCH_PLAN.md): {@link FxStats} starts each frame here; the draw adds its quads, emitters,
+ * rebuilds, build and draw time and the cached buffers' bytes.</li>
  * </ul>
  * Shader time is seconds of game time since an epoch that moves every {@link #EPOCH_SECONDS}, so a float keeps
  * millisecond steps however old the world.
@@ -67,7 +69,8 @@ public final class FxBatch {
     /** The heat haze's screen copy (W8): made at the first frame with haze, resized with the window. */
     private static @Nullable TextureTarget screenCopy;
 
-    private record Built(long revision, int quads, @Nullable VertexBuffer buffer) {
+    /** A cached buffer; {@code bytes} its vertices' size, for {@link FxStats.Counter#VERTEX_BYTES}. */
+    private record Built(long revision, int quads, @Nullable VertexBuffer buffer, long bytes) {
     }
 
     private record Visible(FxEmitter emitter, int quads) {
@@ -98,6 +101,9 @@ public final class FxBatch {
         BUILT.clear();
         if (screenCopy != null) screenCopy.destroyBuffers();
         screenCopy = null;
+        FxStats.set(FxStats.Counter.VERTEX_BYTES, 0);
+        FxStats.set(FxStats.Counter.TEXTURE_BYTES, 0);
+        FxStats.set(FxStats.Counter.REGISTERED, 0);
     }
 
     @SubscribeEvent
@@ -112,12 +118,16 @@ public final class FxBatch {
     @SubscribeEvent
     public static void frame(RenderFrameEvent.Pre event) {
         if (!PATH.run(FxPath::refresh)) FxPath.fallback();
+        FxStats.frame(FxPath.current());
     }
 
     @SubscribeEvent
     public static void render(RenderLevelStageEvent event) {
         if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_PARTICLES || EMITTERS.isEmpty()) return;
+        long started = System.nanoTime();
         BATCH.run(() -> draw(event));
+        FxStats.add(FxStats.Counter.DRAW_NS, System.nanoTime() - started);
+        FxStats.set(FxStats.Counter.REGISTERED, EMITTERS.size());
     }
 
     private static void draw(RenderLevelStageEvent event) {
@@ -167,6 +177,7 @@ public final class FxBatch {
             if (quads > 0) visible.add(new Visible(candidates.get(i), quads));
         }
         if (visible.isEmpty()) return;
+        FxStats.add(FxStats.Counter.EMITTERS, visible.size());
 
         double daylight = level.getSkyDarken(partial);
         double sunAngle = level.getSunAngle(partial);
@@ -210,6 +221,7 @@ public final class FxBatch {
                 uniform(shader, "GlideStart", true, (float) Math.max(emitter.glideStart() - epoch, -1e6));
                 buffer.bind();
                 buffer.draw();
+                FxStats.add(FxStats.Counter.QUADS, v.quads());
             }
         } finally {
             if (shader != null) shader.clear();
@@ -227,6 +239,7 @@ public final class FxBatch {
         var pose = stack.last();
         var camera = event.getCamera();
         boolean wrote = false;
+        long started = System.nanoTime();
         try {
             for (var v : visible) {
                 var emitter = v.emitter();
@@ -237,8 +250,10 @@ public final class FxBatch {
                 var sink = new FxImmediateSink(consumer, pose, origin, camera.getLeftVector(), camera.getUpVector(),
                         FxGlide.ease(emitter.glideStart(), now), now, daylight, emitter.driftPeriod(), kind, emitter.light(), v.quads());
                 FxGuard.effect(emitter.type()).run(() -> emitter.write(sink, v.quads()));
+                FxStats.add(FxStats.Counter.QUADS, v.quads() - sink.remaining());
             }
         } finally {
+            if (wrote) FxStats.add(FxStats.Counter.BUILD_NS, System.nanoTime() - started);
             if (wrote) buffers.endBatch(type);
         }
     }
@@ -248,13 +263,16 @@ public final class FxBatch {
         long revision = emitter.revision();
         var built = BUILT.get(emitter);
         if (built != null && built.revision() == revision && built.quads() == quads) return built.buffer();
+        long started = System.nanoTime();
         VertexBuffer fresh = null;
+        long size = 0;
         try (var bytes = new ByteBufferBuilder(Math.max(256, quads * 4 * FxPackedSink.FORMAT.getVertexSize()))) {
             var builder = new BufferBuilder(bytes, VertexFormat.Mode.QUADS, FxPackedSink.FORMAT);
             var sink = new FxPackedSink(builder, quads);
             if (FxGuard.effect(emitter.type()).run(() -> emitter.write(sink, quads))) {
                 var mesh = builder.build();
                 if (mesh != null) {
+                    size = mesh.vertexBuffer().remaining();
                     fresh = new VertexBuffer(VertexBuffer.Usage.STATIC);
                     fresh.bind();
                     fresh.upload(mesh);
@@ -263,7 +281,10 @@ public final class FxBatch {
             }
         }
         if (built != null && built.buffer() != null) built.buffer().close();
-        BUILT.put(emitter, new Built(revision, quads, fresh));
+        BUILT.put(emitter, new Built(revision, quads, fresh, size));
+        FxStats.add(FxStats.Counter.VERTEX_BYTES, size - (built == null ? 0 : built.bytes()));
+        FxStats.add(FxStats.Counter.REBUILDS, 1);
+        FxStats.add(FxStats.Counter.BUILD_NS, System.nanoTime() - started);
         return fresh;
     }
 
@@ -279,6 +300,7 @@ public final class FxBatch {
     private static void release(FxEmitter emitter) {
         var built = BUILT.remove(emitter);
         if (built != null && built.buffer() != null) built.buffer().close();
+        if (built != null) FxStats.add(FxStats.Counter.VERTEX_BYTES, -built.bytes());
     }
 
     /**
@@ -289,6 +311,8 @@ public final class FxBatch {
         int bound = GL11.glGetInteger(GL30.GL_DRAW_FRAMEBUFFER_BINDING);
         if (screenCopy == null) screenCopy = new TextureTarget(width, height, false, Minecraft.ON_OSX);
         else if (screenCopy.width != width || screenCopy.height != height) screenCopy.resize(width, height, Minecraft.ON_OSX);
+        // RGBA8 colour, no depth.
+        FxStats.set(FxStats.Counter.TEXTURE_BYTES, 4L * width * height);
         GlStateManager._glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, bound);
         GlStateManager._glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, screenCopy.frameBufferId);
         GlStateManager._glBlitFrameBuffer(0, 0, width, height, 0, 0, width, height, GL11.GL_COLOR_BUFFER_BIT, GL11.GL_NEAREST);
