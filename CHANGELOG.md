@@ -36,6 +36,7 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 - A kettle's vapour line stayed shut and its pool rose to 231 kPa with no boil-up since rigid reservoirs: a pass that drew from a void is solved once more with that line started the allowed way before it closes (owner option A) `c6dc5426c`.
 - The 400 MW generator's drawing no longer builds a vessel's shell tables from its kW size (198 MB); the hidden prime mover defects the crash covered are fixed: the damper disc unpainted, the heavy gas turbines' fuel connection clear of the combustors, the shared generator shaft height and flange in the kit `c6dc5426c`.
 - The gas turbine coil's steam port names itself in the simulator; the vacuum pumps' support lines; the constructor's prime mover, vacuum pump and chimney lines fit their display `c6dc5426c`.
+- Bundled random seed 575 held on its wall deadline since rigid reservoirs: a pump whose only outlet is a gas generator reopened every step and stalled; a closed device never reopens toward a flow its own end forbids (owner option A) `7fb9c03cb`.
 
 ## [0.24.0] - 2026-11-10
 
