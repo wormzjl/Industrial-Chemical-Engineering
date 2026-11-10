@@ -84,8 +84,10 @@ import java.util.function.Function;
  * new presentation publications ({@link #serverTiming}), logs the effects' memory, and quits.
  *
  * <p>Every window also logs one {@code FX_PROBE} line: the effects' render-thread time per frame from {@code FxStats}, the
- * CPU and GPU time of the whole {@code AFTER_PARTICLES} stage (GL_TIMESTAMP counters from this probe's own first and last
- * stage handlers, so {@code src/main} has no timer code), quads, emitters, rebuilds, the sound tick and its loops; with
+ * CPU and GPU time of the stages the effects and the wiring draw at, {@code AFTER_PARTICLES} and {@code AFTER_WEATHER}
+ * (the effects since 0d562f7b0, {@code FxBatch.stage()}), each timed apart and summed, so vanilla's clouds and weather
+ * between them stay out (GL_TIMESTAMP counters from this probe's own first and last handlers of each stage, so
+ * {@code src/main} has no timer code), quads, emitters, rebuilds, the sound tick and its loops; with
  * {@code jfr=true}, a JFR recording of the window and one {@code FX_JFR} line (allocation and render-thread CPU samples
  * whose stack holds {@code client.fx} or the instrument renderer).
  */
@@ -101,18 +103,26 @@ public final class FrameTimeProbe {
     private static long warmupEnds, measureEnds, last, screenStarted;
     private static int count, gpuFrames, gpuScreens, cpuScreens, gpuMissed;
     private static String label = "";
-    // GPU ring (render thread only): per slot frame start, screen start, screen end, frame end, AFTER_PARTICLES start and end.
-    private static final int COUNTERS = 6;
+    // GPU ring (render thread only): per slot frame start, screen start, screen end, frame end, then each timed stage's start
+    // and end (AFTER_PARTICLES, AFTER_WEATHER).
+    private static final RenderLevelStageEvent.Stage[] TIMED = {RenderLevelStageEvent.Stage.AFTER_PARTICLES, RenderLevelStageEvent.Stage.AFTER_WEATHER};
+    private static final int COUNTERS = 4 + 2 * TIMED.length;
     private static int[] queries;
-    private static final boolean[] PENDING = new boolean[RING], SCREEN = new boolean[RING], WINDOW = new boolean[RING], STAGE = new boolean[RING];
+    private static final boolean[] PENDING = new boolean[RING], SCREEN = new boolean[RING], WINDOW = new boolean[RING];
+    /** Per timed stage and slot: the stage ran in that slot's frame. */
+    private static final boolean[][] STAGE = new boolean[TIMED.length][RING];
     private static int slot;
-    private static boolean screenInFrame, stageInFrame;
-    // The effects per frame of the window (batch 2026-11-10-custom-shader-system): FxStats, the AFTER_PARTICLES stage, the sound tick.
+    private static boolean screenInFrame;
+    private static final boolean[] stageInFrame = new boolean[TIMED.length];
+    private static final long[] stageOpened = new long[TIMED.length];
+    /** This frame's CPU time in the timed stages, summed. */
+    private static long stageCpuFrame;
+    // The effects per frame of the window (batch 2026-11-10-custom-shader-system): FxStats, the timed stages, the sound tick.
     private static final int FX_SAMPLES = 1 << 18;
     private static final long[] FX_DRAW = new long[FX_SAMPLES], FX_BUILD = new long[FX_SAMPLES], FX_WIRING = new long[FX_SAMPLES], FX_CPU = new long[FX_SAMPLES],
             STAGE_CPU = new long[FX_SAMPLES], GPU_STAGE = new long[FX_SAMPLES], SOUND = new long[FX_SAMPLES];
     private static int fxFrames, stageFrames, gpuStages, soundTicks;
-    private static long stageOpened, quadSum, quadMax, emitterSum, loopSum, loopMax, soundSourceSum, soundGroupSum;
+    private static long quadSum, quadMax, emitterSum, loopSum, loopMax, soundSourceSum, soundGroupSum;
     private static long rebuildsBefore, wiringBuildsBefore, framesBefore;
     // The machine's load over the window.
     private static CompletableFuture<Map<Long, Object[]>> loadBefore;
@@ -184,17 +194,26 @@ public final class FrameTimeProbe {
                     if (gpuFrames < GPU_FRAME.length) GPU_FRAME[gpuFrames++] = t3 - t0;
                     if (SCREEN[slot] && gpuScreens < GPU_SCREEN.length)
                         GPU_SCREEN[gpuScreens++] = GL33.glGetQueryObjecti64(queries[base + 2], GL15.GL_QUERY_RESULT) - GL33.glGetQueryObjecti64(queries[base + 1], GL15.GL_QUERY_RESULT);
-                    if (STAGE[slot] && gpuStages < GPU_STAGE.length)
-                        GPU_STAGE[gpuStages++] = GL33.glGetQueryObjecti64(queries[base + 5], GL15.GL_QUERY_RESULT) - GL33.glGetQueryObjecti64(queries[base + 4], GL15.GL_QUERY_RESULT);
+                    long stages = 0;
+                    boolean any = false;
+                    for (int k = 0; k < TIMED.length; k++) {
+                        if (!STAGE[k][slot]) continue;
+                        any = true;
+                        stages += GL33.glGetQueryObjecti64(queries[base + 5 + 2 * k], GL15.GL_QUERY_RESULT) - GL33.glGetQueryObjecti64(queries[base + 4 + 2 * k], GL15.GL_QUERY_RESULT);
+                    }
+                    if (any && gpuStages < GPU_STAGE.length) GPU_STAGE[gpuStages++] = stages;
                 }
             } else if (WINDOW[slot]) gpuMissed++;
             PENDING[slot] = false;
         }
         WINDOW[slot] = measuring(System.nanoTime());
         SCREEN[slot] = false;
-        STAGE[slot] = false;
+        for (int k = 0; k < TIMED.length; k++) {
+            STAGE[k][slot] = false;
+            stageInFrame[k] = false;
+        }
+        stageCpuFrame = 0;
         screenInFrame = false;
-        stageInFrame = false;
         counter(0);
         if (panning) pan(Minecraft.getInstance());
     }
@@ -217,23 +236,33 @@ public final class FrameTimeProbe {
         if (measuring(now) && cpuScreens < CPU_SCREEN.length) CPU_SCREEN[cpuScreens++] = now - screenStarted;
     }
 
-    /** The {@code AFTER_PARTICLES} stage opens: before every other handler (the effects, the instrument wiring, the rest). */
+    /** A timed stage ({@link #TIMED}): its index, or -1. */
+    private static int timed(RenderLevelStageEvent.Stage stage) {
+        for (int k = 0; k < TIMED.length; k++) if (TIMED[k] == stage) return k;
+        return -1;
+    }
+
+    /**
+     * A timed stage opens: before every other handler. {@code AFTER_PARTICLES} holds the instrument wiring, and the effects
+     * under Fabulous or a shader pack; {@code AFTER_WEATHER} holds the effects otherwise ({@code FxBatch.stage()}).
+     */
     @SubscribeEvent(priority = EventPriority.HIGHEST)
     public static void stageFirst(RenderLevelStageEvent event) {
-        if (queries == null || stageInFrame || event.getStage() != RenderLevelStageEvent.Stage.AFTER_PARTICLES) return;
-        stageOpened = System.nanoTime();
-        counter(4);
+        int k = queries == null ? -1 : timed(event.getStage());
+        if (k < 0 || stageInFrame[k]) return;
+        stageOpened[k] = System.nanoTime();
+        counter(4 + 2 * k);
     }
 
     /** The stage closes: after every other handler. Its batches are ended by then, so their draws are inside. */
     @SubscribeEvent(priority = EventPriority.LOWEST)
     public static void stageLast(RenderLevelStageEvent event) {
-        if (queries == null || stageInFrame || event.getStage() != RenderLevelStageEvent.Stage.AFTER_PARTICLES) return;
-        counter(5);
-        stageInFrame = true;
-        STAGE[slot] = true;
-        long now = System.nanoTime();
-        if (measuring(now) && stageFrames < STAGE_CPU.length) STAGE_CPU[stageFrames++] = now - stageOpened;
+        int k = queries == null ? -1 : timed(event.getStage());
+        if (k < 0 || stageInFrame[k]) return;
+        counter(5 + 2 * k);
+        stageInFrame[k] = true;
+        STAGE[k][slot] = true;
+        stageCpuFrame += System.nanoTime() - stageOpened[k];
     }
 
     /** This frame's effects counters (FxStats), read before the next frame starts them again. */
@@ -252,6 +281,9 @@ public final class FrameTimeProbe {
 
     @SubscribeEvent
     public static void frame(RenderFrameEvent.Post event) {
+        boolean staged = false;
+        for (boolean k : stageInFrame) staged |= k;
+        if (staged && measuring(System.nanoTime()) && stageFrames < STAGE_CPU.length) STAGE_CPU[stageFrames++] = stageCpuFrame;
         if (queries != null) {
             counter(3);
             PENDING[slot] = true;

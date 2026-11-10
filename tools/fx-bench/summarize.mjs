@@ -42,7 +42,7 @@ for (const w of ['view', 'away']) {
 const compat = find('FPS_PROBE', '2-compat-view'), off1 = find('FPS_PROBE', '1-off-view');
 row('frame time p50, COMPATIBLE (record)', '2-compat-view - 1-off-view', part(compat, 'p50ms') - part(off1, 'p50ms'), 'n/a', 'ms', () => true);
 
-// 2. GPU time of our draws: the AFTER_PARTICLES stage's GPU time, AUTO over OFF (only our drawers differ there).
+// 2. GPU time of our draws: the AFTER_PARTICLES plus AFTER_WEATHER stages' GPU time, AUTO over OFF (only our drawers differ there).
 {
   const off = find('FX_PROBE', '1-off-view'), auto = find('FX_PROBE', '1-auto-view'), c = find('FX_PROBE', '2-compat-view');
   row('GPU of our draws p50', '1-auto-view - 1-off-view, gpuStageMs', part(auto, 'gpuStageMs[p50/p95]') - part(off, 'gpuStageMs[p50/p95]'), '<= 0.5', 'ms', v => v <= .5);
