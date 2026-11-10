@@ -31,6 +31,24 @@ class CoolingTowerTest {
     private PassiveStepSolver.Result step(PassiveNetwork graph){return new PassiveStepSolver(model).solve(graph,.1,()->{});}
 
     @Test void sharedFillMatchesItsDeclaredCalibrationPoint(){assertEquals(298.15,TowerTransfer.referenceOutlet(model),1e-5);}
+    /**
+     * The plume's exhaust (batch 2026-11-10-custom-shader-system, W4): at the calibration point (water 35 to 25 °C, L/G 1, air
+     * at 25 °C and 50 %) the air leaves near 28.5 °C and close to saturation, as the plan's mixing-line table takes it; its
+     * humidity is the ambient's plus the evaporation over the dry air; no air leaves the ambient air.
+     */
+    @Test void theExhaustAtTheCalibrationPointLeavesNearlySaturated(){
+        var fill=TowerTransfer.reference(model);
+        var exhaust=TowerTransfer.exhaust(model,fill);
+        System.out.printf(java.util.Locale.ROOT,"calibration exhaust: %.2f K, w %.5f, %.1f %% of saturation%n",exhaust.temperature(),exhaust.humidity(),100*exhaust.saturation());
+        assertEquals(301.65,exhaust.temperature(),1.2,"about 28.5 °C");
+        assertTrue(exhaust.saturation()>.9&&exhaust.saturation()<1.01,"saturated within a few %: "+exhaust.saturation());
+        var ambient=TowerTransfer.exhaust(model,new TowerTransfer.Result(298.15,0,0,0,0,0,0));
+        assertEquals(CoolingTower.AIR_TEMPERATURE,ambient.temperature());assertEquals(CoolingTower.RELATIVE_HUMIDITY,ambient.saturation());
+        assertEquals(ambient.humidity()+fill.evaporation()/fill.dryAirFlow(),exhaust.humidity(),1e-12,"the water the air took up");
+        // A real fill's exhaust (one 8 m fan cell at full speed) is warmer than the air it drew and wetter.
+        var cell=TowerTransfer.exhaust(model,TowerTransfer.fill(model,CoolingTower.induced(8,2,1,1),2*64,308.15,1));
+        assertTrue(cell.temperature()>CoolingTower.AIR_TEMPERATURE&&cell.temperature()<308.15&&cell.humidity()>ambient.humidity(),cell.toString());
+    }
     @Test void theRatingStaysNearTheMarchedFillItReplaced(){
         record Point(CoolingTower tower,double loading,double inlet,double speed,double outlet,double evaporation){}
         var fan=CoolingTower.induced(8,2,1,1);var chimney=CoolingTower.natural(40);

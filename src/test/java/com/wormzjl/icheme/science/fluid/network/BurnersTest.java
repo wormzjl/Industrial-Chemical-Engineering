@@ -39,4 +39,18 @@ class BurnersTest {
         assertEquals(0,Burners.perKilogram(new double[]{0,0},mass,lhv),"nothing flows");
         assertEquals(5.003e7,Burners.perKilogram(new double[]{2,-1},mass,lhv),1e5,"a negative trace is no amount");
     }
+    /** The flue's water (batch 2026-11-10-custom-shader-system, W5): methane 12 % of the dry flue gas, an oil less, hydrogen-free fuel none. */
+    @Test void theFluesWaterFollowsTheFuelsHydrogen() {
+        double[][] formulas={{1,4,0,0,0},{12,26,0,0,0},{1,0,0,1,0},{0,2,0,1,0}};
+        assertEquals(.122,Burners.waterShare(new double[]{1,0,0,0},formulas),.002,"methane at 15 % excess air");
+        assertEquals(.122,Burners.METHANE_WATER,.002);
+        double oil=Burners.waterShare(new double[]{0,1,0,0},formulas);
+        assertTrue(oil>.06&&oil<.09,"dodecane: about 7 %: "+oil);
+        assertEquals(0,Burners.waterShare(new double[]{0,0,1,0},formulas),1e-12,"carbon monoxide forms no water");
+        assertEquals(Burners.METHANE_WATER,Burners.waterShare(new double[]{0,0,0,0},formulas),"no fuel: methane's");
+        assertTrue(Burners.waterShare(new double[]{1,0,0,1},formulas)>Burners.waterShare(new double[]{1,0,0,0},formulas),"the fuel's own water joins the flue");
+        // The flue: the fuel and 0.40 kg of air per MJ fired, the air the fans' power is drawn for.
+        assertEquals(.02+.40e-6*1e6,Burners.flueFlow(.02,1e6),1e-12);
+        assertEquals(Burners.AIR_PER_FIRED*(1/1.185)*1500/.70,Burners.FAN_SHAFT_PER_FIRED,0);
+    }
 }

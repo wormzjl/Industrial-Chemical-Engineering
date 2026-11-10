@@ -58,4 +58,17 @@ class ConvectionCoilTest {
         assertThrows(IllegalArgumentException.class,()->new ConvectionCoil(Double.NaN,1,1));
         assertThrows(IllegalArgumentException.class,()->new ConvectionCoil(1,1,Double.POSITIVE_INFINITY));
     }
+    /**
+     * The stack (batch 2026-11-10-custom-shader-system, W5): the bridgewall less the convection heat over the flue's capacity
+     * rate. At the design 70 / 30 split it leaves at about 370 °C (Burners); without a convection coil at the bridgewall; unfired cold.
+     */
+    @Test void theStackLeavesAtTheBridgewallLessTheConvectionHeat() {
+        double air=Burners.AIR;
+        assertEquals(1073.15-1000*3/7.,ConvectionCoil.stackTemperature(7e6,3e6,air),1e-6,"370 °C at the design split");
+        assertEquals(370+273.15,ConvectionCoil.stackTemperature(7e6,3e6,air),5);
+        assertEquals(ConvectionCoil.BRIDGEWALL,ConvectionCoil.stackTemperature(7e6,0,air),"no convection coil: the bridgewall");
+        assertEquals(air,ConvectionCoil.stackTemperature(0,0,air),"burners out: the combustion air");
+        assertEquals(air,ConvectionCoil.stackTemperature(1e6,5e6,air),"never below the air it came from");
+        assertEquals(ConvectionCoil.BRIDGEWALL,ConvectionCoil.stackTemperature(7e6,-1e5,air),"a coil giving heat back does not warm the stack past the bridgewall");
+    }
 }
