@@ -31,7 +31,9 @@ public final class FlowsheetCatalog {
             // The chimneys (batch 2026-11-10-chimney): one tile for both forms (ChimneyUnit).
             CHIMNEY = modelled("chimney"),
             // The vacuum pumps (batch 2026-11-10-vacuum-pump, owner V8 A): one tile for both, its type a setting (VacuumPumpUnit).
-            VACUUM_PUMP = modelled("vacuum_pump");
+            VACUUM_PUMP = modelled("vacuum_pump"),
+            // The prime movers (batch 2026-11-10-prime-movers, owner P14 A): a tile each (PrimeMoverUnit).
+            ENGINE = modelled("combustion_engine"), GAS_TURBINE = modelled("gas_turbine");
 
     private FlowsheetCatalog() {
     }
@@ -76,6 +78,8 @@ public final class FlowsheetCatalog {
             case BATCH_STILL -> STILL;
             case STEEL_STACK, BRICK_CHIMNEY -> CHIMNEY;
             case LIQUID_RING_PUMP, DRY_SCREW_PUMP -> VACUUM_PUMP;
+            case COMBUSTION_ENGINE -> ENGINE;
+            case GAS_TURBINE -> GAS_TURBINE;
         };
     }
 
@@ -95,6 +99,8 @@ public final class FlowsheetCatalog {
             case BATCH_STILL -> STILL;
             case STEEL_STACK, BRICK_CHIMNEY -> CHIMNEY;
             case LIQUID_RING_PUMP, DRY_SCREW_PUMP -> VACUUM_PUMP;
+            case COMBUSTION_ENGINE -> ENGINE;
+            case GAS_TURBINE -> GAS_TURBINE;
             case PUMP -> PUMP;
             case COMPRESSOR, CENTRIFUGAL_COMPRESSOR -> COMPRESSOR;
             case EJECTOR -> EJECTOR;

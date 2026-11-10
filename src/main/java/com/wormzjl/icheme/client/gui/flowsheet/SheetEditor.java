@@ -282,6 +282,8 @@ public final class SheetEditor {
                 p.addProperty("rise", 2e5);
             }
             case "steam_turbine" -> p.addProperty("exhaust", TurbineUnit.EXHAUST_PRESSURE);
+            // A combustion engine or a gas turbine (batch 2026-11-10-prime-movers): its model sized on its fuel.
+            case "combustion_engine", "gas_turbine" -> p.addProperty("model", 0);
             // A vacuum pump (batch 2026-11-10-vacuum-pump): a one-stage liquid ring, its model sized, to a vent header.
             case "vacuum_pump" -> {
                 p.addProperty("pump", com.wormzjl.icheme.science.machine.VacuumPump.Type.LIQUID_RING_ONE_STAGE.key());

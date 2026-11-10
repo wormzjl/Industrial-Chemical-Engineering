@@ -376,6 +376,8 @@ public final class SheetSizing {
                 case "storage_tank" -> tank(id, entry);
                 case "ejector" -> ejector(id, entry);
                 case "vacuum_pump" -> vacuumPump(id, entry, unit.params());
+                case "combustion_engine" -> primeMover(id, entry, com.wormzjl.icheme.science.machine.PrimeMover.Family.ENGINE);
+                case "gas_turbine" -> primeMover(id, entry, com.wormzjl.icheme.science.machine.PrimeMover.Family.GAS_TURBINE);
                 case "flare" -> flare(id, entry);
                 case "chimney" -> chimney(id, entry, unit.params());
                 case "batch_still" -> still(id, entry, unit.params());
@@ -489,6 +491,13 @@ public final class SheetSizing {
         SizedUnit vacuumPump(String id, UnitEntry entry, com.wormzjl.icheme.science.flowsheet.Params params) {
             var load = VacuumPumpSizing.Load.of(stream(id, "in"), params, basis);
             return sized(entry, VacuumPumpSizing.Size.class, size -> VacuumPumpSizing.rate(load, size), () -> VacuumPumpSizing.auto(load));
+        }
+
+        /** A combustion engine or a gas turbine on the fuel heat its run read; a gas turbine with its coil where the run wired it (batch 2026-11-10-prime-movers). */
+        SizedUnit primeMover(String id, UnitEntry entry, com.wormzjl.icheme.science.machine.PrimeMover.Family family) {
+            boolean coil = wires.getOrDefault(id, Map.of()).containsKey(com.wormzjl.icheme.science.flowsheet.unit.PrimeMoverUnit.FEEDWATER);
+            var load = PrimeMoverSizing.Load.of(readings(id).getOrDefault("fired", 0.), family, coil, basis);
+            return sized(entry, PrimeMoverSizing.Size.class, size -> PrimeMoverSizing.rate(load, size), () -> PrimeMoverSizing.auto(load));
         }
 
         /** An ejector on its suction's load, with what its law needs and what a wired Motive port brings (W10). */

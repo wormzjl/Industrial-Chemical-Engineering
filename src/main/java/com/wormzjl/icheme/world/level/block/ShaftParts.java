@@ -105,6 +105,8 @@ public final class ShaftParts {
             case GENERATOR -> ShaftNetwork.Kind.GENERATOR;
             case GEARBOX -> ShaftNetwork.Kind.GEARBOX;
             case STEAM_TURBINE -> ShaftNetwork.Kind.STEAM_TURBINE;
+            case COMBUSTION_ENGINE -> ShaftNetwork.Kind.COMBUSTION_ENGINE;
+            case GAS_TURBINE -> ShaftNetwork.Kind.GAS_TURBINE;
             default -> ShaftNetwork.Kind.CASING;
         };
     }
@@ -117,7 +119,7 @@ public final class ShaftParts {
     public static void structure(ServerLevel level, BlockPos origin, EquipmentShape shape, long fluid) {
         var kind = kind(shape.kind());
         if (kind == null) return;
-        if ((kind == ShaftNetwork.Kind.CASING || kind == ShaftNetwork.Kind.STEAM_TURBINE) && fluid == 0) return;
+        if ((kind == ShaftNetwork.Kind.CASING || kind == ShaftNetwork.Kind.STEAM_TURBINE || kind.primeMover()) && fluid == 0) return;
         var ends = new ArrayList<ShaftUnit.End>();
         int outputs = 0;
         for (var s : ShapeRasterizer.shafts(shape)) {

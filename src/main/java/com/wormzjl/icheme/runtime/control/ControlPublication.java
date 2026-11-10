@@ -97,6 +97,7 @@ final class ControlPublication {
                         case AIR_COOLER -> "AC";
                         case FIRED_HEATER -> "FH";
                         case STILL -> "BS";
+                        case PRIME_MOVER -> "GT";
                     },
                     id,
                     heat.side());

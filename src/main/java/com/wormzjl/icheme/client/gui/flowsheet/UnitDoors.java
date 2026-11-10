@@ -275,6 +275,16 @@ public final class UnitDoors {
                 r.group("motor", Door.meter(x.text("door.rating"), r.reading("motor", 1e3, 1), "kW"), Door.meter("motor_efficiency", x.text("door.efficiency"), r.reading("motor_efficiency", .01, 1), "%"),
                         Door.meter(x.text("door.electric"), r.reading("electric", 1e3, 1), "kW"), Door.meter(x.text("door.draw"), r.reading("electric", 20 * x.host().joulesPerFE(), 0), "FE/t"));
             }
+            // A combustion engine or a gas turbine (batch 2026-11-10-prime-movers, owner P14 A): the model (0 sizes it); what the fuel gives.
+            case "combustion_engine", "gas_turbine" -> {
+                r.group("set_point", r.entry("model", x.text("door.model"), Quantity.PLAIN));
+                r.readings(Door.meter(x.text("door.power"), r.reading("power", 1e6, 2), "MW"), Door.meter(x.text("door.efficiency"), r.reading("efficiency", .01, 1), "%"),
+                        Door.meter(x.text("door.fired"), r.reading("fired", 1e6, 2), "MW"), Door.meter(x.text("door.model"), r.reading("model", 1, 0), ""),
+                        Door.meter(x.text("door.exhaust_flow"), r.reading("exhaust_flow", 1, 1), "kg/s"),
+                        Door.meter(x.text("door.stack"), Reader.of(x, id).temperature(u, "stack"), u.temperature().symbol()));
+                if (unit.type().equals("combustion_engine")) r.group("radiator", Door.meter(x.text("door.radiator"), r.reading("radiator", 1e6, 2), "MW"));
+                else r.group("coil", Door.meter(x.text("door.coil"), r.reading("coil", 1e6, 2), "MW"));
+            }
             case "steam_turbine" -> {
                 r.group("pressure", r.entry("exhaust", x.text("door.exhaust"), Quantity.PRESSURE));
                 r.readings(Door.meter(x.text("door.power"), r.reading("power", 1e3, 1), "kW"), Door.meter(x.text("door.efficiency"), r.reading("efficiency", .01, 1), "%"),
@@ -389,6 +399,7 @@ public final class UnitDoors {
             }
             case "valve" -> x.text("door.status.valve", SheetUnits.number(1, 100 * results.reading(unit.id(), "vapour")));
             case "vacuum_pump" -> x.text("door.status.vacuum_pump", com.wormzjl.icheme.science.flowsheet.unit.VacuumPumpUnit.name(unit.params(), (int) Math.round(results.reading(unit.id(), "model"))), SheetUnits.number(1, results.reading(unit.id(), "power") / 1e3));
+            case "combustion_engine", "gas_turbine" -> x.text("door.status.prime_mover", com.wormzjl.icheme.science.flowsheet.unit.PrimeMoverUnit.name(unit.type().equals("gas_turbine") ? com.wormzjl.icheme.science.machine.PrimeMover.Family.GAS_TURBINE : com.wormzjl.icheme.science.machine.PrimeMover.Family.ENGINE, (int) Math.round(results.reading(unit.id(), "model"))), SheetUnits.number(2, results.reading(unit.id(), "power") / 1e6));
             case "ejector" -> x.text("door.status.ejector", SheetUnits.number(0, 3600 * results.reading(unit.id(), "motive")), SheetUnits.number(1, results.reading(unit.id(), "compression")));
             case "batch_still" -> x.text("door.status.still", SheetUnits.number(2, results.reading(unit.id(), "batch") / 3600), SheetUnits.number(2, results.reading(unit.id(), "cycle") / 3600),
                     SheetUnits.number(0, 100 * results.reading(unit.id(), "distilled")));

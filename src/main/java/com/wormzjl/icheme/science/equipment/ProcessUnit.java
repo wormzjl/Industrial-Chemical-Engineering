@@ -1741,6 +1741,59 @@ public final class ProcessUnit {
         for(int i=first;i<polygons.size();i++) {var p=polygons.get(i);if(p.material()==Material.MOTOR_FRAME||p.material()==Material.MOTOR_PANEL)polygons.set(i,new Mesh.Facet(p.positions(),p.normal(),p.min(),p.max(),p.shading(),Material.GENERATOR_PANEL,p.u(),p.v(),p.part()));}
     }
     void largeGenerator(double x,double y,double z0,double across,double length,double floor){int first=mesh.facets().size();largeMotor(x,y,z0,across,length,floor);generatorPanels(first);}
+
+    /**
+     * A two-pole turbo-generator (batch 2026-11-10-prime-movers, owner review T1) along z at (x, y) from {@code z0} (its
+     * non-drive end) for {@code length}: a long round stator with its bands, dished end shields with their bearings, the
+     * exciter's housing ahead of the non-drive end ({@code exciter} long), the coolers' box on top with its fins, the HV
+     * terminal box underneath at the exciter end; its feet and the base frame's beams down to {@code floor}.
+     */
+    void turboGenerator(double x, double y, double z0, double across, double length, double exciter, double floor) {
+        double r = across / 2, z1 = z0 + length, dish = .16 * r, s0 = z0 + dish + .12, s1 = z1 - dish - .12;
+        var axis = Frame.of(new double[]{x, y, 0}, 2, 1);
+        var back = Frame.of(new double[]{x, y, 0}, 2, -1);
+        int n = Math.max(16, sides(across));
+        mesh.prism(axis, r, s0, s1, n, Material.GENERATOR_PANEL);
+        for (double zb : new double[]{s0 + .06, (s0 + s1) / 2, s1 - .06}) mesh.hoop(axis, r, r + .04, zb - .06, zb + .06, n, Material.MOTOR_PLAIN);
+        // The end shields: dished, closing the stator's ends, a bearing housing on each.
+        mesh.annulus(axis, .9 * r, r, s1, n, 1, Material.MOTOR_PLAIN);
+        mesh.head(axis, .9 * r, s1, dish, n, Material.MOTOR_PLAIN);
+        mesh.annulus(axis, .9 * r, r, s0, n, -1, Material.MOTOR_PLAIN);
+        mesh.head(back, .9 * r, -s0, dish, n, Material.MOTOR_PLAIN);
+        mesh.cylinder(axis, .2 * r, s1 + .8 * dish, z1, 12, Material.MOTOR_PLAIN);
+        mesh.cylinder(axis, .2 * r, z0, s0 - .8 * dish, 12, Material.MOTOR_PLAIN);
+        solids.add(Solid.rod(new double[]{x, y, 0}, 2, z0, z1, 1.04 * r, 0));
+        volumes.add(Solid.rod(new double[]{x, y, 0}, 2, s0 + .05, s1 - .05, r - .02, 0));
+        // The exciter's housing ahead of the non-drive end.
+        if (exciter > .1) box(new double[]{x - .3 * across, y - .5 * r, z0 - exciter + .02}, new double[]{x + .3 * across, y + .4 * r, z0 - .02}, Material.GENERATOR_PANEL, true);
+        // The coolers' box on top, fins along its sides and a rail round its top.
+        double c0 = s0 + .08 * length, c1 = s1 - .08 * length, cb = y + .92 * r, ct = y + 1.42 * r, cx = .62 * r;
+        box(new double[]{x - cx, cb, c0}, new double[]{x + cx, ct, c1}, Material.GENERATOR_PANEL, true);
+        for (int side = -1; side <= 1; side += 2) {
+            double xf = x + side * cx, xo = xf + side * .05;
+            int fins = Math.max(4, (int) Math.floor((c1 - c0 - .2) / .3));
+            for (int k = 0; k < fins; k++) {
+                double z = c0 + .1 + (c1 - c0 - .2) * (k + .5) / fins;
+                box(new double[]{Math.min(xf, xo), cb + .12, z - .03}, new double[]{Math.max(xf, xo), ct - .08, z + .03}, Material.MOTOR_PLAIN, false);
+            }
+            box(new double[]{Math.min(xf, xo), ct - .08, c0}, new double[]{Math.max(xf, xo), ct, c1}, Material.MOTOR_PLAIN, false);
+        }
+        // The HV terminal box underneath at the exciter end.
+        double zt0 = s0 + .06 * length, zt1 = zt0 + Math.max(.6, .15 * length);
+        box(new double[]{x - .32 * r, Math.max(floor, y - r - .6), zt0}, new double[]{x + .32 * r, y - .88 * r, zt1}, Material.GENERATOR_PANEL, false);
+        // Feet on the base frame's beams, on posts when it stands high.
+        double base = y - r, beam = Math.min(BEAM, base - floor);
+        for (int side = -1; side <= 1; side += 2) {
+            double xf = x + side * .8 * r;
+            for (double zf : new double[]{s0 + .05, s1 - .05 - .12 * length})
+                box(new double[]{xf - .12 * r, base, zf}, new double[]{xf + .12 * r, y - .72 * r, zf + .12 * length}, Material.MOTOR_PLAIN, false);
+            if (beam > .02) box(new double[]{xf - FLANGE_BEAM, base - beam, z0 - .05}, new double[]{xf + FLANGE_BEAM, base, z1 + .05}, Material.STEELWORK, true);
+            if (base - beam - floor > .05)
+                for (double zp : new double[]{z0 + .1, (z0 + z1) / 2, z1 - .1})
+                    box(new double[]{xf - POST / 2, floor, zp - POST / 2}, new double[]{xf + POST / 2, base - beam, zp + POST / 2}, Material.STEELWORK, true);
+        }
+        terminalBox = new double[]{x + r, y - .2 * r, (zt0 + zt1) / 2};
+    }
     void motor(Frame f, double r, double z0, double z1, double shaft, double floor, MotorDetail detail) {
         double fin = detail == MotorDetail.PLAIN ? .03 : .025 + .06 * r;
         motor(f, r, fin, z0, z1 - .18 * (z1 - z0), z1, sides(2 * r), shaft, floor, detail);

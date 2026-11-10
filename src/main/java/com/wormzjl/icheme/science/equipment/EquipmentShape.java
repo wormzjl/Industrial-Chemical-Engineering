@@ -167,7 +167,12 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
         // chimney with a steel liner, releasing their gas and its solids to the atmosphere.
         STEEL_STACK, BRICK_CHIMNEY,
         // Vacuum pump casings on the shaft trains (batch 2026-11-10-vacuum-pump): a liquid ring of one or two stages, a dry screw.
-        LIQUID_RING_PUMP, DRY_SCREW_PUMP;
+        LIQUID_RING_PUMP, DRY_SCREW_PUMP,
+        // Fuelled prime movers on the shaft trains (batch 2026-11-10-prime-movers): a liquid-fuel combustion engine, a gas turbine.
+        COMBUSTION_ENGINE, GAS_TURBINE;
+
+        /** A fuelled prime mover (batch 2026-11-10-prime-movers): a combustion engine or a gas turbine, a shaft-train driver on its fuel. */
+        public boolean primeMover() { return this == COMBUSTION_ENGINE || this == GAS_TURBINE; }
 
         /** A chimney ({@code science.fluid.network.Chimney}): a steel stack or a brick chimney. */
         public boolean chimney() { return this == STEEL_STACK || this == BRICK_CHIMNEY; }
@@ -849,7 +854,7 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
 
     /** Registers with the fluid engine when the whole structure has been built: a steam turbine too (W3, reading A37), a batch still (batch 2026-11-09-batch-distiller, W3), a steam ejector (batch 2026-11-10-steam-ejector-flow). */
     public boolean fluidDevice() {
-        return reservoir() || kind.mover() || kind == Kind.STEAM_TURBINE || kind == Kind.EJECTOR || kind == Kind.FLARE_STACK || kind == Kind.BATCH_STILL || kind.chimney() || HeatSides.unit(kind) != null;
+        return reservoir() || kind.mover() || kind == Kind.STEAM_TURBINE || kind.primeMover() || kind == Kind.EJECTOR || kind == Kind.FLARE_STACK || kind == Kind.BATCH_STILL || kind.chimney() || HeatSides.unit(kind) != null;
     }
 
     /** A vessel's skirt; a designed shape's supports are its own parts. */

@@ -17,14 +17,21 @@ import java.util.Map;
  * plan restores a casing by itself). {@code BURNERS} (batch 2026-11-09-furnace-fuel-power): a radiant coil's limit
  * ({@link FiredCoil#limit}), keyed by the coil's device; {@code FUEL}: a fired heater's fuel valve's mass target, kg/s, keyed
  * by its burners, the node its run enters. {@code FLARE} (batch 2026-11-09-flare-stack): a flare's tip limit, kg/s, keyed by the
- * flare, the node its run enters.
+ * flare, the node its run enters. {@code EXHAUST} (batch 2026-11-10-prime-movers): a gas turbine's steam coil's gas, its
+ * capacity rate W/K ({@code value}) and its inlet K ({@code second}), keyed by the coil's device; a prime mover's fuel valve
+ * takes {@code FUEL}, keyed by its fuel void, the node its run enters.
  */
-public record ShaftPlan(Kind kind, double value) {
-    public enum Kind { SPEED, DISPLACEMENT, GOVERNOR, FANS, FAILED, BURNERS, FUEL, FLARE }
+public record ShaftPlan(Kind kind, double value, double second) {
+    public enum Kind { SPEED, DISPLACEMENT, GOVERNOR, FANS, FAILED, BURNERS, FUEL, FLARE, EXHAUST }
+
+    /** A plan of one value. */
+    public ShaftPlan(Kind kind, double value) {
+        this(kind, value, 0);
+    }
 
     public ShaftPlan {
         java.util.Objects.requireNonNull(kind);
-        if (!(value >= 0) || !Double.isFinite(value) || (kind == Kind.FANS || kind == Kind.FAILED || kind == Kind.BURNERS) && value > 1) throw new IllegalArgumentException("Invalid shaft plan " + value);
+        if (!(second >= 0) || !Double.isFinite(second) || !(value >= 0) || !Double.isFinite(value) || (kind == Kind.FANS || kind == Kind.FAILED || kind == Kind.BURNERS) && value > 1) throw new IllegalArgumentException("Invalid shaft plan " + value);
     }
 
     /**
@@ -51,7 +58,7 @@ public record ShaftPlan(Kind kind, double value) {
             // A fuel valve is keyed by the burners its run enters, a flare's tip limit by the flare.
             if (pipe.control() instanceof FlowControl.ControlValve fuel && fuel.source().sink()) {
                 var plan = plans.get(graph.reservoirs().get(pipe.second()).id());
-                if (plan == null || plan.kind != (fuel.source() == FlowControl.ValveSource.BURNER ? Kind.FUEL : Kind.FLARE)) continue;
+                if (plan == null || plan.kind != (fuel.source() == FlowControl.ValveSource.FLARE ? Kind.FLARE : Kind.FUEL)) continue;
                 var next = Math.abs(plan.value - fuel.massTarget()) <= PassiveStepSolver.VALVE_DEADBAND * Math.max(plan.value, fuel.massTarget()) + 1e-9 && (plan.value > 0) == (fuel.massTarget() > 0)
                         ? fuel : fuel.withMassTarget(plan.value);
                 if (next == fuel) continue;
@@ -67,6 +74,13 @@ public record ShaftPlan(Kind kind, double value) {
                         && Math.abs(coil.limit() - plan.value) <= PassiveStepSolver.VALVE_DEADBAND * Math.max(coil.limit(), plan.value))) {
                     if (pipes == null) pipes = new ArrayList<>(graph.pipes());
                     pipes.set(e, pipe.withHeat(coil.withLimit(plan.value)));
+                }
+                continue;
+            }
+            if (plan.kind == Kind.EXHAUST) {
+                if (pipe.heat() instanceof ExhaustCoil coil && (coil.flue() != plan.value || coil.gasInlet() != plan.second)) {
+                    if (pipes == null) pipes = new ArrayList<>(graph.pipes());
+                    pipes.set(e, pipe.withHeat(coil.withGas(plan.second, plan.value)));
                 }
                 continue;
             }

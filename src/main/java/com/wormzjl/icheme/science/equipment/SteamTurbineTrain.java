@@ -196,7 +196,7 @@ final class SteamTurbineTrain {
      * radius there {@code ra}) to {@code zb} ({@code rb}), {@code out} proud of the casing between heights y0 and y1: its
      * top, underside and outer face, and the end faces asked for (a cone's flange is a slanted hexahedron).
      */
-    private static void ledge(Mesh m, double a, int side, double za, double ra, double zb, double rb, double y0, double y1, double out, boolean startCap, boolean endCap,
+    static void ledge(Mesh m, double a, int side, double za, double ra, double zb, double rb, double y0, double y1, double out, boolean startCap, boolean endCap,
                               Material material) {
         double[][] in = {{a + side * (ra - .03), za}, {a + side * (rb - .03), zb}}, ex = {{a + side * (ra + out), za}, {a + side * (rb + out), zb}};
         for (double y : new double[]{y0, y1})

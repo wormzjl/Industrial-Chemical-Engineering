@@ -231,6 +231,31 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         burners = Objects.requireNonNull(value);
     }
 
+    /** The fuelled prime movers (batch 2026-11-10-prime-movers): their fuel, the power it gives, their coils' gas. */
+    private PrimeMovers primeMovers;
+    /** A prime mover's steam coil registration, 0 for none. */
+    private java.util.function.Function<ShaftUnit, Long> coilOf = u -> 0L;
+    /** Each prime mover's fuel target, kg/s, by its fuel void; the targets and coil gas its islands were last woken for. */
+    private final Map<Long, Double> fuelTargets = new HashMap<>(), fuelWoken = new HashMap<>(), gasWoken = new HashMap<>();
+
+    /** Installs the prime movers and how a unit finds its steam coil. */
+    public void primeMovers(PrimeMovers value, java.util.function.Function<ShaftUnit, Long> coil) {
+        primeMovers = Objects.requireNonNull(value);
+        coilOf = Objects.requireNonNull(coil);
+    }
+
+    /** The prime movers, for their views (reads), or null. */
+    public PrimeMovers primeMovers() {
+        return primeMovers;
+    }
+
+    /** A prime mover unit's law: the model of its kind whose net rating it carries, or null. */
+    static com.wormzjl.icheme.science.machine.PrimeMover law(ShaftUnit u) {
+        var family = u.kind() == ShaftNetwork.Kind.GAS_TURBINE ? com.wormzjl.icheme.science.machine.PrimeMover.Family.GAS_TURBINE : com.wormzjl.icheme.science.machine.PrimeMover.Family.ENGINE;
+        var m = com.wormzjl.icheme.science.machine.PrimeMover.ofRating(family, u.ratedPower());
+        return m == null ? null : new com.wormzjl.icheme.science.machine.PrimeMover(m);
+    }
+
     /** Installs the pumps' health (W10b). */
     public void health(PumpHealth value) {
         health = Objects.requireNonNull(value);
@@ -396,6 +421,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
             for (long id : train.parts()) trainOf.put(id, train.key());
         }
         for (var u : units.values()) if (u.fluid() != 0) unitOfDevice.put(u.fluid(), u.id());
+        if (primeMovers != null) primeMovers.sync(units.values(), coilOf, ShaftTrains::law);
         impacts.keySet().retainAll(units.keySet());
         // A newly registered driver has delivered no power yet. Its set speed is a target, not operating state.
         for (var run : runs.values()) {
@@ -528,6 +554,15 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
                 plans.putAll(fired);
             }
         }
+        // The prime movers' fuel valves and steam coils' gas.
+        if (primeMovers != null) {
+            var fuel = new HashMap<Long, ShaftPlan>();
+            primeMovers.plans(graph, fuelTargets, fuel);
+            if (!fuel.isEmpty()) {
+                if (plans == null) plans = new HashMap<>();
+                plans.putAll(fuel);
+            }
+        }
         // The flares' tip limits.
         if (flares != null) {
             var tips = new HashMap<Long, ShaftPlan>();
@@ -586,6 +621,15 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         if (electric != null) electric.booked(island, start, end, result);
         // The burners' demand, fired heat and fans' draw.
         if (burners != null) burners.booked(island, start, end, result);
+        // The prime movers' fired fuel: their trains step on it.
+        if (primeMovers != null) for (long unit : primeMovers.booked(start, end, result)) {
+            Long key = trainOf.get(unit);
+            var run = key == null ? null : runs.get(key);
+            if (run != null) {
+                run.fresh = true;
+                run.booked = true;
+            }
+        }
         // The flares' flow, heat and status.
         if (flares != null) flares.booked(start, end, result);
         // The chimneys' release and status.
@@ -712,7 +756,11 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
                 else if(sample!=null){double share=flow?sample.flowSpeed():sample.pressureSpeed();var member=train.driven().stream().filter(m->m.id()==candidates.getFirst().id()).findFirst().orElseThrow();requestedRpm=share*candidates.getFirst().designSpeed()/member.ratio();}
             }
         }
-        var measure = new ShaftTrain.Measure(demand, run.available, steamShort, run.measured, run.target, state.previousSpeed(), state.previousMeasured(), run.available > 0 || idleSupply);
+        // A prime mover's supply is the net shaft power its last fired fuel gave; fuel arriving holds an unloaded set at speed.
+        boolean prime = d.kind().primeMover() && primeMovers != null;
+        if (prime) run.available = primeMovers.available(d.id());
+        var measure = prime ? new ShaftTrain.Measure(demand, run.available, false, Double.NaN, Double.NaN, state.previousSpeed(), state.previousMeasured(), primeMovers.firing(d.id()))
+                : new ShaftTrain.Measure(demand, run.available, steamShort, run.measured, run.target, state.previousSpeed(), state.previousMeasured(), run.available > 0 || idleSupply);
         // A motor needs its live feed and buffered energy: its draw is booked at this step, from its last booking to now, at the
         // power this step decided (reading A59); one that runs short stops here (NO POWER) and restarts on the cadence.
         boolean motor = d.kind() == ShaftNetwork.Kind.MOTOR && electric != null;
@@ -750,12 +798,17 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
             if (turbine) run.admission = target;
             if (valve != null) governorTargets.put(valve, target);
         }
+        if (prime) {
+            // The governor's feed-forward sets the fuel (owner P11: a lost load cuts it in this step); short, the cause's word.
+            fuelTargets.put(d.fluid(), primeMovers.target(d.id(), step.governorPower(), driver.running() && step.trip() == ShaftTrain.Trip.NONE));
+            if (step.status().equals("LOW FUEL")) run.status = primeMovers.shortWord(d.id());
+        }
         // Only a protection trip is the unit's (it waits for the reset); NO POWER clears itself and is never saved.
         var trip = step.trip().latched() ? step.trip() : ShaftTrain.Trip.NONE;
         boolean changed = Math.abs(step.speed() - state.speed()) > ShaftTrain.SPEED_DEADBAND * Math.max(d.designSpeed(), 1) || trip != d.trip();
         var next = d.withTrip(trip).withState(new ShaftUnit.State(step.speed(), state.speed(), run.measured));
         if (changed) topology.shaft(next);
-        return changed || turbine || valve != null;
+        return changed || turbine || valve != null || prime;
     }
 
     /**
@@ -869,6 +922,37 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
             if (old != null && !outsideDeadband(old, e.getValue())) continue;
             woken.put(e.getKey(), e.getValue());
             owners(e.getKey(), wake);
+        }
+        // The prime movers (batch 2026-11-10-prime-movers): a fuel target past the valve's deadband wakes its fuel island; a
+        // coil's gas past it wakes the coil's. A set off its train, stopped or faulted, asks for no fuel.
+        if (primeMovers != null) {
+            var fuels = new HashSet<Long>();
+            for (var u : units.values()) {
+                if (!u.kind().primeMover() || u.fluid() == 0) continue;
+                var key = trainOf.get(u.id());
+                var run = key == null ? null : runs.get(key);
+                boolean open = run != null && run.train.fault() == ShaftNetwork.Fault.NONE && run.train.driver() == u.id() && u.settings().running();
+                if (!open) fuelTargets.put(u.fluid(), 0.0);
+                fuels.add(u.fluid());
+            }
+            fuelTargets.keySet().retainAll(fuels);
+            fuelWoken.keySet().retainAll(fuels);
+            for (var e : fuelTargets.entrySet()) {
+                Double old = fuelWoken.get(e.getKey());
+                if (old != null && !outsideDeadband(old, e.getValue())) continue;
+                fuelWoken.put(e.getKey(), e.getValue());
+                owners(e.getKey(), wake);
+            }
+            var coils = primeMovers.coils();
+            gasWoken.keySet().retainAll(coils.values());
+            for (long coil : coils.values()) {
+                var gas = primeMovers.gas(coil);
+                double flue = gas == null ? 0 : gas.value();
+                Double old = gasWoken.get(coil);
+                if (old != null && !outsideDeadband(old, flue)) continue;
+                gasWoken.put(coil, flue);
+                owners(coil, wake);
+            }
         }
         if (!wake.isEmpty()) coordinator.shaftsMoved(wake);
     }

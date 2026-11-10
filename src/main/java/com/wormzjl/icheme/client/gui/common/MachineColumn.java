@@ -28,7 +28,9 @@ public final class MachineColumn {
     public enum Kind {
         MOTOR, STEAM_TURBINE, GENERATOR, GEARBOX, CREATIVE_MOTOR,
         /** The Create coupling (W6b, D41): no switch and no set point, Create drives it. */
-        CREATE_COUPLING;
+        CREATE_COUPLING,
+        /** A combustion engine or a gas turbine (batch 2026-11-10-prime-movers): Off and On, a set speed up to its rated speed. */
+        PRIME_MOVER;
 
         /** The page of shaft part {@code kind}, or null for a shaft block or a casing (the casing has its fluid page). */
         public static @Nullable Kind of(ShaftNetwork.Kind kind) {
@@ -39,6 +41,7 @@ public final class MachineColumn {
                 case GEARBOX -> GEARBOX;
                 case CREATIVE_MOTOR -> CREATIVE_MOTOR;
                 case CREATE_COUPLING -> CREATE_COUPLING;
+                case COMBUSTION_ENGINE, GAS_TURBINE -> PRIME_MOVER;
                 default -> null;
             };
         }
@@ -55,7 +58,7 @@ public final class MachineColumn {
 
         /** Whether it drives its train, so it sets a speed or regulates. */
         public boolean driver() {
-            return this == MOTOR || this == STEAM_TURBINE || this == CREATIVE_MOTOR;
+            return this == MOTOR || this == STEAM_TURBINE || this == CREATIVE_MOTOR || this == PRIME_MOVER;
         }
 
         /** The speed entry's unit: a motor's share in %, a turbine's and a creative motor's rpm (reading A90). */
@@ -138,13 +141,14 @@ public final class MachineColumn {
             var keys = new ArrayList<Column.Button>();
             boolean motor=in.kind()==Kind.MOTOR;
             if(motor)regulate.add(new Column.Buttons(List.of(position("mode:manual",t.get(KEY+"mode.manual"),t.get(KEY+"regulate.speed.hint"),in.mode()==Mode.SPEED,true),position("mode:auto",t.get(KEY+"mode.auto"),t.get(KEY+"auto.hint"),in.mode()!=Mode.SPEED,true))));
-            if(!motor||in.mode()!=Mode.SPEED){
+            // A prime mover holds its set speed alone (owner P11: no other duty, and never above its rated speed).
+            if(in.kind()!=Kind.PRIME_MOVER&&(!motor||in.mode()!=Mode.SPEED)){
                 for(var m:Mode.values())if(!motor||m!=Mode.SPEED)
                     keys.add(position("regulate:"+m.name().toLowerCase(Locale.ROOT),t.get(KEY+"regulate."+m.name().toLowerCase(Locale.ROOT)),t.get(KEY+"regulate."+m.name().toLowerCase(Locale.ROOT)+".hint"),in.mode()==m,true));
                 regulate.add(new Column.Buttons(keys));
             }
             // Flow and pressure targets are the casing's own set points: their keys' hovers say so (panel rule 1).
-            if (in.mode() == Mode.SPEED) regulate.add(new Column.Field("speed", t.get(KEY + "speed"), in.kind().speedUnit(), t.get(KEY + "speed." + (in.kind()==Kind.MOTOR?"motor":in.kind().speedUnit().replace("%", "share")) + ".hint")));
+            if (in.mode() == Mode.SPEED) regulate.add(new Column.Field("speed", t.get(KEY + "speed"), in.kind().speedUnit(), t.get(KEY + "speed." + (in.kind()==Kind.MOTOR?"motor":in.kind()==Kind.PRIME_MOVER?"prime_mover":in.kind().speedUnit().replace("%", "share")) + ".hint")));
             rows.add(new Column.Group(t.get(KEY + "regulate"), t.get(KEY + "regulate.hint"), regulate));
         }
         if (in.kind() == Kind.CREATIVE_MOTOR || in.kind() == Kind.MOTOR)
@@ -195,6 +199,18 @@ public final class MachineColumn {
             supply.add(new Meter("steam_flow", Format.number(v.steamFlow()), "kg/s", null));
             supply.add(new Meter("inlet", Format.number(v.inletPressure() / 1e5), "bar", null));
             supply.add(new Meter("exhaust", Format.number(v.exhaustPressure() / 1e5), "bar", null));
+        }
+        // A prime mover's supply is its fuel, its exhaust its stack's (batch 2026-11-10-prime-movers).
+        var fuel = v.fuel();
+        if (kind == Kind.PRIME_MOVER && fuel != null) {
+            supply.add(new Meter("fuel_heat", Format.number(fuel.fired() / 1e6), "MW", t.get(KEY + "fuel_heat.hint")));
+            supply.add(new Meter("fuel_flow", Format.number(fuel.fuelFlow()), "kg/s", null));
+            supply.add(new Meter("fuel_supply", Double.isFinite(fuel.supply()) ? Format.number(fuel.supply() / 1e5) : "—", "bar", t.get(KEY + "fuel_supply.hint", Format.number(fuel.required() / 1e5))));
+            supply.add(new Meter("exhaust_flow", Format.number(fuel.exhaustFlow()), "kg/s", null));
+            supply.add(new Meter("exhaust_temperature", whole(fuel.exhaust() - 273.15), "°C", null));
+            if (fuel.engine()) supply.add(new Meter("radiator", Format.number(fuel.cooling() / 1e6), "MW", t.get(KEY + "radiator.hint")));
+            else supply.add(new Meter("coil", Format.number(fuel.coil() / 1e6), "MW", t.get(KEY + "coil.hint")));
+            supply.add(new Meter("stack", whole(fuel.stack() - 273.15), "°C", null));
         }
         String governor = kind == Kind.STEAM_TURBINE ? v.governor().isEmpty()
                 ? t.get(KEY + "governor.internal") : t.get(KEY + "governed", v.governor()) : null;
@@ -248,7 +264,7 @@ public final class MachineColumn {
         double set = v.settings().setPoint();
         return switch (Kind.of(v.kind())) {
             case MOTOR -> (set>0?set:1)*v.designSpeed();
-            case STEAM_TURBINE -> (set > 0 ? set : 1) * v.designSpeed();
+            case STEAM_TURBINE, PRIME_MOVER -> (set > 0 ? set : 1) * v.designSpeed();
             case CREATIVE_MOTOR -> set > 0 ? set : ShaftTrain.CREATIVE_SPEED;
             case null, default -> 0;
         };
@@ -259,6 +275,8 @@ public final class MachineColumn {
         return switch (kind) {
             case MOTOR -> designSpeed>0?entry/designSpeed:0;
             case STEAM_TURBINE -> designSpeed > 0 ? entry / designSpeed : 0;
+            // A prime mover never runs above its rated speed (owner P11).
+            case PRIME_MOVER -> designSpeed > 0 ? Math.min(1, entry / designSpeed) : 0;
             default -> entry;
         };
     }

@@ -142,13 +142,38 @@ gear_whine = (tones([(750, .40, 0), (1500, .18, .4), (2250, .07, 1.1), (725, .10
                      (1475, .05, .9), (1525, .05, 1.7)])
               + .30 * noise(8901, between(200, 3000)))
 
+# A combustion engine (batch 2026-11-10-prime-movers): a 16-cylinder four-stroke at 1,500 rpm fires 1,500/60 x 8 =
+# 200 times a second. Each firing is a short exhaust pulse (a decaying 200 to 800 Hz burst); the half order (12.5 Hz,
+# one cylinder's cycle) and the shaft rate (25 Hz) give its low throb, the valve train its 1 to 3 kHz clatter at the
+# firing rate, and the turbocharger a faint 4.2 kHz whine. The loop is authored at 1,500 rpm (UnitDesign.ENGINE_LOOP_RPM).
+firing = 200
+pulse = np.zeros(count)
+pulse_shape = np.exp(-np.arange(rate // 400) / (rate / 2500))
+for start in range(rate // firing // 2, count, rate // firing):
+    span = (start + np.arange(len(pulse_shape))) % count
+    pulse[span] += pulse_shape
+engine_running = (3.0 * (pulse - pulse.mean()) * noise(9101, between(200, 800)) * (1 + .25 * np.sin(2 * np.pi * 12.5 * t))
+                  + tones([(12.5, .45, 0), (25, .55, .6), (50, .30, 1.3), (200, .35, .2), (400, .12, 1.0), (4200, .04, .5)])
+                  + .35 * noise(9102, between(1000, 3000)) * (1 + .5 * np.sin(2 * np.pi * firing * t))
+                  + .30 * noise(9103, between(40, 200)))
+# The loudest pulses rounded by a soft limit (tanh at 3 times the RMS), as the firebox's crackle, so they do not clip.
+engine_running = np.tanh(engine_running / (3.0 * np.sqrt(np.mean(engine_running ** 2))))
+
+# A gas turbine (batch 2026-11-10-prime-movers): the compressor's blade pass, 3,000 rpm x 30 blades = 1,500 Hz, and its
+# front stages' higher whine (about 5.5 kHz), over the combustion and exhaust roar (broadband 100 Hz to 2 kHz, a lift
+# near 300 Hz) with a slow flutter, and the shaft's 50 Hz rumble. Its loop states no speed: it sounds at its rated speed.
+gas_turbine_running = (noise(9201, between(100, 2000) * (1 + .6 * band(300, .8))) * flutter(9202, .3, 1.2, .07)
+                       + tones([(1500, .30, 0), (3000, .10, .8), (5500, .08, 1.4), (50, .35, .3), (100, .12, 1.1)])
+                       + .25 * noise(9203, band(6000, .5)))
+
 # Each loop's RMS: the pump loop's level (tools/machine-sounds), the pilot hiss at a third of it.
 PUMP_RMS = .0926
 for name, sound, level in (("flare_roar", flare_roar, PUMP_RMS), ("flare_pilot", flare_pilot, PUMP_RMS / 3),
                            ("burner_roar", burner_roar, PUMP_RMS), ("fire_draught", fire_draught, PUMP_RMS),
                            ("pot_boil", pot_boil, PUMP_RMS), ("valve_gas", valve_gas, PUMP_RMS),
                            ("fan_whoosh", fan_whoosh, PUMP_RMS), ("water_fall", water_fall, PUMP_RMS),
-                           ("gear_whine", gear_whine, PUMP_RMS)):
+                           ("gear_whine", gear_whine, PUMP_RMS), ("engine_running", engine_running, PUMP_RMS),
+                           ("gas_turbine_running", gas_turbine_running, PUMP_RMS)):
     sound = sound - np.mean(sound)
     sound *= level / np.sqrt(np.mean(sound ** 2))
     path = output / (name + ".ogg")

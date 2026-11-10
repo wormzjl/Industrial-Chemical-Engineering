@@ -902,6 +902,17 @@ public final class ShapeRasterizer {
                 // A turbine registers at its steam inlet's cell (W3, reading A37), as a mover at its suction's.
                 node = ports.stream().filter(port -> nozzles.get(port.nozzle()).role() == EquipmentShape.Role.STEAM)
                         .findFirst().orElseThrow(() -> new IllegalStateException("A turbine needs a steam inlet")).cell();
+            } else if (shape.kind().primeMover()) {
+                // A prime mover (batch 2026-11-10-prime-movers) registers its fuel void at its FUEL nozzle's cell, then a gas
+                // turbine's steam coil at its FEEDWATER nozzle's cell.
+                node = ports.stream().filter(port -> nozzles.get(port.nozzle()).role() == EquipmentShape.Role.FUEL)
+                        .findFirst().orElseThrow(() -> new IllegalStateException("A prime mover needs its fuel nozzle")).cell();
+                var all = new ArrayList<Cell>();all.add(node);
+                for (var port : ports) if (nozzles.get(port.nozzle()).role() == EquipmentShape.Role.FEEDWATER) {
+                    if (all.contains(port.cell())) throw new IllegalStateException("A steam coil's water nozzle shares the fuel's cell");
+                    all.add(port.cell());break;
+                }
+                sides = List.copyOf(all);
             } else if (shape.kind() == EquipmentShape.Kind.FLARE_STACK) {
                 // A flare registers its tip at its vent gas inlet's cell (batch 2026-11-09-flare-stack), as the burners at their fuel's.
                 node = ports.stream().filter(port -> nozzles.get(port.nozzle()).role() == EquipmentShape.Role.FLARE_GAS)

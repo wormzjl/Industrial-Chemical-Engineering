@@ -104,10 +104,11 @@ import java.util.function.Function;
  * <p>44 (batch 2026-11-10-chimney, C1 B): no field changed; sinks open to the air and open vessels stand at the atmosphere
  * of their height, so a state written under the constant atmosphere is dropped and rebuilt from the facts.</p>
  * <p>45 (batch 2026-11-10-vacuum-pump; 44 on its own branch, renumbered at the merge after the chimney's 44): control tag 8 is a vacuum pump casing on its curve.</p>
+ * <p>46 (batch 2026-11-10-prime-movers): heat law tag 5, a gas turbine's exhaust coil (its gas inlet and capacity rate); control valve source ENGINE, a prime mover's fuel valve.</p>
  */
 public final class FluidCheckpointCodec {
     /** The state format: the core record's {@code StateFormat} and every unit's state section. */
-    public static final int VERSION=45;
+    public static final int VERSION=46;
     /** The most wall cells a saved heat side holds (crossflow 64, Standard 8, an air cooler's flat wall 1). */
     private static final int MAXIMUM_WALL_CELLS=64;
     /** The envelope: the core record's frame, the unit header and the section layout. Frozen. */
@@ -436,6 +437,7 @@ public final class FluidCheckpointCodec {
                     w.f64(cooled.draught());control(w,cooled.control());w.u8(cooled.limit().ordinal());}
                 case com.wormzjl.icheme.science.fluid.network.FiredCoil coil->{w.u8(2);w.f64(coil.setTemperature());w.f64(coil.duty());w.f64(coil.firing());w.i64(coil.partner());w.f64(coil.limit());}
                 case com.wormzjl.icheme.science.fluid.network.ConvectionCoil coil->{w.u8(4);w.f64(coil.conductance());w.i64(coil.radiant());w.f64(coil.flue());}
+                case com.wormzjl.icheme.science.fluid.network.ExhaustCoil coil->{w.u8(5);w.f64(coil.gasInlet());w.f64(coil.flue());}
             }
         }
     }
@@ -490,6 +492,7 @@ public final class FluidCheckpointCodec {
         if(tag==0)return null;
         if(tag==2)return new com.wormzjl.icheme.science.fluid.network.FiredCoil(r.f64(),r.f64(),r.f64(),r.i64(),r.f64());
         if(tag==4)return new com.wormzjl.icheme.science.fluid.network.ConvectionCoil(r.f64(),r.i64(),r.f64());
+        if(tag==5)return new com.wormzjl.icheme.science.fluid.network.ExhaustCoil(r.f64(),r.f64());
         if(tag==3) {
             double area=r.f64();var air=new com.wormzjl.icheme.science.fluid.network.AirCooled.Air(r.f64(),r.f64(),r.f64(),r.f64(),r.f64());double draught=r.f64();
             var control=control(r);return new com.wormzjl.icheme.science.fluid.network.AirCooled(area,air,draught,control,limit(r));

@@ -35,7 +35,7 @@ public final class ProcessStates {
     private static final CellWatch<FluidNetwork.FlareState> FLARES=new CellWatch<>(FluidNetwork.Watch.FLARES,k->k==EquipmentShape.Kind.FLARE_STACK,FLARE_SIGHT);
     private static final CellWatch<FluidNetwork.StillState> STILLS=new CellWatch<>(FluidNetwork.Watch.STILLS,k->k==EquipmentShape.Kind.BATCH_STILL,STILL_SIGHT);
     private static final CellWatch<FluidNetwork.TowerPlume> TOWERS=new CellWatch<>(FluidNetwork.Watch.TOWERS,EquipmentShape.Kind::coolingTower,SIGHT);
-    private static final CellWatch<FluidNetwork.HeaterFlue> HEATERS=new CellWatch<>(FluidNetwork.Watch.HEATERS,HeatSides::burners,SIGHT);
+    private static final CellWatch<FluidNetwork.HeaterFlue> HEATERS=new CellWatch<>(FluidNetwork.Watch.HEATERS,k->HeatSides.burners(k)||k.primeMover(),SIGHT);
     /** The chimneys (batch 2026-11-10-chimney): their release at the tip. */
     private static final CellWatch<FluidNetwork.ChimneyState> CHIMNEYS=new CellWatch<>(FluidNetwork.Watch.CHIMNEYS,EquipmentShape.Kind::chimney,SIGHT);
     private static final List<CellWatch<?>> ALL=List.of(FLARES,STILLS,TOWERS,HEATERS,CHIMNEYS);

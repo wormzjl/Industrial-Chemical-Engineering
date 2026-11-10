@@ -36,6 +36,16 @@ public final class MachineColumnSamples {
                 Double.NaN, Double.NaN, Double.NaN, c);
     }
 
+    /**
+     * An illustrative published view of a gas turbine (batch 2026-11-10-prime-movers): an IND-30 at 3,000 rpm giving 24 MW on
+     * 70.4 MW of fuel, 1.41 kg/s at 30 bar against the 28.4 it needs, 92 kg/s of exhaust at 500 °C, its coil taking 30 MW.
+     */
+    public static MachineView gasTurbineSample() {
+        var fuel = new MachineView.Fuel(70.4e6, 1.41, 30e5, 28.37e5, 773.15, 92, 0, 30e6, 465, false);
+        return new MachineView(1, ShaftNetwork.Kind.GAS_TURBINE, "RUNNING", 3000, 24e6, 0, 0, com.wormzjl.icheme.runtime.fluid.ShaftUnit.Settings.DEFAULT,
+                ShaftTrain.Trip.NONE, 30e6, 3000, 0, false, Double.NaN, Double.NaN, "", 0, Double.NaN, Double.NaN, Double.NaN, null, fuel);
+    }
+
     /** A case: its name and its input. */
     public record Case(String name, Input in) {
     }
@@ -58,6 +68,7 @@ public final class MachineColumnSamples {
      * 72 %; a 2500 kW turbine at 4200 rpm giving 1980 kW from 2.9 kg/s of steam, 40 bar in and 4 bar out.
      */
     public static Input sample(Kind kind, boolean edit, boolean variable, Mode mode, boolean tripped, HeatControlColumn.Texts t) {
+        if (kind == Kind.PRIME_MOVER) return input(gasTurbineSample(), edit, true, mode, t);
         if (kind == Kind.CREATE_COUPLING) return input(couplingSample("RUNNING", 256, 2950, 17345, 20480, 25.41e3), edit, true, mode, t);
         boolean turbine = kind == Kind.STEAM_TURBINE;
         var shaft = new ArrayList<Meter>(List.of(new Meter("speed", tripped ? "0" : turbine ? "4200" : "2950", "rpm", null)));

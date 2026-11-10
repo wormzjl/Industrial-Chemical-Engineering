@@ -57,6 +57,8 @@ public final class SizingCoverage {
             case STEEL_STACK, BRICK_CHIMNEY -> sized(ChimneySizing.Size.class);
             // The vacuum pumps by type and model (batch 2026-11-10-vacuum-pump).
             case LIQUID_RING_PUMP, DRY_SCREW_PUMP -> sized(VacuumPumpSizing.Size.class);
+            // The prime movers by family and model (batch 2026-11-10-prime-movers).
+            case COMBUSTION_ENGINE, GAS_TURBINE -> sized(PrimeMoverSizing.Size.class);
             case STIRRED_REACTOR, ADSORBER, TRICKLE_BED_REACTOR, EBULLATED_BED_REACTOR, MOTOR, GENERATOR, GEARBOX, CYCLONE, FCC_CONVERTER, DELAYED_COKER,
                  FLUIDIZED_BED_BOILER, FLUIDIZED_BED_GASIFIER, GRATE_BOILER, FIXED_BED_GASIFIER, INDUCED_DRAFT_COOLING_TOWER, NATURAL_DRAFT_COOLING_TOWER -> none(NO_MODEL);
         };
