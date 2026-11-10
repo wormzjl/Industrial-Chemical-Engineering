@@ -10,6 +10,7 @@ Owner, 2026-11-10: a custom shader system for normal textures (first the instrum
 
 - [CUSTOM_SHADER_SYSTEM_PLAN.md](CUSTOM_SHADER_SYSTEM_PLAN.md): the readings of the request, physics in numbers (white plumes as mixing-line condensation: none at the mod's 25 °C / 50 % ambient), the two render paths (own shaders without a pack, vanilla entity render types with LabPBR under a pack), the config switch, normal maps for the instrument wiring (tiled textures, our own entity shader without a pack, LabPBR under one), the effects and sounds, budgets, the compatibility matrix, W0 to W9, owner decisions X1 to X12 (X1 decided), the ATEX connection practice the wiring follows.
 - [SOFT_DEPENDENCY_REVIEW.md](SOFT_DEPENDENCY_REVIEW.md): which related mods to depend on optionally: Iris API now; Sodium, Embeddium, Flywheel and the effect libraries not; Distant Horizons and LambDynamicLights later; where the speed comes from instead; Distant Horizons added (X11 A); the guards against changes in those mods.
+- [PROCESS_SOUNDS_REVIEW.md](PROCESS_SOUNDS_REVIEW.md): which other equipment makes noise (valves by stream power and cavitation, vents, fans, falling water, burners, gearboxes, kettles), one server-culled noise watch and one client budget of 12 loops; decisions S1 to S4.
 
 ## History
 
@@ -19,6 +20,8 @@ Owner, 2026-11-10: a custom shader system for normal textures (first the instrum
 - 2026-11-10: owner: performance first; check soft dependencies. Review written: only the Iris API is needed (compileOnly, optional, version range); Flywheel breaks under packs without a third-party add-on; speed comes from GPU-animated cached buffers in the SHADER path, budgets, half density under a pack and a shadow-pass guard. Plan 4.2, 4.6 and W1 follow; new decisions X11 and X12 (later batches).
 - 2026-11-10: owner: add DH silhouettes (X11 A); make sure a change in those mods cannot crash the game. Plan 4.7: painted, cell-accurate box silhouettes from the server registry on the client's request, covering DH's grey voxels, inactive within the vanilla render distance, hull boxes far away, W10. Plan 4.8: no direct link, runtime version gate and no load-time range, every call guarded, safe fallbacks (COMPATIBLE path; DH's own voxels), gates with stub APIs. The review's claim that equipment vanishes in DH was wrong and is corrected.
 - 2026-11-10: owner: go with every recommended option (plan section 8); merge main before starting; implementation agents at medium reasoning effort.
+- 2026-11-10: phase 1 started (fx-core, fx-server-states, fx-sounds). fx-sounds done: five synthesised loops, 281b8bb7e (not compiled yet).
+- 2026-11-10: owner: think about sounds for other equipment, valves included, and update performance. Review written; S1 to S4 open.
 
 ## Code areas (planned)
 
