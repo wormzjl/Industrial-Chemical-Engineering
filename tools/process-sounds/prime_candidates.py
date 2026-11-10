@@ -237,3 +237,43 @@ roar = shaped_noise(9941, n, lambda q: between(60, 1800, q)) * np.exp(-k / .6)
 hiss = shaped_noise(9942, n, lambda q: between(2500, 10000, q)) * speed ** 2
 write("gas_turbine_stop", fade((.5 * np.sin(whine) + .15 * np.sin(2 * whine)) * speed + .8 * roar + .25 * hiss, n, attack=.02, release=1.0), loop=False,
       peak=.7)
+
+
+# Owner, 2026-11-10: engine "C but needs to be cleaner". C's character (mechanical knock and piston slap, little
+# whistle) with the dirt cut: each knock a damped ring of three structural modes instead of a noise burst, the slap a
+# clean 320 Hz body, the jitter halved. C1 keeps a broadband floor and a grit under the pulses 13 dB down; C2 has no
+# broadband noise but a faint low exhaust rumble, its knocks short modal clicks.
+def engine_clean(seed, rpm, cylinders, version):
+    rng = np.random.default_rng(seed)
+    firing, cycle = cylinders * rpm / 120, rpm / 120
+    strength = 1 + .15 * rng.standard_normal(cylinders)
+    modes = ((900, 1.0, .006), (1450, .6, .004), (2300, .35, .003)) if version == 1 else ((1100, 1.0, .0025), (1800, .5, .0018), (2900, .25, .0012))
+    jitter = .02
+    grit_source = noise(seed + 1, between(600, 3000))
+    knocks, slap, grit = np.zeros(count), np.zeros(count), np.zeros(count)
+    for e in range(int(round(firing * seconds))):
+        start = int(round((e / firing + jitter / firing * rng.standard_normal()) * rate)) % count
+        a = strength[e % cylinders] * (1 + jitter * 3 * rng.standard_normal())
+        k = np.arange(int(.05 * rate))
+        s = k / rate
+        span = (start + k) % count
+        onset = 1 - np.exp(-s / 1.5e-4)
+        knocks[span] += a * onset * sum(m * np.exp(-s / tau) * np.sin(2 * np.pi * fr * (1 + .01 * rng.standard_normal()) * s) for fr, m, tau in modes)
+        knocks[span] += .5 * a * np.exp(-s / .03) * np.sin(2 * np.pi * 80 * s)  # the exhaust's low thump
+        if version == 1:
+            grit[span] += a * np.exp(-s / .0016) * onset * grit_source[span]
+        start = int(round((e / firing + .3 / firing) * rate)) % count
+        span = (start + k) % count
+        slap[span] += (.8 + .2 * rng.random()) * np.exp(-s / .006) * np.sin(2 * np.pi * 320 * s)
+    sound = knocks / np.sqrt(np.mean(knocks ** 2)) + .6 * slap / np.sqrt(np.mean(slap ** 2))
+    floor = 10 ** (-13 / 20)
+    if version == 1:
+        sound += floor * (grit / np.sqrt(np.mean(grit ** 2)) + .45 * noise(seed + 2, between(30, 3000)) * (1 + .3 * np.sin(2 * np.pi * cycle * t)))
+    else:
+        sound += .12 * noise(seed + 2, between(30, 120)) * (1 + .3 * np.sin(2 * np.pi * cycle * t))
+    return np.tanh(sound / (3.5 * np.sqrt(np.mean(sound ** 2))))
+
+
+for version in (1, 2):
+    write(f"engine_C{version}_clean_hs1500", engine_clean(9550 + version, 1500, 16, version))
+    write(f"engine_C{version}_clean_ms600", engine_clean(9560 + version, 600, 18, version))

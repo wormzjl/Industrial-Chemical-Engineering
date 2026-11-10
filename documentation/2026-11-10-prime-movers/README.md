@@ -26,6 +26,7 @@ Owner, 2026-11-10: "Add combustion engine which worked on liquid fuels, and gas 
   - Exhaust (physics correction: 80 to 200 Hz firing is continuous to the eye): an engine's smoke pulses with its eddies (`PlumeModel.Style.pulsing`, the puffs' phases alternate in density), runs dark for 4 s at a start and after a load rise of more than 10 % of its rated fuel (turbo lag); a gas turbine's stays a steady haze (`FxSources.HeaterSource`).
   - Turning parts: a load shaft spool with its disc pack in an open bar guard at each set's drive end (`ProcessUnit.loadShaft`), a torsional damper on the engine's free end (`ProcessUnit.damper`); new-kind layout rows only, no nozzle moved.
   - Tests: PlumeModelTest, PipePresentationTest, MotorTest, equipmentGates EquipmentLayoutGoldenTest. Drawings `tmp/equipment-drawings/20261110-123329-af0de3`.
+- 2026-11-10: owner picks: gas turbine "A whine" (installed as `gas_turbine_running.ogg`), one-shots "Keep them", engine "C but needs to be cleaner": C1 (modal knock rings, clean 320 Hz slap, jitter halved, floor and grit 13 dB down) and C2 (no broadband but a faint low rumble, short modal clicks), each a high-speed and a medium-speed loop, sent for the owner's pick.
 
 ## Code areas
 
@@ -33,7 +34,7 @@ Owner, 2026-11-10: "Add combustion engine which worked on liquid fuels, and gas 
 
 ## Open items
 
-- Owner's pick of the engine and gas turbine running loops (A, B or C each); then the engine loop splits by family (a medium-speed loop authored at 600 rpm, `UnitDesign.soundPitch`).
+- Owner's pick of the engine running loop (C1 or C2); then the engine loop splits by family (a medium-speed loop authored at 600 rpm, `UnitDesign.soundPitch`).
 - Translation commit for the new subtitle lines (the follow-up's merge).
 - Not run: LanguageFilesTest and UnitTextTest (wait for the translation commit), the full suite and the final lane (merge preparation).
 - Code guide chapter (rotating machinery) and CHANGELOG at merge preparation.
