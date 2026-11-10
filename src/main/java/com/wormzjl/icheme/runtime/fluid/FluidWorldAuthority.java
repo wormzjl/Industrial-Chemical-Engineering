@@ -805,6 +805,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
         // The powered members it holds (W5): a member outside the column is not its own.
         var asked=request.members();
         var members=new ColumnUnit.Members(held(asked.fans(),inside),held(asked.reflux(),inside),asked.pumparounds().stream().map(p->held(p,inside)).toList());
+        // While machines need power, a member pump with no driver at all cannot start (W5, stage 4 step 4: the owner may veto it).
+        String undriven=electric.settings().needPower()?new ColumnPower(topology,electric,shafts).undriven(members):null;
+        if(undriven!=null)return com.wormzjl.icheme.science.column.operation.Refusal.NO_DRIVER.text(undriven);
         var running=new ColumnUnit(unit,request.master(),true,setpoints,stations,existing!=null?existing.totals():ColumnUnit.Totals.empty(m),water,null,false,request.airSurface(),utilities,members);
         var was=existing;topology.column(running);
         try{submit(edits,id);}catch(IllegalArgumentException|IllegalStateException refused){if(was!=null)topology.column(was);else topology.removeColumn(unit);return com.wormzjl.icheme.science.column.operation.Refusal.PORTS_DO_NOT_FIT.text(refused.getMessage());}

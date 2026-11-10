@@ -39,18 +39,25 @@ public final class InlineMachines {
     }
 
     public static double ratedDraw(FlowControl.Mover mover) {
+        return electricPower(ratedShaftPower(mover));
+    }
+
+    /**
+     * A mover's rated shaft power, W: a machine's law at its rated flow and full speed, another mover's power at its set
+     * flow over 65 %, both at 1000 kg/m³ for a liquid and air at 1 bar and 300 K for a gas (the rating {@link #ratedDraw}
+     * draws on; a held column pump books it, W5 of batch 2026-11-10-column-failure-modes).
+     */
+    public static double ratedShaftPower(FlowControl.Mover mover) {
         if (mover instanceof FlowControl.Machine machine) {
             double rho = machine.liquid() ? 1000 : 100000 / (287.05 * 300);
-            return electricPower(
-                    machine.law().shaftPower(machine.law().ratedFlow(), 1, rho, 100000, 1.4));
+            return machine.law().shaftPower(machine.law().ratedFlow(), 1, rho, 100000, 1.4);
         }
-        return electricPower(
-                mover.power(
-                                mover.requestedVolumeFlow() * (mover.liquid() ? 1000 : 1.161),
-                                mover.riseLimit(mover.liquid() ? 1000 : 1.161, 100000, 1000, 1.4),
-                                mover.liquid() ? 1000 : 1.161,
-                                100000,
-                                1.4)
-                        / .65);
+        return mover.power(
+                        mover.requestedVolumeFlow() * (mover.liquid() ? 1000 : 1.161),
+                        mover.riseLimit(mover.liquid() ? 1000 : 1.161, 100000, 1000, 1.4),
+                        mover.liquid() ? 1000 : 1.161,
+                        100000,
+                        1.4)
+                / .65;
     }
 }

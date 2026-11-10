@@ -62,7 +62,7 @@ class ColumnRunTest {
     private static double sum(double[] n){double s=0;for(double v:n)s+=v;return s;}
 
     private record Rig(EventPathWorld world,ColumnOperation ops,Counting counting,long unit,long feed,long product,long tank,long steamSource,long waterSource,long tube,long shell,long waterValve,
-                       long utilitySource,long utilityTube,long utilityShell,long utilityValve,long fanSide,ElectricStores stores,ShaftTrains shafts){}
+                       long utilitySource,long utilityTube,long utilityShell,long utilityValve,long fanSide,long motor,ElectricStores stores,ShaftTrains shafts){}
     /** A 3 bar nitrogen feed line into a feed port, a distillate port out to a tank, a table sending everything to the distillate; jobs taking {@code lag} ticks. */
     private Rig rig(int lag){return rig(lag,null);}
     private Rig rig(int lag,Fake solves){return rig(lag,solves,false,false);}
@@ -136,12 +136,26 @@ class ColumnRunTest {
         if(fanMember){fanSide=last+1;last=fanSide;members=new ColumnUnit.Members(List.of(fanSide),List.of(),List.of());
             var passage=com.wormzjl.icheme.science.equipment.HeatSides.tubePassage(.5,3);
             edits.add(new WorldTopologyLedger.Edit(fanSide,new WorldTopologyLedger.Registration(heatSide(fanSide,28,passage,new HeatUnit(com.wormzjl.icheme.science.equipment.HeatSides.Unit.AIR_COOLER,com.wormzjl.icheme.science.equipment.HeatSides.Side.PROCESS,airSurface,0).withFans(4)).withSuspendedBy(unit),FluidDeviceSpec.nitrogen(world.catalog),0)));}
+        // The reflux pump as a powered member (W5): a held casing on 10 L/s at 50 m, driven by an 11 kW motor through one shaft.
+        long pump=0,motor=0;
+        if(pumpMember){pump=last+1;last=pump;members=new ColumnUnit.Members(members.fans(),List.of(pump),List.of());
+            var in=new PhysicalFluidTopology.Position(EventPathWorld.DIM,2,64,32);var out=new PhysicalFluidTopology.Position(EventPathWorld.DIM,4,64,32);
+            var ports=List.of(new PhysicalFluidTopology.Port(in,Direction.WEST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.SUCTION),new PhysicalFluidTopology.Port(out,Direction.EAST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.DISCHARGE));
+            var casing=new PhysicalFluidTopology.Device(pump,in,Kind.PUMP,Direction.EAST,com.wormzjl.icheme.science.equipment.HeatSides.tubePassage(.5,3),new FlowControl.Machine(REFLUX_PUMP,1,true),ports,true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,null);
+            edits.add(new WorldTopologyLedger.Edit(pump,new WorldTopologyLedger.Registration(casing.withSuspendedBy(unit),FluidDeviceSpec.nitrogen(world.catalog),0)));}
         world.ledger.column(new ColumnUnit(unit,new PhysicalFluidTopology.Position(EventPathWorld.DIM,6,70,0),true,setpoints,stations,ColumnUnit.Totals.empty(m),tubes,null,false,airSurface,utilities,members));
         world.registry.submit(edits,last+1,null);
+        if(pumpMember){
+            motor=world.ledger.reserve(3);var fixed=com.wormzjl.icheme.science.equipment.MachineDuty.Drive.FIXED;var none=com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE;
+            java.util.function.IntFunction<PhysicalFluidTopology.Position> cell=k->new PhysicalFluidTopology.Position(EventPathWorld.DIM,40+k,64,40);
+            world.ledger.shaft(new ShaftUnit(motor,com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR,cell.apply(0),0,List.of(new ShaftUnit.End(cell.apply(0),1,0,0,true)),0,11e3,2950,2,fixed,ShaftUnit.Settings.DEFAULT,none,null));
+            world.ledger.shaft(ShaftUnit.shaft(motor+1,cell.apply(1),0));
+            world.ledger.shaft(new ShaftUnit(motor+2,com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.CASING,cell.apply(2),0,List.of(new ShaftUnit.End(cell.apply(2),-1,0,0,false)),pump,0,2950,0,fixed,ShaftUnit.Settings.DEFAULT,none,null));
+        }
         // The members' power (W5): the world's stores and trains, the config's switch as the rig sets it.
         ElectricStores stores=null;ShaftTrains shafts=null;
         if(!members.none()){stores=new ElectricStores(world.ledger,d->null,world.coordinator,()->new ElectricStores.Settings(2.5,needPower));
-            shafts=new ShaftTrains(world.ledger,d->null,world.coordinator);shafts.electric(stores);ops.power(new ColumnPower(world.ledger,stores,shafts));}
+            shafts=new ShaftTrains(world.ledger,d->null,world.coordinator);shafts.electric(stores);shafts.host(ShaftTrains.Host.NONE);ops.power(new ColumnPower(world.ledger,stores,shafts));}
         // The water valve's lines complete (U2): the column sets it.
         if(waterValve!=0)world.coordinator.operations(Map.of(PhysicalFluidTopology.sideIdentity(tube),com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Operation.column(waterValve,com.wormzjl.icheme.science.equipment.HeatSides.WATER_RANGE)));
         if(utilityValve!=0)world.coordinator.operations(Map.of(PhysicalFluidTopology.sideIdentity(utilityTube),com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Operation.column(utilityValve,com.wormzjl.icheme.science.equipment.HeatSides.WATER_RANGE)));
@@ -158,7 +172,7 @@ class ColumnRunTest {
                                 Double.isNaN(waterBelow)?SplitTable.WATER_NEVER:waterBelow,airArea);
             }
             ops.table(unit,t,s.enthalpy());}
-        return new Rig(world,ops,counting,unit,feed,product,tank,steamSource,waterSource,tube,shell,waterValve,utilitySource,utilityTube,utilityShell,utilityValve,fanSide,stores,shafts);
+        return new Rig(world,ops,counting,unit,feed,product,tank,steamSource,waterSource,tube,shell,waterValve,utilitySource,utilityTube,utilityShell,utilityValve,fanSide,motor,stores,shafts);
     }
     /** A rig's utility line (W4): a reboiler's heating, or the first pumparound's cooler. */
     private enum Utility { REBOILER, PUMPAROUND }
@@ -178,8 +192,10 @@ class ColumnRunTest {
     private double waterTemperature=300,waterPressure=300000,waterValveBore=Double.NaN;
     /** The rig's air condenser: its bare tube, m² (0: none), and its table's tube per mol/s of feed at each fan step, m² (U2). */
     private double airSurface=0;private double[] airArea=new double[0];
-    /** Whether the rig's air condenser bank is a powered member on its own store (W5), and the config's {@code machinesNeedPower}. */
-    private boolean fanMember;private boolean needPower=true;
+    /** Whether the rig's air condenser bank and its reflux pump are powered members (W5), and the config's {@code machinesNeedPower}. */
+    private boolean fanMember,pumpMember;private boolean needPower=true;
+    /** The rig's reflux pump's law (W5): 10 L/s at 50 m and 70 %, about 7 kW of shaft power at its rating. */
+    private static final com.wormzjl.icheme.science.machine.CentrifugalPump REFLUX_PUMP=new com.wormzjl.icheme.science.machine.CentrifugalPump(.01,50,.7);
     /** The bore of the rig's product line and of its feed line and valves, m. */
     private double productBore=.05,lineBore=.05;
     /** A player's flow valve on the rig's product line, kg/s, or NaN for a plain pipe. */
@@ -1057,11 +1073,42 @@ class ColumnRunTest {
         assertTrue(status.startsWith("RUNNING")||status.startsWith("LIMITED: outlet"),"with machinesNeedPower off nothing changes: "+status);
         assertTrue(status.contains("air fans 40 %"),status);
     }
+    /**
+     * Member power (W5): the reflux pump, a held casing whose 11 kW motor's store starts empty. Its driver gives no power, so
+     * the column takes nothing (NO POWER of the reflux pump, member 1, share 0). FE back, the cadence restarts the motor, the
+     * column takes its feed again and the train books the pump's rated shaft power at the cycle's share. With
+     * {@code machinesNeedPower} off, the empty store changes nothing.
+     */
+    @Test void aRefluxPumpWithoutPowerStopsTheFeedAndPowerBackResumes() {
+        pumpMember=true;
+        var r=rig(0);powered(r,3000,false);
+        String status=r.ops().status(r.unit());
+        System.out.printf(Locale.ROOT,"W5_PUMP_UNPOWERED | %s | %s%n",status,r.shafts().view(r.motor()).status());
+        assertTrue(status.startsWith("LIMITED: power, 0 %"),status);
+        var c=Condition.find(r.ops().conditions(r.unit()),Condition.NO_POWER);
+        assertNotNull(c,"NO POWER is raised");assertEquals(ColumnUnit.Members.REFLUX_PUMP,c.index());assertEquals(0,c.value());
+        assertTrue(EquipmentAlarm.column(r.ops().conditions(r.unit())).contains(EquipmentAlarm.NO_POWER),"the NO POWER alarm");
+        assertEquals(0,r.ops().last(r.unit()).feedMoles(),"the feed stops");
+        powered(r,6000,true);
+        status=r.ops().status(r.unit());var motor=r.shafts().view(r.motor());
+        System.out.printf(Locale.ROOT,"W5_PUMP_POWERED demand=%.1f W electric=%.1f W | %s | %s%n",motor.demand(),motor.electricPower(),status,motor.status());
+        assertTrue(status.startsWith("RUNNING")||status.startsWith("LIMITED: outlet"),status);
+        assertNull(Condition.find(r.ops().conditions(r.unit()),Condition.NO_POWER),"power back clears NO POWER");
+        assertTrue(r.ops().last(r.unit()).feedMoles()>0,"the feed resumes");
+        double rated=com.wormzjl.icheme.science.machine.InlineMachines.ratedShaftPower(new FlowControl.Machine(REFLUX_PUMP,1,true));
+        assertEquals(rated*r.ops().last(r.unit()).alpha(),motor.demand(),1e-6*rated,"the train carries the pump's rated shaft power at the share");
+        assertTrue(motor.electricPower()>motor.demand(),"the motor draws it over its efficiency");
+        needPower=false;
+        var free=rig(0);powered(free,3000,false);
+        status=free.ops().status(free.unit());
+        assertTrue(status.startsWith("RUNNING")||status.startsWith("LIMITED: outlet"),"with machinesNeedPower off nothing changes: "+status);
+    }
     /** Runs {@code r} to online tick {@code end}, its members' stores on the cadence, and with {@code supply} FE offered to each every tick. */
     private static void powered(Rig r,long end,boolean supply) {
         for(long t=r.world().ledger.onlineTick();t<end;t++) {
             r.world().runTo(t+1);
             if(supply&&r.fanSide()!=0)r.stores().receive(r.fanSide(),Integer.MAX_VALUE,false);
+            if(supply&&r.motor()!=0)r.stores().receive(r.motor(),Integer.MAX_VALUE,false);
             if((t+1)%ElectricStores.CADENCE==0){r.stores().cadence();r.shafts().cadence();}
         }
     }

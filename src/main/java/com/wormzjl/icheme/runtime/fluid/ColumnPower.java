@@ -1,5 +1,7 @@
 package com.wormzjl.icheme.runtime.fluid;
 
+import com.wormzjl.icheme.science.fluid.network.FlowControl;
+import com.wormzjl.icheme.science.machine.InlineMachines;
 import java.util.Objects;
 
 /**
@@ -34,5 +36,30 @@ public final class ColumnPower implements ColumnOperation.Power {
         var r = topology.active().get(side);
         if (r == null || r.device().heat() == null) return true;
         return electric.member(side, ElectricStores.fanDraw(r.device().heat(), fans), tick);
+    }
+
+    @Override
+    public boolean pump(long mover, double share, long tick) {
+        var r = topology.active().get(mover);
+        if (r == null || !(r.device().control() instanceof FlowControl.Mover m)) return true;
+        double shaft = InlineMachines.ratedShaftPower(m) * Math.max(0, share);
+        // A casing books on its train, whose motor draws from its own store; an in-line pump draws through its integral motor.
+        if (shafts.unitOf(mover)) return shafts.held(mover, shaft);
+        return electric.member(mover, InlineMachines.electricPower(shaft), tick);
+    }
+
+    /**
+     * The first of {@code members}' pumps that has no driver at all, by name ({@code reflux pump}, {@code pumparound N pump}),
+     * or null: a casing whose train has no driver (W5, step 4). An in-line pump carries its own motor.
+     */
+    public String undriven(ColumnUnit.Members members) {
+        for (long p : members.reflux()) if (undriven(p)) return "reflux pump";
+        for (int j = 0; j < members.pumparounds().size(); j++)
+            for (long p : members.pumparound(j)) if (undriven(p)) return "pumparound " + (j + 1) + " pump";
+        return null;
+    }
+
+    private boolean undriven(long mover) {
+        return shafts.unitOf(mover) && shafts.driverOf(mover) == null;
     }
 }

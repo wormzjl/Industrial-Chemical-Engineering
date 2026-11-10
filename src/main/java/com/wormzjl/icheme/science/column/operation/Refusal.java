@@ -27,6 +27,8 @@ public enum Refusal {
     TOO_MANY_SHELLS("the condenser has more than %d shells"),
     TOO_MANY_UTILITY_UNITS("the %s has more than %d units"),
     PORTS_DO_NOT_FIT("the column's ports do not fit its lines: %s"),
+    /** A member pump with no driver at all while machines need power (W5, EXECUTION_PLAN.md stage 4 step 4: the owner may veto it). */
+    NO_DRIVER("the %s has no driver"),
     // ColumnOperation: the first solve.
     NO_OPERATING_POINT("the design has no operating point"),
     NO_NOZZLE("the solve gives a %s the column has no nozzle for"),

@@ -192,8 +192,13 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         double surface(long side);
         /** Fan side {@code side} ran its fans at {@code fans} of full speed until {@code tick}: books it; whether its store has power. */
         boolean fans(long side,double fans,long tick);
+        /**
+         * Pump {@code mover} ran at {@code share} of its rated duty until {@code tick}: books its rated shaft power times the
+         * share on its train (a casing) or its own store (an in-line pump); whether its driver gives power for the next cycle.
+         */
+        boolean pump(long mover,double share,long tick);
         /** No power to book: every member runs free, as before W5. */
-        Power NONE=new Power(){public boolean needed(){return false;}public double surface(long side){return 0;}public boolean fans(long side,double fans,long tick){return true;}};
+        Power NONE=new Power(){public boolean needed(){return false;}public double surface(long side){return 0;}public boolean fans(long side,double fans,long tick){return true;}public boolean pump(long mover,double share,long tick){return true;}};
     }
     private Power power=Power.NONE;
     /** Where this world's column members draw their power. */
@@ -619,7 +624,8 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     /**
      * {@code rooms} with the members' power for the cycle at {@code tick} (W5, {@code MEMBER_POWER_NOTE.md}): each fan side
      * books its fans over the span that just ran (its last speed, 0 where it had no power), then says whether its store has
-     * power; banks without hold their surface at natural draught. With machines that need no power, or no members, as it was.
+     * power; banks without hold their surface at natural draught. Each pump books its rated shaft power at the last cycle's
+     * share; one without power stops the cycle (NO_POWER, share 0). With machines that need no power, or no members, as it was.
      */
     private ColumnCycle.Rooms powered(Run r,ColumnUnit u,SplitTable t,long tick,ColumnCycle.Rooms rooms) {
         if(!power.needed()||u.members().none()){r.unpoweredFans.clear();return rooms;}
@@ -627,9 +633,19 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         var unpowered=new HashSet<Long>();
         for(long side:u.members().fans())if(!power.fans(side,r.unpoweredFans.contains(side)?0:last,tick))unpowered.add(side);
         r.unpoweredFans.clear();r.unpoweredFans.addAll(unpowered);
+        // Each pump books its rated shaft power at the last cycle's share; one whose driver gives none stops the cycle.
+        double share=r.last==null||r.last.tripped()?0:r.last.alpha();
+        var stopped=new ArrayList<Integer>();
+        if(!pumps(u.members().reflux(),share,tick))stopped.add(ColumnUnit.Members.REFLUX_PUMP);
+        for(int j=0;j<u.members().pumparounds().size();j++)if(!pumps(u.members().pumparound(j),share,tick))stopped.add(ColumnUnit.Members.pumparoundPump(j));
         double natural=Math.min(u.airSurface(),surface(u,unpowered));
-        if(!(natural>0))return rooms;
-        return rooms.withPower(t.airFeed(u.airSurface()-natural,natural),true,new int[0]);
+        if(!(natural>0)&&stopped.isEmpty())return rooms;
+        return rooms.withPower(natural>0?t.airFeed(u.airSurface()-natural,natural):rooms.airFeed(),natural>0,stopped.stream().mapToInt(Integer::intValue).toArray());
+    }
+    /** Whether every one of a member's pumps gives power, each booked at {@code share} until {@code tick}. */
+    private boolean pumps(List<Long> movers,double share,long tick) {
+        boolean all=true;for(long p:movers)all&=power.pump(p,share,tick);
+        return all;
     }
     /** The bare tube of {@code u}'s fan sides in {@code sides}, m². */
     private double surface(ColumnUnit u,Set<Long> sides) {
