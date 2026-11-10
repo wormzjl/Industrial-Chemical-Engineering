@@ -2654,8 +2654,10 @@ public final class ProcessUnit {
         double y2 = y1 + hc;
         convection(a - hx, a + hx, a - hz, a + hz, y1, y2);
         var breeching = new Breeching(a - hx, a + hx, a - hz, a + hz);
-        double stack = .25 * dia + .3, neck = breeching.neck(y2, stack);
-        stack(a, a, stack, sides(stack), y2, Math.min(neck + MAX_STACK, stackTop(neck, y1)), Material.HEATER, breeching, true);
+        double stack = .25 * dia + .3, neck = breeching.neck(y2, stack), stackTop = Math.min(neck + MAX_STACK, stackTop(neck, y1));
+        stack(a, a, stack, sides(stack), y2, stackTop, Material.HEATER, breeching, true);
+        // The flue gas leaves the stack's mouth (W5): its mark, inside the rim.
+        mouth("stack_top_0", a, a, .92 * stack / 2, stackTop);
         // The convection coil in near the top of its front header box and out near its bottom; the radiant coil in at the
         // front under the roof, two rows under the convection outlet, and out just over the floor; fuel gas to the ring
         // header's front from the front. Every pipe block keeps one free block from the next.
@@ -2816,8 +2818,9 @@ public final class ProcessUnit {
         for (int j = 0; j < stacks; j++) {
             double zj = zs + length * (j + .5) / stacks, room = Math.min(length / stacks / 2 - .2, Math.max((c1 - c0) / 2, stack / 2 + .3));
             var breeching = new Breeching(c0, c1, zj - room, zj + room);
-            double neck = breeching.neck(y2, stack);
-            stack(a, zj, stack, sides(stack), y2, Math.min(neck + MAX_STACK, stackTop(neck, y1)), Material.HEATER, breeching, true);
+            double neck = breeching.neck(y2, stack), stackTop = Math.min(neck + MAX_STACK, stackTop(neck, y1));
+            stack(a, zj, stack, sides(stack), y2, stackTop, Material.HEATER, breeching, true);
+            mouth("stack_top_" + j, a, zj, .92 * stack / 2, stackTop);
         }
         // The walkways and ladders of each eave wall: the hearth walkway; on walls 6 m or more the side walkways at the rows
         // of peep doors up the wall at most 8 m apart (as the vertical heater's platforms, so no caged climb passes
@@ -3217,6 +3220,8 @@ public final class ProcessUnit {
         mesh.annulus(up, .9 * shield, shield, top + 1, n, 1, Material.MACHINE);
         mesh.bore(up, .9 * shield, top, top + 1, n, Material.MACHINE);
         solids.add(Solid.rod(new double[]{a, 0, a}, 1, top - .2, top + 1, shield, 0));
+        // The flame stands on the windshield's mouth (W3): its mark, the top centre of the tip.
+        mouth("flare_tip", a, a, .9 * shield, top + 1);
         for (int k = 0; k < 3; k++) {
             double t = 2 * Math.PI * k / 3 + Math.PI / 2, x = a + (shield + .08) * DeterministicMath.cos(t), z = a + (shield + .08) * DeterministicMath.sin(t);
             mesh.bar(new double[]{x, top - 2, z}, new double[]{x, top + 1.3, z}, .05, new double[]{1, 0, 0}, Material.PIPE);
@@ -3341,8 +3346,16 @@ public final class ProcessUnit {
         else stillVapour(p);
     }
 
+    /**
+     * A round mouth's mark (batch 2026-11-10-custom-shader-system, W3 to W5): a disc {@code radius} round the vertical line
+     * through (x, z), its box the 5 cm under height {@code top}, where a flame, a plume or a flue gas leaves.
+     */
+    void mouth(String name, double x, double z, double radius, double top) {
+        mark(name, new double[]{x - radius, top - .05, z - radius}, new double[]{x + radius, top, z + radius});
+    }
+
     /** A named part's box ({@link #marks}), from its two corners in any order. */
-    private void mark(String name, double[] a, double[] b) {
+    void mark(String name, double[] a, double[] b) {
         marks.put(name, new double[]{Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.min(a[2], b[2]), Math.max(a[0], b[0]), Math.max(a[1], b[1]), Math.max(a[2], b[2])});
     }
 
