@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.client;
 
+import com.wormzjl.icheme.client.fx.FxMode;
 import com.wormzjl.icheme.client.gui.common.kit.PanelSkin;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
 import com.wormzjl.icheme.science.display.DisplayUnit.FlowRateUnit;
@@ -42,6 +43,10 @@ public final class ClientConfig {
     public static final ModConfigSpec.ConfigValue<List<? extends String>> EQUIPMENT_PAINTS;
     public static final ModConfigSpec.BooleanValue LOW_POLYGON_MODE;
     public static final ModConfigSpec.DoubleValue LOD_SCALE;
+    public static final ModConfigSpec.EnumValue<FxMode> EFFECTS_MODE;
+    public static final ModConfigSpec.BooleanValue PBR_TEXTURES;
+    public static final ModConfigSpec.BooleanValue HEAT_HAZE;
+    public static final ModConfigSpec.BooleanValue DH_SILHOUETTES;
 
     static {
         var builder = new ModConfigSpec.Builder();
@@ -64,6 +69,16 @@ public final class ClientConfig {
         EQUIPMENT_PAINTS = builder.comment("Constructor body and structure colours by player account: UUID:#RRGGBB:#RRGGBB. Remembered when the Paint page is edited.")
                 .defineListAllowEmpty("paint_schemes", List.<String>of(),
                         () -> new UUID(0, 0) + ":#A1A1A0:#5B686D", EquipmentPaints::valid);
+        builder.pop();
+        builder.comment("Flames, smoke, plumes and the instrument wiring's relief (batch 2026-11-10-custom-shader-system). Drawing only: the server's process calculations never read these. Changes take effect on the next frame.").push("effects");
+        EFFECTS_MODE = builder.comment("AUTO picks the path each frame: the mod's own shaders without a shader pack, vanilla render types under one. COMPATIBLE never uses the mod's own shaders (use it if another mod conflicts with them). OFF draws no flames, smoke or plumes; sounds stay.")
+                .defineEnum("mode", FxMode.AUTO);
+        PBR_TEXTURES = builder.comment("The instrument wiring lit through its normal map, by the mod's shader without a shader pack or by the pack. Off: the same texture, lit flat. Reloads the chunks when changed, as low_polygon_mode does.")
+                .define("pbr_textures", true);
+        HEAT_HAZE = builder.comment("A heat shimmer over flames and hot stacks: one screen copy and a distortion. Only without a shader pack.")
+                .define("heat_haze", false);
+        DH_SILHOUETTES = builder.comment("With Distant Horizons: painted equipment silhouettes in its far terrain. No effect without Distant Horizons.")
+                .define("dh_silhouettes", true);
         builder.pop();
         SPEC = builder.build();
     }
@@ -138,6 +153,26 @@ public final class ClientConfig {
     /** This frame's level-of-detail view of a projection whose m11 is {@code m11} on a framebuffer {@code height} high. */
     public static RenderLod.View lodView(double m11, int height) {
         return RenderLod.View.of(m11, height, lodScale());
+    }
+
+    /** The effects mode, AUTO before the config has loaded. */
+    public static FxMode effectsMode() {
+        return get(EFFECTS_MODE, FxMode.AUTO);
+    }
+
+    /** Whether the instrument wiring is lit through its normal map; on before the config has loaded. */
+    public static boolean pbrTextures() {
+        return get(PBR_TEXTURES, true);
+    }
+
+    /** Whether the heat shimmer is drawn (SHADER path only); off before the config has loaded. */
+    public static boolean heatHaze() {
+        return get(HEAT_HAZE, false);
+    }
+
+    /** Whether Distant Horizons shows painted equipment silhouettes; on before the config has loaded. */
+    public static boolean dhSilhouettes() {
+        return get(DH_SILHOUETTES, true);
     }
 
     public static Paint equipmentPaint(UUID player, Paint fallback) {

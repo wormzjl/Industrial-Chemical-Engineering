@@ -55,6 +55,19 @@ repositories {
             includeGroup 'com.github.rtyley'
         }
     }
+    // Modrinth's maven serves only its own group, and nothing else is looked up there: Iris, Sodium and the
+    // Distant Horizons API (batch 2026-11-10-custom-shader-system).
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = 'Modrinth'
+                url = 'https://api.modrinth.com/maven'
+            }
+        }
+        filter {
+            includeGroup 'maven.modrinth'
+        }
+    }
 }
 
 neoForge {
@@ -234,6 +247,35 @@ dependencies {
         optionalModRuntime("dev.engine-room.flywheel:flywheel-neoforge-${minecraft_version}:${flywheel_version}")
         optionalModRuntime("com.tterrag.registrate:Registrate:${registrate_version}")
         optionalModRuntime("dev.latvian.mods:kubejs-neoforge:${kubejs_version}")
+    }
+
+    // Iris and Distant Horizons are optional client integrations of the effects system (CUSTOM_SHADER_SYSTEM_PLAN.md
+    // section 4.8): compiled against, never on a default runtime, so the default runs, tests and GameTests load neither.
+    // Only client/fx/compat/<mod>/ names their types. -PwithIris adds Iris and the Sodium it needs, -PwithDh adds
+    // Distant Horizons, to the dev runs for a manual check.
+    def irisVersion = '1.8.12+1.21.1-neoforge'
+    def sodiumVersion = 'mc1.21.1-0.6.13-neoforge'
+    def dhVersion = '3.3.3-1.21.1'
+    def withIris = providers.gradleProperty('withIris').map { it != 'false' }.getOrElse(false)
+    def withDh = providers.gradleProperty('withDh').map { it != 'false' }.getOrElse(false)
+    compileOnly("maven.modrinth:iris:${irisVersion}") {
+        transitive = false
+    }
+    compileOnly('maven.modrinth:distanthorizonsapi:4.1.0') {
+        transitive = false
+    }
+    if (withIris) {
+        optionalModRuntime("maven.modrinth:iris:${irisVersion}") {
+            transitive = false
+        }
+        optionalModRuntime("maven.modrinth:sodium:${sodiumVersion}") {
+            transitive = false
+        }
+    }
+    if (withDh) {
+        optionalModRuntime("maven.modrinth:distanthorizons:${dhVersion}") {
+            transitive = false
+        }
     }
 
     // JEI is an optional client integration: APIs at compile time, full mod only in dev runs.
