@@ -12,7 +12,10 @@ public final class TopologyCompiler {
      * {@code FlowControl.Turbine}. */
     public enum Kind { RESERVOIR, PIPE, PUMP, VALVE, GENERATOR, VOID, FILTER, COMPRESSOR, HEAT_SIDE, TURBINE,
         /** A three-way diverter valve (batch 2026-11-09-batch-distiller): one inlet, three outlets, one open; it compiles as a pipe through its open pair. */
-        DIVERTER_VALVE }
+        DIVERTER_VALVE,
+        /** A steam ejector set (batch 2026-11-10-steam-ejector-flow): its suction, motive and discharge ports; it compiles as
+         * its mover from its suction node to its discharge junction, and its nozzle's throat from its motive junction to the same. */
+        EJECTOR }
     public record Node(long id,Kind kind,double elevation) {
         public Node{Objects.requireNonNull(kind);if(!Double.isFinite(elevation))throw new IllegalArgumentException("Invalid elevation");}
     }

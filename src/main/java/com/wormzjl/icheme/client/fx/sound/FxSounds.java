@@ -80,7 +80,7 @@ public final class FxSounds {
     /** The loop a noise source plays: a vent hisses as a gas valve does (lower pitched), a kettle boils as a pot does. */
     static String kind(Noise.Kind kind) {
         return switch(kind){case VALVE_GAS,VENT->"valve_gas";case VALVE_LIQUID->"valve_liquid";case VALVE_CAVITATING->"valve_cavitating";case VALVE_FLASHING->"valve_flashing";case FAN->"fan_whoosh";case WATER_FALL->"water_fall";
-            case BURNER->"burner_roar";case GEAR->"gear_whine";case KETTLE->"pot_boil";case PIPE_KNOCK->"pipe_knock";};
+            case BURNER->"burner_roar";case GEAR->"gear_whine";case KETTLE->"pot_boil";case PIPE_KNOCK->"pipe_knock";case EJECTOR->"ejector_jet";};
     }
     private static SoundEvent sound(String kind){return BuiltInRegistries.SOUND_EVENT.get(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,kind));}
     private static boolean audible(Minecraft mc){return mc.options.getSoundSourceVolume(SoundSource.BLOCKS)>0&&mc.options.getSoundSourceVolume(SoundSource.MASTER)>0;}

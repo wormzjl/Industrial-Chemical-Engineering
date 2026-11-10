@@ -124,6 +124,8 @@ public final class ModBlocks {
     public static final DeferredHolder<SoundEvent,SoundEvent> WATER_FALL=loop("water_fall");
     public static final DeferredHolder<SoundEvent,SoundEvent> GEAR_WHINE=loop("gear_whine");
     public static final DeferredHolder<SoundEvent,SoundEvent> PIPE_KNOCK=loop("pipe_knock");
+    /** A steam ejector's motive jet (batch 2026-11-10-steam-ejector-flow). */
+    public static final DeferredHolder<SoundEvent,SoundEvent> EJECTOR_JET=loop("ejector_jet");
     private static DeferredHolder<SoundEvent,SoundEvent> loop(String name){return SOUNDS.register(name,()->SoundEvent.createVariableRangeEvent(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,name)));}
 
     private ModBlocks() {
