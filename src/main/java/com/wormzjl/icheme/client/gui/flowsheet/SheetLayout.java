@@ -295,7 +295,7 @@ public final class SheetLayout {
         String id = port.id();
         return switch (unit.type()) {
             case "pump" -> new int[]{in ? 0 : w, 13, in ? L : R};
-            case "compressor" -> new int[]{in ? 0 : w, 19, in ? L : R};
+            case "compressor", "vacuum_pump" -> new int[]{in ? 0 : w, 19, in ? L : R};
             // The motive nozzle on the axis at the left end, the suction's branch on top of the chest, the diffuser's exit at the right.
             case "ejector" -> switch (id) {
                 case "suction" -> new int[]{10, 0, T};
