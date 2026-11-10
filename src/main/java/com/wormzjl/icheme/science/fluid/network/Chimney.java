@@ -96,10 +96,11 @@ public final class Chimney {
 
     /**
      * The gas a chimney receives, read from the stream at its inlet: {@code massFlow} kg/s of fluid and {@code solids} kg/s,
-     * at {@code temperature} K, {@code molarMass} kg/mol, {@code waterShare} kg of water per kg of dry gas, {@code wet} when
-     * liquid arrives; leaving a mouth {@code d} m across at {@code pressure} Pa.
+     * at {@code temperature} K, {@code molarMass} kg/mol, {@code waterShare} kg of water per kg of dry gas; leaving a mouth
+     * {@code d} m across at {@code pressure} Pa. Liquid that arrives leaves with the gas, released as any content (owner C5:
+     * no condensate model).
      */
-    public record Reading(double massFlow, double solids, double temperature, double molarMass, double waterShare, boolean wet, double d, double pressure) {
+    public record Reading(double massFlow, double solids, double temperature, double molarMass, double waterShare, double d, double pressure) {
         public double density() {
             return Chimney.density(molarMass, temperature, pressure);
         }
@@ -123,7 +124,7 @@ public final class Chimney {
      * A reading of {@code moles} (any amounts, water last) of molar masses {@code molarMasses} at {@code temperature},
      * {@code massFlow} kg/s of fluid with {@code solids} kg/s: its molar mass and its water per dry gas.
      */
-    public static Reading reading(double[] moles, double[] molarMasses, double temperature, double massFlow, double solids, boolean wet, double d, double pressure) {
+    public static Reading reading(double[] moles, double[] molarMasses, double temperature, double massFlow, double solids, double d, double pressure) {
         double total = 0, mass = 0, water = 0;
         int last = moles.length - 1;
         for (int c = 0; c < moles.length; c++) {
@@ -133,12 +134,12 @@ public final class Chimney {
             if (c == last) water = n * molarMasses[c];
         }
         double molar = total > 0 ? mass / total : .029, dry = mass - water;
-        return new Reading(Math.max(0, massFlow), Math.max(0, solids), temperature, molar, dry > 0 ? water / dry : 0, wet, d, pressure);
+        return new Reading(Math.max(0, massFlow), Math.max(0, solids), temperature, molar, dry > 0 ? water / dry : 0, d, pressure);
     }
 
-    /** A chimney's status, by name; its text is the status word (owner C5 A, C6 A, C7). */
+    /** A chimney's status, by name; its text is the status word (owner C6 A, C7). */
     public enum Status {
-        NO_FLOW("NO FLOW"), VENTING("VENTING"), ABOVE_RATING("ABOVE RATING"), WET_STACK("WET STACK"), HOT_STACK("HOT STACK"), NO_DRAFT("NO DRAFT");
+        NO_FLOW("NO FLOW"), VENTING("VENTING"), ABOVE_RATING("ABOVE RATING"), HOT_STACK("HOT STACK"), NO_DRAFT("NO DRAFT");
         public final String text;
 
         Status(String text) {
@@ -149,12 +150,11 @@ public final class Chimney {
     /**
      * The status of {@code r} in a chimney of {@code form}: NO DRAFT when nothing flows while gas stands at its inlet (the
      * inlet below the tip's atmosphere and the column, the void one-way, owner C6 A), NO FLOW when no gas stands there,
-     * then WET STACK (liquid, C5 A), ABOVE RATING (exit velocity over {@link #HIGH_VELOCITY}), HOT STACK (over the form's
+     * then ABOVE RATING (exit velocity over {@link #HIGH_VELOCITY}), HOT STACK (over the form's
      * temperature), VENTING.
      */
     public static Status status(Form form, Reading r, boolean gasAtInlet) {
         if (r.massFlow() < NO_FLOW) return gasAtInlet ? Status.NO_DRAFT : Status.NO_FLOW;
-        if (r.wet()) return Status.WET_STACK;
         if (r.exitVelocity() > HIGH_VELOCITY) return Status.ABOVE_RATING;
         if (r.temperature() > form.hotLimit) return Status.HOT_STACK;
         return Status.VENTING;

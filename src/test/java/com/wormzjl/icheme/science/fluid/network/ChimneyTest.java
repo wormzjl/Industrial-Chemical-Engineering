@@ -67,23 +67,21 @@ class ChimneyTest {
         assertTrue(Chimney.draft(2, 50) < 0, "a dense gas sinks");
     }
 
-    /** The reading's molar mass and water share, water last; the status in its order (C5 A, C6 A, C7). */
+    /** The reading's molar mass and water share, water last; the status in its order (C6 A, C7; owner C5: no condensate model). */
     @Test void readingAndStatus() {
         double[] masses = {.028, .044, .018};
-        var r = Chimney.reading(new double[] {7, 1, 2}, masses, 450, 2, 0, false, 1, PhaseLayout.AMBIENT_PRESSURE);
+        var r = Chimney.reading(new double[] {7, 1, 2}, masses, 450, 2, 0, 1, PhaseLayout.AMBIENT_PRESSURE);
         assertEquals((7 * .028 + .044 + 2 * .018) / 10, r.molarMass(), 1e-12);
         assertEquals(2 * .018 / (7 * .028 + .044), r.waterShare(), 1e-12);
         assertEquals(2 / r.density(), r.volumeFlow(), 1e-12);
         assertEquals(Chimney.Status.VENTING, Chimney.status(Chimney.Form.STEEL, r, true));
-        var none = Chimney.reading(new double[] {1, 0, 0}, masses, 450, 0, 0, false, 1, PhaseLayout.AMBIENT_PRESSURE);
+        var none = Chimney.reading(new double[] {1, 0, 0}, masses, 450, 0, 0, 1, PhaseLayout.AMBIENT_PRESSURE);
         assertEquals(Chimney.Status.NO_DRAFT, Chimney.status(Chimney.Form.STEEL, none, true));
         assertEquals(Chimney.Status.NO_FLOW, Chimney.status(Chimney.Form.STEEL, none, false));
-        var wet = Chimney.reading(new double[] {7, 1, 2}, masses, 450, 2, 0, true, 1, PhaseLayout.AMBIENT_PRESSURE);
-        assertEquals(Chimney.Status.WET_STACK, Chimney.status(Chimney.Form.STEEL, wet, true));
-        var fast = Chimney.reading(new double[] {7, 1, 2}, masses, 450, 30, 0, false, .5, PhaseLayout.AMBIENT_PRESSURE);
+        var fast = Chimney.reading(new double[] {7, 1, 2}, masses, 450, 30, 0, .5, PhaseLayout.AMBIENT_PRESSURE);
         assertTrue(fast.exitVelocity() > Chimney.HIGH_VELOCITY);
         assertEquals(Chimney.Status.ABOVE_RATING, Chimney.status(Chimney.Form.STEEL, fast, true));
-        var hot = Chimney.reading(new double[] {7, 1, 2}, masses, 750, 2, 0, false, 1, PhaseLayout.AMBIENT_PRESSURE);
+        var hot = Chimney.reading(new double[] {7, 1, 2}, masses, 750, 2, 0, 1, PhaseLayout.AMBIENT_PRESSURE);
         assertEquals(Chimney.Status.HOT_STACK, Chimney.status(Chimney.Form.STEEL, hot, true));
         assertEquals(Chimney.Status.VENTING, Chimney.status(Chimney.Form.BRICK, hot, true), "a brick chimney takes 600 °C");
     }

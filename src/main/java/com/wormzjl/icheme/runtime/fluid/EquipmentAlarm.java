@@ -12,8 +12,8 @@ public enum EquipmentAlarm {
     FLAME_OUT("FLAME OUT"), OVER_CAPACITY("OVER CAPACITY"), BLOCKED("BLOCKED"),
     // A batch still's (batch 2026-11-09-batch-distiller, W3).
     OVERHEAT("OVERHEAT"), BOIL_DRY("BOIL DRY"), FLOODING("FLOODING"), COOLING_LIMITED("COOLING LIMITED"),
-    // A chimney's (batch 2026-11-10-chimney): liquid in the stack, nothing drawn while gas stands at its inlet.
-    WET_STACK("WET STACK"), NO_DRAFT("NO DRAFT");
+    // A chimney's (batch 2026-11-10-chimney): nothing drawn while gas stands at its inlet.
+    NO_DRAFT("NO DRAFT");
 
     public final String text;
 
@@ -26,5 +26,5 @@ public enum EquipmentAlarm {
     /** A batch still's alarms (batch 2026-11-09-batch-distiller): NO POWER for an electric one, NO FUEL for a fired one. */
     public static final List<EquipmentAlarm> STILL = List.of(NO_POWER, NO_FUEL, OVERHEAT, BOIL_DRY, FLOODING, COOLING_LIMITED);
     /** A chimney's alarms (batch 2026-11-10-chimney): ABOVE RATING reads as OVER CAPACITY. */
-    public static final List<EquipmentAlarm> CHIMNEY = List.of(OVER_CAPACITY, WET_STACK, NO_DRAFT);
+    public static final List<EquipmentAlarm> CHIMNEY = List.of(OVER_CAPACITY, NO_DRAFT);
 }

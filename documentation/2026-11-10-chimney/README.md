@@ -14,6 +14,7 @@ Owner, 2026-11-10: a chimney that releases gas, and any particulates it carries,
 
 - 2026-11-10: research and plan (601030ae7); decisions C1 to C7 sent to the owner.
 - 2026-11-10: owner "All recommended". C1 B, the atmosphere falls with height at open boundaries (170477cc9, fluid state 44). Kinds, design, engine view, data port (f062456e7). Plume watch fluid-23, effects, VENT sound, data socket (1c4a32b18). Simulator unit, sizing, tile, door, notes, device page, English lines (84bdb1386). Tests, layout rows, re-recorded references, steel stack rest decks (aec962141). Targeted tests only, all green; drawings regenerated and inspected.
+- 2026-11-10: owner correction "C5 ignore that": the WET STACK status, note and alarm removed; liquid at the tip leaves as released content. Targeted tests green.
 
 ## Code areas
 

@@ -22,7 +22,7 @@ public final class Chimneys {
     public record View(double massFlow,double solids,double temperature,double waterShare,double exitVelocity,double opacity,double draft,Chimney.Status status) {
         public static final View NONE=new View(0,0,298.15,0,0,0,0,Chimney.Status.NO_FLOW);
         public List<EquipmentAlarm> alarms() {
-            return switch(status){case ABOVE_RATING->List.of(EquipmentAlarm.OVER_CAPACITY);case WET_STACK->List.of(EquipmentAlarm.WET_STACK);case NO_DRAFT->List.of(EquipmentAlarm.NO_DRAFT);default->List.of();};
+            return switch(status){case ABOVE_RATING->List.of(EquipmentAlarm.OVER_CAPACITY);case NO_DRAFT->List.of(EquipmentAlarm.NO_DRAFT);default->List.of();};
         }
         /** The status line's words: the status, the flow in t/h and the solids released in kg/h (owner C4 A). */
         public String line() {
@@ -70,10 +70,9 @@ public final class Chimneys {
 
     private View view(PhysicalFluidTopology.Device device,PassiveNetwork.Reservoir donor,PassiveNetwork.Reservoir tip,double flow) {
         var state=donor.state();double fluid=state.mass(),solidMass=state.solids().massKg();
-        boolean wet=state.liquidVolume()+state.waterVolume()>1e-6*Math.max(state.volume(),1e-12);
         double solids=fluid>0?flow*solidMass/fluid:0;
         double d=device.geometry().diameter(),height=device.geometry().length();
-        var reading=Chimney.reading(donor.inventory().moles(),molarMasses,state.temperature(),flow,solids,wet,d,tip.state().pressure());
+        var reading=Chimney.reading(donor.inventory().moles(),molarMasses,state.temperature(),flow,solids,d,tip.state().pressure());
         boolean gas=!donor.empty()&&fluid>0;
         var status=Chimney.status(form(device),reading,gas);
         return new View(reading.massFlow(),reading.solids(),reading.temperature(),reading.waterShare(),reading.exitVelocity(),reading.opacity(),Chimney.draft(reading.density(),height),status);

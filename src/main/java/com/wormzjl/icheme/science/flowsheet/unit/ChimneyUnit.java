@@ -19,7 +19,7 @@ import java.util.Locale;
  * reads what the built chimney's stack does with the gas at its design point: the exit velocity, the draft of its gas column
  * ({@link Chimney#draft}), the stack's friction and its entry and exit losses, and so the pressure its inlet needs over the
  * atmosphere at its foot; the solids it releases and the smoke's opacity ({@link Chimney#opacity}). Where the built chimney's
- * status would say so, the unit warns: NO DRAFT (the stream stands below what the inlet needs), WET STACK, ABOVE RATING, HOT
+ * status would say so, the unit warns: NO DRAFT (the stream stands below what the inlet needs), ABOVE RATING, HOT
  * STACK, and a stack lower than good engineering practice gives the nearby structure.
  */
 public final class ChimneyUnit implements UnitModel {
@@ -45,10 +45,8 @@ public final class ChimneyUnit implements UnitModel {
         return List.of(u.calculation(List.of(u.wire("in")), List.of(), (board, report) -> {
             var in = board.stream(u.wire("in"));
             report.leaves(in.mass(), in.enthalpy());
-            var state = in.state();
-            boolean wet = state != null && state.liquidVolume() + state.waterVolume() > 1e-6 * Math.max(state.volume(), 1e-12);
             double solids = in.solids().massKg(), tip = PhaseLayout.atmosphere(PhaseLayout.SEA_LEVEL + height), foot = PhaseLayout.AMBIENT_PRESSURE;
-            var gas = Chimney.reading(in.amountsView(), u.thermo().model().molecularWeights(), in.temperature(), Math.max(0, in.mass() - solids), solids, wet, d, tip);
+            var gas = Chimney.reading(in.amountsView(), u.thermo().model().molecularWeights(), in.temperature(), Math.max(0, in.mass() - solids), solids, d, tip);
             double rho = gas.density(), velocity = gas.exitVelocity(), draft = Chimney.draft(rho, height);
             double friction = rho > 0 ? PipeResistance.pressureDrop(new PipeResistance.Geometry(height, d, PipeResistance.DEFAULT_ROUGHNESS_METRES, Chimney.STACK_LOSS), gas.massFlow(), rho, VISCOSITY) : 0;
             report.reading("exit_velocity", velocity);
@@ -64,7 +62,6 @@ public final class ChimneyUnit implements UnitModel {
             report.reading("density", rho);
             if (in.empty()) return;
             if (in.pressure() < foot + friction - draft) report.note(Note.warning(u.id(), "chimney.no_draft", String.valueOf(in.pressure()), String.valueOf(foot + friction - draft)));
-            if (wet) report.note(Note.warning(u.id(), "chimney.wet_stack"));
             if (velocity > Chimney.HIGH_VELOCITY) report.note(Note.warning(u.id(), "chimney.above_rating", String.format(Locale.ROOT, "%.1f", velocity), String.format(Locale.ROOT, "%.0f", Chimney.HIGH_VELOCITY)));
             if (in.temperature() > form.hotLimit) report.note(Note.warning(u.id(), "chimney.hot_stack", String.valueOf(in.temperature()), String.valueOf(form.hotLimit)));
             if (height < Chimney.gepHeight(nearby)) report.note(Note.warning(u.id(), "chimney.low", String.format(Locale.ROOT, "%.0f", height), String.valueOf(Chimney.gepHeight(nearby))));

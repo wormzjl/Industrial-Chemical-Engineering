@@ -3085,7 +3085,6 @@
   "gui.icheme.flowsheet.flare.flame_out": "The flame does not hold at %s, under %s: the gas leaves unburnt. Add a richer gas.",
   "gui.icheme.flowsheet.flare.over_capacity": "%s is more than the tip passes of this gas, %s: the built flare holds the rest back.",
   "gui.icheme.flowsheet.chimney.no_draft": "The gas stands at %s, under the %s the stack's inlet needs: the built chimney draws nothing (NO DRAFT).",
-  "gui.icheme.flowsheet.chimney.wet_stack": "Liquid reaches the stack: the built chimney releases it with the gas (WET STACK).",
   "gui.icheme.flowsheet.chimney.above_rating": "The gas leaves at %s m/s, over %s m/s: most of the stack's pressure goes to its exit loss (ABOVE RATING).",
   "gui.icheme.flowsheet.chimney.hot_stack": "The gas at %s is hotter than this form takes, %s (HOT STACK).",
   "gui.icheme.flowsheet.chimney.low": "The stack, %s m, is lower than good practice beside the nearby structure, %s m: the plume falls into its wake.",
