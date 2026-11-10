@@ -29,7 +29,7 @@ public final class NoteText {
         var raw = note.arguments();
         var out = new ArrayList<Object>(raw);
         switch (note.key()) {
-            case "mixer.pressures", "ejector.motive_pressure" -> {
+            case "mixer.pressures", "ejector.motive_pressure", "chimney.no_draft" -> {
                 out.set(0, pressure(raw.get(0), units));
                 out.set(1, pressure(raw.get(1), units));
             }
@@ -37,7 +37,7 @@ public final class NoteText {
                 out.set(0, temperature(raw.get(0), units));
                 out.set(1, temperature(raw.get(1), units));
             }
-            case "still.hot_charge" -> {
+            case "still.hot_charge", "chimney.hot_stack" -> {
                 out.set(0, temperature(raw.get(0), units));
                 out.set(1, temperature(raw.get(1), units));
             }

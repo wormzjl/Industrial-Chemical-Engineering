@@ -205,6 +205,14 @@ public final class UnitDoors {
                 r.readings(Door.meter(x.text("door.heat_release"), r.reading("heat", 1e6, 2), "MW"), Door.meter(x.text("door.heating_value"), r.reading("heating_value", 1e6, 1), "MJ/m³"),
                         Door.meter(x.text("door.flame"), Reader.of(x, id).temperature(u, "flame"), u.temperature().symbol()), Door.meter(x.text("door.most_flow"), r.reading("limit", 1, 2), "kg/s"));
             }
+            // A chimney (batch 2026-11-10-chimney): its form and sizes, then what its stack does with the gas.
+            case "chimney" -> {
+                r.group("chimney", r.choice("form", "steel", "steel", "brick"), r.entry("diameter", x.text("door.diameter"), Quantity.PLAIN), r.entry("height", x.text("door.height"), Quantity.PLAIN),
+                        r.entry("nearby", x.text("door.nearby"), Quantity.PLAIN));
+                r.readings(Door.meter(x.text("door.exit_velocity"), r.reading("exit_velocity", 1, 1), "m/s"), Door.meter(x.text("door.draft"), r.reading("draft", 1, 0), "Pa"),
+                        Door.meter(x.text("door.losses"), r.reading("losses", 1, 0), "Pa"), Door.meter(x.text("door.solids"), r.reading("solids", 1. / 3600, 2), "kg/h"),
+                        Door.meter(x.text("door.opacity"), r.reading("opacity", .01, 0), "%"), Door.meter(x.text("door.gep"), r.reading("gep", 1, 0), "m"));
+            }
             // A batch still (batch 2026-11-09-batch-distiller, W7): its curve on a tab of its own.
             case "batch_still" -> {
                 still(r, x, id);

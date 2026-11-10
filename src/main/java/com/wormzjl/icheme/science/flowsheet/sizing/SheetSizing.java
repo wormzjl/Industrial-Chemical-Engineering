@@ -376,6 +376,7 @@ public final class SheetSizing {
                 case "storage_tank" -> tank(id, entry);
                 case "ejector" -> ejector(id, entry);
                 case "flare" -> flare(id, entry);
+                case "chimney" -> chimney(id, entry, unit.params());
                 case "batch_still" -> still(id, entry, unit.params());
                 case "steam_turbine" -> turbine(id, entry, unit.params().number("exhaust", TurbineUnit.EXHAUST_PRESSURE));
                 default -> null;
@@ -501,6 +502,14 @@ public final class SheetSizing {
             var load = FlareSizing.Load.of(stream(id, "in").mass(), r.getOrDefault("per_kilogram", 0.), r.getOrDefault("heating_value", 0.), r.getOrDefault("density", 0.),
                     r.getOrDefault("flame", com.wormzjl.icheme.science.fluid.network.Flare.AMBIENT), basis);
             return sized(entry, FlareSizing.Size.class, size -> FlareSizing.rate(load, size), () -> FlareSizing.auto(load));
+        }
+
+        /** A chimney on the gas its run read at the exit, its door's form and nearby height (batch 2026-11-10-chimney). */
+        SizedUnit chimney(String id, UnitEntry entry, com.wormzjl.icheme.science.flowsheet.Params params) {
+            var r = readings(id);
+            var load = ChimneySizing.Load.of(com.wormzjl.icheme.science.flowsheet.unit.ChimneyUnit.form(params), r.getOrDefault("volume_flow", 0.),
+                    params.number("nearby", com.wormzjl.icheme.science.flowsheet.unit.ChimneyUnit.NEARBY), basis);
+            return sized(entry, ChimneySizing.Size.class, size -> ChimneySizing.rate(load, size), () -> ChimneySizing.auto(load));
         }
 
         /**

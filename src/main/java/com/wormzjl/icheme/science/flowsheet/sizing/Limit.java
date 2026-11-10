@@ -239,6 +239,16 @@ public enum Limit {
     /** What the tip passes over the load, as {@link #AUTO_SPARE}'s 20 %: the owner's "always have enough excess". */
     FLARE_SPARE(SHOULD, least(20), "%", "This plan", QUIET),
 
+    // ---- Chimneys (batch 2026-11-10-chimney, owner C2 and C7) ----
+    /** The exit velocity at design flow: under 1.5 times a 5 m/s wind the plume falls into the stack's wake (downwash). */
+    CHIMNEY_SLOW(SHOULD, least(com.wormzjl.icheme.science.fluid.network.Chimney.LOW_VELOCITY), "m/s", "This plan: `Chimney.LOW_VELOCITY`"),
+    /** The exit velocity at design flow: over 30 m/s the exit loss is the stack's main pressure cost (0.35 kPa). */
+    CHIMNEY_FAST(SHOULD, most(com.wormzjl.icheme.science.fluid.network.Chimney.HIGH_VELOCITY), "m/s", "This plan: `Chimney.HIGH_VELOCITY`"),
+    /** The exit velocity at design flow against the network's cap for every stream (owner decision 2026-10-19). */
+    CHIMNEY_CAP(MUST, most(100), "m/s", "World: the 100 m/s cap"),
+    /** The stack's height against good engineering practice beside the nearby structure (2.5 times its height, at least 10 m). */
+    CHIMNEY_HEIGHT(SHOULD, given(Sense.LEAST), "m", "This plan: `Chimney.gepHeight`"),
+
     // ---- Batch stills (batch 2026-11-09-batch-distiller, W7) ----
     /** The charge's volume over the pot's: the pot holds no more. */
     STILL_VOLUME(MUST, most(100), "%", "World: the pot's volume"),

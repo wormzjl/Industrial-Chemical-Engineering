@@ -37,6 +37,7 @@ public final class UnitTypes {
             Map.entry("cooler", new CoolerUnit()),
             Map.entry("fired_heater", new FiredHeaterUnit()),
             Map.entry("flare", new FlareUnit()),
+            Map.entry("chimney", new com.wormzjl.icheme.science.flowsheet.unit.ChimneyUnit()),
             Map.entry("batch_still", new BatchStillUnit()),
             Map.entry("column", new ColumnUnit()),
             Map.entry("pump", new MoverUnit(new FlowControl.Pump(1, 1))),

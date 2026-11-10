@@ -740,6 +740,16 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             rows.add(new DeviceColumn.Meter("flare_flame",temperatureValue(flare.flameTemperature()),t,tr("flare_flame.hint",temperatureValue(com.wormzjl.icheme.science.fluid.network.Flare.FLAME_LIMIT)+" "+t)));
             rows.add(new DeviceColumn.Meter("flare_limit",value(flowRateUnit.display(flare.limit())),flowRateUnit.unit("kg"),tr("flare_limit.hint",quantity(flare.tip(),"m"))));
         }
+        // A chimney (batch 2026-11-10-chimney): the gas and solids it releases, its exit velocity against its window, the smoke's
+        // opacity and its stack's draft. Its status stands on the display.
+        var chimney=view.chimney();
+        if(chimney!=null){
+            rows.add(new DeviceColumn.Meter("chimney_flow",value(flowRateUnit.display(chimney.massFlow())),flowRateUnit.unit("kg"),tr("chimney_flow.hint")));
+            rows.add(new DeviceColumn.Meter("chimney_solids",value(chimney.solids()*3600),"kg/h",tr("chimney_solids.hint")));
+            rows.add(new DeviceColumn.Meter("chimney_velocity",value(chimney.exitVelocity()),"m/s",tr("chimney_velocity.hint",quantity(com.wormzjl.icheme.science.fluid.network.Chimney.LOW_VELOCITY,"m/s"),quantity(com.wormzjl.icheme.science.fluid.network.Chimney.HIGH_VELOCITY,"m/s"),quantity(chimney.diameter(),"m"))));
+            rows.add(new DeviceColumn.Meter("chimney_opacity",value(100*chimney.opacity()),"%",tr("chimney_opacity.hint")));
+            rows.add(new DeviceColumn.Meter("chimney_draft",value(chimney.draft()/1000),"kPa",tr("chimney_draft.hint")));
+        }
         // An instrument's main value on its meter, the other on hover: a flowmeter's mass flow (its volume flow), a level
         // gauge's share of its span (its height).
         for(var sensor:data.sensors()){

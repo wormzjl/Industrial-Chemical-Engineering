@@ -95,6 +95,7 @@ final class SizingFactsFile {
                 case "TANK" -> new TankSizing.Size(fields.name("type", UnitType.class), fields.whole("count"), fields.number("diameter"), fields.whole("shell"));
                 case "EJECTOR" -> new EjectorSizing.Size(fields.number("suction"));
                 case "FLARE" -> new FlareSizing.Size(fields.number("tip"));
+                case "CHIMNEY" -> new com.wormzjl.icheme.science.flowsheet.sizing.ChimneySizing.Size(fields.name("form", com.wormzjl.icheme.science.equipment.EquipmentShape.Kind.class, com.wormzjl.icheme.science.equipment.EquipmentShape.Kind.STEEL_STACK), fields.number("diameter"), fields.whole("height"));
                 case "BATCH_STILL" -> new StillSizing.Size(fields.number("pot"), new BatchStillOptions(fields.name("heater", BatchStillOptions.Heater.class),
                         fields.name("condenser", BatchStillOptions.Condenser.class), fields.whole("stages")));
                 case "STEAM_TURBINE" -> new TurbineSizing.Size(fields.number("power"), fields.name("steam", MachineDuty.Steam.class), fields.number("exhaust"));
@@ -198,6 +199,12 @@ final class SizingFactsFile {
             case FlareSizing.Size flare -> {
                 json.addProperty("kind", "FLARE");
                 json.addProperty("tip", flare.tip());
+            }
+            case com.wormzjl.icheme.science.flowsheet.sizing.ChimneySizing.Size chimney -> {
+                json.addProperty("kind", "CHIMNEY");
+                json.addProperty("form", chimney.kind().name());
+                json.addProperty("diameter", chimney.diameter());
+                json.addProperty("height", chimney.height());
             }
             case StillSizing.Size still -> {
                 json.addProperty("kind", "BATCH_STILL");
