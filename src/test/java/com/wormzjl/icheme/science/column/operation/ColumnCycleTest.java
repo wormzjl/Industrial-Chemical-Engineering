@@ -72,7 +72,7 @@ class ColumnCycleTest {
             double[] room = new double[table.products().size()];
             java.util.Arrays.fill(room, cycle % 97 == 0 ? 50 : 1e9);
             var step = ColumnCycle.step(table, setpoints(), 5, feed, List.of(steam), room, (k, n) -> energy(table, k, n), cycle % 3 == 0);
-            assertNull(step.trip(), "cycle " + cycle);
+            assertFalse(step.tripped(), "cycle " + cycle);
             for (int i = 0; i < 4; i++) in[i] += step.feed().moles()[i] + step.steam().getFirst().moles()[i];
             energyIn += step.feed().energy() + step.steam().getFirst().energy();
             for (var p : step.products()) {
@@ -98,11 +98,53 @@ class ColumnCycleTest {
         var b = ColumnCycle.step(table, setpoints(), 5, feed, List.of(steam), room, (k, n) -> energy(table, k, n), false);
         assertEquals(500, b.feedMoles(), 1e-9, "rule B keeps the crude rate");
         assertEquals(100, b.steam().getFirst().total(), 1e-9, "and strips with what steam there is");
-        assertEquals(ColumnCycle.Limit.STEAM, b.limit());
+        assertEquals(Condition.STEAM_SHORT, bound(b));
+        assertEquals("", b.binding().text(), "rule B: no rule A on the line");
         var a = ColumnCycle.step(table, setpoints(), 5, feed, List.of(steam), room, (k, n) -> energy(table, k, n), true);
         assertEquals(.5, a.alpha(), 1e-12, "rule A runs everything at the steam's share");
+        assertEquals(Condition.STEAM_SHORT, bound(a));
+        assertEquals(.5, a.binding().value(), 1e-12);
+        assertEquals(Condition.RULE_A, a.binding().text(), "rule A on the line");
         assertEquals(250, a.feedMoles(), 1e-9);
         assertEquals(100, a.steam().getFirst().total(), 1e-9);
+    }
+
+    /** The condition that binds {@code step}, or null. */
+    static Condition bound(ColumnCycle.Step step) {
+        var b = step.binding();
+        return b == null ? null : b.condition();
+    }
+
+    /**
+     * The list holds every LIMIT that holds with the share of the set feed it allows, in the order the cycle weighs them;
+     * the lowest binds, and alpha is its share (W1). A rule B steam shortage is listed and binds only where nothing else does.
+     */
+    @Test
+    void theListHoldsEveryLimitAndTheLowestBinds() {
+        var table = table();
+        // Half the set feed; the bottoms with room for 0.8 of what that feed makes (the outlet's share is of the feed the
+        // accounts hold); the steam short of its ratio.
+        var feed = new Account(new double[] {75, 100, 75, 0}, -.35e8);
+        var steam = new Account(new double[] {0, 0, 0, 40}, -.92e7);
+        double[] open = {1e9, 1e9, 1e9, 1e9, 1e9};
+        double bottoms = ColumnCycle.step(table, setpoints(), 5, feed, List.of(steam), open, (k, n) -> energy(table, k, n), false).products().get(4).total();
+        var full = ColumnCycle.step(table, setpoints(), 5, new Account(new double[] {300, 400, 300, 0}, -1.4e8), List.of(new Account(new double[] {0, 0, 0, 1000}, -2.3e8)),
+                open, (k, n) -> energy(table, k, n), false);
+        double[] room = {1e9, 1e9, 1e9, 1e9, .8 * bottoms};
+        var step = ColumnCycle.step(table, setpoints(), 5, feed, List.of(steam), room, (k, n) -> energy(table, k, n), false);
+        var kinds = step.conditions().stream().map(Condition.Active::condition).toList();
+        assertEquals(List.of(Condition.FEED_SHORT, Condition.PRODUCT_FULL, Condition.STEAM_SHORT), kinds, step.conditions().toString());
+        assertEquals(.5, step.conditions().get(0).value(), 1e-12, "the feed allows half");
+        assertEquals(.8, step.conditions().get(1).value(), 1e-9, "the bottoms allows 0.8");
+        assertEquals(4, step.conditions().get(1).index());
+        assertEquals(1, step.conditions().get(2).value(), "rule B: the short steam cuts nothing");
+        assertEquals(0, step.conditions().get(2).index());
+        assertEquals(Condition.FEED_SHORT, bound(step), "the lowest binds");
+        assertEquals(.5, step.alpha(), 1e-12);
+        assertFalse(step.tripped());
+        // A full take with nothing short lists nothing.
+        assertEquals(List.of(), full.conditions());
+        assertNull(full.binding());
     }
 
     @Test
@@ -112,7 +154,8 @@ class ColumnCycleTest {
         var steam = new Account(new double[] {0, 0, 0, 1000}, -2.3e8);
         double[] room = {1e9, 1e9, 1e9, 1e9, 10};
         var step = ColumnCycle.step(table, setpoints(), 5, feed, List.of(steam), room, (k, n) -> energy(table, k, n), false);
-        assertEquals(ColumnCycle.Limit.OUTLET, step.limit());
+        assertEquals(Condition.PRODUCT_FULL, bound(step));
+        assertEquals(4, step.binding().index(), "the bottoms is the full product");
         assertEquals(10, step.products().get(4).total(), 1e-9, "the bottoms buffer is filled to its room");
         var none = ColumnCycle.step(table, setpoints(), 5, Account.empty(4), List.of(steam), room, (k, n) -> energy(table, k, n), false);
         assertEquals(0, none.feedMoles());
@@ -137,13 +180,13 @@ class ColumnCycleTest {
         // Room for a fifth of the cycle's whole duty.
         double condenserRoom = -.2 * whole.condenserPerFeed() * 500;
         var a = ColumnCycle.step(whole, setpoints(), 5, feed, List.of(steam), room, condenserRoom, (k, n) -> energy(whole, k, n), false);
-        assertEquals(ColumnCycle.Limit.CONDENSER, a.limit());
+        assertEquals(Condition.COOLING_SHORT, bound(a));
         assertEquals(.2, a.alpha(), 1e-12, "the whole duty in the water: a fifth of the feed");
         var b = ColumnCycle.step(trimmed, setpoints(), 5, feed, List.of(steam), room, condenserRoom, (k, n) -> energy(trimmed, k, n), false);
-        assertEquals(ColumnCycle.Limit.CONDENSER, b.limit());
+        assertEquals(Condition.COOLING_SHORT, bound(b));
         assertEquals(.5, b.alpha(), 1e-12, "the trim's 40 %: half the feed");
         var c = ColumnCycle.step(air, setpoints(), 5, feed, List.of(steam), room, condenserRoom, (k, n) -> energy(air, k, n), false);
-        assertEquals(ColumnCycle.Limit.NONE, c.limit());
+        assertNull(bound(c));
         assertEquals(1, c.alpha(), 1e-12);
         assertThrows(IllegalArgumentException.class, () -> new SplitTable(whole.axis(), whole.products(), 0, whole.pumparoundPerFeed(), whole.condenserPerFeed(),
                 whole.reference(), whole.held(), 2 * whole.condenserPerFeed()), "the water takes no more than the whole duty");
@@ -172,10 +215,10 @@ class ColumnCycleTest {
         double[] room = {1e9, 1e9, 1e9, 1e9, 1e9};
         // 100 mol/s set; a face of 2500 m² holds 50 mol/s at full fans.
         var step = ColumnCycle.step(air, setpoints(), 5, feed, List.of(steam), room, Double.POSITIVE_INFINITY, air.airFeed(2500), (k, n) -> energy(air, k, n), false);
-        assertEquals(ColumnCycle.Limit.CONDENSER, step.limit());
+        assertEquals(Condition.COOLING_SHORT, bound(step));
         assertEquals(.5, step.alpha(), 1e-12, "half the feed");
         var free = ColumnCycle.step(air, setpoints(), 5, feed, List.of(steam), room, Double.POSITIVE_INFINITY, air.airFeed(6000), (k, n) -> energy(air, k, n), false);
-        assertEquals(ColumnCycle.Limit.NONE, free.limit());
+        assertNull(bound(free));
         assertEquals(1, free.alpha(), 1e-12);
         assertThrows(IllegalArgumentException.class, () -> new SplitTable(whole.axis(), whole.products(), 0, whole.pumparoundPerFeed(), whole.condenserPerFeed(),
                 whole.reference(), whole.held(), 0, SplitTable.WATER_NEVER, new double[] {1, 2}), "one area a fan step");
@@ -214,7 +257,10 @@ class ColumnCycleTest {
         var feed = new Account(new double[] {300, 400, 300, 0}, -1e10);
         var step = ColumnCycle.step(table, setpoints(), 5, feed, List.of(Account.empty(4)), new double[] {1e9, 1e9, 1e9, 1e9, 1e9},
                 (k, n) -> energy(table, k, n), false);
-        assertNotNull(step.trip());
+        assertTrue(step.tripped());
+        assertEquals(Condition.CLOSURE, bound(step));
+        assertEquals("the condenser would heat the overhead", step.binding().text());
+        assertEquals(List.of(step.binding()), step.conditions(), "a trip is the one condition");
         assertEquals(0, step.feedMoles(), "a tripped cycle takes nothing");
     }
 

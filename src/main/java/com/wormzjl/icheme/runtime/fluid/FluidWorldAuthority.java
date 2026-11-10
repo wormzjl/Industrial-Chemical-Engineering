@@ -735,32 +735,32 @@ public final class FluidWorldAuthority implements AutoCloseable {
      * or why the column cannot start; nothing changes then.
      */
     public @org.jetbrains.annotations.Nullable String startColumn(ColumnStart request) {
-        owned();if(closed)return "the fluid world is closed";
+        owned();if(closed)return com.wormzjl.icheme.science.column.operation.Refusal.CLOSED.text();
         var existing=column(request.master());
-        if(existing!=null&&existing.running())return "already running";
+        if(existing!=null&&existing.running())return com.wormzjl.icheme.science.column.operation.Refusal.ALREADY_RUNNING.text();
         var valves=new HashSet<Long>();for(var s:request.spots())valves.add(s.valve());
         java.util.function.Function<PhysicalFluidTopology.Position,WorldTopologyLedger.Registration> at=p->registry.at(p).orElse(null);
         var inside=new LinkedHashMap<Long,WorldTopologyLedger.Registration>();var queue=new ArrayDeque<WorldTopologyLedger.Registration>();
         for(var nozzle:request.nozzles()) {
-            var r=at.apply(nozzle);if(r==null)return "a nozzle's pipe block is not registered";
+            var r=at.apply(nozzle);if(r==null)return com.wormzjl.icheme.science.column.operation.Refusal.NOZZLE_UNREGISTERED.text();
             if(!valves.contains(r.device().id())&&inside.putIfAbsent(r.device().id(),r)==null)queue.add(r);
         }
         while(!queue.isEmpty()) {
             var r=queue.removeFirst();var d=r.device();
-            if(d.fixed())return "a generator or a void stands inside the column";
-            if(d.suspended()||d.held()||d.port()||topology.pending(d.id()))return "a device inside the column is held or being edited";
-            if(inside.size()>COLUMN_LIMIT)return "the column holds more than "+COLUMN_LIMIT+" devices";
+            if(d.fixed())return com.wormzjl.icheme.science.column.operation.Refusal.FIXED_INSIDE.text();
+            if(d.suspended()||d.held()||d.port()||topology.pending(d.id()))return com.wormzjl.icheme.science.column.operation.Refusal.HELD_INSIDE.text();
+            if(inside.size()>COLUMN_LIMIT)return com.wormzjl.icheme.science.column.operation.Refusal.TOO_MANY_DEVICES.text(COLUMN_LIMIT);
             for(var contact:d.contacts()) {
                 var next=PhysicalFluidTopology.across(at,WorldTopologyLedger.Registration::device,d,contact.cell(),contact.direction());
                 if(next==null||valves.contains(next.device().id())||!d.joins(next.device(),contact.cell(),contact.direction()))continue;
                 if(inside.putIfAbsent(next.device().id(),next)==null)queue.add(next);
             }
         }
-        if(sharePlace(request.spots()))return "two ports share a place";
+        if(sharePlace(request.spots()))return com.wormzjl.icheme.science.column.operation.Refusal.SHARED_PLACE.text();
         for(var s:request.spots()) {
             var valve=registrations().get(s.valve());
-            if(valve==null||inside.containsKey(s.valve()))return "a boundary valve is missing or inside the column";
-            if(at.apply(s.cell().withLane(PhysicalFluidTopology.PORT_LANE))!=null)return "a port's place is taken";
+            if(valve==null||inside.containsKey(s.valve()))return com.wormzjl.icheme.science.column.operation.Refusal.VALVE_MISSING.text();
+            if(at.apply(s.cell().withLane(PhysicalFluidTopology.PORT_LANE))!=null)return com.wormzjl.icheme.science.column.operation.Refusal.PLACE_TAKEN.text();
         }
         long unit=existing!=null?existing.id():topology.reserve(1);long first=topology.nextIdentity();
         var edits=new ArrayList<WorldTopologyLedger.Edit>();var stations=new ArrayList<ColumnUnit.Station>();
@@ -784,12 +784,12 @@ public final class FluidWorldAuthority implements AutoCloseable {
         // one a shell in parallel (S3b).
         var water=new ArrayList<Long>();
         for(long side:request.condenser()){var r=registrations().get(side);if(r!=null&&!inside.containsKey(side)&&r.device().heat()!=null&&inside.containsKey(r.device().heat().partner())&&!water.contains(side))water.add(side);}
-        if(water.size()>ColumnUnit.MAXIMUM_CONDENSERS)return "the condenser has more than "+ColumnUnit.MAXIMUM_CONDENSERS+" shells";
+        if(water.size()>ColumnUnit.MAXIMUM_CONDENSERS)return com.wormzjl.icheme.science.column.operation.Refusal.TOO_MANY_SHELLS.text(ColumnUnit.MAXIMUM_CONDENSERS);
         // A restart keeps the set points the player applied while they fit the design's ports (C7); else the design's.
         var setpoints=existing!=null&&compatible(existing.setpoints(),request.setpoints())?existing.setpoints():request.setpoints();
         var running=new ColumnUnit(unit,request.master(),true,setpoints,stations,existing!=null?existing.totals():ColumnUnit.Totals.empty(m),water,null,false,request.airSurface());
         var was=existing;topology.column(running);
-        try{submit(edits,id);}catch(IllegalArgumentException|IllegalStateException refused){if(was!=null)topology.column(was);else topology.removeColumn(unit);return "the column's ports do not fit its lines: "+refused.getMessage();}
+        try{submit(edits,id);}catch(IllegalArgumentException|IllegalStateException refused){if(was!=null)topology.column(was);else topology.removeColumn(unit);return com.wormzjl.icheme.science.column.operation.Refusal.PORTS_DO_NOT_FIT.text(refused.getMessage());}
         columns.refresh();
         IChemE.LOGGER.info("column status=STARTED master={},{},{} unit={} held={} ports={}",request.master().x(),request.master().y(),request.master().z(),unit,inside.size(),stations.size());
         return null;

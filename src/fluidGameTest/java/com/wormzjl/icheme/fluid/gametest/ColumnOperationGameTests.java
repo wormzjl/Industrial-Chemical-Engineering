@@ -7,7 +7,6 @@ import com.wormzjl.icheme.runtime.assembly.AssemblyService;
 import com.wormzjl.icheme.runtime.fluid.ColumnUnit;
 import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
 import com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity;
-import com.wormzjl.icheme.science.column.operation.ColumnCycle;
 import com.wormzjl.icheme.science.column.operation.OperationView;
 import com.wormzjl.icheme.science.column.operation.Port;
 import com.wormzjl.icheme.science.fluid.network.PassiveNetwork;
@@ -197,7 +196,7 @@ public final class ColumnOperationGameTests {
         var view = life.view();
         if (view == null) return false;
         if (view.phase() == OperationView.Phase.NOT_READY || view.phase() == OperationView.Phase.UPSET) life.failure[0] = "column " + view.phase() + ": " + view.engine();
-        return view.phase() == OperationView.Phase.RUNNING && view.limit() == ColumnCycle.Limit.NONE && view.alpha() == 1 && life.feedRate(view) >= .99 * life.design();
+        return view.phase() == OperationView.Phase.RUNNING && view.binding() == null && view.alpha() == 1 && life.feedRate(view) >= .99 * life.design();
     }
 
     /** Plan C4: a running column at its design; C3: the ports split the islands, and no flow reaches a member. */
@@ -276,7 +275,7 @@ public final class ColumnOperationGameTests {
         var view = life.view();
         if (view == null) return false;
         if (!view.running()) life.failure[0] = "A blocked product does not stop the column: " + view.phase() + " " + view.engine();
-        return view.limit() == ColumnCycle.Limit.OUTLET && view.alpha() < .05;
+        return view.binding() != null && view.binding().condition() == com.wormzjl.icheme.science.column.operation.Condition.PRODUCT_FULL && view.alpha() < .05;
     }
 
     /** Plan C3: the blocked product's buffer is full and the feed stands, the column still running. */

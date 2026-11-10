@@ -7,6 +7,7 @@ import com.wormzjl.icheme.science.assembly.Blueprint.Slot;
 import com.wormzjl.icheme.science.assembly.ColumnBlueprint;
 import com.wormzjl.icheme.science.column.operation.Port;
 import com.wormzjl.icheme.science.column.operation.PortConditions;
+import com.wormzjl.icheme.science.column.operation.Refusal;
 import com.wormzjl.icheme.science.column.operation.Setpoints;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.HeatSides;
@@ -45,13 +46,13 @@ public final class ColumnStarts {
     /** The Start of the column at {@code origin}. */
     public static Built build(ServerLevel level, FluidWorldAuthority world, BlockPos origin) {
         var vessel = EquipmentStructure.at(level, origin);
-        if (vessel == null || !AssemblyService.designed(vessel.shape())) return refused("no designed column here");
+        if (vessel == null || !AssemblyService.designed(vessel.shape())) return refused(Refusal.NO_DESIGN.text());
         var trays = vessel.shape().trays();
         var point = trays.operating();
-        if (point == null) return refused("the design has no operating point: save it from the calculator again");
-        if (trays.components().ejector()) return refused("a vacuum column cannot run yet");
+        if (point == null) return refused(Refusal.NO_SAVED_POINT.text());
+        if (trays.components().ejector()) return refused(Refusal.VACUUM.text());
         var entry = AssemblyStore.of(level).entry(vessel.origin().asLong());
-        if (entry == null || entry.status() != Status.COMPLETE || entry.report() == null) return refused("the assembly is not complete");
+        if (entry == null || entry.status() != Status.COMPLETE || entry.report() == null) return refused(Refusal.INCOMPLETE.text());
         String dimension = level.dimension().location().toString();
         var o = vessel.origin();
         var nozzles = new ArrayList<PhysicalFluidTopology.Position>();
@@ -65,7 +66,7 @@ public final class ColumnStarts {
             // The fitting that fills the slot (its member; the slot report's at is where a fault lies).
             var at = BlockPos.of(s.member());
             var valve = world.at(new PhysicalFluidTopology.Position(dimension, at.getX(), at.getY(), at.getZ())).orElse(null);
-            if (valve == null) return refused("a boundary valve is not registered");
+            if (valve == null) return refused(Refusal.VALVE_UNREGISTERED.text());
             // The valve's arrow points along the stream: an inlet's column side is ahead of it, an outlet's behind it.
             var facing = valve.device().facing();
             var toward = port.inlet() ? opposite(facing) : facing;

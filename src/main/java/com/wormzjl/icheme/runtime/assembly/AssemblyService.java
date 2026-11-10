@@ -358,13 +358,13 @@ public final class AssemblyService {
         String engine = "STOPPED";
         if (trays.components() != null && trays.components().ejector()) {
             phase = com.wormzjl.icheme.science.column.operation.OperationView.Phase.NOT_READY;
-            engine = "a vacuum column cannot run yet";
+            engine = com.wormzjl.icheme.science.column.operation.Refusal.VACUUM.text();
         } else if (refusal != null) {
             phase = com.wormzjl.icheme.science.column.operation.OperationView.Phase.NOT_READY;
             engine = refusal;
         }
         var idle = com.wormzjl.icheme.science.column.operation.OperationView.idle(phase, engine, setpoints);
-        return view == null ? idle : new com.wormzjl.icheme.science.column.operation.OperationView(phase, idle.limit(), 0, false, null, false, engine, false, true, setpoints,
+        return view == null ? idle : new com.wormzjl.icheme.science.column.operation.OperationView(phase, List.of(), 0, null, engine, false, true, setpoints, null,
                 List.of(), List.of(), null);
     }
 

@@ -775,7 +775,7 @@ class ColumnRunTest {
         for(long t=r.world().ledger.onlineTick();t<end;) {
             t=Math.min(end,t+5);r.world().runTo(t);
             var step=r.ops().last(r.unit());
-            if(step!=null&&step!=seen){if(step.trip()==null)sum+=step.condenser();seen=step;}
+            if(step!=null&&step!=seen){if(!step.tripped())sum+=step.condenser();seen=step;}
         }
         return sum;
     }

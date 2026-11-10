@@ -342,8 +342,8 @@ public final class ColumnOperationReviewWorld {
                 IChemE.LOGGER.info("review_operation t={} view=none", ticks);
                 return;
             }
-            IChemE.LOGGER.info("review_operation t={} phase={} limit={} alpha={} ruleA={} failed={} engine=\"{}\"", ticks, view.phase(), view.limit(),
-                    String.format(Locale.ROOT, "%.3f", view.alpha()), view.ruleA(), view.failed(), view.engine());
+            IChemE.LOGGER.info("review_operation t={} phase={} conditions={} alpha={} ruleA={} refused={} engine=\"{}\"", ticks, view.phase(), view.conditions().stream().map(c -> c.condition().name()).toList(),
+                    String.format(Locale.ROOT, "%.3f", view.alpha()), view.ruleA(), view.refused(), view.engine());
             for (var at : List.of(feed, steam, water)) {
                 var d = plant.world.registrations().get(id(at)).device();
                 IChemE.LOGGER.info("review_operation t={} generator={} bore={} on={} status=\"{}\"", ticks, at.toShortString(), d.geometry().diameter(), d.generatorEnabled(),

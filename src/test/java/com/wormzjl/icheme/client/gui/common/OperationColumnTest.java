@@ -4,7 +4,7 @@ import com.wormzjl.icheme.client.gui.common.kit.Column;
 import com.wormzjl.icheme.client.gui.common.kit.Measure;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
-import com.wormzjl.icheme.science.column.operation.ColumnCycle;
+import com.wormzjl.icheme.science.column.operation.Condition;
 import com.wormzjl.icheme.science.column.operation.DriftBands;
 import com.wormzjl.icheme.science.column.operation.OperationView;
 import com.wormzjl.icheme.science.column.operation.OperationView.Duty;
@@ -63,7 +63,10 @@ public class OperationColumnTest {
         duties.add(new Duty(DutyKind.CONDENSER, 0, -7.32e6, -8.51e6));
         if (s.reboilerPerFeed() != 0) duties.add(new Duty(DutyKind.REBOILER, 0, 1.2e6, 1.4e6));
         for (int j = 0; j < s.pumparoundsPerFeed().length; j++) duties.add(new Duty(DutyKind.PUMPAROUND, j, -1.81e6, -2.1e6));
-        return new OperationView(phase, ColumnCycle.Limit.CONDENSER, .86, true, DriftBands.Trigger.COMPOSITION, true, "LIMITED: condenser, 86 %", true, true, s, streams, duties,
+        // The condenser binds at 86 %, rule A holds the steam, and the last solve was refused.
+        var conditions = List.of(new Condition.Active(Condition.COOLING_SHORT, .86), new Condition.Active(Condition.STEAM_SHORT, .9, 0, Condition.RULE_A),
+                new Condition.Active(Condition.SOLVE_REFUSED, "the composition solve failed (test), the table of 30 s ago kept"));
+        return new OperationView(phase, conditions, .86, DriftBands.Trigger.COMPOSITION, "LIMITED: condenser, 86 %", true, true, s, null, streams, duties,
                 new OperationView.Solve(DriftBands.Trigger.ENTHALPY, true, 4321));
     }
 
@@ -95,10 +98,11 @@ public class OperationColumnTest {
             OperationColumn.duties(in.view(), t);
             OperationColumn.solve(in.view(), t);
         }
-        for (var limit : ColumnCycle.Limit.values())
-            OperationColumn.status(new OperationView(Phase.LIMITED, limit, .5, false, null, false, "", true, true, setpoints(1, 1, 1, false), List.of(), List.of(), null), t);
+        for (var limit : Condition.values())
+            if (limit.rank == Condition.Rank.LIMIT)
+                OperationColumn.status(new OperationView(Phase.LIMITED, List.of(new Condition.Active(limit, .5)), .5, null, "", true, true, setpoints(1, 1, 1, false), null, List.of(), List.of(), null), t);
         for (var trigger : DriftBands.Trigger.values()) OperationColumn.trigger(trigger, t);
-        OperationColumn.solve(new OperationView(Phase.RUNNING, ColumnCycle.Limit.NONE, 1, false, null, false, "", true, true, setpoints(1, 1, 1, false), List.of(), List.of(),
+        OperationColumn.solve(new OperationView(Phase.RUNNING, List.of(), 1, null, "", true, true, setpoints(1, 1, 1, false), null, List.of(), List.of(),
                 new OperationView.Solve(null, false, 30)), t);
         OperationColumn.footerButtons(true, t);
         t.get("assembly.operation");
@@ -236,7 +240,7 @@ public class OperationColumnTest {
         assertArrayEquals(new String[]{"Condenser", "-7.32", "-8.51"}, duties.get(1));
         assertEquals("Pumparound 4", duties.getLast()[0]);
         // An air condenser's fans (U2) draw power, not heat: their row reads kW, which its name says.
-        var fans = new OperationView(Phase.RUNNING, ColumnCycle.Limit.NONE, 1, false, null, false, "", true, true, setpoints(1, 1, 1, false), List.of(),
+        var fans = new OperationView(Phase.RUNNING, List.of(), 1, null, "", true, true, setpoints(1, 1, 1, false), null, List.of(),
                 List.of(new Duty(DutyKind.FANS, 0, 144700, 361200)), null);
         assertArrayEquals(new String[]{"Air fans, kW", "144.7", "361.2"}, OperationColumn.duties(fans, t).get(1));
         var solve = OperationColumn.solve(view, t);
@@ -247,5 +251,25 @@ public class OperationColumnTest {
         // The glass's tables lie under one another, inside its box.
         var box = new Rect(0, 0, 400, OperationColumn.height(view));
         assertTrue(box.h() > OperationColumn.PITCH * ports.size());
+    }
+
+    /** The status reads the binding condition (W1): the lowest LIMIT names the limit, a refused set point reads as a refused solve, a rule A steam as every input cut. */
+    @Test
+    void theStatusReadsTheBindingCondition() {
+        var t = new HeatControlColumnTest.Recording("gui.icheme.");
+        var s = setpoints(1, 1, 1, false);
+        var feed = new OperationView(Phase.LIMITED, List.of(new Condition.Active(Condition.FEED_SHORT, .5), new Condition.Active(Condition.PRODUCT_FULL, .8, 2, "")), .5, null,
+                "LIMITED: feed, 50 %", true, true, s, null, List.of(), List.of(), null);
+        assertEquals("Limited: feed, 50 % of the feed", OperationColumn.status(feed, t).text());
+        var refused = new OperationView(Phase.RUNNING, List.of(new Condition.Active(Condition.SETPOINT_REFUSED, "the setpoint solve failed (x), the table of 5 s ago kept")), 1, null,
+                "RUNNING", true, true, s, s, List.of(), List.of(), null);
+        assertEquals("Running; last solve failed", OperationColumn.status(refused, t).text());
+        var ruleA = new OperationView(Phase.LIMITED, List.of(new Condition.Active(Condition.STEAM_SHORT, .3, 0, Condition.RULE_A)), .3, null,
+                "LIMITED: steam, 30 %", true, true, s, null, List.of(), List.of(), null);
+        assertEquals("Limited: steam, 30 % of the feed, every input cut", OperationColumn.status(ruleA, t).text());
+        var solving = new OperationView(Phase.RUNNING, List.of(new Condition.Active(Condition.OFF_TABLE, "composition")), 1, DriftBands.Trigger.COMPOSITION,
+                "RE-SOLVING: composition; RUNNING", true, true, s, null, List.of(), List.of(), null);
+        assertTrue(OperationColumn.status(solving, t).text().startsWith("Running; solving: "), OperationColumn.status(solving, t).text());
+        assertEquals(Set.of(), t.missing);
     }
 }

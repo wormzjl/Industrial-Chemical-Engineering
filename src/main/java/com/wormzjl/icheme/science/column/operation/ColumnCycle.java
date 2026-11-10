@@ -78,11 +78,6 @@ public final class ColumnCycle {
         }
     }
 
-    /** What bounded the throughput. */
-    public enum Limit {
-        NONE, FEED, STEAM, OUTLET, CONDENSER
-    }
-
     /**
      * A cycle's outcome.
      *
@@ -94,14 +89,28 @@ public final class ColumnCycle {
      * @param pumparounds      J into the column per pumparound (negative: removed)
      * @param condenser        J into the column (negative: removed), closing the balance
      * @param solvedCondenser  the table's condenser duty at the feed taken, J
-     * @param trip             why the column trips (the closure would heat, or departs too far), or null
+     * @param conditions       what held (W1): each LIMIT with the share of the set feed it allows, in the order the cycle
+     *                         weighs them (feed, outlets, condenser water, air face, steam), or the TRIP (the closure would
+     *                         heat, or departs too far) with its departure
      */
-    public record Step(double alpha, Limit limit, Account feed, List<Account> steam, List<Account> products, double reboiler, double[] pumparounds,
-                       double condenser, double solvedCondenser, String trip) {
+    public record Step(double alpha, Account feed, List<Account> steam, List<Account> products, double reboiler, double[] pumparounds,
+                       double condenser, double solvedCondenser, List<Condition.Active> conditions) {
         public Step {
             steam = List.copyOf(steam);
             products = List.copyOf(products);
             pumparounds = pumparounds.clone();
+            conditions = List.copyOf(conditions);
+        }
+
+        /** The condition that binds: the TRIP, else the LIMIT with the lowest share; null where the cycle took its set feed. */
+        public Condition.Active binding() {
+            return Condition.binding(conditions);
+        }
+
+        /** Whether the cycle tripped and took nothing. */
+        public boolean tripped() {
+            var b = binding();
+            return b != null && b.condition().rank == Condition.Rank.TRIP;
         }
 
         /** The closed condenser duty's departure from the solved one, a share of the solved; 0 when nothing ran. */
@@ -149,7 +158,7 @@ public final class ColumnCycle {
         if (steam.size() != steamPerFeed.length) throw new IllegalArgumentException("One steam account per steam setpoint");
         if (room.length != table.products().size()) throw new IllegalArgumentException("One room per product");
         double demand = setpoints.feedRate() * seconds;
-        if (!(demand > 0)) return idle(table, steam.size(), Limit.NONE, null);
+        if (!(demand > 0)) return idle(table, steam.size(), List.of());
         // The throughput the outlets allow, from the products of a full take.
         double feedTotal = feed.total();
         double[] full = feedTotal > 0 ? feed.part(demand / feedTotal).moles() : new double[m];
@@ -161,39 +170,35 @@ public final class ColumnCycle {
             }
         }
         double[][] fullProducts = table.split(full);
+        // Every LIMIT that holds, with the share of the set feed it allows, in the order they are weighed: the binding one is
+        // the lowest, the first of equal ones (Condition.binding).
+        var conditions = new java.util.ArrayList<Condition.Active>();
+        if (feedTotal < demand) conditions.add(new Condition.Active(Condition.FEED_SHORT, Math.max(0, feedTotal / demand)));
         double alphaRoom = 1;
+        int fullest = -1;
         for (int k = 0; k < room.length; k++) {
             double made = Arrays.stream(fullProducts[k]).sum();
-            if (made > 0) alphaRoom = Math.min(alphaRoom, Math.max(0, room[k]) / made);
+            if (made > 0 && Math.max(0, room[k]) / made < alphaRoom) {
+                alphaRoom = Math.max(0, room[k]) / made;
+                fullest = k;
+            }
         }
-        double alpha = Math.min(1, feedTotal / demand);
-        Limit limit = feedTotal < demand ? Limit.FEED : Limit.NONE;
-        if (alphaRoom < alpha) {
-            alpha = alphaRoom;
-            limit = Limit.OUTLET;
-        }
+        if (alphaRoom < 1) conditions.add(new Condition.Active(Condition.PRODUCT_FULL, alphaRoom, fullest, ""));
         double duty = -table.condenserWaterPerFeed() * demand;
         if (duty > 0 && condenserRoom < Double.POSITIVE_INFINITY) {
             double alphaCondenser = Math.max(0, condenserRoom) / duty;
-            if (alphaCondenser < alpha) {
-                alpha = alphaCondenser;
-                limit = Limit.CONDENSER;
-            }
+            if (alphaCondenser < 1) conditions.add(new Condition.Active(Condition.COOLING_SHORT, alphaCondenser));
         }
         double alphaAir = Math.max(0, airFeed) * seconds / demand;
-        if (alphaAir < alpha) {
-            alpha = alphaAir;
-            limit = Limit.CONDENSER;
-        }
+        if (alphaAir < 1) conditions.add(new Condition.Active(Condition.COOLING_SHORT, alphaAir));
         if (ruleA)
             for (int j = 0; j < steam.size(); j++) {
                 double want = steamPerFeed[j] * demand;
-                if (want > 0 && steam.get(j).total() / want < alpha) {
-                    alpha = steam.get(j).total() / want;
-                    limit = Limit.STEAM;
-                }
+                if (want > 0 && steam.get(j).total() / want < 1)
+                    conditions.add(new Condition.Active(Condition.STEAM_SHORT, steam.get(j).total() / want, j, Condition.RULE_A));
             }
-        alpha = Math.max(0, alpha);
+        var binding = Condition.binding(conditions);
+        double alpha = Math.max(0, binding == null ? 1 : binding.value());
         double feedTaken = alpha * demand;
         Account takenFeed = feedTotal > 0 ? feed.part(feedTaken / feedTotal) : Account.empty(m);
         var takenSteam = new java.util.ArrayList<Account>();
@@ -202,7 +207,8 @@ public final class ColumnCycle {
         for (int j = 0; j < steam.size(); j++) {
             double have = steam.get(j).total();
             double want = steamPerFeed[j] * feedTaken;
-            if (!ruleA && want > have && limit == Limit.NONE) limit = Limit.STEAM;
+            // Rule B: a short steam is taken as it is and cuts nothing, so it binds only where nothing else does.
+            if (!ruleA && want > have) conditions.add(new Condition.Active(Condition.STEAM_SHORT, 1, j, ""));
             var t = have > 0 ? steam.get(j).part(Math.min(want, have) / have) : Account.empty(m);
             takenSteam.add(t);
             double[] n = t.moles();
@@ -227,18 +233,20 @@ public final class ColumnCycle {
         }
         double condenser = out - energyIn - reboiler - paTotal;
         double solved = table.condenserPerFeed() * fed;
-        String trip = null;
-        if (fed > 0 && condenser > 0) trip = "the condenser would heat the overhead";
+        double departure = solved == 0 ? 0 : (condenser - solved) / Math.abs(solved);
+        Condition.Active trip = null;
+        if (fed > 0 && condenser > 0) trip = new Condition.Active(Condition.CLOSURE, departure, -1, "the condenser would heat the overhead");
         else if (fed > 0 && solved != 0 && Math.abs(condenser - solved) > TRIP_DEPARTURE * Math.abs(solved))
-            trip = String.format(java.util.Locale.ROOT, "the condenser duty departs %.0f %% from the solved one", 100 * Math.abs(condenser - solved) / Math.abs(solved));
-        if (trip != null) return idle(table, steam.size(), limit, trip);
-        return new Step(alpha, limit, takenFeed, takenSteam, products, reboiler, pa, condenser, solved, null);
+            trip = new Condition.Active(Condition.CLOSURE, departure, -1,
+                    String.format(java.util.Locale.ROOT, "the condenser duty departs %.0f %% from the solved one", 100 * Math.abs(condenser - solved) / Math.abs(solved)));
+        if (trip != null) return idle(table, steam.size(), List.of(trip));
+        return new Step(alpha, takenFeed, takenSteam, products, reboiler, pa, condenser, solved, conditions);
     }
 
-    private static Step idle(SplitTable table, int steams, Limit limit, String trip) {
+    private static Step idle(SplitTable table, int steams, List<Condition.Active> conditions) {
         int m = table.axis().size();
         var empty = Account.empty(m);
-        return new Step(0, limit, empty, java.util.Collections.nCopies(steams, empty), java.util.Collections.nCopies(table.products().size(), empty), 0,
-                new double[table.pumparoundPerFeed().length], 0, 0, trip);
+        return new Step(0, empty, java.util.Collections.nCopies(steams, empty), java.util.Collections.nCopies(table.products().size(), empty), 0,
+                new double[table.pumparoundPerFeed().length], 0, 0, conditions);
     }
 }

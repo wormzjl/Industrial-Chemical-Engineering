@@ -58,7 +58,7 @@ class ColumnSolveTest {
         Arrays.fill(room, Double.MAX_VALUE);
         double[][] h = solved.enthalpy();
         var step = ColumnCycle.step(table, setpoints, SECONDS, feedAccount, steamAccounts, room, (k, n) -> dot(h[k], n), false);
-        assertNull(step.trip());
+        assertFalse(step.tripped());
         assertEquals(1, step.alpha(), 1e-12);
         assertEquals(0, step.departure(), 1e-9, "the table's condenser duty is the network's closure at its reference");
         double v3 = solved.solvedCondenser(), network = table.condenserPerFeed() * rate;

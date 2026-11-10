@@ -5,6 +5,7 @@ import com.wormzjl.icheme.client.gui.common.kit.Column;
 import com.wormzjl.icheme.client.gui.common.kit.Measure;
 import com.wormzjl.icheme.client.gui.common.kit.Palette;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
+import com.wormzjl.icheme.science.column.operation.Condition;
 import com.wormzjl.icheme.science.column.operation.DriftBands;
 import com.wormzjl.icheme.science.column.operation.OperationView;
 import com.wormzjl.icheme.science.column.operation.Port;
@@ -188,14 +189,17 @@ public final class OperationColumn {
 
     // ---- The status ----
 
-    /** The status once: the phase in words (a limit with its share; then a failed solve, else rule A, else a solve in flight), its tone, the engine's line in the hover. */
+    /**
+     * The status once: the phase in words (the binding limit with its share; then a refused solve, else rule A, else a solve
+     * in flight), its tone, the engine's line in the hover.
+     */
     public static AssemblyColumn.Status status(OperationView v, HeatControlColumn.Texts t) {
-        String text = switch (v.phase()) {
-            case LIMITED -> t.get(KEY + "status.limited", t.get(KEY + "limit." + v.limit().name().toLowerCase(Locale.ROOT)), Math.round(100 * v.alpha()));
-            default -> t.get(KEY + "status." + v.phase().name().toLowerCase(Locale.ROOT));
-        };
+        var binding = v.binding();
+        String text = v.phase() == OperationView.Phase.LIMITED && binding != null
+                ? t.get(KEY + "status.limited", t.get(KEY + "limit." + limit(binding.condition())), Math.round(100 * v.alpha()))
+                : t.get(KEY + "status." + v.phase().name().toLowerCase(Locale.ROOT));
         // One line: the phase and the one note that matters most; the engine's line in the hover says the rest.
-        if (v.failed()) text = t.get(KEY + "status.failed", text);
+        if (v.refused()) text = t.get(KEY + "status.failed", text);
         else if (v.ruleA()) text = t.get(KEY + "status.rule_a", text);
         else if (v.resolving() != null) text = t.get(KEY + "status.resolving", text, trigger(v.resolving(), t));
         int palette = switch (v.phase()) {
@@ -205,6 +209,11 @@ public final class OperationColumn {
             case UPSET -> Palette.RED;
         };
         return new AssemblyColumn.Status(text, palette, v.engine());
+    }
+
+    /** A LIMIT's word as its key: {@code limit.<word>}. */
+    static String limit(Condition c) {
+        return c.word.replace(' ', '_');
     }
 
     static String trigger(@Nullable DriftBands.Trigger trigger, HeatControlColumn.Texts t) {

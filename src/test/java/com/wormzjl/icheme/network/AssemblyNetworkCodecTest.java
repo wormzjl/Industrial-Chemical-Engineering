@@ -76,6 +76,16 @@ class AssemblyNetworkCodecTest {
             var view = complete.withOperation(operation);
             assertEquals(view, roundTrip(view));
         }
+        // The conditions cross whole (W1): their kinds, shares, indices (none is -1) and texts; and the accepted set points beside the requested ones (W2).
+        var running = com.wormzjl.icheme.client.gui.common.OperationColumnTest.running(s, com.wormzjl.icheme.science.column.operation.OperationView.Phase.LIMITED);
+        var accepted = com.wormzjl.icheme.client.gui.common.OperationColumnTest.setpoints(2, 4, 4, false);
+        var refused = new com.wormzjl.icheme.science.column.operation.OperationView(running.phase(), running.conditions(), running.alpha(), running.resolving(), running.engine(),
+                running.running(), running.editable(), running.setpoints(), accepted, running.streams(), running.duties(), running.solve());
+        var back = roundTrip(complete.withOperation(refused)).operation();
+        assertEquals(refused, back);
+        assertEquals(refused.conditions(), back.conditions());
+        assertEquals(-1, back.conditions().getFirst().index());
+        assertEquals(accepted, back.accepted());
         // A view with no operation (no design, a watch) crosses with none.
         assertNull(roundTrip(complete).operation());
         var buffer = new RegistryFriendlyByteBuf(Unpooled.buffer(), RegistryAccess.EMPTY);
