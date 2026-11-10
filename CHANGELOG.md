@@ -31,6 +31,12 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 - Nozzle pipes may touch: the owner lifted the one-free-block rule between nozzle pipe blocks; a drum's side connections clash only where their flanges at the largest pipe overlap; the unit gate `pipesApart` is gone and only columns keep the gap; existing layouts unchanged. Machine page protocol `machine-4` (`fb944b7d2`).
 - Code guide refreshed: new chapter `effects.md`; twelve chapters and the README updated.
 
+### Fixed
+
+- A kettle's vapour line stayed shut and its pool rose to 231 kPa with no boil-up since rigid reservoirs: a pass that drew from a void is solved once more with that line started the allowed way before it closes (owner option A) `c6dc5426c`.
+- The 400 MW generator's drawing no longer builds a vessel's shell tables from its kW size (198 MB); the hidden prime mover defects the crash covered are fixed: the damper disc unpainted, the heavy gas turbines' fuel connection clear of the combustors, the shared generator shaft height and flange in the kit `c6dc5426c`.
+- The gas turbine coil's steam port names itself in the simulator; the vacuum pumps' support lines; the constructor's prime mover, vacuum pump and chimney lines fit their display `c6dc5426c`.
+
 ## [0.24.0] - 2026-11-10
 
 ### Added
