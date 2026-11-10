@@ -16,11 +16,14 @@ Status: In progress since 2026-11-10 (decisions taken; execution in five stages,
 
 - 2026-11-10: stage 4 (W5, D7) on this branch: `6951f70b5` [MEMBER_POWER_NOTE.md](MEMBER_POWER_NOTE.md), `a8cbde124` fans (the members as `ColumnUnit.members`, fluid facts schema 18, default none: a unit saved before draws nothing until its next Start; corpus `compat/fluid/schema-18/`; each cycle a fan side books its fans over the span that ran and reads its store, banks without power hold natural draught, `NO_POWER` of the condenser where that limits), `7bed7c37b` pumps (a casing books its rated shaft power at the last share on its train, `ShaftTrains.held`; an in-line pump on its own store; no power: `NO_POWER` with the member's index, share 0; a casing with no driver refuses Start, `Refusal.NO_DRIVER`, the owner may veto), `bcd6d119e` step 4a (the heat screen offers a kettle's tubes the `COLUMN` mode with "utility" texts; render `tmp/col-stage4/heat-gui-renders/kettle-column.png`). Everything under `energy.machinesNeedPower`; off, nothing changes. Rigs: the shared review rig already drives each pump with a creative motor and cools its condenser with water, so it needed no motors, no FE source and no config switch; `runFluidGameTestServer -PfluidGameTestRunId=col-stage4-a`: all 87 pass. No new unknown or equation in `PassiveStepSolver`.
 
+- 2026-11-10: stage 5 (W8) on this branch: `b86010ba1` the review run takes one batch (`-PreviewBatch`, `ReviewBatch`) and the rig scales a reboiler duty, `7070f8f3c` `ColumnFailureModesReviewWorld` (plant A the full-size crude column, 710 mol/s, 8 m, 40 trays, air then water on two banks in parallel, motors on FE, named shutoffs, DCS, LIC/FIC, a surge drum fed as a liquid at 662 K and 48 bar; plant B a reboiled column at 1/16 with a kettle on 20 bar steam; 13 cases), `4edfe4638` the gate case (`aDcsListsStartsAppliesStopsAndSeesABlockedProduct`; `runFluidGameTestServer -PfluidGameTestRunId=col-stage5-a`: all 88 pass), `22eb6fa26` a column tripped on a lost steam asks the steam's solve (case 3 deadlocked in UPSET), `8534e09f5` a column level loop reads its feed valve either way, `f05685a56` and `af980c1a7` the parallel air banks. The full-size run at 20 TPS: cases 1 to 8 and 10 to 13 as expected, 9 not covered; the last restore timed out on two held fluid islands. World in `run/saves/column-failure-modes` (13 MB); [MANUAL_TEST.md](MANUAL_TEST.md).
+
 ## Documents
 
 - [COLUMN_FAILURE_MODES_REVIEW.md](COLUMN_FAILURE_MODES_REVIEW.md): expected behaviour, the seven mechanisms in the code, coverage, findings F1 to F12.
 - [COLUMN_FAILURE_MODES_PLAN.md](COLUMN_FAILURE_MODES_PLAN.md): one condition record in five classes, work packages W1 to W7, control system integration, adjustable parameters, cost and saves, owner decisions D1 to D8.
 - [EXECUTION_PLAN.md](EXECUTION_PLAN.md): the decisions in force, the rules for every stage, stages 1 to 5 with their steps, tests and done lines, the test world's plant and script.
+- [MANUAL_TEST.md](MANUAL_TEST.md): the stage 5 world, its named parts, the 13 cases as player actions, what is not covered.
 - [MEMBER_POWER_NOTE.md](MEMBER_POWER_NOTE.md): how a held member's power was booked before stage 4, and the change that books a running column's fans and pumps.
 
 ## Code areas
@@ -29,13 +32,17 @@ Stage 1 changed `science/column/operation/**` (new `Condition`, `ColumnStatus`, 
 
 ## Open items
 
-- Stage 5 of `EXECUTION_PLAN.md` (the owner approved all five sub-threads on 2026-11-10; stages 1 to 4 are done).
 - W3.4 (downcomer backup) is dropped: the owner chose the original plan on 2026-11-10. Its draft stays in `tmp/col-stage2/w34/` until the batch closes.
 - Left by stage 3: the condenser's water curve extrapolates linearly past 10 K to its ceiling (kept byte-identical).
 - The Operation glass no longer fits one view at the design size once the column has tray data (7 px over) or conditions; it scrolls. The DCS column page has no glass (its 464 px window is narrower than the ports table).
 - Stage 4, step 4 (a member pump with no driver refuses Start while `machinesNeedPower` is on) is an assumption the owner may veto. A member's rated shaft power is its law at its rated flow and full speed at 1000 kg/m³ (the in-line rating): a hydrocarbon reflux books about 1.4× its shaft power. A running unit started before stage 4 has no members until its next Start.
 - Stage 3 changes old plants: after their next Start, a reboiler or pumparound cooler with no utility line limits the column.
 - Stage 3: an air-cooled pumparound cooler has no partnered utility side, so its duty stays free.
-- After stage 5: the owner's manual test in `run/saves/column-failure-modes`, then the final lane and the merge on the owner's word.
+- After stage 5: the owner's manual test in `run/saves/column-failure-modes` ([MANUAL_TEST.md](MANUAL_TEST.md)), then the final lane and the merge on the owner's word.
+- A level loop on a vessel whose outlet is two-phase plans by the mixture density. With its feed closed, a column's feed valve reads no flow, so a level loop on the column has no density (NO LEVEL BALANCE) and the feed returns to its set rate: the stage 5 run swung the feed between 0 and 1 (case 12's level form, not covered).
+- Case 9 (flooding by a set point) is not covered in the world: no set point reaches the flood limit at a fixed heat input (0.69, 0.81, 0.82). The limit is covered by `ColumnCycleTest` and `ColumnRunTest`.
+- The full-size run held two fluid islands in the last restore (1364: Newton line search stalled at 1.1e-7; 1403: singular sparse LU), likely plant A's off-gas and plant B's distillate lines. A fluid solver item, not this batch's.
+- After case 2 at full size, one throughput solve failed with "Empty fluid initialization" and the column ran OFF TABLE for about 2 minutes.
+- A flowmeter's FLOW reading is signed by its pipe run's compiled sense (placement order); `ControlLaw` refuses a negative one (REVERSE FLOW).
 - D3 was kept (rule B stays). One rule in place of A and B would need one run of `tools/column-operation` for its numbers.
 - Not in the plan: a turndown floor (owner Q8), vacuum columns, a relief path to the flare.
