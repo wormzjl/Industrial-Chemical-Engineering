@@ -2,7 +2,7 @@
 
 #moj_import <fog.glsl>
 
-// Packed layout: FxPackedSink (see fx_flame.vsh). Pass-through until W8: camera-facing sprites, as fx_plume.
+// Packed layout: FxPackedSink (see fx_flame.vsh). Camera-facing sprites, as fx_plume; fx_haze.fsh bends the screen copy.
 in vec3 Position;
 in vec4 Color;
 in vec2 UV0;

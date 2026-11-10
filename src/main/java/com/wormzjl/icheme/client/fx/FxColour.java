@@ -42,7 +42,20 @@ public final class FxColour {
         double white = .35 * core * core;
         double dark = 1 - .85 * clamp(soot) * smooth(.45, 1, along);
         double alpha = clamp(opacity) * (1 - .7 * smooth(.75, 1, along));
-        return argb(alpha, (c[0] + (1 - c[0]) * white) * dark, (c[1] + (1 - c[1]) * white) * dark, (c[2] + (1 - c[2]) * white) * dark);
+        double r = (c[0] + (1 - c[0]) * white) * dark, g = (c[1] + (1 - c[1]) * white) * dark, b = (c[2] + (1 - c[2]) * white) * dark;
+        double blue = blueRoot(along, heat, soot);
+        return argb(alpha, r + (BLUE[0] - r) * blue, g + (BLUE[1] - g) * blue, b + (BLUE[2] - b) * blue);
+    }
+
+    /** The blue of a flame's root, where the fuel burns before soot forms (CH and C₂ light), r g b. */
+    static final double[] BLUE = {.35, .55, 1};
+
+    /**
+     * How blue a flame is at {@code along} (0 root, 1 tip): 0.7 at the root of a hot clean flame, fading out by 0.18 of its
+     * length, less with soot (a sooty flame is yellow to its root). As {@code fx_flame.fsh}.
+     */
+    public static double blueRoot(double along, double heat, double soot) {
+        return .7 * clamp(heat) * (1 - clamp(soot)) * (1 - smooth(0, .18, clamp(along)));
     }
 
     /**

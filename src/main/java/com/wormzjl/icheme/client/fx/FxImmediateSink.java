@@ -20,7 +20,7 @@ final class FxImmediateSink implements FxSink {
     private final PoseStack.Pose pose;
     private final double ox, oy, oz;
     private final float leftX, leftY, leftZ, upX, upY, upZ;
-    private final double ease, seconds, daylight;
+    private final double ease, seconds, daylight, driftPeriod;
     private final FxKind kind;
     private final int light;
     private int left;
@@ -31,9 +31,11 @@ final class FxImmediateSink implements FxSink {
      * @param ease     the glide's ease this frame, 0 old to 1 new
      * @param seconds  game time, s, for the flipbook
      * @param daylight the sky brightness, 0.2 to 1
+     * @param driftPeriod the emitter's travelling-puff period, s ({@link FxEmitter#driftPeriod()})
      */
     FxImmediateSink(VertexConsumer out, PoseStack.Pose pose, double[] origin, org.joml.Vector3f leftAxis, org.joml.Vector3f upAxis,
-                    double ease, double seconds, double daylight, FxKind kind, int light, int quads) {
+                    double ease, double seconds, double daylight, double driftPeriod, FxKind kind, int light, int quads) {
+        this.driftPeriod = driftPeriod;
         this.out = out;
         this.pose = pose;
         this.ox = origin[0];
@@ -61,8 +63,22 @@ final class FxImmediateSink implements FxSink {
     @Override
     public void sprite(Point c, int params, int seed) {
         if (left <= 0) return;
-        double x = ox + c.x(ease), y = oy + c.y(ease), z = oz + c.z(ease), h = c.half(ease);
-        if (!Double.isFinite(x + y + z + h) || h <= 0) return;
+        square(ox + c.x(ease), oy + c.y(ease), oz + c.z(ease), c.half(ease), params, seed);
+    }
+
+    @Override
+    public void puff(Point start, double dx, double dy, double dz, int params, int seed) {
+        if (left <= 0) return;
+        // As fx_plume.vsh: the drift as the packed normal would carry it, the phase, the growth and the fade.
+        double length = Math.sqrt(dx * dx + dy * dy + dz * dz), cut = length > DRIFT_SCALE ? DRIFT_SCALE / length : 1;
+        double phase = FxSink.phase(seconds, driftPeriod, seed), along = phase * cut;
+        int alpha = (int) Math.round((params >>> 24) * FxSink.envelope(phase));
+        square(ox + start.x(ease) + dx * along, oy + start.y(ease) + dy * along, oz + start.z(ease) + dz * along,
+                start.half(ease) * (1 + GROWTH * phase), params & 0xFFFFFF | alpha << 24, seed);
+    }
+
+    private void square(double x, double y, double z, double h, int params, int seed) {
+        if (!Double.isFinite(x + y + z + h) || h <= 0 || (params >>> 24) == 0) return;
         left--;
         int colour = kind == FxKind.FLAME ? FxColour.flame(.5, (params >> 8 & 0xFF) / 255.0, (params & 0xFF) / 255.0, (params >>> 24) / 255.0)
                 : FxColour.puff(params, daylight);

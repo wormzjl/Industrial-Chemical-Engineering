@@ -8,6 +8,7 @@ import com.wormzjl.icheme.IChemE;
 import net.minecraft.client.renderer.RenderStateShard;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.resources.ResourceLocation;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -43,6 +44,8 @@ public final class FxRenderTypes {
 
     private static final RenderType SHADER_FLAME = effect("icheme_fx_flame", new RenderStateShard.ShaderStateShard(FxShaders::flame));
     private static final RenderType SHADER_PLUME = effect("icheme_fx_plume", new RenderStateShard.ShaderStateShard(FxShaders::plume));
+    /** The heat shimmer (W8): {@code Sampler0} is the screen copy, which {@link FxBatch} binds before it draws. */
+    private static final RenderType SHADER_HAZE = effect("icheme_fx_haze", new RenderStateShard.ShaderStateShard(FxShaders::haze));
     private static final Map<ResourceLocation, RenderType> WIRING = new ConcurrentHashMap<>();
 
     private FxRenderTypes() {
@@ -68,15 +71,20 @@ public final class FxRenderTypes {
 
     /** The SHADER path's type for {@code kind}: its shader state is set up before a cached buffer draws. */
     public static RenderType shader(FxKind kind) {
-        return kind == FxKind.FLAME ? SHADER_FLAME : SHADER_PLUME;
+        return switch (kind) {
+            case FLAME -> SHADER_FLAME;
+            case SMOKE, PLUME -> SHADER_PLUME;
+            case HAZE -> SHADER_HAZE;
+        };
     }
 
-    /** The COMPATIBLE path's type for {@code kind}. */
-    public static RenderType compatible(FxKind kind) {
+    /** The COMPATIBLE path's type for {@code kind}; null for HAZE, which only the SHADER path draws (owner X6 A). */
+    public static @Nullable RenderType compatible(FxKind kind) {
         return switch (kind) {
             case FLAME -> RenderType.entityTranslucentEmissive(FLAME_FLIPBOOK);
             case SMOKE -> RenderType.entityTranslucentCull(SMOKE);
             case PLUME -> RenderType.entityTranslucentCull(PLUME);
+            case HAZE -> null;
         };
     }
 

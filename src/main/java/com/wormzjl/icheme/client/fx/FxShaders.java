@@ -21,7 +21,7 @@ import java.util.function.Consumer;
  * <ul>
  * <li>{@code icheme:fx_flame}: flame ribbons, procedural (no texture).</li>
  * <li>{@code icheme:fx_plume}: smoke and plume puffs, procedural, lit by {@code Daylight} and {@code SunDirection}.</li>
- * <li>{@code icheme:fx_haze}: heat shimmer over a screen copy in {@code Sampler0} (W8 writes its GLSL).</li>
+ * <li>{@code icheme:fx_haze}: heat shimmer over a screen copy in {@code Sampler0}, which {@link FxBatch} takes before the haze draws (W8).</li>
  * <li>{@code icheme:rendertype_wiring}: the instrument wiring, the entity cutout shader plus {@code NormalMap} and
  * {@code SpecularMap} (W2 writes its lighting).</li>
  * </ul>

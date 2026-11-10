@@ -69,6 +69,8 @@ void main() {
     rgb = mix(rgb, vec3(1.0), 0.35 * core * core);
     // Soot darkens the upper flame.
     rgb *= 1.0 - 0.85 * soot * smoothstep(0.45, 1.0, along);
+    // The blue root of a clean flame, before soot forms (FxColour.blueRoot).
+    rgb = mix(rgb, vec3(0.35, 0.55, 1.0), 0.7 * heat * (1.0 - soot) * (1.0 - smoothstep(0.0, 0.18, along)));
 
     float alpha = body * params.a * (1.0 - 0.7 * smoothstep(0.75, 1.0, along)) * (0.75 + 0.5 * n);
     alpha = clamp(alpha, 0.0, 1.0) * ColorModulator.a;

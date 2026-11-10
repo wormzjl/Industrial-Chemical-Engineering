@@ -17,6 +17,8 @@ uniform vec3 Origin;
 uniform float FxTime;
 uniform float GlideStart;
 uniform float GlideSeconds;
+// The emitter's travelling-puff period, s (FxEmitter.driftPeriod).
+uniform float DriftPeriod;
 // Toward the sun, world axes (unit).
 uniform vec3 SunDirection;
 
@@ -39,6 +41,16 @@ void main() {
     int flags = UV1.y;
     vec2 c = vec2(float(flags & 1), float((flags >> 1) & 1));
     seed = float(flags >> 3) / 4096.0;
+    params = Color;
+
+    // A travelling puff (FxSink.puff): Normal is its drift over one period / DRIFT_SCALE (16 m); it moves along it, grows by
+    // half (GROWTH) and fades in and out over each DriftPeriod, its phase offset by its seed.
+    if (dot(Normal, Normal) > 1e-6) {
+        float phase = fract(FxTime / max(DriftPeriod, 0.001) + seed);
+        centre += Normal * 16.0 * phase;
+        halfSize *= 1.0 + 0.5 * phase;
+        params.a *= sin(3.14159265 * phase);
+    }
 
     // A slow billow: each puff swells and shrinks by up to 6 %.
     halfSize *= 1.0 + 0.06 * sin(FxTime * 0.8 + seed * 50.0);
@@ -47,7 +59,6 @@ void main() {
     view.xy += (c * 2.0 - 1.0) * halfSize;
     gl_Position = ProjMat * view;
     vertexDistance = fog_distance(centre, FogShape);
-    params = Color;
     corner = c;
     sunView = mat3(ModelViewMat) * SunDirection;
 }

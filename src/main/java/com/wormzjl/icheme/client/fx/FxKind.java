@@ -10,5 +10,10 @@ public enum FxKind {
     /** Smoke puffs: {@code fx_plume} / {@code entityTranslucentCull} on the smoke texture. */
     SMOKE,
     /** Condensed-water plume puffs: {@code fx_plume} / {@code entityTranslucentCull} on the plume texture. */
-    PLUME
+    PLUME,
+    /**
+     * Heat shimmer sprites (W8, owner X6 A): {@code fx_haze} over a screen copy, SHADER path only and only with
+     * {@code heat_haze} on; the COMPATIBLE path draws none.
+     */
+    HAZE
 }

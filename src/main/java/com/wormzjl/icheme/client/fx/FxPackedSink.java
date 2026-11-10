@@ -14,7 +14,8 @@ import com.mojang.blaze3d.vertex.VertexConsumer;
  * UV0        2 float     old − new centre, x and z, m
  * UV1        2 short     x: old − new centre y, mm (±32.767 m); y: flags = cornerU | cornerV &lt;&lt; 1 | ribbon &lt;&lt; 2 | seed &lt;&lt; 3
  * UV2        2 short     old half-size, new half-size, mm (0 to 32.767 m)
- * Normal     3 byte      a ribbon's axis (unit, new positions); zero for a sprite
+ * Normal     3 byte      a ribbon's axis (unit, new positions); a travelling puff's drift over one period / DRIFT_SCALE;
+ *                        zero for a still sprite
  * </pre>
  * The glide's start is not in the vertex: an emitter's vertices share it, so it is the per-draw uniform
  * {@code GlideStart}, with the emitter's origin as {@code Origin}. A point that moved more than 32 m between snapshots
@@ -43,6 +44,14 @@ final class FxPackedSink implements FxSink {
         if (left <= 0 || !finite(c)) return;
         left--;
         for (int[] k : CORNERS) vertex(c, params, flags(k[0], k[1], false, seed), 0, 0, 0);
+    }
+
+    @Override
+    public void puff(Point start, double dx, double dy, double dz, int params, int seed) {
+        if (left <= 0 || !finite(start) || !Double.isFinite(dx + dy + dz)) return;
+        left--;
+        float[] n = FxSink.drift(dx, dy, dz);
+        for (int[] k : CORNERS) vertex(start, params, flags(k[0], k[1], false, seed), n[0], n[1], n[2]);
     }
 
     @Override

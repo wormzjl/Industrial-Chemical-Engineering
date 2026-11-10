@@ -42,6 +42,14 @@ public interface FxEmitter {
     /** When the current glide started, s of game time ({@link FxGlide#seconds}); the shader eases from it. */
     double glideStart();
 
+    /**
+     * The period of this emitter's travelling puffs ({@link FxSink#puff}), s: fixed per emitter, so a new snapshot never
+     * jumps their phase. The SHADER path passes it as the per-draw uniform {@code DriftPeriod}.
+     */
+    default double driftPeriod() {
+        return 2;
+    }
+
     /** Packed light for the COMPATIBLE path; flames are full bright. */
     default int light() {
         return FULL_BRIGHT;

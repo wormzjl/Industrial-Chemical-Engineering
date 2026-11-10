@@ -1,5 +1,7 @@
 package com.wormzjl.icheme.client.fx;
 
+import com.mojang.blaze3d.pipeline.TextureTarget;
+import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.ByteBufferBuilder;
@@ -19,6 +21,8 @@ import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.RenderFrameEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import org.jetbrains.annotations.Nullable;
+import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL30;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
@@ -38,6 +42,9 @@ import java.util.Set;
  * <li><b>SHADER path.</b> Each emitter's quads live in a cached {@link VertexBuffer} ({@link FxPackedSink}), rebuilt only
  * when its {@link FxEmitter#revision()} or its allotment step changes; per frame the batch sets the shader once per kind
  * and per emitter only {@code Origin} and {@code GlideStart}. The vertex shader eases, faces the camera and flickers.</li>
+ * <li><b>Heat haze</b> (W8, owner X6 A). SHADER path only and only with {@code heat_haze} on: before the haze sprites draw,
+ * one blit copies the frame so far ({@link #copyScreen}), which {@code fx_haze} reads a few pixels off.</li>
+ * <li><b>Travelling puffs.</b> Each emitter's {@link FxEmitter#driftPeriod()} is the per-draw uniform {@code DriftPeriod}.</li>
  * <li><b>COMPATIBLE path.</b> Quads are written every frame ({@link FxImmediateSink}) into the vanilla buffer source,
  * one batch per render type.</li>
  * <li><b>Failures.</b> An emitter that throws turns off its type ({@link FxGuard#effect}); a failure in the batch itself
@@ -55,7 +62,10 @@ public final class FxBatch {
     private static final FxGuard PATH = new FxGuard("effects path", () -> "IChemE");
     private static final Set<FxEmitter> EMITTERS = new LinkedHashSet<>();
     private static final Map<FxEmitter, Built> BUILT = new IdentityHashMap<>();
-    private static final FxKind[][] SHADER_GROUPS = {{FxKind.FLAME}, {FxKind.SMOKE, FxKind.PLUME}};
+    /** The haze first, over a copy of the scene without our effects; then flames, then smoke and plumes. */
+    private static final FxKind[][] SHADER_GROUPS = {{FxKind.HAZE}, {FxKind.FLAME}, {FxKind.SMOKE, FxKind.PLUME}};
+    /** The heat haze's screen copy (W8): made at the first frame with haze, resized with the window. */
+    private static @Nullable TextureTarget screenCopy;
 
     private record Built(long revision, int quads, @Nullable VertexBuffer buffer) {
     }
@@ -86,6 +96,8 @@ public final class FxBatch {
         EMITTERS.clear();
         for (var built : BUILT.values()) if (built.buffer() != null) built.buffer().close();
         BUILT.clear();
+        if (screenCopy != null) screenCopy.destroyBuffers();
+        screenCopy = null;
     }
 
     @SubscribeEvent
@@ -129,8 +141,10 @@ public final class FxBatch {
 
         var candidates = new ArrayList<FxEmitter>();
         var pixels = new ArrayList<Double>();
+        // Heat haze: the SHADER path only, and only with heat_haze on (owner X6 A).
+        boolean haze = path == FxPath.SHADER && ClientConfig.heatHaze();
         for (var emitter : EMITTERS) {
-            if (FxGuard.effect(emitter.type()).disabled()) continue;
+            if (FxGuard.effect(emitter.type()).disabled() || emitter.kind() == FxKind.HAZE && !haze) continue;
             double x = emitter.x(), y = emitter.y(), z = emitter.z(), r = Math.max(.1, emitter.radius());
             double dx = x - camera.x, dy = y - camera.y, dz = z - camera.z, distanceSqr = dx * dx + dy * dy + dz * dz;
             if (distanceSqr > (reach + r) * (reach + r)) continue;
@@ -170,24 +184,28 @@ public final class FxBatch {
         for (var v : visible) for (var kind : kinds) if (v.emitter().kind() == kind) group.add(v);
         if (group.isEmpty()) return;
         var type = FxRenderTypes.shader(kinds[0]);
+        var window = Minecraft.getInstance().getWindow();
         ShaderInstance shader = null;
         boolean setUp = false;
         try {
             type.setupRenderState();
             setUp = true;
+            if (kinds[0] == FxKind.HAZE) RenderSystem.setShaderTexture(0, copyScreen(window.getWidth(), window.getHeight()));
             shader = RenderSystem.getShader();
             if (shader == null) return;
-            shader.setDefaultUniforms(VertexFormat.Mode.QUADS, event.getModelViewMatrix(), event.getProjectionMatrix(), Minecraft.getInstance().getWindow());
+            shader.setDefaultUniforms(VertexFormat.Mode.QUADS, event.getModelViewMatrix(), event.getProjectionMatrix(), window);
             uniform(shader, "FxTime", false, (float) (now - epoch));
             uniform(shader, "GlideSeconds", false, (float) FxGlide.SECONDS);
             uniform(shader, "Daylight", false, (float) daylight);
             uniform(shader, "SunDirection", false, sunX, sunY, 0F);
+            uniform(shader, "ScreenSize", false, (float) window.getWidth(), (float) window.getHeight());
             shader.apply();
             for (var v : group) {
                 var emitter = v.emitter();
                 var buffer = buffer(emitter, v.quads());
                 if (buffer == null) continue;
                 uniform(shader, "Origin", true, (float) (emitter.x() - cx), (float) (emitter.y() - cy), (float) (emitter.z() - cz));
+                uniform(shader, "DriftPeriod", true, (float) emitter.driftPeriod());
                 // A glide that never started (negative infinity) is settled: any start far enough back.
                 uniform(shader, "GlideStart", true, (float) Math.max(emitter.glideStart() - epoch, -1e6));
                 buffer.bind();
@@ -203,6 +221,7 @@ public final class FxBatch {
     private static void drawCompatible(RenderLevelStageEvent event, FxKind kind, List<Visible> visible, double now,
                                        double cx, double cy, double cz, double daylight) {
         var type = FxRenderTypes.compatible(kind);
+        if (type == null) return;
         var buffers = Minecraft.getInstance().renderBuffers().bufferSource();
         var stack = event.getPoseStack() == null ? new PoseStack() : event.getPoseStack();
         var pose = stack.last();
@@ -216,7 +235,7 @@ public final class FxBatch {
                 wrote = true;
                 double[] origin = {emitter.x() - cx, emitter.y() - cy, emitter.z() - cz};
                 var sink = new FxImmediateSink(consumer, pose, origin, camera.getLeftVector(), camera.getUpVector(),
-                        FxGlide.ease(emitter.glideStart(), now), now, daylight, kind, emitter.light(), v.quads());
+                        FxGlide.ease(emitter.glideStart(), now), now, daylight, emitter.driftPeriod(), kind, emitter.light(), v.quads());
                 FxGuard.effect(emitter.type()).run(() -> emitter.write(sink, v.quads()));
             }
         } finally {
@@ -262,11 +281,27 @@ public final class FxBatch {
         if (built != null && built.buffer() != null) built.buffer().close();
     }
 
+    /**
+     * Copies the frame drawn so far into {@link #screenCopy} for the heat haze (W8): one blit of the bound framebuffer's
+     * colour (the main target, or Fabulous' particles target), which is bound again after; returns the copy's texture.
+     */
+    private static int copyScreen(int width, int height) {
+        int bound = GL11.glGetInteger(GL30.GL_DRAW_FRAMEBUFFER_BINDING);
+        if (screenCopy == null) screenCopy = new TextureTarget(width, height, false, Minecraft.ON_OSX);
+        else if (screenCopy.width != width || screenCopy.height != height) screenCopy.resize(width, height, Minecraft.ON_OSX);
+        GlStateManager._glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, bound);
+        GlStateManager._glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, screenCopy.frameBufferId);
+        GlStateManager._glBlitFrameBuffer(0, 0, width, height, 0, 0, width, height, GL11.GL_COLOR_BUFFER_BIT, GL11.GL_NEAREST);
+        GlStateManager._glBindFramebuffer(GL30.GL_FRAMEBUFFER, bound);
+        return screenCopy.getColorTextureId();
+    }
+
     /** Sets a float uniform if the shader has it; after {@code apply()} it must be uploaded at once. */
     private static void uniform(ShaderInstance shader, String name, boolean upload, float... values) {
         var u = shader.getUniform(name);
         if (u == null) return;
         if (values.length == 1) u.set(values[0]);
+        else if (values.length == 2) u.set(values[0], values[1]);
         else u.set(values[0], values[1], values[2]);
         if (upload) u.upload();
     }
