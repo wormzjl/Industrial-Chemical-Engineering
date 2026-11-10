@@ -335,6 +335,9 @@ class ProcessUnitTest {
                 // A vacuum pump's suction and discharge on top (batch 2026-11-10-vacuum-pump).
                 Map.entry(Kind.LIQUID_RING_PUMP, Map.of(Role.SUCTION, "1+", Role.DISCHARGE, "1+")), Map.entry(Kind.DRY_SCREW_PUMP, Map.of(Role.SUCTION, "1+", Role.DISCHARGE, "1+")),
                 Map.entry(Kind.STEAM_TURBINE, Map.of(Role.STEAM, "0+", Role.EXHAUST, "1+")),
+                // A prime mover's fuel out of its +x side; a gas turbine's coil steam and feed water on top (batch 2026-11-10-prime-movers).
+                Map.entry(Kind.COMBUSTION_ENGINE, Map.of(Role.FUEL, "0+")),
+                Map.entry(Kind.GAS_TURBINE, Map.of(Role.FUEL, "0+", Role.STEAM, "1+", Role.FEEDWATER, "1+")),
                 // A flare stack's vent gas towards the front (batch 2026-11-09-flare-stack).
                 Map.entry(Kind.FLARE_STACK, Map.of(Role.FLARE_GAS, "2-")),
                 // A chimney's gas inlet towards the front (batch 2026-11-10-chimney).
@@ -358,7 +361,8 @@ class ProcessUnitTest {
         for (var kind : Kind.values()) assertEquals(kind.unit(), expected.containsKey(kind), kind + " has its nozzles' faces listed");
         for (var shape : everySize()) {
             var sides = shape.kind() == Kind.PUMP && shape.diameter() > ProcessUnit.OH2_MAX ? Map.of(Role.SUCTION, "1+", Role.DISCHARGE, "1+")
-                    : shape.kind() == Kind.BATCH_STILL ? stillSides(shape.still()) : expected.get(shape.kind());
+                    : shape.kind() == Kind.BATCH_STILL ? stillSides(shape.still())
+                    : shape.kind() == Kind.GAS_TURBINE && !PrimeMoverDesign.coil(shape) ? Map.of(Role.FUEL, "0+") : expected.get(shape.kind());
             var nozzles = shape.nozzles();
             assertEquals(sides.keySet(), new HashSet<>(nozzles.stream().map(EquipmentShape.Nozzle::role).toList()), shape.toString());
             assertEquals(sides.size(), nozzles.size(), shape.toString());
@@ -554,7 +558,7 @@ class ProcessUnitTest {
             boolean electric = shape.kind() == Kind.MOTOR || shape.kind() == Kind.GENERATOR || shape.kind() == Kind.AIR_COOLER || shape.kind() == Kind.INDUCED_DRAFT_COOLING_TOWER
                     || shape.kind() == Kind.VERTICAL_HEATER || shape.kind() == Kind.CABIN_HEATER || EquipmentServices.electricStill(shape);
             assertEquals(electric, terminal != null, shape.toString());
-            if (!UnitDesign.of(shape.kind()).hasDuty() && shape.kind() != Kind.COMPRESSOR && !shape.kind().vacuumPump()) {
+            if (!UnitDesign.of(shape.kind()).hasDuty() && shape.kind() != Kind.COMPRESSOR && !shape.kind().vacuumPump() && !shape.kind().primeMover()) {
                 assertEquals(List.of(), shafts, shape.toString());
                 continue;
             }

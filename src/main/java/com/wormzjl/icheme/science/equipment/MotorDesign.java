@@ -21,11 +21,11 @@ import java.util.Locale;
  */
 final class MotorDesign extends UnitDesign {
     /** The largest low-voltage TEFC motor, kW; above it a large motor. */
-    static final double LOW_VOLTAGE = 400;
+    static final double LOW_VOLTAGE = ProcessUnit.MOTOR_LOW_VOLTAGE;
     /** A new motor's poles: the common 4-pole, 1,500 rpm. */
     static final int DEFAULT_POLES = 4;
     /** The plinth at grade and the baseplate, m. */
-    static final double PLINTH = .2, BASEPLATE = .08;
+    static final double PLINTH = ProcessUnit.DRIVER_PLINTH, BASEPLATE = ProcessUnit.DRIVER_BASEPLATE;
 
     /** Whether this is the generator: shaft power in, FE out. */
     final boolean generator;
@@ -39,7 +39,7 @@ final class MotorDesign extends UnitDesign {
     /** A generator's rated powers, kW: the list to 400 MW (batch 2026-11-10-prime-movers, owner P9 A). */
     static final List<Double> GENERATOR_POWERS = MachineDuty.GENERATOR_POWERS;
     /** A two-pole generator above this, kW, is drawn as a turbo-generator (owner P9 A). */
-    static final double TURBO = 20000;
+    static final double TURBO = ProcessUnit.TURBO_GENERATOR;
 
     /** This kind's ratings. */
     List<Double> powers() {
@@ -184,17 +184,7 @@ final class MotorDesign extends UnitDesign {
 
     /** The body's diameter, m: a TEFC motor's {@link ProcessUnit#motorDiameter}, a large motor's frame 1.15 of it across. */
     static double frame(double kw) {
-        return (kw > LOW_VOLTAGE ? 1.15 : 1) * ProcessUnit.motorDiameter(kw);
-    }
-
-    /**
-     * A large generator's shaft height at grade, m: its drawing's ({@link #build}), so a driver drawn for it couples
-     * level (batch 2026-11-10-prime-movers, owner review T1); NaN at low voltage, whose shaft follows its feet.
-     */
-    static double generatorShaft(double kw, int poles) {
-        if (!(kw > LOW_VOLTAGE)) return Double.NaN;
-        double r = (poles == 2 && kw > TURBO ? .85 : 1) * frame(kw) / 2;
-        return Math.ceil(PLINTH + BASEPLATE + r + .1 - .5) + .5;
+        return ProcessUnit.motorFrame(kw);
     }
 
     /** The highest base under a shaft at {@code y} of radius {@code rs} that still leaves its coupling guard room ({@link ProcessUnit#coupling}). */

@@ -161,9 +161,9 @@ final class SteamTurbineTrain {
         // The horizontal split flange along both sides, its studs on top from 1 m; the casing's feet under it at the cone's end.
         double th = Math.max(.05, .1 * d);
         for (int side = -1; side <= 1; side += 2) {
-            ledge(m, a, side, zh, hp / 2, z1, hp / 2, shaft - th / 2, shaft + th / 2, e, true, false, Material.CLADDING);
-            if (hp < d) ledge(m, a, side, z1, hp / 2, z2, r, shaft - th / 2, shaft + th / 2, e, false, false, Material.CLADDING);
-            ledge(m, a, side, z2, r, ze, r, shaft - th / 2, shaft + th / 2, e, false, true, Material.MACHINE);
+            ProcessUnit.ledge(m, a, side, zh, hp / 2, z1, hp / 2, shaft - th / 2, shaft + th / 2, e, true, false, Material.CLADDING);
+            if (hp < d) ProcessUnit.ledge(m, a, side, z1, hp / 2, z2, r, shaft - th / 2, shaft + th / 2, e, false, false, Material.CLADDING);
+            ProcessUnit.ledge(m, a, side, z2, r, ze, r, shaft - th / 2, shaft + th / 2, e, false, true, Material.MACHINE);
             if (d >= 1) {
                 int studs = (int) Math.floor((ze - zh) / .3);
                 for (int k = 0; k < studs; k++) {
@@ -189,27 +189,6 @@ final class SteamTurbineTrain {
         if (z <= z1) return hp / 2;
         if (z >= z2) return d / 2;
         return hp / 2 + (d - hp) / 2 * (z - z1) / (z2 - z1);
-    }
-
-    /**
-     * A length of the split flange on the casing's {@code side} (±x of {@code a}) from station {@code za} (the casing's
-     * radius there {@code ra}) to {@code zb} ({@code rb}), {@code out} proud of the casing between heights y0 and y1: its
-     * top, underside and outer face, and the end faces asked for (a cone's flange is a slanted hexahedron).
-     */
-    static void ledge(Mesh m, double a, int side, double za, double ra, double zb, double rb, double y0, double y1, double out, boolean startCap, boolean endCap,
-                              Material material) {
-        double[][] in = {{a + side * (ra - .03), za}, {a + side * (rb - .03), zb}}, ex = {{a + side * (ra + out), za}, {a + side * (rb + out), zb}};
-        for (double y : new double[]{y0, y1})
-            m.flat(List.of(new double[]{in[0][0], y, za}, new double[]{ex[0][0], y, za}, new double[]{ex[1][0], y, zb}, new double[]{in[1][0], y, zb}),
-                    new double[]{0, y == y1 ? 1 : -1, 0}, material);
-        m.flat(List.of(new double[]{ex[0][0], y0, za}, new double[]{ex[1][0], y0, zb}, new double[]{ex[1][0], y1, zb}, new double[]{ex[0][0], y1, za}), new double[]{side, 0, 0},
-                material);
-        if (startCap)
-            m.flat(List.of(new double[]{in[0][0], y0, za}, new double[]{ex[0][0], y0, za}, new double[]{ex[0][0], y1, za}, new double[]{in[0][0], y1, za}), new double[]{0, 0, -1},
-                    material);
-        if (endCap)
-            m.flat(List.of(new double[]{in[1][0], y0, zb}, new double[]{ex[1][0], y0, zb}, new double[]{ex[1][0], y1, zb}, new double[]{in[1][0], y1, zb}), new double[]{0, 0, 1},
-                    material);
     }
 
     /**

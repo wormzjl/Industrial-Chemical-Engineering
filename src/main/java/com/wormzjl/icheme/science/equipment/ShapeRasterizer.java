@@ -53,6 +53,8 @@ public final class ShapeRasterizer {
     /** Bits per nozzle in a cell key, and the most nozzles that may reach one cell. */
     private static final int CODE_BITS = 7, KEYED_NOZZLES = 9;
     private static final int GEOMETRY_CACHE = 64, GEOMETRY_FACETS = 300_000;
+    /** A unit's shell tables: {@link EquipmentShape#facets}'s fewest, since a unit has no vessel. */
+    private static final int MIN_UNIT_FACETS = 12;
     private static final Map<EquipmentShape, Geometry> GEOMETRIES = new ConcurrentHashMap<>();
     private static final Map<EquipmentShape, Geometry> LOW_GEOMETRIES = new ConcurrentHashMap<>();
     /**
@@ -720,12 +722,15 @@ public final class ShapeRasterizer {
             mesh = new Mesh(detail);
             transform = shape.transform();
             mesh.transform(transform);
-            n = detail.sides(shape.facets());
+            unit = shape.designed() ? ProcessUnit.of(shape) : null;
+            // A unit has no vessel: its design draws and fills its body ({@link #inVessel}), so the shell's tables keep the
+            // fewest facets. A machine's size is its power in kW, and the vessel rule on it gave a 400 MW generator 942,480
+            // shell facets and 235,620 head bands, 198 MB of tables (lane fixes 0.25.0).
+            n = detail.sides(unit != null ? MIN_UNIT_FACETS : shape.facets());
             axis = shape.axis();
             radius = shape.radius();
             outer = shape.outerRadius();
             column = shape.column() ? new ColumnStructure(shape) : null;
-            unit = shape.designed() ? ProcessUnit.of(shape) : null;
             var along = transform.direction(new double[]{0, 1, 0});
             axial = along[0] != 0 ? 0 : along[1] != 0 ? 1 : 2;
             // A lying vessel's frame has the ground below it at x = -support (world y = 0).
@@ -946,7 +951,7 @@ public final class ShapeRasterizer {
 
         /** A head's rings from its tangent line (k = 0) to its apex: {height over the line, radius} at equal latitude steps. */
         private double[][] rings(double r, double depth) {
-            int bands = detail.bands(shape.bands());
+            int bands = detail.bands(unit != null ? MIN_UNIT_FACETS / 4 : shape.bands());
             var out = new double[bands + 1][];
             for (int k = 0; k <= bands; k++) {
                 double phi = Math.PI / 2 * k / bands;

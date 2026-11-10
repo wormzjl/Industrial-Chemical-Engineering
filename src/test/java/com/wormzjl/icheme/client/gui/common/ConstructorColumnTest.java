@@ -335,7 +335,7 @@ class ConstructorColumnTest {
     void eachPageShowsItsKeysWithTheCurrentPositionsLatched() {
         var t = new HeatControlColumnTest.Recording("gui.icheme.");
         var choose = buttons(ConstructorColumn.choose(Category.VESSELS, Equipment.COLUMN, 16, t));
-        assertEquals(List.of("category:vessels", "category:heat", "category:machines", "category:reactors", "category:solid_fuel", "category:vacuum", "import", "kind:vertical_drum", "kind:horizontal_drum",
+        assertEquals(List.of("category:vessels", "category:heat", "category:machines", "category:reactors", "category:solid_fuel", "category:vacuum", "category:power", "import", "kind:vertical_drum", "kind:horizontal_drum",
                 "kind:column", "kind:floating_roof_tank", "kind:sphere", "kind:adsorber", "kind:cyclone"), List.copyOf(choose.keySet()));
         assertTrue(choose.get("category:vessels").latched() && !choose.get("category:vessels").active() && choose.get("category:heat").active());
         assertTrue(choose.get("kind:column").latched() && choose.get("kind:column").active() && choose.get("kind:sphere").active() && !choose.get("kind:sphere").latched(),
