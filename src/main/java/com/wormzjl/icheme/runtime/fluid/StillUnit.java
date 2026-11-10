@@ -6,7 +6,7 @@ import java.util.Objects;
 
 /**
  * A placed batch still's facts (batch 2026-11-09-batch-distiller, W3 and W4; BATCH_STILL_ENGINE.md): what the player built
- * and put in. Its identity is its pot's device. Saved in the fluid facts from schema 15, after the pumps' health.
+ * and put in. Its identity is its pot's device. Saved in the fluid facts from schema 16, after the build facts.
  *
  * <ul>
  * <li>The devices the still registered: its pot (a fired reservoir), its condenser's water side, its distillate and vent

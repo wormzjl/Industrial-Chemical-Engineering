@@ -59,7 +59,7 @@ final class FluidFacts {
      *  16 (batch 2026-11-09-batch-distiller, W3 and W4): the world's batch stills (after the build facts); the control
      *  valve source {@code STILL}; the {@code diverter} control. */
     static final int SCHEMA=16;
-    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 15. */
+    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 16. */
     private static final Map<Class<?>,Map<String,String>> ALIASES=Map.of();
     private static final int MAXIMUM_FIELDS=256,MAXIMUM_ITEMS=1<<22,MAXIMUM_TEXTS=1<<20,MAXIMUM_ARRAY=4096,MAXIMUM_CHANNELS=1<<20;
     /** The cadence an island rebuilt from facts starts at (ticks): the shortest the clock allows, as after a merge. */
@@ -463,7 +463,7 @@ final class FluidFacts {
         return valid(q,"column setpoints",()->new com.wormzjl.icheme.science.column.operation.Setpoints(design,rate,condenser,reflux,reboiler,steam,draws,pumparounds));
     }
     /**
-     * A batch still (schema 15, batch 2026-11-09-batch-distiller): its pot's identity, its water side, distillate, vent and
+     * A batch still (schema 16, batch 2026-11-09-batch-distiller): its pot's identity, its water side, distillate, vent and
      * burners (0 for none), its design (pot volume, heater by name, built-in condenser, trays), its head's two accounts, the
      * heat left in its burning item (J), its firing (0 to 1), its reflux valve (the ratio, then whether it is closed: a closed
      * valve's ratio is +Infinity, which a facts number cannot hold, so it is written as the default ratio and the flag) and its
@@ -853,7 +853,7 @@ final class FluidFacts {
             }
             columns.put(u.id(),settled(u,registrations));
         }
-        // The batch stills (schema 15), their head's accounts on the current axis as a column's are: a component the data
+        // The batch stills (schema 16), their head's accounts on the current axis as a column's are: a component the data
         // no longer has leaves, booked as removed, with its molar share of the account's energy.
         var stills=new HashMap<Long,StillUnit>();
         for(var saved:world.stills) {

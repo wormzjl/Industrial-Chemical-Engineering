@@ -643,7 +643,7 @@ class FluidFactsCompatTest {
      * the methane Cp to the reference spine (decision E16): island-sets 616.608360671 to 615.412696198 J.
      */
     private static final double SCHEMA_ONE_DATA_CHANGE=-10.2747985856,ISLAND_SETS_DATA_CHANGE=615.412696198,STEAM_V2_DATA_CHANGE=126.968251430;
-    /** A batch still's facts (schema 15) survive an exact load and a facts-only rebuild, every field as saved. */
+    /** A batch still's facts (schema 16) survive an exact load and a facts-only rebuild, every field as saved. */
     @Test void aBatchStillsFactsSurviveBothExactAndFactsOnlyLoads(){
         var world=corpusWorld();var saved=image(world);var expected=stills(world.ledger.snapshot());
         assertFalse(expected.isEmpty(),"the corpus world has a still");
@@ -982,7 +982,7 @@ class FluidFactsCompatTest {
         }
         return text.toString();
     }
-    /** What schema 15 carries: each batch still by its pot, its devices, design, accounts, fire, settings and totals. */
+    /** What schema 16 carries: each batch still by its pot, its devices, design, accounts, fire, settings and totals. */
     private static String stills(WorldTopologyLedger.Snapshot world) {
         var text=new StringBuilder();
         for(var u:new TreeMap<>(world.stills()).values()) {
