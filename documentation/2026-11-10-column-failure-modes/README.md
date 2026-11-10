@@ -26,8 +26,9 @@ Stage 1 changed `science/column/operation/**` (new `Condition`, `ColumnStatus`, 
 
 ## Open items
 
-- Stages 1 to 5 of `EXECUTION_PLAN.md`; each needs the owner's approval of its sub-thread.
-- W3.4 waits for the owner: fold the downcomer backup into the flood fraction and re-pin the sample at 10 m, size the apron clearance from the liquid load, or keep the backup a separate reading.
+- Stages 4 and 5 of `EXECUTION_PLAN.md` (the owner approved all five sub-threads on 2026-11-10; stages 1 to 3 are done).
+- W3.4 (downcomer backup) is dropped: the owner chose the original plan on 2026-11-10. Its draft stays in `tmp/col-stage2/w34/` until the batch closes.
+- Left by stage 3: the heat screen does not offer the COLUMN mode for a kettle (stage 4, step 4a); the condenser's water curve extrapolates linearly past 10 K to its ceiling (kept byte-identical).
 - The Operation glass no longer fits one view at the design size once the column has tray data (7 px over) or conditions; it scrolls. The DCS column page has no glass (its 464 px window is narrower than the ports table).
 - Stage 4, step 4 (a member pump with no driver refuses Start while `machinesNeedPower` is on) is an assumption the owner may veto.
 - Stage 3 changes old plants: after their next Start, a reboiler or pumparound cooler with no utility line limits the column.

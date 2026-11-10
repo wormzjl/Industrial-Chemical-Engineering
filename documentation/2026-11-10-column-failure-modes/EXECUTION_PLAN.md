@@ -16,7 +16,7 @@ The owner took every recommended option on 2026-11-10 ("commence as recommended"
 | D6 | A stale table raises OFF TABLE and keeps running; the trip stays at 50 %. |
 | D7 | Member power is in this batch, after the utilities. |
 | D8 | One batch, in the order of the stages below. |
-| D9 | Downcomer backup is a second flood measure (plan section 3a, W3.4); the sizing readings it moves are listed for the owner. |
+| D9 | Dropped by the owner on 2026-11-10 ("if too expensive just use the original plan"): no downcomer backup (W3.4). Flooding is Fair's fraction alone. The stage 2 draft moved the crude sample's column from 8 m to 10 m. |
 | D10 | A test world with a full-size column, tested by script at the end and left for the owner's manual test (stage 5). |
 
 Changes against the plan, decided here to keep the work small:
@@ -131,6 +131,7 @@ Goal: every duty of a running column is owed to a utility through the heat in tr
 2. **Fans.** Each cycle the column draws `fanPower × cycle seconds` from its air cooler members' stores. Stores empty: fan step 0, the feed limited to what natural draught holds (`airSurface / airArea[0]`), condition `NO_POWER` with the condenser's index.
 3. **Pumps.** The reflux pump and each pumparound pump book their design shaft power × the cycle's share on their own train or store. A driver that cannot give it: the share is 0 and the condition is `NO_POWER` with the member's index. Under config `energy.machinesNeedPower`; with it off, nothing changes.
 4. **No driver at all.** With `machinesNeedPower` on, a member pump with no driver refuses Start: `NOT READY: the <member> has no driver`. This is logged here as a decision the owner may veto.
+4a. **The kettle's COLUMN mode on its heat screen** (left by stage 3): the heat screen offers the COLUMN mode for a kettle's tube side as it does for a condenser's water side, with hint and line texts that say "utility", not "water", where the side heats (gui-creation skill; `en_us.json` only; the heat GUI gates and a software render).
 5. **Rigs.** Give the shared rig motors and a creative FE source, or set `machinesNeedPower` off in the plants that are not about power.
 6. Tests: `ColumnRunTest` (fans without power limit to natural draught; a reflux pump without power stops the feed and raises NO POWER; power back resumes), `ColumnOperationGameTests` (fresh run id).
 

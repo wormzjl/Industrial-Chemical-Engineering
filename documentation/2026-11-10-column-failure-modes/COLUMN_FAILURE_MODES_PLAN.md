@@ -124,7 +124,7 @@ Not adjustable, on purpose: tray count, feed tray, diameter (the design), the ba
 |---|---|---|
 | D1 | A short reboiler or pumparound utility | **U1** cut the feed together (LIMIT; no solve). U2 take the duty delivered as the new specification and solve (as rule B does for steam; one solve per crossing, then U1 if it fails). U2 is closer to a real column, which keeps its feed and goes off its products. |
 | D2 | Flooding | **Limit** the feed (as the batch still caps its boil-up at its flood factor). Or a NOTICE only, as the simulator's run (the owner's earlier choice for the calculator). Or degraded separation: the table blended toward a one-stage flash split past 100 % (products off their cuts, no feed cut; an invented law). Section 3a. |
-| D9 | Downcomer backup as a second flood measure (W3.4) | **Yes**, with the moved sizing readings listed for approval. Or keep Fair's fraction alone. |
+| D9 (dropped 2026-11-10: Fair's fraction alone) | Downcomer backup as a second flood measure (W3.4) | **Yes**, with the moved sizing readings listed for approval. Or keep Fair's fraction alone. |
 | D3 | Steam's rule B | **Keep** (owner Q1). Or one rule for every input: cut together at once. That deletes `ruleA`, the STEAM_RATIO retry coupling and one status suffix; its effect on products under a steam shortage needs one run of `tools/column-operation` before it is proposed in numbers. |
 | D4 | Loop outputs on a column | **Feed rate only.** Or also the intensive set points, through a deadband of the drift band and `SOLVE_SPACING`: at most one solve per 30 s per column. |
 | D5 | Operating pressure as a set point | **No** in this batch: it moves every port's pressure (a ledger event per port) and the flood limit. Or yes, within the design's rating. |
