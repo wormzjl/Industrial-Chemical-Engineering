@@ -3256,12 +3256,15 @@ public final class ProcessUnit {
         mouth("stack_top", a, a, .92 * r, top);
         // The tip registers in the top cell on the axis: the stack is the run up to it.
         fluidPoint = new double[]{a, top - .5, a};
-        // The climb up the back, alternating either side of it, the last landing a whole ring.
+        // The climb up the back, alternating either side of it, each rest deck running from its ladder to the next one's foot
+        // (the heater stack's pattern: the next cage stands at the deck's end, not over it), the last landing a whole ring.
         var levels = Access.climbs(0, List.of(), (int) Math.floor(top - 2));
+        double right = Math.PI / 2 - .7, left = Math.PI / 2 + .7, clear = Access.clearance(plinth);
         var rings = new ArrayList<Ring>();
         for (int k = 0; k < levels.size(); k++) {
-            double in = Math.PI / 2 + (k % 2 == 0 ? -.5 : .5);
-            rings.add(k == levels.size() - 1 ? new Ring(levels.get(k), in, in, in + 2 * Math.PI) : new Ring(levels.get(k), in, Math.PI / 2 - 1.4, Math.PI / 2 + 1.4));
+            double in = k % 2 == 0 ? right : left;
+            if (k == levels.size() - 1) rings.add(new Ring(levels.get(k), in, in, in + 2 * Math.PI));
+            else rings.add(in == right ? new Ring(levels.get(k), in, right, left + clear) : new Ring(levels.get(k), in, right - clear, left));
         }
         ringAccess(a, a, plinth, Access.MIN_DECK, 0, rings);
         nozzles.add(radialSide(Role.STACK_GAS, a, com.wormzjl.icheme.science.fluid.network.Chimney.INLET, a, plinth, m, -1, Math.min(PipeSizes.MAX_OUTSIDE, od)));

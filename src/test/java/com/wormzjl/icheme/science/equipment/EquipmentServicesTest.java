@@ -82,6 +82,33 @@ class EquipmentServicesTest {
     }
 
     /**
+     * A chimney's data gland sits in its foot's side (batch 2026-11-10-chimney, as the flare's): on the centre of the bottom
+     * block's face it opens to, inside the frame, its junction box inside the frame too, for both forms at their smallest,
+     * middle and largest exit and every heading.
+     */
+    @Test
+    void aChimneysDataGlandSitsCentredOnTheBottomBlock() {
+        for (var kind : List.of(EquipmentShape.Kind.STEEL_STACK, EquipmentShape.Kind.BRICK_CHIMNEY)) {
+            double low = ProcessUnit.minDiameter(kind), high = ProcessUnit.maxDiameter(kind);
+            for (double d : new double[] {low, ProcessUnit.snap(kind, (low + high) / 2), high})
+                for (var heading : EquipmentShape.Heading.values()) {
+                    var shape = EquipmentShape.designed(kind, d, ProcessUnit.defaultLength(kind, d), heading, 0, ProcessUnit.Bank.ONE);
+                    var services = ShapeRasterizer.services(shape);
+                    var data = services.data();
+                    assertNotNull(data, shape.toString());
+                    double[] at = {data.x(), data.y(), data.z()}, size = {shape.sizeX(), shape.sizeY(), shape.sizeZ()};
+                    int axis = LineGeometry.step(data.face())[0] != 0 ? 0 : 2, across = 2 - axis;
+                    assertEquals(.5, at[1], 1e-9, shape + ": on the bottom block");
+                    assertEquals(Math.floor(at[across]) + .5, at[across], 1e-9, shape + ": centred on its block");
+                    assertTrue(at[axis] > 0 && at[axis] < size[axis], shape + ": the gland inside the frame");
+                    for (var c : services.enclosures())
+                        for (int a = 0; a < 3; a++)
+                            assertTrue(c.low()[a] >= 0 && c.high()[a] <= size[a], shape + ": its box inside the frame");
+                }
+        }
+    }
+
+    /**
      * A batch still's data gland sits on its terminal box (batch 2026-11-09-batch-distiller, W2), on the centre of the
      * bottom block's face it opens to, inside the frame, its box behind it and inside the frame, at every pot, option and
      * heading; only the electric still has one. Its data and FE sockets each face a cell outside the shell, where a cable

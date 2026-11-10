@@ -335,6 +335,8 @@ class ProcessUnitTest {
                 Map.entry(Kind.STEAM_TURBINE, Map.of(Role.STEAM, "0+", Role.EXHAUST, "1+")),
                 // A flare stack's vent gas towards the front (batch 2026-11-09-flare-stack).
                 Map.entry(Kind.FLARE_STACK, Map.of(Role.FLARE_GAS, "2-")),
+                // A chimney's gas inlet towards the front (batch 2026-11-10-chimney).
+                Map.entry(Kind.STEEL_STACK, Map.of(Role.STACK_GAS, "2-")), Map.entry(Kind.BRICK_CHIMNEY, Map.of(Role.STACK_GAS, "2-")),
                 // A batch still's by its options (batch 2026-11-09-batch-distiller, stillSides); here the default still's.
                 Map.entry(Kind.BATCH_STILL, stillSides(BatchStillOptions.DEFAULT)),
                 Map.entry(Kind.MOTOR, Map.of()), Map.entry(Kind.GENERATOR, Map.of()), Map.entry(Kind.GEARBOX, Map.of()),

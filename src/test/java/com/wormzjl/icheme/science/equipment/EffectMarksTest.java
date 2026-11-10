@@ -53,6 +53,23 @@ class EffectMarksTest {
             }
     }
 
+    /** A chimney's {@code stack_top} (batch 2026-11-10-chimney): one mouth at the top of the stack (a brick chimney's liner 1 m proud), on its centre line. */
+    @Test void aChimneysTopMarkStandsOnItsMouth() {
+        for (var kind : List.of(Kind.STEEL_STACK, Kind.BRICK_CHIMNEY))
+            for (double d : new double[] {ProcessUnit.minDiameter(kind), ProcessUnit.maxDiameter(kind)})
+                for (var heading : Heading.values()) {
+                    int height = ProcessUnit.defaultLength(kind, d);
+                    var shape = EquipmentShape.designed(kind, d, height, heading, 0, ProcessUnit.Bank.ONE);
+                    var marks = marks(shape, "stack_top");
+                    assertEquals(1, marks.size(), shape.toString());
+                    var box = marks.getFirst();
+                    assertEquals(kind == Kind.BRICK_CHIMNEY ? height + 1 : height, box[4], 1e-9, shape + ": the stack's mouth (a brick chimney's liner 1 m proud)");
+                    assertTrue(box[4] <= shape.sizeY(), shape + ": inside the box");
+                    assertEquals(shape.sizeX() / 2.0, (box[0] + box[3]) / 2, .5 + 1e-9, shape + ": on the centre line");
+                    assertTrue(box[3] - box[0] < d + 1e-9, shape + ": inside the mouth");
+                }
+    }
+
     @Test void eachFiredHeaterStackHasItsTopMark() {
         for (var shape : List.of(EquipmentShape.unit(Kind.VERTICAL_HEATER, 4.5, 9, Heading.EAST, 5), EquipmentShape.unit(Kind.VERTICAL_HEATER, 4, 8, Heading.NORTH, 3),
                 EquipmentShape.unit(Kind.CABIN_HEATER, 7, 20, Heading.WEST, 4), EquipmentShape.unit(Kind.CABIN_HEATER, 4, 25, Heading.SOUTH, 3))) {
