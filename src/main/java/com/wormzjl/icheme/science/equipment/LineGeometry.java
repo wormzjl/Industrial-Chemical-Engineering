@@ -669,6 +669,29 @@ public final class LineGeometry {
      * cable tool reaches ({@code DataPorts}: the gland stands 0.01 m out of the block face).
      */
     private static void diverter(Mesh m, Key key) {
+        diverter(m, key, true);
+    }
+
+    /** A diverter valve without its stem and actuator case, which a hand's turn draws apart ({@link #diverterActuator}). */
+    public static List<Polygon> diverterBody(Key key, RenderDetail detail) {
+        var m = new Mesh(detail);
+        diverter(m, key, false);
+        return m.cell(0, 0, 0);
+    }
+
+    /** A diverter valve's stem and actuator case alone, cell-local: what a turn rotates about {@link #diverterAxis}. */
+    public static List<Polygon> diverterActuator(Key key, RenderDetail detail) {
+        var m = new Mesh(detail);
+        actuator(m, key);
+        return m.cell(0, 0, 0);
+    }
+
+    /** The axis a diverter valve's plug, stem and actuator turn about, through the block's centre: out of its free face. */
+    public static double[] diverterAxis(Key key) {
+        return step(diverterSocketFace(key.facing())).clone();
+    }
+
+    private static void diverter(Mesh m, Key key, boolean actuator) {
         pipe(m, key);
         double od = PipeSizes.outsideOf(key.outside()), rb = Math.clamp(.62 * od, .04, .3);
         int face = diverterSocketFace(key.facing()), n = Math.max(12, PipeSizes.sides(2 * rb));
@@ -676,6 +699,14 @@ public final class LineGeometry {
         m.prism(f, rb, -.8 * rb, .8 * rb, n, Material.FLANGE);
         m.annulus(f, 0, rb, -.8 * rb, n, -1, Material.FLANGE);
         m.annulus(f, 0, rb, .8 * rb, n, 1, Material.FLANGE);
+        if (actuator) actuator(m, key);
+    }
+
+    /** A diverter valve's stem and its actuator case, from its seat to the block face. */
+    private static void actuator(Mesh m, Key key) {
+        double od = PipeSizes.outsideOf(key.outside()), rb = Math.clamp(.62 * od, .04, .3);
+        int face = diverterSocketFace(key.facing());
+        var f = frame(face, ref(face));
         double seat = Math.min(.36, .8 * rb + .12), top = .5;
         m.cylinder(f, .018, .8 * rb, seat, 8, Material.FLANGE);
         // The actuator case: square across its axis, from its seat to the block face.

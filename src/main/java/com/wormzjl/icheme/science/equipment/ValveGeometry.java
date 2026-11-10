@@ -45,7 +45,12 @@ public final class ValveGeometry {
 
     /** The shutoff valve. Pure geometry; the open flag changes only the lever, never pipe diameter or collision. */
     public static List<Polygon> shutoff(LineGeometry.Key key,boolean open,boolean accessory) { return shutoff(key,open,accessory,RenderDetail.NORMAL); }
-    public static List<Polygon> shutoff(LineGeometry.Key key,boolean open,boolean accessory,RenderDetail detail) {
+    public static List<Polygon> shutoff(LineGeometry.Key key,boolean open,boolean accessory,RenderDetail detail){return shutoff(key,open,accessory,detail,true);}
+    /**
+     * The shutoff valve, with its lever ({@code lever}) or without it: a hand turning the valve ({@code client.ValveTurns})
+     * draws the lever apart, {@link #shutoffLever} turned about {@link #shutoffStem} through {@link #shutoffPivot}.
+     */
+    public static List<Polygon> shutoff(LineGeometry.Key key,boolean open,boolean accessory,RenderDetail detail,boolean lever) {
         var mesh=new Mesh(detail);double od=PipeSizes.outsideOf(key.outside());
         int axis=key.facing()&~1,sides=Math.max(16,PipeSizes.sides(od));
         double radius=Math.min(.495,Math.max(.065,.64*od)),half=Math.min(.31,Math.max(.085,.55*od));
@@ -68,6 +73,27 @@ public final class ValveGeometry {
         mesh.cylinder(bonnet,1.65*neck,.80*radius,radius+.30*rise,12,Material.FLANGE);
         mesh.cylinder(bonnet,neck,radius,radius+rise,12,Material.BOLT);
         mesh.cylinder(bonnet,1.35*neck,radius+.50*rise,radius+.66*rise,6,Material.BOLT);
+        if(lever)lever(mesh,key,open);
+        if(!accessory)arms(mesh,key,half,od,sides);
+        return LineGeometry.overhanging(mesh);
+    }
+
+    /** The shutoff valve's lever alone, open (along the run), block-local: what a turn rotates about the stem. */
+    public static List<Polygon> shutoffLever(LineGeometry.Key key,RenderDetail detail){var mesh=new Mesh(detail);lever(mesh,key,true);return LineGeometry.overhanging(mesh);}
+    /** The shutoff valve's stem direction, a unit axis: the lever turns about it, a quarter turn from open to closed. */
+    public static double[] shutoffStem(LineGeometry.Key key){return (key.facing()&~1)==0?new double[]{0,0,-1}:new double[]{0,1,0};}
+    /** The point the lever turns about, block-local: the stem's top, where the lever's hub sits. */
+    public static double[] shutoffPivot(LineGeometry.Key key){double[] stem=shutoffStem(key);double reach=shutoffRadius(PipeSizes.outsideOf(key.outside()))+shutoffRise(PipeSizes.outsideOf(key.outside()));return plus(CENTRE,scale(stem,reach));}
+    private static double shutoffRadius(double od){return Math.min(.495,Math.max(.065,.64*od));}
+    private static double shutoffRise(double od){return Math.max(.055,.17*od);}
+
+    /** The quarter-turn lever on its hub at the stem's top; open lies along the run, closed across it (stem x run). */
+    private static void lever(Mesh mesh,LineGeometry.Key key,boolean open) {
+        double od=PipeSizes.outsideOf(key.outside());
+        int axis=key.facing()&~1;
+        double radius=shutoffRadius(od),neck=Math.max(.016,.12*od),rise=shutoffRise(od);
+        double[] run=LineGeometry.step(axis|1),stem=shutoffStem(key);
+        var bonnet=new Frame(CENTRE,stem,run);
         double length=Math.min(.95,Math.max(.36,1.10*od)),width=Math.max(.065,Math.min(.19,.24*od)),thickness=Math.max(.035,.085*od);
         var pivot=bonnet.along(radius+rise);double[] lever=open?run:cross(stem,run);
         bar(mesh,pivot,lever,stem,1.35*width,1.15*thickness,-.28*length,.12*length,BOTH_ENDS,Material.FLANGE);
@@ -78,8 +104,6 @@ public final class ValveGeometry {
         bar(mesh,pivot,lever,stem,1.28*width,1.50*thickness,.48*length,.96*length,START,Material.GUARD);
         bar(mesh,pivot,lever,stem,1.30*width,1.55*thickness,.94*length,length,BOTH_ENDS,Material.BOLT);
         mesh.cylinder(new Frame(pivot,stem,run),Math.max(1.35*neck,.55*width),-thickness,1.05*thickness,6,Material.BOLT);
-        if(!accessory)arms(mesh,key,half,od,sides);
-        return LineGeometry.overhanging(mesh);
     }
 
     /** The pressure-control valve; its arrows paint the casting's diagonal facets, clear of the bonnet. */

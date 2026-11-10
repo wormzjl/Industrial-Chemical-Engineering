@@ -88,10 +88,7 @@ public final class MachineAnimation {
         if (level == null || marker == null) return;
         var cells = EquipmentShellBlockEntity.clientMovingCells();
         if (cells.isEmpty() && RotationAnimation.shafts().isEmpty()) return;
-        if (marker != builtWith) {
-            release();
-            builtWith = marker;
-        }
+        if (!sprites()) return;
         var camera = event.getCamera().getPosition();
         var frustum = event.getFrustum();
         double rotationSeconds = (level.getGameTime() + event.getPartialTick().getGameTimeDeltaPartialTick(false)) / 20.0;
@@ -150,6 +147,20 @@ public final class MachineAnimation {
         }
     }
 
+    /**
+     * Whether the materials' sprites are loaded, the cached buffers released first when a resource reload replaced them;
+     * the other per-frame parts ({@link ValveTurnRenderer}) share these buffers and this check.
+     */
+    static boolean sprites() {
+        var marker = EquipmentShellModel.sprite(Mesh.Material.PIPE);
+        if (marker == null) return false;
+        if (marker != builtWith) {
+            release();
+            builtWith = marker;
+        }
+        return true;
+    }
+
     private static List<Mesh.Polygon> shaftPolygons(ShaftLook look) {
         return ShaftGeometry.polygons(look.axis(), look.pixels()).stream().map(polygon -> {
             var positions = polygon.positions().clone();
@@ -158,16 +169,21 @@ public final class MachineAnimation {
         }).toList();
     }
 
-    /** One shader setup and the same cached GPU path for machine parts and loose shafts. Render-thread owned. */
-    private static final class Draws implements AutoCloseable {
+    /** One shader setup and the same cached GPU path for machine parts, loose shafts and turning valves. Render-thread owned. */
+    static final class Draws implements AutoCloseable {
         private final RenderLevelStageEvent event;
         private final RenderType type = RenderType.solid();
         private ShaderInstance shader;
         private VertexBuffer bound;
         private boolean failed;
 
-        private Draws(RenderLevelStageEvent event) {
+        Draws(RenderLevelStageEvent event) {
             this.event = event;
+        }
+
+        /** Part {@code part} of {@code geometry} (a value key) at light {@code light}, uploaded once and drawn at {@code pose}. */
+        void draw(Object geometry, int part, int light, List<Mesh.Polygon> polygons, Matrix4f pose) {
+            draw(new Key(geometry, part, light), polygons, pose);
         }
 
         void draw(Key key, List<Mesh.Polygon> polygons, Matrix4f pose) {
