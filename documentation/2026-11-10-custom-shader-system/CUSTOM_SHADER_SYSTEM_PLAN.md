@@ -1,6 +1,6 @@
 # Custom shader and effects system: plan
 
-Batch `2026-11-10-custom-shader-system`, 2026-11-10. Status: plan, waiting for owner decisions (section 8).
+Batch `2026-11-10-custom-shader-system`, 2026-11-10. Status: decided 2026-11-10 (section 8); implementation started.
 
 ## 1. Request and reading
 
@@ -232,6 +232,8 @@ Order: W0 → W1 → W2 (the owner reviews the wires) → W3 → W4/W5 → W6/W7
 - Whether Sodium 0.6 and Embeddium fire `AFTER_PARTICLES` at the same point as vanilla. Today's ghost and outline renderers suggest yes.
 
 ## 8. Owner decisions
+
+**Decided 2026-11-10 (owner: "Go with recommended"):** X1 with a 0.5 m period and a light-blue sheath; X2 A, X3 A, X4 A, X5 A, X6 A, X7 A, X8 A, X9 A, X10 A, X11 A; X12 B (no fire light in this batch). The options stay listed below for the record.
 
 - **X1 Wires.** Decided (owner, 2026-11-10): the instrument wiring laid out on equipment from sensors to the data port (section 4.4). Open within it: the period (0.5 m between saddles and ties, recommended) and the sheath colour, light blue for intrinsically safe circuits (recommended after the ATEX check) or black.
 - **X9 Lead at the head.** A: an ATEX entry, a gland plus a cable in a drip loop (recommended). B: keep the straight steel lead (the North American conduit look).
