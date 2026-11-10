@@ -16,7 +16,7 @@ jfr=true; [ "${JFR:-1}" = 0 ] && jfr=false
 offline=--offline; [ "${ONLINE:-0}" = 1 ] && offline=
 
 # The run's client config, Gradle switches, windows and feed.
-props=""; windows="view,away"; noise=false; iris=false
+props=""; windows="view,away"; noise=false; iris=false; solo=false
 case "$run" in
   1-off) toml=off ;;
   1-auto) toml=auto ;;
@@ -26,7 +26,8 @@ case "$run" in
   4-sil) toml=auto; props="-PwithDh"; windows=far ;;
   4-nosil) toml=auto-nosilhouettes; props="-PwithDh"; windows=far ;;
   5-sound) toml=auto; windows=view; noise=true ;;
-  *) echo "lane.sh: unknown run $run (1-off 1-auto 2-compat 3-off 3-auto 4-sil 4-nosil 5-sound)" >&2; exit 2 ;;
+  6-solo) toml=auto; windows=view; solo=true; jfr=false ;;  # a listening run: each sound alone, its name on screen
+  *) echo "lane.sh: unknown run $run (1-off 1-auto 2-compat 3-off 3-auto 4-sil 4-nosil 5-sound 6-solo)" >&2; exit 2 ;;
 esac
 if [ "$iris" = true ] && [ ! -f "$pack" ]; then echo "lane.sh: shader pack $pack missing" >&2; exit 1; fi
 
@@ -41,7 +42,8 @@ mkdir -p "$logs"
 busy=$(powershell -NoProfile -Command "@(Get-CimInstance Win32_Process -Filter \"Name='java.exe'\" | Where-Object { \$_.CommandLine -match 'Gradle Test Executor|fml.modFolders' }).Count" | tr -d '\r')
 if [ "$busy" != "0" ]; then rmdir "$lock"; echo "lane.sh: $busy other test or game JVMs run; a timing lane runs alone" >&2; exit 2; fi
 cpu=$(powershell -NoProfile -Command "\$s=1..5|%{ (Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor -Filter \"Name='_Total'\").PercentProcessorTime; Start-Sleep 1 }; [math]::Round((\$s|Measure-Object -Average).Average)" | tr -d '\r')
-if [ "${cpu:-100}" -gt 25 ]; then rmdir "$lock"; echo "lane.sh: the machine's CPU is at ${cpu} %; a timing lane runs alone" >&2; exit 2; fi
+if [ "${CPU_OK:-0}" = 1 ]; then echo "lane.sh: CPU_OK=1: the CPU check is skipped (the owner's choice); the load is ${cpu} %"; fi
+if [ "${CPU_OK:-0}" != 1 ] && [ "$solo" != true ] && [ "${cpu:-100}" -gt 25 ]; then rmdir "$lock"; echo "lane.sh: the machine's CPU is at ${cpu} %; a timing lane runs alone" >&2; exit 2; fi
 free=$(powershell -NoProfile -Command "[math]::Round((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory/1MB,1)" | tr -d '\r')
 echo "lane.sh: $run on $tree, config $toml, ${props:-no extra mods}, windows $windows, CPU ${cpu} %, free RAM ${free} GB"
 
@@ -88,8 +90,9 @@ measure=60
 windows=$windows
 feed=true
 noise=$noise
-install=true
-server=true
+install=$([ "$solo" = true ] && echo false || echo true)
+server=$([ "$solo" = true ] && echo false || echo true)
+solo=$solo
 server.calls=200
 jfr=$jfr
 drums.x=-27

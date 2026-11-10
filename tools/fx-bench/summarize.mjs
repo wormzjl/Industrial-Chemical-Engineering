@@ -21,7 +21,8 @@ for (const name of readdirSync(dir).filter(n => n.endsWith('-summary.txt')).sort
     lines.push({ tag: m[1], run, fields, text: m[2].trim() });
   }
 }
-const find = (tag, label) => lines.find(l => l.tag === tag && l.fields.label === label)?.fields;
+// A window's result line, not its "FPS_PROBE start label=..." line.
+const find = (tag, label) => lines.find(l => l.tag === tag && l.fields.label === label && !l.text.startsWith('start '))?.fields;
 const all = (tag, run) => lines.filter(l => l.tag === tag && (!run || l.run === run));
 /** Value i (0 p50, 1 p95, ...) of a "a/b/c" field, as a number; NaN when absent. */
 const part = (fields, key, i = 0) => { const v = fields?.[key]; return v === undefined ? NaN : Number(v.split('/')[i]); };

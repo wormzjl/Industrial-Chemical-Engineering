@@ -605,7 +605,8 @@ public final class FrameTimeProbe {
                 }
                 case 64 -> { // the feed: from here to the quit
                     noiseSources = noiseSources();
-                    feeding = !"false".equals(pilot.getProperty("feed"));
+                    solo = "true".equals(pilot.getProperty("solo"));
+                    feeding = solo || !"false".equals(pilot.getProperty("feed"));
                     noiseFeed = "true".equals(pilot.getProperty("noise"));
                     waitUntil = now + 20_000_000_000L;
                     stage = 65;
@@ -613,7 +614,30 @@ public final class FrameTimeProbe {
                 case 65 -> {
                     logFeed("before");
                     fxWindow = 0;
-                    stage = 66;
+                    if (solo) {
+                        soloSteps = pilot.getProperty("solo.steps", SOLO_STEPS).split(",");
+                        soloStep = 0;
+                        stage = 80;
+                    } else stage = 66;
+                }
+                case 80 -> { // solo: one sound alone for solo.seconds, then solo.gap of silence (longer than a republication)
+                    if (soloStep >= soloSteps.length) {
+                        soloEnd();
+                        LOGGER.info("FX_SOLO done");
+                        feeding = false;
+                        quit(mc);
+                        stage = 71;
+                        return;
+                    }
+                    soloBegin(mc, soloSteps[soloStep].trim());
+                    waitUntil = now + Long.parseLong(pilot.getProperty("solo.seconds", "15")) * 1_000_000_000L;
+                    stage = 81;
+                }
+                case 81 -> {
+                    soloEnd();
+                    soloStep++;
+                    waitUntil = now + Long.parseLong(pilot.getProperty("solo.gap", "5")) * 1_000_000_000L;
+                    stage = 80;
                 }
                 case 66 -> {
                     queue(mc, windows[fxWindow].trim() + ".txt");
@@ -756,9 +780,22 @@ public final class FrameTimeProbe {
                 noiseField.setAccessible(true);
             }
             for (int k = 0; k < watches.length; k++) {
+                if (solo && k != soloFeedKind) continue;
                 var watch = (com.wormzjl.icheme.client.fx.state.CellWatch<?>) watches[k];
+                FluidNetwork.Target nearest = null;
+                if (solo) { // the solo feeds the structure nearest the listener only
+                    double best = Double.MAX_VALUE;
+                    for (Object o : (Set<?>) watchedField.get(watch)) {
+                        double d = ((FluidNetwork.Target) o).position().distSqr(mc.player.blockPosition());
+                        if (d < best) {
+                            best = d;
+                            nearest = (FluidNetwork.Target) o;
+                        }
+                    }
+                }
                 for (Object o : (Set<?>) watchedField.get(watch)) {
                     var target = (FluidNetwork.Target) o;
+                    if (solo && target != nearest) continue;
                     Object s = SYNTHETIC.get(target);
                     if (s == null) {
                         s = synthetic(k, target, mc.level);
@@ -768,7 +805,12 @@ public final class FrameTimeProbe {
                     if (watch.state(target) != s) accept(s);
                 }
             }
-            if (noiseFeed && noiseField.get(null) != noiseSeen) {
+            if (solo) {
+                if (soloSource != null && (noiseField.get(null) != noiseSeen || soloSource.kind().oneShot())) {
+                    com.wormzjl.icheme.client.fx.sound.FxSounds.accept(List.of(soloSource));
+                    noiseSeen = noiseField.get(null);
+                }
+            } else if (noiseFeed && noiseField.get(null) != noiseSeen) {
                 com.wormzjl.icheme.client.fx.sound.FxSounds.accept(noiseSources);
                 noiseSeen = noiseField.get(null);
             }
@@ -824,6 +866,11 @@ public final class FrameTimeProbe {
      * The sound lane's noise (plan lane 5) around {@code noise.x}, {@code noise.y}, {@code noise.z} (the view point): 100
      * valves at a 1 MPa drop on a 2 m grid, gas and liquid in turn, 1 m below; 20 tower fans at full speed on a ring of 12 m.
      */
+    /** The sound lane's valve kinds, in turn on the grid: gas, plain liquid, cavitating, flashing. */
+    private static final com.wormzjl.icheme.runtime.fluid.Noise.Kind[] VALVES = {com.wormzjl.icheme.runtime.fluid.Noise.Kind.VALVE_GAS,
+            com.wormzjl.icheme.runtime.fluid.Noise.Kind.VALVE_LIQUID, com.wormzjl.icheme.runtime.fluid.Noise.Kind.VALVE_CAVITATING,
+            com.wormzjl.icheme.runtime.fluid.Noise.Kind.VALVE_FLASHING};
+
     private static List<com.wormzjl.icheme.runtime.fluid.Noise.Source> noiseSources() {
         double x = Double.parseDouble(pilot.getProperty("noise.x", ".5")), y = Double.parseDouble(pilot.getProperty("noise.y", "-40"));
         double z = Double.parseDouble(pilot.getProperty("noise.z", "-30"));
@@ -833,12 +880,76 @@ public final class FrameTimeProbe {
         for (int i = 0; i < 10; i++)
             for (int k = 0; k < 10; k++)
                 out.add(new com.wormzjl.icheme.runtime.fluid.Noise.Source(BlockPos.containing(x - 9 + 2 * i, y - 1, z - 9 + 2 * k),
-                        (i + k) % 2 == 0 ? com.wormzjl.icheme.runtime.fluid.Noise.Kind.VALVE_GAS : com.wormzjl.icheme.runtime.fluid.Noise.Kind.VALVE_LIQUID, valve, 1));
+                        VALVES[(i + k) % VALVES.length], valve, 1));
         for (int j = 0; j < 20; j++) {
             double a = 2 * Math.PI * j / 20;
             out.add(new com.wormzjl.icheme.runtime.fluid.Noise.Source(BlockPos.containing(x + 12 * Math.cos(a), y, z + 12 * Math.sin(a)), com.wormzjl.icheme.runtime.fluid.Noise.Kind.FAN, fan, 1));
         }
         return List.copyOf(out);
+    }
+
+    // The sound solo (lane.sh 6-solo, a listening run, not a timing run): each sound alone, its name on screen.
+    private static final String SOLO_STEPS = "valve_gas,valve_liquid,valve_cavitating,valve_flashing,vent,fan,water_fall,burner,gear,kettle,pipe_knock,flare,still";
+    private static boolean solo;
+    private static String[] soloSteps;
+    private static int soloStep, soloFeedKind = -1;
+    private static com.wormzjl.icheme.runtime.fluid.Noise.Source soloSource;
+
+    /**
+     * One solo step: a noise kind is one source {@code solo.distance} m (default 8) ahead of the listener at the view point,
+     * at the level its model gives at a usual duty; {@code flare} and {@code still} feed only the structure of that kind
+     * nearest the listener, who stands 30 m (flare) or 8 m (still) from it.
+     */
+    private static void soloBegin(Minecraft mc, String step) {
+        double x = Double.parseDouble(pilot.getProperty("noise.x", ".5")), y = Double.parseDouble(pilot.getProperty("noise.y", "-40"));
+        double z = Double.parseDouble(pilot.getProperty("noise.z", "-30")), d = Double.parseDouble(pilot.getProperty("solo.distance", "8"));
+        soloSource = null;
+        soloFeedKind = -1;
+        String what;
+        COMMANDS.add("gamemode spectator");
+        switch (step) {
+            case "flare" -> {
+                COMMANDS.add("tp @s -3.5 -55 16 0 -15");
+                soloFeedKind = 0;
+                what = "flare stack at its rating with soot, 30 m";
+            }
+            case "still" -> {
+                COMMANDS.add("tp @s -1.5 -57 -8 0 20");
+                soloFeedKind = 1;
+                what = "batch still distilling at full fire, 8 m";
+            }
+            default -> {
+                var kind = com.wormzjl.icheme.runtime.fluid.Noise.Kind.valueOf(step.toUpperCase(java.util.Locale.ROOT));
+                double level = switch (kind) {
+                    case VALVE_GAS, VALVE_LIQUID, VALVE_CAVITATING, VALVE_FLASHING -> com.wormzjl.icheme.runtime.fluid.Noise.valve(1e6);
+                    case VENT -> com.wormzjl.icheme.runtime.fluid.Noise.vent(1, com.wormzjl.icheme.runtime.fluid.Noise.ventDensity(.029, 300), .01);
+                    case FAN -> com.wormzjl.icheme.runtime.fluid.Noise.fans(1, com.wormzjl.icheme.runtime.fluid.Noise.TOWER_FAN, 1);
+                    case WATER_FALL -> com.wormzjl.icheme.runtime.fluid.Noise.water(100);
+                    case BURNER -> com.wormzjl.icheme.runtime.fluid.Noise.burner(5e6);
+                    case GEAR -> com.wormzjl.icheme.runtime.fluid.Noise.gear(5e5, 1);
+                    case KETTLE -> com.wormzjl.icheme.runtime.fluid.Noise.kettle(2e6);
+                    case PIPE_KNOCK -> com.wormzjl.icheme.runtime.fluid.Noise.knock(1000, 2);
+                };
+                if (!Double.isFinite(level)) level = 90;
+                COMMANDS.add("tp @s " + x + " " + y + " " + z + " 0 0");
+                soloSource = new com.wormzjl.icheme.runtime.fluid.Noise.Source(BlockPos.containing(x, y, z + d), kind, (float) level, 1);
+                noiseSeen = null;
+                what = String.format(java.util.Locale.ROOT, "%.0f dB sound power, %.0f m ahead, volume %.2f", level, d,
+                        com.wormzjl.icheme.client.fx.sound.SoundBudget.volume(level));
+            }
+        }
+        String text = "[sound solo " + (soloStep + 1) + "/" + soloSteps.length + "] " + step + ": " + what;
+        LOGGER.info("FX_SOLO {}", text);
+        if (mc.player != null) mc.player.displayClientMessage(Component.literal(text), false);
+        mc.gui.setOverlayMessage(Component.literal(step), false);
+    }
+
+    /** The step's end: its source and feed stop; a fed structure's real (idle) state returns with the next republication. */
+    private static void soloEnd() {
+        soloSource = null;
+        soloFeedKind = -1;
+        if (Minecraft.getInstance().level != null) com.wormzjl.icheme.client.fx.sound.FxSounds.accept(List.of());
+        noiseSeen = null;
     }
 
     /** One {@code FX_FEED} line: per watch, the structures holding a synthetic state over those watched; the effects' sources. */
