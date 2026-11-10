@@ -83,6 +83,19 @@ public final class FxGlide {
         return to.clone();
     }
 
+    /**
+     * As {@link #from()} without the copy, for a caller that only reads it before the next {@link #arrive}: the per-frame
+     * writes. Never modify it.
+     */
+    public double[] fromShared() {
+        return from;
+    }
+
+    /** As {@link #to()} without the copy, on the terms of {@link #fromShared()}. */
+    public double[] toShared() {
+        return to;
+    }
+
     /** When the glide started, s; negative infinity before the first snapshot. */
     public double start() {
         return start;

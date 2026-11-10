@@ -25,6 +25,9 @@ final class FxImmediateSink implements FxSink {
     private FxKind kind;
     private int light;
     private int left;
+    /** Reused per vertex and per plain ribbon, so the write allocates nothing; render thread only. */
+    private final org.joml.Vector3f position = new org.joml.Vector3f(), normal = new org.joml.Vector3f();
+    private final double[] axis = new double[3];
 
     /**
      * @param origin   the emitter origin minus the camera position, m
@@ -114,7 +117,10 @@ final class FxImmediateSink implements FxSink {
 
     @Override
     public void ribbon(Point a, double va, Point b, double vb, int params, int seed) {
-        double[] axis = {b.x(ease) - a.x(ease), b.y(ease) - a.y(ease), b.z(ease) - a.z(ease)};
+        double[] axis = this.axis;
+        axis[0] = b.x(ease) - a.x(ease);
+        axis[1] = b.y(ease) - a.y(ease);
+        axis[2] = b.z(ease) - a.z(ease);
         ribbon(a, va, axis, b, vb, axis, params, seed);
     }
 
@@ -128,14 +134,14 @@ final class FxImmediateSink implements FxSink {
         double heat = (params >> 8 & 0xFF) / 255.0, soot = (params & 0xFF) / 255.0, opacity = (params >>> 24) / 255.0;
         int frame = (int) Math.floorMod((long) Math.floor(seconds * FRAME_RATE) + seed, (long) FxRenderTypes.FLAME_FRAMES);
         float frameTop = (float) frame / FxRenderTypes.FLAME_FRAMES, frameHeight = 1F / FxRenderTypes.FLAME_FRAMES;
-        double[][] ends = {{ax, ay, az, ha, va}, {bx, by, bz, hb, vb}};
-        double[][] tangents = {ta, tb};
         for (int k = 0; k < 4; k++) {
             int cu = k == 1 || k == 2 ? 1 : 0, cv = k >= 2 ? 1 : 0;
-            double[] e = ends[cv];
-            double tx = tangents[cv][0], ty = tangents[cv][1], tz = tangents[cv][2];
+            // This end: a's for the first two corners, b's for the last two.
+            double ex = cv == 0 ? ax : bx, ey = cv == 0 ? ay : by, ez = cv == 0 ? az : bz, eh = cv == 0 ? ha : hb, ev = cv == 0 ? va : vb;
+            double[] t = cv == 0 ? ta : tb;
+            double tx = t[0], ty = t[1], tz = t[2];
             // The side is across this end's tangent and the line of sight, so the ribbon turns about its centre line.
-            double sx = ty * -e[2] - tz * -e[1], sy = tz * -e[0] - tx * -e[2], sz = tx * -e[1] - ty * -e[0];
+            double sx = ty * -ez - tz * -ey, sy = tz * -ex - tx * -ez, sz = tx * -ey - ty * -ex;
             double s = Math.sqrt(sx * sx + sy * sy + sz * sz);
             if (s < 1e-9) {
                 sx = -leftX;
@@ -143,19 +149,25 @@ final class FxImmediateSink implements FxSink {
                 sz = -leftZ;
                 s = 1;
             }
-            double w = (2 * cu - 1) * e[3] / s;
-            int colour = kind == FxKind.FLAME ? FxColour.flame(e[4], heat, soot, opacity) : FxColour.puff(params, daylight);
-            float v = frameTop + (float) (1 - Math.max(0, Math.min(1, e[4]))) * frameHeight;
-            vertex(e[0] + sx * w, e[1] + sy * w, e[2] + sz * w, colour, cu, v, 0, 1, 0);
+            double w = (2 * cu - 1) * eh / s;
+            int colour = kind == FxKind.FLAME ? FxColour.flame(ev, heat, soot, opacity) : FxColour.puff(params, daylight);
+            float v = frameTop + (float) (1 - Math.max(0, Math.min(1, ev))) * frameHeight;
+            vertex(ex + sx * w, ey + sy * w, ez + sz * w, colour, cu, v, 0, 1, 0);
         }
     }
 
+    /**
+     * One vertex, as {@code addVertex(pose, x, y, z)} and {@code setNormal(pose, nx, ny, nz)} wrote it (the same matrix
+     * transforms, in the same order), into this sink's reused vectors: those defaults allocate a vector a call.
+     */
     private void vertex(double x, double y, double z, int argb, float u, float v, float nx, float ny, float nz) {
-        out.addVertex(pose, (float) x, (float) y, (float) z)
+        var p = pose.pose().transformPosition((float) x, (float) y, (float) z, position);
+        var lit = out.addVertex(p.x(), p.y(), p.z())
                 .setColor(argb >> 16 & 0xFF, argb >> 8 & 0xFF, argb & 0xFF, argb >>> 24)
                 .setUv(u, v)
                 .setOverlay(OverlayTexture.NO_OVERLAY)
-                .setLight(light)
-                .setNormal(pose, nx, ny, nz);
+                .setLight(light);
+        var n = pose.transformNormal(nx, ny, nz, normal);
+        lit.setNormal(n.x(), n.y(), n.z());
     }
 }

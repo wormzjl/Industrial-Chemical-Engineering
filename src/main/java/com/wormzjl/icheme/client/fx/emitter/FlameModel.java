@@ -90,45 +90,69 @@ public final class FlameModel {
      */
     public static void write(FxSink sink, double[] from, double[] to, int ribbons, int seed) {
         boolean flame = ribbons > 0 && (from[LENGTH] > .05 || to[LENGTH] > .05);
-        if (flame) for (int j = 0; j < ribbons; j++) ribbon(sink, from, to, j, ribbons, seed);
+        if (flame) {
+            // Two tangents, reused across every joint of every ribbon: a sink reads them during its call only.
+            var points = new FxSink.Point[SEGMENTS + 1];
+            double[] previous = new double[3], next = new double[3];
+            for (int j = 0; j < ribbons; j++) ribbon(sink, from, to, j, ribbons, seed, points, previous, next);
+        }
         pilots(sink, to[TIP], seed);
     }
 
-    private static void ribbon(FxSink sink, double[] from, double[] to, int j, int of, int flare) {
+    private static void ribbon(FxSink sink, double[] from, double[] to, int j, int of, int flare, FxSink.Point[] points, double[] previous, double[] next) {
         // Inner ribbons are narrower and hotter, and stand a little to either side across the wind.
         double scale = 1 - .18 * j, heat = to[HEAT] * (.6 + .4 * j / Math.max(1, of - 1));
         double side = (j % 2 == 0 ? 1 : -1) * .25 * Math.min(j, 2);
         int params = FxSink.params(0, heat, to[SOOT], to[OPACITY]), seed = flare + j * 397 & FxSink.SEED_MASK;
-        var points = new FxSink.Point[SEGMENTS + 1];
         for (int i = 0; i <= SEGMENTS; i++) {
             double v = (double) i / SEGMENTS;
             points[i] = new FxSink.Point(at(from, v, side, 0), at(from, v, side, 1), at(from, v, side, 2), at(to, v, side, 0), at(to, v, side, 1), at(to, v, side, 2),
                     half(from, v) * scale, half(to, v) * scale);
         }
-        double[] previous = tangent(points, 0);
+        tangent(points, 0, previous);
         for (int i = 1; i <= SEGMENTS; i++) {
-            double[] next = tangent(points, i);
+            tangent(points, i, next);
             sink.ribbon(points[i - 1], (double) (i - 1) / SEGMENTS, previous, points[i], (double) i / SEGMENTS, next, params, seed);
+            double[] t = previous;
             previous = next;
+            next = t;
         }
     }
 
     /** The unit tangent of the new centre line at point {@code i}: the chord across its neighbours (one-sided at the ends). */
     static double[] tangent(FxSink.Point[] points, int i) {
+        return tangent(points, i, new double[3]);
+    }
+
+    /** As {@link #tangent(FxSink.Point[], int)}, into {@code out}; returns {@code out}. */
+    static double[] tangent(FxSink.Point[] points, int i, double[] out) {
         var a = points[Math.max(0, i - 1)];
         var b = points[Math.min(points.length - 1, i + 1)];
         double x = b.newX() - a.newX(), y = b.newY() - a.newY(), z = b.newZ() - a.newZ(), length = Math.sqrt(x * x + y * y + z * z);
-        return length < 1e-9 ? new double[]{0, 1, 0} : new double[]{x / length, y / length, z / length};
+        if (length < 1e-9) {
+            out[0] = 0;
+            out[1] = 1;
+            out[2] = 0;
+        } else {
+            out[0] = x / length;
+            out[1] = y / length;
+            out[2] = z / length;
+        }
+        return out;
     }
 
-    /** Coordinate {@code axis} of the centre line at {@code v}, moved {@code side} half-widths across the wind (sin π v). */
+    /**
+     * Coordinate {@code axis} of the centre line at {@code v}, moved {@code side} half-widths across the wind (sin π v): the
+     * sums of {@link #centre} in the same order, without its array.
+     */
     private static double at(double[] f, double v, double side, int axis) {
-        double[] c = centre(f, v);
+        double a = 2 * v * (1 - v), b = v * v;
+        if (axis == 1) return a * (.85 * f[END + 1]) + b * f[END + 1];
         double ex = f[END], ez = f[END + 2], h = Math.hypot(ex, ez);
         // Across the wind: the end's horizontal way turned a quarter; x when the flame stands straight.
-        double ax = h > 1e-9 ? -ez / h : 1, az = h > 1e-9 ? ex / h : 0;
         double shift = side * f[HALF] * Math.sin(Math.PI * v);
-        return axis == 0 ? c[0] + ax * shift : axis == 1 ? c[1] : c[2] + az * shift;
+        return axis == 0 ? a * (.3 * f[END]) + b * f[END] + (h > 1e-9 ? -ez / h : 1) * shift
+                : a * (.3 * f[END + 2]) + b * f[END + 2] + (h > 1e-9 ? ex / h : 0) * shift;
     }
 
     /** The pilots: three small flames round the rim, a third of a turn apart. */

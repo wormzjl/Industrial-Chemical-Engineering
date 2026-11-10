@@ -50,7 +50,7 @@ final class GlideEmitter implements FxEmitter {
      * about the origin: the same values change nothing; new ones start a glide from where the effect stands.
      */
     void aim(double[] target, int quads, double radius, double now) {
-        if (quads == this.quads && Arrays.equals(target, glide.to())) return;
+        if (quads == this.quads && Arrays.equals(target, glide.toShared())) return;
         glide.arrive(target, now);
         this.quads = quads;
         // The old shape still shows while the glide runs: the radius covers both.
@@ -134,6 +134,7 @@ final class GlideEmitter implements FxEmitter {
 
     @Override
     public void write(FxSink sink, int quads) {
-        geometry.write(sink, glide.from(), glide.to(), quads);
+        // The glide's own arrays: every geometry only reads them (FlameModel, PlumeModel, StillModel, haze, drip).
+        geometry.write(sink, glide.fromShared(), glide.toShared(), quads);
     }
 }

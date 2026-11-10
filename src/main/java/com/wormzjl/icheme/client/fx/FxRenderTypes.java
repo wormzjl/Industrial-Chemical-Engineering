@@ -80,13 +80,16 @@ public final class FxRenderTypes {
 
     /** The COMPATIBLE path's type for {@code kind}; null for HAZE, which only the SHADER path draws (owner X6 A). */
     public static @Nullable RenderType compatible(FxKind kind) {
+        // Kept on first use: vanilla's memoized lookups return these same instances, but box their key a call.
         return switch (kind) {
-            case FLAME -> RenderType.entityTranslucentEmissive(FLAME_FLIPBOOK);
-            case SMOKE -> RenderType.entityTranslucentCull(SMOKE);
-            case PLUME -> RenderType.entityTranslucentCull(PLUME);
+            case FLAME -> compatibleFlame != null ? compatibleFlame : (compatibleFlame = RenderType.entityTranslucentEmissive(FLAME_FLIPBOOK));
+            case SMOKE -> compatibleSmoke != null ? compatibleSmoke : (compatibleSmoke = RenderType.entityTranslucentCull(SMOKE));
+            case PLUME -> compatiblePlume != null ? compatiblePlume : (compatiblePlume = RenderType.entityTranslucentCull(PLUME));
             case HAZE -> null;
         };
     }
+
+    private static @Nullable RenderType compatibleFlame, compatibleSmoke, compatiblePlume;
 
     /**
      * The SHADER path's wiring type on {@code texture} (CUSTOM_SHADER_SYSTEM_PLAN.md section 4.4): the entity cutout state
