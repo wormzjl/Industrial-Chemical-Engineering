@@ -44,6 +44,8 @@ public final class UnitTypes {
             Map.entry("compressor", new MoverUnit(new FlowControl.Compressor(1, 2))),
             Map.entry("ejector", new EjectorUnit()),
             Map.entry("vacuum_pump", new com.wormzjl.icheme.science.flowsheet.unit.VacuumPumpUnit()),
+            Map.entry("combustion_engine", new com.wormzjl.icheme.science.flowsheet.unit.PrimeMoverUnit(com.wormzjl.icheme.science.machine.PrimeMover.Family.ENGINE)),
+            Map.entry("gas_turbine", new com.wormzjl.icheme.science.flowsheet.unit.PrimeMoverUnit(com.wormzjl.icheme.science.machine.PrimeMover.Family.GAS_TURBINE)),
             Map.entry("steam_turbine", new TurbineUnit()));
 
     private UnitTypes() {

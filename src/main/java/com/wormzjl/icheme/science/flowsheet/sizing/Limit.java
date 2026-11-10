@@ -271,6 +271,12 @@ public enum Limit {
     /** The inlet's pressure under its steam class's header: a casing is rated for its class. The world reads the real inlet and refuses none. */
     TURBINE_INLET(SHOULD, given(Sense.MOST), "kPa", "This plan: `MachineDuty.Steam`", QUIET),
 
+    // ---- Prime movers (batch 2026-11-10-prime-movers) ----
+    /** The fuel heat at design flow against the model's rated fuel: the governor holds the fuel there. */
+    PRIME_MOVER_FUEL(MUST, given(Sense.MOST), "MW", "World: `PrimeMover.Model.ratedFuel`"),
+    /** The rated fuel over the load's, as {@link #AUTO_SPARE}'s 20 %: the owner's "always have enough excess". */
+    PRIME_MOVER_SPARE(SHOULD, least(20), "%", "This plan", QUIET),
+
     // ---- Types, section 3.10: what section 3.4 has no row for ----
     /** Above the largest cabin, a count of cabins. */
     TYPE_CABIN_LARGEST(RULE, most(largestHeater(EquipmentShape.Kind.CABIN_HEATER)), "MW", "[FH-TYPE], World"),

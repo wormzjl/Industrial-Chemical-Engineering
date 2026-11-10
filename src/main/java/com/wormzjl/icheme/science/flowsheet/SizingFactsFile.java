@@ -95,6 +95,7 @@ final class SizingFactsFile {
                 case "TANK" -> new TankSizing.Size(fields.name("type", UnitType.class), fields.whole("count"), fields.number("diameter"), fields.whole("shell"));
                 case "EJECTOR" -> new EjectorSizing.Size(fields.number("suction"));
                 case "VACUUM_PUMP" -> new com.wormzjl.icheme.science.flowsheet.sizing.VacuumPumpSizing.Size(fields.name("type", com.wormzjl.icheme.science.machine.VacuumPump.Type.class), fields.whole("model"));
+                case "PRIME_MOVER" -> new com.wormzjl.icheme.science.flowsheet.sizing.PrimeMoverSizing.Size(fields.name("family", com.wormzjl.icheme.science.machine.PrimeMover.Family.class), fields.whole("model"), fields.bool("coil"));
                 case "FLARE" -> new FlareSizing.Size(fields.number("tip"));
                 case "CHIMNEY" -> new com.wormzjl.icheme.science.flowsheet.sizing.ChimneySizing.Size(fields.name("form", com.wormzjl.icheme.science.equipment.EquipmentShape.Kind.class, com.wormzjl.icheme.science.equipment.EquipmentShape.Kind.STEEL_STACK), fields.number("diameter"), fields.whole("height"));
                 case "BATCH_STILL" -> new StillSizing.Size(fields.number("pot"), new BatchStillOptions(fields.name("heater", BatchStillOptions.Heater.class),
@@ -192,6 +193,12 @@ final class SizingFactsFile {
                 json.addProperty("count", tank.count());
                 json.addProperty("diameter", tank.diameter());
                 json.addProperty("shell", tank.shell());
+            }
+            case com.wormzjl.icheme.science.flowsheet.sizing.PrimeMoverSizing.Size mover -> {
+                json.addProperty("kind", "PRIME_MOVER");
+                json.addProperty("family", mover.family().name());
+                json.addProperty("model", mover.model());
+                json.addProperty("coil", mover.coil());
             }
             case com.wormzjl.icheme.science.flowsheet.sizing.VacuumPumpSizing.Size vacuum -> {
                 json.addProperty("kind", "VACUUM_PUMP");

@@ -62,9 +62,12 @@ final class FluidFacts {
      *  18 (batch 2026-11-10-rigid-reservoir): a vessel's {@code rigid}, after its contents: whether its wall has once carried
      *  them; absent means a bag (decision D54).
      *  19 (batch 2026-11-10-vacuum-pump): the {@code machine} control's law {@code vacuum_pump}: its capacity (m³/s), rated
-     *  speed (rpm) and type by name, after the four fields every law carries. */
-    static final int SCHEMA=19;
-    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 19. */
+     *  speed (rpm) and type by name, after the four fields every law carries.
+     *  20 (batch 2026-11-10-prime-movers): the shaft unit kinds {@code COMBUSTION_ENGINE} and {@code GAS_TURBINE} (each naming its
+     *  fuel void), the control valve source {@code ENGINE} (a prime mover's fuel valve), the heat unit {@code PRIME_MOVER} and
+     *  its side {@code EXHAUST} (a gas turbine's steam coil), generators past 20 MW and of 12 poles. */
+    static final int SCHEMA=20;
+    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 20. */
     private static final Map<Class<?>,Map<String,String>> ALIASES=Map.of();
     private static final int MAXIMUM_FIELDS=256,MAXIMUM_ITEMS=1<<22,MAXIMUM_TEXTS=1<<20,MAXIMUM_ARRAY=4096,MAXIMUM_CHANNELS=1<<20;
     /** The cadence an island rebuilt from facts starts at (ticks): the shortest the clock allows, as after a merge. */
@@ -517,7 +520,7 @@ final class FluidFacts {
             double set=q.f64(0),limit=q.f64(0),ratio=q.f64(0);return valid(q,"shaft settings",()->new ShaftUnit.Settings(running,mode,set,limit,ratio));});
         var trip=f.name(com.wormzjl.icheme.science.machine.ShaftTrain.Trip.class,com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE);
         required(kind,f,"shaft unit kind");required(position,f,"shaft unit position");
-        if(axis>2||poles>8||ends.size()>ShaftUnit.MAXIMUM_ENDS)throw f.invalid("shaft unit "+id);
+        if(axis>2||poles>12||ends.size()>ShaftUnit.MAXIMUM_ENDS)throw f.invalid("shaft unit "+id);
         return valid(f,"shaft unit "+id,()->new ShaftUnit(id,kind,position,(int)axis,ends,fluid,power,speed,(int)poles,drive,settings,trip,null));
     }
     /** A heat side's unit (schema 5): its unit and side by name, area, partner, control and heat in transit; an air cooler's fans (schema 11). */

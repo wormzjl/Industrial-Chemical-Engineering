@@ -124,7 +124,48 @@ class FluidFactsCompatTest {
         ejector(world);
         world.runTo(890);
         vacuumPumps(world);
-        world.runTo(900);return world;
+        world.runTo(900);
+        primeMovers(world);
+        world.runTo(910);return world;
+    }
+    /**
+     * Facts schema 20 (batch 2026-11-10-prime-movers): a 300 MW heavy-duty gas turbine's fuel void at its combustor's
+     * pressure (control valve source {@code ENGINE}) and its steam coil (heat unit {@code PRIME_MOVER}, side {@code EXHAUST}),
+     * its shaft unit ({@code GAS_TURBINE}) naming the fuel void, on a 400 MW two-pole generator; a 20 MW medium-speed
+     * engine's fuel void and unit ({@code COMBUSTION_ENGINE}) on a 25 MW twelve-pole generator at 500 rpm. No pipe meets them.
+     */
+    private void primeMovers(EventPathWorld world) {
+        long fuel=world.ledger.nextIdentity(),coil=fuel+1,engine=fuel+2;
+        var gt=com.wormzjl.icheme.science.machine.PrimeMover.models(com.wormzjl.icheme.science.machine.PrimeMover.Family.GAS_TURBINE).getLast();
+        var ms=com.wormzjl.icheme.science.machine.PrimeMover.models(com.wormzjl.icheme.science.machine.PrimeMover.Family.ENGINE).getLast();
+        var voidAt=(java.util.function.Function<Integer,PhysicalFluidTopology.Device>)z->{var p=new PhysicalFluidTopology.Position(EventPathWorld.DIM,120,64,z);
+            return new PhysicalFluidTopology.Device(z==0?fuel:engine,p,Kind.VOID,Direction.NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),FlowControl.ControlValve.engine(),
+                    List.of(new PhysicalFluidTopology.Port(p,Direction.WEST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.VESSEL)),true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,null);};
+        var cold=new PhysicalFluidTopology.Position(EventPathWorld.DIM,124,64,0); var hot=new PhysicalFluidTopology.Position(EventPathWorld.DIM,124,64,3);
+        var side=new PhysicalFluidTopology.Device(coil,cold,Kind.HEAT_SIDE,Direction.NORTH,new PipeResistance.Geometry(30,.9,1.5e-6,0),new FlowControl.Passive(),
+                List.of(new PhysicalFluidTopology.Port(cold,Direction.WEST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.INLET),
+                        new PhysicalFluidTopology.Port(hot,Direction.WEST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.OUTLET)),
+                true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,
+                new HeatUnit(com.wormzjl.icheme.science.equipment.HeatSides.Unit.PRIME_MOVER,com.wormzjl.icheme.science.equipment.HeatSides.Side.EXHAUST,53000,0));
+        var air=FluidDeviceSpec.nitrogen(CATALOG).composition();
+        world.registry.submit(List.of(
+                new WorldTopologyLedger.Edit(fuel,new WorldTopologyLedger.Registration(voidAt.apply(0),new FluidDeviceSpec(1,298.15,gt.combustor(),air),0)),
+                new WorldTopologyLedger.Edit(coil,new WorldTopologyLedger.Registration(side,FluidDeviceSpec.water(CATALOG),0)),
+                new WorldTopologyLedger.Edit(engine,new WorldTopologyLedger.Registration(voidAt.apply(6),new FluidDeviceSpec(1,298.15,101325,air),0))),engine+1,null);
+        world.runTo(905);
+        var none=ShaftUnit.Settings.DEFAULT;var trip=com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE;var fixed=com.wormzjl.icheme.science.equipment.MachineDuty.Drive.FIXED;
+        double gtNet=new com.wormzjl.icheme.science.machine.PrimeMover(gt).ratedNet(),msNet=new com.wormzjl.icheme.science.machine.PrimeMover(ms).ratedNet();
+        world.ledger.shaft(new ShaftUnit(world.ledger.reserve(1),com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.GAS_TURBINE,at(121,0),0,List.of(end(121,0,1,true)),fuel,gtNet,3000,0,fixed,
+                new ShaftUnit.Settings(true,com.wormzjl.icheme.science.machine.ShaftTrain.Mode.SPEED,.98,0,0),trip,null));
+        world.ledger.shaft(new ShaftUnit(world.ledger.reserve(1),com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.GENERATOR,at(122,0),0,List.of(end(122,0,-1,false)),0,4e8,3000,2,fixed,none,trip,null));
+        world.ledger.shaft(new ShaftUnit(world.ledger.reserve(1),com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.COMBUSTION_ENGINE,at(121,6),0,List.of(end(121,6,1,true)),engine,msNet,500,0,fixed,none,trip,null));
+        world.ledger.shaft(new ShaftUnit(world.ledger.reserve(1),com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.GENERATOR,at(122,6),0,List.of(end(122,6,-1,false)),0,2.5e7,500,12,fixed,none,trip,null));
+    }
+    /** The prime movers' fuel voids, each its identity and pressure (Pa), in identity order: what schema 20 carries. */
+    private static String primeMovers(WorldTopologyLedger.Snapshot world) {
+        var text=new StringBuilder();
+        for(var r:new TreeMap<>(world.active()).values())if(r.device().engineFuel()){if(!text.isEmpty())text.append(";");text.append(r.device().id()).append("=").append(r.spec().pressure());}
+        return text.toString();
     }
     /**
      * Facts schema 19 (batch 2026-11-10-vacuum-pump): two vacuum pump casings, a two-stage liquid ring of 500 m³/h at
@@ -806,6 +847,8 @@ class FluidFactsCompatTest {
                 assertEquals(Long.parseLong(expected.getProperty("rigid","0")),rigid(rebuilt.checkpoint()),folder+": rigid vessels");
                 // Schema 19 wrote the vacuum pump casings; an older image reads none.
                 assertEquals(expected.getProperty("vacuumPumps",""),vacuumPumps(ledger),folder+": vacuum pumps");
+                // Schema 20 wrote the prime movers' fuel voids, steam coils and units; an older image reads none.
+                assertEquals(expected.getProperty("primeMovers",""),primeMovers(ledger),folder+": prime movers");
                 assertEquals(Long.parseLong(expected.getProperty("vessels")),vessels,folder+": vessels");
                 double total=Arrays.stream(moles(rebuilt.checkpoint(),model.componentCount())).sum();
                 assertEquals(Double.parseDouble(expected.getProperty("moles")),total,1e-12*total,folder+": stock");
@@ -946,6 +989,7 @@ class FluidFactsCompatTest {
         props.setProperty("vessels",Long.toString(contents(loaded.checkpoint()).values().stream().filter(v->v instanceof PassiveNetwork.Inventory).count()));
         props.setProperty("rigid",Long.toString(rigid(loaded.checkpoint())));
         props.setProperty("vacuumPumps",vacuumPumps(loaded.world().orElseThrow()));
+        props.setProperty("primeMovers",primeMovers(loaded.world().orElseThrow()));
         props.setProperty("moles",Double.toString(Arrays.stream(moles(loaded.checkpoint(),model.componentCount())).sum()));
         try(var out=Files.newBufferedWriter(folder.resolve("expected.properties"))){props.store(out,"Facts schema "+FluidFacts.SCHEMA+" corpus image, state format "+FluidCheckpointCodec.VERSION);}
     }
