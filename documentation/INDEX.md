@@ -14,9 +14,9 @@ Status words:
 
 | Batch | Purpose | Status |
 |---|---|---|
-| [2026-11-09-batch-distiller/](2026-11-09-batch-distiller/README.md) | Fired or electric batch still with optional condenser and small column; batch run in the simulator | In progress since 2026-11-09 |
-| [2026-11-09-flare-stack/](2026-11-09-flare-stack/README.md) | Scalable flare stack: heating-value floor, capacity by tip and height, status on the data network | In progress since 2026-11-09 |
-| [2026-11-09-furnace-fuel-power/](2026-11-09-furnace-fuel-power/README.md) | Fired heaters burn fuel and draw power for their air fans; equipment alarms on the control system | In progress since 2026-11-09 |
+| [2026-11-09-batch-distiller/](2026-11-09-batch-distiller/README.md) | Fired or electric batch still with optional condenser and small column; batch run in the simulator | Implemented 2026-11-10 |
+| [2026-11-09-flare-stack/](2026-11-09-flare-stack/README.md) | Scalable flare stack: heating-value floor, capacity by tip and height, status on the data network | Implemented 2026-11-10 |
+| [2026-11-09-furnace-fuel-power/](2026-11-09-furnace-fuel-power/README.md) | Fired heaters burn fuel and draw power for their air fans; equipment alarms on the control system | Implemented 2026-11-10 |
 | [2026-11-09-final-lane-selection/](2026-11-09-final-lane-selection/README.md) | The final lane runs only the tests a batch's changes can reach, by recorded load sets | Implemented 2026-11-09 |
 | [2026-11-09-drawn-connections/](2026-11-09-drawn-connections/README.md) | Drawn pipe joints are the network's joins; in-line machines drawn as movers | Implemented 2026-11-09 (0.23.4) |
 | [2026-11-09-lod-rendering/](2026-11-09-lod-rendering/README.md) | Distance-based level of detail for instruments, cables and equipment bodies | Implemented 2026-11-09 |

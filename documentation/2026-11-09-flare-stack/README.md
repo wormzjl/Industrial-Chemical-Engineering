@@ -1,6 +1,6 @@
 # Flare stack
 
-Status: **In progress since 2026-11-09** (built, targeted tests pass, not committed). Branch `claude/furnace-fuel-power-requirements-f7a46e`: it reads the `combustion` sub-records of [2026-11-09-furnace-fuel-power](../2026-11-09-furnace-fuel-power/README.md).
+Status: **Implemented 2026-11-10** (merged as 0.24.0 with the batch still). Branch `claude/furnace-fuel-power-requirements-f7a46e`: it reads the `combustion` sub-records of [2026-11-09-furnace-fuel-power](../2026-11-09-furnace-fuel-power/README.md).
 
 ## Scope
 

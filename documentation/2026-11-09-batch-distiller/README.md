@@ -1,6 +1,6 @@
 # Batch distiller
 
-Status: **In progress since 2026-11-09** (owner decisions B1 to B8 answered; build in three phases). Branch
+Status: **Implemented 2026-11-10** (merged as 0.24.0; owner decisions B1 to B8, built in three phases). Branch
 `claude/furnace-fuel-power-requirements-f7a46e`: it reuses the burners and FE draw of
 [2026-11-09-furnace-fuel-power](../2026-11-09-furnace-fuel-power/README.md).
 
@@ -157,6 +157,9 @@ distiller in the process simulator.
   shortened to fit `UnitTextTest` (`19364adba`); translations of 236 new and 3 changed keys in zh_cn, fr_fr, es_es, ja_jp
   (`52415da92`); tooling cleanup, the B3 comparison to `tools/batch-still-column/` (`ebaad1be0`); stale schema comments
   (`7be61a4b9`); code guide, ten chapters (`e7d2889af`). Review: [MERGE_REVIEW.md](MERGE_REVIEW.md).
+- 2026-11-10: final lane at `38e695dd9`: 3061 of 3062 tests, GameTests 87/87, campaign as 0.23.5. `NameplateTest`: the
+  500 L electric still without a condenser had no plate (its pot and skirt one cylinder, bowing 0.08 m across a plate);
+  owner chose A, the terminal box 0.52 m wide, the plate on its face (`68bc05675`). Merged as 0.24.0.
 
 ## Open items
 

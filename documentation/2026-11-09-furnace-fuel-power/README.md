@@ -1,6 +1,6 @@
 # Fired heater fuel, combustion-air power and alarms
 
-Status: **In progress since 2026-11-09**. Branch `claude/furnace-fuel-power-requirements-f7a46e`. Not committed, not merged.
+Status: **Implemented 2026-11-10** (merged as 0.24.0 with the flare stack and the batch still). Branch `claude/furnace-fuel-power-requirements-f7a46e`.
 
 ## Scope
 
