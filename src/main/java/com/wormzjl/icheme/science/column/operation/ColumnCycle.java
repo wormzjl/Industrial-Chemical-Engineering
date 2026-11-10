@@ -161,14 +161,36 @@ public final class ColumnCycle {
      * has none). {@link Double#POSITIVE_INFINITY} where a duty has no utility side: it is free, as every duty but the
      * condenser's was before W4.
      */
-    public record Rooms(double condenser, double reboiler, double[] pumparounds, double airFeed) {
+    public record Rooms(double condenser, double reboiler, double[] pumparounds, double airFeed, boolean airUnpowered, int[] unpowered) {
         /** Every duty free. */
         public static final Rooms NONE = free(Double.POSITIVE_INFINITY);
 
+        /**
+         * @param airUnpowered whether some of the air condenser's banks have no power (W5): {@code airFeed} then holds them at
+         *                     natural draught, and the air's limit is {@code NO_POWER} of the condenser (member 0)
+         * @param unpowered    the members that have no power for the cycle and stop it (W5: a pump's share is 0), by index
+         */
         public Rooms {
             pumparounds = pumparounds.clone();
+            unpowered = unpowered.clone();
             if (Double.isNaN(condenser) || Double.isNaN(reboiler) || Double.isNaN(airFeed)) throw new IllegalArgumentException("Invalid duty room");
             for (double r : pumparounds) if (Double.isNaN(r)) throw new IllegalArgumentException("Invalid duty room");
+            for (int i : unpowered) if (i < 0) throw new IllegalArgumentException("Invalid member index");
+        }
+
+        /** Every member powered. */
+        public Rooms(double condenser, double reboiler, double[] pumparounds, double airFeed) {
+            this(condenser, reboiler, pumparounds, airFeed, false, new int[0]);
+        }
+
+        /** These rooms with the members' power (W5). */
+        public Rooms withPower(double airFeed, boolean airUnpowered, int[] unpowered) {
+            return new Rooms(condenser, reboiler, pumparounds, airFeed, airUnpowered, unpowered);
+        }
+
+        @Override
+        public int[] unpowered() {
+            return unpowered.clone();
         }
 
         /** Every utility free, the air holding at most {@code airFeed} mol/s of feed. */
@@ -177,15 +199,15 @@ public final class ColumnCycle {
         }
 
         public Rooms withCondenser(double value) {
-            return new Rooms(value, reboiler, pumparounds, airFeed);
+            return new Rooms(value, reboiler, pumparounds, airFeed, airUnpowered, unpowered);
         }
 
         public Rooms withReboiler(double value) {
-            return new Rooms(condenser, value, pumparounds, airFeed);
+            return new Rooms(condenser, value, pumparounds, airFeed, airUnpowered, unpowered);
         }
 
         public Rooms withPumparounds(double[] value) {
-            return new Rooms(condenser, reboiler, value, airFeed);
+            return new Rooms(condenser, reboiler, value, airFeed, airUnpowered, unpowered);
         }
 
         @Override
@@ -252,7 +274,10 @@ public final class ColumnCycle {
             if (alphaCondenser < 1) conditions.add(new Condition.Active(Condition.COOLING_SHORT, alphaCondenser));
         }
         double alphaAir = Math.max(0, airFeed) * seconds / demand;
-        if (alphaAir < 1) conditions.add(new Condition.Active(Condition.COOLING_SHORT, alphaAir));
+        // Banks without power hold their surface at natural draught (W5): where that limits, the cause is the power.
+        if (alphaAir < 1) conditions.add(rooms.airUnpowered() ? new Condition.Active(Condition.NO_POWER, alphaAir, 0, "") : new Condition.Active(Condition.COOLING_SHORT, alphaAir));
+        // A pump without power stops the cycle (W5): its share is 0.
+        for (int member : rooms.unpowered()) conditions.add(new Condition.Active(Condition.NO_POWER, 0, member, ""));
         // The reboiler's heating and each pumparound cooler's cooling (W4): each share is its room over its duty of a full take.
         double heating = table.reboilerPerFeed() * demand;
         if (heating > 0 && rooms.reboiler() < Double.POSITIVE_INFINITY) {

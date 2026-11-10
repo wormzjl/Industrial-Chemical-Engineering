@@ -147,6 +147,8 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         Debt debt(Utility utility){return debts.computeIfAbsent(utility,k->new Debt());}
         /** The air condenser's fans at the last cycle, a share of full speed, and their power, W (U2; NaN: no fans known). */
         double fans=Double.NaN,fanPower=Double.NaN;
+        /** The fan sides that had no power at the last cycle (W5): their fans stood. Memory only. */
+        final Set<Long> unpoweredFans=new HashSet<>();
         final Map<Long,ArrayDeque<Span>> spans=new HashMap<>();
         final Map<Long,ArrayDeque<Gift>> gifts=new HashMap<>();
         final Map<Long,ArrayDeque<Credit>> credits=new HashMap<>();
@@ -179,6 +181,23 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     private Solves solves=Solves.NONE;
     /** Where this world's column solves go. */
     public void solves(Solves solves){this.solves=Objects.requireNonNull(solves);}
+    /**
+     * A running column's members' power (W5 of batch 2026-11-10-column-failure-modes, {@code MEMBER_POWER_NOTE.md}): at each
+     * cycle a member books what it drew over the span that just ran, then says whether it has power for the next.
+     */
+    public interface Power {
+        /** Whether machines need power (config {@code energy.machinesNeedPower}): without, nothing books and every member has power. */
+        boolean needed();
+        /** Fan side {@code side}'s bare tube, m². */
+        double surface(long side);
+        /** Fan side {@code side} ran its fans at {@code fans} of full speed until {@code tick}: books it; whether its store has power. */
+        boolean fans(long side,double fans,long tick);
+        /** No power to book: every member runs free, as before W5. */
+        Power NONE=new Power(){public boolean needed(){return false;}public double surface(long side){return 0;}public boolean fans(long side,double fans,long tick){return true;}};
+    }
+    private Power power=Power.NONE;
+    /** Where this world's column members draw their power. */
+    public void power(Power power){this.power=Objects.requireNonNull(power);}
 
     public ColumnOperation(WorldTopologyLedger topology,PhysicalRegistry registry,IslandCoordinator coordinator,List<String> axis,double[] weights) {
         this.topology=Objects.requireNonNull(topology);this.registry=Objects.requireNonNull(registry);this.coordinator=Objects.requireNonNull(coordinator);this.weights=weights.clone();this.axis=List.copyOf(axis);if(axis.size()!=weights.length)throw new IllegalArgumentException("One weight per component");
@@ -597,6 +616,27 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         return true;
     }
 
+    /**
+     * {@code rooms} with the members' power for the cycle at {@code tick} (W5, {@code MEMBER_POWER_NOTE.md}): each fan side
+     * books its fans over the span that just ran (its last speed, 0 where it had no power), then says whether its store has
+     * power; banks without hold their surface at natural draught. With machines that need no power, or no members, as it was.
+     */
+    private ColumnCycle.Rooms powered(Run r,ColumnUnit u,SplitTable t,long tick,ColumnCycle.Rooms rooms) {
+        if(!power.needed()||u.members().none()){r.unpoweredFans.clear();return rooms;}
+        double last=Double.isNaN(r.fans)?0:r.fans;
+        var unpowered=new HashSet<Long>();
+        for(long side:u.members().fans())if(!power.fans(side,r.unpoweredFans.contains(side)?0:last,tick))unpowered.add(side);
+        r.unpoweredFans.clear();r.unpoweredFans.addAll(unpowered);
+        double natural=Math.min(u.airSurface(),surface(u,unpowered));
+        if(!(natural>0))return rooms;
+        return rooms.withPower(t.airFeed(u.airSurface()-natural,natural),true,new int[0]);
+    }
+    /** The bare tube of {@code u}'s fan sides in {@code sides}, m². */
+    private double surface(ColumnUnit u,Set<Long> sides) {
+        double out=0;for(long side:u.members().fans())if(sides.contains(side))out+=power.surface(side);
+        return out;
+    }
+
     /** One cycle at online tick {@code tick} (plan section 5). */
     private void cycle(Run r,long tick) {
         var u=topology.column(r.unit);var stations=new ArrayList<>(u.stations());
@@ -635,16 +675,19 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         // Each duty passes no more than its utility has room for (C6b, W4): the heat owed as of the fence against its hold. An
         // air condenser holds at most what its built banks take with their fans at full speed (U2): past it, the column is limited.
         var pas=new double[t.pumparoundPerFeed().length];for(int j=0;j<pas.length;j++)pas[j]=room(r,u,t,Utility.pumparound(j),tick);
-        var rooms=new ColumnCycle.Rooms(room(r,u,t,Utility.CONDENSER,tick),room(r,u,t,Utility.REBOILER,tick),pas,t.airFeed(u.airSurface()));
+        var rooms=powered(r,u,t,tick,new ColumnCycle.Rooms(room(r,u,t,Utility.CONDENSER,tick),room(r,u,t,Utility.REBOILER,tick),pas,t.airFeed(u.airSurface())));
         ColumnCycle.ProductEnergy priced=(k,n)->{double e=0;var h=energy[k];for(int i=0;i<n.length;i++)e+=n[i]*h[i];return e;};
         var b=ColumnCycle.step(t,set,CYCLE_TICKS/20.0,feedAvailable,steam,room,rooms,priced,false);
         // Rule A stays while the steam is short and its shortage inside the bands of the refused state; then rule B tries once more.
         if(r.ruleA&&(Condition.find(b.conditions(),Condition.STEAM_SHORT)==null||r.refused==null||!inside(r.refused,set,b,designDemand)))r.ruleA=false;
         var step=r.ruleA?ColumnCycle.step(t,set,CYCLE_TICKS/20.0,feedAvailable,steam,room,rooms,priced,true):b;
         r.last=step;
-        // The fans at the feed the cycle took, and their power by the cube of their speed (HeatSides.fanPower).
-        r.fans=t.fans(u.airSurface(),step.feedMoles()/(CYCLE_TICKS/20.0));
-        r.fanPower=Double.isNaN(r.fans)?Double.NaN:com.wormzjl.icheme.science.equipment.HeatSides.fanPower(u.airSurface(),r.fans);
+        // The fans at the feed the cycle took, and their power by the cube of their speed (HeatSides.fanPower). Banks without
+        // power (W5) hold what natural draught holds; the powered ones the rest.
+        double natural=Math.min(u.airSurface(),surface(u,r.unpoweredFans)),driven=u.airSurface()-natural,airTaken=step.feedMoles()/(CYCLE_TICKS/20.0);
+        if(natural>0)airTaken=Math.max(0,airTaken-t.airFeed(0,natural));
+        r.fans=natural>0&&!(driven>0)?(Double.isNaN(t.fans(u.airSurface(),airTaken))?Double.NaN:0):t.fans(driven,airTaken);
+        r.fanPower=Double.isNaN(r.fans)?Double.NaN:com.wormzjl.icheme.science.equipment.HeatSides.fanPower(driven,r.fans);
         if(step.tripped()) {
             // The model has no steady state for this input (a capability limit): the inlets close, a solve of the state the
             // column was given may lift it.

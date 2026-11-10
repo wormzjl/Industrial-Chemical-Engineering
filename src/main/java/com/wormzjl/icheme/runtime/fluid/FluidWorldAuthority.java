@@ -153,6 +153,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
         shafts=new ShaftTrains(topology,registry::owner,runtime.coordinator());runtime.coordinator().shafts(shafts);shafts.host(new ShaftHost());
         electric=new ElectricStores(topology,registry::owner,runtime.coordinator(),()->new ElectricStores.Settings(IChemE.joulesPerFE(),IChemE.machinesNeedPower()));shafts.electric(electric);
         electric.supply(id->com.wormzjl.icheme.runtime.power.PowerNetwork.of(server).supplied(shafts.unit(id)));
+        // A running column's members draw from their own stores and trains (W5 of batch 2026-11-10-column-failure-modes).
+        columns.power(new ColumnPower(topology,electric,shafts));
         // The Create coupling (W6b): its stress rate; a world opened without Create lost its couplings' blocks, so their parts leave.
         shafts.stressPerFE(IChemE::stressPerFE);if(!net.neoforged.fml.ModList.get().isLoaded("create"))shafts.forget(com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.CREATE_COUPLING);
         // The fired heaters' burners (batch 2026-11-09-furnace-fuel-power): the network's heating values in its conserved order.
@@ -717,12 +719,14 @@ public final class FluidWorldAuthority implements AutoCloseable {
      * registrations of a water-cooled condenser's two sides, every shell's (empty for an air cooler): those the column does
      * not hold are its water sides (C6b, S3b); the bare tube of its air condenser's banks, m² (U2: 0 for none); and the
      * registrations of its reboiler's and each pumparound cooler's sides, every unit's (W4): those it does not hold, whose
-     * partner it holds, are their utility sides.
+     * partner it holds, are their utility sides; and its powered members (W5): those it holds draw power while it runs.
      */
     public record ColumnStart(PhysicalFluidTopology.Position master,com.wormzjl.icheme.science.column.operation.Setpoints setpoints,
-                              List<PhysicalFluidTopology.Position> nozzles,List<PortSpot> spots,List<Long> condenser,double airSurface,List<Long> reboiler,List<List<Long>> pumparounds) {
-        public ColumnStart{condenser=List.copyOf(condenser);reboiler=List.copyOf(reboiler);pumparounds=pumparounds.stream().map(List::copyOf).toList();
+                              List<PhysicalFluidTopology.Position> nozzles,List<PortSpot> spots,List<Long> condenser,double airSurface,List<Long> reboiler,List<List<Long>> pumparounds,ColumnUnit.Members members) {
+        public ColumnStart{Objects.requireNonNull(members);condenser=List.copyOf(condenser);reboiler=List.copyOf(reboiler);pumparounds=pumparounds.stream().map(List::copyOf).toList();
             if(!(airSurface>=0)||!Double.isFinite(airSurface))throw new IllegalArgumentException("Invalid air condenser surface");}
+        /** Without members: none draws power (W5). */
+        public ColumnStart(PhysicalFluidTopology.Position master,com.wormzjl.icheme.science.column.operation.Setpoints setpoints,List<PhysicalFluidTopology.Position> nozzles,List<PortSpot> spots,List<Long> condenser,double airSurface,List<Long> reboiler,List<List<Long>> pumparounds){this(master,setpoints,nozzles,spots,condenser,airSurface,reboiler,pumparounds,ColumnUnit.Members.NONE);}
         public ColumnStart(PhysicalFluidTopology.Position master,com.wormzjl.icheme.science.column.operation.Setpoints setpoints,List<PhysicalFluidTopology.Position> nozzles,List<PortSpot> spots,List<Long> condenser,double airSurface){this(master,setpoints,nozzles,spots,condenser,airSurface,List.of(),List.of());}
         public ColumnStart(PhysicalFluidTopology.Position master,com.wormzjl.icheme.science.column.operation.Setpoints setpoints,List<PhysicalFluidTopology.Position> nozzles,List<PortSpot> spots,List<Long> condenser){this(master,setpoints,nozzles,spots,condenser,0);}
         public ColumnStart(PhysicalFluidTopology.Position master,com.wormzjl.icheme.science.column.operation.Setpoints setpoints,List<PhysicalFluidTopology.Position> nozzles,List<PortSpot> spots){this(master,setpoints,nozzles,spots,List.of());}
@@ -798,7 +802,10 @@ public final class FluidWorldAuthority implements AutoCloseable {
         var utilities=new ColumnUnit.Utilities(reboiler,pumparounds);
         // A restart keeps the set points the player applied while they fit the design's ports (C7); else the design's.
         var setpoints=existing!=null&&compatible(existing.setpoints(),request.setpoints())?existing.setpoints():request.setpoints();
-        var running=new ColumnUnit(unit,request.master(),true,setpoints,stations,existing!=null?existing.totals():ColumnUnit.Totals.empty(m),water,null,false,request.airSurface(),utilities);
+        // The powered members it holds (W5): a member outside the column is not its own.
+        var asked=request.members();
+        var members=new ColumnUnit.Members(held(asked.fans(),inside),held(asked.reflux(),inside),asked.pumparounds().stream().map(p->held(p,inside)).toList());
+        var running=new ColumnUnit(unit,request.master(),true,setpoints,stations,existing!=null?existing.totals():ColumnUnit.Totals.empty(m),water,null,false,request.airSurface(),utilities,members);
         var was=existing;topology.column(running);
         try{submit(edits,id);}catch(IllegalArgumentException|IllegalStateException refused){if(was!=null)topology.column(was);else topology.removeColumn(unit);return com.wormzjl.icheme.science.column.operation.Refusal.PORTS_DO_NOT_FIT.text(refused.getMessage());}
         columns.refresh();
@@ -812,6 +819,11 @@ public final class FluidWorldAuthority implements AutoCloseable {
     private List<Long> utilitySides(List<Long> sides,Map<Long,WorldTopologyLedger.Registration> inside) {
         var out=new ArrayList<Long>();
         for(long side:sides){var r=registrations().get(side);if(r!=null&&!inside.containsKey(side)&&r.device().heat()!=null&&inside.containsKey(r.device().heat().partner())&&!out.contains(side))out.add(side);}
+        return out;
+    }
+    /** Of {@code members}, those the column holds ({@code inside}), once each. */
+    private static List<Long> held(List<Long> members,Map<Long,WorldTopologyLedger.Registration> inside) {
+        var out=new ArrayList<Long>();for(long id:members)if(inside.containsKey(id)&&!out.contains(id))out.add(id);
         return out;
     }
     /** Whether two of {@code spots} stand inside one cell: two boundary valves on one inside cell have one place for a port. */

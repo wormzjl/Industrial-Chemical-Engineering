@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.runtime.assembly;
 
 import com.wormzjl.icheme.runtime.assembly.AssemblyStore.Status;
+import com.wormzjl.icheme.runtime.fluid.ColumnUnit;
 import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
 import com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology;
 import com.wormzjl.icheme.science.assembly.Blueprint.Slot;
@@ -87,15 +88,43 @@ public final class ColumnStarts {
         for (int i = 1; i <= trays.pumparounds().size(); i++) pumparounds.add(heatSides(level, world, entry, ColumnBlueprint.pumparoundCooler(i)));
         // An air condenser's banks, every one's bare tube: what its fans hold (U2, COOLER_MODEL_PLAN.md section 8).
         double air = 0;
+        // Its fan sides (W5): the banks' process sides, whose electric stores drive their fans.
+        var fans = new ArrayList<Long>();
         if (!ColumnBlueprint.CONDENSER.equals(cooled))
             for (var s : entry.report().slots())
                 if (s.slot().equals(ColumnBlueprint.CONDENSER))
                     for (long unit : s.units()) {
                         var member = EquipmentStructure.at(level, BlockPos.of(unit));
-                        if (member != null && member.shape().kind() == EquipmentShape.Kind.AIR_COOLER)
+                        if (member != null && member.shape().kind() == EquipmentShape.Kind.AIR_COOLER) {
                             for (var side : HeatSides.of(member.shape())) air += side.area();
+                            for (long side : EquipmentStructure.heatSides(world, level, member)) {
+                                var r = world.registrations().get(side);
+                                if (r != null && r.device().heat().fans()) fans.add(side);
+                            }
+                        }
                     }
-        return new Built(new FluidWorldAuthority.ColumnStart(master, Setpoints.of(point), nozzles, spots, condenser, air, reboiler, pumparounds), null);
+        // The pumps' movers (W5): the reflux pump's and each pumparound pump's, a casing's or an in-line pump's.
+        var pumps = new ArrayList<java.util.List<Long>>();
+        for (int i = 1; i <= trays.pumparounds().size(); i++) pumps.add(movers(level, world, entry, ColumnBlueprint.pumparoundPump(i)));
+        var members = new ColumnUnit.Members(fans, movers(level, world, entry, ColumnBlueprint.REFLUX_PUMP), pumps);
+        return new Built(new FluidWorldAuthority.ColumnStart(master, Setpoints.of(point), nozzles, spots, condenser, air, reboiler, pumparounds, members), null);
+    }
+
+    /** The fluid movers of every unit or fitting the report places in pump slot {@code slot}: a casing's, or an in-line pump's. */
+    private static ArrayList<Long> movers(ServerLevel level, FluidWorldAuthority world, AssemblyStore.Entry entry, Slot slot) {
+        var out = new ArrayList<Long>();
+        String dimension = level.dimension().location().toString();
+        for (var s : entry.report().slots())
+            if (s.slot().equals(slot))
+                for (long unit : s.units()) {
+                    var at = BlockPos.of(unit);
+                    var member = EquipmentStructure.at(level, at);
+                    if (member != null) out.addAll(EquipmentStructure.movers(world, level, member));
+                    else world.at(new PhysicalFluidTopology.Position(dimension, at.getX(), at.getY(), at.getZ()))
+                            .filter(r -> r.device().control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.Mover)
+                            .ifPresent(r -> out.add(r.device().id()));
+                }
+        return out;
     }
 
     /** The registered heat sides of every unit the report places in {@code slot}, one unit after another (S3b: units in parallel). */

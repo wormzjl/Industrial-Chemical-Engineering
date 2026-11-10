@@ -269,6 +269,21 @@ public record SplitTable(List<String> axis, List<Product> products, double reboi
     }
 
     /**
+     * The most feed an air condenser holds, mol/s, with {@code powered} m² of bare tube at full fans and {@code natural} m²
+     * whose fans have no power, at natural draught (W5 of batch 2026-11-10-column-failure-modes): the table's tube per feed
+     * is linear in the surface, so the two add. With no unpowered surface, {@link #airFeed(double)}.
+     */
+    public double airFeed(double powered, double natural) {
+        if (!(natural > 0)) return airFeed(powered);
+        if (airArea.length == 0) return Double.POSITIVE_INFINITY;
+        return held(powered, airArea[FAN_STEPS]) + held(natural, airArea[0]);
+    }
+
+    private static double held(double surface, double perFeed) {
+        return !(surface > 0) ? 0 : perFeed > 0 ? surface / perFeed : Double.POSITIVE_INFINITY;
+    }
+
+    /**
      * The least fan speed, 0 to 1, at which an air condenser of {@code surface} m² of bare tube holds {@code feed} mol/s (U2): 0
      * where natural draught holds it (the louvers throttle, the fans stand still), 1 where full speed does not, between the
      * steps linear in the surface needed; NaN where the table has no air or the surface is not known.

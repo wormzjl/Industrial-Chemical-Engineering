@@ -62,7 +62,7 @@ class ColumnRunTest {
     private static double sum(double[] n){double s=0;for(double v:n)s+=v;return s;}
 
     private record Rig(EventPathWorld world,ColumnOperation ops,Counting counting,long unit,long feed,long product,long tank,long steamSource,long waterSource,long tube,long shell,long waterValve,
-                       long utilitySource,long utilityTube,long utilityShell,long utilityValve){}
+                       long utilitySource,long utilityTube,long utilityShell,long utilityValve,long fanSide,ElectricStores stores,ShaftTrains shafts){}
     /** A 3 bar nitrogen feed line into a feed port, a distillate port out to a tank, a table sending everything to the distillate; jobs taking {@code lag} ticks. */
     private Rig rig(int lag){return rig(lag,null);}
     private Rig rig(int lag,Fake solves){return rig(lag,solves,false,false);}
@@ -115,7 +115,6 @@ class ColumnRunTest {
         if(steam)stations.add(new ColumnUnit.Station(Port.STEAM,0,steamPort,steamValve,Account.empty(m)));
         // The utility sides as a Start after W4 finds them; none where the unit was saved before them.
         var utilities=utility==null||!utilitySaved?ColumnUnit.Utilities.NONE:pumparound?new ColumnUnit.Utilities(List.of(),List.of(List.of(utilityTube))):new ColumnUnit.Utilities(List.of(utilityTube),List.of());
-        world.ledger.column(new ColumnUnit(unit,new PhysicalFluidTopology.Position(EventPathWorld.DIM,6,70,0),true,setpoints,stations,ColumnUnit.Totals.empty(m),tubes,null,false,airSurface,utilities));
         var edits=new ArrayList<>(List.of(new WorldTopologyLedger.Edit(feed,new WorldTopologyLedger.Registration(port(feed,3,Kind.VOID,Direction.WEST,g),new FluidDeviceSpec(1,330,150000,n2),0)),
                 new WorldTopologyLedger.Edit(product,new WorldTopologyLedger.Registration(port(product,10,Kind.GENERATOR,Direction.EAST,g),new FluidDeviceSpec(1,330,250000,n2),0))));
         if(steam)edits.add(new WorldTopologyLedger.Edit(steamPort,new WorldTopologyLedger.Registration(port(steamPort,3,2,Kind.VOID,Direction.WEST,g),new FluidDeviceSpec(1,420,150000,n2),0)));
@@ -132,7 +131,17 @@ class ColumnRunTest {
             edits.add(new WorldTopologyLedger.Edit(utilityShell,new WorldTopologyLedger.Registration(heatSide(utilityShell,24,passage,new HeatUnit(com.wormzjl.icheme.science.equipment.HeatSides.Unit.EXCHANGER,com.wormzjl.icheme.science.equipment.HeatSides.Side.SHELL,area,utilityTube)).withSuspendedBy(unit),FluidDeviceSpec.nitrogen(world.catalog),0)));
             last=utilityShell;
         }
+        // The air condenser's bank as a powered member (W5): its process side, held, with four fans on its electric store.
+        long fanSide=0;var members=ColumnUnit.Members.NONE;
+        if(fanMember){fanSide=last+1;last=fanSide;members=new ColumnUnit.Members(List.of(fanSide),List.of(),List.of());
+            var passage=com.wormzjl.icheme.science.equipment.HeatSides.tubePassage(.5,3);
+            edits.add(new WorldTopologyLedger.Edit(fanSide,new WorldTopologyLedger.Registration(heatSide(fanSide,28,passage,new HeatUnit(com.wormzjl.icheme.science.equipment.HeatSides.Unit.AIR_COOLER,com.wormzjl.icheme.science.equipment.HeatSides.Side.PROCESS,airSurface,0).withFans(4)).withSuspendedBy(unit),FluidDeviceSpec.nitrogen(world.catalog),0)));}
+        world.ledger.column(new ColumnUnit(unit,new PhysicalFluidTopology.Position(EventPathWorld.DIM,6,70,0),true,setpoints,stations,ColumnUnit.Totals.empty(m),tubes,null,false,airSurface,utilities,members));
         world.registry.submit(edits,last+1,null);
+        // The members' power (W5): the world's stores and trains, the config's switch as the rig sets it.
+        ElectricStores stores=null;ShaftTrains shafts=null;
+        if(!members.none()){stores=new ElectricStores(world.ledger,d->null,world.coordinator,()->new ElectricStores.Settings(2.5,needPower));
+            shafts=new ShaftTrains(world.ledger,d->null,world.coordinator);shafts.electric(stores);ops.power(new ColumnPower(world.ledger,stores,shafts));}
         // The water valve's lines complete (U2): the column sets it.
         if(waterValve!=0)world.coordinator.operations(Map.of(PhysicalFluidTopology.sideIdentity(tube),com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Operation.column(waterValve,com.wormzjl.icheme.science.equipment.HeatSides.WATER_RANGE)));
         if(utilityValve!=0)world.coordinator.operations(Map.of(PhysicalFluidTopology.sideIdentity(utilityTube),com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Operation.column(utilityValve,com.wormzjl.icheme.science.equipment.HeatSides.WATER_RANGE)));
@@ -149,7 +158,7 @@ class ColumnRunTest {
                                 Double.isNaN(waterBelow)?SplitTable.WATER_NEVER:waterBelow,airArea);
             }
             ops.table(unit,t,s.enthalpy());}
-        return new Rig(world,ops,counting,unit,feed,product,tank,steamSource,waterSource,tube,shell,waterValve,utilitySource,utilityTube,utilityShell,utilityValve);
+        return new Rig(world,ops,counting,unit,feed,product,tank,steamSource,waterSource,tube,shell,waterValve,utilitySource,utilityTube,utilityShell,utilityValve,fanSide,stores,shafts);
     }
     /** A rig's utility line (W4): a reboiler's heating, or the first pumparound's cooler. */
     private enum Utility { REBOILER, PUMPAROUND }
@@ -169,6 +178,8 @@ class ColumnRunTest {
     private double waterTemperature=300,waterPressure=300000,waterValveBore=Double.NaN;
     /** The rig's air condenser: its bare tube, m² (0: none), and its table's tube per mol/s of feed at each fan step, m² (U2). */
     private double airSurface=0;private double[] airArea=new double[0];
+    /** Whether the rig's air condenser bank is a powered member on its own store (W5), and the config's {@code machinesNeedPower}. */
+    private boolean fanMember;private boolean needPower=true;
     /** The bore of the rig's product line and of its feed line and valves, m. */
     private double productBore=.05,lineBore=.05;
     /** A player's flow valve on the rig's product line, kg/s, or NaN for a plain pipe. */
@@ -1015,6 +1026,44 @@ class ColumnRunTest {
         System.out.printf(Locale.ROOT,"U2_FANS_SHORT | %s%n",status);
         assertTrue(status.startsWith("LIMITED: condenser, 50 %"),status);
         assertTrue(status.contains("air fans 100 %"),status);
+    }
+    /**
+     * Member power (W5): the 40 m² bank of the test above, its four fans on their own store. An empty store holds the bank at
+     * natural draught, 100 m² per mol/s: 0.4 of the 0.5 mol/s, so the column runs at 80 % on NO POWER of the condenser
+     * (member 0), its fans standing. FE back, the cadence restarts the fans and the column takes its whole feed with its fans
+     * at 40 %, drawing their power from the store. With {@code machinesNeedPower} off, the empty store changes nothing.
+     */
+    @Test void anAirCondensersFansWithoutPowerHoldWhatNaturalDraughtHoldsAndPowerBackResumes() {
+        waterShare=0;airArea=new double[]{100,93.75,87.5,81.25,75,68.75,62.5,56.25,50};
+        airSurface=40;fanMember=true;
+        var r=rig(0);powered(r,3000,false);
+        String status=r.ops().status(r.unit());
+        System.out.printf(Locale.ROOT,"W5_FANS_UNPOWERED | %s%n",status);
+        assertTrue(status.startsWith("LIMITED: power, 80 %"),status);
+        assertTrue(status.contains("air fans 0 %, 0.0 kW"),status);
+        var c=Condition.find(r.ops().conditions(r.unit()),Condition.NO_POWER);
+        assertNotNull(c,"NO POWER is raised");assertEquals(ColumnUnit.Members.CONDENSER,c.index());assertEquals(.8,c.value(),1e-9);
+        assertTrue(EquipmentAlarm.column(r.ops().conditions(r.unit())).contains(EquipmentAlarm.NO_POWER),"the NO POWER alarm");
+        powered(r,6000,true);
+        status=r.ops().status(r.unit());var view=r.stores().view(r.fanSide());
+        System.out.printf(Locale.ROOT,"W5_FANS_POWERED draw=%.1f W | %s%n",view.power(),status);
+        assertTrue(status.startsWith("RUNNING")||status.startsWith("LIMITED: outlet"),status);
+        assertTrue(status.contains("air fans 40 %"),status);
+        assertNull(Condition.find(r.ops().conditions(r.unit()),Condition.NO_POWER),"power back clears NO POWER");
+        assertEquals(ElectricStores.fanDraw(r.world().ledger.active().get(r.fanSide()).device().heat(),.4),view.power(),1e-6*view.power(),"the bank draws its fans' power at 40 %");
+        needPower=false;
+        var free=rig(0);powered(free,3000,false);
+        status=free.ops().status(free.unit());
+        assertTrue(status.startsWith("RUNNING")||status.startsWith("LIMITED: outlet"),"with machinesNeedPower off nothing changes: "+status);
+        assertTrue(status.contains("air fans 40 %"),status);
+    }
+    /** Runs {@code r} to online tick {@code end}, its members' stores on the cadence, and with {@code supply} FE offered to each every tick. */
+    private static void powered(Rig r,long end,boolean supply) {
+        for(long t=r.world().ledger.onlineTick();t<end;t++) {
+            r.world().runTo(t+1);
+            if(supply&&r.fanSide()!=0)r.stores().receive(r.fanSide(),Integer.MAX_VALUE,false);
+            if((t+1)%ElectricStores.CADENCE==0){r.stores().cadence();r.shafts().cadence();}
+        }
     }
     /** The water valve's mass flow target, kg/s, the water's inlet temperature (the generator's), K, and the pressure at the
      * water side's inlet node, Pa, as their islands stand. */

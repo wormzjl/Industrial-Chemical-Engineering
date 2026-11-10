@@ -391,6 +391,18 @@ public final class ElectricStores {
         return false;
     }
 
+    /**
+     * A running column's held member {@code id} (W5 of batch 2026-11-10-column-failure-modes): a fan side or an in-line pump
+     * books {@code power} W from its last booking to {@code to}, as its island's commit would; then whether it has power. A
+     * store run short stops it here (the column's cycle is a decision point, not a read). No store: it runs free.
+     */
+    public boolean member(long id, double power, long to) {
+        var s = store(id);
+        if (s == null || s.kind.generator()) return true;
+        draw(s, power, s.bookedTick, to, true);
+        return powered(id);
+    }
+
     /** Books {@code power} W given by generator {@code id} from its last booking to {@code to}: its store takes up to its capacity. */
     public void give(long id, double power, long to) {
         var s = stores.get(id);
