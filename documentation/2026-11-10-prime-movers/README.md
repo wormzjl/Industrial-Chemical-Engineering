@@ -1,6 +1,6 @@
 # Prime movers: combustion engines, gas turbines, generators to 400 MW, steam turbines to 300 MW
 
-Status: **In progress since 2026-11-10** (phase 2: built; engine and gas turbine looks under the owner's review). Branch `claude/prime-movers-4b7224`, cut from `claude/custom-shader-system-caff9e` at `841e765f2`.
+Status: **Merged into the custom-shader-system batch 2026-11-10** (6c597e7b3, owner: "Merge it"), after the owner's model review (13 fixes, 0cf7d5e11). Branch `claude/prime-movers-4b7224`, cut from `claude/custom-shader-system-caff9e` at `841e765f2`.
 
 ## Scope
 
