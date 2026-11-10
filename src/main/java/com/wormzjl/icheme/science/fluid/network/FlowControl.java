@@ -324,13 +324,15 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
      * junction to its discharge junction; the engine sets its mass target once per slice to the steam {@code EjectorLaw} asks
      * for the load the set's curve holds.
      */
-    enum ValveSource { NONE, PRESSURE, MASS_FLOW, VOLUME_FLOW, SHAFT_SPEED, BURNER, FLARE, STILL, EJECTOR;
+    enum ValveSource { NONE, PRESSURE, MASS_FLOW, VOLUME_FLOW, SHAFT_SPEED, BURNER, FLARE, STILL, EJECTOR,
+        /** A prime mover's fuel valve (batch 2026-11-10-prime-movers): on the run into its fuel void; the engine sets its mass target once per slice from its governor. */
+        ENGINE;
         /** Whether a valve of this source regulates its mass flow. */
-        public boolean mass(){return this==MASS_FLOW||this==SHAFT_SPEED||this==BURNER||this==FLARE||this==STILL||this==EJECTOR;}
+        public boolean mass(){return this==MASS_FLOW||this==SHAFT_SPEED||this==BURNER||this==FLARE||this==STILL||this==EJECTOR||this==ENGINE;}
         /** Whether the engine sets this valve's mass target each slice (a governor or a fuel valve), not the player. */
-        public boolean planned(){return this==SHAFT_SPEED||this==BURNER||this==FLARE||this==STILL||this==EJECTOR;}
+        public boolean planned(){return this==SHAFT_SPEED||this==BURNER||this==FLARE||this==STILL||this==EJECTOR||this==ENGINE;}
         /** Whether this is a valve the engine builds into a sink (a firebox or a flare tip), on the run into it. */
-        public boolean sink(){return this==BURNER||this==FLARE;}
+        public boolean sink(){return this==BURNER||this==FLARE||this==ENGINE;}
     }
     /** Configured facts; source identity/revision invalidate endpoint carry when a component or target changes. */
     record ControlValve(ValveSource source,double targetPressure,double massTarget,double volumeTarget,java.util.UUID sensor,long revision) implements Valve {
@@ -357,10 +359,14 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
         public static final java.util.UUID EJECTOR_SENSOR=new java.util.UUID(0x656a6563746f7200L,1);
         /** A steam ejector's motive valve, shut until its first slice plan. */
         public static ControlValve ejector(){return new ControlValve(ValveSource.EJECTOR,200000,0,.01,EJECTOR_SENSOR,0);}
+        /** A prime mover's fuel valve's source identity. */
+        public static final java.util.UUID ENGINE_SENSOR=new java.util.UUID(0x656e67696e650000L,1);
+        /** A prime mover's fuel valve, shut until its first slice plan. */
+        public static ControlValve engine(){return new ControlValve(ValveSource.ENGINE,200000,0,.01,ENGINE_SENSOR,0);}
         @Override public boolean pressureControl(){return source==ValveSource.PRESSURE;}
         @Override public boolean massControl(){return source.mass();}
         @Override public boolean bare(){return sensor==null;}
-        public double target(){return switch(source){case NONE,PRESSURE->targetPressure;case MASS_FLOW,SHAFT_SPEED,BURNER,FLARE,STILL,EJECTOR->massTarget;case VOLUME_FLOW->volumeTarget;};}
+        public double target(){return switch(source){case NONE,PRESSURE->targetPressure;case MASS_FLOW,SHAFT_SPEED,BURNER,FLARE,STILL,EJECTOR,ENGINE->massTarget;case VOLUME_FLOW->volumeTarget;};}
         @Override public double targetMassFlow(double density){return source.mass()?massTarget:volumeTarget*density;}
         public ControlValve withTarget(double value){return new ControlValve(source,source==ValveSource.PRESSURE?value:targetPressure,source.mass()?value:massTarget,source==ValveSource.VOLUME_FLOW?value:volumeTarget,sensor,Math.addExact(revision,1));}
         /** A governor valve's mass target for one slice (W3): a slice input, its revision kept, as a column's port plan is. */

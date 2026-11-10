@@ -8,7 +8,7 @@ package com.wormzjl.icheme.science.fluid.network;
  * no unknown, no mode, exactly zero at no flow. Facts shape its equations ({@link #shape}); slice inputs are fixed for a
  * step by whoever plans it.
  */
-public sealed interface HeatLaw permits HeatSide, AirCooled, FiredCoil, ConvectionCoil {
+public sealed interface HeatLaw permits HeatSide, AirCooled, FiredCoil, ConvectionCoil, ExhaustCoil {
     /**
      * The heat (W) the stream takes up in passing, positive when it is heated, drawn at specific enthalpy {@code inlet}
      * (J/kg) on {@code curve} at {@code massFlow} (kg/s; its sign picks the direction).

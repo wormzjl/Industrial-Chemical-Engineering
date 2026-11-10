@@ -134,7 +134,12 @@ public final class PhysicalFluidTopology {
             boolean chimney=kind==TopologyCompiler.Kind.VOID&&heat==null&&control instanceof FlowControl.Passive&&!onPortLane&&ports.size()==1;
             if(chimney&&(ports.getFirst().port!=PassiveNetwork.PhasePort.BULK||ports.getFirst().role!=ConnectionRole.VESSEL||ports.getFirst().cell.y()>position.y()))
                 throw new IllegalArgumentException("A chimney is a void at its stack's top with one bulk port at or below it");
-            boolean sink=burner||flare||outlet||fired||chimney;
+            // A prime mover's fuel void (batch 2026-11-10-prime-movers): a void behind its FUEL port at its combustor's
+            // pressure, its fuel valve its control.
+            boolean engine=kind==TopologyCompiler.Kind.VOID&&heat==null&&control instanceof FlowControl.ControlValve fuelled&&fuelled.source()==FlowControl.ValveSource.ENGINE;
+            if(engine&&(onPortLane||ports.size()!=1||ports.getFirst().port!=PassiveNetwork.PhasePort.BULK||ports.getFirst().role!=ConnectionRole.VESSEL))
+                throw new IllegalArgumentException("A prime mover's fuel void has one bulk port and its fuel valve");
+            boolean sink=burner||flare||outlet||fired||chimney||engine;
             if(position.lane()==0||onPortLane?slots!=0||points!=0:!laneFits(position.lane(),slots)||(points>>>60)!=0)throw new IllegalArgumentException("Invalid rack lane "+position.lane()+" of "+slots+" positions");
             if(suspendedBy<0||onPortLane&&suspendedBy!=0)throw new IllegalArgumentException("Invalid column suspension");
             if(held&&onPortLane)throw new IllegalArgumentException("A column's port has no block to hold");
@@ -146,9 +151,10 @@ public final class PhysicalFluidTopology {
                 throw new IllegalArgumentException("A rack lane is a plain laid pipe with at most two joints");
             if(inlineFilter&&(kind!=TopologyCompiler.Kind.PIPE||cutoff!=Cutoff.NONE||!(control instanceof FlowControl.Passive)))throw new IllegalArgumentException("Invalid pipe filter accessory");
             if(kind!=TopologyCompiler.Kind.PIPE&&cutoff!=Cutoff.NONE)throw new IllegalArgumentException("Only a pipe has a cutoff accessory");
-            boolean valid=switch(kind) {case PUMP->control instanceof FlowControl.Mover mover&&mover.liquid();case COMPRESSOR->control instanceof FlowControl.Mover mover&&!mover.liquid();case VALVE->control instanceof FlowControl.Valve&&!(control instanceof FlowControl.Turbine);case TURBINE->control instanceof FlowControl.Turbine;case EJECTOR->control instanceof FlowControl.Ejector;case PIPE->control instanceof FlowControl.Passive||control instanceof FlowControl.Valve&&!(control instanceof FlowControl.Turbine)||control instanceof FlowControl.Mover;case VOID->burner||flare||fired||control instanceof FlowControl.Passive;case GENERATOR->outlet||control instanceof FlowControl.Passive;default->control instanceof FlowControl.Passive;};
+            boolean valid=switch(kind) {case PUMP->control instanceof FlowControl.Mover mover&&mover.liquid();case COMPRESSOR->control instanceof FlowControl.Mover mover&&!mover.liquid();case VALVE->control instanceof FlowControl.Valve&&!(control instanceof FlowControl.Turbine);case TURBINE->control instanceof FlowControl.Turbine;case EJECTOR->control instanceof FlowControl.Ejector;case PIPE->control instanceof FlowControl.Passive||control instanceof FlowControl.Valve&&!(control instanceof FlowControl.Turbine)||control instanceof FlowControl.Mover;case VOID->burner||flare||fired||engine||control instanceof FlowControl.Passive;case GENERATOR->outlet||control instanceof FlowControl.Passive;default->control instanceof FlowControl.Passive;};
             if(control instanceof FlowControl.ControlValve valve&&valve.source()==FlowControl.ValveSource.BURNER&&!burner)throw new IllegalArgumentException("Only a burner has a burner's fuel valve");
             if(control instanceof FlowControl.ControlValve valve&&valve.source()==FlowControl.ValveSource.FLARE&&!flare)throw new IllegalArgumentException("Only a flare has a flare's tip limit");
+            if(control instanceof FlowControl.ControlValve valve&&valve.source()==FlowControl.ValveSource.ENGINE&&!engine)throw new IllegalArgumentException("Only a prime mover's fuel void has its fuel valve");
             if(control instanceof FlowControl.ControlValve valve&&valve.source()==FlowControl.ValveSource.STILL&&!outlet&&!fired)throw new IllegalArgumentException("Only a still's outlet or burners have a still's valve");
             if(!valid)throw new IllegalArgumentException("Device/control mismatch");
             if(control instanceof FlowControl.Valve&&cutoff!=Cutoff.NONE)throw new IllegalArgumentException("A pressure valve cannot carry a cutoff accessory");
@@ -220,7 +226,9 @@ public final class PhysicalFluidTopology {
         /** A sink open to the atmosphere (C1 B): a flare's or a chimney's tip, at {@code PhaseLayout.atmosphere} of its own height. */
         public boolean atmospheric(){return flare()||chimney();}
         /** A burner or a flare: a sink whose built-in valve sits on the run into it. */
-        public boolean valvedSink(){return burner()||flare()||stillBurners();}
+        public boolean valvedSink(){return burner()||flare()||stillBurners()||engineFuel();}
+        /** Whether this is a prime mover's fuel void (batch 2026-11-10-prime-movers): the run into it carries its fuel valve. */
+        public boolean engineFuel(){return kind==TopologyCompiler.Kind.VOID&&heat==null&&control instanceof FlowControl.ControlValve v&&v.source()==FlowControl.ValveSource.ENGINE;}
         /** Whether this is a liquid-fired still's burners (batch 2026-11-09-batch-distiller, W4): the run into it carries the still's fuel valve. */
         public boolean stillBurners(){return kind==TopologyCompiler.Kind.VOID&&heat==null&&control instanceof FlowControl.ControlValve v&&v.source()==FlowControl.ValveSource.STILL;}
         /** Whether this is a batch still's outlet (batch 2026-11-09-batch-distiller): the run out of it carries its outlet valve. */

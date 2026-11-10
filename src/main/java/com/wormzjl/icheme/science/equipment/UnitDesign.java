@@ -248,6 +248,8 @@ public abstract class UnitDesign {
         DESIGNS.put(Kind.BRICK_CHIMNEY, new ChimneyDesign(com.wormzjl.icheme.science.fluid.network.Chimney.Form.BRICK));
         DESIGNS.put(Kind.LIQUID_RING_PUMP, new VacuumPumpDesign(true));
         DESIGNS.put(Kind.DRY_SCREW_PUMP, new VacuumPumpDesign(false));
+        DESIGNS.put(Kind.COMBUSTION_ENGINE, new PrimeMoverDesign(com.wormzjl.icheme.science.machine.PrimeMover.Family.ENGINE));
+        DESIGNS.put(Kind.GAS_TURBINE, new PrimeMoverDesign(com.wormzjl.icheme.science.machine.PrimeMover.Family.GAS_TURBINE));
     }
 
     /** The design of a designed kind ({@link Kind#designed()}): a storage vessel's or a unit's. */
@@ -351,7 +353,7 @@ public abstract class UnitDesign {
 
     /** Whether a kind sounds as a driver, its own loop at its own cells: a motor, its mirror the generator, or a steam turbine. */
     public static boolean driver(EquipmentShape.Kind kind) {
-        return kind == EquipmentShape.Kind.MOTOR || kind == EquipmentShape.Kind.GENERATOR || kind == EquipmentShape.Kind.STEAM_TURBINE;
+        return kind == EquipmentShape.Kind.MOTOR || kind == EquipmentShape.Kind.GENERATOR || kind == EquipmentShape.Kind.STEAM_TURBINE || kind.primeMover();
     }
 
     /** Whether a kind is a member of a shaft train (batch 2026-11-03-rotating-machinery, W3): a driver, a gearbox, or a
@@ -374,6 +376,7 @@ public abstract class UnitDesign {
             case COMPRESSOR -> ProcessUnit.compressorSpeed(shape.diameter());
             case STEAM_TURBINE -> SteamTurbineTrain.speed(shape.diameter());
             case LIQUID_RING_PUMP, DRY_SCREW_PUMP -> VacuumPumpDesign.model(shape).speed();
+            case COMBUSTION_ENGINE, GAS_TURBINE -> PrimeMoverDesign.model(shape).speed();
             default -> 0;
         };
     }
@@ -392,6 +395,7 @@ public abstract class UnitDesign {
     public static double ratedPower(EquipmentShape shape) {
         return switch (shape.kind()) {
             case MOTOR, GENERATOR, GEARBOX, STEAM_TURBINE -> 1000 * shape.duty().power();
+            case COMBUSTION_ENGINE, GAS_TURBINE -> new com.wormzjl.icheme.science.machine.PrimeMover(PrimeMoverDesign.model(shape)).ratedNet();
             default -> 0;
         };
     }
@@ -405,6 +409,25 @@ public abstract class UnitDesign {
     /** A vacuum pump casing's law, its model's type, capacity and design speed (batch 2026-11-10-vacuum-pump). */
     public static com.wormzjl.icheme.science.machine.VacuumPump vacuumPump(EquipmentShape shape) {
         return VacuumPumpDesign.law(shape);
+    }
+
+    /** A prime mover's catalogue model (batch 2026-11-10-prime-movers): its kind's family, its size's number. */
+    public static com.wormzjl.icheme.science.machine.PrimeMover.Model primeMoverModel(EquipmentShape shape) {
+        return PrimeMoverDesign.model(shape);
+    }
+
+    /** Whether a gas turbine carries its steam coil (its length 2). */
+    public static boolean steamCoil(EquipmentShape shape) {
+        return PrimeMoverDesign.coil(shape);
+    }
+
+    /** A gas turbine's steam coil's surface, m², and its water passage. */
+    public static double coilSurface(EquipmentShape shape) {
+        return PrimeMoverDesign.coilSurface(PrimeMoverDesign.model(shape));
+    }
+
+    public static com.wormzjl.icheme.science.fluid.network.PipeResistance.Geometry coilPassage(EquipmentShape shape) {
+        return PrimeMoverDesign.coilPassage(PrimeMoverDesign.model(shape));
     }
 
     /** A vacuum pump casing's model name ({@code LR1-500}, {@code DS-650}). */

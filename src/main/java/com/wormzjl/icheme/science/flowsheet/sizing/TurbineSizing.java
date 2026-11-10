@@ -90,12 +90,15 @@ public final class TurbineSizing {
         return best;
     }
 
+    /** The list's end a turbine was sized from before the generators passed 50 MW (batch 2026-11-10-prime-movers), kW. */
+    static final double TURBINE_LIST = 50000;
+
     /** The smallest rated power that holds the need with its spare, on the lowest class that holds the inlet. No power, no size. */
     public static Selection.Choice<Size> auto(Load load) {
         if (!load.flows()) return Selection.Choice.none();
         double exhaust = exhaust(load.exhaust());
         var sizes = new ArrayList<Size>();
-        for (double power : MachineDuty.POWERS) for (var steam : MachineDuty.Steam.values()) sizes.add(new Size(power, steam, exhaust));
+        for (double power : MachineDuty.POWERS) if (power <= TURBINE_LIST) for (var steam : MachineDuty.Steam.values()) sizes.add(new Size(power, steam, exhaust));
         return Selection.smallest(Selection.spareFirst(List.copyOf(sizes), Size::power, Motor.SPARE * load.power()), size -> rate(load, size));
     }
 }

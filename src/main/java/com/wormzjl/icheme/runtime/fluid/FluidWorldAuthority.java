@@ -176,6 +176,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
         burners=new FiredHeaters(topology,runtime.coordinator(),electric,heatingValues(catalog,model),model.molecularWeights(),formulas(catalog,model));shafts.burners(burners);electric.moved(burners::powerMoved);
         flares=new Flares(topology,heatingValues(catalog,model),model.molecularWeights(),formulas(catalog,model));shafts.flares(flares);
         chimneys=new Chimneys(topology,model.molecularWeights());shafts.chimneys(chimneys);
+        // The prime movers (batch 2026-11-10-prime-movers): their fuel's heat; a gas turbine's coil at its structure's FEEDWATER cell.
+        shafts.primeMovers(new PrimeMovers(heatingValues(catalog,model),model.molecularWeights()),this::coilOf);
         // The batch stills (batch 2026-11-09-batch-distiller): their pots, heads and outlets share the port hooks with the columns.
         stills=new Stills(topology,registry::owner,runtime.coordinator(),runtime.coordinator()::model,electric,model.components(),model.molecularWeights(),heatingValues(catalog,model));
         ejectors=new Ejectors(runtime.coordinator()::model);
@@ -613,6 +615,33 @@ public final class FluidWorldAuthority implements AutoCloseable {
                 PhysicalFluidTopology.ALL_FACES,0,0,null);
         var record=new WorldTopologyLedger.Registration(device,new FluidDeviceSpec(1,298.15,com.wormzjl.icheme.science.fluid.solver.PhaseLayout.atmosphere(node.y()),FluidDeviceSpec.nitrogen(catalog).composition()),0);
         submit(List.of(new WorldTopologyLedger.Edit(id,record)),Math.addExact(id,1));return record;
+    }
+    /**
+     * A prime mover's registrations (batch 2026-11-10-prime-movers) as one ledger event: its fuel void at {@code fuel}, a void
+     * at its combustor's {@code pressure} (Pa) behind its FUEL port, its fuel valve its control ({@link FlowControl.ValveSource#ENGINE});
+     * then a gas turbine's steam coil, a heat side of unit {@code PRIME_MOVER} ({@code coil}, null for none). Returns them in that order.
+     */
+    public List<WorldTopologyLedger.Registration> placePrimeMover(PhysicalFluidTopology.Position fuel,List<PhysicalFluidTopology.Port> ports,double pressure,@org.jetbrains.annotations.Nullable UnitSide coil) {
+        owned();long first=topology.nextIdentity();var edits=new ArrayList<WorldTopologyLedger.Edit>();var placed=new ArrayList<WorldTopologyLedger.Registration>();
+        var device=new PhysicalFluidTopology.Device(first,fuel,TopologyCompiler.Kind.VOID,PhysicalFluidTopology.Direction.NORTH,
+                new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),FlowControl.ControlValve.engine(),ports,true,PhysicalFluidTopology.Cutoff.NONE,false,
+                PhysicalFluidTopology.ALL_FACES,0,0,null);
+        var record=new WorldTopologyLedger.Registration(device,new FluidDeviceSpec(1,298.15,pressure,FluidDeviceSpec.nitrogen(catalog).composition()),0);
+        placed.add(record);edits.add(new WorldTopologyLedger.Edit(first,record));
+        if(coil!=null) {
+            var side=new PhysicalFluidTopology.Device(first+1,coil.node(),TopologyCompiler.Kind.HEAT_SIDE,PhysicalFluidTopology.Direction.NORTH,coil.passage(),new FlowControl.Passive(),
+                    coil.ports(),true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,coil.heat());
+            var r=new WorldTopologyLedger.Registration(side,FluidDeviceSpec.nitrogen(catalog),0);placed.add(r);edits.add(new WorldTopologyLedger.Edit(first+1,r));
+        }
+        submit(edits,Math.addExact(first,placed.size()));return placed;
+    }
+    /** Shaft unit {@code u}'s steam coil registration: a gas turbine's at its structure's FEEDWATER cell; 0 for none. */
+    private long coilOf(ShaftUnit u) {
+        var held=topology.structure(u.position());if(held==null||!held.shape().kind().primeMover())return 0;
+        var cells=com.wormzjl.icheme.science.equipment.ShapeRasterizer.fluidCells(held.shape());if(cells.size()<2)return 0;
+        var c=cells.get(1);var p=u.position();
+        var r=registry.at(new PhysicalFluidTopology.Position(p.dimension(),p.x()+c.x(),p.y()+c.y(),p.z()+c.z())).orElse(null);
+        return r!=null&&r.device().heat()!=null&&r.device().heat().unit()==com.wormzjl.icheme.science.equipment.HeatSides.Unit.PRIME_MOVER?r.device().id():0;
     }
     private WorldTopologyLedger.Registration burnerRecord(long id,UnitBurners burners,long radiant) {
         var device=new PhysicalFluidTopology.Device(id,burners.node(),TopologyCompiler.Kind.VOID,PhysicalFluidTopology.Direction.NORTH,

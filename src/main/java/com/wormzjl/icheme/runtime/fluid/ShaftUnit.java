@@ -55,7 +55,7 @@ public record ShaftUnit(long id,ShaftNetwork.Kind kind,PhysicalFluidTopology.Pos
         ends=List.copyOf(ends);
         if(id<=0||fluid<0||ends.size()>MAXIMUM_ENDS)throw new IllegalArgumentException("Invalid shaft unit identity");
         if(kind==ShaftNetwork.Kind.SHAFT?axis<0||axis>2||!ends.isEmpty():ends.isEmpty())throw new IllegalArgumentException("A shaft block has an axis, a machine its shaft ends");
-        if(fluid!=0!=(kind==ShaftNetwork.Kind.CASING||kind==ShaftNetwork.Kind.STEAM_TURBINE))throw new IllegalArgumentException("Only a casing or a turbine names a fluid device");
+        if(fluid!=0!=(kind==ShaftNetwork.Kind.CASING||kind==ShaftNetwork.Kind.STEAM_TURBINE||kind.primeMover()))throw new IllegalArgumentException("Only a casing, a turbine or a prime mover names a fluid device");
         for(var e:ends)if(!e.cell().dimension().equals(position.dimension()))throw new IllegalArgumentException("A shaft end in another dimension");
         if(!(ratedPower>=0)||!(designSpeed>=0)||!Double.isFinite(ratedPower+designSpeed)||poles!=0&&!MachineDuty.POLES.contains(poles))throw new IllegalArgumentException("Invalid shaft unit rating");
     }
@@ -81,7 +81,7 @@ public record ShaftUnit(long id,ShaftNetwork.Kind kind,PhysicalFluidTopology.Pos
     }
     /** The driver this unit is in the step's terms, or null for a part that drives nothing. */
     public ShaftTrain.Drive drive(boolean variable) {
-        return switch(kind){case MOTOR->ShaftTrain.Drive.VARIABLE_MOTOR;case STEAM_TURBINE->ShaftTrain.Drive.TURBINE;case CREATIVE_MOTOR->ShaftTrain.Drive.CREATIVE;case CREATE_COUPLING->ShaftTrain.Drive.CREATE;default->null;};
+        return switch(kind){case MOTOR->ShaftTrain.Drive.VARIABLE_MOTOR;case STEAM_TURBINE->ShaftTrain.Drive.TURBINE;case COMBUSTION_ENGINE,GAS_TURBINE->ShaftTrain.Drive.FUEL;case CREATIVE_MOTOR->ShaftTrain.Drive.CREATIVE;case CREATE_COUPLING->ShaftTrain.Drive.CREATE;default->null;};
     }
     static ShaftNetwork.Cell cell(PhysicalFluidTopology.Position p){return new ShaftNetwork.Cell(p.dimension(),p.x(),p.y(),p.z());}
 }
