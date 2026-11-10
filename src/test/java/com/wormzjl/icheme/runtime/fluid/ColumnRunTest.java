@@ -692,6 +692,29 @@ class ColumnRunTest {
      * with no solve; a state written without them (here: an empty flood record, which reads as absent) is dropped, and the
      * unit then solves once from its start.
      */
+    /**
+     * Set points before the first run (W7): {@code editColumn} gives a column that never ran a stopped unit with no stations
+     * on the edited set points. The facts carry it through a save, and the engine runs no cycle for it.
+     */
+    @Test void aStoppedUnitWithNoStationsSurvivesTheFacts() {
+        var f=new Fake(0);var r=rig(0,f);f.world=r.world();var world=r.world();
+        var design=world.ledger.column(r.unit()).setpoints();
+        var edited=new Setpoints(design.designFeedRate(),design.feedRate()/2,design.condenserTemperature(),design.refluxRatio()*1.1,design.reboilerPerFeed(),
+                design.steamPerFeed(),design.drawsPerFeed(),design.pumparoundsPerFeed());
+        var master=new PhysicalFluidTopology.Position("minecraft:overworld",500,64,500);
+        var stopped=new ColumnUnit(world.ledger.reserve(1),master,false,edited,List.of(),ColumnUnit.Totals.empty(world.model.componentCount()));
+        world.ledger.column(stopped);r.ops().refresh();
+        f.runTo(300);
+        assertNull(r.ops().run(stopped.id()),"no run for a stopped unit");
+        var saved=FluidCheckpointCodec.decodeTopology(FluidCheckpointCodec.encodeTopology(world.ledger.snapshot()),world.ledger.onlineTick(),k->world.model);
+        var back=saved.columns().get(stopped.id());
+        assertNotNull(back,"the stopped unit is a fact of the save");
+        assertFalse(back.running());
+        assertTrue(back.stations().isEmpty());
+        assertEquals(master,back.master());
+        assertFalse(back.setpoints().intensivelyDiffers(edited),"its set points round trip");
+        assertEquals(edited.feedRate(),back.setpoints().feedRate(),0);
+    }
     @Test void aSavedFloodLimitRestoresAndAStateWithoutItSolvesAgain() {
         var f=new Fake(0);f.flood=j->new SplitTable.Flood(1.2/.5,12,true,1000,3000);var r=rig(0,f);f.world=r.world();var world=r.world();
         f.runTo(1500);

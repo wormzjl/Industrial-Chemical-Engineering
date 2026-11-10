@@ -807,12 +807,19 @@ public final class FluidWorldAuthority implements AutoCloseable {
     }
     /**
      * The set points {@code value} for the column at {@code master} (C7, plan section 13): a fact of its unit, the next cycle
-     * reads them and a changed ratio solves. Returns null, or why not: no unit yet (it never ran), or the values do not fit
-     * its design. The feed rate stays at most the design rate (owner Q8).
+     * reads them and a changed ratio solves. A column that never ran gets a stopped unit with no stations on them (W7), whose
+     * set points its first Start keeps while they fit. Returns null, or why not: the values do not fit its design. The feed
+     * rate stays at most the design rate (owner Q8).
      */
     public @org.jetbrains.annotations.Nullable String editColumn(PhysicalFluidTopology.Position master,com.wormzjl.icheme.science.column.operation.Setpoints value) {
         owned();if(closed)return "the fluid world is closed";
-        var u=column(master);if(u==null)return "the column has not run yet";
+        var u=column(master);
+        if(u==null) {
+            var stopped=new ColumnUnit(topology.reserve(1),master,false,value,List.of(),ColumnUnit.Totals.empty(model.componentCount()));
+            topology.column(stopped);
+            IChemE.LOGGER.info("column status=SETPOINTS master={},{},{} unit={} stopped",master.x(),master.y(),master.z(),stopped.id());
+            return null;
+        }
         if(!compatible(u.setpoints(),value))return "the set points do not fit the column's design";
         topology.column(u.withSetpoints(value));columns.edited(u.id());
         IChemE.LOGGER.info("column status=SETPOINTS master={},{},{} unit={}",master.x(),master.y(),master.z(),u.id());

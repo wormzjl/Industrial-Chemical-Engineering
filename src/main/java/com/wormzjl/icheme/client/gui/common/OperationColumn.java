@@ -140,10 +140,18 @@ public final class OperationColumn {
         rows.add(new Column.Group(t.get(KEY + "group.control"), t.get(KEY + "group.control.hint"), List.of(control)));
         var s = v.setpoints();
         var values = values(s, in.units());
+        // Where the table in force was solved at other set points (W7): the accepted value on the entry, and why the
+        // requested one was refused.
+        var accepted = v.accepted() == null ? null : values(v.accepted(), in.units());
+        var refusal = Condition.find(v.conditions(), Condition.SETPOINT_REFUSED);
         var entries = new ArrayList<Column.Row>();
         for (var key : fields(s)) {
             if (!shown(key, s)) continue;
             String label = label(key, s, t), unit = unit(key, in.units(), t), hint = t.get(KEY + "hint." + kind(key));
+            if (accepted != null && !accepted.get(key).equals(values.get(key))) {
+                hint = hint + "\n" + t.get(KEY + "hint.accepted", (accepted.get(key) + " " + unit).trim());
+                if (refusal != null && !refusal.text().isEmpty()) hint = hint + "\n" + t.get(KEY + "hint.refused", refusal.text());
+            }
             entries.add(v.editable() ? new Column.Field(key, label, unit, hint) : new Column.Reading(key, label, values.get(key), unit, hint));
         }
         rows.add(new Column.Group(t.get(KEY + "group.setpoints"), t.get(KEY + (v.editable() ? "group.setpoints.hint" : "group.setpoints.reader")), entries));
@@ -253,6 +261,103 @@ public final class OperationColumn {
         return out;
     }
 
+    /**
+     * The conditions' table (W7): a header, then each condition the last cycle and the solves found, in the list's order:
+     * its word, its value (a LIMIT's share of the set feed, a high load's fraction of flood) and its member (a tray as the
+     * player counts, a steam inlet, a pumparound, a product). Empty where none holds. A free text stays in the engine's
+     * hover, where the status says it, so no cell outgrows the glass.
+     */
+    public static List<String[]> conditions(OperationView v, HeatControlColumn.Texts t) {
+        if (v.conditions().isEmpty()) return List.of();
+        var out = new ArrayList<String[]>();
+        out.add(new String[]{t.get(KEY + "column.condition"), t.get(KEY + "column.value"), t.get(KEY + "column.member")});
+        for (var a : v.conditions()) {
+            var c = a.condition();
+            boolean share = c.rank == Condition.Rank.LIMIT || c == Condition.HIGH_LOAD;
+            out.add(new String[]{t.get(KEY + "condition." + c.name().toLowerCase(Locale.ROOT)), share ? fixed(100 * a.value(), 0) + " %" : "—", member(a, t)});
+        }
+        return out;
+    }
+
+    /** A condition's member: a tray, a steam inlet, a pumparound, a product or a member, numbered from 1; a dash for none. */
+    static String member(Condition.Active a, HeatControlColumn.Texts t) {
+        if (a.index() < 0) return "—";
+        String kind = switch (a.condition()) {
+            case FLOODING, HIGH_LOAD -> "tray";
+            case STEAM_SHORT, UNMETERED -> "steam";
+            case PUMPAROUND_SHORT -> "pumparound";
+            case PRODUCT_FULL -> "product";
+            default -> "member";
+        };
+        return t.get(KEY + "member." + kind, a.index() + 1);
+    }
+
+    /** A condition's colour by its rank: a notice muted, a limit or a stale table a warning, a trip red. */
+    static int colour(Condition.Rank rank) {
+        return switch (rank) {
+            case NOTICE -> Palette.MUTED;
+            case NOT_READY, LIMIT, OFF_TABLE -> Palette.WARN;
+            case TRIP -> Palette.RED;
+        };
+    }
+
+    /**
+     * The duties' table with the trays beside them (W7): after the duties, the pressure drop over the trays and the worst
+     * tray's fraction of its flood limit, at the feed the last cycle took and at the set feed, each row naming its unit as
+     * the fans' does. No tray rows where the table in force has no hydraulics.
+     */
+    public static List<String[]> duties(OperationView v, Units u, HeatControlColumn.Texts t) {
+        var out = duties(v, t);
+        var trays = v.trays();
+        if (!trays.known()) return out;
+        out.add(new String[]{t.get(KEY + "trays.drop", u.pressure().symbol()), pressure(trays.drop(), u.pressure()), pressure(trays.dropAtSet(), u.pressure())});
+        out.add(new String[]{trays.tray() > 0 ? t.get(KEY + "trays.flood.n", trays.tray()) : t.get(KEY + "trays.flood"), fixed(100 * trays.flood(), 0), fixed(100 * trays.floodAtSet(), 0)});
+        return out;
+    }
+
+    /** Water's molar mass, kg/mol: a steam ratio in mol/mol shows as kg of steam. */
+    static final double WATER_KG_PER_MOL = 0.018015;
+
+    /**
+     * The set points' table (W7): each ratio entry's absolute value at the set feed (the reboiler and the pumparounds in MW,
+     * steam in kg per the client's time, draws in kmol per it), and where the table in force was solved at other set points,
+     * the accepted value beside it. Empty where the design has no ratio entries.
+     */
+    public static List<String[]> absolutes(OperationView v, Units u, HeatControlColumn.Texts t) {
+        var s = v.setpoints();
+        var a = v.accepted();
+        var rows = new ArrayList<String[]>();
+        for (var key : fields(s)) {
+            String kind = kind(key);
+            if (!shown(key, s) || kind.equals("feed") || kind.equals("condenser") || kind.equals("reflux")) continue;
+            String name = label(key, s, t), unit = switch (kind) {
+                case "steam" -> u.time().unit("kg");
+                case "draw" -> u.time().unit("kmol");
+                default -> "MW";
+            };
+            String requested = absolute(key, s, s.feedRate(), u), row = name + ", " + unit;
+            rows.add(a == null ? new String[]{row, requested} : new String[]{row, requested, absolute(key, a, s.feedRate(), u)});
+        }
+        if (rows.isEmpty()) return List.of();
+        var out = new ArrayList<String[]>();
+        out.add(a == null ? new String[]{t.get(KEY + "column.setpoint"), t.get(KEY + "column.at_feed")}
+                : new String[]{t.get(KEY + "column.setpoint"), t.get(KEY + "column.requested"), t.get(KEY + "column.accepted")});
+        out.addAll(rows);
+        return out;
+    }
+
+    /** Ratio entry {@code key} of {@code s} at feed {@code feed}, mol/s, in the client's units. */
+    static String absolute(String key, Setpoints s, double feed, Units u) {
+        String kind = kind(key);
+        int j = key.contains(":") ? Integer.parseInt(key.substring(key.indexOf(':') + 1)) : 0;
+        return switch (kind) {
+            case "reboiler" -> fixed(s.reboilerPerFeed() * feed / 1e6, 2);
+            case "pumparound" -> fixed(s.pumparoundsPerFeed()[j] * feed / 1e6, 2);
+            case "steam" -> fixed(u.time().display(s.steamPerFeed()[j] * feed * WATER_KG_PER_MOL), 0);
+            default -> fixed(u.time().display(s.drawsPerFeed()[j] * feed) / 1000, 1);
+        };
+    }
+
     /** The last solve: its route in the heading, what asked it, its age. */
     public static List<String[]> solve(OperationView v, HeatControlColumn.Texts t) {
         var s = v.solve();
@@ -284,35 +389,55 @@ public final class OperationColumn {
         return out;
     }
 
-    /** The glass's height the three tables take for {@code v}: the ports', the duties' and the solve's lines, the gaps between. */
-    public static int height(OperationView v) {
-        return PITCH * (1 + v.streams().size()) + TABLE_GAP + PITCH * (1 + v.duties().size()) + TABLE_GAP + PITCH * solveLines(v) + 3 * 2;
+    /**
+     * The glass's tables for {@code v}, top to bottom (W7): the ports, the duties with the trays, the last solve (the tables of
+     * before, which the design size shows in one view), then the conditions where any hold and the set points' absolute values.
+     */
+    public static List<List<String[]>> tables(OperationView v, Units u, HeatControlColumn.Texts t) {
+        var out = new ArrayList<List<String[]>>();
+        for (var table : List.of(ports(v, u, t), duties(v, u, t), solve(v, t), conditions(v, t), absolutes(v, u, t))) if (!table.isEmpty()) out.add(table);
+        return out;
     }
 
-    private static int solveLines(OperationView v) {
-        return v.solve() == null ? 1 : 3;
+    /** The glass's height the tables take for {@code v}: their lines, the gaps between. */
+    public static int height(OperationView v, Units u, HeatControlColumn.Texts t) {
+        var tables = tables(v, u, t);
+        int lines = 0;
+        for (var table : tables) lines += table.size();
+        return PITCH * lines + TABLE_GAP * (tables.size() - 1) + 2 * tables.size();
     }
 
-    /** The three tables on the glass's inside {@code box}, one under the other, scrolled up by {@code offset} (a glass shorter than {@link #height}: the screen clips it and scrolls it). */
+    /** The tables on the glass's inside {@code box}, one under the other, scrolled up by {@code offset} (a glass shorter than {@link #height}: the screen clips it and scrolls it). */
     public static void glass(Canvas c, Rect box, int offset, OperationView v, Units u, HeatControlColumn.Texts t, Measure m) {
-        box = new Rect(box.x(), box.y() - offset, box.w(), Math.max(box.h(), height(v)));
-        int y = table(c, new Rect(box.x(), box.y(), box.w(), box.h()), widths(ports(v, u, t), box.w(), m), ports(v, u, t), m);
-        y = table(c, new Rect(box.x(), y + TABLE_GAP, box.w(), box.bottom() - y - TABLE_GAP), widths(duties(v, t), box.w(), m), duties(v, t), m);
-        table(c, new Rect(box.x(), y + TABLE_GAP, box.w(), box.bottom() - y - TABLE_GAP), widths(solve(v, t), box.w(), m), solve(v, t), m);
+        box = new Rect(box.x(), box.y() - offset, box.w(), Math.max(box.h(), height(v, u, t)));
+        // The conditions' words in their ranks' colours (W7); every other table's names in the text colour.
+        int[] colours = new int[v.conditions().size() + 1];
+        for (int r = 1; r < colours.length; r++) colours[r] = colour(v.conditions().get(r - 1).condition().rank);
+        int y = box.y() - TABLE_GAP;
+        var tables = tables(v, u, t);
+        for (int k = 0; k < tables.size(); k++)
+            y = table(c, new Rect(box.x(), y + TABLE_GAP, box.w(), box.bottom() - y - TABLE_GAP), widths(tables.get(k), box.w(), m), tables.get(k), m,
+                    tables.get(k).getFirst()[0].equals(t.get(KEY + "column.condition")) ? colours : null);
+    }
+
+    /** {@link #table(Canvas, Rect, int[], List, Measure, int[])} with every name in the text colour. */
+    public static int table(Canvas c, Rect box, int[] widths, List<String[]> rows, Measure m) {
+        return table(c, box, widths, rows, m, null);
     }
 
     /**
      * A table on the glass: its header muted under a rule, every second entry on a band ({@link DialogColumns#BAND}), the
-     * name left and the numbers right-aligned in their cells; returns the top of the line after its last.
+     * name left (in {@code names[r]}'s colour where given) and the numbers right-aligned in their cells; returns the top of
+     * the line after its last.
      */
-    public static int table(Canvas c, Rect box, int[] widths, List<String[]> rows, Measure m) {
+    public static int table(Canvas c, Rect box, int[] widths, List<String[]> rows, Measure m, int @Nullable [] names) {
         int y = box.y() + 2;
         for (int r = 0; r < rows.size() && y + 10 <= box.bottom(); r++, y += PITCH) {
             if (r > 0 && r % 2 == 0) c.fill(box.x(), y - 2, box.right(), y + PITCH - 2, DialogColumns.BAND);
             int x = box.x() + 3;
             for (int i = 0; i < widths.length; i++) {
                 String text = rows.get(r)[i];
-                int colour = r == 0 ? Palette.MUTED : i == 0 ? Palette.TEXT : Palette.ACCENT;
+                int colour = r == 0 ? Palette.MUTED : i == 0 ? names != null && r < names.length ? names[r] : Palette.TEXT : Palette.ACCENT;
                 c.text(text, i == 0 ? x : x + widths[i] - PAD - m.width(text), y, colour);
                 x += widths[i];
             }

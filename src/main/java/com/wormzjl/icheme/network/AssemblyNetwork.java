@@ -54,7 +54,7 @@ import java.util.*;
  * {@link WatchPayload}, which replays their stored views, and their changes come with the buckets ({@link WatchedPayload}).
  */
 public final class AssemblyNetwork {
-    public static final String PROTOCOL = "assembly-5";
+    public static final String PROTOCOL = "assembly-6";
     /** Bounds a view's read checks: slots, ports, members, characters of a slot's name or detail. */
     static final int MAX_SLOTS = 256, MAX_PORTS = 1024, MAX_MEMBERS = 256, MAX_TEXT = 1024;
 
@@ -145,6 +145,11 @@ public final class AssemblyNetwork {
             b.writeDouble(d.booked());
             b.writeDouble(d.solved());
         }
+        b.writeDouble(o.trays().drop());
+        b.writeDouble(o.trays().flood());
+        b.writeDouble(o.trays().dropAtSet());
+        b.writeDouble(o.trays().floodAtSet());
+        b.writeVarInt(o.trays().tray());
         var solve = o.solve();
         b.writeBoolean(solve != null);
         if (solve == null) return;
@@ -173,12 +178,13 @@ public final class AssemblyNetwork {
             var duties = new ArrayList<OperationView.Duty>();
             for (int i = 0, n = count(b, MAX_STREAMS); i < n; i++)
                 duties.add(new OperationView.Duty(b.readEnum(OperationView.DutyKind.class), b.readVarInt(), b.readDouble(), b.readDouble()));
+            var trays = new OperationView.Trays(b.readDouble(), b.readDouble(), b.readDouble(), b.readDouble(), b.readVarInt());
             OperationView.Solve solve = null;
             if (b.readBoolean()) {
                 var trigger = b.readBoolean() ? b.readEnum(DriftBands.Trigger.class) : null;
                 solve = new OperationView.Solve(trigger, b.readBoolean(), b.readDouble());
             }
-            return new OperationView(phase, conditions, alpha, resolving, engine, running, editable, setpoints, accepted, streams, duties, solve);
+            return new OperationView(phase, conditions, alpha, resolving, engine, running, editable, setpoints, accepted, streams, duties, solve, trays);
         } catch (IllegalArgumentException invalid) {
             throw new DecoderException(invalid.getMessage());
         }

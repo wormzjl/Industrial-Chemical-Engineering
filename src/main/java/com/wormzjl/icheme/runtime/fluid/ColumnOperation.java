@@ -311,8 +311,11 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
                     step==null||Double.isNaN(r.fanPower)?0:r.fanPower,com.wormzjl.icheme.science.equipment.HeatSides.fanPower(u.airSurface(),atSet)));
         }
         var solve=t==null?null:new com.wormzjl.icheme.science.column.operation.OperationView.Solve(r.solvedBy,r.warm,Math.max(0,now-r.tableTick)/20.0);
+        // The trays at the feed taken (W7): the live drop as the channel reads it, the worst tray's flood fraction.
+        var trays=com.wormzjl.icheme.science.column.operation.OperationView.Trays.NONE;
+        if(t!=null&&t.flood().known()){double taken=step==null?0:step.feedMoles()/seconds;trays=new com.wormzjl.icheme.science.column.operation.OperationView.Trays(drop(t,taken),t.flood().fraction(taken),drop(t,set.feedRate()),t.flood().fraction(set.feedRate()),t.flood().tray()+1);}
         return new com.wormzjl.icheme.science.column.operation.OperationView(r.phase,r.conditions,step==null?0:step.alpha(),
-                r.pending==null?null:r.pending.trigger,r.status+water(u),true,true,set,accepted,streams,duties,solve);
+                r.pending==null?null:r.pending.trigger,r.status+water(u),true,true,set,accepted,streams,duties,solve,trays);
     }
     /** The role of a column's pressure drop channel, {@code differential_pressure} (W3.3). */
     public static final String DIFFERENTIAL="COLUMN:differential";

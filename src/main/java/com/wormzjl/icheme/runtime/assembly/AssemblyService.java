@@ -10,6 +10,7 @@ import com.wormzjl.icheme.science.assembly.AssemblyView;
 import com.wormzjl.icheme.science.assembly.Blueprint;
 import com.wormzjl.icheme.science.assembly.ColumnBlueprint;
 import com.wormzjl.icheme.science.assembly.ExchangerBlueprint;
+import com.wormzjl.icheme.science.equipment.ColumnTrays;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.ShapeRasterizer;
 import com.wormzjl.icheme.world.level.block.EquipmentStructure;
@@ -323,9 +324,13 @@ public final class AssemblyService {
     public static @Nullable String setpoints(ServerLevel level, BlockPos origin, List<Double> values) {
         var world = FluidWorldAuthority.find(level.getServer()).orElse(null);
         var master = position(level, origin.asLong());
-        var unit = world == null ? null : world.column(master);
-        if (unit == null) return "the column has not run yet";
-        var s = unit.setpoints();
+        if (world == null) return "the fluid world is not running";
+        var unit = world.column(master);
+        // A column that never ran takes set points on its design's (W7), unless it cannot run: a vacuum column (owner Q11).
+        var trays = unit != null ? null : designTrays(level, origin);
+        if (unit == null && (trays == null || trays.operating() == null)) return "the column has no operating point";
+        if (unit == null && vacuum(trays)) return com.wormzjl.icheme.science.column.operation.Refusal.VACUUM.text();
+        var s = unit != null ? unit.setpoints() : com.wormzjl.icheme.science.column.operation.Setpoints.of(trays.operating());
         int steam = s.steamPerFeed().length, draws = s.drawsPerFeed().length, pa = s.pumparoundsPerFeed().length;
         if (values.size() != 4 + steam + draws + pa) return "the set points do not fit the column's design";
         double[] v = values.stream().mapToDouble(Double::doubleValue).toArray();
@@ -349,23 +354,33 @@ public final class AssemblyService {
         if (world == null) return null;
         var view = world.columnView(position(level, origin.asLong()), opening);
         if (view != null && (view.running() || refusal == null)) return view;
-        var vessel = EquipmentStructure.at(level, origin);
-        var trays = vessel == null ? null : vessel.shape().trays();
+        var trays = designTrays(level, origin);
         var point = trays == null ? null : trays.operating();
         var setpoints = view != null ? view.setpoints() : point == null ? null : com.wormzjl.icheme.science.column.operation.Setpoints.of(point);
         if (setpoints == null) return null;
         var phase = com.wormzjl.icheme.science.column.operation.OperationView.Phase.STOPPED;
         String engine = "STOPPED";
-        if (trays.components() != null && trays.components().ejector()) {
+        if (vacuum(trays)) {
             phase = com.wormzjl.icheme.science.column.operation.OperationView.Phase.NOT_READY;
             engine = com.wormzjl.icheme.science.column.operation.Refusal.VACUUM.text();
         } else if (refusal != null) {
             phase = com.wormzjl.icheme.science.column.operation.OperationView.Phase.NOT_READY;
             engine = refusal;
         }
-        var idle = com.wormzjl.icheme.science.column.operation.OperationView.idle(phase, engine, setpoints);
-        return view == null ? idle : new com.wormzjl.icheme.science.column.operation.OperationView(phase, List.of(), 0, null, engine, false, true, setpoints, null,
+        var idle = com.wormzjl.icheme.science.column.operation.OperationView.idle(phase, engine, setpoints, !vacuum(trays));
+        return view == null ? idle : new com.wormzjl.icheme.science.column.operation.OperationView(phase, List.of(), 0, null, engine, false, !vacuum(trays), setpoints, null,
                 List.of(), List.of(), null);
+    }
+
+    /** The trays of the column whose structure stands at {@code origin}, or null. */
+    private static @Nullable ColumnTrays designTrays(ServerLevel level, BlockPos origin) {
+        var vessel = EquipmentStructure.at(level, origin);
+        return vessel == null ? null : vessel.shape().trays();
+    }
+
+    /** Whether a column with {@code trays} cannot run: a vacuum column (owner Q11). */
+    private static boolean vacuum(@Nullable ColumnTrays trays) {
+        return trays != null && trays.components() != null && trays.components().ejector();
     }
 
     private static com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Position position(ServerLevel level, long at) {
