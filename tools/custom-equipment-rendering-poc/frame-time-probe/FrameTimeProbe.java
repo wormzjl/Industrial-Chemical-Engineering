@@ -765,6 +765,9 @@ public final class FrameTimeProbe {
                         sensors += after.metadata().sensors().size();
                     }
                 }
+            // A creative install keeps the stack: an instrument left in the hand puts InstrumentRenderer in its placement
+            // mode (every host gathered, mounts and ghosts each frame), which is not the case the bench measures.
+            player.setItemInHand(InteractionHand.MAIN_HAND, net.minecraft.world.item.ItemStack.EMPTY);
             LOGGER.info("FPS_AUTOPILOT drum instruments: hosts {} gauges {} sensors {} without a host {}", hosts, gauges, sensors, missing);
         });
     }
