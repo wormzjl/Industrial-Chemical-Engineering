@@ -165,7 +165,8 @@ Goal: one world with a full-size column plant, tested by script, then left runni
    | 13 | plant B: close the hot utility valve | HEATING LIMITED |
 
    A case that does not reach its expectation in its time fails the run with its log line; the plant stays standing.
-7. **Gate-size case.** One test in `ColumnOperationGameTests` (`icheme_fluid_test`, a fresh `fluidGameTestRunId`): a blocked product raises `alarm_blocked` on a DCS menu's publication.
+7. **Gate-size cases.** In `ColumnOperationGameTests` (`icheme_fluid_test`, a fresh `fluidGameTestRunId`), the two checks stages 1 and 2 left for a server: a blocked product raises `alarm_blocked` in a DCS menu's publication; a DCS wired to a column lists it, and its START, APPLY and STOP reach the unit.
+7a. **What the earlier stages fixed for this plant.** The pumps need real motors on FE conduits from the creative source (a creative motor needs no FE and cannot lose power); plant B's kettle tubes and plant A's trim and coolers are in the COLUMN mode with complete flow stations where the script expects the column to set their valves; the column is 8 m (D9 was dropped).
 8. **Hand-over.** Run `./gradlew runReviewWorldServer` (alone; about an hour of game time at 20 TPS). Copy `run/review-world/world` to `run/saves/column-failure-modes` in this worktree. Write `MANUAL_TEST.md` in this folder: the launch command for this worktree (the owner starts the client), where the player spawns, each named valve, cable and screen with its coordinates (the rig logs them), the table above as actions for a player with the expected status and alarm and the time each takes, and how to restore. Add `tools/INDEX.md` or `verification.md` lines only where a tool or a lane changed.
 
 **Done:** the script's 13 lines all as expected (attach them); the world in `run/saves/column-failure-modes`; `MANUAL_TEST.md`; commits: rig parameters, the world class, the gate case, the documents.
