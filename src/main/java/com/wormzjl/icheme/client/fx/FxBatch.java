@@ -333,7 +333,7 @@ public final class FxBatch {
             if (kind == FxKind.HAZE) RenderSystem.setShaderTexture(0, copyScreen(window.getWidth(), window.getHeight()));
             shader = RenderSystem.getShader();
             if (shader == null) return;
-            shader.setDefaultUniforms(VertexFormat.Mode.QUADS, event.getModelViewMatrix(), event.getProjectionMatrix(), window);
+            FxShaders.defaultUniforms(shader, event.getModelViewMatrix(), event.getProjectionMatrix(), window);
             uniform(shader, "FxTime", false, (float) (now - epoch));
             uniform(shader, "GlideSeconds", false, (float) FxGlide.SECONDS);
             uniform(shader, "Daylight", false, (float) daylight);

@@ -1,5 +1,7 @@
 package com.wormzjl.icheme.client.fx;
 
+import com.mojang.blaze3d.platform.Window;
+import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.wormzjl.icheme.IChemE;
@@ -10,6 +12,7 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.RegisterShadersEvent;
 import org.jetbrains.annotations.Nullable;
+import org.joml.Matrix4f;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -79,5 +82,46 @@ public final class FxShaders {
 
     public static @Nullable ShaderInstance wiring() {
         return wiring;
+    }
+
+    private static final String[] SAMPLERS = new String[12];
+    /** Texture ids boxed once: {@code setSampler} keeps an Object, and {@code Integer.valueOf} boxes ids above 127 a call. */
+    private static Integer[] boxed = new Integer[1024];
+
+    static {
+        for (int i = 0; i < SAMPLERS.length; i++) SAMPLERS[i] = "Sampler" + i;
+    }
+
+    /**
+     * As {@code ShaderInstance.setDefaultUniforms(VertexFormat.Mode.QUADS, modelView, projection, window)} (NeoForge 21.1,
+     * Minecraft 1.21.1): the same samplers and uniforms from the same sources in the same order, without its twelve
+     * {@code "Sampler" + i} concatenations a call (about 600 B; FX_BENCH_REVIEW.md, {@code FxBatch.drawShader}). No line
+     * width: that is for lines only. Render thread only.
+     */
+    public static void defaultUniforms(ShaderInstance shader, Matrix4f modelView, Matrix4f projection, Window window) {
+        for (int i = 0; i < SAMPLERS.length; i++) shader.setSampler(SAMPLERS[i], box(RenderSystem.getShaderTexture(i)));
+        if (shader.MODEL_VIEW_MATRIX != null) shader.MODEL_VIEW_MATRIX.set(modelView);
+        if (shader.PROJECTION_MATRIX != null) shader.PROJECTION_MATRIX.set(projection);
+        if (shader.COLOR_MODULATOR != null) shader.COLOR_MODULATOR.set(RenderSystem.getShaderColor());
+        if (shader.GLINT_ALPHA != null) shader.GLINT_ALPHA.set(RenderSystem.getShaderGlintAlpha());
+        if (shader.FOG_START != null) shader.FOG_START.set(RenderSystem.getShaderFogStart());
+        if (shader.FOG_END != null) shader.FOG_END.set(RenderSystem.getShaderFogEnd());
+        if (shader.FOG_COLOR != null) shader.FOG_COLOR.set(RenderSystem.getShaderFogColor());
+        if (shader.FOG_SHAPE != null) shader.FOG_SHAPE.set(RenderSystem.getShaderFogShape().getIndex());
+        if (shader.TEXTURE_MATRIX != null) shader.TEXTURE_MATRIX.set(RenderSystem.getTextureMatrix());
+        if (shader.GAME_TIME != null) shader.GAME_TIME.set(RenderSystem.getShaderGameTime());
+        if (shader.SCREEN_SIZE != null) shader.SCREEN_SIZE.set((float) window.getWidth(), (float) window.getHeight());
+        RenderSystem.setupShaderLights(shader);
+    }
+
+    private static Integer box(int id) {
+        if (id < 0) return id;
+        if (id >= boxed.length) {
+            if (id >= 1 << 20) return id;
+            boxed = java.util.Arrays.copyOf(boxed, Math.max(id + 1, 2 * boxed.length));
+        }
+        var b = boxed[id];
+        if (b == null) b = boxed[id] = id;
+        return b;
     }
 }

@@ -357,7 +357,7 @@ public final class InstrumentRenderer {
                     var s=SHOWN.get(i);int at=s.wiring.index(name);if(at<0)continue;
                     var f=s.wiring.finish()[at];int light=s.light;
                     at(mine,s.origin,camera);
-                    for(int k=0;k<f.length;k+=8)consumer.addVertex(mine,f[k],f[k+1],f[k+2]).setColor(255,255,255,255).setUv(f[k+3],f[k+4]).setOverlay(OverlayTexture.NO_OVERLAY).setLight(light).setNormal(mine,f[k+5],f[k+6],f[k+7]);
+                    for(int k=0;k<f.length;k+=8)normal(vertex(consumer,mine,f[k],f[k+1],f[k+2]).setColor(255,255,255,255).setUv(f[k+3],f[k+4]).setOverlay(OverlayTexture.NO_OVERLAY).setLight(light),mine,f[k+5],f[k+6],f[k+7]);
                 }
                 buffers.endBatch(type);
             }
@@ -382,7 +382,7 @@ public final class InstrumentRenderer {
                     if(shader==null)throw new IllegalStateException("The wiring shader is not bound");
                     var origin=shader.getUniform("WiringOrigin");var light=shader.getUniform("WiringLight");
                     if(origin==null||light==null)throw new IllegalStateException("The wiring shader lacks WiringOrigin or WiringLight");
-                    shader.setDefaultUniforms(VertexFormat.Mode.QUADS,event.getModelViewMatrix(),event.getProjectionMatrix(),mc.getWindow());
+                    com.wormzjl.icheme.client.fx.FxShaders.defaultUniforms(shader,event.getModelViewMatrix(),event.getProjectionMatrix(),mc.getWindow());
                     shader.setSampler("NormalMap",textures.getTexture(texture.normal));shader.setSampler("SpecularMap",textures.getTexture(texture.specular));
                     shader.apply();
                     for(int i=0;i<shown;i++){
@@ -488,7 +488,7 @@ public final class InstrumentRenderer {
                 var first=mount.point(.177*Math.cos(a),.177*Math.sin(a),.073).subtract(camera);
                 var second=mount.point(.177*Math.cos(b),.177*Math.sin(b),.073).subtract(camera);
                 var direction=second.subtract(first).normalize();
-                for(var point:List.of(first,second))lines.addVertex(pose.last(),(float)point.x,(float)point.y,(float)point.z).setColor(colour>>16&255,colour>>8&255,colour&255,135).setNormal(pose.last(),(float)direction.x,(float)direction.y,(float)direction.z);
+                for(var point:List.of(first,second))normal(vertex(lines,pose.last(),(float)point.x,(float)point.y,(float)point.z).setColor(colour>>16&255,colour>>8&255,colour&255,135),pose.last(),(float)direction.x,(float)direction.y,(float)direction.z);
             }
         } else LevelRenderer.renderLineBox(pose,lines,selection.bounds().move(camera.scale(-1)),(colour>>16&255)/255f,(colour>>8&255)/255f,(colour&255)/255f,.53f);
     }
@@ -544,13 +544,31 @@ public final class InstrumentRenderer {
     private static int light(Instrument.Mount mount,int tint){return tint==0?LevelRenderer.getLightColor(Minecraft.getInstance().level,net.minecraft.core.BlockPos.containing(mount.centre())):LightTexture.FULL_BRIGHT;}
     /** {@link #light} at an instrument's kept light position. */
     private static int lightAt(BlockPos at){return LevelRenderer.getLightColor(Minecraft.getInstance().level,at);}
-    /** Writes {@code posed}'s quads relative to the camera, {@code tint} (0: each quad's colour) at {@code alpha}. */
+    /**
+     * Writes {@code posed}'s quads relative to the camera, {@code tint} (0: each quad's colour) at {@code alpha}. The pose's
+     * transforms as {@code addVertex(pose, …)} and {@code setNormal(pose, …)} made them, into {@link #POSITION} and
+     * {@link #NORMAL} (those defaults allocate a vector a vertex); the normal once a quad, as each of its vertices took it.
+     */
     private static void submit(PoseStack pose,VertexConsumer consumer,Posed posed,Vec3 camera,int tint,int alpha,int light){
-        var last=pose.last();var v=posed.xyz;
+        var last=pose.last();var matrix=last.pose();var v=posed.xyz;var normals=posed.normals;double cx=camera.x,cy=camera.y,cz=camera.z;var p=POSITION;
         for(int q=0;q<posed.quads;q++){
-            int c=tint==0?posed.colours[q]:tint,o=12*q;float nx=posed.normals[3*q],ny=posed.normals[3*q+1],nz=posed.normals[3*q+2];
-            for(int j=0;j<4;j++)consumer.addVertex(last,(float)(v[o+j*3]-camera.x),(float)(v[o+j*3+1]-camera.y),(float)(v[o+j*3+2]-camera.z)).setColor(c>>16&255,c>>8&255,c&255,alpha).setUv(0,0).setOverlay(OverlayTexture.NO_OVERLAY).setLight(light).setNormal(last,nx,ny,nz);
+            int c=tint==0?posed.colours[q]:tint,o=12*q,r=c>>16&255,g=c>>8&255,b=c&255;
+            var n=last.transformNormal(normals[3*q],normals[3*q+1],normals[3*q+2],NORMAL);float nx=n.x,ny=n.y,nz=n.z;
+            for(int j=0;j<4;j++){
+                matrix.transformPosition((float)(v[o+j*3]-cx),(float)(v[o+j*3+1]-cy),(float)(v[o+j*3+2]-cz),p);
+                consumer.addVertex(p.x,p.y,p.z).setColor(r,g,b,alpha).setUv(0,0).setOverlay(OverlayTexture.NO_OVERLAY).setLight(light).setNormal(nx,ny,nz);
+            }
         }
+    }
+    /** The render thread's transform targets for {@link #vertex}, {@link #normal} and {@link #submit}. */
+    private static final org.joml.Vector3f POSITION=new org.joml.Vector3f(),NORMAL=new org.joml.Vector3f();
+    /** As {@code consumer.addVertex(pose, x, y, z)}: the same transform, into {@link #POSITION}. */
+    private static VertexConsumer vertex(VertexConsumer consumer,PoseStack.Pose pose,float x,float y,float z){
+        var p=pose.pose().transformPosition(x,y,z,POSITION);return consumer.addVertex(p.x,p.y,p.z);
+    }
+    /** As {@code consumer.setNormal(pose, x, y, z)}: the same transform, into {@link #NORMAL}. */
+    private static VertexConsumer normal(VertexConsumer consumer,PoseStack.Pose pose,float x,float y,float z){
+        var n=pose.transformNormal(x,y,z,NORMAL);return consumer.setNormal(n.x,n.y,n.z);
     }
     private static void text(PoseStack pose,MultiBufferSource buffers,Instrument.Mount m,Vec3 camera,String text,double x,double y,float scale){text(pose,buffers,m,camera,text,x,y,scale,InstrumentGeometry.LABEL,0xff252b2e);}
     private static void text(PoseStack pose,MultiBufferSource buffers,Instrument.Mount m,Vec3 camera,String text,double x,double y,float scale,double depth,int colour){var mc=Minecraft.getInstance();var p=m.point(x,y,depth).subtract(camera);pose.pushPose();pose.translate(p.x,p.y,p.z);float angle=(float)Math.toDegrees(Math.atan2(m.normal().x,m.normal().z));pose.mulPose(Axis.YP.rotationDegrees(angle));pose.scale(scale,-scale,scale);mc.font.drawInBatch(text,-mc.font.width(text)/2f,0,colour,false,pose.last().pose(),buffers,net.minecraft.client.gui.Font.DisplayMode.NORMAL,0,LightTexture.FULL_BRIGHT);pose.popPose();}
@@ -562,7 +580,7 @@ public final class InstrumentRenderer {
             if(face.material()==com.wormzjl.icheme.science.equipment.Mesh.Material.GLASS)continue;
             var p=face.positions();var n=face.normals();
             for(int first=1;first+1<face.size();first+=2)for(int c:new int[]{0,first,first+1,Math.min(first+2,face.size()-1)})
-                consumer.addVertex(pose.last(),(float)p[3*c],(float)p[3*c+1],(float)p[3*c+2]).setColor(tint>>16&255,tint>>8&255,tint&255,alpha).setUv(0,0).setOverlay(OverlayTexture.NO_OVERLAY).setLight(LightTexture.FULL_BRIGHT).setNormal(pose.last(),(float)n[3*c],(float)n[3*c+1],(float)n[3*c+2]);
+                normal(vertex(consumer,pose.last(),(float)p[3*c],(float)p[3*c+1],(float)p[3*c+2]).setColor(tint>>16&255,tint>>8&255,tint&255,alpha).setUv(0,0).setOverlay(OverlayTexture.NO_OVERLAY).setLight(LightTexture.FULL_BRIGHT),pose.last(),(float)n[3*c],(float)n[3*c+1],(float)n[3*c+2]);
         }
         pose.popPose();
     }
