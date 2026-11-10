@@ -87,7 +87,7 @@ Changes take effect on the next frame. A change to `pbr_textures` re-meshes the 
 
 **The wiring today.** `InstrumentWiring.build` lays out each structure's wiring:
 
-1. A protected root runs from each built-in sensor down to the skin. It is a 20 mm steel tube (`INSTRUMENT_STEEL`), real geometry.
+1. A straight 20 mm steel lead (`INSTRUMENT_STEEL`, real geometry) runs from each sensor head's cable entry down to the skin. The process connection under the head (`root`: nozzle, flange, hex) is separate.
 2. A 20 mm branch runs from each root's foot to a shared baseline.
 3. The 25 mm baseline (trunk) runs to the service enclosure's instrument entry, which is the data port.
 
@@ -104,13 +104,37 @@ Runs follow the skin's facets (shell, heads, pipes, supports, tower panels) and 
                     [=]  <- service enclosure, data port    normal tilts -side .. up .. +side; AO at both edges
 ```
 
+**What an ATEX connection looks like** (owner request 2026-11-10; references and photos in section 9):
+
+- **At the transmitter.** The cable enters the head through a certified cable gland screwed into its M20 entry, an Ex d / Ex e gland for armoured cable, nickel-plated brass with a hex body of about 30 to 40 mm and often a PVC shroud. Leaving the gland, the cable drops in a **drip loop** below the entry, so water runs off before it reaches the gland. It is then cleated to a support. A rigid steel lead screwed into the head is the North American conduit practice (NEC Class I Div 1, with a seal fitting), not ATEX.
+- **The cable.** Each transmitter has its own single-pair armoured instrument cable (outer sheath, steel wire or braid armour, bedding, one pair), about 10 to 14 mm across. Intrinsically safe circuits are marked by a **light blue** sheath, which is common practice: Lapp sells blue IS glands and cable. I could not confirm the clause in IEC 60079-14. Other circuits are black. A 4 to 20 mA transmitter is usually Ex ia, so its cable is light blue.
+- **No multicore along the vessel.** The single-pair branch cables run side by side on a small perforated galvanised tray (channel) on brackets to the junction box. The number of cables on the tray grows as each branch joins. Instrument cables are not normally strapped straight to a shell or pipe; they ride on tray or brackets fixed to clips. Tray supports are about 1 m apart, at most 3 m. Cables are tied on the tray, closely on vertical runs.
+- **The junction box.** An Ex e box in 316L stainless steel. Branch cables enter through glands on its **bottom** face (sometimes the sides, never the top), each in a drip loop. One multi-pair main cable (for example 12 pairs) leaves the bottom for the control room. In the mod, that main cable is the data cable the player lays from the data port.
+
+```
+ At the head (ATEX)                    Section of the baseline: tray        Junction box (the service enclosure)
+
+  [ head ]=[gland]  <- M20 entry,        tie strap every 0.5 m                   tray, branch cables
+            |          brass, shroud      _ __________________ _                ======\
+            \                            | (o)(o)(o)          |  <- one light-        |
+             \__  drip loop below        |____________________|     blue cable    +---------+
+                \___________ to tray     ======================      per sensor   | Ex e JB | 316L
+                                         bracket / skin              joined       +--+-+-+--+
+                                                                                     U U U  <- bottom glands, drip loops
+                                                                                     |
+                                                                                 main cable = the player's data cable
+```
+
 **Design.**
 
-- **Own tiled textures.** `textures/wiring/branch.png` (one cable, 20 mm) and `trunk.png` (three cables bundled, 25 mm), each with `_n` and `_s` beside it. They stay outside the block atlas, so they can repeat. v becomes metres over a period of 0.5 m: one galvanised saddle clamp per period, plus a cable tie every 0.25 m on the trunk. Within a period the cable sags very slightly between clamps. u stays across the ribbon. `tools/pbr-textures/` writes all three files from one height field: the round cable profile across u, clamps, ties and sag. In `_n`, R and G hold the normal's X and Y, B holds AO and A holds height. In `_s`, R is smoothness (jacket 0.3, clamp 0.6), G is F0 (jacket about 0.04) or a metal id (clamp 230, iron), B is porosity and A is emission (none). The albedo keeps today's colours and has no relief painted in.
+- **Own tiled textures, drawn after the ATEX practice.** `textures/wiring/branch.png`: one light-blue armoured cable on a narrow galvanised strap, held by a stainless saddle once per period. `textures/wiring/tray_1.png` to `tray_6.png`: a perforated galvanised channel with a lip at each edge, holding 1 to 6 light-blue cables, with a tie strap across once per period. Each texture has `_n` and `_s` beside it. The textures stay outside the block atlas, so they can repeat. v becomes metres over a period of 0.5 m. Within a period a cable sags very slightly. u stays across the ribbon. `tools/pbr-textures/` writes all three files from one height field: cable profiles across u, the channel's lips and perforations, saddles, ties, sag. In `_n`, R and G hold the normal's X and Y, B holds AO and A holds height. In `_s`, R is smoothness (sheath 0.35, galvanised 0.5, stainless 0.65), G is F0 (sheath about 0.04) or a metal id (steel parts 230, iron), B is porosity and A is emission (none). The albedo has no relief painted in.
+- **Cable count on the baseline (X10).** `InstrumentWiring.build` already knows where each branch joins the baseline. Each baseline segment takes the tray texture for the number of joins on its far side from the exit, which is the number of cables it carries. Past 6 the tray shows 6. The run to the entry carries every cable.
+- **The lead at the head (X9).** The straight 20 mm steel lead becomes an ATEX entry: a gland on the head's cable entry (a short hex body and shroud), then the cable as a tube that drops in a drip loop below the entry before it meets the skin. It is real geometry, `INSTRUMENT_STEEL` for the gland, the branch sheath for the cable.
+- **The entry into the service enclosure.** The run to the entry ends on the enclosure's bottom or side face, never its top. W2 checks every kind's `instrumentEntry` and moves any top entry.
 - **Without a shader pack: our own shader.** `icheme:rendertype_wiring` is the vanilla entity-cutout shader plus a normal map. The tangent frame comes from screen-space derivatives of position and UV, so the vertex format does not change. The per-pixel normal is lit by vanilla's two entity light directions and the lightmap, the way vanilla lights entities, with a faint sheen on the metal clamps from `_s`. This works only because the wiring is entity geometry. Chunk geometry goes through Sodium's own chunk shader, which cannot take a normal map.
 - **With a shader pack:** `RenderType.entityCutoutNoCull(<wiring texture>)`. Iris loads `_n` and `_s` beside the texture and the pack lights the wiring. Packs with parallax also use the height.
 - **`pbr_textures = false`:** the same tiled albedo, lit flat by the vanilla entity shader. This is still better than today, because the texture is no longer stretched.
-- **Quads:** unshaded vertex colour, because the shader or the pack does the lighting, and v in metres. At a corner where two runs meet, the strips already overlap by half a width. The wiring is still baked per structure, now with one draw per texture per frame, so two draws. The cost is one more texture fetch per wiring pixel.
+- **Quads:** unshaded vertex colour, because the shader or the pack does the lighting, and v in metres. At a corner where two runs meet, the strips already overlap by half a width. The wiring is still baked per structure, now with one draw per texture per frame, so at most seven draws (branch and six trays). The cost is one more texture fetch per wiring pixel.
 - **Later:** the protected roots take the same steel normal map. After that come the chunk sprites (still, tower panels, shell weld seams). Chunk geometry cannot use our shader, so those need X5.
 
 ### 4.5 Effects
@@ -155,7 +179,7 @@ Setups: vanilla NeoForge 21.1.219; Sodium 0.6 for NeoForge; Embeddium 1.0.15; So
 |---|---|---|
 | W0 | Spike: `FxCompat` detection, one test flame ribbon on both paths, one drum's wiring on its tiled `_n` / `_s` textures; settles the questions in section 7 | owner-run matrix on 3 setups |
 | W1 | Core: `FxSettings`, `FxCompat`, `FxShaders`, `FxRenderTypes`, `FxBatch`, `FxWind`, `FxAmbient`, glide | unit tests: wind determinism, ambient mapping, mixing-line excess against section 2's table, batch budgets |
-| W2 | `tools/pbr-textures/`; the branch and trunk textures; `InstrumentWiring.paint` v in metres; `icheme:rendertype_wiring`; `InstrumentRenderer` picks the render type by path | resource test: `_n` / `_s` sizes and channel ranges; InstrumentWiring test: v grows by run length (a 15 m run spans 30 periods); the existing wiring and equipment gates |
+| W2 | `tools/pbr-textures/`; the branch and tray textures; `InstrumentWiring.paint` v in metres and the cable count per baseline segment; the gland and drip loop at the head (X9); bottom or side entries; `icheme:rendertype_wiring`; `InstrumentRenderer` picks the render type by path | resource test: `_n` / `_s` sizes and channel ranges; InstrumentWiring tests: v grows by run length (a 15 m run spans 30 periods), a baseline segment carries the cables joined beyond it, no entry on a top face; the existing wiring and equipment gates |
 | W3 | Flare: flame, smoke, roar; `FlareState` additions; old particle code removed | flame geometry tests; FlareRuntimeTest for the new fields |
 | W4 | Tower plume: `TowerPlume` watch, marks, puffs | plume length tests; tower runtime test for the published exhaust |
 | W5 | Heater stacks: `HEATERS` watch, flue state, marks, plume, smoke, haze hook | flue-state tests (stack temperature, water share by fuel) |
@@ -176,7 +200,9 @@ Order: W0 → W1 → W2 (the owner reviews the wires) → W3 → W4/W5 → W6/W7
 
 ## 8. Owner decisions
 
-- **X1 Wires.** Decided (owner, 2026-11-10): the instrument wiring laid out on equipment from sensors to the data port (section 4.4). Open within it: the period (0.5 m between saddle clamps, recommended) and whether the jacket keeps today's colour (recommended) or turns black PVC.
+- **X1 Wires.** Decided (owner, 2026-11-10): the instrument wiring laid out on equipment from sensors to the data port (section 4.4). Open within it: the period (0.5 m between saddles and ties, recommended) and the sheath colour, light blue for intrinsically safe circuits (recommended after the ATEX check) or black.
+- **X9 Lead at the head.** A: an ATEX entry, a gland plus a cable in a drip loop (recommended). B: keep the straight steel lead (the North American conduit look).
+- **X10 Baseline.** A: a perforated tray showing the cables joined so far, 1 to 6, at today's 25 mm width (recommended). B: the same, with the width growing to a real tray, 12 mm per cable plus 6 mm of lips, 25 to 78 mm; the level-of-detail rule then takes the widest run. C: one cable, as now.
 - **X2 White plume at the mod's ambient.** A: a visual ambient from biome, altitude, rain and night; the plume follows the mixing line (recommended: real physics, weather the player can see). B: always a plume, sized by evaporation or flue flow, whatever the weather. C: the 25 °C, 50 % physics only, so no white plume, only shimmer and haze.
 - **X3 Wind.** A: one presentation wind for flame lean and plume drift (recommended). B: no wind; flames stand straight and plumes rise straight up.
 - **X4 Switch.** A: `AUTO`, `COMPATIBLE`, `OFF`; the old particle code is deleted (recommended). B: keep a `PARTICLES` mode with today's code.
@@ -192,4 +218,5 @@ Order: W0 → W1 → W2 (the owner reviews the wires) → W3 → W4/W5 → W6/W7
 - Iris v0 API (`IrisApi`, `isShaderPackInUse`): [Iris commit 41721a5](https://github.com/IrisShaders/Iris/commit/41721a53dde15698bf03c6763475c62978105e7c), [Iris architecture](https://deepwiki.com/IrisShaders/Iris/2-architecture).
 - Custom pipelines invisible under a pack: [malilib issue 165](https://github.com/sakura-ryoko/malilib/issues/165).
 - Loaders on 1.21.1: [Iris NeoForge 1.21.1](https://www.curseforge.com/minecraft/mc-mods/irisshaders/files/5654382), [Sodium 0.6.13 NeoForge](https://modrinth.com/mod/sodium/version/mc1.21.1-0.6.13-neoforge), [Embeddium](https://nothingseries.github.io/docs/mods/modpages/embeddium).
+- ATEX connection practice: Ex d / Ex e glands for armoured cable, [CMP catalogue](https://acomee.com.mx/catalogos/catalogosc/CMP%20PRODUCTS%20CABLE%20GLANDS%20AND%20CONNECTORS.pdf), [Axis M20 Ex d armoured gland](https://www.axis.com/en-ae/products/ex-d-cable-gland-m20-armored-cable); blue IS glands and cable, [Lapp ATEX gland](https://lappaustralia.com.au/en/atex-gland-m40-2); Ex e junction boxes in 316L with bottom glands, [Pepperl+Fuchs](https://files.pepperl-fuchs.com/webcat/navi/productInfo/pds/t47951_eng.pdf), [Eaton GHG7](https://www.eaton.com/content/dam/eaton/products/enclosures/crouse-hinds/catalog-pages/crouse-hinds-ghg7-junction-box-catalog-pages.pdf); tray supports 1 m (3 m at most), [NOV electrical assembly requirements](https://nov.com/media/nov/files/about/rt-supply-chain-resources/procurement/electrical-assembly-general-requirements-103189068.pdf); instrument cables not strapped to equipment, [instrumentationtools forum](https://ask.instrumentationtools.com/t/installation-of-cables/7962). Photos: a transmitter's armoured cable in a drip loop into its side gland, [sanhuiex](https://sanhuiex.net/wp-content/uploads/2024/04/Digital-Pressure-Transmitter-Cable-inlet-and-outlet.jpg); five light-blue single-pair branch cables on a tray into a junction box and one 12-pair main cable out of its bottom, [Instrumentation Tools video](https://www.youtube.com/watch?v=kZl2rt60JCE).
 - Mixing-line numbers: Magnus-type saturation pressure (Arden Buck), humidity ratio 0.621945 p/(P − p), as `TowerTransfer`; computed for this plan.
