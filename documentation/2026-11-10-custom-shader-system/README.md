@@ -11,6 +11,7 @@ Owner, 2026-11-10: a custom shader system for normal textures (first the instrum
 - [CUSTOM_SHADER_SYSTEM_PLAN.md](CUSTOM_SHADER_SYSTEM_PLAN.md): the readings of the request, physics in numbers (white plumes as mixing-line condensation: none at the mod's 25 °C / 50 % ambient), the two render paths (own shaders without a pack, vanilla entity render types with LabPBR under a pack), the config switch, normal maps for the instrument wiring (tiled textures, our own entity shader without a pack, LabPBR under one), the effects and sounds, budgets, the compatibility matrix, W0 to W9, owner decisions X1 to X12 (X1 decided), the ATEX connection practice the wiring follows.
 - [SOFT_DEPENDENCY_REVIEW.md](SOFT_DEPENDENCY_REVIEW.md): which related mods to depend on optionally: Iris API now; Sodium, Embeddium, Flywheel and the effect libraries not; Distant Horizons and LambDynamicLights later; where the speed comes from instead; Distant Horizons added (X11 A); the guards against changes in those mods.
 - [PROCESS_SOUNDS_REVIEW.md](PROCESS_SOUNDS_REVIEW.md): which other equipment makes noise (valves by stream power and cavitation, vents, fans, falling water, burners, gearboxes, kettles), one server-culled noise watch and one client budget of 12 loops; decisions S1 to S4.
+- [FX_BENCH_PLAN.md](FX_BENCH_PLAN.md): W11, the CPU, GPU and RAM bench (budgets, synthetic-state scene, five lanes) and the optimization loop.
 
 ## History
 
@@ -22,6 +23,7 @@ Owner, 2026-11-10: a custom shader system for normal textures (first the instrum
 - 2026-11-10: owner: go with every recommended option (plan section 8); merge main before starting; implementation agents at medium reasoning effort.
 - 2026-11-10: phase 1 started (fx-core, fx-server-states, fx-sounds). fx-sounds done: five synthesised loops, 281b8bb7e (not compiled yet).
 - 2026-11-10: owner: think about sounds for other equipment, valves included, and update performance. Review written. Owner: valve volume from its pressure drop alone (while it flows), the rest as recommended (S1 A to S4 A); fx-noise agent approved for after phase 1.
+- 2026-11-10: owner: bench the CPU, GPU and RAM overhead and optimize as part of the work. FX_BENCH_PLAN.md (W11) written; the fx-bench agent and the shader-pack download wait for the owner.
 
 ## Code areas (planned)
 

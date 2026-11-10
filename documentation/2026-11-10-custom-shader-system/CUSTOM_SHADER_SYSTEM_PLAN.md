@@ -218,9 +218,10 @@ Setups: vanilla NeoForge 21.1.219; Sodium 0.6 for NeoForge; Embeddium 1.0.15; So
 | W7 | `tools/process-sounds/`: five loops | seam and RMS report, as machine-sounds |
 | W8 | Heat haze (if X6 A) | SHADER path only; off by default |
 | W10 | DH silhouettes: `compat/dh/` (compileOnly DH API, `-PwithoutDh`), the subscription request and the registry reply, cell colours and greedy boxes on a worker, groups with the far tier | silhouette tests: the box set covers the layout cells grown by 0.02 m, box budgets, the subscription replays only registry facts; guard tests with a stub DH API |
+| W11 | CPU, GPU and RAM bench and optimization ([FX_BENCH_PLAN.md](FX_BENCH_PLAN.md)) | lanes within the budgets of that plan; `FX_BENCH_REVIEW.md` |
 | W9 | Docs, code guide chapter "effects", translations of the new config lines, tooling cleanup | final lane |
 
-Order: W0 → W1 → W2 (the owner reviews the wires) → W3 → W4/W5 → W6/W7 → W8 → W10 → W9.
+Order: W0 → W1 → W2 (the owner reviews the wires) → W3 → W4/W5 → W6/W7 → W8 → W10 → W11 → W9.
 
 ## 7. Unknowns W0 settles
 
