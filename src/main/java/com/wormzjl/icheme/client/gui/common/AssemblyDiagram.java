@@ -65,7 +65,8 @@ public final class AssemblyDiagram {
     public static AssemblyDiagram of(ColumnTrays trays) {
         var c = Objects.requireNonNull(trays.components(), "A column without a component design has no assembly");
         var d = new AssemblyDiagram();
-        boolean vac = c.ejector(), ket = c.kettle(), trim = c.condenser() == ColumnComponents.Condenser.AIR_THEN_WATER,
+        // A vacuum top held by a vacuum pump has no ejector (batch 2026-11-10-vacuum-pump).
+        boolean vac = c.ejector() && !c.vacuumPump(), ket = c.kettle(), trim = c.condenser() == ColumnComponents.Condenser.AIR_THEN_WATER,
                 air = trim || c.condenser() == ColumnComponents.Condenser.AIR_COOLER;
 
         d.part(COLUMN, t("part.column"), t("where.column"), null);
@@ -77,12 +78,17 @@ public final class AssemblyDiagram {
         } else
             d.part(CONDENSER, t("part.condenser"), t(vac ? "where.condenser_ejector" : "where.condenser"), t(air ? "wanted.air_cooler" : "wanted.condenser"));
         d.part(RECEIVER, t("part.receiver"), t("where.receiver"), t("wanted.receiver"));
+        // A vacuum pump on the receiver's vapour outlet before the offgas valve.
+        if (c.vacuumPump())
+            d.part(VACUUM_PUMP, t("part.vacuum_pump"), t("where.vacuum_pump"), t(c.vacuum() == ColumnComponents.Vacuum.DRY_SCREW ? "wanted.dry_screw_pump" : "wanted.liquid_ring_pump"));
         d.valve(OFFGAS_VALVE);
         boolean standard = c.refluxPump() == ColumnComponents.Pump.STANDARD;
         d.pump(REFLUX_PUMP, c.refluxPump(), t("part.reflux_pump"), t("where.reflux_pump"));
         d.part(REFLUX_TEE, t("part.reflux_tee"), t("where.reflux_tee"), null);
         d.valve(REFLUX_VALVE);
         d.valve(DISTILLATE_VALVE);
+        // Under a vacuum, a pump lifts the boot's water to its valve.
+        if (c.vacuumPump()) d.pump(WATER_PUMP, c.refluxPump(), t("part.water_pump"), t("where.water_pump"));
         d.valve(WATER_VALVE);
         // The pumparound loops: the pump, then the cooler's shell side, back to the return tray.
         for (int i = 1; i <= trays.pumparounds().size(); i++) {
@@ -113,8 +119,9 @@ public final class AssemblyDiagram {
             port(TRIM_CONDENSER, Role.SHELL_OUTLET, 0, RECEIVER);
         } else port(CONDENSER, air ? Role.PROCESS_OUTLET : Role.SHELL_OUTLET, 0, RECEIVER);
         port(RECEIVER, Role.SIDE, -1, trim ? TRIM_CONDENSER : CONDENSER);
-        port(RECEIVER, Role.VAPOUR_OUTLET, 0, OFFGAS_VALVE);
-        port(RECEIVER, Role.BOOT_DRAIN, 0, WATER_VALVE);
+        boolean pumped = c.vacuumPump();
+        port(RECEIVER, Role.VAPOUR_OUTLET, 0, pumped ? VACUUM_PUMP : OFFGAS_VALVE);
+        port(RECEIVER, Role.BOOT_DRAIN, 0, pumped ? WATER_PUMP : WATER_VALVE);
         port(RECEIVER, Role.LIQUID_OUTLET, 0, REFLUX_PUMP);
         if (standard) {
             port(REFLUX_PUMP, Role.SUCTION, 0, RECEIVER);
@@ -141,6 +148,15 @@ public final class AssemblyDiagram {
             port(COLUMN, Role.VAPOUR_RETURN, 0, REBOILER);
             port(REBOILER, Role.LIQUID_OUTLET, 0, BOTTOMS_VALVE);
         } else port(COLUMN, Role.BOTTOMS, 0, BOTTOMS_VALVE);
+        // The vacuum pump and the water pump last, so the ports before them keep their colours.
+        if (pumped) {
+            port(VACUUM_PUMP, Role.SUCTION, 0, RECEIVER);
+            port(VACUUM_PUMP, Role.DISCHARGE, 0, OFFGAS_VALVE);
+            if (standard) {
+                port(WATER_PUMP, Role.SUCTION, 0, RECEIVER);
+                port(WATER_PUMP, Role.DISCHARGE, 0, WATER_VALVE);
+            }
+        }
     }
 
     private static Text t(String key, Object... args) {
