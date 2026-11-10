@@ -380,7 +380,7 @@ class FluidFactsCompatTest {
             var pack=image.packs().get(row.unit().pack());var facts=FluidCheckpointCodec.islandFacts(pack,FluidCheckpointCodec.islandSections(pack,row),row.id());
             var components=new ArrayList<>(facts.components());components.add("Retired");
             var widened=facts.vessels().stream().map(v->{var moles=Arrays.copyOf(v.moles(),v.moles().length+1);moles[moles.length-1]=2.5;kept.put(v.id(),onWorld(v.moles(),facts.components()));
-                return new FluidFacts.Vessel(v.id(),v.volume(),v.levelHeight(),v.open(),moles,v.energy(),v.solids(),v.temperature(),v.pressure(),v.liquid(),v.vapor(),v.waterLiquid(),v.waterVapor(),v.hydrocarbonPressure());}).toList();
+                return new FluidFacts.Vessel(v.id(),v.volume(),v.levelHeight(),v.open(),moles,v.energy(),v.solids(),v.temperature(),v.pressure(),v.liquid(),v.vapor(),v.waterLiquid(),v.waterVapor(),v.hydrocarbonPressure(),v.rigid());}).toList();
             vessels+=widened.size();
             placed.add(new FluidFacts.Placed(new FluidFacts.Island(facts.dimension(),facts.packageId(),components,widened,facts.filters(),null),row.committed()));
         }
@@ -780,6 +780,8 @@ class FluidFactsCompatTest {
                 // Schema 17 wrote the steam ejectors; an older image reads none.
                 assertEquals(expected.getProperty("ejectors",""),ejectors(ledger),folder+": steam ejectors");
                 long vessels=rebuilt.checkpoint().islands().stream().flatMap(e->e.snapshot().graph().reservoirs().stream()).filter(n->n.kind()==PassiveNetwork.NodeKind.RESERVOIR).count();
+                // Schema 18 wrote whether a vessel's wall is rigid; an older image reads every vessel a bag.
+                assertEquals(Long.parseLong(expected.getProperty("rigid","0")),rigid(rebuilt.checkpoint()),folder+": rigid vessels");
                 assertEquals(Long.parseLong(expected.getProperty("vessels")),vessels,folder+": vessels");
                 double total=Arrays.stream(moles(rebuilt.checkpoint(),model.componentCount())).sum();
                 assertEquals(Double.parseDouble(expected.getProperty("moles")),total,1e-12*total,folder+": stock");
@@ -918,8 +920,13 @@ class FluidFactsCompatTest {
         props.setProperty("stills",stills(loaded.world().orElseThrow()));
         props.setProperty("ejectors",ejectors(loaded.world().orElseThrow()));
         props.setProperty("vessels",Long.toString(contents(loaded.checkpoint()).values().stream().filter(v->v instanceof PassiveNetwork.Inventory).count()));
+        props.setProperty("rigid",Long.toString(rigid(loaded.checkpoint())));
         props.setProperty("moles",Double.toString(Arrays.stream(moles(loaded.checkpoint(),model.componentCount())).sum()));
         try(var out=Files.newBufferedWriter(folder.resolve("expected.properties"))){props.store(out,"Facts schema "+FluidFacts.SCHEMA+" corpus image, state format "+FluidCheckpointCodec.VERSION);}
+    }
+    /** The vessels whose wall is rigid (schema 18, batch 2026-11-10-rigid-reservoir). */
+    private static long rigid(FluidCheckpointCodec.Checkpoint checkpoint) {
+        return checkpoint.islands().stream().flatMap(e->e.snapshot().graph().reservoirs().stream()).filter(n->n.kind()==PassiveNetwork.NodeKind.RESERVOIR&&n.inventory().rigid()).count();
     }
     /** Every heat side and every passage of more than one channel, in identity order: what schema 5 carries. */
     private static String heatSides(WorldTopologyLedger.Snapshot world) {

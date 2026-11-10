@@ -293,11 +293,20 @@ public final class PhaseLayout {
      * <p>An infinite {@code capacity} is an open vessel's (batch 2026-10-21-floating-roof-tanks,
      * {@code PassiveNetwork.Inventory#wallCapacity}): its wall is never taut, so the row is the slack branch alone, the
      * same row count, and its bag is the contents' own volume ({@link #bagVolume}).</p>
+     *
+     * <p>A negative {@code capacity} is a rigid vessel's, {@code -V_max} (batch 2026-11-10-rigid-reservoir,
+     * {@code PassiveNetwork.Inventory#wallCapacity}, {@link #rigid}): its wall is always taut, so the row is the taut branch
+     * alone, {@code V = V_max} at any pressure, the same row count; its bag is always {@code V_max}, so its wall does no work.</p>
      */
     public static double wallRow(FluidThermodynamics.State state,double capacity){return wallRow(state,capacity,null);}
+    /** Whether {@code capacity} is a rigid vessel's ({@link #wallRow}). */
+    public static boolean rigid(double capacity){return capacity<0;}
+    /** The volume a wall of {@code capacity} holds at most, m³: infinite for an open vessel. */
+    public static double capacityVolume(double capacity){return Math.abs(capacity);}
     /** {@link #wallRow} stated on {@code branch}'s branch ({@link Wall#taut}); on the state's own when it is null. */
     public static double wallRow(FluidThermodynamics.State state,double capacity,Wall branch) {
         if(capacity==Double.POSITIVE_INFINITY)return 2*(AMBIENT_PRESSURE-state.pressure())/AMBIENT_PRESSURE;
+        if(capacity<0)return (state.volume()+capacity)/-capacity;
         double taut=(state.volume()-capacity)/capacity,slack=2*(AMBIENT_PRESSURE-state.pressure())/AMBIENT_PRESSURE;
         return (branch==null?taut>=slack:branch.taut())?taut:slack;
     }
@@ -316,11 +325,13 @@ public final class PhaseLayout {
     public record Wall(boolean taut,boolean full) {}
     /** The wall's branches at {@code state}. */
     public static Wall wall(FluidThermodynamics.State state,double capacity) {
+        if(capacity<0)return new Wall(true,true);
         boolean taut=taut(state,capacity);return new Wall(taut,taut||state.volume()>=capacity*(1-1e-12));
     }
     /** Whether the wall carries the contents ({@link #wallRow} on its taut branch). */
     public static boolean taut(FluidThermodynamics.State state,double capacity) {
         if(capacity==Double.POSITIVE_INFINITY)return false;
+        if(capacity<0)return true;
         return (state.volume()-capacity)/capacity>=2*(AMBIENT_PRESSURE-state.pressure())/AMBIENT_PRESSURE;
     }
     /**
@@ -334,6 +345,7 @@ public final class PhaseLayout {
     public static double bagVolume(FluidThermodynamics.State state,double capacity){return bagVolume(state,capacity,null);}
     /** {@link #bagVolume} stated on {@code branch}'s branch ({@link Wall#full}); on the state's own when it is null. */
     public static double bagVolume(FluidThermodynamics.State state,double capacity,Wall branch) {
+        if(capacity<0)return -capacity;
         double volume=state.volume();
         return (branch==null?taut(state,capacity)||volume>=capacity*(1-1e-12):branch.full())?capacity:volume;
     }
