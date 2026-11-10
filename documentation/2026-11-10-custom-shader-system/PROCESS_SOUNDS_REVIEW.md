@@ -30,6 +30,8 @@ The server already has what valves need in each accepted `PipeObservation`: both
 
 ## 3. Owner decisions
 
+**Decided 2026-11-10.** Owner: "For valve I think most noise comes from decompression, so scale its volume based on dP will be sufficient, others as recommended." So a valve sounds only while it passes flow, and its level follows its pressure drop alone: Lw = 70 + 20 log10(ΔP / 20 kPa) dB, silent below 20 kPa, capped at 120 dB (about 6.3 MPa); 1 MPa gives about 104 dB. The loop is picked by phase (gas or steam: `valve_gas`; liquid: the `pump_cavitation` crackle), with no choked-pitch or cavitation-number rule. S1 A for everything else, S2 A, S3 A, S4 A. The fx-noise agent (Opus, medium) is approved to start after phase 1.
+
 - **S1 Scope.** A: everything in table 1 (recommended). B: A without the water-hammer knock and the kettle. C: valves only.
 - **S2 Data.** A: one noise watch with server-side culling to the 16 loudest (recommended). B: one watch per kind, as the movers have now.
 - **S3 Budget.** A: 12 loops at once, 6 m merge radius (recommended). B: other numbers.

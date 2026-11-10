@@ -21,7 +21,7 @@ Owner, 2026-11-10: a custom shader system for normal textures (first the instrum
 - 2026-11-10: owner: add DH silhouettes (X11 A); make sure a change in those mods cannot crash the game. Plan 4.7: painted, cell-accurate box silhouettes from the server registry on the client's request, covering DH's grey voxels, inactive within the vanilla render distance, hull boxes far away, W10. Plan 4.8: no direct link, runtime version gate and no load-time range, every call guarded, safe fallbacks (COMPATIBLE path; DH's own voxels), gates with stub APIs. The review's claim that equipment vanishes in DH was wrong and is corrected.
 - 2026-11-10: owner: go with every recommended option (plan section 8); merge main before starting; implementation agents at medium reasoning effort.
 - 2026-11-10: phase 1 started (fx-core, fx-server-states, fx-sounds). fx-sounds done: five synthesised loops, 281b8bb7e (not compiled yet).
-- 2026-11-10: owner: think about sounds for other equipment, valves included, and update performance. Review written; S1 to S4 open.
+- 2026-11-10: owner: think about sounds for other equipment, valves included, and update performance. Review written. Owner: valve volume from its pressure drop alone (while it flows), the rest as recommended (S1 A to S4 A); fx-noise agent approved for after phase 1.
 
 ## Code areas (planned)
 
