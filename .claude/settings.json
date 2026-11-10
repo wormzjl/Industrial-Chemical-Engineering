@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"try{process.env.AGENT_GUARD_RUN='1';require(require('child_process').execFileSync('git',['rev-parse','--show-toplevel']).toString().trim()+'/tools/agent-guard/guard.js')}catch(e){}\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
