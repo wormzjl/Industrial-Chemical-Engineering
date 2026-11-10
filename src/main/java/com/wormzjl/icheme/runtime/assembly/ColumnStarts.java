@@ -78,15 +78,13 @@ public final class ColumnStarts {
         var master = new PhysicalFluidTopology.Position(dimension, o.getX(), o.getY(), o.getZ());
         // A water-cooled condenser's sides: the column holds its process side, its water side stays in the network (C6b);
         // every shell in parallel the same (S3b); an air-then-water condenser's from its trim (COOLER_MODEL_PLAN.md section 6).
-        var condenser = new ArrayList<Long>();
         var cooled = ColumnBlueprint.waterCooled(trays.components().condenser());
-        if (cooled != null)
-            for (var s : entry.report().slots())
-                if (s.slot().equals(cooled))
-                    for (long unit : s.units()) {
-                        var member = EquipmentStructure.at(level, BlockPos.of(unit));
-                        if (member != null) condenser.addAll(EquipmentStructure.heatSides(world, level, member));
-                    }
+        var condenser = cooled == null ? new ArrayList<Long>() : heatSides(level, world, entry, cooled);
+        // The reboiler's and each pumparound cooler's sides, every unit's, by the condenser's rule (W4): the column holds the
+        // process side, the utility side stays in the network and is owed the duty.
+        var reboiler = heatSides(level, world, entry, ColumnBlueprint.REBOILER);
+        var pumparounds = new ArrayList<java.util.List<Long>>();
+        for (int i = 1; i <= trays.pumparounds().size(); i++) pumparounds.add(heatSides(level, world, entry, ColumnBlueprint.pumparoundCooler(i)));
         // An air condenser's banks, every one's bare tube: what its fans hold (U2, COOLER_MODEL_PLAN.md section 8).
         double air = 0;
         if (!ColumnBlueprint.CONDENSER.equals(cooled))
@@ -97,7 +95,19 @@ public final class ColumnStarts {
                         if (member != null && member.shape().kind() == EquipmentShape.Kind.AIR_COOLER)
                             for (var side : HeatSides.of(member.shape())) air += side.area();
                     }
-        return new Built(new FluidWorldAuthority.ColumnStart(master, Setpoints.of(point), nozzles, spots, condenser, air), null);
+        return new Built(new FluidWorldAuthority.ColumnStart(master, Setpoints.of(point), nozzles, spots, condenser, air, reboiler, pumparounds), null);
+    }
+
+    /** The registered heat sides of every unit the report places in {@code slot}, one unit after another (S3b: units in parallel). */
+    private static ArrayList<Long> heatSides(ServerLevel level, FluidWorldAuthority world, AssemblyStore.Entry entry, Slot slot) {
+        var sides = new ArrayList<Long>();
+        for (var s : entry.report().slots())
+            if (s.slot().equals(slot))
+                for (long unit : s.units()) {
+                    var member = EquipmentStructure.at(level, BlockPos.of(unit));
+                    if (member != null) sides.addAll(EquipmentStructure.heatSides(world, level, member));
+                }
+        return sides;
     }
 
     private static PhysicalFluidTopology.Direction opposite(PhysicalFluidTopology.Direction d) {

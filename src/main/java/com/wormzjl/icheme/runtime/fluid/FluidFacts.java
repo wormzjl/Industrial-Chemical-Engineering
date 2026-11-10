@@ -57,9 +57,11 @@ final class FluidFacts {
      *  pumps' health: each painted line's paints, each equipment structure's shape and paint, and each rack lane's rack
      *  frame (the facing and shape of the cell it lies in), so that the registry can place their blocks again.
      *  16 (batch 2026-11-09-batch-distiller, W3 and W4): the world's batch stills (after the build facts); the control
-     *  valve source {@code STILL}; the {@code diverter} control. */
-    static final int SCHEMA=16;
-    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 16. */
+     *  valve source {@code STILL}; the {@code diverter} control.
+     *  17 (batch 2026-11-10-column-failure-modes, W4): a column unit's utility sides, its reboiler's and each pumparound
+     *  cooler's; a kettle's tube side in the {@code COLUMN} mode. */
+    static final int SCHEMA=17;
+    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 17. */
     private static final Map<Class<?>,Map<String,String>> ALIASES=Map.of();
     private static final int MAXIMUM_FIELDS=256,MAXIMUM_ITEMS=1<<22,MAXIMUM_TEXTS=1<<20,MAXIMUM_ARRAY=4096,MAXIMUM_CHANNELS=1<<20;
     /** The cadence an island rebuilt from facts starts at (ticks): the shortest the clock allows, as after a merge. */
@@ -418,7 +420,8 @@ final class FluidFacts {
     }
     /**
      * A column unit (schema 6, batch 2026-10-28-column-operation): its identity, origin, run switch, setpoints, stations
-     * (each a port by name, which one, its port device, its valve, its account and its solids) and totals.
+     * (each a port by name, which one, its port device, its valve, its account and its solids) and totals; its further
+     * condenser water sides (schema 8), its air condenser surface (schema 9) and its utility sides (schema 17).
      */
     private static void column(Fields f,ColumnUnit u) {
         var s=u.setpoints();var t=u.totals();
@@ -430,7 +433,9 @@ final class FluidFacts {
                 // Schema 8 (S3b): the condenser's further water sides, one a shell in parallel.
                 .list(u.condensers().isEmpty()?List.<Long>of():u.condensers().subList(1,u.condensers().size()),(q,side)->q.count(side))
                 // Schema 9 (U2): the air condenser's bare tube, m².
-                .f64(u.airSurface());
+                .f64(u.airSurface())
+                // Schema 17 (W4): the utility sides of the reboiler and of each pumparound's cooler.
+                .record(q->q.list(u.utilities().reboiler(),(p,side)->p.count(side)).list(u.utilities().pumparounds(),(p,sides)->p.list(sides,(e,side)->e.count(side))));
     }
     private static ColumnUnit column(Record f) {
         long id=f.count(0);var master=position(f);boolean running=f.bool(false);
@@ -450,8 +455,11 @@ final class FluidFacts {
         if(condenser==0&&!further.isEmpty())throw f.invalid("column condenser sides");
         // A unit written before schema 9 has no air condenser surface: its air takes any duty, as before.
         double air=f.f64(0);
+        // A unit written before schema 17 has no utility sides: its reboiler and pumparound duties stay free until its next Start.
+        var utilities=f.record(ColumnUnit.Utilities.NONE,q->{var reboiler=q.list(List.<Long>of(),p->p.count(0));var pumparounds=q.list(List.<List<Long>>of(),p->p.list(List.<Long>of(),s->s.count(0)));
+            return valid(q,"column utilities",()->new ColumnUnit.Utilities(reboiler,pumparounds));});
         required(master,f,"column origin");required(setpoints,f,"column setpoints");required(totals,f,"column totals");
-        return valid(f,"column unit "+id,()->new ColumnUnit(id,master,running,setpoints,stations,totals,condensers,null,leaving,air));
+        return valid(f,"column unit "+id,()->new ColumnUnit(id,master,running,setpoints,stations,totals,condensers,null,leaving,air,utilities));
     }
     private static Fields setpoints(Fields q,com.wormzjl.icheme.science.column.operation.Setpoints s) {
         return q.f64(s.designFeedRate()).f64(s.feedRate()).f64(s.condenserTemperature()).f64(s.refluxRatio()).f64(s.reboilerPerFeed())
@@ -854,7 +862,7 @@ final class FluidFacts {
                 }
                 var totals=new ColumnUnit.Totals(new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(axis.map(u.totals().taken().moles(),null),u.totals().taken().energy()),
                         new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(axis.map(u.totals().produced().moles(),null),u.totals().produced().energy()),u.totals().reboiler(),u.totals().condenser(),u.totals().pumparounds());
-                u=new ColumnUnit(u.id(),u.master(),u.running(),u.setpoints(),stations,totals,u.condensers(),null,u.leaving(),u.airSurface());
+                u=new ColumnUnit(u.id(),u.master(),u.running(),u.setpoints(),stations,totals,u.condensers(),null,u.leaving(),u.airSurface(),u.utilities());
             }
             columns.put(u.id(),settled(u,registrations));
         }

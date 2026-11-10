@@ -22,9 +22,12 @@ import java.util.Objects;
  * outside the column (C6b: the column is their heat partner), one a shell in parallel (S3b, facts schema 8), or none.
  * {@code leaving}: the column was dismantled, and its unit goes once its ports have left. {@code airSurface}: the bare tube of
  * its air condenser's banks as its Start found them, m², whose fans hold the air's duty (U2, batch 2026-11-02-process-simulator,
- * facts schema 9); 0 where it has none or a save before it, whose air then takes any duty, as before.</p>
+ * facts schema 9); 0 where it has none or a save before it, whose air then takes any duty, as before. {@code utilities}: the
+ * utility sides of its reboiler and of each pumparound's cooler as its Start found them (W4, batch
+ * 2026-11-10-column-failure-modes, facts schema 17), each outside the column with its partner held inside; a duty with none
+ * is free, as every reboiler and pumparound duty was before them (a save before the field keeps them free until its next Start).</p>
  */
-public record ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean running,Setpoints setpoints,List<Station> stations,Totals totals,List<Long> condensers,State state,boolean leaving,double airSurface) {
+public record ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean running,Setpoints setpoints,List<Station> stations,Totals totals,List<Long> condensers,State state,boolean leaving,double airSurface,Utilities utilities) {
     /** The most stations a saved unit may hold. A column has at most eleven today (ColumnTrays): a feed, two steams, an off-gas, a sour water, a distillate, four draws, a bottoms. */
     public static final int MAXIMUM_STATIONS=16;
     /** The most condenser water sides: one a shell, as many as a design's condenser count allows. */
@@ -37,6 +40,8 @@ public record ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean r
     public ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean running,Setpoints setpoints,List<Station> stations,Totals totals,List<Long> condensers){this(id,master,running,setpoints,stations,totals,condensers,null,false);}
     /** Without an air condenser's surface. */
     public ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean running,Setpoints setpoints,List<Station> stations,Totals totals,List<Long> condensers,State state,boolean leaving){this(id,master,running,setpoints,stations,totals,condensers,state,leaving,0);}
+    /** Without utility sides: the reboiler's and pumparounds' duties free. */
+    public ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean running,Setpoints setpoints,List<Station> stations,Totals totals,List<Long> condensers,State state,boolean leaving,double airSurface){this(id,master,running,setpoints,stations,totals,condensers,state,leaving,airSurface,Utilities.NONE);}
     public ColumnUnit {
         Objects.requireNonNull(master);Objects.requireNonNull(setpoints);Objects.requireNonNull(totals);stations=List.copyOf(stations);
         if(id<=0||master.lane()!=0||stations.size()>MAXIMUM_STATIONS)throw new IllegalArgumentException("Invalid column unit");
@@ -51,10 +56,38 @@ public record ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean r
         condensers=List.copyOf(condensers);
         if(condensers.size()>MAXIMUM_CONDENSERS||condensers.stream().anyMatch(c->c<=0)||new HashSet<>(condensers).size()!=condensers.size())throw new IllegalArgumentException("Invalid condenser sides");
         if(!(airSurface>=0)||!Double.isFinite(airSurface))throw new IllegalArgumentException("Invalid air condenser surface");
+        Objects.requireNonNull(utilities);
+        // A side serves one duty: its transit is owed by one.
+        var sides=new HashSet<>(condensers);for(long s:utilities.all())if(!sides.add(s))throw new IllegalArgumentException("A utility side serves one duty");
     }
 
     /** The first condenser water side, or 0 for none. */
     public long condenser(){return condensers.isEmpty()?0:condensers.getFirst();}
+
+    /**
+     * The utility sides of a column's heated and cooled members (W4, facts schema 17): its reboiler's (a kettle's tubes, one a
+     * unit in parallel) and each pumparound's cooler's, in the pumparounds' order (each one's cooling side, one a unit), at most
+     * {@link #MAXIMUM_CONDENSERS} a duty. A pumparound past the list, or with an empty list, has none.
+     */
+    public record Utilities(List<Long> reboiler,List<List<Long>> pumparounds) {
+        /** None: every duty free. */
+        public static final Utilities NONE=new Utilities(List.of(),List.of());
+        public Utilities {
+            reboiler=sides(reboiler);var copy=new java.util.ArrayList<List<Long>>();for(var p:pumparounds)copy.add(sides(p));pumparounds=List.copyOf(copy);
+            if(pumparounds.size()>MAXIMUM_STATIONS)throw new IllegalArgumentException("Invalid pumparound utilities");
+        }
+        private static List<Long> sides(List<Long> sides) {
+            var copy=List.copyOf(sides);
+            if(copy.size()>MAXIMUM_CONDENSERS||copy.stream().anyMatch(c->c<=0)||new HashSet<>(copy).size()!=copy.size())throw new IllegalArgumentException("Invalid utility sides");
+            return copy;
+        }
+        /** Pumparound {@code j}'s sides, or none. */
+        public List<Long> pumparound(int j){return j>=0&&j<pumparounds.size()?pumparounds.get(j):List.of();}
+        /** Every side, the reboiler's first. */
+        public List<Long> all(){var out=new java.util.ArrayList<>(reboiler);for(var p:pumparounds)out.addAll(p);return out;}
+        /** Whether no duty has a side. */
+        public boolean none(){return all().isEmpty();}
+    }
 
     /**
      * One port of the column: its kind, which one of that kind (from 0), its registered port device (0 while stopped), the
@@ -95,11 +128,11 @@ public record ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean r
         return kept;
     }
     /** These stations, running or not; a stopped column forgets its engine state. */
-    public ColumnUnit withStations(boolean value,List<Station> next){return new ColumnUnit(id,master,value,setpoints,next,totals,condensers,value?state:null,leaving,airSurface);}
-    public ColumnUnit withSetpoints(Setpoints value){return new ColumnUnit(id,master,running,value,stations,totals,condensers,state,leaving,airSurface);}
-    public ColumnUnit withTotals(Totals value){return new ColumnUnit(id,master,running,setpoints,stations,value,condensers,state,leaving,airSurface);}
-    public ColumnUnit withState(State value){return new ColumnUnit(id,master,running,setpoints,stations,totals,condensers,value,leaving,airSurface);}
-    public ColumnUnit leave(){return new ColumnUnit(id,master,running,setpoints,stations,totals,condensers,state,true,airSurface);}
+    public ColumnUnit withStations(boolean value,List<Station> next){return new ColumnUnit(id,master,value,setpoints,next,totals,condensers,value?state:null,leaving,airSurface,utilities);}
+    public ColumnUnit withSetpoints(Setpoints value){return new ColumnUnit(id,master,running,value,stations,totals,condensers,state,leaving,airSurface,utilities);}
+    public ColumnUnit withTotals(Totals value){return new ColumnUnit(id,master,running,setpoints,stations,value,condensers,state,leaving,airSurface,utilities);}
+    public ColumnUnit withState(State value){return new ColumnUnit(id,master,running,setpoints,stations,totals,condensers,value,leaving,airSurface,utilities);}
+    public ColumnUnit leave(){return new ColumnUnit(id,master,running,setpoints,stations,totals,condensers,state,true,airSurface,utilities);}
 
     /**
      * A running unit's engine state (plan section 12): its split table and the products' partial molar enthalpies (J/mol), the

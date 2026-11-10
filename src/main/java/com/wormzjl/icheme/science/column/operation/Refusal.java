@@ -25,6 +25,7 @@ public enum Refusal {
     VALVE_MISSING("a boundary valve is missing or inside the column"),
     PLACE_TAKEN("a port's place is taken"),
     TOO_MANY_SHELLS("the condenser has more than %d shells"),
+    TOO_MANY_UTILITY_UNITS("the %s has more than %d units"),
     PORTS_DO_NOT_FIT("the column's ports do not fit its lines: %s"),
     // ColumnOperation: the first solve.
     NO_OPERATING_POINT("the design has no operating point"),

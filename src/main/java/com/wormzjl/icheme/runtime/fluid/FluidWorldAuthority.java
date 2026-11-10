@@ -715,11 +715,15 @@ public final class FluidWorldAuthority implements AutoCloseable {
     /**
      * A Start (plan 4.1): the column's origin, its setpoints, the pipe blocks in front of its nozzles, its ports, and the
      * registrations of a water-cooled condenser's two sides, every shell's (empty for an air cooler): those the column does
-     * not hold are its water sides (C6b, S3b); and the bare tube of its air condenser's banks, m² (U2: 0 for none).
+     * not hold are its water sides (C6b, S3b); the bare tube of its air condenser's banks, m² (U2: 0 for none); and the
+     * registrations of its reboiler's and each pumparound cooler's sides, every unit's (W4): those it does not hold, whose
+     * partner it holds, are their utility sides.
      */
     public record ColumnStart(PhysicalFluidTopology.Position master,com.wormzjl.icheme.science.column.operation.Setpoints setpoints,
-                              List<PhysicalFluidTopology.Position> nozzles,List<PortSpot> spots,List<Long> condenser,double airSurface) {
-        public ColumnStart{condenser=List.copyOf(condenser);if(!(airSurface>=0)||!Double.isFinite(airSurface))throw new IllegalArgumentException("Invalid air condenser surface");}
+                              List<PhysicalFluidTopology.Position> nozzles,List<PortSpot> spots,List<Long> condenser,double airSurface,List<Long> reboiler,List<List<Long>> pumparounds) {
+        public ColumnStart{condenser=List.copyOf(condenser);reboiler=List.copyOf(reboiler);pumparounds=pumparounds.stream().map(List::copyOf).toList();
+            if(!(airSurface>=0)||!Double.isFinite(airSurface))throw new IllegalArgumentException("Invalid air condenser surface");}
+        public ColumnStart(PhysicalFluidTopology.Position master,com.wormzjl.icheme.science.column.operation.Setpoints setpoints,List<PhysicalFluidTopology.Position> nozzles,List<PortSpot> spots,List<Long> condenser,double airSurface){this(master,setpoints,nozzles,spots,condenser,airSurface,List.of(),List.of());}
         public ColumnStart(PhysicalFluidTopology.Position master,com.wormzjl.icheme.science.column.operation.Setpoints setpoints,List<PhysicalFluidTopology.Position> nozzles,List<PortSpot> spots,List<Long> condenser){this(master,setpoints,nozzles,spots,condenser,0);}
         public ColumnStart(PhysicalFluidTopology.Position master,com.wormzjl.icheme.science.column.operation.Setpoints setpoints,List<PhysicalFluidTopology.Position> nozzles,List<PortSpot> spots){this(master,setpoints,nozzles,spots,List.of());}
     }
@@ -784,17 +788,31 @@ public final class FluidWorldAuthority implements AutoCloseable {
         if(existing!=null)stations.addAll(existing.lost(stations));
         // The condenser's water sides: of each shell's two sides, the one outside the column, partnered with one inside (C6b);
         // one a shell in parallel (S3b).
-        var water=new ArrayList<Long>();
-        for(long side:request.condenser()){var r=registrations().get(side);if(r!=null&&!inside.containsKey(side)&&r.device().heat()!=null&&inside.containsKey(r.device().heat().partner())&&!water.contains(side))water.add(side);}
+        var water=utilitySides(request.condenser(),inside);
         if(water.size()>ColumnUnit.MAXIMUM_CONDENSERS)return com.wormzjl.icheme.science.column.operation.Refusal.TOO_MANY_SHELLS.text(ColumnUnit.MAXIMUM_CONDENSERS);
+        // The reboiler's and each pumparound cooler's utility sides, by the same rule (W4): a duty with none stays free.
+        var reboiler=utilitySides(request.reboiler(),inside);var pumparounds=new ArrayList<List<Long>>();
+        for(var sides:request.pumparounds())pumparounds.add(utilitySides(sides,inside));
+        if(reboiler.size()>ColumnUnit.MAXIMUM_CONDENSERS)return com.wormzjl.icheme.science.column.operation.Refusal.TOO_MANY_UTILITY_UNITS.text("reboiler",ColumnUnit.MAXIMUM_CONDENSERS);
+        for(int j=0;j<pumparounds.size();j++)if(pumparounds.get(j).size()>ColumnUnit.MAXIMUM_CONDENSERS)return com.wormzjl.icheme.science.column.operation.Refusal.TOO_MANY_UTILITY_UNITS.text("pumparound "+(j+1)+" cooler",ColumnUnit.MAXIMUM_CONDENSERS);
+        var utilities=new ColumnUnit.Utilities(reboiler,pumparounds);
         // A restart keeps the set points the player applied while they fit the design's ports (C7); else the design's.
         var setpoints=existing!=null&&compatible(existing.setpoints(),request.setpoints())?existing.setpoints():request.setpoints();
-        var running=new ColumnUnit(unit,request.master(),true,setpoints,stations,existing!=null?existing.totals():ColumnUnit.Totals.empty(m),water,null,false,request.airSurface());
+        var running=new ColumnUnit(unit,request.master(),true,setpoints,stations,existing!=null?existing.totals():ColumnUnit.Totals.empty(m),water,null,false,request.airSurface(),utilities);
         var was=existing;topology.column(running);
         try{submit(edits,id);}catch(IllegalArgumentException|IllegalStateException refused){if(was!=null)topology.column(was);else topology.removeColumn(unit);return com.wormzjl.icheme.science.column.operation.Refusal.PORTS_DO_NOT_FIT.text(refused.getMessage());}
         columns.refresh();
         IChemE.LOGGER.info("column status=STARTED master={},{},{} unit={} held={} ports={}",request.master().x(),request.master().y(),request.master().z(),unit,inside.size(),stations.size());
         return null;
+    }
+    /**
+     * Of {@code sides} (a member's registered heat sides, every unit's), those outside the column whose heat partner it holds
+     * ({@code inside}), once each: a condenser's water sides (C6b, S3b), a reboiler's or pumparound cooler's utility sides (W4).
+     */
+    private List<Long> utilitySides(List<Long> sides,Map<Long,WorldTopologyLedger.Registration> inside) {
+        var out=new ArrayList<Long>();
+        for(long side:sides){var r=registrations().get(side);if(r!=null&&!inside.containsKey(side)&&r.device().heat()!=null&&inside.containsKey(r.device().heat().partner())&&!out.contains(side))out.add(side);}
+        return out;
     }
     /** Whether two of {@code spots} stand inside one cell: two boundary valves on one inside cell have one place for a port. */
     static boolean sharePlace(List<PortSpot> spots) {
