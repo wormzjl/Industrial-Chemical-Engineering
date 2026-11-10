@@ -12,13 +12,8 @@ The owner starts the client. From this worktree (no test suite may run while it 
 ./gradlew runClient
 ```
 
-Singleplayer → `column-failure-modes`. The plants stand far from spawn. Teleport to plant A's column:
-
-```
-/tp @s -14621096 -40 -12093690
-```
-
-Plant B stands 360 blocks east: `/tp @s -14620736 -45 -12093690`.
+Singleplayer → `column-failure-modes`. The player spawns beside DCS-1, three blocks west of it. Plant B stands 360 blocks
+east of plant A: `/tp @s 1601982 -45 -6590690`. Both plants were saved RUNNING at their set feed with no fluid island held.
 
 ## The plants
 
@@ -31,29 +26,34 @@ Plant B stands 360 blocks east: `/tp @s -14620736 -45 -12093690`.
   - The feed: a generator (liquid, 662 K and 48 bar, above the crude's bubble point at the feed's enthalpy) through SUPPLY
     FCV and SUPPLY FT into the surge drum, then the feed valve, where it flashes.
 - **Plant B.** A reboiled column: the template crude at 1/16, 30 stages fed on 24, reflux 2, an 8 MW (full-feed) kettle on
-  superheated steam (800 K, 20 bar into 5 bar), a water condenser.
+  superheated steam (800 K, 20 bar into 5 bar), a water condenser. Its 400 K distillate runs down to a tank at 2 bar
+  (DISTILLATE): it leaves the receiver saturated at 2.5 bar and is not let down to the atmosphere (README, open items).
 
-Named parts (x, y, z). Every shutoff and utility valve toggles with an empty-hand right-click.
+Named parts (x, y, z); every shutoff and utility valve toggles with an empty-hand right-click. The draws, bottoms, off-gas
+and sour water shutoffs, the cooling-water returns and the other pumps stand beside these (the run's `place` log lines).
 
 | Plant A | at | Plant A | at |
 |---|---|---|---|
-| COLUMN | -14621096 -60 -12093702 | FEED SHUTOFF | -14621090 -50 -12093704 |
-| AIR CONDENSER 1 / 2 | -14621115 -60 -12093733 / -12093765 | STEAM SHUTOFF | -14621082 -53 -12093696 |
-| TRIM CONDENSER | -14621124 -60 -12093719 | DRAW 1 / 2 / 3 SHUTOFF | -14621082 -35 / -40 / -46 -12093696 |
-| RECEIVER | -14621133 -60 -12093718 | BOTTOMS SHUTOFF | -14621090 -60 -12093704 |
-| REFLUX PUMP / MOTOR | -14621108 -60 -12093701 / -14621107 -60 -12093698 | OFFGAS / SOUR WATER SHUTOFF | -14621132 -44 / -57 -12093717 |
-| PA1 / PA2 / PA3 PUMP | -14621105 -60 -12093682 / -665 / -648 | CW TRIM (return -51) | -14621123 -60 -12093720 |
-| PA1 / PA2 / PA3 COOLER | -14621121 -60 -12093683 / -666 / -649 | PA1 / PA2 / PA3 CW (return -51) | -14621120 -60 -12093684 / -667 / -650 |
-| FEED SURGE DRUM | -14621085 -60 -12093721 | SUPPLY FCV / SUPPLY FT | -14621084 -53 -12093713 / -715 |
-| DCS-1, LIC-1, FIC-1 | -14621077 -60 -12093721 / -718 / -715 | DCS-2 (no cable) | -14621077 -60 -12093725 |
-| FANS POWER (cable) / source | -14621102 -59 -12093724 / -14621106 -60 -12093709 | REFLUX MOTOR POWER (cable) | -14621110 -59 -12093697 |
-| PUMPS POWER SOURCE | -14621111 -60 -12093698 | DATA BUS (column end) | -14621085 -59 -12093695 |
+| COLUMN | 1601622 -60 -6590704 | FEED SHUTOFF | 1601628 -50 -6590706 |
+| AIR CONDENSER 1 | 1601603 -60 -6590735 | AIR CONDENSER 2 | 1601603 -60 -6590767 |
+| STEAM SHUTOFF | 1601636 -53 -6590698 | TRIM CONDENSER | 1601594 -60 -6590721 |
+| DRAW 3 SHUTOFF | 1601636 -46 -6590698 | RECEIVER | 1601585 -60 -6590720 |
+| CW TRIM | 1601595 -60 -6590722 | REFLUX PUMP | 1601610 -60 -6590703 |
+| REFLUX MOTOR | 1601611 -60 -6590700 | REFLUX MOTOR POWER | 1601608 -59 -6590699 |
+| PA1 PUMP | 1601613 -60 -6590684 | PA1 COOLER | 1601597 -60 -6590685 |
+| PA1 CW | 1601598 -60 -6590686 | FEED SURGE DRUM | 1601633 -60 -6590723 |
+| SUPPLY FCV | 1601634 -53 -6590715 | SUPPLY FT | 1601634 -53 -6590717 |
+| DCS-1 | 1601641 -60 -6590723 | LIC-1 | 1601641 -60 -6590720 |
+| FIC-1 | 1601641 -60 -6590717 | DCS-2 (no cable) | 1601641 -60 -6590727 |
+| FANS POWER | 1601616 -59 -6590726 | FANS POWER SOURCE | 1601612 -60 -6590711 |
+| PUMPS POWER SOURCE | 1601607 -60 -6590700 | DATA BUS (column end) | 1601633 -59 -6590697 |
 
 | Plant B | at | Plant B | at |
 |---|---|---|---|
-| COLUMN | -14620736 -60 -12093702 | KETTLE | -14620724 -60 -12093702 |
-| KETTLE STEAM (out -60, -12093706) | -14620724 -55 -12093702 | CW CONDENSER (return -52) | -14620749 -60 -12093723 |
-| FEED SHUTOFF | -14620733 -51 -12093704 | DCS-B | -14620731 -60 -12093694 |
+| COLUMN | 1601982 -60 -6590704 | KETTLE | 1601994 -60 -6590704 |
+| KETTLE STEAM | 1601994 -55 -6590704 | CW CONDENSER | 1601969 -60 -6590725 |
+| FEED SHUTOFF | 1601985 -51 -6590706 | DISTILLATE | 1601973 -55 -6590716 |
+| DCS-B | 1601987 -60 -6590696 |  |  |
 
 ## The cases
 
@@ -63,18 +63,18 @@ time is from the script's run at 20 TPS, with 10 s of holding; the restore takes
 | # | Action | Expected | Time |
 |---|---|---|---|
 | 1 | none | RUNNING, no alarm | – |
-| 2 | close FEED SHUTOFF | LIMITED: feed, LOW FEED, share 0 | 22 s |
-| 3 | close STEAM SHUTOFF | LIMITED: steam (STEAM_SHORT, rule B), LOW STEAM, no UPSET; the feed runs on | 45 s |
-| 4 | close DRAW 3 SHUTOFF | LIMITED: outlet, BLOCKED once its buffer fills | 65 s |
-| 5 | close CW TRIM | COOLING LIMITED (COOLING_SHORT), share 0 | 90 s |
-| 6 | break the FANS POWER cable (any block of it) | NO POWER of the condenser; the feed at natural draught, 34 % | 125 s |
+| 2 | close FEED SHUTOFF | LIMITED: feed, LOW FEED, share 0 | 15 s |
+| 3 | close STEAM SHUTOFF | LIMITED: steam (STEAM_SHORT, rule B), LOW STEAM, no UPSET; the feed runs on | 65 s |
+| 4 | close DRAW 3 SHUTOFF | LIMITED: outlet, BLOCKED once its buffer fills | 57 s |
+| 5 | close CW TRIM | COOLING LIMITED (COOLING_SHORT), share 0 | 79 s |
+| 6 | break the FANS POWER cable (any block of it) | NO POWER of the condenser; the feed at natural draught, 34 % | 120 s |
 | 7 | break the REFLUX MOTOR POWER cable | NO POWER, member 1, share 0 | 5 s |
 | 8 | close PA1 CW | COOLING LIMITED, pumparound 1 (PUMPAROUND_SHORT) | 55 s |
 | 9 | flooding | not covered (below) | – |
 | 10 | Operation tab: the third draw at 6 × its design rate, Apply | SETPOINT REFUSED in the conditions, one setpoint solve; the column runs on its last set points | 20 s |
-| 11 | DCS-1: Stop, Start, Apply the design's set points; DCS-2: Stop | each APPLIED; DCS-2 answered NO DATA LINK, the column runs on | 28 s |
+| 11 | DCS-1: Stop, Start, Apply the design's set points; DCS-2: Stop | each APPLIED; DCS-2 answered NO DATA LINK, the column runs on | 29 s |
 | 12 | FIC-1: sensor SUPPLY FT, output the column, 79.7 kg/s, on | the feed follows the flow target: share 0.50, FIC-1 CONTROLLING | 60 s |
-| 13 | plant B: close KETTLE STEAM | HEATING LIMITED (HEATING_SHORT) | 37 s |
+| 13 | plant B: close KETTLE STEAM | HEATING LIMITED (HEATING_SHORT) | 35 s |
 
 Restore each case by undoing its action: toggle the valve again, mend the cable (place power cable on the gap), Apply the
 design's set points, FIC-1 off on SUPPLY FCV. The column returns to RUNNING at its design feed.
@@ -94,13 +94,13 @@ design's set points, FIC-1 off on SUPPLY FCV. The column returns to RUNNING at i
     returns to its set rate.
   - The flow form above stands in; the feed-rate loop is also covered by the stage 2 tests.
 
-## Seen in the full-size run
+## The full-size run
 
-- After case 2, one throughput solve failed ("Empty fluid initialization") and kept the last table (OFF TABLE) for about
-  2 minutes; the next solve cleared it.
-- During case 13's restore two fluid islands held and the script's last restore timed out:
-  - Island 1364 held from tick 21142 (Newton line search stalled at residual 1.1e-7). Plant A then read BLOCKED on its
-    off-gas from tick 21157.
-  - Island 1403 held from tick 18497 (singular sparse LU). Plant B's distillate buffer was full by tick 22285 (BLOCKED).
-  - The world was saved in that state. A world load drops the solved state and solves the islands again; check whether
-    both plants return to RUNNING before the cases.
+- The script's last line: `review_failure end plantA=RUNNING plantB=RUNNING held=0` (600 ticks running at the set feed).
+- Two earlier full-size runs ended with held fluid islands; both causes are corrected:
+  - Plant A's off-gas after case 11 (Stop, Start): the outlet planned round-off as product (fixed in `ColumnOperation`).
+  - Plant B's distillate after case 13's restore: its saturated 400 K distillate flashed into the atmosphere across the
+    reopening valve and the island's Newton search stalled (a fluid-solver item, README); the rundown now stands at 2 bar.
+- Three islands held for one round in case 3 ("round deadline or worker failure") and released on their own.
+- After case 2 one throughput solve may fail ("Empty fluid initialization") and keep the last table (OFF TABLE) for about
+  2 minutes; the next solve clears it.
