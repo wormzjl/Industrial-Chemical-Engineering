@@ -54,6 +54,36 @@ Each goes in the stage that owns it and removes what it makes unnecessary.
 - **W6. Control system.** Section 4.
 - **W7. Operation tab.** Section 5.
 
+## 3a. Flooding: what W3 builds and how it is tested
+
+A real flooded column does not settle: liquid accumulates, the pressure drop climbs steeply, separation collapses, and the operator cuts the vapour load. The tray model computes the flood fraction beside the pressure drop and feeds nothing back; the running column drops it. W3 builds the operator's answer and the signs that lead to it, all outside the V3 solve and the fluid network (the hydraulics run on an accepted state; the running column works from its table).
+
+| Item | What | Where | Cost |
+|---|---|---|---|
+| W3.1 | Flood limit: the feed share is capped so the worst tray stays at or below 100 % | `SplitTable.floodPerFeed`, `ColumnCycle.step` | One multiplication per cycle |
+| W3.2 | Notice `HIGH_LOAD` from 85 % of flood; condition and alarm `FLOODING` where the limit binds | `Condition`, `EquipmentAlarm.COLUMN` | A comparison |
+| W3.3 | A live column pressure drop: the table keeps the solved total dry drop and liquid head; a cycle shows dry × (alpha / alpha of the table)² + liquid. On the tab, and a control-system channel `differential_pressure`. Port pressures do not move. | `SplitTable`, `ColumnUnit.Probes`, `BuiltInInputs` | Arithmetic |
+| W3.4 (decision D9) | Downcomer backup as a second flood measure; the worse of the two is the flood fraction. The free water's entrainment limit keeps Fair's fraction. | `V3TrayHydraulics.terms` | Post-solve arithmetic; it moves the simulator's flood readings |
+
+Not built: a steep pressure-drop rise past flood inside the tray model (it feeds the one warm correction, whose fixed point would stop contracting, and columns that solve today would fail); tray holdup, cycling, hydrocarbon carry-over (no steady-state table holds them); degraded separation past flood (an invented blend law; the alternative of D2).
+
+**Tests.** Each is the least run that decides its item; all by `--tests`, none on a dev client.
+
+| # | Test | Proves | Class |
+|---|---|---|---|
+| T1 | A table at 80 % of flood at the design feed: a cycle at the set feed takes all of it and raises no condition | The limit does not bind in the design case | `ColumnCycleTest` |
+| T2 | The same table with `floodPerFeed` × 1.34 (reflux 2 to 3): alpha = 1/1.07, limit FLOODING, components and energy close | W3.1, conservation | `ColumnCycleTest` |
+| T3 | Flood and a short feed together: the lower alpha binds and names its condition | One binding condition | `ColumnCycleTest` |
+| T4 | The linear rule against the solver: the default crude column solved at 60, 80 and 100 % of the design feed; `maximumFloodFraction` over the feed rate agrees within a stated band (expected a few percent, from the tray pressure drop's effect on vapour density inside the THROUGHPUT band of 0.2). Printed, then pinned | W3.1's one assumption, in numbers | `ColumnSolveTest` (three solves, one run) |
+| T5 | A running column whose reflux set point is raised until the solve gives over 100 %: the status reads the limit, the feed taken falls to the cap, lowering the set point lifts it; no solve beyond the two set-point solves | W3.1 end to end, no extra solver load | `ColumnRunTest` |
+| T6 | The live pressure drop equals the solved one at the table's alpha and falls with alpha² in its dry part at half the feed | W3.3 | `ColumnProbeTest` |
+| T7 | `HIGH_LOAD` at 85 to 100 %, `alarm_flooding` 1 only while the limit binds, the channels readable during a limit | W3.2 on the control system | `ControlSystemTest` |
+| T8 | A state without `floodPerFeed` (an older state format) is dropped and solved again; a restored state limits as before the save | State rule | `ColumnRunTest` (reload case) |
+| T9 | The gate with its rule disabled: T2 fails when the flood cap is removed | The gate bites | T2 alone, once |
+| T10 (with W3.4) | Backup height on a hand-computed tray; a liquid-limited tray reports backup as its flood; `FlowsheetExamplesTest` and the sizing gates with their new flood readings listed for the owner | W3.4 and the references it moves | `V3TrayHydraulicsTest`, the sizing gates |
+
+Acceptance: T1 to T9 green; T4's band is the number the owner accepts for the linear rule (if it is over 5 %, the table keeps the flood fraction at two throughputs and interpolates, still without a solve). No campaign: no fluid solver input changes. The final lane runs once for the batch.
+
 ## 4. Control system
 
 1. **Alarms.** `EquipmentAlarm.COLUMN` lists the words of section 2. `BuiltInInputs.alarms` adds them for `Kind.COLUMN`; `raised` reads the column's cached condition set (`FluidWorldAuthority.columnConditions`, a read). The DCS alarm list (`ControlPublication.alarms`) then shows them with no change. Cost: a set lookup at the 100-tick cadence.
@@ -93,7 +123,8 @@ Not adjustable, on purpose: tray count, feed tray, diameter (the design), the ba
 | # | Decision | Options (recommended first) |
 |---|---|---|
 | D1 | A short reboiler or pumparound utility | **U1** cut the feed together (LIMIT; no solve). U2 take the duty delivered as the new specification and solve (as rule B does for steam; one solve per crossing, then U1 if it fails). U2 is closer to a real column, which keeps its feed and goes off its products. |
-| D2 | Flooding | **Limit** the feed (as the batch still caps its boil-up at its flood factor). Or a NOTICE only, as the simulator's run (the owner's earlier choice for the calculator). |
+| D2 | Flooding | **Limit** the feed (as the batch still caps its boil-up at its flood factor). Or a NOTICE only, as the simulator's run (the owner's earlier choice for the calculator). Or degraded separation: the table blended toward a one-stage flash split past 100 % (products off their cuts, no feed cut; an invented law). Section 3a. |
+| D9 | Downcomer backup as a second flood measure (W3.4) | **Yes**, with the moved sizing readings listed for approval. Or keep Fair's fraction alone. |
 | D3 | Steam's rule B | **Keep** (owner Q1). Or one rule for every input: cut together at once. That deletes `ruleA`, the STEAM_RATIO retry coupling and one status suffix; its effect on products under a steam shortage needs one run of `tools/column-operation` before it is proposed in numbers. |
 | D4 | Loop outputs on a column | **Feed rate only.** Or also the intensive set points, through a deadband of the drift band and `SOLVE_SPACING`: at most one solve per 30 s per column. |
 | D5 | Operating pressure as a set point | **No** in this batch: it moves every port's pressure (a ledger event per port) and the flood limit. Or yes, within the design's rating. |
