@@ -1,6 +1,12 @@
 # Wired controllers, data links and FE power
 
-**Snapshot:** 2f86539b0 (branch `claude/save-corruption-prevention-2bd7ac`, main 0.23.4 merged in), 2026-11-09. Batch `2026-11-03-save-corruption`, merged as 0.23.5 on 2026-11-09: registry first for cables and controllers (W5c C2, C3): `ControlFacts` format 4 (a rack lane's frame), lost cable blocks, racks, controllers and consoles placed back, held cables cut out of their bus, held controllers off · earlier: e4749cdb6 (branch `claude/simulator-sizing-refactor-6bacab`, the consolidation review of `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
+**Snapshot:** 7be61a4b9 (branch `claude/furnace-fuel-power-requirements-f7a46e`, main 0.23.6 merged in), 2026-11-10. Batches `2026-11-09-furnace-fuel-power`, `2026-11-09-flare-stack` and `2026-11-09-batch-distiller`, merged as 0.24.0 on 2026-11-10: the fired heaters' fan power (`PowerPorts`, `TerminalEnergy`, electric store kind `BURNERS`), the electric still's terminal box, alarm channels (`DataPorts`, `SensorId`) · earlier: 2f86539b0 (branch `claude/save-corruption-prevention-2bd7ac`, main 0.23.4 merged in), 2026-11-09. Batch `2026-11-03-save-corruption`, merged as 0.23.5 on 2026-11-09: registry first for cables and controllers (W5c C2, C3): `ControlFacts` format 4 (a rack lane's frame), lost cable blocks, racks, controllers and consoles placed back, held cables cut out of their bus, held controllers off · earlier: e4749cdb6 (branch `claude/simulator-sizing-refactor-6bacab`, the consolidation review of `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
+
+## Fan power, the still's terminal and alarm channels (0.24.0)
+
+- A fired heater's terminal cell feeds its burners' electric store (`ElectricStores` kind `BURNERS`, `PowerPorts`, `TerminalEnergy`): without power the burners trip (NO POWER) and light again once the store refills.
+- The electric still's terminal box feeds its heater: its FE socket faces the back, its data socket the front (`EquipmentServices`).
+- `DataPorts` and `SensorId` carry the alarm channels and the diverter's actuator and data gland.
 
 Local controller boxes own automatic loops. The DCS selects a linked box and edits its settings; it does not run a second controller. Data cable carries connectivity rather than fluid or a packet stream simulation. Power conduit transports ordinary NeoForge FE through capabilities. Both use the pipe laying tool's anchors, routes, validation and rack framework.
 

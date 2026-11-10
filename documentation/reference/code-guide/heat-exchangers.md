@@ -1,6 +1,11 @@
 # Heat exchangers: heat sides, the coupling across islands and built-in control
 
-**Snapshot:** f4130065f (branch `claude/refinery-compounds-thermos-252973`), 2026-11-09. Batch `2026-11-04-refinery-compounds` (with `2026-11-04-open-thermo-data` and `2026-11-05-neural-retrain`, merged as 0.23.0 on 2026-11-09): a partner read on its own island's model · earlier: 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08, batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
+**Snapshot:** 7be61a4b9 (branch `claude/furnace-fuel-power-requirements-f7a46e`, main 0.23.6 merged in), 2026-11-10. Batches `2026-11-09-furnace-fuel-power`, `2026-11-09-flare-stack` and `2026-11-09-batch-distiller`, merged as 0.24.0 on 2026-11-10: `FiredCoil.limit` (the burners' share of the coil's duty), the still's condenser water side · earlier: f4130065f (branch `claude/refinery-compounds-thermos-252973`), 2026-11-09. Batch `2026-11-04-refinery-compounds` (with `2026-11-04-open-thermo-data` and `2026-11-05-neural-retrain`, merged as 0.23.0 on 2026-11-09): a partner read on its own island's model · earlier: 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08, batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
+
+## Fired coil limit and the still's condenser (0.24.0)
+
+- `FiredCoil` gains `limit`: the most heat the coil takes now is its duty at its limit, the share its burners can fire (fuel delivered, fan power). Fuel and air: `Burners` ([fluid-science.md](fluid-science.md)); the coupling: `FiredHeaters` ([fluid-runtime.md](fluid-runtime.md)).
+- A batch still's condenser water side is a heat side on its registration; the condenser's capacity is the still's law (`BatchStill`).
 
 ## Factory probes and one physical data interface (0.22.0)
 

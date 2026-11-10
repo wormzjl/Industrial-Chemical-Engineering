@@ -1,6 +1,12 @@
 # Process sensors and ideal regulation
 
-**Snapshot:** 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
+**Snapshot:** 7be61a4b9 (branch `claude/furnace-fuel-power-requirements-f7a46e`, main 0.23.6 merged in), 2026-11-10. Batches `2026-11-09-furnace-fuel-power`, `2026-11-09-flare-stack` and `2026-11-09-batch-distiller`, merged as 0.24.0 on 2026-11-10: equipment alarms (`Sensor.Kind.ALARM`, `EquipmentAlarm`, `BuiltInInputs` alarm channels), the electric still's and the diverter's controllers, `ControlHosts` (no actuator port without a data socket) · earlier: 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
+
+## Equipment alarms and the still's controllers (0.24.0)
+
+- `Sensor.Kind.ALARM` (unit STATE): an `EquipmentAlarm` (NO POWER, NO FUEL, LOW FUEL, FUEL NOT COMBUSTIBLE, FLAME OUT, OVER CAPACITY, BLOCKED, OVERHEAT, BOIL DRY, FLOODING, COOLING LIMITED) is a built-in input channel `alarm_<name>`, 1 active and 0 clear (`BuiltInInputs`). `ControlPublication` lists the active ones; the control panel's Alarms group shows them (`ControlColumns.alarms`). The words stay in English.
+- The electric still takes a controller on its pot: it holds the distillate flow by its firing (action INLET) or by its reflux (OUTLET), one correction per 42 s response (`ControlLaw`, `ControlPlans`, `ControlService`). A controller switches a diverter valve at its target: straight below, the first side at or above.
+- `ControlHosts`: a shell with no data socket gets no actuator port; an older one is removed at its next bind.
 
 ## Manual and equipment-owned signal sources (0.22.0)
 

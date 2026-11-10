@@ -1,6 +1,12 @@
 # Process simulator: the flowsheet, its run, sizing and the block
 
-**Snapshot:** f4130065f (branch `claude/refinery-compounds-thermos-252973`), 2026-11-09. Batches `2026-11-04-refinery-compounds` (W3, W4: each sheet runs on its own compound list, `SheetCompounds`; tokens and the file-open notice on the sheet's view), `2026-11-04-open-thermo-data` (the example on the medium grade) and `2026-11-05-neural-retrain` (the column unit's learned start), merged as 0.23.0 on 2026-11-09 · earlier: 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08, batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
+**Snapshot:** 7be61a4b9 (branch `claude/furnace-fuel-power-requirements-f7a46e`, main 0.23.6 merged in), 2026-11-10. Batches `2026-11-09-furnace-fuel-power`, `2026-11-09-flare-stack` and `2026-11-09-batch-distiller`, merged as 0.24.0 on 2026-11-10: the flare (`FlareUnit`, `FlareSizing`) and the batch still (`BatchStillUnit`, `StillBatch`, `StillSizing`, `StillCurve`, `Report.Series`, `SimulatorResults` format 2) as MODELLED units; the diverter valve is the splitter · earlier: f4130065f (branch `claude/refinery-compounds-thermos-252973`), 2026-11-09. Batches `2026-11-04-refinery-compounds` (W3, W4: each sheet runs on its own compound list, `SheetCompounds`; tokens and the file-open notice on the sheet's view), `2026-11-04-open-thermo-data` (the example on the medium grade) and `2026-11-05-neural-retrain` (the column unit's learned start), merged as 0.23.0 on 2026-11-09 · earlier: 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08, batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
+
+## Flare and batch still units (0.24.0)
+
+- `FlareUnit` (MODELLED): the stream leaves the sheet through the flame. Its door sets the tip; the run reports the heat released, the heating value, the flame temperature and the most the tip passes (`Flare.gas`), and warns at FLAME OUT, over capacity and solids. `FlareSizing`: the tip that passes the design flow with `Limit.AUTO_SPARE`.
+- `BatchStillUnit` (MODELLED): one batch a cycle on the world's law (`StillBatch`, `BatchStill`, `StillColumn`); each cut, the vent and the residue leave as cycle-averaged flows. The door's Batch tab draws `StillCurve` from the run's `Report.Series` (`SimulatorResults` format 2). `StillSizing`: the pot from the constructor's list; the heater at 25 kW/m², the worm at the full boil-up plus 20 % at 40 K, the column at an F-factor of 1.5 Pa^0.5.
+- `Symbol.STILL` and the flare's symbol; the diverter valve is the simulator's splitter (`FlowsheetCatalog`). Owner questions: BATCH_STILL_SIMULATOR.md.
 
 ## Current viewport and constructor handoff (0.22.0)
 
