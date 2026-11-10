@@ -90,7 +90,7 @@ public final class DriverSounds {
     }
     /**
      * The running drivers' sources for the budget (S4 A): each at the centre of its cells (a motor's body and coupling, a
-     * turbine's casing), its gain {@link UnitDesign#soundGain(EquipmentShape, double)} as the level 100 + 20 log10 gain
+     * turbine's casing), its gain {@link UnitDesign#soundGain(EquipmentShape, double)} as the level {@link com.wormzjl.icheme.client.fx.sound.SoundBudget#FULL} + 20 log10 gain
      * ({@code SoundBudget.level}), its pitch {@link UnitDesign#soundPitch(EquipmentShape, double)}.
      */
     public static void emitters(net.minecraft.world.phys.Vec3 point,List<com.wormzjl.icheme.client.fx.sound.SoundBudget.Emitter> into) {

@@ -90,7 +90,7 @@ public final class MoverSounds {
      * The running movers' sources for the budget (S4 A), read from the states last published: a casing's running loop at
      * its gain ({@link UnitDesign#soundGain(EquipmentShape, double)}, decision D26), and a pump's cavitation crackle and gas
      * churn (W10c) at that gain times their bytes over 255; an in-line pump's layers take the smallest casing's gain
-     * ({@link UnitDesign#leastGain}). Each gain g is the level 100 + 20 log10 g ({@link SoundBudget#level}), so a lone
+     * ({@link UnitDesign#leastGain}). Each gain g is the level {@link SoundBudget#FULL} + 20 log10 g ({@link SoundBudget#level}), so a lone
      * mover plays at the volume it had before the budget. The pitch follows the shaft's rpm over the loop's (owner 2026-11-04).
      */
     public static void emitters(Vec3 point,List<SoundBudget.Emitter> into) {

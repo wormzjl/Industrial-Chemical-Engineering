@@ -73,18 +73,21 @@ public final class SoundBudget {
         return ranked.stream().limit(LOOPS).map(Ranked::group).toList();
     }
 
+    /** The level that plays at full gain, dB. Owner 2026-11-10, "the sound is too loud": 110 (was 100), every source 10 dB quieter. */
+    public static final double FULL=110;
+
     /**
-     * A sound power level's Minecraft volume. At and below 100 dB, 10^((Lw − 100) / 20): the amplitude (100 dB → 1, 90 dB
-     * → 0.32, 80 dB → 0.1; a mover's casing gain g is the level 100 + 20 log10 g). Above, Minecraft caps the gain at 1 and
-     * lengthens the reach to 16 × volume blocks, so the louder sources carry farther: 3^((Lw − 100) / 20), 120 dB → 3
-     * (48 blocks), at most 3.
+     * A sound power level's Minecraft volume. At and below {@link #FULL}, 10^((Lw − 110) / 20): the amplitude (110 dB → 1,
+     * a 1 MPa valve's 104 dB → 0.5, 100 dB → 0.32; a mover's casing gain g is the level 110 + 20 log10 g, its old volume).
+     * Above, Minecraft caps the gain at 1 and lengthens the reach to 16 × volume blocks, so the louder sources carry
+     * farther: 3^((Lw − 110) / 20), 130 dB → 3 (48 blocks), at most 3.
      */
     public static float volume(double level) {
         if(!Double.isFinite(level))return 0;
-        return (float)(level<=100?Math.pow(10,(level-100)/20):Math.min(3,Math.pow(3,(level-100)/20)));
+        return (float)(level<=FULL?Math.pow(10,(level-FULL)/20):Math.min(3,Math.pow(3,(level-FULL)/20)));
     }
-    /** The level whose volume is {@code gain} (gain at most 1): 100 + 20 log10 gain, dB; for a mover's or driver's casing gain. */
-    public static double level(double gain){return gain>0?100+20*Math.log10(Math.min(gain,1)):Double.NEGATIVE_INFINITY;}
+    /** The level whose volume is {@code gain} (gain at most 1): 110 + 20 log10 gain, dB; for a mover's or driver's casing gain. */
+    public static double level(double gain){return gain>0?FULL+20*Math.log10(Math.min(gain,1)):Double.NEGATIVE_INFINITY;}
     /** How far a loop of {@code level} dB reaches, blocks: Minecraft's linear attenuation, 16 × max(volume, 1). */
     public static double reach(double level){return 16*Math.max(1,volume(level));}
 }

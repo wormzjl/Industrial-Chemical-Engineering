@@ -36,8 +36,9 @@ class FxSoundsTest {
         var faint=SoundBudget.choose(SoundBudget.merge(List.of(at("valve_gas",1,15,40))),0,64,0,Set.of());
         assertEquals(List.of(),faint,"heard below 30 dB: not played");
         var far=SoundBudget.choose(SoundBudget.merge(List.of(at("valve_gas",1,20,95))),0,64,0,Set.of());
-        assertEquals(List.of(),far,"beyond its reach of 16 blocks (95 dB, volume 0.56)");
-        assertEquals(1,SoundBudget.choose(SoundBudget.merge(List.of(at("flare_roar",1,40,120))),0,64,0,Set.of()).size(),"120 dB reaches 48 blocks");
+        assertEquals(List.of(),far,"beyond its reach of 16 blocks (95 dB, volume 0.18)");
+        assertEquals(1,SoundBudget.choose(SoundBudget.merge(List.of(at("flare_roar",1,25,120))),0,64,0,Set.of()).size(),"120 dB reaches 28 blocks");
+        assertEquals(List.of(),SoundBudget.choose(SoundBudget.merge(List.of(at("flare_roar",1,40,120))),0,64,0,Set.of()),"but not 40");
     }
 
     @Test void aPlayingLoopKeepsItsPlaceUnlessARivalIs3dBLouder() {
@@ -60,13 +61,15 @@ class FxSoundsTest {
     }
 
     @Test void levelsMapToVolumes() {
-        assertEquals(1,SoundBudget.volume(100),1e-6);
-        assertEquals(3,SoundBudget.volume(120),1e-6,"48 blocks of reach");
-        assertEquals(.316,SoundBudget.volume(90),1e-3);
-        assertEquals(3,SoundBudget.volume(140),1e-6,"at most 3");
+        // Owner 2026-11-10, "too loud": full gain at 110 dB, so a 1 MPa valve (104 dB) plays at half.
+        assertEquals(1,SoundBudget.volume(110),1e-6);
+        assertEquals(.5,SoundBudget.volume(104),.01);
+        assertEquals(3,SoundBudget.volume(130),1e-6,"48 blocks of reach");
+        assertEquals(.316,SoundBudget.volume(100),1e-3);
+        assertEquals(3,SoundBudget.volume(150),1e-6,"at most 3");
         assertEquals(0,SoundBudget.volume(Double.NaN));
         assertEquals(.6,SoundBudget.volume(SoundBudget.level(.6)),1e-5,"a mover's gain plays at its old volume");
-        assertEquals(48,SoundBudget.reach(120),1e-4);
+        assertEquals(48,SoundBudget.reach(130),1e-4);
         assertEquals(16,SoundBudget.reach(90),1e-9);
     }
 }
