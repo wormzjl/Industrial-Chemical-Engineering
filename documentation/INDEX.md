@@ -14,6 +14,7 @@ Status words:
 
 | Batch | Purpose | Status |
 |---|---|---|
+| [2026-11-10-steam-ejector-flow](2026-11-10-steam-ejector-flow/README.md) | Steam ejector as a flow element (motive steam through its throat) and its jet sound | In progress since 2026-11-10 |
 | [2026-11-10-custom-shader-system](2026-11-10-custom-shader-system/README.md) | Shader-pack-safe effects (flare, plumes, still), normal-mapped instrument wiring first, config switch | In progress since 2026-11-10 |
 | [2026-11-10-agent-instructions-review/](2026-11-10-agent-instructions-review/README.md) | AGENTS.md checked against official guidance; skills, Codex skill links and a command guard | Implemented 2026-11-10 |
 | [2026-11-09-batch-distiller/](2026-11-09-batch-distiller/README.md) | Fired or electric batch still with optional condenser and small column; batch run in the simulator | Implemented 2026-11-10 |
