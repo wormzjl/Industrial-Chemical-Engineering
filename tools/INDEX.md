@@ -8,6 +8,7 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 
 | Folder | Purpose | Batch | Status |
 |---|---|---|---|
+| [agent-guard/](agent-guard/README.md) | PreToolUse hook for Claude Code and Codex: blocks the git and Gradle commands AGENTS.md forbids | `2026-11-10-agent-instructions-review` | In use since 2026-11-10 |
 | [heating-values/](heating-values/README.md) | Prebuilt lower heating values (Hess's law) into the material records' combustion sub-record | `2026-11-09-furnace-fuel-power` | In use since 2026-11-09 |
 | [rack-frame-probe/](rack-frame-probe/README.md) | jshell probe: how often a rack lane's face points leave its frame open | `2026-11-03-save-corruption` | Implemented 2026-11-09 |
 | [lod-rendering/](lod-rendering/README.md) | Frame-time pair of the LOD batch: gauge scene, view and away windows | `2026-11-09-lod-rendering` | Implemented 2026-11-09 |
