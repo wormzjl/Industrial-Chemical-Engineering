@@ -121,4 +121,31 @@ class SilhouettesTest {
         assertNull(watch(at(0, 0), 512, false), "an unsubscribe sends nothing");
         assertFalse(silhouettes.subscribed(player));
     }
+
+    /**
+     * Bench 2026-11-10 (FX_BENCH_REVIEW.md: the rank cost 0.52 ms): the rank's index sort orders as the list sort it
+     * replaced, by distance, then by origin, equal keys in the registry's order; and the kept boxes rank as the shapes' own.
+     */
+    @Test void theRankSortOrdersAsTheComparatorItReplaced() {
+        var random = new Random(7);
+        for (int n : new int[]{0, 1, 5, 16, 17, 40, 300}) {
+            double[] distance = new double[n];
+            long[] origin = new long[n];
+            for (int i = 0; i < n; i++) {
+                distance[i] = random.nextInt(6) == 0 ? 0 : random.nextInt(20);
+                origin[i] = random.nextInt(8);
+            }
+            int[] index = new int[n];
+            var expected = new ArrayList<Integer>();
+            for (int i = 0; i < n; i++) {
+                index[i] = i;
+                expected.add(i);
+            }
+            expected.sort(Comparator.<Integer>comparingDouble(i -> distance[i]).thenComparingLong(i -> origin[i]));
+            Silhouettes.sort(index, n, distance, origin);
+            for (int i = 0; i < n; i++) assertEquals((int) expected.get(i), index[i], "n=" + n + " at " + i);
+        }
+        var p = new Silhouettes.Placement(new BlockPos(10, 64, -20), PUMP, Paint.DEFAULT);
+        assertEquals(Silhouettes.distanceSquared(p, 3.5, 7.25), Silhouettes.distanceSquared(10, -20, PUMP.sizeX(), PUMP.sizeZ(), 3.5, 7.25));
+    }
 }
