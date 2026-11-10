@@ -15,7 +15,7 @@
 
 ## Vacuum pumps (batch 2026-11-10-vacuum-pump, not merged)
 
-- `VacuumPumpDesign` (`Kind.LIQUID_RING_PUMP`, `Kind.DRY_SCREW_PUMP`, appended): the size is the model's number (1 to 4; LR 150/500/1500/5000 m³/h at 1450/1450/980/590 rpm, DS 100/300/650/2500 at 2950), the length a ring's stages (1 or 2; the 5000 single only). `UnitDesign.vacuumPump(shape)` gives the world's `VacuumPump` law; `EquipmentStructure.machineControl` registers it as a `FlowControl.Machine` on the shaft train. Two top nozzles a free block apart, the shaft end at the drive end; bores at 25 m/s at `S_n`. Constructor category Vacuum, with the ejector (`ConstructorColumn`).
+- `VacuumPumpDesign` (`Kind.LIQUID_RING_PUMP`, `Kind.DRY_SCREW_PUMP`, appended): the size is the model's number (1 to 4; LR 150/500/1500/5000 m³/h at 1450/1450/980/590 rpm, DS 100/300/650/2500 at 2950), the length a ring's stages (1 or 2; the 5000 single only). `UnitDesign.vacuumPump(shape)` gives the world's `VacuumPump` law; `EquipmentStructure.machineControl` registers it as a `FlowControl.Machine` on the shaft train. A liquid ring is a pump-and-separator package: short ring between port heads, the suction on the front head, DISCHARGE on top of the separator at the skid's front; a dry screw a ribbed box with two top nozzles. Nozzles a free block apart, the shaft end at the drive end; bores at 25 m/s at `S_n`. Constructor category Vacuum, with the ejector (`ConstructorColumn`).
 - `ColumnComponents.Vacuum` (EJECTOR, LIQUID_RING, DRY_SCREW; shape fields 12, `compat/equipment/shapes-12.snbt`): saved by name as `Vacuum` only where it is not the ejector; `toString` names it only then, so earlier corpus lines read unchanged.
 
 ## Flare stack and batch still (0.24.0)
