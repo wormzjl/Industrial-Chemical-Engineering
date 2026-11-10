@@ -15,7 +15,8 @@ import net.minecraft.core.BlockPos;
  * state on a request-driven wire: it ends with the player's logout, its dimension change or its own request.
  * <ul>
  * <li>{@link #watch}: each subscription request is answered at once with a full set ({@link Batch#reset}), which replaces
- * the one before.</li>
+ * the one before; at most one full set per {@link #REQUEST_TICKS} per player (phase 2, fx-noise): a request inside that
+ * window waits for the cadence after it.</li>
  * <li>{@link #publish}, on the presentation cadence: a subscriber whose registry changed ({@link #changed}) or who moved
  * {@link #MOVE} blocks since its last set is ranked again, and receives only the differences.</li>
  * </ul>
@@ -27,6 +28,12 @@ public final class Silhouettes {
     public static final int MAXIMUM_STRUCTURES=256;
     /** A subscriber is ranked again after it moved this far, blocks. */
     static final double MOVE=64;
+    /**
+     * The fewest online ticks between two full sets to one player (5 s): a request inside that window waits, and the first
+     * cadence after it ends answers the latest one. A full set is up to 256 shapes, so a client that asks in a loop costs
+     * the server one registry rank per 5 s at most.
+     */
+    public static final long REQUEST_TICKS=100;
 
     /** A structure as the registry records it: its origin, its shape, its paint. */
     public record Placement(BlockPos origin,EquipmentShape shape,Paint paint) {
@@ -56,6 +63,9 @@ public final class Silhouettes {
     private final Map<UUID,Subscription> subscriptions=new HashMap<>();
     /** The dimensions whose registry records changed since the last publication. */
     private final Set<String> changed=new HashSet<>();
+    /** Each player's last full set, online tick, and the radius of a request that waits for its window to end. */
+    private final Map<UUID,Long> answered=new HashMap<>();
+    private final Map<UUID,Integer> waiting=new HashMap<>();
 
     public Silhouettes(Source source){this.source=Objects.requireNonNull(source);}
 
@@ -63,35 +73,50 @@ public final class Silhouettes {
     public static int radius(int radius){return Math.clamp(radius,0,MAXIMUM_RADIUS);}
 
     /**
-     * Player {@code player}'s request: subscribe within {@code radius} blocks of where it stands ({@code on}), or end its
-     * subscription. Returns the full set to send it now, or null for nothing to send.
+     * Player {@code player}'s request at online tick {@code tick}: subscribe within {@code radius} blocks of where it stands
+     * ({@code on}), or end its subscription. Returns the full set to send it now, or null for nothing to send now: an end, or
+     * a request within {@link #REQUEST_TICKS} of its last full set, which {@link #publish} answers once that window ends.
      */
-    public Batch watch(UUID player,Stand stand,int radius,boolean on) {
+    public Batch watch(UUID player,Stand stand,int radius,boolean on,long tick) {
         Objects.requireNonNull(player);
-        if(!on||stand==null){subscriptions.remove(player);return null;}
-        // Every request is answered with a full set: a client that asks again has dropped what it held (a level change).
+        if(!on||stand==null){subscriptions.remove(player);waiting.remove(player);return null;}
+        Long last=answered.get(player);
+        if(last!=null&&tick>=last&&tick-last<REQUEST_TICKS){waiting.put(player,radius(radius));return null;}
+        waiting.remove(player);
+        return subscribe(player,stand,radius,tick);
+    }
+    /** A full set: a client that asks again has dropped what it held (a level change), so every answer is a reset. */
+    private Batch subscribe(UUID player,Stand stand,int radius,long tick) {
         var s=new Subscription(stand.dimension(),radius(radius),stand.x(),stand.z());
-        subscriptions.put(player,s);
+        subscriptions.put(player,s);answered.put(player,tick);
         var wanted=rank(s);
         s.sent.putAll(wanted);
         return new Batch(true,List.copyOf(wanted.values()),List.of());
     }
     /** Ends {@code player}'s subscription (it left). */
-    public void forget(UUID player){subscriptions.remove(player);}
+    public void forget(UUID player){subscriptions.remove(player);waiting.remove(player);answered.remove(player);}
     /** Whether {@code player} is subscribed. */
     public boolean subscribed(UUID player){return subscriptions.containsKey(player);}
     /** The registry's record of a structure in {@code dimension} changed: placed, repainted, moved or removed. */
     public void changed(String dimension){if(!subscriptions.isEmpty())changed.add(dimension);}
-    public boolean idle(){return subscriptions.isEmpty();}
+    public boolean idle(){return subscriptions.isEmpty()&&waiting.isEmpty();}
 
     /**
-     * The presentation cadence: each subscriber where it now stands ({@code stands}; null for one that left or changed
-     * dimension, whose subscription ends), ranked again where its registry changed or it moved; the differences to send it.
+     * The presentation cadence at online tick {@code tick}: a waiting request whose window ended gets its full set; each
+     * other subscriber where it now stands ({@code stands}; null for one that left or changed dimension, whose subscription
+     * ends), ranked again where its registry changed or it moved; the differences to send it.
      */
-    public Map<UUID,Batch> publish(java.util.function.Function<UUID,Stand> stands) {
+    public Map<UUID,Batch> publish(java.util.function.Function<UUID,Stand> stands,long tick) {
         var out=new LinkedHashMap<UUID,Batch>();
+        for(var it=waiting.entrySet().iterator();it.hasNext();) {
+            var e=it.next();Long last=answered.get(e.getKey());
+            if(last!=null&&tick>=last&&tick-last<REQUEST_TICKS)continue;
+            it.remove();var stand=stands.apply(e.getKey());
+            if(stand==null){subscriptions.remove(e.getKey());continue;}
+            out.put(e.getKey(),subscribe(e.getKey(),stand,e.getValue(),tick));
+        }
         for(var it=subscriptions.entrySet().iterator();it.hasNext();) {
-            var e=it.next();var s=e.getValue();var stand=stands.apply(e.getKey());
+            var e=it.next();var s=e.getValue();if(out.containsKey(e.getKey()))continue;var stand=stands.apply(e.getKey());
             if(stand==null||!stand.dimension().equals(s.dimension)){it.remove();continue;}
             double dx=stand.x()-s.x,dz=stand.z()-s.z;
             if(!changed.contains(s.dimension)&&dx*dx+dz*dz<MOVE*MOVE)continue;

@@ -57,9 +57,11 @@ import java.util.*;
  * and the controls carry a still's settings ({@link StillControls}).</p>
  * <p>{@code fluid-21} (batch 2026-11-10-custom-shader-system, W4 and W5): the cooling towers' and the fired heaters' watches
  * ({@link Watch#TOWERS}, {@link Watch#HEATERS}) and their published plumes and flues ({@link TowerPlume}, {@link HeaterFlue}).</p>
+ * <p>{@code fluid-22} (batch 2026-11-10-custom-shader-system, PROCESS_SOUNDS_REVIEW.md S2 A): the noise watch
+ * ({@link NoiseWatch}) and its answer, the loudest noise sources near the player ({@link NoiseSources}).</p>
  */
 public final class FluidNetwork {
-    public static final String PROTOCOL="fluid-21";
+    public static final String PROTOCOL="fluid-22";
     private static final Gson JSON=new Gson();
     public static final int MAX_JSON=262144;
     public static final int MAX_EDIT_JSON=4096;
@@ -647,6 +649,36 @@ public final class FluidNetwork {
         };
         @Override public Type<? extends CustomPacketPayload> type(){return TYPE;}
     }
+    /**
+     * Client to server (fluid-22, PROCESS_SOUNDS_REVIEW.md S2 A): the noise watch, sent about once a second while the player
+     * hears the plant; the server answers each from the levels it last published ({@link NoiseSources}). A player that
+     * stops asking stops being answered. It carries nothing: the server knows where the player stands.
+     */
+    public record NoiseWatch() implements CustomPacketPayload {
+        public static final Type<NoiseWatch> TYPE=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"noise_watch"));
+        public static final StreamCodec<RegistryFriendlyByteBuf,NoiseWatch> STREAM_CODEC=StreamCodec.unit(new NoiseWatch());
+        @Override public Type<? extends CustomPacketPayload> type(){return TYPE;}
+    }
+    /**
+     * Server to client (fluid-22): the noise sources within {@code Noise.RANGE} blocks of the player, the
+     * {@code Noise.MAXIMUM_SOURCES} loudest at where it stands first; each its position, its kind by {@code Noise.Kind}
+     * ordinal, its sound power level, dB, and its loop's pitch. Read from the published levels; no process inventory.
+     */
+    public record NoiseSources(List<com.wormzjl.icheme.runtime.fluid.Noise.Source> sources) implements CustomPacketPayload {
+        public NoiseSources{sources=List.copyOf(sources);if(sources.size()>com.wormzjl.icheme.runtime.fluid.Noise.MAXIMUM_SOURCES)throw new IllegalArgumentException("Too many noise sources");}
+        public static final Type<NoiseSources> TYPE=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"noise_sources"));
+        public static final StreamCodec<RegistryFriendlyByteBuf,NoiseSources> STREAM_CODEC=new StreamCodec<>() {
+            public NoiseSources decode(RegistryFriendlyByteBuf b) {
+                int n=b.readVarInt();if(n<0||n>com.wormzjl.icheme.runtime.fluid.Noise.MAXIMUM_SOURCES)throw new IllegalArgumentException("Too many noise sources");
+                var kinds=com.wormzjl.icheme.runtime.fluid.Noise.Kind.values();var out=new ArrayList<com.wormzjl.icheme.runtime.fluid.Noise.Source>(n);
+                for(int i=0;i<n;i++){var pos=b.readBlockPos();int kind=b.readUnsignedByte();if(kind>=kinds.length)throw new IllegalArgumentException("Invalid noise kind");
+                    out.add(new com.wormzjl.icheme.runtime.fluid.Noise.Source(pos,kinds[kind],b.readFloat(),b.readFloat()));}
+                return new NoiseSources(out);
+            }
+            public void encode(RegistryFriendlyByteBuf b,NoiseSources p){b.writeVarInt(p.sources.size());for(var s:p.sources){b.writeBlockPos(s.position());b.writeByte(s.kind().ordinal());b.writeFloat(s.level());b.writeFloat(s.pitch());}}
+        };
+        @Override public Type<? extends CustomPacketPayload> type(){return TYPE;}
+    }
     /** Client to server: the drivers (motor, generator, steam turbine) to start and stop watching, by their structures' origins (W3). */
     public record DriverWatch(List<BlockPos> watch,List<BlockPos> unwatch) implements CustomPacketPayload {
         public static final Type<DriverWatch> TYPE=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"driver_watch"));
@@ -765,19 +797,24 @@ public final class FluidNetwork {
             if(context.player() instanceof ServerPlayer player)FluidWorldAuthority.find(player.server).ifPresent(world->world.watchHeaters(player,p.watch,p.unwatch));
         });
         fluid.playToClient(HeaterFlue.TYPE,HeaterFlue.STREAM_CODEC,(p,context)->com.wormzjl.icheme.client.fx.state.ProcessStates.accept(p));
+        // fluid-22 (PROCESS_SOUNDS_REVIEW.md S2 A): the noise watch and its answer.
+        fluid.playToServer(NoiseWatch.TYPE,NoiseWatch.STREAM_CODEC,(p,context)->{
+            if(context.player() instanceof ServerPlayer player)FluidWorldAuthority.find(player.server).ifPresent(world->world.watchNoise(player));
+        });
+        fluid.playToClient(NoiseSources.TYPE,NoiseSources.STREAM_CODEC,(p,context)->com.wormzjl.icheme.client.fx.sound.FxSounds.accept(p.sources()));
         // flare-1 (batch 2026-11-09-flare-stack, W5): the flares' watch and their flame state; flare-2 (batch
         // 2026-11-10-custom-shader-system, W3): the state carries the soot index and the exit velocity.
         var flare=event.registrar("flare-2").executesOn(HandlerThread.MAIN);
         flare.playToServer(Watch.FLARES,Watch.codec(Watch.FLARES),(p,context)->{
             if(context.player() instanceof ServerPlayer player)FluidWorldAuthority.find(player.server).ifPresent(world->world.watchFlares(player,p.watch,p.unwatch));
         });
-        flare.playToClient(FlareState.TYPE,FlareState.STREAM_CODEC,(p,context)->com.wormzjl.icheme.client.FlareFlames.accept(p));
+        flare.playToClient(FlareState.TYPE,FlareState.STREAM_CODEC,(p,context)->com.wormzjl.icheme.client.fx.state.ProcessStates.accept(p));
         // still-1 (batch 2026-11-09-batch-distiller, W6): the stills' watch and their fire state, and the page's fuel slot.
         var still=event.registrar("still-1").executesOn(HandlerThread.MAIN);
         still.playToServer(Watch.STILLS,Watch.codec(Watch.STILLS),(p,context)->{
             if(context.player() instanceof ServerPlayer player)FluidWorldAuthority.find(player.server).ifPresent(world->world.watchStills(player,p.watch,p.unwatch));
         });
-        still.playToClient(StillState.TYPE,StillState.STREAM_CODEC,(p,context)->com.wormzjl.icheme.client.StillFires.accept(p));
+        still.playToClient(StillState.TYPE,StillState.STREAM_CODEC,(p,context)->com.wormzjl.icheme.client.fx.state.ProcessStates.accept(p));
         still.playToServer(StillFuelPayload.TYPE,StillFuelPayload.STREAM_CODEC,(p,context)->{if(context.player() instanceof ServerPlayer player)stillFuel(p,player);});
         var instruments=event.registrar("instruments-1").executesOn(HandlerThread.MAIN);
         instruments.playToServer(InstrumentWatch.TYPE,InstrumentWatch.CODEC,(p,c)->{if(c.player() instanceof ServerPlayer player)FluidWorldAuthority.find(player.server).ifPresent(w->w.instruments().watch(player,p.watch,p.unwatch));});
@@ -805,6 +842,9 @@ public final class FluidNetwork {
     public static void sendStill(ServerPlayer player,StillState state){PacketDistributor.sendToPlayer(player,state);}
     public static void sendTower(ServerPlayer player,TowerPlume state){PacketDistributor.sendToPlayer(player,state);}
     public static void sendHeater(ServerPlayer player,HeaterFlue state){PacketDistributor.sendToPlayer(player,state);}
+    public static void sendNoise(ServerPlayer player,NoiseSources sources){PacketDistributor.sendToPlayer(player,sources);}
+    /** Client: the noise watch's poll (fluid-22). */
+    public static void requestNoise(){PacketDistributor.sendToServer(new NoiseWatch());}
     /** Client: the open still page's fuel slot: load it from the inventory, or take its stack out (W6). */
     public static void stillFuel(FluidDeviceMenu menu,boolean load){PacketDistributor.sendToServer(new StillFuelPayload(menu.containerId,menu.position(),menu.identity(),load));}
     /** Client: asks the server to watch and to stop watching drivers by their origins (W3). */

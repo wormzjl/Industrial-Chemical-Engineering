@@ -99,6 +99,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
     private final Map<Long,com.wormzjl.icheme.network.FluidNetwork.HeaterFlue> publishedHeaters=new HashMap<>();
     /** The far silhouettes' subscriptions (W10): registry facts of the placed structures, read as stored. */
     private final Silhouettes silhouettes=new Silhouettes(this::structuresOf);
+    /** The plant's noise levels by chunk, as last published, and the players that ask for them (PROCESS_SOUNDS_REVIEW.md, S2 A). */
+    private final Noise.Store noise=new Noise.Store();
     private final Map<Long,com.wormzjl.icheme.network.FluidNetwork.MoverState> publishedMovers=new HashMap<>();
     private final com.wormzjl.icheme.runtime.instrument.InstrumentService instruments;
     private final com.wormzjl.icheme.runtime.control.ControlFacts controlFacts;
@@ -309,11 +311,12 @@ public final class FluidWorldAuthority implements AutoCloseable {
     }
     /**
      * A client's far silhouette subscription (W10): within {@code radius} blocks ({@link Silhouettes#MAXIMUM_RADIUS} at most) of
-     * where it stands ({@code on}), or none. A subscription is answered at once with the registry's records, as stored.
+     * where it stands ({@code on}), or none. A subscription is answered at once with the registry's records, as stored, at
+     * most once per {@link Silhouettes#REQUEST_TICKS} per player; a request inside that window is answered when it ends.
      */
     public void watchSilhouettes(net.minecraft.server.level.ServerPlayer player,int radius,boolean on) {
         owned();if(closed)return;
-        var batch=silhouettes.watch(player.getUUID(),stand(player),radius,on);
+        var batch=silhouettes.watch(player.getUUID(),stand(player),radius,on,topology.onlineTick());
         if(batch!=null)com.wormzjl.icheme.network.EquipmentNetwork.sendSilhouettes(player,batch);
     }
     private static Silhouettes.Stand stand(net.minecraft.server.level.ServerPlayer player) {
@@ -322,8 +325,136 @@ public final class FluidWorldAuthority implements AutoCloseable {
     /** The presentation cadence's silhouette differences (W10): to each subscriber whose registry changed or who moved. */
     private void publishSilhouettes() {
         if(silhouettes.idle())return;
-        silhouettes.publish(uuid->{var p=server.getPlayerList().getPlayer(uuid);return p==null?null:stand(p);})
+        silhouettes.publish(uuid->{var p=server.getPlayerList().getPlayer(uuid);return p==null?null:stand(p);},topology.onlineTick())
                 .forEach((uuid,batch)->{var p=server.getPlayerList().getPlayer(uuid);if(p!=null)com.wormzjl.icheme.network.EquipmentNetwork.sendSilhouettes(p,batch);});
+    }
+    /**
+     * A client's noise watch (batch 2026-11-10-custom-shader-system, PROCESS_SOUNDS_REVIEW.md section 2, S2 A): about once a
+     * second it asks for the sources within {@link Noise#RANGE} blocks, and is answered at once with the
+     * {@link Noise#MAXIMUM_SOURCES} loudest at where it stands, read from the levels last published (no solver run, no
+     * process state created). An answer is at most once per {@link Noise#ANSWER_TICKS}; a player that stops asking for
+     * {@link Noise#WATCH_TICKS} is no longer a watcher. Before the first publication it is answered with none.
+     */
+    public void watchNoise(net.minecraft.server.level.ServerPlayer player) {
+        owned();if(closed||player.hasDisconnected()||!noise.ask(player.getUUID(),topology.onlineTick()))return;
+        com.wormzjl.icheme.network.FluidNetwork.sendNoise(player,new com.wormzjl.icheme.network.FluidNetwork.NoiseSources(
+                noise.near(player.serverLevel().dimension().location().toString(),player.getX(),player.getEyeY(),player.getZ())));
+    }
+    /**
+     * The presentation cadence's noise levels (S2 A): only while someone asks. The islands with a device within
+     * {@link Noise#RANGE} blocks of a watcher are read once each (as stored), and an island's levels are computed again only
+     * when it committed a new interval since; the gearboxes near a watcher are read from their shaft trains. A knock is a
+     * one-shot: it stays one cadence.
+     */
+    private void publishNoise() {
+        long now=topology.onlineTick();var watchers=noise.watchers(now);
+        if(watchers.isEmpty()){if(!noise.empty())noise.clear();return;}
+        var near=new TreeSet<Long>();var stands=new ArrayList<net.minecraft.server.level.ServerPlayer>();
+        int reach=(int)Math.ceil(Noise.RANGE/16);
+        for(var uuid:watchers) {
+            var p=server.getPlayerList().getPlayer(uuid);if(p==null||p.hasDisconnected()){noise.forget(uuid);continue;}
+            stands.add(p);String dimension=p.serverLevel().dimension().location().toString();int cx=p.getBlockX()>>4,cz=p.getBlockZ()>>4;
+            for(int i=-reach;i<=reach;i++)for(int j=-reach;j<=reach;j++)for(long id:registry.chunk(dimension,net.minecraft.world.level.ChunkPos.asLong(cx+i,cz+j))){Long owner=registry.owner(id);if(owner!=null)near.add(owner);}
+        }
+        for(long island:near) {
+            // An island's levels stand until it commits a new interval (a knock stands one cadence: Store.current).
+            var snapshot=storedIsland(island);long tick=snapshot.clock().committedTick();
+            if(noise.current(island,tick))continue;
+            var members=registry.members(island);var first=members.isEmpty()?null:registrations().get(members.get(0));
+            if(first!=null)noise.put(island,first.device().position().dimension(),tick,islandNoise(island,snapshot));
+        }
+        noise.retain(near);
+        // The gearboxes near a watcher, from their trains' last step, by dimension.
+        var gears=new HashMap<String,List<Noise.Source>>();
+        for(var unit:shafts.units()) {
+            if(unit.kind()!=com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.GEARBOX)continue;
+            var p=unit.position();var pos=new BlockPos(p.x(),p.y(),p.z());
+            boolean heard=false;for(var s:stands)heard|=s.serverLevel().dimension().location().toString().equals(p.dimension())&&s.position().distanceToSqr(pos.getCenter())<=Noise.RANGE*Noise.RANGE;
+            var v=heard?shafts.view(unit.id()):null;if(v==null)continue;
+            double share=unit.designSpeed()>0?v.speed()/unit.designSpeed():v.share();
+            Noise.add(gears.computeIfAbsent(p.dimension(),d->new ArrayList<>()),pos,Noise.Kind.GEAR,Noise.gear(unit.ratedPower(),share),v.speed()/GEAR_LOOP_RPM);
+        }
+        noise.machines(gears);
+    }
+    /** The gearbox loop's shaft speed, rpm: 30 teeth at 1,500 rpm mesh at its 750 Hz (tools/process-sounds). */
+    static final double GEAR_LOOP_RPM=1500;
+    /**
+     * Island {@code island}'s noise sources from what it last accepted, {@code snapshot} as stored (a read; the review's
+     * table 1): its valves passing flow, by their drop, by phase; its open vessels' vents; its air coolers' fans; its
+     * towers' fans and falling water; its fired heaters' burners and draught fans; its kettles' boiling pools; and the knocks
+     * of its liquid lines stopped since its last publication.
+     */
+    private List<Noise.Source> islandNoise(long island,IslandCoordinator.Snapshot snapshot) {
+        var out=new ArrayList<Noise.Source>();var result=snapshot.lastResult().orElse(null);if(result==null)return out;
+        var graph=snapshot.graph();var rows=new HashMap<Long,PassiveStepSolver.PipeObservation>();for(var o:result.observations())rows.put(o.pipe(),o);
+        var speeds=new HashMap<Long,Double>();var densities=new HashMap<Long,Double>();
+        for(var pipe:graph.pipes()) {
+            var row=rows.get(pipe.id());if(row==null||!(row.density()>0))continue;
+            boolean gas=row.density()<Noise.GAS_DENSITY;
+            // A valve sounds only while it passes flow, its level by its drop alone; its loop by its stream's phase (owner, 2026-11-10).
+            if(pipe.control() instanceof FlowControl.PressureValve||pipe.control() instanceof FlowControl.ControlValve) {
+                var r=registrations().get(graph.reservoirs().get(pipe.first()).id());
+                if(r!=null&&row.flowing()&&row.massFlow()!=0)Noise.add(out,cell(r),gas?Noise.Kind.VALVE_GAS:Noise.Kind.VALVE_LIQUID,Noise.valve(Math.abs(row.firstPressure()-row.secondPressure())),1);
+            }
+            // A liquid line's speed, m/s, against which its stop at the next publication knocks.
+            if(!gas&&!pipe.sections().isEmpty()) {
+                var g=pipe.sections().get(0);double area=Math.max(1,g.channels())*Math.PI*g.diameter()*g.diameter()/4;
+                if(area>0){speeds.put(pipe.id(),row.flowing()?row.massFlow()/(row.density()*area):0);densities.put(pipe.id(),row.density());}
+            }
+        }
+        out.addAll(noise.knocks(island,speeds,densities,pipe->pipeCell(island,pipe)));
+        // Open vessels' vents: the gas their VENT boundaries booked over the interval, a free jet through their roof.
+        if(result.advancedSeconds()>0) {
+            var weights=model.molecularWeights();var mass=new HashMap<Long,Double>();var moles=new HashMap<Long,Double>();
+            for(var b:result.boundaries()) {
+                if(b.kind()!=ConservativeTransport.BoundaryTransfer.Kind.VENT)continue;
+                var n=b.moles();double m=0,mol=0;for(int c=0;c<Math.min(n.length,weights.length);c++){m+=Math.abs(n[c])*weights[c];mol+=Math.abs(n[c]);}
+                mass.merge(b.nodeId(),m,Double::sum);moles.merge(b.nodeId(),mol,Double::sum);
+            }
+            for(var node:graph.reservoirs()) {
+                Double m=mass.get(node.id());var r=m==null?null:registrations().get(node.id());var inventory=node.inventory();
+                if(r==null||inventory==null||!(inventory.levelHeight()>0)||!(m>0))continue;
+                double density=Noise.ventDensity(m/moles.get(node.id()),node.state().temperature());
+                Noise.add(out,cell(r).above((int)Math.ceil(inventory.levelHeight())),Noise.Kind.VENT,Noise.vent(m/result.advancedSeconds(),density,inventory.volume()/inventory.levelHeight()),.8);
+            }
+        }
+        var heats=new HashMap<Long,Double>();
+        if(result.advancedSeconds()>0)for(var b:result.boundaries())if(b.kind()==ConservativeTransport.BoundaryTransfer.Kind.HEAT)heats.merge(b.nodeId(),Math.abs(b.totalEnergyJoule())/result.advancedSeconds(),Double::sum);
+        for(long id:registry.members(island)) {
+            var r=registrations().get(id);if(r==null)continue;var heat=r.device().heat();var pos=cell(r);
+            // An air cooler's fans at the share its heat law last ran them (the fan law).
+            if(heat!=null&&heat.fans()&&heat.fanCount()>0)for(var pipe:graph.pipes())
+                if(pipe.id()==PhysicalFluidTopology.sideIdentity(id)&&pipe.heat() instanceof AirCooled cooled)Noise.add(out,pos,Noise.Kind.FAN,Noise.fans(heat.fanCount(),Noise.COOLER_FAN,cooled.fans()),cooled.fans());
+            // A tower: an induced tower's fans at its fill's speed, at the fan deck; falling water at the basin, either draught.
+            var tower=r.spec().tower();var rates=tower==null?null:result.towers().get(id);
+            if(rates!=null) {
+                if(tower.draft()==CoolingTower.Draft.INDUCED)Noise.add(out,pos.above((int)Math.ceil(tower.height())),Noise.Kind.FAN,Noise.fans(tower.cells(),Noise.TOWER_FAN,rates.fill().speed()),rates.fill().speed());
+                Noise.add(out,pos,Noise.Kind.WATER_FALL,Noise.water(rates.inletFlow()),1);
+            }
+            // A fired heater's burners and draught fan, at its radiant coil, by the heat they release.
+            if(radiantCoil(r)) {
+                long b=burners.burnersOf(id);var flue=b==0?null:burners.flue(b);double design=b==0?0:FiredHeaters.designFired(registrations().get(b));
+                if(flue!=null&&flue.fired()>0) {
+                    Noise.add(out,pos,Noise.Kind.BURNER,Noise.burner(flue.fired()),1);
+                    if(design>0)Noise.add(out,pos,Noise.Kind.FAN,Noise.draftFan(Math.clamp(flue.fired()/design,0,1)),1);
+                }
+            }
+            // A kettle's pool boiling by the heat its tubes give it, muffled by its shell.
+            if(heat!=null&&heat.pool()) {
+                double q=Math.max(heats.getOrDefault(PhysicalFluidTopology.sideIdentity(id),0.0),heat.partner()==0?0:heats.getOrDefault(PhysicalFluidTopology.sideIdentity(heat.partner()),0.0));
+                Noise.add(out,pos,Noise.Kind.KETTLE,Noise.kettle(q),.8);
+            }
+        }
+        return out;
+    }
+    /** A block of island {@code island}'s line {@code pipe}: the pipe block nearest its middle, or null. */
+    private BlockPos pipeCell(long island,long pipe) {
+        BlockPos best=null;double gap=Double.POSITIVE_INFINITY;
+        for(long id:registry.members(island))for(var view:registry.pipeViews(id))if(view.pipeId()==pipe) {
+            double d=Double.isFinite(view.tap())?Math.abs(view.tap()-.5):1;var r=registrations().get(id);
+            if(r!=null&&d<gap){gap=d;best=cell(r);}
+        }
+        return best;
     }
     /** Adds or removes the structure at {@code origin} in the index of the chunks its box spans. */
     private void indexStructure(PhysicalFluidTopology.Position origin,WorldTopologyLedger.Structure structure,boolean add) {
@@ -1038,8 +1169,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
         if(!rotationWatchers.isEmpty()&&topology.onlineTick()%100==0)publishRotations();
         if(topology.onlineTick()%100==0)publishFlares();
         if(topology.onlineTick()%100==0)publishStills();
-        // The towers' plumes, the fired heaters' flues and the far silhouettes (batch 2026-11-10-custom-shader-system): reads only.
-        if(topology.onlineTick()%100==0){publishTowers();publishHeaters();publishSilhouettes();}
+        // The towers' plumes, the fired heaters' flues, the far silhouettes and the noise levels (batch 2026-11-10-custom-shader-system): reads only.
+        if(topology.onlineTick()%100==0){publishTowers();publishHeaters();publishSilhouettes();publishNoise();}
         if(topology.onlineTick()%ElectricStores.CADENCE==0&&propertyHold==null)health.cadence();
         // A generator's port pushes FE to its neighbours (the FE protocol, reading A65): stored FE only, nothing solves.
         pushGenerators();
@@ -1296,7 +1427,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         return new FluidView.Pump(finite(s.available()),finite(s.required()),finite(s.gas()),Math.clamp(h,0,1),curve);
     }
     private static Double finite(double value){return Double.isFinite(value)?value:null;}
-    public void forgetWatcher(UUID player){owned();driverWatchers.remove(player);rotationWatchers.remove(player);tankWatchers.forget(player);for(long id:sightGlassWatchers.devices(player))unwatchSightGlass(player,id);for(long id:moverWatchers.devices(player))unwatchMover(player,id);flareWatchers.forget(player);stillWatchers.forget(player);towerWatchers.forget(player);heaterWatchers.forget(player);silhouettes.forget(player);}
+    public void forgetWatcher(UUID player){owned();driverWatchers.remove(player);rotationWatchers.remove(player);tankWatchers.forget(player);for(long id:sightGlassWatchers.devices(player))unwatchSightGlass(player,id);for(long id:moverWatchers.devices(player))unwatchMover(player,id);flareWatchers.forget(player);stillWatchers.forget(player);towerWatchers.forget(player);heaterWatchers.forget(player);silhouettes.forget(player);noise.forget(player);}
 
     /** Requested shaft/machine speeds, keyed by dimension as well as cell; published values are presentation state only. */
     private final Map<UUID,Set<PhysicalFluidTopology.Position>> rotationWatchers=new HashMap<>();
@@ -1579,12 +1710,18 @@ public final class FluidWorldAuthority implements AutoCloseable {
         Long owner=registry.owner(target.identity());
         var rates=owner==null?null:islands.computeIfAbsent(owner,read).lastResult().map(r->r.towers().get(target.identity())).orElse(null);
         var still=new com.wormzjl.icheme.network.FluidNetwork.TowerPlume(target,0,(float)com.wormzjl.icheme.science.fluid.network.CoolingTower.AIR_TEMPERATURE,0,0);
-        if(rates==null||!(Math.abs(rates.fill().dryAirFlow())>com.wormzjl.icheme.science.fluid.network.TowerTransfer.NO_AIR))return still;
+        if(rates==null||!(plumeAir(rates.fill().dryAirFlow())>0))return still;
         var exhaust=com.wormzjl.icheme.science.fluid.network.TowerTransfer.exhaust(runtime.coordinator().model(owner),rates.fill());
-        float air=(float)Math.abs(rates.fill().dryAirFlow()),t=(float)exhaust.temperature(),w=(float)exhaust.humidity(),e=(float)Math.max(0,rates.fill().evaporation());
+        float air=(float)plumeAir(rates.fill().dryAirFlow()),t=(float)exhaust.temperature(),w=(float)exhaust.humidity(),e=(float)Math.max(0,rates.fill().evaporation());
         if(!Float.isFinite(air)||!Float.isFinite(t)||!Float.isFinite(w)||!Float.isFinite(e))return still;
         return new com.wormzjl.icheme.network.FluidNetwork.TowerPlume(target,air,t,Math.clamp(w,0,1),e);
     }
+    /**
+     * The dry air a tower's plume leaves with, kg/s, of its fill's {@code dryAirFlow} (batch 2026-11-10-custom-shader-system):
+     * the flow up through the fill and out of the stack; 0 below {@code TowerTransfer.NO_AIR} and for a reversed draught
+     * (negative: air drawn down the stack and out of the inlets, which leaves no plume over the stack).
+     */
+    static double plumeAir(double dryAirFlow){return dryAirFlow>com.wormzjl.icheme.science.fluid.network.TowerTransfer.NO_AIR?dryAirFlow:0;}
     /**
      * Heater {@code target}'s flue (a read of what its islands last booked): its firing, the fuel fired over the design's;
      * its stack temperature, the bridgewall less its convection coil's heat over the flue's capacity rate
@@ -2290,7 +2427,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
             });
         }
     }
-    @Override public void close(){owned();if(closed)return;closed=true;unboundStructures.clear();realignment.clear();realigning.clear();shaftRealignment.clear();shaftRealigning.clear();structureChunks.clear();publishedMenuData.clear();publishedSightGlasses.clear();publishedMovers.clear();publishedFlares.clear();publishedStills.clear();publishedTowers.clear();publishedHeaters.clear();driverWatchers.clear();publishedDrivers.clear();rotationWatchers.clear();publishedRotations.clear();runtime.close();data.setDirty();}
+    @Override public void close(){owned();if(closed)return;closed=true;unboundStructures.clear();realignment.clear();realigning.clear();shaftRealignment.clear();shaftRealigning.clear();structureChunks.clear();publishedMenuData.clear();publishedSightGlasses.clear();publishedMovers.clear();publishedFlares.clear();publishedStills.clear();publishedTowers.clear();publishedHeaters.clear();noise.clear();driverWatchers.clear();publishedDrivers.clear();rotationWatchers.clear();publishedRotations.clear();runtime.close();data.setDirty();}
 
     /**
      * Which players watch which open tanks, sight glasses or movers (the request path R-B of the engine-owned presentation

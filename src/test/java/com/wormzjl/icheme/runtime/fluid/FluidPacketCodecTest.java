@@ -139,7 +139,7 @@ class FluidPacketCodecTest {
      * menu's axis is refused. fluid-14 adds a tank's capacity and paired pressures; fluid-16 a heat unit's ports, lines and
      * actuator and a pipe's line reading (the heat GUI). */
     @Test void theProtocolIsFluidNineteenWithDistinctStaticAndLivePayloads() {
-        assertEquals("fluid-21",FluidNetwork.PROTOCOL);
+        assertEquals("fluid-22",FluidNetwork.PROTOCOL);
         var ids=java.util.Set.of(FluidNetwork.EditPayload.TYPE.id(),FluidNetwork.RecoverPayload.TYPE.id(),FluidNetwork.StaticPayload.TYPE.id(),FluidNetwork.LivePayload.TYPE.id());
         assertEquals(4,ids.size());
         var base=generatorMenu("");int count=base.components().size();
@@ -456,5 +456,28 @@ class FluidPacketCodecTest {
         var ids=java.util.Set.of(FluidNetwork.Watch.TOWERS.id(),FluidNetwork.Watch.HEATERS.id(),FluidNetwork.Watch.FLARES.id(),FluidNetwork.Watch.STILLS.id(),
                 FluidNetwork.TowerPlume.TYPE.id(),FluidNetwork.HeaterFlue.TYPE.id(),FluidNetwork.FlareState.TYPE.id());
         assertEquals(7,ids.size());
+    }
+    /**
+     * fluid-22 (PROCESS_SOUNDS_REVIEW.md S2 A): the noise watch's answer crosses whole, its sources in their order (the
+     * loudest first), at most 16; the poll carries nothing; both have their own wire identities.
+     */
+    @Test void theNoiseAnswerRoundTripsAndHoldsAtMostSixteenSources() {
+        var sources=new java.util.ArrayList<Noise.Source>();
+        for(var kind:Noise.Kind.values())sources.add(new Noise.Source(new BlockPos(kind.ordinal(),70,-9),kind,70+kind.ordinal()*5.5f,.5f+kind.ordinal()*.1f));
+        var answer=new FluidNetwork.NoiseSources(sources);
+        var buffer=new RegistryFriendlyByteBuf(Unpooled.buffer(),RegistryAccess.EMPTY);
+        try{
+            FluidNetwork.NoiseSources.STREAM_CODEC.encode(buffer,answer);assertEquals(answer,FluidNetwork.NoiseSources.STREAM_CODEC.decode(buffer));
+            FluidNetwork.NoiseWatch.STREAM_CODEC.encode(buffer,new FluidNetwork.NoiseWatch());assertEquals(new FluidNetwork.NoiseWatch(),FluidNetwork.NoiseWatch.STREAM_CODEC.decode(buffer));
+            assertEquals(0,buffer.readableBytes());
+        }finally{buffer.release();}
+        var seventeen=java.util.Collections.nCopies(Noise.MAXIMUM_SOURCES+1,sources.get(0));
+        assertThrows(IllegalArgumentException.class,()->new FluidNetwork.NoiseSources(seventeen));
+        var bad=new RegistryFriendlyByteBuf(Unpooled.buffer(),RegistryAccess.EMPTY);
+        try{
+            bad.writeVarInt(1);bad.writeBlockPos(BlockPos.ZERO);bad.writeByte(Noise.Kind.values().length);bad.writeFloat(80);bad.writeFloat(1);
+            assertThrows(IllegalArgumentException.class,()->FluidNetwork.NoiseSources.STREAM_CODEC.decode(bad),"an unknown kind is refused");
+        }finally{bad.release();}
+        assertNotEquals(FluidNetwork.NoiseWatch.TYPE.id(),FluidNetwork.NoiseSources.TYPE.id());
     }
 }
