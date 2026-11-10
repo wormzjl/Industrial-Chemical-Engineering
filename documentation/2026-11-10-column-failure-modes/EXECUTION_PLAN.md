@@ -16,7 +16,8 @@ The owner took every recommended option on 2026-11-10 ("commence as recommended"
 | D6 | A stale table raises OFF TABLE and keeps running; the trip stays at 50 %. |
 | D7 | Member power is in this batch, after the utilities. |
 | D8 | One batch, in the order of the stages below. |
-| D9 | A test world with a full-size column, tested by script at the end and left for the owner's manual test (stage 5). |
+| D9 | Downcomer backup is a second flood measure (plan section 3a, W3.4); the sizing readings it moves are listed for the owner. |
+| D10 | A test world with a full-size column, tested by script at the end and left for the owner's manual test (stage 5). |
 
 Changes against the plan, decided here to keep the work small:
 
@@ -73,16 +74,20 @@ Goal: one typed record of what a column's cycle found; fewer solves after a fail
 
 ## 4. Stage 2: flooding, the Operation tab, the DCS, the feed-rate loop
 
-**W3. Flooding from the table**
+**W3. Flooding** (plan section 3a is the specification: items W3.1 to W3.4, tests T1 to T10 and the acceptance line. The steps here place them.)
 
-1. `ColumnSolve.solve` reads `success.result().trayHydraulics()`. `SplitTable` gains `floodPerFeed` (the solve's `maximumFloodFraction` over its feed rate in mol/s; 0: unknown, no limit), `floodTray`, `floodVapourLimited`. `ColumnSolve.Solved` gains `advisories` (V3's bounded advisory texts, at most 4), which become `ADVISORY` notices.
-2. `ColumnCycle.step`: `alphaFlood = 1 / (floodPerFeed × set feed rate)`; the lowest share binds as `FLOODING`, its value the flood fraction at the rate taken, its index the tray.
-3. `FluidFacts.columnState` appends the three fields the way `condenserWaterPerFeed`, `waterBelow` and `airArea` were appended (an older state reads 0: no limit).
-4. Tests: `ColumnCycleTest` (the flood share; no limit at 0), `ColumnSolveTest` (the default column's table carries its flood fraction; a higher reflux ratio raises it), `ColumnRunTest` (a set point that floods limits the feed and raises FLOODING; a reload keeps the limit).
+1. W3.1: `ColumnSolve.solve` reads `success.result().trayHydraulics()`. `SplitTable` gains `floodPerFeed` (the solve's `maximumFloodFraction` over its feed rate in mol/s; 0: unknown, no limit), `floodTray`, `floodVapourLimited`, and for W3.3 the solved total dry drop and liquid head. `ColumnCycle.step`: share = 1 / (`floodPerFeed` × set feed rate); the lowest share binds as `FLOODING`, its value the share, its index the tray. T4 decides the linear rule: over 5 %, keep the flood fraction at two throughputs in the table and interpolate (no solve).
+2. W3.2: a new NOTICE `HIGH_LOAD` from 85 % of flood at the rate taken; `alarm_flooding` only while the limit binds.
+3. W3.3: the live pressure drop, dry × (alpha / the table's alpha)² + liquid, in `ColumnUnit.Probes`, on the tab and as the built-in channel `differential_pressure`. Port pressures do not move.
+4. W3.4 (D9): downcomer backup in `V3TrayHydraulics` as a second measure; the flood fraction is the worse of the two; the free water's entrainment limit keeps Fair's fraction. It is arithmetic on an accepted state: if it moves any solved state or acceptance check, stop and report. List every sizing or example reading it moves (old, new) in the report, for the owner. Its tests load widely: run `V3TrayHydraulicsTest`, the `ColumnSizing` and sheet-sizing test classes, `FlowsheetExamplesTest` and the hold-gate sample-sizing classes by `--tests`.
+5. `ColumnSolve.Solved` gains `advisories` (V3's bounded advisory texts, at most 4), which become `ADVISORY` notices.
+6. State: `FluidFacts.columnState` carries the new table fields; an older state is dropped and solved again (T8).
+7. Two fixes found in stage 1, in `ColumnCycle.step` and `ColumnOperation`: (a) every share is a share of the set demand: today the outlet's room is weighed against the feed available, so a short feed with a tight outlet can overfill a buffer; weigh it against a full take at the set demand, with a test (T3 covers flood and feed; add outlet and feed). (b) The water's heat-read ceiling and status use the accepted condenser temperature (`table.reference().setpoints()`), not the requested one.
+8. A LIMIT is listed whenever its share is below 1, binding or not, and raises its alarm: that is intended.
 
 **W7. Operation tab** (gui-creation skill; prototype sheets in `tools/heat-gui-renders/OperationPrototypes.java`)
 
-1. A conditions table on the glass: rank colour, word, value, member. The status line keeps its place.
+1. A conditions table on the glass: rank colour, word, value, member. The status line keeps its place. The live pressure drop and the flood fraction of the worst tray beside the duties.
 2. Beside each ratio entry its absolute value at the set feed: reboiler and pumparounds in MW, steam in kg/h, draws in kmol/h (client units).
 3. Where requested and accepted set points differ: the accepted value and the refusal's reason on the entry.
 4. Entries before the first run: `FluidWorldAuthority.editColumn` makes a stopped `ColumnUnit` (no stations, the design's set points changed by the edit) where the column has none; `startColumn` already keeps a stopped unit's set points when `compatible`. If `ColumnUnit` or `FluidFacts` refuses a stopped unit without stations, stop and report.
@@ -102,7 +107,7 @@ Goal: one typed record of what a column's cycle found; fewer solves after a fail
 3. `ControlPlans` keeps `columnFeed(unit)`. `ColumnOperation.cycle` and the inlet's plan in `plans` use `min(set feed rate, planned)` through `Setpoints.withFeedRate`; the saved set point does not change. No plan (controller off, held, no link): the set rate.
 4. Tests: a `ControlLoopGameTests` case or a `ColumnRunTest` case: a flow loop holds the feed at its target below the set rate; switching the loop off returns the set rate; the unit's saved set points are unchanged.
 
-**Done:** tests green; commits W3, W7, W6.2, W6.3.
+**Done:** T1 to T9 green and T10 with its moved readings listed; the other tests green; commits W3.1 to W3.3 with the two fixes, W3.4, W7, W6.2, W6.3, in that order. If the stage cannot finish all of them, commit what is whole and report what is left.
 
 ## 5. Stage 3: reboiler and pumparound utilities (W4)
 
