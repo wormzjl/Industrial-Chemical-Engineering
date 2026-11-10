@@ -23,7 +23,8 @@ Owner, 2026-11-10: a custom shader system for normal textures (first the instrum
 - 2026-11-10: owner: go with every recommended option (plan section 8); merge main before starting; implementation agents at medium reasoning effort.
 - 2026-11-10: phase 1 started (fx-core, fx-server-states, fx-sounds). fx-sounds done: five synthesised loops, 281b8bb7e (not compiled yet).
 - 2026-11-10: owner: think about sounds for other equipment, valves included, and update performance. Review written. Owner: valve volume from its pressure drop alone (while it flows), the rest as recommended (S1 A to S4 A); fx-noise agent approved for after phase 1.
-- 2026-11-10: owner: bench the CPU, GPU and RAM overhead and optimize as part of the work. FX_BENCH_PLAN.md (W11) written; the fx-bench agent and the shader-pack download wait for the owner.
+- 2026-11-10: owner: bench the CPU, GPU and RAM overhead and optimize as part of the work. FX_BENCH_PLAN.md (W11) written; owner approved the fx-bench agent and the Complementary Reimagined download (in `tmp/fx-bench/shaderpacks/`).
+- 2026-11-10: phase 1 done. fx-core (W1) 8b62564f9, a1bd257ce; fx-server-states 85d0b040c (flare soot and exit velocity, tower exhaust, heater flue), 07d7897b5 (part marks), 4eb40758c (tower and heater watches, flare-2, silhouette subscription; protocols fluid-21, equipment-23). Compile and the affected tests: 196 tests, 0 failures (effects core 39, server states 117, equipment gates 60). Settled on physics for fx-noise: a reversed tower draught sends no plume; silhouette requests at most one per 5 s per player.
 
 ## Code areas (planned)
 
