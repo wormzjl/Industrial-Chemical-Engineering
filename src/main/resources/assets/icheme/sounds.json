@@ -27,6 +27,14 @@
     "subtitle": "subtitles.icheme.turbine_running",
     "sounds": [{ "name": "icheme:turbine_running", "stream": false }]
   },
+  "engine_running": {
+    "subtitle": "subtitles.icheme.engine_running",
+    "sounds": [{ "name": "icheme:engine_running", "stream": false }]
+  },
+  "gas_turbine_running": {
+    "subtitle": "subtitles.icheme.gas_turbine_running",
+    "sounds": [{ "name": "icheme:gas_turbine_running", "stream": false }]
+  },
   "flare_roar": {
     "subtitle": "subtitles.icheme.flare_roar",
     "sounds": [{ "name": "icheme:flare_roar", "stream": false }]

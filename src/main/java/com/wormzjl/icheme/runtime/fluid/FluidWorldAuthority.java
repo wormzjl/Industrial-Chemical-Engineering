@@ -1751,7 +1751,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         for(var target:unwatch)heaterWatchers.unwatch(uuid,target.identity());
         for(var target:watch) {
             var record=watchable(player,level,target);
-            if(record==null||!radiantCoil(record))continue;
+            if(record==null||!flued(record))continue;
             if(heaterWatchers.watch(uuid,target.identity())) {
                 var state=publishedHeaters.get(target.identity());if(state==null)state=heaterFlue(target,new HashMap<>(),this::storedIsland);
                 if(state!=null)com.wormzjl.icheme.network.FluidNetwork.sendHeater(player,state);
@@ -1805,6 +1805,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
         return record;
     }
     /** Whether {@code record} is a fired heater's radiant coil, where the heater's flue is watched. */
+    /** Whether {@code record}'s flue is watched: a fired heater's radiant coil, or a prime mover's fuel void (its stack). */
+    private static boolean flued(WorldTopologyLedger.Registration record){return radiantCoil(record)||record.device().engineFuel();}
     private static boolean radiantCoil(WorldTopologyLedger.Registration record) {
         var heat=record.device().heat();
         return heat!=null&&heat.burners()&&heat.side()==com.wormzjl.icheme.science.equipment.HeatSides.Side.RADIANT;
@@ -1837,7 +1839,14 @@ public final class FluidWorldAuthority implements AutoCloseable {
      * flow and water ({@link FiredHeaters#flue}); its fuel's phase.
      */
     private com.wormzjl.icheme.network.FluidNetwork.HeaterFlue heaterFlue(com.wormzjl.icheme.network.FluidNetwork.Target target,Map<Long,IslandCoordinator.Snapshot> islands,java.util.function.Function<Long,IslandCoordinator.Snapshot> read) {
-        long id=target.identity();var record=registrations().get(id);if(record==null||!radiantCoil(record))return null;
+        long id=target.identity();var record=registrations().get(id);if(record==null)return null;
+        if(record.device().engineFuel()) {
+            // A prime mover's stack (batch 2026-11-10-prime-movers): its set's exhaust, by its fuel void.
+            var stack=shafts.primeMovers()==null?null:shafts.primeMovers().flue(id);
+            if(stack==null)return new com.wormzjl.icheme.network.FluidNetwork.HeaterFlue(target,0,(float)com.wormzjl.icheme.science.fluid.network.Burners.AIR,0,0,0);
+            return new com.wormzjl.icheme.network.FluidNetwork.HeaterFlue(target,(float)stack.firing(),(float)stack.stack(),(float)stack.flow(),(float)Math.clamp(stack.water(),0,1),stack.fuel().ordinal());
+        }
+        if(!radiantCoil(record))return null;
         long b=burners.burnersOf(id);var flue=b==0?null:burners.flue(b);
         if(flue==null)return new com.wormzjl.icheme.network.FluidNetwork.HeaterFlue(target,0,(float)com.wormzjl.icheme.science.fluid.network.Burners.AIR,0,(float)com.wormzjl.icheme.science.fluid.network.Burners.METHANE_WATER,0);
         double design=FiredHeaters.designFired(registrations().get(b)),firing=design>0?Math.clamp(flue.fired()/design,0,1):0;
@@ -1876,7 +1885,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         publishedHeaters.clear();if(heaterWatchers.devices().isEmpty())return;var islands=new HashMap<Long,IslandCoordinator.Snapshot>();
         for(long id:heaterWatchers.devices()) {
             var record=registrations().get(id);
-            if(record==null||!radiantCoil(record)){heaterWatchers.remove(id);continue;}
+            if(record==null||!flued(record)){heaterWatchers.remove(id);continue;}
             var pos=cell(record);var state=heaterFlue(new com.wormzjl.icheme.network.FluidNetwork.Target(pos,id),islands,this::presented);if(state==null)continue;
             publishedHeaters.put(id,state);
             for(var uuid:heaterWatchers.watchers(id)) {

@@ -103,6 +103,9 @@ public final class ModBlocks {
     public static final DeferredHolder<SoundEvent,SoundEvent> MOTOR_RUNNING=loop("motor_running");
     public static final DeferredHolder<SoundEvent,SoundEvent> GENERATOR_RUNNING=loop("generator_running");
     public static final DeferredHolder<SoundEvent,SoundEvent> TURBINE_RUNNING=loop("turbine_running");
+    // The prime movers (batch 2026-11-10-prime-movers): a combustion engine and a gas turbine.
+    public static final DeferredHolder<SoundEvent,SoundEvent> ENGINE_RUNNING=loop("engine_running");
+    public static final DeferredHolder<SoundEvent,SoundEvent> GAS_TURBINE_RUNNING=loop("gas_turbine_running");
     /** Process loops (tools/process-sounds): an elevated flare's roar and pilot hiss, a still's burner, firebox and boiling pot. */
     public static final DeferredHolder<SoundEvent,SoundEvent> FLARE_ROAR=loop("flare_roar");
     public static final DeferredHolder<SoundEvent,SoundEvent> FLARE_PILOT=loop("flare_pilot");

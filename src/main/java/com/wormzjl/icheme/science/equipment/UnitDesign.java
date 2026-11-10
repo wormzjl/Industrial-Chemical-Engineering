@@ -279,6 +279,11 @@ public abstract class UnitDesign {
             var design=of(shape.kind());size=(shape.diameter()-design.minSize())/(design.maxSize()-design.minSize());
             int least=design.minLength(shape.diameter()),most=design.maxLength(shape.diameter());
             if(most>least)size=(size+(shape.tangentLength()-least)/(most-least))/2;
+        }else if(shape.kind().primeMover()){
+            // A prime mover (batch 2026-11-10-prime-movers): its rating over its family's range, in log power.
+            var models=com.wormzjl.icheme.science.machine.PrimeMover.models(PrimeMoverDesign.family(shape.kind()));
+            double least=models.getFirst().power(),most=models.getLast().power();
+            size=com.wormzjl.icheme.science.math.DeterministicMath.log(PrimeMoverDesign.model(shape).power()/least)/com.wormzjl.icheme.science.math.DeterministicMath.log(most/least);
         }else if(driver(shape.kind())){
             boolean turbine=shape.kind()==EquipmentShape.Kind.STEAM_TURBINE;
             double least=turbine?SteamTurbineDesign.MIN_POWER:MotorDesign.POWERS.getFirst(),most=turbine?SteamTurbineDesign.MAX_POWER:MotorDesign.POWERS.getLast();
@@ -313,6 +318,8 @@ public abstract class UnitDesign {
      * compressor and turbine loops state none: they sound at their machine's rated speed.
      */
     public static final double PUMP_LOOP_RPM = 2950, MOTOR_LOOP_RPM = 1500;
+    /** {@code engine_running} (tools/process-sounds) at 1500 rpm: its 200 Hz firing is 1500 rpm over 60 times 16 cylinders over 2. The gas turbine's loop states none. */
+    public static final double ENGINE_LOOP_RPM = 1500;
 
     /**
      * A running loop's pitch at a shaft speed {@code rpm} for a loop authored at {@code loopRpm} (decision D26; owner
@@ -332,6 +339,7 @@ public abstract class UnitDesign {
      */
     public static double ratedRpm(EquipmentShape shape) {
         var kind = shape.kind();
+        if (kind == Kind.COMBUSTION_ENGINE) return PrimeMoverDesign.model(shape).speed();
         boolean pump = kind == Kind.PUMP, motor = kind == Kind.MOTOR || kind == Kind.GENERATOR;
         if (!pump && !motor) return 0;
         if(shape.duty()!=null&&shape.duty().baseSpeed()>0)return shape.duty().baseSpeed();
@@ -348,7 +356,7 @@ public abstract class UnitDesign {
     public static float soundPitch(EquipmentShape shape, double share) {
         double rated = ratedRpm(shape);
         if (!(rated > 0)) return soundPitch(share, 1);
-        return soundPitch(share * rated, shape.kind() == Kind.PUMP ? PUMP_LOOP_RPM : MOTOR_LOOP_RPM);
+        return soundPitch(share * rated, shape.kind() == Kind.PUMP ? PUMP_LOOP_RPM : shape.kind() == Kind.COMBUSTION_ENGINE ? ENGINE_LOOP_RPM : MOTOR_LOOP_RPM);
     }
 
     /** Whether a kind sounds as a driver, its own loop at its own cells: a motor, its mirror the generator, or a steam turbine. */

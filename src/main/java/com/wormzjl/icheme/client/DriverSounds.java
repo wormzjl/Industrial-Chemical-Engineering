@@ -100,7 +100,14 @@ public final class DriverSounds {
             var cells=ShapeRasterizer.layout(shell.shape()).shell();double cx=0,cy=0,cz=0;
             for(var cell:cells){cx+=cell.x();cy+=cell.y();cz+=cell.z();}
             int n=Math.max(1,cells.size());var kind=shell.shape().kind();
-            into.add(new com.wormzjl.icheme.client.fx.sound.SoundBudget.Emitter(kind==EquipmentShape.Kind.STEAM_TURBINE?"turbine_running":kind==EquipmentShape.Kind.GENERATOR?"generator_running":"motor_running",
+            String loop=switch(kind){
+                case STEAM_TURBINE->"turbine_running";
+                case GENERATOR->"generator_running";
+                case COMBUSTION_ENGINE->"engine_running";
+                case GAS_TURBINE->"gas_turbine_running";
+                default->"motor_running";
+            };
+            into.add(new com.wormzjl.icheme.client.fx.sound.SoundBudget.Emitter(loop,
                     origin.asLong(),origin.getX()+cx/n+.5,origin.getY()+cy/n+.5,origin.getZ()+cz/n+.5,
                     com.wormzjl.icheme.client.fx.sound.SoundBudget.level(UnitDesign.soundGain(shell.shape(),speed)),UnitDesign.soundPitch(shell.shape(),speed)));
         }

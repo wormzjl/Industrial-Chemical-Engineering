@@ -206,4 +206,27 @@ public final class PrimeMovers {
                 fired > 0 ? ExhaustCoil.stack(l.model().exhaust(), flue, coil) : PrimeMover.AIR,
                 s == null || s.fuel == null ? l.model().family() == PrimeMover.Family.ENGINE ? Burners.Fuel.LIQUID : Burners.Fuel.GAS : s.fuel);
     }
+
+    /**
+     * The water the fuel forms, kg per joule fired: methane 2.25 kg per kg at 50 MJ/kg, diesel (CH1.85) 1.24 kg per kg at
+     * 42.8 MJ/kg. The stack's plume reads it; the set's own balance does not.
+     */
+    static final double GAS_WATER = 2.25 / PrimeMover.METHANE_LHV, LIQUID_WATER = 1.24 / PrimeMover.DIESEL_LHV;
+
+    /**
+     * A set's stack as the flue smoke draws it ({@code FluidNetwork.HeaterFlue}): its firing over its rated fuel, its stack's
+     * temperature, its exhaust flow, kg/s, the exhaust's water per kg of the rest, and its fuel's phase; null where {@code fuel}
+     * is no set's fuel void.
+     */
+    public record Flue(double firing, double stack, double flow, double water, Burners.Fuel fuel) {}
+
+    /** The stack of the set whose fuel void is {@code fuel} (a read), or null. */
+    public Flue flue(long fuel) {
+        Long unit = unitOfFuel.get(fuel);
+        var l = unit == null ? null : laws.get(unit);
+        var v = l == null ? null : view(unit);
+        if (v == null) return null;
+        double formed = v.fired() * (v.fuel() == Burners.Fuel.GAS ? GAS_WATER : LIQUID_WATER), rest = v.exhaustFlow() - formed;
+        return new Flue(Math.clamp(v.fired() / l.model().ratedFuel(), 0, 1), v.stack(), v.exhaustFlow(), rest > 0 ? formed / rest : 0, v.fuel());
+    }
 }
