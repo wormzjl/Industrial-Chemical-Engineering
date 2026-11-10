@@ -14,6 +14,7 @@ Status words:
 
 | Batch | Purpose | Status |
 |---|---|---|
+| [2026-11-10-custom-shader-system](2026-11-10-custom-shader-system/README.md) | Shader-pack-safe effects (flare, plumes, still), LabPBR normal maps (cables first), config switch | Planned |
 | [2026-11-09-batch-distiller/](2026-11-09-batch-distiller/README.md) | Fired or electric batch still with optional condenser and small column; batch run in the simulator | Implemented 2026-11-10 |
 | [2026-11-09-flare-stack/](2026-11-09-flare-stack/README.md) | Scalable flare stack: heating-value floor, capacity by tip and height, status on the data network | Implemented 2026-11-10 |
 | [2026-11-09-furnace-fuel-power/](2026-11-09-furnace-fuel-power/README.md) | Fired heaters burn fuel and draw power for their air fans; equipment alarms on the control system | Implemented 2026-11-10 |
