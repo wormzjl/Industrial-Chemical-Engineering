@@ -12,7 +12,7 @@ Batch 2026-11-09-batch-distiller, phase 2. Written on `claude/still-engine-54688
 | Condenser water | `HEAT_SIDE` with `HeatUnit(STILL, WATER, condenser area, pot)` | a coupled side: the coordinator's heat in transit with the pot |
 | DISTILLATE, VENT | `GENERATOR` with `ControlValve.still()`, one BULK port | a port plan: the account's moles at the condensate's (or head's) temperature |
 | Burners (LIQUID) | `VOID` with `ControlValve.still()` at FUEL | the fuel valve at the firing's fuel rate, as the fired heaters' |
-| Facts | `StillUnit` (fluid facts schema 15) | devices, design, head and vent accounts, fire, firing, reflux, totals |
+| Facts | `StillUnit` (fluid facts schema 16; 15 before the main merge) | devices, design, head and vent accounts, fire, firing, reflux, totals |
 
 The water side is registered first, so its identity is the lower: the pair's heat in transit is saved on it.
 
@@ -102,7 +102,7 @@ old outlets and burners, which stand at nozzle cells, not nodes, stayed register
 ## 7. Code areas
 
 `runtime/fluid/Stills.java`, `StillUnit.java`, `PhysicalFluidTopology` (still devices, the diverter), `WorldTopologyLedger`
-(stills; `withBasis` now keeps shafts, stores, health and stills), `FluidFacts` (schema 15; the facts rebuild carries the
+(stills; `withBasis` now keeps shafts, stores, health and stills), `FluidFacts` (schema 16 since the main merge, 15 before; the facts rebuild carries the
 stills), `FluidCheckpointCodec` (state 42: the pool head), `IslandCoordinator.Ports.dispatch`, `ElectricStores`,
 `EquipmentAlarm`, `science/fluid/network/StillHead.java`, `Pool`, `PassiveStepSolver`, `FlowControl` (STILL source),
 `runtime/ProcessSolveServices` (still solves), `world/level/block/EquipmentStructure` (register, restore, drop),

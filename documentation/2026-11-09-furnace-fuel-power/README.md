@@ -22,6 +22,7 @@ Owner, 2026-11-09: wire the fuel requirement into the furnace, working with the 
 
 - 2026-11-09: plan; owner answers F1 (a), F2 prebuilt LHV in the material DB, F3 (b), F4 (a). Built W1 to W4; LHV tool run. Tests: `FiredHeaterFuelTest` (new), `BurnersTest` (new), `FiredCoilTest`, `MaterialThermochemistryTest`, `HeatSidesTest`, `ShapeRasterizerTest`, `EquipmentLayoutGoldenTest` (table updated). Targeted runs: 283 quick-suite and 65 equipment tests; fixed the test rig (one solver per island) and the layout table; `FiredHeaterFuelTest` 4/4: stiff supply coil 3500 kW (its duty) on 6278 kW fired, fans 5.1 kW; 2.016 bar supply fires 2836 kW, coil 1598 kW, LOW FUEL. Committed `59278550b`.
 - 2026-11-09: owner: O1 accepted (combustion in no identity), O2 fix it, "Most duty" replaced. A segment that starts with no flows known and plans a fired coil or controlled air cooler now plans from one rate solve's flows (`PassiveIntervalSolver`, `PassiveStepSolver.plansHeat`). The heater row reads "Rated duty" with a hint naming what lowers the firing.
+- 2026-11-10: merge preparation with the flare and batch still batches (0.24.0): translations, code guide, CHANGELOG; review in [../2026-11-09-batch-distiller/MERGE_REVIEW.md](../2026-11-09-batch-distiller/MERGE_REVIEW.md).
 
 ## Open items
 
@@ -30,4 +31,4 @@ Owner, 2026-11-09: wire the fuel requirement into the furnace, working with the 
 - O3: the burners' VOID device opens a void page when clicked; the heater's coil pages carry the fuel and fan rows.
 - O4 owner: GUI renders sent 2026-11-09 (`GuiPrototypes` gained `firedHeater()` and the alarms group on the control panels; the tool needs the Gson jar on its class path): "Most duty" renamed "Rated duty" (owner); approval of the rest open.
 - O5: the process simulator's heater report does not show fuel or fan power yet.
-- O6: facts corpus image for a world with burners; translations; code guide; CHANGELOG; version.
+- O6 closed 2026-11-10: no facts image is owed (the burners are registrations in the existing facts schema; the batch changed state format 41 only); translations, code guide, CHANGELOG and version in the 0.24.0 merge.

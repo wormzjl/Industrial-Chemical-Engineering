@@ -33,7 +33,7 @@ distiller in the process simulator.
 - `science/fluid/network/BatchStill` (the law), `StillColumn` (bubble point, energy balance, pot mode, on the network's
   phase evaluator), `science/material/SolidFuelCatalog` and `materials/fuels/`; config `energy.joulesPerBurnTick`.
   Reached by game code since phase 2.
-- `runtime/fluid/Stills`, `StillUnit` (fluid facts schema 15), `science/fluid/network/StillHead`, the diverter valve
+- `runtime/fluid/Stills`, `StillUnit` (fluid facts schema 16), `science/fluid/network/StillHead`, the diverter valve
   (`TopologyCompiler.Kind.DIVERTER_VALVE`, its block), the still's controllers (`runtime/control/ControlLaw`,
   `ControlPlans`, `ControlService`), `EquipmentStructure` (register, refresh in place, the fuel slot).
 - `science/equipment/BatchStillDesign`, `BatchStillOptions` (shape fields 11), `ProcessUnit` (pot, firebox or skirt,
@@ -150,6 +150,13 @@ distiller in the process simulator.
   on the condenser row's top (it rose a row higher), so the water inlet enters from under the front channel a row
   lower, and the condenser stands at least 3.5 m up (100 to 300 L pot stills one row higher). Owner: merge when fixed.
   Tests: the eight geometry classes; layout table re-recorded (still rows).
+- 2026-11-10: main 0.23.6 merged in (`3da3fa78b`): main's facts schema 15 is the build facts, so the stills became
+  schema 16, written after them (`FluidFacts`, `WorldTopologyLedger.Snapshot`, `FluidCheckpointCodec`); main's
+  `schema-15` image kept, a new `schema-16` image with both (`851f3a5c2`).
+- 2026-11-10: merge preparation for 0.24.0 (with the flare and fired-heater batches): the flare's datasheet duty line
+  shortened to fit `UnitTextTest` (`19364adba`); translations of 236 new and 3 changed keys in zh_cn, fr_fr, es_es, ja_jp
+  (`52415da92`); tooling cleanup, the B3 comparison to `tools/batch-still-column/` (`ebaad1be0`); stale schema comments
+  (`7be61a4b9`); code guide, ten chapters (`e7d2889af`). Review: [MERGE_REVIEW.md](MERGE_REVIEW.md).
 
 ## Open items
 
@@ -162,8 +169,5 @@ distiller in the process simulator.
   worm (phase-1 law answer 7).
 - An in-game check of the still's page and its effects, only if the owner asks.
 - Feedback item 4: the owner rechecks the pot's drawn volume against its design volume (measured within 3 %).
-- `UnitTextTest` fails on the flare stack's datasheet widths (417 > 411 px); not this batch's lines.
 - Engine options not built (BATCH_STILL_ENGINE.md section 6): a head-temperature reflux law (its gain is not set by the
   physics), a second diverter threshold for the second side outlet.
-- At the merge: move `BubblePointColumn`'s measurement harness to `tools/batch-still-column/` (tooling cleanup); code guide
-  rows for `BatchStill`, `StillColumn` (fluid-science.md) and `fuels` (thermo-materials.md).
