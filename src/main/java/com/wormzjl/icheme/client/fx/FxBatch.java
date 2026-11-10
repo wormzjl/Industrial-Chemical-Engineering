@@ -32,9 +32,14 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Draws every registered {@link FxEmitter} at {@code AFTER_PARTICLES} (CUSTOM_SHADER_SYSTEM_PLAN.md sections 4.1, 4.6
- * and 4.8). Render thread only.
+ * Draws every registered {@link FxEmitter} (CUSTOM_SHADER_SYSTEM_PLAN.md sections 4.1, 4.6 and 4.8). Render thread only.
  * <ul>
+ * <li><b>Stage.</b> {@code AFTER_WEATHER}: vanilla has drawn the clouds (with their depth) and the rain by then, so clouds
+ * no longer paint over the effects in front of them (visual review 2026-11-10, item 3). Under Fabulous graphics (that stage
+ * runs inside the weather target) and under a shader pack (whose pipeline was checked at {@code AFTER_PARTICLES}) the
+ * batch stays at {@code AFTER_PARTICLES}.</li>
+ * <li><b>Order.</b> The haze first, over the frame without effects; then flames, smoke and plumes together, the farthest
+ * emitter first, switching shader only where the kind changes, so a far plume never covers a near flame (item 4).</li>
  * <li><b>Path.</b> Chosen once per frame ({@link FxPath}, at {@link RenderFrameEvent.Pre}). OFF draws nothing; nothing
  * is drawn while Iris renders a shadow pass.</li>
  * <li><b>Selection and budget.</b> Emitters within the vanilla render distance and in the frustum, ranked by the pixels
@@ -64,8 +69,6 @@ public final class FxBatch {
     private static final FxGuard PATH = new FxGuard("effects path", () -> "IChemE");
     private static final Set<FxEmitter> EMITTERS = new LinkedHashSet<>();
     private static final Map<FxEmitter, Built> BUILT = new IdentityHashMap<>();
-    /** The haze first, over a copy of the scene without our effects; then flames, then smoke and plumes. */
-    private static final FxKind[][] SHADER_GROUPS = {{FxKind.HAZE}, {FxKind.FLAME}, {FxKind.SMOKE, FxKind.PLUME}};
     /** The heat haze's screen copy (W8): made at the first frame with haze, resized with the window. */
     private static @Nullable TextureTarget screenCopy;
 
@@ -123,11 +126,46 @@ public final class FxBatch {
 
     @SubscribeEvent
     public static void render(RenderLevelStageEvent event) {
-        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_PARTICLES || EMITTERS.isEmpty()) return;
+        if (EMITTERS.isEmpty() || event.getStage() != stage()) return;
         long started = System.nanoTime();
         BATCH.run(() -> draw(event));
         FxStats.add(FxStats.Counter.DRAW_NS, System.nanoTime() - started);
         FxStats.set(FxStats.Counter.REGISTERED, EMITTERS.size());
+    }
+
+    /** The stage the batch draws at: after the clouds and the rain, except under Fabulous graphics or a shader pack. */
+    static RenderLevelStageEvent.Stage stage() {
+        return Minecraft.useShaderTransparency() || FxCompat.iris().packInUse() ? RenderLevelStageEvent.Stage.AFTER_PARTICLES
+                : RenderLevelStageEvent.Stage.AFTER_WEATHER;
+    }
+
+    /** The shader group a kind draws in: flames apart from smoke and plumes, which share {@code fx_plume}; haze alone. */
+    static int group(FxKind kind) {
+        return switch (kind) {
+            case HAZE -> 0;
+            case FLAME -> 1;
+            case SMOKE, PLUME -> 2;
+        };
+    }
+
+    /**
+     * Runs of {@code sorted} (farthest first) to draw in order: consecutive emitters that share a shader group under the
+     * SHADER path ({@code byGroup}), or a kind under the COMPATIBLE path.
+     */
+    static List<List<Visible>> runs(List<Visible> sorted, boolean byGroup) {
+        var runs = new ArrayList<List<Visible>>();
+        List<Visible> run = null;
+        int key = Integer.MIN_VALUE;
+        for (var v : sorted) {
+            int k = byGroup ? group(v.emitter().kind()) : v.emitter().kind().ordinal();
+            if (run == null || k != key) {
+                run = new ArrayList<>();
+                runs.add(run);
+                key = k;
+            }
+            run.add(v);
+        }
+        return runs;
     }
 
     private static void draw(RenderLevelStageEvent event) {
@@ -178,30 +216,39 @@ public final class FxBatch {
         }
         if (visible.isEmpty()) return;
         FxStats.add(FxStats.Counter.EMITTERS, visible.size());
+        // The farthest first: translucent effects that write no depth must be drawn back to front.
+        double cx = camera.x, cy = camera.y, cz = camera.z;
+        visible.sort((a, b) -> Double.compare(distanceSqr(b.emitter(), cx, cy, cz), distanceSqr(a.emitter(), cx, cy, cz)));
 
         double daylight = level.getSkyDarken(partial);
         double sunAngle = level.getSunAngle(partial);
         float sunX = (float) -Math.sin(sunAngle), sunY = (float) Math.cos(sunAngle);
         if (path == FxPath.SHADER) {
-            for (var group : SHADER_GROUPS) drawShader(event, group, visible, now, epoch, camera.x, camera.y, camera.z, daylight, sunX, sunY);
+            var hazes = visible.stream().filter(v -> v.emitter().kind() == FxKind.HAZE).toList();
+            if (!hazes.isEmpty()) drawShader(event, FxKind.HAZE, hazes, now, epoch, cx, cy, cz, daylight, sunX, sunY);
+            var rest = visible.stream().filter(v -> v.emitter().kind() != FxKind.HAZE).toList();
+            for (var run : runs(rest, true)) drawShader(event, run.get(0).emitter().kind(), run, now, epoch, cx, cy, cz, daylight, sunX, sunY);
         } else {
-            for (var kind : FxKind.values()) drawCompatible(event, kind, visible, now, camera.x, camera.y, camera.z, daylight);
+            for (var run : runs(visible, false)) drawCompatible(event, run.get(0).emitter().kind(), run, now, cx, cy, cz, daylight);
         }
     }
 
-    private static void drawShader(RenderLevelStageEvent event, FxKind[] kinds, List<Visible> visible, double now, double epoch,
+    private static double distanceSqr(FxEmitter e, double cx, double cy, double cz) {
+        double dx = e.x() - cx, dy = e.y() - cy, dz = e.z() - cz;
+        return dx * dx + dy * dy + dz * dz;
+    }
+
+    private static void drawShader(RenderLevelStageEvent event, FxKind kind, List<Visible> group, double now, double epoch,
                                    double cx, double cy, double cz, double daylight, float sunX, float sunY) {
-        List<Visible> group = new ArrayList<>();
-        for (var v : visible) for (var kind : kinds) if (v.emitter().kind() == kind) group.add(v);
         if (group.isEmpty()) return;
-        var type = FxRenderTypes.shader(kinds[0]);
+        var type = FxRenderTypes.shader(kind);
         var window = Minecraft.getInstance().getWindow();
         ShaderInstance shader = null;
         boolean setUp = false;
         try {
             type.setupRenderState();
             setUp = true;
-            if (kinds[0] == FxKind.HAZE) RenderSystem.setShaderTexture(0, copyScreen(window.getWidth(), window.getHeight()));
+            if (kind == FxKind.HAZE) RenderSystem.setShaderTexture(0, copyScreen(window.getWidth(), window.getHeight()));
             shader = RenderSystem.getShader();
             if (shader == null) return;
             shader.setDefaultUniforms(VertexFormat.Mode.QUADS, event.getModelViewMatrix(), event.getProjectionMatrix(), window);
@@ -217,6 +264,7 @@ public final class FxBatch {
                 if (buffer == null) continue;
                 uniform(shader, "Origin", true, (float) (emitter.x() - cx), (float) (emitter.y() - cy), (float) (emitter.z() - cz));
                 uniform(shader, "DriftPeriod", true, (float) emitter.driftPeriod());
+                uniform(shader, "PuffGrowth", true, (float) emitter.puffGrowth());
                 // A glide that never started (negative infinity) is settled: any start far enough back.
                 uniform(shader, "GlideStart", true, (float) Math.max(emitter.glideStart() - epoch, -1e6));
                 buffer.bind();
@@ -248,7 +296,7 @@ public final class FxBatch {
                 wrote = true;
                 double[] origin = {emitter.x() - cx, emitter.y() - cy, emitter.z() - cz};
                 var sink = new FxImmediateSink(consumer, pose, origin, camera.getLeftVector(), camera.getUpVector(),
-                        FxGlide.ease(emitter.glideStart(), now), now, daylight, emitter.driftPeriod(), kind, emitter.light(), v.quads());
+                        FxGlide.ease(emitter.glideStart(), now), now, daylight, emitter.driftPeriod(), emitter.puffGrowth(), kind, emitter.light(), v.quads());
                 FxGuard.effect(emitter.type()).run(() -> emitter.write(sink, v.quads()));
                 FxStats.add(FxStats.Counter.QUADS, v.quads() - sink.remaining());
             }

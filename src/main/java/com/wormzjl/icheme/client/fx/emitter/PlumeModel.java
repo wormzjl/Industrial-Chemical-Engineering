@@ -116,10 +116,13 @@ public final class PlumeModel {
                 Math.max(0, Math.min(1, density)), Math.max(0, diameter), ox, oy, oz};
     }
 
-    /** Segments for {@code length} m of plume the wind {@code wind} m/s carries over each drift {@code period} s: 1 to {@code most}. */
+    /**
+     * Segments for {@code length} m of plume the wind {@code wind} m/s carries over each drift {@code period} s: at least 3
+     * (a short trail still widens along its length; visual review 2026-11-10, item 5), at most {@code most}.
+     */
     public static int segments(double length, double wind, double period, int most) {
         if (!(length > 0) || most < 1) return 0;
-        return (int) Math.max(1, Math.min(most, Math.round(length / Math.max(.5, wind * period))));
+        return (int) Math.max(Math.min(3, most), Math.min(most, Math.round(length / Math.max(.5, wind * period))));
     }
 
     /**

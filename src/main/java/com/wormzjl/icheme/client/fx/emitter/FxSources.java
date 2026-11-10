@@ -131,6 +131,14 @@ public final class FxSources {
     }
 
     /** One watched structure's effects: aimed at a new state, or every {@link #RETARGET} s. */
+    /**
+     * A source's effect seed from its key: all 64 bits mixed (Fibonacci hashing), then the top 12 kept. The low 12 bits of a
+     * {@code BlockPos.asLong} are its y alone, so a plain mask gave every flare of a row one seed and one flame.
+     */
+    static int seed(long key) {
+        return (int) ((key * 0x9E3779B97F4A7C15L) >>> 52) & FxSink.SEED_MASK;
+    }
+
     abstract static class Source<S> {
         final EquipmentShellBlockEntity cell;
         final BlockPos origin;
@@ -144,7 +152,7 @@ public final class FxSources {
             cell = watched.cell();
             origin = cell.origin() == null ? cell.getBlockPos() : cell.origin();
             marks = cell.shape() == null ? Map.of() : ShapeRasterizer.marks(cell.shape());
-            seed = (int) (watched.target().position().asLong() ^ watched.target().identity()) & FxSink.SEED_MASK;
+            seed = seed(watched.target().position().asLong() ^ watched.target().identity());
         }
 
         void update(S state, ClientLevel level, FxWind.Wind wind, double now) {
@@ -250,6 +258,8 @@ public final class FxSources {
         void aim(double[] values, int exits, int puffs, PlumeModel.Style style, double wind, double reach, double now) {
             int most = Math.max(1, puffs / (PlumeModel.PHASES * Math.max(1, exits)));
             segments = values[PlumeModel.DENSITY] > 0 ? PlumeModel.segments(values[PlumeModel.LENGTH] - values[PlumeModel.START], wind, emitter.driftPeriod(), most) : 0;
+            // A puff grows by the plume's spread over the segment it crosses, so it arrives at the next segment's size.
+            emitter.growth(segments > 0 ? PlumeModel.SPREAD * (values[PlumeModel.LENGTH] - values[PlumeModel.START]) / segments : 0);
             this.style = style;
             emitter.aim(values, segments * PlumeModel.PHASES * exits, PlumeModel.radius(values, reach), now);
         }
@@ -293,7 +303,7 @@ public final class FxSources {
             rated = cell.shape() == null ? 0 : Flare.rated(cell.shape().diameter());
             if (tip == null) return;
             flame = add(new GlideEmitter("flare_flame", FxKind.FLAME, tip[0], tip[1], tip[2], 2, FlameModel.values(0, 0, 0, 1, 0, 0, tipRadius),
-                    (sink, from, to, quads) -> FlameModel.write(sink, from, to, ribbons)));
+                    (sink, from, to, quads) -> FlameModel.write(sink, from, to, ribbons, seed)));
             smoke = new Plume(this, "flare_smoke", FxKind.SMOKE, tip, new double[][]{{0, 0, 0}}, seed);
             haze = hazeEmitter(this, "flare_haze", tip);
         }
@@ -311,7 +321,8 @@ public final class FxSources {
             double period = smoke.emitter.driftPeriod();
             if (flaring && s.soot() > 0) {
                 int segments = 2 + (int) Math.round(3 * s.soot());
-                smoke.aim(PlumeModel.values(segments * u * period, SMOKE_RATIO, wind.x(), wind.z(), .9 * s.soot(), 2 * v[FlameModel.HALF], end[0], end[1], end[2]),
+                // Soot leaves the flame's end about one flame half-width across, so neighbouring flares' trails stay apart.
+                smoke.aim(PlumeModel.values(segments * u * period, SMOKE_RATIO, wind.x(), wind.z(), .9 * s.soot(), v[FlameModel.HALF], end[0], end[1], end[2]),
                         1, SMOKE_PUFFS, SOOT, u, 0, now);
             } else if (status == Flares.Status.FLAME_OUT && s.plume() > 0) {
                 int segments = 2 + (int) Math.round(2 * s.plume());

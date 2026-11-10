@@ -22,6 +22,7 @@ final class GlideEmitter implements FxEmitter {
     private final String type;
     private final FxKind kind;
     private final double x, y, z, period;
+    private double growth;
     private final Geometry geometry;
     private final FxGlide glide;
     private boolean alive = true;
@@ -119,6 +120,16 @@ final class GlideEmitter implements FxEmitter {
     @Override
     public double driftPeriod() {
         return period;
+    }
+
+    @Override
+    public double puffGrowth() {
+        return growth;
+    }
+
+    /** Sets {@link #puffGrowth()}, m per period: set with each aim of a plume, from its segment length. */
+    void growth(double metres) {
+        growth = Double.isFinite(metres) ? Math.max(0, metres) : 0;
     }
 
     @Override

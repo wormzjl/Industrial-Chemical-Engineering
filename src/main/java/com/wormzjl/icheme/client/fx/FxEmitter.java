@@ -50,6 +50,15 @@ public interface FxEmitter {
         return 2;
     }
 
+    /**
+     * What one {@link #driftPeriod()} adds to each travelling puff's half-size, m: a plume's spread over the length a puff
+     * travels, so a puff reaches the next segment's size as it gets there and a trail widens smoothly (visual review
+     * 2026-11-10, item 5). The SHADER path passes it as the per-draw uniform {@code PuffGrowth}. Drips and sprites: none.
+     */
+    default double puffGrowth() {
+        return 0;
+    }
+
     /** Packed light for the COMPATIBLE path; flames are full bright. */
     default int light() {
         return FULL_BRIGHT;

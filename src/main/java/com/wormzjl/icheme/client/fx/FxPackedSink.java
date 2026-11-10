@@ -56,24 +56,28 @@ final class FxPackedSink implements FxSink {
 
     @Override
     public void ribbon(Point a, double va, Point b, double vb, int params, int seed) {
+        double[] axis = unit(b.newX() - a.newX(), b.newY() - a.newY(), b.newZ() - a.newZ());
+        ribbon(a, va, axis, b, vb, axis, params, seed);
+    }
+
+    @Override
+    public void ribbon(Point a, double va, double[] ta, Point b, double vb, double[] tb, int params, int seed) {
         if (left <= 0 || !finite(a) || !finite(b)) return;
         left--;
-        double ax = b.newX() - a.newX(), ay = b.newY() - a.newY(), az = b.newZ() - a.newZ();
-        double length = Math.sqrt(ax * ax + ay * ay + az * az);
-        if (length < 1e-6) {
-            ax = 0;
-            ay = 1;
-            az = 0;
-        } else {
-            ax /= length;
-            ay /= length;
-            az /= length;
-        }
+        // Each end's normal is its own tangent: fx_flame.vsh turns that end about it, so joints of a curve meet flush.
+        double[] na = unit(ta[0], ta[1], ta[2]), nb = unit(tb[0], tb[1], tb[2]);
         int pa = withAlong(params, va), pb = withAlong(params, vb);
         for (int[] k : CORNERS) {
-            var end = k[1] == 0 ? a : b;
-            vertex(end, k[1] == 0 ? pa : pb, flags(k[0], k[1], true, seed), (float) ax, (float) ay, (float) az);
+            boolean first = k[1] == 0;
+            double[] n = first ? na : nb;
+            vertex(first ? a : b, first ? pa : pb, flags(k[0], k[1], true, seed), (float) n[0], (float) n[1], (float) n[2]);
         }
+    }
+
+    /** The unit vector along (x, y, z); straight up for a zero or broken one. */
+    private static double[] unit(double x, double y, double z) {
+        double length = Math.sqrt(x * x + y * y + z * z);
+        return length < 1e-6 || !Double.isFinite(length) ? new double[]{0, 1, 0} : new double[]{x / length, y / length, z / length};
     }
 
     private void vertex(Point p, int params, int flags, float nx, float ny, float nz) {

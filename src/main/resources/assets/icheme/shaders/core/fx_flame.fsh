@@ -13,10 +13,15 @@ in float vertexDistance;
 in vec4 params;
 in vec2 corner;
 in float seed;
+// The noise domain in eddies (fx_flame.vsh): isotropic, each unit about one eddy of the local jet.
+in vec2 eddy;
 
 out vec4 fragColor;
 
-// Value noise and a four-octave fractal sum (about 0 to 0.94).
+// A ribbon is ROOM flame half-widths across (fx_flame.vsh).
+const float ROOM = 1.5;
+
+// Value noise, 0 to 1.
 float hash(vec2 p) {
     p = fract(p * vec2(123.34, 456.21));
     p += dot(p, p + 45.32);
@@ -30,54 +35,72 @@ float noise(vec2 p) {
     return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
 }
 
-float fbm(vec2 p) {
+// A four-octave fractal sum (mean about 0.47) whose finer octaves climb faster than the coarse ones and drift sideways by
+// turns, so the pattern boils as it rises instead of sliding up the flame as one picture.
+float flow(vec2 p, float t) {
     float sum = 0.0;
     float amplitude = 0.5;
+    float drift = 0.3;
     for (int i = 0; i < 4; i++) {
-        sum += amplitude * noise(p);
+        sum += amplitude * noise(p - vec2(drift * t, t));
         p = p * 2.03 + vec2(1.7, 9.2);
+        t *= 2.33;
+        drift = -drift;
         amplitude *= 0.5;
     }
     return sum;
 }
 
-// A blackbody's display colour (the Tanner Helland fit), as FxColour.blackbody.
-vec3 blackbody(float kelvin) {
-    float t = clamp(kelvin, 1000.0, 40000.0) / 100.0;
-    float g = 0.3900815788 * log(t) - 0.6318414438;
-    float b = t <= 19.0 ? 0.0 : 0.5432067891 * log(t - 10.0) - 1.1962540891;
-    return clamp(vec3(1.0, g, b), 0.0, 1.0);
+// The colour of the flame's local intensity, 0 at its edge to 1 in its core: red-orange, orange, yellow, then pale yellow
+// where a sooty flame's glow saturates the eye. Never darker than a dim flame: a flame does not shade the sky behind it.
+vec3 ramp(float h) {
+    vec3 c = mix(vec3(0.8, 0.2, 0.02), vec3(1.0, 0.4, 0.05), smoothstep(0.0, 0.25, h));
+    c = mix(c, vec3(1.0, 0.6, 0.12), smoothstep(0.2, 0.5, h));
+    c = mix(c, vec3(1.0, 0.85, 0.45), smoothstep(0.45, 0.8, h));
+    return mix(c, vec3(1.0, 0.97, 0.85), smoothstep(0.8, 1.0, h));
 }
 
+/*
+ * A turbulent flame as a threshold of a rising noise field (owner 2026-11-10: "still looks like plumes, it lacks the
+ * variability of actual flames"). The intensity is full on the axis and falls to nothing at one half-width; the noise
+ * moves its edge little at the root, where the flame is attached, and by half a width toward the end, where it tears
+ * into tongues. The end wanders over about a quarter of the length in gusts, and past it only pockets torn off the flame
+ * still burn. Bulges roll up the flame and pinch it (the puffing of a buoyant flame). The colour follows the intensity,
+ * so every tongue is yellow inside and dark orange at its edge, and the edge is crisp, not a soft blur.
+ */
 void main() {
     float along = clamp(params.r, 0.0, 1.0);
     float heat = params.g;
     float soot = params.b;
-    float across = corner.x * 2.0 - 1.0;
+    float x = (corner.x * 2.0 - 1.0) * ROOM;
 
-    // Domain-warped noise scrolling up the ribbon.
-    vec2 p = vec2(across * 1.6 + seed * 17.0, along * 3.0 - FxTime * 1.8);
-    vec2 warp = vec2(fbm(p + vec2(0.0, FxTime * 0.6)), fbm(p + vec2(5.2, 1.3 - FxTime * 0.4)));
-    float n = fbm(p + 1.7 * warp);
+    // Tongues about half a local eddy across and twice as long, climbing about 20 m/s at a 30 m flare's end.
+    vec2 p = vec2(eddy.x * 2.2, eddy.y * 1.1) + seed * vec2(17.0, 31.0);
+    vec2 warp = vec2(noise(p * 0.5 + vec2(0.0, -FxTime * 1.3)), noise(p * 0.5 + vec2(4.3, -FxTime * 1.1))) - 0.5;
+    float n = (flow(p + 1.2 * warp, FxTime * 3.3) - 0.47) / 0.11;
 
-    // A ragged edge that closes toward the tip.
-    float edge = abs(across) + 0.55 * (n - 0.47) + 0.25 * along;
-    float body = 1.0 - smoothstep(0.55, 1.0, edge);
-    // The core: hot at the root and the middle, 1100 K at the tip to 1900 K in the core.
-    float core = clamp(heat * (1.0 - along) * (1.0 - abs(across)) * (0.6 + 0.9 * n), 0.0, 1.0);
-    vec3 rgb = blackbody(1100.0 + 800.0 * core);
-    rgb = mix(rgb, vec3(1.0), 0.35 * core * core);
-    // Soot darkens the upper flame.
-    rgb *= 1.0 - 0.85 * soot * smoothstep(0.45, 1.0, along);
-    // The blue root of a clean flame, before soot forms (FxColour.blueRoot).
-    rgb = mix(rgb, vec3(0.35, 0.55, 1.0), 0.7 * heat * (1.0 - soot) * (1.0 - smoothstep(0.0, 0.18, along)));
-
-    float alpha = body * params.a * (1.0 - 0.7 * smoothstep(0.75, 1.0, along)) * (0.75 + 0.5 * n);
+    float reach = 0.84 + 0.2 * (noise(vec2(FxTime * 1.3, seed * 50.0)) - 0.5) + 0.1 * (noise(vec2(FxTime * 3.7, seed * 20.0)) - 0.5);
+    // Only on the upper flame: near the root the log scale packs the bulges into rings, a twisted rope seen from below.
+    float puff = 1.0 + 0.2 * smoothstep(0.35, 0.75, along) * sin(eddy.y * 1.4 - FxTime * 4.0 + seed * 9.0);
+    float intensity = 1.0 - abs(x) / puff + (0.12 + 0.4 * along) * n
+            - 1.1 * smoothstep(0.5, reach + 0.08, along) - smoothstep(1.2, ROOM, abs(x));
+    // Hotter is more opaque: the dim edges and the torn-off pockets let the sky through.
+    float h = clamp(intensity * (0.45 + 0.55 * heat) - 0.15 * along, 0.0, 1.0);
+    float alpha = smoothstep(0.0, 0.07, intensity) * (0.6 + 0.4 * smoothstep(0.0, 0.3, h)) * params.a;
     alpha = clamp(alpha, 0.0, 1.0) * ColorModulator.a;
     if (alpha < 0.004) {
         discard;
     }
+
+    vec3 rgb = ramp(h);
+    // Soot dims the upper flame's cooler edges toward a smoky red.
+    rgb *= 1.0 - 0.5 * soot * smoothstep(0.6, 1.0, along) * (1.0 - h);
+    // The blue root of a clean flame, before soot forms (FxColour.blueRoot).
+    rgb = mix(rgb, vec3(0.35, 0.55, 1.0), 0.7 * heat * (1.0 - soot) * (1.0 - smoothstep(0.0, 0.18, along)));
+    // Hotter is brighter, and the whole flame flickers a little.
+    rgb *= (0.9 + 0.5 * h) * (0.9 + 0.2 * noise(vec2(FxTime * 7.0, seed * 61.0)));
+
     // Full bright, no lightmap; vanilla fog on the straight colour, then premultiplied.
-    vec4 lit = linear_fog(vec4(rgb * ColorModulator.rgb * (0.85 + 0.6 * core), alpha), vertexDistance, FogStart, FogEnd, FogColor);
+    vec4 lit = linear_fog(vec4(rgb * ColorModulator.rgb, alpha), vertexDistance, FogStart, FogEnd, FogColor);
     fragColor = vec4(lit.rgb * alpha, alpha);
 }

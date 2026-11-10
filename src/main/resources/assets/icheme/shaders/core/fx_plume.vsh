@@ -19,6 +19,7 @@ uniform float GlideStart;
 uniform float GlideSeconds;
 // The emitter's travelling-puff period, s (FxEmitter.driftPeriod).
 uniform float DriftPeriod;
+uniform float PuffGrowth;
 // Toward the sun, world axes (unit).
 uniform vec3 SunDirection;
 
@@ -43,12 +44,13 @@ void main() {
     seed = float(flags >> 3) / 4096.0;
     params = Color;
 
-    // A travelling puff (FxSink.puff): Normal is its drift over one period / DRIFT_SCALE (16 m); it moves along it, grows by
-    // half (GROWTH) and fades in and out over each DriftPeriod, its phase offset by its seed.
+    // A travelling puff (FxSink.puff): Normal is its drift over one period / DRIFT_SCALE (64 m); it moves along it, grows by
+    // the emitter's PuffGrowth (its spread over the segment, so it reaches the next segment's size) and fades in and out
+    // over each DriftPeriod, its phase offset by its seed.
     if (dot(Normal, Normal) > 1e-6) {
         float phase = fract(FxTime / max(DriftPeriod, 0.001) + seed);
-        centre += Normal * 16.0 * phase;
-        halfSize *= 1.0 + 0.5 * phase;
+        centre += Normal * 64.0 * phase;
+        halfSize += PuffGrowth * phase;
         params.a *= sin(3.14159265 * phase);
     }
 

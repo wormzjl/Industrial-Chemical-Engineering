@@ -24,6 +24,15 @@ out float vertexDistance;
 out vec4 params;
 out vec2 corner;
 out float seed;
+// The noise domain in eddies: across and along the flame, each unit about one eddy, which grows with the distance from the
+// tip as a turbulent jet's width does (about 0.22 of it), so a 30 m flare and a 0.3 m still flame look alike in kind.
+out vec2 eddy;
+
+// An eddy's size at m metres from the tip, m, and the root's eddy scale.
+const float EDDY = 0.22;
+const float ROOT = 0.2;
+// A ribbon is drawn this many times the flame's half-width, so the tongues of fx_flame.fsh can reach past it.
+const float ROOM = 1.5;
 
 // The glide ease, as FxGlide.ease: smoothstep of the elapsed share.
 float ease(float k) {
@@ -34,7 +43,8 @@ float ease(float k) {
 void main() {
     float e = ease((FxTime - GlideStart) / max(GlideSeconds, 0.001));
     vec3 oldCentre = Position + vec3(UV0.x, float(UV1.x) / 1000.0, UV0.y);
-    vec3 centre = Origin + mix(oldCentre, Position, e);
+    // Emitter-local, from the flame's root (the flare tip, the still's door).
+    vec3 local = mix(oldCentre, Position, e);
     float halfSize = mix(float(UV2.x), float(UV2.y), e) / 1000.0;
     int flags = UV1.y;
     vec2 c = vec2(float(flags & 1), float((flags >> 1) & 1));
@@ -42,9 +52,11 @@ void main() {
     seed = float(flags >> 3) / 4096.0;
     float along = Color.r;
 
-    // Flicker: the width breathes by up to 15 %, in two beats that do not repeat together.
-    float flick = 0.5 * sin(FxTime * 9.0 + seed * 40.0 + along * 12.0) + 0.5 * sin(FxTime * 23.0 + seed * 17.0 - along * 7.0);
-    halfSize *= 1.0 + 0.15 * flick;
+    // The whole ribbon breathes in length from its root, in two beats that do not repeat together (one seed per ribbon);
+    // the shader's wandering end does the rest.
+    if (ribbon) local *= 1.0 + 0.05 * sin(FxTime * 2.3 + seed * 40.0) + 0.04 * sin(FxTime * 5.9 + seed * 23.0);
+    vec3 centre = Origin + local;
+    float m = length(local);
 
     vec4 view = ModelViewMat * vec4(centre, 1.0);
     if (ribbon) {
@@ -53,10 +65,14 @@ void main() {
         vec3 side = cross(axis, -view.xyz);
         float s = length(side);
         side = s > 1e-5 ? side / s : vec3(1.0, 0.0, 0.0);
-        view.xyz += side * (c.x * 2.0 - 1.0) * halfSize;
-        // A sway that grows toward the tip.
-        view.xyz += side * along * along * 0.25 * halfSize * sin(FxTime * 5.0 + seed * 31.0 + along * 6.0);
+        view.xyz += side * (c.x * 2.0 - 1.0) * halfSize * ROOM;
+        // Two waves travel up the flame and grow toward its end, a slow lean and a quicker lick, in metres of the larger
+        // of the local half-width and 0.15 of the distance from the root, so a short still flame moves visibly too.
+        float sway = max(halfSize, 0.15 * m) * along;
+        view.xyz += side * sway * (0.45 * sin(along * 4.0 - FxTime * 3.1 + seed * 31.0) + 0.3 * sin(along * 8.0 - FxTime * 7.3 + seed * 13.0));
+        eddy = vec2((c.x * 2.0 - 1.0) * halfSize * ROOM / (EDDY * (m + ROOT)), log(1.0 + m / ROOT) / EDDY);
     } else {
+        eddy = (c * 2.0 - 1.0) * 1.6;
         view.xy += (c * 2.0 - 1.0) * halfSize;
     }
     gl_Position = ProjMat * view;

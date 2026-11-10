@@ -16,8 +16,11 @@ import org.jetbrains.annotations.Nullable;
  * Both stand {@link #PROUD} m out of the door's face. The glided value is the fire share alone; the door fixes the rest.
  */
 public final class StillModel {
-    /** The ember band's height as a share of the door's, and how far the fire stands out of the door's face, m. */
-    public static final double EMBER = .25, PROUD = .01;
+    /**
+     * The glowing bed's height as a share of the door's (a full solid fire lights most of the opening; visual review
+     * 2026-11-10, item 8), and how far the fire stands out of the door's face, m.
+     */
+    public static final double EMBER = .6, PROUD = .01;
     /** Flames over a solid bed, and segments per flame and per jet. */
     public static final int FLAMES = 3, SEGMENTS = 3, JET_SEGMENTS = 4;
 
@@ -64,9 +67,9 @@ public final class StillModel {
         double ax = -door.outZ(), az = door.outX();
         if (solid) {
             double bottom = -h / 2;
-            sink.ribbon(new FxSink.Point(ox, bottom, oz, ox, bottom, oz, w * .45 * glow(from), w * .45 * glow(to)), 0,
-                    new FxSink.Point(ox, bottom + EMBER * h, oz, ox, bottom + EMBER * h, oz, w * .4 * glow(from), w * .4 * glow(to)), .9,
-                    FxSink.params(0, .35, .2, .9 * glow(to)), 1);
+            sink.ribbon(new FxSink.Point(ox, bottom, oz, ox, bottom, oz, w * .34 * glow(from), w * .34 * glow(to)), 0,
+                    new FxSink.Point(ox, bottom + EMBER * h, oz, ox, bottom + EMBER * h, oz, w * .3 * glow(from), w * .3 * glow(to)), .9,
+                    FxSink.params(0, .6, .2, .7 * glow(to)), 1);
             for (int k = 0; k < FLAMES; k++) {
                 double across = (k - (FLAMES - 1) / 2.0) * w * .27;
                 double fx = ox + ax * across, fz = oz + az * across;
@@ -77,7 +80,8 @@ public final class StillModel {
                     double v = (double) i / SEGMENTS, width = w * .12 * (1 - .7 * v);
                     var p = new FxSink.Point(fx, bottom + v * ha * (from > 0 ? 1 : 0), fz, fx, bottom + v * hb * (to > 0 ? 1 : 0), fz,
                             from > 0 ? width : 0, to > 0 ? width : 0);
-                    if (last != null) sink.ribbon(last, (double) (i - 1) / SEGMENTS, p, v, params, 300 + k * 97 + i);
+                    // One seed per flame: its noise and motion run on across the joints.
+                    if (last != null) sink.ribbon(last, (double) (i - 1) / SEGMENTS, p, v, params, 300 + k * 97);
                     last = p;
                 }
             }
@@ -90,7 +94,7 @@ public final class StillModel {
                 double v = (double) i / JET_SEGMENTS, half = h * .1 * (.5 + 1.2 * v * (1 - v) * 2);
                 var p = new FxSink.Point(sx + door.jetX() * la * v, 0, sz + door.jetZ() * la * v, sx + door.jetX() * lb * v, 0, sz + door.jetZ() * lb * v,
                         from > 0 ? half : 0, to > 0 ? half : 0);
-                if (last != null) sink.ribbon(last, (double) (i - 1) / JET_SEGMENTS, p, v, params, 700 + i);
+                if (last != null) sink.ribbon(last, (double) (i - 1) / JET_SEGMENTS, p, v, params, 700);
                 last = p;
             }
         }

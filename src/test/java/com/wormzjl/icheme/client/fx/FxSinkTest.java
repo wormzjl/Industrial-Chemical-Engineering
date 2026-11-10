@@ -37,9 +37,10 @@ class FxSinkTest {
 
     @Test
     void packedDriftFitsTheNormalBytes() {
-        float[] small = FxSink.drift(0, 8, 0);
+        // DRIFT_SCALE 64 m: half of it packs to 0.5; a 100 m drift is cut to the scale, its direction kept.
+        float[] small = FxSink.drift(0, 32, 0);
         assertEquals(.5, small[1], 1e-6);
-        float[] large = FxSink.drift(30, 40, 0);
+        float[] large = FxSink.drift(60, 80, 0);
         assertEquals(1, Math.sqrt(large[0] * large[0] + large[1] * large[1]), 1e-6);
         assertEquals(.6, large[0], 1e-6);
     }

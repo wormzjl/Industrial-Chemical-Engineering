@@ -43,9 +43,9 @@ class FlameModelTest {
         double length = 30;
         var v = FlameModel.values(length, 5, 0, 100, 1, 0, TIP / 2);
         int ribbons = FlameModel.ribbons(length, 1);
-        assertEquals(5, ribbons);
+        assertEquals(3, ribbons);
         var sink = new RecordingSink();
-        FlameModel.write(sink, v, v, ribbons);
+        FlameModel.write(sink, v, v, ribbons, 0);
         assertEquals(ribbons * FlameModel.SEGMENTS + FlameModel.PILOTS, sink.quads());
         assertTrue(sink.quads() <= 48, "plan: at most 48 quads per flare");
         // The outer ribbon is written first and ends at the bent end: 0.5 L downwind and 0.86 L up at u/Uj = 0.05.
@@ -63,16 +63,16 @@ class FlameModelTest {
         var rest = FlameModel.values(0, 0, 0, 1, 0, 0, TIP / 2);
         var v = FlameModel.values(20, 0, 3, 60, .5, .4, TIP / 2);
         var sink = new RecordingSink();
-        FlameModel.write(sink, rest, v, FlameModel.ribbons(20, .5));
+        FlameModel.write(sink, rest, v, FlameModel.ribbons(20, .5), 0);
         var first = sink.ribbons.get(FlameModel.SEGMENTS - 1).b();
         assertEquals(0, first.oldY(), 1e-9);
         assertTrue(first.newY() > 10 && first.newZ() > 0, "wind +z bends the flame toward +z");
         var none = new RecordingSink();
-        FlameModel.write(none, rest, rest, 0);
+        FlameModel.write(none, rest, rest, 0, 0);
         assertEquals(FlameModel.PILOTS, none.quads());
         // A cut budget keeps the outer ribbon whole.
         var cut = new RecordingSink(FlameModel.SEGMENTS);
-        FlameModel.write(cut, v, v, 4);
+        FlameModel.write(cut, v, v, 4, 0);
         assertEquals(FlameModel.SEGMENTS, cut.ribbons.size());
         assertEquals(1, cut.ribbons.get(FlameModel.SEGMENTS - 1).vb(), 1e-12);
     }

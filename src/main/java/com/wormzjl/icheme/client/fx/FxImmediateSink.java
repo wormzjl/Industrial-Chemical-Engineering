@@ -20,7 +20,7 @@ final class FxImmediateSink implements FxSink {
     private final PoseStack.Pose pose;
     private final double ox, oy, oz;
     private final float leftX, leftY, leftZ, upX, upY, upZ;
-    private final double ease, seconds, daylight, driftPeriod;
+    private final double ease, seconds, daylight, driftPeriod, growth;
     private final FxKind kind;
     private final int light;
     private int left;
@@ -32,10 +32,12 @@ final class FxImmediateSink implements FxSink {
      * @param seconds  game time, s, for the flipbook
      * @param daylight the sky brightness, 0.2 to 1
      * @param driftPeriod the emitter's travelling-puff period, s ({@link FxEmitter#driftPeriod()})
+     * @param growth   what a period adds to a travelling puff's half-size, m ({@link FxEmitter#puffGrowth()})
      */
     FxImmediateSink(VertexConsumer out, PoseStack.Pose pose, double[] origin, org.joml.Vector3f leftAxis, org.joml.Vector3f upAxis,
-                    double ease, double seconds, double daylight, double driftPeriod, FxKind kind, int light, int quads) {
+                    double ease, double seconds, double daylight, double driftPeriod, double growth, FxKind kind, int light, int quads) {
         this.driftPeriod = driftPeriod;
+        this.growth = growth;
         this.out = out;
         this.pose = pose;
         this.ox = origin[0];
@@ -74,7 +76,7 @@ final class FxImmediateSink implements FxSink {
         double phase = FxSink.phase(seconds, driftPeriod, seed), along = phase * cut;
         int alpha = (int) Math.round((params >>> 24) * FxSink.envelope(phase));
         square(ox + start.x(ease) + dx * along, oy + start.y(ease) + dy * along, oz + start.z(ease) + dz * along,
-                start.half(ease) * (1 + GROWTH * phase), params & 0xFFFFFF | alpha << 24, seed);
+                start.half(ease) + growth * phase, params & 0xFFFFFF | alpha << 24, seed);
     }
 
     private void square(double x, double y, double z, double h, int params, int seed) {
@@ -104,20 +106,27 @@ final class FxImmediateSink implements FxSink {
 
     @Override
     public void ribbon(Point a, double va, Point b, double vb, int params, int seed) {
+        double[] axis = {b.x(ease) - a.x(ease), b.y(ease) - a.y(ease), b.z(ease) - a.z(ease)};
+        ribbon(a, va, axis, b, vb, axis, params, seed);
+    }
+
+    @Override
+    public void ribbon(Point a, double va, double[] ta, Point b, double vb, double[] tb, int params, int seed) {
         if (left <= 0) return;
         double ax = ox + a.x(ease), ay = oy + a.y(ease), az = oz + a.z(ease), ha = a.half(ease);
         double bx = ox + b.x(ease), by = oy + b.y(ease), bz = oz + b.z(ease), hb = b.half(ease);
         if (!Double.isFinite(ax + ay + az + ha + bx + by + bz + hb)) return;
         left--;
-        double tx = bx - ax, ty = by - ay, tz = bz - az;
         double heat = (params >> 8 & 0xFF) / 255.0, soot = (params & 0xFF) / 255.0, opacity = (params >>> 24) / 255.0;
         int frame = (int) Math.floorMod((long) Math.floor(seconds * FRAME_RATE) + seed, (long) FxRenderTypes.FLAME_FRAMES);
         float frameTop = (float) frame / FxRenderTypes.FLAME_FRAMES, frameHeight = 1F / FxRenderTypes.FLAME_FRAMES;
         double[][] ends = {{ax, ay, az, ha, va}, {bx, by, bz, hb, vb}};
+        double[][] tangents = {ta, tb};
         for (int k = 0; k < 4; k++) {
             int cu = k == 1 || k == 2 ? 1 : 0, cv = k >= 2 ? 1 : 0;
             double[] e = ends[cv];
-            // The side is across the axis and the line of sight, so the ribbon turns about its axis to face the camera.
+            double tx = tangents[cv][0], ty = tangents[cv][1], tz = tangents[cv][2];
+            // The side is across this end's tangent and the line of sight, so the ribbon turns about its centre line.
             double sx = ty * -e[2] - tz * -e[1], sy = tz * -e[0] - tx * -e[2], sz = tx * -e[1] - ty * -e[0];
             double s = Math.sqrt(sx * sx + sy * sy + sz * sz);
             if (s < 1e-9) {

@@ -51,15 +51,16 @@ public interface FxSink {
     /**
      * A camera-facing puff that travels (batch 2026-11-10-custom-shader-system, plan section 4.5): over each of its emitter's
      * {@link FxEmitter#driftPeriod()} it moves from {@code start} by {@code (dx, dy, dz)} m (at most {@link #DRIFT_SCALE}),
-     * grows by {@link #GROWTH} of its half-size and fades in and out ({@link #envelope}); its phase is offset by
+     * grows by its emitter's {@link FxEmitter#puffGrowth()} and fades in and out ({@link #envelope}); its phase is offset by
      * {@code seed} ({@link #phase}). Puffs of one segment with staggered seeds make a steady stream: smoke, a plume, drops.
      */
     void puff(Point start, double dx, double dy, double dz, int params, int seed);
 
-    /** The longest drift of one period, m: the SHADER path packs the drift into the vertex normal's bytes. */
-    double DRIFT_SCALE = 16;
-    /** A travelling puff's growth over one period, as a share of its half-size. */
-    double GROWTH = .5;
+    /**
+     * The longest drift of one period, m: the SHADER path packs the drift into the vertex normal's bytes (about 0.5 m steps).
+     * 16 m cut long plume segments short, so their puffs vanished before the next began (visual review 2026-11-10, item 5).
+     */
+    double DRIFT_SCALE = 64;
 
     /** A travelling puff's phase at {@code seconds}: fract(seconds / period + seed / 4096), as {@code fx_plume.vsh}. */
     static double phase(double seconds, double period, int seed) {
@@ -89,6 +90,15 @@ public interface FxSink {
      * and {@code vb} are the ends' positions along the whole flame, 0 to 1.
      */
     void ribbon(Point a, double va, Point b, double vb, int params, int seed);
+
+    /**
+     * As {@link #ribbon(Point, double, Point, double, int, int)}, each end turned about its own unit tangent {@code ta},
+     * {@code tb} (x, y, z) of the centre line instead of the segment's axis, so consecutive segments of a curved ribbon meet
+     * with one width and no crease. A sink that cannot turn ends apart draws the plain segment.
+     */
+    default void ribbon(Point a, double va, double[] ta, Point b, double vb, double[] tb, int params, int seed) {
+        ribbon(a, va, b, vb, params, seed);
+    }
 
     /** Quads this sink still takes. */
     int remaining();

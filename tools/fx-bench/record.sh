@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Effects recording run (batch 2026-11-10-custom-shader-system; owner 2026-11-10: "Record these animations"). Not a timing run.
-# Usage: record.sh <worktree> <out dir> [config]   (config: auto (default), compatible, off: a tools/fx-bench/config toml)
+# Usage: [SHOTS=<shot file>] record.sh <worktree> <out dir> [config]   (config: auto (default), compatible, off: a tools/fx-bench/config toml;
+#   SHOTS: a shot list in the format of record.txt to record instead of it)
 # The probe's mode=fx builds the bench scene and feeds the synthetic states; FxRecorder (attached beside it) flies to each
 # shot of record.txt and captures frame sequences into <out dir>/<shot>/. It takes the fx lane lock, so no bench lane
 # starts meanwhile, and refuses to start while a test or game JVM runs. Then: record_sheets.py <out dir> for GIFs and sheets.
@@ -39,6 +40,7 @@ cp "$here/options.txt" "$game/options.txt"
 [ -f "$config" ] && cp "$config" "$out/client-config-before.toml"
 cp "$here/config/icheme-client-$toml.toml" "$config"
 for f in scene view away far record; do cp "$here/$f.txt" "$game/fps-autopilot/$f.txt"; done
+[ -n "${SHOTS:-}" ] && cp "$SHOTS" "$game/fps-autopilot/record.txt"
 rm -rf "$game/saves/$save" "$game/fx-record"
 cat > "$game/fps-autopilot/autopilot.properties" <<EOF
 mode=fx

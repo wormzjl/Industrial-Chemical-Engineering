@@ -30,6 +30,7 @@ Owner, 2026-11-10: a custom shader system for normal textures (first the instrum
 
 - 2026-11-10: bench tooling bf951aed2 (FxStats and the F3 line), 0f7603b0b (probe `mode=fx`, `tools/fx-bench/`); the bench lanes run in the sub-thread "Effects bench lanes (W11)". First lanes: effects +1.32 ms p50 in view against a 0.3 ms budget, GPU frame doubled.
 - 2026-11-10: owner: "looks weird, like a plume" (the flares); "Record these animations, use a fable high subagent to review them and check their comment". Recorder `tools/fx-bench/record.sh` + `FxRecorder.java`; 8 shots in `tmp/fx-record/run1/`. Fable review and its check: [FX_VISUAL_REVIEW.md](FX_VISUAL_REVIEW.md) (9 defects; flame reads as a plume, plumes start far downwind as huge balls, clouds over the effects, no back-to-front order, natural towers outside the client watch range).
+- 2026-11-10: owner: "Fix them" (review items 1, 3–9). Back-to-front draw at `AFTER_WEATHER`, growing puffs, per-end ribbon tangents, still glow, pilots on top; run2 recorded. Owner: "still looks like plumes, it lacks the variability of actual flames": the flame shader rebuilt as a threshold of a rising noise field (tongues, a wandering end, torn-off pockets, puffing, colour by intensity), 2–3 ribbons, and a seed fix (`FxSources.seed`: every flare of a row had one seed). Relayed by the bench session, owner: "too loud": full gain moved from 100 to 110 dB, d6168fc69. Details in [FX_VISUAL_REVIEW.md](FX_VISUAL_REVIEW.md), section Fixes.
 
 ## Code areas (planned)
 

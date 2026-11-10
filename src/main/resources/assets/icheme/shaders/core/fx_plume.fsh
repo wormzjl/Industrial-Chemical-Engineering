@@ -48,17 +48,18 @@ void main() {
     vec2 q = corner * 2.0 - 1.0;
     float r = length(q);
 
-    // A soft puff with a billowing edge, drifting slowly.
-    vec2 p = q * 1.6 + vec2(seed * 31.0, seed * 17.0) + vec2(FxTime * 0.03, -FxTime * 0.05);
+    // A puff with a torn, billowing edge (finer, harder erosion: no round balls), drifting slowly.
+    vec2 p = q * 2.4 + vec2(seed * 31.0, seed * 17.0) + vec2(FxTime * 0.03, -FxTime * 0.05);
     float n = fbm(p + 1.3 * vec2(fbm(p + 3.1), fbm(p - 1.7)));
-    float shape = 1.0 - smoothstep(0.35, 1.0, r + 0.45 * (n - 0.47));
+    float shape = 1.0 - smoothstep(0.35, 1.0, r + 0.9 * (n - 0.47));
     float alpha = clamp(shape * params.a * (0.7 + 0.6 * n), 0.0, 1.0) * ColorModulator.a;
     if (alpha < 0.004) {
         discard;
     }
 
     // Lit as a sphere by the sun and by the sky: 15 % at night, so a plume is not white in the dark (FxColour.puff).
-    vec3 normal = normalize(vec3(q, sqrt(max(0.0, 1.0 - r * r)) + 0.3));
+    // A flattened sphere: a puff is a soft cloud, not a lit ball.
+    vec3 normal = normalize(vec3(q, sqrt(max(0.0, 1.0 - r * r)) + 1.0));
     float sun = max(0.0, dot(normal, normalize(sunView + vec3(0.0, 0.0, 1e-4))));
     float day = clamp((Daylight - 0.2) / 0.8, 0.0, 1.0);
     float light = 0.15 + 0.85 * day * (0.7 + 0.3 * sun);
