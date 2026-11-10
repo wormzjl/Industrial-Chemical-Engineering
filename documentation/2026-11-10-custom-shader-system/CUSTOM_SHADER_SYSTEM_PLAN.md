@@ -68,7 +68,7 @@ flowchart LR
 
 1. Chunk geometry stays plain baked quads, which Sodium, Embeddium and Iris mesh as they do now. No chunk shader is replaced and no rendering mixin is added.
 2. Our own `ShaderInstance`s are used only when no shader pack is active. Iris does not intercept a mod's own shader, so such a shader would render wrong or vanish (the malilib issue in the sources shows the same thing for custom pipelines).
-3. Iris is an optional dependency, wired the way Create is ([SOFT_DEPENDENCY_REVIEW.md](SOFT_DEPENDENCY_REVIEW.md)). The code compiles against its public v0 API (`net.irisshaders.iris.api.v0.IrisApi`: `isShaderPackInUse`, `isRenderingShadowPass`), and `client/fx/compat/iris/` loads only when Iris is present. The answer is read once per frame. Without Iris, the answer is "no pack". No other mod is a dependency; the review records why. OptiFine does not run on NeoForge, and Oculus is a Forge 1.20.1 port, so Iris is the one shader loader on NeoForge 1.21.1.
+3. Iris is an optional dependency, wired the way Create is ([SOFT_DEPENDENCY_REVIEW.md](SOFT_DEPENDENCY_REVIEW.md)). The code compiles against its public v0 API (`net.irisshaders.iris.api.v0.IrisApi`: `isShaderPackInUse`, `isRenderingShadowPass`), and `client/fx/compat/iris/` loads only when Iris is present. The answer is read once per frame. Without Iris, the answer is "no pack". Distant Horizons is the second optional dependency (section 4.7). No other mod is a dependency; the review records why. Every call into either mod goes through the guards of section 4.8, so a change in their code turns the integration off instead of crashing the game. OptiFine does not run on NeoForge, and Oculus is a Forge 1.20.1 port, so Iris is the one shader loader on NeoForge 1.21.1.
 4. No vanilla particles for these effects. Particle CPU cost, particle caps and particle-culling mods all differ between setups. We draw our own batches, cull them against the frustum ourselves and use the `RenderLod` distance tiers.
 5. All effects draw at `RenderLevelStageEvent` `AFTER_PARTICLES`. Shadow passes are not hooked, so flames and plumes cast no shadow.
 6. Distant Horizons: effects draw only inside the vanilla render distance, and the shell model already returns no quads to DH.
@@ -80,6 +80,7 @@ flowchart LR
 | `mode` | `AUTO`, `COMPATIBLE`, `OFF` | `AUTO` | AUTO picks the path per frame (section 4.1); COMPATIBLE never uses our shaders (the escape hatch if some mod conflicts); OFF draws no flames, smoke or plumes |
 | `pbr_textures` | true / false | true | Wiring: lit through its normal map, by our shader without a pack or by the pack (section 4.4). Off: the vanilla entity shader, flat. Later chunk sprites: X5 |
 | `heat_haze` | true / false | false | SHADER path only (X6): a screen copy plus a distortion over flames and stacks |
+| `dh_silhouettes` | true / false | true | With Distant Horizons: painted equipment silhouettes in its far terrain (section 4.7). No effect without DH |
 
 Changes take effect on the next frame. A change to `pbr_textures` re-meshes the chunks, as `low_polygon_mode` does. Sounds use Minecraft's Blocks volume slider.
 
@@ -176,16 +177,39 @@ How the budgets are met:
    |                                         |________|
 ```
 
+### 4.7 Distant Horizons silhouettes (owner, 2026-11-10: X11 A)
+
+**Today.** DH asks the shell model for quads without model data. The model returns none, so DH takes the particle sprite's colour (the plate texture). Shell and interior cells therefore show in DH's far terrain as solid voxels, all one grey, whatever the paint or the part (`CUSTOM_EQUIPMENT_RENDERING_REVIEW.md`, read from DH's source). DH's API has no setting to skip only our blocks: `blocksToAvoid` is global.
+
+**Design.**
+
+- **Which structures.** The client asks only when DH is present, its API passes the version gate (section 4.8) and `dh_silhouettes` is on. It sends a subscription request with its DH render radius (from DH's `chunkRenderDistance`), capped at 2,048 blocks. The server answers from the structure registry (`EquipmentStructure.record`: origin, shape, paint). These are facts, read as stored, with no solver run. It then sends placements, repaints and removals while the subscription lasts, and stops on logout or a dimension change. This is a request-driven wire format: a protocol bump, no compatibility work. At most 256 structures per client, the nearest first.
+- **Shapes.** Built on a worker thread from the shape. The cells are those of `ShapeRasterizer.layout` (shell and interior), the same cells DH draws as voxels. Each cell takes the colour of the part that fills most of it: body paint, structure paint, concrete, bare steel or brick. Cells of one colour merge greedily into boxes, layer by layer, usually a few hundred boxes per structure. Each box is 0.02 m larger on every side than its cells, so it hides DH's grey voxel of the same cells. The DH material is `METAL` for steel and paint and `STONE` for concrete and brick, so DH and packs that support DH shade them as they shade terrain.
+- **Registration.** One `IDhApiRenderableBoxGroup` per structure, positioned relative to its origin, resource location `icheme:equipment`, through `IDhApiLevelWrapper.getRenderRegister()` (null until DH's renderer is ready: retry on DH's level-load event). A group is inactive within the vanilla render distance, where the real model draws. `setPreRenderFunc` checks the camera distance against the render distance.
+- **Far tier.** Past 4 × the vanilla render distance, DH draws its own voxels at 2 to 8 blocks per voxel. There the group switches to at most 16 hull boxes per structure, grown by half DH's voxel size at that distance. Budget: at most 50,000 boxes for all structures together.
+- **No live effects far away.** Flames and plumes need watched state, and the server publishes it only for nearby flares. A silhouette is static.
+
+### 4.8 Fallbacks against changes in other mods (owner, 2026-11-10)
+
+An update to Iris or DH may rename, remove or change any class or method we call. None of that may crash the game. Each such case turns one integration off for the session, and the system falls back to a path that works without that mod.
+
+1. **No direct link.** API types appear only in `client/fx/compat/iris/` and `client/fx/compat/dh/`. The core sees two small interfaces (`FxCompat.Iris`, `FxCompat.Dh`) whose default is a no-op. The implementations are loaded by name with `Class.forName`, inside a try/catch, and only when `ModList.isLoaded` says the mod is present.
+2. **Version gate at runtime, none at load.** `neoforge.mods.toml` declares both mods `optional` with no version range, so no Iris or DH version stops the game from starting. At client setup each integration reads the API version: Iris's API revision must be at least the one we compiled against, and DH's `getApiMajorVersion()` must equal the major we compiled against (a new major means breaking changes) with `getApiMinorVersion()` at least ours. Otherwise the integration stays off and the log names the version.
+3. **Every call guarded.** Each interface method wraps its calls in a try/catch for `LinkageError` (`NoSuchMethodError`, `NoClassDefFoundError`, `AbstractMethodError`, `IncompatibleClassChangeError`) and `RuntimeException`. The first failure logs one warning with the mod's version and disables that integration until the next game start. DH callbacks (`setPreRenderFunc`, event handlers) are guarded the same way, because they run inside DH's renderer.
+4. **Safe fallbacks.** Iris unknown or failed: the COMPATIBLE path, whose vanilla render types draw correctly with or without a pack. Our own shaders run only when Iris is confirmed absent, or confirmed to have no pack. DH unknown or failed: our groups are removed (guarded), and DH's own grey voxels stay as they are today.
+5. **Our own code.** If a shader fails to compile or link, the COMPATIBLE path is used. An exception inside one effect type's draw turns that type off for the session and logs once. Buffers are ended in `finally`. No exception leaves a render, tick or network event.
+6. **Gates.** Unit tests replace the API classes with stubs that throw `NoSuchMethodError` or report an old version, and expect the integration off with no exception. The effects core compiles and its tests run with neither mod on the classpath (`-PwithoutIris`, `-PwithoutDh`, as `-PwithoutCreate`).
+
 ## 5. Compatibility matrix (W0 and the final check)
 
-Setups: vanilla NeoForge 21.1.219; Sodium 0.6 for NeoForge; Embeddium 1.0.15; Sodium + Iris 1.8 with Complementary Reimagined, BSL and one more LabPBR pack; Distant Horizons; ImmediatelyFast; Create with Flywheel. Each setup checks that every effect is visible and fogged, that the flame blooms under a pack, that the instrument wiring shows its relief with and without a pack, that a pack toggle switches paths without a restart, and the frame time. These are dev-client checks. Under AGENTS.md the owner starts them, through the `runMcpClient` lane.
+Setups: vanilla NeoForge 21.1.219; Sodium 0.6 for NeoForge; Embeddium 1.0.15; Sodium + Iris 1.8 with Complementary Reimagined, BSL and one more LabPBR pack; Distant Horizons (alone, and with Iris and a pack that supports DH); ImmediatelyFast; Create with Flywheel; one older and one newer Iris and DH release than the ones compiled against, to see the guards of section 4.8 turn an integration off without a crash. Each setup checks that every effect is visible and fogged, that the flame blooms under a pack, that the instrument wiring shows its relief with and without a pack, that a pack toggle switches paths without a restart, and the frame time. These are dev-client checks. Under AGENTS.md the owner starts them, through the `runMcpClient` lane.
 
 ## 6. Work packages
 
 | WP | Content | Gate |
 |---|---|---|
 | W0 | Spike: `FxCompat` detection, one test flame ribbon on both paths, one drum's wiring on its tiled `_n` / `_s` textures; settles the questions in section 7 | owner-run matrix on 3 setups |
-| W1 | Core: `FxSettings`, `FxCompat` (+ `compat/iris/`, compileOnly Iris, optional in `neoforge.mods.toml`, `-PwithoutIris`), `FxShaders`, `FxRenderTypes`, `FxBatch` (cached GPU-animated buffers), `FxWind`, `FxAmbient`, glide | unit tests: wind determinism, ambient mapping, mixing-line excess against section 2's table, batch budgets; the effects core loads without Iris |
+| W1 | Core: `FxSettings`, `FxCompat` with the guards of section 4.8 (+ `compat/iris/`, compileOnly Iris, optional in `neoforge.mods.toml` with no version range, `-PwithoutIris`), `FxShaders`, `FxRenderTypes`, `FxBatch` (cached GPU-animated buffers), `FxWind`, `FxAmbient`, glide | unit tests: wind determinism, ambient mapping, mixing-line excess against section 2's table, batch budgets; the effects core loads without Iris; guard tests with stub APIs (missing method, old version) |
 | W2 | `tools/pbr-textures/`; the branch and tray textures; `InstrumentWiring.paint` v in metres and the cable count per baseline segment; the gland and drip loop at the head (X9); bottom or side entries; `icheme:rendertype_wiring`; `InstrumentRenderer` picks the render type by path | resource test: `_n` / `_s` sizes and channel ranges; InstrumentWiring tests: v grows by run length (a 15 m run spans 30 periods), a baseline segment carries the cables joined beyond it, no entry on a top face; the existing wiring and equipment gates |
 | W3 | Flare: flame, smoke, roar; `FlareState` additions; old particle code removed | flame geometry tests; FlareRuntimeTest for the new fields |
 | W4 | Tower plume: `TowerPlume` watch, marks, puffs | plume length tests; tower runtime test for the published exhaust |
@@ -193,9 +217,10 @@ Setups: vanilla NeoForge 21.1.219; Sodium 0.6 for NeoForge; Embeddium 1.0.15; So
 | W6 | Still: glow, burner jet, flue, sounds | StillFires geometry tests |
 | W7 | `tools/process-sounds/`: five loops | seam and RMS report, as machine-sounds |
 | W8 | Heat haze (if X6 A) | SHADER path only; off by default |
+| W10 | DH silhouettes: `compat/dh/` (compileOnly DH API, `-PwithoutDh`), the subscription request and the registry reply, cell colours and greedy boxes on a worker, groups with the far tier | silhouette tests: the box set covers the layout cells grown by 0.02 m, box budgets, the subscription replays only registry facts; guard tests with a stub DH API |
 | W9 | Docs, code guide chapter "effects", translations of the new config lines, tooling cleanup | final lane |
 
-Order: W0 → W1 → W2 (the owner reviews the wires) → W3 → W4/W5 → W6/W7 → W8 → W9.
+Order: W0 → W1 → W2 (the owner reviews the wires) → W3 → W4/W5 → W6/W7 → W8 → W10 → W9.
 
 ## 7. Unknowns W0 settles
 
@@ -203,6 +228,7 @@ Order: W0 → W1 → W2 (the owner reviews the wires) → W3 → W4/W5 → W6/W7
 - Whether the derivative tangent frame of `rendertype_wiring` holds where a run crosses facets of a curved head. A visible seam there would mean passing the run direction in the vertex normal's place instead.
 - (For later chunk sprites) whether Iris with Sodium keeps our smooth vertex normals for chunk quads or recomputes face normals. Face normals would light round shells in facets under a pack.
 - Whether toggling a shader pack re-meshes chunks, so the X5 variant switch follows the pack without F3+T.
+- Whether DH draws its generic boxes under Iris with a pack that supports DH, and whether boxes grown by 0.02 m fully hide DH's grey voxels at every DH detail level.
 - Whether Sodium 0.6 and Embeddium fire `AFTER_PARTICLES` at the same point as vanilla. Today's ghost and outline renderers suggest yes.
 
 ## 8. Owner decisions
@@ -217,7 +243,7 @@ Order: W0 → W1 → W2 (the owner reviews the wires) → W3 → W4/W5 → W6/W7
 - **X6 Heat haze.** A: in, SHADER path only, off by default (recommended). B: out.
 - **X7 Flare smoke.** A: a soot index from the flared gas's carbon-to-hydrogen ratio and the load, a new published value (recommended). B: load only, as now.
 - **X8 Sounds.** A: synthesised loops, no recordings (recommended, the machine-sounds route). B: CC0 recordings after a licence check.
-- **X11 Distant Horizons silhouettes** (later batch). A: with DH present, coarse box silhouettes of the tall towers, stacks and columns past the vanilla render distance, through DH's generic rendering API. B: none (recommended for this batch).
+- **X11 Distant Horizons silhouettes.** Decided A (owner, 2026-11-10): in this batch, section 4.7.
 - **X12 Fire light** (later batch). A: with LambDynamicLights present, flare, still and heater fires light their surroundings. B: none (recommended for this batch).
 
 ## 9. Sources
@@ -228,4 +254,5 @@ Order: W0 → W1 → W2 (the owner reviews the wires) → W3 → W4/W5 → W6/W7
 - Custom pipelines invisible under a pack: [malilib issue 165](https://github.com/sakura-ryoko/malilib/issues/165).
 - Loaders on 1.21.1: [Iris NeoForge 1.21.1](https://www.curseforge.com/minecraft/mc-mods/irisshaders/files/5654382), [Sodium 0.6.13 NeoForge](https://modrinth.com/mod/sodium/version/mc1.21.1-0.6.13-neoforge), [Embeddium](https://nothingseries.github.io/docs/mods/modpages/embeddium).
 - ATEX connection practice: Ex d / Ex e glands for armoured cable, [CMP catalogue](https://acomee.com.mx/catalogos/catalogosc/CMP%20PRODUCTS%20CABLE%20GLANDS%20AND%20CONNECTORS.pdf), [Axis M20 Ex d armoured gland](https://www.axis.com/en-ae/products/ex-d-cable-gland-m20-armored-cable); blue IS glands and cable, [Lapp ATEX gland](https://lappaustralia.com.au/en/atex-gland-m40-2); Ex e junction boxes in 316L with bottom glands, [Pepperl+Fuchs](https://files.pepperl-fuchs.com/webcat/navi/productInfo/pds/t47951_eng.pdf), [Eaton GHG7](https://www.eaton.com/content/dam/eaton/products/enclosures/crouse-hinds/catalog-pages/crouse-hinds-ghg7-junction-box-catalog-pages.pdf); tray supports 1 m (3 m at most), [NOV electrical assembly requirements](https://nov.com/media/nov/files/about/rt-supply-chain-resources/procurement/electrical-assembly-general-requirements-103189068.pdf); instrument cables not strapped to equipment, [instrumentationtools forum](https://ask.instrumentationtools.com/t/installation-of-cables/7962). Photos: a transmitter's armoured cable in a drip loop into its side gland, [sanhuiex](https://sanhuiex.net/wp-content/uploads/2024/04/Digital-Pressure-Transmitter-Cable-inlet-and-outlet.jpg); five light-blue single-pair branch cables on a tray into a junction box and one 12-pair main cable out of its bottom, [Instrumentation Tools video](https://www.youtube.com/watch?v=kZl2rt60JCE).
+- Distant Horizons API: [class index](https://distant-horizons-f74d0f.gitlab.io/allclasses-index.html), [IDhApiCustomRenderObjectFactory](https://distant-horizons-f74d0f.gitlab.io/com/seibel/distanthorizons/api/interfaces/render/IDhApiCustomRenderObjectFactory.html), [IDhApiRenderableBoxGroup](https://distant-horizons-f74d0f.gitlab.io/com/seibel/distanthorizons/api/interfaces/render/IDhApiRenderableBoxGroup.html), [DhApi versions](https://distant-horizons-f74d0f.gitlab.io/com/seibel/distanthorizons/api/DhApi.html).
 - Mixing-line numbers: Magnus-type saturation pressure (Arden Buck), humidity ratio 0.621945 p/(P − p), as `TowerTransfer`; computed for this plan.
