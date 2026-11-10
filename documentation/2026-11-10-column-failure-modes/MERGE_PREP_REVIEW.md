@@ -36,12 +36,12 @@
 - **Tooling cleanup**: `tools/column-failure-modes/` (README, the dropped W3.4 patch, the full-size run's case lines, the merge scripts) and its `tools/INDEX.md` row. The test world stays in `src/fluidGameTest` (`runReviewWorldServer -PreviewBatch=review-failure-modes`). Nothing left `src/main` or `src/test`; no gate widened or narrowed; no test run needed for it.
 - **Code guide**: updated by an Opus subagent (owner approved), checked against the code and committed: 13 files, snapshot `0893d2339`. `column-operation.md` holds the scheme; `process-control.md`, `wired-control-power.md`, `fluid-runtime.md`, `heat-exchangers.md`, `fluid-science.md`, `rotating-machinery.md`, `client-gui.md`, `machine-assemblies.md`, `verification.md` and the README carry their parts; `column-v3.md` and `process-simulator.md` one line each. Facts schema 21 throughout. Three statements are taken from the batch README and marked so (pump power at 1.4 times, the 88/88 GameTests before the merge, the glass sizes).
 - **Ignored files**: `git ls-files -i -c --exclude-standard` is empty.
-- **Final lane**: not run. It runs once, alone on the machine. The selection at `33d018c0f` (`affected.mjs select`, 107 files changed since main): `test` 231 of 374 classes, `holdGates` 12 of 12, `columnGates` 11 of 82, `equipmentGates` 26 of 28, chain-100, the fluid GameTests and the campaign (1000 seeds, 8 workers; this batch changed `runtime/`, `science/fluid/` and `science/column/operation/`). The baseline is the 0.25.0 lane.
+- **Final lane**: run once on `1d872d2f9`, passed; see [FINAL_LANE_REVIEW.md](FINAL_LANE_REVIEW.md) (the orchestrator checked its counts against the lane folder). The selection at `33d018c0f` (`affected.mjs select`, 107 files changed since main): `test` 231 of 374 classes, `holdGates` 12 of 12, `columnGates` 11 of 82, `equipmentGates` 26 of 28, chain-100, the fluid GameTests and the campaign (1000 seeds, 8 workers; this batch changed `runtime/`, `science/fluid/` and `science/column/operation/`). The baseline is the 0.25.0 lane.
 
 ## Open before the merge
 
 1. `mod_version` (0.25.0 now) and the CHANGELOG heading, at the version the owner chooses.
-2. The final lane, on Opus.
+2. The owner's reading of two lane notes: `MIXED_GAS_COST` Newton solves 297 to 313 (+5 %) and 8 of 33 junction lines with 1 to 3 more Newton solves; the lane cannot tell this batch's heating branch from main's closed-device rule, as the baseline predates both.
 3. The owner's manual test. The world was saved before this merge. The merged code should read it (fields are read by presence), but it was not loaded on the merged code. A rebuild on the merged code takes 15 minutes.
 4. Owner decisions carried from the batch README: the `NO_DRIVER` Start refusal, the version.
 5. In the main checkout: the `research/INDEX.md` row of `renders-w7/` and the log archive of `tools/column-failure-modes/logs/`.
