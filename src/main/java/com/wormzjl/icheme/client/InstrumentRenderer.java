@@ -75,9 +75,11 @@ public final class InstrumentRenderer {
         boolean placing=draft!=null||sensorDraft!=null||wrench||levelGauge;
         var hosts=placing?InstrumentHosts.nearby(mc.level,mc.player.position(),120,false):shownHosts(mc);
         var selected=draft==null?null:InstrumentHosts.select(hosts,mc.player.getEyePosition(),mc.player.getLookAngle(),mc.player.blockInteractionRange(),draft.kind(),false);
+        boolean shadow=SHADOW.test(()->com.wormzjl.icheme.client.fx.FxCompat.iris().shadowPass(),false);
+        SHOWN.clear();
         for(var host:hosts) {
             if(host.entity().isRemoved())continue;
-            drawWiring(pose,buffers,host,camera,view,frustum);
+            drawWiring(pose,buffers,host,camera,view,frustum,shadow);
             for(var sensor:host.metadata().sensors())for(var mount:Sensor.mounts(host,sensor.kind()))if(mount.id().equals(sensor.key().mount())){
                 double d2=mount.centre().distanceToSqr(camera);int tier=HEADS.of(new Seen(host.identity(),mount.id()),view.pixels(HEAD,d2));
                 if(tier==HEADS.hidden()||!visible(frustum,mount))continue;
@@ -122,25 +124,41 @@ public final class InstrumentRenderer {
             if(target!=null&&!target.host().pipe()&&InstrumentHosts.reachable(mc.player,target.host(),target.mount()))outline(pose,buffers,target.mount(),camera,0x73a38e);
 
         }
+        flushWiring(event,pose,buffers,camera);
         buffers.endBatch(TYPE);buffers.endBatch(GHOST);buffers.endBatch(RenderType.lines());
     }
     private static void drawRootGhost(PoseStack pose,MultiBufferSource buffers,InstrumentHosts.Host host,Instrument.Mount mount,Vec3 camera,int colour,int alpha){
         if(!(host.entity() instanceof com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity shell))return;
         EquipmentInstruments.of(shell.shape()).probes().stream().filter(p->p.id().equals(mount.id())).findFirst().ifPresent(p->DataControlRenderer.draw(pose,buffers,camera,Vec3.atLowerCornerOf(shell.origin()),InstrumentWiring.rootHardware(p,com.wormzjl.icheme.client.model.EquipmentShellModel.detail()),colour,alpha));
     }
-    /** A structure's baked wiring, kept while its shape, installed mounts, nozzle codes, detail and atlas hold. */
-    private record Wiring(EquipmentShape shape,Set<String> installed,List<Integer> codes,RenderDetail detail,Object atlas,List<net.minecraft.client.renderer.block.model.BakedQuad> quads){}
+    // ---- instrument wiring (batch 2026-11-10-custom-shader-system, CUSTOM_SHADER_SYSTEM_PLAN.md section 4.4, W2) ----
+    // The steel hardware (roots, glands) stays on the block atlas. The cable finish takes the tiled textures under
+    // textures/wiring/ by what it carries (InstrumentWiring.Finish), v in metres over InstrumentWiring.PERIOD. SHADER path
+    // with pbr_textures: icheme:rendertype_wiring with the _n and _s maps, from one cached buffer per structure and texture,
+    // built again only when that structure's wiring is. COMPATIBLE (a shader pack lights it from _n and _s), OFF or
+    // pbr_textures off: entityCutoutNoCull on the same textures, written every frame. Nothing in an Iris shadow pass.
+    /** A structure's wiring, kept while its shape, installed mounts, nozzle codes, detail and atlas hold: steel as atlas quads, the finish by texture. */
+    private record Wiring(EquipmentShape shape,Set<String> installed,List<Integer> codes,RenderDetail detail,Object atlas,List<net.minecraft.client.renderer.block.model.BakedQuad> hardware,Map<String,List<Mesh.Polygon>> finish,long version){}
     private static final Map<BlockPos,Wiring> WIRING=new HashMap<>();
-    private static void drawWiring(PoseStack pose,MultiBufferSource buffers,InstrumentHosts.Host host,Vec3 camera,RenderLod.View view,net.minecraft.client.renderer.culling.Frustum frustum){
+    private static long wiringBuilds;
+    /** A finish mesh on the GPU: one per structure, build and texture. */
+    private record Uploaded(BlockPos at,long version,String texture){}
+    private static final VertexBufferCache<Uploaded> UPLOADED=new VertexBufferCache<>(512,2048);
+    /** Wiring that passed the level of detail and the frustum this frame, drawn after every host: one batch per texture. */
+    private record Shown(BlockPos at,BlockPos origin,Wiring wiring,int light){}
+    private static final List<Shown> SHOWN=new ArrayList<>();
+    private static final Map<String,ResourceLocation> TEXTURES=new HashMap<>();
+    private static final com.wormzjl.icheme.client.fx.FxGuard LIT=com.wormzjl.icheme.client.fx.FxGuard.effect("instrument_wiring");
+    private static final com.wormzjl.icheme.client.fx.FxGuard SHADOW=new com.wormzjl.icheme.client.fx.FxGuard("Iris shadow pass (wiring)",()->com.wormzjl.icheme.client.fx.FxCompat.version(com.wormzjl.icheme.client.fx.FxCompat.IRIS));
+    private static ResourceLocation texture(String name){return TEXTURES.computeIfAbsent(name,n->ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"textures/wiring/"+n+".png"));}
+    private static void drawWiring(PoseStack pose,MultiBufferSource buffers,InstrumentHosts.Host host,Vec3 camera,RenderLod.View view,net.minecraft.client.renderer.culling.Frustum frustum,boolean shadow){
         if(!(host.entity() instanceof com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity shell)||!shell.cell().equals(ShapeRasterizer.fluidCell(shell.shape())))return;
         var shape=shell.shape();var origin=shell.origin();
         double x0=origin.getX(),y0=origin.getY(),z0=origin.getZ(),x1=x0+shape.sizeX(),y1=y0+shape.sizeY(),z1=z0+shape.sizeZ();
-        if(WIRES.of(new Seen(host.identity(),""),view.pixels(WIRE,camera.x,camera.y,camera.z,x0,y0,z0,x1,y1,z1))==0&&frustum.isVisible(new net.minecraft.world.phys.AABB(x0,y0,z0,x1,y1,z1))){
-            var quads=wiring(shell);
-            if(quads!=null&&!quads.isEmpty()){
-                pose.pushPose();pose.translate(x0-camera.x,y0-camera.y,z0-camera.z);var consumer=buffers.getBuffer(RenderType.entityCutoutNoCull(net.minecraft.world.inventory.InventoryMenu.BLOCK_ATLAS));int light=LevelRenderer.getLightColor(Minecraft.getInstance().level,shell.getBlockPos());
-                for(var q:quads)consumer.putBulkData(pose.last(),q,1,1,1,1,light,OverlayTexture.NO_OVERLAY,true);pose.popPose();
-            }
+        if(!shadow&&WIRES.of(new Seen(host.identity(),""),view.pixels(WIRE,camera.x,camera.y,camera.z,x0,y0,z0,x1,y1,z1))==0&&frustum.isVisible(new net.minecraft.world.phys.AABB(x0,y0,z0,x1,y1,z1))){
+            var wiring=wiring(shell);
+            if(wiring!=null&&(!wiring.hardware().isEmpty()||!wiring.finish().isEmpty()))
+                SHOWN.add(new Shown(shell.getBlockPos(),origin,wiring,LevelRenderer.getLightColor(Minecraft.getInstance().level,shell.getBlockPos())));
         }
         for(var p:EquipmentInstruments.of(shape).probes())if(!p.manual()&&p.display()){
             var mount=InstrumentHosts.equipmentMount(p,origin);
@@ -149,23 +167,94 @@ public final class InstrumentRenderer {
             drawSensor(pose,buffers,mount,camera,Sensor.Kind.valueOf(p.quantity().name()),255,"EQ-"+host.identity(),true,tier,false);
         }
     }
-    /** The wiring's quads, baked again only when what they are drawn from changed; null while a sprite is missing. */
-    private static List<net.minecraft.client.renderer.block.model.BakedQuad> wiring(com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity shell){
+    /** This frame's wiring: the atlas hardware, then the finish on the frame's path; always empties {@link #SHOWN}. */
+    private static void flushWiring(RenderLevelStageEvent event,PoseStack pose,MultiBufferSource.BufferSource buffers,Vec3 camera){
+        if(SHOWN.isEmpty())return;
+        try{
+            var atlas=RenderType.entityCutoutNoCull(net.minecraft.world.inventory.InventoryMenu.BLOCK_ATLAS);var consumer=buffers.getBuffer(atlas);
+            for(var s:SHOWN){pose.pushPose();pose.translate(s.origin().getX()-camera.x,s.origin().getY()-camera.y,s.origin().getZ()-camera.z);for(var q:s.wiring().hardware())consumer.putBulkData(pose.last(),q,1,1,1,1,s.light(),OverlayTexture.NO_OVERLAY,true);pose.popPose();}
+            buffers.endBatch(atlas);
+            var names=new TreeSet<String>();for(var s:SHOWN)names.addAll(s.wiring().finish().keySet());
+            boolean lit=com.wormzjl.icheme.client.fx.FxPath.current()==com.wormzjl.icheme.client.fx.FxPath.SHADER&&ClientConfig.pbrTextures()&&com.wormzjl.icheme.client.fx.FxShaders.wiring()!=null&&!LIT.disabled();
+            if(!lit||!LIT.run(()->drawLit(event,camera,names)))drawFlat(pose,buffers,camera,names);
+        }finally{SHOWN.clear();}
+    }
+    /** COMPATIBLE, OFF or pbr_textures off: the vanilla entity cutout shader on the tiled textures; a shader pack loads _n and _s beside them. */
+    private static void drawFlat(PoseStack pose,MultiBufferSource.BufferSource buffers,Vec3 camera,Set<String> names){
+        for(var name:names){
+            var type=RenderType.entityCutoutNoCull(texture(name));var consumer=buffers.getBuffer(type);
+            for(var s:SHOWN){
+                var polygons=s.wiring().finish().get(name);if(polygons==null)continue;
+                pose.pushPose();pose.translate(s.origin().getX()-camera.x,s.origin().getY()-camera.y,s.origin().getZ()-camera.z);var last=pose.last();int light=s.light();
+                for(var p:polygons)corners(p,(x,y,z,u,v,nx,ny,nz)->consumer.addVertex(last,x,y,z).setColor(255,255,255,255).setUv(u,v).setOverlay(OverlayTexture.NO_OVERLAY).setLight(light).setNormal(last,nx,ny,nz));
+                pose.popPose();
+            }
+            buffers.endBatch(type);
+        }
+    }
+    /** SHADER path: our wiring shader with the texture's _n and _s, one cached buffer per structure and texture, its light as a uniform. */
+    private static void drawLit(RenderLevelStageEvent event,Vec3 camera,Set<String> names){
+        var mc=Minecraft.getInstance();var textures=mc.getTextureManager();
+        var buffers=new HashMap<Uploaded,VertexBuffer>();
+        for(var name:names)for(var s:SHOWN){var polygons=s.wiring().finish().get(name);if(polygons==null)continue;var key=new Uploaded(s.at(),s.wiring().version(),name);var buffer=uploaded(key,polygons);if(buffer!=null)buffers.put(key,buffer);}
+        for(var name:names){
+            var type=com.wormzjl.icheme.client.fx.FxRenderTypes.wiring(texture(name));
+            type.setupRenderState();var shader=com.mojang.blaze3d.systems.RenderSystem.getShader();
+            try{
+                if(shader==null)throw new IllegalStateException("The wiring shader is not bound");
+                var origin=shader.getUniform("WiringOrigin");var light=shader.getUniform("WiringLight");
+                if(origin==null||light==null)throw new IllegalStateException("The wiring shader lacks WiringOrigin or WiringLight");
+                shader.setDefaultUniforms(VertexFormat.Mode.QUADS,event.getModelViewMatrix(),event.getProjectionMatrix(),mc.getWindow());
+                shader.setSampler("NormalMap",textures.getTexture(texture(name+"_n")));shader.setSampler("SpecularMap",textures.getTexture(texture(name+"_s")));
+                shader.apply();
+                for(var s:SHOWN){
+                    var buffer=buffers.get(new Uploaded(s.at(),s.wiring().version(),name));if(buffer==null)continue;
+                    origin.set((float)(s.origin().getX()-camera.x),(float)(s.origin().getY()-camera.y),(float)(s.origin().getZ()-camera.z));origin.upload();
+                    light.set(s.light()&0xFFFF,s.light()>>>16&0xFFFF);light.upload();
+                    buffer.bind();buffer.draw();
+                }
+            }finally{if(shader!=null)shader.clear();VertexBuffer.unbind();type.clearRenderState();}
+        }
+    }
+    /** The finish mesh of {@code key}, uploaded on first use; light comes from the shader's uniform. */
+    private static VertexBuffer uploaded(Uploaded key,List<Mesh.Polygon> polygons){
+        var buffer=UPLOADED.get(key);if(buffer!=null)return buffer;
+        int vertices=0;for(var p:polygons)vertices+=4*((p.size()-1)/2);
+        try(var bytes=new ByteBufferBuilder(Math.max(256,vertices*DefaultVertexFormat.NEW_ENTITY.getVertexSize()))){
+            var builder=new BufferBuilder(bytes,VertexFormat.Mode.QUADS,DefaultVertexFormat.NEW_ENTITY);
+            for(var p:polygons)corners(p,(x,y,z,u,v,nx,ny,nz)->builder.addVertex(x,y,z).setColor(-1).setUv(u,v).setOverlay(OverlayTexture.NO_OVERLAY).setLight(0).setNormal(nx,ny,nz));
+            var mesh=builder.build();if(mesh==null)return null;
+            buffer=new VertexBuffer(VertexBuffer.Usage.STATIC);buffer.bind();buffer.upload(mesh);VertexBuffer.unbind();
+        }
+        UPLOADED.put(key,buffer);return buffer;
+    }
+    private interface Corner{void at(float x,float y,float z,float u,float v,float nx,float ny,float nz);}
+    /** A convex finish polygon as quads (fan pairs, the last corner repeated when odd), v from metres to texture periods. */
+    private static void corners(Mesh.Polygon polygon,Corner out){
+        var p=polygon.positions();var uv=polygon.uvs();var n=polygon.normals();
+        for(int first=1;first+1<polygon.size();first+=2)for(int c:new int[]{0,first,first+1,Math.min(first+2,polygon.size()-1)})
+            out.at((float)p[3*c],(float)p[3*c+1],(float)p[3*c+2],(float)uv[2*c],(float)(uv[2*c+1]/InstrumentWiring.PERIOD),(float)n[3*c],(float)n[3*c+1],(float)n[3*c+2]);
+    }
+    /** The wiring, built again only when what it is drawn from changed; null while a sprite is missing. */
+    private static Wiring wiring(com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity shell){
         var shape=shell.shape();var host=shell.instruments();
         var installed=new HashSet<String>();host.installed().forEach(i->installed.add(i.key().mount()));host.sensors().forEach(i->installed.add(i.key().mount()));
         var codes=new ArrayList<Integer>(java.util.Collections.nCopies(shape.nozzles().size(),0));
         if(shape.kind()==EquipmentShape.Kind.EXCHANGER)for(var port:ShapeRasterizer.ports(shape)){var c=port.cell();var at=shell.origin().offset(c.x(),c.y(),c.z());if(shell.getLevel().hasChunkAt(at)&&shell.getLevel().getBlockEntity(at) instanceof com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity piece)codes.set(port.nozzle(),ShapeRasterizer.nozzleCode(shape,piece.cell(),port.nozzle(),piece.nozzles()));}
         var detail=com.wormzjl.icheme.client.model.EquipmentShellModel.detail();var atlas=com.wormzjl.icheme.client.model.EquipmentShellModel.sprite(Mesh.Material.values()[0]);if(atlas==null)return null;
         var kept=WIRING.get(shell.getBlockPos());
-        if(kept!=null&&kept.atlas()==atlas&&kept.detail()==detail&&kept.shape().equals(shape)&&kept.installed().equals(installed)&&kept.codes().equals(codes))return kept.quads();
+        if(kept!=null&&kept.atlas()==atlas&&kept.detail()==detail&&kept.shape().equals(shape)&&kept.installed().equals(installed)&&kept.codes().equals(codes))return kept;
         var drawing=ShapeRasterizer.instrumentWiring(shape,installed,detail,codes);List<net.minecraft.client.renderer.block.model.BakedQuad> quads=List.of();
-        if(!drawing.polygons().isEmpty()){
+        var steel=new ArrayList<Mesh.Polygon>();var finish=new HashMap<String,List<Mesh.Polygon>>();
+        for(int i=0;i<drawing.polygons().size();i++){var name=drawing.finishes().get(i).texture();if(name==null)steel.add(drawing.polygons().get(i));else finish.computeIfAbsent(name,k->new ArrayList<>()).add(drawing.polygons().get(i));}
+        if(!steel.isEmpty()){
             var sprites=new net.minecraft.client.renderer.texture.TextureAtlasSprite[Mesh.Material.values().length];for(var m:Mesh.Material.values()){sprites[m.ordinal()]=com.wormzjl.icheme.client.model.EquipmentShellModel.sprite(m);if(sprites[m.ordinal()]==null)return null;}
-            quads=com.wormzjl.icheme.client.model.EquipmentShellModel.bake(drawing.polygons(),sprites,true);
+            quads=com.wormzjl.icheme.client.model.EquipmentShellModel.bake(steel,sprites,true);
         }
         if(WIRING.size()>=256)WIRING.clear();
-        WIRING.put(shell.getBlockPos(),new Wiring(shape,Set.copyOf(installed),List.copyOf(codes),detail,atlas,quads));
-        return quads;
+        var wiring=new Wiring(shape,Set.copyOf(installed),List.copyOf(codes),detail,atlas,quads,Map.copyOf(finish),++wiringBuilds);
+        WIRING.put(shell.getBlockPos(),wiring);
+        return wiring;
     }
     /** Whether a mount's dial or head, with its tap, can be on the screen. */
     private static boolean visible(net.minecraft.client.renderer.culling.Frustum frustum,Instrument.Mount mount){
@@ -291,7 +380,7 @@ public final class InstrumentRenderer {
     public static FluidNetwork.InstrumentDisplay get(FluidNetwork.InstrumentTarget target){return CACHE.get(target);}
     public static void accept(FluidNetwork.InstrumentDisplay display){if(WATCHED.contains(display.target())){CACHE.put(display.target(),display);var mc=Minecraft.getInstance();if(mc.level!=null)RECEIVED.put(display.target(),mc.level.getGameTime());}}
     public static void forget(BlockPos pos){var removed=WATCHED.stream().filter(t->t.position().equals(pos)).toList();WATCHED.removeAll(removed);removed.forEach(CACHE::remove);removed.forEach(RECEIVED::remove);if(Minecraft.getInstance().getConnection()!=null)FluidNetwork.requestInstruments(List.of(),removed);}
-    public static void clear(){WIRING.clear();DIALS.clear();HEADS.clear();WIRES.clear();shown=List.of();shownIn=null;shownAt=Long.MIN_VALUE;CACHE.clear();RECEIVED.clear();WATCHED.clear();level=null;ticks=0;}
+    public static void clear(){WIRING.clear();UPLOADED.clear();SHOWN.clear();DIALS.clear();HEADS.clear();WIRES.clear();shown=List.of();shownIn=null;shownAt=Long.MIN_VALUE;CACHE.clear();RECEIVED.clear();WATCHED.clear();level=null;ticks=0;}
     @SubscribeEvent public static void tick(ClientTickEvent.Post event){var mc=Minecraft.getInstance();if(mc.level!=level){clear();level=mc.level;}if(mc.level==null||mc.player==null)return;if(++ticks%20!=0)return;var nearby=new ArrayList<FluidNetwork.InstrumentTarget>();var distances=new HashMap<FluidNetwork.InstrumentTarget,Double>();for(var h:InstrumentHosts.nearby(mc.level,mc.player.position(),120,true))for(var i:h.metadata().installed()){var mount=h.mount(i.key().mount());if(mount!=null&&mount.centre().distanceToSqr(mc.player.position())<=120*120){var target=new FluidNetwork.InstrumentTarget(h.entity().getBlockPos(),i.key(),i.instance());nearby.add(target);distances.put(target,mount.centre().distanceToSqr(mc.player.position()));}}nearby.sort(Comparator.comparingDouble(distances::get));var wanted=new HashSet<>(nearby.subList(0,Math.min(64,nearby.size())));var add=wanted.stream().filter(t->!WATCHED.contains(t)).toList();var remove=WATCHED.stream().filter(t->!wanted.contains(t)).toList();WATCHED.removeAll(remove);remove.forEach(CACHE::remove);remove.forEach(RECEIVED::remove);WATCHED.addAll(add);FluidNetwork.requestInstruments(add,remove);}
     @SubscribeEvent public static void logout(ClientPlayerNetworkEvent.LoggingOut event){clear();}
 }
