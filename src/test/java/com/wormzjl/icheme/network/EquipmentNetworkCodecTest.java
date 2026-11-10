@@ -59,7 +59,7 @@ class EquipmentNetworkCodecTest {
     }
 
     @Test void deconstructionRequestsRoundTrip() {
-        assertEquals("equipment-22", EquipmentNetwork.PROTOCOL);
+        assertEquals("equipment-23", EquipmentNetwork.PROTOCOL);
         var request = new EquipmentNetwork.Deconstruct(AT, AT.north(5), 12345, 99);
         assertEquals(request, roundTrip(EquipmentNetwork.Deconstruct.STREAM_CODEC, request));
 
@@ -246,5 +246,40 @@ class EquipmentNetworkCodecTest {
         var rename = new EquipmentNetwork.Rename(AT, "P-101 水泵");
         assertEquals(rename, roundTrip(EquipmentNetwork.Rename.STREAM_CODEC, rename));
         assertThrows(Exception.class, () -> roundTrip(EquipmentNetwork.Rename.STREAM_CODEC, new EquipmentNetwork.Rename(AT, "x".repeat(EquipmentNetwork.Rename.MAX_TEXT + 1))));
+    }
+
+    /**
+     * The far silhouettes (batch 2026-11-10-custom-shader-system, W10): the subscription crosses within its radius cap, and the
+     * registry's records cross whole (origin, shape as the shell's tag, paint); a full set leaves in batches of 32, the reset
+     * on the first and the removals on the last.
+     */
+    @Test void silhouetteWatchAndBatchesRoundTrip() {
+        var watch = new EquipmentNetwork.SilhouetteWatch(com.wormzjl.icheme.runtime.fluid.Silhouettes.MAXIMUM_RADIUS, true);
+        assertEquals(watch, roundTrip(EquipmentNetwork.SilhouetteWatch.STREAM_CODEC, watch));
+        assertThrows(IllegalArgumentException.class, () -> new EquipmentNetwork.SilhouetteWatch(com.wormzjl.icheme.runtime.fluid.Silhouettes.MAXIMUM_RADIUS + 1, true));
+        var pump = EquipmentShape.unit(EquipmentShape.Kind.PUMP, .25, 1, EquipmentShape.Heading.NORTH, 0);
+        var tower = EquipmentShape.unit(EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER, 8, 2, EquipmentShape.Heading.NORTH, 0)
+                .withTowerBank(new com.wormzjl.icheme.science.equipment.TowerBank(2, 1));
+        var placed = new ArrayList<com.wormzjl.icheme.runtime.fluid.Silhouettes.Placement>();
+        for (int i = 0; i < 70; i++)
+            placed.add(new com.wormzjl.icheme.runtime.fluid.Silhouettes.Placement(AT.east(20 * i), i % 2 == 0 ? pump : tower, i % 3 == 0 ? Paint.DEFAULT : new Paint(0xF7B500, 0x2F4538)));
+        var parts = EquipmentNetwork.split(new com.wormzjl.icheme.runtime.fluid.Silhouettes.Batch(true, placed, List.of(AT.below())));
+        assertEquals(3, parts.size());
+        assertTrue(parts.get(0).reset());
+        assertFalse(parts.get(1).reset() || parts.get(2).reset());
+        assertEquals(List.of(), parts.get(0).removed());
+        assertEquals(List.of(AT.below()), parts.get(2).removed());
+        var back = new ArrayList<com.wormzjl.icheme.runtime.fluid.Silhouettes.Placement>();
+        for (var part : parts) {
+            var read = roundTrip(EquipmentNetwork.SilhouetteBatch.STREAM_CODEC, part);
+            assertEquals(part, read);
+            back.addAll(read.placed());
+        }
+        assertEquals(placed, back);
+        // Removals alone still cross, in one batch.
+        var removal = EquipmentNetwork.split(new com.wormzjl.icheme.runtime.fluid.Silhouettes.Batch(false, List.of(), List.of(AT)));
+        assertEquals(1, removal.size());
+        assertEquals(removal.getFirst(), roundTrip(EquipmentNetwork.SilhouetteBatch.STREAM_CODEC, removal.getFirst()));
+        assertThrows(IllegalArgumentException.class, () -> new EquipmentNetwork.SilhouetteBatch(false, placed, List.of()));
     }
 }

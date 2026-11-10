@@ -55,9 +55,11 @@ import java.util.*;
  * {@link FluidView.Power} (the Power group; NO POWER and UNMETERED stay on the status).</p>
  * <p>{@code fluid-20} (batch 2026-11-09-batch-distiller, W6): a batch still's pot carries its {@link FluidView.Still} (its page),
  * and the controls carry a still's settings ({@link StillControls}).</p>
+ * <p>{@code fluid-21} (batch 2026-11-10-custom-shader-system, W4 and W5): the cooling towers' and the fired heaters' watches
+ * ({@link Watch#TOWERS}, {@link Watch#HEATERS}) and their published plumes and flues ({@link TowerPlume}, {@link HeaterFlue}).</p>
  */
 public final class FluidNetwork {
-    public static final String PROTOCOL="fluid-20";
+    public static final String PROTOCOL="fluid-21";
     private static final Gson JSON=new Gson();
     public static final int MAX_JSON=262144;
     public static final int MAX_EDIT_JSON=4096;
@@ -520,6 +522,10 @@ public final class FluidNetwork {
         public static final Type<Watch> FLARES=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"flare_watch"));
         /** The batch stills, at their pots' cells (batch 2026-11-09-batch-distiller, W6). */
         public static final Type<Watch> STILLS=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"still_watch"));
+        /** The cooling towers, at their basins' fluid cells (batch 2026-11-10-custom-shader-system, W4): their plumes. */
+        public static final Type<Watch> TOWERS=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"tower_watch"));
+        /** The fired heaters, at their fluid cells, their radiant coils' (batch 2026-11-10-custom-shader-system, W5): their flues. */
+        public static final Type<Watch> HEATERS=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"heater_watch"));
         public Watch{Objects.requireNonNull(type);watch=List.copyOf(watch);unwatch=List.copyOf(unwatch);validate(watch);validate(unwatch);}
         static StreamCodec<RegistryFriendlyByteBuf,Watch> codec(Type<Watch> type){return new StreamCodec<>() {
             public Watch decode(RegistryFriendlyByteBuf b){return new Watch(type,targets(b),targets(b));}
@@ -559,14 +565,54 @@ public final class FluidNetwork {
     /**
      * Server to client: a flare stack's published state for its flame (batch 2026-11-09-flare-stack, W5): its status by
      * {@code Flares.Status} ordinal, its flame (heat released over its rating, 0 to 1) and its plume of unburnt gas (the flow
-     * over the most it passes, 0 to 1, while the flame is out). No process inventory or solver results.
+     * over the most it passes, 0 to 1, while the flame is out). No process inventory or solver results. Since flare-2 (batch
+     * 2026-11-10-custom-shader-system, W3) also its soot index, 0 to 1 ({@code Flare.soot}), and its gas's exit velocity at
+     * the tip, m/s ({@code Flare.exitVelocity}).
      */
-    public record FlareState(Target target,int status,float flame,float plume) implements CustomPacketPayload {
-        public FlareState{Objects.requireNonNull(target);if(status<0||status>15||!(flame>=0&&flame<=1)||!(plume>=0&&plume<=1))throw new IllegalArgumentException("Invalid flare state");}
+    public record FlareState(Target target,int status,float flame,float plume,float soot,float exitVelocity) implements CustomPacketPayload {
+        public FlareState(Target target,int status,float flame,float plume){this(target,status,flame,plume,0,0);}
+        public FlareState{Objects.requireNonNull(target);if(status<0||status>15||!(flame>=0&&flame<=1)||!(plume>=0&&plume<=1)||!(soot>=0&&soot<=1)||!(exitVelocity>=0&&exitVelocity<=MAXIMUM_SPEED))throw new IllegalArgumentException("Invalid flare state");}
         public static final Type<FlareState> TYPE=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"flare_state"));
         public static final StreamCodec<RegistryFriendlyByteBuf,FlareState> STREAM_CODEC=new StreamCodec<>() {
-            public FlareState decode(RegistryFriendlyByteBuf b){return new FlareState(readTarget(b),b.readUnsignedByte(),b.readFloat(),b.readFloat());}
-            public void encode(RegistryFriendlyByteBuf b,FlareState p){writeTarget(b,p.target);b.writeByte(p.status);b.writeFloat(p.flame);b.writeFloat(p.plume);}
+            public FlareState decode(RegistryFriendlyByteBuf b){return new FlareState(readTarget(b),b.readUnsignedByte(),b.readFloat(),b.readFloat(),b.readFloat(),b.readFloat());}
+            public void encode(RegistryFriendlyByteBuf b,FlareState p){writeTarget(b,p.target);b.writeByte(p.status);b.writeFloat(p.flame);b.writeFloat(p.plume);b.writeFloat(p.soot);b.writeFloat(p.exitVelocity);}
+        };
+        @Override public Type<? extends CustomPacketPayload> type(){return TYPE;}
+    }
+    /** The highest speed a presentation payload carries, m/s (a sonic tip at most). */
+    public static final float MAXIMUM_SPEED=1000;
+    /**
+     * Server to client: a cooling tower's exhaust for its plume (batch 2026-11-10-custom-shader-system, W4), from the rates its
+     * island last accepted ({@code TowerExchange.Rates}): the dry air through its fill, kg/s, the air leaving it, K and kg water
+     * per kg dry air ({@code TowerTransfer.exhaust}), and the water it evaporates, kg/s. No air (below {@code TowerTransfer.NO_AIR})
+     * leaves no plume: 0 air, the ambient air. Watched at the tower's fluid cell ({@link Watch#TOWERS}). No process inventory.
+     */
+    public record TowerPlume(Target target,float dryAir,float exhaustTemperature,float exhaustHumidity,float evaporation) implements CustomPacketPayload {
+        public TowerPlume{Objects.requireNonNull(target);
+            if(!(dryAir>=0&&Float.isFinite(dryAir))||!(exhaustTemperature>0&&exhaustTemperature<1000)||!(exhaustHumidity>=0&&exhaustHumidity<10)||!(evaporation>=0&&Float.isFinite(evaporation)))throw new IllegalArgumentException("Invalid tower plume");}
+        public static final Type<TowerPlume> TYPE=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"tower_plume"));
+        public static final StreamCodec<RegistryFriendlyByteBuf,TowerPlume> STREAM_CODEC=new StreamCodec<>() {
+            public TowerPlume decode(RegistryFriendlyByteBuf b){return new TowerPlume(readTarget(b),b.readFloat(),b.readFloat(),b.readFloat(),b.readFloat());}
+            public void encode(RegistryFriendlyByteBuf b,TowerPlume p){writeTarget(b,p.target);b.writeFloat(p.dryAir);b.writeFloat(p.exhaustTemperature);b.writeFloat(p.exhaustHumidity);b.writeFloat(p.evaporation);}
+        };
+        @Override public Type<? extends CustomPacketPayload> type(){return TYPE;}
+    }
+    /**
+     * Server to client: a fired heater's flue at its stacks (batch 2026-11-10-custom-shader-system, W5): its firing (the heat
+     * fired over the design's, 0 to 1), the flue gas at the stack, K (the bridgewall less the convection coil's heat over the
+     * flue's capacity rate, {@code ConvectionCoil.stackTemperature}), the flue gas, kg/s, its water, kg per kg of dry flue gas,
+     * and its fuel's phase by {@code Burners.Fuel} ordinal. Watched at the heater's fluid cell, its radiant coil's
+     * ({@link Watch#HEATERS}). No process inventory.
+     */
+    public record HeaterFlue(Target target,float firing,float stackTemperature,float flueFlow,float waterShare,int fuel) implements CustomPacketPayload {
+        public HeaterFlue{Objects.requireNonNull(target);
+            if(!(firing>=0&&firing<=1)||!(stackTemperature>0&&stackTemperature<3000)||!(flueFlow>=0&&Float.isFinite(flueFlow))||!(waterShare>=0&&waterShare<10)
+                    ||fuel<0||fuel>=com.wormzjl.icheme.science.fluid.network.Burners.Fuel.values().length)throw new IllegalArgumentException("Invalid heater flue");}
+        public com.wormzjl.icheme.science.fluid.network.Burners.Fuel fuelKind(){return com.wormzjl.icheme.science.fluid.network.Burners.Fuel.values()[fuel];}
+        public static final Type<HeaterFlue> TYPE=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"heater_flue"));
+        public static final StreamCodec<RegistryFriendlyByteBuf,HeaterFlue> STREAM_CODEC=new StreamCodec<>() {
+            public HeaterFlue decode(RegistryFriendlyByteBuf b){return new HeaterFlue(readTarget(b),b.readFloat(),b.readFloat(),b.readFloat(),b.readFloat(),b.readUnsignedByte());}
+            public void encode(RegistryFriendlyByteBuf b,HeaterFlue p){writeTarget(b,p.target);b.writeFloat(p.firing);b.writeFloat(p.stackTemperature);b.writeFloat(p.flueFlow);b.writeFloat(p.waterShare);b.writeByte(p.fuel);}
         };
         @Override public Type<? extends CustomPacketPayload> type(){return TYPE;}
     }
@@ -710,8 +756,18 @@ public final class FluidNetwork {
             if(context.player() instanceof ServerPlayer player)FluidWorldAuthority.find(player.server).ifPresent(world->world.watchDrivers(player,p.watch,p.unwatch));
         });
         mover.playToClient(DriverState.TYPE,DriverState.STREAM_CODEC,(p,context)->com.wormzjl.icheme.client.DriverSounds.accept(p.origin(),p.running(),p.speed()));
-        // flare-1 (batch 2026-11-09-flare-stack, W5): the flares' watch and their flame state.
-        var flare=event.registrar("flare-1").executesOn(HandlerThread.MAIN);
+        // fluid-21 (batch 2026-11-10-custom-shader-system, W4, W5): the towers' and the fired heaters' watches, their plumes and flues.
+        fluid.playToServer(Watch.TOWERS,Watch.codec(Watch.TOWERS),(p,context)->{
+            if(context.player() instanceof ServerPlayer player)FluidWorldAuthority.find(player.server).ifPresent(world->world.watchTowers(player,p.watch,p.unwatch));
+        });
+        fluid.playToClient(TowerPlume.TYPE,TowerPlume.STREAM_CODEC,(p,context)->com.wormzjl.icheme.client.fx.state.ProcessStates.accept(p));
+        fluid.playToServer(Watch.HEATERS,Watch.codec(Watch.HEATERS),(p,context)->{
+            if(context.player() instanceof ServerPlayer player)FluidWorldAuthority.find(player.server).ifPresent(world->world.watchHeaters(player,p.watch,p.unwatch));
+        });
+        fluid.playToClient(HeaterFlue.TYPE,HeaterFlue.STREAM_CODEC,(p,context)->com.wormzjl.icheme.client.fx.state.ProcessStates.accept(p));
+        // flare-1 (batch 2026-11-09-flare-stack, W5): the flares' watch and their flame state; flare-2 (batch
+        // 2026-11-10-custom-shader-system, W3): the state carries the soot index and the exit velocity.
+        var flare=event.registrar("flare-2").executesOn(HandlerThread.MAIN);
         flare.playToServer(Watch.FLARES,Watch.codec(Watch.FLARES),(p,context)->{
             if(context.player() instanceof ServerPlayer player)FluidWorldAuthority.find(player.server).ifPresent(world->world.watchFlares(player,p.watch,p.unwatch));
         });
@@ -747,6 +803,8 @@ public final class FluidNetwork {
     public static void sendDriver(ServerPlayer player,DriverState state){PacketDistributor.sendToPlayer(player,state);}
     public static void sendFlare(ServerPlayer player,FlareState state){PacketDistributor.sendToPlayer(player,state);}
     public static void sendStill(ServerPlayer player,StillState state){PacketDistributor.sendToPlayer(player,state);}
+    public static void sendTower(ServerPlayer player,TowerPlume state){PacketDistributor.sendToPlayer(player,state);}
+    public static void sendHeater(ServerPlayer player,HeaterFlue state){PacketDistributor.sendToPlayer(player,state);}
     /** Client: the open still page's fuel slot: load it from the inventory, or take its stack out (W6). */
     public static void stillFuel(FluidDeviceMenu menu,boolean load){PacketDistributor.sendToServer(new StillFuelPayload(menu.containerId,menu.position(),menu.identity(),load));}
     /** Client: asks the server to watch and to stop watching drivers by their origins (W3). */

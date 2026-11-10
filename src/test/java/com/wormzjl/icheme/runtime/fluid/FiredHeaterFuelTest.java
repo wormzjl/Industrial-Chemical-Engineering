@@ -144,7 +144,7 @@ class FiredHeaterFuelTest {
             var empty = WorldTopologyLedger.Snapshot.empty(catalog);
             ledger = new WorldTopologyLedger(new WorldTopologyLedger.Snapshot(0, 1000, active, List.of(), empty.constructed(), empty.destroyed(), empty.basis()));
             stores = new ElectricStores(ledger, device -> null, coordinator, () -> ElectricStores.Settings.DEFAULT);
-            heaters = new FiredHeaters(ledger, coordinator, stores, FluidWorldAuthority.heatingValues(catalog, model), model.molecularWeights());
+            heaters = new FiredHeaters(ledger, coordinator, stores, FluidWorldAuthority.heatingValues(catalog, model), model.molecularWeights(), FluidWorldAuthority.formulas(catalog, model));
             radiant = islands.radiant();
             fuel = islands.fuel();
         }
@@ -217,6 +217,26 @@ class FiredHeaterFuelTest {
         assertEquals(view.demand(), rig.heat(), .02 * view.demand() + 1e3, "the coil fires its demand");
         assertEquals(ElectricStores.burnerDraw(rig.ledger.active().get(BURNERS), view.fired()), view.fanDraw(), 1e-9);
         assertTrue(view.fanDraw() > 5e-4 * view.fired() && view.fanDraw() < 1.5e-3 * view.fired(), "about 1 kW electric per MW fired: " + view.fanDraw());
+    }
+
+    /** The flue for the stack's plume (batch 2026-11-10-custom-shader-system, W5): methane gas, its water, its fuel and air. */
+    @Test
+    void theFlueCarriesTheFuelsWaterAndItsCombustionAir() {
+        var rig = new Rig(compile(pure("Methane", 300, 500_000)));
+        var before = rig.heaters.flue(BURNERS);
+        assertEquals(Burners.Fuel.GAS, before.fuel(), "before any fuel: gas");
+        assertEquals(Burners.METHANE_WATER, before.waterShare(), "before any fuel: methane's water");
+        assertEquals(0, before.flueFlow(), 1e-12, "unfired: no flue gas");
+        rig.power();
+        rig.run(12, true);
+        var flue = rig.heaters.flue(BURNERS);
+        var view = rig.heaters.view(BURNERS);
+        assertEquals(Burners.Fuel.GAS, flue.fuel());
+        assertEquals(.122, flue.waterShare(), .002, "methane's flue: 12 % water on the dry gas");
+        assertEquals(view.fired(), flue.fired(), 1e-9);
+        assertEquals(view.fuelFlow() + Burners.AIR_PER_FIRED * view.fired(), flue.flueFlow(), 1e-12, "the fuel and its air");
+        assertTrue(flue.flueFlow() > 20 * flue.fuelFlow(), "about 20 kg of flue gas per kg of methane: " + flue.flueFlow() / flue.fuelFlow());
+        assertNull(rig.heaters.flue(RADIANT), "the flue is the burners'");
     }
 
     @Test

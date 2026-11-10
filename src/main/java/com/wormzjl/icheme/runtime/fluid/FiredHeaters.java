@@ -36,10 +36,22 @@ public final class FiredHeaters {
     /** A heater as its page shows it: its radiant demand, the fuel asked for and fired (W), the fuel's mass flow (kg/s) and heat (J/kg), the fans' draw (W), its alarms. */
     public record View(double demand,double asked,double fired,double fuelFlow,double heatingValue,double fanDraw,List<EquipmentAlarm> alarms) {}
 
+    /**
+     * A heater's flue for its presentation (batch 2026-11-10-custom-shader-system, W5): the heat fired (W), the fuel's mass flow
+     * (kg/s), the flue gas's water (kg per kg of dry flue gas, {@link Burners#waterShare}) and the fuel's phase, as its last
+     * fuel slice burnt them; methane's water and {@code GAS} before any fuel arrived.
+     */
+    public record Flue(double fired,double fuelFlow,double waterShare,Burners.Fuel fuel) {
+        /** The flue gas, kg/s: the fuel and its combustion air ({@link Burners#flueFlow}). */
+        public double flueFlow(){return Burners.flueFlow(fuelFlow,fired);}
+    }
+
     private static final class Heater {
         final long burners;
         long radiant;
         double demand,fired,flow,perKilogram;
+        double water=Burners.METHANE_WATER;
+        Burners.Fuel fuel=Burners.Fuel.GAS;
         boolean demandSeen,firedSeen;
         Long radiantIsland,fuelIsland;
         Heater(long burners){this.burners=burners;}
@@ -49,6 +61,8 @@ public final class FiredHeaters {
     private final IslandCoordinator coordinator;
     private final ElectricStores electric;
     private final double[] heatingValues,molarMasses;
+    /** The formulas, atoms of C, H, N, O, S per molecule, for the flue's water; null: methane's. */
+    private final double[][] formulas;
     private final Map<Long,Heater> heaters=new TreeMap<>();
     /** The burners of each radiant coil: rebuilt on the cadence and when a lookup misses. */
     private final Map<Long,Long> byRadiant=new HashMap<>();
@@ -58,9 +72,13 @@ public final class FiredHeaters {
      * @param molarMasses   its molar masses, kg/mol, in the same order
      */
     public FiredHeaters(WorldTopologyLedger topology,IslandCoordinator coordinator,ElectricStores electric,double[] heatingValues,double[] molarMasses) {
+        this(topology,coordinator,electric,heatingValues,molarMasses,null);
+    }
+    /** @param formulas the formulas in the same order ({@link com.wormzjl.icheme.science.material.MaterialCatalog#formulas}), or null: every flue takes methane's water */
+    public FiredHeaters(WorldTopologyLedger topology,IslandCoordinator coordinator,ElectricStores electric,double[] heatingValues,double[] molarMasses,double[][] formulas) {
         this.topology=Objects.requireNonNull(topology);this.coordinator=Objects.requireNonNull(coordinator);this.electric=Objects.requireNonNull(electric);
-        if(heatingValues.length!=molarMasses.length)throw new IllegalArgumentException("Heating values and molar masses disagree");
-        this.heatingValues=heatingValues.clone();this.molarMasses=molarMasses.clone();
+        if(heatingValues.length!=molarMasses.length||formulas!=null&&formulas.length!=molarMasses.length)throw new IllegalArgumentException("Heating values, molar masses and formulas disagree");
+        this.heatingValues=heatingValues.clone();this.molarMasses=molarMasses.clone();this.formulas=formulas==null?null:formulas.clone();
     }
 
     /** Follows the registrations: a heater for every burners registration, keyed by it; a gone one leaves. On the cadence and on a missed lookup. */
@@ -122,6 +140,8 @@ public final class FiredHeaters {
                 double flow=Math.max(0,average[e]),perKilogram=Burners.perKilogram(donor.inventory().moles(),molarMasses,heatingValues);
                 double fired=flow*perKilogram,before=h.fired;
                 h.flow=flow;h.perKilogram=perKilogram>0||flow>0?perKilogram:h.perKilogram;h.fired=fired;h.fuelIsland=island;h.firedSeen=true;
+                // The flue's water and the fuel's phase, for its presentation (W5): what the fuel now at the valve burns to.
+                if(flow>0){var moles=donor.inventory().moles();h.water=formulas==null?Burners.METHANE_WATER:Burners.waterShare(moles,formulas);h.fuel=phase(donor);}
                 electric.bookedBurners(h.burners,ElectricStores.burnerDraw(topology.active().get(h.burners),fired),start,end);
                 if(moved(before,fired)&&h.radiantIsland!=null)wake.add(h.radiantIsland);
             } else if(pipe.heat() instanceof FiredCoil coil) {
@@ -174,6 +194,21 @@ public final class FiredHeaters {
 
     /** The burners of radiant coil {@code radiant}, or 0. */
     public long burnersOf(long radiant){var h=ofRadiant(radiant);return h==null?0:h.burners;}
+
+    /** The phase a burner's fuel arrives in: solids carried with it, else liquid where its liquid moles outweigh its vapour's. */
+    static Burners.Fuel phase(PassiveNetwork.Reservoir donor) {
+        if(!donor.inventory().solids().empty()||!donor.state().solids().empty())return Burners.Fuel.SOLID;
+        var s=donor.state();double liquid=s.waterLiquid(),vapor=s.waterVapor();
+        for(double n:s.liquid())liquid+=Math.max(0,n);
+        for(double n:s.vapor())vapor+=Math.max(0,n);
+        return liquid>vapor?Burners.Fuel.LIQUID:Burners.Fuel.GAS;
+    }
+
+    /** Heater {@code burners}' flue as its last fuel slice burnt (a read), or null for none. */
+    public Flue flue(long burners) {
+        var h=ofBurners(burners);if(h==null)return null;
+        return new Flue(h.fired,h.flow,h.water,h.fuel);
+    }
 
     /** Heater {@code burners} as its page shows it, or null for none. */
     public View view(long burners) {

@@ -91,6 +91,14 @@ public final class FluidWorldAuthority implements AutoCloseable {
     /** The batch stills each player watches for their fires (batch 2026-11-09-batch-distiller, W6), and what was last published. */
     private final Watchers stillWatchers=new Watchers();
     private final Map<Long,com.wormzjl.icheme.network.FluidNetwork.StillState> publishedStills=new HashMap<>();
+    /** The cooling towers each player watches for their plumes (batch 2026-11-10-custom-shader-system, W4), and what was last published. */
+    private final Watchers towerWatchers=new Watchers();
+    private final Map<Long,com.wormzjl.icheme.network.FluidNetwork.TowerPlume> publishedTowers=new HashMap<>();
+    /** The fired heaters each player watches for their flues (W5), by their radiant coils, and what was last published. */
+    private final Watchers heaterWatchers=new Watchers();
+    private final Map<Long,com.wormzjl.icheme.network.FluidNetwork.HeaterFlue> publishedHeaters=new HashMap<>();
+    /** The far silhouettes' subscriptions (W10): registry facts of the placed structures, read as stored. */
+    private final Silhouettes silhouettes=new Silhouettes(this::structuresOf);
     private final Map<Long,com.wormzjl.icheme.network.FluidNetwork.MoverState> publishedMovers=new HashMap<>();
     private final com.wormzjl.icheme.runtime.instrument.InstrumentService instruments;
     private final com.wormzjl.icheme.runtime.control.ControlFacts controlFacts;
@@ -156,7 +164,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         // The Create coupling (W6b): its stress rate; a world opened without Create lost its couplings' blocks, so their parts leave.
         shafts.stressPerFE(IChemE::stressPerFE);if(!net.neoforged.fml.ModList.get().isLoaded("create"))shafts.forget(com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.CREATE_COUPLING);
         // The fired heaters' burners (batch 2026-11-09-furnace-fuel-power): the network's heating values in its conserved order.
-        burners=new FiredHeaters(topology,runtime.coordinator(),electric,heatingValues(catalog,model),model.molecularWeights());shafts.burners(burners);electric.moved(burners::powerMoved);
+        burners=new FiredHeaters(topology,runtime.coordinator(),electric,heatingValues(catalog,model),model.molecularWeights(),formulas(catalog,model));shafts.burners(burners);electric.moved(burners::powerMoved);
         flares=new Flares(topology,heatingValues(catalog,model),model.molecularWeights(),formulas(catalog,model));shafts.flares(flares);
         // The batch stills (batch 2026-11-09-batch-distiller): their pots, heads and outlets share the port hooks with the columns.
         stills=new Stills(topology,registry::owner,runtime.coordinator(),runtime.coordinator()::model,electric,model.components(),model.molecularWeights(),heatingValues(catalog,model));
@@ -288,6 +296,34 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public void structure(PhysicalFluidTopology.Position origin,WorldTopologyLedger.Structure structure) {
         owned();var old=topology.structure(origin);if(old!=null)indexStructure(origin,old,false);
         topology.structure(origin,structure);if(structure!=null)indexStructure(origin,structure,true);data.setDirty();
+        // The far silhouettes follow the registry (W10): its subscribers see the change at the next presentation bucket.
+        if(!Objects.equals(old,structure))silhouettes.changed(origin.dimension());
+    }
+    /** The registry's structures of {@code dimension}, as stored (W10): each origin once, its shape and paint. */
+    private void structuresOf(String dimension,java.util.function.Consumer<Silhouettes.Placement> into) {
+        var seen=new HashSet<PhysicalFluidTopology.Position>();
+        for(var origins:structureChunks.getOrDefault(dimension,Map.of()).values())for(var origin:origins) {
+            if(!seen.add(origin))continue;
+            var s=topology.structure(origin);if(s!=null)into.accept(new Silhouettes.Placement(new BlockPos(origin.x(),origin.y(),origin.z()),s.shape(),s.paint()));
+        }
+    }
+    /**
+     * A client's far silhouette subscription (W10): within {@code radius} blocks ({@link Silhouettes#MAXIMUM_RADIUS} at most) of
+     * where it stands ({@code on}), or none. A subscription is answered at once with the registry's records, as stored.
+     */
+    public void watchSilhouettes(net.minecraft.server.level.ServerPlayer player,int radius,boolean on) {
+        owned();if(closed)return;
+        var batch=silhouettes.watch(player.getUUID(),stand(player),radius,on);
+        if(batch!=null)com.wormzjl.icheme.network.EquipmentNetwork.sendSilhouettes(player,batch);
+    }
+    private static Silhouettes.Stand stand(net.minecraft.server.level.ServerPlayer player) {
+        return player.hasDisconnected()?null:new Silhouettes.Stand(player.serverLevel().dimension().location().toString(),player.getX(),player.getZ());
+    }
+    /** The presentation cadence's silhouette differences (W10): to each subscriber whose registry changed or who moved. */
+    private void publishSilhouettes() {
+        if(silhouettes.idle())return;
+        silhouettes.publish(uuid->{var p=server.getPlayerList().getPlayer(uuid);return p==null?null:stand(p);})
+                .forEach((uuid,batch)->{var p=server.getPlayerList().getPlayer(uuid);if(p!=null)com.wormzjl.icheme.network.EquipmentNetwork.sendSilhouettes(p,batch);});
     }
     /** Adds or removes the structure at {@code origin} in the index of the chunks its box spans. */
     private void indexStructure(PhysicalFluidTopology.Position origin,WorldTopologyLedger.Structure structure,boolean add) {
@@ -1002,6 +1038,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
         if(!rotationWatchers.isEmpty()&&topology.onlineTick()%100==0)publishRotations();
         if(topology.onlineTick()%100==0)publishFlares();
         if(topology.onlineTick()%100==0)publishStills();
+        // The towers' plumes, the fired heaters' flues and the far silhouettes (batch 2026-11-10-custom-shader-system): reads only.
+        if(topology.onlineTick()%100==0){publishTowers();publishHeaters();publishSilhouettes();}
         if(topology.onlineTick()%ElectricStores.CADENCE==0&&propertyHold==null)health.cadence();
         // A generator's port pushes FE to its neighbours (the FE protocol, reading A65): stored FE only, nothing solves.
         pushGenerators();
@@ -1258,7 +1296,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         return new FluidView.Pump(finite(s.available()),finite(s.required()),finite(s.gas()),Math.clamp(h,0,1),curve);
     }
     private static Double finite(double value){return Double.isFinite(value)?value:null;}
-    public void forgetWatcher(UUID player){owned();driverWatchers.remove(player);rotationWatchers.remove(player);tankWatchers.forget(player);for(long id:sightGlassWatchers.devices(player))unwatchSightGlass(player,id);for(long id:moverWatchers.devices(player))unwatchMover(player,id);flareWatchers.forget(player);stillWatchers.forget(player);}
+    public void forgetWatcher(UUID player){owned();driverWatchers.remove(player);rotationWatchers.remove(player);tankWatchers.forget(player);for(long id:sightGlassWatchers.devices(player))unwatchSightGlass(player,id);for(long id:moverWatchers.devices(player))unwatchMover(player,id);flareWatchers.forget(player);stillWatchers.forget(player);towerWatchers.forget(player);heaterWatchers.forget(player);silhouettes.forget(player);}
 
     /** Requested shaft/machine speeds, keyed by dimension as well as cell; published values are presentation state only. */
     private final Map<UUID,Set<PhysicalFluidTopology.Position>> rotationWatchers=new HashMap<>();
@@ -1423,7 +1461,10 @@ public final class FluidWorldAuthority implements AutoCloseable {
         var view=flares.view(target.identity());if(view==null)return null;
         boolean flame=view.status()==Flares.Status.FLARING||view.status()==Flares.Status.OVER_CAPACITY;
         float share=(float)Math.clamp(view.heat()/view.rated(),0,1),plume=view.status()==Flares.Status.FLAME_OUT&&view.limit()>0?(float)Math.clamp(view.massFlow()/view.limit(),.05,1):0;
-        return new com.wormzjl.icheme.network.FluidNetwork.FlareState(target,view.status().ordinal(),flame?Math.max(share,.02f):0,plume);
+        // W3 (batch 2026-11-10-custom-shader-system): the flame's soot index and the gas's exit velocity, as the span booked them.
+        var f=flares.flame(target.identity());if(f==null)f=Flares.Flame.NONE;
+        float soot=flame?(float)Math.clamp(f.soot(),0,1):0,exit=(float)Math.clamp(f.exitVelocity(),0,com.wormzjl.icheme.network.FluidNetwork.MAXIMUM_SPEED);
+        return new com.wormzjl.icheme.network.FluidNetwork.FlareState(target,view.status().ordinal(),flame?Math.max(share,.02f):0,plume,soot,Float.isFinite(exit)?exit:0);
     }
     /** The presentation cadence's flare states: one per watched flare, to its watchers only. */
     private void publishFlares() {
@@ -1480,6 +1521,123 @@ public final class FluidWorldAuthority implements AutoCloseable {
                 var player=server.getPlayerList().getPlayer(uuid);
                 if(player==null||player.hasDisconnected()||!player.serverLevel().dimension().location().toString().equals(record.device().position().dimension())||!moverRange(player,pos)){stillWatchers.unwatch(uuid,id);continue;}
                 com.wormzjl.icheme.network.FluidNetwork.sendStill(player,state);
+            }
+        }
+    }
+    /**
+     * A cooling tower's plume subscription (batch 2026-11-10-custom-shader-system, W4), as a flare's: watched at its basin's
+     * fluid cell within {@link com.wormzjl.icheme.network.FluidNetwork#WATCH_RANGE}; it replays the state last published, or the
+     * rates its island last accepted (a read), and the presentation cadence keeps it current. It never reads or advances a process.
+     */
+    public void watchTowers(net.minecraft.server.level.ServerPlayer player,List<com.wormzjl.icheme.network.FluidNetwork.Target> watch,List<com.wormzjl.icheme.network.FluidNetwork.Target> unwatch) {
+        owned();if(closed)return;var uuid=player.getUUID();var level=player.serverLevel();
+        for(var target:unwatch)towerWatchers.unwatch(uuid,target.identity());
+        for(var target:watch) {
+            var record=watchable(player,level,target);
+            if(record==null||record.spec().tower()==null)continue;
+            if(towerWatchers.watch(uuid,target.identity())) {
+                var state=publishedTowers.get(target.identity());if(state==null)state=towerPlume(target,new HashMap<>(),this::storedIsland);
+                if(state!=null)com.wormzjl.icheme.network.FluidNetwork.sendTower(player,state);
+            }
+        }
+    }
+    /**
+     * A fired heater's flue subscription (W5), as a flare's: watched at its fluid cell, where its radiant coil binds; it
+     * replays the state last published, or the heater's last booked slices (a read), and the presentation cadence keeps it current.
+     */
+    public void watchHeaters(net.minecraft.server.level.ServerPlayer player,List<com.wormzjl.icheme.network.FluidNetwork.Target> watch,List<com.wormzjl.icheme.network.FluidNetwork.Target> unwatch) {
+        owned();if(closed)return;var uuid=player.getUUID();var level=player.serverLevel();
+        for(var target:unwatch)heaterWatchers.unwatch(uuid,target.identity());
+        for(var target:watch) {
+            var record=watchable(player,level,target);
+            if(record==null||!radiantCoil(record))continue;
+            if(heaterWatchers.watch(uuid,target.identity())) {
+                var state=publishedHeaters.get(target.identity());if(state==null)state=heaterFlue(target,new HashMap<>(),this::storedIsland);
+                if(state!=null)com.wormzjl.icheme.network.FluidNetwork.sendHeater(player,state);
+            }
+        }
+    }
+    /** The registration {@code target} names at its cell, loaded, in {@code level} and within the watch range of {@code player}; null otherwise. */
+    private WorldTopologyLedger.Registration watchable(net.minecraft.server.level.ServerPlayer player,net.minecraft.server.level.ServerLevel level,com.wormzjl.icheme.network.FluidNetwork.Target target) {
+        var pos=target.position();
+        if(!level.hasChunkAt(pos)||!inRange(player,pos)||!(level.getBlockEntity(pos) instanceof FluidView.Receiver receiver)||receiver.fluidIdentity()!=target.identity())return null;
+        var record=registrations().get(target.identity());
+        if(record==null||!cell(record).equals(pos)||!record.device().position().dimension().equals(level.dimension().location().toString()))return null;
+        return record;
+    }
+    /** Whether {@code record} is a fired heater's radiant coil, where the heater's flue is watched. */
+    private static boolean radiantCoil(WorldTopologyLedger.Registration record) {
+        var heat=record.device().heat();
+        return heat!=null&&heat.burners()&&heat.side()==com.wormzjl.icheme.science.equipment.HeatSides.Side.RADIANT;
+    }
+    /**
+     * Tower {@code target}'s plume from the rates its island last accepted (a read): its dry air, its exhaust
+     * ({@code TowerTransfer.exhaust}) and its evaporation; no air without rates or below {@code TowerTransfer.NO_AIR}.
+     */
+    private com.wormzjl.icheme.network.FluidNetwork.TowerPlume towerPlume(com.wormzjl.icheme.network.FluidNetwork.Target target,Map<Long,IslandCoordinator.Snapshot> islands,java.util.function.Function<Long,IslandCoordinator.Snapshot> read) {
+        var record=registrations().get(target.identity());if(record==null||record.spec().tower()==null)return null;
+        Long owner=registry.owner(target.identity());
+        var rates=owner==null?null:islands.computeIfAbsent(owner,read).lastResult().map(r->r.towers().get(target.identity())).orElse(null);
+        var still=new com.wormzjl.icheme.network.FluidNetwork.TowerPlume(target,0,(float)com.wormzjl.icheme.science.fluid.network.CoolingTower.AIR_TEMPERATURE,0,0);
+        if(rates==null||!(Math.abs(rates.fill().dryAirFlow())>com.wormzjl.icheme.science.fluid.network.TowerTransfer.NO_AIR))return still;
+        var exhaust=com.wormzjl.icheme.science.fluid.network.TowerTransfer.exhaust(runtime.coordinator().model(owner),rates.fill());
+        float air=(float)Math.abs(rates.fill().dryAirFlow()),t=(float)exhaust.temperature(),w=(float)exhaust.humidity(),e=(float)Math.max(0,rates.fill().evaporation());
+        if(!Float.isFinite(air)||!Float.isFinite(t)||!Float.isFinite(w)||!Float.isFinite(e))return still;
+        return new com.wormzjl.icheme.network.FluidNetwork.TowerPlume(target,air,t,Math.clamp(w,0,1),e);
+    }
+    /**
+     * Heater {@code target}'s flue (a read of what its islands last booked): its firing, the fuel fired over the design's;
+     * its stack temperature, the bridgewall less its convection coil's heat over the flue's capacity rate
+     * ({@code ConvectionCoil.stackTemperature}), the bridgewall without a convection coil, the combustion air unfired; its flue
+     * flow and water ({@link FiredHeaters#flue}); its fuel's phase.
+     */
+    private com.wormzjl.icheme.network.FluidNetwork.HeaterFlue heaterFlue(com.wormzjl.icheme.network.FluidNetwork.Target target,Map<Long,IslandCoordinator.Snapshot> islands,java.util.function.Function<Long,IslandCoordinator.Snapshot> read) {
+        long id=target.identity();var record=registrations().get(id);if(record==null||!radiantCoil(record))return null;
+        long b=burners.burnersOf(id);var flue=b==0?null:burners.flue(b);
+        if(flue==null)return new com.wormzjl.icheme.network.FluidNetwork.HeaterFlue(target,0,(float)com.wormzjl.icheme.science.fluid.network.Burners.AIR,0,(float)com.wormzjl.icheme.science.fluid.network.Burners.METHANE_WATER,0);
+        double design=FiredHeaters.designFired(registrations().get(b)),firing=design>0?Math.clamp(flue.fired()/design,0,1):0;
+        double radiant=sideHeat(id,islands,read);long convection=record.device().heat().partner();
+        double stack=convection==0?(radiant>0?com.wormzjl.icheme.science.fluid.network.ConvectionCoil.BRIDGEWALL:com.wormzjl.icheme.science.fluid.network.Burners.AIR)
+                :com.wormzjl.icheme.science.fluid.network.ConvectionCoil.stackTemperature(radiant,sideHeat(convection,islands,read),com.wormzjl.icheme.science.fluid.network.Burners.AIR);
+        float flow=(float)flue.flueFlow(),water=(float)Math.clamp(flue.waterShare(),0,1);
+        return new com.wormzjl.icheme.network.FluidNetwork.HeaterFlue(target,(float)firing,(float)stack,Float.isFinite(flow)?flow:0,Float.isFinite(water)?water:0,flue.fuel().ordinal());
+    }
+    /** The heat side {@code device}'s heat over its island's last interval, W, into its stream: its {@code HEAT} boundaries (a read). */
+    private double sideHeat(long device,Map<Long,IslandCoordinator.Snapshot> islands,java.util.function.Function<Long,IslandCoordinator.Snapshot> read) {
+        Long owner=registry.owner(device);if(owner==null)return 0;
+        var result=islands.computeIfAbsent(owner,read).lastResult().orElse(null);if(result==null||!(result.advancedSeconds()>0))return 0;
+        long key=PhysicalFluidTopology.sideIdentity(device);double joule=0;
+        for(var boundary:result.boundaries())if(boundary.kind()==com.wormzjl.icheme.science.fluid.network.ConservativeTransport.BoundaryTransfer.Kind.HEAT&&boundary.nodeId()==key)joule+=boundary.totalEnergyJoule();
+        double rate=joule/result.advancedSeconds();
+        return Double.isFinite(rate)?Math.max(0,rate):0;
+    }
+    /** The presentation cadence's tower plumes: one per watched tower, to its watchers only. */
+    private void publishTowers() {
+        publishedTowers.clear();if(towerWatchers.devices().isEmpty())return;var islands=new HashMap<Long,IslandCoordinator.Snapshot>();
+        for(long id:towerWatchers.devices()) {
+            var record=registrations().get(id);
+            if(record==null||record.spec().tower()==null){towerWatchers.remove(id);continue;}
+            var pos=cell(record);var state=towerPlume(new com.wormzjl.icheme.network.FluidNetwork.Target(pos,id),islands,this::presented);if(state==null)continue;
+            publishedTowers.put(id,state);
+            for(var uuid:towerWatchers.watchers(id)) {
+                var player=server.getPlayerList().getPlayer(uuid);
+                if(player==null||player.hasDisconnected()||!player.serverLevel().dimension().location().toString().equals(record.device().position().dimension())||!inRange(player,pos)){towerWatchers.unwatch(uuid,id);continue;}
+                com.wormzjl.icheme.network.FluidNetwork.sendTower(player,state);
+            }
+        }
+    }
+    /** The presentation cadence's heater flues: one per watched heater, to its watchers only. */
+    private void publishHeaters() {
+        publishedHeaters.clear();if(heaterWatchers.devices().isEmpty())return;var islands=new HashMap<Long,IslandCoordinator.Snapshot>();
+        for(long id:heaterWatchers.devices()) {
+            var record=registrations().get(id);
+            if(record==null||!radiantCoil(record)){heaterWatchers.remove(id);continue;}
+            var pos=cell(record);var state=heaterFlue(new com.wormzjl.icheme.network.FluidNetwork.Target(pos,id),islands,this::presented);if(state==null)continue;
+            publishedHeaters.put(id,state);
+            for(var uuid:heaterWatchers.watchers(id)) {
+                var player=server.getPlayerList().getPlayer(uuid);
+                if(player==null||player.hasDisconnected()||!player.serverLevel().dimension().location().toString().equals(record.device().position().dimension())||!inRange(player,pos)){heaterWatchers.unwatch(uuid,id);continue;}
+                com.wormzjl.icheme.network.FluidNetwork.sendHeater(player,state);
             }
         }
     }
@@ -1763,6 +1921,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
     /** {@code read} of views and instruments from the islands as they are stored, advancing none: a column's Operation tab, which a menu open reads (a replay runs no engine work). */
     public <T> T stored(java.util.function.Supplier<T> read){owned();storedOnly=true;try{return read.get();}finally{storedOnly=false;}}
     private IslandCoordinator.Snapshot presented(long island){return storedOnly?onWorldList(island,runtime.coordinator().observe(island)):presentation(island);}
+    /** Island {@code island} as it is stored, materialising nothing: what a watch's replay reads (batch 2026-11-10-custom-shader-system). */
+    private IslandCoordinator.Snapshot storedIsland(long island){return onWorldList(island,runtime.coordinator().observe(island));}
     /** Island {@code island} as a presentation reads it, on the world list (V2 stage 5): every view, display and wire vector
      * stays on the network package's whole list whatever the island carries. */
     private IslandCoordinator.Snapshot presentation(long island){return onWorldList(island,runtime.coordinator().presentation(island));}
@@ -2130,7 +2290,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
             });
         }
     }
-    @Override public void close(){owned();if(closed)return;closed=true;unboundStructures.clear();realignment.clear();realigning.clear();shaftRealignment.clear();shaftRealigning.clear();structureChunks.clear();publishedMenuData.clear();publishedSightGlasses.clear();publishedMovers.clear();publishedFlares.clear();publishedStills.clear();driverWatchers.clear();publishedDrivers.clear();rotationWatchers.clear();publishedRotations.clear();runtime.close();data.setDirty();}
+    @Override public void close(){owned();if(closed)return;closed=true;unboundStructures.clear();realignment.clear();realigning.clear();shaftRealignment.clear();shaftRealigning.clear();structureChunks.clear();publishedMenuData.clear();publishedSightGlasses.clear();publishedMovers.clear();publishedFlares.clear();publishedStills.clear();publishedTowers.clear();publishedHeaters.clear();driverWatchers.clear();publishedDrivers.clear();rotationWatchers.clear();publishedRotations.clear();runtime.close();data.setDirty();}
 
     /**
      * Which players watch which open tanks, sight glasses or movers (the request path R-B of the engine-owned presentation

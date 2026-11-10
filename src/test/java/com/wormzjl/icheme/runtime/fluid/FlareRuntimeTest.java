@@ -116,6 +116,20 @@ class FlareRuntimeTest {
         assertEquals(List.of(), v.alarms());
     }
 
+    /** The flame's presentation (batch 2026-11-10-custom-shader-system, W3): methane gives no soot; its exit velocity is its volume flow over the tip. */
+    @Test
+    void theFlamesSootAndExitVelocityFollowTheBookedSpan() {
+        var rig = new Rig(.3, gas(Map.of("Methane", 1.), 300, 105_000));
+        assertEquals(Flares.Flame.NONE, rig.flares.flame(FLARE), "no span booked yet: no flame");
+        var v = rig.run(4);
+        var flame = rig.flares.flame(FLARE);
+        assertEquals(0, flame.soot(), "methane burns without smoke");
+        assertTrue(flame.exitVelocity() > 0 && flame.exitVelocity() <= Flare.HIGH_VELOCITY, "it leaves the tip: " + flame.exitVelocity());
+        // At about 0.65 kg/m3 at the tip, the velocity is the mass flow over that density and the tip's area.
+        assertEquals(v.massFlow() / (.65 * Flare.tipArea(.3)), flame.exitVelocity(), .1 * flame.exitVelocity());
+        assertNull(rig.flares.flame(12345), "no flare there");
+    }
+
     /** Nitrogen flares with methane while the flame holds (owner: as long as the combustion temperature is maintained). */
     @Test
     void anInertFlaresWithAFuelWhileTheFlameHolds() {
