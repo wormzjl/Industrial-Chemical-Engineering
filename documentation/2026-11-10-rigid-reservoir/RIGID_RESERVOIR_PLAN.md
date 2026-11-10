@@ -84,3 +84,16 @@ Measurement: the affected test classes by the lane's load sets; one 200-seed qui
 | K1 | Which vessels | A: every closed vessel (tank, drum, sphere, kettle shell, still pot) |
 
 Fixed by the owner's rule, not options: floating-roof tanks stay variable-volume at the ambient; the flag is never cleared; a new block starts as a bag (D54 unchanged until its first fill).
+
+## 7. Decisions and implementation (2026-11-10)
+
+Owner: "All A, floating roof tank stays at it is." (O1 A, V1 A, R1 A, K1 A.)
+
+- `PassiveNetwork.Inventory.rigid` (never for an open vessel; `withRigid`). `wallCapacity` is `-V` for a rigid vessel: `PhaseLayout.wallRow` is then the taut branch alone, `taut` is always true, the bag is `V`, and the wall does no work (`emptyBag`, `wallWorkPressure`).
+- The flag is set where a step is booked (`ConservativeTransport`): a closed vessel holding fluid and taut at its volume becomes rigid. This happens at the science level too. The sentence in section 5, "the flag is false on every science-level graph unless a test sets it", is wrong: every test whose closed tank fills taut and then drains can move.
+- Facts schema 18: the vessel's `rigid`, read default false. Corpus `compat/fluid/schema-18/` (2 rigid vessels). State format 43. The certificate digest carries it.
+- Flash below the vapour pressure (4.2): `PassiveStepSolver.flashes` seeds a rigid vessel without gas at its fixed-volume equilibrium (`FluidThermodynamics.equilibriumAtVolume`). The phase check's crossing uses UV in a rigid vessel.
+- Owner decision of 2026-11-10 (first bubble, option A): in a rigid vessel, the trace fold and the vanishing rule (D34, D38 C) judge a gas phase by its volume share alone, in the form of the 2026-10-20 rule for a hydrocarbon liquid (`FluidThermodynamics.rigidGas`, `belowShare`). A liquid-full tank's first bubble is 3e-11 of its moles but 2e-6 of its volume. The mole share folded it, and the pass cycled. Bags, junctions and other phases are unchanged.
+- Owner decision of 2026-11-10 (breakthrough pass order, option A, amending A272): a converged pass that shows a forbidden direction is phase-checked first. If the check changes a node's phases, the pass is solved again. Only then is the boundary closed. Case: `PhasePortPriorityTest`, the bottom-port drain at 0.1 s slices, at the gas breakthrough (108.5 kPa). The last water was folded off a failed iterate, and the next pass held it as steam at 174 K and 67 kPa, drawing from the void. The closure stood the drain still. A bag's slack wall hid the same pass at the ambient.
+
+Results: blanketed 100 m3 tank drawn 10 m3, 69.2 kPa (plan 68.6). Gravity drain stops at a 0.778 level (plan 0.783). Liquid-full tank 9.5 m over the void drains to a 0.539 level at 3.17 kPa (plan 0.53). A bag filled taut is rigid.
