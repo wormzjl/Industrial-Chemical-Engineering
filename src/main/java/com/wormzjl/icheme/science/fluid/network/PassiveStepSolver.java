@@ -1822,9 +1822,58 @@ public final class PassiveStepSolver {
             if(pipe.control() instanceof FlowControl.Mover mover&&mover.liquid()&&mover.targetVolumeFlow()>0&&read(e.graph,edge))
                 observed=observed.withSuction(npshRatio(e,edge,states,flows[edge]),dry(edge,mover,modes.get(edge),flows[edge],states.get(a).pressure()),gasRatio(edge,mover,states.get(a).pressure()),
                         npshRequired(edge,flows[edge]),vapourShares[edge]);
+            if(pipe.control() instanceof FlowControl.PressureValve||pipe.control() instanceof FlowControl.ControlValve) {
+                // The valve stands at the line's first end: its node side is that end's pressure, its line side the row's
+                // first pressure, which includes the valve's drop (the control head).
+                double node=endPressure(e.graph.reservoirs().get(a),pipe.firstPort(),states.get(a)),line=observed.firstPressure();
+                var read=Math.abs(flows[edge])<=1e-10?PipeObservation.Cavitation.NONE:flows[edge]>=0?cavitation(states.get(donor),node,line,checkpoint):cavitation(states.get(donor),line,node,checkpoint);
+                observed=observed.withValve(Math.abs(node-line),read);
+            }
             samples.add(observed);
         }
         return List.copyOf(samples);
+    }
+    /** A control valve's incipient cavitation pressure ratio x_Fz (IEC 60534-8-4): it cavitates from ΔP = x_Fz (P1 − Pv). */
+    static final double VALVE_INCIPIENT=.3;
+    /**
+     * A flowing valve's cavitation (owner 2026-11-10, option A: the liquid valve's loop by σ = (P1 − Pv) / (P1 − P2), Pv the
+     * vapour pressure of the liquid it passes), from its donor node's state {@code s}, its inlet pressure {@code p1} and its
+     * outlet pressure {@code p2}: FLASHING where p2 lies below Pv (the vapour stays), CAVITATING where σ ≤ 1 / x_Fz
+     * ({@link #VALVE_INCIPIENT}: the vena contracta falls below Pv and the bubbles collapse downstream), else PLAIN. Water
+     * reads its saturation pressure at the donor's temperature. A hydrocarbon liquid is throttled at its own enthalpy, as
+     * {@link #bubblePressure} reads it, but tested at two pressures instead of bisected: it flashes if it holds vapour at
+     * p2, and it cavitates if it holds vapour at p1 − (p1 − p2) / x_Fz, where σ = 1 / x_Fz (any Pv cavitates where that
+     * pressure is below the box's floor); a liquid beside vapour stands at its bubble point, its node's pressure. The worse
+     * of the two liquids counts. NONE with no liquid or where the thermodynamics refuses. Observational only.
+     */
+    private PipeObservation.Cavitation cavitation(FluidThermodynamics.State s,double p1,double p2,Runnable checkpoint) {
+        var none=PipeObservation.Cavitation.NONE;
+        if(!(p1>p2)||!Double.isFinite(p1+p2))return FluidThermodynamics.holdsPhase(s,FluidThermodynamics.OIL)||FluidThermodynamics.holdsPhase(s,FluidThermodynamics.WATER)?PipeObservation.Cavitation.PLAIN:none;
+        double incipient=p1-(p1-p2)/VALVE_INCIPIENT;var worst=none;
+        if(FluidThermodynamics.holdsPhase(s,FluidThermodynamics.WATER)) {
+            try{worst=regime(model.saturationPressure(s.temperature()),p2,incipient);}catch(IllegalArgumentException outsideData){ /* no water read */ }
+        }
+        if(FluidThermodynamics.holdsPhase(s,FluidThermodynamics.OIL)) {
+            PipeObservation.Cavitation oil;
+            if(FluidThermodynamics.holdsPhase(s,FluidThermodynamics.GAS))oil=regime(s.pressure(),p2,incipient);
+            else if(s.liquidProperties()==null)oil=none;
+            else {
+                double[] x=FluidThermodynamics.phaseMoles(s,FluidThermodynamics.OIL);double moles=0;
+                for(int c=0;c<x.length-1;c++)moles+=x[c];
+                double h=moles*s.liquidProperties().molarEnthalpy();int out=liquidPH(s,x,h,Math.max(p2,NumericalBox.MINIMUM_PRESSURE),checkpoint);
+                if(out==PH_VAPOUR)oil=PipeObservation.Cavitation.FLASHING;
+                else if(out!=PH_LIQUID)oil=none;
+                else if(incipient<=NumericalBox.MINIMUM_PRESSURE)oil=PipeObservation.Cavitation.CAVITATING;
+                else oil=liquidPH(s,x,h,incipient,checkpoint)==PH_VAPOUR?PipeObservation.Cavitation.CAVITATING:PipeObservation.Cavitation.PLAIN;
+            }
+            if(oil.ordinal()>worst.ordinal())worst=oil;
+        }
+        return worst;
+    }
+    /** The regime of a liquid of vapour pressure {@code pv} throttled to {@code p2}, cavitating from {@code incipient} (Pa). */
+    static PipeObservation.Cavitation regime(double pv,double p2,double incipient) {
+        if(!Double.isFinite(pv))return PipeObservation.Cavitation.NONE;
+        return pv>p2?PipeObservation.Cavitation.FLASHING:pv>=incipient?PipeObservation.Cavitation.CAVITATING:PipeObservation.Cavitation.PLAIN;
     }
     /**
      * W10b (owner decision D34): a running liquid pump's σ = NPSHA / NPSH3 at the accepted point, which its wear reads
@@ -5276,7 +5325,13 @@ public final class PassiveStepSolver {
     public record FlowSample(long host,double pressure,double massFlow,Double volumeFlow){public FlowSample{if(host<=0||!Double.isFinite(pressure)||!Double.isFinite(massFlow)||volumeFlow!=null&&!Double.isFinite(volumeFlow))throw new IllegalArgumentException("Invalid flow sample");}}
     public record PipeObservation(long pipe,double firstPressure,double secondPressure,double firstElevation,double secondElevation,
                                   double columnDensity,double temperature,boolean flowing,List<Double> lengths,List<Double> losses,double massFlow,double density,List<FlowSample> flowSamples,
-                                  double npshRatio,boolean dry,double gasRatio,double npshRequired,double vapourShare) {
+                                  double npshRatio,boolean dry,double gasRatio,double npshRequired,double vapourShare,double valveDrop,Cavitation cavitation) {
+        /** A flowing liquid valve's state for its noise (owner 2026-11-10, option A; {@link PassiveStepSolver#cavitation}): NONE
+         * on every other row and where the thermodynamics cannot say. */
+        public enum Cavitation { NONE, PLAIN, CAVITATING, FLASHING }
+        /** Without a valve's read: no valve drop (NaN), no cavitation. The pressures of a valve's row include its drop (the
+         * control head): {@code firstPressure} stands after the valve, so the drop is its own component. */
+        public PipeObservation(long pipe,double firstPressure,double secondPressure,double firstElevation,double secondElevation,double columnDensity,double temperature,boolean flowing,List<Double> lengths,List<Double> losses,double massFlow,double density,List<FlowSample> flowSamples,double npshRatio,boolean dry,double gasRatio,double npshRequired,double vapourShare){this(pipe,firstPressure,secondPressure,firstElevation,secondElevation,columnDensity,temperature,flowing,lengths,losses,massFlow,density,flowSamples,npshRatio,dry,gasRatio,npshRequired,vapourShare,Double.NaN,Cavitation.NONE);}
         /** Without the pump readings (W10d): no NPSH3 in metres, no vapour share. */
         public PipeObservation(long pipe,double firstPressure,double secondPressure,double firstElevation,double secondElevation,double columnDensity,double temperature,boolean flowing,List<Double> lengths,List<Double> losses,double massFlow,double density,List<FlowSample> flowSamples,double npshRatio,boolean dry,double gasRatio){this(pipe,firstPressure,secondPressure,firstElevation,secondElevation,columnDensity,temperature,flowing,lengths,losses,massFlow,density,flowSamples,npshRatio,dry,gasRatio,Double.NaN,Double.NaN);}
         /** Without a gas read (W10c): no vapour share in onsets. */
@@ -5286,11 +5341,13 @@ public final class PassiveStepSolver {
         public PipeObservation(long pipe,double firstPressure,double secondPressure,double firstElevation,double secondElevation,double columnDensity,double temperature,boolean flowing,List<Double> lengths,List<Double> losses,double massFlow,double density){this(pipe,firstPressure,secondPressure,firstElevation,secondElevation,columnDensity,temperature,flowing,lengths,losses,massFlow,density,List.of());}
         public PipeObservation(long pipe,double firstPressure,double secondPressure,double firstElevation,double secondElevation,double columnDensity,double temperature,boolean flowing,List<Double> lengths,List<Double> losses){this(pipe,firstPressure,secondPressure,firstElevation,secondElevation,columnDensity,temperature,flowing,lengths,losses,0,0);}
         public PipeObservation{flowSamples=List.copyOf(flowSamples);lengths=List.copyOf(lengths);losses=List.copyOf(losses);if(lengths.isEmpty()||lengths.size()!=losses.size())throw new IllegalArgumentException("Missing observed sections");}
-        public PipeObservation withFlowSamples(List<FlowSample> samples){return new PipeObservation(pipe,firstPressure,secondPressure,firstElevation,secondElevation,columnDensity,temperature,flowing,lengths,losses,massFlow,density,samples,npshRatio,dry,gasRatio,npshRequired,vapourShare);}
+        public PipeObservation withFlowSamples(List<FlowSample> samples){return new PipeObservation(pipe,firstPressure,secondPressure,firstElevation,secondElevation,columnDensity,temperature,flowing,lengths,losses,massFlow,density,samples,npshRatio,dry,gasRatio,npshRequired,vapourShare,valveDrop,cavitation);}
         /** This row with a liquid pump's suction read (W10b, W10c, W10d): its NPSHA over NPSH3 (NaN: none), whether it runs dry,
          * its suction's vapour share in Turpin onsets, {@code r = α/α_T} (NaN: none), its NPSH3 at the accepted flow (m; NaN:
          * none) and its suction's vapour volume share α (NaN: none). The pump page reads the last two. */
-        public PipeObservation withSuction(double ratio,boolean value,double gas,double required,double share){return new PipeObservation(pipe,firstPressure,secondPressure,firstElevation,secondElevation,columnDensity,temperature,flowing,lengths,losses,massFlow,density,flowSamples,ratio,value,gas,required,share);}
+        public PipeObservation withSuction(double ratio,boolean value,double gas,double required,double share){return new PipeObservation(pipe,firstPressure,secondPressure,firstElevation,secondElevation,columnDensity,temperature,flowing,lengths,losses,massFlow,density,flowSamples,ratio,value,gas,required,share,valveDrop,cavitation);}
+        /** This row with a valve's read: its own pressure drop (Pa) and, for a flowing liquid, its cavitation. */
+        public PipeObservation withValve(double drop,Cavitation c){return new PipeObservation(pipe,firstPressure,secondPressure,firstElevation,secondElevation,columnDensity,temperature,flowing,lengths,losses,massFlow,density,flowSamples,npshRatio,dry,gasRatio,npshRequired,vapourShare,drop,c);}
         public static List<PipeObservation> atRest(PassiveNetwork graph,com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics model){
             var result=new ArrayList<PipeObservation>();
             for(var pipe:graph.pipes()){

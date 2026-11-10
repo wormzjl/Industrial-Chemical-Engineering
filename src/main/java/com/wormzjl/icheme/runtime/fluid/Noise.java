@@ -10,7 +10,8 @@ import net.minecraft.core.BlockPos;
  * solver run (section 2), the {@link #MAXIMUM_SOURCES} loudest at the listener within {@link #RANGE} blocks.
  * Sounds read state only: nothing here is saved, solved, created or fed back.
  * <ul>
- * <li>{@link #valve}: a valve passing flow, by its pressure drop alone (owner, 2026-11-10).</li>
+ * <li>{@link #valve}: a valve passing flow, by its pressure drop alone (owner, 2026-11-10); a liquid valve's loop by its
+ * cavitation (owner 2026-11-10, option A: plain, cavitating or flashing, {@code PassiveStepSolver.cavitation}).</li>
  * <li>{@link #vent}: an open vessel's vent, a free jet (Lighthill: its acoustic share 1e-4 M⁵ of its stream power).</li>
  * <li>{@link #fans}: axial fans, the fan law 50 log10 of the speed share.</li>
  * <li>{@link #water}: falling water at a tower's air inlets, 10 log10 of the water flow.</li>
@@ -23,7 +24,7 @@ import net.minecraft.core.BlockPos;
  */
 public final class Noise {
     /** What makes the noise; the client picks its loop by this, a one-shot for the knock. */
-    public enum Kind { VALVE_GAS, VALVE_LIQUID, VENT, FAN, WATER_FALL, BURNER, GEAR, KETTLE, PIPE_KNOCK;
+    public enum Kind { VALVE_GAS, VALVE_LIQUID, VENT, FAN, WATER_FALL, BURNER, GEAR, KETTLE, PIPE_KNOCK, VALVE_CAVITATING, VALVE_FLASHING;
         public boolean oneShot(){return this==PIPE_KNOCK;}
     }
     /** One source: where, what, its sound power level, dB, and its loop's pitch. */

@@ -391,10 +391,11 @@ public final class FluidWorldAuthority implements AutoCloseable {
         for(var pipe:graph.pipes()) {
             var row=rows.get(pipe.id());if(row==null||!(row.density()>0))continue;
             boolean gas=row.density()<Noise.GAS_DENSITY;
-            // A valve sounds only while it passes flow, its level by its drop alone; its loop by its stream's phase (owner, 2026-11-10).
+            // A valve sounds only while it passes flow, its level by its drop alone; its loop by its stream's phase, a liquid's by
+            // its cavitation (owner, 2026-11-10: plain, cavitating or flashing by σ, option A).
             if(pipe.control() instanceof FlowControl.PressureValve||pipe.control() instanceof FlowControl.ControlValve) {
                 var r=registrations().get(graph.reservoirs().get(pipe.first()).id());
-                if(r!=null&&row.flowing()&&row.massFlow()!=0)Noise.add(out,cell(r),gas?Noise.Kind.VALVE_GAS:Noise.Kind.VALVE_LIQUID,Noise.valve(Math.abs(row.firstPressure()-row.secondPressure())),1);
+                if(r!=null&&row.flowing()&&row.massFlow()!=0&&Double.isFinite(row.valveDrop()))Noise.add(out,cell(r),gas?Noise.Kind.VALVE_GAS:switch(row.cavitation()){case CAVITATING->Noise.Kind.VALVE_CAVITATING;case FLASHING->Noise.Kind.VALVE_FLASHING;default->Noise.Kind.VALVE_LIQUID;},Noise.valve(row.valveDrop()),1);
             }
             // A liquid line's speed, m/s, against which its stop at the next publication knocks.
             if(!gas&&!pipe.sections().isEmpty()) {

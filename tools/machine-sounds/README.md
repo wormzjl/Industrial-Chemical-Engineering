@@ -34,6 +34,7 @@ Then copy the `.ogg` files into `src/main/resources/assets/icheme/sounds/`. The 
 ## History
 
 - 2026-11-04 (owner: "Rotation machine sound should also scale with their rpm"): the pitch law reads the loops' reference speeds, `UnitDesign.PUMP_LOOP_RPM` 2950 rpm for `pump_running` (its 300 Hz vane pass, 2950 rpm x 6 vanes; the pump's crackle and churn share it) and `UnitDesign.MOTOR_LOOP_RPM` 1500 rpm for `motor_running` and the generator (250 Hz fan blade pass, 25 Hz x 10 blades). `compressor_running` and `turbine_running` state no speed and sound at their machine's rated speed. Pitch = n/n_loop, 0.5 to 2.
+- 2026-11-10: `pump_cavitation.ogg` in the mod is now `tools/process-sounds/valve_candidates.py`'s L2 (owner); this tool's loop lives on as `valve_liquid.ogg`. Do not copy this tool's `pump_cavitation.ogg` over it.
 - 2026-11-04 (W10c): `pump_cavitation.ogg` (22,261 bytes, RMS 0.101, peak 0.47, seam step 0.054 against a mean step of 0.092) and `pump_gas.ogg` (7,864 bytes, RMS 0.093, peak 0.57, seam step 0.0007 against 0.0021); the other four loops re-render with the same numbers and were not copied (Ogg stream serials differ per run).
 - 2026-11-04: motor and turbine loops (motor RMS 0.093, seam step 0.0004 against a mean step of 0.012; turbine RMS 0.099, seam step 0.008 against 0.074).
 - 2026-11-04: owner "yes" to the casings without the motor hum and to pitch with speed: pump and compressor loops re-authored here (pump RMS 0.095, peak 0.43, seam step 0.030 against a mean step of 0.023; compressor RMS 0.114, peak 0.52, seam step 0.024 against 0.034).

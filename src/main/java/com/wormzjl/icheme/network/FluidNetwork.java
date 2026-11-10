@@ -58,7 +58,8 @@ import java.util.*;
  * <p>{@code fluid-21} (batch 2026-11-10-custom-shader-system, W4 and W5): the cooling towers' and the fired heaters' watches
  * ({@link Watch#TOWERS}, {@link Watch#HEATERS}) and their published plumes and flues ({@link TowerPlume}, {@link HeaterFlue}).</p>
  * <p>{@code fluid-22} (batch 2026-11-10-custom-shader-system, PROCESS_SOUNDS_REVIEW.md S2 A): the noise watch
- * ({@link NoiseWatch}) and its answer, the loudest noise sources near the player ({@link NoiseSources}).</p>
+ * ({@link NoiseWatch}) and its answer, the loudest noise sources near the player ({@link NoiseSources}); a liquid valve's
+ * cavitating and flashing kinds came within the same batch.</p>
  */
 public final class FluidNetwork {
     public static final String PROTOCOL="fluid-22";
