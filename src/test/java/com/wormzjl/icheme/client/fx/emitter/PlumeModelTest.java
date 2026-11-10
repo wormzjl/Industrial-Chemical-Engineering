@@ -3,6 +3,7 @@ package com.wormzjl.icheme.client.fx.emitter;
 import com.wormzjl.icheme.client.fx.FxPlume;
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -111,5 +112,35 @@ class PlumeModelTest {
         PlumeModel.write(none, exits, v, PlumeModel.values(40, 2, 3, 4, 0, FAN, 0, 0, 0), segments, PlumeModel.Style.WHITE, 7);
         assertEquals(0, none.quads());
         assertEquals(0, PlumeModel.segments(0, 5, 2, 8));
+    }
+
+    /**
+     * Bench 2026-11-10 (FX_BENCH_REVIEW.md): the COMPATIBLE path writes every frame, so a plume keeps its two ends' centre
+     * lines ({@link PlumeModel.Lines}). Kept lines equal fresh ones, the puffs written with them equal the puffs written
+     * without, a frame after the first computes no line, and a new aim computes only its new target.
+     */
+    @Test
+    void keptCentreLinesWriteTheSamePuffsAndAreComputedOncePerAim() {
+        var from = PlumeModel.values(5, 30, 1.5, 3, 1, .7, FAN, 0, 2, 0);
+        var to = PlumeModel.values(0, 45, 2.5, 1, 3, .9, FAN, 1, 2, 0);
+        double[][] exits = {{-3, 0, 0}, {3, 0, 1}};
+        var lines = new PlumeModel.Lines();
+        var fresh = new RecordingSink();
+        PlumeModel.write(fresh, exits, from, to, 6, PlumeModel.Style.WHITE, 11);
+        for (int frame = 0; frame < 3; frame++) {
+            var kept = new RecordingSink();
+            PlumeModel.write(kept, exits, from, to, 6, PlumeModel.Style.WHITE, 11, lines);
+            assertEquals(fresh.puffs, kept.puffs, "frame " + frame);
+        }
+        assertEquals(2, lines.computed, "each end once, however many frames");
+        assertArrayEquals(PlumeModel.centreLine(FAN, 2.5, 45, 64), lines.line(FAN, 2.5, 45));
+        // The next aim glides from the old target: only the new target's line is computed.
+        var next = PlumeModel.values(0, 60, 3, 1, 3, .9, FAN, 1, 2, 0);
+        var aimed = new RecordingSink();
+        PlumeModel.write(aimed, exits, to, next, 6, PlumeModel.Style.WHITE, 11, lines);
+        var unkept = new RecordingSink();
+        PlumeModel.write(unkept, exits, to, next, 6, PlumeModel.Style.WHITE, 11);
+        assertEquals(unkept.puffs, aimed.puffs);
+        assertEquals(3, lines.computed);
     }
 }

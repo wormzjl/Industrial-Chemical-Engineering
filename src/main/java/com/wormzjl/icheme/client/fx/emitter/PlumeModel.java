@@ -158,11 +158,56 @@ public final class PlumeModel {
 
     /** The point {@code s} m along a centre line of {@code length} m ({@link #centreLine}), interpolated. */
     static double[] along(double[][] line, double length, double s) {
-        if (!(length > 0)) return new double[2];
+        return along(line, length, s, new double[2]);
+    }
+
+    /** As {@link #along(double[][], double, double)}, into {@code out} (downwind, height); returns {@code out}. */
+    static double[] along(double[][] line, double length, double s, double[] out) {
+        if (!(length > 0)) {
+            out[0] = 0;
+            out[1] = 0;
+            return out;
+        }
         double k = Math.max(0, Math.min(1, s / length)) * (line.length - 1);
         int i = Math.min(line.length - 2, (int) k);
         double f = k - i;
-        return new double[]{line[i][0] + (line[i + 1][0] - line[i][0]) * f, line[i][1] + (line[i + 1][1] - line[i][1]) * f};
+        out[0] = line[i][0] + (line[i + 1][0] - line[i][0]) * f;
+        out[1] = line[i][1] + (line[i + 1][1] - line[i][1]) * f;
+        return out;
+    }
+
+    /**
+     * One plume's centre lines ({@link #centreLine} at {@link #LINE} steps), kept between frames: a line depends only on the
+     * glide end's diameter, r and length, which change only when the emitter is aimed again, so the COMPATIBLE path, which
+     * writes every frame, computes each line once per aim (bench 2026-11-10, FX_BENCH_REVIEW.md: {@code centreLine} was its
+     * top frame). Two slots, so the aim's new start (the old target) is found again. Render thread only, one per emitter.
+     */
+    public static final class Lines {
+        private final double[][][] lines = new double[2][][];
+        private final double[] diameter = new double[2], ratio = new double[2], length = new double[2];
+        private int next;
+        /** The three points one segment reads, reused. */
+        final double[] pa = new double[2], pb = new double[2], qb = new double[2];
+        /** Lines computed, for the tests. */
+        int computed;
+
+        /** {@link #centreLine}({@code d}, {@code r}, {@code l}, {@link #LINE}), from a slot when it holds the same three values. */
+        double[][] line(double d, double r, double l) {
+            for (int k = 0; k < 2; k++)
+                if (lines[k] != null && same(diameter[k], d) && same(ratio[k], r) && same(length[k], l)) return lines[k];
+            int k = next;
+            next = 1 - next;
+            lines[k] = centreLine(d, r, l, LINE);
+            diameter[k] = d;
+            ratio[k] = r;
+            length[k] = l;
+            computed++;
+            return lines[k];
+        }
+
+        private static boolean same(double a, double b) {
+            return Double.doubleToLongBits(a) == Double.doubleToLongBits(b);
+        }
     }
 
     /**
@@ -171,14 +216,19 @@ public final class PlumeModel {
      * all exits, so a cut budget shortens every plume alike. {@code seed} varies the noise per emitter.
      */
     public static void write(FxSink sink, double[][] exits, double[] from, double[] to, int segments, Style style, int seed) {
+        write(sink, exits, from, to, segments, style, seed, new Lines());
+    }
+
+    /** As {@link #write(FxSink, double[][], double[], double[], int, Style, int)}, with the emitter's kept centre lines. */
+    public static void write(FxSink sink, double[][] exits, double[] from, double[] to, int segments, Style style, int seed, Lines lines) {
         if (segments < 1 || !(to[LENGTH] > 0 || from[LENGTH] > 0) || !(to[DENSITY] > 0)) return;
-        double[][] a = centreLine(from[DIAMETER], from[RATIO], from[LENGTH], LINE), b = centreLine(to[DIAMETER], to[RATIO], to[LENGTH], LINE);
+        double[][] a = lines.line(from[DIAMETER], from[RATIO], from[LENGTH]), b = lines.line(to[DIAMETER], to[RATIO], to[LENGTH]);
         double sa = (from[LENGTH] - from[START]) / segments, sb = (to[LENGTH] - to[START]) / segments;
         for (int k = 0; k < segments; k++) {
             double alpha = to[DENSITY] * PUFF_ALPHA * (1 - .5 * k / segments);
             int params = style.params((k + .5) / segments, alpha);
             double ka = from[START] + sa * k, kb = to[START] + sb * k;
-            double[] pa = along(a, from[LENGTH], ka), pb = along(b, to[LENGTH], kb), qb = along(b, to[LENGTH], kb + sb);
+            double[] pa = along(a, from[LENGTH], ka, lines.pa), pb = along(b, to[LENGTH], kb, lines.pb), qb = along(b, to[LENGTH], kb + sb, lines.qb);
             double dx = (qb[0] - pb[0]) * to[WIND_X], dy = qb[1] - pb[1], dz = (qb[0] - pb[0]) * to[WIND_Z];
             for (int e = 0; e < exits.length; e++) {
                 var exit = exits[e];

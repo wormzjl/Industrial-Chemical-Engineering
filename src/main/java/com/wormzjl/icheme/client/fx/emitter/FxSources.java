@@ -244,10 +244,12 @@ public final class FxSources {
         final GlideEmitter emitter;
         private int segments;
         private PlumeModel.Style style = PlumeModel.Style.WHITE;
+        /** The centre lines of the glide's two ends, computed once per aim (the COMPATIBLE path writes every frame). */
+        private final PlumeModel.Lines lines = new PlumeModel.Lines();
 
         Plume(Source<?> source, String type, FxKind kind, double[] at, double[][] exits, int seed) {
             emitter = source.add(new GlideEmitter(type, kind, at[0], at[1], at[2], 2, rest(),
-                    (sink, from, to, quads) -> PlumeModel.write(sink, exits, from, to, segments, style, seed)));
+                    (sink, from, to, quads) -> PlumeModel.write(sink, exits, from, to, segments, style, seed, lines)));
         }
 
         static double[] rest() {
