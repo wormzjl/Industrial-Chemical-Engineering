@@ -6,9 +6,9 @@ Batch `2026-11-10-custom-shader-system`, 2026-11-10. Status: plan, waiting for o
 
 Owner, 2026-11-10: a custom shader system for (a) normal textures, the wires on equipment surfaces first; (b) better flare stack SFX; (c) a cloud effect for the two water coolers and the furnace chimney; (d) SFX for the fuelled still. Style: industrial realism. It must work with FPS optimization mods and the usual shader packs, and it needs a config switch.
 
-Readings this plan takes (X1 and section 8 ask the owner to confirm them):
+Readings this plan takes (section 8 asks the owner to confirm the ones still open):
 
-- **Wires**: the metal cable conduits that `ConduitModel` draws on racks, sockets and leads into equipment (`instrument_conduit`, `data_cable`, `power_cable` sprites, tinted blue for data and orange for FE).
+- **Wires** (owner, 2026-11-10): the instrument wiring that is laid out on an equipment's surface and joins its built-in sensors to its data port (`InstrumentWiring`, drawn by `InstrumentRenderer`). These are not the cable conduits the player lays.
 - **SFX**: what you see and what you hear.
 - **Two water coolers**: the induced-draft and natural-draft cooling towers.
 - **Furnace chimney**: the stacks of the vertical and cabin fired heaters. Boilers and gasifiers come later.
@@ -39,6 +39,7 @@ So at the mod's ambient (`CoolingTower.AIR_TEMPERATURE` 298.15 K, RH 0.5), a rea
 - `StillFires` uses vanilla `FLAME`, `LAVA`, `SMALL_FLAME`, smoke, `FURNACE_FIRE_CRACKLE` and `BUBBLE_COLUMN_UPWARDS_AMBIENT`.
 - Towers and heaters have no world effects. The client gets fan speed and basin level only. There is no watch for heaters.
 - Normals: shell and conduit quads bake their shade into the vertex colour. The tower and still sprites have relief painted in, because "the game's block shader reads no normals". No `_n` or `_s` textures exist.
+- Instrument wiring (section 4.4): a flat stripe on the skin. Its sprite is stretched over the whole length of each run, and its light ignores relief.
 - Iris lesson already in the code (`EquipmentGhost`): chunk render types drawn from a level-stage event vanish under a shader pack. Entity render types drawn at `AFTER_PARTICLES` work.
 
 ## 4. Design
@@ -77,17 +78,40 @@ flowchart LR
 | Key | Values | Default | Effect |
 |---|---|---|---|
 | `mode` | `AUTO`, `COMPATIBLE`, `OFF` | `AUTO` | AUTO picks the path per frame (section 4.1); COMPATIBLE never uses our shaders (the escape hatch if some mod conflicts); OFF draws no flames, smoke or plumes |
-| `pbr_textures` | true / false | true | With a pack: flat albedo with `_n` and `_s` maps, unshaded vertex colour (X5). Off: baked albedo always |
+| `pbr_textures` | true / false | true | Wiring: lit through its normal map, by our shader without a pack or by the pack (section 4.4). Off: the vanilla entity shader, flat. Later chunk sprites: X5 |
 | `heat_haze` | true / false | false | SHADER path only (X6): a screen copy plus a distortion over flames and stacks |
 
 Changes take effect on the next frame. A change to `pbr_textures` re-meshes the chunks, as `low_polygon_mode` does. Sounds use Minecraft's Blocks volume slider.
 
-### 4.4 Normal textures (LabPBR 1.3), wires first
+### 4.4 Normal textures (LabPBR 1.3), the instrument wiring first
 
-- One height source per sprite. A new tool, `tools/pbr-textures/`, writes three files from it: the **baked** albedo (relief painted in, as now, for play without a pack), a **flat** albedo `<name>_flat.png`, and next to it `<name>_flat_n.png` and `<name>_flat_s.png`. In `_n`, R and G hold the normal's X and Y, B holds AO and A holds height. In `_s`, R is smoothness, G is F0 (0 to 229) or a metal id (230 iron, 234 copper, 255 albedo), B is porosity and A is emission. Iris loads `_n` and `_s` beside any atlas sprite, in any namespace.
-- The model chooses the variant (X5). `ConduitModel` and later `EquipmentShellModel` add "pack in use and `pbr_textures`" to their quad-cache key. With a pack, the quads use the flat sprite and a vertex colour of tint × 1, with no baked shade, because the pack lights them from normals. Without a pack, nothing changes.
-- Wires first: `instrument_conduit`, `data_cable` and `power_cable`. The finish is painted steel tube, gloss paint (F0 about 0.04, smoothness 0.55), with worn edges in bare iron (230). The normal map shows the lap seam, coupling ridges and paint chips. U runs along the tube so the tangent follows it; W2 checks this in the `ConduitGeometry` quads.
-- Next, after the owner sees the wires: still sprites, tower panels, painted shell weld seams.
+**The wiring today.** `InstrumentWiring.build` lays out each structure's wiring:
+
+1. A protected root runs from each built-in sensor down to the skin. It is a 20 mm steel tube (`INSTRUMENT_STEEL`), real geometry.
+2. A 20 mm branch runs from each root's foot to a shared baseline.
+3. The 25 mm baseline (trunk) runs to the service enclosure's instrument entry, which is the data port.
+
+Runs follow the skin's facets (shell, heads, pipes, supports, tower panels) and stay horizontal or vertical on flat casings. The ribbon is a decal: polygons clipped to each carrier triangle, 0.5 mm proud of the skin, with the facet's normal and the material `INSTRUMENT_CONDUIT` (sprite `instrument_conduit`, 32 × 64 px in the block atlas). u runs across the ribbon from 0 to 1. v runs along the whole run from 0 to 1 (offset / total), so a 1 m branch and a 15 m baseline carry the same 64 px. `InstrumentRenderer` bakes the quads per structure and draws them as entity geometry (`entityCutoutNoCull` on the block atlas, at `AFTER_PARTICLES`) with one light value. It hides the wiring once the ribbon covers less than a pixel.
+
+```
+ Elevation, a drum with two sensors                       Section across the ribbon, as the normal map shapes it
+
+   [T]          [P]      <- sensor heads                     branch, 20 mm            trunk, 25 mm (3 cables)
+    |            |       <- protected roots (steel tube)       ___                   _   _   _
+    :            :       <- branches, 20 mm, on the skin    __/   \__              _/ \_/ \_/ \_
+    :............:....   <- baseline (trunk), 25 mm   ======|=======|======  ======|=============|======  skin
+                     :   <- run to the entry, 25 mm         u=0  .5  1              u=0     .5      1
+                    [=]  <- service enclosure, data port    normal tilts -side .. up .. +side; AO at both edges
+```
+
+**Design.**
+
+- **Own tiled textures.** `textures/wiring/branch.png` (one cable, 20 mm) and `trunk.png` (three cables bundled, 25 mm), each with `_n` and `_s` beside it. They stay outside the block atlas, so they can repeat. v becomes metres over a period of 0.5 m: one galvanised saddle clamp per period, plus a cable tie every 0.25 m on the trunk. Within a period the cable sags very slightly between clamps. u stays across the ribbon. `tools/pbr-textures/` writes all three files from one height field: the round cable profile across u, clamps, ties and sag. In `_n`, R and G hold the normal's X and Y, B holds AO and A holds height. In `_s`, R is smoothness (jacket 0.3, clamp 0.6), G is F0 (jacket about 0.04) or a metal id (clamp 230, iron), B is porosity and A is emission (none). The albedo keeps today's colours and has no relief painted in.
+- **Without a shader pack: our own shader.** `icheme:rendertype_wiring` is the vanilla entity-cutout shader plus a normal map. The tangent frame comes from screen-space derivatives of position and UV, so the vertex format does not change. The per-pixel normal is lit by vanilla's two entity light directions and the lightmap, the way vanilla lights entities, with a faint sheen on the metal clamps from `_s`. This works only because the wiring is entity geometry. Chunk geometry goes through Sodium's own chunk shader, which cannot take a normal map.
+- **With a shader pack:** `RenderType.entityCutoutNoCull(<wiring texture>)`. Iris loads `_n` and `_s` beside the texture and the pack lights the wiring. Packs with parallax also use the height.
+- **`pbr_textures = false`:** the same tiled albedo, lit flat by the vanilla entity shader. This is still better than today, because the texture is no longer stretched.
+- **Quads:** unshaded vertex colour, because the shader or the pack does the lighting, and v in metres. At a corner where two runs meet, the strips already overlap by half a width. The wiring is still baked per structure, now with one draw per texture per frame, so two draws. The cost is one more texture fetch per wiring pixel.
+- **Later:** the protected roots take the same steel normal map. After that come the chunk sprites (still, tower panels, shell weld seams). Chunk geometry cannot use our shader, so those need X5.
 
 ### 4.5 Effects
 
@@ -123,15 +147,15 @@ At most 48 quads per flare, 32 puffs per plume and 16 per smoke trail. At most 2
 
 ## 5. Compatibility matrix (W0 and the final check)
 
-Setups: vanilla NeoForge 21.1.219; Sodium 0.6 for NeoForge; Embeddium 1.0.15; Sodium + Iris 1.8 with Complementary Reimagined, BSL and one more LabPBR pack; Distant Horizons; ImmediatelyFast; Create with Flywheel. Each setup checks that every effect is visible and fogged, that the flame blooms under a pack, that cables show normal relief under a pack, that a pack toggle switches paths without a restart, and the frame time. These are dev-client checks. Under AGENTS.md the owner starts them, through the `runMcpClient` lane.
+Setups: vanilla NeoForge 21.1.219; Sodium 0.6 for NeoForge; Embeddium 1.0.15; Sodium + Iris 1.8 with Complementary Reimagined, BSL and one more LabPBR pack; Distant Horizons; ImmediatelyFast; Create with Flywheel. Each setup checks that every effect is visible and fogged, that the flame blooms under a pack, that the instrument wiring shows its relief with and without a pack, that a pack toggle switches paths without a restart, and the frame time. These are dev-client checks. Under AGENTS.md the owner starts them, through the `runMcpClient` lane.
 
 ## 6. Work packages
 
 | WP | Content | Gate |
 |---|---|---|
-| W0 | Spike: `FxCompat` detection, one test ribbon on both paths, a cable with `_n` / `_s`; settles the questions in section 7 | owner-run matrix on 3 setups |
+| W0 | Spike: `FxCompat` detection, one test flame ribbon on both paths, one drum's wiring on its tiled `_n` / `_s` textures; settles the questions in section 7 | owner-run matrix on 3 setups |
 | W1 | Core: `FxSettings`, `FxCompat`, `FxShaders`, `FxRenderTypes`, `FxBatch`, `FxWind`, `FxAmbient`, glide | unit tests: wind determinism, ambient mapping, mixing-line excess against section 2's table, batch budgets |
-| W2 | `tools/pbr-textures/` + the three conduit sprites; model variant switch | resource test: `_n` / `_s` sizes and channel ranges; ConduitModel cache-key test |
+| W2 | `tools/pbr-textures/`; the branch and trunk textures; `InstrumentWiring.paint` v in metres; `icheme:rendertype_wiring`; `InstrumentRenderer` picks the render type by path | resource test: `_n` / `_s` sizes and channel ranges; InstrumentWiring test: v grows by run length (a 15 m run spans 30 periods); the existing wiring and equipment gates |
 | W3 | Flare: flame, smoke, roar; `FlareState` additions; old particle code removed | flame geometry tests; FlareRuntimeTest for the new fields |
 | W4 | Tower plume: `TowerPlume` watch, marks, puffs | plume length tests; tower runtime test for the published exhaust |
 | W5 | Heater stacks: `HEATERS` watch, flue state, marks, plume, smoke, haze hook | flue-state tests (stack temperature, water share by fuel) |
@@ -144,18 +168,19 @@ Order: W0 → W1 → W2 (the owner reviews the wires) → W3 → W4/W5 → W6/W7
 
 ## 7. Unknowns W0 settles
 
-- Whether Iris builds a tangent for `entityTranslucentEmissive` quads drawn from a level-stage event, and whether it reads PBR from a standalone (non-atlas) effect texture. If not, effect textures go into a mod atlas.
-- Whether Iris with Sodium keeps our smooth vertex normals for chunk quads or recomputes face normals. Face normals would light round shells in facets under a pack.
+- Whether Iris builds a tangent for entity quads drawn from a level-stage event (the wiring, `entityTranslucentEmissive` flames), and whether it reads `_n` / `_s` beside a standalone (non-atlas) texture. If not, the wiring falls back to block-atlas sprites, with each run's quads split at every 0.5 m period (v from 0 to 1 per period).
+- Whether the derivative tangent frame of `rendertype_wiring` holds where a run crosses facets of a curved head. A visible seam there would mean passing the run direction in the vertex normal's place instead.
+- (For later chunk sprites) whether Iris with Sodium keeps our smooth vertex normals for chunk quads or recomputes face normals. Face normals would light round shells in facets under a pack.
 - Whether toggling a shader pack re-meshes chunks, so the X5 variant switch follows the pack without F3+T.
 - Whether Sodium 0.6 and Embeddium fire `AFTER_PARTICLES` at the same point as vanilla. Today's ghost and outline renderers suggest yes.
 
 ## 8. Owner decisions
 
-- **X1 Wires.** A: the cable conduits of `ConduitModel` (recommended). B: other wires, to be named.
+- **X1 Wires.** Decided (owner, 2026-11-10): the instrument wiring laid out on equipment from sensors to the data port (section 4.4). Open within it: the period (0.5 m between saddle clamps, recommended) and whether the jacket keeps today's colour (recommended) or turns black PVC.
 - **X2 White plume at the mod's ambient.** A: a visual ambient from biome, altitude, rain and night; the plume follows the mixing line (recommended: real physics, weather the player can see). B: always a plume, sized by evaporation or flue flow, whatever the weather. C: the 25 °C, 50 % physics only, so no white plume, only shimmer and haze.
 - **X3 Wind.** A: one presentation wind for flame lean and plume drift (recommended). B: no wind; flames stand straight and plumes rise straight up.
 - **X4 Switch.** A: `AUTO`, `COMPATIBLE`, `OFF`; the old particle code is deleted (recommended). B: keep a `PARTICLES` mode with today's code.
-- **X5 Albedo under a pack.** A: flat albedo and unshaded vertex colour while a pack is in use (recommended). B: flat only (play without a pack loses the painted relief). C: baked only (relief lit twice under a pack).
+- **X5 Later chunk sprites under a pack** (not the wiring, which our shader lights in both cases). A: the model swaps to a flat albedo and unshaded vertex colour while a pack is in use; the quad cache keys on it (recommended). B: flat only (play without a pack loses the painted relief). C: baked only (relief lit twice under a pack).
 - **X6 Heat haze.** A: in, SHADER path only, off by default (recommended). B: out.
 - **X7 Flare smoke.** A: a soot index from the flared gas's carbon-to-hydrogen ratio and the load, a new published value (recommended). B: load only, as now.
 - **X8 Sounds.** A: synthesised loops, no recordings (recommended, the machine-sounds route). B: CC0 recordings after a licence check.
