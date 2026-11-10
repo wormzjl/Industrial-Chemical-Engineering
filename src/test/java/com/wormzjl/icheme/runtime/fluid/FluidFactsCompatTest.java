@@ -122,7 +122,29 @@ class FluidFactsCompatTest {
         stills(world);
         world.runTo(880);
         ejector(world);
-        world.runTo(890);return world;
+        world.runTo(890);
+        vacuumPumps(world);
+        world.runTo(900);return world;
+    }
+    /**
+     * Facts schema 19 (batch 2026-11-10-vacuum-pump): two vacuum pump casings, a two-stage liquid ring of 500 m³/h at
+     * 1450 rpm and a dry screw of 650 m³/h at 2950 rpm, with a set flow and a switch away from their defaults (the
+     * {@code vacuum_pump} law a new name, its type by name; no pipe meets them).
+     */
+    private void vacuumPumps(EventPathWorld world) {
+        long ring=world.ledger.nextIdentity(),screw=ring+1;var spec=FluidDeviceSpec.nitrogen(CATALOG);
+        var ringLaw=new com.wormzjl.icheme.science.machine.VacuumPump(com.wormzjl.icheme.science.machine.VacuumPump.Type.LIQUID_RING_TWO_STAGE,500/3600.,1450);
+        var screwLaw=new com.wormzjl.icheme.science.machine.VacuumPump(com.wormzjl.icheme.science.machine.VacuumPump.Type.DRY_SCREW,650/3600.,2950);
+        world.registry.submit(List.of(
+                new WorldTopologyLedger.Edit(ring,new WorldTopologyLedger.Registration(machine(ring,110,0,Kind.COMPRESSOR,new FlowControl.Machine(ringLaw,0,true,.05,0)),spec,0)),
+                new WorldTopologyLedger.Edit(screw,new WorldTopologyLedger.Registration(machine(screw,110,4,Kind.COMPRESSOR,new FlowControl.Machine(screwLaw,0,false,0,0)),spec,0))),screw+1,null);
+    }
+    /** The vacuum pump casings, each its identity, type, capacity (m³/s), rated speed, switch and set flow, in identity order: what schema 19 carries. */
+    private static String vacuumPumps(WorldTopologyLedger.Snapshot world) {
+        var text=new StringBuilder();
+        for(var r:new TreeMap<>(world.active()).values())if(r.device().control() instanceof FlowControl.Machine m&&m.law() instanceof com.wormzjl.icheme.science.machine.VacuumPump v){
+            if(!text.isEmpty())text.append(";");text.append(r.device().id()).append("=").append(v.type()).append("/").append(v.capacity()).append("/").append(v.ratedSpeed()).append("/").append(m.enabled()).append("/").append(m.setFlow());}
+        return text.toString();
     }
     /**
      * Facts schema 16 (batch 2026-11-09-batch-distiller, W3 and W4): a batch still's pot, a solid-fired still with its
@@ -782,6 +804,8 @@ class FluidFactsCompatTest {
                 long vessels=rebuilt.checkpoint().islands().stream().flatMap(e->e.snapshot().graph().reservoirs().stream()).filter(n->n.kind()==PassiveNetwork.NodeKind.RESERVOIR).count();
                 // Schema 18 wrote whether a vessel's wall is rigid; an older image reads every vessel a bag.
                 assertEquals(Long.parseLong(expected.getProperty("rigid","0")),rigid(rebuilt.checkpoint()),folder+": rigid vessels");
+                // Schema 19 wrote the vacuum pump casings; an older image reads none.
+                assertEquals(expected.getProperty("vacuumPumps",""),vacuumPumps(ledger),folder+": vacuum pumps");
                 assertEquals(Long.parseLong(expected.getProperty("vessels")),vessels,folder+": vessels");
                 double total=Arrays.stream(moles(rebuilt.checkpoint(),model.componentCount())).sum();
                 assertEquals(Double.parseDouble(expected.getProperty("moles")),total,1e-12*total,folder+": stock");
@@ -921,6 +945,7 @@ class FluidFactsCompatTest {
         props.setProperty("ejectors",ejectors(loaded.world().orElseThrow()));
         props.setProperty("vessels",Long.toString(contents(loaded.checkpoint()).values().stream().filter(v->v instanceof PassiveNetwork.Inventory).count()));
         props.setProperty("rigid",Long.toString(rigid(loaded.checkpoint())));
+        props.setProperty("vacuumPumps",vacuumPumps(loaded.world().orElseThrow()));
         props.setProperty("moles",Double.toString(Arrays.stream(moles(loaded.checkpoint(),model.componentCount())).sum()));
         try(var out=Files.newBufferedWriter(folder.resolve("expected.properties"))){props.store(out,"Facts schema "+FluidFacts.SCHEMA+" corpus image, state format "+FluidCheckpointCodec.VERSION);}
     }

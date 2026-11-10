@@ -238,6 +238,10 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
         @Override public double lawRiseSlope(double flow,double suctionDensity,double suctionPressure,double referenceDensity,double k) {
             return law.riseSlope(flow,speed,suctionDensity,suctionPressure,k);
         }
+        /** The law's own row: the head form for a centrifugal curve, the flow form for a vacuum pump (batch 2026-11-10-vacuum-pump). */
+        @Override public double lawResidual(double flow,double head,double suctionDensity,double suctionPressure,double referenceDensity,double k) {
+            return law.residual(flow,head,speed,suctionDensity,suctionPressure,k);
+        }
         @Override public boolean refuses(InletPhase.Supply supply,boolean refused) {
             return liquid()?supply.dry(refused):Compressor.refusesSupply(supply,refused);
         }
@@ -245,7 +249,7 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
         /** This machine with its pump's head scaled by {@code share} ({@link CentrifugalPump#withHeadShare}, the gas share
          * {@link com.wormzjl.icheme.science.machine.GasEntrainment#headShare}); a compressor as it is. */
         public Machine withHeadShare(double share){return law instanceof CentrifugalPump pump&&share!=1?new Machine(pump.withHeadShare(share),speed,enabled,setFlow,setPressure):this;}
-        @Override public String deviceName(){return liquid()?"pump":"compressor";}
+        @Override public String deviceName(){return liquid()?"pump":law instanceof com.wormzjl.icheme.science.machine.VacuumPump?"vacuum pump":"compressor";}
     }
     /**
      * A steam ejector set's suction-to-discharge connection (batch 2026-11-10-steam-ejector-flow, owner "mover with a curve" and

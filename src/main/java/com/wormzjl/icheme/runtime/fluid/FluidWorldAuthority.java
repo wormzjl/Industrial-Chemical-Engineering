@@ -1839,8 +1839,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
         var state=new com.wormzjl.icheme.network.FluidNetwork.MoverState(target,!mover.liquid(),
                 // A column holds its pumps and fans only while it runs, and runs them (C7).
                 running,(float)(running?Math.max(share,0):0),
-                // A pump's crackle and churn (W10c) from its last committed suction; 0 for a compressor and a stopped mover.
-                running&&mover.liquid()?health.crackle(id):0,running&&mover.liquid()?health.churn(id):0,
+                // A pump's crackle and churn (W10c) from its last committed suction, a dry screw's liquid noise in the crackle (owner V6 B); 0 for a compressor and a stopped mover.
+                running?health.crackle(id):0,running&&mover.liquid()?health.churn(id):0,
                 // An in-line pump's rated speed (its D21 duty speed) for its pitch; a casing's comes from its shape.
                 mover instanceof FlowControl.Pump pump&&pump.requestedVolumeFlow()>0?(float)com.wormzjl.icheme.science.machine.Npsh.dutySpeed(pump.requestedVolumeFlow(),com.wormzjl.icheme.science.machine.Motor.ratedSpeed(2)):0);
         publishedMovers.put(id,state);

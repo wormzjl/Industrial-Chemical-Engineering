@@ -1768,6 +1768,9 @@ public final class PassiveStepSolver {
                 var supply=InletPhase.supply(model,graph,edge,mover.targetVolumeFlow(),duration);
                 if(machine.liquid())vapourShares[edge]=supply.vapourVolumeShare();
                 if(machine.liquid())suctionMovers[edge]=machine.withHeadShare(com.wormzjl.icheme.science.machine.GasEntrainment.headShare(supply.vapourVolumeShare(),graph.reservoirs().get(pipe.first()).state().pressure()));
+                // A vacuum pump (batch 2026-11-10-vacuum-pump) counts the suction mixture's volume as a set-flow mover does; a dry
+                // screw keeps its vapour share for its wear and liquid noise (owner V6 B).
+                else if(machine.law() instanceof com.wormzjl.icheme.science.machine.VacuumPump){if(com.wormzjl.icheme.science.machine.VacuumPump.dryScrew(machine.law()))vapourShares[edge]=supply.vapourVolumeShare();}
                 else wetShares[edge]=com.wormzjl.icheme.science.machine.CentrifugalCompressor.wetEfficiency(1,supply.condensedMassShare());
             }
             // W10d: a set-flow pump's suction vapour share, for its page's gas reading only (its law counts the mixture already).
@@ -1861,6 +1864,9 @@ public final class PassiveStepSolver {
             if(pipe.control() instanceof FlowControl.Mover mover&&mover.liquid()&&mover.targetVolumeFlow()>0&&read(e.graph,edge))
                 observed=observed.withSuction(npshRatio(e,edge,states,flows[edge]),dry(edge,mover,modes.get(edge),flows[edge],states.get(a).pressure()),gasRatio(edge,mover,states.get(a).pressure()),
                         npshRequired(edge,flows[edge]),vapourShares[edge]);
+            // A running dry screw's suction vapour share (owner V6 B): its wear and liquid noise read its liquid share.
+            else if(pipe.control() instanceof FlowControl.Machine screw&&com.wormzjl.icheme.science.machine.VacuumPump.dryScrew(screw.law())&&screw.targetVolumeFlow()>0&&read(e.graph,edge))
+                observed=observed.withSuction(Double.NaN,false,Double.NaN,Double.NaN,vapourShares[edge]);
             if(pipe.control() instanceof FlowControl.PressureValve||pipe.control() instanceof FlowControl.ControlValve) {
                 // The valve stands at the line's first end: its node side is that end's pressure, its line side the row's
                 // first pressure, which includes the valve's drop (the control head).
