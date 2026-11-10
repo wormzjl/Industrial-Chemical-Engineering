@@ -14,11 +14,14 @@ Status: In progress since 2026-11-10 (decisions taken; execution in five stages,
 
 - 2026-11-10: stage 3 (W4) on this branch: `d0ecbd807` the reboiler's and each pumparound cooler's utility sides found at Start by the condenser's rule and kept as `ColumnUnit.utilities` (fluid facts schema 17, default none: a unit saved before keeps its duties free until its next Start; corpus `compat/fluid/schema-17/`), `d349712ff` every duty owed to its utility through the heat in transit (one `Debt` per utility in place of the condenser's logs; `ColumnCycle.Rooms`; `HEATING_SHORT` and `PUMPAROUND_SHORT` cut the feed, D1, no solve; a pumparound's ceiling is its draw tray's, from the inspection, less the approach, the reboiler's floor the bottoms' plus the approach), then the relay (`ExchangerRelay.Read.heating`; a kettle's tubes take the `COLUMN` mode and a flow station, the valve at the heat rate over h(inlet) − h(floor)) and the rigs (water on the review plant's pumparound coolers). No new unknown or equation in `PassiveStepSolver`. The heat screen does not offer the `COLUMN` mode for a kettle yet (open item).
 
+- 2026-11-10: stage 4 (W5, D7) on this branch: `6951f70b5` [MEMBER_POWER_NOTE.md](MEMBER_POWER_NOTE.md), `a8cbde124` fans (the members as `ColumnUnit.members`, fluid facts schema 18, default none: a unit saved before draws nothing until its next Start; corpus `compat/fluid/schema-18/`; each cycle a fan side books its fans over the span that ran and reads its store, banks without power hold natural draught, `NO_POWER` of the condenser where that limits), `7bed7c37b` pumps (a casing books its rated shaft power at the last share on its train, `ShaftTrains.held`; an in-line pump on its own store; no power: `NO_POWER` with the member's index, share 0; a casing with no driver refuses Start, `Refusal.NO_DRIVER`, the owner may veto), `bcd6d119e` step 4a (the heat screen offers a kettle's tubes the `COLUMN` mode with "utility" texts; render `tmp/col-stage4/heat-gui-renders/kettle-column.png`). Everything under `energy.machinesNeedPower`; off, nothing changes. Rigs: the shared review rig already drives each pump with a creative motor and cools its condenser with water, so it needed no motors, no FE source and no config switch; `runFluidGameTestServer -PfluidGameTestRunId=col-stage4-a`: all 87 pass. No new unknown or equation in `PassiveStepSolver`.
+
 ## Documents
 
 - [COLUMN_FAILURE_MODES_REVIEW.md](COLUMN_FAILURE_MODES_REVIEW.md): expected behaviour, the seven mechanisms in the code, coverage, findings F1 to F12.
 - [COLUMN_FAILURE_MODES_PLAN.md](COLUMN_FAILURE_MODES_PLAN.md): one condition record in five classes, work packages W1 to W7, control system integration, adjustable parameters, cost and saves, owner decisions D1 to D8.
 - [EXECUTION_PLAN.md](EXECUTION_PLAN.md): the decisions in force, the rules for every stage, stages 1 to 5 with their steps, tests and done lines, the test world's plant and script.
+- [MEMBER_POWER_NOTE.md](MEMBER_POWER_NOTE.md): how a held member's power was booked before stage 4, and the change that books a running column's fans and pumps.
 
 ## Code areas
 
@@ -26,13 +29,13 @@ Stage 1 changed `science/column/operation/**` (new `Condition`, `ColumnStatus`, 
 
 ## Open items
 
-- Stages 4 and 5 of `EXECUTION_PLAN.md` (the owner approved all five sub-threads on 2026-11-10; stages 1 to 3 are done).
+- Stage 5 of `EXECUTION_PLAN.md` (the owner approved all five sub-threads on 2026-11-10; stages 1 to 4 are done).
 - W3.4 (downcomer backup) is dropped: the owner chose the original plan on 2026-11-10. Its draft stays in `tmp/col-stage2/w34/` until the batch closes.
-- Left by stage 3: the heat screen does not offer the COLUMN mode for a kettle (stage 4, step 4a); the condenser's water curve extrapolates linearly past 10 K to its ceiling (kept byte-identical).
+- Left by stage 3: the condenser's water curve extrapolates linearly past 10 K to its ceiling (kept byte-identical).
 - The Operation glass no longer fits one view at the design size once the column has tray data (7 px over) or conditions; it scrolls. The DCS column page has no glass (its 464 px window is narrower than the ports table).
-- Stage 4, step 4 (a member pump with no driver refuses Start while `machinesNeedPower` is on) is an assumption the owner may veto.
+- Stage 4, step 4 (a member pump with no driver refuses Start while `machinesNeedPower` is on) is an assumption the owner may veto. A member's rated shaft power is its law at its rated flow and full speed at 1000 kg/m³ (the in-line rating): a hydrocarbon reflux books about 1.4× its shaft power. A running unit started before stage 4 has no members until its next Start.
 - Stage 3 changes old plants: after their next Start, a reboiler or pumparound cooler with no utility line limits the column.
-- Stage 3: the heat screen offers the `COLUMN` mode on exchanger sides only; a kettle's tubes take it in the engine (W4) but the player cannot choose it yet (a GUI change, and its hint and line notes say "water"). An air-cooled pumparound cooler has no partnered utility side, so its duty stays free.
+- Stage 3: an air-cooled pumparound cooler has no partnered utility side, so its duty stays free.
 - After stage 5: the owner's manual test in `run/saves/column-failure-modes`, then the final lane and the merge on the owner's word.
 - D3 was kept (rule B stays). One rule in place of A and B would need one run of `tools/column-operation` for its numbers.
 - Not in the plan: a turndown floor (owner Q8), vacuum columns, a relief path to the flare.
