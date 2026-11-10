@@ -36,7 +36,9 @@ public final class ProcessStates {
     private static final CellWatch<FluidNetwork.StillState> STILLS=new CellWatch<>(FluidNetwork.Watch.STILLS,k->k==EquipmentShape.Kind.BATCH_STILL,STILL_SIGHT);
     private static final CellWatch<FluidNetwork.TowerPlume> TOWERS=new CellWatch<>(FluidNetwork.Watch.TOWERS,EquipmentShape.Kind::coolingTower,SIGHT);
     private static final CellWatch<FluidNetwork.HeaterFlue> HEATERS=new CellWatch<>(FluidNetwork.Watch.HEATERS,HeatSides::burners,SIGHT);
-    private static final List<CellWatch<?>> ALL=List.of(FLARES,STILLS,TOWERS,HEATERS);
+    /** The chimneys (batch 2026-11-10-chimney): their release at the tip. */
+    private static final CellWatch<FluidNetwork.ChimneyState> CHIMNEYS=new CellWatch<>(FluidNetwork.Watch.CHIMNEYS,EquipmentShape.Kind::chimney,SIGHT);
+    private static final List<CellWatch<?>> ALL=List.of(FLARES,STILLS,TOWERS,HEATERS,CHIMNEYS);
     private static ClientLevel world;
     private static int age;
     private ProcessStates(){}
@@ -53,6 +55,8 @@ public final class ProcessStates {
     public static void accept(FluidNetwork.TowerPlume state){TOWERS.accept(state.target(),state);}
     /** The server's flue for a heater this client watches. */
     public static void accept(FluidNetwork.HeaterFlue state){HEATERS.accept(state.target(),state);}
+    /** The server's release for a chimney this client watches. */
+    public static void accept(FluidNetwork.ChimneyState state){CHIMNEYS.accept(state.target(),state);}
 
     /** The watched flare stacks of the current level with their last flame state. */
     public static List<CellWatch.Watched<FluidNetwork.FlareState>> flares(){return FLARES.active(Minecraft.getInstance().level);}
@@ -62,6 +66,8 @@ public final class ProcessStates {
     public static List<CellWatch.Watched<FluidNetwork.TowerPlume>> towers(){return TOWERS.active(Minecraft.getInstance().level);}
     /** The watched fired heaters of the current level with their last flue. */
     public static List<CellWatch.Watched<FluidNetwork.HeaterFlue>> heaters(){return HEATERS.active(Minecraft.getInstance().level);}
+    /** The watched chimneys of the current level with their last release. */
+    public static List<CellWatch.Watched<FluidNetwork.ChimneyState>> chimneys(){return CHIMNEYS.active(Minecraft.getInstance().level);}
     /** The client left the world: every watch and state goes. */
     public static void clear(){for(var w:ALL)w.clear();world=null;age=0;}
 

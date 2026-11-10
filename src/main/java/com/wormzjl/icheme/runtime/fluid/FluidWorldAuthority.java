@@ -100,6 +100,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
     private final Map<Long,com.wormzjl.icheme.network.FluidNetwork.TowerPlume> publishedTowers=new HashMap<>();
     /** The fired heaters each player watches for their flues (W5), by their radiant coils, and what was last published. */
     private final Watchers heaterWatchers=new Watchers();
+    /** The chimneys each player watches for their plumes (batch 2026-11-10-chimney), and what was last published. */
+    private final Watchers chimneyWatchers=new Watchers();
+    private final Map<Long,com.wormzjl.icheme.network.FluidNetwork.ChimneyState> publishedChimneys=new HashMap<>();
     private final Map<Long,com.wormzjl.icheme.network.FluidNetwork.HeaterFlue> publishedHeaters=new HashMap<>();
     /** The far silhouettes' subscriptions (W10): registry facts of the placed structures, read as stored. */
     private final Silhouettes silhouettes=new Silhouettes(this::structuresOf);
@@ -429,6 +432,14 @@ public final class FluidWorldAuthority implements AutoCloseable {
                 double density=Noise.ventDensity(m/moles.get(node.id()),node.state().temperature());
                 Noise.add(out,cell(r).above((int)Math.ceil(inventory.levelHeight())),Noise.Kind.VENT,Noise.vent(m/result.advancedSeconds(),density,inventory.volume()/inventory.levelHeight()),.8);
             }
+        }
+        // Chimneys' tips (batch 2026-11-10-chimney, plan 3.7): the gas they released, a free jet through their mouth.
+        for(var node:graph.reservoirs()) {
+            if(node.kind()!=PassiveNetwork.NodeKind.VOID)continue;
+            var r=registrations().get(node.id());if(r==null||!r.device().chimney())continue;
+            var c=chimneys.view(node.id());double d=r.device().geometry().diameter(),area=Math.PI*d*d/4;
+            if(c==null||!(c.exitVelocity()>0)||!(c.massFlow()>0))continue;
+            Noise.add(out,cell(r).above(1),Noise.Kind.VENT,Noise.vent(c.massFlow(),c.massFlow()/(c.exitVelocity()*area),area),.8);
         }
         var heats=new HashMap<Long,Double>();
         if(result.advancedSeconds()>0)for(var b:result.boundaries())if(b.kind()==ConservativeTransport.BoundaryTransfer.Kind.HEAT)heats.merge(b.nodeId(),Math.abs(b.totalEnergyJoule())/result.advancedSeconds(),Double::sum);
@@ -1200,7 +1211,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         if(topology.onlineTick()%100==0)publishFlares();
         if(topology.onlineTick()%100==0)publishStills();
         // The towers' plumes, the fired heaters' flues, the far silhouettes and the noise levels (batch 2026-11-10-custom-shader-system): reads only.
-        if(topology.onlineTick()%100==0){publishTowers();publishHeaters();publishSilhouettes();publishNoise();}
+        if(topology.onlineTick()%100==0){publishTowers();publishHeaters();publishChimneys();publishSilhouettes();publishNoise();}
         if(topology.onlineTick()%ElectricStores.CADENCE==0&&propertyHold==null)health.cadence();
         // A generator's port pushes FE to its neighbours (the FE protocol, reading A65): stored FE only, nothing solves.
         pushGenerators();
@@ -1457,7 +1468,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         return new FluidView.Pump(finite(s.available()),finite(s.required()),finite(s.gas()),Math.clamp(h,0,1),curve);
     }
     private static Double finite(double value){return Double.isFinite(value)?value:null;}
-    public void forgetWatcher(UUID player){owned();driverWatchers.remove(player);rotationWatchers.remove(player);tankWatchers.forget(player);for(long id:sightGlassWatchers.devices(player))unwatchSightGlass(player,id);for(long id:moverWatchers.devices(player))unwatchMover(player,id);flareWatchers.forget(player);stillWatchers.forget(player);towerWatchers.forget(player);heaterWatchers.forget(player);silhouettes.forget(player);noise.forget(player);}
+    public void forgetWatcher(UUID player){owned();driverWatchers.remove(player);rotationWatchers.remove(player);tankWatchers.forget(player);for(long id:sightGlassWatchers.devices(player))unwatchSightGlass(player,id);for(long id:moverWatchers.devices(player))unwatchMover(player,id);flareWatchers.forget(player);stillWatchers.forget(player);towerWatchers.forget(player);heaterWatchers.forget(player);chimneyWatchers.forget(player);silhouettes.forget(player);noise.forget(player);}
 
     /** Requested shaft/machine speeds, keyed by dimension as well as cell; published values are presentation state only. */
     private final Map<UUID,Set<PhysicalFluidTopology.Position>> rotationWatchers=new HashMap<>();
@@ -1715,6 +1726,44 @@ public final class FluidWorldAuthority implements AutoCloseable {
             if(heaterWatchers.watch(uuid,target.identity())) {
                 var state=publishedHeaters.get(target.identity());if(state==null)state=heaterFlue(target,new HashMap<>(),this::storedIsland);
                 if(state!=null)com.wormzjl.icheme.network.FluidNetwork.sendHeater(player,state);
+            }
+        }
+    }
+    /**
+     * A chimney's plume subscription (batch 2026-11-10-chimney), as a heater's: watched at its tip's cell; it replays the state
+     * last published, or the chimney's last booked span (a read), and the presentation cadence keeps it current.
+     */
+    public void watchChimneys(net.minecraft.server.level.ServerPlayer player,List<com.wormzjl.icheme.network.FluidNetwork.Target> watch,List<com.wormzjl.icheme.network.FluidNetwork.Target> unwatch) {
+        owned();if(closed)return;var uuid=player.getUUID();var level=player.serverLevel();
+        for(var target:unwatch)chimneyWatchers.unwatch(uuid,target.identity());
+        for(var target:watch) {
+            var record=watchable(player,level,target);
+            if(record==null||!record.device().chimney())continue;
+            if(chimneyWatchers.watch(uuid,target.identity())) {
+                var state=publishedChimneys.get(target.identity());if(state==null)state=chimneyState(target);
+                if(state!=null)com.wormzjl.icheme.network.FluidNetwork.sendChimney(player,state);
+            }
+        }
+    }
+    /** Chimney {@code target}'s release from its last booked span (a read), or null for no chimney. */
+    private com.wormzjl.icheme.network.FluidNetwork.ChimneyState chimneyState(com.wormzjl.icheme.network.FluidNetwork.Target target) {
+        var c=chimneys.view(target.identity());if(c==null)return null;
+        float flow=(float)c.massFlow(),t=(float)Math.clamp(c.temperature(),1,2999),w=(float)Math.clamp(c.waterShare(),0,9),s=(float)c.solids(),o=(float)Math.clamp(c.opacity(),0,1),u=(float)Math.clamp(c.exitVelocity(),0,1000);
+        if(!Float.isFinite(flow+t+w+s+o+u))return new com.wormzjl.icheme.network.FluidNetwork.ChimneyState(target,0,298.15f,0,0,0,0);
+        return new com.wormzjl.icheme.network.FluidNetwork.ChimneyState(target,flow,t,w,s,o,u);
+    }
+    /** The presentation cadence's chimney plumes: one per watched chimney, to its watchers only. */
+    private void publishChimneys() {
+        publishedChimneys.clear();if(chimneyWatchers.devices().isEmpty())return;
+        for(long id:chimneyWatchers.devices()) {
+            var record=registrations().get(id);
+            if(record==null||!record.device().chimney()){chimneyWatchers.remove(id);continue;}
+            var pos=cell(record);var state=chimneyState(new com.wormzjl.icheme.network.FluidNetwork.Target(pos,id));if(state==null)continue;
+            publishedChimneys.put(id,state);
+            for(var uuid:chimneyWatchers.watchers(id)) {
+                var player=server.getPlayerList().getPlayer(uuid);
+                if(player==null||player.hasDisconnected()||!player.serverLevel().dimension().location().toString().equals(record.device().position().dimension())||!inRange(player,pos)){chimneyWatchers.unwatch(uuid,id);continue;}
+                com.wormzjl.icheme.network.FluidNetwork.sendChimney(player,state);
             }
         }
     }

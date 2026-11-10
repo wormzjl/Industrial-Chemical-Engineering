@@ -104,6 +104,7 @@ public final class FxSources {
         sync(ProcessStates.flares(), FlareSource::new, "flare", seen, level, wind, now);
         sync(ProcessStates.towers(), TowerSource::new, "tower_plume", seen, level, wind, now);
         sync(ProcessStates.heaters(), HeaterSource::new, "heater_flue", seen, level, wind, now);
+        sync(ProcessStates.chimneys(), ChimneySource::new, "chimney_plume", seen, level, wind, now);
         sync(ProcessStates.stills(), StillSource::new, "still_fire", seen, level, wind, now);
         var gone = new ArrayList<Target>();
         for (var target : SOURCES.keySet()) if (!seen.contains(target)) gone.add(target);
@@ -365,6 +366,52 @@ public final class FxSources {
     }
 
     /** A fired heater: the white plume, smoke for liquid or solid fuel, and haze at each stack (W5, W8). */
+    /**
+     * A chimney (batch 2026-11-10-chimney, plan 3.8): from its {@code stack_top} mark, a white plume by the mixing line of its
+     * gas's water, smoke whose darkness and density follow the solids' opacity ({@code Chimney.opacity}: grey at 0.2, black
+     * at 1), heat haze while its gas leaves hotter than the air (full at {@link HeaterSource#HAZE_EXCESS} over it).
+     */
+    static final class ChimneySource extends Source<FluidNetwork.ChimneyState> {
+        private final @Nullable Exits exits;
+        private final double @Nullable [] at;
+        private @Nullable Plume plume, smoke;
+        private @Nullable GlideEmitter haze;
+
+        ChimneySource(CellWatch.Watched<FluidNetwork.ChimneyState> watched) {
+            super(watched);
+            exits = Exits.of(this, named("stack_top"));
+            at = exits == null ? null : exits.centroid();
+            if (exits == null) return;
+            var local = exits.local(at);
+            plume = new Plume(this, "chimney_plume", FxKind.PLUME, at, local, seed);
+            smoke = new Plume(this, "chimney_smoke", FxKind.SMOKE, at, local, seed + 1);
+            haze = hazeEmitter(this, "chimney_haze", at);
+        }
+
+        /** The smoke's colours at opacity {@code tau}: from a light grey to near black. */
+        static PlumeModel.Style smoke(double tau) {
+            double s = Math.max(0, Math.min(1, (tau - .2) / .8));
+            double core = .55 - .47 * s, edge = .66 - .36 * s;
+            return new PlumeModel.Style(new double[]{core, core, core * 1.01}, new double[]{edge, edge, edge * 1.01});
+        }
+
+        @Override
+        void aim(FluidNetwork.ChimneyState s, ClientLevel level, FxWind.Wind wind, double now) {
+            if (exits == null || plume == null || smoke == null || haze == null || at == null) return;
+            double t = s.temperature(), w = s.waterShare(), u = wind.speed(), d = exits.diameter(), reach = exits.reach(at);
+            double exit = s.exitVelocity(), ratio = exit / Math.max(u, .1);
+            var ambient = FxAmbient.at(level, BlockPos.containing(at[0], at[1], at[2]), 0);
+            double[] visible = exit > 0 ? PlumeModel.visible(d, t - 273.15, w, ambient.celsius(), ambient.humidity()) : new double[3];
+            int n = exits.world().length;
+            plume.aim(PlumeModel.values(visible[0], visible[1], ratio, wind.x(), wind.z(), visible[2], d, 0, 0, 0), n, PLUME_PUFFS, PlumeModel.Style.WHITE, u, reach, now);
+            double tau = exit > 0 ? s.opacity() : 0;
+            double length = Math.max(HeaterSource.SMOKE_MIN, Math.min(HeaterSource.SMOKE_MAX, HeaterSource.SMOKE_DIAMETERS * d));
+            smoke.aim(PlumeModel.values(length, ratio, wind.x(), wind.z(), tau, d, 0, 0, 0), n, SMOKE_PUFFS, smoke(tau), u, reach, now);
+            double strength = exit > 0 ? (t - 273.15 - ambient.celsius()) / HeaterSource.HAZE_EXCESS : 0;
+            aimHaze(haze, strength, new double[]{0, .6 * d, 0}, Math.max(.6, d), now);
+        }
+    }
+
     static final class HeaterSource extends Source<FluidNetwork.HeaterFlue> {
         static final PlumeModel.Style OIL = new PlumeModel.Style(new double[]{.5, .5, .51}, new double[]{.62, .62, .63});
         static final PlumeModel.Style COAL = new PlumeModel.Style(new double[]{.3, .28, .26}, new double[]{.45, .42, .39});
