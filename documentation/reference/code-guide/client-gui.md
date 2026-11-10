@@ -4,7 +4,15 @@
 
 **Port colours** (since `645e203d`, 2026-10-29; the screen's drawing removed in batch 2026-11-02-process-simulator): the pipe laying tool colours an assembly's nozzles by `PortColours.assembly`, matching a slot, nozzle role and ordinal to `AssemblyDiagram`'s fixed port order (negative mark ordinals accept any nozzle of that role). Colours spread hues and vary brightness/saturation. The tool resolves a column's own nozzles without validation and other equipment from its watched report; matched world squares keep the colour with grey connected frames or yellow misplaced frames, other nozzles use class colours. A design edit can reorder colours. The assembly screen no longer draws ports: `AssemblyFlowsheet` and `AssemblyPortColoursTest` are gone, and its drawing is `AssemblyBlock` (below). `AssemblyDiagramTest.everyPortHasItsOwnColourForTheLayingTool` keeps the colours distinct. No live world-marker check.
 
-**Snapshot:** e4d3d2d9b (branch `claude/lod-rendering-optimization-1ad1f9`), 2026-11-09. Batch `2026-11-09-lod-rendering`, merged as 0.23.2 on 2026-11-09: detail tiers by screen size for the per-frame renderers (`RenderLod`, `lod_scale`) and mesh caches that close only undrawn meshes (`VertexBufferCache`) · earlier: f4130065f (branch `claude/refinery-compounds-thermos-252973`), 2026-11-09, batches `2026-11-04-refinery-compounds`, `2026-11-04-open-thermo-data` and `2026-11-05-neural-retrain`, merged as 0.23.0 on 2026-11-09.
+**Snapshot:** 7be61a4b9 (branch `claude/furnace-fuel-power-requirements-f7a46e`, main 0.23.6 merged in), 2026-11-10. Batches `2026-11-09-furnace-fuel-power`, `2026-11-09-flare-stack` and `2026-11-09-batch-distiller`, merged as 0.24.0 on 2026-11-10: the fired heater's fuel and fan rows, the flare's and the still's pages (`StillDoor`, `FluidView.Still`), the constructor's flare and still options, `StillFires` and `FlareFlames`, the control panel's Alarms; translations for 0.24.0 · earlier: e4d3d2d9b (branch `claude/lod-rendering-optimization-1ad1f9`), 2026-11-09. Batch `2026-11-09-lod-rendering`, merged as 0.23.2 on 2026-11-09: detail tiers by screen size for the per-frame renderers (`RenderLod`, `lod_scale`) and mesh caches that close only undrawn meshes (`VertexBufferCache`) · earlier: f4130065f (branch `claude/refinery-compounds-thermos-252973`), 2026-11-09, batches `2026-11-04-refinery-compounds`, `2026-11-04-open-thermo-data` and `2026-11-05-neural-retrain`, merged as 0.23.0 on 2026-11-09.
+
+## Fired heater, flare and still screens (0.24.0)
+
+- `FluidDeviceScreen`: a heater's coil pages gain Fuel, Fired, Air fans and Rated duty; the flare's page heat released, heating value, flame and most flow; a still's pot page is `StillDoor` (Firing, Reflux valve, Fuel, a controller's hold, the readings; `FluidView.Still`). `HeatSides` names the still's sides (`heat_side` keys pot, water, burner).
+- `EquipmentConstructorScreen`, `ConstructorColumn`: the flare's tip; the still's Heater, Condenser and Stages groups.
+- `StillFires` and `FlareFlames`: client-only particles from published state (watches `STILLS` and `FLARES`); they infer no process state.
+- `ControlPanelScreen`: the Alarms group.
+- Translations zh_cn, fr_fr, es_es and ja_jp for 0.24.0; status and alarm words in English.
 
 ## Viewport, main-door nozzles and identity hovers (0.22.0)
 

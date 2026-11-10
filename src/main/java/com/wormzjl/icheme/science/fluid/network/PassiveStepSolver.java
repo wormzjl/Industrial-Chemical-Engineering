@@ -2134,6 +2134,11 @@ public final class PassiveStepSolver {
      * partner and is planned per slice ({@link #couple}), as is a convection coil's flue gas from another island's radiant
      * coil. {@code graph} itself where nothing changes.
      */
+    /** Whether {@code graph} has a heat actuator {@link #plan} sets from the step's start flows: a fired coil or a controlled air cooler. */
+    static boolean plansHeat(PassiveNetwork graph) {
+        for(var pipe:graph.pipes())if(pipe.heat() instanceof FiredCoil||pipe.heat() instanceof AirCooled cooled&&cooled.control()!=null)return true;
+        return false;
+    }
     public PassiveNetwork plan(PassiveNetwork graph,double[] flows,Runnable checkpoint) {
         List<PassiveNetwork.Pipe> pipes=null;
         Map<Long,Double> radiant=null;
@@ -2324,7 +2329,8 @@ public final class PassiveStepSolver {
     private PassiveNetwork pools(PassiveNetwork graph,Map<Long,ExchangerRelay.Read> reads,double seconds,Runnable checkpoint) {
         List<PassiveNetwork.Reservoir> nodes=null;
         for(int i=0;i<graph.reservoirs().size();i++) {
-            var node=graph.reservoirs().get(i);var pool=node.inventory().pool();if(pool==null)continue;
+            // A still's fired pot (batch 2026-11-09-batch-distiller, W3) has no tubes: the still plans its firing and head at dispatch.
+            var node=graph.reservoirs().get(i);var pool=node.inventory().pool();if(pool==null||pool.fired())continue;
             var read=reads.getOrDefault(pool.id(),ExchangerRelay.Read.NONE);var tube=read.partner();
             var contents=node.state();
             Pool planned;

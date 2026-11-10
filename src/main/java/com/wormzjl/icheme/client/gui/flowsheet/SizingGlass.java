@@ -409,6 +409,13 @@ public final class SizingGlass {
             if (values.containsKey(Rating.AIR_AHEAD)) lines.add(x.text("sizing.value.air_ahead", number(values.get(Rating.AIR_AHEAD) / 1e6)));
             if (values.containsKey(Rating.FANS))
                 lines.add(x.text("sizing.value.fans", SheetUnits.number(0, 100 * values.get(Rating.FANS)) + " %", number(values.getOrDefault(Rating.FAN_POWER, 0.) / 1e3)));
+            // A batch still's sizes that follow its pot (batch 2026-11-09-batch-distiller, W7).
+            if (values.containsKey(com.wormzjl.icheme.science.flowsheet.sizing.StillSizing.RATED))
+                lines.add(x.text("sizing.value.still_heater", number(values.get(com.wormzjl.icheme.science.flowsheet.sizing.StillSizing.RATED) / 1e3)));
+            if (values.getOrDefault(com.wormzjl.icheme.science.flowsheet.sizing.StillSizing.CONDENSER, 0.) > 0)
+                lines.add(x.text("sizing.value.still_condenser", number(values.get(com.wormzjl.icheme.science.flowsheet.sizing.StillSizing.CONDENSER))));
+            if (values.getOrDefault(com.wormzjl.icheme.science.flowsheet.sizing.StillSizing.COLUMN, 0.) > 0)
+                lines.add(x.text("sizing.value.still_column", SheetUnits.number(0, 1000 * values.get(com.wormzjl.icheme.science.flowsheet.sizing.StillSizing.COLUMN))));
         }
         var proposed = picked == null ? null : sized.condensers().get(picked);
         if (proposed != null)

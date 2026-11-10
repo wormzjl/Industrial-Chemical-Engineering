@@ -20,7 +20,7 @@ public final class ModBlockEntities {
     public static final DeferredHolder<BlockEntityType<?>,BlockEntityType<com.wormzjl.icheme.world.level.block.entity.ControlPanelBlockEntity>> CONTROL_PANEL=BLOCK_ENTITY_TYPES.register("control_panel",
             ()->BlockEntityType.Builder.of(com.wormzjl.icheme.world.level.block.entity.ControlPanelBlockEntity::new,ModBlocks.LOCAL_CONTROLLER.get(),ModBlocks.DCS.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>,BlockEntityType<com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity>> FLUID_DEVICE=BLOCK_ENTITY_TYPES.register("fluid_device",()->BlockEntityType.Builder.of(com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity::new,
-            ModBlocks.FLUID_RESERVOIR.get(),ModBlocks.FLUID_PIPE.get(),ModBlocks.FLUID_GENERATOR.get(),ModBlocks.FLUID_VOID.get(),ModBlocks.INLINE_FILTER.get()).build(null));
+            ModBlocks.FLUID_RESERVOIR.get(),ModBlocks.FLUID_PIPE.get(),ModBlocks.FLUID_GENERATOR.get(),ModBlocks.FLUID_VOID.get(),ModBlocks.INLINE_FILTER.get(),ModBlocks.DIVERTER_VALVE.get()).build(null));
 
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<ProcessSimulatorBlockEntity>>
             PROCESS_SIMULATOR = BLOCK_ENTITY_TYPES.register(

@@ -110,6 +110,29 @@ class SimulatorBlockTest {
         assertFalse(buffer.isReadable());
     }
 
+    /** A batch still's curve (batch 2026-11-09-batch-distiller, W7): each series comes back in its order, its gaps (NaN) kept. */
+    @Test
+    void aBatchCurveComesBack() {
+        var sheet = SheetFixture.water();
+        var report = new Report();
+        report.reading("batch", 5400);
+        var channels = new LinkedHashMap<String, double[]>();
+        channels.put("pot", new double[]{300, 320, 341.5});
+        channels.put("head", new double[]{Double.NaN, 310.25, 333});
+        channels.put("x:Isopentane", new double[]{Double.NaN, .6, .2});
+        report.series("batch", new Report.Series(new double[]{0, 1800, 5400}, channels));
+        report.series("second", new Report.Series(new double[0], Map.of()));
+        var run = new FlowsheetRun(FlowsheetRun.Status.STEADY, Map.of(), Map.of(), Map.of("B", report), List.of(), List.of(), 0, 0, 0, 0, 0, List.of(), List.of());
+        var back = replay(new SimulatorHost.Finished(sheet, run, 1), sheet).run().reports().get("B");
+        assertEquals(List.of("batch", "second"), List.copyOf(back.series().keySet()));
+        var series = back.series().get("batch");
+        assertArrayEquals(new double[]{0, 1800, 5400}, series.time());
+        assertEquals(List.copyOf(channels.keySet()), List.copyOf(series.channels().keySet()));
+        for (var key : channels.keySet()) assertArrayEquals(channels.get(key), series.channel(key), key);
+        assertEquals(0, back.series().get("second").size());
+        assertEquals(5400, back.readings().get("batch"));
+    }
+
     @Test
     void aColumnsDisplayAndASolveAloneComeBack() {
         var sheet = SheetFixture.water();

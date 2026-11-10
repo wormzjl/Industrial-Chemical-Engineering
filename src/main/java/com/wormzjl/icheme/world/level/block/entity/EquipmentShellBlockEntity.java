@@ -115,6 +115,9 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
     private LoadedEquipment.@Nullable Structure structure;
     private @Nullable LoadedEquipment structures;
 
+    /** A solid-fired batch still's fuel slot (batch 2026-11-09-batch-distiller, W4): held by its pot's cell, saved as {@code StillFuel}. */
+    private net.neoforged.neoforge.items.@Nullable ItemStackHandler fuel;
+
     public EquipmentShellBlockEntity(BlockPos position, BlockState state) {
         super(ModBlockEntities.EQUIPMENT_SHELL.get(), position, state);
     }
@@ -198,7 +201,7 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
      */
     private void trackMoving() {
         if(level!=null&&level.isClientSide())com.wormzjl.icheme.client.MoverSounds.track(this);
-        if(level!=null&&level.isClientSide())com.wormzjl.icheme.client.DriverSounds.track(this);
+        if(level!=null&&level.isClientSide())com.wormzjl.icheme.client.DriverSounds.track(this);if(level!=null&&level.isClientSide())com.wormzjl.icheme.client.FlareFlames.track(this);if(level!=null&&level.isClientSide())com.wormzjl.icheme.client.StillFires.track(this);
         moving = new int[0];
         CLIENT_MOVING.remove(this);
         CLIENT_TANKS.remove(this);
@@ -285,7 +288,7 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
         com.wormzjl.icheme.runtime.instrument.InstrumentHosts.unloaded(this);
         if(level!=null&&level.isClientSide())com.wormzjl.icheme.client.InstrumentRenderer.forget(worldPosition);
         if(level!=null&&level.isClientSide())com.wormzjl.icheme.client.MoverSounds.forget(this);
-        if(level!=null&&level.isClientSide())com.wormzjl.icheme.client.DriverSounds.forget(this);
+        if(level!=null&&level.isClientSide())com.wormzjl.icheme.client.DriverSounds.forget(this);if(level!=null&&level.isClientSide())com.wormzjl.icheme.client.FlareFlames.forget(this);if(level!=null&&level.isClientSide())com.wormzjl.icheme.client.StillFires.forget(this);
         CLIENT_MOVING.remove(this);
         CLIENT_TANKS.remove(this);
         CLIENT_PORTS.remove(this);
@@ -356,6 +359,67 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
         this.paint = paint;
         setChanged();
         if (level != null) level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 2);
+    }
+
+    /**
+     * This cell's fuel slot (batch 2026-11-09-batch-distiller, W4): every cell of a solid-fired batch still offers its pot
+     * cell's one slot, so a hopper on any face feeds the fire; null on any other structure, on a cell whose pot cell is not
+     * loaded, and on the client. It takes only what burns: an item with a fuel record or a furnace burn time.
+     */
+    public net.neoforged.neoforge.items.@Nullable IItemHandler fuel() {
+        if (shape == null || shape.kind() != EquipmentShape.Kind.BATCH_STILL || shape.still().heater() != com.wormzjl.icheme.science.equipment.BatchStillOptions.Heater.SOLID
+                || !(level instanceof ServerLevel)) return null;
+        var pot = ShapeRasterizer.fluidCell(shape);
+        var at = origin();
+        if (pot == null || at == null) return null;
+        if (pot.equals(cell())) return slot();
+        var potCell = at.offset(pot.x(), pot.y(), pot.z());
+        return level.isLoaded(potCell) && level.getBlockEntity(potCell) instanceof EquipmentShellBlockEntity held && held != this && pot.equals(held.cell()) ? held.slot() : null;
+    }
+
+    private net.neoforged.neoforge.items.ItemStackHandler slot() {
+        if (fuel == null) fuel = new net.neoforged.neoforge.items.ItemStackHandler(1) {
+            @Override
+            public boolean isItemValid(int slot, net.minecraft.world.item.ItemStack stack) {
+                return fuelEnergy(stack) > 0;
+            }
+
+            @Override
+            protected void onContentsChanged(int slot) {
+                setChanged();
+                // A wake for the pot's island, which reads the fire at its next slice; nothing solves here.
+                if (level instanceof ServerLevel server && identity > 0) FluidWorldAuthority.find(server.getServer()).ifPresent(world -> world.stillFuelChanged(identity));
+            }
+        };
+        return fuel;
+    }
+
+    /** The heat of one {@code stack} item in a still's fire, J: its fuel record's, else its furnace burn time times the configured joules per burn tick. */
+    public static double fuelEnergy(net.minecraft.world.item.ItemStack stack) {
+        if (stack.isEmpty()) return 0;
+        var id = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
+        var tags = stack.getTags().map(tag -> tag.location().toString()).toList();
+        return com.wormzjl.icheme.science.material.MaterialRuntime.current().fuels().energy(id, tags, stack.getBurnTime(net.minecraft.world.item.crafting.RecipeType.SMELTING), IChemE.joulesPerBurnTick());
+    }
+
+    /** Takes one item from this pot cell's fuel slot: its heat (J), or 0 when it holds nothing that burns. A container's remainder (a bucket) stays in the slot. */
+    public double takeFuel() {
+        if (fuel == null) return 0;
+        var held = fuel.getStackInSlot(0);
+        double energy = fuelEnergy(held);
+        if (!(energy > 0)) return 0;
+        var remainder = held.getCraftingRemainingItem();
+        fuel.extractItem(0, 1, false);
+        if (!remainder.isEmpty() && fuel.getStackInSlot(0).isEmpty()) fuel.setStackInSlot(0, remainder);
+        return energy;
+    }
+
+    /** What this pot cell's fuel slot holds, dropped where the structure stood (its structure was broken). */
+    public net.minecraft.world.item.ItemStack dropFuel() {
+        if (fuel == null) return net.minecraft.world.item.ItemStack.EMPTY;
+        var held = fuel.getStackInSlot(0).copy();
+        fuel.setStackInSlot(0, net.minecraft.world.item.ItemStack.EMPTY);
+        return held;
     }
 
     /**
@@ -496,6 +560,8 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
         super.saveAdditional(tag, registries);instruments.write(tag);
         write(tag);
         if (identity != 0) tag.putLong("FluidIdentity", identity);
+        // A batch still's fuel slot (W4): written only while it holds something; absent is empty.
+        if (fuel != null && !fuel.getStackInSlot(0).isEmpty()) tag.put("StillFuel", fuel.serializeNBT(registries));
     }
 
     @Override
@@ -508,6 +574,8 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
         stamp = 0;
         box = new int[3];
         identity = tag.getLong("FluidIdentity");
+        fuel = null;
+        if (tag.contains("StillFuel", net.minecraft.nbt.Tag.TAG_COMPOUND)) slot().deserializeNBT(registries, tag.getCompound("StillFuel"));
         lastView = null;
         roofLevel = tag.getFloat("RoofLevel");
         if (!Float.isFinite(roofLevel) || roofLevel < 0) {
@@ -597,6 +665,14 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
         }
         if (shape.kind() == EquipmentShape.Kind.AIR_COOLER) tag.putIntArray("Bank", shape.bank().encode());
         if(shape.kind()==EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER)tag.putIntArray("TowerBank",shape.towerBank().encode());
+        if (shape.kind() == EquipmentShape.Kind.BATCH_STILL) {
+            // A batch still's options (shape fields 11, batch 2026-11-09-batch-distiller): enums by name.
+            var still = new CompoundTag();
+            still.putString("Heater", shape.still().heater().key());
+            still.putString("Condenser", shape.still().condenser().key());
+            still.putInt("Stages", shape.still().stages());
+            tag.put("Still", still);
+        }
         if (shape.designed() && com.wormzjl.icheme.science.equipment.UnitDesign.of(shape.kind()).hasDuty()) tag.put("Duty", writeDuty(shape.duty()));
     }
 
@@ -607,6 +683,14 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
     public static ShapeRepair.Read readShape(CompoundTag tag) {
         var read=ShapeRepair.read(saved(tag));
         if(read.shape()!=null && tag.contains("ExchangerType")) read=new ShapeRepair.Read(read.shape().withExchangerType(com.wormzjl.icheme.science.equipment.ExchangerType.valueOf(tag.getString("ExchangerType"))),read.retired(),read.repairs());
+        if (read.shape() != null && read.shape().kind() == EquipmentShape.Kind.BATCH_STILL) {
+            // Shape fields 11: a still saved without its options is the default still; a refused field is repaired to its default.
+            var still = tag.getCompound("Still");
+            var repairs = new java.util.ArrayList<>(read.repairs());
+            var options = com.wormzjl.icheme.science.equipment.BatchStillOptions.read(still.contains("Heater") ? still.getString("Heater") : null,
+                    still.contains("Condenser") ? still.getString("Condenser") : null, still.contains("Stages") ? still.getInt("Stages") : null, repairs);
+            return new ShapeRepair.Read(read.shape().withStill(options), read.retired(), repairs);
+        }
         if(read.shape()==null||read.shape().kind()!=EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER)return read;
         try{return new ShapeRepair.Read(read.shape().withTowerBank(com.wormzjl.icheme.science.equipment.TowerBank.decode(tag.getIntArray("TowerBank"))),null,read.repairs());}
         catch(IllegalArgumentException invalid){var repairs=new java.util.ArrayList<>(read.repairs());repairs.add("structure bank -> one cell: "+invalid.getMessage());return new ShapeRepair.Read(read.shape(),null,repairs);}

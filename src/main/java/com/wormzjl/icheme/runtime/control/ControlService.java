@@ -44,6 +44,18 @@ public final class ControlService {
         return facts;
     }
 
+    /** The firing the controllers set for still {@code pot} at the last cadence, NaN for none (owner decision O1). */
+    public double stillFiring(long pot) {
+        var v = plans.firing(pot);
+        return v == null ? Double.NaN : v;
+    }
+
+    /** The reflux ratio the controllers set for still {@code pot} at the last cadence, NaN for none. */
+    public double stillReflux(long pot) {
+        var v = plans.reflux(pot);
+        return v == null ? Double.NaN : v;
+    }
+
     /** Cable sites whose chunk loaded, by dimension, each queued once until the re-alignment checks it (W5c C2). */
     private final Map<String, ArrayDeque<DataBus.Site>> cableQueue = new HashMap<>();
     private final Set<DataBus.Site> cableQueued = new HashSet<>();
@@ -304,18 +316,30 @@ public final class ControlService {
         return readings;
     }
 
+    /** What a controller claims: its output, and for a batch still's pot the handle its action names (firing or reflux). */
+    private record Claim(long output, ControlSettings.Action handle) {}
+
+    private Claim claim(ControlSettings s) {
+        var r = world.registrations().get(s.output());
+        return new Claim(s.output(), r != null && r.device().stillPot() ? s.action() : null);
+    }
+
     /**
-     * Every local controller decides in a stable order. Two controllers on one output conflict; a
-     * controller that cannot act keeps the output's last setpoint, unless the output is reserved.
+     * Every local controller decides in a stable order. Two controllers on one output conflict (on a
+     * still's pot, two on one handle); a controller that cannot act keeps the output's last
+     * setpoint, unless the output is reserved. A diverter valve's outlet is an engine edit of its
+     * joints: it stays where the controller last set it.
      */
     private void runControllers(
             Map<UUID, ControlInput> sensors, Map<UUID, Sensor.Reading> readings) {
         var nextValves = new HashMap<Long, FlowControl.ControlValve>();
         var nextHeat = new HashMap<Long, Double>();
-        var claims = new HashMap<Long, Integer>();
+        var nextFiring = new HashMap<Long, Double>();
+        var nextReflux = new HashMap<Long, Double>();
+        var claims = new HashMap<Claim, Integer>();
         for (var panel : facts.panels())
             if (!panel.dcs() && panel.settings().enabled() && !facts.heldPanel(panel.id()))
-                claims.merge(panel.settings().output(), 1, Integer::sum);
+                claims.merge(claim(panel.settings()), 1, Integer::sum);
         for (var panel :
                 facts.panels().stream()
                         .sorted(Comparator.comparing(p -> p.id().toString()))
@@ -327,7 +351,7 @@ public final class ControlService {
                 String state = blocked ? "HELD" : "OFF";
                 if (setting.enabled() && !blocked) {
                     ControlLaw.Decision decision;
-                    if (claims.getOrDefault(setting.output(), 0) > 1)
+                    if (claims.getOrDefault(claim(setting), 0) > 1)
                         decision = ControlLaw.Decision.noSetpoint("OUTPUT CONFLICT");
                     else
                         try {
@@ -343,12 +367,23 @@ public final class ControlService {
                     if (decision.valve() != null)
                         nextValves.put(setting.output(), decision.valve());
                     if (decision.heat() != null) nextHeat.put(setting.output(), decision.heat());
-                    if (!state.equals("OUTPUT RESERVED")
-                            && !nextValves.containsKey(setting.output())
-                            && !nextHeat.containsKey(setting.output())) {
+                    if (decision.firing() != null)
+                        nextFiring.put(setting.output(), decision.firing());
+                    if (decision.reflux() != null)
+                        nextReflux.put(setting.output(), decision.reflux());
+                    if (decision.outlet() != null) {
+                        var refused = world.divert(setting.output(), decision.outlet());
+                        if (refused != null) state += " · " + refused.toUpperCase(Locale.ROOT);
+                    }
+                    if (!state.equals("OUTPUT RESERVED") && !decision.sets()) {
                         var held = plans.valve(setting.output());
                         var thermal = plans.heat(setting.output());
-                        if (held != null) {
+                        boolean firing = setting.action() == ControlSettings.Action.INLET;
+                        var still = firing ? plans.firing(setting.output()) : plans.reflux(setting.output());
+                        if (still != null) {
+                            (firing ? nextFiring : nextReflux).put(setting.output(), still);
+                            state += " · LAST SETPOINT";
+                        } else if (held != null) {
                             nextValves.put(setting.output(), held);
                             state += " · LAST SETPOINT";
                         } else if (thermal != null) {
@@ -359,6 +394,6 @@ public final class ControlService {
                 }
                 publication.status(panel.id(), state);
             }
-        world.controlInputsChanged(plans.commit(nextValves, nextHeat));
+        world.controlInputsChanged(plans.commit(nextValves, nextHeat, nextFiring, nextReflux));
     }
 }

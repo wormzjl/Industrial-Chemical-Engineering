@@ -15,6 +15,19 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-11-10
+
+### Added
+
+- Fired heaters burn fuel and power their air fans: the burners take the fuel their FUEL nozzle delivers on its lower heating value (a `combustion` sub-record prebuilt into 45 material records and the water, `tools/heating-values/`), the combustion-air fans draw about 0.8 kW per MW fired from an FE terminal; short fuel lowers the duty (LOW FUEL), no fuel or no power puts the fire out; the heater row reads "Rated duty". Equipment alarms reach the control system as built-in channels and the control panel's Alarms group (`59278550b`, follow-ups in `37c180e9d`; batch `2026-11-09-furnace-fuel-power`).
+- A scalable elevated flare stack: its tip, 0.1 to 0.6 m, sets the rated heat release and the stack's height; vent gas burns while its flame temperature with air is at least 1700 K and leaves unburnt below; the tip passes at most its rating or its stable exit velocity; solids block it; flame animation, a data socket in the plinth, a MODELLED simulator unit and its sizing (`37c180e9d`, `97647353c`, `9041b677d`, `19364adba`; batch `2026-11-09-flare-stack`).
+- The batch still: a copper pot of 100 to 2000 L on a 4 × 3 block footprint, heated by a brick firebox with solid fuel (mass × heating value, `fuels` records) or liquid fuel, or by an electric heater in a drum skirt; a worm tub, or a top condenser over a 2 to 8 stage column with a reflux valve (the bubble-point column, owner B3), or a vapour outlet; a diverter valve; controllers on the electric still; its page, constructor options, fires and drip; a MODELLED simulator unit with its batch curve and sizing. Fluid facts schema 16, solved state format 42, shape fields 11, protocols `fluid-20` and `equipment-22` (W1 `704a74f74`, W2 `b0e99f669`, W3 to W5 `c7d8adf4d`, W6 `38c559922`, W7 `6d94489d4` to `1b8131cbc`, owner feedback `5984da00f` to `7b03246fe`, main merge `3da3fa78b`, corpus `851f3a5c2`, the terminal box that carries the nameplate `68bc05675`; batch `2026-11-09-batch-distiller`).
+
+### Changed
+
+- Translations of the three batches in zh_cn, fr_fr, es_es and ja_jp (`52415da92`).
+- Tooling cleanup (`ebaad1be0`): the B3 column comparison (`BubblePointColumn`, `BatchColumnComparisonTest`) moves from `src/test` to `tools/batch-still-column/`.
+
 ## [0.23.6] - 2026-11-09
 
 ### Fixed

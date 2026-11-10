@@ -508,6 +508,23 @@ public final class ShapeRasterizer {
         return geometry(shape).terminal;
     }
 
+    /**
+     * A design's named parts, for their animation (batch 2026-11-09-batch-distiller, phase 3): each part's box in the box's
+     * coordinates, low corner then high corner; empty for a shape that names none.
+     */
+    public static Map<String, double[]> marks(EquipmentShape shape) {
+        if (!shape.designed()) return Map.of();
+        var unit = ProcessUnit.of(shape);
+        var transform = shape.transform();
+        var out = new java.util.LinkedHashMap<String, double[]>();
+        unit.marks.forEach((name, b) -> {
+            var a = transform.point(new double[]{b[0], b[1], b[2]});
+            var c = transform.point(new double[]{b[3], b[4], b[5]});
+            out.put(name, new double[]{Math.min(a[0], c[0]), Math.min(a[1], c[1]), Math.min(a[2], c[2]), Math.max(a[0], c[0]), Math.max(a[1], c[1]), Math.max(a[2], c[2])});
+        });
+        return java.util.Collections.unmodifiableMap(out);
+    }
+
     /** The cells nozzle {@code k} may reach at its largest size: those whose keys carry its size. */
     public static Set<Cell> nozzleCells(EquipmentShape shape, int k) {
         return geometry(shape).nozzleCells.get(k);
@@ -528,6 +545,9 @@ public final class ShapeRasterizer {
     }
 
     /** Every node cell of {@code shape}, one per registration: a heat unit's in its sides' order ({@link HeatSides#of}), then a kettle's pool's. */
+    /** A batch still's devices after its pot, by the nozzle each stands at ({@link #fluidCells}): those it has, in this order. */
+    public static final List<EquipmentShape.Role> STILL_DEVICES = List.of(EquipmentShape.Role.WATER_INLET, EquipmentShape.Role.DISTILLATE, EquipmentShape.Role.VENT, EquipmentShape.Role.FUEL);
+
     public static List<Cell> fluidCells(EquipmentShape shape) {
         return geometry(shape).fluidCells;
     }
@@ -834,6 +854,14 @@ public final class ShapeRasterizer {
                     box = new Cell(floor(at[0]), floor(at[1]), floor(at[2]));
                 }
             }
+            // A fired heater's FE port (batch 2026-11-09-furnace-fuel-power) and an electric still's (W6) is its service enclosure's: the cell inside the
+            // enclosure behind its power gland, which stands 0.04 m out of the case's face.
+            if (box == null && (HeatSides.burners(shape.kind()) || EquipmentServices.electricStill(shape)) && services.power() != null) {
+                var p = services.power();
+                int[][] normals = {{0, -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}};
+                var n = normals[p.face()];
+                box = new Cell(floor(p.x() - .1 * n[0]), floor(p.y() - .1 * n[1]), floor(p.z() - .1 * n[2]));
+            }
             terminal = box;
             for (var entry : byCell.entrySet()) {
                 if (entry.getValue().size() > KEYED_NOZZLES)
@@ -853,6 +881,13 @@ public final class ShapeRasterizer {
                     var low = transform.point(unit.fluidPoint);
                     var all = new ArrayList<>(sides);all.add(new Cell(floor(low[0]), floor(low[1]), floor(low[2])));sides = List.copyOf(all);
                 }
+                // A fired heater's burners register after its coils, at their FUEL nozzle's cell (batch 2026-11-09-furnace-fuel-power).
+                if (HeatSides.burners(shape.kind())) {
+                    var fuel = ports.stream().filter(port -> nozzles.get(port.nozzle()).role() == HeatSides.BURNER_ROLE).findFirst()
+                            .orElseThrow(() -> new IllegalStateException("A fired heater needs its fuel nozzle")).cell();
+                    if (sides.contains(fuel)) throw new IllegalStateException("A fired heater's fuel nozzle shares a coil's node cell");
+                    var all = new ArrayList<>(sides);all.add(fuel);sides = List.copyOf(all);
+                }
                 node = sides.getFirst();
             } else if (shape.drum()) {
                 var low = shape.orientation().horizontal()
@@ -866,6 +901,23 @@ public final class ShapeRasterizer {
                 // A turbine registers at its steam inlet's cell (W3, reading A37), as a mover at its suction's.
                 node = ports.stream().filter(port -> nozzles.get(port.nozzle()).role() == EquipmentShape.Role.STEAM)
                         .findFirst().orElseThrow(() -> new IllegalStateException("A turbine needs a steam inlet")).cell();
+            } else if (shape.kind() == EquipmentShape.Kind.FLARE_STACK) {
+                // A flare registers its tip at its vent gas inlet's cell (batch 2026-11-09-flare-stack), as the burners at their fuel's.
+                node = ports.stream().filter(port -> nozzles.get(port.nozzle()).role() == EquipmentShape.Role.FLARE_GAS)
+                        .findFirst().orElseThrow(() -> new IllegalStateException("A flare needs its gas inlet")).cell();
+            } else if (shape.kind() == EquipmentShape.Kind.BATCH_STILL) {
+                // A batch still (batch 2026-11-09-batch-distiller, W3) registers its pot at its lowest inside point, then its
+                // condenser's water side at its WATER_INLET, its DISTILLATE and VENT outlets and its burners at their nozzles' cells.
+                if (unit == null || unit.fluidPoint == null) throw new IllegalStateException("A batch still needs its pot's node");
+                var low = transform.point(unit.fluidPoint);
+                node = new Cell(floor(low[0]), floor(low[1]), floor(low[2]));
+                var all = new ArrayList<Cell>();all.add(node);
+                for (var role : STILL_DEVICES)
+                    for (var port : ports) if (nozzles.get(port.nozzle()).role() == role) {
+                        if (all.contains(port.cell())) throw new IllegalStateException("A batch still's " + role + " nozzle shares a device's cell");
+                        all.add(port.cell());break;
+                    }
+                sides = List.copyOf(all);
             } else if (unit != null && unit.fluidPoint != null) {
                 var low = transform.point(unit.fluidPoint);
                 node = new Cell(floor(low[0]), floor(low[1]), floor(low[2]));

@@ -33,6 +33,19 @@ public final class NoteText {
                 out.set(0, pressure(raw.get(0), units));
                 out.set(1, pressure(raw.get(1), units));
             }
+            case "flare.flame_out" -> {
+                out.set(0, temperature(raw.get(0), units));
+                out.set(1, temperature(raw.get(1), units));
+            }
+            case "still.hot_charge" -> {
+                out.set(0, temperature(raw.get(0), units));
+                out.set(1, temperature(raw.get(1), units));
+            }
+            case "still.overheat" -> out.set(0, temperature(raw.get(0), units));
+            case "flare.over_capacity" -> {
+                out.set(0, flow(raw.get(0)));
+                out.set(1, flow(raw.get(1)));
+            }
             case "heater.limit" -> {
                 out.set(0, watts(raw.get(0)));
                 out.set(1, watts(raw.get(1)));

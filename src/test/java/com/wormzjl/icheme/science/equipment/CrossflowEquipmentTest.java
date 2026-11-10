@@ -250,16 +250,49 @@ class CrossflowEquipmentTest {
             java.nio.file.Files.write(written, lines);
             fail("Copy constructor corpus from " + written + " to " + corpus);
         }
-        for (var line : java.nio.file.Files.readAllLines(corpus)) {
-            var image = net.minecraft.nbt.TagParser.parseTag(line);
-            var read =
-                    com.wormzjl.icheme.world.level.block.entity.EquipmentConstructorBlockEntity
-                            .readDesign(image.getCompound("Saved"), fresh, repair -> fail(repair));
-            // The snapshot string predates the appended base-speed fact; its absent value is zero.
-            var expected =
-                    image.getString("Expected")
-                            .replaceAll("(exhaust=[0-9.Ee+-]+)\\]", "$1, baseSpeed=0.0]");
-            assertEquals(expected, read.toString());
+        // A draft's batch still options (batch 2026-11-09-batch-distiller, W6): an electric pot still and a liquid-fired
+        // still with its condenser and four trays.
+        var stills = corpus.resolveSibling("designs-2.snbt");
+        if (!java.nio.file.Files.exists(stills)) {
+            var lines = new java.util.ArrayList<String>();
+            for (var options :
+                    java.util.List.of(
+                            new BatchStillOptions(BatchStillOptions.Heater.ELECTRIC, BatchStillOptions.Condenser.NONE, 0),
+                            new BatchStillOptions(BatchStillOptions.Heater.LIQUID, BatchStillOptions.Condenser.BUILT_IN, 4))) {
+                var design = fresh.withStill(options);
+                var tag = new CompoundTag();
+                com.wormzjl.icheme.world.level.block.entity.EquipmentConstructorBlockEntity
+                        .writeDesign(tag, design);
+                var image = new CompoundTag();
+                image.put("Saved", tag);
+                image.putString("Expected", design.toString());
+                lines.add(image.toString());
+            }
+            var written = java.nio.file.Path.of("build/compat/constructor/designs-2.snbt");
+            java.nio.file.Files.createDirectories(written.getParent());
+            java.nio.file.Files.write(written, lines);
+            fail("Copy constructor corpus from " + written + " to " + stills);
         }
+        for (var file : java.util.List.of(corpus, stills))
+            for (var line : java.nio.file.Files.readAllLines(file)) {
+                var image = net.minecraft.nbt.TagParser.parseTag(line);
+                var read =
+                        com.wormzjl.icheme.world.level.block.entity.EquipmentConstructorBlockEntity
+                                .readDesign(image.getCompound("Saved"), fresh, repair -> fail(repair));
+                // The snapshot string predates the appended base-speed fact; its absent value is zero.
+                var expected =
+                        image.getString("Expected")
+                                .replaceAll("(exhaust=[0-9.Ee+-]+)\\]", "$1, baseSpeed=0.0]");
+                // An image before W6 reads the default still options, which its text does not show.
+                if (!expected.contains("still="))
+                    expected =
+                            expected.replaceAll(
+                                    "(exchangerType=[A-Z_]+)\\]$",
+                                    "$1, "
+                                            + java.util.regex.Matcher.quoteReplacement(
+                                                    "still=" + BatchStillOptions.DEFAULT)
+                                            + "]");
+                assertEquals(expected, read.toString(), file.toString());
+            }
     }
 }

@@ -208,6 +208,20 @@ public final class SheetEditor {
                 p.addProperty("drop", 1e5);
             }
             case "mixer" -> p.addProperty("inlets", 2);
+            case "flare" -> p.addProperty("tip", com.wormzjl.icheme.science.flowsheet.unit.FlareUnit.TIP);
+            case "batch_still" -> {
+                p.addProperty("volume", com.wormzjl.icheme.science.flowsheet.unit.BatchStillUnit.VOLUME);
+                p.addProperty("heater", "solid");
+                p.addProperty("firing", com.wormzjl.icheme.science.flowsheet.unit.BatchStillUnit.FIRING);
+                p.addProperty("condenser", "built_in");
+                p.addProperty("water", com.wormzjl.icheme.science.flowsheet.unit.BatchStillUnit.WATER);
+                p.addProperty("stages", 0);
+                p.addProperty("reflux", com.wormzjl.icheme.science.flowsheet.unit.BatchStillUnit.REFLUX);
+                p.addProperty("cycle", com.wormzjl.icheme.science.flowsheet.unit.BatchStillUnit.CYCLE);
+                var rows = new JsonArray();
+                for (var row : com.wormzjl.icheme.science.flowsheet.unit.BatchStillUnit.cutRows(Params.none())) rows.add(row.json());
+                p.add("cuts", rows);
+            }
             case "splitter" -> {
                 p.addProperty("mode", "shares");
                 var rows = new JsonArray();

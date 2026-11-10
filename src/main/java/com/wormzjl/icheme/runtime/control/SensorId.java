@@ -27,6 +27,7 @@ public record SensorId(UUID instance, long number, Sensor.Kind kind) {
                     case FLOW -> "FT";
                     case LEVEL -> "LT";
                     case SPEED -> "ST";
+                    case ALARM -> "XA";
                 },
                 number);
     }

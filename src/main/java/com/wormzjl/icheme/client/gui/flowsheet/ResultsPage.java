@@ -73,6 +73,12 @@ public final class ResultsPage {
             if (Double.isNaN(duty)) continue;
             switch (unit.type()) {
                 case "fired_heater" -> fired += duty;
+                // A batch still's firing and its condenser's duty, over its cycle (batch 2026-11-09-batch-distiller, W7).
+                case "batch_still" -> {
+                    fired += duty;
+                    double condenser = results.reading(unit.id(), "condenser");
+                    if (!Double.isNaN(condenser)) cooled += Math.abs(condenser);
+                }
                 case "exchanger", "kettle" -> recovered += Math.abs(duty);
                 case "cooler" -> cooled += Math.abs(duty);
                 default -> {

@@ -17,7 +17,8 @@ import java.util.function.Supplier;
 /**
  * The electric stores of a world (batch 2026-11-03-rotating-machinery W5, build plan sections 2 to 4, owner decision
  * D30): one per powered unit, keyed by its identity (reading A53): a motor's or generator's shaft unit, an air cooler's
- * process side, an induced-draft tower's basin. Arithmetic on the server thread only:
+ * process side, an induced-draft tower's basin, a fired heater's burners (their combustion-air fans, batch
+ * 2026-11-09-furnace-fuel-power: booked by {@link FiredHeaters} at the fuel's commits, a store run empty puts the fire out). Arithmetic on the server thread only:
  * <ul>
  * <li>a port's FE adds to (or a generator's port takes from) its store at once: the FE protocol, no process work, nothing
  * wakes ({@link #receive}, {@link #extract});</li>
@@ -46,7 +47,7 @@ public final class ElectricStores {
 
     /** What a store powers. */
     public enum Kind {
-        MOTOR, GENERATOR, FANS, TOWER, INLINE;
+        MOTOR, GENERATOR, FANS, TOWER, INLINE, BURNERS, STILL;
 
         public boolean generator() {
             return this == GENERATOR;
@@ -88,6 +89,8 @@ public final class ElectricStores {
     private final IslandCoordinator coordinator;
     private final Supplier<Settings> settings;
     private LongPredicate supply=id->false;
+    /** Told when a unit lost or regained its power: a fired heater's burners wake their radiant coil's island too. */
+    private java.util.function.LongConsumer moved=id->{};
     private final Map<Long, Store> stores = new TreeMap<>();
     /** Islands to wake at the next decision point: a fan unit lost or regained its power. */
     private final Set<Long> wake = new TreeSet<>();
@@ -127,6 +130,9 @@ public final class ElectricStores {
         return settings.get().joulesPerFE();
     }
 
+    /** Installs the listener told when a unit lost or regained its power. */
+    public void moved(java.util.function.LongConsumer value){moved=Objects.requireNonNull(value);}
+
     /** Installs the server-thread, read-only FE source lookup used at the motor decision cadence. */
     public void supply(LongPredicate value){supply=Objects.requireNonNull(value);}
 
@@ -141,8 +147,14 @@ public final class ElectricStores {
         if(r.device().kind()==com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.PIPE&&r.device().control() instanceof FlowControl.Mover)return true;
         var heat = r.device().heat();
         if (heat != null && heat.fans()) return true;
+        if (r.device().burner()) return true;
         var tower = r.spec().tower();
         return tower != null && tower.draft() == CoolingTower.Draft.INDUCED;
+    }
+
+    /** Whether batch still {@code u} is a powered unit: an electric one (batch 2026-11-09-batch-distiller, W4). */
+    public static boolean powered(StillUnit u) {
+        return u.heater() == com.wormzjl.icheme.science.fluid.network.BatchStill.Heater.ELECTRIC;
     }
 
     /** Whether shaft unit {@code u} is a powered unit: a motor or a generator. */
@@ -151,11 +163,13 @@ public final class ElectricStores {
     }
 
     private Kind kind(long id) {
+        var still = topology.still(id);
+        if (still != null) return powered(still) ? Kind.STILL : null;
         var u = topology.shaft(id);
         if (u != null) return u.kind() == ShaftNetwork.Kind.MOTOR ? Kind.MOTOR : u.kind() == ShaftNetwork.Kind.GENERATOR ? Kind.GENERATOR : null;
         var r = topology.active().get(id);
         if (r == null || !powered(r)) return null;
-        return r.device().control() instanceof FlowControl.Mover ? Kind.INLINE : r.device().heat() != null ? Kind.FANS : Kind.TOWER;
+        return r.device().control() instanceof FlowControl.Mover ? Kind.INLINE : r.device().burner() ? Kind.BURNERS : r.device().heat() != null ? Kind.FANS : Kind.TOWER;
     }
 
     /** A unit's rated electric draw, W (a generator's rated output): the store's capacity and rates follow it (plan 7). */
@@ -181,7 +195,30 @@ public final class ElectricStores {
                 var r = topology.active().get(id);
                 yield r == null ? 0 : towerDraw(r.spec().tower(), 1);
             }
+            case BURNERS -> burnerDraw(topology.active().get(id), FiredHeaters.designFired(topology.active().get(id)));
+            case STILL -> {
+                var u = topology.still(id);
+                yield u == null ? 0 : com.wormzjl.icheme.science.fluid.network.BatchStill.Heater.ELECTRIC.drawn(u.design().rating());
+            }
         };
+    }
+
+    /**
+     * A fired heater's combustion-air fans' electric draw, W, at {@code fired} W of fuel ({@link com.wormzjl.icheme.science.fluid.network.Burners#fanPower}):
+     * their shaft power over one 4-pole motor's efficiency at the design firing; 0 for no burners.
+     */
+    public static double burnerDraw(WorldTopologyLedger.Registration burners, double fired) {
+        double design = FiredHeaters.designFired(burners);
+        if (!(design > 0)) return 0;
+        var full = com.wormzjl.icheme.science.fluid.network.Burners.fanPower(design);
+        return com.wormzjl.icheme.science.fluid.network.Burners.fanPower(fired) / ElectricStore.fanEfficiency(full, 1);
+    }
+
+    /** Books a fired heater's fans' draw {@code power} W over a committed or replayed span (a read wakes nothing: a shortfall stops them at the cadence). */
+    void bookedBurners(long id, double power, long start, long end) {
+        var s = stores.get(id);
+        if (s == null || s.kind != Kind.BURNERS) return;
+        draw(s, power, start, end, false);
     }
 
     /** An air cooler's electric draw, W, with its fans at {@code fans} of full speed: fan power over its fan motors' efficiency (reading A70). */
@@ -204,6 +241,8 @@ public final class ElectricStores {
         var seen = new HashSet<Long>();
         for (var r : topology.active().values()) if (powered(r)) seen.add(r.device().id());
         for (var u : topology.shafts().values()) if (powered(u)) seen.add(u.id());
+        // An electric batch still (batch 2026-11-09-batch-distiller, W4): its store is keyed by its pot.
+        for (var u : topology.stills().values()) if (powered(u)) seen.add(u.id());
         stores.keySet().retainAll(seen);
         long now = coordinator.now();
         for (long id : seen) {
@@ -471,7 +510,7 @@ public final class ElectricStores {
         for (var e : stores.entrySet()) {
             var s = e.getValue();
             long id = e.getKey();
-            if (s.kind == Kind.FANS || s.kind == Kind.TOWER || s.kind == Kind.INLINE) {
+            if (s.kind == Kind.FANS || s.kind == Kind.TOWER || s.kind == Kind.INLINE || s.kind == Kind.BURNERS || s.kind == Kind.STILL) {
                 boolean changed = now - s.bookedTick >= CADENCE && draw(s, s.power, s.bookedTick, now, true);
                 if (s.shortfall) {
                     s.shortfall = false;
@@ -488,6 +527,7 @@ public final class ElectricStores {
                 if (changed) {
                     Long island = owner.apply(id);
                     if (island != null) wake.add(island);
+                    moved.accept(id);
                 }
             }
             long span = now - s.rateTick;

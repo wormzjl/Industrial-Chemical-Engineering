@@ -202,6 +202,16 @@ public final class EquipmentServices {
                             3,
                             Material.SERVICE_CASE);
             }
+            case FLARE_STACK -> {
+                // A flare's junction box set into its plinth's side at the foot (batch 2026-11-09-flare-stack; owner 2026-11-09:
+                // on the bottom, blended with the model): its cover flush with the plinth, its gland on the bottom block's
+                // centre and inside the frame, clear of the gas inlet at the front.
+                var foot = surface.bounds(Set.of(Material.SUPPORT));
+                double y = .5, z = (foot[2] + foot[5]) / 2;
+                double face = Math.min(mountingPoint(surface, 0, new double[] {0, y, z}, 1, Set.of(Material.SUPPORT), z)[0], north.sizeX() - .06);
+                low = new double[] {face - .12, y - .14, z - .14};
+                high = new double[] {face, y + .14, z + .14};
+            }
             case EXCHANGER, KETTLE, AIR_COOLER, COMPRESSOR, VERTICAL_HEATER, CABIN_HEATER ->
                     anchor = support(surface, height, false, zones);
             case PUMP, CENTRIFUGAL_COMPRESSOR -> {
@@ -283,13 +293,17 @@ public final class EquipmentServices {
                 high = plus(low, new double[] {CASE_ACROSS, CASE_HEIGHT, CASE_ALONG});
                 front = 2;
             }
-            case STEAM_TURBINE -> {
+            // A turbine's governor enclosure; an electric still's terminal box (batch 2026-11-09-batch-distiller): its data
+            // socket to the front and its FE socket opposite, to the back, each on a free cell of the right column (owner,
+            // 2026-11-10). A fired still has no data port: only the electric still takes a controller (owner, 2026-11-09).
+            case STEAM_TURBINE, BATCH_STILL -> {
+                if (kind == EquipmentShape.Kind.BATCH_STILL && !electricStill(shape)) return empty();
                 if (unit == null || unit.serviceHousing == null)
-                    throw new IllegalArgumentException("Missing native turbine governor enclosure");
+                    throw new IllegalArgumentException("Missing native service enclosure: " + kind);
                 var b = unit.serviceHousing;
                 low = north.transform().point(Arrays.copyOfRange(b, 0, 3));
                 high = north.transform().point(Arrays.copyOfRange(b, 3, 6));
-                front = 4;
+                front = kind == EquipmentShape.Kind.BATCH_STILL ? 2 : 4;
                 reuse = true;
             }
             default -> {
@@ -373,6 +387,10 @@ public final class EquipmentServices {
                                 high,
                                 front == 5 ? new double[] {0, 0, -1} : new double[] {-1, 0, 0});
             power = socket(low, high, neg(LineGeometry.step(data.face())));
+        } else if (electricStill(shape)) {
+            // An electric still's FE gland (batch 2026-11-09-batch-distiller, W6): as every powered unit's, on its terminal
+            // box's face opposite the data socket.
+            power = socket(low, high, neg(LineGeometry.step(data.face())));
         }
         double[] entry = null;
         if (anchor != null && !deck) {
@@ -388,9 +406,15 @@ public final class EquipmentServices {
 
     static boolean powered(EquipmentShape.Kind kind) {
         return switch (kind) {
-            case MOTOR, GENERATOR, AIR_COOLER, INDUCED_DRAFT_COOLING_TOWER -> true;
+            // A fired heater's combustion-air fans (batch 2026-11-09-furnace-fuel-power).
+            case MOTOR, GENERATOR, AIR_COOLER, INDUCED_DRAFT_COOLING_TOWER, VERTICAL_HEATER, CABIN_HEATER -> true;
             default -> false;
         };
+    }
+
+    /** Whether {@code shape} is a batch still heated electrically: its terminal box takes FE (batch 2026-11-09-batch-distiller, W6). */
+    public static boolean electricStill(EquipmentShape shape) {
+        return shape.kind() == EquipmentShape.Kind.BATCH_STILL && shape.still().heater() == BatchStillOptions.Heater.ELECTRIC;
     }
 
     private static Plan empty() {

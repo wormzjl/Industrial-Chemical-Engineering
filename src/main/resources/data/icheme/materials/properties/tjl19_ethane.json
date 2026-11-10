@@ -64,6 +64,12 @@
     "source": "M. G. Zabetakis, Flammability Characteristics of Combustible Gases and Vapors, US Bureau of Mines Bulletin 627 (1965), Table A-1, p. 115, entry \"Ethane\": L25 and U25 in air at 25 C and atmospheric pressure. A US Government work (17 U.S.C. 105). Constant with temperature (owner decision E23).",
     "revision": "npg-b627-r1"
   },
+  "combustion": {
+    "lower_heating_value_j_per_mol": 1428642,
+    "estimated": false,
+    "source": "Hess's law on this record's thermochemistry (chemsep-8.3-hf-r1): the formula burnt to CO2, H2O (gas), SO2 and N2 on the ideal-gas heats of formation at 298.15 K of icheme:chemsep_carbon_dioxide (chemsep-8.3-hf-r1), icheme:water (chemsep-8.3-hf-r1) and icheme:chemsep_sulfur_dioxide (chemsep-8.3-hf-r1). Computed by tools/heating-values/heating-values.mjs. Read by a fired heater's burners.",
+    "revision": "hess-lhv-r1"
+  },
   "viscosity": {
     "liquid": {
       "type": "log_table",

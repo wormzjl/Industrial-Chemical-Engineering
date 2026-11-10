@@ -241,6 +241,14 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
                 FluidWorldAuthority.find(serverPlayer.server).ifPresent(world->world.togglePipeCutoff(entity.fluidIdentity()));
             return InteractionResult.sidedSuccess(level.isClientSide());
         }
+        // A diverter valve (batch 2026-11-09-batch-distiller): an empty hand turns it to its next outlet; a sneak opens its menu.
+        if(kind==TopologyCompiler.Kind.DIVERTER_VALVE&&!player.isShiftKeyDown()) {
+            if(!player.mayBuild()||player.isSpectator()||!level.mayInteract(player,position))return InteractionResult.FAIL;
+            if(player instanceof ServerPlayer serverPlayer&&level.getBlockEntity(position) instanceof FluidDeviceBlockEntity entity)
+                FluidWorldAuthority.find(serverPlayer.server).ifPresent(world->{int open=world.diverterOutlet(entity.fluidIdentity());if(open>=0){var refused=world.divert(entity.fluidIdentity(),(open+1)%3);
+                    serverPlayer.displayClientMessage(refused==null?net.minecraft.network.chat.Component.translatable("message.icheme.diverter.outlet",(open+1)%3+1):net.minecraft.network.chat.Component.literal(refused),true);}});
+            return InteractionResult.sidedSuccess(level.isClientSide());
+        }
         if(kind==TopologyCompiler.Kind.PIPE&&!(level.getBlockEntity(position) instanceof FluidDeviceBlockEntity pipe&&!pipe.instruments().sensors().isEmpty()))return InteractionResult.PASS;
         if(player instanceof ServerPlayer serverPlayer&&level.getBlockEntity(position) instanceof FluidDeviceBlockEntity entity)entity.open(serverPlayer,false);
         return InteractionResult.sidedSuccess(level.isClientSide());

@@ -6,21 +6,26 @@ import com.wormzjl.icheme.science.fluid.network.*;
 import java.util.*;
 
 /**
- * The setpoints the engine reads: each controlled valve's law and each heat unit's outlet target,
- * from the last cadence. A slice's graph takes them as immutable inputs; a device without a plan
- * keeps its own settings.
+ * The setpoints the engine reads: each controlled valve's law, each heat unit's outlet target and
+ * each batch still's firing and reflux (owner decision O1), from the last cadence. A slice's graph
+ * takes them as immutable inputs; a device without a plan keeps its own settings.
  */
 final class ControlPlans {
     private final FluidWorldAuthority world;
     private Map<Long, FlowControl.ControlValve> valvePlans = Map.of();
     private Map<Long, Double> heatPlans = Map.of();
+    /** By still pot: its firing (0 to 1) and its reflux ratio (+Infinity closed). */
+    private Map<Long, Double> firingPlans = Map.of(), refluxPlans = Map.of();
 
     ControlPlans(FluidWorldAuthority world) {
         this.world = world;
     }
 
     boolean isEmpty() {
-        return valvePlans.isEmpty() && heatPlans.isEmpty();
+        return valvePlans.isEmpty()
+                && heatPlans.isEmpty()
+                && firingPlans.isEmpty()
+                && refluxPlans.isEmpty();
     }
 
     /** The valve law the last cadence planned for {@code output}, or null. */
@@ -33,17 +38,37 @@ final class ControlPlans {
         return heatPlans.get(output);
     }
 
+    /** The firing the last cadence planned for still {@code pot}, or null. */
+    Double firing(long pot) {
+        return firingPlans.get(pot);
+    }
+
+    /** The reflux ratio the last cadence planned for still {@code pot}, or null. */
+    Double reflux(long pot) {
+        return refluxPlans.get(pot);
+    }
+
     /** Takes this cadence's setpoints and returns the outputs whose setpoint changed. */
-    Set<Long> commit(Map<Long, FlowControl.ControlValve> nextValves, Map<Long, Double> nextHeat) {
-        var changed = new HashSet<Long>(valvePlans.keySet());
-        changed.addAll(nextValves.keySet());
-        changed.removeIf(id -> Objects.equals(valvePlans.get(id), nextValves.get(id)));
-        var thermalChanged = new HashSet<Long>(heatPlans.keySet());
-        thermalChanged.addAll(nextHeat.keySet());
-        thermalChanged.removeIf(id -> Objects.equals(heatPlans.get(id), nextHeat.get(id)));
-        changed.addAll(thermalChanged);
+    Set<Long> commit(
+            Map<Long, FlowControl.ControlValve> nextValves,
+            Map<Long, Double> nextHeat,
+            Map<Long, Double> nextFiring,
+            Map<Long, Double> nextReflux) {
+        var changed = changed(valvePlans, nextValves);
+        changed.addAll(changed(heatPlans, nextHeat));
+        changed.addAll(changed(firingPlans, nextFiring));
+        changed.addAll(changed(refluxPlans, nextReflux));
         valvePlans = Map.copyOf(nextValves);
         heatPlans = Map.copyOf(nextHeat);
+        firingPlans = Map.copyOf(nextFiring);
+        refluxPlans = Map.copyOf(nextReflux);
+        return changed;
+    }
+
+    private static <T> Set<Long> changed(Map<Long, T> before, Map<Long, T> after) {
+        var changed = new HashSet<Long>(before.keySet());
+        changed.addAll(after.keySet());
+        changed.removeIf(id -> Objects.equals(before.get(id), after.get(id)));
         return changed;
     }
 

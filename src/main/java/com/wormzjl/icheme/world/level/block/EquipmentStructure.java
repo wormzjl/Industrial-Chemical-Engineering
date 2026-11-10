@@ -208,11 +208,23 @@ public final class EquipmentStructure {
      * design volume, and its liquid height for the static head {@code g·m·H/V}. It is placed empty, as a tank is.
      */
     private static void register(ServerLevel level, Vessel vessel) {
+        if (vessel.shape().kind() == EquipmentShape.Kind.BATCH_STILL) {
+            registerStill(level, vessel, 0);
+            return;
+        }
         if (HeatSides.unit(vessel.shape().kind()) != null) {
             registerUnit(level, vessel);
             return;
         }
         var node = node(vessel);
+        if (vessel.shape().kind() == EquipmentShape.Kind.FLARE_STACK) {
+            // A flare's tip at its gas inlet's cell (batch 2026-11-09-flare-stack), its tip diameter the structure's size.
+            FluidWorldAuthority.find(level.getServer()).ifPresent(world -> {
+                var record = world.placeFlare(position(level, node), ports(level, vessel), vessel.shape().diameter());
+                if (level.getBlockEntity(node) instanceof EquipmentShellBlockEntity entity) entity.bindIdentity(record.device().id());
+            });
+            return;
+        }
         if (vessel.shape().kind().mover() || turbine(vessel.shape())) {
             // A casing on its curve, a frame at its displacement, a turbine on its steam (W3): each turns with its shaft train.
             var kind = turbine(vessel.shape()) ? TopologyCompiler.Kind.TURBINE : vessel.shape().kind() == EquipmentShape.Kind.PUMP ? TopologyCompiler.Kind.PUMP : TopologyCompiler.Kind.COMPRESSOR;
@@ -243,6 +255,7 @@ public final class EquipmentStructure {
         // A motor, generator or gearbox's shaft unit (W3); queued again on every load, a no-op when nothing changed.
         if(!vessel.shape().fluidDevice()){ShaftParts.structure(level,vessel.origin(),vessel.shape(),0);return true;}
         var world=FluidWorldAuthority.find(level.getServer()).orElse(null);if(world==null)return false;
+        if(vessel.shape().kind()==EquipmentShape.Kind.BATCH_STILL)return restoreStill(level,vessel,world);
         boolean unit=HeatSides.unit(vessel.shape().kind())!=null;
         var heldIds=unit?heldAtNodes(world,level,vessel):List.<Long>of();
         if(unit&&unitRecords(world,heldIds).size()==registrations(vessel.shape())) {
@@ -297,8 +310,10 @@ public final class EquipmentStructure {
         // A kettle's shell (W7): a closed vessel at its pool's node, its phase ports the drum's, its surface its tubes'.
         var pool = HeatSides.pool(shape.kind()) ? new FluidWorldAuthority.UnitVessel(position(level, nodes.get(sides.size())), ports(level, vessel), shape.volume(), shape.levelHeight(),
                 shape.fluidGeometry(), new HeatUnit(unit, HeatSides.Side.SHELL, sides.getFirst().area(), 0)) : null;
+        // A fired heater's burners (batch 2026-11-09-furnace-fuel-power): the firebox behind its FUEL nozzle, after its coils.
+        var burners = HeatSides.burners(shape.kind()) ? burners(level, vessel, nodes.get(sides.size())) : null;
         FluidWorldAuthority.find(level.getServer()).ifPresent(world -> {
-            var records = world.placeUnit(placing, pool);
+            var records = world.placeUnit(placing, pool, burners);
             for (int i = 0; i < records.size(); i++)
                 if (level.getBlockEntity(nodes.get(i)) instanceof EquipmentShellBlockEntity entity) entity.bindIdentity(records.get(i).device().id());
         });
@@ -319,9 +334,24 @@ public final class EquipmentStructure {
         return ports;
     }
 
-    /** A heat unit's registrations: one per side, and a kettle's shell (W7). */
+    /** A heat unit's registrations: one per side, a kettle's shell (W7) and a fired heater's burners. */
     private static int registrations(EquipmentShape shape) {
-        return HeatSides.of(shape).size() + (HeatSides.pool(shape.kind()) ? 1 : 0);
+        return HeatSides.of(shape).size() + (HeatSides.pool(shape.kind()) ? 1 : 0) + (HeatSides.burners(shape.kind()) ? 1 : 0);
+    }
+
+    /** A fired heater's burners to place at {@code node}: the FUEL nozzle its one port (batch 2026-11-09-furnace-fuel-power). */
+    private static FluidWorldAuthority.UnitBurners burners(Level level, Vessel vessel, BlockPos node) {
+        var ports = new ArrayList<PhysicalFluidTopology.Port>();
+        var nozzles = vessel.shape().nozzles();
+        for (var port : ShapeRasterizer.ports(vessel.shape())) {
+            if (nozzles.get(port.nozzle()).role() != HeatSides.BURNER_ROLE) continue;
+            var cell = vessel.origin().offset(port.cell().x(), port.cell().y(), port.cell().z());
+            var face = PhysicalFluidTopology.Direction.valueOf(Direction.fromDelta(port.dx(), port.dy(), port.dz()).name());
+            ports.add(new PhysicalFluidTopology.Port(position(level, cell), face, PassiveNetwork.PhasePort.BULK, PhysicalFluidTopology.ConnectionRole.VESSEL));
+            break;
+        }
+        var radiant = HeatSides.of(vessel.shape()).stream().filter(s -> s.side() == HeatSides.Side.RADIANT).findFirst().orElseThrow();
+        return new FluidWorldAuthority.UnitBurners(position(level, node), ports, new HeatUnit(HeatSides.Unit.FIRED_HEATER, HeatSides.Side.BURNER, radiant.area(), 0));
     }
 
     /** The registrations of a unit's sides, by side: those held at {@code ids} and their partners. */
@@ -365,6 +395,11 @@ public final class EquipmentStructure {
     private static void restateUnit(ServerLevel level, Vessel vessel, FluidWorldAuthority world, java.util.Collection<Long> held) {
         var sides = HeatSides.of(vessel.shape());
         var records = unitRecords(world, held);
+        // A fired heater placed before its burners registered (batch 2026-11-09-furnace-fuel-power): its coils keep their
+        // identities, set point and burners' switch; the burners join them at their node, partnered with the radiant coil.
+        if (HeatSides.burners(vessel.shape().kind()) && !records.containsKey(HeatSides.Side.BURNER) && records.containsKey(HeatSides.Side.RADIANT)
+                && records.containsKey(HeatSides.Side.CONVECTION) && records.size() + 1 == registrations(vessel.shape()))
+            records.put(HeatSides.Side.BURNER, world.placeBurners(records.get(HeatSides.Side.RADIANT).device().id(), burners(level, vessel, nodes(vessel).get(sides.size()))));
         if (records.size() != registrations(vessel.shape())) {
             if (!records.isEmpty()) world.removeUnit(records.values().stream().map(r -> r.device().id()).toList());
             registerUnit(level, vessel);
@@ -385,6 +420,21 @@ public final class EquipmentStructure {
                 if (entity.fluidIdentity() != device.id()) entity.bindIdentity(device.id());
                 else world.deviceLoaded(device.id());
             }
+        }
+        if (HeatSides.burners(vessel.shape().kind())) {
+            // The burners move to their FUEL nozzle's node with it.
+            var record = records.get(HeatSides.Side.BURNER);
+            var node = nodes.get(sides.size());
+            var device = record.device();
+            var moved = device.withPlacement(position(level, node), burners(level, vessel, node).ports()).withHeat(device.heat().withArea(records.get(HeatSides.Side.RADIANT).device().heat().area()));
+            if (!moved.equals(device)) world.edit(device.id(), record.revision(), moved, record.spec());
+            for (var other : nodes)
+                if (!other.equals(node) && level.getBlockEntity(other) instanceof EquipmentShellBlockEntity stale && stale.fluidIdentity() == device.id()) stale.releaseIdentity();
+            if (level.getBlockEntity(node) instanceof EquipmentShellBlockEntity entity) {
+                if (entity.fluidIdentity() != device.id()) entity.bindIdentity(device.id());
+                else world.deviceLoaded(device.id());
+            }
+            return;
         }
         if (!HeatSides.pool(vessel.shape().kind())) return;
         // A kettle's shell (W7) moves to its pool's node with its ports, its vessel follows the datasheet, it keeps what it holds.
@@ -518,6 +568,11 @@ public final class EquipmentStructure {
 
     /** The equipment's registration leaves with its structure (a reservoir's contents go with it). */
     private static void unregister(ServerLevel level, Vessel vessel) {
+        if (vessel.shape().kind() == EquipmentShape.Kind.BATCH_STILL) {
+            dropStillFuel(level, vessel);
+            FluidWorldAuthority.find(level.getServer()).ifPresent(world -> world.removeUnit(heldAtNodes(world, level, vessel)));
+            return;
+        }
         if (HeatSides.unit(vessel.shape().kind()) != null) {
             // A unit's sides leave together: no event leaves half a pair.
             FluidWorldAuthority.find(level.getServer()).ifPresent(world -> world.removeUnit(
@@ -528,6 +583,145 @@ public final class EquipmentStructure {
         FluidWorldAuthority.find(level.getServer()).ifPresent(world -> world.at(position)
                 .filter(record -> record.device().position().equals(position) && !record.device().ports().isEmpty())
                 .ifPresent(record -> world.remove(record.device().id())));
+    }
+
+
+    // ---------------- the batch still (batch 2026-11-09-batch-distiller, W3 and W4) ----------------
+
+    /**
+     * A whole batch still joins the fluid network as one event ({@link FluidWorldAuthority#placeStill}): its pot, a fired
+     * reservoir at its lowest inside cell with its CHARGE, DRAIN and (without the condenser) VAPOUR nozzles; its condenser's
+     * water side through WATER IN and OUT; its DISTILLATE and VENT outlets and its burners at FUEL, each at its nozzle's cell.
+     * {@code former}, the pot of the still it refreshes (0 for none): that still's devices move onto this layout, keeping
+     * their identities, facts and contents (decision D7, owner decision O9); a cell holding one of its identities that its
+     * device left lets it go.
+     */
+    private static void registerStill(ServerLevel level, Vessel vessel, long former) {
+        var shape = vessel.shape();var options = shape.still();
+        var cells = nodes(vessel);if (cells.isEmpty()) return;
+        var heater = switch (options.heater()) {
+            case SOLID -> com.wormzjl.icheme.science.fluid.network.BatchStill.Heater.SOLID;
+            case LIQUID -> com.wormzjl.icheme.science.fluid.network.BatchStill.Heater.LIQUID;
+            case ELECTRIC -> com.wormzjl.icheme.science.fluid.network.BatchStill.Heater.ELECTRIC;
+        };
+        var design = new com.wormzjl.icheme.science.fluid.network.BatchStill.Design(shape.volume(), heater, options.condenses(), options.stages());
+        // The pot's liquid stands over its straight side and its head: 1.1 diameters (ProcessUnit.StillPlan).
+        double height = 1.1 * design.diameter();
+        var potPorts = stillPorts(level, vessel, java.util.Set.of(EquipmentShape.Role.CHARGE, EquipmentShape.Role.DRAIN, EquipmentShape.Role.VAPOUR_OUTLET), PhysicalFluidTopology.ConnectionRole.VESSEL);
+        var pot = new FluidWorldAuthority.UnitVessel(position(level, cells.getFirst()), potPorts, shape.volume(), height,
+                com.wormzjl.icheme.science.fluid.network.VesselGeometry.prism(shape.volume(), height),
+                new HeatUnit(HeatSides.Unit.STILL, HeatSides.Side.POT, design.heatedArea(), 0));
+        FluidWorldAuthority.UnitSide water = null;
+        if (design.condenser()) {
+            var ports = new ArrayList<PhysicalFluidTopology.Port>();
+            ports.addAll(stillPorts(level, vessel, java.util.Set.of(EquipmentShape.Role.WATER_INLET), PhysicalFluidTopology.ConnectionRole.INLET));
+            ports.addAll(stillPorts(level, vessel, java.util.Set.of(EquipmentShape.Role.WATER_OUTLET), PhysicalFluidTopology.ConnectionRole.OUTLET));
+            // The worm's water passage: the tub's (or the shell's) water space, a short wide passage.
+            water = new FluidWorldAuthority.UnitSide(ports.getFirst().cell(), ports, new com.wormzjl.icheme.science.fluid.network.PipeResistance.Geometry(1, .1, com.wormzjl.icheme.science.fluid.network.PipeResistance.DEFAULT_ROUGHNESS_METRES, 0),
+                    new HeatUnit(HeatSides.Unit.STILL, HeatSides.Side.WATER, design.condenserArea(), 0));
+        }
+        var distillate = stillPort(level, vessel, EquipmentShape.Role.DISTILLATE);
+        var vent = stillPort(level, vessel, EquipmentShape.Role.VENT);
+        var burners = heater == com.wormzjl.icheme.science.fluid.network.BatchStill.Heater.LIQUID ? stillPort(level, vessel, EquipmentShape.Role.FUEL) : null;
+        var devices = new FluidWorldAuthority.StillDevices(pot, water, design.condenser() ? distillate : null, design.condenser() ? vent : null, burners, design);
+        FluidWorldAuthority.find(level.getServer()).ifPresent(world -> {
+            var records = world.placeStill(devices, former);
+            var bound = new java.util.HashMap<BlockPos, Long>();
+            for (var record : records) {
+                var d = record.device();bound.put(new BlockPos(d.position().x(), d.position().y(), d.position().z()), d.id());
+            }
+            for (var entry : bound.entrySet())
+                if (level.getBlockEntity(entry.getKey()) instanceof EquipmentShellBlockEntity entity) {
+                    if (entity.fluidIdentity() != entry.getValue()) entity.bindIdentity(entry.getValue());
+                    else world.deviceLoaded(entry.getValue());
+                }
+            var ids = new java.util.HashSet<>(bound.values());
+            for (var at : cells)
+                if (!bound.containsKey(at) && level.getBlockEntity(at) instanceof EquipmentShellBlockEntity stale && ids.contains(stale.fluidIdentity())) stale.releaseIdentity();
+        });
+    }
+
+    /** The still's nozzles of {@code roles} as ports of {@code connection}, each of its nozzle's phase class. */
+    private static List<PhysicalFluidTopology.Port> stillPorts(Level level, Vessel vessel, java.util.Set<EquipmentShape.Role> roles, PhysicalFluidTopology.ConnectionRole connection) {
+        var ports = new ArrayList<PhysicalFluidTopology.Port>();
+        var nozzles = vessel.shape().nozzles();
+        for (var port : ShapeRasterizer.ports(vessel.shape())) {
+            if (!roles.contains(nozzles.get(port.nozzle()).role())) continue;
+            var cell = vessel.origin().offset(port.cell().x(), port.cell().y(), port.cell().z());
+            var face = PhysicalFluidTopology.Direction.valueOf(Direction.fromDelta(port.dx(), port.dy(), port.dz()).name());
+            var phase = connection != PhysicalFluidTopology.ConnectionRole.VESSEL ? PassiveNetwork.PhasePort.BULK : switch (port.port()) {
+                case VAPOUR -> PassiveNetwork.PhasePort.VAPOR;
+                case LIQUID -> PassiveNetwork.PhasePort.LIQUID;
+                case BULK, OVERFLOW -> PassiveNetwork.PhasePort.BULK;
+            };
+            ports.add(new PhysicalFluidTopology.Port(position(level, cell), face, phase, connection));
+        }
+        return ports;
+    }
+
+    /** A still device's one port at its nozzle of {@code role} (bulk), or null where the still has none. */
+    private static PhysicalFluidTopology.@Nullable Port stillPort(Level level, Vessel vessel, EquipmentShape.Role role) {
+        var ports = stillPorts(level, vessel, java.util.Set.of(role), PhysicalFluidTopology.ConnectionRole.VESSEL);
+        if (ports.isEmpty()) return null;
+        var p = ports.getFirst();
+        return new PhysicalFluidTopology.Port(p.cell(), p.face(), PassiveNetwork.PhasePort.BULK, PhysicalFluidTopology.ConnectionRole.VESSEL);
+    }
+
+    /** {@link #restoreStill(ServerLevel, Vessel, FluidWorldAuthority, java.util.Collection)} from the identities its cells hold now. */
+    private static boolean restoreStill(ServerLevel level, Vessel vessel, FluidWorldAuthority world) {
+        for (var at : nodes(vessel)) if (!level.hasChunkAt(at)) return false;
+        var layout = ShapeRasterizer.layout(vessel.shape());
+        for (var cell : layout.shell()) {
+            var at = vessel.origin().offset(cell.x(), cell.y(), cell.z());
+            if (!(level.getBlockEntity(at) instanceof EquipmentShellBlockEntity shell) || !ours(shell, vessel.origin(), vessel.shape()) || shell.stale()) return true;
+        }
+        restoreStill(level, vessel, world, heldAtNodes(world, level, vessel));
+        return true;
+    }
+
+    /**
+     * A still's devices onto {@code vessel}'s layout: where each of its cells holds the device it registers (the pot a
+     * fired reservoir, the others theirs), the cells bind them; otherwise the still whose pot {@code held} names moves onto
+     * the layout whole (its identities, facts and contents kept), and {@code held}'s other units leave. With no still
+     * among them the still registers afresh.
+     */
+    private static void restoreStill(ServerLevel level, Vessel vessel, FluidWorldAuthority world, java.util.Collection<Long> held) {
+        var cells = nodes(vessel);
+        boolean whole = !cells.isEmpty();long pot = 0;
+        for (int i = 0; i < cells.size() && whole; i++) {
+            var at = position(level, cells.get(i));
+            var record = world.at(at).filter(r -> r.device().position().equals(at) && !r.device().ports().isEmpty()).orElse(null);
+            if (record == null || (i == 0) != record.device().stillPot()) whole = false;
+            else if (i == 0) pot = record.device().id();
+        }
+        if (whole && world.stills().view(pot) != null) {
+            for (var at : cells) {
+                var p = position(level, at);
+                world.at(p).ifPresent(r -> {
+                    if (level.getBlockEntity(at) instanceof EquipmentShellBlockEntity shell) {
+                        if (shell.fluidIdentity() != r.device().id()) shell.bindIdentity(r.device().id());
+                        else world.deviceLoaded(r.device().id());
+                    }
+                });
+            }
+            return;
+        }
+        long former = 0;
+        for (long id : held) {var r = world.registrations().get(id);if (r != null && r.device().stillPot() && world.stills().view(id) != null) former = id;}
+        var still = former > 0 ? world.stillDevices(former) : java.util.Set.<Long>of();
+        var others = held.stream().filter(id -> !still.contains(id)).toList();
+        if (!others.isEmpty()) world.removeUnit(others);
+        registerStill(level, vessel, former);
+    }
+
+    /** A broken still's fuel slot drops its items at its pot's cell; the heat left in the burning item is lost with it. */
+    private static void dropStillFuel(ServerLevel level, Vessel vessel) {
+        var cell = ShapeRasterizer.fluidCell(vessel.shape());if (cell == null) return;
+        var at = vessel.origin().offset(cell.x(), cell.y(), cell.z());
+        if (level.getBlockEntity(at) instanceof EquipmentShellBlockEntity shell) {
+            var stack = shell.dropFuel();
+            if (!stack.isEmpty()) net.minecraft.world.Containers.dropItemStack(level, at.getX() + .5, at.getY() + .5, at.getZ() + .5, stack);
+        }
     }
 
     /** The pipes in front of the vessel's nozzles take up (or drop) their connection: the cells were set without shape updates. */
@@ -1185,6 +1379,10 @@ public final class EquipmentStructure {
      * network or a gauge knows of it changes but where it stands. {@code oldNode} held the identity.
      */
     private static void reregister(ServerLevel level, Vessel vessel, @Nullable BlockPos oldNode, List<Long> heldIds) {
+        if (vessel.shape().kind() == EquipmentShape.Kind.BATCH_STILL) {
+            FluidWorldAuthority.find(level.getServer()).ifPresent(world -> restoreStill(level, vessel, world, heldIds));
+            return;
+        }
         if (HeatSides.unit(vessel.shape().kind()) != null) {
             FluidWorldAuthority.find(level.getServer()).ifPresent(world -> restateUnit(level, vessel, world, heldIds));
             return;
@@ -1201,7 +1399,7 @@ public final class EquipmentStructure {
         var device = record.device();
         var spec = record.spec();
         world.edit(device.id(), record.revision(), device.withPlacement(position(level, node), ports(level, vessel)),
-                vessel.shape().kind().mover() ? spec : new FluidDeviceSpec(vessel.shape().volume(), spec.temperature(), spec.pressure(), spec.composition(), spec.solids(), vessel.shape().levelHeight(), open(vessel), vessel.shape().fluidGeometry(),spec.tower()));
+                vessel.shape().kind().mover() || vessel.shape().kind() == EquipmentShape.Kind.FLARE_STACK ? spec : new FluidDeviceSpec(vessel.shape().volume(), spec.temperature(), spec.pressure(), spec.composition(), spec.solids(), vessel.shape().levelHeight(), open(vessel), vessel.shape().fluidGeometry(),spec.tower()));
         if (oldNode != null && !oldNode.equals(node) && level.getBlockEntity(oldNode) instanceof EquipmentShellBlockEntity old && old.fluidIdentity() == device.id()) old.releaseIdentity();
         if (level.getBlockEntity(node) instanceof EquipmentShellBlockEntity entity && entity.fluidIdentity() != device.id()) entity.bindIdentity(device.id());
         ShaftParts.structure(level, vessel.origin(), vessel.shape(), device.id());

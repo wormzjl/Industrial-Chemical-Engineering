@@ -16,22 +16,7 @@ class EquipmentServicesTest {
                 if (services.data() == null) continue;
                 assertFalse(services.enclosures().isEmpty(), shape.toString());
                 for (var heading : EquipmentShape.Heading.values()) {
-                    var s =
-                            new EquipmentShape(
-                                    shape.kind(),
-                                    shape.diameter(),
-                                    shape.tangentLength(),
-                                    shape.orientation(),
-                                    heading,
-                                    shape.support(),
-                                    shape.trays(),
-                                    shape.connections(),
-                                    shape.bank(),
-                                    shape.boot(),
-                                    shape.outlet(),
-                                    shape.towerBank(),
-                                    shape.duty(),
-                                    shape.exchangerType());
+                    var s = shape.withFront(heading);
                     var current = ShapeRasterizer.services(s);
                     assertNotNull(current.data(), s.toString());
                     var normal = ShapeRasterizer.renderBody(s, RenderDetail.NORMAL);
@@ -70,6 +55,76 @@ class EquipmentServicesTest {
             }
         }
         assertTrue(failures.isEmpty(), String.join("\n", failures));
+    }
+
+    /**
+     * A flare's data gland sits low on its plinth (owner 2026-11-09: on the bottom, blended with the model): on the centre of
+     * the bottom block's face it opens to, inside the frame, its junction box inside the frame too, at every tip and heading.
+     */
+    @Test
+    void aFlaresDataGlandSitsCentredOnTheBottomBlock() {
+        var kind = EquipmentShape.Kind.FLARE_STACK;
+        for (double tip = ProcessUnit.minDiameter(kind); tip <= ProcessUnit.maxDiameter(kind) + 1e-9; tip += com.wormzjl.icheme.science.fluid.network.Flare.TIP_STEP)
+            for (var heading : EquipmentShape.Heading.values()) {
+                var shape = EquipmentShape.designed(kind, tip, 1, heading, 0, ProcessUnit.Bank.ONE);
+                var services = ShapeRasterizer.services(shape);
+                var data = services.data();
+                assertNotNull(data, shape.toString());
+                double[] at = {data.x(), data.y(), data.z()}, size = {shape.sizeX(), shape.sizeY(), shape.sizeZ()};
+                int axis = LineGeometry.step(data.face())[0] != 0 ? 0 : 2, across = 2 - axis;
+                assertEquals(.5, at[1], 1e-9, shape + ": on the bottom block");
+                assertEquals(Math.floor(at[across]) + .5, at[across], 1e-9, shape + ": centred on its block");
+                assertTrue(at[axis] > 0 && at[axis] < size[axis], shape + ": the gland inside the frame");
+                for (var c : services.enclosures())
+                    for (int a = 0; a < 3; a++)
+                        assertTrue(c.low()[a] >= 0 && c.high()[a] <= size[a], shape + ": its box inside the frame");
+            }
+    }
+
+    /**
+     * A batch still's data gland sits on its terminal box (batch 2026-11-09-batch-distiller, W2), on the centre of the
+     * bottom block's face it opens to, inside the frame, its box behind it and inside the frame, at every pot, option and
+     * heading; only the electric still has one. Its data and FE sockets each face a cell outside the shell, where a cable
+     * can reach them (owner, 2026-11-10: the FE socket faced the skirt).
+     */
+    @Test
+    void aStillsDataGlandSitsCentredOnItsBox() {
+        var kind = EquipmentShape.Kind.BATCH_STILL;
+        var stills = new ArrayList<EquipmentShape>();
+        for (double litres : ProcessUnit.sizes(kind)) stills.add(EquipmentShape.unit(kind, litres, 1, EquipmentShape.Heading.NORTH, 0));
+        stills.addAll(ProcessUnitTest.stillOptions());
+        for (var still : stills)
+            for (var heading : EquipmentShape.Heading.values()) {
+                var shape = still.withFront(heading);
+                var services = ShapeRasterizer.services(shape);
+                var data = services.data();
+                // Only the electric still has a data port and takes a controller (owner, 2026-11-09).
+                if (!EquipmentServices.electricStill(shape)) {
+                    assertNull(data, shape + ": no data port on a fired still");
+                    assertNull(services.power(), shape + ": no FE socket on a fired still");
+                    continue;
+                }
+                assertNotNull(data, shape.toString());
+                assertNotNull(services.power(), shape + ": the electric still's FE socket (W6)");
+                double[] at = {data.x(), data.y(), data.z()}, size = {shape.sizeX(), shape.sizeY(), shape.sizeZ()};
+                var n = LineGeometry.step(data.face());
+                int axis = n[0] != 0 ? 0 : 2, across = 2 - axis;
+                assertEquals(0, n[1], shape + ": a side face");
+                assertEquals(.5, at[1], 1e-9, shape + ": on the bottom block");
+                assertEquals(Math.floor(at[across]) + .5, at[across], 1e-9, shape + ": centred on its block");
+                assertTrue(at[axis] > 0 && at[axis] < size[axis], shape + ": the gland inside the frame");
+                assertTrue(services.inside(new double[]{at[0] - n[0] * .06, at[1], at[2] - n[2] * .06}), shape + ": its box behind it");
+                for (var c : services.enclosures())
+                    for (int a = 0; a < 3; a++)
+                        assertTrue(c.low()[a] >= 0 && c.high()[a] <= size[a], shape + ": its box inside the frame");
+                var shell = new HashSet<>(ShapeRasterizer.layout(shape).shell());
+                for (var socket : List.of(data, services.power())) {
+                    var m = LineGeometry.step(socket.face());
+                    var cell = new ShapeRasterizer.Cell((int) Math.floor(socket.x() - .01 * m[0]) + (int) m[0],
+                            (int) Math.floor(socket.y() - .01 * m[1]) + (int) m[1], (int) Math.floor(socket.z() - .01 * m[2]) + (int) m[2]);
+                    assertFalse(shell.contains(cell), shape + ": a cable reaches its socket on face " + socket.face());
+                }
+            }
     }
 
     @Test

@@ -317,13 +317,21 @@ class ShapeRasterizerTest {
             else if (HeatSides.unit(shape.kind()) != null) {
                 var sides = HeatSides.of(shape);var cells = ShapeRasterizer.fluidCells(shape);
                 // A kettle's shell registers after its sides, at a shell cell (W7).
-                assertEquals(sides.size() + (HeatSides.pool(shape.kind()) ? 1 : 0), cells.size(), shape.toString());
+                // A fired heater's burners register after its coils, at the fuel nozzle's port cell (batch 2026-11-09-furnace-fuel-power).
+                assertEquals(sides.size() + (HeatSides.pool(shape.kind()) || HeatSides.burners(shape.kind()) ? 1 : 0), cells.size(), shape.toString());
                 if (HeatSides.pool(shape.kind())) assertTrue(ShapeRasterizer.layout(shape).shell().contains(cells.getLast()), shape.toString());
                 for (int i = 0; i < sides.size(); i++) {
                     var inlet = sides.get(i).inlet();
                     var first = ShapeRasterizer.ports(shape).stream().filter(p -> shape.nozzles().get(p.nozzle()).role() == inlet).findFirst().orElseThrow();
                     assertEquals(first.cell(), cells.get(i), shape.toString());
                 }
+            }
+            // A batch still (batch 2026-11-09-batch-distiller, W3): its pot at a shell cell, then each device at its nozzle's port cell.
+            else if (shape.kind() == EquipmentShape.Kind.BATCH_STILL) {
+                var cells = ShapeRasterizer.fluidCells(shape);
+                assertTrue(ShapeRasterizer.layout(shape).shell().contains(cells.getFirst()), shape.toString());
+                for (int i = 1; i < cells.size(); i++) {var cell = cells.get(i);assertTrue(ShapeRasterizer.ports(shape).stream().anyMatch(p -> p.cell().equals(cell)), shape.toString());}
+                assertEquals(cells.size(), new java.util.HashSet<>(cells).size(), shape.toString());
             }
             else assertNull(ShapeRasterizer.fluidCell(shape), shape.toString());
     }

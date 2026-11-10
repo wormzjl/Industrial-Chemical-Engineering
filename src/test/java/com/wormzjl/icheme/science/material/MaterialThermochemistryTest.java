@@ -195,8 +195,8 @@ class MaterialThermochemistryTest {
         var bundled=MaterialCatalog.bundled();var resources=new HashMap<>(bundled.resources());int thermo=0,limits=0;
         for(var entry:resources.entrySet())if(entry.getKey().startsWith(ROOT+"properties/")||entry.getKey().startsWith(ROOT+"water/")) {
             var o=JsonParser.parseString(entry.getValue()).getAsJsonObject();
-            boolean t=o.remove("thermochemistry")!=null,f=o.remove("flammability")!=null;
-            if(t)thermo++;if(f)limits++;if(t||f)entry.setValue(o.toString());
+            boolean t=o.remove("thermochemistry")!=null,f=o.remove("flammability")!=null,c=o.remove("combustion")!=null;
+            if(t)thermo++;if(f)limits++;if(t||f||c)entry.setValue(o.toString());
         }
         assertEquals(46,thermo,"the 45 compounds of the world list and the water");assertEquals(40,limits,"28 compounds and 12 cuts");
         var without=MaterialCatalog.parse(resources);
@@ -211,5 +211,35 @@ class MaterialThermochemistryTest {
         }
         assertEquals(-75000,SubRecords.thermochemistry(edited,WORLD,"Methane").orElseThrow().formationEnthalpy());
         assertEquals(.044,SubRecords.flammability(edited,WORLD,"Methane").orElseThrow().lowerLimit());
+    }
+
+    /**
+     * The {@code combustion} sub-record (batch 2026-11-09-furnace-fuel-power, owner decision F2): every record of the world
+     * list and the water carries the lower heating value Hess's law gives on its own thermochemistry, in the fluid network's
+     * conserved order; the inerts give none; an invalid one refuses the catalog; an edit moves no identity (above).
+     */
+    @Test void everyRecordCarriesItsLowerHeatingValue() {
+        var catalog=MaterialCatalog.bundled();var world=catalog.requirePackage(WORLD);
+        var values=catalog.heatingValues(WORLD);
+        assertEquals(world.components().size()+1,values.length,"the components, then the water");
+        for(int i=0;i<world.components().size();i++) {
+            String component=world.components().get(i);
+            double hess=Math.max(0,hess(catalog,SubRecords.thermochemistry(catalog,WORLD,component).orElseThrow()));
+            assertEquals(hess,values[i],1e-6*Math.max(1,hess),component);
+            if(NOT_COMBUSTIBLE.contains(component))assertEquals(0,values[i],component+" gives no heat");
+        }
+        assertEquals(0,values[values.length-1],"the water gives none");
+        int methane=world.components().indexOf("Methane");
+        assertEquals(802618,values[methane],1e-6);
+        assertEquals(5.003e7,values[methane]/world.properties().get(methane).molecularWeight(),1e5,"50.0 MJ/kg");
+        var without=MaterialCatalog.parse(changed(METHANE,o->o.remove("combustion")));
+        assertEquals(0,without.heatingValues(WORLD)[methane],"without the sub-record a record burns as an inert");
+        List<Consumer<JsonObject>> edits=List.of(c->c.addProperty("lower_heating_value_j_per_mol",-1),c->c.addProperty("lower_heating_value_j_per_mol","x"),
+                c->c.remove("lower_heating_value_j_per_mol"),c->c.remove("estimated"),c->c.remove("source"),c->c.addProperty("revision","hess lhv"),c->c.remove("revision"));
+        for(int i=0;i<edits.size();i++) {
+            var edit=edits.get(i);
+            var error=assertThrows(IllegalArgumentException.class,()->MaterialCatalog.parse(changed(METHANE,o->edit.accept(o.getAsJsonObject("combustion")))),"combustion edit "+i);
+            assertTrue(error.getMessage().contains(METHANE)&&error.getMessage().contains("combustion."),"edit "+i+": "+error.getMessage());
+        }
     }
 }

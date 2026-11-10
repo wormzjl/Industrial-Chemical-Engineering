@@ -75,7 +75,41 @@ class EquipmentShapeCompatTest {
         shapes.add(EquipmentShape.column(3, new ColumnTrays(20, 15, List.of(8), List.of(21), List.of(new ColumnTrays.Pumparound(8, 6)),
                 trimmed.withExchangers(new ColumnComponents.Exchangers(ExchangerType.CROSSFLOW, ExchangerType.CROSSFLOW, List.of(ExchangerType.CROSSFLOW)))),
                 Heading.NORTH, EquipmentShape.minimumSkirt(3)));
+        // Shape fields 11 (batch 2026-11-09-batch-distiller, W2): a batch still's options other than the default.
+        shapes.add(EquipmentShape.unit(Kind.BATCH_STILL, 750, 1, Heading.SOUTH, 0)
+                .withStill(new BatchStillOptions(BatchStillOptions.Heater.ELECTRIC, BatchStillOptions.Condenser.BUILT_IN, 6)));
+        shapes.add(EquipmentShape.unit(Kind.BATCH_STILL, 2000, 1, Heading.EAST, 0)
+                .withStill(new BatchStillOptions(BatchStillOptions.Heater.LIQUID, BatchStillOptions.Condenser.NONE, 0)));
         return shapes;
+    }
+
+    /**
+     * A batch still's options (shape fields 11): saved by name; a still saved before them is the default still; an unknown
+     * heater or an out-of-range column reads its default and is named, the other options kept.
+     */
+    @Test
+    void aStillsOptionsReadByNameAndAreRepairedOneAtATime() {
+        var still = everyKind().stream().filter(s -> s.kind() == Kind.BATCH_STILL && s.still().column()).findFirst().orElseThrow();
+        var tag = saved(still);
+        assertEquals("electric", tag.getCompound("Still").getString("Heater"));
+        assertEquals("built_in", tag.getCompound("Still").getString("Condenser"));
+        var old = tag.copy();
+        old.remove("Still");
+        var read = EquipmentShellBlockEntity.readShape(old);
+        assertEquals(still.withStill(BatchStillOptions.DEFAULT), read.shape());
+        assertTrue(read.repairs().isEmpty(), read.repairs().toString());
+        var heater = tag.copy();
+        heater.getCompound("Still").putString("Heater", "steam");
+        read = EquipmentShellBlockEntity.readShape(heater);
+        assertEquals(still.withStill(still.still().withHeater(BatchStillOptions.Heater.SOLID)), read.shape());
+        assertEquals(List.of("still heater steam -> solid"), read.repairs());
+        var stages = tag.copy();
+        stages.getCompound("Still").putInt("Stages", 12);
+        read = EquipmentShellBlockEntity.readShape(stages);
+        assertEquals(still.withStill(still.still().withStages(0)), read.shape());
+        assertEquals(List.of("still stages 12 -> 0"), read.repairs());
+        // Every other kind writes no still options.
+        assertFalse(saved(EquipmentShape.unit(Kind.PUMP, .05, 1, Heading.EAST, 0)).contains("Still"));
     }
 
     private static CompoundTag saved(EquipmentShape shape) {
@@ -439,9 +473,9 @@ class EquipmentShapeCompatTest {
      * The shape fields' revision: the corpus file this build's tags are kept in. Raise it with a shape-field change (2: a
      * column's components; 3: a column's turned nozzles; 4: a column's operating point; 5: a tower's cell bank; 6: a
      * column's member counts; 7: a column's water trim count and its air-then-water condenser; 8: a machine's design
-     * point).
+     * point; 11: a batch still's options).
      */
-    private static final int SHAPE_FIELDS = 10;
+    private static final int SHAPE_FIELDS = 11;
 
     /** A column's components as an image written before the member counts shows them. */
     private static final java.util.regex.Pattern COMPONENTS_BEFORE_UNITS = java.util.regex.Pattern.compile(
@@ -513,6 +547,8 @@ class EquipmentShapeCompatTest {
                     }
                     if (read.shape().column()) expected = expected.replaceFirst("tangentLength=[0-9.]+", "tangentLength=" + read.shape().tangentLength());
                     if (!expected.contains("exchangerType=")) expected = expected.substring(0, expected.length() - 1) + ", exchangerType=STANDARD]";
+                    // Shape fields 11: a shape saved before the still options has the default ones.
+                    if (!expected.contains("still=")) expected = expected.substring(0, expected.length() - 1) + ", still=" + BatchStillOptions.DEFAULT + "]";
                     if(!expected.contains("baseSpeed="))expected=expected.replaceAll("(exhaust=[0-9.Ee+-]+)\\]","$1, baseSpeed=0.0]");
                     assertEquals(expected, read.shape().toString(), file.toString());
                 }

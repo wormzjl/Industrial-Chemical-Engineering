@@ -6,6 +6,7 @@ import com.wormzjl.icheme.science.material.MaterialCatalog;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -52,7 +53,41 @@ public final class Report {
         }
     }
 
+    /**
+     * A curve over a unit's own time (batch 2026-11-09-batch-distiller, W7): a batch still's pot and head temperatures, distillate rate and
+     * composition through its batch. One time axis (s, rising) and channels by key, each one value a time, NaN where it has none, in the
+     * order they were given. A reading of a stored run, as the scalar readings are: state, which a run rebuilds.
+     */
+    public record Series(double[] time, Map<String, double[]> channels) {
+        public Series {
+            time = time.clone();
+            var copy = new LinkedHashMap<String, double[]>();
+            for (var channel : channels.entrySet()) {
+                if (channel.getValue().length != time.length) throw new IllegalArgumentException("A channel takes one value a time: " + channel.getKey());
+                copy.put(channel.getKey(), channel.getValue().clone());
+            }
+            for (int i = 0; i < time.length; i++)
+                if (!Double.isFinite(time[i]) || i > 0 && time[i] < time[i - 1]) throw new IllegalArgumentException("A series' time rises");
+            channels = Collections.unmodifiableMap(copy);
+        }
+
+        @Override public double[] time() {
+            return time.clone();
+        }
+
+        /** Channel {@code key}'s values, null if it has none. */
+        public double @Nullable [] channel(String key) {
+            var values = channels.get(key);
+            return values == null ? null : values.clone();
+        }
+
+        public int size() {
+            return time.length;
+        }
+    }
+
     private final Map<String, Double> readings = new LinkedHashMap<>();
+    private final Map<String, Series> series = new LinkedHashMap<>();
     private final List<Note> notes = new ArrayList<>();
     private double duty, massIn, enthalpyIn, massOut, enthalpyOut;
     private @Nullable V3ColumnDisplayResult display;
@@ -82,6 +117,16 @@ public final class Report {
         readings.put(key, value);
     }
 
+    /** A time-series reading under {@code key}: a curve the unit's own calculation integrated ({@link Series}). */
+    public void series(String key, Series value) {
+        series.put(key, value);
+    }
+
+    /** The time-series readings by key, in the order they were given. */
+    public Map<String, Series> series() {
+        return Collections.unmodifiableMap(new LinkedHashMap<>(series));
+    }
+
     /** What a column's last solve shows on its door's Results pages: a state, kept here because a stream or reading cannot hold a profile. */
     public void display(V3ColumnDisplayResult display) {
         this.display = display;
@@ -99,11 +144,12 @@ public final class Report {
         return warm;
     }
 
-    /** This report without its warm start: the same readings, notes, boundary, display and start. */
+    /** This report without its warm start: the same readings, series, notes, boundary, display and start. */
     Report cold() {
         if (warm == null) return this;
         var cold = new Report();
         cold.readings.putAll(readings);
+        cold.series.putAll(series);
         cold.notes.addAll(notes);
         cold.duty = duty;
         cold.massIn = massIn;

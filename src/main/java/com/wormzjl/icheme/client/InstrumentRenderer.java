@@ -34,7 +34,7 @@ public final class InstrumentRenderer {
         return metadata.sensors().stream().filter(s->metadata.sensorIds().containsKey(s.instance())).map(s->{
             String label=s.kind()==Sensor.Kind.SPEED?"item.icheme.speed_sensor":"gui.icheme.fluid."+switch(s.kind()){
                 case PRESSURE->"pressure_probe";case TEMPERATURE->"temperature_probe";case FLOW->"flowmeter";
-                case LEVEL->s.key().mount().equals("level_boot")?"boot_level":"body_level";case SPEED->throw new IllegalStateException();};
+                case LEVEL->s.key().mount().equals("level_boot")?"boot_level":"body_level";case SPEED,ALARM->throw new IllegalStateException();};
             return metadata.sensorIds().get(s.instance())+" / "+Component.translatable(label).getString();
         }).sorted().toList();
     }

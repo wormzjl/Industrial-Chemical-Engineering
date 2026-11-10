@@ -19,8 +19,13 @@ import org.jetbrains.annotations.Nullable;
  */
 public final class HeatSides {
     private HeatSides() {}
-    public enum Unit { EXCHANGER, KETTLE, AIR_COOLER, FIRED_HEATER }
-    public enum Side { TUBE, SHELL, PROCESS, CONVECTION, RADIANT }
+    public enum Unit { EXCHANGER, KETTLE, AIR_COOLER, FIRED_HEATER,
+        /** A batch still (batch 2026-11-09-batch-distiller, W3): its fired pot and its condenser's water side. */
+        STILL }
+    /** A unit's registrations: its passages, and a fired heater's {@code BURNER}s, the void behind its FUEL nozzle (batch 2026-11-09-furnace-fuel-power). */
+    public enum Side { TUBE, SHELL, PROCESS, CONVECTION, RADIANT, BURNER,
+        /** A batch still's pot, a vessel heated from below, and its condenser's water passage (batch 2026-11-09-batch-distiller, W3). */
+        POT, WATER }
     /**
      * One side: its nozzles of role {@code inlet} and {@code outlet}, its heat-transfer surface (m²) and its passage.
      */
@@ -99,6 +104,13 @@ public final class HeatSides {
      * whose FEED, VAPOUR_OUTLET and LIQUID_OUTLET nozzles are its ports, as a drum's are, and whose pool is its tubes' other side.
      */
     public static boolean pool(EquipmentShape.Kind kind){return kind==EquipmentShape.Kind.KETTLE;}
+    /**
+     * Whether {@code kind}'s unit also registers its burners, after its sides (batch 2026-11-09-furnace-fuel-power): a fired
+     * heater's firebox, a void behind its FUEL nozzle whose fuel valve its radiant coil's demand sets ({@link #BURNER_ROLE}).
+     */
+    public static boolean burners(EquipmentShape.Kind kind){return unit(kind)==Unit.FIRED_HEATER;}
+    /** The nozzle a fired heater's fuel comes in by. */
+    public static final EquipmentShape.Role BURNER_ROLE=EquipmentShape.Role.FUEL;
     /**
      * A kettle's bundle across, m, in its shell of diameter {@code shell} (W7): the drawn bundle, centred on the shell's axis,
      * 1/1.6 of it ({@link ProcessUnit#kettleShell}, within the shell's rounding to 0.25 m). Its lowest tubes stand half the
@@ -205,7 +217,11 @@ public final class HeatSides {
             case KETTLE,EXCHANGER->{if(partner==0||unit==Unit.KETTLE&&side!=Side.TUBE)yield null;var wall=new double[unit==Unit.EXCHANGER?type.cells():EXCHANGER_CELLS];java.util.Arrays.fill(wall,AIR_TEMPERATURE);
                 yield new HeatSide(area,HeatCurve.Films.DEFAULT,wall,share,0,partner,1,control,HeatControl.Limit.NONE,type.routing(side));}
             case AIR_COOLER->new AirCooled(area,AIR,AIR.draught(share),control,HeatControl.Limit.NONE);
-            case FIRED_HEATER->side==Side.RADIANT?new FiredCoil(target,coilDuty(side,area,share),1,partner):new ConvectionCoil(CONVECTION_U*area,partner,0);
+            // A still's condenser water side (batch 2026-11-09-batch-distiller, W3) takes the duty its still owes it (the column
+            // condenser's read, ExchangerRelay.Read.column): an exchanger's side against its pot; the pot has no passage.
+            case STILL->{if(partner==0||side!=Side.WATER)yield null;var wall=new double[EXCHANGER_CELLS];java.util.Arrays.fill(wall,AIR_TEMPERATURE);
+                yield new HeatSide(area,HeatCurve.Films.DEFAULT,wall,share,0,partner,1,control,HeatControl.Limit.NONE,ExchangerType.STANDARD.routing(side));}
+            case FIRED_HEATER->side==Side.RADIANT?new FiredCoil(target,coilDuty(side,area,share),1,partner):side==Side.CONVECTION?new ConvectionCoil(CONVECTION_U*area,partner,0):null;
             default->null;
         };
     }

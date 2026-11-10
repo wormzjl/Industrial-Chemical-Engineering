@@ -1,0 +1,5 @@
+{
+  "parent": "icheme:block/fluid_device",
+  "loader": "icheme:fluid_device",
+  "kind": "diverter_valve"
+}

@@ -37,7 +37,8 @@ import org.jetbrains.annotations.Nullable;
  * every reading stands without it, and then the results whole.
  */
 public final class SimulatorResults {
-    public static final int FORMAT = 1;
+    /** 2: a report carries its time-series readings ({@link Report.Series}, batch 2026-11-09-batch-distiller, W7). */
+    public static final int FORMAT = 2;
     private static final int MAX_LIST = 4096, MAX_TEXT = 512, MAX_TOKEN = Short.MAX_VALUE, MAX_ARGUMENTS = 16, SAME_SHEET = 0, SAME_AS_RAN = 1, OWN_SHEET = 2;
 
     private SimulatorResults() {
@@ -257,6 +258,14 @@ public final class SimulatorResults {
         b.writeBoolean(report.start() != null);
         if (report.start() != null) b.writeEnum(report.start());
         for (double value : new double[]{report.duty(), report.massIn(), report.enthalpyIn(), report.massOut(), report.enthalpyOut()}) b.writeDouble(value);
+        write(b, report.series().entrySet().stream().toList(), (o, e) -> {
+            text(o, e.getKey());
+            doubles(o, e.getValue().time());
+            write(o, e.getValue().channels().entrySet().stream().toList(), (p, channel) -> {
+                text(p, channel.getKey());
+                doubles(p, channel.getValue());
+            });
+        });
         boolean shown = displays && report.display() != null;
         b.writeBoolean(shown);
         if (shown) ColumnWire.writeDisplayResult(b, report.display());
@@ -271,6 +280,13 @@ public final class SimulatorResults {
         double massIn = b.readDouble(), enthalpyIn = b.readDouble(), massOut = b.readDouble(), enthalpyOut = b.readDouble();
         report.enters(massIn, enthalpyIn);
         report.leaves(massOut, enthalpyOut);
+        for (int i = count(b); i > 0; i--) {
+            String key = text(b);
+            double[] time = doubles(b);
+            var channels = new java.util.LinkedHashMap<String, double[]>();
+            for (int k = count(b); k > 0; k--) channels.put(text(b), doubles(b));
+            report.series(key, new Report.Series(time, channels));
+        }
         if (b.readBoolean()) report.display(ColumnWire.readDisplayResult(b));
         return report;
     }

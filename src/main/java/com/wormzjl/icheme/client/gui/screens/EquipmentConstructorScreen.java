@@ -103,6 +103,8 @@ public final class EquipmentConstructorScreen extends Screen {
     /** A machine's design point, which its sizes follow ({@link UnitDesign#size}); {@link MachineDuty#NONE} for another form. */
     private MachineDuty duty;
     private com.wormzjl.icheme.science.equipment.ExchangerType exchangerType;
+    /** A batch still's heater, condenser and stages (W6); the default for another form. */
+    private com.wormzjl.icheme.science.equipment.BatchStillOptions still=com.wormzjl.icheme.science.equipment.BatchStillOptions.DEFAULT;
     private ColumnTrays trays;
     /** The column design imported from a column calculator, the only one a column is built from (plan 2026-10-26, section 4.5); null before an import. */
     private @Nullable ColumnDesign column;
@@ -171,6 +173,7 @@ public final class EquipmentConstructorScreen extends Screen {
         tangentLength = design.tangentLength();
         duty = design.duty();
         exchangerType=design.exchangerType();
+        still=design.still();
         boot = design.boot();
         outlet = design.outlet();
         support = Math.max(design.support(), minimumSupport());
@@ -198,7 +201,7 @@ public final class EquipmentConstructorScreen extends Screen {
     /** The draft; always valid, because every stepper is clamped to the bounds of its parameter. */
     public Design design() {
         return new Design(diameter, tangentLength, form, support, new VesselPlacement(forward, right, up), trays, List.copyOf(connections), paint, bank, hasBoot(), outlet(),
-                column, List.copyOf(turns), towerBank, name, duty,exchangerType);
+                column, List.copyOf(turns), towerBank, name, duty,exchangerType,still);
     }
 
     private static Skin skin() {
@@ -282,7 +285,7 @@ public final class EquipmentConstructorScreen extends Screen {
             case CHOOSE -> ConstructorColumn.choose(category != null ? category : Equipment.of(form).category, Equipment.of(form), EquipmentNetwork.IMPORT_REACH, EquipmentConstructorScreen::tr);
             case DESIGN -> ConstructorColumn.design(new ConstructorColumn.Design(form, diameter, tangentLength, support, forward, right, up, bank,
                     form.column() ? new ConstructorColumn.Imported(column != null ? column.diameter() : diameter, shownTrays().trays() + 2, shownTrays().feed() + 1) : null,
-                    new ConstructorColumn.Outlet(outlets(), outlet(), words()), EquipmentNetwork.IMPORT_REACH,towerBank,duty,exchangerType),
+                    new ConstructorColumn.Outlet(outlets(), outlet(), words()), EquipmentNetwork.IMPORT_REACH,towerBank,duty,exchangerType,still),
                     !form.designed()&&!form.column()?connectionInput():null,form.column()?nozzleInput():null,EquipmentConstructorScreen::tr);
             case PAINT -> ConstructorColumn.paint(channel, EquipmentConstructorScreen::tr);
             case TEMPLATES -> ConstructorColumn.templates(templateKeys(), templates.unreadable(), EquipmentConstructorScreen::tr);
@@ -430,6 +433,8 @@ public final class EquipmentConstructorScreen extends Screen {
         String what = colon < 0 ? key : key.substring(0, colon), at = colon < 0 ? "" : key.substring(colon + 1);
         switch (what) {
             case "exchanger" -> {exchangerType=com.wormzjl.icheme.science.equipment.ExchangerType.valueOf(at);rebuildWidgets();}
+            case "still_heater" -> {still=still.withHeater(com.wormzjl.icheme.science.equipment.BatchStillOptions.Heater.valueOf(at));refresh();}
+            case "still_condenser" -> {still=still.withCondenser(com.wormzjl.icheme.science.equipment.BatchStillOptions.Condenser.valueOf(at));refresh();}
             case "category" -> {
                 category = Category.valueOf(at.toUpperCase(Locale.ROOT));
                 rebuildWidgets();
@@ -538,6 +543,13 @@ public final class EquipmentConstructorScreen extends Screen {
                 connections.set(selected, new EquipmentShape.Connection(c.side(), c.station(), clamp(c.offset() + step, -across, across)));
             }
             case "nozzle" -> nozzle = clamp(nozzle + step, 0, Math.max(0, sideNozzles().size() - 1));
+            // A still's column: none, or 2 to 8 stages (one step from none to the fewest), only with the built-in condenser.
+            case "stages" -> {
+                if (!still.condenses()) break;
+                int min = com.wormzjl.icheme.science.equipment.BatchStillOptions.MIN_STAGES, max = com.wormzjl.icheme.science.equipment.BatchStillOptions.MAX_STAGES;
+                int next = still.stages() == 0 ? (step > 0 ? min + step - 1 : 0) : still.stages() + step;
+                still = still.withStages(next < min ? 0 : Math.min(next, max));
+            }
             case "flow", "head", "power", "exhaust", "base_speed" -> {
                 machine(UnitDesign.of(kind).step(duty, key, step));
                 return;

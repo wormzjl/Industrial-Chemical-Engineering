@@ -98,10 +98,13 @@ import java.util.function.Function;
  * <p>34 (the same batch, plan section 3.4): control tag 6 is a steam turbine (its rated power and isentropic efficiency),
  * and a boundary transfer may be of kind {@code SHAFT}, a turbine's work out of the island.</p>
  * <p>37: a turbine's computed admission target follows its design in state; its saved facts still carry the design only.</p>
+ * <p>41 (batch 2026-11-09-furnace-fuel-power): a fired coil carries its fuel and air limit after its partner.</p>
+ * <p>42 (batch 2026-11-09-batch-distiller, W3): a pool may be a still's fired pot (partner 0) and carries its column's head
+ * (recoveries and return enthalpy) after its active share.</p>
  */
 public final class FluidCheckpointCodec {
     /** The state format: the core record's {@code StateFormat} and every unit's state section. */
-    public static final int VERSION=40;
+    public static final int VERSION=42;
     /** The most wall cells a saved heat side holds (crossflow 64, Standard 8, an air cooler's flat wall 1). */
     private static final int MAXIMUM_WALL_CELLS=64;
     /** The envelope: the core record's frame, the unit header and the section layout. Frozen. */
@@ -233,7 +236,7 @@ public final class FluidCheckpointCodec {
             active=Map.copyOf(holding);
         }
         return new WorldTopologyLedger.Snapshot(snapshot.onlineTick(),snapshot.nextIdentity(),active,snapshot.events(),snapshot.constructed(),snapshot.destroyed(),snapshot.basis(),
-                snapshot.recoveries(),snapshot.restated(),Map.copyOf(columns),Map.copyOf(shafts),snapshot.stores(),snapshot.health(),snapshot.builds());
+                snapshot.recoveries(),snapshot.restated(),Map.copyOf(columns),Map.copyOf(shafts),snapshot.stores(),snapshot.health(),snapshot.builds(),snapshot.stills());
     }
     /** The facts of a topology unit; facts this build cannot read refuse the world. */
     static FluidFacts.World worldFacts(byte[] data,Sections s) {
@@ -244,7 +247,7 @@ public final class FluidCheckpointCodec {
      * immutable parts with the state it was taken from, so an unchanged ledger is the same objects. */
     public static boolean sameWorldBody(WorldTopologyLedger.Snapshot a,WorldTopologyLedger.Snapshot b) {
         return a.nextIdentity()==b.nextIdentity()&&a.active()==b.active()&&a.events()==b.events()&&a.constructed()==b.constructed()
-                &&a.destroyed()==b.destroyed()&&a.basis()==b.basis()&&a.recoveries()==b.recoveries()&&a.restated()==b.restated()&&a.columns()==b.columns()&&a.builds()==b.builds();
+                &&a.destroyed()==b.destroyed()&&a.basis()==b.basis()&&a.recoveries()==b.recoveries()&&a.restated()==b.restated()&&a.columns()==b.columns()&&a.builds()==b.builds()&&a.stills()==b.stills();
     }
     static byte[] topologyUnit(WorldTopologyLedger.Snapshot world,long generation) {
         var w=new Writer();header(w,TOPOLOGY,0,0,generation);w.raw(encodeTopology(world));return w.toByteArray();
@@ -383,12 +386,16 @@ public final class FluidCheckpointCodec {
     private static void pool(Writer w,com.wormzjl.icheme.science.fluid.network.Pool pool) {
         w.bool(pool!=null);if(pool==null)return;
         w.i64(pool.id());w.i64(pool.partner());w.f64(pool.area());w.f64(pool.bottom());w.f64(pool.bundle());w.varint(pool.cells());for(double t:pool.wall())w.f64(t);w.f64(pool.giveBack());w.f64(pool.active());
+        // State format 42 (batch 2026-11-09-batch-distiller, W3): a still's pot carries its column's head.
+        var head=pool.head();w.bool(head!=null);if(head!=null){w.sparse(head.recovery());w.f64(head.returnEnthalpy());}
     }
     private static com.wormzjl.icheme.science.fluid.network.Pool pool(Reader r) {
         if(!r.bool())return null;
         long id=r.i64(),partner=r.i64();double area=r.f64(),bottom=r.f64(),bundle=r.f64();int cells=r.varint(MAXIMUM_WALL_CELLS);if(cells<1)throw r.invalid("a pool without wall cells");
         double[] wall=new double[cells];for(int k=0;k<cells;k++)wall[k]=r.f64();double giveBack=r.f64(),active=r.f64();
-        try{return new com.wormzjl.icheme.science.fluid.network.Pool(id,partner,area,bottom,bundle,wall,giveBack,active);}
+        com.wormzjl.icheme.science.fluid.network.Pool.Head head=null;
+        if(r.bool()){var recovery=r.sparse(MAXIMUM_ARRAY);double back=r.f64();try{head=new com.wormzjl.icheme.science.fluid.network.Pool.Head(recovery,back);}catch(IllegalArgumentException e){throw r.invalid("invalid still head: "+e.getMessage());}}
+        try{return new com.wormzjl.icheme.science.fluid.network.Pool(id,partner,area,bottom,bundle,wall,giveBack,active,head);}
         catch(IllegalArgumentException e){throw r.invalid("invalid pool: "+e.getMessage());}
     }
     private static com.wormzjl.icheme.science.fluid.network.VesselGeometry geometry(Reader r){return new com.wormzjl.icheme.science.fluid.network.VesselGeometry(com.wormzjl.icheme.science.fluid.network.VesselGeometry.Form.valueOf(r.text()),r.f64(),r.f64(),r.f64(),r.f64(),r.f64(),r.f64());}
@@ -421,7 +428,7 @@ public final class FluidCheckpointCodec {
                 case com.wormzjl.icheme.science.fluid.network.AirCooled cooled->{var air=cooled.air();w.u8(3);w.f64(cooled.area());
                     w.f64(air.temperature());w.f64(air.barePerFace());w.f64(air.film());w.f64(air.capacity());w.f64(air.natural());
                     w.f64(cooled.draught());control(w,cooled.control());w.u8(cooled.limit().ordinal());}
-                case com.wormzjl.icheme.science.fluid.network.FiredCoil coil->{w.u8(2);w.f64(coil.setTemperature());w.f64(coil.duty());w.f64(coil.firing());w.i64(coil.partner());}
+                case com.wormzjl.icheme.science.fluid.network.FiredCoil coil->{w.u8(2);w.f64(coil.setTemperature());w.f64(coil.duty());w.f64(coil.firing());w.i64(coil.partner());w.f64(coil.limit());}
                 case com.wormzjl.icheme.science.fluid.network.ConvectionCoil coil->{w.u8(4);w.f64(coil.conductance());w.i64(coil.radiant());w.f64(coil.flue());}
             }
         }
@@ -475,7 +482,7 @@ public final class FluidCheckpointCodec {
     private static com.wormzjl.icheme.science.fluid.network.HeatLaw heat(Reader r) {
         int tag=r.u8();
         if(tag==0)return null;
-        if(tag==2)return new com.wormzjl.icheme.science.fluid.network.FiredCoil(r.f64(),r.f64(),r.f64(),r.i64());
+        if(tag==2)return new com.wormzjl.icheme.science.fluid.network.FiredCoil(r.f64(),r.f64(),r.f64(),r.i64(),r.f64());
         if(tag==4)return new com.wormzjl.icheme.science.fluid.network.ConvectionCoil(r.f64(),r.i64(),r.f64());
         if(tag==3) {
             double area=r.f64();var air=new com.wormzjl.icheme.science.fluid.network.AirCooled.Air(r.f64(),r.f64(),r.f64(),r.f64(),r.f64());double draught=r.f64();

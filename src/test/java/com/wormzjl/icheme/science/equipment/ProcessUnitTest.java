@@ -62,7 +62,96 @@ class ProcessUnitTest {
                 shapes.add(EquipmentShape.unit(Kind.AIR_COOLER, 1.5, 4, Heading.NORTH, 5, new ProcessUnit.Bank(p, s)));
         shapes.add(EquipmentShape.unit(Kind.AIR_COOLER, 3, 6, Heading.NORTH, 5, new ProcessUnit.Bank(ProcessUnit.Bank.MAX_PARALLEL, ProcessUnit.Bank.MAX_SERIES)));
         shapes.add(EquipmentShape.unit(Kind.AIR_COOLER, 2.5, 4, Heading.WEST, 7, new ProcessUnit.Bank(3, 2)));
+        shapes.addAll(stillOptions());
         return shapes;
+    }
+
+    /**
+     * The batch still's options (batch 2026-11-09-batch-distiller, W2) beyond the default one {@link #everySize} has at every
+     * pot: every heater with the worm tub, no condenser and the column's fewest and most stages, at the least, middle and
+     * largest pots; and two turned.
+     */
+    static List<EquipmentShape> stillOptions() {
+        var shapes = new ArrayList<EquipmentShape>();
+        for (double litres : new double[]{100, 500, 2000})
+            for (var heater : BatchStillOptions.Heater.values())
+                for (var options : List.of(new BatchStillOptions(heater, BatchStillOptions.Condenser.BUILT_IN, 0), new BatchStillOptions(heater, BatchStillOptions.Condenser.NONE, 0),
+                        new BatchStillOptions(heater, BatchStillOptions.Condenser.BUILT_IN, BatchStillOptions.MIN_STAGES),
+                        new BatchStillOptions(heater, BatchStillOptions.Condenser.BUILT_IN, BatchStillOptions.MAX_STAGES)))
+                    if (!options.equals(BatchStillOptions.DEFAULT)) shapes.add(EquipmentShape.unit(Kind.BATCH_STILL, litres, 1, Heading.NORTH, 0).withStill(options));
+        shapes.add(EquipmentShape.unit(Kind.BATCH_STILL, 750, 1, Heading.EAST, 0).withStill(new BatchStillOptions(BatchStillOptions.Heater.LIQUID, BatchStillOptions.Condenser.BUILT_IN, 5)));
+        shapes.add(EquipmentShape.unit(Kind.BATCH_STILL, 1500, 1, Heading.WEST, 0).withStill(new BatchStillOptions(BatchStillOptions.Heater.ELECTRIC, BatchStillOptions.Condenser.NONE, 0)));
+        return shapes;
+    }
+
+    /**
+     * A batch still's nozzle faces by its options (owner, 2026-11-09; seen from the front, -x is the right): the charge to
+     * the front, the drain to the back, a liquid-fuel burner's fuel to the right; the top condenser on the left with its
+     * distillate to the front, its vent up, its water in at the front and out at the back; without a condenser the vapour
+     * to the left.
+     */
+    private static Map<Role, String> stillSides(BatchStillOptions options) {
+        var sides = new HashMap<Role, String>(Map.of(Role.CHARGE, "2-", Role.DRAIN, "2+"));
+        if (!options.condenses()) sides.put(Role.VAPOUR_OUTLET, "0+");
+        else sides.putAll(Map.of(Role.DISTILLATE, "2-", Role.VENT, "1+", Role.WATER_INLET, "2-", Role.WATER_OUTLET, "2+"));
+        if (options.heater() == BatchStillOptions.Heater.LIQUID) sides.put(Role.FUEL, "0-");
+        return sides;
+    }
+
+    @Test
+    void aStillsPotFollowsItsVolume() {
+        // Owner B1 (BATCH_DISTILLER_PLAN.md): 100 to 2000 L, 0.50 m across at 100 L, 0.86 m at 500 L, 1.37 m at 2000 L.
+        assertEquals(List.of(100., 150., 200., 300., 500., 750., 1000., 1500., 2000.), ProcessUnit.sizes(Kind.BATCH_STILL));
+        assertEquals(.50, BatchStillDesign.potDiameter(100), 1e-12);
+        assertEquals(.86, BatchStillDesign.potDiameter(500), 1e-12);
+        assertEquals(1.37, BatchStillDesign.potDiameter(2000), 1e-12);
+        for (double litres : ProcessUnit.sizes(Kind.BATCH_STILL))
+            assertEquals(litres / 1000, EquipmentShape.unit(Kind.BATCH_STILL, litres, 1, Heading.NORTH, 0).volume(), 1e-12);
+        // The options: a column of 2 to 8 stages or none, and only over the built-in condenser; the default on every other kind.
+        assertEquals(BatchStillOptions.DEFAULT, EquipmentShape.unit(Kind.BATCH_STILL, 500, 1, Heading.NORTH, 0).still());
+        for (Runnable bad : List.<Runnable>of(
+                () -> new BatchStillOptions(BatchStillOptions.Heater.SOLID, BatchStillOptions.Condenser.BUILT_IN, 1),
+                () -> new BatchStillOptions(BatchStillOptions.Heater.SOLID, BatchStillOptions.Condenser.BUILT_IN, 9),
+                () -> new BatchStillOptions(BatchStillOptions.Heater.SOLID, BatchStillOptions.Condenser.NONE, 4),
+                () -> EquipmentShape.unit(Kind.PUMP, .25, 1, Heading.NORTH, 0).withStill(BatchStillOptions.DEFAULT.withStages(4))))
+            assertThrows(IllegalArgumentException.class, bad::run);
+        assertEquals(0, BatchStillOptions.DEFAULT.withStages(4).withCondenser(BatchStillOptions.Condenser.NONE).stages(), "no condenser, no column");
+        // Saved options read by name, a missing field at its default, a refused one repaired with a line.
+        var repairs = new ArrayList<String>();
+        assertEquals(new BatchStillOptions(BatchStillOptions.Heater.ELECTRIC, BatchStillOptions.Condenser.BUILT_IN, 6), BatchStillOptions.read("electric", "built_in", 6, repairs));
+        assertEquals(BatchStillOptions.DEFAULT, BatchStillOptions.read(null, null, null, repairs));
+        assertEquals(List.of(), repairs);
+        assertEquals(new BatchStillOptions(BatchStillOptions.Heater.SOLID, BatchStillOptions.Condenser.NONE, 0), BatchStillOptions.read("peat", "none", 3, repairs));
+        assertEquals(2, repairs.size(), repairs.toString());
+    }
+
+    /**
+     * A still names the parts its animation moves (phase 3): a fired still its firing door, fire bed and flue top, a
+     * liquid-fuel one its burner too, an electric one its lamp; every still its spout, a column its reflux valve; each
+     * inside the box.
+     */
+    @Test
+    void aStillNamesItsAnimatedParts() {
+        var shapes = new ArrayList<EquipmentShape>();
+        for (var shape : everySize()) if (shape.kind() == Kind.BATCH_STILL) shapes.add(shape);
+        assertEquals(ProcessUnit.sizes(Kind.BATCH_STILL).size() + stillOptions().size(), shapes.size());
+        for (var shape : shapes) {
+            var options = shape.still();
+            var want = new HashSet<String>(Set.of("spout"));
+            if (!options.condenses()) want.clear();
+            if (options.heater().fired()) want.addAll(Set.of("door", "fire_bed", "flue_top"));
+            else want.add("lamp");
+            if (options.heater() == BatchStillOptions.Heater.LIQUID) want.add("burner");
+            if (options.column()) want.add("reflux_valve");
+            var marks = ShapeRasterizer.marks(shape);
+            assertEquals(want, marks.keySet(), shape.toString());
+            for (var box : marks.values()) {
+                assertTrue(box[0] >= 0 && box[1] >= 0 && box[2] >= 0, shape + " " + java.util.Arrays.toString(box));
+                assertTrue(box[3] <= shape.sizeX() && box[4] <= shape.sizeY() && box[5] <= shape.sizeZ(), shape + " " + java.util.Arrays.toString(box));
+                assertTrue(box[0] < box[3] && box[1] < box[4] && box[2] < box[5], shape + " " + java.util.Arrays.toString(box));
+            }
+        }
+        assertEquals(Map.of(), ShapeRasterizer.marks(EquipmentShape.unit(Kind.PUMP, .25, 1, Heading.NORTH, 0)));
     }
 
     @Test
@@ -244,6 +333,10 @@ class ProcessUnitTest {
                 Map.entry(Kind.EBULLATED_BED_REACTOR, Map.of(Role.EFFLUENT, "2-", Role.FEED, "2-", Role.HYDROGEN, "2+", Role.CATALYST_INLET, "1+", Role.CATALYST_OUTLET, "0+")),
                 Map.entry(Kind.CENTRIFUGAL_COMPRESSOR, Map.of(Role.SUCTION, "1+", Role.DISCHARGE, "1+")),
                 Map.entry(Kind.STEAM_TURBINE, Map.of(Role.STEAM, "0+", Role.EXHAUST, "1+")),
+                // A flare stack's vent gas towards the front (batch 2026-11-09-flare-stack).
+                Map.entry(Kind.FLARE_STACK, Map.of(Role.FLARE_GAS, "2-")),
+                // A batch still's by its options (batch 2026-11-09-batch-distiller, stillSides); here the default still's.
+                Map.entry(Kind.BATCH_STILL, stillSides(BatchStillOptions.DEFAULT)),
                 Map.entry(Kind.MOTOR, Map.of()), Map.entry(Kind.GENERATOR, Map.of()), Map.entry(Kind.GEARBOX, Map.of()),
                 Map.entry(Kind.CYCLONE, Map.of(Role.FEED, "2-", Role.VAPOUR_OUTLET, "2+", Role.SOLIDS_OUTLET, "1-")),
                 Map.entry(Kind.FCC_CONVERTER, Map.of(Role.FEED, "2-", Role.STEAM, "2+", Role.AIR, "2-", Role.FUEL, "2-", Role.FLUE_GAS, "0-", Role.VAPOUR_OUTLET, "0+",
@@ -260,7 +353,8 @@ class ProcessUnitTest {
                         Role.SOLIDS_OUTLET, "1-", Role.QUENCH, "1+", Role.LIQUID_OUTLET, "1-", Role.SYNGAS, "0+")));
         for (var kind : Kind.values()) assertEquals(kind.unit(), expected.containsKey(kind), kind + " has its nozzles' faces listed");
         for (var shape : everySize()) {
-            var sides = shape.kind() == Kind.PUMP && shape.diameter() > ProcessUnit.OH2_MAX ? Map.of(Role.SUCTION, "1+", Role.DISCHARGE, "1+") : expected.get(shape.kind());
+            var sides = shape.kind() == Kind.PUMP && shape.diameter() > ProcessUnit.OH2_MAX ? Map.of(Role.SUCTION, "1+", Role.DISCHARGE, "1+")
+                    : shape.kind() == Kind.BATCH_STILL ? stillSides(shape.still()) : expected.get(shape.kind());
             var nozzles = shape.nozzles();
             assertEquals(sides.keySet(), new HashSet<>(nozzles.stream().map(EquipmentShape.Nozzle::role).toList()), shape.toString());
             assertEquals(sides.size(), nozzles.size(), shape.toString());
@@ -349,7 +443,8 @@ class ProcessUnitTest {
      * nozzle takes the largest pipe, in {@link NozzleBore#STEP}s, whose neck stands clear by this test's own {@link
      * NozzleRoom} (the next step does not), never less than its design pipe; every other kind takes a pipe's largest. On
      * the gated columns: the 3 m column's reflux 0.55 m (a ladder beside it), the 1.5 m column's 0.7 m, the 0.5 m column's
-     * side nozzles 0.25 m (the neck wider than the column's cladding), its top outlet a pipe's largest.
+     * side nozzles 0.25 m (the neck wider than the column's cladding), its top outlet a pipe's largest. A liquid-fired
+     * still's burner takes {@link BatchStillDesign#FUEL_BORE} (owner, 2026-11-09: a small pipe connector is enough).
      */
     @Test
     void aColumnNozzleTakesTheLargestPipeItsPlaceClears() {
@@ -362,7 +457,9 @@ class ProcessUnitTest {
                 double largest = NozzleBore.largest(shape, k);
                 String at = shape + " " + nozzle.role();
                 if (shape.kind() != Kind.COLUMN) {
-                    assertEquals(PipeSizes.MAX_BORE, largest, at);
+                    // A liquid-fired still's burner takes a small fuel line (owner, 2026-11-09).
+                    boolean burner = shape.kind() == Kind.BATCH_STILL && nozzle.role() == Role.FUEL;
+                    assertEquals(burner ? BatchStillDesign.FUEL_BORE : PipeSizes.MAX_BORE, largest, at);
                     continue;
                 }
                 assertTrue(largest >= nozzle.defaultOd() / 1.1 - 1e-9, at + ": under its design pipe");
@@ -459,7 +556,8 @@ class ProcessUnitTest {
      * Batch 2026-11-03-rotating-machinery (W4): every machine's shaft end has its coupling's half in the machine and a
      * free block beyond its coupling face for the shaft block, level, off the ground and a block clear of every nozzle's
      * pipe; a gearbox has its input and its output, every other machine one end. A motor's and a generator's terminal box
-     * lies in the machine; an air cooler and an induced-draft tower have one too (W5); no other kind has one.
+     * lies in the machine; an air cooler and an induced-draft tower have one too (W5), and a fired heater for its burners' air fans
+     * (batch 2026-11-09-furnace-fuel-power); no other kind has one.
      */
     @Test
     void everyShaftEndMeetsAFreeBlockForItsShaft() {
@@ -467,7 +565,8 @@ class ProcessUnitTest {
         for (var shape : everySize()) {
             var shafts = ShapeRasterizer.shafts(shape);
             var terminal = ShapeRasterizer.terminal(shape);
-            boolean electric = shape.kind() == Kind.MOTOR || shape.kind() == Kind.GENERATOR || shape.kind() == Kind.AIR_COOLER || shape.kind() == Kind.INDUCED_DRAFT_COOLING_TOWER;
+            boolean electric = shape.kind() == Kind.MOTOR || shape.kind() == Kind.GENERATOR || shape.kind() == Kind.AIR_COOLER || shape.kind() == Kind.INDUCED_DRAFT_COOLING_TOWER
+                    || shape.kind() == Kind.VERTICAL_HEATER || shape.kind() == Kind.CABIN_HEATER || EquipmentServices.electricStill(shape);
             assertEquals(electric, terminal != null, shape.toString());
             if (!UnitDesign.of(shape.kind()).hasDuty() && shape.kind() != Kind.COMPRESSOR) {
                 assertEquals(List.of(), shafts, shape.toString());
@@ -509,6 +608,15 @@ class ProcessUnitTest {
                 assertTrue(occupied.contains(port.cell()), shape + " " + role);
                 assertFalse(occupied.contains(pipe), shape + " " + role + ": no room for a pipe at " + pipe);
                 assertTrue(pipe.y() >= 0, shape + " " + role + " pipe under the ground");
+                // The nozzle meets its pipe: its face on the block face, its centre line through the pipe block's (batch
+                // 2026-11-09-flare-stack). The delayed coker's feed, steam and water stand 0.05 to 0.35 m off: an open item.
+                if (shape.kind() == Kind.DELAYED_COKER) continue;
+                var face = shape.transform().point(shape.nozzles().get(port.nozzle()).face());
+                int axis = port.dx() != 0 ? 0 : port.dy() != 0 ? 1 : 2;
+                int[] at = {pipe.x(), pipe.y(), pipe.z()};
+                for (int a = 0; a < 3; a++)
+                    if (a == axis) assertEquals(Math.rint(face[a]), face[a], 1e-9, shape + " " + role + ": its face off the block face");
+                    else assertEquals(at[a] + .5, face[a], 1e-9, shape + " " + role + ": its centre line off its pipe's, axis " + a);
             }
             pipesApart(shape);
             // Flanges at their largest stand clear of each other.

@@ -8,6 +8,7 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 
 | Folder | Purpose | Batch | Status |
 |---|---|---|---|
+| [heating-values/](heating-values/README.md) | Prebuilt lower heating values (Hess's law) into the material records' combustion sub-record | `2026-11-09-furnace-fuel-power` | In use since 2026-11-09 |
 | [rack-frame-probe/](rack-frame-probe/README.md) | jshell probe: how often a rack lane's face points leave its frame open | `2026-11-03-save-corruption` | Implemented 2026-11-09 |
 | [lod-rendering/](lod-rendering/README.md) | Frame-time pair of the LOD batch: gauge scene, view and away windows | `2026-11-09-lod-rendering` | Implemented 2026-11-09 |
 | [equipment-service-probes/](equipment-service-probes/README.md) | Gradle-free probes of service cases, nozzle necks, shaft ends and drawn area on the gated shapes | `2026-11-09-main-gate-fixes` | Implemented 2026-11-09 |
@@ -23,6 +24,8 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 | [simulator-bench/](simulator-bench/README.md) | Process simulator CPU, allocation, heap and draw-call bench on the bundled crude unit, with JFR | `2026-11-02-process-simulator` | In use since 2026-11-04 |
 | [rotating-machinery/](rotating-machinery/README.md) | Machine-law quick checks and campaigns, worked numbers, W2 hold traces and probes | `2026-11-03-rotating-machinery` | In use since 2026-11-04 |
 | [pump-sprites/](pump-sprites/README.md) | Machinery/control sprites and normal/low-detail render probes | `2026-11-03-rotating-machinery`, `2026-11-06-simulator-sizing` | In use since 2026-11-04 |
+| [still-sprites/](still-sprites/README.md) | Batch still sprites and textured still renders | `2026-11-09-batch-distiller` | In use since 2026-11-09 |
+| [batch-still-column/](batch-still-column/README.md) | B3 measurement: the bubble-point column candidate against V3 | `2026-11-09-batch-distiller` | Kept for reference since 2026-11-10 |
 | [machine-parts/](machine-parts/README.md) | Flat 16 x 16 machine part item icons (the pump repair kit) | `2026-11-03-rotating-machinery` | In use since 2026-11-04 |
 | [machine-sounds/](machine-sounds/README.md) | Original pump, compressor, motor and steam-turbine loops (authoring only) | `2026-11-03-rotating-machinery` | In use since 2026-11-04 |
 | [machine-nozzle-probe/](machine-nozzle-probe/README.md) | Which nozzle pipe blocks move when machines lose their drawn drivers | `2026-11-03-rotating-machinery` | In use since 2026-11-03 |

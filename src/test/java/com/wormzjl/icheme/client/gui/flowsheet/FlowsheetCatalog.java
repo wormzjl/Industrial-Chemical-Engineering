@@ -25,7 +25,9 @@ public final class FlowsheetCatalog {
             AIR_COOLER = modelled("cooler"), HEATER = modelled("fired_heater"), PUMP = modelled("pump"), COMPRESSOR = modelled("compressor"), COOLING_TOWER = drawn("cooling_tower"),
             EJECTOR = modelled("ejector"), TURBINE = modelled("steam_turbine"), DRIVER = drawn("steam_turbine"), ADSORBER = drawn("adsorber"), CYCLONE = drawn("cyclone"), STIRRED = drawn("stirred_reactor"),
             TRICKLE = drawn("trickle_bed"), EBULLATED = drawn("ebullated_bed"), FCC = drawn("fcc_converter"), COKER = drawn("delayed_coker"), CFB = drawn("cfb_boiler"),
-            FLUID_BED = drawn("fluid_bed_gasifier"), GRATE = drawn("grate_boiler"), FIXED_BED = drawn("fixed_bed_gasifier");
+            FLUID_BED = drawn("fluid_bed_gasifier"), GRATE = drawn("grate_boiler"), FIXED_BED = drawn("fixed_bed_gasifier"), FLARE = modelled("flare"),
+            // The batch still (batch 2026-11-09-batch-distiller): drawn only from W2, modelled since W7 (BatchStillUnit).
+            STILL = modelled("batch_still");
 
     private FlowsheetCatalog() {
     }
@@ -66,6 +68,8 @@ public final class FlowsheetCatalog {
             case GRATE_BOILER -> GRATE;
             case FIXED_BED_GASIFIER -> FIXED_BED;
             case INDUCED_DRAFT_COOLING_TOWER, NATURAL_DRAFT_COOLING_TOWER -> COOLING_TOWER;
+            case FLARE_STACK -> FLARE;
+            case BATCH_STILL -> STILL;
         };
     }
 
@@ -81,6 +85,8 @@ public final class FlowsheetCatalog {
             case AIR_COOLER -> AIR_COOLER;
             case VERTICAL_HEATER, CABIN_HEATER -> HEATER;
             case INDUCED_DRAFT_COOLING_TOWER, NATURAL_DRAFT_COOLING_TOWER -> COOLING_TOWER;
+            case FLARE_STACK -> FLARE;
+            case BATCH_STILL -> STILL;
             case PUMP -> PUMP;
             case COMPRESSOR, CENTRIFUGAL_COMPRESSOR -> COMPRESSOR;
             case EJECTOR -> EJECTOR;
@@ -109,6 +115,9 @@ public final class FlowsheetCatalog {
             case PUMP -> PUMP;
             case VALVE -> modelled("valve");
             case FILTER -> modelled("filter");
+            // The diverter valve (batch 2026-11-09-batch-distiller): one inlet and three outlets, all its flow to the chosen one. On the sheet it is
+            // the splitter, whose chosen outlet takes the rest and whose other two take a share of none.
+            case DIVERTER_VALVE -> modelled("splitter");
             case COMPRESSOR -> COMPRESSOR;
             case HEAT_SIDE -> EXCHANGER;
             // A steam turbine registers as a fluid device (W3, reading A37).

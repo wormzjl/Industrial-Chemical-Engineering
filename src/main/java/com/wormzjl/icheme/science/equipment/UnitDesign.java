@@ -242,6 +242,8 @@ public abstract class UnitDesign {
         DESIGNS.put(Kind.MOTOR, new MotorDesign(false));
         DESIGNS.put(Kind.GENERATOR, new MotorDesign(true));
         DESIGNS.put(Kind.GEARBOX, new GearboxDesign());
+        DESIGNS.put(Kind.FLARE_STACK, new FlareStackDesign());
+        DESIGNS.put(Kind.BATCH_STILL, new BatchStillDesign());
     }
 
     /** The design of a designed kind ({@link Kind#designed()}): a storage vessel's or a unit's. */

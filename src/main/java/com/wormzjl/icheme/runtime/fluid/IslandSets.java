@@ -89,11 +89,19 @@ public final class IslandSets {
         for(int i=0;i<source.length;i++)if(map[i]>=0)cut[map[i]]=source[i];
         return new HydrocarbonModel.Phase(p.molarVolume(),p.molarEnthalpy(),p.molarInternalEnergy(),p.volumePressureDerivative(),cut,p.vaporLike());
     }
+    /**
+     * {@code pool} on {@code to}'s list: a still's head (batch 2026-11-09-batch-distiller, W3) is a slice input on the island's
+     * list, so on another list it is a plain pot's until the still plans the next slice; every other pool as it is.
+     */
+    private static com.wormzjl.icheme.science.fluid.network.Pool onList(com.wormzjl.icheme.science.fluid.network.Pool pool,FluidThermodynamics to) {
+        if(pool==null||pool.head()==null||pool.head().components()==to.componentCount())return pool;
+        return pool.withHead(com.wormzjl.icheme.science.fluid.network.Pool.Head.plain(to.componentCount()));
+    }
     /** A node on {@code to}: its state ({@link #state}) and its inventory's amounts by id; everything else as it is. */
     public static PassiveNetwork.Reservoir node(PassiveNetwork.Reservoir n,FluidThermodynamics from,FluidThermodynamics to) {
         if(same(from,to))return n;
         var i=n.inventory();
-        var inventory=new PassiveNetwork.Inventory(i.volume(),amounts(i.moles(),from,to),i.internalEnergy(),i.solids(),i.levelHeight(),i.open(),i.geometry(),i.pool(),i.tower());
+        var inventory=new PassiveNetwork.Inventory(i.volume(),amounts(i.moles(),from,to),i.internalEnergy(),i.solids(),i.levelHeight(),i.open(),i.geometry(),onList(i.pool(),to),i.tower());
         return new PassiveNetwork.Reservoir(n.id(),n.elevation(),state(n.state(),from,to),n.kind(),inventory);
     }
     /** A graph on {@code to}: every node ({@link #node}); its connections carry no amounts. */
@@ -146,7 +154,7 @@ public final class IslandSets {
         if(same(from,world))return n;
         var i=n.inventory();
         return new PassiveNetwork.Reservoir(n.id(),n.elevation(),padded(n.state(),from,world),n.kind(),
-                new PassiveNetwork.Inventory(i.volume(),amounts(i.moles(),from,world),i.internalEnergy(),i.solids(),i.levelHeight(),i.open(),i.geometry(),i.pool(),i.tower()));
+                new PassiveNetwork.Inventory(i.volume(),amounts(i.moles(),from,world),i.internalEnergy(),i.solids(),i.levelHeight(),i.open(),i.geometry(),onList(i.pool(),world),i.tower()));
     }
     private static PassiveNetwork paddedGraph(PassiveNetwork g,FluidThermodynamics from,FluidThermodynamics world) {
         var nodes=new ArrayList<PassiveNetwork.Reservoir>(g.reservoirs().size());

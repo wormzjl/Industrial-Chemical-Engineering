@@ -182,21 +182,7 @@ final class ServiceSurface {
     }
 
     static EquipmentShape north(EquipmentShape s) {
-        return new EquipmentShape(
-                s.kind(),
-                s.diameter(),
-                s.tangentLength(),
-                s.orientation(),
-                EquipmentShape.Heading.NORTH,
-                s.support(),
-                s.trays(),
-                s.connections(),
-                s.bank(),
-                s.boot(),
-                s.outlet(),
-                s.towerBank(),
-                s.duty(),
-                s.exchangerType());
+        return s.withFront(EquipmentShape.Heading.NORTH);
     }
 
     static List<Polygon> turn(List<Polygon> polygons, Transform transform) {

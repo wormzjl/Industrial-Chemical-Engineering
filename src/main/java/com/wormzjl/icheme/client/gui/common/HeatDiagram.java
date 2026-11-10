@@ -139,6 +139,9 @@ public final class HeatDiagram {
             case PROCESS -> List.of("PROCESS_INLET", "PROCESS_OUTLET");
             case CONVECTION -> List.of("CONVECTION_INLET", "CONVECTION_OUTLET");
             case RADIANT -> List.of("RADIANT_INLET", "RADIANT_OUTLET");
+            case BURNER -> List.of("FUEL");
+            case POT -> List.of("CHARGE", "DRAIN");
+            case WATER -> List.of("WATER_INLET", "WATER_OUTLET");
         };
     }
 
@@ -150,6 +153,8 @@ public final class HeatDiagram {
             case AIR_COOLER -> d.airCooler();
             case FIRED_HEATER -> d.heater(side);
             case KETTLE -> d.kettle();
+            // A batch still (batch 2026-11-09-batch-distiller): its page is phase 3; the kettle's drawing until then.
+            case STILL -> d.kettle();
         }
         return d;
     }

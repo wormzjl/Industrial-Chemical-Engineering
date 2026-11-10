@@ -52,16 +52,31 @@ import java.util.Objects;
  * trickle-bed reactor's effluent on the sides its design leaves free ({@link #outlets}); 0 for every other shape.
  */
 public record EquipmentShape(Kind kind, double diameter, double tangentLength, Orientation orientation, Heading front, int support,
-                             @Nullable ColumnTrays trays, List<Connection> connections, ProcessUnit.Bank bank, boolean boot, int outlet, TowerBank towerBank, MachineDuty duty, ExchangerType exchangerType) {
+                             @Nullable ColumnTrays trays, List<Connection> connections, ProcessUnit.Bank bank, boolean boot, int outlet, TowerBank towerBank, MachineDuty duty, ExchangerType exchangerType,
+                             BatchStillOptions still) {
     public EquipmentShape(Kind kind, double diameter, double tangentLength, Orientation orientation, Heading front, int support,
                           @Nullable ColumnTrays trays, List<Connection> connections, ProcessUnit.Bank bank, boolean boot, int outlet, TowerBank towerBank, MachineDuty duty) {
         this(kind,diameter,tangentLength,orientation,front,support,trays,connections,bank,boot,outlet,towerBank,duty,ExchangerType.STANDARD);
     }
+    /** A shape before shape fields 11: a batch still's options at {@link BatchStillOptions#DEFAULT}. */
+    public EquipmentShape(Kind kind, double diameter, double tangentLength, Orientation orientation, Heading front, int support,
+                          @Nullable ColumnTrays trays, List<Connection> connections, ProcessUnit.Bank bank, boolean boot, int outlet, TowerBank towerBank, MachineDuty duty,
+                          ExchangerType exchangerType) {
+        this(kind,diameter,tangentLength,orientation,front,support,trays,connections,bank,boot,outlet,towerBank,duty,exchangerType,BatchStillOptions.DEFAULT);
+    }
     public EquipmentShape withExchangerType(ExchangerType value) {
-        return new EquipmentShape(kind,diameter,tangentLength,orientation,front,support,trays,connections,bank,boot,outlet,towerBank,duty,value);
+        return new EquipmentShape(kind,diameter,tangentLength,orientation,front,support,trays,connections,bank,boot,outlet,towerBank,duty,value,still);
     }
     public EquipmentShape withTowerBank(TowerBank value) {
-        return new EquipmentShape(kind,diameter,tangentLength,orientation,front,support,trays,connections,bank,boot,outlet,value,duty,exchangerType);
+        return new EquipmentShape(kind,diameter,tangentLength,orientation,front,support,trays,connections,bank,boot,outlet,value,duty,exchangerType,still);
+    }
+    /** This batch still with options {@code value} (shape fields 11, batch 2026-11-09-batch-distiller). */
+    public EquipmentShape withStill(BatchStillOptions value) {
+        return new EquipmentShape(kind,diameter,tangentLength,orientation,front,support,trays,connections,bank,boot,outlet,towerBank,duty,exchangerType,value);
+    }
+    /** This shape facing {@code value}, every other field kept. */
+    public EquipmentShape withFront(Heading value) {
+        return new EquipmentShape(kind,diameter,tangentLength,orientation,value,support,trays,connections,bank,boot,outlet,towerBank,duty,exchangerType,still);
     }
     public com.wormzjl.icheme.science.fluid.network.CoolingTower coolingTower() {
         return kind==Kind.INDUCED_DRAFT_COOLING_TOWER
@@ -143,7 +158,11 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
         STIRRED_REACTOR, ADSORBER, TRICKLE_BED_REACTOR, EBULLATED_BED_REACTOR, CENTRIFUGAL_COMPRESSOR, STEAM_TURBINE, CYCLONE,
         FCC_CONVERTER, DELAYED_COKER, FLUIDIZED_BED_BOILER, FLUIDIZED_BED_GASIFIER, GRATE_BOILER, FIXED_BED_GASIFIER, INDUCED_DRAFT_COOLING_TOWER, NATURAL_DRAFT_COOLING_TOWER,
         // Drivers and power transmission (batch 2026-11-03-rotating-machinery, W4): joined to the casings by shaft blocks.
-        MOTOR, GENERATOR, GEARBOX;
+        MOTOR, GENERATOR, GEARBOX,
+        // An elevated flare stack (batch 2026-11-09-flare-stack).
+        FLARE_STACK,
+        // A batch still: a fired or electric copper pot, a worm tub or a small column (batch 2026-11-09-batch-distiller).
+        BATCH_STILL;
 
         public boolean coolingTower() { return this==INDUCED_DRAFT_COOLING_TOWER || this==NATURAL_DRAFT_COOLING_TOWER; }
 
@@ -237,7 +256,12 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
         VENT(PortClass.VAPOUR), EXHAUST(PortClass.VAPOUR), FLUE_GAS(PortClass.VAPOUR), RELIEF(PortClass.VAPOUR), SYNGAS(PortClass.VAPOUR),
         DRAIN(PortClass.LIQUID), CONDENSATE(PortClass.LIQUID), CATALYST_OUTLET(PortClass.LIQUID), SOLIDS_OUTLET(PortClass.LIQUID),
         // A floating-roof tank: centered front/back bottom nozzles, and the front overflow at the fill height.
-        BOTTOM(PortClass.LIQUID), OVERFLOW(PortClass.OVERFLOW), HOT_WATER_INLET(PortClass.BULK), COLD_WATER_OUTLET(PortClass.LIQUID);
+        BOTTOM(PortClass.LIQUID), OVERFLOW(PortClass.OVERFLOW), HOT_WATER_INLET(PortClass.BULK), COLD_WATER_OUTLET(PortClass.LIQUID),
+        // A flare stack's vent gas inlet (batch 2026-11-09-flare-stack): all it receives goes to the tip.
+        FLARE_GAS(PortClass.BULK),
+        // A batch still (batch 2026-11-09-batch-distiller): its pot's charge, its condenser's distillate (liquid first, the
+        // vapour to its VENT) and cooling water in and out.
+        CHARGE(PortClass.BULK), DISTILLATE(PortClass.LIQUID), WATER_INLET(PortClass.BULK), WATER_OUTLET(PortClass.BULK);
 
         public final PortClass port;
 
@@ -383,7 +407,7 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
      */
     public EquipmentShape withDuty(MachineDuty value) {
         var design = UnitDesign.of(kind);
-        return new EquipmentShape(kind, design.size(value), design.length(value), orientation, front, support, trays, connections, bank, boot, outlet, towerBank, value, exchangerType);
+        return new EquipmentShape(kind, design.size(value), design.length(value), orientation, front, support, trays, connections, bank, boot, outlet, towerBank, value, exchangerType, still);
     }
 
     /**
@@ -418,7 +442,7 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
 
     /** This drum with {@code connections} instead of its own. */
     public EquipmentShape withConnections(List<Connection> connections) {
-        return new EquipmentShape(kind, diameter, tangentLength, orientation, front, support, trays, connections, bank, boot, outlet, towerBank, duty, exchangerType);
+        return new EquipmentShape(kind, diameter, tangentLength, orientation, front, support, trays, connections, bank, boot, outlet, towerBank, duty, exchangerType, still);
     }
 
     /** A column: its bottoms leave through its skirt to the front (the owner leaves columns alone, 2026-10-25). */
@@ -543,6 +567,8 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
     public EquipmentShape {
         Objects.requireNonNull(exchangerType, "exchangerType");
         if (kind != Kind.EXCHANGER && exchangerType != ExchangerType.STANDARD) throw new IllegalArgumentException("Only exchangers have a crossflow configuration");
+        Objects.requireNonNull(still, "still");
+        if (kind != Kind.BATCH_STILL && !still.equals(BatchStillOptions.DEFAULT)) throw new IllegalArgumentException("Only a batch still has still options");
         Objects.requireNonNull(kind, "kind");
         Objects.requireNonNull(orientation, "orientation");
         Objects.requireNonNull(front, "front");
@@ -806,9 +832,9 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
         return kind.reservoir();
     }
 
-    /** Registers with the fluid engine when the whole structure has been built: a steam turbine too (W3, reading A37). */
+    /** Registers with the fluid engine when the whole structure has been built: a steam turbine too (W3, reading A37), a batch still (batch 2026-11-09-batch-distiller, W3). */
     public boolean fluidDevice() {
-        return reservoir() || kind.mover() || kind == Kind.STEAM_TURBINE || HeatSides.unit(kind) != null;
+        return reservoir() || kind.mover() || kind == Kind.STEAM_TURBINE || kind == Kind.FLARE_STACK || kind == Kind.BATCH_STILL || HeatSides.unit(kind) != null;
     }
 
     /** A vessel's skirt; a designed shape's supports are its own parts. */
@@ -883,6 +909,8 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
         if (kind == Kind.KETTLE) return fluidGeometry().capacity();
         if (kind == Kind.TANK) return Math.PI * diameter * diameter / 4 * fillHeight();
         if (kind == Kind.SPHERE) return Math.PI * diameter * diameter * diameter / 6;
+        // A batch still's main size is its pot's volume, litres.
+        if (kind == Kind.BATCH_STILL) return diameter / 1000;
         var b = bootPlace();
         double boot = b == null ? 0 : Math.PI * b.diameter() * b.diameter() / 4 * b.length() + Math.PI * b.diameter() * b.diameter() * b.diameter() / 24;
         return Math.PI * diameter * diameter / 4 * tangentLength + Math.PI * diameter * diameter * diameter / 12 + boot;

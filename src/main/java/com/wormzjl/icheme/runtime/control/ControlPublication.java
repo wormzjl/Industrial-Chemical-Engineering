@@ -83,6 +83,9 @@ final class ControlPublication {
         if (record == null) return "#" + id;
         if (record.device().control() instanceof FlowControl.ControlValve)
             return String.format(Locale.ROOT, "CV-%04d", id);
+        if (record.device().kind()
+                == com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.DIVERTER_VALVE)
+            return String.format(Locale.ROOT, "DV-%04d", id);
         var heat = record.device().heat();
         if (heat != null)
             return String.format(
@@ -93,6 +96,7 @@ final class ControlPublication {
                         case KETTLE -> "RB";
                         case AIR_COOLER -> "AC";
                         case FIRED_HEATER -> "FH";
+                        case STILL -> "BS";
                     },
                     id,
                     heat.side());
@@ -167,6 +171,32 @@ final class ControlPublication {
             var p = registration.device().position();
             tag.putLong("position", new BlockPos(p.x(), p.y(), p.z()).asLong());
         }
+    }
+
+    /**
+     * The raised alarms of the equipment on {@code owner}'s data bus (batch 2026-11-09-furnace-fuel-power): each alarm channel
+     * whose reading is 1, by label, with its equipment's place. Read from the readings this publication already took.
+     */
+    private ListTag alarms(UUID owner, Map<UUID, ControlInput> sensors, Map<UUID, Sensor.Reading> readings) {
+        var reached = new HashSet<Long>();
+        for (var id : hosts.bus().connected(owner)) {
+            var port = facts.port(id);
+            if (port != null && port.host() > 0) reached.add(port.host());
+        }
+        var out = new ListTag();
+        sensors.values().stream()
+                .filter(s -> s.kind() == Sensor.Kind.ALARM && s.role().startsWith("ALARM:") && reached.contains(s.key().host()))
+                .sorted(Comparator.comparing(s -> s.label(facts)))
+                .forEach(s -> {
+                    var r = readings.get(s.instance());
+                    if (r == null || r.value() < .5) return;
+                    var tag = new CompoundTag();
+                    tag.putString("label", String.format(Locale.ROOT, "EQ-%04d", s.key().host()));
+                    tag.putString("alarm", s.role().substring(6));
+                    sensorLocation(tag, s);
+                    out.add(tag);
+                });
+        return out;
     }
 
     private CompoundTag snapshot(
@@ -246,13 +276,21 @@ final class ControlPublication {
                             .filter(
                                     r ->
                                             hostIds.contains(r.device().id())
+                                                    && !r.device().valvedSink()
                                                     && (r.device().control()
                                                                     instanceof
                                                                     FlowControl.ControlValve
                                                             || r.device().heat() != null
                                                                     && r.device()
                                                                             .heat()
-                                                                            .controllable()))
+                                                                            .controllable()
+                                                            // A batch still's pot and a diverter valve (owner decisions O1, O2).
+                                                            || r.device().stillPot()
+                                                            || r.device().kind()
+                                                                    == com.wormzjl.icheme.science
+                                                                            .fluid.topology
+                                                                            .TopologyCompiler.Kind
+                                                                            .DIVERTER_VALVE))
                             .sorted(Comparator.comparingLong(r -> r.device().id()))
                             .toList();
             row.putInt("outputPages", Math.max(1, (outputChoices.size() + 63) / 64));
@@ -278,6 +316,7 @@ final class ControlPublication {
             controllers.add(row);
         }
         root.put("controllers", controllers);
+        root.put("alarms", alarms(owner, sensors, readings));
         return root;
     }
 }

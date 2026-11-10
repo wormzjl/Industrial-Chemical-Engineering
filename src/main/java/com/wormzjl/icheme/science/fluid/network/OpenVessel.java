@@ -26,6 +26,10 @@ import static com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.WATER;
  * The liquids stand stratified: the heavier ({@link FluidThermodynamics#heavierLiquid}) from the bottom, the lighter on
  * it, each with its volume share of the solids ({@link FluidThermodynamics#phaseVolume}). Vent and spill leave the world,
  * booked as boundary transfers of their kinds at the vessel ({@link ConservativeTransport.BoundaryTransfer.Kind}).
+ *
+ * <p>A batch still's pot (batch 2026-11-09-batch-distiller, W3) is open in the same sense: it stands at the ambient pressure
+ * through its column, condenser and vent. Its vent and spill go to the still's head ({@code runtime/fluid/Stills}), not the
+ * atmosphere, and its column's {@link Pool.Head} keeps in the pot what the column returns.</p>
  */
 public final class OpenVessel {
     private OpenVessel() {}
@@ -144,7 +148,17 @@ public final class OpenVessel {
         if(ventShare>0) {
             var n=FluidThermodynamics.phaseMoles(state,GAS);
             for(int c=0;c<n.length;c++){n[c]=Math.min(ventShare*n[c],held[c]);held[c]-=n[c];}
-            vent=new Release(n,ventShare*model.phaseMass(state,GAS)*model.phaseSpecificEnthalpy(state,GAS,null),SolidInventory.EMPTY,SolidInventory.Moments.ZERO);
+            double energy=ventShare*model.phaseMass(state,GAS)*model.phaseSpecificEnthalpy(state,GAS,null);
+            // A still's pot (batch 2026-11-09-batch-distiller, W3): its column passes the share of each component its head
+            // planned; the rest it condenses and returns, which stays in the pot as liquid at the head's return enthalpy, so
+            // only its gas's energy over that leaves with the release.
+            var pool=node.inventory().pool();var head=pool==null?null:pool.head();
+            if(head!=null&&head.components()==n.length) {
+                double returned=0;
+                for(int c=0;c<n.length;c++){double up=head.recovery(c)*n[c],back=n[c]-up;returned+=back;held[c]+=back;n[c]=up;}
+                energy-=returned*head.returnEnthalpy();
+            }
+            vent=new Release(n,energy,SolidInventory.EMPTY,SolidInventory.Moments.ZERO);
         }
         if(spillShare>0) {
             var band=band(model,state,top,liquid);double[] n=new double[held.length];double energy=0;

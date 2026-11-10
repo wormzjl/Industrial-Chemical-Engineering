@@ -355,7 +355,10 @@ public final class IslandCertificate {
             // A kettle's pool's facts and slice inputs (W7): a replay holds them fixed.
             var pool=node.inventory().pool();
             if(pool==null)d.integer(0);
-            else{d.integer(1);d.number(pool.id());d.number(pool.partner());d.real(pool.area());d.real(pool.bottom());d.real(pool.bundle());d.integer(pool.cells());for(double t:pool.wall())d.real(t);d.real(pool.giveBack());d.real(pool.active());}
+            else{d.integer(1);d.number(pool.id());d.number(pool.partner());d.real(pool.area());d.real(pool.bottom());d.real(pool.bundle());d.integer(pool.cells());for(double t:pool.wall())d.real(t);d.real(pool.giveBack());d.real(pool.active());
+                // A still's column head (batch 2026-11-09-batch-distiller, W3): a slice input a replay holds fixed. Named only
+                // where there is one, so the signatures of kettles saved before it stand (within identity 9).
+                var head=pool.head();if(head!=null){d.integer(2);for(double r:head.recovery())d.real(r);d.real(head.returnEnthalpy());}}
             if(node.fixed()) {
                 var inventory=node.inventory();d.integer(inventory.moles().length);for(double n:inventory.moles())d.real(n);
                 d.real(inventory.internalEnergy());d.solids(inventory.solids());d.real(node.state().temperature());d.real(node.state().pressure());
@@ -386,7 +389,9 @@ public final class IslandCertificate {
                     // Fans without power (W5): a held fan limit is part of the law, named only below 1 (older signatures stand).
                     if(cooled.fanLimit()<1)d.real(cooled.fanLimit());}
                 case com.wormzjl.icheme.science.fluid.network.ConvectionCoil coil->{d.integer(4);d.real(coil.conductance());d.number(coil.radiant());d.real(coil.flue());}
-                case com.wormzjl.icheme.science.fluid.network.FiredCoil coil->{d.integer(2);d.real(coil.setTemperature());d.number(coil.partner());d.real(coil.duty());d.real(coil.firing());}
+                case com.wormzjl.icheme.science.fluid.network.FiredCoil coil->{d.integer(2);d.real(coil.setTemperature());d.number(coil.partner());d.real(coil.duty());d.real(coil.firing());
+                    // The burners short of fuel or air (batch 2026-11-09-furnace-fuel-power): named only below 1 (older signatures stand).
+                    if(coil.limit()<1)d.real(coil.limit());}
             }
             // What each end draws (PassiveNetwork.PhasePort): it changes the equations, so a replay holds only under it.
             d.integer(pipe.firstPort().ordinal());d.integer(pipe.secondPort().ordinal());

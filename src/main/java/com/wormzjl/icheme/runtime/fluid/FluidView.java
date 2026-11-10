@@ -10,7 +10,7 @@ import com.wormzjl.icheme.science.fluid.network.InlineFilter;
 public record FluidView(long identity,long inputRevision,long committedTick,long onlineTick,String status,State state,
                         double massFlow,List<PipeTransfer> pipeHistory,Double devicePressureChange,
                         double intervalSeconds,List<PipeRoute> pipeRoutes,InlineFilter filter,PipeInfo pipeInfo,
-                        List<Outlet> outlets,Tank tank,Heat heat,Tower tower,Drive drive,Power power,Pump pump) {
+                        List<Outlet> outlets,Tank tank,Heat heat,Tower tower,Drive drive,Power power,Pump pump,Flare flare,Still still) {
     /**
      * A pump's readings (batch 2026-11-03-rotating-machinery W10d, owner decision D37), from its last committed suction read
      * and its health: NPSH available and NPSH required (NPSH3 at the accepted flow and speed; an in-line pump's at its D21
@@ -48,6 +48,18 @@ public record FluidView(long identity,long inputRevision,long committedTick,long
      * (null for none), and its status word on the display ({@code NO POWER}, the notice {@code UNMETERED}, or empty). Null
      * for a device without fans.
      */
+    /**
+     * A fired heater's burners as its coils' pages show them (batch 2026-11-09-furnace-fuel-power): the fuel's mass flow
+     * into the firebox (kg/s) and its lower heating value (J/kg), the heat fired and asked for (W), the combustion-air fans'
+     * electric draw (W), and the alarms raised, by their status words.
+     */
+    public record Fuel(double massFlow,double heatingValue,double firedWatt,double askedWatt,double fanWatt,List<String> alarms) {
+        public Fuel {
+            alarms=List.copyOf(alarms);
+            if(!(massFlow>=0)||!(heatingValue>=0)||!(firedWatt>=0)||!(askedWatt>=0)||!(fanWatt>=0)||!Double.isFinite(massFlow+heatingValue+firedWatt+askedWatt+fanWatt)||alarms.size()>4)
+                throw new IllegalArgumentException("Invalid fuel presentation");
+        }
+    }
     public record Power(double draw,double perTick,Double store,String status) {
         public Power {
             Objects.requireNonNull(status);
@@ -57,30 +69,84 @@ public record FluidView(long identity,long inputRevision,long committedTick,long
     /** Every field but a casing's drive and a fan unit's power. */
     public FluidView(long identity,long inputRevision,long committedTick,long onlineTick,String status,State state,double massFlow,List<PipeTransfer> pipeHistory,Double devicePressureChange,
                      double intervalSeconds,List<PipeRoute> pipeRoutes,InlineFilter filter,PipeInfo pipeInfo,List<Outlet> outlets,Tank tank,Heat heat,Tower tower) {
-        this(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,tower,null,null,null);
+        this(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,tower,null,null,null,null,null);
     }
-    public FluidView withDrive(Drive value){return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,tower,value,power,pump);}
-    public FluidView withPower(Power value){return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,tower,drive,value,pump);}
-    public FluidView withTower(Tower value){return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,value,drive,power,pump);}
-    public FluidView withPump(Pump value){return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,tower,drive,power,value);}
-    public FluidView withStatus(String value){return new FluidView(identity,inputRevision,committedTick,onlineTick,value,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,tower,drive,power,pump);}
+    public FluidView withDrive(Drive value){return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,tower,value,power,pump,flare,still);}
+    public FluidView withPower(Power value){return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,tower,drive,value,pump,flare,still);}
+    public FluidView withTower(Tower value){return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,value,drive,power,pump,flare,still);}
+    public FluidView withPump(Pump value){return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,tower,drive,power,value,flare);}
+    public FluidView withStatus(String value){return new FluidView(identity,inputRevision,committedTick,onlineTick,value,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,tower,drive,power,pump,flare,still);}
+    /** Every field but a flare's. */
+    public FluidView(long identity,long inputRevision,long committedTick,long onlineTick,String status,State state,double massFlow,List<PipeTransfer> pipeHistory,Double devicePressureChange,
+                     double intervalSeconds,List<PipeRoute> pipeRoutes,InlineFilter filter,PipeInfo pipeInfo,List<Outlet> outlets,Tank tank,Heat heat,Tower tower,Drive drive,Power power,Pump pump) {
+        this(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,tower,drive,power,pump,null,null);
+    }
+    /** Every field but a batch still's. */
+    public FluidView(long identity,long inputRevision,long committedTick,long onlineTick,String status,State state,double massFlow,List<PipeTransfer> pipeHistory,Double devicePressureChange,
+                     double intervalSeconds,List<PipeRoute> pipeRoutes,InlineFilter filter,PipeInfo pipeInfo,List<Outlet> outlets,Tank tank,Heat heat,Tower tower,Drive drive,Power power,Pump pump,Flare flare) {
+        this(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,tower,drive,power,pump,flare,null);
+    }
+    public FluidView withStill(Still value){return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,tower,drive,power,pump,flare,value);}
+    /**
+     * A batch still's pot (batch 2026-11-09-batch-distiller, W6), as its page shows it, from the engine's cached view
+     * ({@code Stills.view}) and the still's facts: its heater by name ({@code SOLID}, {@code LIQUID}, {@code ELECTRIC}), its
+     * column's stages (0 for none), whether it has its built-in condenser, its rating (heat into the pot at full firing, W);
+     * the player's settings, the firing (0 to 1) and the reflux valve (its ratio, or closed); what a data-network controller
+     * holds instead (null where the setting rules; {@code heldClosed} for a controller that closes the valve); the readings:
+     * the pot's and the head's temperatures (K, null for none yet), the liquid level (m) and its share of the pot, the heat
+     * into the pot (W), the distillate and vent flows (kg/s), the condenser's share, the reflux the column runs at (null for
+     * no column, or total reflux); the status word and the alarms' words; a solid still's fuel slot: the item's id (empty for
+     * none), its count, one item's heat (J), and the heat left in the burning item (J). No process state is inferred from it.
+     */
+    public record Still(String heater,int stages,boolean condenser,double rating,double firing,double reflux,boolean closed,
+                        Double heldFiring,Double heldReflux,boolean heldClosed,
+                        Double potTemperature,Double headTemperature,double level,double filled,double heat,double distillate,double vent,double condensed,Double effectiveReflux,
+                        String status,List<String> alarms,String fuel,int fuelCount,double fuelEnergy,double burning) {
+        public Still {
+            Objects.requireNonNull(heater);Objects.requireNonNull(status);Objects.requireNonNull(fuel);alarms=List.copyOf(alarms);
+            if(heater.length()>16||status.length()>32||fuel.length()>128||alarms.size()>8||stages<0||stages>16||fuelCount<0||fuelCount>64
+                    ||!(rating>0)||!(firing>=0&&firing<=1)||!(reflux>=0)||!(level>=0)||!(filled>=0)||!(heat>=0)||!(distillate>=0)||!(vent>=0)||!(condensed>=0&&condensed<=1)||!(fuelEnergy>=0)||!(burning>=0)
+                    ||!Double.isFinite(rating+reflux+level+filled+heat+distillate+vent+fuelEnergy+burning)
+                    ||heldFiring!=null&&!(heldFiring>=0&&heldFiring<=1)||heldReflux!=null&&!(heldReflux>=0&&Double.isFinite(heldReflux))
+                    ||potTemperature!=null&&!(potTemperature>0&&Double.isFinite(potTemperature))||headTemperature!=null&&!(headTemperature>0&&Double.isFinite(headTemperature))
+                    ||effectiveReflux!=null&&!(effectiveReflux>=0&&Double.isFinite(effectiveReflux)))
+                throw new IllegalArgumentException("Invalid still presentation");
+            for(var a:alarms)if(a.length()>32)throw new IllegalArgumentException("Invalid still alarm");
+        }
+        /** Whether a data-network controller holds the firing or the reflux valve. */
+        public boolean held(){return heldFiring!=null||heldReflux!=null||heldClosed;}
+    }
+    public FluidView withFlare(Flare value){return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,tower,drive,power,pump,value,still);}
+    /**
+     * A flare stack (batch 2026-11-09-flare-stack): the mean mass flow it took (kg/s), the heat it released (W), the gas's
+     * net heating value (J per standard m³) and stoichiometric flame temperature (K), the most it passes of that gas now
+     * (kg/s), its rated heat release (W), its tip diameter (m) and its status by name ({@code Flares.Status}). Null for a
+     * device that is no flare.
+     */
+    public record Flare(double massFlow,double heat,double heatingValue,double flameTemperature,double limit,double rated,double tip,String status) {
+        public Flare {
+            Objects.requireNonNull(status);
+            if(!(massFlow>=0)||!(heat>=0)||!(heatingValue>=0)||!(flameTemperature>0)||!(limit>=0)||!(rated>0)||!(tip>0)||!Double.isFinite(massFlow+heat+heatingValue+flameTemperature+limit+rated+tip)||status.length()>32)
+                throw new IllegalArgumentException("Invalid flare presentation");
+        }
+    }
     /** A tank has six faces and each face one neighbour, so it has at most six connections. */
     public static final int MAXIMUM_OUTLETS=6;
     /** Source-side convenience for devices without pipe inspection, not a wire-format fallback. */
     public FluidView(long identity,long inputRevision,long committedTick,long onlineTick,String status,State state,double massFlow,List<PipeTransfer> pipeHistory,Double devicePressureChange,double intervalSeconds,List<PipeRoute> pipeRoutes,InlineFilter filter){
-        this(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,null,List.of(),null,null,null,null,null,null);
+        this(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,null,List.of(),null,null,null,null,null,null,null,null);
     }
     public FluidView withPipeInfo(PipeInfo info){
         return withPipeInfo(info,intervalSeconds);
     }
     public FluidView withPipeInfo(PipeInfo info,double seconds){
-        return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,seconds,pipeRoutes,filter,info,outlets,tank,heat,tower,drive,power,pump);
+        return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,seconds,pipeRoutes,filter,info,outlets,tank,heat,tower,drive,power,pump,flare,still);
     }
     public FluidView withOutlets(List<Outlet> list){
-        return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,list,tank,heat,tower,drive,power,pump);
+        return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,list,tank,heat,tower,drive,power,pump,flare,still);
     }
     public FluidView withTank(Tank value){
-        return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,value,heat,tower,drive,power,pump);
+        return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,value,heat,tower,drive,power,pump,flare,still);
     }
     /**
      * A vessel's own geometry and what it gave the atmosphere over the last completed interval (batch
@@ -167,7 +233,11 @@ public record FluidView(long identity,long inputRevision,long committedTick,long
      */
     public record Heat(String unit,String side,boolean paired,double outletTemperature,double heatWatt,Double fans,Double fanPowerWatt,
                        Double burners,Double setPoint,Double maximumWatt,Double bypass,
-                       String actuator,Double effort,String limit,List<Port> ports,Lines lines) {
+                       String actuator,Double effort,String limit,List<Port> ports,Lines lines,Fuel fuel) {
+        public Heat(String unit,String side,boolean paired,double outletTemperature,double heatWatt,Double fans,Double fanPowerWatt,Double burners,Double setPoint,Double maximumWatt,Double bypass,
+                    String actuator,Double effort,String limit,List<Port> ports,Lines lines) {
+            this(unit,side,paired,outletTemperature,heatWatt,fans,fanPowerWatt,burners,setPoint,maximumWatt,bypass,actuator,effort,limit,ports,lines,null);
+        }
         /** The actuators the screen names: an internal bypass, the real bypass valve, a ratio's feed valve, fans, burners, none. */
         public static final Set<String> ACTUATORS=Set.of("none","bypass","bypass_valve","feed_valve","fans","louvers","burners");
         /** An exchanger's four nozzles, a kettle's five; a little room for another unit's. */
@@ -187,8 +257,10 @@ public record FluidView(long identity,long inputRevision,long committedTick,long
         }
         /** This side with its control's actuator and effort, its limit, the unit's ports and lines. */
         public Heat with(String actuator,Double effort,String limit,List<Port> ports,Lines lines) {
-            return new Heat(unit,side,paired,outletTemperature,heatWatt,fans,fanPowerWatt,burners,setPoint,maximumWatt,bypass,actuator,effort,limit,ports,lines);
+            return new Heat(unit,side,paired,outletTemperature,heatWatt,fans,fanPowerWatt,burners,setPoint,maximumWatt,bypass,actuator,effort,limit,ports,lines,fuel);
         }
+        /** A fired heater's side with its burners' readings. */
+        public Heat withFuel(Fuel value){return new Heat(unit,side,paired,outletTemperature,heatWatt,fans,fanPowerWatt,burners,setPoint,maximumWatt,bypass,actuator,effort,limit,ports,lines,value);}
         /** The port of nozzle role {@code role}, or null. */
         public Port port(String role){for(var p:ports)if(p.role().equals(role))return p;return null;}
     }
@@ -238,10 +310,10 @@ public record FluidView(long identity,long inputRevision,long committedTick,long
     /** Every field but the heat side's: a view of a device that is not one. */
     public FluidView(long identity,long inputRevision,long committedTick,long onlineTick,String status,State state,double massFlow,List<PipeTransfer> pipeHistory,Double devicePressureChange,
                      double intervalSeconds,List<PipeRoute> pipeRoutes,InlineFilter filter,PipeInfo pipeInfo,List<Outlet> outlets,Tank tank) {
-        this(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,null,null,null,null,null);
+        this(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,null,null,null,null,null,null,null);
     }
     public FluidView withHeat(Heat value){
-        return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,value,tower,drive,power,pump);
+        return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,value,tower,drive,power,pump,flare,still);
     }
     public FluidView(long identity,long inputRevision,long committedTick,long onlineTick,String status,State state,double massFlow,List<PipeTransfer> pipeHistory) {
         this(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,null,0,List.of(),null);

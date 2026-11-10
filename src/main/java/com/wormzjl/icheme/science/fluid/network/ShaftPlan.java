@@ -14,14 +14,17 @@ import java.util.Map;
  * fan setting and control stay as they were); {@code FAILED} (W10b, owner decision D34): 0 for a pump whose health reached
  * 0, closed as a stopped mover is (a machine at no speed, a set-flow pump switched off), its settings kept; 1 for an in-line
  * pump repaired since, switched back on (an island keeps the controls its last slice solved with, and a machine's speed
- * plan restores a casing by itself).
+ * plan restores a casing by itself). {@code BURNERS} (batch 2026-11-09-furnace-fuel-power): a radiant coil's limit
+ * ({@link FiredCoil#limit}), keyed by the coil's device; {@code FUEL}: a fired heater's fuel valve's mass target, kg/s, keyed
+ * by its burners, the node its run enters. {@code FLARE} (batch 2026-11-09-flare-stack): a flare's tip limit, kg/s, keyed by the
+ * flare, the node its run enters.
  */
 public record ShaftPlan(Kind kind, double value) {
-    public enum Kind { SPEED, DISPLACEMENT, GOVERNOR, FANS, FAILED }
+    public enum Kind { SPEED, DISPLACEMENT, GOVERNOR, FANS, FAILED, BURNERS, FUEL, FLARE }
 
     public ShaftPlan {
         java.util.Objects.requireNonNull(kind);
-        if (!(value >= 0) || !Double.isFinite(value) || (kind == Kind.FANS || kind == Kind.FAILED) && value > 1) throw new IllegalArgumentException("Invalid shaft plan " + value);
+        if (!(value >= 0) || !Double.isFinite(value) || (kind == Kind.FANS || kind == Kind.FAILED || kind == Kind.BURNERS) && value > 1) throw new IllegalArgumentException("Invalid shaft plan " + value);
     }
 
     /**
@@ -45,8 +48,28 @@ public record ShaftPlan(Kind kind, double value) {
         }
         for (int e = 0; e < graph.pipes().size(); e++) {
             var pipe = graph.pipes().get(e);
+            // A fuel valve is keyed by the burners its run enters, a flare's tip limit by the flare.
+            if (pipe.control() instanceof FlowControl.ControlValve fuel && fuel.source().sink()) {
+                var plan = plans.get(graph.reservoirs().get(pipe.second()).id());
+                if (plan == null || plan.kind != (fuel.source() == FlowControl.ValveSource.BURNER ? Kind.FUEL : Kind.FLARE)) continue;
+                var next = Math.abs(plan.value - fuel.massTarget()) <= PassiveStepSolver.VALVE_DEADBAND * Math.max(plan.value, fuel.massTarget()) + 1e-9 && (plan.value > 0) == (fuel.massTarget() > 0)
+                        ? fuel : fuel.withMassTarget(plan.value);
+                if (next == fuel) continue;
+                if (pipes == null) pipes = new ArrayList<>(graph.pipes());
+                pipes.set(e, pipe.withControl(next));
+                continue;
+            }
             var plan = plans.get(graph.reservoirs().get(pipe.first()).id());
             if (plan == null) continue;
+            if (plan.kind == Kind.BURNERS) {
+                // A limit inside the deadband of the coil's own keeps the coil's (a steady island stays certified); 0 is exact.
+                if (pipe.heat() instanceof FiredCoil coil && coil.limit() != plan.value && !(coil.limit() > 0 && plan.value > 0
+                        && Math.abs(coil.limit() - plan.value) <= PassiveStepSolver.VALVE_DEADBAND * Math.max(coil.limit(), plan.value))) {
+                    if (pipes == null) pipes = new ArrayList<>(graph.pipes());
+                    pipes.set(e, pipe.withHeat(coil.withLimit(plan.value)));
+                }
+                continue;
+            }
             if (plan.kind == Kind.FANS) {
                 if (pipe.heat() instanceof AirCooled cooled && cooled.fanLimit() != plan.value) {
                     if (pipes == null) pipes = new ArrayList<>(graph.pipes());
@@ -87,7 +110,7 @@ public record ShaftPlan(Kind kind, double value) {
             case FlowControl.Machine a when solved instanceof FlowControl.Machine b -> a.sameButSpeed(b);
             case FlowControl.Pump a when solved instanceof FlowControl.Pump b -> a.requestedVolumeFlow() == b.requestedVolumeFlow() && a.maximumAddedPressure() == b.maximumAddedPressure();
             case FlowControl.Compressor a when solved instanceof FlowControl.Compressor b -> a.maximumPressureRatio() == b.maximumPressureRatio() && a.setFlow()==b.setFlow() && a.setPressure()==b.setPressure();
-            case FlowControl.ControlValve a when solved instanceof FlowControl.ControlValve b -> a.source() == FlowControl.ValveSource.SHAFT_SPEED && b.source() == a.source()
+            case FlowControl.ControlValve a when solved instanceof FlowControl.ControlValve b -> a.source().planned() && b.source() == a.source()
                     && a.targetPressure() == b.targetPressure() && a.volumeTarget() == b.volumeTarget() && java.util.Objects.equals(a.sensor(), b.sensor()) && a.revision() == b.revision();
             case FlowControl.Turbine a when solved instanceof FlowControl.Turbine b -> a.design().equals(b.design());
             default -> false;

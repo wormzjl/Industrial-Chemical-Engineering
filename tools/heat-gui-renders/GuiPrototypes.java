@@ -11,6 +11,7 @@ import com.wormzjl.icheme.client.gui.common.HeatControlColumn;
 import com.wormzjl.icheme.client.gui.common.MachineColumnSamples;
 import com.wormzjl.icheme.client.gui.common.MachineColumn;
 import com.wormzjl.icheme.client.gui.common.PumpCurve;
+import com.wormzjl.icheme.client.gui.common.StillDoor;
 import com.wormzjl.icheme.client.gui.common.kit.Canvas;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
 import com.wormzjl.icheme.client.gui.common.kit.Measure;
@@ -92,9 +93,121 @@ public final class GuiPrototypes {
         out.addAll(pumpReadings());
         out.addAll(createCoupling());
         out.addAll(controlPanels());
+        out.addAll(firedHeater());
+        out.addAll(flareStack());
+        out.addAll(batchStill());
         return out;
     }
 
+    /**
+     * A batch still (batch 2026-11-09-batch-distiller, W6): its pot's page distilling on a solid fire with a column, its
+     * damper held by a controller; a liquid-fired pot still heating; an electric still boiled dry; and the constructor's
+     * still options.
+     */
+    static List<Prototype> batchStill() {
+        var out = new ArrayList<Prototype>();
+        record Still(String file, StillDoor.Heater heater, boolean column, String held, StillDoor.Fuel fuel, String status, int colour, List<DeviceColumn.Meter> meters,
+                     DeviceColumn.Power power) {}
+        var flow = "kg/h";
+        var stills = List.of(
+                new Still("batch-still-solid-column", StillDoor.Heater.SOLID, true, "63.0", new StillDoor.Fuel("Coal", "12", "1630", "27.7"), "DISTILLING", Palette.ACCENT,
+                        List.of(meter("still_pot_temperature", "118.4", "°C"), new DeviceColumn.Meter("still_head_temperature", "86.2", "°C", TEXTS.get("still_head_temperature.hint")),
+                                new DeviceColumn.Meter("still_level", "0.52", "m", TEXTS.get("still_level.hint", "61.0")), new DeviceColumn.Meter("still_heat", "20.2", "kW", TEXTS.get("still_heat.hint", "32.0", "63.0")),
+                                new DeviceColumn.Meter("still_distillate", "61.4", flow, TEXTS.get("still_distillate.hint")), new DeviceColumn.Meter("still_vent", "0.0", flow, TEXTS.get("still_vent.hint")),
+                                new DeviceColumn.Meter("still_condensed", "100.0", "%", TEXTS.get("still_condensed.hint")), new DeviceColumn.Meter("still_reflux_run", "2.0", "", TEXTS.get("still_reflux_run.hint"))), null),
+                new Still("batch-still-liquid", StillDoor.Heater.LIQUID, false, null, null, "HEATING", Palette.MUTED,
+                        List.of(meter("still_pot_temperature", "64.9", "°C"), new DeviceColumn.Meter("still_head_temperature", "—", "°C", TEXTS.get("still_head_temperature.hint")),
+                                new DeviceColumn.Meter("still_level", "0.61", "m", TEXTS.get("still_level.hint", "70.0")), new DeviceColumn.Meter("still_heat", "32.0", "kW", TEXTS.get("still_heat.hint", "32.0", "100.0")),
+                                new DeviceColumn.Meter("still_distillate", "0.0", flow, TEXTS.get("still_distillate.hint")), new DeviceColumn.Meter("still_vent", "0.0", flow, TEXTS.get("still_vent.hint")),
+                                new DeviceColumn.Meter("still_condensed", "100.0", "%", TEXTS.get("still_condensed.hint"))), null),
+                new Still("batch-still-electric-dry", StillDoor.Heater.ELECTRIC, false, null, null, "BOIL DRY", Palette.RED,
+                        List.of(meter("still_pot_temperature", "236.0", "°C"), new DeviceColumn.Meter("still_head_temperature", "198.3", "°C", TEXTS.get("still_head_temperature.hint")),
+                                new DeviceColumn.Meter("still_level", "0.03", "m", TEXTS.get("still_level.hint", "4.0")), new DeviceColumn.Meter("still_heat", "0.0", "kW", TEXTS.get("still_heat.hint", "32.0", "100.0"))),
+                        new DeviceColumn.Power("0.0", "0", "100")));
+        for (var s : stills) {
+            var door = StillDoor.rows(new StillDoor.Input(s.heater(), true, true, s.column(), true, s.held(), null, s.fuel()), TEXTS);
+            var input = new DeviceColumn.Input(Kind.RESERVOIR, true, false, true, "bar", "°C", "/h", DeviceColumn.Valve.NONE, null, false,
+                    new DeviceColumn.Level(0.61, "305.0", "500.0"), null, door, phases("volume", 61, 0, 39, 0), s.meters(), null, s.power());
+            out.add(devicePage(s.file(), WINDOW[0], WINDOW[1], input, (d, k) -> {
+                d.title("Batch still");
+                d.name("ST-1", true);
+                d.tabs(0, "Overview", "Outlets", "Datasheet");
+                d.status(s.status(), s.colour());
+                var box = device(d, input, DeviceColumn.rows(input, TEXTS), Map.of("stillFiring", "100", "stillReflux", "2"));
+                contents(d, box, 1, List.of(new String[]{"Component", "Mole %", "kmol"}, new String[]{"n-Hexane", "38.2", "0.71"}, new String[]{"Toluene", "61.8", "1.15"}));
+                d.footer(2, "Close", "Mole", "°C", "bar", "/h");
+            }));
+        }
+        var outlet = new ConstructorColumn.Outlet(1, 0, STANDING);
+        for (var options : List.of(new com.wormzjl.icheme.science.equipment.BatchStillOptions(com.wormzjl.icheme.science.equipment.BatchStillOptions.Heater.SOLID,
+                        com.wormzjl.icheme.science.equipment.BatchStillOptions.Condenser.BUILT_IN, 4),
+                new com.wormzjl.icheme.science.equipment.BatchStillOptions(com.wormzjl.icheme.science.equipment.BatchStillOptions.Heater.ELECTRIC,
+                        com.wormzjl.icheme.science.equipment.BatchStillOptions.Condenser.NONE, 0))) {
+            var page = ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.BATCH_STILL, 500, 1, 0, 1, 0, 0, new ProcessUnit.Bank(1, 1), null, outlet, 16,
+                    com.wormzjl.icheme.science.equipment.TowerBank.ONE, MachineDuty.NONE, com.wormzjl.icheme.science.equipment.ExchangerType.STANDARD, options), DIALOG);
+            out.add(new Prototype("equipment-constructor-still-" + options.heater().key(), 464, 254, (d, k) -> constructorDoor(d, page, "Batch still", "change", "", 0, Map.of()), true));
+        }
+        return out;
+    }
+
+    /**
+     * A flare stack (batch 2026-11-09-flare-stack): its page flaring and with its flame out, its constructor design page, and
+     * the heat equipment's choice with the flare's tile.
+     */
+    static List<Prototype> flareStack() {
+        var out = new ArrayList<Prototype>();
+        for (boolean lit : new boolean[]{true, false}) {
+            var input = new DeviceColumn.Input(Kind.VOID, false, false, true, "bar", "°C", "/h", DeviceColumn.Valve.NONE, null, false, null, null, List.of(),
+                    phases("volume", 0, 0, 1, 0), List.of(meter("pressure", "1.013", "bar"), new DeviceColumn.Meter("throughput", lit ? "6120.0" : "5040.0", "kg/h", TEXTS.get("throughput.hint")),
+                    new DeviceColumn.Meter("flare_heat", lit ? "75.40" : "0.00", "MW", TEXTS.get("flare_heat.hint", "212.4 MW")),
+                    new DeviceColumn.Meter("flare_heating_value", lit ? "33.4" : "3.7", "MJ/m³", TEXTS.get("flare_heating_value.hint")),
+                    new DeviceColumn.Meter("flare_flame", lit ? "1958.9" : "1352.4", "°C", TEXTS.get("flare_flame.hint", "1426.9 °C")),
+                    new DeviceColumn.Meter("flare_limit", lit ? "15282.0" : "5040.0", "kg/h", TEXTS.get("flare_limit.hint", "0.3 m"))));
+            out.add(devicePage(lit ? "flare-stack-flaring" : "flare-stack-flame-out", WINDOW[0], WINDOW[1], input, (d, s) -> {
+                d.title("Flare stack");
+                d.name("FL-101", true);
+                d.tabs(0, "Overview", "Control", "Datasheet");
+                d.status(lit ? "FLARING" : "FLAME OUT", lit ? Palette.ACCENT : Palette.RED);
+                var box = device(d, input, DeviceColumn.rows(input, TEXTS), Map.of());
+                contents(d, box, 1, lit ? List.of(new String[]{"Component", "Mole %", "kg/h"}, new String[]{"Methane", "100.0", "6120"})
+                        : List.of(new String[]{"Component", "Mole %", "kg/h"}, new String[]{"Methane", "11.1", "254"}, new String[]{"Nitrogen", "88.9", "4786"}));
+                d.footer(2, "Close", "Mass", "°C", "bar", "/h");
+            }));
+        }
+        var outlet = new ConstructorColumn.Outlet(1, 0, STANDING);
+        var flare = ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.FLARE_STACK, .3, 1, 0, 0, 0, 0, new ProcessUnit.Bank(1, 1), null, outlet, 16, com.wormzjl.icheme.science.equipment.TowerBank.ONE), DIALOG);
+        out.add(new Prototype("equipment-constructor-flare", 464, 254, (d, s) -> constructorDoor(d, flare, "Flare stack", "change", DIALOG.get(CONSTRUCTOR + "flare_rating", "212.4", "32"), Palette.ACCENT, Map.of()), true));
+        out.add(new Prototype("equipment-constructor-choose-heat", 464, 254, (d, s) -> constructorDoor(d, ConstructorColumn.choose(ConstructorColumn.Category.HEAT,
+                ConstructorColumn.Equipment.FLARE_STACK, 16, DIALOG), "Equipment constructor", "back", null, 0, Map.of()), true));
+        return out;
+    }
+
+    /**
+     * A fired heater's radiant coil page on a short fuel supply (batch 2026-11-09-furnace-fuel-power): its coil rows, then
+     * the burners' fuel flow, the heat fired against the heat asked for, and the combustion-air fans' draw.
+     */
+    static List<Prototype> firedHeater() {
+        var input = new DeviceColumn.Input(Kind.HEAT_SIDE, true, true, true, "bar", "°C", "/h", DeviceColumn.Valve.NONE, null, false, null, null, List.of(),
+                phases("volume", 0, 1, 0, 0), List.of(meter("temperature", "50.0", "°C"), meter("throughput", "1995.0", "kmol/h"),
+                meter("outlet_temperature", "112.4", "°C"), new DeviceColumn.Meter("duty", "1598.0", "kW", TEXTS.get("duty.fired")),
+                meter("set_temperature", "170.0", "°C"), new DeviceColumn.Meter("duty_available", "3500.0", "kW", TEXTS.get("duty_available.hint")),
+                new DeviceColumn.Meter("fuel_flow", "204.1", "kg/h", TEXTS.get("fuel_flow.hint", "50.0 MJ/kg")),
+                new DeviceColumn.Meter("fuel_fired", "2836.0", "kW", TEXTS.get("fuel_fired.hint", "6213.0 kW")),
+                new DeviceColumn.Meter("burner_fans", "2.3", "kW", TEXTS.get("burner_fans.hint"))));
+        return List.of(devicePage("fired-heater-low-fuel", WINDOW[0], WINDOW[1], input, (d, s) -> {
+            d.title("Fired heater, radiant coil");
+            d.name("H-101", true);
+            d.tabs(0, "Overview", "Control", "Datasheet");
+            d.status(Door.tr("gui.icheme.fluid.flowing") + " · LOW FUEL", Palette.RED);
+            var box = device(d, input, DeviceColumn.rows(input, TEXTS), Map.of());
+            contents(d, box, 1, List.of(new String[]{"Component", "Mole %", "kmol/h"}, new String[]{"Water", "100.0", "1995"}));
+            d.footer(2, "Close", "Apply", "Mole", "°C", "bar", "/h");
+        }));
+    }
+
+    /** Two raised alarms (batch 2026-11-09-furnace-fuel-power): the alarms group is last on a DCS's controller list and a controller box's loop page. */
+    static final List<ControlColumns.Alarm> ALARMS=List.of(new ControlColumns.Alarm("EQ-0007","NO_FUEL","Fired heater, 120, 64, -40"),new ControlColumns.Alarm("EQ-0012","LOW_FUEL","Fired heater, 96, 64, -12"));
+    static <T> List<T> plus(List<T> a,List<T> b){var out=new ArrayList<T>(a);out.addAll(b);return out;}
     static List<Prototype> controlPanels(){
         var out=new ArrayList<Prototype>();
         for(boolean dcs:new boolean[]{false,true})for(boolean compact:new boolean[]{false,true}){
@@ -103,9 +216,9 @@ public final class GuiPrototypes {
             d.skin.title(d.c,10,10,dcs?"DCS":"Local controller");
             var view=new ControlColumns.View(true,"m","%",true,"LT-0012 / LEVEL","37.0","CV-0021","CONTROLLING",true,ControlColumns.Variable.LEVEL);
             // KitDoor shares the long loop column's scroll offset; this one-row controller list is above the end view.
-            if(layout.split()&&!d.end)doorColumn(d,ControlColumns.controllers(List.of(new ControlColumns.Choice("controller:1","Drum level",true)),DIALOG::get),layout.areas().getFirst(),Map.of(),"DCS controller list");
+            if(layout.split()&&!d.end)doorColumn(d,plus(ControlColumns.controllers(List.of(new ControlColumns.Choice("controller:1","Drum level",true)),DIALOG::get),ControlColumns.alarms(ALARMS,DIALOG::get)),layout.areas().getFirst(),Map.of(),"DCS controller list");
             if(layout.chooser()!=null)d.skin.button(d.c,layout.chooser(),DIALOG.get("control.controllers"),Skin.Press.REST,false);
-            doorColumn(d,ControlColumns.loop(view,DIALOG::get),layout.areas().getLast(),Map.of("name","Drum level","target","25"),"Level control");
+            doorColumn(d,dcs?ControlColumns.loop(view,DIALOG::get):plus(ControlColumns.loop(view,DIALOG::get),ControlColumns.alarms(ALARMS,DIALOG::get)),layout.areas().getLast(),Map.of("name","Drum level","target","25"),"Level control");
             dialogFooter(d,DIALOG.get("control.close"),DIALOG.get("control.apply"));
             },true));
         }
@@ -113,7 +226,7 @@ public final class GuiPrototypes {
         out.add(new Prototype("control-dcs-controller-list",compact.width(),compact.height(),(d,s)->{
             d.skin.title(d.c,10,10,"DCS");
             d.skin.button(d.c,compact.chooser(),DIALOG.get("control.back"),Skin.Press.REST,false);
-            doorColumn(d,ControlColumns.controllers(List.of(new ControlColumns.Choice("controller:1","Drum level",true),new ControlColumns.Choice("controller:2","Feed flow",false)),DIALOG::get),compact.areas().getFirst(),Map.of(),"Compact controller list");
+            doorColumn(d,plus(ControlColumns.controllers(List.of(new ControlColumns.Choice("controller:1","Drum level",true),new ControlColumns.Choice("controller:2","Feed flow",false)),DIALOG::get),ControlColumns.alarms(ALARMS,DIALOG::get)),compact.areas().getFirst(),Map.of(),"Compact controller list");
             dialogFooter(d,DIALOG.get("control.close"));
         }));
         out.add(new Prototype("control-instrument-ids",246,254,(d,s)->{

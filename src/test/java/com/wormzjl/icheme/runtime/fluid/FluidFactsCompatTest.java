@@ -119,7 +119,35 @@ class FluidFactsCompatTest {
         world.ledger.rack(lane,new WorldTopologyLedger.RackFrame(Direction.EAST,WorldTopologyLedger.RackShape.STRAIGHT));
         // Facts schema 15, last: the laid pipe's name (W5c C4), with a letter outside ASCII.
         world.ledger.name(laid,"Feed é line");
-        return world;
+        stills(world);
+        world.runTo(880);return world;
+    }
+    /**
+     * Facts schema 16 (batch 2026-11-09-batch-distiller, W3 and W4): a batch still's pot, a solid-fired still with its
+     * condenser and four trays, every field away from its default: its head's accounts, the heat left in its burning item,
+     * its firing, a closed reflux valve and its totals. Its water side and outlets are identities the facts name; this world
+     * places no structure, so they are not registered. And a diverter valve fed from the west, set to its third outlet
+     * (its joints, a schema 2 field; its kind a new name).
+     */
+    private void stills(EventPathWorld world) {
+        long water=world.ledger.reserve(1),pot=world.ledger.nextIdentity();int m=model.componentCount();
+        var design=new BatchStill.Design(.5,BatchStill.Heater.SOLID,true,4);
+        var at=new PhysicalFluidTopology.Position(EventPathWorld.DIM,90,64,0);double height=1.1*design.diameter();
+        var device=new PhysicalFluidTopology.Device(pot,at,Kind.RESERVOIR,Direction.NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive(),List.of(),true,
+                PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,new HeatUnit(HeatSides.Unit.STILL,HeatSides.Side.POT,design.heatedArea(),0));
+        var spec=new FluidDeviceSpec(design.volume(),298.15,101325,FluidDeviceSpec.nitrogen(CATALOG).composition(),SlurryFeed.NONE,height,true,VesselGeometry.prism(design.volume(),height),null);
+        world.registry.submit(List.of(new WorldTopologyLedger.Edit(pot,new WorldTopologyLedger.Registration(device,spec,0))),pot+1,null);
+        world.runTo(870);
+        long distillate=world.ledger.reserve(1),vent=world.ledger.reserve(1);
+        var held=new double[m];held[0]=1.25;held[m-1]=.5;var vented=new double[m];vented[1]=.125;
+        world.ledger.still(new StillUnit(pot,water,distillate,vent,0,design.volume(),design.heater(),true,4,
+                new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(held,-4.5e4),new com.wormzjl.icheme.science.column.operation.ColumnCycle.Account(vented,1.5e3),
+                1.75e6,.65,Double.POSITIVE_INFINITY,3.2e7,2.9e7));
+        long diverter=world.ledger.nextIdentity();
+        var valve=new PhysicalFluidTopology.Device(diverter,new PhysicalFluidTopology.Position(EventPathWorld.DIM,94,64,0),Kind.DIVERTER_VALVE,Direction.WEST,
+                new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive(),List.of(),true,PhysicalFluidTopology.Cutoff.NONE,false,
+                PhysicalFluidTopology.diverterJoints(Direction.WEST,2));
+        world.registry.submit(List.of(new WorldTopologyLedger.Edit(diverter,new WorldTopologyLedger.Registration(valve,FluidDeviceSpec.nitrogen(CATALOG),0))),diverter+1,null);
     }
     /**
      * Facts schema 12 (batch 2026-11-03-rotating-machinery W10b): the pumps' health, the first pump worn to 0.73, the
@@ -615,6 +643,13 @@ class FluidFactsCompatTest {
      * the methane Cp to the reference spine (decision E16): island-sets 616.608360671 to 615.412696198 J.
      */
     private static final double SCHEMA_ONE_DATA_CHANGE=-10.2747985856,ISLAND_SETS_DATA_CHANGE=615.412696198,STEAM_V2_DATA_CHANGE=126.968251430;
+    /** A batch still's facts (schema 16) survive an exact load and a facts-only rebuild, every field as saved. */
+    @Test void aBatchStillsFactsSurviveBothExactAndFactsOnlyLoads(){
+        var world=corpusWorld();var saved=image(world);var expected=stills(world.ledger.snapshot());
+        assertFalse(expected.isEmpty(),"the corpus world has a still");
+        for(var restored:List.of(load(saved,key->key.on(model),CATALOG),load(edited(saved,tag->tag.putInt("StateFormat",Integer.MAX_VALUE)),key->key.on(model),CATALOG)))
+            assertEquals(expected,stills(restored.world().orElseThrow()),restored.route()+": the still as saved");
+    }
     @Test void towerSettingsSurviveBothExactAndFactsOnlyLoads(){
         var world=corpusWorld();var saved=image(world);
         for(var restored:List.of(load(saved,key->key.on(model),CATALOG),load(edited(saved,tag->tag.putInt("StateFormat",Integer.MAX_VALUE)),key->key.on(model),CATALOG))){
@@ -718,6 +753,8 @@ class FluidFactsCompatTest {
                 assertEquals(expected.getProperty("health",""),health(ledger),folder+": pump health");
                 // Schema 15 wrote the build facts; an older image reads none.
                 assertEquals(expected.getProperty("builds",""),builds(ledger),folder+": build facts");
+                // Schema 16 wrote the batch stills; an older image reads none.
+                assertEquals(expected.getProperty("stills",""),stills(ledger),folder+": batch stills");
                 long vessels=rebuilt.checkpoint().islands().stream().flatMap(e->e.snapshot().graph().reservoirs().stream()).filter(n->n.kind()==PassiveNetwork.NodeKind.RESERVOIR).count();
                 assertEquals(Long.parseLong(expected.getProperty("vessels")),vessels,folder+": vessels");
                 double total=Arrays.stream(moles(rebuilt.checkpoint(),model.componentCount())).sum();
@@ -854,6 +891,7 @@ class FluidFactsCompatTest {
         props.setProperty("stores",stores(loaded.world().orElseThrow()));
         props.setProperty("health",health(loaded.world().orElseThrow()));
         props.setProperty("builds",builds(loaded.world().orElseThrow()));
+        props.setProperty("stills",stills(loaded.world().orElseThrow()));
         props.setProperty("vessels",Long.toString(contents(loaded.checkpoint()).values().stream().filter(v->v instanceof PassiveNetwork.Inventory).count()));
         props.setProperty("moles",Double.toString(Arrays.stream(moles(loaded.checkpoint(),model.componentCount())).sum()));
         try(var out=Files.newBufferedWriter(folder.resolve("expected.properties"))){props.store(out,"Facts schema "+FluidFacts.SCHEMA+" corpus image, state format "+FluidCheckpointCodec.VERSION);}
@@ -941,6 +979,18 @@ class FluidFactsCompatTest {
         for(var e:new TreeMap<>(world.stores()).entrySet()) {
             if(!text.isEmpty())text.append(";");
             text.append(e.getKey()).append("=").append(e.getValue().joules()).append("/").append(e.getValue().metered());
+        }
+        return text.toString();
+    }
+    /** What schema 16 carries: each batch still by its pot, its devices, design, accounts, fire, settings and totals. */
+    private static String stills(WorldTopologyLedger.Snapshot world) {
+        var text=new StringBuilder();
+        for(var u:new TreeMap<>(world.stills()).values()) {
+            if(!text.isEmpty())text.append(";");
+            text.append(u.id()).append("=").append(u.water()).append("/").append(u.distillate()).append("/").append(u.vent()).append("/").append(u.burners())
+                    .append(",").append(u.volume()).append("/").append(u.heater()).append("/").append(u.condenser()).append("/").append(u.stages())
+                    .append(",").append(Arrays.toString(u.head().moles())).append("@").append(u.head().energy()).append(",").append(Arrays.toString(u.venting().moles())).append("@").append(u.venting().energy())
+                    .append(",").append(u.burning()).append("/").append(u.firing()).append("/").append(u.reflux()).append("/").append(u.heated()).append("/").append(u.condensed());
         }
         return text.toString();
     }
