@@ -1449,6 +1449,8 @@ public final class EquipmentStructure {
                 yield new com.wormzjl.icheme.science.fluid.network.FlowControl.Machine(new com.wormzjl.icheme.science.machine.CentrifugalCompressor(r[0], r[1], .78), 0, true);
             }
             case COMPRESSOR -> new com.wormzjl.icheme.science.fluid.network.FlowControl.Compressor(frameDisplacement(shape), 3, true);
+            // A vacuum pump casing (batch 2026-11-10-vacuum-pump): its model's curve, on the machine row at its train's speed.
+            case LIQUID_RING_PUMP, DRY_SCREW_PUMP -> new com.wormzjl.icheme.science.fluid.network.FlowControl.Machine(UnitDesign.vacuumPump(shape), 0, true);
             case STEAM_TURBINE -> new com.wormzjl.icheme.science.fluid.network.FlowControl.Turbine(com.wormzjl.icheme.science.machine.SteamTurbine.rated(Math.max(1e3, UnitDesign.ratedPower(shape))));
             default -> throw new IllegalArgumentException("Not a shaft-driven machine: " + shape.kind());
         };

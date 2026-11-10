@@ -49,6 +49,8 @@ class EquipmentLayoutGoldenTest {
                 new BatchStillOptions(BatchStillOptions.Heater.ELECTRIC, BatchStillOptions.Condenser.NONE, 0),
                 new BatchStillOptions(BatchStillOptions.Heater.SOLID, BatchStillOptions.Condenser.BUILT_IN, BatchStillOptions.MIN_STAGES)))
             shapes.add(EquipmentShape.unit(Kind.BATCH_STILL, 500, 1, Heading.NORTH, 0).withStill(options));
+        // A two-stage liquid ring (batch 2026-11-10-vacuum-pump): its smallest and largest two-stage models.
+        for (double model : new double[]{1, 3}) shapes.add(EquipmentShape.unit(Kind.LIQUID_RING_PUMP, model, 2, Heading.NORTH, 0));
         return shapes;
     }
 

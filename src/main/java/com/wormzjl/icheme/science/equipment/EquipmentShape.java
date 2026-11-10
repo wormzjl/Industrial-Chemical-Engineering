@@ -162,7 +162,9 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
         // An elevated flare stack (batch 2026-11-09-flare-stack).
         FLARE_STACK,
         // A batch still: a fired or electric copper pot, a worm tub or a small column (batch 2026-11-09-batch-distiller).
-        BATCH_STILL;
+        BATCH_STILL,
+        // Vacuum pump casings on the shaft trains (batch 2026-11-10-vacuum-pump): a liquid ring of one or two stages, a dry screw.
+        LIQUID_RING_PUMP, DRY_SCREW_PUMP;
 
         public boolean coolingTower() { return this==INDUCED_DRAFT_COOLING_TOWER || this==NATURAL_DRAFT_COOLING_TOWER; }
 
@@ -191,7 +193,12 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
 
         /** A self-powered fluid mover, with one suction and one discharge nozzle. */
         public boolean mover() {
-            return this == PUMP || this == COMPRESSOR || this == CENTRIFUGAL_COMPRESSOR;
+            return this == PUMP || this == COMPRESSOR || this == CENTRIFUGAL_COMPRESSOR || vacuumPump();
+        }
+
+        /** A vacuum pump casing (batch 2026-11-10-vacuum-pump): a gas mover on a {@code VacuumPump} law. */
+        public boolean vacuumPump() {
+            return this == LIQUID_RING_PUMP || this == DRY_SCREW_PUMP;
         }
     }
 
