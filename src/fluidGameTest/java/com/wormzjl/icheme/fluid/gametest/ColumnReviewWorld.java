@@ -43,6 +43,7 @@ public final class ColumnReviewWorld {
 
     @GameTest(template = "empty", timeoutTicks = 1200, batch = "review")
     public static void aFullColumnPlantStandsComplete(GameTestHelper helper) {
+        if (ReviewBatch.skipped(helper, "review")) return;
         var level = helper.getLevel();
         // Clear of the test's own structure block, on the ground.
         var corner = helper.absolutePos(new BlockPos(48, 0, 48));

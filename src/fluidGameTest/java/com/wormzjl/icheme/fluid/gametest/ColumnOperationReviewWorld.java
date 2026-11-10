@@ -78,6 +78,7 @@ public final class ColumnOperationReviewWorld {
 
     @GameTest(template = "empty", timeoutTicks = Integer.MAX_VALUE, batch = "review-operation")
     public static void aCrudeColumnRuns(GameTestHelper helper) {
+        if (ReviewBatch.skipped(helper, "review-operation")) return;
         var rig = rig(helper);
         var plant = rig.plant;
         String[] failure = {null};
@@ -175,15 +176,17 @@ public final class ColumnOperationReviewWorld {
         return true;
     }
 
-    /** The default template at {@code scale} of its feed, its draws, steam and pumparound duties, its column area in step. */
+    /** The design at {@code scale} of its feed, its draws, steam, pumparound duties and reboiler duty, its column area in step. */
     static V3ColumnInput scaled(V3ColumnInput in, double scale) {
         double[] feed = in.feedComponentMolarFlowsMolPerSecond().clone();
         for (int c = 0; c < feed.length; c++) feed[c] *= scale;
         var draws = in.sideDraws().stream().map(d -> new V3SideDrawSpec(d.trayNumber(), d.molarFlowMolPerSecond() * scale)).toList();
         var steam = in.steamFeeds().stream().map(s -> new V3SteamFeedSpec(s.stageNumber(), s.molarFlowMolPerSecond() * scale, s.temperatureKelvin())).toList();
+        var specifications = in.specifications().stream().map(sp -> sp instanceof com.wormzjl.icheme.science.column.v3.V3ColumnSpecification.ReboilerDuty r
+                ? (com.wormzjl.icheme.science.column.v3.V3ColumnSpecification) new com.wormzjl.icheme.science.column.v3.V3ColumnSpecification.ReboilerDuty(r.watts() * scale) : sp).toList();
         var pumparounds = in.pumparounds().stream().map(p -> new V3PumparoundSpec(p.returnTray(), p.drawTray(), p.dutyWatts() * scale, p.split())).toList();
         return new V3ColumnInput(in.schemaVersion(), in.packageId(), in.assayId(), in.componentBasis(), feed, in.feedTemperatureKelvin(), in.stageCount(),
-                in.feedStageNumber(), in.topPressurePascal(), in.stagePressureDropPascal(), in.specifications(), draws, steam, pumparounds,
+                in.feedStageNumber(), in.topPressurePascal(), in.stagePressureDropPascal(), specifications, draws, steam, pumparounds,
                 in.columnDiameterMetres() * Math.sqrt(scale));
     }
 
@@ -402,7 +405,9 @@ public final class ColumnOperationReviewWorld {
             var source = plant.branch(in, AssemblyGameTests.Plant.out(exchanger, Role.TUBE_INLET), false, generator);
             var out = AssemblyGameTests.Plant.front(exchanger, Role.TUBE_OUTLET);
             plant.pipe(out);
-            sinks.add(plant.branch(out, AssemblyGameTests.Plant.out(exchanger, Role.TUBE_OUTLET), true, sink));
+            var drain = plant.branch(out, AssemblyGameTests.Plant.out(exchanger, Role.TUBE_OUTLET), true, sink);
+            sinks.add(drain);
+            if (options.shutoffs()) lines.put(line + " out", drain);
             for (var q : Direction.values()) {
                 var valve = plant.valves.remove(in.relative(q, 2));
                 if (valve != null && options.shutoffs()) {
@@ -413,6 +418,11 @@ public final class ColumnOperationReviewWorld {
             }
             return source;
         }
+
+        /**
+         * The generator at {@code at} at bore {@code bore}, m, set to {@code spec} and switched on, in one edit as its own
+         * screen makes it: a generator's connection is the least bore unless set.
+         */
         void supply(BlockPos at, double bore, FluidDeviceSpec spec) {
             long id = id(at);
             var r = plant.world.registrations().get(id);
@@ -526,7 +536,8 @@ public final class ColumnOperationReviewWorld {
         /**
          * A boundary line straight out of the {@code n}th {@code role} nozzle: three pipes, a valve on the second (its outlet
          * along the line, or back at the nozzle), then {@code end}. With {@link Options#shutoffs} two pipes more, a shutoff
-         * valve on the fourth, named {@code name} in {@link #lines}. A null {@code end}: the line ends at its last pipe. Returns
+         * valve on the fourth, named {@code name} in {@link #lines}. A null {@code end}: the last pipe is left free, with the
+         * cells round it held, for the caller to route to. Returns
          * the end's position (the last pipe's).
          */
         BlockPos line(Vessel vessel, Role role, int n, boolean outward, @Nullable BlockState end, String name) {
@@ -539,13 +550,17 @@ public final class ColumnOperationReviewWorld {
                 if (!plant.free(at, AssemblyGameTests.Plant.around(from, from.relative(d, k - 1), from.relative(d, k + 1))))
                     throw new IllegalStateException(role + " line blocked at " + at.toShortString());
             }
-            for (int k = 0; k < pipes; k++) plant.pipe(from.relative(d, k));
+            for (int k = 0; k < (end == null ? pipes - 1 : pipes); k++) plant.pipe(from.relative(d, k));
             plant.valves.put(from.relative(d), outward ? d : d.getOpposite());
             if (options.shutoffs()) {
                 shutoffs.put(from.relative(d, 3), d);
                 lines.put(name, from.relative(d, 3));
             }
-            if (end == null) return from.relative(d, pipes - 1);
+            if (end == null) {
+                // Held free for the caller's route: the lines laid before it go round.
+                for (int k = pipes - 1; k <= pipes + 1; k++) plant.reserved.add(from.relative(d, k));
+                return from.relative(d, pipes - 1);
+            }
             var at = from.relative(d, pipes);
             plant.level.setBlock(at, end, Block.UPDATE_ALL);
             plant.devices.add(at);

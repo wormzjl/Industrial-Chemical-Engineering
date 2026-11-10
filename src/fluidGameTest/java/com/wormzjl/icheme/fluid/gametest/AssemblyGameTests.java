@@ -322,7 +322,14 @@ public final class AssemblyGameTests {
 
         /** The shortest line of pipes from one nozzle's pipe block to another's that touches no other line. */
         List<BlockPos> route(BlockPos from, BlockPos to) {
-            var allowed = Set.of(from, to);
+            return route(from, to, Set.of());
+        }
+
+        /** {@link #route(BlockPos, BlockPos)}, its ends also allowed beside the pipes {@code joins}: a line that ends on another line. */
+        List<BlockPos> route(BlockPos from, BlockPos to, Set<BlockPos> joins) {
+            var allowed = new HashSet<BlockPos>(joins);
+            allowed.add(from);
+            allowed.add(to);
             var previous = new HashMap<BlockPos, BlockPos>();
             var queue = new ArrayDeque<BlockPos>();
             previous.put(from, from);

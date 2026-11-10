@@ -103,6 +103,8 @@ neoForge {
             sourceSet = sourceSets.fluidGameTest
             gameDirectory = layout.projectDirectory.dir('run/review-world')
             systemProperty 'neoforge.enabledGameTestNamespaces', 'icheme_review'
+            // -PreviewBatch=<batch>: that review batch alone (ReviewBatch); unset, every batch.
+            systemProperty 'icheme.review.batch', providers.gradleProperty('reviewBatch').getOrElse('')
         }
         fluidBenchmarkServer {
             type = 'gameTestServer'
