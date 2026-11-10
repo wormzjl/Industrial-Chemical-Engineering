@@ -40,6 +40,22 @@ versionRange = "${kubejs_version_range}"
 ordering = "AFTER"
 side = "BOTH"
 
+# Iris and Distant Horizons: optional, with no version limit, so no version of either stops the game from starting.
+# The effects system checks each API's version at runtime and turns that integration off when it does not match.
+[[dependencies."${mod_id}"]]
+modId = "iris"
+type = "optional"
+versionRange = "[0,)"
+ordering = "NONE"
+side = "CLIENT"
+
+[[dependencies."${mod_id}"]]
+modId = "distanthorizons"
+type = "optional"
+versionRange = "[0,)"
+ordering = "NONE"
+side = "CLIENT"
+
 [[dependencies."${mod_id}"]]
 modId = "jei"
 type = "optional"

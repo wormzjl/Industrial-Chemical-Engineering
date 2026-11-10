@@ -66,7 +66,12 @@ public class SizingCoverageTest {
         out.add(new EjectorSizing.Size(UnitSize.grid(EquipmentShape.Kind.EJECTOR)[3]));
         out.add(new TurbineSizing.Size(1250, MachineDuty.Steam.HP, 350));
         out.add(new FlareSizing.Size(UnitSize.grid(EquipmentShape.Kind.FLARE_STACK)[4]));
+        out.add(new com.wormzjl.icheme.science.flowsheet.sizing.ChimneySizing.Size(EquipmentShape.Kind.STEEL_STACK, 1, 30));
+        out.add(new com.wormzjl.icheme.science.flowsheet.sizing.ChimneySizing.Size(EquipmentShape.Kind.BRICK_CHIMNEY, 2.5, 60));
         out.add(new StillSizing.Size(StillSizing.pots().get(4), new BatchStillOptions(BatchStillOptions.Heater.LIQUID, BatchStillOptions.Condenser.BUILT_IN, 4)));
+        for (var type : com.wormzjl.icheme.science.machine.VacuumPump.Type.values()) out.add(new com.wormzjl.icheme.science.flowsheet.sizing.VacuumPumpSizing.Size(type, 2));
+        out.add(new com.wormzjl.icheme.science.flowsheet.sizing.PrimeMoverSizing.Size(com.wormzjl.icheme.science.machine.PrimeMover.Family.ENGINE, 3, false));
+        out.add(new com.wormzjl.icheme.science.flowsheet.sizing.PrimeMoverSizing.Size(com.wormzjl.icheme.science.machine.PrimeMover.Family.GAS_TURBINE, 4, true));
         out.add(new ValveSizing.Size(.3));
         return out;
     }

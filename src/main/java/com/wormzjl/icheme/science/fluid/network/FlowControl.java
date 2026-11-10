@@ -63,7 +63,7 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
      * pressure; a set-flow pump's relief rise reads the density of its supply, the stream its supply walk ends at, so it primes
      * its own line (owner decision D11, A2; {@code PassiveStepSolver.riseDensity}).
      */
-    sealed interface Mover extends FlowControl permits Pump,Compressor,Machine {
+    sealed interface Mover extends FlowControl permits Pump,Compressor,Machine,Ejector {
         /** The largest suction volume flow a device's controls take (m3/s). */
         double MAXIMUM_VOLUME_FLOW=10;
         /** Configured suction volume flow (m3/s), retained while switched off. */
@@ -238,6 +238,10 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
         @Override public double lawRiseSlope(double flow,double suctionDensity,double suctionPressure,double referenceDensity,double k) {
             return law.riseSlope(flow,speed,suctionDensity,suctionPressure,k);
         }
+        /** The law's own row: the head form for a centrifugal curve, the flow form for a vacuum pump (batch 2026-11-10-vacuum-pump). */
+        @Override public double lawResidual(double flow,double head,double suctionDensity,double suctionPressure,double referenceDensity,double k) {
+            return law.residual(flow,head,speed,suctionDensity,suctionPressure,k);
+        }
         @Override public boolean refuses(InletPhase.Supply supply,boolean refused) {
             return liquid()?supply.dry(refused):Compressor.refusesSupply(supply,refused);
         }
@@ -245,7 +249,54 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
         /** This machine with its pump's head scaled by {@code share} ({@link CentrifugalPump#withHeadShare}, the gas share
          * {@link com.wormzjl.icheme.science.machine.GasEntrainment#headShare}); a compressor as it is. */
         public Machine withHeadShare(double share){return law instanceof CentrifugalPump pump&&share!=1?new Machine(pump.withHeadShare(share),speed,enabled,setFlow,setPressure):this;}
-        @Override public String deviceName(){return liquid()?"pump":"compressor";}
+        @Override public String deviceName(){return liquid()?"pump":law instanceof com.wormzjl.icheme.science.machine.VacuumPump?"vacuum pump":"compressor";}
+    }
+    /**
+     * A steam ejector set's suction-to-discharge connection (batch 2026-11-10-steam-ejector-flow, owner "mover with a curve" and
+     * "Yes, correlation"): its curve ({@link com.wormzjl.icheme.science.machine.SteamEjector#capacity}, the sheet's vacuum
+     * suction speed on its suction) as a set-flow mover's law (form F2e), the displacement the curve's suction volume at the
+     * trial's suction pressure, the relief rise the set's maximum discharge less the suction, so the relief line's last tenth
+     * is the set's break. It does no work: the motive steam that compresses the load arrives at the discharge junction with
+     * its own enthalpy, through the set's motive valve ({@link ValveSource#EJECTOR}). Without steam it stands CLOSED.
+     *
+     * @param design         its suction
+     * @param motivePressure the motive steam's pressure at the nozzle at the slice's start, Pa (a slice input)
+     * @param delivered      the share of the steam its law asked that its nozzle got over the last booked slice, 0 to 1 (a slice input)
+     */
+    record Ejector(com.wormzjl.icheme.science.machine.SteamEjector design,double motivePressure,double delivered) implements Mover {
+        public Ejector(com.wormzjl.icheme.science.machine.SteamEjector design){this(design,0,0);}
+        public Ejector {
+            java.util.Objects.requireNonNull(design);
+            if(!(motivePressure>=0)||!(delivered>=0&&delivered<=1)||!Double.isFinite(motivePressure))throw new IllegalArgumentException("Invalid ejector motive");
+        }
+        /** The same set on the motive of another slice. */
+        public Ejector withMotive(double pressure,double share){return new Ejector(design,pressure,share);}
+        /** The curve's volume at 10 kPa: a scale for seeds, 0 without steam. */
+        @Override public double requestedVolumeFlow(){return design.capacity(1e4,motivePressure,delivered);}
+        @Override public boolean enabled(){return true;}
+        @Override public boolean liquid(){return false;}
+        /** The maximum discharge less the suction, never below a thousandth of the maximum discharge (a broken set holds none). */
+        @Override public double riseLimit(double suctionDensity,double suctionPressure,double referenceDensity,double k) {
+            double top=com.wormzjl.icheme.science.machine.SteamEjector.maximumDischarge(motivePressure),d=top-suctionPressure,e=1e-3*Math.max(top,1);
+            return .5*(d+Math.sqrt(d*d+e*e));
+        }
+        /** None: the motive's enthalpy does the work. */
+        @Override public double power(double massFlow,double head,double suctionDensity,double suctionPressure,double k){return 0;}
+        private com.wormzjl.icheme.science.machine.PositiveDisplacement curve(double suctionDensity,double suctionPressure,double k) {
+            double q=design.capacity(suctionPressure,motivePressure,delivered);
+            return new com.wormzjl.icheme.science.machine.PositiveDisplacement(q>0?q:1e-12,riseLimit(suctionDensity,suctionPressure,suctionDensity,k));
+        }
+        @Override public double lawRise(double flow,double suctionDensity,double suctionPressure,double referenceDensity,double k) {
+            return curve(suctionDensity,suctionPressure,k).rise(flow,1);
+        }
+        @Override public double lawRiseSlope(double flow,double suctionDensity,double suctionPressure,double referenceDensity,double k) {
+            return curve(suctionDensity,suctionPressure,k).riseSlope(flow,1);
+        }
+        @Override public double lawResidual(double flow,double head,double suctionDensity,double suctionPressure,double referenceDensity,double k) {
+            return curve(suctionDensity,suctionPressure,k).residual(flow,head,1);
+        }
+        @Override public boolean refuses(InletPhase.Supply supply,boolean refused){return Compressor.refusesSupply(supply,refused);}
+        @Override public String deviceName(){return "ejector";}
     }
     /** The law of a set-flow mover (form F2e): its set flow is the displacement, its rise limit the relief rise. */
     private static PositiveDisplacement corner(Mover mover,double suctionDensity,double suctionPressure,double referenceDensity,double k) {
@@ -269,14 +320,19 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
      * target once per slice to the most the flare passes ({@link Flare#limit}), 0 while solids arrive.
      * {@code STILL} (batch 2026-11-09-batch-distiller): a batch still's outlet valve, on the run out of its distillate or vent
      * generator; the engine sets its mass target once per slice from what the still's head account holds.
+     * {@code EJECTOR} (batch 2026-11-10-steam-ejector-flow): a steam ejector's motive valve, inside the set from its motive
+     * junction to its discharge junction; the engine sets its mass target once per slice to the steam {@code EjectorLaw} asks
+     * for the load the set's curve holds.
      */
-    enum ValveSource { NONE, PRESSURE, MASS_FLOW, VOLUME_FLOW, SHAFT_SPEED, BURNER, FLARE, STILL;
+    enum ValveSource { NONE, PRESSURE, MASS_FLOW, VOLUME_FLOW, SHAFT_SPEED, BURNER, FLARE, STILL, EJECTOR,
+        /** A prime mover's fuel valve (batch 2026-11-10-prime-movers): on the run into its fuel void; the engine sets its mass target once per slice from its governor. */
+        ENGINE;
         /** Whether a valve of this source regulates its mass flow. */
-        public boolean mass(){return this==MASS_FLOW||this==SHAFT_SPEED||this==BURNER||this==FLARE||this==STILL;}
+        public boolean mass(){return this==MASS_FLOW||this==SHAFT_SPEED||this==BURNER||this==FLARE||this==STILL||this==EJECTOR||this==ENGINE;}
         /** Whether the engine sets this valve's mass target each slice (a governor or a fuel valve), not the player. */
-        public boolean planned(){return this==SHAFT_SPEED||this==BURNER||this==FLARE||this==STILL;}
+        public boolean planned(){return this==SHAFT_SPEED||this==BURNER||this==FLARE||this==STILL||this==EJECTOR||this==ENGINE;}
         /** Whether this is a valve the engine builds into a sink (a firebox or a flare tip), on the run into it. */
-        public boolean sink(){return this==BURNER||this==FLARE;}
+        public boolean sink(){return this==BURNER||this==FLARE||this==ENGINE;}
     }
     /** Configured facts; source identity/revision invalidate endpoint carry when a component or target changes. */
     record ControlValve(ValveSource source,double targetPressure,double massTarget,double volumeTarget,java.util.UUID sensor,long revision) implements Valve {
@@ -299,10 +355,18 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
         public static final java.util.UUID STILL_SENSOR=new java.util.UUID(0x7374696c6c000000L,1);
         /** A batch still's outlet valve, shut until its first slice plan. */
         public static ControlValve still(){return new ControlValve(ValveSource.STILL,200000,0,.01,STILL_SENSOR,0);}
+        /** A steam ejector's motive valve's source identity. */
+        public static final java.util.UUID EJECTOR_SENSOR=new java.util.UUID(0x656a6563746f7200L,1);
+        /** A steam ejector's motive valve, shut until its first slice plan. */
+        public static ControlValve ejector(){return new ControlValve(ValveSource.EJECTOR,200000,0,.01,EJECTOR_SENSOR,0);}
+        /** A prime mover's fuel valve's source identity. */
+        public static final java.util.UUID ENGINE_SENSOR=new java.util.UUID(0x656e67696e650000L,1);
+        /** A prime mover's fuel valve, shut until its first slice plan. */
+        public static ControlValve engine(){return new ControlValve(ValveSource.ENGINE,200000,0,.01,ENGINE_SENSOR,0);}
         @Override public boolean pressureControl(){return source==ValveSource.PRESSURE;}
         @Override public boolean massControl(){return source.mass();}
         @Override public boolean bare(){return sensor==null;}
-        public double target(){return switch(source){case NONE,PRESSURE->targetPressure;case MASS_FLOW,SHAFT_SPEED,BURNER,FLARE,STILL->massTarget;case VOLUME_FLOW->volumeTarget;};}
+        public double target(){return switch(source){case NONE,PRESSURE->targetPressure;case MASS_FLOW,SHAFT_SPEED,BURNER,FLARE,STILL,EJECTOR,ENGINE->massTarget;case VOLUME_FLOW->volumeTarget;};}
         @Override public double targetMassFlow(double density){return source.mass()?massTarget:volumeTarget*density;}
         public ControlValve withTarget(double value){return new ControlValve(source,source==ValveSource.PRESSURE?value:targetPressure,source.mass()?value:massTarget,source==ValveSource.VOLUME_FLOW?value:volumeTarget,sensor,Math.addExact(revision,1));}
         /** A governor valve's mass target for one slice (W3): a slice input, its revision kept, as a column's port plan is. */

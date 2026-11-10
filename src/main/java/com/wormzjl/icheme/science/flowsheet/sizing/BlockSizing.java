@@ -95,7 +95,16 @@ final class BlockSizing {
         // steam's heat.
         var readings = sizing.readings(id);
         double[] condensing = vapour.amounts();
-        if (ColumnComponents.ejectorRequired(door.topPressure())) {
+        if (ColumnComponents.ejectorRequired(door.topPressure()) && door.ejector().vacuum().pump()) {
+            // A vacuum pump on the receiver's vapour outlet (batch 2026-11-10-vacuum-pump, owner V5) takes the same vent, after the
+            // condenser: no steam condenses with the vapour. Its type is the one the block's solve picked at design flow.
+            var vent = thermo.atTemperature(condenser.temperatureKelvin(), condenser.pressurePascal(), sizing.stream(id, ColumnUnit.OVERHEAD).amounts(), SolidInventory.EMPTY);
+            double flow = vent.empty() || vent.state() == null ? 0 : vent.state().volume() * basis.designFlow();
+            var type = com.wormzjl.icheme.science.flowsheet.unit.VacuumPumpUnit.pick(door.ejector().vacuum(), vent.pressure(), flow).type();
+            var load = new VacuumPumpSizing.Load(3600 * flow, vent.pressure(), type);
+            out.put(member(id, "vacuum_pump"), sized(entries.unit(member(id, "vacuum_pump")), VacuumPumpSizing.Size.class, size -> VacuumPumpSizing.rate(load, size),
+                    () -> VacuumPumpSizing.auto(load)));
+        } else if (ColumnComponents.ejectorRequired(door.topPressure())) {
             boolean wired = wires.getOrDefault(id, Map.of()).containsKey(EjectorUnit.MOTIVE);
             var vent = thermo.atTemperature(condenser.temperatureKelvin(), condenser.pressurePascal(), sizing.stream(id, ColumnUnit.OVERHEAD).amounts(), SolidInventory.EMPTY);
             var load = EjectorSizing.Load.of(vent, readings.getOrDefault("ejector_need", 0.), wired ? readings.get("ejector_motive") : null, basis);

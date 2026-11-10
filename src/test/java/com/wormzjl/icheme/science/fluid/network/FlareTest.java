@@ -55,4 +55,34 @@ class FlareTest {
         assertEquals(Flare.rated(.3) / 5e7, Flare.limit(.3, 5e7, 60e6, 2), 1e-9, "a dense rich gas: its heat binds");
         assertEquals(1.145 * 18.3 * Flare.tipArea(.3), Flare.limit(.3, 0, 0, 1.145), 1e-9, "an inert: the low velocity");
     }
+
+    /** Methane, ethane, propane, ethylene, carbon monoxide, hydrogen: atoms of C, H, N, O, S. */
+    private static final double[][] FUELS = {{1, 4, 0, 0, 0}, {2, 6, 0, 0, 0}, {3, 8, 0, 0, 0}, {2, 4, 0, 0, 0}, {1, 0, 0, 1, 0}, {0, 2, 0, 0, 0}};
+
+    private static double soot(int fuel, double load) {
+        var moles = new double[FUELS.length];
+        moles[fuel] = 1;
+        return Flare.soot(moles, FUELS, load);
+    }
+
+    /** The soot index (batch 2026-11-10-custom-shader-system, W3, owner X7 A): methane none, propane some at full load, none unloaded. */
+    @Test void sootFollowsTheCarbonToHydrogenRatioAndTheLoad() {
+        assertEquals(2.98, Flare.carbonToHydrogen(new double[]{1, 0, 0, 0, 0, 0}, FUELS), .01, "methane");
+        assertEquals(0, soot(0, 1), "methane burns clean at any load");
+        assertEquals(.28, soot(1, 1), .01, "ethane: slight");
+        assertEquals(.45, soot(2, 1), .01, "propane smokes at full load");
+        assertEquals(.98, soot(3, 1), .01, "ethylene: nearly all of it");
+        assertEquals(0, soot(2, 0), "no load, no smoke");
+        assertEquals(soot(2, 1), soot(2, Flare.SOOT_LOAD), 1e-12, "the full index from 80 % of the rating");
+        assertEquals(soot(2, 1) / 2, soot(2, Flare.SOOT_LOAD / 2), 1e-12, "half of it at 40 %");
+        assertEquals(0, soot(4, 1), "carbon bound to oxygen does not soot");
+        assertEquals(0, soot(5, 1), "hydrogen has no carbon");
+        assertEquals(0, Flare.soot(new double[FUELS.length], FUELS, 1), "no gas");
+    }
+
+    @Test void theExitVelocityIsTheVolumeFlowOverTheTip() {
+        assertEquals(10 / (.65 * Flare.tipArea(.3)), Flare.exitVelocity(10, .65, .3), 1e-9);
+        assertEquals(0, Flare.exitVelocity(-1, .65, .3), "no reverse flow");
+        assertEquals(0, Flare.exitVelocity(1, 0, .3), "no density, no velocity");
+    }
 }

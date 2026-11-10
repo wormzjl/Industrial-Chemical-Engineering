@@ -191,7 +191,7 @@ class ColumnStructureTest {
                 List.of(new ColumnTrays.Pumparound(11, 10), new ColumnTrays.Pumparound(23, 22))), Heading.NORTH, 4);
         assertEquals(14, crowded.nozzles().size());
         for (var shape : java.util.stream.Stream.concat(COLUMNS.stream(), java.util.stream.Stream.of(crowded)).toList()) {
-            ProcessUnitTest.pipesApart(shape);
+            pipesApart(shape);
             var layout = ShapeRasterizer.layout(shape);
             var occupied = new java.util.HashSet<ShapeRasterizer.Cell>(layout.shell());
             occupied.addAll(layout.interior());
@@ -466,5 +466,23 @@ class ColumnStructureTest {
     private static double[] box(EquipmentShape shape, double r, double a, double y) {
         double axis = shape.axis();
         return shape.transform().point(new double[]{axis + r * Math.cos(a), y, axis + r * Math.sin(a)});
+    }
+
+    /**
+     * A column's nozzles keep the owner's rule of 2026-10-17 ("piping connection should have 1 block spacing between
+     * them"): no two of its pipe blocks touch, by a face, an edge or a corner. The owner lifted the rule for every other
+     * kind on 2026-11-10 and leaves columns as they are.
+     */
+    private static void pipesApart(EquipmentShape shape) {
+        var ports = ShapeRasterizer.ports(shape);
+        for (int i = 0; i < ports.size(); i++)
+            for (int j = i + 1; j < ports.size(); j++) {
+                var p = ports.get(i);
+                var q = ports.get(j);
+                int dx = Math.abs(p.cell().x() + p.dx() - q.cell().x() - q.dx()), dy = Math.abs(p.cell().y() + p.dy() - q.cell().y() - q.dy()),
+                        dz = Math.abs(p.cell().z() + p.dz() - q.cell().z() - q.dz());
+                assertTrue(Math.max(dx, Math.max(dy, dz)) >= 2, shape + ": the pipes of " + shape.nozzles().get(p.nozzle()).role() + " and "
+                        + shape.nozzles().get(q.nozzle()).role() + " touch");
+            }
     }
 }

@@ -43,7 +43,15 @@ public final class Flares {
     private final WorldTopologyLedger topology;
     private final double[] heatingValues,molarMasses;
     private final double[][] formulas;
+    /**
+     * A flare's flame as its presentation shows it (batch 2026-11-10-custom-shader-system, W3): its soot index, 0 to 1
+     * ({@link Flare#soot}), and its gas's exit velocity at the tip, m/s ({@link Flare#exitVelocity}).
+     */
+    public record Flame(double soot,double exitVelocity) {
+        public static final Flame NONE=new Flame(0,0);
+    }
     private final Map<Long,View> views=new HashMap<>();
+    private final Map<Long,Flame> flames=new HashMap<>();
     private final Map<Long,Double> limits=new HashMap<>();
 
     /**
@@ -100,8 +108,16 @@ public final class Flares {
             else if(!burns)status=Status.FLAME_OUT;
             else if(flow>=HELD*limit)status=Status.OVER_CAPACITY;
             else status=Status.FLARING;
-            var g=gas.gas();views.put(id,new View(flow,burns?flow*g.perKilogram():0,g.nhv(),g.flame(),limit,Flare.rated(tip),status));
+            var g=gas.gas();double heat=burns?flow*g.perKilogram():0,rated=Flare.rated(tip);
+            views.put(id,new View(flow,heat,g.nhv(),g.flame(),limit,rated,status));
+            flames.put(id,new Flame(heat>0?Flare.soot(solved.reservoirs().get(pipe.first()).inventory().moles(),formulas,heat/rated):0,Flare.exitVelocity(flow,g.density(),tip)));
         }
+    }
+
+    /** Flare {@code id}'s flame for its presentation: its last booked span, else none. Null for no flare. */
+    public Flame flame(long id) {
+        if(tip(id)<=0)return null;
+        return flames.getOrDefault(id,Flame.NONE);
     }
 
     /** Flare {@code id} as its page shows it: its last booked span, else no flow. Null for no flare. */
@@ -118,6 +134,6 @@ public final class Flares {
 
     /** Forgets flares that left: at each dispatch. */
     void sync() {
-        views.keySet().removeIf(id->tip(id)<=0);limits.keySet().removeIf(id->tip(id)<=0);
+        views.keySet().removeIf(id->tip(id)<=0);limits.keySet().removeIf(id->tip(id)<=0);flames.keySet().removeIf(id->tip(id)<=0);
     }
 }

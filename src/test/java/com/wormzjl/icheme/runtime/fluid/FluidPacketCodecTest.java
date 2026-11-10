@@ -139,7 +139,7 @@ class FluidPacketCodecTest {
      * menu's axis is refused. fluid-14 adds a tank's capacity and paired pressures; fluid-16 a heat unit's ports, lines and
      * actuator and a pipe's line reading (the heat GUI). */
     @Test void theProtocolIsFluidNineteenWithDistinctStaticAndLivePayloads() {
-        assertEquals("fluid-20",FluidNetwork.PROTOCOL);
+        assertEquals("fluid-23",FluidNetwork.PROTOCOL);
         var ids=java.util.Set.of(FluidNetwork.EditPayload.TYPE.id(),FluidNetwork.RecoverPayload.TYPE.id(),FluidNetwork.StaticPayload.TYPE.id(),FluidNetwork.LivePayload.TYPE.id());
         assertEquals(4,ids.size());
         var base=generatorMenu("");int count=base.components().size();
@@ -209,7 +209,7 @@ class FluidPacketCodecTest {
     }
     /** W7: the machine page's view, edit and driver payloads round-trip; a view with a bad number is refused on read. */
     @Test void theMachinePayloadsRoundTripOnTheirOwnRegistrar() {
-        assertEquals("machine-3",com.wormzjl.icheme.network.MachineNetwork.PROTOCOL);
+        assertEquals("machine-4",com.wormzjl.icheme.network.MachineNetwork.PROTOCOL);
         var settings=new ShaftUnit.Settings(true,com.wormzjl.icheme.science.machine.ShaftTrain.Mode.REGULATE_FLOW,.8,0,0);
         var view=new MachineView(7,com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR,"RUNNING",2950,24900,26700,534,settings,
                 com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE,30000,2950,2,true,.72,370,"FV-101",0,2.9,40e5,4e5,null);
@@ -427,5 +427,71 @@ class FluidPacketCodecTest {
         assertEquals("Pressure 1.2E7 Pa outside the package envelope 100.0..1.0E7 Pa (package icheme:refinery)",FluidNetwork.reason(domain));
         assertEquals("Stale fluid controls",FluidNetwork.reason(new IllegalStateException("Stale fluid controls")));
         assertEquals("null",FluidNetwork.reason(new RuntimeException()));
+    }
+    /**
+     * The effects' payloads (batch 2026-11-10-custom-shader-system, W3 to W5): a flare's state with its soot index and exit
+     * velocity, a tower's plume and a heater's flue cross whole; out-of-range values are refused; the new watches have their
+     * own wire identities.
+     */
+    @Test void effectStatesRoundTripAndRefuseOutOfRangeValues() {
+        var target=new FluidNetwork.Target(new BlockPos(5,70,-9),42);
+        var flare=new FluidNetwork.FlareState(target,1,.8f,0,.45f,62.5f);
+        var tower=new FluidNetwork.TowerPlume(target,1234.5f,301.6f,.0247f,20.75f);
+        var heater=new FluidNetwork.HeaterFlue(target,.7f,643.2f,12.3f,.122f,com.wormzjl.icheme.science.fluid.network.Burners.Fuel.LIQUID.ordinal());
+        var buffer=new RegistryFriendlyByteBuf(Unpooled.buffer(),RegistryAccess.EMPTY);
+        try{
+            FluidNetwork.FlareState.STREAM_CODEC.encode(buffer,flare);assertEquals(flare,FluidNetwork.FlareState.STREAM_CODEC.decode(buffer));
+            FluidNetwork.TowerPlume.STREAM_CODEC.encode(buffer,tower);assertEquals(tower,FluidNetwork.TowerPlume.STREAM_CODEC.decode(buffer));
+            FluidNetwork.HeaterFlue.STREAM_CODEC.encode(buffer,heater);assertEquals(heater,FluidNetwork.HeaterFlue.STREAM_CODEC.decode(buffer));
+            assertEquals(0,buffer.readableBytes());
+        }finally{buffer.release();}
+        assertEquals(com.wormzjl.icheme.science.fluid.network.Burners.Fuel.LIQUID,heater.fuelKind());
+        assertEquals(0,new FluidNetwork.FlareState(target,1,.5f,0).soot(),"the old form carries no soot");
+        assertThrows(IllegalArgumentException.class,()->new FluidNetwork.FlareState(target,1,.5f,0,1.5f,10));
+        assertThrows(IllegalArgumentException.class,()->new FluidNetwork.FlareState(target,1,.5f,0,0,Float.NaN));
+        assertThrows(IllegalArgumentException.class,()->new FluidNetwork.TowerPlume(target,-1,300,0,0));
+        assertThrows(IllegalArgumentException.class,()->new FluidNetwork.TowerPlume(target,1,0,0,0));
+        assertThrows(IllegalArgumentException.class,()->new FluidNetwork.HeaterFlue(target,1.2f,600,1,.1f,0));
+        assertThrows(IllegalArgumentException.class,()->new FluidNetwork.HeaterFlue(target,.5f,600,1,.1f,3));
+        var ids=java.util.Set.of(FluidNetwork.Watch.TOWERS.id(),FluidNetwork.Watch.HEATERS.id(),FluidNetwork.Watch.FLARES.id(),FluidNetwork.Watch.STILLS.id(),
+                FluidNetwork.TowerPlume.TYPE.id(),FluidNetwork.HeaterFlue.TYPE.id(),FluidNetwork.FlareState.TYPE.id());
+        assertEquals(7,ids.size());
+    }
+    /**
+     * fluid-22 (PROCESS_SOUNDS_REVIEW.md S2 A): the noise watch's answer crosses whole, its sources in their order (the
+     * loudest first), at most 16; the poll carries nothing; both have their own wire identities.
+     */
+    @Test void theNoiseAnswerRoundTripsAndHoldsAtMostSixteenSources() {
+        var sources=new java.util.ArrayList<Noise.Source>();
+        for(var kind:Noise.Kind.values())sources.add(new Noise.Source(new BlockPos(kind.ordinal(),70,-9),kind,70+kind.ordinal()*4.5f,.5f+kind.ordinal()*.1f));
+        var answer=new FluidNetwork.NoiseSources(sources);
+        var buffer=new RegistryFriendlyByteBuf(Unpooled.buffer(),RegistryAccess.EMPTY);
+        try{
+            FluidNetwork.NoiseSources.STREAM_CODEC.encode(buffer,answer);assertEquals(answer,FluidNetwork.NoiseSources.STREAM_CODEC.decode(buffer));
+            FluidNetwork.NoiseWatch.STREAM_CODEC.encode(buffer,new FluidNetwork.NoiseWatch());assertEquals(new FluidNetwork.NoiseWatch(),FluidNetwork.NoiseWatch.STREAM_CODEC.decode(buffer));
+            assertEquals(0,buffer.readableBytes());
+        }finally{buffer.release();}
+        var seventeen=java.util.Collections.nCopies(Noise.MAXIMUM_SOURCES+1,sources.get(0));
+        assertThrows(IllegalArgumentException.class,()->new FluidNetwork.NoiseSources(seventeen));
+        var bad=new RegistryFriendlyByteBuf(Unpooled.buffer(),RegistryAccess.EMPTY);
+        try{
+            bad.writeVarInt(1);bad.writeBlockPos(BlockPos.ZERO);bad.writeByte(Noise.Kind.values().length);bad.writeFloat(80);bad.writeFloat(1);
+            assertThrows(IllegalArgumentException.class,()->FluidNetwork.NoiseSources.STREAM_CODEC.decode(bad),"an unknown kind is refused");
+        }finally{bad.release();}
+        assertNotEquals(FluidNetwork.NoiseWatch.TYPE.id(),FluidNetwork.NoiseSources.TYPE.id());
+    }
+    /** fluid-23 (batch 2026-11-10-chimney): a chimney's published plume crosses whole; a bad one is refused; its watch has its own identity. */
+    @Test void aChimneyStateRoundTrips() {
+        var target=new FluidNetwork.Target(new BlockPos(3,110,-4),77);
+        var state=new FluidNetwork.ChimneyState(target,2.5f,450,.08f,.004f,.35f,18.5f);
+        var buffer=new RegistryFriendlyByteBuf(Unpooled.buffer(),RegistryAccess.EMPTY);
+        try{
+            FluidNetwork.ChimneyState.STREAM_CODEC.encode(buffer,state);assertEquals(state,FluidNetwork.ChimneyState.STREAM_CODEC.decode(buffer));
+            assertEquals(0,buffer.readableBytes());
+        }finally{buffer.release();}
+        assertThrows(IllegalArgumentException.class,()->new FluidNetwork.ChimneyState(target,1,450,0,0,1.5f,10));
+        assertThrows(IllegalArgumentException.class,()->new FluidNetwork.ChimneyState(target,-1,450,0,0,0,10));
+        assertNotEquals(FluidNetwork.Watch.CHIMNEYS.id(),FluidNetwork.ChimneyState.TYPE.id());
+        assertNotEquals(FluidNetwork.Watch.FLARES.id(),FluidNetwork.Watch.CHIMNEYS.id());
     }
 }

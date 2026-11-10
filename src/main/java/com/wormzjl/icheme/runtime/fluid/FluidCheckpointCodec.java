@@ -101,10 +101,14 @@ import java.util.function.Function;
  * <p>41 (batch 2026-11-09-furnace-fuel-power): a fired coil carries its fuel and air limit after its partner.</p>
  * <p>42 (batch 2026-11-09-batch-distiller, W3): a pool may be a still's fired pot (partner 0) and carries its column's head
  * (recoveries and return enthalpy) after its active share.</p>
+ * <p>44 (batch 2026-11-10-chimney, C1 B): no field changed; sinks open to the air and open vessels stand at the atmosphere
+ * of their height, so a state written under the constant atmosphere is dropped and rebuilt from the facts.</p>
+ * <p>45 (batch 2026-11-10-vacuum-pump; 44 on its own branch, renumbered at the merge after the chimney's 44): control tag 8 is a vacuum pump casing on its curve.</p>
+ * <p>46 (batch 2026-11-10-prime-movers): heat law tag 5, a gas turbine's exhaust coil (its gas inlet and capacity rate); control valve source ENGINE, a prime mover's fuel valve.</p>
  */
 public final class FluidCheckpointCodec {
     /** The state format: the core record's {@code StateFormat} and every unit's state section. */
-    public static final int VERSION=42;
+    public static final int VERSION=46;
     /** The most wall cells a saved heat side holds (crossflow 64, Standard 8, an air cooler's flat wall 1). */
     private static final int MAXIMUM_WALL_CELLS=64;
     /** The envelope: the core record's frame, the unit header and the section layout. Frozen. */
@@ -413,6 +417,9 @@ public final class FluidCheckpointCodec {
                 case FlowControl.PressureValve valve->{w.u8(2);w.f64(valve.targetPressure());}
                 case FlowControl.ControlValve valve->{w.u8(4);w.text(valve.source().name());w.f64(valve.targetPressure());w.f64(valve.massTarget());w.f64(valve.volumeTarget());w.bool(valve.sensor()!=null);if(valve.sensor()!=null){w.i64(valve.sensor().getMostSignificantBits());w.i64(valve.sensor().getLeastSignificantBits());}w.i64(valve.revision());}
                 case FlowControl.Compressor compressor->{w.u8(3);w.f64(compressor.requestedVolumeFlow());w.f64(compressor.maximumPressureRatio());w.bool(compressor.enabled());w.f64(compressor.setFlow());w.f64(compressor.setPressure());}
+                case FlowControl.Ejector ejector->{w.u8(7);w.f64(ejector.design().suction());w.f64(ejector.motivePressure());w.f64(ejector.delivered());}
+                // Format 44 (batch 2026-11-10-vacuum-pump): tag 8, a vacuum pump casing: its type by name, capacity and rated speed.
+                case FlowControl.Machine machine when machine.law() instanceof com.wormzjl.icheme.science.machine.VacuumPump vacuum->{w.u8(8);w.text(vacuum.type().name());w.f64(vacuum.capacity());w.f64(vacuum.ratedSpeed());w.f64(machine.speed());w.bool(machine.enabled());w.f64(machine.setFlow());w.f64(machine.setPressure());}
                 case FlowControl.Machine machine->{var law=machine.law();w.u8(5);w.bool(law.liquid());w.f64(law.ratedFlow());w.f64(law.ratedHead());w.f64(law.efficiency());if(law instanceof com.wormzjl.icheme.science.machine.CentrifugalPump pump)w.f64(pump.ratedSpeed());w.f64(machine.speed());w.bool(machine.enabled());w.f64(machine.setFlow());w.f64(machine.setPressure());}
             }
             // Format 6: the port of each end (PassiveNetwork.PhasePort ordinal), after the control.
@@ -430,6 +437,7 @@ public final class FluidCheckpointCodec {
                     w.f64(cooled.draught());control(w,cooled.control());w.u8(cooled.limit().ordinal());}
                 case com.wormzjl.icheme.science.fluid.network.FiredCoil coil->{w.u8(2);w.f64(coil.setTemperature());w.f64(coil.duty());w.f64(coil.firing());w.i64(coil.partner());w.f64(coil.limit());}
                 case com.wormzjl.icheme.science.fluid.network.ConvectionCoil coil->{w.u8(4);w.f64(coil.conductance());w.i64(coil.radiant());w.f64(coil.flue());}
+                case com.wormzjl.icheme.science.fluid.network.ExhaustCoil coil->{w.u8(5);w.f64(coil.gasInlet());w.f64(coil.flue());}
             }
         }
     }
@@ -448,7 +456,7 @@ public final class FluidCheckpointCodec {
     private static void state(Writer w,PassiveNetwork graph) {
         for(var n:graph.reservoirs()) {
             var inventory=n.inventory();var s=n.state();
-            w.sparse(inventory.moles());w.f64(inventory.internalEnergy());solids(w,inventory.solids());
+            w.sparse(inventory.moles());w.f64(inventory.internalEnergy());solids(w,inventory.solids());w.bool(inventory.rigid());
             w.f64(s.temperature());w.f64(s.pressure());w.sparse(s.liquid());w.sparse(s.vapor());w.f64(s.waterLiquid());w.f64(s.waterVapor());w.f64(s.hydrocarbonPartialPressure());
         }
         for(var p:graph.pipes()) {
@@ -484,6 +492,7 @@ public final class FluidCheckpointCodec {
         if(tag==0)return null;
         if(tag==2)return new com.wormzjl.icheme.science.fluid.network.FiredCoil(r.f64(),r.f64(),r.f64(),r.i64(),r.f64());
         if(tag==4)return new com.wormzjl.icheme.science.fluid.network.ConvectionCoil(r.f64(),r.i64(),r.f64());
+        if(tag==5)return new com.wormzjl.icheme.science.fluid.network.ExhaustCoil(r.f64(),r.f64());
         if(tag==3) {
             double area=r.f64();var air=new com.wormzjl.icheme.science.fluid.network.AirCooled.Air(r.f64(),r.f64(),r.f64(),r.f64(),r.f64());double draught=r.f64();
             var control=control(r);return new com.wormzjl.icheme.science.fluid.network.AirCooled(area,air,draught,control,limit(r));
@@ -625,7 +634,7 @@ public final class FluidCheckpointCodec {
             var list=new ArrayList<PipeResistance.Geometry>(count);for(int s=0;s<count;s++)list.add(new PipeResistance.Geometry(r.f64(),r.f64(),r.f64(),r.f64(),r.varint(1<<20)));
             sections.add(List.copyOf(list));
             controls.add(switch(r.u8()){case 0->new FlowControl.Passive();case 1->new FlowControl.Pump(r.f64(),r.f64(),r.bool());case 2->new FlowControl.PressureValve(r.f64());
-                case 3->new FlowControl.Compressor(r.f64(),r.f64(),r.bool(),r.f64(),r.f64());case 5->machine(r);case 6->new FlowControl.Turbine(new com.wormzjl.icheme.science.machine.SteamTurbine(r.f64(),r.f64()),r.f64());case 4->new FlowControl.ControlValve(FlowControl.ValveSource.valueOf(r.text()),r.f64(),r.f64(),r.f64(),r.bool()?new java.util.UUID(r.i64(),r.i64()):null,r.i64());default->throw new IllegalArgumentException("Unknown saved control");});
+                case 3->new FlowControl.Compressor(r.f64(),r.f64(),r.bool(),r.f64(),r.f64());case 5->machine(r);case 8->new FlowControl.Machine(new com.wormzjl.icheme.science.machine.VacuumPump(com.wormzjl.icheme.science.machine.VacuumPump.Type.valueOf(r.text()),r.f64(),r.f64()),r.f64(),r.bool(),r.f64(),r.f64());case 7->new FlowControl.Ejector(new com.wormzjl.icheme.science.machine.SteamEjector(r.f64()),r.f64(),r.f64());case 6->new FlowControl.Turbine(new com.wormzjl.icheme.science.machine.SteamTurbine(r.f64(),r.f64()),r.f64());case 4->new FlowControl.ControlValve(FlowControl.ValveSource.valueOf(r.text()),r.f64(),r.f64(),r.f64(),r.bool()?new java.util.UUID(r.i64(),r.i64()):null,r.i64());default->throw new IllegalArgumentException("Unknown saved control");});
             firstPorts[p]=port(r);secondPorts[p]=port(r);forbiddenDirections[p]=r.varint(3);actuatorAreas[p]=r.f64();heats[p]=heat(r);
         }
         return new Topology(ids,elevations,kinds,volumes,heights,opens,geometries,pools,towers,pipeIds,first,second,sections,controls,firstPorts,secondPorts,forbiddenDirections,actuatorAreas,heats);
@@ -633,9 +642,9 @@ public final class FluidCheckpointCodec {
     private static PassiveNetwork state(Reader r,Topology t,FluidThermodynamics model) {
         var nodes=new ArrayList<PassiveNetwork.Reservoir>(t.ids.length);
         for(int n=0;n<t.ids.length;n++) {
-            var moles=r.sparse(MAXIMUM_ARRAY);double energy=r.f64();var solids=solids(r,model);
+            var moles=r.sparse(MAXIMUM_ARRAY);double energy=r.f64();var solids=solids(r,model);boolean rigid=r.bool();
             double temperature=r.f64(),pressure=r.f64();var liquid=r.sparse(MAXIMUM_ARRAY);var vapor=r.sparse(MAXIMUM_ARRAY);double waterLiquid=r.f64(),waterVapor=r.f64(),hydrocarbonPressure=r.f64();
-            var inventory=new PassiveNetwork.Inventory(t.volumes[n],moles,energy,solids,t.heights[n],t.opens[n],t.geometries[n],t.pools[n],t.towers[n]);
+            var inventory=new PassiveNetwork.Inventory(t.volumes[n],moles,energy,solids,t.heights[n],t.opens[n],t.geometries[n],t.pools[n],t.towers[n],rigid);
             var state=Arrays.stream(moles).sum()==0&&!solids.empty()?model.solidState(temperature,pressure,solids):model.state(temperature,pressure,liquid,vapor,waterLiquid,waterVapor,hydrocarbonPressure).withSolids(solids);
             nodes.add(new PassiveNetwork.Reservoir(t.ids[n],t.elevations[n],state,t.kinds[n],inventory));
         }

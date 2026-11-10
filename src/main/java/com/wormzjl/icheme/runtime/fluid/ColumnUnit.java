@@ -24,9 +24,9 @@ import java.util.Objects;
  * its air condenser's banks as its Start found them, m², whose fans hold the air's duty (U2, batch 2026-11-02-process-simulator,
  * facts schema 9); 0 where it has none or a save before it, whose air then takes any duty, as before. {@code utilities}: the
  * utility sides of its reboiler and of each pumparound's cooler as its Start found them (W4, batch
- * 2026-11-10-column-failure-modes, facts schema 17), each outside the column with its partner held inside; a duty with none
+ * 2026-11-10-column-failure-modes, facts schema 21), each outside the column with its partner held inside; a duty with none
  * is free, as every reboiler and pumparound duty was before them (a save before the field keeps them free until its next Start).
- * {@code members}: its powered members as its Start found them (W5, facts schema 18): the air condenser's fan sides and its
+ * {@code members}: its powered members as its Start found them (W5, facts schema 21): the air condenser's fan sides and its
  * pumps' movers; none for a save before the field, whose members draw nothing until its next Start.</p>
  */
 public record ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean running,Setpoints setpoints,List<Station> stations,Totals totals,List<Long> condensers,State state,boolean leaving,double airSurface,Utilities utilities,Members members) {
@@ -70,7 +70,7 @@ public record ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean r
     public long condenser(){return condensers.isEmpty()?0:condensers.getFirst();}
 
     /**
-     * The utility sides of a column's heated and cooled members (W4, facts schema 17): its reboiler's (a kettle's tubes, one a
+     * The utility sides of a column's heated and cooled members (W4, facts schema 21): its reboiler's (a kettle's tubes, one a
      * unit in parallel) and each pumparound's cooler's, in the pumparounds' order (each one's cooling side, one a unit), at most
      * {@link #MAXIMUM_CONDENSERS} a duty. A pumparound past the list, or with an empty list, has none.
      */
@@ -95,7 +95,7 @@ public record ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean r
     }
 
     /**
-     * A column's powered members (W5, facts schema 18): its air condenser's fan sides (the air coolers' process sides, whose
+     * A column's powered members (W5, facts schema 21): its air condenser's fan sides (the air coolers' process sides, whose
      * electric stores drive their fans), its reflux pump's movers and each pumparound pump's, in the pumparounds' order (a
      * casing's fluid registration or an in-line pump's), at most {@link #MAXIMUM_CONDENSERS} a member. A member with none
      * draws nothing.

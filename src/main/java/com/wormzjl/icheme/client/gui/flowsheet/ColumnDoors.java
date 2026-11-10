@@ -174,10 +174,20 @@ public final class ColumnDoors {
                         x.host().stores() && !x.host().reader() && input(x, id, door) != null, door.units(), ColumnComponents.kettleRequired(door.reboilerDuty())), x.t());
                 var right = new ArrayList<>(rows.right());
                 right.add(right.size() - 1, Door.group(x.text("door.group.tube_sides"), Door.entry("tube", x.text("door.drop"), x.units().pressure().symbol())));
-                // The ejector on the vapour line (W10), where the top is under ambient pressure: the ejector tile's two pressures.
-                if (ColumnComponents.ejectorRequired(door.topPressure()))
-                    right.add(right.size() - 1, Door.group(x.text("door.group.ejector"), Door.entry("ejector_discharge", x.text("door.discharge"), x.units().pressure().symbol()),
-                            Door.entry("ejector_motive", x.text("door.motive"), x.units().pressure().symbol())));
+                // What holds a top under ambient pressure (batch 2026-11-10-vacuum-pump, owner V5): the ejector on the vapour line (W10)
+                // with the ejector tile's two pressures, or a vacuum pump on the receiver's vapour outlet.
+                if (ColumnComponents.ejectorRequired(door.topPressure())) {
+                    var held = door.ejector().vacuum();
+                    var keys = new ArrayList<Column.Button>();
+                    for (var vacuum : ColumnComponents.Vacuum.values())
+                        keys.add(Door.position("vacuum:" + vacuum.name().toLowerCase(java.util.Locale.ROOT), x.text("door.option.vacuum_" + vacuum.name().toLowerCase(java.util.Locale.ROOT)), vacuum == held));
+                    var group = new ArrayList<Column.Row>(List.of(new Column.Buttons(keys)));
+                    if (!held.pump()) {
+                        group.add(Door.entry("ejector_discharge", x.text("door.discharge"), x.units().pressure().symbol()));
+                        group.add(Door.entry("ejector_motive", x.text("door.motive"), x.units().pressure().symbol()));
+                    }
+                    right.add(right.size() - 1, Door.group(x.text("door.group.vacuum"), group.toArray(Column.Row[]::new)));
+                }
                 columns = List.of(right);
                 glass = ColumnGlass.connections(x, unit, door, duties(x, id, door), view);
             }
@@ -406,6 +416,7 @@ public final class ColumnDoors {
             case "add" -> add(x, id, tail, view);
             case "remove" -> remove(x, id, view);
             case "split" -> row(x, id, view, "split", tail.equals("uniform") ? "UNIFORM" : "RETURN_TRAY");
+            case "vacuum" -> editor.set(id, ColumnDoor.VACUUM, ColumnComponents.Vacuum.valueOf(tail.toUpperCase(java.util.Locale.ROOT)).name(), null);
             case "condenser" -> editor.set(id, "condenser", (switch (tail) {
                 case "exchanger" -> ColumnComponents.Condenser.EXCHANGER;
                 case "air_then_water" -> ColumnComponents.Condenser.AIR_THEN_WATER;

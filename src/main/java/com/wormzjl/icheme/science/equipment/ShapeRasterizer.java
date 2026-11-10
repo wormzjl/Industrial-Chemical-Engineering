@@ -205,7 +205,7 @@ public final class ShapeRasterizer {
         for (var facet : g.mesh.facets()) out.addAll(Mesh.tiled(facet));
         for (int nozzle = 0; nozzle < g.nozzles.size(); nozzle++) for (var facet : g.nozzle(nozzle, 0).facets()) out.addAll(Mesh.tiled(facet));
         if(g.instruments.probes().stream().anyMatch(p->!p.manual())){
-            out.addAll(instrumentWiring(shape,Set.of(),detail).polygons());
+            out.addAll(InstrumentWiring.atlas(instrumentWiring(shape,Set.of(),detail).polygons()));
             for(var probe:g.instruments.probes())if(!probe.manual()&&probe.display())out.addAll(InstrumentGeometry.previewHead(probe));
         }
         return List.copyOf(out);
@@ -894,13 +894,25 @@ public final class ShapeRasterizer {
                         ? transform.point(new double[]{axis - radius + .01, (shape.bottomTangent() + shape.topTangent()) / 2, axis})
                         : transform.point(new double[]{axis, shape.bottomTangent() - shape.headDepth() + .01, axis});
                 node = new Cell(floor(low[0]), floor(low[1]), floor(low[2]));
-            } else if (shape.kind().mover()) {
+            } else if (shape.kind().mover() || shape.kind() == EquipmentShape.Kind.EJECTOR) {
+                // A steam ejector registers at its suction's cell, as a mover does (batch 2026-11-10-steam-ejector-flow).
                 node = ports.stream().filter(port -> nozzles.get(port.nozzle()).role() == EquipmentShape.Role.SUCTION)
                         .findFirst().orElseThrow(() -> new IllegalStateException("A mover needs a suction nozzle")).cell();
             } else if (shape.kind() == EquipmentShape.Kind.STEAM_TURBINE) {
                 // A turbine registers at its steam inlet's cell (W3, reading A37), as a mover at its suction's.
                 node = ports.stream().filter(port -> nozzles.get(port.nozzle()).role() == EquipmentShape.Role.STEAM)
                         .findFirst().orElseThrow(() -> new IllegalStateException("A turbine needs a steam inlet")).cell();
+            } else if (shape.kind().primeMover()) {
+                // A prime mover (batch 2026-11-10-prime-movers) registers its fuel void at its FUEL nozzle's cell, then a gas
+                // turbine's steam coil at its FEEDWATER nozzle's cell.
+                node = ports.stream().filter(port -> nozzles.get(port.nozzle()).role() == EquipmentShape.Role.FUEL)
+                        .findFirst().orElseThrow(() -> new IllegalStateException("A prime mover needs its fuel nozzle")).cell();
+                var all = new ArrayList<Cell>();all.add(node);
+                for (var port : ports) if (nozzles.get(port.nozzle()).role() == EquipmentShape.Role.FEEDWATER) {
+                    if (all.contains(port.cell())) throw new IllegalStateException("A steam coil's water nozzle shares the fuel's cell");
+                    all.add(port.cell());break;
+                }
+                sides = List.copyOf(all);
             } else if (shape.kind() == EquipmentShape.Kind.FLARE_STACK) {
                 // A flare registers its tip at its vent gas inlet's cell (batch 2026-11-09-flare-stack), as the burners at their fuel's.
                 node = ports.stream().filter(port -> nozzles.get(port.nozzle()).role() == EquipmentShape.Role.FLARE_GAS)

@@ -25,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * Standalone process units (owner request and decisions 2026-10-16, batch 2026-10-15-custom-equipment-rendering,
  * {@code STANDALONE_UNITS_PLAN.md}; machines and heaters 2026-10-17, {@code MACHINES_HEATERS_PLAN.md}): their sizes and
  * ranges, where each nozzle faces, and that at every size each nozzle leaves a free block for its pipe, clear of the
- * saddles, frames and other nozzles.
+ * saddles and frames, its flange clear of the other flanges (pipes may touch: owner, 2026-11-10).
  */
 class ProcessUnitTest {
     /**
@@ -332,9 +332,13 @@ class ProcessUnitTest {
                 Map.entry(Kind.TRICKLE_BED_REACTOR, Map.of(Role.FEED, "2-", Role.HYDROGEN, "0+", Role.EFFLUENT, "2-", Role.QUENCH, "0+")),
                 Map.entry(Kind.EBULLATED_BED_REACTOR, Map.of(Role.EFFLUENT, "2-", Role.FEED, "2-", Role.HYDROGEN, "2+", Role.CATALYST_INLET, "1+", Role.CATALYST_OUTLET, "0+")),
                 Map.entry(Kind.CENTRIFUGAL_COMPRESSOR, Map.of(Role.SUCTION, "1+", Role.DISCHARGE, "1+")),
+                // A vacuum pump's suction and discharge on top (batch 2026-11-10-vacuum-pump).
+                Map.entry(Kind.LIQUID_RING_PUMP, Map.of(Role.SUCTION, "1+", Role.DISCHARGE, "1+")), Map.entry(Kind.DRY_SCREW_PUMP, Map.of(Role.SUCTION, "1+", Role.DISCHARGE, "1+")),
                 Map.entry(Kind.STEAM_TURBINE, Map.of(Role.STEAM, "0+", Role.EXHAUST, "1+")),
                 // A flare stack's vent gas towards the front (batch 2026-11-09-flare-stack).
                 Map.entry(Kind.FLARE_STACK, Map.of(Role.FLARE_GAS, "2-")),
+                // A chimney's gas inlet towards the front (batch 2026-11-10-chimney).
+                Map.entry(Kind.STEEL_STACK, Map.of(Role.STACK_GAS, "2-")), Map.entry(Kind.BRICK_CHIMNEY, Map.of(Role.STACK_GAS, "2-")),
                 // A batch still's by its options (batch 2026-11-09-batch-distiller, stillSides); here the default still's.
                 Map.entry(Kind.BATCH_STILL, stillSides(BatchStillOptions.DEFAULT)),
                 Map.entry(Kind.MOTOR, Map.of()), Map.entry(Kind.GENERATOR, Map.of()), Map.entry(Kind.GEARBOX, Map.of()),
@@ -363,23 +367,6 @@ class ProcessUnitTest {
                 assertTrue(nozzle.defaultOd() > 0 && nozzle.defaultOd() <= PipeSizes.MAX_OUTSIDE, shape + " " + nozzle.role());
             }
         }
-    }
-
-    /**
-     * Owner rule 2026-10-17 ("piping connection should have 1 block spacing between them to prevent misconnection"):
-     * pipes in blocks that share a face join, so no two of a shape's pipe blocks touch, by a face, an edge or a corner.
-     */
-    static void pipesApart(EquipmentShape shape) {
-        var ports = ShapeRasterizer.ports(shape);
-        for (int i = 0; i < ports.size(); i++)
-            for (int j = i + 1; j < ports.size(); j++) {
-                var p = ports.get(i);
-                var q = ports.get(j);
-                int dx = Math.abs(p.cell().x() + p.dx() - q.cell().x() - q.dx()), dy = Math.abs(p.cell().y() + p.dy() - q.cell().y() - q.dy()),
-                        dz = Math.abs(p.cell().z() + p.dz() - q.cell().z() - q.dz());
-                assertTrue(Math.max(dx, Math.max(dy, dz)) >= 2, shape + ": the pipes of " + shape.nozzles().get(p.nozzle()).role() + " and "
-                        + shape.nozzles().get(q.nozzle()).role() + " touch");
-            }
     }
 
     /**
@@ -481,7 +468,7 @@ class ProcessUnitTest {
     /**
      * Owner request 2026-10-25 ("make drum/reactor bottom outlet rotatable"): a trickle-bed reactor's effluent leaves its
      * skirt to the front; to the left, its quench port then mirrored to the front; and to the back or the right, whichever
-     * the ladder from grade leaves free, the other refused. Each turn keeps its pipes apart, its effluent's and quench's
+     * the ladder from grade leaves free, the other refused. Each turn keeps its effluent's and quench's
      * necks clear at a pipe's largest, a free block for every pipe, its effluent line off the ladders, and its decks and
      * ladders as they were. No other unit's bottom outlet leaves a skirt sideways: theirs stay where they are.
      */
@@ -517,7 +504,6 @@ class ProcessUnitTest {
                         var qn = shape.nozzles().get(quench);
                         assertArrayEquals(side, new int[]{e.axis(), e.sign()}, at);
                         assertArrayEquals(q == 1 ? new int[]{2, -1} : new int[]{0, 1}, new int[]{qn.axis(), qn.sign()}, at);
-                        pipesApart(shape);
                         assertTrue(NozzleRoom.clear(shape, effluent, PipeSizes.MAX_OUTSIDE), at + " effluent");
                         assertTrue(NozzleRoom.clear(shape, quench, PipeSizes.MAX_OUTSIDE), at + " quench");
                         var layout = ShapeRasterizer.layout(shape);
@@ -568,7 +554,7 @@ class ProcessUnitTest {
             boolean electric = shape.kind() == Kind.MOTOR || shape.kind() == Kind.GENERATOR || shape.kind() == Kind.AIR_COOLER || shape.kind() == Kind.INDUCED_DRAFT_COOLING_TOWER
                     || shape.kind() == Kind.VERTICAL_HEATER || shape.kind() == Kind.CABIN_HEATER || EquipmentServices.electricStill(shape);
             assertEquals(electric, terminal != null, shape.toString());
-            if (!UnitDesign.of(shape.kind()).hasDuty() && shape.kind() != Kind.COMPRESSOR) {
+            if (!UnitDesign.of(shape.kind()).hasDuty() && shape.kind() != Kind.COMPRESSOR && !shape.kind().vacuumPump()) {
                 assertEquals(List.of(), shafts, shape.toString());
                 continue;
             }
@@ -618,7 +604,6 @@ class ProcessUnitTest {
                     if (a == axis) assertEquals(Math.rint(face[a]), face[a], 1e-9, shape + " " + role + ": its face off the block face");
                     else assertEquals(at[a] + .5, face[a], 1e-9, shape + " " + role + ": its centre line off its pipe's, axis " + a);
             }
-            pipesApart(shape);
             // Flanges at their largest stand clear of each other.
             var nozzles = shape.nozzles();
             for (int i = 0; i < nozzles.size(); i++)

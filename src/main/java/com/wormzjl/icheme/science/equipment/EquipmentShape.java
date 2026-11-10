@@ -162,7 +162,20 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
         // An elevated flare stack (batch 2026-11-09-flare-stack).
         FLARE_STACK,
         // A batch still: a fired or electric copper pot, a worm tub or a small column (batch 2026-11-09-batch-distiller).
-        BATCH_STILL;
+        BATCH_STILL,
+        // Chimneys (batch 2026-11-10-chimney, owner C3 A): a self-supporting steel stack and a tapered brick or concrete
+        // chimney with a steel liner, releasing their gas and its solids to the atmosphere.
+        STEEL_STACK, BRICK_CHIMNEY,
+        // Vacuum pump casings on the shaft trains (batch 2026-11-10-vacuum-pump): a liquid ring of one or two stages, a dry screw.
+        LIQUID_RING_PUMP, DRY_SCREW_PUMP,
+        // Fuelled prime movers on the shaft trains (batch 2026-11-10-prime-movers): a liquid-fuel combustion engine, a gas turbine.
+        COMBUSTION_ENGINE, GAS_TURBINE;
+
+        /** A fuelled prime mover (batch 2026-11-10-prime-movers): a combustion engine or a gas turbine, a shaft-train driver on its fuel. */
+        public boolean primeMover() { return this == COMBUSTION_ENGINE || this == GAS_TURBINE; }
+
+        /** A chimney ({@code science.fluid.network.Chimney}): a steel stack or a brick chimney. */
+        public boolean chimney() { return this == STEEL_STACK || this == BRICK_CHIMNEY; }
 
         public boolean coolingTower() { return this==INDUCED_DRAFT_COOLING_TOWER || this==NATURAL_DRAFT_COOLING_TOWER; }
 
@@ -191,7 +204,12 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
 
         /** A self-powered fluid mover, with one suction and one discharge nozzle. */
         public boolean mover() {
-            return this == PUMP || this == COMPRESSOR || this == CENTRIFUGAL_COMPRESSOR;
+            return this == PUMP || this == COMPRESSOR || this == CENTRIFUGAL_COMPRESSOR || vacuumPump();
+        }
+
+        /** A vacuum pump casing (batch 2026-11-10-vacuum-pump): a gas mover on a {@code VacuumPump} law. */
+        public boolean vacuumPump() {
+            return this == LIQUID_RING_PUMP || this == DRY_SCREW_PUMP;
         }
     }
 
@@ -261,7 +279,9 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
         FLARE_GAS(PortClass.BULK),
         // A batch still (batch 2026-11-09-batch-distiller): its pot's charge, its condenser's distillate (liquid first, the
         // vapour to its VENT) and cooling water in and out.
-        CHARGE(PortClass.BULK), DISTILLATE(PortClass.LIQUID), WATER_INLET(PortClass.BULK), WATER_OUTLET(PortClass.BULK);
+        CHARGE(PortClass.BULK), DISTILLATE(PortClass.LIQUID), WATER_INLET(PortClass.BULK), WATER_OUTLET(PortClass.BULK),
+        // A chimney's gas inlet (batch 2026-11-10-chimney): all it receives leaves through the stack.
+        STACK_GAS(PortClass.BULK);
 
         public final PortClass port;
 
@@ -312,8 +332,9 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
         }
 
         /**
-         * Whether this nozzle's pipe block and {@code other}'s touch, by a face, an edge or a corner. Pipes in blocks that
-         * share a face join, so every pipe keeps one free block between it and the next (owner rule 2026-10-17).
+         * Whether this nozzle's pipe block and {@code other}'s touch, by a face, an edge or a corner. Only a column's nozzle
+         * placement keeps them apart ({@code ColumnStructure}; the owner leaves columns as they are): the owner lifted the
+         * one-free-block rule of 2026-10-17 for every other nozzle on 2026-11-10.
          */
         public boolean crowds(Nozzle other) {
             int[] p = pipeBlock(), q = other.pipeBlock();
@@ -832,9 +853,9 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
         return kind.reservoir();
     }
 
-    /** Registers with the fluid engine when the whole structure has been built: a steam turbine too (W3, reading A37), a batch still (batch 2026-11-09-batch-distiller, W3). */
+    /** Registers with the fluid engine when the whole structure has been built: a steam turbine too (W3, reading A37), a batch still (batch 2026-11-09-batch-distiller, W3), a steam ejector (batch 2026-11-10-steam-ejector-flow). */
     public boolean fluidDevice() {
-        return reservoir() || kind.mover() || kind == Kind.STEAM_TURBINE || kind == Kind.FLARE_STACK || kind == Kind.BATCH_STILL || HeatSides.unit(kind) != null;
+        return reservoir() || kind.mover() || kind == Kind.STEAM_TURBINE || kind.primeMover() || kind == Kind.EJECTOR || kind == Kind.FLARE_STACK || kind == Kind.BATCH_STILL || kind.chimney() || HeatSides.unit(kind) != null;
     }
 
     /** A vessel's skirt; a designed shape's supports are its own parts. */
@@ -1145,7 +1166,7 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
         for (int i = fixed; i < all.size(); i++) {
             var box = reach(all.get(i));
             for (int j = 0; j < i; j++)
-                if (overlap(box, reach(all.get(j))) || all.get(i).crowds(all.get(j)))
+                if (overlap(box, reach(all.get(j))))
                     out.add(new Clash(i - fixed, j >= fixed ? j - fixed : switch (all.get(j).role()) {
                         case VAPOUR_OUTLET -> Clash.VAPOUR;
                         case BOOT_DRAIN -> Clash.BOOT;

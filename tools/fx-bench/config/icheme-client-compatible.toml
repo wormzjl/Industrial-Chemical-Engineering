@@ -1,0 +1,7 @@
+# Effects bench client config (batch 2026-11-10-custom-shader-system, tools/fx-bench/): copied to run/mcp-client/config/icheme-client.toml for one run.
+# The other sections keep their defaults (NeoForge adds them).
+[effects]
+	mode = "COMPATIBLE"
+	pbr_textures = true
+	heat_haze = false
+	dh_silhouettes = true

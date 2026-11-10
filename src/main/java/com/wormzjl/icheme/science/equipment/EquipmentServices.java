@@ -202,6 +202,16 @@ public final class EquipmentServices {
                             3,
                             Material.SERVICE_CASE);
             }
+            case STEEL_STACK, BRICK_CHIMNEY -> {
+                // A chimney's junction box set into its foot's side (batch 2026-11-10-chimney, as the flare's): a steel stack's
+                // plinth, a brick chimney's shell; its cover flush, its gland on the bottom block's centre, inside the frame.
+                var body = Set.of(kind == EquipmentShape.Kind.STEEL_STACK ? Material.SUPPORT : Material.CONCRETE);
+                var foot = surface.bounds(body);
+                double y = .5, z = (foot[2] + foot[5]) / 2;
+                double face = Math.min(mountingPoint(surface, 0, new double[] {0, y, z}, 1, body, z)[0], north.sizeX() - .06);
+                low = new double[] {face - .12, y - .14, z - .14};
+                high = new double[] {face, y + .14, z + .14};
+            }
             case FLARE_STACK -> {
                 // A flare's junction box set into its plinth's side at the foot (batch 2026-11-09-flare-stack; owner 2026-11-09:
                 // on the bottom, blended with the model): its cover flush with the plinth, its gland on the bottom block's

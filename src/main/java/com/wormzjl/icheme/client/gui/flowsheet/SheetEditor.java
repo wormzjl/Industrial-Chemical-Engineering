@@ -209,6 +209,12 @@ public final class SheetEditor {
             }
             case "mixer" -> p.addProperty("inlets", 2);
             case "flare" -> p.addProperty("tip", com.wormzjl.icheme.science.flowsheet.unit.FlareUnit.TIP);
+            case "chimney" -> {
+                p.addProperty("form", "steel");
+                p.addProperty("diameter", com.wormzjl.icheme.science.flowsheet.unit.ChimneyUnit.DIAMETER);
+                p.addProperty("height", com.wormzjl.icheme.science.flowsheet.unit.ChimneyUnit.HEIGHT);
+                p.addProperty("nearby", com.wormzjl.icheme.science.flowsheet.unit.ChimneyUnit.NEARBY);
+            }
             case "batch_still" -> {
                 p.addProperty("volume", com.wormzjl.icheme.science.flowsheet.unit.BatchStillUnit.VOLUME);
                 p.addProperty("heater", "solid");
@@ -276,6 +282,14 @@ public final class SheetEditor {
                 p.addProperty("rise", 2e5);
             }
             case "steam_turbine" -> p.addProperty("exhaust", TurbineUnit.EXHAUST_PRESSURE);
+            // A combustion engine or a gas turbine (batch 2026-11-10-prime-movers): its model sized on its fuel.
+            case "combustion_engine", "gas_turbine" -> p.addProperty("model", 0);
+            // A vacuum pump (batch 2026-11-10-vacuum-pump): a one-stage liquid ring, its model sized, to a vent header.
+            case "vacuum_pump" -> {
+                p.addProperty("pump", com.wormzjl.icheme.science.machine.VacuumPump.Type.LIQUID_RING_ONE_STAGE.key());
+                p.addProperty("model", 0);
+                p.addProperty("pressure", com.wormzjl.icheme.science.flowsheet.unit.VacuumPumpUnit.DISCHARGE_PRESSURE);
+            }
             case "ejector" -> {
                 p.addProperty("discharge", EjectorUnit.DISCHARGE_PRESSURE);
                 p.addProperty("motive", EjectorUnit.MOTIVE_PRESSURE);

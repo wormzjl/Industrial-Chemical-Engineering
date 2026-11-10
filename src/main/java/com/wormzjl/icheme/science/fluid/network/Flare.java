@@ -17,6 +17,8 @@ import com.wormzjl.icheme.science.math.DeterministicMath;
  * <li>One size, the tip diameter (owner X3): its rated heat release is methane at its stable velocity through the tip, and
  * its stack is tall enough that the flame's radiation at the base stays at {@link #ALLOWED_FLUX} (API 521 simple method,
  * radiated fraction {@link #RADIATED}, flame length {@link #flameLength}).</li>
+ * <li>Its flame's presentation (batch 2026-11-10-custom-shader-system, W3): a soot index from the gas's carbon-to-hydrogen
+ * ratio and the load ({@link #soot}), and the exit velocity at the tip ({@link #exitVelocity}).</li>
  * </ul>
  */
 public final class Flare {
@@ -100,6 +102,49 @@ public final class Flare {
     /** The tip's flow area, m². */
     public static double tipArea(double tip) {
         return Math.PI * tip * tip / 4;
+    }
+
+    /** Atomic masses of carbon and hydrogen, kg/mol. */
+    static final double CARBON = .012011, HYDROGEN = .001008;
+    /**
+     * The soot index's rule (batch 2026-11-10-custom-shader-system, owner X7 A; a game-level rule, not a smoke-point model):
+     * no soot up to a carbon-to-hydrogen mass ratio of {@link #SOOT_FROM} (methane 2.98), all of it at {@link #SOOT_FROM}
+     * plus {@link #SOOT_SPAN} (ethylene 5.96, benzene 11.9), and the full index from {@link #SOOT_LOAD} of the rated heat.
+     */
+    public static final double SOOT_FROM = 3.2, SOOT_SPAN = 2.8, SOOT_LOAD = 1 / 1.25;
+
+    /**
+     * The flared gas's sooting carbon over its hydrogen, by mass, of {@code moles} (any amounts) of components of
+     * {@code formulas}: a molecule's carbon less its oxygen atoms counts (carbon bound to oxygen, as in CO, CO2 or an
+     * alcohol's, burns without soot). 0 for no sooting carbon; +Infinity for sooting carbon without hydrogen.
+     */
+    public static double carbonToHydrogen(double[] moles, double[][] formulas) {
+        double carbon = 0, hydrogen = 0;
+        for (int k = 0; k < moles.length; k++) {
+            double m = Math.max(0, moles[k]);
+            if (m == 0) continue;
+            var f = formulas[k];
+            carbon += m * Math.max(0, f[0] - f[3]);
+            hydrogen += m * f[1];
+        }
+        if (!(carbon > 0)) return 0;
+        return hydrogen > 0 ? carbon * CARBON / (hydrogen * HYDROGEN) : Double.POSITIVE_INFINITY;
+    }
+
+    /**
+     * The flame's soot index, 0 to 1 (owner X7 A): clamp((C/H − 3.2) / 2.8, 0, 1) × clamp(1.25 × load, 0, 1), C/H the gas's
+     * {@link #carbonToHydrogen} and {@code load} its heat released over its rating. Methane gives none; ethane slight (0.28
+     * at full load), propane 0.45, olefins and aromatics all of it.
+     */
+    public static double soot(double[] moles, double[][] formulas, double load) {
+        double ratio = carbonToHydrogen(moles, formulas);
+        double rich = ratio == Double.POSITIVE_INFINITY ? 1 : Math.clamp((ratio - SOOT_FROM) / SOOT_SPAN, 0, 1);
+        return rich * Math.clamp(load / SOOT_LOAD, 0, 1);
+    }
+
+    /** The gas's exit velocity at a tip {@code tip} m across, m/s: {@code massFlow} kg/s at {@code density} kg/m³ over the tip's area. */
+    public static double exitVelocity(double massFlow, double density, double tip) {
+        return density > 0 && tip > 0 ? Math.max(0, massFlow) / density / tipArea(tip) : 0;
     }
 
     /** The rated heat release of a tip {@code tip} m across, W: methane at its stable velocity. */

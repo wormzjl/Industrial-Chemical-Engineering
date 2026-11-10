@@ -95,7 +95,9 @@ public final class TurbineSizing {
         if (!load.flows()) return Selection.Choice.none();
         double exhaust = exhaust(load.exhaust());
         var sizes = new ArrayList<Size>();
-        for (double power : MachineDuty.POWERS) for (var steam : MachineDuty.Steam.values()) sizes.add(new Size(power, steam, exhaust));
+        var powers = new ArrayList<>(MachineDuty.POWERS.stream().filter(p -> p < MachineDuty.TURBINE_POWERS.getFirst()).toList());
+        powers.addAll(MachineDuty.TURBINE_POWERS);
+        for (double power : powers) for (var steam : MachineDuty.Steam.values()) sizes.add(new Size(power, steam, exhaust));
         return Selection.smallest(Selection.spareFirst(List.copyOf(sizes), Size::power, Motor.SPARE * load.power()), size -> rate(load, size));
     }
 }

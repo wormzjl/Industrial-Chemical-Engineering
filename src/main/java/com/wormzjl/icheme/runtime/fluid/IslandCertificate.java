@@ -350,7 +350,7 @@ public final class IslandCertificate {
         for(var node:graph.reservoirs()) {
             d.number(node.id());d.text(node.kind().name());d.real(node.elevation());
             // A junction's volume is a numerical placeholder that a solve may move; a vessel's is its identity.
-            if(!node.junction()){d.real(node.inventory().volume());d.text(node.inventory().geometry().toString());d.integer(node.inventory().open()?1:0);}
+            if(!node.junction()){d.real(node.inventory().volume());d.text(node.inventory().geometry().toString());d.integer(node.inventory().open()?1:0);d.integer(node.inventory().rigid()?1:0);}
             var tower=node.inventory().tower();d.text(tower==null?"":tower.toString());
             // A kettle's pool's facts and slice inputs (W7): a replay holds them fixed.
             var pool=node.inventory().pool();
@@ -373,6 +373,8 @@ public final class IslandCertificate {
                 case FlowControl.Turbine turbine->{d.text("turbine");d.real(turbine.design().ratedPower());d.real(turbine.design().efficiency());d.real(turbine.massTarget());}
                 case FlowControl.Pump pump->{d.text("pump");d.real(pump.requestedVolumeFlow());d.real(pump.maximumAddedPressure());d.integer(pump.enabled()?1:0);}
                 case FlowControl.Compressor compressor->{d.text("compressor");d.real(compressor.requestedVolumeFlow());d.real(compressor.maximumPressureRatio());d.integer(compressor.enabled()?1:0);}
+                case FlowControl.Ejector ejector->{d.text("ejector");d.real(ejector.design().suction());d.real(ejector.motivePressure());d.real(ejector.delivered());}
+                case FlowControl.Machine machine when machine.law() instanceof com.wormzjl.icheme.science.machine.VacuumPump vacuum->{d.text("vacuum_pump");d.text(vacuum.type().name());d.real(vacuum.capacity());d.real(vacuum.ratedSpeed());d.real(machine.speed());d.integer(machine.enabled()?1:0);}
                 case FlowControl.Machine machine->{var law=machine.law();d.text("machine");d.integer(law.liquid()?1:0);d.real(law.ratedFlow());d.real(law.ratedHead());d.real(law.efficiency());if(law instanceof com.wormzjl.icheme.science.machine.CentrifugalPump pump)d.real(pump.ratedSpeed());d.real(machine.speed());d.integer(machine.enabled()?1:0);}
                 case FlowControl.PressureValve valve->{d.text("valve");d.real(valve.targetPressure());}
                 case FlowControl.ControlValve valve->{d.text("control_valve");d.text(valve.source().name());d.real(valve.target());d.text(String.valueOf(valve.sensor()));d.number(valve.revision());d.real(valve.targetPressure());d.real(valve.massTarget());d.real(valve.volumeTarget());}
@@ -389,6 +391,7 @@ public final class IslandCertificate {
                     // Fans without power (W5): a held fan limit is part of the law, named only below 1 (older signatures stand).
                     if(cooled.fanLimit()<1)d.real(cooled.fanLimit());}
                 case com.wormzjl.icheme.science.fluid.network.ConvectionCoil coil->{d.integer(4);d.real(coil.conductance());d.number(coil.radiant());d.real(coil.flue());}
+                case com.wormzjl.icheme.science.fluid.network.ExhaustCoil coil->{d.integer(5);d.real(coil.gasInlet());d.real(coil.flue());}
                 case com.wormzjl.icheme.science.fluid.network.FiredCoil coil->{d.integer(2);d.real(coil.setTemperature());d.number(coil.partner());d.real(coil.duty());d.real(coil.firing());
                     // The burners short of fuel or air (batch 2026-11-09-furnace-fuel-power): named only below 1 (older signatures stand).
                     if(coil.limit()<1)d.real(coil.limit());}

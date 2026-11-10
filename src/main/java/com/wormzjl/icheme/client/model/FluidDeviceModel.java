@@ -68,7 +68,7 @@ public final class FluidDeviceModel implements IDynamicBakedModel {
      * The cache key; {@code painted}: a bit per paint a laid line has ({@link Paint#BODY}, its pipe; {@link Paint#STRUCTURE},
      * its flanges), whose colours the block tint gives, so one bake serves every colour.
      */
-    private record Look(SightGlassGeometry.Key geometry,boolean sightGlass,FluidDeviceBlock.Shutoff shutoff,boolean pressureValve,boolean filter,TopologyCompiler.Kind mover,int painted){}
+    private record Look(SightGlassGeometry.Key geometry,boolean sightGlass,FluidDeviceBlock.Shutoff shutoff,boolean pressureValve,boolean filter,TopologyCompiler.Kind mover,int painted,boolean apart){}
     private record Baked(List<BakedQuad> solid,List<BakedQuad> glass){}
     private final Map<Look,Baked> quads = new ConcurrentHashMap<>();
 
@@ -91,7 +91,8 @@ public final class FluidDeviceModel implements IDynamicBakedModel {
         var geometry=state!=null&&state.getBlock() instanceof FluidDeviceBlock?sightGlassKey(state,data):new SightGlassGeometry.Key(LineGeometry.Key.item(kind));
         var shutoff=checkAccessory?FluidDeviceBlock.Shutoff.CHECK:shutoffAccessory?FluidDeviceBlock.Shutoff.OPEN:state!=null&&FluidDeviceBlock.hasPipeValve(state)?state.getValue(FluidDeviceBlock.SHUTOFF):FluidDeviceBlock.Shutoff.NONE;
         var key = new Look(geometry,accessory||state!=null&&FluidDeviceBlock.hasSightGlass(state),shutoff,pressureAccessory||state!=null&&FluidDeviceBlock.hasPressureValve(state),state!=null&&FluidDeviceBlock.hasFilter(state),state!=null&&FluidDeviceBlock.hasMover(state)?state.getValue(FluidDeviceBlock.INLINE_MOVER).kind():moverAccessory?kind:TopologyCompiler.Kind.PIPE,
-                state!=null&&data.get(FluidDeviceBlockEntity.DRAWN) instanceof FluidDeviceBlockEntity.Drawn drawn?EquipmentShellModel.painted(drawn.paint(),drawn.secondary()):0);
+                state!=null&&data.get(FluidDeviceBlockEntity.DRAWN) instanceof FluidDeviceBlockEntity.Drawn drawn?EquipmentShellModel.painted(drawn.paint(),drawn.secondary()):0,
+                state!=null&&Boolean.TRUE.equals(data.get(FluidDeviceBlockEntity.APART)));
         var cached = quads.get(key);
         if(cached==null){if(quads.size()>=CACHE)quads.clear();cached=quads.computeIfAbsent(key,this::bake);}
         if(renderType==RenderType.translucent())return cached.glass;
@@ -104,7 +105,9 @@ public final class FluidDeviceModel implements IDynamicBakedModel {
         if(look.filter)return new Baked(quads(look,LineGeometry.filterPolygons(look.geometry.pipe(),detail)),List.of());
         if(look.pressureValve)return new Baked(quads(look,ValveGeometry.pressure(look.geometry.pipe(),pressureAccessory,detail)),List.of());
         if(look.shutoff==FluidDeviceBlock.Shutoff.CHECK)return new Baked(quads(look,ValveGeometry.check(look.geometry.pipe(),checkAccessory,detail)),List.of());
-        if(look.shutoff!=FluidDeviceBlock.Shutoff.NONE)return new Baked(quads(look,ValveGeometry.shutoff(look.geometry.pipe(),look.shutoff==FluidDeviceBlock.Shutoff.OPEN,shutoffAccessory,detail)),List.of());
+        if(look.shutoff!=FluidDeviceBlock.Shutoff.NONE)return new Baked(quads(look,ValveGeometry.shutoff(look.geometry.pipe(),look.shutoff==FluidDeviceBlock.Shutoff.OPEN,shutoffAccessory,detail,!look.apart)),List.of());
+        // A hand turning a valve (client.ValveTurns): its lever or actuator is drawn apart, turned per frame, until the block state agrees.
+        if(look.apart&&kind==TopologyCompiler.Kind.DIVERTER_VALVE)return new Baked(quads(look,LineGeometry.diverterBody(look.geometry.pipe(),detail)),List.of());
         if(!look.sightGlass)return new Baked(quads(look,LineGeometry.polygons(look.geometry.pipe(),detail)),List.of());
         var geometry=SightGlassGeometry.build(look.geometry,accessory,detail);
         return new Baked(quads(look,geometry.metal()),EquipmentShellModel.bake(geometry.glass(),sprites,false));

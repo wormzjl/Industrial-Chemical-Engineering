@@ -21,7 +21,9 @@ public final class ShaftTrain {
     public enum Drive {
         FIXED_MOTOR, VARIABLE_MOTOR, TURBINE, CREATIVE,
         /** A Create coupling (W6b, D40): {@code setPoint} is Create's |rpm|, {@code powerLimit} the power its network spares, W. */
-        CREATE
+        CREATE,
+        /** A fuelled prime mover (batch 2026-11-10-prime-movers): the turbine's internal governor on the power its fuel gave, always governed; its set speed at most its rated speed, no overspeed trip (owner P11). */
+        FUEL
     }
 
     /** How a variable-speed driver sets its speed: a set speed, or regulating its first machine's flow or discharge pressure. Saved by name. */
@@ -68,6 +70,7 @@ public final class ShaftTrain {
         public Driver atSpeed(double rpm){return new Driver(drive,ratedPower,designSpeed,poles,running,Mode.SPEED,rpm/designSpeed,powerLimit,trip,governed,powered);}
         public double setSpeed() {
             if (drive == Drive.CREATE) return setPoint;
+            if (drive == Drive.FUEL) return Math.min(1, setPoint > 0 ? setPoint : 1) * designSpeed;
             double target=drive == Drive.CREATIVE ? setPoint > 0 ? setPoint : CREATIVE_SPEED : (setPoint > 0 ? setPoint : 1) * designSpeed;
             return drive==Drive.VARIABLE_MOTOR||drive==Drive.FIXED_MOTOR?Math.min(Motor.MAXIMUM_RPM,target):target;
         }
@@ -122,6 +125,7 @@ public final class ShaftTrain {
             }
             case TURBINE -> turbine(driver, speed, measure, demand, set);
             case CREATE -> create(driver, speed, demand);
+            case FUEL -> fuel(driver, speed, measure, demand, set);
         };
     }
 
@@ -135,6 +139,20 @@ public final class ShaftTrain {
         if (!(set > 0)) return new Step(0, Trip.NONE, "NO ROTATION", 0, 0);
         double next = driver.limit() > 0 ? limited(speed, driver.limit(), demand, set) : 0;
         return new Step(next, Trip.NONE, next < set * (1 - 1e-9) ? "POWER LIMITED" : "RUNNING", 0, 0);
+    }
+
+    /**
+     * A fuelled prime mover (batch 2026-11-10-prime-movers): the governed turbine's step on the net shaft power its fuel
+     * gave ({@code available}), so its speed never passes its set speed and a load lost lowers the fuel in the same step
+     * (owner P11). Short of fuel it slows and says {@code LOW FUEL}; the engine names the cause (low fuel pressure, wrong fuel).
+     * {@code admissionAvailable}: fuel arrives, so a set at no load holds its speed on its idle fuel.
+     */
+    private static Step fuel(Driver driver, double speed, Measure measure, double demand, double set) {
+        var governed = new Driver(driver.drive(), driver.ratedPower(), driver.designSpeed(), driver.poles(), driver.running(), Mode.SPEED, driver.setPoint(), driver.powerLimit(),
+                Trip.NONE, true, driver.powered());
+        var step = turbine(governed, speed, measure, demand, set);
+        double next = Math.min(set, step.speed());
+        return new Step(next, Trip.NONE, step.status().equals("STEAM LIMITED") ? "LOW FUEL" : step.status(), step.governorPower(), 0);
     }
 
     /** A turbine (D27, readings A22, A23, A26). */

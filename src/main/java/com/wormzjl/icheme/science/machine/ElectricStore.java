@@ -103,7 +103,7 @@ public final class ElectricStore {
 
     /** A generator's efficiency, from the motor's IE3 table (build plan section 1). */
     public static double generatorEfficiency(double ratedPower, int poles) {
-        return poles == 0 || !(ratedPower > 0) ? 1 : Motor.efficiency(ratedPower, poles);
+        return poles == 0 || !(ratedPower > 0) ? 1 : Motor.generatorEfficiency(ratedPower, poles);
     }
 
     /**

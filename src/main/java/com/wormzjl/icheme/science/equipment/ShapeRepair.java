@@ -140,13 +140,19 @@ public final class ShapeRepair {
      * section 6), 1 where a design was saved before it.
      */
     public record SavedComponents(String condenser, String refluxPump, List<String> pumparoundPumps, boolean ejector, boolean kettle,
-                                  int condenserUnits, int kettleUnits, int[] coolerUnits, int trimUnits,ColumnComponents.Exchangers exchangers) {
+                                  int condenserUnits, int kettleUnits, int[] coolerUnits, int trimUnits,ColumnComponents.Exchangers exchangers,
+                                  String vacuum) {
+        /** A design saved before its vacuum (shape fields 12): a steam ejector. */
+        public SavedComponents(String condenser,String refluxPump,List<String> pumparoundPumps,boolean ejector,boolean kettle,int condenserUnits,int kettleUnits,int[] coolerUnits,int trimUnits,ColumnComponents.Exchangers exchangers) {
+            this(condenser,refluxPump,pumparoundPumps,ejector,kettle,condenserUnits,kettleUnits,coolerUnits,trimUnits,exchangers,ColumnComponents.Vacuum.EJECTOR.name());
+        }
         public SavedComponents(String condenser,String refluxPump,List<String> pumparoundPumps,boolean ejector,boolean kettle,int condenserUnits,int kettleUnits,int[] coolerUnits,int trimUnits) {
             this(condenser,refluxPump,pumparoundPumps,ejector,kettle,condenserUnits,kettleUnits,coolerUnits,trimUnits,ColumnComponents.Exchangers.STANDARD);
         }
         public SavedComponents {
             pumparoundPumps = List.copyOf(pumparoundPumps);
             coolerUnits = coolerUnits.clone();
+            Objects.requireNonNull(vacuum, "vacuum");
         }
 
         /** A design saved before its member counts. */
@@ -172,7 +178,7 @@ public final class ShapeRepair {
             for (int i = 0; i < Math.min(coolerUnits.length, pumparoundPumps.size()); i++) coolers.add(count(coolerUnits[i], "pumparound cooler " + (i + 1) + " units", repairs));
             if (coolerUnits.length > pumparoundPumps.size()) repairs.accept("cooler units (" + coolerUnits.length + " for " + pumparoundPumps.size() + " pumparounds) -> " + pumparoundPumps.size());
             int trimCount = count(trimUnits, "trim units", repairs);
-            return ColumnComponents.named(condenser, refluxPump, pumparoundPumps, ejector, kettle, new ColumnComponents.Units(condenserCount, kettleCount, coolers, trimCount)).withExchangers(exchangers);
+            return ColumnComponents.named(condenser, refluxPump, pumparoundPumps, ejector, kettle, new ColumnComponents.Units(condenserCount, kettleCount, coolers, trimCount)).withExchangers(exchangers).withVacuum(constant(ColumnComponents.Vacuum.class, vacuum, Map.of()).orElseThrow(() -> new IllegalArgumentException("no vacuum " + vacuum)));
         }
 
         private static int count(int saved, String field, java.util.function.Consumer<String> repairs) {
@@ -184,11 +190,11 @@ public final class ShapeRepair {
         @Override public boolean equals(Object o) {
             return o instanceof SavedComponents s && condenser.equals(s.condenser) && refluxPump.equals(s.refluxPump) && pumparoundPumps.equals(s.pumparoundPumps)
                     && ejector == s.ejector && kettle == s.kettle && condenserUnits == s.condenserUnits && kettleUnits == s.kettleUnits && Arrays.equals(coolerUnits, s.coolerUnits)
-                    && trimUnits == s.trimUnits;
+                    && trimUnits == s.trimUnits && vacuum.equals(s.vacuum);
         }
 
         @Override public int hashCode() {
-            return Objects.hash(condenser, refluxPump, pumparoundPumps, ejector, kettle, condenserUnits, kettleUnits, Arrays.hashCode(coolerUnits), trimUnits);
+            return Objects.hash(condenser, refluxPump, pumparoundPumps, ejector, kettle, condenserUnits, kettleUnits, Arrays.hashCode(coolerUnits), trimUnits, vacuum);
         }
     }
 

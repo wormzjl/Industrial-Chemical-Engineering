@@ -13,12 +13,13 @@ import org.jetbrains.annotations.Nullable;
  * variable drive; its electric store's share full and the seconds it lasts at the current draw (NaN for none); a turbine's
  * governor valve's name (empty for none); a gearbox's ratio as compiled (0 for another part); a turbine's steam flow,
  * kg/s, and its inlet and exhaust pressure, Pa (NaN for another part, or before the turbine's first run); a Create
- * coupling's Create side (null for another part).
+ * coupling's Create side (null for another part); a prime mover's fuel and exhaust (null for another part; batch
+ * 2026-11-10-prime-movers).
  */
 public record MachineView(long unit, ShaftNetwork.Kind kind, String status, double speed, double shaftPower, double electricPower, double energyPerTick,
                           ShaftUnit.Settings settings, ShaftTrain.Trip trip, double ratedPower, double designSpeed, int poles, boolean variable,
                           double storeShare, double storeSeconds, String governor, double ratio,
-                          double steamFlow, double inletPressure, double exhaustPressure, @Nullable Coupling coupling) {
+                          double steamFlow, double inletPressure, double exhaustPressure, @Nullable Coupling coupling, @Nullable Fuel fuel) {
     /** The longest status word and governor name a view carries. */
     public static final int MAX_TEXT = 256;
 
@@ -49,9 +50,34 @@ public record MachineView(long unit, ShaftNetwork.Kind kind, String status, doub
         }
     }
 
+    /**
+     * A prime mover's page reads (batch 2026-11-10-prime-movers), a read of its set's last fired slice: the fuel heat fired, W,
+     * and the fuel's mass flow, kg/s; the supply's pressure (NaN before its fuel has arrived) and the pressure full fuel
+     * needs, Pa; the exhaust's temperature, K, and flow, kg/s; an engine's radiator heat, W; a gas turbine's coil heat, W;
+     * the stack's temperature, K; whether it is an engine.
+     */
+    public record Fuel(double fired, double fuelFlow, double supply, double required, double exhaust, double exhaustFlow, double cooling, double coil, double stack,
+                       boolean engine) {
+        public Fuel {
+            if (!(fired >= 0) || !(fuelFlow >= 0) || !(required > 0) || !(exhaust > 0) || !(exhaustFlow >= 0) || !(cooling >= 0) || !(coil >= 0) || !(stack > 0)
+                    || !Double.isFinite(fired + fuelFlow + required + exhaust + exhaustFlow + cooling + coil + stack) || supply < 0 || Double.isInfinite(supply))
+                throw new IllegalArgumentException("Invalid prime mover view");
+        }
+    }
+
+    /** A view of a part that burns no fuel. */
+    public MachineView(long unit, ShaftNetwork.Kind kind, String status, double speed, double shaftPower, double electricPower, double energyPerTick,
+                       ShaftUnit.Settings settings, ShaftTrain.Trip trip, double ratedPower, double designSpeed, int poles, boolean variable,
+                       double storeShare, double storeSeconds, String governor, double ratio,
+                       double steamFlow, double inletPressure, double exhaustPressure, @Nullable Coupling coupling) {
+        this(unit, kind, status, speed, shaftPower, electricPower, energyPerTick, settings, trip, ratedPower, designSpeed, poles, variable, storeShare, storeSeconds, governor, ratio,
+                steamFlow, inletPressure, exhaustPressure, coupling, null);
+    }
+
     public MachineView {
         Objects.requireNonNull(kind);
         if ((coupling != null) != (kind == ShaftNetwork.Kind.CREATE_COUPLING)) throw new IllegalArgumentException("A coupling view belongs to a coupling");
+        if (fuel != null && !kind.primeMover()) throw new IllegalArgumentException("A fuel view belongs to a prime mover");
         Objects.requireNonNull(status);
         Objects.requireNonNull(settings);
         Objects.requireNonNull(trip);
@@ -82,7 +108,16 @@ public record MachineView(long unit, ShaftNetwork.Kind kind, String status, doub
         String name = governor.length() > MAX_TEXT ? governor.substring(0, MAX_TEXT) : governor;
         return new MachineView(unit, trains.kindOf(unit), status, v.speed(), v.shaftPower(), v.electricPower(), v.energyPerTick(), v.settings(), v.trip(), u.ratedPower(),
                 u.designSpeed(), u.poles(), u.kind()==ShaftNetwork.Kind.MOTOR||u.drive() == com.wormzjl.icheme.science.equipment.MachineDuty.Drive.VARIABLE, share, seconds, name, trains.ratio(unit),
-                steam == null ? Double.NaN : steam.flow(), steam == null ? Double.NaN : steam.inlet(), steam == null ? Double.NaN : steam.exhaust(), coupling(trains, unit));
+                steam == null ? Double.NaN : steam.flow(), steam == null ? Double.NaN : steam.inlet(), steam == null ? Double.NaN : steam.exhaust(), coupling(trains, unit), fuel(trains, u));
+    }
+
+    /** Prime mover {@code u}'s fuel and exhaust as its set last fired (a read), or null for another part. */
+    private static @Nullable Fuel fuel(ShaftTrains trains, ShaftUnit u) {
+        var movers = trains.primeMovers();
+        var v = movers == null || !u.kind().primeMover() ? null : movers.view(u.id());
+        if (v == null) return null;
+        return new Fuel(v.fired(), v.fuelFlow(), Double.isFinite(v.supply()) && v.supply() >= 0 ? v.supply() : Double.NaN, v.required(), v.exhaust(), v.exhaustFlow(), v.cooling(),
+                v.coilHeat(), v.stack(), u.kind() == ShaftNetwork.Kind.COMBUSTION_ENGINE);
     }
 
     /** Coupling unit {@code unit}'s Create side as the engine last held it (a read: no step, no Create call), or null for another part. */

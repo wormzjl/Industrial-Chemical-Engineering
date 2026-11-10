@@ -82,6 +82,7 @@ final class HeatPresentation {
             case BURNER->new String[]{"FUEL","FUEL"};
             case POT->new String[]{"CHARGE","DRAIN"};
             case WATER->new String[]{"WATER_INLET","WATER_OUTLET"};
+            case EXHAUST->new String[]{"FEEDWATER","STEAM"};
         };
     }
 

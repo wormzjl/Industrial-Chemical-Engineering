@@ -92,6 +92,37 @@ public final class TowerTransfer {
         return fitted;
     }
     static double referenceOutlet(FluidThermodynamics model){return contact(calibration(model),2,308.15,2,2,1).outletTemperature();}
+    /** The calibration point as a fill's result: one square metre, 2 kg/s of water from 35 °C against 2 kg/s of dry air (L/G 1). */
+    static Result reference(FluidThermodynamics model){
+        var c=contact(calibration(model),2,308.15,2,2,1);
+        return new Result(c.outletTemperature(),c.evaporation(),c.dutyWatt(),c.energyWatt(),c.airFlow(),0,0);
+    }
+    /**
+     * The air leaving a fill (batch 2026-11-10-custom-shader-system, W4): its temperature, K, its humidity, kg water per kg
+     * dry air, and that humidity over saturation's at its temperature.
+     */
+    public record Exhaust(double temperature,double humidity,double saturation) {}
+    /**
+     * The air that {@code fill} leaves (a read, no search of the fill): the ambient air ({@link CoolingTower#AIR_TEMPERATURE},
+     * {@link CoolingTower#RELATIVE_HUMIDITY}, {@link CoolingTower#PRESSURE}) gains the evaporated water, w = w_amb + E/G, and the
+     * heat the water gave the air, h = h_amb + (Q_energy − E h_liquid(0 °C))/G on the enthalpy reference the fill uses (dry air
+     * and liquid water at 0 °C); its temperature solves h(T, w). The ambient air for no air flow.
+     */
+    public static Exhaust exhaust(FluidThermodynamics model,Result fill){
+        double zero=liquid(model,ZERO),ambientW=humidity(model,CoolingTower.AIR_TEMPERATURE,CoolingTower.RELATIVE_HUMIDITY);
+        double far=enthalpy(model,zero,CoolingTower.AIR_TEMPERATURE,ambientW),g=Math.abs(fill.dryAirFlow());
+        if(!(g>NO_AIR))return new Exhaust(CoolingTower.AIR_TEMPERATURE,ambientW,CoolingTower.RELATIVE_HUMIDITY);
+        double w=ambientW+Math.max(0,fill.evaporation())/g,h=far+(fill.energyWatt()-fill.evaporation()*zero)/g,t=CoolingTower.AIR_TEMPERATURE;
+        for(int n=0;n<32;n++){
+            double step=(enthalpy(model,zero,t,w)-h)/(CP_AIR+w*CP_VAPOR);
+            t=Math.clamp(t-step,250,373);
+            if(Math.abs(step)<1e-7)break;
+        }
+        double p=model.saturationPressure(t),saturated=p<CoolingTower.PRESSURE?.621945*p/(CoolingTower.PRESSURE-p):Double.POSITIVE_INFINITY;
+        return new Exhaust(t,w,w/saturated);
+    }
+    /** Below this dry air flow, kg/s, a tower has no exhaust to speak of. */
+    public static final double NO_AIR=1e-3;
     /** Merkel's integral over a water fall of {@code fall} from {@code inlet}, in an air that gains {@code gain} J/kg per kelvin of it. */
     private static double merkel(Calibration fit,double inlet,double fall,double gain) {
         double total=0;

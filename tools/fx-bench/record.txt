@@ -1,0 +1,10 @@
+# Effects recording shots (FxRecorder): name x y z yaw pitch seconds fps settle. Yaw 0 faces south (+z), 90 west, -90 east.
+# The bench scene (scene.txt): stills z 0, drums z 10..34, flares z 46 (tips about y -30), heaters z 58, induced towers z 74, natural towers x -56 and 56 at z 20.
+overview 0.5 -40 -30 0 0 4 10 1
+flares 3.5 -26 16 0 -22 4 10 2
+flare-tip 3.5 -29 38 0 -12 4 10 2
+heater-stacks 62 -34 52 70 -12 4 10 2
+induced-towers -6 -40 40 0 -28 4 10 2
+natural-tower -10 -20 -95 -32 -8 4 10 2
+stills -0.5 -57.4 -6 0 12 4 10 2
+drum-wiring -3.5 -56 5 0 2 1 4 2

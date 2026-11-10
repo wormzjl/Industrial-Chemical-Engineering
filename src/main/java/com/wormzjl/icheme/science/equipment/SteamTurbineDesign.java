@@ -23,10 +23,21 @@ import java.util.List;
  * the trip-and-throttle valve from the side (+x), on the cell row nearest the steam chest's axis that its stand reaches.
  * Nozzles: STEAM into the trip-and-throttle valve (0.15 Dc, 0.05 m at least) and EXHAUST up. The back-pressure and
  * condensing generator sets saved before rebuild as this kind (their moved nozzles approved by the owner).
+ *
+ * <p>Above one casing's 45 MW (batch 2026-11-10-prime-movers, owner P12 and the owner's setting "HP=HP+MP+LP, MP=MP+LP,
+ * LP=LP") the unit runs to 300 MW, one turbine named by its inlet class that expands to its exhaust, drawn as tandem
+ * sections on one shaft ({@link #sections}): the front casing above (an HP casing for HP or VHP steam, an MP casing for MP
+ * steam), then an MP casing where HP steam expands below the MP class, then an LP casing where the exhaust lies below the
+ * LP header, double-flow above {@link #DOUBLE_FLOW}. A crossover runs from the front casing's exhaust branch over the
+ * sections; the exhaust rises from the last one. The physics is the unit's, unchanged: the sections are its drawing.
  */
 final class SteamTurbineDesign extends UnitDesign {
-    /** Rated powers, kW (5 Dc² MW reaches 45 MW at 3 m). */
-    static final double MIN_POWER = 55, MAX_POWER = 45000;
+    /** Rated powers, kW: one casing to 45 MW (5 Dc² MW at 3 m), tandem sections above it to 300 MW (owner P12). */
+    static final double MIN_POWER = 55, SINGLE_CASING = 45000, MAX_POWER = MachineDuty.MAX_TURBINE;
+    /** An LP section above this power is double-flow, kW: a single flow's last stage passes about 100 MW at 3,000 rpm (game level). */
+    static final double DOUBLE_FLOW = 100000;
+    /** An LP section's hood across, in Dc: a single flow's, a double flow's (owner review S1: visibly wider than the MP casing). */
+    static final double LP_WIDTH = 1.3, LP_DOUBLE_WIDTH = 1.7;
     /** A turbine saved before its design point: its inlet class and its exhaust, kPa (a back-pressure set into the LP header; a condensing set's 10 kPa). */
     static final MachineDuty.Steam DEFAULT_STEAM = MachineDuty.Steam.HP;
     static final double DEFAULT_EXHAUST = 450, CONDENSING_EXHAUST = 10;
@@ -96,7 +107,7 @@ final class SteamTurbineDesign extends UnitDesign {
     @Override
     public MachineDuty step(MachineDuty duty, String setting, int steps) {
         return switch (setting) {
-            case "power" -> MachineDuty.turbine(MachineDuty.step(MachineDuty.POWERS.stream().filter(p -> p >= MIN_POWER && p <= MAX_POWER).toList(), duty.power(), steps),
+            case "power" -> MachineDuty.turbine(MachineDuty.step(MachineDuty.TURBINE_POWERS, duty.power(), steps),
                     duty.steam(), duty.exhaust());
             case "exhaust" -> MachineDuty.turbine(duty.power(), duty.steam(),
                     MachineDuty.step(MachineDuty.EXHAUSTS.stream().filter(e -> e <= duty.steam().pressure / 2).toList(), duty.exhaust(), steps));
@@ -112,6 +123,51 @@ final class SteamTurbineDesign extends UnitDesign {
     /** The stages: the drop at {@link #STAGE_DROP} each, 1 (an API 611 single-stage look) to 12. */
     static int stages(MachineDuty duty) {
         return (int) Math.max(1, Math.min(12, Math.round(drop(duty) / STAGE_DROP)));
+    }
+
+    /** A section behind the front casing of a unit above one casing. */
+    enum Section {
+        MP, LP, LP_DOUBLE;
+
+        boolean lp() {
+            return this != MP;
+        }
+
+        /** Its casing's length, in Dc. */
+        double length() {
+            return switch (this) {
+                case MP -> 1;
+                case LP -> 1.2;
+                case LP_DOUBLE -> 2;
+            };
+        }
+
+        /** Its casing's top over the shaft, in Dc. */
+        double top() {
+            return lp() ? width() / 2 : .45;
+        }
+
+        /** Its casing's width across, in Dc. */
+        double width() {
+            return switch (this) {
+                case MP -> .9;
+                case LP -> LP_WIDTH;
+                case LP_DOUBLE -> LP_DOUBLE_WIDTH;
+            };
+        }
+    }
+
+    /**
+     * The sections behind the front casing (owner's setting "HP=HP+MP+LP, MP=MP+LP, LP=LP"): none to one casing's power; an MP
+     * casing where HP or VHP steam expands below the MP class; an LP casing where the exhaust lies below the LP header (an
+     * exhaust into it or above leaves the LP section out), double-flow above {@link #DOUBLE_FLOW}.
+     */
+    static List<Section> sections(MachineDuty duty) {
+        if (!(duty.power() > SINGLE_CASING)) return List.of();
+        var out = new java.util.ArrayList<Section>();
+        if (duty.steam() != MachineDuty.Steam.MP && duty.exhaust() < MachineDuty.Steam.MP.pressure) out.add(Section.MP);
+        if (duty.exhaust() < DEFAULT_EXHAUST) out.add(duty.power() > DOUBLE_FLOW ? Section.LP_DOUBLE : Section.LP);
+        return List.copyOf(out);
     }
 
     @Override
@@ -153,11 +209,21 @@ final class SteamTurbineDesign extends UnitDesign {
         double wb = .5 * d + .15, wp = wb + .12;
         // Across x: the shaft on a cell centre, the plinth's and the turbine's left side in the first cell; the
         // trip-and-throttle valve's handwheel out of the exhaust's column of cells (a small turbine's exhaust rises past it).
-        double a = Math.ceil(Math.max(wp + .02, t.leftReach()) - .5) + .5, xv = a + Math.max(t.valveOffset(), .52 + t.handwheel() / 2);
+        var sections = sections(duty);
+        double lpHalf = sections.stream().filter(Section::lp).mapToDouble(Section::width).max().orElse(0) * d / 2;
+        double a = Math.ceil(Math.max(Math.max(wp + .02, t.leftReach()), lpHalf + .02) - .5) + .5, xv = a + Math.max(t.valveOffset(), .52 + t.handwheel() / 2);
         // Along z: the exhaust's centre line on a cell centre, the plinth's front in the first cell; the coupling face on
         // the block face behind the rear pedestal.
         double lead = Math.max(.3, t.frontReach());
-        double zE = Math.ceil(lead + t.exhaust - .5 - 1e-9) + .5, z0 = zE - t.exhaust, face = Math.ceil(z0 + t.length() + .2 + rs - 1e-9);
+        double zE = Math.ceil(lead + t.exhaust - .5 - 1e-9) + .5, z0 = zE - t.exhaust;
+        // Behind the front casing, the sections and their pedestals (none to one casing's power); the coupling behind the last.
+        double back = z0 + t.length();
+        double[] start = new double[sections.size()];
+        for (int k = 0; k < sections.size(); k++) {
+            start[k] = back + .1 * d;
+            back = start[k] + sections.get(k).length() * d + .08 * d + .03 + .25 * d + .05;
+        }
+        double face = Math.ceil(back + .2 + rs - 1e-9);
         // The trip-and-throttle valve's inlet on the cell row nearest the chest's axis that its stand reaches; its stand
         // on the base frame, the plinth or table, or the ground.
         double stand = xv < a + wb ? base : xv < a + wp ? floor : 0, yc = base + t.chestAxis();
@@ -208,7 +274,56 @@ final class SteamTurbineDesign extends UnitDesign {
         // A reducer from the fixed valve flange to the connected pipe. On a short inlet it replaces most of the
         // straight hub, retaining the flange face and 30 mm of neck rather than cutting a large pipe off at the valve.
         u.nozzleRoots.put(u.nozzles.size() - 1, new ProcessUnit.NozzleRoot(od / 2, .4, .03, Material.PIPE));
-        u.nozzles.add(new Nozzle(Role.EXHAUST, new double[]{a, top - .01, zE}, 1, 1, Math.ceil(top + ProcessUnit.NECK) - top + .01, oe, 0));
+        if (sections.isEmpty()) {
+            u.nozzles.add(new Nozzle(Role.EXHAUST, new double[]{a, top - .01, zE}, 1, 1, Math.ceil(top + ProcessUnit.NECK) - top + .01, oe, 0));
+            u.nozzleRoots.put(u.nozzles.size() - 1, new ProcessUnit.NozzleRoot(oe / 2, .4, .03, Material.PIPE));
+            return;
+        }
+        // The tandem sections (owner P12): each casing on the shaft with its pedestal behind it; the crossover from the front
+        // casing's exhaust flange along the top into each; the exhaust up from the last casing's back end.
+        double rc = oe / 2, yo = top + rc + .05;
+        m.prism(up, rc, top, yo + rc, ProcessUnit.sides(oe), Material.PIPE);
+        u.solids.add(ProcessUnit.Solid.rod(new double[]{a, 0, zE}, 1, top, yo + rc, rc, 0));
+        var along = Frame.of(new double[]{a, yo, 0}, 2, 1);
+        var axis = Frame.of(new double[]{a, shaft, 0}, 2, 1);
+        double last = zE;
+        for (int k = 0; k < sections.size(); k++) {
+            var section = sections.get(k);
+            double z1 = start[k], z2 = z1 + section.length() * d, casingTop = shaft + section.top() * d;
+            if (section.lp()) {
+                double half = section.width() * d / 2;
+                u.box(new double[]{a - half, base, z1}, new double[]{a + half, shaft, z2}, Material.MACHINE, true);
+                m.prism(axis, half, z1, z2, ProcessUnit.sides(2 * half), Material.MACHINE);
+                u.solids.add(ProcessUnit.Solid.rod(new double[]{a, shaft, 0}, 2, z1, z2, half, 0));
+                // A double-flow casing's two exhaust hoods either side of its centre ring.
+                if (section == Section.LP_DOUBLE)
+                    m.hoop(axis, half, half + .04 * d, (z1 + z2) / 2 - .05 * d, (z1 + z2) / 2 + .05 * d, ProcessUnit.sides(2 * half), Material.CLADDING);
+            } else {
+                double r = section.top() * d;
+                m.prism(axis, r, z1, z2, ProcessUnit.sides(2 * r), Material.CLADDING);
+                u.solids.add(ProcessUnit.Solid.rod(new double[]{a, shaft, 0}, 2, z1, z2, r, 0));
+                u.box(new double[]{a - .3 * d, base, z1 + .1 * d}, new double[]{a + .3 * d, shaft, z2 - .1 * d}, Material.MACHINE, true);
+            }
+            // Its pedestal behind it.
+            double px = Math.max(.15, .25 * d), p0 = z2 + .08 * d + .03, p1 = p0 + .25 * d + .05;
+            u.box(new double[]{a - px, base, p0}, new double[]{a + px, shaft + .15 * d, p1}, Material.MACHINE, true);
+            // The crossover's drop into it, at a third of its length.
+            double zd = z1 + section.length() * d / 3;
+            m.prism(Frame.of(new double[]{a, 0, zd}, 1, 1), rc, casingTop - .05, yo, ProcessUnit.sides(oe), Material.PIPE);
+            u.solids.add(ProcessUnit.Solid.rod(new double[]{a, 0, zd}, 1, casingTop - .05, yo, rc, 0));
+            last = zd;
+        }
+        m.prism(along, rc, zE - rc, last + rc, ProcessUnit.sides(oe), Material.PIPE);
+        u.solids.add(ProcessUnit.Solid.rod(new double[]{a, yo, 0}, 2, zE - rc, last + rc, rc, 0));
+        // The exhaust up from the last casing's back end, on a cell centre.
+        var end = sections.getLast();
+        double zLast = start[sections.size() - 1] + end.length() * d, zx = Math.floor(zLast - .3) + .5, yx = shaft + end.top() * d, rx = PipeSizes.flange(oe) / 2;
+        var rise = Frame.of(new double[]{a, 0, zx}, 1, 1);
+        m.prism(rise, rc, yx - .1, yx + .15, ProcessUnit.sides(oe), Material.PIPE);
+        m.cylinder(rise, rx, yx + .15, yx + .15 + tf, ProcessUnit.sides(2 * rx), Material.FLANGE);
+        double xTop = yx + .15 + tf;
+        u.solids.add(ProcessUnit.Solid.rod(new double[]{a, 0, zx}, 1, yx - .1, xTop, rx, 0));
+        u.nozzles.add(new Nozzle(Role.EXHAUST, new double[]{a, xTop - .01, zx}, 1, 1, Math.ceil(xTop + ProcessUnit.NECK) - xTop + .01, oe, 0));
         u.nozzleRoots.put(u.nozzles.size() - 1, new ProcessUnit.NozzleRoot(oe / 2, .4, .03, Material.PIPE));
     }
 }

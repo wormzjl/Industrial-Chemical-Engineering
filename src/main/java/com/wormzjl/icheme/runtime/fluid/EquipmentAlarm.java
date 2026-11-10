@@ -15,6 +15,8 @@ public enum EquipmentAlarm {
     FLAME_OUT("FLAME OUT"), OVER_CAPACITY("OVER CAPACITY"), BLOCKED("BLOCKED"),
     // A batch still's (batch 2026-11-09-batch-distiller, W3).
     OVERHEAT("OVERHEAT"), BOIL_DRY("BOIL DRY"), FLOODING("FLOODING"), COOLING_LIMITED("COOLING LIMITED"),
+    // A chimney's (batch 2026-11-10-chimney): nothing drawn while gas stands at its inlet.
+    NO_DRAFT("NO DRAFT"),
     // A running column's (batch 2026-11-10-column-failure-modes, W6.1).
     LOW_FEED("LOW FEED"), LOW_STEAM("LOW STEAM"), HEATING_LIMITED("HEATING LIMITED"), OFF_TABLE("OFF TABLE"), UPSET("UPSET");
 
@@ -28,6 +30,8 @@ public enum EquipmentAlarm {
     public static final List<EquipmentAlarm> HEATER = List.of(NO_POWER, NO_FUEL, LOW_FUEL, NOT_COMBUSTIBLE), FLARE = List.of(FLAME_OUT, OVER_CAPACITY, BLOCKED);
     /** A batch still's alarms (batch 2026-11-09-batch-distiller): NO POWER for an electric one, NO FUEL for a fired one. */
     public static final List<EquipmentAlarm> STILL = List.of(NO_POWER, NO_FUEL, OVERHEAT, BOIL_DRY, FLOODING, COOLING_LIMITED);
+    /** A chimney's alarms (batch 2026-11-10-chimney): ABOVE RATING reads as OVER CAPACITY. */
+    public static final List<EquipmentAlarm> CHIMNEY = List.of(OVER_CAPACITY, NO_DRAFT);
     /** A running column's alarms (batch 2026-11-10-column-failure-modes, W6.1). */
     public static final List<EquipmentAlarm> COLUMN = List.of(UPSET, OFF_TABLE, LOW_FEED, LOW_STEAM, BLOCKED, COOLING_LIMITED, HEATING_LIMITED, FLOODING, NO_POWER);
 

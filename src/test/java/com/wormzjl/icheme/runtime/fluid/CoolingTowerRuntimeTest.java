@@ -14,6 +14,17 @@ import static org.junit.jupiter.api.Assertions.*;
 class CoolingTowerRuntimeTest {
     private final com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics model=FluidTestSupport.networkModel();
 
+    /**
+     * Batch 2026-11-10-custom-shader-system (fx-noise): a plume leaves only with air rising through the fill. A reversed
+     * draught (air drawn down the stack, negative flow) and still air publish no plume; a rising draught keeps its flow.
+     */
+    @Test void aReversedDraughtPublishesNoPlume(){
+        assertEquals(0,FluidWorldAuthority.plumeAir(-250),"reversed: air leaves by the inlets, not the stack");
+        assertEquals(0,FluidWorldAuthority.plumeAir(TowerTransfer.NO_AIR/2),"still air");
+        assertEquals(0,FluidWorldAuthority.plumeAir(Double.NaN));
+        assertEquals(250,FluidWorldAuthority.plumeAir(250),1e-12);
+    }
+
     private PassiveNetwork basin(){
         var tower=CoolingTower.induced(8,2,2,1);
         var amounts=new double[model.componentCount()];amounts[amounts.length-1]=1;

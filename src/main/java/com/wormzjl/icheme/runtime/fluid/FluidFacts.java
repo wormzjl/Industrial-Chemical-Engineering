@@ -58,12 +58,19 @@ final class FluidFacts {
      *  frame (the facing and shape of the cell it lies in), so that the registry can place their blocks again.
      *  16 (batch 2026-11-09-batch-distiller, W3 and W4): the world's batch stills (after the build facts); the control
      *  valve source {@code STILL}; the {@code diverter} control.
-     *  17 (batch 2026-11-10-column-failure-modes, W4): a column unit's utility sides, its reboiler's and each pumparound
-     *  cooler's; a kettle's tube side in the {@code COLUMN} mode.
-     *  18 (batch 2026-11-10-column-failure-modes, W5): a column unit's powered members, its air condenser's fan sides and
-     *  its pumps' movers. */
-    static final int SCHEMA=18;
-    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 18. */
+     *  17 (batch 2026-11-10-steam-ejector-flow): the device kind {@code EJECTOR} and the {@code ejector} control, its suction's bore.
+     *  18 (batch 2026-11-10-rigid-reservoir): a vessel's {@code rigid}, after its contents: whether its wall has once carried
+     *  them; absent means a bag (decision D54).
+     *  19 (batch 2026-11-10-vacuum-pump): the {@code machine} control's law {@code vacuum_pump}: its capacity (m³/s), rated
+     *  speed (rpm) and type by name, after the four fields every law carries.
+     *  20 (batch 2026-11-10-prime-movers): the shaft unit kinds {@code COMBUSTION_ENGINE} and {@code GAS_TURBINE} (each naming its
+     *  fuel void), the control valve source {@code ENGINE} (a prime mover's fuel valve), the heat unit {@code PRIME_MOVER} and
+     *  its side {@code EXHAUST} (a gas turbine's steam coil), generators past 20 MW and of 12 poles.
+     *  21 (batch 2026-11-10-column-failure-modes, W4 and W5): a column unit's utility sides, its reboiler's and each
+     *  pumparound cooler's; a kettle's tube side in the {@code COLUMN} mode; a column unit's powered members, its air
+     *  condenser's fan sides and its pumps' movers. */
+    static final int SCHEMA=21;
+    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 21. */
     private static final Map<Class<?>,Map<String,String>> ALIASES=Map.of();
     private static final int MAXIMUM_FIELDS=256,MAXIMUM_ITEMS=1<<22,MAXIMUM_TEXTS=1<<20,MAXIMUM_ARRAY=4096,MAXIMUM_CHANNELS=1<<20;
     /** The cadence an island rebuilt from facts starts at (ticks): the shortest the clock allows, as after a merge. */
@@ -423,7 +430,7 @@ final class FluidFacts {
     /**
      * A column unit (schema 6, batch 2026-10-28-column-operation): its identity, origin, run switch, setpoints, stations
      * (each a port by name, which one, its port device, its valve, its account and its solids) and totals; its further
-     * condenser water sides (schema 8), its air condenser surface (schema 9) and its utility sides (schema 17).
+     * condenser water sides (schema 8), its air condenser surface (schema 9) and its utility sides (schema 21).
      */
     private static void column(Fields f,ColumnUnit u) {
         var s=u.setpoints();var t=u.totals();
@@ -436,9 +443,9 @@ final class FluidFacts {
                 .list(u.condensers().isEmpty()?List.<Long>of():u.condensers().subList(1,u.condensers().size()),(q,side)->q.count(side))
                 // Schema 9 (U2): the air condenser's bare tube, m².
                 .f64(u.airSurface())
-                // Schema 17 (W4): the utility sides of the reboiler and of each pumparound's cooler.
+                // Schema 21 (W4): the utility sides of the reboiler and of each pumparound's cooler.
                 .record(q->q.list(u.utilities().reboiler(),(p,side)->p.count(side)).list(u.utilities().pumparounds(),(p,sides)->p.list(sides,(e,side)->e.count(side))))
-                // Schema 18 (W5): the powered members, the fan sides, the reflux pump's movers and each pumparound pump's.
+                // Schema 21 (W5): the powered members, the fan sides, the reflux pump's movers and each pumparound pump's.
                 .record(q->q.list(u.members().fans(),(p,m)->p.count(m)).list(u.members().reflux(),(p,m)->p.count(m)).list(u.members().pumparounds(),(p,ms)->p.list(ms,(e,m)->e.count(m))));
     }
     private static ColumnUnit column(Record f) {
@@ -459,10 +466,10 @@ final class FluidFacts {
         if(condenser==0&&!further.isEmpty())throw f.invalid("column condenser sides");
         // A unit written before schema 9 has no air condenser surface: its air takes any duty, as before.
         double air=f.f64(0);
-        // A unit written before schema 17 has no utility sides: its reboiler and pumparound duties stay free until its next Start.
+        // A unit written before schema 21 has no utility sides: its reboiler and pumparound duties stay free until its next Start.
         var utilities=f.record(ColumnUnit.Utilities.NONE,q->{var reboiler=q.list(List.<Long>of(),p->p.count(0));var pumparounds=q.list(List.<List<Long>>of(),p->p.list(List.<Long>of(),s->s.count(0)));
             return valid(q,"column utilities",()->new ColumnUnit.Utilities(reboiler,pumparounds));});
-        // A unit written before schema 18 has no members: none draws power until its next Start.
+        // A unit written before schema 21 has no members: none draws power until its next Start.
         var members=f.record(ColumnUnit.Members.NONE,q->{var fans=q.list(List.<Long>of(),p->p.count(0));var reflux=q.list(List.<Long>of(),p->p.count(0));var pumparounds=q.list(List.<List<Long>>of(),p->p.list(List.<Long>of(),s->s.count(0)));
             return valid(q,"column members",()->new ColumnUnit.Members(fans,reflux,pumparounds));});
         required(master,f,"column origin");required(setpoints,f,"column setpoints");required(totals,f,"column totals");
@@ -527,7 +534,7 @@ final class FluidFacts {
             double set=q.f64(0),limit=q.f64(0),ratio=q.f64(0);return valid(q,"shaft settings",()->new ShaftUnit.Settings(running,mode,set,limit,ratio));});
         var trip=f.name(com.wormzjl.icheme.science.machine.ShaftTrain.Trip.class,com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE);
         required(kind,f,"shaft unit kind");required(position,f,"shaft unit position");
-        if(axis>2||poles>8||ends.size()>ShaftUnit.MAXIMUM_ENDS)throw f.invalid("shaft unit "+id);
+        if(axis>2||poles>12||ends.size()>ShaftUnit.MAXIMUM_ENDS)throw f.invalid("shaft unit "+id);
         return valid(f,"shaft unit "+id,()->new ShaftUnit(id,kind,position,(int)axis,ends,fluid,power,speed,(int)poles,drive,settings,trip,null));
     }
     /** A heat side's unit (schema 5): its unit and side by name, area, partner, control and heat in transit; an air cooler's fans (schema 11). */
@@ -556,10 +563,16 @@ final class FluidFacts {
             case FlowControl.Pump pump->f.text("pump").f64(pump.requestedVolumeFlow()).f64(pump.maximumAddedPressure()).bool(pump.enabled()).f64(0);
             case FlowControl.Compressor compressor->f.text("compressor").f64(compressor.requestedVolumeFlow()).f64(compressor.maximumPressureRatio()).bool(compressor.enabled()).f64(0).f64(compressor.setFlow()).f64(compressor.setPressure());
             // Schema 10 (W3): a casing on its curve, its set points, switch and law; its speed is its train's, a slice input.
+            // Schema 19: a vacuum pump's law, its capacity in the rated flow's place, its rated speed in the pump's, then its type.
+            case FlowControl.Machine machine when machine.law() instanceof com.wormzjl.icheme.science.machine.VacuumPump law->
+                f.text("machine").f64(machine.setFlow()).f64(machine.setPressure()).bool(machine.enabled()).f64(0)
+                        .record(q->q.text("vacuum_pump").f64(law.capacity()).f64(0).f64(0).f64(law.ratedSpeed()).name(law.type()));
             case FlowControl.Machine machine->{var law=machine.law();
                 f.text("machine").f64(machine.setFlow()).f64(machine.setPressure()).bool(machine.enabled()).f64(0)
                         .record(q->q.text(law.liquid()?"centrifugal_pump":"centrifugal_compressor").f64(law.ratedFlow()).f64(law.ratedHead()).f64(law.efficiency())
                                 .f64(law instanceof com.wormzjl.icheme.science.machine.CentrifugalPump pump?pump.ratedSpeed():0));}
+            // Schema 17 (batch 2026-11-10-steam-ejector-flow): a steam ejector set, its suction's bore (m); its motive is a slice input.
+            case FlowControl.Ejector ejector->f.text("ejector").f64(ejector.design().suction()).f64(0).bool(true).f64(0);
             // Schema 10 (W3): a steam turbine's rated power and isentropic efficiency.
             case FlowControl.Turbine turbine->f.text("turbine").f64(0).f64(0).bool(true).f64(0).f64(turbine.design().ratedPower()).f64(turbine.design().efficiency());
             case FlowControl.PressureValve valve->f.text("pressure_valve").f64(0).f64(0).bool(false).f64(valve.targetPressure());
@@ -577,10 +590,13 @@ final class FluidFacts {
             case "machine"->{var law=f.record(null,q->{var type=q.text("");double rated=q.f64(0),head=q.f64(0),efficiency=q.f64(0),rpm=q.f64(0);
                     return switch(type){case "centrifugal_pump"->new com.wormzjl.icheme.science.machine.CentrifugalPump(rated,head,efficiency,rpm);
                         case "centrifugal_compressor"->new com.wormzjl.icheme.science.machine.CentrifugalCompressor(rated,head,efficiency);
+                        case "vacuum_pump"->{var vacuum=q.name(com.wormzjl.icheme.science.machine.VacuumPump.Type.class,null);if(vacuum==null)throw q.invalid("a vacuum pump without its type");
+                            yield new com.wormzjl.icheme.science.machine.VacuumPump(vacuum,rated,rpm);}
                         default->throw q.invalid("unknown machine law "+type);};});
                 if(law==null)throw f.invalid("a machine without its law");
                 yield new FlowControl.Machine(law,0,enabled,flow,limit);}
             case "turbine"->{double power=f.f64(0),efficiency=f.f64(0);yield new FlowControl.Turbine(new com.wormzjl.icheme.science.machine.SteamTurbine(power,efficiency));}
+            case "ejector"->new FlowControl.Ejector(new com.wormzjl.icheme.science.machine.SteamEjector(flow));
             default->throw new IllegalArgumentException("unknown control "+kind);
         });
     }
@@ -708,7 +724,7 @@ final class FluidFacts {
 
     /** A vessel's contents as saved: its inventory and the phase split of its state, on the island's component axis. */
     record Vessel(long id,double volume,double levelHeight,boolean open,double[] moles,double energy,List<Solid> solids,
-                  double temperature,double pressure,double[] liquid,double[] vapor,double waterLiquid,double waterVapor,double hydrocarbonPressure) {}
+                  double temperature,double pressure,double[] liquid,double[] vapor,double waterLiquid,double waterVapor,double hydrocarbonPressure,boolean rigid) {}
     /** A filter's cake as saved, by the filter's device identity. */
     record Filter(long device,double capacity,List<Solid> captured,double energy,boolean stopped) {}
     /** The change a certified island's certificate replays per {@code duration} ticks from {@code baseTick}, per vessel. */
@@ -723,7 +739,7 @@ final class FluidFacts {
             for(var v:vessels) {
                 var delta=drift.moles.get(v.id);if(delta==null){result.add(v);continue;}
                 var moles=v.moles.clone();for(int c=0;c<moles.length;c++)moles[c]+=f*delta[c];
-                result.add(new Vessel(v.id,v.volume,v.levelHeight,v.open,moles,v.energy+f*drift.energy.get(v.id),v.solids,v.temperature,v.pressure,v.liquid,v.vapor,v.waterLiquid,v.waterVapor,v.hydrocarbonPressure));
+                result.add(new Vessel(v.id,v.volume,v.levelHeight,v.open,moles,v.energy+f*drift.energy.get(v.id),v.solids,v.temperature,v.pressure,v.liquid,v.vapor,v.waterLiquid,v.waterVapor,v.hydrocarbonPressure,v.rigid));
             }
             return result;
         }
@@ -737,7 +753,7 @@ final class FluidFacts {
             var vessels=graph.reservoirs().stream().filter(n->n.kind()==PassiveNetwork.NodeKind.RESERVOIR).toList();
             f.list(vessels,(q,n)->{var i=n.inventory();var t=n.state();
                 q.i64(n.id()).f64(i.volume()).f64(i.levelHeight()).bool(i.open()).doubles(i.moles()).f64(i.internalEnergy());solids(q,Solid.of(i.solids()));
-                q.f64(t.temperature()).f64(t.pressure()).doubles(t.liquid()).doubles(t.vapor()).f64(t.waterLiquid()).f64(t.waterVapor()).f64(t.hydrocarbonPartialPressure());});
+                q.f64(t.temperature()).f64(t.pressure()).doubles(t.liquid()).doubles(t.vapor()).f64(t.waterLiquid()).f64(t.waterVapor()).f64(t.hydrocarbonPartialPressure()).bool(i.rigid());});
             var filters=graph.pipes().stream().filter(p->p.filter()!=null).toList();
             f.list(filters,(q,p)->{var cake=p.filter();q.i64(device(p.id())).f64(cake.capacity());solids(q,Solid.of(cake.captured()));q.f64(cake.energyJoule()).bool(cake.stoppedAtCapacity());});
             var drift=new ArrayList<Consumer<Fields>>();
@@ -762,7 +778,7 @@ final class FluidFacts {
         return read(data,offset,length,"facts of "+what,f->{
             var dimension=f.text(null);var packageId=f.text(null);var components=f.list(List.of(),c->c.text(""));
             var vessels=f.list(List.of(),q->new Vessel(q.i64(0),q.f64(0),q.f64(com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.LEVEL_HEAD_HEIGHT),q.bool(false),
-                    required(q.doubles(null),q,"vessel moles"),q.f64(0),solids(q),q.f64(0),q.f64(0),required(q.doubles(null),q,"vessel liquid"),required(q.doubles(null),q,"vessel vapour"),q.f64(0),q.f64(0),q.f64(0)));
+                    required(q.doubles(null),q,"vessel moles"),q.f64(0),solids(q),q.f64(0),q.f64(0),required(q.doubles(null),q,"vessel liquid"),required(q.doubles(null),q,"vessel vapour"),q.f64(0),q.f64(0),q.f64(0),q.bool(false)));
             var filters=f.list(List.of(),q->new Filter(q.i64(0),q.f64(0),solids(q),q.f64(0),q.bool(false)));
             var drifts=f.list(List.of(),q->{long base=q.count(0);long duration=q.count(0);var moles=new HashMap<Long,double[]>();var energy=new HashMap<Long,Double>();
                 for(var node:q.list(List.of(),e->Map.entry(e.i64(0),Map.entry(required(e.doubles(null),e,"drift moles"),e.f64(0))))){
@@ -785,7 +801,7 @@ final class FluidFacts {
             if(n.kind()!=PassiveNetwork.NodeKind.RESERVOIR)continue;
             var v=vessels.remove(n.id());if(v==null)return "vessel "+n.id()+" has no facts";
             var i=n.inventory();var t=n.state();
-            if(v.volume!=i.volume()||v.levelHeight!=i.levelHeight()||v.open!=i.open()||!same(v.moles,i.moles())||v.energy!=i.internalEnergy())return "vessel "+n.id()+" inventory";
+            if(v.volume!=i.volume()||v.levelHeight!=i.levelHeight()||v.open!=i.open()||v.rigid!=i.rigid()||!same(v.moles,i.moles())||v.energy!=i.internalEnergy())return "vessel "+n.id()+" inventory";
             if(!same(v.solids,i.solids()))return "vessel "+n.id()+" solids";
             if(v.temperature!=t.temperature()||v.pressure!=t.pressure()||!same(v.liquid,t.liquid())||!same(v.vapor,t.vapor())||v.waterLiquid!=t.waterLiquid()||v.waterVapor!=t.waterVapor()||v.hydrocarbonPressure!=t.hydrocarbonPartialPressure())
                 return "vessel "+n.id()+" state";
@@ -909,14 +925,15 @@ final class FluidFacts {
                 PassiveNetwork.Reservoir node;
                 if(held!=null) {
                     var state=Arrays.stream(v.moles).sum()==0&&!solids.empty()?held.solidState(v.temperature,v.pressure,solids):held.state(v.temperature,v.pressure,v.liquid,v.vapor,v.waterLiquid,v.waterVapor,v.hydrocarbonPressure).withSolids(solids);
-                    var kept=new PassiveNetwork.Reservoir(v.id,y,state,PassiveNetwork.NodeKind.RESERVOIR,new PassiveNetwork.Inventory(v.volume,v.moles,v.energy,solids,v.levelHeight,v.open,r.spec().geometry(),null,r.spec().tower()));
+                    var kept=new PassiveNetwork.Reservoir(v.id,y,state,PassiveNetwork.NodeKind.RESERVOIR,new PassiveNetwork.Inventory(v.volume,v.moles,v.energy,solids,v.levelHeight,v.open,r.spec().geometry(),null,r.spec().tower(),v.rigid&&!v.open));
                     origins.put(v.id,new IslandSets.Origin(kept,held));node=IslandSets.node(kept,held,model);
                 } else {
                     var moles=from.map(v.moles,removed);restated++;
-                    if(Arrays.stream(moles).sum()==0&&solids.empty())node=r.spec().initialize(r.device(),model,()->{});
+                    // A rigid vessel stays rigid empty (batch 2026-11-10-rigid-reservoir, R1 A).
+                    if(Arrays.stream(moles).sum()==0&&solids.empty()){node=r.spec().initialize(r.device(),model,()->{});node=new PassiveNetwork.Reservoir(node.id(),node.elevation(),node.state(),node.kind(),node.inventory().withRigid(v.rigid));}
                     else {
                         var state=Arrays.stream(moles).sum()==0?model.solidState(v.temperature,v.pressure,solids):model.flashTP(v.temperature,v.pressure,moles,()->{}).withSolids(solids);
-                        node=new PassiveNetwork.Reservoir(v.id,y,state,PassiveNetwork.NodeKind.RESERVOIR,new PassiveNetwork.Inventory(v.volume,moles,state.internalEnergy(),solids,v.levelHeight,v.open,r.spec().geometry(),null,r.spec().tower()));
+                        node=new PassiveNetwork.Reservoir(v.id,y,state,PassiveNetwork.NodeKind.RESERVOIR,new PassiveNetwork.Inventory(v.volume,moles,state.internalEnergy(),solids,v.levelHeight,v.open,r.spec().geometry(),null,r.spec().tower(),v.rigid&&!v.open));
                     }
                     energy+=node.inventory().internalEnergy()-v.energy;
                 }

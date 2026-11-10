@@ -129,9 +129,10 @@ final class VesselCrystals {
         boolean warm=holds&&(closed.liquidProperties()==null||closed.vaporProperties()==null||majorSpecies(totals)>=3);
         boolean taut=PhaseLayout.taut(closed,capacity);FluidThermodynamics.CrystalAnswer answer=null;
         for(int attempt=0;attempt<2;attempt++) {
-            answer=taut?model.crystalsAtVolume(totals,crystalEnergy,capacity-inertMoments.volume(),warm?t:Double.NaN,warm?p:Double.NaN,competing,checkpoint)
-                    :model.crystalsAtPressure(totals,crystalEnergy+PhaseLayout.AMBIENT_PRESSURE*(bag-inertMoments.volume()),PhaseLayout.AMBIENT_PRESSURE,competing,checkpoint);
-            boolean other=taut?answer.pressure()<PhaseLayout.AMBIENT_PRESSURE:answer.volume()+inertMoments.volume()>capacity;
+            answer=taut?model.crystalsAtVolume(totals,crystalEnergy,PhaseLayout.capacityVolume(capacity)-inertMoments.volume(),warm?t:Double.NaN,warm?p:Double.NaN,competing,checkpoint)
+                    :model.crystalsAtPressure(totals,crystalEnergy+inventory.ambient()*(bag-inertMoments.volume()),inventory.ambient(),competing,checkpoint);
+            // A rigid vessel (batch 2026-11-10-rigid-reservoir) has the fixed-volume branch alone.
+            boolean other=taut?!PhaseLayout.rigid(capacity)&&answer.pressure()<inventory.ambient():answer.volume()+inertMoments.volume()>capacity;
             if(!other)break;
             taut=!taut;
         }
@@ -145,7 +146,7 @@ final class VesselCrystals {
         while(!present.isEmpty()) {
             // The vessel's pass loop lays the fluid beside the crystals out (decision D30), from the engine's answer: a phase
             // the record's crystal leaves no room for leaves, as in the vessel's own closure. Each pass runs the checkpoint.
-            var closure=new JointClosure(model,present,seeds,totals,trueEnergy,capacity,bag,inert,checkpoint);
+            var closure=new JointClosure(model,present,seeds,totals,trueEnergy,capacity,inventory.ambient(),bag,inert,checkpoint);
             InventoryEquilibrium.passes(model,answer.fluid(),closure,checkpoint);
             var joint=closure.joint;var solved=closure.solved;
             var absent=new ArrayList<NetworkCrystals.Crystal>();
@@ -230,7 +231,7 @@ final class VesselCrystals {
         double capacity=inventory.wallCapacity(),bag=PhaseLayout.bagVolume(closed,capacity);
         var inert=inventory.solids().withoutCrystals();
         var state=InventoryEquilibrium.solve(model,closed.withSolids(inert),inventory.with(totals,trueEnergy,inert),bag,checkpoint);
-        double work=PhaseLayout.AMBIENT_PRESSURE*(PhaseLayout.bagVolume(state,capacity)-bag);
+        double work=inventory.ambient()*(PhaseLayout.bagVolume(state,capacity)-bag);
         return new Settled(state,inventory.with(totals,trueEnergy-work,inert),-work);
     }
 
@@ -248,9 +249,10 @@ final class VesselCrystals {
         double stored=trueEnergy;for(int k=0;k<all.size();k++)stored-=mass[k]*all.get(k).material().crystal().energyOffset();
         // A bag holding only solids carries no load: slack at the ambient around the solids' own volume (D54), and the
         // ambient works on it as it shrinks there.
-        double work=PhaseLayout.AMBIENT_PRESSURE*(solids.volume()-bag);
+        // A rigid vessel (batch 2026-11-10-rigid-reservoir) keeps its volume: no work.
+        double work=PhaseLayout.rigid(capacity)?0:inventory.ambient()*(solids.volume()-bag);
         var dry=inventory.with(left,stored-work,solids);
-        var state=InventoryEquilibrium.close(model,model.solidState(closed.temperature(),PhaseLayout.AMBIENT_PRESSURE,solids),dry,null,Double.NaN,checkpoint);
+        var state=InventoryEquilibrium.close(model,model.solidState(closed.temperature(),inventory.ambient(),solids),dry,null,Double.NaN,checkpoint);
         return new Settled(state,dry,-work);
     }
 
@@ -259,11 +261,11 @@ final class VesselCrystals {
                                    double[] held,Joint joint,double[] solved,double[] totals,double trueEnergy,double bag,SolidInventory inert,Runnable checkpoint) {
         double[] left=joint.fluidAmounts(solved);double[] mass=new double[all.size()];
         for(var crystal:joint.crystals){int c=crystal.component();mass[all.indexOf(crystal)]=(totals[c]-left[c])*crystal.molarMass();}
-        var beside=ConservativeTransport.repartition(model,joint.fluid(solved),left);
+        var beside=ConservativeTransport.repartition(model,joint.fluid(solved),left,inventory.rigid());
         var solids=stock(inventory.solids(),inert,freezing(closed,beside),all,held,mass);
         double capacity=inventory.wallCapacity();
         var fluid=beside.withSolids(solids);
-        double work=PhaseLayout.AMBIENT_PRESSURE*(PhaseLayout.bagVolume(fluid,capacity)-bag);
+        double work=inventory.ambient()*(PhaseLayout.bagVolume(fluid,capacity)-bag);
         double stored=trueEnergy-work;for(int k=0;k<all.size();k++)stored-=mass[k]*all.get(k).material().crystal().energyOffset();
         var settled=inventory.with(left,stored,solids);
         // Restated as every refresh states a vessel, so the next refresh finds it at its fixed point.
@@ -302,31 +304,32 @@ final class VesselCrystals {
         private final List<NetworkCrystals.Crystal> present;
         private final List<Double> seeds;
         private final double[] totals;
-        private final double trueEnergy,capacity,workFrom;
+        private final double trueEnergy,capacity,ambient,workFrom;
         private final SolidInventory inert;
         private final Runnable checkpoint;
         Joint joint;
         double[] solved;
 
-        JointClosure(FluidThermodynamics model,List<NetworkCrystals.Crystal> present,List<Double> seeds,double[] totals,double trueEnergy,double capacity,
+        JointClosure(FluidThermodynamics model,List<NetworkCrystals.Crystal> present,List<Double> seeds,double[] totals,double trueEnergy,double capacity,double ambient,
                      double workFrom,SolidInventory inert,Runnable checkpoint) {
             this.model=model;this.present=List.copyOf(present);this.seeds=List.copyOf(seeds);this.totals=totals;this.trueEnergy=trueEnergy;
-            this.capacity=capacity;this.workFrom=workFrom;this.inert=inert;this.checkpoint=checkpoint;
+            this.capacity=capacity;this.ambient=ambient;this.workFrom=workFrom;this.inert=inert;this.checkpoint=checkpoint;
         }
-        private Joint joint(FluidThermodynamics.State start){return new Joint(model,start,present,seeds,totals,trueEnergy,capacity,workFrom,inert);}
+        private Joint joint(FluidThermodynamics.State start){return new Joint(model,start,present,seeds,totals,trueEnergy,capacity,ambient,workFrom,inert);}
+        @Override public boolean rigid(){return PhaseLayout.rigid(capacity);}
         private double[] solve(Joint joint,FluidThermodynamics.State start) {
             return SparseNewton.solve(joint,joint.start(start,seeds),new SparseNewton.Settings(SparseNewton.ITERATIONS,InventoryEquilibrium.CLOSURE,1e-6,24),checkpoint).variables();
         }
         @Override public FluidThermodynamics.State close(FluidThermodynamics.State start) {
             var closing=joint(start);var x=solve(closing,start);
             joint=closing;solved=x;
-            return ConservativeTransport.repartition(model,closing.fluid(x),closing.fluidAmounts(x));
+            return ConservativeTransport.repartition(model,closing.fluid(x),closing.fluidAmounts(x),rigid());
         }
         @Override public FluidThermodynamics.State iterate(FluidThermodynamics.State start,double[] variables){return joint(start).fluid(variables);}
         /** The joint closure from {@code start}; {@code null} where it stops short or refuses the state (owner decision D40 A:
          * a failed closure proposes nothing). */
         @Override public FluidThermodynamics.State split(FluidThermodynamics.State start) {
-            try{var closing=joint(start);var x=solve(closing,start);return ConservativeTransport.repartition(model,closing.fluid(x),closing.fluidAmounts(x));}
+            try{var closing=joint(start);var x=solve(closing,start);return ConservativeTransport.repartition(model,closing.fluid(x),closing.fluidAmounts(x),rigid());}
             catch(SparseNewton.Nonconvergence|IllegalArgumentException failed){return null;}
         }
     }
@@ -359,10 +362,10 @@ final class VesselCrystals {
         private PhaseLayout.Wall sweeping,built;
 
         Joint(FluidThermodynamics model,FluidThermodynamics.State seed,List<NetworkCrystals.Crystal> crystals,List<Double> seeds,double[] totals,
-              double trueEnergy,double capacity,double workFrom,SolidInventory inert) {
+              double trueEnergy,double capacity,double ambient,double workFrom,SolidInventory inert) {
             this.model=model;this.crystals=List.copyOf(crystals);this.totals=totals;this.trueEnergy=trueEnergy;this.capacity=capacity;this.workFrom=workFrom;
             this.inert=inert;inertMoments=inert.moments();
-            layout=new PhaseLayout(model,seed,null,null,PhaseLayout.support(model,seed,null,null,false),false);
+            layout=new PhaseLayout(model,seed,null,null,PhaseLayout.support(model,seed,null,null,false),false).atAmbient(ambient);
             fluidSize=layout.size();crystalScale=new double[crystals.size()];row=new Row[crystals.size()];int steam=-1;
             for(int j=0;j<crystals.size();j++) {
                 var crystal=crystals.get(j);

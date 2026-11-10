@@ -67,7 +67,9 @@ final class LineSizingTest {
             new Side(Service.STEAM_SUPERHEATED, Limit.STEAM_SUPERHEATED_SPEED, .5, 2, GAS, gauge(2)),
             new Side(Service.STEAM_SUPERHEATED, Limit.STEAM_SUPERHEATED_DROP, .05, 2, GAS, gauge(2)),
             new Side(Service.STEAM_SUPERHEATED, Limit.STEAM_SUPERHEATED_MOMENTUM, .8, 30, GAS, gauge(40)),
-            new Side(Service.VACUUM_VAPOUR, Limit.VACUUM_SPEED, .8, .002, GAS, .005 * BAR),
+            // 1 kPa: the row's smooth rise, 60 (5 / 1)^¼ = 89.7 m/s (batch 2026-11-10-steam-ejector-flow). Below 0.65 kPa it passes the
+            // world's 100 m/s cap, which then holds the line first.
+            new Side(Service.VACUUM_VAPOUR, Limit.VACUUM_SPEED, .8, .002, GAS, .01 * BAR),
             new Side(Service.VACUUM_VAPOUR, Limit.VACUUM_SPEED, .8, .03, GAS, .03 * BAR),
             new Side(Service.VACUUM_VAPOUR, Limit.VACUUM_SPEED, .8, .5, GAS, .5 * BAR),
             new Side(Service.VACUUM_VAPOUR, Limit.VACUUM_DROP, .1, .5, GAS, .5 * BAR),

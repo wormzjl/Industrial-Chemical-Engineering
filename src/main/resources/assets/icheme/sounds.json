@@ -26,5 +26,97 @@
   "turbine_running": {
     "subtitle": "subtitles.icheme.turbine_running",
     "sounds": [{ "name": "icheme:turbine_running", "stream": false }]
+  },
+  "engine_running": {
+    "subtitle": "subtitles.icheme.engine_running",
+    "sounds": [{ "name": "icheme:engine_running", "stream": false }]
+  },
+  "engine_running_medium": {
+    "subtitle": "subtitles.icheme.engine_running_medium",
+    "sounds": [{ "name": "icheme:engine_running_medium", "stream": false }]
+  },
+  "gas_turbine_running": {
+    "subtitle": "subtitles.icheme.gas_turbine_running",
+    "sounds": [{ "name": "icheme:gas_turbine_running", "stream": false }]
+  },
+  "engine_start_air": {
+    "subtitle": "subtitles.icheme.engine_start_air",
+    "sounds": [{ "name": "icheme:engine_start_air", "stream": false }]
+  },
+  "engine_start_electric": {
+    "subtitle": "subtitles.icheme.engine_start_electric",
+    "sounds": [{ "name": "icheme:engine_start_electric", "stream": false }]
+  },
+  "engine_stop": {
+    "subtitle": "subtitles.icheme.engine_stop",
+    "sounds": [{ "name": "icheme:engine_stop", "stream": false }]
+  },
+  "gas_turbine_start": {
+    "subtitle": "subtitles.icheme.gas_turbine_start",
+    "sounds": [{ "name": "icheme:gas_turbine_start", "stream": false }]
+  },
+  "gas_turbine_stop": {
+    "subtitle": "subtitles.icheme.gas_turbine_stop",
+    "sounds": [{ "name": "icheme:gas_turbine_stop", "stream": false }]
+  },
+  "flare_roar": {
+    "subtitle": "subtitles.icheme.flare_roar",
+    "sounds": [{ "name": "icheme:flare_roar", "stream": false }]
+  },
+  "flare_pilot": {
+    "subtitle": "subtitles.icheme.flare_pilot",
+    "sounds": [{ "name": "icheme:flare_pilot", "stream": false }]
+  },
+  "burner_roar": {
+    "subtitle": "subtitles.icheme.burner_roar",
+    "sounds": [{ "name": "icheme:burner_roar", "stream": false }]
+  },
+  "fire_draught": {
+    "subtitle": "subtitles.icheme.fire_draught",
+    "sounds": [{ "name": "icheme:fire_draught", "stream": false }]
+  },
+  "pot_boil": {
+    "subtitle": "subtitles.icheme.pot_boil",
+    "sounds": [{ "name": "icheme:pot_boil", "stream": false }]
+  },
+  "valve_gas": {
+    "subtitle": "subtitles.icheme.valve_gas",
+    "sounds": [{ "name": "icheme:valve_gas", "stream": false }]
+  },
+  "valve_liquid": {
+    "subtitle": "subtitles.icheme.valve_liquid",
+    "sounds": [{ "name": "icheme:valve_liquid", "stream": false }]
+  },
+  "valve_cavitating": {
+    "subtitle": "subtitles.icheme.valve_cavitating",
+    "sounds": [{ "name": "icheme:pump_cavitation", "stream": false }]
+  },
+  "valve_flashing": {
+    "subtitle": "subtitles.icheme.valve_flashing",
+    "sounds": [{ "name": "icheme:valve_flashing", "stream": false }]
+  },
+  "ejector_jet": {
+    "subtitle": "subtitles.icheme.ejector_jet",
+    "sounds": [{ "name": "icheme:ejector_jet", "stream": false }]
+  },
+  "fan_whoosh": {
+    "subtitle": "subtitles.icheme.fan_whoosh",
+    "sounds": [{ "name": "icheme:fan_whoosh", "stream": false }]
+  },
+  "water_fall": {
+    "subtitle": "subtitles.icheme.water_fall",
+    "sounds": [{ "name": "icheme:water_fall", "stream": false }]
+  },
+  "gear_whine": {
+    "subtitle": "subtitles.icheme.gear_whine",
+    "sounds": [{ "name": "icheme:gear_whine", "stream": false }]
+  },
+  "pipe_knock": {
+    "subtitle": "subtitles.icheme.pipe_knock",
+    "sounds": [{ "name": "icheme:pipe_knock", "stream": false }]
+  },
+  "valve_turn": {
+    "subtitle": "subtitles.icheme.valve_turn",
+    "sounds": [{ "name": "icheme:valve_turn", "stream": false }]
   }
 }

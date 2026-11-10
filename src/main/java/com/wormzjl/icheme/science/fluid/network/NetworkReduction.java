@@ -147,7 +147,7 @@ public final class NetworkReduction {
             if(OpenVessel.releasing(node)||node.inventory().tower()!=null&&!node.empty())return false;
             // A kettle's pool heated by its bundle (W7) moves heat whatever the hydraulics do.
             if(PassiveStepSolver.poolHeat(node)!=0)return false;
-            if(node.kind()==PassiveNetwork.NodeKind.RESERVOIR&&!PassiveStepSolver.holdsNoFluid(node)&&Math.abs(PhaseLayout.wallRow(node.state(),node.inventory().wallCapacity()))>WALL_RESOLUTION)return false;
+            if(node.kind()==PassiveNetwork.NodeKind.RESERVOIR&&!PassiveStepSolver.holdsNoFluid(node)&&Math.abs(PhaseLayout.wallRow(node.state(),node.inventory().wallCapacity(),null,node.inventory().ambient()))>WALL_RESOLUTION)return false;
         }
         // Nothing to move: no generator, no vessel holding fluid (solids alone do not move, D33: they ride the liquid; voids
         // only receive, and a junction's buffer is its relaxation row's state, never material, D46; a minted one no source

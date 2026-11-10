@@ -129,6 +129,8 @@ public final class ColumnDesignTags {
         tag.putIntArray("CoolerUnits", components.units().coolers().stream().mapToInt(Integer::intValue).toArray());
         tag.putInt("TrimUnits", components.units().trim());
         tag.put("Exchangers",writeExchangers(components.exchangers()));
+        // What holds a vacuum top, by name (shape fields 12); written only where it is not the ejector, the design before it.
+        if (components.vacuum() != ColumnComponents.Vacuum.EJECTOR) tag.putString("Vacuum", components.vacuum().name());
         return tag;
     }
 
@@ -181,7 +183,9 @@ public final class ColumnDesignTags {
         int[] coolers = tag.get("CoolerUnits") instanceof net.minecraft.nbt.IntArrayTag array ? array.getAsIntArray() : tag.contains("CoolerUnits") ? new int[] {0} : new int[0];
         if (coolers.length > ColumnTrays.MAX_PUMPAROUNDS + 1) coolers = java.util.Arrays.copyOf(coolers, ColumnTrays.MAX_PUMPAROUNDS + 1);
         return new ShapeRepair.SavedComponents(tag.getString("Condenser"), tag.getString("RefluxPump"), pumps, tag.getBoolean("Ejector"), tag.getBoolean("Kettle"),
-                count(tag, "CondenserUnits"), count(tag, "KettleUnits"), coolers, count(tag, "TrimUnits"),readExchangers(tag));
+                count(tag, "CondenserUnits"), count(tag, "KettleUnits"), coolers, count(tag, "TrimUnits"),readExchangers(tag),
+                // What holds a vacuum top, by name: the ejector where a design was saved before it; resolved with the other kinds.
+                tag.contains("Vacuum") ? tag.getString("Vacuum") : ColumnComponents.Vacuum.EJECTOR.name());
     }
 
     public static CompoundTag writeExchangers(ColumnComponents.Exchangers types) {

@@ -142,6 +142,7 @@ public final class HeatDiagram {
             case BURNER -> List.of("FUEL");
             case POT -> List.of("CHARGE", "DRAIN");
             case WATER -> List.of("WATER_INLET", "WATER_OUTLET");
+            case EXHAUST -> List.of("FEEDWATER", "STEAM");
         };
     }
 

@@ -77,7 +77,11 @@ public final class ConstructorColumn {
 
     /** The choice page's groups of kinds. */
     public enum Category {
-        VESSELS, HEAT, MACHINES, REACTORS, SOLID_FUEL;
+        VESSELS, HEAT, MACHINES, REACTORS, SOLID_FUEL,
+        // The vacuum sub-category (batch 2026-11-10-vacuum-pump, owner V4 A): the steam ejector and the vacuum pump casings.
+        VACUUM,
+        // The power category (batch 2026-11-10-prime-movers, owner P3 A): the steam turbine and the generator moved in, the engines and gas turbines.
+        POWER;
 
         public String key() {
             return name().toLowerCase(Locale.ROOT);
@@ -88,12 +92,14 @@ public final class ConstructorColumn {
     public enum Equipment {
         VERTICAL_DRUM(Category.VESSELS), HORIZONTAL_DRUM(Category.VESSELS), COLUMN(Category.VESSELS), FLOATING_ROOF_TANK(Category.VESSELS), SPHERE(Category.VESSELS),
         ADSORBER(Category.VESSELS), CYCLONE(Category.VESSELS),
-        EXCHANGER(Category.HEAT), KETTLE(Category.HEAT), AIR_COOLER(Category.HEAT), VERTICAL_HEATER(Category.HEAT), CABIN_HEATER(Category.HEAT), INDUCED_DRAFT_COOLING_TOWER(Category.HEAT), NATURAL_DRAFT_COOLING_TOWER(Category.HEAT), FLARE_STACK(Category.HEAT), BATCH_STILL(Category.HEAT),
-        PUMP(Category.MACHINES), COMPRESSOR(Category.MACHINES), CENTRIFUGAL_COMPRESSOR(Category.MACHINES), EJECTOR(Category.MACHINES),
-        STEAM_TURBINE(Category.MACHINES), MOTOR(Category.MACHINES), GENERATOR(Category.MACHINES), GEARBOX(Category.MACHINES),
+        EXCHANGER(Category.HEAT), KETTLE(Category.HEAT), AIR_COOLER(Category.HEAT), VERTICAL_HEATER(Category.HEAT), CABIN_HEATER(Category.HEAT), INDUCED_DRAFT_COOLING_TOWER(Category.HEAT), NATURAL_DRAFT_COOLING_TOWER(Category.HEAT), FLARE_STACK(Category.HEAT), BATCH_STILL(Category.HEAT), STEEL_STACK(Category.HEAT), BRICK_CHIMNEY(Category.HEAT),
+        PUMP(Category.MACHINES), COMPRESSOR(Category.MACHINES), CENTRIFUGAL_COMPRESSOR(Category.MACHINES), EJECTOR(Category.VACUUM),
+        STEAM_TURBINE(Category.POWER), MOTOR(Category.MACHINES), GENERATOR(Category.POWER), GEARBOX(Category.MACHINES),
         STIRRED_REACTOR(Category.REACTORS), TRICKLE_BED_REACTOR(Category.REACTORS), EBULLATED_BED_REACTOR(Category.REACTORS), FCC_CONVERTER(Category.REACTORS),
         DELAYED_COKER(Category.REACTORS),
-        FLUIDIZED_BED_BOILER(Category.SOLID_FUEL), FLUIDIZED_BED_GASIFIER(Category.SOLID_FUEL), GRATE_BOILER(Category.SOLID_FUEL), FIXED_BED_GASIFIER(Category.SOLID_FUEL);
+        FLUIDIZED_BED_BOILER(Category.SOLID_FUEL), FLUIDIZED_BED_GASIFIER(Category.SOLID_FUEL), GRATE_BOILER(Category.SOLID_FUEL), FIXED_BED_GASIFIER(Category.SOLID_FUEL),
+        LIQUID_RING_PUMP(Category.VACUUM), DRY_SCREW_PUMP(Category.VACUUM),
+        COMBUSTION_ENGINE(Category.POWER), GAS_TURBINE(Category.POWER);
 
         public final Category category;
 

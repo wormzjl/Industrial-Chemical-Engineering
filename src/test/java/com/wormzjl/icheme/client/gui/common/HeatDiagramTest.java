@@ -45,6 +45,7 @@ class HeatDiagramTest {
             case FIRED_HEATER -> List.of(HeatSides.Side.CONVECTION, HeatSides.Side.RADIANT);
             case KETTLE -> List.of(HeatSides.Side.TUBE, HeatSides.Side.SHELL);
             case STILL -> List.of(HeatSides.Side.POT, HeatSides.Side.WATER);
+            case PRIME_MOVER -> List.of(HeatSides.Side.EXHAUST);
         };
         var roles = new HashSet<String>();
         for (var side : sides) roles.addAll(HeatDiagram.roles(unit, side));

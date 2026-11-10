@@ -55,19 +55,29 @@ public record MachineDuty(double flow, double head, double polytropicHead, doubl
     }
 
     /** An electric machine's poles. */
-    public static final List<Integer> POLES = List.of(2, 4, 6, 8);
+    public static final List<Integer> POLES = List.of(2, 4, 6, 8, 12);
     /**
-     * Rated powers, kW: the IEC 60072 motor list to 1 MW, then the R20 series to 50 MW. Motors, generators and
+     * Rated powers, kW: the IEC 60072 motor list to 1 MW, then the R20 series to 400 MW (batch 2026-11-10-prime-movers: generators past 20 MW, owner P9 A). Motors, generators and
      * gearboxes take a power from it; turbines a power from 55 kW.
      */
     public static final List<Double> POWERS = List.of(.75, 1.1, 1.5, 2.2, 3.0, 4.0, 5.5, 7.5, 11.0, 15.0, 18.5, 22.0, 30.0, 37.0, 45.0, 55.0, 75.0, 90.0, 110.0, 132.0,
             160.0, 200.0, 250.0, 315.0, 355.0, 400.0, 450.0, 500.0, 560.0, 630.0, 710.0, 800.0, 900.0, 1000.0, 1120.0, 1250.0, 1400.0, 1600.0, 1800.0, 2000.0, 2240.0,
             2500.0, 2800.0, 3150.0, 3550.0, 4000.0, 4500.0, 5000.0, 5600.0, 6300.0, 7100.0, 8000.0, 9000.0, 10000.0, 11200.0, 12500.0, 14000.0, 16000.0, 18000.0, 20000.0,
-            22400.0, 25000.0, 28000.0, 31500.0, 35500.0, 40000.0, 45000.0, 50000.0);
+            22400.0, 25000.0, 28000.0, 31500.0, 35500.0, 40000.0, 45000.0, 50000.0,
+            56000.0, 63000.0, 71000.0, 80000.0, 90000.0, 100000.0, 112000.0, 125000.0, 140000.0, 160000.0, 180000.0, 200000.0, 224000.0, 250000.0, 280000.0, 315000.0,
+            355000.0, 400000.0);
     /** The largest motor, generator and gearbox, kW. */
     public static final double MAX_MOTOR = 20000;
-    /** The rated powers of motors, generators and gearboxes, kW: the list to {@link #MAX_MOTOR}. */
+    /** The rated powers of motors and gearboxes, kW: the list to {@link #MAX_MOTOR}. */
     public static final List<Double> MOTOR_POWERS = POWERS.stream().filter(p -> p <= MAX_MOTOR).toList();
+    /** The largest generator, kW: a 300 MW gas turbine's with its 20 % spare (batch 2026-11-10-prime-movers, owner P9 A). */
+    public static final double MAX_GENERATOR = 400000;
+    /** The rated powers of generators, kW: the list to {@link #MAX_GENERATOR}. */
+    public static final List<Double> GENERATOR_POWERS = POWERS.stream().filter(p -> p <= MAX_GENERATOR).toList();
+    /** The largest steam turbine, kW: one unit of tandem sections to 300 MW (batch 2026-11-10-prime-movers, owner P12). */
+    public static final double MAX_TURBINE = 300000;
+    /** The rated powers of steam turbines, kW: the list from 55 kW, ending at {@link #MAX_TURBINE} (between the list's 280 and 315 MW). */
+    public static final List<Double> TURBINE_POWERS = java.util.stream.Stream.concat(POWERS.stream().filter(p -> p >= 55 && p < MAX_TURBINE), java.util.stream.Stream.of(MAX_TURBINE)).toList();
     /** Exhaust pressures a turbine steps through, kPa absolute: vacuum to a condenser, then back pressures (the LP, MP and HP headers). */
     public static final List<Double> EXHAUSTS = List.of(10.0, 15.0, 20.0, 150.0, 250.0, 350.0, 450.0, 650.0, 1000.0, 1700.0, 2500.0, 4200.0);
     /** The highest exhaust that is vacuum, kPa: below it the turbine exhausts to a condenser. */
@@ -77,7 +87,7 @@ public record MachineDuty(double flow, double head, double polytropicHead, doubl
         Objects.requireNonNull(drive, "drive");
         for (double v : new double[]{flow, head, polytropicHead, power, exhaust, baseSpeed})
             if (!Double.isFinite(v) || v < 0) throw new IllegalArgumentException("A design point's values are finite and not negative, not " + v);
-        if (poles != 0 && !POLES.contains(poles)) throw new IllegalArgumentException("An electric machine has 2, 4, 6 or 8 poles, not " + poles);
+        if (poles != 0 && !POLES.contains(poles)) throw new IllegalArgumentException("An electric machine has 2, 4, 6, 8 or 12 poles, not " + poles);
     }
 
     /** A pump's design point. */

@@ -238,7 +238,15 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
         if(hasPipeValve(state)&&player.getMainHandItem().isEmpty()&&player.getOffhandItem().isEmpty()) {
             if(!player.mayBuild()||player.isSpectator()||!level.mayInteract(player,position)||!player.mayUseItemAt(position,hit.getDirection(),ItemStack.EMPTY))return InteractionResult.FAIL;
             if(player instanceof ServerPlayer serverPlayer&&level.getBlockEntity(position) instanceof FluidDeviceBlockEntity entity)
-                FluidWorldAuthority.find(serverPlayer.server).ifPresent(world->world.togglePipeCutoff(entity.fluidIdentity()));
+                FluidWorldAuthority.find(serverPlayer.server).ifPresent(world->{
+                    long id=entity.fluidIdentity();var was=world.registrations().get(id);
+                    world.togglePipeCutoff(id);
+                    // Accepted: the queued edit's lever position turns at once for everyone near; the flow answers at the commit.
+                    var now=world.registrations().get(id);var cutoff=now==null?null:now.device().cutoff();
+                    if(was!=null&&now!=was&&(cutoff==PhysicalFluidTopology.Cutoff.OPEN||cutoff==PhysicalFluidTopology.Cutoff.CLOSED))
+                        turned(level,position,player,cutoff==PhysicalFluidTopology.Cutoff.CLOSED?1:0);
+                });
+            else if(level.isClientSide()&&com.wormzjl.icheme.client.ValveTurnRenderer.clicked(level,position,state))turnSound(level,position,player);
             return InteractionResult.sidedSuccess(level.isClientSide());
         }
         // A diverter valve (batch 2026-11-09-batch-distiller): an empty hand turns it to its next outlet; a sneak opens its menu.
@@ -246,12 +254,35 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
             if(!player.mayBuild()||player.isSpectator()||!level.mayInteract(player,position))return InteractionResult.FAIL;
             if(player instanceof ServerPlayer serverPlayer&&level.getBlockEntity(position) instanceof FluidDeviceBlockEntity entity)
                 FluidWorldAuthority.find(serverPlayer.server).ifPresent(world->{int open=world.diverterOutlet(entity.fluidIdentity());if(open>=0){var refused=world.divert(entity.fluidIdentity(),(open+1)%3);
-                    serverPlayer.displayClientMessage(refused==null?net.minecraft.network.chat.Component.translatable("message.icheme.diverter.outlet",(open+1)%3+1):net.minecraft.network.chat.Component.literal(refused),true);}});
+                    serverPlayer.displayClientMessage(refused==null?net.minecraft.network.chat.Component.translatable("message.icheme.diverter.outlet",(open+1)%3+1):net.minecraft.network.chat.Component.literal(refused),true);
+                    if(refused==null)turned(level,position,player,(open+1)%3);}});
+            else if(level.isClientSide()&&com.wormzjl.icheme.client.ValveTurnRenderer.clicked(level,position,state))turnSound(level,position,player);
             return InteractionResult.sidedSuccess(level.isClientSide());
         }
         if(kind==TopologyCompiler.Kind.PIPE&&!(level.getBlockEntity(position) instanceof FluidDeviceBlockEntity pipe&&!pipe.instruments().sensors().isEmpty()))return InteractionResult.PASS;
         if(player instanceof ServerPlayer serverPlayer&&level.getBlockEntity(position) instanceof FluidDeviceBlockEntity entity)entity.open(serverPlayer,false);
         return InteractionResult.sidedSuccess(level.isClientSide());
+    }
+    /**
+     * The block event of a hand turning a valve (owner 2026-11-10: "add turning sound and animation for hand valve"); its
+     * parameter is the position turned to: a shutoff valve 0 open, 1 closed, a diverter valve its outlet. Cosmetic: every
+     * client in range turns the lever at once ({@link com.wormzjl.icheme.client.ValveTurns}); the cutoff stays the queued
+     * topology edit, and the block state follows it at the commit.
+     */
+    public static final int TURN_EVENT=1;
+    /** Server: an accepted turn, the lever's turn for every client in range and its sound for everyone near but {@code player}, whose client played it at the click. */
+    private static void turned(Level level,BlockPos position,Player player,int target){
+        level.blockEvent(position,level.getBlockState(position).getBlock(),TURN_EVENT,target);
+        turnSound(level,position,player);
+    }
+    /** The vanilla pattern: on the clicking client it plays for that player; on the server, for everyone near but them. */
+    private static void turnSound(Level level,BlockPos position,Player player){
+        level.playSound(player,position,com.wormzjl.icheme.registry.ModBlocks.VALVE_TURN.get(),net.minecraft.sounds.SoundSource.BLOCKS,.8F,.95F+.1F*level.getRandom().nextFloat());
+    }
+    @Override protected boolean triggerEvent(BlockState state,Level level,BlockPos position,int id,int param) {
+        if(id!=TURN_EVENT)return super.triggerEvent(state,level,position,id,param);
+        if(level.isClientSide())com.wormzjl.icheme.client.ValveTurnRenderer.turned(level,position,state,param);
+        return true;
     }
     @Override protected ItemInteractionResult useItemOn(ItemStack stack,BlockState state,Level level,BlockPos position,Player player,InteractionHand hand,BlockHitResult hit) {
         if(stack.is(com.wormzjl.icheme.registry.ModItems.FLUID_DEBUGGER.get())) {

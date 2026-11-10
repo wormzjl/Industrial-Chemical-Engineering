@@ -46,9 +46,11 @@ import java.util.Optional;
  * structure or one-block device, and {@link ImportChoice} carries the name the Import page listed, which the built
  * structure takes. A machine's design point rides on the constructor's design too (protocol 18, batch
  * 2026-11-03-rotating-machinery), and a batch still's heater, condenser and stages (protocol 22, batch 2026-11-09-batch-distiller, W6).
+ * The far silhouettes' subscription ({@link SilhouetteWatch}) and the registry's records it answers with ({@link SilhouetteBatch};
+ * protocol 23, batch 2026-11-10-custom-shader-system, W10).
  */
 public final class EquipmentNetwork {
-    public static final String PROTOCOL = "equipment-22";
+    public static final String PROTOCOL = "equipment-23";
     /** A player edits or builds only within this distance of the constructor, blocks. */
     private static final double REACH = 8;
     /** A process simulator's designs are imported from within this many blocks of the constructor. */
@@ -327,6 +329,12 @@ public final class EquipmentNetwork {
         registrar.playToServer(ImportChoice.TYPE, ImportChoice.STREAM_CODEC, EquipmentNetwork::importChoice);
         registrar.playToServer(Rename.TYPE, Rename.STREAM_CODEC, EquipmentNetwork::rename);
         registrar.playToServer(Deconstruct.TYPE, Deconstruct.STREAM_CODEC, EquipmentNetwork::deconstruct);
+        // Protocol 23 (batch 2026-11-10-custom-shader-system, W10): the far silhouettes' subscription and the registry's records.
+        registrar.playToServer(SilhouetteWatch.TYPE, SilhouetteWatch.STREAM_CODEC, (request, context) -> {
+            if (context.player() instanceof ServerPlayer player)
+                com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.find(player.server).ifPresent(world -> world.watchSilhouettes(player, request.radius(), request.on()));
+        });
+        registrar.playToClient(SilhouetteBatch.TYPE, SilhouetteBatch.STREAM_CODEC, (batch, context) -> com.wormzjl.icheme.client.fx.state.SilhouetteStore.accept(batch));
         registrar.playToClient(DeconstructAnswer.TYPE, DeconstructAnswer.STREAM_CODEC, (reply, context) ->
                 com.wormzjl.icheme.client.gui.screens.EquipmentConstructorScreen.deconstructed(reply));
         registrar.playToClient(ImportListAnswer.TYPE, ImportListAnswer.STREAM_CODEC, (answer, context) -> com.wormzjl.icheme.client.gui.screens.EquipmentConstructorScreen.listed(
@@ -368,6 +376,100 @@ public final class EquipmentNetwork {
     }
 
     public static void sendDeconstruct(Deconstruct request) { PacketDistributor.sendToServer(request); }
+
+    /**
+     * Client to server (protocol 23, batch 2026-11-10-custom-shader-system, W10): subscribe ({@code on}) to the far
+     * silhouettes of the placed structures within {@code radius} blocks (at most {@code Silhouettes.MAXIMUM_RADIUS}), or end
+     * the subscription. The server answers from the structure registry ({@link SilhouetteBatch}).
+     */
+    public record SilhouetteWatch(int radius, boolean on) implements CustomPacketPayload {
+        public SilhouetteWatch {
+            if (radius < 0 || radius > com.wormzjl.icheme.runtime.fluid.Silhouettes.MAXIMUM_RADIUS) throw new IllegalArgumentException("Invalid silhouette radius");
+        }
+        public static final Type<SilhouetteWatch> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID, "silhouette_watch"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, SilhouetteWatch> STREAM_CODEC = StreamCodec.composite(
+                ByteBufCodecs.VAR_INT, SilhouetteWatch::radius, ByteBufCodecs.BOOL, SilhouetteWatch::on, SilhouetteWatch::new);
+        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
+    }
+
+    /** The most placements one silhouette batch carries: a full set crosses in several ({@link #sendSilhouettes}). */
+    public static final int SILHOUETTES_PER_BATCH = 32;
+
+    /**
+     * Server to client (protocol 23, W10): the registry's records of placed structures for the far silhouettes, as stored:
+     * each one's origin, shape (the shell's shape tag, {@code EquipmentShellBlockEntity.writeShape}) and paint
+     * ({@link Paint#encode}); then the origins of those that left the subscription (removed, or now out of reach). A
+     * {@code reset} batch starts a full set: the client drops what it held first.
+     */
+    public record SilhouetteBatch(boolean reset, List<com.wormzjl.icheme.runtime.fluid.Silhouettes.Placement> placed, List<BlockPos> removed) implements CustomPacketPayload {
+        public SilhouetteBatch {
+            placed = List.copyOf(placed);
+            removed = removed.stream().map(BlockPos::immutable).toList();
+            if (placed.size() > SILHOUETTES_PER_BATCH || removed.size() > com.wormzjl.icheme.runtime.fluid.Silhouettes.MAXIMUM_STRUCTURES)
+                throw new IllegalArgumentException("Too many silhouettes in one batch");
+        }
+        public static final Type<SilhouetteBatch> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID, "silhouette_batch"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, SilhouetteBatch> STREAM_CODEC = new StreamCodec<>() {
+            public SilhouetteBatch decode(RegistryFriendlyByteBuf b) {
+                boolean reset = b.readBoolean();
+                int n = b.readVarInt();
+                if (n < 0 || n > SILHOUETTES_PER_BATCH) throw new IllegalArgumentException("Too many silhouettes in one batch");
+                var placed = new java.util.ArrayList<com.wormzjl.icheme.runtime.fluid.Silhouettes.Placement>(n);
+                for (int i = 0; i < n; i++) {
+                    var origin = b.readBlockPos();
+                    var tag = b.readNbt();
+                    var read = tag == null ? null : com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity.readShape(tag);
+                    if (read == null || read.shape() == null) throw new IllegalArgumentException("A silhouette needs a current shape");
+                    placed.add(new com.wormzjl.icheme.runtime.fluid.Silhouettes.Placement(origin, read.shape(), Paint.decode(b.readVarIntArray(2))));
+                }
+                int m = b.readVarInt();
+                if (m < 0 || m > com.wormzjl.icheme.runtime.fluid.Silhouettes.MAXIMUM_STRUCTURES) throw new IllegalArgumentException("Too many silhouette removals");
+                var removed = new java.util.ArrayList<BlockPos>(m);
+                for (int i = 0; i < m; i++) removed.add(b.readBlockPos());
+                return new SilhouetteBatch(reset, placed, removed);
+            }
+
+            public void encode(RegistryFriendlyByteBuf b, SilhouetteBatch p) {
+                b.writeBoolean(p.reset);
+                b.writeVarInt(p.placed.size());
+                for (var s : p.placed) {
+                    b.writeBlockPos(s.origin());
+                    var tag = new CompoundTag();
+                    com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity.writeShape(tag, s.shape());
+                    b.writeNbt(tag);
+                    b.writeVarIntArray(s.paint().encode());
+                }
+                b.writeVarInt(p.removed.size());
+                for (var origin : p.removed) b.writeBlockPos(origin);
+            }
+        };
+        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
+    }
+
+    /**
+     * Server: sends {@code batch} to {@code player} in batches of at most {@link #SILHOUETTES_PER_BATCH} placements, the reset
+     * (if any) on the first, the removals on the last.
+     */
+    public static void sendSilhouettes(ServerPlayer player, com.wormzjl.icheme.runtime.fluid.Silhouettes.Batch batch) {
+        for (var part : split(batch)) PacketDistributor.sendToPlayer(player, part);
+    }
+
+    /** {@code batch} as its wire batches ({@link #sendSilhouettes}): at least one for a reset or for removals. */
+    public static List<SilhouetteBatch> split(com.wormzjl.icheme.runtime.fluid.Silhouettes.Batch batch) {
+        var out = new java.util.ArrayList<SilhouetteBatch>();
+        var placed = batch.placed();
+        int parts = Math.max(1, (placed.size() + SILHOUETTES_PER_BATCH - 1) / SILHOUETTES_PER_BATCH);
+        for (int k = 0; k < parts; k++) {
+            var slice = placed.subList(Math.min(placed.size(), k * SILHOUETTES_PER_BATCH), Math.min(placed.size(), (k + 1) * SILHOUETTES_PER_BATCH));
+            out.add(new SilhouetteBatch(batch.reset() && k == 0, slice, k == parts - 1 ? batch.removed() : List.of()));
+        }
+        return out;
+    }
+
+    /** Client: subscribe to the far silhouettes within {@code radius} blocks, or ({@code on} false) end the subscription. */
+    public static void watchSilhouettes(int radius, boolean on) {
+        PacketDistributor.sendToServer(new SilhouetteWatch(Math.clamp(radius, 0, com.wormzjl.icheme.runtime.fluid.Silhouettes.MAXIMUM_RADIUS), on));
+    }
 
     /** Applies the screen's design, then keeps it or builds it. */
     private static void constructor(ConstructorPayload payload, IPayloadContext context) {

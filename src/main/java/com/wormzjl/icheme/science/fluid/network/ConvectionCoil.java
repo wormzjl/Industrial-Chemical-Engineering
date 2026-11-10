@@ -28,6 +28,17 @@ public record ConvectionCoil(double conductance,long radiant,double flue) implem
     }
     /** The flue gas's capacity rate, W/K, behind a radiant coil taking {@code radiantHeat} W: what the gas gave between the flame and the bridgewall. */
     public static double flueOf(double radiantHeat){return Math.max(0,radiantHeat)/(FLAME-BRIDGEWALL);}
+    /**
+     * The flue gas at the stack, K (batch 2026-11-10-custom-shader-system, W5): the bridgewall less the convection coil's
+     * {@code convectionHeat} (W) over the capacity rate {@link #flueOf} of the radiant coil's {@code radiantHeat} (W), at
+     * least the combustion air's {@code air} (K); the bridgewall itself without a convection coil (pass 0), and {@code air}
+     * with the burners out. At the design split (70/30) it gives about 370 °C, as {@link Burners} states.
+     */
+    public static double stackTemperature(double radiantHeat,double convectionHeat,double air){
+        double flue=flueOf(radiantHeat);
+        if(!(flue>0))return air;
+        return Math.clamp(BRIDGEWALL-Math.max(0,convectionHeat)/flue,air,BRIDGEWALL);
+    }
     /** The facts that shape the coil's equations, without its flue gas. */
     public record Shape(double conductance,long radiant) {}
     @Override public Shape shape(){return new Shape(conductance,radiant);}

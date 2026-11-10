@@ -6,6 +6,7 @@ import static com.wormzjl.icheme.science.flowsheet.sizing.Bound.least;
 import static com.wormzjl.icheme.science.flowsheet.sizing.Bound.most;
 import static com.wormzjl.icheme.science.flowsheet.sizing.Bound.within;
 import static com.wormzjl.icheme.science.flowsheet.sizing.Bound.Step.rest;
+import static com.wormzjl.icheme.science.flowsheet.sizing.Bound.Step.rising;
 import static com.wormzjl.icheme.science.flowsheet.sizing.Bound.Step.to;
 import static com.wormzjl.icheme.science.flowsheet.sizing.Bound.Step.under;
 import static com.wormzjl.icheme.science.flowsheet.sizing.Limit.Kind.MUST;
@@ -97,7 +98,7 @@ public enum Limit {
     STEAM_SUPERHEATED_SPEED(SHOULD, most(60), "m/s", "[SPX]"),
     STEAM_SUPERHEATED_DROP(SHOULD, most(.2), "bar/100 m", "[SPX]"),
     STEAM_SUPERHEATED_MOMENTUM(SHOULD, most(15000), "kg/m·s²", "[KARM]"),
-    VACUUM_SPEED(SHOULD, most(Axis.ABSOLUTE, under(.01, 90), under(.05, 75), rest(60)), "m/s", "[KARM]"),
+    VACUUM_SPEED(SHOULD, most(Axis.ABSOLUTE, rising(.05, 60, .25), rest(60)), "m/s", "[KARM]"),
     /** A share of the absolute pressure, over the whole line, so it reads the line's length. */
     VACUUM_DROP(SHOULD, most(5), "%", "[BRAN]"),
     /** A floor: a slower flow slugs. */
@@ -238,6 +239,16 @@ public enum Limit {
     /** What the tip passes over the load, as {@link #AUTO_SPARE}'s 20 %: the owner's "always have enough excess". */
     FLARE_SPARE(SHOULD, least(20), "%", "This plan", QUIET),
 
+    // ---- Chimneys (batch 2026-11-10-chimney, owner C2 and C7) ----
+    /** The exit velocity at design flow: under 1.5 times a 5 m/s wind the plume falls into the stack's wake (downwash). */
+    CHIMNEY_SLOW(SHOULD, least(com.wormzjl.icheme.science.fluid.network.Chimney.LOW_VELOCITY), "m/s", "This plan: `Chimney.LOW_VELOCITY`"),
+    /** The exit velocity at design flow: over 30 m/s the exit loss is the stack's main pressure cost (0.35 kPa). */
+    CHIMNEY_FAST(SHOULD, most(com.wormzjl.icheme.science.fluid.network.Chimney.HIGH_VELOCITY), "m/s", "This plan: `Chimney.HIGH_VELOCITY`"),
+    /** The exit velocity at design flow against the network's cap for every stream (owner decision 2026-10-19). */
+    CHIMNEY_CAP(MUST, most(100), "m/s", "World: the 100 m/s cap"),
+    /** The stack's height against good engineering practice beside the nearby structure (2.5 times its height, at least 10 m). */
+    CHIMNEY_HEIGHT(SHOULD, given(Sense.LEAST), "m", "This plan: `Chimney.gepHeight`"),
+
     // ---- Batch stills (batch 2026-11-09-batch-distiller, W7) ----
     /** The charge's volume over the pot's: the pot holds no more. */
     STILL_VOLUME(MUST, most(100), "%", "World: the pot's volume"),
@@ -259,6 +270,12 @@ public enum Limit {
     TURBINE_SPARE(SHOULD, least(Motor.SPARE), "", "This plan: `Motor.SPARE`"),
     /** The inlet's pressure under its steam class's header: a casing is rated for its class. The world reads the real inlet and refuses none. */
     TURBINE_INLET(SHOULD, given(Sense.MOST), "kPa", "This plan: `MachineDuty.Steam`", QUIET),
+
+    // ---- Prime movers (batch 2026-11-10-prime-movers) ----
+    /** The fuel heat at design flow against the model's rated fuel: the governor holds the fuel there. */
+    PRIME_MOVER_FUEL(MUST, given(Sense.MOST), "MW", "World: `PrimeMover.Model.ratedFuel`"),
+    /** The rated fuel over the load's, as {@link #AUTO_SPARE}'s 20 %: the owner's "always have enough excess". */
+    PRIME_MOVER_SPARE(SHOULD, least(20), "%", "This plan", QUIET),
 
     // ---- Types, section 3.10: what section 3.4 has no row for ----
     /** Above the largest cabin, a count of cabins. */

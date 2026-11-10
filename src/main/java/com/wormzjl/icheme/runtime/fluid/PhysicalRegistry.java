@@ -412,7 +412,7 @@ public final class PhysicalRegistry {
                     var node=stock.get(edit.id());if(node==null)throw new IllegalStateException("Topology event reached vessel "+edit.id()+" outside the islands it fenced");
                     if(moved||respecified) {
                         var spec=replacement.spec();var held=node.inventory();
-                        var inventory=respecified?new PassiveNetwork.Inventory(spec.volume(),held.moles(),held.internalEnergy(),held.solids(),spec.levelHeight(),spec.open(),spec.geometry(),null,spec.tower()):held;
+                        var inventory=respecified?new PassiveNetwork.Inventory(spec.volume(),held.moles(),held.internalEnergy(),held.solids(),spec.levelHeight(),spec.open(),spec.geometry(),null,spec.tower(),held.rigid()&&!spec.open()):held;
                         var rebuilt=new PassiveNetwork.Reservoir(node.id(),replacement.device().position().y(),node.state(),node.kind(),inventory);
                         stock.put(edit.id(),rebuilt);if(additions.containsKey(edit.id()))additions.put(edit.id(),rebuilt);
                     }

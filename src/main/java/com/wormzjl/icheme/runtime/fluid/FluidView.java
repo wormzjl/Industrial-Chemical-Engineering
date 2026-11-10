@@ -10,7 +10,25 @@ import com.wormzjl.icheme.science.fluid.network.InlineFilter;
 public record FluidView(long identity,long inputRevision,long committedTick,long onlineTick,String status,State state,
                         double massFlow,List<PipeTransfer> pipeHistory,Double devicePressureChange,
                         double intervalSeconds,List<PipeRoute> pipeRoutes,InlineFilter filter,PipeInfo pipeInfo,
-                        List<Outlet> outlets,Tank tank,Heat heat,Tower tower,Drive drive,Power power,Pump pump,Flare flare,Still still) {
+                        List<Outlet> outlets,Tank tank,Heat heat,Tower tower,Drive drive,Power power,Pump pump,Flare flare,Still still,Chimney chimney) {
+    /** Every field but a chimney's. */
+    public FluidView(long identity,long inputRevision,long committedTick,long onlineTick,String status,State state,double massFlow,List<PipeTransfer> pipeHistory,Double devicePressureChange,
+                     double intervalSeconds,List<PipeRoute> pipeRoutes,InlineFilter filter,PipeInfo pipeInfo,List<Outlet> outlets,Tank tank,Heat heat,Tower tower,Drive drive,Power power,Pump pump,Flare flare,Still still) {
+        this(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,tower,drive,power,pump,flare,still,null);
+    }
+    public FluidView withChimney(Chimney value){return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,tower,drive,power,pump,flare,still,value);}
+    /**
+     * A chimney (batch 2026-11-10-chimney): the mean mass flow it released (kg/s), the solids it carried (kg/s), the gas's
+     * temperature (K), its exit velocity (m/s), the smoke's opacity (0 to 1), the draft of its stack (Pa), its exit diameter
+     * (m) and its status by name ({@code Chimney.Status}). Null for a device that is no chimney.
+     */
+    public record Chimney(double massFlow,double solids,double temperature,double exitVelocity,double opacity,double draft,double diameter,String status) {
+        public Chimney {
+            Objects.requireNonNull(status);
+            if(!(massFlow>=0)||!(solids>=0)||!(temperature>0)||!(exitVelocity>=0)||!(opacity>=0&&opacity<=1)||!(diameter>0)||!Double.isFinite(massFlow+solids+temperature+exitVelocity+draft+diameter)||status.length()>32)
+                throw new IllegalArgumentException("Invalid chimney presentation");
+        }
+    }
     /**
      * A pump's readings (batch 2026-11-03-rotating-machinery W10d, owner decision D37), from its last committed suction read
      * and its health: NPSH available and NPSH required (NPSH3 at the accepted flow and speed; an in-line pump's at its D21
@@ -71,11 +89,11 @@ public record FluidView(long identity,long inputRevision,long committedTick,long
                      double intervalSeconds,List<PipeRoute> pipeRoutes,InlineFilter filter,PipeInfo pipeInfo,List<Outlet> outlets,Tank tank,Heat heat,Tower tower) {
         this(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,tower,null,null,null,null,null);
     }
-    public FluidView withDrive(Drive value){return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,tower,value,power,pump,flare,still);}
-    public FluidView withPower(Power value){return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,tower,drive,value,pump,flare,still);}
-    public FluidView withTower(Tower value){return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,value,drive,power,pump,flare,still);}
+    public FluidView withDrive(Drive value){return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,tower,value,power,pump,flare,still,chimney);}
+    public FluidView withPower(Power value){return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,tower,drive,value,pump,flare,still,chimney);}
+    public FluidView withTower(Tower value){return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,value,drive,power,pump,flare,still,chimney);}
     public FluidView withPump(Pump value){return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,tower,drive,power,value,flare);}
-    public FluidView withStatus(String value){return new FluidView(identity,inputRevision,committedTick,onlineTick,value,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,tower,drive,power,pump,flare,still);}
+    public FluidView withStatus(String value){return new FluidView(identity,inputRevision,committedTick,onlineTick,value,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,tower,drive,power,pump,flare,still,chimney);}
     /** Every field but a flare's. */
     public FluidView(long identity,long inputRevision,long committedTick,long onlineTick,String status,State state,double massFlow,List<PipeTransfer> pipeHistory,Double devicePressureChange,
                      double intervalSeconds,List<PipeRoute> pipeRoutes,InlineFilter filter,PipeInfo pipeInfo,List<Outlet> outlets,Tank tank,Heat heat,Tower tower,Drive drive,Power power,Pump pump) {
@@ -86,7 +104,7 @@ public record FluidView(long identity,long inputRevision,long committedTick,long
                      double intervalSeconds,List<PipeRoute> pipeRoutes,InlineFilter filter,PipeInfo pipeInfo,List<Outlet> outlets,Tank tank,Heat heat,Tower tower,Drive drive,Power power,Pump pump,Flare flare) {
         this(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,tower,drive,power,pump,flare,null);
     }
-    public FluidView withStill(Still value){return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,tower,drive,power,pump,flare,value);}
+    public FluidView withStill(Still value){return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,tower,drive,power,pump,flare,value,chimney);}
     /**
      * A batch still's pot (batch 2026-11-09-batch-distiller, W6), as its page shows it, from the engine's cached view
      * ({@code Stills.view}) and the still's facts: its heater by name ({@code SOLID}, {@code LIQUID}, {@code ELECTRIC}), its
@@ -116,7 +134,7 @@ public record FluidView(long identity,long inputRevision,long committedTick,long
         /** Whether a data-network controller holds the firing or the reflux valve. */
         public boolean held(){return heldFiring!=null||heldReflux!=null||heldClosed;}
     }
-    public FluidView withFlare(Flare value){return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,tower,drive,power,pump,value,still);}
+    public FluidView withFlare(Flare value){return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,heat,tower,drive,power,pump,value,still,chimney);}
     /**
      * A flare stack (batch 2026-11-09-flare-stack): the mean mass flow it took (kg/s), the heat it released (W), the gas's
      * net heating value (J per standard m³) and stoichiometric flame temperature (K), the most it passes of that gas now
@@ -140,13 +158,13 @@ public record FluidView(long identity,long inputRevision,long committedTick,long
         return withPipeInfo(info,intervalSeconds);
     }
     public FluidView withPipeInfo(PipeInfo info,double seconds){
-        return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,seconds,pipeRoutes,filter,info,outlets,tank,heat,tower,drive,power,pump,flare,still);
+        return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,seconds,pipeRoutes,filter,info,outlets,tank,heat,tower,drive,power,pump,flare,still,chimney);
     }
     public FluidView withOutlets(List<Outlet> list){
-        return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,list,tank,heat,tower,drive,power,pump,flare,still);
+        return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,list,tank,heat,tower,drive,power,pump,flare,still,chimney);
     }
     public FluidView withTank(Tank value){
-        return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,value,heat,tower,drive,power,pump,flare,still);
+        return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,value,heat,tower,drive,power,pump,flare,still,chimney);
     }
     /**
      * A vessel's own geometry and what it gave the atmosphere over the last completed interval (batch
@@ -313,7 +331,7 @@ public record FluidView(long identity,long inputRevision,long committedTick,long
         this(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,null,null,null,null,null,null,null);
     }
     public FluidView withHeat(Heat value){
-        return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,value,tower,drive,power,pump,flare,still);
+        return new FluidView(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,devicePressureChange,intervalSeconds,pipeRoutes,filter,pipeInfo,outlets,tank,value,tower,drive,power,pump,flare,still,chimney);
     }
     public FluidView(long identity,long inputRevision,long committedTick,long onlineTick,String status,State state,double massFlow,List<PipeTransfer> pipeHistory) {
         this(identity,inputRevision,committedTick,onlineTick,status,state,massFlow,pipeHistory,null,0,List.of(),null);
