@@ -65,19 +65,19 @@ Rated speed share 1 at the design speed; motor by `Motor.ratingFor` (shaft maxim
 
 | Model | Type | S_n m³/h | Design rpm | Shaft max kW | Motor kW | Blank-off |
 |---|---|---|---|---|---|---|
-| LR1-150 | liquid ring, 1 stage | 150 | 1450 | 4.4 | 5.5 | 3.2 kPa |
-| LR1-500 | 1 stage | 500 | 1450 | 14.6 | 18.5 | 3.2 kPa |
-| LR1-1500 | 1 stage | 1500 | 980 | 44 | 55 | 3.2 kPa |
-| LR1-5000 | 1 stage | 5000 | 590 | 146 | 200 | 3.2 kPa |
+| LR1-150 | liquid ring, 1 stage | 150 | 1450 | 4.3 | 5.5 | 3.2 kPa |
+| LR1-500 | 1 stage | 500 | 1450 | 14.3 | 18.5 | 3.2 kPa |
+| LR1-1500 | 1 stage | 1500 | 980 | 42.8 | 55 | 3.2 kPa |
+| LR1-5000 | 1 stage | 5000 | 590 | 143 | 200 | 3.2 kPa |
 | LR2-150 | liquid ring, 2 stage | 150 | 1450 | 5.0 | 7.5 | 3.2 kPa |
-| LR2-500 | 2 stage | 500 | 1450 | 16.5 | 22 | 3.2 kPa |
-| LR2-1500 | 2 stage | 1500 | 980 | 50 | 75 | 3.2 kPa |
+| LR2-500 | 2 stage | 500 | 1450 | 16.6 | 22 | 3.2 kPa |
+| LR2-1500 | 2 stage | 1500 | 980 | 49.6 | 75 | 3.2 kPa |
 | DS-100 | dry screw | 100 | 2950 | 1.9 | 3 | 1 Pa |
 | DS-300 | dry screw | 300 | 2950 | 5.7 | 7.5 | 1 Pa |
 | DS-650 | dry screw | 650 | 2950 | 12.4 | 15 | 1 Pa |
 | DS-2500 | dry screw | 2500 | 2950 | 47.5 | 75 | 1 Pa |
 
-Catalogue ranges: liquid ring 25 to 22,500 m³/h (2BE1: 100 to 22,500), single and two stage; dry screw 100 to 3,200 m³/h. Real screws turn 3,600 to 6,000 rpm on a VFD; the game's motors stop at 3,000 rpm, so their design speed is 2950 and `S_n` is the catalogue's. The suction and discharge bores follow `VACUUM_SPEED` at the model's duty point (60 m/s at 10 kPa: 0.05 m for 500 m³/h at φ 0.7, rounded up to the next pipe size). Sizing (simulator, constructor's proposal): the smallest model with `S(P_s) ≥ 1.2 × load` (the 20 % spare).
+Catalogue ranges: liquid ring 25 to 22,500 m³/h (2BE1: 100 to 22,500), single and two stage; dry screw 100 to 3,200 m³/h. Real screws turn 3,600 to 6,000 rpm on a VFD; the game's motors stop at 3,000 rpm, so their design speed is 2950 and `S_n` is the catalogue's. The suction and discharge bores take 25 m/s at `S_n` (the vendors' flange sizes), rounded up to the next pipe size from 0.05 to 0.4 m; `VACUUM_SPEED` stays the simulator's line limit (built: shaft maxima are the law's scan of 400 suction pressures). Sizing (simulator, constructor's proposal): the smallest model with `S(P_s) ≥ 1.2 × load` (the 20 % spare).
 
 ## 5. The sub-category (V4)
 
@@ -147,5 +147,15 @@ Tests: only the classes that load the changes, with `--tests` (owner): the new t
 | V7 | Sound | A: reuse `pump_running` / `compressor_running` |
 | V8 | Simulator | A: MODELLED unit, column door vacuum choice |
 | V9 | Screw discharge temperature | `T_s [1 + 0.6 (1 − p_s/P_d)]` (207 °C at deep vacuum); alternative: none (isothermal) |
+
+### 12.1 The owner's answers (2026-11-10)
+
+Owner: **"V6 B with noise, others as recommended"**. V1, V2 B, V3, V4 A, V5 A, V7 A, V8 A, V9 as recommended. V6 B: liquid at a dry screw wears it as a pump running dry does (`Wear`, `PumpHealth`), and makes a noise: a layer over the screw's running loop whose loudness follows the liquid share, as a pump's crackle and churn bytes do (`MoverState`, `MoverSounds`), on an existing layer sound.
+
+### 12.2 As built (2026-11-10)
+
+- One palette tile `vacuum_pump` in the Vacuum category, beside the ejector; its door chooses the type (one- or two-stage ring, dry screw), and the model is a number (0 sizes it). The constructor sets the model with the size stepper (1 to 4; a two-stage ring 1 to 3) and the stages with the length stepper.
+- The column's `Vacuum` field (shape fields 12) is saved by name only where it is not the ejector. `LIQUID_RING` takes the smallest single-stage model that holds the vent with its spare, else the two-stage one's. The column block's solve reads `vacuum_model`, `vacuum_stages`, `vacuum_power` and `vacuum_capacity`; its sizing has a `vacuum_pump` member. The vent product stays at the receiver's pressure in the simulator, and the pump's heat is not booked on it.
+- In the world a vacuum column still refuses to start ("a vacuum column cannot run yet", `ColumnStarts`); the assembly lays the pump and the water pump.
 
 Sources (proportionate): Busch COBRA DS/DX product leaflets (pfeiffer-vacuum.com); 2BE1 distributor listings (bts.net.ua, sealing.com.ua); SIHI and Kinney liquid ring catalogues (15 °C seal-water basis, correction curves); Ryans and Roper, *Process Vacuum System Design and Operation* (1986).
