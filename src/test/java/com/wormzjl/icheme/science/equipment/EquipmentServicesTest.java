@@ -235,7 +235,7 @@ class EquipmentServicesTest {
                 assertTrue(
                         drawing.polygons().stream()
                                 .anyMatch(p -> p.material() == Mesh.Material.INSTRUMENT_CONDUIT));
-                for (var p : drawing.polygons()) {
+                for (var p : InstrumentWiring.atlas(drawing.polygons())) {
                     for (double v : p.positions()) assertTrue(Double.isFinite(v));
                     for (double v : p.uvs())
                         assertTrue(

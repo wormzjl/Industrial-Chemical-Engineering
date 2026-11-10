@@ -205,7 +205,7 @@ public final class ShapeRasterizer {
         for (var facet : g.mesh.facets()) out.addAll(Mesh.tiled(facet));
         for (int nozzle = 0; nozzle < g.nozzles.size(); nozzle++) for (var facet : g.nozzle(nozzle, 0).facets()) out.addAll(Mesh.tiled(facet));
         if(g.instruments.probes().stream().anyMatch(p->!p.manual())){
-            out.addAll(instrumentWiring(shape,Set.of(),detail).polygons());
+            out.addAll(InstrumentWiring.atlas(instrumentWiring(shape,Set.of(),detail).polygons()));
             for(var probe:g.instruments.probes())if(!probe.manual()&&probe.display())out.addAll(InstrumentGeometry.previewHead(probe));
         }
         return List.copyOf(out);
