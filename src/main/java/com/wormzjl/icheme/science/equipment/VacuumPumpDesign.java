@@ -110,13 +110,14 @@ final class VacuumPumpDesign extends UnitDesign {
         return "vacuum_pump.model";
     }
 
+    /** A model reads as its capacity, the unit beside the box (the box holds the number only); its name is on the datasheet. */
     @Override public String sizeUnit() {
-        return "";
+        return "m³/h";
     }
 
     @Override public String sizeText(double size) {
         var m = models().get((int) Math.max(0, Math.min(models().size() - 1, Math.round(size) - 1)));
-        return ring ? m.name + " m³/h" : m.name;
+        return whole(m.capacity);
     }
 
     @Override public String lengthRow() {
@@ -149,7 +150,108 @@ final class VacuumPumpDesign extends UnitDesign {
         return lines;
     }
 
+    /**
+     * A liquid ring package as the vendors ship it (owner: "Pump and separator"): from the front, a vertical separator on the
+     * skid, the outboard bearing, the front port head with the suction flange on its top, the short ring housing (wider than it
+     * is long; two stages a little longer, with a waist between them), the back port head, the drive-end bearing and the
+     * coupling. The front head's discharge port runs into the separator's side; the gas leaves from the separator's top; the
+     * seal water (internal, owner V2 B) shows as a stub on the housing's side. Every part scales with the model's rotor.
+     */
+    private void buildRing(ProcessUnit u) {
+        var shape = u.shape;
+        var m = model(shape);
+        var law = law(shape);
+        int h = shape.support();
+        boolean two = shape.tangentLength() >= 2;
+        double w = m.width, ax = .5, od = nozzle(m);
+        double r = .7 * w + .1, rh = r + .05, th = Math.max(.12 + .12 * w, od + .08);
+        double housing = two ? 1.8 * r : 1.2 * r;
+        double bearingRadius = .2 * w + .06, bearing = .15 + .15 * w;
+        double rs = .3 + .3 * w, minimumDeck = PLINTH + GROUT + BASEPLATE;
+        double ys = Math.ceil(minimumDeck + rh + .08 - .5) + .5;
+        double base = Math.min(ys - rh - .12, Math.floor(ys) - .04) - GROUT - BASEPLATE, deck = base + GROUT + BASEPLATE;
+        // Along z: the separator's centre, then the suction (the front head's centre) two cells on at least, clear of it.
+        double sepZ = Math.ceil(rs + .05 - .5) + .5, suction = sepZ + 2;
+        while (suction - th / 2 - bearing < sepZ + rs + .1) suction += 1;
+        double h0 = suction - th / 2, r0 = suction + th / 2, r1 = r0 + housing, h1 = r1 + th;
+        var along = Frame.of(new double[]{ax, ys, 0}, 2, 1);
+        int n = ProcessUnit.sides(2 * rh);
+        // The ring housing: one ring, or two with a waist between the stages.
+        if (two) {
+            double waist = .12 + .1 * w, mid = (r0 + r1) / 2;
+            u.mesh.prism(along, r, r0, mid - waist / 2, n, Material.PUMP_CASTING);
+            u.mesh.prism(along, .82 * r, mid - waist / 2, mid + waist / 2, n, Material.PUMP_JOINT);
+            u.mesh.prism(along, r, mid + waist / 2, r1, n, Material.PUMP_CASTING);
+            u.mesh.annulus(along, .82 * r, r, mid - waist / 2, n, 1, Material.PUMP_CASTING);
+            u.mesh.annulus(along, .82 * r, r, mid + waist / 2, n, -1, Material.PUMP_CASTING);
+        } else u.mesh.prism(along, r, r0, r1, n, Material.PUMP_CASTING);
+        u.solids.add(Solid.rod(new double[]{ax, ys, 0}, 2, r0, r1, r, 0));
+        u.volumes.add(Solid.rod(new double[]{ax, ys, 0}, 2, r0 + .03, r1 - .03, r - .05, 0));
+        u.round(ax, ys, r0, r1, r);
+        // The two thick port heads, round castings standing on feet.
+        for (double[] head : new double[][]{{h0, r0}, {r1, h1}}) {
+            u.mesh.band(along, rh, rh, head[0], head[1], n, Material.PUMP_JOINT);
+            u.mesh.disc(along, rh, head[0], n, -1, Material.PUMP_DISC);
+            u.mesh.disc(along, rh, head[1], n, 1, Material.PUMP_DISC);
+            u.solids.add(Solid.rod(new double[]{ax, ys, 0}, 2, head[0], head[1], rh, 0));
+            u.box(new double[]{ax - .8 * rh, deck, head[0] + .01}, new double[]{ax + .8 * rh, ys - .6 * rh, head[1] - .01}, Material.PUMP_CASTING, true);
+        }
+        // The bearing housings on their pedestals, outboard of both heads, and the front cover.
+        double zb0 = h0 - bearing, zb1 = h1 + bearing, cover = zb0 - .05;
+        int nb = ProcessUnit.sides(2 * bearingRadius);
+        for (double[] span : new double[][]{{zb0, h0}, {h1, zb1}}) {
+            u.mesh.prism(along, bearingRadius, span[0], span[1], nb, Material.PUMP_CASTING);
+            u.solids.add(Solid.rod(new double[]{ax, ys, 0}, 2, span[0], span[1], bearingRadius, 0));
+            double wide = Math.max(.18, .95 * bearingRadius), narrow = .65 * bearingRadius, top = ys - .6 * bearingRadius, p0 = span[0] + .02, p1 = span[1] - .02;
+            u.extrude(List.of(new double[]{ax - wide, deck + .04}, new double[]{ax + wide, deck + .04},
+                    new double[]{ax + narrow, top}, new double[]{ax - narrow, top}), p0, p1, Material.PUMP_CASTING);
+            u.solids.add(Solid.box(new double[]{ax - wide, deck, p0}, new double[]{ax + wide, top, p1}));
+        }
+        u.mesh.band(along, bearingRadius, bearingRadius, cover, zb0, nb, Material.PUMP_JOINT);
+        u.mesh.disc(along, bearingRadius, cover, nb, -1, Material.PUMP_DISC);
+        u.mesh.annulus(along, .02 + .03 * w, bearingRadius, zb1, nb, 1, Material.PUMP_CASTING);
+        // The seal water's stub on the housing's side, flanged.
+        double seal = .03 + .02 * w, sealY = ys - .35 * r, sealZ = (r0 + r1) / 2;
+        var sideways = Frame.of(new double[]{0, sealY, sealZ}, 0, 1);
+        u.mesh.cylinder(sideways, seal, ax - r - .2, ax - .6 * r, 8, Material.PUMP_CASTING);
+        u.mesh.cylinder(sideways, seal + .03, ax - r - .22, ax - r - .17, 10, Material.PUMP_JOINT);
+        // The discharge: out of the front head's side, along the skid and into the separator's side.
+        double rp = Math.max(.04, .4 * od), px = ax + Math.max(.3, .55 * rh), py = ys - .2 * rh;
+        int np = ProcessUnit.sides(2 * rp);
+        u.mesh.cylinder(Frame.of(new double[]{0, py, suction}, 0, 1), rp, ax + .4 * rh, px + rp, np, Material.PUMP_CASTING);
+        u.mesh.cylinder(Frame.of(new double[]{px, py, 0}, 2, 1), rp, sepZ, suction + rp, np, Material.PUMP_CASTING);
+        u.solids.add(Solid.rod(new double[]{px, py, 0}, 2, sepZ, suction + rp, rp, 0));
+        // The separator: a vertical vessel on the skid, a 2:1 head on top, the gas outlet up out of it.
+        double top = deck + 1.3 + 2.4 * rs, apex = .5 * rs;
+        var up = Frame.of(new double[]{ax, 0, sepZ}, 1, 1);
+        int ns = ProcessUnit.sides(2 * rs);
+        u.mesh.prism(up, rs, deck, top, ns, Material.PUMP_CASTING);
+        u.mesh.disc(up, rs, deck, ns, -1, Material.PUMP_DISC);
+        u.mesh.head(up, rs, top, apex, ns, Material.PUMP_CASTING);
+        u.solids.add(Solid.rod(new double[]{ax, 0, sepZ}, 1, deck, top + apex, rs, 0));
+        u.round(new double[]{ax, 0, sepZ}, 1, deck, top, rs);
+        double rn = od / 2 + .03, neck = top + apex + .05;
+        u.mesh.cylinder(up, rn, top, neck, ProcessUnit.sides(2 * rn), Material.PUMP_CASTING);
+        u.pumpNozzle(Role.DISCHARGE, new double[]{ax, 0, sepZ}, 1, 1, neck, Math.ceil(neck + .02 + PipeSizes.flangeThickness(od) + EquipmentShape.STAND_OUT), od, od / 2);
+        // The suction flange on top of the front head.
+        double low = ys + .3 * rh, sNeck = ys + rh + .05;
+        u.mesh.cylinder(Frame.of(new double[]{ax, 0, suction}, 1, 1), rn, low, sNeck, ProcessUnit.sides(2 * rn), Material.PUMP_CASTING);
+        u.solids.add(Solid.rod(new double[]{ax, 0, suction}, 1, low, sNeck, rn, 0));
+        u.pumpNozzle(Role.SUCTION, new double[]{ax, 0, suction}, 1, 1, sNeck, Math.ceil(ys + rh + .07 + PipeSizes.flangeThickness(od) + EquipmentShape.STAND_OUT), od, od / 2);
+        // The shaft end and its coupling at the back; the skid under it all.
+        double shaft = ProcessUnit.shaftRadius(law.maximumShaftPower() / 1e3, m.speed), face = Math.ceil(zb1 + .2 + shaft - 1e-9);
+        double half = Math.max(rh, rs) + .15, x0 = ax - half, x1 = ax + half, z0 = sepZ - rs - .12, z1 = face - .01;
+        u.coupling(ax, ys, zb1, face, 1, shaft, deck, ProcessUnit.shown(m.speed), EquipmentShape.ShaftEnd.Role.DRIVEN_INPUT);
+        u.baseplate(x0, x1, base + GROUT, deck, z0, z1);
+        u.box(new double[]{x0 + .02, base, z0 + .02}, new double[]{x1 - .02, base + GROUT, z1 - .02}, Material.CONCRETE, false);
+        u.driverBase(x0 - .08, x1 + .08, z0 - .08, z1, base, h);
+    }
+
     @Override void build(ProcessUnit u) {
+        if (ring) {
+            buildRing(u);
+            return;
+        }
         var shape = u.shape;
         var m = model(shape);
         var law = law(shape);
