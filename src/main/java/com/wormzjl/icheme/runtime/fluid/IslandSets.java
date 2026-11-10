@@ -101,7 +101,7 @@ public final class IslandSets {
     public static PassiveNetwork.Reservoir node(PassiveNetwork.Reservoir n,FluidThermodynamics from,FluidThermodynamics to) {
         if(same(from,to))return n;
         var i=n.inventory();
-        var inventory=new PassiveNetwork.Inventory(i.volume(),amounts(i.moles(),from,to),i.internalEnergy(),i.solids(),i.levelHeight(),i.open(),i.geometry(),onList(i.pool(),to),i.tower());
+        var inventory=new PassiveNetwork.Inventory(i.volume(),amounts(i.moles(),from,to),i.internalEnergy(),i.solids(),i.levelHeight(),i.open(),i.geometry(),onList(i.pool(),to),i.tower(),i.rigid());
         return new PassiveNetwork.Reservoir(n.id(),n.elevation(),state(n.state(),from,to),n.kind(),inventory);
     }
     /** A graph on {@code to}: every node ({@link #node}); its connections carry no amounts. */
@@ -154,7 +154,7 @@ public final class IslandSets {
         if(same(from,world))return n;
         var i=n.inventory();
         return new PassiveNetwork.Reservoir(n.id(),n.elevation(),padded(n.state(),from,world),n.kind(),
-                new PassiveNetwork.Inventory(i.volume(),amounts(i.moles(),from,world),i.internalEnergy(),i.solids(),i.levelHeight(),i.open(),i.geometry(),onList(i.pool(),world),i.tower()));
+                new PassiveNetwork.Inventory(i.volume(),amounts(i.moles(),from,world),i.internalEnergy(),i.solids(),i.levelHeight(),i.open(),i.geometry(),onList(i.pool(),world),i.tower(),i.rigid()));
     }
     private static PassiveNetwork paddedGraph(PassiveNetwork g,FluidThermodynamics from,FluidThermodynamics world) {
         var nodes=new ArrayList<PassiveNetwork.Reservoir>(g.reservoirs().size());

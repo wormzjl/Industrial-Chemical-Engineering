@@ -823,20 +823,26 @@ public final class FluidThermodynamics {
      * gas's split is a trace gas's only (such a gas, nitrogen over water, leaves through the node's ports, and its humidity
      * folded alone is given back by the next TP answer, a pass cycle).
      */
-    boolean foldTracePhases(double[] liquid,double[] vapor,double[] water,int vanishing) {
+    boolean foldTracePhases(double[] liquid,double[] vapor,double[] water,int vanishing){return foldTracePhases(liquid,vapor,water,vanishing,false);}
+    /**
+     * {@link #foldTracePhases(double[],double[],double[],int)}; {@code gasStands}: the gas is judged elsewhere and is no trace
+     * by its amount (a rigid vessel's gas, judged by its volume share, {@link #rigidGas}). {@code vanishing} still names it.
+     */
+    private boolean foldTracePhases(double[] liquid,double[] vapor,double[] water,int vanishing,boolean gasStands) {
         double nl=0,nh=0;for(double x:liquid)nl+=x;for(double x:vapor)nh+=x;
         double nv=nh+water[1],nw=water[0],total=nl+nv+nw;
         if(!(total>0))return false;
         double limit=PHASE_TRACE_FRACTION*total;boolean moved=false;
         // A phase is a trace under the trace share or where it is vanishing; a phase the node holds that is no trace stands.
-        boolean tl=nl<limit||(vanishing&1)!=0,tw=nw<limit||(vanishing&4)!=0,tv=nv<limit||(nh==0||(vanishing&2)!=0)&&(water[1]==0||(vanishing&8)!=0);
+        boolean gasTrace=nv<limit&&!gasStands;
+        boolean tl=nl<limit||(vanishing&1)!=0,tw=nw<limit||(vanishing&4)!=0,tv=gasTrace||(nh==0||(vanishing&2)!=0)&&(water[1]==0||(vanishing&8)!=0);
         boolean sl=nl>0&&!tl,sw=nw>0&&!tw,sv=nv>0&&!tv;
         if(nl>0&&tl&&nh>0&&sv){for(int i=0;i<liquid.length;i++){vapor[i]+=liquid[i];liquid[i]=0;}moved=true;}
         if(nw>0&&tw&&sv){water[1]+=water[0];water[0]=0;moved=true;}
         if(nv>0&&tv&&(nh==0||sl)&&(water[1]==0||sw)) {
             for(int i=0;i<vapor.length;i++){liquid[i]+=vapor[i];vapor[i]=0;}water[0]+=water[1];water[1]=0;moved=true;
         }
-        else if(nv>0&&nv<limit&&nh>0&&!sl&&water[1]>0&&sw){water[0]+=water[1];water[1]=0;moved=true;}
+        else if(nv>0&&gasTrace&&nh>0&&!sl&&water[1]>0&&sw){water[0]+=water[1];water[1]=0;moved=true;}
         return moved;
     }
     /**
@@ -902,9 +908,9 @@ public final class FluidThermodynamics {
      * every flash ({@link #flashTP}), the reconstruction's restatement of a node and the phase set each Newton pass is
      * laid out for pass through it. Never inside a residual: a fold is a jump of the state function.
      */
-    public State folded(State state){return folded(state,0);}
-    private State folded(State state,int vanishing) {
-        var result=folded(state,null,vanishing);
+    public State folded(State state){return folded(state,false,0);}
+    private State folded(State state,boolean rigid,int vanishing) {
+        var result=folded(state,null,rigid,vanishing);
         return result==state||state.solids().empty()?result:result.withSolidState(state.solids(),state.solidMoments());
     }
     /**
@@ -912,7 +918,12 @@ public final class FluidThermodynamics {
      * decision D41 ({@link #carriedGas}): a liquid-full junction's gas is restated dry at the junction's pressure, its
      * water vapour in the free water. Nothing leaves the node and nothing is booked, as for the trace fold.
      */
-    public State folded(State state,boolean junction){return folded(state,junction,0);}
+    public State folded(State state,boolean junction){return folded(state,junction,false,0);}
+    /**
+     * {@link #folded(State,boolean)} for a vessel whose wall is rigid ({@code rigid}; batch 2026-11-10-rigid-reservoir, owner
+     * decision of 2026-11-10 amending D34 and D38 C): its gas phase is judged by its volume share alone ({@link #rigidGas}).
+     */
+    public State folded(State state,boolean junction,boolean rigid){return folded(state,junction,rigid,0);}
     /**
      * The check of a failed pass's last iterate (owner decisions D28 and D39): {@link #folded(State,boolean)} with the
      * phases vanishing since {@code from} folded too (D38 C, {@link #vanishing}), and nothing else. A failed iterate is not
@@ -921,24 +932,43 @@ public final class FluidThermodynamics {
      * fluid phase was raised at 17 K about a state the network never reached). A phase the pass needs appears at a
      * converged point's check ({@link #phaseCheck}) or at a smaller step.
      */
-    public State folded(State state,boolean junction,State from){return folded(state,junction,from==null?0:collapsing(from,state));}
+    public State folded(State state,boolean junction,State from){return folded(state,junction,false,from);}
+    /** {@link #folded(State,boolean,State)} for a vessel whose wall is rigid ({@code rigid}, {@link #rigidGas}). */
+    public State folded(State state,boolean junction,boolean rigid,State from){return folded(state,junction,rigid,from==null?0:collapsing(from,state,rigid));}
     /** {@link #folded(State,boolean)} with the phases {@code vanishing} names folded as traces too (owner decision D38 C,
      * {@link #foldTracePhases(double[],double[],double[],int)}). */
-    private State folded(State state,boolean junction,int vanishing) {
-        var result=folded(state,vanishing);
+    private State folded(State state,boolean junction,boolean rigid,int vanishing) {
+        var result=folded(state,rigid&&!junction,vanishing);
         if(!carriedGas(result,junction))return result;
         SolverDiagnostics.count(SolverDiagnostics.traceFolds);
         var carried=state(result.temperature(),result.pressure(),result.liquid(),result.vapor(),result.waterLiquid()+result.waterVapor(),0,result.pressure(),null,null);
         return result.solids().empty()?carried:carried.withSolidState(result.solids(),result.solidMoments());
     }
-    private State folded(State state,TranslatedPengRobinson.Workspace terms,int vanishing) {
+    private State folded(State state,TranslatedPengRobinson.Workspace terms,boolean rigid,int vanishing) {
         double[] l=state.liquid(),v=state.vapor(),water={state.waterLiquid(),state.waterVapor()};
-        if(!foldTracePhases(l,v,water,vanishing))return state;
+        int gas=rigid?rigidGas(state):0;
+        if(!foldTracePhases(l,v,water,vanishing|gas&~GAS_STANDS,(gas&GAS_STANDS)!=0))return state;
         SolverDiagnostics.count(SolverDiagnostics.traceFolds);
         return state(state.temperature(),state.pressure(),l,v,water[0],water[1],
                 foldedHydrocarbonPressure(state.pressure(),state.hydrocarbonPartialPressure(),v,water[1]),terms,null);
     }
 
+    /**
+     * The trace verdict on a rigid vessel's gas (batch 2026-11-10-rigid-reservoir; owner decision of 2026-11-10 amending D34,
+     * in the form of the 2026-10-20 rule for a hydrocarbon liquid, {@link #belowShare}): the gas is judged by its volume
+     * share of the fluid alone. A liquid-full rigid tank drained below its vapour pressure forms its first bubble at about
+     * 3e-11 of its moles but 2e-6 of its volume (1.8e-6 mol of steam, 2 mL in 1 m3); the mole share folded it, and the pass
+     * laid out without it has no liquid-only root (a phase/device active-set cycle). The bits {@code 2|8} where the gas is
+     * a trace by volume ({@link #PHASE_TRACE_FRACTION}), {@link #GAS_STANDS} where it holds more; 0 with no gas. A bag keeps
+     * the mole share: its volume follows the ambient, so its bubble moves no pressure.
+     */
+    private static int rigidGas(State state) {
+        double gas=state.vaporVolume(),fluid=state.liquidVolume()+gas+state.waterVolume();
+        if(!(gas>0))return 0;
+        return gas<PHASE_TRACE_FRACTION*fluid?2|8:GAS_STANDS;
+    }
+    /** {@link #rigidGas}'s verdict that the gas stands, outside the {@link #phaseBits} bits. */
+    private static final int GAS_STANDS=16;
     /** A state's fluid phases as bits: hydrocarbon liquid 1, hydrocarbon vapour 2, free water 4, water vapour 8. */
     public static int phaseBits(State state) {
         return (state.liquidVolume()>0?1:0)|(state.vaporProperties()!=null?2:0)|(state.waterLiquid()>0?4:0)|(state.waterVapor()>0?8:0);
@@ -991,10 +1021,14 @@ public final class FluidThermodynamics {
      * @return {@code state} itself when it keeps its phases and gains none; otherwise the node's new seed
      */
     public State phaseCheck(State state,boolean junction,State from,int[] record,int at,Prepared prepared,UnaryOperator<State> vesselSplit,Runnable checkpoint) {
+        return phaseCheck(state,junction,from,record,at,prepared,vesselSplit,false,checkpoint);
+    }
+    /** {@link #phaseCheck}; {@code rigid}: a rigid vessel's (batch 2026-11-10-rigid-reservoir), whose crossing holds its volume at any pressure. */
+    public State phaseCheck(State state,boolean junction,State from,int[] record,int at,Prepared prepared,UnaryOperator<State> vesselSplit,boolean rigid,Runnable checkpoint) {
         // Owner decision D38 C: the phases vanishing since the solve's start fold as traces, and what that fold removed is not
         // offered back by this check's TP answer.
-        int shrinking=from==null?0:vanishing(from,state);
-        var kept=folded(state,junction,shrinking);var checked=kept;
+        int shrinking=from==null?0:vanishing(from,state,rigid);
+        var kept=folded(state,junction,rigid,shrinking);var checked=kept;
         int excluded=(record==null?0:record[at])|shrinking&phaseBits(state)&~phaseBits(kept),refused=0;
         boolean hydrocarbonComplete=ownPhaseBits(kept)==phaseBits(kept)&&(kept.liquidProperties()==null)==(kept.vaporProperties()==null);
         boolean waterComplete=kept.waterLiquid()>0&&kept.waterVapor()>0||kept.waterLiquid()+kept.waterVapor()==0;
@@ -1015,10 +1049,10 @@ public final class FluidThermodynamics {
                     own=junctionSplit(totals,state.enthalpy(),state.mass(),kept.pressure(),start,checkpoint);
                 }
                 // Owner decision D40 A: a vessel starts from its own state at the crossing, never from the TP answer's amounts.
-                else{start=crossing(state,kept,proposed,totals,checkpoint);own=start==null||vesselSplit==null?null:vesselSplit.apply(start);}
+                else{start=crossing(state,kept,proposed,totals,rigid,checkpoint);own=start==null||vesselSplit==null?null:vesselSplit.apply(start);}
                 if(own!=null) {
                     SolverDiagnostics.count(SolverDiagnostics.phaseSeeds);
-                    var seed=folded(own.withSolidState(kept.solids(),kept.solidMoments()),junction);
+                    var seed=folded(own.withSolidState(kept.solids(),kept.solidMoments()),junction,rigid);
                     // The D26 amendment, amended by the owner on 2026-10-19 (t40's trace of bundled seed 678): the own split's
                     // verdict on a proposed phase is where its closure took it (D38 C); a proposed phase the closure holds below
                     // the vanishing share of the node's fluid (belowShare) is nothing, whatever its direction ({@link #nothing}:
@@ -1026,7 +1060,7 @@ public final class FluidThermodynamics {
                     // solve's start go. A receiver landing on its bubble point was proposed 5.8e-11 m3 of vapour (6.5e-7 of its
                     // volume) that its closure grew slightly, which no direction test refused, and the pass laid out with it
                     // had no root.
-                    refused=proposed&(~lacking(kept,seed)|nothing(own));
+                    refused=proposed&(~lacking(kept,seed)|nothing(own,rigid));
                     int added=lacking(kept,seed)&~excluded;
                     if(added!=0&&(added&refused)==0)checked=seed;
                 }
@@ -1063,10 +1097,12 @@ public final class FluidThermodynamics {
      * {@code start} the node's seed holding the phase the converged point's check added, {@code end} the pass's failed
      * iterate, where a proposed phase it names is refuted.
      */
-    public static int vanishing(State start,State end) {
+    public static int vanishing(State start,State end){return vanishing(start,end,false);}
+    /** {@link #vanishing(State,State)} in a vessel whose wall is rigid ({@code rigid}): its gas judged by volume ({@link #belowShare}). */
+    public static int vanishing(State start,State end,boolean rigid) {
         double[] s=phaseAmounts(start),e=phaseAmounts(end),ev=phaseVolumes(end);double ts=sum(s),te=sum(e),tv=sum(ev);int bits=0;
         // The direction (shrinking) is taken by moles; the share by belowShare.
-        for(int k=0;k<4;k++)if(belowShare(k,e,te,ev,tv)&&e[k]*ts<s[k]*te)bits|=1<<k;
+        for(int k=0;k<4;k++)if(belowShare(k,e,te,ev,tv,rigid)&&e[k]*ts<s[k]*te)bits|=1<<k;
         return bits;
     }
     /**
@@ -1074,9 +1110,9 @@ public final class FluidThermodynamics {
      * whatever their direction: nothing at the node's resolution (owner decision of 2026-10-19 on t40's trace of bundled
      * seed 678), the amended fold's statement ({@link #vanishing}) for a phase arriving as for one leaving.
      */
-    static int nothing(State state) {
+    static int nothing(State state,boolean rigid) {
         double[] e=phaseAmounts(state),ev=phaseVolumes(state);double te=sum(e),tv=sum(ev);int bits=0;
-        for(int k=0;k<4;k++)if(e[k]>0&&belowShare(k,e,te,ev,tv))bits|=1<<k;
+        for(int k=0;k<4;k++)if(e[k]>0&&belowShare(k,e,te,ev,tv,rigid))bits|=1<<k;
         return bits;
     }
     /**
@@ -1094,10 +1130,14 @@ public final class FluidThermodynamics {
      * vessel holds about twenty times its volume share in moles. A methane tank at its dew point (the D34 gate,
      * minimized bundled seed 322) condensed 0.077 mL a step, 1.5e-6 of its moles but 7.7e-8 of its volume. The mole
      * test kept that film as a phase, and the pass laid out with it had no root at any step above 3.7e-4 s.</li>
+     * <li>In a vessel whose wall is rigid ({@code rigid}) either gas is judged on its volume share alone too (owner
+     * decision of 2026-11-10, batch 2026-11-10-rigid-reservoir, the same form): its volume is what moves the rigid
+     * vessel's pressure, and a liquid-full tank's first bubble below its vapour pressure is 2e-6 of its volume but 3e-11
+     * of its moles ({@link #rigidGas}).</li>
      * </ul>
      */
-    private static boolean belowShare(int k,double[] e,double te,double[] ev,double tv) {
-        return ev[k]<VANISHING_SHARE*tv&&(k==0||e[k]<VANISHING_SHARE*te);
+    private static boolean belowShare(int k,double[] e,double te,double[] ev,double tv,boolean rigid) {
+        return ev[k]<VANISHING_SHARE*tv&&(k==0||rigid&&(k==1||k==3)||e[k]<VANISHING_SHARE*te);
     }
     /** A state's fluid volume by phase, in {@link #phaseBits} order; a gas phase's volume shared between the hydrocarbon
      * vapour and the steam by moles. */
@@ -1113,8 +1153,10 @@ public final class FluidThermodynamics {
      * rule alone ({@link #phaseCheck}): a tank whose water a port drained to its condensate within the step holds a
      * phase a thousand times smaller than at its start that is not vanishing but drained.
      */
-    public static int collapsing(State start,State end) {
-        double[] s=phaseAmounts(start),e=phaseAmounts(end);double ts=sum(s),te=sum(e);int bits=vanishing(start,end);
+    public static int collapsing(State start,State end){return collapsing(start,end,false);}
+    /** {@link #collapsing(State,State)} in a vessel whose wall is rigid ({@code rigid}, {@link #vanishing(State,State,boolean)}). */
+    public static int collapsing(State start,State end,boolean rigid) {
+        double[] s=phaseAmounts(start),e=phaseAmounts(end);double ts=sum(s),te=sum(e);int bits=vanishing(start,end,rigid);
         for(int k=0;k<4;k++)if(e[k]*ts<VANISHING_COLLAPSE*s[k]*te)bits|=1<<k;
         return bits;
     }
@@ -1187,13 +1229,14 @@ public final class FluidThermodynamics {
      * does not converge, answers a phase set the network cannot carry, or answers none of the phases {@code proposed}
      * adds (no crossing), so the vessel proposes nothing.
      */
-    private State crossing(State state,State kept,int proposed,double[] totals,Runnable checkpoint) {
+    private State crossing(State state,State kept,int proposed,double[] totals,boolean rigid,Runnable checkpoint) {
         double t=kept.temperature(),p=kept.pressure();var solids=state.solidMoments();
-        // The slack branch of the wall states the pressure the ambient's (PhaseLayout.wallRow); a taut wall carries more.
-        var own=p<=PhaseLayout.AMBIENT_PRESSURE*(1+SLACK_PRESSURE)?equilibriumPH(t,p,state.enthalpy()-solids.enthalpy(state.temperature(),state.pressure()),totals,checkpoint)
+        // The slack branch of the wall states the pressure the ambient's (PhaseLayout.wallRow); a taut wall carries more. A
+        // rigid wall (batch 2026-11-10-rigid-reservoir) is taut at any pressure.
+        var own=!rigid&&p<=PhaseLayout.AMBIENT_PRESSURE*(1+SLACK_PRESSURE)?equilibriumPH(t,p,state.enthalpy()-solids.enthalpy(state.temperature(),state.pressure()),totals,checkpoint)
                 :equilibriumUV(t,p,state.internalEnergy()-solids.internalEnergy(state.temperature()),state.volume()-solids.volume(),totals,checkpoint);
         if(own==null)return null;
-        var seed=folded(own.withSolidState(kept.solids(),kept.solidMoments()),false);
+        var seed=folded(own.withSolidState(kept.solids(),kept.solidMoments()),false,rigid);
         return (lacking(kept,seed)&proposed)!=0?seed:null;
     }
     /** How far above the ambient pressure, relatively, a vessel's state still reads as its wall's slack branch in
@@ -1211,7 +1254,7 @@ public final class FluidThermodynamics {
      * preparing a new one (the arithmetic is the same). */
     public State flashTP(double t,double p,double[] overall,Runnable checkpoint,Prepared prepared) {
         TranslatedPengRobinson.Workspace given=prepared!=null&&prepared.temperature()==t?prepared.pengRobinson():null;
-        return folded(equilibriumTP(t,p,overall,checkpoint,prepared),given,0);
+        return folded(equilibriumTP(t,p,overall,checkpoint,prepared),given,false,0);
     }
     /**
      * The equilibrium split of {@link #flashTP} before its trace phases are folded; not a state the network lays out or
@@ -1287,6 +1330,8 @@ public final class FluidThermodynamics {
      * ({@link #adopt}, unfolded); {@code null} where the engine does not converge or answers a phase set the network cannot
      * carry. {@code checkpoint} runs as for {@link #equilibriumTP}. Never inside a residual.
      */
+    /** {@link #equilibriumUV}, for a rigid vessel that flashes (batch 2026-11-10-rigid-reservoir, {@code PassiveStepSolver.flashes}). */
+    public State equilibriumAtVolume(double t,double p,double u,double v,double[] overall,Runnable checkpoint){return equilibriumUV(t,p,u,v,overall,checkpoint);}
     private State equilibriumUV(double t,double p,double u,double v,double[] overall,Runnable checkpoint) {
         checkpoint.run();
         var result=phaseEngine().crystalUv(engineEnergy(u,overall),v,overall,stepCompetition(t,overall),t,p);

@@ -476,7 +476,7 @@ public final class PassiveStepSolver {
         // Decision D54: the vessels this solve has found running dry within the step (a failed Newton drove what they hold to
         // nothing); each pass solves them as junctions holding their stock (emptyingGraph), null while there is none.
         // A vessel a converged pass has confirmed as emptying is not released again within the solve ({@link #keptEmptying}).
-        final var original=graph;boolean[] emptying=null,emptied=new boolean[graph.reservoirs().size()];
+        final var original=graph;boolean[] emptying=null,emptied=new boolean[graph.reservoirs().size()],flashedVessels=new boolean[graph.reservoirs().size()];
         for(int pass=0;pass<maximumPasses;pass++) {
             checkpoint.run();SolverDiagnostics.count(SolverDiagnostics.activeSetPasses);
             graph=emptying==null?original:emptyingGraph(original,emptying);emptyings=emptying==null?null:emptyings(original,emptying,dt);
@@ -516,6 +516,10 @@ public final class PassiveStepSolver {
                 // Owner decisions D59 (4) and D14: a pump whose law pulled its suction below the vapour pressure of the liquid
                 // it draws cavitates; the pass is solved again with it on its suction limit.
                 if(cavitates(equations,failure.lastVariables(),modes,boundaryClosed,tolerance))continue;
+                // Batch 2026-11-10-rigid-reservoir: a rigid vessel holding no gas whose draw the iterate holds below its
+                // vapour pressure flashes; the pass is solved again with it laid out at its fixed-volume equilibrium.
+                var flashed=flashes(equations,failure.lastVariables(),seeds,flashedVessels,checkpoint);
+                if(flashed!=null){seeds=flashed;continue;}
                 // Decision D54: a vessel the failed iterate drained to nothing runs dry within the step. Its end state has no
                 // contents, so the pass laid out with them has no root (every step size fails the same way); it is solved
                 // again with the vessel as a junction holding its stock, which ends the step empty (emptyingGraph).
@@ -533,7 +537,7 @@ public final class PassiveStepSolver {
                 // solved again from the point it was proposed at, the node laid out without it, and the refusal recorded
                 // (a tank on its bubble point proposed 3.4e-6 of its moles as vapour and stalled at every step size).
                 if(proposal!=null) {
-                    int refuted=proposal.phases()&FluidThermodynamics.collapsing(proposal.seed(),iterate.get(proposal.node()));
+                    int refuted=proposal.phases()&FluidThermodynamics.collapsing(proposal.seed(),iterate.get(proposal.node()),rigid(graph.reservoirs().get(proposal.node())));
                     if(refuted!=0){foldedPhases[proposal.node()]|=refuted;SolverDiagnostics.count(SolverDiagnostics.phaseRefusals);seeds=proposal.point();proposal=null;continue;}
                 }
                 var changedSeeds=foldedIterate(graph,iterate);
@@ -555,7 +559,7 @@ public final class PassiveStepSolver {
             // Decision D54: an emptying vessel whose outlet pressure the converged point puts above the ambient does not run
             // dry (what reaches it is more than its outlets take at the ambient): it holds contents at the step's end and is
             // solved again as the vessel it is, unless an earlier converged pass of this solve has confirmed it emptying.
-            if(emptying!=null){var kept=keptEmptying(states,emptying,emptied);if(kept!=null){emptying=kept;continue;}}
+            if(emptying!=null){var kept=keptEmptying(original,states,emptying,emptied);if(kept!=null){emptying=kept;continue;}}
             boolean changed=false;int illegalDirection=-1,deviceChange=-1;FlowControl.Mode deviceNext=null;
             for(int i=0;i<flows.length;i++) {
                 flows[i]=equations.flow(i,x[equations.edgeOffset+i],equations.cachedTransport);heads[i]=equations.controlOffsets[i]<0?0:x[equations.controlOffsets[i]]*1e5;
@@ -586,7 +590,18 @@ public final class PassiveStepSolver {
             // pins the wrong active set for good (the closed suction edge forces the pump's flow to zero, the reverse-flow
             // test never fires again, and the pump is left running where the Newton cannot converge). The device
             // is decided first; the boundary closure waits for a pass where every device holds a mode it can.
-            if(!changed&&illegalDirection>=0){closeBoundary(graph,illegalDirection,boundaryClosed,modes);changed=true;}
+            // Owner decision of 2026-11-10 (batch 2026-11-10-rigid-reservoir, amending A272): a boundary closure is never taken
+            // back within the solve, so it is taken only on a pass whose phases stand. A converged point that shows a forbidden
+            // direction is phase-checked first ({@link #phaseCorrection}); where the check changes a node's phases the pass is
+            // solved again from them. A rigid tank at the gas breakthrough of its bottom port (108.5 kPa, the void at 1 atm)
+            // had its last water folded off a failed iterate; the pass after it held that water as steam, at 174 K and 67 kPa,
+            // and drew from the void, and the closure stood the drain still for good, before the check that lays the water out
+            // again. A bag hid it: its slack wall held the ambient there.
+            if(!changed&&illegalDirection>=0) {
+                var corrected=phaseCorrection(graph,states,checkpoint,equations.cachedPrepared,foldedPhases);
+                if(corrected!=null){seeds=corrected;continue;}
+                closeBoundary(graph,illegalDirection,boundaryClosed,modes);changed=true;
+            }
             if(!changed)for(int e=0;e<graph.pipes().size()&&!changed;e++)if(!boundaryClosed[e]&&flows[e]!=0&&refusedSpray(graph,e,states)){closeBoundary(graph,e,boundaryClosed,modes);changed=true;}
             // A confirmed emptying (keptEmptying) was decided on the network this active set states, so a mode or closure
             // change decides it again.
@@ -1019,6 +1034,30 @@ public final class PassiveStepSolver {
      * supplier below its floor and closed a pump the closed point then reopened); a vapour-locked pump ({@link #vapourLocks})
      * is closed for the whole solve and never on its law here.
      */
+    /**
+     * Batch 2026-11-10-rigid-reservoir (RIGID_RESERVOIR_PLAN.md 4.2) on a failed Newton: a rigid vessel whose seed holds no gas
+     * cannot give up volume as a liquid alone below its vapour pressure (a liquid-full tank drained below its bubble point has
+     * no liquid-only root). Each such vessel whose iterate holds less than its seed, or none the network can state, is seeded
+     * at the engine's fixed-volume equilibrium of the iterate's amounts and energy, once per solve ({@code flashed}); null
+     * where none is. The seed list is otherwise the pass's own.
+     */
+    private List<FluidThermodynamics.State> flashes(Equations equations,double[] last,List<FluidThermodynamics.State> seeds,boolean[] flashed,Runnable checkpoint) {
+        List<FluidThermodynamics.State> states;
+        try{states=equations.states(last);}catch(IllegalArgumentException outsideDomain){return null;}
+        List<FluidThermodynamics.State> result=null;
+        for(int i=0;i<seeds.size();i++) {
+            var node=equations.graph.reservoirs().get(i);var seed=seeds.get(i);
+            if(flashed[i]||node.kind()!=PassiveNetwork.NodeKind.RESERVOIR||!node.inventory().rigid()||holdsNoFluid(node)||FluidThermodynamics.holdsPhase(seed,FluidThermodynamics.GAS))continue;
+            var at=states.get(i);if(!(at.pressure()<seed.pressure()))continue;
+            FluidThermodynamics.State own;
+            try{own=model.equilibriumAtVolume(at.temperature(),at.pressure(),at.internalEnergy()-at.solidMoments().internalEnergy(at.temperature()),node.inventory().volume()-at.solidMoments().volume(),PhaseLayout.totalAmounts(at),checkpoint);}
+            catch(IllegalArgumentException refused){continue;}
+            if(own==null||!FluidThermodynamics.holdsPhase(own,FluidThermodynamics.GAS))continue;
+            flashed[i]=true;if(result==null)result=new ArrayList<>(seeds);
+            result.set(i,model.folded(own.withSolidState(seed.solids(),seed.solidMoments()),false,true));
+        }
+        return result;
+    }
     private boolean cavitates(Equations equations,double[] last,List<FlowControl.Mode> modes,boolean[] boundaryClosed,double tolerance) {
         List<FluidThermodynamics.State> states=null;
         for(int i=0;i<modes.size();i++) {
@@ -1239,7 +1278,7 @@ public final class PassiveStepSolver {
             // This is only a trial guess and a basis. The accumulation equations still start from the exact original inventory.
             var n=PhaseLayout.totalAmounts(state);double total=Arrays.stream(n).sum();boolean changed=false;
             for(int i=0;i<count;i++)if(available[i]&&n[i]==0){n[i]=total*1e-12;changed=true;}
-            try{seeds.add(changed?arrivingInVessel(graph,nodeIndex,ConservativeTransport.repartition(model,state,n),flows,dt):state);}
+            try{seeds.add(changed?arrivingInVessel(graph,nodeIndex,ConservativeTransport.repartition(model,state,n,node.inventory().rigid()),flows,dt):state);}
             catch(com.wormzjl.icheme.science.fluid.thermo.ThermoHold hold){throw hold.at(graph.reservoirs().get(nodeIndex).id());}
         }
         return arrivingPhases(graph,seeds,modes,boundaryClosed,dt,checkpoint);
@@ -1428,7 +1467,7 @@ public final class PassiveStepSolver {
             var answer=model.equilibriumPH(t,PhaseLayout.AMBIENT_PRESSURE,h,n,checkpoint);
             if(answer==null)return null;
             var start=model.folded(answer,false);
-            var own=InventoryEquilibrium.split(model,start,node.inventory().with(n.clone(),h,SolidInventory.EMPTY),0,checkpoint);
+            var own=InventoryEquilibrium.split(model,start,node.inventory().with(n.clone(),h,SolidInventory.EMPTY),node.inventory().emptyBag(),checkpoint);
             return own==null?start:model.folded(own,false);
         }
         catch(IllegalArgumentException refused){return null;}
@@ -2502,7 +2541,7 @@ public final class PassiveStepSolver {
             var state=states.get(i);var node=graph.reservoirs().get(i);if(node.fixed())continue;
             FluidThermodynamics.State checked;
             try{checked=model.phaseCheck(state,node.junction(),inputStates.get(i),foldedPhases,i,prepared==null?null:prepared[i],
-                    node.junction()?null:start->vesselSplit(node,state,start,checkpoint),checkpoint);}
+                    node.junction()?null:start->vesselSplit(node,state,start,checkpoint),!node.junction()&&node.inventory().rigid(),checkpoint);}
             catch(com.wormzjl.icheme.science.fluid.thermo.ThermoHold hold){throw hold.at(node.id());}
             if(checked==state)continue;
             var corrected=new ArrayList<>(states);corrected.set(i,checked);return corrected;
@@ -2640,10 +2679,12 @@ public final class PassiveStepSolver {
      * writes the A85 record and adds no phase, so no own split is formed and no hold is raised at a point the network
      * never reaches.
      */
+    /** Whether {@code node} is a vessel whose wall is rigid (batch 2026-11-10-rigid-reservoir): its gas is judged by volume. */
+    private static boolean rigid(PassiveNetwork.Reservoir node){return node.kind()==PassiveNetwork.NodeKind.RESERVOIR&&!node.junction()&&node.inventory()!=null&&node.inventory().rigid();}
     private List<FluidThermodynamics.State> foldedIterate(PassiveNetwork graph,List<FluidThermodynamics.State> states) {
         for(int i=0;i<states.size();i++) {
             var state=states.get(i);var node=graph.reservoirs().get(i);if(node.fixed())continue;
-            var folded=model.folded(state,node.junction(),inputStates.get(i));
+            var folded=model.folded(state,node.junction(),rigid(node),inputStates.get(i));
             if(folded==state)continue;
             var corrected=new ArrayList<>(states);corrected.set(i,folded);return corrected;
         }
@@ -2669,7 +2710,7 @@ public final class PassiveStepSolver {
         for(int i=0;i<seeds.size();i++) {
             if(graph.reservoirs().get(i).fixed())continue;
             var seed=seeds.get(i);FluidThermodynamics.State folded;
-            try{folded=model.folded(seed,graph.reservoirs().get(i).junction());}
+            try{folded=model.folded(seed,graph.reservoirs().get(i).junction(),rigid(graph.reservoirs().get(i)));}
             catch(com.wormzjl.icheme.science.fluid.thermo.ThermoHold hold){throw hold.at(graph.reservoirs().get(i).id());}
             if(folded==seed)continue;
             if(result==null)result=new ArrayList<>(seeds);
@@ -3843,7 +3884,7 @@ public final class PassiveStepSolver {
         var nodes=new ArrayList<>(graph.reservoirs());
         for(int i=0;i<emptying.length;i++)if(emptying[i]) {
             var node=graph.reservoirs().get(i);var stock=node.inventory();
-            double work=PhaseLayout.AMBIENT_PRESSURE*PhaseLayout.bagVolume(node.state(),stock.wallCapacity());
+            double work=stock.wallWorkPressure()*PhaseLayout.bagVolume(node.state(),stock.wallCapacity());
             nodes.set(i,new PassiveNetwork.Reservoir(node.id(),node.elevation(),node.state(),PassiveNetwork.NodeKind.JUNCTION,
                     stock.with(stock.moles(),stock.internalEnergy()+work,stock.solids())));
         }
@@ -3858,7 +3899,7 @@ public final class PassiveStepSolver {
         for(int i=0;i<emptying.length;i++)if(emptying[i]) {
             var node=graph.reservoirs().get(i);var stock=node.inventory();
             result[i]=new ConservativeTransport.Emptying((molarMass(stock.moles())+stock.solids().massKg())/dt,
-                    PhaseLayout.AMBIENT_PRESSURE*PhaseLayout.bagVolume(node.state(),stock.wallCapacity()));
+                    stock.wallWorkPressure()*PhaseLayout.bagVolume(node.state(),stock.wallCapacity()));
         }
         return result;
     }
@@ -3871,11 +3912,12 @@ public final class PassiveStepSolver {
      * decided once (a release that restored the vessel form after the phase correction laid out its last 3e-17 kg as two
      * phases cycled the pass sequence at every step size).
      */
-    private static boolean[] keptEmptying(List<FluidThermodynamics.State> states,boolean[] emptying,boolean[] emptied) {
+    private static boolean[] keptEmptying(PassiveNetwork graph,List<FluidThermodynamics.State> states,boolean[] emptying,boolean[] emptied) {
         boolean[] result=null;
         for(int i=0;i<emptying.length;i++) {
             if(!emptying[i]||emptied[i])continue;
-            if(!(states.get(i).pressure()>PhaseLayout.AMBIENT_PRESSURE*(1+1e-9))){emptied[i]=true;continue;}
+            // A rigid vessel (batch 2026-11-10-rigid-reservoir) holds contents at any pressure above none.
+            if(!(states.get(i).pressure()>graph.reservoirs().get(i).inventory().wallWorkPressure()*(1+1e-9))){emptied[i]=true;continue;}
             if(result==null)result=emptying.clone();
             result[i]=false;
         }
@@ -4198,7 +4240,7 @@ public final class PassiveStepSolver {
                 var node=graph.reservoirs().get(i);
                 dry[i]=dry(node,this.seeds.get(i));
                 // The bag volume the step starts from, whose wall work each vessel's energy row books (decision D54).
-                if(node.kind()==PassiveNetwork.NodeKind.RESERVOIR)bagStart[i]=node.empty()?0:PhaseLayout.bagVolume(node.state(),node.inventory().wallCapacity());
+                if(node.kind()==PassiveNetwork.NodeKind.RESERVOIR)bagStart[i]=node.empty()?node.inventory().emptyBag():PhaseLayout.bagVolume(node.state(),node.inventory().wallCapacity());
             }
             for(int i=0;i<count;i++) {
                 var state=graph.reservoirs().get(i).state();offsets[i]=cursor;oldAmounts[i]=graph.reservoirs().get(i).inventory().moles();
