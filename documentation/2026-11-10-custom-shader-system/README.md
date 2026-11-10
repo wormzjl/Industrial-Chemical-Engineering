@@ -1,6 +1,6 @@
 # Custom shader and effects system
 
-Status: **In progress since 2026-11-10**. Branch `claude/custom-shader-system-caff9e`.
+Status: **Implemented 2026-11-10** (0.25.0). Branch `claude/custom-shader-system-caff9e`.
 
 ## Scope
 
@@ -53,6 +53,7 @@ Owner, 2026-11-10: a custom shader system for normal textures (first the instrum
 - 2026-11-10: owner, "Fix the constructor model facing reversed direction when placed down, then prepare for merge". The bench's controls faced away from the placing player; the blockstate now turns the model 180° more than `FACING` and the shape follows, so the build direction and saved constructors are unchanged (971dd8346). Owner chose 0.25.0 and approved two subagents and the final-lane sub-thread: translations 22b5e3924; cleanup a3009fb74; guide 44bd6176d. Owner: "generate a skill for model and sfx creation": `.claude/skills/models-and-sfx/` with its Codex link and an AGENTS.md pointer (ed6f0793f). Owner: "i'm lifting that one block between nozzles limitation", "Gate and drum check": nozzle pipes may touch, columns keep the gap, `machine-4` (fb944b7d2, 401c25e01).
 - 2026-11-10: final lane on 7a7a1373c (sub-thread, once): 11 failures in 3088 tests, GameTests 87/87, chain-100 exact, campaign cold 991/1000 (baseline 992), bundled random 989/1000 (990, new class-F hold seed 575, confirmed alone), bundled defaults 1000/1000. Fixes `c6dc5426c` (owner: "Option A" for the kettle): the kettle's vapour line (a converged pass drawing from a void restarts the line the allowed way before it closes; boil-up Q/λ within 0.1 %), the generator heap (a unit's shell tables at 12 facets; it had hidden 5 more failures: damper paint, two cross-design calls moved into the kit, HD gas turbine fuel nozzle, display widths), the port name, the lang keys, DeterministicMath. Filtered runs pass: the 10 failed classes, the 18 other equipment classes the changes reach, RigidVesselTest, PassiveStepSolverTest, DeadHeadedLineIslandTest, RestResolutionTest, chain-100. Seed 575 replayed alone after the fix still holds (island 44, wall deadline, 402 s): open item.
 
+- 2026-11-10: owner, "Start merge prep": code guide chapters for the lane fixes (snapshot 7fb9c03cb), `mod_version` 0.25.0, the CHANGELOG heading, the six batches Implemented; MERGE_PREP_REVIEW.md "Lane fixes after the final lane". Not merged.
 
 ## Code areas (planned)
 

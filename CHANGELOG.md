@@ -15,6 +15,8 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-11-10
+
 ### Added
 
 - Process effects and sounds: flare flames drawn as torn fire with soot smoke and pilots, white plumes from cooling towers and fired heater stacks only where the exhaust's mixing line crosses saturation (none at 25 °C and 50 %; the visual ambient follows biome, height, rain and night), smoke, still fires and heat haze, all glided from published state; the mod's own shaders without a shader pack, vanilla render types under one, 2000 quads a frame (half under a pack), client `[effects]` settings (`mode` AUTO/COMPATIBLE/OFF, `pbr_textures`, `heat_haze`, `dh_silhouettes`); the instrument wiring after ATEX practice (Ex glands, drip loops, branch cables and trays of up to 6, normal-mapped textures with LabPBR maps); valve (by its own drop and cavitation regime), vent, fan, falling water, burner, gearbox, kettle, flare and still sounds through one budget of 12 loops, with movers and drivers; the hand valve's turn and sound; painted equipment silhouettes in Distant Horizons' far terrain; Iris and Distant Horizons optional, loaded by name and guarded. Protocols `fluid-21` and `fluid-22`, `flare-2`, `equipment-23` (core `8b62564f9`, `a1bd257ce`; server states `85d0b040c` to `4eb40758c`; effects and sounds `b0b915cb1` to `8665c624a`; visual fixes `0d562f7b0`, `f898f6516`; valve sounds `c8d5c4d09`, `c05453b05`; bench and optimization `bf951aed2`, `2ca824c2e`, `b98c571be` to `5788aa958`, `94cf1f7fa`, `7ddc44468`; hand valve `9efca5c54`, `b2de4891c`, `1f8471b94`; constructor facing `971dd8346`; batch `2026-11-10-custom-shader-system`).

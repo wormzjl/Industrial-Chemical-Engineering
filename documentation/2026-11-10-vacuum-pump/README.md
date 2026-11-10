@@ -1,6 +1,6 @@
 # Vacuum pump casings
 
-Status: **In progress since 2026-11-10** (phase 2: built on the branch, not merged). Branch `claude/vacuum-pump-bcd40b`, cut from `claude/custom-shader-system-caff9e` at `6e95356b5`.
+Status: **Implemented 2026-11-10** (0.25.0, with the custom-shader-system batch). Branch `claude/vacuum-pump-bcd40b`, cut from `claude/custom-shader-system-caff9e` at `6e95356b5`.
 
 ## Scope
 

@@ -28,6 +28,12 @@ Branch `claude/custom-shader-system-caff9e` at 971dd8346 over `main` 79d0a6254: 
 
 None. The cleanup changed only `tools/` and `documentation/` (AGENTS.md, "No repeated tests": no test run). The final lane runs once for the batch.
 
+## Lane fixes after the final lane
+
+- The final lane ran once, on 7a7a1373c. Its failures were fixed in c6dc5426c (the kettle restart, the unit shell tables, the prime mover and vacuum pump defects) and 7fb9c03cb (seed 575). Each fix was checked by filtered runs of the classes it reaches (README history). No second final lane (AGENTS.md); test classes the fixes cannot reach stand from that lane.
+- Code guide, snapshot 7fb9c03cb: `fluid-science.md` (the allowed-direction restart before a boundary closes; a device closed toward a forbidden flow stays closed), `equipment.md` (unit shell facets), `rotating-machinery.md` (the generator and motor frame helpers in `ProcessUnit`).
+- `mod_version` 0.25.0 (owner: "Start merge prep" on the 0.25.0 proposal); `[Unreleased]` moved under `[0.25.0] - 2026-11-10`; the six batch rows and READMEs set to Implemented 2026-11-10.
+
 ## Finding for the owner
 
 - `machine-3` gained the prime movers' fuel group (`MachineNetwork`, `MachineView.Fuel`) and two `ShaftNetwork.Kind` constants without a protocol bump: bumped to `machine-4` in fb944b7d2. Late owner changes in the same commit: nozzle pipes may touch (the `pipesApart` gate stays only for columns; a drum's connections clash on overlapping flanges). The final lane covers both. Commits of the preparation: translations 22b5e3924, cleanup a3009fb74, guide 44bd6176d, code fb944b7d2.
@@ -35,8 +41,8 @@ None. The cleanup changed only `tools/` and `documentation/` (AGENTS.md, "No rep
 ## Open items carried from the batch READMEs
 
 - Custom shader: W0 dev-client compatibility checks (packs, Sodium, DH detail levels, the drip loop's shape); DH hull growth 1 m against 8-block voxels; Iris shadow pass for dials and heads; the sound levels the review left open; the API 521 flame-bend table read from memory; the still's burner jet across the door; gas-stack plumes only beyond 5D/f; copper as a sixth silhouette finish; unsounded diverter flow, governor valve; the turning lever's untinted bars on painted lines; a diverter position pointer; wiring CPU estimated 0.25 to 0.32 ms against 0.3 (not benched) and the remaining allocations.
-- Rigid reservoir: the final lane (affected classes, chain-100 exact, fluid GameTests, campaign); no vacuum notice in the GUI (V1 A).
+- Rigid reservoir: no vacuum notice in the GUI (V1 A).
 - Steam ejector: `VACUUM_SPEED` past the 100 m/s cap below 0.65 kPa; the set's status line reads "pump ..."; the vacuum column start (`ColumnStarts`); a narrow discharge line chokes the set (constructor hint).
 - Chimney: closed slack bags, seed paths and `BatchStill.ATMOSPHERIC` at 101,325 Pa; the flare's void at its inlet cell's atmosphere; form held in the device facing; release booked as the void's EXCHANGE; the tile on the flare's symbol; a large brick chimney passes more than one 0.8 m pipe delivers; in-game check.
 - Vacuum pump: in-game check; a vacuum column still refuses to start and its simulator block shows no pump part; no parallel pumps past the largest model; the separator about 4 m tall on model 3.
-- Prime movers: in-game listen and look; `LanguageFilesTest` and `UnitTextTest` after the translation commit.
+- Prime movers: in-game listen and look.

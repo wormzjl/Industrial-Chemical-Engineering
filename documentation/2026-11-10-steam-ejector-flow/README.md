@@ -1,6 +1,6 @@
 # Steam ejector as a flow element, and its sound
 
-Status: **In progress since 2026-11-10** (phase 2: owner "All recommended", E1 A to E8 A; revision 3 "Yes, correlation"; loop J2). Branch `claude/ecstatic-dubinsky-c24b8a`, built on `c05453b05` of `claude/custom-shader-system-caff9e` (the plant noise system).
+Status: **Implemented 2026-11-10** (0.25.0, with the custom-shader-system batch). Branch `claude/ecstatic-dubinsky-c24b8a`, built on `c05453b05` of `claude/custom-shader-system-caff9e` (the plant noise system).
 
 ## Scope
 

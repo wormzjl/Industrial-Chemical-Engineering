@@ -1,6 +1,6 @@
 # Prime movers: combustion engines, gas turbines, generators to 400 MW, steam turbines to 300 MW
 
-Status: **Merged into the custom-shader-system batch 2026-11-10** (6c597e7b3, owner: "Merge it"), after the owner's model review (13 fixes, 0cf7d5e11). **Follow-up merged 2026-11-10** (3e123f51c, owner: "Merge it"): working sound and animation (owner: "add working sound & animation to them"), the owner's sound picks installed. Branch `claude/prime-movers-4b7224`, cut from `claude/custom-shader-system-caff9e` at `841e765f2`.
+Status: **Implemented 2026-11-10** (0.25.0; merged into the custom-shader-system batch at 6c597e7b3, owner: "Merge it"), after the owner's model review (13 fixes, 0cf7d5e11). **Follow-up merged 2026-11-10** (3e123f51c, owner: "Merge it"): working sound and animation (owner: "add working sound & animation to them"), the owner's sound picks installed. Branch `claude/prime-movers-4b7224`, cut from `claude/custom-shader-system-caff9e` at `841e765f2`.
 
 ## Scope
 
