@@ -114,7 +114,7 @@ public final class ColumnFailureModesReviewWorld {
     /** Cases' time limits, ticks: an action's expectation, a restore's return to RUNNING, the first start. */
     static final int CASE_TICKS = 6000, RESTORE_TICKS = 12000, START_TICKS = 36000;
     /** Ticks a held condition must stand before its line is logged: two of the column's 5 s cycles. */
-    static final int HOLD_TICKS = 200;
+    static final int HOLD_TICKS = 200, END_TICKS = 600;
     /** The receivers' saddles, m: the boot's drain line, with its shutoff six blocks long, clears the ground. */
     static final int RECEIVER_SUPPORT = 9;
 
@@ -686,7 +686,26 @@ public final class ColumnFailureModesReviewWorld {
                     rb.design.diameter(), rb.design.trays().trays(), rb.plant.column.origin().toShortString());
         }
 
-/** {@code body} as a wait's check: a failed assertion waits on; any other exception is the run's failure, logged. */        Runnable guard(Runnable body) {            return () -> {                if (failed()) return;                try {                    body.run();                } catch (net.minecraft.gametest.framework.GameTestAssertException wait) {                    throw wait;                } catch (RuntimeException e) {                    failure = e.toString();                    IChemE.LOGGER.error("review_failure check failed", e);                }            };        }
+        /** {@code body} as a wait's check: a failed assertion waits on; any other exception is the run's failure, logged. */
+        Runnable guard(Runnable body) {
+            return () -> {
+                if (failed()) return;
+                checked(body);
+            };
+        }
+
+        /** {@code body} run: a failed assertion waits on; any other exception is the run's failure, logged. */
+        void checked(Runnable body) {
+            try {
+                body.run();
+            } catch (net.minecraft.gametest.framework.GameTestAssertException wait) {
+                throw wait;
+            } catch (RuntimeException e) {
+                if (failure == null) failure = e.toString();
+                IChemE.LOGGER.error("review_failure check failed", e);
+            }
+        }
+
         boolean failed() {
             return failure != null;
         }
@@ -730,6 +749,7 @@ public final class ColumnFailureModesReviewWorld {
                 report(b, "start");
             }));
             s = cases(s);
+            s = end(s);
             s.thenExecute(() -> {
                 if (a != null) {
                     a.plant().release();
@@ -741,6 +761,34 @@ public final class ColumnFailureModesReviewWorld {
                 if (failure != null) helper.fail(failure);
                 else if (!missed.isEmpty()) helper.fail("missed: " + missed);
             }).thenSucceed();
+        }
+
+        /**
+         * The script's end: both plants RUNNING at their set feed, with no held island on a boundary line, for
+         * {@link #END_TICKS} on end; one {@code review_failure end} line. Anything else within {@link #RESTORE_TICKS} fails.
+         */
+        GameTestSequence end(GameTestSequence s) {
+            long[] since = {-1}, t0 = {-1};
+            boolean[] done = {false};
+            return s.thenWaitUntil(() -> checked(() -> {
+                if (done[0]) return;
+                if (t0[0] < 0) t0[0] = now();
+                paced();
+                int held = held("end");
+                boolean ok = running(a) && running(b) && atDesign(a) && atDesign(b) && held == 0;
+                if (!ok) since[0] = -1;
+                else if (since[0] < 0) since[0] = now();
+                boolean passed = ok && now() - since[0] >= END_TICKS;
+                if (passed || now() - t0[0] > RESTORE_TICKS) {
+                    IChemE.LOGGER.info("review_failure end plantA={} plantB={} held={}", words(a).replace(' ', '_'), words(b).replace(' ', '_'), held);
+                    if (!passed && failure == null) failure = "end not reached in " + RESTORE_TICKS + " ticks: A " + words(a) + ", B " + words(b) + ", held " + held;
+                    done[0] = true;
+                    return;
+                }
+                trace(a, "end");
+                trace(b, "end");
+                helper.assertTrue(false, "Waiting for the end");
+            }));
         }
 
         long now() {
@@ -1090,7 +1138,55 @@ public final class ColumnFailureModesReviewWorld {
         final Map<String, String> traced = new HashMap<>();
 
         /** Logs plant {@code x}'s words, engine text and conditions when they change. */
+        /** The islands seen held, by id. */
+        final Map<Long, String> heldIslands = new HashMap<>();
+        long lastHeldScan = -1000;
+
+        /**
+         * Every 100 ticks, the fluid islands now held: each new one is logged once with the plants' named parts and boundary
+         * lines among its members and its nodes' state. Returns how many are held: the world holds the two plants alone, so each is
+         * one of their lines.
+         */
+        int held(String when) {
+            if (now() - lastHeldScan < 100) return heldIslands.size();
+            lastHeldScan = now();
+            var world = a.plant().world;
+            var names = new HashMap<Long, String>();
+            for (var x : List.of(a, b)) {
+                for (var e : x.named.entrySet()) try { names.put(x.rig.id(e.getValue()), x.label + ":" + e.getKey()); } catch (RuntimeException ignored) {}
+                for (var e : x.rig.lines.entrySet()) try { names.put(x.rig.id(e.getValue()), x.label + ":line " + e.getKey()); } catch (RuntimeException ignored) {}
+            }
+            var now = new HashMap<Long, String>();
+            for (var s : world.diagnosticSnapshots()) {
+                if (!s.status().startsWith("HELD")) continue;
+                var members = new java.util.TreeSet<String>();
+                var nodes = new StringBuilder();
+                for (var r : s.graph().reservoirs()) {
+                    var n = names.get(r.id());
+                    if (n != null) members.add(n);
+                    if (nodes.length() < 1500) nodes.append(String.format(Locale.ROOT, " [%d %s %s T=%.1f P=%.4g m=%.4g V=%.3g vap=%.3g]", r.id(), n == null ? "" : n, r.kind(),
+                            r.state().temperature(), r.state().pressure(), r.state().mass(), r.state().volume(), r.state().vaporVolume()));
+                }
+                for (var p : s.graph().pipes()) {
+                    var n = names.get(p.id());
+                    if (n != null) members.add(n);
+                    var g = p.sections().isEmpty() ? null : p.sections().getFirst();
+                    if (nodes.length() < 3000) nodes.append(String.format(Locale.ROOT, " {pipe %d %d->%d sections=%d bore=%s len=%s blocked=%d forbidden=%d control=%s first=%s second=%s}", p.id(), p.first(), p.second(),
+                            p.sections().size(), g == null ? "" : g.diameter(), g == null ? "" : g.length(), p.blockedDirections(), p.forbiddenDirections(), p.control(), p.firstPort(), p.secondPort()));
+                }
+                now.put(s.id(), members.toString());
+                if (!heldIslands.containsKey(s.id()))
+                    log("held island={} when={} committed_tick={} reservoirs={} pipes={} members={} status=\"{}\" nodes={}", s.id(), when, s.clock().committedTick(),
+                            s.graph().reservoirs().size(), s.graph().pipes().size(), members, s.status(), nodes);
+            }
+            for (var id : heldIslands.keySet()) if (!now.containsKey(id)) log("held island={} when={} released", id, when);
+            heldIslands.clear();
+            heldIslands.putAll(now);
+            return now.size();
+        }
+
         void trace(Built x, String when) {
+            if (x == a) held(when);
             var v = x.view();
             if (v == null) return;
             String engine = v.engine();
