@@ -25,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * Standalone process units (owner request and decisions 2026-10-16, batch 2026-10-15-custom-equipment-rendering,
  * {@code STANDALONE_UNITS_PLAN.md}; machines and heaters 2026-10-17, {@code MACHINES_HEATERS_PLAN.md}): their sizes and
  * ranges, where each nozzle faces, and that at every size each nozzle leaves a free block for its pipe, clear of the
- * saddles, frames and other nozzles.
+ * saddles and frames, its flange clear of the other flanges (pipes may touch: owner, 2026-11-10).
  */
 class ProcessUnitTest {
     /**
@@ -370,23 +370,6 @@ class ProcessUnitTest {
     }
 
     /**
-     * Owner rule 2026-10-17 ("piping connection should have 1 block spacing between them to prevent misconnection"):
-     * pipes in blocks that share a face join, so no two of a shape's pipe blocks touch, by a face, an edge or a corner.
-     */
-    static void pipesApart(EquipmentShape shape) {
-        var ports = ShapeRasterizer.ports(shape);
-        for (int i = 0; i < ports.size(); i++)
-            for (int j = i + 1; j < ports.size(); j++) {
-                var p = ports.get(i);
-                var q = ports.get(j);
-                int dx = Math.abs(p.cell().x() + p.dx() - q.cell().x() - q.dx()), dy = Math.abs(p.cell().y() + p.dy() - q.cell().y() - q.dy()),
-                        dz = Math.abs(p.cell().z() + p.dz() - q.cell().z() - q.dz());
-                assertTrue(Math.max(dx, Math.max(dy, dz)) >= 2, shape + ": the pipes of " + shape.nozzles().get(p.nozzle()).role() + " and "
-                        + shape.nozzles().get(q.nozzle()).role() + " touch");
-            }
-    }
-
-    /**
      * A neck at a pipe's largest that touches its own unit, accepted (owner decisions 2026-10-21, "sometimes some overlap is
      * fine", and 2026-10-25: pipes at most 0.8 m; columns are left alone): its kind and role, on these diameters.
      */
@@ -485,7 +468,7 @@ class ProcessUnitTest {
     /**
      * Owner request 2026-10-25 ("make drum/reactor bottom outlet rotatable"): a trickle-bed reactor's effluent leaves its
      * skirt to the front; to the left, its quench port then mirrored to the front; and to the back or the right, whichever
-     * the ladder from grade leaves free, the other refused. Each turn keeps its pipes apart, its effluent's and quench's
+     * the ladder from grade leaves free, the other refused. Each turn keeps its effluent's and quench's
      * necks clear at a pipe's largest, a free block for every pipe, its effluent line off the ladders, and its decks and
      * ladders as they were. No other unit's bottom outlet leaves a skirt sideways: theirs stay where they are.
      */
@@ -521,7 +504,6 @@ class ProcessUnitTest {
                         var qn = shape.nozzles().get(quench);
                         assertArrayEquals(side, new int[]{e.axis(), e.sign()}, at);
                         assertArrayEquals(q == 1 ? new int[]{2, -1} : new int[]{0, 1}, new int[]{qn.axis(), qn.sign()}, at);
-                        pipesApart(shape);
                         assertTrue(NozzleRoom.clear(shape, effluent, PipeSizes.MAX_OUTSIDE), at + " effluent");
                         assertTrue(NozzleRoom.clear(shape, quench, PipeSizes.MAX_OUTSIDE), at + " quench");
                         var layout = ShapeRasterizer.layout(shape);
@@ -622,7 +604,6 @@ class ProcessUnitTest {
                     if (a == axis) assertEquals(Math.rint(face[a]), face[a], 1e-9, shape + " " + role + ": its face off the block face");
                     else assertEquals(at[a] + .5, face[a], 1e-9, shape + " " + role + ": its centre line off its pipe's, axis " + a);
             }
-            pipesApart(shape);
             // Flanges at their largest stand clear of each other.
             var nozzles = shape.nozzles();
             for (int i = 0; i < nozzles.size(); i++)

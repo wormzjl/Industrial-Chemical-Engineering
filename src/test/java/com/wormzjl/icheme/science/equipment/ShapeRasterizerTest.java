@@ -389,7 +389,6 @@ class ShapeRasterizerTest {
     @Test
     void nozzlesEndOnBlockFacesWithRoomForAPipe() {
         for (var shape : SHAPES) {
-            ProcessUnitTest.pipesApart(shape);
             var layout = ShapeRasterizer.layout(shape);
             var occupied = new HashSet<ShapeRasterizer.Cell>(layout.shell());
             occupied.addAll(layout.interior());
@@ -733,7 +732,7 @@ class ShapeRasterizerTest {
         assertEquals(EquipmentShape.Role.SIDE, hillside.role());
         assertEquals(drum.axis() + 1, hillside.base()[0], 0);
         assertEquals(6.5, hillside.base()[1], 0);
-        // Two on one place; two on neighbouring rows, their pipes touching (owner rule 2026-10-17); one beside the bare
+        // Two on one place; two on neighbouring rows, their flanges at the largest pipe overlapping; one beside the bare
         // drum's liquid outlet; one on a saddle; one facing a ground too near.
         assertEquals(List.of(new Clash(1, 0)), drum(3, 4, Orientation.VERTICAL, Heading.NORTH, 4, List.of(new Connection(1, 5, 0), new Connection(1, 5, 0))).clashes());
         assertEquals(List.of(new Clash(1, 0)), drum(3, 6, Orientation.VERTICAL, Heading.NORTH, 4, List.of(new Connection(1, 5, 0), new Connection(1, 6, 0))).clashes());

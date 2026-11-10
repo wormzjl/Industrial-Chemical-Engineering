@@ -332,8 +332,9 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
         }
 
         /**
-         * Whether this nozzle's pipe block and {@code other}'s touch, by a face, an edge or a corner. Pipes in blocks that
-         * share a face join, so every pipe keeps one free block between it and the next (owner rule 2026-10-17).
+         * Whether this nozzle's pipe block and {@code other}'s touch, by a face, an edge or a corner. Only a column's nozzle
+         * placement keeps them apart ({@code ColumnStructure}; the owner leaves columns as they are): the owner lifted the
+         * one-free-block rule of 2026-10-17 for every other nozzle on 2026-11-10.
          */
         public boolean crowds(Nozzle other) {
             int[] p = pipeBlock(), q = other.pipeBlock();
@@ -1165,7 +1166,7 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
         for (int i = fixed; i < all.size(); i++) {
             var box = reach(all.get(i));
             for (int j = 0; j < i; j++)
-                if (overlap(box, reach(all.get(j))) || all.get(i).crowds(all.get(j)))
+                if (overlap(box, reach(all.get(j))))
                     out.add(new Clash(i - fixed, j >= fixed ? j - fixed : switch (all.get(j).role()) {
                         case VAPOUR_OUTLET -> Clash.VAPOUR;
                         case BOOT_DRAIN -> Clash.BOOT;

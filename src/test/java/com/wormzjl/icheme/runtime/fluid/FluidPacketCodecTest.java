@@ -209,7 +209,7 @@ class FluidPacketCodecTest {
     }
     /** W7: the machine page's view, edit and driver payloads round-trip; a view with a bad number is refused on read. */
     @Test void theMachinePayloadsRoundTripOnTheirOwnRegistrar() {
-        assertEquals("machine-3",com.wormzjl.icheme.network.MachineNetwork.PROTOCOL);
+        assertEquals("machine-4",com.wormzjl.icheme.network.MachineNetwork.PROTOCOL);
         var settings=new ShaftUnit.Settings(true,com.wormzjl.icheme.science.machine.ShaftTrain.Mode.REGULATE_FLOW,.8,0,0);
         var view=new MachineView(7,com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR,"RUNNING",2950,24900,26700,534,settings,
                 com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE,30000,2950,2,true,.72,370,"FV-101",0,2.9,40e5,4e5,null);

@@ -45,7 +45,7 @@ import org.jetbrains.annotations.Nullable;
  * get no compatibility work (AGENTS.md).
  */
 public final class MachineNetwork {
-    public static final String PROTOCOL = "machine-3";
+    public static final String PROTOCOL = "machine-4";
     /** The highest speed share a variable drive or a turbine's governor takes, and the highest creative motor speed (rpm) and power limit (W). */
     public static final double MAXIMUM_SHARE = 1.1, MAXIMUM_RPM = 1e5, MAXIMUM_LIMIT = 1e9;
 
