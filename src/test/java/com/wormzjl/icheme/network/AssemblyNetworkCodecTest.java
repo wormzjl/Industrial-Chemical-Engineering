@@ -76,8 +76,25 @@ class AssemblyNetworkCodecTest {
             var view = complete.withOperation(operation);
             assertEquals(view, roundTrip(view));
         }
+        // The conditions cross whole (W1): their kinds, shares, indices (none is -1) and texts; and the accepted set points beside the requested ones (W2).
+        var running = com.wormzjl.icheme.client.gui.common.OperationColumnTest.running(s, com.wormzjl.icheme.science.column.operation.OperationView.Phase.LIMITED);
+        var accepted = com.wormzjl.icheme.client.gui.common.OperationColumnTest.setpoints(2, 4, 4, false);
+        var refused = new com.wormzjl.icheme.science.column.operation.OperationView(running.phase(), running.conditions(), running.alpha(), running.resolving(), running.engine(),
+                running.running(), running.editable(), running.setpoints(), accepted, running.streams(), running.duties(), running.solve());
+        var back = roundTrip(complete.withOperation(refused)).operation();
+        assertEquals(refused, back);
+        assertEquals(refused.conditions(), back.conditions());
+        assertEquals(-1, back.conditions().getFirst().index());
+        assertEquals(accepted, back.accepted());
         // A view with no operation (no design, a watch) crosses with none.
         assertNull(roundTrip(complete).operation());
+        // The trays cross (W7); the DCS's column page carries the same encoding in the control publication's bytes (W6.2).
+        var loaded = com.wormzjl.icheme.client.gui.common.OperationColumnTest.loaded(s);
+        assertEquals(loaded, roundTrip(complete.withOperation(loaded)).operation());
+        assertEquals(loaded, AssemblyNetwork.decodeOperation(AssemblyNetwork.encodeOperation(loaded)));
+        var bytes = AssemblyNetwork.encodeOperation(loaded);
+        assertNull(AssemblyNetwork.decodeOperation(java.util.Arrays.copyOf(bytes, bytes.length / 2)), "a cut view reads as none");
+        assertNull(AssemblyNetwork.decodeOperation(java.util.Arrays.copyOf(bytes, bytes.length + 1)), "trailing bytes read as none");
         var buffer = new RegistryFriendlyByteBuf(Unpooled.buffer(), RegistryAccess.EMPTY);
         try {
             for (var payload : List.of(new AssemblyNetwork.OperationPayload(3, AssemblyNetwork.Action.APPLY, List.of(33.3, 318.15, 2.5, 0.0, .05, -63000.0)),

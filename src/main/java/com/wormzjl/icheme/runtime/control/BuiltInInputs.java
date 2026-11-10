@@ -34,6 +34,8 @@ final class BuiltInInputs {
         if (kind == EquipmentShape.Kind.COLUMN) {
             for (String end : List.of("top", "bottom"))
                 stream(out, host, host, end, "COLUMN:" + end, false);
+            // The live pressure drop over the trays (batch 2026-11-10-column-failure-modes, W3.3).
+            out.add(ControlInput.builtIn(host, host, "differential_pressure", Sensor.Kind.PRESSURE, com.wormzjl.icheme.runtime.fluid.ColumnOperation.DIFFERENTIAL));
             var counts = new EnumMap<EquipmentShape.Role, Integer>(EquipmentShape.Role.class);
             for (var nozzle : shape.nozzles()) counts.merge(nozzle.role(), 1, Integer::sum);
             var seen = new EnumMap<EquipmentShape.Role, Integer>(EquipmentShape.Role.class);
@@ -169,11 +171,19 @@ final class BuiltInInputs {
         else if (kind.chimney())
             for (var alarm : com.wormzjl.icheme.runtime.fluid.EquipmentAlarm.CHIMNEY)
                 out.add(ControlInput.builtIn(binding.host(), binding.node(0), "alarm_" + alarm.name().toLowerCase(Locale.ROOT), Sensor.Kind.ALARM, "ALARM:" + alarm.name()));
+        // A running column's (W6.1), answered from its run's last conditions at the binding's origin.
+        else if (kind == EquipmentShape.Kind.COLUMN)
+            for (var alarm : com.wormzjl.icheme.runtime.fluid.EquipmentAlarm.COLUMN)
+                out.add(ControlInput.builtIn(binding.host(), binding.host(), "alarm_" + alarm.name().toLowerCase(Locale.ROOT), Sensor.Kind.ALARM, "ALARM:" + alarm.name()));
     }
 
-    /** Whether alarm channel {@code input} is raised: its burners' alarm, or its unit's store standing for want of power. */
-    static boolean raised(ControlInput input, FluidWorldAuthority world) {
+    /**
+     * Whether alarm channel {@code input} is raised: a column's from its run's conditions at {@code binding}'s origin, its
+     * burners' alarm, or its unit's store standing for want of power.
+     */
+    static boolean raised(ControlInput input, FluidWorldAuthority world, Binding binding) {
         var alarm = com.wormzjl.icheme.runtime.fluid.EquipmentAlarm.valueOf(input.role().substring(6));
+        if (binding != null && binding.shape().kind() == EquipmentShape.Kind.COLUMN) return world.columnAlarms(binding.origin()).contains(alarm);
         long unit = input.source() > 0 ? input.source() : input.host();
         var heater = world.burners().alarms(unit);
         if (world.registrations().containsKey(unit) && world.registrations().get(unit).device().burner()) return heater.contains(alarm);
@@ -263,7 +273,7 @@ final class BuiltInInputs {
         double value = 0, secondary = 0, span = 0;
         var quality = Instrument.Availability.UNAVAILABLE;
         if (input.role().startsWith("ALARM:")) {
-            value = raised(input, world) ? 1 : 0;
+            value = raised(input, world, binding) ? 1 : 0;
             tick = world.onlineTick();
             quality = Instrument.Availability.AVAILABLE;
         } else if (input.role().startsWith("STILL:")) {

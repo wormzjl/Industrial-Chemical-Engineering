@@ -440,4 +440,51 @@ class ControlSystemTest {
         facts.removePanel(id);
         assertFalse(facts.heldPanel(id), "the hold leaves with the controller");
     }
+
+    /**
+     * A DCS's column page (W6.2): a console whose bus reaches the column runs Start, the set points and Stop at the column;
+     * one with no data link, or a controller box, is refused and the column sees nothing.
+     */
+    @Test
+    void aDcsColumnCommandReachesTheColumnOnlyOverItsDataLink() {
+        var calls = new ArrayList<String>();
+        var door = new ColumnCommands.Door() {
+            @Override public String start(long host) { calls.add("start " + host); return null; }
+            @Override public void stop(long host) { calls.add("stop " + host); }
+            @Override public String setpoints(long host, List<Double> values) { calls.add("apply " + host + " " + values); return values.isEmpty() ? "the set points do not fit the column's design" : null; }
+        };
+        var start = new ColumnCommands.Command(12, ColumnCommands.Action.START, List.of());
+        assertEquals(ColumnCommands.NO_DATA_LINK, ColumnCommands.run(true, true, false, start, door));
+        assertEquals(ColumnCommands.NOT_A_DCS, ColumnCommands.run(false, true, true, start, door));
+        assertEquals(ColumnCommands.CHANGED, ColumnCommands.run(true, false, true, start, door));
+        assertEquals(List.of(), calls, "a refused command reaches no column");
+        assertEquals(ColumnCommands.APPLIED, ColumnCommands.run(true, true, true, start, door));
+        assertEquals(ColumnCommands.APPLIED, ColumnCommands.run(true, true, true, new ColumnCommands.Command(12, ColumnCommands.Action.APPLY, List.of(30.0, 318.15)), door));
+        assertEquals("the set points do not fit the column's design", ColumnCommands.run(true, true, true, new ColumnCommands.Command(12, ColumnCommands.Action.APPLY, List.of()), door),
+                "the column's own refusal is the answer");
+        assertEquals(ColumnCommands.APPLIED, ColumnCommands.run(true, true, true, new ColumnCommands.Command(12, ColumnCommands.Action.STOP, List.of()), door));
+        assertEquals(List.of("start 12", "apply 12 [30.0, 318.15]", "apply 12 []", "stop 12"), calls);
+        assertThrows(IllegalArgumentException.class, () -> new ColumnCommands.Command(12, ColumnCommands.Action.APPLY, Collections.nCopies(65, 1.0)));
+    }
+
+    /** A feed-rate loop's plan (W6.3): a flow target over the feed's molar mass; a level loop's volume flow at the feed's density over it. */
+    @Test
+    void aColumnLoopPlansTheFeedInMolesPerSecond() {
+        assertEquals(100, ControlLaw.flowFeed(25, .25), 1e-12, "25 kg/s of a 250 g/mol feed is 100 mol/s");
+        assertEquals(0, ControlLaw.flowFeed(-1, .25), 0, "no negative plan");
+        assertEquals(80, ControlLaw.levelFeed(.025, 800, .25), 1e-12, "0.025 m³/s at 800 kg/m³ of a 250 g/mol feed is 80 mol/s");
+        assertEquals(0, ControlLaw.levelFeed(-.1, 800, .25), 0);
+    }
+
+    /**
+     * A level loop on a column reads its feed valve's density from the pipe whatever the pipe run's sense (batch
+     * 2026-11-10-column-failure-modes, stage 5 case 12: a run compiled against the flow read -9.6 kg/s, and the loop
+     * answered NO LEVEL BALANCE while the feed ran).
+     */
+    @Test
+    void aColumnLevelLoopReadsItsFeedValveEitherWay() {
+        assertEquals(800, ControlLaw.feedDensity(8, .01), 1e-9);
+        assertEquals(800, ControlLaw.feedDensity(-8, -.01), 1e-9, "a run compiled against the flow");
+        assertTrue(Double.isNaN(ControlLaw.feedDensity(0, 0)), "nothing flowing: no density");
+    }
 }

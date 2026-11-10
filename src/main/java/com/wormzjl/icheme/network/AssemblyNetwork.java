@@ -12,7 +12,7 @@ import com.wormzjl.icheme.science.assembly.AssemblyReport.SlotReport;
 import com.wormzjl.icheme.science.assembly.AssemblyReport.State;
 import com.wormzjl.icheme.science.assembly.AssemblyView;
 import com.wormzjl.icheme.science.assembly.Blueprint.Slot;
-import com.wormzjl.icheme.science.column.operation.ColumnCycle;
+import com.wormzjl.icheme.science.column.operation.Condition;
 import com.wormzjl.icheme.science.column.operation.DriftBands;
 import com.wormzjl.icheme.science.column.operation.OperationView;
 import com.wormzjl.icheme.science.column.operation.Port;
@@ -54,7 +54,7 @@ import java.util.*;
  * {@link WatchPayload}, which replays their stored views, and their changes come with the buckets ({@link WatchedPayload}).
  */
 public final class AssemblyNetwork {
-    public static final String PROTOCOL = "assembly-4";
+    public static final String PROTOCOL = "assembly-6";
     /** Bounds a view's read checks: slots, ports, members, characters of a slot's name or detail. */
     static final int MAX_SLOTS = 256, MAX_PORTS = 1024, MAX_MEMBERS = 256, MAX_TEXT = 1024;
 
@@ -107,20 +107,53 @@ public final class AssemblyNetwork {
     /** Bounds an operation's read checks: ports, duties, the values of a set point list. */
     static final int MAX_STREAMS = 32, MAX_VALUES = 64;
 
+    /** {@code o} in this codec's bytes, for the control publication's column page (W6.2): one encoding of the view. */
+    public static byte[] encodeOperation(OperationView o) {
+        var b = new RegistryFriendlyByteBuf(io.netty.buffer.Unpooled.buffer(), net.minecraft.core.RegistryAccess.EMPTY);
+        try {
+            writeOperation(b, o);
+            var out = new byte[b.readableBytes()];
+            b.readBytes(out);
+            return out;
+        } finally {
+            b.release();
+        }
+    }
+
+    /** The view {@link #encodeOperation} wrote, or null where {@code bytes} do not read as one. */
+    public static @Nullable OperationView decodeOperation(byte[] bytes) {
+        var b = new RegistryFriendlyByteBuf(io.netty.buffer.Unpooled.wrappedBuffer(bytes), net.minecraft.core.RegistryAccess.EMPTY);
+        try {
+            var o = readOperation(b);
+            return b.readableBytes() == 0 ? o : null;
+        } catch (RuntimeException invalid) {
+            return null;
+        } finally {
+            b.release();
+        }
+    }
+
     private static void writeOperation(RegistryFriendlyByteBuf b, @Nullable OperationView o) {
         b.writeBoolean(o != null);
         if (o == null) return;
         b.writeEnum(o.phase());
-        b.writeEnum(o.limit());
+        int conditions = Math.min(o.conditions().size(), MAX_STREAMS);
+        b.writeVarInt(conditions);
+        for (var c : o.conditions().subList(0, conditions)) {
+            b.writeEnum(c.condition());
+            b.writeDouble(c.value());
+            b.writeVarInt(c.index() + 1);
+            b.writeUtf(c.text(), Condition.MAX_TEXT);
+        }
         b.writeDouble(o.alpha());
-        b.writeBoolean(o.ruleA());
         b.writeBoolean(o.resolving() != null);
         if (o.resolving() != null) b.writeEnum(o.resolving());
-        b.writeBoolean(o.failed());
         b.writeUtf(o.engine().length() > MAX_TEXT ? o.engine().substring(0, MAX_TEXT) : o.engine(), MAX_TEXT);
         b.writeBoolean(o.running());
         b.writeBoolean(o.editable());
         writeSetpoints(b, o.setpoints());
+        b.writeBoolean(o.accepted() != null);
+        if (o.accepted() != null) writeSetpoints(b, o.accepted());
         b.writeVarInt(o.streams().size());
         for (var s : o.streams()) {
             b.writeEnum(s.port());
@@ -138,6 +171,11 @@ public final class AssemblyNetwork {
             b.writeDouble(d.booked());
             b.writeDouble(d.solved());
         }
+        b.writeDouble(o.trays().drop());
+        b.writeDouble(o.trays().flood());
+        b.writeDouble(o.trays().dropAtSet());
+        b.writeDouble(o.trays().floodAtSet());
+        b.writeVarInt(o.trays().tray());
         var solve = o.solve();
         b.writeBoolean(solve != null);
         if (solve == null) return;
@@ -151,26 +189,28 @@ public final class AssemblyNetwork {
         if (!b.readBoolean()) return null;
         try {
             var phase = b.readEnum(OperationView.Phase.class);
-            var limit = b.readEnum(ColumnCycle.Limit.class);
+            var conditions = new ArrayList<Condition.Active>();
+            for (int i = 0, n = count(b, MAX_STREAMS); i < n; i++)
+                conditions.add(new Condition.Active(b.readEnum(Condition.class), b.readDouble(), b.readVarInt() - 1, b.readUtf(Condition.MAX_TEXT)));
             double alpha = b.readDouble();
-            boolean ruleA = b.readBoolean();
             var resolving = b.readBoolean() ? b.readEnum(DriftBands.Trigger.class) : null;
-            boolean failed = b.readBoolean();
             String engine = b.readUtf(MAX_TEXT);
             boolean running = b.readBoolean(), editable = b.readBoolean();
             var setpoints = readSetpoints(b);
+            var accepted = b.readBoolean() ? readSetpoints(b) : null;
             var streams = new ArrayList<OperationView.Stream>();
             for (int i = 0, n = count(b, MAX_STREAMS); i < n; i++)
                 streams.add(new OperationView.Stream(b.readEnum(Port.class), b.readVarInt(), b.readDouble(), b.readDouble(), b.readDouble(), b.readDouble(), b.readDouble()));
             var duties = new ArrayList<OperationView.Duty>();
             for (int i = 0, n = count(b, MAX_STREAMS); i < n; i++)
                 duties.add(new OperationView.Duty(b.readEnum(OperationView.DutyKind.class), b.readVarInt(), b.readDouble(), b.readDouble()));
+            var trays = new OperationView.Trays(b.readDouble(), b.readDouble(), b.readDouble(), b.readDouble(), b.readVarInt());
             OperationView.Solve solve = null;
             if (b.readBoolean()) {
                 var trigger = b.readBoolean() ? b.readEnum(DriftBands.Trigger.class) : null;
                 solve = new OperationView.Solve(trigger, b.readBoolean(), b.readDouble());
             }
-            return new OperationView(phase, limit, alpha, ruleA, resolving, failed, engine, running, editable, setpoints, streams, duties, solve);
+            return new OperationView(phase, conditions, alpha, resolving, engine, running, editable, setpoints, accepted, streams, duties, solve, trays);
         } catch (IllegalArgumentException invalid) {
             throw new DecoderException(invalid.getMessage());
         }

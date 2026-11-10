@@ -27,6 +27,9 @@ public final class ControlService {
     private final ArrayDeque<Edit> edits = new ArrayDeque<>();
 
     private record Edit(ControlPanelMenu menu, UUID id, long revision, ControlSettings settings) {}
+    private final ArrayDeque<ColumnRequest> columnCommands = new ArrayDeque<>();
+
+    private record ColumnRequest(ControlPanelMenu menu, ColumnCommands.Command command) {}
 
     public ControlService(FluidWorldAuthority world, ControlFacts facts) {
         this.world = world;
@@ -45,6 +48,12 @@ public final class ControlService {
     }
 
     /** The firing the controllers set for still {@code pot} at the last cadence, NaN for none (owner decision O1). */
+    /** The feed rate a control loop planned for column unit {@code unit} at the last cadence, mol/s, or NaN for none (W6.3). */
+    public double columnFeed(long unit) {
+        var v = plans.columnFeed(unit);
+        return v == null ? Double.NaN : v;
+    }
+
     public double stillFiring(long pot) {
         var v = plans.firing(pot);
         return v == null ? Double.NaN : v;
@@ -230,6 +239,17 @@ public final class ControlService {
         else menu.answer(id, "BUSY: APPLY AGAIN");
     }
 
+    /** A DCS's column command (W6.2): queued like a controller edit, run on the next cadence. */
+    public void column(ControlPanelMenu menu, ColumnCommands.Command command) {
+        if (columnCommands.size() < 256) columnCommands.addLast(new ColumnRequest(menu, command));
+        else menu.answer(menu.panel(), "BUSY: APPLY AGAIN");
+    }
+
+    /** A DCS menu's choice of column page (W6.2): the publication sends that column's Operation view. */
+    public void selectColumn(ControlPanelMenu menu, long host) {
+        menu.selectColumn(host);
+    }
+
     private boolean accessible(ControlPanelMenu menu, UUID id) {
         var owner = facts.panel(menu.panel());
         return owner != null
@@ -243,7 +263,7 @@ public final class ControlService {
      */
     public void tick(long tick) {
         if (tick % CADENCE != 0) return;
-        if (facts.panels().isEmpty() && publication.idle() && edits.isEmpty() && plans.isEmpty())
+        if (facts.panels().isEmpty() && publication.idle() && edits.isEmpty() && columnCommands.isEmpty() && plans.isEmpty())
             return;
         long busRevision = hosts.busRevision();
         if (driveRevision != busRevision) {
@@ -253,6 +273,7 @@ public final class ControlService {
         hosts.refreshColumnMembers();
         var sensors = hosts.inputs();
         applyEdits(sensors);
+        applyColumnCommands();
         var readings = readings(sensors);
         runControllers(sensors, readings);
         publication.publish(sensors, readings);
@@ -288,6 +309,46 @@ public final class ControlService {
             facts.panel(panel.edit(after));
             edit.menu().answer(edit.id(), "APPLIED");
         }
+    }
+
+    /**
+     * The queued column commands (W6.2), each for its console: refused with NO DATA LINK where its bus no longer reaches the
+     * column; else the column's own Start, Stop or set points at its origin, answered on the menu.
+     */
+    private void applyColumnCommands() {
+        while (!columnCommands.isEmpty()) {
+            var request = columnCommands.removeFirst();
+            var menu = request.menu();
+            var console = facts.panel(menu.panel());
+            var cell = hosts.column(request.command().host());
+            boolean allowed = menu.stillValid(menu.player()) && menu.player().mayBuild();
+            boolean wired = console != null && cell != null && hosts.wired(console.id(), request.command().host());
+            menu.answer(menu.panel(), ColumnCommands.run(console != null && console.dcs(), allowed, wired, request.command(), door(cell)));
+        }
+    }
+
+    /** The Operation actions of the column whose loaded cell is {@code cell}, at its origin. */
+    private static ColumnCommands.Door door(EquipmentShellBlockEntity cell) {
+        return new ColumnCommands.Door() {
+            @Override
+            public String start(long host) {
+                return com.wormzjl.icheme.runtime.assembly.AssemblyService.start(level(), cell.origin());
+            }
+
+            @Override
+            public void stop(long host) {
+                com.wormzjl.icheme.runtime.assembly.AssemblyService.stop(level(), cell.origin());
+            }
+
+            @Override
+            public String setpoints(long host, List<Double> values) {
+                return com.wormzjl.icheme.runtime.assembly.AssemblyService.setpoints(level(), cell.origin(), values);
+            }
+
+            private net.minecraft.server.level.ServerLevel level() {
+                return (net.minecraft.server.level.ServerLevel) cell.getLevel();
+            }
+        };
     }
 
     /** The readings the enabled controllers and the open menus need, and nothing else. */
@@ -336,6 +397,7 @@ public final class ControlService {
         var nextHeat = new HashMap<Long, Double>();
         var nextFiring = new HashMap<Long, Double>();
         var nextReflux = new HashMap<Long, Double>();
+        var nextColumnFeed = new HashMap<Long, Double>();
         var claims = new HashMap<Claim, Integer>();
         for (var panel : facts.panels())
             if (!panel.dcs() && panel.settings().enabled() && !facts.heldPanel(panel.id()))
@@ -371,6 +433,7 @@ public final class ControlService {
                         nextFiring.put(setting.output(), decision.firing());
                     if (decision.reflux() != null)
                         nextReflux.put(setting.output(), decision.reflux());
+                    if (decision.feed() != null) nextColumnFeed.merge(decision.unit(), decision.feed(), Math::min);
                     if (decision.outlet() != null) {
                         var refused = world.divert(setting.output(), decision.outlet());
                         if (refused != null) state += " · " + refused.toUpperCase(Locale.ROOT);
@@ -395,5 +458,6 @@ public final class ControlService {
                 publication.status(panel.id(), state);
             }
         world.controlInputsChanged(plans.commit(nextValves, nextHeat, nextFiring, nextReflux));
+        plans.commitColumnFeeds(nextColumnFeed);
     }
 }

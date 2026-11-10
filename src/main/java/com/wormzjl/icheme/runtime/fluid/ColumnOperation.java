@@ -3,6 +3,10 @@ package com.wormzjl.icheme.runtime.fluid;
 import com.wormzjl.icheme.science.column.operation.ColumnCycle;
 import com.wormzjl.icheme.science.column.operation.ColumnCycle.Account;
 import com.wormzjl.icheme.science.column.operation.ColumnSolve;
+import com.wormzjl.icheme.science.column.operation.ColumnStatus;
+import com.wormzjl.icheme.science.column.operation.Condition;
+import com.wormzjl.icheme.science.column.operation.Refusal;
+import com.wormzjl.icheme.science.column.operation.Setpoints;
 import com.wormzjl.icheme.science.column.operation.DriftBands;
 import com.wormzjl.icheme.science.column.operation.Port;
 import com.wormzjl.icheme.science.column.operation.SplitTable;
@@ -39,11 +43,17 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     public static final double INLET_AIM_SECONDS=30,BUFFER_SECONDS=120;
     /** The share of an outlet's available moles a slice may take: a margin over the valve's regulation tolerance. */
     static final double TAKE_MARGIN=1-1e-6;
+    /**
+     * The least an outlet's account gives, kg: below it the account holds the round-off its bookings left (a Stop's booking
+     * left 1e-17 kg on a full-size column's off-gas, which planned its valve at 4e-17 kg/s and left the island's Newton system
+     * singular). The account keeps it until the next production carries it.
+     */
+    static final double TRACE_KG=1e-9;
 
     /** At most one solve per this many online ticks (30 s), except a setpoint edit (plan section 6). */
     static final long SOLVE_SPACING=600;
-    /** A failed solve's retries back off: 30, 60, 120 s (plan section 6). */
-    static final long[] RETRY_TICKS={600,1200,2400};
+    /** A solve the worker did not finish (a deadline, a worker failure, a shutdown) is asked once more after this many ticks (30 s, W2): not a refusal. */
+    static final long TRANSIENT_WAIT=600;
     /** A new table applies at the second cycle after its trigger (owner Q5). */
     static final long APPLY_TICKS=2*CYCLE_TICKS;
     /** The windows a save keeps beyond the fence: a port island this far behind still reads its plan. */
@@ -60,12 +70,17 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         /** No solves: a table comes only from {@link #table}. */
         Solves NONE=new Solves(){public V3ColumnInput design(ColumnUnit unit){return null;}public boolean submit(long unit,ColumnSolve.Job job,java.util.function.Consumer<ColumnSolve.Outcome> done){return false;}};
     }
-    /** A solve in flight: why, the cycle that asked and the cycle that applies it; its outcome once it is done. */
+    /**
+     * A solve in flight: why, the cycle that asked and the cycle that applies it, the set points it solves and the state it
+     * was given (as a drift reference, with the components its table holds); its outcome once it is done.
+     */
     static final class Pending {
-        final DriftBands.Trigger trigger;final long tick;ColumnSolve.Outcome outcome;
-        Pending(DriftBands.Trigger trigger,long tick){this.trigger=trigger;this.tick=tick;}
+        final DriftBands.Trigger trigger;final long tick;final com.wormzjl.icheme.science.column.operation.Setpoints setpoints;final SplitTable.Reference state;final boolean[] held;ColumnSolve.Outcome outcome;
+        Pending(DriftBands.Trigger trigger,long tick,com.wormzjl.icheme.science.column.operation.Setpoints setpoints,SplitTable.Reference state,boolean[] held){this.trigger=trigger;this.tick=tick;this.setpoints=setpoints;this.state=state;this.held=held;}
         long applyAt(){return tick+APPLY_TICKS;}
     }
+    /** A state whose solve was refused (W2): no solve is asked again while the state taken stays inside its bands. */
+    record Refused(DriftBands.Trigger trigger,SplitTable.Reference state,boolean[] held,Condition.Active notice) {}
 
     /** Heat put in transit to each condenser shell's water at {@code tick}, J (one shell's share): by a cycle, or {@code booked} by an outlet's island, whose job decides when it lands. */
     record Owed(long tick,double joule,boolean booked) {}
@@ -73,6 +88,26 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     static final double CONDENSER_HOLD_SECONDS=60,APPROACH_KELVIN=com.wormzjl.icheme.science.equipment.HeatSides.WATER_APPROACH;
     /** The heat each condenser shell's water was owed per second by the cycle at {@code tick}, W: what a feed valve the column sets carries (U2). */
     record Duty(long tick,double watts) {}
+    /**
+     * A duty a running column owes to utility sides through their heat in transit (C6b; W4 of batch
+     * 2026-11-10-column-failure-modes): the condenser's cooling water, the reboiler's heating, pumparound {@code index}'s
+     * cooler. A heating utility ({@link #gives}) gives the duty, its outlet no colder than the bottoms plus the approach; a
+     * cooling one takes it, its outlet no warmer than the condensate's or the draw tray's less the approach.
+     */
+    record Utility(Kind kind,int index) {
+        enum Kind { CONDENSER, REBOILER, PUMPAROUND }
+        static final Utility CONDENSER=new Utility(Kind.CONDENSER,0),REBOILER=new Utility(Kind.REBOILER,0);
+        static Utility pumparound(int j){return new Utility(Kind.PUMPAROUND,j);}
+        /** Whether the utility gives the column heat (the reboiler's) rather than takes it. */
+        boolean gives(){return kind==Kind.REBOILER;}
+        /** +1 where the utility takes the heat owed (the transit is positive), −1 where it gives it. */
+        double sign(){return gives()?-1:1;}
+    }
+    /** What a running unit owes one utility: the heat put in transit, dated, and each cycle's heat rate a side is owed (memory only). */
+    static final class Debt {
+        final ArrayDeque<Owed> owed=new ArrayDeque<>();
+        final ArrayDeque<Duty> rates=new ArrayDeque<>();
+    }
     /** Arrivals at an inlet over online ticks {@code start} to {@code end}, with their solids: already in the account, a cycle takes none of it before its time. */
     record Span(long start,long end,Account arrived,SolidInventory solids) {}
     /** What an outlet gave over online ticks {@code start} to {@code end}, mol: already off the account. */
@@ -91,23 +126,35 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         double[][] enthalpy;
         long nextCycle;
         String status="STARTING: waiting for the first solve";
-        /** The status as the Operation tab says it (C7), set with {@link #status}; the solve that gave the table, whether warm; whether the last solve failed. */
-        com.wormzjl.icheme.science.column.operation.OperationView.Phase phase=com.wormzjl.icheme.science.column.operation.OperationView.Phase.STARTING;DriftBands.Trigger solvedBy;boolean warm,failed;
-        /** Why an inlet demanded nothing at the last cycle (it has no molar mass to meter by), or null. */
-        String unmetered;
+        /** The status as the Operation tab says it (C7), set with {@link #status}; the solve that gave the table, whether warm. */
+        com.wormzjl.icheme.science.column.operation.OperationView.Phase phase=com.wormzjl.icheme.science.column.operation.OperationView.Phase.STARTING;DriftBands.Trigger solvedBy;boolean warm;
+        /** What the last cycle and the solves found (W1): the step's conditions, then the solve's and the notices. */
+        List<Condition.Active> conditions=List.of();
         ColumnCycle.Step last;
-        /** The solve in flight, the tick of the last one asked, the failures in a row and the earliest retry, the warm seed. */
-        Pending pending;long lastSolve=Long.MIN_VALUE/2,retryAt=Long.MIN_VALUE/2;int failures;V3NeuralSeed seed;
-        /** Rule A in force (owner Q1, C1: rule B, with A where a solve fails): a solve of the short inputs failed, so every input is cut together until a solve succeeds or the retry tries B again. */
+        /** The solve in flight, the tick of the last one asked, the warm seed. */
+        Pending pending;long lastSolve=Long.MIN_VALUE/2;V3NeuralSeed seed;
+        /** After a solve the worker did not finish, no solve before this tick; whether that solve was already the one retry (W2). */
+        long waitUntil=Long.MIN_VALUE/2;boolean retried;
+        /** The state whose solve was refused, or null; the requested set points whose solve was refused and why, or null (W2, memory only). */
+        Refused refused;com.wormzjl.icheme.science.column.operation.Setpoints refusedSetpoints;Condition.Active setpointRefusal;
+        /** The design had no operating point at the last request while no table stands: NOT READY, or null. */
+        Condition.Active missing;
+        /** Rule A in force (owner Q1, C1: rule B, with A where a solve fails): a solve of the short steam was refused, so every input is cut together until the steam is no longer short or its shortage leaves the refused state's bands. */
         boolean ruleA;
-        /** The cycle that asked the table's solve and the cycle it applied at; V3's own condenser duty there, W; what the last solve said beyond its table. */
-        long tableTick,applied;double solvedCondenser;String note="";
-        /** The heat booked into the condenser's transit, dated: what the water side reads through the fence (C6b). */
-        final ArrayDeque<Owed> owed=new ArrayDeque<>();
-        /** Each cycle's heat rate owed to a condenser shell's water, dated (U2). State: a reload starts it from the table. */
-        final ArrayDeque<Duty> water=new ArrayDeque<>();
+        /** The cycle that asked the table's solve and the cycle it applied at; V3's own condenser duty there, W; what the accepted solve said beyond its table (FEED_WATER_ROUTED), or null. */
+        long tableTick,applied;double solvedCondenser;Condition.Active routed;
+        /** What the accepted solve advised (V3's bounded texts, W3 step 5), as ADVISORY notices. Memory only: a reload starts without them. */
+        List<Condition.Active> advisories=List.of();
+        /**
+         * Per utility, the heat booked into its sides' transit, dated (what a side reads through the fence, C6b), and each
+         * cycle's heat rate owed to one side (U2, W4). State: a reload starts the rates from the table.
+         */
+        final Map<Utility,Debt> debts=new HashMap<>();
+        Debt debt(Utility utility){return debts.computeIfAbsent(utility,k->new Debt());}
         /** The air condenser's fans at the last cycle, a share of full speed, and their power, W (U2; NaN: no fans known). */
         double fans=Double.NaN,fanPower=Double.NaN;
+        /** The fan sides that had no power at the last cycle (W5): their fans stood. Memory only. */
+        final Set<Long> unpoweredFans=new HashSet<>();
         final Map<Long,ArrayDeque<Span>> spans=new HashMap<>();
         final Map<Long,ArrayDeque<Gift>> gifts=new HashMap<>();
         final Map<Long,ArrayDeque<Credit>> credits=new HashMap<>();
@@ -128,13 +175,40 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     private final Map<Long,Run> runs=new TreeMap<>();
     /** Each port device's unit and station, from the ledger's running units. */
     private final Map<Long,Long> portUnits=new HashMap<>();
-    /** Each running unit's condenser water side, by its connection ({@link PhysicalFluidTopology#sideIdentity}): the side whose heat partner the column is (C6b). */
-    private final Map<Long,Long> waterSides=new HashMap<>();
+    /** A utility side's unit and the duty it serves. */
+    private record Served(long unit,Utility utility) {}
+    /**
+     * Each running unit's utility sides, by their connection ({@link PhysicalFluidTopology#sideIdentity}): the sides whose heat
+     * partner the column is, its condenser's water (C6b) and its reboiler's and pumparound coolers' utilities (W4).
+     */
+    private final Map<Long,Served> utilitySides=new HashMap<>();
     /** The port devices whose islands a cycle's new plan reaches at a later tick (the cycle's tick plus the fence), by that tick. */
     private final TreeMap<Long,Set<Long>> wakes=new TreeMap<>();
     private Solves solves=Solves.NONE;
     /** Where this world's column solves go. */
     public void solves(Solves solves){this.solves=Objects.requireNonNull(solves);}
+    /**
+     * A running column's members' power (W5 of batch 2026-11-10-column-failure-modes, {@code MEMBER_POWER_NOTE.md}): at each
+     * cycle a member books what it drew over the span that just ran, then says whether it has power for the next.
+     */
+    public interface Power {
+        /** Whether machines need power (config {@code energy.machinesNeedPower}): without, nothing books and every member has power. */
+        boolean needed();
+        /** Fan side {@code side}'s bare tube, m². */
+        double surface(long side);
+        /** Fan side {@code side} ran its fans at {@code fans} of full speed until {@code tick}: books it; whether its store has power. */
+        boolean fans(long side,double fans,long tick);
+        /**
+         * Pump {@code mover} ran at {@code share} of its rated duty until {@code tick}: books its rated shaft power times the
+         * share on its train (a casing) or its own store (an in-line pump); whether its driver gives power for the next cycle.
+         */
+        boolean pump(long mover,double share,long tick);
+        /** No power to book: every member runs free, as before W5. */
+        Power NONE=new Power(){public boolean needed(){return false;}public double surface(long side){return 0;}public boolean fans(long side,double fans,long tick){return true;}public boolean pump(long mover,double share,long tick){return true;}};
+    }
+    private Power power=Power.NONE;
+    /** Where this world's column members draw their power. */
+    public void power(Power power){this.power=Objects.requireNonNull(power);}
 
     public ColumnOperation(WorldTopologyLedger topology,PhysicalRegistry registry,IslandCoordinator coordinator,List<String> axis,double[] weights) {
         this.topology=Objects.requireNonNull(topology);this.registry=Objects.requireNonNull(registry);this.coordinator=Objects.requireNonNull(coordinator);this.weights=weights.clone();this.axis=List.copyOf(axis);if(axis.size()!=weights.length)throw new IllegalArgumentException("One weight per component");
@@ -176,13 +250,13 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     }
     /** Reads the ledger's running units again: after a Start, a Stop, a load. A unit that stopped forgets its state. */
     public void refresh() {
-        var units=topology.columns();portUnits.clear();waterSides.clear();
+        var units=topology.columns();portUnits.clear();utilitySides.clear();
         runs.keySet().removeIf(id->{var u=units.get(id);return u==null||!u.running();});
         for(var u:units.values()) {
             if(!u.running())continue;
             runs.computeIfAbsent(u.id(),id->restore(u));
             for(var s:u.stations())if(s.device()!=0)portUnits.put(s.device(),u.id());
-            for(long side:u.condensers())waterSides.put(PhysicalFluidTopology.sideIdentity(side),u.id());
+            for(var utility:utilities(u))for(long side:sideList(u,utility))utilitySides.put(PhysicalFluidTopology.sideIdentity(side),new Served(u.id(),utility));
         }
         schedule();
     }
@@ -193,7 +267,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     private Run restore(ColumnUnit u) {
         var r=new Run(u.id(),firstCycle(u.id()));var s=u.state();
         if(s==null||!s.table().axis().equals(axis)||missingStation(u,s.table())!=null)return r;
-        r.table=s.table();r.enthalpy=s.enthalpy();r.tableTick=s.tableTick();r.applied=s.applied();r.solvedCondenser=s.solvedCondenser();r.status="RUNNING";r.phase=com.wormzjl.icheme.science.column.operation.OperationView.Phase.RUNNING;
+        r.table=s.table();r.enthalpy=s.enthalpy();r.tableTick=s.tableTick();r.applied=s.applied();r.solvedCondenser=s.solvedCondenser();publish(r,List.of(),null);
         r.lastSolve=s.tableTick();r.probes=s.probes();r.rebuildProbes=s.probes()==null;
         for(var l:s.levels())r.levels.computeIfAbsent(l.device(),d->new ArrayDeque<>()).addLast(new Level(l.tick(),l.held(),l.rate(),l.molarMass()));
         for(var c:s.credits())r.credits.computeIfAbsent(c.device(),d->new ArrayDeque<>()).addLast(new Credit(c.tick(),c.product(),SolidInventory.EMPTY));
@@ -226,8 +300,8 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
      */
     private String water(ColumnUnit u) {
         if(u==null)return "";
-        double flow=0,outlet=Double.NaN,ceiling=Math.max(1,u.setpoints().condenserTemperature()-APPROACH_KELVIN);int set=0;
-        for(long side:waterSides(u)) {
+        double flow=0,outlet=Double.NaN,ceiling=Math.max(1,condenserTemperature(u)-APPROACH_KELVIN);int set=0;
+        for(long side:sides(u,Utility.CONDENSER)) {
             long id=PhysicalFluidTopology.sideIdentity(side);var operation=coordinator.operation(id);
             Long valveOwner=operation==null||!operation.column()?null:registry.owner(operation.valve()),sideOwner=registry.owner(side);
             if(valveOwner==null||sideOwner==null)continue;
@@ -252,9 +326,11 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     public com.wormzjl.icheme.science.column.operation.OperationView view(long unit,long now,java.util.function.LongToDoubleFunction opening) {
         var u=topology.column(unit);if(u==null)return null;
         var r=u.running()?runs.get(unit):null;var set=u.setpoints();
-        if(r==null)return new com.wormzjl.icheme.science.column.operation.OperationView(com.wormzjl.icheme.science.column.operation.OperationView.Phase.STOPPED,ColumnCycle.Limit.NONE,0,false,null,false,
-                "STOPPED",false,true,set,List.of(),List.of(),null);
-        var t=r.table;var step=r.last!=null&&r.last.trip()==null?r.last:null;double seconds=CYCLE_TICKS/20.0;
+        if(r==null)return new com.wormzjl.icheme.science.column.operation.OperationView(com.wormzjl.icheme.science.column.operation.OperationView.Phase.STOPPED,List.of(),0,null,
+                "STOPPED",false,true,set,null,List.of(),List.of(),null);
+        var t=r.table;var step=r.last!=null&&!r.last.tripped()?r.last:null;double seconds=CYCLE_TICKS/20.0;
+        // The cycle demands its inlets at the accepted set points (W2); the view shows the requested ones beside them where they differ.
+        var demanded=running(u,t);var accepted=t!=null&&set.intensivelyDiffers(t.reference().setpoints())?demanded:null;
         var stations=new ArrayList<>(u.stations());stations.removeIf(s->s.device()==0);stations.sort(Comparator.comparing((ColumnUnit.Station s)->s.port()).thenComparingInt(ColumnUnit.Station::index));
         var streams=new ArrayList<com.wormzjl.icheme.science.column.operation.OperationView.Stream>();
         for(var s:stations) {
@@ -265,7 +341,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
                 if(taken!=null)rate=taken.total()/seconds;
                 if(t!=null)temperature=s.port()==Port.FEED?t.reference().feedTemperature(taken!=null&&taken.total()>0?taken.energy()/taken.total():Double.NaN)
                         :s.index()<t.reference().steamTemperatures().length?t.reference().steamTemperatures()[s.index()]:Double.NaN;
-                double aim=INLET_AIM_SECONDS*(s.port()==Port.FEED?set.feedRate():s.index()<set.steamPerFeed().length?set.feedRate()*set.steamPerFeed()[s.index()]:0);
+                double aim=INLET_AIM_SECONDS*(s.port()==Port.FEED?demanded.feedRate():s.index()<demanded.steamPerFeed().length?demanded.feedRate()*demanded.steamPerFeed()[s.index()]:0);
                 if(aim>0)held=s.account().total()/aim;
             } else if(t!=null) {
                 int k=t.product(s.port(),s.index());
@@ -292,9 +368,14 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
                     step==null||Double.isNaN(r.fanPower)?0:r.fanPower,com.wormzjl.icheme.science.equipment.HeatSides.fanPower(u.airSurface(),atSet)));
         }
         var solve=t==null?null:new com.wormzjl.icheme.science.column.operation.OperationView.Solve(r.solvedBy,r.warm,Math.max(0,now-r.tableTick)/20.0);
-        return new com.wormzjl.icheme.science.column.operation.OperationView(r.phase,step==null?ColumnCycle.Limit.NONE:step.limit(),step==null?0:step.alpha(),r.ruleA,
-                r.pending==null?null:r.pending.trigger,r.failed,r.status+water(u),true,true,set,streams,duties,solve);
+        // The trays at the feed taken (W7): the live drop as the channel reads it, the worst tray's flood fraction.
+        var trays=com.wormzjl.icheme.science.column.operation.OperationView.Trays.NONE;
+        if(t!=null&&t.flood().known()){double taken=step==null?0:step.feedMoles()/seconds;trays=new com.wormzjl.icheme.science.column.operation.OperationView.Trays(drop(t,taken),t.flood().fraction(taken),drop(t,set.feedRate()),t.flood().fraction(set.feedRate()),t.flood().tray()+1);}
+        return new com.wormzjl.icheme.science.column.operation.OperationView(r.phase,r.conditions,step==null?0:step.alpha(),
+                r.pending==null?null:r.pending.trigger,r.status+water(u),true,true,set,accepted,streams,duties,solve,trays);
     }
+    /** The role of a column's pressure drop channel, {@code differential_pressure} (W3.3). */
+    public static final String DIFFERENTIAL="COLUMN:differential";
     record InstrumentSample(double value,long tick) {}
     ColumnUnit.Probes probes(com.wormzjl.icheme.science.column.v3.V3ColumnInspection accepted,SplitTable table){
         if(accepted==null)return null;
@@ -312,9 +393,11 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         return new ColumnUnit.Probes(top.pressurePascal(),top.temperatureKelvin(),bottom.pressurePascal(),bottom.temperatureKelvin(),reflux.pressurePascal(),reflux.temperatureKelvin(),refluxMass/feed,vapourMass/feed);
     }
     InstrumentSample instrument(long unit,String role,com.wormzjl.icheme.runtime.instrument.Sensor.Kind kind){
-        var u=topology.column(unit);var r=runs.get(unit);if(u==null||r==null||r.table==null||r.last==null||r.last.trip()!=null)return null;
+        var u=topology.column(unit);var r=runs.get(unit);if(u==null||r==null||r.table==null||r.last==null)return null;
+        // On a trip the cycle took nothing: flows read 0, pressures and temperatures stay the table's (W1.7).
         double value=Double.NaN;long tick=r.applied;
-        if(role.startsWith("COLUMN:")){
+        if(role.equals(DIFFERENTIAL)){if(kind!=com.wormzjl.icheme.runtime.instrument.Sensor.Kind.PRESSURE)return null;value=drop(unit);}
+        else if(role.startsWith("COLUMN:")){
             if(r.probes==null)return null;boolean bottom=role.endsWith("bottom");
             value=kind==com.wormzjl.icheme.runtime.instrument.Sensor.Kind.PRESSURE?(bottom?r.probes.bottomPressure():r.probes.topPressure()):(bottom?r.probes.bottomTemperature():r.probes.topTemperature());
         }else if(role.equals("REFLUX")){
@@ -343,8 +426,57 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         if(enthalpy.length!=table.products().size())throw new IllegalArgumentException("One enthalpy row per product");
         var u=topology.column(unit);
         for(var p:table.products())if(u.station(p.port(),p.index())==null)throw new IllegalArgumentException("Product "+p.port()+" "+p.index()+" has no station");
-        r.table=table;r.enthalpy=ColumnSolve.copy(enthalpy);r.status="RUNNING";r.phase=com.wormzjl.icheme.science.column.operation.OperationView.Phase.RUNNING;
+        r.table=table;r.enthalpy=ColumnSolve.copy(enthalpy);publish(r,List.of(),null);
     }
+    /**
+     * The set points of unit {@code unit} were applied (W2): a refusal of the ones requested before is forgotten, so the next
+     * cycle asks one solve of what now stands. Memory only; the cycle runs on its schedule.
+     */
+    public void edited(long unit){var r=runs.get(unit);if(r!=null){r.refusedSetpoints=null;r.setpointRefusal=null;}}
+    /** What the last cycle of unit {@code unit} and its solves found (W1), or none where it does not run. */
+    public List<Condition.Active> conditions(long unit){var r=runs.get(unit);return r==null?List.of():r.conditions;}
+    /**
+     * The status and phase of {@code r} from what the step found ({@code step}), the solve state and the notices (W1): one
+     * list, one formatter (ColumnStatus).
+     */
+    private void publish(Run r,List<Condition.Active> step,Condition.Active unmetered) {
+        var list=new ArrayList<>(step);
+        if(r.pending!=null)list.add(new Condition.Active(Condition.OFF_TABLE,r.pending.trigger.name().toLowerCase(Locale.ROOT)));
+        if(r.table==null&&r.missing!=null)list.add(r.missing);
+        if(r.refused!=null)list.add(r.refused.notice());
+        if(r.setpointRefusal!=null)list.add(r.setpointRefusal);
+        if(r.routed!=null)list.add(r.routed);
+        list.addAll(r.advisories);
+        if(unmetered!=null)list.add(unmetered);
+        r.conditions=List.copyOf(list);
+        r.status=ColumnStatus.line(r.table!=null,r.conditions,r.last==null?0:r.last.alpha(),r.fans,r.fanPower);
+        r.phase=ColumnStatus.phase(r.table!=null,r.conditions);
+    }
+    /** The set points the cycle runs on (W2): the table's accepted ones with the unit's feed rate; the requested ones before any table. */
+    /** The set points the cycle runs on: the accepted ones (W2) at the feed rate it takes, the set one or a control loop's plan below it (W6.3). */
+    private Setpoints running(ColumnUnit u,SplitTable table){double rate=feedRate(u);return table==null?u.setpoints().withFeedRate(rate):table.reference().setpoints().withFeedRate(rate);}
+    /** A control loop's planned feed rate for a unit, mol/s, NaN for none (W6.3). */
+    public interface FeedPlans{double feed(long unit);}
+    private FeedPlans feedPlans=unit->Double.NaN;
+    public void feedPlans(FeedPlans plans){feedPlans=Objects.requireNonNull(plans);}
+    /** The feed rate unit {@code u}'s cycle takes, mol/s: its set rate, or a control loop's plan below it (W6.3). The saved set point does not change. */
+    public double feedRate(ColumnUnit u){double set=u.setpoints().feedRate(),plan=feedPlans.feed(u.id());return plan>=0&&plan<set?plan:set;}
+    /** The molar mass the feed inlet of unit {@code unit} meters by, kg/mol, or NaN: its last level's (W6.3: a flow loop's planned feed). */
+    public double feedMolarMass(long unit){var r=runs.get(unit);var u=topology.column(unit);if(r==null||u==null)return Double.NaN;var s=u.station(Port.FEED,0);var log=s==null?null:r.levels.get(s.device());var last=log==null?null:log.peekLast();return last==null||!(last.molarMass()>0)?Double.NaN:last.molarMass();}
+    /** The condenser temperature the column runs at: the accepted set point where a table stands, the requested one before (a finding of stage 1: the water's ceiling follows the table in force). */
+    private double condenserTemperature(ColumnUnit u){var r=runs.get(u.id());return running(u,r==null?null:r.table).condenserTemperature();}
+    /**
+     * The column's pressure drop at {@code feedRate} mol/s of feed taken on {@code table}, Pa (W3.3): the solved dry drop by the
+     * square of the feed over the table's own, its liquid head as solved; NaN where the table has no hydraulics. Port pressures
+     * do not move with it.
+     */
+    static double drop(SplitTable table,double feedRate){
+        var flood=table.flood();if(!flood.known())return Double.NaN;
+        double solved=table.reference().alpha()*table.reference().setpoints().designFeedRate();
+        return flood.drop(solved>0?feedRate/solved:0);
+    }
+    /** Unit {@code unit}'s live pressure drop over its trays at the last cycle, Pa, or NaN (W3.3: the tab and the {@code differential_pressure} channel). */
+    public double drop(long unit){var r=runs.get(unit);return r==null||r.table==null||r.last==null?Double.NaN:drop(r.table,r.last.feedMoles()/(CYCLE_TICKS/20.0));}
 
     /** The next cycle deadline: the earliest cycle still ahead. A cycle already due waits for its ports' bookings, which run it
      * ({@link #booked}); one a cycle later looks again, since a port's island that stopped (a hold) books nothing. */
@@ -372,6 +504,10 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
      * Whether the cycle at {@code tick} may run: no solve applies there, or its outcome is in and applied now. A solve
      * applies at the second cycle after its trigger whenever it finishes, so a table never depends on the worker's timing;
      * the solve deadline bounds the wait (a deadline that expires is a failed solve).
+     *
+     * <p>A refused solve is not asked again on its own (W2): a refused set point stays refused while the unit's set points
+     * equal it (rule A for a refused short steam), a refused state while the state taken stays inside its bands. A solve the
+     * worker did not finish is asked once more after {@link #TRANSIENT_WAIT}; a second such failure is a refusal.</p>
      */
     private boolean applied(Run r,long tick) {
         var p=r.pending;if(p==null||p.applyAt()>tick)return true;
@@ -380,42 +516,70 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         var u=topology.column(r.unit);
         String refused=p.outcome instanceof ColumnSolve.Solved s?missingStation(u,s.table()):null;
         if(p.outcome instanceof ColumnSolve.Solved s&&refused==null) {
-            r.before=r.table;r.table=s.table();r.enthalpy=s.enthalpy();r.seed=s.seed();r.probes=probes(s.inspection(),s.table());r.rebuildProbes=false;r.tableTick=p.tick;r.applied=tick;r.solvedCondenser=s.solvedCondenser();r.failures=0;r.note=s.note();r.solvedBy=p.trigger;r.warm=s.route().contains("warm");r.failed=false;
+            r.before=r.table;r.table=s.table();r.enthalpy=s.enthalpy();r.seed=s.seed();r.probes=probes(s.inspection(),s.table());r.rebuildProbes=false;r.tableTick=p.tick;r.applied=tick;r.solvedCondenser=s.solvedCondenser();r.solvedBy=p.trigger;r.warm=s.route().contains("warm");
+            r.routed=s.note().isEmpty()?null:new Condition.Active(Condition.FEED_WATER_ROUTED,s.note());
+            r.advisories=s.advisories().stream().map(a->new Condition.Active(Condition.ADVISORY,a)).toList();
+            r.refused=null;r.retried=false;
+            // The requested set points are in force: no refusal of them stands.
+            if(p.trigger==DriftBands.Trigger.SETPOINT||p.trigger==DriftBands.Trigger.START){r.refusedSetpoints=null;r.setpointRefusal=null;}
             // Only a solve of the short steam itself lifts rule A: one at A's own state says nothing of B's.
             if(p.trigger==DriftBands.Trigger.STEAM_RATIO)r.ruleA=false;
             return true;
         }
-        String reason=refused!=null?refused:((ColumnSolve.Failed)p.outcome).reason();
-        r.failures++;r.failed=r.table!=null;r.retryAt=tick+RETRY_TICKS[Math.min(r.failures,RETRY_TICKS.length)-1];
-        // A solve of a changed steam ratio failed (zero steam without a reboiler, the draw wall): rule A, the inputs cut together.
+        var failed=(ColumnSolve.Failed)(refused==null?p.outcome:new ColumnSolve.Failed(refused));
+        // The worker did not finish it (a deadline, a worker failure, a shutdown): once more after a wait, not a refusal.
+        if(failed.transientFailure()&&!r.retried){r.retried=true;r.waitUntil=tick+TRANSIENT_WAIT;return true;}
+        r.retried=false;
+        String text=r.table==null?Refusal.FIRST_SOLVE.text(failed.reason())
+                :String.format(Locale.ROOT,"the %s solve failed (%s), the table of %d s ago kept",p.trigger.name().toLowerCase(Locale.ROOT),failed.reason(),(tick-r.tableTick)/20);
+        if(p.trigger==DriftBands.Trigger.SETPOINT){r.refusedSetpoints=p.setpoints;r.setpointRefusal=new Condition.Active(Condition.SETPOINT_REFUSED,text);return true;}
+        r.refused=new Refused(p.trigger,p.state,p.held,new Condition.Active(Condition.SOLVE_REFUSED,text));
+        // A solve of a changed steam ratio was refused (zero steam without a reboiler, the draw wall): rule A, the inputs cut together.
         if(p.trigger==DriftBands.Trigger.STEAM_RATIO)r.ruleA=true;
-        r.note=r.table==null?"":String.format(Locale.ROOT,"the %s solve failed (%s), the table of %d s ago kept",p.trigger.name().toLowerCase(Locale.ROOT),reason,(tick-r.tableTick)/20);
-        if(r.table==null){r.status="NOT READY: "+reason;r.phase=com.wormzjl.icheme.science.column.operation.OperationView.Phase.NOT_READY;}
         return true;
     }
     /** A product of {@code table} the unit has no outlet for, as a refusal, or null. */
     private static String missingStation(ColumnUnit u,SplitTable table) {
-        for(var p:table.products())if(u.station(p.port(),p.index())==null)return "the solve gives a "+p.port().name().toLowerCase(Locale.ROOT)+" the column has no nozzle for";
+        for(var p:table.products())if(u.station(p.port(),p.index())==null)return Refusal.NO_NOZZLE.text(p.port().name().toLowerCase(Locale.ROOT));
         return null;
     }
     /**
-     * Asks a solve at the cycle at {@code tick} for {@code trigger}, of the state {@code taken}: one in flight per column, at
-     * most one per {@link #SOLVE_SPACING} except a setpoint edit or a start, none before a failure's retry time.
+     * Asks a solve at the cycle at {@code tick} for {@code trigger}, of the state {@code state} (null: the design's at the set
+     * rate): one in flight per column, at most one per {@link #SOLVE_SPACING} except a setpoint edit or a start, none before
+     * an unfinished solve's wait, none of a state inside the bands of a refused one. A SETPOINT or START solve takes the
+     * unit's requested set points, every other the accepted ones with the unit's feed rate (W2).
      */
-    private void request(Run r,ColumnUnit u,long tick,DriftBands.Trigger trigger,ColumnSolve.Taken taken) {
-        if(r.pending!=null||tick<r.retryAt)return;
+    private void request(Run r,ColumnUnit u,long tick,DriftBands.Trigger trigger,ColumnCycle.Step state) {
+        if(r.pending!=null||tick<r.waitUntil)return;
         boolean urgent=trigger==DriftBands.Trigger.SETPOINT||trigger==DriftBands.Trigger.START;
         if(!urgent&&tick<r.lastSolve+SOLVE_SPACING)return;
         var design=solves.design(u);
-        if(design==null){if(r.table==null){r.status="NOT READY: the design has no operating point";r.phase=com.wormzjl.icheme.science.column.operation.OperationView.Phase.NOT_READY;}return;}
-        if(taken==null)taken=designTaken(u,design);
-        var pending=new Pending(trigger,tick);
-        var job=new ColumnSolve.Job(trigger,design,u.setpoints(),taken,trigger==DriftBands.Trigger.START?null:r.seed,solves.condenser(u));
+        if(design==null){if(r.table==null)r.missing=new Condition.Active(Condition.SOLVE_REFUSED,Refusal.NO_OPERATING_POINT.text());return;}
+        r.missing=null;
+        ColumnSolve.Taken taken;
+        if(state==null){taken=designTaken(u,design);state=state(taken);}else taken=taken(state,design);
+        var setpoints=urgent?u.setpoints():running(u,r.table);
+        double designDemand=u.setpoints().designFeedRate()*CYCLE_TICKS/20.0;
+        if(trigger!=DriftBands.Trigger.SETPOINT&&r.refused!=null&&inside(r.refused,setpoints,state,designDemand))return;
+        boolean[] held;if(r.table!=null)held=r.table.held();else{held=new boolean[weights.length];Arrays.fill(held,true);}
+        var pending=new Pending(trigger,tick,setpoints,DriftBands.reference(state,designDemand,setpoints,r.table==null?0:r.table.reference().enthalpySlope()),held);
+        var job=new ColumnSolve.Job(trigger,design,setpoints,taken,trigger==DriftBands.Trigger.START?null:r.seed,solves.condenser(u));
         // In flight before the submission: a solver may answer at once.
         r.pending=pending;
         if(!solves.submit(r.unit,job,outcome->done(r,pending,outcome))){r.pending=null;return;}
         r.lastSolve=tick;
-        if(r.table==null){r.status="STARTING: the first solve";r.phase=com.wormzjl.icheme.science.column.operation.OperationView.Phase.STARTING;}
+    }
+    /** Whether {@code state}, at set points {@code setpoints}, stands inside the bands of the refused state {@code refused}. */
+    private static boolean inside(Refused refused,Setpoints setpoints,ColumnCycle.Step state,double designDemand) {
+        return !refused.state().setpoints().intensivelyDiffers(setpoints)&&DriftBands.check(refused.state(),refused.held(),state,designDemand).isEmpty();
+    }
+    /** A state given as rates (the design's at a start) as one cycle's take, for the bands. */
+    private ColumnCycle.Step state(ColumnSolve.Taken taken) {
+        double seconds=CYCLE_TICKS/20.0;double[] feed=taken.feed();double total=0;
+        for(int i=0;i<feed.length;i++){feed[i]*=seconds;total+=feed[i];}
+        int water=weights.length-1;var steam=new ArrayList<Account>();
+        for(var s:taken.steam()){var n=new double[weights.length];n[water]=Math.max(0,s.rate()*seconds);steam.add(new Account(n,Double.isFinite(s.enthalpy())?s.enthalpy()*n[water]:0));}
+        return new ColumnCycle.Step(1,new Account(feed,Double.isFinite(taken.feedEnthalpy())?taken.feedEnthalpy()*total:0),steam,List.of(),0,new double[0],0,0,List.of());
     }
     /** A solve's outcome, on the server thread: a cycle waiting for it runs now. */
     private void done(Run r,Pending pending,ColumnSolve.Outcome outcome) {
@@ -458,9 +622,41 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
             Long owner=registry.owner(s.device());
             if(owner!=null&&!coordinator.through(owner,s.port().inlet()?tick:tick-FENCE_TICKS))return false;
         }
-        // The condenser's water sides, through the fence the cycle reads their transit at.
-        for(long side:u.condensers()){Long owner=registry.owner(side);if(owner!=null&&!coordinator.through(owner,tick-FENCE_TICKS))return false;}
+        // The utility sides (the condenser's water, W4: the reboiler's and the pumparound coolers'), through the fence the cycle reads their transit at.
+        for(var utility:utilities(u))for(long side:sideList(u,utility)){Long owner=registry.owner(side);if(owner!=null&&!coordinator.through(owner,tick-FENCE_TICKS))return false;}
         return true;
+    }
+
+    /**
+     * {@code rooms} with the members' power for the cycle at {@code tick} (W5, {@code MEMBER_POWER_NOTE.md}): each fan side
+     * books its fans over the span that just ran (its last speed, 0 where it had no power), then says whether its store has
+     * power; banks without hold their surface at natural draught. Each pump books its rated shaft power at the last cycle's
+     * share; one without power stops the cycle (NO_POWER, share 0). With machines that need no power, or no members, as it was.
+     */
+    private ColumnCycle.Rooms powered(Run r,ColumnUnit u,SplitTable t,long tick,ColumnCycle.Rooms rooms) {
+        if(!power.needed()||u.members().none()){r.unpoweredFans.clear();return rooms;}
+        double last=Double.isNaN(r.fans)?0:r.fans;
+        var unpowered=new HashSet<Long>();
+        for(long side:u.members().fans())if(!power.fans(side,r.unpoweredFans.contains(side)?0:last,tick))unpowered.add(side);
+        r.unpoweredFans.clear();r.unpoweredFans.addAll(unpowered);
+        // Each pump books its rated shaft power at the last cycle's share; one whose driver gives none stops the cycle.
+        double share=r.last==null||r.last.tripped()?0:r.last.alpha();
+        var stopped=new ArrayList<Integer>();
+        if(!pumps(u.members().reflux(),share,tick))stopped.add(ColumnUnit.Members.REFLUX_PUMP);
+        for(int j=0;j<u.members().pumparounds().size();j++)if(!pumps(u.members().pumparound(j),share,tick))stopped.add(ColumnUnit.Members.pumparoundPump(j));
+        double natural=Math.min(u.airSurface(),surface(u,unpowered));
+        if(!(natural>0)&&stopped.isEmpty())return rooms;
+        return rooms.withPower(natural>0?t.airFeed(u.airSurface()-natural,natural):rooms.airFeed(),natural>0,stopped.stream().mapToInt(Integer::intValue).toArray());
+    }
+    /** Whether every one of a member's pumps gives power, each booked at {@code share} until {@code tick}. */
+    private boolean pumps(List<Long> movers,double share,long tick) {
+        boolean all=true;for(long p:movers)all&=power.pump(p,share,tick);
+        return all;
+    }
+    /** The bare tube of {@code u}'s fan sides in {@code sides}, m². */
+    private double surface(ColumnUnit u,Set<Long> sides) {
+        double out=0;for(long side:u.members().fans())if(sides.contains(side))out+=power.surface(side);
+        return out;
     }
 
     /** One cycle at online tick {@code tick} (plan section 5). */
@@ -480,7 +676,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         var totals=u.totals();
         if(r.table==null) {
             request(r,u,tick,DriftBands.Trigger.START,null);
-            levels(r,u,available,tick,false);return;
+            publish(r,List.of(),levels(r,u,u.setpoints(),available,tick,false));return;
         }
         // Old rebuildable state has no accepted probe snapshot. Rebuild on the ordinary engine deadline, keeping its table meanwhile.
         if(r.rebuildProbes)request(r,u,tick,DriftBands.Trigger.START,null);
@@ -496,33 +692,35 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
             room[k]=Math.max(0,design*t.perFeed(k)-s.account().total()-givenSince(r,s.device(),tick-FENCE_TICKS));
         }
         var energy=r.enthalpy;
-        // Rule A stays until a solve succeeds; at its retry time the cycle tries B again, and a still short steam asks the solve again.
-        if(r.ruleA&&r.pending==null&&tick>=r.retryAt)r.ruleA=false;
-        // A water-cooled condenser rejects no more than its water has room for: the heat owed as of the fence against its hold.
-        // Its shells in parallel share the duty equally (S3b), so the fullest shell's water bounds the whole: each holds its share.
-        double condenserRoom=Double.POSITIVE_INFINITY;var sides=waterSides(u);
-        if(!sides.isEmpty()) {
-            double owed=0;
-            for(long side:sides) {
-                double held=coordinator.transitAsOf(PhysicalFluidTopology.sideIdentity(side),PhysicalFluidTopology.sideIdentity(partnerOf(side)),tick-FENCE_TICKS);
-                for(var o:r.owed)if(o.booked()&&o.tick()>tick-FENCE_TICKS)held-=o.joule();
-                owed=Math.max(owed,held);
-            }
-            // The water's hold is of its own share: an air-then-water condenser's trim takes part of the duty (COOLER_MODEL_PLAN.md section 6).
-            condenserRoom=CONDENSER_HOLD_SECONDS*Math.abs(t.condenserWaterPerFeed())*u.setpoints().designFeedRate()-sides.size()*owed;
-        }
-        // An air condenser holds at most what its built banks take with their fans at full speed (U2): past it, the column is limited.
-        var step=ColumnCycle.step(t,u.setpoints(),CYCLE_TICKS/20.0,feedAvailable,steam,room,condenserRoom,t.airFeed(u.airSurface()),(k,n)->{double e=0;var h=energy[k];for(int i=0;i<n.length;i++)e+=n[i]*h[i];return e;},r.ruleA);
+        // The cycle runs on the accepted set points with the unit's feed rate (W2): a requested one waits for its solve.
+        var set=running(u,t);double designDemand=u.setpoints().designFeedRate()*CYCLE_TICKS/20.0;
+        // Each duty passes no more than its utility has room for (C6b, W4): the heat owed as of the fence against its hold. An
+        // air condenser holds at most what its built banks take with their fans at full speed (U2): past it, the column is limited.
+        var pas=new double[t.pumparoundPerFeed().length];for(int j=0;j<pas.length;j++)pas[j]=room(r,u,t,Utility.pumparound(j),tick);
+        var rooms=powered(r,u,t,tick,new ColumnCycle.Rooms(room(r,u,t,Utility.CONDENSER,tick),room(r,u,t,Utility.REBOILER,tick),pas,t.airFeed(u.airSurface())));
+        ColumnCycle.ProductEnergy priced=(k,n)->{double e=0;var h=energy[k];for(int i=0;i<n.length;i++)e+=n[i]*h[i];return e;};
+        var b=ColumnCycle.step(t,set,CYCLE_TICKS/20.0,feedAvailable,steam,room,rooms,priced,false);
+        // Rule A stays while the steam is short and its shortage inside the bands of the refused state; then rule B tries once more.
+        if(r.ruleA&&(Condition.find(b.conditions(),Condition.STEAM_SHORT)==null||r.refused==null||!inside(r.refused,set,b,designDemand)))r.ruleA=false;
+        var step=r.ruleA?ColumnCycle.step(t,set,CYCLE_TICKS/20.0,feedAvailable,steam,room,rooms,priced,true):b;
         r.last=step;
-        // The fans at the feed the cycle took, and their power by the cube of their speed (HeatSides.fanPower).
-        r.fans=t.fans(u.airSurface(),step.feedMoles()/(CYCLE_TICKS/20.0));
-        r.fanPower=Double.isNaN(r.fans)?Double.NaN:com.wormzjl.icheme.science.equipment.HeatSides.fanPower(u.airSurface(),r.fans);
-        if(step.trip()!=null) {
+        // The fans at the feed the cycle took, and their power by the cube of their speed (HeatSides.fanPower). Banks without
+        // power (W5) hold what natural draught holds; the powered ones the rest.
+        double natural=Math.min(u.airSurface(),surface(u,r.unpoweredFans)),driven=u.airSurface()-natural,airTaken=step.feedMoles()/(CYCLE_TICKS/20.0);
+        if(natural>0)airTaken=Math.max(0,airTaken-t.airFeed(0,natural));
+        r.fans=natural>0&&!(driven>0)?(Double.isNaN(t.fans(u.airSurface(),airTaken))?Double.NaN:0):t.fans(driven,airTaken);
+        r.fanPower=Double.isNaN(r.fans)?Double.NaN:com.wormzjl.icheme.science.equipment.HeatSides.fanPower(driven,r.fans);
+        if(step.tripped()) {
             // The model has no steady state for this input (a capability limit): the inlets close, a solve of the state the
-            // column was given may lift it.
-            r.status="UPSET: "+step.trip();r.phase=com.wormzjl.icheme.science.column.operation.OperationView.Phase.UPSET;
-            if(feedAvailable.total()>0){var source=solves.design(u);if(source!=null)request(r,u,tick,DriftBands.Trigger.CLOSURE,attempted(u,feedAvailable,steam,source));}
-            levels(r,u,available,tick,false);return;
+            // column was given may lift it. Where rule B's steam is short the solve is the steam's, whose refusal brings rule A;
+            // else of the first band the state left, else the closure's.
+            if(feedAvailable.total()>0) {
+                var given=attempted(set,feedAvailable,steam);
+                var trigger=Condition.find(step.conditions(),Condition.STEAM_SHORT)!=null?DriftBands.Trigger.STEAM_RATIO
+                        :DriftBands.check(t.reference(),t.held(),given,designDemand).map(DriftBands.Crossing::trigger).orElse(DriftBands.Trigger.CLOSURE);
+                request(r,u,tick,trigger,given);
+            }
+            publish(r,step.conditions(),levels(r,u,set,available,tick,false));return;
         }
         replace(stations,Port.FEED,0,a->a.less(step.feed()));
         for(int j=0;j<steam.size();j++){var taken=step.steam().get(j);replace(stations,Port.STEAM,j,a->a.less(taken));}
@@ -541,52 +739,47 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         double pumparounds=0;for(double q:step.pumparounds())pumparounds+=q;
         totals=new ColumnUnit.Totals(totals.taken().plus(in),totals.produced().plus(out),totals.reboiler()+step.reboiler(),totals.condenser()+step.condenser(),totals.pumparounds()+pumparounds);
         topology.column(u.withStations(true,stations).withTotals(totals));
-        // The totals book the whole duty; the water is owed its share, the air takes the rest (COOLER_MODEL_PLAN.md section 6).
-        owe(r,u,tick,-step.condenser()*t.waterShare(),false);
-        // Each shell's water heat rate, for a valve the column sets (U2).
-        if(!sides.isEmpty()) {
-            r.water.addLast(new Duty(tick,Math.max(0,-step.condenser()*t.waterShare())/(CYCLE_TICKS/20.0)/sides.size()));
-            while(r.water.size()>1&&r.water.peekFirst().tick()<tick-FENCE_TICKS-KEEP_TICKS)r.water.removeFirst();
-        }
-        levels(r,u,available,tick,true);
-        r.status=step.limit()==ColumnCycle.Limit.NONE?"RUNNING":String.format(Locale.ROOT,"LIMITED: %s, %.0f %%",step.limit().name().toLowerCase(Locale.ROOT),100*step.alpha());
-        if(!Double.isNaN(r.fans))r.status+=String.format(Locale.ROOT,"; air fans %.0f %%, %.1f kW",100*r.fans,r.fanPower/1000);
-        r.phase=step.limit()==ColumnCycle.Limit.NONE?com.wormzjl.icheme.science.column.operation.OperationView.Phase.RUNNING:com.wormzjl.icheme.science.column.operation.OperationView.Phase.LIMITED;
-        if(r.ruleA)r.status+=", inputs cut together (rule A)";
-        // A new solve where the state taken left the table's bands, or the setpoints moved (plan section 6).
-        DriftBands.Trigger trigger=u.setpoints().intensivelyDiffers(t.reference().setpoints())?DriftBands.Trigger.SETPOINT
-                :DriftBands.check(t,step,u.setpoints().designFeedRate()*CYCLE_TICKS/20.0).map(DriftBands.Crossing::trigger).orElse(null);
-        if(trigger!=null&&step.feedMoles()>0){var source=solves.design(u);if(source!=null)request(r,u,tick,trigger,taken(step,source));}
-        if(r.pending!=null)r.status="RE-SOLVING: "+r.pending.trigger.name().toLowerCase(Locale.ROOT)+"; "+r.status;
-        if(!r.note.isEmpty())r.status+="; "+r.note;
-        if(r.unmetered!=null)r.status+="; "+r.unmetered;
+        // The totals book every duty whole; each utility is owed its duty (W4), the condenser's water its share, the air the rest
+        // (COOLER_MODEL_PLAN.md section 6). A duty with no utility side is the column's own, in the totals alone.
+        owed(r,u,tick,Utility.CONDENSER,-step.condenser()*t.waterShare());
+        owed(r,u,tick,Utility.REBOILER,-step.reboiler());
+        for(int j=0;j<step.pumparounds().length;j++)owed(r,u,tick,Utility.pumparound(j),-step.pumparounds()[j]);
+        var unmetered=levels(r,u,set,available,tick,true);
+        // A refusal of set points the player has since moved from is forgotten: what now stands is solved once.
+        if(r.refusedSetpoints!=null&&u.setpoints().intensivelyDiffers(r.refusedSetpoints)){r.refusedSetpoints=null;r.setpointRefusal=null;}
+        // A new solve where the state taken left the table's bands, or the requested set points moved from the accepted ones
+        // and were not refused (plan section 6, W2).
+        DriftBands.Trigger trigger=r.refusedSetpoints==null&&u.setpoints().intensivelyDiffers(t.reference().setpoints())?DriftBands.Trigger.SETPOINT
+                :DriftBands.check(t,step,designDemand).map(DriftBands.Crossing::trigger).orElse(null);
+        if(trigger!=null&&step.feedMoles()>0)request(r,u,tick,trigger,step);
+        publish(r,step.conditions(),unmetered);
     }
-    /** The state a tripped cycle was given: the feed it holds at the set rate, the steam at its ratios. */
-    private ColumnSolve.Taken attempted(ColumnUnit u,Account feed,List<Account> steam,V3ColumnInput design) {
-        double seconds=CYCLE_TICKS/20.0,demand=u.setpoints().feedRate()*seconds;
+    /** The state a tripped cycle was given: the feed it holds at the set rate, the steam at its ratios (both of {@code set}). */
+    private ColumnCycle.Step attempted(Setpoints set,Account feed,List<Account> steam) {
+        double seconds=CYCLE_TICKS/20.0,demand=set.feedRate()*seconds;
         var feedTaken=feed.part(Math.min(1,demand/feed.total()));
-        var steamTaken=new ArrayList<Account>();double[] ratios=u.setpoints().steamPerFeed();
+        var steamTaken=new ArrayList<Account>();double[] ratios=set.steamPerFeed();
         for(int j=0;j<steam.size();j++){var s=steam.get(j);double want=ratios[j]*feedTaken.total();steamTaken.add(s.total()>0?s.part(Math.min(1,want/s.total())):s);}
-        var none=new double[0];
-        return taken(new ColumnCycle.Step(1,ColumnCycle.Limit.NONE,feedTaken,steamTaken,List.of(),0,none,0,0,null),design);
+        return new ColumnCycle.Step(1,feedTaken,steamTaken,List.of(),0,new double[0],0,0,List.of());
     }
     /** Each inlet's level after the cycle at {@code tick} and the rate the column then demands of it (none: {@code demanding} false);
      * every port's island wakes where the plans this cycle dates take effect, the tick plus the fence. */
-    private void levels(Run r,ColumnUnit u,Map<Long,Account> available,long tick,boolean demanding) {
-        r.unmetered=null;
+    private Condition.Active levels(Run r,ColumnUnit u,Setpoints set,Map<Long,Account> available,long tick,boolean demanding) {
+        Condition.Active unmetered=null;
         for(var s:u.stations()) {
             if(s.device()==0)continue;
             wakes.computeIfAbsent(tick+FENCE_TICKS,t->new TreeSet<>()).add(s.device());
             if(!s.port().inlet())continue;
-            double rate=!demanding?0:s.port()==Port.FEED?u.setpoints().feedRate():u.setpoints().feedRate()*u.setpoints().steamPerFeed()[s.index()];
+            double rate=!demanding?0:s.port()==Port.FEED?set.feedRate():set.feedRate()*set.steamPerFeed()[s.index()];
             // An empty account has no composition yet: its valve meters the design's feed, or water for the steam (not the
             // port's own contents, which before the first arrival are whatever filled the pipe).
             double molarMass=molar(available.get(s.device()).moles());
             if(!(molarMass>0)){int water=axis.indexOf(SplitTable.WATER);molarMass=s.port()==Port.FEED?(r.table==null?0:molar(r.table.reference().feedFractions())):water<0?0:weights[water];}
             // Nothing to meter by (steam on an axis without water): the inlet demands nothing, and the status line says why.
-            if(rate>0&&!(molarMass>0)){rate=0;r.unmetered=String.format(Locale.ROOT,"the %s inlet takes nothing: no molar mass to meter it by",s.port().name().toLowerCase(Locale.ROOT));}
+            if(rate>0&&!(molarMass>0)){rate=0;unmetered=new Condition.Active(Condition.UNMETERED,0,s.index(),String.format(Locale.ROOT,"the %s inlet takes nothing: no molar mass to meter it by",s.port().name().toLowerCase(Locale.ROOT)));}
             r.levels.computeIfAbsent(s.device(),d->new ArrayDeque<>()).addLast(new Level(tick,available.get(s.device()).total(),rate,molarMass));
         }
+        return unmetered;
     }
     /** The latest entry of {@code log} at or before {@code through}, after dropping every older one, or null. */
     private static <T> T asOf(ArrayDeque<T> log,java.util.function.ToLongFunction<T> tick,long through) {
@@ -606,12 +799,12 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
 
     /** The fence (plan section 9): every cycle through {@code start - L} has run for each port the island holds, whose plans read it. */
     @Override public boolean ready(long island,PassiveNetwork graph,long start) {
-        if(portUnits.isEmpty()&&waterSides.isEmpty())return true;
+        if(portUnits.isEmpty()&&utilitySides.isEmpty())return true;
         for(var node:graph.reservoirs()) {
             Long unit=portUnits.get(node.id());if(unit==null)continue;
             var r=runs.get(unit);if(r!=null&&r.nextCycle<=start-FENCE_TICKS)return false;
         }
-        for(var p:graph.pipes()){Long unit=waterSides.get(p.id());var r=unit==null?null:runs.get(unit);if(r!=null&&r.nextCycle<=start-FENCE_TICKS)return false;}
+        for(var p:graph.pipes()){var served=utilitySides.get(p.id());var r=served==null?null:runs.get(served.unit());if(r!=null&&r.nextCycle<=start-FENCE_TICKS)return false;}
         return true;
     }
     @Override public Map<Long,PortPlan> plans(long island,PassiveNetwork graph,IslandClock.Slice slice) {
@@ -652,6 +845,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         var made=r==null?null:asOf(log,Credit::tick,fence);
         if(log!=null)for(var c:log)if(c.tick()>fence){var n=c.product().moles();for(int i=0;i<available.length;i++)available[i]=Math.max(0,available[i]-n[i]);solids=solids.less(c.solids());}
         double total=0;for(double n:available)total+=n;
+        if(!(mass(available)>TRACE_KG))total=0;
         double temperature=node.state().temperature();
         var table=r==null?null:r.tableAt(fence);
         if(table!=null)for(var p:table.products())if(p.port()==s.port()&&p.index()==s.index())temperature=p.temperature();
@@ -743,7 +937,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
                 var t=u.totals();u=withPort(u,s,account,s.solids().less(solid)).withTotals(new ColumnUnit.Totals(t.taken(),t.produced(),t.reboiler(),t.condenser()+(joule-debited),t.pumparounds()));
                 topology.column(u);
                 if(r!=null)r.gifts.computeIfAbsent(device,d->new ArrayDeque<>()).addLast(new Gift(start,end,given));
-                if(r!=null&&water(r,s,start))owe(r,u,end,-(joule-debited),true);
+                if(r!=null&&water(r,s,start))owe(r,u,end,Utility.CONDENSER,-(joule-debited),true);
             }
         }
     }
@@ -771,58 +965,124 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         return later;
     }
     /**
-     * The heat a condenser shell's water was owed per second by the last cycle at or before {@code through}, W: read as of the
-     * fence, so a plan does not depend on when its job runs. Before any such cycle (a start, a reload) the table's water duty
-     * at the set feed, shared by the shells.
+     * The heat one side of {@code utility} was owed per second by the last cycle at or before {@code through}, W: read as of the
+     * fence, so a plan does not depend on when its job runs. Before any such cycle (a start, a reload) the table's duty at the
+     * set feed, shared by the sides.
      */
-    private double waterRate(Run r,ColumnUnit u,long through) {
-        Duty last=null;for(var d:r.water)if(d.tick()<=through)last=d;
+    private double rate(Run r,ColumnUnit u,Utility utility,long through) {
+        Duty last=null;var debt=r.debts.get(utility);if(debt!=null)for(var d:debt.rates)if(d.tick()<=through)last=d;
         if(last!=null)return last.watts();
-        int shells=Math.max(1,waterSides(u).size());
-        return r.table==null?0:Math.max(0,-r.table.condenserWaterPerFeed()*u.setpoints().feedRate())/shells;
+        int units=Math.max(1,sides(u,utility).size());
+        return r.table==null?0:Math.max(0,utility.sign()*-perFeed(r.table,utility)*u.setpoints().feedRate())/units;
+    }
+    /** {@code utility}'s duty per mole of feed in {@code t}, J (column sign: into the column); the condenser's its water's share. */
+    private static double perFeed(SplitTable t,Utility utility) {
+        return switch(utility.kind()) {
+            case CONDENSER->t.condenserWaterPerFeed();
+            case REBOILER->t.reboilerPerFeed();
+            case PUMPAROUND->utility.index()<t.pumparoundPerFeed().length?t.pumparoundPerFeed()[utility.index()]:0;
+        };
+    }
+    /**
+     * The temperature {@code utility}'s outlet stops at, K (C6b, W4): a cooling side's ceiling, the condensate's (the accepted
+     * condenser temperature) or the draw tray's (as {@code t} solved it) less the approach, at least 1 K; the reboiler's floor,
+     * the bottoms' plus the approach.
+     */
+    private double bound(ColumnUnit u,SplitTable t,Utility utility) {
+        return switch(utility.kind()) {
+            case CONDENSER->Math.max(1,condenserTemperature(u)-APPROACH_KELVIN);
+            case REBOILER->t.bottomsTemperature()+APPROACH_KELVIN;
+            case PUMPAROUND->Math.max(1,t.drawTemperature(utility.index())-APPROACH_KELVIN);
+        };
     }
     /** The heat partner of the registered side {@code side}, or 0. */
     private long partnerOf(long side) {
         if(side==0)return 0;var r=registry.registrations().get(side);
         return r==null||r.device().heat()==null?0:r.device().heat().partner();
     }
-    /** {@code u}'s condenser water sides that have a heat partner: those its duty goes to. */
-    private List<Long> waterSides(ColumnUnit u) {
+    /** {@code u}'s utilities that may have sides: the condenser, the reboiler, each pumparound of its set points. */
+    private static List<Utility> utilities(ColumnUnit u) {
+        var out=new ArrayList<Utility>(List.of(Utility.CONDENSER,Utility.REBOILER));
+        for(int j=0;j<u.utilities().pumparounds().size();j++)out.add(Utility.pumparound(j));
+        return out;
+    }
+    /** {@code u}'s sides of {@code utility} as its facts name them. */
+    private static List<Long> sideList(ColumnUnit u,Utility utility) {
+        return switch(utility.kind()) {
+            case CONDENSER->u.condensers();
+            case REBOILER->u.utilities().reboiler();
+            case PUMPAROUND->u.utilities().pumparound(utility.index());
+        };
+    }
+    /** {@code u}'s sides of {@code utility} that have a heat partner: those its duty goes to. */
+    private List<Long> sides(ColumnUnit u,Utility utility) {
         var out=new ArrayList<Long>();
-        for(long side:u.condensers())if(partnerOf(side)!=0)out.add(side);
+        for(long side:sideList(u,utility))if(partnerOf(side)!=0)out.add(side);
         return out;
     }
     /**
-     * Books {@code joule} (J) into the condenser's transit to its water at {@code tick}, an equal share into each shell's water
-     * side (S3b: identical shells in parallel take equal shares of the overhead, so each removes its share of the duty), and
-     * wakes each water side where it reads it. The record keeps one shell's share.
+     * The heat {@code utility} can still take (or give) at the cycle at {@code tick}, J (C6b, W4): its hold,
+     * {@link #CONDENSER_HOLD_SECONDS} of its duty per feed at the design rate, less its units times the fullest unit's transit
+     * as of the fence (identical units in parallel share the duty equally, S3b, so the fullest bounds the whole), what outlets
+     * booked after the fence left out. Unbounded where it has no side: the duty is the column's own.
      */
-    private void owe(Run r,ColumnUnit u,long tick,double joule,boolean booked) {
-        var sides=waterSides(u);
+    private double room(Run r,ColumnUnit u,SplitTable t,Utility utility,long tick) {
+        var sides=sides(u,utility);
+        if(sides.isEmpty())return Double.POSITIVE_INFINITY;
+        var debt=r.debts.get(utility);double owed=0;
+        for(long side:sides) {
+            double held=coordinator.transitAsOf(PhysicalFluidTopology.sideIdentity(side),PhysicalFluidTopology.sideIdentity(partnerOf(side)),tick-FENCE_TICKS);
+            if(debt!=null)for(var o:debt.owed)if(o.booked()&&o.tick()>tick-FENCE_TICKS)held-=o.joule();
+            owed=Math.max(owed,utility.sign()*held);
+        }
+        // The water's hold is of its own share: an air-then-water condenser's trim takes part of the duty (COOLER_MODEL_PLAN.md section 6).
+        return CONDENSER_HOLD_SECONDS*Math.abs(perFeed(t,utility))*u.setpoints().designFeedRate()-sides.size()*owed;
+    }
+    /** A cycle's {@code joule} owed to {@code utility} at {@code tick} (column sign reversed), and each side's heat rate for a valve the column sets (U2). */
+    private void owed(Run r,ColumnUnit u,long tick,Utility utility,double joule) {
+        owe(r,u,tick,utility,joule,false);
+        var sides=sides(u,utility);if(sides.isEmpty())return;
+        var rates=r.debt(utility).rates;
+        rates.addLast(new Duty(tick,Math.max(0,utility.sign()*joule)/(CYCLE_TICKS/20.0)/sides.size()));
+        while(rates.size()>1&&rates.peekFirst().tick()<tick-FENCE_TICKS-KEEP_TICKS)rates.removeFirst();
+    }
+    /**
+     * Books {@code joule} (J) into the transit of {@code utility}'s sides at {@code tick}, an equal share into each (S3b:
+     * identical units in parallel take equal shares, so each passes its share of the duty), and wakes each side where it
+     * reads it. The record keeps one side's share.
+     */
+    private void owe(Run r,ColumnUnit u,long tick,Utility utility,double joule,boolean booked) {
+        var sides=sides(u,utility);
         if(joule==0||sides.isEmpty())return;
         double share=joule/sides.size();
         for(long side:sides) {
             coordinator.owe(PhysicalFluidTopology.sideIdentity(side),PhysicalFluidTopology.sideIdentity(partnerOf(side)),share);
             wakes.computeIfAbsent(tick+FENCE_TICKS,k->new TreeSet<>()).add(side);
         }
-        r.owed.addLast(new Owed(tick,share,booked));
-        while(r.owed.size()>1&&r.owed.peekFirst().tick()<tick-FENCE_TICKS-KEEP_TICKS)r.owed.removeFirst();
+        var owed=r.debt(utility).owed;
+        owed.addLast(new Owed(tick,share,booked));
+        while(owed.size()>1&&owed.peekFirst().tick()<tick-FENCE_TICKS-KEEP_TICKS)owed.removeFirst();
     }
     /**
-     * A coupled side whose partner a running column holds (C6b): the condenser's water side reads the heat the column owes
-     * it as of its slice start less the fence (the transit now, less what the column booked after that), its outlet below
-     * the condensate by the approach; a side of a member the column holds otherwise moves no heat (a kettle's bundle, a
-     * pumparound cooler: their duties are the column's own, plan section 10, stage A).
+     * A coupled side whose partner a running column holds (C6b, W4): a utility side reads the heat the column owes it as of
+     * its slice start less the fence (the transit now, less what the column booked after that), its outlet stopped at its
+     * bound: a cooling side's (the condenser's water, a pumparound cooler's) below the condensate or the draw tray by the
+     * approach, the reboiler's heating above the bottoms by the approach. A side of a member the column holds otherwise moves
+     * no heat (a member whose Start found no utility side, or a save before W4: its duty is the column's own).
      */
     @Override public com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read heatRead(long side,long partner,long start,double seconds,double transit) {
-        Long unit=waterSides.get(side);var r=unit==null?null:runs.get(unit);
-        if(r!=null) {
-            double due=transit;for(var o:r.owed)if(o.tick()>start-FENCE_TICKS)due-=o.joule();
-            var u=topology.column(unit);
-            // The heat a valve the column sets carries (U2): the shell's share of the last cycle's water duty through the fence,
-            // and a backlog beyond a cycle's lump and the slice over the condenser's hold.
-            double rate=waterRate(r,u,start-FENCE_TICKS),excess=Math.max(0,due-rate*(seconds+CYCLE_TICKS/20.0));
-            return com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read.column(due,seconds,Math.max(1,u.setpoints().condenserTemperature()-APPROACH_KELVIN),rate+excess/CONDENSER_HOLD_SECONDS);
+        var served=utilitySides.get(side);var r=served==null?null:runs.get(served.unit());
+        var table=r==null?null:r.tableAt(start-FENCE_TICKS);
+        if(r!=null&&(table!=null||served.utility().kind()==Utility.Kind.CONDENSER)) {
+            var utility=served.utility();var debt=r.debts.get(utility);
+            double due=transit;if(debt!=null)for(var o:debt.owed)if(o.tick()>start-FENCE_TICKS)due-=o.joule();
+            var u=topology.column(served.unit());
+            // The heat a valve the column sets carries (U2): the side's share of the last cycle's duty through the fence, and a
+            // backlog beyond a cycle's lump and the slice over the hold.
+            double rate=rate(r,u,utility,start-FENCE_TICKS),excess=Math.max(0,utility.sign()*due-rate*(seconds+CYCLE_TICKS/20.0));
+            double bound=utility.kind()==Utility.Kind.CONDENSER?Math.max(1,condenserTemperature(u)-APPROACH_KELVIN):bound(u,table,utility);
+            return utility.gives()?com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read.heating(due,seconds,bound,rate+excess/CONDENSER_HOLD_SECONDS)
+                    :com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read.column(due,seconds,bound,rate+excess/CONDENSER_HOLD_SECONDS);
         }
         var held=registry.registrations().get(partner-PhysicalFluidTopology.sideIdentity(0));
         return held!=null&&held.device().suspended()?com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read.NONE:null;

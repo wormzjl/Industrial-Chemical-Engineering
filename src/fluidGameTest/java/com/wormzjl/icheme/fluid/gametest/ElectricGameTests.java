@@ -7,9 +7,7 @@ import com.wormzjl.icheme.runtime.fluid.ShaftTrains;
 import com.wormzjl.icheme.runtime.fluid.ShaftUnit;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.EquipmentShape.Role;
-import com.wormzjl.icheme.science.equipment.MachineDuty;
 import com.wormzjl.icheme.science.equipment.ShapeRasterizer;
-import com.wormzjl.icheme.science.equipment.UnitDesign;
 import com.wormzjl.icheme.science.machine.Motor;
 import com.wormzjl.icheme.science.machine.ShaftTrain;
 import com.wormzjl.icheme.world.level.block.EquipmentStructure;
@@ -53,38 +51,6 @@ public final class ElectricGameTests {
         return port;
     }
 
-    /**
-     * A motor standing beyond a shaft block on {@code pump}'s driven coupling, turned so its driving end faces the shaft,
-     * rated {@code kilowatts} at {@code poles}: the plant's, removed with it.
-     */
-    private static Vessel motor(AssemblyGameTests.Plant plant, Vessel pump, double kilowatts, int poles) {
-        for (var s : ShapeRasterizer.shafts(pump.shape())) {
-            if (s.role() != EquipmentShape.ShaftEnd.Role.DRIVEN_INPUT) continue;
-            var d = Direction.fromDelta(s.dx(), s.dy(), s.dz());
-            var shaft = pump.origin().offset(s.block().x(), s.block().y(), s.block().z());
-            var end = shaft.relative(d);
-            var design = UnitDesign.of(EquipmentShape.Kind.MOTOR);
-            double size = design.snap(kilowatts);
-            int length = design.defaultLength(size);
-            for (var heading : EquipmentShape.Heading.values()) {
-                var shape = EquipmentShape.designed(EquipmentShape.Kind.MOTOR, size, length, heading, 0, com.wormzjl.icheme.science.equipment.ProcessUnit.Bank.ONE)
-                        .withDuty(MachineDuty.motor(size, poles, MachineDuty.Drive.FIXED));
-                for (var m : ShapeRasterizer.shafts(shape)) {
-                    if (m.role() != EquipmentShape.ShaftEnd.Role.DRIVER_OUTPUT || m.dx() != -s.dx() || m.dy() != -s.dy() || m.dz() != -s.dz()) continue;
-                    var origin = end.offset(-m.cell().x(), -m.cell().y(), -m.cell().z());
-                    boolean clear = plant.level.getBlockState(shaft).canBeReplaced();
-                    for (var cell : ShapeRasterizer.layout(shape).shell()) clear &= plant.level.getBlockState(origin.offset(cell.x(), cell.y(), cell.z())).canBeReplaced();
-                    if (!clear) continue;
-                    plant.level.setBlock(shaft, ModBlocks.SHAFT.get().defaultBlockState().setValue(com.wormzjl.icheme.world.level.block.ShaftBlock.AXIS, d.getAxis()), Block.UPDATE_ALL);
-                    plant.devices.add(shaft.immutable());
-                    return plant.place(shape, origin.getX() - plant.base.getX(), origin.getY() - plant.base.getY(), origin.getZ() - plant.base.getZ());
-                }
-            }
-            throw new IllegalStateException("No room for a motor on the pump's coupling at " + shaft.toShortString());
-        }
-        throw new IllegalStateException("No driven coupling on the " + pump.shape().kind());
-    }
-
     @GameTest(template = "empty", timeoutTicks = 20000, batch = "electric-motor")
     public static void aMotorDrivenPumpDrainsItsStoreStopsAndRestartsOnARefill(GameTestHelper helper) {
         var plant = new AssemblyGameTests.Plant(helper, helper.absolutePos(new BlockPos(8, 2, 8)), new BlockPos(-8, -2, -8), new BlockPos(16, 10, 16));
@@ -116,7 +82,7 @@ public final class ElectricGameTests {
             // The motor: twice the pump's design shaft power with the design spare, so the line's run-out never overloads it.
             var duty = pump.shape().duty();
             double shaft = 1000 * 9.81 * duty.flow() / 3600 * duty.head() / .6;
-            motor[0] = motor(plant, pump, Motor.ratingFor(2 * shaft) / 1000, duty.poles() == 0 ? 2 : duty.poles());
+            motor[0] = plant.motor(pump, Motor.ratingFor(2 * shaft) / 1000, duty.poles() == 0 ? 2 : duty.poles());
         } catch (RuntimeException e) {
             failure[0] = "build: " + e;
         }

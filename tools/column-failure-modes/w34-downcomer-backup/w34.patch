@@ -1,0 +1,257 @@
+diff --git a/src/main/java/com/wormzjl/icheme/network/ColumnWire.java b/src/main/java/com/wormzjl/icheme/network/ColumnWire.java
+index 2bf66fdaa..d486ac2af 100644
+--- a/src/main/java/com/wormzjl/icheme/network/ColumnWire.java
++++ b/src/main/java/com/wormzjl/icheme/network/ColumnWire.java
+@@ -243,6 +243,7 @@ public final class ColumnWire {
+             buffer.writeDouble(hydraulics.worstTrayDryPascal());
+             buffer.writeDouble(hydraulics.worstTrayLiquidPascal());
+             buffer.writeDouble(hydraulics.totalDryPascal());
++            buffer.writeBoolean(hydraulics.downcomerLimited());
+         });
+     }
+ 
+@@ -328,7 +329,7 @@ public final class ColumnWire {
+                                     finite(buffer.readDouble(), "hydraulic residual mismatch"),
+                                     finite(buffer.readDouble(), "worst tray dry drop"),
+                                     finite(buffer.readDouble(), "worst tray liquid drop"),
+-                                    finite(buffer.readDouble(), "total dry drop")))
++                                    finite(buffer.readDouble(), "total dry drop"), buffer.readBoolean()))
+                             : Optional.empty();
+             return new V3ColumnDisplayResult(
+                     digest, formulation, assumptions, dataset, iterations, residual, acceptanceChecks, streams, ledger,
+diff --git a/src/main/java/com/wormzjl/icheme/network/SimulatorResults.java b/src/main/java/com/wormzjl/icheme/network/SimulatorResults.java
+index 7c9f92e60..faa2d5e83 100644
+--- a/src/main/java/com/wormzjl/icheme/network/SimulatorResults.java
++++ b/src/main/java/com/wormzjl/icheme/network/SimulatorResults.java
+@@ -38,7 +38,7 @@ import org.jetbrains.annotations.Nullable;
+  */
+ public final class SimulatorResults {
+     /** 2: a report carries its time-series readings ({@link Report.Series}, batch 2026-11-09-batch-distiller, W7); 3: a column
+-     * display's tray hydraulics carry their total dry drop (batch 2026-11-10-column-failure-modes, W3.3). */
++     * display's tray hydraulics carry their total dry drop and whether the downcomer limits (batch 2026-11-10-column-failure-modes, W3.3, W3.4). */
+     public static final int FORMAT = 3;
+     private static final int MAX_LIST = 4096, MAX_TEXT = 512, MAX_TOKEN = Short.MAX_VALUE, MAX_ARGUMENTS = 16, SAME_SHEET = 0, SAME_AS_RAN = 1, OWN_SHEET = 2;
+ 
+diff --git a/src/main/java/com/wormzjl/icheme/science/column/v3/V3TrayHydraulics.java b/src/main/java/com/wormzjl/icheme/science/column/v3/V3TrayHydraulics.java
+index 629949dc5..6c60dde3c 100644
+--- a/src/main/java/com/wormzjl/icheme/science/column/v3/V3TrayHydraulics.java
++++ b/src/main/java/com/wormzjl/icheme/science/column/v3/V3TrayHydraulics.java
+@@ -102,11 +102,56 @@ public final class V3TrayHydraulics {
+             double liquidAcentricFactor,
+             double freeWaterMolarFlowMolPerSecond) {}
+ 
+-    /** One tray's pressure-drop split and its fraction of the Fair flooding limit. */
+-    public record Terms(double dryPascal, double liquidPascal, double residualPascal, double floodFraction) {
++    /**
++     * One tray's pressure-drop split, its fraction of the Fair flooding limit, and its downcomer backup as a fraction of the
++     * froth the downcomer holds (batch 2026-11-10-column-failure-modes, W3.4, decision D9).
++     *
++     * <p>{@code floodFraction} stays Fair's alone: the free water's entrainment limit is built on it
++     * ({@link #entrainmentLimitMolPerSecond}). {@link #worstFraction} is the tray's flood fraction, the worse of the two.</p>
++     */
++    public record Terms(double dryPascal, double liquidPascal, double residualPascal, double floodFraction, double backupFraction) {
++        public Terms(double dryPascal, double liquidPascal, double residualPascal, double floodFraction) {
++            this(dryPascal, liquidPascal, residualPascal, floodFraction, 0.0);
++        }
++
+         public double totalPascal() {
+             return dryPascal + liquidPascal + residualPascal;
+         }
++
++        /** The tray's flood fraction: the worse of Fair's jet flood and the downcomer's backup. */
++        public double worstFraction() {
++            return Math.max(floodFraction, backupFraction);
++        }
++
++        /** Whether the downcomer's backup, not the vapour's jet flood, sets the tray's flood fraction. */
++        public boolean downcomerLimited() {
++            return backupFraction > floodFraction;
++        }
++    }
++
++    /** Clearance under the downcomer apron: the weir height less 10 mm (Coulson and Richardson, vol. 6, section 11.13). */
++    static final double APRON_CLEARANCE_METRES = WEIR_HEIGHT_METRES - 0.010;
++    /** Head loss under the apron, m per (m/s)² of the liquid's speed there: 166 mm (Coulson and Richardson, eq. 11.92). */
++    static final double APRON_LOSS_METRES_PER_SPEED_SQUARED = 0.166;
++    /** The aerated liquid in a downcomer is about half clear liquid: it floods at half the tray spacing plus the weir. */
++    static final double DOWNCOMER_FROTH_DENSITY = 0.5;
++
++    /**
++     * Downcomer backup of one tray, m of clear liquid (Coulson and Richardson, vol. 6, eq. 11.91): the liquid on the tray
++     * below the downcomer's exit, the tray's whole drop as a head of its liquid, and the loss under the apron. Zero on a tray
++     * whose liquid vanished: an empty downcomer backs nothing up.
++     */
++    static double backupMetres(double clearLiquidHeight, double trayDropPascal, double liquidDensity, double liquidVolumeFlow,
++            double weirLength) {
++        if (!(liquidVolumeFlow > 0.0)) return 0.0;
++        double apronSpeed = liquidVolumeFlow / (weirLength * APRON_CLEARANCE_METRES);
++        return clearLiquidHeight + trayDropPascal / (liquidDensity * STANDARD_GRAVITY)
++                + APRON_LOSS_METRES_PER_SPEED_SQUARED * apronSpeed * apronSpeed;
++    }
++
++    /** The backup a downcomer holds before the froth reaches the tray above, m of clear liquid. */
++    static double backupLimitMetres() {
++        return DOWNCOMER_FROTH_DENSITY * (TRAY_SPACING_METRES + WEIR_HEIGHT_METRES);
+     }
+ 
+     /**
+@@ -278,7 +323,11 @@ public final class V3TrayHydraulics {
+                 * DeterministicMath.pow(SURFACE_TENSION_NEWTON_PER_METRE / 0.02, 0.2);
+         double flood = (vaporVolumeFlow / netArea())
+                 / (capacityParameter * Math.sqrt(Math.max(1.0e-9, densityDifference / vaporDensity)));
+-        return new Terms(dry, liquidDensity * STANDARD_GRAVITY * clearLiquidHeight, liquidVolumeFlow > 0.0 ? residual : 0.0, flood);
++        double liquid = liquidDensity * STANDARD_GRAVITY * clearLiquidHeight;
++        double residualHead = liquidVolumeFlow > 0.0 ? residual : 0.0;
++        double backup = backupMetres(clearLiquidHeight, dry + liquid + residualHead, liquidDensity, liquidVolumeFlow, weirLengthMetres())
++                / backupLimitMetres();
++        return new Terms(dry, liquid, residualHead, flood, backup);
+     }
+ 
+     /** The total pressure drop of one tray at one pressure. */
+@@ -374,11 +423,11 @@ public final class V3TrayHydraulics {
+         double worstFlood = 0.0;
+         int worstTray = 1;
+         Terms worstTerms = terms(trays[1], pressures[1]);
+-        worstFlood = worstTerms.floodFraction();
++        worstFlood = worstTerms.worstFraction();
+         for (int tray = 2; tray <= topology.trayCount(); tray++) {
+             Terms candidate = terms(trays[tray], pressures[tray]);
+-            if (candidate.floodFraction() > worstFlood) {
+-                worstFlood = candidate.floodFraction();
++            if (candidate.worstFraction() > worstFlood) {
++                worstFlood = candidate.worstFraction();
+                 worstTray = tray;
+                 worstTerms = candidate;
+             }
+@@ -390,7 +439,7 @@ public final class V3TrayHydraulics {
+         double dry = 0.0;
+         for (int tray = 2; tray <= topology.trayCount(); tray++) dry += terms(trays[tray], pressures[tray]).dryPascal();
+         return new V3TrayHydraulicsSummary(diameterMetres, total, total / intervals, worstFlood, worstTray,
+-                correctionApplied, residualMismatch, worstTerms.dryPascal(), worstTerms.liquidPascal(), Math.min(dry, total));
++                correctionApplied, residualMismatch, worstTerms.dryPascal(), worstTerms.liquidPascal(), Math.min(dry, total), worstTerms.downcomerLimited());
+     }
+ 
+     /**
+diff --git a/src/main/java/com/wormzjl/icheme/science/column/v3/V3TrayHydraulicsSummary.java b/src/main/java/com/wormzjl/icheme/science/column/v3/V3TrayHydraulicsSummary.java
+index 1a02f3c7a..6a35cab95 100644
+--- a/src/main/java/com/wormzjl/icheme/science/column/v3/V3TrayHydraulicsSummary.java
++++ b/src/main/java/com/wormzjl/icheme/science/column/v3/V3TrayHydraulicsSummary.java
+@@ -6,6 +6,9 @@ package com.wormzjl.icheme.science.column.v3;
+  * <p>Only requests that author a column diameter carry one. The per-tray profile it describes is the one the
+  * published state was solved on ({@code result.problem().nodePressuresPascal()}) whenever a correction ran, and
+  * the marched estimate otherwise; {@code residualMismatchFraction} is exactly the disagreement between the two.</p>
++ *
++ * <p>The flood fraction is the worst tray's worse of two measures (batch 2026-11-10-column-failure-modes, W3.4, decision
++ * D9): Fair's jet flood and the downcomer's backup; {@code downcomerLimited} says the backup set it.</p>
+  */
+ public record V3TrayHydraulicsSummary(
+         double columnDiameterMetres,
+@@ -17,10 +20,11 @@ public record V3TrayHydraulicsSummary(
+         double residualMismatchFraction,
+         double worstTrayDryPascal,
+         double worstTrayLiquidPascal,
+-        double totalDryPascal) {
++        double totalDryPascal,
++        boolean downcomerLimited) {
+     /**
+      * A summary that does not know its total dry drop: the worst tray's share of its own drop, applied to the total (batch
+-     * 2026-11-10-column-failure-modes, W3.3: the running column's live drop reads the total split).
++     * 2026-11-10-column-failure-modes, W3.3: the running column's live drop reads the total split); its flood Fair's.
+      */
+     public V3TrayHydraulicsSummary(double columnDiameterMetres, double totalPressureDropPascal, double meanTrayPressureDropPascal,
+             double maximumFloodFraction, int maximumFloodTray, boolean correctionApplied, double residualMismatchFraction,
+@@ -28,7 +32,15 @@ public record V3TrayHydraulicsSummary(
+         this(columnDiameterMetres, totalPressureDropPascal, meanTrayPressureDropPascal, maximumFloodFraction, maximumFloodTray,
+                 correctionApplied, residualMismatchFraction, worstTrayDryPascal, worstTrayLiquidPascal,
+                 worstTrayDryPascal + worstTrayLiquidPascal > 0.0
+-                        ? totalPressureDropPascal * worstTrayDryPascal / (worstTrayDryPascal + worstTrayLiquidPascal) : 0.0);
++                        ? totalPressureDropPascal * worstTrayDryPascal / (worstTrayDryPascal + worstTrayLiquidPascal) : 0.0, false);
++    }
++
++    /** A summary whose flood fraction is Fair's. */
++    public V3TrayHydraulicsSummary(double columnDiameterMetres, double totalPressureDropPascal, double meanTrayPressureDropPascal,
++            double maximumFloodFraction, int maximumFloodTray, boolean correctionApplied, double residualMismatchFraction,
++            double worstTrayDryPascal, double worstTrayLiquidPascal, double totalDryPascal) {
++        this(columnDiameterMetres, totalPressureDropPascal, meanTrayPressureDropPascal, maximumFloodFraction, maximumFloodTray,
++                correctionApplied, residualMismatchFraction, worstTrayDryPascal, worstTrayLiquidPascal, totalDryPascal, false);
+     }
+ 
+     public V3TrayHydraulicsSummary {
+@@ -47,20 +59,22 @@ public record V3TrayHydraulicsSummary(
+         }
+     }
+ 
+-    /** Whether the worst tray is past the Fair flooding limit and the result therefore carries a warning. */
++    /** Whether the worst tray is past its flooding limit and the result therefore carries a warning. */
+     public boolean floods() {
+         return maximumFloodFraction > 1.0;
+     }
+ 
+     /**
+-     * Whether the worst tray's drop is dominated by the orifice term rather than by the froth head.
++     * Whether the worst tray's drop is dominated by the orifice term rather than by the froth head, and its downcomer
++     * does not back up first.
+      *
+      * <p>That is the whole of the flooding diagnosis: a dry drop above the liquid head is vapour the
+-     * perforations cannot pass, and a dominant weir-crest head is liquid the weir and downcomer cannot pass.
+-     * The remedies differ, so the screen and the warning both say which one it is.</p>
++     * perforations cannot pass, and a dominant weir-crest head, or a downcomer backing up past half the spacing, is
++     * liquid the weir and downcomer cannot pass. The remedies differ, so the screen and the warning both say which one
++     * it is.</p>
+      */
+     public boolean vaporLimited() {
+-        return worstTrayDryPascal >= worstTrayLiquidPascal;
++        return !downcomerLimited && worstTrayDryPascal >= worstTrayLiquidPascal;
+     }
+ 
+     /** The total liquid head and bubble residual over the tray intervals, Pa: the total drop less its dry part. */
+diff --git a/src/test/java/com/wormzjl/icheme/science/column/v3/V3TrayHydraulicsTest.java b/src/test/java/com/wormzjl/icheme/science/column/v3/V3TrayHydraulicsTest.java
+index 281ed275b..d73cb7d95 100644
+--- a/src/test/java/com/wormzjl/icheme/science/column/v3/V3TrayHydraulicsTest.java
++++ b/src/test/java/com/wormzjl/icheme/science/column/v3/V3TrayHydraulicsTest.java
+@@ -250,6 +250,45 @@ class V3TrayHydraulicsTest {
+         assertEquals(0.004, summary.residualMismatchFraction(), 0.0);
+     }
+ 
++    /**
++     * T10 (batch 2026-11-10-column-failure-modes, W3.4, decision D9): the downcomer's backup on a hand-computed tray, a 1 m
++     * column carrying 30 kg/s of liquid against 1 kg/s of vapour: the liquid on the tray, the tray's whole drop as a head
++     * of its liquid and the loss under the 40 mm apron, over the 0.325 m of clear liquid a half-aerated downcomer holds
++     * below the tray above. It is far past Fair's jet flood, so the tray reports the backup as its flood, the summary says
++     * the liquid limits it, and Fair's fraction stays the free water's entrainment basis.
++     */
++    @Test
++    void aLiquidLoadedTrayReportsItsDowncomerBackupAsItsFlood() {
++        V3TrayHydraulics hydraulics = V3TrayHydraulics.ofDiameter(1.0);
++        V3TrayHydraulics.Tray tray = new V3TrayHydraulics.Tray(20.0, 1.0, 400.0, 30.0, 0.04, 650.0, 0.45, 0.0);
++        double pressure = 150_000.0;
++        V3TrayHydraulics.Terms terms = hydraulics.terms(tray, pressure);
++        double density = hydraulics.liquidDensityKgPerCubicMetre(tray), g = 9.80665;
++        double clear = terms.liquidPascal() / (density * g);
++        double apronSpeed = 30.0 / density / (0.726 * 1.0 * 0.040);
++        double backup = clear + terms.totalPascal() / (density * g) + 0.166 * apronSpeed * apronSpeed;
++        assertEquals(backup / (0.5 * (0.6 + 0.05)), terms.backupFraction(), 1.0e-12, "backup over half the spacing and the weir");
++        assertTrue(terms.backupFraction() > 1.0 && terms.floodFraction() < 0.5,
++                () -> "backup " + terms.backupFraction() + ", Fair " + terms.floodFraction());
++        assertTrue(terms.downcomerLimited());
++        assertEquals(terms.backupFraction(), terms.worstFraction(), 0.0);
++        assertEquals(terms.floodFraction() * 1.0 / 0.01801528, hydraulics.entrainmentLimitMolPerSecond(tray, pressure), 1.0e-9,
++                "the entrainment limit keeps Fair's fraction");
++        // A tray whose liquid vanished backs nothing up.
++        assertEquals(0.0, hydraulics.terms(new V3TrayHydraulics.Tray(20.0, 1.0, 400.0, 0.0, 0.0, 650.0, 0.45, 0.0), pressure).backupFraction(), 0.0);
++
++        V3ColumnProblem problem = problem(List.of());
++        V3ColumnTopology topology = problem.topology();
++        V3TrayHydraulics.Tray[] trays = new V3TrayHydraulics.Tray[topology.nodeCount()];
++        for (int t = 1; t <= topology.trayCount(); t++) trays[t] = tray;
++        double[] profile = hydraulics.march(problem, trays);
++        V3TrayHydraulicsSummary summary = hydraulics.summarise(problem, trays, profile, false, 0.0);
++        V3TrayHydraulics.Terms worst = hydraulics.terms(trays[summary.maximumFloodTray()], profile[summary.maximumFloodTray()]);
++        assertEquals(worst.backupFraction(), summary.maximumFloodFraction(), 1.0e-12, "the summary's flood is the backup");
++        assertTrue(summary.downcomerLimited() && !summary.vaporLimited() && summary.floods());
++        assertTrue(V3TrayHydraulics.floodingWarning(summary).contains("liquid load is too high"), V3TrayHydraulics.floodingWarning(summary));
++    }
++
+     @Test
+     void theTotalDropMismatchIsNormalisedOnTheMarchedProfileSoAZeroNominalReportsOne() {
+         V3ColumnProblem problem = problem(List.of());

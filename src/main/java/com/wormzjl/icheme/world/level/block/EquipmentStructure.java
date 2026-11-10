@@ -428,6 +428,16 @@ public final class EquipmentStructure {
         return sides;
     }
 
+    /** The fluid movers registered at {@code vessel}'s nodes: a pump casing's (W5 of batch 2026-11-10-column-failure-modes). */
+    public static List<Long> movers(FluidWorldAuthority world, ServerLevel level, Vessel vessel) {
+        var out = new ArrayList<Long>();
+        for (long id : heldAtNodes(world, level, vessel)) {
+            var r = world.registrations().get(id);
+            if (r != null && r.device().control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.Mover) out.add(id);
+        }
+        return out;
+    }
+
     /** The identities registered at {@code vessel}'s nodes. */
     private static List<Long> heldAtNodes(FluidWorldAuthority world, ServerLevel level, Vessel vessel) {
         var ids = new ArrayList<Long>();

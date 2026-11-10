@@ -145,6 +145,48 @@ public final class AssemblyGameTests {
         }
 
         /**
+         * A motor standing beyond a shaft block on {@code pump}'s driven coupling, turned so its driving end faces the shaft,
+         * rated {@code kilowatts} at {@code poles}: the plant's, removed with it.
+         */
+        Vessel motor(Vessel pump, double kilowatts, int poles) {
+            for (var s : ShapeRasterizer.shafts(pump.shape())) {
+                if (s.role() != EquipmentShape.ShaftEnd.Role.DRIVEN_INPUT) continue;
+                var d = Direction.fromDelta(s.dx(), s.dy(), s.dz());
+                var shaft = pump.origin().offset(s.block().x(), s.block().y(), s.block().z());
+                var end = shaft.relative(d);
+                var design = UnitDesign.of(EquipmentShape.Kind.MOTOR);
+                double size = design.snap(kilowatts);
+                int length = design.defaultLength(size);
+                for (var heading : EquipmentShape.Heading.values()) {
+                    var shape = EquipmentShape.designed(EquipmentShape.Kind.MOTOR, size, length, heading, 0, ProcessUnit.Bank.ONE)
+                            .withDuty(com.wormzjl.icheme.science.equipment.MachineDuty.motor(size, poles, com.wormzjl.icheme.science.equipment.MachineDuty.Drive.FIXED));
+                    for (var m : ShapeRasterizer.shafts(shape)) {
+                        if (m.role() != EquipmentShape.ShaftEnd.Role.DRIVER_OUTPUT || m.dx() != -s.dx() || m.dy() != -s.dy() || m.dz() != -s.dz()) continue;
+                        var origin = end.offset(-m.cell().x(), -m.cell().y(), -m.cell().z());
+                        boolean clear = level.getBlockState(shaft).canBeReplaced();
+                        for (var cell : ShapeRasterizer.layout(shape).shell()) clear &= level.getBlockState(origin.offset(cell.x(), cell.y(), cell.z())).canBeReplaced();
+                        if (!clear) continue;
+                        level.setBlock(shaft, ModBlocks.SHAFT.get().defaultBlockState().setValue(com.wormzjl.icheme.world.level.block.ShaftBlock.AXIS, d.getAxis()), Block.UPDATE_ALL);
+                        devices.add(shaft.immutable());
+                        return place(shape, origin.getX() - base.getX(), origin.getY() - base.getY(), origin.getZ() - base.getZ());
+                    }
+                }
+                throw new IllegalStateException("No room for a motor on the pump's coupling at " + shaft.toShortString());
+            }
+            throw new IllegalStateException("No driven coupling on the " + pump.shape().kind());
+        }
+
+        /**
+         * A motor for {@code pump} as {@link #motor(Vessel, double, int)}: twice the pump's design shaft power with the design
+         * spare, so its run-out never overloads it, at the pump's poles.
+         */
+        Vessel motor(Vessel pump) {
+            var duty = pump.shape().duty();
+            double shaft = 1000 * 9.81 * duty.flow() / 3600 * duty.head() / .6;
+            return motor(pump, com.wormzjl.icheme.science.machine.Motor.ratingFor(2 * shaft) / 1000, duty.poles() == 0 ? 2 : duty.poles());
+        }
+
+        /**
          * An exchanger with a bypass around its shell side (batch 2026-10-27-heat-exchanger-design, W8): a line routed from
          * the shell inlet's pipe block to the outlet's, with a control valve on it along its stream, then the feed and the
          * product branching off those two blocks (each a tee) to tanks. The exchanger is the master.
@@ -280,7 +322,14 @@ public final class AssemblyGameTests {
 
         /** The shortest line of pipes from one nozzle's pipe block to another's that touches no other line. */
         List<BlockPos> route(BlockPos from, BlockPos to) {
-            var allowed = Set.of(from, to);
+            return route(from, to, Set.of());
+        }
+
+        /** {@link #route(BlockPos, BlockPos)}, its ends also allowed beside the pipes {@code joins}: a line that ends on another line. */
+        List<BlockPos> route(BlockPos from, BlockPos to, Set<BlockPos> joins) {
+            var allowed = new HashSet<BlockPos>(joins);
+            allowed.add(from);
+            allowed.add(to);
             var previous = new HashMap<BlockPos, BlockPos>();
             var queue = new ArrayDeque<BlockPos>();
             previous.put(from, from);
@@ -303,6 +352,29 @@ public final class AssemblyGameTests {
             Collections.reverse(path);
             for (var at : path) pipe(at);
             return path;
+        }
+
+        /**
+         * A branch from the nozzle's pipe block {@code from} onto a straight pipe of {@code path}, from beside it (a tee):
+         * the first straight pipe from the path's start, two pipes clear of each end, whose route is free. Returns the branch.
+         */
+        List<BlockPos> join(List<BlockPos> path, BlockPos from) {
+            for (int i = 2; i < path.size() - 2; i++) {
+                if (!straight(path, i)) continue;
+                var at = path.get(i);
+                var along = path.get(i + 1).subtract(at);
+                var axis = Direction.fromDelta(along.getX(), along.getY(), along.getZ()).getAxis();
+                for (var q : Direction.values()) {
+                    if (q.getAxis() == axis) continue;
+                    var t = at.relative(q);
+                    if (!free(t, around(at))) continue;
+                    try {
+                        return route(from, t, Set.of(at));
+                    } catch (IllegalStateException ignored) {
+                    }
+                }
+            }
+            throw new IllegalStateException("No room to join " + from.toShortString() + " to the line from " + path.getFirst().toShortString());
         }
 
         static boolean straight(List<BlockPos> path, int i) {

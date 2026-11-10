@@ -78,11 +78,6 @@ public final class ColumnCycle {
         }
     }
 
-    /** What bounded the throughput. */
-    public enum Limit {
-        NONE, FEED, STEAM, OUTLET, CONDENSER
-    }
-
     /**
      * A cycle's outcome.
      *
@@ -94,14 +89,28 @@ public final class ColumnCycle {
      * @param pumparounds      J into the column per pumparound (negative: removed)
      * @param condenser        J into the column (negative: removed), closing the balance
      * @param solvedCondenser  the table's condenser duty at the feed taken, J
-     * @param trip             why the column trips (the closure would heat, or departs too far), or null
+     * @param conditions       what held (W1): each LIMIT with the share of the set feed it allows, in the order the cycle
+     *                         weighs them (feed, outlets, condenser water, air face, reboiler, pumparounds, flooding, steam), or the TRIP (the closure would
+     *                         heat, or departs too far) with its departure
      */
-    public record Step(double alpha, Limit limit, Account feed, List<Account> steam, List<Account> products, double reboiler, double[] pumparounds,
-                       double condenser, double solvedCondenser, String trip) {
+    public record Step(double alpha, Account feed, List<Account> steam, List<Account> products, double reboiler, double[] pumparounds,
+                       double condenser, double solvedCondenser, List<Condition.Active> conditions) {
         public Step {
             steam = List.copyOf(steam);
             products = List.copyOf(products);
             pumparounds = pumparounds.clone();
+            conditions = List.copyOf(conditions);
+        }
+
+        /** The condition that binds: the TRIP, else the LIMIT with the lowest share; null where the cycle took its set feed. */
+        public Condition.Active binding() {
+            return Condition.binding(conditions);
+        }
+
+        /** Whether the cycle tripped and took nothing. */
+        public boolean tripped() {
+            var b = binding();
+            return b != null && b.condition().rank == Condition.Rank.TRIP;
         }
 
         /** The closed condenser duty's departure from the solved one, a share of the solved; 0 when nothing ran. */
@@ -143,57 +152,158 @@ public final class ColumnCycle {
      */
     public static Step step(SplitTable table, Setpoints setpoints, double seconds, Account feed, List<Account> steam, double[] room,
                             double condenserRoom, double airFeed, ProductEnergy energy, boolean ruleA) {
+        return step(table, setpoints, seconds, feed, steam, room, Rooms.free(airFeed).withCondenser(condenserRoom), energy, ruleA);
+    }
+
+    /**
+     * What each of a cycle's duties can still pass to its utility, J, and the air's most feed, mol/s (W4): the condenser's
+     * cooling water, the reboiler's heating, each pumparound cooler's cooling (in the pumparounds' order; one past the array
+     * has none). {@link Double#POSITIVE_INFINITY} where a duty has no utility side: it is free, as every duty but the
+     * condenser's was before W4.
+     */
+    public record Rooms(double condenser, double reboiler, double[] pumparounds, double airFeed, boolean airUnpowered, int[] unpowered) {
+        /** Every duty free. */
+        public static final Rooms NONE = free(Double.POSITIVE_INFINITY);
+
+        /**
+         * @param airUnpowered whether some of the air condenser's banks have no power (W5): {@code airFeed} then holds them at
+         *                     natural draught, and the air's limit is {@code NO_POWER} of the condenser (member 0)
+         * @param unpowered    the members that have no power for the cycle and stop it (W5: a pump's share is 0), by index
+         */
+        public Rooms {
+            pumparounds = pumparounds.clone();
+            unpowered = unpowered.clone();
+            if (Double.isNaN(condenser) || Double.isNaN(reboiler) || Double.isNaN(airFeed)) throw new IllegalArgumentException("Invalid duty room");
+            for (double r : pumparounds) if (Double.isNaN(r)) throw new IllegalArgumentException("Invalid duty room");
+            for (int i : unpowered) if (i < 0) throw new IllegalArgumentException("Invalid member index");
+        }
+
+        /** Every member powered. */
+        public Rooms(double condenser, double reboiler, double[] pumparounds, double airFeed) {
+            this(condenser, reboiler, pumparounds, airFeed, false, new int[0]);
+        }
+
+        /** These rooms with the members' power (W5). */
+        public Rooms withPower(double airFeed, boolean airUnpowered, int[] unpowered) {
+            return new Rooms(condenser, reboiler, pumparounds, airFeed, airUnpowered, unpowered);
+        }
+
+        @Override
+        public int[] unpowered() {
+            return unpowered.clone();
+        }
+
+        /** Every utility free, the air holding at most {@code airFeed} mol/s of feed. */
+        public static Rooms free(double airFeed) {
+            return new Rooms(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY, new double[0], airFeed);
+        }
+
+        public Rooms withCondenser(double value) {
+            return new Rooms(value, reboiler, pumparounds, airFeed, airUnpowered, unpowered);
+        }
+
+        public Rooms withReboiler(double value) {
+            return new Rooms(condenser, value, pumparounds, airFeed, airUnpowered, unpowered);
+        }
+
+        public Rooms withPumparounds(double[] value) {
+            return new Rooms(condenser, reboiler, value, airFeed, airUnpowered, unpowered);
+        }
+
+        @Override
+        public double[] pumparounds() {
+            return pumparounds.clone();
+        }
+
+        /** Pumparound {@code j}'s room, J: unbounded where it has none. */
+        public double pumparound(int j) {
+            return j >= 0 && j < pumparounds.length ? pumparounds[j] : Double.POSITIVE_INFINITY;
+        }
+    }
+
+    /**
+     * One cycle whose duties pass at most {@code rooms} to their utilities (W4): a duty whose utility is short cuts the
+     * throughput as a full outlet does, each share the room over that duty of a full take at the set feed (decision D1: a
+     * short reboiler or pumparound utility cuts the feed, no solve).
+     */
+    public static Step step(SplitTable table, Setpoints setpoints, double seconds, Account feed, List<Account> steam, double[] room,
+                            Rooms rooms, ProductEnergy energy, boolean ruleA) {
         Objects.requireNonNull(table, "table");
+        Objects.requireNonNull(rooms, "rooms");
+        double condenserRoom = rooms.condenser(), airFeed = rooms.airFeed();
         int m = table.axis().size();
         double[] steamPerFeed = setpoints.steamPerFeed();
         if (steam.size() != steamPerFeed.length) throw new IllegalArgumentException("One steam account per steam setpoint");
         if (room.length != table.products().size()) throw new IllegalArgumentException("One room per product");
         double demand = setpoints.feedRate() * seconds;
-        if (!(demand > 0)) return idle(table, steam.size(), Limit.NONE, null);
-        // The throughput the outlets allow, from the products of a full take.
+        if (!(demand > 0)) return idle(table, steam.size(), List.of());
+        // The throughput the outlets allow, from the products of a full take at the set demand: the feed at its composition and
+        // each steam at its ratio, whatever the accounts hold, so every share is a share of the set feed (a short feed with a
+        // tight outlet weighs the outlet against the whole demand, and the cut never overfills its buffer).
         double feedTotal = feed.total();
-        double[] full = feedTotal > 0 ? feed.part(demand / feedTotal).moles() : new double[m];
+        double[] full = new double[m];
+        if (feedTotal > 0) {
+            double[] n = feed.moles();
+            for (int i = 0; i < m; i++) full[i] = n[i] * demand / feedTotal;
+        }
         for (int j = 0; j < steam.size(); j++) {
             double s = steam.get(j).total();
             if (s > 0) {
-                double[] add = steam.get(j).part(steamPerFeed[j] * demand / s).moles();
-                for (int i = 0; i < m; i++) full[i] += add[i];
+                double[] n = steam.get(j).moles();
+                for (int i = 0; i < m; i++) full[i] += n[i] * steamPerFeed[j] * demand / s;
             }
         }
         double[][] fullProducts = table.split(full);
+        // Every LIMIT that holds, with the share of the set feed it allows, in the order they are weighed: the binding one is
+        // the lowest, the first of equal ones (Condition.binding).
+        var conditions = new java.util.ArrayList<Condition.Active>();
+        if (feedTotal < demand) conditions.add(new Condition.Active(Condition.FEED_SHORT, Math.max(0, feedTotal / demand)));
         double alphaRoom = 1;
+        int fullest = -1;
         for (int k = 0; k < room.length; k++) {
             double made = Arrays.stream(fullProducts[k]).sum();
-            if (made > 0) alphaRoom = Math.min(alphaRoom, Math.max(0, room[k]) / made);
+            if (made > 0 && Math.max(0, room[k]) / made < alphaRoom) {
+                alphaRoom = Math.max(0, room[k]) / made;
+                fullest = k;
+            }
         }
-        double alpha = Math.min(1, feedTotal / demand);
-        Limit limit = feedTotal < demand ? Limit.FEED : Limit.NONE;
-        if (alphaRoom < alpha) {
-            alpha = alphaRoom;
-            limit = Limit.OUTLET;
-        }
+        if (alphaRoom < 1) conditions.add(new Condition.Active(Condition.PRODUCT_FULL, alphaRoom, fullest, ""));
         double duty = -table.condenserWaterPerFeed() * demand;
         if (duty > 0 && condenserRoom < Double.POSITIVE_INFINITY) {
             double alphaCondenser = Math.max(0, condenserRoom) / duty;
-            if (alphaCondenser < alpha) {
-                alpha = alphaCondenser;
-                limit = Limit.CONDENSER;
-            }
+            if (alphaCondenser < 1) conditions.add(new Condition.Active(Condition.COOLING_SHORT, alphaCondenser));
         }
         double alphaAir = Math.max(0, airFeed) * seconds / demand;
-        if (alphaAir < alpha) {
-            alpha = alphaAir;
-            limit = Limit.CONDENSER;
+        // Banks without power hold their surface at natural draught (W5): where that limits, the cause is the power.
+        if (alphaAir < 1) conditions.add(rooms.airUnpowered() ? new Condition.Active(Condition.NO_POWER, alphaAir, 0, "") : new Condition.Active(Condition.COOLING_SHORT, alphaAir));
+        // A pump without power stops the cycle (W5): its share is 0.
+        for (int member : rooms.unpowered()) conditions.add(new Condition.Active(Condition.NO_POWER, 0, member, ""));
+        // The reboiler's heating and each pumparound cooler's cooling (W4): each share is its room over its duty of a full take.
+        double heating = table.reboilerPerFeed() * demand;
+        if (heating > 0 && rooms.reboiler() < Double.POSITIVE_INFINITY) {
+            double alphaHeating = Math.max(0, rooms.reboiler()) / heating;
+            if (alphaHeating < 1) conditions.add(new Condition.Active(Condition.HEATING_SHORT, alphaHeating));
         }
+        double[] perFeed = table.pumparoundPerFeed();
+        for (int j = 0; j < perFeed.length; j++) {
+            double cooling = -perFeed[j] * demand, r = rooms.pumparound(j);
+            if (!(cooling > 0) || r == Double.POSITIVE_INFINITY) continue;
+            double alphaCooling = Math.max(0, r) / cooling;
+            if (alphaCooling < 1) conditions.add(new Condition.Active(Condition.PUMPAROUND_SHORT, alphaCooling, j, ""));
+        }
+        // Flooding (W3.1, decision D2): at one table the worst tray's flood fraction is proportional to the feed taken, so the
+        // share that keeps it at its limit is the inverse of its fraction at the set feed.
+        var flood = table.flood();
+        double atSet = flood.fraction(setpoints.feedRate());
+        if (atSet > 1) conditions.add(new Condition.Active(Condition.FLOODING, 1 / atSet, flood.tray(), ""));
         if (ruleA)
             for (int j = 0; j < steam.size(); j++) {
                 double want = steamPerFeed[j] * demand;
-                if (want > 0 && steam.get(j).total() / want < alpha) {
-                    alpha = steam.get(j).total() / want;
-                    limit = Limit.STEAM;
-                }
+                if (want > 0 && steam.get(j).total() / want < 1)
+                    conditions.add(new Condition.Active(Condition.STEAM_SHORT, steam.get(j).total() / want, j, Condition.RULE_A));
             }
-        alpha = Math.max(0, alpha);
+        var binding = Condition.binding(conditions);
+        double alpha = Math.max(0, binding == null ? 1 : binding.value());
         double feedTaken = alpha * demand;
         Account takenFeed = feedTotal > 0 ? feed.part(feedTaken / feedTotal) : Account.empty(m);
         var takenSteam = new java.util.ArrayList<Account>();
@@ -202,7 +312,8 @@ public final class ColumnCycle {
         for (int j = 0; j < steam.size(); j++) {
             double have = steam.get(j).total();
             double want = steamPerFeed[j] * feedTaken;
-            if (!ruleA && want > have && limit == Limit.NONE) limit = Limit.STEAM;
+            // Rule B: a short steam is taken as it is and cuts nothing, so it binds only where nothing else does.
+            if (!ruleA && want > have) conditions.add(new Condition.Active(Condition.STEAM_SHORT, 1, j, ""));
             var t = have > 0 ? steam.get(j).part(Math.min(want, have) / have) : Account.empty(m);
             takenSteam.add(t);
             double[] n = t.moles();
@@ -227,18 +338,30 @@ public final class ColumnCycle {
         }
         double condenser = out - energyIn - reboiler - paTotal;
         double solved = table.condenserPerFeed() * fed;
-        String trip = null;
-        if (fed > 0 && condenser > 0) trip = "the condenser would heat the overhead";
+        double departure = solved == 0 ? 0 : (condenser - solved) / Math.abs(solved);
+        Condition.Active trip = null;
+        if (fed > 0 && condenser > 0) trip = new Condition.Active(Condition.CLOSURE, departure, -1, "the condenser would heat the overhead");
         else if (fed > 0 && solved != 0 && Math.abs(condenser - solved) > TRIP_DEPARTURE * Math.abs(solved))
-            trip = String.format(java.util.Locale.ROOT, "the condenser duty departs %.0f %% from the solved one", 100 * Math.abs(condenser - solved) / Math.abs(solved));
-        if (trip != null) return idle(table, steam.size(), limit, trip);
-        return new Step(alpha, limit, takenFeed, takenSteam, products, reboiler, pa, condenser, solved, null);
+            trip = new Condition.Active(Condition.CLOSURE, departure, -1,
+                    String.format(java.util.Locale.ROOT, "the condenser duty departs %.0f %% from the solved one", 100 * Math.abs(condenser - solved) / Math.abs(solved)));
+        if (trip != null) {
+            // Rule B's short steam stands beside the trip (it binds), so rule A and the steam's solve see what moved.
+            var tripped = new java.util.ArrayList<Condition.Active>(List.of(trip));
+            for (var c : conditions) if (c.condition() == Condition.STEAM_SHORT) tripped.add(c);
+            return idle(table, steam.size(), tripped);
+        }
+        // A sign before the limit binds (W3.2): the worst tray near its flood at the feed taken.
+        double loaded = flood.fraction(fed / seconds);
+        if (loaded >= Condition.HIGH_LOAD_FRACTION)
+            conditions.add(new Condition.Active(Condition.HIGH_LOAD, loaded, flood.tray(),
+                    String.format(java.util.Locale.ROOT, "tray %d at %.0f %% of flood", flood.tray() + 1, 100 * Math.min(loaded, 1))));
+        return new Step(alpha, takenFeed, takenSteam, products, reboiler, pa, condenser, solved, conditions);
     }
 
-    private static Step idle(SplitTable table, int steams, Limit limit, String trip) {
+    private static Step idle(SplitTable table, int steams, List<Condition.Active> conditions) {
         int m = table.axis().size();
         var empty = Account.empty(m);
-        return new Step(0, limit, empty, java.util.Collections.nCopies(steams, empty), java.util.Collections.nCopies(table.products().size(), empty), 0,
-                new double[table.pumparoundPerFeed().length], 0, 0, trip);
+        return new Step(0, empty, java.util.Collections.nCopies(steams, empty), java.util.Collections.nCopies(table.products().size(), empty), 0,
+                new double[table.pumparoundPerFeed().length], 0, 0, conditions);
     }
 }

@@ -77,7 +77,7 @@ public final class ProcessSolveCoordinator {
     private static void routeAbandoned(MinecraftServer server, ProcessSolveRequest request) {
         switch (request) {
             case ProcessSolveServices.FluidIslandRequest fluid -> fluid.handler().abandoned(fluid);
-            case ProcessSolveServices.ColumnUnitRequest column -> column.handler().accept(new com.wormzjl.icheme.science.column.operation.ColumnSolve.Failed("SERVER_SHUTDOWN"));
+            case ProcessSolveServices.ColumnUnitRequest column -> column.handler().accept(new com.wormzjl.icheme.science.column.operation.ColumnSolve.Failed("SERVER_SHUTDOWN",true));
             case ProcessSolveServices.StillRequest still -> still.handler().accept(new com.wormzjl.icheme.science.fluid.network.StillHead.Failed("SERVER_SHUTDOWN"));
         }
     }

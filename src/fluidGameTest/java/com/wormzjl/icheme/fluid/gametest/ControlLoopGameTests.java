@@ -349,7 +349,7 @@ public final class ControlLoopGameTests {
         return ((FluidDeviceBlockEntity) level.getBlockEntity(pipe)).instruments().dataPort();
     }
 
-    private static ControlPanelMenu menu(GameTestHelper helper, ViewCapture operator) {
+    static ControlPanelMenu menu(GameTestHelper helper, ViewCapture operator) {
         helper.assertTrue(
                 operator.player.containerMenu instanceof ControlPanelMenu,
                 "The controller's menu is not open");
@@ -360,7 +360,7 @@ public final class ControlLoopGameTests {
      * A menu owner beside {@code controller}. NeoForge's fake player refuses menus, so this is a
      * server player whose connection keeps the views it is sent.
      */
-    private static ViewCapture operator(ServerLevel level, BlockPos controller) {
+    static ViewCapture operator(ServerLevel level, BlockPos controller) {
         var player =
                 new ServerPlayer(
                         level.getServer(),
@@ -478,8 +478,8 @@ public final class ControlLoopGameTests {
     }
 
     /** A menu owner's connection that keeps the controller views it is sent and drops the rest. */
-    private static final class ViewCapture extends ServerGamePacketListenerImpl {
-        private final List<ControlNetwork.View> views = new ArrayList<>();
+    static final class ViewCapture extends ServerGamePacketListenerImpl {
+        final List<ControlNetwork.View> views = new ArrayList<>();
 
         ViewCapture(ServerPlayer player) {
             super(

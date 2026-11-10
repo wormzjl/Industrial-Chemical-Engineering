@@ -86,4 +86,24 @@ class ColumnProbeTest {
         assertEquals(330, readings.refluxTemperature());
         assertEquals(450, readings.bottomTemperature());
     }
+
+    /**
+     * T6 (batch 2026-11-10-column-failure-modes, W3.3): the live pressure drop equals the solved one at the table's own
+     * throughput, and at half that feed its dry part falls by the square while the liquid head stands; a table without
+     * hydraulics has no reading.
+     */
+    @Test
+    void theLiveDropIsTheSolvedOneAtTheTablesFeedAndItsDryPartGoesWithTheSquare() {
+        var axis = List.of("hc", "Water");
+        var settings = new Setpoints(200, 100, 330, 1, 10, new double[0], new double[0], new double[0]);
+        // The table solved at half the design rate: 100 mol/s.
+        var ref = new SplitTable.Reference(new double[] {.9, .1}, 0, 30, new double[0], .5, settings, 450, new double[0]);
+        var bare = new SplitTable(axis, List.of(new SplitTable.Product(Port.BOTTOMS, 0, new double[] {1, 1}, 450, 300000)), 10, new double[0], -10, ref,
+                new boolean[] {true, true});
+        var table = bare.withFlood(new SplitTable.Flood(.006, 30, false, 6_400, 15_600));
+        assertEquals(22_000, ColumnOperation.drop(table, 100), 1e-9, "the solved drop at the table's feed");
+        assertEquals(1_600 + 15_600, ColumnOperation.drop(table, 50), 1e-9, "half the feed: a quarter of the dry drop, the liquid head as solved");
+        assertEquals(0, ColumnOperation.drop(table, 0), "no vapour, no drop");
+        assertTrue(Double.isNaN(ColumnOperation.drop(bare, 100)), "no hydraulics, no reading");
+    }
 }

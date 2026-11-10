@@ -1244,7 +1244,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
                     yield switch(heat.limit()){case "LOW_LIMIT"->tr("heat_status.low_limit",low);case "LOWEST","HIGHEST"->tr("heat_status.short",target,limitClause(status));default->tr("heat_status.holding",target);};
                 }
                 case RATIO->heat.lines()!=null&&"COMPLETE".equals(heat.lines().status())?tr("heat_status.ratio",number(c.target())):tr("heat_status.ratio_waiting");
-                case COLUMN->heat.lines()!=null&&"COMPLETE".equals(heat.lines().status())?tr("heat_status.column"):tr("heat_status.column_waiting");
+                case COLUMN->{String texts=com.wormzjl.icheme.client.gui.common.HeatControlColumn.columnTexts(unitKind());yield heat.lines()!=null&&"COMPLETE".equals(heat.lines().status())?tr("heat_status."+texts):tr("heat_status."+texts+"_waiting");}
                 default->heat.limit().equals("LOW_LIMIT")?tr("heat_status.low_limit",low):tr("heat_status.manual");
             };
         }

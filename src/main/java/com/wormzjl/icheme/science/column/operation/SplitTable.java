@@ -40,9 +40,14 @@ import java.util.Objects;
  *                          {@link #FAN_STEPS}th of full speed from natural draught (0) to full (1): the law of the world's air
  *                          coolers ({@code HeatSides.airFilms}; U2, {@code COOLER_MODEL_PLAN.md} section 8). Empty where the
  *                          condenser has no air; {@link Double#MAX_VALUE} where the air cannot reach that outlet
+ * @param flood             the solve's tray hydraulics reduced to the cycle's arithmetic (batch 2026-11-10-column-failure-modes, W3):
+ *                          {@link Flood#NONE} where the solve had none (a prescribed drop)
+ * @param pumparoundDraw    K, each pumparound's draw tray as solved (W4: its cooler's utility leaves at least the approach below
+ *                          it); empty where the table has none known (a table built without the inspection)
  */
 public record SplitTable(List<String> axis, List<Product> products, double reboilerPerFeed, double[] pumparoundPerFeed, double condenserPerFeed,
-                         Reference reference, boolean[] held, double condenserWaterPerFeed, double waterBelow, double[] airArea) {
+                         Reference reference, boolean[] held, double condenserWaterPerFeed, double waterBelow, double[] airArea, Flood flood,
+                         double[] pumparoundDraw) {
     /** The fan speeds {@link #airArea} is given at: natural draught, then each eighth of full speed. */
     public static final int FAN_STEPS = 8;
     /** The water's id on the network axis. */
@@ -105,7 +110,47 @@ public record SplitTable(List<String> axis, List<Product> products, double reboi
         }
     }
 
+    /**
+     * The solve's hydraulics as the cycle reads them (W3.1, W3.3): the worst tray's flood fraction per mol/s of feed at the
+     * table's own throughput, that tray and whether its vapour (not its liquid) limits it, and the column's solved total
+     * dry drop and liquid head, Pa. Fair's flood fraction is vapour velocity over a capacity that depends only on intensive
+     * quantities, so at one table it is proportional to the feed taken; the dry drop goes with the square of the vapour's
+     * speed, the liquid head stands as solved.
+     *
+     * @param perFeed       flood fraction per mol/s of feed, 0 where unknown: no limit
+     * @param tray          the worst tray, V3's node (the player reads it as node + 1, as V3's flooding warning does), 0 where unknown
+     * @param vapourLimited whether the worst tray's vapour, not its liquid, limits it
+     * @param dryPascal     the solved total dry drop over the trays, Pa
+     * @param liquidPascal  the solved total liquid head and bubble residual over the trays, Pa
+     */
+    public record Flood(double perFeed, int tray, boolean vapourLimited, double dryPascal, double liquidPascal) {
+        /** A table with no hydraulics. */
+        public static final Flood NONE = new Flood(0, 0, true, 0, 0);
+
+        public Flood {
+            if (!(perFeed >= 0) || !Double.isFinite(perFeed) || tray < 0 || !(dryPascal >= 0) || !Double.isFinite(dryPascal) || !(liquidPascal >= 0)
+                    || !Double.isFinite(liquidPascal)) throw new IllegalArgumentException("Invalid flood record");
+        }
+
+        /** Whether the solve gave hydraulics. */
+        public boolean known() {
+            return perFeed > 0;
+        }
+
+        /** The worst tray's flood fraction at {@code feedRate} mol/s of feed (0 where unknown). */
+        public double fraction(double feedRate) {
+            return perFeed * Math.max(0, feedRate);
+        }
+
+        /** The column's pressure drop where the feed taken is {@code ratio} times the table's, Pa (W3.3): the dry part by the square, the liquid head as solved. */
+        public double drop(double ratio) {
+            double r = Math.max(0, ratio);
+            return dryPascal * r * r + (r > 0 ? liquidPascal : 0);
+        }
+    }
+
     public SplitTable {
+        Objects.requireNonNull(flood, "flood");
         axis = List.copyOf(axis);
         products = List.copyOf(products);
         pumparoundPerFeed = pumparoundPerFeed.clone();
@@ -128,6 +173,57 @@ public record SplitTable(List<String> axis, List<Product> products, double reboi
         airArea = airArea.clone();
         if (airArea.length != 0 && airArea.length != FAN_STEPS + 1) throw new IllegalArgumentException("An air area per fan step");
         for (double a : airArea) if (!(a >= 0) || !Double.isFinite(a)) throw new IllegalArgumentException("Invalid air area " + a);
+        pumparoundDraw = pumparoundDraw.clone();
+        if (pumparoundDraw.length != 0 && pumparoundDraw.length != pumparoundPerFeed.length) throw new IllegalArgumentException("A draw temperature per pumparound");
+        for (double t : pumparoundDraw) if (!(t > 0) || !Double.isFinite(t)) throw new IllegalArgumentException("Invalid draw temperature " + t);
+    }
+
+    /** A table without its pumparounds' draw temperatures. */
+    public SplitTable(List<String> axis, List<Product> products, double reboilerPerFeed, double[] pumparoundPerFeed, double condenserPerFeed,
+                      Reference reference, boolean[] held, double condenserWaterPerFeed, double waterBelow, double[] airArea, Flood flood) {
+        this(axis, products, reboilerPerFeed, pumparoundPerFeed, condenserPerFeed, reference, held, condenserWaterPerFeed, waterBelow, airArea, flood, new double[0]);
+    }
+
+    /** A table without hydraulics (a prescribed drop). */
+    public SplitTable(List<String> axis, List<Product> products, double reboilerPerFeed, double[] pumparoundPerFeed, double condenserPerFeed,
+                      Reference reference, boolean[] held, double condenserWaterPerFeed, double waterBelow, double[] airArea) {
+        this(axis, products, reboilerPerFeed, pumparoundPerFeed, condenserPerFeed, reference, held, condenserWaterPerFeed, waterBelow, airArea, Flood.NONE);
+    }
+
+    /** This table with {@code value} as its hydraulics. */
+    public SplitTable withFlood(Flood value) {
+        return new SplitTable(axis, products, reboilerPerFeed, pumparoundPerFeed, condenserPerFeed, reference, held, condenserWaterPerFeed, waterBelow, airArea, value, pumparoundDraw);
+    }
+
+    /** This table with {@code value} as its pumparounds' draw temperatures, K. */
+    public SplitTable withPumparoundDraw(double[] value) {
+        return new SplitTable(axis, products, reboilerPerFeed, pumparoundPerFeed, condenserPerFeed, reference, held, condenserWaterPerFeed, waterBelow, airArea, flood, value);
+    }
+
+    @Override
+    public double[] pumparoundDraw() {
+        return pumparoundDraw.clone();
+    }
+
+    /** The hottest product's temperature, K: the bottoms' where it has one. */
+    private double hottest() {
+        double t = 0;
+        for (var p : products) t = Math.max(t, p.temperature());
+        return t;
+    }
+
+    /**
+     * Pumparound {@code j}'s draw tray temperature, K (W4): as solved, or, in a table without them, the hottest product's,
+     * which bounds the column's every tray.
+     */
+    public double drawTemperature(int j) {
+        return j >= 0 && j < pumparoundDraw.length ? pumparoundDraw[j] : hottest();
+    }
+
+    /** The bottoms' temperature, K, where the reboiler's utility gives its heat (W4); the hottest product's in a table without a bottoms. */
+    public double bottomsTemperature() {
+        int k = product(Port.BOTTOMS, 0);
+        return k >= 0 ? products.get(k).temperature() : hottest();
     }
 
     /** A table whose condenser has no air the world models (a water-cooled one, or one solved before U2). */
@@ -170,6 +266,21 @@ public record SplitTable(List<String> axis, List<Product> products, double reboi
         if (airArea.length == 0 || !(surface > 0)) return Double.POSITIVE_INFINITY;
         double full = airArea[FAN_STEPS];
         return full > 0 ? surface / full : Double.POSITIVE_INFINITY;
+    }
+
+    /**
+     * The most feed an air condenser holds, mol/s, with {@code powered} m² of bare tube at full fans and {@code natural} m²
+     * whose fans have no power, at natural draught (W5 of batch 2026-11-10-column-failure-modes): the table's tube per feed
+     * is linear in the surface, so the two add. With no unpowered surface, {@link #airFeed(double)}.
+     */
+    public double airFeed(double powered, double natural) {
+        if (!(natural > 0)) return airFeed(powered);
+        if (airArea.length == 0) return Double.POSITIVE_INFINITY;
+        return held(powered, airArea[FAN_STEPS]) + held(natural, airArea[0]);
+    }
+
+    private static double held(double surface, double perFeed) {
+        return !(surface > 0) ? 0 : perFeed > 0 ? surface / perFeed : Double.POSITIVE_INFINITY;
     }
 
     /**

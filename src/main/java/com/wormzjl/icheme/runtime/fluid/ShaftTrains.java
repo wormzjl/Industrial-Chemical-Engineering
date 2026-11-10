@@ -699,6 +699,30 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         }
     }
 
+    /**
+     * A held casing's shaft power, booked by the running column that holds it (W5 of batch 2026-11-10-column-failure-modes):
+     * {@code shaftPower} W stands for its island's booking, and its train steps at once (once a tick at most), its motor
+     * drawing from its own store as at any step. True when the train's driver turns with nothing tripped ({@code NO POWER}
+     * included); false with no train, a faulted one, or a driver that stands.
+     */
+    public boolean held(long device, double shaftPower) {
+        Long unit = unitOfDevice.get(device);
+        Long key = unit == null ? null : trainOf.get(unit);
+        var run = key == null ? null : runs.get(key);
+        if (run == null) return false;
+        run.power.put(unit, Math.max(0, shaftPower));
+        run.booked = true;
+        long now = coordinator.now();
+        if (run.stepped != now) {
+            run.fresh = false;
+            run.stepped = now;
+            if (step(run)) publish();
+        }
+        if (run.train.fault() != ShaftNetwork.Fault.NONE) return false;
+        var d = topology.shaft(run.train.driver());
+        return d != null && d.state() != null && d.state().speed() > 0 && run.trip == ShaftTrain.Trip.NONE;
+    }
+
     /** Whether {@code unit} is its train's first driven member: the one a regulating driver reads (reading A31). */
     private static boolean first(Run run, long unit) {
         return !run.train.driven().isEmpty() && run.train.driven().getFirst().id() == unit;

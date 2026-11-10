@@ -73,6 +73,41 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
         return Component.translatable("gui.icheme." + key, args).getString();
     }
 
+    // A DCS's column page (W6.2): the columns its bus reaches, the one chosen, its Operation view and its entries' drafts.
+    private List<CompoundTag> columns = List.of();
+    private long column;
+    private com.wormzjl.icheme.science.column.operation.OperationView operation;
+    private final Map<String, String> columnDrafts = new HashMap<>();
+
+    private static OperationColumn.Units units() {
+        return new OperationColumn.Units(ClientConfig.temperature(), ClientConfig.pressure(), ClientConfig.flowTime());
+    }
+
+    private String columnLabel() {
+        return columns.stream().filter(c -> c.getLong("id") == column).map(c -> c.getString("label")).findFirst().orElse("");
+    }
+
+    /** The columns' group in a DCS's list: one choice per column its bus reaches. */
+    private List<Column.Row> columnRows() {
+        var rows = new ArrayList<Column.Row>();
+        for (var c : columns)
+            rows.add(new Column.Choice(c.getString("label"), tr("control.column.hint"), page.equals("column") && c.getLong("id") == column, "column:" + c.getLong("id")));
+        if (rows.isEmpty()) rows.add(new Column.Paragraph(tr("control.no_columns"), Palette.TEXT));
+        return List.of(new Column.Group(tr("control.columns"), tr("control.columns.hint"), rows));
+    }
+
+    /** The column page: the column's status, then its Operation door (Control and the set points), as its tab defines them. */
+    private List<Column.Row> columnPage() {
+        if (operation == null) return List.of(new Column.Group(columnLabel(), null, List.of(new Column.Paragraph(tr("control.waiting"), Palette.TEXT))));
+        var status = OperationColumn.status(operation, ControlPanelScreen::tr);
+        boolean note = pending || !reply.isBlank();
+        var rows = new ArrayList<Column.Row>();
+        rows.add(new Column.Group(columnLabel(), status.hint(),
+                List.of(new Column.Paragraph(pending ? tr("control.pending") : !reply.isBlank() ? reply : status.text(), note ? Palette.TEXT : status.palette(), status.hint()))));
+        rows.addAll(OperationColumn.rows(new OperationColumn.Input(operation, pending, units()), ControlPanelScreen::tr));
+        return rows;
+    }
+
     private CompoundTag selected() {
         return controllers.stream()
                 .filter(c -> c.getUUID("id").equals(selected))
@@ -118,6 +153,7 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
     }
 
     private List<Column.Row> right() {
+        if (page.equals("column")) return columnPage();
         var row = selected();
         var d = draft();
         if (row == null || d == null)
@@ -265,6 +301,7 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
             return List.of(all);
         }
         var list = new ArrayList<>(controllerRows());
+        list.addAll(columnRows());
         list.addAll(alarmRows());
         return layout.split()
                 ? List.of(list, r)
@@ -277,12 +314,20 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
         var view = menu.snapshot();
         controllers = tags(view, "controllers");
         alarms = tags(view, "alarms");
+        columns = tags(view, "columns");
+        if (columns.stream().noneMatch(c -> c.getLong("id") == column)) {
+            column = 0;
+            operation = null;
+            if (page.equals("column")) page = "loop";
+        } else if (view.contains("operation") && view.getLong("column") == column)
+            operation = com.wormzjl.icheme.network.AssemblyNetwork.decodeOperation(view.getByteArray("operation"));
         controllerPage = view.getInt("controllerPage");
         controllerPages = Math.max(1, view.getInt("controllerPages"));
         if (view.getLong("ack") != ack) {
             ack = view.getLong("ack");
             pending = false;
             reply = view.getString("reply").equals("APPLIED") ? "" : view.getString("reply");
+            if (page.equals("column") && reply.isEmpty()) columnDrafts.clear();
             if (view.hasUUID("ackPanel") && view.getString("reply").equals("APPLIED")) {
                 var d = drafts.get(view.getUUID("ackPanel"));
                 if (d != null)
@@ -306,7 +351,7 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
         }
         if (controllers.stream().noneMatch(t -> t.getUUID("id").equals(selected))) {
             selected = controllers.isEmpty() ? null : controllers.getFirst().getUUID("id");
-            page = "loop";
+            if (!page.equals("column")) page = "loop";
         }
     }
 
@@ -364,7 +409,9 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
                                 b -> apply(),
                                 ControlPanelScreen::skin)
                         .primary(true);
-        apply.active = draft() != null && !pending && !page.equals("controllers");
+        apply.active = page.equals("column")
+                ? operation != null && operation.editable() && !pending
+                : draft() != null && !pending && !page.equals("controllers");
         addRenderableWidget(apply);
         door.place(leftPos, topPos);
         signature = signature();
@@ -405,10 +452,23 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
                         : d.enabled + ":" + d.sensor + ":" + d.output + ":" + d.unit + ":"
                                 + d.action)
                 + "/"
+                + column
+                + ":"
+                + columns.stream().map(c -> c.getLong("id")).toList()
+                + ":"
+                + (operation == null ? "" : operation.running() + ":" + operation.editable() + ":" + OperationColumn.fields(operation.setpoints()))
+                + "/"
                 + pending;
     }
 
     private AbstractWidget field(Column.Field f, Rect r) {
+        if (page.equals("column") && operation != null) {
+            var box = new SkinField(font, r.x(), r.y(), r.w(), r.h(), Component.literal(f.label()), ControlPanelScreen::skin);
+            box.setMaxLength(32);
+            box.setValue(columnDrafts.getOrDefault(f.key(), OperationColumn.values(operation.setpoints(), units()).getOrDefault(f.key(), "")));
+            box.setResponder(v -> columnDrafts.put(f.key(), v));
+            return addRenderableWidget(box);
+        }
         var d = draft();
         var box =
                 new SkinField(
@@ -447,7 +507,19 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
             }
             return;
         }
-        if (key.startsWith("controller:")) {
+        if (key.startsWith("column:")) {
+            column = Long.parseLong(key.substring(7));
+            operation = null;
+            columnDrafts.clear();
+            reply = "";
+            page = "column";
+            ControlNetwork.selectColumn(menu.containerId, column);
+        } else if (page.equals("column") && (key.equals("start") || key.equals("stop"))) {
+            if (operation != null && !pending) {
+                ControlNetwork.column(menu.containerId, new ColumnCommands.Command(column, key.equals("start") ? ColumnCommands.Action.START : ColumnCommands.Action.STOP, List.of()));
+                pending = true;
+            }
+        } else if (key.startsWith("controller:")) {
             selected = UUID.fromString(key.substring(11));
             page = "loop";
         } else if (key.equals("controller_list")) {
@@ -519,6 +591,18 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
     }
 
     private void apply() {
+        if (page.equals("column")) {
+            if (operation == null || pending) return;
+            var values = OperationColumn.parse(operation.setpoints(), columnDrafts, units());
+            if (values == null) {
+                reply = tr("control.invalid");
+                return;
+            }
+            ControlNetwork.column(menu.containerId, new ColumnCommands.Command(column, ColumnCommands.Action.APPLY, values));
+            pending = true;
+            rebuildWidgets();
+            return;
+        }
         var d = draft();
         if (d == null || pending) return;
         if (d.enabled

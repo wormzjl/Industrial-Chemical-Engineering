@@ -80,6 +80,8 @@ public final class HeatDiagramRender {
                 new Case("air-cooler-reader", "AIR_COOLER", "PROCESS", false, ExchangerBlueprint.Design.NONE, HeatUnit.Mode.OUTLET_TEMPERATURE, true, "fans", 0.6, null, false),
                 new Case("fired-heater", "FIRED_HEATER", "RADIANT", true, ExchangerBlueprint.Design.NONE, HeatUnit.Mode.OFF, true, "burners", 0.7, null, true),
                 new Case("kettle", "KETTLE", "TUBE", true, ExchangerBlueprint.Design.NONE, HeatUnit.Mode.DUTY, true, "bypass", 0.2, null, true),
+                // A kettle's tubes in the column's mode (batch 2026-11-10-column-failure-modes, stage 4a): a reboiler's utility.
+                new Case("kettle-column", "KETTLE", "TUBE", true, new ExchangerBlueprint.Design(F, N), HeatUnit.Mode.COLUMN, true, "feed_valve", null, lines("CHECKED", 1), true),
                 new Case("kettle-pool", "KETTLE", "SHELL", true, ExchangerBlueprint.Design.NONE, HeatUnit.Mode.OFF, true, "none", null, null, true));
         for (var c : cases) {
             var light = page(c, PanelSkin.LIGHT, false);

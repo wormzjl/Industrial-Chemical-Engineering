@@ -6,7 +6,7 @@ import com.wormzjl.icheme.client.gui.common.kit.PanelSkin;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
 import com.wormzjl.icheme.client.gui.common.kit.ScrollView;
 import com.wormzjl.icheme.client.gui.common.kit.Skin;
-import com.wormzjl.icheme.science.column.operation.ColumnCycle;
+import com.wormzjl.icheme.science.column.operation.Condition;
 import com.wormzjl.icheme.science.column.operation.DriftBands;
 import com.wormzjl.icheme.science.column.operation.OperationView;
 import com.wormzjl.icheme.science.column.operation.Port;
@@ -33,7 +33,8 @@ final class OperationPrototypes {
 
     static List<GuiPrototypes.Prototype> operation() {
         return List.of(new GuiPrototypes.Prototype("operation-1920x1080", 624, 344, (d, s) -> door(d, crude(1, 2, 2))),
-                new GuiPrototypes.Prototype("operation-narrow-largest", 496, 368, (d, s) -> door(d, crude(2, 4, 4)), true));
+                new GuiPrototypes.Prototype("operation-narrow-largest", 496, 368, (d, s) -> door(d, crude(2, 4, 4)), true),
+                new GuiPrototypes.Prototype("operation-flooding", 624, 344, (d, s) -> door(d, flooding()), true));
     }
 
     /** A crude column with {@code steam} inlets, {@code draws} and {@code pumparounds}, at 86 % of its 120 kmol/h feed. */
@@ -57,8 +58,23 @@ final class OperationPrototypes {
         duties.add(new OperationView.Duty(OperationView.DutyKind.CONDENSER, 0, -8.51e6 * alpha, -8.51e6));
         for (int j = 0; j < pumparounds; j++) duties.add(new OperationView.Duty(OperationView.DutyKind.PUMPAROUND, j, p[j] * f, p[j] * design));
         duties.add(new OperationView.Duty(OperationView.DutyKind.FANS, 0, 168.2e3 * alpha, 168.2e3));
-        return new OperationView(OperationView.Phase.LIMITED, ColumnCycle.Limit.CONDENSER, alpha, false, null, false,
-                "LIMITED: condenser, 86 %", true, true, set, streams, duties, new OperationView.Solve(DriftBands.Trigger.ENTHALPY, true, 45));
+        var conditions = List.of(new Condition.Active(Condition.COOLING_SHORT, alpha), new Condition.Active(Condition.HIGH_LOAD, .88, 27, "tray 28 at 88 % of flood"));
+        return new OperationView(OperationView.Phase.LIMITED, conditions, alpha, null, "LIMITED: condenser, 86 %", true, true, set, null, streams, duties,
+                new OperationView.Solve(DriftBands.Trigger.ENTHALPY, true, 45), new OperationView.Trays(16_900, .88, 21_800, 1.02, 28));
+    }
+
+    /** The crude column past flood at its set feed (W7): flooding binds at 92 %, a refused set point leaves the accepted steam and draws. */
+    static OperationView flooding() {
+        var base = crude(1, 2, 2);
+        var s = base.setpoints();
+        double[] steam = s.steamPerFeed().clone(), draws = s.drawsPerFeed().clone();
+        steam[0] *= .8;
+        draws[1] *= .9;
+        var accepted = new Setpoints(s.designFeedRate(), s.feedRate(), s.condenserTemperature(), s.refluxRatio(), s.reboilerPerFeed(), steam, draws, s.pumparoundsPerFeed());
+        var conditions = List.of(new Condition.Active(Condition.FLOODING, .92, 27, ""), new Condition.Active(Condition.HIGH_LOAD, 1, 27, "tray 28 at 100 % of flood"),
+                new Condition.Active(Condition.SETPOINT_REFUSED, "the setpoint solve failed (no convergence), the table of 40 s ago kept"));
+        return new OperationView(OperationView.Phase.LIMITED, conditions, .92, null, "LIMITED: flooding, 92 %", true, true, s, accepted, base.streams(), base.duties(),
+                base.solve(), new OperationView.Trays(20_300, 1.0, 21_100, 1.09, 28));
     }
 
     /** The Operation page as AssemblyScreen draws it, through the shipped OperationColumn. */
@@ -76,7 +92,7 @@ final class OperationPrototypes {
         d.skin.hDivider(d.c, 8, d.w - 8, d.h - AssemblyColumn.DIVIDER);
         var box = d.well(AssemblyColumn.glass(d.w, d.h, true));
         // The tables, scrolled with the door to their end where they are taller than the glass.
-        int need = OperationColumn.height(view);
+        int need = OperationColumn.height(view, UNITS, t);
         var glassView = new ScrollView();
         glassView.layout(box, box.right() - ScrollView.BAR, need);
         while (d.end && glassView.offset() < glassView.max()) glassView.wheel(box.x() + 2, box.y() + 2, -1);
@@ -114,6 +130,6 @@ final class OperationPrototypes {
             d.skin.button(d.c, footer.get(i), keys.get(i).text(), keys.get(i).key().equals("apply") ? Skin.Press.PRIMARY : Skin.Press.REST, false);
         if (!d.end && d.skin == PanelSkin.LIGHT)
             System.out.printf(java.util.Locale.ROOT, "%-24s %d by %d: door column %d px wide, %d px tall in a %d px view; tables %d px on a %d px glass; %d keys%n", "operation",
-                    d.w, d.h, area.w(), tall, area.h(), OperationColumn.height(view), box.h(), ConstructorColumn.buttons(rows).size());
+                    d.w, d.h, area.w(), tall, area.h(), OperationColumn.height(view, UNITS, t), box.h(), ConstructorColumn.buttons(rows).size());
     }
 }

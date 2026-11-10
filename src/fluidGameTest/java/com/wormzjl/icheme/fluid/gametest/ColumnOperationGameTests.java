@@ -7,11 +7,16 @@ import com.wormzjl.icheme.runtime.assembly.AssemblyService;
 import com.wormzjl.icheme.runtime.fluid.ColumnUnit;
 import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
 import com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity;
-import com.wormzjl.icheme.science.column.operation.ColumnCycle;
 import com.wormzjl.icheme.science.column.operation.OperationView;
 import com.wormzjl.icheme.science.column.operation.Port;
 import com.wormzjl.icheme.science.fluid.network.PassiveNetwork;
+import com.wormzjl.icheme.runtime.assembly.AssemblyStore;
+import com.wormzjl.icheme.runtime.control.ColumnCommands;
+import com.wormzjl.icheme.science.equipment.CableMedium;
+import com.wormzjl.icheme.world.inventory.ControlPanelMenu;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.nbt.Tag;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.neoforged.neoforge.gametest.GameTestHolder;
@@ -192,12 +197,134 @@ public final class ColumnOperationGameTests {
                 .thenSucceed();
     }
 
+    /**
+     * Stage 5 of the column failure modes batch (2026-11-10), the server checks stages 1 and 2 left: a DCS on one cable to
+     * the column's data socket lists the column; its START runs it at its design, its APPLY of the design's set points and
+     * its STOP are answered APPLIED and reach the unit; between them a blocked product raises {@code alarm_blocked} in the
+     * DCS menu's publication.
+     */
+    @GameTest(template = "empty", timeoutTicks = 24000, batch = "column-dcs")
+    public static void aDcsListsStartsAppliesStopsAndSeesABlockedProduct(GameTestHelper helper) {
+        var rig = ColumnOperationReviewWorld.rig(helper);
+        var life = new Life(rig);
+        var plant = rig.plant;
+        try {
+            rig.build();
+        } catch (RuntimeException e) {
+            life.failure[0] = "build: " + e.getMessage();
+            IChemE.LOGGER.error("column_gametest build failed", e);
+        }
+        BlockPos[] dcs = {null};
+        long[] host = {0};
+        ControlLoopGameTests.ViewCapture[] operator = {null};
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(life.failed() || plant.valvesInstalled(), "Waiting for the valves"))
+                .thenWaitUntil(() -> helper.assertTrue(life.failed() || ColumnFailureModesReviewWorld.port(plant, plant.column.origin(), CableMedium.DATA) != null, "Waiting for the column's data socket"))
+                .thenExecute(() -> life.stage(() -> {
+                    var socket = ColumnFailureModesReviewWorld.port(plant, plant.column.origin(), CableMedium.DATA);
+                    host[0] = socket.host();
+                    dcs[0] = consoleCell(plant, socket.cell());
+                    var console = ColumnFailureModesReviewWorld.panel(plant, dcs[0], Direction.WEST, true);
+                    ColumnFailureModesReviewWorld.lay(plant, List.of(console.dataPort(), socket), CableMedium.DATA);
+                    var entry = AssemblyService.validate(plant.level, plant.controller());
+                    life.check(entry != null && entry.status() == AssemblyStore.Status.COMPLETE, "The plant is complete: " + plant.faults());
+                    operator[0] = ControlLoopGameTests.operator(plant.level, dcs[0]);
+                    ControlPanelMenu.open(operator[0].player, dcs[0]);
+                    plant.world.controls().selectColumn(ControlLoopGameTests.menu(helper, operator[0]), host[0]);
+                }))
+                .thenWaitUntil(() -> helper.assertTrue(life.failed() || listed(operator[0], host[0]), "Waiting for the DCS to list the column"))
+                .thenExecute(() -> life.stage(() -> command(helper, plant, operator[0], host[0], ColumnCommands.Action.START, List.of())))
+                .thenWaitUntil(() -> helper.assertTrue(life.failed() || rig.paced() && atDesign(life) && answered(operator[0], 1), "Waiting for the DCS's Start"))
+                .thenExecute(() -> life.stage(() -> {
+                    life.check(answer(operator[0]).equals(ColumnCommands.APPLIED), "START is answered APPLIED: " + answer(operator[0]));
+                    life.check(life.unit() != null && life.unit().running(), "START reached the unit");
+                    var s = com.wormzjl.icheme.science.column.operation.Setpoints.of(java.util.Objects.requireNonNull(rig.design.trays().operating()));
+                    var values = new java.util.ArrayList<Double>(List.of(s.feedRate(), s.condenserTemperature(), s.refluxRatio(), s.reboilerPerFeed()));
+                    for (double d : s.steamPerFeed()) values.add(d);
+                    for (double d : s.drawsPerFeed()) values.add(d);
+                    for (double d : s.pumparoundsPerFeed()) values.add(d);
+                    command(helper, plant, operator[0], host[0], ColumnCommands.Action.APPLY, values);
+                }))
+                .thenWaitUntil(() -> helper.assertTrue(life.failed() || answered(operator[0], 2), "Waiting for the DCS's Apply"))
+                .thenExecute(() -> life.stage(() -> {
+                    life.check(answer(operator[0]).equals(ColumnCommands.APPLIED), "APPLY is answered APPLIED: " + answer(operator[0]));
+                    life.check(life.unit().running(), "The column runs on after APPLY");
+                    // Nothing downstream of the smallest product's valve: its buffer fills, BLOCKED.
+                    plant.level.removeBlock(rig.sinks.get(2), false);
+                }))
+                .thenWaitUntil(() -> helper.assertTrue(life.failed() || rig.paced() && alarmed(operator[0], "BLOCKED"), "Waiting for alarm_blocked on the DCS"))
+                .thenExecute(() -> life.stage(() -> command(helper, plant, operator[0], host[0], ColumnCommands.Action.STOP, List.of())))
+                .thenWaitUntil(() -> helper.assertTrue(life.failed() || answered(operator[0], 3) && stopped(life), "Waiting for the DCS's Stop"))
+                .thenExecute(() -> life.stage(() -> life.check(answer(operator[0]).equals(ColumnCommands.APPLIED), "STOP is answered APPLIED: " + answer(operator[0]))))
+                .thenExecute(() -> {
+                    if (operator[0] != null) operator[0].player.closeContainer();
+                    plant.remove();
+                })
+                .thenWaitUntil(() -> helper.assertTrue(plant.removed(), "Waiting for the plant to leave"))
+                .thenExecute(() -> {
+                    plant.release();
+                    if (life.failed()) helper.fail(life.failure[0]);
+                })
+                .thenSucceed();
+    }
+
+    /** A free cell, with the one above it, on the ground near {@code near}, for a DCS. */
+    private static BlockPos consoleCell(AssemblyGameTests.Plant plant, BlockPos near) {
+        for (int r = 3; r < 24; r++)
+            for (var d : new Direction[]{Direction.WEST, Direction.SOUTH, Direction.NORTH, Direction.EAST}) {
+                var at = new BlockPos(near.getX(), plant.base.getY(), near.getZ()).relative(d, r);
+                boolean free = true;
+                for (var c : List.of(at, at.above(), at.above(2), at.relative(Direction.WEST)))
+                    free &= plant.inside(c) && plant.level.getBlockState(c).isAir() && !plant.devices.contains(c) && !plant.reserved.contains(c);
+                if (free) return at;
+            }
+        throw new IllegalStateException("No free ground for the DCS near " + near.toShortString());
+    }
+
+    private static void command(GameTestHelper helper, AssemblyGameTests.Plant plant, ControlLoopGameTests.ViewCapture operator, long host, ColumnCommands.Action action, List<Double> values) {
+        plant.world.controls().column(ControlLoopGameTests.menu(helper, operator), new ColumnCommands.Command(host, action, values));
+        log("dcs command={} host={}", action, host);
+    }
+
+    /** Whether the latest view the operator was sent lists the column {@code host}. */
+    private static boolean listed(ControlLoopGameTests.ViewCapture operator, long host) {
+        if (operator.views.isEmpty()) return false;
+        var columns = operator.views.getLast().data().getList("columns", Tag.TAG_COMPOUND);
+        for (int i = 0; i < columns.size(); i++) if (columns.getCompound(i).getLong("id") == host) return true;
+        return false;
+    }
+
+    /** Whether the operator's menu was sent its {@code n}th answer. */
+    private static boolean answered(ControlLoopGameTests.ViewCapture operator, long n) {
+        for (int i = operator.views.size() - 1; i >= 0; i--) {
+            var d = operator.views.get(i).data();
+            if (d.contains("ack")) return d.getLong("ack") >= n;
+        }
+        return false;
+    }
+
+    private static String answer(ControlLoopGameTests.ViewCapture operator) {
+        for (int i = operator.views.size() - 1; i >= 0; i--) {
+            var d = operator.views.get(i).data();
+            if (d.contains("ack")) return d.getString("reply");
+        }
+        return "";
+    }
+
+    /** Whether the latest view the operator was sent lists the alarm {@code alarm}. */
+    private static boolean alarmed(ControlLoopGameTests.ViewCapture operator, String alarm) {
+        if (operator.views.isEmpty()) return false;
+        var alarms = operator.views.getLast().data().getList("alarms", Tag.TAG_COMPOUND);
+        for (int i = 0; i < alarms.size(); i++) if (alarms.getCompound(i).getString("alarm").equals(alarm)) return true;
+        return false;
+    }
+
     /** The column past its start, taking its design feed unlimited; a column that cannot get there fails the test. */
     private static boolean atDesign(Life life) {
         var view = life.view();
         if (view == null) return false;
         if (view.phase() == OperationView.Phase.NOT_READY || view.phase() == OperationView.Phase.UPSET) life.failure[0] = "column " + view.phase() + ": " + view.engine();
-        return view.phase() == OperationView.Phase.RUNNING && view.limit() == ColumnCycle.Limit.NONE && view.alpha() == 1 && life.feedRate(view) >= .99 * life.design();
+        return view.phase() == OperationView.Phase.RUNNING && view.binding() == null && view.alpha() == 1 && life.feedRate(view) >= .99 * life.design();
     }
 
     /** Plan C4: a running column at its design; C3: the ports split the islands, and no flow reaches a member. */
@@ -276,7 +403,7 @@ public final class ColumnOperationGameTests {
         var view = life.view();
         if (view == null) return false;
         if (!view.running()) life.failure[0] = "A blocked product does not stop the column: " + view.phase() + " " + view.engine();
-        return view.limit() == ColumnCycle.Limit.OUTLET && view.alpha() < .05;
+        return view.binding() != null && view.binding().condition() == com.wormzjl.icheme.science.column.operation.Condition.PRODUCT_FULL && view.alpha() < .05;
     }
 
     /** Plan C3: the blocked product's buffer is full and the feed stands, the column still running. */

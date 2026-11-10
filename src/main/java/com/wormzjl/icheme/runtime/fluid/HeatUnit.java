@@ -40,7 +40,9 @@ public record HeatUnit(HeatSides.Unit unit,HeatSides.Side side,double area,long 
      * it needs the exchanger's lines ({@link #lines}), and holds nothing until they are complete. {@code COLUMN} (U2, batch
      * 2026-11-02-process-simulator, {@code COOLER_MODEL_PLAN.md} section 8) is the water side of a column condenser's
      * exchanger: the column sets the mass flow of a valve on its own feed to carry the heat it owes the water to its regulated
-     * outlet. It needs the exchanger's lines; until they are complete the water flows as its line lets it, as before.
+     * outlet. It needs the exchanger's lines; until they are complete the water flows as its line lets it, as before. A
+     * kettle's tubes take it too (W4, batch 2026-11-10-column-failure-modes): the column sets their feed to give the reboiler's
+     * duty down to the bottoms plus the approach.
      */
     public enum Mode { OFF, OUTLET_TEMPERATURE, DUTY, FIRING, RATIO, COLUMN }
     /**
@@ -70,7 +72,7 @@ public record HeatUnit(HeatSides.Unit unit,HeatSides.Side side,double area,long 
         if(unit==HeatSides.Unit.FIRED_HEATER&&(control.mode()!=Mode.FIRING||!(control.target()>0)))throw new IllegalArgumentException("A fired heater's coil fires to a set point");
         if(unit!=HeatSides.Unit.FIRED_HEATER&&control.mode()==Mode.FIRING)throw new IllegalArgumentException("Only a fired heater's coil fires");
         if(unit!=HeatSides.Unit.EXCHANGER&&control.mode()==Mode.RATIO)throw new IllegalArgumentException("Only an exchanger's side holds a ratio");
-        if(unit!=HeatSides.Unit.EXCHANGER&&control.mode()==Mode.COLUMN)throw new IllegalArgumentException("Only an exchanger's side takes a column's water flow");
+        if(unit!=HeatSides.Unit.EXCHANGER&&!(unit==HeatSides.Unit.KETTLE&&side==HeatSides.Side.TUBE)&&control.mode()==Mode.COLUMN)throw new IllegalArgumentException("Only an exchanger's side or a kettle's tubes take a column's flow");
     }
     /** A fired heater's set point when built, K: 300 °C, its burners lit. */
     public static final Control FIRING=new Control(Mode.FIRING,573.15,0,1);
@@ -115,6 +117,8 @@ public record HeatUnit(HeatSides.Unit unit,HeatSides.Side side,double area,long 
      * an assembly; until they are complete, a bypass control works the side's internal bypass and a ratio holds nothing.
      */
     public com.wormzjl.icheme.science.assembly.ExchangerBlueprint.Lines lines() {
+        // A kettle's tubes heating a column's reboiler (W4): a flow station on their feed the column sets; their bypass control is internal.
+        if(kettleTubes())return control.mode()==Mode.COLUMN?com.wormzjl.icheme.science.assembly.ExchangerBlueprint.Lines.FEED:com.wormzjl.icheme.science.assembly.ExchangerBlueprint.Lines.NONE;
         if(unit!=HeatSides.Unit.EXCHANGER)return com.wormzjl.icheme.science.assembly.ExchangerBlueprint.Lines.NONE;
         return switch(control.mode()) {
             case OUTLET_TEMPERATURE,DUTY->com.wormzjl.icheme.science.assembly.ExchangerBlueprint.Lines.BYPASS;
@@ -123,6 +127,8 @@ public record HeatUnit(HeatSides.Unit unit,HeatSides.Side side,double area,long 
             default->com.wormzjl.icheme.science.assembly.ExchangerBlueprint.Lines.NONE;
         };
     }
+    /** Whether this is a kettle's tube bundle (W7), the heating side of a column's reboiler (W4). */
+    public boolean kettleTubes(){return unit==HeatSides.Unit.KETTLE&&side==HeatSides.Side.TUBE;}
     /** Whether this is a kettle's shell (W7): a vessel whose pool is its tubes' other side, no passage of its own. */
     public boolean pool(){return unit==HeatSides.Unit.KETTLE&&side==HeatSides.Side.SHELL;}
 }

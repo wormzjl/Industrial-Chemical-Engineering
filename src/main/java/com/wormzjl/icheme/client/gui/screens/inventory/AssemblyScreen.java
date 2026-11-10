@@ -467,7 +467,7 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
             drawingBox = split.drawing();
         } else if (operating != null) {
             // The tables on the glass; where they are taller than it (a large design in a short window), it scrolls.
-            int need = OperationColumn.height(operating);
+            int need = OperationColumn.height(operating, units(), AssemblyScreen::lang);
             glassView.layout(box, box.right() - ScrollView.BAR, need);
             var lines = need > box.h() ? new Rect(box.x(), box.y(), box.w() - ScrollView.BAR - 2, box.h()) : box;
             canvas.clip(box);

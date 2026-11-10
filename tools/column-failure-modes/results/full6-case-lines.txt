@@ -1,0 +1,15 @@
+review_failure case=1 expected=RUNNING got=RUNNING share=1.000 ticks=0
+review_failure case=2 expected=LOW_FEED got=LIMITED:FEED_SHORT:LOW_FEED share=0.000 ticks=308
+review_failure case=3 expected=LOW_STEAM got=LIMITED:STEAM_SHORT#0:LOW_STEAM share=1.000 ticks=1290
+review_failure case=4 expected=BLOCKED got=LIMITED:PRODUCT_FULL#4:BLOCKED share=0.000 ticks=1137
+review_failure case=5 expected=COOLING_LIMITED got=LIMITED:COOLING_SHORT:COOLING_LIMITED share=0.001 ticks=1575
+review_failure case=6 expected=NO_POWER got=LIMITED:NO_POWER#0:NO_POWER share=0.340 ticks=2400
+review_failure case=7 expected=NO_POWER got=LIMITED:NO_POWER#1:NO_POWER share=0.000 ticks=100
+review_failure case=8 expected=COOLING_LIMITED got=LIMITED:PUMPAROUND_SHORT#0:COOLING_LIMITED share=0.000 ticks=1100
+review_failure case=9 expected=NOT_COVERED got=NOT_RUN share=NaN ticks=0
+review_failure case=10 expected=SETPOINT_REFUSED,_one_solve got=RUNNING share=1.000 ticks=400
+review_failure case=11 expected=STOP:APPLIED;START:APPLIED;APPLY:APPLIED;DCS-2:NO_DATA_LINK got=STOP:APPLIED;START:APPLIED;APPLY:APPLIED;DCS-2:NO_DATA_LINK share=1.000 ticks=570
+review_failure case=12 expected=FEED_FOLLOWS_FLOW_TARGET got=RUNNING:feed=0.500:fic=CONTROLLING share=1.000 ticks=1200
+review_failure case=13 expected=HEATING_LIMITED got=LIMITED:HEATING_SHORT:HEATING_LIMITED share=0.000 ticks=700
+review_failure end plantA=RUNNING plantB=RUNNING held=0
+summary missed=[] failure=null

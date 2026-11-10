@@ -43,12 +43,22 @@ public final class DriftBands {
      * @param designDemand the feed's set demand at the design rate over the step, mol (for the throughput)
      */
     public static Optional<Crossing> check(SplitTable table, ColumnCycle.Step step, double designDemand) {
-        var reference = table.reference();
+        var state = check(table.reference(), table.held(), step, designDemand);
+        if (state.isPresent() || !(step.feedMoles() > 0)) return state;
+        if (Math.abs(step.departure()) > CLOSURE) return Optional.of(new Crossing(Trigger.CLOSURE, step.departure()));
+        return Optional.empty();
+    }
+
+    /**
+     * The first band of the state {@code step} took (component, composition, enthalpy, steam ratio, throughput) it leaves round
+     * {@code reference}, whose solve held the components {@code held}; empty while it stays inside. The closure is the table's,
+     * not the state's: W2 asks this of a refused state.
+     */
+    public static Optional<Crossing> check(SplitTable.Reference reference, boolean[] held, ColumnCycle.Step step, double designDemand) {
         double fed = step.feedMoles();
         if (!(fed > 0)) return Optional.empty();
         double[] feed = step.feed().moles();
         double[] z = reference.feedFractions();
-        boolean[] held = table.held();
         double l1 = 0;
         for (int i = 0; i < feed.length; i++) {
             double share = feed[i] / fed;
@@ -78,7 +88,22 @@ public final class DriftBands {
         }
         double alpha = designDemand > 0 ? fed / designDemand : 0;
         if (Math.abs(alpha - reference.alpha()) > THROUGHPUT) return Optional.of(new Crossing(Trigger.THROUGHPUT, alpha));
-        if (Math.abs(step.departure()) > CLOSURE) return Optional.of(new Crossing(Trigger.CLOSURE, step.departure()));
         return Optional.empty();
+    }
+
+    /**
+     * The state {@code step} took as a reference for {@link #check(SplitTable.Reference, boolean[], ColumnCycle.Step, double)}
+     * (W2: a refused state): its feed's shares and specific enthalpy, each steam's ratio, its throughput against
+     * {@code designDemand}, at set points {@code setpoints}; {@code enthalpySlope} is the feed's, J/(mol K) (0: unknown, no
+     * enthalpy band). Its temperatures are unknown.
+     */
+    public static SplitTable.Reference reference(ColumnCycle.Step step, double designDemand, Setpoints setpoints, double enthalpySlope) {
+        double fed = step.feedMoles();
+        double[] z = step.feed().moles();
+        for (int i = 0; i < z.length; i++) z[i] = fed > 0 ? z[i] / fed : 0;
+        double[] ratios = new double[step.steam().size()];
+        for (int j = 0; j < ratios.length; j++) ratios[j] = fed > 0 ? step.steam().get(j).total() / fed : 0;
+        return new SplitTable.Reference(z, fed > 0 ? step.feed().energy() / fed : 0, enthalpySlope, ratios, designDemand > 0 ? fed / designDemand : 0, setpoints,
+                Double.NaN, new double[ratios.length]);
     }
 }

@@ -80,7 +80,13 @@ class FluidFactsCompatTest {
         world.runTo(700);
         // Facts schema 6: a running column unit, a pipe it holds, and its feed port, a void inside the feed valve.
         long pipe=world.place(40,64,0,Kind.PIPE,Direction.EAST,.05);long feedValve=world.place(41,64,0,Kind.VALVE,Direction.EAST);world.runTo(720);
-        long unit=world.ledger.reserve(1);long port=world.ledger.nextIdentity();int m=model.componentCount();
+        long unit=world.ledger.reserve(1);
+        // Facts schema 21 (W4): the reboiler's utility side and two pumparounds' cooler sides, the first none, the second two
+        // units in parallel. Identities the facts name; this world places no structure, so they are not registered.
+        long utility=world.ledger.reserve(3);
+        // Facts schema 21 (W5): the members, two fan sides, a reflux pump and the second pumparound's pump; identities only.
+        long member=world.ledger.reserve(4);
+        long port=world.ledger.nextIdentity();int m=model.componentCount();
         var held=new double[m];held[0]=3.5;held[m-1]=.25;
         var at=new PhysicalFluidTopology.Position(EventPathWorld.DIM,40,64,0,PhysicalFluidTopology.PORT_LANE);
         var feed=new PhysicalFluidTopology.Device(port,at,Kind.VOID,Direction.EAST,world.registry.registrations().get(feedValve).device().geometry(),new FlowControl.Passive(),
@@ -91,7 +97,8 @@ class FluidFactsCompatTest {
                 List.of(new ColumnUnit.Station(com.wormzjl.icheme.science.column.operation.Port.FEED,0,port,feedValve,account,new com.wormzjl.icheme.science.fluid.state.SolidInventory(List.of(new com.wormzjl.icheme.science.fluid.state.SolidInventory.Population(model.solid("icheme:demo_particle"),com.wormzjl.icheme.science.fluid.state.ParticleSize.micrometres("100"),1.5))))),
                 new ColumnUnit.Totals(account,com.wormzjl.icheme.science.column.operation.ColumnCycle.Account.empty(m),2e5,-3e5,-1e4),List.of(tube,tube2),null,false,
                 // Facts schema 9 (U2): the air condenser's bare tube.
-                1234.5));
+                1234.5,new ColumnUnit.Utilities(List.of(utility),List.of(List.of(),List.of(utility+1,utility+2))),
+                new ColumnUnit.Members(List.of(member,member+1),List.of(member+2),List.of(List.of(),List.of(member+3)))));
         var held0=world.registry.registrations().get(pipe);
         world.registry.submit(List.of(new WorldTopologyLedger.Edit(pipe,new WorldTopologyLedger.Registration(held0.device().withSuspendedBy(unit),held0.spec(),held0.revision()+1)),
                 new WorldTopologyLedger.Edit(port,new WorldTopologyLedger.Registration(feed,new FluidDeviceSpec(1,330,260000,FluidDeviceSpec.nitrogen(CATALOG).composition()),0))),port+1,null);
@@ -1023,6 +1030,10 @@ class FluidFactsCompatTest {
             if(u.condensers().size()>1)text.append(":condensers=").append(u.condensers());
             // Schema 9: the air condenser's surface, written only where there is one, as an older image has none.
             if(u.airSurface()>0)text.append(":air=").append(u.airSurface());
+            // Schema 21: the utility sides, written only where there are some, as an older image has none.
+            if(!u.utilities().none())text.append(":reboiler=").append(u.utilities().reboiler()).append(":pumparounds=").append(u.utilities().pumparounds());
+            // Schema 21: the members, written only where there are some, as an older image has none.
+            if(!u.members().none())text.append(":fans=").append(u.members().fans()).append(":reflux=").append(u.members().reflux()).append(":pumps=").append(u.members().pumparounds());
             for(var s:u.stations())text.append(":").append(s.port()).append(s.index()).append("=").append(s.device()).append("/").append(s.valve()).append("/").append(s.account().total()).append("/").append(s.account().energy()).append("/").append(s.solids().massKg());
         }
         return text.toString();

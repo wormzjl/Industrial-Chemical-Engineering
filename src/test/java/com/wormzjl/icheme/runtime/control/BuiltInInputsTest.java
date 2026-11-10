@@ -111,6 +111,27 @@ class BuiltInInputsTest {
                                 "boundary_sour_water_flow_rate",
                                 "boundary_bottoms_flow_rate")));
         assertTrue(inputs.stream().filter(i -> i.role().equals("REFLUX")).count() == 3);
+        // The live pressure drop over the trays (W3.3): one pressure channel, no volume.
+        var drop = inputs.stream().filter(i -> i.channel().equals("differential_pressure")).toList();
+        assertEquals(1, drop.size());
+        assertEquals(Sensor.Kind.PRESSURE, drop.getFirst().kind());
+        assertEquals(com.wormzjl.icheme.runtime.fluid.ColumnOperation.DIFFERENTIAL, drop.getFirst().role());
+        assertFalse(BuiltInInputs.volumeAvailable(drop.getFirst()));
+        // A running column's alarms (W6.1): one channel per column alarm, on the column's host.
+        var alarms = inputs.stream().filter(i -> i.kind() == com.wormzjl.icheme.runtime.instrument.Sensor.Kind.ALARM).toList();
+        assertEquals(com.wormzjl.icheme.runtime.fluid.EquipmentAlarm.COLUMN.size(), alarms.size());
+        assertTrue(names.containsAll(Set.of("alarm_blocked", "alarm_low_feed", "alarm_low_steam", "alarm_cooling_limited", "alarm_heating_limited",
+                "alarm_off_table", "alarm_upset", "alarm_flooding", "alarm_no_power")), names.toString());
+        assertTrue(alarms.stream().allMatch(i -> i.role().startsWith("ALARM:") && !BuiltInInputs.volumeAvailable(i)));
+        // The conditions a column's cycle finds raise its alarms: a blocked product BLOCKED, a pending solve none.
+        var raised = com.wormzjl.icheme.runtime.fluid.EquipmentAlarm.column(List.of(
+                new com.wormzjl.icheme.science.column.operation.Condition.Active(com.wormzjl.icheme.science.column.operation.Condition.PRODUCT_FULL, 0, 0, ""),
+                new com.wormzjl.icheme.science.column.operation.Condition.Active(com.wormzjl.icheme.science.column.operation.Condition.OFF_TABLE, "composition")));
+        assertEquals(Set.of(com.wormzjl.icheme.runtime.fluid.EquipmentAlarm.BLOCKED), raised);
+        for (var c : com.wormzjl.icheme.science.column.operation.Condition.values()) {
+            var alarm = com.wormzjl.icheme.runtime.fluid.EquipmentAlarm.of(c);
+            assertTrue(alarm == null || com.wormzjl.icheme.runtime.fluid.EquipmentAlarm.COLUMN.contains(alarm), c + " raises a column alarm");
+        }
         assertFalse(
                 BuiltInInputs.volumeAvailable(
                         inputs.stream()

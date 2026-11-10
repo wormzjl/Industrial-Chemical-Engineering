@@ -23,19 +23,24 @@ final class ExchangerLines {
     private ExchangerLines() {
     }
 
-    /** The lines {@code vessel}'s sides' controls ask for; {@link ExchangerBlueprint.Design#NONE} for anything but an exchanger. */
+    /** Whether {@code vessel} may have control lines: an exchanger, or a kettle, whose tubes a column may set (W4). */
+    private static boolean lined(Vessel vessel) {
+        var kind = vessel.shape().kind();
+        return kind == EquipmentShape.Kind.EXCHANGER || kind == EquipmentShape.Kind.KETTLE;
+    }
+
+    /** The lines {@code vessel}'s sides' controls ask for; {@link ExchangerBlueprint.Design#NONE} for anything but an exchanger or a kettle. */
     static ExchangerBlueprint.Design design(ServerLevel level, FluidWorldAuthority world, Vessel vessel) {
-        if (vessel.shape().kind() != EquipmentShape.Kind.EXCHANGER) return ExchangerBlueprint.Design.NONE;
-        var ids = EquipmentStructure.sideIdentities(level, vessel);
-        var sides = HeatSides.of(vessel.shape());
+        if (!lined(vessel)) return ExchangerBlueprint.Design.NONE;
         var tube = ExchangerBlueprint.Lines.NONE;
         var shell = ExchangerBlueprint.Lines.NONE;
-        for (int i = 0; i < sides.size() && i < ids.length; i++) {
-            var r = world.registrations().get(ids[i]);
+        // Each side by its registration's own side: a kettle's shell is its pool, which asks for none.
+        for (long id : EquipmentStructure.sideIdentities(level, vessel)) {
+            var r = id == 0 ? null : world.registrations().get(id);
             var heat = r == null ? null : r.device().heat();
             if (heat == null) continue;
-            if (sides.get(i).side() == HeatSides.Side.TUBE) tube = heat.lines();
-            else if (sides.get(i).side() == HeatSides.Side.SHELL) shell = heat.lines();
+            if (heat.side() == HeatSides.Side.TUBE) tube = heat.lines();
+            else if (heat.side() == HeatSides.Side.SHELL) shell = heat.lines();
         }
         return new ExchangerBlueprint.Design(tube, shell);
     }
@@ -46,27 +51,25 @@ final class ExchangerLines {
      * registration at the position the operated slot holds).
      */
     static void publish(ServerLevel level, FluidWorldAuthority world, Vessel vessel, @Nullable Entry entry) {
-        if (vessel.shape().kind() != EquipmentShape.Kind.EXCHANGER) return;
-        var ids = EquipmentStructure.sideIdentities(level, vessel);
-        var sides = HeatSides.of(vessel.shape());
-        for (int i = 0; i < sides.size() && i < ids.length; i++) {
-            if (ids[i] == 0) continue;
-            var r = world.registrations().get(ids[i]);
+        if (!lined(vessel)) return;
+        for (long id : EquipmentStructure.sideIdentities(level, vessel)) {
+            if (id == 0) continue;
+            var r = world.registrations().get(id);
             var heat = r == null ? null : r.device().heat();
             if (heat == null) continue;
             var asked = heat.lines();
             if (asked == ExchangerBlueprint.Lines.NONE || entry == null) {
-                world.lines(ids[i], null);
+                world.lines(id, null);
                 continue;
             }
             var report = entry.report();
             // The report's slot states go with the lines: the side's screen draws each part in its colour (the heat GUI).
             var slots = report == null ? java.util.List.<AssemblyReport.SlotReport>of() : report.slots();
-            world.lines(ids[i], switch (entry.status()) {
+            world.lines(id, switch (entry.status()) {
                 case NOT_VALIDATED -> new FluidWorldAuthority.Lines(FluidWorldAuthority.Lines.Status.NOT_VALIDATED, 0, 0);
                 case CHECKED -> new FluidWorldAuthority.Lines(FluidWorldAuthority.Lines.Status.CHECKED, report.missing() + report.misplaced(), 0, slots);
                 case COMPLETE -> {
-                    long valve = valve(level, world, report, ExchangerBlueprint.operated(sides.get(i).side(), asked));
+                    long valve = valve(level, world, report, ExchangerBlueprint.operated(heat.side(), asked));
                     // A control valve regulates by its sensor: a bare one stands open, whatever its target.
                     var found = valve == 0 ? null : world.registrations().get(valve);
                     boolean metered = found != null && found.device().control() instanceof FlowControl.ControlValve law && !law.bare();

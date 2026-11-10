@@ -1,10 +1,13 @@
 package com.wormzjl.icheme.runtime.fluid;
 
+import com.wormzjl.icheme.science.column.operation.Condition;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * An equipment alarm (batches 2026-11-09-furnace-fuel-power and 2026-11-09-flare-stack): a fired heater's, a flare's, a batch still's or a
- * powered unit's, by name; the control system lists the active ones and reads each as a built-in input channel
+ * powered unit's or a running column's, by name; the control system lists the active ones and reads each as a built-in input channel
  * ({@code alarm_<name>}, 1 active, 0 clear). Its text is the status word, kept in English.
  */
 public enum EquipmentAlarm {
@@ -13,7 +16,9 @@ public enum EquipmentAlarm {
     // A batch still's (batch 2026-11-09-batch-distiller, W3).
     OVERHEAT("OVERHEAT"), BOIL_DRY("BOIL DRY"), FLOODING("FLOODING"), COOLING_LIMITED("COOLING LIMITED"),
     // A chimney's (batch 2026-11-10-chimney): nothing drawn while gas stands at its inlet.
-    NO_DRAFT("NO DRAFT");
+    NO_DRAFT("NO DRAFT"),
+    // A running column's (batch 2026-11-10-column-failure-modes, W6.1).
+    LOW_FEED("LOW FEED"), LOW_STEAM("LOW STEAM"), HEATING_LIMITED("HEATING LIMITED"), OFF_TABLE("OFF TABLE"), UPSET("UPSET");
 
     public final String text;
 
@@ -27,4 +32,32 @@ public enum EquipmentAlarm {
     public static final List<EquipmentAlarm> STILL = List.of(NO_POWER, NO_FUEL, OVERHEAT, BOIL_DRY, FLOODING, COOLING_LIMITED);
     /** A chimney's alarms (batch 2026-11-10-chimney): ABOVE RATING reads as OVER CAPACITY. */
     public static final List<EquipmentAlarm> CHIMNEY = List.of(OVER_CAPACITY, NO_DRAFT);
+    /** A running column's alarms (batch 2026-11-10-column-failure-modes, W6.1). */
+    public static final List<EquipmentAlarm> COLUMN = List.of(UPSET, OFF_TABLE, LOW_FEED, LOW_STEAM, BLOCKED, COOLING_LIMITED, HEATING_LIMITED, FLOODING, NO_POWER);
+
+    /** The alarm a column's condition raises, or null: a pending solve, a refused set point and the notices raise none. */
+    public static EquipmentAlarm of(Condition condition) {
+        return switch (condition) {
+            case FEED_SHORT -> LOW_FEED;
+            case STEAM_SHORT -> LOW_STEAM;
+            case PRODUCT_FULL -> BLOCKED;
+            case COOLING_SHORT, PUMPAROUND_SHORT -> COOLING_LIMITED;
+            case HEATING_SHORT -> HEATING_LIMITED;
+            case FLOODING -> FLOODING;
+            case NO_POWER -> NO_POWER;
+            case SOLVE_REFUSED -> OFF_TABLE;
+            case CLOSURE -> UPSET;
+            case OFF_TABLE, SETPOINT_REFUSED, ADVISORY, FEED_WATER_ROUTED, UNMETERED, HIGH_LOAD -> null;
+        };
+    }
+
+    /** The alarms a column's conditions raise. */
+    public static Set<EquipmentAlarm> column(List<Condition.Active> conditions) {
+        var out = EnumSet.noneOf(EquipmentAlarm.class);
+        for (var c : conditions) {
+            var alarm = of(c.condition());
+            if (alarm != null) out.add(alarm);
+        }
+        return out;
+    }
 }

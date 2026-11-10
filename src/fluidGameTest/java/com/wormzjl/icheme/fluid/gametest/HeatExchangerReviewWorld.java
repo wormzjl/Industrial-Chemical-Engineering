@@ -70,6 +70,7 @@ public final class HeatExchangerReviewWorld {
 
     @GameTest(template = "empty", timeoutTicks = 3000, batch = "review-heat")
     public static void theHeatUnitsStandRunning(GameTestHelper helper) {
+        if (ReviewBatch.skipped(helper, "review-heat")) return;
         var level = helper.getLevel();
         // West of the column review plant, clear of the test's own structure block, on the ground.
         var corner = helper.absolutePos(new BlockPos(-110, 0, 48));

@@ -16,8 +16,25 @@ public record V3TrayHydraulicsSummary(
         boolean correctionApplied,
         double residualMismatchFraction,
         double worstTrayDryPascal,
-        double worstTrayLiquidPascal) {
+        double worstTrayLiquidPascal,
+        double totalDryPascal) {
+    /**
+     * A summary that does not know its total dry drop: the worst tray's share of its own drop, applied to the total (batch
+     * 2026-11-10-column-failure-modes, W3.3: the running column's live drop reads the total split).
+     */
+    public V3TrayHydraulicsSummary(double columnDiameterMetres, double totalPressureDropPascal, double meanTrayPressureDropPascal,
+            double maximumFloodFraction, int maximumFloodTray, boolean correctionApplied, double residualMismatchFraction,
+            double worstTrayDryPascal, double worstTrayLiquidPascal) {
+        this(columnDiameterMetres, totalPressureDropPascal, meanTrayPressureDropPascal, maximumFloodFraction, maximumFloodTray,
+                correctionApplied, residualMismatchFraction, worstTrayDryPascal, worstTrayLiquidPascal,
+                worstTrayDryPascal + worstTrayLiquidPascal > 0.0
+                        ? totalPressureDropPascal * worstTrayDryPascal / (worstTrayDryPascal + worstTrayLiquidPascal) : 0.0);
+    }
+
     public V3TrayHydraulicsSummary {
+        if (!Double.isFinite(totalDryPascal) || totalDryPascal < 0.0) {
+            throw new IllegalArgumentException("V3 tray hydraulics summary is outside the bounded contract");
+        }
         if (!Double.isFinite(columnDiameterMetres) || columnDiameterMetres <= 0.0
                 || !Double.isFinite(totalPressureDropPascal) || totalPressureDropPascal < 0.0
                 || !Double.isFinite(meanTrayPressureDropPascal) || meanTrayPressureDropPascal < 0.0
@@ -44,5 +61,10 @@ public record V3TrayHydraulicsSummary(
      */
     public boolean vaporLimited() {
         return worstTrayDryPascal >= worstTrayLiquidPascal;
+    }
+
+    /** The total liquid head and bubble residual over the tray intervals, Pa: the total drop less its dry part. */
+    public double totalLiquidPascal() {
+        return Math.max(0.0, totalPressureDropPascal - totalDryPascal);
     }
 }

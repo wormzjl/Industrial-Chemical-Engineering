@@ -84,6 +84,8 @@ public final class ExchangerRelay {
      * whose other side is a running column's condenser (batch 2026-10-28-column-operation, C6b) reads no stream but a
      * {@code ceiling} (K, 0 for none): it takes the heat in transit the column owes it, its outlet no warmer than that; its
      * {@code heatRate} is then the heat the column asks its water to take, W, which a feed valve the column sets carries (U2).
+     * A side that gives a running column heat (W4, a reboiler's tubes, {@link #heating}) reads its floor in the ceiling's place
+     * and a negative {@code heatRate}, the heat it is asked to give.
      */
     public record Read(@Nullable Partner partner,boolean stopped,double transitDue,double partnerSeconds,double sitOut,@Nullable Operation operation,double heatRate,double ceiling) {
         public Read {if(!Double.isFinite(transitDue)||!(partnerSeconds>=0)||!Double.isFinite(partnerSeconds)||!(sitOut>=0&&sitOut<=1)||!Double.isFinite(heatRate)||!(ceiling>=0)||!Double.isFinite(ceiling))throw new IllegalArgumentException("Invalid side read");}
@@ -92,6 +94,15 @@ public final class ExchangerRelay {
         public static Read column(double transitDue,double seconds,double ceiling){return column(transitDue,seconds,ceiling,0);}
         /** {@link #column(double,double,double)} with the heat the column asks its water to take over the slice, W (U2). */
         public static Read column(double transitDue,double seconds,double ceiling,double heatRate){if(!(ceiling>0)||!(heatRate>=0))throw new IllegalArgumentException("A column partner has a ceiling");return new Read(null,false,transitDue,seconds,0,null,heatRate,ceiling);}
+        /**
+         * A running column's reboiler read by its heating utility, a kettle's tubes (W4, batch 2026-11-10-column-failure-modes):
+         * the heat it owes the column (J, negative: the side gives it) as of the slice start, the outlet's floor (K) in the
+         * place of a ceiling, and the heat the column asks the side to give over the slice, W, carried as a negative
+         * {@link #heatRate}.
+         */
+        public static Read heating(double transitDue,double seconds,double floor,double heatRate){if(!(floor>0)||!(heatRate>=0))throw new IllegalArgumentException("A column partner has a floor");return new Read(null,false,transitDue,seconds,0,null,-heatRate,floor);}
+        /** Whether this is a column's read of a side that gives it heat (its bound a floor, W4). */
+        public boolean gives(){return ceiling>0&&heatRate<0;}
         /** This read with the real valve {@code value} a side's control works (W8; U2: a column's water side). */
         public Read withOperation(@Nullable Operation value){return new Read(partner,stopped,transitDue,partnerSeconds,sitOut,value,heatRate,ceiling);}
         public Read(@Nullable Partner partner,boolean stopped,double transitDue,double partnerSeconds,double sitOut,@Nullable Operation operation){this(partner,stopped,transitDue,partnerSeconds,sitOut,operation,0);}
@@ -299,7 +310,9 @@ public final class ExchangerRelay {
      * A side whose other side is a running column's condenser (C6b, plan section 10): no cells move (the column is no stream),
      * and the give-back is all the heat the column owes over the slice, an enthalpy shift on the side's whole flow, scaled
      * down so that its outlet at the slice start stays at or below the ceiling (the rest stays owed, and the column, finding
-     * its condenser short, cuts its throughput). None without flow.
+     * its condenser short, cuts its throughput). None without flow. A column's heating side (W4, {@link Read#heating}: a
+     * reboiler's tubes) is the same with the other sign: the transit due is negative, the shift takes heat from the stream,
+     * and its outlet stays at or above the floor the read carries in the ceiling's place.
      */
     static HeatSide column(HeatSide own,Stream stream,Read read,double seconds) {
         var still=controlled(own,stream,null,0,read);double mass=Math.abs(stream.massFlow());

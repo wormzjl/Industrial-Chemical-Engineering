@@ -2357,6 +2357,8 @@ public final class PassiveStepSolver {
                 boolean pool=partner!=null&&partner.pool();
                 boolean drawn=partner!=null&&(pool||reading(partner).endMass(partner.donor(),partner.port(),partner.volume())>0);
                 if(drawn){low=Math.min(low,partner.donor().temperature());high=Math.max(high,partner.donor().temperature());}
+                // A column's heating side (W4) gives its heat down to its floor, through its condensation: the curve spans it.
+                if(read.gives())low=Math.min(low,read.ceiling());
                 low=Math.max(NumericalBox.MINIMUM_TEMPERATURE,low-10);high=Math.min(NumericalBox.MAXIMUM_TEMPERATURE,high+10);
                 var curve=spanned(start,port,pipe.volume(),low,high,side.films(),checkpoint);
                 var other=!drawn||pool?null:reading(partner).spanned(partner.donor(),partner.port(),partner.volume(),low,high,partner.law().films(),checkpoint);
@@ -2365,10 +2367,17 @@ public final class PassiveStepSolver {
                 else if(stream!=null)planned=ExchangerRelay.plan(side,stream,
                         other==null?null:new ExchangerRelay.Stream(other,reading(partner).endSpecificEnthalpy(partner.donor(),partner.port(),partner.volume()),partner.massFlow(),partner.law(),false),read,seconds);
                 // A column's water side (U2): the flow that carries the heat the column asks for, the water rising its range but
-                // staying under the ceiling; water at or over the ceiling can take nothing, and its valve holds.
+                // staying under the ceiling; water at or over the ceiling can take nothing, and its valve holds. A column's heating
+                // side (W4, a reboiler's tubes) gives its heat down to the floor: the flow is the heat rate over h(inlet) − h(floor);
+                // a stream at or under the floor can give nothing, and its valve holds.
                 if(curve!=null&&valve>=0&&operation.column()&&read.ceiling()>0) {
-                    double outlet=Math.min(curve.temperatureAt(own)+operation.rise(),read.ceiling()),rise=curve.enthalpyAt(outlet)-own;
-                    if(rise>0)regulated=read.heatRate()/rise;
+                    if(read.gives()) {
+                        double fall=own-curve.enthalpyAt(read.ceiling());
+                        if(fall>0)regulated=-read.heatRate()/fall;
+                    } else {
+                        double outlet=Math.min(curve.temperatureAt(own)+operation.rise(),read.ceiling()),rise=curve.enthalpyAt(outlet)-own;
+                        if(rise>0)regulated=read.heatRate()/rise;
+                    }
                 }
             }
             double target=Double.NaN;
