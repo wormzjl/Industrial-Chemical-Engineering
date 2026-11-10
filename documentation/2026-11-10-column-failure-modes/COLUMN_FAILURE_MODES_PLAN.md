@@ -1,6 +1,6 @@
 # Column failure modes and control: plan
 
-Status: proposal for the owner, 2026-11-10. Design only: no code, no Gradle run. Findings F1 to F12 are in [COLUMN_FAILURE_MODES_REVIEW.md](COLUMN_FAILURE_MODES_REVIEW.md). Owner decisions are in section 7; nothing is built before them.
+Status: accepted 2026-11-10: the owner took the recommended option of every decision in section 7 and added a test world. The build order, the briefs and the changes of detail are in [EXECUTION_PLAN.md](EXECUTION_PLAN.md). Design only: no code, no Gradle run. Findings F1 to F12 are in [COLUMN_FAILURE_MODES_REVIEW.md](COLUMN_FAILURE_MODES_REVIEW.md). Owner decisions are in section 7.
 
 ## 1. One rule
 
