@@ -94,3 +94,28 @@ On the plinth's side (steel) or the base (brick), as the flare's. Built-in input
 Owner: "All recommended". C1 B, C2 A, C3 A, C4 A, C5 A, C6 A, C7 as proposed (20 m/s steel, 12 m/s brick at 1.2 × the design flow; window 7.5 to 30 m/s; ABOVE RATING over 30 m/s).
 
 Parent's notes with the answers: build C1 B as written, closed slack bags at 101,325 Pa; the bag exception is an open item (a bag also stands in the open air). The references that C1 moves are listed with their old and new values (section 7) and only those are re-recorded.
+
+## 6. As built (2026-11-10)
+
+- **C1 B.** `PhaseLayout.atmosphere(y)` = 101,325 Pa − 1.185 kg/m³ · g · (y − 63): 11.62 Pa per block. An open vessel's inventory carries its `ambient`, restated by its node from `elevation + levelHeight`; its wall row, its wall work and its crystal joints read it. Closed bags keep 101,325 Pa. A chimney's void and a flare's void take the atmosphere at their cell (`FluidDeviceSpec.initialize`). Fluid state format 43 → 44 (states rebuild from facts).
+- **Kinds.** `STEEL_STACK`, `BRICK_CHIMNEY` and role `STACK_GAS` appended. No fact or shape field changed, so no corpus image. Steel stack: 2 m plinth, caged ladders with rest decks at most 9 m apart (each deck runs from its ladder to the next ladder's foot, so no cage stands over a deck) and a top ring; the gas inlet at 1.5 m on the front, the data socket in the plinth's side. Brick chimney: a frustum (foot radius 1.6 × top), a steel liner 1 m proud, a gallery 3 m under the cap, three lightning rods and a door. Layout table: six new rows; no existing row changed. Drawings: `tools/equipment-drawings/update.ps1 -Only STEEL_STACK,BRICK_CHIMNEY`, 4 sheets, inspected.
+- **Engine.** The tip is a passive one-way VOID at the top cell. Its run's last section is the stack (rise, diameter, roughness, 1.5 velocity heads), so the network's column gives the draft. The form is held in the device's facing (UP steel, DOWN brick). `Chimneys` reads each booked span: mass and solids flow (the donor's solids share), exit velocity, opacity, draft, and status (NO FLOW, VENTING, ABOVE RATING, WET STACK, HOT STACK, NO DRAFT). Alarms: OVER_CAPACITY, WET_STACK, NO_DRAFT. The data port gives `flow_rate`, `solids_rate` and `venting`.
+- **Ledger.** What leaves is booked as the void's existing EXCHANGE, not as a new ATMOSPHERE kind (deviation from 3.1; same totals).
+- **Client.** Protocol fluid-23: `chimney_watch` and `ChimneyState` on the 5 s cadence, only while watched. `ChimneySource` draws a white plume and smoke from grey to black by τ = k·C·D; a VENT noise at the tip.
+- **Simulator.** `ChimneyUnit` (MODELLED): exit velocity, draft, losses, the inlet pressure it needs, solids, opacity and the GEP height, with notes. `ChimneySizing`: the smallest exit that passes 1.2 × the design flow at the form's design velocity, inside the 7.5 to 30 m/s window and under the 100 m/s cap, at the GEP height. Tile "CH" reuses the flare symbol.
+- **Engine check** (`ChimneyRuntimeTest`, 1 m steel stack, tip 30 m up, gas at grade's atmosphere): 473 K nitrogen vents 6.53 kg/s at 11.5 m/s with a 138 Pa draft; 298 K CO₂ has a −186 Pa draft and does not flow (NO DRAFT).
+
+## 7. References that C1 B moved
+
+The load map (`affected.mjs select --since 6e95356b5`) reaches 281 of 367 test classes, because the new enum constants touch most classes. Of those, the classes that build open vessels or atmospheric voids were run. Old → new (all below y 63, so the atmosphere is higher):
+
+| Test | Assertion | Old (Pa) | New (Pa) |
+|---|---|---|---|
+| `OpenTankTest` anOpenTankVentsItsNitrogenAndKeepsItsWaterAtTheAmbient | surface, elevation 0, height 1 | 101,325 | 102,045.49 = atmosphere(1) |
+| `OpenTankTest` aFeedOfWaterAndNitrogenVentsWhatArrives | surface, height 4 | 101,325 | 102,010.63 = atmosphere(4) |
+| `OpenTankTest` aGasOnlyOpenTankHoldsAStepsInflowAndVentsItNext | surface, height 1 | 101,325 | 102,045.49 |
+| `OpenTankTest` aTankWithoutAnOverflowLineSpillsItsInflowOverTheTop | surface, height 1 | 101,325 | 102,045.49 |
+| `OpenTankRuntimeTest` aFedOpenTankOverflowsVentsAndCertifiesSteady | tank at y 0, height 2 | 101,325 | 102,033.87 = atmosphere(2) |
+| `CoolingTowerTest` aStandingBasinBooksSensibleHeatWithoutWaterLoss | fixture: basin water flashed at | 101,325 | atmosphere(BASIN_DEPTH): the basin starts at rest at its own surface pressure (from 101,325 the first step compresses it and hides its cooling) |
+
+Passed unchanged: PhaseLayoutTest, CoolingTowerRuntimeTest, RigidVesselTest, PressureValveContinuationTest, MachineMoverTest, VesselRebuildTest, FluidCheckpointCodecTest, FluidFactsCompatTest, FlareRuntimeTest, FlareTest, PhysicalFluidTopologyTest. Not run here (final lane): the fluid GameTests (`CoolingTowerGameTests` holds open basins), the chain-100 regression (due: it loads `ConservativeTransport`), holdGates and the campaign.
