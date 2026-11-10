@@ -41,10 +41,17 @@ node tools/fx-bench/summarize.mjs tmp/fx-bench/runs
 
 `record.sh <worktree> <out dir> [auto|compatible|off]` builds the same scene and feed with the probe's `mode=fx`, attaches `FxRecorder.java` beside the probe, and flies the camera to each shot of `record.txt` (`name x y z yaw pitch seconds fps settle`), saving half-size frames, one full-size frame and `times.txt` per shot. Not a timing run, but it takes the fx lane lock, so no bench lane starts meanwhile. Then `python record_sheets.py <out dir>` (Pillow) writes a GIF and an eight-frame contact sheet per shot. Output goes to `tmp/fx-record/<run>/`. The first recording and its review: `documentation/2026-11-10-custom-shader-system/FX_VISUAL_REVIEW.md`.
 
+## Flame preview
+
+`flame_preview.py <out dir>` (numpy, Pillow) is a numpy port of `fx_flame.fsh` and of the ribbon geometry of `fx_flame.vsh` / `FlameModel.half` for one straight 30 m flame seen side on, 3 ribbons on a sky colour. It prints the noise field's mean and spread (the calibration of the threshold) and writes `flame.gif` (40 frames, 0.1 s apart) and `flame-sheet.png` (8 frames). It is a copy of the flame rework's scratch preview (FX_VISUAL_REVIEW.md, item 1, second pass; 0d562f7b0, f898f6516) and is not kept in step with the shader: compare it with `fx_flame.fsh` before you rely on it. Output goes to `tmp/flame-preview/`.
+
 ## In `src/main`
 
 `client/fx/FxStats` (counters and the F3 line) stays in the product. Nothing measurement-only is added to `src/main`, so there is no `detach.patch`: the probe is attached uncommitted for the runs only.
 
 ## History
 
-- 2026-11-10: written for the W11 bench (FX_BENCH_PLAN.md); not run yet.
+- 2026-11-10: written for the W11 bench (FX_BENCH_PLAN.md).
+- 2026-11-10: the recorder (`record.sh`, `FxRecorder.java`, `record_sheets.py`; beaa593a7) and the first recordings for FX_VISUAL_REVIEW.md.
+- 2026-11-10: the lanes on c8d5c4d09 (FX_BENCH_REVIEW.md, 2ca824c2e), the probe timing both draw stages (5788aa958), the rerun after the optimization package (e7b16cd69), the placement-mode fix of the probe (1bb1249ea). The allocation pass (94cf1f7fa, 7ddc44468) was not benched (owner: "Skip the lanes").
+- 2026-11-10 (merge preparation): `flame_preview.py` copied in from the scratch folder `tmp/flame-preview/`.
