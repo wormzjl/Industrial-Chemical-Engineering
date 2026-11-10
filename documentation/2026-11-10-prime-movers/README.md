@@ -19,6 +19,7 @@ Owner, 2026-11-10: "Add combustion engine which worked on liquid fuels, and gas 
 - 2026-11-10: owner changed P12 (steam turbine to 300 MW as one unit, "HP=HP+MP+LP, MP=MP+LP, LP=LP") and dropped P15 (several turbines on one shaft); plan 12.2.
 - 2026-11-10: targeted tests passed: PrimeMoverTest, ExhaustCoilTest, ShaftTrainFuelTest, MotorTest, ShaftTrainTest, SteamTurbineTest, FluidFactsCompatTest, FluidCheckpointCodecTest, FluidPacketCodecTest, ShaftPlanTest, ElectricStoreTest, FlowsheetPaletteCoverageTest, SizingCoverageTest, HeatDiagramTest, MachineColumnTest, LimitTest, TurbineSizingTest, PipePresentationTest; equipmentGates EquipmentLayoutGoldenTest, SteamTurbineSectionsTest. Drawings: research copies of `tmp/equipment-drawings/20261110-114345-0c81a0` (engine, gas turbine, turbo-generator) and `20261110-115108-ddd44b` (steam turbine tandem).
 - 2026-11-10: owner on the engine and gas turbine models: "engine and turbine doesn't like it at all"; asked which parts look wrong, models on hold.
+- 2026-11-10: owner model review (relayed by the parent session) applied: gas turbine G1 to G5 (stack about four enclosure heights on a rectangular-to-round transition, open dark top; HD casing with diffuser, combustor cans, split flange and bolt row, inlet plenum, raised filter house on an inlet duct with silencer; weather hoods on every filter house; louvre bars and roof fans; HRSG casing above the package, expanding inlet duct, headers carrying FEEDWATER and STEAM), turbo-generator T1 (round stator, dished end shields, exciter housing, finned coolers, HV box underneath; a gas turbine's shaft at its generator's height, `MotorDesign.generatorShaft`), engine E1 to E6 (medium-speed sets taller and longer with a radiator bank beside, fans up; snail turbochargers, two from 15 MW; inclined V banks with head covers and manifolds; crankcase doors; grilled fans), steam turbine S1 (double-flow LP 1.7 Dc across). Layout table: new-kind rows only. The equipment gates' test heap set to 1 GiB (the layout table's geometry cache measured 533 MB of 512 MiB). Drawings `tmp/equipment-drawings/20261110-121817-17a3f5`.
 
 ## Code areas
 
@@ -26,6 +27,6 @@ Owner, 2026-11-10: "Add combustion engine which worked on liquid fuels, and gas 
 
 ## Open items
 
-- Engine and gas turbine models: the owner's look review (render options before rebuilding).
+- Engine and gas turbine models: the owner's verdict on the reviewed models.
 - Not run: LanguageFilesTest and UnitTextTest (wait for the translation commit), the full suite and the final lane (merge preparation).
 - Code guide chapter (rotating machinery) and CHANGELOG at merge preparation.

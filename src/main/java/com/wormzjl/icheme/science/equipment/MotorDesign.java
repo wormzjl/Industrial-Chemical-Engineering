@@ -187,6 +187,16 @@ final class MotorDesign extends UnitDesign {
         return (kw > LOW_VOLTAGE ? 1.15 : 1) * ProcessUnit.motorDiameter(kw);
     }
 
+    /**
+     * A large generator's shaft height at grade, m: its drawing's ({@link #build}), so a driver drawn for it couples
+     * level (batch 2026-11-10-prime-movers, owner review T1); NaN at low voltage, whose shaft follows its feet.
+     */
+    static double generatorShaft(double kw, int poles) {
+        if (!(kw > LOW_VOLTAGE)) return Double.NaN;
+        double r = (poles == 2 && kw > TURBO ? .85 : 1) * frame(kw) / 2;
+        return Math.ceil(PLINTH + BASEPLATE + r + .1 - .5) + .5;
+    }
+
     /** The highest base under a shaft at {@code y} of radius {@code rs} that still leaves its coupling guard room ({@link ProcessUnit#coupling}). */
     static double guarded(double y, double rs) {
         return y - Math.max(rs + .04, 2.2 * rs) - .06;
@@ -232,14 +242,9 @@ final class MotorDesign extends UnitDesign {
             }
             front = .35 + exciter;
             drive = front + length;
-            if(generator)u.largeGenerator(a,y,front,across,length,deck);else u.largeMotor(a, y, front, across, length, deck);
-            if (turbo) {
-                // The exciter on the far end, on the stator's axis, with its shaft stub into the end shield.
-                var axis = Frame.of(new double[]{a, y, 0}, 2, 1);
-                u.mesh.cylinder(axis, .2 * across, .35, front - .04, ProcessUnit.sides(.4 * across), Material.GENERATOR_PANEL);
-                u.mesh.cylinder(axis, .08 * across, front - .04, front + .02, 12, Material.MOTOR_PLAIN);
-                u.solids.add(ProcessUnit.Solid.rod(new double[]{a, y, 0}, 2, .35, front, .2 * across, 0));
-            }
+            if (turbo) u.turboGenerator(a, y, front, across, length, exciter, deck);
+            else if (generator) u.largeGenerator(a, y, front, across, length, deck);
+            else u.largeMotor(a, y, front, across, length, deck);
         }
         u.terminal = u.terminalBox;
         double face = Math.ceil(drive + .2 + rs - 1e-9);

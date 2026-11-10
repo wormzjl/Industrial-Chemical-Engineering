@@ -549,6 +549,8 @@ def gateGroup = { String name, String tests, List<String> main, List<String> hel
         description = "Runs the ${name} tests on only what they load; it stands up to date unless one of those files changed."
         testClassesDirs = files(testDirectory).builtBy(inputs)
         classpath = files(testDirectory, libDirectory).builtBy(inputs) + configurations.testRuntimeClasspath + configurations.runtimeClasspath
+        // The layout table lays out every kind at three sizes; its geometry cache measured 533 MB of the default 512 MiB heap (batch 2026-11-10-prime-movers).
+        maxHeapSize = '1g'
         filter {
             includeTestsMatching "com.wormzjl.icheme.${tests.replace('/', '.')}.*"
             failOnNoMatchingTests = true

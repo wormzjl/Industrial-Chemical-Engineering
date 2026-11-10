@@ -36,8 +36,8 @@ final class SteamTurbineDesign extends UnitDesign {
     static final double MIN_POWER = 55, SINGLE_CASING = 45000, MAX_POWER = MachineDuty.MAX_TURBINE;
     /** An LP section above this power is double-flow, kW: a single flow's last stage passes about 100 MW at 3,000 rpm (game level). */
     static final double DOUBLE_FLOW = 100000;
-    /** An LP section's hood across, in Dc. */
-    static final double LP_WIDTH = 1.3;
+    /** An LP section's hood across, in Dc: a single flow's, a double flow's (owner review S1: visibly wider than the MP casing). */
+    static final double LP_WIDTH = 1.3, LP_DOUBLE_WIDTH = 1.7;
     /** A turbine saved before its design point: its inlet class and its exhaust, kPa (a back-pressure set into the LP header; a condensing set's 10 kPa). */
     static final MachineDuty.Steam DEFAULT_STEAM = MachineDuty.Steam.HP;
     static final double DEFAULT_EXHAUST = 450, CONDENSING_EXHAUST = 10;
@@ -144,7 +144,16 @@ final class SteamTurbineDesign extends UnitDesign {
 
         /** Its casing's top over the shaft, in Dc. */
         double top() {
-            return lp() ? LP_WIDTH / 2 : .45;
+            return lp() ? width() / 2 : .45;
+        }
+
+        /** Its casing's width across, in Dc. */
+        double width() {
+            return switch (this) {
+                case MP -> .9;
+                case LP -> LP_WIDTH;
+                case LP_DOUBLE -> LP_DOUBLE_WIDTH;
+            };
         }
     }
 
@@ -201,7 +210,7 @@ final class SteamTurbineDesign extends UnitDesign {
         // Across x: the shaft on a cell centre, the plinth's and the turbine's left side in the first cell; the
         // trip-and-throttle valve's handwheel out of the exhaust's column of cells (a small turbine's exhaust rises past it).
         var sections = sections(duty);
-        double lpHalf = sections.stream().anyMatch(Section::lp) ? LP_WIDTH * d / 2 : 0;
+        double lpHalf = sections.stream().filter(Section::lp).mapToDouble(Section::width).max().orElse(0) * d / 2;
         double a = Math.ceil(Math.max(Math.max(wp + .02, t.leftReach()), lpHalf + .02) - .5) + .5, xv = a + Math.max(t.valveOffset(), .52 + t.handwheel() / 2);
         // Along z: the exhaust's centre line on a cell centre, the plinth's front in the first cell; the coupling face on
         // the block face behind the rear pedestal.
@@ -282,7 +291,7 @@ final class SteamTurbineDesign extends UnitDesign {
             var section = sections.get(k);
             double z1 = start[k], z2 = z1 + section.length() * d, casingTop = shaft + section.top() * d;
             if (section.lp()) {
-                double half = LP_WIDTH * d / 2;
+                double half = section.width() * d / 2;
                 u.box(new double[]{a - half, base, z1}, new double[]{a + half, shaft, z2}, Material.MACHINE, true);
                 m.prism(axis, half, z1, z2, ProcessUnit.sides(2 * half), Material.MACHINE);
                 u.solids.add(ProcessUnit.Solid.rod(new double[]{a, shaft, 0}, 2, z1, z2, half, 0));

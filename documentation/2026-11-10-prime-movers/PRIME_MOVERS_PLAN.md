@@ -192,7 +192,7 @@ Owner: **"It shall not overspeed, and keep the model simple. Others as recommend
 - Steam turbine sections (`SteamTurbineDesign.sections`), drawn only above 45 MW:
   - the front casing as today at 3 m: an HP casing for HP or VHP steam, an MP casing for MP steam;
   - an MP casing (1 Dc long, 0.9 Dc across) where HP or VHP steam expands below the MP class (17 bar);
-  - an LP casing (hood 1.3 Dc across) where the exhaust lies below the LP header (4.5 bar): single-flow (1.2 Dc long) to 100 MW, double-flow (2 Dc) above it (game level: one last stage passes about 100 MW at 3,000 rpm);
+  - an LP casing (hood 1.3 Dc across, a double flow 1.7 Dc) where the exhaust lies below the LP header (4.5 bar): single-flow (1.2 Dc long) to 100 MW, double-flow (2 Dc) above it (game level: one last stage passes about 100 MW at 3,000 rpm);
   - a crossover from the front casing's exhaust flange over the sections; the exhaust nozzle up from the last casing's back end.
 - Turbine powers: the R20 list from 55 kW, ending at 300 MW (between its 280 and 315 MW), `MachineDuty.TURBINE_POWERS`. A turbine's loop gain keeps its 55 kW to 45 MW range (larger units sound as the largest).
 - Smoke: a prime mover's fuel void is watched as a fired heater's flue (`HeaterFlue`), its mark `stack_top_0`.
