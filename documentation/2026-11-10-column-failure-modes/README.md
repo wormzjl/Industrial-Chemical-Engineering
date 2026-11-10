@@ -20,12 +20,15 @@ Status: In progress since 2026-11-10 (decisions taken; execution in five stages,
 
 - 2026-11-10: stage 5 rebuild (owner: "Fix and rebuild"): `40428c5e1` an outlet holding only round-off gives nothing (after a Stop and Start the off-gas valve was planned at 4e-17 kg/s and held its island singular; `ColumnRunTest.anOutletHoldingOnlyRoundOffGivesNothing`), `3af639413` the review run ends on both plants running at their set feed for 600 ticks with no held island (`review_failure end`), then plant B's distillate runs down to 2 bar (its saturated 400 K distillate flashing into the atmosphere held the island after case 13; a fluid-solver item, open items; orchestrator's decision). Full-size run: the 13 cases as before, `review_failure end plantA=RUNNING plantB=RUNNING held=0`; fluid GameTests `col-stage5-b` 88/88. World replaced in `run/saves/column-failure-modes` (the previous one in `column-failure-modes-before-rebuild`).
 
+- 2026-11-10: merge preparation (owner: "claude/custom-shader-system-caff9e will merge first, prepare"), see [MERGE_PREP_REVIEW.md](MERGE_PREP_REVIEW.md): `16829d22e` the shader branch (`e07461dee`, to merge as 0.25.0) merged into this branch; its fluid facts schemas 17 to 20 stand and this batch's two steps (the stage 3 and 4 lines above name them 17 and 18) are one schema 21, corpus `compat/fluid/schema-21/` (`45039eac9`); both alarm sets kept. `0893d2339` the translation commit. Tooling cleanup: `tools/column-failure-modes/`. `CHANGELOG.md` entry under `[Unreleased]`; proposed version 0.26.0. Targeted runs: compile of the three source sets, `FluidFactsCompatTest` 19/19. The final lane waits for the shader branch on `main`.
+
 ## Documents
 
 - [COLUMN_FAILURE_MODES_REVIEW.md](COLUMN_FAILURE_MODES_REVIEW.md): expected behaviour, the seven mechanisms in the code, coverage, findings F1 to F12.
 - [COLUMN_FAILURE_MODES_PLAN.md](COLUMN_FAILURE_MODES_PLAN.md): one condition record in five classes, work packages W1 to W7, control system integration, adjustable parameters, cost and saves, owner decisions D1 to D8.
 - [EXECUTION_PLAN.md](EXECUTION_PLAN.md): the decisions in force, the rules for every stage, stages 1 to 5 with their steps, tests and done lines, the test world's plant and script.
 - [MANUAL_TEST.md](MANUAL_TEST.md): the stage 5 world, its named parts, the 13 cases as player actions, what is not covered.
+- [MERGE_PREP_REVIEW.md](MERGE_PREP_REVIEW.md): the merge preparation: the shader branch merged in, facts schema 21, formats, translations, tooling, what is left before the merge.
 - [MEMBER_POWER_NOTE.md](MEMBER_POWER_NOTE.md): how a held member's power was booked before stage 4, and the change that books a running column's fans and pumps.
 
 ## Code areas
@@ -34,13 +37,15 @@ Stage 1 changed `science/column/operation/**` (new `Condition`, `ColumnStatus`, 
 
 ## Open items
 
-- W3.4 (downcomer backup) is dropped: the owner chose the original plan on 2026-11-10. Its draft stays in `tmp/col-stage2/w34/` until the batch closes.
+- W3.4 (downcomer backup) is dropped: the owner chose the original plan on 2026-11-10. Its draft is `tools/column-failure-modes/w34-downcomer-backup/w34.patch`.
 - Left by stage 3: the condenser's water curve extrapolates linearly past 10 K to its ceiling (kept byte-identical).
 - The Operation glass no longer fits one view at the design size once the column has tray data (7 px over) or conditions; it scrolls. The DCS column page has no glass (its 464 px window is narrower than the ports table).
 - Stage 4, step 4 (a member pump with no driver refuses Start while `machinesNeedPower` is on) is an assumption the owner may veto. A member's rated shaft power is its law at its rated flow and full speed at 1000 kg/m³ (the in-line rating): a hydrocarbon reflux books about 1.4× its shaft power. A running unit started before stage 4 has no members until its next Start.
 - Stage 3 changes old plants: after their next Start, a reboiler or pumparound cooler with no utility line limits the column.
 - Stage 3: an air-cooled pumparound cooler has no partnered utility side, so its duty stays free.
-- After stage 5: the owner's manual test in `run/saves/column-failure-modes` ([MANUAL_TEST.md](MANUAL_TEST.md)), then the final lane and the merge on the owner's word.
+- The owner's manual test in `run/saves/column-failure-modes` ([MANUAL_TEST.md](MANUAL_TEST.md)). The world was saved before the merge of the shader branch, by code that named this batch's facts schema 18; the merged code reads it (fields are read by presence, and the shader branch added none to a column unit). A rebuild on the merged code (`tools/column-failure-modes/README.md`, 15 minutes) gives a world at schema 21.
+- Before the merge: the code guide update, the final lane once the shader branch is on `main`, the version the owner chooses (0.26.0 proposed).
+- For the main checkout (this session cannot write there): the row of `research/2026-11-10-column-failure-modes/renders-w7/` in `research/INDEX.md`, and the log archive `tools/column-failure-modes/logs/column-failure-modes-logs-2026-11-10.tar.gz` from this worktree.
 - A level loop on a vessel whose outlet is two-phase plans by the mixture density. With its feed closed, a column's feed valve reads no flow, so a level loop on the column has no density (NO LEVEL BALANCE) and the feed returns to its set rate: the stage 5 run swung the feed between 0 and 1 (case 12's level form, not covered).
 - Case 9 (flooding by a set point) is not covered in the world: no set point reaches the flood limit at a fixed heat input (0.69, 0.81, 0.82). The limit is covered by `ColumnCycleTest` and `ColumnRunTest`.
 - A fluid-solver batch: a boundary valve reopening on a saturated liquid holds its island. The minimal case, from plant B of the stage 5 world (seen in the full-size runs of 2026-11-10 as islands 1364 and 1366, both after case 13's restore): the column's distillate station, a generator at 400 K and 2.5 bar, all liquid (mole fractions crude_pc03 0.275, crude_pc04 0.247, crude_pc02 0.240, crude_pc01 0.097, crude_pc05 0.067, n-pentane 0.024); a 0.5 m pipe to a junction of 3e-5 m³ full of the same liquid at its bubble point (2.498 bar, a 1.5e-7 m³ bubble); the boundary valve (0.05 m, 1.5 m) reopening from 0 to a 2.19 kg/s mass target into a void at 1 atm. The Newton line search stalls at residual 1.1e-7 and the island holds; the column then reads BLOCKED on its distillate. Expected: the valve passes its 2.19 kg/s and the liquid flashes after it (its bubble point at 1 atm lies below 400 K). Not patched; the world's plant B runs its distillate down to 2 bar instead.
