@@ -46,5 +46,29 @@
   "pot_boil": {
     "subtitle": "subtitles.icheme.pot_boil",
     "sounds": [{ "name": "icheme:pot_boil", "stream": false }]
+  },
+  "valve_gas": {
+    "subtitle": "subtitles.icheme.valve_gas",
+    "sounds": [{ "name": "icheme:valve_gas", "stream": false }]
+  },
+  "valve_liquid": {
+    "subtitle": "subtitles.icheme.valve_liquid",
+    "sounds": [{ "name": "icheme:pump_cavitation", "stream": false }]
+  },
+  "fan_whoosh": {
+    "subtitle": "subtitles.icheme.fan_whoosh",
+    "sounds": [{ "name": "icheme:fan_whoosh", "stream": false }]
+  },
+  "water_fall": {
+    "subtitle": "subtitles.icheme.water_fall",
+    "sounds": [{ "name": "icheme:water_fall", "stream": false }]
+  },
+  "gear_whine": {
+    "subtitle": "subtitles.icheme.gear_whine",
+    "sounds": [{ "name": "icheme:gear_whine", "stream": false }]
+  },
+  "pipe_knock": {
+    "subtitle": "subtitles.icheme.pipe_knock",
+    "sounds": [{ "name": "icheme:pipe_knock", "stream": false }]
   }
 }

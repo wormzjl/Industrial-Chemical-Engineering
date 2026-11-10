@@ -109,6 +109,17 @@ public final class ModBlocks {
     public static final DeferredHolder<SoundEvent,SoundEvent> BURNER_ROAR=loop("burner_roar");
     public static final DeferredHolder<SoundEvent,SoundEvent> FIRE_DRAUGHT=loop("fire_draught");
     public static final DeferredHolder<SoundEvent,SoundEvent> POT_BOIL=loop("pot_boil");
+    /**
+     * The plant's other sources (batch 2026-11-10-custom-shader-system, PROCESS_SOUNDS_REVIEW.md table 1): a gas or steam
+     * valve's and a vent's hiss, a liquid valve's crackle (the pump's cavitation sound), a fan's whoosh, falling water, a
+     * gearbox's whine, and a liquid line's water-hammer knock (a one-shot).
+     */
+    public static final DeferredHolder<SoundEvent,SoundEvent> VALVE_GAS=loop("valve_gas");
+    public static final DeferredHolder<SoundEvent,SoundEvent> VALVE_LIQUID=loop("valve_liquid");
+    public static final DeferredHolder<SoundEvent,SoundEvent> FAN_WHOOSH=loop("fan_whoosh");
+    public static final DeferredHolder<SoundEvent,SoundEvent> WATER_FALL=loop("water_fall");
+    public static final DeferredHolder<SoundEvent,SoundEvent> GEAR_WHINE=loop("gear_whine");
+    public static final DeferredHolder<SoundEvent,SoundEvent> PIPE_KNOCK=loop("pipe_knock");
     private static DeferredHolder<SoundEvent,SoundEvent> loop(String name){return SOUNDS.register(name,()->SoundEvent.createVariableRangeEvent(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,name)));}
 
     private ModBlocks() {

@@ -1,5 +1,5 @@
-"""Original process loops (flare roar and pilot, still burner, firebox, boiling pot); authoring only, never part of the
-mod runtime.
+"""Original process loops (flare roar and pilot, still burner, firebox, boiling pot; valve hiss, fan whoosh, falling
+water, gear whine) and the one-shot pipe knock; authoring only, never part of the mod runtime.
 
 The tools/machine-sounds route: periodic tones whose cycles fit the loop exactly, plus noise shaped in the frequency
 domain over the whole loop (so it is periodic too), and short bursts that wrap round the loop's end. Mono 24 kHz
@@ -117,11 +117,38 @@ bubbles = bursts(8501, 25 * seconds, (rate // 120, rate // 30), 2.2, pitches=(15
 thumps = bursts(8502, 10, (rate // 12, rate // 6), 2.0, pitches=(40, 80), strength_cap=2.5)
 pot_boil = soft_limit(bubbles + 1.1 * thumps + .12 * noise(8503, between(200, 2000)), 3.0)
 
+# Phase 2 (PROCESS_SOUNDS_REVIEW.md, table 1): the plant's other sources.
+
+# A gas or steam valve's decompression hiss: turbulent mixing past the vena contracta, broadband with its peak from 1 to
+# 4 kHz (near 2.5 kHz), a faint low rush from the downstream pipe, and almost no flutter (a steady jet).
+valve_gas = (noise(8601, between(1000, 4000) * (1 + .5 * band(2500, .5))) * flutter(8602, .5, 2, .06)
+             + .25 * noise(8603, between(150, 600)))
+
+# An axial fan (air cooler, induced-draft tower, forced-draft heater fan): broadband rush from 40 to 400 Hz,
+# swelling at the blade pass, 300 rpm x 4 blades = 20 Hz, with its 20 and 40 Hz tones and a faint tip-vortex hiss.
+blade = 1 + .35 * np.sin(2 * np.pi * 20 * t)
+fan_whoosh = (noise(8701, between(40, 400) * (1 + .5 * band(90, .7))) * blade * flutter(8702, .3, 1, .08)
+              + tones([(20, .55, 0), (40, .25, .7)]) + .15 * noise(8703, band(1500, .9)))
+
+# Falling water at a tower's air inlets: thousands of drops striking the basin, a dense train of tiny bursts (about
+# 600 a second) of 500 Hz to 4 kHz noise over a steady rain rush in the same band.
+splash = noise(8801, between(500, 4000))
+water_fall = (noise(8802, between(500, 4000) * (1 + .3 * band(1200, .8))) * flutter(8803, .3, 1.5, .10)
+              + .9 * bursts(8804, 600 * seconds, (rate // 1000, rate // 250), 2.5, splash, strength_cap=2.0))
+
+# A gearbox's mesh whine: 30 teeth at 1,500 rpm = 750 Hz with its harmonics, side bands at the shaft rate
+# (1,500 rpm = 25 Hz) from tooth-to-tooth error, and a faint broadband bearing rush.
+gear_whine = (tones([(750, .40, 0), (1500, .18, .4), (2250, .07, 1.1), (725, .10, .3), (775, .10, 2.2),
+                     (1475, .05, .9), (1525, .05, 1.7)])
+              + .30 * noise(8901, between(200, 3000)))
+
 # Each loop's RMS: the pump loop's level (tools/machine-sounds), the pilot hiss at a third of it.
 PUMP_RMS = .0926
 for name, sound, level in (("flare_roar", flare_roar, PUMP_RMS), ("flare_pilot", flare_pilot, PUMP_RMS / 3),
                            ("burner_roar", burner_roar, PUMP_RMS), ("fire_draught", fire_draught, PUMP_RMS),
-                           ("pot_boil", pot_boil, PUMP_RMS)):
+                           ("pot_boil", pot_boil, PUMP_RMS), ("valve_gas", valve_gas, PUMP_RMS),
+                           ("fan_whoosh", fan_whoosh, PUMP_RMS), ("water_fall", water_fall, PUMP_RMS),
+                           ("gear_whine", gear_whine, PUMP_RMS)):
     sound = sound - np.mean(sound)
     sound *= level / np.sqrt(np.mean(sound ** 2))
     path = output / (name + ".ogg")
@@ -131,3 +158,29 @@ for name, sound, level in (("flare_roar", flare_roar, PUMP_RMS), ("flare_pilot",
                           rms=float(np.sqrt(np.mean(decoded ** 2))), peak=float(np.max(np.abs(decoded))),
                           seam_step=float(abs(decoded[0] - decoded[-1])),
                           typical_step=float(np.mean(np.abs(np.diff(decoded)))))))
+
+# A one-shot, not a loop: a liquid line's water-hammer knock (Joukowsky surge reflecting in the pipe). A hard thud (a
+# 70 Hz body decaying in 60 ms) and the pipe's ring (decaying resonances near 180 Hz, 470 Hz and 1.1 kHz, in 0.3 s), with
+# a 4 ms click of broadband noise at the strike, then two weaker echoes as the surge reflects (at 90 and 180 ms). 0.8 s,
+# peak 0.7; its first and last samples are silent.
+knock_count = int(.8 * rate)
+k = np.arange(knock_count) / rate
+rng = np.random.default_rng(9001)
+strike = lambda d: (k >= d) * (k - d)
+def knock_at(delay, strength):
+    s = strike(delay)
+    on = (k >= delay)
+    body = np.exp(-s / .06) * np.sin(2 * np.pi * 70 * s)
+    ring = sum(a * np.exp(-s / tau) * np.sin(2 * np.pi * f * s + p)
+               for f, a, tau, p in ((180, .6, .30, 0), (470, .35, .18, .8), (1100, .20, .10, 1.9)))
+    click = np.exp(-s / .004) * rng.standard_normal(knock_count)
+    return strength * on * (body + ring + .5 * click)
+pipe_knock = knock_at(0, 1) + knock_at(.09, .35) + knock_at(.18, .12)
+pipe_knock *= (1 - np.exp(-k / .001)) * np.minimum(1, (.8 - k) / .05)
+pipe_knock *= .7 / np.max(np.abs(pipe_knock))
+path = output / "pipe_knock.ogg"
+sf.write(path, pipe_knock, rate, format="OGG", subtype="VORBIS")
+decoded, decoded_rate = sf.read(path)
+print(json.dumps(dict(asset="pipe_knock", bytes=path.stat().st_size, frames=len(decoded), rate=decoded_rate,
+                      rms=float(np.sqrt(np.mean(decoded ** 2))), peak=float(np.max(np.abs(decoded))),
+                      first=float(abs(decoded[0])), last=float(abs(decoded[-1])))))
