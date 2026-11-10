@@ -187,9 +187,12 @@ public final class ColumnFailureModesReviewWorld {
     /**
      * Plant A's air cooler: a START solve of the design with an air-then-water condenser at its set feed, then Auto's rule of
      * the process simulator (the fewest banks, then the least face, that hold the air's need at full fans with the 20 %
-     * spare). One bank; a need one bank cannot hold refuses the plant. Logs the air's, the trim's and the pumparounds' duties.
+     * spare): {@code count} identical banks in parallel, each holding its share; a need four banks cannot hold refuses the
+     * plant. Logs the air's, the trim's and the pumparounds' duties.
      */
-    static EquipmentShape airBank(V3ColumnInput design, MaterialCatalog catalog) {
+    record Air(EquipmentShape bank, int count) {}
+
+    static Air airBank(V3ColumnInput design, MaterialCatalog catalog) {
         var model = FluidThermodynamics.forNetwork(catalog, design.packageId());
         var axis = model.components();
         double[] feed = new double[axis.size()];
@@ -207,24 +210,28 @@ public final class ColumnFailureModesReviewWorld {
         double[] area = table.airArea();
         double need = area[SplitTable.FAN_STEPS] * rate, held = need * 1.2;
         double[] best = null;
-        for (var bay : ProcessUnit.bays())
-            for (int parallel = 1; parallel <= ProcessUnit.Bank.MAX_PARALLEL; parallel++)
-                for (int series = 1; series <= ProcessUnit.Bank.MAX_SERIES; series++) {
-                    var bank = new ProcessUnit.Bank(parallel, series);
-                    double surface = HeatSides.airCoolerSurface(bay[0], (int) bay[1], bank), face = bank.bays() * ProcessUnit.bundleFace(bay[0], (int) bay[1]);
-                    if (surface >= held && (best == null || face < best[1] || face == best[1] && bank.bays() < best[2]))
-                        best = new double[]{1, face, bank.bays(), surface, bay[0], bay[1], parallel, series};
-                }
+        int count = 0;
+        for (int k = 1; k <= 4 && best == null; k++) {
+            count = k;
+            for (var bay : ProcessUnit.bays())
+                for (int parallel = 1; parallel <= ProcessUnit.Bank.MAX_PARALLEL; parallel++)
+                    for (int series = 1; series <= ProcessUnit.Bank.MAX_SERIES; series++) {
+                        var bank = new ProcessUnit.Bank(parallel, series);
+                        double surface = HeatSides.airCoolerSurface(bay[0], (int) bay[1], bank), face = bank.bays() * ProcessUnit.bundleFace(bay[0], (int) bay[1]);
+                        if (surface >= held / k && (best == null || face < best[1] || face == best[1] && bank.bays() < best[2]))
+                            best = new double[]{1, face, bank.bays(), surface, bay[0], bay[1], parallel, series};
+                    }
+        }
         log("sizing rate_mol_s={} air_MW={} trim_MW={} pumparounds_MW={} need_m2={} natural_m2={} flood={}", rate,
                 -(table.condenserPerFeed() - table.condenserWaterPerFeed()) * rate / 1e6, -table.condenserWaterPerFeed() * rate / 1e6,
                 Arrays.toString(Arrays.stream(table.pumparoundPerFeed()).map(q -> q * rate / 1e6).toArray()), need, area[0] * rate,
                 table.flood().known() ? table.flood().fraction(rate) : Double.NaN);
-        if (best == null) throw new IllegalStateException("one air cooler bank does not hold the air's " + need + " m²");
-        log("sizing bank={}x{} bay={}x{} surface_m2={}", (int) best[6], (int) best[7], best[4], best[5], best[3]);
+        if (best == null) throw new IllegalStateException("four air cooler banks do not hold the air's " + need + " m²");
+        log("sizing banks={} bank={}x{} bay={}x{} surface_m2={}", count, (int) best[6], (int) best[7], best[4], best[5], best[3]);
         var d = UnitDesign.of(Kind.AIR_COOLER);
         int length = (int) best[5];
-        return EquipmentShape.designed(Kind.AIR_COOLER, best[4], length, EquipmentShape.Heading.NORTH, d.defaultSupport(best[4], length),
-                new ProcessUnit.Bank((int) best[6], (int) best[7]));
+        return new Air(EquipmentShape.designed(Kind.AIR_COOLER, best[4], length, EquipmentShape.Heading.NORTH, d.defaultSupport(best[4], length),
+                new ProcessUnit.Bank((int) best[6], (int) best[7])), count);
     }
 
     /** An exchanger of shell size {@code size}, m, at its default length and support. */
@@ -240,7 +247,8 @@ public final class ColumnFailureModesReviewWorld {
      */
     static ColumnOperationReviewWorld.Options plantA(MaterialCatalog catalog) {
         var design = ColumnOperationReviewWorld.scaled(crude(catalog), SCALE);
-        var bank = airBank(design, catalog);
+        var air = airBank(design, catalog);
+        var bank = air.bank();
         double shell = Math.min(2.5, Math.max(.5, Math.round(2.5 * Math.sqrt(SCALE) * 2) / 2.0));
         var trim = exchanger(shell);
         var cooler = exchanger(shell);
@@ -257,6 +265,10 @@ public final class ColumnFailureModesReviewWorld {
         int north = column[4] - gap;
         var bankAt = new BlockPos(column[0] - gap - b[1], 0, north - b[5]);
         var t = extent(trim);
+        // Further banks in a row north of the first, in parallel.
+        var banks = new ArrayList<BlockPos>();
+        for (int i = 0; i < air.count(); i++) banks.add(bankAt.offset(0, 0, -i * (b[5] - b[4] + 1 + gap)));
+        int depth = air.count() * (b[5] - b[4] + 1) + (air.count() - 1) * gap;
         var trimAt = new BlockPos(bankAt.getX() + b[0] - gap - t[1], 0, north - t[5]);
         var receiver = EquipmentShape.drum(drumDiameter, drumLength, EquipmentShape.Orientation.HORIZONTAL, EquipmentShape.Heading.NORTH, RECEIVER_SUPPORT,
                 EquipmentShape.defaultConnections(drumDiameter, drumLength, EquipmentShape.Orientation.HORIZONTAL, RECEIVER_SUPPORT, true), true);
@@ -277,8 +289,8 @@ public final class ColumnFailureModesReviewWorld {
         int west = Math.min(drumAt.getX() + r[0], coolers.isEmpty() ? 0 : coolers.getLast().getX() + c[0]) - 12;
         int south = (pumps.isEmpty() ? column[5] : pumps.getLast().getZ() + Math.max(c[5], p[5])) + 16;
         int top = Math.max(column[3], 30) + 8;
-        var layout = new ColumnOperationReviewWorld.Layout(List.of(bankAt), List.of(trimAt), drumAt, drumDiameter, drumLength, RECEIVER_SUPPORT, refluxAt, pumps, coolers, null,
-                new BlockPos(240, 0, -96), new BlockPos(west, 0, north - Math.max(b[5] - b[4], r[5] - r[4]) - 16), new BlockPos(column[1] + 56, top, south));
+        var layout = new ColumnOperationReviewWorld.Layout(banks, List.of(trimAt), drumAt, drumDiameter, drumLength, RECEIVER_SUPPORT, refluxAt, pumps, coolers, null,
+                new BlockPos(240, 0, -96), new BlockPos(west, 0, north - Math.max(depth, r[5] - r[4]) - 16), new BlockPos(column[1] + 56, top, south));
         // The bores at the start's feed, twice the design's: the review plant's 0.25 m feed line at 13 and 30 m/s and 0.15 m
         // steam line at 21 and 41 m/s grow with the feed over the bore squared.
         double feedBore = Math.min(PipeSizes.MAX_BORE, Math.max(.25, .25 * Math.sqrt(16 * SCALE) * 1.25));
@@ -454,24 +466,7 @@ public final class ColumnFailureModesReviewWorld {
         rig.feed = generator;
         var path = plant.route(AssemblyGameTests.Plant.front(drum, Role.LIQUID_OUTLET), line, Set.of(line.relative(d.getOpposite()), line.relative(d), line.relative(d, 2)));
         // The vapour outlet onto a straight pipe of that line, from beside it.
-        BlockPos joined = null;
-        for (int i = 2; i < path.size() - 2 && joined == null; i++) {
-            if (!AssemblyGameTests.Plant.straight(path, i)) continue;
-            var at = path.get(i);
-            var along = path.get(i + 1).subtract(at);
-            for (var q : Direction.values()) {
-                if (q.getAxis() == Direction.fromDelta(along.getX(), along.getY(), along.getZ()).getAxis()) continue;
-                var t = at.relative(q);
-                if (!plant.free(t, AssemblyGameTests.Plant.around(at))) continue;
-                try {
-                    plant.route(AssemblyGameTests.Plant.front(drum, Role.VAPOUR_OUTLET), t, Set.of(at));
-                    joined = t;
-                    break;
-                } catch (IllegalStateException ignored) {
-                }
-            }
-        }
-        if (joined == null) throw new IllegalStateException("No room to join the surge drum's vapour to its outlet line");
+        plant.join(path, AssemblyGameTests.Plant.front(drum, Role.VAPOUR_OUTLET));
         name(b, "FEED SURGE DRUM", drum);
         b.named.put("FEED SUPPLY", generator);
     }
@@ -526,6 +521,9 @@ public final class ColumnFailureModesReviewWorld {
         for (int i = 0; i + 1 < ports.size(); i++) {
             var taken = new HashSet<>(path);
             taken.addAll(beyond);
+            // Nor through another port's cell, which its own legs reach.
+            for (var p : ports) taken.add(p.cell());
+            taken.remove(ports.get(i + 1).cell());
             var leg = cableRoute(plant, ports.get(i).cell(), ports.get(i + 1).cell(), taken);
             if (!path.isEmpty()) leg.removeFirst();
             path.addAll(leg);
@@ -782,7 +780,8 @@ public final class ColumnFailureModesReviewWorld {
                 for (int i = 0; i < rig.pumps.size(); i++) name(x, i == 0 ? "REFLUX PUMP" : "PA" + i + " PUMP", rig.pumps.get(i));
                 for (int i = 0; i < rig.motors.size(); i++) name(x, i == 0 ? "REFLUX MOTOR" : "PA" + i + " MOTOR", rig.motors.get(i));
                 for (int i = 0; i < rig.coolers.size(); i++) name(x, "PA" + (i + 1) + " COOLER", rig.coolers.get(i));
-                for (int i = 0; i < rig.condensers.size(); i++) name(x, rig.options.condenser() == ColumnComponents.Condenser.EXCHANGER ? "CONDENSER" : "AIR CONDENSER", rig.condensers.get(i));
+                for (int i = 0; i < rig.condensers.size(); i++)
+                    name(x, (rig.options.condenser() == ColumnComponents.Condenser.EXCHANGER ? "CONDENSER" : "AIR CONDENSER") + (rig.condensers.size() > 1 ? " " + (i + 1) : ""), rig.condensers.get(i));
                 for (int i = 0; i < rig.trims.size(); i++) name(x, "TRIM CONDENSER", rig.trims.get(i));
                 name(x, "RECEIVER", rig.plant.drum);
                 if (rig.kettle != null) name(x, "KETTLE", rig.kettle);
@@ -851,8 +850,11 @@ public final class ColumnFailureModesReviewWorld {
                     x.named.put(name, laid.get(laid.size() / 2).site().cell());
                 }
             }
-            var terminal = java.util.Objects.requireNonNull(port(a.plant(), a.rig.condensers.getFirst().origin(), CableMedium.POWER));
-            var laid = lay(a.plant(), List.of(nearest(faces(a, a.fansSource), terminal.cell()), terminal), CableMedium.POWER);
+            // One cable from the fans' source through every bank's terminal.
+            var terminals = new ArrayList<DataPort>();
+            for (var bank : a.rig.condensers) terminals.add(java.util.Objects.requireNonNull(port(a.plant(), bank.origin(), CableMedium.POWER)));
+            terminals.addFirst(nearest(faces(a, a.fansSource), terminals.getFirst().cell()));
+            var laid = lay(a.plant(), terminals, CableMedium.POWER);
             a.cables.put("FANS POWER", laid);
             a.named.put("FANS POWER", laid.get(laid.size() / 2).site().cell());
         }
