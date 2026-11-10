@@ -45,6 +45,7 @@ Owner, 2026-11-10: a custom shader system for normal textures (first the instrum
     - the quick suite: the fluid network package, machine laws, ChimneyRuntimeTest, the codec, facts and certificate tests, and the simulator palette, sizing, examples, layout, frame and column tests. 542 tests; 2 failed, both in ConstructorColumnTest and from the vacuum branch alone (its new category key and a too-wide "150 m³/h" value);
     - equipmentGates: layout golden, shape compat, process unit and rasterizer, 80 tests, all pass.
   - Owner: "the water ring pump looks alike with other rotating equipments", then "Pump and separator". The vacuum sub-thread redraws the liquid ring pump as a short, fat ring housing between port heads, with a vertical separator tank on the skid taking the discharge, and fixes the two ConstructorColumnTest failures.
+  - The redraw (98e176483) merged at b62cfa3bd (owner: "Merge it"). DISCHARGE moved to the separator top; only the 5 liquid ring layout rows changed (boxes 3×4×5 and 3×4×6). The model box shows the capacity number, and the unit takes the unit slot. The sub-thread ran ConstructorColumnTest, FlowsheetPaletteCoverageTest, SizingPageTest and equipmentGates (layout golden, process unit, rasterizer, shape compat) on that commit: all pass. Open: the separator stands about 4 m on model 3.
 
 ## Code areas (planned)
 
