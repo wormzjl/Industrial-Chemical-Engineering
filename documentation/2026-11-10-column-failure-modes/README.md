@@ -1,6 +1,6 @@
 # 2026-11-10 column failure modes and control
 
-Status: In progress since 2026-11-10 (decisions taken; execution in five stages, see `EXECUTION_PLAN.md`).
+Status: **Implemented 2026-11-10** (0.26.0). Branch `claude/distillation-failure-mode-control-db2da5`.
 
 ## History
 
@@ -25,6 +25,8 @@ Status: In progress since 2026-11-10 (decisions taken; execution in five stages,
 - 2026-11-10: the code guide (`428ac0633`, Opus subagent, 13 files), then main 0.25.0 (`833942033`) merged in at `33d018c0f` (owner: "main is ready, prepare"): two code guide snapshot lines resolved, this batch's CHANGELOG lines under `[Unreleased]`; the three source sets compile. The final lane's selection is in [MERGE_PREP_REVIEW.md](MERGE_PREP_REVIEW.md); the lane has not run.
 - 2026-11-10: final lane on `1d872d2f9` (sub-thread, Opus medium, once), see [FINAL_LANE_REVIEW.md](FINAL_LANE_REVIEW.md): 2771 tests in 423 classes, 0 failures (`test` ran whole: its filter was too long); chain-100 exact; GameTests 88/88; campaign cold 991/1000, bundled random 990/1000 (575 F fixed by main, 514 X to E9), bundled defaults 1000/1000; no new holds, no new budget holds, nothing replayed. `MIXED_GAS_COST` newtonSolves 297 to 313 against the 0.25.0 lane (which predates main's `PassiveStepSolver` fixes). Archive `tools/merge-lane/logs/column-failure-modes-final-lane-logs-2026-11-10.tar.gz` (main checkout).
 
+- 2026-11-10: owner: "Merge as 0.26.0". `mod_version` 0.26.0, the CHANGELOG heading, this batch's status and the code guide's version phrases (`tools/column-failure-modes/merge-prep/version.js`); then the merge to `main`. The owner's manual test of the world, the `NO_DRIVER` decision and the two main-checkout items stay open (below).
+
 ## Documents
 
 - [COLUMN_FAILURE_MODES_REVIEW.md](COLUMN_FAILURE_MODES_REVIEW.md): expected behaviour, the seven mechanisms in the code, coverage, findings F1 to F12.
@@ -48,7 +50,6 @@ Stage 1 changed `science/column/operation/**` (new `Condition`, `ColumnStatus`, 
 - Stage 3 changes old plants: after their next Start, a reboiler or pumparound cooler with no utility line limits the column.
 - Stage 3: an air-cooled pumparound cooler has no partnered utility side, so its duty stays free.
 - The owner's manual test in `run/saves/column-failure-modes` ([MANUAL_TEST.md](MANUAL_TEST.md)). The world was saved before the merge of the shader branch, by code that named this batch's facts schema 18; the merged code should read it (fields are read by presence, and the shader branch added none to a column unit), but it was not loaded on the merged code. A rebuild on the merged code (`tools/column-failure-modes/README.md`, 15 minutes) gives a world at schema 21.
-- Before the merge: the final lane (main 0.25.0 is merged in), the version the owner chooses (0.26.0 proposed). The code guide is updated (13 files, snapshot `0893d2339`).
 - For the main checkout (this session cannot write there): the row of `research/2026-11-10-column-failure-modes/renders-w7/` in `research/INDEX.md`, and the log archive `tools/column-failure-modes/logs/column-failure-modes-logs-2026-11-10.tar.gz` from this worktree.
 - A level loop on a vessel whose outlet is two-phase plans by the mixture density. With its feed closed, a column's feed valve reads no flow, so a level loop on the column has no density (NO LEVEL BALANCE) and the feed returns to its set rate: the stage 5 run swung the feed between 0 and 1 (case 12's level form, not covered).
 - Case 9 (flooding by a set point) is not covered in the world: no set point reaches the flood limit at a fixed heat input (0.69, 0.81, 0.82). The limit is covered by `ColumnCycleTest` and `ColumnRunTest`.

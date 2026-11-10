@@ -15,6 +15,8 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-11-10
+
 ### Added
 
 - Running column failure modes and control: every limit, notice and trip of a running column is one condition (not ready, notice, limit, off table, trip), the lowest share of the set feed binding with no solve; a refused set point or state is remembered and not solved again, the column running on its accepted set points; the reboiler's and each pumparound cooler's duty owed to its utility side, the air condenser's fans and the pumps drawing power (a column with a pump and no driver refuses Start while machines need power); the flood limit from the split table with a high-load notice at 85 % and a live tray pressure drop; nine column alarms and the pressure drop as data channels, a column page on the DCS (Start, Stop, Apply over the data link), a feed-rate loop on the feed set point; the Operation tab's conditions table and requested against accepted set points; a full-size test world of two plants with 13 scripted cases. An older plant's unpiped reboiler or pumparound cooler limits it after its next Start. Fluid facts schema 21, protocols `assembly-6` and `control-4`, simulator results format 3 (conditions and solve policy `a99164867`, `9fedc6e11`, `7eeeb2b9d`; flood limit, Operation tab, DCS page, feed loop `560a386b6` to `7f9ff007b`; utilities `d0ecbd807` to `c2849f62c`; member power `a8cbde124` to `1834a372c`; test world `a678fac2a` to `4b0fdd8a7`, fixes `22eb6fa26`, `8534e09f5`, `40428c5e1`; schema 21 on the shader branch's schemas `16829d22e`, `45039eac9`; batch `2026-11-10-column-failure-modes`).
