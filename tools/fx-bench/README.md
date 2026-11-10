@@ -37,6 +37,10 @@ node tools/fx-bench/summarize.mjs tmp/fx-bench/runs
 
 `JFR=0` records no JFR (a timing pair stays comparable either way: every run records the same). Logs: compress the log folder into the main checkout's `tools/fx-bench/logs/fx-bench-logs-<date>.tar.gz` (git-ignored, never staged); the review is `documentation/2026-11-10-custom-shader-system/FX_BENCH_REVIEW.md`.
 
+## Recording (owner, 2026-11-10: "Record these animations")
+
+`record.sh <worktree> <out dir> [auto|compatible|off]` builds the same scene and feed with the probe's `mode=fx`, attaches `FxRecorder.java` beside the probe, and flies the camera to each shot of `record.txt` (`name x y z yaw pitch seconds fps settle`), saving half-size frames, one full-size frame and `times.txt` per shot. Not a timing run, but it takes the fx lane lock, so no bench lane starts meanwhile. Then `python record_sheets.py <out dir>` (Pillow) writes a GIF and an eight-frame contact sheet per shot. Output goes to `tmp/fx-record/<run>/`. The first recording and its review: `documentation/2026-11-10-custom-shader-system/FX_VISUAL_REVIEW.md`.
+
 ## In `src/main`
 
 `client/fx/FxStats` (counters and the F3 line) stays in the product. Nothing measurement-only is added to `src/main`, so there is no `detach.patch`: the probe is attached uncommitted for the runs only.
