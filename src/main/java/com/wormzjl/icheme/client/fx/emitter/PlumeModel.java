@@ -46,8 +46,27 @@ public final class PlumeModel {
     }
 
     /** A puff colour from the plume's start ({@code near}) to its end ({@code far}), r g b each 0 to 1. */
-    public record Style(double[] near, double[] far) {
+    public record Style(double[] near, double[] far, double pulse) {
         public static final Style WHITE = new Style(new double[]{.95, .95, .97}, new double[]{.93, .94, .96});
+
+        /** A steady plume's colours. */
+        public Style(double[] near, double[] far) {
+            this(near, far, 0);
+        }
+
+        /**
+         * These colours with a pulse of {@code depth} (0 to 1): the puffs of a segment's phases alternate in density, so a
+         * few denser puffs a second run up the plume, as an engine's turbulent exhaust eddies do (batch
+         * 2026-11-10-prime-movers: the firing itself, 80 to 200 Hz, is continuous to the eye).
+         */
+        public Style pulsing(double depth) {
+            return new Style(near, far, depth);
+        }
+
+        /** A puff's density factor at phase {@code j} of {@link #PHASES}: 1 + pulse on the first, less on the others, mean 1. */
+        double phase(int j) {
+            return j == 0 ? 1 + pulse : 1 - pulse / (PHASES - 1);
+        }
 
         int params(double along, double alpha) {
             double k = Math.max(0, Math.min(1, along));
@@ -237,7 +256,8 @@ public final class PlumeModel {
                         from[DIAMETER] / 2 + SPREAD * ka, to[DIAMETER] / 2 + SPREAD * kb);
                 for (int j = 0; j < PHASES; j++) {
                     if (sink.remaining() <= 0) return;
-                    sink.puff(start, dx, dy, dz, params, FxSink.staggered(j, PHASES, seed * 31 + e * 7 + k));
+                    int p = style.pulse() > 0 ? style.params((k + .5) / segments, alpha * style.phase(j)) : params;
+                    sink.puff(start, dx, dy, dz, p, FxSink.staggered(j, PHASES, seed * 31 + e * 7 + k));
                 }
             }
         }

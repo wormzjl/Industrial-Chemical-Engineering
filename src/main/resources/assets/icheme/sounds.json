@@ -31,9 +31,33 @@
     "subtitle": "subtitles.icheme.engine_running",
     "sounds": [{ "name": "icheme:engine_running", "stream": false }]
   },
+  "engine_running_medium": {
+    "subtitle": "subtitles.icheme.engine_running_medium",
+    "sounds": [{ "name": "icheme:engine_running_medium", "stream": false }]
+  },
   "gas_turbine_running": {
     "subtitle": "subtitles.icheme.gas_turbine_running",
     "sounds": [{ "name": "icheme:gas_turbine_running", "stream": false }]
+  },
+  "engine_start_air": {
+    "subtitle": "subtitles.icheme.engine_start_air",
+    "sounds": [{ "name": "icheme:engine_start_air", "stream": false }]
+  },
+  "engine_start_electric": {
+    "subtitle": "subtitles.icheme.engine_start_electric",
+    "sounds": [{ "name": "icheme:engine_start_electric", "stream": false }]
+  },
+  "engine_stop": {
+    "subtitle": "subtitles.icheme.engine_stop",
+    "sounds": [{ "name": "icheme:engine_stop", "stream": false }]
+  },
+  "gas_turbine_start": {
+    "subtitle": "subtitles.icheme.gas_turbine_start",
+    "sounds": [{ "name": "icheme:gas_turbine_start", "stream": false }]
+  },
+  "gas_turbine_stop": {
+    "subtitle": "subtitles.icheme.gas_turbine_stop",
+    "sounds": [{ "name": "icheme:gas_turbine_stop", "stream": false }]
   },
   "flare_roar": {
     "subtitle": "subtitles.icheme.flare_roar",

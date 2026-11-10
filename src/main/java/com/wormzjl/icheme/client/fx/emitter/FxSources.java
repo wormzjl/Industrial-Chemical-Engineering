@@ -419,6 +419,14 @@ public final class FxSources {
         static final double SMOKE_DIAMETERS = 30, SMOKE_MIN = 6, SMOKE_MAX = 48;
         /** The stack's excess over the ambient for full shimmer, K. */
         static final double HAZE_EXCESS = 300;
+        /**
+         * An engine's exhaust (batch 2026-11-10-prime-movers): its smoke pulses gently with its turbulent eddies; it starts
+         * dark (a cold start, rich), and after a load rise of more than {@code LOAD_RISE} of its rated fuel it runs dark for
+         * {@code DARK_SECONDS} (turbo lag: the fuel rises before the charge air). A gas turbine's stays a steady haze.
+         */
+        static final double PULSE = .35, LOAD_RISE = .1, DARK_SECONDS = 4, DARK_SOOT = .55;
+        private final boolean engine;
+        private double lastFiring = -1, darkUntil = Double.NEGATIVE_INFINITY;
         private final @Nullable Exits exits;
         private final double @Nullable [] at;
         private @Nullable Plume plume, smoke;
@@ -426,6 +434,7 @@ public final class FxSources {
 
         HeaterSource(CellWatch.Watched<FluidNetwork.HeaterFlue> watched) {
             super(watched);
+            engine = cell.shape() != null && cell.shape().kind() == com.wormzjl.icheme.science.equipment.EquipmentShape.Kind.COMBUSTION_ENGINE;
             exits = Exits.of(this, named("stack_top_"));
             at = exits == null ? null : exits.centroid();
             if (exits == null) return;
@@ -447,7 +456,15 @@ public final class FxSources {
             var fuel = s.fuelKind();
             double soot = exit > 0 ? fuel == Burners.Fuel.SOLID ? .4 * s.firing() : fuel == Burners.Fuel.LIQUID ? .18 * s.firing() : 0 : 0;
             double length = Math.max(SMOKE_MIN, Math.min(SMOKE_MAX, SMOKE_DIAMETERS * d));
-            smoke.aim(PlumeModel.values(length, ratio, wind.x(), wind.z(), soot, d, 0, 0, 0), n, SMOKE_PUFFS, fuel == Burners.Fuel.SOLID ? COAL : OIL, u, reach, now);
+            var style = fuel == Burners.Fuel.SOLID ? COAL : OIL;
+            if (engine) {
+                // A start (from no firing, after a first reading) or a load rise: dark smoke for a few seconds.
+                if (lastFiring >= 0 && s.firing() > 0 && (lastFiring <= 0 || s.firing() - lastFiring > LOAD_RISE)) darkUntil = now + DARK_SECONDS;
+                lastFiring = s.firing();
+                if (exit > 0 && now < darkUntil) soot = Math.max(soot, DARK_SOOT);
+                style = style.pulsing(PULSE);
+            }
+            smoke.aim(PlumeModel.values(length, ratio, wind.x(), wind.z(), soot, d, 0, 0, 0), n, SMOKE_PUFFS, style, u, reach, now);
             double strength = exit > 0 && s.firing() > 0 ? (t - 273.15 - ambient.celsius()) / HAZE_EXCESS : 0;
             aimHaze(haze, strength, new double[]{0, .6 * d, 0}, Math.max(.6, d), now);
         }

@@ -105,7 +105,12 @@ public final class ModBlocks {
     public static final DeferredHolder<SoundEvent,SoundEvent> TURBINE_RUNNING=loop("turbine_running");
     // The prime movers (batch 2026-11-10-prime-movers): a combustion engine and a gas turbine.
     public static final DeferredHolder<SoundEvent,SoundEvent> ENGINE_RUNNING=loop("engine_running");
+    /** A medium-speed engine's running loop, authored at 600 rpm (UnitDesign.ENGINE_MEDIUM_LOOP_RPM). */
+    public static final DeferredHolder<SoundEvent,SoundEvent> ENGINE_RUNNING_MEDIUM=loop("engine_running_medium");
     public static final DeferredHolder<SoundEvent,SoundEvent> GAS_TURBINE_RUNNING=loop("gas_turbine_running");
+    /** A prime mover's start and stop, one-shots on its speed's crossing of zero (batch 2026-11-10-prime-movers, tools/process-sounds/prime_candidates.py). */
+    public static final DeferredHolder<SoundEvent,SoundEvent> ENGINE_START_AIR=loop("engine_start_air"),ENGINE_START_ELECTRIC=loop("engine_start_electric"),ENGINE_STOP=loop("engine_stop"),
+            GAS_TURBINE_START=loop("gas_turbine_start"),GAS_TURBINE_STOP=loop("gas_turbine_stop");
     /** Process loops (tools/process-sounds): an elevated flare's roar and pilot hiss, a still's burner, firebox and boiling pot. */
     public static final DeferredHolder<SoundEvent,SoundEvent> FLARE_ROAR=loop("flare_roar");
     public static final DeferredHolder<SoundEvent,SoundEvent> FLARE_PILOT=loop("flare_pilot");

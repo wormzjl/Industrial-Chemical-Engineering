@@ -48,9 +48,35 @@ public final class DriverSounds {
      * watch. A stopped driver, or one at no speed, is silent.
      */
     public static void accept(BlockPos origin,boolean running,double speed) {
-        if(!WATCHED.contains(origin)||shell(origin)==null)return;
+        var shell=WATCHED.contains(origin)?shell(origin):null;
+        if(shell==null)return;
         double share=running&&speed>0?Math.min(speed,1):0;
-        SPEEDS.put(origin,share);
+        var before=SPEEDS.put(origin,share);
+        if(before!=null&&(before>0)!=(share>0))crossing(shell,share>0);
+    }
+    /**
+     * A prime mover's speed crossed zero (batch 2026-11-10-prime-movers): its start or stop one-shot at its cells' centre. A
+     * medium-speed engine (750 rpm and under) starts on air, a high-speed one on its electric starter. Played only on a
+     * change between two publications this client saw, never on the first, so a set the player walks up to stays as it is.
+     */
+    private static void crossing(EquipmentShellBlockEntity shell,boolean start) {
+        var shape=shell.shape();var level=Minecraft.getInstance().level;
+        if(shape==null||level==null)return;
+        var sound=switch(shape.kind()){
+            case COMBUSTION_ENGINE->start?(UnitDesign.mediumSpeedEngine(shape)?com.wormzjl.icheme.registry.ModBlocks.ENGINE_START_AIR:com.wormzjl.icheme.registry.ModBlocks.ENGINE_START_ELECTRIC):com.wormzjl.icheme.registry.ModBlocks.ENGINE_STOP;
+            case GAS_TURBINE->start?com.wormzjl.icheme.registry.ModBlocks.GAS_TURBINE_START:com.wormzjl.icheme.registry.ModBlocks.GAS_TURBINE_STOP;
+            default->null;
+        };
+        if(sound==null)return;
+        var c=centre(shell);
+        level.playLocalSound(c[0],c[1],c[2],sound.get(),net.minecraft.sounds.SoundSource.BLOCKS,(float)Math.max(.5,Math.min(2,UnitDesign.soundGain(shape,1))),1F,false);
+    }
+    /** The centre of a structure's cells, world coordinates. */
+    private static double[] centre(EquipmentShellBlockEntity shell) {
+        var origin=shell.origin();var cells=ShapeRasterizer.layout(shell.shape()).shell();double cx=0,cy=0,cz=0;
+        for(var cell:cells){cx+=cell.x();cy+=cell.y();cz+=cell.z();}
+        int n=Math.max(1,cells.size());
+        return new double[]{origin.getX()+cx/n+.5,origin.getY()+cy/n+.5,origin.getZ()+cz/n+.5};
     }
     /** The driver watch request (W3): the drivers near the player in, the ones out of reach out. */
     private static void request(List<BlockPos> watch,List<BlockPos> unwatch){FluidNetwork.requestDrivers(watch,unwatch);}
@@ -103,7 +129,7 @@ public final class DriverSounds {
             String loop=switch(kind){
                 case STEAM_TURBINE->"turbine_running";
                 case GENERATOR->"generator_running";
-                case COMBUSTION_ENGINE->"engine_running";
+                case COMBUSTION_ENGINE->UnitDesign.mediumSpeedEngine(shell.shape())?"engine_running_medium":"engine_running";
                 case GAS_TURBINE->"gas_turbine_running";
                 default->"motor_running";
             };

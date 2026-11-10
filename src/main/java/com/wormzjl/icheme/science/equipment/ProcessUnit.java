@@ -2334,6 +2334,57 @@ public final class ProcessUnit {
         shaftEnds.add(new EquipmentShape.ShaftEnd(role, new double[]{x, y, face}, 2, sign));
     }
 
+    /**
+     * A prime mover's load shaft along z at (x, y) from {@code z0} to {@code z1} (batch 2026-11-10-prime-movers): a spool
+     * of radius {@code rs} with a bolted flange at each end and a disc pack in its middle, one moving part turning at
+     * {@code speed} rev/s, in an open guard of bars on {@code floor} so it shows turning.
+     */
+    void loadShaft(double x, double y, double z0, double z1, double rs, double floor, double speed) {
+        var f = Frame.of(new double[]{x, y, 0}, 2, 1);
+        double rf = Math.max(rs + .05, 2.4 * rs), t = Math.max(.03, .5 * rs), zm = (z0 + z1) / 2;
+        mesh.part(motions.size());
+        mesh.prism(f, rs, z0, z1, ShaftGeometry.SIDES, Material.SHAFT);
+        for (double[] flange : new double[][]{{z0, z0 + t}, {z1 - t, z1}, {zm - t, zm + t}}) {
+            mesh.cylinder(f, rf, flange[0], flange[1], 12, Material.SHAFT);
+            for (int k = 0; k < 6; k++)
+                for (double zb : new double[]{flange[0] - .012, flange[1] + .012}) {
+                    var at = f.at(k * Math.PI / 3, .78 * rf, zb);
+                    box(new double[]{at[0] - .014, at[1] - .014, at[2] - .012}, new double[]{at[0] + .014, at[1] + .014, at[2] + .012}, Material.BOLT, false);
+                }
+        }
+        mesh.part(-1);
+        motions.add(Motion.turning(new double[]{x, y, zm}, new double[]{0, 0, 1}, speed, 0));
+        // The open guard: a hoop frame at each end on the floor, bars along its top and sides.
+        double g = rf + .08, bar = .025;
+        for (double z : new double[]{z0 + bar, z1 - bar})
+            for (int side = -1; side <= 1; side += 2)
+                box(new double[]{x + side * g - bar, floor, z - bar}, new double[]{x + side * g + bar, y + g, z + bar}, Material.GUARD, false);
+        for (double z : new double[]{z0 + bar, z1 - bar})
+            box(new double[]{x - g - bar, y + g - bar, z - bar}, new double[]{x + g + bar, y + g + bar, z + bar}, Material.GUARD, false);
+        for (double[] p : new double[][]{{-g, y + g}, {g, y + g}, {-g, y}, {g, y}, {0, y + g}})
+            box(new double[]{x + p[0] - bar, p[1] - bar, z0}, new double[]{x + p[0] + bar, p[1] + bar, z1}, Material.GUARD, false);
+        solids.add(Solid.box(new double[]{x - g, floor, z0}, new double[]{x + g, y + g, z1}));
+    }
+
+    /**
+     * An engine's torsional damper on its crankshaft's free end along z at (x, y) from {@code z0} to {@code z1}: a heavy
+     * disc of radius {@code r}, its bolt circle and hub, one moving part turning at {@code speed} rev/s.
+     */
+    void damper(double x, double y, double z0, double z1, double r, double speed) {
+        var f = Frame.of(new double[]{x, y, 0}, 2, 1);
+        mesh.part(motions.size());
+        mesh.cylinder(f, r, z0 + .02, z1, sides(2 * r), Material.MACHINE);
+        mesh.hoop(f, r, r + .015, z0 + .02, z0 + .06, sides(2 * r), Material.SHAFT);
+        mesh.cylinder(f, .3 * r, z0 - .03, z0 + .02, 10, Material.SHAFT);
+        for (int k = 0; k < 8; k++) {
+            var at = f.at(k * Math.PI / 4, .62 * r, z0 + .01);
+            box(new double[]{at[0] - .02, at[1] - .02, at[2] - .02}, new double[]{at[0] + .02, at[1] + .02, at[2] + .02}, Material.BOLT, false);
+        }
+        mesh.part(-1);
+        motions.add(Motion.turning(new double[]{x, y, (z0 + z1) / 2}, new double[]{0, 0, 1}, speed, 0));
+        solids.add(Solid.rod(new double[]{x, y, 0}, 2, z0 - .03, z1, r + .015, 0));
+    }
+
     /** A coupling guard's panel's length, m: a flank and the hood's length are cut into whole panels near this, its round is one. */
     static final double GUARD_PANEL = .9;
 
