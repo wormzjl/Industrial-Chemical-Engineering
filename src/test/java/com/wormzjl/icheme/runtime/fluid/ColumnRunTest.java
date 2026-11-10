@@ -2,6 +2,7 @@ package com.wormzjl.icheme.runtime.fluid;
 
 import com.wormzjl.icheme.science.column.operation.ColumnCycle.Account;
 import com.wormzjl.icheme.science.column.operation.ColumnSolve;
+import com.wormzjl.icheme.science.column.operation.Condition;
 import com.wormzjl.icheme.science.column.operation.DriftBands;
 import com.wormzjl.icheme.science.column.operation.Port;
 import com.wormzjl.icheme.science.column.operation.Setpoints;
@@ -455,7 +456,7 @@ class ColumnRunTest {
         static final com.wormzjl.icheme.science.column.v3.V3ColumnInput DESIGN;
         static{var c=MaterialCatalog.bundled();DESIGN=c.presets().column(c.presets().network().defaultColumnPreset()).input(c);}
         com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics model;EventPathWorld world;final long delay;
-        java.util.function.Predicate<ColumnSolve.Job> fail=j->false;
+        java.util.function.Predicate<ColumnSolve.Job> fail=j->false,unfinished=j->false;
         final List<ColumnSolve.Job> jobs=new ArrayList<>();final List<Long> asked=new ArrayList<>();
         final TreeMap<Long,List<Runnable>> due=new TreeMap<>();
         Fake(long delay){this.delay=delay;}
@@ -463,7 +464,7 @@ class ColumnRunTest {
         public boolean submit(long unit,ColumnSolve.Job job,java.util.function.Consumer<ColumnSolve.Outcome> done) {
             jobs.add(job);long now=world.ledger.onlineTick();asked.add(now);
             var taken=job.taken();var ratios=new double[taken.steam().size()];for(int j=0;j<ratios.length;j++)ratios[j]=taken.feedRate()>0?taken.steam().get(j).rate()/taken.feedRate():job.setpoints().steamPerFeed()[j];
-            ColumnSolve.Outcome o=fail.test(job)?new ColumnSolve.Failed("test refusal"):table(model,job.setpoints(),job.trigger()==DriftBands.Trigger.START?job.setpoints().steamPerFeed():ratios);
+            ColumnSolve.Outcome o=fail.test(job)?new ColumnSolve.Failed("test refusal"):unfinished.test(job)?new ColumnSolve.Failed("DEADLINE",true):table(model,job.setpoints(),job.trigger()==DriftBands.Trigger.START?job.setpoints().steamPerFeed():ratios);
             if(delay==0)done.accept(o);else due.computeIfAbsent(now+delay,t->new ArrayList<>()).add(()->done.accept(o));
             return true;
         }
@@ -510,29 +511,103 @@ class ColumnRunTest {
         }
     }
     /**
-     * A setpoint edit solves at the next cycle (plan section 6); a failed solve keeps the table, names it on the status line
-     * and retries after 30 s, then 60 s (plan section 6).
+     * A setpoint edit solves at the next cycle (plan section 6); a refused one asks that one solve and no second (W2): the
+     * table stays, the cycle keeps the accepted steam ratio, the status names the refusal and the view carries the accepted
+     * set points beside the requested ones. Applying other values solves once more.
      */
-    @Test void aSetpointEditSolvesAtOnceAndAFailedSolveKeepsTheTable() {
-        var f=new Fake(0);var r=rig(0,f);f.world=r.world();var world=r.world();
+    @Test void aRefusedSetpointAsksOneSolveAndTheCycleKeepsTheAcceptedOnes() {
+        var f=new Fake(0);var r=rig(0,f,true,false);f.world=r.world();var world=r.world();
         f.runTo(1000);
         var kept=r.ops().run(r.unit()).table;assertNotNull(kept);
         var u=world.ledger.column(r.unit());var s=u.setpoints();
-        world.ledger.column(u.withSetpoints(new Setpoints(s.designFeedRate(),s.feedRate(),s.condenserTemperature(),2,s.reboilerPerFeed(),s.steamPerFeed(),s.drawsPerFeed(),s.pumparoundsPerFeed())));
+        world.ledger.column(u.withSetpoints(new Setpoints(s.designFeedRate(),s.feedRate(),s.condenserTemperature(),2,s.reboilerPerFeed(),new double[]{.4},s.drawsPerFeed(),s.pumparoundsPerFeed())));
         f.fail=j->j.setpoints().refluxRatio()==2;
-        f.runTo(4000);
+        f.runTo(5000);
         var asked=f.asked(DriftBands.Trigger.SETPOINT);
-        assertTrue(asked.size()>=3,"asked "+asked);
+        assertEquals(1,asked.size(),"one solve, no retry: "+asked);
         assertTrue(asked.get(0)<=1000+ColumnOperation.CYCLE_TICKS,"at the next cycle: "+asked);
-        assertCycle(asked.get(0)+ColumnOperation.APPLY_TICKS+600,asked.get(1),"the first retry 30 s after the failure applied");
-        assertCycle(asked.get(1)+ColumnOperation.APPLY_TICKS+1200,asked.get(2),"the second 60 s after");
-        assertSame(kept,r.ops().run(r.unit()).table,"the table stays");
+        var run=r.ops().run(r.unit());
+        assertSame(kept,run.table,"the table stays");
         assertTrue(r.ops().status(r.unit()).contains("setpoint solve failed (test refusal)"),r.ops().status(r.unit()));
-        // The solve succeeds: the next retry's table applies and the note goes.
-        f.fail=j->false;f.runTo(asked.get(2)+ColumnOperation.APPLY_TICKS+2400+ColumnOperation.APPLY_TICKS+1);
-        assertNotSame(kept,r.ops().run(r.unit()).table);
-        assertEquals(2,r.ops().run(r.unit()).table.reference().setpoints().refluxRatio());
+        assertNotNull(Condition.find(r.ops().conditions(r.unit()),Condition.SETPOINT_REFUSED));
+        assertEquals(2,world.ledger.column(r.unit()).setpoints().refluxRatio(),"the requested set points stay the unit's fact");
+        // The steam inlet is demanded at the accepted ratio, not the refused one.
+        var level=run.levels.get(r.feed()+2).peekLast();
+        assertEquals(s.feedRate()*.2,level.rate(),1e-12,"the accepted steam ratio");
+        var view=r.ops().view(r.unit(),world.ledger.onlineTick(),v->Double.NaN);
+        assertNotNull(view.accepted(),"the accepted set points beside the requested ones");
+        assertEquals(1,view.accepted().refluxRatio());assertEquals(2,view.setpoints().refluxRatio());
+        // Other values: one solve, which applies, and the refusal goes.
+        f.fail=j->false;var v=world.ledger.column(r.unit());
+        world.ledger.column(v.withSetpoints(new Setpoints(s.designFeedRate(),s.feedRate(),s.condenserTemperature(),3,s.reboilerPerFeed(),new double[]{.4},s.drawsPerFeed(),s.pumparoundsPerFeed())));
+        f.runTo(world.ledger.onlineTick()+1000);
+        assertEquals(2,f.asked(DriftBands.Trigger.SETPOINT).size(),"the new values solved once");
+        assertEquals(3,r.ops().run(r.unit()).table.reference().setpoints().refluxRatio());
         assertFalse(r.ops().status(r.unit()).contains("failed"),r.ops().status(r.unit()));
+        assertNull(r.ops().view(r.unit(),world.ledger.onlineTick(),x->Double.NaN).accepted(),"accepted and requested agree");
+    }
+    /**
+     * A refused drift state is not solved again while the state taken stays inside its bands, and is solved once outside them
+     * (W2): the feed rate cut to half asks a THROUGHPUT solve that is refused; the column runs on the old table for a long
+     * time with no second solve; cut to a fifth, outside the refused state's band, it solves once.
+     */
+    @Test void aRefusedStateIsNotSolvedAgainInsideItsBands() {
+        var f=new Fake(0);var r=rig(0,f);f.world=r.world();var world=r.world();
+        f.runTo(1500);
+        var kept=r.ops().run(r.unit()).table;var u=world.ledger.column(r.unit());
+        world.ledger.column(u.withSetpoints(u.setpoints().withFeedRate(.25)));
+        f.fail=j->j.trigger()==DriftBands.Trigger.THROUGHPUT;
+        f.runTo(8000);
+        assertEquals(1,f.asked(DriftBands.Trigger.THROUGHPUT).size(),"one solve of the state: "+f.asked(DriftBands.Trigger.THROUGHPUT));
+        assertSame(kept,r.ops().run(r.unit()).table,"the old table runs");
+        assertTrue(r.ops().status(r.unit()).contains("the throughput solve failed (test refusal)"),r.ops().status(r.unit()));
+        f.fail=j->false;var v=world.ledger.column(r.unit());long moved=world.ledger.onlineTick();
+        world.ledger.column(v.withSetpoints(v.setpoints().withFeedRate(.1)));
+        f.runTo(moved+2000);
+        // (The fake's tables stand at the design throughput, so its later tables cross THROUGHPUT again: only the first counts here.)
+        var asked=f.asked(DriftBands.Trigger.THROUGHPUT);
+        assertTrue(asked.size()>=2&&asked.get(1)>moved&&asked.get(1)<=moved+2*ColumnOperation.CYCLE_TICKS,"outside the refused state's band, at the next cycle: "+asked);
+        assertNotSame(kept,r.ops().run(r.unit()).table);
+        assertFalse(r.ops().status(r.unit()).contains("failed"),r.ops().status(r.unit()));
+    }
+    /**
+     * A solve the worker did not finish (a deadline) is not a refusal (W2): it is asked once more 30 s after it applied; a
+     * second such failure refuses the state.
+     */
+    @Test void anUnfinishedSolveIsAskedOnceMore() {
+        var f=new Fake(0);var r=rig(0,f);f.world=r.world();var world=r.world();
+        f.runTo(1500);
+        var u=world.ledger.column(r.unit());
+        world.ledger.column(u.withSetpoints(u.setpoints().withFeedRate(.25)));
+        f.unfinished=j->j.trigger()==DriftBands.Trigger.THROUGHPUT;
+        f.runTo(1600+ColumnOperation.APPLY_TICKS+ColumnOperation.TRANSIENT_WAIT+50);
+        assertFalse(r.ops().status(r.unit()).contains("failed"),"the first was no refusal: "+r.ops().status(r.unit()));
+        f.runTo(world.ledger.onlineTick()+6000);
+        var asked=f.asked(DriftBands.Trigger.THROUGHPUT);
+        assertEquals(2,asked.size(),"once more, then no more: "+asked);
+        assertCycle(asked.get(0)+ColumnOperation.APPLY_TICKS+ColumnOperation.TRANSIENT_WAIT,asked.get(1),"30 s after the first applied");
+        assertTrue(r.ops().status(r.unit()).contains("the throughput solve failed (DEADLINE)"),"the second refuses the state: "+r.ops().status(r.unit()));
+    }
+    /**
+     * A trip (W1.7, F2): the cycle takes nothing and the column's channels still answer, its flows 0 and its pressures and
+     * temperatures the table's; the status is UPSET, the binding the closure, the alarm UPSET.
+     */
+    @Test void aTrippedColumnsChannelsStillAnswer() {
+        var r=rig(0);var world=r.world();var ops=r.ops();long unit=r.unit();
+        world.runTo(1500);
+        var run=ops.run(unit);var t=run.table;
+        // A table whose solved condenser duty is a hundred times the closure: the next cycle departs and trips.
+        ops.table(unit,new SplitTable(t.axis(),t.products(),t.reboilerPerFeed(),t.pumparoundPerFeed(),100*t.condenserPerFeed(),t.reference(),t.held()),run.enthalpy);
+        run.probes=new ColumnUnit.Probes(150000,370,180000,430,145000,330,.15,.3);
+        world.runTo(1800);
+        assertTrue(ops.last(unit).tripped(),ops.status(unit));
+        assertTrue(ops.status(unit).startsWith("UPSET: the condenser duty departs"),ops.status(unit));
+        assertEquals(Condition.CLOSURE,ops.last(unit).binding().condition());
+        assertEquals(370,ops.instrument(unit,"COLUMN:top",com.wormzjl.icheme.runtime.instrument.Sensor.Kind.TEMPERATURE).value(),"the table's temperature");
+        assertEquals(180000,ops.instrument(unit,"COLUMN:bottom",com.wormzjl.icheme.runtime.instrument.Sensor.Kind.PRESSURE).value(),"the table's pressure");
+        assertEquals(0,ops.instrument(unit,"REFLUX",com.wormzjl.icheme.runtime.instrument.Sensor.Kind.FLOW).value(),"no flow");
+        assertEquals(0,ops.instrument(unit,"COLUMN_PORT:FEED:0",com.wormzjl.icheme.runtime.instrument.Sensor.Kind.FLOW).value(),"no feed taken");
+        assertNotNull(ops.instrument(unit,"COLUMN_PORT:DISTILLATE:0",com.wormzjl.icheme.runtime.instrument.Sensor.Kind.TEMPERATURE),"a product's temperature, the table's");
     }
     /**
      * The table is state the topology unit saves (plan section 12): a world read from its checkpoint resumes the running
@@ -580,6 +655,7 @@ class ColumnRunTest {
         var u=world.ledger.column(r.unit());
         assertTrue(r.ops().status(r.unit()).startsWith("LIMITED: outlet"),r.ops().status(r.unit()));
         double held=u.station(Port.DISTILLATE,0).account().total(),buffer=.5*ColumnOperation.BUFFER_SECONDS;
+        assertEquals(com.wormzjl.icheme.science.column.operation.Condition.PRODUCT_FULL,r.ops().last(r.unit()).binding().condition());
         assertEquals(buffer,held,1e-6*buffer,"the outlet holds its full buffer");
         assertEquals(held,u.totals().taken().total(),1e-9,"the column took what its outlet holds, no more");
         double later=-sum(r.counting().moles.getOrDefault(r.feed(),new double[1]));
@@ -587,8 +663,9 @@ class ColumnRunTest {
     }
     /**
      * Rule B with A where a solve fails (owner Q1, C1): the steam supply lost, the column first takes its feed as it comes
-     * and solves on the short steam's ratio; that solve failing (no steam, no reboiler), it cuts every input together, so the
-     * feed stops, and says so; at the retry it tries B again.
+     * and solves on the short steam's ratio; that solve refused (no steam, no reboiler), it cuts every input together, so the
+     * feed stops, and says so. While the steam stays lost its shortage stays inside the refused state's bands: no solve is
+     * asked again (W2). The steam back, rule A clears and rule B takes it.
      */
     @Test void underRuleBAShortSteamSolvesOnItsRatioAndAFailedSolveFallsBackToA() {
         var f=new Fake(0);var r=rig(0,f,true,false);f.world=r.world();var world=r.world();
@@ -607,9 +684,18 @@ class ColumnRunTest {
         double before=world.ledger.column(r.unit()).totals().taken().total();
         f.runTo(world.ledger.onlineTick()+500);
         assertEquals(before,world.ledger.column(r.unit()).totals().taken().total(),1e-9,"rule A: no steam, no feed taken");
-        // At the retry B is tried again: the steam still lost, it solves again, fails again, and A comes back.
-        f.runTo(world.ledger.onlineTick()+1200);
-        assertTrue(f.asked(DriftBands.Trigger.STEAM_RATIO).size()>asked.size(),"B tried again at the retry: "+f.asked(DriftBands.Trigger.STEAM_RATIO));
+        // The steam still lost: its shortage stays inside the refused state's bands, so no solve is asked again and A stays.
+        int refused=f.asked(DriftBands.Trigger.STEAM_RATIO).size();
+        f.runTo(world.ledger.onlineTick()+3000);
+        assertEquals(refused,f.asked(DriftBands.Trigger.STEAM_RATIO).size(),"no solve of the refused state again: "+f.asked(DriftBands.Trigger.STEAM_RATIO));
+        assertTrue(r.ops().run(r.unit()).ruleA,"rule A stays while the steam is lost");
+        // The steam back: no longer short, rule A clears and the column takes its feed again under rule B.
+        var water=new double[world.model.componentCount()];water[water.length-1]=1;
+        world.place(0,64,2,Kind.GENERATOR,Direction.EAST,new FluidDeviceSpec(1,450,300000,water),.05);
+        double stopped=world.ledger.column(r.unit()).totals().taken().total();
+        f.runTo(world.ledger.onlineTick()+3000);
+        assertFalse(r.ops().run(r.unit()).ruleA,"rule A cleared: "+r.ops().status(r.unit()));
+        assertTrue(world.ledger.column(r.unit()).totals().taken().total()>stopped+10,"the feed is taken again");
     }
     /**
      * A water-cooled condenser (C6b, plan section 10): its tubes stay in the cooling-water line while its shell is the

@@ -290,9 +290,10 @@ public final class ProcessSolveServices {
             if(context.request() instanceof FluidIslandRequest fluidRequest) {
                 result.add(new FluidIslandCompletion(fluidRequest,context.admissionDiagnostics(),fluidCompletion(completion)));
             } else if(context.request() instanceof ColumnUnitRequest columnRequest) {
-                // A worker failure, a cancellation or the deadline is a failed solve, named by its status.
+                // A worker failure, a cancellation or the deadline is a failed solve, named by its status: the worker did not
+                // finish it, so it is transient, not a refusal of the state (W2).
                 var outcome=completion.result().map(value->{if(!(value instanceof ColumnUnitSolveResult column))throw new IllegalStateException("Column unit request completed with a different result family");return column.outcome();})
-                        .orElseGet(()->new com.wormzjl.icheme.science.column.operation.ColumnSolve.Failed(completion.status().name()+(completion.detail()==null?"":": "+completion.detail())));
+                        .orElseGet(()->new com.wormzjl.icheme.science.column.operation.ColumnSolve.Failed(completion.status().name()+(completion.detail()==null?"":": "+completion.detail()),true));
                 result.add(new ColumnUnitCompletion(columnRequest,outcome));
             } else if(context.request() instanceof StillRequest stillRequest) {
                 var outcome=completion.result().map(value->{if(!(value instanceof StillSolveResult still))throw new IllegalStateException("Still request completed with a different result family");return still.outcome();})

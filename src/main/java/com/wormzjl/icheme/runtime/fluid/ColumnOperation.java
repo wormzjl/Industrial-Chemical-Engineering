@@ -6,6 +6,7 @@ import com.wormzjl.icheme.science.column.operation.ColumnSolve;
 import com.wormzjl.icheme.science.column.operation.ColumnStatus;
 import com.wormzjl.icheme.science.column.operation.Condition;
 import com.wormzjl.icheme.science.column.operation.Refusal;
+import com.wormzjl.icheme.science.column.operation.Setpoints;
 import com.wormzjl.icheme.science.column.operation.DriftBands;
 import com.wormzjl.icheme.science.column.operation.Port;
 import com.wormzjl.icheme.science.column.operation.SplitTable;
@@ -45,8 +46,8 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
 
     /** At most one solve per this many online ticks (30 s), except a setpoint edit (plan section 6). */
     static final long SOLVE_SPACING=600;
-    /** A failed solve's retries back off: 30, 60, 120 s (plan section 6). */
-    static final long[] RETRY_TICKS={600,1200,2400};
+    /** A solve the worker did not finish (a deadline, a worker failure, a shutdown) is asked once more after this many ticks (30 s, W2): not a refusal. */
+    static final long TRANSIENT_WAIT=600;
     /** A new table applies at the second cycle after its trigger (owner Q5). */
     static final long APPLY_TICKS=2*CYCLE_TICKS;
     /** The windows a save keeps beyond the fence: a port island this far behind still reads its plan. */
@@ -63,12 +64,17 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         /** No solves: a table comes only from {@link #table}. */
         Solves NONE=new Solves(){public V3ColumnInput design(ColumnUnit unit){return null;}public boolean submit(long unit,ColumnSolve.Job job,java.util.function.Consumer<ColumnSolve.Outcome> done){return false;}};
     }
-    /** A solve in flight: why, the cycle that asked and the cycle that applies it; its outcome once it is done. */
+    /**
+     * A solve in flight: why, the cycle that asked and the cycle that applies it, the set points it solves and the state it
+     * was given (as a drift reference, with the components its table holds); its outcome once it is done.
+     */
     static final class Pending {
-        final DriftBands.Trigger trigger;final long tick;ColumnSolve.Outcome outcome;
-        Pending(DriftBands.Trigger trigger,long tick){this.trigger=trigger;this.tick=tick;}
+        final DriftBands.Trigger trigger;final long tick;final com.wormzjl.icheme.science.column.operation.Setpoints setpoints;final SplitTable.Reference state;final boolean[] held;ColumnSolve.Outcome outcome;
+        Pending(DriftBands.Trigger trigger,long tick,com.wormzjl.icheme.science.column.operation.Setpoints setpoints,SplitTable.Reference state,boolean[] held){this.trigger=trigger;this.tick=tick;this.setpoints=setpoints;this.state=state;this.held=held;}
         long applyAt(){return tick+APPLY_TICKS;}
     }
+    /** A state whose solve was refused (W2): no solve is asked again while the state taken stays inside its bands. */
+    record Refused(DriftBands.Trigger trigger,SplitTable.Reference state,boolean[] held,Condition.Active notice) {}
 
     /** Heat put in transit to each condenser shell's water at {@code tick}, J (one shell's share): by a cycle, or {@code booked} by an outlet's island, whose job decides when it lands. */
     record Owed(long tick,double joule,boolean booked) {}
@@ -98,12 +104,16 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         com.wormzjl.icheme.science.column.operation.OperationView.Phase phase=com.wormzjl.icheme.science.column.operation.OperationView.Phase.STARTING;DriftBands.Trigger solvedBy;boolean warm;
         /** What the last cycle and the solves found (W1): the step's conditions, then the solve's and the notices. */
         List<Condition.Active> conditions=List.of();
-        /** The last solve's failure, its table kept (SOLVE_REFUSED or SETPOINT_REFUSED), or null; the design had no operating point while no table stands, or null. */
-        Condition.Active refusal,missing;
         ColumnCycle.Step last;
-        /** The solve in flight, the tick of the last one asked, the failures in a row and the earliest retry, the warm seed. */
-        Pending pending;long lastSolve=Long.MIN_VALUE/2,retryAt=Long.MIN_VALUE/2;int failures;V3NeuralSeed seed;
-        /** Rule A in force (owner Q1, C1: rule B, with A where a solve fails): a solve of the short inputs failed, so every input is cut together until a solve succeeds or the retry tries B again. */
+        /** The solve in flight, the tick of the last one asked, the warm seed. */
+        Pending pending;long lastSolve=Long.MIN_VALUE/2;V3NeuralSeed seed;
+        /** After a solve the worker did not finish, no solve before this tick; whether that solve was already the one retry (W2). */
+        long waitUntil=Long.MIN_VALUE/2;boolean retried;
+        /** The state whose solve was refused, or null; the requested set points whose solve was refused and why, or null (W2, memory only). */
+        Refused refused;com.wormzjl.icheme.science.column.operation.Setpoints refusedSetpoints;Condition.Active setpointRefusal;
+        /** The design had no operating point at the last request while no table stands: NOT READY, or null. */
+        Condition.Active missing;
+        /** Rule A in force (owner Q1, C1: rule B, with A where a solve fails): a solve of the short steam was refused, so every input is cut together until the steam is no longer short or its shortage leaves the refused state's bands. */
         boolean ruleA;
         /** The cycle that asked the table's solve and the cycle it applied at; V3's own condenser duty there, W; what the accepted solve said beyond its table (FEED_WATER_ROUTED), or null. */
         long tableTick,applied;double solvedCondenser;Condition.Active routed;
@@ -260,6 +270,8 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         if(r==null)return new com.wormzjl.icheme.science.column.operation.OperationView(com.wormzjl.icheme.science.column.operation.OperationView.Phase.STOPPED,List.of(),0,null,
                 "STOPPED",false,true,set,null,List.of(),List.of(),null);
         var t=r.table;var step=r.last!=null&&!r.last.tripped()?r.last:null;double seconds=CYCLE_TICKS/20.0;
+        // The cycle demands its inlets at the accepted set points (W2); the view shows the requested ones beside them where they differ.
+        var demanded=running(u,t);var accepted=t!=null&&set.intensivelyDiffers(t.reference().setpoints())?demanded:null;
         var stations=new ArrayList<>(u.stations());stations.removeIf(s->s.device()==0);stations.sort(Comparator.comparing((ColumnUnit.Station s)->s.port()).thenComparingInt(ColumnUnit.Station::index));
         var streams=new ArrayList<com.wormzjl.icheme.science.column.operation.OperationView.Stream>();
         for(var s:stations) {
@@ -270,7 +282,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
                 if(taken!=null)rate=taken.total()/seconds;
                 if(t!=null)temperature=s.port()==Port.FEED?t.reference().feedTemperature(taken!=null&&taken.total()>0?taken.energy()/taken.total():Double.NaN)
                         :s.index()<t.reference().steamTemperatures().length?t.reference().steamTemperatures()[s.index()]:Double.NaN;
-                double aim=INLET_AIM_SECONDS*(s.port()==Port.FEED?set.feedRate():s.index()<set.steamPerFeed().length?set.feedRate()*set.steamPerFeed()[s.index()]:0);
+                double aim=INLET_AIM_SECONDS*(s.port()==Port.FEED?demanded.feedRate():s.index()<demanded.steamPerFeed().length?demanded.feedRate()*demanded.steamPerFeed()[s.index()]:0);
                 if(aim>0)held=s.account().total()/aim;
             } else if(t!=null) {
                 int k=t.product(s.port(),s.index());
@@ -298,7 +310,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         }
         var solve=t==null?null:new com.wormzjl.icheme.science.column.operation.OperationView.Solve(r.solvedBy,r.warm,Math.max(0,now-r.tableTick)/20.0);
         return new com.wormzjl.icheme.science.column.operation.OperationView(r.phase,r.conditions,step==null?0:step.alpha(),
-                r.pending==null?null:r.pending.trigger,r.status+water(u),true,true,set,null,streams,duties,solve);
+                r.pending==null?null:r.pending.trigger,r.status+water(u),true,true,set,accepted,streams,duties,solve);
     }
     record InstrumentSample(double value,long tick) {}
     ColumnUnit.Probes probes(com.wormzjl.icheme.science.column.v3.V3ColumnInspection accepted,SplitTable table){
@@ -351,6 +363,11 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         for(var p:table.products())if(u.station(p.port(),p.index())==null)throw new IllegalArgumentException("Product "+p.port()+" "+p.index()+" has no station");
         r.table=table;r.enthalpy=ColumnSolve.copy(enthalpy);publish(r,List.of(),null);
     }
+    /**
+     * The set points of unit {@code unit} were applied (W2): a refusal of the ones requested before is forgotten, so the next
+     * cycle asks one solve of what now stands. Memory only; the cycle runs on its schedule.
+     */
+    public void edited(long unit){var r=runs.get(unit);if(r!=null){r.refusedSetpoints=null;r.setpointRefusal=null;}}
     /** What the last cycle of unit {@code unit} and its solves found (W1), or none where it does not run. */
     public List<Condition.Active> conditions(long unit){var r=runs.get(unit);return r==null?List.of():r.conditions;}
     /**
@@ -361,13 +378,16 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         var list=new ArrayList<>(step);
         if(r.pending!=null)list.add(new Condition.Active(Condition.OFF_TABLE,r.pending.trigger.name().toLowerCase(Locale.ROOT)));
         if(r.table==null&&r.missing!=null)list.add(r.missing);
-        if(r.refusal!=null)list.add(r.refusal);
+        if(r.refused!=null)list.add(r.refused.notice());
+        if(r.setpointRefusal!=null)list.add(r.setpointRefusal);
         if(r.routed!=null)list.add(r.routed);
         if(unmetered!=null)list.add(unmetered);
         r.conditions=List.copyOf(list);
         r.status=ColumnStatus.line(r.table!=null,r.conditions,r.last==null?0:r.last.alpha(),r.fans,r.fanPower);
         r.phase=ColumnStatus.phase(r.table!=null,r.conditions);
     }
+    /** The set points the cycle runs on (W2): the table's accepted ones with the unit's feed rate; the requested ones before any table. */
+    private static Setpoints running(ColumnUnit u,SplitTable table){return table==null?u.setpoints():table.reference().setpoints().withFeedRate(u.setpoints().feedRate());}
 
     /** The next cycle deadline: the earliest cycle still ahead. A cycle already due waits for its ports' bookings, which run it
      * ({@link #booked}); one a cycle later looks again, since a port's island that stopped (a hold) books nothing. */
@@ -395,6 +415,10 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
      * Whether the cycle at {@code tick} may run: no solve applies there, or its outcome is in and applied now. A solve
      * applies at the second cycle after its trigger whenever it finishes, so a table never depends on the worker's timing;
      * the solve deadline bounds the wait (a deadline that expires is a failed solve).
+     *
+     * <p>A refused solve is not asked again on its own (W2): a refused set point stays refused while the unit's set points
+     * equal it (rule A for a refused short steam), a refused state while the state taken stays inside its bands. A solve the
+     * worker did not finish is asked once more after {@link #TRANSIENT_WAIT}; a second such failure is a refusal.</p>
      */
     private boolean applied(Run r,long tick) {
         var p=r.pending;if(p==null||p.applyAt()>tick)return true;
@@ -403,18 +427,25 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         var u=topology.column(r.unit);
         String refused=p.outcome instanceof ColumnSolve.Solved s?missingStation(u,s.table()):null;
         if(p.outcome instanceof ColumnSolve.Solved s&&refused==null) {
-            r.before=r.table;r.table=s.table();r.enthalpy=s.enthalpy();r.seed=s.seed();r.probes=probes(s.inspection(),s.table());r.rebuildProbes=false;r.tableTick=p.tick;r.applied=tick;r.solvedCondenser=s.solvedCondenser();r.failures=0;r.solvedBy=p.trigger;r.warm=s.route().contains("warm");
-            r.routed=s.note().isEmpty()?null:new Condition.Active(Condition.FEED_WATER_ROUTED,s.note());r.refusal=null;
+            r.before=r.table;r.table=s.table();r.enthalpy=s.enthalpy();r.seed=s.seed();r.probes=probes(s.inspection(),s.table());r.rebuildProbes=false;r.tableTick=p.tick;r.applied=tick;r.solvedCondenser=s.solvedCondenser();r.solvedBy=p.trigger;r.warm=s.route().contains("warm");
+            r.routed=s.note().isEmpty()?null:new Condition.Active(Condition.FEED_WATER_ROUTED,s.note());
+            r.refused=null;r.retried=false;
+            // The requested set points are in force: no refusal of them stands.
+            if(p.trigger==DriftBands.Trigger.SETPOINT||p.trigger==DriftBands.Trigger.START){r.refusedSetpoints=null;r.setpointRefusal=null;}
             // Only a solve of the short steam itself lifts rule A: one at A's own state says nothing of B's.
             if(p.trigger==DriftBands.Trigger.STEAM_RATIO)r.ruleA=false;
             return true;
         }
-        String reason=refused!=null?refused:((ColumnSolve.Failed)p.outcome).reason();
-        r.failures++;r.retryAt=tick+RETRY_TICKS[Math.min(r.failures,RETRY_TICKS.length)-1];
-        // A solve of a changed steam ratio failed (zero steam without a reboiler, the draw wall): rule A, the inputs cut together.
+        var failed=(ColumnSolve.Failed)(refused==null?p.outcome:new ColumnSolve.Failed(refused));
+        // The worker did not finish it (a deadline, a worker failure, a shutdown): once more after a wait, not a refusal.
+        if(failed.transientFailure()&&!r.retried){r.retried=true;r.waitUntil=tick+TRANSIENT_WAIT;return true;}
+        r.retried=false;
+        String text=r.table==null?Refusal.FIRST_SOLVE.text(failed.reason())
+                :String.format(Locale.ROOT,"the %s solve failed (%s), the table of %d s ago kept",p.trigger.name().toLowerCase(Locale.ROOT),failed.reason(),(tick-r.tableTick)/20);
+        if(p.trigger==DriftBands.Trigger.SETPOINT){r.refusedSetpoints=p.setpoints;r.setpointRefusal=new Condition.Active(Condition.SETPOINT_REFUSED,text);return true;}
+        r.refused=new Refused(p.trigger,p.state,p.held,new Condition.Active(Condition.SOLVE_REFUSED,text));
+        // A solve of a changed steam ratio was refused (zero steam without a reboiler, the draw wall): rule A, the inputs cut together.
         if(p.trigger==DriftBands.Trigger.STEAM_RATIO)r.ruleA=true;
-        String text=r.table==null?Refusal.FIRST_SOLVE.text(reason):String.format(Locale.ROOT,"the %s solve failed (%s), the table of %d s ago kept",p.trigger.name().toLowerCase(Locale.ROOT),reason,(tick-r.tableTick)/20);
-        r.refusal=new Condition.Active(p.trigger==DriftBands.Trigger.SETPOINT?Condition.SETPOINT_REFUSED:Condition.SOLVE_REFUSED,text);
         return true;
     }
     /** A product of {@code table} the unit has no outlet for, as a refusal, or null. */
@@ -423,23 +454,42 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         return null;
     }
     /**
-     * Asks a solve at the cycle at {@code tick} for {@code trigger}, of the state {@code taken}: one in flight per column, at
-     * most one per {@link #SOLVE_SPACING} except a setpoint edit or a start, none before a failure's retry time.
+     * Asks a solve at the cycle at {@code tick} for {@code trigger}, of the state {@code state} (null: the design's at the set
+     * rate): one in flight per column, at most one per {@link #SOLVE_SPACING} except a setpoint edit or a start, none before
+     * an unfinished solve's wait, none of a state inside the bands of a refused one. A SETPOINT or START solve takes the
+     * unit's requested set points, every other the accepted ones with the unit's feed rate (W2).
      */
-    private void request(Run r,ColumnUnit u,long tick,DriftBands.Trigger trigger,ColumnSolve.Taken taken) {
-        if(r.pending!=null||tick<r.retryAt)return;
+    private void request(Run r,ColumnUnit u,long tick,DriftBands.Trigger trigger,ColumnCycle.Step state) {
+        if(r.pending!=null||tick<r.waitUntil)return;
         boolean urgent=trigger==DriftBands.Trigger.SETPOINT||trigger==DriftBands.Trigger.START;
         if(!urgent&&tick<r.lastSolve+SOLVE_SPACING)return;
         var design=solves.design(u);
         if(design==null){if(r.table==null)r.missing=new Condition.Active(Condition.SOLVE_REFUSED,Refusal.NO_OPERATING_POINT.text());return;}
         r.missing=null;
-        if(taken==null)taken=designTaken(u,design);
-        var pending=new Pending(trigger,tick);
-        var job=new ColumnSolve.Job(trigger,design,u.setpoints(),taken,trigger==DriftBands.Trigger.START?null:r.seed,solves.condenser(u));
+        ColumnSolve.Taken taken;
+        if(state==null){taken=designTaken(u,design);state=state(taken);}else taken=taken(state,design);
+        var setpoints=urgent?u.setpoints():running(u,r.table);
+        double designDemand=u.setpoints().designFeedRate()*CYCLE_TICKS/20.0;
+        if(trigger!=DriftBands.Trigger.SETPOINT&&r.refused!=null&&inside(r.refused,setpoints,state,designDemand))return;
+        boolean[] held;if(r.table!=null)held=r.table.held();else{held=new boolean[weights.length];Arrays.fill(held,true);}
+        var pending=new Pending(trigger,tick,setpoints,DriftBands.reference(state,designDemand,setpoints,r.table==null?0:r.table.reference().enthalpySlope()),held);
+        var job=new ColumnSolve.Job(trigger,design,setpoints,taken,trigger==DriftBands.Trigger.START?null:r.seed,solves.condenser(u));
         // In flight before the submission: a solver may answer at once.
         r.pending=pending;
         if(!solves.submit(r.unit,job,outcome->done(r,pending,outcome))){r.pending=null;return;}
         r.lastSolve=tick;
+    }
+    /** Whether {@code state}, at set points {@code setpoints}, stands inside the bands of the refused state {@code refused}. */
+    private static boolean inside(Refused refused,Setpoints setpoints,ColumnCycle.Step state,double designDemand) {
+        return !refused.state().setpoints().intensivelyDiffers(setpoints)&&DriftBands.check(refused.state(),refused.held(),state,designDemand).isEmpty();
+    }
+    /** A state given as rates (the design's at a start) as one cycle's take, for the bands. */
+    private ColumnCycle.Step state(ColumnSolve.Taken taken) {
+        double seconds=CYCLE_TICKS/20.0;double[] feed=taken.feed();double total=0;
+        for(int i=0;i<feed.length;i++){feed[i]*=seconds;total+=feed[i];}
+        int water=weights.length-1;var steam=new ArrayList<Account>();
+        for(var s:taken.steam()){var n=new double[weights.length];n[water]=Math.max(0,s.rate()*seconds);steam.add(new Account(n,Double.isFinite(s.enthalpy())?s.enthalpy()*n[water]:0));}
+        return new ColumnCycle.Step(1,new Account(feed,Double.isFinite(taken.feedEnthalpy())?taken.feedEnthalpy()*total:0),steam,List.of(),0,new double[0],0,0,List.of());
     }
     /** A solve's outcome, on the server thread: a cycle waiting for it runs now. */
     private void done(Run r,Pending pending,ColumnSolve.Outcome outcome) {
@@ -504,7 +554,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         var totals=u.totals();
         if(r.table==null) {
             request(r,u,tick,DriftBands.Trigger.START,null);
-            publish(r,List.of(),levels(r,u,available,tick,false));return;
+            publish(r,List.of(),levels(r,u,u.setpoints(),available,tick,false));return;
         }
         // Old rebuildable state has no accepted probe snapshot. Rebuild on the ordinary engine deadline, keeping its table meanwhile.
         if(r.rebuildProbes)request(r,u,tick,DriftBands.Trigger.START,null);
@@ -520,8 +570,8 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
             room[k]=Math.max(0,design*t.perFeed(k)-s.account().total()-givenSince(r,s.device(),tick-FENCE_TICKS));
         }
         var energy=r.enthalpy;
-        // Rule A stays until a solve succeeds; at its retry time the cycle tries B again, and a still short steam asks the solve again.
-        if(r.ruleA&&r.pending==null&&tick>=r.retryAt)r.ruleA=false;
+        // The cycle runs on the accepted set points with the unit's feed rate (W2): a requested one waits for its solve.
+        var set=running(u,t);double designDemand=u.setpoints().designFeedRate()*CYCLE_TICKS/20.0;
         // A water-cooled condenser rejects no more than its water has room for: the heat owed as of the fence against its hold.
         // Its shells in parallel share the duty equally (S3b), so the fullest shell's water bounds the whole: each holds its share.
         double condenserRoom=Double.POSITIVE_INFINITY;var sides=waterSides(u);
@@ -536,7 +586,11 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
             condenserRoom=CONDENSER_HOLD_SECONDS*Math.abs(t.condenserWaterPerFeed())*u.setpoints().designFeedRate()-sides.size()*owed;
         }
         // An air condenser holds at most what its built banks take with their fans at full speed (U2): past it, the column is limited.
-        var step=ColumnCycle.step(t,u.setpoints(),CYCLE_TICKS/20.0,feedAvailable,steam,room,condenserRoom,t.airFeed(u.airSurface()),(k,n)->{double e=0;var h=energy[k];for(int i=0;i<n.length;i++)e+=n[i]*h[i];return e;},r.ruleA);
+        ColumnCycle.ProductEnergy priced=(k,n)->{double e=0;var h=energy[k];for(int i=0;i<n.length;i++)e+=n[i]*h[i];return e;};
+        var b=ColumnCycle.step(t,set,CYCLE_TICKS/20.0,feedAvailable,steam,room,condenserRoom,t.airFeed(u.airSurface()),priced,false);
+        // Rule A stays while the steam is short and its shortage inside the bands of the refused state; then rule B tries once more.
+        if(r.ruleA&&(Condition.find(b.conditions(),Condition.STEAM_SHORT)==null||r.refused==null||!inside(r.refused,set,b,designDemand)))r.ruleA=false;
+        var step=r.ruleA?ColumnCycle.step(t,set,CYCLE_TICKS/20.0,feedAvailable,steam,room,condenserRoom,t.airFeed(u.airSurface()),priced,true):b;
         r.last=step;
         // The fans at the feed the cycle took, and their power by the cube of their speed (HeatSides.fanPower).
         r.fans=t.fans(u.airSurface(),step.feedMoles()/(CYCLE_TICKS/20.0));
@@ -544,8 +598,8 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         if(step.tripped()) {
             // The model has no steady state for this input (a capability limit): the inlets close, a solve of the state the
             // column was given may lift it.
-            if(feedAvailable.total()>0){var source=solves.design(u);if(source!=null)request(r,u,tick,DriftBands.Trigger.CLOSURE,attempted(u,feedAvailable,steam,source));}
-            publish(r,step.conditions(),levels(r,u,available,tick,false));return;
+            if(feedAvailable.total()>0)request(r,u,tick,DriftBands.Trigger.CLOSURE,attempted(set,feedAvailable,steam));
+            publish(r,step.conditions(),levels(r,u,set,available,tick,false));return;
         }
         replace(stations,Port.FEED,0,a->a.less(step.feed()));
         for(int j=0;j<steam.size();j++){var taken=step.steam().get(j);replace(stations,Port.STEAM,j,a->a.less(taken));}
@@ -571,31 +625,33 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
             r.water.addLast(new Duty(tick,Math.max(0,-step.condenser()*t.waterShare())/(CYCLE_TICKS/20.0)/sides.size()));
             while(r.water.size()>1&&r.water.peekFirst().tick()<tick-FENCE_TICKS-KEEP_TICKS)r.water.removeFirst();
         }
-        var unmetered=levels(r,u,available,tick,true);
-        // A new solve where the state taken left the table's bands, or the setpoints moved (plan section 6).
-        DriftBands.Trigger trigger=u.setpoints().intensivelyDiffers(t.reference().setpoints())?DriftBands.Trigger.SETPOINT
-                :DriftBands.check(t,step,u.setpoints().designFeedRate()*CYCLE_TICKS/20.0).map(DriftBands.Crossing::trigger).orElse(null);
-        if(trigger!=null&&step.feedMoles()>0){var source=solves.design(u);if(source!=null)request(r,u,tick,trigger,taken(step,source));}
+        var unmetered=levels(r,u,set,available,tick,true);
+        // A refusal of set points the player has since moved from is forgotten: what now stands is solved once.
+        if(r.refusedSetpoints!=null&&u.setpoints().intensivelyDiffers(r.refusedSetpoints)){r.refusedSetpoints=null;r.setpointRefusal=null;}
+        // A new solve where the state taken left the table's bands, or the requested set points moved from the accepted ones
+        // and were not refused (plan section 6, W2).
+        DriftBands.Trigger trigger=r.refusedSetpoints==null&&u.setpoints().intensivelyDiffers(t.reference().setpoints())?DriftBands.Trigger.SETPOINT
+                :DriftBands.check(t,step,designDemand).map(DriftBands.Crossing::trigger).orElse(null);
+        if(trigger!=null&&step.feedMoles()>0)request(r,u,tick,trigger,step);
         publish(r,step.conditions(),unmetered);
     }
-    /** The state a tripped cycle was given: the feed it holds at the set rate, the steam at its ratios. */
-    private ColumnSolve.Taken attempted(ColumnUnit u,Account feed,List<Account> steam,V3ColumnInput design) {
-        double seconds=CYCLE_TICKS/20.0,demand=u.setpoints().feedRate()*seconds;
+    /** The state a tripped cycle was given: the feed it holds at the set rate, the steam at its ratios (both of {@code set}). */
+    private ColumnCycle.Step attempted(Setpoints set,Account feed,List<Account> steam) {
+        double seconds=CYCLE_TICKS/20.0,demand=set.feedRate()*seconds;
         var feedTaken=feed.part(Math.min(1,demand/feed.total()));
-        var steamTaken=new ArrayList<Account>();double[] ratios=u.setpoints().steamPerFeed();
+        var steamTaken=new ArrayList<Account>();double[] ratios=set.steamPerFeed();
         for(int j=0;j<steam.size();j++){var s=steam.get(j);double want=ratios[j]*feedTaken.total();steamTaken.add(s.total()>0?s.part(Math.min(1,want/s.total())):s);}
-        var none=new double[0];
-        return taken(new ColumnCycle.Step(1,feedTaken,steamTaken,List.of(),0,none,0,0,List.of()),design);
+        return new ColumnCycle.Step(1,feedTaken,steamTaken,List.of(),0,new double[0],0,0,List.of());
     }
     /** Each inlet's level after the cycle at {@code tick} and the rate the column then demands of it (none: {@code demanding} false);
      * every port's island wakes where the plans this cycle dates take effect, the tick plus the fence. */
-    private Condition.Active levels(Run r,ColumnUnit u,Map<Long,Account> available,long tick,boolean demanding) {
+    private Condition.Active levels(Run r,ColumnUnit u,Setpoints set,Map<Long,Account> available,long tick,boolean demanding) {
         Condition.Active unmetered=null;
         for(var s:u.stations()) {
             if(s.device()==0)continue;
             wakes.computeIfAbsent(tick+FENCE_TICKS,t->new TreeSet<>()).add(s.device());
             if(!s.port().inlet())continue;
-            double rate=!demanding?0:s.port()==Port.FEED?u.setpoints().feedRate():u.setpoints().feedRate()*u.setpoints().steamPerFeed()[s.index()];
+            double rate=!demanding?0:s.port()==Port.FEED?set.feedRate():set.feedRate()*set.steamPerFeed()[s.index()];
             // An empty account has no composition yet: its valve meters the design's feed, or water for the steam (not the
             // port's own contents, which before the first arrival are whatever filled the pipe).
             double molarMass=molar(available.get(s.device()).moles());

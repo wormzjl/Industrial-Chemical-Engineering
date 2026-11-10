@@ -814,7 +814,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         owned();if(closed)return "the fluid world is closed";
         var u=column(master);if(u==null)return "the column has not run yet";
         if(!compatible(u.setpoints(),value))return "the set points do not fit the column's design";
-        topology.column(u.withSetpoints(value));
+        topology.column(u.withSetpoints(value));columns.edited(u.id());
         IChemE.LOGGER.info("column status=SETPOINTS master={},{},{} unit={}",master.x(),master.y(),master.z(),u.id());
         return null;
     }

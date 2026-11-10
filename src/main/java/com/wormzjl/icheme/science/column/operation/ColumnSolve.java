@@ -126,8 +126,15 @@ public final class ColumnSolve {
         }
     }
 
-    /** A refused or failed solve, and why. */
-    public record Failed(String reason) implements Outcome {
+    /**
+     * A refused or failed solve, and why; {@code transientFailure} where the worker did not finish it (a deadline, a full
+     * queue, a worker failure, a shutdown): it says nothing of the state, which is asked once more (W2).
+     */
+    public record Failed(String reason, boolean transientFailure) implements Outcome {
+        /** The solve refused the state. */
+        public Failed(String reason) {
+            this(reason, false);
+        }
     }
 
     /**
