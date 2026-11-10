@@ -49,7 +49,7 @@ class OpenTankRuntimeTest {
         long island=w.registry.owner(tank);var snapshot=w.coordinator.observe(island);
         var node=snapshot.graph().reservoirs().stream().filter(n->n.id()==tank).findFirst().orElseThrow();
         assertTrue(node.inventory().open(),"the island keeps the open flag");
-        assertEquals(PhaseLayout.AMBIENT_PRESSURE,node.state().pressure(),1e-6*PhaseLayout.AMBIENT_PRESSURE,"the surface stands at the ambient pressure");
+        assertEquals(PhaseLayout.atmosphere(2),node.state().pressure(),1e-6*PhaseLayout.AMBIENT_PRESSURE,"the surface stands at the atmosphere of its height (C1 B)");
         double held=node.state().liquidVolume()+node.state().waterVolume();
         assertTrue(held>=2-1e-6&&held<2.5,"the tank stands at its overflow: "+held+" m3 of 2; "+snapshot.status());
         assertTrue(snapshot.status().startsWith("STEADY"),"a steadily venting, overflowing tank certifies: "+snapshot.status());

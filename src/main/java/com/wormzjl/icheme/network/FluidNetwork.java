@@ -61,9 +61,11 @@ import java.util.*;
  * ({@link NoiseWatch}) and its answer, the loudest noise sources near the player ({@link NoiseSources}); a liquid valve's
  * cavitating and flashing kinds came within the same batch, and the steam ejector's (batch 2026-11-10-steam-ejector-flow,
  * built on it) before it merges.</p>
+ * <p>{@code fluid-23} (batch 2026-11-10-chimney): a chimney's page view ({@link FluidView.Chimney}), the chimneys' watch
+ * ({@link Watch#CHIMNEYS}) and their published plumes ({@link ChimneyState}).</p>
  */
 public final class FluidNetwork {
-    public static final String PROTOCOL="fluid-22";
+    public static final String PROTOCOL="fluid-23";
     private static final Gson JSON=new Gson();
     public static final int MAX_JSON=262144;
     public static final int MAX_EDIT_JSON=4096;
@@ -530,6 +532,8 @@ public final class FluidNetwork {
         public static final Type<Watch> TOWERS=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"tower_watch"));
         /** The fired heaters, at their fluid cells, their radiant coils' (batch 2026-11-10-custom-shader-system, W5): their flues. */
         public static final Type<Watch> HEATERS=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"heater_watch"));
+        /** The chimneys, at their tips' cells (batch 2026-11-10-chimney): their plumes and smoke. */
+        public static final Type<Watch> CHIMNEYS=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"chimney_watch"));
         public Watch{Objects.requireNonNull(type);watch=List.copyOf(watch);unwatch=List.copyOf(unwatch);validate(watch);validate(unwatch);}
         static StreamCodec<RegistryFriendlyByteBuf,Watch> codec(Type<Watch> type){return new StreamCodec<>() {
             public Watch decode(RegistryFriendlyByteBuf b){return new Watch(type,targets(b),targets(b));}
@@ -617,6 +621,22 @@ public final class FluidNetwork {
         public static final StreamCodec<RegistryFriendlyByteBuf,HeaterFlue> STREAM_CODEC=new StreamCodec<>() {
             public HeaterFlue decode(RegistryFriendlyByteBuf b){return new HeaterFlue(readTarget(b),b.readFloat(),b.readFloat(),b.readFloat(),b.readFloat(),b.readUnsignedByte());}
             public void encode(RegistryFriendlyByteBuf b,HeaterFlue p){writeTarget(b,p.target);b.writeFloat(p.firing);b.writeFloat(p.stackTemperature);b.writeFloat(p.flueFlow);b.writeFloat(p.waterShare);b.writeByte(p.fuel);}
+        };
+        @Override public Type<? extends CustomPacketPayload> type(){return TYPE;}
+    }
+    /**
+     * Server to client: a chimney's release at its tip (batch 2026-11-10-chimney): its gas flow, kg/s, at its temperature, K,
+     * with its water, kg per kg of dry gas, its solids, kg/s, the smoke's opacity (0 to 1, {@code Chimney.opacity}) and its
+     * exit velocity, m/s. Watched at the tip's cell ({@link Watch#CHIMNEYS}). No process inventory.
+     */
+    public record ChimneyState(Target target,float flow,float temperature,float waterShare,float solids,float opacity,float exitVelocity) implements CustomPacketPayload {
+        public ChimneyState{Objects.requireNonNull(target);
+            if(!(flow>=0&&Float.isFinite(flow))||!(temperature>0&&temperature<3000)||!(waterShare>=0&&waterShare<10)||!(solids>=0&&Float.isFinite(solids))||!(opacity>=0&&opacity<=1)||!(exitVelocity>=0&&exitVelocity<=1000))
+                throw new IllegalArgumentException("Invalid chimney state");}
+        public static final Type<ChimneyState> TYPE=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"chimney_state"));
+        public static final StreamCodec<RegistryFriendlyByteBuf,ChimneyState> STREAM_CODEC=new StreamCodec<>() {
+            public ChimneyState decode(RegistryFriendlyByteBuf b){return new ChimneyState(readTarget(b),b.readFloat(),b.readFloat(),b.readFloat(),b.readFloat(),b.readFloat(),b.readFloat());}
+            public void encode(RegistryFriendlyByteBuf b,ChimneyState p){writeTarget(b,p.target);b.writeFloat(p.flow);b.writeFloat(p.temperature);b.writeFloat(p.waterShare);b.writeFloat(p.solids);b.writeFloat(p.opacity);b.writeFloat(p.exitVelocity);}
         };
         @Override public Type<? extends CustomPacketPayload> type(){return TYPE;}
     }
@@ -799,6 +819,11 @@ public final class FluidNetwork {
             if(context.player() instanceof ServerPlayer player)FluidWorldAuthority.find(player.server).ifPresent(world->world.watchHeaters(player,p.watch,p.unwatch));
         });
         fluid.playToClient(HeaterFlue.TYPE,HeaterFlue.STREAM_CODEC,(p,context)->com.wormzjl.icheme.client.fx.state.ProcessStates.accept(p));
+        // fluid-23 (batch 2026-11-10-chimney): the chimneys' watch and their release.
+        fluid.playToServer(Watch.CHIMNEYS,Watch.codec(Watch.CHIMNEYS),(p,context)->{
+            if(context.player() instanceof ServerPlayer player)FluidWorldAuthority.find(player.server).ifPresent(world->world.watchChimneys(player,p.watch,p.unwatch));
+        });
+        fluid.playToClient(ChimneyState.TYPE,ChimneyState.STREAM_CODEC,(p,context)->com.wormzjl.icheme.client.fx.state.ProcessStates.accept(p));
         // fluid-22 (PROCESS_SOUNDS_REVIEW.md S2 A): the noise watch and its answer.
         fluid.playToServer(NoiseWatch.TYPE,NoiseWatch.STREAM_CODEC,(p,context)->{
             if(context.player() instanceof ServerPlayer player)FluidWorldAuthority.find(player.server).ifPresent(world->world.watchNoise(player));
@@ -844,6 +869,7 @@ public final class FluidNetwork {
     public static void sendStill(ServerPlayer player,StillState state){PacketDistributor.sendToPlayer(player,state);}
     public static void sendTower(ServerPlayer player,TowerPlume state){PacketDistributor.sendToPlayer(player,state);}
     public static void sendHeater(ServerPlayer player,HeaterFlue state){PacketDistributor.sendToPlayer(player,state);}
+    public static void sendChimney(ServerPlayer player,ChimneyState state){PacketDistributor.sendToPlayer(player,state);}
     public static void sendNoise(ServerPlayer player,NoiseSources sources){PacketDistributor.sendToPlayer(player,sources);}
     /** Client: the noise watch's poll (fluid-22). */
     public static void requestNoise(){PacketDistributor.sendToServer(new NoiseWatch());}

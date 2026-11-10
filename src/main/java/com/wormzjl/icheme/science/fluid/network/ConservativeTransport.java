@@ -667,7 +667,7 @@ public final class ConservativeTransport {
             catch(SparseNewton.Nonconvergence failure){throw failure.at(reservoir.id());}
             double moved=PhaseLayout.bagVolume(states.get(node),capacity)-workFrom;
             if(moved!=0) {
-                double work=PhaseLayout.AMBIENT_PRESSURE*moved;energy[node]-=work;externalEnergy-=work;
+                double work=reservoir.inventory().ambient()*moved;energy[node]-=work;externalEnergy-=work;
                 boundaries.add(new BoundaryTransfer(reservoir.id(),new double[components],-work));
             }
         }

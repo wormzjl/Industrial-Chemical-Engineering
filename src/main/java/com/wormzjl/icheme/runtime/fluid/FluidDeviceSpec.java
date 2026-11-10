@@ -71,7 +71,8 @@ public record FluidDeviceSpec(double volume,double temperature,double pressure,d
         // Decision D54: a placed reservoir holds nothing; it fills from what its connections deliver.
         if(kind==PassiveNetwork.NodeKind.RESERVOIR){var n=PassiveNetwork.emptyVessel(device.id(),device.position().y(),volume,levelHeight,open,model);return new PassiveNetwork.Reservoir(n.id(),n.elevation(),n.state(),n.kind(),new PassiveNetwork.Inventory(volume,n.inventory().moles(),0,n.inventory().solids(),levelHeight,open,geometry,null,tower));}
         FluidThermodynamics.State state;
-        if(kind==PassiveNetwork.NodeKind.VOID)state=model.initialNitrogenCharge(volume,temperature,pressure,checkpoint);
+        // C1 B (batch 2026-11-10-chimney): a sink open to the air stands at the atmosphere of its own height, whatever its spec says.
+        if(kind==PassiveNetwork.NodeKind.VOID)state=model.initialNitrogenCharge(volume,temperature,device.atmospheric()?com.wormzjl.icheme.science.fluid.solver.PhaseLayout.atmosphere(device.position().y()):pressure,checkpoint);
         else {
             var n=composition.clone();var unit=model.flashTP(temperature,pressure,n,checkpoint);
             var stock=solids.unitMass(model.solids);double liquidVolume=unit.liquidVolume()+unit.waterVolume();

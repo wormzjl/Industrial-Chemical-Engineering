@@ -27,7 +27,9 @@ public final class FlowsheetCatalog {
             TRICKLE = drawn("trickle_bed"), EBULLATED = drawn("ebullated_bed"), FCC = drawn("fcc_converter"), COKER = drawn("delayed_coker"), CFB = drawn("cfb_boiler"),
             FLUID_BED = drawn("fluid_bed_gasifier"), GRATE = drawn("grate_boiler"), FIXED_BED = drawn("fixed_bed_gasifier"), FLARE = modelled("flare"),
             // The batch still (batch 2026-11-09-batch-distiller): drawn only from W2, modelled since W7 (BatchStillUnit).
-            STILL = modelled("batch_still");
+            STILL = modelled("batch_still"),
+            // The chimneys (batch 2026-11-10-chimney): one tile for both forms (ChimneyUnit).
+            CHIMNEY = modelled("chimney");
 
     private FlowsheetCatalog() {
     }
@@ -70,6 +72,7 @@ public final class FlowsheetCatalog {
             case INDUCED_DRAFT_COOLING_TOWER, NATURAL_DRAFT_COOLING_TOWER -> COOLING_TOWER;
             case FLARE_STACK -> FLARE;
             case BATCH_STILL -> STILL;
+            case STEEL_STACK, BRICK_CHIMNEY -> CHIMNEY;
         };
     }
 
@@ -87,6 +90,7 @@ public final class FlowsheetCatalog {
             case INDUCED_DRAFT_COOLING_TOWER, NATURAL_DRAFT_COOLING_TOWER -> COOLING_TOWER;
             case FLARE_STACK -> FLARE;
             case BATCH_STILL -> STILL;
+            case STEEL_STACK, BRICK_CHIMNEY -> CHIMNEY;
             case PUMP -> PUMP;
             case COMPRESSOR, CENTRIFUGAL_COMPRESSOR -> COMPRESSOR;
             case EJECTOR -> EJECTOR;

@@ -14,6 +14,7 @@ Status words:
 
 | Batch | Purpose | Status |
 |---|---|---|
+| [2026-11-10-chimney](2026-11-10-chimney/README.md) | Steel and brick chimneys releasing gas and particulates to the atmosphere | In progress since 2026-11-10 |
 | [2026-11-10-steam-ejector-flow](2026-11-10-steam-ejector-flow/README.md) | Steam ejector as a flow element (motive steam through its throat) and its jet sound | In progress since 2026-11-10 |
 | [2026-11-10-rigid-reservoir](2026-11-10-rigid-reservoir/README.md) | Closed vessels rigid once filled (D54 bag only until then) | In progress since 2026-11-10 |
 | [2026-11-10-custom-shader-system](2026-11-10-custom-shader-system/README.md) | Shader-pack-safe effects (flare, plumes, still), normal-mapped instrument wiring first, config switch | In progress since 2026-11-10 |

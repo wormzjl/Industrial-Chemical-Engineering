@@ -209,6 +209,12 @@ public final class SheetEditor {
             }
             case "mixer" -> p.addProperty("inlets", 2);
             case "flare" -> p.addProperty("tip", com.wormzjl.icheme.science.flowsheet.unit.FlareUnit.TIP);
+            case "chimney" -> {
+                p.addProperty("form", "steel");
+                p.addProperty("diameter", com.wormzjl.icheme.science.flowsheet.unit.ChimneyUnit.DIAMETER);
+                p.addProperty("height", com.wormzjl.icheme.science.flowsheet.unit.ChimneyUnit.HEIGHT);
+                p.addProperty("nearby", com.wormzjl.icheme.science.flowsheet.unit.ChimneyUnit.NEARBY);
+            }
             case "batch_still" -> {
                 p.addProperty("volume", com.wormzjl.icheme.science.flowsheet.unit.BatchStillUnit.VOLUME);
                 p.addProperty("heater", "solid");

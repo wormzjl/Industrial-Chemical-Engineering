@@ -162,7 +162,13 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
         // An elevated flare stack (batch 2026-11-09-flare-stack).
         FLARE_STACK,
         // A batch still: a fired or electric copper pot, a worm tub or a small column (batch 2026-11-09-batch-distiller).
-        BATCH_STILL;
+        BATCH_STILL,
+        // Chimneys (batch 2026-11-10-chimney, owner C3 A): a self-supporting steel stack and a tapered brick or concrete
+        // chimney with a steel liner, releasing their gas and its solids to the atmosphere.
+        STEEL_STACK, BRICK_CHIMNEY;
+
+        /** A chimney ({@code science.fluid.network.Chimney}): a steel stack or a brick chimney. */
+        public boolean chimney() { return this == STEEL_STACK || this == BRICK_CHIMNEY; }
 
         public boolean coolingTower() { return this==INDUCED_DRAFT_COOLING_TOWER || this==NATURAL_DRAFT_COOLING_TOWER; }
 
@@ -261,7 +267,9 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
         FLARE_GAS(PortClass.BULK),
         // A batch still (batch 2026-11-09-batch-distiller): its pot's charge, its condenser's distillate (liquid first, the
         // vapour to its VENT) and cooling water in and out.
-        CHARGE(PortClass.BULK), DISTILLATE(PortClass.LIQUID), WATER_INLET(PortClass.BULK), WATER_OUTLET(PortClass.BULK);
+        CHARGE(PortClass.BULK), DISTILLATE(PortClass.LIQUID), WATER_INLET(PortClass.BULK), WATER_OUTLET(PortClass.BULK),
+        // A chimney's gas inlet (batch 2026-11-10-chimney): all it receives leaves through the stack.
+        STACK_GAS(PortClass.BULK);
 
         public final PortClass port;
 
@@ -834,7 +842,7 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
 
     /** Registers with the fluid engine when the whole structure has been built: a steam turbine too (W3, reading A37), a batch still (batch 2026-11-09-batch-distiller, W3), a steam ejector (batch 2026-11-10-steam-ejector-flow). */
     public boolean fluidDevice() {
-        return reservoir() || kind.mover() || kind == Kind.STEAM_TURBINE || kind == Kind.EJECTOR || kind == Kind.FLARE_STACK || kind == Kind.BATCH_STILL || HeatSides.unit(kind) != null;
+        return reservoir() || kind.mover() || kind == Kind.STEAM_TURBINE || kind == Kind.EJECTOR || kind == Kind.FLARE_STACK || kind == Kind.BATCH_STILL || kind.chimney() || HeatSides.unit(kind) != null;
     }
 
     /** A vessel's skirt; a designed shape's supports are its own parts. */

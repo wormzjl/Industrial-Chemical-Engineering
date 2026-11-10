@@ -81,7 +81,7 @@ class OpenTankTest extends PortFixture {
         var run=drive("vent",graph,5,3);
         var after=run.last().reservoirs().getFirst();
         assertTrue(after.inventory().open(),"a solve keeps the open flag");
-        assertEquals(P0,after.state().pressure(),1e-6*P0,"the surface stands at the ambient pressure");
+        assertEquals(PhaseLayout.atmosphere(1),after.state().pressure(),1e-6*P0,"the surface stands at the atmosphere of its height (C1 B)");
         double vented=0;for(int s=0;s<run.slices().size();s++)vented-=run.booked(Kind.VENT,s,nitrogen);
         assertTrue(vented>=.99*gas,"the nitrogen gas vents: "+vented+" of "+gas+" mol");
         assertEquals(start.waterLiquid(),after.state().waterLiquid()+after.state().waterVapor(),1e-3*start.waterLiquid(),"the water stays");
@@ -98,7 +98,7 @@ class OpenTankTest extends PortFixture {
         var nodes=List.of(openTank(1,0,water(2),10,4),new PassiveNetwork.Reservoir(2,0,feed,PassiveNetwork.NodeKind.GENERATOR));
         var graph=new PassiveNetwork(nodes,List.of(pipe(90,1,0,line(5,.025),PhasePort.BULK,PhasePort.LIQUID)));
         var run=drive("feed",graph,5,8);
-        for(var g:run.graphs())assertEquals(P0,tank(g).pressure(),1e-6*P0,"the open tank stays at the ambient pressure");
+        for(var g:run.graphs())assertEquals(PhaseLayout.atmosphere(4),tank(g).pressure(),1e-6*P0,"the open tank stays at the atmosphere of its height (C1 B)");
         var last=run.slices().getLast();int slice=run.slices().size()-1;
         var transfer=last.pipeTransfers().stream().filter(t->t.pipeId()==90).findFirst().orElseThrow().forward();
         double arrived=0;for(var p:transfer.phaseMoles())arrived+=p[nitrogen];
@@ -132,7 +132,7 @@ class OpenTankTest extends PortFixture {
         double vented=-run.booked(Kind.VENT,slice,nitrogen),kept=run.last().reservoirs().getFirst().inventory().moles()[nitrogen];
         assertTrue(arrived>0&&kept>0,"nitrogen arrives and is held: "+arrived+", "+kept);
         assertEquals(arrived,vented,.1*arrived,"the steady vent is the arriving nitrogen");
-        for(var g:run.graphs())assertEquals(P0,tank(g).pressure(),1e-6*P0,"at the ambient pressure");
+        for(var g:run.graphs())assertEquals(PhaseLayout.atmosphere(1),tank(g).pressure(),1e-6*P0,"at the atmosphere of its height (C1 B)");
     }
 
     /** A stabilised crude (the network package's heavy cuts) in an open tank vents nothing and holds no gas. */
@@ -191,7 +191,7 @@ class OpenTankTest extends PortFixture {
         assertEquals(in,spilled,.02*in,"the steady spill is the inflow");
         double level=OpenVessel.condensedVolume(tank(run.last()));double top=OpenVessel.topVolume(run.last().reservoirs().getFirst().inventory());
         assertTrue(level>=top-1e-9&&level<top+in/997,"the level stands at the shell top: "+level+" of "+top+" m3");
-        assertEquals(P0,tank(run.last()).pressure(),1e-6*P0,"an open tank is never pressurised");
+        assertEquals(PhaseLayout.atmosphere(1),tank(run.last()).pressure(),1e-6*P0,"an open tank is never pressurised (C1 B: the atmosphere of its height)");
         System.out.println("OPEN_TANK_SPILL in="+in+" spilled="+spilled+" level="+level+" top="+top);
     }
 }

@@ -305,6 +305,8 @@ public final class SheetLayout {
             case "mixer" -> in ? new int[]{0, stacked(order, ports.size() - 1, h), L} : new int[]{w, h / 2, R};
             // A flare's gas enters its riser near the foot.
             case "flare" -> new int[]{0, h - 8, L};
+            // A chimney's gas enters its foot.
+            case "chimney" -> new int[]{0, h - 8, L};
             case "splitter" -> in ? new int[]{0, h / 2, L} : new int[]{w, stacked(order, ports.size() - 1, h), R};
             // A batch still (batch 2026-11-09-batch-distiller, W7): the charge into the pot, the drain under the firebox, the vent on the worm
             // tub, the cuts down the tub's side.

@@ -129,7 +129,12 @@ public final class PhysicalFluidTopology {
             boolean fired=kind==TopologyCompiler.Kind.VOID&&heat==null&&control instanceof FlowControl.ControlValve fuel&&fuel.source()==FlowControl.ValveSource.STILL;
             if(fired&&(onPortLane||ports.size()!=1||ports.getFirst().port!=PassiveNetwork.PhasePort.BULK||ports.getFirst().role!=ConnectionRole.VESSEL))
                 throw new IllegalArgumentException("A still's burners are a void with one bulk port and its fuel valve");
-            boolean sink=burner||flare||outlet||fired;
+            // A chimney's tip (batch 2026-11-10-chimney): a passive void at the stack's top cell with one bulk port at its gas
+            // inlet; its geometry is the stack, the run into it carries it (its column, friction and exit loss).
+            boolean chimney=kind==TopologyCompiler.Kind.VOID&&heat==null&&control instanceof FlowControl.Passive&&!onPortLane&&ports.size()==1;
+            if(chimney&&(ports.getFirst().port!=PassiveNetwork.PhasePort.BULK||ports.getFirst().role!=ConnectionRole.VESSEL||ports.getFirst().cell.y()>position.y()))
+                throw new IllegalArgumentException("A chimney is a void at its stack's top with one bulk port at or below it");
+            boolean sink=burner||flare||outlet||fired||chimney;
             if(position.lane()==0||onPortLane?slots!=0||points!=0:!laneFits(position.lane(),slots)||(points>>>60)!=0)throw new IllegalArgumentException("Invalid rack lane "+position.lane()+" of "+slots+" positions");
             if(suspendedBy<0||onPortLane&&suspendedBy!=0)throw new IllegalArgumentException("Invalid column suspension");
             if(held&&onPortLane)throw new IllegalArgumentException("A column's port has no block to hold");
@@ -210,6 +215,10 @@ public final class PhysicalFluidTopology {
         public boolean burner(){return kind==TopologyCompiler.Kind.VOID&&heat!=null;}
         /** Whether this is a flare's tip (batch 2026-11-09-flare-stack): the run into it carries its tip limit. */
         public boolean flare(){return kind==TopologyCompiler.Kind.VOID&&heat==null&&control instanceof FlowControl.ControlValve v&&v.source()==FlowControl.ValveSource.FLARE;}
+        /** Whether this is a chimney's tip (batch 2026-11-10-chimney): the run into it carries its stack, {@link #geometry}. */
+        public boolean chimney(){return kind==TopologyCompiler.Kind.VOID&&heat==null&&control instanceof FlowControl.Passive&&position.lane()!=PORT_LANE&&ports.size()==1;}
+        /** A sink open to the atmosphere (C1 B): a flare's or a chimney's tip, at {@code PhaseLayout.atmosphere} of its own height. */
+        public boolean atmospheric(){return flare()||chimney();}
         /** A burner or a flare: a sink whose built-in valve sits on the run into it. */
         public boolean valvedSink(){return burner()||flare()||stillBurners();}
         /** Whether this is a liquid-fired still's burners (batch 2026-11-09-batch-distiller, W4): the run into it carries the still's fuel valve. */
@@ -584,6 +593,10 @@ public final class PhysicalFluidTopology {
                         mapViews(views,run,linkOwner,linkDirections,physical,islandIndex,pipeId,burnerEnd);
                     }
                     continue;
+                }
+                if(start!=null&&start.chimney()||end!=null&&end.chimney()) {
+                    // A chimney's stack (batch 2026-11-10-chimney) is the last section of the run into its tip.
+                    var all=new ArrayList<>(sections);if(end!=null&&end.chimney())all.add(end.geometry());else all.addFirst(start.geometry());sections=List.copyOf(all);
                 }
                 if(fromStart&&fromEnd) {
                     int middle=reservoirs.size();reservoirs.add(new PassiveNetwork.Reservoir(virtual--,.5*(reservoirs.get(a).elevation()+reservoirs.get(b).elevation()),seed,PassiveNetwork.NodeKind.JUNCTION));

@@ -116,7 +116,7 @@ class CoolingTowerTest {
         }
     }
     @Test void aStandingBasinBooksSensibleHeatWithoutWaterLoss(){
-        var tower=CoolingTower.induced(8,2,1,1);var node=basin(1,tower,water(308.15,101325,64));
+        var tower=CoolingTower.induced(8,2,1,1);var node=basin(1,tower,water(308.15,PhaseLayout.atmosphere(CoolingTower.BASIN_DEPTH),64));
         var result=step(new PassiveNetwork(List.of(node),List.of()));
         assertEquals(0,result.externalMoles()[water()]);
         assertTrue(result.states().getFirst().temperature()<node.state().temperature());

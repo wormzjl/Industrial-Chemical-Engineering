@@ -101,10 +101,12 @@ import java.util.function.Function;
  * <p>41 (batch 2026-11-09-furnace-fuel-power): a fired coil carries its fuel and air limit after its partner.</p>
  * <p>42 (batch 2026-11-09-batch-distiller, W3): a pool may be a still's fired pot (partner 0) and carries its column's head
  * (recoveries and return enthalpy) after its active share.</p>
+ * <p>44 (batch 2026-11-10-chimney, C1 B): no field changed; sinks open to the air and open vessels stand at the atmosphere
+ * of their height, so a state written under the constant atmosphere is dropped and rebuilt from the facts.</p>
  */
 public final class FluidCheckpointCodec {
     /** The state format: the core record's {@code StateFormat} and every unit's state section. */
-    public static final int VERSION=43;
+    public static final int VERSION=44;
     /** The most wall cells a saved heat side holds (crossflow 64, Standard 8, an air cooler's flat wall 1). */
     private static final int MAXIMUM_WALL_CELLS=64;
     /** The envelope: the core record's frame, the unit header and the section layout. Frozen. */
