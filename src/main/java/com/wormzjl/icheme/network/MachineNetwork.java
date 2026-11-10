@@ -45,7 +45,7 @@ import org.jetbrains.annotations.Nullable;
  * get no compatibility work (AGENTS.md).
  */
 public final class MachineNetwork {
-    public static final String PROTOCOL = "machine-3";
+    public static final String PROTOCOL = "machine-4";
     /** The highest speed share a variable drive or a turbine's governor takes, and the highest creative motor speed (rpm) and power limit (W). */
     public static final double MAXIMUM_SHARE = 1.1, MAXIMUM_RPM = 1e5, MAXIMUM_LIMIT = 1e9;
 
@@ -75,6 +75,12 @@ public final class MachineNetwork {
         for (double d : new double[]{v.steamFlow(), v.inletPressure(), v.exhaustPressure()}) b.writeDouble(d);
         b.writeBoolean(v.coupling() != null);
         if (v.coupling() != null) for (double d : new double[]{v.coupling().createSpeed(), v.coupling().stress(), v.coupling().impact(), v.coupling().trainSpeed(), v.coupling().wattsPerStress()}) b.writeDouble(d);
+        b.writeBoolean(v.fuel() != null);
+        if (v.fuel() != null) {
+            var f = v.fuel();
+            for (double d : new double[]{f.fired(), f.fuelFlow(), f.supply(), f.required(), f.exhaust(), f.exhaustFlow(), f.cooling(), f.coil(), f.stack()}) b.writeDouble(d);
+            b.writeBoolean(f.engine());
+        }
     }
 
     private static MachineView read(RegistryFriendlyByteBuf b) {
@@ -90,8 +96,12 @@ public final class MachineNetwork {
             boolean variable = b.readBoolean();
             double share = b.readDouble(), seconds = b.readDouble();
             String governor = b.readUtf(MachineView.MAX_TEXT);
-            return new MachineView(unit, kind, status, speed, shaft, electric, perTick, settings, trip, rated, design, poles, variable, share, seconds, governor, b.readDouble(), b.readDouble(), b.readDouble(), b.readDouble(),
-                    b.readBoolean() ? new MachineView.Coupling(b.readDouble(), b.readDouble(), b.readDouble(), b.readDouble(), b.readDouble()) : null);
+            double ratio = b.readDouble(), steam = b.readDouble(), inlet = b.readDouble(), exhaust = b.readDouble();
+            var coupling = b.readBoolean() ? new MachineView.Coupling(b.readDouble(), b.readDouble(), b.readDouble(), b.readDouble(), b.readDouble()) : null;
+            var fuel = b.readBoolean() ? new MachineView.Fuel(b.readDouble(), b.readDouble(), b.readDouble(), b.readDouble(), b.readDouble(), b.readDouble(), b.readDouble(), b.readDouble(),
+                    b.readDouble(), b.readBoolean()) : null;
+            return new MachineView(unit, kind, status, speed, shaft, electric, perTick, settings, trip, rated, design, poles, variable, share, seconds, governor, ratio, steam, inlet, exhaust,
+                    coupling, fuel);
         } catch (IllegalArgumentException invalid) {
             throw new DecoderException(invalid.getMessage());
         }

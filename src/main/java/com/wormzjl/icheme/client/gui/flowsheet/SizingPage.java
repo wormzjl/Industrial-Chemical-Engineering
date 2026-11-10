@@ -25,6 +25,7 @@ import com.wormzjl.icheme.science.flowsheet.sizing.DesignBasis;
 import com.wormzjl.icheme.science.flowsheet.sizing.DrumSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.EjectorSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.FlareSizing;
+import com.wormzjl.icheme.science.flowsheet.sizing.ChimneySizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.StillSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.ExchangerSizing;
 import com.wormzjl.icheme.science.flowsheet.sizing.HeaterSizing;
@@ -195,7 +196,10 @@ public final class SizingPage {
         return switch (size) {
             case PumpSizing.Size p -> "pump";
             case EjectorSizing.Size e -> "ejector";
+            case com.wormzjl.icheme.science.flowsheet.sizing.VacuumPumpSizing.Size v -> "vacuum_pump";
+            case com.wormzjl.icheme.science.flowsheet.sizing.PrimeMoverSizing.Size m -> m.family() == com.wormzjl.icheme.science.machine.PrimeMover.Family.ENGINE ? "combustion_engine" : "gas_turbine";
             case FlareSizing.Size f -> "flare";
+            case ChimneySizing.Size c -> "chimney";
             case StillSizing.Size s -> "batch_still";
             case TurbineSizing.Size s -> "steam_turbine";
             case ExchangerSizing.Size e -> e.kettle() ? "kettle" : "exchanger";
@@ -289,7 +293,10 @@ public final class SizingPage {
         String text = switch (size) {
             case PumpSizing.Size p -> x.text("sizing.size.pump", SheetUnits.number(2, p.discharge()));
             case EjectorSizing.Size e -> x.text("sizing.size.ejector", SheetUnits.number(2, e.suction()));
+            case com.wormzjl.icheme.science.flowsheet.sizing.VacuumPumpSizing.Size v -> x.text("sizing.size.vacuum_pump", com.wormzjl.icheme.science.equipment.UnitDesign.vacuumPumpModel(v.shape()));
+            case com.wormzjl.icheme.science.flowsheet.sizing.PrimeMoverSizing.Size m -> x.text("sizing.size.prime_mover", com.wormzjl.icheme.science.equipment.UnitDesign.primeMoverModel(m.shape()).name());
             case FlareSizing.Size f -> x.text("sizing.size.flare", SheetUnits.number(2, f.tip()));
+            case ChimneySizing.Size c -> x.text("sizing.size.chimney", SheetUnits.number(2, c.diameter()), c.height());
             case StillSizing.Size s -> x.text("sizing.size.still", SheetUnits.number(0, s.pot()));
             case TurbineSizing.Size s -> x.text("sizing.size.turbine", SheetUnits.number(0, s.power()), s.steam().name(), SheetUnits.number(0, s.exhaust()));
             case ExchangerSizing.Size e -> x.text("sizing.size.exchanger", SheetUnits.number(2, e.shell()), e.tubes());
@@ -373,7 +380,13 @@ public final class SizingPage {
         switch (size) {
             case PumpSizing.Size p -> group.add(Door.entry(KEY + "size/discharge", x.text("sizing.discharge"), "m"));
             case EjectorSizing.Size e -> group.add(Door.entry(KEY + "size/suction", x.text("sizing.suction"), "m"));
+            case com.wormzjl.icheme.science.flowsheet.sizing.VacuumPumpSizing.Size v -> group.add(Door.entry(KEY + "size/model", x.text("sizing.model"), ""));
+            case com.wormzjl.icheme.science.flowsheet.sizing.PrimeMoverSizing.Size m -> group.add(Door.entry(KEY + "size/model", x.text("sizing.model"), ""));
             case FlareSizing.Size f -> group.add(Door.entry(KEY + "size/tip", x.text("sizing.tip"), "m"));
+            case ChimneySizing.Size c -> {
+                group.add(Door.entry(KEY + "size/diameter", x.text("sizing.diameter"), "m"));
+                group.add(Door.entry(KEY + "size/height", x.text("sizing.height"), "m"));
+            }
             case StillSizing.Size s -> group.add(Door.entry(KEY + "size/pot", x.text("sizing.pot"), "L"));
             case TurbineSizing.Size s -> {
                 group.add(Door.entry(KEY + "size/power", x.text("sizing.power"), "kW"));
@@ -464,7 +477,10 @@ public final class SizingPage {
         return switch (size) {
             case PumpSizing.Size p -> new Dimensions(EquipmentShape.Kind.PUMP, "discharge", null, p.discharge(), 1);
             case EjectorSizing.Size e -> new Dimensions(EquipmentShape.Kind.EJECTOR, "suction", null, e.suction(), 1);
+            case com.wormzjl.icheme.science.flowsheet.sizing.VacuumPumpSizing.Size v -> new Dimensions(v.shape().kind(), "model", null, v.model(), (int) v.shape().tangentLength());
+            case com.wormzjl.icheme.science.flowsheet.sizing.PrimeMoverSizing.Size m -> new Dimensions(m.shape().kind(), "model", null, m.model(), (int) m.shape().tangentLength());
             case FlareSizing.Size f -> new Dimensions(EquipmentShape.Kind.FLARE_STACK, "tip", null, f.tip(), 1);
+            case ChimneySizing.Size c -> new Dimensions(c.kind(), "diameter", "height", c.diameter(), c.height());
             case StillSizing.Size s -> new Dimensions(EquipmentShape.Kind.BATCH_STILL, "pot", null, s.pot(), 1);
             case ExchangerSizing.Size e -> new Dimensions(e.kettle() ? EquipmentShape.Kind.KETTLE : EquipmentShape.Kind.EXCHANGER, "shell", "tubes", e.shell(), e.tubes());
             case HeaterSizing.Size h -> new Dimensions(h.type().kind(), "diameter", "length", h.diameter(), h.length());
@@ -579,7 +595,13 @@ public final class SizingPage {
             switch (size(x, unit, sized)) {
                 case PumpSizing.Size p -> values.put(KEY + "size/discharge", SheetUnits.number(2, p.discharge()));
                 case EjectorSizing.Size e -> values.put(KEY + "size/suction", SheetUnits.number(2, e.suction()));
+                case com.wormzjl.icheme.science.flowsheet.sizing.VacuumPumpSizing.Size v -> values.put(KEY + "size/model", Integer.toString(v.model()));
+                case com.wormzjl.icheme.science.flowsheet.sizing.PrimeMoverSizing.Size m -> values.put(KEY + "size/model", Integer.toString(m.model()));
                 case FlareSizing.Size f -> values.put(KEY + "size/tip", SheetUnits.number(2, f.tip()));
+                case ChimneySizing.Size c -> {
+                    values.put(KEY + "size/diameter", SheetUnits.number(2, c.diameter()));
+                    values.put(KEY + "size/height", Integer.toString(c.height()));
+                }
                 case StillSizing.Size s -> values.put(KEY + "size/pot", SheetUnits.number(0, s.pot()));
                 case TurbineSizing.Size s -> {
                     values.put(KEY + "size/power", SheetUnits.number(0, s.power()));
@@ -694,7 +716,14 @@ public final class SizingPage {
         return switch (size) {
             case PumpSizing.Size p -> field.equals("discharge") ? new PumpSizing.Size(value) : null;
             case EjectorSizing.Size e -> field.equals("suction") ? new EjectorSizing.Size(value) : null;
+            case com.wormzjl.icheme.science.flowsheet.sizing.VacuumPumpSizing.Size v -> field.equals("model") ? new com.wormzjl.icheme.science.flowsheet.sizing.VacuumPumpSizing.Size(v.type(), whole) : null;
+            case com.wormzjl.icheme.science.flowsheet.sizing.PrimeMoverSizing.Size m -> field.equals("model") ? new com.wormzjl.icheme.science.flowsheet.sizing.PrimeMoverSizing.Size(m.family(), whole, m.coil()) : null;
             case FlareSizing.Size f -> field.equals("tip") ? new FlareSizing.Size(value) : null;
+            case ChimneySizing.Size c -> switch (field) {
+                case "diameter" -> new ChimneySizing.Size(c.kind(), value, c.height());
+                case "height" -> new ChimneySizing.Size(c.kind(), c.diameter(), whole);
+                default -> null;
+            };
             case StillSizing.Size s -> field.equals("pot") ? s.withPot(value) : null;
             case TurbineSizing.Size s -> switch (field) {
                 case "power" -> new TurbineSizing.Size(value, s.steam(), s.exhaust());

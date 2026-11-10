@@ -65,6 +65,7 @@ These rules apply to every agent working in this repository (Claude, Codex, suba
   - Compare forms on the 200-seed quick check (all distributions). Compare at most three forms per task, then choose one.
   - Run one full campaign (1000 seeds, all distributions, 8 workers) for the chosen form only. Do not replay worse seeds alone. Replay alone only new budget-class holds (classes C and F not in the baseline), batched in one run.
   - List worse worlds by class with the campaign's classifier. Minimize and trace at most the two smallest new ones.
+  - A fuzz seed stops at its first hold (both hold-fuzz harnesses). A held seed's one replay alone, in the lane, is its measurement. Do not replay it again to confirm a fix, bisect it or trace it: diagnose from the lane's trace, the code and git history. A new run of it is the next final lane's.
   - Read references once, in one final lane (`tools/merge-lane/lane.sh`: the affected test classes, with the 33 junction lines, the printed lines and `MIXED_GAS_COST` when their tests are among them; chain-100 exact and the fluid GameTests when what they load changed; the campaign when one of its inputs changed since `main`). A reference whose test the lane skips stands from the baseline lane. Do not run a second final lane. Do not copy the lane into a batch's tool folder.
   - To prove a gate test fails with its rule disabled, run that one test, not the suite.
   - Take counters from the campaign. Do not make separate per-seed Newton runs.
@@ -95,6 +96,7 @@ These rules apply to every agent working in this repository (Claude, Codex, suba
 
 ## New equipment
 
+- Before you build, change or review an equipment model or a sound, read `.claude/skills/models-and-sfx/SKILL.md`. It holds the model and sound rules, the owner's taste, and the tools.
 - Every new `EquipmentShape.Kind`, `ConstructorColumn.Equipment` and `TopologyCompiler.Kind` constant joins the process simulator. Add its case to `FlowsheetCatalog`: MODELLED, or DRAWING_ONLY while no model exists.
 - `FlowsheetPaletteCoverageTest` checks that each has a tile, a port rule and a lang line. One tile may hold several kinds.
 - Use the tracked workflow in [`tools/equipment-drawings/README.md`](tools/equipment-drawings/README.md): `./tools/equipment-drawings/update.ps1 -Check`, then `./tools/equipment-drawings/update.ps1 -Only <affected IDs or kinds>` (or its `update.py` equivalent). Keep the exporter, renderer, dependency list and run instructions readily available in `tools/`; never make drawing updates depend only on ignored scratch files, session-specific class paths or another worktree.

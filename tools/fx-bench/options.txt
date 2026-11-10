@@ -1,0 +1,13 @@
+version:3955
+onboardAccessibility:false
+pauseOnLostFocus:false
+fullscreen:false
+enableVsync:false
+maxFps:260
+renderDistance:12
+simulationDistance:12
+narrator:0
+soundCategory_music:0.0
+tutorialStep:none
+joinedFirstServer:true
+skipMultiplayerWarning:true

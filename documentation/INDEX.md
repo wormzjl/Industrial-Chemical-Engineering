@@ -14,6 +14,12 @@ Status words:
 
 | Batch | Purpose | Status |
 |---|---|---|
+| [2026-11-10-prime-movers](2026-11-10-prime-movers/README.md) | Liquid-fuel combustion engines and gas turbines as shaft-train drivers, steam coil, generators to 400 MW, steam turbines to 300 MW | Merged into the custom-shader-system batch 2026-11-10 (6c597e7b3), sound and animation follow-up 3e123f51c |
+| [2026-11-10-chimney](2026-11-10-chimney/README.md) | Steel and brick chimneys releasing gas and particulates to the atmosphere | Merged into the custom-shader-system batch 2026-11-10 (44886656a); with it to main |
+| [2026-11-10-vacuum-pump](2026-11-10-vacuum-pump/README.md) | Liquid ring and dry screw vacuum pump casings on the shaft trains; the pump on a vacuum column's receiver | Merged into the custom-shader-system batch 2026-11-10 (682d7b56e), liquid ring redraw b62cfa3bd |
+| [2026-11-10-steam-ejector-flow](2026-11-10-steam-ejector-flow/README.md) | Steam ejector as a flow element (motive steam through its throat) and its jet sound | Implemented 2026-11-10 (0.25.0) |
+| [2026-11-10-rigid-reservoir](2026-11-10-rigid-reservoir/README.md) | Closed vessels rigid once filled (D54 bag only until then) | Implemented 2026-11-10 (0.25.0) |
+| [2026-11-10-custom-shader-system](2026-11-10-custom-shader-system/README.md) | Shader-pack-safe effects (flare, plumes, still), normal-mapped instrument wiring first, config switch | Implemented 2026-11-10 (0.25.0) |
 | [2026-11-10-agent-instructions-review/](2026-11-10-agent-instructions-review/README.md) | AGENTS.md checked against official guidance; skills, Codex skill links and a command guard | Implemented 2026-11-10 |
 | [2026-11-09-batch-distiller/](2026-11-09-batch-distiller/README.md) | Fired or electric batch still with optional condenser and small column; batch run in the simulator | Implemented 2026-11-10 |
 | [2026-11-09-flare-stack/](2026-11-09-flare-stack/README.md) | Scalable flare stack: heating-value floor, capacity by tip and height, status on the data network | Implemented 2026-11-10 |

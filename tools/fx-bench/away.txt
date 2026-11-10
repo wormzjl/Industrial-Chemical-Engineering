@@ -1,0 +1,2 @@
+# The away window: the same point facing north over empty ground; every effect is behind the camera (its states stay watched).
+tp @s 0.5 -40 -30 180 0

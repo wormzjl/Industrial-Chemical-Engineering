@@ -86,6 +86,8 @@ final class CoolingTowerDesign extends UnitDesign {
             u.solids.add(ProcessUnit.Solid.ring(cx,cz,bell,top,r,mouth,0,2*Math.PI));
             // The fan's floor and rotor collide as one disc: nobody walks through the blades.
             u.solids.add(ProcessUnit.Solid.rod(new double[]{cx,0,cz},1,bell-.2,bell+.45,r,0));
+            // The exhaust leaves the fan stack's mouth (batch 2026-11-10-custom-shader-system, W4): one mark per cell, row by row.
+            u.mouth("fan_exhaust_"+(x*bank.rows()+z),cx,cz,mouth,top);
         }
         nozzle(u,Role.HOT_WATER_INLET,w/2,t.distributorHeight(),0,2,-1,.05);
         basinOutlet(u,w/2,l);
@@ -147,6 +149,8 @@ final class CoolingTowerDesign extends UnitDesign {
         double lip=shellRadius(throat,shellScale,zthroat,b,base,height),edge=d/100;
         u.mesh.ring(frame,lip-.25-edge/2,lip+edge/2,height-2*edge,height,facets,3,Material.CONCRETE);
         u.solids.add(ProcessUnit.Solid.ring(axis,axis,height-2*edge,height,lip-.25-edge/2,lip+edge/2,0,2*Math.PI));
+        // The exhaust leaves through the top ring (batch 2026-11-10-custom-shader-system, W4): its mark, the ring's opening.
+        u.mouth("throat",axis,axis,lip-.25-edge/2,height);
         // Keep the V-pairs: each basin-floor foot leans inward to two tops on the resized chimney's ring.
         double footRadius=r-.5,strut=d/100,supportRadius=shellScale*r-strut/2;int bays=32;
         for(int i=0;i<bays;i++){

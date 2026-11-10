@@ -27,7 +27,13 @@ public final class FlowsheetCatalog {
             TRICKLE = drawn("trickle_bed"), EBULLATED = drawn("ebullated_bed"), FCC = drawn("fcc_converter"), COKER = drawn("delayed_coker"), CFB = drawn("cfb_boiler"),
             FLUID_BED = drawn("fluid_bed_gasifier"), GRATE = drawn("grate_boiler"), FIXED_BED = drawn("fixed_bed_gasifier"), FLARE = modelled("flare"),
             // The batch still (batch 2026-11-09-batch-distiller): drawn only from W2, modelled since W7 (BatchStillUnit).
-            STILL = modelled("batch_still");
+            STILL = modelled("batch_still"),
+            // The chimneys (batch 2026-11-10-chimney): one tile for both forms (ChimneyUnit).
+            CHIMNEY = modelled("chimney"),
+            // The vacuum pumps (batch 2026-11-10-vacuum-pump, owner V8 A): one tile for both, its type a setting (VacuumPumpUnit).
+            VACUUM_PUMP = modelled("vacuum_pump"),
+            // The prime movers (batch 2026-11-10-prime-movers, owner P14 A): a tile each (PrimeMoverUnit).
+            ENGINE = modelled("combustion_engine"), GAS_TURBINE = modelled("gas_turbine");
 
     private FlowsheetCatalog() {
     }
@@ -70,6 +76,10 @@ public final class FlowsheetCatalog {
             case INDUCED_DRAFT_COOLING_TOWER, NATURAL_DRAFT_COOLING_TOWER -> COOLING_TOWER;
             case FLARE_STACK -> FLARE;
             case BATCH_STILL -> STILL;
+            case STEEL_STACK, BRICK_CHIMNEY -> CHIMNEY;
+            case LIQUID_RING_PUMP, DRY_SCREW_PUMP -> VACUUM_PUMP;
+            case COMBUSTION_ENGINE -> ENGINE;
+            case GAS_TURBINE -> GAS_TURBINE;
         };
     }
 
@@ -87,6 +97,10 @@ public final class FlowsheetCatalog {
             case INDUCED_DRAFT_COOLING_TOWER, NATURAL_DRAFT_COOLING_TOWER -> COOLING_TOWER;
             case FLARE_STACK -> FLARE;
             case BATCH_STILL -> STILL;
+            case STEEL_STACK, BRICK_CHIMNEY -> CHIMNEY;
+            case LIQUID_RING_PUMP, DRY_SCREW_PUMP -> VACUUM_PUMP;
+            case COMBUSTION_ENGINE -> ENGINE;
+            case GAS_TURBINE -> GAS_TURBINE;
             case PUMP -> PUMP;
             case COMPRESSOR, CENTRIFUGAL_COMPRESSOR -> COMPRESSOR;
             case EJECTOR -> EJECTOR;
@@ -122,6 +136,8 @@ public final class FlowsheetCatalog {
             case HEAT_SIDE -> EXCHANGER;
             // A steam turbine registers as a fluid device (W3, reading A37).
             case TURBINE -> TURBINE;
+            // A steam ejector registers as a fluid device (batch 2026-11-10-steam-ejector-flow).
+            case EJECTOR -> EJECTOR;
         };
     }
 }

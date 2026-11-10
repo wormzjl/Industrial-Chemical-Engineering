@@ -20,8 +20,33 @@ public final class Burners {
     public static final double AIR=298.15;
     /** Fuel fired per watt the radiant coil takes. */
     public static final double FIRED_PER_RADIANT=(ConvectionCoil.FLAME-AIR)/(ConvectionCoil.FLAME-ConvectionCoil.BRIDGEWALL);
+    /** The combustion air per joule fired, kg/J: 0.40 kg per MJ. */
+    public static final double AIR_PER_FIRED=.40e-6;
+    /** The excess air over stoichiometry the flame and the air flow assume. */
+    public static final double EXCESS_AIR=.15;
     /** The forced-draft fans' shaft power per watt fired. */
-    public static final double FAN_SHAFT_PER_FIRED=.40e-6*(1/1.185)*1500/.70;
+    public static final double FAN_SHAFT_PER_FIRED=AIR_PER_FIRED*(1/1.185)*1500/.70;
+    /** The fuel's phase as the burners receive it (batch 2026-11-10-custom-shader-system, W5): the flue's smoke follows it. */
+    public enum Fuel { GAS, LIQUID, SOLID }
+    /** Molar masses of the flue gas's products, kg/mol: CO2, H2O, SO2, N2, O2. */
+    private static final double CO2=.04401,H2O=.018015,SO2=.06407,N2=.028014,O2=.031999;
+    /**
+     * The flue gas's water, kg per kg of dry flue gas, of {@code moles} (any amounts) of fuel components of {@code formulas}
+     * (atoms of C, H, N, O, S per molecule) burnt with {@link #EXCESS_AIR}: the water the hydrogen forms (and a fuel's own
+     * water) over the CO2, SO2, nitrogen and excess oxygen. Methane gives 0.122; {@link #METHANE_WATER} for no fuel.
+     */
+    public static double waterShare(double[] moles,double[][] formulas) {
+        double c=0,h=0,n=0,o=0,s=0;
+        for(int k=0;k<moles.length;k++){double m=Math.max(0,moles[k]);if(m==0)continue;var f=formulas[k];c+=m*f[0];h+=m*f[1];n+=m*f[2];o+=m*f[3];s+=m*f[4];}
+        double demand=Math.max(0,c+h/4+s-o/2),air=(1+EXCESS_AIR)*demand;
+        double dry=c*CO2+s*SO2+(n/2+air*Flare.AIR_NITROGEN)*N2+(air-demand+Math.max(0,o/2-c-h/4-s))*O2;
+        if(!(dry>0))return METHANE_WATER;
+        return h/2*H2O/dry;
+    }
+    /** Methane's flue water ({@link #waterShare}), kg per kg dry: the share of a heater whose fuel is not known yet. */
+    public static final double METHANE_WATER=waterShare(new double[]{1},new double[][]{{1,4,0,0,0}});
+    /** The flue gas, kg/s, of {@code fuel} kg/s fired at {@code fired} W: the fuel and its combustion air ({@link #AIR_PER_FIRED}). */
+    public static double flueFlow(double fuel,double fired){return Math.max(0,fuel)+AIR_PER_FIRED*Math.max(0,fired);}
     /**
      * The firebox's back pressure on the burner tips, Pa absolute: the fuel's line must deliver above it. Gas burners take 0.3
      * to 2 bar(g) at the tips; 1 bar(g).

@@ -45,6 +45,35 @@ class ColumnBlueprintTest {
     }
 
     /**
+     * A vacuum top held by a vacuum pump (batch 2026-11-10-vacuum-pump, owner V5): no ejector; the pump of the design's type on the
+     * receiver's vapour outlet before the offgas valve, and a pump of the reflux pump's kind on the boot's water before its valve.
+     */
+    @Test
+    void aVacuumPumpStandsOnTheReceiversVapourOutlet() {
+        for (var vacuum : List.of(ColumnComponents.Vacuum.LIQUID_RING, ColumnComponents.Vacuum.DRY_SCREW)) {
+            var c = new ColumnComponents(Condenser.AIR_COOLER, Pump.IN_LINE, List.of(), true, true).withVacuum(vacuum);
+            var blueprint = ColumnBlueprint.of(trays(c, List.of(), List.of(), List.of()));
+            assertEquals(List.of(COLUMN, CONDENSER, RECEIVER, VACUUM_PUMP, OFFGAS_VALVE, WATER_PUMP, WATER_VALVE, REFLUX_PUMP, REFLUX_TEE, REFLUX_VALVE, DISTILLATE_VALVE,
+                    FEED_VALVE, REBOILER, BOTTOMS_VALVE), blueprint.slots(), vacuum::name);
+            assertEquals(List.of(CONDENSER), link(blueprint, "overhead").steps().stream().map(Step::slot).toList(), "no ejector");
+            var offgas = link(blueprint, "offgas");
+            assertEquals(List.of(VACUUM_PUMP, OFFGAS_VALVE), offgas.steps().stream().map(Step::slot).toList());
+            var pump = (UnitForm) offgas.steps().getFirst().form();
+            assertEquals(vacuum == ColumnComponents.Vacuum.DRY_SCREW ? Kind.DRY_SCREW_PUMP : Kind.LIQUID_RING_PUMP, pump.kind());
+            assertEquals(Role.SUCTION, pump.in());
+            assertEquals(Role.DISCHARGE, pump.out());
+            var water = link(blueprint, "water");
+            assertEquals(List.of(WATER_PUMP, WATER_VALVE), water.steps().stream().map(Step::slot).toList());
+            assertEquals(new FittingForm(PortGraph.Fitting.INLINE_PUMP), water.steps().getFirst().form(), "the reflux pump's kind");
+        }
+        // An ejector design keeps its ejector, whatever field it was saved with.
+        var ejected = ColumnBlueprint.of(trays(new ColumnComponents(Condenser.AIR_COOLER, Pump.STANDARD, List.of(), true, true), List.of(), List.of(), List.of()));
+        assertTrue(ejected.slots().contains(EJECTOR));
+        assertFalse(ejected.slots().contains(VACUUM_PUMP));
+        assertFalse(ejected.slots().contains(WATER_PUMP));
+    }
+
+    /**
      * An air-then-water condenser (COOLER_MODEL_PLAN.md section 6): the overhead passes the air cooler's banks, then the
      * water trim's shells, and ends there; the condensate starts after the trim. The trim's water sides cool the condenser.
      */

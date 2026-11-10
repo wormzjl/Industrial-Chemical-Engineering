@@ -1,0 +1,3 @@
+# The far window (lane 4, Distant Horizons): 600 blocks north of the scene's middle (z about 35), facing it; the vanilla render distance (192 blocks) ends far short of it.
+gamemode spectator
+tp @s 0.5 -20 -565 0 2

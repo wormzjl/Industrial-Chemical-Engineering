@@ -480,7 +480,7 @@ public final class ConservativeTransport {
             // restate the booked amounts in: they are flashed where its state stands (the ambient, or its solids' temperature),
             // and its closure below solves the rest.
             try{var restated=dryVessel(reservoir,supports,node)?model.flashTP(candidate.get(node).temperature(),candidate.get(node).pressure(),moles[node],checkpoint)
-                    :repartition(model,candidate.get(node),moles[node]);if(reservoir.junction())restated=model.folded(restated,true);
+                    :repartition(model,candidate.get(node),moles[node],!reservoir.junction()&&reservoir.inventory().rigid());if(reservoir.junction())restated=model.folded(restated,true);
                 states.add(restated.withSolids(new SolidInventory(populations)));}
             catch(com.wormzjl.icheme.science.fluid.thermo.ThermoHold hold){throw hold.at(reservoir.id());}
         }
@@ -595,6 +595,8 @@ public final class ConservativeTransport {
                 work=switch(mover) {
                     case FlowControl.Pump pump->rates==null?dt*flows[edge]*suction.volume()/suction.mass()*Math.max(0,heads[edge])
                             :dt*flows[edge]*specificVolume*Math.max(0,heads[edge]);
+                    // A steam ejector does no work: its motive steam arrives at the discharge junction with its own enthalpy.
+                    case FlowControl.Ejector ignored->0.0;
                     case FlowControl.Compressor compressor->dt*compressor.power(flows[edge],heads[edge],1/specificVolume,suction.pressure(),kappa);
                     // A machine's work is the Newton's own (MoverWork): what the solve read of its suction, a wet compressor's
                     // efficiency (request 11), enters it.
@@ -655,7 +657,7 @@ public final class ConservativeTransport {
         for(int node=0;node<nodes;node++) {
             var reservoir=graph.reservoirs().get(node);if(index[node]<0||reservoir.junction())continue;
             checkpoint.run();var state=states.get(node);double capacity=reservoir.inventory().wallCapacity();
-            double workFrom=reservoir.empty()?0:PhaseLayout.bagVolume(reservoir.state(),capacity);
+            double workFrom=reservoir.empty()?reservoir.inventory().emptyBag():PhaseLayout.bagVolume(reservoir.state(),capacity);
             var booked=reservoir.inventory().with(moles[node],energy[node],state.solids());
             try{states.set(node,dryVessel(reservoir,supports,node)?InventoryEquilibrium.solve(model,state,booked,workFrom,checkpoint)
                     :InventoryEquilibrium.close(model,state,booked,supports==null?null:supports[node],workFrom,checkpoint));}
@@ -665,7 +667,7 @@ public final class ConservativeTransport {
             catch(SparseNewton.Nonconvergence failure){throw failure.at(reservoir.id());}
             double moved=PhaseLayout.bagVolume(states.get(node),capacity)-workFrom;
             if(moved!=0) {
-                double work=PhaseLayout.AMBIENT_PRESSURE*moved;energy[node]-=work;externalEnergy-=work;
+                double work=reservoir.inventory().ambient()*moved;energy[node]-=work;externalEnergy-=work;
                 boundaries.add(new BoundaryTransfer(reservoir.id(),new double[components],-work));
             }
         }
@@ -675,7 +677,12 @@ public final class ConservativeTransport {
             if(frozen&&oldNode.junction()){inventories.add(oldNode.inventory());continue;}
             // A junction's buffer record holds endMass*w and its energy field in enthalpy form (m*h).
             if(oldNode.junction()){inventories.add(oldNode.inventory().with(ownedMoles[node],energy[node],ownedSolids[node]));continue;}
-            inventories.add(oldNode.fixed()?oldNode.inventory():oldNode.inventory().with(moles[node],energy[node],state.solids()));
+            if(oldNode.fixed()){inventories.add(oldNode.inventory());continue;}
+            var booked=oldNode.inventory().with(moles[node],energy[node],state.solids());
+            // Batch 2026-11-10-rigid-reservoir (owner: "Resevoir should be rigid when it's filled once (except the floating roof
+            // tank)"): a closed vessel whose wall ends a step carrying its contents keeps its volume from then on.
+            if(oldNode.kind()==PassiveNetwork.NodeKind.RESERVOIR&&!booked.open()&&!booked.rigid()&&!PassiveStepSolver.holdsNoFluid(booked,state)&&PhaseLayout.taut(state,booked.volume()))booked=booked.withRigid(true);
+            inventories.add(booked);
         }
         return new Projection(inventories,states,boundaries,external,externalEnergy,pumpWork,filters,held,meltedRecord);
     }
@@ -815,7 +822,14 @@ public final class ConservativeTransport {
      * restated exactly as before, with the flash's trace-phase rule applied to the split (decision D34,
      * {@link FluidThermodynamics#foldTracePhases}): a node is never committed with a phase its flash would not give it.
      */
-    static FluidThermodynamics.State repartition(FluidThermodynamics model,FluidThermodynamics.State state,double[] moles) {
+    static FluidThermodynamics.State repartition(FluidThermodynamics model,FluidThermodynamics.State state,double[] moles){return repartition(model,state,moles,false);}
+    /**
+     * {@link #repartition(FluidThermodynamics,FluidThermodynamics.State,double[])} in a vessel whose wall is rigid
+     * ({@code rigid}, batch 2026-11-10-rigid-reservoir): the restated split is folded by the rigid vessel's rule, its gas
+     * judged by its volume share ({@code FluidThermodynamics.folded(State,boolean,boolean)}), which the split's amounts alone
+     * cannot state.
+     */
+    static FluidThermodynamics.State repartition(FluidThermodynamics model,FluidThermodynamics.State state,double[] moles,boolean rigid) {
         double[] oldL=state.liquidView(),oldV=state.vaporView(),l=new double[oldL.length],v=new double[l.length];
         if(appearsWithoutPhase(state,moles))return model.flashTP(state.temperature(),state.pressure(),moles,()->{}).withSolidState(state.solids(),state.solidMoments());
         for(int c=0;c<l.length;c++) {
@@ -829,6 +843,7 @@ public final class ConservativeTransport {
         else if(state.waterLiquid()<state.waterVapor()){wl=moles[l.length]*(state.waterLiquid()/water);wv=moles[l.length]-wl;}
         else{wv=moles[l.length]*(state.waterVapor()/water);wl=moles[l.length]-wv;}
         double[] split={wl,wv};double pc=state.hydrocarbonPartialPressure();
+        if(rigid)return model.folded(model.adoptingState(state.temperature(),state.pressure(),l,v,split[0],split[1],pc,null),false,true).withSolidState(state.solids(),state.solidMoments());
         if(model.foldTracePhases(l,v,split)){SolverDiagnostics.count(SolverDiagnostics.traceFolds);pc=FluidThermodynamics.foldedHydrocarbonPressure(state.pressure(),pc,v,split[1]);}
         return model.adoptingState(state.temperature(),state.pressure(),l,v,split[0],split[1],pc,null).withSolidState(state.solids(),state.solidMoments());
     }

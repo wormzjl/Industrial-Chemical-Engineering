@@ -120,7 +120,72 @@ class FluidFactsCompatTest {
         // Facts schema 15, last: the laid pipe's name (W5c C4), with a letter outside ASCII.
         world.ledger.name(laid,"Feed é line");
         stills(world);
-        world.runTo(880);return world;
+        world.runTo(880);
+        ejector(world);
+        world.runTo(890);
+        vacuumPumps(world);
+        world.runTo(900);
+        primeMovers(world);
+        world.runTo(910);return world;
+    }
+    /**
+     * Facts schema 20 (batch 2026-11-10-prime-movers): a 300 MW heavy-duty gas turbine's fuel void at its combustor's
+     * pressure (control valve source {@code ENGINE}) and its steam coil (heat unit {@code PRIME_MOVER}, side {@code EXHAUST}),
+     * its shaft unit ({@code GAS_TURBINE}) naming the fuel void, on a 400 MW two-pole generator; a 20 MW medium-speed
+     * engine's fuel void and unit ({@code COMBUSTION_ENGINE}) on a 25 MW twelve-pole generator at 500 rpm. No pipe meets them.
+     */
+    private void primeMovers(EventPathWorld world) {
+        long fuel=world.ledger.nextIdentity(),coil=fuel+1,engine=fuel+2;
+        var gt=com.wormzjl.icheme.science.machine.PrimeMover.models(com.wormzjl.icheme.science.machine.PrimeMover.Family.GAS_TURBINE).getLast();
+        var ms=com.wormzjl.icheme.science.machine.PrimeMover.models(com.wormzjl.icheme.science.machine.PrimeMover.Family.ENGINE).getLast();
+        var voidAt=(java.util.function.Function<Integer,PhysicalFluidTopology.Device>)z->{var p=new PhysicalFluidTopology.Position(EventPathWorld.DIM,120,64,z);
+            return new PhysicalFluidTopology.Device(z==0?fuel:engine,p,Kind.VOID,Direction.NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),FlowControl.ControlValve.engine(),
+                    List.of(new PhysicalFluidTopology.Port(p,Direction.WEST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.VESSEL)),true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,null);};
+        var cold=new PhysicalFluidTopology.Position(EventPathWorld.DIM,124,64,0); var hot=new PhysicalFluidTopology.Position(EventPathWorld.DIM,124,64,3);
+        var side=new PhysicalFluidTopology.Device(coil,cold,Kind.HEAT_SIDE,Direction.NORTH,new PipeResistance.Geometry(30,.9,1.5e-6,0),new FlowControl.Passive(),
+                List.of(new PhysicalFluidTopology.Port(cold,Direction.WEST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.INLET),
+                        new PhysicalFluidTopology.Port(hot,Direction.WEST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.OUTLET)),
+                true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,
+                new HeatUnit(com.wormzjl.icheme.science.equipment.HeatSides.Unit.PRIME_MOVER,com.wormzjl.icheme.science.equipment.HeatSides.Side.EXHAUST,53000,0));
+        var air=FluidDeviceSpec.nitrogen(CATALOG).composition();
+        world.registry.submit(List.of(
+                new WorldTopologyLedger.Edit(fuel,new WorldTopologyLedger.Registration(voidAt.apply(0),new FluidDeviceSpec(1,298.15,gt.combustor(),air),0)),
+                new WorldTopologyLedger.Edit(coil,new WorldTopologyLedger.Registration(side,FluidDeviceSpec.water(CATALOG),0)),
+                new WorldTopologyLedger.Edit(engine,new WorldTopologyLedger.Registration(voidAt.apply(6),new FluidDeviceSpec(1,298.15,101325,air),0))),engine+1,null);
+        world.runTo(905);
+        var none=ShaftUnit.Settings.DEFAULT;var trip=com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE;var fixed=com.wormzjl.icheme.science.equipment.MachineDuty.Drive.FIXED;
+        double gtNet=new com.wormzjl.icheme.science.machine.PrimeMover(gt).ratedNet(),msNet=new com.wormzjl.icheme.science.machine.PrimeMover(ms).ratedNet();
+        world.ledger.shaft(new ShaftUnit(world.ledger.reserve(1),com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.GAS_TURBINE,at(121,0),0,List.of(end(121,0,1,true)),fuel,gtNet,3000,0,fixed,
+                new ShaftUnit.Settings(true,com.wormzjl.icheme.science.machine.ShaftTrain.Mode.SPEED,.98,0,0),trip,null));
+        world.ledger.shaft(new ShaftUnit(world.ledger.reserve(1),com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.GENERATOR,at(122,0),0,List.of(end(122,0,-1,false)),0,4e8,3000,2,fixed,none,trip,null));
+        world.ledger.shaft(new ShaftUnit(world.ledger.reserve(1),com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.COMBUSTION_ENGINE,at(121,6),0,List.of(end(121,6,1,true)),engine,msNet,500,0,fixed,none,trip,null));
+        world.ledger.shaft(new ShaftUnit(world.ledger.reserve(1),com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.GENERATOR,at(122,6),0,List.of(end(122,6,-1,false)),0,2.5e7,500,12,fixed,none,trip,null));
+    }
+    /** The prime movers' fuel voids, each its identity and pressure (Pa), in identity order: what schema 20 carries. */
+    private static String primeMovers(WorldTopologyLedger.Snapshot world) {
+        var text=new StringBuilder();
+        for(var r:new TreeMap<>(world.active()).values())if(r.device().engineFuel()){if(!text.isEmpty())text.append(";");text.append(r.device().id()).append("=").append(r.spec().pressure());}
+        return text.toString();
+    }
+    /**
+     * Facts schema 19 (batch 2026-11-10-vacuum-pump): two vacuum pump casings, a two-stage liquid ring of 500 m³/h at
+     * 1450 rpm and a dry screw of 650 m³/h at 2950 rpm, with a set flow and a switch away from their defaults (the
+     * {@code vacuum_pump} law a new name, its type by name; no pipe meets them).
+     */
+    private void vacuumPumps(EventPathWorld world) {
+        long ring=world.ledger.nextIdentity(),screw=ring+1;var spec=FluidDeviceSpec.nitrogen(CATALOG);
+        var ringLaw=new com.wormzjl.icheme.science.machine.VacuumPump(com.wormzjl.icheme.science.machine.VacuumPump.Type.LIQUID_RING_TWO_STAGE,500/3600.,1450);
+        var screwLaw=new com.wormzjl.icheme.science.machine.VacuumPump(com.wormzjl.icheme.science.machine.VacuumPump.Type.DRY_SCREW,650/3600.,2950);
+        world.registry.submit(List.of(
+                new WorldTopologyLedger.Edit(ring,new WorldTopologyLedger.Registration(machine(ring,110,0,Kind.COMPRESSOR,new FlowControl.Machine(ringLaw,0,true,.05,0)),spec,0)),
+                new WorldTopologyLedger.Edit(screw,new WorldTopologyLedger.Registration(machine(screw,110,4,Kind.COMPRESSOR,new FlowControl.Machine(screwLaw,0,false,0,0)),spec,0))),screw+1,null);
+    }
+    /** The vacuum pump casings, each its identity, type, capacity (m³/s), rated speed, switch and set flow, in identity order: what schema 19 carries. */
+    private static String vacuumPumps(WorldTopologyLedger.Snapshot world) {
+        var text=new StringBuilder();
+        for(var r:new TreeMap<>(world.active()).values())if(r.device().control() instanceof FlowControl.Machine m&&m.law() instanceof com.wormzjl.icheme.science.machine.VacuumPump v){
+            if(!text.isEmpty())text.append(";");text.append(r.device().id()).append("=").append(v.type()).append("/").append(v.capacity()).append("/").append(v.ratedSpeed()).append("/").append(m.enabled()).append("/").append(m.setFlow());}
+        return text.toString();
     }
     /**
      * Facts schema 16 (batch 2026-11-09-batch-distiller, W3 and W4): a batch still's pot, a solid-fired still with its
@@ -129,6 +194,26 @@ class FluidFactsCompatTest {
      * places no structure, so they are not registered. And a diverter valve fed from the west, set to its third outlet
      * (its joints, a schema 2 field; its kind a new name).
      */
+    /**
+     * Facts schema 17 (batch 2026-11-10-steam-ejector-flow): a steam ejector of 0.1 m suction, its suction, motive and
+     * discharge ports in a row (its kind and control new names; no pipe meets it).
+     */
+    private void ejector(EventPathWorld world) {
+        long id=world.ledger.nextIdentity();
+        var suction=new PhysicalFluidTopology.Position(EventPathWorld.DIM,100,64,2);
+        var ports=List.of(new PhysicalFluidTopology.Port(suction,Direction.WEST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.SUCTION),
+                new PhysicalFluidTopology.Port(new PhysicalFluidTopology.Position(EventPathWorld.DIM,100,64,0),Direction.WEST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.INLET),
+                new PhysicalFluidTopology.Port(new PhysicalFluidTopology.Position(EventPathWorld.DIM,100,64,4),Direction.WEST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.DISCHARGE));
+        var device=new PhysicalFluidTopology.Device(id,suction,Kind.EJECTOR,Direction.NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),
+                new FlowControl.Ejector(new com.wormzjl.icheme.science.machine.SteamEjector(.1)),ports,true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES);
+        world.registry.submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,FluidDeviceSpec.nitrogen(CATALOG),0))),id+1,null);
+    }
+    /** The steam ejectors, each its identity and rated load (kg/s), in identity order: what schema 17 carries. */
+    private static String ejectors(WorldTopologyLedger.Snapshot world) {
+        var text=new StringBuilder();
+        for(var r:new TreeMap<>(world.active()).values())if(r.device().control() instanceof FlowControl.Ejector e){if(!text.isEmpty())text.append(";");text.append(r.device().id()).append("=").append(e.design().suction());}
+        return text.toString();
+    }
     private void stills(EventPathWorld world) {
         long water=world.ledger.reserve(1),pot=world.ledger.nextIdentity();int m=model.componentCount();
         var design=new BatchStill.Design(.5,BatchStill.Heater.SOLID,true,4);
@@ -358,7 +443,7 @@ class FluidFactsCompatTest {
             var pack=image.packs().get(row.unit().pack());var facts=FluidCheckpointCodec.islandFacts(pack,FluidCheckpointCodec.islandSections(pack,row),row.id());
             var components=new ArrayList<>(facts.components());components.add("Retired");
             var widened=facts.vessels().stream().map(v->{var moles=Arrays.copyOf(v.moles(),v.moles().length+1);moles[moles.length-1]=2.5;kept.put(v.id(),onWorld(v.moles(),facts.components()));
-                return new FluidFacts.Vessel(v.id(),v.volume(),v.levelHeight(),v.open(),moles,v.energy(),v.solids(),v.temperature(),v.pressure(),v.liquid(),v.vapor(),v.waterLiquid(),v.waterVapor(),v.hydrocarbonPressure());}).toList();
+                return new FluidFacts.Vessel(v.id(),v.volume(),v.levelHeight(),v.open(),moles,v.energy(),v.solids(),v.temperature(),v.pressure(),v.liquid(),v.vapor(),v.waterLiquid(),v.waterVapor(),v.hydrocarbonPressure(),v.rigid());}).toList();
             vessels+=widened.size();
             placed.add(new FluidFacts.Placed(new FluidFacts.Island(facts.dimension(),facts.packageId(),components,widened,facts.filters(),null),row.committed()));
         }
@@ -755,7 +840,15 @@ class FluidFactsCompatTest {
                 assertEquals(expected.getProperty("builds",""),builds(ledger),folder+": build facts");
                 // Schema 16 wrote the batch stills; an older image reads none.
                 assertEquals(expected.getProperty("stills",""),stills(ledger),folder+": batch stills");
+                // Schema 17 wrote the steam ejectors; an older image reads none.
+                assertEquals(expected.getProperty("ejectors",""),ejectors(ledger),folder+": steam ejectors");
                 long vessels=rebuilt.checkpoint().islands().stream().flatMap(e->e.snapshot().graph().reservoirs().stream()).filter(n->n.kind()==PassiveNetwork.NodeKind.RESERVOIR).count();
+                // Schema 18 wrote whether a vessel's wall is rigid; an older image reads every vessel a bag.
+                assertEquals(Long.parseLong(expected.getProperty("rigid","0")),rigid(rebuilt.checkpoint()),folder+": rigid vessels");
+                // Schema 19 wrote the vacuum pump casings; an older image reads none.
+                assertEquals(expected.getProperty("vacuumPumps",""),vacuumPumps(ledger),folder+": vacuum pumps");
+                // Schema 20 wrote the prime movers' fuel voids, steam coils and units; an older image reads none.
+                assertEquals(expected.getProperty("primeMovers",""),primeMovers(ledger),folder+": prime movers");
                 assertEquals(Long.parseLong(expected.getProperty("vessels")),vessels,folder+": vessels");
                 double total=Arrays.stream(moles(rebuilt.checkpoint(),model.componentCount())).sum();
                 assertEquals(Double.parseDouble(expected.getProperty("moles")),total,1e-12*total,folder+": stock");
@@ -892,9 +985,17 @@ class FluidFactsCompatTest {
         props.setProperty("health",health(loaded.world().orElseThrow()));
         props.setProperty("builds",builds(loaded.world().orElseThrow()));
         props.setProperty("stills",stills(loaded.world().orElseThrow()));
+        props.setProperty("ejectors",ejectors(loaded.world().orElseThrow()));
         props.setProperty("vessels",Long.toString(contents(loaded.checkpoint()).values().stream().filter(v->v instanceof PassiveNetwork.Inventory).count()));
+        props.setProperty("rigid",Long.toString(rigid(loaded.checkpoint())));
+        props.setProperty("vacuumPumps",vacuumPumps(loaded.world().orElseThrow()));
+        props.setProperty("primeMovers",primeMovers(loaded.world().orElseThrow()));
         props.setProperty("moles",Double.toString(Arrays.stream(moles(loaded.checkpoint(),model.componentCount())).sum()));
         try(var out=Files.newBufferedWriter(folder.resolve("expected.properties"))){props.store(out,"Facts schema "+FluidFacts.SCHEMA+" corpus image, state format "+FluidCheckpointCodec.VERSION);}
+    }
+    /** The vessels whose wall is rigid (schema 18, batch 2026-11-10-rigid-reservoir). */
+    private static long rigid(FluidCheckpointCodec.Checkpoint checkpoint) {
+        return checkpoint.islands().stream().flatMap(e->e.snapshot().graph().reservoirs().stream()).filter(n->n.kind()==PassiveNetwork.NodeKind.RESERVOIR&&n.inventory().rigid()).count();
     }
     /** Every heat side and every passage of more than one channel, in identity order: what schema 5 carries. */
     private static String heatSides(WorldTopologyLedger.Snapshot world) {

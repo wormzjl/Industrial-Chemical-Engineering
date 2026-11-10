@@ -28,7 +28,7 @@ A step list after the side runs only those steps, for example `lane.sh head camp
   - its own source or a file of its load set changed;
   - a loaded file uses a compile-time constant whose initializer changed (javac copies the value into its users, which then never load the holder): it names `Holder.NAME`, imports it statically, or extends the holder; a constant built from a changed one counts as changed;
   - a loaded file reads a changed resource or source file: a string constant names the file's path or folder, the resource sits in the class's package, or `readers.txt` lists the reader (for paths built from pieces);
-  - a build file changed (`build.gradle`, `settings.gradle`, `gradle/`, `tools/development.gradle`, `gradle.properties` beyond `mod_version`), or a test resource changed that no class names: then every class runs.
+  - a build file changed (`settings.gradle`, `gradle/`, the wrapper, `tools/development.gradle`, `gradle.properties` beyond `mod_version`; not `build.gradle`, owner 2026-11-10: its compileOnly dependencies, JVM settings and gate lists do not change what a test computes, and the game and loader versions are in `gradle.properties`), or a test resource changed that no class names: then every class runs.
 - If nothing a test class loaded or read changed since its load set was recorded, it runs the same code on the same data, and its last pass stands. A change that would make it load a new class must change a class it loaded.
 - A failed class saves no load set (a failure can cut it short), so it runs again next time. Uncommitted changes to `src/` or the build files block the save: HEAD would not be what ran.
 - Changes to `documentation/`, `tools/`, `research/`, `*.md` at the root and `.claude/` run nothing (the campaign list covers its own tool folders).
@@ -51,3 +51,4 @@ A step list after the side runs only those steps, for example `lane.sh head camp
 - 2026-11-03: `main-reach.pl` added for the rule that `src/main` holds only code the game reaches.
 - 2026-11-09: `compare.mjs` added at the 0.23.0 final lane (batch 2026-11-04-open-thermo-data, MERGE_REVIEW.md).
 - 2026-11-09: affected-only lane (batch 2026-11-09-final-lane-selection): `affected.mjs`, `record.init.gradle`, `readers.txt`; chain-100 and the GameTests by what they load. A bytecode-reference closure was tried first and dropped: every class reaches the `@Mod` class `IChemE`, which names the client classes, so a renderer change selected every hold gate.
+- 2026-11-10: a `build.gradle` change no longer runs every class (owner: "changing build.gradle should not trigger a full test"); `select` notes it (batch 2026-11-10-custom-shader-system, at its final lane).

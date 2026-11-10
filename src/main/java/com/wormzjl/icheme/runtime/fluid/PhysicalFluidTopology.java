@@ -129,7 +129,17 @@ public final class PhysicalFluidTopology {
             boolean fired=kind==TopologyCompiler.Kind.VOID&&heat==null&&control instanceof FlowControl.ControlValve fuel&&fuel.source()==FlowControl.ValveSource.STILL;
             if(fired&&(onPortLane||ports.size()!=1||ports.getFirst().port!=PassiveNetwork.PhasePort.BULK||ports.getFirst().role!=ConnectionRole.VESSEL))
                 throw new IllegalArgumentException("A still's burners are a void with one bulk port and its fuel valve");
-            boolean sink=burner||flare||outlet||fired;
+            // A chimney's tip (batch 2026-11-10-chimney): a passive void at the stack's top cell with one bulk port at its gas
+            // inlet; its geometry is the stack, the run into it carries it (its column, friction and exit loss).
+            boolean chimney=kind==TopologyCompiler.Kind.VOID&&heat==null&&control instanceof FlowControl.Passive&&!onPortLane&&ports.size()==1;
+            if(chimney&&(ports.getFirst().port!=PassiveNetwork.PhasePort.BULK||ports.getFirst().role!=ConnectionRole.VESSEL||ports.getFirst().cell.y()>position.y()))
+                throw new IllegalArgumentException("A chimney is a void at its stack's top with one bulk port at or below it");
+            // A prime mover's fuel void (batch 2026-11-10-prime-movers): a void behind its FUEL port at its combustor's
+            // pressure, its fuel valve its control.
+            boolean engine=kind==TopologyCompiler.Kind.VOID&&heat==null&&control instanceof FlowControl.ControlValve fuelled&&fuelled.source()==FlowControl.ValveSource.ENGINE;
+            if(engine&&(onPortLane||ports.size()!=1||ports.getFirst().port!=PassiveNetwork.PhasePort.BULK||ports.getFirst().role!=ConnectionRole.VESSEL))
+                throw new IllegalArgumentException("A prime mover's fuel void has one bulk port and its fuel valve");
+            boolean sink=burner||flare||outlet||fired||chimney||engine;
             if(position.lane()==0||onPortLane?slots!=0||points!=0:!laneFits(position.lane(),slots)||(points>>>60)!=0)throw new IllegalArgumentException("Invalid rack lane "+position.lane()+" of "+slots+" positions");
             if(suspendedBy<0||onPortLane&&suspendedBy!=0)throw new IllegalArgumentException("Invalid column suspension");
             if(held&&onPortLane)throw new IllegalArgumentException("A column's port has no block to hold");
@@ -141,9 +151,10 @@ public final class PhysicalFluidTopology {
                 throw new IllegalArgumentException("A rack lane is a plain laid pipe with at most two joints");
             if(inlineFilter&&(kind!=TopologyCompiler.Kind.PIPE||cutoff!=Cutoff.NONE||!(control instanceof FlowControl.Passive)))throw new IllegalArgumentException("Invalid pipe filter accessory");
             if(kind!=TopologyCompiler.Kind.PIPE&&cutoff!=Cutoff.NONE)throw new IllegalArgumentException("Only a pipe has a cutoff accessory");
-            boolean valid=switch(kind) {case PUMP->control instanceof FlowControl.Mover mover&&mover.liquid();case COMPRESSOR->control instanceof FlowControl.Mover mover&&!mover.liquid();case VALVE->control instanceof FlowControl.Valve&&!(control instanceof FlowControl.Turbine);case TURBINE->control instanceof FlowControl.Turbine;case PIPE->control instanceof FlowControl.Passive||control instanceof FlowControl.Valve&&!(control instanceof FlowControl.Turbine)||control instanceof FlowControl.Mover;case VOID->burner||flare||fired||control instanceof FlowControl.Passive;case GENERATOR->outlet||control instanceof FlowControl.Passive;default->control instanceof FlowControl.Passive;};
+            boolean valid=switch(kind) {case PUMP->control instanceof FlowControl.Mover mover&&mover.liquid();case COMPRESSOR->control instanceof FlowControl.Mover mover&&!mover.liquid();case VALVE->control instanceof FlowControl.Valve&&!(control instanceof FlowControl.Turbine);case TURBINE->control instanceof FlowControl.Turbine;case EJECTOR->control instanceof FlowControl.Ejector;case PIPE->control instanceof FlowControl.Passive||control instanceof FlowControl.Valve&&!(control instanceof FlowControl.Turbine)||control instanceof FlowControl.Mover;case VOID->burner||flare||fired||engine||control instanceof FlowControl.Passive;case GENERATOR->outlet||control instanceof FlowControl.Passive;default->control instanceof FlowControl.Passive;};
             if(control instanceof FlowControl.ControlValve valve&&valve.source()==FlowControl.ValveSource.BURNER&&!burner)throw new IllegalArgumentException("Only a burner has a burner's fuel valve");
             if(control instanceof FlowControl.ControlValve valve&&valve.source()==FlowControl.ValveSource.FLARE&&!flare)throw new IllegalArgumentException("Only a flare has a flare's tip limit");
+            if(control instanceof FlowControl.ControlValve valve&&valve.source()==FlowControl.ValveSource.ENGINE&&!engine)throw new IllegalArgumentException("Only a prime mover's fuel void has its fuel valve");
             if(control instanceof FlowControl.ControlValve valve&&valve.source()==FlowControl.ValveSource.STILL&&!outlet&&!fired)throw new IllegalArgumentException("Only a still's outlet or burners have a still's valve");
             if(!valid)throw new IllegalArgumentException("Device/control mismatch");
             if(control instanceof FlowControl.Valve&&cutoff!=Cutoff.NONE)throw new IllegalArgumentException("A pressure valve cannot carry a cutoff accessory");
@@ -153,6 +164,7 @@ public final class PhysicalFluidTopology {
             // The one-block pump and compressor are gone (batch 2026-10-28-old-mover-removal): a mover is either constructed,
             // with ports, or in-line, a pipe carrying its control.
             if(ports.isEmpty()&&kind==TopologyCompiler.Kind.TURBINE)throw new IllegalArgumentException("A steam turbine is a constructed machine with ports");
+            if(ports.isEmpty()&&kind==TopologyCompiler.Kind.EJECTOR)throw new IllegalArgumentException("A steam ejector is a constructed unit with ports");
             if(ports.isEmpty()&&(kind==TopologyCompiler.Kind.PUMP||kind==TopologyCompiler.Kind.COMPRESSOR))throw new IllegalArgumentException("A pump or compressor without ports is an in-line mover: a pipe carrying its control");
             if(ports.isEmpty()&&control instanceof FlowControl.Mover mover&&!mover.enabled())throw new IllegalArgumentException("Only constructed movers have a power switch");
             if(ports.size()>MAXIMUM_PORTS)throw new IllegalArgumentException("Too many device ports: "+ports.size());
@@ -179,8 +191,17 @@ public final class PhysicalFluidTopology {
                 if(heat.partner()==id)throw new IllegalArgumentException("A heat side cannot be its own partner");
             } else for(var port:ports) {
                 if(!port.cell.dimension().equals(position.dimension())||!seen.add(new Contact(port.cell,port.face)))throw new IllegalArgumentException("Invalid device port");
-                if(port.role==ConnectionRole.INLET||port.role==ConnectionRole.OUTLET)throw new IllegalArgumentException("Only a heat side has inlet and outlet ports");
-                if(kind==TopologyCompiler.Kind.RESERVOIR) {
+                if(port.role==ConnectionRole.INLET&&kind!=TopologyCompiler.Kind.EJECTOR||port.role==ConnectionRole.OUTLET)throw new IllegalArgumentException("Only a heat side has inlet and outlet ports, and an ejector its motive inlet");
+                if(kind==TopologyCompiler.Kind.EJECTOR) {
+                    // A steam ejector (batch 2026-11-10-steam-ejector-flow): its suction at its node, its motive inlet, its discharge.
+                    if(port.port!=PassiveNetwork.PhasePort.BULK)throw new IllegalArgumentException("An ejector needs bulk ports");
+                    switch(port.role) {
+                        case SUCTION->{suction++;if(!port.cell.equals(position))throw new IllegalArgumentException("An ejector's node must be its suction cell");}
+                        case DISCHARGE->discharge++;
+                        case INLET->{}
+                        default->throw new IllegalArgumentException("An ejector needs suction, motive and discharge ports");
+                    }
+                } else if(kind==TopologyCompiler.Kind.RESERVOIR) {
                     if(port.role!=ConnectionRole.VESSEL)throw new IllegalArgumentException("A reservoir needs vessel ports");
                 } else if(kind==TopologyCompiler.Kind.PUMP||kind==TopologyCompiler.Kind.COMPRESSOR||kind==TopologyCompiler.Kind.TURBINE) {
                     if(port.port!=PassiveNetwork.PhasePort.BULK)throw new IllegalArgumentException("A mover needs bulk ports");
@@ -191,7 +212,8 @@ public final class PhysicalFluidTopology {
                     }
                 } else if(!onPortLane&&!sink)throw new IllegalArgumentException("Only reservoirs, pumps, compressors, heat sides, burners, flares and column ports have ports");
             }
-            if(!ports.isEmpty()&&kind!=TopologyCompiler.Kind.RESERVOIR&&kind!=TopologyCompiler.Kind.HEAT_SIDE&&!onPortLane&&!sink&&(ports.size()!=2||suction!=1||discharge!=1))
+            if(kind==TopologyCompiler.Kind.EJECTOR&&(ports.size()!=3||suction!=1||discharge!=1))throw new IllegalArgumentException("An ejector needs exactly one suction, one motive and one discharge port");
+            if(!ports.isEmpty()&&kind!=TopologyCompiler.Kind.RESERVOIR&&kind!=TopologyCompiler.Kind.HEAT_SIDE&&kind!=TopologyCompiler.Kind.EJECTOR&&!onPortLane&&!sink&&(ports.size()!=2||suction!=1||discharge!=1))
                 throw new IllegalArgumentException("A mover needs exactly one suction and one discharge port");
         }
         boolean boundary(){return kind==TopologyCompiler.Kind.RESERVOIR||kind==TopologyCompiler.Kind.GENERATOR||kind==TopologyCompiler.Kind.VOID;}
@@ -199,8 +221,14 @@ public final class PhysicalFluidTopology {
         public boolean burner(){return kind==TopologyCompiler.Kind.VOID&&heat!=null;}
         /** Whether this is a flare's tip (batch 2026-11-09-flare-stack): the run into it carries its tip limit. */
         public boolean flare(){return kind==TopologyCompiler.Kind.VOID&&heat==null&&control instanceof FlowControl.ControlValve v&&v.source()==FlowControl.ValveSource.FLARE;}
+        /** Whether this is a chimney's tip (batch 2026-11-10-chimney): the run into it carries its stack, {@link #geometry}. */
+        public boolean chimney(){return kind==TopologyCompiler.Kind.VOID&&heat==null&&control instanceof FlowControl.Passive&&position.lane()!=PORT_LANE&&ports.size()==1;}
+        /** A sink open to the atmosphere (C1 B): a flare's or a chimney's tip, at {@code PhaseLayout.atmosphere} of its own height. */
+        public boolean atmospheric(){return flare()||chimney();}
         /** A burner or a flare: a sink whose built-in valve sits on the run into it. */
-        public boolean valvedSink(){return burner()||flare()||stillBurners();}
+        public boolean valvedSink(){return burner()||flare()||stillBurners()||engineFuel();}
+        /** Whether this is a prime mover's fuel void (batch 2026-11-10-prime-movers): the run into it carries its fuel valve. */
+        public boolean engineFuel(){return kind==TopologyCompiler.Kind.VOID&&heat==null&&control instanceof FlowControl.ControlValve v&&v.source()==FlowControl.ValveSource.ENGINE;}
         /** Whether this is a liquid-fired still's burners (batch 2026-11-09-batch-distiller, W4): the run into it carries the still's fuel valve. */
         public boolean stillBurners(){return kind==TopologyCompiler.Kind.VOID&&heat==null&&control instanceof FlowControl.ControlValve v&&v.source()==FlowControl.ValveSource.STILL;}
         /** Whether this is a batch still's outlet (batch 2026-11-09-batch-distiller): the run out of it carries its outlet valve. */
@@ -314,9 +342,17 @@ public final class PhysicalFluidTopology {
         boolean connects(Direction direction){return generatorEnabled&&cutoff!=Cutoff.CLOSED&&mechanicallyConnects(direction);}
         /** Fitting joints and bore inheritance remain axial even when hydraulic contacts are closed. */
         public boolean mechanicallyConnects(Direction direction){return jointAt(direction)&&(!actuator()&&!filter()&&cutoff==Cutoff.NONE||direction.x*facing.x+direction.y*facing.y+direction.z*facing.z!=0);}
+        /** Whether {@code face} of {@code cell} is an ejector's motive inlet: its run ends at the ejector's motive junction. */
+        boolean motiveAt(Position cell,Direction face) {
+            if(kind!=TopologyCompiler.Kind.EJECTOR)return false;
+            for(var port:ports)if(port.cell.equals(cell)&&port.face==face)return port.role==ConnectionRole.INLET;
+            return false;
+        }
         /** The driven side is the actual discharge nozzle, independent of the node's position and the model's heading. */
         boolean outletAt(Position cell,Direction face) {
             if(kind==TopologyCompiler.Kind.HEAT_SIDE){for(var port:ports)if(port.cell.equals(cell)&&port.face==face)return port.role==ConnectionRole.OUTLET;return false;}
+            // An ejector's motive and discharge runs leave its node for its own junctions (batch 2026-11-10-steam-ejector-flow).
+            if(kind==TopologyCompiler.Kind.EJECTOR){for(var port:ports)if(port.cell.equals(cell)&&port.face==face)return port.role!=ConnectionRole.SUCTION;return false;}
             if(!actuator())return false;
             if(ports.isEmpty())return cell.equals(position)&&face==facing;
             for(var port:ports)if(port.cell.equals(cell)&&port.face==face)return port.role==ConnectionRole.DISCHARGE;
@@ -430,6 +466,10 @@ public final class PhysicalFluidTopology {
     }
     /** The compiled pipe of heat side {@code physicalId}: its passage between its inlet node and its outlet junction. */
     public static long sideIdentity(long physicalId){return Long.MIN_VALUE/2+physicalId;}
+    /** The compiled pipe of ejector {@code physicalId}'s mover, from its suction node to its discharge junction. */
+    public static long ejectorIdentity(long physicalId){return Long.MIN_VALUE/4+physicalId;}
+    /** The compiled pipe of ejector {@code physicalId}'s nozzle, from its motive junction to its discharge junction: its steam. */
+    public static long motiveIdentity(long physicalId){return Long.MIN_VALUE/8+physicalId;}
     public static Compiled compile(Collection<Device> devices,Map<Long,PassiveNetwork.Reservoir> boundaryStates) {
         return compile(devices,boundaryStates,Map.of(),boundaryStates.values().stream().findFirst().map(PassiveNetwork.Reservoir::state).orElse(null));
     }
@@ -451,7 +491,7 @@ public final class PhysicalFluidTopology {
         // The face of every link with a tank (RESERVOIR) end, as the direction from the tank to its neighbour, and the port
         // a pipe end at that tank compiles to (Device.portAt). Generators and voids stay BULK.
         var tankFaces=new HashMap<Long,Direction>();var tankPorts=new HashMap<Long,PassiveNetwork.PhasePort>();var outletLinks=new HashSet<Long>();
-        var linkDirections=new HashMap<Long,Direction>();
+        var linkDirections=new HashMap<Long,Direction>();var motiveLinks=new HashSet<Long>();
         for(var d:physical.values())for(var contact:d.contacts()) {
             var direction=contact.direction();var next=contact.cell().offset(direction);
             var other=across(positions::get,x->x,d,contact.cell(),direction);
@@ -463,12 +503,13 @@ public final class PhysicalFluidTopology {
                 if(d.kind==TopologyCompiler.Kind.RESERVOIR){tankFaces.put(linkId,direction);tankPorts.put(linkId,d.portAt(contact.cell(),direction));}
                 else if(other.kind==TopologyCompiler.Kind.RESERVOIR){tankFaces.put(linkId,opposite(direction));tankPorts.put(linkId,other.portAt(next,opposite(direction)));}
                 if(d.outletAt(contact.cell(),direction)||other.outletAt(next,opposite(direction)))outletLinks.add(linkId);
+                if(d.motiveAt(contact.cell(),direction)||other.motiveAt(next,opposite(direction)))motiveLinks.add(linkId);
                 linkOwner.put(linkId++,owner.id);
             } else {
                 long middle=virtual--;var a=points.get(d.id);var b=points.get(other.id);var p=new Point((a.x+b.x)/2,(a.y+b.y)/2,(a.z+b.z)/2);
                 points.put(middle,p);nodes.add(new TopologyCompiler.Node(middle,TopologyCompiler.Kind.PIPE,p.y));
-                links.add(new TopologyCompiler.Link(linkId,d.id,middle,half(d,other)));linkDirections.put(linkId,direction);if(d.outletAt(contact.cell(),direction))outletLinks.add(linkId);linkOwner.put(linkId++,d.id);
-                links.add(new TopologyCompiler.Link(linkId,middle,other.id,half(other,d)));linkDirections.put(linkId,direction);if(other.outletAt(next,opposite(direction)))outletLinks.add(linkId);linkOwner.put(linkId++,other.id);
+                links.add(new TopologyCompiler.Link(linkId,d.id,middle,half(d,other)));linkDirections.put(linkId,direction);if(d.outletAt(contact.cell(),direction))outletLinks.add(linkId);if(d.motiveAt(contact.cell(),direction))motiveLinks.add(linkId);linkOwner.put(linkId++,d.id);
+                links.add(new TopologyCompiler.Link(linkId,middle,other.id,half(other,d)));linkDirections.put(linkId,direction);if(other.outletAt(next,opposite(direction)))outletLinks.add(linkId);if(other.motiveAt(next,opposite(direction)))motiveLinks.add(linkId);linkOwner.put(linkId++,other.id);
             }
         }
         var checks=new HashSet<Long>();for(var d:physical.values())if(d.cutoff==Cutoff.CHECK)checks.add(d.id);
@@ -509,7 +550,7 @@ public final class PhysicalFluidTopology {
                 indices.put(id,reservoirs.size());var node=retained.get(id);var boundary=boundaryStates.get(id);
                 reservoirs.add(boundary!=null?pooled(physical.get(id),boundary):new PassiveNetwork.Reservoir(id,node.elevation(),seed,PassiveNetwork.NodeKind.JUNCTION));
             }
-            var pipes=new ArrayList<PassiveNetwork.Pipe>();int islandIndex=islands.size();var positiveFilterEdges=new HashMap<Long,Set<Long>>();
+            var pipes=new ArrayList<PassiveNetwork.Pipe>();int islandIndex=islands.size();var positiveFilterEdges=new HashMap<Long,Set<Long>>();var motiveEdges=new HashMap<Long,Set<Long>>();
             for(var run:runsOf.get(group)) {
                 // A passive return to the same zero-holdup node has no driving pressure or owned stock.
                 if(run.first()==run.second()){for(var segment:run.segments())diagnostics.put(linkOwner.get(segment.linkId()),"NO FLOW: passive return loop");continue;}
@@ -561,6 +602,10 @@ public final class PhysicalFluidTopology {
                     }
                     continue;
                 }
+                if(start!=null&&start.chimney()||end!=null&&end.chimney()) {
+                    // A chimney's stack (batch 2026-11-10-chimney) is the last section of the run into its tip.
+                    var all=new ArrayList<>(sections);if(end!=null&&end.chimney())all.add(end.geometry());else all.addFirst(start.geometry());sections=List.copyOf(all);
+                }
                 if(fromStart&&fromEnd) {
                     int middle=reservoirs.size();reservoirs.add(new PassiveNetwork.Reservoir(virtual--,.5*(reservoirs.get(a).elevation()+reservoirs.get(b).elevation()),seed,PassiveNetwork.NodeKind.JUNCTION));
                     var halves=sections.stream().map(g->scaled(g,.5)).toList();
@@ -581,6 +626,9 @@ public final class PhysicalFluidTopology {
                     // A heat side's outlet runs leave from its outlet junction, as a filter's positive side does.
                     if(start!=null&&start.kind==TopologyCompiler.Kind.HEAT_SIDE&&outletLinks.contains(startLink.id()))positiveFilterEdges.computeIfAbsent(start.id,k->new HashSet<>()).add(pipeId);
                     if(end!=null&&end.kind==TopologyCompiler.Kind.HEAT_SIDE&&outletLinks.contains(endLink.id()))positiveFilterEdges.computeIfAbsent(end.id,k->new HashSet<>()).add(pipeId);
+                    // An ejector's motive run ends at its motive junction, its discharge run leaves its discharge junction.
+                    if(start!=null&&start.kind==TopologyCompiler.Kind.EJECTOR&&outletLinks.contains(startLink.id()))(motiveLinks.contains(startLink.id())?motiveEdges:positiveFilterEdges).computeIfAbsent(start.id,k->new HashSet<>()).add(pipeId);
+                    if(end!=null&&end.kind==TopologyCompiler.Kind.EJECTOR&&outletLinks.contains(endLink.id()))(motiveLinks.contains(endLink.id())?motiveEdges:positiveFilterEdges).computeIfAbsent(end.id,k->new HashSet<>()).add(pipeId);
                 }
             }
             // A filter's cake and a heat side's passage each own a pipe between the device's node and a junction of their own
@@ -596,6 +644,21 @@ public final class PhysicalFluidTopology {
                 // The side's heat law (W5: an air cooler against its air) rides on its passage; a side waiting for its partner has none.
                 pipes.add(side?new PassiveNetwork.Pipe(identity,negative,positive,device.geometry).withHeat(device.heat.heatSide()):new PassiveNetwork.Pipe(identity,negative,positive,device.geometry).withFilter(filterStock.getOrDefault(id,InlineFilter.empty())));
                 views.put(id,List.of(new View(islandIndex,identity,true)));
+            }
+            // A steam ejector (batch 2026-11-10-steam-ejector-flow): its mover from its suction node to its discharge junction,
+            // and its nozzle's throat from its motive junction to the same, the equivalent throat whose velocity cap passes its
+            // steam (EJECTOR_FLOW_PLAN.md section 2.4; the owner's 100 m/s cap, no choke law).
+            for(long id:new TreeSet<>(members))if(physical.containsKey(id)&&physical.get(id).kind==TopologyCompiler.Kind.EJECTOR){
+                var device=physical.get(id);var ejector=(FlowControl.Ejector)device.control;
+                int suctionNode=indices.get(id),discharge=reservoirs.size(),motive=discharge+1;
+                reservoirs.add(new PassiveNetwork.Reservoir(virtual--,device.ports.stream().filter(p->p.role==ConnectionRole.DISCHARGE).findFirst().orElseThrow().cell.y,seed,PassiveNetwork.NodeKind.JUNCTION));
+                reservoirs.add(new PassiveNetwork.Reservoir(virtual--,device.ports.stream().filter(p->p.role==ConnectionRole.INLET).findFirst().orElseThrow().cell.y,seed,PassiveNetwork.NodeKind.JUNCTION));
+                var leaving=positiveFilterEdges.getOrDefault(id,Set.of());var arriving=motiveEdges.getOrDefault(id,Set.of());
+                for(int i=0;i<pipes.size();i++){var p=pipes.get(i);int to=leaving.contains(p.id())?discharge:arriving.contains(p.id())?motive:-1;if(to<0)continue;
+                    pipes.set(i,new PassiveNetwork.Pipe(p.id(),p.first()==suctionNode?to:p.first(),p.second()==suctionNode?to:p.second(),p.sections(),p.control(),p.blockedDirections(),p.filter(),p.firstPort(),p.secondPort(),p.forbiddenDirections()));}
+                pipes.add(new PassiveNetwork.Pipe(ejectorIdentity(id),suctionNode,discharge,List.of(ejectorBody(ejector)),ejector));
+                pipes.add(new PassiveNetwork.Pipe(motiveIdentity(id),motive,discharge,List.of(ejectorNozzle(ejector)),FlowControl.ControlValve.ejector()));
+                views.put(id,List.of(new View(islandIndex,ejectorIdentity(id),true)));
             }
             var ids=new TreeSet<Long>();for(long id:members)if(physical.containsKey(id))ids.add(id);
             Optional<String> error=ids.stream().filter(compiled.invalidPumpCycles()::contains).findFirst().map(id->diagnostics.get(id));
@@ -730,9 +793,17 @@ public final class PhysicalFluidTopology {
         var g=device.geometry;
         // A heat side's geometry is its passage, which its own pipe carries ({@link #sideIdentity}); its nozzles are 1 m stubs
         // at the line's bore, as an actuator's are.
-        if(device.kind==TopologyCompiler.Kind.HEAT_SIDE)g=new PipeResistance.Geometry(1,line.geometry.diameter(),line.geometry.roughness(),0);
+        if(device.kind==TopologyCompiler.Kind.HEAT_SIDE||device.kind==TopologyCompiler.Kind.EJECTOR)g=new PipeResistance.Geometry(1,line.geometry.diameter(),line.geometry.roughness(),0);
         if(device.kind!=TopologyCompiler.Kind.PIPE&&device.actuator()&&line.kind==TopologyCompiler.Kind.PIPE)g=new PipeResistance.Geometry(g.length(),line.geometry.diameter(),line.geometry.roughness(),g.minorLoss());
         return scaled(g,.5);
+    }
+    /** An ejector's body as a section, suction to discharge: 1 m at its suction's bore. */
+    static PipeResistance.Geometry ejectorBody(FlowControl.Ejector ejector) {
+        return new PipeResistance.Geometry(1,ejector.design().suction(),PipeResistance.DEFAULT_ROUGHNESS_METRES,0);
+    }
+    /** An ejector's motive valve's section: 1 m at its motive nozzle's bore ({@link com.wormzjl.icheme.science.machine.SteamEjector#motiveBore}). */
+    static PipeResistance.Geometry ejectorNozzle(FlowControl.Ejector ejector) {
+        return new PipeResistance.Geometry(1,ejector.design().motiveBore(),PipeResistance.DEFAULT_ROUGHNESS_METRES,0);
     }
     private static PipeResistance.Geometry scaled(PipeResistance.Geometry g,double fraction){return new PipeResistance.Geometry(g.length()*fraction,g.diameter(),g.roughness(),g.minorLoss()*fraction,g.channels());}
     private static void mapViews(Map<Long,List<View>> views,TopologyCompiler.Run run,Map<Long,Long> owners,Map<Long,Direction> linkDirections,Map<Long,Device> physical,int island,long pipe,boolean forward) {mapViews(views,run,owners,linkDirections,physical,island,pipe,forward,false);}

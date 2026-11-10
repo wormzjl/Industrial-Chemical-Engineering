@@ -313,6 +313,29 @@ public final class ProcessUnit {
         return shaftRadius(pumpPower(shape.duty()), shape.duty().speed());
     }
 
+    /** The largest low-voltage TEFC motor, kW; above it a large motor. */
+    static final double MOTOR_LOW_VOLTAGE = 400;
+    /** A two-pole generator above this, kW, is drawn as a turbo-generator (owner P9 A). */
+    static final double TURBO_GENERATOR = 20000;
+    /** A motor's or generator's plinth at grade and its baseplate, m. */
+    static final double DRIVER_PLINTH = .2, DRIVER_BASEPLATE = .08;
+
+    /** A motor's or generator's body across, m: a TEFC motor's {@link #motorDiameter}, a large machine's frame 1.15 of it. */
+    static double motorFrame(double kw) {
+        return (kw > MOTOR_LOW_VOLTAGE ? 1.15 : 1) * motorDiameter(kw);
+    }
+
+    /**
+     * A large generator's shaft height at grade, m: its drawing's ({@code MotorDesign.build}), so a driver drawn for it couples
+     * level (batch 2026-11-10-prime-movers, owner review T1); NaN at low voltage, whose shaft follows its feet. The kit's, so
+     * a prime mover reads it without reaching into the generator's design.
+     */
+    static double generatorShaft(double kw, int poles) {
+        if (!(kw > MOTOR_LOW_VOLTAGE)) return Double.NaN;
+        double r = (poles == 2 && kw > TURBO_GENERATOR ? .85 : 1) * motorFrame(kw) / 2;
+        return Math.ceil(DRIVER_PLINTH + DRIVER_BASEPLATE + r + .1 - .5) + .5;
+    }
+
     /** A TEFC motor's body across, m, for {@code kw}: about 0.19 P^0.25 (0.32 m at 8 kW, 0.91 m at 530 kW). */
     static double motorDiameter(double kw) {
         return .19 * Math.sqrt(Math.sqrt(kw));
@@ -1741,6 +1764,59 @@ public final class ProcessUnit {
         for(int i=first;i<polygons.size();i++) {var p=polygons.get(i);if(p.material()==Material.MOTOR_FRAME||p.material()==Material.MOTOR_PANEL)polygons.set(i,new Mesh.Facet(p.positions(),p.normal(),p.min(),p.max(),p.shading(),Material.GENERATOR_PANEL,p.u(),p.v(),p.part()));}
     }
     void largeGenerator(double x,double y,double z0,double across,double length,double floor){int first=mesh.facets().size();largeMotor(x,y,z0,across,length,floor);generatorPanels(first);}
+
+    /**
+     * A two-pole turbo-generator (batch 2026-11-10-prime-movers, owner review T1) along z at (x, y) from {@code z0} (its
+     * non-drive end) for {@code length}: a long round stator with its bands, dished end shields with their bearings, the
+     * exciter's housing ahead of the non-drive end ({@code exciter} long), the coolers' box on top with its fins, the HV
+     * terminal box underneath at the exciter end; its feet and the base frame's beams down to {@code floor}.
+     */
+    void turboGenerator(double x, double y, double z0, double across, double length, double exciter, double floor) {
+        double r = across / 2, z1 = z0 + length, dish = .16 * r, s0 = z0 + dish + .12, s1 = z1 - dish - .12;
+        var axis = Frame.of(new double[]{x, y, 0}, 2, 1);
+        var back = Frame.of(new double[]{x, y, 0}, 2, -1);
+        int n = Math.max(16, sides(across));
+        mesh.prism(axis, r, s0, s1, n, Material.GENERATOR_PANEL);
+        for (double zb : new double[]{s0 + .06, (s0 + s1) / 2, s1 - .06}) mesh.hoop(axis, r, r + .04, zb - .06, zb + .06, n, Material.MOTOR_PLAIN);
+        // The end shields: dished, closing the stator's ends, a bearing housing on each.
+        mesh.annulus(axis, .9 * r, r, s1, n, 1, Material.MOTOR_PLAIN);
+        mesh.head(axis, .9 * r, s1, dish, n, Material.MOTOR_PLAIN);
+        mesh.annulus(axis, .9 * r, r, s0, n, -1, Material.MOTOR_PLAIN);
+        mesh.head(back, .9 * r, -s0, dish, n, Material.MOTOR_PLAIN);
+        mesh.cylinder(axis, .2 * r, s1 + .8 * dish, z1, 12, Material.MOTOR_PLAIN);
+        mesh.cylinder(axis, .2 * r, z0, s0 - .8 * dish, 12, Material.MOTOR_PLAIN);
+        solids.add(Solid.rod(new double[]{x, y, 0}, 2, z0, z1, 1.04 * r, 0));
+        volumes.add(Solid.rod(new double[]{x, y, 0}, 2, s0 + .05, s1 - .05, r - .02, 0));
+        // The exciter's housing ahead of the non-drive end.
+        if (exciter > .1) box(new double[]{x - .3 * across, y - .5 * r, z0 - exciter + .02}, new double[]{x + .3 * across, y + .4 * r, z0 - .02}, Material.GENERATOR_PANEL, true);
+        // The coolers' box on top, fins along its sides and a rail round its top.
+        double c0 = s0 + .08 * length, c1 = s1 - .08 * length, cb = y + .92 * r, ct = y + 1.42 * r, cx = .62 * r;
+        box(new double[]{x - cx, cb, c0}, new double[]{x + cx, ct, c1}, Material.GENERATOR_PANEL, true);
+        for (int side = -1; side <= 1; side += 2) {
+            double xf = x + side * cx, xo = xf + side * .05;
+            int fins = Math.max(4, (int) Math.floor((c1 - c0 - .2) / .3));
+            for (int k = 0; k < fins; k++) {
+                double z = c0 + .1 + (c1 - c0 - .2) * (k + .5) / fins;
+                box(new double[]{Math.min(xf, xo), cb + .12, z - .03}, new double[]{Math.max(xf, xo), ct - .08, z + .03}, Material.MOTOR_PLAIN, false);
+            }
+            box(new double[]{Math.min(xf, xo), ct - .08, c0}, new double[]{Math.max(xf, xo), ct, c1}, Material.MOTOR_PLAIN, false);
+        }
+        // The HV terminal box underneath at the exciter end.
+        double zt0 = s0 + .06 * length, zt1 = zt0 + Math.max(.6, .15 * length);
+        box(new double[]{x - .32 * r, Math.max(floor, y - r - .6), zt0}, new double[]{x + .32 * r, y - .88 * r, zt1}, Material.GENERATOR_PANEL, false);
+        // Feet on the base frame's beams, on posts when it stands high.
+        double base = y - r, beam = Math.min(BEAM, base - floor);
+        for (int side = -1; side <= 1; side += 2) {
+            double xf = x + side * .8 * r;
+            for (double zf : new double[]{s0 + .05, s1 - .05 - .12 * length})
+                box(new double[]{xf - .12 * r, base, zf}, new double[]{xf + .12 * r, y - .72 * r, zf + .12 * length}, Material.MOTOR_PLAIN, false);
+            if (beam > .02) box(new double[]{xf - FLANGE_BEAM, base - beam, z0 - .05}, new double[]{xf + FLANGE_BEAM, base, z1 + .05}, Material.STEELWORK, true);
+            if (base - beam - floor > .05)
+                for (double zp : new double[]{z0 + .1, (z0 + z1) / 2, z1 - .1})
+                    box(new double[]{xf - POST / 2, floor, zp - POST / 2}, new double[]{xf + POST / 2, base - beam, zp + POST / 2}, Material.STEELWORK, true);
+        }
+        terminalBox = new double[]{x + r, y - .2 * r, (zt0 + zt1) / 2};
+    }
     void motor(Frame f, double r, double z0, double z1, double shaft, double floor, MotorDetail detail) {
         double fin = detail == MotorDetail.PLAIN ? .03 : .025 + .06 * r;
         motor(f, r, fin, z0, z1 - .18 * (z1 - z0), z1, sides(2 * r), shaft, floor, detail);
@@ -2281,6 +2357,79 @@ public final class ProcessUnit {
         shaftEnds.add(new EquipmentShape.ShaftEnd(role, new double[]{x, y, face}, 2, sign));
     }
 
+    /**
+     * A length of the split flange on the casing's {@code side} (±x of {@code a}) from station {@code za} (the casing's
+     * radius there {@code ra}) to {@code zb} ({@code rb}), {@code out} proud of the casing between heights y0 and y1: its
+     * top, underside and outer face, and the end faces asked for (a cone's flange is a slanted hexahedron). The kit's: a
+     * steam turbine's and a gas turbine's casings both carry it.
+     */
+    static void ledge(Mesh m, double a, int side, double za, double ra, double zb, double rb, double y0, double y1, double out, boolean startCap, boolean endCap,
+                              Material material) {
+        double[][] in = {{a + side * (ra - .03), za}, {a + side * (rb - .03), zb}}, ex = {{a + side * (ra + out), za}, {a + side * (rb + out), zb}};
+        for (double y : new double[]{y0, y1})
+            m.flat(List.of(new double[]{in[0][0], y, za}, new double[]{ex[0][0], y, za}, new double[]{ex[1][0], y, zb}, new double[]{in[1][0], y, zb}),
+                    new double[]{0, y == y1 ? 1 : -1, 0}, material);
+        m.flat(List.of(new double[]{ex[0][0], y0, za}, new double[]{ex[1][0], y0, zb}, new double[]{ex[1][0], y1, zb}, new double[]{ex[0][0], y1, za}), new double[]{side, 0, 0},
+                material);
+        if (startCap)
+            m.flat(List.of(new double[]{in[0][0], y0, za}, new double[]{ex[0][0], y0, za}, new double[]{ex[0][0], y1, za}, new double[]{in[0][0], y1, za}), new double[]{0, 0, -1},
+                    material);
+        if (endCap)
+            m.flat(List.of(new double[]{in[1][0], y0, zb}, new double[]{ex[1][0], y0, zb}, new double[]{ex[1][0], y1, zb}, new double[]{in[1][0], y1, zb}), new double[]{0, 0, 1},
+                    material);
+    }
+    /**
+     * A prime mover's load shaft along z at (x, y) from {@code z0} to {@code z1} (batch 2026-11-10-prime-movers): a spool
+     * of radius {@code rs} with a bolted flange at each end and a disc pack in its middle, one moving part turning at
+     * {@code speed} rev/s, in an open guard of bars on {@code floor} so it shows turning.
+     */
+    void loadShaft(double x, double y, double z0, double z1, double rs, double floor, double speed) {
+        var f = Frame.of(new double[]{x, y, 0}, 2, 1);
+        double rf = Math.max(rs + .05, 2.4 * rs), t = Math.max(.03, .5 * rs), zm = (z0 + z1) / 2;
+        mesh.part(motions.size());
+        mesh.prism(f, rs, z0, z1, ShaftGeometry.SIDES, Material.SHAFT);
+        for (double[] flange : new double[][]{{z0, z0 + t}, {z1 - t, z1}, {zm - t, zm + t}}) {
+            mesh.cylinder(f, rf, flange[0], flange[1], 12, Material.SHAFT);
+            for (int k = 0; k < 6; k++)
+                for (double zb : new double[]{flange[0] - .012, flange[1] + .012}) {
+                    var at = f.at(k * Math.PI / 3, .78 * rf, zb);
+                    box(new double[]{at[0] - .014, at[1] - .014, at[2] - .012}, new double[]{at[0] + .014, at[1] + .014, at[2] + .012}, Material.BOLT, false);
+                }
+        }
+        mesh.part(-1);
+        motions.add(Motion.turning(new double[]{x, y, zm}, new double[]{0, 0, 1}, speed, 0));
+        // The open guard: a hoop frame at each end on the floor, bars along its top and sides.
+        double g = rf + .08, bar = .025;
+        for (double z : new double[]{z0 + bar, z1 - bar})
+            for (int side = -1; side <= 1; side += 2)
+                box(new double[]{x + side * g - bar, floor, z - bar}, new double[]{x + side * g + bar, y + g, z + bar}, Material.GUARD, false);
+        for (double z : new double[]{z0 + bar, z1 - bar})
+            box(new double[]{x - g - bar, y + g - bar, z - bar}, new double[]{x + g + bar, y + g + bar, z + bar}, Material.GUARD, false);
+        for (double[] p : new double[][]{{-g, y + g}, {g, y + g}, {-g, y}, {g, y}, {0, y + g}})
+            box(new double[]{x + p[0] - bar, p[1] - bar, z0}, new double[]{x + p[0] + bar, p[1] + bar, z1}, Material.GUARD, false);
+        solids.add(Solid.box(new double[]{x - g, floor, z0}, new double[]{x + g, y + g, z1}));
+    }
+
+    /**
+     * An engine's torsional damper on its crankshaft's free end along z at (x, y) from {@code z0} to {@code z1}: a heavy
+     * disc of radius {@code r}, its bolt circle and hub, one moving part turning at {@code speed} rev/s.
+     */
+    void damper(double x, double y, double z0, double z1, double r, double speed) {
+        var f = Frame.of(new double[]{x, y, 0}, 2, 1);
+        mesh.part(motions.size());
+        // Bare machined steel: a moving part is unpainted, drawn without the cell's tint.
+        mesh.cylinder(f, r, z0 + .02, z1, sides(2 * r), Material.SHAFT);
+        mesh.hoop(f, r, r + .015, z0 + .02, z0 + .06, sides(2 * r), Material.SHAFT);
+        mesh.cylinder(f, .3 * r, z0 - .03, z0 + .02, 10, Material.SHAFT);
+        for (int k = 0; k < 8; k++) {
+            var at = f.at(k * Math.PI / 4, .62 * r, z0 + .01);
+            box(new double[]{at[0] - .02, at[1] - .02, at[2] - .02}, new double[]{at[0] + .02, at[1] + .02, at[2] + .02}, Material.BOLT, false);
+        }
+        mesh.part(-1);
+        motions.add(Motion.turning(new double[]{x, y, (z0 + z1) / 2}, new double[]{0, 0, 1}, speed, 0));
+        solids.add(Solid.rod(new double[]{x, y, 0}, 2, z0 - .03, z1, r + .015, 0));
+    }
+
     /** A coupling guard's panel's length, m: a flank and the hood's length are cut into whole panels near this, its round is one. */
     static final double GUARD_PANEL = .9;
 
@@ -2654,8 +2803,10 @@ public final class ProcessUnit {
         double y2 = y1 + hc;
         convection(a - hx, a + hx, a - hz, a + hz, y1, y2);
         var breeching = new Breeching(a - hx, a + hx, a - hz, a + hz);
-        double stack = .25 * dia + .3, neck = breeching.neck(y2, stack);
-        stack(a, a, stack, sides(stack), y2, Math.min(neck + MAX_STACK, stackTop(neck, y1)), Material.HEATER, breeching, true);
+        double stack = .25 * dia + .3, neck = breeching.neck(y2, stack), stackTop = Math.min(neck + MAX_STACK, stackTop(neck, y1));
+        stack(a, a, stack, sides(stack), y2, stackTop, Material.HEATER, breeching, true);
+        // The flue gas leaves the stack's mouth (W5): its mark, inside the rim.
+        mouth("stack_top_0", a, a, .92 * stack / 2, stackTop);
         // The convection coil in near the top of its front header box and out near its bottom; the radiant coil in at the
         // front under the roof, two rows under the convection outlet, and out just over the floor; fuel gas to the ring
         // header's front from the front. Every pipe block keeps one free block from the next.
@@ -2816,8 +2967,9 @@ public final class ProcessUnit {
         for (int j = 0; j < stacks; j++) {
             double zj = zs + length * (j + .5) / stacks, room = Math.min(length / stacks / 2 - .2, Math.max((c1 - c0) / 2, stack / 2 + .3));
             var breeching = new Breeching(c0, c1, zj - room, zj + room);
-            double neck = breeching.neck(y2, stack);
-            stack(a, zj, stack, sides(stack), y2, Math.min(neck + MAX_STACK, stackTop(neck, y1)), Material.HEATER, breeching, true);
+            double neck = breeching.neck(y2, stack), stackTop = Math.min(neck + MAX_STACK, stackTop(neck, y1));
+            stack(a, zj, stack, sides(stack), y2, stackTop, Material.HEATER, breeching, true);
+            mouth("stack_top_" + j, a, zj, .92 * stack / 2, stackTop);
         }
         // The walkways and ladders of each eave wall: the hearth walkway; on walls 6 m or more the side walkways at the rows
         // of peep doors up the wall at most 8 m apart (as the vertical heater's platforms, so no caged climb passes
@@ -3190,7 +3342,7 @@ public final class ProcessUnit {
      * cell's centre, up to {@link com.wormzjl.icheme.science.fluid.network.Flare#stackHeight}, on a tapered base 3 m high;
      * at the top a flare tip (a windshield 0.3 m wider than the riser, 1.2 m high) with three pilot tubes; the vent gas
      * inlet at the front, its centre 1.5 m up. No ladder: a flare's tip is reached from a crane while it is down. The
-     * flame is the client's ({@code FlareFlames}), drawn while the flare works.
+     * flame is the client's ({@code FxSources}, {@code FlameModel}), drawn while the flare works.
      */
     /**
      * A flare stack's plinth radius at least, m, and its gas inlet's centre, m (batch 2026-11-09-flare-stack): on the cell
@@ -3217,12 +3369,92 @@ public final class ProcessUnit {
         mesh.annulus(up, .9 * shield, shield, top + 1, n, 1, Material.MACHINE);
         mesh.bore(up, .9 * shield, top, top + 1, n, Material.MACHINE);
         solids.add(Solid.rod(new double[]{a, 0, a}, 1, top - .2, top + 1, shield, 0));
+        // The flame stands on the windshield's mouth (W3): its mark, the top centre of the tip.
+        mouth("flare_tip", a, a, .9 * shield, top + 1);
         for (int k = 0; k < 3; k++) {
             double t = 2 * Math.PI * k / 3 + Math.PI / 2, x = a + (shield + .08) * DeterministicMath.cos(t), z = a + (shield + .08) * DeterministicMath.sin(t);
             mesh.bar(new double[]{x, top - 2, z}, new double[]{x, top + 1.3, z}, .05, new double[]{1, 0, 0}, Material.PIPE);
         }
         // The vent gas enters the plinth 1.5 m up, towards the front, as a flare header arrives near grade.
         nozzles.add(radialSide(Role.FLARE_GAS, a, FLARE_INLET, a, plinth, m, -1, od));
+    }
+
+    // ---- Chimneys (batch 2026-11-10-chimney, owner C3 A) -----------------------------------------------------------
+
+    /** A steel stack's plinth radius at least, m. */
+    static final double STACK_PLINTH = .45;
+    /** A brick chimney's wall at its top beyond the liner, m (liner, air gap, brick), and its foot's radius over its top's (owner: "wider at the foot"). */
+    static final double CHIMNEY_WALL = .3, CHIMNEY_TAPER = 1.6;
+
+    /**
+     * A self-supporting steel stack (batch 2026-11-10-chimney): its shell {@code diameter} across inside up to
+     * {@code tangentLength} on a concrete plinth 2 m high that takes the gas inlet at the front, its centre
+     * {@link com.wormzjl.icheme.science.fluid.network.Chimney#INLET} up on its pipe block's centre line, and the data socket
+     * on its side; caged ladders up the back with rest platforms at most {@link Access#MAX_CLIMB} apart and a ring platform
+     * 2 m under the top (owner: "a ladder and a platform near the top").
+     */
+    void steelStack() {
+        double d = shape.diameter(), od = d + .02, r = od / 2, top = shape.tangentLength(), plinth = Math.max(r + .15, STACK_PLINTH);
+        double a = centre(plinth + Access.MIN_DECK + .1);
+        int n = sides(od), m = sides(2 * plinth);
+        var up = Frame.of(new double[]{a, 0, a}, 1, 1);
+        mesh.prism(up, plinth, 0, 2, m, Material.SUPPORT);
+        mesh.annulus(up, r, plinth, 2, m, 1, Material.SUPPORT);
+        solids.add(Solid.rod(new double[]{a, 0, a}, 1, 0, 2, plinth, 0));
+        stack(a, a, od, n, 2, top, Material.STEELWORK, null, false);
+        mouth("stack_top", a, a, .92 * r, top);
+        // The tip registers in the top cell on the axis: the stack is the run up to it.
+        fluidPoint = new double[]{a, top - .5, a};
+        // The climb up the back, alternating either side of it, each rest deck running from its ladder to the next one's foot
+        // (the heater stack's pattern: the next cage stands at the deck's end, not over it), the last landing a whole ring.
+        var levels = Access.climbs(0, List.of(), (int) Math.floor(top - 2));
+        double right = Math.PI / 2 - .7, left = Math.PI / 2 + .7, clear = Access.clearance(plinth);
+        var rings = new ArrayList<Ring>();
+        for (int k = 0; k < levels.size(); k++) {
+            double in = k % 2 == 0 ? right : left;
+            if (k == levels.size() - 1) rings.add(new Ring(levels.get(k), in, in, in + 2 * Math.PI));
+            else rings.add(in == right ? new Ring(levels.get(k), in, right, left + clear) : new Ring(levels.get(k), in, right - clear, left));
+        }
+        ringAccess(a, a, plinth, Access.MIN_DECK, 0, rings);
+        nozzles.add(radialSide(Role.STACK_GAS, a, com.wormzjl.icheme.science.fluid.network.Chimney.INLET, a, plinth, m, -1, Math.min(PipeSizes.MAX_OUTSIDE, od)));
+    }
+
+    /**
+     * A tapered brick or concrete chimney with a steel liner (batch 2026-11-10-chimney): its liner {@code diameter} across
+     * inside, standing 1 m proud of the shell's cap at {@code tangentLength}; the shell {@link #CHIMNEY_WALL} beyond the liner
+     * at the top and {@link #CHIMNEY_TAPER} times as wide at the foot; a railed gallery 3 m under the cap (climbed inside),
+     * an access door at the back, lightning rods on the rim, the gas inlet at the front through the foot, its centre
+     * {@link com.wormzjl.icheme.science.fluid.network.Chimney#INLET} up.
+     */
+    void brickChimney() {
+        double d = shape.diameter(), liner = d / 2 + .02, top = shape.tangentLength(), rt = d / 2 + CHIMNEY_WALL, rf = CHIMNEY_TAPER * rt;
+        double gallery = top - 3, rg = rf + (rt - rf) * gallery / top;
+        double a = centre(Math.max(rf, rg + Access.MIN_DECK) + .1);
+        int n = sides(2 * rf);
+        var up = Frame.of(new double[]{a, 0, a}, 1, 1);
+        mesh.frustum(up, rf, rt, 0, top, n, Material.CONCRETE);
+        mesh.annulus(up, liner, rt, top, n, 1, Material.CONCRETE);
+        solids.add(Solid.cone(new double[]{a, 0, a}, 1, 0, top, rf, rt, 0));
+        // The liner's head over the cap.
+        mesh.prism(up, liner, top, top + 1, n, Material.SHELL);
+        band(up, liner, top + .6, n, Material.STEELWORK);
+        mesh.annulus(up, .92 * liner, liner, top + 1, n, 1, Material.SHELL);
+        mesh.bore(up, .92 * liner, top + .7, top + 1, n, Material.SHELL);
+        mesh.annulus(up, 0, .92 * liner, top + .7, n, 1, Material.OPENING);
+        solids.add(Solid.rod(new double[]{a, 0, a}, 1, top, top + 1, liner, 0));
+        mouth("stack_top", a, a, .92 * liner, top + 1);
+        fluidPoint = new double[]{a, top + .5, a};
+        for (int k = 0; k < 3; k++) {
+            double t = 2 * Math.PI * k / 3 + Math.PI / 2, x = a + (rt - .1) * DeterministicMath.cos(t), z = a + (rt - .1) * DeterministicMath.sin(t);
+            mesh.bar(new double[]{x, top, z}, new double[]{x, top + 1.5, z}, .03, new double[]{1, 0, 0}, Material.PIPE);
+        }
+        // The gallery, two railed half rings meeting open.
+        double edge = rg + Access.MIN_DECK, step = Access.Arc.step(edge);
+        for (int k = 0; k < 2; k++)
+            platform(new Access.Arc(a, a, rg, k * Math.PI, (k + 1) * Math.PI, edge, step), gallery, Access.MIN_DECK, false, false);
+        door(a, a, rf, Math.PI / 2, 1.2, .45, 1);
+        double inlet = rf + (rt - rf) * com.wormzjl.icheme.science.fluid.network.Chimney.INLET / top;
+        nozzles.add(radialSide(Role.STACK_GAS, a, com.wormzjl.icheme.science.fluid.network.Chimney.INLET, a, inlet, n, -1, PipeSizes.MAX_OUTSIDE));
     }
 
     // ---- Batch still (batch 2026-11-09-batch-distiller, W2; BATCH_STILL_STRUCTURE.md) ------------------------------
@@ -3341,8 +3573,16 @@ public final class ProcessUnit {
         else stillVapour(p);
     }
 
+    /**
+     * A round mouth's mark (batch 2026-11-10-custom-shader-system, W3 to W5): a disc {@code radius} round the vertical line
+     * through (x, z), its box the 5 cm under height {@code top}, where a flame, a plume or a flue gas leaves.
+     */
+    void mouth(String name, double x, double z, double radius, double top) {
+        mark(name, new double[]{x - radius, top - .05, z - radius}, new double[]{x + radius, top, z + radius});
+    }
+
     /** A named part's box ({@link #marks}), from its two corners in any order. */
-    private void mark(String name, double[] a, double[] b) {
+    void mark(String name, double[] a, double[] b) {
         marks.put(name, new double[]{Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.min(a[2], b[2]), Math.max(a[0], b[0]), Math.max(a[1], b[1]), Math.max(a[2], b[2])});
     }
 

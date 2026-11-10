@@ -4,6 +4,11 @@ import com.wormzjl.icheme.science.math.DeterministicMath;
 
 /** VFD motor ratings, efficiency and continuous torque/power envelope. Legacy pole counts remain readable. */
 public final class Motor {
+    /** A generator's ratings past the motors' 20 MW, kW: the R20 series to 400 MW (batch 2026-11-10-prime-movers, owner P9 A). */
+    private static final double[] GENERATOR_KW = {22400, 25000, 28000, 31500, 35500, 40000, 45000, 50000, 56000, 63000, 71000, 80000, 90000, 100000, 112000, 125000,
+            140000, 160000, 180000, 200000, 224000, 250000, 280000, 315000, 355000, 400000};
+    /** A large generator's full-load efficiency at {@link #LARGE_GENERATOR} W (S1: air- and hydrogen-cooled turbo-generators, 97.5 % at 10 MW to 98.8 % at 300 MW). */
+    public static final double LARGE_EFFICIENCY = .988, LARGE_GENERATOR = 3e8;
     /** The rated outputs a design offers, kW: IEC 60072-1 from 0.75 kW to 1 MW, then the R20 series to 20 MW. */
     private static final double[] RATINGS_KW = {.75, 1.1, 1.5, 2.2, 3, 4, 5.5, 7.5, 11, 15, 18.5, 22, 30, 37, 45, 55, 75, 90, 110,
             132, 160, 200, 250, 315, 355, 400, 450, 500, 560, 630, 710, 800, 900, 1000, 1120, 1250, 1400, 1600, 1800, 2000, 2240,
@@ -36,6 +41,25 @@ public final class Motor {
     /** The rating, W, a design proposes for {@code shaftPower} (W): the next standard one above it with the {@link #SPARE}. */
     public static double ratingFor(double shaftPower) {
         return standardRating(SPARE * shaftPower);
+    }
+
+    /** The generator rating, W, a design proposes for {@code shaftPower} W: the next of the motors' list, then {@link #GENERATOR_KW}, above it with the {@link #SPARE}; NaN above 400 MW. */
+    public static double generatorRatingFor(double shaftPower) {
+        double power = SPARE * shaftPower, rating = standardRating(power);
+        if (Double.isFinite(rating)) return rating;
+        for (double kw : GENERATOR_KW) if (power <= kw * 1000 * (1 + 1e-12)) return kw * 1000;
+        return Double.NaN;
+    }
+
+    /**
+     * A generator's full-load efficiency (S1): the IE3 table to 1 MW (12 poles read as 8), then in log power to
+     * {@link #LARGE_EFFICIENCY} at {@link #LARGE_GENERATOR}: 97.0 % at 10 MW, 98.2 % at 100 MW for two poles.
+     */
+    public static double generatorEfficiency(double ratedPower, int poles) {
+        int p = poles == 12 ? 8 : poles;
+        if (!(ratedPower > 1e6)) return efficiency(ratedPower, p);
+        double base = efficiency(1e6, p), x = Math.min(1, DeterministicMath.log(ratedPower / 1e6) / DeterministicMath.log(LARGE_GENERATOR / 1e6));
+        return base + (LARGE_EFFICIENCY - base) * x;
     }
 
     /** The speed of a {@code poles}-pole motor at 50 Hz, rev/min, its rated slip included. */

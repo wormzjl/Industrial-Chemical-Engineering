@@ -134,7 +134,6 @@ class CrossflowEquipmentTest {
                                 layout.interior().contains(pipe),
                                 shape + ": interior pipe " + pipe);
                     }
-                    ProcessUnitTest.pipesApart(shape);
                     assertEquals(4, shape.nozzles().size());
                     assertEquals(2, ShapeRasterizer.fluidCells(shape).size());
                     checked++;

@@ -294,6 +294,12 @@ class PipePresentationTest {
         assertEquals(.5F,UnitDesign.soundPitch(1475,UnitDesign.PUMP_LOOP_RPM),1e-6);assertEquals(1F,UnitDesign.soundPitch(2950,UnitDesign.PUMP_LOOP_RPM),1e-6);
         assertEquals(1.5F,UnitDesign.soundPitch(4425,UnitDesign.PUMP_LOOP_RPM),1e-6);assertEquals(2F,UnitDesign.soundPitch(9000,UnitDesign.PUMP_LOOP_RPM));
         assertEquals(.5F,UnitDesign.soundPitch(500,UnitDesign.PUMP_LOOP_RPM));assertEquals(1F,UnitDesign.soundPitch(1500,UnitDesign.MOTOR_LOOP_RPM),1e-6);
+        // An engine family's own loop (owner pick C1): a high-speed set over its 1500 rpm loop, a medium-speed set over its
+        // 600 rpm loop (750 rpm plays at 1.25, 500 rpm at 0.83).
+        var engine=EquipmentShape.Kind.COMBUSTION_ENGINE;
+        var hs=EquipmentShape.unit(engine,2,1,EquipmentShape.Heading.NORTH,0);var ms750=EquipmentShape.unit(engine,5,1,EquipmentShape.Heading.NORTH,0);var ms500=EquipmentShape.unit(engine,6,1,EquipmentShape.Heading.NORTH,0);
+        assertFalse(UnitDesign.mediumSpeedEngine(hs));assertTrue(UnitDesign.mediumSpeedEngine(ms750));assertTrue(UnitDesign.mediumSpeedEngine(ms500));
+        assertEquals(1F,UnitDesign.soundPitch(hs,1),1e-6);assertEquals(1.25F,UnitDesign.soundPitch(ms750,1),1e-6);assertEquals(500/600F,UnitDesign.soundPitch(ms500,1),1e-6);
         // From a shape's design data: a 2-pole pump at full speed is its loop, a 4-pole one an octave down, at 1.5 times
         // its speed half again; a 4-pole motor (1475 rpm) just under its 1500 rpm loop; a compressor's loop states no speed.
         var designed=UnitDesign.of(EquipmentShape.Kind.PUMP);double size=designed.minSize();int length=designed.defaultLength(size);

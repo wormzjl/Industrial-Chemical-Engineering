@@ -134,7 +134,7 @@ public final class InventoryEquilibrium {
         // repartition, so this energy-volume flash returns no trace phase either. Owner decision D40 A: the vessel starts
         // from its own state, an inventory that moved restated in the phases it holds (repartition), not from a TP flash of
         // its amounts at its last temperature and pressure, which ignores its volume.
-        var state=(changedBasis?ConservativeTransport.repartition(model,previous,n):model.folded(previous)).withSolids(inventory.solids());
+        var state=(changedBasis?ConservativeTransport.repartition(model,previous,n,inventory.rigid()):model.folded(previous,false,inventory.rigid())).withSolids(inventory.solids());
         // Owner decision D59 (2): a vessel that holds no fluid at the bag's resolution holds a residue, booked exactly in its
         // inventory, and no fluid state to close: it is stated at its flash with its solids, at the temperature and pressure
         // it had. Random fuzz seed 707 booked 1e-42 mol of crude and 1e-84 mol of water vapour into an empty 1 m3 tank; the
@@ -145,6 +145,7 @@ public final class InventoryEquilibrium {
             @Override public FluidThermodynamics.State close(FluidThermodynamics.State start){return InventoryEquilibrium.close(model,start,inventory,null,workFrom,checkpoint);}
             @Override public FluidThermodynamics.State iterate(FluidThermodynamics.State start,double[] variables){return layout(model,start,null).decode(variables,0);}
             @Override public FluidThermodynamics.State split(FluidThermodynamics.State start){return InventoryEquilibrium.split(model,start,inventory,workFrom,checkpoint);}
+            @Override public boolean rigid(){return inventory.rigid();}
         },checkpoint);
     }
     /**
@@ -153,6 +154,8 @@ public final class InventoryEquilibrium {
      * beside its crystals, their amounts unknowns, {@code VesselCrystals}, decision D30).
      */
     interface Closure {
+        /** Whether the vessel's wall is rigid (batch 2026-11-10-rigid-reservoir): its crossings hold its volume. */
+        default boolean rigid(){return false;}
         /** The vessel closed, laid out with {@code start}'s phases; a {@link SparseNewton.Nonconvergence}, with its last
          * iterate where it has one, where it stops short. */
         FluidThermodynamics.State close(FluidThermodynamics.State start);
@@ -186,7 +189,7 @@ public final class InventoryEquilibrium {
                 // Decisions D28 A', D39 and D40 A: a failed closure's last iterate is a trial layout, not a state: the phases it
                 // empties are folded, and it proposes nothing. Laid out again with the solids of the pass's state (the vessel's
                 // own closure: its inventory's).
-                var checked=model.folded(closure.iterate(state,failure.lastVariables()),false,from);
+                var checked=model.folded(closure.iterate(state,failure.lastVariables()),false,closure.rigid(),from);
                 if(regime(checked).equals(regime(state)))throw failure;
                 // What a failed closure folds joins the A85 record (t38 form B, 2026-10-18): the check of the answer without
                 // it may not propose it again within this closure, else the regime it was folded from repeats and the
@@ -196,7 +199,7 @@ public final class InventoryEquilibrium {
                 state=checked.withSolids(state.solids());continue;
             }
             if(candidate==state)return state;
-            var checked=model.phaseCheck(candidate,false,from,excluded,0,null,own,checkpoint);
+            var checked=model.phaseCheck(candidate,false,from,excluded,0,null,own,closure.rigid(),checkpoint);
             if(checked!=candidate){state=checked;continue;}
             return candidate;
         }
@@ -235,11 +238,11 @@ public final class InventoryEquilibrium {
             double temperature=com.wormzjl.icheme.science.material.SolidMaterialCatalog.SolidMaterial.REFERENCE_TEMPERATURE+energy/inventory.solids().moments().heatCapacity();
             return model.solidState(temperature,state.pressure(),inventory.solids());
         }
-        var layout=layout(model,state,support);var x=layout.encode(state);
+        var layout=layout(model,state,support).atAmbient(inventory.ambient());var x=layout.encode(state);
         double[] residual=new double[layout.size()];layout.residual(state,n,energy,volume,workFrom,residual,0,x);
         if(norm(residual)<=CLOSURE)return state;
         var solved=SparseNewton.solve(layout.wallClosure(n,energy,volume,workFrom),x,new SparseNewton.Settings(SparseNewton.ITERATIONS,CLOSURE,1e-6,24),checkpoint);
-        var closed=ConservativeTransport.repartition(model,layout.decode(solved.variables(),0),n);
+        var closed=ConservativeTransport.repartition(model,layout.decode(solved.variables(),0),n,inventory.rigid());
         // The restatement applies the flash's trace-phase rule (decision D34), so a phase the closure left as a trace is
         // folded away and the vessel is closed again without it, in the folded state's own layout (decision D30). Folded
         // and only checked, a liquid-full LNG tank whose closure left its last bubble just under the trace share missed

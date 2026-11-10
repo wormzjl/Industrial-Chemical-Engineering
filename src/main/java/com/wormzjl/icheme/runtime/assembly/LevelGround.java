@@ -73,7 +73,7 @@ final class LevelGround implements AssemblyWalker.Ground {
             case VALVE -> new AssemblyWalker.Piece(false, false, Fitting.CONTROL_VALVE, facing, faces);
             case RESERVOIR, GENERATOR, VOID -> new AssemblyWalker.Piece(false, true, null, facing, faces);
             // A unit's heat side and a steam turbine (W3) always have ports: the check above returned.
-            case HEAT_SIDE, TURBINE -> null;
+            case HEAT_SIDE, TURBINE, EJECTOR -> null;
             // A diverter valve (batch 2026-11-09-batch-distiller): a fitting in its line.
             case DIVERTER_VALVE -> new AssemblyWalker.Piece(false, false, Fitting.OTHER, facing, faces);
         };

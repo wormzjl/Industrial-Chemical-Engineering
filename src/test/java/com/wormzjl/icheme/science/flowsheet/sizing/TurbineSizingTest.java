@@ -48,10 +48,10 @@ final class TurbineSizingTest {
         assertEquals(Lamp.RED, TurbineSizing.rate(LOAD, new TurbineSizing.Size(1120, MachineDuty.Steam.MP, 1000)).lamp(), "an exhaust over half the class's inlet");
         assertSame(Limit.UNIT_SHAPE, TurbineSizing.rate(LOAD, new TurbineSizing.Size(1120, MachineDuty.Steam.MP, 1000)).closest().limit());
         assertNull(UnitSize.built(new TurbineSizing.Size(45, MachineDuty.Steam.HP, 350)), "under the turbine's 55 kW");
-        assertEquals(Lamp.RED, TurbineSizing.rate(new TurbineSizing.Load(50000, 4000, 350), new TurbineSizing.Size(50000, MachineDuty.Steam.HP, 350)).lamp(), "over its 45 MW");
+        assertEquals(Lamp.RED, TurbineSizing.rate(new TurbineSizing.Load(315000, 4000, 350), new TurbineSizing.Size(315000, MachineDuty.Steam.HP, 350)).lamp(), "over its 300 MW (owner P12)");
         // The world runs a turbine past its rating, so a need over the largest one is yellow: Auto offers the largest.
-        var largest = TurbineSizing.auto(new TurbineSizing.Load(50000, 4000, 350));
-        assertEquals(new TurbineSizing.Size(45000, MachineDuty.Steam.HP, 350), largest.size());
+        var largest = TurbineSizing.auto(new TurbineSizing.Load(315000, 4000, 350));
+        assertEquals(new TurbineSizing.Size(300000, MachineDuty.Steam.HP, 350), largest.size());
         assertEquals(Lamp.YELLOW, largest.rating().lamp());
     }
 

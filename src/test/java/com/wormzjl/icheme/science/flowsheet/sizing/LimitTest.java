@@ -62,8 +62,9 @@ final class LimitTest {
         assertEquals(20, Limit.GAS_SPEED.value(5.1), EXACT);
         assertEquals(7500, Limit.GAS_MOMENTUM.value(20), EXACT, "under 20 barg");
         assertEquals(15000, Limit.GAS_MOMENTUM.value(80), EXACT, "over 80");
-        assertEquals(75, Limit.VACUUM_SPEED.value(.01), EXACT, "under 0.01 bara");
-        assertEquals(60, Limit.VACUUM_SPEED.value(.05), EXACT, "the plan's last step");
+        assertEquals(60 * Math.pow(5, .25), Limit.VACUUM_SPEED.value(.01), 1e-12, "60 (0.05 / 0.01)^0.25 at 0.01 bara: 89.7");
+        assertEquals(68.17, Limit.VACUUM_SPEED.value(.03), .01, "68 m/s at 3 kPa");
+        assertEquals(60, Limit.VACUUM_SPEED.value(.05), EXACT, "60 from 0.05 bara up");
     }
 
     @Test void aRowReadsBySense() {

@@ -225,6 +225,45 @@ public final class EquipmentStructure {
             });
             return;
         }
+        if (vessel.shape().kind().chimney()) {
+            // A chimney's tip in its top cell (batch 2026-11-10-chimney): the stack from its inlet up is the run into it.
+            FluidWorldAuthority.find(level.getServer()).ifPresent(world -> {
+                var record = world.placeChimney(position(level, node), ports(level, vessel), vessel.shape());
+                if (level.getBlockEntity(node) instanceof EquipmentShellBlockEntity entity) entity.bindIdentity(record.device().id());
+            });
+            return;
+        }
+        if (vessel.shape().kind() == EquipmentShape.Kind.EJECTOR) {
+            // A steam ejector set on its curve at its suction's cell (batch 2026-11-10-steam-ejector-flow): no shaft.
+            FluidWorldAuthority.find(level.getServer()).ifPresent(world -> {
+                var record = world.placeMachine(position(level, node), TopologyCompiler.Kind.EJECTOR, ports(level, vessel), ejectorControl(vessel.shape()));
+                if (level.getBlockEntity(node) instanceof EquipmentShellBlockEntity entity) entity.bindIdentity(record.device().id());
+            });
+            return;
+        }
+        if (vessel.shape().kind().primeMover()) {
+            // A prime mover (batch 2026-11-10-prime-movers): its fuel void at its combustor's pressure behind its FUEL nozzle, a gas
+            // turbine's steam coil at its FEEDWATER nozzle; its shaft unit names the fuel void.
+            FluidWorldAuthority.find(level.getServer()).ifPresent(world -> {
+                var shape = vessel.shape();
+                var model = com.wormzjl.icheme.science.equipment.UnitDesign.primeMoverModel(shape);
+                var cells = nodes(vessel);
+                var fuelPorts = rolePorts(level, vessel, EquipmentShape.Role.FUEL);
+                FluidWorldAuthority.UnitSide coil = null;
+                if (cells.size() > 1) {
+                    var definition = new HeatSides.Definition(HeatSides.Side.EXHAUST, EquipmentShape.Role.FEEDWATER, EquipmentShape.Role.STEAM,
+                            com.wormzjl.icheme.science.equipment.UnitDesign.coilSurface(shape), com.wormzjl.icheme.science.equipment.UnitDesign.coilPassage(shape));
+                    coil = new FluidWorldAuthority.UnitSide(position(level, cells.get(1)), sidePorts(level, vessel, definition), definition.passage(),
+                            new HeatUnit(HeatSides.Unit.PRIME_MOVER, HeatSides.Side.EXHAUST, com.wormzjl.icheme.science.equipment.UnitDesign.coilSurface(shape), 0));
+                }
+                var placed = world.placePrimeMover(position(level, cells.getFirst()), fuelPorts, model.family() == com.wormzjl.icheme.science.machine.PrimeMover.Family.GAS_TURBINE
+                        ? model.combustor() : com.wormzjl.icheme.science.machine.PrimeMover.ATMOSPHERE, coil);
+                for (int i = 0; i < placed.size(); i++)
+                    if (level.getBlockEntity(cells.get(i)) instanceof EquipmentShellBlockEntity entity) entity.bindIdentity(placed.get(i).device().id());
+                ShaftParts.structure(level, vessel.origin(), shape, placed.getFirst().device().id());
+            });
+            return;
+        }
         if (vessel.shape().kind().mover() || turbine(vessel.shape())) {
             // A casing on its curve, a frame at its displacement, a turbine on its steam (W3): each turns with its shaft train.
             var kind = turbine(vessel.shape()) ? TopologyCompiler.Kind.TURBINE : vessel.shape().kind() == EquipmentShape.Kind.PUMP ? TopologyCompiler.Kind.PUMP : TopologyCompiler.Kind.COMPRESSOR;
@@ -320,6 +359,18 @@ public final class EquipmentStructure {
     }
 
     /** A heat side's nozzles: its inlets and outlets in nozzle order, so its first inlet is its node ({@link ShapeRasterizer#fluidCells}). */
+    /** The vessel port of {@code vessel}'s first nozzle of {@code role} (a prime mover's fuel), or none. */
+    private static List<PhysicalFluidTopology.Port> rolePorts(Level level, Vessel vessel, EquipmentShape.Role role) {
+        var nozzles = vessel.shape().nozzles();
+        for (var port : ShapeRasterizer.ports(vessel.shape())) {
+            if (nozzles.get(port.nozzle()).role() != role) continue;
+            var cell = vessel.origin().offset(port.cell().x(), port.cell().y(), port.cell().z());
+            var face = PhysicalFluidTopology.Direction.valueOf(Direction.fromDelta(port.dx(), port.dy(), port.dz()).name());
+            return List.of(new PhysicalFluidTopology.Port(position(level, cell), face, PassiveNetwork.PhasePort.BULK, PhysicalFluidTopology.ConnectionRole.VESSEL));
+        }
+        return List.of();
+    }
+
     private static List<PhysicalFluidTopology.Port> sidePorts(Level level, Vessel vessel, HeatSides.Definition side) {
         var ports = new ArrayList<PhysicalFluidTopology.Port>();
         var nozzles = vessel.shape().nozzles();
@@ -541,7 +592,16 @@ public final class EquipmentStructure {
         for (var port : ShapeRasterizer.ports(vessel.shape())) {
             if (passages.contains(nozzles.get(port.nozzle()).role())) continue;
             var role = PhysicalFluidTopology.ConnectionRole.VESSEL;
-            if (vessel.shape().kind().mover() || turbine(vessel.shape())) {
+            if (vessel.shape().kind() == EquipmentShape.Kind.EJECTOR) {
+                // A steam ejector's suction, its motive steam as an inlet, its discharge (batch 2026-11-10-steam-ejector-flow).
+                role = switch (nozzles.get(port.nozzle()).role()) {
+                    case SUCTION -> PhysicalFluidTopology.ConnectionRole.SUCTION;
+                    case MOTIVE -> PhysicalFluidTopology.ConnectionRole.INLET;
+                    case DISCHARGE -> PhysicalFluidTopology.ConnectionRole.DISCHARGE;
+                    default -> null;
+                };
+                if (role == null) continue;
+            } else if (vessel.shape().kind().mover() || turbine(vessel.shape())) {
                 // A turbine's steam inlet is its suction, its exhaust its discharge (W3, reading A37).
                 role = switch (nozzles.get(port.nozzle()).role()) {
                     case SUCTION, STEAM -> PhysicalFluidTopology.ConnectionRole.SUCTION;
@@ -558,7 +618,7 @@ public final class EquipmentStructure {
                 case BULK -> PassiveNetwork.PhasePort.BULK;
                 case OVERFLOW -> PassiveNetwork.PhasePort.OVERFLOW;
             };
-            if(turbine(vessel.shape()))phase=PassiveNetwork.PhasePort.BULK;
+            if(turbine(vessel.shape())||vessel.shape().kind()==EquipmentShape.Kind.EJECTOR)phase=PassiveNetwork.PhasePort.BULK;
             if(vessel.shape().kind().coolingTower())phase=switch(nozzles.get(port.nozzle()).role()){case HOT_WATER_INLET->PassiveNetwork.PhasePort.SPRAY;default->phase;};
             if(vessel.shape().boot())phase=switch(nozzles.get(port.nozzle()).role()){case BOOT_DRAIN->PassiveNetwork.PhasePort.BOOT_WATER;case LIQUID_OUTLET->PassiveNetwork.PhasePort.BOOT_HC;default->phase;};
             ports.add(new PhysicalFluidTopology.Port(position(level, cell), face, phase, role));
@@ -1399,10 +1459,15 @@ public final class EquipmentStructure {
         var device = record.device();
         var spec = record.spec();
         world.edit(device.id(), record.revision(), device.withPlacement(position(level, node), ports(level, vessel)),
-                vessel.shape().kind().mover() || vessel.shape().kind() == EquipmentShape.Kind.FLARE_STACK ? spec : new FluidDeviceSpec(vessel.shape().volume(), spec.temperature(), spec.pressure(), spec.composition(), spec.solids(), vessel.shape().levelHeight(), open(vessel), vessel.shape().fluidGeometry(),spec.tower()));
+                vessel.shape().kind().mover() || vessel.shape().kind() == EquipmentShape.Kind.FLARE_STACK || vessel.shape().kind().chimney() ? spec : new FluidDeviceSpec(vessel.shape().volume(), spec.temperature(), spec.pressure(), spec.composition(), spec.solids(), vessel.shape().levelHeight(), open(vessel), vessel.shape().fluidGeometry(),spec.tower()));
         if (oldNode != null && !oldNode.equals(node) && level.getBlockEntity(oldNode) instanceof EquipmentShellBlockEntity old && old.fluidIdentity() == device.id()) old.releaseIdentity();
         if (level.getBlockEntity(node) instanceof EquipmentShellBlockEntity entity && entity.fluidIdentity() != device.id()) entity.bindIdentity(device.id());
         ShaftParts.structure(level, vessel.origin(), vessel.shape(), device.id());
+    }
+
+    /** A steam ejector's control (batch 2026-11-10-steam-ejector-flow): its curve from its suction bore, no motive until its first slice. */
+    static com.wormzjl.icheme.science.fluid.network.FlowControl.Ejector ejectorControl(EquipmentShape shape) {
+        return new com.wormzjl.icheme.science.fluid.network.FlowControl.Ejector(new com.wormzjl.icheme.science.machine.SteamEjector(shape.diameter()));
     }
 
     /** Whether a shape registers as a steam turbine (W3, reading A37). */
@@ -1427,6 +1492,8 @@ public final class EquipmentStructure {
                 yield new com.wormzjl.icheme.science.fluid.network.FlowControl.Machine(new com.wormzjl.icheme.science.machine.CentrifugalCompressor(r[0], r[1], .78), 0, true);
             }
             case COMPRESSOR -> new com.wormzjl.icheme.science.fluid.network.FlowControl.Compressor(frameDisplacement(shape), 3, true);
+            // A vacuum pump casing (batch 2026-11-10-vacuum-pump): its model's curve, on the machine row at its train's speed.
+            case LIQUID_RING_PUMP, DRY_SCREW_PUMP -> new com.wormzjl.icheme.science.fluid.network.FlowControl.Machine(UnitDesign.vacuumPump(shape), 0, true);
             case STEAM_TURBINE -> new com.wormzjl.icheme.science.fluid.network.FlowControl.Turbine(com.wormzjl.icheme.science.machine.SteamTurbine.rated(Math.max(1e3, UnitDesign.ratedPower(shape))));
             default -> throw new IllegalArgumentException("Not a shaft-driven machine: " + shape.kind());
         };

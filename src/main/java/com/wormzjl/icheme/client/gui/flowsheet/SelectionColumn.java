@@ -68,9 +68,17 @@ public final class SelectionColumn {
                 rows.add(Door.meter(x.text("door.power"), read.of("power", 1e3, 1), "kW"));
                 rows.add(Door.meter(x.text("door.rise"), read.of("rise", u.pressure().si(1), 2), u.pressure().symbol()));
             }
+            case "combustion_engine", "gas_turbine" -> {
+                rows.add(Door.meter(x.text("door.power"), read.of("power", 1e6, 2), "MW"));
+                rows.add(Door.meter(x.text("door.efficiency"), read.of("efficiency", .01, 1), "%"));
+            }
             case "steam_turbine" -> {
                 rows.add(Door.meter(x.text("door.power"), read.of("power", 1e3, 1), "kW"));
                 rows.add(Door.meter(x.text("door.steam_rate"), read.of("steam_rate", 1, 2), "kg/kWh"));
+            }
+            case "vacuum_pump" -> {
+                rows.add(Door.meter(x.text("door.power"), read.of("power", 1e3, 1), "kW"));
+                rows.add(Door.meter(x.text("door.capacity"), read.of("capacity", 1 / 3600., 0), "m³/h"));
             }
             case "ejector" -> {
                 rows.add(Door.meter(x.text("door.steam_in"), read.of("motive", 1 / 3600., 0), "kg/h"));

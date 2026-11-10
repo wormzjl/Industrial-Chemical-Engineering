@@ -34,8 +34,8 @@ public final class IChemEClient {
         SightGlassRenderer.clear();
         MoverSounds.clear();
         DriverSounds.clear();
-        FlareFlames.clear();
-        StillFires.clear();
+        com.wormzjl.icheme.client.fx.sound.FxSounds.clear();
+        com.wormzjl.icheme.client.fx.state.ProcessStates.clear();
     }
 
 }

@@ -26,11 +26,18 @@ public final class ShaftNetwork {
 
     /** What a part is in its train. */
     public enum Kind {
-        SHAFT, MOTOR, GENERATOR, GEARBOX, STEAM_TURBINE, CASING, CREATIVE_MOTOR, CREATE_COUPLING;
+        SHAFT, MOTOR, GENERATOR, GEARBOX, STEAM_TURBINE, CASING, CREATIVE_MOTOR, CREATE_COUPLING,
+        /** Fuelled prime movers (batch 2026-11-10-prime-movers): each names its fuel void as its fluid device. */
+        COMBUSTION_ENGINE, GAS_TURBINE;
 
         /** Whether it drives its train. */
         public boolean driver() {
-            return this == MOTOR || this == STEAM_TURBINE || this == CREATIVE_MOTOR || this == CREATE_COUPLING;
+            return this == MOTOR || this == STEAM_TURBINE || this == CREATIVE_MOTOR || this == CREATE_COUPLING || primeMover();
+        }
+
+        /** A fuelled prime mover: a combustion engine or a gas turbine. */
+        public boolean primeMover() {
+            return this == COMBUSTION_ENGINE || this == GAS_TURBINE;
         }
 
         /** Whether its train drives it. */

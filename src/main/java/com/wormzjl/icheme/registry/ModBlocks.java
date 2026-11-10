@@ -103,6 +103,39 @@ public final class ModBlocks {
     public static final DeferredHolder<SoundEvent,SoundEvent> MOTOR_RUNNING=loop("motor_running");
     public static final DeferredHolder<SoundEvent,SoundEvent> GENERATOR_RUNNING=loop("generator_running");
     public static final DeferredHolder<SoundEvent,SoundEvent> TURBINE_RUNNING=loop("turbine_running");
+    // The prime movers (batch 2026-11-10-prime-movers): a combustion engine and a gas turbine.
+    public static final DeferredHolder<SoundEvent,SoundEvent> ENGINE_RUNNING=loop("engine_running");
+    /** A medium-speed engine's running loop, authored at 600 rpm (UnitDesign.ENGINE_MEDIUM_LOOP_RPM). */
+    public static final DeferredHolder<SoundEvent,SoundEvent> ENGINE_RUNNING_MEDIUM=loop("engine_running_medium");
+    public static final DeferredHolder<SoundEvent,SoundEvent> GAS_TURBINE_RUNNING=loop("gas_turbine_running");
+    /** A prime mover's start and stop, one-shots on its speed's crossing of zero (batch 2026-11-10-prime-movers, tools/process-sounds/prime_candidates.py). */
+    public static final DeferredHolder<SoundEvent,SoundEvent> ENGINE_START_AIR=loop("engine_start_air"),ENGINE_START_ELECTRIC=loop("engine_start_electric"),ENGINE_STOP=loop("engine_stop"),
+            GAS_TURBINE_START=loop("gas_turbine_start"),GAS_TURBINE_STOP=loop("gas_turbine_stop");
+    /** Process loops (tools/process-sounds): an elevated flare's roar and pilot hiss, a still's burner, firebox and boiling pot. */
+    public static final DeferredHolder<SoundEvent,SoundEvent> FLARE_ROAR=loop("flare_roar");
+    public static final DeferredHolder<SoundEvent,SoundEvent> FLARE_PILOT=loop("flare_pilot");
+    public static final DeferredHolder<SoundEvent,SoundEvent> BURNER_ROAR=loop("burner_roar");
+    public static final DeferredHolder<SoundEvent,SoundEvent> FIRE_DRAUGHT=loop("fire_draught");
+    public static final DeferredHolder<SoundEvent,SoundEvent> POT_BOIL=loop("pot_boil");
+    /**
+     * The plant's other sources (batch 2026-11-10-custom-shader-system, PROCESS_SOUNDS_REVIEW.md table 1): a gas or steam
+     * valve's and a vent's hiss, a liquid valve's rush, its cavitation (the pump's crackle) and its
+     * rattling hiss when it flashes, a fan's whoosh, falling water, a
+     * gearbox's whine, and a liquid line's water-hammer knock (a one-shot).
+     */
+    public static final DeferredHolder<SoundEvent,SoundEvent> VALVE_GAS=loop("valve_gas");
+    public static final DeferredHolder<SoundEvent,SoundEvent> VALVE_LIQUID=loop("valve_liquid");
+    /** A cavitating liquid valve (the pump's cavitation loop) and a flashing one (hiss and plug rattle), owner 2026-11-10. */
+    public static final DeferredHolder<SoundEvent,SoundEvent> VALVE_CAVITATING=loop("valve_cavitating");
+    public static final DeferredHolder<SoundEvent,SoundEvent> VALVE_FLASHING=loop("valve_flashing");
+    public static final DeferredHolder<SoundEvent,SoundEvent> FAN_WHOOSH=loop("fan_whoosh");
+    public static final DeferredHolder<SoundEvent,SoundEvent> WATER_FALL=loop("water_fall");
+    public static final DeferredHolder<SoundEvent,SoundEvent> GEAR_WHINE=loop("gear_whine");
+    public static final DeferredHolder<SoundEvent,SoundEvent> PIPE_KNOCK=loop("pipe_knock");
+    /** A steam ejector's motive jet (batch 2026-11-10-steam-ejector-flow). */
+    public static final DeferredHolder<SoundEvent,SoundEvent> EJECTOR_JET=loop("ejector_jet");
+    /** A hand valve's quarter turn at the click, a one-shot (owner 2026-11-10: tools/process-sounds/valve_turn_candidates.py). */
+    public static final DeferredHolder<SoundEvent,SoundEvent> VALVE_TURN=loop("valve_turn");
     private static DeferredHolder<SoundEvent,SoundEvent> loop(String name){return SOUNDS.register(name,()->SoundEvent.createVariableRangeEvent(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,name)));}
 
     private ModBlocks() {

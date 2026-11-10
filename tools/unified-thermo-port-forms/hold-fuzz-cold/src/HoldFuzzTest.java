@@ -28,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * pressure control valves, joined by pipe runs from any face, branches making junction pipes), places its blocks one by one
  * in a random order at random online ticks on the world's event path (the real {@link PhysicalRegistry} and
  * {@link IslandCoordinator} with one synchronous worker, run tick by tick as {@code FluidWorldAuthority.tick} runs), and then
- * runs {@code holdFuzz.slices} (120) slices at the 5 s cadence. Every published HELD status (seed, tick, island, committed
+ * runs {@code holdFuzz.slices} (120) slices at the 5 s cadence, up to the seed's first hold. Every published HELD status (seed, tick, island, committed
  * tick, reason) and every thrown exception is recorded. Everything is drawn from {@code new Random(seed)}: a seed replays
  * alone ({@code -PholdFuzzSeeds=137 -PholdFuzzVerbose=true} prints its blocks and the held island).
  *
@@ -273,6 +273,9 @@ class HoldFuzzTest {
             while(w.ledger.onlineTick()<end) {
                 w.tick();
                 if(verbose&&w.held.size()>reported){for(var h:w.held.subList(reported,w.held.size()))System.out.println("FUZZ_VERBOSE_HELD seed="+seed+" "+h+"\n"+w.describe(h.island()));reported=w.held.size();}
+                // Owner, 2026-11-10: a seed stops at its first hold. A held island is retried at every publication, so running on
+                // to the window's end only burns its wall deadline again (seed 575: 119 times, 400 s); the first hold classifies the seed.
+                if(!w.held.isEmpty())break;
             }
             var b=new StringBuilder();for(var s:w.coordinator.observe())b.append(s.id()).append(':').append(s.status().length()>60?s.status().substring(0,60):s.status()).append(';');islands=b.toString();
             // The cold option's crystal summary: the crystal mass the islands hold at the end and the vessels holding it (a

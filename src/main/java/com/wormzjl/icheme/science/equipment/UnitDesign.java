@@ -244,6 +244,12 @@ public abstract class UnitDesign {
         DESIGNS.put(Kind.GEARBOX, new GearboxDesign());
         DESIGNS.put(Kind.FLARE_STACK, new FlareStackDesign());
         DESIGNS.put(Kind.BATCH_STILL, new BatchStillDesign());
+        DESIGNS.put(Kind.STEEL_STACK, new ChimneyDesign(com.wormzjl.icheme.science.fluid.network.Chimney.Form.STEEL));
+        DESIGNS.put(Kind.BRICK_CHIMNEY, new ChimneyDesign(com.wormzjl.icheme.science.fluid.network.Chimney.Form.BRICK));
+        DESIGNS.put(Kind.LIQUID_RING_PUMP, new VacuumPumpDesign(true));
+        DESIGNS.put(Kind.DRY_SCREW_PUMP, new VacuumPumpDesign(false));
+        DESIGNS.put(Kind.COMBUSTION_ENGINE, new PrimeMoverDesign(com.wormzjl.icheme.science.machine.PrimeMover.Family.ENGINE));
+        DESIGNS.put(Kind.GAS_TURBINE, new PrimeMoverDesign(com.wormzjl.icheme.science.machine.PrimeMover.Family.GAS_TURBINE));
     }
 
     /** The design of a designed kind ({@link Kind#designed()}): a storage vessel's or a unit's. */
@@ -273,9 +279,14 @@ public abstract class UnitDesign {
             var design=of(shape.kind());size=(shape.diameter()-design.minSize())/(design.maxSize()-design.minSize());
             int least=design.minLength(shape.diameter()),most=design.maxLength(shape.diameter());
             if(most>least)size=(size+(shape.tangentLength()-least)/(most-least))/2;
+        }else if(shape.kind().primeMover()){
+            // A prime mover (batch 2026-11-10-prime-movers): its rating over its family's range, in log power.
+            var models=com.wormzjl.icheme.science.machine.PrimeMover.models(PrimeMoverDesign.family(shape.kind()));
+            double least=models.getFirst().power(),most=models.getLast().power();
+            size=com.wormzjl.icheme.science.math.DeterministicMath.log(PrimeMoverDesign.model(shape).power()/least)/com.wormzjl.icheme.science.math.DeterministicMath.log(most/least);
         }else if(driver(shape.kind())){
             boolean turbine=shape.kind()==EquipmentShape.Kind.STEAM_TURBINE;
-            double least=turbine?SteamTurbineDesign.MIN_POWER:MotorDesign.POWERS.getFirst(),most=turbine?SteamTurbineDesign.MAX_POWER:MotorDesign.POWERS.getLast();
+            double least=turbine?SteamTurbineDesign.MIN_POWER:MotorDesign.POWERS.getFirst(),most=turbine?SteamTurbineDesign.SINGLE_CASING:MotorDesign.POWERS.getLast();
             size=com.wormzjl.icheme.science.math.DeterministicMath.log(shape.duty().power()/least)/com.wormzjl.icheme.science.math.DeterministicMath.log(most/least);
         }else return 0;
         return gain(size,speed);
@@ -307,6 +318,18 @@ public abstract class UnitDesign {
      * compressor and turbine loops state none: they sound at their machine's rated speed.
      */
     public static final double PUMP_LOOP_RPM = 2950, MOTOR_LOOP_RPM = 1500;
+    /**
+     * The engine loops' authored speeds, rpm (tools/process-sounds/prime_candidates.py, owner pick C1): {@code engine_running}
+     * at 1500 rpm (16 cylinders, 200 Hz firing) for a high-speed set, {@code engine_running_medium} at 600 rpm (18 cylinders,
+     * 90 Hz) for a medium-speed set, {@link #MEDIUM_SPEED} rpm and under: the pitch clamp 0.5 to 2 cannot stretch one loop
+     * from 500 to 1500 rpm. The gas turbine's loop states none.
+     */
+    public static final double ENGINE_LOOP_RPM = 1500, ENGINE_MEDIUM_LOOP_RPM = 600, MEDIUM_SPEED = 750;
+
+    /** Whether {@code shape} is a medium-speed engine ({@link #MEDIUM_SPEED} rpm and under): its own loop, its air start. */
+    public static boolean mediumSpeedEngine(EquipmentShape shape) {
+        return shape.kind() == Kind.COMBUSTION_ENGINE && ratedRpm(shape) <= MEDIUM_SPEED;
+    }
 
     /**
      * A running loop's pitch at a shaft speed {@code rpm} for a loop authored at {@code loopRpm} (decision D26; owner
@@ -326,6 +349,7 @@ public abstract class UnitDesign {
      */
     public static double ratedRpm(EquipmentShape shape) {
         var kind = shape.kind();
+        if (kind == Kind.COMBUSTION_ENGINE) return PrimeMoverDesign.model(shape).speed();
         boolean pump = kind == Kind.PUMP, motor = kind == Kind.MOTOR || kind == Kind.GENERATOR;
         if (!pump && !motor) return 0;
         if(shape.duty()!=null&&shape.duty().baseSpeed()>0)return shape.duty().baseSpeed();
@@ -342,12 +366,12 @@ public abstract class UnitDesign {
     public static float soundPitch(EquipmentShape shape, double share) {
         double rated = ratedRpm(shape);
         if (!(rated > 0)) return soundPitch(share, 1);
-        return soundPitch(share * rated, shape.kind() == Kind.PUMP ? PUMP_LOOP_RPM : MOTOR_LOOP_RPM);
+        return soundPitch(share * rated, shape.kind() == Kind.PUMP ? PUMP_LOOP_RPM : shape.kind() == Kind.COMBUSTION_ENGINE ? (mediumSpeedEngine(shape) ? ENGINE_MEDIUM_LOOP_RPM : ENGINE_LOOP_RPM) : MOTOR_LOOP_RPM);
     }
 
     /** Whether a kind sounds as a driver, its own loop at its own cells: a motor, its mirror the generator, or a steam turbine. */
     public static boolean driver(EquipmentShape.Kind kind) {
-        return kind == EquipmentShape.Kind.MOTOR || kind == EquipmentShape.Kind.GENERATOR || kind == EquipmentShape.Kind.STEAM_TURBINE;
+        return kind == EquipmentShape.Kind.MOTOR || kind == EquipmentShape.Kind.GENERATOR || kind == EquipmentShape.Kind.STEAM_TURBINE || kind.primeMover();
     }
 
     /** Whether a kind is a member of a shaft train (batch 2026-11-03-rotating-machinery, W3): a driver, a gearbox, or a
@@ -369,6 +393,8 @@ public abstract class UnitDesign {
             case CENTRIFUGAL_COMPRESSOR -> CentrifugalCompressorDesign.speed(shape.diameter());
             case COMPRESSOR -> ProcessUnit.compressorSpeed(shape.diameter());
             case STEAM_TURBINE -> SteamTurbineTrain.speed(shape.diameter());
+            case LIQUID_RING_PUMP, DRY_SCREW_PUMP -> VacuumPumpDesign.model(shape).speed();
+            case COMBUSTION_ENGINE, GAS_TURBINE -> PrimeMoverDesign.model(shape).speed();
             default -> 0;
         };
     }
@@ -387,6 +413,7 @@ public abstract class UnitDesign {
     public static double ratedPower(EquipmentShape shape) {
         return switch (shape.kind()) {
             case MOTOR, GENERATOR, GEARBOX, STEAM_TURBINE -> 1000 * shape.duty().power();
+            case COMBUSTION_ENGINE, GAS_TURBINE -> new com.wormzjl.icheme.science.machine.PrimeMover(PrimeMoverDesign.model(shape)).ratedNet();
             default -> 0;
         };
     }
@@ -395,6 +422,35 @@ public abstract class UnitDesign {
     public static double[] pumpRating(EquipmentShape shape) {
         var duty = shape.duty();
         return new double[]{(duty.flow() > 0 ? duty.flow() : ProcessUnit.pumpFlow(shape.diameter())) / 3600, duty.head() > 0 ? duty.head() : ProcessUnit.PUMP_HEAD};
+    }
+
+    /** A vacuum pump casing's law, its model's type, capacity and design speed (batch 2026-11-10-vacuum-pump). */
+    public static com.wormzjl.icheme.science.machine.VacuumPump vacuumPump(EquipmentShape shape) {
+        return VacuumPumpDesign.law(shape);
+    }
+
+    /** A prime mover's catalogue model (batch 2026-11-10-prime-movers): its kind's family, its size's number. */
+    public static com.wormzjl.icheme.science.machine.PrimeMover.Model primeMoverModel(EquipmentShape shape) {
+        return PrimeMoverDesign.model(shape);
+    }
+
+    /** Whether a gas turbine carries its steam coil (its length 2). */
+    public static boolean steamCoil(EquipmentShape shape) {
+        return PrimeMoverDesign.coil(shape);
+    }
+
+    /** A gas turbine's steam coil's surface, m², and its water passage. */
+    public static double coilSurface(EquipmentShape shape) {
+        return PrimeMoverDesign.coilSurface(PrimeMoverDesign.model(shape));
+    }
+
+    public static com.wormzjl.icheme.science.fluid.network.PipeResistance.Geometry coilPassage(EquipmentShape shape) {
+        return PrimeMoverDesign.coilPassage(PrimeMoverDesign.model(shape));
+    }
+
+    /** A vacuum pump casing's model name ({@code LR1-500}, {@code DS-650}). */
+    public static String vacuumPumpModel(EquipmentShape shape) {
+        return VacuumPumpDesign.name(shape);
     }
 
     /** A reciprocating frame's displacement at its design speed, m³/s (W3). */

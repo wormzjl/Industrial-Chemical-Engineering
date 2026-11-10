@@ -99,7 +99,7 @@ public final class ColumnUnit implements UnitModel {
         for (var pumparound : door.pumparounds()) ports.addAll(List.of(Port.utilityIn(pumparoundIn(pumparound)), Port.out(pumparoundOut(pumparound))));
         for (var steam : door.steam()) ports.add(Port.utilityIn(steamPort(steam)));
         for (var draw : door.draws()) ports.add(Port.out(drawPort(draw)));
-        if (ColumnComponents.ejectorRequired(door.topPressure())) ports.add(Port.optionalIn(MOTIVE));
+        if (ColumnComponents.ejectorRequired(door.topPressure()) && !door.ejector().vacuum().pump()) ports.add(Port.optionalIn(MOTIVE));
         return ports;
     }
 

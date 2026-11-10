@@ -49,6 +49,20 @@ class EquipmentLayoutGoldenTest {
                 new BatchStillOptions(BatchStillOptions.Heater.ELECTRIC, BatchStillOptions.Condenser.NONE, 0),
                 new BatchStillOptions(BatchStillOptions.Heater.SOLID, BatchStillOptions.Condenser.BUILT_IN, BatchStillOptions.MIN_STAGES)))
             shapes.add(EquipmentShape.unit(Kind.BATCH_STILL, 500, 1, Heading.NORTH, 0).withStill(options));
+        // A two-stage liquid ring (batch 2026-11-10-vacuum-pump): its smallest and largest two-stage models.
+        for (double model : new double[]{1, 3}) shapes.add(EquipmentShape.unit(Kind.LIQUID_RING_PUMP, model, 2, Heading.NORTH, 0));
+        // A gas turbine with its steam coil (batch 2026-11-10-prime-movers): its smallest and largest models.
+        for (double model : new double[]{1, 9}) shapes.add(EquipmentShape.unit(Kind.GAS_TURBINE, model, 2, Heading.NORTH, 0));
+        // Steam turbines above one casing (owner P12): HP to vacuum at 300 MW (HP, MP, double-flow LP), HP to the MP header at
+        // 150 MW (HP, MP), MP to vacuum at 80 MW (MP, LP), VHP into the LP header at 60 MW (HP, MP).
+        for (var duty : List.of(MachineDuty.turbine(300000, MachineDuty.Steam.HP, 10), MachineDuty.turbine(150000, MachineDuty.Steam.HP, 1000),
+                MachineDuty.turbine(80000, MachineDuty.Steam.MP, 10), MachineDuty.turbine(63000, MachineDuty.Steam.VHP, 450)))
+            shapes.add(EquipmentShape.unit(Kind.STEAM_TURBINE, 3, 1, Heading.NORTH, 0).withDuty(duty));
+        // The generators the table held before their range grew to 400 MW: their layouts stand.
+        for (double kilowatts : new double[]{10000, 20000}) {
+            int length = ProcessUnit.defaultLength(Kind.GENERATOR, kilowatts);
+            shapes.add(EquipmentShape.designed(Kind.GENERATOR, kilowatts, length, Heading.NORTH, ProcessUnit.defaultSupport(Kind.GENERATOR, kilowatts, length), ProcessUnit.Bank.ONE, 0));
+        }
         return shapes;
     }
 

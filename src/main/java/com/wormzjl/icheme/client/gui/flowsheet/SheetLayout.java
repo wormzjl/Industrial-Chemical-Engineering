@@ -295,7 +295,7 @@ public final class SheetLayout {
         String id = port.id();
         return switch (unit.type()) {
             case "pump" -> new int[]{in ? 0 : w, 13, in ? L : R};
-            case "compressor" -> new int[]{in ? 0 : w, 19, in ? L : R};
+            case "compressor", "vacuum_pump" -> new int[]{in ? 0 : w, 19, in ? L : R};
             // The motive nozzle on the axis at the left end, the suction's branch on top of the chest, the diffuser's exit at the right.
             case "ejector" -> switch (id) {
                 case "suction" -> new int[]{10, 0, T};
@@ -305,6 +305,14 @@ public final class SheetLayout {
             case "mixer" -> in ? new int[]{0, stacked(order, ports.size() - 1, h), L} : new int[]{w, h / 2, R};
             // A flare's gas enters its riser near the foot.
             case "flare" -> new int[]{0, h - 8, L};
+            // A chimney's gas enters its foot.
+            case "chimney" -> new int[]{0, h - 8, L};
+            // A gas turbine (batch 2026-11-10-prime-movers): the fuel into the combustor at the left, the coil's water under its duct, its steam on top.
+            case "gas_turbine" -> switch (id) {
+                case "feedwater" -> new int[]{w - 10, h, B};
+                case "steam" -> new int[]{w - 10, 0, T};
+                default -> new int[]{0, h / 2, L};
+            };
             case "splitter" -> in ? new int[]{0, h / 2, L} : new int[]{w, stacked(order, ports.size() - 1, h), R};
             // A batch still (batch 2026-11-09-batch-distiller, W7): the charge into the pot, the drain under the firebox, the vent on the worm
             // tub, the cuts down the tub's side.

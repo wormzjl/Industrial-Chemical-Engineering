@@ -37,11 +37,15 @@ public final class UnitTypes {
             Map.entry("cooler", new CoolerUnit()),
             Map.entry("fired_heater", new FiredHeaterUnit()),
             Map.entry("flare", new FlareUnit()),
+            Map.entry("chimney", new com.wormzjl.icheme.science.flowsheet.unit.ChimneyUnit()),
             Map.entry("batch_still", new BatchStillUnit()),
             Map.entry("column", new ColumnUnit()),
             Map.entry("pump", new MoverUnit(new FlowControl.Pump(1, 1))),
             Map.entry("compressor", new MoverUnit(new FlowControl.Compressor(1, 2))),
             Map.entry("ejector", new EjectorUnit()),
+            Map.entry("vacuum_pump", new com.wormzjl.icheme.science.flowsheet.unit.VacuumPumpUnit()),
+            Map.entry("combustion_engine", new com.wormzjl.icheme.science.flowsheet.unit.PrimeMoverUnit(com.wormzjl.icheme.science.machine.PrimeMover.Family.ENGINE)),
+            Map.entry("gas_turbine", new com.wormzjl.icheme.science.flowsheet.unit.PrimeMoverUnit(com.wormzjl.icheme.science.machine.PrimeMover.Family.GAS_TURBINE)),
             Map.entry("steam_turbine", new TurbineUnit()));
 
     private UnitTypes() {

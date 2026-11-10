@@ -15,6 +15,31 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-11-10
+
+### Added
+
+- Process effects and sounds: flare flames drawn as torn fire with soot smoke and pilots, white plumes from cooling towers and fired heater stacks only where the exhaust's mixing line crosses saturation (none at 25 °C and 50 %; the visual ambient follows biome, height, rain and night), smoke, still fires and heat haze, all glided from published state; the mod's own shaders without a shader pack, vanilla render types under one, 2000 quads a frame (half under a pack), client `[effects]` settings (`mode` AUTO/COMPATIBLE/OFF, `pbr_textures`, `heat_haze`, `dh_silhouettes`); the instrument wiring after ATEX practice (Ex glands, drip loops, branch cables and trays of up to 6, normal-mapped textures with LabPBR maps); valve (by its own drop and cavitation regime), vent, fan, falling water, burner, gearbox, kettle, flare and still sounds through one budget of 12 loops, with movers and drivers; the hand valve's turn and sound; painted equipment silhouettes in Distant Horizons' far terrain; Iris and Distant Horizons optional, loaded by name and guarded. Protocols `fluid-21` and `fluid-22`, `flare-2`, `equipment-23` (core `8b62564f9`, `a1bd257ce`; server states `85d0b040c` to `4eb40758c`; effects and sounds `b0b915cb1` to `8665c624a`; visual fixes `0d562f7b0`, `f898f6516`; valve sounds `c8d5c4d09`, `c05453b05`; bench and optimization `bf951aed2`, `2ca824c2e`, `b98c571be` to `5788aa958`, `94cf1f7fa`, `7ddc44468`; hand valve `9efca5c54`, `b2de4891c`, `1f8471b94`; constructor facing `971dd8346`; batch `2026-11-10-custom-shader-system`).
+- Rigid reservoirs: a closed vessel that has once been filled taut keeps its volume and can stand below the ambient (floating-roof tanks stay open); its gas judged by volume share; a boundary closes only after the pass is phase-checked. Fluid facts schema 18, solved state format 43 (`3041f3f7e`, merged at `3b5fb2b11`; batch `2026-11-10-rigid-reservoir`).
+- The steam ejector as a fluid-network element: a mover on the process simulator's correlation, its motive steam on a planned valve, its capacity following the motive share; the vacuum suction speed made smooth below 5 kPa; its jet sound. Fluid facts schema 17 (`106f501a8`, `4f731b450`, merged at `1be3a167b`; batch `2026-11-10-steam-ejector-flow`).
+- Chimneys: a self-supporting steel stack (0.4 to 3 m exit, 10 to 60 m) and a tapered brick chimney with a steel liner (1 to 8 m, 30 to 150 m), sized for exit velocity with the 20 % spare and by good engineering practice height, releasing gas and solids to the atmosphere with smoke by Beer-Lambert opacity; the atmosphere falls with height at every open boundary; page, data channels, plume and sound; a MODELLED simulator unit and its sizing. Solved state format 44, protocol `fluid-23` (`170477cc9` to `aec962141`, `7bd948c44`, merged at `44886656a`; batch `2026-11-10-chimney`).
+- Vacuum pump casings on the shaft trains: liquid ring (one and two stages) and dry screw, 11 models from 100 to 5000 m³/h, a dry screw worn by liquid; a Vacuum category with the ejector in the constructor and the simulator; a vacuum column's pump on the receiver's vapour outlet; the liquid ring drawn as a pump-and-separator package. Fluid facts schema 19, solved state format 45, shape fields 12 (`0790661cd` to `29e4fb808`, merged at `682d7b56e`; redraw `98e176483`, merged at `b62cfa3bd`; batch `2026-11-10-vacuum-pump`).
+- Prime movers: liquid-fuel combustion engines (0.5 to 20 MW) and gas turbines (1.2 to 300 MW) on their fuel line by a Willans line, governed with no overspeed, a gas turbine's optional heat-recovery steam coil, generators to 400 MW, steam turbines to 300 MW drawn as tandem sections, a Power category; working sounds per engine family, start and stop sounds, pulsing exhaust smoke and turning load shafts; MODELLED simulator units and sizing. Fluid facts schema 20, solved state format 46 (`845eb69d7` to `42fee999e`, model review `0cf7d5e11`, merged at `6c597e7b3`; sound and animation `9d09bebfa` to `c76158c23`, merged at `3e123f51c`; batch `2026-11-10-prime-movers`).
+
+### Changed
+
+- Translations of the six batches in zh_cn, fr_fr, es_es and ja_jp `22b5e3924`.
+- Tooling cleanup `a3009fb74`: the flame shader preview moves from the scratch folder to `tools/fx-bench/flame_preview.py`; the bench tool's README and index row are brought up to date. Nothing left `src/main` or `src/test`.
+- Nozzle pipes may touch: the owner lifted the one-free-block rule between nozzle pipe blocks; a drum's side connections clash only where their flanges at the largest pipe overlap; the unit gate `pipesApart` is gone and only columns keep the gap; existing layouts unchanged. Machine page protocol `machine-4` (`fb944b7d2`).
+- Code guide refreshed: new chapter `effects.md`; twelve chapters and the README updated.
+
+### Fixed
+
+- A kettle's vapour line stayed shut and its pool rose to 231 kPa with no boil-up since rigid reservoirs: a pass that drew from a void is solved once more with that line started the allowed way before it closes (owner option A) `c6dc5426c`.
+- The 400 MW generator's drawing no longer builds a vessel's shell tables from its kW size (198 MB); the hidden prime mover defects the crash covered are fixed: the damper disc unpainted, the heavy gas turbines' fuel connection clear of the combustors, the shared generator shaft height and flange in the kit `c6dc5426c`.
+- The gas turbine coil's steam port names itself in the simulator; the vacuum pumps' support lines; the constructor's prime mover, vacuum pump and chimney lines fit their display `c6dc5426c`.
+- Bundled random seed 575 held on its wall deadline since rigid reservoirs: a pump whose only outlet is a gas generator reopened every step and stalled; a closed device never reopens toward a flow its own end forbids (owner option A) `7fb9c03cb`.
+
 ## [0.24.0] - 2026-11-10
 
 ### Added

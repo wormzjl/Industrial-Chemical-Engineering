@@ -1,6 +1,10 @@
 # Machine assemblies: a column's plant, validated against its design
 
-**Snapshot:** 3efffdb2d (branch `claude/simulator-sizing-refactor-6bacab`, the consolidation review of `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
+**Snapshot:** 971dd8346 (branch `claude/custom-shader-system-caff9e`), 2026-11-10. Batch `2026-11-10-vacuum-pump`, to merge as 0.25.0: a vacuum column's pump on the receiver's vapour outlet (`ColumnBlueprint` slots `vacuum_pump`, `water_pump`; `AssemblyDiagram`); protocol `assembly-4` and store format 2 unchanged · earlier: 3efffdb2d (branch `claude/simulator-sizing-refactor-6bacab`, the consolidation review of `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
+
+## The vacuum pump on the receiver (0.25.0)
+
+- With `ColumnComponents.Vacuum` `LIQUID_RING` or `DRY_SCREW` (shape fields 12; owner V5: "placed on the drum vapor outlet") the blueprint asks for the vacuum pump of the design's type on the receiver's VAPOUR_OUTLET before the offgas valve, and a water pump (of the reflux pump's kind) on its BOOT_DRAIN before the water valve, in place of the ejector on the overhead (table below). `AssemblyDiagram` draws both parts. A vacuum column still refuses to start in the world (open item of the batch).
 
 ## Column C1 instrumentation (0.22.0)
 
@@ -110,14 +114,14 @@ sequenceDiagram
 
 <details><summary>The column's blueprint (ColumnBlueprint)</summary>
 
-Slots in report order: `column`, [`ejector`], `condenser`, [`trim_condenser`], `receiver`, `offgas_valve`, `water_valve`, `reflux_pump`, `reflux_tee`, `reflux_valve`, `distillate_valve`, `feed_valve`, `steam_valve` i, `draw_valve` i, `pa_pump` i and `pa_cooler` i, [`reboiler`], `bottoms_valve`. Bracketed slots follow the design's flags.
+Slots in report order: `column`, [`ejector`], `condenser`, [`trim_condenser`], `receiver`, [`vacuum_pump`], `offgas_valve`, [`water_pump`], `water_valve`, `reflux_pump`, `reflux_tee`, `reflux_valve`, `distillate_valve`, `feed_valve`, `steam_valve` i, `draw_valve` i, `pa_pump` i and `pa_cooler` i, [`reboiler`], `bottoms_valve`. Bracketed slots follow the design's flags: a vacuum top takes the ejector, or with `ColumnComponents.Vacuum` `LIQUID_RING` or `DRY_SCREW` (shape fields 12, batch 2026-11-10-vacuum-pump, owner V5) the vacuum pump and the water pump instead.
 
 | Link | From | Steps | Finish |
 |---|---|---|---|
 | overhead | column VAPOUR_OUTLET | [ejector: SUCTION → DISCHARGE, MOTIVE a utility]; condenser: an air cooler's PROCESS_INLET or an exchanger's SHELL_INLET (decision D15; the other kind is the wrong kind); air then water: the air cooler PROCESS_INLET → PROCESS_OUTLET, then the trim, an exchanger's SHELL_INLET | at the unit (the trim's, with air then water) |
 | condensate | after the condenser (the trim) | receiver: a lying drum with a boot at its SIDE connection (any other drum is the wrong kind) | at the unit |
-| offgas | receiver VAPOUR_OUTLET | a control valve | outside |
-| water | receiver BOOT_DRAIN | a control valve | outside |
+| offgas | receiver VAPOUR_OUTLET | [the vacuum pump of the design's type: SUCTION → DISCHARGE]; a control valve | outside |
+| water | receiver BOOT_DRAIN | [the water pump, of the reflux pump's kind]; a control valve | outside |
 | oil | receiver LIQUID_OUTLET | the reflux pump (standard or in-line as designed; the other is the wrong kind); the reflux tee: one branch through the reflux valve to the column's REFLUX, one through the distillate valve outside | at the tee |
 | feed (upstream) | column FEED | a control valve | outside |
 | steam i (upstream) | column STEAM i | a control valve | outside |
@@ -267,7 +271,7 @@ States in rank order (a later one outranks an earlier one on the same slot):
 
 All unit tests run under `test` (none is a slow gate class in `build.gradle`).
 
-- [`science/assembly/`](../../../src/test/java/com/wormzjl/icheme/science/assembly/): `ColumnBlueprintTest` (3: a plain column asks for its overhead system, the feed and the bottoms; an air-then-water condenser runs its air cooler then its trim; the blueprint names every nozzle of the built column and no other), `AssemblyParallelTest` (6: identical units in parallel fill their steps and the assembly is complete; an air-then-water condenser matches its banks then its trim shells; parallel kettles join their vapour and their liquid again; another number of units is a count fault; units of another size and a branch to anything else are faults; a single-unit step still stops at a branch), `AssemblyMatcherTest` (18: every case of the design table complete on its plant; the column alone; a partly connected unit; an open end; an unloaded chunk; a reversed pump and valve; a pumparound on the cooler's tube side; a standing drum as receiver; an extra valve and a valve beyond the boundary; an ejector after the condenser; a branch before the feed valve; the reflux tee's branches; a reflux line without its tee; a shared condenser; the 16-block outside rule; an in-line pump where a standard one is designed; determinism), `ExchangerBlueprintTest` (4: a built bypass is complete; a bypass fault is named on its slot; a ratio station needs the reference meter; a bypass and a ratio share a line), helper `TestGraph` (`bypass` round a side, `meter`; manifold `Hub`s, `leg`, for units in parallel).
+- [`science/assembly/`](../../../src/test/java/com/wormzjl/icheme/science/assembly/): `ColumnBlueprintTest` (4: a plain column asks for its overhead system, the feed and the bottoms; a vacuum pump stands on the receiver's vapour outlet; an air-then-water condenser runs its air cooler then its trim; the blueprint names every nozzle of the built column and no other), `AssemblyParallelTest` (6: identical units in parallel fill their steps and the assembly is complete; an air-then-water condenser matches its banks then its trim shells; parallel kettles join their vapour and their liquid again; another number of units is a count fault; units of another size and a branch to anything else are faults; a single-unit step still stops at a branch), `AssemblyMatcherTest` (18: every case of the design table complete on its plant; the column alone; a partly connected unit; an open end; an unloaded chunk; a reversed pump and valve; a pumparound on the cooler's tube side; a standing drum as receiver; an extra valve and a valve beyond the boundary; an ejector after the condenser; a branch before the feed valve; the reflux tee's branches; a reflux line without its tee; a shared condenser; the 16-block outside rule; an in-line pump where a standard one is designed; determinism), `ExchangerBlueprintTest` (4: a built bypass is complete; a bypass fault is named on its slot; a ratio station needs the reference meter; a bypass and a ratio share a line), helper `TestGraph` (`bypass` round a side, `meter`; manifold `Hub`s, `leg`, for units in parallel).
 - [`runtime/assembly/`](../../../src/test/java/com/wormzjl/icheme/runtime/assembly/): `AssemblyWalkerTest` (5), `LevelGroundTest` (1), `AssemblyStoreTest` (4), `AssemblyPresentationTest` (4), `AssemblyToolWatchTest` (4).
 - `network/AssemblyNetworkCodecTest` (4).
 - Client: `client/gui/common/AssemblyDiagramTest` (5: every slot has one part; every text has its English line; an air-then-water condenser pipes its air cooler to its trim; every port has its own colour for the laying tool; every port a line starts from or ends at is listed), `client/gui/common/AssemblyColumnTest` (8, the door and the parts list), `client/gui/flowsheet/AssemblyBlockTest` (3: every slot the assembly checks is one drawn part; the block fits the glass and a click finds its part; each part reads its check).

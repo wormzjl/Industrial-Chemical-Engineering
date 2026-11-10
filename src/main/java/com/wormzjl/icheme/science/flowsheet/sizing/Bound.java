@@ -35,14 +35,28 @@ public record Bound(Sense sense, double low, Axis axis, List<Step> steps) {
     }
 
     /**
-     * One step: {@code value} up to {@code edge}.
+     * One step: {@code value} up to {@code edge}, or below its edge {@code value (edge / key)^exponent}, a smooth rise
+     * toward a lower key that meets the next step's number on its edge.
      *
-     * @param closed whether the edge itself belongs to this step
+     * @param closed   whether the edge itself belongs to this step
+     * @param exponent the rise's exponent, 0 for a flat step
      */
-    public record Step(double edge, boolean closed, double value) {
+    public record Step(double edge, boolean closed, double value, double exponent) {
+        public Step(double edge, boolean closed, double value) {
+            this(edge, closed, value, 0);
+        }
+
         /** Under {@code edge}: the edge belongs to the next step. */
         public static Step under(double edge, double value) {
             return new Step(edge, false, value);
+        }
+
+        /**
+         * Under {@code edge}, {@code value (edge / key)^exponent}: {@code value} on the edge, rising smoothly below it
+         * (batch 2026-11-10-steam-ejector-flow: the vacuum suction speed, owner "Yes, correlation").
+         */
+        public static Step rising(double edge, double value, double exponent) {
+            return new Step(edge, false, value, exponent);
         }
 
         /** Up to {@code edge} and on it. */
@@ -57,6 +71,11 @@ public record Bound(Sense sense, double low, Axis axis, List<Step> steps) {
 
         boolean holds(double key) {
             return closed ? key <= edge : key < edge;
+        }
+
+        /** The step's number at {@code key}. */
+        double at(double key) {
+            return exponent == 0 ? value : value * com.wormzjl.icheme.science.math.DeterministicMath.pow(edge / Math.max(key, 1e-9 * edge), exponent);
         }
     }
 
@@ -96,7 +115,7 @@ public record Bound(Sense sense, double low, Axis axis, List<Step> steps) {
     /** The row's number at {@code key} on its axis. */
     double at(double key) {
         if (steps.isEmpty()) throw new IllegalStateException("The rating gives this limit");
-        for (var step : steps) if (step.holds(key)) return step.value();
+        for (var step : steps) if (step.holds(key)) return step.at(key);
         throw new IllegalArgumentException("Outside the row's steps: " + key);
     }
 }

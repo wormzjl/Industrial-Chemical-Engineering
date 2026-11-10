@@ -365,10 +365,18 @@ public final class FluidDeviceBlockEntity extends ModelledBlockEntity implements
     @Override public CompoundTag getUpdateTag(HolderLookup.Provider registries){var tag=new CompoundTag();instruments.write(tag);tag.putLong("FluidIdentity",identity);tag.putDouble("Bore",bore);tag.putByteArray("Faces",faces.clone());if(offsets!=0)tag.putLong("Offsets",offsets);writeLine(joints,paint,secondary,tag);DeviceNames.write(tag,name);return tag;}
     @Override protected void clientGeometryChanged(){com.wormzjl.icheme.runtime.instrument.InstrumentHosts.loaded(this);trackOpenEnds();}
     public long lineOffsets(){return offsets;}
+    /**
+     * Model data: whether a hand is turning this valve ({@link com.wormzjl.icheme.client.ValveTurns}), so the model leaves
+     * its lever or actuator out of the chunk mesh and the turn draws it per frame. Client only; absent at rest.
+     */
+    public static final ModelProperty<Boolean> APART = new ModelProperty<>();
     @Override public ModelData getModelData() {
         long packed=0;int flanged=0;
         for(int i=0;i<6;i++){packed|=(long)(faces[i]&127)<<(7*i);if((faces[i]&FLANGED)!=0)flanged|=1<<i;}
-        return ModelData.of(DRAWN,new Drawn(bore,packed,flanged,spoolEnd(),offsets,paint,secondary));
+        var drawn=new Drawn(bore,packed,flanged,spoolEnd(),offsets,paint,secondary);
+        if(level!=null&&level.isClientSide()&&com.wormzjl.icheme.client.ValveTurns.CLIENT.apart(worldPosition.asLong()))
+            return ModelData.builder().with(DRAWN,drawn).with(APART,true).build();
+        return ModelData.of(DRAWN,drawn);
     }
     /** A straight pipe whose coordinate along its run is a multiple of {@link LineGeometry#SPOOL}: it carries the flange pair between spools. */
     private boolean spoolEnd() {

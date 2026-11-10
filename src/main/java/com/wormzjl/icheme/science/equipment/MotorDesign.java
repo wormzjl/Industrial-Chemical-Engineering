@@ -21,11 +21,11 @@ import java.util.Locale;
  */
 final class MotorDesign extends UnitDesign {
     /** The largest low-voltage TEFC motor, kW; above it a large motor. */
-    static final double LOW_VOLTAGE = 400;
+    static final double LOW_VOLTAGE = ProcessUnit.MOTOR_LOW_VOLTAGE;
     /** A new motor's poles: the common 4-pole, 1,500 rpm. */
     static final int DEFAULT_POLES = 4;
     /** The plinth at grade and the baseplate, m. */
-    static final double PLINTH = .2, BASEPLATE = .08;
+    static final double PLINTH = ProcessUnit.DRIVER_PLINTH, BASEPLATE = ProcessUnit.DRIVER_BASEPLATE;
 
     /** Whether this is the generator: shaft power in, FE out. */
     final boolean generator;
@@ -36,15 +36,24 @@ final class MotorDesign extends UnitDesign {
 
     /** The rated powers, kW: the IEC list to 20 MW. */
     static final List<Double> POWERS = MachineDuty.MOTOR_POWERS;
+    /** A generator's rated powers, kW: the list to 400 MW (batch 2026-11-10-prime-movers, owner P9 A). */
+    static final List<Double> GENERATOR_POWERS = MachineDuty.GENERATOR_POWERS;
+    /** A two-pole generator above this, kW, is drawn as a turbo-generator (owner P9 A). */
+    static final double TURBO = ProcessUnit.TURBO_GENERATOR;
+
+    /** This kind's ratings. */
+    List<Double> powers() {
+        return generator ? GENERATOR_POWERS : POWERS;
+    }
 
     @Override
     public double minSize() {
-        return POWERS.getFirst();
+        return powers().getFirst();
     }
 
     @Override
     public double maxSize() {
-        return POWERS.getLast();
+        return powers().getLast();
     }
 
     /** A notional step; the sizes are the IEC list ({@link #sizes()}). */
@@ -55,17 +64,17 @@ final class MotorDesign extends UnitDesign {
 
     @Override
     public List<Double> sizes() {
-        return POWERS;
+        return powers();
     }
 
     @Override
     public double snap(double size) {
-        return Double.isFinite(size) ? MachineDuty.nearest(POWERS, size) : minSize();
+        return Double.isFinite(size) ? MachineDuty.nearest(powers(), size) : minSize();
     }
 
     @Override
     public double step(double size, int steps) {
-        return MachineDuty.step(POWERS, size, steps);
+        return MachineDuty.step(powers(), size, steps);
     }
 
     @Override
@@ -117,9 +126,9 @@ final class MotorDesign extends UnitDesign {
 
     @Override
     void checkDuty(MachineDuty duty) {
-        if (!POWERS.contains(duty.power())) throw new IllegalArgumentException("A " + name() + "'s rated power is one of the IEC list, 0.75 to 20,000 kW, not " + duty.power());
+        if (!powers().contains(duty.power())) throw new IllegalArgumentException("A " + name() + "'s rated power is one of the IEC list, 0.75 to " + whole(powers().getLast()) + " kW, not " + duty.power());
         if (!generator && duty.baseSpeed()!=0 && (duty.baseSpeed()<300||duty.baseSpeed()>12000))throw new IllegalArgumentException("Motor base speed is 300 to 12000 rpm");
-        if (generator && duty.poles() == 0) throw new IllegalArgumentException("A " + name() + " has 2, 4, 6 or 8 poles");
+        if (generator && duty.poles() == 0) throw new IllegalArgumentException("A " + name() + " has 2, 4, 6, 8 or 12 poles");
         if (generator && duty.drive() != MachineDuty.Drive.FIXED) throw new IllegalArgumentException("A generator has no drive");
         if (duty.flow() != 0 || duty.head() != 0 || duty.polytropicHead() != 0 || duty.steam() != null || duty.exhaust() != 0)
             throw new IllegalArgumentException("A " + name() + "'s design point is its power, poles" + (generator ? "" : " and drive"));
@@ -128,9 +137,15 @@ final class MotorDesign extends UnitDesign {
     /** Power steps along the IEC list ({@link #POWERS}). */
     @Override
     public MachineDuty step(MachineDuty duty, String setting, int steps) {
+        // A generator turns at a synchronous speed (batch 2026-11-10-prime-movers): its speed steps through its pole counts, 3000 to 500 rpm.
+        if (setting.equals("base_speed") && generator) {
+            var poles = MachineDuty.POLES;
+            int at = Math.max(0, poles.indexOf(duty.poles()));
+            return duty.withBaseSpeed(0).withPoles(poles.get(Math.clamp(at - steps, 0, poles.size() - 1)));
+        }
         if (setting.equals("base_speed")) return duty.withBaseSpeed(Math.clamp(UnitDesign.designSpeed(generator?EquipmentShape.Kind.GENERATOR:EquipmentShape.Kind.MOTOR,duty)+steps*100,300,com.wormzjl.icheme.science.machine.Motor.MAXIMUM_RPM));
         if (!setting.equals("power")) return duty;
-        double power = MachineDuty.step(POWERS, duty.power(), steps);
+        double power = MachineDuty.step(powers(), duty.power(), steps);
         return new MachineDuty(0,0,0,power,duty.poles(),duty.drive(),null,0,duty.baseSpeed());
     }
 
@@ -156,7 +171,7 @@ final class MotorDesign extends UnitDesign {
 
     @Override
     public String variant(EquipmentShape shape) {
-        return shape.duty().power() > LOW_VOLTAGE ? ".large" : "";
+        return generator && shape.duty().poles() == 2 && shape.duty().power() > TURBO ? ".turbo" : shape.duty().power() > LOW_VOLTAGE ? ".large" : "";
     }
 
     @Override
@@ -169,7 +184,7 @@ final class MotorDesign extends UnitDesign {
 
     /** The body's diameter, m: a TEFC motor's {@link ProcessUnit#motorDiameter}, a large motor's frame 1.15 of it across. */
     static double frame(double kw) {
-        return (kw > LOW_VOLTAGE ? 1.15 : 1) * ProcessUnit.motorDiameter(kw);
+        return ProcessUnit.motorFrame(kw);
     }
 
     /** The highest base under a shaft at {@code y} of radius {@code rs} that still leaves its coupling guard room ({@link ProcessUnit#coupling}). */
@@ -202,7 +217,10 @@ final class MotorDesign extends UnitDesign {
             if(generator)u.generator(Frame.of(new double[]{a,y,drive},2,-1),r,0,length,deck);
             else u.motor(Frame.of(new double[]{a, y, drive}, 2, -1), r, 0, length, 0, deck, ProcessUnit.MotorDetail.FULL);
         } else {
-            double across = frame(kw), r = across / 2, length = 1.7 * across + .2, terminal = Math.min(1.2, .3 + .2 * across);
+            // A two-pole generator above {@link #TURBO} is a turbo-generator (owner P9 A): a slimmer, longer stator, its exciter on the far end.
+            boolean turbo = generator && duty.poles() == 2 && kw > TURBO;
+            double across = (turbo ? .85 : 1) * frame(kw), r = across / 2, length = turbo ? 2.6 * across + .4 : 1.7 * across + .2, terminal = Math.min(1.2, .3 + .2 * across);
+            double exciter = turbo ? .5 * across : 0;
             half = r + .4 * terminal + .05;
             a = ProcessUnit.centre(half + .12);
             y = Math.ceil(deck + r + .1 - .5) + .5;
@@ -212,9 +230,11 @@ final class MotorDesign extends UnitDesign {
                 floor = plinth;
                 deck = floor + BASEPLATE;
             }
-            front = .35;
+            front = .35 + exciter;
             drive = front + length;
-            if(generator)u.largeGenerator(a,y,front,across,length,deck);else u.largeMotor(a, y, front, across, length, deck);
+            if (turbo) u.turboGenerator(a, y, front, across, length, exciter, deck);
+            else if (generator) u.largeGenerator(a, y, front, across, length, deck);
+            else u.largeMotor(a, y, front, across, length, deck);
         }
         u.terminal = u.terminalBox;
         double face = Math.ceil(drive + .2 + rs - 1e-9);

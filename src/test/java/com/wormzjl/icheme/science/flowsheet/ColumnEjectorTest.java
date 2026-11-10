@@ -123,4 +123,32 @@ final class ColumnEjectorTest {
         assertEquals(Lamp.GREEN, sized.rating().reading(Limit.EJECTOR_MOTIVE).lamp());
         assertEquals(Lamp.YELLOW, sized.rating().reading(Limit.EJECTOR_MOTIVE_SPARE).lamp(), "between the need and its spare");
     }
+
+    /**
+     * A liquid ring pump on the receiver's vapour outlet in the ejector's place (batch 2026-11-10-vacuum-pump, owner V5): no Motive
+     * port, no steam; the block reads the pump's model, its shaft power at the vent, and sizes it as a member. This column's vent at
+     * 80 kPa, 4.6 m³/s, is past the largest ring (5,000 m³/h): the block takes that one and warns.
+     */
+    @Test void aVacuumPumpTakesTheVentWithNoSteam() {
+        var door = door();
+        door.json().addProperty(ColumnDoor.VACUUM, "liquid_ring");
+        var units = List.of(new Flowsheet.Unit("T", "column", "T-101", 0, 0, door));
+        var base = sheet(null);
+        var sheet = new Flowsheet(base.basis(), units, base.streams(), base.settings());
+        var run = run(sheet, null);
+        assertEquals(FlowsheetRun.Status.STEADY, run.status(), () -> "log " + run.log());
+        assertEquals(0, run.massGap(), 1e-9 * run.massIn(), "mass");
+        var readings = run.reports().get("T").readings();
+        assertFalse(readings.containsKey("ejector_heat"), "no ejector");
+        double power = reading(run, "vacuum_power"), capacity = reading(run, "vacuum_capacity");
+        assertTrue(power > 0, "it takes shaft power");
+        assertEquals(4, reading(run, "vacuum_model"), "the largest ring");
+        assertEquals(1, reading(run, "vacuum_stages"));
+        assertEquals(5000 / 3600. * Math.pow(1 - com.wormzjl.icheme.science.machine.VacuumPump.SEAL_VAPOUR_PRESSURE / TOP, 2), capacity, 2e-2 * capacity, "its capacity at about the top's pressure");
+        assertTrue(run.reports().get("T").notes().stream().anyMatch(note -> note.key().equals("vacuum_pump.capacity")), "short of the vent: a warning");
+        System.out.printf("vacuum pump: model %.0f, %.1f kW, capacity %.0f m³/h%n", reading(run, "vacuum_model"), power / 1e3, 3600 * capacity);
+        var sized = MaterialRuntime.with(CATALOG, NETWORK, () -> SheetSizing.rate(sheet, run, THERMO)).units();
+        org.junit.jupiter.api.Assertions.assertNull(sized.get(SheetSizing.member("T", "ejector")), "no ejector member");
+        assertNotNull(sized.get(SheetSizing.member("T", "vacuum_pump")), "the pump is a member");
+    }
 }

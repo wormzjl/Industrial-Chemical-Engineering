@@ -182,6 +182,10 @@ final class ColumnBlockSolve implements Calculation.Law {
         var vent = product("overhead_vapor", result);
         if (vent.empty()) return null;
         var load = thermo.atTemperature(condenser.temperatureKelvin(), condenser.pressurePascal(), vent.amounts(), SolidInventory.EMPTY);
+        if (door.ejector().vacuum().pump()) {
+            vacuumPump(report, load);
+            return null;
+        }
         String wire = u.wire(MOTIVE);
         var steam = EjectorUnit.motive(u.id() + "/ejector", "ejector_", thermo, load, wire == null ? null : board.stream(wire), door.ejector().motive(), door.ejector().discharge(), report);
         var free = product(FREE_WATER, result);
@@ -191,6 +195,23 @@ final class ColumnBlockSolve implements Calculation.Law {
         double heat = steam.enthalpy() + free.enthalpy() - water.enthalpy();
         report.reading("ejector_heat", heat);
         return new Ejected(steam, water, heat);
+    }
+
+    /**
+     * A vacuum pump on the receiver's vapour outlet (batch 2026-11-10-vacuum-pump, owner V5): it takes the vent as it leaves the
+     * receiver, after the condenser, so no steam joins the free water and the condenser's duty stands as V3 gives it. Its model is
+     * the smallest that holds the vent with its spare; its shaft power the world's curve's at that suction, to the atmosphere.
+     */
+    private void vacuumPump(Report report, FlowStream load) {
+        double volume = load.state().volume(), pressure = load.pressure();
+        var pick = VacuumPumpUnit.pick(door.ejector().vacuum(), pressure, volume);
+        if (pick.model() == 0) report.note(Note.warning(u.id(), "vacuum_pump.capacity"));
+        var law = pick.law();
+        double density = load.mass() / volume, k = u.thermo().model().heatCapacityRatio(load.state());
+        report.reading("vacuum_model", pick.model() == 0 ? VacuumPumpUnit.models(pick.type()) : pick.model());
+        report.reading("vacuum_stages", pick.type() == com.wormzjl.icheme.science.machine.VacuumPump.Type.LIQUID_RING_TWO_STAGE ? 2 : 1);
+        report.reading("vacuum_power", law.shaftPower(volume, 1, density, pressure, k));
+        report.reading("vacuum_capacity", law.suction(pressure, 1));
     }
 
     /**

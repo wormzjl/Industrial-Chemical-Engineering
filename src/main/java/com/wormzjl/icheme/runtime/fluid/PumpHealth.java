@@ -61,6 +61,8 @@ public final class PumpHealth {
         /** The sound bytes of its last committed suction (W10c): the crackle {@code 255 I_c(σ)} and the churn {@code 255 v(r)}. */
         int crackle, churn;
         Suction suction = Suction.NONE;
+        /** A dry screw's suction liquid volume share at its last committed slice (owner V6 B); 0 for a pump. */
+        double liquid;
         long bookedTick;
         boolean failed;
     }
@@ -100,9 +102,14 @@ public final class PumpHealth {
         });
     }
 
-    /** Whether registration {@code r} is a pump: its control a liquid mover (a constructed casing or an in-line pump). */
+    /** Whether {@code mover} wears: a liquid mover, or a dry screw vacuum pump, which liquid wears (owner V6 B). */
+    static boolean worn(FlowControl.Mover mover) {
+        return mover.liquid() || mover instanceof FlowControl.Machine m && com.wormzjl.icheme.science.machine.VacuumPump.dryScrew(m.law());
+    }
+
+    /** Whether registration {@code r} is a pump: its control a liquid mover (a constructed casing or an in-line pump) or a dry screw. */
     public static boolean pump(WorldTopologyLedger.Registration r) {
-        return r != null && r.device().control() instanceof FlowControl.Mover m && m.liquid();
+        return r != null && r.device().control() instanceof FlowControl.Mover m && worn(m);
     }
 
     private Wear.Settings settings() {
@@ -140,7 +147,7 @@ public final class PumpHealth {
         Map<Long, PassiveStepSolver.PipeObservation> rows = null;
         var s = settings();
         for (var pipe : solved.pipes()) {
-            if (!(pipe.control() instanceof FlowControl.Mover m) || !m.liquid()) continue;
+            if (!(pipe.control() instanceof FlowControl.Mover m) || !worn(m)) continue;
             long id = solved.reservoirs().get(pipe.first()).id();
             var p = pump(id);
             if (p == null) continue;
@@ -150,6 +157,16 @@ public final class PumpHealth {
             }
             var row = rows.get(pipe.id());
             boolean read = row != null && m.targetVolumeFlow() > 0;
+            if (!m.liquid()) {
+                // A dry screw (owner V6 B): liquid above the trace wears it as running dry does, and makes its liquid noise.
+                double liquid = read && Double.isFinite(row.vapourShare()) ? 1 - row.vapourShare() : 0;
+                p.liquid = liquid;
+                book(p, Wear.rate(Double.NaN, liquid > com.wormzjl.icheme.science.machine.VacuumPump.LIQUID_TRACE, s), start, end);
+                p.crackle = com.wormzjl.icheme.science.machine.VacuumPump.liquidNoise(liquid);
+                p.churn = 0;
+                p.suction = Suction.NONE;
+                continue;
+            }
             book(p, read ? Wear.rate(row.npshRatio(), row.dry(), s) : 0, start, end);
             p.crackle = read ? (int) Math.round(255 * Wear.intensity(row.npshRatio())) : 0;
             p.churn = read ? (int) Math.round(255 * com.wormzjl.icheme.science.machine.GasEntrainment.churn(row.gasRatio())) : 0;
@@ -165,7 +182,7 @@ public final class PumpHealth {
     void plans(PassiveNetwork graph, Map<Long, ShaftPlan> out) {
         boolean enabled = settings().enabled();
         for (var pipe : graph.pipes()) {
-            if (!(pipe.control() instanceof FlowControl.Mover m) || !m.liquid()) continue;
+            if (!(pipe.control() instanceof FlowControl.Mover m) || !worn(m)) continue;
             long id = graph.reservoirs().get(pipe.first()).id();
             var p = pumps.get(id);
             if (enabled && p != null && p.failed) out.put(id, new ShaftPlan(ShaftPlan.Kind.FAILED, 0));
@@ -300,6 +317,8 @@ public final class PumpHealth {
      */
     public String status(long id) {
         if (failed(id)) return "FAILED";
+        var screw = pumps.get(id);
+        if (screw != null && screw.liquid > com.wormzjl.icheme.science.machine.VacuumPump.LIQUID_TRACE) return "LIQUID";
         var s = suction(id);
         if (s.sigma() < Wear.INCEPTION) return "CAVITATION";
         if (s.ratio() > GAS_RATIO) return "GAS";

@@ -51,7 +51,7 @@ public final class FlareUnit implements UnitModel {
     }
 
     /** The sheet package's lower heating values, J/mol, on the run's axis (water last). */
-    private static double[] heatingValues(FlowThermo thermo) {
+    static double[] heatingValues(FlowThermo thermo) {
         var values = thermo.catalog().heatingValues(thermo.packageId());
         var names = names(thermo);
         var axis = thermo.axis();
