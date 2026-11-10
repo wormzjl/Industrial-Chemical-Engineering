@@ -56,4 +56,10 @@ Then copy the `.ogg` files into `src/main/resources/assets/icheme/sounds/`. The 
   - A `valve_turn_A_squeak_clunk`: 0.9 s, 10,332 bytes, RMS 0.079; a 620 to 760 Hz squeak at 28 slips a second, a clunk at 0.68 s (rings 1.25, 2.9, 4.7 kHz, 180 Hz body).
   - B `valve_turn_B_grind_thunk`: 1.1 s, 14,271 bytes, RMS 0.078; a gritty scrape at 45 slips a second, a heavier thunk at 0.82 s (95 Hz body).
   - C `valve_turn_C_chirp_clink`: 0.65 s, 8,310 bytes, RMS 0.064; a brisk 950 to 1250 Hz chirp, a light clink at 0.41 s.
-  - A stands in as `assets/icheme/sounds/valve_turn.ogg` until the owner picks.
+  - A stood in as `assets/icheme/sounds/valve_turn.ogg` until the owner judged the three "Not good" and chose "Recorded CC0 sample".
+- 2026-11-10: `valve_turn_cc0.py <envelope|cut> <download folder> [<output folder> R1=start,length ...]` cuts the hand valve turn from three CC0 recordings, the freesound.org HQ previews (128 kbps MP3, no account needed). Each is at https://freesound.org/people/(author)/sounds/(id)/ under Creative Commons 0:
+  - R1 "Turning gas off.wav" by jokallset (395880);
+  - R2 "Leaky_Pipe_Valve_Turn.wav" by mickyman5000 (340643);
+  - R3 "Shower handle turn on and off quickly" by SpliceSound (369869).
+
+  Cuts: 1.0 s mono at the source rate, 5 ms fade in, 80 ms fade out, peak 0.7; windows from 0 s (R1), 0.2 s (R2) and 1.24 s (R3). The owner picked **R3** ("R3 shower handle"): `valve_turn_R3.ogg` (13,142 bytes, 48 kHz, RMS 0.097) is `assets/icheme/sounds/valve_turn.ogg`. The downloads stay in `tmp/valve-turn/cc0/`, which is git-ignored. CC0 asks for no attribution; the sources are recorded here for provenance.
