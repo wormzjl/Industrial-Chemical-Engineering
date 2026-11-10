@@ -354,6 +354,29 @@ public final class AssemblyGameTests {
             return path;
         }
 
+        /**
+         * A branch from the nozzle's pipe block {@code from} onto a straight pipe of {@code path}, from beside it (a tee):
+         * the first straight pipe from the path's start, two pipes clear of each end, whose route is free. Returns the branch.
+         */
+        List<BlockPos> join(List<BlockPos> path, BlockPos from) {
+            for (int i = 2; i < path.size() - 2; i++) {
+                if (!straight(path, i)) continue;
+                var at = path.get(i);
+                var along = path.get(i + 1).subtract(at);
+                var axis = Direction.fromDelta(along.getX(), along.getY(), along.getZ()).getAxis();
+                for (var q : Direction.values()) {
+                    if (q.getAxis() == axis) continue;
+                    var t = at.relative(q);
+                    if (!free(t, around(at))) continue;
+                    try {
+                        return route(from, t, Set.of(at));
+                    } catch (IllegalStateException ignored) {
+                    }
+                }
+            }
+            throw new IllegalStateException("No room to join " + from.toShortString() + " to the line from " + path.getFirst().toShortString());
+        }
+
         static boolean straight(List<BlockPos> path, int i) {
             var a = path.get(i).subtract(path.get(i - 1));
             var b = path.get(i + 1).subtract(path.get(i));

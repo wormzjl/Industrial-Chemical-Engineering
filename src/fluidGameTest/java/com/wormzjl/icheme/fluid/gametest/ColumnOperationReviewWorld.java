@@ -299,11 +299,14 @@ public final class ColumnOperationReviewWorld {
                 plant.route(AssemblyGameTests.Plant.front(column, Role.VAPOUR_OUTLET), AssemblyGameTests.Plant.front(condensers.getFirst(), Role.SHELL_INLET));
                 plant.route(AssemblyGameTests.Plant.front(condensers.getFirst(), Role.SHELL_OUTLET), AssemblyGameTests.Plant.front(drum, Role.SIDE));
             } else {
-                plant.route(AssemblyGameTests.Plant.front(column, Role.VAPOUR_OUTLET), AssemblyGameTests.Plant.front(condensers.getFirst(), Role.PROCESS_INLET));
-                if (trims.isEmpty()) plant.route(AssemblyGameTests.Plant.front(condensers.getFirst(), Role.PROCESS_OUTLET), AssemblyGameTests.Plant.front(drum, Role.SIDE));
-                else {
-                    plant.route(AssemblyGameTests.Plant.front(condensers.getFirst(), Role.PROCESS_OUTLET), AssemblyGameTests.Plant.front(trims.getFirst(), Role.SHELL_INLET));
-                    plant.route(AssemblyGameTests.Plant.front(trims.getFirst(), Role.SHELL_OUTLET), AssemblyGameTests.Plant.front(drum, Role.SIDE));
+                var in = plant.route(AssemblyGameTests.Plant.front(column, Role.VAPOUR_OUTLET), AssemblyGameTests.Plant.front(condensers.getFirst(), Role.PROCESS_INLET));
+                var out = trims.isEmpty() ? plant.route(AssemblyGameTests.Plant.front(condensers.getFirst(), Role.PROCESS_OUTLET), AssemblyGameTests.Plant.front(drum, Role.SIDE))
+                        : plant.route(AssemblyGameTests.Plant.front(condensers.getFirst(), Role.PROCESS_OUTLET), AssemblyGameTests.Plant.front(trims.getFirst(), Role.SHELL_INLET));
+                if (!trims.isEmpty()) plant.route(AssemblyGameTests.Plant.front(trims.getFirst(), Role.SHELL_OUTLET), AssemblyGameTests.Plant.front(drum, Role.SIDE));
+                // Every further bank in parallel with the first: its inlet off the overhead line, its outlet onto the first's.
+                for (var bank : condensers.subList(1, condensers.size())) {
+                    plant.join(in, AssemblyGameTests.Plant.front(bank, Role.PROCESS_INLET));
+                    plant.join(out, AssemblyGameTests.Plant.front(bank, Role.PROCESS_OUTLET));
                 }
             }
             plant.route(AssemblyGameTests.Plant.front(drum, Role.LIQUID_OUTLET), AssemblyGameTests.Plant.front(refluxPump, Role.SUCTION));
