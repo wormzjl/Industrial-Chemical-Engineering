@@ -413,8 +413,12 @@ final class PrimeMoverDesign extends UnitDesign {
         var along = Frame.of(new double[]{ax, ys, 0}, 2, 1);
         u.mesh.cylinder(along, rf, zb1, zf, ProcessUnit.sides(2 * rf), Material.MACHINE);
         u.solids.add(Solid.rod(new double[]{ax, ys, 0}, 2, zb1, zf, rf, 0));
-        double shaft = ProcessUnit.shaftRadius(m.power() / 1e3, m.speed()), face = Math.ceil(zf + .2 + shaft - 1e-9);
-        u.coupling(ax, ys, zf, face, 1, shaft, deck, ProcessUnit.shown(m.speed()), EquipmentShape.ShaftEnd.Role.DRIVER_OUTPUT);
+        // The load shaft turning in its open guard (owner: visible turning parts), then the half coupling under its guard.
+        double shaft = ProcessUnit.shaftRadius(m.power() / 1e3, m.speed()), zl = zf + .5 + .2 * s, face = Math.ceil(zl + .2 + shaft - 1e-9);
+        u.loadShaft(ax, ys, zf, zl, shaft, deck, ProcessUnit.shown(m.speed()));
+        u.coupling(ax, ys, zl, face, 1, shaft, deck, ProcessUnit.shown(m.speed()), EquipmentShape.ShaftEnd.Role.DRIVER_OUTPUT);
+        // The torsional damper turning on the crankshaft's free end.
+        u.damper(ax, ys, zb0 - .08 - .05 * s, zb0, .22 * width, ProcessUnit.shown(m.speed()));
         // The fuel connection on the right, near the front of the block.
         side(u, Role.FUEL, ax + width / 2, ys, Math.floor(zb0 + 1) + .5, fuelNozzle(m));
         // The base frame on the plinth.
@@ -572,8 +576,10 @@ final class PrimeMoverDesign extends UnitDesign {
         // The fuel connection on the right, near the middle.
         side(u, Role.FUEL, ax + width / 2, ys, Math.floor((zg0 + zg1) / 2) + .5, fuelNozzle(m));
         // The coupling at the back; the base on its plinth.
-        double shaft = ProcessUnit.shaftRadius(m.power() / 1e3, m.speed()), face = Math.ceil(zg1 + .2 + shaft - 1e-9);
-        u.coupling(ax, ys, zg1, face, 1, shaft, deck, ProcessUnit.shown(m.speed()), EquipmentShape.ShaftEnd.Role.DRIVER_OUTPUT);
+        // The load shaft turning in its open guard (owner: visible turning parts), then the half coupling under its guard.
+        double shaft = ProcessUnit.shaftRadius(m.power() / 1e3, m.speed()), zl = zg1 + .6 + .2 * s, face = Math.ceil(zl + .2 + shaft - 1e-9);
+        u.loadShaft(ax, ys, zg1, zl, shaft, deck, ProcessUnit.shown(m.speed()));
+        u.coupling(ax, ys, zl, face, 1, shaft, deck, ProcessUnit.shown(m.speed()), EquipmentShape.ShaftEnd.Role.DRIVER_OUTPUT);
         u.box(new double[]{ax - half, PLINTH, zp0 - .05}, new double[]{ax + half, deck, face - .2}, Material.STEELWORK, true);
         u.driverBase(ax - half - .1, ax + half + .1, zp0 - .15, face - .1, PLINTH, 0);
     }
