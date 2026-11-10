@@ -43,6 +43,12 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     public static final double INLET_AIM_SECONDS=30,BUFFER_SECONDS=120;
     /** The share of an outlet's available moles a slice may take: a margin over the valve's regulation tolerance. */
     static final double TAKE_MARGIN=1-1e-6;
+    /**
+     * The least an outlet's account gives, kg: below it the account holds the round-off its bookings left (a Stop's booking
+     * left 1e-17 kg on a full-size column's off-gas, which planned its valve at 4e-17 kg/s and left the island's Newton system
+     * singular). The account keeps it until the next production carries it.
+     */
+    static final double TRACE_KG=1e-9;
 
     /** At most one solve per this many online ticks (30 s), except a setpoint edit (plan section 6). */
     static final long SOLVE_SPACING=600;
@@ -839,6 +845,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         var made=r==null?null:asOf(log,Credit::tick,fence);
         if(log!=null)for(var c:log)if(c.tick()>fence){var n=c.product().moles();for(int i=0;i<available.length;i++)available[i]=Math.max(0,available[i]-n[i]);solids=solids.less(c.solids());}
         double total=0;for(double n:available)total+=n;
+        if(!(mass(available)>TRACE_KG))total=0;
         double temperature=node.state().temperature();
         var table=r==null?null:r.tableAt(fence);
         if(table!=null)for(var p:table.products())if(p.port()==s.port()&&p.index()==s.index())temperature=p.temperature();

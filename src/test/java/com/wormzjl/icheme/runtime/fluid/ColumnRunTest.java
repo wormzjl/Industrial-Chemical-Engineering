@@ -247,6 +247,29 @@ class ColumnRunTest {
         }
         assertTrue(world.registry.registrations().values().stream().noneMatch(x->x.device().suspendedBy()==unit),"it holds nothing");
     }
+    /**
+     * An outlet whose account holds only round-off gives nothing (stage 5): its generator stands at its own state and its
+     * valve shuts, the residue kept for the next production. A Stop's booking left 1e-17 kg on a full-size column's off-gas,
+     * whose valve was planned at 4e-17 kg/s and held its island singular after the next Start. An account of a gram plans a flow.
+     */
+    @Test void anOutletHoldingOnlyRoundOffGivesNothing() {
+        var r=rig(0);var world=r.world();var ops=r.ops();long unit=r.unit();int m=world.model.componentCount();
+        world.runTo(3000);
+        var island=world.coordinator.snapshots().stream().filter(s->s.graph().reservoirs().stream().anyMatch(n->n.id()==r.product())).findFirst().orElseThrow();
+        var node=island.graph().reservoirs().stream().filter(n->n.id()==r.product()).findFirst().orElseThrow();
+        // A slice well past every credit: the account itself is what the plan reads.
+        var slice=new IslandClock.Slice(100000,100005,1);
+        java.util.function.DoubleFunction<PortPlan> planned=moles->{
+            var u=world.ledger.column(unit);var n=EventPathWorld.nitrogen().composition();double t=0;for(double x:n)t+=x;for(int i=0;i<n.length;i++)n[i]*=moles/t;
+            world.ledger.column(u.withStations(true,u.stations().stream().map(s->s.device()==r.product()?s.withAccount(new Account(n,0)):s).toList()));
+            return ops.plans(island.id(),island.graph(),slice).get(r.product());
+        };
+        var residue=planned.apply(1e-16);
+        assertEquals(0,residue.massTarget(),"round-off gives nothing: "+residue.massTarget());
+        assertArrayEquals(com.wormzjl.icheme.science.fluid.solver.PhaseLayout.totalAmounts(node.state()),residue.moles(),"the generator keeps its own state");
+        var gram=planned.apply(.001/.028);
+        assertTrue(gram.massTarget()>0,"a gram plans a flow: "+gram.massTarget());
+    }
     /** Dismantling a running column: a save before its release commits finds every held device's unit, and the unit goes with its ports (merge review, finding 3). */
     @Test void aDismantledColumnLeavesWithItsPorts() {
         var r=rig(0);var world=r.world();var ops=r.ops();long unit=r.unit();
