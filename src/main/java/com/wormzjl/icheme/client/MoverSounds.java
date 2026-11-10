@@ -104,7 +104,7 @@ public final class MoverSounds {
             float pitch=shell!=null?UnitDesign.soundPitch(shell.shape(),speed):state.rpm()>0?UnitDesign.soundPitch(speed*state.rpm(),UnitDesign.PUMP_LOOP_RPM):1;
             var p=target.position();double x=p.getX()+.5,y=p.getY()+.5,z=p.getZ()+.5;
             // A casing's running loop; an in-line pump has none (it never had one), only its layers.
-            if(shell!=null)into.add(new SoundBudget.Emitter(state.compressor()?"compressor_running":"pump_running",p.asLong(),x,y,z,SoundBudget.level(gain),pitch));
+            if(shell!=null)into.add(new SoundBudget.Emitter(state.compressor()&&shell.shape().kind()!=com.wormzjl.icheme.science.equipment.EquipmentShape.Kind.LIQUID_RING_PUMP?"compressor_running":"pump_running",p.asLong(),x,y,z,SoundBudget.level(gain),pitch));
             if(state.crackle()>0)into.add(new SoundBudget.Emitter("pump_cavitation",p.asLong(),x,y,z,SoundBudget.level(gain*state.crackle()/255.0),pitch));
             if(state.churn()>0)into.add(new SoundBudget.Emitter("pump_gas",p.asLong(),x,y,z,SoundBudget.level(gain*state.churn()/255.0),pitch));
         }

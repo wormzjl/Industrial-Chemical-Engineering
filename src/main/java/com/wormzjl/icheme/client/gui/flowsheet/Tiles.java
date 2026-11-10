@@ -44,7 +44,9 @@ public final class Tiles {
             new Category("heat", List.of(new Tile("exchanger", Symbol.EXCHANGER, true), new Tile("kettle", Symbol.KETTLE, true), new Tile("cooler", Symbol.AIR_COOLER, true), new Tile("fired_heater", Symbol.HEATER, true), new Tile("cooling_tower", Symbol.COOLING_TOWER, false), new Tile("flare", Symbol.FLARE, true),
                     // A chimney (batch 2026-11-10-chimney): on the flare's stack symbol until its own is baked.
                     new Tile("chimney", Symbol.FLARE, true))),
-            new Category("machines", List.of(new Tile("pump", Symbol.PUMP, true), new Tile("compressor", Symbol.COMPRESSOR, true), new Tile("ejector", Symbol.EJECTOR, true), new Tile("steam_turbine", Symbol.TURBINE, true))),
+            new Category("machines", List.of(new Tile("pump", Symbol.PUMP, true), new Tile("compressor", Symbol.COMPRESSOR, true), new Tile("steam_turbine", Symbol.TURBINE, true))),
+            // The vacuum sub-category (batch 2026-11-10-vacuum-pump, owner V4 A): the steam ejector and the vacuum pump, on the compressor's symbol.
+            new Category("vacuum", List.of(new Tile("ejector", Symbol.EJECTOR, true), new Tile("vacuum_pump", Symbol.COMPRESSOR, true))),
             new Category("reactors", List.of(new Tile("stirred_reactor", Symbol.REACTOR, false), new Tile("trickle_bed", Symbol.TRICKLE, false), new Tile("ebullated_bed", Symbol.EBULLATED, false), new Tile("fcc_converter", Symbol.FCC, false), new Tile("delayed_coker", Symbol.COKER, false))),
             new Category("solid_fuel", List.of(new Tile("cfb_boiler", Symbol.CFB, false), new Tile("fluid_bed_gasifier", Symbol.FLUID_GAS, false), new Tile("grate_boiler", Symbol.GRATE, false), new Tile("fixed_bed_gasifier", Symbol.FIXED_GAS, false))));
 
@@ -140,6 +142,7 @@ public final class Tiles {
             case "pump" -> "P";
             case "compressor" -> "K";
             case "ejector" -> "J";
+            case "vacuum_pump" -> "VP";
             case "steam_turbine" -> "ST";
             default -> "X";
         };

@@ -282,6 +282,12 @@ public final class SheetEditor {
                 p.addProperty("rise", 2e5);
             }
             case "steam_turbine" -> p.addProperty("exhaust", TurbineUnit.EXHAUST_PRESSURE);
+            // A vacuum pump (batch 2026-11-10-vacuum-pump): a one-stage liquid ring, its model sized, to a vent header.
+            case "vacuum_pump" -> {
+                p.addProperty("pump", com.wormzjl.icheme.science.machine.VacuumPump.Type.LIQUID_RING_ONE_STAGE.key());
+                p.addProperty("model", 0);
+                p.addProperty("pressure", com.wormzjl.icheme.science.flowsheet.unit.VacuumPumpUnit.DISCHARGE_PRESSURE);
+            }
             case "ejector" -> {
                 p.addProperty("discharge", EjectorUnit.DISCHARGE_PRESSURE);
                 p.addProperty("motive", EjectorUnit.MOTIVE_PRESSURE);

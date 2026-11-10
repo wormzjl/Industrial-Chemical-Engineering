@@ -375,6 +375,7 @@ public final class SheetSizing {
                 case "drum" -> drum(id, entry);
                 case "storage_tank" -> tank(id, entry);
                 case "ejector" -> ejector(id, entry);
+                case "vacuum_pump" -> vacuumPump(id, entry, unit.params());
                 case "flare" -> flare(id, entry);
                 case "chimney" -> chimney(id, entry, unit.params());
                 case "batch_still" -> still(id, entry, unit.params());
@@ -482,6 +483,12 @@ public final class SheetSizing {
             var load = TankSizing.Load.of(stream(id, OIL), stream(id, WATER), entry.hold(), basis, thermo);
             var type = entry.type();
             return sized(entry, TankSizing.Size.class, size -> TankSizing.rate(load, size), () -> TankSizing.auto(load, type));
+        }
+
+        /** A vacuum pump on its suction's load, its tile's type (batch 2026-11-10-vacuum-pump). */
+        SizedUnit vacuumPump(String id, UnitEntry entry, com.wormzjl.icheme.science.flowsheet.Params params) {
+            var load = VacuumPumpSizing.Load.of(stream(id, "in"), params, basis);
+            return sized(entry, VacuumPumpSizing.Size.class, size -> VacuumPumpSizing.rate(load, size), () -> VacuumPumpSizing.auto(load));
         }
 
         /** An ejector on its suction's load, with what its law needs and what a wired Motive port brings (W10). */

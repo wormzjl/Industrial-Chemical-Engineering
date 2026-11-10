@@ -332,6 +332,8 @@ class ProcessUnitTest {
                 Map.entry(Kind.TRICKLE_BED_REACTOR, Map.of(Role.FEED, "2-", Role.HYDROGEN, "0+", Role.EFFLUENT, "2-", Role.QUENCH, "0+")),
                 Map.entry(Kind.EBULLATED_BED_REACTOR, Map.of(Role.EFFLUENT, "2-", Role.FEED, "2-", Role.HYDROGEN, "2+", Role.CATALYST_INLET, "1+", Role.CATALYST_OUTLET, "0+")),
                 Map.entry(Kind.CENTRIFUGAL_COMPRESSOR, Map.of(Role.SUCTION, "1+", Role.DISCHARGE, "1+")),
+                // A vacuum pump's suction and discharge on top (batch 2026-11-10-vacuum-pump).
+                Map.entry(Kind.LIQUID_RING_PUMP, Map.of(Role.SUCTION, "1+", Role.DISCHARGE, "1+")), Map.entry(Kind.DRY_SCREW_PUMP, Map.of(Role.SUCTION, "1+", Role.DISCHARGE, "1+")),
                 Map.entry(Kind.STEAM_TURBINE, Map.of(Role.STEAM, "0+", Role.EXHAUST, "1+")),
                 // A flare stack's vent gas towards the front (batch 2026-11-09-flare-stack).
                 Map.entry(Kind.FLARE_STACK, Map.of(Role.FLARE_GAS, "2-")),
@@ -570,7 +572,7 @@ class ProcessUnitTest {
             boolean electric = shape.kind() == Kind.MOTOR || shape.kind() == Kind.GENERATOR || shape.kind() == Kind.AIR_COOLER || shape.kind() == Kind.INDUCED_DRAFT_COOLING_TOWER
                     || shape.kind() == Kind.VERTICAL_HEATER || shape.kind() == Kind.CABIN_HEATER || EquipmentServices.electricStill(shape);
             assertEquals(electric, terminal != null, shape.toString());
-            if (!UnitDesign.of(shape.kind()).hasDuty() && shape.kind() != Kind.COMPRESSOR) {
+            if (!UnitDesign.of(shape.kind()).hasDuty() && shape.kind() != Kind.COMPRESSOR && !shape.kind().vacuumPump()) {
                 assertEquals(List.of(), shafts, shape.toString());
                 continue;
             }

@@ -165,7 +165,9 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
         BATCH_STILL,
         // Chimneys (batch 2026-11-10-chimney, owner C3 A): a self-supporting steel stack and a tapered brick or concrete
         // chimney with a steel liner, releasing their gas and its solids to the atmosphere.
-        STEEL_STACK, BRICK_CHIMNEY;
+        STEEL_STACK, BRICK_CHIMNEY,
+        // Vacuum pump casings on the shaft trains (batch 2026-11-10-vacuum-pump): a liquid ring of one or two stages, a dry screw.
+        LIQUID_RING_PUMP, DRY_SCREW_PUMP;
 
         /** A chimney ({@code science.fluid.network.Chimney}): a steel stack or a brick chimney. */
         public boolean chimney() { return this == STEEL_STACK || this == BRICK_CHIMNEY; }
@@ -197,7 +199,12 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
 
         /** A self-powered fluid mover, with one suction and one discharge nozzle. */
         public boolean mover() {
-            return this == PUMP || this == COMPRESSOR || this == CENTRIFUGAL_COMPRESSOR;
+            return this == PUMP || this == COMPRESSOR || this == CENTRIFUGAL_COMPRESSOR || vacuumPump();
+        }
+
+        /** A vacuum pump casing (batch 2026-11-10-vacuum-pump): a gas mover on a {@code VacuumPump} law. */
+        public boolean vacuumPump() {
+            return this == LIQUID_RING_PUMP || this == DRY_SCREW_PUMP;
         }
     }
 

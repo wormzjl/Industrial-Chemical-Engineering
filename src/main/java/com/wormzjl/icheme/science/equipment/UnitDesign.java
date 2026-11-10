@@ -246,6 +246,8 @@ public abstract class UnitDesign {
         DESIGNS.put(Kind.BATCH_STILL, new BatchStillDesign());
         DESIGNS.put(Kind.STEEL_STACK, new ChimneyDesign(com.wormzjl.icheme.science.fluid.network.Chimney.Form.STEEL));
         DESIGNS.put(Kind.BRICK_CHIMNEY, new ChimneyDesign(com.wormzjl.icheme.science.fluid.network.Chimney.Form.BRICK));
+        DESIGNS.put(Kind.LIQUID_RING_PUMP, new VacuumPumpDesign(true));
+        DESIGNS.put(Kind.DRY_SCREW_PUMP, new VacuumPumpDesign(false));
     }
 
     /** The design of a designed kind ({@link Kind#designed()}): a storage vessel's or a unit's. */
@@ -371,6 +373,7 @@ public abstract class UnitDesign {
             case CENTRIFUGAL_COMPRESSOR -> CentrifugalCompressorDesign.speed(shape.diameter());
             case COMPRESSOR -> ProcessUnit.compressorSpeed(shape.diameter());
             case STEAM_TURBINE -> SteamTurbineTrain.speed(shape.diameter());
+            case LIQUID_RING_PUMP, DRY_SCREW_PUMP -> VacuumPumpDesign.model(shape).speed();
             default -> 0;
         };
     }
@@ -397,6 +400,16 @@ public abstract class UnitDesign {
     public static double[] pumpRating(EquipmentShape shape) {
         var duty = shape.duty();
         return new double[]{(duty.flow() > 0 ? duty.flow() : ProcessUnit.pumpFlow(shape.diameter())) / 3600, duty.head() > 0 ? duty.head() : ProcessUnit.PUMP_HEAD};
+    }
+
+    /** A vacuum pump casing's law, its model's type, capacity and design speed (batch 2026-11-10-vacuum-pump). */
+    public static com.wormzjl.icheme.science.machine.VacuumPump vacuumPump(EquipmentShape shape) {
+        return VacuumPumpDesign.law(shape);
+    }
+
+    /** A vacuum pump casing's model name ({@code LR1-500}, {@code DS-650}). */
+    public static String vacuumPumpModel(EquipmentShape shape) {
+        return VacuumPumpDesign.name(shape);
     }
 
     /** A reciprocating frame's displacement at its design speed, m³/s (W3). */

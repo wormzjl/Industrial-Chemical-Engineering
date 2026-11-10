@@ -32,7 +32,8 @@ import java.util.List;
  *                       (S3b): {@code condenser_units}, {@code kettle_units}, {@code trim_units} (C2) and a pumparound row's
  *                       {@code units}, 1 where absent
  * @param ejector        the ejector on the vapour line where the top is under ambient pressure (W10): {@code ejector_discharge} and
- *                       {@code ejector_motive}, the tile's defaults where absent
+ *                       {@code ejector_motive}, the tile's defaults where absent; or, by {@code vacuum} (batch 2026-11-10-vacuum-pump),
+ *                       a vacuum pump on the receiver's vapour outlet, which takes only the vent and no steam
  */
 public record ColumnDoor(String assayId, int stages, int feedStage, double topPressure, double stageDrop, double diameter,
                          double condenserTemperature, double reflux, double reboilerDuty, ColumnComponents.Condenser condenser, double condenserDrop, double reboilerDrop,
@@ -51,8 +52,29 @@ public record ColumnDoor(String assayId, int stages, int feedStage, double topPr
     public record Steam(String id, int stage, double flow, double temperature) {
     }
 
-    /** The ejector's discharge pressure and its motive steam's (Pa), as the ejector tile's door sets them. */
-    public record Ejector(double discharge, double motive) {
+    /**
+     * The ejector's discharge pressure and its motive steam's (Pa), as the ejector tile's door sets them; and what holds the
+     * vacuum: the ejector, or a vacuum pump on the receiver's vapour outlet, which leaves the two pressures unused.
+     */
+    public record Ejector(double discharge, double motive, ColumnComponents.Vacuum vacuum) {
+        public Ejector(double discharge, double motive) {
+            this(discharge, motive, ColumnComponents.Vacuum.EJECTOR);
+        }
+
+        public Ejector {
+            java.util.Objects.requireNonNull(vacuum, "vacuum");
+        }
+    }
+
+    /** The setting of what holds the vacuum, a {@link ColumnComponents.Vacuum} by name; the ejector where absent. */
+    public static final String VACUUM = "vacuum";
+
+    private static ColumnComponents.Vacuum vacuum(Params p) {
+        try {
+            return ColumnComponents.Vacuum.valueOf(p.text(VACUUM, ColumnComponents.Vacuum.EJECTOR.name()).toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException unknown) {
+            throw new FlowsheetFailure("unit.setting", VACUUM);
+        }
     }
 
     /** The settings of the ejector's two pressures. */
@@ -88,7 +110,7 @@ public record ColumnDoor(String assayId, int stages, int feedStage, double topPr
         return new ColumnDoor(p.text("assay", ""), (int) p.number("stages"), (int) p.number("feed_stage"), p.number("top_pressure"), p.number("stage_drop"), p.number("diameter", 0),
                 p.number("condenser_temperature"), p.number("reflux"), p.number("reboiler_duty"), condenser(p), p.number("condenser_drop", 0), p.number("reboiler_drop", 0), draws, steam, pumparounds,
                 new ColumnComponents.Units(units(p, CONDENSER_UNITS), units(p, KETTLE_UNITS), coolers, units(p, TRIM_UNITS)),
-                new Ejector(p.number(EJECTOR_DISCHARGE, EjectorUnit.DISCHARGE_PRESSURE), p.number(EJECTOR_MOTIVE, EjectorUnit.MOTIVE_PRESSURE)),readExchangers(p.json()));
+                new Ejector(p.number(EJECTOR_DISCHARGE, EjectorUnit.DISCHARGE_PRESSURE), p.number(EJECTOR_MOTIVE, EjectorUnit.MOTIVE_PRESSURE), vacuum(p)),readExchangers(p.json()));
     }
 
     /**
@@ -109,7 +131,7 @@ public record ColumnDoor(String assayId, int stages, int feedStage, double topPr
      * 2026-11-03-rotating-machinery, D42): every pump is standard, and the assembly takes either kind in its slot.
      */
     public ColumnComponents.Choices choices() {
-        return new ColumnComponents.Choices(condenser, ColumnComponents.Pump.STANDARD, List.of(), units,exchangers).fit(pumparounds.size());
+        return new ColumnComponents.Choices(condenser, ColumnComponents.Pump.STANDARD, List.of(), units,exchangers,ejector.vacuum()).fit(pumparounds.size());
     }
 
     private static ColumnComponents.Exchangers readExchangers(JsonObject json) {

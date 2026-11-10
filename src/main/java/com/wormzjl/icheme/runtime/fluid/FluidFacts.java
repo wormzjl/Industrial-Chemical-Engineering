@@ -60,9 +60,11 @@ final class FluidFacts {
      *  valve source {@code STILL}; the {@code diverter} control.
      *  17 (batch 2026-11-10-steam-ejector-flow): the device kind {@code EJECTOR} and the {@code ejector} control, its suction's bore.
      *  18 (batch 2026-11-10-rigid-reservoir): a vessel's {@code rigid}, after its contents: whether its wall has once carried
-     *  them; absent means a bag (decision D54). */
-    static final int SCHEMA=18;
-    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 18. */
+     *  them; absent means a bag (decision D54).
+     *  19 (batch 2026-11-10-vacuum-pump): the {@code machine} control's law {@code vacuum_pump}: its capacity (m³/s), rated
+     *  speed (rpm) and type by name, after the four fields every law carries. */
+    static final int SCHEMA=19;
+    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 19. */
     private static final Map<Class<?>,Map<String,String>> ALIASES=Map.of();
     private static final int MAXIMUM_FIELDS=256,MAXIMUM_ITEMS=1<<22,MAXIMUM_TEXTS=1<<20,MAXIMUM_ARRAY=4096,MAXIMUM_CHANNELS=1<<20;
     /** The cadence an island rebuilt from facts starts at (ticks): the shortest the clock allows, as after a merge. */
@@ -544,6 +546,10 @@ final class FluidFacts {
             case FlowControl.Pump pump->f.text("pump").f64(pump.requestedVolumeFlow()).f64(pump.maximumAddedPressure()).bool(pump.enabled()).f64(0);
             case FlowControl.Compressor compressor->f.text("compressor").f64(compressor.requestedVolumeFlow()).f64(compressor.maximumPressureRatio()).bool(compressor.enabled()).f64(0).f64(compressor.setFlow()).f64(compressor.setPressure());
             // Schema 10 (W3): a casing on its curve, its set points, switch and law; its speed is its train's, a slice input.
+            // Schema 19: a vacuum pump's law, its capacity in the rated flow's place, its rated speed in the pump's, then its type.
+            case FlowControl.Machine machine when machine.law() instanceof com.wormzjl.icheme.science.machine.VacuumPump law->
+                f.text("machine").f64(machine.setFlow()).f64(machine.setPressure()).bool(machine.enabled()).f64(0)
+                        .record(q->q.text("vacuum_pump").f64(law.capacity()).f64(0).f64(0).f64(law.ratedSpeed()).name(law.type()));
             case FlowControl.Machine machine->{var law=machine.law();
                 f.text("machine").f64(machine.setFlow()).f64(machine.setPressure()).bool(machine.enabled()).f64(0)
                         .record(q->q.text(law.liquid()?"centrifugal_pump":"centrifugal_compressor").f64(law.ratedFlow()).f64(law.ratedHead()).f64(law.efficiency())
@@ -567,6 +573,8 @@ final class FluidFacts {
             case "machine"->{var law=f.record(null,q->{var type=q.text("");double rated=q.f64(0),head=q.f64(0),efficiency=q.f64(0),rpm=q.f64(0);
                     return switch(type){case "centrifugal_pump"->new com.wormzjl.icheme.science.machine.CentrifugalPump(rated,head,efficiency,rpm);
                         case "centrifugal_compressor"->new com.wormzjl.icheme.science.machine.CentrifugalCompressor(rated,head,efficiency);
+                        case "vacuum_pump"->{var vacuum=q.name(com.wormzjl.icheme.science.machine.VacuumPump.Type.class,null);if(vacuum==null)throw q.invalid("a vacuum pump without its type");
+                            yield new com.wormzjl.icheme.science.machine.VacuumPump(vacuum,rated,rpm);}
                         default->throw q.invalid("unknown machine law "+type);};});
                 if(law==null)throw f.invalid("a machine without its law");
                 yield new FlowControl.Machine(law,0,enabled,flow,limit);}

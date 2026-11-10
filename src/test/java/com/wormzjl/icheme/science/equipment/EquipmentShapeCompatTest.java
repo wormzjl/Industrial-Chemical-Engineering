@@ -80,6 +80,9 @@ class EquipmentShapeCompatTest {
                 .withStill(new BatchStillOptions(BatchStillOptions.Heater.ELECTRIC, BatchStillOptions.Condenser.BUILT_IN, 6)));
         shapes.add(EquipmentShape.unit(Kind.BATCH_STILL, 2000, 1, Heading.EAST, 0)
                 .withStill(new BatchStillOptions(BatchStillOptions.Heater.LIQUID, BatchStillOptions.Condenser.NONE, 0)));
+        // Shape fields 12 (batch 2026-11-10-vacuum-pump, owner V5): a vacuum top held by a liquid ring pump on the receiver.
+        shapes.add(EquipmentShape.column(3, new ColumnTrays(20, 15, List.of(8), List.of(21), List.of(new ColumnTrays.Pumparound(8, 6)),
+                COMPONENTS.withVacuum(ColumnComponents.Vacuum.LIQUID_RING)), Heading.SOUTH, EquipmentShape.minimumSkirt(3)));
         return shapes;
     }
 
@@ -167,6 +170,28 @@ class EquipmentShapeCompatTest {
         read = EquipmentShellBlockEntity.readShape(wrong);
         assertEquals(List.of("trim units 0 -> 1"), read.repairs());
         assertEquals(new ColumnComponents.Units(2, 1, List.of(1), 1), read.shape().trays().components().units(), "the other counts kept");
+    }
+
+    /**
+     * What holds a vacuum top (shape fields 12): saved by name only where it is not the ejector, so a design saved before it reads
+     * the ejector; a name this build does not have never makes the reader throw.
+     */
+    @Test
+    void theVacuumReadsTheEjectorWhenAbsent() {
+        var built = everyKind().stream().filter(s -> s.trays() != null && s.trays().components() != null
+                && s.trays().components().vacuum() == ColumnComponents.Vacuum.LIQUID_RING).findFirst().orElseThrow();
+        var tag = saved(built);
+        assertEquals("LIQUID_RING", tag.getCompound("Components").getString("Vacuum"), "saved by name");
+        assertTrue(built.trays().components().vacuumPump());
+        var older = tag.copy();
+        older.getCompound("Components").remove("Vacuum");
+        var read = EquipmentShellBlockEntity.readShape(older);
+        assertEquals(List.of(), read.repairs());
+        assertEquals(ColumnComponents.Vacuum.EJECTOR, read.shape().trays().components().vacuum(), "a design saved before it: the ejector");
+        assertFalse(saved(read.shape()).getCompound("Components").contains("Vacuum"), "the ejector writes no field");
+        var unknown = tag.copy();
+        unknown.getCompound("Components").putString("Vacuum", "ION_PUMP");
+        assertNotNull(EquipmentShellBlockEntity.readShape(unknown).shape());
     }
 
     @Test
@@ -473,9 +498,9 @@ class EquipmentShapeCompatTest {
      * The shape fields' revision: the corpus file this build's tags are kept in. Raise it with a shape-field change (2: a
      * column's components; 3: a column's turned nozzles; 4: a column's operating point; 5: a tower's cell bank; 6: a
      * column's member counts; 7: a column's water trim count and its air-then-water condenser; 8: a machine's design
-     * point; 11: a batch still's options).
+     * point; 11: a batch still's options; 12: what holds a column's vacuum top).
      */
-    private static final int SHAPE_FIELDS = 11;
+    private static final int SHAPE_FIELDS = 12;
 
     /** A column's components as an image written before the member counts shows them. */
     private static final java.util.regex.Pattern COMPONENTS_BEFORE_UNITS = java.util.regex.Pattern.compile(

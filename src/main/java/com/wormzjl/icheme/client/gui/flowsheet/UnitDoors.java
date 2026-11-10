@@ -280,6 +280,17 @@ public final class UnitDoors {
                 r.readings(Door.meter(x.text("door.power"), r.reading("power", 1e3, 1), "kW"), Door.meter(x.text("door.efficiency"), r.reading("efficiency", .01, 1), "%"),
                         Door.meter(x.text("door.steam_rate"), r.reading("steam_rate", 1, 2), "kg/kWh"), Door.meter(x.text("door.isentropic"), r.reading("drop", 1e3, 1), "kJ/kg"));
             }
+            case "vacuum_pump" -> {
+                // Batch 2026-11-10-vacuum-pump: the type, the model (0 sizes it), the discharge; the curve's numbers and the proposed motor.
+                var types = new java.util.ArrayList<String>();
+                for (var type : com.wormzjl.icheme.science.machine.VacuumPump.Type.values()) types.add(type.key());
+                r.group("pump", r.choice("pump", types.getFirst(), types.toArray(String[]::new)));
+                r.group("set_point", r.entry("model", x.text("door.model"), Quantity.PLAIN), r.entry("pressure", x.text("door.outlet"), Quantity.PRESSURE));
+                r.readings(Door.meter(x.text("door.power"), r.reading("power", 1e3, 1), "kW"), Door.meter(x.text("door.capacity"), r.reading("capacity", 1 / 3600., 0), "m³/h"),
+                        Door.meter(x.text("door.load"), r.reading("load", 1 / 3600., 0), "m³/h"), Door.meter(x.text("door.model"), r.reading("model", 1, 0), ""));
+                r.group("motor", Door.meter(x.text("door.rating"), r.reading("motor", 1e3, 1), "kW"), Door.meter("motor_efficiency", x.text("door.efficiency"), r.reading("motor_efficiency", .01, 1), "%"),
+                        Door.meter(x.text("door.electric"), r.reading("electric", 1e3, 1), "kW"), Door.meter(x.text("door.draw"), r.reading("electric", 20 * x.host().joulesPerFE(), 0), "FE/t"));
+            }
             case "ejector" -> {
                 r.group("pressure", r.entry("discharge", x.text("door.discharge"), Quantity.PRESSURE), r.entry("motive", x.text("door.motive"), Quantity.PRESSURE));
                 r.readings(Door.meter(x.text("door.steam_need"), r.reading("need", 1 / 3600., 0), "kg/h"), Door.meter(x.text("door.steam_in"), r.reading("motive", 1 / 3600., 0), "kg/h"),
@@ -377,6 +388,7 @@ public final class UnitDoors {
                 yield rest == null ? x.text("door.status.solved") : x.text("door.status.rest", rest.name());
             }
             case "valve" -> x.text("door.status.valve", SheetUnits.number(1, 100 * results.reading(unit.id(), "vapour")));
+            case "vacuum_pump" -> x.text("door.status.vacuum_pump", com.wormzjl.icheme.science.flowsheet.unit.VacuumPumpUnit.name(unit.params(), (int) Math.round(results.reading(unit.id(), "model"))), SheetUnits.number(1, results.reading(unit.id(), "power") / 1e3));
             case "ejector" -> x.text("door.status.ejector", SheetUnits.number(0, 3600 * results.reading(unit.id(), "motive")), SheetUnits.number(1, results.reading(unit.id(), "compression")));
             case "batch_still" -> x.text("door.status.still", SheetUnits.number(2, results.reading(unit.id(), "batch") / 3600), SheetUnits.number(2, results.reading(unit.id(), "cycle") / 3600),
                     SheetUnits.number(0, 100 * results.reading(unit.id(), "distilled")));

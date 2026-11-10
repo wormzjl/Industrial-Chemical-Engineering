@@ -34,7 +34,8 @@ public record VesselPlacement(int forward, int right, int up) {
         NATURAL_DRAFT_COOLING_TOWER(EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER),
         MOTOR(EquipmentShape.Kind.MOTOR), GENERATOR(EquipmentShape.Kind.GENERATOR), GEARBOX(EquipmentShape.Kind.GEARBOX),
         FLARE_STACK(EquipmentShape.Kind.FLARE_STACK), BATCH_STILL(EquipmentShape.Kind.BATCH_STILL),
-        STEEL_STACK(EquipmentShape.Kind.STEEL_STACK), BRICK_CHIMNEY(EquipmentShape.Kind.BRICK_CHIMNEY);
+        STEEL_STACK(EquipmentShape.Kind.STEEL_STACK), BRICK_CHIMNEY(EquipmentShape.Kind.BRICK_CHIMNEY),
+        LIQUID_RING_PUMP(EquipmentShape.Kind.LIQUID_RING_PUMP), DRY_SCREW_PUMP(EquipmentShape.Kind.DRY_SCREW_PUMP);
 
         private final EquipmentShape.Kind kind;
 

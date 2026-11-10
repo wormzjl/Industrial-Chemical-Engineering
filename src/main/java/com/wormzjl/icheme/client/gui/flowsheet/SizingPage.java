@@ -196,6 +196,7 @@ public final class SizingPage {
         return switch (size) {
             case PumpSizing.Size p -> "pump";
             case EjectorSizing.Size e -> "ejector";
+            case com.wormzjl.icheme.science.flowsheet.sizing.VacuumPumpSizing.Size v -> "vacuum_pump";
             case FlareSizing.Size f -> "flare";
             case ChimneySizing.Size c -> "chimney";
             case StillSizing.Size s -> "batch_still";
@@ -291,6 +292,7 @@ public final class SizingPage {
         String text = switch (size) {
             case PumpSizing.Size p -> x.text("sizing.size.pump", SheetUnits.number(2, p.discharge()));
             case EjectorSizing.Size e -> x.text("sizing.size.ejector", SheetUnits.number(2, e.suction()));
+            case com.wormzjl.icheme.science.flowsheet.sizing.VacuumPumpSizing.Size v -> x.text("sizing.size.vacuum_pump", com.wormzjl.icheme.science.equipment.UnitDesign.vacuumPumpModel(v.shape()));
             case FlareSizing.Size f -> x.text("sizing.size.flare", SheetUnits.number(2, f.tip()));
             case ChimneySizing.Size c -> x.text("sizing.size.chimney", SheetUnits.number(2, c.diameter()), c.height());
             case StillSizing.Size s -> x.text("sizing.size.still", SheetUnits.number(0, s.pot()));
@@ -376,6 +378,7 @@ public final class SizingPage {
         switch (size) {
             case PumpSizing.Size p -> group.add(Door.entry(KEY + "size/discharge", x.text("sizing.discharge"), "m"));
             case EjectorSizing.Size e -> group.add(Door.entry(KEY + "size/suction", x.text("sizing.suction"), "m"));
+            case com.wormzjl.icheme.science.flowsheet.sizing.VacuumPumpSizing.Size v -> group.add(Door.entry(KEY + "size/model", x.text("sizing.model"), ""));
             case FlareSizing.Size f -> group.add(Door.entry(KEY + "size/tip", x.text("sizing.tip"), "m"));
             case ChimneySizing.Size c -> {
                 group.add(Door.entry(KEY + "size/diameter", x.text("sizing.diameter"), "m"));
@@ -471,6 +474,7 @@ public final class SizingPage {
         return switch (size) {
             case PumpSizing.Size p -> new Dimensions(EquipmentShape.Kind.PUMP, "discharge", null, p.discharge(), 1);
             case EjectorSizing.Size e -> new Dimensions(EquipmentShape.Kind.EJECTOR, "suction", null, e.suction(), 1);
+            case com.wormzjl.icheme.science.flowsheet.sizing.VacuumPumpSizing.Size v -> new Dimensions(v.shape().kind(), "model", null, v.model(), (int) v.shape().tangentLength());
             case FlareSizing.Size f -> new Dimensions(EquipmentShape.Kind.FLARE_STACK, "tip", null, f.tip(), 1);
             case ChimneySizing.Size c -> new Dimensions(c.kind(), "diameter", "height", c.diameter(), c.height());
             case StillSizing.Size s -> new Dimensions(EquipmentShape.Kind.BATCH_STILL, "pot", null, s.pot(), 1);
@@ -587,6 +591,7 @@ public final class SizingPage {
             switch (size(x, unit, sized)) {
                 case PumpSizing.Size p -> values.put(KEY + "size/discharge", SheetUnits.number(2, p.discharge()));
                 case EjectorSizing.Size e -> values.put(KEY + "size/suction", SheetUnits.number(2, e.suction()));
+                case com.wormzjl.icheme.science.flowsheet.sizing.VacuumPumpSizing.Size v -> values.put(KEY + "size/model", Integer.toString(v.model()));
                 case FlareSizing.Size f -> values.put(KEY + "size/tip", SheetUnits.number(2, f.tip()));
                 case ChimneySizing.Size c -> {
                     values.put(KEY + "size/diameter", SheetUnits.number(2, c.diameter()));
@@ -706,6 +711,7 @@ public final class SizingPage {
         return switch (size) {
             case PumpSizing.Size p -> field.equals("discharge") ? new PumpSizing.Size(value) : null;
             case EjectorSizing.Size e -> field.equals("suction") ? new EjectorSizing.Size(value) : null;
+            case com.wormzjl.icheme.science.flowsheet.sizing.VacuumPumpSizing.Size v -> field.equals("model") ? new com.wormzjl.icheme.science.flowsheet.sizing.VacuumPumpSizing.Size(v.type(), whole) : null;
             case FlareSizing.Size f -> field.equals("tip") ? new FlareSizing.Size(value) : null;
             case ChimneySizing.Size c -> switch (field) {
                 case "diameter" -> new ChimneySizing.Size(c.kind(), value, c.height());
