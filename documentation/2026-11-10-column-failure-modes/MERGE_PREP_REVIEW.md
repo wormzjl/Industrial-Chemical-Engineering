@@ -4,7 +4,8 @@
 
 ## The shader branch, merged in (`16829d22e`)
 
-- `claude/custom-shader-system-caff9e` at `e07461dee` (113 commits, six batches, its merge prep for 0.25.0 done) is merged into this branch. If it gains commits before it reaches `main`, merge it again; then merge `main`.
+- `claude/custom-shader-system-caff9e` at `e07461dee` (113 commits, six batches, its merge prep for 0.25.0 done) is merged into this branch.
+- `main` at 0.25.0 (`833942033`, 11 commits more: the shader branch's final-lane fixes) is merged in at `33d018c0f`. Two code guide snapshot lines resolved (this batch's line, main's newer snapshot as its earlier part); `PassiveStepSolver` (main's closed-device rule, this batch's heating branch) and the lang files merged by git; main changed no format number. The three source sets compile; `check.js` OK 3455 keys per file.
 - 21 files changed on both sides. Git merged 11 by itself. Resolved by hand:
   - `FluidFacts`: both sides took schemas 17 and 18. The shader branch's 17 to 20 stand (ejector, rigid vessels, vacuum pump, prime movers), with its corpus images. This batch's two steps (utility sides, powered members) are one schema 21, as no build on `main` ever wrote them apart. Corpus `compat/fluid/schema-21/` (`45039eac9`), written on the merged code.
   - `EquipmentAlarm`, `BuiltInInputs`: the chimney's and the column's alarms both kept (saved by name; order free).
@@ -29,17 +30,17 @@
 
 ## Checklist
 
-- **CHANGELOG**: one Added line and two Changed lines under `[Unreleased]`, below the shader branch's. When 0.25.0 lands, they move into a new `[Unreleased]`.
+- **CHANGELOG**: one Added line and three Changed lines under `[Unreleased]`, above `[0.25.0]`; the 0.25.0 section equals main's.
 - **Version**: 0.26.0 proposed (a feature and model batch: minor). `gradle.properties` is not changed; the owner chooses.
 - **Translations**: `0893d2339`. 52 new keys, one rewritten, one removed, in zh_cn, fr_fr, es_es, ja_jp; the five new alarm words stay in English. `check.js`: OK 3453 keys per file. `status-words.js` names none of this batch's keys. Widths outside the constructor and vessel screens are not gated; long labels were shortened by hand.
 - **Tooling cleanup**: `tools/column-failure-modes/` (README, the dropped W3.4 patch, the full-size run's case lines, the merge scripts) and its `tools/INDEX.md` row. The test world stays in `src/fluidGameTest` (`runReviewWorldServer -PreviewBatch=review-failure-modes`). Nothing left `src/main` or `src/test`; no gate widened or narrowed; no test run needed for it.
 - **Code guide**: updated by an Opus subagent (owner approved), checked against the code and committed: 13 files, snapshot `0893d2339`. `column-operation.md` holds the scheme; `process-control.md`, `wired-control-power.md`, `fluid-runtime.md`, `heat-exchangers.md`, `fluid-science.md`, `rotating-machinery.md`, `client-gui.md`, `machine-assemblies.md`, `verification.md` and the README carry their parts; `column-v3.md` and `process-simulator.md` one line each. Facts schema 21 throughout. Three statements are taken from the batch README and marked so (pump power at 1.4 times, the 88/88 GameTests before the merge, the glass sizes).
 - **Ignored files**: `git ls-files -i -c --exclude-standard` is empty.
-- **Final lane**: not run. It runs once, alone on the machine, after the shader branch is on `main` and `main` is merged in: then the lane's selection is this batch's changes only and the shader branch's lane is its baseline. This batch changed `runtime/`, `science/fluid/` and `science/column/operation/`, all in `campaign-inputs.txt`, so the lane runs the campaign (1000 seeds, 8 workers) and the fluid GameTests.
+- **Final lane**: not run. It runs once, alone on the machine. The selection at `33d018c0f` (`affected.mjs select`, 107 files changed since main): `test` 231 of 374 classes, `holdGates` 12 of 12, `columnGates` 11 of 82, `equipmentGates` 26 of 28, chain-100, the fluid GameTests and the campaign (1000 seeds, 8 workers; this batch changed `runtime/`, `science/fluid/` and `science/column/operation/`). The baseline is the 0.25.0 lane.
 
 ## Open before the merge
 
-1. The shader branch on `main`; `main` merged into this branch (CHANGELOG headings, `mod_version`).
+1. `mod_version` (0.25.0 now) and the CHANGELOG heading, at the version the owner chooses.
 2. The final lane, on Opus.
 3. The owner's manual test. The world was saved before this merge. The merged code should read it (fields are read by presence), but it was not loaded on the merged code. A rebuild on the merged code takes 15 minutes.
 4. Owner decisions carried from the batch README: the `NO_DRIVER` Start refusal, the version.

@@ -24,6 +24,7 @@ The test world's code stays in `src/fluidGameTest/` (`ColumnFailureModesReviewWo
 | `w34-downcomer-backup/w34.patch` | The dropped W3.4 draft: downcomer backup as a second flood limit in `V3TrayHydraulics`, with its test. Never committed. Applies to `bf5741da0` (`git apply`); it also applies after the merge of the shader branch (`16829d22e`). |
 | `merge-prep/resolve.js` | Resolved the four text conflicts of the merge of `claude/custom-shader-system-caff9e` into this branch (`16829d22e`). One-off. |
 | `merge-prep/renumber.js` | Renumbered this batch's fluid facts schema mentions from 17 and 18 to 21 in that merge. One-off. |
+| `merge-prep/resolve-main.js` | Resolved the merge of main 0.25.0 into this branch (`33d018c0f`): two code guide snapshot lines, and this batch's CHANGELOG lines moved under `[Unreleased]`. One-off. |
 | `merge-prep/apply-tr.js` | Wrote the translation commit (`0893d2339`) from per-locale work files in en_us key order. Reusable with new `tmp/<name>/tr-<locale>.json` files after a path edit. |
 
 Logs: the stage and review-world logs are archived as `logs/column-failure-modes-logs-2026-11-10.tar.gz` (local, never staged). The archive was written in the batch's worktree; its place is the main checkout, at the same path.
