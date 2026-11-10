@@ -106,6 +106,8 @@ public final class ColumnFailureModesReviewWorld {
     static final double B_SCALE = 1 / 16.0;
     static final int B_STAGES = 30, B_FEED_STAGE = 24;
     static final double B_RECEIVER = 400, B_REFLUX = 2, B_REBOILER = 8e6;
+    /** Plant B's distillate rundown, Pa: a tank at 2 bar, under the receiver's 2.5 bar. */
+    static final double B_RUNDOWN = 200_000;
     /**
      * Plant B's hot utility: superheated steam into the kettle's tubes, K and Pa, out to a void at {@link #HOT_OUT}. Its sensible
      * heat only (about 370 kJ/kg down to the bottoms): 20 bar into 5 bar passes some 2 kg/s, the 0.5 MW reboiler with 60 % spare.
@@ -678,6 +680,14 @@ public final class ColumnFailureModesReviewWorld {
                 long id = rb.id(drain);
                 var r = rb.plant.world.registrations().get(id);
                 rb.plant.world.edit(id, r.revision(), r.device(), new FluidDeviceSpec(1, 298.15, HOT_OUT, waterFluid));
+            }
+            // Plant B's distillate runs down at pressure: its 400 K liquid leaves the receiver saturated at 2.5 bar, and a
+            // real plant does not let it down to the atmosphere (README open items: the island held on that flash).
+            var rundown = rb.lines.get("distillate");
+            if (rundown != null) {
+                long id = rb.id(rundown);
+                var r = rb.plant.world.registrations().get(id);
+                rb.plant.world.edit(id, r.revision(), r.device(), new FluidDeviceSpec(1, 298.15, B_RUNDOWN, waterFluid));
             }
             designFeed = Arrays.stream(ra.input.feedComponentMolarFlowsMolPerSecond()).sum();
             log("plantA scale={} design_mol_s={} diameter_m={} trays={} column={} box={}..{}", SCALE, designFeed, ra.design.diameter(), ra.design.trays().trays(),
