@@ -35,6 +35,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -64,8 +65,6 @@ public final class ColumnOperationReviewWorld {
     static final double SUPPLY = 500_000, WATER = 400_000, ATMOSPHERE = 101_325;
     /** The cooling water's supply temperature, K. */
     static final double WATER_TEMPERATURE = 298.15;
-    static final ColumnComponents.Choices CHOICES = new ColumnComponents.Choices(ColumnComponents.Condenser.EXCHANGER, ColumnComponents.Pump.STANDARD,
-            List.of(ColumnComponents.Pump.STANDARD, ColumnComponents.Pump.STANDARD, ColumnComponents.Pump.STANDARD));
     /** The condenser's shell size, m: larger than the least exchanger, for the overhead's duty. */
     static final double CONDENSER_SIZE = 1.5;
     /** The feed's and the steam's line bores, m (their generators' too). */
@@ -117,18 +116,53 @@ public final class ColumnOperationReviewWorld {
      * above the ground anywhere in its box.
      */
     static Rig rig(GameTestHelper helper) {
+        return rig(helper, Options.REVIEW);
+    }
+
+    /** {@link #rig(GameTestHelper)} built as {@code options} say, its box and its first place from them. */
+    static Rig rig(GameTestHelper helper, Options options) {
         var level = helper.getLevel();
-        var corner = helper.absolutePos(new BlockPos(48, 0, -64));
-        var below = new BlockPos(-34, 0, -32);
-        var above = new BlockPos(24, 44, 36);
+        var layout = options.layout();
+        var corner = helper.absolutePos(layout.corner());
+        var below = layout.below();
+        var above = layout.above();
         for (int k = 0; k <= 16; k++) {
             var at = corner.north(k * (above.getZ() - below.getZ() + 1));
             level.getChunk(at.getX() >> 4, at.getZ() >> 4);
             int ground = level.getHeight(Heightmap.Types.WORLD_SURFACE, at.getX(), at.getZ());
             if (clear(level, at.offset(below), at.offset(above), ground))
-                return new Rig(new AssemblyGameTests.Plant(helper, new BlockPos(at.getX(), ground, at.getZ()), below, above));
+                return new Rig(new AssemblyGameTests.Plant(helper, new BlockPos(at.getX(), ground, at.getZ()), below, above), options);
         }
         throw new IllegalStateException("No clear ground for the column plant north of " + corner.toShortString());
+    }
+
+    /**
+     * Where a rig's units stand, offsets from the column's origin (batch 2026-11-10-column-failure-modes, stage 5): the
+     * condenser's units (an exchanger's shells or an air cooler's banks), the trim's shells (air then water), the receiver
+     * and its size, the reflux pump, each pumparound's pump and cooler, the kettle (where the design has one); the box the
+     * pipes stay in and the corner, from the test's cell, the search for clear ground starts at.
+     */
+    record Layout(List<BlockPos> condenser, List<BlockPos> trim, BlockPos drum, double drumDiameter, double drumLength, int drumSupport,
+                  BlockPos refluxPump, List<BlockPos> pumps, List<BlockPos> coolers, @Nullable BlockPos kettle, BlockPos corner, BlockPos below, BlockPos above) {
+        /** The review plant's: the 2 m column of {@link #SCALE}. */
+        static final Layout REVIEW = new Layout(List.of(new BlockPos(-14, 0, -20)), List.of(), new BlockPos(-24, 0, -6), 1.5, 4, 5, new BlockPos(-10, 0, -8),
+                List.of(new BlockPos(-7, 0, 9), new BlockPos(-7, 0, 17), new BlockPos(-7, 0, 25)),
+                List.of(new BlockPos(-16, 0, 9), new BlockPos(-16, 0, 17), new BlockPos(-16, 0, 25)), null,
+                new BlockPos(48, 0, -64), new BlockPos(-34, 0, -32), new BlockPos(24, 44, 36));
+    }
+
+    /**
+     * How a rig is built (stage 5 of batch 2026-11-10-column-failure-modes; the review plant's are {@link #REVIEW}): the
+     * share of the design's feed, the design (null: the network's default column template), the condenser, the units'
+     * shapes (the condenser's, the trim's, a pumparound cooler's, the kettle's), the feed's, steam's and utility lines'
+     * bores (0: as laid), whether each pump turns on a motor fed with FE (else a creative motor), and whether every supply
+     * and product line carries a shutoff valve beyond its boundary valve.
+     */
+    record Options(double scale, @Nullable java.util.function.Function<MaterialCatalog, V3ColumnInput> design, ColumnComponents.Condenser condenser,
+                   EquipmentShape condenserUnit, @Nullable EquipmentShape trimUnit, EquipmentShape coolerUnit, @Nullable EquipmentShape kettleUnit,
+                   double feedBore, double steamBore, double waterBore, double productBore, boolean motors, boolean shutoffs, Layout layout) {
+        static final Options REVIEW = new Options(SCALE, null, ColumnComponents.Condenser.EXCHANGER, exchanger(CONDENSER_SIZE), null,
+                AssemblyGameTests.Plant.unit(Kind.EXCHANGER), null, FEED_BORE, STEAM_BORE, 0, 0, false, false, Layout.REVIEW);
     }
 
     /** Whether every column from {@code low} to {@code high} has its surface at {@code ground}: nothing stands on it. */
@@ -155,61 +189,120 @@ public final class ColumnOperationReviewWorld {
 
     static final class Rig {
         final AssemblyGameTests.Plant plant;
+        final Options options;
         final List<BlockPos> sinks = new ArrayList<>();
         BlockPos feed, steam, water;
         /** Each pumparound cooler's cooling-water generator (W4). */
         final List<BlockPos> coolingWater = new ArrayList<>();
+        /** Every water-cooled condenser unit's generator (the exchanger's shells, or the trim's), {@link #water} the first. */
+        final List<BlockPos> condenserWater = new ArrayList<>();
+        /** The kettle's hot utility's generator, or null. */
+        BlockPos heating;
+        /** The shutoff valves beyond the boundary valves, each with its axis ({@link Options#shutoffs}), and which line each is on. */
+        final java.util.Map<BlockPos, Direction> shutoffs = new java.util.LinkedHashMap<>();
+        final java.util.Map<String, BlockPos> lines = new java.util.LinkedHashMap<>();
+        /** The units as placed: the condenser's, the trim's, the receiver, the pumps (the reflux pump first), the coolers, the kettle. */
+        final List<Vessel> condensers = new ArrayList<>(), trims = new ArrayList<>(), pumps = new ArrayList<>(), coolers = new ArrayList<>(), motors = new ArrayList<>();
+        Vessel kettle;
+        /** The feed line's last pipe where the feed comes from upstream units the caller builds ({@link #layout(boolean)}). */
+        BlockPos feedLine;
         V3ColumnInput input;
+        ColumnDesign design;
 
         Rig(AssemblyGameTests.Plant plant) {
+            this(plant, Options.REVIEW);
+        }
+
+        Rig(AssemblyGameTests.Plant plant, Options options) {
             this.plant = plant;
+            this.options = options;
+        }
+
+        /** The plant, its valves and its supplies: {@link #layout(boolean)}, then {@link #finish()}. */
+        void build() {
+            layout(false);
+            finish();
         }
 
         /**
-         * The plant, west to east: the overhead train (north: condenser, receiver, reflux pump) and the three pumparound
+         * The plant, west to east: the overhead train (north: condenser, [trim,] receiver, reflux pump) and the pumparound
          * loops (south: a pump, then an exchanger's shell) on the column's west, where its reflux and pumparound nozzles
-         * face; the column; its side draws and its steam to the east. Boundary lines first, straight out of their nozzles;
-         * then the lines between units, each the shortest that touches no other line.
+         * face; the column; its side draws and its steam to the east; a kettle where the design has one. Boundary lines
+         * first, straight out of their nozzles; then the lines between units, each the shortest that touches no other line.
+         * {@code openFeed}: the feed line ends at a pipe ({@link #feedLine}) for the caller to feed, else at a generator.
          */
-        void build() {
+        void layout(boolean openFeed) {
             plant.hold();
             MaterialCatalog catalog = MaterialRuntime.active();
-            input = scaled(catalog.presets().column(catalog.presets().network().defaultColumnPreset()).input(catalog), SCALE);
-            var design = ColumnDesign.of(input, CHOICES);
+            var base = options.design() == null ? catalog.presets().column(catalog.presets().network().defaultColumnPreset()).input(catalog) : options.design().apply(catalog);
+            input = scaled(base, options.scale());
+            var layout = options.layout();
+            int pumparounds = input.pumparounds().size();
+            var choices = new ColumnComponents.Choices(options.condenser(), ColumnComponents.Pump.STANDARD, java.util.Collections.nCopies(pumparounds, ColumnComponents.Pump.STANDARD),
+                    new ColumnComponents.Units(layout.condenser().size(), 1, java.util.Collections.nCopies(pumparounds, 1), Math.max(1, layout.trim().size())));
+            design = ColumnDesign.of(input, choices);
             var shape = EquipmentShape.column(design.diameter(), design.trays(), EquipmentShape.Heading.NORTH, EquipmentShape.minimumSkirt(design.diameter()));
             ColumnDesign.misfit(shape).ifPresent(reason -> {
                 throw new IllegalStateException(reason);
             });
             var column = plant.column = plant.place(shape, 0, 0, 0);
-            var condenser = plant.place(exchanger(CONDENSER_SIZE), -14, 0, -20);
-            var drum = plant.drum = plant.place(EquipmentShape.drum(1.5, 4, EquipmentShape.Orientation.HORIZONTAL, EquipmentShape.Heading.NORTH, 5,
-                    EquipmentShape.defaultConnections(1.5, 4, EquipmentShape.Orientation.HORIZONTAL, 5, true), true), -24, 0, -6);
-            var refluxPump = plant.place(AssemblyGameTests.Plant.unit(Kind.PUMP), -10, 0, -8);
-            var pumps = new ArrayList<Vessel>();
-            var coolers = new ArrayList<Vessel>();
-            for (int j = 0; j < 3; j++) {
-                pumps.add(plant.place(AssemblyGameTests.Plant.unit(Kind.PUMP), -7, 0, 9 + 8 * j));
-                coolers.add(plant.place(AssemblyGameTests.Plant.unit(Kind.EXCHANGER), -16, 0, 9 + 8 * j));
+            for (var at : layout.condenser()) condensers.add(plant.place(options.condenserUnit(), at.getX(), at.getY(), at.getZ()));
+            for (var at : layout.trim()) trims.add(plant.place(java.util.Objects.requireNonNull(options.trimUnit()), at.getX(), at.getY(), at.getZ()));
+            double dd = layout.drumDiameter(), dl = layout.drumLength();
+            var drum = plant.drum = plant.place(EquipmentShape.drum(dd, dl, EquipmentShape.Orientation.HORIZONTAL, EquipmentShape.Heading.NORTH, layout.drumSupport(),
+                    EquipmentShape.defaultConnections(dd, dl, EquipmentShape.Orientation.HORIZONTAL, layout.drumSupport(), true), true), layout.drum().getX(), layout.drum().getY(), layout.drum().getZ());
+            var refluxPump = plant.place(AssemblyGameTests.Plant.unit(Kind.PUMP), layout.refluxPump().getX(), layout.refluxPump().getY(), layout.refluxPump().getZ());
+            pumps.add(refluxPump);
+            var paPumps = new ArrayList<Vessel>();
+            for (int j = 0; j < pumparounds; j++) {
+                var p = layout.pumps().get(j);
+                var c = layout.coolers().get(j);
+                paPumps.add(plant.place(AssemblyGameTests.Plant.unit(Kind.PUMP), p.getX(), p.getY(), p.getZ()));
+                coolers.add(plant.place(options.coolerUnit(), c.getX(), c.getY(), c.getZ()));
             }
+            pumps.addAll(paPumps);
+            if (design.components().kettle()) {
+                var k = java.util.Objects.requireNonNull(layout.kettle(), "the design has a kettle: the layout places it");
+                kettle = plant.place(java.util.Objects.requireNonNull(options.kettleUnit()), k.getX(), k.getY(), k.getZ());
+            }
+            // A motor on FE beyond each pump's coupling (stage 5), before the lines, which go round it.
+            if (options.motors()) for (var pump : pumps) motors.add(plant.motor(pump));
 
             // Boundary lines: the feed and steam valves point at the column, the products' away from it.
             var generator = ModBlocks.FLUID_GENERATOR.get().defaultBlockState();
             var sink = ModBlocks.FLUID_VOID.get().defaultBlockState();
-            feed = line(column, Role.FEED, 0, false, generator);
-            steam = line(column, Role.STEAM, 0, false, generator);
-            for (int j = 0; j < 3; j++) sinks.add(line(column, Role.DRAW, j, true, sink));
-            sinks.add(line(column, Role.BOTTOMS, 0, true, sink));
-            sinks.add(line(drum, Role.VAPOUR_OUTLET, 0, true, sink));
-            sinks.add(line(drum, Role.BOOT_DRAIN, 0, true, sink));
-            // The condenser's water: a generator into its tubes, out into a void.
-            water = water(condenser, generator, sink);
+            if (openFeed) feedLine = line(column, Role.FEED, 0, false, null, "feed");
+            else feed = line(column, Role.FEED, 0, false, generator, "feed");
+            for (int s = 0; s < input.steamFeeds().size(); s++) {
+                var at = line(column, Role.STEAM, s, false, generator, "steam" + (s + 1));
+                if (s == 0) steam = at;
+            }
+            for (int j = 0; j < input.sideDraws().size(); j++) sinks.add(line(column, Role.DRAW, j, true, sink, "draw" + (j + 1)));
+            sinks.add(kettle == null ? line(column, Role.BOTTOMS, 0, true, sink, "bottoms") : line(kettle, Role.LIQUID_OUTLET, 0, true, sink, "bottoms"));
+            sinks.add(line(drum, Role.VAPOUR_OUTLET, 0, true, sink, "offgas"));
+            sinks.add(line(drum, Role.BOOT_DRAIN, 0, true, sink, "water"));
+            // The condenser's water: a generator into its tubes, out into a void (the trim's, with air then water).
+            var cooled = options.condenser() == ColumnComponents.Condenser.AIR_THEN_WATER ? trims : options.condenser() == ColumnComponents.Condenser.EXCHANGER ? condensers : List.<Vessel>of();
+            for (int i = 0; i < cooled.size(); i++) condenserWater.add(water(cooled.get(i), generator, sink, i == 0 ? "trim" : "trim" + (i + 1)));
+            water = condenserWater.isEmpty() ? null : condenserWater.getFirst();
             // Each pumparound cooler's water the same way (W4: the column owes it the pumparound's duty; without it the column
             // reads LIMITED: pumparound).
-            for (var cooler : coolers) coolingWater.add(water(cooler, generator, sink));
+            for (int j = 0; j < coolers.size(); j++) coolingWater.add(water(coolers.get(j), generator, sink, "pa" + (j + 1)));
+            if (kettle != null) heating = water(kettle, generator, sink, "heating");
 
-            // The overhead: column, condenser shell, receiver, reflux pump, the distillate's tee, the reflux back.
-            plant.route(AssemblyGameTests.Plant.front(column, Role.VAPOUR_OUTLET), AssemblyGameTests.Plant.front(condenser, Role.SHELL_INLET));
-            plant.route(AssemblyGameTests.Plant.front(condenser, Role.SHELL_OUTLET), AssemblyGameTests.Plant.front(drum, Role.SIDE));
+            // The overhead: column, condenser (an air cooler's process side, then the trim's shell, or an exchanger's shell),
+            // receiver, reflux pump, the distillate's tee, the reflux back.
+            if (options.condenser() == ColumnComponents.Condenser.EXCHANGER) {
+                plant.route(AssemblyGameTests.Plant.front(column, Role.VAPOUR_OUTLET), AssemblyGameTests.Plant.front(condensers.getFirst(), Role.SHELL_INLET));
+                plant.route(AssemblyGameTests.Plant.front(condensers.getFirst(), Role.SHELL_OUTLET), AssemblyGameTests.Plant.front(drum, Role.SIDE));
+            } else {
+                plant.route(AssemblyGameTests.Plant.front(column, Role.VAPOUR_OUTLET), AssemblyGameTests.Plant.front(condensers.getFirst(), Role.PROCESS_INLET));
+                if (trims.isEmpty()) plant.route(AssemblyGameTests.Plant.front(condensers.getFirst(), Role.PROCESS_OUTLET), AssemblyGameTests.Plant.front(drum, Role.SIDE));
+                else {
+                    plant.route(AssemblyGameTests.Plant.front(condensers.getFirst(), Role.PROCESS_OUTLET), AssemblyGameTests.Plant.front(trims.getFirst(), Role.SHELL_INLET));
+                    plant.route(AssemblyGameTests.Plant.front(trims.getFirst(), Role.SHELL_OUTLET), AssemblyGameTests.Plant.front(drum, Role.SIDE));
+                }
+            }
             plant.route(AssemblyGameTests.Plant.front(drum, Role.LIQUID_OUTLET), AssemblyGameTests.Plant.front(refluxPump, Role.SUCTION));
             var before = new HashSet<>(plant.devices);
             plant.tee(plant.route(AssemblyGameTests.Plant.front(refluxPump, Role.DISCHARGE), front(column, Role.REFLUX, 0)));
@@ -218,33 +311,56 @@ public final class ColumnOperationReviewWorld {
                 if (!before.contains(at) && plant.level.getBlockState(at).is(ModBlocks.FLUID_RESERVOIR.get())) {
                     plant.level.setBlock(at, sink, Block.UPDATE_ALL);
                     sinks.add(at);
+                    lines.put("distillate", at);
                 }
             // Each pumparound: drawn through its pump and its exchanger's shell, back two trays up; the lowest first, the upper ones around it.
-            for (int j = 2; j >= 0; j--) {
-                plant.route(front(column, Role.PUMPAROUND_DRAW, j), AssemblyGameTests.Plant.front(pumps.get(j), Role.SUCTION));
-                plant.route(AssemblyGameTests.Plant.front(pumps.get(j), Role.DISCHARGE), AssemblyGameTests.Plant.front(coolers.get(j), Role.SHELL_INLET));
+            for (int j = pumparounds - 1; j >= 0; j--) {
+                plant.route(front(column, Role.PUMPAROUND_DRAW, j), AssemblyGameTests.Plant.front(paPumps.get(j), Role.SUCTION));
+                plant.route(AssemblyGameTests.Plant.front(paPumps.get(j), Role.DISCHARGE), AssemblyGameTests.Plant.front(coolers.get(j), Role.SHELL_INLET));
                 plant.route(AssemblyGameTests.Plant.front(coolers.get(j), Role.SHELL_OUTLET), front(column, Role.RETURN, j));
             }
-            // The feed and the steam lines sized for their flows, on both sides of their valves (the network model's flash): the
-            // crude is 71 % vapour at 638 K and 5 bar (30.2 kg/m³), 79 % at 632 K and 2.5 bar past the valve (13.5 kg/m³); its
-            // start target, 19.9 kg/s, runs at 336 and 750 m/s in the least bore (0.05 m), 13 and 30 m/s at 0.25 m. The steam,
-            // 0.75 kg/s at the start (2.1 and 1.0 kg/m³), runs at 185 and 370 m/s at 0.05 m, 21 and 41 m/s at 0.15 m.
-            for (var line : List.of(new Object[]{Role.FEED, FEED_BORE}, new Object[]{Role.STEAM, STEAM_BORE})) {
+            // The reboiler: the bottoms into the kettle, its vapour back under the bottom tray.
+            if (kettle != null) {
+                plant.route(AssemblyGameTests.Plant.front(column, Role.BOTTOMS), AssemblyGameTests.Plant.front(kettle, Role.FEED));
+                plant.route(AssemblyGameTests.Plant.front(kettle, Role.VAPOUR_OUTLET), AssemblyGameTests.Plant.front(column, Role.VAPOUR_RETURN));
+            }
+        }
+
+        /**
+         * The valves, the pumps' drivers and the supplies: the feed and the steam lines sized for their flows on both sides of
+         * their valves (the network model's flash): at the review plant's scale the crude is 71 % vapour at 638 K and 5 bar
+         * (30.2 kg/m³), 79 % at 632 K and 2.5 bar past the valve (13.5 kg/m³); its start target, 19.9 kg/s, runs at 336 and
+         * 750 m/s in the least bore (0.05 m), 13 and 30 m/s at 0.25 m. The steam, 0.75 kg/s at the start (2.1 and 1.0 kg/m³),
+         * runs at 185 and 370 m/s at 0.05 m, 21 and 41 m/s at 0.15 m. The velocity goes with the flow over the bore squared.
+         */
+        void finish() {
+            MaterialCatalog catalog = MaterialRuntime.active();
+            var column = plant.column;
+            for (var line : List.of(new Object[]{Role.FEED, options.feedBore(), 1}, new Object[]{Role.STEAM, options.steamBore(), input.steamFeeds().size()})) {
                 var role = (Role) line[0];
-                for (int k : new int[]{0, 2})
-                    plant.world.resizeLine(id(front(column, role, 0).relative(out(column, role, 0), k)), (double) line[1], d -> PipeSizes.MAX_BORE);
+                for (int n = 0; n < (int) line[2]; n++)
+                    for (int k : options.shutoffs() ? new int[]{0, 2, 4} : new int[]{0, 2})
+                        plant.world.resizeLine(id(front(column, role, n).relative(out(column, role, n), k)), (double) line[1], d -> PipeSizes.MAX_BORE);
+            }
+            if (options.productBore() > 0) for (var at : sinks) resize(at, options.productBore());
+            if (options.waterBore() > 0) {
+                var utilities = new ArrayList<BlockPos>(condenserWater);
+                utilities.addAll(coolingWater);
+                if (heating != null) utilities.add(heating);
+                for (var at : utilities) resize(at, options.waterBore());
             }
             for (var valve : plant.valves.entrySet()) plant.install(valve.getKey(), valve.getValue());
-            // The casings turn only with their shaft trains (W3): a creative motor drives each pump.
-            plant.drive(refluxPump);
-            for (var pump : pumps) plant.drive(pump);
+            for (var valve : shutoffs.entrySet()) shutoff(valve.getKey(), valve.getValue());
+            // The casings turn only with their shaft trains (W3): a creative motor drives each pump, or a motor on FE (stage 5).
+            if (!options.motors()) for (var pump : pumps) plant.drive(pump);
 
             // The supplies and the sinks.
-            supply(feed, FEED_BORE, new FluidDeviceSpec(1, input.feedTemperatureKelvin(), SUPPLY, crude(catalog)));
+            if (feed != null) supply(feed, options.feedBore(), new FluidDeviceSpec(1, input.feedTemperatureKelvin(), SUPPLY, crude(catalog)));
             var waterFluid = FluidDeviceSpec.water(catalog).composition();
-            supply(steam, STEAM_BORE, new FluidDeviceSpec(1, input.steamFeeds().getFirst().temperatureKelvin(), SUPPLY, waterFluid));
-            TankCharge.run(plant.world, id(water), new FluidDeviceSpec(1, WATER_TEMPERATURE, WATER, waterFluid));
-            for (var at : coolingWater) TankCharge.run(plant.world, id(at), new FluidDeviceSpec(1, WATER_TEMPERATURE, WATER, waterFluid));
+            if (steam != null) supply(steam, options.steamBore(), new FluidDeviceSpec(1, input.steamFeeds().getFirst().temperatureKelvin(), SUPPLY, waterFluid));
+            var spec = new FluidDeviceSpec(1, WATER_TEMPERATURE, WATER, waterFluid);
+            for (var at : condenserWater) water(at, spec);
+            for (var at : coolingWater) water(at, spec);
             for (var at : sinks) {
                 long id = id(at);
                 var r = plant.world.registrations().get(id);
@@ -252,12 +368,35 @@ public final class ColumnOperationReviewWorld {
             }
         }
 
+        /** A utility's generator at {@code at} set to {@code spec}: charged at the laid bore, or switched on at {@link Options#waterBore}. */
+        void water(BlockPos at, FluidDeviceSpec spec) {
+            if (options.waterBore() > 0) supply(at, options.waterBore(), spec);
+            else TankCharge.run(plant.world, id(at), spec);
+        }
+
+        /** Every pipe of the straight line that ends at {@code end} (a generator or a void) at bore {@code bore}, m, up to the unit it leaves. */
+        void resize(BlockPos end, double bore) {
+            for (var d : Direction.values()) {
+                var at = end.relative(d);
+                if (!plant.devices.contains(at)) continue;
+                for (int k = 0; k < 8 && plant.devices.contains(at); k++, at = at.relative(d))
+                    if (plant.world.at(plant.position(at)).isPresent()) plant.world.resizeLine(id(at), bore, x -> PipeSizes.MAX_BORE);
+            }
+        }
+
+        /** A shutoff valve on the pipe at {@code at}, its handle on {@code axis}, open, as the fitting item installs one. */
+        void shutoff(BlockPos at, Direction axis) {
+            if (!plant.world.installPipeValve(id(at), com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Direction.valueOf(axis.name()),
+                    com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Cutoff.OPEN))
+                throw new IllegalStateException("The shutoff valve at " + at.toShortString() + " did not install");
+        }
+
         /**
          * Cooling water through {@code exchanger}'s tubes, straight out of its nozzles: a generator into the inlet, out into a
-         * void (a sink), the water running free (branching pipes off the tube nozzles left valves on the water lines: they go);
-         * returns the generator.
+         * void (a sink), the water running free (branching pipes off the tube nozzles left valves on the water lines: they go;
+         * with {@link Options#shutoffs} the inlet's becomes a shutoff named by {@code line}); returns the generator.
          */
-        BlockPos water(Vessel exchanger, net.minecraft.world.level.block.state.BlockState generator, net.minecraft.world.level.block.state.BlockState sink) {
+        BlockPos water(Vessel exchanger, net.minecraft.world.level.block.state.BlockState generator, net.minecraft.world.level.block.state.BlockState sink, String line) {
             var in = AssemblyGameTests.Plant.front(exchanger, Role.TUBE_INLET);
             plant.pipe(in);
             var source = plant.branch(in, AssemblyGameTests.Plant.out(exchanger, Role.TUBE_INLET), false, generator);
@@ -265,16 +404,15 @@ public final class ColumnOperationReviewWorld {
             plant.pipe(out);
             sinks.add(plant.branch(out, AssemblyGameTests.Plant.out(exchanger, Role.TUBE_OUTLET), true, sink));
             for (var q : Direction.values()) {
-                plant.valves.remove(in.relative(q, 2));
+                var valve = plant.valves.remove(in.relative(q, 2));
+                if (valve != null && options.shutoffs()) {
+                    shutoffs.put(in.relative(q, 2), valve);
+                    lines.put(line, in.relative(q, 2));
+                }
                 plant.valves.remove(out.relative(q, 2));
             }
             return source;
         }
-
-        /**
-         * The generator at {@code at} at bore {@code bore}, m, set to {@code spec} and switched on, in one edit as its own
-         * screen makes it: a generator's connection is the least bore unless set.
-         */
         void supply(BlockPos at, double bore, FluidDeviceSpec spec) {
             long id = id(at);
             var r = plant.world.registrations().get(id);
@@ -387,19 +525,28 @@ public final class ColumnOperationReviewWorld {
 
         /**
          * A boundary line straight out of the {@code n}th {@code role} nozzle: three pipes, a valve on the second (its outlet
-         * along the line, or back at the nozzle), then {@code end}. Returns the end's position.
+         * along the line, or back at the nozzle), then {@code end}. With {@link Options#shutoffs} two pipes more, a shutoff
+         * valve on the fourth, named {@code name} in {@link #lines}. A null {@code end}: the line ends at its last pipe. Returns
+         * the end's position (the last pipe's).
          */
-        BlockPos line(Vessel vessel, Role role, int n, boolean outward, BlockState end) {
+        BlockPos line(Vessel vessel, Role role, int n, boolean outward, @Nullable BlockState end, String name) {
             var from = front(vessel, role, n);
             var d = out(vessel, role, n);
-            for (int k = 0; k <= 3; k++) {
+            int pipes = options.shutoffs() ? 5 : 3;
+            for (int k = 0; k <= pipes; k++) {
                 var at = from.relative(d, k);
+                if (k == pipes && end == null) break;
                 if (!plant.free(at, AssemblyGameTests.Plant.around(from, from.relative(d, k - 1), from.relative(d, k + 1))))
                     throw new IllegalStateException(role + " line blocked at " + at.toShortString());
             }
-            for (int k = 0; k < 3; k++) plant.pipe(from.relative(d, k));
+            for (int k = 0; k < pipes; k++) plant.pipe(from.relative(d, k));
             plant.valves.put(from.relative(d), outward ? d : d.getOpposite());
-            var at = from.relative(d, 3);
+            if (options.shutoffs()) {
+                shutoffs.put(from.relative(d, 3), d);
+                lines.put(name, from.relative(d, 3));
+            }
+            if (end == null) return from.relative(d, pipes - 1);
+            var at = from.relative(d, pipes);
             plant.level.setBlock(at, end, Block.UPDATE_ALL);
             plant.devices.add(at);
             return at;
