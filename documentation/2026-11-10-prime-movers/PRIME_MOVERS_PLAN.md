@@ -180,3 +180,20 @@ Owner: **"It shall not overspeed, and keep the model simple. Others as recommend
 - P11, neither A nor B: a prime mover never overspeeds. The governor never lets the speed pass the set speed; the speed setting tops out at the rated speed (share 1.0 at most, not the steam turbine's 1.05); a load loss cuts the fuel in the same quasi-steady step. No overspeed trip for these kinds: no `TRIP_SPEED` check, no latched trip, no reset, no `OVERSPEED` status. The steam turbine's trip stays as it is.
 - "Keep the model simple", for the whole build: the simplest form that keeps conservation and these decisions; no new modes, switches or special cases; a part that needs more machinery than the plan states goes to the owner as a decision first.
 - As recommended: P1 A, P2 (7 engines, 9 GTs), P3 A, P4 A, P5 A, P6 B, P7, P8 A, P9 A (to 400 MW, S1 efficiency, 12 poles, turbo look), P10 A, P12 A, P13 (one loop each), P14 A.
+
+### 12.2 Later owner changes (2026-11-10)
+
+- **P12 changed**: owner "max 300MW steam turbine should be enough", corrected to "300MW should be the combined duty I assume", then the owner's setting "HP=HP+MP+LP, MP=MP+LP, LP=LP. I assume this will make things simpler" ("ok"). One steam turbine unit, named by its inlet class (MP, HP, VHP), expands to its exhaust as `SteamTurbine` already does, to 300 MW. The efficiency and isentropic-drop laws are unchanged (the owner accepted that superheat pays more in game than the steam tables say). Above one casing's 45 MW the unit is drawn as tandem sections (12.3). Existing sizes keep their layout. No format changes.
+- **P15 dropped** (owner's setting above): several steam turbines on one shaft were asked for, then replaced by the one-unit setting. One driver per shaft stays; `TWO_DRIVERS` is unchanged.
+
+### 12.3 As built
+
+- Shape fields: no bump. A prime mover's model is its size number (1 to N) and a gas turbine's coil its length (2), as the vacuum pumps. Facts schema 20, checkpoint 46, corpus image `compat/fluid/schema-20/`; the facts reader accepts 12 poles.
+- Steam turbine sections (`SteamTurbineDesign.sections`), drawn only above 45 MW:
+  - the front casing as today at 3 m: an HP casing for HP or VHP steam, an MP casing for MP steam;
+  - an MP casing (1 Dc long, 0.9 Dc across) where HP or VHP steam expands below the MP class (17 bar);
+  - an LP casing (hood 1.3 Dc across) where the exhaust lies below the LP header (4.5 bar): single-flow (1.2 Dc long) to 100 MW, double-flow (2 Dc) above it (game level: one last stage passes about 100 MW at 3,000 rpm);
+  - a crossover from the front casing's exhaust flange over the sections; the exhaust nozzle up from the last casing's back end.
+- Turbine powers: the R20 list from 55 kW, ending at 300 MW (between its 280 and 315 MW), `MachineDuty.TURBINE_POWERS`. A turbine's loop gain keeps its 55 kW to 45 MW range (larger units sound as the largest).
+- Smoke: a prime mover's fuel void is watched as a fired heater's flue (`HeaterFlue`), its mark `stack_top_0`.
+- Simulator: tiles `combustion_engine` and `gas_turbine` (Power category, the steam turbine moved in), `PrimeMoverUnit` (the fuel leaves as a flare's; the coil at its pinch, read at its inlet and bubble point), `PrimeMoverSizing`, limits `PRIME_MOVER_FUEL` and `PRIME_MOVER_SPARE`.
