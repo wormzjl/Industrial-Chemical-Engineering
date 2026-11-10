@@ -26,10 +26,23 @@ Owner, 2026-11-10: a custom shader system for normal textures (first the instrum
 - 2026-11-10: owner: bench the CPU, GPU and RAM overhead and optimize as part of the work. FX_BENCH_PLAN.md (W11) written; owner approved the fx-bench agent and the Complementary Reimagined download (in `tmp/fx-bench/shaderpacks/`).
 - 2026-11-10: phase 1 done. fx-core (W1) 8b62564f9, a1bd257ce; fx-server-states 85d0b040c (flare soot and exit velocity, tower exhaust, heater flue), 07d7897b5 (part marks), 4eb40758c (tower and heater watches, flare-2, silhouette subscription; protocols fluid-21, equipment-23). Compile and the affected tests: 196 tests, 0 failures (effects core 39, server states 117, equipment gates 60). Settled on physics for fx-noise: a reversed tower draught sends no plume; silhouette requests at most one per 5 s per player.
 
+- 2026-11-10: phase 2 done (agents fx-wiring W2, fx-effects W3–W6 and W8, fx-dh W10, fx-noise; Opus, medium). Ten commits b0b915cb1..8665c624a: process loops (`valve_gas`, `fan_whoosh`, `water_fall`, `gear_whine`, one-shot `pipe_knock`); travelling puffs, haze screen copy, blue flame root; baked flame, smoke and plume textures (`tools/fx-textures/`); flare, tower, heater and still emitters with the flare and still watches in `ProcessStates`, `FlareFlames` and `StillFires` deleted with their particles; the noise watch (protocol fluid-22), one client budget of 12 loops that movers and drivers join, the silhouette rate limit, no plume on a reversed draught; wiring textures (`tools/pbr-textures/`), wiring finish in metres with tray cable counts, Ex gland and drip loop, the wiring render paths; DH API 7.2.0 and the far silhouettes. Integration: one compile fix (a duplicate variable in `FxSounds`), one test fix (NoiseTest expected a vent level above the 120 dB cap). Compile and the affected tests: `test` 166, `equipmentGates` 58, 0 failures.
+
 ## Code areas (planned)
 
 New `client/fx/` (settings, Iris detection, core shaders, render types, batch, wind, ambient, emitters); `client/FlareFlames`, `client/StillFires`, `client/InstrumentRenderer`, `science/equipment/InstrumentWiring` (v in metres), `client/ClientConfig`; `network/FluidNetwork` (new watches `TOWERS`, `HEATERS`, more fields on the flare state); `runtime/fluid/FluidWorldAuthority` (their states); `science/equipment/ProcessUnit` (part marks); `assets/icheme/shaders/core/`, `textures/` (`_flat`, `_n`, `_s`), `sounds/`; tools `tools/pbr-textures/`, `tools/process-sounds/`.
 
 ## Open items
 
-- W0 compatibility questions (plan section 7). They need dev-client checks, which the owner starts.
+- W0 compatibility questions (plan section 7). They need dev-client checks, which the owner starts. The same check judges the drip loop's shape (0.09 m drop, meeting the skin 3 cm below the gland) and whether the silhouette boxes hide DH's voxels at every detail level, with and without a pack.
+- Owner questions from phase 2:
+  - DH hull growth: 1 m (half a 2-block voxel); DH's 8-block voxels may show past it, full cover needs 4 m.
+  - Iris shadow pass: only the wiring skips it; should the dials and heads skip it too?
+  - Sound levels the review left open: air-cooler fan 97 dB, tower fan 100 dB per cell, draft fan 90 dB at full firing; water 72 + 10 log10(kg/s); burner 30 + 10 log10(W); gearbox 75 + 10 log10(kW) + 30 log10(speed); kettle 75 + 10 log10(MW); flare 120 + 10 log10(flame share), pilot 85; still fire 88 + 10 log10(fire), pot 72. Knock at a surge of 0.2 MPa or more (a = 1,200 m/s); below 300 kg/m³ counts as gas. Volume 10^((L − 100)/20) up to 100 dB, 3^((L − 100)/20) above, capped at 3.
+  - Tower and heater sounds come from the noise watch (water flow, fan speed), not from the plume and flue states.
+  - Flame bend: `FlameModel`'s table of API 521 flame distortion (u∞/Uj against ΣΔx/L, ΣΔy/L) is read from memory; check against the figure.
+  - Still fire: the liquid burner's mark sits inside the brickwork, so the jet now runs across the door; the alternative is a peep opening in the door model. The still publishes no flue flow, so its draught is 1 + 2·fire m/s.
+  - Gas-stack plumes show only beyond 5D/f (43–97 m for a 1.5 m stack, the free-jet dilution law); a wind-bent dilution would show them nearer the stack.
+  - Silhouettes add a sixth finish, copper, for the copper stills.
+  - Not sounded: the diverter valve and the turbine governor valve; steam ejectors have no live state.
+- Code guide `client-gui.md` still names `FlareFlames` and `StillFires` (W9).
