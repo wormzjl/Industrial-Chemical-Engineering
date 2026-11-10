@@ -63,7 +63,7 @@ public final class DriverSounds {
         var shape=shell.shape();var level=Minecraft.getInstance().level;
         if(shape==null||level==null)return;
         var sound=switch(shape.kind()){
-            case COMBUSTION_ENGINE->start?(UnitDesign.ratedRpm(shape)<=750?com.wormzjl.icheme.registry.ModBlocks.ENGINE_START_AIR:com.wormzjl.icheme.registry.ModBlocks.ENGINE_START_ELECTRIC):com.wormzjl.icheme.registry.ModBlocks.ENGINE_STOP;
+            case COMBUSTION_ENGINE->start?(UnitDesign.mediumSpeedEngine(shape)?com.wormzjl.icheme.registry.ModBlocks.ENGINE_START_AIR:com.wormzjl.icheme.registry.ModBlocks.ENGINE_START_ELECTRIC):com.wormzjl.icheme.registry.ModBlocks.ENGINE_STOP;
             case GAS_TURBINE->start?com.wormzjl.icheme.registry.ModBlocks.GAS_TURBINE_START:com.wormzjl.icheme.registry.ModBlocks.GAS_TURBINE_STOP;
             default->null;
         };
@@ -129,7 +129,7 @@ public final class DriverSounds {
             String loop=switch(kind){
                 case STEAM_TURBINE->"turbine_running";
                 case GENERATOR->"generator_running";
-                case COMBUSTION_ENGINE->"engine_running";
+                case COMBUSTION_ENGINE->UnitDesign.mediumSpeedEngine(shell.shape())?"engine_running_medium":"engine_running";
                 case GAS_TURBINE->"gas_turbine_running";
                 default->"motor_running";
             };

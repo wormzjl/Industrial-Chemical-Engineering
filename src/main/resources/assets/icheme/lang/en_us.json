@@ -140,6 +140,7 @@
   "subtitles.icheme.generator_running": "Generator running",
   "subtitles.icheme.turbine_running": "Steam turbine running",
   "subtitles.icheme.engine_running": "Combustion engine running",
+  "subtitles.icheme.engine_running_medium": "Medium-speed engine running",
   "subtitles.icheme.gas_turbine_running": "Gas turbine running",
   "subtitles.icheme.engine_start_air": "Engine air start",
   "subtitles.icheme.engine_start_electric": "Engine starter",

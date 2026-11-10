@@ -31,6 +31,10 @@
     "subtitle": "subtitles.icheme.engine_running",
     "sounds": [{ "name": "icheme:engine_running", "stream": false }]
   },
+  "engine_running_medium": {
+    "subtitle": "subtitles.icheme.engine_running_medium",
+    "sounds": [{ "name": "icheme:engine_running_medium", "stream": false }]
+  },
   "gas_turbine_running": {
     "subtitle": "subtitles.icheme.gas_turbine_running",
     "sounds": [{ "name": "icheme:gas_turbine_running", "stream": false }]

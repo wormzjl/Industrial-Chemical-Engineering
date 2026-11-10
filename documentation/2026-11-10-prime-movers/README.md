@@ -1,6 +1,6 @@
 # Prime movers: combustion engines, gas turbines, generators to 400 MW, steam turbines to 300 MW
 
-Status: **Merged into the custom-shader-system batch 2026-11-10** (6c597e7b3, owner: "Merge it"), after the owner's model review (13 fixes, 0cf7d5e11). **Follow-up in progress since 2026-11-10**: working sound and animation (owner: "add working sound & animation to them"); the running loops wait for the owner's pick. Branch `claude/prime-movers-4b7224`, cut from `claude/custom-shader-system-caff9e` at `841e765f2`.
+Status: **Merged into the custom-shader-system batch 2026-11-10** (6c597e7b3, owner: "Merge it"), after the owner's model review (13 fixes, 0cf7d5e11). **Follow-up built 2026-11-10, not merged**: working sound and animation (owner: "add working sound & animation to them"), the owner's sound picks installed. Branch `claude/prime-movers-4b7224`, cut from `claude/custom-shader-system-caff9e` at `841e765f2`.
 
 ## Scope
 
@@ -27,6 +27,7 @@ Owner, 2026-11-10: "Add combustion engine which worked on liquid fuels, and gas 
   - Turning parts: a load shaft spool with its disc pack in an open bar guard at each set's drive end (`ProcessUnit.loadShaft`), a torsional damper on the engine's free end (`ProcessUnit.damper`); new-kind layout rows only, no nozzle moved.
   - Tests: PlumeModelTest, PipePresentationTest, MotorTest, equipmentGates EquipmentLayoutGoldenTest. Drawings `tmp/equipment-drawings/20261110-123329-af0de3`.
 - 2026-11-10: owner picks: gas turbine "A whine" (installed as `gas_turbine_running.ogg`), one-shots "Keep them", engine "C but needs to be cleaner": C1 (modal knock rings, clean 320 Hz slap, jitter halved, floor and grit 13 dB down) and C2 (no broadband but a faint low rumble, short modal clicks), each a high-speed and a medium-speed loop, sent for the owner's pick.
+- 2026-11-10: owner picked engine **C1**: `engine_running.ogg` (high-speed sets, authored at 1500 rpm) and the new `engine_running_medium.ogg` (medium-speed sets, 750 rpm and under, authored at 600 rpm; `UnitDesign.mediumSpeedEngine`, `ENGINE_MEDIUM_LOOP_RPM`), its sound event and subtitle line (en_us only). PipePresentationTest checks each family's pitch (1500 rpm 1.0, 750 rpm 1.25, 500 rpm 0.83).
 
 ## Code areas
 
@@ -34,7 +35,7 @@ Owner, 2026-11-10: "Add combustion engine which worked on liquid fuels, and gas 
 
 ## Open items
 
-- Owner's pick of the engine running loop (C1 or C2); then the engine loop splits by family (a medium-speed loop authored at 600 rpm, `UnitDesign.soundPitch`).
+- In-game listen and look (sounds, puffs, turning parts): not done; the owner may start one check.
 - Translation commit for the new subtitle lines (the follow-up's merge).
 - Not run: LanguageFilesTest and UnitTextTest (wait for the translation commit), the full suite and the final lane (merge preparation).
 - Code guide chapter (rotating machinery) and CHANGELOG at merge preparation.

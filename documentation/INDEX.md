@@ -14,7 +14,7 @@ Status words:
 
 | Batch | Purpose | Status |
 |---|---|---|
-| [2026-11-10-prime-movers](2026-11-10-prime-movers/README.md) | Liquid-fuel combustion engines and gas turbines as shaft-train drivers, steam coil, generators to 400 MW, steam turbines to 300 MW | Merged into the custom-shader-system batch 2026-11-10 (6c597e7b3); sound and animation follow-up in progress since 2026-11-10 |
+| [2026-11-10-prime-movers](2026-11-10-prime-movers/README.md) | Liquid-fuel combustion engines and gas turbines as shaft-train drivers, steam coil, generators to 400 MW, steam turbines to 300 MW | Merged into the custom-shader-system batch 2026-11-10 (6c597e7b3); sound and animation follow-up built 2026-11-10, not merged |
 | [2026-11-10-chimney](2026-11-10-chimney/README.md) | Steel and brick chimneys releasing gas and particulates to the atmosphere | Merged into the custom-shader-system batch 2026-11-10 (44886656a); with it to main |
 | [2026-11-10-vacuum-pump](2026-11-10-vacuum-pump/README.md) | Liquid ring and dry screw vacuum pump casings on the shaft trains; the pump on a vacuum column's receiver | Merged into the custom-shader-system batch 2026-11-10 (682d7b56e), liquid ring redraw b62cfa3bd |
 | [2026-11-10-steam-ejector-flow](2026-11-10-steam-ejector-flow/README.md) | Steam ejector as a flow element (motive steam through its throat) and its jet sound | In progress since 2026-11-10 |

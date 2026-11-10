@@ -318,8 +318,18 @@ public abstract class UnitDesign {
      * compressor and turbine loops state none: they sound at their machine's rated speed.
      */
     public static final double PUMP_LOOP_RPM = 2950, MOTOR_LOOP_RPM = 1500;
-    /** {@code engine_running} (tools/process-sounds) at 1500 rpm: its 200 Hz firing is 1500 rpm over 60 times 16 cylinders over 2. The gas turbine's loop states none. */
-    public static final double ENGINE_LOOP_RPM = 1500;
+    /**
+     * The engine loops' authored speeds, rpm (tools/process-sounds/prime_candidates.py, owner pick C1): {@code engine_running}
+     * at 1500 rpm (16 cylinders, 200 Hz firing) for a high-speed set, {@code engine_running_medium} at 600 rpm (18 cylinders,
+     * 90 Hz) for a medium-speed set, {@link #MEDIUM_SPEED} rpm and under: the pitch clamp 0.5 to 2 cannot stretch one loop
+     * from 500 to 1500 rpm. The gas turbine's loop states none.
+     */
+    public static final double ENGINE_LOOP_RPM = 1500, ENGINE_MEDIUM_LOOP_RPM = 600, MEDIUM_SPEED = 750;
+
+    /** Whether {@code shape} is a medium-speed engine ({@link #MEDIUM_SPEED} rpm and under): its own loop, its air start. */
+    public static boolean mediumSpeedEngine(EquipmentShape shape) {
+        return shape.kind() == Kind.COMBUSTION_ENGINE && ratedRpm(shape) <= MEDIUM_SPEED;
+    }
 
     /**
      * A running loop's pitch at a shaft speed {@code rpm} for a loop authored at {@code loopRpm} (decision D26; owner
@@ -356,7 +366,7 @@ public abstract class UnitDesign {
     public static float soundPitch(EquipmentShape shape, double share) {
         double rated = ratedRpm(shape);
         if (!(rated > 0)) return soundPitch(share, 1);
-        return soundPitch(share * rated, shape.kind() == Kind.PUMP ? PUMP_LOOP_RPM : shape.kind() == Kind.COMBUSTION_ENGINE ? ENGINE_LOOP_RPM : MOTOR_LOOP_RPM);
+        return soundPitch(share * rated, shape.kind() == Kind.PUMP ? PUMP_LOOP_RPM : shape.kind() == Kind.COMBUSTION_ENGINE ? (mediumSpeedEngine(shape) ? ENGINE_MEDIUM_LOOP_RPM : ENGINE_LOOP_RPM) : MOTOR_LOOP_RPM);
     }
 
     /** Whether a kind sounds as a driver, its own loop at its own cells: a motor, its mirror the generator, or a steam turbine. */
