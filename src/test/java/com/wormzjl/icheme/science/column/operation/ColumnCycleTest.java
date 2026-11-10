@@ -122,8 +122,8 @@ class ColumnCycleTest {
     @Test
     void theListHoldsEveryLimitAndTheLowestBinds() {
         var table = table();
-        // Half the set feed; the bottoms with room for 0.8 of what that feed makes (the outlet's share is of the feed the
-        // accounts hold); the steam short of its ratio.
+        // Half the set feed; the bottoms with room for 0.8 of what that feed makes, so 0.4 of what the set feed makes (every
+        // share is of the set demand, a finding of stage 1); the steam short of its ratio.
         var feed = new Account(new double[] {75, 100, 75, 0}, -.35e8);
         var steam = new Account(new double[] {0, 0, 0, 40}, -.92e7);
         double[] open = {1e9, 1e9, 1e9, 1e9, 1e9};
@@ -135,12 +135,13 @@ class ColumnCycleTest {
         var kinds = step.conditions().stream().map(Condition.Active::condition).toList();
         assertEquals(List.of(Condition.FEED_SHORT, Condition.PRODUCT_FULL, Condition.STEAM_SHORT), kinds, step.conditions().toString());
         assertEquals(.5, step.conditions().get(0).value(), 1e-12, "the feed allows half");
-        assertEquals(.8, step.conditions().get(1).value(), 1e-9, "the bottoms allows 0.8");
+        assertEquals(.4, step.conditions().get(1).value(), 1e-9, "the bottoms allows 0.4 of the set feed");
         assertEquals(4, step.conditions().get(1).index());
         assertEquals(1, step.conditions().get(2).value(), "rule B: the short steam cuts nothing");
         assertEquals(0, step.conditions().get(2).index());
-        assertEquals(Condition.FEED_SHORT, bound(step), "the lowest binds");
-        assertEquals(.5, step.alpha(), 1e-12);
+        assertEquals(Condition.PRODUCT_FULL, bound(step), "the lowest binds");
+        assertEquals(.4, step.alpha(), 1e-9);
+        assertTrue(step.products().get(4).total() <= room[4] * (1 + 1e-12), "the bottoms is filled no further than its room");
         assertFalse(step.tripped());
         // A full take with nothing short lists nothing.
         assertEquals(List.of(), full.conditions());
@@ -282,6 +283,89 @@ class ColumnCycleTest {
         var lighter = ColumnCycle.step(table, setpoints(), 5, new Account(new double[] {160, 200, 140, 0}, ref.feedEnthalpy() * 500), List.of(steam), room,
                 (k, n) -> energy(table, k, n), false);
         assertEquals(DriftBands.Trigger.COMPOSITION, DriftBands.check(table, lighter, 500).orElseThrow().trigger());
+    }
+
+    /** The test table with its worst tray at {@code fraction} of flood at the design feed (100 mol/s), a liquid-limited tray 12. */
+    static SplitTable flooding(double fraction) {
+        return table().withFlood(new SplitTable.Flood(fraction / 100, 12, false, 2_000, 6_000));
+    }
+
+    static final Account FEED = new Account(new double[] {300, 400, 300, 0}, -1.4e8);
+    static final Account STEAM = new Account(new double[] {0, 0, 0, 1000}, -2.3e8);
+    static final double[] OPEN = {1e9, 1e9, 1e9, 1e9, 1e9};
+
+    /** T1 (batch 2026-11-10-column-failure-modes, W3.1): a table at 80 % of flood at the design feed takes all of it and raises nothing. */
+    @Test
+    void aTableBelowFloodTakesItsSetFeed() {
+        var table = flooding(.8);
+        var step = ColumnCycle.step(table, setpoints(), 5, FEED, List.of(STEAM), OPEN, (k, n) -> energy(table, k, n), false);
+        assertEquals(1, step.alpha(), 1e-12);
+        assertEquals(List.of(), step.conditions(), "below 85 % of flood nothing is said");
+    }
+
+    /**
+     * T2 (W3.1): the table's flood per feed raised by 1.34 (reflux 2 to 3) puts the worst tray at 107 % at the set feed: the
+     * cycle takes 1/1.072 of it, FLOODING binds with its tray, the worst tray stands at its limit (HIGH_LOAD at 100 %), and
+     * components and energy close. T9: this test fails with the flood cap removed.
+     */
+    @Test
+    void aTablePastFloodCutsTheFeedToTheLimitAndCloses() {
+        var table = flooding(.8 * 1.34);
+        var step = ColumnCycle.step(table, setpoints(), 5, FEED, List.of(STEAM), OPEN, (k, n) -> energy(table, k, n), false);
+        assertEquals(Condition.FLOODING, bound(step));
+        assertEquals(1 / 1.072, step.alpha(), 1e-12);
+        assertEquals(12, step.binding().index(), "the worst tray");
+        assertEquals(1, table.flood().fraction(step.feedMoles() / 5), 1e-12, "the worst tray at its limit");
+        var high = Condition.find(step.conditions(), Condition.HIGH_LOAD);
+        assertNotNull(high, step.conditions().toString());
+        assertEquals("tray 13 at 100 % of flood", high.text());
+        double[] in = new double[4], out = new double[4];
+        double energyOut = 0;
+        for (int i = 0; i < 4; i++) in[i] = step.feed().moles()[i] + step.steam().getFirst().moles()[i];
+        for (var p : step.products()) {
+            for (int i = 0; i < 4; i++) out[i] += p.moles()[i];
+            energyOut += p.energy();
+        }
+        for (int i = 0; i < 4; i++) assertEquals(in[i], out[i], Math.max(in[i], 1) * 1e-12, AXIS.get(i) + " is conserved");
+        double energyIn = step.feed().energy() + step.steam().getFirst().energy() + step.reboiler() + step.condenser() + java.util.Arrays.stream(step.pumparounds()).sum();
+        assertEquals(energyIn, energyOut, Math.abs(energyOut) * 1e-12, "the energy closes on the condenser");
+    }
+
+    /** T3 (W3.1): flooding and a short feed together: the lower share binds and names its condition; both are listed. */
+    @Test
+    void floodingAndAShortFeedTheLowerBinds() {
+        var table = flooding(.8 * 1.34);
+        // 90 % of the set feed: the feed's 0.9 is below the flood's 0.933.
+        var short90 = ColumnCycle.step(table, setpoints(), 5, FEED.part(.9 * 500 / 1000), List.of(STEAM), OPEN, (k, n) -> energy(table, k, n), false);
+        assertEquals(Condition.FEED_SHORT, bound(short90));
+        assertEquals(.9, short90.alpha(), 1e-12);
+        assertNotNull(Condition.find(short90.conditions(), Condition.FLOODING), "the flood is listed though it does not bind");
+        // 97 %: the flood binds.
+        var short97 = ColumnCycle.step(table, setpoints(), 5, FEED.part(.97 * 500 / 1000), List.of(STEAM), OPEN, (k, n) -> energy(table, k, n), false);
+        assertEquals(Condition.FLOODING, bound(short97));
+        assertEquals(1 / 1.072, short97.alpha(), 1e-12);
+    }
+
+    /**
+     * A finding of stage 1 (W3 step 7a): an outlet's room is weighed against a full take at the set demand, not against the
+     * feed the accounts hold. A short feed with a tight outlet cut by the outlet fills its buffer to its room and no further.
+     */
+    @Test
+    void aShortFeedWithATightOutletFillsTheBufferToItsRoom() {
+        var table = table();
+        var half = FEED.part(.25);
+        double made = ColumnCycle.step(table, setpoints(), 5, FEED, List.of(STEAM), OPEN, (k, n) -> energy(table, k, n), false).products().get(4).total();
+        // The feed holds half the demand; the bottoms has room for 0.3 of what the set feed makes: the outlet binds...
+        double[] room = {1e9, 1e9, 1e9, 1e9, .3 * made};
+        var step = ColumnCycle.step(table, setpoints(), 5, half, List.of(STEAM), room, (k, n) -> energy(table, k, n), false);
+        assertEquals(Condition.PRODUCT_FULL, bound(step), step.conditions().toString());
+        assertEquals(.3, step.alpha(), 1e-9);
+        assertEquals(room[4], step.products().get(4).total(), 1e-9 * room[4], "filled to its room");
+        // ...and with room for 0.6, the feed's half binds and the buffer keeps its spare.
+        room[4] = .6 * made;
+        var fed = ColumnCycle.step(table, setpoints(), 5, half, List.of(STEAM), room, (k, n) -> energy(table, k, n), false);
+        assertEquals(Condition.FEED_SHORT, bound(fed));
+        assertTrue(fed.products().get(4).total() < room[4]);
     }
 
     @Test

@@ -111,6 +111,12 @@ class BuiltInInputsTest {
                                 "boundary_sour_water_flow_rate",
                                 "boundary_bottoms_flow_rate")));
         assertTrue(inputs.stream().filter(i -> i.role().equals("REFLUX")).count() == 3);
+        // The live pressure drop over the trays (W3.3): one pressure channel, no volume.
+        var drop = inputs.stream().filter(i -> i.channel().equals("differential_pressure")).toList();
+        assertEquals(1, drop.size());
+        assertEquals(Sensor.Kind.PRESSURE, drop.getFirst().kind());
+        assertEquals(com.wormzjl.icheme.runtime.fluid.ColumnOperation.DIFFERENTIAL, drop.getFirst().role());
+        assertFalse(BuiltInInputs.volumeAvailable(drop.getFirst()));
         // A running column's alarms (W6.1): one channel per column alarm, on the column's host.
         var alarms = inputs.stream().filter(i -> i.kind() == com.wormzjl.icheme.runtime.instrument.Sensor.Kind.ALARM).toList();
         assertEquals(com.wormzjl.icheme.runtime.fluid.EquipmentAlarm.COLUMN.size(), alarms.size());

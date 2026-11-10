@@ -457,6 +457,8 @@ class ColumnRunTest {
         static{var c=MaterialCatalog.bundled();DESIGN=c.presets().column(c.presets().network().defaultColumnPreset()).input(c);}
         com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics model;EventPathWorld world;final long delay;
         java.util.function.Predicate<ColumnSolve.Job> fail=j->false,unfinished=j->false;
+        /** The hydraulics each table carries (W3): none by default. */
+        java.util.function.Function<ColumnSolve.Job,SplitTable.Flood> flood=j->SplitTable.Flood.NONE;
         final List<ColumnSolve.Job> jobs=new ArrayList<>();final List<Long> asked=new ArrayList<>();
         final TreeMap<Long,List<Runnable>> due=new TreeMap<>();
         Fake(long delay){this.delay=delay;}
@@ -465,7 +467,9 @@ class ColumnRunTest {
             jobs.add(job);long now=world.ledger.onlineTick();asked.add(now);
             var taken=job.taken();var ratios=new double[taken.steam().size()];for(int j=0;j<ratios.length;j++)ratios[j]=taken.feedRate()>0?taken.steam().get(j).rate()/taken.feedRate():job.setpoints().steamPerFeed()[j];
             ColumnSolve.Outcome o=fail.test(job)?new ColumnSolve.Failed("test refusal"):unfinished.test(job)?new ColumnSolve.Failed("DEADLINE",true):table(model,job.setpoints(),job.trigger()==DriftBands.Trigger.START?job.setpoints().steamPerFeed():ratios);
-            if(delay==0)done.accept(o);else due.computeIfAbsent(now+delay,t->new ArrayList<>()).add(()->done.accept(o));
+            if(o instanceof ColumnSolve.Solved s&&flood.apply(job).known())o=new ColumnSolve.Solved(s.table().withFlood(flood.apply(job)),s.enthalpy(),null,s.solvedCondenser(),"test","");
+            var answer=o;
+            if(delay==0)done.accept(answer);else due.computeIfAbsent(now+delay,t->new ArrayList<>()).add(()->done.accept(answer));
             return true;
         }
         /** Runs the world tick by tick to {@code tick}, each answer at its tick. */
@@ -643,6 +647,101 @@ class ColumnRunTest {
         assertEquals(.15*ops.run(r.unit()).last.feedMoles()/5,ops.instrument(r.unit(),"REFLUX",com.wormzjl.icheme.runtime.instrument.Sensor.Kind.FLOW).value(),1e-12,"internal flow follows accepted throughput after reload");
         // A stopped unit keeps no engine state.
         var u=again.ledger.column(r.unit());assertNull(u.withStations(false,u.stations().stream().map(s->s.withDevice(0)).toList()).state());
+    }
+    /** A solver's hydraulics where the worst tray stands at 0.6 of flood per unit of reflux ratio at the design feed (0.5 mol/s): tray 12, vapour limited. */
+    private static SplitTable.Flood floodByReflux(ColumnSolve.Job job){return new SplitTable.Flood(.6*job.setpoints().refluxRatio()/.5,12,true,1000,3000);}
+    private void reflux(Rig r,double ratio){var u=r.world().ledger.column(r.unit());var s=u.setpoints();
+        r.world().ledger.column(u.withSetpoints(new Setpoints(s.designFeedRate(),s.feedRate(),s.condenserTemperature(),ratio,s.reboilerPerFeed(),s.steamPerFeed(),s.drawsPerFeed(),s.pumparoundsPerFeed())));}
+    /**
+     * T5 and T7 (batch 2026-11-10-column-failure-modes, W3.1, W3.2): a reflux raised from 1 to 2 solves to 120 % of flood at
+     * the set feed; the cycle takes 1/1.2 of it, the status reads the limit and the alarm FLOODING is raised, the channels
+     * answer through it (the live drop, the feed). Lowered to 1.5 the feed comes back whole, at 90 % of flood: HIGH LOAD on
+     * the line and no alarm. No solve beyond the two set-point solves.
+     */
+    @Test void aRefluxThatFloodsCutsTheFeedToItsLimitAndLoweringItLiftsIt() {
+        var f=new Fake(0);f.flood=ColumnRunTest::floodByReflux;var r=rig(0,f);f.world=r.world();var world=r.world();var ops=r.ops();long unit=r.unit();
+        f.runTo(1500);
+        assertTrue(ops.status(unit).startsWith("RUNNING"),ops.status(unit));
+        assertTrue(EquipmentAlarm.column(ops.conditions(unit)).isEmpty(),"60 % of flood: nothing");
+        reflux(r,2);
+        f.runTo(3000);
+        assertEquals(1,f.asked(DriftBands.Trigger.SETPOINT).size());
+        assertTrue(ops.status(unit).startsWith("LIMITED: flooding, 83 %"),ops.status(unit));
+        assertTrue(ops.status(unit).contains("tray 13 at 100 % of flood"),ops.status(unit));
+        var last=ops.last(unit);
+        assertEquals(Condition.FLOODING,last.binding().condition());
+        assertEquals(.5/1.2,last.feedMoles()/5,1e-9,"the feed taken falls to the cap");
+        assertEquals(java.util.Set.of(EquipmentAlarm.FLOODING),EquipmentAlarm.column(ops.conditions(unit)),"FLOODING while the limit binds");
+        var high=Condition.find(ops.conditions(unit),Condition.HIGH_LOAD);
+        assertNotNull(high);assertEquals(1,high.value(),1e-9);
+        // The channels answer during a limit: the live drop at the feed taken (the fake's tables stand at the design rate), the feed.
+        double drop=ops.instrument(unit,ColumnOperation.DIFFERENTIAL,com.wormzjl.icheme.runtime.instrument.Sensor.Kind.PRESSURE).value();
+        assertEquals(1000/1.44+3000,drop,1e-6,"the dry drop by the square of the feed, the liquid head as solved");
+        assertTrue(ops.instrument(unit,"COLUMN_PORT:FEED:0",com.wormzjl.icheme.runtime.instrument.Sensor.Kind.FLOW).value()>0);
+        reflux(r,1.5);
+        f.runTo(4500);
+        assertEquals(2,f.asked(DriftBands.Trigger.SETPOINT).size(),"two set-point solves and no other: "+f.jobs.stream().map(ColumnSolve.Job::trigger).toList());
+        assertEquals(1,f.asked(DriftBands.Trigger.START).size());
+        assertEquals(3,f.jobs.size(),"no solve beyond the start and the two set points");
+        assertTrue(ops.status(unit).startsWith("RUNNING; tray 13 at 90 % of flood"),ops.status(unit));
+        assertEquals(.5,ops.last(unit).feedMoles()/5,1e-9,"the whole set feed");
+        assertTrue(EquipmentAlarm.column(ops.conditions(unit)).isEmpty(),"HIGH LOAD raises no alarm");
+    }
+    /**
+     * T8 (W3, step 6): the table's hydraulics are state the topology unit saves. A restored state limits as before the save,
+     * with no solve; a state written without them (here: an empty flood record, which reads as absent) is dropped, and the
+     * unit then solves once from its start.
+     */
+    @Test void aSavedFloodLimitRestoresAndAStateWithoutItSolvesAgain() {
+        var f=new Fake(0);f.flood=j->new SplitTable.Flood(1.2/.5,12,true,1000,3000);var r=rig(0,f);f.world=r.world();var world=r.world();
+        f.runTo(1500);
+        assertTrue(r.ops().status(r.unit()).startsWith("LIMITED: flooding, 83 %"),r.ops().status(r.unit()));
+        // Accepted readings, as a real solve leaves them: a state without them rebuilds them by a solve.
+        r.ops().run(r.unit()).probes=new ColumnUnit.Probes(150000,370,180000,430,145000,330,.15,.3);
+        f.runTo(1600);
+        var bytes=FluidCheckpointCodec.encodeTopology(world.ledger.snapshot());
+        var saved=FluidCheckpointCodec.decodeTopology(bytes,world.ledger.onlineTick(),k->world.model);
+        assertEquals(f.flood.apply(null),saved.columns().get(r.unit()).state().table().flood(),"the hydraulics round trip");
+        var again=new EventPathWorld(1,saved,world.entries());
+        var g=new Fake(0);g.world=again;g.model=again.model;
+        var ops=new ColumnOperation(again.ledger,again.registry,again.coordinator,again.model.components(),again.model.molecularWeights());
+        ops.solves(g);again.coordinator.ports(ops);ops.refresh();
+        g.runTo(again.ledger.onlineTick()+1000);
+        assertTrue(g.jobs.isEmpty(),"no solve: "+g.jobs);
+        assertTrue(ops.status(r.unit()).startsWith("LIMITED: flooding, 83 %"),"it limits as before the save: "+ops.status(r.unit()));
+        // The same state with its flood record empty: dropped by the reader, so the unit solves again.
+        var u=world.ledger.column(r.unit());
+        var state=FluidFacts.topologyState(List.of(),Map.of(u.id(),u));
+        var flood=u.state().table().flood();
+        var record=new java.io.ByteArrayOutputStream();record.write(5);
+        for(double v:new double[]{flood.perFeed()}){long bits=Double.doubleToRawLongBits(v);for(int s=56;s>=0;s-=8)record.write((int)(bits>>>s));}
+        record.write(flood.tray());record.write(flood.vapourLimited()?1:0);
+        for(double v:new double[]{flood.dryPascal(),flood.liquidPascal()}){long bits=Double.doubleToRawLongBits(v);for(int s=56;s>=0;s-=8)record.write((int)(bits>>>s));}
+        byte[] needle=record.toByteArray();int at=-1;
+        for(int i=0;i+needle.length<=state.length&&at<0;i++)if(Arrays.equals(state,i,i+needle.length,needle,0,needle.length))at=i;
+        assertTrue(at>0,"the flood record in the state");
+        var older=new byte[state.length-needle.length+1];System.arraycopy(state,0,older,0,at);older[at]=0;System.arraycopy(state,at+needle.length,older,at+1,state.length-at-needle.length);
+        assertNull(FluidFacts.topologyState(older,0,older.length).columns().get(u.id()),"a state without its hydraulics is dropped");
+        var bare=new EventPathWorld(1,saved,world.entries());bare.ledger.column(bare.ledger.column(r.unit()).withState(null));
+        var h=new Fake(0);h.world=bare;h.model=bare.model;h.flood=f.flood;
+        var fresh=new ColumnOperation(bare.ledger,bare.registry,bare.coordinator,bare.model.components(),bare.model.molecularWeights());
+        fresh.solves(h);bare.coordinator.ports(fresh);fresh.refresh();
+        h.runTo(bare.ledger.onlineTick()+1000);
+        assertEquals(1,h.asked(DriftBands.Trigger.START).size(),"one start solve");
+        assertTrue(fresh.status(r.unit()).startsWith("LIMITED: flooding, 83 %"),fresh.status(r.unit()));
+    }
+    /**
+     * A finding of stage 1 (W3, step 7b): the condenser's water reads its ceiling from the accepted condenser temperature, not
+     * a requested one whose solve has not applied.
+     */
+    @Test void theWatersCeilingFollowsTheAcceptedCondenserTemperature() {
+        var r=rig(0,null,false,false,true);var world=r.world();var ops=r.ops();
+        world.runTo(1500);
+        var u=world.ledger.column(r.unit());var s=u.setpoints();
+        world.ledger.column(u.withSetpoints(new Setpoints(s.designFeedRate(),s.feedRate(),320,s.refluxRatio(),s.reboilerPerFeed(),s.steamPerFeed(),s.drawsPerFeed(),s.pumparoundsPerFeed())));
+        world.runTo(1800);
+        var read=ops.heatRead(PhysicalFluidTopology.sideIdentity(r.tube()),PhysicalFluidTopology.sideIdentity(r.shell()),world.ledger.onlineTick(),5,0);
+        assertEquals(330-com.wormzjl.icheme.science.equipment.HeatSides.WATER_APPROACH,read.ceiling(),1e-12,"the accepted 330 K less the approach");
     }
     /**
      * A blocked product cuts the feed (plan section 7, owner Q1): with nothing downstream of the product valve the outlet's

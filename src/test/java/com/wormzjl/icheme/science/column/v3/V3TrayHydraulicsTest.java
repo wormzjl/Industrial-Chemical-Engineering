@@ -241,6 +241,10 @@ class V3TrayHydraulicsTest {
         assertEquals(hydraulics.terms(trays[2], profile[2]).liquidPascal(), summary.worstTrayLiquidPascal(), 1.0e-12);
         assertEquals(V3TrayHydraulics.totalDropPascal(topology, profile), summary.totalPressureDropPascal(), 1.0e-12);
         assertEquals(summary.totalPressureDropPascal() / 2.0, summary.meanTrayPressureDropPascal(), 1.0e-12);
+        // The total's dry part over the same intervals (batch 2026-11-10-column-failure-modes, W3.3), the rest the liquid's.
+        double dry = hydraulics.terms(trays[2], profile[2]).dryPascal() + hydraulics.terms(trays[3], profile[3]).dryPascal();
+        assertEquals(Math.min(dry, summary.totalPressureDropPascal()), summary.totalDryPascal(), 1.0e-9);
+        assertEquals(summary.totalPressureDropPascal() - summary.totalDryPascal(), summary.totalLiquidPascal(), 1.0e-9);
         assertTrue(summary.correctionApplied());
         assertFalse(summary.floods());
         assertEquals(0.004, summary.residualMismatchFraction(), 0.0);

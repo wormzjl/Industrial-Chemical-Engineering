@@ -117,6 +117,8 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         boolean ruleA;
         /** The cycle that asked the table's solve and the cycle it applied at; V3's own condenser duty there, W; what the accepted solve said beyond its table (FEED_WATER_ROUTED), or null. */
         long tableTick,applied;double solvedCondenser;Condition.Active routed;
+        /** What the accepted solve advised (V3's bounded texts, W3 step 5), as ADVISORY notices. Memory only: a reload starts without them. */
+        List<Condition.Active> advisories=List.of();
         /** The heat booked into the condenser's transit, dated: what the water side reads through the fence (C6b). */
         final ArrayDeque<Owed> owed=new ArrayDeque<>();
         /** Each cycle's heat rate owed to a condenser shell's water, dated (U2). State: a reload starts it from the table. */
@@ -241,7 +243,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
      */
     private String water(ColumnUnit u) {
         if(u==null)return "";
-        double flow=0,outlet=Double.NaN,ceiling=Math.max(1,u.setpoints().condenserTemperature()-APPROACH_KELVIN);int set=0;
+        double flow=0,outlet=Double.NaN,ceiling=Math.max(1,condenserTemperature(u)-APPROACH_KELVIN);int set=0;
         for(long side:waterSides(u)) {
             long id=PhysicalFluidTopology.sideIdentity(side);var operation=coordinator.operation(id);
             Long valveOwner=operation==null||!operation.column()?null:registry.owner(operation.valve()),sideOwner=registry.owner(side);
@@ -312,6 +314,8 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         return new com.wormzjl.icheme.science.column.operation.OperationView(r.phase,r.conditions,step==null?0:step.alpha(),
                 r.pending==null?null:r.pending.trigger,r.status+water(u),true,true,set,accepted,streams,duties,solve);
     }
+    /** The role of a column's pressure drop channel, {@code differential_pressure} (W3.3). */
+    public static final String DIFFERENTIAL="COLUMN:differential";
     record InstrumentSample(double value,long tick) {}
     ColumnUnit.Probes probes(com.wormzjl.icheme.science.column.v3.V3ColumnInspection accepted,SplitTable table){
         if(accepted==null)return null;
@@ -332,7 +336,8 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         var u=topology.column(unit);var r=runs.get(unit);if(u==null||r==null||r.table==null||r.last==null)return null;
         // On a trip the cycle took nothing: flows read 0, pressures and temperatures stay the table's (W1.7).
         double value=Double.NaN;long tick=r.applied;
-        if(role.startsWith("COLUMN:")){
+        if(role.equals(DIFFERENTIAL)){if(kind!=com.wormzjl.icheme.runtime.instrument.Sensor.Kind.PRESSURE)return null;value=drop(unit);}
+        else if(role.startsWith("COLUMN:")){
             if(r.probes==null)return null;boolean bottom=role.endsWith("bottom");
             value=kind==com.wormzjl.icheme.runtime.instrument.Sensor.Kind.PRESSURE?(bottom?r.probes.bottomPressure():r.probes.topPressure()):(bottom?r.probes.bottomTemperature():r.probes.topTemperature());
         }else if(role.equals("REFLUX")){
@@ -381,6 +386,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         if(r.refused!=null)list.add(r.refused.notice());
         if(r.setpointRefusal!=null)list.add(r.setpointRefusal);
         if(r.routed!=null)list.add(r.routed);
+        list.addAll(r.advisories);
         if(unmetered!=null)list.add(unmetered);
         r.conditions=List.copyOf(list);
         r.status=ColumnStatus.line(r.table!=null,r.conditions,r.last==null?0:r.last.alpha(),r.fans,r.fanPower);
@@ -388,6 +394,20 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     }
     /** The set points the cycle runs on (W2): the table's accepted ones with the unit's feed rate; the requested ones before any table. */
     private static Setpoints running(ColumnUnit u,SplitTable table){return table==null?u.setpoints():table.reference().setpoints().withFeedRate(u.setpoints().feedRate());}
+    /** The condenser temperature the column runs at: the accepted set point where a table stands, the requested one before (a finding of stage 1: the water's ceiling follows the table in force). */
+    private double condenserTemperature(ColumnUnit u){var r=runs.get(u.id());return running(u,r==null?null:r.table).condenserTemperature();}
+    /**
+     * The column's pressure drop at {@code feedRate} mol/s of feed taken on {@code table}, Pa (W3.3): the solved dry drop by the
+     * square of the feed over the table's own, its liquid head as solved; NaN where the table has no hydraulics. Port pressures
+     * do not move with it.
+     */
+    static double drop(SplitTable table,double feedRate){
+        var flood=table.flood();if(!flood.known())return Double.NaN;
+        double solved=table.reference().alpha()*table.reference().setpoints().designFeedRate();
+        return flood.drop(solved>0?feedRate/solved:0);
+    }
+    /** Unit {@code unit}'s live pressure drop over its trays at the last cycle, Pa, or NaN (W3.3: the tab and the {@code differential_pressure} channel). */
+    public double drop(long unit){var r=runs.get(unit);return r==null||r.table==null||r.last==null?Double.NaN:drop(r.table,r.last.feedMoles()/(CYCLE_TICKS/20.0));}
 
     /** The next cycle deadline: the earliest cycle still ahead. A cycle already due waits for its ports' bookings, which run it
      * ({@link #booked}); one a cycle later looks again, since a port's island that stopped (a hold) books nothing. */
@@ -429,6 +449,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         if(p.outcome instanceof ColumnSolve.Solved s&&refused==null) {
             r.before=r.table;r.table=s.table();r.enthalpy=s.enthalpy();r.seed=s.seed();r.probes=probes(s.inspection(),s.table());r.rebuildProbes=false;r.tableTick=p.tick;r.applied=tick;r.solvedCondenser=s.solvedCondenser();r.solvedBy=p.trigger;r.warm=s.route().contains("warm");
             r.routed=s.note().isEmpty()?null:new Condition.Active(Condition.FEED_WATER_ROUTED,s.note());
+            r.advisories=s.advisories().stream().map(a->new Condition.Active(Condition.ADVISORY,a)).toList();
             r.refused=null;r.retried=false;
             // The requested set points are in force: no refusal of them stands.
             if(p.trigger==DriftBands.Trigger.SETPOINT||p.trigger==DriftBands.Trigger.START){r.refusedSetpoints=null;r.setpointRefusal=null;}
@@ -896,7 +917,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
             // The heat a valve the column sets carries (U2): the shell's share of the last cycle's water duty through the fence,
             // and a backlog beyond a cycle's lump and the slice over the condenser's hold.
             double rate=waterRate(r,u,start-FENCE_TICKS),excess=Math.max(0,due-rate*(seconds+CYCLE_TICKS/20.0));
-            return com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read.column(due,seconds,Math.max(1,u.setpoints().condenserTemperature()-APPROACH_KELVIN),rate+excess/CONDENSER_HOLD_SECONDS);
+            return com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read.column(due,seconds,Math.max(1,condenserTemperature(u)-APPROACH_KELVIN),rate+excess/CONDENSER_HOLD_SECONDS);
         }
         var held=registry.registrations().get(partner-PhysicalFluidTopology.sideIdentity(0));
         return held!=null&&held.device().suspended()?com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read.NONE:null;

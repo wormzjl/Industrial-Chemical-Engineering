@@ -110,11 +110,17 @@ public final class ColumnSolve {
      * @param solvedCondenser V3's own condenser duty, W (column sign)
      * @param route           V3's solve path
      * @param note            what the input left out (feed water too cold to enter as steam), or empty
+     * @param advisories      V3's bounded advisory texts of the accepted solve, at most {@link #MAX_ADVISORIES} (W3, step 5)
      */
-    public record Solved(SplitTable table, double[][] enthalpy, V3NeuralSeed seed, double solvedCondenser, String route, String note, com.wormzjl.icheme.science.column.v3.V3ColumnInspection inspection) implements Outcome {
+    public record Solved(SplitTable table, double[][] enthalpy, V3NeuralSeed seed, double solvedCondenser, String route, String note, com.wormzjl.icheme.science.column.v3.V3ColumnInspection inspection,
+                         List<String> advisories) implements Outcome {
+        /** The most advisories a solve carries to the column's conditions. */
+        public static final int MAX_ADVISORIES = 4;
         public Solved(SplitTable table,double[][] enthalpy,V3NeuralSeed seed,double duty,String route,String note){this(table,enthalpy,seed,duty,route,note,null);}
+        public Solved(SplitTable table,double[][] enthalpy,V3NeuralSeed seed,double duty,String route,String note,com.wormzjl.icheme.science.column.v3.V3ColumnInspection inspection){this(table,enthalpy,seed,duty,route,note,inspection,List.of());}
         public Solved {
             Objects.requireNonNull(table, "table");
+            advisories = List.copyOf(advisories.subList(0, Math.min(MAX_ADVISORIES, advisories.size())));
             enthalpy = copy(enthalpy);
             if (enthalpy.length != table.products().size()) throw new IllegalArgumentException("One enthalpy row per product");
             for (double[] row : enthalpy) if (row.length != table.axis().size()) throw new IllegalArgumentException("A partial enthalpy per axis component");
@@ -286,9 +292,13 @@ public final class ColumnSolve {
         // The air's surface per feed at each fan step (U2): an air cooler's from the top to the receiver, air then water's to the split.
         double[] air = job.condenser() == ColumnComponents.Condenser.EXCHANGER ? new double[0]
                 : airArea(model, success.result().inspection().orElseThrow(), basis, axis, setpoints.condenserTemperature(), job.condenser() == ColumnComponents.Condenser.AIR_THEN_WATER, rate, checkpoint);
-        var table = new SplitTable(solved.axis(), solved.products(), solved.reboilerPerFeed(), pa, condenser, reference, solved.held(), cooled, waterBelow, air);
+        // The worst tray's flood per mol/s of feed and the solved drop's split (W3.1, W3.3): none at a prescribed drop.
+        var hydraulics = success.result().trayHydraulics().orElse(null);
+        var flood = hydraulics == null ? SplitTable.Flood.NONE : new SplitTable.Flood(hydraulics.maximumFloodFraction() / rate, hydraulics.maximumFloodTray(),
+                hydraulics.vaporLimited(), hydraulics.totalDryPascal(), hydraulics.totalLiquidPascal());
+        var table = new SplitTable(solved.axis(), solved.products(), solved.reboilerPerFeed(), pa, condenser, reference, solved.held(), cooled, waterBelow, air, flood);
         return new Solved(table, enthalpy, success.result().warmSeed().orElse(null), solved.condenserPerFeed() * rate,
-                success.diagnostics().solvePath(), note, success.result().inspection().orElse(null));
+                success.diagnostics().solvePath(), note, success.result().inspection().orElse(null), success.result().acceptanceAudit().advisoryEvidence());
     }
 
     /**

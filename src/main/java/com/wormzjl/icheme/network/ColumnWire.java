@@ -242,6 +242,7 @@ public final class ColumnWire {
             buffer.writeDouble(hydraulics.residualMismatchFraction());
             buffer.writeDouble(hydraulics.worstTrayDryPascal());
             buffer.writeDouble(hydraulics.worstTrayLiquidPascal());
+            buffer.writeDouble(hydraulics.totalDryPascal());
         });
     }
 
@@ -326,7 +327,8 @@ public final class ColumnWire {
                                     buffer.readVarInt(), buffer.readBoolean(),
                                     finite(buffer.readDouble(), "hydraulic residual mismatch"),
                                     finite(buffer.readDouble(), "worst tray dry drop"),
-                                    finite(buffer.readDouble(), "worst tray liquid drop")))
+                                    finite(buffer.readDouble(), "worst tray liquid drop"),
+                                    finite(buffer.readDouble(), "total dry drop")))
                             : Optional.empty();
             return new V3ColumnDisplayResult(
                     digest, formulation, assumptions, dataset, iterations, residual, acceptanceChecks, streams, ledger,

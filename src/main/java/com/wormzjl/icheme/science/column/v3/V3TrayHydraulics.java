@@ -385,8 +385,12 @@ public final class V3TrayHydraulics {
         }
         double total = totalDropPascal(topology, pressures);
         int intervals = Math.max(1, topology.trayCount() - 1);
+        // The dry part of the total, over the same N-1 intervals the total spans (a running column scales it by the square
+        // of its vapour's speed, batch 2026-11-10-column-failure-modes, W3.3); never more than the total.
+        double dry = 0.0;
+        for (int tray = 2; tray <= topology.trayCount(); tray++) dry += terms(trays[tray], pressures[tray]).dryPascal();
         return new V3TrayHydraulicsSummary(diameterMetres, total, total / intervals, worstFlood, worstTray,
-                correctionApplied, residualMismatch, worstTerms.dryPascal(), worstTerms.liquidPascal());
+                correctionApplied, residualMismatch, worstTerms.dryPascal(), worstTerms.liquidPascal(), Math.min(dry, total));
     }
 
     /**

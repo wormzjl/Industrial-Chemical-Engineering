@@ -384,6 +384,42 @@ class ColumnSolveTest {
         }
     }
 
+    /**
+     * T4 (batch 2026-11-10-column-failure-modes, W3.1): the cycle's flood rule is linear in the feed taken at one table. The
+     * default crude column solved at 60, 80 and 100 % of its design feed: the worst tray's flood fraction per mol/s of feed
+     * agrees within {@link #FLOOD_LINEAR_BAND} across each step of 0.2 (the THROUGHPUT band), the error the tray pressure
+     * drop's effect on vapour density leaves. Prints the numbers.
+     */
+    @Test void theFloodPerFeedIsLinearInTheThroughputBand() {
+        var catalog = com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog();
+        V3ColumnInput design = catalog.presets().column("tia_juana_nitrogen").input(catalog);
+        var model = FluidThermodynamics.forNetwork(catalog, design.packageId());
+        double[] feed = feedOnTheNetwork(model, design);
+        var setpoints = Setpoints.of(ColumnOperatingPoint.of(design));
+        double[] shares = {.6, .8, 1}, perFeed = new double[shares.length];
+        for (int n = 0; n < shares.length; n++) {
+            double share = shares[n];
+            var steam = design.steamFeeds().stream().map(s -> new ColumnSolve.Steam(share * s.molarFlowMolPerSecond(), s.temperatureKelvin(), Double.NaN)).toList();
+            var outcome = ColumnSolve.run(new ColumnSolve.Job(DriftBands.Trigger.START, design, setpoints, new ColumnSolve.Taken(scale(feed, share), Double.NaN, steam), null),
+                    model, V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO, () -> {});
+            var table = assertInstanceOf(ColumnSolve.Solved.class, outcome, outcome::toString).table();
+            var flood = table.flood();
+            assertTrue(flood.known(), "the 8 m column has hydraulics");
+            perFeed[n] = flood.perFeed();
+            double rate = share * Arrays.stream(feed).sum();
+            System.out.printf(java.util.Locale.ROOT, "T4_FLOOD share=%.1f rate=%.2f mol/s flood=%.4f tray=%d vapour=%s perFeed=%.6e dry=%.0f Pa liquid=%.0f Pa%n",
+                    share, rate, flood.fraction(rate), flood.tray(), flood.vapourLimited(), flood.perFeed(), flood.dryPascal(), flood.liquidPascal());
+        }
+        for (int n = 1; n < shares.length; n++) {
+            double error = Math.abs(perFeed[n] - perFeed[n - 1]) / perFeed[n];
+            System.out.printf(java.util.Locale.ROOT, "T4_FLOOD_BAND from=%.1f to=%.1f error=%.4f%n", shares[n - 1], shares[n], error);
+            assertTrue(error <= FLOOD_LINEAR_BAND, "the linear rule within its band: " + error);
+        }
+    }
+
+    /** T4's band: the linear flood rule's error across a THROUGHPUT band step on the default column (measured 2026-11-10: 0.41 % from 0.6 to 0.8, 0.52 % from 0.8 to 1; the plan's line for interpolation was 5 %). */
+    static final double FLOOD_LINEAR_BAND = .01;
+
     /** Auto's air cooler for {@code table}'s air at {@code rate} mol/s of feed and its fans there; printed after {@code label}. */
     private static void fans(String label, SplitTable table, double rate, double duty) {
         double[] area = table.airArea();

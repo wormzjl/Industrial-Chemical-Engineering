@@ -649,7 +649,8 @@ final class FluidFacts {
                 .list(s.levels(),(q,l)->q.count(l.device()).i64(l.tick()).f64(l.held()).f64(l.rate()).f64(l.molarMass()))
                 .list(s.credits(),(q,c)->q.count(c.device()).i64(c.tick()).record(a->account(a,c.product())))
                 .f64(t.condenserWaterPerFeed()).f64(t.waterBelow()).doubles(t.airArea())
-                .record(q->{var p=s.probes();if(p!=null)q.f64(p.topPressure()).f64(p.topTemperature()).f64(p.bottomPressure()).f64(p.bottomTemperature()).f64(p.refluxPressure()).f64(p.refluxTemperature()).f64(p.refluxPerFeed()).f64(p.vapourPerFeed());});
+                .record(q->{var p=s.probes();if(p!=null)q.f64(p.topPressure()).f64(p.topTemperature()).f64(p.bottomPressure()).f64(p.bottomTemperature()).f64(p.refluxPressure()).f64(p.refluxTemperature()).f64(p.refluxPerFeed()).f64(p.vapourPerFeed());})
+                .record(q->{var h=t.flood();q.f64(h.perFeed()).count(h.tray()).bool(h.vapourLimited()).f64(h.dryPascal()).f64(h.liquidPascal());});
     }
     /** A column unit's engine state as saved, or null where it does not validate. */
     private static ColumnUnit.State columnState(Record f) {
@@ -672,12 +673,16 @@ final class FluidFacts {
         // The air condenser's surface per feed at each fan step (U2): a state written before it has no air the world models.
         var air=f.doubles(new double[0]);
         var probes=f.record(null,q->{try{return new ColumnUnit.Probes(q.f64(0),q.f64(0),q.f64(0),q.f64(0),q.f64(0),q.f64(0),q.f64(-1),q.f64(-1));}catch(IllegalArgumentException invalid){return null;}});
+        // The table's hydraulics (batch 2026-11-10-column-failure-modes, W3): a state written before them is dropped, and that unit solves again.
+        var flood=f.record(null,q->{double per=q.f64(-1);long tray=q.count(-1);boolean vapour=q.bool(true);double dry=q.f64(-1),liquid=q.f64(-1);
+            try{return new com.wormzjl.icheme.science.column.operation.SplitTable.Flood(per,Math.toIntExact(tray),vapour,dry,liquid);}catch(RuntimeException invalid){return null;}});
+        if(flood==null)return null;
         try {
             var kept=new boolean[held.length];for(int i=0;i<kept.length;i++)kept[i]=held[i]!=0;
             if(products.contains(null)||credits.contains(null))return null;
             var table=Double.isNaN(below)?new com.wormzjl.icheme.science.column.operation.SplitTable(axis,products,reboiler,pa,condenser,reference,kept,water)
                     :new com.wormzjl.icheme.science.column.operation.SplitTable(axis,products,reboiler,pa,condenser,reference,kept,water,below,air);
-            return new ColumnUnit.State(table,enthalpy,tableTick,applied,solved,levels,credits,probes);
+            return new ColumnUnit.State(table.withFlood(flood),enthalpy,tableTick,applied,solved,levels,credits,probes);
         }catch(RuntimeException invalid){return null;}
     }
 

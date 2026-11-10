@@ -40,9 +40,11 @@ import java.util.Objects;
  *                          {@link #FAN_STEPS}th of full speed from natural draught (0) to full (1): the law of the world's air
  *                          coolers ({@code HeatSides.airFilms}; U2, {@code COOLER_MODEL_PLAN.md} section 8). Empty where the
  *                          condenser has no air; {@link Double#MAX_VALUE} where the air cannot reach that outlet
+ * @param flood             the solve's tray hydraulics reduced to the cycle's arithmetic (batch 2026-11-10-column-failure-modes, W3):
+ *                          {@link Flood#NONE} where the solve had none (a prescribed drop)
  */
 public record SplitTable(List<String> axis, List<Product> products, double reboilerPerFeed, double[] pumparoundPerFeed, double condenserPerFeed,
-                         Reference reference, boolean[] held, double condenserWaterPerFeed, double waterBelow, double[] airArea) {
+                         Reference reference, boolean[] held, double condenserWaterPerFeed, double waterBelow, double[] airArea, Flood flood) {
     /** The fan speeds {@link #airArea} is given at: natural draught, then each eighth of full speed. */
     public static final int FAN_STEPS = 8;
     /** The water's id on the network axis. */
@@ -105,7 +107,47 @@ public record SplitTable(List<String> axis, List<Product> products, double reboi
         }
     }
 
+    /**
+     * The solve's hydraulics as the cycle reads them (W3.1, W3.3): the worst tray's flood fraction per mol/s of feed at the
+     * table's own throughput, that tray and whether its vapour (not its liquid) limits it, and the column's solved total
+     * dry drop and liquid head, Pa. Fair's flood fraction is vapour velocity over a capacity that depends only on intensive
+     * quantities, so at one table it is proportional to the feed taken; the dry drop goes with the square of the vapour's
+     * speed, the liquid head stands as solved.
+     *
+     * @param perFeed       flood fraction per mol/s of feed, 0 where unknown: no limit
+     * @param tray          the worst tray, V3's node (the player reads it as node + 1, as V3's flooding warning does), 0 where unknown
+     * @param vapourLimited whether the worst tray's vapour, not its liquid, limits it
+     * @param dryPascal     the solved total dry drop over the trays, Pa
+     * @param liquidPascal  the solved total liquid head and bubble residual over the trays, Pa
+     */
+    public record Flood(double perFeed, int tray, boolean vapourLimited, double dryPascal, double liquidPascal) {
+        /** A table with no hydraulics. */
+        public static final Flood NONE = new Flood(0, 0, true, 0, 0);
+
+        public Flood {
+            if (!(perFeed >= 0) || !Double.isFinite(perFeed) || tray < 0 || !(dryPascal >= 0) || !Double.isFinite(dryPascal) || !(liquidPascal >= 0)
+                    || !Double.isFinite(liquidPascal)) throw new IllegalArgumentException("Invalid flood record");
+        }
+
+        /** Whether the solve gave hydraulics. */
+        public boolean known() {
+            return perFeed > 0;
+        }
+
+        /** The worst tray's flood fraction at {@code feedRate} mol/s of feed (0 where unknown). */
+        public double fraction(double feedRate) {
+            return perFeed * Math.max(0, feedRate);
+        }
+
+        /** The column's pressure drop where the feed taken is {@code ratio} times the table's, Pa (W3.3): the dry part by the square, the liquid head as solved. */
+        public double drop(double ratio) {
+            double r = Math.max(0, ratio);
+            return dryPascal * r * r + (r > 0 ? liquidPascal : 0);
+        }
+    }
+
     public SplitTable {
+        Objects.requireNonNull(flood, "flood");
         axis = List.copyOf(axis);
         products = List.copyOf(products);
         pumparoundPerFeed = pumparoundPerFeed.clone();
@@ -128,6 +170,17 @@ public record SplitTable(List<String> axis, List<Product> products, double reboi
         airArea = airArea.clone();
         if (airArea.length != 0 && airArea.length != FAN_STEPS + 1) throw new IllegalArgumentException("An air area per fan step");
         for (double a : airArea) if (!(a >= 0) || !Double.isFinite(a)) throw new IllegalArgumentException("Invalid air area " + a);
+    }
+
+    /** A table without hydraulics (a prescribed drop). */
+    public SplitTable(List<String> axis, List<Product> products, double reboilerPerFeed, double[] pumparoundPerFeed, double condenserPerFeed,
+                      Reference reference, boolean[] held, double condenserWaterPerFeed, double waterBelow, double[] airArea) {
+        this(axis, products, reboilerPerFeed, pumparoundPerFeed, condenserPerFeed, reference, held, condenserWaterPerFeed, waterBelow, airArea, Flood.NONE);
+    }
+
+    /** This table with {@code value} as its hydraulics. */
+    public SplitTable withFlood(Flood value) {
+        return new SplitTable(axis, products, reboilerPerFeed, pumparoundPerFeed, condenserPerFeed, reference, held, condenserWaterPerFeed, waterBelow, airArea, value);
     }
 
     /** A table whose condenser has no air the world models (a water-cooled one, or one solved before U2). */

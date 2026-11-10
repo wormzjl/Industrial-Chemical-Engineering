@@ -34,6 +34,8 @@ final class BuiltInInputs {
         if (kind == EquipmentShape.Kind.COLUMN) {
             for (String end : List.of("top", "bottom"))
                 stream(out, host, host, end, "COLUMN:" + end, false);
+            // The live pressure drop over the trays (batch 2026-11-10-column-failure-modes, W3.3).
+            out.add(ControlInput.builtIn(host, host, "differential_pressure", Sensor.Kind.PRESSURE, com.wormzjl.icheme.runtime.fluid.ColumnOperation.DIFFERENTIAL));
             var counts = new EnumMap<EquipmentShape.Role, Integer>(EquipmentShape.Role.class);
             for (var nozzle : shape.nozzles()) counts.merge(nozzle.role(), 1, Integer::sum);
             var seen = new EnumMap<EquipmentShape.Role, Integer>(EquipmentShape.Role.class);

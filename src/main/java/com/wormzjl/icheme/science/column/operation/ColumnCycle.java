@@ -159,14 +159,20 @@ public final class ColumnCycle {
         if (room.length != table.products().size()) throw new IllegalArgumentException("One room per product");
         double demand = setpoints.feedRate() * seconds;
         if (!(demand > 0)) return idle(table, steam.size(), List.of());
-        // The throughput the outlets allow, from the products of a full take.
+        // The throughput the outlets allow, from the products of a full take at the set demand: the feed at its composition and
+        // each steam at its ratio, whatever the accounts hold, so every share is a share of the set feed (a short feed with a
+        // tight outlet weighs the outlet against the whole demand, and the cut never overfills its buffer).
         double feedTotal = feed.total();
-        double[] full = feedTotal > 0 ? feed.part(demand / feedTotal).moles() : new double[m];
+        double[] full = new double[m];
+        if (feedTotal > 0) {
+            double[] n = feed.moles();
+            for (int i = 0; i < m; i++) full[i] = n[i] * demand / feedTotal;
+        }
         for (int j = 0; j < steam.size(); j++) {
             double s = steam.get(j).total();
             if (s > 0) {
-                double[] add = steam.get(j).part(steamPerFeed[j] * demand / s).moles();
-                for (int i = 0; i < m; i++) full[i] += add[i];
+                double[] n = steam.get(j).moles();
+                for (int i = 0; i < m; i++) full[i] += n[i] * steamPerFeed[j] * demand / s;
             }
         }
         double[][] fullProducts = table.split(full);
@@ -191,6 +197,11 @@ public final class ColumnCycle {
         }
         double alphaAir = Math.max(0, airFeed) * seconds / demand;
         if (alphaAir < 1) conditions.add(new Condition.Active(Condition.COOLING_SHORT, alphaAir));
+        // Flooding (W3.1, decision D2): at one table the worst tray's flood fraction is proportional to the feed taken, so the
+        // share that keeps it at its limit is the inverse of its fraction at the set feed.
+        var flood = table.flood();
+        double atSet = flood.fraction(setpoints.feedRate());
+        if (atSet > 1) conditions.add(new Condition.Active(Condition.FLOODING, 1 / atSet, flood.tray(), ""));
         if (ruleA)
             for (int j = 0; j < steam.size(); j++) {
                 double want = steamPerFeed[j] * demand;
@@ -240,6 +251,11 @@ public final class ColumnCycle {
             trip = new Condition.Active(Condition.CLOSURE, departure, -1,
                     String.format(java.util.Locale.ROOT, "the condenser duty departs %.0f %% from the solved one", 100 * Math.abs(condenser - solved) / Math.abs(solved)));
         if (trip != null) return idle(table, steam.size(), List.of(trip));
+        // A sign before the limit binds (W3.2): the worst tray near its flood at the feed taken.
+        double loaded = flood.fraction(fed / seconds);
+        if (loaded >= Condition.HIGH_LOAD_FRACTION)
+            conditions.add(new Condition.Active(Condition.HIGH_LOAD, loaded, flood.tray(),
+                    String.format(java.util.Locale.ROOT, "tray %d at %.0f %% of flood", flood.tray() + 1, 100 * Math.min(loaded, 1))));
         return new Step(alpha, takenFeed, takenSteam, products, reboiler, pa, condenser, solved, conditions);
     }
 

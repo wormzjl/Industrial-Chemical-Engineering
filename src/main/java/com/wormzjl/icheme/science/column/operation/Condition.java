@@ -39,7 +39,15 @@ public enum Condition {
     /** The feed's water did not enter as steam and follows the distillate. */
     FEED_WATER_ROUTED(Rank.NOTICE, "feed water"),
     /** An inlet has no molar mass to meter by and takes nothing. */
-    UNMETERED(Rank.NOTICE, "unmetered");
+    UNMETERED(Rank.NOTICE, "unmetered"),
+    /**
+     * The worst tray stands at {@link #HIGH_LOAD_FRACTION} of its flood limit or more at the feed taken (W3.2); the value is
+     * that fraction, the index the tray. A sign before {@link #FLOODING} binds, with no alarm.
+     */
+    HIGH_LOAD(Rank.NOTICE, "high load");
+
+    /** The flood fraction from which a cycle reports {@link #HIGH_LOAD}. */
+    public static final double HIGH_LOAD_FRACTION = .85;
 
     /** The classes, in rising order: the phase is the highest present. */
     public enum Rank {
