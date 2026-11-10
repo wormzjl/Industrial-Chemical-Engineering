@@ -39,15 +39,10 @@ compiled without the B3 harness.
 
 ## Open items carried to main
 
-- Batch distiller: the W7 owner questions, the pot volume recheck (feedback item 4), the engine options not built, the
-  still-models style mapping; an in-game check only on the owner's request ([README.md](README.md), open items).
-- Flare stack: the owner's review of the as-built deviations; the delayed coker's off-centre nozzles
-  ([../2026-11-09-flare-stack/README.md](../2026-11-09-flare-stack/README.md)).
-- Fired heaters: O3 (the burners' void page), O4 (render approval), O5 (the simulator's heater report shows no fuel or
-  fan power) ([../2026-11-09-furnace-fuel-power/README.md](../2026-11-09-furnace-fuel-power/README.md)).
+In each batch's README: the still's W7 questions, pot volume recheck, engine options and style mapping; the flare's
+as-built review and the delayed coker's nozzles; the heaters' O3 to O5 (void page, renders, simulator fuel report).
 
 ## Merge
 
-- Merged to `main` as 0.24.0 on 2026-11-10 (owner: "merge when these are fixed"). Not pushed.
-- Lane outputs: the main checkout, `tools/merge-lane/logs/batch-distiller-final-lane-logs-2026-11-10.tar.gz` (local); this
-  lane is the next merge's baseline.
+Merged to `main` as 0.24.0 on 2026-11-10, not pushed. Lane outputs: the main checkout,
+`tools/merge-lane/logs/batch-distiller-final-lane-logs-2026-11-10.tar.gz` (local), the next merge's baseline.
