@@ -261,7 +261,8 @@ dependencies {
     compileOnly("maven.modrinth:iris:${irisVersion}") {
         transitive = false
     }
-    compileOnly('maven.modrinth:distanthorizonsapi:4.1.0') {
+    // DH 3.3.3 ships API 7.2.0; DhBridge's runtime gate takes API major 7, minor 2 or later.
+    compileOnly('maven.modrinth:distanthorizonsapi:7.2.0') {
         transitive = false
     }
     if (withIris) {
