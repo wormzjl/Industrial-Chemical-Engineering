@@ -32,6 +32,7 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 | [process-sounds/](process-sounds/README.md) | Original flare, burner, firebox and boiling-pot loops (authoring only) | `2026-11-10-custom-shader-system` | In use since 2026-11-10 |
 | [pbr-textures/](pbr-textures/README.md) | Instrument wiring textures with LabPBR 1.3 maps (stdlib Python) | `2026-11-10-custom-shader-system` | In use since 2026-11-10 |
 | [fx-textures/](fx-textures/README.md) | Effects textures: flame flipbook with LabPBR `_s`, smoke, plume (stdlib Python) | `2026-11-10-custom-shader-system` | In use since 2026-11-10 |
+| [fx-bench/](fx-bench/README.md) | Effects CPU, GPU and RAM bench: scene, synthetic feed, five lanes, budget summary | `2026-11-10-custom-shader-system` | In progress since 2026-11-10 |
 | [machine-nozzle-probe/](machine-nozzle-probe/README.md) | Which nozzle pipe blocks move when machines lose their drawn drivers | `2026-11-03-rotating-machinery` | In use since 2026-11-03 |
 | [localization/](localization/README.md) | Missing-key scan and translation checks for the lang files | `2026-11-03-localization` | Implemented 2026-11-03 |
 | [dry-ice-cost/](dry-ice-cost/README.md) | Per-job cost, shadow flashes and prototypes of the cold crystal worlds | `2026-11-02-dry-ice-cost` | Implemented 2026-11-03 |

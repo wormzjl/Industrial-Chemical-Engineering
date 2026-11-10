@@ -1,0 +1,107 @@
+# Effects bench scene (batch 2026-11-10-custom-shader-system, FX_BENCH_PLAN.md). Flat world: the ground is y -60. Run by the probe's mode=fx, one command a tick.
+# The view point is (0.5, -40, -30) facing south: stills within 48 blocks, flares within 88, towers and heaters within 120 (the client watch ranges).
+time set noon
+gamerule doDaylightCycle false
+gamerule doWeatherCycle false
+weather clear
+gamerule doMobSpawning false
+# Snowy plains (-6 C) under the whole scene, so every plume shows (the worst case): 9 boxes of 64 x 128 x 64.
+gamerule commandModificationBlockLimit 600000
+fillbiome -96 -64 -64 -33 63 -1 minecraft:snowy_plains
+fillbiome -96 -64 0 -33 63 63 minecraft:snowy_plains
+fillbiome -96 -64 64 -33 63 127 minecraft:snowy_plains
+fillbiome -32 -64 -64 31 63 -1 minecraft:snowy_plains
+fillbiome -32 -64 0 31 63 63 minecraft:snowy_plains
+fillbiome -32 -64 64 31 63 127 minecraft:snowy_plains
+fillbiome 32 -64 -64 95 63 -1 minecraft:snowy_plains
+fillbiome 32 -64 0 95 63 63 minecraft:snowy_plains
+fillbiome 32 -64 64 95 63 127 minecraft:snowy_plains
+# 10 fuelled batch stills (500 L, solid fuel by default): z 0, x -18..18.
+icheme equipment unit -18 -60 0 batch_still 500 1 0 north
+icheme equipment unit -14 -60 0 batch_still 500 1 0 north
+icheme equipment unit -10 -60 0 batch_still 500 1 0 north
+icheme equipment unit -6 -60 0 batch_still 500 1 0 north
+icheme equipment unit -2 -60 0 batch_still 500 1 0 north
+icheme equipment unit 2 -60 0 batch_still 500 1 0 north
+icheme equipment unit 6 -60 0 batch_still 500 1 0 north
+icheme equipment unit 10 -60 0 batch_still 500 1 0 north
+icheme equipment unit 14 -60 0 batch_still 500 1 0 north
+icheme equipment unit 18 -60 0 batch_still 500 1 0 north
+# 50 standing drums D 2 m, T/T 6 m, skirt 2 m: z 10..34, x -27..27, 6 m apart (autopilot drums.*); each gets every gauge and a level meter.
+icheme equipment place -27 -60 10 2 6 vertical 2
+icheme equipment place -21 -60 10 2 6 vertical 2
+icheme equipment place -15 -60 10 2 6 vertical 2
+icheme equipment place -9 -60 10 2 6 vertical 2
+icheme equipment place -3 -60 10 2 6 vertical 2
+icheme equipment place 3 -60 10 2 6 vertical 2
+icheme equipment place 9 -60 10 2 6 vertical 2
+icheme equipment place 15 -60 10 2 6 vertical 2
+icheme equipment place 21 -60 10 2 6 vertical 2
+icheme equipment place 27 -60 10 2 6 vertical 2
+icheme equipment place -27 -60 16 2 6 vertical 2
+icheme equipment place -21 -60 16 2 6 vertical 2
+icheme equipment place -15 -60 16 2 6 vertical 2
+icheme equipment place -9 -60 16 2 6 vertical 2
+icheme equipment place -3 -60 16 2 6 vertical 2
+icheme equipment place 3 -60 16 2 6 vertical 2
+icheme equipment place 9 -60 16 2 6 vertical 2
+icheme equipment place 15 -60 16 2 6 vertical 2
+icheme equipment place 21 -60 16 2 6 vertical 2
+icheme equipment place 27 -60 16 2 6 vertical 2
+icheme equipment place -27 -60 22 2 6 vertical 2
+icheme equipment place -21 -60 22 2 6 vertical 2
+icheme equipment place -15 -60 22 2 6 vertical 2
+icheme equipment place -9 -60 22 2 6 vertical 2
+icheme equipment place -3 -60 22 2 6 vertical 2
+icheme equipment place 3 -60 22 2 6 vertical 2
+icheme equipment place 9 -60 22 2 6 vertical 2
+icheme equipment place 15 -60 22 2 6 vertical 2
+icheme equipment place 21 -60 22 2 6 vertical 2
+icheme equipment place 27 -60 22 2 6 vertical 2
+icheme equipment place -27 -60 28 2 6 vertical 2
+icheme equipment place -21 -60 28 2 6 vertical 2
+icheme equipment place -15 -60 28 2 6 vertical 2
+icheme equipment place -9 -60 28 2 6 vertical 2
+icheme equipment place -3 -60 28 2 6 vertical 2
+icheme equipment place 3 -60 28 2 6 vertical 2
+icheme equipment place 9 -60 28 2 6 vertical 2
+icheme equipment place 15 -60 28 2 6 vertical 2
+icheme equipment place 21 -60 28 2 6 vertical 2
+icheme equipment place 27 -60 28 2 6 vertical 2
+icheme equipment place -27 -60 34 2 6 vertical 2
+icheme equipment place -21 -60 34 2 6 vertical 2
+icheme equipment place -15 -60 34 2 6 vertical 2
+icheme equipment place -9 -60 34 2 6 vertical 2
+icheme equipment place -3 -60 34 2 6 vertical 2
+icheme equipment place 3 -60 34 2 6 vertical 2
+icheme equipment place 9 -60 34 2 6 vertical 2
+icheme equipment place 15 -60 34 2 6 vertical 2
+icheme equipment place 21 -60 34 2 6 vertical 2
+icheme equipment place 27 -60 34 2 6 vertical 2
+# 10 flare stacks, tip 0.3 m: z 46, x -32..31.
+icheme equipment unit -32 -60 46 flare_stack 0.3 1 0 north
+icheme equipment unit -25 -60 46 flare_stack 0.3 1 0 north
+icheme equipment unit -18 -60 46 flare_stack 0.3 1 0 north
+icheme equipment unit -11 -60 46 flare_stack 0.3 1 0 north
+icheme equipment unit -4 -60 46 flare_stack 0.3 1 0 north
+icheme equipment unit 3 -60 46 flare_stack 0.3 1 0 north
+icheme equipment unit 10 -60 46 flare_stack 0.3 1 0 north
+icheme equipment unit 17 -60 46 flare_stack 0.3 1 0 north
+icheme equipment unit 24 -60 46 flare_stack 0.3 1 0 north
+icheme equipment unit 31 -60 46 flare_stack 0.3 1 0 north
+# 10 vertical fired heaters, radiant 4 m x 8 m on a 3 m floor: z 58, x -45..45.
+icheme equipment unit -45 -60 58 vertical_heater 4 8 3 north
+icheme equipment unit -35 -60 58 vertical_heater 4 8 3 north
+icheme equipment unit -25 -60 58 vertical_heater 4 8 3 north
+icheme equipment unit -15 -60 58 vertical_heater 4 8 3 north
+icheme equipment unit -5 -60 58 vertical_heater 4 8 3 north
+icheme equipment unit 5 -60 58 vertical_heater 4 8 3 north
+icheme equipment unit 15 -60 58 vertical_heater 4 8 3 north
+icheme equipment unit 25 -60 58 vertical_heater 4 8 3 north
+icheme equipment unit 35 -60 58 vertical_heater 4 8 3 north
+icheme equipment unit 45 -60 58 vertical_heater 4 8 3 north
+# 2 induced-draft towers (cell 12 m, fill 2 m) at z 74; 2 natural-draft towers (D 40 m) at x -56 and 56, z 20.
+icheme equipment unit -14 -60 74 induced_draft_cooling_tower 12 2 0 north
+icheme equipment unit 2 -60 74 induced_draft_cooling_tower 12 2 0 north
+icheme equipment unit -56 -60 20 natural_draft_cooling_tower 40 north
+icheme equipment unit 56 -60 20 natural_draft_cooling_tower 40 north

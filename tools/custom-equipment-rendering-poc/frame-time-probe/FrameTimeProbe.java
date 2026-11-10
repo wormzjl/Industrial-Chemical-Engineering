@@ -23,12 +23,16 @@ import net.minecraft.world.level.levelgen.WorldOptions;
 import net.minecraft.world.level.levelgen.presets.WorldPresets;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
+import com.wormzjl.icheme.client.fx.FxStats;
+import com.wormzjl.icheme.network.FluidNetwork;
 import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RegisterClientCommandsEvent;
 import net.neoforged.neoforge.client.event.RenderFrameEvent;
+import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.client.event.ScreenEvent;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL15;
@@ -41,7 +45,9 @@ import java.io.Reader;
 import java.lang.management.ManagementFactory;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
+import java.lang.reflect.Field;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -49,6 +55,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 
@@ -70,7 +77,17 @@ import java.util.function.Function;
  * block, loads the bundled crude unit, runs it to steady, then measures idle, panning, T-101's door and the Results tab, and quits.
  * {@code mode=lod} (batch 2026-11-09-lod-rendering) creates a fresh flat world the same way, runs {@code scene.txt}, puts a
  * pressure gauge on each pipe of the {@code grid.*} grid through the server's own install request, then measures
- * {@code view.txt} and {@code away.txt}, and quits.
+ * {@code view.txt} and {@code away.txt}, and quits. {@code mode=fx} (batch 2026-11-10-custom-shader-system,
+ * FX_BENCH_PLAN.md; lane in tools/fx-bench/) creates a fresh flat world, runs {@code scene.txt} (the effects scene in a
+ * snowy biome), puts every gauge and a level meter on the {@code drums.*} grid's drums, feeds the effects' client stores
+ * synthetic full-load states ({@link #feed}), measures each window of {@code windows} (60 s + 60 s each), times the server's
+ * new presentation publications ({@link #serverTiming}), logs the effects' memory, and quits.
+ *
+ * <p>Every window also logs one {@code FX_PROBE} line: the effects' render-thread time per frame from {@code FxStats}, the
+ * CPU and GPU time of the whole {@code AFTER_PARTICLES} stage (GL_TIMESTAMP counters from this probe's own first and last
+ * stage handlers, so {@code src/main} has no timer code), quads, emitters, rebuilds, the sound tick and its loops; with
+ * {@code jfr=true}, a JFR recording of the window and one {@code FX_JFR} line (allocation and render-thread CPU samples
+ * whose stack holds {@code client.fx} or the instrument renderer).
  */
 @EventBusSubscriber(modid = "icheme_mcp_compat", value = Dist.CLIENT)
 public final class FrameTimeProbe {
@@ -84,11 +101,19 @@ public final class FrameTimeProbe {
     private static long warmupEnds, measureEnds, last, screenStarted;
     private static int count, gpuFrames, gpuScreens, cpuScreens, gpuMissed;
     private static String label = "";
-    // GPU ring (render thread only).
+    // GPU ring (render thread only): per slot frame start, screen start, screen end, frame end, AFTER_PARTICLES start and end.
+    private static final int COUNTERS = 6;
     private static int[] queries;
-    private static final boolean[] PENDING = new boolean[RING], SCREEN = new boolean[RING], WINDOW = new boolean[RING];
+    private static final boolean[] PENDING = new boolean[RING], SCREEN = new boolean[RING], WINDOW = new boolean[RING], STAGE = new boolean[RING];
     private static int slot;
-    private static boolean screenInFrame;
+    private static boolean screenInFrame, stageInFrame;
+    // The effects per frame of the window (batch 2026-11-10-custom-shader-system): FxStats, the AFTER_PARTICLES stage, the sound tick.
+    private static final int FX_SAMPLES = 1 << 18;
+    private static final long[] FX_DRAW = new long[FX_SAMPLES], FX_BUILD = new long[FX_SAMPLES], FX_WIRING = new long[FX_SAMPLES], FX_CPU = new long[FX_SAMPLES],
+            STAGE_CPU = new long[FX_SAMPLES], GPU_STAGE = new long[FX_SAMPLES], SOUND = new long[FX_SAMPLES];
+    private static int fxFrames, stageFrames, gpuStages, soundTicks;
+    private static long stageOpened, quadSum, quadMax, emitterSum, loopSum, loopMax, soundSourceSum, soundGroupSum;
+    private static long rebuildsBefore, wiringBuildsBefore, framesBefore;
     // The machine's load over the window.
     private static CompletableFuture<Map<Long, Object[]>> loadBefore;
     private static double cpuLoadSum;
@@ -123,6 +148,9 @@ public final class FrameTimeProbe {
         measureEnds = warmupEnds + measureSeconds * 1_000_000_000L;
         label = name;
         count = gpuFrames = gpuScreens = cpuScreens = gpuMissed = 0;
+        fxFrames = stageFrames = gpuStages = soundTicks = 0;
+        quadSum = quadMax = emitterSum = loopSum = loopMax = soundSourceSum = soundGroupSum = 0;
+        rebuildsBefore = wiringBuildsBefore = framesBefore = -1;
         cpuLoadSum = 0;
         cpuLoadSamples = 0;
         loadBefore = null;
@@ -138,31 +166,35 @@ public final class FrameTimeProbe {
     // ---- GPU timestamps ----
 
     private static void counter(int index) {
-        GL33.glQueryCounter(queries[slot * 4 + index], GL33.GL_TIMESTAMP);
+        GL33.glQueryCounter(queries[slot * COUNTERS + index], GL33.GL_TIMESTAMP);
     }
 
     @SubscribeEvent
     public static void framePre(RenderFrameEvent.Pre event) {
         if (queries == null) {
-            queries = new int[RING * 4];
+            queries = new int[RING * COUNTERS];
             GL15.glGenQueries(queries);
             LOGGER.info("FPS_PROBE gpu renderer={} version={}", GL11.glGetString(GL11.GL_RENDERER), GL11.glGetString(GL11.GL_VERSION));
         }
         if (PENDING[slot]) {
-            int base = slot * 4;
+            int base = slot * COUNTERS;
             if (GL15.glGetQueryObjecti(queries[base + 3], GL15.GL_QUERY_RESULT_AVAILABLE) != 0) {
                 if (WINDOW[slot]) {
                     long t0 = GL33.glGetQueryObjecti64(queries[base], GL15.GL_QUERY_RESULT), t3 = GL33.glGetQueryObjecti64(queries[base + 3], GL15.GL_QUERY_RESULT);
                     if (gpuFrames < GPU_FRAME.length) GPU_FRAME[gpuFrames++] = t3 - t0;
                     if (SCREEN[slot] && gpuScreens < GPU_SCREEN.length)
                         GPU_SCREEN[gpuScreens++] = GL33.glGetQueryObjecti64(queries[base + 2], GL15.GL_QUERY_RESULT) - GL33.glGetQueryObjecti64(queries[base + 1], GL15.GL_QUERY_RESULT);
+                    if (STAGE[slot] && gpuStages < GPU_STAGE.length)
+                        GPU_STAGE[gpuStages++] = GL33.glGetQueryObjecti64(queries[base + 5], GL15.GL_QUERY_RESULT) - GL33.glGetQueryObjecti64(queries[base + 4], GL15.GL_QUERY_RESULT);
                 }
             } else if (WINDOW[slot]) gpuMissed++;
             PENDING[slot] = false;
         }
         WINDOW[slot] = measuring(System.nanoTime());
         SCREEN[slot] = false;
+        STAGE[slot] = false;
         screenInFrame = false;
+        stageInFrame = false;
         counter(0);
         if (panning) pan(Minecraft.getInstance());
     }
@@ -185,6 +217,39 @@ public final class FrameTimeProbe {
         if (measuring(now) && cpuScreens < CPU_SCREEN.length) CPU_SCREEN[cpuScreens++] = now - screenStarted;
     }
 
+    /** The {@code AFTER_PARTICLES} stage opens: before every other handler (the effects, the instrument wiring, the rest). */
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
+    public static void stageFirst(RenderLevelStageEvent event) {
+        if (queries == null || stageInFrame || event.getStage() != RenderLevelStageEvent.Stage.AFTER_PARTICLES) return;
+        stageOpened = System.nanoTime();
+        counter(4);
+    }
+
+    /** The stage closes: after every other handler. Its batches are ended by then, so their draws are inside. */
+    @SubscribeEvent(priority = EventPriority.LOWEST)
+    public static void stageLast(RenderLevelStageEvent event) {
+        if (queries == null || stageInFrame || event.getStage() != RenderLevelStageEvent.Stage.AFTER_PARTICLES) return;
+        counter(5);
+        stageInFrame = true;
+        STAGE[slot] = true;
+        long now = System.nanoTime();
+        if (measuring(now) && stageFrames < STAGE_CPU.length) STAGE_CPU[stageFrames++] = now - stageOpened;
+    }
+
+    /** This frame's effects counters (FxStats), read before the next frame starts them again. */
+    private static void sampleFx() {
+        if (fxFrames >= FX_SAMPLES) return;
+        long draw = FxStats.now(FxStats.Counter.DRAW_NS), wiring = FxStats.now(FxStats.Counter.WIRING_NS);
+        FX_DRAW[fxFrames] = draw;
+        FX_BUILD[fxFrames] = FxStats.now(FxStats.Counter.BUILD_NS);
+        FX_WIRING[fxFrames] = wiring;
+        FX_CPU[fxFrames++] = draw + wiring;
+        long quads = FxStats.now(FxStats.Counter.QUADS);
+        quadSum += quads;
+        quadMax = Math.max(quadMax, quads);
+        emitterSum += FxStats.now(FxStats.Counter.EMITTERS);
+    }
+
     @SubscribeEvent
     public static void frame(RenderFrameEvent.Post event) {
         if (queries != null) {
@@ -194,11 +259,22 @@ public final class FrameTimeProbe {
         }
         if (!active) return;
         long now = System.nanoTime();
-        if (now >= warmupEnds && loadBefore == null) loadBefore = CompletableFuture.supplyAsync(FrameTimeProbe::cpuTimes);
-        if (now >= warmupEnds && last >= warmupEnds && count < SAMPLES.length) SAMPLES[count++] = now - last;
+        if (now >= warmupEnds && loadBefore == null) {
+            loadBefore = CompletableFuture.supplyAsync(FrameTimeProbe::cpuTimes);
+            rebuildsBefore = FxStats.total(FxStats.Counter.REBUILDS);
+            wiringBuildsBefore = FxStats.total(FxStats.Counter.WIRING_BUILDS);
+            framesBefore = FxStats.frames();
+            if (pilot != null && "true".equals(pilot.getProperty("jfr"))) jfrStart();
+        }
+        if (now >= warmupEnds && last >= warmupEnds && count < SAMPLES.length) {
+            SAMPLES[count++] = now - last;
+            sampleFx();
+        }
         last = now;
         if (now < measureEnds) return;
         active = false;
+        fxLine();
+        jfrStop(label, count);
         var sorted = Arrays.copyOf(SAMPLES, count);
         Arrays.sort(sorted);
         long total = 0;
@@ -267,8 +343,8 @@ public final class FrameTimeProbe {
                 return;
             }
             String save = pilot.getProperty("save");
-            boolean lod = "lod".equals(pilot.getProperty("mode"));
-            if (!lod && !"simulator".equals(pilot.getProperty("mode"))) {
+            boolean lod = "lod".equals(pilot.getProperty("mode")), fx = "fx".equals(pilot.getProperty("mode"));
+            if (!lod && !fx && !"simulator".equals(pilot.getProperty("mode"))) {
                 LOGGER.info("FPS_AUTOPILOT opening save {}", save);
                 stage = 1;
                 mc.createWorldOpenFlows().openWorld(save, () -> LOGGER.error("FPS_AUTOPILOT could not open the save"));
@@ -280,13 +356,17 @@ public final class FrameTimeProbe {
                 return;
             }
             LOGGER.info("FPS_AUTOPILOT creating the flat world {}", save);
-            stage = lod ? 40 : 20;
+            stage = fx ? 60 : lod ? 40 : 20;
             var settings = new LevelSettings(save, GameType.CREATIVE, false, Difficulty.PEACEFUL, true, new GameRules(), WorldDataConfiguration.DEFAULT);
             mc.createWorldOpenFlows().createFreshLevel(save, settings, new WorldOptions(20261104L, false, false),
                     registry -> registry.registryOrThrow(Registries.WORLD_PRESET).getHolderOrThrow(WorldPresets.FLAT).value().createWorldDimensions(), mc.screen);
             return;
         }
         if (stage < 0) return;
+        if (stage >= 60) {
+            fx(mc);
+            return;
+        }
         if (stage >= 40) {
             lod(mc);
             return;
@@ -471,6 +551,526 @@ public final class FrameTimeProbe {
                 }
             LOGGER.info("FPS_AUTOPILOT gauges installed {} refused {} without identity {}", done, refused, unbound);
         });
+    }
+
+    // ---- The effects lane (batch 2026-11-10-custom-shader-system, FX_BENCH_PLAN.md; tools/fx-bench/) ----
+
+    private static final String[] WATCHES = {"FLARES", "STILLS", "TOWERS", "HEATERS"};
+    private static int fxWindow;
+    private static CompletableFuture<Void> serverRun;
+    // The synthetic feed (client thread only).
+    private static boolean feeding, noiseFeed;
+    private static Object[] watches;
+    private static Field watchedField, noiseField;
+    private static final Map<FluidNetwork.Target, Object> SYNTHETIC = new HashMap<>();
+    private static List<com.wormzjl.icheme.runtime.fluid.Noise.Source> noiseSources = List.of();
+    private static Object noiseSeen;
+    private static jdk.jfr.Recording recording;
+
+    /**
+     * The effects lane, stages 60 on: 10 s in the new world, {@code scene.txt}, 30 s for the structures' identities and the
+     * chunks, the drums' instruments ({@code install}), 10 s, the synthetic states (and with {@code noise=true} the noise
+     * sources) for 20 s, then each window of {@code windows} ({@code <name>.txt}, then {@code warmup} s and {@code measure} s),
+     * the server's publications ({@code server=true}), the memory line, and quit.
+     */
+    private static void fx(Minecraft mc) {
+        long now = System.nanoTime();
+        if (!COMMANDS.isEmpty()) {
+            if (mc.player != null) mc.player.connection.sendCommand(COMMANDS.poll());
+            return;
+        }
+        if (now < waitUntil) return;
+        int warmup = Integer.parseInt(pilot.getProperty("warmup", "60")), measure = Integer.parseInt(pilot.getProperty("measure", "60"));
+        String name = pilot.getProperty("label", "fx");
+        String[] windows = pilot.getProperty("windows", "view,away").split(",");
+        try {
+            switch (stage) {
+                case 60 -> { // in the fresh world: 10 s for the first chunks, then the scene, one command a tick
+                    if (mc.player == null || mc.level == null || mc.screen != null) return;
+                    waitUntil = now + 10_000_000_000L;
+                    stage = 61;
+                }
+                case 61 -> {
+                    queue(mc, "scene.txt");
+                    if (stage >= 0) stage = 62;
+                }
+                case 62 -> { // the scene placed: 30 s for the identities and the chunk meshes
+                    waitUntil = now + 30_000_000_000L;
+                    stage = 63;
+                }
+                case 63 -> {
+                    if (!"false".equals(pilot.getProperty("install"))) installInstruments(mc);
+                    waitUntil = now + 10_000_000_000L;
+                    stage = 64;
+                }
+                case 64 -> { // the feed: from here to the quit
+                    noiseSources = noiseSources();
+                    feeding = !"false".equals(pilot.getProperty("feed"));
+                    noiseFeed = "true".equals(pilot.getProperty("noise"));
+                    waitUntil = now + 20_000_000_000L;
+                    stage = 65;
+                }
+                case 65 -> {
+                    logFeed("before");
+                    fxWindow = 0;
+                    stage = 66;
+                }
+                case 66 -> {
+                    queue(mc, windows[fxWindow].trim() + ".txt");
+                    if (stage >= 0) stage = 67;
+                }
+                case 67 -> {
+                    window(mc, name + "-" + windows[fxWindow].trim(), warmup, measure);
+                    stage = 68;
+                }
+                case 68 -> {
+                    if (active) return;
+                    logFeed(windows[fxWindow].trim());
+                    stage = ++fxWindow < windows.length ? 66 : 69;
+                }
+                case 69 -> {
+                    if ("true".equals(pilot.getProperty("server"))) serverRun = serverTiming(mc);
+                    stage = 70;
+                }
+                case 70 -> {
+                    if (serverRun != null && !serverRun.isDone()) return;
+                    memory(mc);
+                    feeding = false;
+                    quit(mc);
+                    stage = 71;
+                }
+                case 71 -> {
+                    if (mc.level != null) return;
+                    stage = 72;
+                    mc.stop();
+                }
+                default -> {
+                }
+            }
+        } catch (RuntimeException e) {
+            LOGGER.error("FPS_AUTOPILOT stage {} failed", stage, e);
+            stage = -1;
+        }
+    }
+
+    /**
+     * Measurement only: every gauge mount of each drum of the grid {@code drums.x}, {@code drums.y}, {@code drums.z},
+     * {@code drums.nx}, {@code drums.nz}, {@code drums.step} (a pressure gauge where the mount takes one, else a
+     * temperature gauge) and one digital level meter, through the server's own install requests, the player put 1.8 m out
+     * from each mount in turn, so the structures' instrument wiring is full.
+     */
+    private static void installInstruments(Minecraft mc) {
+        var server = mc.getSingleplayerServer();
+        if (server == null) {
+            LOGGER.error("FPS_AUTOPILOT the instruments need the integrated server");
+            return;
+        }
+        int x0 = Integer.parseInt(pilot.getProperty("drums.x", "-27")), y = Integer.parseInt(pilot.getProperty("drums.y", "-60"));
+        int z0 = Integer.parseInt(pilot.getProperty("drums.z", "10")), nx = Integer.parseInt(pilot.getProperty("drums.nx", "10"));
+        int nz = Integer.parseInt(pilot.getProperty("drums.nz", "5")), step = Integer.parseInt(pilot.getProperty("drums.step", "6"));
+        server.execute(() -> {
+            var players = server.getPlayerList().getPlayers();
+            var world = com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.find(server).orElse(null);
+            if (players.isEmpty() || world == null) {
+                LOGGER.error("FPS_AUTOPILOT no player or no fluid world for the instruments");
+                return;
+            }
+            var player = players.get(0);
+            var level = player.serverLevel();
+            int hosts = 0, gauges = 0, sensors = 0, missing = 0;
+            for (int i = 0; i < nx; i++)
+                for (int k = 0; k < nz; k++) {
+                    var host = drumHost(level, new BlockPos(x0 + i * step, y, z0 + k * step));
+                    if (host == null) {
+                        missing++;
+                        continue;
+                    }
+                    hosts++;
+                    var at = host.entity().getBlockPos();
+                    for (var mount : host.mounts()) {
+                        var now = com.wormzjl.icheme.runtime.instrument.InstrumentHosts.at(level, at);
+                        if (now == null || mount.kinds().isEmpty() || now.occupied(mount)) continue;
+                        boolean pressure = mount.kinds().contains(com.wormzjl.icheme.world.item.GaugeSettings.Kind.PRESSURE);
+                        var stack = new net.minecraft.world.item.ItemStack(pressure ? com.wormzjl.icheme.registry.ModItems.PRESSURE_GAUGE.get() : com.wormzjl.icheme.registry.ModItems.TEMPERATURE_GAUGE.get());
+                        stack.set(com.wormzjl.icheme.registry.ModItems.GAUGE_SETTINGS.get(), pressure ? com.wormzjl.icheme.world.item.GaugeSettings.PRESSURE : com.wormzjl.icheme.world.item.GaugeSettings.TEMPERATURE);
+                        player.setItemInHand(InteractionHand.MAIN_HAND, stack);
+                        face(player, level, mount.centre(), mount.normal());
+                        world.instruments().request(player, InteractionHand.MAIN_HAND, false);
+                    }
+                    for (var mount : com.wormzjl.icheme.runtime.instrument.Sensor.mounts(host, com.wormzjl.icheme.runtime.instrument.Sensor.Kind.LEVEL)) {
+                        player.setItemInHand(InteractionHand.MAIN_HAND, new net.minecraft.world.item.ItemStack(com.wormzjl.icheme.registry.ModItems.DIGITAL_LEVEL_METER.get()));
+                        face(player, level, mount.centre(), mount.normal());
+                        world.instruments().requestSensor(player, InteractionHand.MAIN_HAND, com.wormzjl.icheme.runtime.instrument.Sensor.Kind.LEVEL);
+                        break;
+                    }
+                    var after = com.wormzjl.icheme.runtime.instrument.InstrumentHosts.at(level, at);
+                    if (after != null) {
+                        gauges += after.metadata().installed().size();
+                        sensors += after.metadata().sensors().size();
+                    }
+                }
+            LOGGER.info("FPS_AUTOPILOT drum instruments: hosts {} gauges {} sensors {} without a host {}", hosts, gauges, sensors, missing);
+        });
+    }
+
+    /** The instrument host of the drum standing at {@code base}: the first of its cells up to 12 m above that hosts instruments. */
+    private static com.wormzjl.icheme.runtime.instrument.InstrumentHosts.Host drumHost(net.minecraft.server.level.ServerLevel level, BlockPos base) {
+        for (int dy = 0; dy <= 12; dy++) {
+            var host = com.wormzjl.icheme.runtime.instrument.InstrumentHosts.at(level, base.above(dy));
+            if (host != null && !host.pipe() && !host.mounts().isEmpty()) return host;
+        }
+        return null;
+    }
+
+    /** The player 1.8 m out from {@code centre} along {@code normal}, looking at it. */
+    private static void face(net.minecraft.server.level.ServerPlayer player, net.minecraft.server.level.ServerLevel level, Vec3 centre, Vec3 normal) {
+        var eye = centre.add(normal.scale(1.8));
+        var look = centre.subtract(eye).normalize();
+        float yaw = (float) Math.toDegrees(Math.atan2(-look.x, look.z)), pitch = (float) Math.toDegrees(-Math.asin(look.y));
+        player.teleportTo(level, eye.x, eye.y - player.getEyeHeight(), eye.z, yaw, pitch);
+    }
+
+    /**
+     * Measurement only, client thread, every tick from stage 64: the plan's full-load states for every structure the
+     * effects' watches hold ({@code ProcessStates}' stores, by reflection), stored through the stores' own {@code accept}
+     * again whenever the server's republication (the structures' real, idle states, every 5 s) replaced them. Ticks start
+     * after the packets of the tick are handled, so the effects and the sounds, which read the stores at the tick's end, see
+     * only these. With {@code noise=true} the same for the noise watch's answer ({@code FxSounds.accept}). Nothing is sent
+     * to the server.
+     */
+    @SubscribeEvent
+    public static void feed(ClientTickEvent.Pre event) {
+        var mc = Minecraft.getInstance();
+        if (!feeding || mc.level == null || mc.player == null) return;
+        try {
+            if (watches == null) {
+                watches = new Object[WATCHES.length];
+                for (int k = 0; k < WATCHES.length; k++) {
+                    var f = com.wormzjl.icheme.client.fx.state.ProcessStates.class.getDeclaredField(WATCHES[k]);
+                    f.setAccessible(true);
+                    watches[k] = f.get(null);
+                }
+                watchedField = com.wormzjl.icheme.client.fx.state.CellWatch.class.getDeclaredField("watched");
+                watchedField.setAccessible(true);
+                noiseField = com.wormzjl.icheme.client.fx.sound.FxSounds.class.getDeclaredField("noise");
+                noiseField.setAccessible(true);
+            }
+            for (int k = 0; k < watches.length; k++) {
+                var watch = (com.wormzjl.icheme.client.fx.state.CellWatch<?>) watches[k];
+                for (Object o : (Set<?>) watchedField.get(watch)) {
+                    var target = (FluidNetwork.Target) o;
+                    Object s = SYNTHETIC.get(target);
+                    if (s == null) {
+                        s = synthetic(k, target, mc.level);
+                        if (s == null) continue;
+                        SYNTHETIC.put(target, s);
+                    }
+                    if (watch.state(target) != s) accept(s);
+                }
+            }
+            if (noiseFeed && noiseField.get(null) != noiseSeen) {
+                com.wormzjl.icheme.client.fx.sound.FxSounds.accept(noiseSources);
+                noiseSeen = noiseField.get(null);
+            }
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            LOGGER.error("FX_FEED failed; the feed stops", e);
+            feeding = false;
+        }
+    }
+
+    private static void accept(Object state) {
+        if (state instanceof FluidNetwork.FlareState s) com.wormzjl.icheme.client.fx.state.ProcessStates.accept(s);
+        else if (state instanceof FluidNetwork.StillState s) com.wormzjl.icheme.client.fx.state.ProcessStates.accept(s);
+        else if (state instanceof FluidNetwork.TowerPlume s) com.wormzjl.icheme.client.fx.state.ProcessStates.accept(s);
+        else if (state instanceof FluidNetwork.HeaterFlue s) com.wormzjl.icheme.client.fx.state.ProcessStates.accept(s);
+        else throw new IllegalStateException("No store for " + state);
+    }
+
+    /**
+     * The full-load state of watch {@code kind} ({@link #WATCHES}) for {@code target}, from its structure's shape, or null
+     * while its cell is not loaded: a flare flaring at its rating with soot (flame and smoke), a still distilling at full fire
+     * (fire, flue smoke, drip), a tower's exhaust at 36 °C saturated through its exits at 9 m/s (induced) or 4 m/s (natural),
+     * a heater fired at its design with liquid fuel (white plume and grey smoke) and its stack at 620 K, 8 m/s.
+     */
+    private static Object synthetic(int kind, FluidNetwork.Target target, net.minecraft.client.multiplayer.ClientLevel level) {
+        if (!(level.getBlockEntity(target.position()) instanceof com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity shell) || shell.shape() == null) return null;
+        var shape = shell.shape();
+        var marks = com.wormzjl.icheme.science.equipment.ShapeRasterizer.marks(shape);
+        return switch (kind) {
+            case 0 -> new FluidNetwork.FlareState(target, com.wormzjl.icheme.runtime.fluid.Flares.Status.FLARING.ordinal(), 1f, 0f, .7f, 80f);
+            case 1 -> new FluidNetwork.StillState(target, shape.still().heater().ordinal(), com.wormzjl.icheme.science.fluid.network.BatchStill.Status.DISTILLING.ordinal(), 1f, true, true);
+            case 2 -> {
+                boolean natural = shape.kind() == com.wormzjl.icheme.science.equipment.EquipmentShape.Kind.NATURAL_DRAFT_COOLING_TOWER;
+                float w = .036f, air = (float) (1.1 * (natural ? 4 : 9) * area(marks, natural ? "throat" : "fan_exhaust_") / (1 + w));
+                yield new FluidNetwork.TowerPlume(target, air, 309f, w, .012f * air);
+            }
+            case 3 -> new FluidNetwork.HeaterFlue(target, 1f, 620f, (float) (.55 * 8 * area(marks, "stack_top_")), .12f, com.wormzjl.icheme.science.fluid.network.Burners.Fuel.LIQUID.ordinal());
+            default -> null;
+        };
+    }
+
+    /** The flow area of the marks named {@code prefix}..., m², each a circle across its x width; at least 1 m². */
+    private static double area(Map<String, double[]> marks, String prefix) {
+        double a = 0;
+        for (var e : marks.entrySet()) {
+            if (!e.getKey().startsWith(prefix)) continue;
+            double d = e.getValue()[3] - e.getValue()[0];
+            a += Math.PI * d * d / 4;
+        }
+        return Math.max(a, 1);
+    }
+
+    /**
+     * The sound lane's noise (plan lane 5) around {@code noise.x}, {@code noise.y}, {@code noise.z} (the view point): 100
+     * valves at a 1 MPa drop on a 2 m grid, gas and liquid in turn, 1 m below; 20 tower fans at full speed on a ring of 12 m.
+     */
+    private static List<com.wormzjl.icheme.runtime.fluid.Noise.Source> noiseSources() {
+        double x = Double.parseDouble(pilot.getProperty("noise.x", ".5")), y = Double.parseDouble(pilot.getProperty("noise.y", "-40"));
+        double z = Double.parseDouble(pilot.getProperty("noise.z", "-30"));
+        var out = new ArrayList<com.wormzjl.icheme.runtime.fluid.Noise.Source>();
+        float valve = (float) com.wormzjl.icheme.runtime.fluid.Noise.valve(1e6);
+        float fan = (float) com.wormzjl.icheme.runtime.fluid.Noise.fans(1, com.wormzjl.icheme.runtime.fluid.Noise.TOWER_FAN, 1);
+        for (int i = 0; i < 10; i++)
+            for (int k = 0; k < 10; k++)
+                out.add(new com.wormzjl.icheme.runtime.fluid.Noise.Source(BlockPos.containing(x - 9 + 2 * i, y - 1, z - 9 + 2 * k),
+                        (i + k) % 2 == 0 ? com.wormzjl.icheme.runtime.fluid.Noise.Kind.VALVE_GAS : com.wormzjl.icheme.runtime.fluid.Noise.Kind.VALVE_LIQUID, valve, 1));
+        for (int j = 0; j < 20; j++) {
+            double a = 2 * Math.PI * j / 20;
+            out.add(new com.wormzjl.icheme.runtime.fluid.Noise.Source(BlockPos.containing(x + 12 * Math.cos(a), y, z + 12 * Math.sin(a)), com.wormzjl.icheme.runtime.fluid.Noise.Kind.FAN, fan, 1));
+        }
+        return List.copyOf(out);
+    }
+
+    /** One {@code FX_FEED} line: per watch, the structures holding a synthetic state over those watched; the effects' sources. */
+    private static void logFeed(String when) {
+        var out = new StringBuilder();
+        if (watches != null) {
+            try {
+                for (int k = 0; k < watches.length; k++) {
+                    var watch = (com.wormzjl.icheme.client.fx.state.CellWatch<?>) watches[k];
+                    var watched = (Set<?>) watchedField.get(watch);
+                    int fed = 0;
+                    for (Object o : watched) {
+                        var s = SYNTHETIC.get((FluidNetwork.Target) o);
+                        if (s != null && watch.state((FluidNetwork.Target) o) == s) fed++;
+                    }
+                    out.append(' ').append(WATCHES[k].toLowerCase(java.util.Locale.ROOT)).append('=').append(fed).append('/').append(watched.size());
+                }
+            } catch (ReflectiveOperationException e) {
+                out.append(" unreadable");
+            }
+        } else out.append(" off");
+        LOGGER.info("FX_FEED when={}{} noise={} sources={} registered={}", when, out, FxStats.now(FxStats.Counter.NOISE), FxStats.now(FxStats.Counter.SOURCES),
+                FxStats.now(FxStats.Counter.REGISTERED));
+    }
+
+    /** The sound tick of the window, sampled at each tick's start: the last tick's time, loops, sources and groups. */
+    @SubscribeEvent
+    public static void soundSample(ClientTickEvent.Pre event) {
+        if (!measuring(System.nanoTime()) || soundTicks >= SOUND.length) return;
+        SOUND[soundTicks++] = FxStats.now(FxStats.Counter.SOUND_NS);
+        long loops = FxStats.now(FxStats.Counter.LOOPS);
+        loopSum += loops;
+        loopMax = Math.max(loopMax, loops);
+        soundSourceSum += FxStats.now(FxStats.Counter.SOUND_SOURCES);
+        soundGroupSum += FxStats.now(FxStats.Counter.SOUND_GROUPS);
+    }
+
+    /** The window's {@code FX_PROBE} line (every mode). */
+    private static void fxLine() {
+        if (framesBefore < 0) return;
+        long sound = 0;
+        for (int i = 0; i < soundTicks; i++) sound += SOUND[i];
+        LOGGER.info("FX_PROBE label={} path={} frames={} fxCpuMs[p50/p95]={}/{} drawMs[p50/p95]={}/{} buildMs[p50/p95]={}/{} wiringMs[p50/p95]={}/{} "
+                        + "stageCpuMs[p50/p95]={}/{} gpuStageMs[p50/p95]={}/{} gpuStages={} quads[mean/max]={}/{} emitters[mean]={} rebuilds={} wiringBuilds={} fxFrames={} "
+                        + "soundMs[mean/p50/p95/max]={}/{}/{}/{} ticks={} loops[mean/max]={}/{} soundSources[mean]={} soundGroups[mean]={}",
+                label, FxStats.path(), fxFrames, fmt(FX_CPU, fxFrames, .5), fmt(FX_CPU, fxFrames, .95), fmt(FX_DRAW, fxFrames, .5), fmt(FX_DRAW, fxFrames, .95),
+                fmt(FX_BUILD, fxFrames, .5), fmt(FX_BUILD, fxFrames, .95), fmt(FX_WIRING, fxFrames, .5), fmt(FX_WIRING, fxFrames, .95),
+                fmt(STAGE_CPU, stageFrames, .5), fmt(STAGE_CPU, stageFrames, .95), fmt(GPU_STAGE, gpuStages, .5), fmt(GPU_STAGE, gpuStages, .95), gpuStages,
+                fxFrames == 0 ? "-" : String.format("%.0f", (double) quadSum / fxFrames), quadMax, fxFrames == 0 ? "-" : String.format("%.1f", (double) emitterSum / fxFrames),
+                FxStats.total(FxStats.Counter.REBUILDS) - rebuildsBefore, FxStats.total(FxStats.Counter.WIRING_BUILDS) - wiringBuildsBefore, FxStats.frames() - framesBefore,
+                soundTicks == 0 ? "-" : String.format("%.4f", sound / 1e6 / soundTicks), fmt(SOUND, soundTicks, .5), fmt(SOUND, soundTicks, .95), fmt(SOUND, soundTicks, 1),
+                soundTicks, soundTicks == 0 ? "-" : String.format("%.1f", (double) loopSum / soundTicks), loopMax,
+                soundTicks == 0 ? "-" : String.format("%.1f", (double) soundSourceSum / soundTicks), soundTicks == 0 ? "-" : String.format("%.1f", (double) soundGroupSum / soundTicks));
+    }
+
+    /** The {@code quantile} of the first {@code n} samples (ns), ms with four decimals; sorts them. */
+    private static String fmt(long[] samples, int n, double quantile) {
+        if (n == 0) return "-";
+        Arrays.sort(samples, 0, n);
+        return String.format("%.4f", samples[Math.min(n - 1, (int) (quantile * n))] / 1e6);
+    }
+
+    /**
+     * Measurement only: the window's JFR recording (started by {@link #frame} when the window's measurement starts, with
+     * {@code jfr=true}): allocation samples ({@code jfr.throttle}, 1000/s by default) and execution samples every 10 ms.
+     */
+    private static void jfrStart() {
+        try {
+            var r = new jdk.jfr.Recording();
+            r.enable("jdk.ObjectAllocationSample").with("throttle", pilot.getProperty("jfr.throttle", "1000/s")).withStackTrace();
+            r.enable("jdk.ExecutionSample").withPeriod(Duration.ofMillis(10)).withStackTrace();
+            r.setToDisk(true);
+            r.start();
+            recording = r;
+        } catch (Throwable e) { // JFR missing from the runtime: the window still measures
+            LOGGER.error("FX_JFR could not start", e);
+        }
+    }
+
+    /** Stops the window's recording, keeps it as {@code fps-<name>.jfr} and logs its {@code FX_JFR} line off the render thread. */
+    private static void jfrStop(String name, int frames) {
+        var r = recording;
+        recording = null;
+        if (r == null) return;
+        var out = Minecraft.getInstance().gameDirectory.toPath().resolve("fps-" + name + ".jfr");
+        try {
+            r.stop();
+            r.dump(out);
+        } catch (IOException | RuntimeException e) {
+            LOGGER.error("FX_JFR could not keep {}", out, e);
+            return;
+        } finally {
+            r.close();
+        }
+        CompletableFuture.runAsync(() -> jfrSummary(out, name, frames));
+    }
+
+    private static boolean fxClass(String name) {
+        return name.startsWith("com.wormzjl.icheme.client.fx.") || name.startsWith("com.wormzjl.icheme.client.InstrumentRenderer");
+    }
+
+    /** The innermost frame of {@code stack} in the effects' code ({@link #fxClass}), as {@code Class.method}; null for none. */
+    private static String fxFrame(jdk.jfr.consumer.RecordedStackTrace stack) {
+        if (stack == null) return null;
+        for (var f : stack.getFrames()) {
+            if (f.getMethod() == null || f.getMethod().getType() == null) continue;
+            String type = f.getMethod().getType().getName();
+            if (fxClass(type)) return type.substring(type.lastIndexOf('.') + 1) + "." + f.getMethod().getName();
+        }
+        return null;
+    }
+
+    /**
+     * {@code FX_JFR}: the allocation the samples weigh to the effects' code (all threads), per frame of the window, its top
+     * methods and classes; the render thread's execution samples, the share whose stack holds the effects' code, its top
+     * methods (innermost effects frame).
+     */
+    private static void jfrSummary(Path file, String name, int frames) {
+        long all = 0, fx = 0, renderSamples = 0, fxSamples = 0;
+        var allocAt = new HashMap<String, Long>();
+        var allocOf = new HashMap<String, Long>();
+        var cpuAt = new HashMap<String, Long>();
+        try (var events = new jdk.jfr.consumer.RecordingFile(file)) {
+            while (events.hasMoreEvents()) {
+                var e = events.readEvent();
+                String type = e.getEventType().getName();
+                if (type.equals("jdk.ObjectAllocationSample")) {
+                    long weight = e.getLong("weight");
+                    all += weight;
+                    String at = fxFrame(e.getStackTrace());
+                    if (at == null) continue;
+                    fx += weight;
+                    allocAt.merge(at, weight, Long::sum);
+                    var c = e.getClass("objectClass");
+                    allocOf.merge(c == null ? "?" : c.getName(), weight, Long::sum);
+                } else if (type.equals("jdk.ExecutionSample")) {
+                    var thread = e.getThread("sampledThread");
+                    if (thread == null || !"Render thread".equals(thread.getJavaName())) continue;
+                    renderSamples++;
+                    String at = fxFrame(e.getStackTrace());
+                    if (at == null) continue;
+                    fxSamples++;
+                    cpuAt.merge(at, 1L, Long::sum);
+                }
+            }
+        } catch (IOException | RuntimeException e) {
+            LOGGER.error("FX_JFR cannot read {}", file, e);
+            return;
+        }
+        LOGGER.info("FX_JFR label={} frames={} allocFxBytes={} allocFxPerFrame={} allocAllBytes={} allocTop=[{}] allocClasses=[{}] renderSamples={} fxSamples={} fxShare={}% cpuTop=[{}] file={}",
+                name, frames, fx, frames == 0 ? "-" : String.format("%.0f", (double) fx / frames), all, top(allocAt), top(allocOf), renderSamples, fxSamples,
+                renderSamples == 0 ? "-" : String.format("%.2f", 100.0 * fxSamples / renderSamples), top(cpuAt), file.getFileName());
+    }
+
+    /** The six largest entries, "key value" joined by commas. */
+    private static String top(Map<String, Long> counts) {
+        return counts.entrySet().stream().sorted(Map.Entry.<String, Long>comparingByValue().reversed()).limit(6)
+                .map(e -> e.getKey() + " " + e.getValue()).collect(java.util.stream.Collectors.joining(", "));
+    }
+
+    /**
+     * Measurement only, on the server thread: the new presentation publications of FluidWorldAuthority ({@code publishTowers},
+     * {@code publishHeaters}, {@code publishNoise}, {@code publishSilhouettes}; private, by reflection) at the scene's size,
+     * {@code server.calls} times each after 20 unmeasured, with what each served (watched devices, islands, subscribers).
+     * Noise and silhouettes also as their worst case: every island's levels computed again ({@code Noise.Store.clear} first) and
+     * every subscriber ranked again ({@code Silhouettes.changed} first). Each call sends what it publishes, as the cadence does.
+     */
+    private static CompletableFuture<Void> serverTiming(Minecraft mc) {
+        var server = mc.getSingleplayerServer();
+        if (server == null) {
+            LOGGER.error("FX_SERVER needs the integrated server");
+            return null;
+        }
+        int calls = Integer.parseInt(pilot.getProperty("server.calls", "200"));
+        return server.submit(() -> {
+            try {
+                Object world = com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.find(server).orElseThrow();
+                Object noise = get(world, "noise"), silhouettes = get(world, "silhouettes");
+                publish(world, "publishTowers", null, calls, "towers", "devices=" + ((Map<?, ?>) get(get(world, "towerWatchers"), "byDevice")).size());
+                publish(world, "publishHeaters", null, calls, "heaters", "devices=" + ((Map<?, ?>) get(get(world, "heaterWatchers"), "byDevice")).size());
+                publish(world, "publishNoise", null, calls, "noise", "islands=" + ((Map<?, ?>) get(noise, "islands")).size());
+                publish(world, "publishNoise", () -> call(noise, "clear"), calls, "noise-recomputed", "islands=" + ((Map<?, ?>) get(noise, "islands")).size());
+                publish(world, "publishSilhouettes", null, calls, "silhouettes", "subscribers=" + ((Map<?, ?>) get(silhouettes, "subscriptions")).size());
+                publish(world, "publishSilhouettes", () -> call(silhouettes, "changed", "minecraft:overworld"), calls, "silhouettes-ranked",
+                        "subscribers=" + ((Map<?, ?>) get(silhouettes, "subscriptions")).size());
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                LOGGER.error("FX_SERVER failed", e);
+            }
+        });
+    }
+
+    private interface Step {
+        Object run() throws ReflectiveOperationException;
+    }
+
+    private static void publish(Object world, String method, Step before, int calls, String name, String served) throws ReflectiveOperationException {
+        var samples = new long[calls];
+        for (int i = 0; i < calls + 20; i++) {
+            if (before != null) before.run();
+            long started = System.nanoTime();
+            call(world, method);
+            long took = System.nanoTime() - started;
+            if (i >= 20) samples[i - 20] = took;
+        }
+        long sum = 0;
+        for (long s : samples) sum += s;
+        Arrays.sort(samples);
+        LOGGER.info("FX_SERVER publication={} calls={} p50Us={} p95Us={} meanUs={} {}", name, calls, String.format("%.1f", samples[calls / 2] / 1e3),
+                String.format("%.1f", samples[Math.min(calls - 1, (int) (.95 * calls))] / 1e3), String.format("%.1f", sum / 1e3 / calls), served);
+    }
+
+    /**
+     * {@code FX_MEMORY}: the effects' resident bytes from FxStats (cached vertex buffers, wiring uploads, the haze's target),
+     * the effects' and wiring's textures loaded now (level 0, RGBA8, read from GL), silhouette boxes and the stores' sizes.
+     */
+    private static void memory(Minecraft mc) {
+        long textures = 0;
+        int loaded = 0;
+        for (String folder : new String[]{"textures/fx", "textures/wiring"})
+            for (var location : mc.getResourceManager().listResources(folder, p -> p.getPath().endsWith(".png")).keySet()) {
+                if (!location.getNamespace().equals("icheme")) continue;
+                var texture = mc.getTextureManager().getTexture(location, null);
+                if (texture == null) continue;
+                com.mojang.blaze3d.platform.GlStateManager._bindTexture(texture.getId());
+                textures += 4L * GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_WIDTH) * GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_HEIGHT);
+                loaded++;
+            }
+        com.mojang.blaze3d.platform.GlStateManager._bindTexture(0);
+        LOGGER.info("FX_MEMORY vertexBytes={} wiringBytes={} targetBytes={} textureBytes={} textures={} silhouetteBoxes={} silhouettes={} states={} sources={} registered={} noise={} loops={}",
+                FxStats.now(FxStats.Counter.VERTEX_BYTES), FxStats.now(FxStats.Counter.WIRING_BYTES), FxStats.now(FxStats.Counter.TEXTURE_BYTES), textures, loaded,
+                FxStats.now(FxStats.Counter.SILHOUETTE_BOXES), FxStats.now(FxStats.Counter.SILHOUETTES), FxStats.now(FxStats.Counter.STATES), FxStats.now(FxStats.Counter.SOURCES),
+                FxStats.now(FxStats.Counter.REGISTERED), FxStats.now(FxStats.Counter.NOISE), FxStats.now(FxStats.Counter.LOOPS));
     }
 
     /**
