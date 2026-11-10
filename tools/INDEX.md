@@ -29,7 +29,7 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 | [batch-still-column/](batch-still-column/README.md) | B3 measurement: the bubble-point column candidate against V3 | `2026-11-09-batch-distiller` | Kept for reference since 2026-11-10 |
 | [machine-parts/](machine-parts/README.md) | Flat 16 x 16 machine part item icons (the pump repair kit) | `2026-11-03-rotating-machinery` | In use since 2026-11-04 |
 | [machine-sounds/](machine-sounds/README.md) | Original pump, compressor, motor and steam-turbine loops (authoring only) | `2026-11-03-rotating-machinery` | In use since 2026-11-04 |
-| [process-sounds/](process-sounds/README.md) | Original flare, burner, firebox and boiling-pot loops (authoring only) | `2026-11-10-custom-shader-system` | In use since 2026-11-10 |
+| [process-sounds/](process-sounds/README.md) | Original flare, burner, firebox, boiling-pot, valve and steam ejector loops (authoring only) | `2026-11-10-custom-shader-system` | In use since 2026-11-10 |
 | [pbr-textures/](pbr-textures/README.md) | Instrument wiring textures with LabPBR 1.3 maps (stdlib Python) | `2026-11-10-custom-shader-system` | In use since 2026-11-10 |
 | [fx-textures/](fx-textures/README.md) | Effects textures: flame flipbook with LabPBR `_s`, smoke, plume (stdlib Python) | `2026-11-10-custom-shader-system` | In use since 2026-11-10 |
 | [fx-bench/](fx-bench/README.md) | Effects CPU, GPU and RAM bench: scene, synthetic feed, five lanes, budget summary | `2026-11-10-custom-shader-system` | In progress since 2026-11-10 |

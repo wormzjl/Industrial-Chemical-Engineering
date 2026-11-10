@@ -894,7 +894,8 @@ public final class ShapeRasterizer {
                         ? transform.point(new double[]{axis - radius + .01, (shape.bottomTangent() + shape.topTangent()) / 2, axis})
                         : transform.point(new double[]{axis, shape.bottomTangent() - shape.headDepth() + .01, axis});
                 node = new Cell(floor(low[0]), floor(low[1]), floor(low[2]));
-            } else if (shape.kind().mover()) {
+            } else if (shape.kind().mover() || shape.kind() == EquipmentShape.Kind.EJECTOR) {
+                // A steam ejector registers at its suction's cell, as a mover does (batch 2026-11-10-steam-ejector-flow).
                 node = ports.stream().filter(port -> nozzles.get(port.nozzle()).role() == EquipmentShape.Role.SUCTION)
                         .findFirst().orElseThrow(() -> new IllegalStateException("A mover needs a suction nozzle")).cell();
             } else if (shape.kind() == EquipmentShape.Kind.STEAM_TURBINE) {

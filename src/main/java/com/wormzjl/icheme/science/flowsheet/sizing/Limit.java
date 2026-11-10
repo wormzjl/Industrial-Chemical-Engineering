@@ -6,6 +6,7 @@ import static com.wormzjl.icheme.science.flowsheet.sizing.Bound.least;
 import static com.wormzjl.icheme.science.flowsheet.sizing.Bound.most;
 import static com.wormzjl.icheme.science.flowsheet.sizing.Bound.within;
 import static com.wormzjl.icheme.science.flowsheet.sizing.Bound.Step.rest;
+import static com.wormzjl.icheme.science.flowsheet.sizing.Bound.Step.rising;
 import static com.wormzjl.icheme.science.flowsheet.sizing.Bound.Step.to;
 import static com.wormzjl.icheme.science.flowsheet.sizing.Bound.Step.under;
 import static com.wormzjl.icheme.science.flowsheet.sizing.Limit.Kind.MUST;
@@ -97,7 +98,7 @@ public enum Limit {
     STEAM_SUPERHEATED_SPEED(SHOULD, most(60), "m/s", "[SPX]"),
     STEAM_SUPERHEATED_DROP(SHOULD, most(.2), "bar/100 m", "[SPX]"),
     STEAM_SUPERHEATED_MOMENTUM(SHOULD, most(15000), "kg/m·s²", "[KARM]"),
-    VACUUM_SPEED(SHOULD, most(Axis.ABSOLUTE, under(.01, 90), under(.05, 75), rest(60)), "m/s", "[KARM]"),
+    VACUUM_SPEED(SHOULD, most(Axis.ABSOLUTE, rising(.05, 60, .25), rest(60)), "m/s", "[KARM]"),
     /** A share of the absolute pressure, over the whole line, so it reads the line's length. */
     VACUUM_DROP(SHOULD, most(5), "%", "[BRAN]"),
     /** A floor: a slower flow slugs. */

@@ -122,6 +122,8 @@ public final class FlowsheetCatalog {
             case HEAT_SIDE -> EXCHANGER;
             // A steam turbine registers as a fluid device (W3, reading A37).
             case TURBINE -> TURBINE;
+            // A steam ejector registers as a fluid device (batch 2026-11-10-steam-ejector-flow).
+            case EJECTOR -> EJECTOR;
         };
     }
 }

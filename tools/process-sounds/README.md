@@ -33,7 +33,7 @@ Then copy the `.ogg` files into `src/main/resources/assets/icheme/sounds/`. The 
 
 ## Entry points
 
-`make_loops.py <output folder>`; `valve_candidates.py <output folder>` (the valve candidates, 48 kHz).
+`make_loops.py <output folder>`; `valve_candidates.py <output folder>` (the valve candidates, 48 kHz); `ejector_candidates.py <output folder>` (the steam ejector candidates J1 to J3, 48 kHz, batch 2026-11-10-steam-ejector-flow).
 
 ## History
 
@@ -50,3 +50,5 @@ Then copy the `.ogg` files into `src/main/resources/assets/icheme/sounds/`. The 
   - `gear_whine`: 26,517 bytes, RMS 0.0952, peak 0.38, seam step 0.0661 against 0.0372 (750 Hz tones, codec phase at the seam).
   - `pipe_knock`: 5,828 bytes, 19,200 frames (0.8 s), RMS 0.104, peak 0.71, first sample 0.009, last 0.0001.
 - 2026-11-10: owner, "valve sound is not good": `valve_candidates.py` (gas A/B/C, liquid L1/L2, flashing F1/F2). Owner: gas stays; L2 for a cavitating valve and pump (copied over `pump_cavitation.ogg`, 48,873 bytes); "F1 moderate" for a flashing valve (`valve_flashing.ogg`, 48,712 bytes); "Switch to L1" for a plain liquid valve (`valve_liquid.ogg`, 31,211 bytes). The loop is chosen by σ (owner: option A, `PassiveStepSolver.cavitation`).
+- 2026-11-10 (batch 2026-11-10-steam-ejector-flow): `ejector_candidates.py`, a steam ejector's motive jet: J1 a steady 2 to 8 kHz hiss over a 100 to 400 Hz diffuser rumble 12 dB under it (42,362 bytes, RMS 0.0887, peak 0.39, seam step 0.034 against 0.060), J2 brighter with a faint 3 kHz screech (41,889 bytes, RMS 0.0886, seam step 0.154 against 0.073, codec noise at the seam), J3 rumble-forward with a 0.3 Hz swell (39,270 bytes, RMS 0.0901, seam step 0.017 against 0.035); in the main checkout's `research/2026-11-10-steam-ejector-flow/sounds/`. J1 stood in as `ejector_jet.ogg` until the owner picked.
+- 2026-11-10: the owner picked **J2** ("J2"): `ejector_J2_bright_screech.ogg` is `assets/icheme/sounds/ejector_jet.ogg`.

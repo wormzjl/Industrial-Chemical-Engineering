@@ -20,12 +20,12 @@ import net.minecraft.core.BlockPos;
  * <li>{@link #gear}: a gearbox's mesh, of its rated power and speed share.</li>
  * <li>{@link #kettle}: a kettle reboiler's boiling pool, muffled by its shell.</li>
  * <li>{@link #knock}: a liquid line stopped between two publications, a one-shot by its Joukowsky surge.</li>
+ * <li>{@link #ejector}: a steam ejector's motive jet, a supersonic free jet behind its casing (batch 2026-11-10-steam-ejector-flow).</li>
  * </ul>
- * Steam ejectors have no live state in the world (only the simulator's sheet), so they make none.
  */
 public final class Noise {
     /** What makes the noise; the client picks its loop by this, a one-shot for the knock. */
-    public enum Kind { VALVE_GAS, VALVE_LIQUID, VENT, FAN, WATER_FALL, BURNER, GEAR, KETTLE, PIPE_KNOCK, VALVE_CAVITATING, VALVE_FLASHING;
+    public enum Kind { VALVE_GAS, VALVE_LIQUID, VENT, FAN, WATER_FALL, BURNER, GEAR, KETTLE, PIPE_KNOCK, VALVE_CAVITATING, VALVE_FLASHING, EJECTOR;
         public boolean oneShot(){return this==PIPE_KNOCK;}
     }
     /** One source: where, what, its sound power level, dB, and its loop's pitch. */
@@ -93,6 +93,24 @@ public final class Noise {
     public static double knock(double density,double speed) {
         double surge=density*LIQUID_WAVE_SPEED*Math.abs(speed);
         return surge>=KNOCK_FLOOR?valve(surge):Double.NaN;
+    }
+    /** The share of a supersonic jet's power its sound takes at most (Lighthill's 1e-4 M⁵ passes it from M = 2.3). */
+    public static final double JET_EFFICIENCY=5e-3;
+    /** What an ejector's casing and diffuser wall take from its jet's sound, dB (30 to 40). */
+    public static final double EJECTOR_CASING=35;
+    /** The heat capacity ratio an ejector's motive steam expands at. */
+    static final double STEAM_K=1.3;
+    /**
+     * A steam ejector's motive jet: {@code massFlow} kg/s of steam of density {@code density} kg/m³ at {@code motive} Pa expanding
+     * to {@code discharge} Pa. Its speed is the isentropic drop's, {@code U²/2 = Δh_is} (k 1.3); its sound {@code η ṁ Δh_is},
+     * η = 1e-4 (U/a)⁵ at most {@link #JET_EFFICIENCY}, less {@link #EJECTOR_CASING} dB: 10 bar to 1.2 bar at 0.218 kg/s (a
+     * 0.1 m suction's set) about 110.5 dB, a 1 m set's the cap. NaN without flow.
+     */
+    public static double ejector(double massFlow,double density,double motive,double discharge) {
+        if(!(massFlow>0)||!(density>0)||!(motive>discharge)||!(discharge>0))return Double.NaN;
+        double drop=com.wormzjl.icheme.science.machine.SteamTurbine.isentropicDrop(motive,density,discharge,STEAM_K),u=Math.sqrt(2*drop);
+        double watt=Math.min(JET_EFFICIENCY,1e-4*com.wormzjl.icheme.science.math.DeterministicMath.pow(u/AIR_SOUND,5))*massFlow*drop;
+        return watt>0?capped(10*com.wormzjl.icheme.science.math.DeterministicMath.log10(watt/1e-12)-EJECTOR_CASING):Double.NaN;
     }
     /** A gas vent's density at the ambient pressure, kg/m³: P M / (R T), of its mean molar mass {@code molarMass} kg/mol. */
     public static double ventDensity(double molarMass,double temperature){return molarMass>0&&temperature>0?AMBIENT*molarMass/(GAS_CONSTANT*temperature):Double.NaN;}

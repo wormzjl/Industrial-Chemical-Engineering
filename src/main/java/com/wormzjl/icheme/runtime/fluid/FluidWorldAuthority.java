@@ -53,6 +53,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
     private final Flares flares;
     /** The batch stills (batch 2026-11-09-batch-distiller, W3 to W5). */
     private final Stills stills;
+    /** The steam ejectors' motive slice inputs (batch 2026-11-10-steam-ejector-flow). */
+    private final Ejectors ejectors;
     /** The pumps' health (W10b). */
     private final PumpHealth health;
     /**
@@ -170,7 +172,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
         flares=new Flares(topology,heatingValues(catalog,model),model.molecularWeights(),formulas(catalog,model));shafts.flares(flares);
         // The batch stills (batch 2026-11-09-batch-distiller): their pots, heads and outlets share the port hooks with the columns.
         stills=new Stills(topology,registry::owner,runtime.coordinator(),runtime.coordinator()::model,electric,model.components(),model.molecularWeights(),heatingValues(catalog,model));
-        stills.refresh();runtime.coordinator().ports(IslandCoordinator.Ports.both(columns,stills));
+        ejectors=new Ejectors(runtime.coordinator()::model);
+        stills.refresh();runtime.coordinator().ports(IslandCoordinator.Ports.both(columns,IslandCoordinator.Ports.both(stills,ejectors)));
         stills.solves((pot,island,job,done)->{
             var at=registrations().get(pot);if(at==null)return false;
             var dimension=net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION,net.minecraft.resources.ResourceLocation.parse(at.device().position().dimension()));
@@ -396,6 +399,11 @@ public final class FluidWorldAuthority implements AutoCloseable {
             if(pipe.control() instanceof FlowControl.PressureValve||pipe.control() instanceof FlowControl.ControlValve) {
                 var r=registrations().get(graph.reservoirs().get(pipe.first()).id());
                 if(r!=null&&row.flowing()&&row.massFlow()!=0&&Double.isFinite(row.valveDrop()))Noise.add(out,cell(r),gas?Noise.Kind.VALVE_GAS:switch(row.cavitation()){case CAVITATING->Noise.Kind.VALVE_CAVITATING;case FLASHING->Noise.Kind.VALVE_FLASHING;default->Noise.Kind.VALVE_LIQUID;},Noise.valve(row.valveDrop()),1);
+            }
+            // A steam ejector's motive jet, by the steam its nozzle passes (batch 2026-11-10-steam-ejector-flow), at its suction's cell.
+            if(pipe.control() instanceof FlowControl.Ejector) {
+                long id=Ejectors.physical(pipe.id());var r=registrations().get(id);var jet=rows.get(PhysicalFluidTopology.motiveIdentity(id));
+                if(r!=null&&jet!=null&&jet.flowing())Noise.add(out,cell(r),Noise.Kind.EJECTOR,Noise.ejector(jet.massFlow(),jet.density(),jet.firstPressure(),jet.secondPressure()),1);
             }
             // A liquid line's speed, m/s, against which its stop at the next publication knocks.
             if(!gas&&!pipe.sections().isEmpty()) {
@@ -789,7 +797,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
      */
     public WorldTopologyLedger.Registration placeMachine(PhysicalFluidTopology.Position suction,TopologyCompiler.Kind kind,List<PhysicalFluidTopology.Port> ports,FlowControl control) {
         owned();
-        if(kind!=TopologyCompiler.Kind.PUMP&&kind!=TopologyCompiler.Kind.COMPRESSOR&&kind!=TopologyCompiler.Kind.TURBINE||ports.isEmpty())throw new IllegalArgumentException("Expected a shaft-driven machine");
+        if(kind!=TopologyCompiler.Kind.PUMP&&kind!=TopologyCompiler.Kind.COMPRESSOR&&kind!=TopologyCompiler.Kind.TURBINE&&kind!=TopologyCompiler.Kind.EJECTOR||ports.isEmpty())throw new IllegalArgumentException("Expected a shaft-driven machine or an ejector");
         long id=topology.nextIdentity();
         var device=new PhysicalFluidTopology.Device(id,suction,kind,PhysicalFluidTopology.Direction.NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),control,ports,true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES);
         var record=new WorldTopologyLedger.Registration(device,FluidDeviceSpec.nitrogen(catalog),0);

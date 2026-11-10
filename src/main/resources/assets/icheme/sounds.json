@@ -63,6 +63,10 @@
     "subtitle": "subtitles.icheme.valve_flashing",
     "sounds": [{ "name": "icheme:valve_flashing", "stream": false }]
   },
+  "ejector_jet": {
+    "subtitle": "subtitles.icheme.ejector_jet",
+    "sounds": [{ "name": "icheme:ejector_jet", "stream": false }]
+  },
   "fan_whoosh": {
     "subtitle": "subtitles.icheme.fan_whoosh",
     "sounds": [{ "name": "icheme:fan_whoosh", "stream": false }]

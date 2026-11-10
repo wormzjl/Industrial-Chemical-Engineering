@@ -57,9 +57,10 @@ final class FluidFacts {
      *  pumps' health: each painted line's paints, each equipment structure's shape and paint, and each rack lane's rack
      *  frame (the facing and shape of the cell it lies in), so that the registry can place their blocks again.
      *  16 (batch 2026-11-09-batch-distiller, W3 and W4): the world's batch stills (after the build facts); the control
-     *  valve source {@code STILL}; the {@code diverter} control. */
-    static final int SCHEMA=16;
-    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 16. */
+     *  valve source {@code STILL}; the {@code diverter} control.
+     *  17 (batch 2026-11-10-steam-ejector-flow): the device kind {@code EJECTOR} and the {@code ejector} control, its suction's bore. */
+    static final int SCHEMA=17;
+    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 17. */
     private static final Map<Class<?>,Map<String,String>> ALIASES=Map.of();
     private static final int MAXIMUM_FIELDS=256,MAXIMUM_ITEMS=1<<22,MAXIMUM_TEXTS=1<<20,MAXIMUM_ARRAY=4096,MAXIMUM_CHANNELS=1<<20;
     /** The cadence an island rebuilt from facts starts at (ticks): the shortest the clock allows, as after a merge. */
@@ -545,6 +546,8 @@ final class FluidFacts {
                 f.text("machine").f64(machine.setFlow()).f64(machine.setPressure()).bool(machine.enabled()).f64(0)
                         .record(q->q.text(law.liquid()?"centrifugal_pump":"centrifugal_compressor").f64(law.ratedFlow()).f64(law.ratedHead()).f64(law.efficiency())
                                 .f64(law instanceof com.wormzjl.icheme.science.machine.CentrifugalPump pump?pump.ratedSpeed():0));}
+            // Schema 17 (batch 2026-11-10-steam-ejector-flow): a steam ejector set, its suction's bore (m); its motive is a slice input.
+            case FlowControl.Ejector ejector->f.text("ejector").f64(ejector.design().suction()).f64(0).bool(true).f64(0);
             // Schema 10 (W3): a steam turbine's rated power and isentropic efficiency.
             case FlowControl.Turbine turbine->f.text("turbine").f64(0).f64(0).bool(true).f64(0).f64(turbine.design().ratedPower()).f64(turbine.design().efficiency());
             case FlowControl.PressureValve valve->f.text("pressure_valve").f64(0).f64(0).bool(false).f64(valve.targetPressure());
@@ -566,6 +569,7 @@ final class FluidFacts {
                 if(law==null)throw f.invalid("a machine without its law");
                 yield new FlowControl.Machine(law,0,enabled,flow,limit);}
             case "turbine"->{double power=f.f64(0),efficiency=f.f64(0);yield new FlowControl.Turbine(new com.wormzjl.icheme.science.machine.SteamTurbine(power,efficiency));}
+            case "ejector"->new FlowControl.Ejector(new com.wormzjl.icheme.science.machine.SteamEjector(flow));
             default->throw new IllegalArgumentException("unknown control "+kind);
         });
     }

@@ -595,6 +595,8 @@ public final class ConservativeTransport {
                 work=switch(mover) {
                     case FlowControl.Pump pump->rates==null?dt*flows[edge]*suction.volume()/suction.mass()*Math.max(0,heads[edge])
                             :dt*flows[edge]*specificVolume*Math.max(0,heads[edge]);
+                    // A steam ejector does no work: its motive steam arrives at the discharge junction with its own enthalpy.
+                    case FlowControl.Ejector ignored->0.0;
                     case FlowControl.Compressor compressor->dt*compressor.power(flows[edge],heads[edge],1/specificVolume,suction.pressure(),kappa);
                     // A machine's work is the Newton's own (MoverWork): what the solve read of its suction, a wet compressor's
                     // efficiency (request 11), enters it.

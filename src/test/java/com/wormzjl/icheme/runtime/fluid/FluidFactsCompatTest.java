@@ -120,7 +120,9 @@ class FluidFactsCompatTest {
         // Facts schema 15, last: the laid pipe's name (W5c C4), with a letter outside ASCII.
         world.ledger.name(laid,"Feed é line");
         stills(world);
-        world.runTo(880);return world;
+        world.runTo(880);
+        ejector(world);
+        world.runTo(890);return world;
     }
     /**
      * Facts schema 16 (batch 2026-11-09-batch-distiller, W3 and W4): a batch still's pot, a solid-fired still with its
@@ -129,6 +131,26 @@ class FluidFactsCompatTest {
      * places no structure, so they are not registered. And a diverter valve fed from the west, set to its third outlet
      * (its joints, a schema 2 field; its kind a new name).
      */
+    /**
+     * Facts schema 17 (batch 2026-11-10-steam-ejector-flow): a steam ejector of 0.1 m suction, its suction, motive and
+     * discharge ports in a row (its kind and control new names; no pipe meets it).
+     */
+    private void ejector(EventPathWorld world) {
+        long id=world.ledger.nextIdentity();
+        var suction=new PhysicalFluidTopology.Position(EventPathWorld.DIM,100,64,2);
+        var ports=List.of(new PhysicalFluidTopology.Port(suction,Direction.WEST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.SUCTION),
+                new PhysicalFluidTopology.Port(new PhysicalFluidTopology.Position(EventPathWorld.DIM,100,64,0),Direction.WEST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.INLET),
+                new PhysicalFluidTopology.Port(new PhysicalFluidTopology.Position(EventPathWorld.DIM,100,64,4),Direction.WEST,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.DISCHARGE));
+        var device=new PhysicalFluidTopology.Device(id,suction,Kind.EJECTOR,Direction.NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),
+                new FlowControl.Ejector(new com.wormzjl.icheme.science.machine.SteamEjector(.1)),ports,true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES);
+        world.registry.submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,FluidDeviceSpec.nitrogen(CATALOG),0))),id+1,null);
+    }
+    /** The steam ejectors, each its identity and rated load (kg/s), in identity order: what schema 17 carries. */
+    private static String ejectors(WorldTopologyLedger.Snapshot world) {
+        var text=new StringBuilder();
+        for(var r:new TreeMap<>(world.active()).values())if(r.device().control() instanceof FlowControl.Ejector e){if(!text.isEmpty())text.append(";");text.append(r.device().id()).append("=").append(e.design().suction());}
+        return text.toString();
+    }
     private void stills(EventPathWorld world) {
         long water=world.ledger.reserve(1),pot=world.ledger.nextIdentity();int m=model.componentCount();
         var design=new BatchStill.Design(.5,BatchStill.Heater.SOLID,true,4);
@@ -755,6 +777,8 @@ class FluidFactsCompatTest {
                 assertEquals(expected.getProperty("builds",""),builds(ledger),folder+": build facts");
                 // Schema 16 wrote the batch stills; an older image reads none.
                 assertEquals(expected.getProperty("stills",""),stills(ledger),folder+": batch stills");
+                // Schema 17 wrote the steam ejectors; an older image reads none.
+                assertEquals(expected.getProperty("ejectors",""),ejectors(ledger),folder+": steam ejectors");
                 long vessels=rebuilt.checkpoint().islands().stream().flatMap(e->e.snapshot().graph().reservoirs().stream()).filter(n->n.kind()==PassiveNetwork.NodeKind.RESERVOIR).count();
                 assertEquals(Long.parseLong(expected.getProperty("vessels")),vessels,folder+": vessels");
                 double total=Arrays.stream(moles(rebuilt.checkpoint(),model.componentCount())).sum();
@@ -892,6 +916,7 @@ class FluidFactsCompatTest {
         props.setProperty("health",health(loaded.world().orElseThrow()));
         props.setProperty("builds",builds(loaded.world().orElseThrow()));
         props.setProperty("stills",stills(loaded.world().orElseThrow()));
+        props.setProperty("ejectors",ejectors(loaded.world().orElseThrow()));
         props.setProperty("vessels",Long.toString(contents(loaded.checkpoint()).values().stream().filter(v->v instanceof PassiveNetwork.Inventory).count()));
         props.setProperty("moles",Double.toString(Arrays.stream(moles(loaded.checkpoint(),model.componentCount())).sum()));
         try(var out=Files.newBufferedWriter(folder.resolve("expected.properties"))){props.store(out,"Facts schema "+FluidFacts.SCHEMA+" corpus image, state format "+FluidCheckpointCodec.VERSION);}

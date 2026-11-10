@@ -23,6 +23,16 @@ class NoiseTest {
         assertEquals(76.02,Noise.valve(40e3),.01,"doubling the drop: +6 dB");
     }
 
+    /** A steam ejector's motive jet (batch 2026-11-10-steam-ejector-flow, EJECTOR_FLOW_PLAN.md section 3.1): η ṁ Δh_is less 35 dB. */
+    @Test void anEjectorsJetFollowsItsSteam() {
+        double small=784/3600.;  // a 0.1 m set at 10 kPa on 10 bar steam: the sheet's law, 784 kg/h
+        assertEquals(110.5,Noise.ejector(small,5.147,1e6,1.2e5),.3,"a 0.1 m set on 10 bar steam to 1.2 bar");
+        assertEquals(104,Noise.ejector(small/2,2.67,5e5,1.2e5),.5,"on 5 bar: half the steam, a slower jet");
+        assertEquals(Noise.CAP,Noise.ejector(100*small,5.147,1e6,1.2e5),1e-9,"a 1 m set: the cap");
+        assertTrue(Double.isNaN(Noise.ejector(0,5.147,1e6,1.2e5)),"no steam: silent");
+        assertTrue(Double.isNaN(Noise.ejector(small,5.147,1e5,1.2e5)),"no drop: silent");
+    }
+
     @Test void theOtherSourcesFollowTheirLaws() {
         // A vent: Lighthill's u⁸, loud at 100 m/s, nothing at 10 m/s (1 m² of air).
         assertEquals(111.2,Noise.vent(120,1.2,1),.2);
