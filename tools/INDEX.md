@@ -25,6 +25,7 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 | [rotating-machinery/](rotating-machinery/README.md) | Machine-law quick checks and campaigns, worked numbers, W2 hold traces and probes | `2026-11-03-rotating-machinery` | In use since 2026-11-04 |
 | [pump-sprites/](pump-sprites/README.md) | Machinery/control sprites and normal/low-detail render probes | `2026-11-03-rotating-machinery`, `2026-11-06-simulator-sizing` | In use since 2026-11-04 |
 | [still-sprites/](still-sprites/README.md) | Batch still sprites and textured still renders | `2026-11-09-batch-distiller` | In use since 2026-11-09 |
+| [batch-still-column/](batch-still-column/README.md) | B3 measurement: the bubble-point column candidate against V3 | `2026-11-09-batch-distiller` | Kept for reference since 2026-11-10 |
 | [machine-parts/](machine-parts/README.md) | Flat 16 x 16 machine part item icons (the pump repair kit) | `2026-11-03-rotating-machinery` | In use since 2026-11-04 |
 | [machine-sounds/](machine-sounds/README.md) | Original pump, compressor, motor and steam-turbine loops (authoring only) | `2026-11-03-rotating-machinery` | In use since 2026-11-04 |
 | [machine-nozzle-probe/](machine-nozzle-probe/README.md) | Which nozzle pipe blocks move when machines lose their drawn drivers | `2026-11-03-rotating-machinery` | In use since 2026-11-03 |
