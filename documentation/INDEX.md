@@ -14,8 +14,8 @@ Status words:
 
 | Batch | Purpose | Status |
 |---|---|---|
-| [2026-11-10-chimney](2026-11-10-chimney/README.md) | Steel and brick chimneys releasing gas and particulates to the atmosphere | In progress since 2026-11-10 |
-| [2026-11-10-vacuum-pump](2026-11-10-vacuum-pump/README.md) | Liquid ring and dry screw vacuum pump casings on the shaft trains; the pump on a vacuum column's receiver | In progress since 2026-11-10 |
+| [2026-11-10-chimney](2026-11-10-chimney/README.md) | Steel and brick chimneys releasing gas and particulates to the atmosphere | Merged into the custom-shader-system batch 2026-11-10 (44886656a); with it to main |
+| [2026-11-10-vacuum-pump](2026-11-10-vacuum-pump/README.md) | Liquid ring and dry screw vacuum pump casings on the shaft trains; the pump on a vacuum column's receiver | Merged into the custom-shader-system batch 2026-11-10 (682d7b56e); liquid ring redraw in progress |
 | [2026-11-10-steam-ejector-flow](2026-11-10-steam-ejector-flow/README.md) | Steam ejector as a flow element (motive steam through its throat) and its jet sound | In progress since 2026-11-10 |
 | [2026-11-10-rigid-reservoir](2026-11-10-rigid-reservoir/README.md) | Closed vessels rigid once filled (D54 bag only until then) | In progress since 2026-11-10 |
 | [2026-11-10-custom-shader-system](2026-11-10-custom-shader-system/README.md) | Shader-pack-safe effects (flare, plumes, still), normal-mapped instrument wiring first, config switch | In progress since 2026-11-10 |
