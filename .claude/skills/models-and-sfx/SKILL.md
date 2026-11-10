@@ -50,8 +50,9 @@ batches. The owner judges models on rendered drawings and judges sounds by ear, 
   stack top or an open fan ring is dark.
 - Proportions come from the real machine. A stack is tall and slender above a transition piece, not a squat silo.
   Ducts join what they feed, and no part floats in the air.
-- Keep one free block between nozzle pipe blocks on new models. Leave large columns and gasifiers alone; report their
-  defects instead.
+- Nozzle pipe blocks may stand next to each other. The owner lifted the old one-free-block rule on 2026-11-10. Lay
+  nozzles out as the real machine has them, and keep existing layouts as they are. Leave large columns and gasifiers
+  alone; report their defects instead.
 - Saved structures refresh to the current layout (`EquipmentRefresh`). A nozzle pipe block that moves on an existing
   kind or size needs the owner's approval. When you extend a range, draw the new look only above the old range, as the
   steam turbine sections above 45 MW do, so that existing sizes keep their rows.
