@@ -1,6 +1,6 @@
 # 2026-11-10 agent instructions review
 
-Status: In progress since 2026-11-10. Option A applied on `claude/delegation-rule-refinement-e61ba6`; reaches `main` with a documentation-only merge.
+Status: Implemented 2026-11-10 (documentation-only merge to `main`).
 
 ## History
 
@@ -19,4 +19,3 @@ No game code. `AGENTS.md`, `.claude/skills/`, `.agents/skills/`, `.claude/settin
 ## Open items
 
 - Codex asks the owner to trust the project hook in `.codex/hooks.json` once.
-- Documentation-only merge to `main` on the owner's word.
