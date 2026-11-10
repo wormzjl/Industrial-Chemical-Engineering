@@ -26,5 +26,25 @@
   "turbine_running": {
     "subtitle": "subtitles.icheme.turbine_running",
     "sounds": [{ "name": "icheme:turbine_running", "stream": false }]
+  },
+  "flare_roar": {
+    "subtitle": "subtitles.icheme.flare_roar",
+    "sounds": [{ "name": "icheme:flare_roar", "stream": false }]
+  },
+  "flare_pilot": {
+    "subtitle": "subtitles.icheme.flare_pilot",
+    "sounds": [{ "name": "icheme:flare_pilot", "stream": false }]
+  },
+  "burner_roar": {
+    "subtitle": "subtitles.icheme.burner_roar",
+    "sounds": [{ "name": "icheme:burner_roar", "stream": false }]
+  },
+  "fire_draught": {
+    "subtitle": "subtitles.icheme.fire_draught",
+    "sounds": [{ "name": "icheme:fire_draught", "stream": false }]
+  },
+  "pot_boil": {
+    "subtitle": "subtitles.icheme.pot_boil",
+    "sounds": [{ "name": "icheme:pot_boil", "stream": false }]
   }
 }

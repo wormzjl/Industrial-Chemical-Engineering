@@ -29,6 +29,7 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 | [batch-still-column/](batch-still-column/README.md) | B3 measurement: the bubble-point column candidate against V3 | `2026-11-09-batch-distiller` | Kept for reference since 2026-11-10 |
 | [machine-parts/](machine-parts/README.md) | Flat 16 x 16 machine part item icons (the pump repair kit) | `2026-11-03-rotating-machinery` | In use since 2026-11-04 |
 | [machine-sounds/](machine-sounds/README.md) | Original pump, compressor, motor and steam-turbine loops (authoring only) | `2026-11-03-rotating-machinery` | In use since 2026-11-04 |
+| [process-sounds/](process-sounds/README.md) | Original flare, burner, firebox and boiling-pot loops (authoring only) | `2026-11-10-custom-shader-system` | In use since 2026-11-10 |
 | [machine-nozzle-probe/](machine-nozzle-probe/README.md) | Which nozzle pipe blocks move when machines lose their drawn drivers | `2026-11-03-rotating-machinery` | In use since 2026-11-03 |
 | [localization/](localization/README.md) | Missing-key scan and translation checks for the lang files | `2026-11-03-localization` | Implemented 2026-11-03 |
 | [dry-ice-cost/](dry-ice-cost/README.md) | Per-job cost, shadow flashes and prototypes of the cold crystal worlds | `2026-11-02-dry-ice-cost` | Implemented 2026-11-03 |

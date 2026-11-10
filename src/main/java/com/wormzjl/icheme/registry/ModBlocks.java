@@ -103,6 +103,12 @@ public final class ModBlocks {
     public static final DeferredHolder<SoundEvent,SoundEvent> MOTOR_RUNNING=loop("motor_running");
     public static final DeferredHolder<SoundEvent,SoundEvent> GENERATOR_RUNNING=loop("generator_running");
     public static final DeferredHolder<SoundEvent,SoundEvent> TURBINE_RUNNING=loop("turbine_running");
+    /** Process loops (tools/process-sounds): an elevated flare's roar and pilot hiss, a still's burner, firebox and boiling pot. */
+    public static final DeferredHolder<SoundEvent,SoundEvent> FLARE_ROAR=loop("flare_roar");
+    public static final DeferredHolder<SoundEvent,SoundEvent> FLARE_PILOT=loop("flare_pilot");
+    public static final DeferredHolder<SoundEvent,SoundEvent> BURNER_ROAR=loop("burner_roar");
+    public static final DeferredHolder<SoundEvent,SoundEvent> FIRE_DRAUGHT=loop("fire_draught");
+    public static final DeferredHolder<SoundEvent,SoundEvent> POT_BOIL=loop("pot_boil");
     private static DeferredHolder<SoundEvent,SoundEvent> loop(String name){return SOUNDS.register(name,()->SoundEvent.createVariableRangeEvent(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,name)));}
 
     private ModBlocks() {
