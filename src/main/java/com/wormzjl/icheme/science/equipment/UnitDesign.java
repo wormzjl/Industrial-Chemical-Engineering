@@ -244,6 +244,8 @@ public abstract class UnitDesign {
         DESIGNS.put(Kind.GEARBOX, new GearboxDesign());
         DESIGNS.put(Kind.FLARE_STACK, new FlareStackDesign());
         DESIGNS.put(Kind.BATCH_STILL, new BatchStillDesign());
+        DESIGNS.put(Kind.STEEL_STACK, new ChimneyDesign(com.wormzjl.icheme.science.fluid.network.Chimney.Form.STEEL));
+        DESIGNS.put(Kind.BRICK_CHIMNEY, new ChimneyDesign(com.wormzjl.icheme.science.fluid.network.Chimney.Form.BRICK));
     }
 
     /** The design of a designed kind ({@link Kind#designed()}): a storage vessel's or a unit's. */

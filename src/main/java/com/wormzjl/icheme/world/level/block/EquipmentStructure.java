@@ -225,6 +225,14 @@ public final class EquipmentStructure {
             });
             return;
         }
+        if (vessel.shape().kind().chimney()) {
+            // A chimney's tip in its top cell (batch 2026-11-10-chimney): the stack from its inlet up is the run into it.
+            FluidWorldAuthority.find(level.getServer()).ifPresent(world -> {
+                var record = world.placeChimney(position(level, node), ports(level, vessel), vessel.shape());
+                if (level.getBlockEntity(node) instanceof EquipmentShellBlockEntity entity) entity.bindIdentity(record.device().id());
+            });
+            return;
+        }
         if (vessel.shape().kind() == EquipmentShape.Kind.EJECTOR) {
             // A steam ejector set on its curve at its suction's cell (batch 2026-11-10-steam-ejector-flow): no shaft.
             FluidWorldAuthority.find(level.getServer()).ifPresent(world -> {
@@ -1416,7 +1424,7 @@ public final class EquipmentStructure {
         var device = record.device();
         var spec = record.spec();
         world.edit(device.id(), record.revision(), device.withPlacement(position(level, node), ports(level, vessel)),
-                vessel.shape().kind().mover() || vessel.shape().kind() == EquipmentShape.Kind.FLARE_STACK ? spec : new FluidDeviceSpec(vessel.shape().volume(), spec.temperature(), spec.pressure(), spec.composition(), spec.solids(), vessel.shape().levelHeight(), open(vessel), vessel.shape().fluidGeometry(),spec.tower()));
+                vessel.shape().kind().mover() || vessel.shape().kind() == EquipmentShape.Kind.FLARE_STACK || vessel.shape().kind().chimney() ? spec : new FluidDeviceSpec(vessel.shape().volume(), spec.temperature(), spec.pressure(), spec.composition(), spec.solids(), vessel.shape().levelHeight(), open(vessel), vessel.shape().fluidGeometry(),spec.tower()));
         if (oldNode != null && !oldNode.equals(node) && level.getBlockEntity(oldNode) instanceof EquipmentShellBlockEntity old && old.fluidIdentity() == device.id()) old.releaseIdentity();
         if (level.getBlockEntity(node) instanceof EquipmentShellBlockEntity entity && entity.fluidIdentity() != device.id()) entity.bindIdentity(device.id());
         ShaftParts.structure(level, vessel.origin(), vessel.shape(), device.id());

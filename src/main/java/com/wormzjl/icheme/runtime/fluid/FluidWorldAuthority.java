@@ -51,6 +51,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
     private final ElectricStores electric;
     private final FiredHeaters burners;
     private final Flares flares;
+    /** The chimneys (batch 2026-11-10-chimney). */
+    private final Chimneys chimneys;
     /** The batch stills (batch 2026-11-09-batch-distiller, W3 to W5). */
     private final Stills stills;
     /** The steam ejectors' motive slice inputs (batch 2026-11-10-steam-ejector-flow). */
@@ -170,6 +172,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         // The fired heaters' burners (batch 2026-11-09-furnace-fuel-power): the network's heating values in its conserved order.
         burners=new FiredHeaters(topology,runtime.coordinator(),electric,heatingValues(catalog,model),model.molecularWeights(),formulas(catalog,model));shafts.burners(burners);electric.moved(burners::powerMoved);
         flares=new Flares(topology,heatingValues(catalog,model),model.molecularWeights(),formulas(catalog,model));shafts.flares(flares);
+        chimneys=new Chimneys(topology,model.molecularWeights());shafts.chimneys(chimneys);
         // The batch stills (batch 2026-11-09-batch-distiller): their pots, heads and outlets share the port hooks with the columns.
         stills=new Stills(topology,registry::owner,runtime.coordinator(),runtime.coordinator()::model,electric,model.components(),model.molecularWeights(),heatingValues(catalog,model));
         ejectors=new Ejectors(runtime.coordinator()::model);
@@ -583,6 +586,23 @@ public final class FluidWorldAuthority implements AutoCloseable {
         var record=new WorldTopologyLedger.Registration(device,new FluidDeviceSpec(1,com.wormzjl.icheme.science.fluid.network.Flare.AMBIENT,101325,FluidDeviceSpec.nitrogen(catalog).composition()),0);
         submit(List.of(new WorldTopologyLedger.Edit(id,record)),Math.addExact(id,1));return record;
     }
+    /**
+     * A chimney's tip (batch 2026-11-10-chimney): a passive void at the top cell of its stack {@code node}, with its one bulk
+     * port at the gas inlet; its geometry is the stack from the inlet up, {@code shape}'s exit diameter across with its entry
+     * and exit losses ({@link com.wormzjl.icheme.science.fluid.network.Chimney#STACK_LOSS}), which the run into it carries.
+     * Its facing names its form ({@link Chimneys#form}): UP a steel stack, DOWN a brick chimney.
+     */
+    public WorldTopologyLedger.Registration placeChimney(PhysicalFluidTopology.Position node,List<PhysicalFluidTopology.Port> ports,com.wormzjl.icheme.science.equipment.EquipmentShape shape) {
+        owned();long id=topology.nextIdentity();
+        // From the inlet's centre line, half a block up its port's cell, to the top of the tip's cell.
+        double rise=Math.max(1,node.y()-ports.getFirst().cell().y()+.5);
+        var facing=shape.kind()==com.wormzjl.icheme.science.equipment.EquipmentShape.Kind.BRICK_CHIMNEY?PhysicalFluidTopology.Direction.DOWN:PhysicalFluidTopology.Direction.UP;
+        var device=new PhysicalFluidTopology.Device(id,node,TopologyCompiler.Kind.VOID,facing,
+                new PipeResistance.Geometry(rise,shape.diameter(),PipeResistance.DEFAULT_ROUGHNESS_METRES,com.wormzjl.icheme.science.fluid.network.Chimney.STACK_LOSS),new FlowControl.Passive(),ports,true,PhysicalFluidTopology.Cutoff.NONE,false,
+                PhysicalFluidTopology.ALL_FACES,0,0,null);
+        var record=new WorldTopologyLedger.Registration(device,new FluidDeviceSpec(1,298.15,com.wormzjl.icheme.science.fluid.solver.PhaseLayout.atmosphere(node.y()),FluidDeviceSpec.nitrogen(catalog).composition()),0);
+        submit(List.of(new WorldTopologyLedger.Edit(id,record)),Math.addExact(id,1));return record;
+    }
     private WorldTopologyLedger.Registration burnerRecord(long id,UnitBurners burners,long radiant) {
         var device=new PhysicalFluidTopology.Device(id,burners.node(),TopologyCompiler.Kind.VOID,PhysicalFluidTopology.Direction.NORTH,
                 new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),FlowControl.ControlValve.burner(),burners.ports(),true,PhysicalFluidTopology.Cutoff.NONE,false,
@@ -636,6 +656,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public FiredHeaters burners(){owned();return burners;}
     /** The flare stacks: their views and alarms are reads. */
     public Flares flares(){owned();return flares;}
+    public Chimneys chimneys(){owned();return chimneys;}
     /** The batch stills (batch 2026-11-09-batch-distiller). */
     public Stills stills(){owned();return stills;}
     /**
@@ -2218,6 +2239,14 @@ public final class FluidWorldAuthority implements AutoCloseable {
             if(f!=null) {
                 view=view.withFlare(new FluidView.Flare(f.massFlow(),f.heat(),f.heatingValue(),f.flameTemperature(),f.limit(),f.rated(),registration.device().geometry().diameter(),f.status().name()));
                 for(var a:f.alarms())if(!view.status().contains(a.text))view=view.withStatus(view.status()+" / "+a.text);
+            }
+        }
+        // A chimney (batch 2026-11-10-chimney): its release, gas and status; its status line names the flow and the solids.
+        if(registration.device().chimney()) {
+            var c=chimneys.view(id);
+            if(c!=null) {
+                view=view.withChimney(new FluidView.Chimney(c.massFlow(),c.solids(),c.temperature(),c.exitVelocity(),c.opacity(),c.draft(),registration.device().geometry().diameter(),c.status().name()));
+                var line=c.line();if(!view.status().contains(line))view=view.withStatus(view.status()+" / "+line);
             }
         }
         // A plain pipe's line reading (OWNER_TEST_REVIEW.md section 6): the stream it carries, as its gauge reads it.

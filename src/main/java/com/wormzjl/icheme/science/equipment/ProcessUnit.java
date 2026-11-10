@@ -3230,6 +3230,81 @@ public final class ProcessUnit {
         nozzles.add(radialSide(Role.FLARE_GAS, a, FLARE_INLET, a, plinth, m, -1, od));
     }
 
+    // ---- Chimneys (batch 2026-11-10-chimney, owner C3 A) -----------------------------------------------------------
+
+    /** A steel stack's plinth radius at least, m. */
+    static final double STACK_PLINTH = .45;
+    /** A brick chimney's wall at its top beyond the liner, m (liner, air gap, brick), and its foot's radius over its top's (owner: "wider at the foot"). */
+    static final double CHIMNEY_WALL = .3, CHIMNEY_TAPER = 1.6;
+
+    /**
+     * A self-supporting steel stack (batch 2026-11-10-chimney): its shell {@code diameter} across inside up to
+     * {@code tangentLength} on a concrete plinth 2 m high that takes the gas inlet at the front, its centre
+     * {@link com.wormzjl.icheme.science.fluid.network.Chimney#INLET} up on its pipe block's centre line, and the data socket
+     * on its side; caged ladders up the back with rest platforms at most {@link Access#MAX_CLIMB} apart and a ring platform
+     * 2 m under the top (owner: "a ladder and a platform near the top").
+     */
+    void steelStack() {
+        double d = shape.diameter(), od = d + .02, r = od / 2, top = shape.tangentLength(), plinth = Math.max(r + .15, STACK_PLINTH);
+        double a = centre(plinth + Access.MIN_DECK + .1);
+        int n = sides(od), m = sides(2 * plinth);
+        var up = Frame.of(new double[]{a, 0, a}, 1, 1);
+        mesh.prism(up, plinth, 0, 2, m, Material.SUPPORT);
+        mesh.annulus(up, r, plinth, 2, m, 1, Material.SUPPORT);
+        solids.add(Solid.rod(new double[]{a, 0, a}, 1, 0, 2, plinth, 0));
+        stack(a, a, od, n, 2, top, Material.STEELWORK, null, false);
+        mouth("stack_top", a, a, .92 * r, top);
+        // The tip registers in the top cell on the axis: the stack is the run up to it.
+        fluidPoint = new double[]{a, top - .5, a};
+        // The climb up the back, alternating either side of it, the last landing a whole ring.
+        var levels = Access.climbs(0, List.of(), (int) Math.floor(top - 2));
+        var rings = new ArrayList<Ring>();
+        for (int k = 0; k < levels.size(); k++) {
+            double in = Math.PI / 2 + (k % 2 == 0 ? -.5 : .5);
+            rings.add(k == levels.size() - 1 ? new Ring(levels.get(k), in, in, in + 2 * Math.PI) : new Ring(levels.get(k), in, Math.PI / 2 - 1.4, Math.PI / 2 + 1.4));
+        }
+        ringAccess(a, a, plinth, Access.MIN_DECK, 0, rings);
+        nozzles.add(radialSide(Role.STACK_GAS, a, com.wormzjl.icheme.science.fluid.network.Chimney.INLET, a, plinth, m, -1, Math.min(PipeSizes.MAX_OUTSIDE, od)));
+    }
+
+    /**
+     * A tapered brick or concrete chimney with a steel liner (batch 2026-11-10-chimney): its liner {@code diameter} across
+     * inside, standing 1 m proud of the shell's cap at {@code tangentLength}; the shell {@link #CHIMNEY_WALL} beyond the liner
+     * at the top and {@link #CHIMNEY_TAPER} times as wide at the foot; a railed gallery 3 m under the cap (climbed inside),
+     * an access door at the back, lightning rods on the rim, the gas inlet at the front through the foot, its centre
+     * {@link com.wormzjl.icheme.science.fluid.network.Chimney#INLET} up.
+     */
+    void brickChimney() {
+        double d = shape.diameter(), liner = d / 2 + .02, top = shape.tangentLength(), rt = d / 2 + CHIMNEY_WALL, rf = CHIMNEY_TAPER * rt;
+        double gallery = top - 3, rg = rf + (rt - rf) * gallery / top;
+        double a = centre(Math.max(rf, rg + Access.MIN_DECK) + .1);
+        int n = sides(2 * rf);
+        var up = Frame.of(new double[]{a, 0, a}, 1, 1);
+        mesh.frustum(up, rf, rt, 0, top, n, Material.CONCRETE);
+        mesh.annulus(up, liner, rt, top, n, 1, Material.CONCRETE);
+        solids.add(Solid.cone(new double[]{a, 0, a}, 1, 0, top, rf, rt, 0));
+        // The liner's head over the cap.
+        mesh.prism(up, liner, top, top + 1, n, Material.SHELL);
+        band(up, liner, top + .6, n, Material.STEELWORK);
+        mesh.annulus(up, .92 * liner, liner, top + 1, n, 1, Material.SHELL);
+        mesh.bore(up, .92 * liner, top + .7, top + 1, n, Material.SHELL);
+        mesh.annulus(up, 0, .92 * liner, top + .7, n, 1, Material.OPENING);
+        solids.add(Solid.rod(new double[]{a, 0, a}, 1, top, top + 1, liner, 0));
+        mouth("stack_top", a, a, .92 * liner, top + 1);
+        fluidPoint = new double[]{a, top + .5, a};
+        for (int k = 0; k < 3; k++) {
+            double t = 2 * Math.PI * k / 3 + Math.PI / 2, x = a + (rt - .1) * DeterministicMath.cos(t), z = a + (rt - .1) * DeterministicMath.sin(t);
+            mesh.bar(new double[]{x, top, z}, new double[]{x, top + 1.5, z}, .03, new double[]{1, 0, 0}, Material.PIPE);
+        }
+        // The gallery, two railed half rings meeting open.
+        double edge = rg + Access.MIN_DECK, step = Access.Arc.step(edge);
+        for (int k = 0; k < 2; k++)
+            platform(new Access.Arc(a, a, rg, k * Math.PI, (k + 1) * Math.PI, edge, step), gallery, Access.MIN_DECK, false, false);
+        door(a, a, rf, Math.PI / 2, 1.2, .45, 1);
+        double inlet = rf + (rt - rf) * com.wormzjl.icheme.science.fluid.network.Chimney.INLET / top;
+        nozzles.add(radialSide(Role.STACK_GAS, a, com.wormzjl.icheme.science.fluid.network.Chimney.INLET, a, inlet, n, -1, PipeSizes.MAX_OUTSIDE));
+    }
+
     // ---- Batch still (batch 2026-11-09-batch-distiller, W2; BATCH_STILL_STRUCTURE.md) ------------------------------
 
     /**

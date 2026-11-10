@@ -128,6 +128,11 @@ final class BuiltInInputs {
             // A flare (batch 2026-11-09-flare-stack): the mass flow it receives, and whether it is flaring (1) or not (0).
             out.add(ControlInput.builtIn(host, binding.node(0), "flow_rate", Sensor.Kind.FLOW, "FLARE:FLOW"));
             out.add(ControlInput.builtIn(host, binding.node(0), "flaring", Sensor.Kind.ALARM, "FLARE:FLARING"));
+        } else if (kind.chimney()) {
+            // A chimney (batch 2026-11-10-chimney, plan 3.9): its gas flow and solids flow, and whether it vents (1) or not (0).
+            out.add(ControlInput.builtIn(host, binding.node(0), "flow_rate", Sensor.Kind.FLOW, "CHIMNEY:FLOW"));
+            out.add(ControlInput.builtIn(host, binding.node(0), "solids_rate", Sensor.Kind.FLOW, "CHIMNEY:SOLIDS"));
+            out.add(ControlInput.builtIn(host, binding.node(0), "venting", Sensor.Kind.ALARM, "CHIMNEY:VENTING"));
         }
         if (kind.mover()
                 || kind == EquipmentShape.Kind.STEAM_TURBINE
@@ -161,6 +166,9 @@ final class BuiltInInputs {
         else if (kind == EquipmentShape.Kind.FLARE_STACK)
             for (var alarm : com.wormzjl.icheme.runtime.fluid.EquipmentAlarm.FLARE)
                 out.add(ControlInput.builtIn(binding.host(), binding.node(0), "alarm_" + alarm.name().toLowerCase(Locale.ROOT), Sensor.Kind.ALARM, "ALARM:" + alarm.name()));
+        else if (kind.chimney())
+            for (var alarm : com.wormzjl.icheme.runtime.fluid.EquipmentAlarm.CHIMNEY)
+                out.add(ControlInput.builtIn(binding.host(), binding.node(0), "alarm_" + alarm.name().toLowerCase(Locale.ROOT), Sensor.Kind.ALARM, "ALARM:" + alarm.name()));
     }
 
     /** Whether alarm channel {@code input} is raised: its burners' alarm, or its unit's store standing for want of power. */
@@ -171,6 +179,7 @@ final class BuiltInInputs {
         if (world.registrations().containsKey(unit) && world.registrations().get(unit).device().burner()) return heater.contains(alarm);
         if (world.registrations().containsKey(unit) && world.registrations().get(unit).device().flare()) return world.flares().alarms(unit).contains(alarm);
         if (world.registrations().containsKey(unit) && world.registrations().get(unit).device().stillPot()) return world.stills().alarms(unit).contains(alarm);
+        if (world.registrations().containsKey(unit) && world.registrations().get(unit).device().chimney()) return world.chimneys().alarms(unit).contains(alarm);
         if (alarm != com.wormzjl.icheme.runtime.fluid.EquipmentAlarm.NO_POWER) return false;
         var view = world.electric().view(unit);
         return view != null && view.unpowered();
@@ -220,6 +229,7 @@ final class BuiltInInputs {
         return !input.role().startsWith("COLUMN")
                 && !input.role().startsWith("ALARM:")
                 && !input.role().startsWith("FLARE:")
+                && !input.role().startsWith("CHIMNEY:")
                 && !input.role().startsWith("STILL:")
                 && !input.role().equals("REFLUX")
                 && !input.role().startsWith("AIR:")
@@ -281,6 +291,17 @@ final class BuiltInInputs {
             if (flare != null) {
                 value = input.role().equals("FLARE:FLOW") ? flare.massFlow()
                         : flare.status() == com.wormzjl.icheme.runtime.fluid.Flares.Status.FLARING || flare.status() == com.wormzjl.icheme.runtime.fluid.Flares.Status.OVER_CAPACITY ? 1 : 0;
+                tick = world.onlineTick();
+                quality = Instrument.Availability.AVAILABLE;
+            }
+        } else if (input.role().startsWith("CHIMNEY:")) {
+            var chimney = world.chimneys().view(input.source());
+            if (chimney != null) {
+                value = switch (input.role()) {
+                    case "CHIMNEY:FLOW" -> chimney.massFlow();
+                    case "CHIMNEY:SOLIDS" -> chimney.solids();
+                    default -> chimney.massFlow() >= com.wormzjl.icheme.science.fluid.network.Chimney.NO_FLOW ? 1 : 0;
+                };
                 tick = world.onlineTick();
                 quality = Instrument.Availability.AVAILABLE;
             }

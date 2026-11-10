@@ -218,6 +218,14 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         flares = Objects.requireNonNull(value);
     }
 
+    /** The chimneys (batch 2026-11-10-chimney): book what they released. */
+    private Chimneys chimneys;
+
+    /** Installs the chimneys. */
+    public void chimneys(Chimneys value) {
+        chimneys = Objects.requireNonNull(value);
+    }
+
     /** Installs the fired heaters' burners. */
     public void burners(FiredHeaters value) {
         burners = Objects.requireNonNull(value);
@@ -580,6 +588,11 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         if (burners != null) burners.booked(island, start, end, result);
         // The flares' flow, heat and status.
         if (flares != null) flares.booked(start, end, result);
+        // The chimneys' release and status.
+        if (chimneys != null) {
+            chimneys.sync();
+            chimneys.booked(start, end, result);
+        }
         // The pumps' wear over the span (W10b).
         if (health != null) health.booked(island, start, end, result);
         if (unitOfDevice.isEmpty()) return;
