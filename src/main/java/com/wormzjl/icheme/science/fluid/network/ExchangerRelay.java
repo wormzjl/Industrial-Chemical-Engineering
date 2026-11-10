@@ -84,6 +84,8 @@ public final class ExchangerRelay {
      * whose other side is a running column's condenser (batch 2026-10-28-column-operation, C6b) reads no stream but a
      * {@code ceiling} (K, 0 for none): it takes the heat in transit the column owes it, its outlet no warmer than that; its
      * {@code heatRate} is then the heat the column asks its water to take, W, which a feed valve the column sets carries (U2).
+     * A side that gives a running column heat (W4, a reboiler's tubes, {@link #heating}) reads its floor in the ceiling's place
+     * and a negative {@code heatRate}, the heat it is asked to give.
      */
     public record Read(@Nullable Partner partner,boolean stopped,double transitDue,double partnerSeconds,double sitOut,@Nullable Operation operation,double heatRate,double ceiling) {
         public Read {if(!Double.isFinite(transitDue)||!(partnerSeconds>=0)||!Double.isFinite(partnerSeconds)||!(sitOut>=0&&sitOut<=1)||!Double.isFinite(heatRate)||!(ceiling>=0)||!Double.isFinite(ceiling))throw new IllegalArgumentException("Invalid side read");}
@@ -308,7 +310,9 @@ public final class ExchangerRelay {
      * A side whose other side is a running column's condenser (C6b, plan section 10): no cells move (the column is no stream),
      * and the give-back is all the heat the column owes over the slice, an enthalpy shift on the side's whole flow, scaled
      * down so that its outlet at the slice start stays at or below the ceiling (the rest stays owed, and the column, finding
-     * its condenser short, cuts its throughput). None without flow.
+     * its condenser short, cuts its throughput). None without flow. A column's heating side (W4, {@link Read#heating}: a
+     * reboiler's tubes) is the same with the other sign: the transit due is negative, the shift takes heat from the stream,
+     * and its outlet stays at or above the floor the read carries in the ceiling's place.
      */
     static HeatSide column(HeatSide own,Stream stream,Read read,double seconds) {
         var still=controlled(own,stream,null,0,read);double mass=Math.abs(stream.massFlow());

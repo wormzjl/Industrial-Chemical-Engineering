@@ -62,7 +62,7 @@ class ColumnRunTest {
     private static double sum(double[] n){double s=0;for(double v:n)s+=v;return s;}
 
     private record Rig(EventPathWorld world,ColumnOperation ops,Counting counting,long unit,long feed,long product,long tank,long steamSource,long waterSource,long tube,long shell,long waterValve,
-                       long utilitySource,long utilityTube,long utilityShell){}
+                       long utilitySource,long utilityTube,long utilityShell,long utilityValve){}
     /** A 3 bar nitrogen feed line into a feed port, a distillate port out to a tank, a table sending everything to the distillate; jobs taking {@code lag} ticks. */
     private Rig rig(int lag){return rig(lag,null);}
     private Rig rig(int lag,Fake solves){return rig(lag,solves,false,false);}
@@ -94,9 +94,12 @@ class ColumnRunTest {
             if(k==0&&!Double.isNaN(waterValveBore)){waterValve=world.place(6,64,4,Kind.VALVE,Direction.EAST,new FlowControl.ControlValve(FlowControl.ValveSource.MASS_FLOW,.05,new UUID(5,5),1),null,waterValveBore);world.place(7,64,4,Kind.PIPE,Direction.EAST,.05);end=8;}
             world.place(end,64,4+8*k,Kind.VOID,Direction.EAST,new FluidDeviceSpec(1,300,200000,water),.05);}
         // A reboiler's heating or a pumparound cooler's water (W4): one line on row 20 through an exchanger's tubes, its shell held by the column.
-        long utilitySource=0;
+        long utilitySource=0,utilityValve=0;
         if(utility!=null){utilitySource=world.place(0,64,20,Kind.GENERATOR,Direction.EAST,new FluidDeviceSpec(1,utilityTemperature,utilityPressure,water),.05);
-            world.place(1,64,20,Kind.PIPE,Direction.EAST,.05);world.place(5,64,20,Kind.PIPE,Direction.EAST,.05);world.place(6,64,20,Kind.VOID,Direction.EAST,new FluidDeviceSpec(1,300,200000,water),.05);}
+            world.place(1,64,20,Kind.PIPE,Direction.EAST,.05);world.place(5,64,20,Kind.PIPE,Direction.EAST,.05);int end=6;
+            // With a bore for its valve, a flow station on the return the column sets (W4: a reboiler's tubes in the COLUMN mode).
+            if(!Double.isNaN(utilityValveBore)){utilityValve=world.place(6,64,20,Kind.VALVE,Direction.EAST,new FlowControl.ControlValve(FlowControl.ValveSource.MASS_FLOW,.05,new UUID(6,6),1),null,utilityValveBore);world.place(7,64,20,Kind.PIPE,Direction.EAST,.05);end=8;}
+            world.place(end,64,20,Kind.VOID,Direction.EAST,new FluidDeviceSpec(1,300,200000,water),.05);}
         // The steam line is sized for its 0.1 mol/s (1 cm): a 5 cm valve regulating 6 g/s from 3 to 1.5 bar holds its island (README, open items).
         if(steam){steamSource=world.place(0,64,2,Kind.GENERATOR,Direction.EAST,new FluidDeviceSpec(1,450,300000,water),.05);world.place(1,64,2,Kind.PIPE,Direction.EAST,.01);steamValve=world.place(2,64,2,Kind.VALVE,Direction.EAST,FluidDeviceSpec.nitrogen(world.catalog),.01);}
         var ops=new ColumnOperation(world.ledger,world.registry,world.coordinator,model.components(),model.molecularWeights());var counting=new Counting(ops,world);world.coordinator.ports(counting);
@@ -132,6 +135,7 @@ class ColumnRunTest {
         world.registry.submit(edits,last+1,null);
         // The water valve's lines complete (U2): the column sets it.
         if(waterValve!=0)world.coordinator.operations(Map.of(PhysicalFluidTopology.sideIdentity(tube),com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Operation.column(waterValve,com.wormzjl.icheme.science.equipment.HeatSides.WATER_RANGE)));
+        if(utilityValve!=0)world.coordinator.operations(Map.of(PhysicalFluidTopology.sideIdentity(utilityTube),com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Operation.column(utilityValve,com.wormzjl.icheme.science.equipment.HeatSides.WATER_RANGE)));
         if(solves!=null){solves.model=model;ops.solves(solves);}
         ops.refresh();world.columns=ops;
         if(solves==null){var s=liquid?waterTable(model,setpoints,productPort):table(model,setpoints,setpoints.steamPerFeed(),productPort);var t=s.table();
@@ -145,12 +149,12 @@ class ColumnRunTest {
                                 Double.isNaN(waterBelow)?SplitTable.WATER_NEVER:waterBelow,airArea);
             }
             ops.table(unit,t,s.enthalpy());}
-        return new Rig(world,ops,counting,unit,feed,product,tank,steamSource,waterSource,tube,shell,waterValve,utilitySource,utilityTube,utilityShell);
+        return new Rig(world,ops,counting,unit,feed,product,tank,steamSource,waterSource,tube,shell,waterValve,utilitySource,utilityTube,utilityShell,utilityValve);
     }
     /** A rig's utility line (W4): a reboiler's heating, or the first pumparound's cooler. */
     private enum Utility { REBOILER, PUMPAROUND }
     /** The rig's utility line, or none; its fluid (water), K and Pa; whether its unit names the side (false: a unit saved before W4). */
-    private Utility utility;private double utilityTemperature=450,utilityPressure=300000;private boolean utilitySaved=true;
+    private Utility utility;private double utilityTemperature=450,utilityPressure=300000,utilityValveBore=Double.NaN;private boolean utilitySaved=true;
     /** The rig's reboiler duty and its pumparound's removal, J per mol of feed. */
     private double reboilerPerFeed=400,pumparoundPerFeed=400;
     /** A liquid water feed on the rig's line through a pump, ahead of its boundary valve. */
@@ -1120,6 +1124,30 @@ class ColumnRunTest {
         String status=r.ops().status(r.unit());
         assertTrue(status.startsWith("RUNNING")||status.startsWith("LIMITED: outlet"),status);
         assertTrue(r.world().held.isEmpty(),"no island held: "+r.world().held);
+    }
+    /**
+     * W4: a reboiler's tubes in the COLUMN mode with a complete flow station: the column sets the steam's valve to carry its
+     * duty from the steam's inlet down to the floor (the bottoms plus the approach), the heat rate over h(inlet) − h(floor),
+     * and the heat closes against the steam's island.
+     */
+    @Test void aReboilersSteamValveCarriesItsDutyDownToTheFloor() {
+        utility=Utility.REBOILER;reboilerPerFeed=4e4;utilityValveBore=.005;
+        var r=rig(0);var world=r.world();world.runTo(4000);
+        var last=r.ops().last(r.unit());double q=last.reboiler()/CYCLE_SECONDS;
+        double target=Double.NaN,p=Double.NaN;long side=PhysicalFluidTopology.sideIdentity(r.utilityTube());
+        for(var island:world.coordinator.snapshots())for(var pipe:island.graph().pipes()) {
+            if(pipe.control() instanceof FlowControl.ControlValve law&&island.graph().reservoirs().get(pipe.first()).id()==r.utilityValve())target=law.massTarget();
+            if(pipe.id()==side)p=island.graph().reservoirs().get(pipe.first()).state().pressure();
+        }
+        double floor=330+com.wormzjl.icheme.science.equipment.HeatSides.WATER_APPROACH;
+        double expected=q/(specific(world.model,utilityTemperature,p)-specific(world.model,floor,p));
+        String status=r.ops().status(r.unit());
+        System.out.printf(Locale.ROOT,"W4_VALVE steam=%.1f K at %.0f Pa duty=%.1f W floor=%.2f K target=%.6f kg/s expected=%.6f kg/s | %s%n",utilityTemperature,p,q,floor,target,expected,status);
+        assertEquals(expected,target,.03*expected,"the valve carries the duty down to the floor");
+        var heat=utilityHeat(r);double booked=world.ledger.column(r.unit()).totals().reboiler();
+        assertEquals(booked,-(heat[0]+heat[1]),1e-6*booked,"the steam gave it or owes it");
+        assertTrue(status.startsWith("RUNNING")||status.startsWith("LIMITED: outlet"),status);
+        assertTrue(world.held.isEmpty(),"no island held: "+world.held);
     }
     /** W4, decision D1: a reboiler whose steam is lost cannot heat; the heat owed fills its hold and the feed is cut, HEATING LIMITED, no solve. */
     @Test void aShortReboilerUtilityLimitsTheColumn() {

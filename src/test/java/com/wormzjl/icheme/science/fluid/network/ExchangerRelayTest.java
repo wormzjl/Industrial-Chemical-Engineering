@@ -68,4 +68,25 @@ class ExchangerRelayTest {
         var owed=ExchangerRelay.plan(own,flowing,partner,new ExchangerRelay.Read(null,true,1e6,5,0),5);
         assertEquals(0,owed.giveBack(),"a hot stream is not heated past its own inlet");
     }
+    /**
+     * W4 (batch 2026-11-10-column-failure-modes): a column's heating side, a reboiler's tubes, gives the heat it owes the
+     * column over the slice, no further than keeps its outlet at the floor (the bottoms plus the approach); the rest stays
+     * owed. The cooling read is the same law with the other sign: its outlet stops at the ceiling.
+     */
+    @Test void aColumnsHeatingSideGivesItsDueDownToTheFloor() {
+        var own=side(10,2000);
+        var hot=new ExchangerRelay.Stream(liquid(2000),h(400),2,own,true);
+        var read=ExchangerRelay.Read.heating(-1e5,5,350,4e4);
+        assertTrue(read.gives());assertEquals(-4e4,read.heatRate(),0.,"the heat it is asked to give, negative");
+        var planned=ExchangerRelay.plan(own,hot,null,read,5);
+        assertEquals(-1e5/5,planned.heat(hot.curve(),hot.inlet(),2),1e-6*1e5,"the whole due over the slice, given");
+        var deep=ExchangerRelay.plan(own,hot,null,ExchangerRelay.Read.heating(-1e8,5,350,4e4),5);
+        assertEquals(h(350),hot.inlet()+deep.heat(hot.curve(),hot.inlet(),2)/2,1e-6,"a debt past the floor: the outlet stops at the floor");
+        var cold=new ExchangerRelay.Stream(liquid(2000),h(340),2,own,true);
+        assertEquals(0,ExchangerRelay.plan(own,cold,null,read,5).giveBack(),0.,"a stream under the floor gives nothing");
+        var cooling=ExchangerRelay.Read.column(1e8,5,350,4e4);
+        assertFalse(cooling.gives());
+        var water=new ExchangerRelay.Stream(liquid(2000),h(300),2,own,true);
+        assertEquals(h(350),water.inlet()+ExchangerRelay.plan(own,water,null,cooling,5).heat(water.curve(),water.inlet(),2)/2,1e-6,"the water's outlet stops at its ceiling");
+    }
 }
