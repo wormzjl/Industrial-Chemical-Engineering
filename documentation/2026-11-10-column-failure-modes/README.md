@@ -23,6 +23,7 @@ Status: In progress since 2026-11-10 (decisions taken; execution in five stages,
 - 2026-11-10: merge preparation (owner: "claude/custom-shader-system-caff9e will merge first, prepare"), see [MERGE_PREP_REVIEW.md](MERGE_PREP_REVIEW.md): `16829d22e` the shader branch (`e07461dee`, to merge as 0.25.0) merged into this branch; its fluid facts schemas 17 to 20 stand and this batch's two steps (the stage 3 and 4 lines above name them 17 and 18) are one schema 21, corpus `compat/fluid/schema-21/` (`45039eac9`); both alarm sets kept. `0893d2339` the translation commit. Tooling cleanup: `tools/column-failure-modes/`. `CHANGELOG.md` entry under `[Unreleased]`; proposed version 0.26.0. Targeted runs: compile of the three source sets, `FluidFactsCompatTest` 19/19. The final lane waits for the shader branch on `main`.
 
 - 2026-11-10: the code guide (`428ac0633`, Opus subagent, 13 files), then main 0.25.0 (`833942033`) merged in at `33d018c0f` (owner: "main is ready, prepare"): two code guide snapshot lines resolved, this batch's CHANGELOG lines under `[Unreleased]`; the three source sets compile. The final lane's selection is in [MERGE_PREP_REVIEW.md](MERGE_PREP_REVIEW.md); the lane has not run.
+- 2026-11-10: final lane on `1d872d2f9` (sub-thread, Opus medium, once), see [FINAL_LANE_REVIEW.md](FINAL_LANE_REVIEW.md): 2771 tests in 423 classes, 0 failures (`test` ran whole: its filter was too long); chain-100 exact; GameTests 88/88; campaign cold 991/1000, bundled random 990/1000 (575 F fixed by main, 514 X to E9), bundled defaults 1000/1000; no new holds, no new budget holds, nothing replayed. `MIXED_GAS_COST` newtonSolves 297 to 313 against the 0.25.0 lane (which predates main's `PassiveStepSolver` fixes). Archive `tools/merge-lane/logs/column-failure-modes-final-lane-logs-2026-11-10.tar.gz` (main checkout).
 
 ## Documents
 
@@ -31,6 +32,7 @@ Status: In progress since 2026-11-10 (decisions taken; execution in five stages,
 - [EXECUTION_PLAN.md](EXECUTION_PLAN.md): the decisions in force, the rules for every stage, stages 1 to 5 with their steps, tests and done lines, the test world's plant and script.
 - [MANUAL_TEST.md](MANUAL_TEST.md): the stage 5 world, its named parts, the 13 cases as player actions, what is not covered.
 - [MERGE_PREP_REVIEW.md](MERGE_PREP_REVIEW.md): the merge preparation: the shader branch merged in, facts schema 21, formats, translations, tooling, what is left before the merge.
+- [FINAL_LANE_REVIEW.md](FINAL_LANE_REVIEW.md): the final lane on `1d872d2f9` against the 0.25.0 lane: tests, chain-100, GameTests, campaign holds, junction lines.
 - [MEMBER_POWER_NOTE.md](MEMBER_POWER_NOTE.md): how a held member's power was booked before stage 4, and the change that books a running column's fans and pumps.
 
 ## Code areas
