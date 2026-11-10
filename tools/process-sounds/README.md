@@ -33,7 +33,7 @@ Then copy the `.ogg` files into `src/main/resources/assets/icheme/sounds/`. The 
 
 ## Entry points
 
-`make_loops.py <output folder>`; `valve_candidates.py <output folder>` (the valve candidates, 48 kHz); `ejector_candidates.py <output folder>` (the steam ejector candidates J1 to J3, 48 kHz, batch 2026-11-10-steam-ejector-flow).
+`make_loops.py <output folder>`; `valve_candidates.py <output folder>` (the valve candidates, 48 kHz); `ejector_candidates.py <output folder>` (the steam ejector candidates J1 to J3, 48 kHz, batch 2026-11-10-steam-ejector-flow); `valve_turn_candidates.py <output folder>` (the hand valve turn one-shots A to C, 48 kHz).
 
 ## History
 
@@ -52,3 +52,8 @@ Then copy the `.ogg` files into `src/main/resources/assets/icheme/sounds/`. The 
 - 2026-11-10: owner, "valve sound is not good": `valve_candidates.py` (gas A/B/C, liquid L1/L2, flashing F1/F2). Owner: gas stays; L2 for a cavitating valve and pump (copied over `pump_cavitation.ogg`, 48,873 bytes); "F1 moderate" for a flashing valve (`valve_flashing.ogg`, 48,712 bytes); "Switch to L1" for a plain liquid valve (`valve_liquid.ogg`, 31,211 bytes). The loop is chosen by σ (owner: option A, `PassiveStepSolver.cavitation`).
 - 2026-11-10 (batch 2026-11-10-steam-ejector-flow): `ejector_candidates.py`, a steam ejector's motive jet: J1 a steady 2 to 8 kHz hiss over a 100 to 400 Hz diffuser rumble 12 dB under it (42,362 bytes, RMS 0.0887, peak 0.39, seam step 0.034 against 0.060), J2 brighter with a faint 3 kHz screech (41,889 bytes, RMS 0.0886, seam step 0.154 against 0.073, codec noise at the seam), J3 rumble-forward with a 0.3 Hz swell (39,270 bytes, RMS 0.0901, seam step 0.017 against 0.035); in the main checkout's `research/2026-11-10-steam-ejector-flow/sounds/`. J1 stood in as `ejector_jet.ogg` until the owner picked.
 - 2026-11-10: the owner picked **J2** ("J2"): `ejector_J2_bright_screech.ogg` is `assets/icheme/sounds/ejector_jet.ogg`.
+- 2026-11-10 (owner: "add turning sound and animation for hand valve", "Synthesised candidates"): `valve_turn_candidates.py`, a hand valve's quarter turn, each a packing stick-slip squeak then the stop lug's strike, peak 0.7 as the pipe knock, silent ends, in `tmp/valve-turn/`:
+  - A `valve_turn_A_squeak_clunk`: 0.9 s, 10,332 bytes, RMS 0.079; a 620 to 760 Hz squeak at 28 slips a second, a clunk at 0.68 s (rings 1.25, 2.9, 4.7 kHz, 180 Hz body).
+  - B `valve_turn_B_grind_thunk`: 1.1 s, 14,271 bytes, RMS 0.078; a gritty scrape at 45 slips a second, a heavier thunk at 0.82 s (95 Hz body).
+  - C `valve_turn_C_chirp_clink`: 0.65 s, 8,310 bytes, RMS 0.064; a brisk 950 to 1250 Hz chirp, a light clink at 0.41 s.
+  - A stands in as `assets/icheme/sounds/valve_turn.ogg` until the owner picks.

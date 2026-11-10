@@ -126,6 +126,8 @@ public final class ModBlocks {
     public static final DeferredHolder<SoundEvent,SoundEvent> PIPE_KNOCK=loop("pipe_knock");
     /** A steam ejector's motive jet (batch 2026-11-10-steam-ejector-flow). */
     public static final DeferredHolder<SoundEvent,SoundEvent> EJECTOR_JET=loop("ejector_jet");
+    /** A hand valve's quarter turn at the click, a one-shot (owner 2026-11-10: tools/process-sounds/valve_turn_candidates.py). */
+    public static final DeferredHolder<SoundEvent,SoundEvent> VALVE_TURN=loop("valve_turn");
     private static DeferredHolder<SoundEvent,SoundEvent> loop(String name){return SOUNDS.register(name,()->SoundEvent.createVariableRangeEvent(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,name)));}
 
     private ModBlocks() {
