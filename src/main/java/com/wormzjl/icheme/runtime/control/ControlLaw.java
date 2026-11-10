@@ -270,9 +270,9 @@ final class ControlLaw {
         double height = s.unit() == Sensor.Unit.HEIGHT_PERCENT ? s.target() * reading.span() / 100 : s.target();
         if (height > reading.span()) return Decision.noSetpoint("TARGET OUT OF RANGE");
         double volume = state.phaseVolumes()[0] + state.phaseVolumes()[1] + state.solids().volume();
-        double flow = Math.max(0, valve.volumeFlow());
+        double flow = Math.abs(valve.volumeFlow()), density = feedDensity(valve.massFlow(), valve.volumeFlow());
         // The feed's density from its valve's pipe; with nothing flowing, none to turn a volume into mass.
-        if (!(flow > 1e-12) || !(valve.massFlow() > 1e-12)) return Decision.noSetpoint("NO LEVEL BALANCE");
+        if (!(flow > 1e-12) || !(density > 0)) return Decision.noSetpoint("NO LEVEL BALANCE");
         var previous = levels.get(panel.id());
         double elapsed = 0, prior = volume;
         if (previous != null && previous.sensor().equals(sensor.instance()) && previous.output() == s.output() && reading.tick() > previous.tick()) {
@@ -282,7 +282,16 @@ final class ControlLaw {
         double requested = InventoryControl.target(volume, tank.geometry().volumeAt(height), flow, prior, elapsed, ControlService.CADENCE / 20.0, true);
         if (previous == null || reading.tick() > previous.tick())
             levels.put(panel.id(), new LevelSample(sensor.instance(), s.output(), reading.tick(), volume));
-        return Decision.columnFeed(unit, levelFeed(Math.max(0, requested), valve.massFlow() / flow, molarMass));
+        return Decision.columnFeed(unit, levelFeed(Math.max(0, requested), density, molarMass));
+    }
+
+    /**
+     * A column feed valve's density, kg/m³, from its pipe reading's mass and volume flow; NaN where nothing flows. The
+     * magnitudes: a reading's sign is its pipe run's compiled sense, and a running column's feed flows only into it.
+     */
+    static double feedDensity(double massFlow, double volumeFlow) {
+        double v = Math.abs(volumeFlow), m = Math.abs(massFlow);
+        return v > 1e-12 && m > 1e-12 ? m / v : Double.NaN;
     }
 
     /** A flow loop's planned feed, mol/s: the target mass flow, kg/s, over the feed's molar mass, kg/mol (W6.3). */

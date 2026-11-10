@@ -475,4 +475,16 @@ class ControlSystemTest {
         assertEquals(80, ControlLaw.levelFeed(.025, 800, .25), 1e-12, "0.025 m³/s at 800 kg/m³ of a 250 g/mol feed is 80 mol/s");
         assertEquals(0, ControlLaw.levelFeed(-.1, 800, .25), 0);
     }
+
+    /**
+     * A level loop on a column reads its feed valve's density from the pipe whatever the pipe run's sense (batch
+     * 2026-11-10-column-failure-modes, stage 5 case 12: a run compiled against the flow read -9.6 kg/s, and the loop
+     * answered NO LEVEL BALANCE while the feed ran).
+     */
+    @Test
+    void aColumnLevelLoopReadsItsFeedValveEitherWay() {
+        assertEquals(800, ControlLaw.feedDensity(8, .01), 1e-9);
+        assertEquals(800, ControlLaw.feedDensity(-8, -.01), 1e-9, "a run compiled against the flow");
+        assertTrue(Double.isNaN(ControlLaw.feedDensity(0, 0)), "nothing flowing: no density");
+    }
 }
