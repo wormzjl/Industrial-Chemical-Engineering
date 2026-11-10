@@ -3390,7 +3390,8 @@ public final class ProcessUnit {
      * box's sockets open: the 1500 and 2000 L rings are narrower. The terminal box stands on a stand in
      * the right column's centre seen from the front, on the middle row (owner, 2026-11-10: the FE socket faced the skirt,
      * no cable could reach it): its pilot lamp outward, its data socket to the front and its FE socket to the back, a
-     * conduit straight into the skirt.
+     * conduit straight into the skirt. The box is 0.52 m wide (owner, 2026-11-10): the pot and skirt are one cylinder
+     * that bows 0.08 m across a plate, so the still's nameplate ({@link Nameplate}, 0.5 m) sits on the box's outward face.
      */
     private void stillSkirt(StillPlan p) {
         double x = StillPlan.POT_X, z = StillPlan.POT_Z, r = p.d() / 2, top = p.bottom();
@@ -3406,7 +3407,7 @@ public final class ProcessUnit {
             mesh.annulus(vent, 0, .035, -.03, 8, 1, Material.OPENING);
         }
         round(x, z, 0, top, r, 1);
-        double[] lo = {.38, .2, z - .18}, hi = {.62, .8, z + .18};
+        double[] lo = {.38, .2, z - .26}, hi = {.62, .8, z + .26};
         box(new double[]{.44, 0, z - .1}, new double[]{.56, .2, z + .1}, ALL_FACES & ~4, Material.STEELWORK, true);
         box(lo, hi, ALL_FACES, Material.MACHINE, true);
         mesh.disc(new Frame(new double[]{lo[0] - .002, .7, z}, new double[]{-1, 0, 0}, new double[]{0, 0, 1}), .025, 0, 8, 1, Material.GLASS);
