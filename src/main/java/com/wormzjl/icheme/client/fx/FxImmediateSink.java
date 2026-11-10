@@ -16,13 +16,14 @@ final class FxImmediateSink implements FxSink {
     /** Flipbook frames per second. */
     private static final double FRAME_RATE = 12;
 
-    private final VertexConsumer out;
-    private final PoseStack.Pose pose;
-    private final double ox, oy, oz;
-    private final float leftX, leftY, leftZ, upX, upY, upZ;
-    private final double ease, seconds, daylight, driftPeriod, growth;
-    private final FxKind kind;
-    private final int light;
+    // Set again for each emitter ({@link #reset}): the batch keeps one sink, so the per-frame draw allocates none.
+    private VertexConsumer out;
+    private PoseStack.Pose pose;
+    private double ox, oy, oz;
+    private float leftX, leftY, leftZ, upX, upY, upZ;
+    private double ease, seconds, daylight, driftPeriod, growth;
+    private FxKind kind;
+    private int light;
     private int left;
 
     /**
@@ -36,13 +37,19 @@ final class FxImmediateSink implements FxSink {
      */
     FxImmediateSink(VertexConsumer out, PoseStack.Pose pose, double[] origin, org.joml.Vector3f leftAxis, org.joml.Vector3f upAxis,
                     double ease, double seconds, double daylight, double driftPeriod, double growth, FxKind kind, int light, int quads) {
+        reset(out, pose, origin[0], origin[1], origin[2], leftAxis, upAxis, ease, seconds, daylight, driftPeriod, growth, kind, light, quads);
+    }
+
+    /** As the constructor, for the next emitter, the origin as {@code ox, oy, oz}; returns this sink. */
+    FxImmediateSink reset(VertexConsumer out, PoseStack.Pose pose, double ox, double oy, double oz, org.joml.Vector3f leftAxis, org.joml.Vector3f upAxis,
+                          double ease, double seconds, double daylight, double driftPeriod, double growth, FxKind kind, int light, int quads) {
         this.driftPeriod = driftPeriod;
         this.growth = growth;
         this.out = out;
         this.pose = pose;
-        this.ox = origin[0];
-        this.oy = origin[1];
-        this.oz = origin[2];
+        this.ox = ox;
+        this.oy = oy;
+        this.oz = oz;
         this.leftX = leftAxis.x();
         this.leftY = leftAxis.y();
         this.leftZ = leftAxis.z();
@@ -55,6 +62,7 @@ final class FxImmediateSink implements FxSink {
         this.kind = kind;
         this.light = light;
         this.left = Math.max(0, quads);
+        return this;
     }
 
     @Override

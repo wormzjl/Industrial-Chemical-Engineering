@@ -76,7 +76,39 @@ public final class FxBatch {
     private record Built(long revision, int quads, @Nullable VertexBuffer buffer, long bytes) {
     }
 
-    private record Visible(FxEmitter emitter, int quads) {
+    // ---- The per-frame working space (render thread only), reused so that a frame allocates nothing (bench 2026-11-10,
+    // FX_BENCH_REVIEW.md: about 23 KB a frame went to lists, records, boxed pixels, the comparator and streams) ----
+    private static FxEmitter[] candidates = new FxEmitter[64], visible = new FxEmitter[64];
+    private static double[] pixels = new double[64], distance = new double[64];
+    private static int[] wanted = new int[64], allotted = new int[64], order = new int[64], scratch = new int[64], quadsOf = new int[64];
+    /** Indices into {@link #visible}: farthest first ({@code sorted}); a run's members ({@code members}). */
+    private static int[] sorted = new int[64], members = new int[64];
+    /** Each emitter's frustum box, kept while its centre and radius hold. */
+    private static final Map<FxEmitter, AABB> BOUNDS = new IdentityHashMap<>();
+    private static final List<FxEmitter> DEAD = new ArrayList<>();
+    private static @Nullable RenderLevelStageEvent drawing;
+    private static final Runnable DRAW = () -> draw(drawing);
+    private static @Nullable FxEmitter probing, writing;
+    private static final java.util.function.BooleanSupplier ALIVE = () -> probing.alive();
+    private static @Nullable FxImmediateSink sink;
+    private static int writingQuads;
+    private static final Runnable WRITE = () -> writing.write(sink, writingQuads);
+
+    /** Grows the working space to hold {@code n} emitters. */
+    private static void room(int n) {
+        if (candidates.length >= n) return;
+        int size = Math.max(n, 2 * candidates.length);
+        candidates = new FxEmitter[size];
+        visible = new FxEmitter[size];
+        pixels = new double[size];
+        distance = new double[size];
+        wanted = new int[size];
+        allotted = new int[size];
+        order = new int[size];
+        scratch = new int[size];
+        quadsOf = new int[size];
+        sorted = new int[size];
+        members = new int[size];
     }
 
     private FxBatch() {
@@ -102,6 +134,7 @@ public final class FxBatch {
         EMITTERS.clear();
         for (var built : BUILT.values()) if (built.buffer() != null) built.buffer().close();
         BUILT.clear();
+        BOUNDS.clear();
         if (screenCopy != null) screenCopy.destroyBuffers();
         screenCopy = null;
         FxStats.set(FxStats.Counter.VERTEX_BYTES, 0);
@@ -128,7 +161,12 @@ public final class FxBatch {
     public static void render(RenderLevelStageEvent event) {
         if (EMITTERS.isEmpty() || event.getStage() != stage()) return;
         long started = System.nanoTime();
-        BATCH.run(() -> draw(event));
+        drawing = event;
+        try {
+            BATCH.run(DRAW);
+        } finally {
+            drawing = null;
+        }
         FxStats.add(FxStats.Counter.DRAW_NS, System.nanoTime() - started);
         FxStats.set(FxStats.Counter.REGISTERED, EMITTERS.size());
     }
@@ -148,24 +186,9 @@ public final class FxBatch {
         };
     }
 
-    /**
-     * Runs of {@code sorted} (farthest first) to draw in order: consecutive emitters that share a shader group under the
-     * SHADER path ({@code byGroup}), or a kind under the COMPATIBLE path.
-     */
-    static List<List<Visible>> runs(List<Visible> sorted, boolean byGroup) {
-        var runs = new ArrayList<List<Visible>>();
-        List<Visible> run = null;
-        int key = Integer.MIN_VALUE;
-        for (var v : sorted) {
-            int k = byGroup ? group(v.emitter().kind()) : v.emitter().kind().ordinal();
-            if (run == null || k != key) {
-                run = new ArrayList<>();
-                runs.add(run);
-                key = k;
-            }
-            run.add(v);
-        }
-        return runs;
+    /** The key a run shares: a shader group under the SHADER path ({@code byGroup}), or a kind under the COMPATIBLE path. */
+    static int runKey(FxKind kind, boolean byGroup) {
+        return byGroup ? group(kind) : kind.ordinal();
     }
 
     private static void draw(RenderLevelStageEvent event) {
@@ -187,50 +210,108 @@ public final class FxBatch {
         double reach = mc.options.getEffectiveRenderDistance() * 16.0;
         var view = ClientConfig.lodView(event.getProjectionMatrix().m11(), mc.getWindow().getHeight());
 
-        var candidates = new ArrayList<FxEmitter>();
-        var pixels = new ArrayList<Double>();
-        // Heat haze: the SHADER path only, and only with heat_haze on (owner X6 A).
-        boolean haze = path == FxPath.SHADER && ClientConfig.heatHaze();
-        for (var emitter : EMITTERS) {
-            if (FxGuard.effect(emitter.type()).disabled() || emitter.kind() == FxKind.HAZE && !haze) continue;
-            double x = emitter.x(), y = emitter.y(), z = emitter.z(), r = Math.max(.1, emitter.radius());
-            double dx = x - camera.x, dy = y - camera.y, dz = z - camera.z, distanceSqr = dx * dx + dy * dy + dz * dz;
-            if (distanceSqr > (reach + r) * (reach + r)) continue;
-            if (!frustum.isVisible(new AABB(x - r, y - r, z - r, x + r, y + r, z + r))) continue;
-            candidates.add(emitter);
-            pixels.add(view.pixels(2 * r, distanceSqr));
-        }
-        if (candidates.isEmpty()) return;
-        double[] px = new double[candidates.size()];
-        int[] wanted = new int[candidates.size()];
-        for (int i = 0; i < px.length; i++) {
-            px[i] = pixels.get(i);
-            wanted[i] = candidates.get(i).quads();
-        }
-        double density = path == FxPath.COMPATIBLE && iris.packInUse() ? FxBudget.PACK_DENSITY : 1;
-        int[] allotted = FxBudget.allot(px, wanted, density, FxBudget.FRAME_QUADS);
-        var visible = new ArrayList<Visible>();
-        for (int i = 0; i < allotted.length; i++) {
-            int quads = path == FxPath.SHADER ? FxBudget.quantize(allotted[i], wanted[i]) : allotted[i];
-            if (quads > 0) visible.add(new Visible(candidates.get(i), quads));
-        }
-        if (visible.isEmpty()) return;
-        FxStats.add(FxStats.Counter.EMITTERS, visible.size());
-        // The farthest first: translucent effects that write no depth must be drawn back to front.
-        double cx = camera.x, cy = camera.y, cz = camera.z;
-        visible.sort((a, b) -> Double.compare(distanceSqr(b.emitter(), cx, cy, cz), distanceSqr(a.emitter(), cx, cy, cz)));
+        room(EMITTERS.size());
+        int count = 0, shown = 0;
+        try {
+            // Heat haze: the SHADER path only, and only with heat_haze on (owner X6 A).
+            boolean haze = path == FxPath.SHADER && ClientConfig.heatHaze();
+            for (var emitter : EMITTERS) {
+                if (FxGuard.effect(emitter.type()).disabled() || emitter.kind() == FxKind.HAZE && !haze) continue;
+                double x = emitter.x(), y = emitter.y(), z = emitter.z(), r = Math.max(.1, emitter.radius());
+                double dx = x - camera.x, dy = y - camera.y, dz = z - camera.z, distanceSqr = dx * dx + dy * dy + dz * dz;
+                if (distanceSqr > (reach + r) * (reach + r)) continue;
+                if (!frustum.isVisible(bounds(emitter, x, y, z, r))) continue;
+                candidates[count] = emitter;
+                pixels[count] = view.pixels(2 * r, distanceSqr);
+                wanted[count] = emitter.quads();
+                count++;
+            }
+            if (count == 0) return;
+            double density = path == FxPath.COMPATIBLE && iris.packInUse() ? FxBudget.PACK_DENSITY : 1;
+            FxBudget.allot(pixels, wanted, count, density, FxBudget.FRAME_QUADS, allotted, order, scratch);
+            double cx = camera.x, cy = camera.y, cz = camera.z;
+            for (int i = 0; i < count; i++) {
+                int quads = path == FxPath.SHADER ? FxBudget.quantize(allotted[i], wanted[i]) : allotted[i];
+                if (quads <= 0) continue;
+                visible[shown] = candidates[i];
+                quadsOf[shown] = quads;
+                distance[shown] = distanceSqr(candidates[i], cx, cy, cz);
+                sorted[shown] = shown;
+                shown++;
+            }
+            if (shown == 0) return;
+            FxStats.add(FxStats.Counter.EMITTERS, shown);
+            // The farthest first: translucent effects that write no depth must be drawn back to front.
+            farthestFirst(sorted, shown, distance, scratch);
 
-        double daylight = level.getSkyDarken(partial);
-        double sunAngle = level.getSunAngle(partial);
-        float sunX = (float) -Math.sin(sunAngle), sunY = (float) Math.cos(sunAngle);
-        if (path == FxPath.SHADER) {
-            var hazes = visible.stream().filter(v -> v.emitter().kind() == FxKind.HAZE).toList();
-            if (!hazes.isEmpty()) drawShader(event, FxKind.HAZE, hazes, now, epoch, cx, cy, cz, daylight, sunX, sunY);
-            var rest = visible.stream().filter(v -> v.emitter().kind() != FxKind.HAZE).toList();
-            for (var run : runs(rest, true)) drawShader(event, run.get(0).emitter().kind(), run, now, epoch, cx, cy, cz, daylight, sunX, sunY);
-        } else {
-            for (var run : runs(visible, false)) drawCompatible(event, run.get(0).emitter().kind(), run, now, cx, cy, cz, daylight);
+            double daylight = level.getSkyDarken(partial);
+            double sunAngle = level.getSunAngle(partial);
+            float sunX = (float) -Math.sin(sunAngle), sunY = (float) Math.cos(sunAngle);
+            if (path == FxPath.SHADER) {
+                int n = 0;
+                for (int k = 0; k < shown; k++) if (visible[sorted[k]].kind() == FxKind.HAZE) members[n++] = sorted[k];
+                if (n > 0) drawShader(event, FxKind.HAZE, members, 0, n, now, epoch, cx, cy, cz, daylight, sunX, sunY);
+                n = 0;
+                for (int k = 0; k < shown; k++) if (visible[sorted[k]].kind() != FxKind.HAZE) members[n++] = sorted[k];
+                for (int from = 0, to; from < n; from = to) {
+                    int key = runKey(visible[members[from]].kind(), true);
+                    for (to = from + 1; to < n && runKey(visible[members[to]].kind(), true) == key; to++) ;
+                    drawShader(event, visible[members[from]].kind(), members, from, to, now, epoch, cx, cy, cz, daylight, sunX, sunY);
+                }
+            } else {
+                for (int from = 0, to; from < shown; from = to) {
+                    int key = runKey(visible[sorted[from]].kind(), false);
+                    for (to = from + 1; to < shown && runKey(visible[sorted[to]].kind(), false) == key; to++) ;
+                    drawCompatible(event, visible[sorted[from]].kind(), sorted, from, to, now, cx, cy, cz, daylight);
+                }
+            }
+        } finally {
+            // Hold no emitter past the frame.
+            java.util.Arrays.fill(candidates, 0, count, null);
+            java.util.Arrays.fill(visible, 0, shown, null);
         }
+    }
+
+    /** The frustum box of {@code emitter} about (x, y, z) with radius {@code r}: the kept one while it still matches. */
+    private static AABB bounds(FxEmitter emitter, double x, double y, double z, double r) {
+        var box = BOUNDS.get(emitter);
+        if (box != null && box.minX == x - r && box.minY == y - r && box.minZ == z - r && box.maxX == x + r && box.maxY == y + r && box.maxZ == z + r)
+            return box;
+        box = new AABB(x - r, y - r, z - r, x + r, y + r, z + r);
+        BOUNDS.put(emitter, box);
+        return box;
+    }
+
+    /**
+     * Sorts {@code index[0, n)} farthest first by {@code distance} (as {@code Double.compare}, reversed); stable, so equal
+     * distances keep their order, as the list sort this replaced. Insertion runs of 16, then merges through {@code scratch}.
+     */
+    static void farthestFirst(int[] index, int n, double[] distance, int[] scratch) {
+        final int run = 16;
+        for (int from = 0; from < n; from += run) {
+            int to = Math.min(n, from + run);
+            for (int i = from + 1; i < to; i++) {
+                int v = index[i], j = i - 1;
+                while (j >= from && Double.compare(distance[index[j]], distance[v]) < 0) {
+                    index[j + 1] = index[j];
+                    j--;
+                }
+                index[j + 1] = v;
+            }
+        }
+        int[] a = index, b = scratch;
+        for (int width = run; width < n; width *= 2) {
+            for (int lo = 0; lo < n; lo += 2 * width) {
+                int mid = Math.min(n, lo + width), hi = Math.min(n, lo + 2 * width), i = lo, j = mid, k = lo;
+                while (i < mid && j < hi) b[k++] = Double.compare(distance[a[i]], distance[a[j]]) < 0 ? a[j++] : a[i++];
+                while (i < mid) b[k++] = a[i++];
+                while (j < hi) b[k++] = a[j++];
+            }
+            int[] t = a;
+            a = b;
+            b = t;
+        }
+        if (a != index) System.arraycopy(a, 0, index, 0, n);
     }
 
     private static double distanceSqr(FxEmitter e, double cx, double cy, double cz) {
@@ -238,9 +319,10 @@ public final class FxBatch {
         return dx * dx + dy * dy + dz * dz;
     }
 
-    private static void drawShader(RenderLevelStageEvent event, FxKind kind, List<Visible> group, double now, double epoch,
+    /** Draws {@link #visible}{@code [run[from, to)]} on the SHADER path with {@code kind}'s shader. */
+    private static void drawShader(RenderLevelStageEvent event, FxKind kind, int[] run, int from, int to, double now, double epoch,
                                    double cx, double cy, double cz, double daylight, float sunX, float sunY) {
-        if (group.isEmpty()) return;
+        if (from >= to) return;
         var type = FxRenderTypes.shader(kind);
         var window = Minecraft.getInstance().getWindow();
         ShaderInstance shader = null;
@@ -258,9 +340,10 @@ public final class FxBatch {
             uniform(shader, "SunDirection", false, sunX, sunY, 0F);
             uniform(shader, "ScreenSize", false, (float) window.getWidth(), (float) window.getHeight());
             shader.apply();
-            for (var v : group) {
-                var emitter = v.emitter();
-                var buffer = buffer(emitter, v.quads());
+            for (int k = from; k < to; k++) {
+                var emitter = visible[run[k]];
+                int quads = quadsOf[run[k]];
+                var buffer = buffer(emitter, quads);
                 if (buffer == null) continue;
                 uniform(shader, "Origin", true, (float) (emitter.x() - cx), (float) (emitter.y() - cy), (float) (emitter.z() - cz));
                 uniform(shader, "DriftPeriod", true, (float) emitter.driftPeriod());
@@ -269,7 +352,7 @@ public final class FxBatch {
                 uniform(shader, "GlideStart", true, (float) Math.max(emitter.glideStart() - epoch, -1e6));
                 buffer.bind();
                 buffer.draw();
-                FxStats.add(FxStats.Counter.QUADS, v.quads());
+                FxStats.add(FxStats.Counter.QUADS, quads);
             }
         } finally {
             if (shader != null) shader.clear();
@@ -278,7 +361,8 @@ public final class FxBatch {
         }
     }
 
-    private static void drawCompatible(RenderLevelStageEvent event, FxKind kind, List<Visible> visible, double now,
+    /** Writes {@link #visible}{@code [run[from, to)]} of {@code kind} into the vanilla buffer source (COMPATIBLE path). */
+    private static void drawCompatible(RenderLevelStageEvent event, FxKind kind, int[] run, int from, int to, double now,
                                        double cx, double cy, double cz, double daylight) {
         var type = FxRenderTypes.compatible(kind);
         if (type == null) return;
@@ -289,16 +373,26 @@ public final class FxBatch {
         boolean wrote = false;
         long started = System.nanoTime();
         try {
-            for (var v : visible) {
-                var emitter = v.emitter();
+            for (int k = from; k < to; k++) {
+                var emitter = visible[run[k]];
+                int quads = quadsOf[run[k]];
                 if (emitter.kind() != kind) continue;
                 var consumer = buffers.getBuffer(type);
                 wrote = true;
-                double[] origin = {emitter.x() - cx, emitter.y() - cy, emitter.z() - cz};
-                var sink = new FxImmediateSink(consumer, pose, origin, camera.getLeftVector(), camera.getUpVector(),
-                        FxGlide.ease(emitter.glideStart(), now), now, daylight, emitter.driftPeriod(), emitter.puffGrowth(), kind, emitter.light(), v.quads());
-                FxGuard.effect(emitter.type()).run(() -> emitter.write(sink, v.quads()));
-                FxStats.add(FxStats.Counter.QUADS, v.quads() - sink.remaining());
+                double ox = emitter.x() - cx, oy = emitter.y() - cy, oz = emitter.z() - cz;
+                double ease = FxGlide.ease(emitter.glideStart(), now);
+                if (sink == null) sink = new FxImmediateSink(consumer, pose, new double[]{ox, oy, oz}, camera.getLeftVector(), camera.getUpVector(),
+                        ease, now, daylight, emitter.driftPeriod(), emitter.puffGrowth(), kind, emitter.light(), quads);
+                else sink.reset(consumer, pose, ox, oy, oz, camera.getLeftVector(), camera.getUpVector(),
+                        ease, now, daylight, emitter.driftPeriod(), emitter.puffGrowth(), kind, emitter.light(), quads);
+                writing = emitter;
+                writingQuads = quads;
+                try {
+                    FxGuard.effect(emitter.type()).run(WRITE);
+                } finally {
+                    writing = null;
+                }
+                FxStats.add(FxStats.Counter.QUADS, quads - sink.remaining());
             }
         } finally {
             if (wrote) FxStats.add(FxStats.Counter.BUILD_NS, System.nanoTime() - started);
@@ -337,15 +431,22 @@ public final class FxBatch {
     }
 
     private static void prune() {
-        var dead = new ArrayList<FxEmitter>();
-        for (var emitter : EMITTERS) {
-            boolean alive = FxGuard.effect(emitter.type()).test(emitter::alive, false);
-            if (!alive) dead.add(emitter);
+        try {
+            for (var emitter : EMITTERS) {
+                probing = emitter;
+                boolean alive = FxGuard.effect(emitter.type()).test(ALIVE, false);
+                if (!alive) DEAD.add(emitter);
+            }
+        } finally {
+            probing = null;
         }
-        for (var emitter : dead) remove(emitter);
+        if (DEAD.isEmpty()) return;
+        for (var emitter : DEAD) remove(emitter);
+        DEAD.clear();
     }
 
     private static void release(FxEmitter emitter) {
+        BOUNDS.remove(emitter);
         var built = BUILT.remove(emitter);
         if (built != null && built.buffer() != null) built.buffer().close();
         if (built != null) FxStats.add(FxStats.Counter.VERTEX_BYTES, -built.bytes());
@@ -368,13 +469,25 @@ public final class FxBatch {
         return screenCopy.getColorTextureId();
     }
 
-    /** Sets a float uniform if the shader has it; after {@code apply()} it must be uploaded at once. */
-    private static void uniform(ShaderInstance shader, String name, boolean upload, float... values) {
+    /** Sets a float uniform if the shader has it; after {@code apply()} it must be uploaded at once. No varargs: no array a call. */
+    private static void uniform(ShaderInstance shader, String name, boolean upload, float a) {
         var u = shader.getUniform(name);
         if (u == null) return;
-        if (values.length == 1) u.set(values[0]);
-        else if (values.length == 2) u.set(values[0], values[1]);
-        else u.set(values[0], values[1], values[2]);
+        u.set(a);
+        if (upload) u.upload();
+    }
+
+    private static void uniform(ShaderInstance shader, String name, boolean upload, float a, float b) {
+        var u = shader.getUniform(name);
+        if (u == null) return;
+        u.set(a, b);
+        if (upload) u.upload();
+    }
+
+    private static void uniform(ShaderInstance shader, String name, boolean upload, float a, float b, float c) {
+        var u = shader.getUniform(name);
+        if (u == null) return;
+        u.set(a, b, c);
         if (upload) u.upload();
     }
 }

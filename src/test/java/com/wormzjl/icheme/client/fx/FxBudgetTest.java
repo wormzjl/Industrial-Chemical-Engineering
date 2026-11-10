@@ -53,4 +53,41 @@ class FxBudgetTest {
         assertEquals(0, FxBudget.quantize(0, 48));
         for (int a = 0; a <= 48; a++) assertTrue(FxBudget.quantize(a, 48) <= a);
     }
+
+    /** Bench 2026-11-10: the per-frame form, over a prefix with reused arrays, allots as the allocating one (NaN and ties too). */
+    @Test
+    void thePerFrameFormAllotsTheSame() {
+        var random = new java.util.Random(3);
+        int[] out = new int[512], order = new int[512], scratch = new int[512];
+        for (int n : new int[]{0, 1, 7, 16, 33, 200}) {
+            double[] pixels = new double[n + 5];
+            int[] wanted = new int[n + 5];
+            for (int i = 0; i < pixels.length; i++) {
+                pixels[i] = random.nextInt(9) == 0 ? Double.NaN : random.nextInt(12);
+                wanted[i] = random.nextInt(60) - 5;
+            }
+            var expected = reference(Arrays.copyOf(pixels, n), Arrays.copyOf(wanted, n), .5, 900);
+            FxBudget.allot(pixels, wanted, n, .5, 900, out, order, scratch);
+            assertArrayEquals(expected, Arrays.copyOf(out, n), "n=" + n);
+            assertArrayEquals(expected, FxBudget.allot(Arrays.copyOf(pixels, n), Arrays.copyOf(wanted, n), .5, 900), "n=" + n);
+        }
+    }
+
+    /** The allotment as it was written before the bench (boxed indices, a comparator), the reference of the per-frame form. */
+    private static int[] reference(double[] pixels, int[] wanted, double density, int budget) {
+        int n = wanted.length;
+        Integer[] order = new Integer[n];
+        for (int i = 0; i < n; i++) order[i] = i;
+        Arrays.sort(order, java.util.Comparator.<Integer>comparingDouble(i -> Double.isNaN(pixels[i]) ? 0 : -pixels[i]).thenComparingInt(i -> i));
+        double d = Double.isNaN(density) ? 0 : Math.max(0, Math.min(1, density));
+        int left = Math.max(0, budget);
+        int[] out = new int[n];
+        for (int i : order) {
+            int wish = wanted[i] <= 0 ? 0 : Math.max(1, (int) Math.ceil(wanted[i] * d));
+            int given = Math.min(wish, left);
+            out[i] = given;
+            left -= given;
+        }
+        return out;
+    }
 }
