@@ -296,7 +296,11 @@ public final class ColumnSolve {
         var hydraulics = success.result().trayHydraulics().orElse(null);
         var flood = hydraulics == null ? SplitTable.Flood.NONE : new SplitTable.Flood(hydraulics.maximumFloodFraction() / rate, hydraulics.maximumFloodTray(),
                 hydraulics.vaporLimited(), hydraulics.totalDryPascal(), hydraulics.totalLiquidPascal());
-        var table = new SplitTable(solved.axis(), solved.products(), solved.reboilerPerFeed(), pa, condenser, reference, solved.held(), cooled, waterBelow, air, flood);
+        // Each pumparound's draw tray as solved (W4): its cooler's utility leaves the approach below it. Node n is tray n.
+        var inspection = success.result().inspection().orElse(null);
+        double[] drawTemperatures = new double[inspection == null ? 0 : input.pumparounds().size()];
+        for (int j = 0; j < drawTemperatures.length; j++) drawTemperatures[j] = inspection.nodes().get(input.pumparounds().get(j).drawTray()).temperatureKelvin();
+        var table = new SplitTable(solved.axis(), solved.products(), solved.reboilerPerFeed(), pa, condenser, reference, solved.held(), cooled, waterBelow, air, flood, drawTemperatures);
         return new Solved(table, enthalpy, success.result().warmSeed().orElse(null), solved.condenserPerFeed() * rate,
                 success.diagnostics().solvePath(), note, success.result().inspection().orElse(null), success.result().acceptanceAudit().advisoryEvidence());
     }

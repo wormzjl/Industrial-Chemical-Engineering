@@ -92,6 +92,15 @@ public final class ExchangerRelay {
         public static Read column(double transitDue,double seconds,double ceiling){return column(transitDue,seconds,ceiling,0);}
         /** {@link #column(double,double,double)} with the heat the column asks its water to take over the slice, W (U2). */
         public static Read column(double transitDue,double seconds,double ceiling,double heatRate){if(!(ceiling>0)||!(heatRate>=0))throw new IllegalArgumentException("A column partner has a ceiling");return new Read(null,false,transitDue,seconds,0,null,heatRate,ceiling);}
+        /**
+         * A running column's reboiler read by its heating utility, a kettle's tubes (W4, batch 2026-11-10-column-failure-modes):
+         * the heat it owes the column (J, negative: the side gives it) as of the slice start, the outlet's floor (K) in the
+         * place of a ceiling, and the heat the column asks the side to give over the slice, W, carried as a negative
+         * {@link #heatRate}.
+         */
+        public static Read heating(double transitDue,double seconds,double floor,double heatRate){if(!(floor>0)||!(heatRate>=0))throw new IllegalArgumentException("A column partner has a floor");return new Read(null,false,transitDue,seconds,0,null,-heatRate,floor);}
+        /** Whether this is a column's read of a side that gives it heat (its bound a floor, W4). */
+        public boolean gives(){return ceiling>0&&heatRate<0;}
         /** This read with the real valve {@code value} a side's control works (W8; U2: a column's water side). */
         public Read withOperation(@Nullable Operation value){return new Read(partner,stopped,transitDue,partnerSeconds,sitOut,value,heatRate,ceiling);}
         public Read(@Nullable Partner partner,boolean stopped,double transitDue,double partnerSeconds,double sitOut,@Nullable Operation operation){this(partner,stopped,transitDue,partnerSeconds,sitOut,operation,0);}

@@ -194,6 +194,47 @@ class ColumnCycleTest {
     }
 
     /**
+     * W4, decision D1: each duty's utility room bounds that duty alone. The reboiler's heating room cuts the feed to its share
+     * (HEATING_SHORT), a pumparound cooler's room to its share (PUMPAROUND_SHORT, with its index), the lowest share binds, and a
+     * duty with no utility side (an unbounded room) takes the cycle exactly as before W4.
+     */
+    @Test
+    void eachUtilitysRoomBoundsItsOwnDuty() {
+        var whole = table();
+        double reboiler = 30_000;
+        // The same closure with a reboiler: the solved condenser removes the reboiler's heat too.
+        var heated = new SplitTable(AXIS, whole.products(), reboiler, whole.pumparoundPerFeed(), whole.condenserPerFeed() - reboiler, whole.reference(), whole.held());
+        var feed = new Account(new double[] {300, 400, 300, 0}, -1.4e8);
+        var steam = new Account(new double[] {0, 0, 0, 1000}, -2.3e8);
+        double[] room = {1e9, 1e9, 1e9, 1e9, 1e9};
+        double demand = 100 * 5;
+        ColumnCycle.ProductEnergy energy = (k, n) -> energy(heated, k, n);
+        var a = ColumnCycle.step(heated, setpoints(), 5, feed, List.of(steam), room, ColumnCycle.Rooms.NONE.withReboiler(.25 * reboiler * demand), energy, false);
+        assertEquals(Condition.HEATING_SHORT, bound(a));
+        assertEquals(.25, a.alpha(), 1e-12, "a quarter of the reboiler's duty: a quarter of the feed");
+        var b = ColumnCycle.step(heated, setpoints(), 5, feed, List.of(steam), room, ColumnCycle.Rooms.NONE.withPumparounds(new double[] {.4 * 20_000 * demand}), energy, false);
+        assertEquals(Condition.PUMPAROUND_SHORT, bound(b));
+        assertEquals(0, b.binding().index(), "the first pumparound");
+        assertEquals(.4, b.alpha(), 1e-12);
+        var both = ColumnCycle.Rooms.NONE.withReboiler(.6 * reboiler * demand).withPumparounds(new double[] {.4 * 20_000 * demand}).withCondenser(-.7 * heated.condenserPerFeed() * demand);
+        var c = ColumnCycle.step(heated, setpoints(), 5, feed, List.of(steam), room, both, energy, false);
+        assertEquals(Condition.PUMPAROUND_SHORT, bound(c), "the lowest share binds");
+        assertEquals(.4, c.alpha(), 1e-12);
+        assertEquals(3, c.conditions().stream().filter(x -> x.condition().rank == Condition.Rank.LIMIT).count(), "each short utility is listed: " + c.conditions());
+        var free = ColumnCycle.step(heated, setpoints(), 5, feed, List.of(steam), room, ColumnCycle.Rooms.NONE, energy, false);
+        var before = ColumnCycle.step(heated, setpoints(), 5, feed, List.of(steam), room, energy, false);
+        assertEquals(1, free.alpha());
+        assertEquals(before.conditions(), free.conditions());
+        assertArrayEquals(before.feed().moles(), free.feed().moles(), 0);
+        assertEquals(before.condenser(), free.condenser(), 0, "no utility side: the cycle as before");
+        // A table with no reboiler duty and no pumparounds: their rooms bound nothing.
+        var plain = new SplitTable(AXIS, whole.products(), 0, new double[0], whole.condenserPerFeed() - 20_000, whole.reference(), whole.held());
+        var d = ColumnCycle.step(plain, new Setpoints(100, 100, 332, 4, 0, new double[] {.4}, new double[] {.1}, new double[0]), 5, feed, List.of(steam), room,
+                ColumnCycle.Rooms.NONE.withReboiler(0).withPumparounds(new double[] {0}), (k, n) -> energy(plain, k, n), false);
+        assertNull(bound(d), "no duty, no limit: " + d.conditions());
+    }
+
+    /**
      * An air condenser (U2, COOLER_MODEL_PLAN.md section 8): the table's surface per feed at each fan step gives the least fan
      * speed a built face needs, still fans where natural draught holds, and the most feed full fans hold; a duty past full fans
      * limits the cycle as a cooling water shortage does. A table with no air, or a face not known, limits nothing.

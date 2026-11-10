@@ -82,6 +82,26 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     static final double CONDENSER_HOLD_SECONDS=60,APPROACH_KELVIN=com.wormzjl.icheme.science.equipment.HeatSides.WATER_APPROACH;
     /** The heat each condenser shell's water was owed per second by the cycle at {@code tick}, W: what a feed valve the column sets carries (U2). */
     record Duty(long tick,double watts) {}
+    /**
+     * A duty a running column owes to utility sides through their heat in transit (C6b; W4 of batch
+     * 2026-11-10-column-failure-modes): the condenser's cooling water, the reboiler's heating, pumparound {@code index}'s
+     * cooler. A heating utility ({@link #gives}) gives the duty, its outlet no colder than the bottoms plus the approach; a
+     * cooling one takes it, its outlet no warmer than the condensate's or the draw tray's less the approach.
+     */
+    record Utility(Kind kind,int index) {
+        enum Kind { CONDENSER, REBOILER, PUMPAROUND }
+        static final Utility CONDENSER=new Utility(Kind.CONDENSER,0),REBOILER=new Utility(Kind.REBOILER,0);
+        static Utility pumparound(int j){return new Utility(Kind.PUMPAROUND,j);}
+        /** Whether the utility gives the column heat (the reboiler's) rather than takes it. */
+        boolean gives(){return kind==Kind.REBOILER;}
+        /** +1 where the utility takes the heat owed (the transit is positive), −1 where it gives it. */
+        double sign(){return gives()?-1:1;}
+    }
+    /** What a running unit owes one utility: the heat put in transit, dated, and each cycle's heat rate a side is owed (memory only). */
+    static final class Debt {
+        final ArrayDeque<Owed> owed=new ArrayDeque<>();
+        final ArrayDeque<Duty> rates=new ArrayDeque<>();
+    }
     /** Arrivals at an inlet over online ticks {@code start} to {@code end}, with their solids: already in the account, a cycle takes none of it before its time. */
     record Span(long start,long end,Account arrived,SolidInventory solids) {}
     /** What an outlet gave over online ticks {@code start} to {@code end}, mol: already off the account. */
@@ -119,10 +139,12 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         long tableTick,applied;double solvedCondenser;Condition.Active routed;
         /** What the accepted solve advised (V3's bounded texts, W3 step 5), as ADVISORY notices. Memory only: a reload starts without them. */
         List<Condition.Active> advisories=List.of();
-        /** The heat booked into the condenser's transit, dated: what the water side reads through the fence (C6b). */
-        final ArrayDeque<Owed> owed=new ArrayDeque<>();
-        /** Each cycle's heat rate owed to a condenser shell's water, dated (U2). State: a reload starts it from the table. */
-        final ArrayDeque<Duty> water=new ArrayDeque<>();
+        /**
+         * Per utility, the heat booked into its sides' transit, dated (what a side reads through the fence, C6b), and each
+         * cycle's heat rate owed to one side (U2, W4). State: a reload starts the rates from the table.
+         */
+        final Map<Utility,Debt> debts=new HashMap<>();
+        Debt debt(Utility utility){return debts.computeIfAbsent(utility,k->new Debt());}
         /** The air condenser's fans at the last cycle, a share of full speed, and their power, W (U2; NaN: no fans known). */
         double fans=Double.NaN,fanPower=Double.NaN;
         final Map<Long,ArrayDeque<Span>> spans=new HashMap<>();
@@ -145,8 +167,13 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     private final Map<Long,Run> runs=new TreeMap<>();
     /** Each port device's unit and station, from the ledger's running units. */
     private final Map<Long,Long> portUnits=new HashMap<>();
-    /** Each running unit's condenser water side, by its connection ({@link PhysicalFluidTopology#sideIdentity}): the side whose heat partner the column is (C6b). */
-    private final Map<Long,Long> waterSides=new HashMap<>();
+    /** A utility side's unit and the duty it serves. */
+    private record Served(long unit,Utility utility) {}
+    /**
+     * Each running unit's utility sides, by their connection ({@link PhysicalFluidTopology#sideIdentity}): the sides whose heat
+     * partner the column is, its condenser's water (C6b) and its reboiler's and pumparound coolers' utilities (W4).
+     */
+    private final Map<Long,Served> utilitySides=new HashMap<>();
     /** The port devices whose islands a cycle's new plan reaches at a later tick (the cycle's tick plus the fence), by that tick. */
     private final TreeMap<Long,Set<Long>> wakes=new TreeMap<>();
     private Solves solves=Solves.NONE;
@@ -193,13 +220,13 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     }
     /** Reads the ledger's running units again: after a Start, a Stop, a load. A unit that stopped forgets its state. */
     public void refresh() {
-        var units=topology.columns();portUnits.clear();waterSides.clear();
+        var units=topology.columns();portUnits.clear();utilitySides.clear();
         runs.keySet().removeIf(id->{var u=units.get(id);return u==null||!u.running();});
         for(var u:units.values()) {
             if(!u.running())continue;
             runs.computeIfAbsent(u.id(),id->restore(u));
             for(var s:u.stations())if(s.device()!=0)portUnits.put(s.device(),u.id());
-            for(long side:u.condensers())waterSides.put(PhysicalFluidTopology.sideIdentity(side),u.id());
+            for(var utility:utilities(u))for(long side:sideList(u,utility))utilitySides.put(PhysicalFluidTopology.sideIdentity(side),new Served(u.id(),utility));
         }
         schedule();
     }
@@ -244,7 +271,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     private String water(ColumnUnit u) {
         if(u==null)return "";
         double flow=0,outlet=Double.NaN,ceiling=Math.max(1,condenserTemperature(u)-APPROACH_KELVIN);int set=0;
-        for(long side:waterSides(u)) {
+        for(long side:sides(u,Utility.CONDENSER)) {
             long id=PhysicalFluidTopology.sideIdentity(side);var operation=coordinator.operation(id);
             Long valveOwner=operation==null||!operation.column()?null:registry.owner(operation.valve()),sideOwner=registry.owner(side);
             if(valveOwner==null||sideOwner==null)continue;
@@ -565,8 +592,8 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
             Long owner=registry.owner(s.device());
             if(owner!=null&&!coordinator.through(owner,s.port().inlet()?tick:tick-FENCE_TICKS))return false;
         }
-        // The condenser's water sides, through the fence the cycle reads their transit at.
-        for(long side:u.condensers()){Long owner=registry.owner(side);if(owner!=null&&!coordinator.through(owner,tick-FENCE_TICKS))return false;}
+        // The utility sides (the condenser's water, W4: the reboiler's and the pumparound coolers'), through the fence the cycle reads their transit at.
+        for(var utility:utilities(u))for(long side:sideList(u,utility)){Long owner=registry.owner(side);if(owner!=null&&!coordinator.through(owner,tick-FENCE_TICKS))return false;}
         return true;
     }
 
@@ -605,25 +632,15 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         var energy=r.enthalpy;
         // The cycle runs on the accepted set points with the unit's feed rate (W2): a requested one waits for its solve.
         var set=running(u,t);double designDemand=u.setpoints().designFeedRate()*CYCLE_TICKS/20.0;
-        // A water-cooled condenser rejects no more than its water has room for: the heat owed as of the fence against its hold.
-        // Its shells in parallel share the duty equally (S3b), so the fullest shell's water bounds the whole: each holds its share.
-        double condenserRoom=Double.POSITIVE_INFINITY;var sides=waterSides(u);
-        if(!sides.isEmpty()) {
-            double owed=0;
-            for(long side:sides) {
-                double held=coordinator.transitAsOf(PhysicalFluidTopology.sideIdentity(side),PhysicalFluidTopology.sideIdentity(partnerOf(side)),tick-FENCE_TICKS);
-                for(var o:r.owed)if(o.booked()&&o.tick()>tick-FENCE_TICKS)held-=o.joule();
-                owed=Math.max(owed,held);
-            }
-            // The water's hold is of its own share: an air-then-water condenser's trim takes part of the duty (COOLER_MODEL_PLAN.md section 6).
-            condenserRoom=CONDENSER_HOLD_SECONDS*Math.abs(t.condenserWaterPerFeed())*u.setpoints().designFeedRate()-sides.size()*owed;
-        }
-        // An air condenser holds at most what its built banks take with their fans at full speed (U2): past it, the column is limited.
+        // Each duty passes no more than its utility has room for (C6b, W4): the heat owed as of the fence against its hold. An
+        // air condenser holds at most what its built banks take with their fans at full speed (U2): past it, the column is limited.
+        var pas=new double[t.pumparoundPerFeed().length];for(int j=0;j<pas.length;j++)pas[j]=room(r,u,t,Utility.pumparound(j),tick);
+        var rooms=new ColumnCycle.Rooms(room(r,u,t,Utility.CONDENSER,tick),room(r,u,t,Utility.REBOILER,tick),pas,t.airFeed(u.airSurface()));
         ColumnCycle.ProductEnergy priced=(k,n)->{double e=0;var h=energy[k];for(int i=0;i<n.length;i++)e+=n[i]*h[i];return e;};
-        var b=ColumnCycle.step(t,set,CYCLE_TICKS/20.0,feedAvailable,steam,room,condenserRoom,t.airFeed(u.airSurface()),priced,false);
+        var b=ColumnCycle.step(t,set,CYCLE_TICKS/20.0,feedAvailable,steam,room,rooms,priced,false);
         // Rule A stays while the steam is short and its shortage inside the bands of the refused state; then rule B tries once more.
         if(r.ruleA&&(Condition.find(b.conditions(),Condition.STEAM_SHORT)==null||r.refused==null||!inside(r.refused,set,b,designDemand)))r.ruleA=false;
-        var step=r.ruleA?ColumnCycle.step(t,set,CYCLE_TICKS/20.0,feedAvailable,steam,room,condenserRoom,t.airFeed(u.airSurface()),priced,true):b;
+        var step=r.ruleA?ColumnCycle.step(t,set,CYCLE_TICKS/20.0,feedAvailable,steam,room,rooms,priced,true):b;
         r.last=step;
         // The fans at the feed the cycle took, and their power by the cube of their speed (HeatSides.fanPower).
         r.fans=t.fans(u.airSurface(),step.feedMoles()/(CYCLE_TICKS/20.0));
@@ -651,13 +668,11 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         double pumparounds=0;for(double q:step.pumparounds())pumparounds+=q;
         totals=new ColumnUnit.Totals(totals.taken().plus(in),totals.produced().plus(out),totals.reboiler()+step.reboiler(),totals.condenser()+step.condenser(),totals.pumparounds()+pumparounds);
         topology.column(u.withStations(true,stations).withTotals(totals));
-        // The totals book the whole duty; the water is owed its share, the air takes the rest (COOLER_MODEL_PLAN.md section 6).
-        owe(r,u,tick,-step.condenser()*t.waterShare(),false);
-        // Each shell's water heat rate, for a valve the column sets (U2).
-        if(!sides.isEmpty()) {
-            r.water.addLast(new Duty(tick,Math.max(0,-step.condenser()*t.waterShare())/(CYCLE_TICKS/20.0)/sides.size()));
-            while(r.water.size()>1&&r.water.peekFirst().tick()<tick-FENCE_TICKS-KEEP_TICKS)r.water.removeFirst();
-        }
+        // The totals book every duty whole; each utility is owed its duty (W4), the condenser's water its share, the air the rest
+        // (COOLER_MODEL_PLAN.md section 6). A duty with no utility side is the column's own, in the totals alone.
+        owed(r,u,tick,Utility.CONDENSER,-step.condenser()*t.waterShare());
+        owed(r,u,tick,Utility.REBOILER,-step.reboiler());
+        for(int j=0;j<step.pumparounds().length;j++)owed(r,u,tick,Utility.pumparound(j),-step.pumparounds()[j]);
         var unmetered=levels(r,u,set,available,tick,true);
         // A refusal of set points the player has since moved from is forgotten: what now stands is solved once.
         if(r.refusedSetpoints!=null&&u.setpoints().intensivelyDiffers(r.refusedSetpoints)){r.refusedSetpoints=null;r.setpointRefusal=null;}
@@ -713,12 +728,12 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
 
     /** The fence (plan section 9): every cycle through {@code start - L} has run for each port the island holds, whose plans read it. */
     @Override public boolean ready(long island,PassiveNetwork graph,long start) {
-        if(portUnits.isEmpty()&&waterSides.isEmpty())return true;
+        if(portUnits.isEmpty()&&utilitySides.isEmpty())return true;
         for(var node:graph.reservoirs()) {
             Long unit=portUnits.get(node.id());if(unit==null)continue;
             var r=runs.get(unit);if(r!=null&&r.nextCycle<=start-FENCE_TICKS)return false;
         }
-        for(var p:graph.pipes()){Long unit=waterSides.get(p.id());var r=unit==null?null:runs.get(unit);if(r!=null&&r.nextCycle<=start-FENCE_TICKS)return false;}
+        for(var p:graph.pipes()){var served=utilitySides.get(p.id());var r=served==null?null:runs.get(served.unit());if(r!=null&&r.nextCycle<=start-FENCE_TICKS)return false;}
         return true;
     }
     @Override public Map<Long,PortPlan> plans(long island,PassiveNetwork graph,IslandClock.Slice slice) {
@@ -850,7 +865,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
                 var t=u.totals();u=withPort(u,s,account,s.solids().less(solid)).withTotals(new ColumnUnit.Totals(t.taken(),t.produced(),t.reboiler(),t.condenser()+(joule-debited),t.pumparounds()));
                 topology.column(u);
                 if(r!=null)r.gifts.computeIfAbsent(device,d->new ArrayDeque<>()).addLast(new Gift(start,end,given));
-                if(r!=null&&water(r,s,start))owe(r,u,end,-(joule-debited),true);
+                if(r!=null&&water(r,s,start))owe(r,u,end,Utility.CONDENSER,-(joule-debited),true);
             }
         }
     }
@@ -878,58 +893,124 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         return later;
     }
     /**
-     * The heat a condenser shell's water was owed per second by the last cycle at or before {@code through}, W: read as of the
-     * fence, so a plan does not depend on when its job runs. Before any such cycle (a start, a reload) the table's water duty
-     * at the set feed, shared by the shells.
+     * The heat one side of {@code utility} was owed per second by the last cycle at or before {@code through}, W: read as of the
+     * fence, so a plan does not depend on when its job runs. Before any such cycle (a start, a reload) the table's duty at the
+     * set feed, shared by the sides.
      */
-    private double waterRate(Run r,ColumnUnit u,long through) {
-        Duty last=null;for(var d:r.water)if(d.tick()<=through)last=d;
+    private double rate(Run r,ColumnUnit u,Utility utility,long through) {
+        Duty last=null;var debt=r.debts.get(utility);if(debt!=null)for(var d:debt.rates)if(d.tick()<=through)last=d;
         if(last!=null)return last.watts();
-        int shells=Math.max(1,waterSides(u).size());
-        return r.table==null?0:Math.max(0,-r.table.condenserWaterPerFeed()*u.setpoints().feedRate())/shells;
+        int units=Math.max(1,sides(u,utility).size());
+        return r.table==null?0:Math.max(0,utility.sign()*-perFeed(r.table,utility)*u.setpoints().feedRate())/units;
+    }
+    /** {@code utility}'s duty per mole of feed in {@code t}, J (column sign: into the column); the condenser's its water's share. */
+    private static double perFeed(SplitTable t,Utility utility) {
+        return switch(utility.kind()) {
+            case CONDENSER->t.condenserWaterPerFeed();
+            case REBOILER->t.reboilerPerFeed();
+            case PUMPAROUND->utility.index()<t.pumparoundPerFeed().length?t.pumparoundPerFeed()[utility.index()]:0;
+        };
+    }
+    /**
+     * The temperature {@code utility}'s outlet stops at, K (C6b, W4): a cooling side's ceiling, the condensate's (the accepted
+     * condenser temperature) or the draw tray's (as {@code t} solved it) less the approach, at least 1 K; the reboiler's floor,
+     * the bottoms' plus the approach.
+     */
+    private double bound(ColumnUnit u,SplitTable t,Utility utility) {
+        return switch(utility.kind()) {
+            case CONDENSER->Math.max(1,condenserTemperature(u)-APPROACH_KELVIN);
+            case REBOILER->t.bottomsTemperature()+APPROACH_KELVIN;
+            case PUMPAROUND->Math.max(1,t.drawTemperature(utility.index())-APPROACH_KELVIN);
+        };
     }
     /** The heat partner of the registered side {@code side}, or 0. */
     private long partnerOf(long side) {
         if(side==0)return 0;var r=registry.registrations().get(side);
         return r==null||r.device().heat()==null?0:r.device().heat().partner();
     }
-    /** {@code u}'s condenser water sides that have a heat partner: those its duty goes to. */
-    private List<Long> waterSides(ColumnUnit u) {
+    /** {@code u}'s utilities that may have sides: the condenser, the reboiler, each pumparound of its set points. */
+    private static List<Utility> utilities(ColumnUnit u) {
+        var out=new ArrayList<Utility>(List.of(Utility.CONDENSER,Utility.REBOILER));
+        for(int j=0;j<u.utilities().pumparounds().size();j++)out.add(Utility.pumparound(j));
+        return out;
+    }
+    /** {@code u}'s sides of {@code utility} as its facts name them. */
+    private static List<Long> sideList(ColumnUnit u,Utility utility) {
+        return switch(utility.kind()) {
+            case CONDENSER->u.condensers();
+            case REBOILER->u.utilities().reboiler();
+            case PUMPAROUND->u.utilities().pumparound(utility.index());
+        };
+    }
+    /** {@code u}'s sides of {@code utility} that have a heat partner: those its duty goes to. */
+    private List<Long> sides(ColumnUnit u,Utility utility) {
         var out=new ArrayList<Long>();
-        for(long side:u.condensers())if(partnerOf(side)!=0)out.add(side);
+        for(long side:sideList(u,utility))if(partnerOf(side)!=0)out.add(side);
         return out;
     }
     /**
-     * Books {@code joule} (J) into the condenser's transit to its water at {@code tick}, an equal share into each shell's water
-     * side (S3b: identical shells in parallel take equal shares of the overhead, so each removes its share of the duty), and
-     * wakes each water side where it reads it. The record keeps one shell's share.
+     * The heat {@code utility} can still take (or give) at the cycle at {@code tick}, J (C6b, W4): its hold,
+     * {@link #CONDENSER_HOLD_SECONDS} of its duty per feed at the design rate, less its units times the fullest unit's transit
+     * as of the fence (identical units in parallel share the duty equally, S3b, so the fullest bounds the whole), what outlets
+     * booked after the fence left out. Unbounded where it has no side: the duty is the column's own.
      */
-    private void owe(Run r,ColumnUnit u,long tick,double joule,boolean booked) {
-        var sides=waterSides(u);
+    private double room(Run r,ColumnUnit u,SplitTable t,Utility utility,long tick) {
+        var sides=sides(u,utility);
+        if(sides.isEmpty())return Double.POSITIVE_INFINITY;
+        var debt=r.debts.get(utility);double owed=0;
+        for(long side:sides) {
+            double held=coordinator.transitAsOf(PhysicalFluidTopology.sideIdentity(side),PhysicalFluidTopology.sideIdentity(partnerOf(side)),tick-FENCE_TICKS);
+            if(debt!=null)for(var o:debt.owed)if(o.booked()&&o.tick()>tick-FENCE_TICKS)held-=o.joule();
+            owed=Math.max(owed,utility.sign()*held);
+        }
+        // The water's hold is of its own share: an air-then-water condenser's trim takes part of the duty (COOLER_MODEL_PLAN.md section 6).
+        return CONDENSER_HOLD_SECONDS*Math.abs(perFeed(t,utility))*u.setpoints().designFeedRate()-sides.size()*owed;
+    }
+    /** A cycle's {@code joule} owed to {@code utility} at {@code tick} (column sign reversed), and each side's heat rate for a valve the column sets (U2). */
+    private void owed(Run r,ColumnUnit u,long tick,Utility utility,double joule) {
+        owe(r,u,tick,utility,joule,false);
+        var sides=sides(u,utility);if(sides.isEmpty())return;
+        var rates=r.debt(utility).rates;
+        rates.addLast(new Duty(tick,Math.max(0,utility.sign()*joule)/(CYCLE_TICKS/20.0)/sides.size()));
+        while(rates.size()>1&&rates.peekFirst().tick()<tick-FENCE_TICKS-KEEP_TICKS)rates.removeFirst();
+    }
+    /**
+     * Books {@code joule} (J) into the transit of {@code utility}'s sides at {@code tick}, an equal share into each (S3b:
+     * identical units in parallel take equal shares, so each passes its share of the duty), and wakes each side where it
+     * reads it. The record keeps one side's share.
+     */
+    private void owe(Run r,ColumnUnit u,long tick,Utility utility,double joule,boolean booked) {
+        var sides=sides(u,utility);
         if(joule==0||sides.isEmpty())return;
         double share=joule/sides.size();
         for(long side:sides) {
             coordinator.owe(PhysicalFluidTopology.sideIdentity(side),PhysicalFluidTopology.sideIdentity(partnerOf(side)),share);
             wakes.computeIfAbsent(tick+FENCE_TICKS,k->new TreeSet<>()).add(side);
         }
-        r.owed.addLast(new Owed(tick,share,booked));
-        while(r.owed.size()>1&&r.owed.peekFirst().tick()<tick-FENCE_TICKS-KEEP_TICKS)r.owed.removeFirst();
+        var owed=r.debt(utility).owed;
+        owed.addLast(new Owed(tick,share,booked));
+        while(owed.size()>1&&owed.peekFirst().tick()<tick-FENCE_TICKS-KEEP_TICKS)owed.removeFirst();
     }
     /**
-     * A coupled side whose partner a running column holds (C6b): the condenser's water side reads the heat the column owes
-     * it as of its slice start less the fence (the transit now, less what the column booked after that), its outlet below
-     * the condensate by the approach; a side of a member the column holds otherwise moves no heat (a kettle's bundle, a
-     * pumparound cooler: their duties are the column's own, plan section 10, stage A).
+     * A coupled side whose partner a running column holds (C6b, W4): a utility side reads the heat the column owes it as of
+     * its slice start less the fence (the transit now, less what the column booked after that), its outlet stopped at its
+     * bound: a cooling side's (the condenser's water, a pumparound cooler's) below the condensate or the draw tray by the
+     * approach, the reboiler's heating above the bottoms by the approach. A side of a member the column holds otherwise moves
+     * no heat (a member whose Start found no utility side, or a save before W4: its duty is the column's own).
      */
     @Override public com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read heatRead(long side,long partner,long start,double seconds,double transit) {
-        Long unit=waterSides.get(side);var r=unit==null?null:runs.get(unit);
-        if(r!=null) {
-            double due=transit;for(var o:r.owed)if(o.tick()>start-FENCE_TICKS)due-=o.joule();
-            var u=topology.column(unit);
-            // The heat a valve the column sets carries (U2): the shell's share of the last cycle's water duty through the fence,
-            // and a backlog beyond a cycle's lump and the slice over the condenser's hold.
-            double rate=waterRate(r,u,start-FENCE_TICKS),excess=Math.max(0,due-rate*(seconds+CYCLE_TICKS/20.0));
-            return com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read.column(due,seconds,Math.max(1,condenserTemperature(u)-APPROACH_KELVIN),rate+excess/CONDENSER_HOLD_SECONDS);
+        var served=utilitySides.get(side);var r=served==null?null:runs.get(served.unit());
+        var table=r==null?null:r.tableAt(start-FENCE_TICKS);
+        if(r!=null&&(table!=null||served.utility().kind()==Utility.Kind.CONDENSER)) {
+            var utility=served.utility();var debt=r.debts.get(utility);
+            double due=transit;if(debt!=null)for(var o:debt.owed)if(o.tick()>start-FENCE_TICKS)due-=o.joule();
+            var u=topology.column(served.unit());
+            // The heat a valve the column sets carries (U2): the side's share of the last cycle's duty through the fence, and a
+            // backlog beyond a cycle's lump and the slice over the hold.
+            double rate=rate(r,u,utility,start-FENCE_TICKS),excess=Math.max(0,utility.sign()*due-rate*(seconds+CYCLE_TICKS/20.0));
+            double bound=utility.kind()==Utility.Kind.CONDENSER?Math.max(1,condenserTemperature(u)-APPROACH_KELVIN):bound(u,table,utility);
+            return utility.gives()?com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read.heating(due,seconds,bound,rate+excess/CONDENSER_HOLD_SECONDS)
+                    :com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read.column(due,seconds,bound,rate+excess/CONDENSER_HOLD_SECONDS);
         }
         var held=registry.registrations().get(partner-PhysicalFluidTopology.sideIdentity(0));
         return held!=null&&held.device().suspended()?com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read.NONE:null;

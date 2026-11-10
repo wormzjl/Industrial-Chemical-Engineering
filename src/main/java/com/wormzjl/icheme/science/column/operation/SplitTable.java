@@ -42,9 +42,12 @@ import java.util.Objects;
  *                          condenser has no air; {@link Double#MAX_VALUE} where the air cannot reach that outlet
  * @param flood             the solve's tray hydraulics reduced to the cycle's arithmetic (batch 2026-11-10-column-failure-modes, W3):
  *                          {@link Flood#NONE} where the solve had none (a prescribed drop)
+ * @param pumparoundDraw    K, each pumparound's draw tray as solved (W4: its cooler's utility leaves at least the approach below
+ *                          it); empty where the table has none known (a table built without the inspection)
  */
 public record SplitTable(List<String> axis, List<Product> products, double reboilerPerFeed, double[] pumparoundPerFeed, double condenserPerFeed,
-                         Reference reference, boolean[] held, double condenserWaterPerFeed, double waterBelow, double[] airArea, Flood flood) {
+                         Reference reference, boolean[] held, double condenserWaterPerFeed, double waterBelow, double[] airArea, Flood flood,
+                         double[] pumparoundDraw) {
     /** The fan speeds {@link #airArea} is given at: natural draught, then each eighth of full speed. */
     public static final int FAN_STEPS = 8;
     /** The water's id on the network axis. */
@@ -170,6 +173,15 @@ public record SplitTable(List<String> axis, List<Product> products, double reboi
         airArea = airArea.clone();
         if (airArea.length != 0 && airArea.length != FAN_STEPS + 1) throw new IllegalArgumentException("An air area per fan step");
         for (double a : airArea) if (!(a >= 0) || !Double.isFinite(a)) throw new IllegalArgumentException("Invalid air area " + a);
+        pumparoundDraw = pumparoundDraw.clone();
+        if (pumparoundDraw.length != 0 && pumparoundDraw.length != pumparoundPerFeed.length) throw new IllegalArgumentException("A draw temperature per pumparound");
+        for (double t : pumparoundDraw) if (!(t > 0) || !Double.isFinite(t)) throw new IllegalArgumentException("Invalid draw temperature " + t);
+    }
+
+    /** A table without its pumparounds' draw temperatures. */
+    public SplitTable(List<String> axis, List<Product> products, double reboilerPerFeed, double[] pumparoundPerFeed, double condenserPerFeed,
+                      Reference reference, boolean[] held, double condenserWaterPerFeed, double waterBelow, double[] airArea, Flood flood) {
+        this(axis, products, reboilerPerFeed, pumparoundPerFeed, condenserPerFeed, reference, held, condenserWaterPerFeed, waterBelow, airArea, flood, new double[0]);
     }
 
     /** A table without hydraulics (a prescribed drop). */
@@ -180,7 +192,38 @@ public record SplitTable(List<String> axis, List<Product> products, double reboi
 
     /** This table with {@code value} as its hydraulics. */
     public SplitTable withFlood(Flood value) {
-        return new SplitTable(axis, products, reboilerPerFeed, pumparoundPerFeed, condenserPerFeed, reference, held, condenserWaterPerFeed, waterBelow, airArea, value);
+        return new SplitTable(axis, products, reboilerPerFeed, pumparoundPerFeed, condenserPerFeed, reference, held, condenserWaterPerFeed, waterBelow, airArea, value, pumparoundDraw);
+    }
+
+    /** This table with {@code value} as its pumparounds' draw temperatures, K. */
+    public SplitTable withPumparoundDraw(double[] value) {
+        return new SplitTable(axis, products, reboilerPerFeed, pumparoundPerFeed, condenserPerFeed, reference, held, condenserWaterPerFeed, waterBelow, airArea, flood, value);
+    }
+
+    @Override
+    public double[] pumparoundDraw() {
+        return pumparoundDraw.clone();
+    }
+
+    /** The hottest product's temperature, K: the bottoms' where it has one. */
+    private double hottest() {
+        double t = 0;
+        for (var p : products) t = Math.max(t, p.temperature());
+        return t;
+    }
+
+    /**
+     * Pumparound {@code j}'s draw tray temperature, K (W4): as solved, or, in a table without them, the hottest product's,
+     * which bounds the column's every tray.
+     */
+    public double drawTemperature(int j) {
+        return j >= 0 && j < pumparoundDraw.length ? pumparoundDraw[j] : hottest();
+    }
+
+    /** The bottoms' temperature, K, where the reboiler's utility gives its heat (W4); the hottest product's in a table without a bottoms. */
+    public double bottomsTemperature() {
+        int k = product(Port.BOTTOMS, 0);
+        return k >= 0 ? products.get(k).temperature() : hottest();
     }
 
     /** A table whose condenser has no air the world models (a water-cooled one, or one solved before U2). */

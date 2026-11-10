@@ -90,7 +90,7 @@ public final class ColumnCycle {
      * @param condenser        J into the column (negative: removed), closing the balance
      * @param solvedCondenser  the table's condenser duty at the feed taken, J
      * @param conditions       what held (W1): each LIMIT with the share of the set feed it allows, in the order the cycle
-     *                         weighs them (feed, outlets, condenser water, air face, steam), or the TRIP (the closure would
+     *                         weighs them (feed, outlets, condenser water, air face, reboiler, pumparounds, flooding, steam), or the TRIP (the closure would
      *                         heat, or departs too far) with its departure
      */
     public record Step(double alpha, Account feed, List<Account> steam, List<Account> products, double reboiler, double[] pumparounds,
@@ -152,7 +152,63 @@ public final class ColumnCycle {
      */
     public static Step step(SplitTable table, Setpoints setpoints, double seconds, Account feed, List<Account> steam, double[] room,
                             double condenserRoom, double airFeed, ProductEnergy energy, boolean ruleA) {
+        return step(table, setpoints, seconds, feed, steam, room, Rooms.free(airFeed).withCondenser(condenserRoom), energy, ruleA);
+    }
+
+    /**
+     * What each of a cycle's duties can still pass to its utility, J, and the air's most feed, mol/s (W4): the condenser's
+     * cooling water, the reboiler's heating, each pumparound cooler's cooling (in the pumparounds' order; one past the array
+     * has none). {@link Double#POSITIVE_INFINITY} where a duty has no utility side: it is free, as every duty but the
+     * condenser's was before W4.
+     */
+    public record Rooms(double condenser, double reboiler, double[] pumparounds, double airFeed) {
+        /** Every duty free. */
+        public static final Rooms NONE = free(Double.POSITIVE_INFINITY);
+
+        public Rooms {
+            pumparounds = pumparounds.clone();
+            if (Double.isNaN(condenser) || Double.isNaN(reboiler) || Double.isNaN(airFeed)) throw new IllegalArgumentException("Invalid duty room");
+            for (double r : pumparounds) if (Double.isNaN(r)) throw new IllegalArgumentException("Invalid duty room");
+        }
+
+        /** Every utility free, the air holding at most {@code airFeed} mol/s of feed. */
+        public static Rooms free(double airFeed) {
+            return new Rooms(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY, new double[0], airFeed);
+        }
+
+        public Rooms withCondenser(double value) {
+            return new Rooms(value, reboiler, pumparounds, airFeed);
+        }
+
+        public Rooms withReboiler(double value) {
+            return new Rooms(condenser, value, pumparounds, airFeed);
+        }
+
+        public Rooms withPumparounds(double[] value) {
+            return new Rooms(condenser, reboiler, value, airFeed);
+        }
+
+        @Override
+        public double[] pumparounds() {
+            return pumparounds.clone();
+        }
+
+        /** Pumparound {@code j}'s room, J: unbounded where it has none. */
+        public double pumparound(int j) {
+            return j >= 0 && j < pumparounds.length ? pumparounds[j] : Double.POSITIVE_INFINITY;
+        }
+    }
+
+    /**
+     * One cycle whose duties pass at most {@code rooms} to their utilities (W4): a duty whose utility is short cuts the
+     * throughput as a full outlet does, each share the room over that duty of a full take at the set feed (decision D1: a
+     * short reboiler or pumparound utility cuts the feed, no solve).
+     */
+    public static Step step(SplitTable table, Setpoints setpoints, double seconds, Account feed, List<Account> steam, double[] room,
+                            Rooms rooms, ProductEnergy energy, boolean ruleA) {
         Objects.requireNonNull(table, "table");
+        Objects.requireNonNull(rooms, "rooms");
+        double condenserRoom = rooms.condenser(), airFeed = rooms.airFeed();
         int m = table.axis().size();
         double[] steamPerFeed = setpoints.steamPerFeed();
         if (steam.size() != steamPerFeed.length) throw new IllegalArgumentException("One steam account per steam setpoint");
@@ -197,6 +253,19 @@ public final class ColumnCycle {
         }
         double alphaAir = Math.max(0, airFeed) * seconds / demand;
         if (alphaAir < 1) conditions.add(new Condition.Active(Condition.COOLING_SHORT, alphaAir));
+        // The reboiler's heating and each pumparound cooler's cooling (W4): each share is its room over its duty of a full take.
+        double heating = table.reboilerPerFeed() * demand;
+        if (heating > 0 && rooms.reboiler() < Double.POSITIVE_INFINITY) {
+            double alphaHeating = Math.max(0, rooms.reboiler()) / heating;
+            if (alphaHeating < 1) conditions.add(new Condition.Active(Condition.HEATING_SHORT, alphaHeating));
+        }
+        double[] perFeed = table.pumparoundPerFeed();
+        for (int j = 0; j < perFeed.length; j++) {
+            double cooling = -perFeed[j] * demand, r = rooms.pumparound(j);
+            if (!(cooling > 0) || r == Double.POSITIVE_INFINITY) continue;
+            double alphaCooling = Math.max(0, r) / cooling;
+            if (alphaCooling < 1) conditions.add(new Condition.Active(Condition.PUMPAROUND_SHORT, alphaCooling, j, ""));
+        }
         // Flooding (W3.1, decision D2): at one table the worst tray's flood fraction is proportional to the feed taken, so the
         // share that keeps it at its limit is the inverse of its fraction at the set feed.
         var flood = table.flood();
