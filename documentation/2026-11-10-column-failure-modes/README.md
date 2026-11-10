@@ -8,6 +8,8 @@ Status: In progress since 2026-11-10 (decisions taken; execution in five stages,
 
 - 2026-11-10: the owner took the recommended option of D1 to D8 ("commence as recommended") and asked for a test world with a full-size column, tested at the end and left for a manual test (D9). `EXECUTION_PLAN.md` written: five stages for Opus sub-threads (1: condition record, solve policy, alarms; 2: flooding, Operation tab, DCS page, feed-rate loop; 3: reboiler and pumparound utilities; 4: member power; 5: the test world and `MANUAL_TEST.md`). Design details changed there: advisories as one notice, no port level channel, the column page on the DCS only, requested set points stay the fact.
 
+- 2026-11-10: stage 1 (W1, W2, W6.1) on this branch: `a99164867` condition record (`Condition`, `ColumnStatus`, `Refusal`; `OperationView.conditions`, assembly-5), `9fedc6e11` solve policy (accepted set points run the cycle; refused set points and states remembered in memory; one retry after an unfinished solve; `RETRY_TICKS` gone), then the column alarms (`EquipmentAlarm.COLUMN`, `FluidWorldAuthority.columnAlarms`, `alarm_*` channels on the column's host). No fact change. Targeted runs green: the section 2 invariants, `ColumnCycleTest`, `ColumnRunTest`, `OperationColumnTest`, `AssemblyNetworkCodecTest`, `BuiltInInputsTest` and the tests that load `EquipmentAlarm`, `ProcessSolveServices` and the control service. The alarm in `ControlPublication`'s list needs a server and is the stage 5 GameTest (item 7).
+
 ## Documents
 
 - [COLUMN_FAILURE_MODES_REVIEW.md](COLUMN_FAILURE_MODES_REVIEW.md): expected behaviour, the seven mechanisms in the code, coverage, findings F1 to F12.
@@ -16,7 +18,7 @@ Status: In progress since 2026-11-10 (decisions taken; execution in five stages,
 
 ## Code areas
 
-None changed. The plan names `science/column/operation/**`, `runtime/fluid/ColumnOperation`, `ColumnUnit`, `runtime/control/**` (`BuiltInInputs`, `ControlLaw`, `ControlPlans`, `ControlPublication`), `EquipmentAlarm`, `network/ControlNetwork`, `AssemblyNetwork`, `client/gui/common/OperationColumn`, `HeatUnit`, `ElectricStores`.
+Stage 1 changed `science/column/operation/**` (new `Condition`, `ColumnStatus`, `Refusal`), `runtime/fluid/ColumnOperation`, `EquipmentAlarm`, `FluidWorldAuthority` (start refusals, `columnAlarms`, `editColumn`), `runtime/assembly/ColumnStarts`, `AssemblyService`, `runtime/control/BuiltInInputs`, `runtime/ProcessSolveServices`, `network/ProcessSolveCoordinator`, `network/AssemblyNetwork` (assembly-5), `client/gui/common/OperationColumn`, `en_us.json`. The plan names `science/column/operation/**`, `runtime/fluid/ColumnOperation`, `ColumnUnit`, `runtime/control/**` (`BuiltInInputs`, `ControlLaw`, `ControlPlans`, `ControlPublication`), `EquipmentAlarm`, `network/ControlNetwork`, `AssemblyNetwork`, `client/gui/common/OperationColumn`, `HeatUnit`, `ElectricStores`.
 
 ## Open items
 

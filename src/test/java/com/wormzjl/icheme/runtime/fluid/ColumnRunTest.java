@@ -561,6 +561,7 @@ class ColumnRunTest {
         assertEquals(1,f.asked(DriftBands.Trigger.THROUGHPUT).size(),"one solve of the state: "+f.asked(DriftBands.Trigger.THROUGHPUT));
         assertSame(kept,r.ops().run(r.unit()).table,"the old table runs");
         assertTrue(r.ops().status(r.unit()).contains("the throughput solve failed (test refusal)"),r.ops().status(r.unit()));
+        assertTrue(EquipmentAlarm.column(r.ops().conditions(r.unit())).contains(EquipmentAlarm.OFF_TABLE),"the column reads OFF TABLE");
         f.fail=j->false;var v=world.ledger.column(r.unit());long moved=world.ledger.onlineTick();
         world.ledger.column(v.withSetpoints(v.setpoints().withFeedRate(.1)));
         f.runTo(moved+2000);
@@ -603,6 +604,7 @@ class ColumnRunTest {
         assertTrue(ops.last(unit).tripped(),ops.status(unit));
         assertTrue(ops.status(unit).startsWith("UPSET: the condenser duty departs"),ops.status(unit));
         assertEquals(Condition.CLOSURE,ops.last(unit).binding().condition());
+        assertTrue(EquipmentAlarm.column(ops.conditions(unit)).contains(EquipmentAlarm.UPSET));
         assertEquals(370,ops.instrument(unit,"COLUMN:top",com.wormzjl.icheme.runtime.instrument.Sensor.Kind.TEMPERATURE).value(),"the table's temperature");
         assertEquals(180000,ops.instrument(unit,"COLUMN:bottom",com.wormzjl.icheme.runtime.instrument.Sensor.Kind.PRESSURE).value(),"the table's pressure");
         assertEquals(0,ops.instrument(unit,"REFLUX",com.wormzjl.icheme.runtime.instrument.Sensor.Kind.FLOW).value(),"no flow");
@@ -656,6 +658,7 @@ class ColumnRunTest {
         assertTrue(r.ops().status(r.unit()).startsWith("LIMITED: outlet"),r.ops().status(r.unit()));
         double held=u.station(Port.DISTILLATE,0).account().total(),buffer=.5*ColumnOperation.BUFFER_SECONDS;
         assertEquals(com.wormzjl.icheme.science.column.operation.Condition.PRODUCT_FULL,r.ops().last(r.unit()).binding().condition());
+        assertTrue(EquipmentAlarm.column(r.ops().conditions(r.unit())).contains(EquipmentAlarm.BLOCKED),"the column raises BLOCKED: "+r.ops().conditions(r.unit()));
         assertEquals(buffer,held,1e-6*buffer,"the outlet holds its full buffer");
         assertEquals(held,u.totals().taken().total(),1e-9,"the column took what its outlet holds, no more");
         double later=-sum(r.counting().moles.getOrDefault(r.feed(),new double[1]));
