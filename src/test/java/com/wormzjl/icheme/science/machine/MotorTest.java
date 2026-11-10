@@ -6,6 +6,25 @@ import org.junit.jupiter.api.Test;
 
 /** Motor sizes, speeds and IE3 efficiencies (plan sections 1.3 and 7). */
 class MotorTest {
+    /**
+     * Generators to 400 MW (batch 2026-11-10-prime-movers, owner P9 A): the rating holds the 20 % spare (300 MW asks 360,
+     * rated 400); the efficiency runs from the IE3 table at 1 MW to 98.8 % at 300 MW in log power; 12 poles read as 8.
+     */
+    @Test void largeGeneratorsRateAndRunToFourHundredMegawatts() {
+        assertEquals(4e8, Motor.generatorRatingFor(3e8), 1);
+        assertEquals(Double.NaN, Motor.generatorRatingFor(4e8));
+        assertEquals(.988, Motor.generatorEfficiency(3e8, 2), 1e-12);
+        assertEquals(.988, Motor.generatorEfficiency(4e8, 2), 1e-12, "flat above 300 MW");
+        assertEquals(Motor.efficiency(1e6, 2), Motor.generatorEfficiency(1e6, 2), 1e-12, "the IE3 table to 1 MW");
+        assertEquals(Motor.efficiency(5e5, 8), Motor.generatorEfficiency(5e5, 12), 1e-12, "12 poles read as 8");
+        double last = 0;
+        for (double w : new double[]{1e6, 5e6, 2e7, 1e8, 3e8}) {
+            double eta = Motor.generatorEfficiency(w, 2);
+            assertTrue(eta >= last, "rising with size at " + w);
+            last = eta;
+        }
+    }
+
     /** The standard ratings, W, smallest first, walked through {@link Motor#standardRating} (the index accessors left
      * {@code Motor} at the batch's tooling cleanup: the game reads only the next rating above a power). */
     private static final double[] RATINGS = ratings();

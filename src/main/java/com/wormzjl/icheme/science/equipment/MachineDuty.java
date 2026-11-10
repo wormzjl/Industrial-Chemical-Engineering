@@ -74,6 +74,10 @@ public record MachineDuty(double flow, double head, double polytropicHead, doubl
     public static final double MAX_GENERATOR = 400000;
     /** The rated powers of generators, kW: the list to {@link #MAX_GENERATOR}. */
     public static final List<Double> GENERATOR_POWERS = POWERS.stream().filter(p -> p <= MAX_GENERATOR).toList();
+    /** The largest steam turbine, kW: one unit of tandem sections to 300 MW (batch 2026-11-10-prime-movers, owner P12). */
+    public static final double MAX_TURBINE = 300000;
+    /** The rated powers of steam turbines, kW: the list from 55 kW, ending at {@link #MAX_TURBINE} (between the list's 280 and 315 MW). */
+    public static final List<Double> TURBINE_POWERS = java.util.stream.Stream.concat(POWERS.stream().filter(p -> p >= 55 && p < MAX_TURBINE), java.util.stream.Stream.of(MAX_TURBINE)).toList();
     /** Exhaust pressures a turbine steps through, kPa absolute: vacuum to a condenser, then back pressures (the LP, MP and HP headers). */
     public static final List<Double> EXHAUSTS = List.of(10.0, 15.0, 20.0, 150.0, 250.0, 350.0, 450.0, 650.0, 1000.0, 1700.0, 2500.0, 4200.0);
     /** The highest exhaust that is vacuum, kPa: below it the turbine exhausts to a condenser. */

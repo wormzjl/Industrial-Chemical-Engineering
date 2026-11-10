@@ -286,7 +286,7 @@ public abstract class UnitDesign {
             size=com.wormzjl.icheme.science.math.DeterministicMath.log(PrimeMoverDesign.model(shape).power()/least)/com.wormzjl.icheme.science.math.DeterministicMath.log(most/least);
         }else if(driver(shape.kind())){
             boolean turbine=shape.kind()==EquipmentShape.Kind.STEAM_TURBINE;
-            double least=turbine?SteamTurbineDesign.MIN_POWER:MotorDesign.POWERS.getFirst(),most=turbine?SteamTurbineDesign.MAX_POWER:MotorDesign.POWERS.getLast();
+            double least=turbine?SteamTurbineDesign.MIN_POWER:MotorDesign.POWERS.getFirst(),most=turbine?SteamTurbineDesign.SINGLE_CASING:MotorDesign.POWERS.getLast();
             size=com.wormzjl.icheme.science.math.DeterministicMath.log(shape.duty().power()/least)/com.wormzjl.icheme.science.math.DeterministicMath.log(most/least);
         }else return 0;
         return gain(size,speed);
