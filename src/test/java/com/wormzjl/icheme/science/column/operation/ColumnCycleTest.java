@@ -302,7 +302,8 @@ class ColumnCycleTest {
         assertTrue(step.tripped());
         assertEquals(Condition.CLOSURE, bound(step));
         assertEquals("the condenser would heat the overhead", step.binding().text());
-        assertEquals(List.of(step.binding()), step.conditions(), "a trip is the one condition");
+        // The trip binds; beside it stands only rule B's short steam (none here at all), which rule A and the steam's solve read.
+        assertEquals(List.of(step.binding(), new Condition.Active(Condition.STEAM_SHORT, 1, 0, "")), step.conditions(), "the trip and the short steam");
         assertEquals(0, step.feedMoles(), "a tripped cycle takes nothing");
     }
 

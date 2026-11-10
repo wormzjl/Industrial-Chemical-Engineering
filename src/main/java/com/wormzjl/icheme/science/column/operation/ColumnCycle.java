@@ -344,7 +344,12 @@ public final class ColumnCycle {
         else if (fed > 0 && solved != 0 && Math.abs(condenser - solved) > TRIP_DEPARTURE * Math.abs(solved))
             trip = new Condition.Active(Condition.CLOSURE, departure, -1,
                     String.format(java.util.Locale.ROOT, "the condenser duty departs %.0f %% from the solved one", 100 * Math.abs(condenser - solved) / Math.abs(solved)));
-        if (trip != null) return idle(table, steam.size(), List.of(trip));
+        if (trip != null) {
+            // Rule B's short steam stands beside the trip (it binds), so rule A and the steam's solve see what moved.
+            var tripped = new java.util.ArrayList<Condition.Active>(List.of(trip));
+            for (var c : conditions) if (c.condition() == Condition.STEAM_SHORT) tripped.add(c);
+            return idle(table, steam.size(), tripped);
+        }
         // A sign before the limit binds (W3.2): the worst tray near its flood at the feed taken.
         double loaded = flood.fraction(fed / seconds);
         if (loaded >= Condition.HIGH_LOAD_FRACTION)

@@ -906,6 +906,40 @@ class ColumnRunTest {
         assertTrue(world.ledger.column(r.unit()).totals().taken().total()>stopped+10,"the feed is taken again");
     }
     /**
+     * A steam lost at once on a table whose closure the steam carries (batch 2026-11-10-column-failure-modes, stage 5 case 3):
+     * rule B's first short cycle trips. The solve that trip asks is of what moved, the steam's ratio, not a closure's; its
+     * refusal brings rule A, which cuts the feed with the steam: LIMITED with LOW STEAM, no longer tripped. A trip asking a
+     * closure solve instead stood UPSET with its inlets closed, so the steam back never reached it.
+     */
+    @Test void aTripOnALostSteamAsksTheSteamsSolveAndARefusalFallsBackToA() {
+        var f=new Fake(0);var r=rig(0,f,true,false);f.world=r.world();var world=r.world();var ops=r.ops();long unit=r.unit();
+        f.runTo(2500);
+        assertTrue(world.ledger.column(unit).totals().taken().total()>20,"it ran on its steam");
+        // The water leaves 3000 J/mol above the steam's enthalpy, the solved condenser duty with it: at the design's 0.2 mol
+        // of steam per mol of feed the closure holds, and without the steam it departs 150 %.
+        var run=ops.run(unit);var t=run.table;double x=3000;
+        var enthalpy=Arrays.stream(run.enthalpy).map(double[]::clone).toArray(double[][]::new);enthalpy[0][enthalpy[0].length-1]+=x;
+        ops.table(unit,new SplitTable(t.axis(),t.products(),t.reboilerPerFeed(),t.pumparoundPerFeed(),t.condenserPerFeed()+.2*x,t.reference(),t.held()),enthalpy);
+        f.fail=j->j.trigger()!=DriftBands.Trigger.START;
+        int before=f.jobs.size();
+        // The steam lost at once: its source gone and its port's account emptied.
+        world.registry.submit(List.of(new WorldTopologyLedger.Edit(r.steamSource(),null)),world.ledger.nextIdentity(),null);
+        var u=world.ledger.column(unit);var stations=new ArrayList<ColumnUnit.Station>();
+        for(var s:u.stations())stations.add(s.port()==Port.STEAM?s.withAccount(Account.empty(world.model.componentCount())):s);
+        world.ledger.column(u.withStations(u.running(),stations));
+        long lost=world.ledger.onlineTick();
+        while(!ops.run(unit).ruleA&&world.ledger.onlineTick()<lost+4000)f.runTo(world.ledger.onlineTick()+10);
+        var asked=f.jobs.subList(before,f.jobs.size()).stream().map(ColumnSolve.Job::trigger).toList();
+        assertFalse(asked.isEmpty(),"the trip asked a solve");
+        assertEquals(DriftBands.Trigger.STEAM_RATIO,asked.getFirst(),"the trip's solve is the steam's: "+asked);
+        assertFalse(asked.contains(DriftBands.Trigger.CLOSURE),"no closure solve: "+asked);
+        assertTrue(ops.run(unit).ruleA,"its refusal brought rule A: "+ops.status(unit));
+        f.runTo(world.ledger.onlineTick()+2*ColumnOperation.CYCLE_TICKS);
+        assertFalse(ops.last(unit).tripped(),"rule A cuts the feed with the steam, no trip: "+ops.status(unit));
+        assertEquals(Condition.STEAM_SHORT,ops.last(unit).binding().condition(),ops.status(unit));
+        assertTrue(EquipmentAlarm.column(ops.conditions(unit)).contains(EquipmentAlarm.LOW_STEAM),"LOW STEAM: "+ops.status(unit));
+    }
+    /**
      * A water-cooled condenser (C6b, plan section 10): its tubes stay in the cooling-water line while its shell is the
      * column's; the heat each cycle's condenser removes goes into transit to the water and the water takes it. Every joule
      * the column's condenser removed is in the water or still in transit.

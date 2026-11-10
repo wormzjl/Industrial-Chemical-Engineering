@@ -706,8 +706,14 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         r.fanPower=Double.isNaN(r.fans)?Double.NaN:com.wormzjl.icheme.science.equipment.HeatSides.fanPower(driven,r.fans);
         if(step.tripped()) {
             // The model has no steady state for this input (a capability limit): the inlets close, a solve of the state the
-            // column was given may lift it.
-            if(feedAvailable.total()>0)request(r,u,tick,DriftBands.Trigger.CLOSURE,attempted(set,feedAvailable,steam));
+            // column was given may lift it. Where rule B's steam is short the solve is the steam's, whose refusal brings rule A;
+            // else of the first band the state left, else the closure's.
+            if(feedAvailable.total()>0) {
+                var given=attempted(set,feedAvailable,steam);
+                var trigger=Condition.find(step.conditions(),Condition.STEAM_SHORT)!=null?DriftBands.Trigger.STEAM_RATIO
+                        :DriftBands.check(t.reference(),t.held(),given,designDemand).map(DriftBands.Crossing::trigger).orElse(DriftBands.Trigger.CLOSURE);
+                request(r,u,tick,trigger,given);
+            }
             publish(r,step.conditions(),levels(r,u,set,available,tick,false));return;
         }
         replace(stations,Port.FEED,0,a->a.less(step.feed()));
