@@ -134,7 +134,10 @@ final class VacuumPumpDesign extends UnitDesign {
 
     @Override public Line held(EquipmentShape shape) {
         var law = law(shape);
-        return new Line("vacuum_pump.held", name(shape), whole(model(shape).capacity), number(law.maximumShaftPower() / 1e3), number(Motor.ratingFor(law.maximumShaftPower()) / 1e3));
+        // The middle display's line fits 180 px (UnitTextTest): the shaft power stays on the datasheet, a whole motor rating
+        // reads without its decimal (200 kW, 7.5 kW).
+        double motor = Motor.ratingFor(law.maximumShaftPower()) / 1e3;
+        return new Line("vacuum_pump.held", name(shape), whole(model(shape).capacity), motor == Math.rint(motor) ? whole(motor) : number(motor));
     }
 
     @Override public List<Line> datasheet(EquipmentShape shape) {

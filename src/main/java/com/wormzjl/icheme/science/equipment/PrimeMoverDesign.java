@@ -7,6 +7,7 @@ import com.wormzjl.icheme.science.equipment.Mesh.Material;
 import com.wormzjl.icheme.science.equipment.ProcessUnit.Solid;
 import com.wormzjl.icheme.science.machine.Motor;
 import com.wormzjl.icheme.science.machine.PrimeMover;
+import com.wormzjl.icheme.science.math.DeterministicMath;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -147,7 +148,8 @@ final class PrimeMoverDesign extends UnitDesign {
     @Override public Line held(EquipmentShape shape) {
         var m = model(shape);
         var law = new PrimeMover(m);
-        return new Line("prime_mover.held", m.name(), number(law.ratedNet() / 1e6), whole(m.speed()), number(Motor.generatorRatingFor(law.ratedNet()) / 1e6));
+        // The middle display's line fits 180 px (UnitTextTest): the generator's rating stays on the datasheet.
+        return new Line("prime_mover.held", m.name(), number(law.ratedNet() / 1e6), whole(m.speed()));
     }
 
     @Override public List<Line> datasheet(EquipmentShape shape) {
@@ -292,7 +294,7 @@ final class PrimeMoverDesign extends UnitDesign {
         var m = model(u.shape);
         var law = new PrimeMover(m);
         boolean medium = m.speed() <= 750;
-        double s = Math.cbrt(m.power() / 1e6), length = (medium ? 4.8 : 3.8) * s, width = 1.65 * s, height = (medium ? 2.3 : 2.0) * s;
+        double s = DeterministicMath.cbrt(m.power() / 1e6), length = (medium ? 4.8 : 3.8) * s, width = 1.65 * s, height = (medium ? 2.3 : 2.0) * s;
         double frame = .1 + .08 * s, deck = PLINTH + frame;
         int cylinders = m.cylinders(), banks = cylinders > 10 ? 2 : 1, perBank = Math.max(1, cylinders / banks);
         double bank = medium ? .8 * width : 0, gap = medium ? .5 : 0, half = width / 2 + .15, left = half + gap + bank;
@@ -340,7 +342,7 @@ final class PrimeMoverDesign extends UnitDesign {
             double my = blockTop - .25 * (blockTop - crank), mx = ax - (topWidth + .25 * (width / 2 - .05 - topWidth)) - rm;
             manifold[0] = new double[]{mx, my};
         } else {
-            double yv = crank + .3 * (blockTop - crank), theta = Math.toRadians(25), sn = Math.sin(theta), cs = Math.cos(theta), tb = .3 * width;
+            double yv = crank + .3 * (blockTop - crank), theta = Math.toRadians(25), sn = DeterministicMath.sin(theta), cs = DeterministicMath.cos(theta), tb = .3 * width;
             u.extrude(List.of(new double[]{ax - width / 2 + .05, crank}, new double[]{ax + width / 2 - .05, crank},
                     new double[]{ax + .3 * width, yv}, new double[]{ax - .3 * width, yv}), zb0 + .1, zb1 - .1, Material.MACHINE);
             for (int b = 0; b < 2; b++) {
@@ -449,12 +451,12 @@ final class PrimeMoverDesign extends UnitDesign {
         var m = model(u.shape);
         var law = new PrimeMover(m);
         boolean heavy = m.name().startsWith("HD"), coil = coil(u.shape);
-        double s = Math.cbrt(m.power() / 3e7), length = 6 * s + 3.5, width = 2.4 * s + 1.2, height = 2.6 * s + 1.4;
+        double s = DeterministicMath.cbrt(m.power() / 3e7), length = 6 * s + 3.5, width = 2.4 * s + 1.2, height = 2.6 * s + 1.4;
         double rs = Math.max(.2, law.stackDiameter() / 2), deck = PLINTH + .2, rc = .38 * width;
         double top = deck + height, filterTop = top + .6 * height;
         // The shaft at its generator's height (owner review T1), above the diffuser's or the enclosure's floor.
         double own = Math.ceil(deck + (heavy ? 1.2 * rc + .05 : .3 * height) - .5) + .5;
-        double generator = MotorDesign.generatorShaft(Motor.generatorRatingFor(m.power()) / 1e3, poles(m.speed()));
+        double generator = ProcessUnit.generatorShaft(Motor.generatorRatingFor(m.power()) / 1e3, poles(m.speed()));
         double ys = Double.isNaN(generator) ? own : Math.max(own, generator);
         // The plenum (the HRSG casing with the coil) at the front, the stack over its front end.
         double dh = coil ? Math.max(.65 * width, rs + .35) : Math.max(.55 * width, rs + .3);
@@ -481,10 +483,15 @@ final class PrimeMoverDesign extends UnitDesign {
             u.solids.add(Solid.box(new double[]{ax - dh, deck, zp1}, new double[]{ax + dh, plenumTop, zg0}));
         }
         double zg1 = zg0 + length, zf0 = zg1 - .45 * length;
+        // The fuel connection's row: the package's middle; a heavy frame's over its compressor (below).
+        double fuelZ = Math.floor((zg0 + zg1) / 2) + .5;
         if (heavy) {
             var along = Frame.of(new double[]{ax, ys, 0}, 2, 1);
             int n = ProcessUnit.sides(2 * rc);
             double zt0 = zg0 + .22 * length, zt1 = zg0 + .38 * length, zc1 = zg0 + .52 * length, zi0 = zg1 - .2 * length;
+            // The package's middle lies in the combustors' ring (its solid 1.45 rc across the half width's 1.32 rc), so a heavy
+            // frame's fuel comes in over the compressor (0.75 to 0.62 rc): HD-300's 0.8 m neck met the ring (lane fixes 0.25.0).
+            fuelZ = Math.floor((zc1 + .2 * rc + zi0) / 2) + .5;
             // The exhaust diffuser widening forward into the plenum, the turbine, the combustors' section, the narrower compressor.
             u.mesh.frustum(along, 1.15 * rc, rc, zg0, zt0, n, Material.MACHINE);
             u.mesh.prism(along, rc, zt0, zt1, n, Material.MACHINE);
@@ -498,7 +505,7 @@ final class PrimeMoverDesign extends UnitDesign {
             double[][] runs = {{zg0, 1.15 * rc, zt0, rc}, {zt0, rc, zt1, rc}, {zt1, .9 * rc, zc1, .9 * rc}, {zc1, .75 * rc, zi0, .62 * rc}};
             for (int side = -1; side <= 1; side += 2)
                 for (var run : runs) {
-                    SteamTurbineTrain.ledge(u.mesh, ax, side, run[0], run[1], run[2], run[3], ys - th / 2, ys + th / 2, e, true, true, Material.MACHINE);
+                    ProcessUnit.ledge(u.mesh, ax, side, run[0], run[1], run[2], run[3], ys - th / 2, ys + th / 2, e, true, true, Material.MACHINE);
                     int studs = Math.max(1, (int) Math.floor((run[2] - run[0]) / .35));
                     for (int k = 0; k < studs; k++) {
                         double t = (k + .5) / studs, z = run[0] + (run[2] - run[0]) * t, x = ax + side * (run[1] + (run[3] - run[1]) * t + .55 * e);
@@ -509,9 +516,9 @@ final class PrimeMoverDesign extends UnitDesign {
             int cans = (int) Math.max(8, Math.min(14, Math.round(6 + 3.7 * s)));
             double zc = zt1 + .25 * (zc1 - zt1), rk = .13 * rc, lk = .55 * rc, beta = Math.toRadians(55);
             for (int k = 0; k < cans; k++) {
-                double phi = 2 * Math.PI * (k + .5) / cans, cx = Math.cos(phi), cy = Math.sin(phi);
+                double phi = 2 * Math.PI * (k + .5) / cans, cx = DeterministicMath.cos(phi), cy = DeterministicMath.sin(phi);
                 if (cy < -.35) continue;
-                double[] dir = {cx * Math.sin(beta), cy * Math.sin(beta), Math.cos(beta)}, t = {-cy, cx, 0};
+                double[] dir = {cx * DeterministicMath.sin(beta), cy * DeterministicMath.sin(beta), DeterministicMath.cos(beta)}, t = {-cy, cx, 0};
                 var can = new Frame(new double[]{ax + .82 * rc * cx, ys + .82 * rc * cy, zc}, dir, t);
                 u.mesh.cylinder(can, rk, 0, lk, 8, Material.MACHINE);
                 u.mesh.cylinder(can, 1.2 * rk, lk, lk + .06 + .02 * s, 8, Material.FLANGE);
@@ -573,8 +580,8 @@ final class PrimeMoverDesign extends UnitDesign {
             up(u, Role.STEAM, ax, hot, plenumTop + 2 * rh - .02, so);
             up(u, Role.FEEDWATER, ax, cold, plenumTop + 2 * rh - .02, wo);
         }
-        // The fuel connection on the right, near the middle.
-        side(u, Role.FUEL, ax + width / 2, ys, Math.floor((zg0 + zg1) / 2) + .5, fuelNozzle(m));
+        // The fuel connection on the right, near the middle (a heavy frame's over its compressor).
+        side(u, Role.FUEL, ax + width / 2, ys, fuelZ, fuelNozzle(m));
         // The coupling at the back; the base on its plinth.
         // The load shaft turning in its open guard (owner: visible turning parts), then the half coupling under its guard.
         double shaft = ProcessUnit.shaftRadius(m.power() / 1e3, m.speed()), zl = zg1 + .6 + .2 * s, face = Math.ceil(zl + .2 + shaft - 1e-9);

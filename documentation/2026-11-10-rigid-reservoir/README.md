@@ -1,6 +1,6 @@
 # Rigid reservoirs once filled
 
-Status: **In progress since 2026-11-10** (implemented on the branch, 3041f3f7e; not merged). Branch `claude/ecstatic-dubinsky-c24b8a`, after the steam ejector batch.
+Status: **Implemented 2026-11-10** (0.25.0, with the custom-shader-system batch). Branch `claude/ecstatic-dubinsky-c24b8a`, after the steam ejector batch.
 
 ## Scope
 

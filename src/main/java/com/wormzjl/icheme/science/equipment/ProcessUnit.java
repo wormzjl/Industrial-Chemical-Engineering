@@ -313,6 +313,29 @@ public final class ProcessUnit {
         return shaftRadius(pumpPower(shape.duty()), shape.duty().speed());
     }
 
+    /** The largest low-voltage TEFC motor, kW; above it a large motor. */
+    static final double MOTOR_LOW_VOLTAGE = 400;
+    /** A two-pole generator above this, kW, is drawn as a turbo-generator (owner P9 A). */
+    static final double TURBO_GENERATOR = 20000;
+    /** A motor's or generator's plinth at grade and its baseplate, m. */
+    static final double DRIVER_PLINTH = .2, DRIVER_BASEPLATE = .08;
+
+    /** A motor's or generator's body across, m: a TEFC motor's {@link #motorDiameter}, a large machine's frame 1.15 of it. */
+    static double motorFrame(double kw) {
+        return (kw > MOTOR_LOW_VOLTAGE ? 1.15 : 1) * motorDiameter(kw);
+    }
+
+    /**
+     * A large generator's shaft height at grade, m: its drawing's ({@code MotorDesign.build}), so a driver drawn for it couples
+     * level (batch 2026-11-10-prime-movers, owner review T1); NaN at low voltage, whose shaft follows its feet. The kit's, so
+     * a prime mover reads it without reaching into the generator's design.
+     */
+    static double generatorShaft(double kw, int poles) {
+        if (!(kw > MOTOR_LOW_VOLTAGE)) return Double.NaN;
+        double r = (poles == 2 && kw > TURBO_GENERATOR ? .85 : 1) * motorFrame(kw) / 2;
+        return Math.ceil(DRIVER_PLINTH + DRIVER_BASEPLATE + r + .1 - .5) + .5;
+    }
+
     /** A TEFC motor's body across, m, for {@code kw}: about 0.19 P^0.25 (0.32 m at 8 kW, 0.91 m at 530 kW). */
     static double motorDiameter(double kw) {
         return .19 * Math.sqrt(Math.sqrt(kw));
@@ -2335,6 +2358,27 @@ public final class ProcessUnit {
     }
 
     /**
+     * A length of the split flange on the casing's {@code side} (±x of {@code a}) from station {@code za} (the casing's
+     * radius there {@code ra}) to {@code zb} ({@code rb}), {@code out} proud of the casing between heights y0 and y1: its
+     * top, underside and outer face, and the end faces asked for (a cone's flange is a slanted hexahedron). The kit's: a
+     * steam turbine's and a gas turbine's casings both carry it.
+     */
+    static void ledge(Mesh m, double a, int side, double za, double ra, double zb, double rb, double y0, double y1, double out, boolean startCap, boolean endCap,
+                              Material material) {
+        double[][] in = {{a + side * (ra - .03), za}, {a + side * (rb - .03), zb}}, ex = {{a + side * (ra + out), za}, {a + side * (rb + out), zb}};
+        for (double y : new double[]{y0, y1})
+            m.flat(List.of(new double[]{in[0][0], y, za}, new double[]{ex[0][0], y, za}, new double[]{ex[1][0], y, zb}, new double[]{in[1][0], y, zb}),
+                    new double[]{0, y == y1 ? 1 : -1, 0}, material);
+        m.flat(List.of(new double[]{ex[0][0], y0, za}, new double[]{ex[1][0], y0, zb}, new double[]{ex[1][0], y1, zb}, new double[]{ex[0][0], y1, za}), new double[]{side, 0, 0},
+                material);
+        if (startCap)
+            m.flat(List.of(new double[]{in[0][0], y0, za}, new double[]{ex[0][0], y0, za}, new double[]{ex[0][0], y1, za}, new double[]{in[0][0], y1, za}), new double[]{0, 0, -1},
+                    material);
+        if (endCap)
+            m.flat(List.of(new double[]{in[1][0], y0, zb}, new double[]{ex[1][0], y0, zb}, new double[]{ex[1][0], y1, zb}, new double[]{in[1][0], y1, zb}), new double[]{0, 0, 1},
+                    material);
+    }
+    /**
      * A prime mover's load shaft along z at (x, y) from {@code z0} to {@code z1} (batch 2026-11-10-prime-movers): a spool
      * of radius {@code rs} with a bolted flange at each end and a disc pack in its middle, one moving part turning at
      * {@code speed} rev/s, in an open guard of bars on {@code floor} so it shows turning.
@@ -2373,7 +2417,8 @@ public final class ProcessUnit {
     void damper(double x, double y, double z0, double z1, double r, double speed) {
         var f = Frame.of(new double[]{x, y, 0}, 2, 1);
         mesh.part(motions.size());
-        mesh.cylinder(f, r, z0 + .02, z1, sides(2 * r), Material.MACHINE);
+        // Bare machined steel: a moving part is unpainted, drawn without the cell's tint.
+        mesh.cylinder(f, r, z0 + .02, z1, sides(2 * r), Material.SHAFT);
         mesh.hoop(f, r, r + .015, z0 + .02, z0 + .06, sides(2 * r), Material.SHAFT);
         mesh.cylinder(f, .3 * r, z0 - .03, z0 + .02, 10, Material.SHAFT);
         for (int k = 0; k < 8; k++) {

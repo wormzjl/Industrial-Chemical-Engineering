@@ -1,6 +1,6 @@
 # Chimney
 
-Status: **In progress since 2026-11-10** (built on the branch, not merged). Branch `claude/chimney-b7484c`, cut from `claude/custom-shader-system-caff9e` at `6e95356b5` (its plume, smoke and VENT sound).
+Status: **Implemented 2026-11-10** (0.25.0, with the custom-shader-system batch). Branch `claude/chimney-b7484c`, cut from `claude/custom-shader-system-caff9e` at `6e95356b5` (its plume, smoke and VENT sound).
 
 ## Scope
 

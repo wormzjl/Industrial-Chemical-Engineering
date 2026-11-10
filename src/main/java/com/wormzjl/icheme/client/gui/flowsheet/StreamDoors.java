@@ -363,8 +363,8 @@ public final class StreamDoors {
         var parts = port.split("/");
         return switch (parts[0]) {
             case "pa" -> x.text("port.pa_" + parts[2], parts[1]);
-            case "in", "out" -> parts.length > 1 ? x.text("port." + parts[0] + "_row", parts[1]) : x.text("port." + port);
-            case "steam", "draw", "cut" -> x.text("port." + parts[0] + "_row", parts[1]);
+            // A numbered port names its row; an unnumbered one, such as a gas turbine coil's steam, its own key.
+            case "in", "out", "steam", "draw", "cut" -> parts.length > 1 ? x.text("port." + parts[0] + "_row", parts[1]) : x.text("port." + port);
             default -> x.text("port." + port);
         };
     }

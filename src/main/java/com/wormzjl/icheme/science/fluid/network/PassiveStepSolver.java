@@ -203,6 +203,9 @@ public final class PassiveStepSolver {
     private List<PassiveNetwork.Pipe.Identity> previousPipes=List.of();
     private long[] previousNodeIds=new long[0];
     private double[] previousFlows=new double[0],previousHeads=new double[0];
+    /** The next pass's start flows of the connections restarted in their allowed direction ({@link #allowedRestart}), NaN for
+     * the others; null for none. The pass's equations read it once, as they are built. */
+    private double[] allowedRestart;
     /** The law flows ({@link #saturated}: the edge unknowns) of the point {@link #previousFlows} are the transported flows of;
      * a step's Newton starts from them. At a job start the committed endpoint's transported flows stand in for them. */
     private double[] previousLawFlows=new double[0];
@@ -477,6 +480,9 @@ public final class PassiveStepSolver {
         // nothing); each pass solves them as junctions holding their stock (emptyingGraph), null while there is none.
         // A vessel a converged pass has confirmed as emptying is not released again within the solve ({@link #keptEmptying}).
         final var original=graph;boolean[] emptying=null,emptied=new boolean[graph.reservoirs().size()],flashedVessels=new boolean[graph.reservoirs().size()];
+        // Owner decision of 2026-11-10 (option A, batch 2026-11-10-custom-shader-system): the connections at a void or generator
+        // end this solve has restarted in their allowed direction ({@link #allowedRestart}), and how many restarts it took.
+        boolean[] restarted=new boolean[graph.pipes().size()];int restarts=0;allowedRestart=null;
         for(int pass=0;pass<maximumPasses;pass++) {
             checkpoint.run();SolverDiagnostics.count(SolverDiagnostics.activeSetPasses);
             graph=emptying==null?original:emptyingGraph(original,emptying);emptyings=emptying==null?null:emptyings(original,emptying,dt);
@@ -491,14 +497,14 @@ public final class PassiveStepSolver {
             int[] phases=new int[seeds.size()];for(int i=0;i<phases.length;i++)phases[i]=dry(graph.reservoirs().get(i),seeds.get(i))?DRY:phaseCode(seeds.get(i));
             byte[] modeCodes=new byte[modes.size()];for(int i=0;i<modeCodes.length;i++)modeCodes[i]=(byte)modes.get(i).ordinal();
             var supports=supports(graph,seeds,reachable,promoted);
-            var equations=new Equations(graph,dt,modes,boundaryClosed,seeds,reachable,supports,pipeIdentities);
+            var equations=new Equations(graph,dt,modes,boundaryClosed,seeds,reachable,supports,pipeIdentities);allowedRestart=null;
             flashRestated=null;
             // The active-set state is what varies between passes, so the structure key is also the cycle key: repeating one
             // means the pass sequence cannot make progress. The frozen junction donors, the phase-port segments and the static
             // columns belong to it for the same reason the modes do: they decide which equations this pass states (see
             // {@link PassKey}).
             var structure=new WorkspaceKey(0,nodeIds,kinds,pipeIdentities,phases,componentMask,supportCodes(supports),modeCodes,boundaryClosed.clone(),equations.junctionDonorFirst);
-            if(!seen.add(new PassKey(structure,equations.segmentCodes(),equations.columnCodes(),foldedPhases.clone(),proposal==null?-1:proposal.node(),proposal==null?0:proposal.phases())))throw new SparseNewton.Nonconvergence("Phase/device active-set cycle");
+            if(!seen.add(new PassKey(structure,equations.segmentCodes(),equations.columnCodes(),foldedPhases.clone(),proposal==null?-1:proposal.node(),proposal==null?0:proposal.phases(),restarts)))throw new SparseNewton.Nonconvergence("Phase/device active-set cycle");
             var key=new WorkspaceKey(Double.doubleToLongBits(dt),nodeIds,kinds,pipeIdentities,phases,componentMask,structure.supports,modeCodes,structure.boundaryClosed,structure.junctionDonors);
             var workspace=workspaces.get(key);
             SolverDiagnostics.count(workspace==null?SolverDiagnostics.workspaceBuilds:SolverDiagnostics.workspaceReuses);
@@ -600,6 +606,14 @@ public final class PassiveStepSolver {
             if(!changed&&illegalDirection>=0) {
                 var corrected=phaseCorrection(graph,states,checkpoint,equations.cachedPrepared,foldedPhases);
                 if(corrected!=null){seeds=corrected;continue;}
+                // Owner decision of 2026-11-10 (option A): a converged point can flow the way a void or generator end forbids
+                // where the network has a second root. A rigid kettle shell boiling at 101.6 kPa into a void at 1 atm converged
+                // from rest on 29 kg/s drawn from the void at 101.320 kPa; the closure held its vapour line shut for the step,
+                // and the next step started from rest again, so the line stayed shut for good while the shell rose to 231 kPa.
+                // Before such a closure, the pass is solved once more from the same seeds with that connection started at its
+                // own law's flow on the step-start states, where that flow goes the allowed way.
+                var restart=restarted[illegalDirection]?null:allowedRestart(graph,illegalDirection);
+                if(restart!=null){restarted[illegalDirection]=true;restarts++;allowedRestart=restart;continue;}
                 closeBoundary(graph,illegalDirection,boundaryClosed,modes);changed=true;
             }
             if(!changed)for(int e=0;e<graph.pipes().size()&&!changed;e++)if(!boundaryClosed[e]&&flows[e]!=0&&refusedSpray(graph,e,states)){closeBoundary(graph,e,boundaryClosed,modes);changed=true;}
@@ -704,6 +718,20 @@ public final class PassiveStepSolver {
      * Closes connection {@code edge}'s boundary for the rest of the solve: a direction its one-way end forbids (a void
      * supplying, a generator receiving, a dry end giving).
      */
+    /**
+     * Owner decision of 2026-11-10 (option A): the start flows that restart connection {@code edge}, which a converged point
+     * showed flowing the way its void or generator end forbids, at its own law's flow on the step-start states; null where
+     * the connection has no such end or that flow is not the allowed way (then the boundary closes as before).
+     */
+    private double[] allowedRestart(PassiveNetwork graph,int edge) {
+        var pipe=graph.pipes().get(edge);var a=graph.reservoirs().get(pipe.first()).kind();var b=graph.reservoirs().get(pipe.second()).kind();
+        boolean end=a==PassiveNetwork.NodeKind.VOID||a==PassiveNetwork.NodeKind.GENERATOR||b==PassiveNetwork.NodeKind.VOID||b==PassiveNetwork.NodeKind.GENERATOR;
+        if(!end)return null;
+        double flow=initialMassFlow(graph,pipe);
+        if(!(Math.abs(flow)>1e-10)||!boundaryAllowed(graph,pipe,flow))return null;
+        double[] start=new double[graph.pipes().size()];Arrays.fill(start,Double.NaN);start[edge]=flow;
+        return start;
+    }
     private static void closeBoundary(PassiveNetwork graph,int edge,boolean[] boundaryClosed,List<FlowControl.Mode> modes) {
         boundaryClosed[edge]=true;
         if(!(graph.pipes().get(edge).control() instanceof FlowControl.Passive))modes.set(edge,FlowControl.Mode.CLOSED);
@@ -780,6 +808,12 @@ public final class PassiveStepSolver {
     private FlowControl.Mode nextMode(Equations equations,int i,FlowControl.Mode mode,double flow,double head,List<FluidThermodynamics.State> states,
                                       FluidThermodynamics.State up,Equations.Transport suction,double tolerance) {
         var graph=equations.graph;var pipe=graph.pipes().get(i);double rho=suction.density;var next=mode;
+        // Owner decision of 2026-11-10 (option A, batch 2026-11-10-custom-shader-system): a closed device never reopens toward
+        // a flow its own end forbids, a discharge into a generator or a suction from a void: it can never deliver there, so it
+        // stands dead-headed. Bundled random 575's pump into a 254 kPa gas generator reopened on its rise every step, stalled
+        // its Newton on the law (its suction junction pulled to 75 kPa) and closed again, 4 to 8 passes a step, and the step
+        // controller cut the steps to 6 ms until the island held on its wall deadline.
+        if(mode==FlowControl.Mode.CLOSED&&forwardForbidden(graph,pipe))return FlowControl.Mode.CLOSED;
         if(pipe.control() instanceof FlowControl.Mover pump) {
             double band=shutoffBand(equations.pressureScales[i],tolerance);
             // A mover on its own law (batch 2026-11-03-rotating-machinery): it closes on a reverse drive (its check valve; the
@@ -1116,9 +1150,9 @@ public final class PassiveStepSolver {
      * 143.0 kPa, was refused as a repeat of the first (bundled fuzz seed 145, hold E7). The columns are a finite record, so
      * the sequence stays finite; a pair of passes that alternates its columns repeats a key one pass later.
      */
-    private record PassKey(WorkspaceKey structure,byte[] segments,byte[] columns,int[] folded,int proposalNode,int proposalPhases) {
-        @Override public boolean equals(Object other){return other instanceof PassKey key&&structure.equals(key.structure)&&Arrays.equals(segments,key.segments)&&Arrays.equals(columns,key.columns)&&Arrays.equals(folded,key.folded)&&proposalNode==key.proposalNode&&proposalPhases==key.proposalPhases;}
-        @Override public int hashCode(){return 31*(31*(31*(31*(31*structure.hashCode()+Arrays.hashCode(segments))+Arrays.hashCode(columns))+Arrays.hashCode(folded))+proposalNode)+proposalPhases;}
+    private record PassKey(WorkspaceKey structure,byte[] segments,byte[] columns,int[] folded,int proposalNode,int proposalPhases,int restarts) {
+        @Override public boolean equals(Object other){return other instanceof PassKey key&&structure.equals(key.structure)&&Arrays.equals(segments,key.segments)&&Arrays.equals(columns,key.columns)&&Arrays.equals(folded,key.folded)&&proposalNode==key.proposalNode&&proposalPhases==key.proposalPhases&&restarts==key.restarts;}
+        @Override public int hashCode(){return 31*(31*(31*(31*(31*(31*structure.hashCode()+Arrays.hashCode(segments))+Arrays.hashCode(columns))+Arrays.hashCode(folded))+proposalNode)+proposalPhases)+restarts;}
     }
     /**
      * A proposal (owner decision D39 B): the phases ({@link FluidThermodynamics#phaseBits} bits) the check of a converged
@@ -3780,6 +3814,10 @@ public final class PassiveStepSolver {
      * not out of a dry end ({@link #dryEnd}). A phase port never refuses a direction for want of its first phase (decision
      * D11): a vessel that lacks it draws the next one of the port's priority order ({@link PhaseDraw}).
      */
+    /** Whether a device's forward flow (first end to second) is one its ends forbid: into a generator, or out of a void. */
+    private static boolean forwardForbidden(PassiveNetwork graph,PassiveNetwork.Pipe pipe) {
+        return graph.reservoirs().get(pipe.second()).kind()==PassiveNetwork.NodeKind.GENERATOR||graph.reservoirs().get(pipe.first()).kind()==PassiveNetwork.NodeKind.VOID;
+    }
     static boolean boundaryAllowed(PassiveNetwork graph,PassiveNetwork.Pipe pipe,double flow) {
         var a=graph.reservoirs().get(pipe.first()).kind();var b=graph.reservoirs().get(pipe.second()).kind();
         return !pipe.blocked(flow)&&!(flow<0&&(a==PassiveNetwork.NodeKind.GENERATOR||b==PassiveNetwork.NodeKind.VOID)
@@ -4894,6 +4932,7 @@ public final class PassiveStepSolver {
             int edges=graph.pipes().size();
             double[] q=new double[edges],head=new double[edges];boolean[] headSet=new boolean[edges];
             startPoint(graph,modes,boundaryClosed,pipeIdentities,seeds,q,head,headSet);
+            if(allowedRestart!=null&&allowedRestart.length==edges)for(int i=0;i<edges;i++)if(!Double.isNaN(allowedRestart[i]))q[i]=allowedRestart[i];
             for(int i=0;i<edges;i++) {
                 x[edgeOffset+i]=q[i];
                 if(headSet[i]&&controlOffsets[i]>=0)x[controlOffsets[i]]=head[i];
