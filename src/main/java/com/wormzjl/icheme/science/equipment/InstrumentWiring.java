@@ -3,6 +3,7 @@ package com.wormzjl.icheme.science.equipment;
 import static com.wormzjl.icheme.science.equipment.Mesh.*;
 
 import java.util.*;
+import com.wormzjl.icheme.science.math.DeterministicMath;
 
 /**
  * Equipment-owned, non-network instrument finish. No blocks, simulation nodes or collision are
@@ -440,7 +441,7 @@ public final class InstrumentWiring {
             var normal = new double[sides + 1][];
             for (int k = 0; k <= sides; k++) {
                 double angle = 2 * Math.PI * k / sides;
-                normal[k] = plus(scale(ref, Math.cos(angle)), scale(side, Math.sin(angle)));
+                normal[k] = plus(scale(ref, DeterministicMath.cos(angle)), scale(side, DeterministicMath.sin(angle)));
                 ring[k] = plus(at, scale(normal[k], r));
             }
             if (i > 0) v += SurfaceSection.distance(path.get(i - 1), at);

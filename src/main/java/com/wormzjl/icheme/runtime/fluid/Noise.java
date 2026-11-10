@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.runtime.fluid;
 
 import java.util.*;
+import com.wormzjl.icheme.science.math.DeterministicMath;
 import net.minecraft.core.BlockPos;
 
 /**
@@ -55,13 +56,13 @@ public final class Noise {
     private Noise(){}
 
     /** The level {@code level} dB gives at {@code distance} blocks, dB: spherical spreading, 20 log10 r (r at least 1). */
-    public static double at(double level,double distance){return level-20*Math.log10(Math.max(1,distance));}
+    public static double at(double level,double distance){return level-20*DeterministicMath.log10(Math.max(1,distance));}
     /** Levels summed by energy, dB: 10 log10 Σ 10^(L/10). */
-    public static double sum(double... levels){double e=0;for(double l:levels)e+=Math.pow(10,l/10);return e>0?10*Math.log10(e):Double.NEGATIVE_INFINITY;}
+    public static double sum(double... levels){double e=0;for(double l:levels)e+=DeterministicMath.pow(10,l/10);return e>0?10*DeterministicMath.log10(e):Double.NEGATIVE_INFINITY;}
     private static double capped(double level){return Double.isFinite(level)?Math.min(CAP,level):Double.NaN;}
 
     /** A valve passing flow with a drop of {@code drop} Pa: 70 + 20 log10(ΔP / 20 kPa) dB, NaN (silent) below 20 kPa, at most 120 dB. */
-    public static double valve(double drop){return drop>=REFERENCE_DROP?capped(VALVE_FLOOR+20*Math.log10(drop/REFERENCE_DROP)):Double.NaN;}
+    public static double valve(double drop){return drop>=REFERENCE_DROP?capped(VALVE_FLOOR+20*DeterministicMath.log10(drop/REFERENCE_DROP)):Double.NaN;}
     /**
      * A vent of {@code massFlow} kg/s of gas of density {@code density} kg/m³ through {@code area} m² (its roof): a free jet
      * at u = ṁ / (ρ A), its acoustic power 1e-4 (u/a)⁵ of its stream power ṁ u² / 2 (Lighthill's u⁸). 100 m/s through 1 m²
@@ -70,21 +71,21 @@ public final class Noise {
     public static double vent(double massFlow,double density,double area) {
         if(!(massFlow>0)||!(density>0)||!(area>0))return Double.NaN;
         double u=Math.min(com.wormzjl.icheme.science.fluid.network.OpenVessel.VENT_SPEED,massFlow/(density*area));
-        double watt=1e-4*Math.pow(u/AIR_SOUND,5)*.5*massFlow*u*u;
-        return watt>0?capped(10*Math.log10(watt/1e-12)):Double.NaN;
+        double watt=1e-4*DeterministicMath.pow(u/AIR_SOUND,5)*.5*massFlow*u*u;
+        return watt>0?capped(10*DeterministicMath.log10(watt/1e-12)):Double.NaN;
     }
     /** {@code count} fans of {@code full} dB each at full speed, at speed share {@code speed}: full + 10 log10 n + 50 log10 speed (fan law). NaN for none or stopped. */
-    public static double fans(int count,double full,double speed){return count>0&&speed>0?capped(full+10*Math.log10(count)+50*Math.log10(Math.min(speed,1.5))):Double.NaN;}
+    public static double fans(int count,double full,double speed){return count>0&&speed>0?capped(full+10*DeterministicMath.log10(count)+50*DeterministicMath.log10(Math.min(speed,1.5))):Double.NaN;}
     /** Falling water at a tower's air inlets, {@code flow} kg/s: 72 + 10 log10 flow (a 20 t/s natural tower about 115 dB, a 14 m cell's 392 kg/s about 98 dB). */
-    public static double water(double flow){return flow>1?capped(72+10*Math.log10(flow)):Double.NaN;}
+    public static double water(double flow){return flow>1?capped(72+10*DeterministicMath.log10(flow)):Double.NaN;}
     /** Burners releasing {@code watt} W: a combustion efficiency of 1e-9 behind the casing, 30 + 10 log10 Q (10 MW: 100 dB). NaN unfired. */
-    public static double burner(double watt){return watt>1e4?capped(30+10*Math.log10(watt)):Double.NaN;}
+    public static double burner(double watt){return watt>1e4?capped(30+10*DeterministicMath.log10(watt)):Double.NaN;}
     /** A burner's forced-draft fan, its air following the firing share: {@link #COOLER_FAN} − 7 dB at full firing, the fan law below. */
     public static double draftFan(double firing){return fans(1,COOLER_FAN-7,firing);}
     /** A gearbox rated {@code watt} W at speed share {@code speed}: 75 + 10 log10(P / 1 kW) + 30 log10 speed (1 MW at full speed: 105 dB). */
-    public static double gear(double watt,double speed){return watt>0&&speed>0?capped(75+10*Math.log10(watt/1e3)+30*Math.log10(Math.min(speed,1.5))):Double.NaN;}
+    public static double gear(double watt,double speed){return watt>0&&speed>0?capped(75+10*DeterministicMath.log10(watt/1e3)+30*DeterministicMath.log10(Math.min(speed,1.5))):Double.NaN;}
     /** A kettle reboiler boiling {@code watt} W in its pool, muffled by its shell: 75 + 10 log10(Q / 1 MW). NaN below 10 kW. */
-    public static double kettle(double watt){return watt>1e4?capped(75+10*Math.log10(watt/1e6)):Double.NaN;}
+    public static double kettle(double watt){return watt>1e4?capped(75+10*DeterministicMath.log10(watt/1e6)):Double.NaN;}
     /**
      * A liquid line of density {@code density} kg/m³ stopped from {@code speed} m/s: the Joukowsky surge ΔP = ρ a Δv (water
      * at 2 m/s about 24 bar) on the valve's scale, 70 + 20 log10(ΔP / 20 kPa); NaN below {@link #KNOCK_FLOOR}.
