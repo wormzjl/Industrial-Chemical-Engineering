@@ -332,6 +332,22 @@ public class OperationColumnTest {
         assertFalse(reflux.hint().contains("Accepted"), "an entry the table holds says nothing more");
     }
 
+    /** The DCS's column page (W6.2) places the same door in the console's page column: it fits there at every console size, narrowed for a bar too. */
+    @Test
+    void theDoorFitsTheDcsColumnPage() {
+        var t = new HeatControlColumnTest.Recording("gui.icheme.");
+        for (int width = 300; width <= 760; width += 23)
+            for (int height = 240; height <= 520; height += 70) {
+                var layout = ControlColumns.layout(width, height, true);
+                var area = layout.areas().getLast();
+                for (var in : inputs())
+                    for (boolean bar : new boolean[]{false, true}) {
+                        int w = bar ? area.w() - ScrollView.BAR - 4 : area.w();
+                        assertFits(Column.place(OperationColumn.rows(in, t), area.x(), area.y(), w, M, Column.Metrics.COMPACT), "DCS " + width + " by " + height + (bar ? " narrowed" : ""));
+                    }
+            }
+    }
+
     /** Before the first run a column that can run takes set points (W7): entries and Apply; a vacuum column keeps the design's meters. */
     @Test
     void aColumnThatNeverRanTakesSetPoints() {

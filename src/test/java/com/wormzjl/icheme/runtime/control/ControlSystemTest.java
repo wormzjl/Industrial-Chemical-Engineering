@@ -440,4 +440,30 @@ class ControlSystemTest {
         facts.removePanel(id);
         assertFalse(facts.heldPanel(id), "the hold leaves with the controller");
     }
+
+    /**
+     * A DCS's column page (W6.2): a console whose bus reaches the column runs Start, the set points and Stop at the column;
+     * one with no data link, or a controller box, is refused and the column sees nothing.
+     */
+    @Test
+    void aDcsColumnCommandReachesTheColumnOnlyOverItsDataLink() {
+        var calls = new ArrayList<String>();
+        var door = new ColumnCommands.Door() {
+            @Override public String start(long host) { calls.add("start " + host); return null; }
+            @Override public void stop(long host) { calls.add("stop " + host); }
+            @Override public String setpoints(long host, List<Double> values) { calls.add("apply " + host + " " + values); return values.isEmpty() ? "the set points do not fit the column's design" : null; }
+        };
+        var start = new ColumnCommands.Command(12, ColumnCommands.Action.START, List.of());
+        assertEquals(ColumnCommands.NO_DATA_LINK, ColumnCommands.run(true, true, false, start, door));
+        assertEquals(ColumnCommands.NOT_A_DCS, ColumnCommands.run(false, true, true, start, door));
+        assertEquals(ColumnCommands.CHANGED, ColumnCommands.run(true, false, true, start, door));
+        assertEquals(List.of(), calls, "a refused command reaches no column");
+        assertEquals(ColumnCommands.APPLIED, ColumnCommands.run(true, true, true, start, door));
+        assertEquals(ColumnCommands.APPLIED, ColumnCommands.run(true, true, true, new ColumnCommands.Command(12, ColumnCommands.Action.APPLY, List.of(30.0, 318.15)), door));
+        assertEquals("the set points do not fit the column's design", ColumnCommands.run(true, true, true, new ColumnCommands.Command(12, ColumnCommands.Action.APPLY, List.of()), door),
+                "the column's own refusal is the answer");
+        assertEquals(ColumnCommands.APPLIED, ColumnCommands.run(true, true, true, new ColumnCommands.Command(12, ColumnCommands.Action.STOP, List.of()), door));
+        assertEquals(List.of("start 12", "apply 12 [30.0, 318.15]", "apply 12 []", "stop 12"), calls);
+        assertThrows(IllegalArgumentException.class, () -> new ColumnCommands.Command(12, ColumnCommands.Action.APPLY, Collections.nCopies(65, 1.0)));
+    }
 }

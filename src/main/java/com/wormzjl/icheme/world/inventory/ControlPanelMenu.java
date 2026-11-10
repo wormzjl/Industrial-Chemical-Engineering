@@ -28,6 +28,16 @@ public final class ControlPanelMenu extends AbstractContainerMenu {
     private UUID answered;
     private String reply = "";
     private int controllerPage, devicePage;
+    private long column;
+
+    /** The column host whose Operation page this DCS menu shows (W6.2), 0 for none. */
+    public long column() {
+        return column;
+    }
+
+    public void selectColumn(long host) {
+        column = Math.max(0, host);
+    }
 
     public int controllerPage() {
         return controllerPage;

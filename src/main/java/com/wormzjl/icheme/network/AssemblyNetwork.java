@@ -107,6 +107,32 @@ public final class AssemblyNetwork {
     /** Bounds an operation's read checks: ports, duties, the values of a set point list. */
     static final int MAX_STREAMS = 32, MAX_VALUES = 64;
 
+    /** {@code o} in this codec's bytes, for the control publication's column page (W6.2): one encoding of the view. */
+    public static byte[] encodeOperation(OperationView o) {
+        var b = new RegistryFriendlyByteBuf(io.netty.buffer.Unpooled.buffer(), net.minecraft.core.RegistryAccess.EMPTY);
+        try {
+            writeOperation(b, o);
+            var out = new byte[b.readableBytes()];
+            b.readBytes(out);
+            return out;
+        } finally {
+            b.release();
+        }
+    }
+
+    /** The view {@link #encodeOperation} wrote, or null where {@code bytes} do not read as one. */
+    public static @Nullable OperationView decodeOperation(byte[] bytes) {
+        var b = new RegistryFriendlyByteBuf(io.netty.buffer.Unpooled.wrappedBuffer(bytes), net.minecraft.core.RegistryAccess.EMPTY);
+        try {
+            var o = readOperation(b);
+            return b.readableBytes() == 0 ? o : null;
+        } catch (RuntimeException invalid) {
+            return null;
+        } finally {
+            b.release();
+        }
+    }
+
     private static void writeOperation(RegistryFriendlyByteBuf b, @Nullable OperationView o) {
         b.writeBoolean(o != null);
         if (o == null) return;

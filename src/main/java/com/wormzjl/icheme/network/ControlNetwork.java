@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.network;
 
 import com.wormzjl.icheme.IChemE;
+import com.wormzjl.icheme.runtime.control.ColumnCommands;
 import com.wormzjl.icheme.runtime.control.ControlSettings;
 import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
 import com.wormzjl.icheme.world.inventory.ControlPanelMenu;
@@ -92,8 +93,55 @@ public final class ControlNetwork {
         }
     }
 
+    /** A DCS menu's choice of column page (W6.2): the publication then carries that column's Operation view. */
+    public record ColumnSelect(int menu, long host) implements CustomPacketPayload {
+        public static final Type<ColumnSelect> TYPE = ControlNetwork.type("control_column_select");
+        public static final StreamCodec<RegistryFriendlyByteBuf, ColumnSelect> CODEC =
+                StreamCodec.of(
+                        (b, p) -> {
+                            b.writeVarInt(p.menu);
+                            b.writeVarLong(p.host);
+                        },
+                        b -> new ColumnSelect(b.readVarInt(), b.readVarLong()));
+
+        @Override
+        public Type<ColumnSelect> type() {
+            return TYPE;
+        }
+    }
+
+    /** A DCS's column command (W6.2): Start, Stop or the set points, queued like a controller edit. */
+    public record ColumnCommand(int menu, ColumnCommands.Command command) implements CustomPacketPayload {
+        public static final Type<ColumnCommand> TYPE = ControlNetwork.type("control_column_command");
+        public static final StreamCodec<RegistryFriendlyByteBuf, ColumnCommand> CODEC =
+                StreamCodec.of(
+                        (b, p) -> {
+                            b.writeVarInt(p.menu);
+                            b.writeVarLong(p.command.host());
+                            b.writeEnum(p.command.action());
+                            b.writeVarInt(p.command.values().size());
+                            for (double v : p.command.values()) b.writeDouble(v);
+                        },
+                        b -> {
+                            int menu = b.readVarInt();
+                            long host = b.readVarLong();
+                            var action = b.readEnum(ColumnCommands.Action.class);
+                            int n = b.readVarInt();
+                            if (n < 0 || n > ColumnCommands.Command.MAX_VALUES)
+                                throw new io.netty.handler.codec.DecoderException("Too many set point values");
+                            var values = new ArrayList<Double>();
+                            for (int i = 0; i < n; i++) values.add(b.readDouble());
+                            return new ColumnCommand(menu, new ColumnCommands.Command(host, action, values));
+                        });
+
+        @Override
+        public Type<ColumnCommand> type() {
+            return TYPE;
+        }
+    }
+
     public static void register(RegisterPayloadHandlersEvent event) {
-        var r = event.registrar("control-3").executesOn(HandlerThread.MAIN);
+        var r = event.registrar("control-4").executesOn(HandlerThread.MAIN);
         r.playToServer(
                 Edit.TYPE,
                 Edit.CODEC,
@@ -121,6 +169,27 @@ public final class ControlNetwork {
                             && menu.containerId == p.menu
                             && menu.stillValid(player)) menu.browse(p.controllers, p.devices);
                 });
+        r.playToServer(
+                ColumnSelect.TYPE,
+                ColumnSelect.CODEC,
+                (p, c) -> {
+                    if (c.player() instanceof ServerPlayer player
+                            && player.containerMenu instanceof ControlPanelMenu menu
+                            && menu.containerId == p.menu
+                            && menu.dcs()
+                            && menu.stillValid(player))
+                        FluidWorldAuthority.find(player.server).ifPresent(w -> w.controls().selectColumn(menu, p.host));
+                });
+        r.playToServer(
+                ColumnCommand.TYPE,
+                ColumnCommand.CODEC,
+                (p, c) -> {
+                    if (c.player() instanceof ServerPlayer player
+                            && player.containerMenu instanceof ControlPanelMenu menu
+                            && menu.containerId == p.menu
+                            && menu.stillValid(player))
+                        FluidWorldAuthority.find(player.server).ifPresent(w -> w.controls().column(menu, p.command));
+                });
         r.playToClient(
                 View.TYPE,
                 View.CODEC,
@@ -138,6 +207,14 @@ public final class ControlNetwork {
 
     public static void edit(int menu, UUID panel, long revision, ControlSettings settings) {
         PacketDistributor.sendToServer(new Edit(menu, panel, revision, settings));
+    }
+
+    public static void selectColumn(int menu, long host) {
+        PacketDistributor.sendToServer(new ColumnSelect(menu, host));
+    }
+
+    public static void column(int menu, ColumnCommands.Command command) {
+        PacketDistributor.sendToServer(new ColumnCommand(menu, command));
     }
 
     public static void browse(int menu, int controllers, int devices) {

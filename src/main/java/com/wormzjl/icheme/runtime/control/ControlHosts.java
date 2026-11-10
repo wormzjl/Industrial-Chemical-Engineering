@@ -407,6 +407,21 @@ final class ControlHosts {
         return hostIds;
     }
 
+    /** The column hosts whose data socket {@code controller}'s bus reaches, in host order (W6.2: the DCS's column page). */
+    List<Long> columns(UUID controller) {
+        var out = new ArrayList<Long>();
+        for (long host : columnCells.keySet()) if (column(host) != null && wired(controller, host)) out.add(host);
+        out.sort(null);
+        return out;
+    }
+
+    /** A loaded cell of column host {@code host}, or null: the column's origin and level for its Operation commands. */
+    EquipmentShellBlockEntity column(long host) {
+        var ref = columnCells.get(host);
+        var cell = ref == null ? null : ref.get();
+        return cell == null || cell.isRemoved() || cell.getLevel() == null || cell.shape() == null ? null : cell;
+    }
+
     /** The data port registered for an equipment host, or null. */
     DataPort port(long host) {
         return equipmentPorts.get(host);
