@@ -111,7 +111,7 @@ public final class ModBlocks {
     public static final DeferredHolder<SoundEvent,SoundEvent> POT_BOIL=loop("pot_boil");
     /**
      * The plant's other sources (batch 2026-11-10-custom-shader-system, PROCESS_SOUNDS_REVIEW.md table 1): a gas or steam
-     * valve's and a vent's hiss, a liquid valve's crackle (the former pump cavitation loop), its cavitation (the pump's) and its
+     * valve's and a vent's hiss, a liquid valve's rush, its cavitation (the pump's crackle) and its
      * rattling hiss when it flashes, a fan's whoosh, falling water, a
      * gearbox's whine, and a liquid line's water-hammer knock (a one-shot).
      */
