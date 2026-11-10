@@ -281,6 +281,18 @@ public final class PhaseLayout {
      */
     public static final double AMBIENT_PRESSURE=101325;
     /**
+     * Batch 2026-11-10-chimney (owner decision C1 B): the atmosphere falls with height at every boundary open to it. The
+     * density of the outside air, kg/m³ (dry air, 298.15 K, 101,325 Pa), and the height, block y, where it stands at
+     * {@link #AMBIENT_PRESSURE} (the world's sea level).
+     */
+    public static final double AIR_DENSITY=1.185,SEA_LEVEL=63;
+    /** The atmosphere's pressure at height {@code y}, Pa: {@code AMBIENT_PRESSURE - AIR_DENSITY g (y - SEA_LEVEL)}, 11.6 Pa a block. */
+    public static double atmosphere(double y){return AMBIENT_PRESSURE-AIR_DENSITY*9.80665*(y-SEA_LEVEL);}
+    /** The pressure outside this node's wall, Pa ({@link #atAmbient}): an open vessel's surface reads it. */
+    private double ambient=AMBIENT_PRESSURE;
+    /** This layout for a vessel whose wall stands under {@code value} (its inventory's ambient); returns this. */
+    public PhaseLayout atAmbient(double value){ambient=value;return this;}
+    /**
      * Owner decision D54: every vessel is a bag with a stiff wall. Its wall carries no load while the contents are
      * smaller than the capacity, so the pressure is the ambient and the volume the contents' own; once the contents
      * would exceed the capacity the wall holds them there and the pressure comes from the contents. The wall law
@@ -304,8 +316,10 @@ public final class PhaseLayout {
     /** The volume a wall of {@code capacity} holds at most, m³: infinite for an open vessel. */
     public static double capacityVolume(double capacity){return Math.abs(capacity);}
     /** {@link #wallRow} stated on {@code branch}'s branch ({@link Wall#taut}); on the state's own when it is null. */
-    public static double wallRow(FluidThermodynamics.State state,double capacity,Wall branch) {
-        if(capacity==Double.POSITIVE_INFINITY)return 2*(AMBIENT_PRESSURE-state.pressure())/AMBIENT_PRESSURE;
+    public static double wallRow(FluidThermodynamics.State state,double capacity,Wall branch){return wallRow(state,capacity,branch,AMBIENT_PRESSURE);}
+    /** {@link #wallRow} of a vessel whose wall stands under {@code ambient}: an open vessel's surface (C1 B); a closed bag's slack branch keeps {@link #AMBIENT_PRESSURE}. */
+    public static double wallRow(FluidThermodynamics.State state,double capacity,Wall branch,double ambient) {
+        if(capacity==Double.POSITIVE_INFINITY)return 2*(ambient-state.pressure())/AMBIENT_PRESSURE;
         if(capacity<0)return (state.volume()+capacity)/-capacity;
         double taut=(state.volume()-capacity)/capacity,slack=2*(AMBIENT_PRESSURE-state.pressure())/AMBIENT_PRESSURE;
         return (branch==null?taut>=slack:branch.taut())?taut:slack;
@@ -381,9 +395,9 @@ public final class PhaseLayout {
         for(int i:components)result[row++]=(l[i]+v[i]-targetAmounts[i])/componentScales[i];
         if(waterLiquidIndex>=0||waterVaporIndex>=0)result[row++]=(state.waterLiquid()+state.waterVapor()-targetAmounts[l.length])/componentScales[l.length];
         double energy=state.internalEnergy();
-        if(!Double.isNaN(workFrom)){double moved=bagVolume(state,capacity,branch)-workFrom;if(moved!=0)energy+=AMBIENT_PRESSURE*moved;}
+        if(!Double.isNaN(workFrom)){double moved=bagVolume(state,capacity,branch)-workFrom;if(moved!=0)energy+=ambient*moved;}
         result[row++]=(energy-targetEnergy)/energyScale;
-        result[row++]=wallRow(state,capacity,branch);
+        result[row++]=wallRow(state,capacity,branch,ambient);
         if(solidIndex>=0){solidRows(state,variables,offset,solidReference,false,result);row+=3;}
         return row;
     }

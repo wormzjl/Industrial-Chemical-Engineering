@@ -238,7 +238,7 @@ public final class InventoryEquilibrium {
             double temperature=com.wormzjl.icheme.science.material.SolidMaterialCatalog.SolidMaterial.REFERENCE_TEMPERATURE+energy/inventory.solids().moments().heatCapacity();
             return model.solidState(temperature,state.pressure(),inventory.solids());
         }
-        var layout=layout(model,state,support);var x=layout.encode(state);
+        var layout=layout(model,state,support).atAmbient(inventory.ambient());var x=layout.encode(state);
         double[] residual=new double[layout.size()];layout.residual(state,n,energy,volume,workFrom,residual,0,x);
         if(norm(residual)<=CLOSURE)return state;
         var solved=SparseNewton.solve(layout.wallClosure(n,energy,volume,workFrom),x,new SparseNewton.Settings(SparseNewton.ITERATIONS,CLOSURE,1e-6,24),checkpoint);

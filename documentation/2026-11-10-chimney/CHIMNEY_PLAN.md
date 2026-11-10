@@ -89,6 +89,8 @@ On the plinth's side (steel) or the base (brick), as the flare's. Built-in input
 - C6 Starved inlet: **no backflow, NO DRAFT (recommended)**; or air enters at the tip.
 - C7 Exit velocity: design 20 m/s steel, 12 m/s brick, Should window 7.5–30 m/s (recommended); or other numbers.
 
-## 5. Owner answers
+## 5. Owner answers (2026-11-10)
 
-(pending)
+Owner: "All recommended". C1 B, C2 A, C3 A, C4 A, C5 A, C6 A, C7 as proposed (20 m/s steel, 12 m/s brick at 1.2 × the design flow; window 7.5 to 30 m/s; ABOVE RATING over 30 m/s).
+
+Parent's notes with the answers: build C1 B as written, closed slack bags at 101,325 Pa; the bag exception is an open item (a bag also stands in the open air). The references that C1 moves are listed with their old and new values (section 7) and only those are re-recorded.
