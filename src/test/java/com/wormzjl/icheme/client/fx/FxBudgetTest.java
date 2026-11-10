@@ -1,0 +1,56 @@
+package com.wormzjl.icheme.client.fx;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.Arrays;
+
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/** CUSTOM_SHADER_SYSTEM_PLAN.md section 4.6: at most 2,000 quads a frame, the largest on screen first. */
+class FxBudgetTest {
+    @Test
+    void everyoneFitsUnderTheBudget() {
+        assertArrayEquals(new int[]{48, 32, 16}, FxBudget.allot(new double[]{10, 300, 50}, new int[]{48, 32, 16}, 1, FxBudget.FRAME_QUADS));
+    }
+
+    @Test
+    void theLargestOnScreenAreServedFirst() {
+        double[] pixels = new double[60];
+        int[] wanted = new int[60];
+        for (int i = 0; i < 60; i++) {
+            pixels[i] = i;
+            wanted[i] = 48;
+        }
+        int[] out = FxBudget.allot(pixels, wanted, 1, FxBudget.FRAME_QUADS);
+        assertEquals(FxBudget.FRAME_QUADS, Arrays.stream(out).sum());
+        // 41 full flares (1,968 quads), then the 32 quads left, then nothing.
+        for (int i = 59; i >= 19; i--) assertEquals(48, out[i]);
+        assertEquals(32, out[18]);
+        for (int i = 17; i >= 0; i--) assertEquals(0, out[i]);
+    }
+
+    @Test
+    void halfDensityUnderAPack() {
+        assertArrayEquals(new int[]{24, 16, 1}, FxBudget.allot(new double[]{3, 2, 1}, new int[]{48, 31, 1}, FxBudget.PACK_DENSITY, 2000));
+    }
+
+    @Test
+    void tiesKeepTheirOrderAndNothingGoesNegative() {
+        assertArrayEquals(new int[]{5, 3, 0}, FxBudget.allot(new double[]{1, 1, 1}, new int[]{5, 5, 5}, 1, 8));
+        assertArrayEquals(new int[]{0, 0}, FxBudget.allot(new double[]{1, Double.NaN}, new int[]{-3, 0}, 1, 8));
+        assertArrayEquals(new int[]{0}, FxBudget.allot(new double[]{1}, new int[]{4}, 1, -5));
+    }
+
+    @Test
+    void quantizedSharesMoveInEighths() {
+        assertEquals(48, FxBudget.quantize(48, 48));
+        assertEquals(48, FxBudget.quantize(60, 48));
+        assertEquals(42, FxBudget.quantize(47, 48));
+        assertEquals(24, FxBudget.quantize(25, 48));
+        assertEquals(0, FxBudget.quantize(5, 48));
+        assertEquals(0, FxBudget.quantize(0, 48));
+        for (int a = 0; a <= 48; a++) assertTrue(FxBudget.quantize(a, 48) <= a);
+    }
+}
