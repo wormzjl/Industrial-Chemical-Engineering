@@ -396,7 +396,16 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         r.phase=ColumnStatus.phase(r.table!=null,r.conditions);
     }
     /** The set points the cycle runs on (W2): the table's accepted ones with the unit's feed rate; the requested ones before any table. */
-    private static Setpoints running(ColumnUnit u,SplitTable table){return table==null?u.setpoints():table.reference().setpoints().withFeedRate(u.setpoints().feedRate());}
+    /** The set points the cycle runs on: the accepted ones (W2) at the feed rate it takes, the set one or a control loop's plan below it (W6.3). */
+    private Setpoints running(ColumnUnit u,SplitTable table){double rate=feedRate(u);return table==null?u.setpoints().withFeedRate(rate):table.reference().setpoints().withFeedRate(rate);}
+    /** A control loop's planned feed rate for a unit, mol/s, NaN for none (W6.3). */
+    public interface FeedPlans{double feed(long unit);}
+    private FeedPlans feedPlans=unit->Double.NaN;
+    public void feedPlans(FeedPlans plans){feedPlans=Objects.requireNonNull(plans);}
+    /** The feed rate unit {@code u}'s cycle takes, mol/s: its set rate, or a control loop's plan below it (W6.3). The saved set point does not change. */
+    public double feedRate(ColumnUnit u){double set=u.setpoints().feedRate(),plan=feedPlans.feed(u.id());return plan>=0&&plan<set?plan:set;}
+    /** The molar mass the feed inlet of unit {@code unit} meters by, kg/mol, or NaN: its last level's (W6.3: a flow loop's planned feed). */
+    public double feedMolarMass(long unit){var r=runs.get(unit);var u=topology.column(unit);if(r==null||u==null)return Double.NaN;var s=u.station(Port.FEED,0);var log=s==null?null:r.levels.get(s.device());var last=log==null?null:log.peekLast();return last==null||!(last.molarMass()>0)?Double.NaN:last.molarMass();}
     /** The condenser temperature the column runs at: the accepted set point where a table stands, the requested one before (a finding of stage 1: the water's ceiling follows the table in force). */
     private double condenserTemperature(ColumnUnit u){var r=runs.get(u.id());return running(u,r==null?null:r.table).condenserTemperature();}
     /**

@@ -16,6 +16,8 @@ final class ControlPlans {
     private Map<Long, Double> heatPlans = Map.of();
     /** By still pot: its firing (0 to 1) and its reflux ratio (+Infinity closed). */
     private Map<Long, Double> firingPlans = Map.of(), refluxPlans = Map.of();
+    /** By column unit: the feed rate a control loop plans, mol/s (W6.3). */
+    private Map<Long, Double> columnFeedPlans = Map.of();
 
     ControlPlans(FluidWorldAuthority world) {
         this.world = world;
@@ -25,7 +27,8 @@ final class ControlPlans {
         return valvePlans.isEmpty()
                 && heatPlans.isEmpty()
                 && firingPlans.isEmpty()
-                && refluxPlans.isEmpty();
+                && refluxPlans.isEmpty()
+                && columnFeedPlans.isEmpty();
     }
 
     /** The valve law the last cadence planned for {@code output}, or null. */
@@ -46,6 +49,16 @@ final class ControlPlans {
     /** The reflux ratio the last cadence planned for still {@code pot}, or null. */
     Double reflux(long pot) {
         return refluxPlans.get(pot);
+    }
+
+    /** The feed rate the last cadence planned for column unit {@code unit}, mol/s, or null (W6.3). */
+    Double columnFeed(long unit) {
+        return columnFeedPlans.get(unit);
+    }
+
+    /** Takes this cadence's column feed plans (W6.3). The column's cycle reads them at its own cadence: no island wakes. */
+    void commitColumnFeeds(Map<Long, Double> next) {
+        columnFeedPlans = Map.copyOf(next);
     }
 
     /** Takes this cadence's setpoints and returns the outputs whose setpoint changed. */

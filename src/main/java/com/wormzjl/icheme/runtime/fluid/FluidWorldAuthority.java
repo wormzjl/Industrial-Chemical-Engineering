@@ -173,6 +173,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
             public double firing(long pot){return controls==null?Double.NaN:controls.stillFiring(pot);}
             public double reflux(long pot){return controls==null?Double.NaN:controls.stillReflux(pot);}
         });
+        // A control loop's planned column feed (W6.3): the control service's last cadence; the cycle takes it below the set rate.
+        columns.feedPlans(unit->controls==null?Double.NaN:controls.columnFeed(unit));
         health=new PumpHealth(topology,registry::owner,runtime.coordinator(),id->PumpHealth.pump(topology.active().get(id)),id->{var r=topology.active().get(id);return r==null?null:r.device().control();},IChemE::wearSettings);shafts.health(health);
         // Block entities whose chunks loaded before this authority existed never reported themselves: every device
         // in an already loaded chunk is marked once, and its bucket binds and presents it. Nothing is pushed here.
@@ -829,6 +831,20 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public com.wormzjl.icheme.science.column.operation.OperationView columnView(PhysicalFluidTopology.Position master,java.util.function.LongToDoubleFunction opening) {
         owned();var u=column(master);return u==null?null:columns.view(u.id(),topology.onlineTick(),opening);
     }
+    /**
+     * The column unit a control loop with output {@code output} plans the feed of (W6.3): the unit at {@code master} (the
+     * output is that column's host), else the running unit whose feed boundary valve {@code output} is; 0 for none.
+     */
+    public long columnLoop(long output,@org.jetbrains.annotations.Nullable PhysicalFluidTopology.Position master){
+        owned();
+        if(master!=null){var u=column(master);return u==null?0:u.id();}
+        for(var u:topology.columns().values())if(u.running()){var s=u.station(com.wormzjl.icheme.science.column.operation.Port.FEED,0);if(s!=null&&s.valve()==output)return u.id();}
+        return 0;
+    }
+    /** The molar mass column unit {@code unit}'s feed inlet meters by, kg/mol, or NaN (W6.3). */
+    public double columnFeedMolarMass(long unit){owned();return columns.feedMolarMass(unit);}
+    /** The feed boundary valve of column unit {@code unit}, or 0 (W6.3). */
+    public long columnFeedValve(long unit){owned();var u=topology.column(unit);var s=u==null?null:u.station(com.wormzjl.icheme.science.column.operation.Port.FEED,0);return s==null?0:s.valve();}
     /** The alarms of the column at {@code master} (W6.1): a read of its run's last conditions; none where it does not run. */
     public java.util.Set<EquipmentAlarm> columnAlarms(PhysicalFluidTopology.Position master){owned();var u=column(master);return u==null?java.util.Set.of():EquipmentAlarm.column(columns.conditions(u.id()));}
     public record ColumnInstrument(double value,long tick,com.wormzjl.icheme.runtime.instrument.Instrument.Availability availability) {}

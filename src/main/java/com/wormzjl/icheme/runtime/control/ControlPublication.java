@@ -312,6 +312,13 @@ final class ControlPublication {
                 out.putString("label", label(r.device().id()));
                 outputs.add(out);
             }
+            // A column's host is an output too (W6.3): a loop on it plans the column's feed rate.
+            for (long host : hosts.columns(p.id())) {
+                var out = new CompoundTag();
+                out.putLong("id", host);
+                out.putString("label", String.format(Locale.ROOT, "COL-%04d", host));
+                outputs.add(out);
+            }
             row.put("outputs", outputs);
             controllers.add(row);
         }

@@ -693,6 +693,31 @@ class ColumnRunTest {
      * unit then solves once from its start.
      */
     /**
+     * A feed-rate loop (W6.3): a planned feed below the set rate holds the feed the cycle takes at the plan; a plan above
+     * the set rate changes nothing; with no plan (the loop off) the set rate returns. The unit's saved set points stay.
+     */
+    @Test void aFeedLoopsPlanHoldsTheFeedBelowTheSetRateAndOffReturnsIt() {
+        var f=new Fake(0);var r=rig(0,f);f.world=r.world();var world=r.world();
+        double[] plan={Double.NaN};
+        r.ops().feedPlans(u->plan[0]);
+        f.runTo(1500);
+        var saved=world.ledger.column(r.unit()).setpoints();
+        double seconds=ColumnOperation.CYCLE_TICKS/20.0;
+        double free=r.ops().run(r.unit()).last.feedMoles()/seconds;
+        assertTrue(free>0,"the column takes feed");
+        plan[0]=free/2;
+        f.runTo(3000);
+        assertEquals(free/2,r.ops().run(r.unit()).last.feedMoles()/seconds,free*.02,"the feed held at the plan");
+        assertEquals(free/2,r.ops().feedRate(world.ledger.column(r.unit())),1e-12);
+        assertSame(saved,world.ledger.column(r.unit()).setpoints(),"the saved set points do not change");
+        plan[0]=saved.feedRate()*2;
+        assertEquals(saved.feedRate(),r.ops().feedRate(world.ledger.column(r.unit())),0,"a plan above the set rate: the set rate");
+        plan[0]=Double.NaN;
+        f.runTo(4500);
+        assertEquals(free,r.ops().run(r.unit()).last.feedMoles()/seconds,free*.02,"no plan: the set rate returns");
+        assertSame(saved,world.ledger.column(r.unit()).setpoints());
+    }
+    /**
      * Set points before the first run (W7): {@code editColumn} gives a column that never ran a stopped unit with no stations
      * on the edited set points. The facts carry it through a save, and the engine runs no cycle for it.
      */

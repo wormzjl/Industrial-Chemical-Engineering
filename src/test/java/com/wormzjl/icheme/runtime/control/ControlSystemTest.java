@@ -466,4 +466,13 @@ class ControlSystemTest {
         assertEquals(List.of("start 12", "apply 12 [30.0, 318.15]", "apply 12 []", "stop 12"), calls);
         assertThrows(IllegalArgumentException.class, () -> new ColumnCommands.Command(12, ColumnCommands.Action.APPLY, Collections.nCopies(65, 1.0)));
     }
+
+    /** A feed-rate loop's plan (W6.3): a flow target over the feed's molar mass; a level loop's volume flow at the feed's density over it. */
+    @Test
+    void aColumnLoopPlansTheFeedInMolesPerSecond() {
+        assertEquals(100, ControlLaw.flowFeed(25, .25), 1e-12, "25 kg/s of a 250 g/mol feed is 100 mol/s");
+        assertEquals(0, ControlLaw.flowFeed(-1, .25), 0, "no negative plan");
+        assertEquals(80, ControlLaw.levelFeed(.025, 800, .25), 1e-12, "0.025 m³/s at 800 kg/m³ of a 250 g/mol feed is 80 mol/s");
+        assertEquals(0, ControlLaw.levelFeed(-.1, 800, .25), 0);
+    }
 }

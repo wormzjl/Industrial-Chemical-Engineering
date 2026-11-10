@@ -422,6 +422,13 @@ final class ControlHosts {
         return cell == null || cell.isRemoved() || cell.getLevel() == null || cell.shape() == null ? null : cell;
     }
 
+    /** The master position of column host {@code host}, or null where {@code host} is no column's (W6.3: a column loop's output). */
+    PhysicalFluidTopology.Position columnMaster(long host) {
+        if (!columnCells.containsKey(host)) return null;
+        var binding = bindings.get(host);
+        return binding == null ? null : binding.origin();
+    }
+
     /** The data port registered for an equipment host, or null. */
     DataPort port(long host) {
         return equipmentPorts.get(host);

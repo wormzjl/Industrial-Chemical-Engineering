@@ -48,6 +48,12 @@ public final class ControlService {
     }
 
     /** The firing the controllers set for still {@code pot} at the last cadence, NaN for none (owner decision O1). */
+    /** The feed rate a control loop planned for column unit {@code unit} at the last cadence, mol/s, or NaN for none (W6.3). */
+    public double columnFeed(long unit) {
+        var v = plans.columnFeed(unit);
+        return v == null ? Double.NaN : v;
+    }
+
     public double stillFiring(long pot) {
         var v = plans.firing(pot);
         return v == null ? Double.NaN : v;
@@ -391,6 +397,7 @@ public final class ControlService {
         var nextHeat = new HashMap<Long, Double>();
         var nextFiring = new HashMap<Long, Double>();
         var nextReflux = new HashMap<Long, Double>();
+        var nextColumnFeed = new HashMap<Long, Double>();
         var claims = new HashMap<Claim, Integer>();
         for (var panel : facts.panels())
             if (!panel.dcs() && panel.settings().enabled() && !facts.heldPanel(panel.id()))
@@ -426,6 +433,7 @@ public final class ControlService {
                         nextFiring.put(setting.output(), decision.firing());
                     if (decision.reflux() != null)
                         nextReflux.put(setting.output(), decision.reflux());
+                    if (decision.feed() != null) nextColumnFeed.merge(decision.unit(), decision.feed(), Math::min);
                     if (decision.outlet() != null) {
                         var refused = world.divert(setting.output(), decision.outlet());
                         if (refused != null) state += " · " + refused.toUpperCase(Locale.ROOT);
@@ -450,5 +458,6 @@ public final class ControlService {
                 publication.status(panel.id(), state);
             }
         world.controlInputsChanged(plans.commit(nextValves, nextHeat, nextFiring, nextReflux));
+        plans.commitColumnFeeds(nextColumnFeed);
     }
 }

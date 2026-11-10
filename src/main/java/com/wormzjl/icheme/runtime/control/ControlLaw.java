@@ -25,34 +25,41 @@ final class ControlLaw {
             Double heat,
             Double firing,
             Double reflux,
-            Integer outlet) {
+            Integer outlet,
+            Double feed,
+            long unit) {
         static Decision noSetpoint(String status) {
-            return new Decision(status, null, null, null, null, null);
+            return new Decision(status, null, null, null, null, null, null, 0);
         }
 
         static Decision valveLaw(FlowControl.ControlValve law) {
-            return new Decision("CONTROLLING", law, null, null, null, null);
+            return new Decision("CONTROLLING", law, null, null, null, null, null, 0);
         }
 
         static Decision outletTarget(double target) {
-            return new Decision("CONTROLLING", null, target, null, null, null);
+            return new Decision("CONTROLLING", null, target, null, null, null, null, 0);
         }
 
         static Decision stillFiring(double firing) {
-            return new Decision("CONTROLLING", null, null, firing, null, null);
+            return new Decision("CONTROLLING", null, null, firing, null, null, null, 0);
         }
 
         static Decision stillReflux(double reflux) {
-            return new Decision("CONTROLLING", null, null, null, reflux, null);
+            return new Decision("CONTROLLING", null, null, null, reflux, null, null, 0);
         }
 
         static Decision divert(int outlet) {
-            return new Decision("CONTROLLING", null, null, null, null, outlet);
+            return new Decision("CONTROLLING", null, null, null, null, outlet, null, 0);
+        }
+
+        /** A column loop's planned feed rate for column unit {@code unit}, mol/s (W6.3). */
+        static Decision columnFeed(long unit, double feed) {
+            return new Decision("CONTROLLING", null, null, null, null, null, feed, unit);
         }
 
         /** Whether it asks for a setpoint. */
         boolean sets() {
-            return valve != null || heat != null || firing != null || reflux != null || outlet != null;
+            return valve != null || heat != null || firing != null || reflux != null || outlet != null || feed != null;
         }
     }
 
@@ -85,6 +92,10 @@ final class ControlLaw {
 
     Decision decide(ControlFacts.Panel panel, ControlInput sensor, Sensor.Reading reading) {
         var s = panel.settings();
+        // A column loop (W6.3): its output is a column's host or a running column's feed boundary valve. It plans the feed
+        // rate at the cadence (its sensor may stand on another island), before the valve's own checks.
+        long unit = world.columnLoop(s.output(), hosts.columnMaster(s.output()));
+        if (unit != 0) return column(panel, sensor, reading, unit);
         var record = world.registrations().get(s.output());
         if (sensor == null || record == null) return Decision.noSetpoint("MISSING DEVICE");
         if (world.controlReserved(s.output())) return Decision.noSetpoint("OUTPUT RESERVED");
@@ -218,6 +229,70 @@ final class ControlLaw {
                 v = source == FlowControl.ValveSource.VOLUME_FLOW ? target : law.volumeTarget();
         return Decision.valveLaw(
                 new FlowControl.ControlValve(source, p, m, v, sensor.instance(), panel.revision()));
+    }
+
+    /**
+     * A column loop's decision (W6.3): the feed rate it plans for column unit {@code unit}, which the column's cycle takes
+     * below its set rate. FLOW: the target mass flow over the feed's molar mass. LEVEL on a vessel upstream with action
+     * OUTLET: the volume flow that brings the level to its target in one cadence ({@link InventoryControl#target}, as a
+     * valve's level loop), turned to mass with the feed valve's pipe reading and to mol/s with the same molar mass.
+     */
+    private Decision column(ControlFacts.Panel panel, ControlInput sensor, Sensor.Reading reading, long unit) {
+        var s = panel.settings();
+        if (sensor == null) return Decision.noSetpoint("MISSING DEVICE");
+        if (!hosts.wired(panel.id(), sensor.key().host()) || !hosts.wired(panel.id(), s.output()))
+            return Decision.noSetpoint("NO DATA LINK");
+        if (reading == null || reading.availability() != Instrument.Availability.AVAILABLE)
+            return Decision.noSetpoint("NO SIGNAL");
+        if (sensor.kind() != Sensor.Kind.FLOW && sensor.kind() != Sensor.Kind.LEVEL)
+            return Decision.noSetpoint("SELECT FLOW OR LEVEL");
+        if (s.unit() != reading.unit() && reading.secondaryUnit().filter(u -> u == s.unit()).isEmpty())
+            return Decision.noSetpoint("UNIT MISMATCH");
+        double molarMass = world.columnFeedMolarMass(unit);
+        if (!(molarMass > 0)) return Decision.noSetpoint("NO FEED DATA");
+        if (sensor.kind() == Sensor.Kind.FLOW) {
+            double mass = s.target();
+            if (s.unit() == Sensor.Unit.CUBIC_METRE_PER_SECOND) {
+                // A volume target: to mass at the reading's own density.
+                if (!(reading.secondary() > 1e-12) || !BuiltInInputs.volumeAvailable(sensor) && sensor.physical() == null)
+                    return Decision.noSetpoint("UNIT UNAVAILABLE");
+                mass = s.target() * reading.value() / reading.secondary();
+            }
+            return Decision.columnFeed(unit, flowFeed(mass, molarMass));
+        }
+        if (s.action() != ControlSettings.Action.OUTLET) return Decision.noSetpoint("LEVEL: OUTLET ACTION");
+        var view = world.view(sensor.key().host());
+        var state = view.state();
+        var tank = view.tank();
+        var valve = world.instrumentPipeReading(world.columnFeedValve(unit));
+        if (state == null || tank == null || valve == null || valve.volumeFlow() == null || sensor.key().mount().equals("level_boot"))
+            return Decision.noSetpoint("NO LEVEL BALANCE");
+        double height = s.unit() == Sensor.Unit.HEIGHT_PERCENT ? s.target() * reading.span() / 100 : s.target();
+        if (height > reading.span()) return Decision.noSetpoint("TARGET OUT OF RANGE");
+        double volume = state.phaseVolumes()[0] + state.phaseVolumes()[1] + state.solids().volume();
+        double flow = Math.max(0, valve.volumeFlow());
+        // The feed's density from its valve's pipe; with nothing flowing, none to turn a volume into mass.
+        if (!(flow > 1e-12) || !(valve.massFlow() > 1e-12)) return Decision.noSetpoint("NO LEVEL BALANCE");
+        var previous = levels.get(panel.id());
+        double elapsed = 0, prior = volume;
+        if (previous != null && previous.sensor().equals(sensor.instance()) && previous.output() == s.output() && reading.tick() > previous.tick()) {
+            elapsed = (reading.tick() - previous.tick()) / 20.0;
+            prior = previous.volume();
+        }
+        double requested = InventoryControl.target(volume, tank.geometry().volumeAt(height), flow, prior, elapsed, ControlService.CADENCE / 20.0, true);
+        if (previous == null || reading.tick() > previous.tick())
+            levels.put(panel.id(), new LevelSample(sensor.instance(), s.output(), reading.tick(), volume));
+        return Decision.columnFeed(unit, levelFeed(Math.max(0, requested), valve.massFlow() / flow, molarMass));
+    }
+
+    /** A flow loop's planned feed, mol/s: the target mass flow, kg/s, over the feed's molar mass, kg/mol (W6.3). */
+    static double flowFeed(double massTarget, double molarMass) {
+        return Math.max(0, massTarget) / molarMass;
+    }
+
+    /** A level loop's planned feed, mol/s: the volume flow, m³/s, at the feed's density, kg/m³, over its molar mass, kg/mol (W6.3). */
+    static double levelFeed(double volumeFlow, double density, double molarMass) {
+        return Math.max(0, volumeFlow) * density / molarMass;
     }
 
     /** The reading in the settings' unit: its primary value, or its secondary one. */
