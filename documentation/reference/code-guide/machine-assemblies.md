@@ -1,6 +1,14 @@
 # Machine assemblies: a column's plant, validated against its design
 
-**Snapshot:** 971dd8346 (branch `claude/custom-shader-system-caff9e`), 2026-11-10. Batch `2026-11-10-vacuum-pump`, to merge as 0.25.0: a vacuum column's pump on the receiver's vapour outlet (`ColumnBlueprint` slots `vacuum_pump`, `water_pump`; `AssemblyDiagram`); protocol `assembly-4` and store format 2 unchanged · earlier: 3efffdb2d (branch `claude/simulator-sizing-refactor-6bacab`, the consolidation review of `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
+**Snapshot:** 0893d2339 (branch `claude/distillation-failure-mode-control-db2da5`, `claude/custom-shader-system-caff9e` merged in), 2026-11-10. Batch `2026-11-10-column-failure-modes`, to merge after 0.25.0: Start carries the reboiler's and pumparound coolers' heat sides and the powered members (`ColumnStarts`), refusals as `Refusal` texts, set points on a column that never ran (`AssemblyService.setpoints`), a kettle's lines (`ExchangerLines`); protocol `assembly-6`, store format 2 unchanged · earlier: 971dd8346 (branch `claude/custom-shader-system-caff9e`), 2026-11-10. Batch `2026-11-10-vacuum-pump`, to merge as 0.25.0: a vacuum column's pump on the receiver's vapour outlet (`ColumnBlueprint` slots `vacuum_pump`, `water_pump`; `AssemblyDiagram`); protocol `assembly-4` and store format 2 unchanged · earlier: 3efffdb2d (branch `claude/simulator-sizing-refactor-6bacab`, the consolidation review of `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
+
+## Utilities, members and set points at Start (after 0.25.0, batch 2026-11-10-column-failure-modes)
+
+- `ColumnStarts.build` now also gives `FluidWorldAuthority.ColumnStart` the heat sides of every unit in slot `REBOILER` and in each `pumparoundCooler(i)` (`heatSides`, one unit after another), the air condenser's fan sides (an AIR_COOLER member's sides whose heat unit has fans) and the pumps' movers of `REFLUX_PUMP` and each `pumparoundPump(i)` (`movers`: a casing's through `EquipmentStructure.movers`, or the registration of an in-line pump at the slot's place), as `ColumnUnit.Members`. The ledger keeps those that qualify ([column-operation.md](column-operation.md)).
+- Refusal texts come from `Refusal` (`NO_DESIGN`, `NO_SAVED_POINT`, `VACUUM`, `INCOMPLETE`, `VALVE_UNREGISTERED`); the words are unchanged.
+- `AssemblyService.setpoints` takes set points on a column that never ran, on its design's (it refuses with "the column has no operating point" or `Refusal.VACUUM`); `operation` marks the idle view editable unless the column is a vacuum column.
+- `ExchangerLines` gives lines to an EXCHANGER and to a KETTLE (whose tubes a column may set, mode COLUMN), each side by its registration's own side.
+- Protocol `assembly-6` (`assembly-5`: the conditions list; `assembly-6`: accepted set points and tray readings in the operation view). `AssemblyNetwork.encodeOperation`/`decodeOperation` give the view's bytes to the DCS's column page.
 
 ## The vacuum pump on the receiver (0.25.0)
 
@@ -28,7 +36,7 @@ Up: [code guide](README.md)
 - You add a slot, a link or a part form to a column's blueprint, or a new kind of assembly.
 - You change what a click on a column or on a unit next to it opens, or the laying tool's assembly marks.
 - Start refuses a complete column, or a change stops a running one.
-- You touch the `assembly-4` packets, the `icheme_assemblies` store, or the review world (`runReviewWorldServer`).
+- You touch the `assembly-6` packets (`assembly-4` before batch 2026-11-10-column-failure-modes), the `icheme_assemblies` store, or the review world (`runReviewWorldServer`).
 
 The column's design (what Save design stores, `ColumnComponents` with its member counts, `ColumnDesign`) and the column's nozzles are in [equipment.md](equipment.md); Save design is on the process simulator's column (`ProcessSimulatorNetwork.SaveDesign`). The pipes and fittings the walk reads are registry devices ([fluid-runtime.md](fluid-runtime.md)). What a started column does is in [column-operation.md](column-operation.md).
 
@@ -107,7 +115,7 @@ sequenceDiagram
 - **Condenser.** The water sides come from every unit (`SlotReport.units`) of the slot `ColumnBlueprint.waterCooled` names: the condenser's shells for an exchanger, the trim's shells for air then water, none for an air cooler (`EquipmentStructure.heatSides`). Where the condenser slot is not water-cooled, the start also carries the bare tube of every air cooler bank it holds (`HeatSides.of(...).area()`), what the fans hold ([column-operation.md](column-operation.md)).
 - **A start reverts nothing.** A held device keeps its structural code, and a port has ports, so `LevelGround.piece` is null and it has no code.
 - **Stops.** `revert` and `removed` call `stopColumn` first. A dismantle also calls `dismantled` (`FluidWorldAuthority.columnRemoved`): the unit leaves with its accounts booked as destroyed. A refresh calls `removed` alone, so its unit stays, stopped.
-- **Set points.** `setpoints(level, origin, values)` takes feed, condenser, reflux, reboiler, steam…, draws…, pumparounds…, holds the feed to the design rate and refuses a wrong count or a column that has not run yet.
+- **Set points.** `setpoints(level, origin, values)` takes feed, condenser, reflux, reboiler, steam…, draws…, pumparounds…, holds the feed to the design rate and refuses a wrong count. Since batch 2026-11-10-column-failure-modes a column that has not run yet takes them on its design's set points (a stopped unit with no stations), unless it has no operating point or is a vacuum column.
 - **`operation`** gives the tab's snapshot, a read: the unit's view; otherwise stopped on the design's set points, or NOT_READY for a vacuum column or a refused Start; null without an operating point.
 
 </details>
@@ -216,7 +224,7 @@ States in rank order (a later one outranks an earlier one on the same slot):
 <details><summary>Formats and wire</summary>
 
 - **Store** `icheme_assemblies` in each level's data storage (`AssemblyStore.of`), state (AGENTS.md: state formats change freely): `format` (`FORMAT` 2; 1 had no units in parallel), `rebuild`, `entries` (each: `master`, `status`, the coded positions and codes, `changed`, the slots with their `parallel` origins, fewer than `ColumnComponents.MAX_UNITS`, the ports, footprint and members). Bounds `MAX_MASTERS` 4096, `MAX_SLOTS` 256, `MAX_PORTS` 1024, `MAX_FOOTPRINT` 2 · `MAX_WALK`. A store of another format, or one that does not read, is dropped whole (`assembly_store status=STATE_DROPPED`) and marked for rebuilding.
-- **Protocol `assembly-4`** (all `HandlerThread.MAIN`; bounds `MAX_SLOTS` 256, `MAX_PORTS` 1024, `MAX_MEMBERS` 256, `MAX_TEXT` 1024, `MAX_STREAMS` 32, `MAX_VALUES` 64; the `VIEW` codec leaves out the footprint, carries each slot's `parallel` origins after its detail (at most `MAX_UNITS` - 1) and the operation after the report):
+- **Protocol `assembly-6`** (`assembly-4` before batch 2026-11-10-column-failure-modes, which changed only the operation view: conditions, accepted set points, trays; all `HandlerThread.MAIN`; bounds `MAX_SLOTS` 256, `MAX_PORTS` 1024, `MAX_MEMBERS` 256, `MAX_TEXT` 1024, `MAX_STREAMS` 32, `MAX_VALUES` 64; the `VIEW` codec leaves out the footprint, carries each slot's `parallel` origins after its detail (at most `MAX_UNITS` - 1) and the operation after the report):
 
 | Payload | Direction | Fields |
 |---|---|---|

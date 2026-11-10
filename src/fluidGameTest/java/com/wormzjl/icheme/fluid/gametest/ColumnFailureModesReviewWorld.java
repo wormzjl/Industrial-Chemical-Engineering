@@ -83,7 +83,7 @@ import java.util.function.Supplier;
 
 /**
  * The test world of batch 2026-11-10-column-failure-modes (stage 5, W8): a full-size crude column plant (plant A: the
- * network's default column template at its design feed, about 8 m across, 42 trays, three draws, three pumparounds, sump
+ * network's default column template at its design feed, about 8 m across, 40 trays, three draws, three pumparounds, sump
  * steam; an air-then-water condenser) and a small reboiled column (plant B, a kettle on a hot utility), every supply behind
  * a named shutoff valve, the pumps on motors fed with FE, a DCS console and a level loop on the feed's surge drum. A script
  * then runs the failure cases of the execution plan's section 7 one by one: each acts, waits for the expected condition,

@@ -33,6 +33,7 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 - Code guide refreshed: new chapter `effects.md`; twelve chapters and the README updated.
 - Translations of the column failure modes batch in zh_cn, fr_fr, es_es and ja_jp `0893d2339`.
 - Tooling cleanup of the column failure modes batch: the dropped downcomer-backup draft, the full-size run's case lines and the merge scripts go to `tools/column-failure-modes/`; the test world stays in `src/fluidGameTest`. Nothing left `src/main` or `src/test`.
+- Code guide refreshed for the column failure modes batch: the scheme in `column-operation.md`; eleven more chapters and the README updated.
 
 ## [0.24.0] - 2026-11-10
 
