@@ -31,3 +31,7 @@ Source: code.claude.com/docs/en/memory ("Write effective instructions", "AGENTS.
 - C: no change; run `/doctor prompt-audit` from a terminal session for a second opinion.
 
 Code guide: no change (no code changed). No tests run (documents only).
+
+## Outcome (2026-11-10)
+
+Owner chose A. AGENTS.md is 149 lines (not the estimated 115: the code guide pointer and a new "Skills and hooks" section stay). Codex gets the skills through `.agents/skills/` symlinks and the guard through `.codex/hooks.json`. Details in README.md.

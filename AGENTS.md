@@ -101,14 +101,14 @@ These rules apply to every agent working in this repository (Claude, Codex, suba
 
 ## Translations
 
-- During a batch, change only `src/main/resources/assets/icheme/lang/en_us.json`. Do not edit the other lang files between commits.
-- Before the batch merges, bring every other lang file up to date with en_us in one translation commit (`zh_cn`, `fr_fr`, `es_es`, `ja_jp`, and any language added later):
-  - add each new key;
-  - rewrite the translation of each line whose English changed, also when only the wording changed;
-  - remove each key that en_us removes.
-- Keep each file in en_us key order. Keep the arguments (`%s`, `%n$s`, `%%`) and the line breaks that en_us has. Keep the server's status words (LIMITED, LOW LIMIT, DUTY INSUFFICIENT) in English.
-- Use the terms that each file already uses. `tools/localization/glossary.md` lists them for fr, es and ja.
-- Check offline with `tools/localization/`: `check.js` for keys and arguments, `width.js` for label widths, and `stale-translations.js <locale>` before the translation commit, for translations whose English changed. `LanguageFilesTest` (quick suite) and `UnitTextTest` (equipmentGates) are the gates. They fail until the translation commit; do not run them before it. The final lane runs them.
+- During a batch, change only `src/main/resources/assets/icheme/lang/en_us.json`. Do not edit the other lang files between commits. `LanguageFilesTest` and `UnitTextTest` fail until the translation commit; do not run them before it.
+- Before the batch merges, make one translation commit: follow the `translation-commit` skill (`.claude/skills/translation-commit/SKILL.md`).
+
+## Skills and hooks
+
+- Project skills live once in `.claude/skills/<name>/`. `.agents/skills/<name>` is a tracked symlink to the same folder, so Codex loads them too. A new skill gets both. An agent with no skill loader reads `SKILL.md` as a plain file.
+- `tools/agent-guard/guard.js` blocks the git and Gradle commands this file forbids, for Claude Code (`.claude/settings.json`) and Codex (`.codex/hooks.json`). A blocked command is not retried in another form.
+- Do not add a `CLAUDE.md`, `.claude/CLAUDE.md` or `CLAUDE.local.md` at or above the repository root. Claude Code then stops reading this file.
 
 ## Git and worktrees
 
@@ -137,34 +137,13 @@ These rules apply to every agent working in this repository (Claude, Codex, suba
 - Keep large files out of `documentation/`. It holds text documents, each under 1 MB. Screenshots and other images, PDFs, world region files and `*-logs/` folders are git-ignored there. Store them in the main checkout at the same path under `research/` (`documentation/<batch>/shots/a.png` goes to `research/<batch>/shots/a.png`) and link them there. Treat any other file over 1 MB the same way, and add a `.gitignore` line for a new large file type.
 - Logs stay git-ignored (`logs/`, `*.log`). Store them compressed in the main checkout, `tools/<tool-folder>/logs/<name>-logs-<date>.tar.gz`. These archives stay local; never stage them.
 
-## Merging to main
-
-Every merge to `main` includes, in the same merge:
-
-- A `CHANGELOG.md` entry in Keep a Changelog format: one line per batch, with its commits and batch folder. Branches record their entry under `[Unreleased]`. The merge turns it into the new version heading.
-- A `mod_version` bump in `gradle.properties`:
-  - patch for fixes, cleanups and consolidation;
-  - minor only for a new feature or a solver or model batch.
-  - Propose the version and let the owner choose. Do not jump versions fast.
-- The translation commit (see Translations), when the batch changed `en_us.json`.
-- A code guide update (see below).
-- The tooling cleanup (see below).
-
-A documentation-only merge changes only `documentation/`, `tools/`, `AGENTS.md` or `.gitignore`. It needs none of these.
-
-### Code guide
+## Code guide
 
 - The code guide is at `documentation/reference/code-guide/`. `README.md` gives what the mod calculates and the code map. There is one chapter per subsystem.
 - Read `README.md` first in an unfamiliar area. Open only the chapter the task needs.
-- Before every merge, update the chapters whose code the batch changed: classes, flows, contracts, defaults, formats and versions, Gradle tasks and gates. Set each touched chapter's snapshot line to the last code commit it describes, and the date. A file cannot name the commit that contains it. Add a chapter and a README row for a new subsystem. Take facts from the code on the merging branch, not from plans.
-- A batch that changes no code the guide covers records "code guide: no change" in its review.
 
-### Tooling cleanup
+## Merging to main
 
-- Before a batch merges, sort everything it created for measurement or investigation. Keep in the code only tests that a gate task runs, code the product needs, and harnesses that a documented Gradle task runs.
-- `src/main` holds only code the game reaches. Move code that only tests use to `src/test`, with the data only it reads, whichever batch wrote it. A gate test that needs it does not keep it in `src/main`, and neither does a small link from production code: remove the link. `perl tools/merge-lane/main-reach.pl .` lists such classes; check a method by its callers.
-- Move everything else (one-off probes, campaign and analysis scripts, in-game rigs, instrumentation, baseline patches, run configurations and Gradle switches that only served them) to `tools/<tool-folder>/` on the batch's branch, with a row in `tools/INDEX.md`. Do not leave it in `documentation/` batch folders or in `tmp/`.
-- The folder's row in `tools/INDEX.md` holds only the folder, the purpose in a few words, the batch and the status with its date.
-- Each tool folder has a `README.md` with its purpose, the batch it served, how to run it, its entry points and its history. For code removed from a tracked path, the README also gives the removing commit and how to re-attach it: source files plus a patch against that commit, so that `git show <sha>:<path>` and the stored copy agree.
-- The batch review names the tool folders.
-- A cleanup does not widen or narrow a gate suite. After it, run only what it can affect (see "No repeated tests"), record that in the batch review, and add a `CHANGELOG.md` line for the detached code.
+- Every merge to `main` includes, in the same merge: a `CHANGELOG.md` entry, a proposed `mod_version` bump that the owner chooses, the translation commit, a code guide update and the tooling cleanup. Follow the `merge-prep` skill (`.claude/skills/merge-prep/SKILL.md`) for each of them.
+- Probes, rigs and scripts a batch made for measurement leave `src/main` and go to `tools/<tool-folder>/` before the merge (`merge-prep`, "Tooling cleanup").
+- A documentation-only merge changes only `documentation/`, `tools/`, `AGENTS.md`, `.gitignore`, the project skills or the agent hook files. It needs none of these.

@@ -1,0 +1,19 @@
+{
+  "description": "IChemE: block the git and Gradle commands AGENTS.md forbids (tools/agent-guard).",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"try{process.env.AGENT_GUARD_RUN='1';require(require('child_process').execFileSync('git',['rev-parse','--show-toplevel']).toString().trim()+'/tools/agent-guard/guard.js')}catch(e){}\"",
+            "commandWindows": "powershell -NoProfile -NonInteractive -Command \"node (Join-Path (git rev-parse --show-toplevel) tools/agent-guard/guard.js)\"",
+            "timeout": 10,
+            "statusMessage": "Checking the command against AGENTS.md"
+          }
+        ]
+      }
+    ]
+  }
+}

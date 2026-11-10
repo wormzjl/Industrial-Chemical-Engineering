@@ -53,6 +53,7 @@ docs/
 CLAUDE.md
 /.claude/*
 !/.claude/skills/
+!/.claude/settings.json
 
 # Local branch handoffs and standalone diagnostic tools
 /BRANCH_HANDOFF.md
