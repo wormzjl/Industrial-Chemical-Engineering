@@ -13,13 +13,19 @@ in float vertexDistance;
 in vec4 params;
 in vec2 corner;
 in float seed;
-// The noise domain in eddies (fx_flame.vsh): isotropic, each unit about one eddy of the local jet.
+// A billboard's noise domain in eddies; a ribbon's place in metres (across, from the root); 1 on a ribbon (fx_flame.vsh).
 in vec2 eddy;
+in vec2 metres;
+in float onRibbon;
 
 out vec4 fragColor;
 
 // A ribbon is ROOM flame half-widths across (fx_flame.vsh).
 const float ROOM = 1.5;
+// An eddy's size at m metres from the root, m: it grows with the distance as a turbulent jet's width does (about 0.22 of
+// it), from ROOT m at the root, so a 30 m flare and a 0.3 m still flame look alike in kind.
+const float EDDY = 0.22;
+const float ROOT = 0.2;
 
 // Value noise, 0 to 1.
 float hash(vec2 p) {
@@ -74,14 +80,15 @@ void main() {
     float soot = params.b;
     float x = (corner.x * 2.0 - 1.0) * ROOM;
 
+    // The noise domain in eddies: across, and along on a log scale, so each unit is about one local eddy.
+    vec2 e = onRibbon > 0.5 ? vec2(metres.x / (EDDY * (metres.y + ROOT)), log(1.0 + metres.y / ROOT) / EDDY) : eddy;
     // Tongues about half a local eddy across and twice as long, climbing about 20 m/s at a 30 m flare's end.
-    vec2 p = vec2(eddy.x * 2.2, eddy.y * 1.1) + seed * vec2(17.0, 31.0);
+    vec2 p = vec2(e.x * 2.2, e.y * 1.1) + seed * vec2(17.0, 31.0);
     vec2 warp = vec2(noise(p * 0.5 + vec2(0.0, -FxTime * 1.3)), noise(p * 0.5 + vec2(4.3, -FxTime * 1.1))) - 0.5;
     float n = (flow(p + 1.2 * warp, FxTime * 3.3) - 0.47) / 0.11;
 
     float reach = 0.84 + 0.2 * (noise(vec2(FxTime * 1.3, seed * 50.0)) - 0.5) + 0.1 * (noise(vec2(FxTime * 3.7, seed * 20.0)) - 0.5);
-    // Only on the upper flame: near the root the log scale packs the bulges into rings, a twisted rope seen from below.
-    float puff = 1.0 + 0.2 * smoothstep(0.35, 0.75, along) * sin(eddy.y * 1.4 - FxTime * 4.0 + seed * 9.0);
+    float puff = 1.0 + 0.2 * smoothstep(0.35, 0.75, along) * sin(e.y * 1.4 - FxTime * 4.0 + seed * 9.0);
     float intensity = 1.0 - abs(x) / puff + (0.12 + 0.4 * along) * n
             - 1.1 * smoothstep(0.5, reach + 0.08, along) - smoothstep(1.2, ROOM, abs(x));
     // Hotter is more opaque: the dim edges and the torn-off pockets let the sky through.

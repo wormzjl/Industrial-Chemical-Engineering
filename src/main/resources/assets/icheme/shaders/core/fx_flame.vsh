@@ -24,13 +24,14 @@ out float vertexDistance;
 out vec4 params;
 out vec2 corner;
 out float seed;
-// The noise domain in eddies: across and along the flame, each unit about one eddy, which grows with the distance from the
-// tip as a turbulent jet's width does (about 0.22 of it), so a 30 m flare and a 0.3 m still flame look alike in kind.
+// A billboard's noise domain, in eddies.
 out vec2 eddy;
+// A ribbon's place in metres: across from its centre line and from the flame's root; fx_flame.fsh turns them into eddies
+// per fragment (a log interpolated between vertices packed the first segment's noise into ripples).
+out vec2 metres;
+// 1 on a ribbon, 0 on a billboard.
+out float onRibbon;
 
-// An eddy's size at m metres from the tip, m, and the root's eddy scale.
-const float EDDY = 0.22;
-const float ROOT = 0.2;
 // A ribbon is drawn this many times the flame's half-width, so the tongues of fx_flame.fsh can reach past it.
 const float ROOM = 1.5;
 
@@ -70,9 +71,13 @@ void main() {
         // of the local half-width and 0.15 of the distance from the root, so a short still flame moves visibly too.
         float sway = max(halfSize, 0.15 * m) * along;
         view.xyz += side * sway * (0.45 * sin(along * 4.0 - FxTime * 3.1 + seed * 31.0) + 0.3 * sin(along * 8.0 - FxTime * 7.3 + seed * 13.0));
-        eddy = vec2((c.x * 2.0 - 1.0) * halfSize * ROOM / (EDDY * (m + ROOT)), log(1.0 + m / ROOT) / EDDY);
+        metres = vec2((c.x * 2.0 - 1.0) * halfSize * ROOM, m);
+        eddy = vec2(0.0);
+        onRibbon = 1.0;
     } else {
         eddy = (c * 2.0 - 1.0) * 1.6;
+        metres = vec2(0.0);
+        onRibbon = 0.0;
         view.xy += (c * 2.0 - 1.0) * halfSize;
     }
     gl_Position = ProjMat * view;
