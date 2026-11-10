@@ -102,6 +102,9 @@ class HeatControlColumnTest {
                         out.add(new Case("air cooler still", new HeatControlColumn.Input(heat("AIR_COOLER", "PROCESS", false, "fans", 0.0, null, List.of()), applied, edit, true, mode, false, "C")));
                     out.add(new Case("kettle tubes " + mode, new HeatControlColumn.Input(heat("KETTLE", "TUBE", true, "bypass", 0.1, null, List.of()), applied, edit, true, mode, true, "K")));
                 }
+                // A kettle's tubes in the column's mode (W5 of batch 2026-11-10-column-failure-modes, step 4a): a reboiler's utility.
+                if (mode == HeatUnit.Mode.COLUMN)
+                    out.add(new Case("kettle tubes COLUMN" + (edit ? "" : " reader"), new HeatControlColumn.Input(heat("KETTLE", "TUBE", true, "feed_valve", null, null, List.of()), applied, edit, true, mode, true, "K")));
             }
             for (var side : List.of("CONVECTION", "RADIANT"))
                 for (boolean on : new boolean[]{true, false})
@@ -292,6 +295,30 @@ class HeatControlColumnTest {
         assertTrue(groups(column).contains(texts.get("heat_acting.feed_valve")));
         var checked = new HeatControlColumn.Input(in.heat().with("none", null, "NONE", ports, new FluidView.Lines("CHECKED", 1, List.of())), in.applied(), true, true, HeatUnit.Mode.COLUMN, true, "C");
         assertTrue(flat(HeatControlColumn.rows(checked, texts)).stream().anyMatch(r -> r instanceof Column.Paragraph p && p.text().equals(texts.get("lines_note.column.checked", 1))));
+    }
+
+    /**
+     * Stage 4a of batch 2026-11-10-column-failure-modes: a kettle's tubes offer the column's mode as a condenser's water side
+     * does, last; in it they set nothing, and their hint and lines note speak of the reboiler's utility, not water.
+     */
+    @Test
+    void aKettlesTubesOfferTheColumnsModeAsAReboilersUtility() {
+        var texts = new Recording();
+        var ports = List.of(port("TUBE_INLET", 2.5), port("TUBE_OUTLET", 2.5));
+        var lines = new FluidView.Lines("COMPLETE", 0, List.of());
+        var off = new HeatControlColumn.Input(heat("KETTLE", "TUBE", true, "bypass", 0.1, null, List.of()), new HeatUnit.Control(HeatUnit.Mode.OUTLET_TEMPERATURE, 400, 0, 0), true, true, HeatUnit.Mode.OUTLET_TEMPERATURE, true, "C");
+        assertEquals(List.of("outlet_temperature", "duty", "column"), HeatControlColumn.targets(off), "the column's mode, last");
+        var choice = choices(HeatControlColumn.rows(off, texts)).getLast();
+        assertEquals(texts.get("heat_target.column_heating.hint", texts.get("heat_actuator.bypass")), choice.hint(), "the heating hint");
+        assertTrue(choice.hint().contains("utility") && !choice.hint().contains("water"), choice.hint());
+        var in = new HeatControlColumn.Input(heat("KETTLE", "TUBE", true, "feed_valve", null, lines, ports), new HeatUnit.Control(HeatUnit.Mode.COLUMN, 0, 0, 0), true, true, HeatUnit.Mode.COLUMN, true, "C");
+        var column = HeatControlColumn.rows(in, texts);
+        assertTrue(choices(column).getLast().selected(), "the column's target, selected");
+        assertEquals(List.of("side:0", "side:1", "power:off", "power:on", "check_lines"), keys(column), "nothing to set");
+        var checked = new HeatControlColumn.Input(in.heat().with("none", null, "NONE", ports, new FluidView.Lines("CHECKED", 1, List.of())), in.applied(), true, true, HeatUnit.Mode.COLUMN, true, "C");
+        String note = texts.get("lines_note.column_heating.checked", 1);
+        assertTrue(flat(HeatControlColumn.rows(checked, texts)).stream().anyMatch(r -> r instanceof Column.Paragraph p && p.text().equals(note)), "the utility's lines note");
+        assertTrue(note.contains("utility") && !note.contains("water"), note);
     }
 
     /** The rows, a group followed by its own rows. */

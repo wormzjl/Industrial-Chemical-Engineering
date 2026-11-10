@@ -102,7 +102,7 @@ public final class HeatControlColumn {
             if (on && in.controllable()) {
                 var targets = new ArrayList<Column.Row>();
                 for (var key : targets(in))
-                    targets.add(new Column.Choice(t.get("heat_target." + key), t.get("heat_target." + key + ".hint", actuator), key.equals(target(in)), in.canEdit() ? "target:" + key : null));
+                    targets.add(new Column.Choice(t.get("heat_target." + key), t.get("heat_target." + (key.equals("column") ? columnTexts(in.unit()) : key) + ".hint", actuator), key.equals(target(in)), in.canEdit() ? "target:" + key : null));
                 left.add(new Column.Group(t.get("heat_group.target"), t.get("heat_group.target.hint"), targets));
             }
             var settings = settings(in, t);
@@ -184,8 +184,19 @@ public final class HeatControlColumn {
         return switch (in.unit()) {
             case EXCHANGER -> List.of("outlet_temperature", "duty", "ratio", "column");
             case AIR_COOLER -> List.of("outlet_temperature", "duty", "fan_speed");
+            // A kettle's tubes also the column's (W4, W5 of batch 2026-11-10-column-failure-modes): a reboiler's utility.
+            case KETTLE -> List.of("outlet_temperature", "duty", "column");
             default -> List.of("outlet_temperature", "duty");
         };
+    }
+
+    /**
+     * The texts of the column's mode on a side of {@code unit} (W4, W5 of batch 2026-11-10-column-failure-modes): {@code column}
+     * where the side cools the column (a condenser's water), {@code column_heating} where it heats it (a kettle's tubes: a
+     * reboiler's utility).
+     */
+    public static String columnTexts(HeatSides.Unit unit) {
+        return unit == HeatSides.Unit.KETTLE ? "column_heating" : "column";
     }
 
     /** The drafted target: its mode's key; an air cooler running with no controller holds a fixed fan speed. */
@@ -239,7 +250,7 @@ public final class HeatControlColumn {
         if (lines == null || lines.status().equals("NONE") || lines.status().equals("COMPLETE") || in.applied() == null) return null;
         String kind = switch (in.applied().mode()) {
             case RATIO -> "ratio";
-            case COLUMN -> "column";
+            case COLUMN -> columnTexts(in.unit());
             default -> "bypass";
         };
         return t.get("lines_note." + kind + "." + lines.status().toLowerCase(Locale.ROOT), lines.missing());
