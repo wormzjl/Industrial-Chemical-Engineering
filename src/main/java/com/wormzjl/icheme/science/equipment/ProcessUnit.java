@@ -3193,7 +3193,7 @@ public final class ProcessUnit {
      * cell's centre, up to {@link com.wormzjl.icheme.science.fluid.network.Flare#stackHeight}, on a tapered base 3 m high;
      * at the top a flare tip (a windshield 0.3 m wider than the riser, 1.2 m high) with three pilot tubes; the vent gas
      * inlet at the front, its centre 1.5 m up. No ladder: a flare's tip is reached from a crane while it is down. The
-     * flame is the client's ({@code FlareFlames}), drawn while the flare works.
+     * flame is the client's ({@code FxSources}, {@code FlameModel}), drawn while the flare works.
      */
     /**
      * A flare stack's plinth radius at least, m, and its gas inlet's centre, m (batch 2026-11-09-flare-stack): on the cell

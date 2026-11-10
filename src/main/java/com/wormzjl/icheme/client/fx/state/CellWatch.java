@@ -16,8 +16,9 @@ import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * Client-thread-only watch of one kind of equipment's published state (batch 2026-11-10-custom-shader-system, W4, W5), as
- * the flares' ({@code FlareFlames}): a structure is tracked at its fluid cell ({@link ShapeRasterizer#fluidCell}), where its
+ * Client-thread-only watch of one kind of equipment's published state (batch 2026-11-10-custom-shader-system, W3 to W6;
+ * the flares' and stills' since W3 and W6 replaced {@code FlareFlames} and {@code StillFires}, whose watches this one
+ * generalised): a structure is tracked at its fluid cell ({@link ShapeRasterizer#fluidCell}), where its
  * identity binds, through the shell cells' load and remove call sites; once a second the client asks for the nearest
  * {@link FluidNetwork#MAXIMUM_WATCHED} within {@link #sight} ({@link FluidNetwork.Watch}), and asks again for a watched one
  * until its first state arrives (registration is queued). The server publishes each state on its presentation cadence;
