@@ -1,8 +1,14 @@
 # Water cooling towers
 
-**Snapshot:** e4d3d2d9b (branch `claude/lod-rendering-optimization-1ad1f9`), 2026-11-09. Batch `2026-11-09-lod-rendering`, merged as 0.23.2 on 2026-11-09: the shell drawn within its 32-block square's mesh · earlier: 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08, batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
+**Snapshot:** 971dd8346 (branch `claude/custom-shader-system-caff9e`), 2026-11-10. Batch `2026-11-10-custom-shader-system`, to merge as 0.25.0: the tower's exhaust air for the white plume and its sounds · earlier: e4d3d2d9b (branch `claude/lod-rendering-optimization-1ad1f9`), 2026-11-09. Batch `2026-11-09-lod-rendering`, merged as 0.23.2 on 2026-11-09: the shell drawn within its 32-block square's mesh · earlier: 050cd1098 (branch `codex/simulator-sizing`), 2026-11-08, batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
 
 Optional client Low detail caps the shell's angular samples at 24 and uses the same coarse basin-water boundary. `EquipmentBodyRenderer`/`LoadedEquipment` now also serve other coarse equipment bodies. Normal tower drawing, basin volume/level, structural collision and process duty remain unchanged. The mode is absent from server facts and packets.
+
+## Plume and sounds (0.25.0)
+
+- `TowerTransfer.exhaust(model, fill)`: a read of the air a fill leaves (no search of the fill): the ambient air (25 °C, 50 %) gains the evaporated water and the water's heat on the fill's enthalpy reference; returns temperature, humidity and its ratio to saturation; the ambient below `NO_AIR` 1e-3 kg/s of dry air. `TowerTransfer.reference` gives the calibration point as a fill's result.
+- `FluidWorldAuthority.publishTowers` sends it on `Watch.TOWERS` (`TowerPlume`, protocol `fluid-21`) to watchers only; a reversed draught sends no plume. Marks `fan_exhaust_<i>` (induced draft) and `throat` (natural draft) in `CoolingTowerDesign`. The plume itself is drawn by the client ([effects.md](effects.md)).
+- Noise sources (`runtime/fluid/Noise`): each fan cell `TOWER_FAN` 100 dB at full speed (50 log10 of the speed share), falling water at the air inlets 72 + 10 log10 of the water flow (kg/s).
 
 ## Factory instrument locations (0.22.0)
 

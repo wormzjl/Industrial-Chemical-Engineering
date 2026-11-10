@@ -1,6 +1,10 @@
 # Machine assemblies: a column's plant, validated against its design
 
-**Snapshot:** 3efffdb2d (branch `claude/simulator-sizing-refactor-6bacab`, the consolidation review of `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
+**Snapshot:** 971dd8346 (branch `claude/custom-shader-system-caff9e`), 2026-11-10. Batch `2026-11-10-vacuum-pump`, to merge as 0.25.0: a vacuum column's pump on the receiver's vapour outlet (`ColumnBlueprint` slots `vacuum_pump`, `water_pump`; `AssemblyDiagram`); protocol `assembly-4` and store format 2 unchanged · earlier: 3efffdb2d (branch `claude/simulator-sizing-refactor-6bacab`, the consolidation review of `codex/simulator-sizing`), 2026-11-08. Batch `2026-11-06-simulator-sizing`, merged as 0.22.0 on 2026-11-08.
+
+## The vacuum pump on the receiver (0.25.0)
+
+- With `ColumnComponents.Vacuum` `LIQUID_RING` or `DRY_SCREW` (shape fields 12; owner V5: "placed on the drum vapor outlet") the blueprint asks for the vacuum pump of the design's type on the receiver's VAPOUR_OUTLET before the offgas valve, and a water pump (of the reflux pump's kind) on its BOOT_DRAIN before the water valve, in place of the ejector on the overhead (table below). `AssemblyDiagram` draws both parts. A vacuum column still refuses to start in the world (open item of the batch).
 
 ## Column C1 instrumentation (0.22.0)
 
