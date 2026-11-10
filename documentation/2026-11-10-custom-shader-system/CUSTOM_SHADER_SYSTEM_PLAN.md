@@ -68,7 +68,7 @@ flowchart LR
 
 1. Chunk geometry stays plain baked quads, which Sodium, Embeddium and Iris mesh as they do now. No chunk shader is replaced and no rendering mixin is added.
 2. Our own `ShaderInstance`s are used only when no shader pack is active. Iris does not intercept a mod's own shader, so such a shader would render wrong or vanish (the malilib issue in the sources shows the same thing for custom pipelines).
-3. Iris is detected by reflection on its public v0 API (`net.irisshaders.iris.api.v0.IrisApi.getInstance().isShaderPackInUse()`), read once per frame, with no hard dependency. Without Iris, the answer is "no pack". OptiFine does not run on NeoForge, and Oculus is a Forge 1.20.1 port, so Iris is the one shader loader on NeoForge 1.21.1.
+3. Iris is an optional dependency, wired the way Create is ([SOFT_DEPENDENCY_REVIEW.md](SOFT_DEPENDENCY_REVIEW.md)). The code compiles against its public v0 API (`net.irisshaders.iris.api.v0.IrisApi`: `isShaderPackInUse`, `isRenderingShadowPass`), and `client/fx/compat/iris/` loads only when Iris is present. The answer is read once per frame. Without Iris, the answer is "no pack". No other mod is a dependency; the review records why. OptiFine does not run on NeoForge, and Oculus is a Forge 1.20.1 port, so Iris is the one shader loader on NeoForge 1.21.1.
 4. No vanilla particles for these effects. Particle CPU cost, particle caps and particle-culling mods all differ between setups. We draw our own batches, cull them against the frustum ourselves and use the `RenderLod` distance tiers.
 5. All effects draw at `RenderLevelStageEvent` `AFTER_PARTICLES`. Shadow passes are not hooked, so flames and plumes cast no shadow.
 6. Distant Horizons: effects draw only inside the vanilla render distance, and the shell model already returns no quads to DH.
@@ -157,6 +157,13 @@ Sounds are synthesised by the `tools/machine-sounds` route (periodic noise shape
 
 At most 48 quads per flare, 32 puffs per plume and 16 per smoke trail. At most 2,000 effect quads per frame in total, ranked by screen size. One draw per render type per frame. CPU at most 0.2 ms per frame with 10 active emitters. That replaces about 480 particles per full flare. The heat-haze screen copy costs one full-screen blit, and only while haze is visible.
 
+How the budgets are met:
+
+- **SHADER path.** The CPU writes an emitter's vertices into a cached vertex buffer only when a snapshot arrives. Each vertex carries the old and new values and the glide's start time, and the vertex shader eases between them, faces the camera and flickers. There are no per-frame vertex writes.
+- **COMPATIBLE path.** Vertices are written every frame, because Iris's programs cannot run our animation. Density is halved and haze is off under a pack.
+- **Wiring.** Without a pack, a cached vertex buffer per structure; under a pack, the immediate entity draw that works today.
+- **Shadow pass.** No effect work while Iris renders a shadow pass.
+
 ```
  Side view, flare in wind (X3 A)                 Side view, induced-draft tower plume (X2 A, cold day)
 
@@ -178,7 +185,7 @@ Setups: vanilla NeoForge 21.1.219; Sodium 0.6 for NeoForge; Embeddium 1.0.15; So
 | WP | Content | Gate |
 |---|---|---|
 | W0 | Spike: `FxCompat` detection, one test flame ribbon on both paths, one drum's wiring on its tiled `_n` / `_s` textures; settles the questions in section 7 | owner-run matrix on 3 setups |
-| W1 | Core: `FxSettings`, `FxCompat`, `FxShaders`, `FxRenderTypes`, `FxBatch`, `FxWind`, `FxAmbient`, glide | unit tests: wind determinism, ambient mapping, mixing-line excess against section 2's table, batch budgets |
+| W1 | Core: `FxSettings`, `FxCompat` (+ `compat/iris/`, compileOnly Iris, optional in `neoforge.mods.toml`, `-PwithoutIris`), `FxShaders`, `FxRenderTypes`, `FxBatch` (cached GPU-animated buffers), `FxWind`, `FxAmbient`, glide | unit tests: wind determinism, ambient mapping, mixing-line excess against section 2's table, batch budgets; the effects core loads without Iris |
 | W2 | `tools/pbr-textures/`; the branch and tray textures; `InstrumentWiring.paint` v in metres and the cable count per baseline segment; the gland and drip loop at the head (X9); bottom or side entries; `icheme:rendertype_wiring`; `InstrumentRenderer` picks the render type by path | resource test: `_n` / `_s` sizes and channel ranges; InstrumentWiring tests: v grows by run length (a 15 m run spans 30 periods), a baseline segment carries the cables joined beyond it, no entry on a top face; the existing wiring and equipment gates |
 | W3 | Flare: flame, smoke, roar; `FlareState` additions; old particle code removed | flame geometry tests; FlareRuntimeTest for the new fields |
 | W4 | Tower plume: `TowerPlume` watch, marks, puffs | plume length tests; tower runtime test for the published exhaust |
@@ -210,6 +217,8 @@ Order: W0 → W1 → W2 (the owner reviews the wires) → W3 → W4/W5 → W6/W7
 - **X6 Heat haze.** A: in, SHADER path only, off by default (recommended). B: out.
 - **X7 Flare smoke.** A: a soot index from the flared gas's carbon-to-hydrogen ratio and the load, a new published value (recommended). B: load only, as now.
 - **X8 Sounds.** A: synthesised loops, no recordings (recommended, the machine-sounds route). B: CC0 recordings after a licence check.
+- **X11 Distant Horizons silhouettes** (later batch). A: with DH present, coarse box silhouettes of the tall towers, stacks and columns past the vanilla render distance, through DH's generic rendering API. B: none (recommended for this batch).
+- **X12 Fire light** (later batch). A: with LambDynamicLights present, flare, still and heater fires light their surroundings. B: none (recommended for this batch).
 
 ## 9. Sources
 
