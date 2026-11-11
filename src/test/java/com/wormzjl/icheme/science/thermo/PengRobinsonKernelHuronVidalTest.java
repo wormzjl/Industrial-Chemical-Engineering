@@ -774,13 +774,13 @@ class PengRobinsonKernelHuronVidalTest {
             return gji - gii;
         }
 
-        /** The held line (W3b step 2c): linear between the ends; past one, the integral of a slope fading to zero over 50 K. */
+        /** The held line (W3b step 2d): linear between the ends; past one, the integral of a slope fading to zero over 150 K along a smoothstep. */
         double line(double t1, double v1, double t2, double v2) {
             double s = (v2 - v1) / (t2 - t1), low = Math.min(t1, t2), high = Math.max(t1, t2);
             double at = Math.max(low, Math.min(high, t));
             double value = v1 + s * (at - t1);
-            double past = Math.min(Math.abs(t - at), 50.0);
-            return value + Math.signum(t - at) * s * (past - past * past / 100.0);
+            double x = Math.min(Math.abs(t - at), 150.0) / 150.0;
+            return value + Math.signum(t - at) * s * 150.0 * (x - x * x * x + 0.5 * x * x * x * x);
         }
 
         double alpha(int j, int i) {

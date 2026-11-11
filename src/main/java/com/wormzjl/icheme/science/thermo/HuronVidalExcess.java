@@ -39,17 +39,20 @@ public final class HuronVidalExcess {
      * The width, K, over which a held line's slope fades to zero past each of its fitted ends. The derived lines are
      * fitted at 298.15 and 373.15 K and the network runs from about 90 to 800 K, where the plain lines refused the
      * kernel at 1 atm (water/n-hexane from 750 K, water/N2 from 700 K) and water/ethanol's energy changed sign below
-     * 230 K (W3b step 2b).
+     * 230 K (W3b step 2b). 150 K since step 2d: the heat capacity reads the line's second derivative, whose peak is
+     * {@code 1.5 s/W}; over 50 K a linear fade put a step of about 35 J/mol/K in water/ethanol's liquid heat capacity
+     * at 100 C.
      */
-    public static final double HOLD_FADE = 50.0;
+    public static final double HOLD_FADE = 150.0;
 
     /**
      * A held line (owner, 2026-11-11, W3b step 2c: a data range never refuses a state): {@code intercept + slope T}
      * between its ends {@code low} and {@code high} (bit for bit the plain line there); past an end, the value continues with its slope
-     * fading linearly to zero over {@link #HOLD_FADE}, then stays constant. Past {@code high}, with
-     * {@code u = min(T - high, W)}: {@code v = v(high) + s (u - u^2/(2W))}, {@code v' = s (1 - u/W)},
-     * {@code v'' = -s/W} while {@code T - high < W}; mirrored below {@code low}. Value and slope are continuous.
-     * Writes {@code {v, v', v''}} into {@code out}.
+     * fading to zero over {@link #HOLD_FADE} along a smoothstep (W3b step 2d), then stays constant. Past {@code high}, with
+     * {@code x = min(T - high, W)/W}: {@code v = v(high) + s W (x - x^3 + x^4/2)}, {@code v' = s (1 - 3x^2 + 2x^3)},
+     * {@code v'' = s (6x^2 - 6x)/W}; mirrored below {@code low} ({@code v''} changes sign). Value, slope and second
+     * derivative are continuous, so an energy read through it gives a continuous heat capacity. Writes
+     * {@code {v, v', v''}} into {@code out}.
      */
     public static void held(double intercept, double slope, double low, double high, double t, double[] out) {
         if (t <= high && t >= low) {
@@ -61,11 +64,11 @@ public final class HuronVidalExcess {
         boolean above = t > high;
         double sign = above ? 1.0 : -1.0;
         double distance = above ? t - high : low - t;
-        double u = Math.min(distance, HOLD_FADE);
-        out[0] = intercept + slope * (above ? high : low) + sign * slope * (u - u * u / (2.0 * HOLD_FADE));
-        boolean fading = distance < HOLD_FADE;
-        out[1] = fading ? slope * (1.0 - u / HOLD_FADE) : 0.0;
-        out[2] = fading ? -sign * slope / HOLD_FADE : 0.0;
+        double x = Math.min(distance, HOLD_FADE) / HOLD_FADE;
+        double x2 = x * x;
+        out[0] = intercept + slope * (above ? high : low) + sign * slope * HOLD_FADE * (x - x2 * x + 0.5 * x2 * x2);
+        out[1] = slope * (1.0 - 3.0 * x2 + 2.0 * x2 * x);
+        out[2] = sign * slope * 6.0 * (x2 - x) / HOLD_FADE;
     }
 
     private final int componentCount;

@@ -355,15 +355,18 @@ class AqueousEquilibriumTest {
     /** H(T) at fixed P through the label flip of a one-root phase with water: continuous, the share follows v/b. */
     @Test void enthalpyIsContinuousThroughALabelFlip() {
         double[] z = feed("Water", 0.9, "Methane", 0.1);
-        // The flip lies past the water/methane line's fitted ends (held since W3b step 2c; about 690 K, two phases
-        // below about 650 K): find it by a scan.
-        double p = 40.0e6, low = 650.0, high = Double.NaN;
-        PhaseKind lowKind = tp(low, p, z, FLUID).phases().get(0).kind();
-        for (double t = low + 2.0; t <= 800.0; t += 2.0) {
-            if (tp(t, p, z, FLUID).phases().get(0).kind() != lowKind) { high = t; break; }
+        // The flip lies past the water/methane line's fitted ends (held since W3b step 2c, over 150 K since step 2d):
+        // find it by a scan, between two neighbouring one-phase states of different kinds.
+        double p = 40.0e6, low = Double.NaN, high = Double.NaN;
+        PhaseKind lowKind = null;
+        for (double t = 500.0; t <= 1000.0; t += 2.0) {
+            var phases = tp(t, p, z, FLUID).phases();
+            if (phases.size() != 1) { lowKind = null; continue; }
+            if (lowKind != null && phases.get(0).kind() != lowKind) { high = t; break; }
+            lowKind = phases.get(0).kind();
             low = t;
         }
-        assertTrue(tp(low, p, z, FLUID).phases().size() == 1 && Double.isFinite(high), "a flip of one phase between 650 and 800 K");
+        assertTrue(Double.isFinite(high), "a flip of one phase between 500 and 1000 K");
         while (high - low > 1.0e-10 * high) {
             double mid = 0.5 * (low + high);
             if (tp(mid, p, z, FLUID).phases().get(0).kind() == lowKind) low = mid; else high = mid;

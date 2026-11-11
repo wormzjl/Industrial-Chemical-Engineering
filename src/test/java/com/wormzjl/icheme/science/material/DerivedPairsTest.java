@@ -338,13 +338,69 @@ class DerivedPairsTest {
             assertEquals(1234.5 + -6.75 * t, out[0], 0.0);
             assertEquals(-6.75, out[1], 0.0);
         }
-        com.wormzjl.icheme.science.thermo.HuronVidalExcess.held(0.0, 2.0, 298.15, 373.15, 373.15 + 50.0, out);
-        assertEquals(2.0 * 373.15 + 50.0, out[0], 1e-12);
+        // Past an end the slope fades over 150 K: the value gains s W/2, then stays (W3b step 2d).
+        com.wormzjl.icheme.science.thermo.HuronVidalExcess.held(0.0, 2.0, 298.15, 373.15, 373.15 + 150.0, out);
+        assertEquals(2.0 * 373.15 + 150.0, out[0], 1e-12);
+        assertEquals(0.0, out[1], 1e-15);
+        assertEquals(0.0, out[2], 1e-15);
         com.wormzjl.icheme.science.thermo.HuronVidalExcess.held(0.0, 2.0, 298.15, 373.15, 900.0, out);
-        assertEquals(2.0 * 373.15 + 50.0, out[0], 1e-12);
+        assertEquals(2.0 * 373.15 + 150.0, out[0], 1e-12);
         assertEquals(0.0, out[1], 0.0);
         com.wormzjl.icheme.science.thermo.HuronVidalExcess.held(0.0, 2.0, 298.15, 373.15, 98.15, out);
-        assertEquals(2.0 * 298.15 - 50.0, out[0], 1e-12);
+        assertEquals(2.0 * 298.15 - 150.0, out[0], 1e-12);
+        // Value, slope and second derivative continuous at both ends and at the end of the fade.
+        for (double edge : new double[] {298.15, 373.15, 148.15, 523.15}) {
+            double[] below = new double[3], above = new double[3];
+            com.wormzjl.icheme.science.thermo.HuronVidalExcess.held(5.0, 2.0, 298.15, 373.15, edge - 1e-7, below);
+            com.wormzjl.icheme.science.thermo.HuronVidalExcess.held(5.0, 2.0, 298.15, 373.15, edge + 1e-7, above);
+            assertEquals(below[0], above[0], 1e-6, "value at " + edge);
+            assertEquals(below[1], above[1], 1e-7, "slope at " + edge);
+            assertEquals(below[2], above[2], 1e-7, "second derivative at " + edge);
+        }
+    }
+
+    /**
+     * W3b step 2d: water/ethanol at x = 0.5 on the liquid root at 1 atm. The residual enthalpy and its temperature
+     * slope (the residual heat capacity) are continuous through the fitted ends 298.15 and 373.15 K and the ends of the
+     * fade, 148.15 and 523.15 K (a linear fade over 50 K left a step of about 35 J/mol/K at 373.15 K). Printed: the
+     * largest step at an end, and at 10 MPa (a liquid over the whole fade) the largest departure of the residual heat
+     * capacity from its linear trend at the fitted end, an upper indicator of what the hold adds (it holds the mixture's
+     * own curvature too).
+     */
+    @Test void heldEnthalpyAndHeatCapacityAreContinuousThroughTheFittedEnds() {
+        var kernel = kernel("Water", "Ethanol");
+        var workspace = kernel.newWorkspace();
+        var derivatives = kernel.newDerivatives();
+        double[] x = {0.5, 0.5};
+        double delta = 1.0e-4, step = 0.0;
+        for (double edge : new double[] {148.15, 298.15, 373.15, 523.15}) {
+            kernel.evaluateDerivatives(edge - delta, ATM, x, PengRobinsonKernel.Root.LIQUID, workspace, derivatives);
+            double hBelow = derivatives.evaluation().residualEnthalpyJoulesPerMol(), cpBelow = derivatives.dResidualEnthalpyDt();
+            kernel.evaluateDerivatives(edge + delta, ATM, x, PengRobinsonKernel.Root.LIQUID, workspace, derivatives);
+            double hAbove = derivatives.evaluation().residualEnthalpyJoulesPerMol(), cpAbove = derivatives.dResidualEnthalpyDt();
+            String at = String.format(Locale.ROOT, "water/ethanol x 0.5 liquid at %.2f K", edge);
+            // H: its change over 2 delta is the slope's (no step); the slope: no step (a linear fade left about 35 J/mol/K).
+            assertEquals(0.5 * (cpBelow + cpAbove) * 2.0 * delta, hAbove - hBelow, 1.0e-5, "H " + at);
+            assertEquals(cpBelow, cpAbove, 0.01, "dH/dT " + at);
+            step = Math.max(step, Math.abs(cpAbove - cpBelow));
+        }
+        double pressure = 1.0e7;
+        double largest = 0.0, where = 0.0;
+        for (double[] end : new double[][] {{298.15, -1.0}, {373.15, 1.0}}) {
+            kernel.evaluateDerivatives(end[0], pressure, x, PengRobinsonKernel.Root.LIQUID, workspace, derivatives);
+            double atEnd = derivatives.dResidualEnthalpyDt();
+            kernel.evaluateDerivatives(end[0] - end[1] * 1.0, pressure, x, PengRobinsonKernel.Root.LIQUID, workspace, derivatives);
+            double slopeInside = atEnd - derivatives.dResidualEnthalpyDt();
+            for (double u = 1.0; u <= 150.0; u += 1.0) {
+                double t = end[0] + end[1] * u;
+                kernel.evaluateDerivatives(t, pressure, x, PengRobinsonKernel.Root.LIQUID, workspace, derivatives);
+                double change = derivatives.dResidualEnthalpyDt() - (atEnd + slopeInside * u);
+                if (Math.abs(change) > Math.abs(largest)) { largest = change; where = t; }
+            }
+        }
+        System.out.println(String.format(Locale.ROOT,
+                "HELD_HEAT_CAPACITY water/ethanol x 0.5 liquid: largest step at an end %.2e J/mol/K (1 atm); largest departure from the end's linear trend %.2f J/mol/K at %.0f K (10 MPa)",
+                step, largest, where));
     }
 
     private static DerivedPairs.Source source(DerivedPairs.Result result, String a, String b) {

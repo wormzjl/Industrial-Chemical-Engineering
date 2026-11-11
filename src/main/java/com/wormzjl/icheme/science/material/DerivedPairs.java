@@ -66,7 +66,7 @@ import java.util.function.ToDoubleFunction;
  */
 public final class DerivedPairs {
     /** The declared revision of the derivation: bumped when a rule, a constant or a fit setting here changes. */
-    public static final String REVISION = "derived-pairs-r3";
+    public static final String REVISION = "derived-pairs-r4";
     public static final double FIRST_KELVIN = 298.15;
     public static final double SECOND_KELVIN = 373.15;
     /** The pressure of the activity fit: both compounds liquid at both temperatures for the usual solvents. */
