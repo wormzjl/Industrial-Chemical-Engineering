@@ -39,6 +39,8 @@ final class WaterShare {
     /** Region 1's upper boundary, where the liquid gap starts to fade. */
     static final double FADE_START = 623.15;
     private static final double TRIPLE = 273.16;
+    /** Region 1's upper pressure, Pa: the gap continues linearly in P past it. */
+    private static final double REGION_1_MAXIMUM_PRESSURE = 100.0e6;
     static final double RATIO_DENSE = 2.6, RATIO_GAS = 3.6;
     private static final double SQRT_TWO = Math.sqrt(2.0);
 
@@ -192,7 +194,10 @@ final class WaterShare {
      * Region 1 minus the cubic at one state, into the workspace's gap: {@code h, s, v}, then {@code dh/dT, dh/dP, ds/dT,
      * ds/dP, dv/dT, dv/dP}, then {@code d2h/dTdP, d2s/dTdP, d2v/dTdP}.
      */
-    private double[] gapAt(double t, double p, Workspace w) {
+    private double[] gapAt(double t, double pressure, Workspace w) {
+        // Past Region 1's 100 MPa its sums fail (no positive c_p at 623 K and 1 GPa): the gap there continues linearly in
+        // P from 100 MPa, with the mixed derivative carrying its T slopes, value and slope continuous.
+        double p = Math.min(pressure, REGION_1_MAXIMUM_PRESSURE);
         region1(t, p, w);
         pureCubic(t, p, w);
         double[] r = w.region, c = w.cubic, g = w.gap;
@@ -216,6 +221,15 @@ final class WaterShare {
         g[9] = -t * (r[6] - c[6]);
         g[10] = -(r[6] - c[6]);
         g[11] = r[7] - c[7];
+        if (pressure > p) {
+            double step = pressure - p;
+            g[0] += g[4] * step;
+            g[1] += g[6] * step;
+            g[2] += g[8] * step;
+            g[3] += g[9] * step;
+            g[5] += g[10] * step;
+            g[7] += g[11] * step;
+        }
         return g;
     }
 

@@ -1484,7 +1484,7 @@ public final class FluidTpEquilibrium {
     /** {@code (dH/dT)_P} of one dry phase, {@code NaN} otherwise. */
     private double dryHeatCapacity(EquilibriumResult result, double t, double p, Workspace w) {
         PhaseDerivatives d = dryDerivatives(result, t, p, w);
-        return d == null ? Double.NaN : w.total * d.enthalpyTemperatureDerivative();
+        return d == null ? Double.NaN : w.total * d.balanceHeatCapacity();
     }
 
     /** {@code (dU/dT)_V} of one dry phase, {@code NaN} otherwise. */
@@ -1492,17 +1492,17 @@ public final class FluidTpEquilibrium {
         double p = result.phases().get(0).pressure();
         PhaseDerivatives d = dryDerivatives(result, t, p, w);
         if (d == null) return Double.NaN;
-        double dvdt = d.volumeTemperatureDerivative();
-        double dvdp = d.volumePressureDerivative();
-        double dudt = d.enthalpyTemperatureDerivative() - p * dvdt;
-        double dudp = d.enthalpyPressureDerivative() - d.state().molarVolume() - p * dvdp;
+        double dvdt = d.balanceVolumeTemperatureDerivative();
+        double dvdp = d.balanceVolumePressureDerivative();
+        double dudt = d.balanceHeatCapacity() - p * dvdt;
+        double dudp = d.balanceEnthalpyPressureDerivative() - d.state().balanceVolume() - p * dvdp;
         return w.total * (dudt - dudp * dvdt / dvdp);
     }
 
     /** {@code -(d ln V/d ln P)_T} of one dry phase, {@code NaN} otherwise. */
     private double dryCompressibility(EquilibriumResult result, double t, double p, Workspace w) {
         PhaseDerivatives d = dryDerivatives(result, t, p, w);
-        return d == null ? Double.NaN : -p * d.volumePressureDerivative() / d.state().molarVolume();
+        return d == null ? Double.NaN : -p * d.balanceVolumePressureDerivative() / d.state().balanceVolume();
     }
 
     private double energyResidual(EquilibriumResult result, double target, double t, Workspace w) {
@@ -1590,7 +1590,8 @@ public final class FluidTpEquilibrium {
             if (s.bracketed() && (s.width() <= tolerance * t || w.presentCount == 1 && s.straddlesPureCoexistence()
                     || !w.wet && pureCrystal(w) != null && s.straddlesCrystalStep()
                     || w.wet && (condensedStep(s.lowerResult, s.upperResult) || freezeStep(s.lowerResult, s.upperResult))
-                    || binaryCrystal(w) != null && threePhaseDue(s, s.width() / t))) {
+                    || binaryCrystal(w) != null && threePhaseDue(s, s.width() / t)
+                    || binaryFluid(w) >= 0 && fluidThreeDue(s, s.width() / t))) {
                 EquilibriumResult closed = closedPh(p, target, competition, w);
                 if (closed != null) return closed;
                 // The coexistence lies beyond the jump (its side is recorded), or was not met yet: the search goes on.
@@ -1644,6 +1645,11 @@ public final class FluidTpEquilibrium {
         } else if (binaryCrystal(w) != null && straddlesThreePhase(s)) {
             // P5: a binary's three-phase step (vapour, liquid and crystal at one temperature for the fixed pressure).
             EquilibriumResult answer = binaryThreePhase(Specification.PH, s, t, p, target, closed, competition, w);
+            if (answer != null) return outerAnswer(Specification.PH, answer, target, Double.NaN, true, null, w);
+            if (!Double.isNaN(w.coexistenceX) || !closed) return null;
+        } else if (binaryFluid(w) >= 0 && straddlesFluidThree(s)) {
+            // W3a D4: a binary's vapour-liquid-liquid step (at the fixed pressure, one temperature).
+            EquilibriumResult answer = binaryFluidThreePhase(Specification.PH, s, t, p, target, closed, competition, w);
             if (answer != null) return outerAnswer(Specification.PH, answer, target, Double.NaN, true, null, w);
             if (!Double.isNaN(w.coexistenceX) || !closed) return null;
         } else if (w.wet && condensedStep(s.lowerResult, s.upperResult)) {
@@ -1931,12 +1937,12 @@ public final class FluidTpEquilibrium {
     private boolean analyticJacobian(EquilibriumResult result, double t, double p, double f0, Workspace w) {
         PhaseDerivatives d = dryDerivatives(result, t, p, w);
         if (d == null) return false;
-        double volume = d.state().molarVolume();
-        double dvdt = d.volumeTemperatureDerivative();
-        double dvdp = d.volumePressureDerivative();
+        double volume = d.state().balanceVolume();
+        double dvdt = d.balanceVolumeTemperatureDerivative();
+        double dvdp = d.balanceVolumePressureDerivative();
         double rt = R * t;
-        w.jacobian[0] = t * (d.enthalpyTemperatureDerivative() - p * dvdt) / rt - f0;
-        w.jacobian[1] = p * (d.enthalpyPressureDerivative() - volume - p * dvdp) / rt;
+        w.jacobian[0] = t * (d.balanceHeatCapacity() - p * dvdt) / rt - f0;
+        w.jacobian[1] = p * (d.balanceEnthalpyPressureDerivative() - volume - p * dvdp) / rt;
         w.jacobian[2] = t * dvdt / volume;
         w.jacobian[3] = p * dvdp / volume;
         w.jacobianValid = true;
@@ -2183,7 +2189,8 @@ public final class FluidTpEquilibrium {
             if (s.bracketed() && (s.width() <= tolerance || w.presentCount == 1 && s.straddlesPureCoexistence()
                     || !w.wet && pureCrystal(w) != null && s.straddlesCrystalStep()
                     || w.wet && (condensedStep(s.upperResult, s.lowerResult) || freezeStep(s.lowerResult, s.upperResult))
-                    || binaryCrystal(w) != null && threePhaseDue(s, s.width()))) {
+                    || binaryCrystal(w) != null && threePhaseDue(s, s.width())
+                    || binaryFluid(w) >= 0 && fluidThreeDue(s, s.width()))) {
                 int closed = closedInner(t, v, competition, w);
                 if (closed != INNER_BELOW) return closed;
                 // The coexistence lies beyond the jump (its side is recorded), or was not met yet: the search goes on.
@@ -2247,6 +2254,11 @@ public final class FluidTpEquilibrium {
         } else if (binaryCrystal(w) != null && straddlesThreePhase(s)) {
             // P5: a binary's three-phase step (vapour, liquid and crystal at one pressure for the fixed temperature).
             EquilibriumResult answer = binaryThreePhase(Specification.UV, s, t, p, v, closed, competition, w);
+            if (answer != null) return foundOrHeld(answer, w);
+            if (!Double.isNaN(w.coexistenceX) || !closed) return INNER_BELOW;
+        } else if (binaryFluid(w) >= 0 && straddlesFluidThree(s)) {
+            // W3a D4: a binary's vapour-liquid-liquid step (at the fixed temperature, one pressure).
+            EquilibriumResult answer = binaryFluidThreePhase(Specification.UV, s, t, p, v, closed, competition, w);
             if (answer != null) return foundOrHeld(answer, w);
             if (!Double.isNaN(w.coexistenceX) || !closed) return INNER_BELOW;
         } else if (w.wet && condensedStep(s.upperResult, s.lowerResult)) {
@@ -2314,8 +2326,8 @@ public final class FluidTpEquilibrium {
         PhaseState vapour = evaluator.evaluate(t, p, w.feed, Root.VAPOR, w.phases, w.vaporState);
         w.outerKernel += 2;
         double n = w.hydrocarbonTotal;
-        double liquidValue = energy ? liquid.molarEnthalpy() : liquid.molarVolume();
-        double vapourValue = energy ? vapour.molarEnthalpy() : vapour.molarVolume();
+        double liquidValue = energy ? liquid.balanceEnthalpy() : liquid.balanceVolume();
+        double vapourValue = energy ? vapour.balanceEnthalpy() : vapour.balanceVolume();
         double beta = (target / n - liquidValue) / (vapourValue - liquidValue);
         // The specification tolerance as a phase fraction.
         double gap = vapourValue - liquidValue;
@@ -3762,8 +3774,8 @@ public final class FluidTpEquilibrium {
         w.outerKernel++;
         double n = w.hydrocarbonTotal;
         double traces = traces(i, w);
-        double solidValue = energy ? solid.molarEnthalpy() : solid.molarVolume();
-        double fluidValue = energy ? fluid.molarEnthalpy() : fluid.molarVolume();
+        double solidValue = energy ? solid.balanceEnthalpy() : solid.balanceVolume();
+        double fluidValue = energy ? fluid.balanceEnthalpy() : fluid.balanceVolume();
         double gap = fluidValue - solidValue;
         double beta = (target / n - solidValue) / gap;
         // D21: the smallest fluid share that keeps the traces within STEP_FLUID_TRACES of it (0 for a pure feed).
@@ -3771,7 +3783,7 @@ public final class FluidTpEquilibrium {
         if (traces > 0.0) {
             for (int k = 0; k < NEAR_PURE_ITERATIONS && beta >= lowest && beta <= 1.0; k++) {
                 fluid = stepFluid(t, p, i, beta * n - traces, root, w);
-                fluidValue = energy ? fluid.molarEnthalpy() : fluid.molarVolume();
+                fluidValue = energy ? fluid.balanceEnthalpy() : fluid.balanceVolume();
                 gap = fluidValue - solidValue;
                 double next = (target / n - solidValue) / gap;
                 boolean converged = Math.abs(next - beta) <= 4.0 * Math.ulp(beta);
@@ -4105,8 +4117,8 @@ public final class FluidTpEquilibrium {
 
     /** The triple point's mole, energy and volume balances over (vapour, liquid, crystal), row-major for {@link #solve3}. */
     private static double[] tripleBalances(PhaseState vapour, PhaseState liquid, PhaseState solid) {
-        return new double[] {1.0, 1.0, 1.0, vapour.molarInternalEnergy(), liquid.molarInternalEnergy(), solid.molarInternalEnergy(),
-                vapour.molarVolume(), liquid.molarVolume(), solid.molarVolume()};
+        return new double[] {1.0, 1.0, 1.0, vapour.balanceInternalEnergy(), liquid.balanceInternalEnergy(), solid.balanceInternalEnergy(),
+                vapour.balanceVolume(), liquid.balanceVolume(), solid.balanceVolume()};
     }
 
     /** The same balances over a triangle's corners, {@code (u_V, v_V, u_L, v_L, u_s, v_s)}. */
@@ -4274,9 +4286,9 @@ public final class FluidTpEquilibrium {
         if (!(Math.abs(liquid.molarVolume() - vapour.molarVolume()) > 1.0e-3 * liquid.molarVolume()) || !(Math.abs(x3 - y3) > 1.0e-9)) return null;
         double ni = w.feed[i];
         double nj = w.feed[j];
-        double vapourValue = energy ? vapour.molarEnthalpy() : vapour.molarVolume();
-        double liquidValue = energy ? liquid.molarEnthalpy() : liquid.molarVolume();
-        double solidValue = energy ? solid.molarEnthalpy() : solid.molarVolume();
+        double vapourValue = energy ? vapour.balanceEnthalpy() : vapour.balanceVolume();
+        double liquidValue = energy ? liquid.balanceEnthalpy() : liquid.balanceVolume();
+        double solidValue = energy ? solid.balanceEnthalpy() : solid.balanceVolume();
         // Rows: species i, species j, the third balance.
         double[] a = {y3, x3, 1.0, 1.0 - y3, 1.0 - x3, 0.0, vapourValue, liquidValue, solidValue};
         double[] amounts = solve3(a, new double[] {ni, nj, target});
@@ -4389,6 +4401,299 @@ public final class FluidTpEquilibrium {
         w.pure[i] = fraction;
         w.pure[j] = 1.0 - fraction;
         return evaluator.evaluate(t, p, w.pure, root, w.phases, out);
+    }
+
+    /**
+     * The first major species of a (pseudo-)binary of an engine with water in the equation of state that has no
+     * competing crystal (W3a D4), or -1: its vapour and two liquids coexist only on a line, so at fixed pressure
+     * {@code H(T)} and at fixed temperature {@code V(P)} step there, as at {@link #binaryThreePhase}'s point.
+     */
+    private int binaryFluid(Workspace w) {
+        if (!inEquationOfState || w.wet || w.presentCount < 2 || binaryCrystal(w) != null) return -1;
+        int first = -1, majors = 0;
+        for (int a = 0; a < w.presentCount; a++) {
+            int k = w.present[a];
+            if (w.feed[k] > TRACE_FRACTION * w.hydrocarbonTotal) {
+                if (first < 0) first = k;
+                majors++;
+            }
+        }
+        return majors == 2 ? first : -1;
+    }
+
+    /**
+     * Whether a bracket of a {@link #binaryFluid} feed straddles its vapour-liquid-liquid step: both ends converged, one
+     * holding two liquids, one a vapour, none a crystal.
+     */
+    private static boolean straddlesFluidThree(Search s) {
+        if (s.lowerResult == null || s.upperResult == null) return false;
+        boolean vapour = false, twoLiquids = false;
+        for (EquilibriumResult end : new EquilibriumResult[] {s.lowerResult, s.upperResult}) {
+            if (!end.converged()) return false;
+            int liquids = 0;
+            for (PhaseAmounts phase : end.phases()) {
+                switch (phase.kind()) {
+                    case SOLID -> {
+                        return false;
+                    }
+                    case LIQUID -> liquids++;
+                    default -> vapour = true;
+                }
+            }
+            if (liquids >= 2) twoLiquids = true;
+        }
+        return vapour && twoLiquids;
+    }
+
+    /** {@link #threePhaseDue} for the vapour-liquid-liquid step of a {@link #binaryFluid} feed. */
+    private static boolean fluidThreeDue(Search s, double width) {
+        if (!straddlesFluidThree(s)) return false;
+        if (s.threePhaseAttempts == 0 || width <= THREE_PHASE_BRACKET && s.threePhaseAttempts < 4) {
+            s.threePhaseAttempts++;
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * The vapour-liquid-liquid step of a {@link #binaryFluid} feed (W3a D4), {@link #binaryThreePhase}'s role with a
+     * second liquid for the crystal: at the fixed pressure (PH) the temperature, at the fixed temperature (UV) the
+     * pressure where a vapour and two liquids coexist, then the three amounts from the two species' balances and the
+     * energy or volume balance (balance book). Newton on {@code (X, q_1, q_2, q_V)} ({@code X = 1/T} for PH, {@code ln P}
+     * for UV; {@code q = ln(x_i/x_j)} per phase, which resolves a trace of either species) for the four equal chemical
+     * potentials of each liquid with the vapour, a finite-difference Jacobian, steps capped, to {@code 1e-11}; it must lie
+     * inside the bracket with three distinct phases. The answer, the step's end in {@code coexistenceX} and
+     * {@code coexistenceResidual}, or null, as {@link #binaryThreePhase}. Each species' rounding goes to the phase holding
+     * most of it; a trace splits over the phases by {@code n_p / phi_p}, equal fugacities to first order.
+     */
+    private EquilibriumResult binaryFluidThreePhase(Specification specification, Search s, double t, double p, double target,
+                                                    boolean clamp, PhaseCompetition competition, Workspace w) {
+        w.coexistenceX = Double.NaN;
+        int i = binaryFluid(w);
+        if (i < 0 || !straddlesFluidThree(s)) return null;
+        int j = -1;
+        for (int a = 0; a < w.presentCount; a++) {
+            int k = w.present[a];
+            if (k != i && w.feed[k] > TRACE_FRACTION * w.hydrocarbonTotal) j = k;
+        }
+        boolean energy = specification == Specification.PH;
+        int slotI = basisOfComponent[i], slotJ = basisOfComponent[j];
+        Slots z = w.slots;
+        double[] u = z.threeU;
+        u[1] = u[2] = u[3] = Double.NaN;
+        for (EquilibriumResult end : new EquilibriumResult[] {s.lowerResult, s.upperResult}) {
+            int liquids = 0;
+            for (PhaseAmounts phase : end.phases()) if (phase.kind() == PhaseKind.LIQUID) liquids++;
+            for (PhaseAmounts phase : end.phases()) {
+                double q = logRatio(phase.amount(slotI), phase.amount(slotJ));
+                if (phase.kind() != PhaseKind.LIQUID) {
+                    if (Double.isNaN(u[3])) u[3] = q;
+                } else if (liquids >= 2) {
+                    if (Double.isNaN(u[1]) || q > u[1]) {
+                        if (!Double.isNaN(u[1])) u[2] = u[1];
+                        u[1] = q;
+                    } else if (Double.isNaN(u[2])) {
+                        u[2] = q;
+                    }
+                }
+            }
+        }
+        if (Double.isNaN(u[1]) || Double.isNaN(u[2]) || Double.isNaN(u[3])) return null;
+        double lower = energy ? Math.min(s.lower, s.upper) : DeterministicMath.exp(Math.min(s.lower, s.upper));
+        double upper = energy ? Math.max(s.lower, s.upper) : DeterministicMath.exp(Math.max(s.lower, s.upper));
+        u[0] = energy ? 1.0 / t : DeterministicMath.log(p);
+        double[] r = z.threeR, trial = z.threeTrial, shifted = z.threeShifted, jacobian = z.threeJacobian, step = z.threeStep;
+        double fixed = energy ? p : t;
+        boolean converged = false;
+        for (int k = 0; k < THREE_PHASE_ITERATIONS; k++) {
+            if (!fluidThreeResidual(energy, fixed, u, i, j, r, w)) return null;
+            double norm = 0.0;
+            for (int a = 0; a < 4; a++) norm = Math.max(norm, Math.abs(r[a]));
+            if (norm <= THREE_PHASE_TOLERANCE) {
+                converged = true;
+                break;
+            }
+            for (int col = 0; col < 4; col++) {
+                double h = col == 0 ? 1.0e-7 * Math.abs(u[0]) + (energy ? 0.0 : 1.0e-7) : 1.0e-7 * Math.max(1.0, Math.abs(u[col]));
+                System.arraycopy(u, 0, shifted, 0, 4);
+                shifted[col] += h;
+                if (!fluidThreeResidual(energy, fixed, shifted, i, j, trial, w)) return null;
+                for (int row = 0; row < 4; row++) jacobian[4 * row + col] = (trial[row] - r[row]) / h;
+            }
+            for (int a = 0; a < 4; a++) step[a] = -r[a];
+            if (!solveSmall(jacobian, step, 4)) return null;
+            double scale = Math.min(1.0, (energy ? 0.02 * Math.abs(u[0]) : 0.2) / Math.max(Math.abs(step[0]), 1.0e-300));
+            for (int a = 1; a < 4; a++) scale = Math.min(scale, 2.0 / Math.max(Math.abs(step[a]), 1.0e-300));
+            for (int a = 0; a < 4; a++) u[a] += scale * step[a];
+        }
+        if (!converged) return null;
+        double t3 = energy ? 1.0 / u[0] : t;
+        double p3 = energy ? p : DeterministicMath.exp(u[0]);
+        double variable = energy ? t3 : p3;
+        double slack = 1.0e-9 * variable;
+        if (!(variable >= lower - slack && variable <= upper + slack)) return null;
+        PhaseState vapour = evaluateRatio(t3, p3, u[3], i, j, Root.VAPOR, w.threeVapour, w);
+        PhaseState first = evaluateRatio(t3, p3, u[1], i, j, Root.LIQUID, w.threeLiquid, w);
+        PhaseState second = evaluateRatio(t3, p3, u[2], i, j, Root.LIQUID, z.states[2], w);
+        w.outerKernel += 3;
+        // Three distinct phases: not one fluid taken twice at its onset.
+        if (!(Math.abs(u[1] - u[2]) > 1.0e-6 && Math.abs(u[1] - u[3]) > 1.0e-6 && Math.abs(u[2] - u[3]) > 1.0e-6)
+                || !(vapour.molarVolume() > 1.5 * Math.max(first.molarVolume(), second.molarVolume()))) {
+            return null;
+        }
+        PhaseState[] states = {vapour, first, second};
+        double ni = w.feed[i], nj = w.feed[j];
+        double[] a = new double[9];
+        for (int c = 0; c < 3; c++) {
+            a[c] = states[c].moleFraction(i);
+            a[3 + c] = states[c].moleFraction(j);
+            a[6 + c] = energy ? states[c].balanceEnthalpy() : states[c].balanceVolume();
+        }
+        double[] amounts = solve3(a, new double[] {ni, nj, target});
+        if (amounts == null) return null;
+        // The direction that keeps both species' balances: the cross product of their rows.
+        double[] d = {a[1] * a[5] - a[2] * a[4], a[2] * a[3] - a[0] * a[5], a[0] * a[4] - a[1] * a[3]};
+        double allowance = SPECIFICATION_TOLERANCE * (ni + nj);
+        boolean inside = amounts[0] >= -allowance && amounts[1] >= -allowance && amounts[2] >= -allowance;
+        if (!inside) {
+            double lambdaLow = Double.NEGATIVE_INFINITY, lambdaHigh = Double.POSITIVE_INFINITY;
+            for (int c = 0; c < 3; c++) {
+                if (d[c] > 0.0) lambdaLow = Math.max(lambdaLow, -amounts[c] / d[c]);
+                else if (d[c] < 0.0) lambdaHigh = Math.min(lambdaHigh, -amounts[c] / d[c]);
+            }
+            if (!(lambdaLow <= lambdaHigh)) return null;
+            if (!clamp) {
+                double third = d[0] * a[6] + d[1] * a[7] + d[2] * a[8];
+                double lambda = 0.0 < lambdaLow ? lambdaLow : lambdaHigh;
+                double value = target + lambda * third;
+                w.coexistenceX = energy ? t3 : DeterministicMath.log(p3);
+                w.coexistenceResidual = energy ? value - target : DeterministicMath.log(target / value);
+                return null;
+            }
+            double lambda = Math.clamp(0.0, lambdaLow, lambdaHigh);
+            for (int c = 0; c < 3; c++) amounts[c] += lambda * d[c];
+        }
+        double[][] split = new double[3][];
+        for (int c = 0; c < 3; c++) {
+            amounts[c] = Math.max(amounts[c], 0.0);
+            split[c] = pair(slotI, amounts[c] * a[c], slotJ, amounts[c] * a[3 + c]);
+        }
+        conserve(split, slotI, ni);
+        conserve(split, slotJ, nj);
+        for (int b = 0; b < w.presentCount; b++) {
+            int k = w.present[b];
+            if (k == i || k == j) continue;
+            double weights = 0.0;
+            for (int c = 0; c < 3; c++) weights += amounts[c] * DeterministicMath.exp(-states[c].logFugacityCoefficient(k));
+            for (int c = 0; c < 3; c++) {
+                split[c][basisOfComponent[k]] = weights > 0.0
+                        ? w.feed[k] * amounts[c] * DeterministicMath.exp(-states[c].logFugacityCoefficient(k)) / weights : 0.0;
+            }
+            conserve(split, basisOfComponent[k], w.feed[k]);
+        }
+        List<PhaseAmounts> phases = new ArrayList<>(3);
+        boolean hasVapour = amounts[0] > 0.0;
+        int liquids = 0;
+        if (hasVapour) phases.add(new PhaseAmounts(PhaseKind.VAPOR, null, t3, p3, split[0], vapour.copy()));
+        int lighter = first.molarVolume() >= second.molarVolume() ? 1 : 2;
+        for (int c : new int[] {lighter, 3 - lighter}) {
+            if (amounts[c] > 0.0) {
+                phases.add(new PhaseAmounts(PhaseKind.LIQUID, null, t3, p3, split[c], states[c].copy()));
+                liquids++;
+            }
+        }
+        Classification classification = hasVapour ? liquids == 2 ? Classification.VAPOR_LIQUID_LIQUID
+                : liquids == 1 ? Classification.VAPOR_LIQUID : Classification.SINGLE_VAPOR
+                : liquids == 2 ? Classification.LIQUID_LIQUID : liquids == 1 ? Classification.SINGLE_LIQUID : null;
+        if (classification == null) return null;
+        String note = "vapour-liquid-liquid point of the " + evaluator.components().get(i) + " and " + evaluator.components().get(j)
+                + " binary at (" + t3 + " K, " + p3 + " Pa); vapour " + amounts[0] + ", liquids " + amounts[1] + " and " + amounts[2]
+                + " mol from the species and " + (energy ? "energy" : "volume") + " balances";
+        return new EquilibriumResult(Specification.TP, EquilibriumResult.Status.CONVERGED, null, CONVERGED + "; " + note,
+                contract.identity(), competition, classification, phases, List.of(), solidCoverage(convergedCoverage, w),
+                diagnostics(w, null, false), null, null);
+    }
+
+    /** {@code ln(a/b)}, held to +-46 (a fraction of 1e-20) where one of them is zero. */
+    private static double logRatio(double a, double b) {
+        if (!(a > 0.0)) return -46.0;
+        if (!(b > 0.0)) return 46.0;
+        return Math.clamp(DeterministicMath.log(a / b), -46.0, 46.0);
+    }
+
+    /** Puts the rounding of {@code slot}'s balance over three phase amounts into the phase that holds most of it. */
+    private static void conserve(double[][] split, int slot, double total) {
+        int most = 0;
+        for (int c = 1; c < 3; c++) if (split[c][slot] > split[most][slot]) most = c;
+        double rest = total;
+        for (int c = 0; c < 3; c++) if (c != most) rest -= split[c][slot];
+        split[most][slot] = Math.max(rest, 0.0);
+    }
+
+    /** The binary's phase with {@code q = ln(x_i/x_j)} on {@code root}, both fractions resolved near either pure end. */
+    private PhaseState evaluateRatio(double t, double p, double q, int i, int j, Root root, PhaseState out, Workspace w) {
+        Arrays.fill(w.pure, 0.0);
+        w.pure[i] = 1.0 / (1.0 + DeterministicMath.exp(-q));
+        w.pure[j] = 1.0 / (1.0 + DeterministicMath.exp(q));
+        return evaluator.evaluate(t, p, w.pure, root, w.phases, out);
+    }
+
+    /**
+     * The residuals of the binary vapour-liquid-liquid point at {@code u = (X, q_1, q_2, q_V)}: each species' chemical
+     * potential in each liquid less the vapour's, over {@code R T}; false when a state is refused.
+     */
+    private boolean fluidThreeResidual(boolean energy, double fixed, double[] u, int i, int j, double[] r, Workspace w) {
+        double t = energy ? 1.0 / u[0] : fixed;
+        double p = energy ? fixed : DeterministicMath.exp(u[0]);
+        if (!Double.isFinite(t) || !Double.isFinite(p) || !(t > 0.0) || !(p > 0.0)) return false;
+        try {
+            PhaseState vapour = evaluateRatio(t, p, u[3], i, j, Root.VAPOR, w.threeVapour, w);
+            PhaseState first = evaluateRatio(t, p, u[1], i, j, Root.LIQUID, w.threeLiquid, w);
+            PhaseState second = evaluateRatio(t, p, u[2], i, j, Root.LIQUID, w.slots.states[2], w);
+            w.outerKernel += 3;
+            double rt = R * t;
+            r[0] = (first.chemicalPotential(i) - vapour.chemicalPotential(i)) / rt;
+            r[1] = (first.chemicalPotential(j) - vapour.chemicalPotential(j)) / rt;
+            r[2] = (second.chemicalPotential(i) - vapour.chemicalPotential(i)) / rt;
+            r[3] = (second.chemicalPotential(j) - vapour.chemicalPotential(j)) / rt;
+            for (int a = 0; a < 4; a++) if (!Double.isFinite(r[a])) return false;
+            return true;
+        } catch (IllegalArgumentException | IllegalStateException | ArithmeticException refused) {
+            return false;
+        }
+    }
+
+    /** Solves {@code a x = b} in place ({@code a} row-major {@code n x n}, overwritten) by partial pivoting; false when singular. */
+    private static boolean solveSmall(double[] a, double[] b, int n) {
+        for (int col = 0; col < n; col++) {
+            int pivot = col;
+            for (int row = col + 1; row < n; row++) if (Math.abs(a[n * row + col]) > Math.abs(a[n * pivot + col])) pivot = row;
+            double top = a[n * pivot + col];
+            if (!(Math.abs(top) > 0.0) || !Double.isFinite(top)) return false;
+            if (pivot != col) {
+                for (int k = 0; k < n; k++) {
+                    double swap = a[n * col + k];
+                    a[n * col + k] = a[n * pivot + k];
+                    a[n * pivot + k] = swap;
+                }
+                double swap = b[col];
+                b[col] = b[pivot];
+                b[pivot] = swap;
+            }
+            for (int row = col + 1; row < n; row++) {
+                double factor = a[n * row + col] / top;
+                if (factor == 0.0) continue;
+                for (int k = col; k < n; k++) a[n * row + k] -= factor * a[n * col + k];
+                b[row] -= factor * b[col];
+            }
+        }
+        for (int row = n - 1; row >= 0; row--) {
+            double sum = b[row];
+            for (int k = row + 1; k < n; k++) sum -= a[n * row + k] * b[k];
+            b[row] = sum / a[n * row + row];
+            if (!Double.isFinite(b[row])) return false;
+        }
+        return true;
     }
 
     /**
@@ -5904,7 +6209,7 @@ public final class FluidTpEquilibrium {
             w.iterations++;
             steps++;
             w.lastChange = change;
-            if (change < settings.lnKTolerance()) break;
+            if (change < settings.lnKTolerance() && s.fractionsConverged) break;
             if (!Double.isFinite(change)) {
                 w.failure = "the three-slot substitution met a non-finite ln phi";
                 return false;
@@ -5972,15 +6277,16 @@ public final class FluidTpEquilibrium {
     }
 
     /**
-     * Drops the higher of two present slots on the same root whose compositions agree within {@link #SLOT_DUPLICATE}
-     * ({@code sum_i z_i (ln x_ik - ln x_il)^2}): one phase taken twice. Its fraction goes to the lower slot.
+     * Drops one of two watched slots on the same root whose compositions agree within {@link #SLOT_DUPLICATE}
+     * ({@code sum_i z_i (ln x_ik - ln x_il)^2}): one phase taken twice, which leaves Q's Hessian singular. The present one
+     * (the lower where both are) stays and takes both fractions.
      */
     private boolean dropDuplicates(Workspace w) {
         Slots s = w.slots;
         for (int k = 0; k < SLOT_COUNT; k++) {
-            if (!s.present[k]) continue;
+            if (!s.watched[k]) continue;
             for (int l = k + 1; l < SLOT_COUNT; l++) {
-                if (!s.present[l] || s.root[k] != s.root[l]) continue;
+                if (!s.watched[l] || s.root[k] != s.root[l]) continue;
                 double distance = 0.0;
                 for (int a = 0; a < w.presentCount; a++) {
                     int i = w.present[a];
@@ -5988,10 +6294,11 @@ public final class FluidTpEquilibrium {
                     distance += w.z[i] * d * d;
                 }
                 if (distance < SLOT_DUPLICATE) {
-                    s.watched[l] = false;
-                    s.present[l] = false;
-                    s.beta[k] += s.beta[l];
-                    s.beta[l] = 0.0;
+                    int kept = s.present[l] && !s.present[k] ? l : k, dropped = kept == k ? l : k;
+                    s.watched[dropped] = false;
+                    s.present[dropped] = false;
+                    s.beta[kept] += s.beta[dropped];
+                    s.beta[dropped] = 0.0;
                     return true;
                 }
             }
@@ -6021,6 +6328,7 @@ public final class FluidTpEquilibrium {
         }
         if (!(total > 0.0)) for (int k = 0; k < SLOT_COUNT; k++) if (s.watched[k]) s.beta[k] = 1.0;
         double q = slotObjective(s.beta, w);
+        s.fractionsConverged = false;
         for (int iteration = 0; iteration < RACHFORD_RICE_SLOTS_ITERATIONS; iteration++) {
             w.rachfordRiceSteps++;
             // E_i, the gradient 1 - sum_i z_i c_ik / E_i and the Hessian sum_i z_i c_ik c_il / E_i^2.
@@ -6047,7 +6355,10 @@ public final class FluidTpEquilibrium {
                     if (Math.abs(s.rrGradient[k]) > SLOT_FRACTION_TOLERANCE) done = false;
                 }
             }
-            if (done) break;
+            if (done) {
+                s.fractionsConverged = true;
+                break;
+            }
             for (int a = 0; a < free; a++) {
                 for (int b = 0; b <= a; b++) {
                     int k = s.freeSlots[a], l = s.freeSlots[b];
@@ -6415,7 +6726,9 @@ public final class FluidTpEquilibrium {
         final double[] newtonGradient, newtonHessian, newtonFactor, newtonStep, newtonScale;
         final PengRobinsonKernel.Derivatives[] derivatives = new PengRobinsonKernel.Derivatives[SLOT_COUNT];
         final PhaseState[] states = new PhaseState[SLOT_COUNT];
-        boolean reseeded;
+        boolean reseeded, fractionsConverged;
+        final double[] threeU = new double[4], threeR = new double[4], threeTrial = new double[4], threeShifted = new double[4];
+        final double[] threeJacobian = new double[16], threeStep = new double[4];
 
         Slots(FluidTpEquilibrium owner) {
             int n = owner.count;
