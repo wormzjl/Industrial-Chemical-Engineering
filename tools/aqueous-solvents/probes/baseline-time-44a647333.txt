@@ -1,0 +1,3 @@
+dry: 14 compounds, 6439 replays of 4 intervals, 77268 accepted steps, 0.777 ms per accepted step
+wet: 14 compounds, 5416 replays of 4 intervals, 64992 accepted steps, 0.923 ms per accepted step
+polar: 16 compounds, 4897 replays of 4 intervals, 58764 accepted steps, 1.021 ms per accepted step
