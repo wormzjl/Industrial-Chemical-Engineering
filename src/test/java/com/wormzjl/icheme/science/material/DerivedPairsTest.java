@@ -302,6 +302,51 @@ class DerivedPairsTest {
         return x[0];
     }
 
+    /**
+     * W3b step 2c: the derived lines (NRTL energies, homomorph k) are held past their fitted ends, so the kernel answers
+     * both roots from 90 to 800 K at 1 atm and at 10 MPa for the nine pairs measured in step 2b (the plain lines refused
+     * water/n-hexane from 750 K, water/crude_pc03 at 800 K and water/N2 from 700 K), and the held line is the plain line
+     * between the ends.
+     */
+    @Test void heldLinesAnswerFromNinetyToEightHundredKelvin() {
+        String[][] pairs = {{"Water", "Ethanol"}, {"Water", "N-hexane"}, {"Water", "Nitrogen"}, {"Water", "Methane"},
+                {"Water", "CarbonDioxide"}, {"Ethanol", "N-hexane"}, {"Ethanol", "Nitrogen"}, {"Water", "Benzene"},
+                {"Water", "crude_pc03"}};
+        int answered = 0;
+        for (String[] pair : pairs) {
+            var kernel = kernel(pair[0], pair[1]);
+            var workspace = kernel.newWorkspace();
+            var evaluation = kernel.newEvaluation();
+            for (double t = 90.0; t <= 800.0; t += 5.0) {
+                for (double pressure : new double[] {ATM, 1.0e7}) {
+                    for (double x = 0.02; x < 0.99; x += 0.08) {
+                        for (var root : PengRobinsonKernel.Root.values()) {
+                            String at = String.format(Locale.ROOT, "%s/%s %.0f K %.0f Pa x %.2f %s", pair[0], pair[1], t, pressure, x, root);
+                            double kelvin = t, share = x;
+                            assertDoesNotThrow(() -> kernel.evaluate(kelvin, pressure, new double[] {share, 1.0 - share}, root, workspace, evaluation), at);
+                            for (double value : evaluation.logFugacityCoefficients()) assertTrue(Double.isFinite(value), at);
+                            answered++;
+                        }
+                    }
+                }
+            }
+        }
+        System.out.println("HELD_LINES 90..800 K, 1 atm and 10 MPa: " + answered + " evaluations answered");
+        double[] out = new double[3];
+        for (double t = 298.15; t <= 373.15; t += 2.5) {
+            com.wormzjl.icheme.science.thermo.HuronVidalExcess.held(1234.5, -6.75, 298.15, 373.15, t, out);
+            assertEquals(1234.5 + -6.75 * t, out[0], 0.0);
+            assertEquals(-6.75, out[1], 0.0);
+        }
+        com.wormzjl.icheme.science.thermo.HuronVidalExcess.held(0.0, 2.0, 298.15, 373.15, 373.15 + 50.0, out);
+        assertEquals(2.0 * 373.15 + 50.0, out[0], 1e-12);
+        com.wormzjl.icheme.science.thermo.HuronVidalExcess.held(0.0, 2.0, 298.15, 373.15, 900.0, out);
+        assertEquals(2.0 * 373.15 + 50.0, out[0], 1e-12);
+        assertEquals(0.0, out[1], 0.0);
+        com.wormzjl.icheme.science.thermo.HuronVidalExcess.held(0.0, 2.0, 298.15, 373.15, 98.15, out);
+        assertEquals(2.0 * 298.15 - 50.0, out[0], 1e-12);
+    }
+
     private static DerivedPairs.Source source(DerivedPairs.Result result, String a, String b) {
         for (var pair : result.pairs()) {
             if (pair.first().equals(a) && pair.second().equals(b) || pair.first().equals(b) && pair.second().equals(a)) return pair.source();

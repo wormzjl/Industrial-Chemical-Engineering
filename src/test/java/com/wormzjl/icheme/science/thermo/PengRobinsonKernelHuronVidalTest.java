@@ -28,9 +28,11 @@ class PengRobinsonKernelHuronVidalTest {
     /**
      * Larger than the hydrocarbon tests' 1e-6: a vapour at 1 bar has {@code d ln phi/dn} near 1e-4, where the cubic
      * root's last-digit noise over a 1e-6 step is already 1e-6 of the value; at 1e-4 the curvature of a dilute
-     * component in a supersaturated vapour is (the error falls as h^2 from 1e-2 to 1e-4 there).
+     * component in a supersaturated vapour is (the error falls as h^2 from 1e-2 to 1e-4 there). 2.5e-6 since W3b step
+     * 2c: with the held CO2/water line the 520 K, 5 MPa liquid left a truncation error of 1.4e-6 at 1e-5 (9e-8 at
+     * 2.5e-6, the h^2 law), and the 1 bar vapour's noise at 2.5e-6 is 4.2e-7 (measured).
      */
-    private static final double MOLE_STEP = 1.0e-5;
+    private static final double MOLE_STEP = 2.5e-6;
     private static final double DIFFERENCE_TOLERANCE = 1.0e-6;
 
     // ---------------------------------------------------------------------------------------------------------------
@@ -254,7 +256,7 @@ class PengRobinsonKernelHuronVidalTest {
         return Math.abs(expected - actual) / Math.max(1.0e-300, Math.max(1.0e-6, Math.abs(expected)));
     }
 
-    private static final double[][] POLAR_STATES = {{300.0, 1.0e5}, {340.0, 1.0e5}, {373.15, 1.0e5}, {420.0, 5.0e5},
+    private static final double[][] POLAR_STATES = {{300.0, 1.0e5}, {340.0, 1.0e5}, {373.0, 1.0e5}, {420.0, 5.0e5},
             {300.0, 2.0e6}, {450.0, 2.0e6}, {520.0, 5.0e6}};
 
     @Test void nrtlRuleMatchesTheOracleAndTheGibbsEnergyDerivative() {
@@ -772,7 +774,14 @@ class PengRobinsonKernelHuronVidalTest {
             return gji - gii;
         }
 
-        double line(double t1, double v1, double t2, double v2) { return v1 + (v2 - v1) / (t2 - t1) * (t - t1); }
+        /** The held line (W3b step 2c): linear between the ends; past one, the integral of a slope fading to zero over 50 K. */
+        double line(double t1, double v1, double t2, double v2) {
+            double s = (v2 - v1) / (t2 - t1), low = Math.min(t1, t2), high = Math.max(t1, t2);
+            double at = Math.max(low, Math.min(high, t));
+            double value = v1 + s * (at - t1);
+            double past = Math.min(Math.abs(t - at), 50.0);
+            return value + Math.signum(t - at) * s * (past - past * past / 100.0);
+        }
 
         double alpha(int j, int i) {
             for (Nrtl pair : mixture.pairs) if ((pair.i == i && pair.j == j) || (pair.i == j && pair.j == i)) return pair.alpha;

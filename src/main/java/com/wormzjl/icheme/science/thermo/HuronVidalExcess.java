@@ -18,10 +18,10 @@ import java.util.Arrays;
  * <p>(NRTL with local compositions weighted by the co-volumes). Each unordered pair is one of two kinds:</p>
  * <ul>
  *   <li>an NRTL pair: {@code alpha_ij} in {@code [0, 1)} and the two energies {@code dg_ij}, {@code dg_ji} (J/mol),
- *   each linear in temperature through its values at two temperatures;</li>
+ *   each a {@link #held held line} through its values at two temperatures;</li>
  *   <li>a classical pair: {@code alpha_ij = 0} and {@code dg_ji(T) = g_ji - g_ii}, {@code g_ii = -Lambda a_i(T)/b_i},
  *   {@code g_ji = -2 sqrt(b_i b_j)/(b_i + b_j) sqrt(g_ii g_jj)(1 - k_ij(T))}, which the kernel evaluates on its own
- *   {@code a_i(T)} and {@code b_i}. Its {@code k_ij(T)} is a constant, a line {@code k0 + k1 T} through its values at
+ *   {@code a_i(T)} and {@code b_i}. Its {@code k_ij(T)} is a constant, a {@link #held held line} {@code k0 + k1 T} through its values at
  *   two temperatures, or a pair of a {@link PairInteractions} model over the same basis (E-PPR78's {@code k_ij(T)},
  *   evaluated by the kernel with its two temperature derivatives). With every pair classical the rule is exactly the
  *   quadratic rule {@code a_ij = sqrt(a_i a_j)(1 - k_ij(T))}.</li>
@@ -34,6 +34,39 @@ public final class HuronVidalExcess {
     private static final double SQRT_TWO = Math.sqrt(2.0);
     /** {@code ln((2 + sqrt2)/(2 - sqrt2)) / (2 sqrt2) = 0.6232252...}, PR's infinite-pressure limit. */
     public static final double LAMBDA = DeterministicMath.log((2.0 + SQRT_TWO) / (2.0 - SQRT_TWO)) / (2.0 * SQRT_TWO);
+
+    /**
+     * The width, K, over which a held line's slope fades to zero past each of its fitted ends. The derived lines are
+     * fitted at 298.15 and 373.15 K and the network runs from about 90 to 800 K, where the plain lines refused the
+     * kernel at 1 atm (water/n-hexane from 750 K, water/N2 from 700 K) and water/ethanol's energy changed sign below
+     * 230 K (W3b step 2b).
+     */
+    public static final double HOLD_FADE = 50.0;
+
+    /**
+     * A held line (owner, 2026-11-11, W3b step 2c: a data range never refuses a state): {@code intercept + slope T}
+     * between its ends {@code low} and {@code high} (bit for bit the plain line there); past an end, the value continues with its slope
+     * fading linearly to zero over {@link #HOLD_FADE}, then stays constant. Past {@code high}, with
+     * {@code u = min(T - high, W)}: {@code v = v(high) + s (u - u^2/(2W))}, {@code v' = s (1 - u/W)},
+     * {@code v'' = -s/W} while {@code T - high < W}; mirrored below {@code low}. Value and slope are continuous.
+     * Writes {@code {v, v', v''}} into {@code out}.
+     */
+    public static void held(double intercept, double slope, double low, double high, double t, double[] out) {
+        if (t <= high && t >= low) {
+            out[0] = intercept + slope * t;
+            out[1] = slope;
+            out[2] = 0.0;
+            return;
+        }
+        boolean above = t > high;
+        double sign = above ? 1.0 : -1.0;
+        double distance = above ? t - high : low - t;
+        double u = Math.min(distance, HOLD_FADE);
+        out[0] = intercept + slope * (above ? high : low) + sign * slope * (u - u * u / (2.0 * HOLD_FADE));
+        boolean fading = distance < HOLD_FADE;
+        out[1] = fading ? slope * (1.0 - u / HOLD_FADE) : 0.0;
+        out[2] = fading ? -sign * slope / HOLD_FADE : 0.0;
+    }
 
     private final int componentCount;
     /** Row-major {@code [i * n + j]}, symmetric: true for a classical pair (and for the diagonal). */
@@ -51,13 +84,17 @@ public final class HuronVidalExcess {
     /** {@code dg_ji(T) = intercept + slope T} stored at {@code [i * n + j]} (energy of {@code j} around a centre {@code i}). */
     private final double[] energyIntercept;
     private final double[] energySlope;
+    /** The fitted ends of each line, K, row-major and symmetric ({@link #held}); infinite for a constant and a model pair. */
+    private final double[] lineLow, lineHigh;
     private final int nrtlPairs;
     private final boolean rankOne;
 
     private HuronVidalExcess(int componentCount, boolean[] classical, double[] alpha, double[] interaction,
                              double[] interactionSlope, PairInteractions interactions, int[] modelPair,
-                             double[] energyIntercept, double[] energySlope) {
+                             double[] energyIntercept, double[] energySlope, double[] lineLow, double[] lineHigh) {
         this.componentCount = componentCount;
+        this.lineLow = lineLow;
+        this.lineHigh = lineHigh;
         this.classical = classical;
         this.alpha = alpha;
         this.interaction = interaction;
@@ -106,6 +143,10 @@ public final class HuronVidalExcess {
     public double energyIntercept(int j, int i) { return energyIntercept[index(i, j)]; }
     /** {@code d(dg_ji)/dT}; zero for a classical pair. */
     public double energySlope(int j, int i) { return energySlope[index(i, j)]; }
+    /** The lower fitted end of a pair's line, K ({@link #held}); minus infinity for a constant or a model pair. */
+    public double lineLow(int i, int j) { return lineLow[index(i, j)]; }
+    /** The upper fitted end of a pair's line, K; plus infinity for a constant or a model pair. */
+    public double lineHigh(int i, int j) { return lineHigh[index(i, j)]; }
 
     private int index(int i, int j) {
         if (i < 0 || j < 0 || i >= componentCount || j >= componentCount) throw new IndexOutOfBoundsException("Pair index out of range");
@@ -123,6 +164,7 @@ public final class HuronVidalExcess {
         private final int[] modelPair;
         private final double[] energyIntercept;
         private final double[] energySlope;
+        private final double[] lineLow, lineHigh;
         private PairInteractions interactions;
 
         private Builder(int componentCount) {
@@ -139,11 +181,22 @@ public final class HuronVidalExcess {
             Arrays.fill(modelPair, -1);
             this.energyIntercept = new double[cells];
             this.energySlope = new double[cells];
+            this.lineLow = new double[cells];
+            this.lineHigh = new double[cells];
+            Arrays.fill(lineLow, Double.NEGATIVE_INFINITY);
+            Arrays.fill(lineHigh, Double.POSITIVE_INFINITY);
+        }
+
+        private void ends(int i, int j, double firstKelvin, double secondKelvin) {
+            for (int at : new int[] {i * componentCount + j, j * componentCount + i}) {
+                lineLow[at] = Math.min(firstKelvin, secondKelvin);
+                lineHigh[at] = Math.max(firstKelvin, secondKelvin);
+            }
         }
 
         /**
          * An NRTL pair: {@code alpha_ij} and the energies {@code dg_ij} and {@code dg_ji} (J/mol) at two temperatures,
-         * linear in temperature through both (and beyond them).
+         * linear in temperature between them and {@link #held held} past them.
          */
         public Builder nrtl(int i, int j, double alphaIj,
                             double firstKelvin, double dgIjAtFirst, double dgJiAtFirst,
@@ -176,6 +229,7 @@ public final class HuronVidalExcess {
             energySlope[ji] = slopeIj;
             energyIntercept[ij] = interceptJi;
             energySlope[ij] = slopeJi;
+            ends(i, j, firstKelvin, secondKelvin);
             return this;
         }
 
@@ -189,8 +243,8 @@ public final class HuronVidalExcess {
         }
 
         /**
-         * A classical pair whose {@code k_ij} is linear in temperature through its values at two temperatures (and
-         * beyond them): {@code k_ij(T) = k0 + k1 T}.
+         * A classical pair whose {@code k_ij} is linear in temperature between its values at two temperatures,
+         * {@code k_ij(T) = k0 + k1 T}, and {@link #held held} past them.
          */
         public Builder classicalLinear(int i, int j, double firstKelvin, double kAtFirst, double secondKelvin, double kAtSecond) {
             requireTemperatures(firstKelvin, secondKelvin, "A linear classical interaction");
@@ -203,6 +257,7 @@ public final class HuronVidalExcess {
             interaction[j * componentCount + i] = intercept;
             interactionSlope[i * componentCount + j] = slope;
             interactionSlope[j * componentCount + i] = slope;
+            ends(i, j, firstKelvin, secondKelvin);
             return this;
         }
 
@@ -227,7 +282,8 @@ public final class HuronVidalExcess {
 
         public HuronVidalExcess build() {
             return new HuronVidalExcess(componentCount, classical.clone(), alpha.clone(), interaction.clone(),
-                    interactionSlope.clone(), interactions, modelPair.clone(), energyIntercept.clone(), energySlope.clone());
+                    interactionSlope.clone(), interactions, modelPair.clone(), energyIntercept.clone(), energySlope.clone(),
+                    lineLow.clone(), lineHigh.clone());
         }
 
         private static void requireTemperatures(double firstKelvin, double secondKelvin, String what) {
