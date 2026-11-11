@@ -16,18 +16,28 @@ for (const line of readFileSync(`${dir}/modfac_ip.txt`, 'utf8').split(/\r?\n/)) 
   if (!line.trim() || line.startsWith("'")) continue;
   const f = line.trim().split(/\s+/).map(Number); IP[`${f[0]}-${f[1]}`] = f.slice(2, 5); IP[`${f[1]}-${f[0]}`] = f.slice(5, 8);
 }
+if (process.argv[3] === 'nist') { // the NIST refit of the same model (Kang et al.): same groups, its own pair values
+  for (const k of Object.keys(IP)) delete IP[k];
+  for (const line of readFileSync(`${dir}/NIST-MODFAC_IP.txt`, 'utf8').split(/\r?\n/).slice(1)) {
+    const f = line.trim().split(/\s+/).map(Number); if (f.length >= 5 && f.every(Number.isFinite)) IP[`${f[0]}-${f[1]}`] = [f[2], f[3], f[4] / 1000];
+  }
+}
 function kappa(w) { return w <= 0.491 ? 0.37464 + 1.54226 * w - 0.26992 * w * w : 0.379642 + 1.48503 * w - 0.164423 * w * w + 0.016666 * w * w * w; }
 const COMP = {
   ethanol: { tc: 514.71, pc: 6.268e6, c: [kappa(0.644), 0, 0], groups: { CH3: 1, CH2: 1, OH: 1 } },
   water: { tc: 647.096, pc: 22.064e6, c: [0.91167, -0.27706, 0.22232], groups: { H2O: 1 } },
   hexane: { tc: 507.6, pc: 3.025e6, c: [kappa(0.3013), 0, 0], groups: { CH3: 2, CH2: 4 } },
+  octane: { tc: 568.7, pc: 2.49e6, c: [kappa(0.3996), 0, 0], groups: { CH3: 2, CH2: 6 } },
+  benzene: { tc: 562.05, pc: 4.895e6, c: [kappa(0.2103), 0, 0], groups: { ACH: 6 } },
+  co2: { tc: 304.13, pc: 7.3773e6, c: [kappa(0.22394), 0, 0], groups: {} },
+  nitrogen: { tc: 126.19, pc: 3.3958e6, c: [kappa(0.0372), 0, 0], groups: {} },
 };
 
 // Modified UNIFAC (Dortmund): ln gamma of each compound of `names` at composition x.
-function dortmund(names, x, T, residualOnly = false) {
+function dortmund(names, x, T, residualOnly = false, block = null) {
   const subs = [...new Set(names.flatMap(n => Object.keys(COMP[n].groups)))];
   const nu = names.map(n => subs.map(s => COMP[n].groups[s] ?? 0)), Q = subs.map(s => SUB[s].Q), main = subs.map(s => SUB[s].main);
-  const psi = (m, k) => { if (main[m] === main[k]) return 1; const p = IP[`${main[m]}-${main[k]}`]; if (!p) throw new Error(`no group pair ${main[m]}-${main[k]}`); return Math.exp(-(p[0] + p[1] * T + p[2] * T * T) / T); };
+  const psi = (m, k) => { if (main[m] === main[k]) return 1; const p = block?.[`${main[m]}-${main[k]}`] ?? IP[`${main[m]}-${main[k]}`]; if (!p) throw new Error(`no group pair ${main[m]}-${main[k]}`); return Math.exp(-(p[0] + p[1] * T + p[2] * T * T) / T); };
   const lnGamma = comp => { // comp: mole numbers of each compound
     const X = subs.map((_, k) => comp.reduce((s, c, i) => s + c * nu[i][k], 0)), tot = X.reduce((s, v, k) => s + Q[k] * v, 0), theta = X.map((v, k) => Q[k] * v / tot);
     const den = subs.map((_, m) => theta.reduce((s, t, n) => s + t * psi(n, m), 0));
@@ -190,13 +200,13 @@ function nelderMead(fn, start, step, iterations) {
   pts.sort((u, v) => u.f - v.f); return pts[0];
 }
 const GRID = [0, 0.02, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.98, 1];
-function deriveShape(first, second, T, fixedAlpha) {
+function deriveShape(first, second, T, fixedAlpha, block = null) {
   const names = [first, second], P = 2e6, pure = [lnphi([first], T, P, [1], () => 0, true)[0], lnphi([second], T, P, [1], () => 0, true)[0]];
-  const target = GRID.map(x => dortmund(names, [x, 1 - x], T));
+  const target = GRID.map(x => dortmund(names, [x, 1 - x], T, false, block));
   // One liquid in the group model at T (its ln activity of the first compound rises with x): the derived pair must be one liquid too.
   const FINE = []; for (let x = 0.01; x < 0.995; x += 0.01) FINE.push(x);
   const falls = act => { let drop = 0, last = -Infinity; for (const x of FINE) { const v = act(x); if (v < last) drop += last - v; last = Math.max(last, v); } return drop; };
-  const oneLiquid = falls(x => Math.log(x) + dortmund(names, [x, 1 - x], T)[0]) === 0;
+  const oneLiquid = falls(x => Math.log(x) + dortmund(names, [x, 1 - x], T, false, block)[0]) === 0;
   const miss = v => { const al = fixedAlpha ?? v[2]; if (!(al > 0.05 && al < 0.7)) return 1e9; let sum = 0;
     for (let k = 0; k < GRID.length; k++) { const x = GRID[k], l = lnphi(names, T, P, [x, 1 - x], (j) => j === first ? v[1] : v[0], true, () => al); if (!l) return 1e9;
       sum += (l[0] - pure[0] - target[k][0]) ** 2 + (l[1] - pure[1] - target[k][1]) ** 2; }
@@ -221,3 +231,91 @@ for (const [a, b] of [['ethanol', 'water'], ['ethanol', 'hexane'], ['water', 'he
   console.log(`  water and n-hexane at 25 C: hexane in water ${sci(b2.xa[1])}, water in hexane ${sci(b2.xo[0])} (group model 1.5e-4, 7.8e-3; measured 2.5e-6, 5.3e-4)`);
   const n3 = ['ethanol', 'water', 'hexane'], r = twoLiquids(n3, [0.2, 0.4, 0.4], 298.15, x => phi(n3, 298.15, ATM, x, true), [0.3, 0.7 - 1e-6, 1e-6], [0.05, 1e-3, 0.949]);
   console.log(r ? `  ternary at 25 C: aqueous ${r.xa.map(v => fmt(v, 4)).join(' ')}; organic ${r.xo.map(v => fmt(v, 4)).join(' ')}; ethanol's share in the aqueous liquid ${fmt(r.xa[0] * (1 - r.beta) / 0.2, 3)} (group model: aqueous 0.3206 0.6734 0.0059; organic 0.0280 0.0103 0.9617; 0.942)` : '  ternary at 25 C: one liquid'); }
+
+// Water with a hydrocarbon: the table's CH2-H2O values serve alcohols; for a compound with no polar group a separate
+// block is fitted to measured mutual solubility (here n-hexane at 25 C; n-octane is the prediction).
+const dilute = (hc, block, T = 298.15) => [dortmund(['water', hc], [1, 0], T, false, block)[1], dortmund(['water', hc], [0, 1], T, false, block)[0]]; // ln gamma: hc in water, water in hc
+function fitBlock(hc, hcInWater, waterInHc, key) {
+  const target = [-Math.log(hcInWater), -Math.log(waterInHc)], [m, k] = key; let v = [1391.3 - 3.6156 * 298.15 + 1.144e-3 * 298.15 ** 2, -17.253 + 0.8389 * 298.15 + 9.021e-4 * 298.15 ** 2];
+  const blockOf = u => ({ [`${m}-${k}`]: [u[0], 0, 0], [`${k}-${m}`]: [u[1], 0, 0] }), miss = u => dilute(hc, blockOf(u)).map((g, i) => g - target[i]);
+  for (let it = 0; it < 80; it++) {
+    const r = miss(v); if (Math.max(Math.abs(r[0]), Math.abs(r[1])) < 1e-10) break;
+    const h = 0.01, c0 = miss([v[0] + h, v[1]]).map((g, i) => (g - r[i]) / h), c1 = miss([v[0], v[1] + h]).map((g, i) => (g - r[i]) / h), det = c0[0] * c1[1] - c1[0] * c0[1];
+    let d = [-(r[0] * c1[1] - c1[0] * r[1]) / det, -(c0[0] * r[1] - r[0] * c0[1]) / det]; const big = Math.max(Math.abs(d[0]), Math.abs(d[1])); if (big > 200) d = d.map(q => q * 200 / big);
+    v = [v[0] + d[0], v[1] + d[1]];
+  }
+  return blockOf(v);
+}
+console.log('');
+console.log('water with hydrocarbons at 25 C: solubility as 1/gamma (mole fraction: hydrocarbon in water, water in hydrocarbon)');
+const show2 = (name, g, measured) => console.log(`  ${name}: ${sci(Math.exp(-g[0]))}, ${sci(Math.exp(-g[1]))} (measured ${measured})`);
+show2('table, n-hexane', dilute('hexane', null), '2.5e-6, 5.3e-4'); show2('table, n-octane', dilute('octane', null), '1.0e-7, 5.6e-4'); show2('table, benzene', dilute('benzene', null), '4.1e-4, 3.0e-3');
+const ALKYL = fitBlock('hexane', 2.5e-6, 5.3e-4, [1, 7]), AROMATIC = fitBlock('benzene', 4.1e-4, 3.0e-3, [3, 7]), BLOCK = { ...ALKYL, ...AROMATIC };
+console.log(`  block fitted: CH2-H2O ${fmt(ALKYL['1-7'][0], 1)} K, H2O-CH2 ${fmt(ALKYL['7-1'][0], 1)} K (table at 25 C: 415.0, 313.1); ACH-H2O ${fmt(AROMATIC['3-7'][0], 1)} K, H2O-ACH ${fmt(AROMATIC['7-3'][0], 1)} K`);
+show2('block, n-hexane (fitted)', dilute('hexane', BLOCK), '2.5e-6, 5.3e-4'); show2('block, n-octane (predicted)', dilute('octane', BLOCK), '1.0e-7, 5.6e-4'); show2('block, benzene (fitted)', dilute('benzene', BLOCK), '4.1e-4, 3.0e-3');
+
+// The derived model with that block: two liquids, and the boiling of two liquids together (three fluid phases).
+const FINAL = {}, FINAL_ALPHA = {};
+for (const [a, b, block] of [['ethanol', 'water', null], ['ethanol', 'hexane', null], ['water', 'hexane', BLOCK]]) {
+  const lo = deriveShape(a, b, T1, undefined, block), hi = deriveShape(a, b, T2, lo.alpha, block); FINAL[`${b}>${a}`] = [lo.u[0], hi.u[0]]; FINAL[`${a}>${b}`] = [lo.u[1], hi.u[1]]; FINAL_ALPHA[[a, b].sort().join('/')] = lo.alpha;
+}
+const finalEnergy = (j, i, T) => { const v = FINAL[`${j}>${i}`]; return v[0] + (v[1] - v[0]) * (T - T1) / (T2 - T1); }, finalAlpha = (j, i) => FINAL_ALPHA[[j, i].sort().join('/')] ?? ALPHA;
+const model = (names, T, p, x, liquid) => lnphi(names, T, p, x, finalEnergy, liquid, finalAlpha);
+// Three phases at pressure P: the temperature at which the vapour over the two liquids sums to one.
+function threePhaseBoil(names, z, P, aq0, org0) {
+  let lo = 300, hi = 372, out = null;
+  const at = T => {
+    const r = twoLiquids(names, z, T, x => model(names, T, P, x, true), aq0, org0); if (!r) return null;
+    let y = names.map(() => 1 / names.length), sum = 1;
+    for (let it = 0; it < 400; it++) { const l = model(names, T, P, r.xa, true), v = model(names, T, P, y, false), k = names.map((_, i) => r.xa[i] * Math.exp(l[i] - v[i])); sum = k.reduce((t, q) => t + q, 0); const ny = k.map(q => q / sum), d = Math.max(...ny.map((q, i) => Math.abs(q - y[i]))); y = ny; if (d < 1e-12) break; }
+    return { sum, y, r };
+  };
+  for (let k = 0; k < 50; k++) { const T = 0.5 * (lo + hi), a = at(T); if (!a) return null; out = { T, ...a }; if (a.sum > 1) hi = T; else lo = T; }
+  return out;
+}
+console.log('');
+console.log('derived model with the block');
+{ const n = ['water', 'hexane'], r = twoLiquids(n, [0.5, 0.5], 298.15, x => model(n, 298.15, ATM, x, true), [1 - 1e-6, 1e-6], [1e-3, 1 - 1e-3]);
+  console.log(`  water and n-hexane at 25 C: hexane in water ${sci(r.xa[1])}, water in hexane ${sci(r.xo[0])} (measured 2.5e-6, 5.3e-4)`);
+  const b = threePhaseBoil(n, [0.5, 0.5], ATM, [1 - 1e-6, 1e-6], [1e-3, 1 - 1e-3]);
+  console.log(`  water and n-hexane boiling together at 101.325 kPa: ${fmt(b.T - 273.15, 1)} C, vapour ${fmt(b.y[1])} hexane (measured 61.6 C, 0.79)`); }
+{ const n = ['ethanol', 'water', 'hexane'], aq = [0.3, 0.7 - 1e-6, 1e-6], org = [0.05, 1e-3, 0.949], z = [0.2, 0.4, 0.4];
+  const r = twoLiquids(n, z, 298.15, x => model(n, 298.15, ATM, x, true), aq, org);
+  console.log(`  ethanol 0.2, water 0.4, n-hexane 0.4 at 25 C: aqueous ${r.xa.map(v => fmt(v, 4)).join(' ')}; organic ${r.xo.map(v => fmt(v, 4)).join(' ')}; ethanol's share in the aqueous liquid ${fmt(r.xa[0] * (1 - r.beta) / 0.2, 3)}`);
+  const b = threePhaseBoil(n, z, ATM, aq, org);
+  console.log(b ? `  the same mixture boiling at 101.325 kPa (three phases): ${fmt(b.T - 273.15, 1)} C, vapour ethanol ${fmt(b.y[0])} water ${fmt(b.y[1])} hexane ${fmt(b.y[2])} (measured ternary azeotrope 56.0 C: 0.184, 0.118, 0.698)` : '  the same mixture at the boil: one liquid'); }
+
+// The classical rule as the special case: alpha 0 and energies from k_ij give the one-fluid rule's ln phi.
+{ const names = ['ethanol', 'hexane'], T = 340, p = 2e5, x = [0.3, 0.7], k = 0.05, a = names.map(n => pureA(n, T)), b = names.map(pureB);
+  const g = i => -LAMBDA * a[i] / b[i], cross = (j, i) => -2 * Math.sqrt(b[i] * b[j]) / (b[i] + b[j]) * Math.sqrt(g(i) * g(j)) * (1 - k);
+  const viaRule = liquid => lnphi(names, T, p, x, (nj, ni) => { const j = names.indexOf(nj), i = names.indexOf(ni); return -cross(j, i) * -1 - g(i); }, liquid, () => 0);
+  const direct = liquid => { const a12 = Math.sqrt(a[0] * a[1]) * (1 - k), am = x[0] * x[0] * a[0] + 2 * x[0] * x[1] * a12 + x[1] * x[1] * a[1], bm = x[0] * b[0] + x[1] * b[1], A = am * p / (R * T) ** 2, B = bm * p / (R * T);
+    const zs = cubic(-(1 - B), A - 3 * B * B - 2 * B, -(A * B - B * B - B * B * B)).filter(z => z > B), Z = liquid ? zs[0] : zs[zs.length - 1], sum = [x[0] * a[0] + x[1] * a12, x[0] * a12 + x[1] * a[1]];
+    return [0, 1].map(i => b[i] / bm * (Z - 1) - Math.log(Z - B) - A / (2 * S2 * B) * (2 * sum[i] / am - b[i] / bm) * Math.log((Z + (1 + S2) * B) / (Z + (1 - S2) * B))); };
+  const worst = Math.max(...[true, false].flatMap(l => { const u = viaRule(l), v = direct(l); return u.map((q, i) => Math.abs(q - v[i])); }));
+  console.log(''); console.log(`classical rule (k_ij 0.05) against the Huron-Vidal rule at alpha 0 with energies from k_ij: largest difference in ln phi ${worst.toExponential(1)}`); }
+
+// Gases in water: each gas carries its Henry constant in water (IAPWS G7-04: ln(kH/p_sat) = A/Tr + B tau^0.355/Tr + C Tr^-0.41 exp(tau));
+// the pair's one energy (both directions, alpha 0.3) is derived to give it, at 25 C and 100 C.
+const HENRY = { co2: [-8.55445, 4.01195, 9.52345], nitrogen: [-9.67578, 4.72162, 11.70585] };
+const henry = (gas, T) => { const tr = T / 647.096, tau = 1 - tr, [A, B, C] = HENRY[gas]; return antoine[1](T) * Math.exp(A / tr + B * tau ** 0.355 / tr + C * tr ** -0.41 * Math.exp(tau)); };
+const classical = names => (nj, ni, T) => { const a = n => pureA(n, T), b = pureB, g = n => -LAMBDA * a(n) / b(n); return 2 * Math.sqrt(b(ni) * b(nj)) / (b(ni) + b(nj)) * -Math.sqrt(g(ni) * g(nj)) - g(ni); };
+function gasEnergy(gas, T) {
+  const names = [gas, 'water'], want = Math.log(henry(gas, T) / ATM), miss = e => lnphi(names, T, ATM, [0, 1], () => e, true)[0] - want;
+  let lo = -30000, hi = 80000; for (let k = 0; k < 200; k++) { const m = 0.5 * (lo + hi); if (miss(lo) * miss(m) <= 0) hi = m; else lo = m; } return 0.5 * (lo + hi);
+}
+function dissolved(gas, T, P, energy, alphaOf) {
+  const names = [gas, 'water']; let x = [1e-4, 1 - 1e-4], y = [1 - antoine[1](T) / P, antoine[1](T) / P];
+  for (let it = 0; it < 2000; it++) {
+    const l = lnphi(names, T, P, x, energy, true, alphaOf), v = lnphi(names, T, P, y, energy, false, alphaOf);
+    const yw = x[1] * Math.exp(l[1] - v[1]), xg = (1 - yw) * Math.exp(v[0] - l[0]), d = Math.abs(xg - x[0]); x = [xg, 1 - xg]; y = [1 - yw, yw]; if (d < 1e-14) break;
+  }
+  return x[0];
+}
+console.log(''); console.log('gases in water (mole fraction of the gas in the liquid)');
+for (const gas of ['co2', 'nitrogen']) {
+  const e1 = gasEnergy(gas, T1), e2 = gasEnergy(gas, T2), energy = (j, i, T) => e1 + (e2 - e1) * (T - T1) / (T2 - T1), names = [gas, 'water'];
+  const kClassic = ATM * Math.exp(lnphi(names, T1, ATM, [0, 1], classical(names), true, () => 0)[0]);
+  console.log(`  ${gas}: Henry constant at 25 C ${sci(henry(gas, T1))} Pa, at 100 C ${sci(henry(gas, T2))} Pa; the classical rule with k_ij 0 gives ${sci(kClassic)} Pa at 25 C; derived energy ${fmt(e1, 0)} J/mol at 25 C, ${fmt(e2, 0)} at 100 C`);
+  console.log(`    derived: at 25 C and 101.325 kPa ${sci(dissolved(gas, T1, ATM, energy))} (Henry: ${sci((ATM - antoine[1](T1)) / henry(gas, T1))}); at 25 C and 5 MPa ${sci(dissolved(gas, T1, 5e6, energy))}${gas === 'co2' ? ' (measured about 2.0e-2)' : ''}; at 60 C and 5 MPa ${sci(dissolved(gas, 333.15, 5e6, energy))}${gas === 'co2' ? ' (measured about 1.2e-2)' : ''}`);
+}
