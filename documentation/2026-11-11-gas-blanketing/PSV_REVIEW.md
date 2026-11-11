@@ -1,6 +1,6 @@
 # Pressure safety valve: build review
 
-Branch `claude/pressure-safety-valve-e38517`: `c919a0ec9` engine, `439a22868` accessory, `db6a8f34c` GUI, `aae56cf0a` tests, then the side outlet facing the player, drawings and documents. Plan: [PRESSURE_SAFETY_VALVE_PLAN.md](PRESSURE_SAFETY_VALVE_PLAN.md).
+Branch `claude/pressure-safety-valve-e38517`: `c919a0ec9` engine, `439a22868` accessory, `db6a8f34c` GUI, `aae56cf0a` tests, `09e106041` the side outlet facing the player, drawings and documents, then D6 form A2. Plan: [PRESSURE_SAFETY_VALVE_PLAN.md](PRESSURE_SAFETY_VALVE_PLAN.md).
 
 ## 1. Expected behaviour
 
@@ -26,16 +26,23 @@ A spring valve holds the guarded pressure at or below its set pressure: shut bel
 | On a pipe | junction 300000 Pa; drum behind 300054 Pa; 1.111 kg/s |
 | Ten drums, one 0.4 m header (D5) | one island, all at 300000 Pa, 11.11 kg/s; 21 commits, 81 accepted + 7 rejected substeps (4.2 per commit); 248 ms for 80 s of play |
 | GameTest: methane 5 bar to a 0.3 m flare | 401325 Pa (= set); 0.612 kg/s relieved = flared; piped |
+| GameTest: 0.1 m flare, methane | 492818 Pa (set 401325); 0.400 kg/s = the tip's limit; lifted, no hold |
+| GameTest: 0.1 m flare, nitrogen | 486891 Pa; 0.427 kg/s = the tip's limit; lifted, no hold |
+| Tip 0.3 kg/s (world test, feed 1.11) | 498232 Pa; relief 0.300; lifted once |
+| Tip 2 kg/s / load at 95 % of the limit | 300000 Pa; never lifted |
+| Load at 103 % of the limit | 307453 Pa; relief 1.0777 = limit; lifted once |
 
-D5 holds. Tests passing: ReliefValveWorld 6, FluidFactsCompat 20, PhysicalFluidTopology 34, PhysicalRegistry 11, FluidCheckpointStore 9, AccessoryStoreCompat 8, DeviceColumn 10, FluidPacketCodec 26, PipePresentation 14, FluidGuiConsistency 6, EquipmentServices 9, InstrumentWiring 5, ShapeRasterizer PSV gates 2, ReliefFlareGameTests 1 (alone: `tools/psv-flare/run.sh`).
+D5 holds. Tests passing: ReliefValveWorld 10 (1 disabled, section 4), FluidCheckpointCodec 13, FluidCheckpointStore 9, IslandCertificate 23, BlanketValveWorld 1, FluidFactsCompat 20, PhysicalFluidTopology 34, PhysicalRegistry 11, AccessoryStoreCompat 8, DeviceColumn 10, FluidPacketCodec 26, PipePresentation 14, FluidGuiConsistency 6, EquipmentServices 9, InstrumentWiring 5, ShapeRasterizer PSV gates 2, ReliefFlareGameTests 3 (alone: `tools/psv-flare/run.sh`).
 
-## 4. Open: an undersized flare holds the island (D6, owner)
+## 4. D6, owner decision A2: an undersized flare
 
-**Expected.** The tip passes at most its limit (rated heat, stable-flame velocity); above it back pressure builds and the vessel rises over its set pressure.
-**Code.** On a 0.1 m tip the tip's mass-target valve binds (methane 0.45 kg/s; nitrogen 8e-4 kg/s, an inert's low stable velocity) while the PSV regulates: two active regulators around the zero-volume middle junction leave its pressure undetermined, "Singular Newton Jacobian", HELD. A tip that passes the load converges (the GameTest).
-**Options.** A (recommended): a lag, as the owner allowed: such a valve opens to a share planned each solver step from the guarded pressure, proportional from set to set + 10 % (a real valve's accumulation); one active regulator remains. B: keep only the sink's law on that run; loses regulation below the tip limit. C: refuse a flare below the relief load; blocks a real case.
+**Expected.** The tip passes at most its limit; above it back pressure builds and the vessel rises over its set pressure.
+**Before.** The tip's mass-target valve and the PSV both regulated the zero-volume middle junction: "Singular Newton Jacobian", HELD.
+**Code (A2, owner: "Yes, keep it").** A run into a valved sink carries `PressureValve.relief(set)`. `ReliefValves.plan` (each step, after `GasBlanket.plan`, from the step's start flows) lifts the valve wide open (a held opening of 1, no pressure control) while the far valve's limit L binds: inflow to the guarded node ≥ 0.98 L and P ≥ 0.98 set. It reseats only below set, with inflow and its own flow under 0.98 L. One regulator is active at a time. State only: checkpoint state format 48, no fact change.
+**Not A.** A proportional lift (set to set + 10 %) moved every run: the gas drum swung around 303.6 kPa, a full drum and the header held, a 2 kg/s tip held.
+**Limits.** A load crossing L on a ramp lifts cleanly but holds on the way down (tick 6007): each edit rebuilds the run regulating while the tip still binds (test disabled with this reason). An abrupt step across a binding tip holds at its first step. A load in [0.98 L, L) would lift and reseat on a long period (not tested). Driven ends keep the plain regulator; firebox and pad sinks are covered by the same rule but not tested.
 
 ## 5. Other open items
 
-- No in-game check. The fluid GameTest runs in the final lane. Translations: `en_us.json` only.
-- Drawings show the default outlet direction (away from the drum's middle); in game the player picks it. The owner judges the iso views.
+- No in-game check. The fluid GameTests run in the final lane. Translations: `en_us.json` only.
+- Drawings show the default outlet direction (away from the drum's middle); in game the player picks it. The owner judges the iso views and the screens.

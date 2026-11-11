@@ -18,6 +18,18 @@ public final class ReliefFlareRun {
     @GameTest(template = "empty", timeoutTicks = 8000, batch = "psv-flare")
     public static void aBlockedInDrumRelievesToAFlareStackAlone(GameTestHelper helper) {
         if (ReviewBatch.skipped(helper, "psv-flare")) return;
-        ReliefFlareGameTests.run(helper);
+        ReliefFlareGameTests.aBlockedInDrumRelievesToAFlareStack(helper);
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 8000, batch = "psv-flare-small")
+    public static void aTooSmallFlareAlone(GameTestHelper helper) {
+        if (ReviewBatch.skipped(helper, "psv-flare")) return;
+        ReliefFlareGameTests.aDrumRelievingToATooSmallFlareRisesAboveItsSetPressure(helper);
+    }
+
+    @GameTest(template = "empty", timeoutTicks = 8000, batch = "psv-flare-inert")
+    public static void nitrogenToAFlareAlone(GameTestHelper helper) {
+        if (ReviewBatch.skipped(helper, "psv-flare")) return;
+        ReliefFlareGameTests.aDrumRelievingNitrogenToAFlareRisesAboveItsSetPressure(helper);
     }
 }

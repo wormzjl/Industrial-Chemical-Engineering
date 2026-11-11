@@ -18,12 +18,13 @@ Purpose: a gas blanketing valve as an optional accessory on vertical and horizon
 - 2026-11-11 (`db6a8f34c`): PSV GUI. A group on the drum's Accessory page; a pipe's own valve screen; `Controls.relief`, `FluidView.Relief`; `GuiPrototypes` renders; a `DeviceColumn` gate.
 - 2026-11-11 (`aae56cf0a`): PSV tests. Fluid GameTest to a flare (`tools/psv-flare`); ten drums on one header (D5: 4.2 substeps per commit).
 - 2026-11-11: owner: "connection should point to side", "outlet should face the user when placed". The outlet leaves the body sideways toward the fitting player, its face kept as a fact; drawing scenes `*_VALVES`; [PSV_REVIEW.md](PSV_REVIEW.md). Found: an undersized flare holds the island (D6).
+- 2026-11-11 (`d9d0898ec` and the commit after): D6, owner chose A2 ("Yes, keep it"): `ReliefValves.plan` lifts a PSV wide open while its flare tip's limit binds, reseats below set; checkpoint state format 48. A 0.1 m flare (methane, nitrogen) no longer holds: the drum rises to 4.9 bar, relieving the tip's limit. Open: a load ramping down across the limit holds (test disabled).
 
 ## Documents
 
 - [GAS_BLANKET_REVIEW.md](GAS_BLANKET_REVIEW.md): the law, the measurements, the open items.
 - [PRESSURE_SAFETY_VALVE_PLAN.md](PRESSURE_SAFETY_VALVE_PLAN.md): the pressure safety valve's design, for the owner.
-- [PSV_REVIEW.md](PSV_REVIEW.md): the PSV build, measurements, the open D6.
+- [PSV_REVIEW.md](PSV_REVIEW.md): the PSV build, measurements, D6 (A2) and its limits.
 
 ## Code areas
 
@@ -32,13 +33,13 @@ Purpose: a gas blanketing valve as an optional accessory on vertical and horizon
 - `runtime/instrument`: `Instrument.Type.BLANKET_VALVE`, `InstrumentHosts.BlanketValve`, `InstrumentService`, `AccessoryFacts` (schema 5).
 - `science/equipment`: `BlanketValveGeometry`, `EquipmentInstruments` (lying drum reservations), `ShapeRasterizer.blanketValve`. `client/InstrumentRenderer`. `world/level/block/EquipmentStructure.reregister`.
 - GUI: `FluidNetwork.Controls.blanket`, `DeviceColumn.blanketValve`, `FluidDeviceScreen` page `ACCESSORY`.
-- PSV: `PhysicalFluidTopology` (`ConnectionRole.RELIEF`, `Relief`, the relief run), `PhysicalRegistry.reliefs`, `FluidWorldAuthority.reliefValve`, `pipeRelief`, `reliefPressure`, `FluidDeviceSpec.relief`, `FluidView.Relief`; `Instrument.Type.SAFETY_VALVE`, `InstrumentHosts.ReliefValve`, `InstrumentService` (`reliefs`); `ReliefValveGeometry`, `ShapeRasterizer.reliefValve`; `DeviceColumn.reliefValve`, `FluidDeviceScreen` (`valveOnly`), `FluidDeviceBlock` (a pipe with a PSV opens). Tests: `ReliefValveWorldTest`, `ReliefFlareGameTests`.
+- PSV: `PhysicalFluidTopology` (`ConnectionRole.RELIEF`, `Relief`, the relief run), `PhysicalRegistry.reliefs`, `FluidWorldAuthority.reliefValve`, `pipeRelief`, `reliefPressure`, `FluidDeviceSpec.relief`, `FluidView.Relief`; `Instrument.Type.SAFETY_VALVE`, `InstrumentHosts.ReliefValve`, `InstrumentService` (`reliefs`); `ReliefValveGeometry`, `ShapeRasterizer.reliefValve`; `DeviceColumn.reliefValve`, `FluidDeviceScreen` (`valveOnly`), `FluidDeviceBlock` (a pipe with a PSV opens). D6: `ReliefValves`, `FlowControl.PressureValve` (`relief`, `lifted`), `FluidCheckpointCodec` 48. Tests: `ReliefValveWorldTest`, `ReliefFlareGameTests`.
 - Tests: `GasBlanketTest`, `BlanketValveWorldTest`, `FluidFactsCompatTest`, `AccessoryStoreCompatTest`, `LevelLoopGameTests`.
 - Tools: `tools/equipment-drawings` scenes `VERTICAL_BLANKET`, `LENGTHWISE_BLANKET`, `LENGTHWISE_BLANKET_SMALL`, `GAS_BLANKETING_VALVE`; `tools/heat-gui-renders/GuiPrototypes` page `fluid-drum-accessory`; `tools/minecraft-time-delta/level-loop/run.sh` (`LEVEL_LOOP_TAG`, the two switches).
 
 ## Open items
 
 - Review section 5: the direct-start hold (with defect 1 of the drum batch), the vent's lag on a fast fill, the item icon, the fifth tab, the in-game check.
-- PSV: D6 (an undersized flare holds the island; PSV_REVIEW.md section 4); the PSV drawings and screens for the owner; no in-game check.
+- PSV: D6 A2 limits (a load ramping down or stepping across a binding tip holds; PSV_REVIEW.md section 4); the PSV drawings and screens for the owner; no in-game check.
 - Owner: judge the valve's drawings and the Accessory page. PSV plan: D4 decided (own accessory); D1, D2, D3, D5 are built as recommended unless the owner overrules.
 - Before the merge: final lane, CHANGELOG, version, translation commit (`en_us.json` has new keys), code guide (`fluid-science.md`: GasBlanket and the per-step plan; `fluid-runtime.md`: the BLANKET role; equipment and GUI chapters), with the time-factor and drum batches.
