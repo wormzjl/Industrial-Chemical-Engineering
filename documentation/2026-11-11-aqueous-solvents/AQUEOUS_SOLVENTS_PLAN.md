@@ -107,15 +107,16 @@ With M2 and M4 it needs no mechanism: a dissolved gas is a compound of a liquid.
 
 | | Package | Proves it |
 |---|---|---|
-| W1 | Kernel: per-compound alpha; the Huron-Vidal plan with analytic dZ, d ln φ/dT, d ln φ/dn, residual enthalpy | Finite-difference oracle; the classical rule at α = 0; kernel cost counters |
-| W2 | Catalog: group counts and Henry coefficients on datasets, the group tables (Dortmund with its block; E-PPR78 moved from the test overlay), the derivation (M4) through `DeterministicMath`, water's cubic dataset, identities by declared revisions; the import writes groups; literature values for the block's anchors and the gas checks | A gate on section 2's tables; `MaterialCatalogTest` |
+| W1 | Kernel: per-compound alpha; the Huron-Vidal plan with analytic dZ, d ln φ/dT, d ln φ/dn, residual enthalpy. First cut: dense sums over the list, the existing plans untouched bit for bit; the sums over polar compounds only (section 6) follow once W3a can count them | Finite-difference oracle; the classical rule at α = 0; kernel cost counters |
+| W2a | Catalog data: group counts, `models.pr78.alpha` and Henry coefficients on datasets, the group tables (Dortmund with its block; E-PPR78 moved from the test overlay), the Dortmund activity model and the Henry evaluator through `DeterministicMath`; the import writes groups. No package identity changes | The new fields' parse and refusal tests; the activity model against values the offline script prints; `MaterialCatalogTest` |
+| W2b | Catalog derivation (M4), after W1: pairs through the kernel, water's cubic dataset, identities by declared revisions, literature values for the block's anchors and the gas checks | A gate on section 2's tables |
 | W3a | Engine: water in the equation of state with its share of enthalpy, volume and entropy (M2) and their analytic derivatives, the three-phase system in TP, PH and UV, ice as a crystal; the free-water rule and the steam's Dalton volume removed | Section 2's three-phase points and water tables as gates; pure liquid water equal to Region 1; the engine's tests re-stated; campaign |
 | W3b | Network: the aqueous layer in `PhaseLayout` and the step solver, ports and displays; fluid state format bump; every wet reference re-recorded once. Its own design document first | `NetworkPhaseEngineTest`, fluid GameTests, chain-100 re-captured, the hold-fuzz campaign as the new baseline |
 | W4 | Still | `BatchStillTest`: a 10 % wash starts near 92.5 C with y near 0.26 |
 | W5 | V3 column with water on its axis: package, feed flash, classical seed, the simulator's unit and sizing, the running column; a tray with two liquids warns | An ethanol and water rectifier against an offline McCabe-Thiele on the same model |
 | W6 | Ethanol: records with groups, preset, names, heating value | Section 3 of the first review |
 
-Order: W1 and W2 first (disjoint files). Saves: contents are facts and keep their amounts and temperature; the engine restates energy and pressure and books the difference (AGENTS.md); no facts field changes.
+Order: W1 and W2a first (disjoint files), then W2b, which needs both. Saves: contents are facts and keep their amounts and temperature; the engine restates energy and pressure and books the difference (AGENTS.md); no facts field changes.
 
 Risks: W3 rewrites the wet side of the engine and the vessel layout, so the hold-fuzz campaign starts from a new baseline; water's share is proven offline for pure water and one mixture path only (its derivatives, entropy, ice below 0 C and cost are W3a's), and pure water's saturation pressure moves from Wagner-Pruss by up to 0.54 %; the derivation is a small fit at load (deterministic, bounded; a pair it cannot fit is refused by name); E-PPR78 instead of zero pairs moves every result with a gas beside a crude cut, so the column's references and its start networks move once.
 
