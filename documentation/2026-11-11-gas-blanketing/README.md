@@ -18,8 +18,9 @@ Purpose: a gas blanketing valve as an optional accessory on vertical and horizon
 - 2026-11-11 (`db6a8f34c`): PSV GUI. A group on the drum's Accessory page; a pipe's own valve screen; `Controls.relief`, `FluidView.Relief`; `GuiPrototypes` renders; a `DeviceColumn` gate.
 - 2026-11-11 (`aae56cf0a`): PSV tests. Fluid GameTest to a flare (`tools/psv-flare`); ten drums on one header (D5: 4.2 substeps per commit).
 - 2026-11-11: owner: "connection should point to side", "outlet should face the user when placed". The outlet leaves the body sideways toward the fitting player, its face kept as a fact; drawing scenes `*_VALVES`; [PSV_REVIEW.md](PSV_REVIEW.md). Found: an undersized flare holds the island (D6).
-- 2026-11-11: D6, owner direction "Flare flowrate should vary with backpressure, and increasing backpressure will eventually lead to dysfunctional PSV" (replaces A2, which was built in `d9d0898ec` and deleted). The flare tip is an open line, its bore the run's last section, shut only while solids arrive; a relief run into a flare is one line; X4's limits are status only (flame out above the stable velocity, over capacity above the rating: the orchestrator's call). `ReliefValves` and checkpoint state 48 removed. A 0.1 m tip holds a 5 bar drum at 4.9 bar, the valve wide open; no hold in the step, the ramp or the GameTests.
+- 2026-11-11: D6, owner direction "Flare flowrate should vary with backpressure, and increasing backpressure will eventually lead to dysfunctional PSV" (replaces A2, which was built in `d9d0898ec` and deleted). The flare tip is an open line, its bore the run's last section, shut only while solids arrive; a relief run into a flare is one line; X4's limits are status only (flame out above the stable velocity, over capacity above the rating). `ReliefValves` and checkpoint state 48 removed. A 0.1 m tip holds a 5 bar drum at 4.9 bar, the valve wide open; no hold in the step, the ramp or the GameTests.
 - 2026-11-11: owner: "Blanketing valve and PSV should be in obvious different groups in GUI". The Accessory page has one framed group per valve ("Blanketing valve": set pressure, drum; "Safety valve"), a gap between them (`DeviceColumn.accessories`), and an accent rule between their sections on the glass; DeviceColumn gate.
+- 2026-11-11: owner decision on X4 as status only: asked "Keep the rule that the flame goes out above its stable exit velocity?", the owner answered "Yes, keep it". PSV_REVIEW.md section 4 and the flare batch README record it.
 
 ## Documents
 
@@ -41,6 +42,6 @@ Purpose: a gas blanketing valve as an optional accessory on vertical and horizon
 ## Open items
 
 - Review section 5: the direct-start hold (with defect 1 of the drum batch), the vent's lag on a fast fill, the item icon, the fifth tab, the in-game check.
-- PSV: D6 open (PSV_REVIEW.md section 4): a relief run into a firebox, a blanketed vessel or a set-flow mover keeps two regulators; a relief run straight into a flare has no solids block; the X4-as-status rule is for the owner; the PSV drawings and screens for the owner; no in-game check.
+- PSV: D6 open (PSV_REVIEW.md section 4): a relief run into a firebox, a blanketed vessel or a set-flow mover keeps two regulators; a relief run straight into a flare has no solids block; the PSV drawings and screens for the owner; no in-game check.
 - Owner: judge the valve's drawings and the Accessory page. PSV plan: D4 decided (own accessory); D1, D2, D3, D5 are built as recommended unless the owner overrules.
 - Before the merge: final lane, CHANGELOG, version, translation commit (`en_us.json` has new keys), code guide (`fluid-science.md`: GasBlanket and the per-step plan; `fluid-runtime.md`: the BLANKET role; equipment and GUI chapters), with the time-factor and drum batches.
