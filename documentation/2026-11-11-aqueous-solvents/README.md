@@ -1,6 +1,6 @@
 # Aqueous solvents
 
-Status: **Planned** (2026-11-11). Branch `claude/ethanol-compound-matrix-4b318d`, cut from main `ff6f6892f` (0.26.0).
+Status: **In progress since 2026-11-11**. Branch `claude/ethanol-compound-matrix-4b318d`, cut from main `ff6f6892f` (0.26.0).
 
 ## Scope
 
@@ -21,6 +21,7 @@ Owner, 2026-11-11: add ethanol to the compound matrix, identify what it affects 
 - 2026-11-11: owner: "How about solubility in organics?"; "I'm open to breaking changes to the thermo engine. It needs to be fast and accurate with all the additional loads." Measured gases at 25 C: in n-hexane E-PPR78 group counts give 1.05 to 1.32 times the measured solubility (zero pairs 1.17 to 2.07; the authored library 1.02 to 1.20); in ethanol the homomorph rule 0.85 to 0.93. Measured water on the cubic to 300 C: saturation 0.54 %, heat of vaporization 3.3 %, liquid density -13 %, liquid heat capacity +22 %. Plan's fifth form: one water in the equation of state with an IF97 share, the free-water rule removed, pairs for nonpolar compounds from E-PPR78, the speed design (section 6). No test run.
 - 2026-11-11: owner: "Prototype first". `water-share.mjs`: equilibrium from the cubic alone; water's share of enthalpy and volume from Region 1 in a liquid-like phase and from IF97's second virial coefficient at water's partial pressure in a gas-like one, weighted by the phase's own v/b. Pure liquid water is Region 1 up to 350 C; the heat of vaporization is 0.03 % off at 100 C, 0.79 % at 200 C, 5.0 % at 300 C (today 0.03, 0.93, 8.5 %); no jump on 14 isobars, 16 isotherms and a CO2 and water mixture through its critical region. The form first written (a Gibbs energy difference per label) is replaced: it jumps at a label flip. Pure water's saturation pressure moves from Wagner-Pruss by up to 0.54 %. No test run.
 - 2026-11-11: owner approved the W1 and W2 subagents (Opus medium). W2 split: W2a (data, group tables, activity model, import; started with W1) and W2b (the derivation, after W1, because it runs through the kernel's new rule).
+- 2026-11-11: W1 (kernel): `PengRobinsonKernel` gains a Mathias-Copeman alpha per compound and the `HURON_VIDAL` plan (`HuronVidalExcess`), analytic derivatives, dense sums; the existing plans untouched. W2a (catalog data): `group_counts`, `henry_in_water` and `models.pr78.alpha` on datasets, in no identity; the Dortmund table with the water-hydrocarbon block and `ModifiedUnifac`; `HenryConstant`; the E-PPR78 table moved from the pilot overlay to main; 33 datasets got counts, 8 gases Henry coefficients (checked against Table 2 of IAPWS G7-04). Gate: 14 test classes, 92 tests, pass (`test --tests`, 4 workers, second lane). Owner on the kernel's kept constructors and plans: "no need for backward compat".
 
 ## Tools
 
@@ -28,12 +29,17 @@ Owner, 2026-11-11: add ethanol to the compound matrix, identify what it affects 
 
 ## Code areas
 
-None yet. Named by the plan: `science/thermo/PengRobinsonKernel`, `science/material/MaterialCatalog`, `science/thermo/phase/` (`WaterParticipation`, `PhaseContract`), `science/fluid/thermo/`, `science/fluid/network/StillColumn`, `science/column/v3/thermo/`, `tools/compound-import/`, `src/main/resources/data/icheme/materials/`.
+Changed so far: `science/thermo/PengRobinsonKernel`, `HuronVidalExcess`; `science/material/MaterialCatalog`, `ModifiedUnifac`, `HenryConstant`; `data/icheme/materials/properties`, `group_interactions`; `tools/compound-import`. Named by the plan: `science/thermo/PengRobinsonKernel`, `science/material/MaterialCatalog`, `science/thermo/phase/` (`WaterParticipation`, `PhaseContract`), `science/fluid/thermo/`, `science/fluid/network/StillColumn`, `science/column/v3/thermo/`, `tools/compound-import/`, `src/main/resources/data/icheme/materials/`.
 
 ## Open items
 
-- W1 and W2a: subagents started 2026-11-11; their diffs are uncommitted until checked. W2b to W6 not started.
-- Henry coefficients (W2a) were typed from memory of IAPWS G7-04: check against the guideline before W2b uses them.
+- W2b to W6 not started. `columnGates` and `equipmentGates` load the changed material data and have not run; they are the final lane's.
+- Kernel: one rule for every list (the owner needs no backward compatibility): collapse the classical plans into the Huron-Vidal form once its sums run over polar compounds only and W3a can count the cost.
+- Kernel: a large positive excess energy can make the mixture attraction negative (the root selection then throws); W3a's rejected-trial handling.
+- ChemSep's PPR78 counts put ring and alkenic carbons in plain CH2 for cyclohexane, propylene, butene-1, isobutene, butadiene (refused, so those five have no E-PPR78 counts) and its Dortmund counts give ethylene as 2 CH2 (refused): author the counts from the group definitions in W2b.
+- Ethanol's and methanol's PPR78 group 41 has no E-PPR78 name: as planned, a polar compound takes the homomorph rule.
+- The block's anchor solubilities are still from memory (the record says so).
+- Licence: the E-PPR78 table now ships in the jar; its supporting-information file states no licence (DATA_LICENSE_REVIEW.md item for a release).
 - Owner: the creative-source ethanol preset, yes or no.
 - Water's share (plan M2): proven offline for pure water and one mixture path; its derivatives, entropy, ice below 0 C and cost are W3a's.
 - Saturated steam above 250 C (heat of vaporization 2 to 13 % off; today 3 to 33 %): Region 2 in full at water's partial pressure would close it; not in this batch.
