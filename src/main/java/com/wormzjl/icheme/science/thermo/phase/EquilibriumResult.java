@@ -57,6 +57,12 @@ public final class EquilibriumResult {
          * network) holds on it with a typed reason.
          */
         LIQUID_LIQUID,
+        /**
+         * Three fluid phases of a list with water in the equation of state (batch 2026-11-11-aqueous-solvents, W3a D3): the
+         * lightest (largest molar volume) labelled {@link PhaseKind#VAPOR}, then the two liquids labelled
+         * {@link PhaseKind#LIQUID}, the lighter first; neither is named aqueous.
+         */
+        VAPOR_LIQUID_LIQUID,
         /** A pure component at its own coexistence pressure: two phases, split undetermined by T and P. */
         PURE_COEXISTENCE_UNDERDETERMINED,
         /**

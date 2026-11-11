@@ -131,10 +131,24 @@ public final class TangentPlaneStability {
 
     private final PengRobinsonKernel kernel;
     private final Settings settings;
+    /** The component of the water-rich trial (W3a D3), -1 for none. */
+    private final int waterRichTrial;
 
     public TangentPlaneStability(PengRobinsonKernel kernel, Settings settings) {
+        this(kernel, settings, -1);
+    }
+
+    /**
+     * The test with one added trial for a list with water (batch 2026-11-11-aqueous-solvents, W3a D3): where the
+     * pure-component trials do not run (more than {@link Settings#pureComponentTrialLimit()} components present) and
+     * component {@code waterRichTrial} is present, a last trial starts from it pure, as a pure-component trial does. With
+     * {@code -1} this is the two-argument test bit for bit.
+     */
+    public TangentPlaneStability(PengRobinsonKernel kernel, Settings settings, int waterRichTrial) {
         this.kernel = Objects.requireNonNull(kernel, "kernel");
         this.settings = Objects.requireNonNull(settings, "settings");
+        if (waterRichTrial < -1 || waterRichTrial >= kernel.componentCount()) throw new IllegalArgumentException("Invalid water-rich trial component");
+        this.waterRichTrial = waterRichTrial;
     }
 
     public PengRobinsonKernel kernel() { return kernel; }
@@ -270,7 +284,9 @@ public final class TangentPlaneStability {
         System.arraycopy(w.feed, 0, w.best, 0, w.count);
         boolean proven = false;
         boolean unresolved = false;
-        int trialCount = 2 + (w.presentCount <= settings.pureComponentTrialLimit() ? w.presentCount : 0);
+        boolean pureTrials = w.presentCount <= settings.pureComponentTrialLimit();
+        int trialCount = 2 + (pureTrials ? w.presentCount : 0)
+                + (!pureTrials && waterRichTrial >= 0 && w.feed[waterRichTrial] > 0.0 ? 1 : 0);
         int trials = 0;
         for (int trial = 0; trial < trialCount; trial++) {
             Outcome outcome = runTrial(w, trial);
@@ -340,7 +356,8 @@ public final class TangentPlaneStability {
             evaluate(w, seed, preferred, false, true);
         } else {
             preferred = opposite(w.feedRoot);
-            int pure = w.present[trial - 2];
+            int pure = trial - 2 < w.presentCount && w.presentCount <= settings.pureComponentTrialLimit()
+                    ? w.present[trial - 2] : waterRichTrial;
             Arrays.fill(seed.amounts, 0.0);
             seed.amounts[pure] = 1.0;
             for (int a = 0; a < w.presentCount; a++) {

@@ -291,6 +291,22 @@ public final class FluidTpEquilibrium {
     private static final int SPLIT = 1;
     private static final int MERGED = 2;
     private static final int FAILED = 3;
+    /** W3a D3: three fluid phases present in the three-slot system. */
+    private static final int THREE = 4;
+    // The three-slot system (W3a D3).
+    private static final int SLOT_COUNT = 3;
+    /** A watched slot absent this many steps in a row with {@code sum x <} {@link #WATCH_SUM} is dropped. */
+    private static final int WATCH_STEPS = 3;
+    private static final double WATCH_SUM = 0.9;
+    /** Halvings of a refused trial composition toward the slot's last accepted one. */
+    private static final int REFUSED_HALVINGS = 8;
+    /** Two present slots on one root within this {@code sum z (ln x - ln x')^2} are one phase. */
+    private static final double SLOT_DUPLICATE = 1.0e-8;
+    /** Newton steps of the slots' Rachford-Rice, and its tolerance on the gradient {@code 1 - sum_i x_ik}. */
+    private static final int RACHFORD_RICE_SLOTS_ITERATIONS = 100;
+    private static final double SLOT_FRACTION_TOLERANCE = 1.0e-13;
+    /** The water-rich seed's share of every other compound, relative to the feed's. */
+    private static final double SEED_TRACE = 1.0e-6;
 
     /**
      * @param lnKTolerance a plain substitution step moving no {@code ln K_i} by more than this is converged
@@ -475,12 +491,13 @@ public final class FluidTpEquilibrium {
         waterChemistry = contract.waterChemistrySpecies().stream().mapToInt(contract::index).sorted().toArray();
         kernel = evaluator.kernel();
         translations = evaluator.translations();
-        stability = new TangentPlaneStability(kernel, settings.stability());
+        // W3a D3: a list with water in the cubic adds the water-rich trial; every other list keeps today's test.
+        stability = new TangentPlaneStability(kernel, settings.stability(), cubicWater);
         var s = settings.stability();
         patientStability = new TangentPlaneStability(kernel, new TangentPlaneStability.Settings(s.instabilityTolerance(),
                 s.convergenceTolerance(), s.newtonSwitch(), s.maximumSuccessiveSubstitutions(), s.accelerationCycle(),
                 Math.multiplyExact(s.maximumIterations(), UNRESOLVED_STABILITY_BUDGET_FACTOR), s.trivialDistance(),
-                s.pureComponentTrialLimit(), s.exhaustive()));
+                s.pureComponentTrialLimit(), s.exhaustive()), cubicWater);
         convergedCoverage = new EquilibriumResult.Coverage(contract.fluidCoverage().grade(),
                 contract.fluidCoverage().evidence() + FLUID_ONLY_NOTE);
         List<Crystal> built = new ArrayList<>();
@@ -778,6 +795,8 @@ public final class FluidTpEquilibrium {
         private double reducedSlope;
         // P5: the phases of a binary's three-phase point and of a pure species' triple point.
         private final PhaseState threeLiquid, threeVapour;
+        /** W3a D3: the three-slot system's scratch; null unless water is in the equation of state. */
+        private final Slots slots;
 
         private Workspace(FluidTpEquilibrium owner) {
             this.owner = owner;
@@ -838,6 +857,7 @@ public final class FluidTpEquilibrium {
             reduced = owner.evaluator.newDerivatives();
             threeLiquid = owner.evaluator.newState();
             threeVapour = owner.evaluator.newState();
+            slots = owner.inEquationOfState ? new Slots(owner) : null;
         }
 
         /** The pressure a root's branch is evaluated at. */
@@ -4725,6 +4745,7 @@ public final class FluidTpEquilibrium {
             case SINGLE -> singlePhase(t, p, competition, w);
             case MERGED -> merged(t, p, competition, w);
             case SPLIT -> twoPhaseResult(t, p, competition, w);
+            case THREE -> threePhaseResult(t, p, competition, w);
             default -> failed(t, p, competition, w);
         };
     }
@@ -4890,6 +4911,7 @@ public final class FluidTpEquilibrium {
                 return SINGLE;
             }
             default -> {
+                if (threeSlotFeed(w)) return threeSlot(t, feed, w);
                 w.standInHeld = false;
                 int outcome = twoPhase(t, feed, w);
                 if (!w.carrying) return outcome;
@@ -5709,6 +5731,716 @@ public final class FluidTpEquilibrium {
         double sum = 0.0;
         for (int i = 0; i < count; i++) if (composition[i] > 0.0) sum += composition[i] * logPhi[i];
         return sum;
+    }
+
+    // W3a D3: three fluid phases as one system, for a feed of a derived list holding a polar compound.
+
+    /**
+     * Whether an unstable feed takes the three-slot system: water in the equation of state, one pressure, no carried
+     * crystals, and a polar compound present. Every other feed keeps the two-slot path bit for bit.
+     */
+    private boolean threeSlotFeed(Workspace w) {
+        if (!inEquationOfState || w.branched || w.carrying || w.slots == null) return false;
+        for (int a = 0; a < w.presentCount; a++) if (polar[w.present[a]]) return true;
+        return false;
+    }
+
+    /**
+     * The three-slot system (W3a D3): slots vapour, liquid and second liquid; for fixed {@code ln phi} of each slot the phase
+     * fractions minimise Michelsen's convex {@code Q(beta) = sum_k beta_k - sum_i z_i ln(sum_k beta_k / phi_ik)} over
+     * {@code beta >= 0} ({@link #slotFractions}), whose optimality conditions are the presence rows: {@code beta_k >= 0},
+     * {@code 1 - sum_i x_ik >= 0}, their product zero, {@code x_ik = z_i / (phi_ik E_i)}. Successive substitution on the
+     * stacked {@code ln phi} with the dominant-eigenvalue extrapolation, then the Newton finish on the Gibbs energy over the
+     * mole numbers of the phases present ({@link #slotNewton}). Seeds: Wilson's vapour and liquid, and the water-rich
+     * (else the largest polar compound's) liquid. An absent slot is watched (one evaluation per step) until it has been
+     * absent with {@code sum x <} {@link #WATCH_SUM} for {@link #WATCH_STEPS} steps; two present slots that coincide are one.
+     * The products are audited by the stability test; a failed audit reseeds an absent slot from its stationary trial,
+     * once; a second failure is {@link EquilibriumResult#UNSTABLE_PRODUCT}. Returns SINGLE, SPLIT, MERGED, THREE or FAILED.
+     */
+    private int threeSlot(double t, TangentPlaneStability.Result feed, Workspace w) {
+        Slots s = w.slots;
+        int n = count;
+        kernel.wilsonK(t, w.liquidPressure, w.k);
+        int seedPolar = cubicWater >= 0 && w.feed[cubicWater] > 0.0 ? cubicWater : -1;
+        if (seedPolar < 0) {
+            for (int a = 0; a < w.presentCount; a++) {
+                int i = w.present[a];
+                if (polar[i] && (seedPolar < 0 || w.z[i] > w.z[seedPolar])) seedPolar = i;
+            }
+        }
+        for (int k = 0; k < SLOT_COUNT; k++) {
+            Arrays.fill(s.composition[k], 0.0);
+            double sum = 0.0;
+            for (int a = 0; a < w.presentCount; a++) {
+                int i = w.present[a];
+                double value = k == 0 ? w.z[i] * w.k[i] : k == 1 ? w.z[i] / w.k[i] : i == seedPolar ? 1.0 : SEED_TRACE * w.z[i];
+                s.composition[k][i] = value;
+                sum += value;
+            }
+            for (int a = 0; a < w.presentCount; a++) s.composition[k][w.present[a]] /= sum;
+            System.arraycopy(s.composition[k], 0, s.accepted[k], 0, n);
+            s.watched[k] = true;
+            s.absentSteps[k] = 0;
+            s.beta[k] = 1.0 / SLOT_COUNT;
+            evaluateSlot(t, k, s.composition[k], w);
+        }
+        s.reseeded = false;
+        w.tieLine = Double.NaN;
+        w.seedDistance = Double.NaN;
+        // d_i of the feed on its stability root: the Newton finish's reference.
+        kernel.evaluate(t, w.liquidPressure, w.z, feed.feedRoot(), w.mixture, w.first);
+        w.kernelEvaluations++;
+        for (int a = 0; a < w.presentCount; a++) {
+            int i = w.present[a];
+            w.reference[i] = DeterministicMath.log(w.z[i]) + w.first.logFugacityCoefficient(i);
+        }
+        while (true) {
+            if (!slotSubstitution(t, w)) return FAILED;
+            int present = slotsPresent(s);
+            // The audit: every present product against the stability test.
+            int reseed = -1;
+            double[] trial = null;
+            Root trialRoot = null;
+            TangentPlaneStability.Verdict worst = TangentPlaneStability.Verdict.STABLE;
+            w.productDistance = Double.POSITIVE_INFINITY;
+            for (int k = 0; k < SLOT_COUNT; k++) {
+                if (!s.present[k]) continue;
+                TangentPlaneStability.Result check = stabilityOf(stability, t, s.moles[k], w);
+                w.productDistance = Math.min(w.productDistance, check.minimumTangentPlaneDistance());
+                if (check.verdict() != TangentPlaneStability.Verdict.STABLE) {
+                    if (worst != TangentPlaneStability.Verdict.UNSTABLE) worst = check.verdict();
+                    if (trial == null && check.verdict() == TangentPlaneStability.Verdict.UNSTABLE) {
+                        trial = check.trialComposition();
+                        trialRoot = check.trialRoot();
+                    }
+                }
+            }
+            if (worst == TangentPlaneStability.Verdict.STABLE) return slotOutcome(t, present, w);
+            if (trial != null && !s.reseeded) {
+                for (int k = trialRoot == Root.VAPOR ? 0 : 1; k < SLOT_COUNT && reseed < 0; k++) if (!s.present[k]) reseed = k;
+                for (int k = 0; k < SLOT_COUNT && reseed < 0; k++) if (!s.present[k]) reseed = k;
+            }
+            if (reseed < 0) {
+                w.failure = (worst == TangentPlaneStability.Verdict.UNSTABLE ? EquilibriumResult.UNSTABLE_PRODUCT
+                        : EquilibriumResult.UNRESOLVED_PRODUCT) + ": a product of the three-slot system is not stable ("
+                        + present + " phases present" + (s.reseeded ? ", after one reseed" : "") + ")";
+                return FAILED;
+            }
+            s.reseeded = true;
+            System.arraycopy(trial, 0, s.composition[reseed], 0, n);
+            System.arraycopy(trial, 0, s.accepted[reseed], 0, n);
+            s.watched[reseed] = true;
+            s.absentSteps[reseed] = 0;
+            s.beta[reseed] = 0.0;
+            evaluateSlot(t, reseed, s.composition[reseed], w);
+        }
+    }
+
+    /** ln phi of slot {@code k} at {@code composition} on its lower-Gibbs root; a refused trial is halved toward the last accepted one. */
+    private void evaluateSlot(double t, int k, double[] composition, Workspace w) {
+        Slots s = w.slots;
+        Root preferred = k == 0 ? Root.VAPOR : Root.LIQUID;
+        for (int halving = 0; ; halving++) {
+            try {
+                s.root[k] = lowerGibbsRoot(t, composition, preferred, s.logPhi[k], w);
+                System.arraycopy(composition, 0, s.accepted[k], 0, count);
+                return;
+            } catch (IllegalArgumentException | IllegalStateException refused) {
+                // D3: the Huron-Vidal attraction can turn negative for a trial composition: a rejected trial, never a hold.
+                if (halving >= REFUSED_HALVINGS) throw refused;
+                for (int i = 0; i < count; i++) composition[i] = 0.5 * (composition[i] + s.accepted[k][i]);
+            }
+        }
+    }
+
+    /**
+     * Substitution on the stacked {@code ln phi} of the watched slots until no entry moves by {@link Settings#lnKTolerance()},
+     * then the mole numbers ({@code s.moles}) and presence; the Newton finish where substitution is slow. False with
+     * {@code failure} when neither converges.
+     */
+    private boolean slotSubstitution(double t, Workspace w) {
+        Slots s = w.slots;
+        boolean hasPrevious = false, newtonTried = false;
+        int plainSteps = 0, steps = 0;
+        w.lambda = 0.0;
+        while (true) {
+            slotFractions(w);
+            // Presence of the step: watched slots with a positive fraction; a duplicate of a lower slot is dropped.
+            for (int k = 0; k < SLOT_COUNT; k++) s.present[k] = s.watched[k] && s.beta[k] > 0.0;
+            if (dropDuplicates(w)) {
+                hasPrevious = false;
+                continue;
+            }
+            for (int k = 0; k < SLOT_COUNT; k++) {
+                if (!s.watched[k] || s.present[k]) {
+                    s.absentSteps[k] = 0;
+                    continue;
+                }
+                s.absentSteps[k] = s.sums[k] < WATCH_SUM ? s.absentSteps[k] + 1 : 0;
+                if (s.absentSteps[k] >= WATCH_STEPS) {
+                    s.watched[k] = false;
+                    hasPrevious = false;
+                }
+            }
+            double change = 0.0;
+            for (int k = 0; k < SLOT_COUNT; k++) {
+                if (!s.watched[k]) continue;
+                for (int a = 0; a < w.presentCount; a++) {
+                    int i = w.present[a];
+                    w.trial[i] = s.unnormalised[k][i] / s.sums[k];
+                }
+                for (int i = 0; i < count; i++) if (w.feed[i] == 0.0) w.trial[i] = 0.0;
+                System.arraycopy(w.trial, 0, s.composition[k], 0, count);
+                double[] previous = s.newLogPhi[k];
+                System.arraycopy(s.logPhi[k], 0, previous, 0, count);
+                evaluateSlot(t, k, s.composition[k], w);
+                for (int a = 0; a < w.presentCount; a++) {
+                    int i = w.present[a];
+                    double d = s.logPhi[k][i] - previous[i];
+                    s.delta[k * count + i] = d;
+                    change = Math.max(change, Math.abs(d));
+                }
+            }
+            w.iterations++;
+            steps++;
+            w.lastChange = change;
+            if (change < settings.lnKTolerance()) break;
+            if (!Double.isFinite(change)) {
+                w.failure = "the three-slot substitution met a non-finite ln phi";
+                return false;
+            }
+            if (steps >= settings.maximumIterations()) {
+                w.failure = "no convergence of the three-slot system in " + steps + " substitution iterations (max |d ln phi| " + change + ")";
+                return false;
+            }
+            plainSteps++;
+            boolean extrapolated = false;
+            if (hasPrevious && plainSteps >= settings.accelerationCycle()) {
+                double numerator = 0.0, denominator = 0.0;
+                for (int k = 0; k < SLOT_COUNT; k++) {
+                    if (!s.watched[k]) continue;
+                    for (int a = 0; a < w.presentCount; a++) {
+                        int v = k * count + w.present[a];
+                        numerator += s.delta[v] * s.delta[v];
+                        denominator += s.previousDelta[v] * s.delta[v];
+                    }
+                }
+                double lambda = numerator / denominator;
+                w.lambda = lambda;
+                if (lambda > 0.0 && lambda < 1.0) {
+                    double factor = lambda / (1.0 - lambda);
+                    double scale = change * factor > MAXIMUM_EXTRAPOLATION ? MAXIMUM_EXTRAPOLATION / (change * factor) : 1.0;
+                    for (int k = 0; k < SLOT_COUNT; k++) {
+                        if (!s.watched[k]) continue;
+                        for (int a = 0; a < w.presentCount; a++) {
+                            int i = w.present[a];
+                            s.logPhi[k][i] += s.delta[k * count + i] * factor * scale;
+                        }
+                    }
+                    extrapolated = true;
+                    w.extrapolations++;
+                }
+                plainSteps = 0;
+            }
+            if (extrapolated) {
+                hasPrevious = false;
+            } else {
+                double[] swap = s.previousDelta;
+                s.previousDelta = s.delta;
+                s.delta = swap;
+                hasPrevious = true;
+            }
+            if (!newtonTried && slotsPresent(s) >= 2 && (steps >= settings.substitutionLimit()
+                    || steps >= SLOW_SUBSTITUTION_STEPS && w.lambda > SLOW_EIGENVALUE)) {
+                newtonTried = true;
+                slotMoles(w);
+                if (slotNewton(t, w)) return true;
+                hasPrevious = false;
+            }
+        }
+        slotFractions(w);
+        for (int k = 0; k < SLOT_COUNT; k++) s.present[k] = s.watched[k] && s.beta[k] > 0.0;
+        dropDuplicates(w);
+        slotMoles(w);
+        return true;
+    }
+
+    private static int slotsPresent(Slots s) {
+        int present = 0;
+        for (int k = 0; k < SLOT_COUNT; k++) if (s.present[k]) present++;
+        return present;
+    }
+
+    /**
+     * Drops the higher of two present slots on the same root whose compositions agree within {@link #SLOT_DUPLICATE}
+     * ({@code sum_i z_i (ln x_ik - ln x_il)^2}): one phase taken twice. Its fraction goes to the lower slot.
+     */
+    private boolean dropDuplicates(Workspace w) {
+        Slots s = w.slots;
+        for (int k = 0; k < SLOT_COUNT; k++) {
+            if (!s.present[k]) continue;
+            for (int l = k + 1; l < SLOT_COUNT; l++) {
+                if (!s.present[l] || s.root[k] != s.root[l]) continue;
+                double distance = 0.0;
+                for (int a = 0; a < w.presentCount; a++) {
+                    int i = w.present[a];
+                    double d = DeterministicMath.log(s.composition[k][i]) - DeterministicMath.log(s.composition[l][i]);
+                    distance += w.z[i] * d * d;
+                }
+                if (distance < SLOT_DUPLICATE) {
+                    s.watched[l] = false;
+                    s.present[l] = false;
+                    s.beta[k] += s.beta[l];
+                    s.beta[l] = 0.0;
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Michelsen's multiphase Rachford-Rice for the slots' current {@code ln phi}: the minimum of the convex {@code Q(beta)}
+     * over the watched slots, {@code beta >= 0}, by Newton on the free set (a fraction above zero, or its gradient
+     * negative), a fraction-to-zero cap and an Armijo search on Q. Fills {@code beta}, the unnormalised
+     * {@code x_ik = z_i c_ik / E_i} ({@code c_ik = exp(m_i - ln phi_ik)}, {@code m_i} the smallest ln phi of component i) and
+     * their sums.
+     */
+    private void slotFractions(Workspace w) {
+        Slots s = w.slots;
+        for (int a = 0; a < w.presentCount; a++) {
+            int i = w.present[a];
+            double least = Double.POSITIVE_INFINITY;
+            for (int k = 0; k < SLOT_COUNT; k++) if (s.watched[k]) least = Math.min(least, s.logPhi[k][i]);
+            for (int k = 0; k < SLOT_COUNT; k++) s.c[k * count + i] = s.watched[k] ? DeterministicMath.exp(least - s.logPhi[k][i]) : 0.0;
+        }
+        double total = 0.0;
+        for (int k = 0; k < SLOT_COUNT; k++) {
+            if (!s.watched[k]) s.beta[k] = 0.0;
+            total += s.beta[k];
+        }
+        if (!(total > 0.0)) for (int k = 0; k < SLOT_COUNT; k++) if (s.watched[k]) s.beta[k] = 1.0;
+        double q = slotObjective(s.beta, w);
+        for (int iteration = 0; iteration < RACHFORD_RICE_SLOTS_ITERATIONS; iteration++) {
+            w.rachfordRiceSteps++;
+            // E_i, the gradient 1 - sum_i z_i c_ik / E_i and the Hessian sum_i z_i c_ik c_il / E_i^2.
+            Arrays.fill(s.rrGradient, 1.0);
+            Arrays.fill(s.rrHessian, 0.0);
+            for (int a = 0; a < w.presentCount; a++) {
+                int i = w.present[a];
+                double e = 0.0;
+                for (int k = 0; k < SLOT_COUNT; k++) e += s.beta[k] * s.c[k * count + i];
+                for (int k = 0; k < SLOT_COUNT; k++) {
+                    if (!s.watched[k]) continue;
+                    double ck = w.z[i] * s.c[k * count + i] / e;
+                    s.rrGradient[k] -= ck;
+                    for (int l = 0; l <= k; l++) if (s.watched[l]) s.rrHessian[k * SLOT_COUNT + l] += ck * s.c[l * count + i] / e;
+                }
+            }
+            int free = 0;
+            boolean done = true;
+            for (int k = 0; k < SLOT_COUNT; k++) {
+                if (!s.watched[k]) continue;
+                boolean isFree = s.beta[k] > 0.0 || s.rrGradient[k] < 0.0;
+                if (isFree) {
+                    s.freeSlots[free++] = k;
+                    if (Math.abs(s.rrGradient[k]) > SLOT_FRACTION_TOLERANCE) done = false;
+                }
+            }
+            if (done) break;
+            for (int a = 0; a < free; a++) {
+                for (int b = 0; b <= a; b++) {
+                    int k = s.freeSlots[a], l = s.freeSlots[b];
+                    s.rrMatrix[a * free + b] = k >= l ? s.rrHessian[k * SLOT_COUNT + l] : s.rrHessian[l * SLOT_COUNT + k];
+                }
+                s.rrStep[a] = -s.rrGradient[s.freeSlots[a]];
+            }
+            boolean factored = false;
+            for (int attempt = 0; attempt < 14 && !factored; attempt++) {
+                double mu = attempt == 0 ? 0.0 : DeterministicMath.pow(10.0, attempt - 14);
+                factored = factorShifted(s.rrMatrix, free, mu, s.rrFactor);
+            }
+            if (!factored) break;
+            TangentPlaneStability.solveCholesky(s.rrFactor, free, s.rrStep);
+            double length = 1.0, slope = 0.0;
+            int blocking = -1;
+            for (int a = 0; a < free; a++) {
+                int k = s.freeSlots[a];
+                slope += s.rrGradient[k] * s.rrStep[a];
+                if (s.rrStep[a] < 0.0 && s.beta[k] + length * s.rrStep[a] < 0.0) {
+                    length = s.beta[k] / -s.rrStep[a];
+                    blocking = k;
+                }
+            }
+            boolean accepted = false;
+            for (int halving = 0; halving <= NEWTON_HALVINGS; halving++, length *= 0.5, blocking = -1) {
+                Arrays.fill(s.trialBeta, 0.0);
+                for (int k = 0; k < SLOT_COUNT; k++) s.trialBeta[k] = s.beta[k];
+                for (int a = 0; a < free; a++) {
+                    int k = s.freeSlots[a];
+                    s.trialBeta[k] = k == blocking ? 0.0 : Math.max(0.0, s.beta[k] + length * s.rrStep[a]);
+                }
+                double next = slotObjective(s.trialBeta, w);
+                if (next <= q + ARMIJO * length * slope + 1.0e-15 * Math.abs(q)) {
+                    q = next;
+                    System.arraycopy(s.trialBeta, 0, s.beta, 0, SLOT_COUNT);
+                    accepted = true;
+                    break;
+                }
+            }
+            if (!accepted) break;
+        }
+        for (int k = 0; k < SLOT_COUNT; k++) {
+            s.sums[k] = 0.0;
+            Arrays.fill(s.unnormalised[k], 0.0);
+        }
+        for (int a = 0; a < w.presentCount; a++) {
+            int i = w.present[a];
+            double e = 0.0;
+            for (int k = 0; k < SLOT_COUNT; k++) e += s.beta[k] * s.c[k * count + i];
+            for (int k = 0; k < SLOT_COUNT; k++) {
+                if (!s.watched[k]) continue;
+                double x = w.z[i] * s.c[k * count + i] / e;
+                s.unnormalised[k][i] = x;
+                s.sums[k] += x;
+            }
+        }
+    }
+
+    /** {@code Q(beta) = sum_k beta_k - sum_i z_i ln E_i}; +infinity where an E_i is not positive. */
+    private double slotObjective(double[] beta, Workspace w) {
+        Slots s = w.slots;
+        double q = 0.0;
+        for (int k = 0; k < SLOT_COUNT; k++) q += beta[k];
+        for (int a = 0; a < w.presentCount; a++) {
+            int i = w.present[a];
+            double e = 0.0;
+            for (int k = 0; k < SLOT_COUNT; k++) e += beta[k] * s.c[k * count + i];
+            if (!(e > 0.0)) return Double.POSITIVE_INFINITY;
+            q -= w.z[i] * DeterministicMath.log(e);
+        }
+        return q;
+    }
+
+    /** The present slots' mole numbers per mole of feed, {@code beta_k x_ik}, each component summing to its {@code z_i}. */
+    private void slotMoles(Workspace w) {
+        Slots s = w.slots;
+        for (int k = 0; k < SLOT_COUNT; k++) Arrays.fill(s.moles[k], 0.0);
+        for (int a = 0; a < w.presentCount; a++) {
+            int i = w.present[a];
+            double e = 0.0;
+            for (int k = 0; k < SLOT_COUNT; k++) if (s.present[k]) e += s.beta[k] * s.c[k * count + i];
+            for (int k = 0; k < SLOT_COUNT; k++) if (s.present[k]) s.moles[k][i] = w.z[i] * s.beta[k] * s.c[k * count + i] / e;
+        }
+    }
+
+    /**
+     * The Newton finish over the present slots (two or three): the Gibbs energy over the mole numbers of every present
+     * slot but the largest (the reference, by difference), gradient {@code mu_ik - mu_iR}, Hessian
+     * {@code delta_kl M^k + M^R} with {@code M^k_ij = delta_ij/n_ik + (Phi^k_ij - 1)/N_k}, Jacobi-scaled and shifted until
+     * Cholesky succeeds, the step cut so no amount shrinks below a tenth of itself, an Armijo search on {@code Delta G/RT}.
+     * Converged at {@code max |g| <} {@link #FUGACITY_TOLERANCE}; the slots' compositions and {@code ln phi} follow.
+     */
+    private boolean slotNewton(double t, Workspace w) {
+        Slots s = w.slots;
+        int q = 0, reference = -1;
+        double largest = -1.0;
+        for (int k = 0; k < SLOT_COUNT; k++) {
+            if (!s.present[k]) continue;
+            double total = 0.0;
+            for (int a = 0; a < w.presentCount; a++) total += s.moles[k][w.present[a]];
+            if (total > largest) {
+                largest = total;
+                reference = k;
+            }
+        }
+        for (int k = 0; k < SLOT_COUNT; k++) if (s.present[k] && k != reference) s.others[q++] = k;
+        int m = w.presentCount, dimension = q * m;
+        double gibbs = slotGibbs(t, s.moles, w);
+        if (!Double.isFinite(gibbs)) return false;
+        for (int iteration = 0; ; iteration++) {
+            for (int k = 0; k < SLOT_COUNT; k++) {
+                if (!s.present[k]) continue;
+                try {
+                    differentiatePhase(t, s.moles[k], k == 0, s.derivatives[k], w);
+                } catch (IllegalStateException | IllegalArgumentException coalescing) {
+                    return false;
+                }
+                s.totals[k] = 0.0;
+                for (int a = 0; a < m; a++) s.totals[k] += s.moles[k][w.present[a]];
+            }
+            double worst = 0.0;
+            for (int c = 0; c < q; c++) {
+                int k = s.others[c];
+                for (int a = 0; a < m; a++) {
+                    int i = w.present[a];
+                    double g = DeterministicMath.log(s.moles[k][i] / s.totals[k]) + s.derivatives[k].evaluation().logFugacityCoefficient(i)
+                            - DeterministicMath.log(s.moles[reference][i] / s.totals[reference])
+                            - s.derivatives[reference].evaluation().logFugacityCoefficient(i);
+                    s.newtonGradient[c * m + a] = g;
+                    worst = Math.max(worst, Math.abs(g));
+                }
+            }
+            w.lastChange = worst;
+            if (worst < FUGACITY_TOLERANCE) break;
+            if (!Double.isFinite(worst) || iteration >= settings.maximumNewtonIterations()) return false;
+            for (int c = 0; c < q; c++) {
+                int k = s.others[c];
+                for (int a = 0; a < m; a++) {
+                    for (int d = 0; d <= c; d++) {
+                        int l = s.others[d];
+                        for (int b = 0; b < m && (d < c || b <= a); b++) {
+                            double entry = slotCurvature(s, reference, a, b, w);
+                            if (k == l) entry += slotCurvature(s, k, a, b, w);
+                            s.newtonHessian[(c * m + a) * dimension + d * m + b] = entry;
+                        }
+                    }
+                }
+            }
+            for (int v = 0; v < dimension; v++) s.newtonScale[v] = 1.0 / Math.sqrt(s.newtonHessian[v * dimension + v]);
+            for (int v = 0; v < dimension; v++) {
+                for (int u = 0; u <= v; u++) s.newtonHessian[v * dimension + u] *= s.newtonScale[v] * s.newtonScale[u];
+                s.newtonStep[v] = -s.newtonScale[v] * s.newtonGradient[v];
+            }
+            boolean factored = false;
+            for (int attempt = 0; attempt < 14 && !factored; attempt++) {
+                double mu = attempt == 0 ? 0.0 : DeterministicMath.pow(10.0, attempt - 9);
+                factored = factorShifted(s.newtonHessian, dimension, mu, s.newtonFactor);
+            }
+            if (!factored) return false;
+            TangentPlaneStability.solveCholesky(s.newtonFactor, dimension, s.newtonStep);
+            double slope = 0.0, length = 1.0;
+            for (int v = 0; v < dimension; v++) {
+                s.newtonStep[v] *= s.newtonScale[v];
+                slope += s.newtonGradient[v] * s.newtonStep[v];
+            }
+            for (int a = 0; a < m; a++) {
+                int i = w.present[a];
+                double moved = 0.0;
+                for (int c = 0; c < q; c++) {
+                    double d = s.newtonStep[c * m + a];
+                    moved += d;
+                    if (d < 0.0) length = Math.min(length, FRACTION_TO_BOUNDARY * s.moles[s.others[c]][i] / -d);
+                }
+                if (moved > 0.0) length = Math.min(length, FRACTION_TO_BOUNDARY * s.moles[reference][i] / moved);
+            }
+            boolean accepted = false;
+            for (int halving = 0; halving <= NEWTON_HALVINGS; halving++, length *= 0.5) {
+                for (int k = 0; k < SLOT_COUNT; k++) System.arraycopy(s.moles[k], 0, s.trialMoles[k], 0, count);
+                for (int a = 0; a < m; a++) {
+                    int i = w.present[a];
+                    for (int c = 0; c < q; c++) {
+                        double d = length * s.newtonStep[c * m + a];
+                        s.trialMoles[s.others[c]][i] += d;
+                        s.trialMoles[reference][i] -= d;
+                    }
+                }
+                double next;
+                try {
+                    next = slotGibbs(t, s.trialMoles, w);
+                } catch (IllegalArgumentException | IllegalStateException refused) {
+                    continue;
+                }
+                if (next <= gibbs + ARMIJO * length * slope + GIBBS_ROUNDOFF * w.gibbsScale) {
+                    gibbs = next;
+                    accepted = true;
+                    break;
+                }
+            }
+            if (!accepted) return false;
+            for (int k = 0; k < SLOT_COUNT; k++) System.arraycopy(s.trialMoles[k], 0, s.moles[k], 0, count);
+            w.newtonIterations++;
+        }
+        // The slots follow the converged mole numbers.
+        for (int k = 0; k < SLOT_COUNT; k++) {
+            if (!s.present[k]) continue;
+            for (int i = 0; i < count; i++) s.composition[k][i] = s.moles[k][i] / s.totals[k];
+            s.beta[k] = s.totals[k];
+            evaluateSlot(t, k, s.composition[k], w);
+        }
+        return true;
+    }
+
+    /** {@code M^k_ab = delta_ab / n_ak + (Phi^k_ab - 1) / N_k} of slot k, symmetrised, over present components a and b. */
+    private static double slotCurvature(Slots s, int k, int a, int b, Workspace w) {
+        int i = w.present[a], j = w.present[b];
+        double phi = 0.5 * (s.derivatives[k].dLogPhiDnRowView(i)[j] + s.derivatives[k].dLogPhiDnRowView(j)[i]);
+        return (a == b ? 1.0 / s.moles[k][i] : 0.0) + (phi - 1.0) / s.totals[k];
+    }
+
+    /** {@code Delta G/RT} of the present slots' mole numbers against the feed's tangent plane; the magnitude in gibbsScale. */
+    private double slotGibbs(double t, double[][] moles, Workspace w) {
+        Slots s = w.slots;
+        double sum = 0.0, magnitude = 0.0;
+        for (int k = 0; k < SLOT_COUNT; k++) {
+            if (!s.present[k]) continue;
+            double total = 0.0;
+            for (int a = 0; a < w.presentCount; a++) total += moles[k][w.present[a]];
+            Arrays.fill(w.x, 0.0);
+            for (int a = 0; a < w.presentCount; a++) w.x[w.present[a]] = moles[k][w.present[a]] / total;
+            lowerGibbsRoot(t, w.x, k == 0 ? Root.VAPOR : Root.LIQUID, w.liquidLogPhi, w);
+            for (int a = 0; a < w.presentCount; a++) {
+                int i = w.present[a];
+                double term = DeterministicMath.log(w.x[i]) + w.liquidLogPhi[i];
+                sum += moles[k][i] * (term - w.reference[i]);
+                magnitude += moles[k][i] * (Math.abs(term) + Math.abs(w.reference[i]));
+            }
+        }
+        w.gibbsScale = magnitude;
+        if (!Double.isFinite(sum)) throw new IllegalArgumentException("Non-finite Gibbs energy of a trial three-slot split");
+        return sum;
+    }
+
+    /**
+     * The converged slots as the core's outcome: one present slot is the feed (SINGLE on its root); two fill the two-slot
+     * workspace (the denser the liquid) for {@link #twoPhaseResult}, merged where the split is below the model's
+     * resolution; three are THREE for {@link #threePhaseResult}. Each component's amounts: every share but the largest by
+     * its own mole number, the largest by difference, so each component conserves to rounding.
+     */
+    private int slotOutcome(double t, int present, Workspace w) {
+        Slots s = w.slots;
+        for (int k = 0; k < SLOT_COUNT; k++) Arrays.fill(s.amounts[k], 0.0);
+        for (int a = 0; a < w.presentCount; a++) {
+            int i = w.present[a];
+            double sum = 0.0;
+            int major = -1;
+            for (int k = 0; k < SLOT_COUNT; k++) {
+                if (!s.present[k]) continue;
+                sum += s.moles[k][i];
+                if (major < 0 || s.moles[k][i] > s.moles[major][i]) major = k;
+            }
+            double rest = w.feed[i];
+            for (int k = 0; k < SLOT_COUNT; k++) {
+                if (!s.present[k] || k == major) continue;
+                s.amounts[k][i] = Math.min(rest, w.feed[i] * (s.moles[k][i] / sum));
+                rest -= s.amounts[k][i];
+            }
+            s.amounts[major][i] = rest;
+        }
+        if (present == 1) {
+            for (int k = 0; k < SLOT_COUNT; k++) if (s.present[k]) w.singleRoot = s.root[k];
+            return SINGLE;
+        }
+        // Tie lines between the present slots; the shortest decides the band.
+        double shortest = Double.POSITIVE_INFINITY;
+        for (int k = 0; k < SLOT_COUNT; k++) {
+            for (int l = k + 1; l < SLOT_COUNT; l++) {
+                if (!s.present[k] || !s.present[l]) continue;
+                double tie = 0.0;
+                for (int a = 0; a < w.presentCount; a++) {
+                    int i = w.present[a];
+                    double d = DeterministicMath.log(s.composition[k][i]) - DeterministicMath.log(s.composition[l][i]);
+                    tie += w.z[i] * d * d;
+                }
+                shortest = Math.min(shortest, tie);
+            }
+        }
+        w.tieLine = shortest;
+        for (int k = 0; k < SLOT_COUNT; k++) {
+            if (!s.present[k]) continue;
+            kernel.evaluate(t, w.liquidPressure, s.amounts[k], s.root[k], w.mixture, w.first);
+            w.kernelEvaluations++;
+            s.dense[k] = PhaseIdentification.denseLiquidLike(w.first, t, w.liquidPressure);
+            evaluator.evaluate(t, w.liquidPressure, s.amounts[k], s.root[k], w.phases, s.states[k]);
+            w.kernelEvaluations++;
+        }
+        if (present == 3) return THREE;
+        int first = -1, second = -1;
+        for (int k = 0; k < SLOT_COUNT; k++) {
+            if (!s.present[k]) continue;
+            if (first < 0) first = k; else second = k;
+        }
+        boolean firstDenser = s.states[first].molarVolume() < s.states[second].molarVolume();
+        int liquid = firstDenser ? first : second, vapour = firstDenser ? second : first;
+        System.arraycopy(s.amounts[liquid], 0, w.liquidAmounts, 0, count);
+        System.arraycopy(s.amounts[vapour], 0, w.vaporAmounts, 0, count);
+        w.liquidProductDenseLiquidLike = s.dense[liquid];
+        w.vapourProductDenseLiquidLike = s.dense[vapour];
+        evaluator.evaluate(t, w.liquidPressure, w.liquidAmounts, s.root[liquid], w.phases, w.liquidState);
+        evaluator.evaluate(t, w.vaporPressure, w.vaporAmounts, s.root[vapour], w.phases, w.vaporState);
+        w.kernelEvaluations += 2;
+        double gap = Math.abs(w.vaporState.molarVolume() - w.liquidState.molarVolume())
+                / (0.5 * (w.vaporState.molarVolume() + w.liquidState.molarVolume()));
+        if (w.tieLine < settings.mergeTieLine() && gap < settings.mergeVolumeGap()) return MERGED;
+        double residual = 0.0;
+        for (int a = 0; a < w.presentCount; a++) {
+            int i = w.present[a];
+            double difference = DeterministicMath.log(w.liquidState.moleFraction(i)) + w.liquidState.logFugacityCoefficient(i)
+                    - DeterministicMath.log(w.vaporState.moleFraction(i)) - w.vaporState.logFugacityCoefficient(i);
+            if (Double.isFinite(difference)) residual = Math.max(residual, Math.abs(difference));
+        }
+        w.residual = residual;
+        return SPLIT;
+    }
+
+    /**
+     * Three fluid phases (W3a D3): {@link Classification#VAPOR_LIQUID_LIQUID}, the lightest (largest molar volume) the
+     * vapour, then the two liquids lighter first, as {@link Classification#LIQUID_LIQUID} lists them. No liquid is named
+     * aqueous: a threshold on the water fraction would flip.
+     */
+    private EquilibriumResult threePhaseResult(double t, double p, PhaseCompetition competition, Workspace w) {
+        Slots s = w.slots;
+        int[] order = {0, 1, 2};
+        for (int a = 0; a < 3; a++) {
+            for (int b = a + 1; b < 3; b++) {
+                if (s.states[order[b]].molarVolume() > s.states[order[a]].molarVolume()) {
+                    int swap = order[a];
+                    order[a] = order[b];
+                    order[b] = swap;
+                }
+            }
+        }
+        List<PhaseAmounts> phases = new ArrayList<>(3);
+        for (int a = 0; a < 3; a++) {
+            int k = order[a];
+            phases.add(new PhaseAmounts(a == 0 ? PhaseKind.VAPOR : PhaseKind.LIQUID, null, t, p, expand(s.amounts[k]), s.states[k].copy()));
+        }
+        boolean band = inBand(t, p, w) || w.tieLine < BAND_TIE_LINE;
+        return converged(competition, Classification.VAPOR_LIQUID_LIQUID, phases, List.of(), diagnostics(w, w.feedResult, band),
+                band ? bandReason(t, p, w, Double.NaN) : null, null);
+    }
+
+    /** The three-slot system's scratch (W3a D3), in the workspace of an engine with water in the equation of state. */
+    private static final class Slots {
+        final double[][] logPhi, newLogPhi, composition, accepted, unnormalised, moles, trialMoles, amounts;
+        final double[] beta = new double[SLOT_COUNT], sums = new double[SLOT_COUNT], totals = new double[SLOT_COUNT];
+        final double[] trialBeta = new double[SLOT_COUNT], rrGradient = new double[SLOT_COUNT];
+        final double[] rrHessian = new double[SLOT_COUNT * SLOT_COUNT], rrMatrix = new double[SLOT_COUNT * SLOT_COUNT];
+        final double[] rrFactor = new double[SLOT_COUNT * SLOT_COUNT], rrStep = new double[SLOT_COUNT];
+        final int[] freeSlots = new int[SLOT_COUNT], others = new int[SLOT_COUNT], absentSteps = new int[SLOT_COUNT];
+        final boolean[] watched = new boolean[SLOT_COUNT], present = new boolean[SLOT_COUNT], dense = new boolean[SLOT_COUNT];
+        final Root[] root = new Root[SLOT_COUNT];
+        final double[] c;
+        double[] delta, previousDelta;
+        final double[] newtonGradient, newtonHessian, newtonFactor, newtonStep, newtonScale;
+        final PengRobinsonKernel.Derivatives[] derivatives = new PengRobinsonKernel.Derivatives[SLOT_COUNT];
+        final PhaseState[] states = new PhaseState[SLOT_COUNT];
+        boolean reseeded;
+
+        Slots(FluidTpEquilibrium owner) {
+            int n = owner.count;
+            logPhi = new double[SLOT_COUNT][n];
+            newLogPhi = new double[SLOT_COUNT][n];
+            composition = new double[SLOT_COUNT][n];
+            accepted = new double[SLOT_COUNT][n];
+            unnormalised = new double[SLOT_COUNT][n];
+            moles = new double[SLOT_COUNT][n];
+            trialMoles = new double[SLOT_COUNT][n];
+            amounts = new double[SLOT_COUNT][n];
+            c = new double[SLOT_COUNT * n];
+            delta = new double[SLOT_COUNT * n];
+            previousDelta = new double[SLOT_COUNT * n];
+            int dimension = (SLOT_COUNT - 1) * n;
+            newtonGradient = new double[dimension];
+            newtonHessian = new double[dimension * dimension];
+            newtonFactor = new double[dimension * dimension];
+            newtonStep = new double[dimension];
+            newtonScale = new double[dimension];
+            for (int k = 0; k < SLOT_COUNT; k++) {
+                derivatives[k] = owner.kernel.newDerivatives();
+                states[k] = owner.evaluator.newState();
+            }
+        }
     }
 
     // The critical band.
