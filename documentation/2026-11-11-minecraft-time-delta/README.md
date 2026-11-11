@@ -30,6 +30,7 @@ Owner, 2026-11-11: evaluate running the simulation on Minecraft time (72 process
 - 2026-11-11, W4 (`a64fcc57d`): FE at the play-time rate (an FE carries joulesPerFE x factor), wear on process time with default lives 8 h and 40 min under `machines.wear.cavitationProcessHours` and `dryProcessMinutes` (T3), fuel on process time. 44 tests.
 - 2026-11-11, W5 (`93985cfa5`): status lines say "s of play", the pump page shows its life left, the store's "Lasts" is play time. 155 tests.
 - 2026-11-11, W6: the quick checks at 1, 4 and 72, the campaign at 4 (clean equal to the 0.26.0 lane in every distribution; three new wall-deadline holds, clean alone), the column and heat-pair worlds for 1 h of process time at 4 and 72, the fluid GameTests at 4 (88 pass, after `FluidCheckpointGameTests`' restarted coordinator took the factor). Written up in TIME_SCALE_BUILD_REVIEW.md. Test-rig hooks: `EventPathWorld.time` and `ExchangerCouplingTest` on the model's factor (factor 1 unchanged; `ExchangerCouplingTest` passes).
+- 2026-11-11: owner "Keep both": the column's outlet buffer stays 24 cycles at every factor, and the heat sides' startup lag on unequal cadences stays as built. No code change.
 
 ## Code areas
 
@@ -38,7 +39,8 @@ Changed in W1-W5: `science/fluid/SimulationTime` (new), `FluidThermodynamics`, `
 ## Open items
 
 - Decided: T1-T6 of TIME_SCALE_PLAN.md section 3. Built: W1-W6. Open: W7 and the merge.
-- Owner options from W6 (TIME_SCALE_BUILD_REVIEW.md section 6): the column's outlet buffer at high factors (2.4 h of production at 72), the heat-coupling startup lag on unequal cadences.
+- Decided (owner "Keep both", 2026-11-11; TIME_SCALE_BUILD_REVIEW.md section 6, option a of 1 and 2): the column's outlet buffer keeps its cycle counts (2.4 h of production at 72); the heat-coupling startup lag on unequal cadences is accepted.
+- Open before a merge: whether the checkpoint's optional package field `TimeScale` (absent = 1) needs a corpus image under `src/test/resources/compat/`.
 - Not built: the level loop on a drum (needs a server; no GameTest builds one).
 - Decided: `HOLDUP_TAU` scales with the factor, alone (owner "Holdup only"). Option A is dropped; the tolerance change stays an option in OPTION_A_REVIEW.md.
 - Not traced: bundled 15's last cause under the larger buffer; cold 6 and 183, new under it.

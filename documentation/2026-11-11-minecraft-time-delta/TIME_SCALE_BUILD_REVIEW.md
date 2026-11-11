@@ -43,7 +43,7 @@ At 72 the built code holds the same seeds as the evaluation's "holdup only" form
 
 `runFluidGameTestServer` with the config's default `timeScale = 4`, fresh run id: all 88 pass (27.6 s). The first run (`timescale4`) crashed in `FluidCheckpointGameTests`: its restarted coordinator was built without the factor ("An island model on time factor 4 in a coordinator on 1"); fixed in the test (`.withTime(options.time())`). Production builds its coordinator with the factor.
 
-## 6. Owner options
+## 6. Owner options (decided 2026-11-11, "Keep both": 1a and 2a)
 
 1. The column's outlet buffer at high factors (T6). (a) Keep the cycle counts: 2.4 h of production is held before the first give at 72. (b) Cap the buffer in process time, for example 10 min at any factor: the same play time as today at 4, a shorter start at 72.
 2. The coupling lag between heat sides on unequal cadences. It is one slice of the slower side, and it grows with the factor. (a) Accept: it settles in about 6 slower slices. (b) Do not certify a heat side before its partner has booked its first exchange: this removes the startup swing, and the steady replay is unchanged.
