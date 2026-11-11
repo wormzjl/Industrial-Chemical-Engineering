@@ -1,0 +1,92 @@
+COLUMN factor=4 ticks=18000 processS=3600 taken=315.67 mol (0.088 mol/s of process) produced=315.67 condenser=-2.619e+05 J held=0 status=LIMITED: outlet, 0 %
+COLUMN factor=4 given=75.67 mol outletAccount=240.00 mol tank=75.67 mol at 250000 Pa
+COLUMN factor=72 ticks=1000 processS=3600 taken=720.00 mol (0.200 mol/s of process) produced=720.00 condenser=-7.200e+05 J held=0 status=RUNNING
+COLUMN factor=72 given=0.00 mol outletAccount=720.00 mol tank=0.00 mol at 101325 Pa
+HEAT factor 1 cadences 100/100 certificates off: factor 1 cadences 100/100 certificates off: hot 24.297 kg/s 363.158 -> 340.087 K (steady 340.085), cold 17.164 kg/s 293.155 -> 325.933 K (steady 325.932), transit 261 J
+HEAT factor 1 cadences 100/100 certificates on: factor 1 cadences 100/100 certificates on: hot 24.297 kg/s 363.158 -> 340.087 K (steady 340.085), cold 17.164 kg/s 293.155 -> 325.933 K (steady 325.932), transit 258 J
+HEAT factor 1 cadences 20/400 certificates off: factor 1 cadences 20/400 certificates off: hot 24.297 kg/s 363.158 -> 340.087 K (steady 340.085), cold 17.164 kg/s 293.155 -> 325.933 K (steady 325.932), transit 96.7 J
+HEAT factor 1 cadences 20/400 certificates on: factor 1 cadences 20/400 certificates on: hot 24.297 kg/s 363.158 -> 340.087 K (steady 340.085), cold 17.164 kg/s 293.155 -> 325.933 K (steady 325.932), transit 1.09e+03 J
+HEAT factor 4 cadences 100/100 certificates off: factor 4 cadences 100/100 certificates off: hot 24.297 kg/s 363.158 -> 340.087 K (steady 340.085), cold 17.164 kg/s 293.155 -> 325.933 K (steady 325.932), transit 1.04e+03 J
+HEAT factor 4 cadences 100/100 certificates on: factor 4 cadences 100/100 certificates on: hot 24.297 kg/s 363.158 -> 340.087 K (steady 340.085), cold 17.164 kg/s 293.155 -> 325.933 K (steady 325.932), transit 1.05e+03 J
+HEAT factor 4 cadences 20/400 certificates off: factor 4 cadences 20/400 certificates off: hot 24.297 kg/s 363.158 -> 340.087 K (steady 340.085), cold 17.164 kg/s 293.155 -> 325.933 K (steady 325.932), transit 387 J
+HEAT factor 4 cadences 20/400 certificates on: factor 4 cadences 20/400 certificates on: hot 24.297 kg/s 363.158 -> 340.087 K (steady 340.085), cold 17.164 kg/s 293.155 -> 325.933 K (steady 325.932), transit 4.81e+03 J
+HEAT factor 72 cadences 100/100 certificates off: factor 72 cadences 100/100 certificates off: hot 24.297 kg/s 363.158 -> 340.087 K (steady 340.085), cold 17.164 kg/s 293.155 -> 325.933 K (steady 325.932), transit 1.88e+04 J
+HEAT factor 72 cadences 100/100 certificates on: factor 72 cadences 100/100 certificates on: hot 24.297 kg/s 363.158 -> 340.087 K (steady 340.085), cold 17.164 kg/s 293.155 -> 325.933 K (steady 325.932), transit 1.88e+04 J
+HEAT factor 72 cadences 20/400 certificates off: factor 72 cadences 20/400 certificates off: hot 24.297 kg/s 363.158 -> 340.083 K (steady 340.085), cold 17.164 kg/s 293.155 -> 325.932 K (steady 325.932), transit -6.14e+05 J
+HEAT factor 72 cadences 20/400 certificates on: factor 72 cadences 20/400 certificates on: hot 24.322 kg/s 363.158 -> 324.486 K (steady 340.106), cold 17.164 kg/s 293.155 -> 325.932 K (steady 325.937), transit -3.39e+09 J
+HEAT FAILURE factor 72 cadences 20/400 certificates on: the hot outlet at the countercurrent steady state ==> expected: <340.1057878291888> but was: <324.48550171512125>
+TRACE play=  2s hotOut=363.160 K transit=0.000 J hot=[FULL] cold=[READY]
+TRACE play=  4s hotOut=363.160 K transit=0.000 J hot=[FULL] cold=[READY]
+TRACE play=  6s hotOut=363.160 K transit=0.000 J hot=[FULL] cold=[READY]
+TRACE play=  8s hotOut=363.160 K transit=0.000 J hot=[FULL] cold=[READY]
+TRACE play= 10s hotOut=363.160 K transit=0.000 J hot=[FULL] cold=[READY]
+TRACE play= 12s hotOut=363.160 K transit=0.000 J hot=[FULL] cold=[READY]
+TRACE play= 14s hotOut=363.160 K transit=0.000 J hot=[FULL] cold=[READY]
+TRACE play= 16s hotOut=363.160 K transit=0.000 J hot=[FULL] cold=[READY]
+TRACE play= 18s hotOut=363.160 K transit=0.000 J hot=[FULL] cold=[READY]
+TRACE play= 20s hotOut=363.160 K transit=0.000 J hot=[STEADY: replaying 24.23 kg/s since 3.0 s of play, next check] cold=[FULL]
+TRACE play= 22s hotOut=363.160 K transit=0.000 J hot=[STEADY: replaying 24.23 kg/s since 3.0 s of play, next check] cold=[FULL]
+TRACE play= 24s hotOut=363.160 K transit=0.000 J hot=[STEADY: replaying 24.23 kg/s since 3.0 s of play, next check] cold=[FULL]
+TRACE play= 26s hotOut=363.160 K transit=0.000 J hot=[STEADY: replaying 24.23 kg/s since 3.0 s of play, next check] cold=[FULL]
+TRACE play= 28s hotOut=363.160 K transit=0.000 J hot=[STEADY: replaying 24.23 kg/s since 3.0 s of play, next check] cold=[FULL]
+TRACE play= 30s hotOut=363.160 K transit=0.000 J hot=[STEADY: replaying 24.23 kg/s since 3.0 s of play, next check] cold=[FULL]
+TRACE play= 32s hotOut=363.160 K transit=0.000 J hot=[STEADY: replaying 24.23 kg/s since 3.0 s of play, next check] cold=[FULL]
+TRACE play= 34s hotOut=363.160 K transit=0.000 J hot=[STEADY: replaying 24.23 kg/s since 3.0 s of play, next check] cold=[FULL]
+TRACE play= 36s hotOut=363.160 K transit=0.000 J hot=[STEADY: replaying 24.23 kg/s since 3.0 s of play, next check] cold=[FULL]
+TRACE play= 38s hotOut=363.160 K transit=0.000 J hot=[STEADY: replaying 24.23 kg/s since 3.0 s of play, next check] cold=[FULL]
+TRACE play= 40s hotOut=363.160 K transit=-3.386e+09 J hot=[WAITING: an exchanger's other side changed] cold=[FULL]
+TRACE play= 42s hotOut=324.486 K transit=-3.386e+09 J hot=[FULL] cold=[FULL]
+TRACE play= 44s hotOut=324.486 K transit=-3.386e+09 J hot=[FULL] cold=[FULL]
+TRACE play= 46s hotOut=324.486 K transit=-3.386e+09 J hot=[FULL] cold=[FULL]
+TRACE play= 48s hotOut=324.486 K transit=-3.386e+09 J hot=[FULL] cold=[FULL]
+TRACE play= 50s hotOut=324.486 K transit=-3.386e+09 J hot=[FULL] cold=[FULL]
+TRACE play= 52s hotOut=324.486 K transit=-3.386e+09 J hot=[FULL] cold=[FULL]
+TRACE play= 54s hotOut=324.486 K transit=-3.386e+09 J hot=[FULL] cold=[FULL]
+TRACE play= 56s hotOut=324.486 K transit=-3.386e+09 J hot=[FULL] cold=[FULL]
+TRACE play= 58s hotOut=324.486 K transit=-3.386e+09 J hot=[FULL] cold=[FULL]
+TRACE play= 60s hotOut=347.074 K transit=9.216e+08 J hot=[FULL] cold=[FULL]
+TRACE play= 62s hotOut=348.050 K transit=9.216e+08 J hot=[FULL] cold=[FULL]
+TRACE play= 64s hotOut=348.050 K transit=9.216e+08 J hot=[FULL] cold=[FULL]
+TRACE play= 66s hotOut=348.050 K transit=9.216e+08 J hot=[FULL] cold=[FULL]
+TRACE play= 68s hotOut=348.050 K transit=9.216e+08 J hot=[FULL] cold=[FULL]
+TRACE play= 70s hotOut=348.050 K transit=9.216e+08 J hot=[FULL] cold=[FULL]
+TRACE play= 72s hotOut=348.050 K transit=9.216e+08 J hot=[FULL] cold=[FULL]
+TRACE play= 74s hotOut=348.050 K transit=9.216e+08 J hot=[FULL] cold=[FULL]
+TRACE play= 76s hotOut=348.050 K transit=9.216e+08 J hot=[FULL] cold=[FULL]
+TRACE play= 78s hotOut=348.050 K transit=9.216e+08 J hot=[FULL] cold=[FULL]
+TRACE play= 80s hotOut=338.176 K transit=-2.518e+08 J hot=[FULL] cold=[FULL]
+TRACE play= 82s hotOut=337.915 K transit=-2.518e+08 J hot=[FULL] cold=[FULL]
+TRACE play= 84s hotOut=337.915 K transit=-2.518e+08 J hot=[FULL] cold=[FULL]
+TRACE play= 86s hotOut=337.915 K transit=-2.518e+08 J hot=[FULL] cold=[FULL]
+TRACE play= 88s hotOut=337.915 K transit=-2.518e+08 J hot=[FULL] cold=[FULL]
+TRACE play= 90s hotOut=337.915 K transit=-2.518e+08 J hot=[FULL] cold=[FULL]
+TRACE play= 92s hotOut=337.915 K transit=-2.518e+08 J hot=[FULL] cold=[FULL]
+TRACE play= 94s hotOut=337.915 K transit=-2.518e+08 J hot=[FULL] cold=[FULL]
+TRACE play= 96s hotOut=337.915 K transit=-2.518e+08 J hot=[FULL] cold=[FULL]
+TRACE play= 98s hotOut=337.915 K transit=-2.518e+08 J hot=[FULL] cold=[FULL]
+TRACE play=100s hotOut=340.604 K transit=6.769e+07 J hot=[FULL] cold=[FULL]
+TRACE play=102s hotOut=340.672 K transit=6.769e+07 J hot=[FULL] cold=[FULL]
+TRACE play=104s hotOut=340.672 K transit=6.769e+07 J hot=[FULL] cold=[FULL]
+TRACE play=106s hotOut=340.672 K transit=6.769e+07 J hot=[FULL] cold=[FULL]
+TRACE play=108s hotOut=340.672 K transit=6.769e+07 J hot=[FULL] cold=[FULL]
+TRACE play=110s hotOut=340.672 K transit=6.769e+07 J hot=[FULL] cold=[FULL]
+TRACE play=112s hotOut=340.672 K transit=6.769e+07 J hot=[FULL] cold=[FULL]
+TRACE play=114s hotOut=340.672 K transit=6.769e+07 J hot=[FULL] cold=[FULL]
+TRACE play=116s hotOut=340.672 K transit=6.769e+07 J hot=[FULL] cold=[FULL]
+TRACE play=118s hotOut=340.672 K transit=6.769e+07 J hot=[FULL] cold=[FULL]
+TRACE play=120s hotOut=339.947 K transit=-1.830e+07 J hot=[FULL] cold=[FULL]
+TRACE play=122s hotOut=339.928 K transit=-1.830e+07 J hot=[FULL] cold=[FULL]
+TRACE play=124s hotOut=339.928 K transit=-1.830e+07 J hot=[FULL] cold=[FULL]
+TRACE play=126s hotOut=339.928 K transit=-1.830e+07 J hot=[FULL] cold=[FULL]
+TRACE play=128s hotOut=339.928 K transit=-1.830e+07 J hot=[FULL] cold=[FULL]
+TRACE play=130s hotOut=339.928 K transit=-1.830e+07 J hot=[FULL] cold=[FULL]
+TRACE play=132s hotOut=339.928 K transit=-1.830e+07 J hot=[FULL] cold=[FULL]
+TRACE play=134s hotOut=339.928 K transit=-1.830e+07 J hot=[FULL] cold=[FULL]
+TRACE play=136s hotOut=339.928 K transit=-1.830e+07 J hot=[FULL] cold=[FULL]
+TRACE play=138s hotOut=339.928 K transit=-1.830e+07 J hot=[FULL] cold=[FULL]
+TRACE play=140s hotOut=340.125 K transit=5.071e+06 J hot=[FULL] cold=[FULL]
+TRACE play=142s hotOut=340.130 K transit=5.071e+06 J hot=[FULL] cold=[FULL]
+TRACE play=144s hotOut=340.130 K transit=5.071e+06 J hot=[FULL] cold=[FULL]
+TRACE play=146s hotOut=340.130 K transit=5.071e+06 J hot=[FULL] cold=[FULL]
+TRACE play=148s hotOut=340.130 K transit=5.071e+06 J hot=[FULL] cold=[FULL]
+TRACE play=150s hotOut=340.130 K transit=5.071e+06 J hot=[FULL] cold=[FULL]

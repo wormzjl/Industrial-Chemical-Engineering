@@ -1,10 +1,10 @@
 # minecraft-time-delta
 
-Purpose: the measurements behind `documentation/2026-11-11-minecraft-time-delta/` (`TIME_SCALE_REVIEW.md`, `HOLD_STUDY_REVIEW.md`, `OPTION_A_REVIEW.md`):
+Purpose: the measurements behind `documentation/2026-11-11-minecraft-time-delta/` (`TIME_SCALE_REVIEW.md`, `HOLD_STUDY_REVIEW.md`, `OPTION_A_REVIEW.md`, `TIME_SCALE_BUILD_REVIEW.md`):
 the hold-fuzz quick check with simulated time running 72 times faster than online time (one Minecraft day = 24 h of
 process time), and the study of every seed it held.
 
-Batch: `2026-11-11-minecraft-time-delta`. Status: Concluded 2026-11-11 (evaluation only; nothing in `src/main` changed).
+Batch: `2026-11-11-minecraft-time-delta`. Status: In progress since 2026-11-11. The probe patch and `run.sh` measured the evaluation on `ff6f6892f`; `factor.sh` and `worlds/` measure the built time factor (W1-W6) and need no patch.
 
 ## Contents
 
@@ -14,6 +14,8 @@ Batch: `2026-11-11-minecraft-time-delta`. Status: Concluded 2026-11-11 (evaluati
 | `probe.init.gradle` | Forwards the `-Pprobe...` and `-Pstudy...` switches to the test JVMs and attaches `probe/src`. |
 | `run.sh` | `bash tools/minecraft-time-delta/run.sh <label> <seeds> "<dists>" [-P...]`: one Gradle run per distribution (`cold`, `bundled`, `defaults`) with the harnesses of `tools/unified-thermo-port-forms/`, reports in `tmp/time-scale/`. `THREADS=1` replays seeds alone. |
 | `probe/src/TimeScaleStudyTest.java`, `study.sh` | `bash tools/minecraft-time-delta/study.sh <label> <bundled|cold> <seeds> [-P...]`: each seed alone after one warm-up seed, with the step-attempt trace, the stalls and a 50 ms stack sampler (leaf and inclusive frames); output `tmp/time-scale/study-<label>.txt`, probe lines in its `.gradle.txt`. |
+| `factor.sh` | `bash tools/minecraft-time-delta/factor.sh <label> <seeds> "<dists>" <factor> [-P...]`: the hold-fuzz run on the built factor (`-PholdFuzzTimeScale`), classified; reports `tmp/time-scale/<label>-<dist>-report.txt`; a label starting `campaign` also copies them under the merge lane's names to `tmp/time-scale/<label>/` for `tools/merge-lane/compare.mjs`. `THREADS=1` replays seeds alone. |
+| `worlds/worlds.init.gradle`, `worlds/src/.../TimeScaleWorldsTest.java` | W6's headless worlds: `ColumnRunTest`'s running column and `ExchangerCouplingTest`'s water pair for 1 h of process time at 4 and 72 (the pair also at 1), through `EventPathWorld.time`; prints `COLUMN`, `HEAT` and the `TRACE` of the unequal-cadence pair at 72. |
 | `results/summary.txt` | The `SUMMARY`, `COUNTERS` and `CLASS` lines and the held seeds of every run, then the study runs. |
 | `results/study/` | Study outputs of the 5 s budget run, seed 47 and seed 164 (attempt lists cut to 60 lines), and the `PROBE_FAILURE` / `PROBE_NONFINITE` lines of the probe runs. |
 
@@ -31,6 +33,16 @@ bash tools/minecraft-time-delta/run.sh h72  1-200 "bundled cold defaults" $C -Pp
 bash tools/minecraft-time-delta/study.sh c72-5s bundled 15,47,77,123 $C -PprobeWallNanos=5000000000 -PprobeSoftNanos=3750000000
 bash tools/minecraft-time-delta/study.sh f-bundled bundled 15,164,123 $C -PprobeFailures=true
 git apply -R tools/minecraft-time-delta/patches/probe-time-scale.patch
+```
+
+On the built factor (no patch):
+
+```bash
+bash tools/minecraft-time-delta/factor.sh q4 1-200 "bundled cold defaults" 4
+bash tools/minecraft-time-delta/factor.sh campaign4 1-1000 "cold bundled defaults" 4
+node tools/merge-lane/compare.mjs tmp/merge-lane/head tmp/time-scale/campaign4
+THREADS=1 bash tools/minecraft-time-delta/factor.sh replay4 47,118,678 bundled 4
+./gradlew --offline --no-configuration-cache --init-script tools/minecraft-time-delta/worlds/worlds.init.gradle test --tests '*TimeScaleWorldsTest'
 ```
 
 Forms A and B of the review are `-PprobeTimeScale=72` alone and with `-PprobeMaximumStep=1440`. Run alone on the machine

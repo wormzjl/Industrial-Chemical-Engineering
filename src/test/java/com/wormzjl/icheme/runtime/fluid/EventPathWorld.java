@@ -41,6 +41,10 @@ class EventPathWorld {
     int lag;
     private final Map<Long,Long> submitted=new HashMap<>();
 
+    /** The time factor of a world built with no model: factor 1, which a tool's factor sweep sets (tools/minecraft-time-delta/worlds/). */
+    static com.wormzjl.icheme.science.fluid.SimulationTime time=com.wormzjl.icheme.science.fluid.SimulationTime.ONLINE;
+    /** {@code model} at that factor: itself at factor 1. */
+    static FluidThermodynamics timed(FluidThermodynamics model){return time==com.wormzjl.icheme.science.fluid.SimulationTime.ONLINE?model:model.withTime(time);}
     /** A world with one synchronous worker. */
     EventPathWorld(){this(1);}
     /** A world whose worker pool has {@code workers} slots: 0 (no solve) or 1 (a synchronous worker). */
@@ -60,7 +64,7 @@ class EventPathWorld {
     }
     /** That reload with the flowmeters the accessory store holds on {@code flowmeters}, given to the registry before it loads. */
     EventPathWorld(int workers,WorldTopologyLedger.Snapshot saved,List<FluidCheckpointCodec.IslandEntry> islands,Collection<Long> flowmeters) {
-        this(workers,saved,islands,CATALOG,FluidTestSupport.networkModel(),flowmeters);
+        this(workers,saved,islands,CATALOG,timed(FluidTestSupport.networkModel()),flowmeters);
     }
     /** A world with one synchronous worker on {@code catalog}, whose network model is {@code model}
      * ({@code FluidThermodynamics.forNetwork} of its network package): built and run inside that catalog's

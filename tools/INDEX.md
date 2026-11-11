@@ -8,7 +8,7 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 
 | Folder | Purpose | Batch | Status |
 |---|---|---|---|
-| [minecraft-time-delta/](minecraft-time-delta/README.md) | Time-scale probe patch, hold-fuzz quick-check runner at 72x simulated time, single-seed hold study probe, run summaries | `2026-11-11-minecraft-time-delta` | Concluded 2026-11-11 |
+| [minecraft-time-delta/](minecraft-time-delta/README.md) | Time-scale probe patch, hold-fuzz runner on the built time factor (`factor.sh`), headless 1 h worlds at 4 and 72, single-seed hold study probe, run summaries | `2026-11-11-minecraft-time-delta` | In progress since 2026-11-11 |
 | [column-failure-modes/](column-failure-modes/README.md) | Failure-mode test world run and case lines, dropped downcomer-backup draft, merge-prep scripts | `2026-11-10-column-failure-modes` | In use since 2026-11-10 |
 | [agent-guard/](agent-guard/README.md) | PreToolUse hook for Claude Code and Codex: blocks the git and Gradle commands AGENTS.md forbids | `2026-11-10-agent-instructions-review` | In use since 2026-11-10 |
 | [heating-values/](heating-values/README.md) | Prebuilt lower heating values (Hess's law) into the material records' combustion sub-record | `2026-11-09-furnace-fuel-power` | In use since 2026-11-09 |

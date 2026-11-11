@@ -428,3 +428,76 @@ COUNTERS implicitSolves=257 activeSetPasses=257 newtonSolves=323 newtonIteration
 ==== STUDY seed=123 ms=4055 end=2874 holds=1 exceptions=0 islands=42:STEADY: no flow since 114.2 s;43:STEADY: no flow since 114.2 s;60:HELD: wall deadline;61:SOLVING;
 HELD tick=2874 island=60 committed=2870 status=HELD: wall deadline
 COUNTERS implicitSolves=3363 activeSetPasses=6100 newtonSolves=6292 newtonIterations=52667 jacobianBuilds=15757 residualEvaluations=153609 stepAttempts=3358 stepAttemptsAccepted=1690 equationGateRejections=53 restIntervals=173 phaseSeeds=2 phaseRefusals=1 newtonBacktracks=94167
+## q1 bundled
+SUMMARY seeds=200 clean=199 threads=8 slices=120 wallMs=20785 seedMsSum=96234
+COUNTERS implicitSolves=22768 activeSetPasses=26524 newtonSolves=33025 newtonIterations=135837 jacobianBuilds=41238 residualEvaluations=322657 stepAttempts=21671 stepAttemptsAccepted=20909 equationGateRejections=11 reconstructCalls=24335 restIntervals=11517 restStops=18 phaseSeeds=85 phaseRefusals=1 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=15094 newtonIterationsPreconditioned=62631 newtonIterationsFresh=41238 newtonIterationsStale=94599 newtonStepEvaluationsFresh=85519 newtonStepEvaluationsStale=101136 newtonRefreshesStalled=10406 newtonRefreshesAged=5605 newtonRefreshesFailed=85 newtonBacktracks=50836
+CLASS e:new seeds=1 smallest=200 list=[200]
+E5 step line search stalls                                   seeds=   1 smallest=  200 list= 200
+## q1 cold
+SUMMARY seeds=200 clean=197 threads=8 slices=120 wallMs=57646 seedMsSum=189207 cold=icheme:pilot_cryogenic
+COUNTERS implicitSolves=31963 activeSetPasses=35449 newtonSolves=51227 newtonIterations=273725 jacobianBuilds=87015 residualEvaluations=658906 stepAttempts=25900 stepAttemptsAccepted=21920 equationGateRejections=315 reconstructCalls=32420 restIntervals=11852 restStops=59 phaseSeeds=493 phaseRefusals=22 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=18275 newtonIterationsPreconditioned=117792 newtonIterationsFresh=87015 newtonIterationsStale=186710 newtonStepEvaluationsFresh=245170 newtonStepEvaluationsStale=200645 newtonRefreshesStalled=23486 newtonRefreshesAged=12285 newtonRefreshesFailed=153 newtonBacktracks=172414
+CLASS e:new seeds=3 smallest=85 list=[85, 101, 118]
+E1 interval-start rate pass does not converge                seeds=   1 smallest=   85 list= 85
+E6 step Newton iteration limit                               seeds=   1 smallest=  101 list= 101
+F  budget (wall deadline / soft budget)                      seeds=   1 smallest=  118 list= 118
+## q1 defaults
+SUMMARY seeds=200 clean=200 threads=8 slices=120 wallMs=2258 seedMsSum=17101
+COUNTERS implicitSolves=5251 activeSetPasses=5406 newtonSolves=6139 newtonIterations=10902 jacobianBuilds=4280 residualEvaluations=20918 stepAttempts=4808 stepAttemptsAccepted=4678 equationGateRejections=0 reconstructCalls=5251 restIntervals=12861 restStops=18 phaseSeeds=0 phaseRefusals=0 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=2423 newtonIterationsPreconditioned=5856 newtonIterationsFresh=4280 newtonIterationsStale=6622 newtonStepEvaluationsFresh=5648 newtonStepEvaluationsStale=6932 newtonRefreshesStalled=385 newtonRefreshesAged=265 newtonRefreshesFailed=4 newtonBacktracks=1678
+## q4 bundled
+SUMMARY seeds=200 clean=197 threads=8 slices=120 wallMs=17356 seedMsSum=79902
+COUNTERS implicitSolves=19755 activeSetPasses=23613 newtonSolves=28921 newtonIterations=133067 jacobianBuilds=41804 residualEvaluations=301329 stepAttempts=18690 stepAttemptsAccepted=17444 equationGateRejections=4 reconstructCalls=21162 restIntervals=11581 restStops=20 phaseSeeds=135 phaseRefusals=93 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=12666 newtonIterationsPreconditioned=58859 newtonIterationsFresh=41804 newtonIterationsStale=91263 newtonStepEvaluationsFresh=94944 newtonStepEvaluationsStale=100987 newtonRefreshesStalled=13565 newtonRefreshesAged=6039 newtonRefreshesFailed=127 newtonBacktracks=62869
+CLASS e:new seeds=3 smallest=47 list=[47, 118, 145]
+E9 other                                                     seeds=   1 smallest=  145 list= 145
+F  budget (wall deadline / soft budget)                      seeds=   2 smallest=   47 list= 47 118
+## q4 cold
+SUMMARY seeds=200 clean=196 threads=8 slices=120 wallMs=69155 seedMsSum=217860 cold=icheme:pilot_cryogenic
+COUNTERS implicitSolves=35974 activeSetPasses=43738 newtonSolves=65187 newtonIterations=378413 jacobianBuilds=121215 residualEvaluations=944381 stepAttempts=30160 stepAttemptsAccepted=24193 equationGateRejections=243 reconstructCalls=37174 restIntervals=11911 restStops=50 phaseSeeds=3926 phaseRefusals=93 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=22593 newtonIterationsPreconditioned=158756 newtonIterationsFresh=121215 newtonIterationsStale=257198 newtonStepEvaluationsFresh=365882 newtonStepEvaluationsStale=315836 newtonRefreshesStalled=37416 newtonRefreshesAged=18263 newtonRefreshesFailed=364 newtonBacktracks=303800
+CLASS e:new seeds=4 smallest=85 list=[85, 101, 118, 181]
+E1 interval-start rate pass does not converge                seeds=   1 smallest=   85 list= 85
+E2 step solve singular at every step size                    seeds=   1 smallest=  181 list= 181
+E5 step line search stalls                                   seeds=   1 smallest=  101 list= 101
+F  budget (wall deadline / soft budget)                      seeds=   1 smallest=  118 list= 118
+## q4 defaults
+SUMMARY seeds=200 clean=200 threads=8 slices=120 wallMs=1951 seedMsSum=14918
+COUNTERS implicitSolves=4304 activeSetPasses=4380 newtonSolves=4989 newtonIterations=8919 jacobianBuilds=3114 residualEvaluations=17069 stepAttempts=3915 stepAttemptsAccepted=3703 equationGateRejections=0 reconstructCalls=4305 restIntervals=12961 restStops=22 phaseSeeds=0 phaseRefusals=0 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=2032 newtonIterationsPreconditioned=5187 newtonIterationsFresh=3114 newtonIterationsStale=5805 newtonStepEvaluationsFresh=4236 newtonStepEvaluationsStale=6020 newtonRefreshesStalled=338 newtonRefreshesAged=202 newtonRefreshesFailed=1 newtonBacktracks=1337
+## q72 bundled
+SUMMARY seeds=200 clean=197 threads=8 slices=120 wallMs=16248 seedMsSum=78264
+COUNTERS implicitSolves=15772 activeSetPasses=18968 newtonSolves=23980 newtonIterations=109399 jacobianBuilds=38544 residualEvaluations=273864 stepAttempts=14833 stepAttemptsAccepted=13354 equationGateRejections=11 reconstructCalls=16590 restIntervals=11733 restStops=34 phaseSeeds=109 phaseRefusals=23 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=10094 newtonIterationsPreconditioned=48318 newtonIterationsFresh=38544 newtonIterationsStale=70855 newtonStepEvaluationsFresh=91988 newtonStepEvaluationsStale=81932 newtonRefreshesStalled=14028 newtonRefreshesAged=4255 newtonRefreshesFailed=142 newtonBacktracks=64526
+CLASS e:new seeds=3 smallest=15 list=[15, 47, 118]
+F  budget (wall deadline / soft budget)                      seeds=   3 smallest=   15 list= 15 47 118
+## q72 cold
+SUMMARY seeds=200 clean=197 threads=8 slices=120 wallMs=25160 seedMsSum=160142 cold=icheme:pilot_cryogenic
+COUNTERS implicitSolves=28787 activeSetPasses=33836 newtonSolves=47183 newtonIterations=265469 jacobianBuilds=86844 residualEvaluations=708691 stepAttempts=24683 stepAttemptsAccepted=18474 equationGateRejections=436 reconstructCalls=29496 restIntervals=12008 restStops=71 phaseSeeds=968 phaseRefusals=283 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=19814 newtonIterationsPreconditioned=129834 newtonIterationsFresh=86844 newtonIterationsStale=178625 newtonStepEvaluationsFresh=345980 newtonStepEvaluationsStale=189455 newtonRefreshesStalled=28517 newtonRefreshesAged=12451 newtonRefreshesFailed=145 newtonBacktracks=270303
+CLASS b:trace-underflow seeds=1 smallest=72 list=[72]
+CLASS e:new seeds=2 smallest=6 list=[6, 118]
+B  trace underflow (T1)                                      seeds=   1 smallest=   72 list= 72
+F  budget (wall deadline / soft budget)                      seeds=   2 smallest=    6 list= 6 118
+## q72 defaults
+SUMMARY seeds=200 clean=200 threads=8 slices=120 wallMs=2286 seedMsSum=17642
+COUNTERS implicitSolves=4260 activeSetPasses=4343 newtonSolves=5199 newtonIterations=10204 jacobianBuilds=3201 residualEvaluations=19172 stepAttempts=3905 stepAttemptsAccepted=3419 equationGateRejections=0 reconstructCalls=4260 restIntervals=13159 restStops=24 phaseSeeds=0 phaseRefusals=0 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=2215 newtonIterationsPreconditioned=6619 newtonIterationsFresh=3201 newtonIterationsStale=7003 newtonStepEvaluationsFresh=3966 newtonStepEvaluationsStale=7439 newtonRefreshesStalled=319 newtonRefreshesAged=264 newtonRefreshesFailed=9 newtonBacktracks=1201
+## campaign4 bundled
+SUMMARY seeds=1000 clean=990 threads=8 slices=120 wallMs=37019 seedMsSum=237270
+COUNTERS implicitSolves=99454 activeSetPasses=125593 newtonSolves=154140 newtonIterations=860192 jacobianBuilds=298878 residualEvaluations=2650146 stepAttempts=94784 stepAttemptsAccepted=79586 equationGateRejections=311 reconstructCalls=100784 restIntervals=58832 restStops=106 phaseSeeds=2417 phaseRefusals=1475 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=67254 newtonIterationsPreconditioned=322459 newtonIterationsFresh=298878 newtonIterationsStale=561314 newtonStepEvaluationsFresh=1229352 newtonStepEvaluationsStale=863937 newtonRefreshesStalled=145448 newtonRefreshesAged=28381 newtonRefreshesFailed=5364 newtonBacktracks=1233490
+CLASS b:trace-underflow seeds=1 smallest=301 list=[301]
+CLASS e:new seeds=9 smallest=47 list=[47, 118, 145, 241, 431, 579, 678, 896, 941]
+B  trace underflow (T1)                                      seeds=   1 smallest=  301 list= 301
+E5 step line search stalls                                   seeds=   1 smallest=  896 list= 896
+E6 step Newton iteration limit                               seeds=   2 smallest=  241 list= 241 431
+E9 other                                                     seeds=   1 smallest=  145 list= 145
+F  budget (wall deadline / soft budget)                      seeds=   5 smallest=   47 list= 47 118 579 678 941
+## campaign4 cold
+SUMMARY seeds=1000 clean=991 threads=8 slices=120 wallMs=224997 seedMsSum=1450539 cold=icheme:pilot_cryogenic
+COUNTERS implicitSolves=192869 activeSetPasses=226287 newtonSolves=325049 newtonIterations=2002081 jacobianBuilds=634197 residualEvaluations=4964856 stepAttempts=156597 stepAttemptsAccepted=123022 equationGateRejections=296 reconstructCalls=198655 restIntervals=57872 restStops=847 phaseSeeds=14730 phaseRefusals=747 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=122452 newtonIterationsPreconditioned=869159 newtonIterationsFresh=634197 newtonIterationsStale=1367880 newtonStepEvaluationsFresh=2100643 newtonStepEvaluationsStale=1524610 newtonRefreshesStalled=204179 newtonRefreshesAged=103583 newtonRefreshesFailed=2260 newtonBacktracks=1624636
+CLASS b:trace-underflow seeds=3 smallest=431 list=[431, 589, 629]
+CLASS e:new seeds=6 smallest=85 list=[85, 101, 118, 181, 752, 803]
+B  trace underflow (T1)                                      seeds=   3 smallest=  431 list= 431 589 629
+E1 interval-start rate pass does not converge                seeds=   1 smallest=   85 list= 85
+E2 step solve singular at every step size                    seeds=   1 smallest=  181 list= 181
+E5 step line search stalls                                   seeds=   3 smallest=  101 list= 101 752 803
+F  budget (wall deadline / soft budget)                      seeds=   1 smallest=  118 list= 118
+## campaign4 defaults
+SUMMARY seeds=1000 clean=1000 threads=8 slices=120 wallMs=5384 seedMsSum=42157
+COUNTERS implicitSolves=22246 activeSetPasses=23937 newtonSolves=26542 newtonIterations=62242 jacobianBuilds=21449 residualEvaluations=126002 stepAttempts=19839 stepAttemptsAccepted=18629 equationGateRejections=0 reconstructCalls=22318 restIntervals=64734 restStops=91 phaseSeeds=1 phaseRefusals=0 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=9623 newtonIterationsPreconditioned=31515 newtonIterationsFresh=21449 newtonIterationsStale=40793 newtonStepEvaluationsFresh=48143 newtonStepEvaluationsStale=43682 newtonRefreshesStalled=4100 newtonRefreshesAged=1846 newtonRefreshesFailed=20 newtonBacktracks=29583
+## replay4 bundled
+SUMMARY seeds=3 clean=3 threads=1 slices=120 wallMs=45984 seedMsSum=45975
+COUNTERS implicitSolves=2777 activeSetPasses=4478 newtonSolves=5565 newtonIterations=57173 jacobianBuilds=35617 residualEvaluations=279865 stepAttempts=2760 stepAttemptsAccepted=1947 equationGateRejections=3 reconstructCalls=2255 restIntervals=295 restStops=2 phaseSeeds=149 phaseRefusals=11 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=1581 newtonIterationsPreconditioned=15384 newtonIterationsFresh=35617 newtonIterationsStale=21556 newtonStepEvaluationsFresh=185395 newtonStepEvaluationsStale=49403 newtonRefreshesStalled=25737 newtonRefreshesAged=1116 newtonRefreshesFailed=697 newtonBacktracks=177657
