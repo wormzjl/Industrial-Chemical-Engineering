@@ -114,7 +114,8 @@ public record PhaseContract(String packageId, ThermoIdentity identity, List<Stri
      * The contract of a package with derived pairs (batch 2026-11-11-aqueous-solvents, W3a decisions D1, D6), the pilot's
      * kind: the package's compounds other than {@value CubicPhaseEvaluator#WATER} in package order, then water, as
      * {@link WaterParticipation#IN_EQUATION_OF_STATE} (without water in the package {@link WaterParticipation#NONE});
-     * qualified for fluid-only competition; the package envelope; graded estimated-with-declared-error. The identity:
+     * qualified for fluid-only competition and, when the package admits crystals ({@link #admittedCrystals}), for their
+     * competition as one set (D5); the package envelope; graded estimated-with-declared-error. The identity:
      * the package revision is {@link MaterialCatalog#fluidRevision} with the derivation's identity
      * ({@code DerivedPairs.Result.identity}), the family {@link CubicPhaseEvaluator#DERIVED_FAMILY}, the spine revision,
      * and the water part {@code water-in-eos-v1:<water dataset revision>:<share revision>}.
@@ -152,8 +153,13 @@ public record PhaseContract(String packageId, ThermoIdentity identity, List<Stri
                 "PR78 with the Huron-Vidal rule of pairs derived from group counts and Henry constants, water a component of the "
                         + "cubic with its IF97 share of enthalpy, entropy and volume (batch 2026-11-11-aqueous-solvents); "
                         + "the declared critical band is graded research-only by the engine; the package's advisory evidence applies");
+        // W3a D5: the package's admitted crystals (ice among them) compete as one whole set, as on a network package.
+        var competitions = new HashSet<PhaseCompetition>();
+        competitions.add(PhaseCompetition.FLUID_ONLY);
+        List<String> crystals = admittedCrystals(catalog, packageId);
+        if (!crystals.isEmpty()) competitions.add(PhaseCompetition.withCrystals(crystals.toArray(String[]::new)));
         return new PhaseContract(packageId, identity, basis, water ? WaterParticipation.IN_EQUATION_OF_STATE : WaterParticipation.NONE,
-                water ? CubicPhaseEvaluator.WATER : null, Set.of(PhaseCompetition.FLUID_ONLY), Set.of(), domain, coverage);
+                water ? CubicPhaseEvaluator.WATER : null, competitions, Set.of(), domain, coverage);
     }
 
     /**

@@ -237,6 +237,9 @@ public final class FluidTpEquilibrium {
      * the gas-solid solve converges when {@code |mu_i - mu_s|/(R T)} is below it.
      */
     public static final double DEPOSITION_TOLERANCE = 1.0e-9;
+    /** Two crystals at once (W3a D5): the sweeps of their single solves, and the move of a solid that ends them. */
+    private static final int TWO_CRYSTAL_SWEEPS = 60;
+    private static final double TWO_CRYSTAL_CHANGE = 1.0e-12;
     /**
      * P4 stage 2a: the vapour mole fraction of a crystal's species below which its deposition counts as complete (the
      * solid takes the whole species, the vapour none).
@@ -434,11 +437,17 @@ public final class FluidTpEquilibrium {
     /**
      * The service of a package with derived pairs (batch 2026-11-11-aqueous-solvents, W3a): {@link PhaseContract#forDerived}
      * on {@link CubicPhaseEvaluator#derived} over {@link PhaseContract#derivedBasis}, the default settings, no free-water
-     * model (water is a component of the cubic).
+     * model (water is a component of the cubic), an evaluator of every crystal the contract admits (ice is water's, D5).
      */
     public static FluidTpEquilibrium forDerivedPackage(MaterialCatalog catalog, String packageId) {
         CubicPhaseEvaluator evaluator = CubicPhaseEvaluator.derived(catalog, packageId, PhaseContract.derivedBasis(catalog, packageId));
-        return new FluidTpEquilibrium(PhaseContract.forDerived(catalog, packageId, evaluator), evaluator, Settings.DEFAULT, null, List.of());
+        PhaseContract contract = PhaseContract.forDerived(catalog, packageId, evaluator);
+        List<CrystalPhaseEvaluator> solids = new ArrayList<>();
+        PhaseCompetition competition = contract.crystalCompetition();
+        if (competition != null) {
+            for (String crystal : competition.crystals()) solids.add(CrystalPhaseEvaluator.forPackage(catalog, packageId, crystal));
+        }
+        return new FluidTpEquilibrium(contract, evaluator, Settings.DEFAULT, null, solids);
     }
 
     /**
@@ -543,13 +552,27 @@ public final class FluidTpEquilibrium {
             throw new IllegalArgumentException("Crystal " + solid.crystal() + " is split against another ideal gas than the evaluator's "
                     + solid.component() + ": the chemical potentials would not compare");
         }
-        var anchored = solid.anchored(solid.anchor(evaluator));
+        var anchor = solid.anchor(evaluator);
+        double[] share = component == cubicWater ? liquidShare(component, anchor) : null;
+        var anchored = share != null ? solid.anchored(anchor, share[0], share[1], share[2]) : solid.anchored(anchor);
         var coverage = solid.record().coverage();
         int slot = contract.index(solid.component());
         String evidence = solid.crystal() + " (" + solid.record().revision() + ", " + coverage.grade().key() + ": " + coverage.evidence() + ")";
         double[] triple = familyTriplePoint(anchored, component);
         return new Crystal(anchored, solid.crystal(), component, slot, gradeOf(coverage.grade()), evidence,
                 triple[0], triple[1], tripleTriangle(anchored, component, triple[0], triple[1]));
+    }
+
+    /**
+     * The water share {@code (h, s, v)} of the pure liquid of {@code component} at {@code anchor} (W3a D5): the constant
+     * share ice carries on the balance book.
+     */
+    private double[] liquidShare(int component, SolidPhaseEvaluator.TriplePointAnchor anchor) {
+        double[] pure = new double[count];
+        pure[component] = 1.0;
+        PhaseState liquid = evaluator.evaluate(anchor.temperature(), anchor.pressure(), pure, Root.LIQUID, evaluator.newWorkspace(),
+                evaluator.newState());
+        return new double[] {liquid.shareEnthalpy(), liquid.shareEntropy(), liquid.shareVolume()};
     }
 
     /**
@@ -565,8 +588,8 @@ public final class FluidTpEquilibrium {
             PhaseState vapour = evaluator.evaluate(t, p, pure, Root.VAPOR, scratch, evaluator.newState());
             PhaseState liquid = evaluator.evaluate(t, p, pure, Root.LIQUID, scratch, evaluator.newState());
             PhaseState solid = crystal.evaluate(t, p, new PhaseState(1));
-            return new double[] {vapour.molarInternalEnergy(), vapour.molarVolume(), liquid.molarInternalEnergy(), liquid.molarVolume(),
-                    solid.molarInternalEnergy(), solid.molarVolume()};
+            return new double[] {vapour.balanceInternalEnergy(), vapour.balanceVolume(), liquid.balanceInternalEnergy(),
+                    liquid.balanceVolume(), solid.balanceInternalEnergy(), solid.balanceVolume()};
         } catch (IllegalArgumentException | IllegalStateException | ArithmeticException refused) {
             return null;
         }
@@ -792,6 +815,8 @@ public final class FluidTpEquilibrium {
         private final PhaseDerivatives reduced;
         private final PhaseDerivatives solidSlope = new PhaseDerivatives(1);
         private int fluidEquilibria;
+        /** Two crystals at once (W3a D5): the partner held at its solid amount, and a second crystal met by a single solve. */
+        private Crystal paired, secondForming;
         private double reducedSlope;
         // P5: the phases of a binary's three-phase point and of a pure species' triple point.
         private final PhaseState threeLiquid, threeVapour;
@@ -3013,17 +3038,36 @@ public final class FluidTpEquilibrium {
         if (!(drive > DEPOSITION_TOLERANCE)) {
             return threeFluid ? fluid : assessed(fluid, "solids assessed: no crystal forms (" + forces + ")", w);
         }
-        if (formingCount > 1) return crystalPhasesHold(fluid, "two crystals form (" + forces + ")", competition, w);
+        Crystal second = null;
+        if (formingCount > 1) {
+            if (formingCount > 2) return crystalPhasesHold(fluid, "three crystals form (" + forces + ")", competition, w);
+            for (int a = 0; a < w.activeCount; a++) {
+                Crystal c = w.active[a];
+                if (c != forming && w.feed[c.component()] > 0.0
+                        && (fluidMuOf(fluid, threeFluid, c.component(), w) - c.anchored().chemicalPotential(t, p)) / rt > DEPOSITION_TOLERANCE) {
+                    second = c;
+                }
+            }
+        }
         System.arraycopy(w.feed, 0, w.savedFeed, 0, count);
         System.arraycopy(w.basisAmounts, 0, w.savedBasis, 0, basis);
+        w.secondForming = null;
         try {
-            if (!threeFluid) {
-                EquilibriumResult answer = depositFromVapour(fluid, forming, drive, solidMu, forces, t, p, competition, w);
-                if (answer != null) return answer;
+            if (second == null) {
+                EquilibriumResult answer = null;
+                if (!threeFluid) {
+                    answer = depositFromVapour(fluid, forming, drive, solidMu, forces, t, p, competition, w);
+                    if (answer == null) restoreFeed(w);
+                }
+                if (answer == null) answer = depositFromFluid(fluid, threeFluid, forming, drive, solidMu, forces, t, p, competition, w);
+                if (w.secondForming == null) return answer;
+                second = w.secondForming;
                 restoreFeed(w);
             }
-            return depositFromFluid(fluid, threeFluid, forming, drive, solidMu, forces, t, p, competition, w);
+            return twoCrystals(forming, second, forces, t, p, competition, w);
         } finally {
+            w.secondForming = null;
+            w.paired = null;
             restoreFeed(w);
         }
     }
@@ -3456,6 +3500,9 @@ public final class FluidTpEquilibrium {
         if (reduced.classification() == Classification.LIQUID_LIQUID) {
             return crystalPhasesHold(reduced, "the fluid left by the crystal " + c.id() + " is two liquids (" + forces + ")", competition, w);
         }
+        if (reduced.classification() == Classification.VAPOR_LIQUID_LIQUID) {
+            return crystalPhasesHold(reduced, c.id() + " forms and the fluid it leaves has three fluid phases (" + forces + ")", competition, w);
+        }
         if (classification == null) {
             return EquilibriumResult.notConverged(Specification.TP, contract.identity(), competition, "the fluid left by the crystal "
                     + c.id() + " is " + reduced.classification() + ", which a crystal answer does not carry", diagnostics(w, w.feedResult,
@@ -3491,6 +3538,149 @@ public final class FluidTpEquilibrium {
         return solidAnswer(competition, classification, phases, reduced, deposition, note, w);
     }
 
+    /** {@code mu_i} of a fluid answer, or of the workspace's split when that answer had a product proved unstable. */
+    private static double fluidMuOf(EquilibriumResult fluid, boolean threeFluid, int component, Workspace w) {
+        return threeFluid ? w.liquidState.chemicalPotential(component) : fluidChemicalPotential(fluid, component);
+    }
+
+    /**
+     * Two crystals at once (W3a D5, owner decision 6 A: ice and another crystal coexist): each crystal's solid amount
+     * from its single solve ({@link #depositFromVapour}, then {@link #depositFromFluid}) on the feed less the other's
+     * solid, alternated until neither amount moves by more than {@link #TWO_CRYSTAL_CHANGE} of its species' feed (the
+     * coupling is the fluid's dilution only, so a sweep contracts by about the second species' share of the fluid), at
+     * most {@link #TWO_CRYSTAL_SWEEPS} sweeps. The answer: the last solve's fluid and crystal with the first crystal
+     * beside them, each crystal's species at its chemical potential within ten times {@link #DEPOSITION_TOLERANCE}; a
+     * fluid that both species leave entirely is the two crystals alone ({@link Classification#SOLID_PRESENT}). The saved
+     * feed is the caller's, restored by it.
+     */
+    private EquilibriumResult twoCrystals(Crystal first, Crystal second, CharSequence forces, double t, double p,
+                                          PhaseCompetition competition, Workspace w) {
+        Crystal[] pair = {first, second};
+        double[] solid = new double[2];
+        EquilibriumResult[] answers = new EquilibriumResult[2];
+        double rt = R * t;
+        int sweeps = 0;
+        boolean converged = false;
+        while (!converged && sweeps < TWO_CRYSTAL_SWEEPS) {
+            sweeps++;
+            double change = 0.0;
+            for (int a = 0; a < 2; a++) {
+                Crystal c = pair[a];
+                Crystal other = pair[1 - a];
+                reduceFeed(other, solid[1 - a], w);
+                double z = w.feed[c.component()];
+                double mu = c.anchored().chemicalPotential(t, p);
+                double amount;
+                if (w.presentCount == 1) {
+                    // The other species left entirely: this one alone, its crystal where the fluid is supersaturated.
+                    EquilibriumResult pure = solveDry(t, p, competition, w);
+                    w.fluidEquilibria++;
+                    if (!pure.converged()) return pure;
+                    amount = (fluidChemicalPotential(pure, c.component()) - mu) / rt > DEPOSITION_TOLERANCE ? z : 0.0;
+                    answers[a] = null;
+                } else {
+                    EquilibriumResult base = solveDry(t, p, competition, w);
+                    w.fluidEquilibria++;
+                    boolean threeFluid = !base.converged() && splitChemicalPotentialsUsable(base, w);
+                    if (!base.converged() && !threeFluid) return base;
+                    double d = (fluidMuOf(base, threeFluid, c.component(), w) - mu) / rt;
+                    if (!(d > DEPOSITION_TOLERANCE)) {
+                        amount = 0.0;
+                        answers[a] = base;
+                    } else {
+                        w.paired = other;
+                        EquilibriumResult r = null;
+                        if (!threeFluid) {
+                            r = depositFromVapour(base, c, d, mu, forces, t, p, competition, w);
+                            if (r == null) reduceFeed(other, solid[1 - a], w);
+                        }
+                        if (r == null) r = depositFromFluid(base, threeFluid, c, d, mu, forces, t, p, competition, w);
+                        w.paired = null;
+                        if (!r.converged()) return r;
+                        amount = r.deposition() == null ? 0.0 : r.deposition().solidAmount();
+                        answers[a] = r;
+                    }
+                }
+                change = Math.max(change, Math.abs(amount - solid[a]) / w.savedFeed[c.component()]);
+                solid[a] = amount;
+            }
+            converged = change <= TWO_CRYSTAL_CHANGE;
+        }
+        if (!converged) {
+            return EquilibriumResult.notConverged(Specification.TP, contract.identity(), competition, "the two crystals " + first.id()
+                    + " and " + second.id() + " did not converge in " + sweeps + " sweeps (solids " + solid[0] + " and " + solid[1] + " mol)",
+                    diagnostics(w, w.feedResult, false));
+        }
+        String note = "two crystals: " + first.id() + " " + solid[0] + " mol and " + second.id() + " " + solid[1] + " mol after " + sweeps
+                + " sweeps of their single solves";
+        int carried = 0;
+        for (int i = 0; i < count; i++) if (w.savedFeed[i] > 0.0) carried++;
+        // A feed of the two species alone: with both crystals forming no fluid keeps them at fixed T and P (the phase rule
+        // leaves a fluid beside two crystals of a binary one pressure per temperature), so both deposit entirely.
+        boolean alone = carried == 2 && solid[0] > 0.0 && solid[1] > 0.0;
+        if (alone) {
+            solid[0] = w.savedFeed[first.component()];
+            solid[1] = w.savedFeed[second.component()];
+        }
+        if (alone || answers[1] == null && solid[0] == w.savedFeed[first.component()] && solid[1] == w.savedFeed[second.component()]) {
+            List<PhaseAmounts> phases = new ArrayList<>(2);
+            for (int a = 0; a < 2; a++) {
+                Crystal c = pair[a];
+                phases.add(new PhaseAmounts(PhaseKind.SOLID, c.id(), t, p, single(c.slot(), solid[a]), c.anchored().evaluate(t, p, w.solidState).copy()));
+            }
+            var deposition = new EquilibriumResult.Deposition(second.id(), evaluator.components().get(second.component()), Double.NaN,
+                    Double.NaN, solid[1], true, sweeps, w.fluidEquilibria);
+            return new EquilibriumResult(Specification.TP, EquilibriumResult.Status.CONVERGED, null, CONVERGED + "; " + note
+                    + "; the fluid vanishes", contract.identity(), competition, Classification.SOLID_PRESENT, phases, List.of(),
+                    solidCoverage(convergedCoverage, w), diagnostics(w, w.feedResult, false), null, deposition);
+        }
+        EquilibriumResult last = answers[1];
+        if (last == null || !last.converged()) {
+            return crystalPhasesHold(answers[0] != null ? answers[0] : last != null ? last : EquilibriumResult.notConverged(Specification.TP,
+                    contract.identity(), competition, "two crystals", diagnostics(w, w.feedResult, false)),
+                    "two crystals form and the fluid they leave is not one the engine answers (" + forces + ")", competition, w);
+        }
+        if (solid[0] == 0.0 || solid[1] == 0.0) {
+            // One of the two does not form beside the other: the single answer that holds the one that does.
+            EquilibriumResult one = solid[1] > 0.0 || answers[0] == null ? last : answers[0];
+            return one;
+        }
+        // The first crystal's species on the last fluid: at its chemical potential within the tolerance.
+        double mu = first.anchored().chemicalPotential(t, p);
+        double worst = 0.0;
+        for (PhaseAmounts phase : last.phases()) {
+            if (phase.kind() == PhaseKind.SOLID) continue;
+            worst = Math.max(worst, Math.abs((phase.state().chemicalPotential(first.component()) - mu) / rt));
+        }
+        boolean firstGone = solid[0] == w.savedFeed[first.component()];
+        if (!firstGone && !(worst <= 10.0 * DEPOSITION_TOLERANCE)) {
+            return EquilibriumResult.notConverged(Specification.TP, contract.identity(), competition, "the two crystals " + first.id()
+                    + " and " + second.id() + " left the first off its chemical potential (|mu_i - mu_s|/RT = " + worst + ")",
+                    diagnostics(w, w.feedResult, false));
+        }
+        List<PhaseAmounts> phases = new ArrayList<>(last.phases());
+        phases.add(new PhaseAmounts(PhaseKind.SOLID, first.id(), t, p, single(first.slot(), solid[0]), first.anchored().evaluate(t, p, w.solidState).copy()));
+        return new EquilibriumResult(Specification.TP, EquilibriumResult.Status.CONVERGED, null, last.detail() + "; " + note,
+                contract.identity(), competition, last.classification(), phases, List.of(), last.coverage(), last.diagnostics(), null,
+                last.deposition());
+    }
+
+    /** The saved feed less {@code amount} of crystal {@code c}'s species, with its composition and present list. */
+    private void reduceFeed(Crystal c, double amount, Workspace w) {
+        restoreFeed(w);
+        if (!(amount > 0.0)) return;
+        double left = amount >= w.savedFeed[c.component()] ? 0.0 : w.savedFeed[c.component()] - amount;
+        w.feed[c.component()] = left;
+        w.basisAmounts[c.slot()] = left;
+        double total = 0.0;
+        for (int i = 0; i < count; i++) total += w.feed[i];
+        w.presentCount = 0;
+        for (int i = 0; i < count; i++) {
+            w.z[i] = w.feed[i] / total;
+            if (w.feed[i] > 0.0) w.present[w.presentCount++] = i;
+        }
+    }
+
     /** {@code df/ds} of the crystal solve on a one-phase fluid answer of the workspace's feed: {@code 1 - y_i + y_i Phi_ii}. */
     private double singlePhaseSlope(double t, double p, EquilibriumResult reduced, int i, Workspace w) {
         try {
@@ -3510,9 +3700,11 @@ public final class FluidTpEquilibrium {
         double rt = R * t;
         for (int a = 0; a < w.activeCount; a++) {
             Crystal other = w.active[a];
-            if (other == c || !(w.feed[other.component()] > 0.0)) continue;
+            if (other == c || other == w.paired || !(w.feed[other.component()] > 0.0)) continue;
             double d = (fluidChemicalPotential(reduced, other.component()) - other.anchored().chemicalPotential(t, p)) / rt;
             if (d > DEPOSITION_TOLERANCE) {
+                // Owner decision 6 A: ice and another crystal coexist; the caller solves the two at once.
+                w.secondForming = other;
                 return crystalPhasesHold(reduced, "a second crystal " + other.id() + " forms beside " + c.id(), competition, w);
             }
         }

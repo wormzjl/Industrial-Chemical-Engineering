@@ -114,7 +114,18 @@ public final class CrystalPhaseEvaluator implements SolidPhaseEvaluator {
      */
     public Anchored anchored(TriplePointAnchor anchor) {
         requireAnchor(anchor);
-        return new Anchored(anchor);
+        return new Anchored(anchor, 0.0, 0.0, 0.0);
+    }
+
+    /**
+     * {@link #anchored(TriplePointAnchor)} carrying a constant share on the balance book (batch 2026-11-11-aqueous-solvents,
+     * W3a D5): ice anchored on a cubic with water in it carries the liquid's water share at the anchor, J/mol, J/(mol K)
+     * and m3/mol, so its fusion on the balance book at the anchor is the record's. The chemical potential (the
+     * equilibrium book) does not move.
+     */
+    public Anchored anchored(TriplePointAnchor anchor, double shareEnthalpy, double shareEntropy, double shareVolume) {
+        requireAnchor(anchor);
+        return new Anchored(anchor, shareEnthalpy, shareEntropy, shareVolume);
     }
 
     private Anchored view(TriplePointAnchor anchor) {
@@ -136,9 +147,13 @@ public final class CrystalPhaseEvaluator implements SolidPhaseEvaluator {
         private final JaegerSpanGibbsFunction function;
         private final double g0;
         private final double g1;
+        private final double shareEnthalpy, shareEntropy, shareVolume;
 
-        private Anchored(TriplePointAnchor anchor) {
+        private Anchored(TriplePointAnchor anchor, double shareEnthalpy, double shareEntropy, double shareVolume) {
             this.anchor = anchor;
+            this.shareEnthalpy = shareEnthalpy;
+            this.shareEntropy = shareEntropy;
+            this.shareVolume = shareVolume;
             this.function = crystal.gibbsFunction();
             if (function != null) {
                 double[] constants = crystal.integrationConstants(anchor.chemicalPotential(), anchor.liquidEnthalpy());
@@ -211,6 +226,7 @@ public final class CrystalPhaseEvaluator implements SolidPhaseEvaluator {
             out.set(PhaseKind.SOLID, crystal.id(), null, 0, temperature, pressure, s.volume(), hIdeal, s.enthalpy() - hIdeal,
                     sIdeal, s.entropy() - sIdeal, s.gibbs(), ONE, new double[] {(s.gibbs() - gIdeal) / (R * temperature)},
                     new double[] {gIdeal});
+            if (shareEnthalpy != 0.0 || shareEntropy != 0.0 || shareVolume != 0.0) out.setShare(shareEnthalpy, shareEntropy, shareVolume);
             return out;
         }
     }
