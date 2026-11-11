@@ -186,6 +186,18 @@ public final class DeviceColumn {
     }
 
     /** What the player sets on the device: its set points, a mover's limit, a valve's target, a pipe's bore. */
+    /**
+     * A drum's gas blanketing valve's page (batch 2026-11-11-gas-blanketing, owner: "a dedicated accessory page so you can
+     * configure it"): its set pressure, an entry for an editor and a meter for a reader, then the drum's pressure.
+     */
+    public static List<Column.Row> blanketValve(boolean canEdit, String pressureUnit, String set, String pressure, HeatControlColumn.Texts t) {
+        var rows = new ArrayList<Column.Row>();
+        rows.add(group(t.get("heat_group.set_point"), canEdit ? field("blanket", t, "blanket", pressureUnit)
+                : new Column.Reading("meter:blanket_set", t.get("device_field.blanket"), set, pressureUnit, t.get("device_field.blanket.hint"))));
+        rows.add(group(t.get("device_group.readings"), new Column.Reading("meter:blanket_pressure", t.get("blanket_pressure"), pressure, pressureUnit, t.get("blanket_pressure.hint"))));
+        return rows;
+    }
+
     /** A fan tower's control: manual speed or a leaving-water target. A natural tower has none. */
     public static List<Column.Row> towerControl(boolean fans, boolean target, boolean canEdit, String temperatureUnit, HeatControlColumn.Texts t) {
         if (!fans) return List.of();

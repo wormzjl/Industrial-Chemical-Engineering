@@ -212,6 +212,14 @@ public final class EquipmentInstruments {
                 } else {
                     double length = shape.tangentLength();
                     boolean boot = shape.boot();
+                    // The two top flanges at the rear of the crown, beside each other as on a standing drum's roof (owner,
+                    // 2026-11-11: "these 2 should be placed on top of drums").
+                    for (int i = 0; i < 2; i++) {
+                        double pad = .16 * d, half = Math.min(.5, .175 * d), x = cx + (i == 0 ? -pad : pad);
+                        var tap = surface.ray(1, new double[] {x, 0, cz + .5 * length - half - .05}, 1, BODY);
+                        var lo = plus(tap, new double[] {-half, .08, -half});
+                        reserved.add(new Reservation(i == 0 ? "F1" : "F2", i == 0 ? "Gas blanketing valve" : "PSV", lo, plus(lo, new double[] {2 * half, 1.5, 2 * half})));
+                    }
                     double[] positions = {
                         cz + (boot ? .03 : -.2) * length,
                         cz + (boot ? .16 : 0) * length,

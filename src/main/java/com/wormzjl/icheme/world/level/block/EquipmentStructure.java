@@ -1468,8 +1468,12 @@ public final class EquipmentStructure {
         }
         var device = record.device();
         var spec = record.spec();
-        world.edit(device.id(), record.revision(), device.withPlacement(position(level, node), ports(level, vessel)),
-                vessel.shape().kind().mover() || vessel.shape().kind() == EquipmentShape.Kind.FLARE_STACK || vessel.shape().kind().chimney() ? spec : new FluidDeviceSpec(vessel.shape().volume(), spec.temperature(), spec.pressure(), spec.composition(), spec.solids(), vessel.shape().levelHeight(), open(vessel), vessel.shape().fluidGeometry(),spec.tower()));
+        var nozzles = ports(level, vessel);
+        // A fitted gas blanketing valve (batch 2026-11-11-gas-blanketing) keeps its set pressure, its inlet where the layout now puts it.
+        var valve = spec.blanket() > 0 ? com.wormzjl.icheme.runtime.instrument.InstrumentHosts.BlanketValve.of(level, vessel.origin(), vessel.shape()) : null;
+        if (valve != null) { nozzles = new ArrayList<>(nozzles); nozzles.add(valve.port()); }
+        world.edit(device.id(), record.revision(), device.withPlacement(position(level, node), nozzles),
+                vessel.shape().kind().mover() || vessel.shape().kind() == EquipmentShape.Kind.FLARE_STACK || vessel.shape().kind().chimney() ? spec : new FluidDeviceSpec(vessel.shape().volume(), spec.temperature(), spec.pressure(), spec.composition(), spec.solids(), vessel.shape().levelHeight(), open(vessel), vessel.shape().fluidGeometry(),spec.tower(), valve == null ? 0 : spec.blanket()));
         if (oldNode != null && !oldNode.equals(node) && level.getBlockEntity(oldNode) instanceof EquipmentShellBlockEntity old && old.fluidIdentity() == device.id()) old.releaseIdentity();
         if (level.getBlockEntity(node) instanceof EquipmentShellBlockEntity entity && entity.fluidIdentity() != device.id()) entity.bindIdentity(device.id());
         ShaftParts.structure(level, vessel.origin(), vessel.shape(), device.id());

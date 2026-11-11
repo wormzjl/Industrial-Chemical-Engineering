@@ -61,7 +61,7 @@ public final class InstrumentHosts {
             if(pos.getCenter().distanceToSqr(centre)>reach*reach||!level.hasChunkAt(pos))continue;
             var h=at(level,pos);if(h==null)continue;
             var mounts=new ArrayList<>(h.mounts());mounts.addAll(Sensor.mounts(h,Sensor.Kind.LEVEL));mounts.addAll(Sensor.mounts(h,Sensor.Kind.FLOW));mounts.addAll(Sensor.mounts(h,Sensor.Kind.SPEED));
-            var gauge=LevelGauge.of(h);
+            var gauge=vesselFitting(h);
             if(h.entity() instanceof EquipmentShellBlockEntity shell&&shell.cell().equals(ShapeRasterizer.fluidCell(shell.shape()))&&EquipmentInstruments.of(shell.shape()).probes().stream().anyMatch(p->{var q=p.centre();return centre.distanceToSqr(q[0]+shell.origin().getX(),q[1]+shell.origin().getY(),q[2]+shell.origin().getZ())<=radius*radius;})||mounts.stream().anyMatch(m->m.centre().distanceToSqr(centre)<=radius*radius)||gauge!=null&&gauge.bounds().distanceToSqr(centre)<=radius*radius)result.putIfAbsent(h.identity(),h);
         }
         return List.copyOf(result.values());
@@ -115,14 +115,34 @@ public final class InstrumentHosts {
     public static FittingSelection selectFitting(Collection<Host> hosts,Vec3 eye,Vec3 direction,double reach,boolean installedOnly){
         FittingSelection best=null;var end=eye.add(direction.scale(reach));
         for(var host:hosts){
-            Instrument.Selectable mount=host.pipe()?host.entity() instanceof FluidDeviceBlockEntity pipe?PipeAccessory.of(pipe):null:LevelGauge.of(host);
-            if(mount==null||installedOnly&&(host.pipe()?legacy(host.entity().getBlockState())==null:!host.metadata().levelGauge()))continue;
+            Instrument.Selectable mount=host.pipe()?host.entity() instanceof FluidDeviceBlockEntity pipe?PipeAccessory.of(pipe):null:vesselFitting(host);
+            if(mount==null||installedOnly&&(host.pipe()?legacy(host.entity().getBlockState())==null:host.metadata().fitting()==null))continue;
             // Installation only supports the reservoir gauge; pipe fittings keep their existing item path.
             if(!installedOnly&&host.pipe())continue;
             var hit=mount.bounds().clip(eye,end);if(hit.isEmpty())continue;double distance=hit.get().distanceTo(eye);
             if(best==null||distance<best.distance())best=new FittingSelection(host,mount,distance);
         }
         return best;
+    }
+    /** The place of {@code host}'s own fitting: a tank's level gauge, a drum's gas blanketing valve; null for every other host. */
+    public static Instrument.Selectable vesselFitting(Host host){var gauge=LevelGauge.of(host);return gauge!=null?gauge:BlanketValve.of(host);}
+    /** The type of the fitting {@link #vesselFitting} places, or null. */
+    public static Instrument.Type vesselType(Host host){return LevelGauge.of(host)!=null?Instrument.Type.LEVEL_GAUGE:BlanketValve.of(host)!=null?Instrument.Type.BLANKET_VALVE:null;}
+    /** A drum's gas blanketing valve (batch 2026-11-11-gas-blanketing): its bounds, and the port its gas inlet gives the drum. */
+    public record BlanketValve(AABB bounds,com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Port port) implements Instrument.Selectable {
+        @Override public String id(){return "blanket_valve";}
+        public static BlanketValve of(Host host){
+            if(!(host.entity() instanceof EquipmentShellBlockEntity shell)||shell.shape()==null||shell.getLevel()==null)return null;
+            return of(shell.getLevel(),shell.origin(),shell.shape());
+        }
+        public static BlanketValve of(Level level,BlockPos origin,EquipmentShape shape){
+            var place=com.wormzjl.icheme.science.equipment.BlanketValveGeometry.of(shape);if(place==null)return null;
+            var b=place.bounds();var cell=place.cell();var face=place.face();
+            var position=new com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Position(level.dimension().location().toString(),origin.getX()+cell[0],origin.getY()+cell[1],origin.getZ()+cell[2]);
+            var direction=com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Direction.valueOf(Direction.fromDelta(face[0],face[1],face[2]).name());
+            return new BlanketValve(new AABB(b[0],b[1],b[2],b[3],b[4],b[5]).move(origin).inflate(.008),
+                    new com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Port(position,direction,com.wormzjl.icheme.science.fluid.network.PassiveNetwork.PhasePort.VAPOR,com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.ConnectionRole.BLANKET));
+        }
     }
     /** Full accessory bounds shared by install ghosts, clearance, hover and wrench validation. */
     public record LevelGauge(AABB bounds) implements Instrument.Selectable {

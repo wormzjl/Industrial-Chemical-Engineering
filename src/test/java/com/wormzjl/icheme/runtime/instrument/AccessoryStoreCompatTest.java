@@ -32,6 +32,8 @@ class AccessoryStoreCompatTest {
         var tombstone=install(s,41,"pipe_west",new GaugeSettings(Kind.PRESSURE,101325,201325,Unit.PA,true),7);assertNotNull(s.remove(tombstone.key(),tombstone.instance()));
         long host=31;
         for(var type:List.of(Instrument.Type.SIGHT_GLASS,Instrument.Type.SHUTOFF,Instrument.Type.CHECK,Instrument.Type.PRESSURE_VALVE,Instrument.Type.FILTER,Instrument.Type.PUMP,Instrument.Type.COMPRESSOR))s.installLegacy(host++,type);
+        // Facts schema 5: a drum's gas blanketing valve.
+        s.installLegacy(61,Instrument.Type.BLANKET_VALVE);
         var first=s.installLegacy(51,Instrument.Type.FILTER);assertNotNull(s.removeLegacy(51,first.instance()));s.installLegacy(51,Instrument.Type.PUMP);
         assertTrue(s.queue(new InstrumentService.Store.Pending(new UUID(0xa11,1),player,new Instrument.Key(21,"temperature_bottom"),new UUID(0x9a,8),s.revision(21),true,Instrument.Type.TEMPERATURE,
                 new GaugeSettings(Kind.TEMPERATURE,273.15,373.15,Unit.CELSIUS,false),"minecraft:overworld",new BlockPos(4,70,-9).asLong(),3,false)));

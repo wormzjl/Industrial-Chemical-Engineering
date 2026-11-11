@@ -945,6 +945,27 @@ public final class FluidWorldAuthority implements AutoCloseable {
             edits.add(new WorldTopologyLedger.Edit(partner.device().id(),new WorldTopologyLedger.Registration(partner.device().withHeat(partner.device().heat().withControl(heat.control())),partner.spec(),Math.addExact(partner.revision(),1))));
         return submit(edits,topology.nextIdentity());
     }
+    /**
+     * Fits a closed vessel's gas blanketing valve, its gas inlet {@code port} (role {@code BLANKET}), or removes it
+     * ({@code port} null), as one queued ledger event (batch 2026-11-11-gas-blanketing). A fitted valve starts at the set
+     * pressure the vessel last had, or {@link FluidDeviceSpec#DEFAULT_BLANKET}. False for a device that takes no valve: one
+     * that is not a closed vessel, or whose inlet meets another of its ports.
+     */
+    public boolean blanketValve(long id,PhysicalFluidTopology.Port port) {
+        owned();var record=registrations().get(id);
+        if(record==null||record.device().kind()!=TopologyCompiler.Kind.RESERVOIR||record.spec().open()||record.device().ports().isEmpty())return false;
+        if(port!=null&&port.role()!=PhysicalFluidTopology.ConnectionRole.BLANKET)throw new IllegalArgumentException("A gas blanketing valve's inlet is a blanket gas port");
+        var ports=new ArrayList<>(record.device().ports());ports.removeIf(p->p.role()==PhysicalFluidTopology.ConnectionRole.BLANKET);
+        if(port!=null){for(var p:ports)if(p.cell().equals(port.cell())&&p.face()==port.face())return false;ports.add(port);}
+        edit(id,record.revision(),record.device().withPlacement(record.device().position(),ports),record.spec().withBlanket(port==null?0:FluidDeviceSpec.DEFAULT_BLANKET));
+        return true;
+    }
+    /** Sets a fitted gas blanketing valve's set pressure, Pa absolute, as a queued ledger event; false for a vessel without one or a pressure outside the valve's range. */
+    public boolean blanketPressure(long id,double pascal) {
+        owned();var record=registrations().get(id);
+        if(record==null||!(record.spec().blanket()>0)||!(pascal>=FluidDeviceSpec.MIN_BLANKET)||!(pascal<=FluidDeviceSpec.MAX_BLANKET))return false;
+        edit(id,record.revision(),record.device(),record.spec().withBlanket(pascal));return true;
+    }
     // ---------------- running columns (batch 2026-10-28-column-operation, C3) ----------------
 
     /**

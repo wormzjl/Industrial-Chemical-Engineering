@@ -52,6 +52,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private String[][] particles=new String[64][3];
     private long revision=Long.MIN_VALUE,messageRevision;
     private int page,phase=2;
+    private boolean hasBlanket;
     private boolean templates,rebuildNext,hasConnections,powerOn=true,phaseSelected;
     private String search="",message="",hovered;
     private V3ClientPresets library;
@@ -98,7 +99,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     /** Saves the typed name by the rename path (N1), as Apply does: Enter in the entry; a tank with contents has Copy in Apply's slot. */
     private void saveName(){if(canEdit()&&renames())com.wormzjl.icheme.network.EquipmentNetwork.rename(menu.position(),nameDraft);}
     /** Whether Apply sends this device's controls: every kind but a tank (an induced-draught tower's aside), a filter, and a heat side off its Control tab or with nothing to control. */
-    private boolean controlsApply(){var data=menu.clientData();return data!=null&&(data.kind()!=TopologyCompiler.Kind.RESERVOIR||tower()&&data.controls().tower().draft()==com.wormzjl.icheme.science.fluid.network.CoolingTower.Draft.INDUCED||still()!=null)&&data.kind()!=TopologyCompiler.Kind.FILTER&&(data.kind()!=TopologyCompiler.Kind.HEAT_SIDE||page==CONTROL&&(fans()||burners()||controllable()));}
+    private boolean controlsApply(){var data=menu.clientData();return data!=null&&(data.kind()!=TopologyCompiler.Kind.RESERVOIR||blanket()||tower()&&data.controls().tower().draft()==com.wormzjl.icheme.science.fluid.network.CoolingTower.Draft.INDUCED||still()!=null)&&data.kind()!=TopologyCompiler.Kind.FILTER&&(data.kind()!=TopologyCompiler.Kind.HEAT_SIDE||page==CONTROL&&(fans()||burners()||controllable()));}
     private boolean constructedMover(){var data=menu.clientData();return data!=null&&datasheet!=null&&(data.kind()==TopologyCompiler.Kind.PUMP||data.kind()==TopologyCompiler.Kind.COMPRESSOR);}
     /** An air cooler's side: its fans switch as a mover does (batch 2026-10-27-heat-exchanger-design). */
     private boolean fans(){var data=menu.clientData();return data!=null&&data.view().heat()!=null&&data.view().heat().fans()!=null;}
@@ -171,6 +172,9 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private boolean switchable(){return generator()||constructedMover();}
     /** The Control tab (HEAT_GUI_PLAN.md section 2): every heat unit's sides and a kettle's pool. */
     private static final int CONTROL=6;
+    /** A drum's accessory page (batch 2026-11-11-gas-blanketing): its gas blanketing valve. */
+    private static final int ACCESSORY=7;
+    private boolean blanket(){return tank()&&menu.clientData().controls().blanket()>0;}
     /** The page a heat unit's screen opens on: the one last chosen this client session (the side selector keeps it). */
     private static int preferredHeatPage=0;
     private boolean heatPageSet;
@@ -202,6 +206,8 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         if(!heatPageSet&&data.view().heat()!=null){heatPageSet=true;if(page==0&&preferredHeatPage==CONTROL){page=CONTROL;rebuildNext=true;}}
         boolean connected=pipe()&&data.view().pipeInfo().connections().size()>1;
         if(connected!=hasConnections){hasConnections=connected;if(!connected&&page==3)page=0;rebuildNext=true;}
+        // A valve fitted or removed while the screen is open: its tab comes and goes, and its page closes with it.
+        if(blanket()!=hasBlanket){hasBlanket=blanket();if(!hasBlanket&&page==ACCESSORY)page=0;rebuildNext=true;}
         // An initially empty publication must not leave a newly flowing void on an absent default phase.
         // Once the player chooses a phase, retain that choice across later publications.
         if(!phaseSelected){
@@ -219,6 +225,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         powerOn=c.power()==FluidNetwork.Power.ON;valveSource=c.valveSource();
         fields.clear();fields.put("temperature",new NumericDraft(c.temperature(),temperatureUnit));
         fields.put("pressure",new NumericDraft(c.pressure(),pressureUnit));fields.put("diameter",new NumericDraft(c.diameter()));
+        fields.put("blanket",new NumericDraft(c.blanket()>0?c.blanket():com.wormzjl.icheme.runtime.fluid.FluidDeviceSpec.DEFAULT_BLANKET,pressureUnit));
         fields.put("volumeFlow",new NumericDraft(c.volumeFlow(),flowRateUnit));fields.put("maximumAddedPressure",new NumericDraft(c.maximumAddedPressure(),pressureUnit));
         if(c.tower()!=null){
             towerAuto=c.tower().mode()==com.wormzjl.icheme.science.fluid.network.CoolingTower.Mode.TARGET_TEMPERATURE;
@@ -309,6 +316,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         if(pipe()&&data.view().pipeInfo().connections().size()>1){tabs.add("connections");pages.add(3);}
         if(tank()){tabs.add("outlets");pages.add(4);}
         if(datasheet!=null){tabs.add("datasheet");pages.add(5);}
+        if(blanket()&&tabs.size()<4){tabs.add("accessory");pages.add(ACCESSORY);}
         var tabSlots=FluidGuiLayout.tabs(imageWidth,tabs.size());
         for(int i=0;i<tabs.size();i++){int target=pages.get(i);var slot=tabSlots.get(i);doorAction(tabs.get(i),slot.x(),29,slot.width(),()->changePage(target)).latched(true).active=page!=target;}
         int themeWidth=themeWidth();
@@ -482,7 +490,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             var controls=new FluidNetwork.Controls(fields.get("temperature").si(),fields.get("pressure").si(),
                 fields.get("diameter").value(),PipeResistance.DEFAULT_ROUGHNESS_METRES,fields.get("volumeFlow").si(),
                 fields.get("maximumAddedPressure").si(),composition.moleFractions(),solids(),fields.get("maximumPressureRatio").value(),powerOn?FluidNetwork.Power.ON:FluidNetwork.Power.OFF,valveSource,fields.get("massFlow").si(),
-                heatControl(),towerControl());
+                heatControl(),towerControl()).withBlanket(blanket()?fields.get("blanket").si():0);
             if(still()!=null)controls=controls.withStill(stillControls());
             FluidNetwork.sendEdit(menu,revision,controls);message=tr("waiting");
         }catch(IllegalArgumentException e){message=tr("invalid_input");}
@@ -630,6 +638,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         else if(page==3)renderConnections(g,mouseX-leftPos,mouseY-topPos);
         else if(page==4)renderOutlets(g,mouseX-leftPos,mouseY-topPos);
         else if(page==5)renderDatasheet(g,mouseX-leftPos,mouseY-topPos);
+        else if(page==ACCESSORY)renderAccessory(g,mouseX-leftPos,mouseY-topPos);
         else {
             int w=tableWidth();text(g,tr("solid_col.0"),tableX(),128,TEXT,w/2);
             text(g,tr("solid_col.1"),tableX()+w/2,128,TEXT,w/4);text(g,tr("solid_col.2"),tableX()+3*w/4,128,TEXT,w/4);
@@ -847,6 +856,15 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
      * A tank's connections by face (plan 4.3), page 4: what each outlet is and which face it leaves by, what it drew over
      * the last interval and its flow; one two-line row per connection in the table area, scrolled when they do not all fit.
      */
+    /** The accessory page's glass: the gas blanketing valve, the pressures at which it pads and vents, and what it needs. */
+    private void renderAccessory(GuiGraphics g,int mx,int my){
+        int x=tableX(),w=tableWidth();double set=menu.clientData().controls().blanket();
+        text(g,tr("accessory.blanket"),x,82,ACCENT,w);if(mx>=x&&mx<x+w&&my>=80&&my<92)hovered=tr("accessory.blanket.hint");
+        String unit=pressureUnit.symbol();
+        text(g,tr("accessory.blanket.pad",pressureValue(set),unit),x,100,TEXT,w-4);g.hLine(x,x+w,112,LINE);
+        text(g,tr("accessory.blanket.vent",pressureValue(com.wormzjl.icheme.science.fluid.network.GasBlanket.ventPressure(set)),unit),x,118,TEXT,w-4);g.hLine(x,x+w,130,LINE);
+        int y=136;for(var line:font.split(Component.literal(tr("accessory.blanket.supply")),w-4)){g.drawString(font,line,x,y,MUTED,false);y+=10;}
+    }
     private void renderOutlets(GuiGraphics g,int mx,int my){
         var outlets=menu.clientData().view().outlets();int x=tableX(),w=tableWidth();
         text(g,tr("outlets"),x,82,ACCENT,w);if(mx>=x&&mx<x+w&&my>=80&&my<92)hovered=tr("outlets.hint");
@@ -1071,7 +1089,8 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     }
     /** The device's page's column at an image width: from x 10 to {@code FluidGuiLayout.side}. */
     private Column deviceColumn(int width){
-        var rows=new ArrayList<>(DeviceColumn.rows(deviceInput(),FluidDeviceScreen::tr));
+        var state=menu.clientData().view().state();
+        var rows=new ArrayList<>(page==ACCESSORY?DeviceColumn.blanketValve(canEdit(),pressureUnit.symbol(),pressureValue(menu.clientData().controls().blanket()),pressureValue(state==null?null:state.pressure()),FluidDeviceScreen::tr):DeviceColumn.rows(deviceInput(),FluidDeviceScreen::tr));
         var ids=new ArrayList<>(com.wormzjl.icheme.client.InstrumentRenderer.identities(minecraft.level,menu.position()));
         if(menu.clientData().valve()!=null)ids.add(String.format(Locale.ROOT,"CV-%04d",menu.identity()));
         rows.addAll(DeviceColumn.instrumentIds(ids,FluidDeviceScreen::tr));

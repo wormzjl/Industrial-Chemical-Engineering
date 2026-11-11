@@ -187,15 +187,16 @@ public final class InstrumentRenderer {
         var mc=Minecraft.getInstance();if(mc.level==null||mc.player==null)return;long started=System.nanoTime();
         var camera=event.getCamera().getPosition();var buffers=mc.renderBuffers().bufferSource();var pose=event.getPoseStack();
         var view=ClientConfig.lodView(event.getProjectionMatrix().m11(),mc.getWindow().getHeight());var frustum=event.getFrustum();
-        GaugeSettings draft=null;Sensor.Kind sensorDraft=null;boolean wrench=false,levelGauge=false;
+        GaugeSettings draft=null;Sensor.Kind sensorDraft=null;boolean wrench=false,levelGauge=false,blanketValve=false;
         for(var hand:HANDS) {
             var stack=mc.player.getItemInHand(hand);
             if(stack.is(ModItems.LIQUID_LEVEL_GAUGE.get()))levelGauge=true;
+            if(stack.is(ModItems.GAS_BLANKETING_VALVE.get()))blanketValve=true;
             if(stack.getItem() instanceof SensorItem sensorItem)sensorDraft=sensorItem.kind();
             if(stack.getItem() instanceof GaugeItem)draft=stack.get(ModItems.GAUGE_SETTINGS.get());
             if(stack.getItem() instanceof AccessoryWrenchItem&&mc.player.isShiftKeyDown())wrench=true;
         }
-        boolean placing=draft!=null||sensorDraft!=null||wrench||levelGauge;
+        boolean placing=draft!=null||sensorDraft!=null||wrench||levelGauge||blanketValve;
         var hosts=placing?InstrumentHosts.nearby(mc.level,mc.player.position(),120,false):shownHosts(mc);
         var selected=draft==null?null:InstrumentHosts.select(hosts,mc.player.getEyePosition(),mc.player.getLookAngle(),mc.player.blockInteractionRange(),draft.kind(),false);
         boolean shadow=SHADOW.test(()->com.wormzjl.icheme.client.fx.FxCompat.iris().shadowPass(),false);
@@ -223,6 +224,20 @@ public final class InstrumentRenderer {
                 var display=get(dial.target);
                 double ratio=display==null||display.sample().availability()==Instrument.Availability.UNAVAILABLE?0:dial.settings.needle(display.sample().value());
                 drawDial(pose,buffers,dial,camera,ratio,tier);
+            }
+            // A drum's gas blanketing valve (batch 2026-11-11-gas-blanketing): drawn where fitted, a ghost on its flange while its item is held.
+            if(host.metadata().blanketValve()){
+                var mount=InstrumentHosts.BlanketValve.of(host);
+                if(mount!=null&&frustum.isVisible(mount.bounds())&&view.pixels(.4,mount.bounds().getCenter().distanceToSqr(camera))>=3)drawBlanketValve(pose,buffers,host,camera,-1,255);
+            }else if(blanketValve&&host.metadata().fitting()==null){
+                var mount=InstrumentHosts.BlanketValve.of(host);
+                if(mount!=null&&mount.bounds().distanceToSqr(mc.player.getEyePosition())<=64){
+                    boolean clear=InstrumentHosts.clear(mc.level,host,mount);
+                    var hit=mount.bounds().clip(mc.player.getEyePosition(),mc.player.getEyePosition().add(mc.player.getLookAngle().scale(mc.player.blockInteractionRange())));
+                    boolean aimed=hit.isPresent()&&InstrumentHosts.reachable(mc.player,host,mount);
+                    drawBlanketValve(pose,buffers,host,camera,clear?(aimed?0x73a38e:0x779ba9):0xad7770,aimed?64:40);
+                    outline(pose,buffers,mount,camera,clear?0x73a38e:0xad7770);
+                }
             }
             if(levelGauge){
                 var mount=InstrumentHosts.LevelGauge.of(host);
@@ -572,6 +587,21 @@ public final class InstrumentRenderer {
     }
     private static void text(PoseStack pose,MultiBufferSource buffers,Instrument.Mount m,Vec3 camera,String text,double x,double y,float scale){text(pose,buffers,m,camera,text,x,y,scale,InstrumentGeometry.LABEL,0xff252b2e);}
     private static void text(PoseStack pose,MultiBufferSource buffers,Instrument.Mount m,Vec3 camera,String text,double x,double y,float scale,double depth,int colour){var mc=Minecraft.getInstance();var p=m.point(x,y,depth).subtract(camera);pose.pushPose();pose.translate(p.x,p.y,p.z);float angle=(float)Math.toDegrees(Math.atan2(m.normal().x,m.normal().z));pose.mulPose(Axis.YP.rotationDegrees(angle));pose.scale(scale,-scale,scale);mc.font.drawInBatch(text,-mc.font.width(text)/2f,0,colour,false,pose.last().pose(),buffers,net.minecraft.client.gui.Font.DisplayMode.NORMAL,0,LightTexture.FULL_BRIGHT);pose.popPose();}
+    /** A drum's gas blanketing valve: in its own colours under the world's light ({@code tint} -1, {@code alpha} 255), or a placement ghost in {@code tint}. */
+    private static void drawBlanketValve(PoseStack pose,MultiBufferSource buffers,InstrumentHosts.Host host,Vec3 camera,int tint,int alpha){
+        if(!(host.entity() instanceof com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity shell))return;
+        var place=com.wormzjl.icheme.science.equipment.BlanketValveGeometry.of(shell.shape());if(place==null)return;
+        var origin=shell.origin();var consumer=buffers.getBuffer(alpha==255?TYPE:GHOST);
+        int light=alpha==255?LevelRenderer.getLightColor(Minecraft.getInstance().level,net.minecraft.core.BlockPos.containing(origin.getX()+place.foot()[0],origin.getY()+place.centre(),origin.getZ()+place.foot()[2])):LightTexture.FULL_BRIGHT;
+        pose.pushPose();pose.translate(origin.getX()-camera.x,origin.getY()-camera.y,origin.getZ()-camera.z);
+        for(var face:com.wormzjl.icheme.science.equipment.ShapeRasterizer.blanketValve(shell.shape())){
+            int colour=tint>=0?tint:switch(face.material()){case FLANGE->0x6b7178;case ACTUATOR->0xa8452f;case MACHINE->0x7d8f9c;default->0x8d939a;};
+            var p=face.positions();var n=face.normals();
+            for(int first=1;first+1<face.size();first+=2)for(int c:new int[]{0,first,first+1,Math.min(first+2,face.size()-1)})
+                normal(vertex(consumer,pose.last(),(float)p[3*c],(float)p[3*c+1],(float)p[3*c+2]).setColor(colour>>16&255,colour>>8&255,colour&255,alpha).setUv(0,0).setOverlay(OverlayTexture.NO_OVERLAY).setLight(light),pose.last(),(float)n[3*c],(float)n[3*c+1],(float)n[3*c+2]);
+        }
+        pose.popPose();
+    }
     private static void drawLevelGhost(PoseStack pose,MultiBufferSource buffers,InstrumentHosts.Host host,Vec3 camera,int tint,int alpha){
         if(!(host.entity() instanceof com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity shell))return;
         var origin=shell.origin();var consumer=buffers.getBuffer(GHOST);

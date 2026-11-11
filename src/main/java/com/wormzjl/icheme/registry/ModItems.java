@@ -91,6 +91,8 @@ public final class ModItems {
     public static final DeferredItem<com.wormzjl.icheme.world.item.SensorItem> SPEED_SENSOR=sensor("speed_sensor",com.wormzjl.icheme.runtime.instrument.Sensor.Kind.SPEED);
     private static DeferredItem<com.wormzjl.icheme.world.item.SensorItem> sensor(String name,com.wormzjl.icheme.runtime.instrument.Sensor.Kind kind){return ITEMS.registerItem(name,p->new com.wormzjl.icheme.world.item.SensorItem(p,kind));}
     public static final DeferredItem<com.wormzjl.icheme.world.item.LiquidLevelGaugeItem> LIQUID_LEVEL_GAUGE = ITEMS.registerItem("liquid_level_gauge", com.wormzjl.icheme.world.item.LiquidLevelGaugeItem::new);
+    /** A drum's gas blanketing valve (batch 2026-11-11-gas-blanketing): fitted and removed as the tank's level gauge is. */
+    public static final DeferredItem<com.wormzjl.icheme.world.item.LiquidLevelGaugeItem> GAS_BLANKETING_VALVE = ITEMS.registerItem("gas_blanketing_valve", p -> new com.wormzjl.icheme.world.item.LiquidLevelGaugeItem(p, "gas_blanketing_valve"));
 
     private ModItems() {
     }

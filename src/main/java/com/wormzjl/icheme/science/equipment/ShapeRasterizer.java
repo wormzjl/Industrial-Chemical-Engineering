@@ -325,6 +325,8 @@ public final class ShapeRasterizer {
     }
 
     /** Cached accessory geometry in equipment-local world axes; not part of the bare tank's shell/collision. */
+    /** A drum's gas blanketing valve's faces, in the box frame; none where the shape takes no valve ({@link BlanketValveGeometry}). */
+    public static List<Polygon> blanketValve(EquipmentShape shape){if(!drawing)throw new IllegalStateException("A dedicated server keeps no accessory surfaces");return geometry(shape).blanketValve();}
     public static List<Polygon> tankGauge(EquipmentShape shape){if(!drawing)throw new IllegalStateException("A dedicated server keeps no accessory surfaces");return shape.kind()==EquipmentShape.Kind.TANK?geometry(shape).tankGauge():List.of();}
 
     /** A floating-roof tank's client-drawn parts in the box, or null for any other shape. */
@@ -1612,6 +1614,14 @@ public final class ShapeRasterizer {
             return reach;
         }
 
+        private volatile List<Polygon> blanketValve;
+        private List<Polygon> blanketValve(){
+            var result=blanketValve;if(result!=null)return result;
+            var place=BlanketValveGeometry.of(shape);if(place==null)return blanketValve=List.of();
+            var accessory=new Mesh(detail);place.build(accessory);
+            var polygons=new ArrayList<Polygon>();cut(accessory,accessory.facets(),new double[3],polygons);
+            return blanketValve=List.copyOf(polygons);
+        }
         private volatile List<Polygon> tankGauge;
         private List<Polygon> tankGauge(){
             var result=tankGauge;if(result!=null)return result;
