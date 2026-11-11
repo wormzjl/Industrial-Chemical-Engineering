@@ -207,3 +207,11 @@ Baseline `48b4fb298` (three chains: dry, wet three-phase, dry with polar refiner
 - Wet: kernel evaluations 5769 to 11554 and state calls 2868 to 3516, with the excess on every water pair as well.
 
 The bounds are broken for the wet and the polar scenario. Decided by the orchestrator: the tests come first; then an optimisation step 5b in the structure (the second temperature derivative only when read; sparse rows in `correctExcess`; absent centres' cells skipped; a one-component phase on a pure-compound evaluation prepared once per T and P), measured item by item on the same three scenarios. The polar scenario also depends on the owner's open choice of which compounds take activity fits with hydrocarbons (section 9).
+
+## 11. Defect found in the test migration: cancellation in the kernel's sparse sums (2026-11-11)
+
+**Expected.** In pure water an absent heavy crude cut has a large, finite ln phi (it does not dissolve), smooth in temperature.
+
+**What the code does.** The kernel's sparse-row form (N8) builds each centre's local-composition sum as `b` plus corrections, `D_i = b + sum_j w_j (G_ji - 1)`. For water around the heaviest cut the derived energy is 512.8 kJ/mol at 298 K, so `G` is 9e-16; with water holding nearly all of `b` the sum is `b - b (1 - G)`, rounding noise. The cut's ln phi at 1 atm reads 103 at 298.15 K, 150 at 298.2 K, -18 at 290 K, NaN at 285 K. The ice anchor then fails, and every wet refinery list with that cut fails when its engine is built (about 20 of the 83 failures of the first filtered run). The literature form of N8 did not have this subtraction; the sparse-row form introduced it.
+
+**Decided by the orchestrator** (numerics, no physics change): the classical part of each centre's sums is formed directly over the compounds that are not its cell partners, never as `b` minus the partners' weights; the order stays O(n + cells + n P). No cap on the derived energies: a floor on `G` leaves a relative error near 1e-3 in the same subtraction. Gates: a finite, smooth ln phi of the absent cut from 90 to 800 K; agreement to 1e-12 with the plain sums in extended precision for four phases; a dry phase bit for bit unchanged. A guard on the exponent is added only if that gate finds a nonfinite value.
