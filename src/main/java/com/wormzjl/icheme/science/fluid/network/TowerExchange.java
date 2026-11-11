@@ -36,13 +36,16 @@ public final class TowerExchange {
     }
     /** Whether a stream can feed the fill: its liquid is water alone and stays liquid at the atmosphere. Its gas passes to the basin, whose vent takes it. */
     public static boolean liquidWater(FluidThermodynamics model,FluidThermodynamics.State state) {
-        // W3b: the liquid is one slot that holds water alone, with no other liquid beside it.
+        // W3b: the liquid is one slot that holds water and no other condensable compound, with no other liquid beside it. A gas
+        // dissolved in it (a compound above its critical temperature: the air or nitrogen of a basin's water, about 1e-5 of
+        // it) leaves with the spray as the gas of any stream; read as a second compound, it refused every basin's own water
+        // and a pumped loop never primed (W3b stage A, CoolingTowerRuntimeTest).
         if(!state.solids().empty())return false;
         int slot=state.slot(FluidThermodynamics.AQUEOUS);
         if(slot<0||state.slot(FluidThermodynamics.OIL)>=0)return false;
         double[] liquid=state.amountsView(slot);
         if(!(liquid[liquid.length-1]>0))return false;
-        for(int c=0;c<liquid.length-1;c++)if(liquid[c]!=0)return false;
+        for(int c=0;c<liquid.length-1;c++)if(liquid[c]!=0&&model.hydrocarbon.criticalTemperature(c)>state.temperature())return false;
         return model.saturationPressure(state.temperature())<CoolingTower.PRESSURE;
     }
     public static Rates at(PassiveNetwork graph,int node,List<FluidThermodynamics.State> states,double[] flows,FluidThermodynamics model) {

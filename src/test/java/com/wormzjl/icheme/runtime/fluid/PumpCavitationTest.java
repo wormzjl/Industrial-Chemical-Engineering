@@ -28,6 +28,7 @@ import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
  */
 class PumpCavitationTest {
     /** Owner decision D20 Q11 A: how far above the floor of the liquid it draws the suction of pump connection {@code pump}
+     * (on {@code model}, the island's own list: its states are on that list, which is not the world's)
      * stands at its committed mass flow {@code massFlow} (kg/s): {@code 0.85 ρ_l g NPSH3(Q)} on its design
      * ({@link FlowControl.Mover#npsh}), its suction junction's volume flow and the liquid its supply delivers. */
     private static double breakdown(FluidThermodynamics model,PassiveNetwork graph,int pump,double massFlow) {
@@ -95,7 +96,7 @@ class PumpCavitationTest {
         var s=w.coordinator.snapshots().getFirst();var result=s.lastResult().orElseThrow();var graph=s.graph();
         int pump=-1;for(int e=0;e<graph.pipes().size();e++)if(graph.pipes().get(e).control() instanceof FlowControl.Pump)pump=e;
         var suction=graph.reservoirs().get(graph.pipes().get(pump).first()).state();
-        double vapour=w.model.saturationPressure(suction.temperature()),q=result.averageMassFlows()[pump],floor=vapour+breakdown(w.model,graph,pump,q);
+        double vapour=w.model.saturationPressure(suction.temperature()),q=result.averageMassFlows()[pump],floor=vapour+breakdown(w.coordinator.model(s.id()),graph,pump,q);
         System.out.println("PUMP_CAVITATION_STEADY modes="+result.endpointModes()+" flows="+Arrays.toString(result.averageMassFlows())
                 +" suctionP="+suction.pressure()+" vapourP="+vapour+" floor="+floor);
         assertEquals(FlowControl.Mode.PUMP_SUCTION_LIMIT,result.endpointModes().get(pump),"the pump cavitates");
@@ -140,7 +141,7 @@ class PumpCavitationTest {
             int pump=-1;for(int e=0;e<graph.pipes().size();e++)if(graph.pipes().get(e).control() instanceof FlowControl.Pump)pump=e;
             var tank=graph.reservoirs().stream().filter(r->r.kind()==PassiveNetwork.NodeKind.RESERVOIR).findFirst().orElseThrow().state();
             var suction=graph.reservoirs().get(graph.pipes().get(pump).first()).state();double q=result.averageMassFlows()[pump];
-            double floor=tank.pressure()+breakdown(w.model,graph,pump,q);
+            double floor=tank.pressure()+breakdown(w.coordinator.model(s.id()),graph,pump,q);
             System.out.println("PUMP_CAVITATION_LNG modes="+result.endpointModes()+" flows="+Arrays.toString(result.averageMassFlows())+" tankP="+tank.pressure()+" tankT="+tank.temperature()
                     +" tankLiquidV="+TestPhases.liquidVolume(tank)+" tankVapourV="+tank.vaporVolume()+" suctionP="+suction.pressure()+" suctionT="+suction.temperature()+" floor="+floor);
             assertTrue(TestPhases.liquidVolume(tank)>0&&tank.vaporVolume()>0,"the tank boils: two-phase");
@@ -184,7 +185,7 @@ class PumpCavitationTest {
             var suction=graph.reservoirs().get(graph.pipes().get(pump).first()).state();double q=result.averageMassFlows()[pump];
             double[] x=FluidThermodynamics.phaseMoles(generator,FluidThermodynamics.OIL);double t=generator.temperature(),moles=0;
             for(int c=0;c<x.length-1;c++)moles+=x[c];
-            double h=moles*TestPhases.liquidProperties(generator).molarEnthalpy(),bubble=suction.pressure()-breakdown(w.model,graph,pump,q);
+            double h=moles*TestPhases.liquidProperties(generator).molarEnthalpy(),bubble=suction.pressure()-breakdown(w.coordinator.model(s.id()),graph,pump,q);
             var above=w.model.equilibriumPH(t,bubble*1.001,h,x.clone(),()->{});
             var below=w.model.equilibriumPH(t,bubble*.999,h,x.clone(),()->{});
             assertTrue(above!=null&&below!=null,"the PH equilibria on either side of the suction converge");
@@ -274,7 +275,7 @@ class PumpCavitationTest {
         var result=s.lastResult().orElseThrow();var graph=s.graph();
         int pump=-1;for(int e=0;e<graph.pipes().size();e++)if(graph.pipes().get(e).control() instanceof FlowControl.Pump)pump=e;
         var suction=graph.reservoirs().get(graph.pipes().get(pump).first()).state();
-        double vapour=w.model.saturationPressure(suction.temperature()),q=result.averageMassFlows()[pump],floor=vapour+breakdown(w.model,graph,pump,q);
+        double vapour=w.model.saturationPressure(suction.temperature()),q=result.averageMassFlows()[pump],floor=vapour+breakdown(w.coordinator.model(s.id()),graph,pump,q);
         double steam=TestPhases.waterVapor(suction)/(TestPhases.waterLiquid(suction)+TestPhases.waterVapor(suction));
         System.out.println("PUMP_CAVITATION_ARRIVAL modes="+result.endpointModes()+" flows="+Arrays.toString(result.averageMassFlows())+" suctionP="+suction.pressure()
                 +" vapourP="+vapour+" suctionT="+suction.temperature()+" steamShare="+steam);

@@ -998,7 +998,12 @@ public final class FluidThermodynamics {
             for(int i=0;i<n;i++) {
                 double v=closed.vaporAmountsView()[i],l=closed.liquidAmountsView()[i],a=closed.aqueousAmountsView()[i],total=v+l+a;
                 if(!(total>0)){int slot=closed.phase(State.LIQUID)!=null?State.LIQUID:closed.phase(State.AQUEOUS)!=null?State.AQUEOUS:State.VAPOR;out[slot][i]=amounts[i];continue;}
-                out[0][i]=amounts[i]*(v/total);out[2][i]=amounts[i]*(a/total);out[1][i]=amounts[i]-out[0][i]-out[2][i];
+                // The rest of the rounding goes to the slot holding the most of it: put in the liquid slot of a gas and an
+                // aqueous liquid, it was a 1e-15 mol liquid of dissolved nitrogen with no liquid root, or a negative amount,
+                // and the junction's condensate was refused (W3b stage A, a cooling tower's suction line).
+                double[] share={v,l,a};int most=0;for(int k=1;k<3;k++)if(share[k]>share[most])most=k;
+                double placed=0;for(int k=0;k<3;k++)if(k!=most){out[k][i]=amounts[i]*(share[k]/total);placed+=out[k][i];}
+                out[most][i]=amounts[i]-placed;
             }
             return adoptingState(closed.temperature(),p,out[0],out[1],out[2],null).withSolidState(start.solids(),start.solidMoments());
         }

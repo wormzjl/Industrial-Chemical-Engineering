@@ -91,6 +91,12 @@ public final class HydrocarbonModel {
     /** The compounds of this model's list, water not among them: the conserved basis less its last entry. */
     public List<String> components() { return compounds; }
     public int componentCount() { return compounds.size(); }
+    /** The critical temperature (K) of conserved component {@code i} (water last): the derivation's, the package's water
+     * record's for water on a list whose cubic does not carry it. */
+    public double criticalTemperature(int i) {
+        if(i<compounds.size()||water>=0)return evaluator.derivation().criticalTemperatures()[i];
+        return propertyPackage.water().criticalTemperature();
+    }
     /** The kernel's basis: the compounds, then water where the list carries it. */
     public List<String> species() { return species; }
     /** Whether water is a component of this model's cubic (option A: an island that can hold water). */

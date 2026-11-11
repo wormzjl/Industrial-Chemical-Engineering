@@ -972,8 +972,8 @@ public final class PassiveStepSolver {
         if(!(floor<Double.POSITIVE_INFINITY))return Double.POSITIVE_INFINITY;
         var walk=InletPhase.walk(graph,edge);if(walk.via()<0)return Double.POSITIVE_INFINITY;
         var s=states.get(walk.node());var link=graph.pipes().get(walk.via());var supplier=graph.reservoirs().get(walk.node());
-        boolean boiling=FluidThermodynamics.holdsPhase(s,FluidThermodynamics.GAS)&&FluidThermodynamics.holdsLiquid(s);
-        return suctionSupply(graph,edge,walk.node(),walk.via(),endPressure(supplier,link.portAt(walk.node()),s),s)-(boiling?s.pressure():floor);
+        // The floor is the supplier's own (suctionFloor): a hydrocarbon liquid's is the supplier's pressure where it holds a gas.
+        return suctionSupply(graph,edge,walk.node(),walk.via(),endPressure(supplier,link.portAt(walk.node()),s),s)-floor;
     }
     /**
      * Owner decision D14 (reading A13; K6 of the t38 plan widened): a pump's suction limit reads the liquid it draws. A pump
@@ -994,10 +994,72 @@ public final class PassiveStepSolver {
         for(int edge=0;edge<floors.length;edge++) {
             var pipe=graph.pipes().get(edge);
             if(!(pipe.control() instanceof FlowControl.Mover liquid&&liquid.liquid())||pipe.firstPort()==PassiveNetwork.PhasePort.VAPOR)continue;
-            var walk=InletPhase.walk(graph,edge);if(walk.via()<0)continue;
-            floors[edge]=bubblePressure(states.get(walk.node()),checkpoint);
+            var walk=InletPhase.walk(graph,edge);boolean direct=walk.via()<0;
+            int supplier=direct?pipe.first():walk.node();var s=states.get(supplier);
+            int label=drawnLiquid(s,direct?pipe.firstPort():graph.pipes().get(walk.via()).portAt(supplier));
+            // D16 C as on main: a hydrocarbon liquid's floor is read through a suction walk; a tank's own closure holds it.
+            if(label<0||label==FluidThermodynamics.OIL&&direct)continue;
+            floors[edge]=suctionFloor(s,label,checkpoint);
         }
         return floors;
+    }
+    /** The liquid label (OIL or AQUEOUS) a pump draws from supplier state {@code s} through its end {@code port}: the port's
+     * leading liquid; the hydrocarbon liquid where it draws both or the bulk and the supplier holds one; -1 for none. */
+    private int drawnLiquid(FluidThermodynamics.State s,PassiveNetwork.PhasePort port) {
+        int leading=PhaseDraw.leading(model,s,port);
+        if(leading==FluidThermodynamics.OIL||leading==FluidThermodynamics.AQUEOUS)return leading;
+        if(FluidThermodynamics.holdsPhase(s,FluidThermodynamics.OIL))return FluidThermodynamics.OIL;
+        return FluidThermodynamics.holdsPhase(s,FluidThermodynamics.AQUEOUS)?FluidThermodynamics.AQUEOUS:-1;
+    }
+    /**
+     * The pressure the suction of a pump drawing liquid {@code label} from supplier state {@code s} may not fall below, Pa
+     * (W3b stage A, provisional: the owner's rule is open, the choice is this one function). Two branches, by label:
+     * <ul>
+     * <li>{@link #hydrocarbonFloor}, the OIL liquid: owner decision D16 C as on main, the supplier's own pressure where it
+     * holds a gas, else the bubble pressure of the liquid drawn at its enthalpy ({@link #bubblePressure});</li>
+     * <li>{@link #aqueousFloor}, the AQUEOUS liquid: the bubble pressure of its condensable components at the supplier's
+     * temperature, the compounds above their critical temperature left out (water alone: the cubic's saturation pressure,
+     * 3175 Pa at 298.15 K; water with ethanol: their mixture's bubble pressure; nitrogen or air dissolved in it: none of
+     * it, as main's saturation curve).</li>
+     * </ul>
+     * Positive infinity where there is none.
+     */
+    private double suctionFloor(FluidThermodynamics.State s,int label,Runnable checkpoint) {
+        return label==FluidThermodynamics.OIL?hydrocarbonFloor(s,checkpoint):aqueousFloor(s,checkpoint);
+    }
+    /** {@link #suctionFloor}'s OIL branch (D16 C). */
+    private double hydrocarbonFloor(FluidThermodynamics.State s,Runnable checkpoint){return bubblePressure(s,checkpoint);}
+    /** The aqueous floors {@link #aqueousFloor} worked out, keyed by the supplier state. */
+    private static final Map<FluidThermodynamics.State,Double> AQUEOUS_CACHE=Collections.synchronizedMap(new WeakHashMap<>());
+    /**
+     * {@link #suctionFloor}'s AQUEOUS branch: the lowest pressure at which the AQUEOUS liquid of {@code s}, less its
+     * compounds above their critical temperature at {@code s}'s temperature, is one liquid at that temperature, a bisection in
+     * ln P to {@link #BUBBLE_WIDTH} between the numerical box's floor and a top raised from the supplier's pressure until the
+     * liquid stands; positive infinity where nothing condensable is left, where it is one liquid at the box's floor and where
+     * no top stands below the box's ceiling. Midpoints are geometric means, as {@link #bubblePressure}'s.
+     */
+    private double aqueousFloor(FluidThermodynamics.State s,Runnable checkpoint) {
+        if(!FluidThermodynamics.holdsPhase(s,FluidThermodynamics.AQUEOUS))return Double.POSITIVE_INFINITY;
+        var known=AQUEOUS_CACHE.get(s);if(known!=null)return known;
+        double t=s.temperature(),floor=Double.POSITIVE_INFINITY;double[] x=FluidThermodynamics.phaseMoles(s,FluidThermodynamics.AQUEOUS).clone();
+        boolean any=false;for(int c=0;c<x.length;c++){if(model.hydrocarbon.criticalTemperature(c)<=t)x[c]=0;any|=x[c]>0;}
+        if(any) {
+            double lo=NumericalBox.MINIMUM_PRESSURE,hi=Math.max(s.pressure(),lo);
+            while(hi<NumericalBox.MAXIMUM_PRESSURE&&condensedAt(t,hi,x,checkpoint)!=PH_LIQUID)hi=Math.min(NumericalBox.MAXIMUM_PRESSURE,hi*2);
+            if(condensedAt(t,hi,x,checkpoint)==PH_LIQUID&&condensedAt(t,lo,x,checkpoint)!=PH_LIQUID) {
+                for(int k=0;k<200&&hi>lo*(1+BUBBLE_WIDTH);k++){double mid=Math.sqrt(lo*hi);if(condensedAt(t,mid,x,checkpoint)==PH_LIQUID)hi=mid;else lo=mid;}
+                floor=hi;
+            }
+        }
+        AQUEOUS_CACHE.put(s,floor);
+        return floor;
+    }
+    /** The TP equilibrium of the amounts {@code x} at {@code t} and {@code p}: {@link #PH_LIQUID} for liquid alone,
+     * {@link #PH_VAPOUR} with a vapour, {@link #PH_OTHER} for a refusal. */
+    private int condensedAt(double t,double p,double[] x,Runnable checkpoint) {
+        FluidThermodynamics.State at;
+        try{at=model.flashTP(t,p,x.clone(),checkpoint);}catch(IllegalArgumentException refused){return PH_OTHER;}
+        return FluidThermodynamics.holdsPhase(at,FluidThermodynamics.GAS)?PH_VAPOUR:FluidThermodynamics.holdsLiquid(at)?PH_LIQUID:PH_OTHER;
     }
     /** The bubble pressures {@link #bubblePressure} worked out, keyed by the supplier state (a generator keeps its state
      * across solves). */
