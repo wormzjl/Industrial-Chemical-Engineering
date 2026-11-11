@@ -1,0 +1,109 @@
+{
+  "comment": "Batch 2026-11-11-aqueous-solvents, W2b: group counts authored from the group definitions where ChemSep's were refused by the W2a import (E-PPR78 for cyclohexane, propylene, butene-1, isobutene and butadiene; modified UNIFAC (Dortmund) for ethylene). Each entry keeps ChemSep's other scheme.",
+  "properties_revision": "unused",
+  "viscosity_revision": "unused",
+  "freezing_revision": "unused",
+  "group_counts_revisions": {
+    "modfac": "chemsep-8.3-modfac-r1",
+    "eppr78": "chemsep-8.3-ppr78-r1"
+  },
+  "form": {},
+  "compounds": [],
+  "groups_only": [
+    {
+      "component": "Cyclohexane",
+      "cas": "110-82-7",
+      "properties": "icheme:chemsep_cyclohexane",
+      "properties_file": "chemsep_cyclohexane.json",
+      "authored_counts": {
+        "eppr78-2022": {
+          "counts": {
+            "CH2_cyclic": 6
+          },
+          "source": "Authored in batch 2026-11-11-aqueous-solvents (W2b) from the E-PPR78 group definitions, ChemSep's PPR78 counts having put ring or alkenic carbons in plain alkane groups: Jaubert et al. 2022 (Fluid Phase Equilib. 560, 113456) Tables 1 and 2 and the PPR78 alkene groups it builds on (Qian, Privat and Jaubert 2013): G10 CH2,cyclic a ring CH2; G18 CH2,alkenic an alkenic =CH2 or =CH- carbon; G19 C,alkenic an alkenic =C< carbon; G1 CH3 and G2 CH2 the alkane groups. Cyclohexane: six ring CH2.",
+          "revision": "eppr78-group-definitions-r1"
+        }
+      }
+    },
+    {
+      "component": "Propylene",
+      "cas": "115-07-1",
+      "properties": "icheme:chemsep_propylene",
+      "properties_file": "chemsep_propylene.json",
+      "authored_counts": {
+        "eppr78-2022": {
+          "counts": {
+            "CH3": 1,
+            "CH2_alkenic": 2
+          },
+          "source": "Authored in batch 2026-11-11-aqueous-solvents (W2b) from the E-PPR78 group definitions, ChemSep's PPR78 counts having put ring or alkenic carbons in plain alkane groups: Jaubert et al. 2022 (Fluid Phase Equilib. 560, 113456) Tables 1 and 2 and the PPR78 alkene groups it builds on (Qian, Privat and Jaubert 2013): G10 CH2,cyclic a ring CH2; G18 CH2,alkenic an alkenic =CH2 or =CH- carbon; G19 C,alkenic an alkenic =C< carbon; G1 CH3 and G2 CH2 the alkane groups. Propylene CH3-CH=CH2: one CH3, two alkenic CH2/CH.",
+          "revision": "eppr78-group-definitions-r1"
+        }
+      }
+    },
+    {
+      "component": "Butene-1",
+      "cas": "106-98-9",
+      "properties": "icheme:chemsep_butene_1",
+      "properties_file": "chemsep_butene_1.json",
+      "authored_counts": {
+        "eppr78-2022": {
+          "counts": {
+            "CH3": 1,
+            "CH2": 1,
+            "CH2_alkenic": 2
+          },
+          "source": "Authored in batch 2026-11-11-aqueous-solvents (W2b) from the E-PPR78 group definitions, ChemSep's PPR78 counts having put ring or alkenic carbons in plain alkane groups: Jaubert et al. 2022 (Fluid Phase Equilib. 560, 113456) Tables 1 and 2 and the PPR78 alkene groups it builds on (Qian, Privat and Jaubert 2013): G10 CH2,cyclic a ring CH2; G18 CH2,alkenic an alkenic =CH2 or =CH- carbon; G19 C,alkenic an alkenic =C< carbon; G1 CH3 and G2 CH2 the alkane groups. Butene-1 CH2=CH-CH2-CH3: one CH3, one CH2, two alkenic CH2/CH.",
+          "revision": "eppr78-group-definitions-r1"
+        }
+      }
+    },
+    {
+      "component": "Isobutene",
+      "cas": "115-11-7",
+      "properties": "icheme:chemsep_isobutene",
+      "properties_file": "chemsep_isobutene.json",
+      "authored_counts": {
+        "eppr78-2022": {
+          "counts": {
+            "CH3": 2,
+            "CH2_alkenic": 1,
+            "C_alkenic": 1
+          },
+          "source": "Authored in batch 2026-11-11-aqueous-solvents (W2b) from the E-PPR78 group definitions, ChemSep's PPR78 counts having put ring or alkenic carbons in plain alkane groups: Jaubert et al. 2022 (Fluid Phase Equilib. 560, 113456) Tables 1 and 2 and the PPR78 alkene groups it builds on (Qian, Privat and Jaubert 2013): G10 CH2,cyclic a ring CH2; G18 CH2,alkenic an alkenic =CH2 or =CH- carbon; G19 C,alkenic an alkenic =C< carbon; G1 CH3 and G2 CH2 the alkane groups. Isobutene (CH3)2C=CH2: two CH3, one alkenic CH2, one alkenic C.",
+          "revision": "eppr78-group-definitions-r1"
+        }
+      }
+    },
+    {
+      "component": "Butadiene",
+      "cas": "106-99-0",
+      "properties": "icheme:chemsep_butadiene",
+      "properties_file": "chemsep_butadiene.json",
+      "authored_counts": {
+        "eppr78-2022": {
+          "counts": {
+            "CH2_alkenic": 4
+          },
+          "source": "Authored in batch 2026-11-11-aqueous-solvents (W2b) from the E-PPR78 group definitions, ChemSep's PPR78 counts having put ring or alkenic carbons in plain alkane groups: Jaubert et al. 2022 (Fluid Phase Equilib. 560, 113456) Tables 1 and 2 and the PPR78 alkene groups it builds on (Qian, Privat and Jaubert 2013): G10 CH2,cyclic a ring CH2; G18 CH2,alkenic an alkenic =CH2 or =CH- carbon; G19 C,alkenic an alkenic =C< carbon; G1 CH3 and G2 CH2 the alkane groups. 1,3-Butadiene CH2=CH-CH=CH2: four alkenic CH2/CH.",
+          "revision": "eppr78-group-definitions-r1"
+        }
+      }
+    },
+    {
+      "component": "Ethylene",
+      "cas": "74-85-1",
+      "properties": "icheme:chemsep_ethylene",
+      "properties_file": "chemsep_ethylene.json",
+      "authored_counts": {
+        "modified-unifac-dortmund": {
+          "counts": {
+            "CH2=CH": 1
+          },
+          "source": "Authored in batch 2026-11-11-aqueous-solvents (W2b) from the modified UNIFAC (Dortmund) group definitions, ChemSep's counts (2 CH2) having put both alkenic carbons in an alkane group: ethylene CH2=CH2 has no subgroup of its own; it is counted as one CH2=CH (subgroup 5 of main group 2, C=C), the alkenic subgroup with a terminal CH2, so its main group is right and its volume and area (R 1.2832, Q 1.6016) are those of the vinyl group.",
+          "revision": "dortmund-group-definitions-r1"
+        }
+      }
+    }
+  ]
+}

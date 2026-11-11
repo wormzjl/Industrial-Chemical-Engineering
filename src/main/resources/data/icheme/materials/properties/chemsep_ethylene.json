@@ -62,6 +62,14 @@
     "revision": "hess-lhv-r1"
   },
   "group_counts": {
+    "modified-unifac-dortmund": {
+      "counts": {
+        "CH2=CH": 1
+      },
+      "estimated": false,
+      "source": "Authored in batch 2026-11-11-aqueous-solvents (W2b) from the modified UNIFAC (Dortmund) group definitions, ChemSep's counts (2 CH2) having put both alkenic carbons in an alkane group: ethylene CH2=CH2 has no subgroup of its own; it is counted as one CH2=CH (subgroup 5 of main group 2, C=C), the alkenic subgroup with a terminal CH2, so its main group is right and its volume and area (R 1.2832, Q 1.6016) are those of the vinyl group. (table dwsim-10.2.5-modfac-r1)",
+      "revision": "dortmund-group-definitions-r1"
+    },
     "eppr78-2022": {
       "counts": {
         "C2H4": 1

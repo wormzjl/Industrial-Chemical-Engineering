@@ -64,7 +64,16 @@ class AqueousSolventDataTest {
         assertEquals(Map.of("CH3",2,"CH2",4),counts.get(Eppr78Groups.SCHEME).counts());
         assertEquals("chemsep-8.3-modfac-r1",counts.get(ModifiedUnifac.SCHEME).revision());
         assertEquals(Set.of(Eppr78Groups.SCHEME),catalog.groupCounts(WORLD,"CarbonDioxide").keySet(),"ChemSep gives CO2 no Dortmund groups");
-        assertEquals(Set.of(ModifiedUnifac.SCHEME),catalog.groupCounts(WORLD,"Cyclohexane").keySet(),"ChemSep's PPR78 ring carbons are refused by the import");
+        // ChemSep's PPR78 ring and alkenic carbons and its Dortmund ethylene are refused by the import; W2b authored them
+        // from the group definitions (tools/compound-import/selection-aqueous-authored.json).
+        var cyclohexane=catalog.groupCounts(WORLD,"Cyclohexane");
+        assertEquals(Map.of("CH2_cyclic",6),cyclohexane.get(Eppr78Groups.SCHEME).counts());
+        assertEquals("eppr78-group-definitions-r1",cyclohexane.get(Eppr78Groups.SCHEME).revision());
+        assertEquals("chemsep-8.3-modfac-r1",cyclohexane.get(ModifiedUnifac.SCHEME).revision());
+        assertEquals(Map.of("CH3",2,"CH2_alkenic",1,"C_alkenic",1),catalog.groupCounts(WORLD,"Isobutene").get(Eppr78Groups.SCHEME).counts());
+        assertEquals(Map.of("CH2=CH",1),catalog.groupCounts(WORLD,"Ethylene").get(ModifiedUnifac.SCHEME).counts());
+        for(String compound:List.of("Propylene","Butene-1","Butadiene"))
+            assertEquals("eppr78-group-definitions-r1",catalog.groupCounts(WORLD,compound).get(Eppr78Groups.SCHEME).revision(),compound);
         assertTrue(catalog.groupCounts(WORLD,"crude_pc05").isEmpty());assertTrue(catalog.groupCounts(WORLD,"Water").isEmpty());
         var henry=catalog.henryInWater(WORLD,"CarbonDioxide").orElseThrow();
         assertEquals(List.of(-8.55445,4.01195,9.52345),List.of(henry.a(),henry.b(),henry.c()));

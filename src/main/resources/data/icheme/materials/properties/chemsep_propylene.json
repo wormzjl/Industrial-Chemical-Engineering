@@ -62,6 +62,15 @@
     "revision": "hess-lhv-r1"
   },
   "group_counts": {
+    "eppr78-2022": {
+      "counts": {
+        "CH3": 1,
+        "CH2_alkenic": 2
+      },
+      "estimated": false,
+      "source": "Authored in batch 2026-11-11-aqueous-solvents (W2b) from the E-PPR78 group definitions, ChemSep's PPR78 counts having put ring or alkenic carbons in plain alkane groups: Jaubert et al. 2022 (Fluid Phase Equilib. 560, 113456) Tables 1 and 2 and the PPR78 alkene groups it builds on (Qian, Privat and Jaubert 2013): G10 CH2,cyclic a ring CH2; G18 CH2,alkenic an alkenic =CH2 or =CH- carbon; G19 C,alkenic an alkenic =C< carbon; G1 CH3 and G2 CH2 the alkane groups. Propylene CH3-CH=CH2: one CH3, two alkenic CH2/CH. (table eppr78-2022-si-table-s4-r2)",
+      "revision": "eppr78-group-definitions-r1"
+    },
     "modified-unifac-dortmund": {
       "counts": {
         "CH3": 1,
