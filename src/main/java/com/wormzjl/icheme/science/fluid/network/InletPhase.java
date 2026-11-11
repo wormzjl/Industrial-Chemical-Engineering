@@ -120,7 +120,7 @@ public final class InletPhase {
     /** The stream of {@code state} that phase volumes {@code drawn} (m3 by phase, {@link FluidThermodynamics#phaseVolume};
      * null for the bulk) take, as {@link Drawn} states it. */
     private static Drawn stream(Supply supply,FluidThermodynamics.State state,double[] drawn) {
-        if(drawn==null)return new Drawn(supply,state,PhaseLayout.totalAmounts(state),state.enthalpy()-state.solidMoments().enthalpy(state.temperature(),state.pressure()),FluidThermodynamics.holdsLiquid(state));
+        if(drawn==null)return new Drawn(supply,state,PhaseLayout.totalAmounts(state),state.fluidEnthalpy(),FluidThermodynamics.holdsLiquid(state));
         double[] amounts=new double[state.componentCount()];double enthalpy=0;
         for(int phase=0;phase<3;phase++) {
             if(!(drawn[phase]>0))continue;

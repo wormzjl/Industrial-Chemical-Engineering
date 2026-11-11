@@ -1356,6 +1356,8 @@ public final class FluidThermodynamics {
         public static final int VAPOR=0,LIQUID=1,AQUEOUS=2;
         public State { Objects.requireNonNull(solids); Objects.requireNonNull(solidMoments); }
         public State withSolids(SolidInventory inventory) { return withSolidState(inventory,inventory.moments()); }
+        /** The fluid's enthalpy, J: the state's less its solids' at its temperature and pressure. */
+        public double fluidEnthalpy() { return enthalpy-solidMoments.enthalpy(temperature,pressure); }
         /** Moment-only trial states never become owned inventories before population reconstruction. */
         public State withSolidState(SolidInventory inventory,SolidInventory.Moments moments) {
             return new State(temperature,pressure,vaporAmounts,liquidAmounts,aqueousAmounts,

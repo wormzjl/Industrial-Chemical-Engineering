@@ -91,7 +91,8 @@ public final class TowerTransfer {
             double[] vapour=s.vaporAmountsView(),oil=s.liquidAmountsView(),water=s.aqueousAmountsView();double mass=0;
             for(int c=0;c<n;c++){g[c]=share*vapour[c];o[c]=share*oil[c];a[c]=share*water[c];mass+=(o[c]+a[c])*model.molecularWeight(c);}
             double gasHeat=FluidThermodynamics.holdsVapor(s)?share*model.phaseMass(s,FluidThermodynamics.GAS)*model.phaseSpecificEnthalpy(s,FluidThermodynamics.GAS,null):0;
-            return new Stream(g,o,a,gasHeat,share*s.enthalpy()-gasHeat,mass,s.temperature());
+            // The fluid's enthalpy: the solids fall to the basin with theirs, so none of it leaves with the air.
+            return new Stream(g,o,a,gasHeat,share*s.fluidEnthalpy()-gasHeat,mass,s.temperature());
         }
     }
 
@@ -264,7 +265,9 @@ public final class TowerTransfer {
     private static double ambientWaterPressure(FluidThermodynamics model){return CoolingTower.RELATIVE_HUMIDITY*model.saturationPressure(CoolingTower.AIR_TEMPERATURE);}
     /** The ambient air's humidity, kg water per kg dry air. */
     private static double ambientWater(FluidThermodynamics model){double pw=ambientWaterPressure(model);return model.waterMolecularWeight/AIR_MOLAR_MASS*pw/(CoolingTower.PRESSURE-pw);}
-    private static double second(double inlet){return Math.abs(inlet-AMBIENT_WET_BULB)>=5?AMBIENT_WET_BULB:inlet-10;}
+    /** The table's second reading, K: always below the inlet and smooth in it (288.3 K for a 308.15 K inlet, 281 K at the
+     * ambient wet bulb); a switch here would put a step in the table, and so in the residual. */
+    private static double second(double inlet){double d=inlet-AMBIENT_WET_BULB;return inlet-Math.sqrt(d*d+100);}
     /** The components the ambient air brings to a fill: nitrogen, oxygen and water, those the package holds. */
     static int[] airComponents(FluidThermodynamics model) {
         int nitrogen=model.components().indexOf("Nitrogen"),oxygen=model.components().indexOf("Oxygen");
