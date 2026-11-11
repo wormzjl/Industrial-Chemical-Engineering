@@ -411,3 +411,13 @@ Measured by the sub-thread on the rule of section 21's last paragraph: the three
 Why it was the wrong work: the kettle passes on main and at the baseline (`48b4fb298`) under the same pin rule, and `boilUp` is unchanged. W3b did not break the rule; something upstream now drives the kettle into a branch it did not enter before (the duty controller reaches 8.1 MW at t = 10 s). The orchestrator ordered a redesign of the rule before asking what the batch had changed.
 
 Now: the group 5 work is kept as a patch in `tmp/w3b-network/`; the kettle's 1 MW case is run at `48b4fb298` and at HEAD with the same print per accepted step (controller output, pool heat, boil-up, gas capacity, vent flow, pin, pool volume, pressure, temperature), and the first step and quantity that differ decide the fix. If the baseline also passes liquid through the top port, the fault is older than W3b and becomes an open item. The condensate of section 21 arose only under the withdrawn rule.
+
+**The kettle against the baseline (2026-11-11).** The fault is older than W3b. Same start state on both sides (372.147 K, 101325 Pa, liquid only, 1.292 m3; pool heat 5.70 MW; hot side identical).
+
+- First difference, t = 0 to 1 s: water's saturation pressure at the step's end, 101599.5 Pa at the baseline (IF97 to about 1 Pa) against 101676.5 Pa at HEAD (the cubic water, 75 Pa or 0.074 % higher at the same temperature). The vent then passes 4.36 against 6.89 kg/s (274 against 351 Pa over the atmosphere).
+- The baseline also pins the gas and passes liquid through the top nozzle: 107, 96 and 82 kg/s at t = 4.1 to 5.0 s against a boil-up of 3.7 kg/s; 171, 121, 73, 12 and 12 kg/s at t = 23.3 to 26 s against 0.40 kg/s. It then settles at 0.437 kg/s from t = 28 s (pool 1.292 to 0.985 m3) and its test passes.
+- HEAD bursts every 1 to 3 s from t = 25 to 50 s (123 down to 23 kg/s, the vent at 0 in between); the pool falls to 0.633 m3 and the last interval's mean is 8.14 kg/s.
+
+So W3b's 0.07 % shift in vapour pressure only moves the timing of a fault main has: the gas pinned by the outflow test, with liquid through the vapour nozzle while vapour stands above the pool.
+
+One last form, measured (no further port-rule forms in this batch): the outflow test pins a liquid, not a gas the seed still holds. A liquid's holdup is what a port can draw of it in a step; a gas's holdup is no such limit, since drawing it lowers the pressure and the port's own law then passes less. A gas runs out at a port only when liquid displaces it, which is the existing path (the seed no longer holds it, the start did). If any class fails or slows, the rule stays as on main and the kettle is the owner's open item.
