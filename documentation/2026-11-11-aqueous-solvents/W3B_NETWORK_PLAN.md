@@ -477,3 +477,20 @@ Chosen: form G. Form T is rejected on the alternation; form 0 stays behind the s
 | Stall | singular LU, then the iteration limit, on the supplier junction's rows | the iteration limit, same rows; modes alternating |
 
 Both pumps draw from a boiling junction with 0.25 m and 0.11 m of suction head; form 0 (D16 C) closes them as vapour-locked. Decided (orchestrator): E was read on the supplier's liquid alone, but a junction delivers its whole stream, vapour included. E is the pressure at which the stream the pump draws reaches the clean zone's edge: the liquid alone from a vessel's liquid port, the whole mixture from a junction or a bulk draw; where that stream already holds vapour at or past the edge, E is the supplier's own pressure and the pump is locked, as under form 0. Rejected: the lock at the supplier's bubble pressure whenever the supplier holds gas (it would lock water under a nitrogen blanket with any suction lift); the lock below the breakdown at shutoff (it misses bundled 6 by 71 Pa). To be built only if both junction streams are at or past the edge in the traces; then the vapour lock check on form G is their next run.
+
+## 26. The vapour lock stays; the edge on the stream drawn (2026-11-11)
+
+**E on the stream drawn**, committed by the sub-thread as `69db75057`: through a bulk end (a junction's mixture) E is read on the whole mixture at its own enthalpy, and is the supplier's own pressure where that mixture is already past the clean zone's edge; a liquid or bottom port keeps the liquid's E (water under nitrogen 69.9 kPa, unchanged). 29 pump and suction classes pass. The orchestrator's review of that commit found four points not yet in, sent as one follow-up commit: the stream must be the one `InletPhase.supply` delivers, not "bulk end, whole node"; the mixture's enthalpy must leave out carried solids; `limitFloor` drops a finite E where there is no vapour pressure, and a finite vapour pressure where there is no E (a pump with no limit at all); the mixture cache is keyed by the state alone.
+
+**The vapour lock on form G, kept against removed** (200 seeds, 8 threads, machine idle):
+
+| | Cold random | Bundled random | Defaults | Newton iterations, cold / bundled / defaults |
+|---|---|---|---|---|
+| Lock kept | 3: E6 101, F 6, F 118 | 1: F 26 (clean alone: contention) | 0 | 291,234 / 123,409 / 10,894 |
+| Lock removed | 4: E5 181, E6 101, F 6, F 118 | 0 | 0 | 283,474 / 129,734 / 10,894 |
+
+Decided, as the owner asked ("All four, measured"): the vapour lock (D15) stays. Removing it brings cold 181 back as a line search stall at tick 1086 and costs 5.1 % of the bundled iterations. With the lock kept and E on the stream drawn, cold 181 and bundled 6 are clean.
+
+So of section 17's four rules: water's own saturation curve, the no-limit rule for a pump at its tank and D16 C's gas-beside-the-liquid rule are gone (form G); the vapour lock is kept. Forms 0 and T leave the code.
+
+**Open under form G: cold 6**, a wall-deadline hold (tick 2028 to 2084) that form 0 does not have; replayed alone once, not traced (the two-trace allowance went to 181 and bundled 6). Reading from the code: under G a supplier state costs up to three bisections of about 24 PH equilibria each (p_v, the liquid's E, the mixture's E) where form 0 costs one, and a junction supplier changes state every step. Ordered: nothing worked out that the edge does not read (now); a counter of those equilibria per accepted step and cheaper searches in stage B. Step 7's campaign is its next run.
