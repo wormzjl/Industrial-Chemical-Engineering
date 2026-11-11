@@ -191,3 +191,19 @@ Decided by the orchestrator (owner: "auto proceed if nothing major breaks"):
 - **An island's phase model holds water only when water can be in the island** (its mask). The conserved basis and the saved forms keep water last. N1 is read this way.
 - **A baseline is recorded before the network changes**: three fixed scenarios (dry, wet three-phase, dry with a polar refinery compound), counters and time per accepted step, run again after step 5. A wet island above 1.5 times or a dry one above 1.1 comes back as a decision. Skipping the cells of absent compounds in the kernel (estimated 200 ns at 12 compounds, about a day) is decided from those numbers.
 - **Open, the owner's:** which compounds take activity fits with hydrocarbons. Today every compound with a polar group does. Limiting them to compounds that name a homomorph (the water-miscible organics, ethanol first) would give hydrogen sulfide, sulfur dioxide, the mercaptans and ammonia constant pairs with hydrocarbons (library, else E-PPR78 at 298.15 K) and today's cost on sour dry islands; their pairs with water would stay as they are.
+
+## 10. Step cost after steps 3 to 5, main code (2026-11-11)
+
+Baseline `48b4fb298` (three chains: dry, wet three-phase, dry with polar refinery compounds), measured again on the main code of steps 3 to 5 (`58376e618`, tests not yet migrated). Each timing run alone, 60 s warm-up, 60 s measured.
+
+| Scenario | ms per accepted step, before | After | Ratio | Bound |
+|---|---|---|---|---|
+| Dry | 0.777 | 0.831 | 1.07 | 1.1 |
+| Wet | 0.923 | 2.305 | 2.50 | 1.5 |
+| Polar (H2S, methyl mercaptan) | 1.021 | 1.680 | 1.64 | 1.1 |
+
+- Steps and Newton iterations are the same in all three; end states agree to 4 digits.
+- Dry and polar: the same kernel evaluation counts. The polar cost is per evaluation: the activity pairs of hydrogen sulfide and the mercaptan put the local-composition excess in every evaluation (profile: 18 % `correctExcess`, 8 % the excess's second temperature derivative, 3 % `presentOmega`).
+- Wet: kernel evaluations 5769 to 11554 and state calls 2868 to 3516, with the excess on every water pair as well.
+
+The bounds are broken for the wet and the polar scenario. Decided by the orchestrator: the tests come first; then an optimisation step 5b in the structure (the second temperature derivative only when read; sparse rows in `correctExcess`; absent centres' cells skipped; a one-component phase on a pure-compound evaluation prepared once per T and P), measured item by item on the same three scenarios. The polar scenario also depends on the owner's open choice of which compounds take activity fits with hydrocarbons (section 9).
