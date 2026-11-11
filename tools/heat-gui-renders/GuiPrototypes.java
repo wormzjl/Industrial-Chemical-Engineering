@@ -267,7 +267,7 @@ public final class GuiPrototypes {
         double rated = 100 / 3600.0;
         var pump = new com.wormzjl.icheme.science.machine.CentrifugalPump(rated, 80, 0.70, 2950);
         String required = com.wormzjl.icheme.client.gui.common.kit.Format.number(pump.npsh(1).required(rated));
-        var casing = casingInput().withSuction(new DeviceColumn.Suction("6.8", required, "0.4", "73.0"));
+        var casing = casingInput().withSuction(new DeviceColumn.Suction("6.8", required, "0.4", "73.0", "87.6"));
         var casingRows = DeviceColumn.rows(casing, TEXTS);
         double slow = .7, flow = .7 * rated, head = pump.head(flow, slow);
         String slowRequired = com.wormzjl.icheme.client.gui.common.kit.Format.number(pump.npsh(slow).required(flow));

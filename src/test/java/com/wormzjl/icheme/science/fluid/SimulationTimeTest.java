@@ -63,5 +63,5 @@ class SimulationTimeTest {
     private static final List<String> ALLOWED=List.of(
             "ElectricStores.java: return new FluidView.Power(draw, draw / joulesPerFE() / 20,",
             "ShaftTrains.java: return new View(unit, u.kind(), status, driverSpeed, speed, share, demand, shaft, power, power / jpf / 20,",
-            "ColumnOperation.java: :String.format(Locale.ROOT,\"the %s solve failed (%s), the table of %d s ago kept\"");
+            "ColumnOperation.java: :String.format(Locale.ROOT,\"the %s solve failed (%s), the table of %d s of play ago kept\"");
 }

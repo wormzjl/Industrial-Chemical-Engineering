@@ -102,10 +102,14 @@ public final class DeviceColumn {
 
     /**
      * A pump's readings (batch 2026-11-03-rotating-machinery W10d, owner decision D37), as shown: NPSH available and NPSH
-     * required (m; an in-line pump's NPSH3 at its D21 duty speed), the suction's gas (% by volume) and the health left (%).
+     * required (m; an in-line pump's NPSH3 at its D21 duty speed), the suction's gas (% by volume), the health left (%) and
+     * its life, minutes of play until it fails at its present wear (— while it does not wear; batch 2026-11-11-minecraft-time-delta).
      * The status words (FAILED, CAVITATION, GAS) stay on the message display.
      */
-    public record Suction(String available, String required, String gas, String health) {
+    public record Suction(String available, String required, String gas, String health, String life) {
+        public Suction(String available, String required, String gas, String health) {
+            this(available, required, gas, health, "—");
+        }
     }
 
     /** The Suction group (NPSH available, NPSH required, gas) and the Health group (what is left), LED meters with their hovers. */
@@ -116,7 +120,8 @@ public final class DeviceColumn {
                         new Column.Reading("npsh:required", t.get("npsh_required"), s.required(), "m", t.get("npsh_required.hint")),
                         new Column.Reading("npsh:gas", t.get("gas_share"), s.gas(), "%", t.get("gas_share.hint")))),
                 new Column.Group(t.get("device_group.health"), t.get("device_group.health.hint"), List.of(
-                        new Column.Reading("health", t.get("health_left"), s.health(), "%", t.get("health_left.hint")))));
+                        new Column.Reading("health", t.get("health_left"), s.health(), "%", t.get("health_left.hint")),
+                        new Column.Reading("life", t.get("life_left"), s.life(), "min", t.get("life_left.hint")))));
     }
 
     /** The Drive group: the driver's line and state, then Open driver, a push button (it opens a page; A100). */

@@ -546,7 +546,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         if(failed.transientFailure()&&!r.retried){r.retried=true;r.waitUntil=tick+TRANSIENT_WAIT;return true;}
         r.retried=false;
         String text=r.table==null?Refusal.FIRST_SOLVE.text(failed.reason())
-                :String.format(Locale.ROOT,"the %s solve failed (%s), the table of %d s ago kept",p.trigger.name().toLowerCase(Locale.ROOT),failed.reason(),(tick-r.tableTick)/20);
+                :String.format(Locale.ROOT,"the %s solve failed (%s), the table of %d s of play ago kept",p.trigger.name().toLowerCase(Locale.ROOT),failed.reason(),(tick-r.tableTick)/20);
         if(p.trigger==DriftBands.Trigger.SETPOINT){r.refusedSetpoints=p.setpoints;r.setpointRefusal=new Condition.Active(Condition.SETPOINT_REFUSED,text);return true;}
         r.refused=new Refused(p.trigger,p.state,p.held,new Condition.Active(Condition.SOLVE_REFUSED,text));
         // A solve of a changed steam ratio was refused (zero steam without a reboiler, the draw wall): rule A, the inputs cut together.

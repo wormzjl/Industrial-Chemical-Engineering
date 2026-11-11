@@ -100,8 +100,9 @@ public record MachineView(long unit, ShaftNetwork.Kind kind, String status, doub
         var store = v.electric();
         if (store != null && store.capacity() > 0) {
             share = Math.clamp(store.joules() / store.capacity(), 0, 1);
-            // How long the store lasts at the current draw (reading A92); a generator's store fills, so it has no time.
-            if (v.kind() == ShaftNetwork.Kind.MOTOR && v.electricPower() > 0) seconds = store.joules() / v.electricPower();
+            // How long the store lasts at the current draw (reading A92), in play seconds (batch 2026-11-11-minecraft-time-delta:
+            // its joules over the draw are process seconds); a generator's store fills, so it has no time.
+            if (v.kind() == ShaftNetwork.Kind.MOTOR && v.electricPower() > 0) seconds = store.joules() / v.electricPower() / trains.time().factor();
         }
         String status = v.status().length() > MAX_TEXT ? v.status().substring(0, MAX_TEXT) : v.status();
         var steam = trains.steam(unit);

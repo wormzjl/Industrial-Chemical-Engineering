@@ -813,7 +813,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
      */
     private DeviceColumn.Suction suction(){
         var p=menu.clientData().view().pump();if(p==null)return null;
-        return new DeviceColumn.Suction(boxed(p.npshAvailable()),boxed(p.npshRequired()),p.gasShare()==null?"—":value(100*p.gasShare()),value(100*p.health()));
+        return new DeviceColumn.Suction(boxed(p.npshAvailable()),boxed(p.npshRequired()),p.gasShare()==null?"—":value(100*p.gasShare()),value(100*p.health()),p.lifePlaySeconds()==null?"—":value(p.lifePlaySeconds()/60));
     }
     private String boxed(Double v){return v==null?"—":value(v);}
     /** Whether the Overview's glass draws this pump's curve (W10d): a constructed centrifugal pump with a driver. In-line pumps keep their tables. */

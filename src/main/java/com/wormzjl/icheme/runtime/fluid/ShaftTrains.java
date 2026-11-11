@@ -534,6 +534,11 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         }
     }
 
+    /** Process time against online time: the coordinator's ({@link IslandCoordinator#time}). */
+    public com.wormzjl.icheme.science.fluid.SimulationTime time() {
+        return coordinator.time();
+    }
+
     // ---------------- the coordinator's hook ----------------
 
     @Override

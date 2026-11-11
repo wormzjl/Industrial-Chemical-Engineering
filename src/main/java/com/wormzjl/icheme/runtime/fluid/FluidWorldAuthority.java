@@ -1554,7 +1554,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
         var s=health.suction(id);
         var curve=registration.device().control() instanceof FlowControl.Machine machine&&machine.law() instanceof com.wormzjl.icheme.science.machine.CentrifugalPump law
                 ?new FluidView.Curve(law.ratedFlow(),law.ratedHead(),law.efficiency(),law.ratedSpeed()):null;
-        return new FluidView.Pump(finite(s.available()),finite(s.required()),finite(s.gas()),Math.clamp(h,0,1),curve);
+        // Its life in play time: the health left over the wear rate per process second, over the factor (W5).
+        double rate=health.rate(id),life=h>0&&rate>0?h/rate/model.time().factor():Double.NaN;
+        return new FluidView.Pump(finite(s.available()),finite(s.required()),finite(s.gas()),Math.clamp(h,0,1),curve,finite(life));
     }
     private static Double finite(double value){return Double.isFinite(value)?value:null;}
     public void forgetWatcher(UUID player){owned();driverWatchers.remove(player);rotationWatchers.remove(player);tankWatchers.forget(player);for(long id:sightGlassWatchers.devices(player))unwatchSightGlass(player,id);for(long id:moverWatchers.devices(player))unwatchMover(player,id);flareWatchers.forget(player);stillWatchers.forget(player);towerWatchers.forget(player);heaterWatchers.forget(player);chimneyWatchers.forget(player);silhouettes.forget(player);noise.forget(player);}

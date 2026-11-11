@@ -33,13 +33,17 @@ public record FluidView(long identity,long inputRevision,long committedTick,long
      * A pump's readings (batch 2026-11-03-rotating-machinery W10d, owner decision D37), from its last committed suction read
      * and its health: NPSH available and NPSH required (NPSH3 at the accepted flow and speed; an in-line pump's at its D21
      * duty speed), m, and the suction's vapour volume share, 0 to 1, each null where the slice made no read; its health, 0
-     * to 1; a constructed centrifugal pump's design for its curve, null for an in-line pump. Null for a device that is no pump.
+     * to 1; a constructed centrifugal pump's design for its curve, null for an in-line pump; its life, the play seconds until
+     * it fails at its present wear (batch 2026-11-11-minecraft-time-delta, W5), null while it does not wear. Null for a device
+     * that is no pump.
      */
-    public record Pump(Double npshAvailable,Double npshRequired,Double gasShare,double health,Curve curve) {
+    public record Pump(Double npshAvailable,Double npshRequired,Double gasShare,double health,Curve curve,Double lifePlaySeconds) {
         public Pump {
             if(npshAvailable!=null&&!Double.isFinite(npshAvailable)||npshRequired!=null&&!(npshRequired>=0&&Double.isFinite(npshRequired))
-                    ||gasShare!=null&&!(gasShare>=0&&gasShare<=1)||!(health>=0&&health<=1))throw new IllegalArgumentException("Invalid pump presentation");
+                    ||gasShare!=null&&!(gasShare>=0&&gasShare<=1)||!(health>=0&&health<=1)||lifePlaySeconds!=null&&!(lifePlaySeconds>=0&&Double.isFinite(lifePlaySeconds)))
+                throw new IllegalArgumentException("Invalid pump presentation");
         }
+        public Pump(Double npshAvailable,Double npshRequired,Double gasShare,double health,Curve curve){this(npshAvailable,npshRequired,gasShare,health,curve,null);}
     }
     /** A constructed centrifugal pump's design ({@code CentrifugalPump}): rated suction flow (m³/s), head (m), efficiency and speed (rpm). Static: its casing's duty. */
     public record Curve(double ratedFlow,double ratedHead,double efficiency,double ratedSpeed) {

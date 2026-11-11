@@ -1287,7 +1287,7 @@ public final class IslandCoordinator {
     private void revalidate(Island island,IslandCertificate certificate) {
         island.certificate=null;island.revalidating=certificate;island.retained=new RetainedSolver();
         island.lastInterval=null;island.streak=0;
-        island.status="REVALIDATING: certificate horizon at "+SimulationTime.playSeconds(certificate.horizonTick())+" s";island.signature=null;island.touch();FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.certificateWakes);
+        island.status="REVALIDATING: certificate horizon at "+SimulationTime.playSeconds(certificate.horizonTick())+" s of play";island.signature=null;island.touch();FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.certificateWakes);
         reconsider(island);
     }
     /**
@@ -1350,8 +1350,8 @@ public final class IslandCoordinator {
         var certificate=island.certificate;double since=SimulationTime.playSeconds(island.certifiedSince);
         // One certificate kind (BE_INTEGRATOR_PLAN.md section 4): the line names what it replays, and its recheck if it has one.
         String what=certificate.largestFlow()==0?"no flow":String.format(Locale.ROOT,"replaying %.4g kg/s",certificate.largestFlow());
-        String next=certificate.horizonTick()==Long.MAX_VALUE?"":String.format(Locale.ROOT,", next check at %.1f s",SimulationTime.playSeconds(certificate.horizonTick()));
-        return String.format(Locale.ROOT,"STEADY: %s since %.1f s%s",what,since,next)+island.notice;
+        String next=certificate.horizonTick()==Long.MAX_VALUE?"":String.format(Locale.ROOT,", next check at %.1f s of play",SimulationTime.playSeconds(certificate.horizonTick()));
+        return String.format(Locale.ROOT,"STEADY: %s since %.1f s of play%s",what,since,next)+island.notice;
     }
     private void schedule(long tick,IslandScheduler.Kind kind,long id,long generation) {
         scheduler.schedule(tick,kind,id,generation);

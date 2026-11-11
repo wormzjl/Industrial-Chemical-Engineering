@@ -136,7 +136,7 @@ class DeviceColumnTest {
     void aPumpsSuctionAndHealthFitTheDoor() {
         var texts = new HeatControlColumnTest.Recording();
         var driven = new DeviceColumn.Drive(texts.get("drive_line_poles", texts.get("driver.motor"), "30.0", 2), texts.get("drive_state", "RUNNING", "2950"), true, false);
-        var readings = new DeviceColumn.Suction("6.8", "3.3", "0.4", "73.0");
+        var readings = new DeviceColumn.Suction("6.8", "3.3", "0.4", "73.0", "87.6");
         var none = new DeviceColumn.Suction("—", "—", "—", "100.0");
         for (var drive : java.util.Arrays.asList(driven, null))
             for (boolean edit : new boolean[]{true, false})
@@ -157,7 +157,7 @@ class DeviceColumnTest {
                     assertTrue(intake > drives && health == intake + 1 && phases == health + 1, what + ": Suction and Health after the drive, before the Phases");
                     var suctionRows = ((Column.Group) rows.get(intake)).rows();
                     assertEquals(List.of("npsh:available", "npsh:required", "npsh:gas"), suctionRows.stream().map(r -> ((Column.Reading) r).key()).toList(), what);
-                    assertEquals("health", ((Column.Reading) ((Column.Group) rows.get(health)).rows().getFirst()).key(), what);
+                    assertEquals(List.of("health", "life"), ((Column.Group) rows.get(health)).rows().stream().map(r -> ((Column.Reading) r).key()).toList(), what + ": the health left, then its life in minutes of play");
                     for (int width = 300; width <= 790; width += 7) {
                         var column = Column.place(rows, 10, 74, FluidGuiLayout.side(width) - 10, M, Column.Metrics.COMPACT);
                         for (var p : column.rows()) {
