@@ -1,6 +1,6 @@
 # Minecraft time as the simulation step
 
-Status: **Concluded 2026-11-11** (evaluation; no code change). Branch `claude/minecraft-time-delta-eval-997e82`, from `ff6f6892f` (0.26.0).
+Status: **Planned 2026-11-11** (evaluation concluded, implementation plan written; no code change). Branch `claude/minecraft-time-delta-eval-997e82`, from `ff6f6892f` (0.26.0).
 
 ## Scope
 
@@ -8,6 +8,7 @@ Owner, 2026-11-11: evaluate running the simulation on Minecraft time (72 process
 
 ## Documents
 
+- [TIME_SCALE_PLAN.md](TIME_SCALE_PLAN.md): the implementation plan for a time factor (`fluid.timeScale`, 1 to 72): work packages W1-W7, the owner decisions T1-T6 with recommendations, saves, the known holds at 72.
 - [OPTION_A_REVIEW.md](OPTION_A_REVIEW.md): option A prototyped and measured at 1x and 72x (it clears nothing), the stuck row (a junction's enthalpy row, stated over its 0.05 s buffer), the holdup scaled with the time factor, and the options.
 - [HOLD_STUDY_REVIEW.md](HOLD_STUDY_REVIEW.md): every hold of the 72x quick check, its cause, the hypothesis runs and the options on the Newton tolerance and the wall budget.
 - [TIME_SCALE_REVIEW.md](TIME_SCALE_REVIEW.md): the expected behaviour in numbers, what the code does with a slice, the 200-seed quick check at 72x in three step forms, the impact outside the island solve, and the options for the owner.
@@ -19,6 +20,7 @@ Owner, 2026-11-11: evaluate running the simulation on Minecraft time (72 process
   - one replay alone of form C's five new wall-deadline holds (bundled 15, 47, 77, 118, 123): four stand, 118 is clean.
 - 2026-11-11: owner "why 2s budget at all? The engine iteration time is 5s" and "yes, study all the failed cases". Every held case traced with a single-seed study probe (step trace, stack sampler, the rows a failed Newton ends on); four hypothesis switches on the five bundled seeds; the tolerance switch on seeds 1-200 at 72x (bundled 197, cold 199 clean). Written up in HOLD_STUDY_REVIEW.md.
 - 2026-11-11: owner "Yes, option A". Prototyped as a probe switch and measured on seeds 1-200 at 1x and 72x: harmless at 1x, the same worlds hold at 72x. The stuck row identified (junction enthalpy, amount form over the buffer); `HOLDUP_TAU` scaled with the factor (3.6 s) clears bundled 123, 77, 164 at 72x with the tolerances untouched; seed 15 stays (an equation-gate miss of 1.0e-8 to 1.7e-8 on a fugacity row). Written up in OPTION_A_REVIEW.md.
+- 2026-11-11: owner "Holdup only" (the junction holdup scales with the factor; no tolerance or gate change). Plan written in TIME_SCALE_PLAN.md; nothing implemented.
 - No test of the suite ran: no production or test file changed.
 
 ## Code areas (read, not changed)
@@ -27,8 +29,8 @@ Owner, 2026-11-11: evaluate running the simulation on Minecraft time (72 process
 
 ## Open items
 
-- Owner: the factor (72, an intermediate one such as 12, or 1) and, for a factor above 1, whether FE, wear and fuel follow process time or play time.
-- Owner: for a time factor, `HOLDUP_TAU` scaled with it, alone or with the tolerance change (OPTION_A_REVIEW.md section 4). Option A is dropped.
+- Owner: decisions T1-T6 of TIME_SCALE_PLAN.md section 3 (default factor, FE, wear, fuel, level control, the column's accounts) and the go-ahead to implement.
+- Decided: `HOLDUP_TAU` scales with the factor, alone (owner "Holdup only"). Option A is dropped; the tolerance change stays an option in OPTION_A_REVIEW.md.
 - Not traced: bundled 15's last cause under the larger buffer; cold 6 and 183, new under it.
 - Hold classes the longer process time reaches, for their own batches: bundled 47 (liquid drying out in a gas tank), 164 (gas vanishing in a water junction), cold 72 (non-finite fugacity derivative at 111 K).
 - Not measured: the running column, stills, control loops, heat sides in two islands, shaft trains.
