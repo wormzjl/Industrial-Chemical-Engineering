@@ -93,6 +93,17 @@ public final class EquilibriumResult {
          */
         VAPOR_LIQUID_SOLID,
         /**
+         * Two liquids and one crystal (W3b step 1, with water in the equation of state), the liquids lighter first, then the crystal: the fluid the crystal
+         * leaves is a stable {@link #LIQUID_LIQUID} split, each liquid at the crystal's chemical potential of its species
+         * (ice beside a water-rich and an oil-rich liquid).
+         */
+        LIQUID_LIQUID_SOLID,
+        /**
+         * A vapour, two liquids and one crystal (W3b step 1, with water in the equation of state), in that order: the fluid the crystal leaves is a stable
+         * {@link #VAPOR_LIQUID_LIQUID} split at the crystal's chemical potential of its species.
+         */
+        VAPOR_LIQUID_LIQUID_SOLID,
+        /**
          * Water took part as separate free water (P3): the phases are the gas (hydrocarbon vapour and steam), the
          * hydrocarbon liquid, a competing crystal and the free water's condensed phase (its liquid, or its ice below the
          * melting line, WP4), each where present; {@link #freeWater()} carries the rule's pressures and the hydrocarbon
@@ -104,7 +115,8 @@ public final class EquilibriumResult {
 
         /** Whether an answer of this classification holds a crystal among its phases (P4 stage 2a, P5). */
         public boolean holdsCrystal() {
-            return this == SOLID_PRESENT || this == VAPOR_SOLID || this == LIQUID_SOLID || this == VAPOR_LIQUID_SOLID;
+            return this == SOLID_PRESENT || this == VAPOR_SOLID || this == LIQUID_SOLID || this == VAPOR_LIQUID_SOLID
+                    || this == LIQUID_LIQUID_SOLID || this == VAPOR_LIQUID_LIQUID_SOLID;
         }
     }
 
@@ -251,8 +263,9 @@ public final class EquilibriumResult {
 
     /**
      * The prefix of the detail of the typed hold of a crystal competition whose answer needs a phase set the engine does
-     * not implement: two liquids beside a crystal, three fluid phases beside a crystal (that fluid has a product proved
-     * unstable), or two crystals forming. The result is {@link Status#UNSUPPORTED} with
+     * not implement: on the free-water contract two liquids or three fluid phases beside a crystal (a split with a
+     * product proved unstable included; with water in the equation of state both are answers, W3b step 1), three
+     * crystals forming, or two crystals whose fluid is not answered. The result is {@link Status#UNSUPPORTED} with
      * {@link UnsupportedReason#NOT_IMPLEMENTED}, the fluid answer's diagnostics, and no phases.
      */
     public static final String CRYSTAL_PHASES = "CRYSTAL_PHASES";

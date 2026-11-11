@@ -191,6 +191,108 @@ class AqueousEquilibriumTest {
         assertEquals(2, alone.phases().size());
     }
 
+    private static int count(EquilibriumResult r, PhaseKind kind) {
+        int n = 0;
+        for (PhaseAmounts phase : r.phases()) if (phase.kind() == kind) n++;
+        return n;
+    }
+
+    /** The highest temperature at {@code p} where ice forms, between {@code low} (ice) and {@code high} (none), to 1e-6 K. */
+    private static double iceOnset(double[] z, double p, double low, double high) {
+        assertTrue(holdsSolid(tp(low, p, z, ICE)) && !holdsSolid(tp(high, p, z, ICE)), "bracket of the ice onset");
+        while (high - low > 1.0e-6) {
+            double mid = 0.5 * (low + high);
+            if (holdsSolid(tp(mid, p, z, ICE))) low = mid; else high = mid;
+        }
+        return high;
+    }
+
+    /** PH and UV of a TP answer return its state, to 1e-6 of N R T (W3b step 1). */
+    private static void roundTrips(EquilibriumResult r, double t, double p, double[] z, PhaseCompetition competition) {
+        double nrt = R * t;
+        var ph = ENGINE.ph(EquilibriumRequest.ph(p, r.enthalpy(), BASIS, z, competition));
+        assertTrue(ph.converged(), () -> "PH at " + t + " K: " + ph.detail());
+        conserved(ph, z);
+        assertEquals(r.enthalpy(), ph.enthalpy(), 1.0e-6 * nrt);
+        assertEquals(t, ph.phases().get(0).temperature(), 1.0e-6 * t);
+        var uv = ENGINE.uv(EquilibriumRequest.uv(r.internalEnergy(), r.volume(), BASIS, z, competition));
+        assertTrue(uv.converged(), () -> "UV at " + t + " K: " + uv.detail());
+        conserved(uv, z);
+        assertEquals(r.internalEnergy(), uv.internalEnergy(), 1.0e-6 * nrt);
+        assertEquals(t, uv.phases().get(0).temperature(), 1.0e-6 * t);
+        assertEquals(p, uv.phases().get(0).pressure(), 1.0e-6 * p);
+    }
+
+    /**
+     * W3b step 1: ice beside two liquids and beside three fluid phases is an answer. Water under n-hexane with nitrogen at
+     * -5 C and 1 atm freezes to ice, a hexane-rich liquid and gas; with ethanol at 10 % by mass of the water the ice
+     * appears only below about -4 C, beside two liquids and the gas. Both round-trip through PH and UV.
+     */
+    @Test void iceFormsBesideTwoLiquidsAndThreeFluidPhases() {
+        double t = 268.15;
+        double[] dry = feed("Water", 0.3, "N-hexane", 0.4, "Nitrogen", 0.3);
+        var frozen = tp(t, ATM, dry, ICE);
+        System.out.printf(Locale.ROOT, "water, n-hexane, nitrogen at -5 C, 1 atm: %s, %d kernel evaluations%n", frozen.classification(),
+                frozen.diagnostics().kernelEvaluations());
+        assertEquals(1, count(frozen, PhaseKind.SOLID), frozen.detail());
+        assertEquals(1, count(frozen, PhaseKind.VAPOR), frozen.detail());
+        assertEquals(1, count(frozen, PhaseKind.LIQUID), frozen.detail());
+        PhaseAmounts oil = null;
+        for (PhaseAmounts phase : frozen.phases()) if (phase.kind() == PhaseKind.LIQUID) oil = phase;
+        assertTrue(fraction(oil, "N-hexane") > 0.9, "the liquid is hexane-rich");
+        roundTrips(frozen, t, ATM, dry, ICE);
+
+        double water = 0.3, ethanol = 0.1 * water * 18.015 / 46.069 / 0.9;
+        double[] wet = feed("Ethanol", ethanol, "Water", water, "N-hexane", 0.4, "Nitrogen", 0.3);
+        double onset = iceOnset(wet, ATM, 263.15, 272.15);
+        // Some ethanol goes to the oil and the gas, so the water-rich liquid holds less than 10 % and freezes a little higher.
+        var atOnset = tp(onset + 1.0e-3, ATM, wet, ICE);
+        PhaseAmounts aqueous = null;
+        for (PhaseAmounts phase : atOnset.phases()) {
+            if (phase.kind() == PhaseKind.LIQUID && (aqueous == null || fraction(phase, "Water") > fraction(aqueous, "Water"))) aqueous = phase;
+        }
+        double massEthanol = aqueous.amount(BASIS.indexOf("Ethanol")) * 46.069;
+        double massShare = massEthanol / (massEthanol + aqueous.amount(BASIS.indexOf("Water")) * 18.015);
+        System.out.printf(Locale.ROOT, "with ethanol at 10 %% by mass of the water: ice onset %.3f C, the water-rich liquid %.2f %% ethanol by mass%n",
+                onset - 273.15, 100.0 * massShare);
+        assertTrue(onset - 273.15 >= -5.5 && onset - 273.15 <= -3.0, "ice onset " + (onset - 273.15));
+        double below = onset - 2.0;
+        var four = tp(below, ATM, wet, ICE);
+        System.out.printf(Locale.ROOT, "  %.2f C: %s, %d kernel evaluations%n", below - 273.15, four.classification(),
+                four.diagnostics().kernelEvaluations());
+        assertEquals(Classification.VAPOR_LIQUID_LIQUID_SOLID, four.classification(), four.detail());
+        assertEquals(2, count(four, PhaseKind.LIQUID));
+        double rt = R * below;
+        var ice = ENGINE.anchoredCrystal("icheme:crystal_ice_ih");
+        int w = ENGINE.evaluator().waterComponent();
+        for (PhaseAmounts phase : four.phases()) {
+            if (phase.kind() == PhaseKind.SOLID) continue;
+            assertEquals(0.0, (phase.state().chemicalPotential(w) - ice.chemicalPotential(below, ATM)) / rt, 1.0e-8, "water at the ice's potential");
+        }
+        roundTrips(four, below, ATM, wet, ICE);
+        // Without the gas, ice beside two liquids.
+        double[] liquids = feed("Ethanol", ethanol, "Water", water, "N-hexane", 0.4);
+        var two = tp(below, 5.0 * ATM, liquids, ICE);
+        assertEquals(Classification.LIQUID_LIQUID_SOLID, two.classification(), two.detail());
+        roundTrips(two, below, 5.0 * ATM, liquids, ICE);
+    }
+
+    /**
+     * W3b step 1: the ethanol, water and n-hexane ternary below its ice onset with a gas: ice beside three fluid phases
+     * answers and conserves every compound. A ternary has four phases at one pressure per temperature (phase rule), so
+     * the gas at a fixed T and P is held by a little nitrogen.
+     */
+    @Test void iceBesideThreeFluidPhasesConserves() {
+        double[] z = feed("Ethanol", 0.05, "Water", 0.45, "N-hexane", 0.45, "Nitrogen", 0.05);
+        for (double t : new double[] {263.15, 258.15, 253.15}) {
+            for (double p : new double[] {0.5 * ATM, ATM}) {
+                var r = tp(t, p, z, ICE);
+                System.out.printf(Locale.ROOT, "ethanol/water/n-hexane/N2 at %.2f C, %.0f Pa: %s%n", t - 273.15, p, r.classification());
+                assertEquals(Classification.VAPOR_LIQUID_LIQUID_SOLID, r.classification(), r.detail());
+            }
+        }
+    }
+
     /** TP to PH and UV and back over one, two and three fluid phases and with crystals, to 1e-6 of N R T. */
     @Test void phAndUvRoundTrips() {
         Object[][] cases = {

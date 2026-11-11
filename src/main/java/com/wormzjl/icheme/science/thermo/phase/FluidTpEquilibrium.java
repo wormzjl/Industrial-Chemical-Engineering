@@ -112,10 +112,12 @@ import java.util.Objects;
  * above {@link #DEPOSITION_TOLERANCE} the solid amount is solved so that the fluid the crystal leaves, re-flashed with
  * the stability test, has the crystal's chemical potential to {@code 1e-9}: the vapour-solid Newton on the reduced
  * feed's vapour root first ({@link #depositFromVapour}), else the general solve whose every iterate is a re-flash
- * ({@link #depositFromFluid}; {@link Classification#VAPOR_SOLID}, {@link Classification#LIQUID_SOLID} or
- * {@link Classification#VAPOR_LIQUID_SOLID}). A pure feed freezes or deposits completely
- * ({@link Classification#SOLID_PRESENT}), as does a species below {@link #DEPOSITION_TRACE} in the fluid. Two liquids
- * beside the crystal, three fluid phases and two crystals are the typed {@link EquilibriumResult#CRYSTAL_PHASES} hold.
+ * ({@link #depositFromFluid}; {@link Classification#VAPOR_SOLID}, {@link Classification#LIQUID_SOLID},
+ * {@link Classification#VAPOR_LIQUID_SOLID}, and, with water in the equation of state, beside two liquids
+ * {@link Classification#LIQUID_LIQUID_SOLID} or {@link Classification#VAPOR_LIQUID_LIQUID_SOLID}, W3b step 1). A pure feed freezes or deposits completely
+ * ({@link Classification#SOLID_PRESENT}), as does a species below {@link #DEPOSITION_TRACE} in the fluid. Two crystals
+ * alternate their single solves; on the free-water contract two liquids or three fluid phases beside the crystal, a
+ * fluid with a product proved unstable beside it and three crystals are the typed {@link EquilibriumResult#CRYSTAL_PHASES} hold.
  * PH and UV answer the pure species' sublimation and melting steps, its triple point (UV) and a binary's three-phase
  * step from the balances; a start in a held region restarts from the competition's ceiling. Onsets
  * ({@link #depositionTemperature}, {@link #freezingTemperature}, {@link #depositionPressure}) are bracketed searches on
@@ -2998,8 +3000,9 @@ public final class FluidTpEquilibrium {
      * crystal alone (except within the coexistence tolerance of its sublimation or melting point, undetermined as a
      * pure fluid's coexistence); a mixture's solid amount is solved so that the fluid the crystal leaves, re-flashed
      * with the stability test, has the crystal's chemical potential: {@link #depositFromVapour} first, and where that
-     * does not leave one stable fluid phase on its root, {@link #depositFromFluid}; two liquids beside the crystal,
-     * three fluid phases and two crystals forming are the typed {@link EquilibriumResult#CRYSTAL_PHASES} hold.
+     * does not leave one stable fluid phase on its root, {@link #depositFromFluid} (which answers beside one or, with water in the
+     * equation of state, two liquids and a vapour); two crystals forming alternate in {@link #twoCrystals}; three crystals forming are the typed
+     * {@link EquilibriumResult#CRYSTAL_PHASES} hold.
      */
     private EquilibriumResult solveWithCrystals(double t, double p, PhaseCompetition competition, Workspace w) {
         EquilibriumResult fluid = solveDry(t, p, competition, w);
@@ -3391,8 +3394,11 @@ public final class FluidTpEquilibrium {
      * refused, LNG at 140.9 K and 620 kPa freezing CO2). A reduced fluid whose split has a product proved unstable steers
      * the search but is never an answer. Below the trace floor with {@code f} still positive the deposition is complete.
      * The answer: the fluid's phases and the crystal ({@link Classification#VAPOR_SOLID},
-     * {@link Classification#LIQUID_SOLID} or {@link Classification#VAPOR_LIQUID_SOLID}); two liquids beside the crystal
-     * are the typed {@link EquilibriumResult#CRYSTAL_PHASES} hold, a search that does not converge {@code NOT_CONVERGED}.
+     * {@link Classification#LIQUID_SOLID}, {@link Classification#VAPOR_LIQUID_SOLID}, {@link Classification#LIQUID_LIQUID_SOLID}
+     * or {@link Classification#VAPOR_LIQUID_LIQUID_SOLID}: the crystal's species meets it in every fluid phase, two liquids
+     * included, W3b step 1, with water in the equation of state; on the free-water contract two liquids or three fluid
+     * phases are the typed hold); a fluid with a product proved unstable whose bracket closes is the typed
+     * {@link EquilibriumResult#CRYSTAL_PHASES} hold, a search that does not converge {@code NOT_CONVERGED}.
      * The solid is {@code -z_i expm1(s)} and the fluid carries {@code z_i e^s}, so the species is conserved to rounding.
      */
     private EquilibriumResult depositFromFluid(EquilibriumResult fluid, boolean threeFluid, Crystal c, double drive, double solidMu,
@@ -3509,15 +3515,21 @@ public final class FluidTpEquilibrium {
         }
         Classification classification = switch (reduced.classification()) {
             case VAPOR_LIQUID -> Classification.VAPOR_LIQUID_SOLID;
+            case LIQUID_LIQUID -> Classification.LIQUID_LIQUID_SOLID;
+            case VAPOR_LIQUID_LIQUID -> Classification.VAPOR_LIQUID_LIQUID_SOLID;
             case SINGLE_VAPOR, SINGLE_LIQUID, SINGLE_FLUID, SUPERCRITICAL_FLUID ->
                     reduced.phases().get(0).kind() == PhaseKind.LIQUID ? Classification.LIQUID_SOLID : Classification.VAPOR_SOLID;
             default -> null;
         };
-        if (reduced.classification() == Classification.LIQUID_LIQUID) {
-            return crystalPhasesHold(reduced, "the fluid left by the crystal " + c.id() + " is two liquids (" + forces + ")", competition, w);
-        }
-        if (reduced.classification() == Classification.VAPOR_LIQUID_LIQUID) {
-            return crystalPhasesHold(reduced, c.id() + " forms and the fluid it leaves has three fluid phases (" + forces + ")", competition, w);
+        // The free-water contract's network adopts one hydrocarbon liquid: two liquids beside a crystal stay its typed hold
+        // until the network carries them (W3b step 3); with water in the equation of state they are the answer.
+        if (contract.water() != WaterParticipation.IN_EQUATION_OF_STATE) {
+            if (reduced.classification() == Classification.LIQUID_LIQUID) {
+                return crystalPhasesHold(reduced, "the fluid left by the crystal " + c.id() + " is two liquids (" + forces + ")", competition, w);
+            }
+            if (reduced.classification() == Classification.VAPOR_LIQUID_LIQUID) {
+                return crystalPhasesHold(reduced, c.id() + " forms and the fluid it leaves has three fluid phases (" + forces + ")", competition, w);
+            }
         }
         if (classification == null) {
             return EquilibriumResult.notConverged(Specification.TP, contract.identity(), competition, "the fluid left by the crystal "
@@ -3538,6 +3550,8 @@ public final class FluidTpEquilibrium {
         String out = switch (classification) {
             case LIQUID_SOLID -> "freezes " + solid + " mol of " + species + " out of the liquid";
             case VAPOR_LIQUID_SOLID -> "forms " + solid + " mol of " + species + " beside a vapour and a liquid";
+            case LIQUID_LIQUID_SOLID -> "freezes " + solid + " mol of " + species + " beside two liquids";
+            case VAPOR_LIQUID_LIQUID_SOLID -> "forms " + solid + " mol of " + species + " beside a vapour and two liquids";
             default -> "deposits " + solid + " mol of " + species + " from the vapour";
         };
         String note = complete
@@ -3949,8 +3963,8 @@ public final class FluidTpEquilibrium {
     }
 
     /**
-     * The typed hold of a crystal competition whose answer needs a phase set the engine does not implement (P5: two
-     * liquids beside a crystal, three fluid phases beside it, two crystals); see {@link EquilibriumResult#CRYSTAL_PHASES}.
+     * The typed hold of a crystal competition whose answer needs a phase set the engine does not implement (a fluid with a
+     * product proved unstable beside a crystal, three crystals, two crystals whose fluid is not answered); see {@link EquilibriumResult#CRYSTAL_PHASES}.
      */
     private EquilibriumResult crystalPhasesHold(EquilibriumResult fluid, String why, PhaseCompetition competition, Workspace w) {
         String detail = EquilibriumResult.CRYSTAL_PHASES + ": " + why + "; that phase set beside a crystal is not implemented";
