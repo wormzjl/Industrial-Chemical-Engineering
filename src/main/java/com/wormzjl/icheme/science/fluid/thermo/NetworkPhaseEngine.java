@@ -30,10 +30,12 @@ final class NetworkPhaseEngine {
     private final List<String> species;
     /** Whether the engine's basis carries water (the network's conserved basis), or the compounds alone. */
     private final boolean wet;
+    /** The network package, named by a dry model's refusal of water. */
+    private final String packageId;
     private final ThreadLocal<FluidTpEquilibrium.Workspace> workspaces;
 
-    private NetworkPhaseEngine(FluidTpEquilibrium engine,boolean wet) {
-        this.engine=engine;species=engine.contract().components();this.wet=wet;
+    private NetworkPhaseEngine(FluidTpEquilibrium engine,boolean wet,String packageId) {
+        this.engine=engine;species=engine.contract().components();this.wet=wet;this.packageId=packageId;
         workspaces=ThreadLocal.withInitial(engine::newWorkspace);
     }
 
@@ -54,14 +56,16 @@ final class NetworkPhaseEngine {
                 throw new IllegalStateException("Package "+packageId+": the network's crystals "+crystals+" are not the contract's competition "+competition);
             for(String id:crystals)solids.add(CrystalPhaseEvaluator.forPackage(catalog,packageId,id));
         }
-        return new NetworkPhaseEngine(new FluidTpEquilibrium(contract,evaluator,settings,null,solids),fluid.wet());
+        return new NetworkPhaseEngine(new FluidTpEquilibrium(contract,evaluator,settings,null,solids),fluid.wet(),packageId);
     }
 
     /** {@code overall} (the network's conserved basis, water last) on the engine's basis: itself with water, the compounds
      * alone without (the water amount must then be zero). */
     private double[] basis(double[] overall) {
         if(wet)return overall;
-        if(overall[overall.length-1]!=0)throw new IllegalArgumentException("Water on a model without water");
+        // A capability limit (W3b, option C): a package whose ideal gas comes from reference spines has no water spine, so
+        // MaterialCatalog.withWater leaves its network dry, and water is refused at its state.
+        if(overall[overall.length-1]!=0)throw new IllegalArgumentException("Package "+packageId+" holds no water: its ideal-gas data has no water record");
         return Arrays.copyOf(overall,overall.length-1);
     }
     /** The TP equilibrium of {@code overall} (the network's conserved basis, water last) at {@code (t, p)}: under the
