@@ -1,8 +1,8 @@
 # 2026-11-11 gas blanketing
 
-Status: in progress since 2026-11-11. Branch `claude/gas-vent-hold`, cut from `8f91ccd11` (the drum-operation-holds tip, which holds the time-factor batch). Not merged; merge preparation waits for the owner.
+Status: in progress since 2026-11-11. Branch `claude/gas-vent-hold`, cut from `8f91ccd11` (the drum-operation-holds tip, which holds the time-factor batch). The pressure safety valve branch is merged in (`e55b0e363`); the branch also carries the batches `2026-11-11-minecraft-time-delta` and `2026-11-11-drum-operation-holds`. Merge preparation 2026-11-11; the final lane, the version and the merge to `main` are still to come.
 
-Purpose: a gas blanketing valve as an optional accessory on vertical and horizontal drums. It holds the drum's gas pressure at a set value: supply gas in through piping below it, gas out to atmosphere above it. Then the design of a pressure safety valve.
+Purpose: a gas blanketing valve as an optional accessory on vertical and horizontal drums. It holds the drum's gas pressure at a set value: supply gas in through piping below it, gas out to atmosphere above it. Then a pressure safety valve on drums and pipes, and a flare whose flow follows its back pressure (D6).
 
 ## History
 
@@ -22,6 +22,7 @@ Purpose: a gas blanketing valve as an optional accessory on vertical and horizon
 - 2026-11-11: owner: "Blanketing valve and PSV should be in obvious different groups in GUI". The Accessory page has one framed group per valve ("Blanketing valve": set pressure, drum; "Safety valve"), a gap between them (`DeviceColumn.accessories`), and an accent rule between their sections on the glass; DeviceColumn gate.
 - 2026-11-11: owner decision on X4 as status only: asked "Keep the rule that the flame goes out above its stable exit velocity?", the owner answered "Yes, keep it". PSV_REVIEW.md section 4 and the flare batch README record it.
 - 2026-11-11: the PSV branch (`claude/pressure-safety-valve-e38517`, tip `905c3f10e`) merged into `claude/gas-vent-hold` on the owner's word ("ok go ahead"); the merged tree is the PSV branch's plus this README, so no test ran again.
+- 2026-11-11, merge preparation: CHANGELOG lines under `[Unreleased]` (the valves under Added, the flare's back pressure under Changed); tool folders `tools/psv-flare/`, `tools/equipment-drawings/`, `tools/heat-gui-renders/` checked (READMEs, index rows); the batch row's purpose in `documentation/INDEX.md` now names the PSV and the flare; nothing left `src/`. What ran after the cleanup: nothing, documents and tools only.
 
 ## Documents
 
@@ -38,11 +39,11 @@ Purpose: a gas blanketing valve as an optional accessory on vertical and horizon
 - GUI: `FluidNetwork.Controls.blanket`, `DeviceColumn.blanketValve`, `FluidDeviceScreen` page `ACCESSORY`.
 - PSV: `PhysicalFluidTopology` (`ConnectionRole.RELIEF`, `Relief`, the relief run), `PhysicalRegistry.reliefs`, `FluidWorldAuthority.reliefValve`, `pipeRelief`, `reliefPressure`, `FluidDeviceSpec.relief`, `FluidView.Relief`; `Instrument.Type.SAFETY_VALVE`, `InstrumentHosts.ReliefValve`, `InstrumentService` (`reliefs`); `ReliefValveGeometry`, `ShapeRasterizer.reliefValve`; `DeviceColumn.reliefValve`, `FluidDeviceScreen` (`valveOnly`), `FluidDeviceBlock` (a pipe with a PSV opens). D6: `FlowControl.ControlValve.bare` (an open flare tip), `Flares` (status from the exit velocity and rating), `PhysicalFluidTopology` (the tip bore, one relief line into a flare). Tests: `ReliefValveWorldTest`, `ReliefFlareGameTests`.
 - Tests: `GasBlanketTest`, `BlanketValveWorldTest`, `FluidFactsCompatTest`, `AccessoryStoreCompatTest`, `LevelLoopGameTests`.
-- Tools: `tools/equipment-drawings` scenes `VERTICAL_BLANKET`, `LENGTHWISE_BLANKET`, `LENGTHWISE_BLANKET_SMALL`, `GAS_BLANKETING_VALVE`; `tools/heat-gui-renders/GuiPrototypes` page `fluid-drum-accessory`; `tools/minecraft-time-delta/level-loop/run.sh` (`LEVEL_LOOP_TAG`, the two switches).
+- Tools: `tools/equipment-drawings` scenes `VERTICAL_BLANKET`, `LENGTHWISE_BLANKET`, `LENGTHWISE_BLANKET_SMALL`, `GAS_BLANKETING_VALVE`; `tools/heat-gui-renders/GuiPrototypes` page `fluid-drum-accessory`; `tools/minecraft-time-delta/level-loop/run.sh` (`LEVEL_LOOP_TAG`, the two switches); `tools/psv-flare` (`ReliefFlareGameTests` alone on the review server); `tools/equipment-drawings` scenes `*_VALVES`, `PRESSURE_SAFETY_VALVE`, `PRESSURE_SAFETY_VALVE_ON_PIPE`; `tools/heat-gui-renders/GuiPrototypes` pages `fluid-drum-accessory-psv`, `fluid-pipe-psv`.
 
 ## Open items
 
 - Review section 5: the direct-start hold (with defect 1 of the drum batch), the vent's lag on a fast fill, the item icon, the fifth tab, the in-game check.
-- PSV: D6 open (PSV_REVIEW.md section 4): a relief run into a firebox, a blanketed vessel or a set-flow mover keeps two regulators; a relief run straight into a flare has no solids block; the PSV drawings and screens for the owner; no in-game check.
+- PSV: built and merged into this branch. D6 decided by the owner: the flare follows its back pressure, and X4 stays as status only ("Yes, keep it": the flame goes out above its stable exit velocity). Open from it (PSV_REVIEW.md section 4): a relief run into a firebox, a blanketed vessel or a set-flow mover keeps two regulators; a relief run straight into a flare has no solids block; the PSV drawings and screens for the owner; no in-game check.
 - Owner, 2026-11-11, on the redrawn valve (`9777378a4`): "Yes, keep it". Still to judge: the Accessory page. PSV plan: D4 decided (own accessory); D1, D2, D3, D5 are built as recommended unless the owner overrules.
-- Before the merge: final lane, CHANGELOG, version, translation commit (`en_us.json` has new keys), code guide (`fluid-science.md`: GasBlanket and the per-step plan; `fluid-runtime.md`: the BLANKET role; equipment and GUI chapters), with the time-factor and drum batches.
+- Before the merge, with the time-factor and drum batches: the final lane (once, on the final code; fluid GameTests with `ReliefFlareGameTests` and `level-loop-blanket`, the campaign), the version, the translation commit (`en_us.json` has new keys), the code guide (`fluid-science.md`: GasBlanket and the per-step plan; `fluid-runtime.md`: the BLANKET and RELIEF roles; the flare chapter for D6; equipment and GUI chapters), then the merge. CHANGELOG entry and tooling cleanup: done (2026-11-11).

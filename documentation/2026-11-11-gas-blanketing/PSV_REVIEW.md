@@ -44,3 +44,4 @@ Step 5 → 7 bar (0.15 m tip): 2.568 → 3.610 kg/s, drum 300000 → 311538 Pa (
 ## 5. Other open items
 
 - No in-game check. Fluid GameTests run in the final lane. Translations: `en_us.json` only. The owner judges the drawings and screens.
+- Tools of the batch (both valves): `tools/psv-flare/`, `tools/equipment-drawings/` (scenes `*_BLANKET`, `*_VALVES`, the valves alone), `tools/heat-gui-renders/` (`fluid-drum-accessory*`, `fluid-pipe-psv`), `tools/minecraft-time-delta/level-loop/` (switches `blanket`, `direct`). Tooling cleanup (merge preparation): nothing left `src/`; what ran after it: nothing, documents and tools only.

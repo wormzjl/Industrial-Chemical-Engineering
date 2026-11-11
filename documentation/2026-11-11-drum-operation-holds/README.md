@@ -1,6 +1,6 @@
 # Drum operation holds
 
-Status: **In progress since 2026-11-11**. Branch `claude/nice-archimedes-0816d4`, cut from `claude/minecraft-time-delta-eval-997e82` (`f9a493084`, not merged). Defects 2, 3 and 5 fixed; 1 and 4 wait on the owner's options.
+Status: **In progress since 2026-11-11**. Branch `claude/nice-archimedes-0816d4`, cut from `claude/minecraft-time-delta-eval-997e82` (`f9a493084`, not merged). Defects 2, 3 and 5 fixed; 4 answered by the gas blanketing valve; 1 open. Its commits merge to `main` on `claude/gas-vent-hold` with the batches `2026-11-11-minecraft-time-delta` and `2026-11-11-gas-blanketing`.
 
 ## Scope
 
@@ -16,7 +16,7 @@ Owner, 2026-11-11: the drum-operation defects the time-factor batch (`2026-11-11
 
 - [DRUM_HOLDS_REVIEW.md](DRUM_HOLDS_REVIEW.md): defects 2, 3 and 5. Expected behaviour, what the code did, the fix and its proof.
 - [GAS_VENT_REVIEW.md](GAS_VENT_REVIEW.md): defects 1 and 4. Diagnosis and the options for the owner.
-- Tool: [tools/drum-operation-holds/](../../tools/drum-operation-holds/README.md), the headless gas-vent rig.
+- Tools: [tools/drum-operation-holds/](../../tools/drum-operation-holds/README.md), the headless gas-vent rigs; [tools/minecraft-time-delta/](../../tools/minecraft-time-delta/README.md) (`factor.sh`, `worlds/DrumDrainTest`, `level-loop/` with the `gasOutlet` switch).
 
 ## History
 
@@ -31,6 +31,7 @@ Owner, 2026-11-11: the drum-operation defects the time-factor batch (`2026-11-11
 - 2026-11-11 (defect 1, option (a), owner "Revert (d), build (a)"): the mint's sweep does not pass an empty vessel's bottom port; a junction there takes the gas reaching the vessel (amends D55). `JunctionStartFormTest` gate fails with it disabled (55.5 mol of water at the foot). 49 changed-class tests, hold gates 58, chain-100 exact, the 33 junction lines equal. Level loop on the gas vent still holds (46 the same substep limit, 23 and 69 round deadline); the probed rows equal the time-delta dump: the failing state is the island's own, not the mint's. `DropLegColdStartTest` passes without `rest` under (a). Quick check not run (`e09e9943b`).
 - 2026-11-11 (defect 1): (a) reverted (owner "Revert (a), run it"): the hold remained and the held cases' residual rose to 13 570 mol unexplained. Code as at `9af97a3e6`; `rest` kept.
 - 2026-11-11 (defect 1, rig only): the level loop with the outlet void charged as nitrogen (`-Dicheme.levelLoop.gasOutlet=true`) holds the same way, the rows equal to the digit. A void never stands in a line (`donates`), and its state is the ambient nitrogen in either charge. The foot's 30 kPa deficit equals its own bulk (about 510 kg/m3) as a full 6 m column to the void (arithmetic, not run). Defect 1 open.
+- 2026-11-11, merge preparation (on `claude/gas-vent-hold`): CHANGELOG line under `[Unreleased]` (Fixed); `tools/drum-operation-holds/` README and index row checked; nothing left `src/`. What ran after the cleanup: nothing, documents and tools only.
 
 ## Code areas
 
@@ -40,9 +41,9 @@ Owner, 2026-11-11: the drum-operation defects the time-factor batch (`2026-11-11
 
 - 2026-11-11: defect 4 is answered by the gas blanketing valve (batch 2026-11-11-gas-blanketing): a blanketed drum passes the level loop on the standard start. Its direct start (from empty on the design feed) holds once the pad keeps the drum at pressure, the same drain as defect 1; it reproduces at factor 4 in three minutes (GAS_BLANKET_REVIEW.md, item 1).
 - Defect 1 open: the gas-vent setup hold (GAS_VENT_REVIEW.md, rows). Lead, not verified: the foot's BULK column fills the whole 6 m line to the void whatever the 1 L foot holds.
-- Close-out: the 200-seed quick check at factor 1 on the final code stands (`dh2`, on `9af97a3e6`; `src/` is unchanged since). Then the owner's merge steps.
+- Close-out: the 200-seed quick check at factor 1 (`dh2`, on `9af97a3e6`) stands for this batch's code. `src/` changed since in the gas blanketing batch, so the final lane, with the campaign, is the measure of the merged code.
 - Not explained: the held cases' 1.357e4 mol residual under (a) (reverted).
-- Owner: defect 4, option (A), (B) or (C) for the rig; recommended (A), after defect 1. `LevelLoopGameTests` keeps its fill at a tenth and its ramp until then.
+- Defect 4's options (A) to (C) for the void-vent rig are not chosen; the blanketed loop (`level-loop-blanket`) answers it in play. `LevelLoopGameTests` keeps its fill at a tenth and its ramp.
 - Not run: the fluid and column GameTests (the final lane's); the kept crash world `world-crash-147499` (the JUnit reproduces its stack).
 - Seen, not this batch's: `IslandCoordinator.budgetHold` counts a missing result as a budget hold whatever its cause, so a worker exception is retried as one.
-- Before the merge: CHANGELOG, version, translation (no lang change), code guide (`fluid-runtime.md`: Ports.decide; `fluid-science.md`: BalanceNet.rest), the final lane. The time-factor batch merges first or with it.
+- Before the merge, with the time-factor and gas blanketing batches on `claude/gas-vent-hold`: the final lane (once, for the three batches), the version, the translation commit (this batch has no lang change; the others do), the code guide (`fluid-runtime.md`: Ports.decide; `fluid-science.md`: BalanceNet.rest), then the merge. CHANGELOG entry and tooling cleanup: done (2026-11-11).

@@ -1,6 +1,6 @@
 # Time factor build: W1-W6 (2026-11-11)
 
-Plan: [TIME_SCALE_PLAN.md](TIME_SCALE_PLAN.md). Commits `c7a0e4ddd` (W1), `6a3642338` (W2), `ad0c21634` (W3), `a64fcc57d` (W4), `93985cfa5` (W5); W6 below. Reports in this worktree's `tmp/time-scale/` (git-ignored); tool `tools/minecraft-time-delta/` (`factor.sh`, `worlds/`).
+Plan: [TIME_SCALE_PLAN.md](TIME_SCALE_PLAN.md). Commits `c7a0e4ddd` (W1), `6a3642338` (W2), `ad0c21634` (W3), `a64fcc57d` (W4), `93985cfa5` (W5); W6 below. Reports in this worktree's `tmp/time-scale/` (git-ignored); tool `tools/minecraft-time-delta/` (`factor.sh`, `worlds/`, `level-loop/`), with the hold-fuzz harnesses of `tools/unified-thermo-port-forms/` (`-PholdFuzzTimeScale`) and the pump page render in `tools/heat-gui-renders/`. Tooling cleanup (merge preparation): nothing left `src/`; what ran after it: nothing, documents and tools only.
 
 ## 1. Factor 1 is the engine's old behaviour
 

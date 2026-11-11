@@ -1,6 +1,6 @@
 # Drum operation holds: defects 2, 3 and 5 (2026-11-11)
 
-Defects found by the time-factor batch's level loop (`2026-11-11-minecraft-time-delta`); they occur at factor 1, `main`'s behaviour. Defects 1 and 4: [GAS_VENT_REVIEW.md](GAS_VENT_REVIEW.md).
+Defects found by the time-factor batch's level loop (`2026-11-11-minecraft-time-delta`); they occur at factor 1, `main`'s behaviour. Defects 1 and 4: [GAS_VENT_REVIEW.md](GAS_VENT_REVIEW.md). Tools: `tools/drum-operation-holds/` (headless gas-vent rigs), `tools/minecraft-time-delta/` (`factor.sh` quick check, `worlds/DrumDrainTest`, `level-loop/`). Tooling cleanup (merge preparation): nothing left `src/`; what ran after it: nothing, documents and tools only.
 
 ## 5. Server crash on a restored certificate (fixed, `9c05850bd`)
 - **Expected.** A certified island whose horizon passed before its deadline fired (a restored world, a fence released late) materialises to the horizon once, revalidates, and solves on. A column cycle that waited for it runs after.
