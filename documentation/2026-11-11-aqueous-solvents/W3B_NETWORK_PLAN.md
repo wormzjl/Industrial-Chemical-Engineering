@@ -285,3 +285,17 @@ Commits: `58376e618` (main code), `9c3a23ffb`, `fa0a292f3`, `402b1bf86`, `65828c
 - Tests removed, each with its reason in the lists file: the bit-for-bit pin of the old dry path, the partial-pressure box, two free-water rule tests, the virial steam's network state, the crude-trace fold in a water-full vessel, one pilot refresh.
 
 Next, in the same sub-thread: the 21 defects group by group (conservation first), then step 5b; steps 6 and 7 after that.
+
+## 16. Stage A (the 21 defects), groups 1 to 3, and the pump suction floor (2026-11-11)
+
+Committed: `e5391b412` (a bottom port's pump left its last 6.8 g of water as vapour at 282 K: a phase the step's start holds and the seed has lost is now pinned, so the port draws it whole), `ba002f4a6` (a vessel holding only solids has no phase to add), `dc6238dc4` (the aqueous liquid's vanishing share is judged by moles as well as by volume, as on main; the volume-only form held condensate as supersaturated vapour, a 2 K sawtooth over 6 slices). Filtered run: 2039 tests, 21 failing, 7 fixed, none new.
+
+**The pump suction floor: the owner's choice.**
+
+- Expected: a pump cannot pull its suction below the pressure at which the liquid it draws forms vapour. For water that is its saturation pressure (3.2 kPa at 25 C). A liquid in equilibrium with its own gas (a separator's oil) is at that pressure already.
+- What the code does: on main, water took its saturation pressure everywhere; a hydrocarbon liquid took its bubble pressure, or its vessel's own pressure when the vessel holds gas (owner decision D16 C). Water now dissolves nitrogen and air, so by equilibrium a blanketed water tank is at its bubble pressure too, and its pump keeps only its static head: 9.8 kPa under 1 m of water against about 17 kPa needed at 10 L/s. Real pumps use the vapour pressure, because dissolved gas comes out slowly; an equilibrium model has no rate.
+- Options:
+  - **Today's behaviour, by label (built provisionally, in one function).** The oil slot keeps D16 C; the aqueous liquid takes the bubble pressure of its condensable compounds (those above their critical temperature left out). No pump in an existing world changes.
+  - **One rule, dissolved gases never count.** Any liquid takes the bubble pressure without the compounds above their critical temperature. Replaces D16 C: an oil under a nitrogen blanket gains suction margin; a live crude ignores its dissolved methane and may then free gas at the pump.
+  - **One rule, equilibrium.** Any liquid takes its full bubble pressure. Pumps on blanketed or open water tanks keep only their static head.
+- Whatever the rule, the floor is read from the supplier directly as well as through a suction walk (a pump drawing straight from its tank had no floor: NPSHA was NaN).
