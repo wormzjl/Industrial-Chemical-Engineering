@@ -609,9 +609,7 @@ public final class IslandCoordinator {
                 var reads=reads(island,slice);
                 // The shaft trains' slice inputs (W3), read here as a heat side's partner is.
                 var controlled=controls.apply(island.graph);
-                // Each gas blanketing valve's pad for the slice, from the vessel's committed state (batch 2026-11-11-gas-blanketing).
-                var planned=com.wormzjl.icheme.science.fluid.network.GasBlanket.plan(com.wormzjl.icheme.science.fluid.network.ShaftPlan.apply(controlled,shafts.plans(island.id,controlled)),island.model,slice.seconds(settings.time));
-                var dispatched=ports.dispatch(island.id,planned,slice);
+                var dispatched=ports.dispatch(island.id,com.wormzjl.icheme.science.fluid.network.ShaftPlan.apply(controlled,shafts.plans(island.id,controlled)),slice);
                 var command=new ProcessSolveServices.FluidIslandCommand(island.model,dispatched,slice.seconds(settings.time),PassiveIntervalSolver.Settings.defaults(settings.time),settings.hardBudgetNanos,island.retained,reads,ports.plans(island.id,dispatched,slice));
                 if(!dispatcher.submit(attempt,command)) {island.status="WAITING: shared worker capacity";island.touch();break;}
                 island.clock.admitted(slice);island.status="SOLVING";island.touch();FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.solvesDispatched);

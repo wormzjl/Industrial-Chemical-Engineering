@@ -609,10 +609,15 @@ public final class PhysicalFluidTopology {
                         pipes.add(new PassiveNetwork.Pipe(pipeId,source,middle,halves,control(feeder,compiled.invalidPumpCycles())).withPorts(sourcePort,PassiveNetwork.PhasePort.BULK));mapViews(views,run,linkOwner,linkDirections,physical,islandIndex,pipeId,burnerEnd,true);
                         pipeId=runIdentity(run,linkOwner,1);if(!pipeIdentities.add(pipeId))throw new IllegalStateException("Compiled pipe identity collision");
                         pipes.add(new PassiveNetwork.Pipe(pipeId,middle,sink,halves,sinkValve).withPorts(PassiveNetwork.PhasePort.BULK,sinkPort).withActuatorArea(halves.getLast().area()));mapViews(views,run,linkOwner,linkDirections,physical,islandIndex,pipeId,burnerEnd,true);
+                        // The half into a blanketed vessel is that vessel's connection: its face, as any tank connection has.
+                        if(burner.kind==TopologyCompiler.Kind.RESERVOIR)faces.computeIfAbsent(burner.id,k->new HashMap<>()).put(pipeId,tankFaces.get((burnerEnd?endLink:startLink).id()));
                     } else {
                         pipes.add(new PassiveNetwork.Pipe(pipeId,source,sink,sections,sinkValve).withPorts(sourcePort,sinkPort)
                                 .withForbiddenDirections(checkRestrictions(start,end,startLink,endLink,points,burnerStart)).withActuatorArea((burnerEnd?sections.getLast():sections.getFirst()).area()));
                         mapViews(views,run,linkOwner,linkDirections,physical,islandIndex,pipeId,burnerEnd);
+                        // Either end may be a tank: a blanketed vessel, or a tank feeding the valve or the burners.
+                        if(start!=null&&start.kind==TopologyCompiler.Kind.RESERVOIR)faces.computeIfAbsent(start.id,k->new HashMap<>()).put(pipeId,tankFaces.get(startLink.id()));
+                        if(end!=null&&end.kind==TopologyCompiler.Kind.RESERVOIR)faces.computeIfAbsent(end.id,k->new HashMap<>()).put(pipeId,tankFaces.get(endLink.id()));
                     }
                     continue;
                 }

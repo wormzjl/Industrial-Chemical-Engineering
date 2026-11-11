@@ -33,14 +33,16 @@ class GasBlanketTest extends PortFixture {
         var unit=model.flashTP(state.temperature(),state.pressure(),n,NOOP);
         return new PassiveNetwork.Reservoir(1,0,unit,PassiveNetwork.NodeKind.RESERVOIR,new PassiveNetwork.Inventory(1,PhaseLayout.totalAmounts(unit),unit.internalEnergy()).withRigid(true).withBlanket(SET));
     }
-    /** {@code slices} slices of 1 s, each planned as the coordinator plans it; the lowest and highest pressure the drum ended a slice at. */
+    /** {@code slices} slices of 1 s (the interval solver plans the valve at each step); the lowest and highest pressure the drum ended a slice at. */
     private PassiveNetwork run(PassiveNetwork graph,int slices,double[] range,List<ConservativeTransport.BoundaryTransfer> vents) {
         var solver=new PassiveIntervalSolver(model);range[0]=Double.POSITIVE_INFINITY;range[1]=0;
         for(int i=0;i<slices;i++) {
-            var result=solver.solve(GasBlanket.plan(graph,model,1),1,PassiveIntervalSolver.Settings.defaults(),NOOP);
+            var result=solver.solve(graph,1,PassiveIntervalSolver.Settings.defaults(),NOOP);
             assertEquals(1,result.advancedSeconds(),1e-9,"slice "+i);
             graph=result.graph();double p=graph.reservoirs().getFirst().state().pressure();
             range[0]=Math.min(range[0],p);range[1]=Math.max(range[1],p);
+            // With a third entry: the lowest while liquid stands.
+            if(range.length>2&&level(graph)>.05)range[2]=Math.min(range[2],p);
             for(var b:result.boundaries())if(b.kind()==ConservativeTransport.BoundaryTransfer.Kind.VENT)vents.add(b);
         }
         return graph;
@@ -75,12 +77,15 @@ class GasBlanketTest extends PortFixture {
     }
 
     @Test void aDrainedDrumKeepsItsPressureAndRunsDry() {
-        var range=new double[2];var vents=new ArrayList<ConservativeTransport.BoundaryTransfer>();
+        var range=new double[]{0,0,Double.POSITIVE_INFINITY};var vents=new ArrayList<ConservativeTransport.BoundaryTransfer>();
         var end=run(new PassiveNetwork(List.of(drum(waterUnderNitrogen(.8,SET)),supply(),exit()),List.of(pad(1),outlet(2))),150,range,vents);
-        System.out.println("BLANKET_RUN drain: level="+level(end)+" P lowest="+range[0]+" highest="+range[1]);
+        System.out.println("BLANKET_RUN drain: level="+level(end)+" P lowest="+range[0]+" highest="+range[1]+" lowest while draining="+range[2]);
         assertTrue(level(end)<.02,"its gas follows its liquid out: "+level(end));
-        // The pad follows the gas room by one slice: 0.02 m3/s of water leaving a 0.2 m3 gas room in 1 s slices sags it by a fifth.
-        assertTrue(range[0]>.75*SET,"the pad holds its pressure: "+range[0]);
+        // 0.02 m3/s of water leaves a 0.2 m3 gas room. The first steps have no rate to read and sag by 3 %; then the pad
+        // brings the gas for the room the liquid vacates, and the pressure stands. Dry, the drum's gas leaves by its open
+        // outlet faster than the pad's response (the overall lowest).
+        assertTrue(range[2]>.95*SET,"the pad holds its pressure while it drains: "+range[2]);
+        assertTrue(range[0]>.75*SET,"and stays near it dry: "+range[0]);
         assertTrue(range[1]<=GasBlanket.ventPressure(SET)*1.001,"and never passes the vent pressure: "+range[1]);
     }
 

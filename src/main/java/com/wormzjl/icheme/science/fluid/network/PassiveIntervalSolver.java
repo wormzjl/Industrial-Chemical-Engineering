@@ -212,7 +212,7 @@ public final class PassiveIntervalSolver {
         if(!Double.isFinite(startingStep)||startingStep<=0)throw new IllegalArgumentException("Positive finite starting step required");
         PassiveNetwork accepted=refreshed.graph();
         // h is the controller's estimate; each attempt uses it truncated to the rest of the interval.
-        double elapsed=0,h=Math.min(startingStep,settings.maximumStep);int acceptedCount=0,rejectedCount=0,consecutiveRejects=0;PassiveStepSolver.Result last=null;
+        double elapsed=0,h=Math.min(startingStep,settings.maximumStep),lastStep=0;int acceptedCount=0,rejectedCount=0,consecutiveRejects=0;PassiveStepSolver.Result last=null;
         double[] transferred=new double[accepted.pipes().size()];
         double work=0;var boundaries=new ArrayList<ConservativeTransport.BoundaryTransfer>(refreshed.boundaries());
         var pipeTransfers=new PipeTransfer.Accumulator();
@@ -262,7 +262,11 @@ public final class PassiveIntervalSolver {
                     if(rateFlows==null){var rate=implicit.portRate(accepted,checkpoint);if(rate!=null)rateFlows=rate.massFlows();}
                     startFlows=rateFlows;
                 }
-                accepted=implicit.plan(accepted,startFlows,checkpoint);
+                // Each gas blanketing valve's pad for this step (batch 2026-11-11-gas-blanketing), from its vessel's state at
+                // the step's start and its liquid's rate over the step before; at an interval's first step, over the
+                // committed interval, carried as its endpoint flows are.
+                boolean carried=last==null&&carriedFlows(accepted)!=null;
+                accepted=GasBlanket.plan(implicit.plan(accepted,startFlows,checkpoint),model,step,last!=null?last.pipeTransfers():carried?carriedTransfers:null,last!=null?lastStep:carried?carriedSeconds:0);
                 PassiveNetwork start=accepted;
                 if(implicit.backwardEulerCold(accepted)) {
                     if(coldSeedFor!=accepted){coldSeed=coldRateSeed(accepted,checkpoint);coldSeedFor=accepted;}
@@ -285,11 +289,11 @@ public final class PassiveIntervalSolver {
                 boolean ok=step<=transitionFloor||change<=STATE_CAP||jump;
                 SolverDiagnostics.attempt(attempt,step,ok,ok&&jump&&step>transitionFloor?"be-jump":ok&&step<=transitionFloor&&change>STATE_CAP?"be-floor":"be-state",change);
                 if(!ok){previousStateChange=change;previousStateStep=step;throw new StateChangeRejection("Backward-Euler state change "+change);}
-                accepted=replace(accepted,result);last=result;elapsed+=step;acceptedCount++;consecutiveRejects=0;previousStateChange=0;
+                accepted=replace(accepted,result);last=result;lastStep=step;elapsed+=step;acceptedCount++;consecutiveRejects=0;previousStateChange=0;
                 var flush=flushTraces(accepted,checkpoint);if(flush!=null)accepted=flush.graph();
                 declared=settled;
                 implicit.markBackwardEulerAccepted(accepted,result);
-                carriedModes=result.modes();carriedFlows=result.massFlows();carriedKey=flowKey(accepted);
+                carriedModes=result.modes();carriedFlows=result.massFlows();carriedKey=flowKey(accepted);carriedTransfers=result.pipeTransfers();carriedSeconds=step;
                 // The cold-start graphs are read only while the structure is cold, and the step solver's last solve only
                 // by a test of the Jacobian; a retained island keeps neither (review 8.7 (c) E2).
                 coldSeed=null;coldSeedFor=null;implicit.releaseLastSolve();
@@ -462,6 +466,7 @@ public final class PassiveIntervalSolver {
         implicit.replayStart(graph,continued?committed:null);
         // The start-of-step guard and the inlet check's hysteresis (decision D6) read the committed endpoint.
         carriedModes=continued?committed.endpointModes():null;carriedFlows=continued?committed.endpointFlows():null;carriedKey=continued?flowKey(committed.graph()):List.of();
+        carriedTransfers=continued?committed.pipeTransfers():null;carriedSeconds=continued?committed.advancedSeconds():0;
         inletModes=continued?committed.endpointModes():null;
         inletKey=continued?pipeIds(graph):List.of();
     }
@@ -470,6 +475,10 @@ public final class PassiveIntervalSolver {
     private List<FlowControl.Mode> carriedModes;
     private double[] carriedFlows;
     private List<Long> carriedKey=List.of();
+    /** What moved through each connection over the last accepted step, or over the committed interval at a job's start,
+     * and its seconds: the rate a gas blanketing valve's pad reads its vessel's liquid at ({@link GasBlanket#plan}). */
+    private List<PipeTransfer> carriedTransfers;
+    private double carriedSeconds;
     private static List<Long> flowKey(PassiveNetwork graph) {
         var key=new ArrayList<Long>();for(var pipe:graph.pipes()){key.add(pipe.id());key.add((long)pipe.blockedDirections());key.add((long)pipe.forbiddenDirections());}
         return key;

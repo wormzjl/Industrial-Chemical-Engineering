@@ -96,6 +96,7 @@ public final class GuiPrototypes {
         out.addAll(firedHeater());
         out.addAll(flareStack());
         out.addAll(batchStill());
+        out.addAll(blanketValve());
         return out;
     }
 
@@ -1243,6 +1244,40 @@ public final class GuiPrototypes {
             contents(d, box, 0, List.of(new String[]{"Component", "Mass %", "kg/s"}, new String[]{"Toluene", "100.0", "2.5"}));
             d.footer(2, "Close", "Apply", "Mass", "°C", "bar", "/s");
         });
+    }
+
+    /**
+     * A drum's accessory page (batch 2026-11-11-gas-blanketing): its gas blanketing valve's set pressure as an editor's
+     * entry and as a reader's meter, the drum's pressure, and on the glass the pressures at which it pads and vents.
+     */
+    static List<Prototype> blanketValve() {
+        var in = new DeviceColumn.Input(Kind.RESERVOIR, true, false, true, "bar", "°C", "/s", DeviceColumn.Valve.NONE, null, false,
+                new DeviceColumn.Level(0.5, "3976.0", "7952.0"), null, List.of(), phases("volume", 0, 4, 4, 0), List.of());
+        var out = new ArrayList<Prototype>();
+        for (boolean editor : new boolean[]{true, false}) {
+            var rows = DeviceColumn.blanketValve(editor, "bar", "1.213", "1.209", TEXTS);
+            out.add(devicePage(editor ? "fluid-drum-accessory" : "fluid-drum-accessory-reader", WINDOW[0], WINDOW[1], rows, (d, s) -> {
+                d.title("Horizontal drum");
+                d.name("V-101", false);
+                d.tabs(3, "Overview", "Outlets", "Datasheet", Door.tr("gui.icheme.fluid.accessory"));
+                d.status(Door.tr("gui.icheme.fluid.flowing"), Palette.MUTED);
+                var box = device(d, in, rows, Map.of("blanket", "1.213"));
+                int x = box.x() + 9, w = box.w() - 16;
+                d.c.text(d.m.cut(Door.tr("gui.icheme.fluid.accessory.blanket"), w), x, 82, Palette.ACCENT);
+                d.c.text(d.m.cut(Door.tr("gui.icheme.fluid.accessory.blanket.pad", "1.213", "bar"), w - 4), x, 100, Palette.TEXT);
+                d.c.hLine(x, x + w, 112, Palette.LINE);
+                d.c.text(d.m.cut(Door.tr("gui.icheme.fluid.accessory.blanket.vent", "1.274", "bar"), w - 4), x, 118, Palette.TEXT);
+                d.c.hLine(x, x + w, 130, Palette.LINE);
+                int y = 136;
+                for (var line : d.m.wrap(Door.tr("gui.icheme.fluid.accessory.blanket.supply"), w - 4)) {
+                    d.c.text(line, x, y, Palette.MUTED);
+                    y += 10;
+                }
+                if (editor) d.footer(2, "Close", "Apply", "Mass", "°C", "bar", "/s");
+                else d.footer(1, "Close", "Mass", "°C", "bar", "/s");
+            }));
+        }
+        return out;
     }
 
     static Prototype tank() {

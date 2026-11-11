@@ -49,9 +49,13 @@ class BlanketValveWorldTest {
         System.out.println("BLANKET_WORLD P="+n.state().pressure()+" rigid="+n.inventory().rigid()+" blanket="+n.inventory().blanket()+" valve="+valveInto(world,drum));
         assertTrue(valveInto(world,drum) instanceof FlowControl.ControlValve v&&v.source()==FlowControl.ValveSource.BLANKET,"the run into the port carries the valve");
         assertEquals(SET,n.inventory().blanket(),0);
+        // The drum's view lists the supply connection by its face (TankOutlets refuses a connection without one).
+        assertEquals(Direction.EAST,world.registry.tankFaces(drum).values().stream().findFirst().orElse(null),"the supply connection's face");
         assertTrue(n.inventory().rigid(),"its gas fills it");
         assertEquals(SET,n.state().pressure(),.03*SET,"at its set pressure");
-        assertEquals(0,((FlowControl.ControlValve)valveInto(world,drum)).massTarget(),0,"the valve asks for nothing more");
+        var island=world.coordinator.snapshots().stream().filter(s->s.graph().reservoirs().stream().anyMatch(r->r.id()==drum)).findFirst().orElseThrow();
+        System.out.println("BLANKET_WORLD status="+island.status());
+        assertTrue(island.status().startsWith("STEADY: no flow"),"the valve asks for nothing more, and the island rests: "+island.status());
         // The valve removed: one registry edit, the drum keeps what it holds and is a plain closed drum again.
         var record=world.registry.registrations().get(drum);var ports=new ArrayList<>(record.device().ports());ports.removeIf(p->p.role()==PhysicalFluidTopology.ConnectionRole.BLANKET);
         double held=Arrays.stream(n.inventory().moles()).sum();

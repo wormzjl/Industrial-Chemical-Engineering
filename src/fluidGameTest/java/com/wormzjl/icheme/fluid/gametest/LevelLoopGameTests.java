@@ -70,14 +70,32 @@ public final class LevelLoopGameTests {
         run(helper);
     }
 
+    /**
+     * The same loop on a drum with a gas blanketing valve (batch 2026-11-11-gas-blanketing): no vent line; the valve on the
+     * drum's top flange, its inlet on a 3 bar nitrogen line, pads and vents the drum's gas. The same fill, ramp and loop.
+     * (From empty on the design feed, {@code icheme.levelLoop.direct}, the drum overfills before its level controller reads
+     * it, and draining it wide open holds: open, GAS_BLANKET_REVIEW.md.)
+     */
+    @GameTest(template = "empty", timeoutTicks = 20000, batch = "level-loop-blanket")
+    public static void aBlanketedDrumOfTwoCyclesHoldsItsLevelOnTheCadence(GameTestHelper helper) {
+        run(helper, true, false);
+    }
+
     /** One line of the run's record, for the log and the batch's review. */
     static void log(String format, Object... args) {
         IChemE.LOGGER.info("level_loop " + format, args);
     }
 
+    /** The loop as the tool's switches set it: {@code icheme.levelLoop.blanket} (a blanketed drum), {@code icheme.levelLoop.direct} (from empty on the design feed). */
     static void run(GameTestHelper helper) {
+        run(helper, Boolean.getBoolean("icheme.levelLoop.blanket"), Boolean.getBoolean("icheme.levelLoop.direct"));
+    }
+
+    static void run(GameTestHelper helper, boolean blanket, boolean direct) {
         var plant = new AssemblyGameTests.Plant(helper, helper.absolutePos(new BlockPos(8, 4, 8)), new BlockPos(-8, -3, -8), new BlockPos(16, 24, 16));
         var state = new State();
+        state.blanket = blanket;
+        state.direct = direct;
         try {
             build(helper, plant, state);
         } catch (RuntimeException e) {
@@ -147,19 +165,35 @@ public final class LevelLoopGameTests {
         plant.devices.add(outlet.getLast());
         var levelValve = outlet.get(1);
         plant.valves.put(levelValve, AssemblyGameTests.Plant.out(drum, Role.LIQUID_OUTLET));
-        var vent = line(plant, drum, Role.VAPOUR_OUTLET, 3, 0);
-        for (int k = 0; k < vent.size() - 1; k++) plant.pipe(vent.get(k));
-        level.setBlock(vent.getLast(), ModBlocks.FLUID_VOID.get().defaultBlockState(), Block.UPDATE_ALL);
-        plant.devices.add(vent.getLast());
+        // The gas side: a vent line to a void at 1 atm, or (blanketed) a nitrogen line of two pipes from a generator to the
+        // inlet of the gas blanketing valve on the drum's top flange; the valve is fitted with the sensors.
+        var gas = new ArrayList<BlockPos>();
+        var valve = state.blanket ? InstrumentHosts.BlanketValve.of(level, drum.origin(), drum.shape()) : null;
+        if (state.blanket) {
+            if (valve == null) throw new IllegalStateException("The drum has no flange for a gas blanketing valve");
+            var cell = valve.port().cell();
+            var out = Direction.valueOf(valve.port().face().name());
+            for (int k = 1; k <= 3; k++) gas.add(new BlockPos(cell.x(), cell.y(), cell.z()).relative(out, k));
+            for (var at : gas) if (!plant.free(at, new HashSet<>(gas))) throw new IllegalStateException("supply line blocked at " + at.toShortString());
+            level.setBlock(gas.getLast(), ModBlocks.FLUID_GENERATOR.get().defaultBlockState(), Block.UPDATE_ALL);
+            plant.devices.add(gas.getLast());
+            for (int k = gas.size() - 2; k >= 0; k--) plant.pipe(gas.get(k));
+        } else {
+            gas.addAll(line(plant, drum, Role.VAPOUR_OUTLET, 3, 0));
+            for (int k = 0; k < gas.size() - 1; k++) plant.pipe(gas.get(k));
+            level.setBlock(gas.getLast(), ModBlocks.FLUID_VOID.get().defaultBlockState(), Block.UPDATE_ALL);
+            plant.devices.add(gas.getLast());
+        }
+        var vent = gas;
         // Lines of 0.25 m: two cycles of an 8 m3 drum at factor 4 is about 200 kg/s of water.
-        for (var line : List.of(feed, outlet, vent)) world.resizeLine(id(plant, line.get(1)), BORE, x -> com.wormzjl.icheme.science.equipment.PipeSizes.MAX_BORE);
+        for (var line : List.of(feed, outlet, vent)) world.resizeLine(id(plant, line.get(state.blanket && line == vent ? 0 : 1)), BORE, x -> com.wormzjl.icheme.science.equipment.PipeSizes.MAX_BORE);
         for (var v : plant.valves.entrySet()) plant.install(v.getKey(), v.getValue());
         long generatorId = id(plant, generator), outletId = id(plant, outlet.getLast()), ventId = id(plant, vent.getLast());
         // The generator stands 6 m above the drum's top inlet: at 1 atm less its head until the feed valve has its law, so
         // nothing flows through the open valves before.
         TankCharge.run(world, generatorId, new FluidDeviceSpec(1, 300, 101_325 - 6 * 9.81 * DENSITY, water));
         TankCharge.run(world, outletId, new FluidDeviceSpec(1, 300, 101_325, water));
-        TankCharge.run(world, ventId, new FluidDeviceSpec(1, 300, 101_325, FluidDeviceSpec.nitrogen(MaterialRuntime.active()).composition()));
+        TankCharge.run(world, ventId, new FluidDeviceSpec(1, 300, state.blanket ? 300_000 : 101_325, FluidDeviceSpec.nitrogen(MaterialRuntime.active()).composition()));
         long feedValveId = id(plant, feedValve), levelValveId = id(plant, levelValve);
         world.observe(state::published);
         long cadence = ControlService.CADENCE;
@@ -170,6 +204,7 @@ public final class LevelLoopGameTests {
                         && InstrumentHosts.at(level, drum.controller()) != null && world.view(InstrumentHosts.at(level, drum.controller()).identity()).tank() != null))
                 .thenExecute(step(state, "fitting", () -> {
                     state.drum = InstrumentHosts.at(level, drum.controller()).identity();
+                    if (state.blanket && !world.blanketValve(state.drum, valve.port())) throw new IllegalStateException("The gas blanketing valve was not fitted");
                     for (var v : List.of(feedValve, levelValve)) {
                         world.instruments().legacyInstalled(id(plant, v), Instrument.Type.PRESSURE_VALVE);
                         var e = (FluidDeviceBlockEntity) level.getBlockEntity(v);
@@ -201,20 +236,22 @@ public final class LevelLoopGameTests {
                     // at 72, is where a raised feed overfilled the drum).
                     var old = world.registrations().get(feedValveId);
                     var d = old.device();
-                    var law = new FlowControl.ControlValve(FlowControl.ValveSource.MASS_FLOW, FILL * state.feed, state.flowSensor, 1);
+                    // Direct: the design feed and the 50 % setpoint from the empty drum.
+                    double first = state.direct ? 1 : FILL, level0 = state.direct ? SETPOINT : FILLED;
+                    var law = new FlowControl.ControlValve(FlowControl.ValveSource.MASS_FLOW, first * state.feed, state.flowSensor, 1);
                     world.edit(feedValveId, old.revision(), new com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Device(d.id(), d.position(), d.kind(), d.facing(), d.geometry(), law, d.ports(), true, d.cutoff(), d.inlineFilter()), old.spec());
                     TankCharge.run(world, generatorId, new FluidDeviceSpec(1, 300, 300_000, water));
                     // The fill: a tenth of the feed to a 25 % level (a placed vessel is empty, and the full feed into a near-empty
                     // drum is the start's own transient, not the loop's).
-                    edit(helper, world, state, state.fic, state.ficBox, new ControlSettings("FIC-1", true, state.flowSensor, feedValveId, Sensor.Unit.KILOGRAM_PER_SECOND, FILL * state.feed, ControlSettings.Action.OUTLET));
-                    edit(helper, world, state, state.lic, state.licBox, new ControlSettings("LIC-1", true, state.levelSensor, levelValveId, Sensor.Unit.HEIGHT_PERCENT, FILLED, ControlSettings.Action.OUTLET));
+                    edit(helper, world, state, state.fic, state.ficBox, new ControlSettings("FIC-1", true, state.flowSensor, feedValveId, Sensor.Unit.KILOGRAM_PER_SECOND, first * state.feed, ControlSettings.Action.OUTLET));
+                    edit(helper, world, state, state.lic, state.licBox, new ControlSettings("LIC-1", true, state.levelSensor, levelValveId, Sensor.Unit.HEIGHT_PERCENT, level0, ControlSettings.Action.OUTLET));
                     // Two more operators keep LIC-1's and FIC-1's menus open: their views carry each loop's status and reading.
                     state.watcher = ControlLoopGameTests.operator(level, state.lic);
                     ControlPanelMenu.open(state.watcher.player, state.lic);
                     state.ficWatcher = ControlLoopGameTests.operator(level, state.fic);
                     ControlPanelMenu.open(state.ficWatcher.player, state.fic);
                     state.applied = world.onlineTick();
-                    log("start factor={} capacity={} m3 height={} m cycle={} s cycles={} feed={} kg/s", time.factor(), fmt(state.capacity), fmt(state.span), fmt(state.cycle), CYCLES, fmt(state.feed));
+                    log("start factor={} capacity={} m3 height={} m cycle={} s cycles={} feed={} kg/s blanket={} direct={}", time.factor(), fmt(state.capacity), fmt(state.span), fmt(state.cycle), CYCLES, fmt(state.feed), state.blanket, state.direct);
                 }))
                 // Both loops CONTROLLING on their menus and a cadence more.
                 .thenWaitUntil(until(helper, world, state, 2400, "waiting for both loops to control", () -> {
@@ -224,6 +261,7 @@ public final class LevelLoopGameTests {
                     return committed(world, state) >= state.controlling + cadence;
                 }))
                 .thenWaitUntil(until(helper, world, state, 6000, "waiting for the drum to stand at " + FILLED + " %", () -> {
+                    if (state.direct) return true;
                     pace(world, state);
                     double l = state.level(world);
                     long c = committed(world, state) / cadence;
@@ -243,6 +281,7 @@ public final class LevelLoopGameTests {
                 // The design feed in three steps a cadence apart (a step of the whole feed into the drum at once is a solver
                 // hold of its own, not the loop's), the level held at 25 %; then the start: the 50 % setpoint.
                 .thenWaitUntil(until(helper, world, state, 2400, "ramping the feed", () -> {
+                    if (state.direct) return true;
                     if (committed(world, state) < state.rampAt) return false;
                     if (state.ramp == RAMP.length) return true;
                     edit(helper, world, state, state.fic, state.ficBox, new ControlSettings("FIC-1", true, state.flowSensor, feedValveId, Sensor.Unit.KILOGRAM_PER_SECOND, RAMP[state.ramp++] * state.feed, ControlSettings.Action.OUTLET));
@@ -250,17 +289,18 @@ public final class LevelLoopGameTests {
                     state.settled = -1;
                     return false;
                 }))
-                .thenWaitUntil(until(helper, world, state, 6000, "waiting for the drum to hold " + FILLED + " % on the design feed", () -> {
+                .thenWaitUntil(until(helper, world, state, 6000, "waiting for the drum to hold its level on the design feed", () -> {
                     pace(world, state);
-                    double l = state.level(world);
+                    double l = state.level(world), target = state.direct ? SETPOINT : FILLED, near = state.direct ? BAND / 2 : 2;
                     long c = committed(world, state) / cadence;
                     if (c > state.logged) {
                         state.logged = c;
                         var out = world.instrumentPipeReading(levelValveId);
-                        log("hold level={} % feed={} kg/s outletReading={} m3/s lic={} island={} residual={} mol {} J", fmt(l), fmt(state.flow(world, meter, plant)),
-                                out == null || out.volumeFlow() == null ? "none" : fmt(out.volumeFlow()), state.lic(), world.view(state.drum).status(), fmt(state.massResidual), fmt(state.energyResidual));
+                        var s = world.view(state.drum).state();
+                        log("hold level={} % feed={} kg/s outletReading={} m3/s lic={} island={} residual={} mol {} J pressure={} Pa", fmt(l), fmt(state.flow(world, meter, plant)),
+                                out == null || out.volumeFlow() == null ? "none" : fmt(out.volumeFlow()), state.lic(), world.view(state.drum).status(), fmt(state.massResidual), fmt(state.energyResidual), s == null ? "none" : fmt(s.pressure()));
                     }
-                    if (!(Math.abs(l - FILLED) < 2) || state.flow(world, meter, plant) < .98 * state.feed) {state.settled = -1;return false;}
+                    if (!(Math.abs(l - target) < near) || state.flow(world, meter, plant) < .98 * state.feed) {state.settled = -1;return false;}
                     if (state.settled < 0) state.settled = committed(world, state);
                     return committed(world, state) >= state.settled + 2 * cadence;
                 }))
@@ -283,6 +323,8 @@ public final class LevelLoopGameTests {
                     if (Double.isNaN(l)) {state.unread++;return false;}
                     state.low = Math.min(state.low, l);
                     state.high = Math.max(state.high, l);
+                    var gasState = world.view(state.drum).state();
+                    if (gasState != null) {state.lowPressure = Math.min(state.lowPressure, gasState.pressure());state.highPressure = Math.max(state.highPressure, gasState.pressure());}
                     if (cycles > state.logged) {
                         state.logged = cycles;
                         var out = world.instrumentPipeReading(levelValveId);
@@ -303,8 +345,8 @@ public final class LevelLoopGameTests {
                     if (state.operator != null) state.operator.player.closeContainer();
                     if (state.watcher != null) state.watcher.player.closeContainer();
                     if (state.ficWatcher != null) state.ficWatcher.player.closeContainer();
-                    log("result factor={} cycles={} low={} % high={} % levelAtStep={} % levelAtEnd={} % held={} failure={} molesResidual={} mol of {} mol energyResidual={} J of {} J intervals={} ticks={} unread={} setupResidual={} mol {} J",
-                            time.factor(), CYCLES, fmt(state.low), fmt(state.high), fmt(state.firstHalf), fmt(state.secondHalf), state.held, state.failure,
+                    log("result factor={} cycles={} blanket={} direct={} pressure={} to {} Pa low={} % high={} % levelAtStep={} % levelAtEnd={} % held={} failure={} molesResidual={} mol of {} mol energyResidual={} J of {} J intervals={} ticks={} unread={} setupResidual={} mol {} J",
+                            time.factor(), CYCLES, state.blanket, state.direct, fmt(state.lowPressure), fmt(state.highPressure), fmt(state.low), fmt(state.high), fmt(state.firstHalf), fmt(state.secondHalf), state.held, state.failure,
                             fmt(state.massResidual), fmt(state.massThrough), fmt(state.energyResidual), fmt(state.energyThrough), state.intervals, world.onlineTick() - state.applied, state.unread, fmt(state.setupMoles), fmt(state.setupEnergy));
                     plant.remove();
                 })
@@ -359,6 +401,10 @@ public final class LevelLoopGameTests {
         double setupMoles, setupEnergy;
         double capacity, span, cycle, feed, low = Double.POSITIVE_INFINITY, high = Double.NEGATIVE_INFINITY, firstHalf = Double.NaN, secondHalf = Double.NaN;
         boolean stepped;
+        /** The drum has a gas blanketing valve on a nitrogen line, no vent line; the run starts empty on the design feed. */
+        boolean blanket, direct;
+        /** The drum's pressure over the loop, Pa. */
+        double lowPressure = Double.POSITIVE_INFINITY, highPressure = Double.NEGATIVE_INFINITY;
         String held;
         /** The island's inventory (moles, J) less its boundaries' net inflow since the first booked interval, and that at the first. */
         double massResidual, energyResidual, massThrough, energyThrough, massOrigin = Double.NaN, energyOrigin, massIn, energyIn;
