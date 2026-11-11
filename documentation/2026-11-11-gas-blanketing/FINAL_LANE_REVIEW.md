@@ -9,7 +9,7 @@
 
 ## Selection
 
-`test` 296 of 383 classes selected; the filter list was too long, so `test` ran whole (383). `holdGates` 12/12, `columnGates` 64/82, `equipmentGates` 26/28: 485 classes in all. chain-100 (`FlowControl.java` changed), the fluid GameTests (`FluidCheckpointGameTests.java` changed) and the campaign (its inputs changed) were due. The campaign runs at time factor 1, the harnesses' `-PholdFuzzTimeScale` default.
+`test` 296 of 383 classes selected; the filter list was too long, so `test` ran whole (383). `holdGates` 12/12, `columnGates` 64/82, `equipmentGates` 26/28: 485 classes in all. chain-100 (`FlowControl.java` changed), the fluid GameTests (`FluidCheckpointGameTests.java` changed) and the campaign (its inputs changed) were due. The campaign runs at time factor 1, the harnesses' `-PholdFuzzTimeScale` default. (Since [valve follow-ups](../2026-11-11-valve-followups/VALVE_FOLLOWUPS_REVIEW.md) item 5 the default is 4; the next lane compares against the factor-4 campaign.)
 
 ## Results against the 0.26.0 lane (`1d872d2f9`, `tmp/merge-lane/head`)
 

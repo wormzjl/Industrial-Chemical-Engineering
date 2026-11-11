@@ -73,12 +73,19 @@ public final class LevelLoopGameTests {
     /**
      * The same loop on a drum with a gas blanketing valve (batch 2026-11-11-gas-blanketing): no vent line; the valve on the
      * drum's top flange, its inlet on a 3 bar nitrogen line, pads and vents the drum's gas. The same fill, ramp and loop.
-     * (From empty on the design feed, {@code direct} in the tool's run, the drum overfills before its level controller reads
-     * it, and draining it wide open holds: open, GAS_BLANKET_REVIEW.md.)
      */
     @GameTest(template = "empty", timeoutTicks = 20000, batch = "level-loop-blanket")
     public static void aBlanketedDrumOfTwoCyclesHoldsItsLevelOnTheCadence(GameTestHelper helper) {
         run(helper, CYCLES, true, false);
+    }
+
+    /**
+     * The blanketed drum started empty on the design feed with the 50 % setpoint, no fill and no ramp (batch
+     * 2026-11-11-valve-followups, item 1; it held in the gas blanketing batch, GAS_BLANKET_REVIEW.md section 5).
+     */
+    @GameTest(template = "empty", timeoutTicks = 20000, batch = "level-loop-blanket-direct")
+    public static void aBlanketedDrumStartedEmptyOnTheDesignFeedHoldsItsLevel(GameTestHelper helper) {
+        run(helper, CYCLES, true, true);
     }
 
     /** One line of the run's record, for the log and the batch's review. */

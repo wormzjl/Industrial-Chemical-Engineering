@@ -44,8 +44,8 @@ class HoldFuzzTest {
     static final int COMPONENTS=MaterialTestBasis.NETWORK+1,WATER=MaterialTestBasis.NETWORK,NITROGEN=MaterialTestBasis.NITROGEN;
     static final int METHANE=CATALOG.requirePackage("icheme:tjl20_methane_nitrogen").components().indexOf("Methane");
     static final double[] CRUDE=Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo("icheme:tjl20_methane_nitrogen").crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(),COMPONENTS);
-    /** {@code holdFuzz.timeScale} (batch 2026-11-11-minecraft-time-delta, W2): the time factor, 1 (the engine's default) to 72. */
-    static final com.wormzjl.icheme.science.fluid.SimulationTime TIME=com.wormzjl.icheme.science.fluid.SimulationTime.of(Integer.getInteger("holdFuzz.timeScale",1));
+    /** {@code holdFuzz.timeScale} (batch 2026-11-11-minecraft-time-delta, W2): the time factor, 1 to 72; unset, the game's default ({@link com.wormzjl.icheme.science.fluid.SimulationTime#DEFAULT_FACTOR}, valve follow-ups item 5). */
+    static final com.wormzjl.icheme.science.fluid.SimulationTime TIME=com.wormzjl.icheme.science.fluid.SimulationTime.of(Integer.getInteger("holdFuzz.timeScale",com.wormzjl.icheme.science.fluid.SimulationTime.DEFAULT_FACTOR));
     static final ThreadLocal<FluidThermodynamics> MODELS=ThreadLocal.withInitial(()->FluidTestSupport.networkModel().withTime(TIME));
 
     record Block(int x,int y,int z,Kind kind,PhysicalFluidTopology.Direction facing,double bore,FlowControl control,FluidDeviceSpec spec,String fluid) {
@@ -316,7 +316,7 @@ class HoldFuzzTest {
             for(var e:o.exceptions)report.append("  EXCEPTION ").append(e).append('\n');
             for(var e:o.refused)report.append("  REFUSED ").append(e).append('\n');
         }
-        report.append("SUMMARY seeds=").append(outcomes.size()).append(" clean=").append(clean).append(" threads=").append(threads).append(" slices=").append(slices)
+        report.append("SUMMARY seeds=").append(outcomes.size()).append(" clean=").append(clean).append(" threads=").append(threads).append(" slices=").append(slices).append(" factor=").append(TIME.factor())
                 .append(" wallMs=").append(wall).append(" seedMsSum=").append(cpu).append('\n');
         if(counters) {
             com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics.ENABLED=false;

@@ -89,6 +89,30 @@ class GasBlanketTest extends PortFixture {
         assertTrue(range[1]<=GasBlanket.ventPressure(SET)*1.001,"and never passes the vent pressure: "+range[1]);
     }
 
+    /** A 4 bar water line of 2 m and 0.05 m into node 0. */
+    private static PassiveNetwork.Pipe feed(int from) {
+        return new PassiveNetwork.Pipe(3,from,0,List.of(new PipeResistance.Geometry(2,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0)),new FlowControl.Passive(),0,null,PhasePort.BULK,PhasePort.BULK);
+    }
+
+    @Test void aFastFillVentsAtItsVentPressure() {
+        // Half full at the set pressure, filled at about 0.03 m3/s: at 90 % the liquid takes a sixth of the gas room each
+        // second. The vent passes the gas the liquid displaces as it enters, so the drum stands near its vent pressure.
+        var water=new PassiveNetwork.Reservoir(2,0,waterSupply(4e5),PassiveNetwork.NodeKind.GENERATOR);
+        var graph=new PassiveNetwork(List.of(drum(waterUnderNitrogen(.5,SET)),water),List.of(feed(1)));
+        var solver=new PassiveIntervalSolver(model);double peak=0,before=total(graph.reservoirs().getFirst().inventory().moles()),booked=0;var vents=new ArrayList<ConservativeTransport.BoundaryTransfer>();
+        for(int i=0;i<40&&level(graph)<.9;i++) {
+            var result=solver.solve(graph,.5,PassiveIntervalSolver.Settings.defaults(),NOOP);
+            graph=result.graph();peak=Math.max(peak,graph.reservoirs().getFirst().state().pressure());
+            for(var b:result.boundaries()){booked+=total(b.moles());if(b.kind()==ConservativeTransport.BoundaryTransfer.Kind.VENT)vents.add(b);}
+        }
+        double after=total(graph.reservoirs().getFirst().inventory().moles());
+        System.out.println("BLANKET_RUN fast fill: level="+level(graph)+" P="+graph.reservoirs().getFirst().state().pressure()+" peak="+peak+" vent="+GasBlanket.ventPressure(SET)+" vents="+vents.size()+" held "+before+" to "+after+" booked "+booked);
+        assertEquals(after-before,booked,1e-9*after,"what entered and left is booked");
+        assertTrue(level(graph)>=.9,"it fills: "+level(graph));
+        assertFalse(vents.isEmpty(),"its vent passes the displaced gas");
+        assertTrue(peak<1.03*GasBlanket.ventPressure(SET),"near its vent pressure: "+peak);
+    }
+
     @Test void aDrumFullOfLiquidDrains() {
         var range=new double[2];var vents=new ArrayList<ConservativeTransport.BoundaryTransfer>();
         var end=run(new PassiveNetwork(List.of(drum(waterSupply(SET)),supply(),exit()),List.of(pad(1),outlet(2))),200,range,vents);

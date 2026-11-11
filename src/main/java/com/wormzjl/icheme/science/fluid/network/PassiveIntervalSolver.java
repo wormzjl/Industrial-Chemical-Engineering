@@ -262,11 +262,13 @@ public final class PassiveIntervalSolver {
                     if(rateFlows==null){var rate=implicit.portRate(accepted,checkpoint);if(rate!=null)rateFlows=rate.massFlows();}
                     startFlows=rateFlows;
                 }
-                // Each gas blanketing valve's pad for this step (batch 2026-11-11-gas-blanketing), from its vessel's state at
-                // the step's start and its liquid's rate over the step before; at an interval's first step, over the
-                // committed interval, carried as its endpoint flows are.
+                // Each gas blanketing valve's pad and vent for this step (batch 2026-11-11-gas-blanketing; one law for both,
+                // 2026-11-11-valve-followups), from its vessel's state at the step's start and its liquid's rate over the step
+                // before; at an interval's first step, over the committed interval, carried as its endpoint flows are.
                 boolean carried=last==null&&carriedFlows(accepted)!=null;
-                accepted=GasBlanket.plan(implicit.plan(accepted,startFlows,checkpoint),model,step,last!=null?last.pipeTransfers():carried?carriedTransfers:null,last!=null?lastStep:carried?carriedSeconds:0);
+                var inflows=GasBlanket.inflows(accepted,last!=null?last.pipeTransfers():carried?carriedTransfers:null,last!=null?lastStep:carried?carriedSeconds:0);
+                accepted=GasBlanket.plan(implicit.plan(accepted,startFlows,checkpoint),model,step,inflows);
+                implicit.blanketInflows(inflows);
                 PassiveNetwork start=accepted;
                 if(implicit.backwardEulerCold(accepted)) {
                     if(coldSeedFor!=accepted){coldSeed=coldRateSeed(accepted,checkpoint);coldSeedFor=accepted;}

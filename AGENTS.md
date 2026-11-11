@@ -23,7 +23,7 @@ These rules apply to every agent working in this repository (Claude, Codex, suba
   - Do not send contents to clients with no active request.
 - Player inputs and network changes are queued engine events. Their acknowledgements and results arrive on the engine schedule. Packet handlers, block-entity loads and menu opens never force a process update.
 - Do not calculate process state on Minecraft's per-tick loop. Due simulation deadlines, dependency changes and worker completions drive the work. The tick hook only checks what is due, drains completions and flushes a presentation bucket.
-- Simulated time is online ticks at a nominal 20 TPS. There is no wall-clock or offline advancement.
+- Simulated time is online ticks at a nominal 20 TPS, times the time factor (`fluid.timeScale`, default 4). There is no wall-clock or offline advancement.
 - The process simulator's run is a client tool outside this schedule. It runs on the client and reads and writes no process state. The server only stores the sheet and its results, and the block opens them as a replay.
 
 ## Physics and defects

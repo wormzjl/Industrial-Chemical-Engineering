@@ -108,6 +108,10 @@ public final class PassiveStepSolver {
     /** Exempts these connections from the start-of-solve closures ({@link #closeDeadHeads}, {@link #closeIllegalStarts})
      * of the next step solve only; the pass loop may still close them on a converged point. */
     void reopenNext(Set<PassiveNetwork.Pipe.Identity> identities){keepOpen=Set.copyOf(identities);}
+    /** Each blanketed vessel's forecast condensed inflow over the step solves that follow, m3/s by vessel identity ({@link
+     * GasBlanket#inflows}), what its vent reads ({@link GasBlanket#releases}); set by the interval solver's per-step plan. */
+    private Map<Long,Double> blanketInflows=Map.of();
+    void blanketInflows(Map<Long,Double> rates){blanketInflows=Map.copyOf(rates);}
     /** The driving pressure (Pa) a closed run's end states must exceed in an allowed direction to be reopened. */
     static double reopenBand(double pa,double pb){return Math.max(1,1e-6*Math.max(Math.abs(pa),Math.abs(pb)));}
     /** The runs of a graph: a run is a maximal chain of connections through degree-two junctions no actuator touches.
@@ -236,6 +240,8 @@ public final class PassiveStepSolver {
     private double[] heldOpenings=new double[0];
     /** The flow valves of this solve that stand open behind a lower target ({@link ControlConstraints#standing}). */
     private BitSet standing=new BitSet();
+    /** The series of a pressure valve and a flow regulator each connection of this solve stands in ({@link ControlConstraints#series}), null for none. */
+    private int[] series;
     /** Owner decision D11 (A2): this solve's input graph and slice, and the density of each set-flow pump's supply on it
      * ({@link #riseDensity}; -1 where none is measured), NaN until read. */
     private PassiveNetwork supplyGraph;private double supplyDuration;private double[] supplyDensities=new double[0];
@@ -362,7 +368,7 @@ public final class PassiveStepSolver {
         heldOpenings=new double[graph.pipes().size()];Arrays.fill(heldOpenings,Double.NaN);
         var conflicts=ControlConstraints.dependent(graph);
         for(int e=conflicts.nextSetBit(0);e>=0;e=conflicts.nextSetBit(e+1))heldOpenings[e]=acceptedOpenings.getOrDefault(graph.pipes().get(e).identity(),1.0);
-        standing=ControlConstraints.standing(graph);
+        standing=ControlConstraints.standing(graph);series=ControlConstraints.series(graph);
         // An island of unconnected nodes changes nothing in a step, unless an open vessel in it gives the atmosphere its gas
         // or its spill (OpenVessel).
         if(graph.pipes().isEmpty()&&graph.scheduledTransfers().isEmpty()&&(rateOnly||graph.reservoirs().stream().noneMatch(node->OpenVessel.releasing(node)||poolHeat(node)!=0||node.inventory().tower()!=null&&!node.empty())))return new Result(graph.reservoirs().stream().map(PassiveNetwork.Reservoir::state).toList(),new double[0],dt,
@@ -579,7 +585,7 @@ public final class PassiveStepSolver {
             // dry (what reaches it is more than its outlets take at the ambient): it holds contents at the step's end and is
             // solved again as the vessel it is, unless an earlier converged pass of this solve has confirmed it emptying.
             if(emptying!=null){var kept=keptEmptying(original,states,emptying,emptied);if(kept!=null){emptying=kept;continue;}}
-            boolean changed=false;int illegalDirection=-1,deviceChange=-1;FlowControl.Mode deviceNext=null;
+            boolean changed=false;int illegalDirection=-1,deviceChange=-1,pressureEntry=-1;FlowControl.Mode deviceNext=null;
             for(int i=0;i<flows.length;i++) {
                 flows[i]=equations.flow(i,x[equations.edgeOffset+i],equations.cachedTransport);heads[i]=equations.controlOffsets[i]<0?0:x[equations.controlOffsets[i]]*1e5;
                 if(boundaryClosed[i]||modes.get(i)==FlowControl.Mode.CLOSED){flows[i]=0;x[equations.edgeOffset+i]=0;lawFlows[i]=0;}
@@ -593,7 +599,22 @@ public final class PassiveStepSolver {
                 if(!boundaryAllowed(graph,pipe,flows[i])&&Math.abs(flows[i])>1e-10){if(illegalDirection<0)illegalDirection=i;continue;}
                 if(boundaryClosed[i])continue;
                 next=nextMode(equations,i,mode,flows[i],heads[i],states,up,suction,tolerance);
-                if(next!=mode&&deviceChange<0){deviceChange=i;deviceNext=next;}
+                // Owner decision of 2026-11-02 ("Lower target wins") in a series of a pressure valve and a flow regulator (batch
+                // 2026-11-11-valve-followups, item 3): a flow regulator that would regulate goes before the pressure valve of its
+                // series, and one that would regulate while the other regulates opens the other in its place, the change of this
+                // pass ({@link #regulatesInSeries}).
+                boolean flowEntry=next!=mode&&series!=null&&series.length==modes.size()&&series[i]>=0&&series[i]==pressureEntry&&!ControlConstraints.pressureRegulator(graph,i)&&regulating(graph,i,next);
+                if(next!=mode&&(deviceChange<0||flowEntry)) {
+                    int other=regulatesInSeries(graph,modes,i,next);pressureEntry=-1;
+                    if(other<0){deviceChange=i;deviceNext=next;if(series!=null&&series.length==modes.size()&&series[i]>=0&&ControlConstraints.pressureRegulator(graph,i)&&regulating(graph,i,next))pressureEntry=series[i];}
+                    else if(other!=i){deviceChange=other;deviceNext=FlowControl.Mode.VALVE_OPEN;}
+                    else {
+                        // A pressure valve beside a running set-flow mover, which cannot stand open: it stands open in place of
+                        // regulating, or reseats where its first node fell below its set pressure.
+                        var stands=mode==FlowControl.Mode.CLOSED?FlowControl.Mode.VALVE_OPEN:FlowControl.Mode.CLOSED;
+                        if(stands!=mode){deviceChange=i;deviceNext=stands;}
+                    }
+                }
             }
             // Decision A272: one active-set change per pass, a device's mode first, then a boundary closure. A boundary
             // closure is never taken back within a solve, and a forbidden direction can be the symptom of a wrong device
@@ -818,6 +839,29 @@ public final class PassiveStepSolver {
      * {@code mode} itself when the point holds it. The one statement of the pump and valve transitions, read by the pass
      * loop and by {@link #polishRefusedPoint}, which must accept a point only where the pass loop would.
      */
+    /**
+     * Owner decision of 2026-11-02 ("Lower target wins") where a pressure valve and a flow regulator carry one flow ({@link
+     * ControlConstraints#series}; batch 2026-11-11-valve-followups, item 3): with both regulating, the pressure valve holding
+     * its first node and the flow regulator the flow, their junction's pressure is in no row and the pass is singular. So
+     * the lower flow wins one change at a time (decision A272): where connection {@code edge} would move to {@code next} and
+     * regulate while a connection of the other kind in its series regulates, that one stands open instead. A pressure valve
+     * then holds its node and the flow valve passes less than its target, or the flow valve holds its target and the
+     * pressure valve stands wide open, its node rising above its set pressure. Returns the valve to open, {@code edge}
+     * itself where that is a pressure valve beside a running set-flow mover (a mover cannot stand open), or -1.
+     */
+    private int regulatesInSeries(PassiveNetwork graph,List<FlowControl.Mode> modes,int edge,FlowControl.Mode next) {
+        if(series==null||series.length!=modes.size()||series[edge]<0||!regulating(graph,edge,next)||regulating(graph,edge,modes.get(edge)))return -1;
+        boolean pressure=ControlConstraints.pressureRegulator(graph,edge);
+        for(int e=0;e<modes.size();e++) {
+            if(e==edge||series[e]!=series[edge]||ControlConstraints.pressureRegulator(graph,e)==pressure||!regulating(graph,e,modes.get(e)))continue;
+            return graph.pipes().get(e).control() instanceof FlowControl.Valve?e:pressure?edge:-1;
+        }
+        return -1;
+    }
+    /** Whether connection {@code e} in {@code mode} fixes what it regulates: a valve regulating, or a set-flow mover on its law (its displacement on its supply's density, {@link #riseDensity}) or closed (no flow). */
+    private static boolean regulating(PassiveNetwork graph,int e,FlowControl.Mode mode) {
+        return graph.pipes().get(e).control() instanceof FlowControl.Valve?mode==FlowControl.Mode.VALVE_REGULATING:mode==FlowControl.Mode.CLOSED||mode==FlowControl.Mode.INLET_WRONG_PHASE;
+    }
     private FlowControl.Mode nextMode(Equations equations,int i,FlowControl.Mode mode,double flow,double head,List<FluidThermodynamics.State> states,
                                       FluidThermodynamics.State up,Equations.Transport suction,double tolerance) {
         var graph=equations.graph;var pipe=graph.pipes().get(i);double rho=suction.density;var next=mode;
@@ -4506,7 +4550,8 @@ public final class PassiveStepSolver {
         private OpenVessel.Releases[] releases(PassiveNetwork graph,double dt) {
             OpenVessel.Releases[] result=null;
             for(int node=0;node<graph.reservoirs().size();node++) {
-                var released=OpenVessel.releases(model,graph.reservoirs().get(node),dt);if(released==null)continue;
+                var vessel=graph.reservoirs().get(node);
+                var released=OpenVessel.releases(model,vessel,dt,blanketInflows.getOrDefault(vessel.id(),0.0)*dt);if(released==null)continue;
                 if(result==null)result=new OpenVessel.Releases[graph.reservoirs().size()];
                 result[node]=released;
             }

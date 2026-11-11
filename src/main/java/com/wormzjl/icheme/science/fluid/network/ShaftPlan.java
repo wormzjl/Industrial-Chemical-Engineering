@@ -66,6 +66,20 @@ public record ShaftPlan(Kind kind, double value, double second) {
                 pipes.set(e, pipe.withControl(next));
                 continue;
             }
+            // A safety valve's run straight into a flare (batch 2026-11-11-valve-followups, item 4): one line, the valve's law and
+            // the tip's bore, no tip valve of its own (owner D6). The tip blocks while solids arrive (owner X5): the line
+            // closes both ways, as the tip valve's zero target closes its run, and opens again with the plan. The closure is the
+            // line's fitting mask, which an interval start keeps (a solids closure it lifts, D33); the compile leaves that
+            // mask free on this line, whose ends are the guarded vessel and the flare, neither a check valve.
+            if (pipe.control() instanceof FlowControl.PressureValve) {
+                var plan = plans.get(graph.reservoirs().get(pipe.second()).id());
+                if (plan == null || plan.kind != Kind.FLARE) continue;
+                int blocked = plan.value > 0 ? 0 : 3;
+                if (blocked == pipe.forbiddenDirections()) continue;
+                if (pipes == null) pipes = new ArrayList<>(graph.pipes());
+                pipes.set(e, pipe.withForbiddenDirections(blocked));
+                continue;
+            }
             var plan = plans.get(graph.reservoirs().get(pipe.first()).id());
             if (plan == null) continue;
             if (plan.kind == Kind.BURNERS) {

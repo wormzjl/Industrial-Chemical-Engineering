@@ -94,7 +94,7 @@ public final class IChemE {
                         "The engine's schedule stays in play time: the cadence, the wall budget and every setting below stated in seconds are play seconds unless they say otherwise.",
                         "Flows and rates on screen stay per process hour; a 1000 m3 tank on a 100 m3/h line fills in 10 h of process time, 2.5 h of play at 4. 72 makes a Minecraft day 24 h of process time.",
                         "A change keeps every world's contents, ledger and online tick and rebuilds the islands' solved state once. Captured on server start.")
-                .defineInRange("timeScale",4,com.wormzjl.icheme.science.fluid.SimulationTime.MINIMUM_FACTOR,com.wormzjl.icheme.science.fluid.SimulationTime.MAXIMUM_FACTOR);
+                .defineInRange("timeScale",com.wormzjl.icheme.science.fluid.SimulationTime.DEFAULT_FACTOR,com.wormzjl.icheme.science.fluid.SimulationTime.MINIMUM_FACTOR,com.wormzjl.icheme.science.fluid.SimulationTime.MAXIMUM_FACTOR);
         FLUID_INITIAL_INTERVAL_SECONDS=builder.comment("Starting hydraulic cadence for newly created islands, in play seconds. Existing saved clocks retain their cadence; adaptation uses 1-20 s.").defineInRange("initialIntervalSeconds",5,1,20);
         FLUID_ADAPTIVE_CADENCE=builder.comment("Adapt island cadence to measured CPU load. Disable for reproducible fixed-cadence qualification; saved simulation debt is retained.").define("adaptiveCadence",true);
         FLUID_WALL_BUDGET_MILLISECONDS=builder.comment("Hard worker budget per island interval, in real milliseconds: a solve past it counts as failed, and the adaptive cadence reads 75% of it as its slow-solve threshold. Applied on server start.").defineInRange("wallBudgetMilliseconds",2000,100,60000);
