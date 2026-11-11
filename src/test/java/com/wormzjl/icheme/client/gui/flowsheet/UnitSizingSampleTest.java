@@ -97,7 +97,9 @@ class UnitSizingSampleTest {
         assertEquals(96, read(unit.rating(), Limit.PUMP_RATED), ONE);
         assertEquals(730, read(unit.rating(), Limit.PUMP_FLOW), ONE);
         assertEquals(71, read(unit.rating(), Limit.PUMP_HEAD), ONE);
-        assertEquals(80.4, read(unit.rating(), Limit.PUMP_NPSH), TENTH, "a feed stands at grade, so no height is missing");
+        // 80.4 m before W3b: the derived pairs (light ends over the heavy cuts) put the dry crude's bubble pressure at
+        // 298.15 K at 129.6 kPa instead of 115.0 kPa, 1.72 m of this crude's head (batch 2026-11-11-aqueous-solvents).
+        assertEquals(78.65, read(unit.rating(), Limit.PUMP_NPSH), TENTH, "a feed stands at grade, so no height is missing");
     }
 
     @Test
