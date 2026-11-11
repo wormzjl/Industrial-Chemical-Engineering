@@ -753,7 +753,8 @@ final class FluidFacts {
             var vessels=graph.reservoirs().stream().filter(n->n.kind()==PassiveNetwork.NodeKind.RESERVOIR).toList();
             f.list(vessels,(q,n)->{var i=n.inventory();var t=n.state();
                 q.i64(n.id()).f64(i.volume()).f64(i.levelHeight()).bool(i.open()).doubles(i.moles()).f64(i.internalEnergy());solids(q,Solid.of(i.solids()));
-                q.f64(t.temperature()).f64(t.pressure()).doubles(t.liquid()).doubles(t.vapor()).f64(t.waterLiquid()).f64(t.waterVapor()).f64(t.hydrocarbonPartialPressure()).bool(i.rigid());});
+                var split=FluidThermodynamics.legacySplit(t);
+                q.f64(t.temperature()).f64(t.pressure()).doubles(split.liquid()).doubles(split.vapor()).f64(split.waterLiquid()).f64(split.waterVapor()).f64(split.hydrocarbonPressure()).bool(i.rigid());});
             var filters=graph.pipes().stream().filter(p->p.filter()!=null).toList();
             f.list(filters,(q,p)->{var cake=p.filter();q.i64(device(p.id())).f64(cake.capacity());solids(q,Solid.of(cake.captured()));q.f64(cake.energyJoule()).bool(cake.stoppedAtCapacity());});
             var drift=new ArrayList<Consumer<Fields>>();
@@ -803,7 +804,8 @@ final class FluidFacts {
             var i=n.inventory();var t=n.state();
             if(v.volume!=i.volume()||v.levelHeight!=i.levelHeight()||v.open!=i.open()||v.rigid!=i.rigid()||!same(v.moles,i.moles())||v.energy!=i.internalEnergy())return "vessel "+n.id()+" inventory";
             if(!same(v.solids,i.solids()))return "vessel "+n.id()+" solids";
-            if(v.temperature!=t.temperature()||v.pressure!=t.pressure()||!same(v.liquid,t.liquid())||!same(v.vapor,t.vapor())||v.waterLiquid!=t.waterLiquid()||v.waterVapor!=t.waterVapor()||v.hydrocarbonPressure!=t.hydrocarbonPartialPressure())
+            var split=FluidThermodynamics.legacySplit(t);
+            if(v.temperature!=t.temperature()||v.pressure!=t.pressure()||!same(v.liquid,split.liquid())||!same(v.vapor,split.vapor())||v.waterLiquid!=split.waterLiquid()||v.waterVapor!=split.waterVapor()||v.hydrocarbonPressure!=split.hydrocarbonPressure())
                 return "vessel "+n.id()+" state";
         }
         if(!vessels.isEmpty())return "vessels "+vessels.keySet()+" are in no node";
@@ -924,7 +926,7 @@ final class FluidFacts {
                 double y=r.device().position().y();var solids=inventory(v.solids,solid);
                 PassiveNetwork.Reservoir node;
                 if(held!=null) {
-                    var state=Arrays.stream(v.moles).sum()==0&&!solids.empty()?held.solidState(v.temperature,v.pressure,solids):held.state(v.temperature,v.pressure,v.liquid,v.vapor,v.waterLiquid,v.waterVapor,v.hydrocarbonPressure).withSolids(solids);
+                    var state=Arrays.stream(v.moles).sum()==0&&!solids.empty()?held.solidState(v.temperature,v.pressure,solids):held.fromLegacySplit(v.temperature,v.pressure,v.liquid,v.vapor,v.waterLiquid,v.waterVapor).withSolids(solids);
                     var kept=new PassiveNetwork.Reservoir(v.id,y,state,PassiveNetwork.NodeKind.RESERVOIR,new PassiveNetwork.Inventory(v.volume,v.moles,v.energy,solids,v.levelHeight,v.open,r.spec().geometry(),null,r.spec().tower(),v.rigid&&!v.open));
                     origins.put(v.id,new IslandSets.Origin(kept,held));node=IslandSets.node(kept,held,model);
                 } else {
@@ -954,14 +956,16 @@ final class FluidFacts {
         var delivers=new HashMap<Long,Set<String>>();
         for(var u:columns.values())for(var st:u.stations()) {
             if(st.device()==0||st.port().inlet())continue;var n=st.account().moles();
-            for(int i=0;i<n.length;i++)if(n[i]>0&&!basis.components().get(i).equals("Water"))delivers.computeIfAbsent(st.device(),ignored->new HashSet<>()).add(basis.components().get(i));
+            // W3b option A: a column outlet can deliver water whatever its account holds now, so its island is wet.
+            var outlet=delivers.computeIfAbsent(st.device(),ignored->new HashSet<>());outlet.add("Water");
+            for(int i=0;i<n.length;i++)if(n[i]>0)outlet.add(basis.components().get(i));
         }
         var compiled=PhysicalFluidTopology.compile(devices,stock,cakes,NetworkReduction.ambient(model));
         long next=world.nextIdentity;var entries=new ArrayList<FluidCheckpointCodec.IslandEntry>();
         String status="WAITING: rebuilt from saved facts ("+reason+")"+(removed.empty()?"":"; removed by the property data: "+removed.summary());
         for(var island:compiled.islands()) {
             var set=IslandSets.held(island.graph(),model,origins);for(long device:island.physicalIds())set.addAll(delivers.getOrDefault(device,Set.of()));
-            var own=model.on(set);
+            var own=model.island(set);
             var graph=PassiveNetwork.mintJunctions(IslandSets.onto(island.graph(),model,own,origins),own);long id=next++;
             var dimension=registrations.get(island.physicalIds().iterator().next()).device().position().dimension();
             entries.add(new FluidCheckpointCodec.IslandEntry(dimension,key.packageId(),own.compounds(),new IslandCoordinator.Snapshot(id,0,graph,new IslandClock.Snapshot(epoch,epoch,0,REBUILT_CADENCE),

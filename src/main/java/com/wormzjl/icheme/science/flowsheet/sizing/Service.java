@@ -94,14 +94,14 @@ public enum Service {
 
     /** Whether a state's liquid is water. */
     static boolean water(FluidThermodynamics.State state) {
-        double oil = Arrays.stream(state.liquidView()).sum();
-        return 100 * state.waterLiquid() / (oil + state.waterLiquid()) > Limit.SERVICE_WATER.value();
+        double liquid = Arrays.stream(state.liquidAmountsView()).sum() + Arrays.stream(state.aqueousAmountsView()).sum();
+        return 100 * state.liquidWater() / liquid > Limit.SERVICE_WATER.value();
     }
 
     /** A vapour under ambient answers to its absolute pressure, whatever its gas: a limit in bar per 100 m means nothing there. */
     private static Service vapour(FluidThermodynamics.State state, FluidThermodynamics model) {
         if (state.pressure() / 1e5 < Limit.SERVICE_VACUUM.value()) return VACUUM_VAPOUR;
-        double hydrocarbon = Arrays.stream(state.vaporView()).sum(), water = state.waterVapor() / (hydrocarbon + state.waterVapor());
+        double water = state.waterFraction(FluidThermodynamics.State.VAPOR);
         if (100 * water <= Limit.SERVICE_STEAM.value()) return GAS;
         return model.saturationPressure(state.temperature() - Limit.SERVICE_SUPERHEAT.value()) < water * state.pressure() ? STEAM_SATURATED : STEAM_SUPERHEATED;
     }

@@ -54,28 +54,33 @@ public record PipeTransfer(long pipeId, Stream forward, Stream reverse) {
             // pinned at its capacity (PhaseDraw).
             if(drawn!=null)for(int k=0;k<drawn.length;k++)if(drawn[k]>0&&!FluidThermodynamics.holdsPhase(k<3?state:start,k%3))drawn=null;
             double mass=Math.abs(rates[i])*duration;
-            var liquid=state.liquid();var vapour=state.vapor();int count=liquid.length+1;
+            int count=state.componentCount();
             double[][] n=new double[3][count];
             Stream moved;
             if(drawn!=null) {
                 double[] volumes=new double[3];var solids=SolidInventory.EMPTY;
                 for(int k=0;k<drawn.length;k++) {
                     if(!(drawn[k]>0))continue;
-                    int phase=k%3;var from=k<3?state:start;var fromLiquid=k<3?liquid:from.liquidView();var fromVapour=k<3?vapour:from.vaporView();
+                    int phase=k%3;var from=k<3?state:start;
                     double fraction=drawn[k]*duration/model.phaseMass(from,phase);
-                    switch(phase) {
-                        case FluidThermodynamics.GAS->{for(int c=0;c<liquid.length;c++)n[2][c]+=fraction*fromVapour[c];n[2][count-1]+=fraction*from.waterVapor();volumes[2]+=fraction*from.vaporVolume();}
-                        case FluidThermodynamics.OIL->{for(int c=0;c<liquid.length;c++)n[0][c]+=fraction*fromLiquid[c];volumes[0]+=fraction*from.liquidVolume();}
-                        default->{n[1][count-1]+=fraction*from.waterLiquid();volumes[1]+=fraction*from.waterVolume();}
-                    }
+                    // The stream's rows: the oil (0), the aqueous liquid (1) and the gas (2), each a whole phase of the donor.
+                    int row=phase==FluidThermodynamics.GAS?2:phase==FluidThermodynamics.OIL?0:1,slot=from.slot(phase);
+                    double[] amounts=from.amountsView(slot);
+                    for(int c=0;c<count;c++)n[row][c]+=fraction*amounts[c];
+                    volumes[row]+=fraction*from.slotVolume(slot);
                     if(phase!=FluidThermodynamics.GAS){var carried=from.solids().scale(fraction*FluidThermodynamics.phaseSolidShare(from,phase));solids=solids.empty()?carried:solids.plus(carried);}
                 }
                 moved=new Stream(mass,n,volumes,solids);
             } else {
                 double fraction=mass/state.mass();
-                for(int c=0;c<liquid.length;c++){n[0][c]=fraction*liquid[c];n[2][c]=fraction*vapour[c];}
-                n[1][count-1]=fraction*state.waterLiquid();n[2][count-1]=fraction*state.waterVapor();
-                moved=new Stream(mass,n,new double[]{fraction*state.liquidVolume(),fraction*state.waterVolume(),fraction*state.vaporVolume()},state.solids().scale(fraction));
+                double[] volumes=new double[3];
+                for(int phase:new int[]{FluidThermodynamics.OIL,FluidThermodynamics.AQUEOUS,FluidThermodynamics.GAS}) {
+                    int slot=state.slot(phase),row=phase==FluidThermodynamics.GAS?2:phase==FluidThermodynamics.OIL?0:1;if(slot<0)continue;
+                    double[] amounts=state.amountsView(slot);
+                    for(int c=0;c<count;c++)n[row][c]=fraction*amounts[c];
+                    volumes[row]=fraction*state.slotVolume(slot);
+                }
+                moved=new Stream(mass,n,volumes,state.solids().scale(fraction));
             }
             var zero=zero(count);
             result.add(new PipeTransfer(pipe.id(),rates[i]>=0?moved:zero,rates[i]>=0?zero:moved));

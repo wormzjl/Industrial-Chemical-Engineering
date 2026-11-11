@@ -836,10 +836,19 @@ public final class MaterialCatalog {
      * the water; {@link Combustion}): 0 for a record without a {@code combustion} sub-record, which burns as an inert.
      */
     public double[] heatingValues(String packageId) {
-        var p=requirePackage(packageId);var out=new double[p.components().size()+1];
-        for(int i=0;i<p.properties().size();i++){var c=combustion.get("properties/"+p.properties().get(i).id());out[i]=c==null?0:c.lowerHeatingValue();}
+        var p=requirePackage(packageId);var names=conservedComponents(packageId);var out=new double[names.size()];
+        for(int k=0;k<names.size()-1;k++){var c=combustion.get("properties/"+p.properties().get(p.components().indexOf(names.get(k))).id());out[k]=c==null?0:c.lowerHeatingValue();}
         var water=combustion.get("water/"+waterModels.get(packageId));out[out.length-1]=water==null?0:water.lowerHeatingValue();
         return out;
+    }
+    /**
+     * A package's components in the fluid network's conserved order: those other than {@code Water} in package order, then
+     * {@code Water} (W3b of batch 2026-11-11-aqueous-solvents: a package may carry water as a component of its cubic; one
+     * that does not still has its water model in the last place).
+     */
+    public List<String> conservedComponents(String packageId) {
+        var list=new ArrayList<>(requirePackage(packageId).components());list.remove("Water");list.add("Water");
+        return List.copyOf(list);
     }
     /**
      * Package {@code packageId}'s formulas in the fluid network's conserved order (its components, then the water): atoms of
@@ -847,8 +856,8 @@ public final class MaterialCatalog {
      * record without one. A flare's flame temperature reads them (batch 2026-11-09-flare-stack).
      */
     public double[][] formulas(String packageId) {
-        var p=requirePackage(packageId);var out=new double[p.components().size()+1][];
-        for(int i=0;i<p.properties().size();i++)out[i]=atoms(formulas.get("properties/"+p.properties().get(i).id()));
+        var p=requirePackage(packageId);var names=conservedComponents(packageId);var out=new double[names.size()][];
+        for(int k=0;k<names.size()-1;k++)out[k]=atoms(formulas.get("properties/"+p.properties().get(p.components().indexOf(names.get(k))).id()));
         out[out.length-1]=atoms(formulas.get("water/"+waterModels.get(packageId)));
         return out;
     }

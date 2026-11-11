@@ -4,7 +4,6 @@ import com.wormzjl.icheme.science.fluid.solver.*;
 import com.wormzjl.icheme.science.fluid.state.SolidInventory;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.fluid.thermo.ThermoHold;
-import com.wormzjl.icheme.science.thermo.PhaseSupport;
 import java.util.*;
 import java.util.function.Predicate;
 import java.util.function.UnaryOperator;
@@ -229,7 +228,7 @@ public final class InventoryEquilibrium {
      * {@code inventory}'s energy is the step's booked energy before the wall's work; the closed state then holds that
      * energy less {@code P_ambient (V_bag - workFrom)}. {@code NaN}: the inventory's energy is the state's.
      */
-    public static FluidThermodynamics.State close(FluidThermodynamics model,FluidThermodynamics.State state,PassiveNetwork.Inventory inventory,PhaseSupport[] support,
+    public static FluidThermodynamics.State close(FluidThermodynamics model,FluidThermodynamics.State state,PassiveNetwork.Inventory inventory,byte[] support,
                                                   double workFrom,Runnable checkpoint) {
         var n=inventory.moles();double energy=inventory.internalEnergy(),volume=inventory.wallCapacity();
         if(Arrays.stream(n).sum()==0) {
@@ -280,19 +279,23 @@ public final class InventoryEquilibrium {
      * fits {@code state}: a reconstruction that folded a phase (decision D34) or restated a phase appearance as its flash
      * hands over a state the pass loop solves again, laid out from it.
      */
-    private static PhaseLayout layout(FluidThermodynamics model,FluidThermodynamics.State state,PhaseSupport[] support) {
-        return new PhaseLayout(model,state,null,null,support!=null&&fits(support,state)?support:PhaseLayout.support(model,state,null,null,false));
+    private static PhaseLayout layout(FluidThermodynamics model,FluidThermodynamics.State state,byte[] support) {
+        return new PhaseLayout(model,state,null,null,support!=null&&fits(support,state)?support:PhaseLayout.support(model,state,null,null));
     }
-    /** Whether every component {@code state} holds has a phase under {@code support} that {@code state} holds. */
-    private static boolean fits(PhaseSupport[] support,FluidThermodynamics.State state) {
-        double[] l=state.liquidView(),v=state.vaporView();if(support.length!=l.length)return false;
-        boolean liquid=state.liquidVolume()>0,vapor=Arrays.stream(v).sum()>0;
-        for(int c=0;c<l.length;c++) {
-            if(support[c]==PhaseSupport.ABSENT){if(l[c]+v[c]>0)return false;continue;}
-            if(support[c].liquid()&&!liquid||support[c].vapor()&&!vapor)return false;
+    /** Whether every component {@code state} holds has a slot under {@code support} that {@code state} holds. */
+    private static boolean fits(byte[] support,FluidThermodynamics.State state) {
+        double[] n=state.totals();if(support.length!=n.length)return false;
+        int active=PhaseLayout.activeBits(state);
+        for(int c=0;c<n.length;c++) {
+            if(support[c]==0){if(n[c]>0)return false;continue;}
+            if((support[c]&~active)!=0)return false;
         }
         return true;
     }
-    static String regime(FluidThermodynamics.State state){return (state.liquidVolume()>0?"L":"")+(state.vaporProperties()!=null?"G":"")+(state.waterLiquid()>0?"W":"")+(state.waterVapor()>0?"S":"");}
+    /** The storage slots a state holds ({@link PhaseLayout#activeBits}), as a word. */
+    static String regime(FluidThermodynamics.State state) {
+        int bits=PhaseLayout.activeBits(state);
+        return ((bits&PhaseLayout.LIQUID)!=0?"L":"")+((bits&PhaseLayout.VAPOR)!=0?"G":"")+((bits&PhaseLayout.AQUEOUS)!=0?"A":"");
+    }
     private static double norm(double[] values){double maximum=0;for(double value:values){if(!Double.isFinite(value))return Double.POSITIVE_INFINITY;maximum=Math.max(maximum,Math.abs(value));}return maximum;}
 }

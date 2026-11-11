@@ -489,9 +489,10 @@ public final class PhysicalRegistry {
             // The island's own compound list (V2) and its graph on it; the recompile's junctions are minted there (start state,
             // decision D37, and buffer size, D25); nothing is booked (D46).
             var compounds=compounds(island,affected,split,origins);
-            String held=compounds.size()>compoundCap?"an island carries at most "+compoundCap+" compounds and water; joined, this one would carry "+compounds.size()
+            int carried=(int)compounds.stream().filter(c->!c.equals(com.wormzjl.icheme.science.thermo.phase.CubicPhaseEvaluator.WATER)).count();
+            String held=carried>compoundCap?"an island carries at most "+compoundCap+" compounds and water; joined, this one would carry "+carried
                     +": separate its parts to run it":null;
-            var own=model.on(compounds);
+            var own=model.island(compounds);
             long id=nextId++;replacements.add(new IslandCoordinator.Replacement(id,PassiveNetwork.mintJunctions(IslandSets.onto(island.graph(),model,own,origins),own),own,held));replacementMembers.put(id,island.physicalIds().stream().sorted().toList());
         }
         var eventIds=new LinkedHashSet<UUID>();for(var event:events)eventIds.add(event.id());
@@ -533,9 +534,13 @@ public final class PhysicalRegistry {
     private List<String> compounds(PhysicalFluidTopology.Island island,Set<Long> affected,Set<Long> split,Map<Long,IslandSets.Origin> origins) {
         var set=IslandSets.held(island.graph(),model,origins);
         for(long device:island.physicalIds()) {
-            if(fixedDevice(device)){set.addAll(host.portCompounds(device));continue;}
+            // W3b option A: a column or still port can deliver water whatever its account holds now, so its island is wet.
+            if(fixedDevice(device)){var port=host.portCompounds(device);set.addAll(port);if(!port.isEmpty())set.add(com.wormzjl.icheme.science.thermo.phase.CubicPhaseEvaluator.WATER);continue;}
             Long holder=owners.get(device);
-            if(holder!=null&&affected.contains(holder)&&!split.contains(holder))set.addAll(host.coordinator().model(holder).compounds());
+            if(holder!=null&&affected.contains(holder)&&!split.contains(holder)) {
+                var own=host.coordinator().model(holder);set.addAll(own.compounds());
+                if(own.wet())set.add(com.wormzjl.icheme.science.thermo.phase.CubicPhaseEvaluator.WATER);
+            }
         }
         return new ArrayList<>(set);
     }

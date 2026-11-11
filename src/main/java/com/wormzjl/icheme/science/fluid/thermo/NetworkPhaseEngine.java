@@ -1,80 +1,69 @@
 package com.wormzjl.icheme.science.fluid.thermo;
 
-import com.wormzjl.icheme.science.math.DeterministicMath;
-
-import com.wormzjl.icheme.science.column.v3.thermo.V3WaterProperties;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
-import com.wormzjl.icheme.science.thermo.IdealGasFunction;
 import com.wormzjl.icheme.science.thermo.phase.CrystalPhaseEvaluator;
-import com.wormzjl.icheme.science.thermo.phase.CubicPhaseEvaluator;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumRequest;
 import com.wormzjl.icheme.science.thermo.phase.EquilibriumResult;
 import com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium;
-import com.wormzjl.icheme.science.thermo.phase.FreeWaterIce;
-import com.wormzjl.icheme.science.thermo.phase.FreeWaterModel;
 import com.wormzjl.icheme.science.thermo.phase.PhaseCompetition;
 import com.wormzjl.icheme.science.thermo.phase.PhaseContract;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
- * The equilibrium engine of one network model: {@link FluidTpEquilibrium} on the network package's contract, with the
- * network's own free water, as the one service that decides a node's phases ({@link FluidThermodynamics#equilibriumTP}:
- * the outer active-set check, the inventory refresh, placement and boundary charges), and of a pipe junction's own split
- * where the outer check adds a phase ({@link #ph}, D26).
+ * The equilibrium engine of one network model: {@link FluidTpEquilibrium} on the derived contract of the model's own
+ * evaluator ({@link PhaseContract#forDerived}, the very {@link HydrocarbonModel#evaluator}), the one service that decides a
+ * node's phases ({@link FluidThermodynamics#equilibriumTP}: the outer active-set check, the inventory refresh, placement and
+ * boundary charges) and a pipe junction's own split where the outer check adds a phase ({@link #ph}, D26).
  *
- * <p>The evaluator carries the network's exact equation of state: on a package with a reference spine
- * {@link CubicPhaseEvaluator#forPackage} (the same {@link SpinePackageData} as {@link HydrocarbonModel}); on a package
- * without one {@link HydrocarbonModel#coefficientEvaluator}, the package's PR78 constants and constant interactions with
- * the model's own translations (they enter the vapour branch's shift and the gas volume of the free-water rule, so a
- * translation-free evaluator would put the partial pressure elsewhere). Volume and {@code ln phi} are then bit for bit
- * the network's. The ideal-gas functions of a spine-less package are its {@code shifted_polynomial_5} fits on the
- * network's sensible datum ({@link CoefficientIdealGas}: zero enthalpy and entropy at 298.15 K and 1e5 Pa, the network's
- * own ideal-gas enthalpy): the engine needs them for the states it reports, for a junction's PH seed (its own rows then
- * solve it) and for the package's crystals, which they put on the network's datum (decision E27); TP decisions between
- * fluid phases are the cubic's and the water rule's.</p>
+ * <p>W3b of batch 2026-11-11-aqueous-solvents: water is a component of the cubic, so the engine has no free-water model; ice
+ * is one of the package's crystals. On a model with water the engine's basis is the network's conserved basis (compounds,
+ * water last); on a model without water (option A: an island no water can reach) it is the compounds alone, and a request's
+ * water amount, which is exactly zero there, is dropped.</p>
  *
  * <p>The engine's workspaces are per-thread scratch ({@link FluidTpEquilibrium.Workspace}), kept in a thread-local of
- * this instance so a model shared by several island workers never shares one; the engine carries nothing between calls
- * but prepared temperatures, recomputed bit for bit.</p>
+ * this instance so a model shared by several island workers never shares one.</p>
  */
 final class NetworkPhaseEngine {
-    /** The standard entropy of water vapour at 298.15 K and 1e5 Pa, J/(mol K) (CODATA key value, Cox, Wagman and Medvedev 1989;
-     * NASA CEA's H2O polynomial gives 188.829): the steam's entropy anchor. */
-    static final double STEAM_STANDARD_ENTROPY=188.835;
     private final FluidTpEquilibrium engine;
     private final List<String> species;
+    /** Whether the engine's basis carries water (the network's conserved basis), or the compounds alone. */
+    private final boolean wet;
     private final ThreadLocal<FluidTpEquilibrium.Workspace> workspaces;
 
-    private NetworkPhaseEngine(FluidTpEquilibrium engine) {
-        this.engine=engine;species=engine.contract().components();
+    private NetworkPhaseEngine(FluidTpEquilibrium engine,boolean wet) {
+        this.engine=engine;species=engine.contract().components();this.wet=wet;
         workspaces=ThreadLocal.withInitial(engine::newWorkspace);
     }
 
     /**
-     * The engine of {@code fluid}'s package with {@code settings} ({@link FluidTpEquilibrium.Settings#DEFAULT} for the
-     * network). A package that admits crystals gets its whole crystal set qualified ({@link PhaseContract#forPackage},
-     * D8/D17) and one evaluator per crystal, anchored to this evaluator's family on either ideal-gas source
-     * ({@link CrystalPhaseEvaluator#forPackage}); every other package keeps the fluid-only network contract.
+     * The engine of {@code fluid}'s model with {@code settings} ({@link FluidTpEquilibrium.Settings#DEFAULT} for the
+     * network): the derived contract of the model's evaluator, with one evaluator per crystal the contract admits (ice
+     * among them on a model with water), anchored to this evaluator's family on either ideal-gas source
+     * ({@link CrystalPhaseEvaluator#forPackage}).
      */
-    static NetworkPhaseEngine of(FluidThermodynamics fluid,MaterialCatalog catalog,String packageId,MaterialCatalog.Water water,
-                                 FluidTpEquilibrium.Settings settings) {
-        var propertyPackage=catalog.requirePackage(packageId);
-        var evaluator=propertyPackage.spine().isEmpty()?fluid.hydrocarbon.coefficientEvaluator():CubicPhaseEvaluator.forPackage(catalog,packageId);
+    static NetworkPhaseEngine of(FluidThermodynamics fluid,MaterialCatalog catalog,String packageId,FluidTpEquilibrium.Settings settings) {
+        var evaluator=fluid.hydrocarbon.evaluator();
+        var contract=PhaseContract.forDerived(catalog,packageId,evaluator);
         var crystals=fluid.crystals();
+        List<CrystalPhaseEvaluator> solids=new ArrayList<>();
         if(!crystals.isEmpty()) {
-            var contract=PhaseContract.forPackage(catalog,packageId);
             var competition=contract.crystalCompetition();
             if(competition==null||!competition.crystals().equals(new java.util.TreeSet<>(crystals)))
                 throw new IllegalStateException("Package "+packageId+": the network's crystals "+crystals+" are not the contract's competition "+competition);
-            List<CrystalPhaseEvaluator> solids=new ArrayList<>();
             for(String id:crystals)solids.add(CrystalPhaseEvaluator.forPackage(catalog,packageId,id));
-            return new NetworkPhaseEngine(new FluidTpEquilibrium(contract,evaluator,settings,new NetworkFreeWater(fluid,water),solids));
         }
-        var contract=PhaseContract.forNetworkPackage(catalog,packageId);
-        return new NetworkPhaseEngine(new FluidTpEquilibrium(contract,evaluator,settings,new NetworkFreeWater(fluid,water)));
+        return new NetworkPhaseEngine(new FluidTpEquilibrium(contract,evaluator,settings,null,solids),fluid.wet());
     }
 
+    /** {@code overall} (the network's conserved basis, water last) on the engine's basis: itself with water, the compounds
+     * alone without (the water amount must then be zero). */
+    private double[] basis(double[] overall) {
+        if(wet)return overall;
+        if(overall[overall.length-1]!=0)throw new IllegalArgumentException("Water on a model without water");
+        return Arrays.copyOf(overall,overall.length-1);
+    }
     /** The TP equilibrium of {@code overall} (the network's conserved basis, water last) at {@code (t, p)}: under the
      * package's crystal competition when {@code crystals} ({@link PhaseCompetition#FLUID_AND_CRYSTALS}), fluid phases only
      * otherwise. */
@@ -83,7 +72,7 @@ final class NetworkPhaseEngine {
     }
     /** {@link #tp(double,double,double[],boolean)} under {@code competition}. */
     EquilibriumResult tp(double t,double p,double[] overall,PhaseCompetition competition) {
-        return engine.tp(EquilibriumRequest.tp(t,p,species,overall,competition),workspaces.get());
+        return engine.tp(EquilibriumRequest.tp(t,p,species,basis(overall),competition),workspaces.get());
     }
     /** The PH equilibrium of {@code overall} at {@code p} with enthalpy {@code h} (J, on the engine's datum), under the
      * competition {@code crystals} selects as for {@link #tp}: a pipe junction's own split (D26). */
@@ -92,88 +81,25 @@ final class NetworkPhaseEngine {
     }
     /** {@link #ph(double,double,double[],boolean)} under {@code competition}. */
     EquilibriumResult ph(double p,double h,double[] overall,PhaseCompetition competition) {
-        return engine.ph(EquilibriumRequest.ph(p,h,species,overall,competition),workspaces.get());
+        return engine.ph(EquilibriumRequest.ph(p,h,species,basis(overall),competition),workspaces.get());
     }
     /**
      * The equilibrium of {@code overall} at internal energy {@code u} (J, the engine's datum) and volume {@code v} (m3), the
-     * package's crystals competing where {@code crystals} (as for {@link #tp}) and the free water's ice by water's own rule
-     * (WP4): the crystal test of a taut vessel's refresh ({@code InventoryEquilibrium}, D23), D21's near-pure step included.
-     * Warm-started at {@code (hintT, hintP)} when both are finite
-     * ({@link FluidTpEquilibrium#uv(EquilibriumRequest, com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium.Workspace, double, double)}).
+     * package's crystals competing where {@code crystals} (as for {@link #tp}): the crystal test of a taut vessel's refresh
+     * ({@code InventoryEquilibrium}, D23), D21's near-pure step included. Warm-started at {@code (hintT, hintP)} when both
+     * are finite.
      */
     EquilibriumResult crystalUv(double u,double v,double[] overall,boolean crystals,double hintT,double hintP) {
         return crystalUv(u,v,overall,competition(crystals),hintT,hintP);
     }
     /** {@link #crystalUv(double,double,double[],boolean,double,double)} under {@code competition}. */
     EquilibriumResult crystalUv(double u,double v,double[] overall,PhaseCompetition competition,double hintT,double hintP) {
-        var request=EquilibriumRequest.uv(u,v,species,overall,competition);
+        var request=EquilibriumRequest.uv(u,v,species,basis(overall),competition);
         return Double.isFinite(hintT)&&Double.isFinite(hintP)?engine.uv(request,workspaces.get(),hintT,hintP):engine.uv(request,workspaces.get());
     }
     private static PhaseCompetition competition(boolean crystals){return crystals?PhaseCompetition.FLUID_AND_CRYSTALS:PhaseCompetition.FLUID_ONLY;}
     /** The engine itself: the crystal evaluators and the onset functions the network's crystal records are built from. */
     FluidTpEquilibrium engine(){return engine;}
-    /** The engine's basis: the network's conserved components, water last. */
+    /** The engine's basis: the compounds, then water on a model with water. */
     List<String> species(){return species;}
-
-    /**
-     * The network's free water as the engine's {@link FreeWaterModel}: the very methods {@link FluidThermodynamics#state}
-     * uses (its saturation pressure, its liquid water at the state pressure, its steam partial-pressure limit), its
-     * ice below the melting line ({@link FluidThermodynamics#freeWaterIce}, WP4) and its
-     * steam: its ideal-gas functions ({@link Steam}), the engine adding the second virial
-     * ({@link com.wormzjl.icheme.science.thermo.phase.SteamVirial}).
-     */
-    static final class NetworkFreeWater implements FreeWaterModel {
-        private final FluidThermodynamics fluid;
-        private final MaterialCatalog.Water water;
-        NetworkFreeWater(FluidThermodynamics fluid,MaterialCatalog.Water water) {
-            this.fluid=fluid;this.water=water;
-        }
-        @Override public String revision(){return water.revision();}
-        @Override public double saturationPressure(double t){return fluid.saturationPressure(t);}
-        @Override public double vaporPartialPressureLimit(double t){return FluidThermodynamics.waterVaporPressureLimit(t);}
-        @Override public void liquid(double t,double p,double[] out) {
-            var liquid=fluid.waterLiquid(t,p);out[0]=liquid.molarVolume();out[1]=liquid.molarEnthalpy();
-        }
-        @Override public IdealGasFunction vapor(){return fluid.steam();}
-        @Override public FreeWaterIce ice(){return fluid.freeWaterIce();}
-    }
-
-    /**
-     * The ideal-gas functions of the network's steam: the water record's Shomate polynomial (the column's {@code vaporMolarEnthalpy}, the
-     * network's {@code vaporWaterEnthalpy}), its entropy anchored at {@link #STEAM_STANDARD_ENTROPY}. Past the record's
-     * range, from its triple point to its maximum temperature, the heat capacity is held at the end value and the enthalpy
-     * and entropy integrate it (owner rule of 2026-10-16), so value and slope are continuous at both ends.
-     */
-    static final class Steam implements IdealGasFunction {
-        private final MaterialCatalog.Water water;
-        private final double minimum,maximum,offset,lowCp,highCp,lowEnthalpy,highEnthalpy,lowEntropy,highEntropy;
-        Steam(MaterialCatalog.Water water) {
-            this.water=water;minimum=water.triplePoint();maximum=water.maximumTemperature();
-            offset=STEAM_STANDARD_ENTROPY-shomateEntropy(298.15);
-            lowCp=V3WaterProperties.dVaporMolarEnthalpyDT(water,minimum);highCp=V3WaterProperties.dVaporMolarEnthalpyDT(water,maximum);
-            lowEnthalpy=V3WaterProperties.vaporMolarEnthalpy(water,minimum);highEnthalpy=V3WaterProperties.vaporMolarEnthalpy(water,maximum);
-            lowEntropy=shomateEntropy(minimum)+offset;highEntropy=shomateEntropy(maximum)+offset;
-        }
-        private double shomateEntropy(double t) {
-            double x=t/1000.0;var c=water.shomate();
-            return c.get(0)*DeterministicMath.log(x)+c.get(1)*x+c.get(2)*x*x/2.0+c.get(3)*x*x*x/3.0-c.get(4)/(2.0*x*x);
-        }
-        private static void require(double t) {
-            if(!(t>0)||!Double.isFinite(t))throw new IllegalArgumentException("Steam temperature must be positive and finite: "+t);
-        }
-        @Override public double heatCapacity(double t) {
-            require(t);return t<minimum?lowCp:t>maximum?highCp:V3WaterProperties.dVaporMolarEnthalpyDT(water,t);
-        }
-        @Override public double enthalpy(double t) {
-            require(t);
-            return t<minimum?lowEnthalpy+lowCp*(t-minimum):t>maximum?highEnthalpy+highCp*(t-maximum):V3WaterProperties.vaporMolarEnthalpy(water,t);
-        }
-        @Override public double entropy(double t,double p) {
-            require(t);if(!(p>0)||!Double.isFinite(p))throw new IllegalArgumentException("Steam entropy needs a positive finite pressure");
-            double s=t<minimum?lowEntropy+lowCp*DeterministicMath.log(t/minimum):t>maximum?highEntropy+highCp*DeterministicMath.log(t/maximum):shomateEntropy(t)+offset;
-            return s-FluidThermodynamics.R*DeterministicMath.log(p/1.0e5);
-        }
-        @Override public double minimumTemperature(){return minimum;}
-        @Override public double maximumTemperature(){return maximum;}
-    }
 }

@@ -230,7 +230,7 @@ final class ColumnBlockSolve implements Calculation.Law {
 
     /** V3 on the stream as flashed: its hydrocarbons are the feed, its water a steam feed if it is vapour there. */
     private V3ColumnResult run(FlowStream flashed, List<V3SteamFeedSpec> rows) {
-        if (flashed.state().waterLiquid() > TRACE * flashed.total()) throw new FlowsheetFailure("column.liquid_water");
+        if (flashed.state().liquidWater() > TRACE * flashed.total()) throw new FlowsheetFailure("column.liquid_water");
         double[] amounts = flashed.amounts();
         double water = amounts[components - 1];
         amounts[components - 1] = 0;
@@ -273,7 +273,7 @@ final class ColumnBlockSolve implements Calculation.Law {
             }
             double stage = stages.getOrDefault(row.stage(), door.pressure(row.stage()));
             var valved = thermo.heated(supply, 0, Math.min(supply.pressure(), stage));
-            if (valved.state().waterLiquid() > TRACE * valved.total()) throw new FlowsheetFailure("column.steam_wet", row.id());
+            if (valved.state().liquidWater() > TRACE * valved.total()) throw new FlowsheetFailure("column.steam_wet", row.id());
             past.add(valved);
         }
         return past;

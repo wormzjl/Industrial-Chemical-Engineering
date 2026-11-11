@@ -5,7 +5,7 @@ import java.util.Arrays;
 
 import static com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.GAS;
 import static com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.OIL;
-import static com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.WATER;
+import static com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.AQUEOUS;
 
 /**
  * What a vessel's phase port draws (decision D11: ports carry mixed phases by priority). Priority: a bottom
@@ -37,10 +37,11 @@ final class PhaseDraw {
      * liquid, then the heavier, then the gas ({@link OpenVessel}). */
     static int[] order(FluidThermodynamics model,FluidThermodynamics.State state,PassiveNetwork.PhasePort port) {
         if(port==PassiveNetwork.PhasePort.BULK)return FluidThermodynamics.bulkDrawsGas(state)?new int[]{GAS}:null;
-        int heavy=model.heavierLiquid(state),light=heavy==OIL?WATER:OIL;
+        int heavy=model.heavierLiquid(state),light=heavy==OIL?AQUEOUS:OIL;
         return switch(port) {
-            case LIQUID,BOOT_HC->new int[]{OIL,WATER,GAS};
-            case BOOT_WATER->new int[]{WATER,OIL,GAS};
+            case LIQUID,BOOT_HC->new int[]{OIL,AQUEOUS,GAS};
+            // W3b: the boot holds the denser liquid, whichever it is.
+            case BOOT_WATER->new int[]{heavy,light,GAS};
             case OVERFLOW->new int[]{light,heavy,GAS};
             default->new int[]{GAS,light,heavy};
         };
@@ -52,13 +53,13 @@ final class PhaseDraw {
      * port holding both liquids has no one leading phase (-1 too): every reader asks {@link #mixedLiquids} first and reads
      * the {@link #mixedShares} stream there, never the bulk. */
     static int leading(FluidThermodynamics model,FluidThermodynamics.State state,PassiveNetwork.PhasePort port) {
-        if(port==PassiveNetwork.PhasePort.LIQUID&&FluidThermodynamics.holdsPhase(state,OIL)&&FluidThermodynamics.holdsPhase(state,WATER))return -1;
+        if(port==PassiveNetwork.PhasePort.LIQUID&&FluidThermodynamics.holdsPhase(state,OIL)&&FluidThermodynamics.holdsPhase(state,AQUEOUS))return -1;
         var order=order(model,state,port);if(order==null)return -1;
         for(int phase:order)if(FluidThermodynamics.holdsPhase(state,phase))return phase;
         return -1;
     }
     static boolean mixedLiquids(FluidThermodynamics.State state,PassiveNetwork.PhasePort port){
-        return port==PassiveNetwork.PhasePort.LIQUID&&FluidThermodynamics.holdsPhase(state,OIL)&&FluidThermodynamics.holdsPhase(state,WATER);
+        return port==PassiveNetwork.PhasePort.LIQUID&&FluidThermodynamics.holdsPhase(state,OIL)&&FluidThermodynamics.holdsPhase(state,AQUEOUS);
     }
     /**
      * The volume shares (indexed by phase; the gas's 0) of the liquid a {@link #mixedLiquids} port draws at a vanishing
@@ -71,27 +72,27 @@ final class PhaseDraw {
      */
     static double[] mixedShares(FluidThermodynamics.State state,double volume){
         double[] shares=new double[3];
-        if(!(volume>0)){shares[OIL]=shares[WATER]=.5;return shares;}
-        double oil=FluidThermodynamics.phaseVolume(state,OIL),water=FluidThermodynamics.phaseVolume(state,WATER);
+        if(!(volume>0)){shares[OIL]=shares[AQUEOUS]=.5;return shares;}
+        double oil=FluidThermodynamics.phaseVolume(state,OIL),water=FluidThermodynamics.phaseVolume(state,AQUEOUS);
         double shared=Math.min(volume/2,Math.min(oil,water)),rest=volume-2*shared;
         double o=shared+Math.min(oil-shared,rest),w=shared+Math.min(water-shared,rest-(o-shared)),total=o+w;
-        shares[OIL]=o/total;shares[WATER]=w/total;return shares;
+        shares[OIL]=o/total;shares[AQUEOUS]=w/total;return shares;
     }
     /** Equal-volume column/sample, retaining the finite-inventory dilution of the existing column law. */
     static double[] fillMixed(FluidThermodynamics.State state,double volume,int ends){
-        double[] result=new double[3];double oil=FluidThermodynamics.phaseVolume(state,OIL)/ends,water=FluidThermodynamics.phaseVolume(state,WATER)/ends;
-        double shared=Math.min(volume/2,Math.min(oil,water));result[OIL]=shared;result[WATER]=shared;double remaining=volume-2*shared;
-        for(int phase:new int[]{OIL,WATER,GAS}){
+        double[] result=new double[3];double oil=FluidThermodynamics.phaseVolume(state,OIL)/ends,water=FluidThermodynamics.phaseVolume(state,AQUEOUS)/ends;
+        double shared=Math.min(volume/2,Math.min(oil,water));result[OIL]=shared;result[AQUEOUS]=shared;double remaining=volume-2*shared;
+        for(int phase:new int[]{OIL,AQUEOUS,GAS}){
             if(!FluidThermodynamics.holdsPhase(state,phase))continue;
             double available=Math.max(0,FluidThermodynamics.phaseVolume(state,phase)/ends-result[phase]);
             double take=Math.min(remaining,available);result[phase]+=take;remaining-=take;
         }
-        if(remaining>0){int last=FluidThermodynamics.holdsPhase(state,GAS)?GAS:oil>water?OIL:WATER;result[last]+=remaining;}
+        if(remaining>0){int last=FluidThermodynamics.holdsPhase(state,GAS)?GAS:oil>water?OIL:AQUEOUS;result[last]+=remaining;}
         return result;
     }
     /** Which of the three phases {@code state} holds. */
     static boolean[] held(FluidThermodynamics.State state) {
-        return new boolean[]{FluidThermodynamics.holdsPhase(state,GAS),FluidThermodynamics.holdsPhase(state,OIL),FluidThermodynamics.holdsPhase(state,WATER)};
+        return new boolean[]{FluidThermodynamics.holdsPhase(state,GAS),FluidThermodynamics.holdsPhase(state,OIL),FluidThermodynamics.holdsPhase(state,AQUEOUS)};
     }
     /**
      * A port's priority fill of {@code volume} (m3) from {@code state}: the volume of each phase stream that fills it, by
@@ -126,18 +127,18 @@ final class PhaseDraw {
         Segment(int[] order,double[] capacity,int[] pinned,int marginal){this(order,capacity,pinned,marginal,false);}
         /** Equal volume-rate draw; one depleted liquid becomes pinned and the other takes the remainder. */
         static Segment mixed(double[] capacity,boolean[] held,double outflow,double oilDensity,double waterDensity) {
-            int[] order={OIL,WATER,GAS};
-            if(!held[OIL]||!held[WATER])return decide(order,capacity,held,outflow);
+            int[] order={OIL,AQUEOUS,GAS};
+            if(!held[OIL]||!held[AQUEOUS])return decide(order,capacity,held,outflow);
             double sum=oilDensity+waterDensity,oilShare=oilDensity/sum,waterShare=waterDensity/sum;
-            if(outflow*oilShare<=capacity[OIL]&&outflow*waterShare<=capacity[WATER])
+            if(outflow*oilShare<=capacity[OIL]&&outflow*waterShare<=capacity[AQUEOUS])
                 return new Segment(order,capacity,new int[0],OIL,true);
-            int first=capacity[OIL]/oilShare<=capacity[WATER]/waterShare?OIL:WATER,second=first==OIL?WATER:OIL;
+            int first=capacity[OIL]/oilShare<=capacity[AQUEOUS]/waterShare?OIL:AQUEOUS,second=first==OIL?AQUEOUS:OIL;
             return decide(new int[]{first,second,GAS},capacity,held,outflow);
         }
         double[] rates(int marginal,double outflow,double oilDensity,double waterDensity) {
             if(!mixed||oilDensity<=0||waterDensity<=0)return rates(marginal,outflow);
             double[] result=new double[6];double total=oilDensity+waterDensity;
-            result[OIL]=outflow*oilDensity/total;result[WATER]=outflow*waterDensity/total;return result;
+            result[OIL]=outflow*oilDensity/total;result[AQUEOUS]=outflow*waterDensity/total;return result;
         }
         /**
          * The segment an outflow {@code outflow} (kg/s; zero or negative is no outflow) lands in. Walk the order over the

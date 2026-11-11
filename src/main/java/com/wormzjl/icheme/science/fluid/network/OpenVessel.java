@@ -5,7 +5,7 @@ import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 
 import static com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.GAS;
 import static com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.OIL;
-import static com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.WATER;
+import static com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.AQUEOUS;
 
 /**
  * A vessel open to the atmosphere under a floating roof ({@link PassiveNetwork.Inventory#open}; batch
@@ -114,7 +114,7 @@ public final class OpenVessel {
      */
     static double[] band(FluidThermodynamics model,FluidThermodynamics.State state,double lower,double upper) {
         double[] band=new double[3];if(!(upper>lower))return band;
-        int heavy=model.heavierLiquid(state),light=heavy==OIL?WATER:OIL;
+        int heavy=model.heavierLiquid(state),light=heavy==OIL?AQUEOUS:OIL;
         double heavyTop=FluidThermodynamics.holdsPhase(state,heavy)?FluidThermodynamics.phaseVolume(state,heavy):0;
         double lightTop=heavyTop+(FluidThermodynamics.holdsPhase(state,light)?FluidThermodynamics.phaseVolume(state,light):0);
         band[heavy]=Math.max(0,Math.min(upper,heavyTop)-Math.max(lower,0));
@@ -129,7 +129,7 @@ public final class OpenVessel {
         double[] mass=new double[3];if(!overflows(node))return mass;
         var state=node.state();double held=condensedVolume(state);
         var band=band(model,state,node.inventory().volume(),Math.min(held,topVolume(node.inventory())));
-        for(int phase=OIL;phase<=WATER;phase++)if(band[phase]>0)mass[phase]=model.phaseMass(state,phase)*band[phase]/FluidThermodynamics.phaseVolume(state,phase);
+        for(int phase=OIL;phase<=AQUEOUS;phase++)if(band[phase]>0)mass[phase]=model.phaseMass(state,phase)*band[phase]/FluidThermodynamics.phaseVolume(state,phase);
         return mass;
     }
 
@@ -163,7 +163,7 @@ public final class OpenVessel {
         if(spillShare>0) {
             var band=band(model,state,top,liquid);double[] n=new double[held.length];double energy=0;
             var solids=SolidInventory.EMPTY;double solidMass=0,solidVolume=0,solidCapacity=0;
-            for(int phase=OIL;phase<=WATER;phase++) {
+            for(int phase=OIL;phase<=AQUEOUS;phase++) {
                 if(!(band[phase]>0))continue;
                 double part=spillShare*band[phase]/FluidThermodynamics.phaseVolume(state,phase);
                 var phaseMoles=FluidThermodynamics.phaseMoles(state,phase);

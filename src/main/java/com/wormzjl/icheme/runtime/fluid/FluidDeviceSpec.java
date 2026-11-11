@@ -38,7 +38,7 @@ public record FluidDeviceSpec(double volume,double temperature,double pressure,d
     public static FluidDeviceSpec nitrogen(com.wormzjl.icheme.science.material.MaterialCatalog catalog){return pure(catalog,"Nitrogen");}
     public static FluidDeviceSpec water(com.wormzjl.icheme.science.material.MaterialCatalog catalog){return pure(catalog,"Water");}
     private static FluidDeviceSpec pure(com.wormzjl.icheme.science.material.MaterialCatalog catalog,String id) {
-        var ids=new ArrayList<>(catalog.requirePackage(com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(catalog)).components());ids.add("Water");
+        var ids=new ArrayList<>(catalog.conservedComponents(com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(catalog)));
         var axis=new com.wormzjl.icheme.science.material.MaterialAxis(ids);double[] n=new double[axis.size()];n[axis.requireIndex(id)]=1;
         return new FluidDeviceSpec(1,298.15,101325,n);
     }
@@ -75,7 +75,7 @@ public record FluidDeviceSpec(double volume,double temperature,double pressure,d
         if(kind==PassiveNetwork.NodeKind.VOID)state=model.initialNitrogenCharge(volume,temperature,device.atmospheric()?com.wormzjl.icheme.science.fluid.solver.PhaseLayout.atmosphere(device.position().y()):pressure,checkpoint);
         else {
             var n=composition.clone();var unit=model.flashTP(temperature,pressure,n,checkpoint);
-            var stock=solids.unitMass(model.solids);double liquidVolume=unit.liquidVolume()+unit.waterVolume();
+            var stock=solids.unitMass(model.solids);double liquidVolume=unit.condensedVolume();
             if(solids.volumeFraction()>0&&liquidVolume==0)throw new IllegalArgumentException("A slurry generator needs a liquid carrier");
             double solidVolume=solids.volumeFraction()/(1-solids.volumeFraction())*liquidVolume;
             double factor=volume/(unit.volume()+solidVolume);for(int c=0;c<n.length;c++)n[c]*=factor;

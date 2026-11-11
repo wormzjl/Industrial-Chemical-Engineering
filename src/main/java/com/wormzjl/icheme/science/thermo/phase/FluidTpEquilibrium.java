@@ -434,6 +434,8 @@ public final class FluidTpEquilibrium {
      * needs aqueous chemistry), and an evaluator of every crystal the contract admits.
      */
     public static FluidTpEquilibrium forPackage(MaterialCatalog catalog, String packageId) {
+        // W3b: a package that carries Water in its cubic is served on its derived contract.
+        if (catalog.requirePackage(packageId).components().contains(CubicPhaseEvaluator.WATER)) return forDerivedPackage(catalog, packageId);
         PhaseContract contract = PhaseContract.forPackage(catalog, packageId);
         List<CrystalPhaseEvaluator> solids = new ArrayList<>();
         PhaseCompetition competition = contract.crystalCompetition();

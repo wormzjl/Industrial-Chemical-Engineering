@@ -68,6 +68,6 @@ public final class VesselUnit implements UnitModel {
         }
         u.write(board, report, GAS, u.thermo().phase(held, FluidThermodynamics.GAS));
         u.write(board, report, OIL, u.thermo().phase(held, FluidThermodynamics.OIL));
-        u.write(board, report, WATER, u.thermo().phase(held, FluidThermodynamics.WATER));
+        u.write(board, report, WATER, u.thermo().phase(held, FluidThermodynamics.AQUEOUS));
     }
 }

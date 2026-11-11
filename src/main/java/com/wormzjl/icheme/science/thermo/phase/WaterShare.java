@@ -29,9 +29,9 @@ import com.wormzjl.icheme.science.thermo.PengRobinsonKernel.Root;
  * <p>Immutable; the per-thread scratch ({@link Workspace}) keeps the liquid gap of the last {@code (T, P)} and the gas
  * gap of the last {@code T}. Every transcendental through {@link DeterministicMath}; nothing allocates per call.</p>
  */
-final class WaterShare {
+public final class WaterShare {
     /** The declared revision of this rule: bumped when a constant or a form here changes. */
-    static final String REVISION = "water-share-m2-r1";
+    public static final String REVISION = "water-share-m2-r1";
     private static final double R = PengRobinsonKernel.GAS_CONSTANT;
     private static final double RS = 461.526;
     private static final double MOLAR = R / RS;
@@ -66,23 +66,23 @@ final class WaterShare {
     private static final double[] WAGNER = {-7.85951783, 1.84408259, -11.7866497, 22.6807411, -15.9618719, 1.80122502};
 
     /** Indices into the output of {@link #phase}. */
-    static final int H = 0, S = 1, V = 2, H_T = 3, H_P = 4, S_T = 5, S_P = 6, V_T = 7, V_P = 8, SIZE = 9;
+    public static final int H = 0, S = 1, V = 2, H_T = 3, H_P = 4, S_T = 5, S_P = 6, V_T = 7, V_P = 8, SIZE = 9;
 
     private final PengRobinsonKernel water;
     private final double coVolume;
 
     /** @param mathiasCopeman the cubic water's alpha coefficients, or null for PR78's kappa */
-    WaterShare(double criticalTemperature, double criticalPressure, double acentricFactor, double[] mathiasCopeman) {
+    public WaterShare(double criticalTemperature, double criticalPressure, double acentricFactor, double[] mathiasCopeman) {
         water = PengRobinsonKernel.huronVidal(new double[] {criticalTemperature}, new double[] {criticalPressure},
                 new double[] {acentricFactor}, HuronVidalExcess.builder(1).build(), new double[][] {mathiasCopeman},
                 Double.MIN_VALUE, Double.MAX_VALUE, Double.MIN_VALUE, Double.MAX_VALUE);
         coVolume = water.coVolume(0);
     }
 
-    Workspace newWorkspace() { return new Workspace(this); }
+    public Workspace newWorkspace() { return new Workspace(this); }
 
     /** Per-thread scratch: the pure water's kernel storage, Region 1's power tables and the last gaps. */
-    static final class Workspace {
+    public static final class Workspace {
         private final WaterShare owner;
         private final PengRobinsonKernel.Workspace mixture;
         private final PengRobinsonKernel.Evaluation evaluation;
@@ -113,7 +113,7 @@ final class WaterShare {
      * at {@code (t, p)} with water fraction {@code xw}, untranslated molar volume {@code v}, co-volume {@code b} and the
      * fixed-composition {@code dv/dT}, {@code dv/dP}. All zeros for {@code xw = 0}.
      */
-    void phase(double t, double p, double xw, double v, double b, double dvdt, double dvdp, Workspace w, double[] out) {
+    public void phase(double t, double p, double xw, double v, double b, double dvdt, double dvdp, Workspace w, double[] out) {
         if (w.owner != this) throw new IllegalArgumentException("Workspace belongs to another water share");
         java.util.Arrays.fill(out, 0.0);
         if (!(xw > 0.0)) return;

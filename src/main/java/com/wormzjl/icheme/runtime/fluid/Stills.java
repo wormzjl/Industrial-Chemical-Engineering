@@ -177,7 +177,7 @@ public final class Stills implements IslandCoordinator.Ports {
     private double heat(StillUnit u,Run r,PassiveNetwork.Reservoir node,double seconds) {
         var design=u.design();double asked=firing(u)*design.rating();
         var s=node.state();int alarms=0;
-        double liquid=s.liquidVolume()+s.waterVolume(),volume=node.inventory().volume();
+        double liquid=s.condensedVolume(),volume=node.inventory().volume();
         r.potTemperature=s.temperature();r.filled=volume>0?liquid/volume:0;r.level=r.filled*node.inventory().levelHeight();
         double available=switch(u.heater()) {
             case SOLID->asked>0?Math.min(1,u.burning()*u.heater().efficiency()/(asked*seconds)):0;

@@ -349,7 +349,7 @@ public final class NetworkReduction {
     public static double viscosity(FluidThermodynamics model,FluidThermodynamics.State s,MixtureViscosity.Workspace scratch) {
         if(!FluidThermodynamics.holdsFluid(s))return viscosity(model,ambient(model),scratch);
         double value=0,volume=0;
-        for(int phase:new int[]{FluidThermodynamics.GAS,FluidThermodynamics.OIL,FluidThermodynamics.WATER})
+        for(int phase:new int[]{FluidThermodynamics.GAS,FluidThermodynamics.OIL,FluidThermodynamics.AQUEOUS})
             if(FluidThermodynamics.holdsPhase(s,phase)){double v=FluidThermodynamics.phaseVolume(s,phase);value+=v*model.phaseViscosity(s,phase,scratch,null);volume+=v;}
         return value/volume;
     }

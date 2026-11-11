@@ -457,7 +457,8 @@ public final class FluidCheckpointCodec {
         for(var n:graph.reservoirs()) {
             var inventory=n.inventory();var s=n.state();
             w.sparse(inventory.moles());w.f64(inventory.internalEnergy());solids(w,inventory.solids());w.bool(inventory.rigid());
-            w.f64(s.temperature());w.f64(s.pressure());w.sparse(s.liquid());w.sparse(s.vapor());w.f64(s.waterLiquid());w.f64(s.waterVapor());w.f64(s.hydrocarbonPartialPressure());
+            var split=FluidThermodynamics.legacySplit(s);
+            w.f64(s.temperature());w.f64(s.pressure());w.sparse(split.liquid());w.sparse(split.vapor());w.f64(split.waterLiquid());w.f64(split.waterVapor());w.f64(split.hydrocarbonPressure());
         }
         for(var p:graph.pipes()) {
             w.varint(p.blockedDirections());var filter=p.filter();
@@ -645,7 +646,7 @@ public final class FluidCheckpointCodec {
             var moles=r.sparse(MAXIMUM_ARRAY);double energy=r.f64();var solids=solids(r,model);boolean rigid=r.bool();
             double temperature=r.f64(),pressure=r.f64();var liquid=r.sparse(MAXIMUM_ARRAY);var vapor=r.sparse(MAXIMUM_ARRAY);double waterLiquid=r.f64(),waterVapor=r.f64(),hydrocarbonPressure=r.f64();
             var inventory=new PassiveNetwork.Inventory(t.volumes[n],moles,energy,solids,t.heights[n],t.opens[n],t.geometries[n],t.pools[n],t.towers[n],rigid);
-            var state=Arrays.stream(moles).sum()==0&&!solids.empty()?model.solidState(temperature,pressure,solids):model.state(temperature,pressure,liquid,vapor,waterLiquid,waterVapor,hydrocarbonPressure).withSolids(solids);
+            var state=Arrays.stream(moles).sum()==0&&!solids.empty()?model.solidState(temperature,pressure,solids):model.fromLegacySplit(temperature,pressure,liquid,vapor,waterLiquid,waterVapor).withSolids(solids);
             nodes.add(new PassiveNetwork.Reservoir(t.ids[n],t.elevations[n],state,t.kinds[n],inventory));
         }
         var pipes=new ArrayList<PassiveNetwork.Pipe>(t.pipeIds.length);

@@ -16,6 +16,9 @@ public final class MixtureViscosity {
     private final MaterialCatalog.Package propertyPackage;
     private final ViscosityCorrelation[] liquidCorrelations,vaporCorrelations;
     private final ViscosityCorrelation waterLiquidCorrelation;
+    /** The compounds (water not among them) in package order, their package indices, and the correction's participants on the conserved basis. */
+    private final java.util.List<String> compounds;
+    private final int[] packageIndex,correctionParticipants;
     private final double[][] wilkeMassQuarter,wilkeDenominator;
 
     public MixtureViscosity(MaterialCatalog catalog,String packageId) {
@@ -24,15 +27,21 @@ public final class MixtureViscosity {
         liquidMixture=catalog.liquidMixture(packageId);
         // The declared revisions of the data (the package's records, its water, the fluid reference data) and the
         // formulation labels; nothing is hashed (owner decision 2026-10-26).
-        revision=catalog.fluidRevision(packageId)+":log-liquid-pair-groups-wilke-v2:catalog-conditional-solute-v1:supercritical-liquid-slot-dilute-v1:range-continuation-v1";
-        int count=propertyPackage.components().size();liquidCorrelations=new ViscosityCorrelation[count];vaporCorrelations=new ViscosityCorrelation[count];
+        // W3b (owner, 2026-11-11): one log-mixing rule over a liquid's components on the conserved basis, water last with its
+        // own liquid viscosity; the vapour's Wilke rule over the same basis.
+        revision=catalog.fluidRevision(packageId)+":log-liquid-pair-groups-wilke-v2:catalog-conditional-solute-v1:supercritical-liquid-slot-dilute-v1:range-continuation-v1:water-in-liquid-log-v1";
+        var list=new java.util.ArrayList<>(propertyPackage.components());list.remove("Water");compounds=java.util.List.copyOf(list);
+        int count=compounds.size();liquidCorrelations=new ViscosityCorrelation[count];vaporCorrelations=new ViscosityCorrelation[count];packageIndex=new int[count];
         double[] mw=new double[count+1];
         for(int i=0;i<count;i++) {
-            String component=propertyPackage.components().get(i);
+            String component=compounds.get(i);packageIndex[i]=propertyPackage.components().indexOf(component);
             liquidCorrelations[i]=catalog.viscosity(packageId,component,ViscosityCorrelation.Phase.LIQUID).orElse(null);
             vaporCorrelations[i]=catalog.viscosity(packageId,component,ViscosityCorrelation.Phase.VAPOR).orElse(null);
-            mw[i]=propertyPackage.properties().get(i).molecularWeight();
+            mw[i]=propertyPackage.properties().get(packageIndex[i]).molecularWeight();
         }
+        var participants=new java.util.ArrayList<Integer>();
+        for(int i=0;i<count;i++)if(liquidMixture.participants().contains(packageIndex[i]))participants.add(i);
+        correctionParticipants=participants.stream().mapToInt(Integer::intValue).toArray();
         mw[count]=propertyPackage.water().molarMass();waterLiquidCorrelation=catalog.viscosity(packageId,"Water",ViscosityCorrelation.Phase.LIQUID).orElse(null);
         wilkeMassQuarter=new double[count+1][count+1];wilkeDenominator=new double[count+1][count+1];
         for(int i=0;i<=count;i++)for(int j=0;j<=count;j++){wilkeMassQuarter[i][j]=Math.sqrt(Math.sqrt(mw[j]/mw[i]));wilkeDenominator[i][j]=1/Math.sqrt(8*(1+mw[i]/mw[j]));}
@@ -61,7 +70,7 @@ public final class MixtureViscosity {
         private double water=Double.NaN;
         private Prepared(MixtureViscosity owner,double temperature) {
             this.owner=owner;this.temperature=temperature;
-            int count=owner.propertyPackage.components().size();
+            int count=owner.compounds.size();
             liquidLog=new double[count];liquidKind=new byte[count];
             vaporMu=new double[count+1];vaporSqrt=new double[count+1];
             Arrays.fill(vaporMu,Double.NaN);
@@ -100,10 +109,10 @@ public final class MixtureViscosity {
      */
     private int liquidSource(int component,double temperature) {
         var correlation=liquidCorrelations[component];
-        if(correlation==null)throw new IllegalArgumentException("PROPERTY_UNAVAILABLE: liquid viscosity for "+propertyPackage.components().get(component));
+        if(correlation==null)throw new IllegalArgumentException("PROPERTY_UNAVAILABLE: liquid viscosity for "+compounds.get(component));
         if(temperature<=correlation.maximumTemperatureKelvin())return LIQUID_TABLE;
-        var curve=conditional.get(propertyPackage.components().get(component));
-        if(temperature>=propertyPackage.properties().get(component).pr().criticalTemperature()&&vaporCorrelations[component]!=null
+        var curve=conditional.get(compounds.get(component));
+        if(temperature>=propertyPackage.properties().get(packageIndex[component]).pr().criticalTemperature()&&vaporCorrelations[component]!=null
                 &&(curve==null||temperature<curve.minimumTemperatureKelvin()))return VAPOR_DATA;
         return curve!=null&&temperature>=curve.minimumTemperatureKelvin()?SOLUTE_CURVE:LIQUID_TABLE;
     }
@@ -113,7 +122,7 @@ public final class MixtureViscosity {
         if(liquidCorrelations[component]==null)return null;
         return switch(liquidSource(component,temperature)) {
             case VAPOR_DATA->vaporCorrelations[component];
-            case SOLUTE_CURVE->conditional.get(propertyPackage.components().get(component));
+            case SOLUTE_CURVE->conditional.get(compounds.get(component));
             default->liquidCorrelations[component];
         };
     }
@@ -126,7 +135,7 @@ public final class MixtureViscosity {
         switch(liquidSource(component,temperature)) {
             case VAPOR_DATA->{mu=pureVapor(temperature,component);prepared.liquidKind[component]=Prepared.CARRIER;}
             case SOLUTE_CURVE->{
-                mu=conditional.get(propertyPackage.components().get(component)).dynamicViscosityPascalSeconds(temperature,ViscosityCorrelation.Phase.LIQUID);
+                mu=conditional.get(compounds.get(component)).dynamicViscosityPascalSeconds(temperature,ViscosityCorrelation.Phase.LIQUID);
                 prepared.liquidKind[component]=Prepared.CONDITIONAL_SOLUTE;
             }
             default->{mu=liquidCorrelations[component].dynamicViscosityPascalSeconds(temperature,ViscosityCorrelation.Phase.LIQUID);prepared.liquidKind[component]=Prepared.CARRIER;}
@@ -146,16 +155,21 @@ public final class MixtureViscosity {
     public Result liquid(double temperature,double[] amounts,Prepared prepared) {
         checkBasis(amounts);own(prepared,temperature);
         var terms=prepared==null?prepare(temperature):prepared;
-        double sum=0,logSum=0,carrier=0,conditional=0;
-        for(int i=0;i<amounts.length;i++) {
+        double sum=0,logSum=0,carrier=0,conditional=0;int count=compounds.size();
+        for(int i=0;i<count;i++) {
             double n=amounts[i];if(n==0)continue;sum+=n;
             if(terms.liquid(i)==Prepared.CARRIER)carrier+=n;else conditional+=n;
             logSum+=n*terms.liquidLog[i];
         }
+        // Water is a carrier with its own liquid viscosity (the package's water record, held in Region 1's range).
+        double water=amounts[count];
+        if(water>0){sum+=water;carrier+=water;logSum+=water*DeterministicMath.log(waterLiquid(temperature,prepared));}
         if(!(sum>0) || !Double.isFinite(sum) || !(carrier>0)) {
             throw new IllegalArgumentException("Liquid mixture needs a supported carrier; no pure-liquid claim for conditional solutes");
         }
-        return new Result(positive(DeterministicMath.exp(logSum/sum+liquidMixture.logCorrection(amounts))),conditional>0);
+        double x=0,x2=0;
+        for(int i:correctionParticipants){double v=amounts[i]/sum;x+=v;x2+=v*v;}
+        return new Result(positive(DeterministicMath.exp(logSum/sum+liquidMixture.coefficient()*(x*x-x2))),conditional>0);
     }
 
     public double waterLiquid(double temperature) {
@@ -185,16 +199,15 @@ public final class MixtureViscosity {
             return n;
         }
     }
-    public double vapor(double temperature,double[] amounts,double waterMoles) {
-        return vapor(temperature,amounts,waterMoles,null,null);
+    public double vapor(double temperature,double[] amounts) {
+        return vapor(temperature,amounts,null,null);
     }
-    public double vapor(double temperature,double[] amounts,double waterMoles,Workspace workspace,Prepared prepared) {
+    /** The vapour's Wilke viscosity of conserved {@code amounts} (water last). */
+    public double vapor(double temperature,double[] amounts,Workspace workspace,Prepared prepared) {
         checkBasis(amounts);own(prepared,temperature);
-        if(!Double.isFinite(waterMoles)||waterMoles<0)throw new IllegalArgumentException("Invalid water amount");
         var terms=prepared==null?prepare(temperature):prepared;
-        int count=amounts.length+1;
-        double[] n=workspace==null?new double[count]:workspace.amounts(count);
-        System.arraycopy(amounts,0,n,0,amounts.length);n[count-1]=waterMoles;
+        int count=amounts.length;
+        double[] n=amounts;
         // Pure-component viscosity and its square root depend on temperature alone; fill in index
         // order, so the first component without a correlation still refuses the same mixture.
         for(int i=0;i<count;i++)if(n[i]>0)terms.vapor(i);
@@ -213,7 +226,7 @@ public final class MixtureViscosity {
     }
 
     private void checkBasis(double[] amounts) {
-        if(amounts.length!=propertyPackage.components().size())throw new IllegalArgumentException("Transport basis mismatch");
+        if(amounts.length!=compounds.size()+1)throw new IllegalArgumentException("Transport basis mismatch");
         for(double n:amounts)if(!Double.isFinite(n)||n<0)throw new IllegalArgumentException("Invalid transport amount");
     }
     private static double positive(double value) {

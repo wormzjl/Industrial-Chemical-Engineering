@@ -112,7 +112,12 @@ public final class CubicPhaseEvaluator {
      * its constant interactions and the model's translations ({@link HydrocarbonModel#coefficientEvaluator}).
      */
     public static CubicPhaseEvaluator forPackage(MaterialCatalog catalog, String packageId) {
-        if (catalog.requirePackage(packageId).spine().isEmpty()) return new HydrocarbonModel(catalog, packageId).coefficientEvaluator();
+        var pack = catalog.requirePackage(packageId);
+        if (pack.spine().isEmpty()) {
+            List<IdealGasFunction> gas = new java.util.ArrayList<>();
+            for (String id : pack.components()) gas.add(CoefficientIdealGas.of(catalog, packageId, id));
+            return fromPackage(pack, pack.components(), HydrocarbonModel.coefficientTranslations(catalog, packageId), gas);
+        }
         var data = SpinePackageData.of(catalog, packageId);
         return new CubicPhaseEvaluator(packageId, data.components(), data.interactions(), data.translations(), data.idealGas());
     }
@@ -143,7 +148,8 @@ public final class CubicPhaseEvaluator {
 
     /**
      * The derived evaluator of package {@code packageId} over {@code componentIds} in that order (W3a D1): the kernel of
-     * {@link DerivedPairs#derive}, one {@link CoefficientIdealGas} per compound (the network's sensible datum), water
+     * {@link DerivedPairs#derive}, one {@link CoefficientIdealGas} per compound (the network's sensible datum; on a package
+     * with a reference spine its spine records, on the spine's formation datum as the crystals' anchors are), water
      * untranslated and every other compound translated so that its pure liquid on this kernel has its volume anchor's
      * volume (the catalog's volume reference, else the record's standard density; none where the anchor has no liquid
      * root), and water's share ({@link WaterShare}) when {@value #WATER} is in the list.
@@ -162,10 +168,12 @@ public final class CubicPhaseEvaluator {
         var scratch = kernel.newWorkspace();
         var evaluation = kernel.newEvaluation();
         int water = ids.indexOf(WATER);
+        var spine = pack.spine().isEmpty() ? null : SpinePackageData.of(catalog, packageId);
         for (int i = 0; i < n; i++) {
             var property = pack.properties().get(pack.components().indexOf(ids.get(i)));
             components.add(new ThermoComponent(ids.get(i), tc[i], pc[i], omega[i], property.molecularWeight()));
-            idealGas.add(CoefficientIdealGas.of(catalog, packageId, ids.get(i)));
+            idealGas.add(spine == null ? CoefficientIdealGas.of(catalog, packageId, ids.get(i))
+                    : spine.idealGas().get(pack.components().indexOf(ids.get(i))));
             if (i == water) continue;
             var point = calibrations.get(property.component());
             double t = point == null ? property.standardTemperature() : point.temperatureKelvin();

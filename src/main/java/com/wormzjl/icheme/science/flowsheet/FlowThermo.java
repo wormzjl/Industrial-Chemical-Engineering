@@ -203,7 +203,7 @@ public final class FlowThermo implements StreamThermo {
     }
 
     private static double vapourAmount(FluidThermodynamics.State state) {
-        return Arrays.stream(state.vaporView()).sum() + state.waterVapor();
+        return Arrays.stream(state.vaporAmountsView()).sum();
     }
 
     /** Vapour's share of a stream's moles, 0 to 1. */
@@ -226,7 +226,7 @@ public final class FlowThermo implements StreamThermo {
         if (state == null) throw new IllegalArgumentException("A phase split needs a flash");
         double[] amounts = FluidThermodynamics.phaseMoles(state, phase);
         if (total(amounts) == 0) return FlowStream.empty(amounts.length);
-        boolean carried = phase == FluidThermodynamics.GAS && !(state.liquidVolume() + state.waterVolume() > 0);
+        boolean carried = phase == FluidThermodynamics.GAS && !(state.condensedVolume() > 0);
         double share = carried ? 1 : FluidThermodynamics.phaseSolidShare(state, phase);
         double mass = model.phaseMass(state, phase), enthalpy = model.phaseSpecificEnthalpy(state, phase, null) * mass;
         var solids = share > 0 ? state.solids().scale(share) : SolidInventory.EMPTY;
@@ -236,7 +236,7 @@ public final class FlowThermo implements StreamThermo {
     /** {@code stream}'s oil and free water as one stream, as they leave a kettle over its weir. */
     public FlowStream liquid(FlowStream stream) {
         var oil = phase(stream, FluidThermodynamics.OIL);
-        var water = phase(stream, FluidThermodynamics.WATER);
+        var water = phase(stream, FluidThermodynamics.AQUEOUS);
         double[] amounts = oil.amounts();
         for (int i = 0; i < amounts.length; i++) amounts[i] += water.amountsView()[i];
         return atEnthalpy(stream.pressure(), oil.enthalpy() + water.enthalpy(), amounts, stream.temperature(), oil.solids().plus(water.solids()));

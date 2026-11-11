@@ -80,6 +80,12 @@ public final class StillColumn {
         return tc[i];
     }
 
+    /** A vector on the column's basis (the compounds) on the model's conserved basis: water last, at zero. W3b keeps the
+     * still's water outside its column, as before; a column with water among its components is the batch's later step. */
+    private double[] conserved(double[] x) {
+        return java.util.Arrays.copyOf(x, n + 1);
+    }
+
     public HydrocarbonModel model() {
         return model;
     }
@@ -369,11 +375,11 @@ public final class StillColumn {
     private Eval eval(double[] x, double t, double[] yStart) {
         try {
             var terms = model.prepare(t);
-            double[] liquid = model.phase(t, pressure, x, PengRobinsonKernel.Root.LIQUID, terms).logFugacityView();
+            double[] liquid = model.phase(t, pressure, conserved(x), PengRobinsonKernel.Root.LIQUID, terms, false).logFugacityView();
             double[] y = yStart.clone(), k = new double[n];
             double sum = 1;
             for (int pass = 0; pass < 8; pass++) {
-                double[] vapour = model.phase(t, pressure, y, PengRobinsonKernel.Root.VAPOR, terms).logFugacityView();
+                double[] vapour = model.phase(t, pressure, conserved(y), PengRobinsonKernel.Root.VAPOR, terms, false).logFugacityView();
                 sum = 0;
                 for (int i = 0; i < n; i++) {
                     k[i] = DeterministicMath.exp(liquid[i] - vapour[i]);
@@ -397,22 +403,22 @@ public final class StillColumn {
 
     /** Liquid {@code x}'s molar enthalpy at {@code t} K on the network's datum, J/mol. */
     public double liquidEnthalpy(double t, double[] x) {
-        return model.phase(t, pressure, fractions(x), PengRobinsonKernel.Root.LIQUID).molarEnthalpy();
+        return model.phase(t, pressure, conserved(fractions(x)), PengRobinsonKernel.Root.LIQUID).molarEnthalpy();
     }
 
     /** Vapour {@code y}'s molar enthalpy at {@code t} K, J/mol. */
     public double vapourEnthalpy(double t, double[] y) {
-        return model.phase(t, pressure, fractions(y), PengRobinsonKernel.Root.VAPOR).molarEnthalpy();
+        return model.phase(t, pressure, conserved(fractions(y)), PengRobinsonKernel.Root.VAPOR).molarEnthalpy();
     }
 
     /** Liquid {@code x}'s molar volume at {@code t} K, m³/mol. */
     public double liquidVolume(double t, double[] x) {
-        return model.phase(t, pressure, fractions(x), PengRobinsonKernel.Root.LIQUID).molarVolume();
+        return model.phase(t, pressure, conserved(fractions(x)), PengRobinsonKernel.Root.LIQUID).molarVolume();
     }
 
     /** Vapour {@code y}'s molar volume at {@code t} K, m³/mol. */
     public double vapourVolume(double t, double[] y) {
-        return model.phase(t, pressure, fractions(y), PengRobinsonKernel.Root.VAPOR).molarVolume();
+        return model.phase(t, pressure, conserved(fractions(y)), PengRobinsonKernel.Root.VAPOR).molarVolume();
     }
 
     /** The molar mass of a mixture of mole fractions {@code x}, kg/mol. */

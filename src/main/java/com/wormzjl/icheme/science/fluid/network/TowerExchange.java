@@ -36,8 +36,13 @@ public final class TowerExchange {
     }
     /** Whether a stream can feed the fill: its liquid is water alone and stays liquid at the atmosphere. Its gas passes to the basin, whose vent takes it. */
     public static boolean liquidWater(FluidThermodynamics model,FluidThermodynamics.State state) {
-        if(!state.solids().empty()||state.waterLiquid()<=0)return false;
-        for(double amount:state.liquid())if(amount!=0)return false;
+        // W3b: the liquid is one slot that holds water alone, with no other liquid beside it.
+        if(!state.solids().empty())return false;
+        int slot=state.slot(FluidThermodynamics.AQUEOUS);
+        if(slot<0||state.slot(FluidThermodynamics.OIL)>=0)return false;
+        double[] liquid=state.amountsView(slot);
+        if(!(liquid[liquid.length-1]>0))return false;
+        for(int c=0;c<liquid.length-1;c++)if(liquid[c]!=0)return false;
         return model.saturationPressure(state.temperature())<CoolingTower.PRESSURE;
     }
     public static Rates at(PassiveNetwork graph,int node,List<FluidThermodynamics.State> states,double[] flows,FluidThermodynamics model) {
@@ -49,7 +54,7 @@ public final class TowerExchange {
             double incoming=first?-flows[edge]:flows[edge];
             var donor=states.get(first?pipe.second():pipe.first());
             if(!liquidWater(model,donor)){unsupported=true;continue;}
-            if(incoming>0){double water=incoming*donor.waterLiquid()*model.waterMolecularWeight/donor.mass();inlet+=water;heat+=water*donor.temperature();}
+            if(incoming>0){double water=incoming*donor.amountsView(donor.slot(FluidThermodynamics.AQUEOUS))[donor.componentCount()-1]*model.waterMolecularWeight/donor.mass();inlet+=water;heat+=water*donor.temperature();}
         }
         double basinTemperature=states.get(node).temperature();
         double temperature=inlet>0?heat/inlet:basinTemperature;

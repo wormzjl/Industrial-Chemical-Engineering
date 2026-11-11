@@ -96,9 +96,22 @@ public final class TranslatedPengRobinson {
 
     /** The kernel-taking residual-only form: no ideal-gas part, no fit ranges. */
     private TranslatedPengRobinson(List<ThermoComponent> components, PengRobinsonKernel kernel, double[] translations) {
-        this.residualOnly = true;
-        this.idealGas = null;
-        this.datumOffsets = null;
+        this(components, kernel, null, null, translations);
+    }
+
+    /**
+     * The full model on a kernel built elsewhere (W3b: the network's derived kernel, {@code DerivedPairs}): one ideal-gas
+     * function per component, its enthalpy less {@code datumOffsets} (a spine package's formation enthalpies, zero on the
+     * coefficient path's sensible datum).
+     */
+    public TranslatedPengRobinson(List<ThermoComponent> components, PengRobinsonKernel kernel,
+                                  List<? extends IdealGasFunction> idealGas, double[] datumOffsets, double[] translations) {
+        this.residualOnly = idealGas == null;
+        if ((idealGas == null) != (datumOffsets == null)) throw new IllegalArgumentException("Inconsistent ideal-gas functions");
+        if (idealGas != null && (idealGas.size() != components.size() || datumOffsets.length != components.size()))
+            throw new IllegalArgumentException("One ideal-gas function and one datum offset per component");
+        this.idealGas = idealGas == null ? null : idealGas.toArray(new IdealGasFunction[0]);
+        this.datumOffsets = datumOffsets == null ? null : datumOffsets.clone();
         this.components = List.copyOf(components);
         int count = components.size();
         if (count == 0 || kernel.componentCount() != count || translations.length != count)
@@ -267,6 +280,9 @@ public final class TranslatedPengRobinson {
         /** The caller must not mutate these; they are refilled by the next evaluation. */
         public double[] logFugacityCoefficientsView(){return logFugacityCoefficients;}
         public double[] partialMolarVolumesView(){return partialMolarVolumes;}
+        /** The root's untranslated molar volume, m3/mol, and the mixture's co-volume (water's share reads their ratio). */
+        public double untranslatedVolume(){return untranslatedVolume;}
+        public double coVolume(){return coVolume;}
         private Phase phase() {
             return new Phase(molarVolume,molarEnthalpy,molarInternalEnergy,volumeTemperatureDerivative,
                     volumePressureDerivative,heatCapacity,enthalpyPressureDerivative,isothermalCompressibility,

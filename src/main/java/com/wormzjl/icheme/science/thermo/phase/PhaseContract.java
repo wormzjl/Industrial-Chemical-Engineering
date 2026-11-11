@@ -69,6 +69,9 @@ public record PhaseContract(String packageId, ThermoIdentity identity, List<Stri
      */
     public static PhaseContract forNetworkPackage(MaterialCatalog catalog, String packageId, String spineRevision) {
         var propertyPackage = catalog.requirePackage(packageId);
+        // W3b: a package that carries Water in its cubic has no separate free water; its contract is the derived one.
+        if (propertyPackage.components().contains(CubicPhaseEvaluator.WATER))
+            throw new IllegalArgumentException("Package " + packageId + " carries Water in its cubic: its contract is forDerivedPackage");
         List<String> basis = new ArrayList<>(propertyPackage.components());
         basis.add("Water");
         var identity = ThermoIdentity.of(catalog, packageId, CubicPhaseEvaluator.FAMILY, spineRevision,
@@ -101,6 +104,7 @@ public record PhaseContract(String packageId, ThermoIdentity identity, List<Stri
      * crystal request on it is refused as not qualified.
      */
     public static PhaseContract forPackage(MaterialCatalog catalog, String packageId) {
+        if (catalog.requirePackage(packageId).components().contains(CubicPhaseEvaluator.WATER)) return forDerivedPackage(catalog, packageId);
         PhaseContract fluid = forNetworkPackage(catalog, packageId);
         List<String> crystals = admittedCrystals(catalog, packageId);
         if (crystals.isEmpty()) return fluid;
