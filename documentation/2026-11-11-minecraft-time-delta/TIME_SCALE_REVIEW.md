@@ -27,7 +27,7 @@ Hold-fuzz quick check, seeds 1-200, 120 slices (10 min of process time at 1x, 12
 
 - Form C does 72 times the process time for 1.12, 1.06 and 0.98 times the Newton work: most islands reach rest or a steady flow, and a scaled step crosses the rest in the same number of steps. With the steps unscaled (A) the work is 2.2, 1.2 and 3.1 times.
 - Holds of form C: bundled 15, 47, 77, 123 (wall deadline; they stand replayed alone on one thread), 118 (wall deadline; clean alone), 164 (substep limit: 507 accepted, 517 rejected on line-search stalls); cold 72 (non-finite matrix, class B) and 118 (wall deadline, held at 1x too). Held at 1x and clean at 72x: bundled 6 and 200, cold 85 and 101.
-- The wall-deadline holds are not a substep count: seed 47 overran 2 s on a 4-tick slice with 72 step attempts in the whole world. Their mechanism is not traced (a held seed is replayed once).
+- The wall-deadline holds are not a substep count: seed 47 overran 2 s on a 4-tick slice with 72 step attempts in the whole world. Every held case is traced in [HOLD_STUDY_REVIEW.md](HOLD_STUDY_REVIEW.md) (owner request): two are a Newton that ends just above its tolerance, the others are states the longer process time reaches.
 - Not measured: the fuzz worlds hold tanks, pipes, valves, pumps, compressors, filters, generators and voids, and no column, controller, heat unit, shaft train or still.
 
 ## 4. Impact outside the island solve (from the code, not measured)
@@ -47,4 +47,4 @@ Hold-fuzz quick check, seeds 1-200, 120 slices (10 min of process time at 1x, 12
    - A. 72 (the Minecraft day). Needs the column, still and control windows in cycles, level control inside the solve or drums sized for at least two cycles (12 min), and owner choices for FE, wear and fuel (process time or play time).
    - B. 12 (a day is 4 h of process; a slice is 1 min). The explicit loops stay inside usual 5 min holdups; tanks fill 12 times faster. Not measured.
    - C. Stay at 1.
-4. **Before any default changes**: trace bundled 15 and 47 (wall deadline) and 164, and cold 72, in their own batch; one full campaign of the chosen factor; a column, heat and control check, which the fuzz does not cover.
+4. **Before any default changes**: the owner's choice on the near-miss tolerance ([HOLD_STUDY_REVIEW.md](HOLD_STUDY_REVIEW.md), section 4); one full campaign of the chosen factor; a column, heat and control check, which the fuzz does not cover.
