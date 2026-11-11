@@ -124,7 +124,10 @@ class TraceTruncationLayoutTest {
         var decoded=layout.decode(layout.encode(seed),0);
         double[] l=TestPhases.liquid(decoded),v=TestPhases.vapor(decoded),before=PhaseLayout.totalAmounts(seed),after=PhaseLayout.totalAmounts(decoded);
         int checked=0;
-        for(int i=0;i<support.length-1;i++) {
+        // W3b: water is a compound of the layout like any other (it was a free-water slot carried apart, which the decode
+        // returned to the last ulp); its split between the liquids and the vapour is a phase split like theirs, its total
+        // exact with theirs.
+        for(int i=0;i<support.length;i++) {
             if(kind(support[i])==PhaseSupport.LIQUID_ONLY){assertEquals(0,v[i],0,"vapour of component "+i);checked++;}
             if(kind(support[i])==PhaseSupport.VAPOR_ONLY){assertEquals(0,l[i],0,"liquid of component "+i);checked++;}
         }
@@ -132,8 +135,6 @@ class TraceTruncationLayoutTest {
         // Folding an omitted trace into the retained phase is a phase-split approximation and never a
         // material one: the balance rows subtract the same totals the untruncated layout would.
         for(int i=0;i<before.length;i++)assertEquals(before[i],after[i],Math.max(1e-30,4*Math.ulp(before[i])),"total of component "+i);
-        assertEquals(TestPhases.waterLiquid(seed),TestPhases.waterLiquid(decoded),4*Math.ulp(TestPhases.waterLiquid(seed)));
-        assertEquals(TestPhases.waterVapor(seed),TestPhases.waterVapor(decoded),4*Math.ulp(TestPhases.waterVapor(seed)));
     }
 
     @Test void aTruncatedInventorySolveReachesTheSameTemperaturePressureAndTotals() {

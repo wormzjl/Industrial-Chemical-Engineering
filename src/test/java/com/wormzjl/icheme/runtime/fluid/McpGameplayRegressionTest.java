@@ -40,9 +40,15 @@ class McpGameplayRegressionTest {
         var saved=new com.google.gson.Gson().fromJson(json,Graph.class);
         var nodes=new ArrayList<PassiveNetwork.Reservoir>();
         for(var n:saved.nodes()) {
-            var p=n.phase();var inventory=new PassiveNetwork.Inventory(n.inventory().volume(),n.inventory().moles(),n.inventory().internalEnergy(),com.wormzjl.icheme.science.fluid.state.SolidInventory.EMPTY);
-            nodes.add(new PassiveNetwork.Reservoir(n.id(),n.elevation(),TestPhases.state(model,p.temperature(),p.pressure(),p.liquid(),p.vapor(),p.waterLiquid(),p.waterVapor()).withSolids(inventory.solids()),
-                    PassiveNetwork.NodeKind.valueOf(n.kind()),inventory));
+            // W3b: the capture's energy is on the free water's model. After a model change contents keep their amounts and
+            // temperature and the energy is the current model's (AGENTS.md, saves), as the facts restate does: the saved
+            // energy beside a state rebuilt at the saved temperature put the tank's water 7.25 K colder after one second.
+            var p=n.phase();var state=TestPhases.state(model,p.temperature(),p.pressure(),p.liquid(),p.vapor(),p.waterLiquid(),p.waterVapor());
+            double[] held=com.wormzjl.icheme.science.fluid.solver.PhaseLayout.totalAmounts(state),moles=n.inventory().moles();
+            double share=0,total=0;for(int c=0;c<moles.length;c++){share+=moles[c];total+=held[c];}
+            // The state holds the inventory's amounts (to round-off): its energy, per mole, is the inventory's.
+            var inventory=new PassiveNetwork.Inventory(n.inventory().volume(),moles,state.internalEnergy()*share/total,com.wormzjl.icheme.science.fluid.state.SolidInventory.EMPTY);
+            nodes.add(new PassiveNetwork.Reservoir(n.id(),n.elevation(),state.withSolids(inventory.solids()),PassiveNetwork.NodeKind.valueOf(n.kind()),inventory));
         }
         return new PassiveNetwork(nodes,saved.pipes().stream().map(p->new PassiveNetwork.Pipe(p.id(),p.first(),p.second(),p.sections().stream().map(Section::geometry).toList(),switch(p.control().kind()) {
             case "passive"->new FlowControl.Passive();case "pump"->new FlowControl.Pump(p.control().target(),p.control().limit());

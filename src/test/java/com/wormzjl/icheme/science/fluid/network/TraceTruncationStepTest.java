@@ -60,7 +60,13 @@ class TraceTruncationStepTest {
             assertEquals(a.vaporVolume()/a.volume(),b.vaporVolume()/b.volume(),1e-6);
             assertEquals(TestPhases.waterVolume(a)/a.volume(),TestPhases.waterVolume(b)/b.volume(),1e-6);
         }
-        assertEquals(reference.massFlows()[0],reduced.massFlows()[0],1e-6*Math.abs(reference.massFlows()[0])+1e-9);
+        // The flow follows the phases' densities and viscosities. Each omitted trace (a mole fraction below the cutoff in
+        // its phase) moves at most about the cutoff of that phase, so n of them move the flow by at most about n times the
+        // cutoff (W3b: water's traces in the vapour and the oil are among them now; the old 1e-6 was one cutoff).
+        int traces=0;
+        for(var s:reference.states())for(int slot=0;slot<3;slot++){if(s.phase(slot)==null)continue;double[] x=s.amountsView(slot);double sum=Arrays.stream(x).sum();
+            for(double xi:x)if(xi>0&&xi<CUTOFF*sum)traces++;}
+        assertEquals(reference.massFlows()[0],reduced.massFlows()[0],Math.max(1,traces)*CUTOFF*Math.abs(reference.massFlows()[0])+1e-9,traces+" traces");
     }
 
     @Test void theStepSolverCountsTheUnknownsItOmitsAndNoneAtTheOffSwitch() {
