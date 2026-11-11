@@ -15,8 +15,9 @@ import com.wormzjl.icheme.science.thermo.PengRobinsonKernel.Root;
  *   <li>{@code share = x_w W L(T, P) + x_w^2 (1 - W) G(T, P)}, the weight {@code W} a C2 quintic of {@code v/b}: 1 below
  *   {@link #RATIO_DENSE}, 0 above {@link #RATIO_GAS};</li>
  *   <li>the liquid gap {@code L}: IF97 Region 1's residual properties of pure liquid water minus the cubic's pure liquid
- *   water, at {@code T} and {@code max(P, p_sat(T))} (Wagner and Pruss): {@code h_R1 - h_ig - h^R}, {@code s_R1 - s_ig
- *   - s^R}, {@code v_R1 - v}, the ideal gas IF97 Region 2's. Up to {@link #FADE_START} exact; from there to the critical
+ *   water, at {@code T} and {@code P} (Wagner and Pruss): {@code h_R1 - h_ig - h^R}, {@code s_R1 - s_ig - s^R},
+ *   {@code v_R1 - v}, the ideal gas IF97 Region 2's; below {@code p_sat(T)} continued linearly in {@code P} from
+ *   {@code p_sat}, value and slope continuous (held at {@code p_sat}, dh/dP was 9 % off at 350 K and 10 kPa). Up to {@link #FADE_START} exact; from there to the critical
  *   temperature the gap at {@link #FADE_START} continued with its slope there and faded to zero (value and slope
  *   continuous); zero from the critical temperature on. Below the triple point Region 1 is held there and continued
  *   with the held slopes ({@code c_p} for {@code h} and {@code s}, {@code dv/dT} for {@code v}), as the repository's
@@ -88,11 +89,11 @@ public final class WaterShare {
         private final double[] rootDt = new double[1], rootDt2 = new double[1];
         private final double[] xp = new double[HIGHEST_X + 1], yp = new double[HIGHEST_Y - LOWEST_Y + 1];
         private double powersTemperature = Double.NaN, kernelTemperature = Double.NaN;
-        // Region 1 (molar): v, h, s, cp, vT, vP, vTT, vTP, dh/dP, ds/dP; the cubic's pure liquid: v, hR, sR, cpR, vT, vP,
-        // vTT, vTP.
-        private final double[] region = new double[10], cubic = new double[8];
-        /** The gap at one (T, P): h, s, v, their T and P derivatives, and the mixed ones (h, s, v). */
-        private final double[] gap = new double[12];
+        // Region 1 (molar): v, h, s, cp, vT, vP, vTT, vTP, dh/dP, ds/dP, vPP; the cubic's pure liquid: v, hR, sR, cpR, vT,
+        // vP, vTT, vTP, vPP.
+        private final double[] region = new double[11], cubic = new double[9];
+        /** The gap at one (T, P): h, s, v, their T and P derivatives, the mixed ones (h, s, v) and the second P ones (h, s, v). */
+        private final double[] gap = new double[15];
         /** The liquid gap L of the last (T, P): h, s, v, hT, hP, sT, sP, vT, vP. */
         private final double[] liquid = new double[9];
         private double liquidT = Double.NaN, liquidP = Double.NaN;
@@ -162,18 +163,20 @@ public final class WaterShare {
             double saturation = saturationPressure(at);
             boolean above = p >= saturation;
             double[] g = gapAt(at, above ? p : saturation, w);
-            double slope = above ? 0.0 : saturationSlope(at, saturation);
-            // Along the saturation line below it: the state moves with p_sat(T), and not with P.
-            double hT = g[3] + g[4] * slope, sT = g[5] + g[6] * slope, vT = g[7] + g[8] * slope;
-            double hP = above ? g[4] : 0.0, sP = above ? g[6] : 0.0, vP = above ? g[8] : 0.0;
+            // Below p_sat: continued linearly in P from the gap at p_sat, g(T, ps) + g_P (p - ps), whose T derivative at
+            // fixed p is g_T + (g_TP + g_PP ps') (p - ps) (the move of ps along the line cancels in value).
+            double below = above ? 0.0 : p - saturation, slope = above ? 0.0 : saturationSlope(at, saturation);
+            double hTP = g[9] + g[12] * slope, sTP = g[10] + g[13] * slope, vTP = g[11] + g[14] * slope;
+            double h0 = g[0] + g[4] * below, s0 = g[1] + g[6] * below, v0 = g[2] + g[8] * below;
+            double hT = g[3] + hTP * below, sT = g[5] + sTP * below, vT = g[7] + vTP * below;
+            double hP = g[4], sP = g[6], vP = g[8];
             if (!fading) {
-                l[0] = g[0]; l[1] = g[1]; l[2] = g[2];
+                l[0] = h0; l[1] = s0; l[2] = v0;
                 l[3] = hT; l[4] = hP; l[5] = sT; l[6] = sP; l[7] = vT; l[8] = vP;
             } else {
                 double span = TC - FADE_START, d = t - FADE_START, q = d / span;
                 double fade = 1.0 - smooth(q), fadeSlope = -smoothSlope(q) / span;
-                double hTP = above ? g[9] : 0.0, sTP = above ? g[10] : 0.0, vTP = above ? g[11] : 0.0;
-                double h = g[0] + hT * d, s = g[1] + sT * d, v = g[2] + vT * d;
+                double h = h0 + hT * d, s = s0 + sT * d, v = v0 + vT * d;
                 l[0] = h * fade; l[1] = s * fade; l[2] = v * fade;
                 l[3] = hT * fade + h * fadeSlope;
                 l[5] = sT * fade + s * fadeSlope;
@@ -219,6 +222,9 @@ public final class WaterShare {
         g[9] = -t * (r[6] - c[6]);
         g[10] = -(r[6] - c[6]);
         g[11] = r[7] - c[7];
+        g[12] = (r[5] - t * r[7]) - (c[5] - t * c[7]);
+        g[13] = -(r[7] - c[7]);
+        g[14] = r[10] - c[8];
         if (pressure > p) {
             double step = pressure - p;
             g[0] += g[4] * step;
@@ -251,13 +257,14 @@ public final class WaterShare {
         double[] xp = w.xp, yp = w.yp;
         xp[0] = 1.0;
         for (int k = 1; k < xp.length; k++) xp[k] = xp[k - 1] * x;
-        double g = 0, gp = 0, gpp = 0, gt = 0, gtt = 0, gpt = 0, gptt = 0, gppt = 0;
+        double g = 0, gp = 0, gpp = 0, gppp = 0, gt = 0, gtt = 0, gpt = 0, gptt = 0, gppt = 0;
         for (int k = 0; k < N.length; k++) {
             int i = I[k], jj = J[k], j = jj - LOWEST_Y;
             double n = N[k];
             g += n * xp[i] * yp[j];
             if (i != 0) gp += n * i * xp[i - 1] * yp[j];
             if (i > 1) gpp += n * i * (i - 1) * xp[i - 2] * yp[j];
+            if (i > 2) gppp += n * i * (i - 1) * (i - 2) * xp[i - 3] * yp[j];
             if (jj != 0) gt += n * jj * xp[i] * yp[j - 1];
             if (jj != 0 && jj != 1) gtt += n * jj * (jj - 1) * xp[i] * yp[j - 2];
             if (i != 0 && jj != 0) gpt += n * i * jj * xp[i - 1] * yp[j - 1];
@@ -267,6 +274,7 @@ public final class WaterShare {
         double v = RS * t * gp / P_STAR, h = RS * t * tau * gt, s = RS * (tau * gt - g), cp = -RS * tau * tau * gtt;
         double vT = RS / P_STAR * (gp - tau * gpt), vP = RS * t * gpp / (P_STAR * P_STAR);
         double vTT = RS * tau * tau * gptt / (P_STAR * t), vTP = RS / (P_STAR * P_STAR) * (gpp - tau * gppt);
+        double vPP = RS * t * gppp / (P_STAR * P_STAR * P_STAR);
         if (!(v > 0.0) || !(cp > 0.0) || !(vP < 0.0) || !Double.isFinite(h) || !Double.isFinite(s))
             throw new IllegalArgumentException("Invalid Region 1 state of the water share at " + t + " K, " + p + " Pa");
         double[] r = w.region;
@@ -277,10 +285,12 @@ public final class WaterShare {
             r[4] = vT; r[5] = vP + vTP * step; r[6] = 0.0; r[7] = vTP;
             r[8] = v - TRIPLE * vT + cpPressure * step;
             r[9] = -vT + cpPressure * logRatio;
+            r[10] = vPP;
         } else {
             r[0] = v; r[1] = h; r[2] = s; r[3] = cp; r[4] = vT; r[5] = vP; r[6] = vTT; r[7] = vTP;
             r[8] = v - t * vT;
             r[9] = -vT;
+            r[10] = vPP;
         }
         for (int k = 0; k < r.length; k++) r[k] *= MOLAR;
     }
@@ -311,13 +321,14 @@ public final class WaterShare {
         double vT = -dpdt / dpdv, vP = 1.0 / dpdv;
         double vTT = -(-a2 / den + 2.0 * dpdtv * vT + dpdvv * vT * vT) / dpdv;
         double vTP = -(dpdtv + dpdvv * vT) / (dpdv * dpdv);
+        double vPP = -dpdvv / (dpdv * dpdv * dpdv);
         double log = DeterministicMath.log((v + (1.0 + SQRT_TWO) * b) / (v + (1.0 - SQRT_TWO) * b));
         double dlogdv = 1.0 / (v + (1.0 + SQRT_TWO) * b) - 1.0 / (v + (1.0 - SQRT_TWO) * b);
         double hR = rt * (z - 1.0) + (t * a1 - a) / (2.0 * SQRT_TWO * b) * log;
         double cpR = p * vT - R + t * a2 / (2.0 * SQRT_TWO * b) * log + (t * a1 - a) / (2.0 * SQRT_TWO * b) * dlogdv * vT;
         double sR = (hR - rt * logPhi) / t;
         double[] c = w.cubic;
-        c[0] = v; c[1] = hR; c[2] = sR; c[3] = cpR; c[4] = vT; c[5] = vP; c[6] = vTT; c[7] = vTP;
+        c[0] = v; c[1] = hR; c[2] = sR; c[3] = cpR; c[4] = vT; c[5] = vP; c[6] = vTT; c[7] = vTP; c[8] = vPP;
     }
 
     /** {@code B_IF97 - B}, its first and second temperature derivatives, at {@code t} (kept for the next call). */

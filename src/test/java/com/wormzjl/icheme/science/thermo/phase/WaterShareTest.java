@@ -143,6 +143,29 @@ class WaterShareTest {
         System.out.printf(Locale.ROOT, "water share derivatives against central differences: worst %.2e relative%n", worst);
     }
 
+    /**
+     * Below its saturation pressure liquid water's share is continued linearly in P from p_sat (W3B_NETWORK_PLAN.md
+     * section 12, stage B item 5), so Maxwell's relations hold on the share as on the cubic: dh/dP = v - T dv/dT and
+     * ds/dP = -dv/dT, at 350 K and 10 kPa (31.7 kPa below p_sat) and on both sides of p_sat. Held at p_sat, its dh/dP
+     * was zero there, 9 % of the phase's v off. The continuation leaves a mismatch linear in p - p_sat, (p - p_sat)(h_PP -
+     * T v_PP dp_sat/dT) for dh/dP: 2.1e-5 of v at 10 kPa.
+     */
+    @Test void theShareKeepsMaxwellsRelationsBelowSaturation() {
+        var ev = ENGINE.evaluator();
+        double[] pure = new double[ev.componentCount()];
+        pure[ev.waterComponent()] = 1.0;
+        var ws = ev.newWorkspace();
+        var d = ev.newDerivatives();
+        double t = 350, saturation = WaterShare.saturationPressure(t);
+        for (double p : new double[] {1.0e4, saturation * (1 - 1e-6), saturation * (1 + 1e-6), 101325}) {
+            ev.derivatives(t, p, pure, Root.LIQUID, ws, d);
+            var s = d.state();
+            double v = s.molarVolume(), maxwellH = s.shareVolume() - t * d.shareVolumeTemperatureDerivative();
+            assertEquals(maxwellH, d.shareEnthalpyPressureDerivative(), 1.0e-4 * v, "dh/dP = v - T dv/dT at " + p + " Pa");
+            assertEquals(-d.shareVolumeTemperatureDerivative(), d.shareEntropyPressureDerivative(), 1.0e-4 * v / t, "ds/dP = -dv/dT at " + p + " Pa");
+        }
+    }
+
     @Test void theShareMovesTheBalanceBookOnly() {
         var ev = ENGINE.evaluator();
         List<String> basis = ENGINE.contract().components();
