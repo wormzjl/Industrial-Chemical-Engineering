@@ -9,13 +9,17 @@ import java.util.*;
 
 /**
  * The flare stacks (batch 2026-11-09-flare-stack, FLARE_STACK_PLAN.md): arithmetic on the server thread on the shaft-train
- * hooks, as the burners'. A flare's tip is a void behind its gas inlet; the run into it carries its tip limit.
+ * hooks, as the burners'. A flare's tip is a void behind its gas inlet; the run into it ends in the tip's bore and carries
+ * the tip's valve.
  * <ul>
- * <li>At each dispatch, the tip limit's mass target ({@link ShaftPlan.Kind#FLARE}): the most the flare passes of the gas
- * now at the run's other end ({@link Flare#limit}: its rated heat, its stable exit velocity), 0 while that gas carries solids
- * (owner X5: blocked while solids arrive).</li>
+ * <li>At each dispatch, the tip's plan ({@link ShaftPlan.Kind#FLARE}): open, or shut while the gas at the run's other end
+ * carries solids (owner X5: blocked while solids arrive). An open tip passes what the pressure behind it drives (batch
+ * 2026-11-11-gas-blanketing, owner D6: "Flare flowrate should vary with backpressure").</li>
  * <li>At each commit or replay, what it received: the mean mass flow, the gas's net heating value and flame temperature,
- * the heat it released (none below {@link Flare#FLAME_LIMIT}: the gas leaves unburnt, owner X2), and its status.</li>
+ * the heat it released, and its status. The gas leaves unburnt (FLAME OUT, no heat) below {@link Flare#FLAME_LIMIT} (owner
+ * X2) and while it leaves the tip faster than its stable velocity ({@link Flare#stableVelocity}: the flame lifts off, and
+ * relights below it); above the tip's rated heat it burns on (OVER CAPACITY). Both of X4's limits are the flame's status
+ * only, never the flow.</li>
  * </ul>
  * All of it is state: a load starts every flare at no flow, and its first slice reads it again.
  */
@@ -26,13 +30,12 @@ public final class Flares {
         public final String text;
         Status(String text){this.text=text;}
     }
-    /** A flow within this share of the limit is held back by it (OVER CAPACITY). */
-    static final double HELD=.99;
     /** Below this mass flow, kg/s, nothing flows. */
     static final double NO_FLOW=1e-6;
     /**
      * A flare as its page and the data network show it: the mean mass flow (kg/s), the heat released (W), the gas's net
-     * heating value (J/scm) and flame temperature (K), the most it passes now (kg/s), its rating (W) and its status.
+     * heating value (J/scm) and flame temperature (K), the most it burns now (kg/s: its rating, its stable velocity), its rating
+     * (W) and its status.
      */
     public record View(double massFlow,double heat,double heatingValue,double flameTemperature,double limit,double rated,Status status) {
         public List<EquipmentAlarm> alarms() {
@@ -78,39 +81,40 @@ public final class Flares {
         return new Gas(Flare.gas(donor.inventory().moles(),molarMasses,heatingValues,formulas,donor.state().temperature(),tip),solids);
     }
 
-    /** Each flare's tip limit at dispatch (reads only). */
+    /** Each flare's tip at dispatch, open or blocked (reads only). */
     void plans(PassiveNetwork graph,Map<Long,ShaftPlan> out) {
         sync();
         for(var pipe:graph.pipes()) {
             if(!(pipe.control() instanceof FlowControl.ControlValve valve)||valve.source()!=FlowControl.ValveSource.FLARE)continue;
             long id=graph.reservoirs().get(pipe.second()).id();double tip=tip(id);if(tip<=0)continue;
             var gas=gas(graph.reservoirs().get(pipe.first()),tip);
-            double limit=gas.solids()?0:gas.gas().limit();
-            limits.put(id,limit);
-            out.put(id,new ShaftPlan(ShaftPlan.Kind.FLARE,limit));
+            limits.put(id,gas.gas().limit());
+            out.put(id,new ShaftPlan(ShaftPlan.Kind.FLARE,gas.solids()?0:1));
         }
     }
 
-    /** A committed or replayed span of an island: each flare's flow, heat and status. */
+    /** A committed or replayed span of an island: each flare's flow, heat and status, read on the run into it (its tip's valve, or a safety valve's run). */
     void booked(long start,long end,PassiveIntervalSolver.Result result) {
         if(end<=start)return;
         var solved=result.graph();var average=result.averageMassFlows();
         for(int e=0;e<solved.pipes().size();e++) {
             var pipe=solved.pipes().get(e);
-            if(!(pipe.control() instanceof FlowControl.ControlValve valve)||valve.source()!=FlowControl.ValveSource.FLARE)continue;
             long id=solved.reservoirs().get(pipe.second()).id();double tip=tip(id);if(tip<=0)continue;
             var gas=gas(solved.reservoirs().get(pipe.first()),tip);
-            double flow=Math.max(0,average[e]),limit=limits.getOrDefault(id,gas.solids()?0:gas.gas().limit());
-            boolean burns=gas.gas().burns();
+            var g=gas.gas();double flow=Math.max(0,average[e]),limit=limits.getOrDefault(id,g.limit()),rated=Flare.rated(tip);
+            double velocity=Flare.exitVelocity(flow,g.density(),tip);
+            // The flame holds while the gas burns and leaves the tip no faster than its stable velocity; it then releases all
+            // its heat, over the rating or not.
+            boolean burns=g.burns()&&velocity<=Flare.stableVelocity(g.nhv());
             Status status;
             if(gas.solids()&&flow<NO_FLOW)status=Status.BLOCKED;
             else if(flow<NO_FLOW)status=Status.NO_FLOW;
             else if(!burns)status=Status.FLAME_OUT;
-            else if(flow>=HELD*limit)status=Status.OVER_CAPACITY;
+            else if(flow*g.perKilogram()>rated)status=Status.OVER_CAPACITY;
             else status=Status.FLARING;
-            var g=gas.gas();double heat=burns?flow*g.perKilogram():0,rated=Flare.rated(tip);
+            double heat=burns&&flow>=NO_FLOW?flow*g.perKilogram():0;
             views.put(id,new View(flow,heat,g.nhv(),g.flame(),limit,rated,status));
-            flames.put(id,new Flame(heat>0?Flare.soot(solved.reservoirs().get(pipe.first()).inventory().moles(),formulas,heat/rated):0,Flare.exitVelocity(flow,g.density(),tip)));
+            flames.put(id,new Flame(heat>0?Flare.soot(solved.reservoirs().get(pipe.first()).inventory().moles(),formulas,heat/rated):0,velocity));
         }
     }
 

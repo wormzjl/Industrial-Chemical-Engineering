@@ -343,4 +343,30 @@ class DeviceColumnTest {
         assertEquals("Crystals", ((Column.Split) phases.rows().get(1)).shares().get(3).label());
         assertEquals(3, phases.rows().size(), "a mole basis that leaves custom solids out says so");
     }
+
+    /**
+     * A pressure safety valve's group (batch 2026-11-11-gas-blanketing): an editor's set pressure entry, a reader's meter,
+     * the host's pressure only where no blanketing valve's group shows it, what it relieves and where to; every line in
+     * en_us; a drum's page with both valves fits the design view.
+     */
+    @Test
+    void aSafetyValvesGroupHoldsItsSetPressureItsReliefAndItsDischargeAndFitsBesideTheBlanketingValve() {
+        var texts = new HeatControlColumnTest.Recording();
+        var editor = (Column.Group) DeviceColumn.reliefValve(true, "bar", "4.013", null, "1.111", "kg/s", true, texts).getFirst();
+        assertEquals("Safety valve", editor.title());
+        assertEquals("relief", ((Column.Field) editor.rows().getFirst()).key());
+        assertEquals(List.of("meter:relief_flow", "meter:relief_discharge"), editor.rows().stream().skip(1).map(r -> ((Column.Reading) r).key()).toList(), "no pressure beside a blanketing valve's");
+        assertEquals("Air", ((Column.Reading) editor.rows().getLast()).value());
+        var reader = (Column.Group) DeviceColumn.reliefValve(false, "bar", "3.000", "2.998", "0.000", "kg/s", false, texts).getFirst();
+        assertEquals(List.of("meter:relief_set", "meter:relief_pressure", "meter:relief_flow", "meter:relief_discharge"), reader.rows().stream().map(r -> ((Column.Reading) r).key()).toList());
+        assertEquals("Piped", ((Column.Reading) reader.rows().getLast()).value());
+        var blanket = DeviceColumn.blanketValve(true, "bar", "1.213", "4.012", texts);
+        assertEquals(List.of("Blanketing valve"), blanket.stream().map(r -> ((Column.Group) r).title()).toList(), "one group under the valve's own plate");
+        var both = DeviceColumn.accessories(blanket, DeviceColumn.reliefValve(true, "bar", "4.013", null, "1.111", "kg/s", true, texts));
+        assertEquals(List.of("Blanketing valve", "", "Safety valve"), both.stream().map(r -> r instanceof Column.Group g ? g.title() : "").toList(), "two groups, a gap between");
+        int view = FluidGuiLayout.doorView(FluidGuiLayout.HEIGHT);
+        for (int width : new int[]{464, 790})
+            assertTrue(Column.place(both, 10, 74, FluidGuiLayout.side(width) - 10, M, Column.Metrics.COMPACT).bounds().h() <= view, "both valves fit the design view at " + width);
+        assertEquals(Set.of(), texts.missing);
+    }
 }

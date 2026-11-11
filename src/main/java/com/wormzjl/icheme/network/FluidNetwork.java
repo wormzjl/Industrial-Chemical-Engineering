@@ -91,13 +91,17 @@ public final class FluidNetwork {
      * A menu's edit form. {@code heat} is a controllable heat side's control (batch 2026-10-27-heat-exchanger-design, W4: an
      * exchanger side's or an air cooler's mode, set point, low limit and manual share), null for any other device; {@code still} a batch still's settings (W6), null for any other device.
      */
-    public record Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio,Power power,FlowControl.ValveSource valveSource,double massFlow,HeatUnit.Control heat,com.wormzjl.icheme.science.fluid.network.CoolingTower tower,boolean fixedMover,StillControls still,double blanket) {
+    public record Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio,Power power,FlowControl.ValveSource valveSource,double massFlow,HeatUnit.Control heat,com.wormzjl.icheme.science.fluid.network.CoolingTower tower,boolean fixedMover,StillControls still,double blanket,double relief) {
+        /** Controls of a device without a pressure safety valve ({@code relief} 0). */
+        public Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio,Power power,FlowControl.ValveSource valveSource,double massFlow,HeatUnit.Control heat,com.wormzjl.icheme.science.fluid.network.CoolingTower tower,boolean fixedMover,StillControls still,double blanket){this(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,power,valveSource,massFlow,heat,tower,fixedMover,still,blanket,0);}
+        /** These controls with a pressure safety valve set to {@code value} Pa absolute (batch 2026-11-11-gas-blanketing); 0 without a valve. */
+        public Controls withRelief(double value){return new Controls(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,power,valveSource,massFlow,heat,tower,fixedMover,still,blanket,value);}
         /** Controls of a device without a gas blanketing valve ({@code blanket} 0). */
         public Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio,Power power,FlowControl.ValveSource valveSource,double massFlow,HeatUnit.Control heat,com.wormzjl.icheme.science.fluid.network.CoolingTower tower,boolean fixedMover,StillControls still){this(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,power,valveSource,massFlow,heat,tower,fixedMover,still,0);}
         /** These controls with a drum's gas blanketing valve set to {@code value} Pa absolute (batch 2026-11-11-gas-blanketing); 0 without a valve. */
-        public Controls withBlanket(double value){return new Controls(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,power,valveSource,massFlow,heat,tower,fixedMover,still,value);}
+        public Controls withBlanket(double value){return new Controls(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,power,valveSource,massFlow,heat,tower,fixedMover,still,value,relief);}
         public Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio,Power power,FlowControl.ValveSource valveSource,double massFlow,HeatUnit.Control heat,com.wormzjl.icheme.science.fluid.network.CoolingTower tower,boolean fixedMover){this(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,power,valveSource,massFlow,heat,tower,fixedMover,null);}
-        public Controls withStill(StillControls value){return new Controls(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,power,valveSource,massFlow,heat,tower,fixedMover,value,blanket);}
+        public Controls withStill(StillControls value){return new Controls(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,power,valveSource,massFlow,heat,tower,fixedMover,value,blanket,relief);}
         public Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio,Power power,FlowControl.ValveSource valveSource,double massFlow,HeatUnit.Control heat,com.wormzjl.icheme.science.fluid.network.CoolingTower tower){this(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,power,valveSource,massFlow,heat,tower,false);}
         public Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio,Power power,FlowControl.ValveSource valveSource,double massFlow){this(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,power,valveSource,massFlow,null,null);}
         public Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio,Power power){this(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,power,FlowControl.ValveSource.NONE,1);}
@@ -106,7 +110,7 @@ public final class FluidNetwork {
         public Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition){this(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,SlurryFeed.NONE);}
         public Controls {
             Objects.requireNonNull(valveSource);if(!Double.isFinite(massFlow)||massFlow<0)throw new IllegalArgumentException("Invalid mass-flow target");Objects.requireNonNull(solids);if(power==null)throw new IllegalArgumentException("Missing or unknown power setting");composition=composition.clone();
-            for(double value:new double[]{temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,maximumPressureRatio,blanket})if(!Double.isFinite(value))throw new IllegalArgumentException("All controls must be finite numbers");
+            for(double value:new double[]{temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,maximumPressureRatio,blanket,relief})if(!Double.isFinite(value))throw new IllegalArgumentException("All controls must be finite numbers");
             if(!pressureRatioAllowed(maximumPressureRatio))throw new IllegalArgumentException("The pressure ratio must lie between "+MINIMUM_PRESSURE_RATIO+" and "+MAXIMUM_PRESSURE_RATIO);
             // Temperature and pressure are only required to be physical here: the input box is the property package's
             // envelope, so the server checks it against the model when the edit arrives (see edit below).
@@ -129,7 +133,7 @@ public final class FluidNetwork {
             var power=!d.generatorEnabled()||d.control() instanceof FlowControl.Mover m&&!m.enabled()||heat!=null&&(heat.fans()||heat.burners())&&heat.control().share()==0?Power.OFF:Power.ON;
             double temperature=heat!=null&&heat.burners()?heat.control().target():record.spec().temperature();
             return new Controls(temperature,pressure,d.geometry().diameter(),d.geometry().roughness(),flow,head,record.spec().composition(),record.spec().solids(),ratio,power,valve==null?(d.control() instanceof FlowControl.PressureValve?FlowControl.ValveSource.PRESSURE:FlowControl.ValveSource.NONE):valve.source(),valve==null?1:valve.massTarget(),
-                    heat!=null&&heat.controllable()?heat.control():null,record.spec().tower(),d.kind()==TopologyCompiler.Kind.PIPE&&d.control() instanceof FlowControl.Machine).withBlanket(record.spec().blanket());
+                    heat!=null&&heat.controllable()?heat.control():null,record.spec().tower(),d.kind()==TopologyCompiler.Kind.PIPE&&d.control() instanceof FlowControl.Machine).withBlanket(record.spec().blanket()).withRelief(record.spec().relief());
         }
     }
     /**
@@ -399,7 +403,11 @@ public final class FluidNetwork {
                 var old=Objects.requireNonNull(world.registrations().get(payload.identity));var d=old.device();
                 var geometry=d.geometry();var control=d.control();var spec=old.spec();var heat=d.heat();
                 switch(d.hydraulicKind()) {
-                    case PIPE,FILTER->geometry=new PipeResistance.Geometry(geometry.length(),controls.diameter,PipeResistance.DEFAULT_ROUGHNESS_METRES,geometry.minorLoss());
+                    case PIPE,FILTER->{
+                        geometry=new PipeResistance.Geometry(geometry.length(),controls.diameter,PipeResistance.DEFAULT_ROUGHNESS_METRES,geometry.minorLoss());
+                        // A pipe's pressure safety valve (batch 2026-11-11-gas-blanketing): its set pressure, inside the valve's range.
+                        if(spec.relief()>0){if(!spec.reliefTakes(controls.relief))throw new IllegalArgumentException("Set pressure outside the safety valve's range");spec=spec.withRelief(controls.relief,spec.reliefFace());}
+                    }
                     case PUMP->{if(control instanceof FlowControl.Machine m)control=new FlowControl.Machine(m.law(),m.speed(),controls.power==Power.ON,d.kind()==TopologyCompiler.Kind.PIPE?0:controls.volumeFlow,d.kind()==TopologyCompiler.Kind.PIPE?0:controls.pressure);else control=new FlowControl.Pump(controls.volumeFlow,controls.maximumAddedPressure,controls.power==Power.ON);}
                     case COMPRESSOR->{if(control instanceof FlowControl.Machine m)control=new FlowControl.Machine(m.law(),m.speed(),controls.power==Power.ON,d.kind()==TopologyCompiler.Kind.PIPE?0:controls.volumeFlow,d.kind()==TopologyCompiler.Kind.PIPE?0:controls.pressure);else if(control instanceof FlowControl.Compressor c&&world.shafts().unitOf(d.id()))control=new FlowControl.Compressor(c.requestedVolumeFlow(),c.maximumPressureRatio(),controls.power==Power.ON,controls.volumeFlow,controls.pressure);else control=new FlowControl.Compressor(controls.volumeFlow,controls.maximumPressureRatio,controls.power==Power.ON);}
                     case VALVE->{
@@ -422,10 +430,13 @@ public final class FluidNetwork {
                             if(refused!=null)throw new IllegalArgumentException(refused);
                             break;
                         }
-                        // A drum's gas blanketing valve (batch 2026-11-11-gas-blanketing): its set pressure, inside the valve's range.
-                        if(spec.blanket()>0){
-                            if(!(controls.blanket>=FluidDeviceSpec.MIN_BLANKET)||!(controls.blanket<=FluidDeviceSpec.MAX_BLANKET))throw new IllegalArgumentException("Set pressure outside the valve's range");
-                            spec=spec.withBlanket(controls.blanket);break;
+                        // A drum's gas blanketing valve and pressure safety valve (batch 2026-11-11-gas-blanketing): their set
+                        // pressures, each inside its valve's range, the safety valve's above the blanketing valve's vent pressure.
+                        if(spec.blanket()>0||spec.relief()>0){
+                            double blanket=spec.blanket()>0?controls.blanket:0,relief=spec.relief()>0?controls.relief:0;
+                            if(blanket>0&&(!(blanket>=FluidDeviceSpec.MIN_BLANKET)||!(blanket<=FluidDeviceSpec.MAX_BLANKET)))throw new IllegalArgumentException("Set pressure outside the valve's range");
+                            if(relief>0&&!FluidDeviceSpec.reliefTakes(relief,blanket))throw new IllegalArgumentException(blanket>0&&FluidDeviceSpec.reliefTakes(relief,0)?"The safety valve's set pressure must lie above the blanketing valve's vent pressure":"Set pressure outside the safety valve's range");
+                            spec=spec.withValves(blanket,relief);break;
                         }
                         if(spec.tower()==null||controls.tower==null)throw new IllegalArgumentException("Reservoir contents are conserved; only cooling tower controls can be edited.");
                         var t=controls.tower;

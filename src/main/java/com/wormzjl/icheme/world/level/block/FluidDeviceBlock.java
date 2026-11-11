@@ -259,7 +259,8 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
             else if(level.isClientSide()&&com.wormzjl.icheme.client.ValveTurnRenderer.clicked(level,position,state))turnSound(level,position,player);
             return InteractionResult.sidedSuccess(level.isClientSide());
         }
-        if(kind==TopologyCompiler.Kind.PIPE&&!(level.getBlockEntity(position) instanceof FluidDeviceBlockEntity pipe&&!pipe.instruments().sensors().isEmpty()))return InteractionResult.PASS;
+        // A plain pipe opens only with a sensor or a pressure safety valve on it (batch 2026-11-11-gas-blanketing: the valve's own screen).
+        if(kind==TopologyCompiler.Kind.PIPE&&!(level.getBlockEntity(position) instanceof FluidDeviceBlockEntity pipe&&(!pipe.instruments().sensors().isEmpty()||pipe.instruments().safetyValve())))return InteractionResult.PASS;
         if(player instanceof ServerPlayer serverPlayer&&level.getBlockEntity(position) instanceof FluidDeviceBlockEntity entity)entity.open(serverPlayer,false);
         return InteractionResult.sidedSuccess(level.isClientSide());
     }

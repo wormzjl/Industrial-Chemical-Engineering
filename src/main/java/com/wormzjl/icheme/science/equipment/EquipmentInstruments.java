@@ -199,8 +199,36 @@ public final class EquipmentInstruments {
                     for (int i = 0; i < 2; i++) {
                         double pad = Math.min(r, .16 * d),
                                 half = Math.min(.5, .175 * d),
-                                x = cx + (i == 0 ? -pad : pad);
-                        var tap = surface.ray(1, new double[] {x, 0, cz + 1.2 * pad}, 1, BODY);
+                                x = cx + (i == 0 ? -pad : pad),
+                                z = cz + 1.2 * pad;
+                        if (i == 1 && Math.floor(x) == Math.floor(cx - pad)) {
+                            // Both flanges in one cell (a drum 3 m across, batch 2026-11-11-gas-blanketing): the safety valve's
+                            // takes the next free roof cell, beside the first, clear of the top nozzles and the probes, with
+                            // its foot at least a quarter metre inside the roof's edge. A drum with none keeps the flange in the first one's cell,
+                            // where the safety valve finds no room (ReliefValveGeometry).
+                            double fx = Math.floor(cx - pad) + .5, fz = Math.floor(z) + .5;
+                            var nozzles = new ArrayList<double[]>();
+                            for (var nozzle : north.nozzles()) {
+                                var at = north.transform().point(nozzle.base());
+                                if (at[1] > (b[1] + b[4]) / 2) nozzles.add(at);
+                            }
+                            double[] found = null;
+                            for (double[] step : new double[][] {{1, 0}, {-1, 0}, {0, 1}, {1, 1}, {-1, 1}, {1, -1}, {-1, -1}, {0, -1}}) {
+                                double px = fx + step[0], pz = fz + step[1];
+                                if (Math.hypot(px - cx, pz - cz) > d / 2 - .25) continue;
+                                boolean busy = false;
+                                for (var at : nozzles) busy |= Math.floor(at[0]) == Math.floor(px) && Math.floor(at[2]) == Math.floor(pz);
+                                for (var probe : points) busy |= Math.hypot(probe.tap()[0] - px, probe.tap()[2] - pz) < .5;
+                                if (busy) continue;
+                                found = new double[] {px, pz};
+                                break;
+                            }
+                            if (found != null) {
+                                x = found[0];
+                                z = found[1];
+                            }
+                        }
+                        var tap = surface.ray(1, new double[] {x, 0, z}, 1, BODY);
                         var lo = plus(tap, new double[] {-half, .08, -half});
                         reserved.add(
                                 new Reservation(

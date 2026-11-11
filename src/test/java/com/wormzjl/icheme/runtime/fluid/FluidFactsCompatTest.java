@@ -135,7 +135,9 @@ class FluidFactsCompatTest {
         primeMovers(world);
         world.runTo(910);
         blanketed(world);
-        world.runTo(920);return world;
+        world.runTo(920);
+        relieved(world);
+        world.runTo(930);return world;
     }
     /**
      * Facts schema 20 (batch 2026-11-10-prime-movers): a 300 MW heavy-duty gas turbine's fuel void at its combustor's
@@ -227,6 +229,26 @@ class FluidFactsCompatTest {
         var device=new PhysicalFluidTopology.Device(id,node,Kind.RESERVOIR,Direction.NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive(),ports);
         var spec=new FluidDeviceSpec(g.capacity(),298.15,101325,FluidDeviceSpec.nitrogen(CATALOG).composition(),SlurryFeed.NONE,g.height(),false,g,null,135000);
         world.registry.submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,spec,0))),id+1,null);
+    }
+    /** Facts schema 23: a blanketed drum with a pressure safety valve on its relief port, and a pipe carrying one, its outlet up. */
+    private static void relieved(EventPathWorld world) {
+        long id=world.ledger.nextIdentity();var node=new PhysicalFluidTopology.Position(EventPathWorld.DIM,96,64,8);
+        var g=VesselGeometry.round(VesselGeometry.Form.HORIZONTAL_DRUM,2,6,2.0/3,.7);
+        var ports=List.of(new PhysicalFluidTopology.Port(node,Direction.NORTH,PassiveNetwork.PhasePort.LIQUID),
+                new PhysicalFluidTopology.Port(new PhysicalFluidTopology.Position(EventPathWorld.DIM,96,68,8),Direction.WEST,PassiveNetwork.PhasePort.VAPOR,PhysicalFluidTopology.ConnectionRole.BLANKET),
+                new PhysicalFluidTopology.Port(new PhysicalFluidTopology.Position(EventPathWorld.DIM,96,68,11),Direction.UP,PassiveNetwork.PhasePort.VAPOR,PhysicalFluidTopology.ConnectionRole.RELIEF));
+        var device=new PhysicalFluidTopology.Device(id,node,Kind.RESERVOIR,Direction.NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive(),ports);
+        var spec=new FluidDeviceSpec(g.capacity(),298.15,101325,FluidDeviceSpec.nitrogen(CATALOG).composition(),SlurryFeed.NONE,g.height(),false,g,null,135000).withRelief(450000,null);
+        world.registry.submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,spec,0))),id+1,null);
+        world.place(100,64,8,Kind.PIPE,Direction.EAST,FluidDeviceSpec.nitrogen(CATALOG).withRelief(250000,Direction.UP),.05);
+    }
+    /** Each pressure safety valve: its set pressure and its outlet (a vessel's relief port, or a pipe's face). */
+    private static String relieved(WorldTopologyLedger.Snapshot world) {
+        var text=new StringBuilder();
+        for(var r:new TreeMap<>(world.active()).values())if(r.spec().relief()>0){if(!text.isEmpty())text.append(";");
+            var port=r.device().reliefPort();
+            text.append(r.device().id()).append("=").append(r.spec().relief()).append("/").append(port!=null?port.cell().x()+","+port.cell().y()+","+port.cell().z()+" "+port.face()+" "+port.port():"face "+r.spec().reliefFace());}
+        return text.toString();
     }
     /** Each blanketed vessel: its set pressure and its blanket gas port. */
     private static String blanketed(WorldTopologyLedger.Snapshot world) {
@@ -907,6 +929,8 @@ class FluidFactsCompatTest {
                 assertEquals(expected.getProperty("ejectors",""),ejectors(ledger),folder+": steam ejectors");
                 // Schema 22 wrote the gas blanketing valves; an older image has none.
                 assertEquals(expected.getProperty("blanketed",""),blanketed(ledger),folder+": gas blanketing valves");
+                // Schema 23 wrote the pressure safety valves; an older image has none.
+                assertEquals(expected.getProperty("relieved",""),relieved(ledger),folder+": pressure safety valves");
                 long vessels=rebuilt.checkpoint().islands().stream().flatMap(e->e.snapshot().graph().reservoirs().stream()).filter(n->n.kind()==PassiveNetwork.NodeKind.RESERVOIR).count();
                 // Schema 18 wrote whether a vessel's wall is rigid; an older image reads every vessel a bag.
                 assertEquals(Long.parseLong(expected.getProperty("rigid","0")),rigid(rebuilt.checkpoint()),folder+": rigid vessels");
@@ -1052,6 +1076,7 @@ class FluidFactsCompatTest {
         props.setProperty("stills",stills(loaded.world().orElseThrow()));
         props.setProperty("ejectors",ejectors(loaded.world().orElseThrow()));
         props.setProperty("blanketed",blanketed(loaded.world().orElseThrow()));
+        props.setProperty("relieved",relieved(loaded.world().orElseThrow()));
         props.setProperty("vessels",Long.toString(contents(loaded.checkpoint()).values().stream().filter(v->v instanceof PassiveNetwork.Inventory).count()));
         props.setProperty("rigid",Long.toString(rigid(loaded.checkpoint())));
         props.setProperty("vacuumPumps",vacuumPumps(loaded.world().orElseThrow()));

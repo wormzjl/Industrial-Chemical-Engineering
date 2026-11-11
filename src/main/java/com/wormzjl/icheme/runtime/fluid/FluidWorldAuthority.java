@@ -957,6 +957,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
         if(port!=null&&port.role()!=PhysicalFluidTopology.ConnectionRole.BLANKET)throw new IllegalArgumentException("A gas blanketing valve's inlet is a blanket gas port");
         var ports=new ArrayList<>(record.device().ports());ports.removeIf(p->p.role()==PhysicalFluidTopology.ConnectionRole.BLANKET);
         if(port!=null){for(var p:ports)if(p.cell().equals(port.cell())&&p.face()==port.face())return false;ports.add(port);}
+        // A pressure safety valve already fitted stays above the new valve's vent pressure.
+        if(port!=null&&record.spec().relief()>0&&!(record.spec().relief()>com.wormzjl.icheme.science.fluid.network.GasBlanket.ventPressure(FluidDeviceSpec.DEFAULT_BLANKET)))return false;
         edit(id,record.revision(),record.device().withPlacement(record.device().position(),ports),record.spec().withBlanket(port==null?0:FluidDeviceSpec.DEFAULT_BLANKET));
         return true;
     }
@@ -964,7 +966,48 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public boolean blanketPressure(long id,double pascal) {
         owned();var record=registrations().get(id);
         if(record==null||!(record.spec().blanket()>0)||!(pascal>=FluidDeviceSpec.MIN_BLANKET)||!(pascal<=FluidDeviceSpec.MAX_BLANKET))return false;
+        // A pressure safety valve on the same vessel stays above the blanketing valve's vent pressure.
+        if(record.spec().relief()>0&&!(record.spec().relief()>com.wormzjl.icheme.science.fluid.network.GasBlanket.ventPressure(pascal)))return false;
         edit(id,record.revision(),record.device(),record.spec().withBlanket(pascal));return true;
+    }
+    /**
+     * Fits a closed vessel's pressure safety valve, its outlet {@code port} (role {@code RELIEF}), or removes it ({@code port}
+     * null), as one queued ledger event (batch 2026-11-11-gas-blanketing, the pressure safety valve). A fitted valve starts at
+     * {@link FluidDeviceSpec#DEFAULT_RELIEF}, or just above a blanketing valve's vent pressure where that is higher. False for a
+     * device that takes no valve: one that is not a closed vessel, or whose outlet meets another of its ports.
+     */
+    public boolean reliefValve(long id,PhysicalFluidTopology.Port port) {
+        owned();var record=registrations().get(id);
+        if(record==null||record.device().kind()!=TopologyCompiler.Kind.RESERVOIR||record.spec().open()||record.device().ports().isEmpty())return false;
+        if(port!=null&&port.role()!=PhysicalFluidTopology.ConnectionRole.RELIEF)throw new IllegalArgumentException("A pressure safety valve's outlet is a relief port");
+        var ports=new ArrayList<>(record.device().ports());ports.removeIf(p->p.role()==PhysicalFluidTopology.ConnectionRole.RELIEF);
+        if(port!=null){for(var p:ports)if(p.cell().equals(port.cell())&&p.face()==port.face())return false;ports.add(port);}
+        double set=port==null?0:fittedRelief(record.spec());if(port!=null&&!(set>0))return false;
+        edit(id,record.revision(),record.device().withPlacement(record.device().position(),ports),record.spec().withRelief(set,null));
+        return true;
+    }
+    /** The set pressure a newly fitted pressure safety valve starts at on a device with {@code spec}: the default, or just above its blanketing valve's vent pressure; 0 where none fits. */
+    static double fittedRelief(FluidDeviceSpec spec) {
+        double set=FluidDeviceSpec.DEFAULT_RELIEF;
+        if(spec.blanket()>0)set=Math.max(set,Math.ceil(com.wormzjl.icheme.science.fluid.network.GasBlanket.ventPressure(spec.blanket())*1.1/1000)*1000);
+        return spec.reliefTakes(set)?set:0;
+    }
+    /**
+     * Fits a pressure safety valve on pipe {@code id}, its outlet leaving through {@code face}, or removes it ({@code face}
+     * null), as one queued ledger event. The pipe's other faces stay joined as a plain pipe's. False for a device that is no
+     * plain pipe: a pipe carrying a fitting, a rack lane, or a pipe with ports.
+     */
+    public boolean pipeRelief(long id,PhysicalFluidTopology.Direction face) {
+        owned();var record=registrations().get(id);if(record==null)return false;var d=record.device();
+        if(d.kind()!=TopologyCompiler.Kind.PIPE||!d.ports().isEmpty()||d.slots()>0||face!=null&&(d.actuator()||d.filter()||d.cutoff()!=PhysicalFluidTopology.Cutoff.NONE))return false;
+        edit(id,record.revision(),d,record.spec().withRelief(face==null?0:FluidDeviceSpec.DEFAULT_RELIEF,face));
+        return true;
+    }
+    /** Sets a fitted pressure safety valve's set pressure, Pa absolute, as a queued ledger event; false for a device without one or a pressure it does not take ({@link FluidDeviceSpec#reliefTakes}). */
+    public boolean reliefPressure(long id,double pascal) {
+        owned();var record=registrations().get(id);
+        if(record==null||!(record.spec().relief()>0)||!record.spec().reliefTakes(pascal))return false;
+        edit(id,record.revision(),record.device(),record.spec().withRelief(pascal,record.spec().reliefFace()));return true;
     }
     // ---------------- running columns (batch 2026-10-28-column-operation, C3) ----------------
 
@@ -2418,6 +2461,14 @@ public final class FluidWorldAuthority implements AutoCloseable {
                 view=view.withChimney(new FluidView.Chimney(c.massFlow(),c.solids(),c.temperature(),c.exitVelocity(),c.opacity(),c.draft(),registration.device().geometry().diameter(),c.status().name()));
                 var line=c.line();if(!view.status().contains(line))view=view.withStatus(view.status()+" / "+line);
             }
+        }
+        // A pressure safety valve (batch 2026-11-11-gas-blanketing): what its run out of the guarded node relieved, and whether
+        // that run is the open stub to the atmosphere.
+        if(registration.spec().relief()>0) {
+            double relieved=0;boolean open=true;var q=snapshot.lastResult().map(PassiveIntervalSolver.Result::averageMassFlows).orElse(null);
+            for(int i=0;i<snapshot.graph().pipes().size();i++){var pipe=snapshot.graph().pipes().get(i);
+                if(pipe.control() instanceof FlowControl.PressureValve&&snapshot.graph().reservoirs().get(pipe.first()).id()==id){open=pipe.id()==PhysicalFluidTopology.reliefIdentity(id);if(q!=null)relieved=Math.max(0,q[i]);}}
+            view=view.withRelief(new FluidView.Relief(relieved,open));
         }
         // A plain pipe's line reading (OWNER_TEST_REVIEW.md section 6): the stream it carries, as its gauge reads it.
         if(registration.device().kind()==TopologyCompiler.Kind.PIPE&&view.pipeInfo()!=null)view=view.withPipeInfo(view.pipeInfo().withReading(lineReading(id,view)));

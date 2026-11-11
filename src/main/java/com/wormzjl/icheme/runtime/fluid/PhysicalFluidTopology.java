@@ -38,11 +38,14 @@ public final class PhysicalFluidTopology {
     public enum ConnectionRole {
         VESSEL(0),SUCTION(1),DISCHARGE(2),INLET(3),OUTLET(4),
         /** A vessel's blanket gas port (batch 2026-11-11-gas-blanketing): the run into it carries the vessel's gas blanketing valve. */
-        BLANKET(5);
+        BLANKET(5),
+        /** A vessel's relief port (batch 2026-11-11-gas-blanketing, the pressure safety valve): the run out of it carries the
+         * vessel's pressure safety valve, stated from the vessel; with nothing piped to it, a stub to the atmosphere does. */
+        RELIEF(6);
         private final int code;
         ConnectionRole(int code){this.code=code;}
         public int code(){return code;}
-        public static ConnectionRole fromCode(int code){return switch(code){case 0->VESSEL;case 1->SUCTION;case 2->DISCHARGE;case 3->INLET;case 4->OUTLET;case 5->BLANKET;default->throw new IllegalArgumentException("Unknown connection role "+code);};}
+        public static ConnectionRole fromCode(int code){return switch(code){case 0->VESSEL;case 1->SUCTION;case 2->DISCHARGE;case 3->INLET;case 4->OUTLET;case 5->BLANKET;case 6->RELIEF;default->throw new IllegalArgumentException("Unknown connection role "+code);};}
     }
     /** A multi-cell device's nozzle: the face of {@code cell} where a pipe meets it, its phase class and connection role. */
     public record Port(Position cell,Direction face,PassiveNetwork.PhasePort port,ConnectionRole role) {
@@ -118,7 +121,7 @@ public final class PhysicalFluidTopology {
                     ||onPortLane||ports.size()!=1||ports.getFirst().port!=PassiveNetwork.PhasePort.BULK||ports.getFirst().role!=ConnectionRole.VESSEL))
                 throw new IllegalArgumentException("A burner is a fired heater's void with one bulk port and its fuel valve, partnered with its radiant coil");
             if(heat!=null&&heat.side()==com.wormzjl.icheme.science.equipment.HeatSides.Side.BURNER&&!burner)throw new IllegalArgumentException("A burner side is a void");
-            // A flare's tip (batch 2026-11-09-flare-stack): a void behind its gas inlet, its tip limit its control.
+            // A flare's tip (batch 2026-11-09-flare-stack): a void behind its gas inlet, its tip's valve its control.
             boolean flare=kind==TopologyCompiler.Kind.VOID&&heat==null&&control instanceof FlowControl.ControlValve tip&&tip.source()==FlowControl.ValveSource.FLARE;
             if(flare&&(onPortLane||ports.size()!=1||ports.getFirst().port!=PassiveNetwork.PhasePort.BULK||ports.getFirst().role!=ConnectionRole.VESSEL))
                 throw new IllegalArgumentException("A flare is a void with one bulk port and its tip limit");
@@ -204,7 +207,8 @@ public final class PhysicalFluidTopology {
                         default->throw new IllegalArgumentException("An ejector needs suction, motive and discharge ports");
                     }
                 } else if(kind==TopologyCompiler.Kind.RESERVOIR) {
-                    if(port.role!=ConnectionRole.VESSEL&&port.role!=ConnectionRole.BLANKET)throw new IllegalArgumentException("A reservoir needs vessel ports");
+                    if(port.role!=ConnectionRole.VESSEL&&port.role!=ConnectionRole.BLANKET&&port.role!=ConnectionRole.RELIEF)throw new IllegalArgumentException("A reservoir needs vessel ports");
+                    if(port.role==ConnectionRole.RELIEF&&(port.port!=PassiveNetwork.PhasePort.VAPOR||ports.stream().filter(p->p.role==ConnectionRole.RELIEF).count()>1))throw new IllegalArgumentException("A vessel has one relief port, on its vapour space");
                     if(port.role==ConnectionRole.BLANKET&&(port.port!=PassiveNetwork.PhasePort.VAPOR||ports.stream().filter(p->p.role==ConnectionRole.BLANKET).count()>1))throw new IllegalArgumentException("A vessel has one blanket gas port, on its vapour space");
                 } else if(kind==TopologyCompiler.Kind.PUMP||kind==TopologyCompiler.Kind.COMPRESSOR||kind==TopologyCompiler.Kind.TURBINE) {
                     if(port.port!=PassiveNetwork.PhasePort.BULK)throw new IllegalArgumentException("A mover needs bulk ports");
@@ -358,6 +362,14 @@ public final class PhysicalFluidTopology {
             for(var port:ports)if(port.cell.equals(cell)&&port.face==face)return port.role==ConnectionRole.BLANKET;
             return false;
         }
+        /** Whether the port out of {@code cell} towards {@code face} is this vessel's relief port. */
+        boolean reliefPortAt(Position cell,Direction face) {
+            if(kind!=TopologyCompiler.Kind.RESERVOIR)return false;
+            for(var port:ports)if(port.cell.equals(cell)&&port.face==face)return port.role==ConnectionRole.RELIEF;
+            return false;
+        }
+        /** This vessel's relief port, or null. */
+        public Port reliefPort(){for(var port:ports)if(port.role==ConnectionRole.RELIEF)return port;return null;}
         boolean outletAt(Position cell,Direction face) {
             if(kind==TopologyCompiler.Kind.HEAT_SIDE){for(var port:ports)if(port.cell.equals(cell)&&port.face==face)return port.role==ConnectionRole.OUTLET;return false;}
             // An ejector's motive and discharge runs leave its node for its own junctions (batch 2026-11-10-steam-ejector-flow).
@@ -425,6 +437,12 @@ public final class PhysicalFluidTopology {
         return null;
     }
     private record Point(double x,double y,double z) {}
+    /** Whether {@code device}'s pressure safety valve's outlet leaves {@code cell} towards {@code face}: a vessel's relief port, or a pipe's outlet face. */
+    private static boolean guards(Device device,Position cell,Direction face,Map<Long,Relief> reliefs) {
+        var relief=reliefs.get(device.id);if(relief==null)return false;
+        if(device.kind==TopologyCompiler.Kind.RESERVOIR)return device.reliefPortAt(cell,face);
+        return device.kind==TopologyCompiler.Kind.PIPE&&relief.face()==face&&cell.equals(device.position);
+    }
     public static long filterIdentity(long physicalId){return Long.MIN_VALUE+physicalId;}
     /**
      * {@code node} as its device compiles it: a kettle's shell (W7) carries its pool, keyed as a side would be
@@ -477,13 +495,31 @@ public final class PhysicalFluidTopology {
     public static long sideIdentity(long physicalId){return Long.MIN_VALUE/2+physicalId;}
     /** The compiled pipe of ejector {@code physicalId}'s mover, from its suction node to its discharge junction. */
     public static long ejectorIdentity(long physicalId){return Long.MIN_VALUE/4+physicalId;}
+    /**
+     * A device's pressure safety valve (batch 2026-11-11-gas-blanketing, PRESSURE_SAFETY_VALVE_PLAN.md section 3): its set
+     * pressure, Pa absolute, and on a pipe the face its outlet leaves by (null on a vessel, whose outlet is its relief port).
+     * The run out of the outlet carries the existing upstream pressure valve law ({@link FlowControl.PressureValve}), stated
+     * from the guarded node; with nothing piped to the outlet, a stub ({@link #RELIEF_STUB}) to a void at the ambient does.
+     */
+    public record Relief(double pressure,Direction face) {
+        public Relief{if(!(pressure>0)||!Double.isFinite(pressure))throw new IllegalArgumentException("Invalid relief set pressure");}
+    }
+    /**
+     * An open relief outlet's stub: 1 m of a 0.1 m bore with an exit loss. At 4 bar it passes about 3.5 kg/s of nitrogen at
+     * the network's 100 m/s limit, and about 190 kg/s of water at 3 bar of drop (plan section 1).
+     */
+    public static final PipeResistance.Geometry RELIEF_STUB=new PipeResistance.Geometry(1,.1,PipeResistance.DEFAULT_ROUGHNESS_METRES,1);
+    /** The compiled stub of device {@code physicalId}'s open relief outlet, from its guarded node to its void. */
+    public static long reliefIdentity(long physicalId){return Long.MIN_VALUE/16+physicalId;}
     /** The compiled pipe of ejector {@code physicalId}'s nozzle, from its motive junction to its discharge junction: its steam. */
     public static long motiveIdentity(long physicalId){return Long.MIN_VALUE/8+physicalId;}
     public static Compiled compile(Collection<Device> devices,Map<Long,PassiveNetwork.Reservoir> boundaryStates) {
         return compile(devices,boundaryStates,Map.of(),boundaryStates.values().stream().findFirst().map(PassiveNetwork.Reservoir::state).orElse(null));
     }
     public static Compiled compile(Collection<Device> devices,Map<Long,PassiveNetwork.Reservoir> boundaryStates,Map<Long,InlineFilter> filterStock,com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.State idleSeed) {return compile(devices,boundaryStates,filterStock,idleSeed,Set.of());}
-    public static Compiled compile(Collection<Device> devices,Map<Long,PassiveNetwork.Reservoir> boundaryStates,Map<Long,InlineFilter> filterStock,com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.State idleSeed,Set<Long> flowmeters) {
+    public static Compiled compile(Collection<Device> devices,Map<Long,PassiveNetwork.Reservoir> boundaryStates,Map<Long,InlineFilter> filterStock,com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.State idleSeed,Set<Long> flowmeters) {return compile(devices,boundaryStates,filterStock,idleSeed,flowmeters,Map.of());}
+    /** {@code reliefs}: each device's pressure safety valve, by device id ({@link Relief}); {@code idleSeed} is then the ambient an open outlet's void stands at. */
+    public static Compiled compile(Collection<Device> devices,Map<Long,PassiveNetwork.Reservoir> boundaryStates,Map<Long,InlineFilter> filterStock,com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.State idleSeed,Set<Long> flowmeters,Map<Long,Relief> reliefs) {
         var physical=new TreeMap<Long,Device>();var positions=new HashMap<Position,Device>();var points=new HashMap<Long,Point>();
         var nodes=new ArrayList<TopologyCompiler.Node>();var links=new ArrayList<TopologyCompiler.Link>();var linkOwner=new HashMap<Long,Long>();
         for(var d:devices) {
@@ -501,6 +537,8 @@ public final class PhysicalFluidTopology {
         // a pipe end at that tank compiles to (Device.portAt). Generators and voids stay BULK.
         var tankFaces=new HashMap<Long,Direction>();var tankPorts=new HashMap<Long,PassiveNetwork.PhasePort>();var outletLinks=new HashSet<Long>();
         var linkDirections=new HashMap<Long,Direction>();var motiveLinks=new HashSet<Long>();var blanketLinks=new HashSet<Long>();
+        // A pressure safety valve's outlet link, to the device it guards (batch 2026-11-11-gas-blanketing).
+        var reliefLinks=new HashMap<Long,Long>();
         for(var d:physical.values())for(var contact:d.contacts()) {
             var direction=contact.direction();var next=contact.cell().offset(direction);
             var other=across(positions::get,x->x,d,contact.cell(),direction);
@@ -512,17 +550,23 @@ public final class PhysicalFluidTopology {
                 if(d.kind==TopologyCompiler.Kind.RESERVOIR){tankFaces.put(linkId,direction);tankPorts.put(linkId,d.portAt(contact.cell(),direction));}
                 else if(other.kind==TopologyCompiler.Kind.RESERVOIR){tankFaces.put(linkId,opposite(direction));tankPorts.put(linkId,other.portAt(next,opposite(direction)));}
                 if(d.blanketAt(contact.cell(),direction)||other.blanketAt(next,opposite(direction)))blanketLinks.add(linkId);
+                if(guards(d,contact.cell(),direction,reliefs))reliefLinks.put(linkId,d.id);else if(guards(other,next,opposite(direction),reliefs))reliefLinks.put(linkId,other.id);
                 if(d.outletAt(contact.cell(),direction)||other.outletAt(next,opposite(direction)))outletLinks.add(linkId);
                 if(d.motiveAt(contact.cell(),direction)||other.motiveAt(next,opposite(direction)))motiveLinks.add(linkId);
                 linkOwner.put(linkId++,owner.id);
             } else {
                 long middle=virtual--;var a=points.get(d.id);var b=points.get(other.id);var p=new Point((a.x+b.x)/2,(a.y+b.y)/2,(a.z+b.z)/2);
                 points.put(middle,p);nodes.add(new TopologyCompiler.Node(middle,TopologyCompiler.Kind.PIPE,p.y));
+                if(guards(d,contact.cell(),direction,reliefs))reliefLinks.put(linkId,d.id);
                 links.add(new TopologyCompiler.Link(linkId,d.id,middle,half(d,other)));linkDirections.put(linkId,direction);if(d.outletAt(contact.cell(),direction))outletLinks.add(linkId);if(d.motiveAt(contact.cell(),direction))motiveLinks.add(linkId);linkOwner.put(linkId++,d.id);
+                if(guards(other,next,opposite(direction),reliefs))reliefLinks.put(linkId,other.id);
                 links.add(new TopologyCompiler.Link(linkId,middle,other.id,half(other,d)));linkDirections.put(linkId,direction);if(other.outletAt(next,opposite(direction)))outletLinks.add(linkId);if(other.motiveAt(next,opposite(direction)))motiveLinks.add(linkId);linkOwner.put(linkId++,other.id);
             }
         }
         var checks=new HashSet<Long>();for(var d:physical.values())if(d.cutoff==Cutoff.CHECK)checks.add(d.id);
+        // A pipe carrying a pressure safety valve keeps its pressure node, as an inline check does: the valve reads it.
+        for(var d:physical.values())if(d.kind==TopologyCompiler.Kind.PIPE&&reliefs.containsKey(d.id)&&reliefs.get(d.id).face()!=null)checks.add(d.id);
+        var piped=new HashSet<>(reliefLinks.values());var reliefPipes=new HashSet<Long>();
         var compiled=TopologyCompiler.compile(nodes,links,checks);var byLink=new HashMap<Long,TopologyCompiler.Link>();for(var link:links)byLink.put(link.id(),link);
         var diagnostics=new HashMap<Long,String>();
         for(long link:compiled.deadEndLinks())diagnostics.put(linkOwner.get(link),"NO FLOW: dead-end pipe");
@@ -576,6 +620,43 @@ public final class PhysicalFluidTopology {
                 boolean padStart=start!=null&&start.kind==TopologyCompiler.Kind.RESERVOIR&&blanketLinks.contains(startLink.id()),padEnd=end!=null&&end.kind==TopologyCompiler.Kind.RESERVOIR&&blanketLinks.contains(endLink.id());
                 boolean burnerStart=start!=null&&start.valvedSink()||padStart,burnerEnd=end!=null&&end.valvedSink()||padEnd;
                 boolean outletStart=start!=null&&start.stillOutlet(),outletEnd=end!=null&&end.stillOutlet();
+                Long guardStart=reliefLinks.get(startLink.id()),guardEnd=reliefLinks.get(endLink.id());
+                boolean reliefStart=start!=null&&guardStart!=null&&guardStart==start.id,reliefEnd=!reliefStart&&end!=null&&guardEnd!=null&&guardEnd==end.id;
+                if(reliefStart||reliefEnd) {
+                    // A pressure safety valve's outlet run (batch 2026-11-11-gas-blanketing): the upstream pressure valve law,
+                    // stated from the node it guards. A far end with a built-in valve of its own (a firebox, a blanketed vessel) or
+                    // a driving end keeps its own half, as two driven ends do. A flare's open tip regulates nothing (owner D6): the
+                    // run into it is one line, valve, pipe and tip bore, as into a chimney; split at a junction, both halves of one
+                    // bore reached the velocity cap together and left the junction's pressure undetermined.
+                    var guarded=reliefStart?start:end;var far=reliefStart?end:start;var farLink=reliefStart?endLink:startLink;var guardedLink=reliefStart?startLink:endLink;
+                    int from=reliefStart?a:b,to=reliefStart?b:a;var fromPort=reliefStart?startPort:endPort;var farPort=reliefStart?endPort:startPort;
+                    var valve=new FlowControl.PressureValve(reliefs.get(guarded.id).pressure());
+                    boolean farSink=far!=null&&(far.valvedSink()&&!far.flare()||far.kind==TopologyCompiler.Kind.RESERVOIR&&blanketLinks.contains(farLink.id()));
+                    boolean farDriven=far!=null&&(far.stillOutlet()||far.actuator()&&outletLinks.contains(farLink.id()));
+                    if(farSink||farDriven) {
+                        int middle=reservoirs.size();reservoirs.add(new PassiveNetwork.Reservoir(virtual--,.5*(reservoirs.get(a).elevation()+reservoirs.get(b).elevation()),seed,PassiveNetwork.NodeKind.JUNCTION));
+                        var halves=sections.stream().map(g->scaled(g,.5)).toList();
+                        pipes.add(new PassiveNetwork.Pipe(pipeId,from,middle,halves,valve).withPorts(fromPort,PassiveNetwork.PhasePort.BULK).withActuatorArea(halves.getFirst().area()));mapViews(views,run,linkOwner,linkDirections,physical,islandIndex,pipeId,reliefStart,true);
+                        reliefPipes.add(pipeId);
+                        if(guarded.kind==TopologyCompiler.Kind.RESERVOIR)faces.computeIfAbsent(guarded.id,k->new HashMap<>()).put(pipeId,tankFaces.get(guardedLink.id()));
+                        pipeId=runIdentity(run,linkOwner,1);if(!pipeIdentities.add(pipeId))throw new IllegalStateException("Compiled pipe identity collision");
+                        if(farSink) {
+                            pipes.add(new PassiveNetwork.Pipe(pipeId,middle,to,halves,far.valvedSink()?far.control:FlowControl.ControlValve.blanket()).withPorts(PassiveNetwork.PhasePort.BULK,farPort).withActuatorArea(halves.getLast().area()));mapViews(views,run,linkOwner,linkDirections,physical,islandIndex,pipeId,reliefStart,true);
+                        } else {
+                            pipes.add(new PassiveNetwork.Pipe(pipeId,to,middle,halves,far.stillOutlet()?far.control:control(far,compiled.invalidPumpCycles())).withPorts(farPort,PassiveNetwork.PhasePort.BULK).withActuatorArea(halves.getFirst().area()));mapViews(views,run,linkOwner,linkDirections,physical,islandIndex,pipeId,!reliefStart,true);
+                        }
+                        if(far.kind==TopologyCompiler.Kind.RESERVOIR)faces.computeIfAbsent(far.id,k->new HashMap<>()).put(pipeId,tankFaces.get(farLink.id()));
+                    } else {
+                        // A chimney's stack (batch 2026-11-10-chimney), or a flare's tip bore (owner D6), is the last section of the run into its tip.
+                        if(far!=null&&(far.chimney()||far.flare())){var all=new ArrayList<>(sections);if(reliefStart)all.add(far.geometry());else all.addFirst(far.geometry());sections=List.copyOf(all);}
+                        pipes.add(new PassiveNetwork.Pipe(pipeId,from,to,sections,valve).withPorts(fromPort,farPort)
+                                .withForbiddenDirections(checkRestrictions(start,end,startLink,endLink,points,reliefEnd)).withActuatorArea((reliefStart?sections.getFirst():sections.getLast()).area()));
+                        mapViews(views,run,linkOwner,linkDirections,physical,islandIndex,pipeId,reliefStart);reliefPipes.add(pipeId);
+                        if(start!=null&&start.kind==TopologyCompiler.Kind.RESERVOIR)faces.computeIfAbsent(start.id,k->new HashMap<>()).put(pipeId,tankFaces.get(startLink.id()));
+                        if(end!=null&&end.kind==TopologyCompiler.Kind.RESERVOIR)faces.computeIfAbsent(end.id,k->new HashMap<>()).put(pipeId,tankFaces.get(endLink.id()));
+                    }
+                    continue;
+                }
                 if((outletStart||outletEnd)&&!(burnerStart||burnerEnd)) {
                     // A batch still's outlet (batch 2026-11-09-batch-distiller): the run out of its generator carries its outlet
                     // valve, stated from it; a valve, pump or compressor driving the run's other end keeps its own half.
@@ -602,6 +683,9 @@ public final class PhysicalFluidTopology {
                     var burner=burnerEnd?end:start;var feeder=burnerEnd?start:end;var feederLink=burnerEnd?startLink:endLink;
                     var sinkValve=burner.valvedSink()?burner.control:FlowControl.ControlValve.blanket();var sinkPort=burnerEnd?endPort:startPort;
                     int sink=burnerEnd?b:a,source=burnerEnd?a:b;var sourcePort=burnerEnd?startPort:endPort;
+                    // A flare's tip bore is the run's last section (owner D6), as a chimney's stack is: an open tip passes what the
+                    // pressure behind it drives through it.
+                    if(burner.flare()){var all=new ArrayList<>(sections);if(burnerEnd)all.add(burner.geometry());else all.addFirst(burner.geometry());sections=List.copyOf(all);}
                     boolean driven=feeder!=null&&feeder.actuator()&&outletLinks.contains(feederLink.id());
                     if(driven) {
                         int middle=reservoirs.size();reservoirs.add(new PassiveNetwork.Reservoir(virtual--,.5*(reservoirs.get(a).elevation()+reservoirs.get(b).elevation()),seed,PassiveNetwork.NodeKind.JUNCTION));
@@ -650,6 +734,23 @@ public final class PhysicalFluidTopology {
                     if(end!=null&&end.kind==TopologyCompiler.Kind.EJECTOR&&outletLinks.contains(endLink.id()))(motiveLinks.contains(endLink.id())?motiveEdges:positiveFilterEdges).computeIfAbsent(end.id,k->new HashSet<>()).add(pipeId);
                 }
             }
+            // An open relief outlet (batch 2026-11-11-gas-blanketing): nothing is piped to it, so the valve relieves through a
+            // stub to the atmosphere, a void at the ambient ({@code idleSeed}) where the outlet stands. What enters it is booked
+            // there, as at every void.
+            for(long id:new TreeSet<>(members)) {
+                var device=physical.get(id);var relief=reliefs.get(id);
+                if(device==null||relief==null||piped.contains(id)||!indices.containsKey(id))continue;
+                Direction face;PassiveNetwork.PhasePort port;int y;
+                if(device.kind==TopologyCompiler.Kind.RESERVOIR){var p=device.reliefPort();if(p==null)continue;face=p.face;port=p.port;y=p.cell.y()+face.y;}
+                else if(device.kind==TopologyCompiler.Kind.PIPE&&relief.face()!=null){face=relief.face();port=PassiveNetwork.PhasePort.BULK;y=device.position.y()+face.y;}
+                else continue;
+                if(idleSeed==null)throw new IllegalArgumentException("An open relief outlet needs the ambient's state");
+                int sink=reservoirs.size();reservoirs.add(new PassiveNetwork.Reservoir(virtual--,y,idleSeed,PassiveNetwork.NodeKind.VOID));
+                long stub=reliefIdentity(id);if(!pipeIdentities.add(stub))throw new IllegalStateException("Compiled pipe identity collision");
+                pipes.add(new PassiveNetwork.Pipe(stub,indices.get(id),sink,List.of(RELIEF_STUB),new FlowControl.PressureValve(relief.pressure())).withPorts(port,PassiveNetwork.PhasePort.BULK).withActuatorArea(RELIEF_STUB.area()));
+                reliefPipes.add(stub);
+                if(device.kind==TopologyCompiler.Kind.RESERVOIR)faces.computeIfAbsent(id,k->new HashMap<>()).put(stub,face);
+            }
             // A filter's cake and a heat side's passage each own a pipe between the device's node and a junction of their own
             // (batch 2026-10-27-heat-exchanger-design: the side's junction stands at its outlet).
             for(long id:new TreeSet<>(members))if(physical.containsKey(id)&&(physical.get(id).filter()||physical.get(id).kind==TopologyCompiler.Kind.HEAT_SIDE)){
@@ -681,7 +782,7 @@ public final class PhysicalFluidTopology {
             }
             var ids=new TreeSet<Long>();for(long id:members)if(physical.containsKey(id))ids.add(id);
             Optional<String> error=ids.stream().filter(compiled.invalidPumpCycles()::contains).findFirst().map(id->diagnostics.get(id));
-            for(int e=0;e<pipes.size();e++){var pipe=pipes.get(e);if(pipe.control() instanceof FlowControl.Valve){var actuator=physical.get(reservoirs.get(pipe.first()).id());if(actuator!=null)pipes.set(e,pipe.withActuatorArea(actuator.geometry().area()));}}
+            for(int e=0;e<pipes.size();e++){var pipe=pipes.get(e);if(pipe.control() instanceof FlowControl.Valve&&!reliefPipes.contains(pipe.id())){var actuator=physical.get(reservoirs.get(pipe.first()).id());if(actuator!=null)pipes.set(e,pipe.withActuatorArea(actuator.geometry().area()));}}
             for(int p=0;p<pipes.size();p++){
                 var pipe=pipes.get(p);var measurementPoints=new ArrayList<PassiveNetwork.Pipe.ObservationPoint>();
                 for(long host:flowmeters){var device=physical.get(host);if(device==null)continue;
