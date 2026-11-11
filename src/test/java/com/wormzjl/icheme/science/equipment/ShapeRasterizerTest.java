@@ -449,6 +449,31 @@ class ShapeRasterizerTest {
     }
 
     @Test
+    void aGasBlanketingValvesSupplyPipeStandsClearOfTheDrumAndItsNozzlePipes() {
+        // Batch 2026-11-11-gas-blanketing: the pipe cell at the valve's inlet is no cell of the drum and no nozzle's pipe
+        // cell (it may stand beside one: nozzle pipes may touch); the valve stands no taller than the drum's box.
+        for (var heading : Heading.values()) {
+            // A standing drum 1.5 m across has one roof cell, its vapour nozzle's: no valve.
+            org.junit.jupiter.api.Assertions.assertNull(BlanketValveGeometry.of(drum(1.5, 3, Orientation.VERTICAL, heading, 3)));
+            for (var shape : List.of(drum(1.5, 4, Orientation.HORIZONTAL, heading, 1), drum(3, 6, Orientation.HORIZONTAL, heading, 1),
+                    drum(5.5, 8, Orientation.HORIZONTAL, heading, 1), drum(3, 4, Orientation.VERTICAL, heading, 4), drum(5.5, 8, Orientation.VERTICAL, heading, 3))) {
+                var place = BlanketValveGeometry.of(shape);
+                org.junit.jupiter.api.Assertions.assertNotNull(place, shape.toString());
+                int[] cell = place.cell(), face = place.face();
+                int x = cell[0] + face[0], y = cell[1] + face[1], z = cell[2] + face[2];
+                var layout = ShapeRasterizer.layout(shape);
+                for (var cells : List.of(layout.shell(), layout.interior()))
+                    for (var c : cells) assertTrue(c.x() != x || c.y() != y || c.z() != z, shape + ": the supply pipe's cell " + x + "," + y + "," + z + " is the drum's");
+                for (var port : ShapeRasterizer.ports(shape)) {
+                    int away = Math.abs(port.cell().x() + port.dx() - x) + Math.abs(port.cell().y() + port.dy() - y) + Math.abs(port.cell().z() + port.dz() - z);
+                    assertTrue(away > 0, shape + ": the supply pipe's cell " + x + "," + y + "," + z + " is the pipe cell of nozzle " + port.nozzle());
+                }
+                assertTrue(place.bounds()[4] <= shape.sizeY() + 1e-9, shape + ": the valve stands " + place.bounds()[4] + " high in a box of " + shape.sizeY());
+            }
+        }
+    }
+
+    @Test
     void nozzleDrawsAtTheConnectedPipeSize() {
         var standing = drum(3, 4, Orientation.VERTICAL, Heading.NORTH, 4);
         int k = 0;

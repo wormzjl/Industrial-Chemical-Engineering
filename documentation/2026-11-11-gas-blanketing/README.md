@@ -11,6 +11,8 @@ Purpose: a gas blanketing valve as an optional accessory on vertical and horizon
 - 2026-11-11 (`e2bad7cf3`): `BlanketValveWorldTest`; the pad asks for nothing below 1e-6 of the gas room, so the island rests.
 - 2026-11-11 (`085e5d3dd`): the pad planned at each solver step (owner: a lag is allowed; 1 s response time) with the forecast of the room the liquid vacates; the supply connection's face in the drum's view (a GameTest server crash); `LevelLoopGameTests` blanketed variant (batch `level-loop-blanket`), tool switches `blanket` and `direct`; accessory page in `GuiPrototypes`.
 - 2026-11-11 (`4c3130472`): the valve stands on a nozzle stub at a station clear of nozzles and probes (it stood behind a lying drum's head); drawing scenes; review and the PSV plan.
+- 2026-11-11 (HASH): owner: "this location is not good and it's too big". The valve is a slim nozzle with its inlet on top, no taller than the drum's nozzles; a lying drum's F1 at the rear end of the crown, F2 at the front end; none on a 1.5 m standing drum; the supply-pipe gate; the rig lays its supply line and waits for each ramp edit.
+- 2026-11-11: owner: "PSV and Blanketing valve are both accessory, with PSV usable on pipes. PSV set pressure is set in its GUI. PSV on pipe get a standalone GUI and use accessory page when on drum. Start implementing the PSV using a sub-thread". The build runs in a sub-thread on its own branch off this one.
 
 ## Documents
 
@@ -30,5 +32,5 @@ Purpose: a gas blanketing valve as an optional accessory on vertical and horizon
 ## Open items
 
 - Review section 5: the direct-start hold (with defect 1 of the drum batch), the vent's lag on a fast fill, the item icon, the fifth tab, the in-game check.
-- Owner: judge the valve's drawings and the Accessory page; decide the PSV plan's options.
+- Owner: judge the valve's drawings and the Accessory page. PSV plan: D4 decided (own accessory); D1, D2, D3, D5 are built as recommended unless the owner overrules.
 - Before the merge: final lane, CHANGELOG, version, translation commit (`en_us.json` has new keys), code guide (`fluid-science.md`: GasBlanket and the per-step plan; `fluid-runtime.md`: the BLANKET role; equipment and GUI chapters), with the time-factor and drum batches.

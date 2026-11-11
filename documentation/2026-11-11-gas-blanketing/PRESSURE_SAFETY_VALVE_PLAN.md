@@ -1,6 +1,6 @@
 # Pressure safety valve: design plan
 
-Batch `2026-11-11-gas-blanketing`. Owner, 2026-11-11: "Can be installed on drums, and pipes (is it possible & not so expensive to do so?)"; "Keeps reservoir pressure under certain value"; "Outlet can be connected to pipes, release to atmosphere otherwise"; "like an auto-switch to connect fluid networks?"; "these 2 should be placed on top of drums, there are space intentionally left for them". Nothing here is built. Decisions D1 to D5 are the owner's.
+Batch `2026-11-11-gas-blanketing`. Owner, 2026-11-11: "Can be installed on drums, and pipes (is it possible & not so expensive to do so?)"; "Keeps reservoir pressure under certain value"; "Outlet can be connected to pipes, release to atmosphere otherwise"; "like an auto-switch to connect fluid networks?"; "these 2 should be placed on top of drums, there are space intentionally left for them". Owner, later that day: "PSV and Blanketing valve are both accessory, with PSV usable on pipes. PSV set pressure is set in its GUI. PSV on pipe get a standalone GUI and use accessory page when on drum." So D4 is (a), one accessory item for both hosts, and section 5's pipe page is the valve's own screen. D1, D2, D3 and D5 are built as recommended unless the owner overrules.
 
 ## 1. Physics
 
@@ -32,7 +32,7 @@ Batch `2026-11-11-gas-blanketing`. Owner, 2026-11-11: "Can be installed on drums
 
 ## 4. On drums
 
-- Accessory item "Pressure safety valve", fitted on F2 with the same request, ghost, wrench and refund path as the blanketing valve. Its outlet faces away from F1, at a cell face, so a pipe placed there connects and the two valves' pipes never meet.
+- Accessory item "Pressure safety valve", fitted on F2 with the same request, ghost, wrench and refund path as the blanketing valve. F2 is at the front end of a lying drum's crown and beside F1 on a standing drum's roof. Its outlet is at a cell face whose pipe cell is no cell of the drum and no nozzle's pipe cell (the gate of the blanketing valve's inlet). On a standing drum 3 m across F1 and F2 fall in one cell, so the PSV takes the next free roof cell; a drum with none takes no PSV.
 - Facts: `FluidDeviceSpec.relief` (set pressure, 0 for none; append-only, default 0), port role `RELIEF` (appended, by name). Fluid facts schema 23, accessory facts schema 6 (type `SAFETY_VALVE`, mount `safety_valve`), a corpus image for each.
 - `InstrumentHosts.vesselFitting` returns one fitting per host today. It becomes one per mount, so a drum holds both valves. The fitting key already is (host, mount).
 - The set pressure must stand above the blanketing valve's vent pressure (set × 1.05) when both are fitted; the page refuses a lower one and says why.

@@ -173,11 +173,22 @@ public final class LevelLoopGameTests {
             if (valve == null) throw new IllegalStateException("The drum has no flange for a gas blanketing valve");
             var cell = valve.port().cell();
             var out = Direction.valueOf(valve.port().face().name());
-            for (int k = 1; k <= 3; k++) gas.add(new BlockPos(cell.x(), cell.y(), cell.z()).relative(out, k));
-            for (var at : gas) if (!plant.free(at, new HashSet<>(gas))) throw new IllegalStateException("supply line blocked at " + at.toShortString());
+            var first = new BlockPos(cell.x(), cell.y(), cell.z()).relative(out);
+            // On this drum the inlet's pipe cell stands beside the feed nozzle's. The line turns away from the feed riser
+            // at once and is laid as the pipe tool lays one, each pipe jointed along the line only: a pipe placed by hand
+            // there joins the feed riser.
+            var beside = feed.getFirst();
+            boolean touching = first.distManhattan(beside) == 1;
+            var turn = touching ? Direction.fromDelta(first.getX() - beside.getX(), first.getY() - beside.getY(), first.getZ() - beside.getZ()) : out;
+            gas.add(first);
+            for (int k = 1; k <= 2; k++) gas.add(first.relative(turn, k));
+            var allowed = new HashSet<>(gas);
+            if (touching) allowed.add(beside);
+            for (var at : gas) if (!plant.free(at, allowed)) throw new IllegalStateException("supply line blocked at " + at.toShortString());
             level.setBlock(gas.getLast(), ModBlocks.FLUID_GENERATOR.get().defaultBlockState(), Block.UPDATE_ALL);
             plant.devices.add(gas.getLast());
-            for (int k = gas.size() - 2; k >= 0; k--) plant.pipe(gas.get(k));
+            if (touching) lay(plant, gas.subList(0, 2), new Direction[] {out.getOpposite(), turn.getOpposite()}, turn);
+            else for (int k = gas.size() - 2; k >= 0; k--) plant.pipe(gas.get(k));
         } else {
             gas.addAll(line(plant, drum, Role.VAPOUR_OUTLET, 3, 0));
             for (int k = 0; k < gas.size() - 1; k++) plant.pipe(gas.get(k));
@@ -282,10 +293,19 @@ public final class LevelLoopGameTests {
                 // hold of its own, not the loop's), the level held at 25 %; then the start: the 50 % setpoint.
                 .thenWaitUntil(until(helper, world, state, 2400, "ramping the feed", () -> {
                     if (state.direct) return true;
+                    // A step's edit is queued: the next step waits a cadence from the panel taking it (its revision moves),
+                    // not from the request. An edit sent before the last one is applied carries a stale revision and is refused.
+                    long revision = world.controls().facts().panel(state.ficBox.identity()).revision();
+                    if (state.rampRevision >= 0) {
+                        if (revision == state.rampRevision) return false;
+                        state.rampRevision = -1;
+                        state.rampAt = committed(world, state) + cadence;
+                    }
                     if (committed(world, state) < state.rampAt) return false;
                     if (state.ramp == RAMP.length) return true;
+                    log("ramp step={} feed={} kg/s committed={} revision={}", state.ramp + 1, fmt(RAMP[state.ramp] * state.feed), committed(world, state), revision);
                     edit(helper, world, state, state.fic, state.ficBox, new ControlSettings("FIC-1", true, state.flowSensor, feedValveId, Sensor.Unit.KILOGRAM_PER_SECOND, RAMP[state.ramp++] * state.feed, ControlSettings.Action.OUTLET));
-                    state.rampAt = committed(world, state) + cadence;
+                    state.rampRevision = revision;
                     state.settled = -1;
                     return false;
                 }))
@@ -396,6 +416,8 @@ public final class LevelLoopGameTests {
         ControlPanelBlockEntity licBox, ficBox;
         ControlLoopGameTests.ViewCapture operator, watcher, ficWatcher;
         long controlling = -1, rampAt;
+        /** The flow controller's revision when the pending ramp step was requested, or -1 with none pending. */
+        long rampRevision = -1;
         int ramp;
         /** The book's residual over the setup (valves, lines, specs recompiling the island), mol and J: reported, not checked. */
         double setupMoles, setupEnergy;
@@ -487,6 +509,33 @@ public final class LevelLoopGameTests {
         for (int k = 1; k <= drop; k++) out.add(corner.below(k));
         for (var at : out) if (!plant.free(at, new HashSet<>(out))) throw new IllegalStateException(role + " line blocked at " + at.toShortString());
         return out;
+    }
+
+    /**
+     * Pipes laid as the pipe tool lays a line along {@code along}: each registered with two joints only, back towards
+     * {@code from} (by cell) and on along the line, its block bound to that registration.
+     */
+    static void lay(AssemblyGameTests.Plant plant, List<BlockPos> cells, Direction[] from, Direction along) {
+        var laid = new ArrayList<FluidWorldAuthority.Laid>();
+        for (int i = 0; i < cells.size(); i++)
+            laid.add(new FluidWorldAuthority.Laid(plant.position(cells.get(i)), face(along),
+                    1 << face(from[i]).ordinal() | 1 << face(along).ordinal(), 0, 0));
+        var records = plant.world.lay(laid, BORE, java.util.Map.of(), com.wormzjl.icheme.science.equipment.Paint.BARE, com.wormzjl.icheme.science.equipment.Paint.BARE);
+        var edits = new ArrayList<com.wormzjl.icheme.world.level.block.LinePlacement.Edit>();
+        for (int i = 0; i < cells.size(); i++) {
+            long identity = records.get(i).device().id();
+            edits.add(new com.wormzjl.icheme.world.level.block.LinePlacement.Edit(cells.get(i),
+                    ModBlocks.FLUID_PIPE.get().defaultBlockState().setValue(com.wormzjl.icheme.world.level.block.FluidDeviceBlock.FACING, along),
+                    Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE, entity -> ((FluidDeviceBlockEntity) entity).bindIdentity(identity)));
+        }
+        com.wormzjl.icheme.world.level.block.LinePlacement.apply(plant.level, new com.wormzjl.icheme.world.level.block.LinePlacement.Work(edits, () -> {
+            for (var at : cells) if (plant.level.getBlockEntity(at) instanceof FluidDeviceBlockEntity pipe) pipe.refreshGeometry(BORE, true);
+        }));
+        plant.devices.addAll(cells);
+    }
+
+    static com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Direction face(Direction d) {
+        return com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Direction.valueOf(d.name());
     }
 
     static long id(AssemblyGameTests.Plant plant, BlockPos at) {
