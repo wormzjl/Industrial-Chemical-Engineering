@@ -271,6 +271,80 @@ class ReliefValveWorldTest {
         assertEquals(before.pressure(),after.pressure(),2e-3*before.pressure(),"back where it stood");
         assertEquals(before.relief(),after.relief(),.01*before.relief(),"relieving the feed again");
     }
+    /**
+     * A drum on its 5 bar nitrogen feed relieving into a device that regulates the flow itself (batch 2026-11-11-valve-followups,
+     * item 3): the run of two regulators. Its 0.15 m relief line runs up and south from the drum's relief port; {@code sink}
+     * places what it ends at. Runs 2400 ticks; returns the drum's pressure, the relief and the island's first hold or status.
+     */
+    private record Sunk(double pressure,double relief,String held) {}
+    private static Sunk sunk(String label,java.util.function.Consumer<EventPathWorld> sink) {
+        var world=new EventPathWorld();
+        long drum=drum(world,0,SET);gasFeed(world,0,5e5);
+        world.place(10,67,0,Kind.PIPE,Direction.UP,.15);world.place(10,68,0,Kind.PIPE,Direction.SOUTH,.15);
+        sink.accept(world);
+        world.runTo(2400);
+        var s=island(world,drum);var n=node(world,drum);double relief=0;
+        for(int e=0;e<s.graph().pipes().size();e++){var p=s.graph().pipes().get(e);if(s.graph().reservoirs().get(p.first()).id()==drum&&p.control() instanceof FlowControl.PressureValve)relief=flow(s,e);}
+        var r=new Sunk(n.state().pressure(),relief,world.held.isEmpty()?"clean "+s.status():world.held.getFirst().status());
+        System.out.println("RELIEF_SINK "+label+" "+r);
+        for(var h:world.held)System.out.println("RELIEF_SINK_HELD "+label+" "+h);
+        return r;
+    }
+    /** A sink valve of the run's end at (10,68,1), as a firebox's burners or a prime mover's fuel void: {@code control} its valve. */
+    private static void valvedSink(EventPathWorld world,FlowControl control,HeatUnit heat) {
+        long id=world.ledger.nextIdentity();
+        var device=new PhysicalFluidTopology.Device(id,at(10,68,1),Kind.VOID,Direction.NORTH,new PipeResistance.Geometry(1,.15,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),control,
+                List.of(new PhysicalFluidTopology.Port(at(10,68,1),Direction.NORTH,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.VESSEL)),true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,heat);
+        world.registry.submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,EventPathWorld.nitrogen(),0))),id+1,null);
+    }
+    /** A second drum blanketed at 150 kPa, its BLANKET port the run's end, its own gas drawn off by a flow valve at {@code draw} kg/s through a line of {@code bore} m to a void. */
+    private static void blanketedSink(EventPathWorld world,double draw,double bore) {
+        world.place(10,68,1,Kind.PIPE,Direction.SOUTH,.15);world.place(10,68,2,Kind.PIPE,Direction.SOUTH,.15);world.place(10,67,2,Kind.PIPE,Direction.DOWN,.15);
+        long id=world.ledger.nextIdentity();var node=at(10,64,2);
+        var ports=List.of(new PhysicalFluidTopology.Port(at(10,66,2),Direction.UP,PassiveNetwork.PhasePort.VAPOR,PhysicalFluidTopology.ConnectionRole.BLANKET),
+                new PhysicalFluidTopology.Port(at(10,66,2),Direction.EAST,PassiveNetwork.PhasePort.VAPOR));
+        var device=new PhysicalFluidTopology.Device(id,node,Kind.RESERVOIR,Direction.NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive(),ports);
+        var spec=new FluidDeviceSpec(DRUM.capacity(),298.15,101325,nitrogen(),SlurryFeed.NONE,DRUM.height(),false,DRUM,null,1.5e5);
+        world.registry.submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,spec,0))),id+1,null);
+        world.place(11,66,2,Kind.PIPE,Direction.EAST,new FlowControl.ControlValve(FlowControl.ValveSource.MASS_FLOW,draw,new UUID(7,1),1),null,bore);
+        world.place(12,66,2,Kind.PIPE,Direction.EAST,bore);world.place(13,66,2,Kind.VOID,Direction.EAST,EventPathWorld.nitrogen(),bore);
+    }
+    /** A set-flow compressor at (10,68,1) drawing {@code volumeFlow} m3/s from the run, out to a void at the ambient. */
+    private static void compressorSink(EventPathWorld world,double volumeFlow) {
+        world.place(10,68,1,Kind.COMPRESSOR,Direction.SOUTH,new FlowControl.Compressor(volumeFlow,3.0),null,.15);
+        world.place(10,68,2,Kind.PIPE,Direction.SOUTH,.15);world.place(10,68,3,Kind.VOID,Direction.SOUTH,EventPathWorld.nitrogen(),.15);
+    }
+
+    /**
+     * Item 3 of the valve follow-ups: a relief run into a firebox's fuel valve, a blanketed vessel's {@code BLANKET} port or a
+     * set-flow compressor's suction (two regulators around a junction) runs without a hold, and the lower flow wins (owner
+     * decision of 2026-11-02): a sink that takes less than the 1.11 kg/s feed sets the flow, the safety valve stands wide open
+     * and the drum rises toward its feed; one that takes more leaves the safety valve holding the drum at its set pressure.
+     */
+    @Test void aReliefRunIntoASecondRegulatorRunsWithoutAHold() {
+        var firebox=new HeatUnit(com.wormzjl.icheme.science.equipment.HeatSides.Unit.FIRED_HEATER,com.wormzjl.icheme.science.equipment.HeatSides.Side.BURNER,100,999);
+        var low=new LinkedHashMap<String,Sunk>();var high=new LinkedHashMap<String,Sunk>();
+        low.put("burners 0.5 kg/s",sunk("burners 0.5",w->valvedSink(w,FlowControl.ControlValve.burner().withMassTarget(.5),firebox)));
+        high.put("burners 3 kg/s",sunk("burners 3",w->valvedSink(w,FlowControl.ControlValve.burner().withMassTarget(3),firebox)));
+        low.put("blanketed drum drawn 0.3 kg/s",sunk("blanket 0.3",w->blanketedSink(w,.3,.05)));
+        high.put("blanketed drum drawn 3 kg/s",sunk("blanket 3",w->blanketedSink(w,3,.15)));
+        low.put("compressor 0.05 m3/s",sunk("compressor 0.05",w->compressorSink(w,.05)));
+        high.put("compressor 1 m3/s",sunk("compressor 1",w->compressorSink(w,1)));
+        for(var e:low.entrySet()) {
+            var r=e.getValue();
+            assertTrue(r.held().startsWith("clean"),e.getKey()+": "+r);
+            assertTrue(r.pressure()>1.5*SET&&r.pressure()<5e5,e.getKey()+": the sink sets the flow, the drum rises toward its feed: "+r);
+            assertTrue(r.relief()>.2&&r.relief()<.6,e.getKey()+": what the sink takes: "+r);
+        }
+        assertEquals(.5,low.get("burners 0.5 kg/s").relief(),1e-3,"the burners' fuel valve passes its target");
+        for(var e:high.entrySet()) {
+            var r=e.getValue();
+            assertTrue(r.held().startsWith("clean"),e.getKey()+": "+r);
+            assertEquals(SET,r.pressure(),.02*SET,e.getKey()+": the safety valve holds the drum at its set pressure: "+r);
+            assertEquals(1.11,r.relief(),.05,e.getKey()+": relieving its feed: "+r);
+        }
+    }
+
     /** The generator {@code id} charged at {@code pressure}, as a queued edit. */
     private static void charge(EventPathWorld world,long id,double pressure) {
         var record=world.registry.registrations().get(id);

@@ -71,6 +71,43 @@ public final class ControlConstraints {
         }
         return bound;
     }
+    /**
+     * The series each regulator stands in (batch 2026-11-11-valve-followups, item 3): for each connection that is a
+     * regulating valve (not bare) or a set-flow pump or compressor, the index of the group of such connections that junction
+     * balances make one flow with it, where that group holds both a pressure valve and a flow regulator (a flow valve or a
+     * set-flow mover); -1 elsewhere. In such a series only one can regulate (owner decision 2026-11-02, "Lower target wins"):
+     * the pressure valve holds its first node and the flow regulator the flow, and with both regulating their junction's
+     * pressure is in no row (a safety valve's relief run into a firebox's fuel valve, a blanketed vessel's pad or a recovery
+     * compressor). Null when no connection stands in one.
+     */
+    public static int[] series(PassiveNetwork graph){
+        int edges=graph.pipes().size();var regulators=new ArrayList<Integer>();
+        for(int e=0;e<edges;e++)if(pressureRegulator(graph,e)||flowRegulator(graph,e))regulators.add(e);
+        if(regulators.size()<2)return null;
+        var basis=junctionBasis(graph);var rows=new ArrayList<double[]>();var groups=new ArrayList<List<Integer>>();
+        for(int e:regulators){
+            double[] row=reduced(basis,unit(edges,e));if(same(row,new double[edges]))continue;
+            int g=-1;for(int k=0;k<rows.size();k++)if(same(rows.get(k),row)){g=k;break;}
+            if(g<0){rows.add(row);groups.add(new ArrayList<>());g=rows.size()-1;}
+            groups.get(g).add(e);
+        }
+        int[] series=null;
+        for(int g=0;g<groups.size();g++){
+            var group=groups.get(g);
+            if(group.stream().noneMatch(e->pressureRegulator(graph,e))||group.stream().noneMatch(e->flowRegulator(graph,e)))continue;
+            if(series==null){series=new int[edges];Arrays.fill(series,-1);}
+            for(int e:group)series[e]=g;
+        }
+        return series;
+    }
+    /** Whether connection {@code e} is a regulating pressure valve: it holds its first node at its set pressure. */
+    static boolean pressureRegulator(PassiveNetwork graph,int e){return graph.pipes().get(e).control() instanceof FlowControl.Valve v&&!v.bare()&&v.pressureControl()&&!(v instanceof FlowControl.Turbine);}
+    /** Whether connection {@code e} fixes its series' flow: a regulating flow valve, or a set-flow pump or compressor (form F2e: its displacement). */
+    static boolean flowRegulator(PassiveNetwork graph,int e){
+        var control=graph.pipes().get(e).control();
+        return control instanceof FlowControl.Valve v&&!v.bare()&&!v.pressureControl()&&!(v instanceof FlowControl.Turbine)
+                ||control instanceof FlowControl.Mover m&&!(m instanceof FlowControl.Machine)&&m.targetVolumeFlow()>0;
+    }
     /** The junction mass balances, eliminated: each junction's row of its connections' flows, in by its second end. */
     private static double[][] junctionBasis(PassiveNetwork graph){
         int edges=graph.pipes().size();var basis=new double[edges][];
