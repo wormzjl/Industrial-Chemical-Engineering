@@ -10,7 +10,7 @@ Purpose: a gas blanketing valve as an optional accessory on vertical and horizon
 - 2026-11-11 (`e2737f3b4`): drum side. Accessory on the first top flange (F1), its inlet the drum's blanket gas port, drawing, the drum screen's Accessory page; accessory facts schema 5; corpus images of fluid facts 22 and accessory facts 5. Lying drums get the F1/F2 reservations.
 - 2026-11-11 (`e2bad7cf3`): `BlanketValveWorldTest`; the pad asks for nothing below 1e-6 of the gas room, so the island rests.
 - 2026-11-11 (`085e5d3dd`): the pad planned at each solver step (owner: a lag is allowed; 1 s response time) with the forecast of the room the liquid vacates; the supply connection's face in the drum's view (a GameTest server crash); `LevelLoopGameTests` blanketed variant (batch `level-loop-blanket`), tool switches `blanket` and `direct`; accessory page in `GuiPrototypes`.
-- 2026-11-11 (this commit): the valve stands on a nozzle stub at a station clear of nozzles and probes (it stood behind a lying drum's head); drawing scenes; review and the PSV plan.
+- 2026-11-11 (`4c3130472`): the valve stands on a nozzle stub at a station clear of nozzles and probes (it stood behind a lying drum's head); drawing scenes; review and the PSV plan.
 
 ## Documents
 
