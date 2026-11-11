@@ -456,3 +456,24 @@ Measured by the sub-thread after the quick check of section 23.
 - Cold 181 under G (E6, a set-flow pump): for a liquid that is all condensable, E lies below p_v (LNG: 93.67 against 93.71 kPa) and G's limit and lock are T's. G differs only where E exceeds p_v plus the breakdown, which needs a compound above its critical temperature in the liquid; the seed's world has an LNG generator at 128 K, above nitrogen's 126.2 K. Reading, not confirmed: the limit sits just under the supplier's own pressure, where form 0 (D16 C) vapour-locks the pump and G leaves it open on a small margin.
 
 Chosen: form G. Form T is rejected on the alternation; form 0 stays behind the switch until G's three holds (cold 6, bundled 6, cold 181) are understood. Next: a trace of the two smallest (one replay each, release pressures and the lock printed), then the lock's statement under G, then the vapour lock check.
+
+## 25. The kettle fixed (group 5), and form G's holds (2026-11-11)
+
+**Group 5, committed by the sub-thread as `2aebdcd3c`** (the harness port as `2f02dab60`): a gas the seed holds is pinned at a port only when the liquid entering within the step fills the vapour space (each stream's liquid at its donor's start density, injections flashed at the start state).
+
+- Kettle: 1 MW 0.4427 kg/s against 0.4430; the largest vent after 5 s is 3.27 kg/s of flash vapour; OFF 1.2333 against 1.2339 kg/s.
+- `LiquidCo2LetDownTest` 5 cm: no hold, 105 accepted steps (98 before). The risk stated in section 23 is confirmed: the flooded tank saw-tooths, gas-only steps venting about 7 kg/s while the vapour falls from 0.09 to 0.01 m3, then pinned steps venting 115 to 153 kg/s while it regrows to 0.1 m3, every 4 to 6 steps. Open item: the implicit form (a flooded vessel closed by its vapour volume).
+- `PressureValveContinuationTest` equalSetpoint: every interval settles with the bottom line on its cap (82.93 kg/s, valve open, junction at 201.8 kPa) and 23.60 kg/s through the top (valve regulating at 200.0 kPa), in equal to out to 1.7e-9, in 0.35 s. Assertion changed from "bottom valve regulating" to "bottom valve open above 200 kPa, top valve regulating at 200 kPa within 1 Pa".
+- Failed Newton passes on the target classes 66 against 88; filtered run: 8 failures, all present before.
+
+**Form G's holds, two traced** (one replay each):
+
+| | Cold 181 | Bundled 6 |
+|---|---|---|
+| Supplier | two-phase junction, 127.54 K, 312.23 kPa | two-phase junction, 386.32 K, 180.45 kPa |
+| Liquid above its critical temperature | 0.37 % (nitrogen) | 0.61 % |
+| p_v / E / breakdown at shutoff | 295.6 / 311.14 / 2.58 kPa | 143.2 / 179.39 / 0.99 kPa |
+| Limit under G | E, 1.09 kPa under the supplier | E, 1.06 kPa under the supplier |
+| Stall | singular LU, then the iteration limit, on the supplier junction's rows | the iteration limit, same rows; modes alternating |
+
+Both pumps draw from a boiling junction with 0.25 m and 0.11 m of suction head; form 0 (D16 C) closes them as vapour-locked. Decided (orchestrator): E was read on the supplier's liquid alone, but a junction delivers its whole stream, vapour included. E is the pressure at which the stream the pump draws reaches the clean zone's edge: the liquid alone from a vessel's liquid port, the whole mixture from a junction or a bulk draw; where that stream already holds vapour at or past the edge, E is the supplier's own pressure and the pump is locked, as under form 0. Rejected: the lock at the supplier's bubble pressure whenever the supplier holds gas (it would lock water under a nitrogen blanket with any suction lift); the lock below the breakdown at shutoff (it misses bundled 6 by 71 Pa). To be built only if both junction streams are at or past the edge in the traces; then the vapour lock check on form G is their next run.
