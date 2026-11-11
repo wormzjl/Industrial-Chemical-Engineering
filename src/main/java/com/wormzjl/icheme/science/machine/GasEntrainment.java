@@ -41,6 +41,16 @@ public final class GasEntrainment {
         return 1 / (1 + x2 * x2);
     }
 
+    /**
+     * The clean zone, in onsets (owner, 2026-11-11, W3B_NETWORK_PLAN.md section 17): a pump whose suction holds vapour below
+     * this share of the onset takes no harm from it: no wear, no status word, no sound, no cavitation count. Its head there
+     * is the head law's, at least 0.99 of the gas-free head (the law is not changed). 1.05 % by volume at 1 bar, 2.6 % at
+     * 2.5 bar, 9 % at 10 bar. The suction limit's zone edge reads the same constant ({@link #cleanShare}).
+     */
+    public static final double CLEAN_ONSETS = .5;
+    /** The vapour volume share at the edge of the clean zone at suction pressure {@code suctionPressure} (Pa). */
+    public static double cleanShare(double suctionPressure) { return CLEAN_ONSETS * onset(suctionPressure); }
+
     /** The churn's peak value of {@code clamp(r − 0.5, 0, 1) M(r)}, at r = 1.42: the loudness it is scaled to. */
     public static final double CHURN_PEAK = .568;
 
@@ -51,8 +61,8 @@ public final class GasEntrainment {
      * r = 1.42, then fading as the head collapses toward gas lock: 0.51 at 2, 0.13 at 3. Zero for no read (NaN).
      */
     public static double churn(double r) {
-        if (!(r > .5) || Double.isInfinite(r)) return 0;
-        double rise = Math.min(r - .5, 1), share = 1 / (1 + DeterministicMath.pow(r / HALF_HEAD_ONSETS, 4));
+        if (!(r > CLEAN_ONSETS) || Double.isInfinite(r)) return 0;
+        double rise = Math.min(r - CLEAN_ONSETS, 1), share = 1 / (1 + DeterministicMath.pow(r / HALF_HEAD_ONSETS, 4));
         return Math.min(1, rise * share / CHURN_PEAK);
     }
 }

@@ -326,5 +326,5 @@ public final class PumpHealth {
     }
 
     /** The gas ratio r = α/α_T above which a pump churns ({@link com.wormzjl.icheme.science.machine.GasEntrainment#churn}) and its page says {@code GAS}. */
-    public static final double GAS_RATIO = .5;
+    public static final double GAS_RATIO = com.wormzjl.icheme.science.machine.GasEntrainment.CLEAN_ONSETS;
 }

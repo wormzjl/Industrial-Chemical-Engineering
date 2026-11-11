@@ -31,6 +31,15 @@ class PumpCavitationTest {
      * (on {@code model}, the island's own list: its states are on that list, which is not the world's)
      * stands at its committed mass flow {@code massFlow} (kg/s): {@code 0.85 ρ_l g NPSH3(Q)} on its design
      * ({@link FlowControl.Mover#npsh}), its suction junction's volume flow and the liquid its supply delivers. */
+    /** W3B_NETWORK_PLAN.md section 17: the vapour pressure of the water the suction state {@code suction} holds, on the
+     * island's own {@code model} (its cubic, the liquid the engine states, not the Wagner-Pruss curve, which stands 0.14 %
+     * lower at 326.7 K): the lowest pressure at which its TP equilibrium at its own temperature holds no vapour. Water
+     * alone, so its own enthalpy and its temperature at the floor give the same point. */
+    private static double vapourPressure(FluidThermodynamics model,FluidThermodynamics.State suction) {
+        double[] x=suction.amountsView(suction.slot(FluidThermodynamics.AQUEOUS)).clone();double lo=1,hi=1e7;
+        for(int k=0;k<200&&hi>lo*(1+1e-9);k++){double mid=Math.sqrt(lo*hi);if(FluidThermodynamics.holdsPhase(model.flashTP(suction.temperature(),mid,x.clone(),()->{}),FluidThermodynamics.GAS))lo=mid;else hi=mid;}
+        return hi;
+    }
     private static double breakdown(FluidThermodynamics model,PassiveNetwork graph,int pump,double massFlow) {
         var mover=(FlowControl.Mover)graph.pipes().get(pump).control();var suction=graph.reservoirs().get(graph.pipes().get(pump).first()).state();
         return mover.npsh().breakdownPressure(massFlow/(suction.mass()/suction.volume()),InletPhase.liquidDensity(model,graph,pump,mover.targetVolumeFlow(),5));
@@ -96,7 +105,8 @@ class PumpCavitationTest {
         var s=w.coordinator.snapshots().getFirst();var result=s.lastResult().orElseThrow();var graph=s.graph();
         int pump=-1;for(int e=0;e<graph.pipes().size();e++)if(graph.pipes().get(e).control() instanceof FlowControl.Pump)pump=e;
         var suction=graph.reservoirs().get(graph.pipes().get(pump).first()).state();
-        double vapour=w.model.saturationPressure(suction.temperature()),q=result.averageMassFlows()[pump],floor=vapour+breakdown(w.coordinator.model(s.id()),graph,pump,q);
+        var island=w.coordinator.model(s.id());
+        double vapour=vapourPressure(island,suction),q=result.averageMassFlows()[pump],floor=vapour+breakdown(island,graph,pump,q);
         System.out.println("PUMP_CAVITATION_STEADY modes="+result.endpointModes()+" flows="+Arrays.toString(result.averageMassFlows())
                 +" suctionP="+suction.pressure()+" vapourP="+vapour+" floor="+floor);
         assertEquals(FlowControl.Mode.PUMP_SUCTION_LIMIT,result.endpointModes().get(pump),"the pump cavitates");
@@ -275,7 +285,8 @@ class PumpCavitationTest {
         var result=s.lastResult().orElseThrow();var graph=s.graph();
         int pump=-1;for(int e=0;e<graph.pipes().size();e++)if(graph.pipes().get(e).control() instanceof FlowControl.Pump)pump=e;
         var suction=graph.reservoirs().get(graph.pipes().get(pump).first()).state();
-        double vapour=w.model.saturationPressure(suction.temperature()),q=result.averageMassFlows()[pump],floor=vapour+breakdown(w.coordinator.model(s.id()),graph,pump,q);
+        var island=w.coordinator.model(s.id());
+        double vapour=vapourPressure(island,suction),q=result.averageMassFlows()[pump],floor=vapour+breakdown(island,graph,pump,q);
         double steam=TestPhases.waterVapor(suction)/(TestPhases.waterLiquid(suction)+TestPhases.waterVapor(suction));
         System.out.println("PUMP_CAVITATION_ARRIVAL modes="+result.endpointModes()+" flows="+Arrays.toString(result.averageMassFlows())+" suctionP="+suction.pressure()
                 +" vapourP="+vapour+" suctionT="+suction.temperature()+" steamShare="+steam);

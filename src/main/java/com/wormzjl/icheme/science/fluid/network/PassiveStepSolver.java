@@ -216,6 +216,9 @@ public final class PassiveStepSolver {
     private List<FluidThermodynamics.State> previousOutputStates=List.of();private boolean previousRateOnly;
     /** Per connection, the pressure a pump's suction may not fall below in this solve ({@link #suctionFloors(PassiveNetwork,List,Runnable)}). */
     private double[] suctionFloors=new double[0];
+    /** Per connection, the clean zone's edge E its pump's suction limit may not fall below in this solve (form G of
+     * W3B_NETWORK_PLAN.md section 17, {@link #release}); 0 where none. Written with {@link #suctionFloors}. */
+    private double[] zoneEdges=new double[0];
     /** Per connection, whether its pump is vapour-locked in this solve ({@link #vapourLocks}): one fact per solve, read on the
      * step's start states with the floor. */
     private boolean[] vapourLocked=new boolean[0];
@@ -889,7 +892,7 @@ public final class PassiveStepSolver {
     private double suctionLimit(Equations equations,int edge,IntFunction<FluidThermodynamics.State> states,double volumeFlow) {
         var pipe=equations.graph.pipes().get(edge);
         double floor=vapourPressure(equations,edge,states.apply(pipe.first()));int supplier=equations.suctionSuppliers[edge];
-        if(floor<Double.POSITIVE_INFINITY)floor+=breakdown(equations.graph,edge,volumeFlow);
+        if(floor<Double.POSITIVE_INFINITY)floor=limitFloor(edge,floor,breakdown(equations.graph,edge,volumeFlow));
         if(!(floor<Double.POSITIVE_INFINITY)||supplier<0)return floor;
         var s=states.apply(supplier);int link=equations.suctionLinks[edge];
         return Math.min(floor,suctionSupply(equations.graph,edge,supplier,link,endPressure(equations.graph.reservoirs().get(supplier),equations.graph.pipes().get(link).portAt(supplier),s),s));
@@ -905,23 +908,32 @@ public final class PassiveStepSolver {
         return supplierEnd-columnDensity(s,line.portAt(supplier),line.volume())*GRAVITY*lift;
     }
     /**
-     * The pressure the suction of pump connection {@code edge} may not fall below, at the trial state {@code suction} of its
-     * first node: the vapour pressure of the water that node's seed holds, at the trial's temperature (owner decision D59
-     * (4), A390; the seed's temperature where the trial stands outside the water data), else the floor of the liquid the
-     * pump draws ({@link #suctionFloors}); positive infinity where the suction has none (no pump, a VAPOR port, a pump
-     * drawing straight from its first node, a supplier with no hydrocarbon liquid or whose liquid does not flash above the
-     * numerical box's floor).
+     * The vapour pressure of the liquid the pump on connection {@code edge} draws, for the whole solve
+     * ({@link #suctionFloors}): its p_v under forms G and T, the floor of section 16's rule under form 0
+     * ({@link #SUCTION_FORM}). Its wear reads σ against it ({@link #npshRatio}); its suction limit and vapour lock add the
+     * zone edge ({@link #limitFloor}). Positive infinity where the suction has none (no pump, a VAPOR port, a supplier with no
+     * liquid, a liquid that stays one liquid down to the numerical box's floor). The water saturation curve of owner
+     * decision D59 (4) was lifted by the owner on 2026-11-11 (W3B_NETWORK_PLAN.md section 17): water is one more liquid.
+     * {@code suction} is the trial state of the pump's first node, which the floor does not read.
      */
     double vapourPressure(Equations equations,int edge,FluidThermodynamics.State suction) {
-        return vapourPressure(equations.graph,edge,equations.seeds.get(equations.graph.pipes().get(edge).first()),suction);
+        return vapourPressure(equations.graph,edge);
     }
-    /** {@link #vapourPressure} with {@code seed} the state the pump's first node is laid out from. */
-    private double vapourPressure(PassiveNetwork graph,int edge,FluidThermodynamics.State seed,FluidThermodynamics.State suction) {
+    /** {@link #vapourPressure} on {@code graph}. */
+    private double vapourPressure(PassiveNetwork graph,int edge) {
         var pipe=graph.pipes().get(edge);
         if(!(pipe.control() instanceof FlowControl.Mover liquid&&liquid.liquid())||pipe.firstPort()==PassiveNetwork.PhasePort.VAPOR)return Double.POSITIVE_INFINITY;
-        // W3b: the floor of every liquid, water among its components, is its bubble pressure; the free water's saturation
-        // curve (D59 (4)) went with the free water.
         return edge<suctionFloors.length?suctionFloors[edge]:Double.POSITIVE_INFINITY;
+    }
+    /**
+     * W3B_NETWORK_PLAN.md section 17: the pressure the suction of the pump on connection {@code edge}, with floor
+     * {@code floor} (Pa, {@link #vapourPressure}), is held at with {@code breakdown} (Pa) of breakdown NPSH added: the larger
+     * of the clean zone's edge E ({@link #zoneEdges}, form G) and the floor plus the breakdown. The suction limit reads it
+     * with the breakdown at the pump's flow, the vapour lock with none. Infinite where the floor is.
+     */
+    private double limitFloor(int edge,double floor,double breakdown) {
+        if(!(floor<Double.POSITIVE_INFINITY))return floor;
+        return Math.max(edge<zoneEdges.length?zoneEdges[edge]:0,floor+breakdown);
     }
     /**
      * Owner decisions D15 and D16 A (batch 2026-11-03-rotating-machinery, D14_HOLDS_REVIEW.md, D15_HOLDS_REVIEW.md): per
@@ -937,8 +949,9 @@ public final class PassiveStepSolver {
      * crude tee 99 to 117 kPa above its 124.18 kPa floor) and cold random 181 (LNG 400 Pa above its 101.32 kPa floor with its
      * drain flowing, none with it stopped) cycled while the test was read on each pass's point: the closed converged point
      * reopened the pump, its law pulled the supplier itself to 7 to 73 kPa and 14 to 28 kPa, and the failed iterate closed
-     * it again. A pump whose supplier recovers stays closed for that one solve (181: 0.03 kg/s for one step). Water's
-     * floor where the start state holds no water data at its temperature: not locked. The lock reads the liquid's floor
+     * it again. A pump whose supplier recovers stays closed for that one solve (181: 0.03 kg/s for one step). The lock (D15)
+     * was lifted by the owner on 2026-11-11 subject to measurement (W3B_NETWORK_PLAN.md section 17: kept against removed,
+     * on the chosen form). The lock reads the liquid's floor and the clean zone's edge ({@link #limitFloor})
      * without the breakdown NPSH (plan section 3.6: it is the NPSHA ≤ 0 end): a supplier whose head at no flow lies between
      * zero and the breakdown NPSH at shutoff leaves the pump on its suction limit, where D17's lesser-of takes its delivery
      * to zero continuously ({@link #suctionLimit}).
@@ -949,7 +962,7 @@ public final class PassiveStepSolver {
             var pipe=graph.pipes().get(edge);
             if(!(pipe.control() instanceof FlowControl.Mover pump&&pump.liquid())||pump.targetVolumeFlow()==0)continue;
             var a=states.get(pipe.first());double head;
-            try{head=suctionHead(graph,edge,vapourPressure(graph,edge,a,a),states);}catch(IllegalArgumentException outsideData){continue;}
+            try{head=suctionHead(graph,edge,limitFloor(edge,vapourPressure(graph,edge),0),states);}catch(IllegalArgumentException outsideData){continue;}
             locked[edge]=!(head>shutoffBand(Math.max(a.pressure(),states.get(pipe.second()).pressure()),NEWTON_TOLERANCE));
         }
         return locked;
@@ -960,47 +973,45 @@ public final class PassiveStepSolver {
      * Owner decision D15: the suction head the line of liquid pump connection {@code edge} has at no flow over the floor
      * {@code floor} of the liquid it draws, on the node {@code states} (Pa), the step's start states ({@link #vapourLocks}):
      * the end pressure of the supplier its suction walk ends at ({@link InletPhase#walk}), less the floor and the static
-     * column of the supplier's stream up to the pump's first node. A supplier holding vapour beside its hydrocarbon liquid
-     * stands at that liquid's bubble pressure, its own pressure (reading A13). On the start states a hydrocarbon floor of
-     * such a supplier is that pressure already ({@link #bubblePressure}); the test adds it where the pump's floor is the
-     * water curve (its first node holds free water, D59 (4)), which stays the curve for water beside a gas alone, since that
-     * gas may not condense (PumpCavitationTest, water arriving beside a nitrogen tank). Positive infinity where the pump
-     * has no floor ({@code floor} infinite) or no suction walk (it draws straight from its first node, whose own closure
-     * holds its bubble pressure).
+     * column of the supplier's stream up to the pump's first node. Positive infinity where the pump has no floor
+     * ({@code floor} infinite) or no suction walk (it draws straight from its first node: its line has no length over which
+     * to lose its head at no flow).
      */
     private double suctionHead(PassiveNetwork graph,int edge,double floor,List<FluidThermodynamics.State> states) {
         if(!(floor<Double.POSITIVE_INFINITY))return Double.POSITIVE_INFINITY;
         var walk=InletPhase.walk(graph,edge);if(walk.via()<0)return Double.POSITIVE_INFINITY;
         var s=states.get(walk.node());var link=graph.pipes().get(walk.via());var supplier=graph.reservoirs().get(walk.node());
-        // The floor is the supplier's own (suctionFloor): a hydrocarbon liquid's is the supplier's pressure where it holds a gas.
         return suctionSupply(graph,edge,walk.node(),walk.via(),endPressure(supplier,link.portAt(walk.node()),s),s)-floor;
     }
     /**
-     * Owner decision D14 (reading A13; K6 of the t38 plan widened): a pump's suction limit reads the liquid it draws. A pump
-     * cannot pull its suction below the bubble pressure of that liquid; for water the saturation curve says what it is
-     * ({@link #vapourPressure}), and for a hydrocarbon liquid its bubble pressure at its own composition and enthalpy
-     * ({@link #bubblePressure}, owner decision D16 C), whether or not the supplier holds vapour. Per pump connection, for the whole
-     * solve: the bubble pressure of the hydrocarbon liquid of the supplier its suction walk ends at
-     * ({@link InletPhase#walk}) in the step's start states, where that supplier is not the pump's own first node (a tank's
-     * own closure holds its bubble pressure; a suction junction between the two is what the pump can pull down); positive
-     * infinity otherwise, and where the thermodynamics refuses the evaluation (no floor, never a hold). An LNG tank at
-     * 112 K and 222 kPa feeding a pump through its line drew the junction below the bubble point, where the liquid flashed
-     * and the step stalled; with water at that temperature the limit was nothing. A subcooled light crude at 310 K and
-     * 390 kPa, drawn by a 0.01 m3/s pump through a 1 cm line that passes 3.04 kg/s, was pulled to the 1 Pa floor still
-     * laid out as liquid, and the line search stalled (bundled random seeds 952 and 575).
+     * Owner decision D14 (reading A13; K6 of the t38 plan widened), as W3B_NETWORK_PLAN.md section 17 restates it: a pump's
+     * suction limit reads the liquid it draws, at that liquid's own enthalpy ({@link #release}), whatever the liquid. Per
+     * pump connection, for the whole solve, on the step's start states: the floor of the liquid of the supplier its suction
+     * walk ends at ({@link InletPhase#walk}), or of its own first node where it draws straight from it; the clean zone's edge
+     * into {@link #zoneEdges} beside it ({@link #SUCTION_FORM}). Positive infinity where there is none, and where the
+     * thermodynamics refuses the evaluation (no floor, never a hold). An LNG tank at 112 K and 222 kPa feeding a pump
+     * through its line drew the junction below the bubble point, where the liquid flashed and the step stalled; with water at
+     * that temperature the limit was nothing. A subcooled light crude at 310 K and 390 kPa, drawn by a 0.01 m3/s pump
+     * through a 1 cm line that passes 3.04 kg/s, was pulled to the 1 Pa floor still laid out as liquid, and the line search
+     * stalled (bundled random seeds 952 and 575).
      */
     private double[] suctionFloors(PassiveNetwork graph,List<FluidThermodynamics.State> states,Runnable checkpoint) {
-        double[] floors=new double[graph.pipes().size()];Arrays.fill(floors,Double.POSITIVE_INFINITY);
+        double[] floors=new double[graph.pipes().size()],zones=new double[floors.length];Arrays.fill(floors,Double.POSITIVE_INFINITY);
         for(int edge=0;edge<floors.length;edge++) {
             var pipe=graph.pipes().get(edge);
             if(!(pipe.control() instanceof FlowControl.Mover liquid&&liquid.liquid())||pipe.firstPort()==PassiveNetwork.PhasePort.VAPOR)continue;
+            // Section 17 (owner, 2026-11-11): a pump drawing straight from its tank reads its own first node, as one drawing
+            // through a suction walk reads the walk's end. The old rule ("a tank's own closure holds its bubble pressure")
+            // left it with no NPSH, no cavitation and no wear.
             var walk=InletPhase.walk(graph,edge);boolean direct=walk.via()<0;
             int supplier=direct?pipe.first():walk.node();var s=states.get(supplier);
             int label=drawnLiquid(s,direct?pipe.firstPort():graph.pipes().get(walk.via()).portAt(supplier));
-            // D16 C as on main: a hydrocarbon liquid's floor is read through a suction walk; a tank's own closure holds it.
-            if(label<0||label==FluidThermodynamics.OIL&&direct)continue;
-            floors[edge]=suctionFloor(s,label,checkpoint);
+            if(label<0)continue;
+            double[] release=release(s,checkpoint);
+            floors[edge]=SUCTION_FORM=='0'&&label==FluidThermodynamics.OIL?release[0]:release[1];
+            if(SUCTION_FORM=='G')zones[edge]=release[2];
         }
+        zoneEdges=zones;
         return floors;
     }
     /** The liquid label (OIL or AQUEOUS) a pump draws from supplier state {@code s} through its end {@code port}: the port's
@@ -1012,111 +1023,117 @@ public final class PassiveStepSolver {
         return FluidThermodynamics.holdsPhase(s,FluidThermodynamics.AQUEOUS)?FluidThermodynamics.AQUEOUS:-1;
     }
     /**
-     * The pressure the suction of a pump drawing liquid {@code label} from supplier state {@code s} may not fall below, Pa
-     * (W3b stage A, provisional: the owner's rule is open, the choice is this one function). Two branches, by label:
+     * W3B_NETWORK_PLAN.md section 17 (owner, 2026-11-11): the suction rule the pumps read, in this one place so the three
+     * forms can be measured against each other (system property {@code icheme.suctionForm}, default G):
      * <ul>
-     * <li>{@link #hydrocarbonFloor}, the OIL liquid: owner decision D16 C as on main, the supplier's own pressure where it
-     * holds a gas, else the bubble pressure of the liquid drawn at its enthalpy ({@link #bubblePressure});</li>
-     * <li>{@link #aqueousFloor}, the AQUEOUS liquid: the bubble pressure of its condensable components at the supplier's
-     * temperature, the compounds above their critical temperature left out (water alone: the cubic's saturation pressure,
-     * 3175 Pa at 298.15 K; water with ethanol: their mixture's bubble pressure; nitrogen or air dissolved in it: none of
-     * it, as main's saturation curve).</li>
+     * <li>{@code '0'}: section 16's provisional rule. A hydrocarbon liquid's floor is owner decision D16 C as on main (the
+     * supplier's own pressure where it holds a gas, else the bubble pressure of all of its liquid); an aqueous liquid's is
+     * p_v. No zone.</li>
+     * <li>{@code 'G'}: limit = max(E, p_v + 0.85 ρ g NPSH3(Q)); wear reads σ against p_v.</li>
+     * <li>{@code 'T'}: limit = p_v + 0.85 ρ g NPSH3(Q).</li>
      * </ul>
-     * Positive infinity where there is none.
+     * D16 C's second half (gas beside the liquid puts the limit at the vessel's pressure) was lifted by the owner on
+     * 2026-11-11; form 0 keeps it only to be measured.
      */
-    private double suctionFloor(FluidThermodynamics.State s,int label,Runnable checkpoint) {
-        return label==FluidThermodynamics.OIL?hydrocarbonFloor(s,checkpoint):aqueousFloor(s,checkpoint);
+    static final char SUCTION_FORM=suctionForm(System.getProperty("icheme.suctionForm","G"));
+    private static char suctionForm(String value) {
+        if(value.length()!=1||"0GT".indexOf(value.charAt(0))<0)throw new IllegalArgumentException("icheme.suctionForm: 0, G or T, not "+value);
+        return value.charAt(0);
     }
-    /** {@link #suctionFloor}'s OIL branch (D16 C). */
-    private double hydrocarbonFloor(FluidThermodynamics.State s,Runnable checkpoint){return bubblePressure(s,checkpoint);}
-    /** The aqueous floors {@link #aqueousFloor} worked out, keyed by the supplier state. */
-    private static final Map<FluidThermodynamics.State,Double> AQUEOUS_CACHE=Collections.synchronizedMap(new WeakHashMap<>());
+    /** The release pressures {@link #release} worked out, keyed by the supplier state (a generator keeps its state across
+     * solves). */
+    private static final Map<FluidThermodynamics.State,double[]> RELEASE_CACHE=Collections.synchronizedMap(new WeakHashMap<>());
     /**
-     * {@link #suctionFloor}'s AQUEOUS branch: the lowest pressure at which the AQUEOUS liquid of {@code s}, less its
-     * compounds above their critical temperature at {@code s}'s temperature, is one liquid at that temperature, a bisection in
-     * ln P to {@link #BUBBLE_WIDTH} between the numerical box's floor and a top raised from the supplier's pressure until the
-     * liquid stands; positive infinity where nothing condensable is left, where it is one liquid at the box's floor and where
-     * no top stands below the box's ceiling. Midpoints are geometric means, as {@link #bubblePressure}'s.
+     * The release pressures of supplier state {@code s}'s liquids together (Pa, {@link #releasePressure}), once per state:
+     * <ol start="0">
+     * <li>form 0's hydrocarbon floor (D16 C): the supplier's pressure where it holds a gas, else the bubble pressure of all
+     * of the liquid at its own enthalpy;</li>
+     * <li>p_v: the bubble pressure of its condensable compounds, those above their critical temperature at the supplier's
+     * temperature left out, at their own enthalpy at the supplier's pressure, every liquid (water alone at 298.15 K and
+     * 1 atm: about 3175 Pa; nitrogen or air dissolved in it: none of it; CO2 dissolved in water at 298 K counts, its Tc is
+     * 304.1 K);</li>
+     * <li>E, the clean zone's edge: the lowest pressure at which all of the liquid, at its own enthalpy, holds a vapour
+     * volume share at most {@link com.wormzjl.icheme.science.machine.GasEntrainment#cleanShare} at that pressure (a boiling liquid: its bubble pressure).</li>
+     * </ol>
+     * Positive infinity where there is none. Each is worked out only under the form that reads it.
      */
-    private double aqueousFloor(FluidThermodynamics.State s,Runnable checkpoint) {
-        if(!FluidThermodynamics.holdsPhase(s,FluidThermodynamics.AQUEOUS))return Double.POSITIVE_INFINITY;
-        var known=AQUEOUS_CACHE.get(s);if(known!=null)return known;
-        double t=s.temperature(),floor=Double.POSITIVE_INFINITY;double[] x=FluidThermodynamics.phaseMoles(s,FluidThermodynamics.AQUEOUS).clone();
-        boolean any=false;for(int c=0;c<x.length;c++){if(model.hydrocarbon.criticalTemperature(c)<=t)x[c]=0;any|=x[c]>0;}
-        if(any) {
-            double lo=NumericalBox.MINIMUM_PRESSURE,hi=Math.max(s.pressure(),lo);
-            while(hi<NumericalBox.MAXIMUM_PRESSURE&&condensedAt(t,hi,x,checkpoint)!=PH_LIQUID)hi=Math.min(NumericalBox.MAXIMUM_PRESSURE,hi*2);
-            if(condensedAt(t,hi,x,checkpoint)==PH_LIQUID&&condensedAt(t,lo,x,checkpoint)!=PH_LIQUID) {
-                for(int k=0;k<200&&hi>lo*(1+BUBBLE_WIDTH);k++){double mid=Math.sqrt(lo*hi);if(condensedAt(t,mid,x,checkpoint)==PH_LIQUID)hi=mid;else lo=mid;}
-                floor=hi;
+    private double[] release(FluidThermodynamics.State s,Runnable checkpoint) {
+        var known=RELEASE_CACHE.get(s);if(known!=null)return known;
+        double[] r={Double.POSITIVE_INFINITY,Double.POSITIVE_INFINITY,Double.POSITIVE_INFINITY};
+        if(FluidThermodynamics.holdsLiquid(s)) {
+            // W3b: the supplier's liquids together, water among their components: two liquids at equilibrium share one bubble
+            // pressure, and a pump drawing either draws the same floor.
+            double[] x=liquidMoles(s);double h=liquidEnthalpy(s),t=s.temperature();
+            if(SUCTION_FORM=='0')r[0]=FluidThermodynamics.holdsPhase(s,FluidThermodynamics.GAS)?s.pressure():releasePressure(s,x,h,p->0,checkpoint);
+            if(SUCTION_FORM=='G')r[2]=releasePressure(s,x,h,com.wormzjl.icheme.science.machine.GasEntrainment::cleanShare,checkpoint);
+            double[] c=x.clone();boolean removed=false,left=false;
+            for(int k=0;k<c.length;k++){if(c[k]>0&&model.hydrocarbon.criticalTemperature(k)<=t){c[k]=0;removed=true;}left|=c[k]>0;}
+            if(left) {
+                double hc=h;
+                if(removed)try{hc=model.flashTP(t,s.pressure(),c.clone(),checkpoint).enthalpy();}catch(IllegalArgumentException refused){hc=Double.NaN;}
+                if(Double.isFinite(hc))r[1]=releasePressure(s,c,hc,p->0,checkpoint);
             }
         }
-        AQUEOUS_CACHE.put(s,floor);
-        return floor;
+        RELEASE_CACHE.put(s,r);
+        return r;
     }
-    /** The TP equilibrium of the amounts {@code x} at {@code t} and {@code p}: {@link #PH_LIQUID} for liquid alone,
-     * {@link #PH_VAPOUR} with a vapour, {@link #PH_OTHER} for a refusal. */
-    private int condensedAt(double t,double p,double[] x,Runnable checkpoint) {
-        FluidThermodynamics.State at;
-        try{at=model.flashTP(t,p,x.clone(),checkpoint);}catch(IllegalArgumentException refused){return PH_OTHER;}
-        return FluidThermodynamics.holdsPhase(at,FluidThermodynamics.GAS)?PH_VAPOUR:FluidThermodynamics.holdsLiquid(at)?PH_LIQUID:PH_OTHER;
-    }
-    /** The bubble pressures {@link #bubblePressure} worked out, keyed by the supplier state (a generator keeps its state
-     * across solves). */
-    private static final Map<FluidThermodynamics.State,Double> BUBBLE_CACHE=Collections.synchronizedMap(new WeakHashMap<>());
-    /** The relative width in pressure to which {@link #bubblePressure} brackets a bubble point. The floor is read from one
+    /** The relative width in pressure to which {@link #releasePressure} brackets its pressure. The floor is read from one
      * evaluation for a whole solve, so its rows and mode tests all read the same value; the width only places it against
-     * the true bubble pressure (0.1 Pa at 100 kPa), and it costs about 24 PH equilibria from the box's floor, once per
-     * supplier state ({@link #BUBBLE_CACHE}). */
+     * the true pressure (0.1 Pa at 100 kPa), and it costs about 24 PH equilibria from the box's floor, once per supplier
+     * state ({@link #RELEASE_CACHE}). */
     private static final double BUBBLE_WIDTH=1e-6;
     /**
-     * Owner decisions D14 (reading A13) and D16 C: the bubble pressure of the hydrocarbon liquid supplier state {@code s}
-     * holds, at that liquid's composition (its OIL stream, {@link FluidThermodynamics#phaseMoles}) and its own enthalpy
-     * (the stream's, {@link FluidThermodynamics#phaseSpecificEnthalpy} without a solid share): the liquid reaches the pump
-     * through its line as through a throttle, which keeps its enthalpy, as {@link BalanceNet#waterFloor} states it for
-     * water. A supplier holding vapour beside the liquid stands at its bubble pressure: its own pressure, exactly. Else the
-     * lowest pressure, between the numerical box's floor and the supplier's pressure, at which the engine's PH equilibrium
-     * ({@link FluidThermodynamics#equilibriumPH}, unfolded, so a trace of vapour counts) states the liquid as one liquid:
-     * a bisection in ln P to {@link #BUBBLE_WIDTH} that returns the liquid end, so a suction held there is liquid.
-     * Midpoints are geometric means ({@link Math#sqrt}, correctly rounded, the same on every runtime). A trial the engine
-     * cannot state as a network phase set (no convergence, two liquids, a product proved unstable, the cold end of a deep
-     * flash outside the box: {@link #liquidPH}) is not one liquid; the floor stands only where some trial below the liquid
-     * end stated a vapour. Positive infinity where the supplier holds no hydrocarbon liquid, where the liquid is one liquid
-     * at the box's floor, where the equilibrium at the supplier's own pressure is refused or holds no liquid, and where no
-     * trial stated a vapour: no floor, never a hold (AGENTS.md, thermo validity). At the liquid's temperature (D14's TP
-     * form) the floor stood below the pressure at which the throttled liquid, warmed by its Joule-Thomson effect, boils:
-     * cold random 181's LNG has its floor at 101 324.09 Pa at its temperature and 101 324.998 Pa at its enthalpy, and held
-     * at the lower one its suction flashed a trace and stalled at tick 1078; at its enthalpy that tick passes
-     * (D15_HOLDS_REVIEW.md, probe C).
+     * W3B_NETWORK_PLAN.md section 17, after owner decisions D14 (reading A13) and D16 C's first half: the lowest pressure,
+     * between the numerical box's floor and supplier {@code s}'s pressure, at which the liquid {@code x} drawn from it, at
+     * its own enthalpy {@code h} (J), holds a vapour volume share at most {@code share} at that pressure. The liquid reaches
+     * the pump through its line as through a throttle, which keeps its enthalpy. A bisection in ln P to
+     * {@link #BUBBLE_WIDTH} on the engine's PH equilibrium ({@link FluidThermodynamics#equilibriumPH}, unfolded, so a trace
+     * of vapour counts) that returns the high end, so a suction held there holds no more vapour than {@code share}; with
+     * {@code share} 0 it is the bubble pressure. Midpoints are geometric means ({@link Math#sqrt}, correctly rounded, the
+     * same on every runtime). A trial the engine cannot state as a network phase set (no convergence, a product proved
+     * unstable, the cold end of a deep flash outside the box: {@link #releaseShare}) does not pass; the pressure stands
+     * only where some trial below the end stated a vapour. The supplier's pressure where the liquid holds more there;
+     * positive infinity where it passes at the box's floor, where the equilibrium at the supplier's own pressure is refused
+     * and where no trial stated a vapour: no floor, never a hold (AGENTS.md, thermo validity).
+     *
+     * <p>At the liquid's temperature (D14's TP form) the floor stood below the pressure at which the throttled liquid,
+     * warmed by its Joule-Thomson effect, boils: cold random 181's LNG has its floor at 101 324.09 Pa at its temperature and
+     * 101 324.998 Pa at its enthalpy, and held at the lower one its suction flashed a trace and stalled at tick 1078; at its
+     * enthalpy that tick passes (D15_HOLDS_REVIEW.md, probe C). The same for water: PumpCavitationTest's starved suction,
+     * water at 298.15 K and 1 atm drawn down, is 91 J/kg over the saturated liquid at its stated temperature; held at that
+     * temperature's saturation pressure 3.7e-5 of what arrived flashed, the pure-water junction held steam beside its water
+     * and the suction limit's row was its own phase rule: the step's Jacobian was singular. At its own enthalpy it stands
+     * liquid at about 298.17 K. That is why water's own curve (BalanceNet.waterFloor, D59 (4)) read its enthalpy; this
+     * reads every liquid's.
      */
-    private double bubblePressure(FluidThermodynamics.State s,Runnable checkpoint) {
-        if(!FluidThermodynamics.holdsLiquid(s))return Double.POSITIVE_INFINITY;
-        if(FluidThermodynamics.holdsPhase(s,FluidThermodynamics.GAS))return s.pressure();
-        var known=BUBBLE_CACHE.get(s);if(known!=null)return known;
-        double bubble=Double.POSITIVE_INFINITY;
-        // W3b: the supplier's liquids together, water among their components: two liquids at equilibrium share one bubble
-        // pressure, and a pump drawing either draws the same floor.
-        double[] x=liquidMoles(s);double hi=s.pressure(),lo=NumericalBox.MINIMUM_PRESSURE;
-        if(hi>lo) {
-            double h=liquidEnthalpy(s);
-            int top=liquidPH(s,x,h,hi,checkpoint);
-            if(top==PH_VAPOUR)bubble=hi;
-            else if(top==PH_LIQUID) {
-                int bottom=liquidPH(s,x,h,lo,checkpoint);boolean vapour=bottom==PH_VAPOUR;
-                if(bottom!=PH_LIQUID) {
-                    for(int k=0;k<200&&hi>lo*(1+BUBBLE_WIDTH);k++){double mid=Math.sqrt(lo*hi);int at=liquidPH(s,x,h,mid,checkpoint);if(at==PH_LIQUID)hi=mid;else{lo=mid;vapour|=at==PH_VAPOUR;}}
-                    if(vapour)bubble=hi;
-                }
-            }
-        }
-        BUBBLE_CACHE.put(s,bubble);
-        return bubble;
+    private double releasePressure(FluidThermodynamics.State s,double[] x,double h,java.util.function.DoubleUnaryOperator share,Runnable checkpoint) {
+        double hi=s.pressure(),lo=NumericalBox.MINIMUM_PRESSURE;
+        if(!(hi>lo))return Double.POSITIVE_INFINITY;
+        double top=releaseShare(s,x,h,hi,checkpoint);
+        if(Double.isNaN(top))return Double.POSITIVE_INFINITY;
+        if(!(top<=share.applyAsDouble(hi)))return hi;
+        double bottom=releaseShare(s,x,h,lo,checkpoint);
+        if(bottom<=share.applyAsDouble(lo))return Double.POSITIVE_INFINITY;
+        boolean vapour=bottom>0;
+        for(int k=0;k<200&&hi>lo*(1+BUBBLE_WIDTH);k++){double mid=Math.sqrt(lo*hi),at=releaseShare(s,x,h,mid,checkpoint);if(at<=share.applyAsDouble(mid))hi=mid;else{lo=mid;vapour|=at>0;}}
+        return vapour?hi:Double.POSITIVE_INFINITY;
+    }
+    /** The vapour volume share of the PH equilibrium of liquid {@code x} at enthalpy {@code h} (J) and pressure {@code p},
+     * warm-started at supplier {@code s}'s temperature ({@link #releasePressure}): 0 for liquid alone, the smallest positive
+     * double for a vapour too small to have a volume, NaN for anything the network cannot carry or no liquid. */
+    private double releaseShare(FluidThermodynamics.State s,double[] x,double h,double p,Runnable checkpoint) {
+        FluidThermodynamics.State at;
+        try{at=model.equilibriumPH(s.temperature(),p,h,x.clone(),checkpoint);}catch(IllegalArgumentException refused){return Double.NaN;}
+        if(at==null||!(FluidThermodynamics.holdsPhase(at,FluidThermodynamics.OIL)||FluidThermodynamics.holdsPhase(at,FluidThermodynamics.AQUEOUS)))return Double.NaN;
+        if(!FluidThermodynamics.holdsPhase(at,FluidThermodynamics.GAS))return 0;
+        double v=at.vaporVolume(),total=v+at.condensedVolume();
+        return total>0&&v>0?v/total:Double.MIN_VALUE;
     }
     /** The answers of {@link #liquidPH}: liquid alone, a vapour beside the liquid, or anything else (a refusal, a phase set
      * the network cannot carry, no liquid). */
     private static final int PH_LIQUID=1,PH_VAPOUR=0,PH_OTHER=-1;
     /** The PH equilibrium of the liquid {@code x} of supplier {@code s} at its enthalpy {@code h} (J) and pressure
-     * {@code p}, warm-started at the supplier's temperature, as {@link #bubblePressure} reads it. W3b: any liquid counts,
+     * {@code p}, warm-started at the supplier's temperature, as {@link #releasePressure} reads it. W3b: any liquid counts,
      * water's among them (a single liquid of half water or more is labelled aqueous, so the oil label alone left a water
      * pump with no floor and a water valve with no cavitation). */
     private int liquidPH(FluidThermodynamics.State s,double[] x,double h,double p,Runnable checkpoint) {
@@ -1950,7 +1967,7 @@ public final class PassiveStepSolver {
      * outlet pressure {@code p2}: FLASHING where p2 lies below Pv (the vapour stays), CAVITATING where σ ≤ 1 / x_Fz
      * ({@link #VALVE_INCIPIENT}: the vena contracta falls below Pv and the bubbles collapse downstream), else PLAIN. Water
      * reads its saturation pressure at the donor's temperature. A hydrocarbon liquid is throttled at its own enthalpy, as
-     * {@link #bubblePressure} reads it, but tested at two pressures instead of bisected: it flashes if it holds vapour at
+     * {@link #releasePressure} reads it, but tested at two pressures instead of bisected: it flashes if it holds vapour at
      * p2, and it cavitates if it holds vapour at p1 − (p1 − p2) / x_Fz, where σ = 1 / x_Fz (any Pv cavitates where that
      * pressure is below the box's floor); a liquid beside vapour stands at its bubble point, its node's pressure. The worse
      * of the two liquids counts. NONE with no liquid or where the thermodynamics refuses. Observational only.
@@ -3372,16 +3389,15 @@ public final class PassiveStepSolver {
                 else if(mode==FlowControl.Mode.VALVE_REGULATING&&!valve.pressureControl())prescribed[e]=valve.targetMassFlow(rho[e][0]);
             }
         }
-        /** The floor of the liquid the pump on connection {@code e} draws: its hydrocarbon supplier's bubble pressure
-         * ({@link #suctionFloors}, owner decision D14), or the water curve where its suction junction holds free water (D59 (4),
-         * {@link #waterFloor}); infinite where neither. One statement for a pump the balance puts on its suction limit and for
-         * one that arrives there, worked out once per connection. The NPSH the pump's flow adds is {@link #cavitationFloor}'s. */
+        /** The floor of the liquid the pump on connection {@code e} draws ({@link PassiveStepSolver#vapourPressure}, owner
+         * decision D14 as W3B_NETWORK_PLAN.md section 17 restates it); infinite where none. One statement for a pump the
+         * balance puts on its suction limit and for one that arrives there, worked out once per connection. The clean zone's
+         * edge and the NPSH the pump's flow adds are {@link #cavitationFloor}'s. The water curve D59 (4) put beside it where
+         * the junction held free water (BalanceNet.waterFloor) was lifted by the owner on 2026-11-11: every liquid's floor
+         * is at its own enthalpy ({@link PassiveStepSolver#releasePressure}), so water's is no longer a second one. */
         private double suctionFloor(int e,Runnable checkpoint) {
             if(!Double.isNaN(floors[e]))return floors[e];
-            var pipe=graph.pipes().get(e);var a=graph.reservoirs().get(pipe.first());var sa=a.state();
-            double floor=e<suctionFloors.length?suctionFloors[e]:Double.POSITIVE_INFINITY;
-            if(a.junction()&&FluidThermodynamics.holdsPhase(sa,FluidThermodynamics.AQUEOUS)&&pipe.control() instanceof FlowControl.Mover liquid&&liquid.liquid()&&pipe.firstPort()!=PassiveNetwork.PhasePort.VAPOR){try{floor=Math.min(floor,waterFloor(sa,checkpoint));}catch(IllegalArgumentException outsideData){}}
-            return floors[e]=floor;
+            return floors[e]=vapourPressure(graph,e);
         }
         /** Owner decision D20 Q11 A in the balance: the floor {@code floor} of the liquid pump connection {@code e} draws
          * ({@link #suctionFloor}) plus its breakdown NPSH ({@link PassiveStepSolver#breakdown}) at mass flow {@code massFlow}
@@ -3389,7 +3405,7 @@ public final class PassiveStepSolver {
          * decides the mode, its prescribed flow on its suction limit, none where it arrives there. The Newton's row reads the
          * same floor at its trial flow ({@link PassiveStepSolver#suctionLimit}). */
         private double cavitationFloor(int e,double floor,double massFlow) {
-            return floor<Double.POSITIVE_INFINITY?floor+breakdown(graph,e,Math.max(0,massFlow)/rho[e][0]):floor;
+            return floor<Double.POSITIVE_INFINITY?limitFloor(e,floor,breakdown(graph,e,Math.max(0,massFlow)/rho[e][0])):floor;
         }
         /** Owner decision D17 in the balance: the pressure the suction junction of pump connection {@code e}, on its suction
          * limit, is anchored at on the balance's pressures {@code p}: the lesser of its floor at its prescribed flow
@@ -3403,27 +3419,6 @@ public final class PassiveStepSolver {
             int s=walk.node();var link=graph.pipes().get(walk.via());
             double end=unknown[s]>=0?p[s]:!Double.isNaN(anchor[s])?anchor[s]:endPressure(graph,link,s);
             return Math.min(floor,suctionSupply(graph,e,s,walk.via(),end,graph.reservoirs().get(s).state()));
-        }
-        /** The vapour pressure junction state {@code s}'s free water stands at when a pump draws it down. Water alone and
-         * liquid: the saturation pressure at the temperature its liquid reaches on the saturation curve at its own enthalpy
-         * (one Newton step on the saturated liquid's enthalpy). A liquid stated at a higher pressure is compressed, and
-         * throttled to its vapour pressure it warms by its excess enthalpy over the saturated liquid's. Else (vapour beside
-         * the water, which is then saturated, or a hydrocarbon beside it): the saturation pressure at its temperature.
-         * PumpCavitationTest's starved suction: water at 298.15 K and 1 atm, drawn down to its vapour pressure, is 91 J/kg
-         * over the saturated liquid there and stands at 298.172 K and 3 173.9 Pa. Held at the 3 169.8 Pa of its stated
-         * temperature, 3.7e-5 of what arrived flashed, and the pure-water junction holding steam beside its water made the
-         * suction limit's row its own phase rule: the step's Jacobian was singular. */
-        private double waterFloor(FluidThermodynamics.State s,Runnable checkpoint) {
-            double t=s.temperature(),saturation=model.saturationPressure(t);
-            double fluid=s.mass()-s.solidMoments().mass();double[] y=PhaseLayout.totalAmounts(s);double hydrocarbon=0;
-            for(int c=0;c<y.length-1;c++)hydrocarbon+=y[c];
-            if(hydrocarbon>0||!(fluid>0)||FluidThermodynamics.holdsPhase(s,FluidThermodynamics.GAS))return saturation;
-            for(int c=0;c<y.length;c++)y[c]/=fluid;
-            double h=(s.enthalpy()-s.solidMoments().enthalpy(t,s.pressure()))/fluid,dt=1e-3;
-            var at=model.flashTP(t,saturation*(1+1e-9),y.clone(),checkpoint);var up=model.flashTP(t+dt,model.saturationPressure(t+dt)*(1+1e-9),y.clone(),checkpoint);
-            if(FluidThermodynamics.holdsPhase(at,FluidThermodynamics.GAS)||FluidThermodynamics.holdsPhase(up,FluidThermodynamics.GAS))return saturation;
-            double slope=(up.enthalpy()/up.mass()-at.enthalpy()/at.mass())/dt;
-            return slope>0?model.saturationPressure(t+(h-at.enthalpy()/at.mass())/slope):saturation;
         }
         /** Whether junction {@code node} reads its table at {@code pressure}, not its stated data. */
         private boolean tabled(int node,double pressure){return tableP[node]!=null&&pressure<flashFrom[node];}
@@ -3740,7 +3735,7 @@ public final class PassiveStepSolver {
          * temperature bisection inside the streams' window (20 K either side, inside the numerical box: no data range narrows a seed, owner rule of 2026-10-16).
          * The bisection ends on the bracket side whose state is nearer the delivered enthalpy. Water alone (no engine answer) has
          * no two-phase TP state at its own vapour pressure: its enthalpy jumps by the latent heat across the saturation, and the
-         * midpoint's side is round-off. A pump suction the balance holds at its own liquid's vapour pressure ({@link #waterFloor})
+         * midpoint's side is round-off. A pump suction the balance holds at its own liquid's vapour pressure ({@link PassiveStepSolver#releasePressure})
          * is delivered the saturated liquid's enthalpy to round-off: the liquid side is that round-off away, the steam side the
          * latent heat. Bundled fuzz seed 889, while the floor read the junction's stated temperature: water arriving 0.06 K
          * warmer from the friction of its 309 kPa descent (1e-4 of it flashes there) was stated all steam, and the step's
