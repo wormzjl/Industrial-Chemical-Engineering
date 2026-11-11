@@ -137,4 +137,36 @@ class ReliefValveWorldTest {
         assertEquals(SET,n.state().pressure(),.03*SET,"the drum behind it stands at its set pressure");
         assertTrue(flow(s,e)>.1,"it passes the feed: "+flow(s,e));
     }
+
+    /**
+     * Ten drums on one relief header (plan decision D5, the joined island's cost): each drum blocked in on its own 5 bar
+     * nitrogen feed, its relief port up a 0.15 m riser into one 0.4 m header open to a void at the ambient. One island; every
+     * drum stands at its set pressure and the header carries the ten feeds. Prints the island's substeps per commit and the
+     * wall time of the run (one run; counters decide, the wall time is a note).
+     */
+    @Test void tenDrumsOnOneReliefHeaderEachStandAtTheirSetPressure() {
+        var world=new EventPathWorld();
+        var drums=new long[10];
+        for(int i=0;i<10;i++){int z=3*i;drums[i]=drum(world,z,SET);gasFeed(world,z,5e5);world.place(10,67,z,Kind.PIPE,Direction.UP,.15);}
+        for(int z=0;z<=28;z++)world.place(10,68,z,Kind.PIPE,Direction.SOUTH,.4);
+        world.place(10,68,29,Kind.VOID,Direction.SOUTH,EventPathWorld.nitrogen(),.4);
+        long commits=0,accepted=0,rejected=0,last=-1;long started=System.nanoTime();
+        while(world.ledger.onlineTick()<1600) {
+            world.tick();
+            for(var s:world.coordinator.snapshots())if(s.graph().reservoirs().stream().anyMatch(r->r.id()==drums[0])&&s.clock().committedTick()!=last&&s.lastResult().isPresent()){
+                last=s.clock().committedTick();commits++;accepted+=s.lastResult().get().acceptedSubsteps();rejected+=s.lastResult().get().rejectedSubsteps();}
+        }
+        long ms=(System.nanoTime()-started)/1_000_000;
+        world.assertKeptUp("relief header");
+        var s=island(world,drums[0]);double relieved=0;
+        for(int e=0;e<s.graph().pipes().size();e++)if(s.graph().pipes().get(e).control() instanceof FlowControl.PressureValve)relieved+=flow(s,e);
+        double low=Double.MAX_VALUE,high=0;
+        for(long d:drums){double p=node(world,d).state().pressure();low=Math.min(low,p);high=Math.max(high,p);}
+        System.out.println("RELIEF_HEADER drums=10 islands="+world.coordinator.snapshots().size()+" commits="+commits+" acceptedSubsteps="+accepted+" rejectedSubsteps="+rejected
+                +" perCommit="+String.format(Locale.ROOT,"%.1f",(accepted+rejected)/(double)Math.max(1,commits))+" ms="+ms+" P="+low+".."+high+" relieved="+relieved+" status="+s.status());
+        for(long d:drums)assertEquals(s.id(),island(world,d).id(),"one island");
+        assertEquals(SET,low,.02*SET,"every drum at its set pressure");
+        assertEquals(SET,high,.02*SET,"every drum at its set pressure");
+        assertEquals(11.1,relieved,.5,"the header carries the ten feeds");
+    }
 }
