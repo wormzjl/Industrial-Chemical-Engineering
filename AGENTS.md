@@ -56,8 +56,8 @@ These rules apply to every agent working in this repository (Claude, Codex, suba
 
 ## Gradle, measurement and verification
 
-- Run at most two Gradle invocations at a time on the machine, each in its own worktree. The final lane may be one of the two. A benchmark, whose result is a time, runs alone. Never run a test suite while a dev client is running.
-- When two runs overlap, judge cost by counters, in wall-time cost gates and campaigns too. Replay a wall-clock budget hold alone before you count it.
+- Run at most two Gradle invocations at a time on the machine, each in its own worktree. The final lane may be one of the two. Never run a test suite while a dev client is running.
+- Record time only in a performance optimization task; a run that measures time runs alone. In every other task judge cost by counters, in wall-time cost gates and campaigns too, and report no times. Replay a wall-clock budget hold alone before you count it.
 - Large solver campaigns use 8 to 10 worker threads and never overlap another campaign of that size. A run on the second Gradle lane uses at most 4 worker threads.
 - `./gradlew test` is the quick suite. `./gradlew test slowGates` (or `check`) runs everything. The final lane runs, once per batch, only the test classes that the batch's changes can reach: those whose recorded load set holds a change (`tools/merge-lane/affected.mjs`). `lane.sh head --all` runs everything; use it only when the owner asks.
 - `columnGates` and `equipmentGates` hold the column and equipment tests, which `test` leaves out. Each sees only what its tests load, so it runs only when one of those files changed. When a group fails with a class or resource missing, add it to the group's list in `build.gradle`.

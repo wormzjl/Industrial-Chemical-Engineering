@@ -23,7 +23,7 @@ Purpose: a gas blanketing valve as an optional accessory on vertical and horizon
 - 2026-11-11: owner decision on X4 as status only: asked "Keep the rule that the flame goes out above its stable exit velocity?", the owner answered "Yes, keep it". PSV_REVIEW.md section 4 and the flare batch README record it.
 - 2026-11-11: the PSV branch (`claude/pressure-safety-valve-e38517`, tip `905c3f10e`) merged into `claude/gas-vent-hold` on the owner's word ("ok go ahead"); the merged tree is the PSV branch's plus this README, so no test ran again.
 - 2026-11-11, merge preparation: CHANGELOG lines under `[Unreleased]` (the valves under Added, the flare's back pressure under Changed); tool folders `tools/psv-flare/`, `tools/equipment-drawings/`, `tools/heat-gui-renders/` checked (READMEs, index rows); the batch row's purpose in `documentation/INDEX.md` now names the PSV and the flare; nothing left `src/`. What ran after the cleanup: nothing, documents and tools only.
-- 2026-11-11: owner, at the final lane: "allow two running at the same time", "change testing rule as well". `AGENTS.md` and `tools/merge-lane/README.md`: two Gradle runs may overlap, the final lane included; cost by counters, a wall-clock budget hold replayed alone; a benchmark still runs alone.
+- 2026-11-11: owner, at the final lane: "allow two running at the same time", "change testing rule as well". `AGENTS.md` and `tools/merge-lane/README.md`: two Gradle runs may overlap, the final lane included; cost by counters, a wall-clock budget hold replayed alone. Then: "no need to record time when not doing performance optimization": time is recorded only in a performance optimization task, and such a run runs alone.
 
 ## Documents
 
