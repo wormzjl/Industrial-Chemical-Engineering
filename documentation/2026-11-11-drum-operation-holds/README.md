@@ -28,14 +28,17 @@ Owner, 2026-11-11: the drum-operation defects the time-factor batch (`2026-11-11
 - 2026-11-11 (defect 1, no code): the leg's segment read from the dump. Pass 0 decides it at q0 = 0, so the drum's 60 µL of trace water is marginal and the leg runs at water's density (470 to 485 kg/s); a failed pass never re-decides it, and `drainedSeeds` reads only pinned phases. Not forced by D11 as written: option (d), next to (a). `GasVentSequenceTest` (the setup's sequence, headless) is clean in 3 cases; it lacks the dump's drum water and 70.7 kPa foot.
 - 2026-11-11 (defect 1, option (d), owner "Yes, option (d)"): `Equations.failedSegments` re-decides the segments from a failed iterate, before `runsDry`. 115 changed-class tests, hold gates 58, chain-100 exact, the 33 junction lines equal. No step-level gate (a rig from the dump commits without the rule). The level loop on the gas vent still holds: all three cases now "round deadline"; the leg still asks 46 to 782 kg/s under every segment, driven by the foot's water and the open outlet. Quick check not run. Committed for the owner's keep-or-revert (`186c36d96`).
 - 2026-11-11 (defect 1): (d) reverted (owner "Revert (d), build (a)"): no gate test, the hold remained, a failed step cost more passes. `PassiveStepSolver` as at `9af97a3e6`.
+- 2026-11-11 (defect 1, option (a), owner "Revert (d), build (a)"): the mint's sweep does not pass an empty vessel's bottom port; a junction there takes the gas reaching the vessel (amends D55). `JunctionStartFormTest` gate fails with it disabled (55.5 mol of water at the foot). 49 changed-class tests, hold gates 58, chain-100 exact, the 33 junction lines equal. Level loop on the gas vent still holds (46 the same substep limit, 23 and 69 round deadline); the probed rows equal the time-delta dump: the failing state is the island's own, not the mint's. `DropLegColdStartTest` passes without `rest` under (a). Quick check not run.
 
 ## Code areas
 
-`runtime/fluid/IslandCoordinator` (`Ports.decide`, `completed` with a failure, `missing`), `ColumnOperation` (`booked`, `decide`), `MinecraftFluidRuntime` (`failure`); `science/fluid/network/PassiveStepSolver` (`BalanceNet.rest`, `still`, `solveOnce`). Tests: `ColumnRunTest`, `EventPathWorld`, `WorkerFailureStatusTest`, `DropLegColdStartTest`.
+`runtime/fluid/IslandCoordinator` (`Ports.decide`, `completed` with a failure, `missing`), `ColumnOperation` (`booked`, `decide`), `MinecraftFluidRuntime` (`failure`); `science/fluid/network/PassiveStepSolver` (`BalanceNet.rest`, `still`, `solveOnce`, `supplierSeeds`, `sweepNeighbours`, `emptyVesselGas`). Tests: `ColumnRunTest`, `EventPathWorld`, `WorkerFailureStatusTest`, `DropLegColdStartTest`, `JunctionStartFormTest`.
 
 ## Open items
 
-- Defect 1: option (a) (owner, 2026-11-11), in progress.
+- Owner: defect 1. Option (a) is in and does not clear the hold: the failing step's state comes from the island's own steps (GAS_VENT_REVIEW.md, rows). Keep or revert (a) (the 200-seed quick check before a keep); no further option chosen.
+- Owner: with (a), defect 3's `rest` may be removable (`DropLegColdStartTest` passes without it); not removed.
+- Not explained: the level loop's held cases end with a 1.357e4 mol residual under (a) (7.346 mol before).
 - Owner: defect 4, option (A), (B) or (C) for the rig; recommended (A), after defect 1. `LevelLoopGameTests` keeps its fill at a tenth and its ramp until then.
 - Not run: the fluid and column GameTests (the final lane's); the kept crash world `world-crash-147499` (the JUnit reproduces its stack).
 - Seen, not this batch's: `IslandCoordinator.budgetHold` counts a missing result as a budget hold whatever its cause, so a worker exception is retried as one.

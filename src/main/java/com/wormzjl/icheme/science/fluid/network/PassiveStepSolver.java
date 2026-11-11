@@ -3054,7 +3054,11 @@ public final class PassiveStepSolver {
      * against the ambient ({@link #supplyFlow}); the junction is the flow-weighted mixture of what reaches it, flashed at the
      * flow-weighted pressure of its suppliers' ends ({@link #seedAt}; the ambient put a liquid CO2 let-down below its triple point): the balance solves the pressures and restates every mixture at its balanced pressure
      * ({@link BalanceNet#seeded}), so D55's pressure bisection is not needed. A junction no supplier drives into takes it hop
-     * by hop from the junctions that have it (a breadth-first sweep weighted by the flow that seeded them); one neither
+     * by hop from the junctions that have it (a breadth-first sweep weighted by the flow that seeded them), through vessels
+     * that hold no fluid but never by such a vessel's bottom (LIQUID) port: a junction there takes the gas that reaches the
+     * vessel, at the vessel's pressure ({@link #emptyVesselGas}; owner option (a) of batch 2026-11-11-drum-operation-holds,
+     * amending D55's sweep-through rule of 2026-10-19: a drop leg under an empty drum held the feed's water at 70.7 kPa and
+     * its first step asked 470 kg/s of liquid the drum did not hold). One neither
      * reaches takes the streams of the suppliers joined to it, one share each, and the sweep runs again. A junction no
      * source reaches keeps the state it was built with ({@link NetworkReduction#atRest}).
      *
@@ -3105,7 +3109,8 @@ public final class PassiveStepSolver {
             // Flashed at the flow-weighted pressure of what reaches it (a liquid CO2 let-down's junction stands above the triple
             // point, not at the ambient); the balance then solves the pressure and restates the mixture there.
             for(int j=0;j<nodes;j++)if(mass[j]>0&&seedAt(states,j,amounts[j],mass[j],heat[j],tLow[j],tHigh[j],pressureSum[j]/mass[j],checkpoint)){seeded[j]=true;weight[j]=mass[j];}
-            // The sweep: hop by hop from the junctions seeded so far; a vessel that holds no fluid passes it through.
+            // The sweep: hop by hop from the junctions seeded so far; a vessel that holds no fluid passes it through, except by
+            // its bottom (LIQUID) port, where the junction takes the gas reaching the vessel instead (owner option (a)).
             for(boolean grew=true;grew;) {
                 grew=false;var next=new boolean[nodes];
                 Arrays.fill(mass,0);Arrays.fill(heat,0);Arrays.fill(pressureSum,0);Arrays.fill(tLow,Double.POSITIVE_INFINITY);Arrays.fill(tHigh,Double.NEGATIVE_INFINITY);
@@ -3118,6 +3123,16 @@ public final class PassiveStepSolver {
                         heat[j]+=w*(s.enthalpy()/s.mass());pressureSum[j]+=w*s.pressure();mass[j]+=w;
                         tLow[j]=Math.min(tLow[j],s.temperature());tHigh[j]=Math.max(tHigh[j],s.temperature());
                     }
+                    for(var pipe:graph.pipes()) {
+                        int v=pipe.first()==j?pipe.second():pipe.second()==j?pipe.first():-1;
+                        if(v<0||pipe.portAt(v)!=PassiveNetwork.PhasePort.LIQUID||!holdsNoFluid(graph.reservoirs().get(v)))continue;
+                        double pressure=graph.reservoirs().get(v).state().pressure();
+                        for(var gas:emptyVesselGas(graph,v,seeded,weight)) {
+                            var g=gas.state();double w=gas.weight();double[] n=PhaseLayout.totalAmounts(g);for(int c=0;c<count;c++)amounts[j][c]+=w*n[c]/g.mass();
+                            heat[j]+=w*(g.enthalpy()/g.mass());pressureSum[j]+=w*pressure;mass[j]+=w;
+                            tLow[j]=Math.min(tLow[j],g.temperature());tHigh[j]=Math.max(tHigh[j],g.temperature());
+                        }
+                    }
                 }
                 for(int j=0;j<nodes;j++)if(mass[j]>0&&seedAt(states,j,amounts[j],mass[j],heat[j],tLow[j],tHigh[j],pressureSum[j]/mass[j],checkpoint)){next[j]=grew=true;weight[j]=mass[j];}
                 for(int j=0;j<nodes;j++)seeded[j]|=next[j];
@@ -3126,19 +3141,44 @@ public final class PassiveStepSolver {
         return states;
     }
     /** The junctions one hop from junction {@code j} for {@link #supplierSeeds}' sweep: joined to it by a connection, or
-     * through one or more vessels that hold no fluid ({@link #holdsNoFluid}: none of their own to send). */
+     * through one or more vessels that hold no fluid ({@link #holdsNoFluid}: none of their own to send), never by such a
+     * vessel's bottom (LIQUID) port (owner option (a), batch 2026-11-11-drum-operation-holds). */
     private static List<Integer> sweepNeighbours(PassiveNetwork graph,int j) {
         var found=new ArrayList<Integer>();var seen=new HashSet<Integer>();var open=new ArrayDeque<Integer>();open.add(j);seen.add(j);
         while(!open.isEmpty()) {
             int at=open.poll();
             for(var pipe:graph.pipes()) {
                 int other=pipe.first()==at?pipe.second():pipe.second()==at?pipe.first():-1;
-                if(other<0||!seen.add(other))continue;
+                if(other<0)continue;
                 var node=graph.reservoirs().get(other);
+                // An empty vessel's bottom port is where its liquid would leave; nothing passes it through there.
+                if(at!=j&&pipe.portAt(at)==PassiveNetwork.PhasePort.LIQUID||!node.junction()&&pipe.portAt(other)==PassiveNetwork.PhasePort.LIQUID)continue;
+                if(!seen.add(other))continue;
                 if(node.junction())found.add(other);else if(holdsNoFluid(node))open.add(other);
             }
         }
         Collections.sort(found);return found;
+    }
+    /** One stream {@link #emptyVesselGas} finds, with its sweep weight. */
+    private record WeightedState(FluidThermodynamics.State state,double weight){}
+    /**
+     * The gas that reaches vessel {@code v}, which holds no fluid, through its ports other than its bottom one, for the junction
+     * under it (owner option (a)): each supplier that may give into it (a generator, a vessel holding fluid; its end stream,
+     * weight one) and each junction the sweep has seeded (its state, its weight), where what it sends is gas alone. None:
+     * nothing gas reaches it, and the junction keeps what the sweep gives it otherwise, or the state it was built with.
+     */
+    private List<WeightedState> emptyVesselGas(PassiveNetwork graph,int v,boolean[] seeded,double[] weight) {
+        var found=new ArrayList<WeightedState>();
+        for(var pipe:graph.pipes()) {
+            int o=pipe.first()==v?pipe.second():pipe.second()==v?pipe.first():-1;
+            if(o<0||pipe.portAt(v)==PassiveNetwork.PhasePort.LIQUID)continue;
+            var node=graph.reservoirs().get(o);FluidThermodynamics.State gas;double w;
+            if(node.junction()){if(!seeded[o])continue;gas=node.state();w=weight[o];}
+            else{if(!boundaryAllowed(graph,pipe,pipe.first()==o?1:-1)||holdsNoFluid(node)||node.kind()==PassiveNetwork.NodeKind.VOID)continue;gas=endStream(node.state(),pipe.portAt(o),pipe.volume());w=1;}
+            if(gas==null||!(gas.mass()>0)||!FluidThermodynamics.holdsPhase(gas,FluidThermodynamics.GAS)||FluidThermodynamics.holdsPhase(gas,FluidThermodynamics.OIL)||FluidThermodynamics.holdsPhase(gas,FluidThermodynamics.WATER))continue;
+            found.add(new WeightedState(gas,w));
+        }
+        return found;
     }
     /** {@link #supplierSeeds}' flash of junction {@code j}'s mixture (amounts and enthalpy summed over {@code mass}) at
      * {@code pressure}, per kilogram: the temperature at which the mixture has the mixed enthalpy, bisected within 20 K of
