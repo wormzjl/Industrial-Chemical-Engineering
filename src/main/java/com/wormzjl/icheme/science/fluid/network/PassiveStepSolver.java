@@ -212,9 +212,6 @@ public final class PassiveStepSolver {
     /** The next pass's start flows of the connections restarted in their allowed direction ({@link #allowedRestart}), NaN for
      * the others; null for none. The pass's equations read it once, as they are built. */
     private double[] allowedRestart;
-    /** The next pass's phase-port segments as a failed pass re-decided them from its iterate ({@link Equations#failedSegments}),
-     * null for the start flows' own ({@link Equations#startSegments}). The pass's equations read it once, as they are built. */
-    private PhaseDraw.Segment[][] carriedSegments;
     /** The law flows ({@link #saturated}: the edge unknowns) of the point {@link #previousFlows} are the transported flows of;
      * a step's Newton starts from them. At a job start the committed endpoint's transported flows stand in for them. */
     private double[] previousLawFlows=new double[0];
@@ -493,7 +490,7 @@ public final class PassiveStepSolver {
         final var original=graph;boolean[] emptying=null,emptied=new boolean[graph.reservoirs().size()],flashedVessels=new boolean[graph.reservoirs().size()];
         // Owner decision of 2026-11-10 (option A, batch 2026-11-10-custom-shader-system): the connections at a void or generator
         // end this solve has restarted in their allowed direction ({@link #allowedRestart}), and how many restarts it took.
-        boolean[] restarted=new boolean[graph.pipes().size()];int restarts=0;allowedRestart=null;carriedSegments=null;
+        boolean[] restarted=new boolean[graph.pipes().size()];int restarts=0;allowedRestart=null;
         for(int pass=0;pass<maximumPasses;pass++) {
             checkpoint.run();SolverDiagnostics.count(SolverDiagnostics.activeSetPasses);
             graph=emptying==null?original:emptyingGraph(original,emptying);emptyings=emptying==null?null:emptyings(original,emptying,dt);
@@ -508,7 +505,7 @@ public final class PassiveStepSolver {
             int[] phases=new int[seeds.size()];for(int i=0;i<phases.length;i++)phases[i]=dry(graph.reservoirs().get(i),seeds.get(i))?DRY:phaseCode(seeds.get(i));
             byte[] modeCodes=new byte[modes.size()];for(int i=0;i<modeCodes.length;i++)modeCodes[i]=(byte)modes.get(i).ordinal();
             var supports=supports(graph,seeds,reachable,promoted);
-            var equations=new Equations(graph,dt,modes,boundaryClosed,seeds,reachable,supports,pipeIdentities);allowedRestart=null;carriedSegments=null;
+            var equations=new Equations(graph,dt,modes,boundaryClosed,seeds,reachable,supports,pipeIdentities);allowedRestart=null;
             flashRestated=null;
             // The active-set state is what varies between passes, so the structure key is also the cycle key: repeating one
             // means the pass sequence cannot make progress. The frozen junction donors, the phase-port segments and the static
@@ -537,13 +534,6 @@ public final class PassiveStepSolver {
                 // vapour pressure flashes; the pass is solved again with it laid out at its fixed-volume equilibrium.
                 var flashed=flashes(equations,failure.lastVariables(),seeds,flashedVessels,checkpoint);
                 if(flashed!=null){seeds=flashed;continue;}
-                // Decision D11 (batch 2026-11-11-drum-operation-holds, option d): the segments this pass froze at its start flows
-                // must be the ones its iterate's flows land in; a segment decided at no flow makes a vessel's first held phase
-                // marginal, a trace among them (60 uL of water in a gas-filled drum led a leg asking 470 kg/s). The pass is
-                // solved again under the segments the iterate decides, a phase they pin at its whole content drained from the
-                // seed (drainedSeeds). The cycle key carries the segments, so the sequence stays finite.
-                var redecided=equations.failedSegments(failure.lastVariables());
-                if(redecided!=null){var drainedSeeds=equations.drainedSeeds(redecided,checkpoint);if(drainedSeeds!=null)seeds=drainedSeeds;carriedSegments=redecided;continue;}
                 // Decision D54: a vessel the failed iterate drained to nothing runs dry within the step. Its end state has no
                 // contents, so the pass laid out with them has no root (every step size fails the same way); it is solved
                 // again with the vessel as a junction holding its stock, which ends the step empty (emptyingGraph).
@@ -554,8 +544,6 @@ public final class PassiveStepSolver {
                 // (a drained level-loop drum held its island at residual = the valve's flow). It is solved again open, passing
                 // what reaches it; the converged open point regulates again where it passes more than the target.
                 if(openStarved(original,modes,emptying))continue;
-                // What a failed iterate decides is listed above: a cavitating pump, a flashing rigid vessel, the segments its flows
-                // land in, a vessel it runs dry, a starved valve; each restates this pass's own equations from the iterate's flows.
                 // A point the Newton never reached is not read as evidence about this pass's frozen junction donors or the
                 // junction basis they state (unlike the converged tests below): a diverged trial's flow sign handed a
                 // junction the tank's nitrogen as a seeded trace nothing delivers, and every swept pressure lost an interval
@@ -574,7 +562,7 @@ public final class PassiveStepSolver {
                 var changedSeeds=foldedIterate(graph,iterate);
                 // Decision D11: a phase a vessel's ports draw at their full capacity leaves the vessel within the step; a
                 // pass whose seed still holds it may have no root (see drainedSeeds).
-                if(changedSeeds==null)changedSeeds=equations.drainedSeeds(equations.segments,checkpoint);
+                if(changedSeeds==null)changedSeeds=equations.drainedSeeds(checkpoint);
                 if(changedSeeds==null)throw new SparseNewton.Nonconvergence(failure.getMessage()+"; active-set pass="+pass,failure.lastVariables(),failure.phaseHold());
                 seeds=changedSeeds;continue;
             }
@@ -4477,7 +4465,7 @@ public final class PassiveStepSolver {
                 // choice multiplies nothing. The rule is {@link #columnFromFirst}, which the start estimate states too.
                 columnEnds[edge]=only>=0?only:columnFromFirst(first,second,difference,dz,initialPoint[edgeOffset+edge]>=0)?0:1;
             }
-            segments=carriedSegments!=null?carriedSegments:startSegments();
+            segments=startSegments();
         }
         /**
          * The segments of this pass, decided from the flows its start point carries: the start point's edge unknowns are
@@ -4619,7 +4607,7 @@ public final class PassiveStepSolver {
          * step doubles the capacity and the pinned draw is still the whole phase. A starting point and a phase regime only:
          * a converged pass that holds the phase after all is corrected back by the converged-point phase correction.
          */
-        List<FluidThermodynamics.State> drainedSeeds(PhaseDraw.Segment[][] segments,Runnable checkpoint) {
+        List<FluidThermodynamics.State> drainedSeeds(Runnable checkpoint) {
             List<FluidThermodynamics.State> result=null;
             for(int node=0;node<layout.length;node++) {
                 // An open vessel's vent draws its whole start gas (OpenVessel), as a phase pinned at its capacity does.
@@ -4688,22 +4676,6 @@ public final class PassiveStepSolver {
         }
         /** Whether the converged connection flows {@code flows} land an open phase-port end in another segment than the one
          * this pass froze (the pass loop then solves the pass again with the segments re-decided from them). */
-        /**
-         * The segments a failed iterate {@code x} decides ({@link #decideSegments} at its transported flows, its law flows
-         * where it does not decode), or null when they are this pass's own (decision D11; the converged pass's check is
-         * {@link #segmentsMoved}).
-         */
-        PhaseDraw.Segment[][] failedSegments(double[] x) {
-            boolean any=false;for(boolean draws:drawsPhase)any|=draws;
-            if(!any)return null;
-            Transport[] tr;try{decode(x);tr=cachedTransport;}catch(IllegalArgumentException outsideDomain){tr=null;}
-            double[] flows=new double[graph.pipes().size()];
-            for(int edge=0;edge<flows.length;edge++){double y=x[edgeOffset+edge];flows[edge]=boundaryClosed[edge]||modes.get(edge)==FlowControl.Mode.CLOSED?0:tr==null?y:flow(edge,y,tr);}
-            var decided=decideSegments(flows);
-            for(int edge=0;edge<segments.length;edge++)for(int end=0;end<2;end++)
-                if(segments[edge][end]!=null&&!segments[edge][end].samePhases(decided[edge][end]))return decided;
-            return null;
-        }
         boolean segmentsMoved(double[] flows) {
             boolean any=false;for(boolean draws:drawsPhase)any|=draws;
             if(!any)return false;
