@@ -3442,12 +3442,6 @@ public final class PassiveStepSolver {
             for(int e:nodeEdges[node]){if(e==except||closed[e])continue;var pipe=graph.pipes().get(e);double q=flow(e,endAt(e,0,p),endAt(e,1,p));net+=pipe.second()==node?q:-q;}
             return net;
         }
-        /** Whether no open connection of junction {@code node} carries anything at {@code p}: each is refused the way its drive
-         * points, or has none (a sealed fitting, whose balance holds at its own pressure). */
-        private boolean sealed(int node,double[] p) {
-            for(int e:nodeEdges[node]){if(closed[e])continue;if(flow(e,endAt(e,0,p),endAt(e,1,p))!=0)return false;}
-            return true;
-        }
         private double scale(int node,double pressure){return unknown[node]>=0&&gas[node]?pressure/reference[node]:1;}
         /** The connection's flow at end pressures {@code pa}, {@code pb} (positive first to second): its law in the donor's
          * column and stream, saturated at the donor's cap, nothing in a refused direction; a mover's prescribed flow, or its
@@ -3542,7 +3536,7 @@ public final class PassiveStepSolver {
         }
         /**
          * One Gauss-Seidel sweep: each junction is bisected on the sign of its net inflow inside the hull, except a sealed one
-         * ({@link #sealed}), which keeps its pressure (t56's trace of cold seed 743): a junction between closed lines and a
+         * ({@link #still}), which keeps its pressure (t56's trace of cold seed 743): a junction between closed lines and a
          * one-way supply it stands above has no inflow at any pressure above that supply's, and the bisection put it on the
          * edge of that flat range, a liquid-full fitting at 4.96 MPa seeded as vapour at the supply's 485 kPa, where no step
          * converged. A sealed fitting holds its fluid and its pressure.
@@ -3550,7 +3544,7 @@ public final class PassiveStepSolver {
         void sweep(double[] p) {
             int[][] nodeEdges=incidence(graph);
             for(int node=0;node<nodes;node++) {
-                if(unknown[node]<0||sealed(node,p))continue;
+                if(unknown[node]<0||still(node,p))continue;
                 double lo=low,hi=high;
                 for(int k=0;k<30&&hi-lo>1e-9*high;k++) {
                     double mid=.5*(lo+hi),net=0;p[node]=mid;
@@ -3626,7 +3620,7 @@ public final class PassiveStepSolver {
             double tolerance=1e-6*Math.max(1,scale);
             for(int iteration=0;iteration<30;iteration++) {
                 checkpoint.run();finalResidual=maximum(residual);
-                if(finalResidual<=tolerance){converged=true;return p;}
+                if(finalResidual<=tolerance){converged=true;break;}
                 iterations++;
                 double[][] jacobian=new double[count][2*band+1];residual(p,new double[count],jacobian);
                 double floor=0;for(int i=0;i<count;i++)floor=Math.max(floor,Math.abs(jacobian[i][band]));floor=Math.max(floor*1e-12,Double.MIN_NORMAL);
@@ -3651,7 +3645,30 @@ public final class PassiveStepSolver {
                     if(moved<1e-12)break;}
             }
             finalResidual=maximum(residual);converged=finalResidual<=tolerance;
+            rest(p);
             return p;
+        }
+        /**
+         * A junction whose connections all carry nothing at {@code p} moves back toward its own pressure as far as they still
+         * carry nothing: to its own pressure, or to the edge of its no-flow range nearest it. Its flows stay zero, so no row
+         * changes. A no-flow range has a zero merit at every point, so the Newton's first step into it is accepted wherever
+         * it lands, the hull's clamp included (defect 3 of batch 2026-11-11-drum-operation-holds: a leg's foot at 300 Pa,
+         * the hull's floor, instead of its column's 52 kPa).
+         */
+        private void rest(double[] p) {
+            for(int node=0;node<nodes;node++) {
+                if(unknown[node]<0||!still(node,p))continue;
+                double own=Math.clamp(reference[node],low,high),near=p[node],far=own;
+                p[node]=own;if(still(node,p))continue;
+                for(int k=0;k<60&&Math.abs(far-near)>1e-12*Math.max(1,Math.abs(own));k++){double mid=.5*(near+far);p[node]=mid;if(still(node,p))near=mid;else far=mid;}
+                p[node]=near;
+            }
+        }
+        /** Whether no open connection of junction {@code node} carries anything at {@code p}: each is refused the way its drive
+         * points, or has none (a sealed fitting, whose balance holds at its own pressure). */
+        private boolean still(int node,double[] p) {
+            for(int e:nodeEdges[node]){if(closed[e])continue;if(flow(e,endAt(e,0,p),endAt(e,1,p))!=0)return false;}
+            return true;
         }
         /**
          * The graph with every balanced junction at its pressure and the upwind mixture of what the balanced flows deliver (PH
