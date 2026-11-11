@@ -435,17 +435,21 @@ public final class EquilibriumResult {
         for (PhaseAmounts phase : phases) total += phase.total();
         return total;
     }
-    /** {@code sum_p n_p h_p}, J. */
+    // The aggregates read each phase's balance book (W3a D2): the equilibrium book plus water's share, which is zero
+    // unless water is a component of the cubic, so these equal the equilibrium book's sums bit for bit then.
+    /** {@code sum_p n_p h_p}, J, on the balance book. */
     public double enthalpy() { return sum(Property.ENTHALPY); }
-    /** {@code sum_p n_p u_p}, J. */
+    /** {@code sum_p n_p u_p}, J, on the balance book. */
     public double internalEnergy() { return sum(Property.INTERNAL_ENERGY); }
-    /** {@code sum_p n_p g_p}, J. */
+    /** {@code sum_p n_p g_p}, J: the equilibrium book (no share enters the Gibbs energy). */
     public double gibbsEnergy() { return sum(Property.GIBBS); }
-    /** {@code sum_p n_p v_p}, m3. */
+    /** {@code sum_p n_p v_p}, m3, on the balance book. */
     public double volume() { return sum(Property.VOLUME); }
+    /** {@code sum_p n_p s_p}, J/K, on the balance book. */
+    public double entropy() { return sum(Property.ENTROPY); }
     public double molarEnthalpy() { return enthalpy() / totalAmount(); }
 
-    private enum Property { ENTHALPY, INTERNAL_ENERGY, GIBBS, VOLUME }
+    private enum Property { ENTHALPY, INTERNAL_ENERGY, GIBBS, VOLUME, ENTROPY }
 
     private double sum(Property property) {
         requireSplit();
@@ -453,10 +457,11 @@ public final class EquilibriumResult {
         for (PhaseAmounts phase : phases) {
             PhaseState state = phase.state();
             double molar = switch (property) {
-                case ENTHALPY -> state.molarEnthalpy();
-                case INTERNAL_ENERGY -> state.molarInternalEnergy();
+                case ENTHALPY -> state.balanceEnthalpy();
+                case INTERNAL_ENERGY -> state.balanceInternalEnergy();
                 case GIBBS -> state.molarGibbsEnergy();
-                case VOLUME -> state.molarVolume();
+                case VOLUME -> state.balanceVolume();
+                case ENTROPY -> state.balanceEntropy();
             };
             sum += phase.total() * molar;
         }

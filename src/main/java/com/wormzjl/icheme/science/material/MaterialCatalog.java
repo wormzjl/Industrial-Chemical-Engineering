@@ -942,8 +942,8 @@ public final class MaterialCatalog {
     }
     /** The group counts of a dataset by scheme, by its record id; empty where it has none. */
     Map<String,GroupCounts> propertyGroupCounts(String propertyId) { return groupData.counts().getOrDefault("properties/"+propertyId,Map.of()); }
-    /** The declared revision of a property record (dataset). */
-    String propertyRevision(String propertyId) {
+    /** The declared revision of a property record (dataset); public for the derived contract's water identity (W3a D6). */
+    public String propertyRevision(String propertyId) {
         String revision=records.propertyRevisions().get(propertyId);
         if(revision==null)throw new IllegalArgumentException("Unknown property record: "+propertyId);
         return revision;

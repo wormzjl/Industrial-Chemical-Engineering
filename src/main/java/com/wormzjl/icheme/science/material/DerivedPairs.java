@@ -125,9 +125,11 @@ public final class DerivedPairs {
         private final List<String> notices;
         private final String identity;
         private final int fitsRun;
+        private final boolean[] polar;
 
         private Result(List<String> components, double[] tc, double[] pc, double[] omega, double[][] alpha, HuronVidalExcess excess,
-                       List<Pair> pairs, List<String> missing, List<String> notices, String identity, int fitsRun) {
+                       List<Pair> pairs, List<String> missing, List<String> notices, String identity, int fitsRun, boolean[] polar) {
+            this.polar = polar;
             this.components = List.copyOf(components);
             this.criticalTemperatures = tc; this.criticalPressures = pc; this.acentricFactors = omega; this.mathiasCopeman = alpha;
             this.excess = excess; this.pairs = List.copyOf(pairs); this.missing = List.copyOf(missing); this.notices = List.copyOf(notices);
@@ -163,6 +165,11 @@ public final class DerivedPairs {
         public String identity() { return identity; }
         /** Pairs this call fitted; zero when every fit came from the catalog's cache. */
         public int fitsRun() { return fitsRun; }
+        /**
+         * Whether compound {@code i} is polar by its Dortmund counts (a main group other than 1, 2, 3, 4 and 42; water is
+         * polar): the equilibrium engine's three-slot system runs for a feed holding one (W3a D3).
+         */
+        public boolean polar(int i) { return polar[i]; }
 
         /** The kernel on these inputs over the given temperature and pressure box. */
         public PengRobinsonKernel kernel(double minimumKelvin, double maximumKelvin, double minimumPascal, double maximumPascal) {
@@ -313,12 +320,14 @@ public final class DerivedPairs {
         if (modelPairs) excess.interactions(model.build());
         double[] tc = new double[n], pc = new double[n], omega = new double[n];
         double[][] alpha = new double[n][];
+        boolean[] polar = new boolean[n];
         for (int i = 0; i < n; i++) {
             Compound c = compounds.get(i);
             tc[i] = c.tc; pc[i] = c.pc; omega[i] = c.omega; alpha[i] = c.alpha == null ? null : c.alpha.clone();
+            polar[i] = c.polar || c.id.equals(WATER);
         }
         String identity = "derived-pairs=" + REVISION + ";records=" + String.join(",", tokens);
-        return new Result(ids, tc, pc, omega, alpha, excess.build(), pairs, missing, notices, identity, counter.get());
+        return new Result(ids, tc, pc, omega, alpha, excess.build(), pairs, missing, notices, identity, counter.get(), polar);
     }
 
     /** A group-contribution pair the tables cannot resolve: the pair falls to {@link Source#MISSING} with this reason. */

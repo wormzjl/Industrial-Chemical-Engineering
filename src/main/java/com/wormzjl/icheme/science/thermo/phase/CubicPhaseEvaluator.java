@@ -2,9 +2,11 @@ package com.wormzjl.icheme.science.thermo.phase;
 
 import com.wormzjl.icheme.science.math.DeterministicMath;
 
+import com.wormzjl.icheme.science.fluid.thermo.CoefficientIdealGas;
 import com.wormzjl.icheme.science.fluid.thermo.HydrocarbonModel;
 import com.wormzjl.icheme.science.fluid.thermo.SpinePackageData;
 import com.wormzjl.icheme.science.fluid.thermo.TranslatedPengRobinson;
+import com.wormzjl.icheme.science.material.DerivedPairs;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.thermo.IdealGasFunction;
 import com.wormzjl.icheme.science.thermo.PairInteractions;
@@ -30,6 +32,11 @@ import java.util.Objects;
  * <p>The translation {@code c_i} adds {@code P c} to {@code h} and {@code g} and {@code P c_i/(R T)} to
  * {@code ln phi_i}, nothing to {@code s} or {@code c_p}; it cancels from every phase-equilibrium condition.</p>
  *
+ * <p>The derived family {@value #DERIVED_FAMILY} (batch 2026-11-11-aqueous-solvents, W3a decisions D1, D2;
+ * {@link #derived}): a list whose pairs come from {@link DerivedPairs} (the Huron-Vidal rule, a Mathias-Copeman alpha
+ * per compound), water a component of the cubic with no volume translation, and water's own share of enthalpy,
+ * entropy and volume ({@link WaterShare}) on each state's balance book, apart from {@code g} and {@code ln phi}.</p>
+ *
  * <p>Errors: malformed input (wrong length, negative or non-finite amounts, no material, non-positive T or P) is an
  * {@link IllegalArgumentException}; a state outside a component's data is evaluated on the data's continuation (owner
  * rule of 2026-10-16), never refused; a state the model cannot evaluate (no physical root, a derivative at root
@@ -37,6 +44,10 @@ import java.util.Objects;
  */
 public final class CubicPhaseEvaluator {
     public static final String FAMILY = "pr78_translated_v1";
+    /** The family of {@link #derived}: PR78 with the Huron-Vidal rule of derived pairs and water's IF97 share. */
+    public static final String DERIVED_FAMILY = "pr78_huron_vidal_water_share_v1";
+    /** The water component's id in a derived list. */
+    public static final String WATER = "Water";
     private static final double R = PengRobinsonKernel.GAS_CONSTANT;
 
     private final String sourceId;
@@ -45,6 +56,11 @@ public final class CubicPhaseEvaluator {
     private final IdealGasFunction[] idealGas;
     private final TranslatedPengRobinson eos;
     private final double[] translations;
+    private final String family;
+    /** The derived family's water share, its water index and the derivation; null, -1, null otherwise. */
+    private final WaterShare waterShare;
+    private final int waterIndex;
+    private final DerivedPairs.Result derivation;
 
     /**
      * @param sourceId the package the constants come from
@@ -67,6 +83,16 @@ public final class CubicPhaseEvaluator {
 
     private CubicPhaseEvaluator(String sourceId, List<ThermoComponent> components, TranslatedPengRobinson eos,
                                 double[] translations, List<? extends IdealGasFunction> idealGas) {
+        this(sourceId, components, eos, translations, idealGas, FAMILY, null, -1, null);
+    }
+
+    private CubicPhaseEvaluator(String sourceId, List<ThermoComponent> components, TranslatedPengRobinson eos,
+                                double[] translations, List<? extends IdealGasFunction> idealGas, String family,
+                                WaterShare waterShare, int waterIndex, DerivedPairs.Result derivation) {
+        this.family = family;
+        this.waterShare = waterShare;
+        this.waterIndex = waterIndex;
+        this.derivation = derivation;
         this.sourceId = Objects.requireNonNull(sourceId, "sourceId");
         this.components = List.copyOf(components);
         if (idealGas.size() != this.components.size()) throw new IllegalArgumentException("One ideal-gas function per component");
@@ -115,7 +141,55 @@ public final class CubicPhaseEvaluator {
         return new CubicPhaseEvaluator(propertyPackage.id(), components, interactions, translations, idealGas);
     }
 
-    public String family() { return FAMILY; }
+    /**
+     * The derived evaluator of package {@code packageId} over {@code componentIds} in that order (W3a D1): the kernel of
+     * {@link DerivedPairs#derive}, one {@link CoefficientIdealGas} per compound (the network's sensible datum), water
+     * untranslated and every other compound translated so that its pure liquid on this kernel has its volume anchor's
+     * volume (the catalog's volume reference, else the record's standard density; none where the anchor has no liquid
+     * root), and water's share ({@link WaterShare}) when {@value #WATER} is in the list.
+     */
+    public static CubicPhaseEvaluator derived(MaterialCatalog catalog, String packageId, List<String> componentIds) {
+        var result = DerivedPairs.derive(catalog, packageId, componentIds);
+        var pack = catalog.requirePackage(packageId);
+        List<String> ids = result.components();
+        int n = ids.size();
+        PengRobinsonKernel kernel = result.kernel(Double.MIN_VALUE, Double.MAX_VALUE, Double.MIN_VALUE, Double.MAX_VALUE);
+        double[] tc = result.criticalTemperatures(), pc = result.criticalPressures(), omega = result.acentricFactors();
+        List<ThermoComponent> components = new java.util.ArrayList<>(n);
+        List<IdealGasFunction> idealGas = new java.util.ArrayList<>(n);
+        double[] translations = new double[n];
+        var calibrations = catalog.fluidData().volumeReferences();
+        var scratch = kernel.newWorkspace();
+        var evaluation = kernel.newEvaluation();
+        int water = ids.indexOf(WATER);
+        for (int i = 0; i < n; i++) {
+            var property = pack.properties().get(pack.components().indexOf(ids.get(i)));
+            components.add(new ThermoComponent(ids.get(i), tc[i], pc[i], omega[i], property.molecularWeight()));
+            idealGas.add(CoefficientIdealGas.of(catalog, packageId, ids.get(i)));
+            if (i == water) continue;
+            var point = calibrations.get(property.component());
+            double t = point == null ? property.standardTemperature() : point.temperatureKelvin();
+            double target = point == null ? property.molecularWeight() / property.density() : point.molarVolumeCubicMetres();
+            double p = point == null ? property.standardPressure() : point.pressurePascal();
+            double[] pure = new double[n];
+            pure[i] = 1.0;
+            kernel.prepareTemperature(t, scratch);
+            kernel.evaluate(t, p, pure, Root.LIQUID, scratch, evaluation);
+            double raw = evaluation.compressibility() * R * t / p;
+            boolean liquid = evaluation.physicalRootCount() > 1 || raw < PhaseIdentification.VAPOUR_BRANCH_VOLUME_RATIO * kernel.coVolume(i);
+            translations[i] = liquid ? target - raw : 0.0;
+        }
+        var eos = TranslatedPengRobinson.residualOnly(components, kernel, translations);
+        WaterShare share = null;
+        if (water >= 0) share = new WaterShare(tc[water], pc[water], omega[water], result.mathiasCopeman()[water]);
+        return new CubicPhaseEvaluator(packageId, components, eos, translations, idealGas, DERIVED_FAMILY, share, water, result);
+    }
+
+    public String family() { return family; }
+    /** The water component's index in a derived list with water, else -1. */
+    public int waterComponent() { return waterShare == null ? -1 : waterIndex; }
+    /** The derivation of a {@link #derived} evaluator, null otherwise. */
+    public DerivedPairs.Result derivation() { return derivation; }
     public List<String> components() { return names; }
     public ThermoComponent component(int index) { return components.get(index); }
     public IdealGasFunction idealGas(int index) { return idealGas[index]; }
@@ -142,6 +216,8 @@ public final class CubicPhaseEvaluator {
         private final PengRobinsonKernel.Derivatives mixtureDerivatives;
         private final double[] composition;
         private final double[] idealGibbs;
+        private final WaterShare.Workspace shareScratch;
+        private final double[] share = new double[WaterShare.SIZE];
 
         private Workspace(CubicPhaseEvaluator owner) {
             this.owner = owner;
@@ -150,6 +226,7 @@ public final class CubicPhaseEvaluator {
             mixtureDerivatives = owner.eos.kernel().newDerivatives();
             composition = new double[owner.names.size()];
             idealGibbs = new double[owner.names.size()];
+            shareScratch = owner.waterShare == null ? null : owner.waterShare.newWorkspace();
         }
     }
 
@@ -172,7 +249,7 @@ public final class CubicPhaseEvaluator {
         // The same root on the kernel's own workspace: d ln phi/dn and the untranslated d ln phi/dT.
         eos.kernel().evaluateDerivatives(temperature, pressure, amounts, preference, w.mixture, w.mixtureDerivatives);
         fill(temperature, pressure, preference, values, w, out.state());
-        out.begin(FAMILY);
+        out.begin(family);
         int n = names.size();
         for (int i = 0; i < n; i++) {
             double[] row = out.logFugacityCompositionRowBuffer(i);
@@ -203,6 +280,10 @@ public final class CubicPhaseEvaluator {
             throw new IllegalArgumentException("Invalid phase heat capacity " + heatCapacity);
         }
         out.setCaloric(heatCapacity, values.enthalpyPressureDerivative());
+        if (waterShare != null) {
+            double[] s = w.share;
+            out.setShare(s[WaterShare.H_T], s[WaterShare.H_P], s[WaterShare.S_T], s[WaterShare.S_P], s[WaterShare.V_T], s[WaterShare.V_P]);
+        }
         return out;
     }
 
@@ -263,5 +344,16 @@ public final class CubicPhaseEvaluator {
         out.set(kind, null, preference, values.physicalRootCount(), temperature, pressure, values.molarVolume(),
                 idealEnthalpy, residualEnthalpy, idealEntropy, residualEntropy, gibbs, w.composition, logPhi,
                 w.idealGibbs);
+        if (waterShare != null) {
+            // The balance book's share (D2): from the phase's own untranslated v/b, never part of g or ln phi.
+            double shift = 0.0, coVolume = 0.0;
+            for (int i = 0; i < names.size(); i++) {
+                shift += w.composition[i] * translations[i];
+                coVolume += w.composition[i] * eos.kernel().coVolume(i);
+            }
+            waterShare.phase(temperature, pressure, w.composition[waterIndex], values.molarVolume() - shift, coVolume,
+                    values.volumeTemperatureDerivative(), values.volumePressureDerivative(), w.shareScratch, w.share);
+            out.setShare(w.share[WaterShare.H], w.share[WaterShare.S], w.share[WaterShare.V]);
+        }
     }
 }

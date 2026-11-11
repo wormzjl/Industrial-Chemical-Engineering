@@ -111,6 +111,52 @@ public record PhaseContract(String packageId, ThermoIdentity identity, List<Stri
     }
 
     /**
+     * The contract of a package with derived pairs (batch 2026-11-11-aqueous-solvents, W3a decisions D1, D6), the pilot's
+     * kind: the package's compounds other than {@value CubicPhaseEvaluator#WATER} in package order, then water, as
+     * {@link WaterParticipation#IN_EQUATION_OF_STATE} (without water in the package {@link WaterParticipation#NONE});
+     * qualified for fluid-only competition; the package envelope; graded estimated-with-declared-error. The identity:
+     * the package revision is {@link MaterialCatalog#fluidRevision} with the derivation's identity
+     * ({@code DerivedPairs.Result.identity}), the family {@link CubicPhaseEvaluator#DERIVED_FAMILY}, the spine revision,
+     * and the water part {@code water-in-eos-v1:<water dataset revision>:<share revision>}.
+     */
+    public static PhaseContract forDerivedPackage(MaterialCatalog catalog, String packageId) {
+        return forDerived(catalog, packageId, CubicPhaseEvaluator.derived(catalog, packageId, derivedBasis(catalog, packageId)));
+    }
+
+    /** The derived basis of a package: its compounds other than water in package order, then water. */
+    public static List<String> derivedBasis(MaterialCatalog catalog, String packageId) {
+        var pack = catalog.requirePackage(packageId);
+        List<String> basis = new ArrayList<>(pack.components());
+        boolean water = basis.remove(CubicPhaseEvaluator.WATER);
+        if (water) basis.add(CubicPhaseEvaluator.WATER);
+        return basis;
+    }
+
+    /** {@link #forDerivedPackage} on an evaluator already built from {@link CubicPhaseEvaluator#derived}. */
+    public static PhaseContract forDerived(MaterialCatalog catalog, String packageId, CubicPhaseEvaluator evaluator) {
+        if (evaluator.derivation() == null) throw new IllegalArgumentException("A derived contract needs a derived evaluator");
+        var pack = catalog.requirePackage(packageId);
+        List<String> basis = evaluator.components();
+        boolean water = basis.contains(CubicPhaseEvaluator.WATER);
+        String spine = catalog.spineRevision(packageId);
+        String waterPart = ThermoIdentity.NO_WATER;
+        if (water) {
+            var property = pack.properties().get(pack.components().indexOf(CubicPhaseEvaluator.WATER));
+            waterPart = ThermoIdentity.WATER_IN_EOS_FORMULATION + ":" + property.id() + "@" + catalog.propertyRevision(property.id())
+                    + ":" + WaterShare.REVISION;
+        }
+        var identity = new ThermoIdentity(catalog.fluidRevision(packageId) + ";" + evaluator.derivation().identity(),
+                CubicPhaseEvaluator.DERIVED_FAMILY, spine.isEmpty() ? ThermoIdentity.NO_SPINE : spine, waterPart);
+        var domain = PhaseDomain.of(FluidDomain.of(catalog, packageId), basis);
+        var coverage = new EquilibriumResult.Coverage(EquilibriumResult.CoverageGrade.ESTIMATED_DECLARED_ERROR,
+                "PR78 with the Huron-Vidal rule of pairs derived from group counts and Henry constants, water a component of the "
+                        + "cubic with its IF97 share of enthalpy, entropy and volume (batch 2026-11-11-aqueous-solvents); "
+                        + "the declared critical band is graded research-only by the engine; the package's advisory evidence applies");
+        return new PhaseContract(packageId, identity, basis, water ? WaterParticipation.IN_EQUATION_OF_STATE : WaterParticipation.NONE,
+                water ? CubicPhaseEvaluator.WATER : null, Set.of(PhaseCompetition.FLUID_ONLY), Set.of(), domain, coverage);
+    }
+
+    /**
      * The crystals of a package that may compete (P4 stage 2a): those the package declares whose records are usable
      * ({@link CrystalReference#usable()}) and graded {@code qualified} or {@code estimated_declared_error}; a
      * research-only or unavailable record is not admitted. In declaration order.

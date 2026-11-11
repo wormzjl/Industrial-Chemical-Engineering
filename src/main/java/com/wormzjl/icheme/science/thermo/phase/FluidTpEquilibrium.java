@@ -364,6 +364,12 @@ public final class FluidTpEquilibrium {
     private final int basis;
     private final int[] basisOfComponent;
     private final int waterIndex;
+    /** W3a D1: water is a component of the cubic ({@link WaterParticipation#IN_EQUATION_OF_STATE}). */
+    private final boolean inEquationOfState;
+    /** W3a D3: per component, polar by its group counts (a derived list); a feed holding one runs the three-slot system. */
+    private final boolean[] polar;
+    /** The cubic's water component, -1 without one. */
+    private final int cubicWater;
     private final int[] waterChemistry;
     private final double[] translations;
     private final EquilibriumResult.Coverage convergedCoverage;
@@ -410,6 +416,16 @@ public final class FluidTpEquilibrium {
     }
 
     /**
+     * The service of a package with derived pairs (batch 2026-11-11-aqueous-solvents, W3a): {@link PhaseContract#forDerived}
+     * on {@link CubicPhaseEvaluator#derived} over {@link PhaseContract#derivedBasis}, the default settings, no free-water
+     * model (water is a component of the cubic).
+     */
+    public static FluidTpEquilibrium forDerivedPackage(MaterialCatalog catalog, String packageId) {
+        CubicPhaseEvaluator evaluator = CubicPhaseEvaluator.derived(catalog, packageId, PhaseContract.derivedBasis(catalog, packageId));
+        return new FluidTpEquilibrium(PhaseContract.forDerived(catalog, packageId, evaluator), evaluator, Settings.DEFAULT, null, List.of());
+    }
+
+    /**
      * @param crystalEvaluators the crystals this service evaluates (P4 stage 2a): each made of a species of the
      *        evaluator's basis, named by a qualified competition of the contract, with the same ideal-gas function as
      *        the evaluator's for its species (so the chemical potentials compare); each is anchored here, once, to this
@@ -426,10 +442,15 @@ public final class FluidTpEquilibrium {
             throw new IllegalArgumentException("Contract identity names family " + contract.identity().evaluatorFamily()
                     + ", evaluator is " + evaluator.family());
         }
+        inEquationOfState = contract.water() == WaterParticipation.IN_EQUATION_OF_STATE;
         List<String> withoutWater = new ArrayList<>(contract.components());
-        if (contract.waterComponent() != null) withoutWater.remove(contract.waterComponent());
+        if (contract.waterComponent() != null && !inEquationOfState) withoutWater.remove(contract.waterComponent());
         if (!withoutWater.equals(evaluator.components())) {
-            throw new IllegalArgumentException("The evaluator basis must be the contract basis without water, in order");
+            throw new IllegalArgumentException(inEquationOfState ? "The evaluator basis must be the contract basis, in order"
+                    : "The evaluator basis must be the contract basis without water, in order");
+        }
+        if (inEquationOfState && freeWater != null) {
+            throw new IllegalArgumentException("Water in the equation of state takes no free-water model");
         }
         if (freeWater != null) {
             if (contract.water() != WaterParticipation.SEPARATE_FREE_WATER) {
@@ -446,7 +467,11 @@ public final class FluidTpEquilibrium {
         basis = contract.components().size();
         basisOfComponent = new int[count];
         for (int i = 0; i < count; i++) basisOfComponent[i] = contract.index(evaluator.components().get(i));
-        waterIndex = contract.waterIndex();
+        // The free water's slot; water in the equation of state is a component like the others, no free water.
+        waterIndex = inEquationOfState ? -1 : contract.waterIndex();
+        polar = new boolean[count];
+        if (evaluator.derivation() != null) for (int i = 0; i < count; i++) polar[i] = evaluator.derivation().polar(i);
+        cubicWater = evaluator.waterComponent();
         waterChemistry = contract.waterChemistrySpecies().stream().mapToInt(contract::index).sorted().toArray();
         kernel = evaluator.kernel();
         translations = evaluator.translations();

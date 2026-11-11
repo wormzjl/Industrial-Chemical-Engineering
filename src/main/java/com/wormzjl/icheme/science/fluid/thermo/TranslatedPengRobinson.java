@@ -84,6 +84,38 @@ public final class TranslatedPengRobinson {
     }
 
     /**
+     * {@link #residualOnly(List, double[][], double[])} on a prebuilt kernel (batch 2026-11-11-aqueous-solvents, W3a): a
+     * list whose pairs are derived ({@code science.material.DerivedPairs}, the Huron-Vidal rule and per-compound alphas)
+     * hands its own kernel over. The kernel's components must be {@code components} in order (critical constants and
+     * acentric factors equal); the translation and the volumetric block are this class's expressions on it.
+     */
+    public static TranslatedPengRobinson residualOnly(List<ThermoComponent> components, PengRobinsonKernel kernel,
+                                                      double[] translations) {
+        return new TranslatedPengRobinson(components,Objects.requireNonNull(kernel,"kernel"),translations);
+    }
+
+    /** The kernel-taking residual-only form: no ideal-gas part, no fit ranges. */
+    private TranslatedPengRobinson(List<ThermoComponent> components, PengRobinsonKernel kernel, double[] translations) {
+        this.residualOnly = true;
+        this.idealGas = null;
+        this.datumOffsets = null;
+        this.components = List.copyOf(components);
+        int count = components.size();
+        if (count == 0 || kernel.componentCount() != count || translations.length != count)
+            throw new IllegalArgumentException("Inconsistent property basis");
+        this.fitMinimum = new double[count];
+        this.fitMaximum = new double[count];
+        this.heatCapacityCoefficients = new double[count][6];
+        this.translations = translations.clone();
+        for (int i = 0; i < count; i++) {
+            fitMinimum[i] = Double.NEGATIVE_INFINITY;
+            fitMaximum[i] = Double.POSITIVE_INFINITY;
+            finite(this.translations[i]);
+        }
+        this.kernel = kernel;
+    }
+
+    /**
      * The spine variant: the ideal-gas heat capacity and enthalpy of component {@code i} are
      * {@code idealGas.get(i).heatCapacity(T)} and {@code idealGas.get(i).enthalpy(T) - datumOffsets[i]}; the residual
      * parts, the translation and the volumetric block are the coefficient path's expressions on the same kernel
