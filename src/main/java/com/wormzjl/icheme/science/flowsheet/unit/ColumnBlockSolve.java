@@ -228,9 +228,14 @@ final class ColumnBlockSolve implements Calculation.Law {
         };
     }
 
-    /** V3 on the stream as flashed: its hydrocarbons are the feed, its water a steam feed if it is vapour there. */
+    /**
+     * V3 on the stream as flashed: its hydrocarbons are the feed, its water a steam feed. A feed holding an aqueous liquid is
+     * refused; water dissolved in the oil joins the steam feed with the vapour's, since V3 carries no water in its liquid
+     * (W3b; W5, which gives V3 that water, removes this).
+     */
     private V3ColumnResult run(FlowStream flashed, List<V3SteamFeedSpec> rows) {
-        if (flashed.state().liquidWater() > TRACE * flashed.total()) throw new FlowsheetFailure("column.liquid_water");
+        var state = flashed.state();
+        if (state.labelAmountsView(com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.AQUEOUS)[components - 1] > TRACE * flashed.total()) throw new FlowsheetFailure("column.liquid_water");
         double[] amounts = flashed.amounts();
         double water = amounts[components - 1];
         amounts[components - 1] = 0;
