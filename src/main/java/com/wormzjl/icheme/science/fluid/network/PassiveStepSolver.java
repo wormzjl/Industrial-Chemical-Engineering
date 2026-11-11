@@ -4567,6 +4567,64 @@ public final class PassiveStepSolver {
         /** The segment of every open phase-port end at the connection flows {@code flows} and this pass's seeds; each end's
          * priority order is read off the node's state on the accepted state the step starts from, like its capacities. */
         private PhaseDraw.Segment[][] decideSegments(double[] flows) {
+            var first=decideSegments(flows,null);
+            // W3b stage A group 5 (W3B_NETWORK_PLAN.md section 23): a gas the seed holds is pinned at a port only where the
+            // liquid its node gains within the step, at these flows and through every other end, fills its vapour space.
+            boolean any=false;for(var ends:first)for(var segment:ends)any|=segment!=null&&segment.pinsGas();
+            if(!any)return first;
+            double[] gained=new double[graph.reservoirs().size()];double[][] leaving=new double[first.length][2];
+            for(int edge=0;edge<first.length;edge++) {
+                double q=flows[edge];if(q==0)continue;var pipe=graph.pipes().get(edge);
+                int out=q>0?0:1,donor=out==0?pipe.first():pipe.second(),into=out==0?pipe.second():pipe.first();
+                double liquid=liquidVolumeFlow(first[edge][out],donor,Math.abs(q));
+                gained[into]+=liquid;gained[donor]-=liquid;leaving[edge][out]=liquid;
+            }
+            if(arrived==null)arrived=arrivals(graph);
+            for(int node=0;node<gained.length;node++)if(arrived[node]!=null)gained[node]+=FluidThermodynamics.phaseVolume(arrived[node],FluidThermodynamics.OIL)+FluidThermodynamics.phaseVolume(arrived[node],FluidThermodynamics.AQUEOUS);
+            boolean[][] displaced=new boolean[first.length][2];
+            for(int edge=0;edge<first.length;edge++)for(int end=0;end<2;end++) {
+                var pipe=graph.pipes().get(edge);int node=end==0?pipe.first():pipe.second();
+                double vapour=graph.reservoirs().get(node).state().vaporVolume();
+                displaced[edge][end]=(gained[node]+leaving[edge][end])*dt>=vapour;
+            }
+            return decideSegments(flows,displaced);
+        }
+        /** Per node, the flows (mol/s) its scheduled injections deliver, flashed at the step's start temperature and pressure;
+         * null where none (for {@link #decideSegments}). */
+        private FluidThermodynamics.State[] arrived;
+        private FluidThermodynamics.State[] arrivals(PassiveNetwork graph) {
+            var result=new FluidThermodynamics.State[graph.reservoirs().size()];double[][] rates=new double[result.length][];
+            for(var transfer:graph.scheduledTransfers())if(transfer instanceof ScheduledTransfer.Injection injection) {
+                double[] n=injection.molesPerSecond();var into=rates[injection.node()];
+                if(into==null)rates[injection.node()]=n.clone();else for(int c=0;c<n.length;c++)into[c]+=n[c];
+            }
+            for(int node=0;node<result.length;node++) {
+                if(rates[node]==null||!(PhaseLayout.sum(rates[node])>0))continue;var start=graph.reservoirs().get(node).state();
+                try{result[node]=model.flashTP(start.temperature(),start.pressure(),rates[node],()->{});}catch(IllegalArgumentException refused){}
+            }
+            return result;
+        }
+        /** The liquid volume flow (m3/s) a donor node {@code donor} sends through an end drawing {@code q} (kg/s) under
+         * {@code segment} (null: its bulk), each liquid at the donor's start state's density (before any flash on entry). */
+        private double liquidVolumeFlow(PhaseDraw.Segment segment,int donor,double q) {
+            var s=graph.reservoirs().get(donor).state();double volume=0;
+            if(segment==null) {
+                double mass=s.mass();if(!(mass>0))return 0;
+                for(int phase:new int[]{FluidThermodynamics.OIL,FluidThermodynamics.AQUEOUS})if(FluidThermodynamics.holdsPhase(s,phase))volume+=q*model.phaseMass(s,phase)/mass/phaseDensity(model,s,phase);
+                return volume;
+            }
+            var seed=seeds.get(donor);
+            double oil=FluidThermodynamics.holdsPhase(seed,FluidThermodynamics.OIL)?phaseDensity(model,seed,FluidThermodynamics.OIL):0,water=FluidThermodynamics.holdsPhase(seed,FluidThermodynamics.AQUEOUS)?phaseDensity(model,seed,FluidThermodynamics.AQUEOUS):0;
+            double[] rates=segment.rates(segment.marginalAt(PhaseDraw.held(seed)),q,oil,water);
+            for(int phase:new int[]{FluidThermodynamics.OIL,FluidThermodynamics.AQUEOUS}) {
+                double mass=rates[phase]+rates[3+phase];if(!(mass>0))continue;
+                double rho=FluidThermodynamics.holdsPhase(s,phase)?phaseDensity(model,s,phase):phase==FluidThermodynamics.OIL?oil:water;
+                if(rho>0)volume+=mass/rho;
+            }
+            return volume;
+        }
+        /** {@link #decideSegments(double[])} with {@code displaced} (null: every gas end as displaced, the outflow test). */
+        private PhaseDraw.Segment[][] decideSegments(double[] flows,boolean[][] displaced) {
             var result=new PhaseDraw.Segment[graph.pipes().size()][2];
             for(int edge=0;edge<result.length;edge++)for(int end=0;end<2;end++) {
                 var pipe=graph.pipes().get(edge);var port=end==0?pipe.firstPort():pipe.secondPort();int node=end==0?pipe.first():pipe.second();
@@ -4587,9 +4645,10 @@ public final class PassiveStepSolver {
                     capacity[FluidThermodynamics.AQUEOUS]=waterVolume>0?capacity[FluidThermodynamics.AQUEOUS]*available/waterVolume:0;
                     if(available==0)order=new int[]{FluidThermodynamics.OIL,FluidThermodynamics.GAS};
                 }
+                boolean gasDisplaced=displaced==null||displaced[edge][end];
                 result[edge][end]=port==PassiveNetwork.PhasePort.LIQUID?
-                        PhaseDraw.Segment.mixed(capacity,seedHeld[node],PhaseDraw.held(start),outflow,FluidThermodynamics.holdsPhase(seeds.get(node),FluidThermodynamics.OIL)?phaseDensity(model,seeds.get(node),FluidThermodynamics.OIL):0,FluidThermodynamics.holdsPhase(seeds.get(node),FluidThermodynamics.AQUEOUS)?phaseDensity(model,seeds.get(node),FluidThermodynamics.AQUEOUS):0):
-                        PhaseDraw.Segment.decide(order,capacity,seedHeld[node],PhaseDraw.held(start),outflow);
+                        PhaseDraw.Segment.mixed(capacity,seedHeld[node],PhaseDraw.held(start),outflow,FluidThermodynamics.holdsPhase(seeds.get(node),FluidThermodynamics.OIL)?phaseDensity(model,seeds.get(node),FluidThermodynamics.OIL):0,FluidThermodynamics.holdsPhase(seeds.get(node),FluidThermodynamics.AQUEOUS)?phaseDensity(model,seeds.get(node),FluidThermodynamics.AQUEOUS):0,gasDisplaced):
+                        PhaseDraw.Segment.decide(order,capacity,seedHeld[node],PhaseDraw.held(start),outflow,gasDisplaced);
             }
             return result;
         }

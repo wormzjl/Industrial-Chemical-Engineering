@@ -127,13 +127,17 @@ final class PhaseDraw {
         Segment(int[] order,double[] capacity,int[] pinned,int marginal){this(order,capacity,pinned,marginal,false);}
         /** Equal volume-rate draw; one depleted liquid becomes pinned and the other takes the remainder. */
         static Segment mixed(double[] capacity,boolean[] held,boolean[] startHeld,double outflow,double oilDensity,double waterDensity) {
+            return mixed(capacity,held,startHeld,outflow,oilDensity,waterDensity,true);
+        }
+        /** As above; {@code gasDisplaced} as in {@link #decide(int[],double[],boolean[],boolean[],double,boolean)}. */
+        static Segment mixed(double[] capacity,boolean[] held,boolean[] startHeld,double outflow,double oilDensity,double waterDensity,boolean gasDisplaced) {
             int[] order={OIL,AQUEOUS,GAS};
-            if(!held[OIL]||!held[AQUEOUS])return decide(order,capacity,held,startHeld,outflow);
+            if(!held[OIL]||!held[AQUEOUS])return decide(order,capacity,held,startHeld,outflow,gasDisplaced);
             double sum=oilDensity+waterDensity,oilShare=oilDensity/sum,waterShare=waterDensity/sum;
             if(outflow*oilShare<=capacity[OIL]&&outflow*waterShare<=capacity[AQUEOUS])
                 return new Segment(order,capacity,new int[0],OIL,true);
             int first=capacity[OIL]/oilShare<=capacity[AQUEOUS]/waterShare?OIL:AQUEOUS,second=first==OIL?AQUEOUS:OIL;
-            return decide(new int[]{first,second,GAS},capacity,held,startHeld,outflow);
+            return decide(new int[]{first,second,GAS},capacity,held,startHeld,outflow,gasDisplaced);
         }
         double[] rates(int marginal,double outflow,double oilDensity,double waterDensity) {
             if(!mixed||oilDensity<=0||waterDensity<=0)return rates(marginal,outflow);
@@ -153,11 +157,24 @@ final class PhaseDraw {
          * capacity of zero: a phase that appeared within the step), then any the seed holds; none, -1.
          */
         static Segment decide(int[] order,double[] capacity,boolean[] seedHeld,boolean[] startHeld,double outflow) {
+            return decide(order,capacity,seedHeld,startHeld,outflow,true);
+        }
+        /**
+         * As above, with the outflow test for a gas the seed still holds replaced by {@code gasDisplaced} (W3b stage A group 5,
+         * W3B_NETWORK_PLAN.md section 23): a gas runs out at a port when the liquid entering within the step fills the vapour
+         * space, not when the port's flow exceeds its holdup over the step. Drawing a gas lowers the pressure and the port's
+         * own law then passes less, so its holdup is no limit; liquid that fills the space is. Measured on three cases:
+         * a kettle's vapour nozzle with the gas pinned on its start holdup passed its pool's liquid (107 kg/s at t = 4 s and
+         * 171 kg/s at t = 23 s against a boil-up of 3.7 and 0.40 kg/s, baseline 48b4fb298, the 1 MW kettle; 8.14 kg/s mean
+         * at W3b's end); a vented drum fed 106 kg/s, 11.4 of its 11.5 m3 vapour, passed liquid through its top port in 84
+         * of 171 passes; a tank filled with liquid CO2 at 0.08 m3/s has its 0.16 m3 vapour space displaced within 2 s.
+         */
+        static Segment decide(int[] order,double[] capacity,boolean[] seedHeld,boolean[] startHeld,double outflow,boolean gasDisplaced) {
             double remaining=Math.max(outflow,0);int[] pinned=new int[3];int count=0,marginal=-1,after=0;
             for(int i=0;i<order.length;i++) {
                 int phase=order[i];if(!(capacity[phase]>0))continue;
                 boolean relieved=false;for(int j=i+1;j<order.length;j++)relieved|=seedHeld[order[j]];
-                if((remaining>capacity[phase]||!seedHeld[phase]&&startHeld[phase]&&Double.isFinite(capacity[phase]))&&relieved){pinned[count++]=phase;remaining=Math.max(0,remaining-capacity[phase]);after=i+1;continue;}
+                if((remaining>capacity[phase]&&(phase!=GAS||!seedHeld[phase]||gasDisplaced)||!seedHeld[phase]&&startHeld[phase]&&Double.isFinite(capacity[phase]))&&relieved){pinned[count++]=phase;remaining=Math.max(0,remaining-capacity[phase]);after=i+1;continue;}
                 if(seedHeld[phase]){marginal=phase;break;}
             }
             if(marginal<0)for(int i=after;i<order.length;i++)if(seedHeld[order[i]]){marginal=order[i];break;}
@@ -170,6 +187,8 @@ final class PhaseDraw {
             return (byte)(marginal+1|mask<<2|(mixed?64:0));
         }
         boolean samePhases(Segment other){return mixed==other.mixed&&marginal==other.marginal&&Arrays.equals(pinned,other.pinned);}
+        /** Whether this segment pins the gas. */
+        boolean pinsGas(){for(int phase:pinned)if(phase==GAS)return true;return false;}
         /** The pinned total, {@code C = sum c}. */
         double pinnedTotal() {
             double total=0;for(int phase:pinned)total+=capacity[phase];
