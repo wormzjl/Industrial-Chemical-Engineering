@@ -70,6 +70,18 @@ class ControlSystemTest {
         assertEquals(0, InventoryControl.target(120, 100, 1, 120, 5, 5, false));
     }
 
+    /** A first decision (no earlier sample, NaN) acts on the level error alone: the actuated flow it reads is not the balance
+     * (the level loop's draining drum, FEED_STEP_HOLD_REVIEW.md: 0.737 m³/s out on a 0.199 m³/s feed asked 0.667 m³/s). A
+     * reading that has not advanced since the earlier sample keeps the actuated flow as the balance. */
+    @Test
+    void aFirstDecisionActsOnTheLevelErrorAlone() {
+        assertEquals(0, InventoryControl.target(.114, 1.555, .737, Double.NaN, 0, 20, true));
+        assertEquals((1.555 - .114) / 20, InventoryControl.target(.114, 1.555, .737, Double.NaN, 0, 20, false), 1e-15);
+        assertEquals((2 - 1.555) / 20, InventoryControl.target(2, 1.555, .737, Double.NaN, 0, 20, true), 1e-15);
+        assertEquals(0, InventoryControl.target(2, 1.555, .737, Double.NaN, 0, 20, false));
+        assertEquals(.2 - (3.976 - 1.555) / 20, InventoryControl.target(1.555, 3.976, .2, 1.555, 0, 20, true), 1e-15);
+    }
+
     @Test
     void everyControlCorpusRetainsFactsAndConnectivity() throws Exception {
         try (var paths = Files.list(Path.of("src/test/resources/compat/control"))) {
