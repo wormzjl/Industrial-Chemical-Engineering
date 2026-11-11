@@ -19,4 +19,4 @@ JAVA_TOOL_OPTIONS="-Dicheme.levelLoop.cycles=$cycles" ./gradlew --offline --cons
 status=$?
 cp "$OUT/icheme-common.toml.saved" "$CONFIG"
 echo "== level loop factor=$factor cycles=$cycles exit=$status"
-grep -E "level_loop (start|fill|feed|hold|step|result|cycle)|required tests" "$log" | cut -c60-300
+grep -E "level_loop (start|fill|feed|hold|step|result|cycle|probe)|required tests" "$log" | cut -c60-300
