@@ -1,0 +1,5 @@
+# W3b after steps 3-5 (code at 58376e618 + fixes), alone, 60 s warm-up + 60 s; before: baseline-time-44a647333.txt
+dry: 14 compounds, 6018 replays of 4 intervals, 72216 accepted steps, 0.831 ms per accepted step
+wet: 14 compounds, 2169 replays of 4 intervals, 26028 accepted steps, 2.305 ms per accepted step
+polar: 16 compounds, 2976 replays of 4 intervals, 35712 accepted steps, 1.680 ms per accepted step
+polar replay alone: 1.676 ms per accepted step

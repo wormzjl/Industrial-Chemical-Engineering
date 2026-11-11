@@ -424,7 +424,10 @@ public final class MaterialCatalog {
         if (index >= 0) key = "properties/" + p.properties().get(index).id();
         else if (id.equals("Water")) key = "water/" + waterModels.get(packageId);
         else throw new IllegalArgumentException("Component is outside package: " + componentId);
-        return Optional.ofNullable(viscosities.getOrDefault(key, Map.of()).get(phase));
+        var found = viscosities.getOrDefault(key, Map.of()).get(phase);
+        // W3b: Water in a package's cubic keeps its water model's viscosity where its cubic record carries none.
+        if (found == null && index >= 0 && id.equals("Water")) found = viscosities.getOrDefault("water/" + waterModels.get(packageId), Map.of()).get(phase);
+        return Optional.ofNullable(found);
     }
 
     private static JsonObject propertyScience(Property property) {

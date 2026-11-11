@@ -771,7 +771,7 @@ public final class PassiveStepSolver {
         if(model.traceTruncation().enabled())for(int node=0;node<states.size();node++) {
             var layout=equations.layout[node];
             if(layout==null||layout.singlePhaseComponentCount()==0)continue;
-            boolean[] flags=promoted[node]==null?new boolean[model.hydrocarbon.componentCount()]:promoted[node].clone();
+            boolean[] flags=promoted[node]==null?new boolean[model.componentCount()]:promoted[node].clone();
             if(layout.reactivate(states.get(node),model.traceTruncation(),flags)>0)return null;
         }
         double[] flows=new double[graph.pipes().size()],heads=new double[flows.length];
@@ -4274,7 +4274,7 @@ public final class PassiveStepSolver {
             for(int i=0;i<count;i++) {
                 var state=graph.reservoirs().get(i).state();offsets[i]=cursor;oldAmounts[i]=graph.reservoirs().get(i).inventory().moles();
                 if(!graph.reservoirs().get(i).fixed()&&!dry[i]) {
-                    layout[i]=new PhaseLayout(model,seeds.get(i),Arrays.copyOf(reachable[i],model.hydrocarbon.componentCount()),kept(i),supports[i],solidSupport).atAmbient(graph.reservoirs().get(i).inventory().ambient());cursor+=layout[i].size();
+                    layout[i]=new PhaseLayout(model,seeds.get(i),reachable[i],kept(i),supports[i],solidSupport).atAmbient(graph.reservoirs().get(i).inventory().ambient());cursor+=layout[i].size();
                     if(SolverDiagnostics.ENABLED) {
                         int omitted=layout[i].singlePhaseComponentCount();
                         if(omitted>0){SolverDiagnostics.traceOmittedUnknowns.add(omitted);SolverDiagnostics.truncatedNodePasses.increment();}

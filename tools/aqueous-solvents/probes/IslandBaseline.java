@@ -45,9 +45,10 @@ public final class IslandBaseline {
         var amounts = new ArrayList<Double>();
         for (double m : DRY_MOLES) amounts.add(m);
         if (scenario.equals("polar")) { ids.add("HydrogenSulfide"); amounts.add(0.04); ids.add("MethylMercaptan"); amounts.add(0.02); }
-        var model = network.on(ids);
-        // Water is not a package compound today: on() appends it to every island list.
-        if (scenario.equals("wet")) { ids.add("Water"); amounts.add(0.33); }
+        // W3b option A: an island no water reaches runs on the model without water.
+        boolean wet = scenario.equals("wet");
+        var model = network.on(ids, wet);
+        if (wet) { ids.add("Water"); amounts.add(0.33); }
         var start = chain(model, ids, amounts);
         if (mode.equals("count")) count(model, start, scenario, intervals);
         else time(model, start, scenario, intervals, Double.parseDouble(args.length > 3 ? args[3] : "60"),
@@ -74,8 +75,8 @@ public final class IslandBaseline {
 
     /** The node's phase volumes; the one place that reads the State's phase layout (edit after step 5). */
     static String phases(FluidThermodynamics.State s) {
-        return String.format(Locale.ROOT, "T %.2f P %.0f L %.4f W %.4f V %.4f", s.temperature(), s.pressure(),
-                s.liquidVolume(), s.waterVolume(), s.vaporVolume());
+        return String.format(Locale.ROOT, "T %.2f P %.0f L %.4f A %.4f V %.4f", s.temperature(), s.pressure(),
+                s.liquidSlotVolume(), s.aqueousSlotVolume(), s.vaporVolume());
     }
 
     static void count(FluidThermodynamics model, PassiveNetwork start, String scenario, int intervals) {
