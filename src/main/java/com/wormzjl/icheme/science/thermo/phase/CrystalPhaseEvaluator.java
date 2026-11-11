@@ -118,10 +118,16 @@ public final class CrystalPhaseEvaluator implements SolidPhaseEvaluator {
     }
 
     /**
-     * {@link #anchored(TriplePointAnchor)} carrying a constant share on the balance book (batch 2026-11-11-aqueous-solvents,
-     * W3a D5): ice anchored on a cubic with water in it carries the liquid's water share at the anchor, J/mol, J/(mol K)
-     * and m3/mol, so its fusion on the balance book at the anchor is the record's. The chemical potential (the
-     * equilibrium book) does not move.
+     * {@link #anchored(TriplePointAnchor)} on a cubic whose liquid of the species carries a share on the balance book
+     * (batch 2026-11-11-aqueous-solvents, W3a D5: ice on a cubic with water in it), the liquid's share at the anchor
+     * {@code (h, s, v)} in J/mol, J/(mol K) and m3/mol. The crystal's balance book is the record (its enthalpy and
+     * entropy as anchored, plus the liquid's share, so the fusion there is the record's; its volume the record's). Its
+     * equilibrium book takes the liquid's volume gap {@code c = -v_share}: {@code g} and {@code h} gain
+     * {@code c (P - P_t)} and {@code v} gains {@code c} (expansion and compressibility rescaled, so {@code dv/dT} and
+     * {@code dv/dP} stay the record's), so the melting line from the chemical potentials has the balance book's volume of
+     * fusion at the anchor (Clapeyron) rather than the cubic liquid's: for water the cubic's liquid is 21.3 cm3/mol, the
+     * share brings it to IF97's 18.0, and ice is 19.65. The share the state carries: {@code h_share - c (P - P_t)},
+     * {@code s_share}, {@code -c}.
      */
     public Anchored anchored(TriplePointAnchor anchor, double shareEnthalpy, double shareEntropy, double shareVolume) {
         requireAnchor(anchor);
@@ -174,16 +180,25 @@ public final class CrystalPhaseEvaluator implements SolidPhaseEvaluator {
 
         /** g, h, s, v, c_p, alpha and kappa at (T, P), continued past the record's range ({@link CrystalReference}). */
         public CrystalReference.State properties(double temperature, double pressure) {
-            if (function == null) return crystal.state(temperature, pressure, anchor.chemicalPotential(), anchor.liquidEnthalpy());
+            if (function == null) return gap(crystal.state(temperature, pressure, anchor.chemicalPotential(), anchor.liquidEnthalpy()));
             var s = function.evaluate(temperature, pressure, g0, g1);
-            return new CrystalReference.State(temperature, pressure, s.gibbs(), s.enthalpy(), s.entropy(), s.volume(),
-                    s.heatCapacity(), s.expansion(), s.compressibility());
+            return gap(new CrystalReference.State(temperature, pressure, s.gibbs(), s.enthalpy(), s.entropy(), s.volume(),
+                    s.heatCapacity(), s.expansion(), s.compressibility()));
+        }
+
+        /** The equilibrium book's volume gap (see {@link CrystalPhaseEvaluator#anchored(TriplePointAnchor, double, double, double)}). */
+        private CrystalReference.State gap(CrystalReference.State s) {
+            double c = -shareVolume;
+            if (c == 0.0) return s;
+            double shift = c * (s.pressure() - anchor.pressure()), volume = s.volume() + c, ratio = s.volume() / volume;
+            return new CrystalReference.State(s.temperature(), s.pressure(), s.gibbs() + shift, s.enthalpy() + shift, s.entropy(), volume,
+                    s.heatCapacity(), s.expansion() * ratio, s.compressibility() * ratio);
         }
 
         /** {@code g_s(T, P)}, J/mol on the fluid family's reference: the crystal's chemical potential. */
         public double chemicalPotential(double temperature, double pressure) {
             if (function == null) return properties(temperature, pressure).gibbs();
-            return function.evaluate(temperature, pressure, g0, g1).gibbs();
+            return function.evaluate(temperature, pressure, g0, g1).gibbs() - shareVolume * (pressure - anchor.pressure());
         }
 
         /** {@code ln phi_s = (g_s(T, P) - g_ig(T, P)) / (R T)}: the chemical potential against the species' ideal gas at P. */
@@ -214,6 +229,8 @@ public final class CrystalPhaseEvaluator implements SolidPhaseEvaluator {
             double volume = s.volume();
             out.setVolumetric(s.expansion() * volume, -s.compressibility() * volume);
             out.setCaloric(s.heatCapacity(), volume * (1.0 - s.expansion() * temperature));
+            // The share's one derivative: its enthalpy h_share + v_share (P - P_t) in P.
+            if (shareVolume != 0.0) out.setShare(0.0, shareVolume, 0.0, 0.0, 0.0, 0.0);
             return out;
         }
 
@@ -226,7 +243,9 @@ public final class CrystalPhaseEvaluator implements SolidPhaseEvaluator {
             out.set(PhaseKind.SOLID, crystal.id(), null, 0, temperature, pressure, s.volume(), hIdeal, s.enthalpy() - hIdeal,
                     sIdeal, s.entropy() - sIdeal, s.gibbs(), ONE, new double[] {(s.gibbs() - gIdeal) / (R * temperature)},
                     new double[] {gIdeal});
-            if (shareEnthalpy != 0.0 || shareEntropy != 0.0 || shareVolume != 0.0) out.setShare(shareEnthalpy, shareEntropy, shareVolume);
+            if (shareEnthalpy != 0.0 || shareEntropy != 0.0 || shareVolume != 0.0) {
+                out.setShare(shareEnthalpy + shareVolume * (pressure - anchor.pressure()), shareEntropy, shareVolume);
+            }
             return out;
         }
     }

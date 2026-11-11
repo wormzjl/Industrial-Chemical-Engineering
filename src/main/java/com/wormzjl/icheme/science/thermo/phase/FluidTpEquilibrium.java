@@ -2009,6 +2009,8 @@ public final class FluidTpEquilibrium {
         EquilibriumResult last = null;
         int retreats = 0;
         boolean strict = false;
+        // Whether each bracket end was recorded from an inexact volume solve, and whether a closed jump was re-solved.
+        boolean lowerLoose = false, upperLoose = false, resolved = false;
         int warmer = 0;
         for (int steps = 0; ; steps++) {
             if (steps >= settings.maximumOuterIterations()) {
@@ -2075,6 +2077,7 @@ public final class FluidTpEquilibrium {
                 continue;
             }
             s.record(t, residual, result, coexistence);
+            if (residual < 0.0) lowerLoose = w.innerLoose; else upperLoose = w.innerLoose;
             double slope = coexistence ? Double.NaN : dryIsochoricHeatCapacity(result, t, w);
             if (!(slope > 0.0) || !Double.isFinite(slope)) {
                 slope = Double.isNaN(previousT) || previousT == t ? Double.NaN : (residual - previousResidual) / (t - previousT);
@@ -2098,6 +2101,19 @@ public final class FluidTpEquilibrium {
                     if (Math.abs(residual) <= scale) return outerAnswer(Specification.UV, result, u, v, coexistence, null, w);
                     return outsideWindow(Specification.UV, false, belowWindow,
                             "the specified volume " + v + " m3 at the specified internal energy " + u + " J", competition, last, w);
+                }
+                if ((lowerLoose || upperLoose) && !resolved) {
+                    // An end from an inexact volume solve may lie on the wrong side: within a split dU/d ln V at fixed T is
+                    // about the vapour's share of the latent heat, far above the N R T the looseness assumes (W3a: ethanol
+                    // and water at 360 K, 7 Pa and 5 J off). The search starts again from its best end with exact solves.
+                    resolved = true;
+                    strict = true;
+                    lowerLoose = upperLoose = false;
+                    t = Math.abs(s.lowerResidual) <= Math.abs(s.upperResidual) ? s.lower : s.upper;
+                    s.reset(s.minimum, s.maximum);
+                    previousT = Double.NaN;
+                    previousResidual = Double.NaN;
+                    continue;
                 }
                 // A target inside a one-major feed's triple-point triangle was answered before the search (solveUv).
                 boolean crystalStep = !w.wet && pureCrystal(w) != null && s.endHoldsSolid();
@@ -3759,6 +3775,12 @@ public final class FluidTpEquilibrium {
     }
 
     /** Whether a converged answer holds a crystal, among its phases or its two coexisting states. */
+    private static boolean holdsKind(EquilibriumResult result, PhaseKind kind) {
+        if (result == null || !result.converged()) return false;
+        for (PhaseAmounts phase : result.phases()) if (phase.kind() == kind) return true;
+        return false;
+    }
+
     private static boolean holdsSolid(EquilibriumResult result) {
         if (result == null || !result.converged()) return false;
         for (PhaseAmounts phase : result.phases()) if (phase.kind() == PhaseKind.SOLID) return true;
@@ -3955,7 +3977,12 @@ public final class FluidTpEquilibrium {
         Crystal c = pureCrystal(w);
         if (c == null) return null;
         boolean energy = specification == Specification.PH;
-        boolean melting = energy ? p > c.triplePressure() : t > c.tripleTemperature();
+        // The step's fluid by the triple point (a crystal denser than its liquid melts above T_t at every pressure), and a
+        // liquid where the bracket's fluid end is one (ice, lighter than water, also melts below T_t above P_t, W3a D5).
+        Search s = energy ? w.search : w.inner;
+        boolean liquidEnd = holdsKind(s.lowerResult, PhaseKind.LIQUID) || holdsKind(s.upperResult, PhaseKind.LIQUID);
+        boolean vapourEnd = holdsKind(s.lowerResult, PhaseKind.VAPOR) || holdsKind(s.upperResult, PhaseKind.VAPOR);
+        boolean melting = (energy ? p > c.triplePressure() : t > c.tripleTemperature()) || liquidEnd && !vapourEnd;
         Root root = melting ? Root.LIQUID : Root.VAPOR;
         if (energy) t = crystalStepTemperature(p, t, c, root, w); else p = crystalStepPressure(t, p, c, root, w);
         if (Double.isNaN(t) || Double.isNaN(p)) return null;
@@ -4105,8 +4132,8 @@ public final class FluidTpEquilibrium {
     /**
      * The pressure at {@code t} where the crystal's pure species and its fluid on {@code root} have equal chemical
      * potentials on this family (the sublimation pressure on the vapour root, the melting pressure on the liquid root,
-     * P5): Newton in {@code ln P} on {@code g = (mu_F - mu_s)/(R T)} with {@code dg/d ln P = P (v_F - v_s)/(R T)},
-     * bisection once both signs are seen; converged at {@code |d ln P| <= 1e-14}; {@code NaN} when it does not converge.
+     * P5): Newton in {@code ln P} on {@code g = (mu_F - mu_s)/(R T)} with {@code dg/d ln P = P (v_F - v_s)/(R T)}, either
+     * sign of {@code v_F - v_s}, bisection once both signs are seen; converged at {@code |d ln P| <= 1e-14}; {@code NaN} when it does not converge.
      */
     private double crystalStepPressure(double t, double start, Crystal c, Root root, Workspace w) {
         int i = c.component();
@@ -4125,15 +4152,19 @@ public final class FluidTpEquilibrium {
         double maximum = DeterministicMath.log(NumericalBox.MAXIMUM_PRESSURE);
         double low = Double.NaN;
         double high = Double.NaN;
+        // The orientation of g in ln P: the sign of the volume of fusion or sublimation at the start (W3a D5: negative for
+        // ice beside water, whose liquid is the denser phase), so the bracket reads sign * g as increasing.
+        double sign = 0.0;
         for (int k = 0; k < COEXISTENCE_ITERATIONS; k++) {
             double p = DeterministicMath.exp(y);
             PhaseState fluid = evaluator.evaluate(t, p, w.pure, root, w.phases, w.pureState);
             PhaseState solid = c.anchored().evaluate(t, p, w.solidState);
             w.outerKernel++;
-            double g = (fluid.chemicalPotential(i) - solid.molarGibbsEnergy()) / (R * t);
+            if (sign == 0.0) sign = fluid.molarVolume() >= solid.molarVolume() ? 1.0 : -1.0;
+            double g = sign * (fluid.chemicalPotential(i) - solid.molarGibbsEnergy()) / (R * t);
             if (g == 0.0) return p;
             if (g > 0.0) high = y; else low = y;
-            double slope = p * (fluid.molarVolume() - solid.molarVolume()) / (R * t);
+            double slope = sign * p * (fluid.molarVolume() - solid.molarVolume()) / (R * t);
             double next = y - g / slope;
             boolean bracketed = !Double.isNaN(low) && !Double.isNaN(high);
             if (!(slope > 0.0) || !Double.isFinite(next) || bracketed && !(next > low && next < high)) {
