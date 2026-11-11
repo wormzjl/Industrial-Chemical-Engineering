@@ -565,3 +565,22 @@ Remaining ideas (the sub-thread's estimates, none built):
 - E. Fewer compounds with activity fits against hydrocarbons: lowers polar's cost and its accuracy (alcohol with hydrocarbon mixtures are strongly non-ideal).
 
 Orchestrator's recommendation to the owner: B in this batch, before steps 6 and 7, with its design written first (`ANALYTIC_JACOBIAN_PLAN.md`), because step 7's campaign and the final lane should be taken once, on the final solver. A only if B is not built. Not E.
+
+## 31. The gates run on 4d07122fe, and whether B can keep the rows (2026-11-12)
+
+Gates, once: `columnGates` 83 classes pass. `holdGates` 131 tests, 14 fail; none failed on main's 0.27.1 lane, and this branch had not run them before. All 14 are flowsheet tests where water crosses between the network's model (cubic water with the share) and V3's own water:
+
+| Tests | What fails |
+|---|---|
+| `FlowsheetColumnTest` (6), `ColumnEjectorTest` (1) | the column block's heat gap, about -180 kW on 174 to 194 MW (0.1 %); one of them holds with `column.liquid_water` |
+| `UtilityRegulationTest` (2) | the same gap (-185 kW) on steam; the steam is not read as saturated condensate |
+| sizing samples (5) | references moved by 0.01 to 10 % (`ColumnSizing` 1265 to 1378 and 509 to 561; `UnitSizing` 80.4 to 78.6 and 2.299 to 2.319; `SizeAll` 73.06 to 73.053) |
+
+Not changed yet. They belong to step 6's flowsheet callers; each group gets its report (expected, what the code does, proposal) before a reference or a tolerance moves.
+
+B with the rows kept (the sub-thread, from the code): possible. `HydrocarbonModel.Phase` is a plain record and a state is built from three independent slot phases, so only the perturbed node's `hydrocarbon.phase()` would be replaced by the base phase plus its first-order change; `transport`, `nodeRows`, `edgeRows` and `nodeAccumulate` run unchanged, and viscosity and the solid moments stay exact. In the way:
+
+1. The domain fallback: today a perturbed decode that throws (no root, a liquid slot on a vapour-like root, the numerical box) hands the build to the coloured sweep. A linear model never throws; the box test can stay, the root tests at the perturbed point are lost.
+2. Exactness: `BlockJacobianEquivalenceTest` asserts bit equality with the residual's column differences. It becomes a tolerance. The Newton's path moves in its last digits: the 33 junction lines, chain-100, the fluid regression and the campaign's references move once.
+3. Derivatives the kernel lacks: the partial molar volume and enthalpy follow from the ln phi derivatives only if those carry the volume translation and water's share; the share's correction has no composition derivative yet; `d(dv/dP)` needs third derivatives (read only by the acoustic velocity bound, mostly above the 100 m/s cap).
+4. The temperature column still prepares the model at the perturbed temperature (about 1 %).
