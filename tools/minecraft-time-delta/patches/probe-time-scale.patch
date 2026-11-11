@@ -1,0 +1,61 @@
+diff --git a/src/main/java/com/wormzjl/icheme/runtime/fluid/IslandCertificate.java b/src/main/java/com/wormzjl/icheme/runtime/fluid/IslandCertificate.java
+index 914eeb6b2..36d91fb23 100644
+--- a/src/main/java/com/wormzjl/icheme/runtime/fluid/IslandCertificate.java
++++ b/src/main/java/com/wormzjl/icheme/runtime/fluid/IslandCertificate.java
+@@ -221,7 +221,7 @@ public final class IslandCertificate {
+             double change=Math.abs(b.energy[n]-a.energy[n]);
+             if(change!=0){double scale=energyScale(t);double ratio=scale>0?change/scale:Double.POSITIVE_INFINITY;if(ratio>energy){energy=ratio;energyAt="node "+t.id()+" energy";}}
+         }
+-        var q1=a.result.averageMassFlows();var q2=b.result.averageMassFlows();double reference=b.largestFlow(),seconds=b.durationTicks/20.0;
++        var q1=a.result.averageMassFlows();var q2=b.result.averageMassFlows();double reference=b.largestFlow(),seconds=IslandClock.seconds(b.durationTicks);
+         double flow=0,worstChange=0,moves=0,largest=0;String flowAt=null;
+         for(int i=0;i<q2.length;i++) {
+             double change=Math.abs(q2[i]-q1[i]);if(change==0)continue;
+@@ -437,7 +437,7 @@ public final class IslandCertificate {
+      */
+     static IslandCertificate rebuild(Saved saved,double[] molecularWeights) {
+         var interval=saved.interval();
+-        if(interval.result().advancedSeconds()!=(interval.endTick()-interval.startTick())/20.0)
++        if(interval.result().advancedSeconds()!=IslandClock.seconds(interval.endTick()-interval.startTick()))
+             throw new IllegalArgumentException("Saved certificate interval ["+interval.startTick()+", "+interval.endTick()+"] disagrees with its result of "+interval.result().advancedSeconds()+" s");
+         var summary=new Summary(interval,molecularWeights);
+         for(int n=0;n<summary.moles.length;n++) {
+@@ -507,7 +507,7 @@ public final class IslandCertificate {
+         }
+         var pipes=new ArrayList<PipeTransfer>(recorded.pipeTransfers().size());
+         for(var p:recorded.pipeTransfers())pipes.add(new PipeTransfer(p.pipeId(),scale(p.forward(),g),scale(p.reverse(),g)));
+-        return new PassiveIntervalSolver.Result(graphAt(to),(to-from)/20.0,recorded.averageMassFlows(),0,0,g*recorded.pumpWorkJoule(),boundaries,Map.of(),
++        return new PassiveIntervalSolver.Result(graphAt(to),IslandClock.seconds(to-from),recorded.averageMassFlows(),0,0,g*recorded.pumpWorkJoule(),boundaries,Map.of(),
+                 recorded.endpointModes(),recorded.endpointHeads(),recorded.endpointFlows(),pipes,recorded.observations(),recorded.towers());
+     }
+     private static PipeTransfer.Stream scale(PipeTransfer.Stream stream,double g) {
+diff --git a/src/main/java/com/wormzjl/icheme/runtime/fluid/IslandClock.java b/src/main/java/com/wormzjl/icheme/runtime/fluid/IslandClock.java
+index 465b73c02..b61a27cb3 100644
+--- a/src/main/java/com/wormzjl/icheme/runtime/fluid/IslandClock.java
++++ b/src/main/java/com/wormzjl/icheme/runtime/fluid/IslandClock.java
+@@ -28,8 +28,11 @@ public final class IslandClock {
+     }
+     public record Slice(long startTick,long endTick,long requestId) {
+         public Slice {if(startTick<0||endTick<=startTick||requestId<=0)throw new IllegalArgumentException("Invalid simulation slice");}
+-        public double seconds(){return (endTick-startTick)/20.0;}
++        public double seconds(){return IslandClock.seconds(endTick-startTick);}
+     }
++    /** PROBE (tools/minecraft-time-delta): simulated seconds per online tick, as a multiple of the nominal 1/20 s. */
++    public static final double TIME_SCALE=Double.parseDouble(System.getProperty("icheme.probe.timeScale","1"));
++    public static double seconds(long ticks){return ticks*TIME_SCALE/20.0;}
+     /** Restores the saved clock on a shared epoch: its online tick reads exactly the saved one now. */
+     public IslandClock(Snapshot saved,LongSupplier epoch) {
+         this.epoch=Objects.requireNonNull(epoch);base=Math.subtractExact(epoch.getAsLong(),saved.onlineTick);
+diff --git a/src/main/java/com/wormzjl/icheme/science/fluid/network/PassiveIntervalSolver.java b/src/main/java/com/wormzjl/icheme/science/fluid/network/PassiveIntervalSolver.java
+index 4731d4fb8..4e3855040 100644
+--- a/src/main/java/com/wormzjl/icheme/science/fluid/network/PassiveIntervalSolver.java
++++ b/src/main/java/com/wormzjl/icheme/science/fluid/network/PassiveIntervalSolver.java
+@@ -41,7 +41,7 @@ public final class PassiveIntervalSolver {
+             if(!Double.isFinite(initialStep)||initialStep<=0||!Double.isFinite(maximumStep)||maximumStep<initialStep
+                     ||maximumAttempts<1)throw new IllegalArgumentException("Invalid interval settings");
+         }
+-        public static Settings defaults(){return new Settings(1,20,1024);}
++        public static Settings defaults(){return new Settings(Double.parseDouble(System.getProperty("icheme.probe.initialStep","1")),Double.parseDouble(System.getProperty("icheme.probe.maximumStep","20")),1024);}
+     }
+     public record Result(PassiveNetwork graph,double advancedSeconds,double[] averageMassFlows,int acceptedSubsteps,int rejectedSubsteps,
+                          double pumpWorkJoule,List<ConservativeTransport.BoundaryTransfer> boundaries,Map<String,Integer> rejectionReasons,

@@ -14,6 +14,7 @@ Status words:
 
 | Batch | Purpose | Status |
 |---|---|---|
+| [2026-11-11-minecraft-time-delta/](2026-11-11-minecraft-time-delta/README.md) | Evaluation: simulated time at 72x online time (Minecraft day time), convergence and impact | Concluded 2026-11-11 |
 | [2026-11-10-column-failure-modes/](2026-11-10-column-failure-modes/README.md) | Running column: one failure-mode scheme, control system and DCS integration, adjustable parameters, a full-size test world | Implemented 2026-11-10 (0.26.0) |
 | [2026-11-10-prime-movers](2026-11-10-prime-movers/README.md) | Liquid-fuel combustion engines and gas turbines as shaft-train drivers, steam coil, generators to 400 MW, steam turbines to 300 MW | Merged into the custom-shader-system batch 2026-11-10 (6c597e7b3), sound and animation follow-up 3e123f51c |
 | [2026-11-10-chimney](2026-11-10-chimney/README.md) | Steel and brick chimneys releasing gas and particulates to the atmosphere | Merged into the custom-shader-system batch 2026-11-10 (44886656a); with it to main |

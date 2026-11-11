@@ -1,0 +1,14 @@
+// Forwards the time-scale probe's switches to the test JVMs (patches/probe-time-scale.patch must be applied):
+//   -PprobeTimeScale=72     simulated seconds per online tick, as a multiple of 1/20 s (72 = Minecraft day time)
+//   -PprobeInitialStep=1    PassiveIntervalSolver.Settings.defaults().initialStep, s
+//   -PprobeMaximumStep=20   PassiveIntervalSolver.Settings.defaults().maximumStep, s
+// Used after the hold-fuzz init script: see README.md.
+gradle.projectsEvaluated {
+    def root = gradle.rootProject
+    root.tasks.withType(Test).configureEach {
+        [timeScale: 'probeTimeScale', initialStep: 'probeInitialStep', maximumStep: 'probeMaximumStep'].each { key, name ->
+            def value = root.findProperty(name)
+            if (value) systemProperty 'icheme.probe.' + key, value
+        }
+    }
+}
