@@ -45,6 +45,7 @@ class ColumnRunTest {
             for(var b:result.boundaries())if(b.kind()==ConservativeTransport.BoundaryTransfer.Kind.EXCHANGE){var sum=moles.computeIfAbsent(b.nodeId(),id->new double[world.componentCount()]);var n=IslandSets.amounts(b.moles(),islands.model(island),world);for(int i=0;i<n.length;i++)sum[i]+=n[i];solids.merge(b.nodeId(),b.solids().massKg(),Double::sum);energy.merge(b.nodeId(),b.totalEnergyJoule(),Double::sum);}
             inner.booked(island,graph,start,end,result);
         }
+        public void decide(){inner.decide();}
     }
     private static PhysicalFluidTopology.Device port(long id,int x,Kind kind,Direction toward,PipeResistanceGeometry g){return port(id,x,0,kind,toward,g);}
     private static PhysicalFluidTopology.Device port(long id,int x,int z,Kind kind,Direction toward,PipeResistanceGeometry g) {
@@ -230,6 +231,38 @@ class ColumnRunTest {
         assertTrue(sum(given)>15&&stock>sum(given)*.5,"the product reached the tank, the outlet filling its buffer toward 60 s of production first: given "+sum(given)+", tank "+stock);
         assertTrue(totals.condenser()<0,"the condenser removed heat: "+totals.condenser());
         assertTrue(world.held.isEmpty(),"no island held: "+world.held);
+    }
+    /**
+     * A booking records; the column acts at the decision point after it (batch 2026-11-11-drum-operation-holds, defect 5). A
+     * certified island whose horizon passed before its deadline fired (a restored world, a fence released late) materialises
+     * to the horizon; a column whose cycle waited behind it used to run that cycle from the island's booking, inside the
+     * materialisation, and read the same island through the cycle's tick: the second materialisation ended the certificate the
+     * first one still read, and the server stopped (NullPointerException in certifiedStatus).
+     */
+    @Test void aHorizonPassedBeforeItsDeadlineFiresWithACycleDueBehindIt() {
+        var r=rig(0,null,false,false,true);var world=r.world();
+        // The condenser's cooling-water island, certified, run to one tick short of its horizon; the ports' islands hold over
+        // the last 2000 ticks (a held island delivers nothing more: the cycle passes it), so only the water island is waited on.
+        long wake=-1;Long water=null;
+        while(world.ledger.onlineTick()<4_000_000) {
+            water=world.registry.owner(r.waterSource());
+            var certified=water==null?Optional.<IslandCoordinator.Certified>empty():world.coordinator.presentation(water).certificate();
+            long horizon=certified.map(IslandCoordinator.Certified::horizonTick).orElse(Long.MAX_VALUE);
+            if(horizon==Long.MAX_VALUE){world.runTo(world.ledger.onlineTick()+100);continue;}
+            if(horizon-world.ledger.onlineTick()<=1){wake=horizon;break;}
+            if(horizon-world.ledger.onlineTick()>2000){world.runTo(horizon-2000);continue;}
+            world.failing.add(world.registry.owner(r.feed()));world.failing.add(world.registry.owner(r.product()));
+            world.runTo(horizon-1);
+        }
+        assertTrue(wake>0,"the water island certified with a horizon, one tick ahead");
+        // Online time passes the horizon and the cycles after it with no pass over due deadlines; one pass then pops the
+        // horizon ahead of the cycles.
+        while(world.ledger.onlineTick()<wake+ColumnOperation.FENCE_TICKS+ColumnOperation.CYCLE_TICKS+1)world.ledger.tick();
+        assertDoesNotThrow(world::tick,"the horizon's materialisation with a cycle due behind it");
+        var after=world.coordinator.presentation(water);
+        assertTrue(after.clock().committedTick()>=wake,"the water island reached its horizon: "+after.status());
+        world.runTo(world.ledger.onlineTick()+1000);
+        assertTrue(world.coordinator.presentation(water).clock().committedTick()>wake+ColumnOperation.FENCE_TICKS,"it solves on past the cycle that waited on it");
     }
     /** What the ports carried after Stop was pressed and before their event committed is booked (merge review, finding 4). */
     @Test void aStopBooksWhatItsPortsCarryUntilTheyLeave() {

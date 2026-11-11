@@ -494,14 +494,15 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     public double drop(long unit){var r=runs.get(unit);return r==null||r.table==null||r.last==null?Double.NaN:drop(r.table,r.last.feedMoles()/cycleSeconds());}
 
     /** The next cycle deadline: the earliest cycle still ahead. A cycle already due waits for its ports' bookings, which run it
-     * ({@link #booked}); one a cycle later looks again, since a port's island that stopped (a hold) books nothing. */
+     * at the next decision point ({@link #booked}, {@link #decide}); one a cycle later looks again, since a port's island that
+     * stopped (a hold) books nothing. */
     private void schedule() {
         long now=coordinator.now(),next=wakes.isEmpty()?Long.MAX_VALUE:Math.max(now+1,wakes.firstKey());for(var r:runs.values())next=Math.min(next,r.nextCycle>now?r.nextCycle:now+CYCLE_TICKS);
         coordinator.schedule(IslandScheduler.Kind.COLUMN_CYCLE,next,this::due);
     }
     /** Runs every cycle that is due and whose inlets have booked through its tick, then schedules the next. */
     private void due() {
-        // Materialising a certified inlet island books its replay here again: one pass at a time.
+        // A solve answered at once from a cycle reaches done() inside this pass: one pass at a time.
         if(cycling)return;cycling=true;
         try {
             long now=coordinator.now();
@@ -925,10 +926,13 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
             energy.merge(b.nodeId(),b.totalEnergyJoule(),Double::sum);solids.merge(b.nodeId(),b.solids(),SolidInventory::plus);
         }
         if(moles!=null)credit(moles,energy,solids,start,end);
-        // A cycle waiting on this island's bookings may run now, whether or not anything moved.
-        boolean waiting=false;for(var r:runs.values())waiting|=r.nextCycle<=coordinator.now();
-        if(waiting)due();
+        // A cycle waiting on this island's bookings may run, whether or not anything moved: at the decision point that follows,
+        // never here, inside the island's materialisation (defect 5 of batch 2026-11-11-drum-operation-holds).
+        for(var r:runs.values())bookedWhileDue|=r.nextCycle<=coordinator.now();
     }
+    /** Whether a port's island booked while a cycle was due, since the last decision point. */
+    private boolean bookedWhileDue;
+    @Override public void decide(){if(!bookedWhileDue)return;bookedWhileDue=false;due();bookedWhileDue=false;}
     /** Books what the ports gave and took over {@code start} to {@code end}: an inlet's arrivals as a span, an outlet's gift as a debit. */
     private void credit(Map<Long,double[]> moles,Map<Long,Double> energy,Map<Long,SolidInventory> solids,long start,long end) {
         for(var e:moles.entrySet()) {

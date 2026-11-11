@@ -244,7 +244,12 @@ public final class IslandCoordinator {
     public interface Ports {
         boolean ready(long island,PassiveNetwork graph,long start);
         Map<Long,com.wormzjl.icheme.science.fluid.network.PortPlan> plans(long island,PassiveNetwork graph,IslandClock.Slice slice);
+        /** Records what the island's ports gave and took. A booking runs inside a materialisation: it never reads
+         * {@link IslandCoordinator#through} or acts; what it makes due runs in {@link #decide}. */
         void booked(long island,PassiveNetwork graph,long start,long end,PassiveIntervalSolver.Result result);
+        /** The units' step at the engine's decision points (after the due deadlines, a pump, a round's close), as the shaft
+         * trains': where they may materialise the islands they wait on (batch 2026-11-11-drum-operation-holds, defect 5). */
+        default void decide(){}
         /**
          * The read of coupled side {@code side} whose other side {@code partner} a running column holds (C6b), at a slice from
          * {@code start} of {@code seconds} s, the pair's heat in transit now {@code transit} (J): a column's condenser water
@@ -266,6 +271,7 @@ public final class IslandCoordinator {
                     var all=new HashMap<>(first);all.putAll(second);return all;
                 }
                 public void booked(long island,PassiveNetwork graph,long start,long end,PassiveIntervalSolver.Result result){a.booked(island,graph,start,end,result);b.booked(island,graph,start,end,result);}
+                public void decide(){a.decide();b.decide();}
                 public com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read heatRead(long side,long partner,long start,double seconds,double transit) {
                     var read=a.heatRead(side,partner,start,seconds,transit);return read!=null?read:b.heatRead(side,partner,start,seconds,transit);
                 }
@@ -559,7 +565,7 @@ public final class IslandCoordinator {
                 default->throw new IllegalStateException("No handler for deadline "+due.kind());
             }
         }
-        shafts.decide();flushWakes();
+        shafts.decide();ports.decide();flushWakes();
     }
     /**
      * The O(1) check the tick hooks make: pumps only when a pump would act, that is when a state change made
@@ -609,7 +615,7 @@ public final class IslandCoordinator {
                 reconsider(island);
             }
             if(!admitted.isEmpty()){var round=new Round(roundSequence=Math.addExact(roundSequence,1),List.copyOf(admitted),roundStarted);rounds.add(round);scheduleRoundTimeout(round,settings.hardBudgetNanos);}
-            shafts.decide();flushWakes();
+            shafts.decide();ports.decide();flushWakes();
         } finally {
             // Owners that became ready during this pump were offered to it; any left over wait for capacity,
             // which pumpIfUseful checks directly, so no request survives the pump.
@@ -677,7 +683,7 @@ public final class IslandCoordinator {
         }
         FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.islandsPublished,changed.size());
         publisher.published(List.copyOf(changed));
-        shafts.decide();flushWakes();
+        shafts.decide();ports.decide();flushWakes();
     }
     /** The longest a held island waits between retries at the shortest slice, in cadences: 2^6 = 64. */
     static final int MAXIMUM_RETRY_DOUBLINGS=6;
