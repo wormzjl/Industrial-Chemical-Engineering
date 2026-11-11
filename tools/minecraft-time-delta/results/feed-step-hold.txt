@@ -169,3 +169,37 @@ decide tick=112600 readingTick=112546 level=6.916 % liquid=0.2257 m3 outletReadi
 slice start=112546 end=112646 dispatched=112646 levelTarget=0.000 m3/s
 decide tick=112700 readingTick=112646 level=52.18 % liquid=4.201 m3 outletReading=0.000 m3/s 0.000 kg/s
 slice start=112646 end=112746 dispatched=112746 levelTarget=0.3329 m3/s
+
+== first decision (2026-11-11, owner "Fix first decision"): InventoryControl.target, previous NaN = no earlier sample -> balance 0
+-- suite level loop at 4 (runFluidGameTestServer, ids firstdecision4 = the elapsed-0 form, firstdecision4b = the final form)
+gametest-firstdecision4:
+cycle=0 level=24.84 % flow=198.1 kg/s outletReading=0.1999 m3/s lag=5 lic=CONTROLLING 0.3789 island=FULL residual=0.000 mol 0.000 J
+cycle=1 level=78.45 % flow=198.1 kg/s outletReading=0.000 m3/s lag=15 lic=CONTROLLING 0.3726 island=FULL residual=8.731e-11 mol -7.629e-06 J
+result factor=4 cycles=2 low=24.84 % high=78.45 % levelAtStep=50.00 % levelAtEnd=50.00 % held=null failure=null molesResidual=-7.130e-10 mol of 1.605e+07 mol energyResidual=-4.745e-05 J of 7.130e+11 J
+gametest-firstdecision4b:
+cycle=0 level=24.82 % flow=198.1 kg/s outletReading=0.2001 m3/s lag=3 lic=CONTROLLING 0.3794 island=FULL residual=0.000 mol 0.000 J
+cycle=1 level=64.89 % flow=198.1 kg/s outletReading=0.07648 m3/s lag=11 lic=CONTROLLING 0.3723 island=FULL residual=5.821e-11 mol -1.907e-06 J
+result factor=4 cycles=2 low=24.82 % high=64.89 % levelAtStep=50.00 % levelAtEnd=50.00 % held=null failure=null molesResidual=-1.310e-10 mol of 1.591e+07 mol energyResidual=-1.550e-05 J of 7.072e+11 J
+-- LevelLoopStepProbe at 4 (run.sh 4)
+probe result case="step factor-4 feed" factor=4 feed=198.1 kg/s held=clean failure=null level=24.65 to 57.40 % setupResidual=3.638e-12 mol -1.073e-06 J
+probe result case="step rule feed" factor=4 feed=198.1 kg/s held=clean failure=null level=24.65 to 57.40 % setupResidual=3.638e-12 mol -5.960e-07 J
+probe result case="empty factor-4 feed" factor=4 feed=198.1 kg/s held=clean failure=null level=6.916 to 100.0 % setupResidual=-4.729e-11 mol -1.788e-07 J
+result factor=4 cycles=2 low=24.99 % high=62.47 % levelAtStep=50.00 % levelAtEnd=50.00 % held=null failure=null molesResidual=4.453e-09 mol of 1.607e+07 mol energyResidual=6.294e-05 J of 7.140e+11 J i
+probe result case="empty rule feed" factor=4 feed=198.1 kg/s held=clean failure=null level=25.00 to 51.10 % setupResidual=-5.821e-11 mol -1.907e-06 J
+decide tick=121100 readingTick=120995 level=4.384 % liquid=0.1136 m3 outletReading=0.7373 m3/s 734.8 kg/s
+decide tick=121200 readingTick=121095 level=6.916 % liquid=0.2257 m3 outletReading=0.000 m3/s 0.000 kg/s
+slice start=121095 end=121195 dispatched=121195 levelTarget=0.000 m3/s
+decide tick=121300 readingTick=121195 level=52.18 % liquid=4.201 m3 outletReading=0.000 m3/s 0.000 kg/s
+slice start=121295 end=121385 dispatched=121385 levelTarget=0.3329 m3/s
+decide tick=121400 readingTick=121385 level=100.0 % liquid=7.952 m3 outletReading=0.1988 m3/s 198.1 kg/s
+-- run.sh 72
+probe result case="step factor-4 feed" factor=72 feed=198.1 kg/s held=clean failure=null level=25.57 to 100.0 % setupResidual=64.56 mol 1.283e+06 J
+probe result case="step rule feed" factor=72 feed=11.01 kg/s held=clean failure=null level=25.00 to 100.0 % setupResidual=64.56 mol 1.283e+06 J
+probe result case="empty factor-4 feed" factor=72 feed=198.1 kg/s held=clean failure=null level=100.0 to 100.0 % setupResidual=64.56 mol 1.283e+06 J
+result factor=72 cycles=2 low=24.99 % high=65.03 % levelAtStep=50.00 % levelAtEnd=50.00 % held=null failure=null molesResidual=5.821e-11 mol of 1.606e+07 mol energyResidual=-0.0002041 J of 7.136e+11 J
+probe result case="empty rule feed" factor=72 feed=11.01 kg/s held=clean failure=null level=2.991 to 70.80 % setupResidual=2.328e-10 mol 3.242e-05 J
+tick=129100 readingTick=129043 level=100.0 % liquid=7.952 m3 outletReading=0.01104 m3/s 11.01 kg/s
+-- DrumDrainTest after option 1 and this fix
+DRUM_DRAIN_RESULT case="empty" factor=1 outletPlacedAtTick=100 ticks=1200 share=0.0 to 0.019998650729034666 held=clean
+DRUM_DRAIN_RESULT case="1 %" factor=1 outletPlacedAtTick=115 ticks=1215 share=0.0 to 0.03613389434234281 held=clean
+DRUM_DRAIN_RESULT case="empty, outlet valve at 592.8 kg/s" factor=1 outletPlacedAtTick=100 ticks=1 share=0.0 to 0.0 held=HELD: Substep refinement exhausted: Newton line search stalled at residual 5.5874665995300425; active-set pass=0; reasons={Newton line sear
