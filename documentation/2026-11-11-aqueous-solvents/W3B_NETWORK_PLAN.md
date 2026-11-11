@@ -525,3 +525,17 @@ Decided (orchestrator, owner: "auto proceed"): E is read on the stream the end d
 Stage B item 1 (uncommitted, counters only so far): the heat capacity and the second temperature derivative of the volume are formed when read. Excess second-derivative sums: wet 10842 to 0, polar 6738 to 0; all second sums on dry 5475 to 114; end states bit-identical on the three scenarios. Timings not yet run.
 
 Built (969c3633b): section 28's form with the four review points on 69db75057: `limit(p_v, E, breakdown)` is the larger of the edges that exist; E is worked out when first read and cached by state and stream; forms 0 and T and `icheme.suctionForm` are deleted; the vapour lock reads this solve's stream. The 29 suction classes pass (189 tests); the bottom-port drain is as before (MOVER_LAW three times, 24 steps, none rejected).
+
+## 29. Stage B (step 5b, cost): items 1 to 4 (2026-11-12)
+
+Timing runs alone, 60 s warm-up and 60 s measured, ms per accepted step. Bounds against main: dry 1.1, wet 1.5, polar 1.1.
+
+| Item | What | Counters | dry | wet | polar | Outcome |
+|---|---|---|---|---|---|---|
+| before (ab6b90d42) | | | 0.837 | 2.467 | 1.702 | |
+| 1 | The heat capacity and the volume's second temperature derivative formed only when read; the network's kernel callers ask for derivatives without them | excess second-derivative sums wet 10842 to 0, polar 6738 to 0; end states identical | 0.794 | 1.995 | 1.451 | committed 2a780f8f6; 272 tests in 49 classes pass |
+| 2 | Sparse rows: centres with one partner set share one direct sum | identical to item 1 | 0.888 | 2.098 | 1.454 | no gain; reverted (variant kept in the sub-thread's scratch) |
+| 3 | Skip an absent centre's cells where its ln phi is not read | 1.7 absent centres per call in wet (0.54 polar); 9.7 % of the cells visited (3.6 %) | | | | skipped (orchestrator): the network reads ln phi of absent components, so it needs a mask through three layers for at most a tenth of one function |
+| 4 | Water share's pure-water evaluation in closed form, bit for bit | removes 933 of wet's 11554 kernel evaluations (8.1 %) | | | | built, not yet measured |
+
+The dry column's 0.794 against 0.888 is machine noise (the dry kernel has no excess term; about 22 % background load during item 2's run). Wet's remaining excess over dry, about 6200 kernel evaluations, sits in the three-slot states, not in the share. Asked of the sub-thread for its next report: each scenario's ratio to main beside its bound, and wet's kernel evaluations split by caller. If wet or polar is still over its bound after item 5, the decision goes to the owner.
