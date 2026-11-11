@@ -25,6 +25,7 @@ Owner, 2026-11-11: the drum-operation defects the time-factor batch (`2026-11-11
 - 2026-11-11, `e0a82728f` (defect 3): `BalanceNet.rest` moves a junction that nothing flows through back toward its own pressure. `DropLegColdStartTest` holds without it. Chain-100 exact, the 33 junction lines equal, hold gates pass.
 - 2026-11-11, `9af97a3e6` (defect 3): `rest` narrowed to a junction the hull's clamp left on its bound (cold seed 65, new in the first quick check, E5). Quick check 1-200 at factor 1: the batch's recorded run exactly (cold 197, bundled 199, defaults 200). Chain-100 exact, the junction lines equal.
 - 2026-11-11 (defects 1 and 4, no code): level loop at factor 1 with the generator vent, defects 2, 3 and 5 fixed: the same setup holds. Defect 1 is a mint convention (the feed's water seeded through an empty drum); options (a) to (c). Defect 4 is correct on a void vent (a rigid full drum cannot drain without gas), and a generator vent only gives gas; options (A) to (C). Written up in GAS_VENT_REVIEW.md.
+- 2026-11-11 (defect 1, no code): the leg's segment read from the dump. Pass 0 decides it at q0 = 0, so the drum's 60 µL of trace water is marginal and the leg runs at water's density (470 to 485 kg/s); a failed pass never re-decides it, and `drainedSeeds` reads only pinned phases. Not forced by D11 as written: option (d), next to (a). `GasVentSequenceTest` (the setup's sequence, headless) is clean in 3 cases; it lacks the dump's drum water and 70.7 kPa foot.
 
 ## Code areas
 
@@ -32,7 +33,7 @@ Owner, 2026-11-11: the drum-operation defects the time-factor batch (`2026-11-11
 
 ## Open items
 
-- Owner: defect 1, option (a), (b) or (c) (GAS_VENT_REVIEW.md); recommended (a).
+- Owner: defect 1, option (d) (re-decide segments on a failed pass), (a), (b) or (c) (GAS_VENT_REVIEW.md); recommended (d), then (a) if the level loop still holds.
 - Owner: defect 4, option (A), (B) or (C) for the rig; recommended (A), after defect 1. `LevelLoopGameTests` keeps its fill at a tenth and its ramp until then.
 - Not run: the fluid and column GameTests (the final lane's); the kept crash world `world-crash-147499` (the JUnit reproduces its stack).
 - Seen, not this batch's: `IslandCoordinator.budgetHold` counts a missing result as a budget hold whatever its cause, so a worker exception is retried as one.
