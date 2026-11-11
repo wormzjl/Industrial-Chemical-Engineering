@@ -57,6 +57,60 @@ class WetGasGatesTest {
         }
     }
 
+    /**
+     * A condenser's vapour: the sizing sample's naphtha (ten times its distillate, the reflux), its offgas and its 330.7 mol/s
+     * of steam (23 %) at 2.5 bar from 352 to 384 K. Above the temperature where the aqueous liquid appears the oil condenses
+     * as the dry hydrocarbons would at their own partial pressure (Dalton: P V/(V + W), V their vapour, W the steam), within
+     * 2 points of the hydrocarbons (measured 0.9 to 1.3: the water dissolved in the oil and the gas's nonideality), and it
+     * appears within 2 K of that reference's dew point (377 K). No 2-K step of the oil's share exceeds 2.5 times the
+     * steepest 2-K step of the dry control at 2.5 bar (measured 1.8: below the aqueous dew point the condensing water raises
+     * the hydrocarbons' partial pressure). Below 358 K three phases stand. Before W3b's liquid trial seeded water at a trace,
+     * the stability test called this gas stable up to 384 K and the oil appeared at once at 356 K, 42 % of the feed.
+     */
+    @Test void naphthaBesideSteamCondensesAtItsOwnPartialPressure() {
+        double[] wet = feed("Methane", 2.96763, "Ethane", 9.48591, "Propane", 39.8587, "Isobutane", 29.8049, "N-butane", 74.5316,
+                "Isopentane", 74.6871, "N-pentane", 102.218, "crude_pc01", 367.438, "crude_pc02", 362.419, "crude_pc03", 0.00439957, "Water", 330.707);
+        int w = model.componentCount() - 1;
+        double steam = wet[w], hydrocarbons = 0;
+        double[] dry = wet.clone();
+        dry[w] = 0;
+        for (double v : dry) hydrocarbons += v;
+        double pressure = 2.5e5, steepestDry = 0, previousDry = Double.NaN, previousOil = Double.NaN, daltonDew = Double.NaN, wetDew = Double.NaN;
+        for (double t = 352; t <= 384 + 1e-9; t += 2) {
+            var s = model.flashTP(t, pressure, wet, () -> {});
+            double oil = 0, aqueous = 0;
+            for (int i = 0; i < w; i++) oil += s.amountsView(1)[i];
+            for (double v : s.amountsView(2)) aqueous += v;
+            oil /= hydrocarbons;
+            var d = model.flashTP(t, pressure, dry, () -> {});
+            double dryLiquid = 0;
+            for (double v : d.amountsView(1)) dryLiquid += v;
+            for (double v : d.amountsView(2)) dryLiquid += v;
+            dryLiquid /= hydrocarbons;
+            if (!Double.isNaN(previousDry)) steepestDry = Math.max(steepestDry, Math.abs(dryLiquid - previousDry));
+            previousDry = dryLiquid;
+            String at = t + " K";
+            if (t < 358) assertTrue(s.vaporVolume() > 0 && oil > 0 && aqueous > 0, at + ": gas, oil and aqueous liquid");
+            if (oil > 0) wetDew = t;
+            if (!Double.isNaN(previousOil)) assertTrue(Math.abs(oil - previousOil) <= 2.5 * steepestDry, () -> at + ": the oil's share steps " + "by more than the dry curve allows");
+            previousOil = oil;
+            if (aqueous > 0) continue;
+            // The dry hydrocarbons at their own partial pressure, with every mole of steam in the gas.
+            double partial = pressure * hydrocarbons / (hydrocarbons + steam), reference = 0;
+            for (int iteration = 0; iteration < 40; iteration++) {
+                var r = model.flashTP(t, partial, dry, () -> {});
+                double liquid = 0;
+                for (double v : r.amountsView(1)) liquid += v;
+                for (double v : r.amountsView(2)) liquid += v;
+                reference = liquid / hydrocarbons;
+                partial = pressure * (hydrocarbons - liquid) / (hydrocarbons - liquid + steam);
+            }
+            if (reference > 0) daltonDew = t;
+            assertEquals(reference, oil, 0.02, at + ": the oil condenses as the dry hydrocarbons at their partial pressure");
+        }
+        assertEquals(daltonDew, wetDew, 2.0 + 1e-9, "the oil's dew point is the hydrocarbons' own");
+    }
+
     /** Item 9: the scan on the network's list and on the pilot list (water, ethanol, n-hexane). */
     @Test void everyLocalCompositionPairScansWithoutAKernelRefusal() {
         scan(model);

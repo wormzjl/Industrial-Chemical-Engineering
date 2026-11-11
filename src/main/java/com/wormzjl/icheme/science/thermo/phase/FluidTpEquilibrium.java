@@ -319,8 +319,6 @@ public final class FluidTpEquilibrium {
     private static final double SLOT_FRACTION_TOLERANCE = 1.0e-13;
     /** Two ends' phases of one kind are the same phase across a closed bracket's step where their compositions differ by less (mole fraction). */
     private static final double LEVER_MATCH = 1.0e-4;
-    /** The water-rich seed's share of every other compound, relative to the feed's. */
-    private static final double SEED_TRACE = 1.0e-6;
 
     /**
      * @param lnKTolerance a plain substitution step moving no {@code ln K_i} by more than this is converged
@@ -6444,13 +6442,14 @@ public final class FluidTpEquilibrium {
             double sum = 0.0;
             for (int a = 0; a < w.presentCount; a++) {
                 int i = w.present[a];
-                // The first liquid is Wilson's liquid of the non-polar compounds, the polar ones at a trace (W3b step 1c: Wilson's
+                // The first liquid is Wilson's liquid of the non-polar compounds, the polar ones at a trace, by the rule the
+                // stability test's liquid trial follows for water (TangentPlaneStability.SEED_TRACE; W3b step 1c: Wilson's
                 // liquid of the whole feed was water-rich like the second seed, so the oil-rich liquid was never seeded and the
                 // ternary at its bubble point converged to a vapour and the aqueous liquid first, then failed its audit, 783
                 // kernel evaluations instead of 515). Without a non-polar compound, Wilson's liquid of the whole feed.
                 double liquid = w.z[i] / w.k[i];
-                if (k == 1 && nonPolar && polar[i]) liquid *= SEED_TRACE;
-                double value = k == 0 ? w.z[i] * w.k[i] : k == 1 ? liquid : i == seedPolar ? 1.0 : SEED_TRACE * w.z[i];
+                if (k == 1 && nonPolar && polar[i]) liquid *= TangentPlaneStability.SEED_TRACE;
+                double value = k == 0 ? w.z[i] * w.k[i] : k == 1 ? liquid : i == seedPolar ? 1.0 : TangentPlaneStability.SEED_TRACE * w.z[i];
                 s.composition[k][i] = value;
                 sum += value;
             }

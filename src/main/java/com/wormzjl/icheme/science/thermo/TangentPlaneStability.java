@@ -13,8 +13,10 @@ import java.util.Objects;
  * {@code W} is measured by the modified tangent-plane distance {@code tm(W) = 1 + sum_i W_i (ln W_i + ln phi_i(W) - d_i - 1)},
  * whose minimum over the amount scale is {@code 1 - exp(-D(w))}, so {@code tm(W) < 0} at any {@code W} proves the feed
  * unstable; every trial phase is evaluated on its own lower-Gibbs root. Trials run in a fixed order: Wilson vapour-like
- * {@code W = z K}, Wilson liquid-like {@code W = z / K}, and, when at most {@link Settings#pureComponentTrialLimit()}
- * components are present, each pure present component in basis order. A trial iterates {@code ln W_i = d_i - ln phi_i(W)}
+ * {@code W = z K}, Wilson liquid-like {@code W = z / K} (on a list with water and another present component, water at
+ * {@link #SEED_TRACE} of its Wilson value: the oil-rich liquid, W3b), and, when at most
+ * {@link Settings#pureComponentTrialLimit()} components are present, each pure present component in basis order, else
+ * the water-rich trial. A trial iterates {@code ln W_i = d_i - ln phi_i(W)}
  * by successive substitution with a fixed-cycle dominant-eigenvalue extrapolation, then Newton on
  * {@code alpha_i = 2 sqrt(W_i)} with the Hessian {@code delta_ij (1 + g_i / 2) + sqrt(w_i w_j) d ln phi_i/d n_j}, a
  * decrease test on {@code tm} and step halving; it ends converged, at the trivial solution {@code W = z}, or out of
@@ -128,6 +130,15 @@ public final class TangentPlaneStability {
     private static final int LOCALLY_STABLE = 1;
     private static final int LOCALLY_UNSTABLE = 2;
     private static final int UNDETERMINED = 3;
+
+    /**
+     * The share a seed gives a compound it means to leave out, relative to its own value: water in Wilson's liquid trial and
+     * in the three-slot split's first liquid, every other compound in its water-rich liquid (W3b). Wilson's liquid of a
+     * steam-laden gas holds a third or more of water; its substitution ran to the aqueous side, which above water's dew point
+     * proves nothing, so a gas that would condense its oil was called stable (naphtha with 23 % steam at 2.5 bar stayed all
+     * gas from water's dew point at 358 K up to 384 K, where without the steam it is 9 to 66 % liquid).
+     */
+    public static final double SEED_TRACE = 1.0e-6;
 
     private final PengRobinsonKernel kernel;
     private final Settings settings;
@@ -358,9 +369,13 @@ public final class TangentPlaneStability {
         if (trial < 2) {
             preferred = trial == 0 ? PengRobinsonKernel.Root.VAPOR : PengRobinsonKernel.Root.LIQUID;
             double sign = trial == 0 ? 1.0 : -1.0;
+            // The liquid trial is the oil-rich liquid: water at a trace where anything else is present (SEED_TRACE); the
+            // aqueous side stays the pure-component or water-rich trial's.
+            int traced = trial == 1 && waterRichTrial >= 0 && w.feed[waterRichTrial] > 0.0 && w.presentCount > 1 ? waterRichTrial : -1;
             for (int a = 0; a < w.presentCount; a++) {
                 int i = w.present[a];
-                seed.logAmounts[i] = bounded(w.logFeed[i] + sign * DeterministicMath.log(w.wilson[i]));
+                seed.logAmounts[i] = bounded(w.logFeed[i] + sign * DeterministicMath.log(w.wilson[i])
+                        + (i == traced ? DeterministicMath.log(SEED_TRACE) : 0.0));
             }
             evaluate(w, seed, preferred, false, true);
         } else {
