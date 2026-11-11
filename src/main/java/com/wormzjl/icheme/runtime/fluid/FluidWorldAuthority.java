@@ -2462,6 +2462,14 @@ public final class FluidWorldAuthority implements AutoCloseable {
                 var line=c.line();if(!view.status().contains(line))view=view.withStatus(view.status()+" / "+line);
             }
         }
+        // A pressure safety valve (batch 2026-11-11-gas-blanketing): what its run out of the guarded node relieved, and whether
+        // that run is the open stub to the atmosphere.
+        if(registration.spec().relief()>0) {
+            double relieved=0;boolean open=true;var q=snapshot.lastResult().map(PassiveIntervalSolver.Result::averageMassFlows).orElse(null);
+            for(int i=0;i<snapshot.graph().pipes().size();i++){var pipe=snapshot.graph().pipes().get(i);
+                if(pipe.control() instanceof FlowControl.PressureValve&&snapshot.graph().reservoirs().get(pipe.first()).id()==id){open=pipe.id()==PhysicalFluidTopology.reliefIdentity(id);if(q!=null)relieved=Math.max(0,q[i]);}}
+            view=view.withRelief(new FluidView.Relief(relieved,open));
+        }
         // A plain pipe's line reading (OWNER_TEST_REVIEW.md section 6): the stream it carries, as its gauge reads it.
         if(registration.device().kind()==TopologyCompiler.Kind.PIPE&&view.pipeInfo()!=null)view=view.withPipeInfo(view.pipeInfo().withReading(lineReading(id,view)));
         if(registration.device().kind()==TopologyCompiler.Kind.VOID) {

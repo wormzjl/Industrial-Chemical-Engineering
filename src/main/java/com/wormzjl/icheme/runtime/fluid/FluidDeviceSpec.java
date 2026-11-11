@@ -25,6 +25,8 @@ public record FluidDeviceSpec(double volume,double temperature,double pressure,d
     /** These settings with a gas blanketing valve set to {@code value} Pa absolute, or without one (0). */
     public FluidDeviceSpec withBlanket(double value){return value==blanket?this:new FluidDeviceSpec(volume,temperature,pressure,composition,solids,levelHeight,open,geometry,tower,value,relief,reliefFace);}
     /** These settings with a pressure safety valve set to {@code value} Pa absolute, its outlet at {@code face} (a pipe's; null on a vessel), or without one (0, null). */
+    /** These settings with both valves' set pressures at once (either 0 without that valve), the safety valve's outlet kept. */
+    public FluidDeviceSpec withValves(double blanket,double relief){return blanket==this.blanket&&relief==this.relief?this:new FluidDeviceSpec(volume,temperature,pressure,composition,solids,levelHeight,open,geometry,tower,blanket,relief,relief>0?reliefFace:null);}
     public FluidDeviceSpec withRelief(double value,PhysicalFluidTopology.Direction face){return value==relief&&face==reliefFace?this:new FluidDeviceSpec(volume,temperature,pressure,composition,solids,levelHeight,open,geometry,tower,blanket,value,face);}
     public FluidDeviceSpec(double volume,double temperature,double pressure,double[] composition,SlurryFeed solids,double levelHeight,boolean open){this(volume,temperature,pressure,composition,solids,levelHeight,open,com.wormzjl.icheme.science.fluid.network.VesselGeometry.prism(volume,levelHeight),null);}
     public FluidDeviceSpec withGeometry(com.wormzjl.icheme.science.fluid.network.VesselGeometry geometry){return new FluidDeviceSpec(volume,temperature,pressure,composition,solids,levelHeight,open,geometry,tower,blanket,relief,reliefFace);}
@@ -37,7 +39,8 @@ public record FluidDeviceSpec(double volume,double temperature,double pressure,d
     public static final double MIN_RELIEF=com.wormzjl.icheme.science.fluid.solver.PhaseLayout.AMBIENT_PRESSURE+1e4,MAX_RELIEF=com.wormzjl.icheme.science.fluid.solver.PhaseLayout.AMBIENT_PRESSURE+1e7,DEFAULT_RELIEF=com.wormzjl.icheme.science.fluid.solver.PhaseLayout.AMBIENT_PRESSURE+3e5;
     /** Whether {@code value} Pa absolute is a set pressure a pressure safety valve on a device with these settings takes. */
     public boolean reliefTakes(double value){return reliefTakes(value,blanket);}
-    private static boolean reliefTakes(double value,double blanket){return value>=MIN_RELIEF&&value<=MAX_RELIEF&&(!(blanket>0)||value>com.wormzjl.icheme.science.fluid.network.GasBlanket.ventPressure(blanket));}
+    /** Whether a safety valve takes the set pressure {@code value} beside a blanketing valve set to {@code blanket} (0: none). */
+    public static boolean reliefTakes(double value,double blanket){return value>=MIN_RELIEF&&value<=MAX_RELIEF&&(!(blanket>0)||value>com.wormzjl.icheme.science.fluid.network.GasBlanket.ventPressure(blanket));}
     /** The largest vessel volume, m³ (a floating-roof tank 40 m across with 23 m of fill holds about 28,900 m³, owner
      * decision FR6), and the tallest level height, m. */
     /** A gas blanketing valve's set pressure, Pa absolute: from 5 kPa over the game's ambient to 10 bar over it; 20 kPa over it when fitted. */

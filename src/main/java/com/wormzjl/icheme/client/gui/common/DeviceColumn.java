@@ -198,6 +198,21 @@ public final class DeviceColumn {
         return rows;
     }
 
+    /**
+     * A pressure safety valve's group (batch 2026-11-11-gas-blanketing, owner: "PSV set pressure is set in its GUI"), on a
+     * drum's accessory page or a pipe's valve screen: its set pressure, an entry for an editor and a meter for a reader;
+     * the host's pressure where no other group shows it ({@code pressure} null: none); what it relieves and where to.
+     */
+    public static List<Column.Row> reliefValve(boolean canEdit, String pressureUnit, String set, @Nullable String pressure, String flow, String flowUnit, boolean open, HeatControlColumn.Texts t) {
+        var rows = new ArrayList<Column.Row>();
+        rows.add(canEdit ? field("relief", t, "relief", pressureUnit)
+                : new Column.Reading("meter:relief_set", t.get("device_field.relief"), set, pressureUnit, t.get("device_field.relief.hint")));
+        if (pressure != null) rows.add(new Column.Reading("meter:relief_pressure", t.get("relief_pressure"), pressure, pressureUnit, t.get("relief_pressure.hint")));
+        rows.add(new Column.Reading("meter:relief_flow", t.get("relief_flow"), flow, flowUnit, t.get("relief_flow.hint")));
+        rows.add(new Column.Reading("meter:relief_discharge", t.get("relief_discharge"), t.get(open ? "relief_discharge.open" : "relief_discharge.piped"), "", t.get("relief_discharge.hint")));
+        return List.of(new Column.Group(t.get("accessory.relief"), null, rows));
+    }
+
     /** A fan tower's control: manual speed or a leaving-water target. A natural tower has none. */
     public static List<Column.Row> towerControl(boolean fans, boolean target, boolean canEdit, String temperatureUnit, HeatControlColumn.Texts t) {
         if (!fans) return List.of();
