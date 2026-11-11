@@ -460,12 +460,6 @@ class ShapeRasterizerTest {
                 var place = BlanketValveGeometry.of(shape);
                 org.junit.jupiter.api.Assertions.assertNotNull(place, shape.toString());
                 int[] cell = place.cell(), face = place.face();
-                assertEquals(0, face[1], shape + ": the outlet points to the side");
-                // Asked for a face (the player's), the valve takes it where its cell is free, else none.
-                for (int[] way : new int[][] {{0, 1}, {0, -1}, {2, 1}, {2, -1}}) {
-                    var asked = ReliefValveGeometry.of(shape, way[0], way[1]);
-                    if (asked != null) assertEquals(way[1], asked.face()[way[0]], shape + ": the outlet faces the way asked");
-                }
                 int x = cell[0] + face[0], y = cell[1] + face[1], z = cell[2] + face[2];
                 var layout = ShapeRasterizer.layout(shape);
                 for (var cells : List.of(layout.shell(), layout.interior()))
@@ -492,6 +486,12 @@ class ShapeRasterizerTest {
                 var place = ReliefValveGeometry.of(shape);
                 org.junit.jupiter.api.Assertions.assertNotNull(place, shape.toString());
                 int[] cell = place.cell(), face = place.face();
+                assertEquals(0, face[1], shape + ": the outlet points to the side");
+                // Asked for a face (the player's), the valve takes it where its cell is free, else none.
+                for (int[] way : new int[][] {{0, 1}, {0, -1}, {2, 1}, {2, -1}}) {
+                    var asked = ReliefValveGeometry.of(shape, way[0], way[1]);
+                    if (asked != null) assertEquals(way[1], asked.face()[way[0]], shape + ": the outlet faces the way asked");
+                }
                 int x = cell[0] + face[0], y = cell[1] + face[1], z = cell[2] + face[2];
                 var layout = ShapeRasterizer.layout(shape);
                 for (var cells : List.of(layout.shell(), layout.interior()))

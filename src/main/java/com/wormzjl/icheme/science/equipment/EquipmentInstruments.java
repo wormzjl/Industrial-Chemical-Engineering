@@ -215,10 +215,14 @@ public final class EquipmentInstruments {
                             double[] found = null;
                             for (double[] step : new double[][] {{1, 0}, {-1, 0}, {0, 1}, {1, 1}, {-1, 1}, {1, -1}, {-1, -1}, {0, -1}}) {
                                 double px = fx + step[0], pz = fz + step[1];
-                                if (Math.hypot(px - cx, pz - cz) > d / 2 - .25) continue;
+                                double ex = px - cx, ez = pz - cz, reach = d / 2 - .25;
+                                if (reach < 0 || ex * ex + ez * ez > reach * reach) continue;
                                 boolean busy = false;
                                 for (var at : nozzles) busy |= Math.floor(at[0]) == Math.floor(px) && Math.floor(at[2]) == Math.floor(pz);
-                                for (var probe : points) busy |= Math.hypot(probe.tap()[0] - px, probe.tap()[2] - pz) < .5;
+                                for (var probe : points) {
+                                    double qx = probe.tap()[0] - px, qz = probe.tap()[2] - pz;
+                                    busy |= qx * qx + qz * qz < .25;
+                                }
                                 if (busy) continue;
                                 found = new double[] {px, pz};
                                 break;
