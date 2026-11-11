@@ -89,8 +89,8 @@ From the engine: `solveWet`, `PartialPressureClosure`, `wetCoexistence`, `waterB
 Each step ends in a commit and a filtered test run of the classes it can reach. Steps 3 to 5 compile at each commit; their tests run at the end of step 5.
 
 1. Engine and kernel: a crystal beside two liquids and beside three fluid phases; N8; the bubble-point cost (783 evaluations); the UV restart on a narrow-boiling hydrocarbon binary. Gates: ice under n-hexane over water at -5 C and 1 atm answers ice, two liquids and gas; kernel evaluations per answer no higher than W3a's table; one timing pair for N8 (60 s warm-up, 60 s measured, run alone).
-2. Data: N9's main-data rows; `PhaseContract.forNetworkPackage` on the derived contract.
-3. `HydrocarbonModel`, `State`, `adopt`, `NetworkPhaseEngine` (N1, N2, N6).
+2. Data: the cubic water record alone goes into the main data (`properties/cubic_water.json`); the test overlay reads it. The derived contract stands beside `PhaseContract.forNetworkPackage`. Changed 2026-11-11: `icheme:refinery` is not edited here, because the network reads that record directly (`MaterialPresets` refuses a network package with a Water component, `forNetworkPackage` appends Water itself, `FluidThermodynamics` indexes crystals on the hydrocarbon list, and the package's revision is in the network's identity, so an edit restates saved worlds). A sibling package was built and dropped: it broke 14 tests that count or rename the refinery's packages.
+3. `HydrocarbonModel`, `State`, `adopt`, `NetworkPhaseEngine` (N1, N2, N6); with them the refinery package's Water component, ice Ih in its crystals and its revision, and the four readers named in step 2.
 4. `PhaseLayout` and the trace rules (N3, N4).
 5. `PassiveStepSolver`, `PhaseDraw`, `InletPhase`, `OpenVessel`, `InventoryEquilibrium`, `VesselCrystals`, `NetworkCrystals`, `ConservativeTransport`, transport (N5, N7); the tests moved to the phase accessors.
 6. Runtime: checkpoint format 47, the restate, presentation rows, labels, the flowsheet callers.
