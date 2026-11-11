@@ -884,7 +884,7 @@ class ColumnRunTest {
         world.runTo(6000);
         var u=world.ledger.column(r.unit());
         assertTrue(r.ops().status(r.unit()).startsWith("LIMITED: outlet"),r.ops().status(r.unit()));
-        double held=u.station(Port.DISTILLATE,0).account().total(),buffer=.5*ColumnOperation.BUFFER_SECONDS;
+        double held=u.station(Port.DISTILLATE,0).account().total(),buffer=.5*(ColumnOperation.BUFFER_CYCLES*ColumnOperation.CYCLE_TICKS/20.0);
         assertEquals(com.wormzjl.icheme.science.column.operation.Condition.PRODUCT_FULL,r.ops().last(r.unit()).binding().condition());
         assertTrue(EquipmentAlarm.column(r.ops().conditions(r.unit())).contains(EquipmentAlarm.BLOCKED),"the column raises BLOCKED: "+r.ops().conditions(r.unit()));
         assertEquals(buffer,held,1e-6*buffer,"the outlet holds its full buffer");
@@ -1245,7 +1245,7 @@ class ColumnRunTest {
         var u=world.ledger.column(r.unit());
         assertTrue(r.ops().status(r.unit()).startsWith("LIMITED: condenser"),r.ops().status(r.unit()));
         assertEquals(before,u.totals().taken().total(),1e-9,"no feed taken while the condenser cannot reject heat");
-        double hold=ColumnOperation.CONDENSER_HOLD_SECONDS*1000*.5,owed=world.coordinator.transitAsOf(PhysicalFluidTopology.sideIdentity(r.tube()),PhysicalFluidTopology.sideIdentity(r.shell()),world.ledger.onlineTick());
+        double hold=(ColumnOperation.CONDENSER_HOLD_CYCLES*ColumnOperation.CYCLE_TICKS/20.0)*1000*.5,owed=world.coordinator.transitAsOf(PhysicalFluidTopology.sideIdentity(r.tube()),PhysicalFluidTopology.sideIdentity(r.shell()),world.ledger.onlineTick());
         assertTrue(owed<=hold*1.2,"the heat owed stays near the hold: "+owed+" J of "+hold+" J");
     }
     /** The heat the utility side of rig {@code r} took up, J (negative: it gave), and what is still in transit to it, J. */
@@ -1319,7 +1319,7 @@ class ColumnRunTest {
         assertTrue(EquipmentAlarm.column(r.ops().conditions(r.unit())).contains(EquipmentAlarm.HEATING_LIMITED),r.ops().conditions(r.unit()).toString());
         // The shortage asks no solve of its own: only the throughput band, as for any cut feed, while the column still takes some.
         assertTrue(solves.jobs.stream().skip(asked).allMatch(j->j.trigger()==DriftBands.Trigger.THROUGHPUT),"solves after the loss: "+solves.jobs.stream().skip(asked).map(ColumnSolve.Job::trigger).toList());
-        double hold=ColumnOperation.CONDENSER_HOLD_SECONDS*reboilerPerFeed*.5,owed=-utilityHeat(r)[1];
+        double hold=(ColumnOperation.CONDENSER_HOLD_CYCLES*ColumnOperation.CYCLE_TICKS/20.0)*reboilerPerFeed*.5,owed=-utilityHeat(r)[1];
         assertTrue(owed<=hold*1.2,"the heat owed stays near the hold: "+owed+" J of "+hold+" J");
     }
     /** W4, decision D1: a pumparound cooler whose cooling water is lost cuts the feed, PUMPAROUND short (COOLING LIMITED); with its water its heat closes. */

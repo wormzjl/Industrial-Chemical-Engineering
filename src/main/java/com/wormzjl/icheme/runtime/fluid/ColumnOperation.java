@@ -40,8 +40,12 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     public static final int CYCLE_TICKS=100;
     /** The outlet fence L (owner Q4): a slice plans from the credits booked through its start less this. */
     public static final long FENCE_TICKS=440;
-    /** An inlet's account aims at this much of its set rate, s; an outlet holds this much design production, s (plan 4.2). */
-    public static final double INLET_AIM_SECONDS=30,BUFFER_SECONDS=120;
+    /**
+     * An inlet's account aims at this many cycles of its set rate; an outlet holds this many cycles of design production (plan
+     * 4.2): 30 s and 120 s at factor 1. Counts of cycles (batch 2026-11-11-minecraft-time-delta, W3, owner T6), so the
+     * accounts answer in the same play time at any time factor: 2 min of feed and 8 min of products at 4.
+     */
+    public static final int INLET_AIM_CYCLES=6,BUFFER_CYCLES=24;
     /** The share of an outlet's available moles a slice may take: a margin over the valve's regulation tolerance. */
     static final double TAKE_MARGIN=1-1e-6;
     /**
@@ -86,7 +90,8 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     /** Heat put in transit to each condenser shell's water at {@code tick}, J (one shell's share): by a cycle, or {@code booked} by an outlet's island, whose job decides when it lands. */
     record Owed(long tick,double joule,boolean booked) {}
     /** The condenser holds at most this many seconds of its design duty its water has not taken, and its water leaves at least this far below the condensate (C6b, plan section 10; U2: the simulator's approach). */
-    static final double CONDENSER_HOLD_SECONDS=60,APPROACH_KELVIN=com.wormzjl.icheme.science.equipment.HeatSides.WATER_APPROACH;
+    static final int CONDENSER_HOLD_CYCLES=12;
+    static final double APPROACH_KELVIN=com.wormzjl.icheme.science.equipment.HeatSides.WATER_APPROACH;
     /** The heat each condenser shell's water was owed per second by the cycle at {@code tick}, W: what a feed valve the column sets carries (U2). */
     record Duty(long tick,double watts) {}
     /**
@@ -215,6 +220,10 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     private SimulationTime time(){return coordinator.time();}
     /** The process seconds one column cycle advances. */
     private double cycleSeconds(){return time().seconds(CYCLE_TICKS);}
+    /** {@link #INLET_AIM_CYCLES}, {@link #BUFFER_CYCLES} and {@link #CONDENSER_HOLD_CYCLES} in process seconds (30, 120 and 60 s at factor 1). */
+    double inletAimSeconds(){return INLET_AIM_CYCLES*cycleSeconds();}
+    double bufferSeconds(){return BUFFER_CYCLES*cycleSeconds();}
+    double condenserHoldSeconds(){return CONDENSER_HOLD_CYCLES*cycleSeconds();}
 
     public ColumnOperation(WorldTopologyLedger topology,PhysicalRegistry registry,IslandCoordinator coordinator,List<String> axis,double[] weights) {
         this.topology=Objects.requireNonNull(topology);this.registry=Objects.requireNonNull(registry);this.coordinator=Objects.requireNonNull(coordinator);this.weights=weights.clone();this.axis=List.copyOf(axis);if(axis.size()!=weights.length)throw new IllegalArgumentException("One weight per component");
@@ -347,14 +356,14 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
                 if(taken!=null)rate=taken.total()/seconds;
                 if(t!=null)temperature=s.port()==Port.FEED?t.reference().feedTemperature(taken!=null&&taken.total()>0?taken.energy()/taken.total():Double.NaN)
                         :s.index()<t.reference().steamTemperatures().length?t.reference().steamTemperatures()[s.index()]:Double.NaN;
-                double aim=INLET_AIM_SECONDS*(s.port()==Port.FEED?demanded.feedRate():s.index()<demanded.steamPerFeed().length?demanded.feedRate()*demanded.steamPerFeed()[s.index()]:0);
+                double aim=inletAimSeconds()*(s.port()==Port.FEED?demanded.feedRate():s.index()<demanded.steamPerFeed().length?demanded.feedRate()*demanded.steamPerFeed()[s.index()]:0);
                 if(aim>0)held=s.account().total()/aim;
             } else if(t!=null) {
                 int k=t.product(s.port(),s.index());
                 if(k>=0) {
                     var p=t.products().get(k);temperature=p.temperature();
                     if(step!=null&&k<step.products().size())rate=step.products().get(k).total()/seconds;
-                    double capacity=set.designFeedRate()*BUFFER_SECONDS*t.perFeed(k);
+                    double capacity=set.designFeedRate()*bufferSeconds()*t.perFeed(k);
                     if(capacity>0)held=s.account().total()/capacity;
                 }
             }
@@ -691,7 +700,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         var steam=new ArrayList<Account>();
         for(int j=0;j<u.setpoints().steamPerFeed().length;j++){var s=station(stations,Port.STEAM,j);steam.add(s==null?Account.empty(weights.length):available.get(s.device()));}
         double[] room=new double[t.products().size()];
-        double design=u.setpoints().designFeedRate()*BUFFER_SECONDS;
+        double design=u.setpoints().designFeedRate()*bufferSeconds();
         for(int k=0;k<room.length;k++) {
             var p=t.products().get(k);var s=station(stations,p.port(),p.index());
             // Gifts through the fence only: a slow island's booking lands after the cycle or before it, the room is the same.
@@ -828,14 +837,14 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     }
     /**
      * An inlet's valve (plan 4.3, FC): the rate the column demanded at its last cycle through the slice start less the fence,
-     * corrected by the account's level after that cycle against {@link #INLET_AIM_SECONDS} of that rate. Read as of the
+     * corrected by the account's level after that cycle against {@link #INLET_AIM_CYCLES} of that rate. Read as of the
      * fence, so the plan does not depend on when the island's job is dispatched (plan section 9).
      */
     private PortPlan inletPlan(Run r,ColumnUnit.Station s,PassiveNetwork.Reservoir node,IslandClock.Slice slice) {
         double target=0;
         var level=r==null?null:asOf(r.levels.get(s.device()),Level::tick,slice.startTick()-FENCE_TICKS);
         if(level!=null&&level.rate()>0&&level.molarMass()>0) {
-            double aim=level.rate()*INLET_AIM_SECONDS,gain=Math.max(0,Math.min(2,1+(aim-level.held())/aim));
+            double aim=level.rate()*inletAimSeconds(),gain=Math.max(0,Math.min(2,1+(aim-level.held())/aim));
             target=level.rate()*gain*level.molarMass();
         }
         return new PortPlan(node.id(),s.valve(),target,0,null);
@@ -862,7 +871,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         if(!(total>0)||mine==null)return new PortPlan(node.id(),s.valve(),0,node.state().temperature(),com.wormzjl.icheme.science.fluid.solver.PhaseLayout.totalAmounts(node.state()));
         double mass=mass(available),cap=mass/slice.seconds(time())*TAKE_MARGIN,rate=cap;
         if(made!=null) {
-            double produced=mass(made.product().moles())/cycleSeconds(),aim=produced*BUFFER_SECONDS/2;
+            double produced=mass(made.product().moles())/cycleSeconds(),aim=produced*bufferSeconds()/2;
             if(aim>0)rate=produced*Math.max(0,Math.min(2,mass/aim));
         }
         return new PortPlan(node.id(),s.valve(),Math.min(cap,rate),temperature,mine,solids);
@@ -1028,7 +1037,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     }
     /**
      * The heat {@code utility} can still take (or give) at the cycle at {@code tick}, J (C6b, W4): its hold,
-     * {@link #CONDENSER_HOLD_SECONDS} of its duty per feed at the design rate, less its units times the fullest unit's transit
+     * {@link #CONDENSER_HOLD_CYCLES} of its duty per feed at the design rate, less its units times the fullest unit's transit
      * as of the fence (identical units in parallel share the duty equally, S3b, so the fullest bounds the whole), what outlets
      * booked after the fence left out. Unbounded where it has no side: the duty is the column's own.
      */
@@ -1042,7 +1051,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
             owed=Math.max(owed,utility.sign()*held);
         }
         // The water's hold is of its own share: an air-then-water condenser's trim takes part of the duty (COOLER_MODEL_PLAN.md section 6).
-        return CONDENSER_HOLD_SECONDS*Math.abs(perFeed(t,utility))*u.setpoints().designFeedRate()-sides.size()*owed;
+        return condenserHoldSeconds()*Math.abs(perFeed(t,utility))*u.setpoints().designFeedRate()-sides.size()*owed;
     }
     /** A cycle's {@code joule} owed to {@code utility} at {@code tick} (column sign reversed), and each side's heat rate for a valve the column sets (U2). */
     private void owed(Run r,ColumnUnit u,long tick,Utility utility,double joule) {
@@ -1087,8 +1096,8 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
             // backlog beyond a cycle's lump and the slice over the hold.
             double rate=rate(r,u,utility,start-FENCE_TICKS),excess=Math.max(0,utility.sign()*due-rate*(seconds+cycleSeconds()));
             double bound=utility.kind()==Utility.Kind.CONDENSER?Math.max(1,condenserTemperature(u)-APPROACH_KELVIN):bound(u,table,utility);
-            return utility.gives()?com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read.heating(due,seconds,bound,rate+excess/CONDENSER_HOLD_SECONDS)
-                    :com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read.column(due,seconds,bound,rate+excess/CONDENSER_HOLD_SECONDS);
+            return utility.gives()?com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read.heating(due,seconds,bound,rate+excess/condenserHoldSeconds())
+                    :com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read.column(due,seconds,bound,rate+excess/condenserHoldSeconds());
         }
         var held=registry.registrations().get(partner-PhysicalFluidTopology.sideIdentity(0));
         return held!=null&&held.device().suspended()?com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read.NONE:null;

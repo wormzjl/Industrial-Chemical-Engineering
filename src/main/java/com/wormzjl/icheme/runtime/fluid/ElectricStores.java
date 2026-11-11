@@ -71,16 +71,18 @@ public final class ElectricStores {
         boolean shortfall;
         long bookedTick, rateTick, tick = Long.MIN_VALUE;
         long offeredTick = Long.MIN_VALUE;
+        /** The time factor its windows are counted under ({@link IslandCoordinator#time}). */
+        final com.wormzjl.icheme.science.fluid.SimulationTime time;
 
-        Store(Kind kind, ElectricStore.Facts facts, long now) {
-            this.kind = kind;
+        Store(Kind kind, ElectricStore.Facts facts, long now, com.wormzjl.icheme.science.fluid.SimulationTime time) {
+            this.kind = kind;this.time = time;
             joules = facts.joules();
             metered = facts.metered();
             bookedTick = rateTick = now;
         }
 
         double capacity() {
-            return kind == Kind.MOTOR ? ElectricStore.MOTOR_BUFFER_SECONDS * ratedDraw : ElectricStore.capacity(ratedDraw);
+            return kind == Kind.MOTOR ? ElectricStore.motorCapacity(ratedDraw, time) : ElectricStore.capacity(ratedDraw, time);
         }
     }
 
@@ -108,12 +110,12 @@ public final class ElectricStores {
         topology.stores().forEach((id, facts) -> {
             var kind = kind(id);
             if (kind == null) return;
-            var s = new Store(kind, facts, now);
+            var s = new Store(kind, facts, now, coordinator.time());
             stores.put(id, s);
         });
         // Existing inline movers retain their saved custom duty and former unmetered behaviour until wired.
         for(var r:topology.active().values()) if(r.device().kind()==com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.PIPE&&r.device().control() instanceof FlowControl.Mover&&!(r.device().control() instanceof FlowControl.Machine)&&!stores.containsKey(r.device().id()))
-            stores.put(r.device().id(),new Store(Kind.INLINE,ElectricStore.Facts.UNMETERED,now));
+            stores.put(r.device().id(),new Store(Kind.INLINE,ElectricStore.Facts.UNMETERED,now,coordinator.time()));
         sync();
         for (var s : stores.values()) s.unpowered = !kindGenerator(s) && s.metered && (s.kind == Kind.MOTOR || s.joules <= 0) && needPower();
     }
@@ -249,7 +251,7 @@ public final class ElectricStores {
             var kind = kind(id);
             var s = stores.get(id);
             if (s == null || s.kind != kind) {
-                s = new Store(kind, ElectricStore.Facts.EMPTY, now);
+                s = new Store(kind, ElectricStore.Facts.EMPTY, now, coordinator.time());
                 stores.put(id, s);
                 s.ratedDraw = ratedDraw(id, kind);
                 // A new store is empty: its unit waits for one slice of power before it first runs.
@@ -425,7 +427,7 @@ public final class ElectricStores {
     public boolean restart(long id) {
         var s = stores.get(id);
         if (s == null || !s.unpowered) return false;
-        double threshold = s.kind == Kind.MOTOR ? ElectricStore.MOTOR_RESTART_SECONDS * s.ratedDraw : ElectricStore.restart(s.ratedDraw);
+        double threshold = s.kind == Kind.MOTOR ? ElectricStore.motorRestart(s.ratedDraw, s.time) : ElectricStore.restart(s.ratedDraw, s.time);
         if (!free(s) && (s.joules < threshold || s.kind == Kind.MOTOR && !supplied(id,s))) return false;
         s.unpowered = false;
         return true;

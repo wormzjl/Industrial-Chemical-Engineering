@@ -8,13 +8,17 @@ package com.wormzjl.icheme.science.machine;
  * (reading A55).
  */
 public final class ElectricStore {
-    /** The buffer: two slices at the longest 20 s cadence of rated draw (plan 7). */
-    public static final double BUFFER_SECONDS = 40;
-    /** One slice at the longest cadence, s: the restart threshold's span of rated draw (reading A62). */
-    public static final double SLICE_SECONDS = 20;
-    /** Motors only bridge two presentation periods; their buffer is not a stand-alone power supply. */
-    public static final double MOTOR_BUFFER_SECONDS = 10;
-    public static final double MOTOR_RESTART_SECONDS = 5;
+    /** The longest cadence, ticks (20 s of play): the slice the store windows are counted in. */
+    public static final int SLICE_TICKS = 400;
+    /** The engine's presentation period, ticks (5 s of play): the motor windows are counted in it. */
+    public static final int PERIOD_TICKS = 100;
+    /**
+     * The windows as counts of the engine's cycles (batch 2026-11-11-minecraft-time-delta, W3), so they hold the same play
+     * time at any time factor: the buffer, two slices at the longest cadence of rated draw (plan 7; 40 s of process at factor
+     * 1); the restart threshold, one slice (reading A62); a motor's buffer, two presentation periods (it only bridges them: not
+     * a stand-alone power supply), and its restart, one.
+     */
+    public static final int BUFFER_SLICES = 2, RESTART_SLICES = 1, MOTOR_BUFFER_PERIODS = 2, MOTOR_RESTART_PERIODS = 1;
     /** The most a port takes or gives per tick, as a multiple of the rated draw (plan 7). */
     public static final double RATE = 2;
     /** A generator delivers within this share of its rated speed either way (reading A64). */
@@ -40,9 +44,14 @@ public final class ElectricStore {
         }
     }
 
-    /** The store of a unit drawing {@code ratedDraw} W at rating: 40 s of it, J. */
-    public static double capacity(double ratedDraw) {
-        return BUFFER_SECONDS * Math.max(0, ratedDraw);
+    /** The store of a unit drawing {@code ratedDraw} W at rating: two slices of it under {@code time} (40 s at factor 1), J. */
+    public static double capacity(double ratedDraw, com.wormzjl.icheme.science.fluid.SimulationTime time) {
+        return BUFFER_SLICES * time.seconds(SLICE_TICKS) * Math.max(0, ratedDraw);
+    }
+
+    /** A motor's store: two presentation periods of its rated draw under {@code time} (10 s at factor 1), J. */
+    public static double motorCapacity(double ratedDraw, com.wormzjl.icheme.science.fluid.SimulationTime time) {
+        return MOTOR_BUFFER_PERIODS * time.seconds(PERIOD_TICKS) * ratedDraw;
     }
 
     /** The most its port takes or gives per tick, J: twice its rated draw over the process seconds of one tick under {@code time}. */
@@ -50,9 +59,14 @@ public final class ElectricStore {
         return RATE * Math.max(0, ratedDraw) * time.tickSeconds();
     }
 
-    /** What its store must hold for a stopped unit to restart, J: one slice of its rated draw (reading A62). */
-    public static double restart(double ratedDraw) {
-        return SLICE_SECONDS * Math.max(0, ratedDraw);
+    /** What its store must hold for a stopped unit to restart, J: one slice of its rated draw under {@code time} (reading A62). */
+    public static double restart(double ratedDraw, com.wormzjl.icheme.science.fluid.SimulationTime time) {
+        return RESTART_SLICES * time.seconds(SLICE_TICKS) * Math.max(0, ratedDraw);
+    }
+
+    /** What a stopped motor's store must hold to restart, J: one presentation period of its rated draw under {@code time}. */
+    public static double motorRestart(double ratedDraw, com.wormzjl.icheme.science.fluid.SimulationTime time) {
+        return MOTOR_RESTART_PERIODS * time.seconds(PERIOD_TICKS) * ratedDraw;
     }
 
     /** {@code joules} in FE at {@code joulesPerFE}. */
