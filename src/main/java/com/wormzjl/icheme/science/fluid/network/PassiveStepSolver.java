@@ -63,6 +63,12 @@ public final class PassiveStepSolver {
      * term ({@link #checkConservation}). A numerical regularisation sized to the flow: its mixing lag at full flow is tau.
      */
     static final double HOLDUP_TAU=.05;
+    /**
+     * {@link #HOLDUP_TAU} under the time factor (batch 2026-11-11-minecraft-time-delta, W2; owner "Holdup only"): a time
+     * constant of the numerics, so a step carries the same number of buffers through a junction at any factor (5 s over 0.05 s
+     * at 1, 360 s over 3.6 s at 72) and its mixing lag stays 1 % of a slice. Exactly {@link #HOLDUP_TAU} at factor 1.
+     */
+    static double holdupTau(com.wormzjl.icheme.science.fluid.SimulationTime time){return HOLDUP_TAU*time.factor();}
     /** The Newton's relative tolerance on its scaled rows (a taut vessel's weighted by the pressure they imply,
      * {@link Equations#rowWeights}); the solid
      * events read a flow within it of the island's largest as roundoff ({@code SolidEventIntegrator.still}). */
@@ -385,11 +391,13 @@ public final class PassiveStepSolver {
                 // Owner decision D11 (A1): one whose target lies above what a set-flow mover in its series moves starts open, the
                 // mover setting the flow, as an open valve's first pass would find; the pass loop regulates again where the open line
                 // passes more. Regulating there asked the mover for its target: 50 kg/s of a 10 kg/s pump stood a thousand relief
-                // rises below its suction, where the thermo failed.
+                // rises below its suction, where the thermo failed. Owner option 1 of FEED_STEP_HOLD_REVIEW.md: one whose supply holds
+                // nothing ({@link InletPhase#starved}, a drained drum) starts open too, as {@link #openStarved} opens it in a pass.
                 else if(accepted==FlowControl.Mode.VALVE_REGULATING&&!valve.pressureControl()) {
                     if(bound==null)bound=moverBounds(graph);
                     var pipe=graph.pipes().get(edge);
-                    if(valve.targetMassFlow(endDensity(graph.reservoirs().get(pipe.first()).state(),pipe.firstPort(),pipe.volume()))>bound[edge])start=FlowControl.Mode.VALVE_OPEN;
+                    if(valve.targetMassFlow(endDensity(graph.reservoirs().get(pipe.first()).state(),pipe.firstPort(),pipe.volume()))>bound[edge]
+                            ||InletPhase.starved(graph,edge,node->false))start=FlowControl.Mode.VALVE_OPEN;
                 }
                 modes.set(edge,start);
             }
@@ -531,6 +539,11 @@ public final class PassiveStepSolver {
                 // again with the vessel as a junction holding its stock, which ends the step empty (emptyingGraph).
                 var drained=equations.runsDry(failure.lastVariables(),emptying);
                 if(drained!=null){emptying=drained;continue;}
+                // Owner option 1 of FEED_STEP_HOLD_REVIEW.md: a regulating flow valve fed only by vessels that hold nothing or that
+                // this pass runs dry cannot hold a target above what reaches it; its regulation row has no root at any step size
+                // (a drained level-loop drum held its island at residual = the valve's flow). It is solved again open, passing
+                // what reaches it; the converged open point regulates again where it passes more than the target.
+                if(openStarved(original,modes,emptying))continue;
                 // A point the Newton never reached is not read as evidence about this pass's frozen junction donors or the
                 // junction basis they state (unlike the converged tests below): a diverged trial's flow sign handed a
                 // junction the tank's nitrogen as a seeded trace nothing delivers, and every swept pressure lost an interval
@@ -1733,6 +1746,15 @@ public final class PassiveStepSolver {
     private double[] moverBounds(PassiveNetwork graph) {
         return ControlConstraints.moverBounds(graph,e->{var pipe=graph.pipes().get(e);
             return ((FlowControl.Mover)pipe.control()).targetVolumeFlow()*endDensity(graph.reservoirs().get(pipe.first()).state(),pipe.firstPort(),pipe.volume());});
+    }
+    /** Sets every regulating flow valve that {@link InletPhase#starved} finds without stock on {@code graph} (the solve's
+     * input graph; {@code emptying} the vessels this pass runs dry, or null) to open; whether any was. */
+    private static boolean openStarved(PassiveNetwork graph,List<FlowControl.Mode> modes,boolean[] emptying) {
+        boolean changed=false;
+        for(int edge=0;edge<modes.size();edge++)
+            if(modes.get(edge)==FlowControl.Mode.VALVE_REGULATING&&graph.pipes().get(edge).control() instanceof FlowControl.Valve valve&&!valve.pressureControl()
+                    &&InletPhase.starved(graph,edge,node->emptying!=null&&emptying[node])){modes.set(edge,FlowControl.Mode.VALVE_OPEN);changed=true;}
+        return changed;
     }
     /** The rise (Pa) of the mover on connection {@code edge} at suction volume flow {@code flow} on its own law
      * ({@code MOVER_LAW}), as this solve reads it ({@link #mover}). */
@@ -3420,12 +3442,6 @@ public final class PassiveStepSolver {
             for(int e:nodeEdges[node]){if(e==except||closed[e])continue;var pipe=graph.pipes().get(e);double q=flow(e,endAt(e,0,p),endAt(e,1,p));net+=pipe.second()==node?q:-q;}
             return net;
         }
-        /** Whether no open connection of junction {@code node} carries anything at {@code p}: each is refused the way its drive
-         * points, or has none (a sealed fitting, whose balance holds at its own pressure). */
-        private boolean sealed(int node,double[] p) {
-            for(int e:nodeEdges[node]){if(closed[e])continue;if(flow(e,endAt(e,0,p),endAt(e,1,p))!=0)return false;}
-            return true;
-        }
         private double scale(int node,double pressure){return unknown[node]>=0&&gas[node]?pressure/reference[node]:1;}
         /** The connection's flow at end pressures {@code pa}, {@code pb} (positive first to second): its law in the donor's
          * column and stream, saturated at the donor's cap, nothing in a refused direction; a mover's prescribed flow, or its
@@ -3520,7 +3536,7 @@ public final class PassiveStepSolver {
         }
         /**
          * One Gauss-Seidel sweep: each junction is bisected on the sign of its net inflow inside the hull, except a sealed one
-         * ({@link #sealed}), which keeps its pressure (t56's trace of cold seed 743): a junction between closed lines and a
+         * ({@link #still}), which keeps its pressure (t56's trace of cold seed 743): a junction between closed lines and a
          * one-way supply it stands above has no inflow at any pressure above that supply's, and the bisection put it on the
          * edge of that flat range, a liquid-full fitting at 4.96 MPa seeded as vapour at the supply's 485 kPa, where no step
          * converged. A sealed fitting holds its fluid and its pressure.
@@ -3528,7 +3544,7 @@ public final class PassiveStepSolver {
         void sweep(double[] p) {
             int[][] nodeEdges=incidence(graph);
             for(int node=0;node<nodes;node++) {
-                if(unknown[node]<0||sealed(node,p))continue;
+                if(unknown[node]<0||still(node,p))continue;
                 double lo=low,hi=high;
                 for(int k=0;k<30&&hi-lo>1e-9*high;k++) {
                     double mid=.5*(lo+hi),net=0;p[node]=mid;
@@ -3604,7 +3620,7 @@ public final class PassiveStepSolver {
             double tolerance=1e-6*Math.max(1,scale);
             for(int iteration=0;iteration<30;iteration++) {
                 checkpoint.run();finalResidual=maximum(residual);
-                if(finalResidual<=tolerance){converged=true;return p;}
+                if(finalResidual<=tolerance){converged=true;break;}
                 iterations++;
                 double[][] jacobian=new double[count][2*band+1];residual(p,new double[count],jacobian);
                 double floor=0;for(int i=0;i<count;i++)floor=Math.max(floor,Math.abs(jacobian[i][band]));floor=Math.max(floor*1e-12,Double.MIN_NORMAL);
@@ -3629,7 +3645,32 @@ public final class PassiveStepSolver {
                     if(moved<1e-12)break;}
             }
             finalResidual=maximum(residual);converged=finalResidual<=tolerance;
+            rest(p);
             return p;
+        }
+        /**
+         * A junction the hull's clamp holds on its bound with nothing flowing through it has no balance there: the bound is
+         * the search's box, not a pressure. It moves back toward its own pressure as far as its connections still carry
+         * nothing: to its own pressure, or to the edge of its no-flow range nearest it. Its flows stay zero, so no row changes.
+         * A no-flow range has a zero merit at every point, so the Newton's first step into it is accepted where it lands, the
+         * clamp included (defect 3 of batch 2026-11-11-drum-operation-holds: a leg's foot at 300 Pa, the hull's floor,
+         * instead of its column's 52 kPa). A junction inside a no-flow band is a balance anywhere in it and stays: moved to the
+         * band's edge, a cryogenic pocket two-phase near its dew point stalled the step (cold seed 65).
+         */
+        private void rest(double[] p) {
+            for(int node=0;node<nodes;node++) {
+                if(unknown[node]<0||p[node]>low&&p[node]<high||!still(node,p))continue;
+                double own=Math.clamp(reference[node],low,high),near=p[node],far=own;
+                p[node]=own;if(still(node,p))continue;
+                for(int k=0;k<60&&Math.abs(far-near)>1e-12*Math.max(1,Math.abs(own));k++){double mid=.5*(near+far);p[node]=mid;if(still(node,p))near=mid;else far=mid;}
+                p[node]=near;
+            }
+        }
+        /** Whether no open connection of junction {@code node} carries anything at {@code p}: each is refused the way its drive
+         * points, or has none (a sealed fitting, whose balance holds at its own pressure). */
+        private boolean still(int node,double[] p) {
+            for(int e:nodeEdges[node]){if(closed[e])continue;if(flow(e,endAt(e,0,p),endAt(e,1,p))!=0)return false;}
+            return true;
         }
         /**
          * The graph with every balanced junction at its pressure and the upwind mixture of what the balanced flows deliver (PH

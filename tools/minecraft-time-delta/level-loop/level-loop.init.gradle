@@ -1,0 +1,6 @@
+// Attaches this folder's src/ to the fluidGameTest source set for one Gradle invocation: LevelLoopFactorRun, the drum
+// level loop in the review server's namespace. Use through run.sh. Not part of any gate.
+gradle.projectsEvaluated {
+    def here = gradle.startParameter.initScripts.find { it.name == 'level-loop.init.gradle' }.parentFile
+    gradle.rootProject.sourceSets.fluidGameTest.java.srcDir(new File(here, 'src'))
+}

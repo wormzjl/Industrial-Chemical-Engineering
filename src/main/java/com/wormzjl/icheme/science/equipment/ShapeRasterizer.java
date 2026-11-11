@@ -325,6 +325,24 @@ public final class ShapeRasterizer {
     }
 
     /** Cached accessory geometry in equipment-local world axes; not part of the bare tank's shell/collision. */
+    /** A drum's gas blanketing valve's faces, in the box frame; none where the shape takes no valve ({@link BlanketValveGeometry}). */
+    public static List<Polygon> blanketValve(EquipmentShape shape){if(!drawing)throw new IllegalStateException("A dedicated server keeps no accessory surfaces");return geometry(shape).blanketValve();}
+    /** A drum's pressure safety valve's faces, in the box frame; none where the shape takes none ({@link ReliefValveGeometry}). */
+    public static List<Polygon> reliefValve(EquipmentShape shape){return reliefValve(shape,-1,0);}
+    /** The same with its outlet toward horizontal axis {@code axis} and {@code sign} (-1: the default direction); none where that cell is taken. */
+    public static List<Polygon> reliefValve(EquipmentShape shape,int axis,int sign){if(!drawing)throw new IllegalStateException("A dedicated server keeps no accessory surfaces");return geometry(shape).reliefValve(axis,sign);}
+    private static final Map<List<Object>,List<Polygon>> PIPE_RELIEF=new ConcurrentHashMap<>();
+    /** A pipe's pressure safety valve's faces in its block, its outlet out of face {@code face} (axis, sign), standing along the pipe's {@code axis}, on a pipe of outside diameter {@code outside} ({@link ReliefValveGeometry#onPipe}). */
+    public static List<Polygon> reliefValveOnPipe(int face,int faceSign,int axis,double outside){
+        if(!drawing)throw new IllegalStateException("A dedicated server keeps no accessory surfaces");
+        if(PIPE_RELIEF.size()>64)PIPE_RELIEF.clear();
+        return PIPE_RELIEF.computeIfAbsent(List.of(face,faceSign,axis,outside),k->{
+            var place=ReliefValveGeometry.onPipe(face,faceSign,axis,outside);var mesh=new Mesh();place.build(mesh,outside/2);
+            var polygons=new ArrayList<Polygon>();var pieces=new ArrayList<Polygon>();
+            for(var facet:mesh.facets()){pieces.clear();mesh.cell(facet,0,0,0,pieces);polygons.addAll(pieces);}
+            return List.copyOf(polygons);
+        });
+    }
     public static List<Polygon> tankGauge(EquipmentShape shape){if(!drawing)throw new IllegalStateException("A dedicated server keeps no accessory surfaces");return shape.kind()==EquipmentShape.Kind.TANK?geometry(shape).tankGauge():List.of();}
 
     /** A floating-roof tank's client-drawn parts in the box, or null for any other shape. */
@@ -1612,6 +1630,23 @@ public final class ShapeRasterizer {
             return reach;
         }
 
+        private volatile List<Polygon> blanketValve;
+        private List<Polygon> blanketValve(){
+            var result=blanketValve;if(result!=null)return result;
+            var place=BlanketValveGeometry.of(shape);if(place==null)return blanketValve=List.of();
+            var accessory=new Mesh(detail);place.build(accessory);
+            var polygons=new ArrayList<Polygon>();cut(accessory,accessory.facets(),new double[3],polygons);
+            return blanketValve=List.copyOf(polygons);
+        }
+        private final Map<Integer,List<Polygon>> reliefValves=new ConcurrentHashMap<>();
+        private List<Polygon> reliefValve(int axis,int sign){
+            return reliefValves.computeIfAbsent(axis<0?-1:axis*2+(sign>0?1:0),k->{
+                var place=ReliefValveGeometry.of(shape,axis,sign);if(place==null)return List.of();
+                var accessory=new Mesh(detail);place.build(accessory,.45);
+                var polygons=new ArrayList<Polygon>();cut(accessory,accessory.facets(),new double[3],polygons);
+                return List.copyOf(polygons);
+            });
+        }
         private volatile List<Polygon> tankGauge;
         private List<Polygon> tankGauge(){
             var result=tankGauge;if(result!=null)return result;

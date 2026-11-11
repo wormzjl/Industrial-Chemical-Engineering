@@ -1,0 +1,417 @@
+==== STUDY seed=15 ms=9862 end=3637 holds=1 exceptions=0 islands=25:HELD: wall deadline;26:STEADY: no flow since 86.9 s;
+layout 100:gen[crude 386K 328kPa]@0,-1,1 100:tank@0,0,2 121:valve[200kPa]@0,0,-2>SOUTH 121:tank@0,-1,-1 125:pipe0.01@0,0,-1 125:void@0,2,-1 457:filter@2,0,-1>WEST 621:pipe0.01@0,1,-1 630:filter@0,0,0>SOUTH 1022:pipe0.05@-1,0,2 1130:pipe0.02@0,0,1 1410:pump[0.01,500kPa]@-2,0,2>EAST 1410:pipe0.1@1,0,-1 
+HELD tick=3637 island=25 committed=3537 status=HELD: wall deadline
+COUNTERS implicitSolves=559 activeSetPasses=559 newtonSolves=625 newtonIterations=10302 jacobianBuilds=9099 residualEvaluations=13240 stepAttempts=517 stepAttemptsAccepted=308 equationGateRejections=0 restIntervals=86 phaseSeeds=0 phaseRefusals=0 newtonBacktracks=4
+ATTEMPTS 517
+  #0..1 x2 ok be-state step=3.600..7.200 change=0.0158
+  #2..4 x3 REJECT be-state step=3.600..14.40 change=0.355
+  #5..5 x1 ok be-state step=1.800..1.800 change=0.00791
+  #6..7 x2 REJECT be-state step=1.800..3.600 change=0.127
+  #8..17 x10 ok be-state step=0.6571..1.894 change=0.0345
+  #18..21 x4 REJECT be-state step=3.600..28.80 change=0.302
+  #22..30 x9 ok be-state step=1.800..4.535 change=0.0274
+  #31..33 x3 REJECT be-state step=14.40..57.60 change=0.244
+  #34..40 x7 ok be-state step=7.134..10.13 change=0.0413
+  #41..43 x3 REJECT be-state step=18.00..72.00 change=0.168
+  #44..46 x3 ok be-state step=9.000..12.55 change=0.0268
+  #47..47 x1 REJECT be-state step=13.71..13.71 change=0.0512
+  #48..55 x8 ok be-state step=6.118..14.64 change=0.0261
+  #56..57 x2 REJECT be-state step=36.00..72.00 change=0.131
+  #58..66 x9 ok be-state step=18.00..34.43 change=0.0363
+  #67..67 x1 REJECT be-state step=72.00..72.00 change=0.0514
+  #68..146 x79 ok be-state step=3.600..163.7 change=0.0269
+  #147..151 x5 REJECT newton|Newton iteration limit at residual #; active-set pass=# step=9.000..144.0 change=NaN
+  #152..152 x1 ok be-state step=4.500..4.500 change=4.06e-09
+  #153..153 x1 REJECT newton|Newton iteration limit at residual #; active-set pass=# step=9.000..9.000 change=NaN
+  #154..154 x1 ok be-state step=4.500..4.500 change=4.02e-09
+  #155..155 x1 REJECT newton|Newton iteration limit at residual #; active-set pass=# step=9.000..9.000 change=NaN
+  #156..156 x1 ok be-state step=4.500..4.500 change=3.99e-09
+  #157..158 x2 REJECT newton|Newton iteration limit at residual #; active-set pass=# step=4.500..9.000 change=NaN
+  #159..159 x1 ok be-state step=2.250..2.250 change=1.98e-09
+  #160..160 x1 REJECT newton|Newton iteration limit at residual #; active-set pass=# step=4.500..4.500 change=NaN
+  #161..161 x1 ok be-state step=2.250..2.250 change=1.97e-09
+  #162..162 x1 REJECT newton|Newton iteration limit at residual #; active-set pass=# step=4.500..4.500 change=NaN
+  #163..163 x1 ok be-state step=2.250..2.250 change=1.97e-09
+  #164..164 x1 REJECT newton|Newton iteration limit at residual #; active-set pass=# step=4.500..4.500 change=NaN
+  #165..165 x1 ok be-state step=2.250..2.250 change=1.96e-09
+  #166..166 x1 REJECT newton|Newton iteration limit at residual #; active-set pass=# step=4.500..4.500 change=NaN
+  #167..167 x1 ok be-state step=2.250..2.250 change=1.95e-09
+  #168..168 x1 REJECT newton|Newton iteration limit at residual #; active-set pass=# step=4.500..4.500 change=NaN
+  #169..169 x1 ok be-state step=2.250..2.250 change=1.94e-09
+  #170..170 x1 REJECT newton|Newton iteration limit at residual #; active-set pass=# step=4.500..4.500 change=NaN
+  #171..171 x1 ok be-state step=2.250..2.250 change=1.93e-09
+  #172..172 x1 REJECT newton|Newton iteration limit at residual #; active-set pass=# step=4.500..4.500 change=NaN
+  #173..173 x1 ok be-state step=2.250..2.250 change=1.92e-09
+  #174..174 x1 REJECT newton|Newton iteration limit at residual #; active-set pass=# step=4.500..4.500 change=NaN
+  #175..175 x1 ok be-state step=2.250..2.250 change=1.91e-09
+  #176..176 x1 REJECT newton|Newton iteration limit at residual #; active-set pass=# step=4.500..4.500 change=NaN
+  #177..177 x1 ok be-state step=2.250..2.250 change=1.90e-09
+  #178..178 x1 REJECT newton|Newton iteration limit at residual #; active-set pass=# step=4.500..4.500 change=NaN
+  #179..179 x1 ok be-state step=2.250..2.250 change=1.89e-09
+  #180..180 x1 REJECT newton|Newton iteration limit at residual #; active-set pass=# step=4.500..4.500 change=NaN
+  #181..181 x1 ok be-state step=2.250..2.250 change=1.88e-09
+  #182..182 x1 REJECT newton|Newton iteration limit at residual #; active-set pass=# step=4.500..4.500 change=NaN
+  #183..183 x1 ok be-state step=2.250..2.250 change=1.87e-09
+  #184..184 x1 REJECT newton|Newton iteration limit at residual #; active-set pass=# step=4.500..4.500 change=NaN
+  #185..185 x1 ok be-state step=2.250..2.250 change=1.87e-09
+  #186..186 x1 REJECT newton|Newton iteration limit at residual #; active-set pass=# step=4.500..4.500 change=NaN
+  #187..187 x1 ok be-state step=2.250..2.250 change=1.86e-09
+  #188..188 x1 REJECT newton|Newton iteration limit at residual #; active-set pass=# step=4.500..4.500 change=NaN
+  #189..189 x1 ok be-state step=2.250..2.250 change=1.85e-09
+  #190..190 x1 REJECT newton|Newton iteration limit at residual #; active-set pass=# step=4.500..4.500 change=NaN
+  #191..191 x1 ok be-state step=2.250..2.250 change=1.84e-09
+  #192..192 x1 REJECT newton|Newton iteration limit at residual #; active-set pass=# step=4.500..4.500 change=NaN
+  #193..193 x1 ok be-state step=2.250..2.250 change=1.83e-09
+  #194..194 x1 REJECT newton|Newton iteration limit at residual #; active-set pass=# step=4.500..4.500 change=NaN
+STALLS (no step attempt finished for at least 300 ms)
+SAMPLES 158 every 50 ms
+LEAF frames
+   17.1% SparseLuSolver$Storage.factor0:141
+    8.2% DeterministicMath.log:31
+    6.3% MixtureViscosity.vapor:206
+    6.3% DeterministicMath.exp:43
+    6.3% ViscosityCorrelation.evaluate:109
+    3.8% PengRobinsonKernel.requirePackageState:734
+    3.2% DeterministicMath.pow:89
+    2.5% PassiveStepSolver$Equations.baseCap:4725
+    2.5% PassiveStepSolver.molarMass:1545
+    1.9% SparseLuSolver$Storage.checkResidual:193
+    1.9% PhaseLayout.totalAmounts:576
+    1.9% TranslatedPengRobinson.fill:339
+INCLUSIVE methods
+  100.0% HoldFuzzTest.run
+  100.0% TimeScaleStudyTest.study
+   99.4% PassiveIntervalSolver.solve
+   99.4% RetainedSolver.solve
+   99.4% SolidEventIntegrator.solve
+   99.4% HoldFuzzTest$World.tick
+   99.4% ProcessSolveServices$FluidIslandCommand.solve
+   98.7% PassiveStepSolver.solve
+   91.8% PassiveIntervalSolver.run
+   91.8% PassiveIntervalSolver.integrateToTransition
+   82.3% SparseNewton.solve
+   75.3% SparseNewton.differentiate0
+   75.3% SparseNewton.differentiate1
+   75.3% SparseNewton.differentiate
+   54.4% PassiveStepSolver$Equations.differentiateEntries
+   20.9% SparseLuSolver$Storage.factor0
+   20.9% SparseLuSolver$Storage.factor
+   20.9% SparseNewton.factor
+   20.3% PassiveStepSolver$Equations.edgeRows
+   17.1% PhaseLayout.decode
+   15.2% ViscosityCorrelation.evaluate
+   15.2% PassiveStepSolver$Equations.drawnCarrierViscosity
+   15.2% ViscosityCorrelation.dynamicViscosityPascalSeconds
+   15.2% PassiveStepSolver.carrierViscosity
+   14.6% FluidThermodynamics.state
+   14.6% FluidThermodynamics.adoptingState
+   13.3% MixtureViscosity.vapor
+   12.0% NetworkPhaseEngine.ph
+   12.0% MixtureViscosity.liquid
+   12.0% FluidTpEquilibrium.solvePh
+   12.0% FluidTpEquilibrium.ph
+   12.0% FluidThermodynamics.equilibriumPH
+   10.8% TranslatedPengRobinson.evaluateValues
+   10.8% FluidTpEquilibrium.solveDry
+   10.8% FluidTpEquilibrium.outerTp
+   10.8% FluidTpEquilibrium.evaluateTp
+   10.8% HydrocarbonModel.phase
+   10.8% PassiveStepSolver$Equations.transport
+   10.1% FluidTpEquilibrium.hydrocarbon
+    9.5% PassiveStepSolver.viscosity
+    8.9% FluidTpEquilibrium.attempt
+    8.9% PengRobinsonKernel.evaluatePrepared
+    8.9% FluidTpEquilibrium.twoPhase
+    8.2% PengRobinsonKernel.evaluate
+    8.2% MixtureViscosity$Prepared.liquid
+STACK in the longest stall
+    science.fluid.network.ControlConstraints.standing:31
+    science.fluid.network.PassiveStepSolver.solve:359
+    science.fluid.network.PassiveStepSolver.solveRate:330
+    science.fluid.network.PassiveStepSolver.portRate:342
+    science.fluid.network.SolidEventIntegrator.solve:341
+    science.fluid.network.PassiveIntervalSolver.solve:106
+    runtime.fluid.RetainedSolver.solve:63
+    runtime.ProcessSolveServices$FluidIslandCommand.solve:391
+    runtime.ProcessSolveServices$FluidIslandCommand.solve:377
+    runtime.fluid.HoldFuzzTest$World.tick:208
+    runtime.fluid.HoldFuzzTest$World.runTo:213
+    runtime.fluid.HoldFuzzTest.run:233
+    jdk.internal.reflect.DirectMethodHandleAccessor.invoke:103
+    java.lang.reflect.Method.invoke:580
+    runtime.fluid.TimeScaleStudyTest.study:32
+    jdk.internal.reflect.DirectMethodHandleAccessor.invoke:103
+    java.lang.reflect.Method.invoke:580
+    org.junit.platform.commons.util.ReflectionUtils.invokeMethod:767
+    org.junit.jupiter.engine.execution.MethodInvocation.proceed:60
+    org.junit.jupiter.engine.execution.InvocationInterceptorChain$ValidatingInvocation.proceed:131
+    org.junit.jupiter.engine.extension.TimeoutExtension.intercept:156
+    org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestableMethod:147
+    org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestMethod:86
+    org.junit.jupiter.engine.execution.InterceptingExecutableInvoker$ReflectiveInterceptorCall.lambda$ofVoidMethod$0:103
+    org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.lambda$invoke$0:93
+    org.junit.jupiter.engine.execution.InvocationInterceptorChain$InterceptedInvocation.proceed:106
+    org.junit.jupiter.engine.execution.InvocationInterceptorChain.proceed:64
+    org.junit.jupiter.engine.execution.InvocationInterceptorChain.chainAndInvoke:45
+    org.junit.jupiter.engine.execution.InvocationInterceptorChain.invoke:37
+    org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke:92
+    org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke:86
+    org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.lambda$invokeTestMethod$8:217
+    org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute:73
+    org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.invokeTestMethod:213
+    org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute:138
+    org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.execute:68
+    org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6:156
+    org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute:73
+    org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8:146
+    org.junit.platform.engine.support.hierarchical.Node.around:137
+    org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9:144
+    org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute:73
+    org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively:143
+    org.junit.platform.engine.support.hierarchical.NodeTestTask.execute:100
+    java.util.ArrayList.forEach:1596
+==== STUDY seed=47 ms=175131 end=9826 holds=1 exceptions=0 islands=42:HELD: wall deadline;43:STEADY: no flow since 91.3 s;
+layout 140:pipe0.05@-2,-3,-1 140:pipe0.05@0,0,0 155:pipe0.05@-2,-2,0 538:pipe0.05@-3,0,0 544:pipe0.05@-2,0,0 571:filter@2,1,-1>EAST 571:pipe0.05@1,-2,-1 595:valve[200kPa]@-2,-3,-3>NORTH 629:pipe0.05@1,1,-1 629:pipe0.05@1,-1,-1 663:pipe0.05@1,0,-2 693:tank@0,3,-1 796:gen[crude 360K 281kPa]@-2,-3,0 796:gen[CH4 290K 175kPa]@0,0,-1 1056:pipe0.05@0,2,-1 1078:pipe0.02@0,2,0 1084:pipe0.05@-4,0,0 1084:pipe0.05@-1,0,0 1422:pipe0.02@0,3,0 1422:pipe0.05@0,1,-1 1441:pipe0.05@-2,-1,0 1447:void@1,0,-4 1447:pipe0.05@1,0,-3 1447:pipe0.02@0,1,0 1499:pipe0.05@-2,-3,-2 1499:pipe0.05@-5,0,0 1499:pipe0.05@1,0,-1 
+HELD tick=9826 island=42 committed=9726 status=HELD: wall deadline
+COUNTERS implicitSolves=4236 activeSetPasses=7913 newtonSolves=8793 newtonIterations=153573 jacobianBuilds=112653 residualEvaluations=512687 stepAttempts=4230 stepAttemptsAccepted=2243 equationGateRejections=0 restIntervals=93 phaseSeeds=166 phaseRefusals=32 newtonBacktracks=304227
+ATTEMPTS 4230
+STALLS (no step attempt finished for at least 300 ms)
+  at 158549 ms for 424 ms after attempt 3885, newton iterations 56, in SparseLuSolver$Storage.factor0:141
+  at 159225 ms for 351 ms after attempt 3887, newton iterations 38, in PassiveStepSolver$Equations.baseCap:4725
+SAMPLES 2798 every 50 ms
+LEAF frames
+   35.2% SparseLuSolver$Storage.factor0:141
+    4.7% DeterministicMath.exp:43
+    4.6% DeterministicMath.pow:89
+    3.9% SparseLuSolver$Storage.factor0:140
+    3.4% MixtureViscosity.vapor:206
+    3.4% PassiveStepSolver$Equations.baseCap:4725
+    2.6% DeterministicMath.log:31
+    2.1% SparseLuSolver$Storage.factor0:135
+    1.8% SparseLuSolver$Storage.solveMultiple:170
+    1.6% PhaseLayout.totalAmounts:576
+    1.3% ViscosityCorrelation.evaluate:109
+    1.3% PassiveStepSolver$Equations.nodeAccumulate:5070
+INCLUSIVE methods
+  100.0% HoldFuzzTest$World.tick
+  100.0% HoldFuzzTest.run
+  100.0% TimeScaleStudyTest.study
+   99.9% PassiveIntervalSolver.integrateToTransition
+   99.9% SolidEventIntegrator.solve
+   99.9% ProcessSolveServices$FluidIslandCommand.solve
+   99.9% PassiveIntervalSolver.run
+   99.9% PassiveIntervalSolver.solve
+   99.9% RetainedSolver.solve
+   99.6% PassiveStepSolver.solve
+   94.5% SparseNewton.solve
+   84.5% SparseNewton.differentiate
+   84.5% SparseNewton.differentiate0
+   84.5% SparseNewton.differentiate1
+   44.1% SparseNewton.factor
+   42.2% SparseLuSolver$Storage.factor0
+   42.2% SparseLuSolver$Storage.factor
+   40.1% PassiveStepSolver$Equations.differentiateEntries
+   13.3% PhaseLayout.decode
+   11.0% FluidThermodynamics.adoptingState
+   10.9% FluidThermodynamics.state
+   10.4% PassiveStepSolver$Equations.transport
+    9.1% PassiveStepSolver$Equations.nodeAccumulate
+    8.8% PassiveStepSolver.viscosity
+    8.5% HydrocarbonModel.phase
+    8.4% TranslatedPengRobinson.evaluateValues
+    7.2% PassiveStepSolver$Equations.residual
+    7.2% SparseNewton.evaluate
+    7.1% PassiveStepSolver$Equations.flow
+    5.5% PassiveStepSolver$Equations.edgeRows
+    5.4% PassiveStepSolver$Equations.decode
+    5.2% PengRobinsonKernel.evaluate
+    5.2% PengRobinsonKernel.evaluatePrepared
+    5.2% MixtureViscosity.vapor
+    4.7% DeterministicMath.exp
+    4.6% DeterministicMath.pow
+    4.1% MixtureViscosity.liquid
+    4.0% FluidThermodynamics.equilibriumPH
+    4.0% NetworkPhaseEngine.ph
+    4.0% FluidTpEquilibrium.hydrocarbon
+    4.0% PassiveStepSolver.initialPhaseSeeds
+    4.0% PassiveStepSolver.arrivingPhases
+    4.0% FluidTpEquilibrium.solveDry
+    4.0% FluidTpEquilibrium.ph
+    4.0% FluidTpEquilibrium.evaluateTp
+STACK in the longest stall
+    org.ejml.sparse.csc.misc.TriangularSolver_DSCC.solveColB:278
+    org.ejml.sparse.csc.decomposition.lu.LuUpLooking_DSCC.performLU:113
+    org.ejml.sparse.csc.decomposition.lu.LuUpLooking_DSCC.decompose:68
+    org.ejml.sparse.csc.linsol.lu.LinearSolverLu_DSCC.setA:60
+    org.ejml.sparse.csc.linsol.lu.LinearSolverLu_DSCC.setA:39
+    science.fluid.linalg.SparseLuSolver$Storage.factor0:141
+    science.fluid.linalg.SparseLuSolver$Storage.factor:103
+    science.fluid.solver.SparseNewton.factor:300
+    science.fluid.solver.SparseNewton.differentiate1:278
+    science.fluid.solver.SparseNewton.differentiate0:269
+    science.fluid.solver.SparseNewton.differentiate:260
+    science.fluid.solver.SparseNewton.solve:199
+    science.fluid.network.PassiveStepSolver.solve:518
+    science.fluid.network.PassiveStepSolver.solve:329
+    science.fluid.network.PassiveIntervalSolver.run:262
+    science.fluid.network.PassiveIntervalSolver.integrateToTransition:172
+    science.fluid.network.SolidEventIntegrator.solve:374
+    science.fluid.network.PassiveIntervalSolver.solve:106
+    runtime.fluid.RetainedSolver.solve:63
+    runtime.ProcessSolveServices$FluidIslandCommand.solve:391
+    runtime.ProcessSolveServices$FluidIslandCommand.solve:377
+    runtime.fluid.HoldFuzzTest$World.tick:208
+    runtime.fluid.HoldFuzzTest.run:240
+    jdk.internal.reflect.DirectMethodHandleAccessor.invoke:103
+    java.lang.reflect.Method.invoke:580
+    runtime.fluid.TimeScaleStudyTest.study:32
+    jdk.internal.reflect.DirectMethodHandleAccessor.invoke:103
+    java.lang.reflect.Method.invoke:580
+    org.junit.platform.commons.util.ReflectionUtils.invokeMethod:767
+    org.junit.jupiter.engine.execution.MethodInvocation.proceed:60
+    org.junit.jupiter.engine.execution.InvocationInterceptorChain$ValidatingInvocation.proceed:131
+    org.junit.jupiter.engine.extension.TimeoutExtension.intercept:156
+    org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestableMethod:147
+    org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestMethod:86
+    org.junit.jupiter.engine.execution.InterceptingExecutableInvoker$ReflectiveInterceptorCall.lambda$ofVoidMethod$0:103
+    org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.lambda$invoke$0:93
+    org.junit.jupiter.engine.execution.InvocationInterceptorChain$InterceptedInvocation.proceed:106
+    org.junit.jupiter.engine.execution.InvocationInterceptorChain.proceed:64
+    org.junit.jupiter.engine.execution.InvocationInterceptorChain.chainAndInvoke:45
+    org.junit.jupiter.engine.execution.InvocationInterceptorChain.invoke:37
+    org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke:92
+    org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.invoke:86
+    org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.lambda$invokeTestMethod$8:217
+    org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute:73
+    org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.invokeTestMethod:213
+==== STUDY seed=77 ms=20696 end=13711 holds=0 exceptions=0 islands=25:STEADY: no flow since 75.1 s;42:FULL;43:STEADY: replaying 24.39 kg/s since 101.9 s, next check at 86;44:STEADY: no flow since 101.9 s;
+layout 346:pipe0.02@0,1,0 346:tank@0,-2,0 390:pipe0.02@0,0,1 390:pipe0.05@0,0,-3 523:pipe0.05@0,0,-1 541:comp[0.01,6.0]@-3,0,0>EAST 619:void@2,1,-2 659:pipe0.02@0,-1,0 659:pipe0.05@0,0,0 829:void@0,0,2 863:pipe0.05@1,1,0 918:filter@0,1,-4>DOWN 944:pipe0.05@0,0,-4 1173:pipe0.05@2,1,-1 1175:pipe0.05@0,0,-2 1487:pipe0.05@-1,0,0 1557:pipe0.02@4,1,-2 1592:pipe0.02@3,1,-2 1594:filter@1,4,0>DOWN 1645:pipe0.05@-2,0,0 1658:pipe0.02@1,3,0 1710:pipe0.02@0,2,0 1710:gen[crude 390K 244kPa]@2,1,0 1711:pipe0.02@1,2,0 
+COUNTERS implicitSolves=1604 activeSetPasses=1604 newtonSolves=1666 newtonIterations=32530 jacobianBuilds=28409 residualEvaluations=36485 stepAttempts=1599 stepAttemptsAccepted=985 equationGateRejections=0 restIntervals=126 phaseSeeds=0 phaseRefusals=0 newtonBacktracks=119
+ATTEMPTS 1599
+STALLS (no step attempt finished for at least 300 ms)
+SAMPLES 330 every 50 ms
+LEAF frames
+   22.4% SparseLuSolver$Storage.factor0:141
+    6.4% DeterministicMath.exp:43
+    6.1% DeterministicMath.pow:89
+    5.5% SparseLuSolver$Storage.factor0:140
+    3.3% MixtureViscosity.vapor:206
+    3.0% DeterministicMath.log:31
+    2.1% PassiveStepSolver$Equations.nodeAccumulate:5070
+    2.1% PassiveStepSolver$Equations.baseCap:4725
+    2.1% PhaseLayout.totalAmounts:576
+    1.8% PengRobinsonKernel.evaluateDerivatives:457
+    1.5% SparseLuSolver$Storage.factor0:136
+    1.2% PengRobinsonKernel.mixtureSecondTemperatureDerivative:524
+INCLUSIVE methods
+  100.0% HoldFuzzTest.run
+  100.0% PassiveIntervalSolver.run
+  100.0% PassiveIntervalSolver.solve
+  100.0% PassiveIntervalSolver.integrateToTransition
+  100.0% TimeScaleStudyTest.study
+  100.0% RetainedSolver.solve
+  100.0% SolidEventIntegrator.solve
+  100.0% HoldFuzzTest$World.tick
+  100.0% ProcessSolveServices$FluidIslandCommand.solve
+   98.8% PassiveStepSolver.solve
+   87.3% SparseNewton.solve
+   81.5% SparseNewton.differentiate0
+   81.5% SparseNewton.differentiate1
+   81.5% SparseNewton.differentiate
+   49.7% PassiveStepSolver$Equations.differentiateEntries
+   31.8% SparseNewton.factor
+   30.6% SparseLuSolver$Storage.factor0
+   30.6% SparseLuSolver$Storage.factor
+   17.3% PhaseLayout.decode
+   13.3% FluidThermodynamics.state
+   13.3% FluidThermodynamics.adoptingState
+   12.4% TranslatedPengRobinson.evaluateValues
+   12.4% HydrocarbonModel.phase
+   10.9% FluidThermodynamics.equilibriumPH
+   10.9% PassiveStepSolver$Equations.transport
+   10.6% NetworkPhaseEngine.ph
+   10.6% FluidTpEquilibrium.solveDry
+   10.6% FluidTpEquilibrium.outerTp
+   10.6% PassiveStepSolver.initialPhaseSeeds
+   10.6% FluidTpEquilibrium.solvePh
+   10.6% PassiveStepSolver.arrivingPhases
+   10.6% FluidTpEquilibrium.ph
+   10.6% FluidTpEquilibrium.evaluateTp
+   10.3% FluidTpEquilibrium.hydrocarbon
+    9.7% PengRobinsonKernel.evaluate
+    9.7% PengRobinsonKernel.evaluatePrepared
+    9.4% TangentPlaneStability.run
+    9.4% TangentPlaneStability.test
+    9.4% FluidTpEquilibrium.stabilityOf
+    9.1% PassiveStepSolver$Equations.nodeAccumulate
+    8.5% TangentPlaneStability.runTrial
+    7.9% PassiveStepSolver.viscosity
+    6.7% FluidTpEquilibrium.attempt
+    6.7% FluidTpEquilibrium.twoPhase
+    6.4% PassiveStepSolver$Equations.flow
+==== STUDY seed=123 ms=4447 end=2874 holds=1 exceptions=0 islands=42:STEADY: no flow since 114.2 s;43:STEADY: no flow since 114.2 s;60:HELD: Interval substep limit; no partial interval may commit;61:SOLVING;
+layout 134:pipe0.01@-1,0,0 134:filter@0,-3,-2>DOWN 134:pipe0.1@-1,0,-3 191:pipe0.05@0,0,1 253:tank@0,-1,1 303:pipe0.05@-2,-1,0 464:pump[0.01,500kPa]@0,0,-3>SOUTH 665:pipe0.01@-1,-1,1 698:pipe0.01@0,-2,-2 861:tank@0,2,2 1075:gen[water 318K 144kPa]@-2,0,0 1115:pipe0.1@0,0,-1 1392:pipe0.1@-1,0,-4 1392:pipe0.05@-2,-1,-1 1392:pipe0.05@-2,-1,2 1561:tank@-3,-1,-2 1575:pipe0.1@-1,0,-5 1575:filter@1,0,1>EAST 1816:gen[water 286K 129kPa]@2,0,0 1816:pipe0.01@0,-1,-2 1834:pipe0.05@0,0,3 1852:pipe0.1@-1,0,-2 1904:pipe0.05@0,0,2 1956:gen[N2 336K 174kPa]@0,0,0 1956:pipe0.01@1,0,0 2020:pipe0.05@0,0,4 2212:pipe0.05@0,1,2 2212:pipe0.1@-1,0,-1 2255:pipe0.01@-2,-1,-2 2408:pipe0.05@-2,-1,1 2672:pipe0.05@-2,-1,3 2859:pipe0.01@-1,-1,-2 2869:pipe0.1@0,0,-2 
+HELD tick=2874 island=60 committed=2870 status=HELD: Interval substep limit; no partial interval may commit: advanced=3.204931640625007 of 7.2 s, accepted=507, rejected=517, reasons={Newton iteration limit at residual #; active-set pass=#=295, Conservative reconstruction fails equation gate: #=222}, last=Conservative reconstruction fails equation gate: 3.373227154540509E-8
+COUNTERS implicitSolves=3778 activeSetPasses=6964 newtonSolves=7332 newtonIterations=65502 jacobianBuilds=18090 residualEvaluations=181986 stepAttempts=3774 stepAttemptsAccepted=1898 equationGateRejections=222 restIntervals=173 phaseSeeds=2 phaseRefusals=1 newtonBacktracks=108668
+ATTEMPTS 3774
+STALLS (no step attempt finished for at least 300 ms)
+SAMPLES 70 every 50 ms
+LEAF frames
+    8.6% PassiveStepSolver$Equations.baseCap:4725
+    7.1% PhaseLayout.junctionRows:428
+    5.7% DeterministicMath.pow:89
+    4.3% SparseLuSolver$Storage.factor0:141
+    4.3% TranslatedPengRobinson.prepare:252
+    2.9% DeterministicMath.exp:43
+    2.9% PengRobinsonKernel.evaluatePrepared:367
+    2.9% PassiveStepSolver.viscosity:4070
+    2.9% SparseLuSolver$Storage.factor0:135
+    2.9% FluidThermodynamics.state:729
+    2.9% PassiveStepSolver$Equations.decode:4954
+    2.9% DeterministicMath.acos:63
+INCLUSIVE methods
+  100.0% HoldFuzzTest.run
+  100.0% TimeScaleStudyTest.study
+  100.0% HoldFuzzTest$World.tick
+   98.6% PassiveIntervalSolver.run
+   98.6% PassiveIntervalSolver.solve
+   98.6% PassiveIntervalSolver.integrate
+   98.6% RetainedSolver.solve
+   98.6% ProcessSolveServices$FluidIslandCommand.solve
+   97.1% PassiveStepSolver.solve
+   75.7% SparseNewton.solve
+   38.6% PassiveStepSolver$Equations.residual
+   37.1% SparseNewton.evaluate
+   35.7% SparseNewton.differentiate0
+   35.7% SparseNewton.differentiate1
+   35.7% SparseNewton.differentiate
+   28.6% PassiveStepSolver$Equations.differentiateEntries
+   27.1% PhaseLayout.decode
+   27.1% HoldFuzzTest$World.runTo
+   25.7% FluidThermodynamics.state
+   24.3% FluidThermodynamics.adoptingState
+   24.3% PassiveStepSolver$Equations.decode
+   15.7% PassiveStepSolver$Equations.assemble
+   14.3% PassiveStepSolver$Equations.flow
+   12.9% PassiveStepSolver$Equations.nodeAccumulate
+   10.0% PassiveStepSolver.polishRefusedPoint
+   10.0% HydrocarbonModel.phase
+    8.6% TranslatedPengRobinson.evaluateValues
+    8.6% PassiveStepSolver$Equations.cap
+    8.6% PassiveStepSolver$Equations.baseCap
+    7.1% PengRobinsonKernel.evaluate
+    7.1% NetworkPhaseEngine.ph
+    7.1% PengRobinsonKernel.evaluatePrepared
+    7.1% SparseLuSolver$Storage.factor0
+    7.1% SparseLuSolver$Storage.factor
+    7.1% FluidTpEquilibrium.evaluateTp
+    7.1% SparseNewton.factor
+    7.1% FluidThermodynamics.equilibriumPH
+    7.1% PhaseLayout.junctionRows
+    7.1% FluidTpEquilibrium.solveWet
+    5.7% PhaseLayout.junctionResidual
+    5.7% DeterministicMath.pow
+    5.7% PassiveStepSolver.phaseCorrection
+    5.7% FluidThermodynamics.phaseCheck
+    5.7% PassiveStepSolver.initialPhaseSeeds
+    5.7% FluidTpEquilibrium.solvePh

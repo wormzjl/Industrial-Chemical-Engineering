@@ -68,8 +68,12 @@ final class FluidFacts {
      *  its side {@code EXHAUST} (a gas turbine's steam coil), generators past 20 MW and of 12 poles.
      *  21 (batch 2026-11-10-column-failure-modes, W4 and W5): a column unit's utility sides, its reboiler's and each
      *  pumparound cooler's; a kettle's tube side in the {@code COLUMN} mode; a column unit's powered members, its air
-     *  condenser's fan sides and its pumps' movers. */
-    static final int SCHEMA=21;
+     *  condenser's fan sides and its pumps' movers.
+     *  22 (batch 2026-11-11-gas-blanketing): a device spec's gas blanket set pressure, after its cooling tower (absent: 0,
+     *  no valve); the port role {@code BLANKET}, a vessel's blanket gas port.
+     *  23 (same batch, the pressure safety valve): a device spec's relief set pressure and a pipe's relief outlet face, after
+     *  its blanket (absent: 0 and none, no valve); the port role {@code RELIEF}, a vessel's relief port. */
+    static final int SCHEMA=23;
     /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 21. */
     private static final Map<Class<?>,Map<String,String>> ALIASES=Map.of();
     private static final int MAXIMUM_FIELDS=256,MAXIMUM_ITEMS=1<<22,MAXIMUM_TEXTS=1<<20,MAXIMUM_ARRAY=4096,MAXIMUM_CHANNELS=1<<20;
@@ -383,7 +387,7 @@ final class FluidFacts {
                 .list(d.ports(),(q,p)->{position(q,p.cell());q.name(p.face()).name(p.port()).name(p.role());})
                 .record(q->q.f64(s.volume()).f64(s.temperature()).f64(s.pressure()).doubles(s.composition())
                         .record(feed->feed.f64(s.solids().volumeFraction()).list(s.solids().grades(),(e,grade)->e.text(grade.material()).text(grade.size().metres()).f64(grade.massShare())))
-                        .f64(s.levelHeight()).bool(s.open()).record(shape->geometry(shape,s.geometry())).list(s.tower()==null?List.<com.wormzjl.icheme.science.fluid.network.CoolingTower>of():List.of(s.tower()),FluidFacts::tower))
+                        .f64(s.levelHeight()).bool(s.open()).record(shape->geometry(shape,s.geometry())).list(s.tower()==null?List.<com.wormzjl.icheme.science.fluid.network.CoolingTower>of():List.of(s.tower()),FluidFacts::tower).f64(s.blanket()).f64(s.relief()).list(s.reliefFace()==null?List.<PhysicalFluidTopology.Direction>of():List.of(s.reliefFace()),(e,face)->e.name(face)))
                 .count(r.revision()).count(d.joints()).count(d.slots()).count(d.points())
                 .list(d.heat()==null?List.<HeatUnit>of():List.of(d.heat()),FluidFacts::heatUnit).count(d.suspendedBy());
     }
@@ -410,7 +414,11 @@ final class FluidFacts {
             double levelHeight=q.f64(com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.LEVEL_HEAD_HEIGHT);boolean open=q.bool(false);
             var shape=q.record(com.wormzjl.icheme.science.fluid.network.VesselGeometry.prism(volume,levelHeight),FluidFacts::geometry);
             var towers=q.list(List.<com.wormzjl.icheme.science.fluid.network.CoolingTower>of(),FluidFacts::tower);if(towers.size()>1)throw q.invalid("Multiple cooling towers");
-            required(composition,q,"composition");return valid(q,"device spec",()->new FluidDeviceSpec(volume,temperature,pressure,composition,feed,levelHeight,open,shape,towers.isEmpty()?null:towers.getFirst()));});
+            // Schema 22: a spec written before the gas blanketing valve existed has none.
+            double blanket=q.f64(0);
+            // Schema 23: a spec written before the pressure safety valve existed has none.
+            double relief=q.f64(0);var faces=q.list(List.<PhysicalFluidTopology.Direction>of(),e->required(e.name(PhysicalFluidTopology.Direction.class,null),e,"relief face"));if(faces.size()>1)throw q.invalid("Multiple relief faces");
+            required(composition,q,"composition");return valid(q,"device spec",()->new FluidDeviceSpec(volume,temperature,pressure,composition,feed,levelHeight,open,shape,towers.isEmpty()?null:towers.getFirst(),blanket,relief,faces.isEmpty()?null:faces.getFirst()));});
         long revision=f.count(0);
         // Schema 2: a record written before joints existed connects through every face, as every pipe did then.
         long joints=f.count(PhysicalFluidTopology.ALL_FACES);if(joints>PhysicalFluidTopology.ALL_FACES)throw f.invalid("joints "+joints);
@@ -869,7 +877,7 @@ final class FluidFacts {
         for(var r:world.registrations) {
             var spec=r.spec();var composition=axis.map(spec.composition(),null);
             if(Arrays.stream(composition).sum()<=0){composition=FluidDeviceSpec.nitrogen(catalog).composition();warn("device "+r.device().id()+": its spec holds only components the data no longer has; it now holds nitrogen");}
-            if(restate)spec=new FluidDeviceSpec(spec.volume(),spec.temperature(),spec.pressure(),composition,spec.solids(),spec.levelHeight(),spec.open(),spec.geometry(),spec.tower());
+            if(restate)spec=spec.withCharge(spec.temperature(),spec.pressure(),composition);
             registrations.put(r.device().id(),new WorldTopologyLedger.Registration(r.device(),spec,r.revision()));
         }
         // The column units, their accounts on the current axis, and their queued Starts and Stops, which do not survive this
@@ -925,7 +933,7 @@ final class FluidFacts {
                 PassiveNetwork.Reservoir node;
                 if(held!=null) {
                     var state=Arrays.stream(v.moles).sum()==0&&!solids.empty()?held.solidState(v.temperature,v.pressure,solids):held.state(v.temperature,v.pressure,v.liquid,v.vapor,v.waterLiquid,v.waterVapor,v.hydrocarbonPressure).withSolids(solids);
-                    var kept=new PassiveNetwork.Reservoir(v.id,y,state,PassiveNetwork.NodeKind.RESERVOIR,new PassiveNetwork.Inventory(v.volume,v.moles,v.energy,solids,v.levelHeight,v.open,r.spec().geometry(),null,r.spec().tower(),v.rigid&&!v.open));
+                    var kept=new PassiveNetwork.Reservoir(v.id,y,state,PassiveNetwork.NodeKind.RESERVOIR,new PassiveNetwork.Inventory(v.volume,v.moles,v.energy,solids,v.levelHeight,v.open,r.spec().geometry(),null,r.spec().tower(),v.rigid&&!v.open).withBlanket(r.spec().blanket()));
                     origins.put(v.id,new IslandSets.Origin(kept,held));node=IslandSets.node(kept,held,model);
                 } else {
                     var moles=from.map(v.moles,removed);restated++;
@@ -933,7 +941,7 @@ final class FluidFacts {
                     if(Arrays.stream(moles).sum()==0&&solids.empty()){node=r.spec().initialize(r.device(),model,()->{});node=new PassiveNetwork.Reservoir(node.id(),node.elevation(),node.state(),node.kind(),node.inventory().withRigid(v.rigid));}
                     else {
                         var state=Arrays.stream(moles).sum()==0?model.solidState(v.temperature,v.pressure,solids):model.flashTP(v.temperature,v.pressure,moles,()->{}).withSolids(solids);
-                        node=new PassiveNetwork.Reservoir(v.id,y,state,PassiveNetwork.NodeKind.RESERVOIR,new PassiveNetwork.Inventory(v.volume,moles,state.internalEnergy(),solids,v.levelHeight,v.open,r.spec().geometry(),null,r.spec().tower(),v.rigid&&!v.open));
+                        node=new PassiveNetwork.Reservoir(v.id,y,state,PassiveNetwork.NodeKind.RESERVOIR,new PassiveNetwork.Inventory(v.volume,moles,state.internalEnergy(),solids,v.levelHeight,v.open,r.spec().geometry(),null,r.spec().tower(),v.rigid&&!v.open).withBlanket(r.spec().blanket()));
                     }
                     energy+=node.inventory().internalEnergy()-v.energy;
                 }
@@ -956,7 +964,7 @@ final class FluidFacts {
             if(st.device()==0||st.port().inlet())continue;var n=st.account().moles();
             for(int i=0;i<n.length;i++)if(n[i]>0&&!basis.components().get(i).equals("Water"))delivers.computeIfAbsent(st.device(),ignored->new HashSet<>()).add(basis.components().get(i));
         }
-        var compiled=PhysicalFluidTopology.compile(devices,stock,cakes,NetworkReduction.ambient(model));
+        var compiled=PhysicalFluidTopology.compile(devices,stock,cakes,NetworkReduction.ambient(model),Set.of(),PhysicalRegistry.reliefs(registrations.values()));
         long next=world.nextIdentity;var entries=new ArrayList<FluidCheckpointCodec.IslandEntry>();
         String status="WAITING: rebuilt from saved facts ("+reason+")"+(removed.empty()?"":"; removed by the property data: "+removed.summary());
         for(var island:compiled.islands()) {
@@ -1012,7 +1020,7 @@ final class FluidFacts {
             double t=Math.min(box.maximumTemperature(),Math.max(box.minimumTemperature(),spec.temperature())),p=Math.min(box.maximumPressure(),Math.max(box.minimumPressure(),spec.pressure()));
             if(t!=spec.temperature()||p!=spec.pressure()) {
                 warn("device "+d.id()+": its spec "+spec.temperature()+" K, "+spec.pressure()+" Pa lies outside the package's input box; it now reads "+t+" K, "+p+" Pa");
-                spec=new FluidDeviceSpec(spec.volume(),t,p,spec.composition(),spec.solids(),spec.levelHeight(),spec.open(),spec.geometry(),spec.tower());
+                spec=spec.withCharge(t,p,spec.composition());
             }
         }
         return spec.initialize(d,model,()->{});

@@ -1,0 +1,503 @@
+## b1 bundled
+SUMMARY seeds=200 clean=198 threads=8 slices=120 wallMs=16171 seedMsSum=77172
+COUNTERS implicitSolves=22259 activeSetPasses=25623 newtonSolves=31991 newtonIterations=131782 jacobianBuilds=39247 residualEvaluations=307823 stepAttempts=21285 stepAttemptsAccepted=20530 equationGateRejections=11 reconstructCalls=23438 restIntervals=11517 restStops=18 phaseSeeds=80 phaseRefusals=1 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=14654 newtonIterationsPreconditioned=61140 newtonIterationsFresh=39247 newtonIterationsStale=92535 newtonStepEvaluationsFresh=82289 newtonStepEvaluationsStale=98989 newtonRefreshesStalled=10156 newtonRefreshesAged=5524 newtonRefreshesFailed=85 newtonBacktracks=49514
+CLASS e:new seeds=2 smallest=6 list=[6, 200]
+E5 step line search stalls                                   seeds=   1 smallest=  200 list= 200
+F  budget (wall deadline / soft budget)                      seeds=   1 smallest=    6 list= 6
+   SEED 6 blocks=24 ms=6997 end=2054 holds=1
+   SEED 200 blocks=23 ms=162 end=3028 holds=1
+  HELD tick=1837 island=41 committed=1833 class=e:new status=HELD: wall deadline
+  HELD tick=3028 island=43 committed=3026 class=e:new status=HELD: Substep refinement exhausted: Newton line search stalled at residual 0.3024097530950023; active-set pass=1; reasons={Newton line search stalled at residual #; active-set pass=#=20}
+## b1 cold
+SUMMARY seeds=200 clean=197 threads=8 slices=120 wallMs=47285 seedMsSum=156700 cold=icheme:pilot_cryogenic
+COUNTERS implicitSolves=32104 activeSetPasses=35591 newtonSolves=51439 newtonIterations=274320 jacobianBuilds=87085 residualEvaluations=659713 stepAttempts=26041 stepAttemptsAccepted=21991 equationGateRejections=385 reconstructCalls=32631 restIntervals=11852 restStops=59 phaseSeeds=493 phaseRefusals=22 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=18417 newtonIterationsPreconditioned=118317 newtonIterationsFresh=87085 newtonIterationsStale=187235 newtonStepEvaluationsFresh=245240 newtonStepEvaluationsStale=201170 newtonRefreshesStalled=23486 newtonRefreshesAged=12285 newtonRefreshesFailed=153 newtonBacktracks=172414
+CLASS e:new seeds=3 smallest=85 list=[85, 101, 118]
+E1 interval-start rate pass does not converge                seeds=   1 smallest=   85 list= 85
+E6 step Newton iteration limit                               seeds=   1 smallest=  101 list= 101
+F  budget (wall deadline / soft budget)                      seeds=   1 smallest=  118 list= 118
+   SEED 85 blocks=28 ms=101 end=1866 holds=2
+   SEED 101 blocks=18 ms=438 end=1294 holds=1
+   SEED 118 blocks=24 ms=3682 end=2682 holds=1
+  HELD tick=1825 island=42 committed=1823 class=e:new status=HELD: Newton iteration limit at residual 1.713212075671322E-5
+  HELD tick=1866 island=42 committed=1823 class=e:new status=HELD: Newton iteration limit at residual 1.713212075671322E-5
+  HELD tick=1294 island=28 committed=1281 class=e:new status=HELD: Substep refinement exhausted: Newton iteration limit at residual 1.0742323711000196E-5; active-set pass=1; reasons={Newton iteration limit at residual #; active-set pass=#=18, Backward-Euler state change #=5, Newton line search stalled at residual #; active-set pass=#=3, Solid transport transition inside the step=1}
+  HELD tick=2682 island=38 committed=2666 class=e:new status=HELD: wall deadline
+## b1 defaults
+SUMMARY seeds=200 clean=200 threads=8 slices=120 wallMs=1881 seedMsSum=14426
+COUNTERS implicitSolves=5251 activeSetPasses=5406 newtonSolves=6139 newtonIterations=10902 jacobianBuilds=4280 residualEvaluations=20918 stepAttempts=4808 stepAttemptsAccepted=4678 equationGateRejections=0 reconstructCalls=5251 restIntervals=12861 restStops=18 phaseSeeds=0 phaseRefusals=0 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=2423 newtonIterationsPreconditioned=5856 newtonIterationsFresh=4280 newtonIterationsStale=6622 newtonStepEvaluationsFresh=5648 newtonStepEvaluationsStale=6932 newtonRefreshesStalled=385 newtonRefreshesAged=265 newtonRefreshesFailed=4 newtonBacktracks=1678
+## a72 bundled
+SUMMARY seeds=200 clean=192 threads=8 slices=120 wallMs=40743 seedMsSum=120489
+COUNTERS implicitSolves=60290 activeSetPasses=71724 newtonSolves=82533 newtonIterations=292881 jacobianBuilds=95055 residualEvaluations=899686 stepAttempts=59472 stepAttemptsAccepted=56085 equationGateRejections=566 reconstructCalls=62465 restIntervals=11733 restStops=50 phaseSeeds=141 phaseRefusals=86 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=57894 newtonIterationsPreconditioned=175989 newtonIterationsFresh=95055 newtonIterationsStale=197826 newtonStepEvaluationsFresh=277810 newtonStepEvaluationsStale=306015 newtonRefreshesStalled=56252 newtonRefreshesAged=9045 newtonRefreshesFailed=955 newtonBacktracks=290955
+CLASS e:new seeds=8 smallest=15 list=[15, 19, 47, 77, 118, 123, 145, 164]
+E6 step Newton iteration limit                               seeds=   1 smallest=  164 list= 164
+E9 other                                                     seeds=   1 smallest=  145 list= 145
+F  budget (wall deadline / soft budget)                      seeds=   6 smallest=   15 list= 15 19 47 77 118 123
+   SEED 15 blocks=13 ms=8926 end=3437 holds=1
+   SEED 19 blocks=30 ms=12178 end=2910 holds=4
+   SEED 47 blocks=27 ms=3420 end=1503 holds=1
+   SEED 77 blocks=24 ms=3245 end=2238 holds=1
+   SEED 118 blocks=27 ms=2385 end=2707 holds=1
+   SEED 123 blocks=33 ms=3236 end=2874 holds=1
+   SEED 145 blocks=25 ms=324 end=2441 holds=1
+   SEED 164 blocks=22 ms=4992 end=6404 holds=1
+  HELD tick=3437 island=25 committed=3337 class=e:new status=HELD: wall deadline
+  HELD tick=2239 island=29 committed=2230 class=e:new status=HELD: wall deadline
+  HELD tick=2240 island=35 committed=2238 class=e:new status=HELD: wall deadline
+  HELD tick=2340 island=35 committed=2238 class=e:new status=HELD: wall deadline
+  HELD tick=2540 island=35 committed=2238 class=e:new status=HELD: wall deadline
+  HELD tick=1503 island=42 committed=1499 class=e:new status=HELD: wall deadline
+  HELD tick=2238 island=42 committed=2138 class=e:new status=HELD: wall deadline
+  HELD tick=2707 island=45 committed=2607 class=e:new status=HELD: wall deadline
+  HELD tick=2874 island=60 committed=2870 class=e:new status=HELD: wall deadline
+  HELD tick=2145 island=32 committed=2129 class=e:new status=HELD: Substep refinement exhausted: Invalid inventory volume/energy/level height; reasons={Newton line search stalled at residual #; active-set pass=#=8, Newton iteration limit at residual #; active-set pass=#=4, Backward-Euler state change #=8, Invalid inventory volume/energy/level height=19}
+  HELD tick=6404 island=36 committed=6304 class=e:new status=HELD: Substep refinement exhausted: Newton iteration limit at residual 8.048458721081919E-6; active-set pass=0; reasons={Newton line search stalled at residual #; active-set pass=#=12, Newton iteration limit at residual #; active-set pass=#=8}
+## a72 cold
+SUMMARY seeds=200 clean=199 threads=8 slices=120 wallMs=26135 seedMsSum=139133 cold=icheme:pilot_cryogenic
+COUNTERS implicitSolves=63990 activeSetPasses=66844 newtonSolves=87469 newtonIterations=336993 jacobianBuilds=87151 residualEvaluations=854141 stepAttempts=59844 stepAttemptsAccepted=55683 equationGateRejections=2 reconstructCalls=63925 restIntervals=12037 restStops=140 phaseSeeds=267 phaseRefusals=39 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=52578 newtonIterationsPreconditioned=217824 newtonIterationsFresh=87151 newtonIterationsStale=249842 newtonStepEvaluationsFresh=310015 newtonStepEvaluationsStale=281374 newtonRefreshesStalled=28997 newtonRefreshesAged=14264 newtonRefreshesFailed=252 newtonBacktracks=254571
+CLASS b:trace-underflow seeds=1 smallest=72 list=[72]
+B  trace underflow (T1)                                      seeds=   1 smallest=   72 list= 72
+   SEED 72 blocks=21 ms=959 end=1317 holds=3
+  HELD tick=1080 island=31 committed=1077 class=b:trace-underflow status=HELD: Substep refinement exhausted: Matrix values must be finite; reasons={Matrix values must be finite=20}
+  HELD tick=1180 island=31 committed=1077 class=b:trace-underflow status=HELD: Substep refinement exhausted: Matrix values must be finite; reasons={Matrix values must be finite=20}
+  HELD tick=1317 island=31 committed=1077 class=b:trace-underflow status=HELD: Substep refinement exhausted: Matrix values must be finite; reasons={Matrix values must be finite=20}
+## a72 defaults
+SUMMARY seeds=200 clean=200 threads=8 slices=120 wallMs=2520 seedMsSum=17082
+COUNTERS implicitSolves=16989 activeSetPasses=17092 newtonSolves=17586 newtonIterations=33790 jacobianBuilds=3734 residualEvaluations=69304 stepAttempts=16633 stepAttemptsAccepted=16512 equationGateRejections=0 reconstructCalls=16989 restIntervals=13158 restStops=25 phaseSeeds=0 phaseRefusals=0 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=13468 newtonIterationsPreconditioned=30532 newtonIterationsFresh=3734 newtonIterationsStale=30056 newtonStepEvaluationsFresh=4416 newtonStepEvaluationsStale=45820 newtonRefreshesStalled=824 newtonRefreshesAged=453 newtonRefreshesFailed=3 newtonBacktracks=16446
+## b72 bundled
+SUMMARY seeds=200 clean=192 threads=8 slices=120 wallMs=26920 seedMsSum=99199
+COUNTERS implicitSolves=35522 activeSetPasses=42463 newtonSolves=48046 newtonIterations=202037 jacobianBuilds=67187 residualEvaluations=646286 stepAttempts=34705 stepAttemptsAccepted=31601 equationGateRejections=85 reconstructCalls=35603 restIntervals=11739 restStops=46 phaseSeeds=155 phaseRefusals=64 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=29120 newtonIterationsPreconditioned=119687 newtonIterationsFresh=67187 newtonIterationsStale=134850 newtonStepEvaluationsFresh=233831 newtonStepEvaluationsStale=218972 newtonRefreshesStalled=35733 newtonRefreshesAged=6212 newtonRefreshesFailed=1263 newtonBacktracks=250776
+CLASS e:new seeds=8 smallest=15 list=[15, 19, 47, 77, 118, 123, 145, 164]
+E8 interval attempt limit (not F7)                           seeds=   1 smallest=  164 list= 164
+E9 other                                                     seeds=   1 smallest=  145 list= 145
+F  budget (wall deadline / soft budget)                      seeds=   6 smallest=   15 list= 15 19 47 77 118 123
+   SEED 15 blocks=13 ms=9097 end=3437 holds=1
+   SEED 19 blocks=30 ms=11027 end=4236 holds=1
+   SEED 47 blocks=27 ms=3548 end=1503 holds=1
+   SEED 77 blocks=24 ms=3081 end=2338 holds=1
+   SEED 118 blocks=27 ms=3000 end=2707 holds=1
+   SEED 123 blocks=33 ms=3386 end=2872 holds=1
+   SEED 145 blocks=25 ms=369 end=2441 holds=1
+   SEED 164 blocks=22 ms=3869 end=4004 holds=1
+  HELD tick=3437 island=25 committed=3337 class=e:new status=HELD: wall deadline
+  HELD tick=4236 island=52 committed=4136 class=e:new status=HELD: wall deadline
+  HELD tick=1503 island=42 committed=1499 class=e:new status=HELD: wall deadline
+  HELD tick=2338 island=42 committed=2238 class=e:new status=HELD: wall deadline
+  HELD tick=2707 island=45 committed=2607 class=e:new status=HELD: wall deadline
+  HELD tick=2872 island=60 committed=2869 class=e:new status=HELD: wall deadline
+  HELD tick=2145 island=32 committed=2129 class=e:new status=HELD: Substep refinement exhausted: Invalid inventory volume/energy/level height; reasons={Newton line search stalled at residual #; active-set pass=#=8, Newton iteration limit at residual #; active-set pass=#=4, Backward-Euler state change #=8, Invalid inventory volume/energy/level height=19}
+  HELD tick=4004 island=36 committed=3904 class=e:new status=HELD: Interval substep limit; no partial interval may commit: advanced=46.1015625 of 360.0 s, accepted=509, rejected=515, reasons={Newton line search stalled at residual #; active-set pass=#=414, Newton iteration limit at residual #; active-set pass=#=53, Conservative reconstruction fails equation gate: #=48}, last=Newton line search sta
+## b72 cold
+SUMMARY seeds=200 clean=199 threads=8 slices=120 wallMs=23310 seedMsSum=129031 cold=icheme:pilot_cryogenic
+COUNTERS implicitSolves=42527 activeSetPasses=45043 newtonSolves=58364 newtonIterations=283163 jacobianBuilds=78966 residualEvaluations=713994 stepAttempts=38243 stepAttemptsAccepted=34262 equationGateRejections=67 reconstructCalls=42386 restIntervals=12037 restStops=139 phaseSeeds=239 phaseRefusals=27 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=31142 newtonIterationsPreconditioned=173351 newtonIterationsFresh=78966 newtonIterationsStale=204197 newtonStepEvaluationsFresh=305384 newtonStepEvaluationsStale=231567 newtonRefreshesStalled=30298 newtonRefreshesAged=13337 newtonRefreshesFailed=177 newtonBacktracks=253950
+CLASS b:trace-underflow seeds=1 smallest=72 list=[72]
+B  trace underflow (T1)                                      seeds=   1 smallest=   72 list= 72
+   SEED 72 blocks=21 ms=1155 end=1317 holds=3
+  HELD tick=1080 island=31 committed=1077 class=b:trace-underflow status=HELD: Substep refinement exhausted: Matrix values must be finite; reasons={Matrix values must be finite=20}
+  HELD tick=1180 island=31 committed=1077 class=b:trace-underflow status=HELD: Substep refinement exhausted: Matrix values must be finite; reasons={Matrix values must be finite=20}
+  HELD tick=1317 island=31 committed=1077 class=b:trace-underflow status=HELD: Substep refinement exhausted: Matrix values must be finite; reasons={Matrix values must be finite=20}
+## b72 defaults
+SUMMARY seeds=200 clean=200 threads=8 slices=120 wallMs=2325 seedMsSum=16820
+COUNTERS implicitSolves=9063 activeSetPasses=9167 newtonSolves=9664 newtonIterations=18172 jacobianBuilds=4161 residualEvaluations=36721 stepAttempts=8707 stepAttemptsAccepted=8586 equationGateRejections=0 reconstructCalls=9063 restIntervals=13158 restStops=25 phaseSeeds=0 phaseRefusals=0 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=5713 newtonIterationsPreconditioned=14998 newtonIterationsFresh=4161 newtonIterationsStale=14011 newtonStepEvaluationsFresh=4845 newtonStepEvaluationsStale=20721 newtonRefreshesStalled=1434 newtonRefreshesAged=317 newtonRefreshesFailed=3 newtonBacktracks=7394
+## c72 bundled
+SUMMARY seeds=200 clean=194 threads=8 slices=120 wallMs=12814 seedMsSum=63098
+COUNTERS implicitSolves=17617 activeSetPasses=22665 newtonSolves=25542 newtonIterations=147652 jacobianBuilds=50860 residualEvaluations=423618 stepAttempts=16795 stepAttemptsAccepted=13249 equationGateRejections=72 reconstructCalls=16576 restIntervals=11734 restStops=34 phaseSeeds=46 phaseRefusals=19 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=11332 newtonIterationsPreconditioned=65724 newtonIterationsFresh=50860 newtonIterationsStale=96792 newtonStepEvaluationsFresh=205868 newtonStepEvaluationsStale=151978 newtonRefreshesStalled=24985 newtonRefreshesAged=5621 newtonRefreshesFailed=503 newtonBacktracks=210199
+CLASS e:new seeds=6 smallest=15 list=[15, 47, 77, 118, 123, 164]
+E8 interval attempt limit (not F7)                           seeds=   1 smallest=  164 list= 164
+F  budget (wall deadline / soft budget)                      seeds=   5 smallest=   15 list= 15 47 77 118 123
+   SEED 15 blocks=13 ms=4605 end=3537 holds=1
+   SEED 47 blocks=27 ms=2927 end=1503 holds=1
+   SEED 77 blocks=24 ms=2332 end=2338 holds=1
+   SEED 118 blocks=27 ms=2348 end=2707 holds=1
+   SEED 123 blocks=33 ms=4674 end=2874 holds=1
+   SEED 164 blocks=22 ms=3084 end=3204 holds=1
+  HELD tick=3537 island=25 committed=3437 class=e:new status=HELD: wall deadline
+  HELD tick=1503 island=42 committed=1499 class=e:new status=HELD: wall deadline
+  HELD tick=2338 island=42 committed=2238 class=e:new status=HELD: wall deadline
+  HELD tick=2707 island=45 committed=2607 class=e:new status=HELD: wall deadline
+  HELD tick=2874 island=60 committed=2870 class=e:new status=HELD: wall deadline
+  HELD tick=3204 island=36 committed=3104 class=e:new status=HELD: Interval substep limit; no partial interval may commit: advanced=292.4033203125 of 360.0 s, accepted=507, rejected=517, reasons={Newton line search stalled at residual #; active-set pass=#=511, Conservative reconstruction fails equation gate: #=6}, last=Newton line search stalled at residual 3.25057921316229E-9; active-set pass=0
+## c72 cold
+SUMMARY seeds=200 clean=198 threads=8 slices=120 wallMs=24082 seedMsSum=128649 cold=icheme:pilot_cryogenic
+COUNTERS implicitSolves=29471 activeSetPasses=33979 newtonSolves=45265 newtonIterations=290542 jacobianBuilds=96114 residualEvaluations=769667 stepAttempts=25035 stepAttemptsAccepted=18537 equationGateRejections=70 reconstructCalls=29909 restIntervals=12030 restStops=84 phaseSeeds=1099 phaseRefusals=415 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=19678 newtonIterationsPreconditioned=143605 newtonIterationsFresh=96114 newtonIterationsStale=194428 newtonStepEvaluationsFresh=401254 newtonStepEvaluationsStale=211640 newtonRefreshesStalled=36618 newtonRefreshesAged=14363 newtonRefreshesFailed=215 newtonBacktracks=322731
+CLASS b:trace-underflow seeds=1 smallest=72 list=[72]
+CLASS e:new seeds=1 smallest=118 list=[118]
+B  trace underflow (T1)                                      seeds=   1 smallest=   72 list= 72
+F  budget (wall deadline / soft budget)                      seeds=   1 smallest=  118 list= 118
+   SEED 72 blocks=21 ms=1180 end=1317 holds=3
+   SEED 118 blocks=24 ms=10131 end=2878 holds=1
+  HELD tick=1080 island=31 committed=1077 class=b:trace-underflow status=HELD: Substep refinement exhausted: Matrix values must be finite; reasons={Matrix values must be finite=20}
+  HELD tick=1180 island=31 committed=1077 class=b:trace-underflow status=HELD: Substep refinement exhausted: Matrix values must be finite; reasons={Matrix values must be finite=20}
+  HELD tick=1317 island=31 committed=1077 class=b:trace-underflow status=HELD: Substep refinement exhausted: Matrix values must be finite; reasons={Matrix values must be finite=20}
+  HELD tick=2878 island=38 committed=2778 class=e:new status=HELD: wall deadline
+## c72 defaults
+SUMMARY seeds=200 clean=200 threads=8 slices=120 wallMs=2157 seedMsSum=16822
+COUNTERS implicitSolves=4261 activeSetPasses=4337 newtonSolves=5258 newtonIterations=10722 jacobianBuilds=3345 residualEvaluations=20026 stepAttempts=3906 stepAttemptsAccepted=3420 equationGateRejections=0 reconstructCalls=4260 restIntervals=13159 restStops=24 phaseSeeds=0 phaseRefusals=0 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=2370 newtonIterationsPreconditioned=6994 newtonIterationsFresh=3345 newtonIterationsStale=7377 newtonStepEvaluationsFresh=4104 newtonStepEvaluationsStale=7898 newtonRefreshesStalled=347 newtonRefreshesAged=286 newtonRefreshesFailed=11 newtonBacktracks=1280
+## c72-alone bundled
+SUMMARY seeds=5 clean=1 threads=1 slices=120 wallMs=20091 seedMsSum=20079
+COUNTERS implicitSolves=4565 activeSetPasses=7414 newtonSolves=7933 newtonIterations=69300 jacobianBuilds=27398 residualEvaluations=190743 stepAttempts=4504 stepAttemptsAccepted=2536 equationGateRejections=152 reconstructCalls=3499 restIntervals=600 restStops=2 phaseSeeds=31 phaseRefusals=11 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=3160 newtonIterationsPreconditioned=25883 newtonIterationsFresh=27398 newtonIterationsStale=41902 newtonStepEvaluationsFresh=95478 newtonStepEvaluationsStale=79743 newtonRefreshesStalled=20270 newtonRefreshesAged=2108 newtonRefreshesFailed=199 newtonBacktracks=105925
+CLASS e:new seeds=4 smallest=15 list=[15, 47, 77, 123]
+F  budget (wall deadline / soft budget)                      seeds=   4 smallest=   15 list= 15 47 77 123
+   SEED 15 blocks=13 ms=3677 end=3537 holds=1
+   SEED 47 blocks=27 ms=2639 end=1503 holds=1
+   SEED 77 blocks=24 ms=2266 end=2338 holds=1
+   SEED 123 blocks=33 ms=3650 end=2874 holds=1
+  HELD tick=3537 island=25 committed=3437 class=e:new status=HELD: wall deadline
+  HELD tick=1503 island=42 committed=1499 class=e:new status=HELD: wall deadline
+  HELD tick=2338 island=42 committed=2238 class=e:new status=HELD: wall deadline
+  HELD tick=2874 island=60 committed=2870 class=e:new status=HELD: wall deadline
+
+######## Hold study (2026-11-11): single seeds under TimeScaleStudyTest, form C (72x, steps 72 s / 1440 s)
+## study c72-5s
+==== STUDY seed=15 ms=9862 end=3637 holds=1 exceptions=0 islands=25:HELD: wall deadline;26:STEADY: no flow since 86.9 s;
+HELD tick=3637 island=25 committed=3537 status=HELD: wall deadline
+COUNTERS implicitSolves=559 activeSetPasses=559 newtonSolves=625 newtonIterations=10302 jacobianBuilds=9099 residualEvaluations=13240 stepAttempts=517 stepAttemptsAccepted=308 equationGateRejections=0 restIntervals=86 phaseSeeds=0 phaseRefusals=0 newtonBacktracks=4
+==== STUDY seed=47 ms=175131 end=9826 holds=1 exceptions=0 islands=42:HELD: wall deadline;43:STEADY: no flow since 91.3 s;
+HELD tick=9826 island=42 committed=9726 status=HELD: wall deadline
+COUNTERS implicitSolves=4236 activeSetPasses=7913 newtonSolves=8793 newtonIterations=153573 jacobianBuilds=112653 residualEvaluations=512687 stepAttempts=4230 stepAttemptsAccepted=2243 equationGateRejections=0 restIntervals=93 phaseSeeds=166 phaseRefusals=32 newtonBacktracks=304227
+==== STUDY seed=77 ms=20696 end=13711 holds=0 exceptions=0 islands=25:STEADY: no flow since 75.1 s;42:FULL;43:STEADY: replaying 24.39 kg/s since 101.9 s, next check at 86;44:STEADY: no flow since 101.9 s;
+COUNTERS implicitSolves=1604 activeSetPasses=1604 newtonSolves=1666 newtonIterations=32530 jacobianBuilds=28409 residualEvaluations=36485 stepAttempts=1599 stepAttemptsAccepted=985 equationGateRejections=0 restIntervals=126 phaseSeeds=0 phaseRefusals=0 newtonBacktracks=119
+==== STUDY seed=123 ms=4447 end=2874 holds=1 exceptions=0 islands=42:STEADY: no flow since 114.2 s;43:STEADY: no flow since 114.2 s;60:HELD: Interval substep limit; no partial interval may commit;61:SOLVING;
+HELD tick=2874 island=60 committed=2870 status=HELD: Interval substep limit; no partial interval may commit: advanced=3.204931640625007 of 7.2 s, accepted=507, rejected=517, reasons={Newton iteration limit at residual #; active-set pass=#=295, Conservative reconstruction fails equation gate: #=222}, last=Conservative reconstruction fails equation gate: 3.373227154540509E-8
+COUNTERS implicitSolves=3778 activeSetPasses=6964 newtonSolves=7332 newtonIterations=65502 jacobianBuilds=18090 residualEvaluations=181986 stepAttempts=3774 stepAttemptsAccepted=1898 equationGateRejections=222 restIntervals=173 phaseSeeds=2 phaseRefusals=1 newtonBacktracks=108668
+## study J
+==== STUDY seed=15 ms=3319 end=3637 holds=1 exceptions=0 islands=25:HELD: wall deadline;26:STEADY: no flow since 86.9 s;
+HELD tick=3637 island=25 committed=3537 status=HELD: wall deadline
+COUNTERS implicitSolves=299 activeSetPasses=299 newtonSolves=603 newtonIterations=3387 jacobianBuilds=2283 residualEvaluations=12398 stepAttempts=257 stepAttemptsAccepted=181 equationGateRejections=56 restIntervals=86 phaseSeeds=0 phaseRefusals=0 newtonBacktracks=9
+==== STUDY seed=47 ms=8356 end=1726 holds=1 exceptions=0 islands=42:HELD: wall deadline;43:SOLVING;
+HELD tick=1726 island=42 committed=1626 status=HELD: wall deadline
+COUNTERS implicitSolves=238 activeSetPasses=501 newtonSolves=592 newtonIterations=8379 jacobianBuilds=5723 residualEvaluations=32698 stepAttempts=232 stepAttemptsAccepted=124 equationGateRejections=0 restIntervals=91 phaseSeeds=41 phaseRefusals=16 newtonBacktracks=18949
+==== STUDY seed=77 ms=2839 end=13711 holds=0 exceptions=0 islands=25:STEADY: no flow since 75.1 s;42:FULL;43:STEADY: replaying 24.39 kg/s since 101.9 s, next check at 86;44:STEADY: no flow since 101.9 s;
+COUNTERS implicitSolves=619 activeSetPasses=619 newtonSolves=811 newtonIterations=5985 jacobianBuilds=3463 residualEvaluations=13561 stepAttempts=614 stepAttemptsAccepted=502 equationGateRejections=0 restIntervals=126 phaseSeeds=0 phaseRefusals=0 newtonBacktracks=45
+==== STUDY seed=123 ms=3973 end=2874 holds=1 exceptions=0 islands=42:STEADY: no flow since 114.2 s;43:STEADY: no flow since 114.2 s;60:HELD: wall deadline;61:SOLVING;
+HELD tick=2874 island=60 committed=2870 status=HELD: wall deadline
+COUNTERS implicitSolves=3767 activeSetPasses=7194 newtonSolves=7500 newtonIterations=69283 jacobianBuilds=19592 residualEvaluations=190215 stepAttempts=3762 stepAttemptsAccepted=1891 equationGateRejections=109 restIntervals=173 phaseSeeds=2 phaseRefusals=0 newtonBacktracks=112807
+==== STUDY seed=164 ms=2681 end=3204 holds=1 exceptions=0 islands=36:HELD: Interval substep limit; no partial interval may commit;
+HELD tick=3204 island=36 committed=3104 status=HELD: Interval substep limit; no partial interval may commit: advanced=95.080078125 of 360.0 s, accepted=505, rejected=519, reasons={Newton line search stalled at residual #; active-set pass=#=261, Conservative reconstruction fails equation gate: #=239, Newton iteration limit at residual #; active-set pass=#=19}, last=Newton iteration limit at residual 1.1182828212038929
+COUNTERS implicitSolves=1563 activeSetPasses=1719 newtonSolves=2485 newtonIterations=23523 jacobianBuilds=15829 residualEvaluations=63104 stepAttempts=1558 stepAttemptsAccepted=875 equationGateRejections=244 restIntervals=69 phaseSeeds=20 phaseRefusals=1 newtonBacktracks=35105
+## study G
+==== STUDY seed=15 ms=5143 end=3637 holds=1 exceptions=0 islands=25:HELD: wall deadline;26:STEADY: no flow since 86.9 s;
+HELD tick=3637 island=25 committed=3537 status=HELD: wall deadline
+COUNTERS implicitSolves=388 activeSetPasses=388 newtonSolves=454 newtonIterations=5335 jacobianBuilds=4145 residualEvaluations=8103 stepAttempts=347 stepAttemptsAccepted=296 equationGateRejections=0 restIntervals=86 phaseSeeds=0 phaseRefusals=0 newtonBacktracks=4
+==== STUDY seed=47 ms=7104 end=1826 holds=1 exceptions=0 islands=42:HELD: wall deadline;43:SOLVING;
+HELD tick=1826 island=42 committed=1726 status=HELD: wall deadline
+COUNTERS implicitSolves=319 activeSetPasses=524 newtonSolves=630 newtonIterations=7906 jacobianBuilds=4791 residualEvaluations=26904 stepAttempts=313 stepAttemptsAccepted=221 equationGateRejections=0 restIntervals=92 phaseSeeds=25 phaseRefusals=8 newtonBacktracks=13699
+==== STUDY seed=77 ms=8434 end=13711 holds=0 exceptions=0 islands=25:STEADY: no flow since 75.1 s;42:FULL;43:STEADY: replaying 24.39 kg/s since 101.9 s, next check at 86;44:STEADY: no flow since 101.9 s;
+COUNTERS implicitSolves=1168 activeSetPasses=1168 newtonSolves=1264 newtonIterations=16523 jacobianBuilds=12422 residualEvaluations=21486 stepAttempts=1163 stepAttemptsAccepted=938 equationGateRejections=0 restIntervals=126 phaseSeeds=0 phaseRefusals=0 newtonBacktracks=339
+==== STUDY seed=123 ms=999 end=2870 holds=1 exceptions=1 islands=
+HELD tick=2409 island=48 committed=2339 status=HELD: Interval substep limit; no partial interval may commit: advanced=246.65625 of 248.4 s, accepted=823, rejected=201, reasons={Newton line search stalled at residual #; active-set pass=#=201}, last=Newton line search stalled at residual 6.839205828595583E-6; active-set pass=0
+COUNTERS implicitSolves=3255 activeSetPasses=5815 newtonSolves=6013 newtonIterations=26675 jacobianBuilds=5518 residualEvaluations=65533 stepAttempts=3252 stepAttemptsAccepted=2572 equationGateRejections=1 restIntervals=173 phaseSeeds=1 phaseRefusals=0 newtonBacktracks=31909
+==== STUDY seed=164 ms=2327 end=3804 holds=1 exceptions=0 islands=36:HELD: Interval substep limit; no partial interval may commit;
+HELD tick=3804 island=36 committed=3704 status=HELD: Interval substep limit; no partial interval may commit: advanced=167.97216796875 of 360.0 s, accepted=892, rejected=132, reasons={Newton line search stalled at residual #; active-set pass=#=110, Conservative reconstruction fails equation gate: #=21, Newton iteration limit at residual #; active-set pass=#=1}, last=Newton line search stalled at residual 4.94386613106
+COUNTERS implicitSolves=1915 activeSetPasses=2092 newtonSolves=2794 newtonIterations=18951 jacobianBuilds=7582 residualEvaluations=66035 stepAttempts=1910 stepAttemptsAccepted=1537 equationGateRejections=23 restIntervals=69 phaseSeeds=17 phaseRefusals=1 newtonBacktracks=41732
+## study T
+==== STUDY seed=15 ms=5606 end=13410 holds=0 exceptions=0 islands=25:FULL;26:STEADY: no flow since 86.9 s;
+COUNTERS implicitSolves=687 activeSetPasses=687 newtonSolves=951 newtonIterations=5188 jacobianBuilds=3162 residualEvaluations=15392 stepAttempts=549 stepAttemptsAccepted=473 equationGateRejections=0 restIntervals=86 phaseSeeds=0 phaseRefusals=0 newtonBacktracks=13
+==== STUDY seed=47 ms=11021 end=2226 holds=1 exceptions=0 islands=42:HELD: wall deadline;43:STEADY: no flow since 91.3 s;
+HELD tick=2226 island=42 committed=2126 status=HELD: wall deadline
+COUNTERS implicitSolves=326 activeSetPasses=622 newtonSolves=769 newtonIterations=11219 jacobianBuilds=7988 residualEvaluations=41978 stepAttempts=320 stepAttemptsAccepted=183 equationGateRejections=0 restIntervals=93 phaseSeeds=34 phaseRefusals=13 newtonBacktracks=21448
+==== STUDY seed=77 ms=3396 end=13711 holds=0 exceptions=0 islands=25:STEADY: no flow since 75.1 s;42:FULL;43:STEADY: replaying 24.39 kg/s since 101.9 s, next check at 86;44:STEADY: no flow since 101.9 s;
+COUNTERS implicitSolves=683 activeSetPasses=683 newtonSolves=819 newtonIterations=7186 jacobianBuilds=4269 residualEvaluations=12927 stepAttempts=678 stepAttemptsAccepted=534 equationGateRejections=0 restIntervals=126 phaseSeeds=0 phaseRefusals=0 newtonBacktracks=162
+==== STUDY seed=123 ms=483 end=14869 holds=0 exceptions=0 islands=42:STEADY: no flow since 114.2 s;43:STEADY: no flow since 114.2 s;60:STEADY: no flow since 159.8 s;61:STEADY: no flow since 159.8 s;
+COUNTERS implicitSolves=1213 activeSetPasses=1792 newtonSolves=2344 newtonIterations=7516 jacobianBuilds=3351 residualEvaluations=32326 stepAttempts=1210 stepAttemptsAccepted=627 equationGateRejections=0 restIntervals=192 phaseSeeds=1 phaseRefusals=0 newtonBacktracks=20514
+==== STUDY seed=164 ms=2060 end=5304 holds=1 exceptions=0 islands=36:HELD: Substep refinement exhausted: Newton iteration limit a;
+HELD tick=5304 island=36 committed=5204 status=HELD: Substep refinement exhausted: Newton iteration limit at residual 6.29966306731846E-5; active-set pass=0; reasons={Newton line search stalled at residual #; active-set pass=#=14, Newton iteration limit at residual #; active-set pass=#=6}
+COUNTERS implicitSolves=986 activeSetPasses=1207 newtonSolves=1866 newtonIterations=16109 jacobianBuilds=8117 residualEvaluations=61755 stepAttempts=981 stepAttemptsAccepted=626 equationGateRejections=11 restIntervals=69 phaseSeeds=17 phaseRefusals=1 newtonBacktracks=39568
+## study JG
+==== STUDY seed=15 ms=3347 end=3637 holds=1 exceptions=0 islands=25:HELD: wall deadline;26:STEADY: no flow since 86.9 s;
+HELD tick=3637 island=25 committed=3537 status=HELD: wall deadline
+COUNTERS implicitSolves=374 activeSetPasses=374 newtonSolves=730 newtonIterations=3359 jacobianBuilds=2217 residualEvaluations=14492 stepAttempts=332 stepAttemptsAccepted=262 equationGateRejections=50 restIntervals=86 phaseSeeds=0 phaseRefusals=0 newtonBacktracks=9
+==== STUDY seed=47 ms=8073 end=1926 holds=1 exceptions=0 islands=42:HELD: wall deadline;43:STEADY: no flow since 91.3 s;
+HELD tick=1926 island=42 committed=1826 status=HELD: wall deadline
+COUNTERS implicitSolves=370 activeSetPasses=617 newtonSolves=734 newtonIterations=8967 jacobianBuilds=5471 residualEvaluations=31370 stepAttempts=364 stepAttemptsAccepted=262 equationGateRejections=0 restIntervals=93 phaseSeeds=39 phaseRefusals=4 newtonBacktracks=16478
+==== STUDY seed=77 ms=2740 end=13711 holds=0 exceptions=0 islands=25:STEADY: no flow since 75.1 s;42:FULL;43:STEADY: replaying 24.39 kg/s since 101.9 s, next check at 86;44:STEADY: no flow since 101.9 s;
+COUNTERS implicitSolves=684 activeSetPasses=684 newtonSolves=889 newtonIterations=6157 jacobianBuilds=3354 residualEvaluations=14268 stepAttempts=679 stepAttemptsAccepted=570 equationGateRejections=0 restIntervals=126 phaseSeeds=0 phaseRefusals=0 newtonBacktracks=47
+==== STUDY seed=123 ms=797 end=2870 holds=1 exceptions=1 islands=
+HELD tick=2409 island=48 committed=2339 status=HELD: Interval substep limit; no partial interval may commit: advanced=242.578125 of 248.4 s, accepted=836, rejected=188, reasons={Newton line search stalled at residual #; active-set pass=#=188}, last=Newton line search stalled at residual 3.193203829146216E-7; active-set pass=0
+COUNTERS implicitSolves=2398 activeSetPasses=4374 newtonSolves=4524 newtonIterations=20435 jacobianBuilds=4010 residualEvaluations=48005 stepAttempts=2395 stepAttemptsAccepted=1900 equationGateRejections=0 restIntervals=173 phaseSeeds=2 phaseRefusals=0 newtonBacktracks=22341
+==== STUDY seed=164 ms=4150 end=6304 holds=1 exceptions=0 islands=36:HELD: Interval substep limit; no partial interval may commit;
+HELD tick=6304 island=36 committed=6204 status=HELD: Interval substep limit; no partial interval may commit: advanced=75.45849609375 of 360.0 s, accepted=896, rejected=128, reasons={Newton line search stalled at residual #; active-set pass=#=101, Conservative reconstruction fails equation gate: #=27}, last=Newton line search stalled at residual 1.1167332766813543E-9; active-set pass=0
+COUNTERS implicitSolves=3391 activeSetPasses=3701 newtonSolves=5199 newtonIterations=39028 jacobianBuilds=15430 residualEvaluations=117685 stepAttempts=3386 stepAttemptsAccepted=2730 equationGateRejections=46 restIntervals=69 phaseSeeds=27 phaseRefusals=2 newtonBacktracks=69625
+## study J15
+==== STUDY seed=15 ms=3349 end=3637 holds=1 exceptions=0 islands=25:HELD: wall deadline;26:STEADY: no flow since 86.9 s;
+HELD tick=3637 island=25 committed=3537 status=HELD: wall deadline
+COUNTERS implicitSolves=285 activeSetPasses=285 newtonSolves=567 newtonIterations=3128 jacobianBuilds=2044 residualEvaluations=11613 stepAttempts=243 stepAttemptsAccepted=174 equationGateRejections=49 restIntervals=86 phaseSeeds=0 phaseRefusals=0 newtonBacktracks=9
+## study f47
+==== STUDY seed=47 ms=2679 end=1503 holds=1 exceptions=0 islands=42:HELD: wall deadline;43:SOLVING;
+HELD tick=1503 island=42 committed=1499 status=HELD: wall deadline
+COUNTERS implicitSolves=79 activeSetPasses=168 newtonSolves=203 newtonIterations=2538 jacobianBuilds=1481 residualEvaluations=8395 stepAttempts=73 stepAttemptsAccepted=40 equationGateRejections=0 restIntervals=84 phaseSeeds=26 phaseRefusals=11 newtonBacktracks=3435
+## study T164
+==== STUDY seed=164 ms=2721 end=5304 holds=1 exceptions=0 islands=36:HELD: Substep refinement exhausted: Newton iteration limit a;
+HELD tick=5304 island=36 committed=5204 status=HELD: Substep refinement exhausted: Newton iteration limit at residual 6.29966306731846E-5; active-set pass=0; reasons={Newton line search stalled at residual #; active-set pass=#=14, Newton iteration limit at residual #; active-set pass=#=6}
+COUNTERS implicitSolves=986 activeSetPasses=1207 newtonSolves=1866 newtonIterations=16109 jacobianBuilds=8117 residualEvaluations=61755 stepAttempts=981 stepAttemptsAccepted=626 equationGateRejections=11 restIntervals=69 phaseSeeds=17 phaseRefusals=1 newtonBacktracks=39568
+## study nf-cold
+==== STUDY seed=72 ms=1068 end=1317 holds=3 exceptions=0 islands=31:HELD: Substep refinement exhausted: Matrix values must be fi; crystalKg=78.5615 crystalVessels=2
+HELD tick=1080 island=31 committed=1077 status=HELD: Substep refinement exhausted: Matrix values must be finite; reasons={Matrix values must be finite=20}
+HELD tick=1180 island=31 committed=1077 status=HELD: Substep refinement exhausted: Matrix values must be finite; reasons={Matrix values must be finite=20}
+HELD tick=1317 island=31 committed=1077 status=HELD: Substep refinement exhausted: Matrix values must be finite; reasons={Matrix values must be finite=20}
+COUNTERS implicitSolves=277 activeSetPasses=287 newtonSolves=337 newtonIterations=2478 jacobianBuilds=1367 residualEvaluations=13802 stepAttempts=183 stepAttemptsAccepted=74 equationGateRejections=0 restIntervals=40 phaseSeeds=0 phaseRefusals=0 newtonBacktracks=10113
+## study f-bundled
+==== STUDY seed=15 ms=10177 end=3637 holds=1 exceptions=0 islands=25:HELD: wall deadline;26:STEADY: no flow since 86.9 s;
+HELD tick=3637 island=25 committed=3537 status=HELD: wall deadline
+COUNTERS implicitSolves=541 activeSetPasses=541 newtonSolves=607 newtonIterations=9876 jacobianBuilds=8682 residualEvaluations=12796 stepAttempts=499 stepAttemptsAccepted=299 equationGateRejections=0 restIntervals=86 phaseSeeds=0 phaseRefusals=0 newtonBacktracks=4
+==== STUDY seed=164 ms=3031 end=3204 holds=1 exceptions=0 islands=36:HELD: Interval substep limit; no partial interval may commit;
+HELD tick=3204 island=36 committed=3104 status=HELD: Interval substep limit; no partial interval may commit: advanced=292.4033203125 of 360.0 s, accepted=507, rejected=517, reasons={Newton line search stalled at residual #; active-set pass=#=511, Conservative reconstruction fails equation gate: #=6}, last=Newton line search stalled at residual 3.25057921316229E-9; active-set pass=0
+COUNTERS implicitSolves=1556 activeSetPasses=1705 newtonSolves=2028 newtonIterations=13111 jacobianBuilds=7917 residualEvaluations=82347 stepAttempts=1551 stepAttemptsAccepted=877 equationGateRejections=10 restIntervals=69 phaseSeeds=15 phaseRefusals=1 newtonBacktracks=64855
+==== STUDY seed=123 ms=4472 end=2874 holds=1 exceptions=0 islands=42:STEADY: no flow since 114.2 s;43:STEADY: no flow since 114.2 s;60:HELD: Interval substep limit; no partial interval may commit;61:SOLVING;
+HELD tick=2874 island=60 committed=2870 status=HELD: Interval substep limit; no partial interval may commit: advanced=3.204931640625007 of 7.2 s, accepted=507, rejected=517, reasons={Newton iteration limit at residual #; active-set pass=#=295, Conservative reconstruction fails equation gate: #=222}, last=Conservative reconstruction fails equation gate: 3.373227154540509E-8
+COUNTERS implicitSolves=3778 activeSetPasses=6964 newtonSolves=7332 newtonIterations=65502 jacobianBuilds=18090 residualEvaluations=181986 stepAttempts=3774 stepAttemptsAccepted=1898 equationGateRejections=222 restIntervals=173 phaseSeeds=2 phaseRefusals=1 newtonBacktracks=108668
+## study f-cold
+==== STUDY seed=72 ms=953 end=1317 holds=3 exceptions=0 islands=31:HELD: Substep refinement exhausted: Matrix values must be fi; crystalKg=78.5615 crystalVessels=2
+HELD tick=1080 island=31 committed=1077 status=HELD: Substep refinement exhausted: Matrix values must be finite; reasons={Matrix values must be finite=20}
+HELD tick=1180 island=31 committed=1077 status=HELD: Substep refinement exhausted: Matrix values must be finite; reasons={Matrix values must be finite=20}
+HELD tick=1317 island=31 committed=1077 status=HELD: Substep refinement exhausted: Matrix values must be finite; reasons={Matrix values must be finite=20}
+COUNTERS implicitSolves=277 activeSetPasses=287 newtonSolves=337 newtonIterations=2478 jacobianBuilds=1367 residualEvaluations=13802 stepAttempts=183 stepAttemptsAccepted=74 equationGateRejections=0 restIntervals=40 phaseSeeds=0 phaseRefusals=0 newtonBacktracks=10113
+## t72 bundled (tolerance 1e-8, gate 1e-7)
+SUMMARY seeds=200 clean=197 threads=8 slices=120 wallMs=15711 seedMsSum=81376
+COUNTERS implicitSolves=19055 activeSetPasses=22390 newtonSolves=28608 newtonIterations=121678 jacobianBuilds=50016 residualEvaluations=364952 stepAttempts=18023 stepAttemptsAccepted=14858 equationGateRejections=21 reconstructCalls=18150 restIntervals=11753 restStops=34 phaseSeeds=44 phaseRefusals=18 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=11192 newtonIterationsPreconditioned=50099 newtonIterationsFresh=50016 newtonIterationsStale=71662 newtonStepEvaluationsFresh=168149 newtonStepEvaluationsStale=95722 newtonRefreshesStalled=22156 newtonRefreshesAged=3612 newtonRefreshesFailed=499 newtonBacktracks=142199
+CLASS e:new seeds=3 smallest=47 list=[47, 118, 164]
+E6 step Newton iteration limit                               seeds=   1 smallest=  164 list= 164
+F  budget (wall deadline / soft budget)                      seeds=   2 smallest=   47 list= 47 118
+  HELD tick=1503 island=42 committed=1499 class=e:new status=HELD: wall deadline
+  HELD tick=2707 island=45 committed=2607 class=e:new status=HELD: wall deadline
+  HELD tick=5304 island=36 committed=5204 class=e:new status=HELD: Substep refinement exhausted: Newton iteration limit at residual 6.29966306731846E-5; active-set pass=0; reasons={Newton line search stalled at residual #; active-set pass=#=14, Newton iteration limit at residual #; active-set pass=#=6}
+## t72 cold (tolerance 1e-8, gate 1e-7)
+SUMMARY seeds=200 clean=199 threads=8 slices=120 wallMs=28789 seedMsSum=140833 cold=icheme:pilot_cryogenic
+COUNTERS implicitSolves=30071 activeSetPasses=34949 newtonSolves=53584 newtonIterations=286527 jacobianBuilds=102974 residualEvaluations=835654 stepAttempts=25166 stepAttemptsAccepted=18644 equationGateRejections=9 reconstructCalls=30778 restIntervals=12030 restStops=86 phaseSeeds=972 phaseRefusals=260 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=19707 newtonIterationsPreconditioned=134767 newtonIterationsFresh=102974 newtonIterationsStale=183553 newtonStepEvaluationsFresh=406965 newtonStepEvaluationsStale=197335 newtonRefreshesStalled=35680 newtonRefreshesAged=12894 newtonRefreshesFailed=147 newtonBacktracks=318166
+CLASS b:trace-underflow seeds=1 smallest=72 list=[72]
+B  trace underflow (T1)                                      seeds=   1 smallest=   72 list= 72
+  HELD tick=1080 island=31 committed=1077 class=b:trace-underflow status=HELD: Substep refinement exhausted: Matrix values must be finite; reasons={Matrix values must be finite=20}
+  HELD tick=1180 island=31 committed=1077 class=b:trace-underflow status=HELD: Substep refinement exhausted: Matrix values must be finite; reasons={Matrix values must be finite=20}
+  HELD tick=1317 island=31 committed=1077 class=b:trace-underflow status=HELD: Substep refinement exhausted: Matrix values must be finite; reasons={Matrix values must be finite=20}
+
+######## Option A and the junction holdup (2026-11-11)
+## a1x bundled newtonFailures=390 nearMissesAccepted=25
+SUMMARY seeds=200 clean=199 threads=8 slices=120 wallMs=17648 seedMsSum=83097
+COUNTERS implicitSolves=22730 activeSetPasses=26449 newtonSolves=32951 newtonIterations=133594 jacobianBuilds=41122 residualEvaluations=319911 stepAttempts=21633 stepAttemptsAccepted=20891 equationGateRejections=11 reconstructCalls=24286 restIntervals=11517 restStops=18 phaseSeeds=82 phaseRefusals=1 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=15012 newtonIterationsPreconditioned=61753 newtonIterationsFresh=41122 newtonIterationsStale=92472 newtonStepEvaluationsFresh=84944 newtonStepEvaluationsStale=98934 newtonRefreshesStalled=10664 newtonRefreshesAged=5376 newtonRefreshesFailed=89 newtonBacktracks=50301
+CLASS e:new seeds=1 smallest=200 list=[200]
+E5 step line search stalls                                   seeds=   1 smallest=  200 list= 200
+  HELD tick=3028 island=43 committed=3026 class=e:new status=HELD: Substep refinement exhausted: Newton line search stalled at residual 0.3024097530950023; active-set pass=1; reasons={Newton line search stalled at residual #; active-set pass=#=20}
+## a1x cold newtonFailures=1380 nearMissesAccepted=5
+SUMMARY seeds=200 clean=197 threads=8 slices=120 wallMs=47516 seedMsSum=156895 cold=icheme:pilot_cryogenic
+COUNTERS implicitSolves=32084 activeSetPasses=35571 newtonSolves=51424 newtonIterations=274275 jacobianBuilds=87034 residualEvaluations=658836 stepAttempts=26022 stepAttemptsAccepted=21983 equationGateRejections=393 reconstructCalls=32639 restIntervals=11852 restStops=59 phaseSeeds=493 phaseRefusals=22 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=18426 newtonIterationsPreconditioned=118328 newtonIterationsFresh=87034 newtonIterationsStale=187241 newtonStepEvaluationsFresh=244406 newtonStepEvaluationsStale=201181 newtonRefreshesStalled=23454 newtonRefreshesAged=12280 newtonRefreshesFailed=152 newtonBacktracks=171636
+CLASS e:new seeds=3 smallest=85 list=[85, 101, 118]
+E1 interval-start rate pass does not converge                seeds=   1 smallest=   85 list= 85
+E6 step Newton iteration limit                               seeds=   1 smallest=  101 list= 101
+F  budget (wall deadline / soft budget)                      seeds=   1 smallest=  118 list= 118
+  HELD tick=1825 island=42 committed=1823 class=e:new status=HELD: Newton iteration limit at residual 1.713212075671322E-5
+  HELD tick=1866 island=42 committed=1823 class=e:new status=HELD: Newton iteration limit at residual 1.713212075671322E-5
+  HELD tick=1294 island=28 committed=1281 class=e:new status=HELD: Substep refinement exhausted: Newton iteration limit at residual 1.0742323711000196E-5; active-set pass=1; reasons={Newton iteration limit at residual #; active-set pass=#=18, Backward-Euler state change #=5, Newton line search stalled at residual #; active-set pass=#=3, Solid transport transition inside the step=1}
+  HELD tick=2682 island=38 committed=2666 class=e:new status=HELD: wall deadline
+## a1x defaults newtonFailures=13 nearMissesAccepted=0
+SUMMARY seeds=200 clean=200 threads=8 slices=120 wallMs=1845 seedMsSum=14051
+COUNTERS implicitSolves=5251 activeSetPasses=5406 newtonSolves=6139 newtonIterations=10902 jacobianBuilds=4280 residualEvaluations=20918 stepAttempts=4808 stepAttemptsAccepted=4678 equationGateRejections=0 reconstructCalls=5251 restIntervals=12861 restStops=18 phaseSeeds=0 phaseRefusals=0 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=2423 newtonIterationsPreconditioned=5856 newtonIterationsFresh=4280 newtonIterationsStale=6622 newtonStepEvaluationsFresh=5648 newtonStepEvaluationsStale=6932 newtonRefreshesStalled=385 newtonRefreshesAged=265 newtonRefreshesFailed=4 newtonBacktracks=1678
+## a72x bundled newtonFailures=2088 nearMissesAccepted=468
+SUMMARY seeds=200 clean=194 threads=8 slices=120 wallMs=12327 seedMsSum=60145
+COUNTERS implicitSolves=15706 activeSetPasses=19511 newtonSolves=22846 newtonIterations=131276 jacobianBuilds=45890 residualEvaluations=339606 stepAttempts=14883 stepAttemptsAccepted=12326 equationGateRejections=82 reconstructCalls=15577 restIntervals=11734 restStops=34 phaseSeeds=54 phaseRefusals=21 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=10015 newtonIterationsPreconditioned=56175 newtonIterationsFresh=45890 newtonIterationsStale=85386 newtonStepEvaluationsFresh=149337 newtonStepEvaluationsStale=124486 newtonRefreshesStalled=22276 newtonRefreshesAged=4934 newtonRefreshesFailed=366 newtonBacktracks=142554
+CLASS e:new seeds=6 smallest=15 list=[15, 47, 77, 118, 123, 164]
+E6 step Newton iteration limit                               seeds=   1 smallest=  164 list= 164
+F  budget (wall deadline / soft budget)                      seeds=   5 smallest=   15 list= 15 47 77 118 123
+  HELD tick=3637 island=25 committed=3537 class=e:new status=HELD: wall deadline
+  HELD tick=1503 island=42 committed=1499 class=e:new status=HELD: wall deadline
+  HELD tick=2338 island=42 committed=2238 class=e:new status=HELD: wall deadline
+  HELD tick=2707 island=45 committed=2607 class=e:new status=HELD: wall deadline
+  HELD tick=2874 island=60 committed=2870 class=e:new status=HELD: wall deadline
+  HELD tick=5004 island=36 committed=4904 class=e:new status=HELD: Substep refinement exhausted: Newton iteration limit at residual 4.077054569664261E-4; active-set pass=0; reasons={Newton line search stalled at residual #; active-set pass=#=16, Newton iteration limit at residual #; active-set pass=#=4}
+## a72x cold newtonFailures=2512 nearMissesAccepted=34
+SUMMARY seeds=200 clean=198 threads=8 slices=120 wallMs=21225 seedMsSum=118044 cold=icheme:pilot_cryogenic
+COUNTERS implicitSolves=29449 activeSetPasses=34076 newtonSolves=45147 newtonIterations=294073 jacobianBuilds=99715 residualEvaluations=794041 stepAttempts=25008 stepAttemptsAccepted=18519 equationGateRejections=0 reconstructCalls=29828 restIntervals=12030 restStops=84 phaseSeeds=1098 phaseRefusals=411 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=19640 newtonIterationsPreconditioned=143453 newtonIterationsFresh=99715 newtonIterationsStale=194358 newtonStepEvaluationsFresh=425345 newtonStepEvaluationsStale=212746 newtonRefreshesStalled=40110 newtonRefreshesAged=14405 newtonRefreshesFailed=270 newtonBacktracks=344390
+CLASS b:trace-underflow seeds=1 smallest=72 list=[72]
+CLASS e:new seeds=1 smallest=118 list=[118]
+B  trace underflow (T1)                                      seeds=   1 smallest=   72 list= 72
+F  budget (wall deadline / soft budget)                      seeds=   1 smallest=  118 list= 118
+  HELD tick=1080 island=31 committed=1077 class=b:trace-underflow status=HELD: Substep refinement exhausted: Matrix values must be finite; reasons={Matrix values must be finite=20}
+  HELD tick=1180 island=31 committed=1077 class=b:trace-underflow status=HELD: Substep refinement exhausted: Matrix values must be finite; reasons={Matrix values must be finite=20}
+  HELD tick=1317 island=31 committed=1077 class=b:trace-underflow status=HELD: Substep refinement exhausted: Matrix values must be finite; reasons={Matrix values must be finite=20}
+  HELD tick=2978 island=38 committed=2878 class=e:new status=HELD: wall deadline
+## a72x defaults newtonFailures=2 nearMissesAccepted=0
+SUMMARY seeds=200 clean=200 threads=8 slices=120 wallMs=1807 seedMsSum=14045
+COUNTERS implicitSolves=4261 activeSetPasses=4337 newtonSolves=5258 newtonIterations=10722 jacobianBuilds=3345 residualEvaluations=20026 stepAttempts=3906 stepAttemptsAccepted=3420 equationGateRejections=0 reconstructCalls=4260 restIntervals=13159 restStops=24 phaseSeeds=0 phaseRefusals=0 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=2370 newtonIterationsPreconditioned=6994 newtonIterationsFresh=3345 newtonIterationsStale=7377 newtonStepEvaluationsFresh=4104 newtonStepEvaluationsStale=7898 newtonRefreshesStalled=347 newtonRefreshesAged=286 newtonRefreshesFailed=11 newtonBacktracks=1280
+## h72 bundled newtonFailures=569 nearMissesAccepted=0
+SUMMARY seeds=200 clean=197 threads=8 slices=120 wallMs=13982 seedMsSum=69464
+COUNTERS implicitSolves=15783 activeSetPasses=18995 newtonSolves=24023 newtonIterations=109839 jacobianBuilds=38845 residualEvaluations=275000 stepAttempts=14844 stepAttemptsAccepted=13361 equationGateRejections=14 reconstructCalls=16609 restIntervals=11733 restStops=34 phaseSeeds=115 phaseRefusals=25 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=10109 newtonIterationsPreconditioned=48442 newtonIterationsFresh=38845 newtonIterationsStale=70994 newtonStepEvaluationsFresh=92462 newtonStepEvaluationsStale=82171 newtonRefreshesStalled=14266 newtonRefreshesAged=4262 newtonRefreshesFailed=142 newtonBacktracks=64799
+CLASS e:new seeds=3 smallest=15 list=[15, 47, 118]
+F  budget (wall deadline / soft budget)                      seeds=   3 smallest=   15 list= 15 47 118
+  HELD tick=3637 island=25 committed=3537 class=e:new status=HELD: wall deadline
+  HELD tick=1503 island=42 committed=1499 class=e:new status=HELD: wall deadline
+  HELD tick=2707 island=45 committed=2607 class=e:new status=HELD: wall deadline
+## h72 cold newtonFailures=2116 nearMissesAccepted=0
+SUMMARY seeds=200 clean=197 threads=8 slices=120 wallMs=18100 seedMsSum=113841 cold=icheme:pilot_cryogenic
+COUNTERS implicitSolves=29321 activeSetPasses=34371 newtonSolves=47945 newtonIterations=269144 jacobianBuilds=87674 residualEvaluations=720553 stepAttempts=25217 stepAttemptsAccepted=18719 equationGateRejections=663 reconstructCalls=30196 restIntervals=12008 restStops=71 phaseSeeds=968 phaseRefusals=283 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=20268 newtonIterationsPreconditioned=132305 newtonIterationsFresh=87674 newtonIterationsStale=181470 newtonStepEvaluationsFresh=352774 newtonStepEvaluationsStale=193761 newtonRefreshesStalled=28986 newtonRefreshesAged=12458 newtonRefreshesFailed=197 newtonBacktracks=277728
+CLASS b:trace-underflow seeds=1 smallest=72 list=[72]
+CLASS e:new seeds=2 smallest=6 list=[6, 118]
+B  trace underflow (T1)                                      seeds=   1 smallest=   72 list= 72
+E5 step line search stalls                                   seeds=   1 smallest=    6 list= 6
+F  budget (wall deadline / soft budget)                      seeds=   1 smallest=  118 list= 118
+  HELD tick=2023 island=39 committed=2021 class=e:new status=HELD: Substep refinement exhausted: Newton line search stalled at residual 1.0006223349900978E-9; active-set pass=0; reasons={Backward-Euler state change #=12, Backward-Euler boundary reopened=3, Newton line search stalled at residual #; active-set pass=#=72}
+  HELD tick=1080 island=31 committed=1077 class=b:trace-underflow status=HELD: Substep refinement exhausted: Matrix values must be finite; reasons={Matrix values must be finite=20}
+  HELD tick=1180 island=31 committed=1077 class=b:trace-underflow status=HELD: Substep refinement exhausted: Matrix values must be finite; reasons={Matrix values must be finite=20}
+  HELD tick=1317 island=31 committed=1077 class=b:trace-underflow status=HELD: Substep refinement exhausted: Matrix values must be finite; reasons={Matrix values must be finite=20}
+  HELD tick=2582 island=36 committed=2574 class=e:new status=HELD: wall deadline
+  HELD tick=2652 island=36 committed=2574 class=e:new status=HELD: wall deadline
+## h72 defaults newtonFailures=4 nearMissesAccepted=0
+SUMMARY seeds=200 clean=200 threads=8 slices=120 wallMs=2070 seedMsSum=16065
+COUNTERS implicitSolves=4260 activeSetPasses=4343 newtonSolves=5199 newtonIterations=10204 jacobianBuilds=3201 residualEvaluations=19172 stepAttempts=3905 stepAttemptsAccepted=3419 equationGateRejections=0 reconstructCalls=4260 restIntervals=13159 restStops=24 phaseSeeds=0 phaseRefusals=0 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=2215 newtonIterationsPreconditioned=6619 newtonIterationsFresh=3201 newtonIterationsStale=7003 newtonStepEvaluationsFresh=3966 newtonStepEvaluationsStale=7439 newtonRefreshesStalled=319 newtonRefreshesAged=264 newtonRefreshesFailed=9 newtonBacktracks=1201
+## hg72 bundled newtonFailures=520 nearMissesAccepted=0
+SUMMARY seeds=200 clean=197 threads=8 slices=120 wallMs=14398 seedMsSum=72269
+COUNTERS implicitSolves=16022 activeSetPasses=18978 newtonSolves=23916 newtonIterations=107589 jacobianBuilds=37497 residualEvaluations=265802 stepAttempts=15083 stepAttemptsAccepted=13497 equationGateRejections=1 reconstructCalls=16766 restIntervals=11733 restStops=34 phaseSeeds=117 phaseRefusals=23 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=10212 newtonIterationsPreconditioned=48853 newtonIterationsFresh=37497 newtonIterationsStale=70092 newtonStepEvaluationsFresh=85892 newtonStepEvaluationsStale=78543 newtonRefreshesStalled=13496 newtonRefreshesAged=4209 newtonRefreshesFailed=93 newtonBacktracks=56851
+CLASS e:new seeds=3 smallest=15 list=[15, 47, 118]
+F  budget (wall deadline / soft budget)                      seeds=   3 smallest=   15 list= 15 47 118
+  HELD tick=3637 island=25 committed=3537 class=e:new status=HELD: wall deadline
+  HELD tick=1503 island=42 committed=1499 class=e:new status=HELD: wall deadline
+  HELD tick=2707 island=45 committed=2607 class=e:new status=HELD: wall deadline
+## hg72 cold newtonFailures=2150 nearMissesAccepted=0
+SUMMARY seeds=200 clean=197 threads=8 slices=120 wallMs=20875 seedMsSum=116982 cold=icheme:pilot_cryogenic
+COUNTERS implicitSolves=32010 activeSetPasses=37145 newtonSolves=52114 newtonIterations=283453 jacobianBuilds=90508 residualEvaluations=749749 stepAttempts=27874 stepAttemptsAccepted=20158 equationGateRejections=1780 reconstructCalls=34013 restIntervals=12007 restStops=75 phaseSeeds=1009 phaseRefusals=288 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=22761 newtonIterationsPreconditioned=143096 newtonIterationsFresh=90508 newtonIterationsStale=192945 newtonStepEvaluationsFresh=362133 newtonStepEvaluationsStale=205156 newtonRefreshesStalled=29724 newtonRefreshesAged=12963 newtonRefreshesFailed=202 newtonBacktracks=284185
+CLASS b:trace-underflow seeds=1 smallest=72 list=[72]
+CLASS e:new seeds=2 smallest=6 list=[6, 183]
+B  trace underflow (T1)                                      seeds=   1 smallest=   72 list= 72
+E5 step line search stalls                                   seeds=   1 smallest=    6 list= 6
+F  budget (wall deadline / soft budget)                      seeds=   1 smallest=  183 list= 183
+  HELD tick=2023 island=39 committed=2021 class=e:new status=HELD: Substep refinement exhausted: Newton line search stalled at residual 1.0006223349900978E-9; active-set pass=0; reasons={Backward-Euler state change #=12, Backward-Euler boundary reopened=3, Newton line search stalled at residual #; active-set pass=#=72}
+  HELD tick=1080 island=31 committed=1077 class=b:trace-underflow status=HELD: Substep refinement exhausted: Matrix values must be finite; reasons={Matrix values must be finite=20}
+  HELD tick=1180 island=31 committed=1077 class=b:trace-underflow status=HELD: Substep refinement exhausted: Matrix values must be finite; reasons={Matrix values must be finite=20}
+  HELD tick=1317 island=31 committed=1077 class=b:trace-underflow status=HELD: Substep refinement exhausted: Matrix values must be finite; reasons={Matrix values must be finite=20}
+  HELD tick=2772 island=41 committed=2756 class=e:new status=HELD: wall deadline
+  HELD tick=2872 island=41 committed=2756 class=e:new status=HELD: wall deadline
+  HELD tick=2961 island=41 committed=2756 class=e:new status=HELD: wall deadline
+## study A
+==== STUDY seed=15 ms=3422 end=3637 holds=1 exceptions=0 islands=25:HELD: wall deadline;26:STEADY: no flow since 86.9 s;
+HELD tick=3637 island=25 committed=3537 status=HELD: wall deadline
+COUNTERS implicitSolves=261 activeSetPasses=261 newtonSolves=360 newtonIterations=3408 jacobianBuilds=2400 residualEvaluations=7236 stepAttempts=219 stepAttemptsAccepted=163 equationGateRejections=0 restIntervals=86 phaseSeeds=0 phaseRefusals=0 newtonBacktracks=4
+==== STUDY seed=123 ms=3250 end=2874 holds=1 exceptions=0 islands=42:STEADY: no flow since 114.2 s;43:STEADY: no flow since 114.2 s;60:HELD: wall deadline;61:SOLVING;
+HELD tick=2874 island=60 committed=2870 status=HELD: wall deadline
+COUNTERS implicitSolves=2381 activeSetPasses=3970 newtonSolves=4520 newtonIterations=44262 jacobianBuilds=14918 residualEvaluations=130187 stepAttempts=2376 stepAttemptsAccepted=1203 equationGateRejections=97 restIntervals=173 phaseSeeds=3 phaseRefusals=1 newtonBacktracks=80198
+==== STUDY seed=77 ms=5134 end=3338 holds=1 exceptions=0 islands=25:STEADY: no flow since 75.1 s;42:HELD: wall deadline;43:STEADY: replaying 24.39 kg/s since 101.9 s, next check at 86;44:STEADY: no flow since 101.9 s;
+HELD tick=3338 island=42 committed=3238 status=HELD: wall deadline
+COUNTERS implicitSolves=385 activeSetPasses=385 newtonSolves=440 newtonIterations=8902 jacobianBuilds=8017 residualEvaluations=11244 stepAttempts=379 stepAttemptsAccepted=224 equationGateRejections=0 restIntervals=126 phaseSeeds=0 phaseRefusals=0 newtonBacktracks=13
+## study AG7
+==== STUDY seed=15 ms=3680 end=3637 holds=1 exceptions=0 islands=25:HELD: wall deadline;26:STEADY: no flow since 86.9 s;
+HELD tick=3637 island=25 committed=3537 status=HELD: wall deadline
+COUNTERS implicitSolves=251 activeSetPasses=251 newtonSolves=345 newtonIterations=3107 jacobianBuilds=2109 residualEvaluations=6745 stepAttempts=209 stepAttemptsAccepted=158 equationGateRejections=0 restIntervals=86 phaseSeeds=0 phaseRefusals=0 newtonBacktracks=4
+==== STUDY seed=123 ms=5508 end=14869 holds=0 exceptions=0 islands=42:STEADY: no flow since 114.2 s;43:STEADY: no flow since 114.2 s;60:STEADY: no flow since 209.8 s;61:STEADY: no flow since 159.8 s;
+COUNTERS implicitSolves=3217 activeSetPasses=4568 newtonSolves=4918 newtonIterations=56553 jacobianBuilds=26877 residualEvaluations=201349 stepAttempts=3213 stepAttemptsAccepted=1616 equationGateRejections=8 restIntervals=183 phaseSeeds=2 phaseRefusals=0 newtonBacktracks=138696
+==== STUDY seed=77 ms=8694 end=4438 holds=1 exceptions=0 islands=25:STEADY: no flow since 75.1 s;42:HELD: wall deadline;43:STEADY: replaying 24.39 kg/s since 101.9 s, next check at 86;44:STEADY: no flow since 101.9 s;
+HELD tick=4438 island=42 committed=4338 status=HELD: wall deadline
+COUNTERS implicitSolves=632 activeSetPasses=632 newtonSolves=747 newtonIterations=15436 jacobianBuilds=14125 residualEvaluations=20227 stepAttempts=626 stepAttemptsAccepted=360 equationGateRejections=0 restIntervals=126 phaseSeeds=0 phaseRefusals=0 newtonBacktracks=20
+==== STUDY seed=164 ms=2517 end=4604 holds=1 exceptions=0 islands=36:HELD: Substep refinement exhausted: Newton iteration limit a;
+HELD tick=4604 island=36 committed=4504 status=HELD: Substep refinement exhausted: Newton iteration limit at residual 4.680338079737166E-4; active-set pass=0; reasons={Newton iteration limit at residual #; active-set pass=#=9, Newton line search stalled at residual #; active-set pass=#=17}
+COUNTERS implicitSolves=1527 activeSetPasses=1686 newtonSolves=2432 newtonIterations=17339 jacobianBuilds=9708 residualEvaluations=88991 stepAttempts=1522 stepAttemptsAccepted=879 equationGateRejections=58 restIntervals=69 phaseSeeds=15 phaseRefusals=1 newtonBacktracks=64647
+## study A7
+==== STUDY seed=15 ms=25562 end=13410 holds=0 exceptions=0 islands=25:FULL;26:STEADY: no flow since 86.9 s;
+COUNTERS implicitSolves=1219 activeSetPasses=1219 newtonSolves=1731 newtonIterations=25014 jacobianBuilds=22402 residualEvaluations=43767 stepAttempts=1081 stepAttemptsAccepted=716 equationGateRejections=0 restIntervals=86 phaseSeeds=0 phaseRefusals=0 newtonBacktracks=82
+==== STUDY seed=123 ms=2921 end=14869 holds=0 exceptions=0 islands=42:STEADY: no flow since 114.2 s;43:STEADY: no flow since 114.2 s;60:STEADY: no flow since 209.8 s;61:STEADY: no flow since 159.8 s;
+COUNTERS implicitSolves=2022 activeSetPasses=2802 newtonSolves=3333 newtonIterations=27752 jacobianBuilds=13429 residualEvaluations=117394 stepAttempts=2018 stepAttemptsAccepted=1033 equationGateRejections=6 restIntervals=183 phaseSeeds=3 phaseRefusals=0 newtonBacktracks=84552
+==== STUDY seed=77 ms=6320 end=13711 holds=0 exceptions=0 islands=25:STEADY: no flow since 75.1 s;42:FULL;43:STEADY: replaying 24.39 kg/s since 101.9 s, next check at 86;44:STEADY: no flow since 101.9 s;
+COUNTERS implicitSolves=807 activeSetPasses=807 newtonSolves=955 newtonIterations=12246 jacobianBuilds=9456 residualEvaluations=18480 stepAttempts=802 stepAttemptsAccepted=590 equationGateRejections=0 restIntervals=126 phaseSeeds=0 phaseRefusals=0 newtonBacktracks=99
+==== STUDY seed=164 ms=4168 end=7604 holds=1 exceptions=0 islands=36:HELD: Substep refinement exhausted: Newton iteration limit a;
+HELD tick=7604 island=36 committed=7504 status=HELD: Substep refinement exhausted: Newton iteration limit at residual 1.0180862542389485E-4; active-set pass=0; reasons={Newton line search stalled at residual #; active-set pass=#=14, Newton iteration limit at residual #; active-set pass=#=6}
+COUNTERS implicitSolves=2430 activeSetPasses=2685 newtonSolves=5222 newtonIterations=29546 jacobianBuilds=16731 residualEvaluations=160093 stepAttempts=2425 stepAttemptsAccepted=1378 equationGateRejections=660 restIntervals=69 phaseSeeds=18 phaseRefusals=2 newtonBacktracks=113714
+## study JA
+==== STUDY seed=15 ms=5311 end=3737 holds=1 exceptions=0 islands=25:HELD: wall deadline;26:STEADY: no flow since 86.9 s;
+HELD tick=3737 island=25 committed=3637 status=HELD: wall deadline
+COUNTERS implicitSolves=282 activeSetPasses=282 newtonSolves=688 newtonIterations=5155 jacobianBuilds=4061 residualEvaluations=16839 stepAttempts=239 stepAttemptsAccepted=174 equationGateRejections=46 restIntervals=86 phaseSeeds=0 phaseRefusals=0 newtonBacktracks=7
+==== STUDY seed=123 ms=1008 end=14869 holds=0 exceptions=0 islands=42:STEADY: no flow since 114.2 s;43:STEADY: no flow since 114.2 s;60:STEADY: no flow since 159.8 s;61:STEADY: no flow since 159.8 s;
+COUNTERS implicitSolves=1594 activeSetPasses=2409 newtonSolves=2719 newtonIterations=10898 jacobianBuilds=4657 residualEvaluations=48798 stepAttempts=1591 stepAttemptsAccepted=817 equationGateRejections=0 restIntervals=192 phaseSeeds=2 phaseRefusals=0 newtonBacktracks=34076
+==== STUDY seed=77 ms=1274 end=13711 holds=0 exceptions=0 islands=25:STEADY: no flow since 75.1 s;42:FULL;43:STEADY: replaying 24.39 kg/s since 101.9 s, next check at 86;44:STEADY: no flow since 101.9 s;
+COUNTERS implicitSolves=415 activeSetPasses=415 newtonSolves=573 newtonIterations=2604 jacobianBuilds=906 residualEvaluations=8496 stepAttempts=410 stepAttemptsAccepted=400 equationGateRejections=0 restIntervals=126 phaseSeeds=0 phaseRefusals=0 newtonBacktracks=34
+==== STUDY seed=164 ms=1954 end=4304 holds=1 exceptions=0 islands=36:HELD: Substep refinement exhausted: Newton iteration limit a;
+HELD tick=4304 island=36 committed=4204 status=HELD: Substep refinement exhausted: Newton iteration limit at residual 4.6083070086553305E-4; active-set pass=0; reasons={Newton line search stalled at residual #; active-set pass=#=15, Newton iteration limit at residual #; active-set pass=#=5}
+COUNTERS implicitSolves=829 activeSetPasses=1061 newtonSolves=1521 newtonIterations=14486 jacobianBuilds=7840 residualEvaluations=48295 stepAttempts=824 stepAttemptsAccepted=523 equationGateRejections=6 restIntervals=69 phaseSeeds=27 phaseRefusals=1 newtonBacktracks=29655
+## study H
+==== STUDY seed=15 ms=3425 end=3637 holds=1 exceptions=0 islands=25:HELD: wall deadline;26:STEADY: no flow since 86.9 s;
+HELD tick=3637 island=25 committed=3537 status=HELD: wall deadline
+COUNTERS implicitSolves=272 activeSetPasses=272 newtonSolves=511 newtonIterations=3156 jacobianBuilds=2096 residualEvaluations=10288 stepAttempts=230 stepAttemptsAccepted=168 equationGateRejections=34 restIntervals=86 phaseSeeds=0 phaseRefusals=0 newtonBacktracks=7
+==== STUDY seed=123 ms=817 end=14869 holds=0 exceptions=0 islands=42:STEADY: no flow since 114.2 s;43:STEADY: no flow since 114.2 s;60:STEADY: replaying 5.503e-13 kg/s since 314.8 s, next check a;61:STEADY: no flow since 159.8 s;
+COUNTERS implicitSolves=281 activeSetPasses=646 newtonSolves=910 newtonIterations=5224 jacobianBuilds=1517 residualEvaluations=10413 stepAttempts=277 stepAttemptsAccepted=229 equationGateRejections=1 restIntervals=183 phaseSeeds=11 phaseRefusals=0 newtonBacktracks=3105
+==== STUDY seed=77 ms=4286 end=13711 holds=0 exceptions=0 islands=25:STEADY: no flow since 75.1 s;42:FULL;43:STEADY: replaying 24.39 kg/s since 101.9 s, next check at 86;44:STEADY: no flow since 101.9 s;
+COUNTERS implicitSolves=622 activeSetPasses=622 newtonSolves=817 newtonIterations=7141 jacobianBuilds=4765 residualEvaluations=14822 stepAttempts=617 stepAttemptsAccepted=499 equationGateRejections=0 restIntervals=126 phaseSeeds=0 phaseRefusals=0 newtonBacktracks=39
+==== STUDY seed=164 ms=1209 end=13877 holds=0 exceptions=0 islands=36:FULL; outside data range: Nitrogen ideal-gas heat capacity e;
+COUNTERS implicitSolves=708 activeSetPasses=837 newtonSolves=1267 newtonIterations=7457 jacobianBuilds=2896 residualEvaluations=20258 stepAttempts=703 stepAttemptsAccepted=603 equationGateRejections=0 restIntervals=64 phaseSeeds=14 phaseRefusals=0 newtonBacktracks=9165
+## study Hrow
+==== STUDY seed=15 ms=3458 end=3637 holds=1 exceptions=0 islands=25:HELD: wall deadline;26:STEADY: no flow since 86.9 s;
+HELD tick=3637 island=25 committed=3537 status=HELD: wall deadline
+COUNTERS implicitSolves=281 activeSetPasses=281 newtonSolves=535 newtonIterations=3363 jacobianBuilds=2285 residualEvaluations=10834 stepAttempts=239 stepAttemptsAccepted=172 equationGateRejections=39 restIntervals=86 phaseSeeds=0 phaseRefusals=0 newtonBacktracks=7
+## study row
+==== STUDY seed=15 ms=3363 end=3537 holds=1 exceptions=0 islands=25:HELD: wall deadline;26:STEADY: no flow since 86.9 s;
+HELD tick=3537 island=25 committed=3437 status=HELD: wall deadline
+COUNTERS implicitSolves=257 activeSetPasses=257 newtonSolves=323 newtonIterations=3062 jacobianBuilds=2060 residualEvaluations=5698 stepAttempts=216 stepAttemptsAccepted=160 equationGateRejections=0 restIntervals=86 phaseSeeds=0 phaseRefusals=0 newtonBacktracks=4
+==== STUDY seed=123 ms=4055 end=2874 holds=1 exceptions=0 islands=42:STEADY: no flow since 114.2 s;43:STEADY: no flow since 114.2 s;60:HELD: wall deadline;61:SOLVING;
+HELD tick=2874 island=60 committed=2870 status=HELD: wall deadline
+COUNTERS implicitSolves=3363 activeSetPasses=6100 newtonSolves=6292 newtonIterations=52667 jacobianBuilds=15757 residualEvaluations=153609 stepAttempts=3358 stepAttemptsAccepted=1690 equationGateRejections=53 restIntervals=173 phaseSeeds=2 phaseRefusals=1 newtonBacktracks=94167
+## q1 bundled
+SUMMARY seeds=200 clean=199 threads=8 slices=120 wallMs=20785 seedMsSum=96234
+COUNTERS implicitSolves=22768 activeSetPasses=26524 newtonSolves=33025 newtonIterations=135837 jacobianBuilds=41238 residualEvaluations=322657 stepAttempts=21671 stepAttemptsAccepted=20909 equationGateRejections=11 reconstructCalls=24335 restIntervals=11517 restStops=18 phaseSeeds=85 phaseRefusals=1 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=15094 newtonIterationsPreconditioned=62631 newtonIterationsFresh=41238 newtonIterationsStale=94599 newtonStepEvaluationsFresh=85519 newtonStepEvaluationsStale=101136 newtonRefreshesStalled=10406 newtonRefreshesAged=5605 newtonRefreshesFailed=85 newtonBacktracks=50836
+CLASS e:new seeds=1 smallest=200 list=[200]
+E5 step line search stalls                                   seeds=   1 smallest=  200 list= 200
+## q1 cold
+SUMMARY seeds=200 clean=197 threads=8 slices=120 wallMs=57646 seedMsSum=189207 cold=icheme:pilot_cryogenic
+COUNTERS implicitSolves=31963 activeSetPasses=35449 newtonSolves=51227 newtonIterations=273725 jacobianBuilds=87015 residualEvaluations=658906 stepAttempts=25900 stepAttemptsAccepted=21920 equationGateRejections=315 reconstructCalls=32420 restIntervals=11852 restStops=59 phaseSeeds=493 phaseRefusals=22 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=18275 newtonIterationsPreconditioned=117792 newtonIterationsFresh=87015 newtonIterationsStale=186710 newtonStepEvaluationsFresh=245170 newtonStepEvaluationsStale=200645 newtonRefreshesStalled=23486 newtonRefreshesAged=12285 newtonRefreshesFailed=153 newtonBacktracks=172414
+CLASS e:new seeds=3 smallest=85 list=[85, 101, 118]
+E1 interval-start rate pass does not converge                seeds=   1 smallest=   85 list= 85
+E6 step Newton iteration limit                               seeds=   1 smallest=  101 list= 101
+F  budget (wall deadline / soft budget)                      seeds=   1 smallest=  118 list= 118
+## q1 defaults
+SUMMARY seeds=200 clean=200 threads=8 slices=120 wallMs=2258 seedMsSum=17101
+COUNTERS implicitSolves=5251 activeSetPasses=5406 newtonSolves=6139 newtonIterations=10902 jacobianBuilds=4280 residualEvaluations=20918 stepAttempts=4808 stepAttemptsAccepted=4678 equationGateRejections=0 reconstructCalls=5251 restIntervals=12861 restStops=18 phaseSeeds=0 phaseRefusals=0 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=2423 newtonIterationsPreconditioned=5856 newtonIterationsFresh=4280 newtonIterationsStale=6622 newtonStepEvaluationsFresh=5648 newtonStepEvaluationsStale=6932 newtonRefreshesStalled=385 newtonRefreshesAged=265 newtonRefreshesFailed=4 newtonBacktracks=1678
+## q4 bundled
+SUMMARY seeds=200 clean=197 threads=8 slices=120 wallMs=17356 seedMsSum=79902
+COUNTERS implicitSolves=19755 activeSetPasses=23613 newtonSolves=28921 newtonIterations=133067 jacobianBuilds=41804 residualEvaluations=301329 stepAttempts=18690 stepAttemptsAccepted=17444 equationGateRejections=4 reconstructCalls=21162 restIntervals=11581 restStops=20 phaseSeeds=135 phaseRefusals=93 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=12666 newtonIterationsPreconditioned=58859 newtonIterationsFresh=41804 newtonIterationsStale=91263 newtonStepEvaluationsFresh=94944 newtonStepEvaluationsStale=100987 newtonRefreshesStalled=13565 newtonRefreshesAged=6039 newtonRefreshesFailed=127 newtonBacktracks=62869
+CLASS e:new seeds=3 smallest=47 list=[47, 118, 145]
+E9 other                                                     seeds=   1 smallest=  145 list= 145
+F  budget (wall deadline / soft budget)                      seeds=   2 smallest=   47 list= 47 118
+## q4 cold
+SUMMARY seeds=200 clean=196 threads=8 slices=120 wallMs=69155 seedMsSum=217860 cold=icheme:pilot_cryogenic
+COUNTERS implicitSolves=35974 activeSetPasses=43738 newtonSolves=65187 newtonIterations=378413 jacobianBuilds=121215 residualEvaluations=944381 stepAttempts=30160 stepAttemptsAccepted=24193 equationGateRejections=243 reconstructCalls=37174 restIntervals=11911 restStops=50 phaseSeeds=3926 phaseRefusals=93 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=22593 newtonIterationsPreconditioned=158756 newtonIterationsFresh=121215 newtonIterationsStale=257198 newtonStepEvaluationsFresh=365882 newtonStepEvaluationsStale=315836 newtonRefreshesStalled=37416 newtonRefreshesAged=18263 newtonRefreshesFailed=364 newtonBacktracks=303800
+CLASS e:new seeds=4 smallest=85 list=[85, 101, 118, 181]
+E1 interval-start rate pass does not converge                seeds=   1 smallest=   85 list= 85
+E2 step solve singular at every step size                    seeds=   1 smallest=  181 list= 181
+E5 step line search stalls                                   seeds=   1 smallest=  101 list= 101
+F  budget (wall deadline / soft budget)                      seeds=   1 smallest=  118 list= 118
+## q4 defaults
+SUMMARY seeds=200 clean=200 threads=8 slices=120 wallMs=1951 seedMsSum=14918
+COUNTERS implicitSolves=4304 activeSetPasses=4380 newtonSolves=4989 newtonIterations=8919 jacobianBuilds=3114 residualEvaluations=17069 stepAttempts=3915 stepAttemptsAccepted=3703 equationGateRejections=0 reconstructCalls=4305 restIntervals=12961 restStops=22 phaseSeeds=0 phaseRefusals=0 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=2032 newtonIterationsPreconditioned=5187 newtonIterationsFresh=3114 newtonIterationsStale=5805 newtonStepEvaluationsFresh=4236 newtonStepEvaluationsStale=6020 newtonRefreshesStalled=338 newtonRefreshesAged=202 newtonRefreshesFailed=1 newtonBacktracks=1337
+## q72 bundled
+SUMMARY seeds=200 clean=197 threads=8 slices=120 wallMs=16248 seedMsSum=78264
+COUNTERS implicitSolves=15772 activeSetPasses=18968 newtonSolves=23980 newtonIterations=109399 jacobianBuilds=38544 residualEvaluations=273864 stepAttempts=14833 stepAttemptsAccepted=13354 equationGateRejections=11 reconstructCalls=16590 restIntervals=11733 restStops=34 phaseSeeds=109 phaseRefusals=23 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=10094 newtonIterationsPreconditioned=48318 newtonIterationsFresh=38544 newtonIterationsStale=70855 newtonStepEvaluationsFresh=91988 newtonStepEvaluationsStale=81932 newtonRefreshesStalled=14028 newtonRefreshesAged=4255 newtonRefreshesFailed=142 newtonBacktracks=64526
+CLASS e:new seeds=3 smallest=15 list=[15, 47, 118]
+F  budget (wall deadline / soft budget)                      seeds=   3 smallest=   15 list= 15 47 118
+## q72 cold
+SUMMARY seeds=200 clean=197 threads=8 slices=120 wallMs=25160 seedMsSum=160142 cold=icheme:pilot_cryogenic
+COUNTERS implicitSolves=28787 activeSetPasses=33836 newtonSolves=47183 newtonIterations=265469 jacobianBuilds=86844 residualEvaluations=708691 stepAttempts=24683 stepAttemptsAccepted=18474 equationGateRejections=436 reconstructCalls=29496 restIntervals=12008 restStops=71 phaseSeeds=968 phaseRefusals=283 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=19814 newtonIterationsPreconditioned=129834 newtonIterationsFresh=86844 newtonIterationsStale=178625 newtonStepEvaluationsFresh=345980 newtonStepEvaluationsStale=189455 newtonRefreshesStalled=28517 newtonRefreshesAged=12451 newtonRefreshesFailed=145 newtonBacktracks=270303
+CLASS b:trace-underflow seeds=1 smallest=72 list=[72]
+CLASS e:new seeds=2 smallest=6 list=[6, 118]
+B  trace underflow (T1)                                      seeds=   1 smallest=   72 list= 72
+F  budget (wall deadline / soft budget)                      seeds=   2 smallest=    6 list= 6 118
+## q72 defaults
+SUMMARY seeds=200 clean=200 threads=8 slices=120 wallMs=2286 seedMsSum=17642
+COUNTERS implicitSolves=4260 activeSetPasses=4343 newtonSolves=5199 newtonIterations=10204 jacobianBuilds=3201 residualEvaluations=19172 stepAttempts=3905 stepAttemptsAccepted=3419 equationGateRejections=0 reconstructCalls=4260 restIntervals=13159 restStops=24 phaseSeeds=0 phaseRefusals=0 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=2215 newtonIterationsPreconditioned=6619 newtonIterationsFresh=3201 newtonIterationsStale=7003 newtonStepEvaluationsFresh=3966 newtonStepEvaluationsStale=7439 newtonRefreshesStalled=319 newtonRefreshesAged=264 newtonRefreshesFailed=9 newtonBacktracks=1201
+## campaign4 bundled
+SUMMARY seeds=1000 clean=990 threads=8 slices=120 wallMs=37019 seedMsSum=237270
+COUNTERS implicitSolves=99454 activeSetPasses=125593 newtonSolves=154140 newtonIterations=860192 jacobianBuilds=298878 residualEvaluations=2650146 stepAttempts=94784 stepAttemptsAccepted=79586 equationGateRejections=311 reconstructCalls=100784 restIntervals=58832 restStops=106 phaseSeeds=2417 phaseRefusals=1475 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=67254 newtonIterationsPreconditioned=322459 newtonIterationsFresh=298878 newtonIterationsStale=561314 newtonStepEvaluationsFresh=1229352 newtonStepEvaluationsStale=863937 newtonRefreshesStalled=145448 newtonRefreshesAged=28381 newtonRefreshesFailed=5364 newtonBacktracks=1233490
+CLASS b:trace-underflow seeds=1 smallest=301 list=[301]
+CLASS e:new seeds=9 smallest=47 list=[47, 118, 145, 241, 431, 579, 678, 896, 941]
+B  trace underflow (T1)                                      seeds=   1 smallest=  301 list= 301
+E5 step line search stalls                                   seeds=   1 smallest=  896 list= 896
+E6 step Newton iteration limit                               seeds=   2 smallest=  241 list= 241 431
+E9 other                                                     seeds=   1 smallest=  145 list= 145
+F  budget (wall deadline / soft budget)                      seeds=   5 smallest=   47 list= 47 118 579 678 941
+## campaign4 cold
+SUMMARY seeds=1000 clean=991 threads=8 slices=120 wallMs=224997 seedMsSum=1450539 cold=icheme:pilot_cryogenic
+COUNTERS implicitSolves=192869 activeSetPasses=226287 newtonSolves=325049 newtonIterations=2002081 jacobianBuilds=634197 residualEvaluations=4964856 stepAttempts=156597 stepAttemptsAccepted=123022 equationGateRejections=296 reconstructCalls=198655 restIntervals=57872 restStops=847 phaseSeeds=14730 phaseRefusals=747 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=122452 newtonIterationsPreconditioned=869159 newtonIterationsFresh=634197 newtonIterationsStale=1367880 newtonStepEvaluationsFresh=2100643 newtonStepEvaluationsStale=1524610 newtonRefreshesStalled=204179 newtonRefreshesAged=103583 newtonRefreshesFailed=2260 newtonBacktracks=1624636
+CLASS b:trace-underflow seeds=3 smallest=431 list=[431, 589, 629]
+CLASS e:new seeds=6 smallest=85 list=[85, 101, 118, 181, 752, 803]
+B  trace underflow (T1)                                      seeds=   3 smallest=  431 list= 431 589 629
+E1 interval-start rate pass does not converge                seeds=   1 smallest=   85 list= 85
+E2 step solve singular at every step size                    seeds=   1 smallest=  181 list= 181
+E5 step line search stalls                                   seeds=   3 smallest=  101 list= 101 752 803
+F  budget (wall deadline / soft budget)                      seeds=   1 smallest=  118 list= 118
+## campaign4 defaults
+SUMMARY seeds=1000 clean=1000 threads=8 slices=120 wallMs=5384 seedMsSum=42157
+COUNTERS implicitSolves=22246 activeSetPasses=23937 newtonSolves=26542 newtonIterations=62242 jacobianBuilds=21449 residualEvaluations=126002 stepAttempts=19839 stepAttemptsAccepted=18629 equationGateRejections=0 reconstructCalls=22318 restIntervals=64734 restStops=91 phaseSeeds=1 phaseRefusals=0 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=9623 newtonIterationsPreconditioned=31515 newtonIterationsFresh=21449 newtonIterationsStale=40793 newtonStepEvaluationsFresh=48143 newtonStepEvaluationsStale=43682 newtonRefreshesStalled=4100 newtonRefreshesAged=1846 newtonRefreshesFailed=20 newtonBacktracks=29583
+## replay4 bundled
+SUMMARY seeds=3 clean=3 threads=1 slices=120 wallMs=45984 seedMsSum=45975
+COUNTERS implicitSolves=2777 activeSetPasses=4478 newtonSolves=5565 newtonIterations=57173 jacobianBuilds=35617 residualEvaluations=279865 stepAttempts=2760 stepAttemptsAccepted=1947 equationGateRejections=3 reconstructCalls=2255 restIntervals=295 restStops=2 phaseSeeds=149 phaseRefusals=11 balanceStarts= balanceIterations= balanceSweeps= balanceLaws= balanceUnconverged= balanceFlashes= newtonSolvesPreconditioned=1581 newtonIterationsPreconditioned=15384 newtonIterationsFresh=35617 newtonIterationsStale=21556 newtonStepEvaluationsFresh=185395 newtonStepEvaluationsStale=49403 newtonRefreshesStalled=25737 newtonRefreshesAged=1116 newtonRefreshesFailed=697 newtonBacktracks=177657

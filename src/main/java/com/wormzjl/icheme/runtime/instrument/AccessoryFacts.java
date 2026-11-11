@@ -21,8 +21,11 @@ import java.util.function.Supplier;
  * or refunds an item, so a dropped operation loses nothing.</p>
  */
 final class AccessoryFacts {
-    /** Schema 4: optional floating-roof level gauges, retaining schema 3's sensors and speed pickups. */
-    static final int SCHEMA=4,STATE=1;
+    /** Schema 4: optional floating-roof level gauges, retaining schema 3's sensors and speed pickups. Schema 5 (batch
+     * 2026-11-11-gas-blanketing): the fitting type {@code BLANKET_VALVE}, a drum's gas blanketing valve, on the mount {@code blanket_valve}. Schema 6 (same batch): the fitting type
+     * {@code SAFETY_VALVE}, a pressure safety valve on the mount {@code safety_valve}: a drum's beside its other fitting, or a
+     * pipe's only one. */
+    static final int SCHEMA=6,STATE=1;
     /**
      * Renamed or removed saved names, per name set: the saved name to the current one. A gauge's kind and unit share the
      * item component's tables, so one alias serves both. None at schema 1.

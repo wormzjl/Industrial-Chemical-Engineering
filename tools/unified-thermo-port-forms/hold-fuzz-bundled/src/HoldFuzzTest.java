@@ -44,7 +44,9 @@ class HoldFuzzTest {
     static final int COMPONENTS=MaterialTestBasis.NETWORK+1,WATER=MaterialTestBasis.NETWORK,NITROGEN=MaterialTestBasis.NITROGEN;
     static final int METHANE=CATALOG.requirePackage("icheme:tjl20_methane_nitrogen").components().indexOf("Methane");
     static final double[] CRUDE=Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo("icheme:tjl20_methane_nitrogen").crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(),COMPONENTS);
-    static final ThreadLocal<FluidThermodynamics> MODELS=ThreadLocal.withInitial(FluidTestSupport::networkModel);
+    /** {@code holdFuzz.timeScale} (batch 2026-11-11-minecraft-time-delta, W2): the time factor, 1 (the engine's default) to 72. */
+    static final com.wormzjl.icheme.science.fluid.SimulationTime TIME=com.wormzjl.icheme.science.fluid.SimulationTime.of(Integer.getInteger("holdFuzz.timeScale",1));
+    static final ThreadLocal<FluidThermodynamics> MODELS=ThreadLocal.withInitial(()->FluidTestSupport.networkModel().withTime(TIME));
 
     record Block(int x,int y,int z,Kind kind,PhysicalFluidTopology.Direction facing,double bore,FlowControl control,FluidDeviceSpec spec,String fluid) {
         PhysicalFluidTopology.Position position(){return new PhysicalFluidTopology.Position(DIM,x,y,z);}
@@ -169,7 +171,7 @@ class HoldFuzzTest {
                 public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveServices.FluidIslandCommand command){attempts.put(attempt.slice().requestId(),attempt);commands.put(attempt.slice().requestId(),command);return true;}
                 public void cancel(long request){}
             },changed->{for(var s:changed)if(s.status().startsWith("HELD"))held.add(new Held(ledger.onlineTick(),s.id(),s.clock().committedTick(),s.status()));},
-                    ()->0L,new IslandCoordinator.Settings(Long.getLong("holdFuzz.wallNanos",2_000_000_000L),Long.getLong("holdFuzz.softNanos",1_500_000_000L),64,false,100,CertificatePolicy.defaults()),ledger::onlineTick);
+                    ()->0L,new IslandCoordinator.Settings(Long.getLong("holdFuzz.wallNanos",2_000_000_000L),Long.getLong("holdFuzz.softNanos",1_500_000_000L),64,false,100,CertificatePolicy.defaults()).withTime(TIME),ledger::onlineTick);
             registry=new PhysicalRegistry(ledger,model,InlineFilter.empty(),new PhysicalRegistry.Host() {
                 public IslandCoordinator coordinator(){return coordinator;}
                 public void topology(String dimension,Set<UUID> events,Set<Long> affected,List<IslandCoordinator.Replacement> replacements,long committed,long online,

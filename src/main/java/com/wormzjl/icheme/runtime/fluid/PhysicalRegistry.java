@@ -88,6 +88,12 @@ public final class PhysicalRegistry {
         this.topology=Objects.requireNonNull(topology);this.model=Objects.requireNonNull(model);weights=model.molecularWeights();
         this.emptyFilter=Objects.requireNonNull(emptyFilter);this.host=Objects.requireNonNull(host);
     }
+    /** Every pressure safety valve among {@code records} (batch 2026-11-11-gas-blanketing): its set pressure, and on a pipe its outlet face. */
+    static Map<Long,PhysicalFluidTopology.Relief> reliefs(Collection<WorldTopologyLedger.Registration> records) {
+        var reliefs=new HashMap<Long,PhysicalFluidTopology.Relief>();
+        for(var r:records)if(r.spec().relief()>0)reliefs.put(r.device().id(),new PhysicalFluidTopology.Relief(r.spec().relief(),r.spec().reliefFace()));
+        return reliefs;
+    }
     /** Compiles the loaded registry once and binds every device to the island a checkpoint restored for it. */
     public void load() {
         var islands=host.coordinator().snapshots();
@@ -107,7 +113,7 @@ public final class PhysicalRegistry {
         for(var entry:stock.entrySet()){var r=active.get(entry.getKey());if(r!=null&&r.device().fixed()){fixedStates.put(entry.getKey(),entry.getValue());fixedModels.put(entry.getKey(),stockModels.get(entry.getKey()));}}
         // A disconnected filter's ports stand at the ambient (NetworkReduction.ambient), as an empty vessel does.
         var compiled=PhysicalFluidTopology.compile(active.values().stream().map(WorldTopologyLedger.Registration::device).toList(),stock,cakes,
-                com.wormzjl.icheme.science.fluid.network.NetworkReduction.ambient(model),flowmeters);
+                com.wormzjl.icheme.science.fluid.network.NetworkReduction.ambient(model),flowmeters,reliefs(active.values()));
         diagnostics.putAll(compiled.diagnostics());pipeViews.putAll(compiled.pipeViews());tankFaces.putAll(compiled.tankFaces());
         for(var island:compiled.islands()) {
             var graph=island.graph();
@@ -412,7 +418,7 @@ public final class PhysicalRegistry {
                     var node=stock.get(edit.id());if(node==null)throw new IllegalStateException("Topology event reached vessel "+edit.id()+" outside the islands it fenced");
                     if(moved||respecified) {
                         var spec=replacement.spec();var held=node.inventory();
-                        var inventory=respecified?new PassiveNetwork.Inventory(spec.volume(),held.moles(),held.internalEnergy(),held.solids(),spec.levelHeight(),spec.open(),spec.geometry(),null,spec.tower(),held.rigid()&&!spec.open()):held;
+                        var inventory=respecified?new PassiveNetwork.Inventory(spec.volume(),held.moles(),held.internalEnergy(),held.solids(),spec.levelHeight(),spec.open(),spec.geometry(),null,spec.tower(),held.rigid()&&!spec.open()).withBlanket(spec.blanket()):held;
                         var rebuilt=new PassiveNetwork.Reservoir(node.id(),replacement.device().position().y(),node.state(),node.kind(),inventory);
                         stock.put(edit.id(),rebuilt);if(additions.containsKey(edit.id()))additions.put(edit.id(),rebuilt);
                     }
@@ -465,7 +471,7 @@ public final class PhysicalRegistry {
             }
         }
         var compiled=PhysicalFluidTopology.compile(component.values().stream().map(WorldTopologyLedger.Registration::device).toList(),componentStock,componentCakes,
-                com.wormzjl.icheme.science.fluid.network.NetworkReduction.ambient(model),flowmeters);
+                com.wormzjl.icheme.science.fluid.network.NetworkReduction.ambient(model),flowmeters,reliefs(component.values()));
         FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.topologyBatches);FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.topologyEvents,events.size());
         FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.compiledDevices,component.size());
         // The islands this batch splits: an original whose devices land in two or more of the new islands (owner decision

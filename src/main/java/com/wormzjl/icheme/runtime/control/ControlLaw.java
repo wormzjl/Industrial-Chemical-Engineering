@@ -194,13 +194,16 @@ final class ControlLaw {
                 double desired = tank.geometry().volumeAt(height),
                         flow = Math.max(0, output.volumeFlow());
                 var previous = levels.get(panel.id());
-                double elapsed = 0, prior = volume;
+                // No earlier sample of this sensor and output: NaN, a first decision (InventoryControl.target).
+                double elapsed = 0, prior = Double.NaN;
                 if (previous != null
                         && previous.sensor().equals(sensor.instance())
-                        && previous.output() == s.output()
-                        && reading.tick() > previous.tick()) {
-                    elapsed = (reading.tick() - previous.tick()) / 20.0;
-                    prior = previous.volume();
+                        && previous.output() == s.output()) {
+                    prior = volume;
+                    if (reading.tick() > previous.tick()) {
+                        elapsed = world.time().seconds(reading.tick() - previous.tick());
+                        prior = previous.volume();
+                    }
                 }
                 // One scheduled interval to recover the inventory error, rather than a tuned
                 // integral loop.
@@ -211,7 +214,7 @@ final class ControlLaw {
                                 flow,
                                 prior,
                                 elapsed,
-                                ControlService.CADENCE / 20.0,
+                                world.time().seconds(ControlService.CADENCE),
                                 s.action() == ControlSettings.Action.OUTLET);
                 source = FlowControl.ValveSource.VOLUME_FLOW;
                 target = Math.max(0, requested);
@@ -274,12 +277,12 @@ final class ControlLaw {
         // The feed's density from its valve's pipe; with nothing flowing, none to turn a volume into mass.
         if (!(flow > 1e-12) || !(density > 0)) return Decision.noSetpoint("NO LEVEL BALANCE");
         var previous = levels.get(panel.id());
-        double elapsed = 0, prior = volume;
-        if (previous != null && previous.sensor().equals(sensor.instance()) && previous.output() == s.output() && reading.tick() > previous.tick()) {
-            elapsed = (reading.tick() - previous.tick()) / 20.0;
-            prior = previous.volume();
+        double elapsed = 0, prior = Double.NaN;
+        if (previous != null && previous.sensor().equals(sensor.instance()) && previous.output() == s.output()) {
+            prior = volume;
+            if (reading.tick() > previous.tick()) {elapsed = world.time().seconds(reading.tick() - previous.tick());prior = previous.volume();}
         }
-        double requested = InventoryControl.target(volume, tank.geometry().volumeAt(height), flow, prior, elapsed, ControlService.CADENCE / 20.0, true);
+        double requested = InventoryControl.target(volume, tank.geometry().volumeAt(height), flow, prior, elapsed, world.time().seconds(ControlService.CADENCE), true);
         if (previous == null || reading.tick() > previous.tick())
             levels.put(panel.id(), new LevelSample(sensor.instance(), s.output(), reading.tick(), volume));
         return Decision.columnFeed(unit, levelFeed(Math.max(0, requested), density, molarMass));

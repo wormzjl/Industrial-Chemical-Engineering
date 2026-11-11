@@ -15,6 +15,22 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-11-11
+
+### Added
+
+- Simulated time at a configurable factor: process time runs `fluid.timeScale` times faster than online time (1 to 72, default 4, read at server start), one conversion of ticks to process seconds (`SimulationTime`), the factor in the model revision and the solved-state checkpoint; the interval's first step, step cap and the junction holdup scale with it (owner "Holdup only"); the column's, the still's and the electric stores' windows count cycles; FE at the play-time rate, fuel and wear on process time with new default lives of 8 h (cavitation) and 40 min (dry running) of process time under `machines.wear.cavitationProcessHours` and `dryProcessMinutes`; status lines and screens say which time they show; a drum level loop GameTest at 4. On the way: a regulating flow valve on a starved supply opens and passes what reaches it, and a level law's first decision acts on the level error alone (owner choice A) (evaluation `8d5e51d4f` to `903280638`; W1 to W5 `c7a0e4ddd`, `6a3642338`, `ad0c21634`, `a64fcc57d`, `93985cfa5`; W6 `e760aa35c`, `583e04781`; fixes `3a3c2c25d`, `0a5034904`; batch `2026-11-11-minecraft-time-delta`).
+- Gas blanketing valve and pressure safety valve, accessories on drums: the blanketing valve holds a drum's gas at its set pressure, padding from a supply gas line through its inlet at each solver step with a 1 s response and venting to the atmosphere above set × 1.05, on a slim nozzle at the drum's end; the pressure safety valve, one item for drums and pipes, holds the guarded pressure at its set pressure (ambient + 10 kPa to + 10 MPa, default + 300 kPa, above the blanketing valve's vent pressure), relieving gas or a full drum's liquid to the atmosphere or into a pipe, its outlet to the side toward the player who fits it; a drum's Accessory page with one group per valve, a pipe's own valve screen; drawings and placement ghosts. Fluid facts schema 23, accessory facts schema 6, solved state format 47, with corpus images (blanketing valve `0283f41e5`, `e2737f3b4`, `e2bad7cf3`, `085e5d3dd`, `4c3130472`, `9777378a4`; safety valve `c919a0ec9`, `439a22868`, `db6a8f34c`, `aae56cf0a`, `09e106041`, `1a1965d4c`, merged at `e55b0e363`; batch `2026-11-11-gas-blanketing`).
+
+### Changed
+
+- Flare stacks follow their back pressure (owner direction D6, revising X4 of `2026-11-09-flare-stack`): the tip is an open line whose bore is the run's last section, shut only while solids arrive, so an existing flare now passes what the pressure behind it drives instead of being held at its rating or stable velocity; above its stable exit velocity the flame goes out and the gas leaves unburnt (FLAME OUT), over its rated heat it burns on (OVER CAPACITY), and "Most flow" reads "Stable flow". A relief run into a flare is one line; a 0.1 m tip no longer holds the island (`d647d331d`, `905c3f10e`; batch `2026-11-11-gas-blanketing`).
+- Tooling cleanup of the three batches: the time-scale probe patches, hold-fuzz runner, headless worlds and level-loop runs are in `tools/minecraft-time-delta/`, the gas-vent rigs in `tools/drum-operation-holds/`, the safety-valve-to-flare run in `tools/psv-flare/`; the hold-fuzz harnesses of `tools/unified-thermo-port-forms/` take `-PholdFuzzTimeScale`. Nothing left `src/main` or `src/test`.
+
+### Fixed
+
+- Drum operation holds found at factor 1: the server crashed on a restored certificate when a column's waiting cycle re-entered an island's materialisation (a column now acts at the engine's decision points, `9c05850bd`); a held island's status line and the log name the worker's failure (`aac765065`); a regulating valve cold-started under a gas-filled drop leg held in its first tick (a junction the balance's clamp left on its bound, with nothing flowing, rests nearest its own pressure, `e0a82728f`, `9af97a3e6`). The gas-vent setup hold (defect 1) stays open (batch `2026-11-11-drum-operation-holds`).
+
 ## [0.26.0] - 2026-11-10
 
 ### Added

@@ -126,10 +126,10 @@ public final class PumpHealth {
         return p;
     }
 
-    /** Books {@code p} at {@code rate} (per second) from its last booking or {@code from}, whichever is later, to {@code to}. */
-    private static void book(Pump p, double rate, long from, long to) {
+    /** Books {@code p} at {@code rate} (per process second) from its last booking or {@code from}, whichever is later, to {@code to}. */
+    private void book(Pump p, double rate, long from, long to) {
         long a = Math.max(from, p.bookedTick);
-        if (to > a && rate > 0) p.health = Math.max(0, p.health - rate * (to - a) / 20.0);
+        if (to > a && rate > 0) p.health = Math.max(0, p.health - coordinator.time().seconds(rate * (to - a)));
         p.rate = rate;
         p.bookedTick = Math.max(p.bookedTick, to);
     }

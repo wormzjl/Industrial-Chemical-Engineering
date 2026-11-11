@@ -17,7 +17,8 @@ import static com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Direction.*
  * islands, coupled through the relay on the coordinator's clock behind the coupling fence (owner Q16, form C).
  */
 class ExchangerCouplingTest {
-    private final FluidThermodynamics model=FluidTestSupport.networkModel();
+    /** The network model at the time factor of a world built with no model ({@link EventPathWorld#time}: 1 here, a tool's factor sweep sets it). */
+    private final FluidThermodynamics model=EventPathWorld.timed(FluidTestSupport.networkModel());
     private static final PipeResistance.Geometry STUB=new PipeResistance.Geometry(1,.05,.000045,0);
     /** A 0.5 m shell over 3 m tubes: 56 m² of tube, UA about 56 kW/K with liquid on both sides. */
     private static final double SHELL=.5,TUBES=3,AREA=com.wormzjl.icheme.science.equipment.ProcessUnit.tubeSurface(SHELL,TUBES);
@@ -73,7 +74,7 @@ class ExchangerCouplingTest {
                 public long nextRequestId(){return ++requests;}
                 public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveServices.FluidIslandCommand command){attempts.put(attempt.slice().requestId(),attempt);commands.put(attempt.slice().requestId(),command);return true;}
                 public void cancel(long request){throw new AssertionError("no deadlines here");}
-            },this::book,()->0L,new IslandCoordinator.Settings(30_000_000_000L,20_000_000_000L,64,false,100,policy),()->epoch[0]);
+            },this::book,()->0L,new IslandCoordinator.Settings(30_000_000_000L,20_000_000_000L,64,false,100,policy).withTime(model.time()),()->epoch[0]);
             coordinator.onReplayed(this::book);
         }
         /** Each island's heat at its sides over the spans its clock advanced, J (a held publication advances nothing). */
@@ -81,7 +82,7 @@ class ExchangerCouplingTest {
             for(var s:changed) {
                 long to=s.clock().committedTick(),from=committed.getOrDefault(s.id(),to);committed.put(s.id(),to);
                 if(to==from||s.lastResult().isEmpty())continue;
-                var result=s.lastResult().orElseThrow();double scale=result.advancedSeconds()>0?(to-from)/20.0/result.advancedSeconds():0;
+                var result=s.lastResult().orElseThrow();double scale=result.advancedSeconds()>0?model.time().seconds(to-from)/result.advancedSeconds():0;
                 for(var b:result.boundaries())if(b.kind()==ConservativeTransport.BoundaryTransfer.Kind.HEAT)heat.merge(b.nodeId(),b.totalEnergyJoule()*(Math.abs(scale-1)<1e-12?1:scale),Double::sum);
             }
         }

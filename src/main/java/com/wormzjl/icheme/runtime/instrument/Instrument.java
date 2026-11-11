@@ -15,19 +15,26 @@ import java.util.UUID;
 public final class Instrument {
     private Instrument(){}
     /** What a player attaches: the dial gauges, tank level gauge and pipe fittings. */
-    public enum Type { PRESSURE, TEMPERATURE, SIGHT_GLASS, SHUTOFF, CHECK, PRESSURE_VALVE, FILTER, PUMP, COMPRESSOR, LEVEL_GAUGE }
+    public enum Type { PRESSURE, TEMPERATURE, SIGHT_GLASS, SHUTOFF, CHECK, PRESSURE_VALVE, FILTER, PUMP, COMPRESSOR, LEVEL_GAUGE,
+        /** A drum's gas blanketing valve (batch 2026-11-11-gas-blanketing), on its first reserved top flange. */
+        BLANKET_VALVE,
+        /** A pressure safety valve (same batch): on a drum's second reserved top flange, or on a pipe, the pipe's only fitting. */
+        SAFETY_VALVE;
+        /** Whether this is a fitting placed where its host's shape gives it, through the accessory request: a tank's level gauge, a drum's gas blanketing valve, a pressure safety valve. */
+        public boolean vessel(){return this==LEVEL_GAUGE||this==BLANKET_VALVE||this==SAFETY_VALVE;}
+    }
     /** Every mount name; saved by name, like an enum constant. */
-    public static final Set<String> MOUNTS=Set.of("pipe_north","pipe_south","pipe_east","pipe_west","pipe_accessory","pressure_top","pressure_bottom","temperature_top","temperature_bottom","level_body","level_boot","valve_sensor",Sensor.SPEED_PICKUP,"tank_level");
+    public static final Set<String> MOUNTS=Set.of("pipe_north","pipe_south","pipe_east","pipe_west","pipe_accessory","pressure_top","pressure_bottom","temperature_top","temperature_bottom","level_body","level_boot","valve_sensor",Sensor.SPEED_PICKUP,"tank_level","blanket_valve","safety_valve");
     /** One non-dial accessory. Tank instruments and pipe fittings share persistence, revisions and recovery. */
     public record Fitting(Key key,UUID instance,long revision,Type type) {
         public Fitting{Objects.requireNonNull(key);Objects.requireNonNull(instance);Objects.requireNonNull(type);if(revision<=0||type==Type.PRESSURE||type==Type.TEMPERATURE||!key.mount().equals(mount(type)))throw new IllegalArgumentException("Invalid accessory fitting");}
-        public static String mount(Type type){return type==Type.LEVEL_GAUGE?"tank_level":"pipe_accessory";}
+        public static String mount(Type type){return type==Type.LEVEL_GAUGE?"tank_level":type==Type.BLANKET_VALVE?"blanket_valve":type==Type.SAFETY_VALVE?"safety_valve":"pipe_accessory";}
     }
     public record Key(long host,String mount) {
         public Key{if(host<=0||mount==null||!MOUNTS.contains(mount))throw new IllegalArgumentException("Invalid instrument key");}
     }
     public record Installed(Key key,UUID instance,long revision,GaugeSettings settings) {
-        public Installed{Objects.requireNonNull(key);Objects.requireNonNull(instance);Objects.requireNonNull(settings);if(revision<=0||key.mount().equals("pipe_accessory")||key.mount().equals("tank_level")||key.mount().startsWith("pressure_")&&settings.kind()!=GaugeSettings.Kind.PRESSURE||key.mount().startsWith("temperature_")&&settings.kind()!=GaugeSettings.Kind.TEMPERATURE)throw new IllegalArgumentException("Invalid instrument revision or mount kind");}
+        public Installed{Objects.requireNonNull(key);Objects.requireNonNull(instance);Objects.requireNonNull(settings);if(revision<=0||key.mount().equals("pipe_accessory")||key.mount().equals("tank_level")||key.mount().equals("blanket_valve")||key.mount().equals("safety_valve")||key.mount().startsWith("pressure_")&&settings.kind()!=GaugeSettings.Kind.PRESSURE||key.mount().startsWith("temperature_")&&settings.kind()!=GaugeSettings.Kind.TEMPERATURE)throw new IllegalArgumentException("Invalid instrument revision or mount kind");}
     }
     public enum Availability { AVAILABLE, NO_FLOW, UNAVAILABLE; public int code(){return switch(this){case AVAILABLE->0;case NO_FLOW->1;case UNAVAILABLE->2;};} public static Availability fromCode(int code){return switch(code){case 0->AVAILABLE;case 1->NO_FLOW;case 2->UNAVAILABLE;default->throw new IllegalArgumentException("Invalid instrument availability");};} }
     public record Sample(double value,long tick,Availability availability) {
@@ -79,6 +86,13 @@ public final class Instrument {
         private Fitting fitting;
         public Fitting fitting(){return fitting;}
         public boolean levelGauge(){return fitting!=null&&fitting.type()==Type.LEVEL_GAUGE;}
+        public boolean blanketValve(){return fitting!=null&&fitting.type()==Type.BLANKET_VALVE;}
+        /** A pressure safety valve (batch 2026-11-11-gas-blanketing): a drum's beside its other fitting, or a pipe's only one; and on a pipe the face its outlet leaves by. */
+        private Fitting relief;
+        private Direction reliefFace;
+        public Fitting relief(){return relief;}
+        public boolean safetyValve(){return relief!=null;}
+        public Direction reliefFace(){return reliefFace;}
         private long revision;
         private java.util.Map<java.util.UUID,String> sensorIds=java.util.Map.of();
         public java.util.Map<java.util.UUID,String> sensorIds(){return sensorIds;}
@@ -92,8 +106,9 @@ public final class Instrument {
         public List<Installed> installed(){return installed;}
         public long revision(){return revision;}
         public void set(List<Installed> value,long revision){set(value,revision,null);}
-        public void set(List<Installed> value,long revision,Fitting fitting){installed=List.copyOf(value);this.revision=revision;this.fitting=fitting;}
-        public void write(CompoundTag tag){if(powerPort!=null)tag.put("PowerPort",powerPort.save());else tag.remove("PowerPort");var ids=new ListTag();sensorIds.forEach((instance,id)->{var t=new CompoundTag();t.putUUID("instance",instance);t.putString("id",id);ids.add(t);});tag.put("SensorIds",ids);if(dataPort!=null)tag.put("DataPort",dataPort.save());else tag.remove("DataPort");tag.putLong("AccessoryRevision",revision);var list=new ListTag();for(var i:installed)list.add(AccessoryFacts.installed(i));tag.put("Instruments",list);var transmitters=new ListTag();sensors.forEach(s->transmitters.add(Sensor.save(s)));tag.put("Sensors",transmitters);if(fitting!=null)tag.put("Fitting",AccessoryFacts.fitting(fitting));else tag.remove("Fitting");}
+        public void set(List<Installed> value,long revision,Fitting fitting){set(value,revision,fitting,null,null);}
+        public void set(List<Installed> value,long revision,Fitting fitting,Fitting relief,Direction reliefFace){installed=List.copyOf(value);this.revision=revision;this.fitting=fitting;this.relief=relief;this.reliefFace=relief==null?null:reliefFace;}
+        public void write(CompoundTag tag){if(powerPort!=null)tag.put("PowerPort",powerPort.save());else tag.remove("PowerPort");var ids=new ListTag();sensorIds.forEach((instance,id)->{var t=new CompoundTag();t.putUUID("instance",instance);t.putString("id",id);ids.add(t);});tag.put("SensorIds",ids);if(dataPort!=null)tag.put("DataPort",dataPort.save());else tag.remove("DataPort");tag.putLong("AccessoryRevision",revision);var list=new ListTag();for(var i:installed)list.add(AccessoryFacts.installed(i));tag.put("Instruments",list);var transmitters=new ListTag();sensors.forEach(s->transmitters.add(Sensor.save(s)));tag.put("Sensors",transmitters);if(fitting!=null)tag.put("Fitting",AccessoryFacts.fitting(fitting));else tag.remove("Fitting");if(relief!=null)tag.put("Relief",AccessoryFacts.fitting(relief));else tag.remove("Relief");if(reliefFace!=null)tag.putString("ReliefFace",reliefFace.getSerializedName());else tag.remove("ReliefFace");}
         public void read(CompoundTag tag) {
             try{powerPort=tag.contains("PowerPort",10)?com.wormzjl.icheme.runtime.control.DataPort.load(tag.getCompound("PowerPort")):null;if(powerPort!=null&&!powerPort.kind().power())powerPort=null;}catch(IllegalArgumentException invalid){powerPort=null;}
             var ids=new java.util.HashMap<java.util.UUID,String>();for(var value:tag.getList("SensorIds",10)){var t=(CompoundTag)value;if(ids.size()<8&&t.hasUUID("instance")&&t.getString("id").matches("[A-Z]{2}-[0-9]{4,19}"))ids.put(t.getUUID("instance"),t.getString("id"));}sensorIds=java.util.Map.copyOf(ids);
@@ -103,10 +118,12 @@ public final class Instrument {
                 var list=tag.getList("Instruments",10);if(list.size()>6)throw new IllegalArgumentException("Too many host instruments");
                 var result=new java.util.ArrayList<Installed>();for(var t:list)result.add(AccessoryFacts.installed((CompoundTag)t));installed=List.copyOf(result);revision=saved;var sensorList=tag.getList("Sensors",10);if(sensorList.size()>8)throw new IllegalArgumentException("Too many sensors");var sensorCopy=new java.util.ArrayList<Sensor.Installed>();for(var t:sensorList)sensorCopy.add(Sensor.load((CompoundTag)t));sensors=List.copyOf(sensorCopy);
                 var attached=tag.contains("Fitting")?AccessoryFacts.fitting(tag.getCompound("Fitting")):null;
-                if(attached!=null&&(attached.revision()>saved||attached.type()!=Type.LEVEL_GAUGE&&(!result.isEmpty()||!sensors.isEmpty())))throw new IllegalArgumentException("Conflicting accessory copy");
-                fitting=attached;
+                if(attached!=null&&(attached.revision()>saved||!attached.type().vessel()&&(!result.isEmpty()||!sensors.isEmpty())))throw new IllegalArgumentException("Conflicting accessory copy");
+                var valve=tag.contains("Relief")?AccessoryFacts.fitting(tag.getCompound("Relief")):null;
+                if(valve!=null&&(valve.revision()>saved||valve.type()!=Type.SAFETY_VALVE||attached!=null&&attached.type()==Type.SAFETY_VALVE))throw new IllegalArgumentException("Conflicting accessory copy");
+                fitting=attached;relief=valve;reliefFace=valve==null?null:Direction.byName(tag.getString("ReliefFace"));
             } catch(IllegalArgumentException unreadable) {
-                installed=List.of();sensors=List.of();fitting=null;revision=0;com.wormzjl.icheme.IChemE.LOGGER.warn("accessory_copy status=DROPPED detail={}",unreadable.getMessage());
+                installed=List.of();sensors=List.of();fitting=null;relief=null;reliefFace=null;revision=0;com.wormzjl.icheme.IChemE.LOGGER.warn("accessory_copy status=DROPPED detail={}",unreadable.getMessage());
             }
         }
     }

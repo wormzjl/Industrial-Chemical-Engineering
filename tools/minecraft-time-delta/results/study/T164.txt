@@ -1,0 +1,126 @@
+==== STUDY seed=164 ms=2721 end=5304 holds=1 exceptions=0 islands=36:HELD: Substep refinement exhausted: Newton iteration limit a;
+layout 434:pipe0.05@0,-2,1 467:pipe0.01@0,0,2 467:tank@0,-4,0 670:pipe0.1@0,-3,1 797:valve[200kPa]@0,-3,2>SOUTH 847:gen[N2 262K 339kPa]@-1,1,0 857:gen[water 324K 401kPa]@0,1,-1 910:tank@0,0,3 938:pump[0.01,500kPa]@2,-3,1>WEST 1197:pump[0.01,500kPa]@0,-3,-2>NORTH 1252:pipe0.01@0,-1,0 1297:gen[N2 314K 131kPa]@0,-2,0 1340:pipe0.05@0,-1,1 1340:pipe0.02@0,-3,-1 1353:tank@1,-1,0 1383:pipe0.05@1,-3,1 1691:pipe0.1@0,1,0 1714:tank@0,3,0 1796:pipe0.1@0,2,0 1826:pipe0.01@0,0,1 1840:tank@0,0,0 1877:pipe0.01@0,-3,0 
+HELD tick=5304 island=36 committed=5204 status=HELD: Substep refinement exhausted: Newton iteration limit at residual 6.29966306731846E-5; active-set pass=0; reasons={Newton line search stalled at residual #; active-set pass=#=14, Newton iteration limit at residual #; active-set pass=#=6}
+COUNTERS implicitSolves=986 activeSetPasses=1207 newtonSolves=1866 newtonIterations=16109 jacobianBuilds=8117 residualEvaluations=61755 stepAttempts=981 stepAttemptsAccepted=626 equationGateRejections=11 restIntervals=69 phaseSeeds=17 phaseRefusals=1 newtonBacktracks=39568
+ATTEMPTS 981
+  #0..3 x4 ok be-state step=3.600..28.80 change=4.32e-05
+  #4..4 x1 REJECT be-state step=54.00..54.00 change=0.0924
+  #5..5 x1 ok be-state step=27.00..27.00 change=0.000324
+  #6..6 x1 REJECT be-state step=27.00..27.00 change=0.0962
+  #7..7 x1 ok be-state step=13.50..13.50 change=0.000162
+  #8..8 x1 REJECT be-state step=13.50..13.50 change=0.0984
+  #9..9 x1 ok be-state step=6.750..6.750 change=0.00705
+  #10..10 x1 REJECT be-state step=6.750..6.750 change=0.0919
+  #11..14 x4 ok be-state step=0.2227..3.600 change=0.0464
+  #15..15 x1 REJECT be-state step=7.200..7.200 change=0.0641
+  #16..20 x5 ok be-state step=3.600..57.60 change=0.0374
+  #21..21 x1 REJECT be-state step=3.600..3.600 change=1.07
+  #22..22 x1 REJECT be-reopen step=1.800..1.800 change=1.00
+  #23..26 x4 REJECT be-state step=0.2250..1.800 change=0.604
+  #27..27 x1 ok be-state step=0.1125..0.1125 change=0.0302
+  #28..28 x1 REJECT be-reopen step=0.1303..0.1303 change=1.00
+  #29..44 x16 ok be-state step=0.1206..0.1303 change=0.0437
+  #45..45 x1 REJECT be-state step=0.1206..0.1206 change=0.0759
+  #46..46 x1 ok be-state step=0.06030..0.06030 change=0.0202
+  #47..47 x1 REJECT be-state step=0.08528..0.08528 change=0.0926
+  #48..87 x40 ok be-state step=0.02815..25.20 change=0.0469
+  #88..88 x1 REJECT newton|Newton line search stalled at residual #; active-set pass=# step=3.600..3.600 change=NaN
+  #89..89 x1 REJECT be-reopen step=1.800..1.800 change=1.00
+  #90..90 x1 REJECT newton|Newton line search stalled at residual #; active-set pass=# step=1.800..1.800 change=NaN
+  #91..91 x1 REJECT newton|Newton iteration limit at residual #; active-set pass=# step=0.9000..0.9000 change=NaN
+  #92..92 x1 REJECT be-reopen step=0.4500..0.4500 change=1.00
+  #93..93 x1 REJECT newton|Newton line search stalled at residual #; active-set pass=# step=0.4500..0.4500 change=NaN
+  #94..94 x1 REJECT be-reopen step=0.2250..0.2250 change=1.00
+  #95..95 x1 REJECT newton|Newton iteration limit at residual #; active-set pass=# step=0.2250..0.2250 change=NaN
+  #96..96 x1 REJECT be-state step=0.1125..0.1125 change=0.0859
+  #97..97 x1 ok be-state step=0.05625..0.05625 change=0.0348
+  #98..98 x1 REJECT be-reopen step=0.06066..0.06066 change=1.00
+  #99..99 x1 REJECT newton|Newton iteration limit at residual #; active-set pass=# step=0.06066..0.06066 change=NaN
+  #100..100 x1 ok be-state step=0.03033..0.03033 change=0.0343
+  #101..101 x1 REJECT be-reopen step=0.03295..0.03295 change=1.00
+  #102..117 x16 ok be-state step=0.03295..0.1219 change=0.0337
+  #118..118 x1 REJECT be-state step=0.1196..0.1196 change=0.0602
+  #119..119 x1 ok be-state step=0.05980..0.05980 change=0.0201
+  #120..120 x1 REJECT be-state step=0.08490..0.08490 change=0.0894
+  #121..124 x4 ok be-state step=0.03744..0.04252 change=0.0404
+  #125..125 x1 REJECT newton|Newton line search stalled at residual #; active-set pass=# step=0.03659..0.03659 change=NaN
+  #126..126 x1 ok be-state step=0.01829..0.01829 change=0.0205
+  #127..127 x1 REJECT newton|Newton line search stalled at residual #; active-set pass=# step=0.02570..0.02570 change=NaN
+  #128..128 x1 REJECT newton|Newton iteration limit at residual #; active-set pass=# step=0.01285..0.01285 change=NaN
+  #129..129 x1 ok be-state step=0.006425..0.006425 change=0.00716
+  #130..130 x1 REJECT newton|Newton iteration limit at residual #; active-set pass=# step=0.01285..0.01285 change=NaN
+  #131..131 x1 ok be-state step=0.006425..0.006425 change=0.00715
+  #132..132 x1 REJECT newton|Newton iteration limit at residual #; active-set pass=# step=0.01285..0.01285 change=NaN
+  #133..133 x1 REJECT newton|Newton line search stalled at residual #; active-set pass=# step=0.006425..0.006425 change=NaN
+  #134..134 x1 ok be-state step=0.003213..0.003213 change=0.00357
+  #135..135 x1 REJECT newton|Newton iteration limit at residual #; active-set pass=# step=0.006425..0.006425 change=NaN
+  #136..136 x1 REJECT newton|Newton line search stalled at residual #; active-set pass=# step=0.003213..0.003213 change=NaN
+  #137..142 x6 ok be-state step=0.001606..0.02789 change=0.00176
+  #143..143 x1 REJECT be-state step=0.03137..0.03137 change=0.0630
+  #144..178 x35 ok be-state step=0.01568..0.3257 change=0.0243
+  #179..180 x2 REJECT be-state step=3.600..7.200 change=0.0834
+  #181..186 x6 ok be-state step=1.046..28.80 change=0.0391
+  #187..187 x1 REJECT be-state step=57.60..57.60 change=0.0741
+  #188..190 x3 ok be-state step=21.60..28.80 change=0.0368
+  #191..194 x4 REJECT newton|Newton line search stalled at residual #; active-set pass=# step=0.4500..3.600 change=NaN
+STALLS (no step attempt finished for at least 300 ms)
+SAMPLES 43 every 50 ms
+LEAF frames
+    9.3% PassiveNetwork$Pipe.minimumArea:359
+    4.7% MixtureViscosity.vapor:203
+    4.7% PengRobinsonKernel.evaluatePrepared:367
+    4.7% DeterministicMath.log:31
+    4.7% DeterministicMath.pow:89
+    2.3% DeterministicMath.exp:43
+    2.3% TranslatedPengRobinson.prepare:252
+    2.3% SparseLuSolver$Storage.factor0:141
+    2.3% V3WaterProperties.wagnerPruss:65
+    2.3% PassiveStepSolver.poolHeat:3909
+    2.3% PengRobinsonKernel.evaluate:250
+    2.3% SteamVirial.polynomial:103
+INCLUSIVE methods
+  100.0% HoldFuzzTest.run
+  100.0% TimeScaleStudyTest.study
+  100.0% HoldFuzzTest$World.tick
+   97.7% ProcessSolveServices$FluidIslandCommand.solve
+   95.3% PassiveIntervalSolver.run
+   95.3% PassiveStepSolver.solve
+   95.3% PassiveIntervalSolver.solve
+   95.3% PassiveIntervalSolver.integrate
+   95.3% RetainedSolver.solve
+   74.4% SparseNewton.solve
+   37.2% SparseNewton.differentiate0
+   37.2% SparseNewton.differentiate1
+   37.2% SparseNewton.differentiate
+   30.2% SparseNewton.evaluate
+   30.2% PassiveStepSolver$Equations.residual
+   30.2% PassiveStepSolver$Equations.differentiateEntries
+   25.6% PassiveStepSolver$Equations.decode
+   18.6% PhaseLayout.decode
+   18.6% PassiveStepSolver$Equations.transport
+   16.3% FluidThermodynamics.state
+   16.3% FluidThermodynamics.adoptingState
+   16.3% HoldFuzzTest$World.runTo
+   14.0% PassiveStepSolver$Equations.nodeAccumulate
+   11.6% PassiveStepSolver$Equations.flow
+   11.6% FluidThermodynamics.phaseStream
+    9.3% PassiveStepSolver$Equations.cap
+    9.3% PassiveNetwork$Pipe.minimumArea
+    9.3% PassiveStepSolver$Equations.baseCap
+    9.3% MixtureViscosity.vapor
+    9.3% PassiveStepSolver$Equations.capLimit
+    9.3% HydrocarbonModel.phase
+    7.0% TranslatedPengRobinson.evaluateValues
+    7.0% PengRobinsonKernel.evaluate
+    7.0% NetworkPhaseEngine.ph
+    7.0% PassiveStepSolver$Equations.<init>
+    7.0% PassiveStepSolver.viscosity
+    7.0% PassiveStepSolver.initialPhaseSeeds
+    7.0% FluidTpEquilibrium.solvePh
+    7.0% PassiveStepSolver.arrivingPhases
+    7.0% FluidThermodynamics.vaporStream
+    7.0% FluidTpEquilibrium.ph
+    7.0% PassiveStepSolver$Equations.edgeRows
+    7.0% SparseNewton.factor
+    7.0% FluidThermodynamics.equilibriumPH
+    4.7% ViscosityCorrelation.evaluate

@@ -12,11 +12,12 @@ class WearTest {
     @Test
     void cavitationLivesMatchThePlan() {
         assertEquals(1, Wear.intensity(Wear.PEAK), 1e-12, "the erosion peak is one");
-        assertEquals(2.0, hours(2.06), .05, "2.0 h at the peak");
-        assertEquals(5.1, hours(1), .05, "5.1 h at NPSH3");
-        assertEquals(18.9, hours(3.5), .05, "18.9 h at sigma 3.5");
+        // Process time (batch 2026-11-11-minecraft-time-delta, owner T3): four times the old online lives, the same play time at factor 4.
+        assertEquals(8.0, hours(2.06), .2, "8.0 h at the peak");
+        assertEquals(20.4, hours(1), .2, "20.4 h at NPSH3");
+        assertEquals(75.6, hours(3.5), .2, "75.6 h at sigma 3.5");
         // The peak is the shortest life.
-        for (double s = .1; s < 4; s += .01) assertTrue(hours(s) >= 2.0 - 1e-9, "sigma " + s);
+        for (double s = .1; s < 4; s += .01) assertTrue(hours(s) >= 8.0 - 1e-9, "sigma " + s);
     }
 
     @Test
@@ -29,8 +30,8 @@ class WearTest {
     }
 
     @Test
-    void runningDryLastsTenMinutesAndTheSwitchStopsAllWear() {
-        assertEquals(600, Wear.life(Double.NaN, true, Wear.Settings.DEFAULT), 1e-9);
+    void runningDryLastsFortyProcessMinutesAndTheSwitchStopsAllWear() {
+        assertEquals(2400, Wear.life(Double.NaN, true, Wear.Settings.DEFAULT), 1e-9);
         var off = new Wear.Settings(false, 2, 10);
         assertEquals(0, Wear.rate(2.06, true, off));
         // The config scales each life.

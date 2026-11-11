@@ -153,11 +153,11 @@ public final class PrimeMovers {
     }
 
     /** A committed or replayed span: each fuel void's fired heat, supply and phase, each coil's heat. Returns the units whose fuel was booked. */
-    List<Long> booked(long start, long end, PassiveIntervalSolver.Result result) {
+    List<Long> booked(long start, long end, PassiveIntervalSolver.Result result, com.wormzjl.icheme.science.fluid.SimulationTime time) {
         if (end <= start) return List.of();
         var solved = result.graph();
         var average = result.averageMassFlows();
-        double seconds = (end - start) / 20.0;
+        double seconds = time.seconds(end - start);
         Map<Long, Double> heat = null;
         var out = new ArrayList<Long>();
         for (int e = 0; e < solved.pipes().size(); e++) {

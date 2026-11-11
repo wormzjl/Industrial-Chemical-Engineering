@@ -136,7 +136,7 @@ class DeviceColumnTest {
     void aPumpsSuctionAndHealthFitTheDoor() {
         var texts = new HeatControlColumnTest.Recording();
         var driven = new DeviceColumn.Drive(texts.get("drive_line_poles", texts.get("driver.motor"), "30.0", 2), texts.get("drive_state", "RUNNING", "2950"), true, false);
-        var readings = new DeviceColumn.Suction("6.8", "3.3", "0.4", "73.0");
+        var readings = new DeviceColumn.Suction("6.8", "3.3", "0.4", "73.0", "87.6");
         var none = new DeviceColumn.Suction("—", "—", "—", "100.0");
         for (var drive : java.util.Arrays.asList(driven, null))
             for (boolean edit : new boolean[]{true, false})
@@ -157,7 +157,7 @@ class DeviceColumnTest {
                     assertTrue(intake > drives && health == intake + 1 && phases == health + 1, what + ": Suction and Health after the drive, before the Phases");
                     var suctionRows = ((Column.Group) rows.get(intake)).rows();
                     assertEquals(List.of("npsh:available", "npsh:required", "npsh:gas"), suctionRows.stream().map(r -> ((Column.Reading) r).key()).toList(), what);
-                    assertEquals("health", ((Column.Reading) ((Column.Group) rows.get(health)).rows().getFirst()).key(), what);
+                    assertEquals(List.of("health", "life"), ((Column.Group) rows.get(health)).rows().stream().map(r -> ((Column.Reading) r).key()).toList(), what + ": the health left, then its life in minutes of play");
                     for (int width = 300; width <= 790; width += 7) {
                         var column = Column.place(rows, 10, 74, FluidGuiLayout.side(width) - 10, M, Column.Metrics.COMPACT);
                         for (var p : column.rows()) {
@@ -342,5 +342,31 @@ class DeviceColumnTest {
         assertTrue(basis.soft() && basis.active(), "the basis is a display key, a reader's too");
         assertEquals("Crystals", ((Column.Split) phases.rows().get(1)).shares().get(3).label());
         assertEquals(3, phases.rows().size(), "a mole basis that leaves custom solids out says so");
+    }
+
+    /**
+     * A pressure safety valve's group (batch 2026-11-11-gas-blanketing): an editor's set pressure entry, a reader's meter,
+     * the host's pressure only where no blanketing valve's group shows it, what it relieves and where to; every line in
+     * en_us; a drum's page with both valves fits the design view.
+     */
+    @Test
+    void aSafetyValvesGroupHoldsItsSetPressureItsReliefAndItsDischargeAndFitsBesideTheBlanketingValve() {
+        var texts = new HeatControlColumnTest.Recording();
+        var editor = (Column.Group) DeviceColumn.reliefValve(true, "bar", "4.013", null, "1.111", "kg/s", true, texts).getFirst();
+        assertEquals("Safety valve", editor.title());
+        assertEquals("relief", ((Column.Field) editor.rows().getFirst()).key());
+        assertEquals(List.of("meter:relief_flow", "meter:relief_discharge"), editor.rows().stream().skip(1).map(r -> ((Column.Reading) r).key()).toList(), "no pressure beside a blanketing valve's");
+        assertEquals("Air", ((Column.Reading) editor.rows().getLast()).value());
+        var reader = (Column.Group) DeviceColumn.reliefValve(false, "bar", "3.000", "2.998", "0.000", "kg/s", false, texts).getFirst();
+        assertEquals(List.of("meter:relief_set", "meter:relief_pressure", "meter:relief_flow", "meter:relief_discharge"), reader.rows().stream().map(r -> ((Column.Reading) r).key()).toList());
+        assertEquals("Piped", ((Column.Reading) reader.rows().getLast()).value());
+        var blanket = DeviceColumn.blanketValve(true, "bar", "1.213", "4.012", texts);
+        assertEquals(List.of("Blanketing valve"), blanket.stream().map(r -> ((Column.Group) r).title()).toList(), "one group under the valve's own plate");
+        var both = DeviceColumn.accessories(blanket, DeviceColumn.reliefValve(true, "bar", "4.013", null, "1.111", "kg/s", true, texts));
+        assertEquals(List.of("Blanketing valve", "", "Safety valve"), both.stream().map(r -> r instanceof Column.Group g ? g.title() : "").toList(), "two groups, a gap between");
+        int view = FluidGuiLayout.doorView(FluidGuiLayout.HEIGHT);
+        for (int width : new int[]{464, 790})
+            assertTrue(Column.place(both, 10, 74, FluidGuiLayout.side(width) - 10, M, Column.Metrics.COMPACT).bounds().h() <= view, "both valves fit the design view at " + width);
+        assertEquals(Set.of(), texts.missing);
     }
 }

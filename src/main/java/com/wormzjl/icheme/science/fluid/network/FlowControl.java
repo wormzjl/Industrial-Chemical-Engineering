@@ -316,8 +316,10 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
      * mass flow, its {@link ControlValve#massTarget}, which the engine sets once per slice from the train's power demand.
      * {@code BURNER} (batch 2026-11-09-furnace-fuel-power): a fired heater's fuel valve, on the run into its firebox; the engine
      * sets its mass target once per slice from the radiant coil's demand ({@link Burners}), 0 with the burners out or unpowered.
-     * {@code FLARE} (batch 2026-11-09-flare-stack): a flare's tip limit, on the run into its tip; the engine sets its mass
-     * target once per slice to the most the flare passes ({@link Flare#limit}), 0 while solids arrive.
+     * {@code FLARE} (batch 2026-11-09-flare-stack): a flare's tip, on the run into it; the engine sets its mass target once per
+     * slice, 0 while solids arrive (owner X5: blocked), else open. An open tip regulates nothing: it is a bare line, its flow
+     * what the pressure behind it drives through the tip (batch 2026-11-11-gas-blanketing, owner D6: "Flare flowrate should
+     * vary with backpressure"); its stable velocity and rating are its flame's status ({@code Flares}), not a limit.
      * {@code STILL} (batch 2026-11-09-batch-distiller): a batch still's outlet valve, on the run out of its distillate or vent
      * generator; the engine sets its mass target once per slice from what the still's head account holds.
      * {@code EJECTOR} (batch 2026-11-10-steam-ejector-flow): a steam ejector's motive valve, inside the set from its motive
@@ -326,11 +328,13 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
      */
     enum ValveSource { NONE, PRESSURE, MASS_FLOW, VOLUME_FLOW, SHAFT_SPEED, BURNER, FLARE, STILL, EJECTOR,
         /** A prime mover's fuel valve (batch 2026-11-10-prime-movers): on the run into its fuel void; the engine sets its mass target once per slice from its governor. */
-        ENGINE;
+        ENGINE,
+        /** A vessel's gas blanketing valve (batch 2026-11-11-gas-blanketing): on the run into its blanket gas port; the interval solver sets its mass target at each step to the gas its vessel lacks at its set pressure ({@link GasBlanket#plan}). */
+        BLANKET;
         /** Whether a valve of this source regulates its mass flow. */
-        public boolean mass(){return this==MASS_FLOW||this==SHAFT_SPEED||this==BURNER||this==FLARE||this==STILL||this==EJECTOR||this==ENGINE;}
+        public boolean mass(){return this==MASS_FLOW||this==SHAFT_SPEED||this==BURNER||this==FLARE||this==STILL||this==EJECTOR||this==ENGINE||this==BLANKET;}
         /** Whether the engine sets this valve's mass target each slice (a governor or a fuel valve), not the player. */
-        public boolean planned(){return this==SHAFT_SPEED||this==BURNER||this==FLARE||this==STILL||this==EJECTOR||this==ENGINE;}
+        public boolean planned(){return this==SHAFT_SPEED||this==BURNER||this==FLARE||this==STILL||this==EJECTOR||this==ENGINE||this==BLANKET;}
         /** Whether this is a valve the engine builds into a sink (a firebox or a flare tip), on the run into it. */
         public boolean sink(){return this==BURNER||this==FLARE||this==ENGINE;}
     }
@@ -349,7 +353,7 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
         public static ControlValve burner(){return new ControlValve(ValveSource.BURNER,200000,0,.01,BURNER_SENSOR,0);}
         /** A flare's tip limit's source identity. */
         public static final java.util.UUID FLARE_SENSOR=new java.util.UUID(0x666c617265000000L,1);
-        /** A flare's tip limit, shut until its first slice plan. */
+        /** A flare's tip, shut until its first slice plan. */
         public static ControlValve flare(){return new ControlValve(ValveSource.FLARE,200000,0,.01,FLARE_SENSOR,0);}
         /** A batch still's outlet valve's source identity. */
         public static final java.util.UUID STILL_SENSOR=new java.util.UUID(0x7374696c6c000000L,1);
@@ -363,10 +367,15 @@ public sealed interface FlowControl permits FlowControl.Passive,FlowControl.Move
         public static final java.util.UUID ENGINE_SENSOR=new java.util.UUID(0x656e67696e650000L,1);
         /** A prime mover's fuel valve, shut until its first slice plan. */
         public static ControlValve engine(){return new ControlValve(ValveSource.ENGINE,200000,0,.01,ENGINE_SENSOR,0);}
+        /** A gas blanketing valve's source identity. */
+        public static final java.util.UUID BLANKET_SENSOR=new java.util.UUID(0x626c616e6b657400L,1);
+        /** A vessel's gas blanketing valve, shut until its first slice plan; its set pressure is its vessel's ({@link PassiveNetwork.Inventory#blanket}). */
+        public static ControlValve blanket(){return new ControlValve(ValveSource.BLANKET,200000,0,.01,BLANKET_SENSOR,0);}
         @Override public boolean pressureControl(){return source==ValveSource.PRESSURE;}
         @Override public boolean massControl(){return source.mass();}
-        @Override public boolean bare(){return sensor==null;}
-        public double target(){return switch(source){case NONE,PRESSURE->targetPressure;case MASS_FLOW,SHAFT_SPEED,BURNER,FLARE,STILL,EJECTOR,ENGINE->massTarget;case VOLUME_FLOW->volumeTarget;};}
+        /** No sensor, or an open flare tip (owner D6): the line's own law, no regulation. */
+        @Override public boolean bare(){return sensor==null||source==ValveSource.FLARE&&massTarget>0;}
+        public double target(){return switch(source){case NONE,PRESSURE->targetPressure;case MASS_FLOW,SHAFT_SPEED,BURNER,FLARE,STILL,EJECTOR,ENGINE,BLANKET->massTarget;case VOLUME_FLOW->volumeTarget;};}
         @Override public double targetMassFlow(double density){return source.mass()?massTarget:volumeTarget*density;}
         public ControlValve withTarget(double value){return new ControlValve(source,source==ValveSource.PRESSURE?value:targetPressure,source.mass()?value:massTarget,source==ValveSource.VOLUME_FLOW?value:volumeTarget,sensor,Math.addExact(revision,1));}
         /** A governor valve's mass target for one slice (W3): a slice input, its revision kept, as a column's port plan is. */

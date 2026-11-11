@@ -1,0 +1,252 @@
+diff --git a/src/main/java/com/wormzjl/icheme/runtime/fluid/IslandCertificate.java b/src/main/java/com/wormzjl/icheme/runtime/fluid/IslandCertificate.java
+index 914eeb6b2..36d91fb23 100644
+--- a/src/main/java/com/wormzjl/icheme/runtime/fluid/IslandCertificate.java
++++ b/src/main/java/com/wormzjl/icheme/runtime/fluid/IslandCertificate.java
+@@ -221,7 +221,7 @@ public final class IslandCertificate {
+             double change=Math.abs(b.energy[n]-a.energy[n]);
+             if(change!=0){double scale=energyScale(t);double ratio=scale>0?change/scale:Double.POSITIVE_INFINITY;if(ratio>energy){energy=ratio;energyAt="node "+t.id()+" energy";}}
+         }
+-        var q1=a.result.averageMassFlows();var q2=b.result.averageMassFlows();double reference=b.largestFlow(),seconds=b.durationTicks/20.0;
++        var q1=a.result.averageMassFlows();var q2=b.result.averageMassFlows();double reference=b.largestFlow(),seconds=IslandClock.seconds(b.durationTicks);
+         double flow=0,worstChange=0,moves=0,largest=0;String flowAt=null;
+         for(int i=0;i<q2.length;i++) {
+             double change=Math.abs(q2[i]-q1[i]);if(change==0)continue;
+@@ -437,7 +437,7 @@ public final class IslandCertificate {
+      */
+     static IslandCertificate rebuild(Saved saved,double[] molecularWeights) {
+         var interval=saved.interval();
+-        if(interval.result().advancedSeconds()!=(interval.endTick()-interval.startTick())/20.0)
++        if(interval.result().advancedSeconds()!=IslandClock.seconds(interval.endTick()-interval.startTick()))
+             throw new IllegalArgumentException("Saved certificate interval ["+interval.startTick()+", "+interval.endTick()+"] disagrees with its result of "+interval.result().advancedSeconds()+" s");
+         var summary=new Summary(interval,molecularWeights);
+         for(int n=0;n<summary.moles.length;n++) {
+@@ -507,7 +507,7 @@ public final class IslandCertificate {
+         }
+         var pipes=new ArrayList<PipeTransfer>(recorded.pipeTransfers().size());
+         for(var p:recorded.pipeTransfers())pipes.add(new PipeTransfer(p.pipeId(),scale(p.forward(),g),scale(p.reverse(),g)));
+-        return new PassiveIntervalSolver.Result(graphAt(to),(to-from)/20.0,recorded.averageMassFlows(),0,0,g*recorded.pumpWorkJoule(),boundaries,Map.of(),
++        return new PassiveIntervalSolver.Result(graphAt(to),IslandClock.seconds(to-from),recorded.averageMassFlows(),0,0,g*recorded.pumpWorkJoule(),boundaries,Map.of(),
+                 recorded.endpointModes(),recorded.endpointHeads(),recorded.endpointFlows(),pipes,recorded.observations(),recorded.towers());
+     }
+     private static PipeTransfer.Stream scale(PipeTransfer.Stream stream,double g) {
+diff --git a/src/main/java/com/wormzjl/icheme/runtime/fluid/IslandClock.java b/src/main/java/com/wormzjl/icheme/runtime/fluid/IslandClock.java
+index 465b73c02..b61a27cb3 100644
+--- a/src/main/java/com/wormzjl/icheme/runtime/fluid/IslandClock.java
++++ b/src/main/java/com/wormzjl/icheme/runtime/fluid/IslandClock.java
+@@ -28,8 +28,11 @@ public final class IslandClock {
+     }
+     public record Slice(long startTick,long endTick,long requestId) {
+         public Slice {if(startTick<0||endTick<=startTick||requestId<=0)throw new IllegalArgumentException("Invalid simulation slice");}
+-        public double seconds(){return (endTick-startTick)/20.0;}
++        public double seconds(){return IslandClock.seconds(endTick-startTick);}
+     }
++    /** PROBE (tools/minecraft-time-delta): simulated seconds per online tick, as a multiple of the nominal 1/20 s. */
++    public static final double TIME_SCALE=Double.parseDouble(System.getProperty("icheme.probe.timeScale","1"));
++    public static double seconds(long ticks){return ticks*TIME_SCALE/20.0;}
+     /** Restores the saved clock on a shared epoch: its online tick reads exactly the saved one now. */
+     public IslandClock(Snapshot saved,LongSupplier epoch) {
+         this.epoch=Objects.requireNonNull(epoch);base=Math.subtractExact(epoch.getAsLong(),saved.onlineTick);
+diff --git a/src/main/java/com/wormzjl/icheme/science/fluid/linalg/SparseMatrix.java b/src/main/java/com/wormzjl/icheme/science/fluid/linalg/SparseMatrix.java
+index eaa59f283..047965a2e 100644
+--- a/src/main/java/com/wormzjl/icheme/science/fluid/linalg/SparseMatrix.java
++++ b/src/main/java/com/wormzjl/icheme/science/fluid/linalg/SparseMatrix.java
+@@ -4,6 +4,8 @@ import java.util.Objects;
+ 
+ /** Deeply immutable square matrix in compressed sparse column order; rows in a column are unique and sorted. */
+ public final class SparseMatrix {
++    /** PROBE (tools/minecraft-time-delta): row and column of the last non-finite entry refused. */
++    public static volatile int[] PROBE_NONFINITE;
+     private final int size;
+     private final int[] columnOffsets;
+     private final int[] rows;
+@@ -50,6 +52,7 @@ public final class SparseMatrix {
+                     throw new IllegalArgumentException("Rows must be in range, sorted, and unique");
+                 }
+                 if (!Double.isFinite(this.values[entry])) {
++                    PROBE_NONFINITE = new int[] {this.rows[entry], column}; // PROBE (tools/minecraft-time-delta)
+                     throw new IllegalArgumentException("Matrix values must be finite");
+                 }
+                 previousRow = this.rows[entry];
+diff --git a/src/main/java/com/wormzjl/icheme/science/fluid/network/PassiveIntervalSolver.java b/src/main/java/com/wormzjl/icheme/science/fluid/network/PassiveIntervalSolver.java
+index 4731d4fb8..60f7fa2a3 100644
+--- a/src/main/java/com/wormzjl/icheme/science/fluid/network/PassiveIntervalSolver.java
++++ b/src/main/java/com/wormzjl/icheme/science/fluid/network/PassiveIntervalSolver.java
+@@ -41,7 +41,7 @@ public final class PassiveIntervalSolver {
+             if(!Double.isFinite(initialStep)||initialStep<=0||!Double.isFinite(maximumStep)||maximumStep<initialStep
+                     ||maximumAttempts<1)throw new IllegalArgumentException("Invalid interval settings");
+         }
+-        public static Settings defaults(){return new Settings(1,20,1024);}
++        public static Settings defaults(){return new Settings(Double.parseDouble(System.getProperty("icheme.probe.initialStep","1")),Double.parseDouble(System.getProperty("icheme.probe.maximumStep","20")),1024);}
+     }
+     public record Result(PassiveNetwork graph,double advancedSeconds,double[] averageMassFlows,int acceptedSubsteps,int rejectedSubsteps,
+                          double pumpWorkJoule,List<ConservativeTransport.BoundaryTransfer> boundaries,Map<String,Integer> rejectionReasons,
+@@ -219,6 +219,8 @@ public final class PassiveIntervalSolver {
+         int transitionRejects=0;double beforeTransition=0;SolidEventIntegrator.Transition declared=null;
+         // The last refused state change and its step, for the algebraic-jump test.
+         double previousStateChange=0,previousStateStep=0;
++        // PROBE (tools/minecraft-time-delta): the step a Newton failed at bounds the growth for this many accepted steps.
++        int probeHold=Integer.getInteger("icheme.probe.failureCeiling",0),probeAccepts=0;double probeCeiling=0;
+         // Runs already reopened for the attempted step (same t0 and step).
+         var reopened=new HashSet<PassiveNetwork.Pipe.Identity>();double reopenElapsed=-1,reopenStep=-1;
+         // Rejections a phase hold decided: the last one, how many, and whether the latest rejection was one.
+@@ -289,6 +291,7 @@ public final class PassiveIntervalSolver {
+                 var flows=result.massFlows();for(int i=0;i<transferred.length;i++)transferred[i]+=step*flows[i];
+                 double factor=change>0?Math.clamp(.9*Math.sqrt(STATE_CAP/change),.5,2):2;
+                 h=Math.min(settings.maximumStep,Math.max(h,step)*factor);
++                if(probeCeiling>0){if(++probeAccepts>=probeHold)probeCeiling=0;else h=Math.min(h,probeCeiling*.5);}
+                 // Owner decision D42: an island the gauge reads at rest at this accepted step (NetworkReduction step 6 on its
+                 // end state and its flows) is no longer stepped. The rest of the interval is the identity: nothing moves, so
+                 // the step's transfers stand as booked and the interval's averages are what the steps moved.
+@@ -320,6 +323,7 @@ public final class PassiveIntervalSolver {
+                 else count(rejectionReasons,String.valueOf(rejected.getMessage()).replaceAll("[-+]?[0-9]+(?:\\.[0-9]+)?(?:[Ee][-+]?[0-9]+)?","#"));
+                 lastWasHold=hold!=null;
+                 rejectedCount++;consecutiveRejects++;h=step*.5;
++                if(probeHold>0&&!(rejected instanceof StateChangeRejection)){probeCeiling=step;probeAccepts=0;}
+                 if(consecutiveRejects>=20||elapsed+h==elapsed)throw new SparseNewton.Nonconvergence("Substep refinement exhausted: "+rejected.getMessage()+"; reasons="+rejectionReasons,null,phaseHoldCause(lastWasHold,lastHold,holdRejections,rejectedCount));
+             }
+         }
+diff --git a/src/main/java/com/wormzjl/icheme/science/fluid/network/PassiveStepSolver.java b/src/main/java/com/wormzjl/icheme/science/fluid/network/PassiveStepSolver.java
+index 62932b743..c8df6f705 100644
+--- a/src/main/java/com/wormzjl/icheme/science/fluid/network/PassiveStepSolver.java
++++ b/src/main/java/com/wormzjl/icheme/science/fluid/network/PassiveStepSolver.java
+@@ -62,7 +62,7 @@ public final class PassiveStepSolver {
+      * inventory (owner decision D46): nothing is booked at a mint, and the ledger reports the buffers' change as its own
+      * term ({@link #checkConservation}). A numerical regularisation sized to the flow: its mixing lag at full flow is tau.
+      */
+-    static final double HOLDUP_TAU=.05;
++    static final double HOLDUP_TAU=Double.parseDouble(System.getProperty("icheme.probe.holdupTau",".05")); // PROBE (tools/minecraft-time-delta)
+     /** The Newton's relative tolerance on its scaled rows (a taut vessel's weighted by the pressure they imply,
+      * {@link Equations#rowWeights}); the solid
+      * events read a flow within it of the island's largest as roundoff ({@code SolidEventIntegrator.still}). */
+@@ -325,6 +325,54 @@ public final class PassiveStepSolver {
+         @Override public double[] externalMoles(){return externalMoles.clone();}
+     }
+     public Result solve(PassiveNetwork graph,double dt,Runnable checkpoint){return solve(graph,dt,checkpoint,false,null);}
++    /** PROBE (tools/minecraft-time-delta): a failed pass Newton, with the rows its last iterate is largest on. */
++    private static final java.util.concurrent.atomic.AtomicInteger PROBE_FAILURES=new java.util.concurrent.atomic.AtomicInteger();
++    static final boolean PROBE_JUNCTION_RELATIVE=Boolean.getBoolean("icheme.probe.junctionRelative");
++    /** PROBE option A (HOLD_STUDY_REVIEW.md): a Newton that ends within the equation gate hands its last iterate on, and the
++     * reconstruction's gate decides. Off: the Newton's own failure stands. */
++    static final boolean PROBE_GATE_DECIDES=Boolean.getBoolean("icheme.probe.gateDecides");
++    public static final java.util.concurrent.atomic.AtomicLong PROBE_NEAR_MISSES=new java.util.concurrent.atomic.AtomicLong(),PROBE_NEWTON_FAILURES=new java.util.concurrent.atomic.AtomicLong();
++    static {
++        String out=System.getProperty("icheme.probe.countsOut");
++        if(out!=null)Runtime.getRuntime().addShutdownHook(new Thread(()->{
++            try{java.nio.file.Files.writeString(java.nio.file.Path.of(out),"newtonFailures="+PROBE_NEWTON_FAILURES.get()+" nearMissesAccepted="+PROBE_NEAR_MISSES.get()+"\n");}catch(java.io.IOException ignored){}
++        }));
++    }
++    private static SparseNewton.Result probeGateDecides(Equations equations,double[] start,SparseNewton.Settings settings,Runnable checkpoint,SparseNewton.Workspace workspace) {
++        try{return SparseNewton.solve(equations,start,settings,checkpoint,workspace);}
++        catch(SparseNewton.Nonconvergence failure) {
++            PROBE_NEWTON_FAILURES.incrementAndGet();
++            double[] last=failure.lastVariables();
++            if(!PROBE_GATE_DECIDES||last==null||failure.phaseHold()!=null)throw failure;
++            double norm;
++            try{norm=equations.residualNorm(equations.residual(last));}catch(IllegalArgumentException outside){throw failure;}
++            if(!(norm<=Double.parseDouble(System.getProperty("icheme.probe.nearGate","1e-8"))))throw failure;
++            PROBE_NEAR_MISSES.incrementAndGet();
++            return new SparseNewton.Result(last,norm,SparseNewton.ITERATIONS,0,0,0);
++        }
++    }
++    private void probeFailure(Equations e,PassiveNetwork graph,double dt,boolean rateOnly,List<FlowControl.Mode> modes,SparseNewton.Nonconvergence failure) {
++        int k=PROBE_FAILURES.incrementAndGet();if(k>10&&k%Integer.getInteger("icheme.probe.failures.every",50)!=0)return;
++        var b=new StringBuilder("PROBE_FAILURE #"+k+" dt="+dt+" rate="+rateOnly+" nodes="+graph.reservoirs().size()+" pipes="+graph.pipes().size()+" "+failure.getMessage()+"\n");
++        try {
++            double[] x=failure.lastVariables();if(x==null){System.out.print(b);return;}
++            double[] f=e.residual(x),w=e.rowWeights,f0=e.residual(e.initial());
++            b.append("  norm at start=").append(e.residualNorm(f0)).append(" at failure=").append(e.residualNorm(f)).append(" size=").append(f.length).append('\n');
++            Integer[] order=new Integer[f.length];for(int i=0;i<f.length;i++)order[i]=i;
++            Arrays.sort(order,(p,q)->Double.compare((w==null?1:w[q])*Math.abs(f[q]),(w==null?1:w[p])*Math.abs(f[p])));
++            for(int i=0;i<Math.min(4,f.length);i++) {
++                int row=order[i];
++                b.append("  row ").append(row).append(" f=").append(f[row]).append(" weight=").append(w==null?1:w[row]).append(' ').append(probeWhere(e,graph,modes,row,x)).append('\n');
++            }
++        } catch(RuntimeException ex){b.append("  (residual unavailable: ").append(ex).append(")\n");}
++        System.out.print(b);
++    }
++    private static String probeWhere(Equations e,PassiveNetwork graph,List<FlowControl.Mode> modes,int row,double[] x) {
++        if(row>=e.edgeOffset){int idx=row-e.edgeOffset;return idx<graph.pipes().size()?"pipe "+idx+" "+graph.pipes().get(idx).first()+"->"+graph.pipes().get(idx).second()+" mode="+modes.get(idx)+" control="+graph.pipes().get(idx).control().getClass().getSimpleName()+" ports="+graph.pipes().get(idx).firstPort()+"/"+graph.pipes().get(idx).secondPort()+" q="+x[row]:"edge-extra "+idx;}
++        for(int n=0;n<e.layout.length;n++)if(e.layout[n]!=null&&row>=e.offsets[n]&&row<e.offsets[n]+e.layout[n].size()){var node=graph.reservoirs().get(n);var s=node.state();
++            return "node "+n+" "+node.kind()+" local "+(row-e.offsets[n])+"/"+e.layout[n].size()+" P="+s.pressure()+" T="+s.temperature()+" m="+s.mass()+" liq="+s.liquidVolume()+" water="+s.waterVolume()+" vap="+s.vaporVolume()+" V="+node.inventory().volume()+" solids="+node.inventory().solids().empty()+(node.junction()?" ROW "+e.layout[n].probeJunctionRow(row-e.offsets[n],s):"");}
++        return "?";
++    }
+     /** The interval controller supplies only modes of its matching accepted endpoint, never a rejected attempt. */
+     Result solve(PassiveNetwork graph,double dt,Runnable checkpoint,List<FlowControl.Mode> acceptedEndpointModes){return solve(graph,dt,checkpoint,false,acceptedEndpointModes);}
+     public Result solveRate(PassiveNetwork graph,Runnable checkpoint){return solve(graph,1,checkpoint,true,null);}
+@@ -514,9 +562,17 @@ public final class PassiveStepSolver {
+             // One tolerance for every island: a taut vessel's rows carry the precision its pressure needs as weights in the
+             // norm the Newton converges on (owner decision D12, {@link Equations#rowWeights}), in place of the tenth of
+             // the tolerance a small headspace used to impose on the whole island.
+-            double tolerance=NEWTON_TOLERANCE;
+-            try{numerical=SparseNewton.solve(equations,equations.initial(),new SparseNewton.Settings(SparseNewton.ITERATIONS,tolerance,1e-6,24),checkpoint,workspace);}
++            double tolerance=Double.parseDouble(System.getProperty("icheme.probe.newtonTolerance","1e-9"));
++            try{numerical=probeGateDecides(equations,equations.initial(),new SparseNewton.Settings(SparseNewton.ITERATIONS,tolerance,1e-6,24),checkpoint,workspace);}
++            catch(IllegalArgumentException probed) {
++                if(Boolean.getBoolean("icheme.probe.failures")&&String.valueOf(probed.getMessage()).contains("Matrix values")){
++                    var at=com.wormzjl.icheme.science.fluid.linalg.SparseMatrix.PROBE_NONFINITE;double[] x0=equations.initial();
++                    System.out.println("PROBE_NONFINITE dt="+dt+" rate="+rateOnly+" row "+at[0]+": "+probeWhere(equations,graph,modes,at[0],x0)+"\n  column "+at[1]+" x="+x0[at[1]]+": "+probeWhere(equations,graph,modes,at[1],x0));
++                }
++                throw probed;
++            }
+             catch(SparseNewton.Nonconvergence failure) {
++                if(Boolean.getBoolean("icheme.probe.failures"))probeFailure(equations,graph,dt,rateOnly,modes,failure);
+                 if(failure.lastVariables()==null)throw failure;
+                 double[] trialFlows=Arrays.copyOfRange(failure.lastVariables(),equations.edgeOffset,equations.edgeOffset+graph.pipes().size());
+                 // Owner decisions D59 (4) and D14: a pump whose law pulled its suction below the vapour pressure of the liquid
+@@ -667,7 +723,7 @@ public final class PassiveStepSolver {
+             for(int node=0;node<projection.states().size();node++)if(equations.layout[node]!=null){var encoded=equations.layout[node].encode(projection.states().get(node));System.arraycopy(encoded,0,reconstructed,equations.offsets[node],encoded.length);}
+             SolverDiagnostics.count(SolverDiagnostics.verificationResiduals);
+             double maximumResidual=0;for(double residual:equations.residual(reconstructed))maximumResidual=Math.max(maximumResidual,Math.abs(residual));
+-            double gate=1e-8;
++            double gate=Double.parseDouble(System.getProperty("icheme.probe.gate","1e-8"));
+             if(maximumResidual>gate) {
+                 // Decision D13: a refused point gets one polish on a fresh Jacobian before the step is refused; see
+                 // {@link #polishRefusedPoint}. Reached only after the gate has refused, so every point it accepts is untouched.
+@@ -683,6 +739,10 @@ public final class PassiveStepSolver {
+                     System.arraycopy(polished.heads(),0,heads,0,heads.length);draws=polished.draws();
+                     projection=polished.projection();reconstructed=polished.reconstructed();maximumResidual=polished.residual();}
+             }
++            if(maximumResidual>gate&&Boolean.getBoolean("icheme.probe.failures")&&PROBE_FAILURES.incrementAndGet()%Integer.getInteger("icheme.probe.failures.every",50)<3) {
++                double[] gf=equations.residual(reconstructed);int worst=0;for(int r=1;r<gf.length;r++)if(Math.abs(gf[r])>Math.abs(gf[worst]))worst=r;
++                System.out.println("PROBE_GATE dt="+dt+" residual="+gf[worst]+" row "+worst+": "+probeWhere(equations,graph,modes,worst,reconstructed));
++            }
+             if(maximumResidual>gate){SolverDiagnostics.count(SolverDiagnostics.equationGateRejections);throw new SparseNewton.Nonconvergence("Conservative reconstruction fails equation gate: "+maximumResidual);}
+             // The ledger reads the island as it is: an emptying vessel is a vessel that ends empty, not the junction it stood
+             // as in this pass.
+@@ -764,7 +824,7 @@ public final class PassiveStepSolver {
+                                         boolean[] boundaryClosed,boolean[][] promoted,int[] foldedPhases,double tolerance,double gate,Runnable checkpoint) {
+         SolverDiagnostics.count(SolverDiagnostics.equationGatePolishes);
+         SparseNewton.Result numerical;
+-        try{numerical=SparseNewton.solve(equations,x,new SparseNewton.Settings(SparseNewton.ITERATIONS,tolerance*1e-2,1e-6,24),checkpoint,new SparseNewton.Workspace(ownership));}
++        try{numerical=probeGateDecides(equations,x,new SparseNewton.Settings(SparseNewton.ITERATIONS,tolerance*1e-2,1e-6,24),checkpoint,new SparseNewton.Workspace(ownership));}
+         catch(SparseNewton.Nonconvergence failure){return null;}
+         double[] variables=numerical.variables();var states=equations.states(variables);
+         // A trace the polished point would reactivate is an active-set change the pass loop would take (reactivate), not an
+@@ -5398,7 +5458,8 @@ public final class PassiveStepSolver {
+                 for(int c=0;c<fractions.length;c++)fractions[c]=held[c]*model.molecularWeight(c)/heldMass;
+                 return inventory.internalEnergy()/heldMass;
+             }
+-            junctionWeight=total*dt/Math.max(heldMass,1e-300);
++            // PROBE (tools/minecraft-time-delta): the rows over the larger of the holdup and the step's inflow, a weight of 1 to 2.
++            junctionWeight=total*dt/Math.max(PROBE_JUNCTION_RELATIVE?Math.max(heldMass,incomingMass[node]*dt):heldMass,1e-300);
+             // Owner decision D61: what the junction's own stock melts joins its fluid, with the crystal's offset.
+             var melt=heldMelt[node];
+             for(int c=0;c<fractions.length;c++)
+diff --git a/src/main/java/com/wormzjl/icheme/science/fluid/solver/PhaseLayout.java b/src/main/java/com/wormzjl/icheme/science/fluid/solver/PhaseLayout.java
+index e37bcefc3..ab57ad9f3 100644
+--- a/src/main/java/com/wormzjl/icheme/science/fluid/solver/PhaseLayout.java
++++ b/src/main/java/com/wormzjl/icheme/science/fluid/solver/PhaseLayout.java
+@@ -128,6 +128,13 @@ public final class PhaseLayout {
+      */
+     public double steamLogReadScale(double value){return traceDifferenceScale(Math.max(Math.abs(value),logReadFloor(differenceScales[waterVaporIndex])));}
+     public int size(){return size;}
++    /** PROBE (tools/minecraft-time-delta): what a junction's local row states. */
++    public String probeJunctionRow(int local,FluidThermodynamics.State state) {
++        int m=junctionBasis.length;
++        if(local<m-1){int i=junctionBasis[local];double[] l=state.liquidView(),v=state.vaporView();double moles=i==l.length?state.waterLiquid()+state.waterVapor():l[i]+v[i],total=state.waterLiquid()+state.waterVapor();for(int c=0;c<l.length;c++)total+=l[c]+v[c];
++            return "mixing component "+i+" mole fraction "+moles/total+" (basis "+m+", bulk "+junctionBasis[m-1]+")";}
++        return local==m-1?"continuity (basis "+m+")":local==m?"enthalpy (basis "+m+")":local==m+1?"normalization":"equilibrium/solid "+(local-m-2);
++    }
+     /** The local column of the pressure unknown, {@code ln(P / 1e5)}; every layout has one. */
+     public int pressureVariable(){return pressureIndex;}
+     public int componentBalanceCount(){return components.length+(waterLiquidIndex>=0||waterVaporIndex>=0?1:0);}

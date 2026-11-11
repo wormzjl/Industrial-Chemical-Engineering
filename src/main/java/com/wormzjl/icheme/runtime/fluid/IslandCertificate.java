@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.runtime.fluid;
 
+import com.wormzjl.icheme.science.fluid.SimulationTime;
 import com.wormzjl.icheme.science.fluid.network.*;
 import com.wormzjl.icheme.science.fluid.state.SolidInventory;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
@@ -43,6 +44,8 @@ public final class IslandCertificate {
     static final class Summary {
         final Interval interval;
         final long startTick,endTick;final int durationTicks;
+        /** The process time the interval spans: its ticks under the island's time factor. */
+        final SimulationTime time;final double seconds;
         final PassiveNetwork before,after;final PassiveIntervalSolver.Result result;
         final double[][] moles;final double[] energy;final int[] phases;
         /** The largest relative change of any finite node's (vessel's or junction's) temperature or pressure over the interval. */
@@ -58,8 +61,11 @@ public final class IslandCertificate {
          * ({@code PassiveIntervalSolver.flushTraces}), a one-time removal that linear replay must not repeat. */
         final boolean flushed;
         /** {@code molecularWeights} (kg/mol, conserved-component order) weigh the finite inventories for {@link #referenceMass}. */
-        Summary(Interval interval,double[] molecularWeights) {
+        Summary(Interval interval,double[] molecularWeights){this(interval,molecularWeights,SimulationTime.ONLINE);}
+        /** {@code time} is the island's time factor ({@link FluidThermodynamics#time}). */
+        Summary(Interval interval,double[] molecularWeights,SimulationTime time) {
             this.interval=interval;startTick=interval.startTick;endTick=interval.endTick;durationTicks=Math.toIntExact(endTick-startTick);
+            this.time=java.util.Objects.requireNonNull(time);seconds=time.seconds(durationTicks);
             before=interval.before;result=interval.result;after=result.graph();
             if(before.reservoirs().size()!=after.reservoirs().size()||before.pipes().size()!=after.pipes().size())throw new IllegalArgumentException("Interval changed the island's structure");
             int nodes=after.reservoirs().size();moles=new double[nodes][];energy=new double[nodes];phases=new int[nodes];
@@ -221,7 +227,7 @@ public final class IslandCertificate {
             double change=Math.abs(b.energy[n]-a.energy[n]);
             if(change!=0){double scale=energyScale(t);double ratio=scale>0?change/scale:Double.POSITIVE_INFINITY;if(ratio>energy){energy=ratio;energyAt="node "+t.id()+" energy";}}
         }
-        var q1=a.result.averageMassFlows();var q2=b.result.averageMassFlows();double reference=b.largestFlow(),seconds=b.durationTicks/20.0;
+        var q1=a.result.averageMassFlows();var q2=b.result.averageMassFlows();double reference=b.largestFlow(),seconds=b.seconds;
         double flow=0,worstChange=0,moves=0,largest=0;String flowAt=null;
         for(int i=0;i<q2.length;i++) {
             double change=Math.abs(q2[i]-q1[i]);if(change==0)continue;
@@ -278,6 +284,7 @@ public final class IslandCertificate {
         if(last.flushed)return Result.refused("the interval flushed a trace component");
         if(last.grossWithoutNet)return Result.refused("gross flow with a zero average is not rest");
         if(last.exactZero) {
+            // The recheck period is play time, a schedule quantity: ticks, whatever the time factor.
             long horizon=policy.recheckSeconds()==0?Long.MAX_VALUE:Math.addExact(last.endTick,20L*policy.recheckSeconds());
             return Result.of(new IslandCertificate(last,horizon));
         }
@@ -435,11 +442,13 @@ public final class IslandCertificate {
      * what a load materialises its island from, from the base tick to the saved committed tick. Refuses an interval
      * whose length disagrees with its result, a structure change inside it, or nonfinite per-interval deltas.
      */
-    static IslandCertificate rebuild(Saved saved,double[] molecularWeights) {
+    static IslandCertificate rebuild(Saved saved,double[] molecularWeights){return rebuild(saved,molecularWeights,SimulationTime.ONLINE);}
+    /** {@code time} is the factor the island runs under: a saved interval's seconds must be its ticks under it. */
+    static IslandCertificate rebuild(Saved saved,double[] molecularWeights,SimulationTime time) {
         var interval=saved.interval();
-        if(interval.result().advancedSeconds()!=(interval.endTick()-interval.startTick())/20.0)
+        if(interval.result().advancedSeconds()!=time.seconds(interval.endTick()-interval.startTick()))
             throw new IllegalArgumentException("Saved certificate interval ["+interval.startTick()+", "+interval.endTick()+"] disagrees with its result of "+interval.result().advancedSeconds()+" s");
-        var summary=new Summary(interval,molecularWeights);
+        var summary=new Summary(interval,molecularWeights,time);
         for(int n=0;n<summary.moles.length;n++) {
             if(summary.moles[n]==null)continue;
             for(double delta:summary.moles[n])if(!Double.isFinite(delta))throw new IllegalArgumentException("Saved certificate has a nonfinite component delta at node "+summary.after.reservoirs().get(n).id());
@@ -458,7 +467,7 @@ public final class IslandCertificate {
         if(!policy.enabled())return new Restored(null,"certificates are off (restDetection=false)");
         String difference=saved.signature().difference(Signature.of(model,policy,saved.interval().result().graph()));
         if(difference!=null)return new Restored(null,"its "+difference+" changed");
-        var rebuilt=rebuild(saved,model.molecularWeights());
+        var rebuilt=rebuild(saved,model.molecularWeights(),model.time());
         var issued=issue(rebuilt.summary,policy);
         if(issued.certificate()==null||issued.certificate().horizonTick!=saved.horizonTick())
             throw new IllegalArgumentException("Saved certificate with horizon "+saved.horizonTick()+" is not the certificate its interval gives under its own signature: "
@@ -507,7 +516,7 @@ public final class IslandCertificate {
         }
         var pipes=new ArrayList<PipeTransfer>(recorded.pipeTransfers().size());
         for(var p:recorded.pipeTransfers())pipes.add(new PipeTransfer(p.pipeId(),scale(p.forward(),g),scale(p.reverse(),g)));
-        return new PassiveIntervalSolver.Result(graphAt(to),(to-from)/20.0,recorded.averageMassFlows(),0,0,g*recorded.pumpWorkJoule(),boundaries,Map.of(),
+        return new PassiveIntervalSolver.Result(graphAt(to),summary.time.seconds(to-from),recorded.averageMassFlows(),0,0,g*recorded.pumpWorkJoule(),boundaries,Map.of(),
                 recorded.endpointModes(),recorded.endpointHeads(),recorded.endpointFlows(),pipes,recorded.observations(),recorded.towers());
     }
     private static PipeTransfer.Stream scale(PipeTransfer.Stream stream,double g) {

@@ -18,6 +18,7 @@ gradle.projectsEvaluated {
         systemProperty 'holdFuzz.strict', root.findProperty('holdFuzzStrict') ?: 'false'
         systemProperty 'holdFuzz.defaults', root.findProperty('holdFuzzDefaults') ?: 'false'
         systemProperty 'holdFuzz.counters', root.findProperty('holdFuzzCounters') ?: 'false'
+        systemProperty 'holdFuzz.timeScale', root.findProperty('holdFuzzTimeScale') ?: '1'
         systemProperty 'holdFuzz.pipeBetween', root.findProperty('holdFuzzPipeBetween') ?: 'true'
         systemProperty 'holdFuzz.out', root.findProperty('holdFuzzOut') ?: new File(here, 'logs/report.txt').absolutePath
         testLogging { showStandardStreams = true }

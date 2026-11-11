@@ -40,6 +40,12 @@ class PumpHealthTest {
         long requests;
 
         Rig(double supply) {
+            this(supply, 1, FAST);
+        }
+
+        /** The line under time factor {@code factor} and wear lives {@code wear} (batch 2026-11-11-minecraft-time-delta, W4). */
+        Rig(double supply, int factor, Wear.Settings wear) {
+            var time = com.wormzjl.icheme.science.fluid.SimulationTime.of(factor);
             coordinator = new IslandCoordinator(new IslandCoordinator.Dispatcher() {
                 public int availableWorkers() {
                     return 64 - attempts.size();
@@ -59,17 +65,17 @@ class PumpHealthTest {
                     throw new AssertionError("no deadlines here");
                 }
             }, changed -> {
-            }, () -> 0L, new IslandCoordinator.Settings(30_000_000_000L, 20_000_000_000L, 64, false, 100, CertificatePolicy.defaults()), () -> epoch[0]);
+            }, () -> 0L, new IslandCoordinator.Settings(30_000_000_000L, 20_000_000_000L, 64, false, 100, CertificatePolicy.defaults()).withTime(time), () -> epoch[0]);
             var ledger = new WorldTopologyLedger(WorldTopologyLedger.Snapshot.empty(EventPathWorld.CATALOG));
             var trains = new ShaftTrains(ledger, device -> device == 1 ? 1L : null, coordinator);
-            health = new PumpHealth(ledger, device -> device == 1 ? 1L : null, coordinator, device -> device == 1, device -> device == 1 ? new FlowControl.Pump(FLOW, 5e5) : null, () -> FAST);
+            health = new PumpHealth(ledger, device -> device == 1 ? 1L : null, coordinator, device -> device == 1, device -> device == 1 ? new FlowControl.Pump(FLOW, 5e5) : null, () -> wear);
             trains.health(health);
             trains.host(ShaftTrains.Host.NONE);
             coordinator.shafts(trains);
             var line = new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1, 0, water(supply), PassiveNetwork.NodeKind.GENERATOR),
                     new PassiveNetwork.Reservoir(2, 0, water(101325), PassiveNetwork.NodeKind.VOID)),
                     List.of(new PassiveNetwork.Pipe(10, 0, 1, FAT, new FlowControl.Pump(FLOW, 5e5))));
-            coordinator.register(new IslandCoordinator.Snapshot(1, 0, line, new IslandClock.Snapshot(0, 0, 0, 100), Optional.empty(), "READY"), model);
+            coordinator.register(new IslandCoordinator.Snapshot(1, 0, line, new IslandClock.Snapshot(0, 0, 0, 100), Optional.empty(), "READY"), model.withTime(time));
         }
 
         void tick() {
@@ -101,6 +107,26 @@ class PumpHealthTest {
         var s = water(101325);
         double rho = s.mass() / s.volume();
         return model.saturationPressure(298.15) + sigma * rho * 9.80665 * Npsh.forDuty(FLOW, 2950).required(FLOW);
+    }
+
+    /**
+     * Wear is booked over process time (batch 2026-11-11-minecraft-time-delta, W4, owner T3): at factors 4 and 72 the pump at
+     * the erosion peak loses its rate times the process seconds of the ticks that passed, factor times the play time.
+     */
+    @Test
+    void wearIsBookedOverProcessTimeAtFactorsFourAndSeventyTwo() {
+        var slow = new Wear.Settings(true, 1, 10);
+        for (int factor : new int[]{4, 72}) {
+            var rig = new Rig(supplyAt(2.06), factor, slow);
+            for (int i = 0; i < 2 * PumpHealth.CADENCE; i++) rig.tick();
+            double rate = rig.health.rate(1), before = rig.health.health(1);
+            assertEquals(Wear.rate(rig.ratio(), false, slow), rate, 1e-12, "it books its commit's rate");
+            for (int i = 0; i < 2 * PumpHealth.CADENCE; i++) rig.tick();
+            double lost = before - rig.health.health(1), expected = rate * factor * 2 * PumpHealth.CADENCE / 20.0;
+            assertEquals(expected, lost, 1e-3 * expected, "factor " + factor + ": two cadences of play are " + factor * 10 + " s of process wear");
+        }
+        assertEquals(8 * 3600, Wear.life(Wear.PEAK, false, Wear.Settings.DEFAULT), 1e-6, "the default life at the peak: 8 h of process, 2 h of play at 4");
+        assertEquals(40 * 60, Wear.life(Double.NaN, true, Wear.Settings.DEFAULT), 1e-9, "dry: 40 min of process, 10 min of play at 4");
     }
 
     @Test

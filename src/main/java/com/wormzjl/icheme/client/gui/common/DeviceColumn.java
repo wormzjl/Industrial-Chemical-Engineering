@@ -102,10 +102,14 @@ public final class DeviceColumn {
 
     /**
      * A pump's readings (batch 2026-11-03-rotating-machinery W10d, owner decision D37), as shown: NPSH available and NPSH
-     * required (m; an in-line pump's NPSH3 at its D21 duty speed), the suction's gas (% by volume) and the health left (%).
+     * required (m; an in-line pump's NPSH3 at its D21 duty speed), the suction's gas (% by volume), the health left (%) and
+     * its life, minutes of play until it fails at its present wear (— while it does not wear; batch 2026-11-11-minecraft-time-delta).
      * The status words (FAILED, CAVITATION, GAS) stay on the message display.
      */
-    public record Suction(String available, String required, String gas, String health) {
+    public record Suction(String available, String required, String gas, String health, String life) {
+        public Suction(String available, String required, String gas, String health) {
+            this(available, required, gas, health, "—");
+        }
     }
 
     /** The Suction group (NPSH available, NPSH required, gas) and the Health group (what is left), LED meters with their hovers. */
@@ -116,7 +120,8 @@ public final class DeviceColumn {
                         new Column.Reading("npsh:required", t.get("npsh_required"), s.required(), "m", t.get("npsh_required.hint")),
                         new Column.Reading("npsh:gas", t.get("gas_share"), s.gas(), "%", t.get("gas_share.hint")))),
                 new Column.Group(t.get("device_group.health"), t.get("device_group.health.hint"), List.of(
-                        new Column.Reading("health", t.get("health_left"), s.health(), "%", t.get("health_left.hint")))));
+                        new Column.Reading("health", t.get("health_left"), s.health(), "%", t.get("health_left.hint")),
+                        new Column.Reading("life", t.get("life_left"), s.life(), "min", t.get("life_left.hint")))));
     }
 
     /** The Drive group: the driver's line and state, then Open driver, a push button (it opens a page; A100). */
@@ -181,6 +186,43 @@ public final class DeviceColumn {
     }
 
     /** What the player sets on the device: its set points, a mover's limit, a valve's target, a pipe's bore. */
+    /**
+     * A drum's gas blanketing valve's page (batch 2026-11-11-gas-blanketing, owner: "a dedicated accessory page so you can
+     * configure it"): one group under the valve's own plate (owner: "Blanketing valve and PSV should be in obvious different
+     * groups"), its set pressure, an entry for an editor and a meter for a reader, then the drum's pressure.
+     */
+    public static List<Column.Row> blanketValve(boolean canEdit, String pressureUnit, String set, String pressure, HeatControlColumn.Texts t) {
+        return List.of(group(t.get("accessory.blanket.group"), canEdit ? field("blanket", t, "blanket", pressureUnit)
+                : new Column.Reading("meter:blanket_set", t.get("device_field.blanket"), set, pressureUnit, t.get("device_field.blanket.hint")),
+                new Column.Reading("meter:blanket_pressure", t.get("blanket_pressure"), pressure, pressureUnit, t.get("blanket_pressure.hint"))));
+    }
+
+    /** A drum's accessory page: the blanketing valve's group and the safety valve's, either empty, apart by a gap. */
+    public static List<Column.Row> accessories(List<Column.Row> blanket, List<Column.Row> relief) {
+        var rows = new ArrayList<Column.Row>(blanket);
+        if (!blanket.isEmpty() && !relief.isEmpty()) rows.add(new Column.Gap(ACCESSORY_GAP));
+        rows.addAll(relief);
+        return rows;
+    }
+
+    /** The gap between two valves' groups on a drum's accessory page, px. */
+    public static final int ACCESSORY_GAP = 8;
+
+    /**
+     * A pressure safety valve's group (batch 2026-11-11-gas-blanketing, owner: "PSV set pressure is set in its GUI"), on a
+     * drum's accessory page or a pipe's valve screen: its set pressure, an entry for an editor and a meter for a reader;
+     * the host's pressure where no other group shows it ({@code pressure} null: none); what it relieves and where to.
+     */
+    public static List<Column.Row> reliefValve(boolean canEdit, String pressureUnit, String set, @Nullable String pressure, String flow, String flowUnit, boolean open, HeatControlColumn.Texts t) {
+        var rows = new ArrayList<Column.Row>();
+        rows.add(canEdit ? field("relief", t, "relief", pressureUnit)
+                : new Column.Reading("meter:relief_set", t.get("device_field.relief"), set, pressureUnit, t.get("device_field.relief.hint")));
+        if (pressure != null) rows.add(new Column.Reading("meter:relief_pressure", t.get("relief_pressure"), pressure, pressureUnit, t.get("relief_pressure.hint")));
+        rows.add(new Column.Reading("meter:relief_flow", t.get("relief_flow"), flow, flowUnit, t.get("relief_flow.hint")));
+        rows.add(new Column.Reading("meter:relief_discharge", t.get("relief_discharge"), t.get(open ? "relief_discharge.open" : "relief_discharge.piped"), "", t.get("relief_discharge.hint")));
+        return List.of(new Column.Group(t.get("accessory.relief.group"), null, rows));
+    }
+
     /** A fan tower's control: manual speed or a leaving-water target. A natural tower has none. */
     public static List<Column.Row> towerControl(boolean fans, boolean target, boolean canEdit, String temperatureUnit, HeatControlColumn.Texts t) {
         if (!fans) return List.of();

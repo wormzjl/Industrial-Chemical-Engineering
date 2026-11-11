@@ -199,8 +199,40 @@ public final class EquipmentInstruments {
                     for (int i = 0; i < 2; i++) {
                         double pad = Math.min(r, .16 * d),
                                 half = Math.min(.5, .175 * d),
-                                x = cx + (i == 0 ? -pad : pad);
-                        var tap = surface.ray(1, new double[] {x, 0, cz + 1.2 * pad}, 1, BODY);
+                                x = cx + (i == 0 ? -pad : pad),
+                                z = cz + 1.2 * pad;
+                        if (i == 1 && Math.floor(x) == Math.floor(cx - pad)) {
+                            // Both flanges in one cell (a drum 3 m across, batch 2026-11-11-gas-blanketing): the safety valve's
+                            // takes the next free roof cell, beside the first, clear of the top nozzles and the probes, with
+                            // its foot at least a quarter metre inside the roof's edge. A drum with none keeps the flange in the first one's cell,
+                            // where the safety valve finds no room (ReliefValveGeometry).
+                            double fx = Math.floor(cx - pad) + .5, fz = Math.floor(z) + .5;
+                            var nozzles = new ArrayList<double[]>();
+                            for (var nozzle : north.nozzles()) {
+                                var at = north.transform().point(nozzle.base());
+                                if (at[1] > (b[1] + b[4]) / 2) nozzles.add(at);
+                            }
+                            double[] found = null;
+                            for (double[] step : new double[][] {{1, 0}, {-1, 0}, {0, 1}, {1, 1}, {-1, 1}, {1, -1}, {-1, -1}, {0, -1}}) {
+                                double px = fx + step[0], pz = fz + step[1];
+                                double ex = px - cx, ez = pz - cz, reach = d / 2 - .25;
+                                if (reach < 0 || ex * ex + ez * ez > reach * reach) continue;
+                                boolean busy = false;
+                                for (var at : nozzles) busy |= Math.floor(at[0]) == Math.floor(px) && Math.floor(at[2]) == Math.floor(pz);
+                                for (var probe : points) {
+                                    double qx = probe.tap()[0] - px, qz = probe.tap()[2] - pz;
+                                    busy |= qx * qx + qz * qz < .25;
+                                }
+                                if (busy) continue;
+                                found = new double[] {px, pz};
+                                break;
+                            }
+                            if (found != null) {
+                                x = found[0];
+                                z = found[1];
+                            }
+                        }
+                        var tap = surface.ray(1, new double[] {x, 0, z}, 1, BODY);
                         var lo = plus(tap, new double[] {-half, .08, -half});
                         reserved.add(
                                 new Reservation(
@@ -217,6 +249,34 @@ public final class EquipmentInstruments {
                         cz + (boot ? .16 : 0) * length,
                         cz + (boot ? .28 : .2) * length
                     };
+                    // The two top flanges on the crown line, one at each end of the drum, outside its nozzles and the probe row
+                    // between them (owner, 2026-11-11: "these 2 should be placed on top of drums"; of the first place, beside a
+                    // probe at mid-drum, "this location is not good"): the gas blanketing valve's at the rear, the safety valve's
+                    // at the front. Each at the outermost cell centre the drum's top still carries (at most a tenth of the
+                    // diameter past the tangent line) that stands a cell from every top nozzle and half a cell from every
+                    // probe station; an end with no such station reserves none.
+                    double half = Math.min(.5, .175 * d);
+                    var busy = new ArrayList<Double>();
+                    for (var nozzle : north.nozzles()) {
+                        var at = north.transform().point(nozzle.base());
+                        if (at[1] > (b[1] + b[4]) / 2) busy.add(at[2]);
+                    }
+                    for (int i = 0; i < 2; i++) {
+                        int inward = i == 0 ? -1 : 1;
+                        double end = cz - inward * .5 * length, station = Double.NaN;
+                        double z = i == 0 ? Math.floor(end + .1 * d - .5) + .5 : Math.ceil(end - .1 * d - .5) + .5;
+                        search:
+                        for (; i == 0 ? z > cz : z < cz; z += inward) {
+                            for (double o : busy) if (Math.abs(o - z) < 1 - 1e-9) continue search;
+                            for (double o : positions) if (Math.abs(o - z) < .5) continue search;
+                            station = z;
+                            break;
+                        }
+                        if (Double.isNaN(station)) continue;
+                        var tap = surface.ray(1, new double[] {cx, 0, station}, 1, BODY);
+                        var lo = plus(tap, new double[] {-half, .08, -half});
+                        reserved.add(new Reservation(i == 0 ? "F1" : "F2", i == 0 ? "Gas blanketing valve" : "PSV", lo, plus(lo, new double[] {2 * half, 1.5, 2 * half})));
+                    }
                     for (int i = 0; i < 3; i++)
                         points.add(
                                 top(
