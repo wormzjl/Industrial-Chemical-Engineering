@@ -331,3 +331,16 @@ Owner on section 16's question: "The pump cavitation system has been added, this
 Then, on the chosen form: vapour lock kept against removed. The removals stand only if step 7's campaign shows no new hold class against the baseline. Cases to report under each form (limit, NPSHA, sigma): water under nitrogen at 1 atm; water under carbon dioxide at 1 atm and 25 C; a dead oil under nitrogen; a separator liquid with methane at 10 bar and 310 K; LNG at its bubble point; a propane drum.
 
 Effect on existing worlds: a pump bolted to its tank starts to read NPSH and can cavitate and wear; a pump on a blanketed hydrocarbon tank gains suction margin; modes are state and health keeps its format.
+
+## 18. Stage A group 4 and the kettle's port rule (2026-11-11)
+
+Group 4 committed by the sub-thread (`ae2a457c6`; filtered run 2039 tests, 14 failing, 7 fixed, none new): section 16's provisional floor (form 0 of section 17); a junction's split no longer leaves each component's rounding remainder in the oil slot (a 1e-15 mol nitrogen "liquid" with no liquid root refused the condensate: the cooling tower's suction junction stood supersaturated, and the turbine's 342 K exhaust at 1.89 bar was a vapour 50 K below its dew point; it is now wet at 212 kPa and 395.3 K with 4.7 % liquid); the tower basin's water is accepted with its dissolved nitrogen (the loop runs at 19.94 kg/s).
+
+Suction head available at 10 L/s under 1 m of liquid (NPSH3 1.68 m), by section 16's three rules (today's by label / equilibrium / gases left out): water under nitrogen 11.04 / 1.00 / 11.04 m; a dead oil under nitrogen 1.00 / 1.00 / 12.92 m; a separator liquid at 10 bar and 310 K 1.00 / 1.00 / 135.06 m. Pulled to the gases-left-out floor plus breakdown, the junction holds 8.8 %, 49 % and 95 % vapour by volume, and the pump's head share does not see it (it reads the supplier's stream). Consequence for section 17: form T is compared only with the head share read on the suction junction's own vapour share; otherwise it is dropped.
+
+**The kettle (D11, the port's segment rule).**
+
+- Expected: 1 MW boils 0.443 kg/s of water. A top nozzle cannot reach liquid while vapour space remains.
+- What the code does: once the vent's hydraulic flow exceeds the gas capacity of the step (start gas plus boil-up), the gas is pinned and the liquid carries the rest; the space then flashes and the gas regrows, so about 21 kg/s of liquid leaves through the top port with 0.48 m3 of vapour above the pool (8.14 kg/s reported).
+- Decided (orchestrator; no owner rule moves): a phase the end state still holds is the marginal phase; a phase drawn whole is pinned at what the step could supply, its start holdup plus what forms or arrives within the step. The boil-up was already in that capacity (heat exchanger batch); the feed joins it. Without the feed (measured) a fed tank drains its water only every few slices (86 and 676 boundary reopens). A special case for top ports was rejected.
+- Pass conditions: the kettle at 0.443 kg/s; the two fed-drain tests steady; port ledgers closed at 1e-12; no new failure.
