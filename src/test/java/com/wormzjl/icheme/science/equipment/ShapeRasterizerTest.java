@@ -474,6 +474,52 @@ class ShapeRasterizerTest {
     }
 
     @Test
+    void aSafetyValvesOutletPipeStandsClearOfTheDrumItsNozzlePipesAndTheBlanketingValve() {
+        // Batch 2026-11-11-gas-blanketing, the pressure safety valve on reservation F2: the pipe cell at its outlet is no cell of
+        // the drum and no nozzle's pipe cell; the valve stands no taller than the drum's box, in its own cell beside the
+        // blanketing valve and clear of it. A standing drum 3 m across puts both flanges in one cell: the safety valve takes
+        // the next free roof cell; one 1.5 m across has none.
+        for (var heading : Heading.values()) {
+            org.junit.jupiter.api.Assertions.assertNull(ReliefValveGeometry.of(drum(1.5, 3, Orientation.VERTICAL, heading, 3)));
+            for (var shape : List.of(drum(1.5, 4, Orientation.HORIZONTAL, heading, 1), drum(3, 6, Orientation.HORIZONTAL, heading, 1),
+                    drum(5.5, 8, Orientation.HORIZONTAL, heading, 1), drum(3, 4, Orientation.VERTICAL, heading, 4), drum(5.5, 8, Orientation.VERTICAL, heading, 3))) {
+                var place = ReliefValveGeometry.of(shape);
+                org.junit.jupiter.api.Assertions.assertNotNull(place, shape.toString());
+                int[] cell = place.cell(), face = place.face();
+                int x = cell[0] + face[0], y = cell[1] + face[1], z = cell[2] + face[2];
+                var layout = ShapeRasterizer.layout(shape);
+                for (var cells : List.of(layout.shell(), layout.interior()))
+                    for (var c : cells) assertTrue(c.x() != x || c.y() != y || c.z() != z, shape + ": the outlet pipe's cell " + x + "," + y + "," + z + " is the drum's");
+                for (var port : ShapeRasterizer.ports(shape)) {
+                    int away = Math.abs(port.cell().x() + port.dx() - x) + Math.abs(port.cell().y() + port.dy() - y) + Math.abs(port.cell().z() + port.dz() - z);
+                    assertTrue(away > 0, shape + ": the outlet pipe's cell " + x + "," + y + "," + z + " is the pipe cell of nozzle " + port.nozzle());
+                }
+                double[] b = place.bounds();
+                assertTrue(b[4] <= shape.sizeY() + 1e-9, shape + ": the valve stands " + b[4] + " high in a box of " + shape.sizeY());
+                var blanket = BlanketValveGeometry.of(shape);
+                if (blanket == null) continue;
+                assertTrue(blanket.cell()[0] != cell[0] || blanket.cell()[2] != cell[2], shape + ": both valves in one cell");
+                double[] o = blanket.bounds();
+                assertTrue(b[0] >= o[3] || o[0] >= b[3] || b[2] >= o[5] || o[2] >= b[5], shape + ": the valves overlap");
+            }
+        }
+    }
+
+    @Test
+    void aSafetyValveOnAPipeStandsInsideThePipesBlock() {
+        for (double outside : new double[] {.06, .17, .33})
+            for (int face = 0; face < 3; face++)
+                for (int axis = 0; axis < 3; axis++) {
+                    if (axis == face) continue;
+                    for (int sign : new int[] {-1, 1}) {
+                        var b = ReliefValveGeometry.onPipe(face, sign, axis, outside).bounds();
+                        for (int k = 0; k < 3; k++) assertTrue(b[k] >= -1e-9 && b[k + 3] <= 1 + 1e-9, "outside " + outside + " face " + face + "/" + sign + ": " + java.util.Arrays.toString(b));
+                        assertEquals(sign > 0 ? 1 : 0, sign > 0 ? b[face + 3] : b[face], 1e-9, "its outlet is the block's face");
+                    }
+                }
+    }
+
+    @Test
     void nozzleDrawsAtTheConnectedPipeSize() {
         var standing = drum(3, 4, Orientation.VERTICAL, Heading.NORTH, 4);
         int k = 0;

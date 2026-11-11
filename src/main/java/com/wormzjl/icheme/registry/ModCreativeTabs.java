@@ -28,6 +28,7 @@ public final class ModCreativeTabs {
                 output.accept(ModItems.TEMPERATURE_GAUGE.get());
                 output.accept(ModItems.LIQUID_LEVEL_GAUGE.get());
                 output.accept(ModItems.GAS_BLANKETING_VALVE.get());
+                output.accept(ModItems.PRESSURE_SAFETY_VALVE.get());
                 output.accept(ModItems.ACCESSORY_WRENCH.get());
                 output.accept(ModItems.REPAIR_KIT.get());
                 output.accept(ModItems.PIPELINE_TOOL.get());

@@ -1472,8 +1472,11 @@ public final class EquipmentStructure {
         // A fitted gas blanketing valve (batch 2026-11-11-gas-blanketing) keeps its set pressure, its inlet where the layout now puts it.
         var valve = spec.blanket() > 0 ? com.wormzjl.icheme.runtime.instrument.InstrumentHosts.BlanketValve.of(level, vessel.origin(), vessel.shape()) : null;
         if (valve != null) { nozzles = new ArrayList<>(nozzles); nozzles.add(valve.port()); }
+        // So does a fitted pressure safety valve, its outlet the relief port where the layout now puts it.
+        var relief = spec.relief() > 0 ? com.wormzjl.icheme.runtime.instrument.InstrumentHosts.ReliefValve.of(level, vessel.origin(), vessel.shape()) : null;
+        if (relief != null) { nozzles = new ArrayList<>(nozzles); nozzles.add(relief.port()); }
         world.edit(device.id(), record.revision(), device.withPlacement(position(level, node), nozzles),
-                vessel.shape().kind().mover() || vessel.shape().kind() == EquipmentShape.Kind.FLARE_STACK || vessel.shape().kind().chimney() ? spec : new FluidDeviceSpec(vessel.shape().volume(), spec.temperature(), spec.pressure(), spec.composition(), spec.solids(), vessel.shape().levelHeight(), open(vessel), vessel.shape().fluidGeometry(),spec.tower(), valve == null ? 0 : spec.blanket()));
+                vessel.shape().kind().mover() || vessel.shape().kind() == EquipmentShape.Kind.FLARE_STACK || vessel.shape().kind().chimney() ? spec : new FluidDeviceSpec(vessel.shape().volume(), spec.temperature(), spec.pressure(), spec.composition(), spec.solids(), vessel.shape().levelHeight(), open(vessel), vessel.shape().fluidGeometry(),spec.tower(), valve == null ? 0 : spec.blanket(), relief == null ? 0 : spec.relief(), null));
         if (oldNode != null && !oldNode.equals(node) && level.getBlockEntity(oldNode) instanceof EquipmentShellBlockEntity old && old.fluidIdentity() == device.id()) old.releaseIdentity();
         if (level.getBlockEntity(node) instanceof EquipmentShellBlockEntity entity && entity.fluidIdentity() != device.id()) entity.bindIdentity(device.id());
         ShaftParts.structure(level, vessel.origin(), vessel.shape(), device.id());

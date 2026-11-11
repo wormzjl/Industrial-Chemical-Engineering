@@ -94,6 +94,9 @@ public final class ModItems {
     /** A drum's gas blanketing valve (batch 2026-11-11-gas-blanketing): fitted and removed as the tank's level gauge is. */
     public static final DeferredItem<com.wormzjl.icheme.world.item.LiquidLevelGaugeItem> GAS_BLANKETING_VALVE = ITEMS.registerItem("gas_blanketing_valve", p -> new com.wormzjl.icheme.world.item.LiquidLevelGaugeItem(p, "gas_blanketing_valve"));
 
+    /** A pressure safety valve (batch 2026-11-11-gas-blanketing): fitted on a drum's second top flange or on a pipe, and removed, as the gas blanketing valve is. */
+    public static final DeferredItem<com.wormzjl.icheme.world.item.LiquidLevelGaugeItem> PRESSURE_SAFETY_VALVE = ITEMS.registerItem("pressure_safety_valve", p -> new com.wormzjl.icheme.world.item.LiquidLevelGaugeItem(p, "pressure_safety_valve"));
+
     private ModItems() {
     }
 
