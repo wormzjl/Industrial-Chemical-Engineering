@@ -50,3 +50,7 @@ for (const gas of ['nitrogen', 'methane', 'co2']) { const k = eppr78(gas, 'propa
 // The authored library (dwsim_refinery_pr78) gives these three pairs with n-hexane; pairs it does not give are zero today.
 console.log('gas in n-hexane with the authored library k_ij:');
 for (const [gas, k] of [['nitrogen', 0.1496], ['methane', 0.04], ['co2', 0.11]]) { const x = dissolved(gas, 'hexane', k), m = MEASURED[`${gas}/hexane`]; console.log(`  ${gas.padEnd(9)} k ${k.toFixed(3)} -> ${x.toExponential(2)} (${(x / m).toFixed(2)})`); }
+// The same rule without the homomorph's own constants: the homomorph's group fractions with the liquid's own a and b.
+COMP.ethanolAsAlkane = { ...COMP.ethanol, groups: { CH3: 2, CH2: 1 }, others: 0 };
+console.log('gas in ethanol with the homomorph\'s groups and ethanol\'s own a and b:');
+for (const gas of ['nitrogen', 'methane', 'co2']) { const k = eppr78(gas, 'ethanolAsAlkane'), x = dissolved(gas, 'ethanol', k), m = MEASURED[`${gas}/ethanol`]; console.log(`  ${gas.padEnd(9)} k ${k.toFixed(3)} -> ${x.toExponential(2)} (${(x / m).toFixed(2)})`); }
