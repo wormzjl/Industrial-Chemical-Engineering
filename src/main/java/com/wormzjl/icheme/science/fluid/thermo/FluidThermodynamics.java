@@ -927,13 +927,16 @@ public final class FluidThermodynamics {
     /**
      * Whether phase {@code k} ({@link #phaseBits} order: liquid slot, vapour, aqueous slot) is below
      * {@link #VANISHING_SHARE}. Every phase is below the share by volume (owner decision of 2026-10-18: a gas holds about a
-     * hundred times its mole share in volume). A liquid is judged on its volume share alone (owner decision 2026-10-20 for
-     * the hydrocarbon liquid; W3b states it for both liquid slots: a film of any composition holds about twenty times its
-     * volume share in moles). The gas must also be below the share by moles, except in a vessel whose wall is rigid,
-     * where its volume alone is judged (owner decision of 2026-11-10).
+     * hundred times its mole share in volume). The hydrocarbon liquid (the liquid slot) is judged on its volume share alone
+     * (owner decision 2026-10-20: a methane tank at its dew point condensed 0.077 mL a step, 1.5e-6 of its moles but 7.7e-8
+     * of its volume, and the pass laid out with that film had no root above 3.7e-4 s). The aqueous liquid and the gas must
+     * also be below the share by moles, the gas except in a vessel whose wall is rigid, where its volume alone is judged
+     * (owner decision of 2026-11-10). Judged by volume alone, the condensate of a cooling humid headspace and a slow water
+     * feed into a gas tank stood as supersaturated vapour until they filled a millionth of the vessel, then condensed at once
+     * (1.2 g in a 1 m3 tank at 1.5 bar, 2 K warmer in one 0.1 s slice; W3b stage A).
      */
     private static boolean belowShare(int k,double[] e,double te,double[] ev,double tv,boolean rigid) {
-        return ev[k]<VANISHING_SHARE*tv&&(k!=1||rigid||e[k]<VANISHING_SHARE*te);
+        return ev[k]<VANISHING_SHARE*tv&&(k==0||k==1&&rigid||e[k]<VANISHING_SHARE*te);
     }
     /** A state's fluid volume by phase, in {@link #phaseBits} order. */
     private static double[] phaseVolumes(State state){return new double[]{state.slotVolume(State.LIQUID),state.vaporVolume(),state.slotVolume(State.AQUEOUS)};}
