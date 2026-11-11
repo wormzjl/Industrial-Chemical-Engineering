@@ -64,10 +64,10 @@ class CoolingTowerRuntimeTest {
     }
 
     /**
-     * No stream is refused (W3B_NETWORK_PLAN.md section 20). Ethyl mercaptan at 330 K boils at the atmosphere (its normal
-     * boiling point is 308 K): it reaches the basin with no air contact, and its vapour leaves by the basin's flash and vent.
+     * No stream is refused (COOLING_TOWER_PLAN.md). Ethyl mercaptan at 330 K is above its boiling point at one atmosphere
+     * (308 K): it flashes at the nozzle, and what stays liquid evaporates in the fill; the island keeps up without a hold.
      */
-    @Test void aPumpedBoilingHydrocarbonReachesTheBasinWithoutContactOrHold(){
+    @Test void aPumpedVolatileHydrocarbonFlashesAndEvaporatesWithoutAHold(){
         var w=new EventPathWorld();w.runTo(20);
         long id=tower(w,CoolingTower.induced(8,2,1,1),new PhysicalFluidTopology.Port(at(1,7,0),NORTH,PassiveNetwork.PhasePort.SPRAY),new PhysicalFluidTopology.Port(at(1,0,4),SOUTH,PassiveNetwork.PhasePort.LIQUID));
         double[] oil=new double[model.componentCount()];oil[oil.length-3]=1;
@@ -76,7 +76,7 @@ class CoolingTowerRuntimeTest {
         w.runTo(600);w.assertKeptUp("pumped hydrocarbon");
         var snapshot=w.coordinator.observe(w.registry.owner(id));
         var rates=snapshot.lastResult().orElseThrow().towers().get(id);
-        assertTrue(rates.status().startsWith("BOILING"),rates.status());assertEquals(0,rates.massLoss());
+        assertEquals("RUNNING",rates.status());assertTrue(rates.massLoss()>0,"it leaves with the air: "+rates);
     }
 
     @Test void anEmptyBasinPublishesItsFansThroughTheScheduledDisplay(){

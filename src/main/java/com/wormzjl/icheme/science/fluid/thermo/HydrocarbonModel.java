@@ -107,6 +107,11 @@ public final class HydrocarbonModel {
     public TranslatedPengRobinson.Workspace prepare(double t){return translated.prepare(t);}
     /** The translated EOS this model evaluates. */
     TranslatedPengRobinson translated(){return translated;}
+    /** Conserved component {@code i}'s ideal-gas enthalpy, J/mol, on the model's datum (water last; a wet list only for water). */
+    public double idealGasEnthalpy(int i,double t){return translated.idealGasEnthalpy(kernelIndex(i),t);}
+    /** Conserved component {@code i}'s ideal-gas heat capacity, J/(mol K). */
+    public double idealGasHeatCapacity(int i,double t){return translated.idealGasHeatCapacity(kernelIndex(i),t);}
+    private int kernelIndex(int i){if(i==compounds.size()&&water<0)throw new IllegalArgumentException("Water on a list without water");return i;}
 
     /** The kernel's amounts of conserved {@code amounts} (water last): the array itself on a wet list; on a dry one its compounds, water refused. */
     double[] kernelAmounts(double[] amounts) {

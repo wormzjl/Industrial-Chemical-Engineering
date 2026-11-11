@@ -1880,7 +1880,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         var still=new com.wormzjl.icheme.network.FluidNetwork.TowerPlume(target,0,(float)com.wormzjl.icheme.science.fluid.network.CoolingTower.AIR_TEMPERATURE,0,0);
         if(rates==null||!(plumeAir(rates.fill().dryAirFlow())>0))return still;
         var exhaust=com.wormzjl.icheme.science.fluid.network.TowerTransfer.exhaust(runtime.coordinator().model(owner),rates.fill());
-        float air=(float)plumeAir(rates.fill().dryAirFlow()),t=(float)exhaust.temperature(),w=(float)exhaust.humidity(),e=(float)Math.max(0,rates.fill().evaporation());
+        float air=(float)plumeAir(rates.fill().dryAirFlow()),t=(float)exhaust.temperature(),w=(float)exhaust.humidity(),e=(float)Math.max(0,rates.fill().waterLoss());
         if(!Float.isFinite(air)||!Float.isFinite(t)||!Float.isFinite(w)||!Float.isFinite(e))return still;
         return new com.wormzjl.icheme.network.FluidNetwork.TowerPlume(target,air,t,Math.clamp(w,0,1),e);
     }

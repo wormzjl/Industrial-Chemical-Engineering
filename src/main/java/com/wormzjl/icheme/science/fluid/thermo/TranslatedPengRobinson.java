@@ -208,6 +208,18 @@ public final class TranslatedPengRobinson {
     /** The equation of state this model translates; the phase-stability test runs on it (the translation cancels). */
     public PengRobinsonKernel kernel() { return kernel; }
 
+    /** Component {@code i}'s ideal-gas enthalpy at {@code temperature}, J/mol, on this model's datum (the spine variant). */
+    public double idealGasEnthalpy(int i, double temperature) {
+        if (idealGas == null) throw new IllegalStateException("No ideal-gas functions on the coefficient path");
+        return idealGas[i].enthalpy(temperature) - datumOffsets[i];
+    }
+
+    /** Component {@code i}'s ideal-gas heat capacity at {@code temperature}, J/(mol K) (the spine variant). */
+    public double idealGasHeatCapacity(int i, double temperature) {
+        if (idealGas == null) throw new IllegalStateException("No ideal-gas functions on the coefficient path");
+        return idealGas[i].heatCapacity(temperature);
+    }
+
     public Phase evaluate(double temperature, double pressure, double[] amounts, PengRobinsonKernel.Root root) {
         return evaluate(temperature,pressure,amounts,root,prepare(temperature));
     }

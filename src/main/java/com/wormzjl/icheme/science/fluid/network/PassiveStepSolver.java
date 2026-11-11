@@ -706,7 +706,7 @@ public final class PassiveStepSolver {
                 shown.set(i,NetworkReduction.ambient(model));
             }
             if(shown!=null)endStates=shown;
-            var accepted=new Result(endStates,flows,dt,numerical,acceptedModes,heads,projection.pumpWork(),projection.externalMoles(),projection.externalEnergy(),projection.inventories(),projection.boundaries(),PipeTransfer.sample(model,graph,projection.states(),flows,dt,draws),projection.filters(),observe(equations,states,flows,lawFlows,heads,acceptedModes,checkpoint),TowerExchange.readings(original,states,flows,model));
+            var accepted=new Result(endStates,flows,dt,numerical,acceptedModes,heads,projection.pumpWork(),projection.externalMoles(),projection.externalEnergy(),projection.inventories(),projection.boundaries(),PipeTransfer.sample(model,graph,projection.states(),flows,dt,draws),projection.filters(),observe(equations,states,flows,lawFlows,heads,acceptedModes,checkpoint),TowerExchange.readings(original,states,flows,draws,model));
             // The retained last solve keeps its equations and point, not their per-node decode caches (states, transport
             // rows, prepared temperature workspaces): a later reader re-decodes (review 8.7 (c) E2).
             equations.releaseDecodeCache();
@@ -4884,20 +4884,25 @@ public final class PassiveStepSolver {
             double[][] result=null;
             for(int edge=0;edge<flows.length;edge++) {
                 double q=flows[edge];if(q==0)continue;
-                int end=q>=0?0:1;var segment=segments[edge][end];
-                var pipe=graph.pipes().get(edge);var donor=states.get(end==0?pipe.first():pipe.second());double[] rates;
-                if(segment==null) {
-                    if(!FluidThermodynamics.bulkDrawsGas(donor))continue;
-                    rates=new double[6];rates[FluidThermodynamics.GAS]=Math.abs(q);
-                } else {
-                    int marginal=segment.marginalAt(PhaseDraw.held(donor));
-                    if(marginal<0&&segment.pinned().length==0)continue;
-                    rates=phaseRates(segment,edge,end,transportAt(end==0?pipe.first():pipe.second(),donor),Math.abs(q));
-                }
+                var pipe=graph.pipes().get(edge);var donor=states.get(q>=0?pipe.first():pipe.second());
+                var rates=drawRates(edge,q,donor,null);if(rates==null)continue;
                 if(result==null)result=new double[flows.length][];
                 result[edge]=rates;
             }
             return result;
+        }
+        /** {@link #draws}' entry for connection {@code edge} at flow {@code q} on its donor's {@code donor} (its transport
+         * {@code transport}, or null to build it): null where the end draws the bulk. */
+        double[] drawRates(int edge,double q,FluidThermodynamics.State donor,Transport transport) {
+            int end=q>=0?0:1;var segment=segments[edge][end];
+            if(segment==null) {
+                if(!FluidThermodynamics.bulkDrawsGas(donor))return null;
+                var rates=new double[6];rates[FluidThermodynamics.GAS]=Math.abs(q);return rates;
+            }
+            int marginal=segment.marginalAt(PhaseDraw.held(donor));
+            if(marginal<0&&segment.pinned().length==0)return null;
+            var pipe=graph.pipes().get(edge);
+            return phaseRates(segment,edge,end,transport!=null?transport:transportAt(end==0?pipe.first():pipe.second(),donor),Math.abs(q));
         }
         /** This node's transport rows at {@code state} with no prepared temperature bundle (for a point other than the
          * pass's decoded one: the reconstruction's, the error probe's). */
@@ -5208,7 +5213,13 @@ public final class PassiveStepSolver {
             double pooled=poolHeat(graph.reservoirs().get(node));stored+=dt*pooled;heat+=pooled;
             if(graph.reservoirs().get(node).inventory().tower()!=null) {
                 var flows=new double[graph.pipes().size()];for(int e=0;e<flows.length;e++)flows[e]=flow(e,x[edgeOffset+e],tr);
-                var exchange=TowerExchange.at(graph,node,Arrays.asList(st),flows,model);
+                // The stream each spray edge delivers, as this point's transport draws it (COOLING_TOWER_PLAN.md 3.1).
+                double[][] drawn=null;
+                for(int edge:nodeEdges[node]){var pipe=graph.pipes().get(edge);boolean first=pipe.first()==node;
+                    if(pipe.portAt(node)!=PassiveNetwork.PhasePort.SPRAY||!((first?-flows[edge]:flows[edge])>0))continue;
+                    int donor=first?pipe.second():pipe.first();var rates=drawRates(edge,flows[edge],st[donor],tr[donor]);
+                    if(rates!=null){if(drawn==null)drawn=new double[flows.length][];drawn[edge]=rates;}}
+                var exchange=TowerExchange.at(graph,node,Arrays.asList(st),flows,drawn,model);
                 for(int c=0;c<target.length;c++)target[c]-=dt*exchange.loss(c)/model.molecularWeight(c);
                 stored-=dt*exchange.energyWatt();heat-=exchange.energyWatt();net-=exchange.massLoss();
             }

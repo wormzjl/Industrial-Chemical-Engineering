@@ -254,7 +254,7 @@ public final class ConservativeTransport {
         TowerExchange.Rates[] towerExchanges=null;
         for(int n=0;n<nodes;n++)if(graph.reservoirs().get(n).inventory().tower()!=null){
             if(towerExchanges==null)towerExchanges=new TowerExchange.Rates[nodes];
-            towerExchanges[n]=TowerExchange.at(graph,n,candidate,flows,model);
+            towerExchanges[n]=TowerExchange.at(graph,n,candidate,flows,draws,model);
         }
         var populationBasis=new TreeMap<SolidInventory.Key,SolidInventory.Population>();
         for(var node:graph.reservoirs())for(var population:node.inventory().solids().populations())populationBasis.merge(population.key(),population,(a,b)->{if(!a.material().equals(b.material()))throw new IllegalArgumentException("Conflicting solid material definitions");return a;});
@@ -792,7 +792,7 @@ public final class ConservativeTransport {
                 if(donor==node)out+=rate;
             }
             // An emptying vessel (decision D54) passes what reaches it and its whole stock: dt (In' - Out') = -m_stock.
-            double atmospheric=graph.reservoirs().get(node).inventory().tower()==null?0:TowerExchange.at(graph,node,candidate,flows,model).massLoss();
+            double atmospheric=graph.reservoirs().get(node).inventory().tower()==null?0:TowerExchange.at(graph,node,candidate,flows,draws,model).massLoss();
             double outflow=fromJunctions+fromOthers-atmospheric+(emptying!=null&&emptying[node]!=null?emptying[node].drain():0),inflow=out-fromJunctions+atmospheric;
             if(out>0&&Double.isFinite(outflow)){double f=outflow/out;for(int edge=0;edge<flows.length;edge++){if(flows[edge]==0)continue;var pipe=graph.pipes().get(edge);if((flows[edge]>0?pipe.first():pipe.second())==node)factor[edge]=f;}}
             else if(fromOthers>0&&inflow>=0&&inflow<=fromOthers){double g=inflow/fromOthers;for(int edge=0;edge<flows.length;edge++){if(flows[edge]==0)continue;var pipe=graph.pipes().get(edge);int donor=flows[edge]>0?pipe.first():pipe.second(),receiver=flows[edge]>0?pipe.second():pipe.first();if(receiver==node&&!junction[donor])factor[edge]=g;}}

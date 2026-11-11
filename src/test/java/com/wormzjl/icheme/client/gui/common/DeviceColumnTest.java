@@ -201,7 +201,7 @@ class DeviceColumnTest {
                     column.slots();
                     assertInLine(column, "tower at " + width);
                 }
-        for (var key : List.of("inlet_temperature", "tower_basin_temperature", "bottom_pressure.hint", "tower_cooling_duty", "tower_return", "tower_evaporation", "fan_power", "tower_speed")) texts.get(key);
+        for (var key : List.of("inlet_temperature", "tower_basin_temperature", "bottom_pressure.hint", "tower_cooling_duty", "tower_return", "tower_evaporation", "tower_other_losses", "fan_power", "tower_speed")) texts.get(key);
         assertEquals(Set.of(), texts.missing);
     }
 
