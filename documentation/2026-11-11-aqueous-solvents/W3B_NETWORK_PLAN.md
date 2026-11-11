@@ -590,3 +590,21 @@ B with the rows kept (the sub-thread, from the code): possible. `HydrocarbonMode
 - 1059ece75: the aqueous row reads "Water" at 99 % water by moles or more, else "Aqueous" (plan N7; `en_us.json` only).
 - 5c85000c8: a spray end's riser is weighed with the arriving column in every reader (COOLING_TOWER_PLAN.md section 9's last open point); other ends unchanged to the bit; the 30 tower tests pass.
 - Spine packages and water (orchestrator; owner: "auto proceed"): today's behaviour stays as a documented capability limit. A package whose method takes its ideal gas from reference spines is dry on the network, and water is refused at its state. No main package has a spine; only the test package `icheme:pilot_cryogenic` does. Not chosen: giving it the cubic water now (a water spine record, `withWater` for spine methods, derived pairs, the ice crystal's datum; about half a day, for test data only), and refusing such a package at load (moves 44 test classes). When a main package gets a spine, the first of these is the work to do, and the dry-model path goes with it.
+
+## 33. The 14 flowsheet failures: causes and decisions (2026-11-12)
+
+Diagnosed by the sub-thread from probes on this branch and on main's build; nothing rerun. Decided by the orchestrator (owner: "auto proceed"); not built yet.
+
+**G1. The heat gap (7 column tests, the utility pair), and the condenser's size.**
+Expected: steam enters a column block, free water leaves, and the two water models agree. What the code does: pure liquid water on the network's model stands a constant 564.5 J/mol (31.3 kJ/kg) above V3's from 298 to 450 K at 1 to 10 bar; steam agrees within 1 J/mol. V3's liquid sits one Watson latent heat at 298.15 K below steam (44.554 kJ/mol); the network's model gives IAPWS-95's (43.990 kJ/mol). So V3's latent heat is 1.3 % high at every temperature. The difference does not cancel where water crosses the block in another phase: 326.7 mol/s of free water times 564.5 J/mol is 184.4 kW, the reported gap. The condenser sample (508.9 to 560.8 m2) is the same datum: the product water's enthalpy is 184 kW higher, the inlet 2.1 K hotter, and the extra heat lands on the gas film.
+Decision: correct the datum at its definition (`V3WaterProperties.liquidEnthalpyOffset` subtracts IAPWS's latent heat at 298.15 K, not Watson's). V3's liquid water and the network's Region 1 utility water take it. Effect: steam-stripped column duties -0.6 % on the sample, utility steam duties about -1.3 %; V3 references with condensing water move by a predicted amount. Not chosen: a constant at the boundary (it would move steam too); reading the block's streams on V3's model (the world's product water would stay off its own model).
+
+**G2a. Steam not read as saturated condensate.**
+What the code does: the kettle sets its condensate 1 mK under Wagner-Pruss's saturation temperature. The network model's own water saturates up to 0.43 K away (cubic less Wagner-Pruss: -0.02 K at 1 bar, +0.08 at 10, -0.28 at 100, -0.43 at 150, -0.26 at 200 bar), so at 200 bar the flash reads vapour.
+Decision: inside the network model, water's saturation curve is the model's own (tabulated once per model, no kernel call per read); Wagner-Pruss stays in V3. Recorded for W2's data: the alpha function's fit near 100 to 200 bar.
+
+**G2b. `waterInAHotFeedJoinsAsSteam` holds with `column.liquid_water`.**
+What the code does: the column block refuses any liquid water. On main free water was insoluble, so 50 mol/s of water in a 638 K crude at 2.5 bar was all steam. Now 0.406 mol/s dissolves in the oil (2.8e-3 by moles), with no aqueous phase.
+Decision: the check reads the aqueous liquid only; water dissolved in the oil joins the steam feed until W5 gives V3 water in its liquid.
+
+**G3. Sizing samples.** The condenser and the air cooler follow G1. P-101's NPSH (80.37 to 78.65 m) is not water: the dry crude's bubble pressure at 298.15 K went from 115.0 to 129.6 kPa with the derived pairs (light ends over the heavy cuts). Accepted as their effect; the reference is re-pinned with its cause. `UnitSizing` (2.299 to 2.319) and `SizeAll` (73.06 to 73.053) are attributed after G1.
