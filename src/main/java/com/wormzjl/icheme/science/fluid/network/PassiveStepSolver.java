@@ -1009,7 +1009,13 @@ public final class PassiveStepSolver {
             if(label<0)continue;
             double[] release=release(s,checkpoint);
             floors[edge]=SUCTION_FORM=='0'&&label==FluidThermodynamics.OIL?release[0]:release[1];
-            if(SUCTION_FORM=='G')zones[edge]=release[2];
+            // E is read on the stream the pump draws: the liquid alone through a vessel's liquid or bottom port, the whole
+            // mixture through a BULK end (a junction's, a bulk draw). Where that stream already holds vapour past the clean
+            // zone's edge at the supplier's pressure, E is that pressure (releasePressure). Cold random 181 and bundled
+            // random 6: a pump on a boiling two-phase junction, E read on its liquid alone 1.1 kPa under the junction's
+            // pressure, was left open there and the junction's rows stalled down to steps of 1e-6 and 1e-8 s.
+            var port=direct?pipe.firstPort():graph.pipes().get(walk.via()).portAt(supplier);
+            if(SUCTION_FORM=='G')zones[edge]=port==PassiveNetwork.PhasePort.BULK?mixtureEdge(s,checkpoint):release[2];
         }
         zoneEdges=zones;
         return floors;
@@ -1040,6 +1046,21 @@ public final class PassiveStepSolver {
         if(value.length()!=1||"0GT".indexOf(value.charAt(0))<0)throw new IllegalArgumentException("icheme.suctionForm: 0, G or T, not "+value);
         return value.charAt(0);
     }
+    /** {@link #mixtureEdge} worked out, keyed by the supplier state. */
+    private static final Map<FluidThermodynamics.State,Double> MIXTURE_EDGE_CACHE=Collections.synchronizedMap(new WeakHashMap<>());
+    /**
+     * The clean zone's edge E of supplier state {@code s}'s whole contents at their own enthalpy, what a BULK end draws
+     * ({@link #suctionFloors}): the lowest pressure at which the mixture holds a vapour volume share at most
+     * {@link com.wormzjl.icheme.science.machine.GasEntrainment#cleanShare} there; the supplier's own pressure where the
+     * mixture is already past it; positive infinity where there is none. Liquid alone, it is {@link #release}'s E.
+     */
+    double mixtureEdge(FluidThermodynamics.State s,Runnable checkpoint) {
+        var known=MIXTURE_EDGE_CACHE.get(s);if(known!=null)return known;
+        double e=Double.POSITIVE_INFINITY;
+        if(FluidThermodynamics.holdsLiquid(s))e=releasePressure(s,PhaseLayout.totalAmounts(s),s.enthalpy(),com.wormzjl.icheme.science.machine.GasEntrainment::cleanShare,checkpoint);
+        MIXTURE_EDGE_CACHE.put(s,e);
+        return e;
+    }
     /** The release pressures {@link #release} worked out, keyed by the supplier state (a generator keeps its state across
      * solves). */
     private static final Map<FluidThermodynamics.State,double[]> RELEASE_CACHE=Collections.synchronizedMap(new WeakHashMap<>());
@@ -1057,7 +1078,7 @@ public final class PassiveStepSolver {
      * </ol>
      * Positive infinity where there is none. Each is worked out only under the form that reads it.
      */
-    private double[] release(FluidThermodynamics.State s,Runnable checkpoint) {
+    double[] release(FluidThermodynamics.State s,Runnable checkpoint) {
         var known=RELEASE_CACHE.get(s);if(known!=null)return known;
         double[] r={Double.POSITIVE_INFINITY,Double.POSITIVE_INFINITY,Double.POSITIVE_INFINITY};
         if(FluidThermodynamics.holdsLiquid(s)) {
