@@ -43,6 +43,7 @@ Owner, 2026-11-11: add ethanol to the compound matrix, identify what it affects 
 - 2026-11-12: the cooling tower built to COOLING_TOWER_PLAN.md (sub-thread f958b4b90, faf419a4c; plan section 9): the stream from the transport, the nozzle flash on the table, no critical-temperature test, nitrogen and oxygen saturated slot by slot, ideal-gas vapour enthalpies; 24 and 6 tower tests pass, per-component ledgers closed; checkpoint format 47, no facts change; `TowerExchange.at` 35.6 to 67 us. Orchestrator: the two-reading table stays (380 K water: nozzle 0.5 K high, 13 % less flash vapour, heat conserved); three code points open.
 - 2026-11-12: sub-thread commits 969c3633b (the suction review points; E on the liquid at the suction now, W3B_NETWORK_PLAN.md section 28; 189 suction tests pass) and ab6b90d42 (the tower follow-up; outlets within 0.022 K, evaporation -0.1 % at warm inlets, +3.2 % at a 286 K inlet).
 - 2026-11-12: stage B (step 5b) items 1, 4, 5 committed (2a780f8f6, 6ef50c8cd, 4d07122fe), item 2 reverted, item 3 skipped (W3B_NETWORK_PLAN.md sections 29, 30). Cost against main: dry 1.04, wet 2.18, polar 1.42 (bounds 1.1, 1.5, 1.1). Put to the owner: the node Jacobian from the kernel's derivatives.
+- 2026-11-12: gates run once on 4d07122fe: columnGates pass, 14 flowsheet tests of holdGates fail where water crosses to V3's own water (W3B_NETWORK_PLAN.md section 31; reports before any reference moves). Step 6 started: 1059ece75 (the "Water" label at 99 % water), 5c85000c8 (the spray riser's column); spine packages stay dry, a documented capability limit (section 32).
 
 ## Tools
 
@@ -54,6 +55,7 @@ Changed so far: `science/thermo/PengRobinsonKernel`, `HuronVidalExcess`; `scienc
 
 ## Open items
 
+- holdGates: 14 flowsheet failures at the boundary between the network's water and V3's (W3B_NETWORK_PLAN.md section 31): the column block's heat gap of 0.1 %, steam not read as saturated condensate, sizing references moved by up to 10 %. Undiagnosed.
 - Cost (W3B_NETWORK_PLAN.md section 30): wet 2.18 and polar 1.42 times main after stage B, over their bounds (1.5, 1.1). Owner decision open: the analytic node Jacobian in this batch, or other bounds.
 - W3b steps 1 to 5 built, with 21 open engine and network defects and the cost step 5b (W3B_NETWORK_PLAN.md sections 10 and 15); steps 6 and 7 not started; W4 to W6 not started.
 - Cooling tower (COOLING_TOWER_PLAN.md): built (faf419a4c, follow-up ab6b90d42: the second reading smooth, the bulk stream without its solids). Open: the spray riser's density with step 6, its cost in stage B, and the four choices of section 8 for the owner.

@@ -584,3 +584,9 @@ B with the rows kept (the sub-thread, from the code): possible. `HydrocarbonMode
 2. Exactness: `BlockJacobianEquivalenceTest` asserts bit equality with the residual's column differences. It becomes a tolerance. The Newton's path moves in its last digits: the 33 junction lines, chain-100, the fluid regression and the campaign's references move once.
 3. Derivatives the kernel lacks: the partial molar volume and enthalpy follow from the ln phi derivatives only if those carry the volume translation and water's share; the share's correction has no composition derivative yet; `d(dv/dP)` needs third derivatives (read only by the acoustic velocity bound, mostly above the 100 m/s cap).
 4. The temperature column still prepares the model at the perturbed temperature (about 1 %).
+
+## 32. Step 6 started: the label, the spray riser, spine packages (2026-11-12)
+
+- 1059ece75: the aqueous row reads "Water" at 99 % water by moles or more, else "Aqueous" (plan N7; `en_us.json` only).
+- 5c85000c8: a spray end's riser is weighed with the arriving column in every reader (COOLING_TOWER_PLAN.md section 9's last open point); other ends unchanged to the bit; the 30 tower tests pass.
+- Spine packages and water (orchestrator; owner: "auto proceed"): today's behaviour stays as a documented capability limit. A package whose method takes its ideal gas from reference spines is dry on the network, and water is refused at its state. No main package has a spine; only the test package `icheme:pilot_cryogenic` does. Not chosen: giving it the cubic water now (a water spine record, `withWater` for spine methods, derived pairs, the ice crystal's datum; about half a day, for test data only), and refusing such a package at load (moves 44 test classes). When a main package gets a spine, the first of these is the work to do, and the dry-model path goes with it.
