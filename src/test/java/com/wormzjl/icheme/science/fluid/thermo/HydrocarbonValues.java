@@ -13,6 +13,8 @@ public final class HydrocarbonValues {
 
     public static TranslatedPengRobinson.Values of(HydrocarbonModel model, double temperature, double pressure, double[] amounts,
                                                    PengRobinsonKernel.Root root) {
-        return model.translated().evaluateValues(temperature, pressure, amounts, root, model.prepare(temperature));
+        // W3b: the conserved basis (compounds, then water; compounds alone pass with no water) to the kernel's.
+        return model.translated().evaluateValues(temperature, pressure, model.kernelAmounts(TestPhases.conserved(model, amounts)), root,
+                model.prepare(temperature));
     }
 }

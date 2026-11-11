@@ -1050,15 +1050,17 @@ public final class PassiveStepSolver {
         BUBBLE_CACHE.put(s,bubble);
         return bubble;
     }
-    /** The answers of {@link #liquidPH}: one hydrocarbon liquid, a vapour beside the liquid, or anything else (a refusal,
-     * a phase set the network cannot carry, no liquid). */
+    /** The answers of {@link #liquidPH}: liquid alone, a vapour beside the liquid, or anything else (a refusal, a phase set
+     * the network cannot carry, no liquid). */
     private static final int PH_LIQUID=1,PH_VAPOUR=0,PH_OTHER=-1;
-    /** The PH equilibrium of the hydrocarbon liquid {@code x} of supplier {@code s} at its enthalpy {@code h} (J) and
-     * pressure {@code p}, warm-started at the supplier's temperature, as {@link #bubblePressure} reads it. */
+    /** The PH equilibrium of the liquid {@code x} of supplier {@code s} at its enthalpy {@code h} (J) and pressure
+     * {@code p}, warm-started at the supplier's temperature, as {@link #bubblePressure} reads it. W3b: any liquid counts,
+     * water's among them (a single liquid of half water or more is labelled aqueous, so the oil label alone left a water
+     * pump with no floor and a water valve with no cavitation). */
     private int liquidPH(FluidThermodynamics.State s,double[] x,double h,double p,Runnable checkpoint) {
         FluidThermodynamics.State at;
         try{at=model.equilibriumPH(s.temperature(),p,h,x.clone(),checkpoint);}catch(IllegalArgumentException refused){return PH_OTHER;}
-        if(at==null||!FluidThermodynamics.holdsPhase(at,FluidThermodynamics.OIL))return PH_OTHER;
+        if(at==null||!(FluidThermodynamics.holdsPhase(at,FluidThermodynamics.OIL)||FluidThermodynamics.holdsPhase(at,FluidThermodynamics.AQUEOUS)))return PH_OTHER;
         return FluidThermodynamics.holdsPhase(at,FluidThermodynamics.GAS)?PH_VAPOUR:PH_LIQUID;
     }
     /**
@@ -3251,8 +3253,9 @@ public final class PassiveStepSolver {
             double margin=rhoMax*GRAVITY*(zHigh-zLow)+1;low=Math.max(low-margin-rises,1e-3*high);high+=margin+rises;
             for(int j=0;j<nodes;j++) {
                 if(unknown[j]<0)continue;var s=graph.reservoirs().get(j).state();if(!FluidThermodynamics.holdsFluid(s))continue;
-                boolean vapour=FluidThermodynamics.holdsPhase(s,FluidThermodynamics.GAS),liquid=!vapour&&FluidThermodynamics.holdsPhase(s,FluidThermodynamics.OIL);
-                if(!liquid&&!(vapour&&(FluidThermodynamics.holdsPhase(s,FluidThermodynamics.OIL)||FluidThermodynamics.holdsPhase(s,FluidThermodynamics.AQUEOUS))))continue;
+                // W3b: any liquid, water's among them (a single liquid of half water or more is labelled aqueous).
+                boolean vapour=FluidThermodynamics.holdsPhase(s,FluidThermodynamics.GAS),anyLiquid=FluidThermodynamics.holdsPhase(s,FluidThermodynamics.OIL)||FluidThermodynamics.holdsPhase(s,FluidThermodynamics.AQUEOUS),liquid=!vapour&&anyLiquid;
+                if(!liquid&&!(vapour&&anyLiquid))continue;
                 // A liquid is a liquid from its stated pressure up. Below its bubble pressure it flashes and its density falls
                 // sixty times, which the balance must see: read as a liquid, the junctions under a 1.35 MPa LNG line with a
                 // 1.25 MPa bubble point fell to 1 atm still liquid and 40 K superheated, and flashing them one by one stalled

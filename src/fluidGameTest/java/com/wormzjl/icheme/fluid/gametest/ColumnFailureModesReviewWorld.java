@@ -371,8 +371,8 @@ public final class ColumnFailureModesReviewWorld {
         for (double bar : new double[]{10, 15, 20, 30, 40, 60, 80, 120, 160, 240}) {
             double p = bar * 1e5, t = matched(model, z, h, temperature, p);
             var s = model.flashTP(t, p, z.clone(), () -> {});
-            double vapour = s.waterVapor();
-            for (double v : s.vapor()) vapour += v;
+            double vapour = 0;
+            for (double v : s.vaporAmountsView()) vapour += v;
             IChemE.LOGGER.info("review_failure supply_search bar={} T={} vapour={}", bar, String.format("%.1f", t), String.format("%.4f", vapour));
             if (!(vapour > 1e-9)) {
                 found = new double[]{matched(model, z, h, temperature, 1.2 * p), 1.2 * p};

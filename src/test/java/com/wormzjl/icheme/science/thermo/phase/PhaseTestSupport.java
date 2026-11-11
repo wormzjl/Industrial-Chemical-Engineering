@@ -175,7 +175,9 @@ final class PhaseTestSupport {
      * ({@code V3WaterProperties.dVaporMolarEnthalpyDT}); its entropy is that polynomial's Shomate entropy, anchored at the
      * standard entropy of water vapour, 188.835 J/(mol K) at 298.15 K and 1e5 Pa (CODATA key value), minus {@code R ln(P/1e5)}. Past the
      * record's range the heat capacity is held at the end value and the entropy integrates it, as the network's steam
-     * (owner rule of 2026-10-16).
+     * (owner rule of 2026-10-16). W3b: the fluid network's model holds water in its cubic and has no free water, so the
+     * free-water rule's ice (anchored at the triple point to this liquid water, with this steam) and its steam
+     * partial-pressure limit ({@link #VAPOR_LIMIT_PRESSURES}) are built here, as that model built them before.
      */
     static FreeWaterModel networkFreeWater(FluidThermodynamics fluid) {
         MaterialCatalog.Water water = network().water();
@@ -202,19 +204,37 @@ final class PhaseTestSupport {
             @Override public double maximumTemperature() { return maximum; }
             public String revision() { return water.revision(); }
         };
+        var iceData = water.ice();
+        var iceRecord = MaterialCatalog.bundled().crystals().get(iceData.crystal());
+        var triple = fluid.waterLiquid(iceRecord.anchor().temperature(), iceRecord.anchor().pressure());
+        FreeWaterIce freeWaterIce = FreeWaterIce.of(iceRecord, iceData.coefficients(), iceData.exponents(), fluid::saturationPressure,
+                triple.molarVolume(), triple.molarEnthalpy(), steam);
         return new FreeWaterModel() {
             public String revision() { return water.revision(); }
             @Override public double saturationPressure(double t) { return fluid.saturationPressure(t); }
-            @Override public double vaporPartialPressureLimit(double t) { return FluidThermodynamics.waterVaporPressureLimit(t); }
+            @Override public double vaporPartialPressureLimit(double t) { return vaporLimit(t); }
             @Override public void liquid(double t, double p, double[] out) {
                 var liquid = fluid.waterLiquid(t, p);
                 out[0] = liquid.molarVolume();
                 out[1] = liquid.molarEnthalpy();
             }
             @Override public IdealGasFunction vapor() { return steam; }
-            @Override public FreeWaterIce ice() { return fluid.freeWaterIce(); }
+            @Override public FreeWaterIce ice() { return freeWaterIce; }
         };
     }
+
+    /**
+     * The free water's qualified steam partial pressure, Pa (the network's rule until W3b): each band holds the pressure
+     * where the second-virial steam's volume first leaves 2 % of IAPWS-IF97 Region 2 at the band's lower temperature,
+     * rounded down to two digits (1.8 MPa below 500 K to 65 MPa from 875 K).
+     */
+    static double vaporLimit(double t) {
+        int band = 0;
+        while (band < VAPOR_LIMIT_TEMPERATURES.length && t >= VAPOR_LIMIT_TEMPERATURES[band]) band++;
+        return VAPOR_LIMIT_PRESSURES[band];
+    }
+    private static final double[] VAPOR_LIMIT_TEMPERATURES = {500, 525, 550, 575, 600, 625, 650, 675, 700, 725, 750, 775, 800, 825, 850, 875};
+    static final double[] VAPOR_LIMIT_PRESSURES = {1.8e6, 2.2e6, 2.8e6, 3.6e6, 4.5e6, 5.5e6, 6.7e6, 8.1e6, 9.6e6, 11e6, 13e6, 15e6, 18e6, 22e6, 27e6, 34e6, 65e6};
 
     /** The Tia Juana light assay plus 5 mol% nitrogen over the network basis (water last, zero). */
     /** Amounts over {@code contract}'s basis from (species, amount) pairs, every other species zero (owner decision O2: a

@@ -75,30 +75,38 @@ class AqueousSolventDataTest {
         assertEquals(Map.of("CH2=CH",1),catalog.groupCounts(WORLD,"Ethylene").get(ModifiedUnifac.SCHEME).counts());
         for(String compound:List.of("Propylene","Butene-1","Butadiene"))
             assertEquals("eppr78-group-definitions-r1",catalog.groupCounts(WORLD,compound).get(Eppr78Groups.SCHEME).revision(),compound);
-        assertTrue(catalog.groupCounts(WORLD,"crude_pc05").isEmpty());assertTrue(catalog.groupCounts(WORLD,"Water").isEmpty());
+        assertTrue(catalog.groupCounts(WORLD,"crude_pc05").isEmpty());
+        assertFalse(catalog.withWater(WORLD).groupCounts(WORLD,"Water").isEmpty(),"W3b: Water is a compound of the network model's cubic, with its groups");
         var henry=catalog.henryInWater(WORLD,"CarbonDioxide").orElseThrow();
         assertEquals(List.of(-8.55445,4.01195,9.52345),List.of(henry.a(),henry.b(),henry.c()));
         assertTrue(catalog.henryInWater(WORLD,"N-hexane").isEmpty());
         int gases=0;for(String gas:List.of("Hydrogen","Nitrogen","Oxygen","CarbonMonoxide","CarbonDioxide","HydrogenSulfide","Methane","Ethane"))
             if(catalog.henryInWater(WORLD,gas).isPresent())gases++;
         assertEquals(8,gases);
-        for(var p:catalog.packages().values())for(var property:p.properties())assertNull(property.pr()==null?null:property.pr().alpha(),property.id());
+        // W3b: icheme:cubic_water, which the network model adds to its package, is the one main record with an alpha of its own.
+        for(var p:catalog.packages().values())for(var property:p.properties())
+            if(!property.id().equals(CUBIC_WATER))assertNull(property.pr()==null?null:property.pr().alpha(),property.id());
     }
 
     /**
      * W3b step 2 (design N9, the owner's option 2): water as a compound of the cubic is main data,
-     * {@code icheme:cubic_water}, and the pilot reads it (its own copy is gone). No main package names it yet: the
-     * network's {@code icheme:refinery} keeps its records, its crystals and its revision until W3b step 3 moves the
-     * network onto the derived contract.
+     * {@code icheme:cubic_water}, and the pilot reads it (its own copy is gone). No main package names it: the network
+     * model adds it, with ice Ih, to a package that does not name Water ({@link MaterialCatalog#withWater}).
      */
     @Test void theCubicWaterIsMainDataAndThePilotReadsIt() {
         var catalog=MaterialCatalog.bundled();
         assertEquals("cubic-water-r1",catalog.propertyRevision(CUBIC_WATER));
         var world=catalog.requirePackage(WORLD);
-        assertFalse(world.components().contains("Water"),"the network package keeps water separate");
+        // The record is unchanged; the network's view carries Water in its cubic and ice Ih among its crystals.
+        assertFalse(world.components().contains("Water"),"the record does not name Water");
         assertEquals(List.of("icheme:crystal_carbon_dioxide_i"),world.crystals());
-        assertEquals("refinery-tier1-r3",world.revision(),"the network package record is unchanged");
+        assertEquals("refinery-tier1-r3",world.revision(),"the network package record's revision is unchanged");
         for(var p:catalog.packages().values())for(var property:p.properties())assertNotEquals(CUBIC_WATER,property.id(),p.id());
+        var wet=catalog.withWater(WORLD).requirePackage(WORLD);
+        assertEquals("Water",wet.components().getLast());
+        assertEquals(CUBIC_WATER,wet.properties().getLast().id());
+        assertEquals(List.of("icheme:crystal_carbon_dioxide_i","icheme:crystal_ice_ih"),wet.crystals());
+        assertEquals(world.components(),wet.components().subList(0,wet.components().size()-1));
         var pilotCatalog=PilotAqueousTestCatalog.catalog();
         var pilot=pilotCatalog.requirePackage(PilotAqueousTestCatalog.PACKAGE_ID);
         assertEquals("pilot-aqueous-r3",pilot.revision());

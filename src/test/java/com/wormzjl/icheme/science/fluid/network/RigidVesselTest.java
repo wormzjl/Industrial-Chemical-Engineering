@@ -6,6 +6,7 @@ import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * A rigid vessel (batch 2026-11-10-rigid-reservoir, RIGID_RESERVOIR_PLAN.md section 2; owner: "Resevoir should be rigid when
@@ -46,20 +47,24 @@ class RigidVesselTest extends PortFixture {
         var exit=new PassiveNetwork.Reservoir(2,0,nitrogenAt(101325),PassiveNetwork.NodeKind.VOID);
         var line=new PassiveNetwork.Pipe(1,0,1,List.of(new PipeResistance.Geometry(10,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0)),new FlowControl.Passive(),0,null,PhasePort.LIQUID,PhasePort.BULK);
         var result=new PassiveIntervalSolver(model).solve(new PassiveNetwork(List.of(vessel,exit),List.of(line)),600,PassiveIntervalSolver.Settings.defaults(),NOOP);
-        var end=result.graph().reservoirs().getFirst();var s=end.state();double level=(s.liquidVolume()+s.waterVolume())/end.inventory().volume();
-        System.out.println("RIGID_RUN barometric: level="+level+" P="+s.pressure()+" Pa steam="+s.waterVapor()*mw[water]+" kg advanced="+result.advancedSeconds());
+        var end=result.graph().reservoirs().getFirst();var s=end.state();double level=(TestPhases.liquidVolume(s)+TestPhases.waterVolume(s))/end.inventory().volume();
+        System.out.println("RIGID_RUN barometric: level="+level+" P="+s.pressure()+" Pa steam="+TestPhases.waterVapor(s)*mw[water]+" kg advanced="+result.advancedSeconds());
         assertEquals(600,result.advancedSeconds(),1e-9);
         assertEquals(3170,s.pressure(),100,"the water's vapour pressure at 25 °C");
         assertEquals(.53,level,.05,"(101.3 - 3.2) kPa / rho g - 9.5 m");
     }
 
-    /** 80 m3 of water under 20 m3 of nitrogen at 1 atm drawn 10 m3: the gas expands to 30 m3, 68.6 kPa; a bag stays at the ambient. */
+    /**
+     * 80 m3 of water under 20 m3 of nitrogen at 1 atm drawn 10 m3: the gas expands to 30 m3; a bag stays at the ambient. W3b:
+     * the water holds 48 mol of the nitrogen at 98.2 kPa (Henry, H = 9.1e9 Pa), which leaves it as the pressure falls: 66.5
+     * kPa of nitrogen instead of 65.4, with the water's 3.2, 69.7 kPa (68.6 before, the free water dissolving none).
+     */
     @Test void aBlanketedRigidTankDrawnTenPercentFallsBelowTheAmbientAndABagDoesNot() {
         var full=scaled(waterUnderNitrogen(.8,101325),100);
         var rigid=drawn(full,100,10,true);var bag=drawn(full,100,10,false);
         System.out.println("RIGID_RUN blanketed: rigid P="+rigid.pressure()+" Pa V="+rigid.volume()+"; bag P="+bag.pressure()+" Pa V="+bag.volume());
         assertEquals(100,rigid.volume(),1e-6);
-        assertEquals(68.6e3,rigid.pressure(),.6e3,"98.2 kPa of nitrogen to 65.4, with the water's 3.2");
+        assertEquals(69.7e3,rigid.pressure(),.6e3,"98.2 kPa of nitrogen to 66.5 with what the water gives up, and the water's 3.2");
         assertEquals(101325,bag.pressure(),1,"the bag shrinks at the ambient");
         assertEquals(90,bag.volume(),.2);
     }
@@ -83,7 +88,7 @@ class RigidVesselTest extends PortFixture {
         assertEquals(600,result.advancedSeconds(),1e-9);
         var end=result.graph().reservoirs().getFirst();
         assertEquals(rigid,end.inventory().rigid(),"a rigid tank stays rigid, a slack bag a bag");
-        return (end.state().liquidVolume()+end.state().waterVolume())/end.inventory().volume();
+        return (TestPhases.liquidVolume(end.state())+TestPhases.waterVolume(end.state()))/end.inventory().volume();
     }
 
     /** A bag filled taut from a 2 bar nitrogen supply is rigid at the step's end; an open vessel never is. */

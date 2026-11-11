@@ -9,6 +9,7 @@ import java.util.*;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * Crystals as solids through the real coordinator (milestone M3 of the unified thermo port, re-homed on main's
@@ -80,7 +81,7 @@ class CrystalIslandRuntimeTest {
 
     @Test void aCrystalBesideTwoLiquidsParksTheIslandTypedAndAFencedEventIsAcceptedWhileHeld() {
         // 40 % N2, 55 % C2H6 and 5 % CO2 at 95 K and 2 MPa: the fluid the crystal would leave is two liquids (type III).
-        double[] liquid={40,0,55,5};var state=model.state(95,2e6,liquid,new double[4],0,0,2e6);
+        double[] liquid={40,0,55,5};var state=TestPhases.state(model,95,2e6,liquid,new double[4],0,0);
         var rig=new CertifyingRig(CertificatePolicy.defaults(),model,0);rig.register(1,vessel(state));
         rig.run(300);
         var held=rig.coordinator.snapshot(1);

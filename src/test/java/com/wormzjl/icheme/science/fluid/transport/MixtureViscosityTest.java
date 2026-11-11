@@ -23,7 +23,7 @@ class MixtureViscosityTest {
                 for(var check:curve.getAsJsonArray("checks")) {
                     var row=check.getAsJsonObject();double t=row.get("temperature_kelvin").getAsDouble();
                     if(t<=pure.maximumTemperatureKelvin()||t<carrier.minimumTemperatureKelvin()||t>carrier.maximumTemperatureKelvin())continue;
-                    double[] n=new double[p.components().size()];n[solute]=.05;n[carrierIndex]=.95;
+                    double[] n=new double[catalog.conservedComponents(id).size()];n[solute]=.05;n[carrierIndex]=.95;
                     checked++;
                     double expected=Math.exp(.05*Math.log(row.get("viscosity_pascal_seconds").getAsDouble())
                             +.95*Math.log(carrier.dynamicViscosityPascalSeconds(t,ViscosityCorrelation.Phase.LIQUID)));
@@ -37,14 +37,14 @@ class MixtureViscosityTest {
     }
     @Test void pureUnsupportedSoluteDoesNotBecomeAnInventedLiquid() {
         var model=new MixtureViscosity(MaterialCatalog.bundled(),"icheme:tjl20_methane");
-        double[] n=new double[com.wormzjl.icheme.science.material.MaterialTestBasis.CRUDE];n[0]=1;
+        double[] n=new double[com.wormzjl.icheme.science.material.MaterialTestBasis.CRUDE+1];n[0]=1;
         assertThrows(IllegalArgumentException.class,()->model.liquid(300,n));
-        assertTrue(model.vapor(300,n,0)>0);
-        assertTrue(model.vapor(300,n,.1)>0);
+        assertTrue(model.vapor(300,n)>0);
+        double[] humid=n.clone();humid[humid.length-1]=.1;assertTrue(model.vapor(300,humid)>0);
     }
     @Test void crudeCompositionsHaveDifferentMaterialDependentViscosities() {
         var catalog=MaterialCatalog.bundled();var model=new MixtureViscosity(catalog,"icheme:tjl20_methane");
-        double[] light=new double[com.wormzjl.icheme.science.material.MaterialTestBasis.CRUDE],heavy=new double[com.wormzjl.icheme.science.material.MaterialTestBasis.CRUDE];light[6]=.99;light[1]=.01;heavy[com.wormzjl.icheme.science.material.MaterialTestBasis.CRUDE-1]=.99;heavy[1]=.01;
+        double[] light=new double[com.wormzjl.icheme.science.material.MaterialTestBasis.CRUDE+1],heavy=new double[com.wormzjl.icheme.science.material.MaterialTestBasis.CRUDE+1];light[6]=.99;light[1]=.01;heavy[com.wormzjl.icheme.science.material.MaterialTestBasis.CRUDE-1]=.99;heavy[1]=.01;
         assertTrue(model.liquid(300,heavy).pascalSeconds()>model.liquid(300,light).pascalSeconds());
         // Past its tables a crude liquid is continued, its table's end value held (owner rule of 2026-10-16), not refused.
         double hot=model.liquid(1000,heavy).pascalSeconds();

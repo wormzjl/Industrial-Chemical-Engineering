@@ -9,6 +9,7 @@ import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * A world on the event path for the hold-class gates (phase-ports batch, "Hold class ..." sections of
@@ -83,6 +84,8 @@ class EventPathWorld {
                 assertEquals(DIM,dimension);coordinator.topology(events,affected,replacements,model,committed,online,additions,removals,releasedFilters,commit);
             }
             public boolean acceptsRecovery(UUID player){return true;}
+            // W3b option A: a running column's outlet names its compounds and Water (as FluidWorldAuthority's host does).
+            public Set<String> portCompounds(long port){return columns==null?Set.of():columns.compounds(port);}
             public void refused(UUID event,String reason){}
             public void committed(Set<Long> removed,Set<Long> recompiled){committedRemovals.add(removed);if(columns!=null)columns.committed();}
         });
@@ -107,7 +110,7 @@ class EventPathWorld {
     /** {@code amounts}, recorded on that axis, on the world list by compound id. */
     static double[] legacy(double[] amounts) {
         var legacy=legacyAxis();if(amounts.length!=legacy.size())throw new IllegalArgumentException("A legacy composition has "+legacy.size()+" entries");
-        var ids=new ArrayList<>(CATALOG.requirePackage(CATALOG.presets().network().packageId()).components());ids.add("Water");
+        var ids=CATALOG.conservedComponents(CATALOG.presets().network().packageId());
         double[] n=new double[ids.size()];for(int i=0;i<amounts.length;i++)n[ids.indexOf(legacy.get(i))]=amounts[i];return n;
     }
     /** One mole of the compound at {@code index} of that axis, on the world list. */
@@ -193,7 +196,7 @@ class EventPathWorld {
         if(!held.isEmpty())for(var s:coordinator.snapshots()) {
             System.out.println("EVENT_PATH_ISLAND "+s.id()+" "+s.status()+" flows="+s.lastResult().map(r->java.util.Arrays.toString(r.averageMassFlows())).orElse("-"));
             for(var node:s.graph().reservoirs())System.out.println("  node "+node.id()+" "+node.kind()+" z="+node.elevation()+" empty="+node.empty()+" P="+node.state().pressure()
-                    +" T="+node.state().temperature()+" m="+node.state().mass()+" liq="+node.state().liquidVolume()+" water="+node.state().waterVolume()+" vap="+node.state().vaporVolume());
+                    +" T="+node.state().temperature()+" m="+node.state().mass()+" liq="+TestPhases.liquidVolume(node.state())+" water="+TestPhases.waterVolume(node.state())+" vap="+node.state().vaporVolume());
             for(var pipe:s.graph().pipes())System.out.println("  pipe "+pipe.first()+"->"+pipe.second()+" "+pipe.control()+" ports="+pipe.firstPort()+"/"+pipe.secondPort());
         }
         assertTrue(held.isEmpty(),label+": holds "+held);

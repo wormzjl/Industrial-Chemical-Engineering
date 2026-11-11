@@ -19,6 +19,7 @@ import java.util.*;
 import org.junit.jupiter.api.Test;
 import static com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Direction;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * Backward compatibility of the fluid checkpoint (AGENTS.md, "Saves and data formats"; batch 2026-10-26-backward-compat):
@@ -916,16 +917,16 @@ class FluidFactsCompatTest {
             assertArrayEquals(onWorld(v.moles(),axis),IslandSets.amounts(n.inventory().moles(),e.key().on(model),model),"vessel "+n.id()+": its moles are kept exactly");
             assertEquals(v.volume(),n.inventory().volume());
             assertEquals(v.temperature(),s.temperature(),1e-9*v.temperature(),"vessel "+n.id()+": its temperature is kept");
-            assertTrue(s.waterVapor()>0&&s.waterLiquid()==0&&s.waterVapor()==v.waterVapor(),"all of the water is steam, as saved");
+            assertTrue(TestPhases.waterVapor(s)>0&&TestPhases.waterLiquid(s)==0&&TestPhases.waterVapor(s)==v.waterVapor(),"all of the water is steam, as saved");
             // The restatement is a TP flash at the saved temperature and pressure (FluidFacts.rebuild): the denser virial
             // steam fills less than the wall until the island's first solve brings the contents back to it.
             assertEquals(v.pressure(),s.pressure(),"vessel "+n.id()+": restated at its saved pressure");
             assertTrue(s.volume()<v.volume(),"vessel "+n.id()+": the virial steam is denser than the ideal steam it was saved as");
             double b=SteamVirial.secondVirial(s.temperature()),t=s.temperature();
-            assertEquals(s.waterVapor()*FluidThermodynamics.R*t/(s.vaporVolume()-s.waterVapor()*b),s.waterPartialPressure(),1e-9*s.waterPartialPressure(),"the virial steam's partial pressure");
+            assertEquals(TestPhases.waterVapor(s)*FluidThermodynamics.R*t/(s.vaporVolume()-TestPhases.waterVapor(s)*b),TestPhases.waterPartialPressure(s),1e-9*TestPhases.waterPartialPressure(s),"the virial steam's partial pressure");
             energy+=n.inventory().internalEnergy()-v.energy();
-            residual+=-s.waterVapor()*s.waterPartialPressure()*t*SteamVirial.temperatureDerivative(t);
-            System.out.println("steam-v2 vessel "+n.id()+": T "+t+" K, steam "+s.waterVapor()+" mol at "+s.waterPartialPressure()+" Pa of "+s.pressure()
+            residual+=-TestPhases.waterVapor(s)*TestPhases.waterPartialPressure(s)*t*SteamVirial.temperatureDerivative(t);
+            System.out.println("steam-v2 vessel "+n.id()+": T "+t+" K, steam "+TestPhases.waterVapor(s)+" mol at "+TestPhases.waterPartialPressure(s)+" Pa of "+s.pressure()
                     +" Pa, volume "+v.volume()+" -> "+s.volume()+" m3, U "+v.energy()+" -> "+n.inventory().internalEnergy()+" J");
         }
         assertEquals(1,vessels);

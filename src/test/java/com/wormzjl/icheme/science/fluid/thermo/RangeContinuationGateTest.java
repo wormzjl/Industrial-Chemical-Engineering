@@ -44,8 +44,7 @@ class RangeContinuationGateTest {
                 checked++;
             }
         }
-        var model = FluidThermodynamics.forNetwork(catalog, NETWORK);
-        ends(model.steam(), "steam");
+        // W3b: the network's steam is water's ideal gas in the cubic, checked among the components above.
         assertTrue(checked > 50, "ideal-gas functions checked: " + checked);
     }
 
@@ -61,7 +60,7 @@ class RangeContinuationGateTest {
             double[] fit = CoefficientIdealGas.fitRange(catalog, NETWORK, property);
             double minimum = fit[0], maximum = fit[1];
             var gas = new CoefficientIdealGas(property, minimum, maximum);
-            double[] pure = new double[n];
+            double[] pure = new double[model.hydrocarbon.species().size()];
             pure[i] = 1;
             DoubleUnaryOperator cp = t -> eos.evaluateValues(t, 1000, pure, PengRobinsonKernel.Root.VAPOR, eos.prepare(t)).idealGasHeatCapacity();
             DoubleUnaryOperator h = t -> eos.evaluateValues(t, 1000, pure, PengRobinsonKernel.Root.VAPOR, eos.prepare(t)).molarEnthalpy();

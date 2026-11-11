@@ -20,6 +20,7 @@ import com.wormzjl.icheme.science.thermo.phase.PhaseState;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * G3 fixture family F8 (plan {@code P3_PILOT_ENGINE_PLAN.md} sections 7 and 8.2; P0 section 3.1): conservation and
@@ -261,7 +262,7 @@ class G3F8ConservationAndDerivativeTest {
             double u = energy + k * target / steps;
             state = com.wormzjl.icheme.fluid.support.FluidTestSupport.inventoryState(model, state, new PassiveNetwork.Inventory(volume, n, u));
             double moles = 0;
-            for (int i = 0; i < 4; i++) moles += state.liquidView()[i] + state.vaporView()[i];
+            for (int i = 0; i < 4; i++) moles += TestPhases.liquid(state)[i] + TestPhases.vapor(state)[i];
             worstMoles = Math.max(worstMoles, Math.abs(moles - 1));
             worstEnergy = Math.max(worstEnergy, Math.abs(state.internalEnergy() - u) / (1e-4 + 1e-6 * Math.abs(u)));
             assertTrue(state.temperature() > previousT, "heating raises T");

@@ -28,6 +28,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * S3's gate on a real steady run of the sample (batch 2026-11-02-process-simulator, {@code SIZING_PLAN.md} sections 3.4 to 3.6 and 4),
@@ -163,7 +164,7 @@ class ColumnSizingSampleTest {
         amounts[axis.size() - 1] += top.waterVaporMolPerSecond();
         double[] flash = MaterialRuntime.with(SheetFixture.CATALOG, SheetFixture.NETWORK, () -> {
             var state = thermo.atTemperature(top.temperatureKelvin(), top.pressurePascal(), amounts, com.wormzjl.icheme.science.fluid.state.SolidInventory.EMPTY);
-            return new double[]{state.mass(), thermo.model().vaporMass(state.state()), state.state().waterLiquid(), state.temperature()};
+            return new double[]{state.mass(), thermo.model().vaporMass(state.state()), TestPhases.waterLiquid(state.state()), state.temperature()};
         });
         var overhead = line("overhead");
         System.out.printf(Locale.ROOT, "TOP\t%.2f K\tvapour %.4f of %.3f kg/s\twater liquid %.4f mol/s\toverhead line %s at %.4g kg/m3%n", flash[3], flash[1], flash[0], flash[2], overhead.line().service(), overhead.line().density());

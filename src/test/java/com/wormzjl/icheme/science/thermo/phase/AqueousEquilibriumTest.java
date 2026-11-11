@@ -394,14 +394,15 @@ class AqueousEquilibriumTest {
 
     /**
      * The kernel evaluations per TP answer on the pilot list, printed, against W3a's table (W3b step 1: no higher; the
-     * ternary at its bubble point 783 there, 515 since the oil-rich seed and the absent-slot rule of step 1c).
+     * ternary at its bubble point 783 there, 515 since the oil-rich seed and the absent-slot rule of step 1c; 519 since the
+     * repeated vapour trial of W3b section 14 item 7, which adds 0 to 10 evaluations per answer).
      */
     @Test void kernelEvaluationsRecorded() {
         Object[][] cases = {{"dry methane/n-hexane 25 C", 298.15, new Object[] {"Methane", 0.5, "N-hexane", 0.5}, 87},
-                {"water/n-hexane 25 C", 298.15, new Object[] {"Water", 0.5, "N-hexane", 0.5}, 117},
+                {"water/n-hexane 25 C", 298.15, new Object[] {"Water", 0.5, "N-hexane", 0.5}, 119},
                 {"ethanol/water 80 C", 353.15, new Object[] {"Ethanol", 0.5, "Water", 0.5}, 52},
-                {"ethanol/water/n-hexane 58 C", 331.15, new Object[] {"Ethanol", 0.2, "Water", 0.4, "N-hexane", 0.4}, 282},
-                {"ethanol/water/n-hexane at its bubble point", 329.94, new Object[] {"Ethanol", 0.2, "Water", 0.4, "N-hexane", 0.4}, 515},
+                {"ethanol/water/n-hexane 58 C", 331.15, new Object[] {"Ethanol", 0.2, "Water", 0.4, "N-hexane", 0.4}, 287},
+                {"ethanol/water/n-hexane at its bubble point", 329.94, new Object[] {"Ethanol", 0.2, "Water", 0.4, "N-hexane", 0.4}, 519},
                 {"water/cut 117 C", 390.0, new Object[] {"Water", 0.5, "crude_pc03", 0.5}, 120}};
         StringBuilder line = new StringBuilder("pilot_aqueous kernel evaluations per TP answer:");
         for (Object[] c : cases) {

@@ -33,11 +33,9 @@ class PumpRiseScalingTest {
     }
 
     @Test void theReferenceIsThisModelsOwnWaterAtRoomConditions() {
-        double rho=model.waterMolecularWeight/model.waterLiquid(298.15,101325).molarVolume();
-        assertEquals(rho,model.pumpReferenceDensity(),1e-12*rho);
-        // IF97 Region 1 at 298.15 K and 1 atm itself: 997.048 kg/m3 (IAPWS-95 997.047; the retired 2 MPa reference carried to
-        // 1 atm by the global 1e-9 1/Pa compressibility gave 996.0).
-        assertEquals(997.048,model.pumpReferenceDensity(),.001);
+        // W3b: the network's own water, the cubic's pure liquid at 298.15 K and 1 atm: 997.055 kg/m3 (IF97 Region 1 997.048,
+        // IAPWS-95 997.047; the retired 2 MPa reference carried to 1 atm by the global 1e-9 1/Pa compressibility gave 996.0).
+        assertEquals(997.055,model.pumpReferenceDensity(),.001);
     }
 
     /**
@@ -79,6 +77,8 @@ class PumpRiseScalingTest {
 
     /** On water the limit is the setting within water's compressibility: the same shutoff as before P1. */
     @Test void onWaterTheLimitIsTheSettingWithinWatersCompressibility() {
+        // W3b: water on the refinery network, whose cubic holds it (the tjl20 packages hold none).
+        var model=com.wormzjl.icheme.fluid.support.FluidTestSupport.networkModel();
         double[] water=new double[model.componentCount()];water[model.componentCount()-1]=1;
         for(double p:new double[]{101325,601325,2e6}) {
             var unit=model.flashTP(298.15,p,water,()->{});double rho=unit.mass()/unit.volume();

@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Locale;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * P6 (batch 2026-09-24-coolprop-low-temperature): a liquid-full vessel of a mixture cooled through its bubble point.
@@ -46,7 +47,7 @@ class LiquidFullBubblePointTest {
     /** Cools the vessel for {@code intervals} intervals; every interval must commit; returns the last graph. */
     private PassiveNetwork crossBubblePoint(String name,double[] z,double t,int intervals) {
         var start=charge(t,5e6,z,1e-3);
-        assertNotNull(start.liquidProperties());assertNull(start.vaporProperties(),name+": liquid-full");
+        assertNotNull(TestPhases.liquidProperties(start));assertNull(TestPhases.vaporProperties(start),name+": liquid-full");
         PassiveNetwork graph=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,start)),List.of());
         double[] initial=graph.reservoirs().getFirst().inventory().moles();
         int firstVapour=-1;
@@ -55,8 +56,8 @@ class LiquidFullBubblePointTest {
             graph=new PassiveNetwork(result.graph().reservoirs(),result.graph().pipes());
             var state=graph.reservoirs().getFirst().state();
             System.out.printf(Locale.ROOT,"%s interval %d: %.6f K %.1f Pa, vapour %.3e mol, substeps %d rejected %d%n",name,k+1,state.temperature(),state.pressure(),
-                    Arrays.stream(state.vaporView()).sum(),result.acceptedSubsteps(),result.rejectedSubsteps());
-            if(firstVapour<0&&state.vaporProperties()!=null)firstVapour=k+1;
+                    Arrays.stream(TestPhases.vapor(state)).sum(),result.acceptedSubsteps(),result.rejectedSubsteps());
+            if(firstVapour<0&&TestPhases.vaporProperties(state)!=null)firstVapour=k+1;
             assertTrue(result.acceptedSubsteps()<=12,name+": a handful of substeps, not the pre-P6 refinement to nothing");
         }
         assertTrue(firstVapour>1,name+": the vessel crossed its bubble point inside the run (first vapour in interval "+firstVapour+")");
@@ -80,7 +81,7 @@ class LiquidFullBubblePointTest {
         assertEquals(t,node.state().temperature(),1e-9*t,"temperature");
         assertEquals(p,node.state().pressure(),1e-9*p,"pressure");
         double vapour=0;for(var phase:uv.phases())if(phase.kind()==com.wormzjl.icheme.science.thermo.phase.PhaseKind.VAPOR)vapour=phase.total();
-        assertEquals(vapour,Arrays.stream(node.state().vaporView()).sum(),1e-9*Arrays.stream(totals).sum(),"vapour amount");
+        assertEquals(vapour,Arrays.stream(TestPhases.vapor(node.state())).sum(),1e-9*Arrays.stream(totals).sum(),"vapour amount");
     }
 
     @Test void aLiquidFullMethaneNitrogenVesselCrossesItsBubblePoint() {

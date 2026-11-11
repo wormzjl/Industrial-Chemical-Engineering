@@ -247,11 +247,12 @@ public final class Stills implements IslandCoordinator.Ports {
         double mass=mass(available),target=mass/Math.max(slice.seconds(),HOLD_SECONDS);
         return new PortPlan(node.id(),node.id(),target,temperature,mine);
     }
-    /** The compounds outlet {@code device} may deliver: those its account holds (water not named), for its island's list. */
+    /** The compounds outlet {@code device} may deliver, for its island's list: those its account holds, and Water whatever it
+     * holds now (W3b option A: a still's outlet can deliver water, so its island is wet from the start). */
     public Set<String> compounds(long device) {
         sync();Long pot=outlets.get(device);var u=pot==null?null:topology.still(pot);if(u==null)return Set.of();
         var n=(device==u.distillate()?u.head():u.venting()).moles();var out=new TreeSet<String>();
-        for(int i=0;i<n.length-1;i++)if(n[i]>0)out.add(axis.get(i));
+        for(int i=0;i<n.length;i++)if(n[i]>0||i==n.length-1)out.add(axis.get(i));
         return out;
     }
 

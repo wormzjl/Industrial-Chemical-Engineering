@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Locale;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * The pilot world's row E (the branch's P6b failure 2, re-measured for milestone M3 of the unified thermo port): liquid
@@ -80,7 +81,7 @@ class CrystalFlushBudgetTest {
             var vessel = graph.reservoirs().get(2);
             var s = vessel.state();
             System.out.printf(Locale.ROOT, "row E interval %d: %d checkpoints, %d substeps, %d rejected | %.4f K %.1f Pa liquid %.5f m3 vapour %.5f m3 crystal %.6f mol%n", k + 1,
-                    checkpoints[0], result.acceptedSubsteps(), result.rejectedSubsteps(), s.temperature(), s.pressure(), s.liquidVolume(), s.vaporVolume(), crystal(vessel.inventory()));
+                    checkpoints[0], result.acceptedSubsteps(), result.rejectedSubsteps(), s.temperature(), s.pressure(), TestPhases.liquidVolume(s), s.vaporVolume(), crystal(vessel.inventory()));
             assertTrue(checkpoints[0] < bounds[k], "interval " + (k + 1) + ": " + checkpoints[0] + " checkpoints (the branch's per-substep form 1,324,561 / 5,015,036 / "
                     + "10,489,051, with its warm start 362,486 / 1,078,475 / 4,301,502)");
         }
@@ -88,8 +89,8 @@ class CrystalFlushBudgetTest {
         var node = settled.reservoirs().get(2);
         var s = node.state();
         System.out.printf(Locale.ROOT, "row E vessel at the next refresh: %.4f K %.1f Pa liquid %.5f m3 vapour %.5f m3 crystal %.6f mol%n", s.temperature(), s.pressure(),
-                s.liquidVolume(), s.vaporVolume(), crystal(node.inventory()));
-        assertTrue(s.liquidVolume() > 0 && s.vaporVolume() > 0 && crystal(node.inventory()) > 0, "a vapour, a liquid and the crystal");
+                TestPhases.liquidVolume(s), s.vaporVolume(), crystal(node.inventory()));
+        assertTrue(TestPhases.liquidVolume(s) > 0 && s.vaporVolume() > 0 && crystal(node.inventory()) > 0, "a vapour, a liquid and the crystal");
         // The vessel's UV warm from its own state equals the cold search to 1e-10 at a fraction of its cost.
         var inventory = node.inventory();
         double[] totals = inventory.moles();

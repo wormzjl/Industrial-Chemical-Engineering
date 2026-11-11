@@ -33,8 +33,8 @@ class NetworkPhaseEngineTest {
     private double[] crude(boolean wet) {
         var charge = FluidTestSupport.oneCubicMetreState(model, FluidTestSupport.Mixture.WET_CRUDE, 350, 150000);
         double[] totals = new double[n];
-        for (int i = 0; i < n - 1; i++) totals[i] = charge.liquidView()[i] + charge.vaporView()[i];
-        totals[water] = wet ? charge.waterLiquid() + charge.waterVapor() : 0;
+        for (int i = 0; i < n - 1; i++) totals[i] = TestPhases.liquid(charge)[i] + TestPhases.vapor(charge)[i];
+        totals[water] = wet ? TestPhases.waterLiquid(charge) + TestPhases.waterVapor(charge) : 0;
         return totals;
     }
     private double[] pure(int component, double amount, double waterAmount) {
@@ -58,35 +58,31 @@ class NetworkPhaseEngineTest {
     void theNetworkFlashStatesTheEnginesAnswerWithTheNetworksOwnEvaluations() {
         for (var c : cases()) {
             var state = model.flashTP(c.t(), c.p(), c.overall(), () -> {});
-            double[] liquid = state.liquidView(), vapor = state.vaporView();
+            double[] liquid = TestPhases.liquid(state), vapor = TestPhases.vapor(state);
             for (int i = 0; i < n - 1; i++) {
                 assertEquals(c.overall()[i], liquid[i] + vapor[i], 1e-13 * Math.max(1, c.overall()[i]), c.name() + " conserves " + model.components().get(i));
                 assertTrue(liquid[i] >= 0 && vapor[i] >= 0, c.name());
             }
-            assertEquals(c.overall()[water], state.waterLiquid() + state.waterVapor(), 1e-13 * Math.max(1, c.overall()[water]), c.name() + " conserves water");
+            assertEquals(c.overall()[water], TestPhases.waterLiquid(state) + TestPhases.waterVapor(state), 1e-13 * Math.max(1, c.overall()[water]), c.name() + " conserves water");
             // The network's own direct evaluation of those amounts, bit for bit.
-            var again = model.state(c.t(), c.p(), liquid, vapor, state.waterLiquid(), state.waterVapor(), state.hydrocarbonPartialPressure());
+            var again = model.state(c.t(), c.p(), state.vaporAmountsView().clone(), state.liquidAmountsView().clone(), state.aqueousAmountsView().clone());
             assertEquals(Double.doubleToLongBits(again.volume()), Double.doubleToLongBits(state.volume()), c.name());
             assertEquals(Double.doubleToLongBits(again.enthalpy()), Double.doubleToLongBits(state.enthalpy()), c.name());
-            // The free-water rule's closure: steam at its partial pressure beside the hydrocarbon vapour at pc.
-            if (state.waterVapor() > 0 && state.waterLiquid() == 0 && state.vaporProperties() != null) {
-                assertEquals(c.p(), state.hydrocarbonPartialPressure() + state.waterPartialPressure(), 1e-6 * c.p(), c.name());
-            }
             System.out.printf("%s: liquid %.6g, vapour %.6g, free water %.6g, steam %.6g mol, pc %.3f Pa%n", c.name(),
-                    Arrays.stream(liquid).sum(), Arrays.stream(vapor).sum(), state.waterLiquid(), state.waterVapor(), state.hydrocarbonPartialPressure());
+                    Arrays.stream(liquid).sum(), Arrays.stream(vapor).sum(), TestPhases.waterLiquid(state), TestPhases.waterVapor(state), TestPhases.hydrocarbonPartialPressure(state));
         }
         // The slots: two phases where the engine splits, the one-root phase where its phase identification parameter says.
         var list = cases();
-        assertTrue(sum(model.flashTP(350, 5e5, list.get(1).overall(), () -> {}).liquidView()) > 0);
-        assertTrue(sum(model.flashTP(350, 5e5, list.get(1).overall(), () -> {}).vaporView()) > 0);
+        assertTrue(sum(TestPhases.liquid(model.flashTP(350, 5e5, list.get(1).overall(), () -> {}))) > 0);
+        assertTrue(sum(TestPhases.vapor(model.flashTP(350, 5e5, list.get(1).overall(), () -> {}))) > 0);
         var denseNitrogen = model.flashTP(130, 6e6, list.get(7).overall(), () -> {});
-        assertEquals(40, sum(denseNitrogen.liquidView()), 0, "liquid-like supercritical nitrogen takes the liquid slot");
-        var values = model.hydrocarbon.translated().evaluateValues(130, 6e6, denseNitrogen.liquidView(), Root.LIQUID, model.hydrocarbon.prepare(130));
+        assertEquals(40, sum(TestPhases.liquid(denseNitrogen)), 0, "liquid-like supercritical nitrogen takes the liquid slot");
+        var values = model.hydrocarbon.translated().evaluateValues(130, 6e6, TestPhases.oil(denseNitrogen), Root.LIQUID, model.hydrocarbon.prepare(130));
         assertTrue(PhaseIdentification.liquidLike(values.phaseIdentificationParameter(), values.compressibility()),
                 "PIP " + values.phaseIdentificationParameter() + " Z " + values.compressibility());
-        assertEquals(40, sum(model.flashTP(400, 1e7, list.get(9).overall(), () -> {}).vaporView()), 0, "vapour-like methane takes the vapour slot");
-        assertEquals(40, sum(model.flashTP(298.15, 101325, list.get(5).overall(), () -> {}).vaporView()), 0);
-        assertEquals(40, sum(model.flashTP(77.355, 5e5, list.get(6).overall(), () -> {}).liquidView()), 0);
+        assertEquals(40, sum(TestPhases.vapor(model.flashTP(400, 1e7, list.get(9).overall(), () -> {}))), 0, "vapour-like methane takes the vapour slot");
+        assertEquals(40, sum(TestPhases.vapor(model.flashTP(298.15, 101325, list.get(5).overall(), () -> {}))), 0);
+        assertEquals(40, sum(TestPhases.liquid(model.flashTP(77.355, 5e5, list.get(6).overall(), () -> {}))), 0);
     }
 
     /** The thread-local engine workspace, reused forwards then backwards, against a fresh workspace per state: bitwise. */
@@ -102,11 +98,11 @@ class NetworkPhaseEngineTest {
                     model.stepCompetition(c.t(), c.overall())), null);
             var other = FluidTestSupport.networkModel().flashTP(c.t(), c.p(), c.overall(), () -> {});
             for (var candidate : List.of(fresh, other)) {
-                assertArrayEquals(bits(reused.liquidView()), bits(candidate.liquidView()), c.name());
-                assertArrayEquals(bits(reused.vaporView()), bits(candidate.vaporView()), c.name());
-                assertEquals(Double.doubleToLongBits(reused.waterLiquid()), Double.doubleToLongBits(candidate.waterLiquid()), c.name());
-                assertEquals(Double.doubleToLongBits(reused.waterVapor()), Double.doubleToLongBits(candidate.waterVapor()), c.name());
-                assertEquals(Double.doubleToLongBits(reused.hydrocarbonPartialPressure()), Double.doubleToLongBits(candidate.hydrocarbonPartialPressure()), c.name());
+                assertArrayEquals(bits(TestPhases.liquid(reused)), bits(TestPhases.liquid(candidate)), c.name());
+                assertArrayEquals(bits(TestPhases.vapor(reused)), bits(TestPhases.vapor(candidate)), c.name());
+                assertEquals(Double.doubleToLongBits(TestPhases.waterLiquid(reused)), Double.doubleToLongBits(TestPhases.waterLiquid(candidate)), c.name());
+                assertEquals(Double.doubleToLongBits(TestPhases.waterVapor(reused)), Double.doubleToLongBits(TestPhases.waterVapor(candidate)), c.name());
+                assertEquals(Double.doubleToLongBits(TestPhases.hydrocarbonPartialPressure(reused)), Double.doubleToLongBits(TestPhases.hydrocarbonPartialPressure(candidate)), c.name());
                 assertEquals(Double.doubleToLongBits(reused.volume()), Double.doubleToLongBits(candidate.volume()), c.name());
                 assertEquals(Double.doubleToLongBits(reused.enthalpy()), Double.doubleToLongBits(candidate.enthalpy()), c.name());
             }
@@ -122,15 +118,15 @@ class NetworkPhaseEngineTest {
         var pilot = FluidTestSupport.model(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PILOT);
         double[] feed = {0, 0.8, 0, 0.2, 0};
         var state = pilot.flashTP(230, 2e6, feed, () -> {});
-        for (int i = 0; i < 4; i++) assertEquals(feed[i], state.liquidView()[i] + state.vaporView()[i], 1e-15);
-        System.out.println("CH4/CO2 80/20 at 230 K, 2 MPa: liquid " + Arrays.toString(state.liquidView()) + ", vapour " + Arrays.toString(state.vaporView()));
+        for (int i = 0; i < 4; i++) assertEquals(feed[i], TestPhases.liquid(state)[i] + TestPhases.vapor(state)[i], 1e-15);
+        System.out.println("CH4/CO2 80/20 at 230 K, 2 MPa: liquid " + Arrays.toString(TestPhases.liquid(state)) + ", vapour " + Arrays.toString(TestPhases.vapor(state)));
         int twoPhase = 0, states = 0;
         for (double t = 222; t <= 238; t += 2) {
             for (double p = 1.6e6; p <= 2.4e6 + 1; p += 1e5) {
                 var s = pilot.flashTP(t, p, feed, () -> {});
                 states++;
-                if (sum(s.liquidView()) > 0 && sum(s.vaporView()) > 0) twoPhase++;
-                for (int i = 0; i < 4; i++) assertEquals(feed[i], s.liquidView()[i] + s.vaporView()[i], 1e-15, t + " K " + p + " Pa");
+                if (sum(TestPhases.liquid(s)) > 0 && sum(TestPhases.vapor(s)) > 0) twoPhase++;
+                for (int i = 0; i < 4; i++) assertEquals(feed[i], TestPhases.liquid(s)[i] + TestPhases.vapor(s)[i], 1e-15, t + " K " + p + " Pa");
             }
         }
         System.out.println("CH4/CO2 80/20, 222-238 K x 1.6-2.4 MPa: " + states + " states, " + twoPhase + " two-phase, none refused");
@@ -146,8 +142,7 @@ class NetworkPhaseEngineTest {
         var pilot = FluidTestSupport.model(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PILOT);
         var limited = new FluidTpEquilibrium.Settings(1.0e-10, 1000, 5, 1.0e-9, 1.0e-8, TangentPlaneStability.Settings.DEFAULT,
                 1, 1, 1.0e-8, 1.0e-2, 100, 1.0e-11);
-        var engine = NetworkPhaseEngine.of(pilot, com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PILOT, com.wormzjl.icheme.science.material.MaterialRuntime.with(
-                com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PILOT, com.wormzjl.icheme.science.material.MaterialRuntime::water), limited);
+        var engine = NetworkPhaseEngine.of(pilot, com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PILOT, limited);
         double[] nearCritical = {0.67, 0.33, 0, 0, 0}, ordinary = {0.5, 0.5, 0, 0, 0};
         var inside = engine.tp(150, 4.56e6, nearCritical, false);
         assertEquals(EquilibriumResult.Status.NOT_CONVERGED, inside.status(), inside.toString());
@@ -184,22 +179,22 @@ class NetworkPhaseEngineTest {
     void theOuterCheckKeepsThePopulatedPhasesAndSeedsTheMissingOneAtTheNodesOwnSplit() {
         double t = 100, p = saturationPressure(t);
         var flash = model.flashTP(t, p, pure(nitrogen, 40, 0), () -> {});
-        assertEquals(40, sum(flash.liquidView()), 0, "a standalone flash at coexistence states the liquid");
+        assertEquals(40, sum(TestPhases.liquid(flash)), 0, "a standalone flash at coexistence states the liquid");
         double[] liquid = new double[n - 1], vapor = new double[n - 1], none = new double[n - 1];
         liquid[nitrogen] = 30;vapor[nitrogen] = 10;
-        var both = model.state(t, p, liquid, vapor, 0, 0, p);
+        var both = TestPhases.state(model,t, p, liquid, vapor, 0, 0);
         assertSame(both, model.phaseCheck(both, false, null, null, 0, null, null, () -> {}), "a node holding both phases keeps its layout");
         // A junction: the PH answer at its pressure and enthalpy.
         double above = 1.01 * p;
         vapor[nitrogen] = 40;
-        var supersaturated = model.state(t, above, none, vapor, 0, 0, above);
+        var supersaturated = TestPhases.state(model,t, above, none, vapor, 0, 0);
         var condensed = model.phaseCheck(supersaturated, true, null, null, 0, null, null, () -> {});
-        System.out.printf("N2 vapour at %.6f Pa, 100 K: junction seed %.6f K, liquid %.6e of 40 mol%n", above, condensed.temperature(), sum(condensed.liquidView()));
-        assertTrue(sum(condensed.liquidView()) > 0 && sum(condensed.vaporView()) > 0, "the liquid its enthalpy condenses beside the vapour");
+        System.out.printf("N2 vapour at %.6f Pa, 100 K: junction seed %.6f K, liquid %.6e of 40 mol%n", above, condensed.temperature(), sum(TestPhases.liquid(condensed)));
+        assertTrue(sum(TestPhases.liquid(condensed)) > 0 && sum(TestPhases.vapor(condensed)) > 0, "the liquid its enthalpy condenses beside the vapour");
         assertEquals(above, condensed.pressure(), 0, "at the junction's pressure");
         assertEquals(above, saturationPressure(condensed.temperature()), 1e-7 * above, "at the saturation temperature of that pressure");
         assertEquals(supersaturated.enthalpy(), condensed.enthalpy(), 1e-9 * Math.abs(supersaturated.enthalpy()), "at the junction's enthalpy");
-        assertEquals(40, sum(condensed.liquidView()) + sum(condensed.vaporView()), 1e-12, "the junction's own amount");
+        assertEquals(40, sum(TestPhases.liquid(condensed)) + sum(TestPhases.vapor(condensed)), 1e-12, "the junction's own amount");
         // A vessel: its own split starts from its own state at the crossing (D40 A), and a failed closure proposes nothing.
         var answer = model.flashTP(t, above, pure(nitrogen, 40, 0), () -> {});
         var starts = new ArrayList<FluidThermodynamics.State>();int[] record = {0};
@@ -208,27 +203,28 @@ class NetworkPhaseEngineTest {
         assertEquals(1, starts.size(), "the vessel's own split is asked once");
         var crossing = starts.getFirst();
         System.out.printf("N2 vapour at %.6f Pa, 100 K: vessel crossing %.6f K %.6f Pa, liquid %.6e of 40 mol in %.9e m3%n", above, crossing.temperature(), crossing.pressure(),
-                sum(crossing.liquidView()), crossing.volume());
+                sum(TestPhases.liquid(crossing)), crossing.volume());
         assertEquals(supersaturated.volume(), crossing.volume(), 1e-6 * supersaturated.volume(), "in the vessel's own volume");
         assertEquals(supersaturated.internalEnergy(), crossing.internalEnergy(), 1e-6 * Math.abs(supersaturated.internalEnergy()), "at the vessel's own energy");
         assertTrue(crossing.temperature() > t, "the liquid's condensing heat warms it: " + crossing.temperature());
         assertEquals(crossing.pressure(), saturationPressure(crossing.temperature()), 1e-6 * crossing.pressure(), "at its saturation");
-        assertTrue(sum(crossing.liquidView()) > 0 && sum(crossing.liquidView()) < 1, "the liquid its volume no longer holds as vapour: " + sum(crossing.liquidView()));
-        assertEquals(40, sum(crossing.liquidView()) + sum(crossing.vaporView()), 1e-9, "the vessel's own amount");
+        assertTrue(sum(TestPhases.liquid(crossing)) > 0 && sum(TestPhases.liquid(crossing)) < 1, "the liquid its volume no longer holds as vapour: " + sum(TestPhases.liquid(crossing)));
+        assertEquals(40, sum(TestPhases.liquid(crossing)) + sum(TestPhases.vapor(crossing)), 1e-9, "the vessel's own amount");
         assertEquals(FluidThermodynamics.phaseBits(answer) & ~FluidThermodynamics.phaseBits(supersaturated), record[0], "the liquid is refused for the solve");
-        var gas = model.state(t, p, none, vapor, 0, 0, p);
+        var gas = TestPhases.state(model,t, p, none, vapor, 0, 0);
         assertSame(gas, model.phaseCheck(gas, false, null, new int[]{FluidThermodynamics.phaseBits(flash)}, 0, null, null, () -> {}),
                 "a phase the trace rule removed in this solve is not added back");
-        double tw = 350, saturation = model.saturationPressure(tw);
-        assertEquals(0, model.flashTP(tw, .99 * saturation, pure(nitrogen, 0, 1), () -> {}).waterLiquid(), 0, "the flash: all steam");
-        var superheated = model.state(tw, .99 * saturation, none, none, 1, 0, .99 * saturation);
+        // W3b: water boils at the cubic's own saturation pressure (41.21 kPa at 350 K, Wagner-Pruss 41.27 kPa).
+        double tw = 350, saturation = saturationPressure(water, tw, 1e3, 1e6);
+        assertEquals(0, TestPhases.waterLiquid(model.flashTP(tw, .99 * saturation, pure(nitrogen, 0, 1), () -> {})), 0, "the flash: all steam");
+        var superheated = TestPhases.state(model,tw, .99 * saturation, none, none, 1, 0);
         var boiled = model.phaseCheck(superheated, true, null, null, 0, null, null, () -> {});
-        System.out.printf("water at %.3f Pa, 350 K: junction seed %.6f K, steam %.6e of 1 mol%n", .99 * saturation, boiled.temperature(), boiled.waterVapor());
-        assertTrue(boiled.waterLiquid() > 0 && boiled.waterVapor() > 0, "the liquid stays and the steam its enthalpy gives enters");
-        assertEquals(.99 * saturation, model.saturationPressure(boiled.temperature()), 1e-7 * saturation, "at the saturation temperature");
+        System.out.printf("water at %.3f Pa, 350 K: junction seed %.6f K, steam %.6e of 1 mol%n", .99 * saturation, boiled.temperature(), TestPhases.waterVapor(boiled));
+        assertTrue(TestPhases.waterLiquid(boiled) > 0 && TestPhases.waterVapor(boiled) > 0, "the liquid stays and the steam its enthalpy gives enters");
+        assertEquals(.99 * saturation, saturationPressure(water, boiled.temperature(), 1e3, 1e6), 1e-7 * saturation, "at the saturation temperature");
         assertEquals(superheated.enthalpy(), boiled.enthalpy(), 1e-9 * Math.abs(superheated.enthalpy()), "at the junction's enthalpy");
-        assertEquals(1, boiled.waterLiquid() + boiled.waterVapor(), 1e-15, "the water its own");
-        var barely = model.state(tw, saturation * (1 - 1e-9), none, none, 1, 0, saturation * (1 - 1e-9));
+        assertEquals(1, TestPhases.waterLiquid(boiled) + TestPhases.waterVapor(boiled), 1e-15, "the water its own");
+        var barely = TestPhases.state(model,tw, saturation * (1 - 1e-9), none, none, 1, 0);
         assertSame(barely, model.phaseCheck(barely, true, null, null, 0, null, null, () -> {}), "a trace of steam is not added");
     }
 
@@ -259,7 +255,7 @@ class NetworkPhaseEngineTest {
         List<Feed> feeds = List.of(new Feed("N2", pureNitrogen, 1e7, true), new Feed("N2/CH4 90/10", lean, 1e7, true),
                 new Feed("light gas", light, 2e6, true), new Feed("20-component mixture", mixture, 2e6, false));
         double[] pressures = {1e5, 5e5, 1e6, 2e6, 5e6, 1e7};
-        int answered = 0, steamBeyond = 0, wetGas = 0;
+        int answered = 0, wetGas = 0;
         double worstRatio = 0;
         var terms = new java.util.HashMap<Double, TranslatedPengRobinson.Workspace>();
         for (double t : new double[] {600, 750, 900}) {
@@ -272,12 +268,11 @@ class NetworkPhaseEngineTest {
                         String at = feed.name() + (waterAmount > 0 ? " wet" : " dry") + " at " + t + " K, " + p + " Pa";
                         FluidThermodynamics.State state = model.flashTP(t, p, overall, () -> {});
                         answered++;
-                        if (waterAmount > 0 && state.waterPartialPressure() > FluidThermodynamics.waterVaporPressureLimit(t)) steamBeyond++;
                         for (int i = 0; i < hydrocarbons; i++) {
-                            assertEquals(overall[i], state.liquidView()[i] + state.vaporView()[i], 1e-13, at + " conserves " + model.components().get(i));
+                            assertEquals(overall[i], TestPhases.liquid(state)[i] + TestPhases.vapor(state)[i], 1e-13, at + " conserves " + model.components().get(i));
                         }
                         if (feed.gas()) {
-                            assertEquals(0, sum(state.liquidView()), 0, at + ": a hot gas has nothing in the liquid slot");
+                            assertEquals(0, sum(TestPhases.liquid(state)), 0, at + ": a hot gas has nothing in the liquid slot");
                             // The engine's own label and the network model's flags of the same root.
                             var result = model.phaseEngine().tp(t, p, Arrays.copyOf(feed.x(), n), false);
                             assertEquals(1, result.phases().size(), at);
@@ -286,43 +281,45 @@ class NetworkPhaseEngineTest {
                                     || kind == com.wormzjl.icheme.science.thermo.phase.PhaseKind.FLUID, at + ": " + kind);
                             var eos = model.hydrocarbon.translated();
                             var prepared = terms.computeIfAbsent(t, model.hydrocarbon::prepare);
-                            var values = eos.evaluateValues(t, p, feed.x(), Root.VAPOR, prepared);
+                            var values = eos.evaluateValues(t, p, Arrays.copyOf(feed.x(), n), Root.VAPOR, prepared);
                             assertTrue(HydrocarbonModel.liquidLike(values) == false
                                     && PhaseIdentification.vapourLike(values.phaseIdentificationParameter(), values.compressibility()), at);
-                            assertTrue(model.hydrocarbon.phase(t, p, feed.x(), Root.VAPOR, prepared).vaporLike(), at);
-                            assertThrows(HydrocarbonModel.RootAbsent.class, () -> model.hydrocarbon.phase(t, p, feed.x(), Root.LIQUID, prepared, true), at);
+                            assertTrue(model.hydrocarbon.phase(t, p, TestPhases.conserved(model.hydrocarbon, feed.x()), Root.VAPOR, prepared, false).vaporLike(), at);
+                            assertThrows(HydrocarbonModel.RootAbsent.class, () -> model.hydrocarbon.phase(t, p, TestPhases.conserved(model.hydrocarbon, feed.x()), Root.LIQUID, prepared, true), at);
                         }
                         if (waterAmount > 0) {
-                            assertEquals(0, state.waterLiquid(), 0, at + ": all steam");
-                            assertEquals(p, state.hydrocarbonPartialPressure() + state.waterPartialPressure(), 1e-6 * p, at);
-                            assertTrue(state.hydrocarbonPartialPressure() > 0.5 * p, at + ": pc " + state.hydrocarbonPartialPressure());
+                            // W3b: a gas has no liquid; beside the mixture's heavy liquid some water dissolves: at 600 K and 500 kPa 2.58e-3
+                            // of 0.1 mol since the fade of item 9 (water dissolving in hot oil; 1.2e-3 at 1 MPa before), under 5 %.
+                            assertEquals(0, TestPhases.waterLiquid(state), feed.gas() ? 0 : 5e-2 * waterAmount, at + ": all steam");
+                            assertEquals(p, TestPhases.hydrocarbonPartialPressure(state) + TestPhases.waterPartialPressure(state), 1e-6 * p, at);
+                            assertTrue(TestPhases.hydrocarbonPartialPressure(state) > 0.5 * p, at + ": pc " + TestPhases.hydrocarbonPartialPressure(state));
                             // The virial steam (B p_w/(R T) at most 2 % here) in a gas whose Z is within a few per cent of one: p_w close to y_w P (the heavy
                             // mixture's gas has the lowest Z: p_w/(y_w P) 1.05 at 750 K and 2 MPa).
-                            double steamFraction = state.waterVapor() / (state.waterVapor() + sum(state.vaporView()));
-                            double ratio = state.waterPartialPressure() / (steamFraction * p);
-                            assertEquals(1, ratio, 0.06, at + ": p_w " + state.waterPartialPressure() + " against y_w P " + steamFraction * p);
+                            double steamFraction = TestPhases.waterVapor(state) / (TestPhases.waterVapor(state) + sum(TestPhases.vapor(state)));
+                            double ratio = TestPhases.waterPartialPressure(state) / (steamFraction * p);
+                            assertEquals(1, ratio, 0.06, at + ": p_w " + TestPhases.waterPartialPressure(state) + " against y_w P " + steamFraction * p);
                             if (feed.gas()) {
                                 wetGas++;
                                 worstRatio = Math.max(worstRatio, Math.abs(ratio - 1));
                             }
                             if (t == 750 && p == 1e6) System.out.printf("WP7c %s: pc %.3f Pa, p_w %.3f Pa, p_w/(y_w P) %.6f%n", at,
-                                    state.hydrocarbonPartialPressure(), state.waterPartialPressure(), ratio);
+                                    TestPhases.hydrocarbonPartialPressure(state), TestPhases.waterPartialPressure(state), ratio);
                         }
                     }
                 }
             }
         }
-        System.out.printf("WP7c hot network states: %d answered, %d past the steam's qualified partial pressure; the gases' p_w within %.4f of y_w P over %d wet states%n",
-                answered, steamBeyond, worstRatio, wetGas);
+        System.out.printf("WP7c hot network states: %d answered; the gases' p_w within %.4f of y_w P over %d wet states%n",
+                answered, worstRatio, wetGas);
         assertTrue(answered > 100 && wetGas > 40, answered + " answered, " + wetGas + " wet gases");
         // The gases' Z lies within 4 % of one here (nitrogen 1.036 at 600 K and 10 MPa, the light gas 0.977 at 2 MPa), and the
         // virial steam's B p_w/(R T) within 2 % (-1.8 % in that nitrogen); the two add there: 0.051 (under 4 % with ideal steam).
         assertTrue(worstRatio < 0.06, "the gases' steam partial pressure is the ideal-mixing one to 6 %: " + worstRatio);
         // The pinned 700 K states of the WP7b note: pure N2 with 0.1 mol water at 0.1 MPa, and the lean gas at 0.1 MPa.
         var wetNitrogen = model.flashTP(700, 1e5, pure(nitrogen, 1, 0.1), () -> {});
-        assertEquals(1e5 / 11, wetNitrogen.waterPartialPressure(), 1e-3 * 1e5 / 11, "p_w of 0.1 mol steam in 1.1 mol gas");
+        assertEquals(1e5 / 11, TestPhases.waterPartialPressure(wetNitrogen), 1e-3 * 1e5 / 11, "p_w of 0.1 mol steam in 1.1 mol gas");
         double[] leanWet = Arrays.copyOf(lean, n);leanWet[water] = 0.1;
-        assertTrue(model.flashTP(700, 1e5, leanWet, () -> {}).hydrocarbonPartialPressure() > 9e4);
+        assertTrue(TestPhases.hydrocarbonPartialPressure(model.flashTP(700, 1e5, leanWet, () -> {})) > 9e4);
         for (Feed feed : feeds) {
             var hot = assertDoesNotThrow(() -> model.flashTP(1200, 1e5, Arrays.copyOf(feed.x(), n), () -> {}), feed.name());
             assertTrue(Double.isFinite(hot.enthalpy()) && hot.vaporVolume() > 0, feed.name() + " at 1200 K");
@@ -345,18 +342,17 @@ class NetworkPhaseEngineTest {
      * beside a liquid at 10 MPa (N2/C2H6 at 195 K) is a vapour-liquid split again and takes both slots.</p>
      */
     @Test
-    void aLiquidLiquidSplitIsRefusedTypedByTheNetwork() {
+    void aLiquidLiquidSplitIsTwoLiquidsOfTheNetwork() {
         var pilot = FluidTestSupport.model(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PILOT);
         double[] typeThree = {0.3, 0, 0.7, 0, 0};
         var answer = pilot.phaseEngine().tp(95, 2e6, typeThree, false);
         assertEquals(EquilibriumResult.Classification.LIQUID_LIQUID, answer.classification(), answer.toString());
-        var refused = assertThrows(FluidThermodynamics.UnsupportedPhases.class, () -> pilot.flashTP(95, 2e6, typeThree, () -> {}));
-        // The service's reason, the kind, the state and the package are the hold's message (main's hold has no accessors).
-        assertTrue(refused.getMessage().startsWith("Unsupported phases: PHASE_COMPETITION_NOT_QUALIFIED (LIQUID_LIQUID) at 95.0 K, 2000000.0 Pa (package "
-                + PILOT + "): "), refused.getMessage());
-        assertTrue(refused.getMessage().contains("liquid-liquid") && refused.getMessage().contains("one hydrocarbon liquid"), refused.getMessage());
-        var direct = assertThrows(FluidThermodynamics.UnsupportedPhases.class, () -> pilot.adopt(95, 2e6, typeThree, answer, null));
-        assertEquals(refused.getMessage(), direct.getMessage());
+        // W3b: the two liquids take the two liquid slots (three fluid phases come from the physics, never a hold).
+        var liquids = assertDoesNotThrow(() -> pilot.flashTP(95, 2e6, typeThree, () -> {}));
+        assertTrue(liquids.liquidSlotVolume() > 0 && liquids.aqueousSlotVolume() > 0 && liquids.vaporVolume() == 0, "two liquids");
+        assertArrayEquals(typeThree, liquids.totals(), 1e-12);
+        var direct = assertDoesNotThrow(() -> pilot.adopt(95, 2e6, typeThree, answer, null));
+        assertEquals(liquids.volume(), direct.volume(), 1e-12 * liquids.volume());
 
         double[] threePhase = {0.94, 0, 0.06, 0, 0};
         var indication = pilot.phaseEngine().tp(125, 3e6, threePhase, false);
@@ -366,7 +362,8 @@ class NetworkPhaseEngineTest {
         var third = assertThrows(FluidThermodynamics.UnsupportedPhases.class, () -> pilot.flashTP(125, 3e6, threePhase, () -> {}));
         assertTrue(third.getMessage().startsWith("Unsupported phases: PHASE_COMPETITION_NOT_QUALIFIED (THREE_PHASES) at 125.0 K, 3000000.0 Pa"),
                 third.getMessage());
-        assertTrue(third.getMessage().contains("third fluid phase"), third.getMessage());
+        // W3b: the network carries a vapour and two liquids; an engine answer left unstable is still the typed hold.
+        assertTrue(third.getMessage().contains("further fluid phase"), third.getMessage());
         double[] atTheBandRule = {0.95, 0, 0.05, 0, 0};
         var band = assertThrows(FluidThermodynamics.CriticalBandHold.class, () -> pilot.flashTP(125, 3e6, atTheBandRule, () -> {}));
         assertTrue(band.getMessage().contains(EquilibriumResult.UNSTABLE_PRODUCT), band.getMessage());
@@ -375,14 +372,14 @@ class NetworkPhaseEngineTest {
         var dense = pilot.phaseEngine().tp(195, 1e7, denseGas, false);
         assertEquals(EquilibriumResult.Classification.VAPOR_LIQUID, dense.classification(), dense.toString());
         var denseState = pilot.flashTP(195, 1e7, denseGas, () -> {});
-        assertTrue(sum(denseState.liquidView()) > 0 && sum(denseState.vaporView()) > 0, "a dense gas beside a liquid takes both slots");
+        assertTrue(sum(TestPhases.liquid(denseState)) > 0 && sum(TestPhases.vapor(denseState)) > 0, "a dense gas beside a liquid takes both slots");
 
         double[] nearCritical = {0.67, 0.33, 0, 0, 0};
         var split = pilot.phaseEngine().tp(150, 4.64e6, nearCritical, false);
         assertEquals(EquilibriumResult.Classification.VAPOR_LIQUID, split.classification(), split.toString());
         assertTrue(split.diagnostics().criticalBand());
         var state = pilot.flashTP(150, 4.64e6, nearCritical, () -> {});
-        assertTrue(sum(state.liquidView()) > 0 && sum(state.vaporView()) > 0, "both slots");
+        assertTrue(sum(TestPhases.liquid(state)) > 0 && sum(TestPhases.vapor(state)) > 0, "both slots");
     }
 
     /**
@@ -427,12 +424,12 @@ class NetworkPhaseEngineTest {
             var tp = engine.tp(at.t(), at.p(), feed, false);
             assertTrue(tp.converged(), at + ": " + tp.detail());
             double vapour = hydrocarbonVapour(tp);
-            assertTrue(vapour > 1, at + " holds hydrocarbon vapour: " + vapour);
+            // W3b: on the cubic the oil keeps more of its light ends; 0.94 of the 100 mol in the gas at 393 K, 5 bar.
+            assertTrue(vapour > .5, at + " holds hydrocarbon vapour: " + vapour);
             var ph = engine.ph(at.p(), tp.enthalpy(), feed, false);
             var uv = engine.crystalUv(tp.internalEnergy(), tp.volume(), feed, false, Double.NaN, Double.NaN);
             for (var answer : List.of(ph, uv)) {
                 assertTrue(answer.converged(), at + ": " + answer.detail());
-                assertFalse(answer.diagnostics().coexistenceFromBalance(), at + ": " + answer.detail());
                 var state = answer.phases().get(0);
                 assertEquals(at.t(), state.temperature(), 1e-6, at + " " + answer.specification());
                 assertEquals(at.p(), state.pressure(), 1e-6 * at.p(), at + " " + answer.specification());
@@ -460,19 +457,19 @@ class NetworkPhaseEngineTest {
         double total = sum(clean);
         for (int i = 0; i < n; i++) clean[i] *= 100 / total;
         clean[water] = 30;
+        // W3b: the cubic's three phases at one temperature, where water's vapour pressure and the cut's next to none make
+        // the pressure (the free-water rule's balance at water's saturation before).
         var alone = engine.ph(p, midway(clean, p), clean, false);
         assertTrue(alone.converged(), alone.detail());
-        assertTrue(alone.diagnostics().coexistenceFromBalance(), alone.detail());
-        assertEquals(p, alone.freeWater().saturationPressure(), 1e-6 * p, "at water's saturation");
-        assertEquals(0, hydrocarbonVapour(alone), "no hydrocarbon vapour");
-        assertTrue(alone.freeWater().waterVapor() > 0 && alone.freeWater().condensed() > 0, alone.detail());
-        assertTrue(alone.diagnostics().outerIterations() <= 4, "TP answers: " + alone.diagnostics().outerIterations());
+        double t = alone.phases().get(0).temperature();
+        assertEquals(p, saturationPressure(water, t, 1e3, 1e7), 1e-3 * p, "at water's saturation, the cut's vapour pressure aside");
+        assertTrue(hydrocarbonVapour(alone) < 1e-3 * steam(alone), "next to no hydrocarbon vapour: " + hydrocarbonVapour(alone));
+        assertTrue(steam(alone) > 0 && condensedWater(alone) > 0, alone.detail());
 
         double[] traced = clean.clone();
         traced[methane] = .1;
         var shared = engine.ph(p, midway(traced, p), traced, false);
         assertTrue(shared.converged(), shared.detail());
-        assertFalse(shared.diagnostics().coexistenceFromBalance(), shared.detail());
         assertTrue(hydrocarbonVapour(shared) > 0, shared.detail());
     }
 
@@ -487,16 +484,14 @@ class NetworkPhaseEngineTest {
         var engine = model.phaseEngine();
         double p = 2e5;
         double[] trace = crudeWith(1e4);
+        // W3b: on the cubic's water, at water's saturation to the crude's share of the pressure.
         var alone = engine.ph(p, midway(trace, p), trace, false);
         assertTrue(alone.converged(), alone.detail());
-        assertTrue(alone.diagnostics().coexistenceFromBalance(), alone.detail());
-        assertEquals(p, alone.freeWater().saturationPressure(), 1e-6 * p, "at water's saturation");
-        assertTrue(alone.diagnostics().outerIterations() <= 4, "TP answers: " + alone.diagnostics().outerIterations());
+        assertEquals(p, saturationPressure(water, alone.phases().get(0).temperature(), 1e3, 1e7), 1e-3 * p, "at water's saturation");
 
         double[] more = crudeWith(100);
         var shared = engine.ph(p, midway(more, p), more, false);
         assertTrue(shared.converged(), shared.detail());
-        assertFalse(shared.diagnostics().coexistenceFromBalance(), shared.detail());
         assertTrue(hydrocarbonVapour(shared) > 0, shared.detail());
     }
 
@@ -516,15 +511,18 @@ class NetworkPhaseEngineTest {
         for (var at : List.of(new Point(320, 5e3), new Point(370, 1e5), new Point(382, 1e5))) {
             var tp = engine.tp(at.t(), at.p(), feed, false);
             assertTrue(tp.converged(), at + ": " + tp.detail());
-            var split = tp.freeWater();
-            assertEquals(30, split.waterVapor(), 1e-12, at + " all of the water is steam");
-            double pc = split.hydrocarbonPressure();
+            // W3b: read from the engine's gas on the cubic's water.
+            // W3b: the cubic's oil dissolves some water (0.04 of the 30 mol at 320 K and 5 kPa); the rest is steam.
+            assertEquals(30, steam(tp), .01 * 30, at + " the water is steam but what the oil dissolves");
+            assertEquals(30, steam(tp) + condensedWater(tp), 1e-9 * 30, at + " water conserved");
+            double pc = hydrocarbonPressure(tp, at.p());
             double vapourPressure = saturationPressure(cut, at.t(), 1e2, 3e6);
-            assertEquals(vapourPressure, pc, .01 * vapourPressure, at + " at the hydrocarbon's own vapour pressure");
-            assertEquals(at.p() - pc, split.waterPartialPressure(), 1e-9 * at.p(), at + " the steam at the rest");
-            assertTrue(split.waterPartialPressure() < split.saturationPressure(), at + " under water's saturation");
+            // W3b: the cubic's mixing rule holds in the gas too; beside the steam the cut's partial pressure is 2.9 % over its
+            // vapour pressure at 370 K and 1 bar.
+            assertEquals(vapourPressure, pc, .05 * vapourPressure, at + " at the hydrocarbon's own vapour pressure");
+            assertTrue(at.p() - pc < saturationPressure(water, at.t(), 1e2, 1e7), at + " the steam under water's saturation");
             double vapour = hydrocarbonVapour(tp);
-            assertEquals(30 * pc / (at.p() - pc), vapour, .01 * vapour, at + " the two gases fill one volume");
+            assertEquals(steam(tp) * pc / (at.p() - pc), vapour, .01 * vapour, at + " the two gases fill one volume");
             assertEquals(100 - vapour, hydrocarbonLiquid(tp), 1e-9, at + " the rest stays liquid");
             var ph = engine.ph(at.p(), tp.enthalpy(), feed, false);
             var uv = engine.crystalUv(tp.internalEnergy(), tp.volume(), feed, false, Double.NaN, Double.NaN);
@@ -554,25 +552,34 @@ class NetworkPhaseEngineTest {
             double target = .5 * (engine.tp(367, p, feed, false).enthalpy() + engine.tp(369, p, feed, false).enthalpy());
             var ph = engine.ph(p, target, feed, false);
             assertTrue(ph.converged(), ph.detail());
-            assertTrue(ph.diagnostics().coexistenceFromBalance(), ph.detail());
             assertEquals(target, ph.enthalpy(), 1e-8 * Math.abs(target), "the energy balance");
-            var split = ph.freeWater();
-            assertEquals(p, split.saturationPressure() + split.hydrocarbonPressure(), 1e-9 * p, "the two vapour pressures add up");
-            assertTrue(split.condensed() > 0 && split.waterVapor() > 0, ph.detail());
+            double t = ph.phases().get(0).temperature();
+            // W3b: on the cubic's water; the two liquids next to immiscible, so the two vapour pressures add up to 2 % (98.7 kPa
+            // of 100: their mutual solubility and the gas's mixing rule).
+            double waterPressure = saturationPressure(water, t, 1e3, 1e7), cutPressure = saturationPressure(cut, t, 1e2, 3e6);
+            assertEquals(p, waterPressure + cutPressure, .02 * p, "the two vapour pressures add up");
+            assertTrue(condensedWater(ph) > 0 && steam(ph) > 0, ph.detail());
             double vapour = hydrocarbonVapour(ph);
             assertTrue(hydrocarbonLiquid(ph) > 0 && vapour > 0, ph.detail());
-            double ideal = split.hydrocarbonPressure() / split.saturationPressure();
-            assertEquals(ideal, vapour / split.waterVapor(), .01 * ideal, "the gas holds them as their pressures");
-            double t = ph.phases().get(0).temperature();
+            double ideal = cutPressure / waterPressure;
+            // The liquids' mutual solubility and the gas's nonideality: 2.8 % at ratio 0.3.
+            assertEquals(ideal, vapour / steam(ph), .05 * ideal, "the gas holds them as their pressures");
             assertTrue(t > 367 && t < 369, ph.detail());
             assertEquals(0, hydrocarbonVapour(engine.tp(t - 1e-6, p, feed, false)), "no gas under it");
             assertTrue(hydrocarbonVapour(engine.tp(t + 1e-6, p, feed, false)) > vapour, "over it the step's top end");
+            // W3b section 14 item 7: from the three-phase point to 5 K above it every TP answers a vapour (at ratio 30 the
+            // audit missed it 0.5 K above, each trial on its liquid root, before the vapour trial was held on its own root).
+            for (int k = 1; k <= 50; k++) {
+                double above = t + 0.1 * k;
+                var r = engine.tp(above, p, feed, false);
+                assertTrue(r.converged() && steam(r) + hydrocarbonVapour(r) > 0, above + " K at ratio " + ratio + ": " + r.detail());
+            }
             var uv = engine.crystalUv(ph.internalEnergy(), ph.volume(), feed, false, Double.NaN, Double.NaN);
             assertTrue(uv.converged(), uv.detail());
             assertEquals(t, uv.phases().get(0).temperature(), 1e-6, "UV");
             assertEquals(p, uv.phases().get(0).pressure(), 1e-6 * p, "UV");
             assertEquals(vapour, hydrocarbonVapour(uv), 1e-5 * vapour, "UV");
-            assertEquals(split.waterVapor(), uv.freeWater().waterVapor(), 1e-5 * split.waterVapor(), "UV");
+            assertEquals(steam(ph), steam(uv), 1e-5 * steam(ph), "UV");
         }
     }
 
@@ -592,8 +599,12 @@ class NetworkPhaseEngineTest {
             feed[heavy - 1] = at.trace();
             var tp = engine.tp(at.t(), at.p(), feed, false);
             assertTrue(tp.converged(), at + ": " + tp.detail());
-            assertEquals(30, tp.freeWater().waterVapor(), 1e-12, at + " all of the water is steam");
-            assertEquals(at.p(), tp.freeWater().waterPartialPressure(), 1e-6 * at.p(), at + " at the state pressure");
+            // W3b: the oil dissolves some water, the rest is steam. Since the fade of item 9 (the water-cut cells fade from 373 K
+            // to 809 K, water dissolving in hot oil as a gas does): 0.36 of the 30 mol at 550 K and 1 bar (0.06 before), 11.88 at
+            // 700 K and 5 bar (x_w 0.106 in the oil; under 0.3 before).
+            double steamExpected = at.t() > 600 ? 18.1246 : 29.640;
+            assertEquals(steamExpected, steam(tp), 1e-3 * steamExpected, at + " the water is steam but what the oil dissolves");
+            assertEquals(at.p(), at.p() - hydrocarbonPressure(tp, at.p()), 1e-4 * at.p(), at + " at the state pressure");
             assertTrue(hydrocarbonVapour(tp) < 1e-3, at + ": " + tp.detail());
             var ph = engine.ph(at.p(), tp.enthalpy(), feed, false);
             assertTrue(ph.converged(), at + ": " + ph.detail());
@@ -621,6 +632,26 @@ class NetworkPhaseEngineTest {
         return feed;
     }
 
+    /** Water in an answer's gas, mol. */
+    private double steam(EquilibriumResult answer) {
+        double steam = 0;
+        for (var phase : answer.phases()) if (phase.kind() == PhaseKind.VAPOR) steam += phase.amount(water);
+        return steam;
+    }
+
+    /** Water in an answer's liquids, mol. */
+    private double condensedWater(EquilibriumResult answer) {
+        double condensed = 0;
+        for (var phase : answer.phases()) if (phase.kind() == PhaseKind.LIQUID) condensed += phase.amount(water);
+        return condensed;
+    }
+
+    /** The hydrocarbons' partial pressure in an answer's gas, {@code y_hc P}, Pa (0 without a gas). */
+    private double hydrocarbonPressure(EquilibriumResult answer, double p) {
+        double gas = hydrocarbonVapour(answer) + steam(answer);
+        return gas > 0 ? p * hydrocarbonVapour(answer) / gas : 0;
+    }
+
     /** The hydrocarbons of an answer's gas, mol. */
     private double hydrocarbonVapour(EquilibriumResult answer) {
         double vapour = 0;
@@ -646,14 +677,14 @@ class NetworkPhaseEngineTest {
         return saturationPressure(nitrogen, t, 1e4, 3.3e6);
     }
 
-    /** The model's own saturation pressure of a pure hydrocarbon inside {@code [low, high]}. */
+    /** The model's own saturation pressure of a pure component (water included, W3b) inside {@code [low, high]}. */
     private double saturationPressure(int component, double t, double low, double high) {
-        double[] pure = new double[n - 1];pure[component] = 1;
+        double[] pure = new double[n];pure[component] = 1;
         var terms = model.hydrocarbon.prepare(t);
         for (int k = 0; k < 200 && high - low > 1e-14 * high; k++) {
             double mid = Math.sqrt(low * high);
-            var l = model.hydrocarbon.phase(t, mid, pure, Root.LIQUID, terms);
-            var v = model.hydrocarbon.phase(t, mid, pure, Root.VAPOR, terms);
+            var l = model.hydrocarbon.phase(t, mid, pure, Root.LIQUID, terms, false);
+            var v = model.hydrocarbon.phase(t, mid, pure, Root.VAPOR, terms, false);
             // Below the saturation pressure the vapour has the lower fugacity.
             if (l.logFugacityView()[component] > v.logFugacityView()[component]) low = mid; else high = mid;
         }

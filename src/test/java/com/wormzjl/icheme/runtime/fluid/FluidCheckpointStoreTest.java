@@ -16,6 +16,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * Checkpoint format 11 through its real layout on a temporary directory (F3): the core record as the world's saved
@@ -50,7 +51,7 @@ class FluidCheckpointStoreTest extends CertifyingRig.Islands {
             var a=expected.reservoirs().get(n);var b=actual.reservoirs().get(n);
             assertEquals(a.id(),b.id(),what);assertEquals(a.kind(),b.kind(),what);assertEquals(a.inventory(),b.inventory(),what+": node "+a.id()+" inventory, bit for bit");
             assertEquals(Double.doubleToRawLongBits(a.state().temperature()),Double.doubleToRawLongBits(b.state().temperature()),what);assertEquals(Double.doubleToRawLongBits(a.state().pressure()),Double.doubleToRawLongBits(b.state().pressure()),what);
-            assertArrayEquals(a.state().liquid(),b.state().liquid(),what);assertArrayEquals(a.state().vapor(),b.state().vapor(),what);
+            assertArrayEquals(TestPhases.liquid(a.state()),TestPhases.liquid(b.state()),what);assertArrayEquals(TestPhases.vapor(a.state()),TestPhases.vapor(b.state()),what);
         }
     }
     /** A backend that fails its next pack or core write on demand, as a crash or a full disk would. */

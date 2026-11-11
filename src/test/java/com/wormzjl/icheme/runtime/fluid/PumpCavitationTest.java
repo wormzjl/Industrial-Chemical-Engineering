@@ -13,6 +13,7 @@ import java.util.Arrays;
 import org.junit.jupiter.api.Test;
 import static com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Direction.*;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * Owner decision D59 (4) of the phase-ports batch (A335): a pump cannot pull its suction below the vapour pressure of the
@@ -141,8 +142,8 @@ class PumpCavitationTest {
             var suction=graph.reservoirs().get(graph.pipes().get(pump).first()).state();double q=result.averageMassFlows()[pump];
             double floor=tank.pressure()+breakdown(w.model,graph,pump,q);
             System.out.println("PUMP_CAVITATION_LNG modes="+result.endpointModes()+" flows="+Arrays.toString(result.averageMassFlows())+" tankP="+tank.pressure()+" tankT="+tank.temperature()
-                    +" tankLiquidV="+tank.liquidVolume()+" tankVapourV="+tank.vaporVolume()+" suctionP="+suction.pressure()+" suctionT="+suction.temperature()+" floor="+floor);
-            assertTrue(tank.liquidVolume()>0&&tank.vaporVolume()>0,"the tank boils: two-phase");
+                    +" tankLiquidV="+TestPhases.liquidVolume(tank)+" tankVapourV="+tank.vaporVolume()+" suctionP="+suction.pressure()+" suctionT="+suction.temperature()+" floor="+floor);
+            assertTrue(TestPhases.liquidVolume(tank)>0&&tank.vaporVolume()>0,"the tank boils: two-phase");
             assertEquals(FlowControl.Mode.PUMP_SUCTION_LIMIT,result.endpointModes().get(pump),"the pump stands on its suction limit");
             assertEquals(floor,suction.pressure(),.01*tank.pressure(),"its suction stands at the tank's bubble pressure plus its breakdown NPSH");
             assertTrue(q>0&&q<.01*suction.mass()/suction.volume(),"it delivers what the head pushes through the line, below its target: "+q);
@@ -183,15 +184,15 @@ class PumpCavitationTest {
             var suction=graph.reservoirs().get(graph.pipes().get(pump).first()).state();double q=result.averageMassFlows()[pump];
             double[] x=FluidThermodynamics.phaseMoles(generator,FluidThermodynamics.OIL);double t=generator.temperature(),moles=0;
             for(int c=0;c<x.length-1;c++)moles+=x[c];
-            double h=moles*generator.liquidProperties().molarEnthalpy(),bubble=suction.pressure()-breakdown(w.model,graph,pump,q);
+            double h=moles*TestPhases.liquidProperties(generator).molarEnthalpy(),bubble=suction.pressure()-breakdown(w.model,graph,pump,q);
             var above=w.model.equilibriumPH(t,bubble*1.001,h,x.clone(),()->{});
             var below=w.model.equilibriumPH(t,bubble*.999,h,x.clone(),()->{});
             assertTrue(above!=null&&below!=null,"the PH equilibria on either side of the suction converge");
             System.out.println("PUMP_CAVITATION_SUBCOOLED modes="+result.endpointModes()+" flows="+Arrays.toString(result.averageMassFlows())+" generatorP="+generator.pressure()
                     +" generatorT="+t+" suctionP="+suction.pressure()+" suctionT="+suction.temperature());
-            assertTrue(generator.liquidVolume()>0&&generator.vaporVolume()==0,"the generator holds a subcooled liquid, no vapour");
+            assertTrue(TestPhases.liquidVolume(generator)>0&&generator.vaporVolume()==0,"the generator holds a subcooled liquid, no vapour");
             assertEquals(FlowControl.Mode.PUMP_SUCTION_LIMIT,result.endpointModes().get(pump),"the pump stands on its suction limit");
-            assertTrue(above.liquidVolume()>0&&above.vaporVolume()==0,"0.1 % above the suction less its breakdown NPSH the generator's liquid is one liquid");
+            assertTrue(TestPhases.liquidVolume(above)>0&&above.vaporVolume()==0,"0.1 % above the suction less its breakdown NPSH the generator's liquid is one liquid");
             assertTrue(below.vaporVolume()>0,"0.1 % below it splits a vapour: the suction stands at its bubble pressure plus its breakdown NPSH");
             assertTrue(q>0&&q<.01*generator.mass()/generator.volume(),"it delivers what the line passes, below its target: "+q);
             for(int e=0;e<graph.pipes().size();e++)assertEquals(q,Math.abs(result.averageMassFlows()[e]),1e-3*q,"the series line carries the pump's flow");
@@ -274,14 +275,14 @@ class PumpCavitationTest {
         int pump=-1;for(int e=0;e<graph.pipes().size();e++)if(graph.pipes().get(e).control() instanceof FlowControl.Pump)pump=e;
         var suction=graph.reservoirs().get(graph.pipes().get(pump).first()).state();
         double vapour=w.model.saturationPressure(suction.temperature()),q=result.averageMassFlows()[pump],floor=vapour+breakdown(w.model,graph,pump,q);
-        double steam=suction.waterVapor()/(suction.waterLiquid()+suction.waterVapor());
+        double steam=TestPhases.waterVapor(suction)/(TestPhases.waterLiquid(suction)+TestPhases.waterVapor(suction));
         System.out.println("PUMP_CAVITATION_ARRIVAL modes="+result.endpointModes()+" flows="+Arrays.toString(result.averageMassFlows())+" suctionP="+suction.pressure()
                 +" vapourP="+vapour+" suctionT="+suction.temperature()+" steamShare="+steam);
         // The cavitation is what the gate reads, not the mode's name: the pump stands where its head limit and its suction limit
         // both bind (owner direction 2026-10-21, BALANCE_CONVERGENCE_REVIEW.md), and either label holds the same suction at the
         // vapour pressure and the same flow (0.47887 kg/s on the head limit against 0.47882 on the suction limit).
         assertEquals(floor,suction.pressure(),1e-3*floor,"the pump cavitates: its suction stands at the vapour pressure plus its breakdown NPSH");
-        assertTrue(suction.waterLiquid()>0&&steam<1e-3,"the suction junction holds liquid water beside a trace of steam: "+steam);
+        assertTrue(TestPhases.waterLiquid(suction)>0&&steam<1e-3,"the suction junction holds liquid water beside a trace of steam: "+steam);
         assertTrue(q>0&&q<.001*suction.mass()/suction.volume(),"it delivers what the line gives, below its target: "+q);
     }
 }

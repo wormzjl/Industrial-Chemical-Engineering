@@ -327,14 +327,14 @@ class IslandCoordinatorTest {
             var first=dispatch.attempts.values().iterator().next();var firstSolver=dispatch.commands.get(first.slice().requestId()).retained();
             phaseHold(first,violation(260.12,1));
             var status=coordinator.snapshot(1).status();
-            assertEquals("HELD (phases): a third fluid phase, which the network does not carry at 260.12 K, 101325 Pa in tank at 1, 64, 0 (package icheme:tjl20_methane_nitrogen)",status);
+            assertEquals("HELD (phases): a further fluid phase, which the network does not carry at 260.12 K, 101325 Pa in tank at 1, 64, 0 (package icheme:tjl20_methane_nitrogen)",status);
             assertFalse(coordinator.waitsForInputs(1),"the first phase hold is retried");
             var retry=nextAttempt();assertEquals(100,retry.getKey(),"the retry comes a cadence later");
             assertEquals(50,retry.getValue().slice().endTick()-retry.getValue().slice().startTick(),"on the halved slice every hold gives");
             assertNotSame(firstSolver,dispatch.commands.get(retry.getValue().slice().requestId()).retained(),"on a fresh solver");
             phaseHold(retry.getValue(),violation(258.4,1));
             assertTrue(coordinator.waitsForInputs(1),"the retry reproduced it: the island waits for its inputs");
-            assertTrue(coordinator.snapshot(1).status().startsWith("HELD (phases): a third fluid phase, which the network does not carry at 258.40 K, 101325 Pa in tank at 1, 64, 0"),coordinator.snapshot(1).status());
+            assertTrue(coordinator.snapshot(1).status().startsWith("HELD (phases): a further fluid phase, which the network does not carry at 258.40 K, 101325 Pa in tank at 1, 64, 0"),coordinator.snapshot(1).status());
             assertTrue(coordinator.snapshot(1).status().endsWith("the retry failed the same way, so the island waits for a change to its network"));
             assertEquals(Long.MAX_VALUE,coordinator.snapshot(1).clock().retryAtTick());
             for(int tick=0;tick<1000;tick++)coordinator.tick();

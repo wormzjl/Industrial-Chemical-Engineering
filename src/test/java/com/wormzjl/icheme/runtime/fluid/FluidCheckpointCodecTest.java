@@ -204,11 +204,14 @@ class FluidCheckpointCodecTest {
     // ---------------- format 6: pipe ports and the compressor (phase-ports WP5, plan 4.4) ----------------
 
     private int component(String name){int i=model.components().indexOf(name);assertTrue(i>=0,name);return i;}
+    /** W3b: on the refinery network, whose cubic holds water (this class's package holds none). */
+    private final FluidThermodynamics wet=com.wormzjl.icheme.fluid.support.FluidTestSupport.networkModel();
+    private static final String WET="icheme:refinery";
     private FluidThermodynamics.State waterUnderNitrogen(double waterVolume,double pressure) {
-        double t=298.15;double[] mw=model.molecularWeights();double[] n=new double[mw.length];int water=component("Water");
-        n[water]=waterVolume*997/mw[water];n[component("Nitrogen")]=pressure*(1-waterVolume)/(FluidThermodynamics.R*t);
-        var unit=model.flashTP(t,pressure,n,()->{});for(int c=0;c<n.length;c++)n[c]/=unit.volume();
-        return model.flashTP(t,pressure,n,()->{});
+        double t=298.15;double[] mw=wet.molecularWeights();double[] n=new double[mw.length];int water=wet.components().indexOf("Water");
+        n[water]=waterVolume*997/mw[water];n[wet.components().indexOf("Nitrogen")]=pressure*(1-waterVolume)/(FluidThermodynamics.R*t);
+        var unit=wet.flashTP(t,pressure,n,()->{});for(int c=0;c<n.length;c++)n[c]/=unit.volume();
+        return wet.flashTP(t,pressure,n,()->{});
     }
     /**
      * An island whose pipes have every port kind and a compressor fed the bulk of a half-water tank, solved for one
@@ -219,6 +222,7 @@ class FluidCheckpointCodecTest {
      */
     @Test void portsACompressorAndItsModeRoundTripExactly() {
         var block=new PipeResistance.Geometry(1,.05,.000045,0);
+        var model=wet;
         var nodes=List.of(new PassiveNetwork.Reservoir(1,0,waterUnderNitrogen(.5,150000)),new PassiveNetwork.Reservoir(2,0,model.initialNitrogenCharge(1,298.15,150000,()->{}),PassiveNetwork.NodeKind.JUNCTION),
                 new PassiveNetwork.Reservoir(3,0,model.initialNitrogenCharge(1,298.15,101325,()->{}),PassiveNetwork.NodeKind.VOID));
         var pipes=List.of(new PassiveNetwork.Pipe(10,0,2,List.of(block),new FlowControl.Passive(),0,null,PassiveNetwork.PhasePort.LIQUID,PassiveNetwork.PhasePort.BULK),
@@ -228,7 +232,7 @@ class FluidCheckpointCodecTest {
         var full=new PassiveIntervalSolver(model).solve(new PassiveNetwork(nodes,pipes),5,PassiveIntervalSolver.Settings.defaults(),()->{});
         assertNotEquals(FlowControl.Mode.INLET_WRONG_PHASE,full.endpointModes().get(2),"the compressor on the tank's bulk is not refused");
         var state=new IslandCoordinator.Snapshot(1,4,full.graph(),new IslandClock.Snapshot(350,200,400,100),Optional.of(full),"FULL");
-        var before=new FluidCheckpointCodec.Checkpoint(List.of(new FluidCheckpointCodec.IslandEntry("minecraft:overworld",PACKAGE,state)));
+        var before=new FluidCheckpointCodec.Checkpoint(List.of(new FluidCheckpointCodec.IslandEntry("minecraft:overworld",WET,state)));
         var image=FluidCheckpointCodec.encode(before,key->key.on(model));assertEquals(FluidCheckpointCodec.VERSION,image.core().getInt("StateFormat"));
         var after=FluidCheckpointCodec.decode(image,key->key.on(model)).islands().getFirst().snapshot();
         assertEquals(full.graph().pipes(),after.graph().pipes(),"ends, sections, controls, blocked masks and the ports of every pipe");

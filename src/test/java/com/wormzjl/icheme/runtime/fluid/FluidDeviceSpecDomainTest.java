@@ -8,6 +8,7 @@ import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * F4, T1.1, and the input box of the range-extrapolation plan (decision 9, owner rule of 2026-10-16): the device input
@@ -47,11 +48,13 @@ class FluidDeviceSpecDomainTest {
      * accepted and continued. Water at 260 K passes the input box and the generator supplies it, the stand-in of its ice
      * (WP4: free liquid water, which a vessel's refresh freezes), with no hold. */
     @Test void aGeneratorIsCheckedAgainstTheEnvelopeAndControlsAreOnlyStructural() {
-        int water=model.componentCount()-1;double[] n=new double[model.componentCount()];n[water]=1;
+        // W3b: water on the refinery network, whose cubic holds it (this package holds none).
+        var wet=com.wormzjl.icheme.fluid.support.FluidTestSupport.networkModel();
+        int water=wet.componentCount()-1;double[] n=new double[wet.componentCount()];n[water]=1;
         var ice=new FluidDeviceSpec(1,260,101325,n);
-        assertDoesNotThrow(()->ice.validate(model,TopologyCompiler.Kind.GENERATOR));
-        var source=assertDoesNotThrow(()->ice.initialize(device(TopologyCompiler.Kind.GENERATOR),model,()->{}));
-        assertTrue(source.state().waterLiquid()>0&&source.state().waterVapor()==0,"condensed below the melting line, carried as its stand-in");
+        assertDoesNotThrow(()->ice.validate(wet,TopologyCompiler.Kind.GENERATOR));
+        var source=assertDoesNotThrow(()->ice.initialize(device(TopologyCompiler.Kind.GENERATOR),wet,()->{}));
+        assertTrue(TestPhases.waterLiquid(source.state())>0&&TestPhases.waterVapor(source.state())==0,"condensed below the melting line, carried as its stand-in");
         double[] crude=new double[model.componentCount()];crude[model.components().indexOf("crude_pc02")]=1;
         assertDoesNotThrow(()->new FluidDeviceSpec(1,280,101325,crude).validate(model,TopologyCompiler.Kind.GENERATOR));
         assertThrows(IllegalArgumentException.class,()->new FluidDeviceSpec(1,950,101325,crude).validate(model,TopologyCompiler.Kind.GENERATOR),"above the 900 K envelope");

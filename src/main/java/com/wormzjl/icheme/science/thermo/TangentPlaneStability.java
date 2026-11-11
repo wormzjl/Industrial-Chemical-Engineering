@@ -288,10 +288,18 @@ public final class TangentPlaneStability {
         int trialCount = 2 + (pureTrials ? w.presentCount : 0)
                 + (!pureTrials && waterRichTrial >= 0 && w.feed[waterRichTrial] > 0.0 ? 1 : 0);
         int trials = 0;
+        // The vapour trial (0) that ends on a liquid root duplicates the liquid trial and tells nothing; it is repeated
+        // with every iterate held on the vapour root (W3b). A water-rich feed seeds it water-rich, where below 373 K the
+        // lower-Gibbs root is the liquid, so the substitution never left the liquid basin: a cut with 30 mol of water
+        // per mol at 369 K and 1 bar, above its three-phase point, answered two liquids.
+        boolean held = false;
         for (int trial = 0; trial < trialCount; trial++) {
+            w.heldRoot = held;
             Outcome outcome = runTrial(w, trial);
             trials++;
             Point end = w.current;
+            held = trial == 0 && !held && outcome != Outcome.PROVEN && end.root == PengRobinsonKernel.Root.LIQUID;
+            if (held) trial--;
             if (filter != null && (outcome == Outcome.PROVEN || outcome == Outcome.UNRESOLVED)) {
                 // runTrial ends such a trial at its stationary point or its budget, so the current point is the trial's.
                 for (int i = 0; i < w.count; i++) w.shares[i] = end.amounts[i] / end.total;
@@ -317,6 +325,7 @@ public final class TangentPlaneStability {
                 w.nearestStationary = Math.min(w.nearestStationary, end.trivial);
             }
         }
+        w.heldRoot = false;
         Verdict verdict;
         if (proven || w.localStability == LOCALLY_UNSTABLE) verdict = Verdict.UNSTABLE;
         else if (unresolved) verdict = Verdict.UNRESOLVED;
@@ -556,7 +565,7 @@ public final class TangentPlaneStability {
     }
 
     /**
-     * Evaluates a trial point on its lower-Gibbs root and fills its gradient {@code g_i = ln W_i + ln phi_i - d_i},
+     * Evaluates a trial point on its lower-Gibbs root (a held trial: on its preferred root) and fills its gradient {@code g_i = ln W_i + ln phi_i - d_i},
      * {@code tm}, the largest {@code |g_i|} and the squared log distance from the feed.
      *
      * @param fromLogarithms take the amounts from {@code logAmounts}; otherwise they are already set
@@ -606,7 +615,7 @@ public final class TangentPlaneStability {
             boolean otherAdmissible = admissible(w, c.second, other);
             double otherShift = other == PengRobinsonKernel.Root.VAPOR ? w.branchShift(c.amounts, total) : 0.0;
             double preferredShift = preferred == PengRobinsonKernel.Root.VAPOR ? w.branchShift(c.amounts, total) : 0.0;
-            if (!preferredAdmissible || otherAdmissible && w.residualGibbs(c.second, c.amounts, total) + otherShift
+            if (!preferredAdmissible || !w.heldRoot && otherAdmissible && w.residualGibbs(c.second, c.amounts, total) + otherShift
                     < w.residualGibbs(chosen, c.amounts, total) + preferredShift) {
                 root = other;
                 chosen = c.second;
@@ -621,7 +630,7 @@ public final class TangentPlaneStability {
                     }
                 }
             }
-        } else if (chosen.physicalRootCount() > 1) {
+        } else if (!w.heldRoot && chosen.physicalRootCount() > 1) {
             PengRobinsonKernel.Root other = opposite(preferred);
             kernel.evaluate(t, pressure, c.amounts, other, w.mixture, c.second);
             w.evaluations++;
@@ -780,6 +789,8 @@ public final class TangentPlaneStability {
         private PengRobinsonKernel.Root feedRoot;
         private int localStability;
         private boolean fullStep;
+        /** Whether the current trial keeps every iterate on its preferred root (the repeated vapour trial). */
+        private boolean heldRoot;
         private int evaluations;
         private int derivativeEvaluations;
         private int iterations;

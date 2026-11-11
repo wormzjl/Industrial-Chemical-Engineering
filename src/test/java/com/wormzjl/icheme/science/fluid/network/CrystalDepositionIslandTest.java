@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Locale;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * The fluid network on the crystal competition of the pilot package {@code icheme:pilot_cryogenic} (N2, CH4, C2H6, CO2
@@ -92,14 +93,14 @@ class CrystalDepositionIslandTest {
     }
 
     @Test void theCrystalsAreThePilotsSolidAndTheIceAndTheBundledNetworkPackageHasTheIceAndCarbonDioxideI() {
-        var crystals=model.crystalSolids().all();assertEquals(2,crystals.size(),"CO2-I and, last, the free water's ice (WP4)");
-        assertTrue(crystals.getLast().water());assertEquals("icheme:crystal_ice_ih",crystals.getLast().material().id());
+        // W3b: the pilot's cubic holds no water, so its contract admits no ice (before, the free water's ice came last).
+        var crystals=model.crystalSolids().all();assertEquals(1,crystals.size(),"CO2-I alone");
         var crystal=crystals.getFirst();
         assertEquals(CO2_I,crystal.material().id());assertEquals(CO2,crystal.component());assertNotNull(crystal.material().crystal());
         assertEquals(194.627788,crystal.referenceTemperature(),1e-6,"its constants are taken at CO2-I's normal sublimation point");
         assertTrue(model.crystalsCompete(150,new double[]{0,.98,0,.02,0}),"a dry request carrying CO2 below the crystals' ceiling");
         assertFalse(model.crystalsCompete(150,new double[]{0,1,0,0,0}),"no CO2, no competition");
-        assertTrue(model.flashTP(150,2e6,new double[]{0,.98,0,.02,0},()->{}).liquidVolume()>0,"CO2 dissolved in liquid methane below its triple point is evaluated");
+        assertTrue(TestPhases.liquidVolume(model.flashTP(150,2e6,new double[]{0,.98,0,.02,0},()->{}))>0,"CO2 dissolved in liquid methane below its triple point is evaluated");
         // The bundled network package admits CO2-I on its fit ideal gas since O11 (decision E27); a view without CO2 holds the ice only.
         var bundled=FluidTestSupport.networkModel().crystalSolids().all();
         assertEquals(2,bundled.size(),"CO2-I and the free water's ice");
@@ -118,7 +119,7 @@ class CrystalDepositionIslandTest {
         var crystal=co2();var material=crystal.material();
         double offset=model.hydrocarbon.spine().orElseThrow().formationReference().offsetJoulesPerMole(CO2);
         double t=194.466712376,p=1e5;double[] none=new double[4];
-        var vapour=model.state(t,p,none,new double[]{0,0,0,1},0,0,p);
+        var vapour=TestPhases.state(model,t,p,none,new double[]{0,0,0,1},0,0);
         double sublimation=vapour.enthalpy()-enthalpy(material,crystal.molarMass(),t,p);
         System.out.printf(Locale.ROOT,"sublimation enthalpy on the network datum at %.9f K, %.0f Pa: %.4f J/mol; crystal %.4f kg/m3, %.4f J/(kg K)%n",t,p,sublimation,
                 material.density(),material.heatCapacity());
@@ -145,7 +146,7 @@ class CrystalDepositionIslandTest {
         var node=result.graph().reservoirs().getFirst();var after=node.inventory();var state=node.state();
         double crystal=crystal(after),co2=before.moles()[CO2];
         System.out.printf(Locale.ROOT,"(a) 10%% CO2 in N2, 0.1 m3 charged at 170 K, 1 MPa: %.6f K, %.3f Pa, crystal %.9f mol of %.9f mol CO2 (%.3f %%), gas y_CO2 %.6e, size %s m%n",
-                state.temperature(),state.pressure(),crystal,co2,100*crystal/co2,state.vaporView()[CO2]/Arrays.stream(state.vaporView()).sum(),after.solids().size(CO2_I).metres());
+                state.temperature(),state.pressure(),crystal,co2,100*crystal/co2,TestPhases.vapor(state)[CO2]/Arrays.stream(TestPhases.vapor(state)).sum(),after.solids().size(CO2_I).metres());
         assertTrue(crystal>0,"deposited at the first refresh");
         assertEquals(co2,species(after)[CO2],1e-12*co2,"CO2 conserved");
         assertEquals(before.moles()[NITROGEN],after.moles()[NITROGEN],0,"the nitrogen never moves");
@@ -257,7 +258,7 @@ class CrystalDepositionIslandTest {
             var a=graph.reservoirs().get(0);var j=graph.reservoirs().get(1);var b=graph.reservoirs().get(2);
             System.out.printf(Locale.ROOT,"(c) interval %d: warm %.3f K %.1f Pa crystal %.3e | junction %.3f K | cold %.3f K %.1f Pa crystal %.6e mol, gas y_CO2 %.3e%n",k+1,
                     a.state().temperature(),a.state().pressure(),crystal(a.inventory()),j.state().temperature(),b.state().temperature(),b.state().pressure(),crystal(b.inventory()),
-                    b.state().vaporView()[CO2]/Arrays.stream(b.state().vaporView()).sum());
+                    TestPhases.vapor(b.state())[CO2]/Arrays.stream(TestPhases.vapor(b.state())).sum());
             assertTrue(a.inventory().solids().empty(),"no deposition in the warm vessel");
             assertTrue(j.inventory().solids().empty()&&j.state().solids().empty(),"a junction never precipitates (D23 (5))");
             assertEquals(co2,total(graph),1e-10*co2,"CO2 conserved over the island (vessels, their crystals and the junction's buffer)");
@@ -277,7 +278,7 @@ class CrystalDepositionIslandTest {
     @Test void aCo2RichChargeBelowTheTriplePointFreezesBesideTheLiquidItLeaves() {
         double[] feed={0,0,.3,.7,0};
         var direct=model.flashTP(200,2e6,feed,()->{});
-        assertNotNull(direct.liquidProperties(),"the TP adapter states the supersaturated liquid in the liquid slot");
+        assertNotNull(TestPhases.liquidProperties(direct),"the TP adapter states the supersaturated liquid in the liquid slot");
         var rigid=interval(closed(charge(200,2e6,feed,1e-3))).graph().reservoirs().getFirst();
         System.out.printf(Locale.ROOT,"(d) charged at 2 MPa: %.6f K, %.0f Pa, crystal %.9f mol%n",rigid.state().temperature(),rigid.state().pressure(),crystal(rigid.inventory()));
         assertTrue(rigid.state().pressure()>1e7,"above the 10 MPa envelope, carried: "+rigid.state().pressure());
@@ -287,9 +288,9 @@ class CrystalDepositionIslandTest {
         var node=result.graph().reservoirs().getFirst();var after=node.inventory();var state=node.state();
         double crystal=crystal(after),co2=before.moles()[CO2];
         System.out.printf(Locale.ROOT,"(d) 70%% CO2 in ethane charged at 200 K, 0.5 MPa: %.6f K, %.3f Pa, crystal %.9f of %.9f mol CO2, liquid x_CO2 %.6f, size %s m%n",
-                state.temperature(),state.pressure(),crystal,co2,state.liquidView()[CO2]/Arrays.stream(state.liquidView()).sum(),after.solids().size(CO2_I).metres());
+                state.temperature(),state.pressure(),crystal,co2,TestPhases.liquid(state)[CO2]/Arrays.stream(TestPhases.liquid(state)).sum(),after.solids().size(CO2_I).metres());
         assertTrue(crystal>0,"CO2 froze beside the liquid");
-        assertNotNull(state.liquidProperties());
+        assertNotNull(TestPhases.liquidProperties(state));
         assertEquals(co2,species(after)[CO2],1e-12*co2,"CO2 conserved");
         assertEquals(trueEnergy(before),trueEnergy(after),1e-12*Math.abs(trueEnergy(before)));assertEquals(before.volume(),after.volume(),0);
         var uv=engineUv(after);
@@ -312,7 +313,7 @@ class CrystalDepositionIslandTest {
     @Test void aLiquidMethaneVesselWithDissolvedCo2FreezesWhenCooledAndDissolvesWhenWarmed() {
         double[] z={0,.98,0,.02,0};
         var unit=model.flashTP(172,2.45e6,z,()->{});
-        assertNotNull(unit.liquidProperties());assertNotNull(unit.vaporProperties(),"a liquid with its vapour");
+        assertNotNull(TestPhases.liquidProperties(unit));assertNotNull(TestPhases.vaporProperties(unit),"a liquid with its vapour");
         var start=closed(unit);var initial=start.reservoirs().getFirst();
         assertTrue(interval(start).graph().reservoirs().getFirst().inventory().solids().empty(),"above its three-phase line nothing freezes");
         double trace=1e-12;
@@ -320,11 +321,11 @@ class CrystalDepositionIslandTest {
         var cooled=refreshed(cold.graph()).reservoirs().getFirst();double crystal=crystal(cooled.inventory());
         double co2=initial.inventory().moles()[CO2];
         System.out.printf(Locale.ROOT,"(h) cooled by 1500 J: %.6f K, %.3f Pa, crystal %.9f mol, liquid x_CO2 %.6f, vapour y_CO2 %.6e, size %s m (%d substeps, %d rejected)%n",
-                cooled.state().temperature(),cooled.state().pressure(),crystal,cooled.state().liquidView()[CO2]/Arrays.stream(cooled.state().liquidView()).sum(),
-                cooled.state().vaporView()[CO2]/Arrays.stream(cooled.state().vaporView()).sum(),cooled.inventory().solids().empty()?"-":cooled.inventory().solids().size(CO2_I).metres(),
+                cooled.state().temperature(),cooled.state().pressure(),crystal,TestPhases.liquid(cooled.state())[CO2]/Arrays.stream(TestPhases.liquid(cooled.state())).sum(),
+                TestPhases.vapor(cooled.state())[CO2]/Arrays.stream(TestPhases.vapor(cooled.state())).sum(),cooled.inventory().solids().empty()?"-":cooled.inventory().solids().size(CO2_I).metres(),
                 cold.acceptedSubsteps(),cold.rejectedSubsteps());
         assertTrue(crystal>0,"CO2 froze out of the liquid");
-        assertNotNull(cooled.state().liquidProperties(),"beside a liquid");
+        assertNotNull(TestPhases.liquidProperties(cooled.state()),"beside a liquid");
         assertEquals(co2,species(cooled.inventory())[CO2],1e-12*co2,"CO2 conserved");
         assertEquals(trueEnergy(initial.inventory())-1500,trueEnergy(cooled.inventory()),1e-9*1500);
         var uv=engineUv(cooled.inventory());
@@ -354,16 +355,16 @@ class CrystalDepositionIslandTest {
     @Test void aLiquidFullVesselFreezesBelowItsLiquidusBesideTheLiquidAloneAndDissolvesWhenWarmed() {
         double[] z={0,.97,0,.03,0};
         var start=closed(charge(170,9e6,z,1e-3));var initial=start.reservoirs().getFirst();
-        assertNotNull(initial.state().liquidProperties());assertNull(initial.state().vaporProperties(),"liquid-full");
+        assertNotNull(TestPhases.liquidProperties(initial.state()));assertNull(TestPhases.vaporProperties(initial.state()),"liquid-full");
         double trace=1e-12;
         var cold=heat(heat(heat(start,-200,trace,METHANE).graph(),-200,trace,METHANE).graph(),-200,trace,METHANE);
         var cooled=refreshed(cold.graph()).reservoirs().getFirst();double crystal=crystal(cooled.inventory());
         double co2=initial.inventory().moles()[CO2];
         System.out.printf(Locale.ROOT,"(h) liquid-full, cooled by 3000 J: %.6f K, %.3f Pa, crystal %.9f of %.9f mol CO2, liquid x_CO2 %.6f, vapour %s (%d substeps, %d rejected)%n",
-                cooled.state().temperature(),cooled.state().pressure(),crystal,co2,cooled.state().liquidView()[CO2]/Arrays.stream(cooled.state().liquidView()).sum(),
-                cooled.state().vaporProperties()==null?"none":"present",cold.acceptedSubsteps(),cold.rejectedSubsteps());
+                cooled.state().temperature(),cooled.state().pressure(),crystal,co2,TestPhases.liquid(cooled.state())[CO2]/Arrays.stream(TestPhases.liquid(cooled.state())).sum(),
+                TestPhases.vaporProperties(cooled.state())==null?"none":"present",cold.acceptedSubsteps(),cold.rejectedSubsteps());
         assertTrue(crystal>0,"CO2 froze out of the liquid");
-        assertNotNull(cooled.state().liquidProperties());assertNull(cooled.state().vaporProperties(),"still liquid-full: the liquid alone beside the crystal");
+        assertNotNull(TestPhases.liquidProperties(cooled.state()));assertNull(TestPhases.vaporProperties(cooled.state()),"still liquid-full: the liquid alone beside the crystal");
         assertEquals(co2,species(cooled.inventory())[CO2],1e-12*co2,"CO2 conserved");
         assertEquals(trueEnergy(initial.inventory())-3000,trueEnergy(cooled.inventory()),1e-9*3000);
         var uv=engineUv(cooled.inventory());
@@ -393,11 +394,11 @@ class CrystalDepositionIslandTest {
      */
     @Test void aCrystalBesideTwoLiquidsIsTheTypedCrystalPhasesHold() {
         double[] feed={40,0,55,5,0};double[] none=new double[4];
-        var liquid=model.state(95,2e6,Arrays.copyOf(feed,4),none,0,0,2e6);
+        var liquid=TestPhases.state(model,95,2e6,Arrays.copyOf(feed,4),none,0,0);
         var island=closed(liquid);
-        var direct=assertThrows(FluidThermodynamics.UnsupportedPhases.class,()->model.flashTP(95,2e6,feed,()->{}));
-        System.out.println("TP at 95 K, 2 MPa: "+direct.getMessage());
-        assertEquals(FluidThermodynamics.UnsupportedPhases.Kind.LIQUID_LIQUID,direct.kind());
+        // W3b: the fluid flash carries the split as two liquids (three fluid phases come from the physics, never a hold).
+        var direct=assertDoesNotThrow(()->model.flashTP(95,2e6,feed,()->{}));
+        assertTrue(direct.liquidSlotVolume()>0&&direct.aqueousSlotVolume()>0,"two liquids");
         RuntimeException refused=assertThrows(RuntimeException.class,()->interval(island));
         System.out.println("refresh: "+refused.getMessage());
         assertInstanceOf(FluidThermodynamics.UnsupportedPhases.class,refused,"the typed hold: "+refused);

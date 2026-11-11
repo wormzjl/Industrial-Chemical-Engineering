@@ -4646,8 +4646,9 @@ public final class FluidTpEquilibrium {
      * water's boiling under a heavy cut does (a step 3e-9 K wide), the answer is the ends' mixture {@code (1 - lambda) low +
      * lambda high} whose enthalpy (PH) or internal energy (UV, both ends at the specified volume) is the specification: the
      * phases the ends share are merged, the leaving phase comes from the lower end and the entering one from the upper.
-     * Every component is conserved, as at both ends. Null where the ends do not differ so, hold a crystal, or the
-     * specification lies outside them.
+     * Every component is conserved, as at both ends. A crystal is one of the phases like a fluid, matched by its id: ice
+     * melting under oil at 273.15 K is the step between gas, oil and ice and gas, oil and water. Null where the ends do not
+     * differ so or the specification lies outside them.
      */
     private EquilibriumResult leverStep(Specification specification, Search s, double target, PhaseCompetition competition, Workspace w) {
         EquilibriumResult low = s.lowerResult, high = s.upperResult;
@@ -4657,8 +4658,6 @@ public final class FluidTpEquilibrium {
         double lambda = (target - lowValue) / (highValue - lowValue);
         if (!(lambda >= 0.0 && lambda <= 1.0)) return null;
         List<PhaseAmounts> lows = low.phases(), highs = high.phases();
-        for (PhaseAmounts phase : lows) if (phase.kind() == PhaseKind.SOLID) return null;
-        for (PhaseAmounts phase : highs) if (phase.kind() == PhaseKind.SOLID) return null;
         int[] partner = new int[highs.size()];
         boolean[] taken = new boolean[lows.size()];
         int entering = -1, leaving = -1;
@@ -4666,7 +4665,7 @@ public final class FluidTpEquilibrium {
             partner[h] = -1;
             double nearest = LEVER_MATCH;
             for (int l = 0; l < lows.size(); l++) {
-                if (taken[l] || lows.get(l).kind() != highs.get(h).kind()) continue;
+                if (taken[l] || lows.get(l).kind() != highs.get(h).kind() || !Objects.equals(lows.get(l).crystal(), highs.get(h).crystal())) continue;
                 double distance = compositionDistance(lows.get(l).amounts(), highs.get(h).amounts());
                 if (distance < nearest) {
                     nearest = distance;
@@ -4698,23 +4697,38 @@ public final class FluidTpEquilibrium {
         if (lambda < 1.0) phases.add(scaled(lows.get(leaving), 1.0 - lambda, null));
         // The vapour first, then the liquids lighter first.
         phases.sort((a, b) -> a.kind() == b.kind() ? Double.compare(b.state().molarVolume(), a.state().molarVolume())
-                : a.kind() == PhaseKind.LIQUID ? 1 : b.kind() == PhaseKind.LIQUID ? -1 : 0);
-        int liquids = 0;
+                : Integer.compare(order(a.kind()), order(b.kind())));
+        int liquids = 0, solids = 0;
         boolean vapour = false;
+        PhaseAmounts crystal = null;
         for (PhaseAmounts phase : phases) {
             if (phase.kind() == PhaseKind.LIQUID) liquids++;
+            else if (phase.kind() == PhaseKind.SOLID) { solids++; crystal = phase; }
             else vapour = true;
         }
-        Classification classification = vapour ? liquids == 2 ? Classification.VAPOR_LIQUID_LIQUID
-                : liquids == 1 ? Classification.VAPOR_LIQUID : null
-                : liquids == 2 ? Classification.LIQUID_LIQUID : null;
-        if (classification == null || phases.size() > 3) return null;
+        if (solids > 1 || phases.size() - solids > 3) return null;
+        Classification classification = solids == 0
+                ? vapour ? liquids == 2 ? Classification.VAPOR_LIQUID_LIQUID : liquids == 1 ? Classification.VAPOR_LIQUID : null
+                        : liquids == 2 ? Classification.LIQUID_LIQUID : null
+                : liquids == 2 ? vapour ? Classification.VAPOR_LIQUID_LIQUID_SOLID : Classification.LIQUID_LIQUID_SOLID
+                : crystalClassification(vapour, liquids == 1, true);
+        if (classification == null) return null;
+        EquilibriumResult.Deposition deposition = null;
+        if (crystal != null) {
+            Crystal c = crystalById(crystal.crystal());
+            double held = 0.0;
+            for (double x : crystal.amountsView()) held += x;
+            if (c != null && held > 0.0) deposition = new EquilibriumResult.Deposition(c.id(), evaluator.components().get(c.component()), Double.NaN, Double.NaN, held, false, 0, 0);
+        }
         String note = "on the step between " + s.lower + " and " + s.upper + (energy ? " K" : " K at the specified volume")
                 + " by the lever rule (" + lambda + " of the upper end)";
         return new EquilibriumResult(Specification.TP, EquilibriumResult.Status.CONVERGED, null, CONVERGED + "; " + note,
                 contract.identity(), competition, classification, phases, List.of(), solidCoverage(convergedCoverage, w),
-                diagnostics(w, null, false), null, null);
+                diagnostics(w, null, false), null, deposition);
     }
+
+    /** The order of the lever step's phases by kind: the vapour, the liquids, then a crystal. */
+    private static int order(PhaseKind kind) { return kind == PhaseKind.SOLID ? 2 : kind == PhaseKind.LIQUID ? 1 : 0; }
 
     /** The largest mole-fraction difference of two phases' amounts. */
     private static double compositionDistance(double[] a, double[] b) {
@@ -5577,9 +5591,12 @@ public final class FluidTpEquilibrium {
         return stabilityOf(test, t, w.feed, w);
     }
 
-    /** The stability test of {@code amounts} at the workspace's branch pressures, counted; filtered when carrying. */
+    /**
+     * The stability test of {@code amounts} at the workspace's branch pressures, counted; filtered when carrying on the
+     * two-slot path. A feed of the three-slot system is not filtered: a crystal's stand-in is a liquid of its own there.
+     */
     private TangentPlaneStability.Result stabilityOf(TangentPlaneStability test, double t, double[] amounts, Workspace w) {
-        TangentPlaneStability.Result result = w.carrying
+        TangentPlaneStability.Result result = w.carrying && !threeSlotFeed(w)
                 ? test.test(t, w.liquidPressure, w.vaporPressure, translations, amounts, w.carriedFilter, w.stability)
                 : w.branched ? test.test(t, w.liquidPressure, w.vaporPressure, translations, amounts, w.stability)
                 : test.test(t, w.liquidPressure, amounts, w.stability);
@@ -5658,11 +5675,12 @@ public final class FluidTpEquilibrium {
     }
 
     /**
-     * A split under {@link PhaseCompetition#FLUID_CARRYING_CRYSTALS} restated, one place for the dry and the wet path. A split
-     * with no crystal-rich product is the answer. Both products dense outside the critical band (the test of
-     * {@link #twoPhaseResult}) is the crystal's stand-in split of a dense fluid: the answer is the feed as one liquid. Otherwise
-     * a crystal-rich denser product is the stand-in beside a vapour: it keeps its crystal species and the lighter product takes
-     * every other species, the shape a crystal is carried in. In the vapour the crystal's mass would take a gas's volume and
+     * A split under {@link PhaseCompetition#FLUID_CARRYING_CRYSTALS} restated on the two-slot path. A split with no
+     * crystal-rich product is the answer. Both products dense outside the critical band (the test of {@link #twoPhaseResult})
+     * are two liquids, the crystal-rich one the crystal's stand-in in a liquid slot of its own (W3b, option A: the network
+     * carries two liquids; the feed as one liquid was the one-liquid-slot workaround, a merged liquid at a composition the
+     * fluid equilibrium splits). Otherwise a crystal-rich denser product is the stand-in beside a vapour: it keeps its
+     * crystal species and the lighter product takes every other species, the shape a crystal is carried in. In the vapour the crystal's mass would take a gas's volume and
      * energy (a CO2 let-down below the triple point, stated all vapour, ran to CO2's 90 K floor).
      */
     private int carriedSplit(double t, Workspace w) {
@@ -5673,10 +5691,7 @@ public final class FluidTpEquilibrium {
         boolean lighterRich = crystalRich(lighter, swapped ? w.liquidState : w.vaporState, t, w);
         if (!denserRich && !lighterRich) return SPLIT;
         boolean band = inBand(t, w.liquidPressure, w) || w.tieLine < BAND_TIE_LINE;
-        if (!band && w.liquidProductDenseLiquidLike && w.vapourProductDenseLiquidLike) {
-            w.singleRoot = Root.LIQUID;
-            return SINGLE;
-        }
+        if (!band && w.liquidProductDenseLiquidLike && w.vapourProductDenseLiquidLike) return SPLIT;
         if (!denserRich) return SPLIT;
         for (int i = 0; i < count; i++) {
             double held = crystalSpecies[i] ? denser[i] : 0.0;
@@ -6386,11 +6401,15 @@ public final class FluidTpEquilibrium {
     // W3a D3: three fluid phases as one system, for a feed of a derived list holding a polar compound.
 
     /**
-     * Whether an unstable feed takes the three-slot system: water in the equation of state, one pressure, no carried
-     * crystals, and a polar compound present. Every other feed keeps the two-slot path bit for bit.
+     * Whether an unstable feed takes the three-slot system: water in the equation of state, one pressure, and a polar
+     * compound present. Every other feed keeps the two-slot path bit for bit. Under
+     * {@link PhaseCompetition#FLUID_CARRYING_CRYSTALS} such a feed answers its fluid-only equilibrium, unfiltered: a dense
+     * product rich in a crystal's species is the crystal's stand-in in a liquid slot of its own, for every crystal alike
+     * (W3b, option A; the merge of two dense products into one liquid was the one-liquid-slot workaround). Water under oil at
+     * 263 K is gas, oil and a supercooled aqueous liquid; a merged liquid at an unstable composition is no equilibrium.
      */
     private boolean threeSlotFeed(Workspace w) {
-        if (!inEquationOfState || w.branched || w.carrying || w.slots == null) return false;
+        if (!inEquationOfState || w.branched || w.slots == null) return false;
         for (int a = 0; a < w.presentCount; a++) if (polar[w.present[a]]) return true;
         return false;
     }

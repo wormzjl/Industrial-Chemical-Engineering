@@ -31,16 +31,19 @@ import java.util.function.ToDoubleFunction;
  *   <li>{@link Source#LIBRARY}: a pair the package's interaction libraries give (a constant {@code k_ij}, or a pair its
  *   group-contribution rule resolves, {@code k_ij(T)} exact), as a classical pair;</li>
  *   <li>{@link Source#HYDROGEN}: hydrogen with anything, {@code k_ij = 0} (owner rule of 2026-11-04);</li>
- *   <li>{@link Source#HENRY}: water with a gas that carries {@code henry_in_water}: one energy for both directions at
- *   {@code alpha = 0.3}, at 298.15 K and at 373.15 K (linear in T between), such that the gas's fugacity coefficient at
- *   infinite dilution in liquid water at 101.325 kPa is {@code k_H/P};</li>
+ *   <li>{@link Source#HENRY}: water with a gas that carries {@code henry_in_water}: a classical pair, {@code k_ij} at
+ *   298.15 K and at 373.15 K (linear in T between, held past the ends), each such that the gas's fugacity coefficient at
+ *   infinite dilution in liquid water at 101.325 kPa is {@code k_H/P}; a {@code k_ij} at or above 1 (a negative unlike
+ *   attraction) is refused. A local-composition cell on the gas centre would carry the solubility only with an energy
+ *   several times the gas's own cohesion, which makes the hot wet gas's attraction negative (W3b, section 12 item 3);</li>
  *   <li>{@link Source#ACTIVITY}: two compounds with modified UNIFAC (Dortmund) counts, both liquids at 298.15 K and
  *   2 MPa (below Tc, root denser than PR's critical volume), at least one polar (a main group other than 1, 2, 3, 4 and
  *   42; water is polar), whose main-group pairs the table holds: the group model's ln gamma of both compounds on 15
  *   compositions at 298.15 K fitted by least squares, through the equation of state at 2 MPa
  *   ({@code ln gamma_i = ln phi_i - ln phi_i} of the pure liquid), into alpha and the two energies; then the two energies
  *   alone at 373.15 K with that alpha (constant energies when a compound is not a liquid at 373.15 K); energies linear
- *   in T. The water-hydrocarbon block of the table applies where its rule holds. Where the group model has one liquid
+ *   in T, held past the ends and faded to zero toward the highest critical temperature of the pair's polar compounds
+ *   ({@link HuronVidalExcess#held(double, double, double, double, double, double, double[])}). The water-hydrocarbon block of the table applies where its rule holds. Where the group model has one liquid
  *   the fit is held to one (a falling {@code ln x_1 + ln gamma_1} is penalised) and refused if it keeps two; one liquid
  *   where the group model has two is kept with a notice ({@link Result#notices()}). A compound that is not a liquid at
  *   298.15 K, or a pair the table lacks, takes the next source;</li>
@@ -59,23 +62,22 @@ import java.util.function.ToDoubleFunction;
  * <p>A crude cut (a {@code petroleum_fraction} without counts in a scheme) takes paraffinic counts from its molar mass M
  * (g/mol): {@code n = round((M - 2.01588)/14.02658)} carbons of a normal paraffin, rounded half up, as 2 CH3 and
  * {@code n - 2} CH2, in both schemes. A fit that does not converge (no root, a penalty left at the optimum, two liquids
- * where the group model has one, a Henry energy outside its bracket) is refused with both compounds' names ({@link Refused}). Each fitted pair is kept for the life of
+ * where the group model has one, a Henry k_ij outside its bracket) is refused with both compounds' names ({@link Refused}). Each fitted pair is kept for the life of
  * the catalog in its {@link Cache}, keyed by the source and the records it read with their revisions, so lists sharing a
  * pair fit it once. The fits are deterministic: fixed starting points, fixed iteration counts, every transcendental
  * function through {@link DeterministicMath} or the kernel.</p>
  */
 public final class DerivedPairs {
     /** The declared revision of the derivation: bumped when a rule, a constant or a fit setting here changes. */
-    public static final String REVISION = "derived-pairs-r4";
+    public static final String REVISION = "derived-pairs-r6";
     public static final double FIRST_KELVIN = 298.15;
     public static final double SECOND_KELVIN = 373.15;
     /** The pressure of the activity fit: both compounds liquid at both temperatures for the usual solvents. */
     static final double FIT_PRESSURE = 2.0e6;
     /** The pressure a gas's Henry constant is matched at. */
     static final double HENRY_PRESSURE = 101325.0;
-    static final double HENRY_ALPHA = 0.3;
-    /** The bracket of the Henry energy, J/mol, and the bisection's step count. */
-    static final double HENRY_LOW = -30000.0, HENRY_HIGH = 80000.0;
+    /** The bracket of the Henry pair's k_ij (below 1: a nonnegative unlike attraction) and the bisection's step count. */
+    static final double HENRY_LOW = -5.0, HENRY_HIGH = 1.0;
     static final int HENRY_STEPS = 200;
     /** Mole fractions of the first compound the activity fit compares on. */
     static final double[] GRID = {0.0, 0.02, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.98, 1.0};
@@ -253,11 +255,10 @@ public final class DerivedPairs {
                     Compound gas = a.id.equals(WATER) ? b : a, water = gas == a ? b : a;
                     var read = new TreeSet<>(List.of(gas.token, water.token, gas.henryToken, context.waterToken()));
                     tokens.addAll(read);
-                    double[] e = context.cache.get("henry|" + String.join(",", read), () -> context.henryEnergies(gas, water), counter);
-                    int g = gas == a ? i : j, w = gas == a ? j : i;
-                    excess.nrtl(g, w, HENRY_ALPHA, FIRST_KELVIN, e[0], e[0], SECOND_KELVIN, e[1], e[1]);
+                    double[] k = context.cache.get("henry|" + String.join(",", read), () -> context.henryInteraction(gas, water), counter);
+                    excess.classicalLinear(i, j, FIRST_KELVIN, k[0], SECOND_KELVIN, k[1]);
                     pair = new Pair(a.id, b.id, Source.HENRY, String.format(java.util.Locale.ROOT,
-                            "alpha %.2f, energy %.1f J/mol at %.2f K, %.1f at %.2f K", HENRY_ALPHA, e[0], FIRST_KELVIN, e[1], SECOND_KELVIN));
+                            "k_ij %.5f at %.2f K, %.5f at %.2f K (Henry)", k[0], FIRST_KELVIN, k[1], SECOND_KELVIN));
                 } else if (a.activity() && b.activity() && (a.polar || b.polar) && context.groupModel(a, b, notices)) {
                     // Fitted with the compounds in record-key order, so one fit serves either list order.
                     boolean ordered = a.recordKey.compareTo(b.recordKey) <= 0;
@@ -270,6 +271,9 @@ public final class DerivedPairs {
                             () -> context.activity(first, second), counter);
                     int f = ordered ? i : j, s = ordered ? j : i;
                     excess.nrtl(f, s, fit.alpha, FIRST_KELVIN, fit.first[1], fit.first[0], SECOND_KELVIN, fit.second[1], fit.second[0]);
+                    // Item 9 of W3b section 14: the cells fade to zero toward the highest critical temperature of the pair's polar
+                    // compounds; above it the pair is classical (k = 0), the hot gas's attraction nonnegative.
+                    excess.fade(f, s, Math.max(first.polar ? first.tc : 0.0, second.polar ? second.tc : 0.0));
                     pair = new Pair(a.id, b.id, Source.ACTIVITY, fit.describe(first.id, second.id) + (block ? ", water-hydrocarbon block" : ""));
                     if (fit.notice != null) notices.add(first.id + " / " + second.id + ": " + fit.notice);
                 } else {
@@ -498,30 +502,30 @@ public final class DerivedPairs {
         }
 
         /**
-         * The Henry pair's energy at 298.15 K and 373.15 K ({@code gasEnergy}): both directions {@code e}, alpha 0.3, and
-         * {@code ln phi_gas} at infinite dilution in liquid water at 101.325 kPa equal to {@code ln(k_H/P)}, by bisection
-         * on {@code [-30000, 80000]} J/mol.
+         * The Henry pair's {@code k_ij} at 298.15 K and 373.15 K: {@code ln phi_gas} at infinite dilution in liquid water at
+         * 101.325 kPa equal to {@code ln(k_H/P)}, by bisection on {@code [-5, 1]}; refused where no {@code k_ij} below 1
+         * reaches it.
          */
-        double[] henryEnergies(Compound gas, Compound water) {
+        double[] henryInteraction(Compound gas, Compound water) {
             var binary = new Binary(gas, water);
             double[] out = new double[2];
             double[] temperatures = {FIRST_KELVIN, SECOND_KELVIN};
             for (int t = 0; t < 2; t++) {
                 double temperature = temperatures[t];
                 double want = DeterministicMath.log(gas.henry.pascal(pack.water(), temperature) / HENRY_PRESSURE);
-                DoubleUnaryOperator miss = e -> {
-                    double[] phi = binary.logPhi(HENRY_ALPHA, e, e, temperature, HENRY_PRESSURE, 0.0);
+                DoubleUnaryOperator miss = k -> {
+                    double[] phi = binary.classicalLogPhi(k, temperature, HENRY_PRESSURE, 0.0);
                     return phi == null ? Double.NaN : phi[0] - want;
                 };
                 double low = HENRY_LOW, high = HENRY_HIGH;
                 double lowMiss = miss.applyAsDouble(low), highMiss = miss.applyAsDouble(high);
-                if (!(lowMiss * highMiss <= 0.0)) throw new Refused(gas.id, water.id, "no Henry energy in [" + low + ", " + high + "] J/mol at " + temperature + " K");
+                if (!(lowMiss * highMiss <= 0.0)) throw new Refused(gas.id, water.id, "no Henry k_ij in [" + low + ", " + high + ") at " + temperature + " K");
                 for (int step = 0; step < HENRY_STEPS; step++) {
                     double middle = 0.5 * (low + high);
                     if (miss.applyAsDouble(low) * miss.applyAsDouble(middle) <= 0.0) high = middle; else low = middle;
                 }
                 out[t] = 0.5 * (low + high);
-                if (!(Math.abs(miss.applyAsDouble(out[t])) < 1.0e-6)) throw new Refused(gas.id, water.id, "the Henry energy does not converge at " + temperature + " K");
+                if (!(Math.abs(miss.applyAsDouble(out[t])) < 1.0e-6) || !(out[t] < 1.0)) throw new Refused(gas.id, water.id, "the Henry k_ij does not converge below 1 at " + temperature + " K");
             }
             return out;
         }
@@ -710,6 +714,12 @@ public final class DerivedPairs {
         /** ln phi of both compounds at the first's mole fraction {@code x}, or null without a root. */
         double[] logPhi(double nrtlAlpha, double dg01, double dg10, double temperature, double pressure, double x) {
             return model(nrtlAlpha, dg01, dg10).logPhi(temperature, pressure, x);
+        }
+
+        /** ln phi of both compounds at the first's mole fraction {@code x} with a classical {@code k_ij}, or null without a root. */
+        double[] classicalLogPhi(double kij, double temperature, double pressure, double x) {
+            var excess = HuronVidalExcess.builder(2).classical(0, 1, kij).build();
+            return new Model(PengRobinsonKernel.huronVidal(tc, pc, omega, excess, alpha, 1.0, 3000.0, 1.0, 1.0e9)).logPhi(temperature, pressure, x);
         }
 
         /** ln phi of pure compound {@code i} on its liquid root. */

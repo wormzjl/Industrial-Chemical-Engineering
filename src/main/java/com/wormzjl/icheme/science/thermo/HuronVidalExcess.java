@@ -71,6 +71,41 @@ public final class HuronVidalExcess {
         out[2] = sign * slope * 6.0 * (x2 - x) / HOLD_FADE;
     }
 
+    /**
+     * {@link #held} of a local-composition cell, then faded to zero toward {@code critical} (W3b section 14 item 9): above
+     * the critical temperature of the pair's polar compound there is no polar liquid and no local structure for the cell to
+     * describe, and the pair is classical ({@code k = 0}), so the hot gas's attraction is nonnegative at every composition.
+     * The held value is multiplied by {@code f = 1 - (6u^5 - 15u^4 + 10u^3)}, {@code u = (T - high)/(T_e - high)},
+     * {@code T_e = }{@link #FADE_END}{@code  critical}: 1 up to the fitted end {@code high}, 0 from {@code T_e}, value,
+     * slope and second derivative continuous at both ends. Below {@code high} bit for bit {@link #held}; an infinite
+     * {@code critical} (or a {@code T_e} at or below the fitted end) is no fade. The low side is unchanged. The fade's
+     * own heat capacity, {@code -T E f''}, peaks at {@code 5.77 T E/W^2} over its width {@code W}: from 373.15 K to 809 K
+     * for water (W 436 K) water with ethanol's liquid at 30 MPa takes -22.5 J/mol/K; from 485 K to 647 K (W 162 K) it was
+     * -174 and negative heat capacities at 600 to 630 K and 12 to 30 MPa (owner's option B, 2026-11-11).
+     */
+    public static void held(double intercept, double slope, double low, double high, double critical, double t, double[] out) {
+        held(intercept, slope, low, high, t, out);
+        double start = high, end = FADE_END * critical;
+        if (!(t > start) || !(end > start)) return;
+        if (t >= end) {
+            out[0] = 0.0;
+            out[1] = 0.0;
+            out[2] = 0.0;
+            return;
+        }
+        double width = end - start, u = (t - start) / width, u2 = u * u;
+        double f = 1.0 - u2 * u * (10.0 + u * (-15.0 + 6.0 * u));
+        double fDt = -30.0 * u2 * (1.0 - u) * (1.0 - u) / width;
+        double fDt2 = -60.0 * u * (1.0 - u) * (1.0 - 2.0 * u) / (width * width);
+        double v = out[0], vDt = out[1], vDt2 = out[2];
+        out[0] = v * f;
+        out[1] = vDt * f + v * fDt;
+        out[2] = vDt2 * f + 2.0 * vDt * fDt + v * fDt2;
+    }
+
+    /** Where a cell's fade ends, as a multiple of its polar compound's critical temperature ({@link #held(double, double, double, double, double, double, double[])}). */
+    public static final double FADE_END = 1.25;
+
     private final int componentCount;
     /** Row-major {@code [i * n + j]}, symmetric: true for a classical pair (and for the diagonal). */
     private final boolean[] classical;
@@ -89,13 +124,16 @@ public final class HuronVidalExcess {
     private final double[] energySlope;
     /** The fitted ends of each line, K, row-major and symmetric ({@link #held}); infinite for a constant and a model pair. */
     private final double[] lineLow, lineHigh;
+    /** Each NRTL pair's fade temperature, K, row-major and symmetric; plus infinity for no fade. */
+    private final double[] lineFade;
     private final int nrtlPairs;
     private final boolean rankOne;
 
     private HuronVidalExcess(int componentCount, boolean[] classical, double[] alpha, double[] interaction,
                              double[] interactionSlope, PairInteractions interactions, int[] modelPair,
-                             double[] energyIntercept, double[] energySlope, double[] lineLow, double[] lineHigh) {
+                             double[] energyIntercept, double[] energySlope, double[] lineLow, double[] lineHigh, double[] lineFade) {
         this.componentCount = componentCount;
+        this.lineFade = lineFade;
         this.lineLow = lineLow;
         this.lineHigh = lineHigh;
         this.classical = classical;
@@ -150,6 +188,8 @@ public final class HuronVidalExcess {
     public double lineLow(int i, int j) { return lineLow[index(i, j)]; }
     /** The upper fitted end of a pair's line, K; plus infinity for a constant or a model pair. */
     public double lineHigh(int i, int j) { return lineHigh[index(i, j)]; }
+    /** The temperature, K, an NRTL pair's energies fade to zero at; plus infinity for no fade. */
+    public double lineFade(int i, int j) { return lineFade[index(i, j)]; }
 
     private int index(int i, int j) {
         if (i < 0 || j < 0 || i >= componentCount || j >= componentCount) throw new IndexOutOfBoundsException("Pair index out of range");
@@ -167,7 +207,7 @@ public final class HuronVidalExcess {
         private final int[] modelPair;
         private final double[] energyIntercept;
         private final double[] energySlope;
-        private final double[] lineLow, lineHigh;
+        private final double[] lineLow, lineHigh, lineFade;
         private PairInteractions interactions;
 
         private Builder(int componentCount) {
@@ -188,6 +228,20 @@ public final class HuronVidalExcess {
             this.lineHigh = new double[cells];
             Arrays.fill(lineLow, Double.NEGATIVE_INFINITY);
             Arrays.fill(lineHigh, Double.POSITIVE_INFINITY);
+            this.lineFade = new double[cells];
+            Arrays.fill(lineFade, Double.POSITIVE_INFINITY);
+        }
+
+        /**
+         * The temperature, K, NRTL pair {@code (i, j)}'s energies fade to zero at: the critical temperature of its polar
+         * compound ({@link HuronVidalExcess#held(double, double, double, double, double, double, double[])}).
+         */
+        public Builder fade(int i, int j, double criticalKelvin) {
+            if (!(criticalKelvin > 0.0) || Double.isNaN(criticalKelvin)) throw new IllegalArgumentException("A fade temperature must be positive");
+            if (classical[i * componentCount + j]) throw new IllegalArgumentException("Only an NRTL pair fades");
+            lineFade[i * componentCount + j] = criticalKelvin;
+            lineFade[j * componentCount + i] = criticalKelvin;
+            return this;
         }
 
         private void ends(int i, int j, double firstKelvin, double secondKelvin) {
@@ -286,7 +340,7 @@ public final class HuronVidalExcess {
         public HuronVidalExcess build() {
             return new HuronVidalExcess(componentCount, classical.clone(), alpha.clone(), interaction.clone(),
                     interactionSlope.clone(), interactions, modelPair.clone(), energyIntercept.clone(), energySlope.clone(),
-                    lineLow.clone(), lineHigh.clone());
+                    lineLow.clone(), lineHigh.clone(), lineFade.clone());
         }
 
         private static void requireTemperatures(double firstKelvin, double secondKelvin, String what) {

@@ -145,12 +145,15 @@ public final class ColumnSolve {
 
     /**
      * Solves {@code job} on {@code model}, its feed island's model (a view of the network package, or the whole package),
-     * taken on the engine thread; {@code screen} is V3's liquid-supply screen ratio. V3 reads the model's own catalog.
+     * taken on the engine thread; {@code screen} is V3's liquid-supply screen ratio. V3 reads the model's own catalog. The
+     * solve runs on the island list's view with water (W3b option A): the steam and the products' water are states of the
+     * column whether or not the feed island holds water; the axis is the same, water last.
      */
     public static Outcome run(Job job, FluidThermodynamics model, double screen, Runnable checkpoint) {
         String packageId = model.domain().packageId();
         try {
-            return MaterialRuntime.with(model.catalog(), packageId, () -> solve(job, model, packageId, screen, checkpoint));
+            var wet = model.on(model.compounds(), true);
+            return MaterialRuntime.with(wet.catalog(), packageId, () -> solve(job, wet, packageId, screen, checkpoint));
         } catch (IllegalArgumentException refused) {
             return new Failed(refused.getMessage());
         }

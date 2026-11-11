@@ -39,7 +39,7 @@ class DirectLiquidContinuityTest {
         var report=new StringBuilder();
         for(var c:cases) {
             var oracle=HelmholtzFluid.load(c.fluid());int index=hydrocarbon.components().indexOf(c.component());
-            double[] pure=new double[hydrocarbon.componentCount()];pure[index]=1;double b=eos.kernel().coVolume(index);
+            double[] pure=new double[hydrocarbon.species().size()];pure[index]=1;double b=eos.kernel().coVolume(index);
             for(double t:c.temperatures()) {
                 double tr=t/oracle.criticalTemperature(),target=tr<=.85?.03:.10,worst=0,start=Math.max(1e5,1.02*oracle.saturation(t).pressure());
                 var terms=eos.prepare(t);
@@ -56,7 +56,7 @@ class DirectLiquidContinuityTest {
         // The P1 study, section 2.5, anchor (a): the same translated PR78 evaluated directly (CoolProp 8.0.0 reference).
         double[][] p1={{77.36,5e6,-0.08},{77.36,10e6,-0.17},{100,10e6,0.34}};
         var nitrogen=HelmholtzFluid.load("Nitrogen");int n2=hydrocarbon.components().indexOf("Nitrogen");
-        double[] pure=new double[hydrocarbon.componentCount()];pure[n2]=1;
+        double[] pure=new double[hydrocarbon.species().size()];pure[n2]=1;
         for(double[] row:p1) {
             double rho=1/eos.evaluate(row[0],row[1],pure,Root.LIQUID,eos.prepare(row[0])).molarVolume();
             double deviation=100*(rho/nitrogen.density(row[0],row[1],HelmholtzFluid.Root.LIQUID)-1);
@@ -116,7 +116,7 @@ class DirectLiquidContinuityTest {
     }
     /** {@code dT/dP} along the adiabat, {@code T (dv/dT)_P / c_p}, from the equation of state's own derivatives. */
     private static double[] adiabaticSlope(FluidThermodynamics model,FluidThermodynamics.State state) {
-        double[] x=state.liquid();double total=0;for(double value:x)total+=value;for(int i=0;i<x.length;i++)x[i]/=total;
+        double[] x=TestPhases.liquid(state);double total=0;for(double value:x)total+=value;for(int i=0;i<x.length;i++)x[i]/=total;
         var values=HydrocarbonValues.of(model.hydrocarbon,state.temperature(),state.pressure(),x,Root.LIQUID);
         return new double[]{state.temperature()*values.volumeTemperatureDerivative()/values.heatCapacity()};
     }

@@ -12,6 +12,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * CO2 in the world's package (O11 of batch 2026-11-04-open-thermo-data, owner decisions E25, E27 and E28): the package
@@ -91,10 +92,10 @@ class RefineryCarbonDioxideCatalogTest {
                 var a = modelAfter.flashTP(tp[0], tp[1], overall, () -> {});
                 var b = modelBefore.flashTP(tp[0], tp[1], overall, () -> {});
                 assertEquals(b.temperature(), a.temperature(), 0.0);
-                assertArrayEquals(b.liquid(), a.liquid(), 0.0, compounds + " liquid at " + tp[0] + " K");
-                assertArrayEquals(b.vapor(), a.vapor(), 0.0, compounds + " vapour at " + tp[0] + " K");
-                assertEquals(b.waterLiquid(), a.waterLiquid(), 0.0);
-                assertEquals(b.waterVapor(), a.waterVapor(), 0.0);
+                assertArrayEquals(TestPhases.liquid(b), TestPhases.liquid(a), 0.0, compounds + " liquid at " + tp[0] + " K");
+                assertArrayEquals(TestPhases.vapor(b), TestPhases.vapor(a), 0.0, compounds + " vapour at " + tp[0] + " K");
+                assertEquals(TestPhases.waterLiquid(b), TestPhases.waterLiquid(a), 0.0);
+                assertEquals(TestPhases.waterVapor(b), TestPhases.waterVapor(a), 0.0);
             }
         }
         var co2 = bundled.restrict(REFINERY, List.of("Methane", "CarbonDioxide"));

@@ -29,8 +29,8 @@ public final class PhysicalRegistry {
                       Map<Long,PassiveNetwork.Reservoir> additions,Set<Long> removals,Map<Long,InlineFilter> releasedFilters,Runnable commit);
         /** Whether a recovery's player can take its item now (online, with a free slot). */
         boolean acceptsRecovery(UUID player);
-        /** The compounds the running column holding port {@code port} may deliver through it (V2: they join its island's
-         * compound list before the port gives them); empty for none. */
+        /** The compounds the running column or still holding port {@code port} may deliver through it (V2: they join its
+         * island's compound list before the port gives them), Water named for every outlet (W3b option A); empty for none. */
         default Set<String> portCompounds(long port){return Set.of();}
         /** An applied event did nothing for the player who asked; the reason reaches them with the reply to their input. */
         void refused(UUID event,String reason);
@@ -534,8 +534,8 @@ public final class PhysicalRegistry {
     private List<String> compounds(PhysicalFluidTopology.Island island,Set<Long> affected,Set<Long> split,Map<Long,IslandSets.Origin> origins) {
         var set=IslandSets.held(island.graph(),model,origins);
         for(long device:island.physicalIds()) {
-            // W3b option A: a column or still port can deliver water whatever its account holds now, so its island is wet.
-            if(fixedDevice(device)){var port=host.portCompounds(device);set.addAll(port);if(!port.isEmpty())set.add(com.wormzjl.icheme.science.thermo.phase.CubicPhaseEvaluator.WATER);continue;}
+            // W3b option A: a column or still outlet names Water whatever its account holds now, so its island is wet.
+            if(fixedDevice(device)){set.addAll(host.portCompounds(device));continue;}
             Long holder=owners.get(device);
             if(holder!=null&&affected.contains(holder)&&!split.contains(holder)) {
                 var own=host.coordinator().model(holder);set.addAll(own.compounds());

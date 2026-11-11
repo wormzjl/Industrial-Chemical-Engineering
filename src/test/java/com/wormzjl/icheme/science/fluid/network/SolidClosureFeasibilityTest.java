@@ -128,7 +128,7 @@ class SolidClosureFeasibilityTest {
     @Test void heavyLiquidCoolingStopsAtTheActualViscosityTableCrossing() {
         int heavy = model.hydrocarbon.components().indexOf("crude_pc12");
         assertTrue(heavy >= 0);
-        var amounts = new double[model.hydrocarbon.componentCount()];
+        var amounts = new double[model.componentCount()]; // W3b: the conserved basis (the cubic may hold water)
         amounts[heavy] = 1;
         // Prescribed cooling is a probe fixture, not a new heater or reservoir thermal model. It starts above crude_pc12's
         // 100 Pa s crossing: 382.4 K on its Twu 1985 table since O4 of batch 2026-11-04-open-thermo-data (333.9 K on the Dalia

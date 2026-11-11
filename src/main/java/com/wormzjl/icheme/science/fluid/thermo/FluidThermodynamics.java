@@ -102,6 +102,9 @@ public final class FluidThermodynamics {
     }
     /** The model of a compound list (batch 2026-11-04-refinery-compounds, V2): {@code whole}'s package restricted to it. */
     private FluidThermodynamics(MaterialCatalog catalog,String packageId,double maximumVelocity,TraceTruncationPolicy tracePolicy,com.wormzjl.icheme.science.fluid.transport.SlurryTransport.Settings solidSettings,FluidThermodynamics whole) {
+        // A whole model gives its package water as a compound of the cubic where the package does not name it (W3b): the
+        // network supplies water itself, no package record is edited for it. A view is restricted from that catalog.
+        if(whole==null)catalog=catalog.withWater(packageId);
         this.whole=whole==null?this:whole;views=whole==null?new java.util.HashMap<>():null;
         this.solidSettings=Objects.requireNonNull(solidSettings);
         if(!Double.isFinite(maximumVelocity)||maximumVelocity<=0)throw new IllegalArgumentException("Positive finite maximum velocity required");
@@ -131,7 +134,14 @@ public final class FluidThermodynamics {
         // Region 1 at 298.15 K and 1 atm itself, the stable liquid: the pump's density and utility water's datum.
         var reference=WaterRegion1.evaluate(water,298.15,101325);
         waterEnthalpyOffset=com.wormzjl.icheme.science.column.v3.thermo.V3WaterProperties.liquidEnthalpyOffset(water);
-        pumpReferenceDensity=water.molarMass()/(reference.specificVolume()*water.molarMass());
+        // The pump's density is the network's own water at that state (W3b: the cubic's, 7e-6 off Region 1, which put a pumped
+        // water line 3.5 Pa over its shutoff); a view keeps its whole model's, a package without water Region 1's.
+        if(whole!=null)pumpReferenceDensity=whole.pumpReferenceDensity;
+        else if(hydrocarbon.wet()) {
+            double[] pure=new double[n+1];pure[n]=1;
+            pumpReferenceDensity=waterMolecularWeight/hydrocarbon.phase(298.15,101325,pure,PengRobinsonKernel.Root.LIQUID,hydrocarbon.prepare(298.15),false).molarVolume();
+        }
+        else pumpReferenceDensity=water.molarMass()/(reference.specificVolume()*water.molarMass());
         this.catalog=catalog;
         thermodynamicRevision="fluid-trbdf2-r1:"+hydrocarbon.revision()+":"+viscosity.revision();
         // The trace cutoff joins the hydraulic acceptance law, not the thermodynamic reference: it changes which unknowns a
@@ -535,6 +545,8 @@ public final class FluidThermodynamics {
         if(slot<0||!(condensed>0))return 0;
         return state.slotVolume(slot)==condensed?1.0:state.slotVolume(slot)/condensed;
     }
+    /** The own density (no solids) of the liquid in storage slot {@code slot}: its fluid mass over its volume. */
+    private double liquidPhaseDensityOfSlot(State state,int slot){return slotMass(state,slot)/state.slotVolume(slot);}
     /** The own density (no solids) of a liquid phase the state holds: its fluid mass over its volume. */
     public double liquidPhaseDensity(State state,int phase) {
         int slot=state.slot(phase);
@@ -630,7 +642,9 @@ public final class FluidThermodynamics {
     /** Utility water's saturation pressure at {@code t} (Pa), the package's water record: steam services and ejectors. Not a
      * network phase rule since W3b. */
     public double saturationPressure(double t) {
-        return com.wormzjl.icheme.science.column.v3.thermo.V3WaterProperties.saturationPressurePascal(water,t);
+        // Wagner-Pruss continued past its ends (a data range never refuses), infinite above the critical temperature.
+        if(!Double.isFinite(t))throw new IllegalArgumentException("Non-finite water temperature");
+        return t>=water.criticalTemperature()?Double.POSITIVE_INFINITY:com.wormzjl.icheme.science.column.v3.thermo.V3WaterProperties.wagnerPruss(water,t);
     }
 
     /**
@@ -1177,13 +1191,20 @@ public final class FluidThermodynamics {
     private double[] conserved(double[] engine){return engine.length==componentCount()?engine.clone():Arrays.copyOf(engine,componentCount());}
     /**
      * The state of a vapour and two liquids (either may be empty) with the liquids in their canonical slots: of two the one
-     * with the larger water mole fraction in the aqueous slot; a single liquid in the aqueous slot when water is at least
+     * with the larger water mole fraction in the aqueous slot, at equal fractions (two liquids without water, a carried
+     * crystal's stand-in beside a dry liquid) the denser by mass; a single liquid in the aqueous slot when water is at least
      * half of it by moles, in the liquid slot otherwise ({@link State#slot}).
      */
     private State placedState(double t,double p,double[] vapor,double[] first,double[] second,TranslatedPengRobinson.Workspace terms) {
         double s1=sum(first),s2=sum(second);int w=componentCount()-1;
         double[] liquid,aqueous;
-        if(s1>0&&s2>0){boolean swap=first[w]/s1>second[w]/s2;liquid=swap?second:first;aqueous=swap?first:second;}
+        if(s1>0&&s2>0) {
+            if(first[w]/s1==second[w]/s2) {
+                var tied=state(t,p,vapor,first,second,terms,null);
+                return liquidPhaseDensityOfSlot(tied,State.LIQUID)>liquidPhaseDensityOfSlot(tied,State.AQUEOUS)?state(t,p,vapor,second,first,terms,null):tied;
+            }
+            boolean swap=first[w]/s1>second[w]/s2;liquid=swap?second:first;aqueous=swap?first:second;
+        }
         else {
             double[] only=s1>0?first:second,none=s1>0?second:first;double so=s1>0?s1:s2;
             boolean water=so>0&&only[w]/so>=0.5;
@@ -1263,7 +1284,7 @@ public final class FluidThermodynamics {
         @Override String what() {
             return switch(kind) {
                 case LIQUID_LIQUID->"two liquids of one slot";
-                case THREE_PHASES->"a fourth fluid phase, which the network does not carry";
+                case THREE_PHASES->"a further fluid phase, which the network does not carry";
                 case CRYSTAL_PHASES->"a crystal beside a phase set the equilibrium engine does not implement";
                 case CRYSTAL_STEP->"a near-pure crystal step the equilibrium engine does not answer";
             };
@@ -1374,8 +1395,10 @@ public final class FluidThermodynamics {
         /**
          * The storage slot holding the phase labelled {@code label} ({@link FluidThermodynamics#GAS}, {@code OIL},
          * {@code AQUEOUS}), -1 where the state holds none: the vapour slot for the gas; of two liquids the one with the
-         * larger water mole fraction is the aqueous one (the second slot at a tie); a single liquid is aqueous when water is
-         * at least half of it by moles, the oil otherwise.
+         * larger water mole fraction is the aqueous one (the second slot at a tie, where the network places the denser
+         * liquid by mass: two liquids without water, a carried crystal's stand-in beside a dry liquid; the label's name is
+         * then wider than its meaning); a single liquid is aqueous when water is at least half of it by moles, the oil
+         * otherwise.
          */
         public int slot(int label) {
             if(label==FluidThermodynamics.GAS)return vaporVolume>0?VAPOR:-1;

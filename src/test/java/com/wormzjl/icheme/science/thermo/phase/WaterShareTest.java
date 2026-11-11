@@ -111,15 +111,24 @@ class WaterShareTest {
             double t = s[0], p = s[1];
             ev.derivatives(t, p, x, root, ws, d);
             // Steps above the rounding of the cubic's own root solve (some 1e-12 of v), within the share's smooth pieces.
+            // Richardson's extrapolation of two central differences (steps h and h/2) removes their h^2 error: at 630 K and
+            // 25 MPa the faded cells' curvature (W3b item 9) put the plain difference 2e-5 off the analytic value.
             double dt = 1.0e-4 * t, dp = 1.0e-3 * p;
-            ev.evaluate(t + dt, p, x, root, ws, a);
-            ev.evaluate(t - dt, p, x, root, ws, b);
-            double[] byT = {(a.shareEnthalpy() - b.shareEnthalpy()) / (2 * dt), (a.shareEntropy() - b.shareEntropy()) / (2 * dt),
-                    (a.shareVolume() - b.shareVolume()) / (2 * dt)};
-            ev.evaluate(t, p + dp, x, root, ws, a);
-            ev.evaluate(t, p - dp, x, root, ws, b);
-            double[] byP = {(a.shareEnthalpy() - b.shareEnthalpy()) / (2 * dp), (a.shareEntropy() - b.shareEntropy()) / (2 * dp),
-                    (a.shareVolume() - b.shareVolume()) / (2 * dp)};
+            double[] byT = new double[3], byP = new double[3];
+            for (int half = 0; half < 2; half++) {
+                double step = half == 0 ? dt : 0.5 * dt, weight = half == 0 ? -1.0 / 3.0 : 4.0 / 3.0;
+                ev.evaluate(t + step, p, x, root, ws, a);
+                ev.evaluate(t - step, p, x, root, ws, b);
+                byT[0] += weight * (a.shareEnthalpy() - b.shareEnthalpy()) / (2 * step);
+                byT[1] += weight * (a.shareEntropy() - b.shareEntropy()) / (2 * step);
+                byT[2] += weight * (a.shareVolume() - b.shareVolume()) / (2 * step);
+                double q = half == 0 ? dp : 0.5 * dp;
+                ev.evaluate(t, p + q, x, root, ws, a);
+                ev.evaluate(t, p - q, x, root, ws, b);
+                byP[0] += weight * (a.shareEnthalpy() - b.shareEnthalpy()) / (2 * q);
+                byP[1] += weight * (a.shareEntropy() - b.shareEntropy()) / (2 * q);
+                byP[2] += weight * (a.shareVolume() - b.shareVolume()) / (2 * q);
+            }
             double[] analytic = {d.shareEnthalpyTemperatureDerivative(), d.shareEntropyTemperatureDerivative(), d.shareVolumeTemperatureDerivative(),
                     d.shareEnthalpyPressureDerivative(), d.shareEntropyPressureDerivative(), d.shareVolumePressureDerivative()};
             double[] numeric = {byT[0], byT[1], byT[2], byP[0], byP[1], byP[2]};

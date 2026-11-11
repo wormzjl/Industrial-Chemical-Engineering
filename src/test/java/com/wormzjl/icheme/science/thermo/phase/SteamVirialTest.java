@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 /**
  * The free water's second-virial steam ({@link SteamVirial}, {@code separate-free-water-v3}) against the full IAPWS-IF97
  * Region 2 ({@link If97Region2}): B and the residual enthalpy are Region 2's low-pressure limits, and the qualified
- * partial pressure ({@link FluidThermodynamics#waterVaporPressureLimit}) bounds the virial's volume within 2 % of Region 2.
+ * partial pressure ({@link PhaseTestSupport#vaporLimit}, the free-water rule's) bounds the virial's volume within 2 % of Region 2.
  */
 class SteamVirialTest {
     private static final double R = PengRobinsonKernel.GAS_CONSTANT;
@@ -67,7 +67,7 @@ class SteamVirialTest {
     void theQualifiedPartialPressureBoundsTheVirialWithinTwoPercentOfRegion2() {
         int accepted = 0, rejected = 0;
         for (double t = 275; t <= If97Region2.CEILING; t += 2.5) {
-            double top = If97Region2.maximumPressure(t), limit = FluidThermodynamics.waterVaporPressureLimit(t);
+            double top = If97Region2.maximumPressure(t), limit = PhaseTestSupport.vaporLimit(t);
             for (int k = 1; k <= 400; k++) {
                 double p = top * k / 400;
                 if (p <= limit) {
@@ -84,50 +84,22 @@ class SteamVirialTest {
             if (Math.abs(error(m, If97Region2.saturationPressure(m))) <= 0.02) low = m; else high = m;
         }
         double saturated = If97Region2.saturationPressure(low);
-        assertTrue(saturated >= FluidThermodynamics.waterVaporPressureLimit(low) && saturated < 1.1 * FluidThermodynamics.waterVaporPressureLimit(low),
+        assertTrue(saturated >= PhaseTestSupport.vaporLimit(low) && saturated < 1.1 * PhaseTestSupport.vaporLimit(low),
                 "2 % at saturation: " + low + " K, " + saturated + " Pa");
         // Every later band: its limit lies within 10 % below the first 2 % crossing at its lower temperature.
         for (double t : new double[] {500, 525, 550, 575, 600, 625, 650, 675, 700, 725, 750, 775, 800, 825, 850}) {
-            double crossing = firstCrossing(t), limit = FluidThermodynamics.waterVaporPressureLimit(t);
+            double crossing = firstCrossing(t), limit = PhaseTestSupport.vaporLimit(t);
             assertTrue(limit <= crossing && crossing < 1.1 * limit, t + " K: limit " + limit + " Pa, 2 % at " + crossing + " Pa");
         }
         // From 875 K the least crossing up to Region 2's ceiling (65.5 MPa at 1000 K).
         double least = Double.POSITIVE_INFINITY;
         for (double t = 875; t <= If97Region2.CEILING; t += 5) least = Math.min(least, firstCrossing(t));
-        double last = FluidThermodynamics.waterVaporPressureLimit(875);
+        double last = PhaseTestSupport.vaporLimit(875);
         assertTrue(last <= least && least < 1.1 * last, "from 875 K: limit " + last + " Pa, least 2 % crossing " + least + " Pa");
     }
 
-    /**
-     * The network's state holds the virial steam: alone at the state pressure, {@code V = n (R T/P + B)} and {@code p_w = P},
-     * its enthalpy the ideal gas's plus {@code p (B - T dB/dT)}; beside nitrogen, saturated over free water, the gas holds
-     * {@code p_sat V/(R T + p_sat B)} of steam and the partial pressures close.
-     */
-    @Test
-    void theNetworkStateHoldsTheVirialSteam() {
-        var model = FluidTestSupport.networkModel();
-        int n = model.componentCount() - 1;
-        double t = 453.03, p = 1e6;
-        var steam = model.state(t, p, new double[n], new double[n], 0, 2, p);
-        assertEquals(2 * SteamVirial.molarVolume(t, p), steam.vaporVolume(), 1e-14);
-        assertEquals(p, steam.waterPartialPressure());
-        double h = 2 * (model.vaporWaterEnthalpy(t) + SteamVirial.residualEnthalpy(t, p));
-        assertEquals(h, steam.enthalpy(), 1e-12 * Math.abs(h));
-        assertEquals(h - p * steam.volume(), steam.internalEnergy(), 1e-12 * Math.abs(h));
-        // Z = 1 + B p/(R T) = 0.939 at 10 bar on saturation (Region 2: 0.930), B = -229 cm3/mol.
-        assertEquals(-0.0607, SteamVirial.secondVirial(t) * p / (R * t), 5e-4);
-
-        double[] overall = new double[n + 1];
-        overall[model.components().indexOf("Nitrogen")] = 1;
-        overall[n] = 10;
-        double hot = 450, total = 2e6;
-        var wet = model.flashTP(hot, total, overall, () -> { });
-        double saturation = model.saturationPressure(hot);
-        assertTrue(wet.waterLiquid() > 0 && wet.waterVapor() > 0, wet.toString());
-        assertEquals(saturation, wet.waterPartialPressure(), 1e-6 * saturation, "the gas saturated over the free water");
-        assertEquals(total, wet.hydrocarbonPartialPressure() + wet.waterPartialPressure(), 1e-6 * total, "Dalton's closure");
-        assertEquals(SteamVirial.moles(saturation, hot, wet.vaporVolume()), wet.waterVapor(), 1e-6 * wet.waterVapor());
-    }
+    // W3b: theNetworkStateHoldsTheVirialSteam went with the network's free-water steam: water is a component of the network
+    // package's cubic. The virial stays the free-water rule's steam and the column's (theColumnPricesWaterAsTheNetworkDoes).
 
     /**
      * One water model (decision E30 of batch 2026-11-04-open-thermo-data): the column prices its steam and its free water

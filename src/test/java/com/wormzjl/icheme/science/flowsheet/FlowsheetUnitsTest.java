@@ -22,6 +22,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * The W2 gate of batch 2026-11-02-process-simulator: every unit closes mass and energy on the world's flash, and the pump and the
@@ -430,7 +431,9 @@ final class FlowsheetUnitsTest {
         var wet = closes(sheet().unit("D", "drum", "{}").unit("P", "pump", "{\"pressure\":8e5}")
                 .feed("in", "D", "in", feed(400, 2e5, WET_CRUDE, 100)).product("gas", "D", "gas").product("water", "D", "water")
                 .line("oil", "D", "oil", "P", "in").product("out", "P", "out").run());
-        assertFalse(logged(wet, "pump.bubble_point"), "steam carries part of a wet drum's pressure, so its oil stands below its own bubble pressure");
+        // W3b: the oil of a wet drum holds the water it dissolves, so it stands at its own bubble point as a dry drum's does
+        // (before, the free water left the oil dry and the steam carried part of the pressure).
+        assertTrue(logged(wet, "pump.bubble_point"), "a wet drum's oil stands at its bubble point too");
     }
 
     @Test void aCompressorIsTheWorldsClosure() {
@@ -536,8 +539,9 @@ final class FlowsheetUnitsTest {
         var run = closes(sheet().unit("E", "exchanger", "{\"target\":\"outlet\",\"side\":\"shell\",\"temperature\":480}").unit("H", "fired_heater", "{\"temperature\":560}")
                 .feed("cold", "E", "shell_a", feed(320, 20e5, PURE_WATER, 100)).line("warm", "E", "shell_b", "H", "a").line("hot", "H", "b", "E", "tube_a").product("cooled", "E", "tube_b").run());
         var cooled = run.streams().get("cooled");
-        assertEquals(485.53, cooled.temperature(), .01, "water at 20 bar condenses at its one temperature");
-        assertTrue(cooled.state().waterLiquid() > 0 && cooled.state().waterVapor() > 0, "part steam, part water");
+        // W3b: the cubic's water condenses 0.10 K over IAPWS's 485.53 K at 20 bar.
+        assertEquals(485.53, cooled.temperature(), .15, "water at 20 bar condenses at its one temperature");
+        assertTrue(TestPhases.waterLiquid(cooled.state()) > 0 && TestPhases.waterVapor(cooled.state()) > 0, "part steam, part water");
     }
 
     @Test void aDrumOnABoilingPlateauKeepsItsEnergy() {
@@ -545,7 +549,7 @@ final class FlowsheetUnitsTest {
                 .feed("in", "V", "a", feed(460, 20e5, PURE_WATER, 100)).line("flashed", "V", "b", "D", "in").product("gas", "D", "gas").product("oil", "D", "oil").product("water", "D", "water").run());
         assertTrue(run.streams().get("gas").total() > 0 && run.streams().get("water").total() > 0, "a let-down flashes part of the water");
         assertEquals(run.streams().get("gas").temperature(), run.streams().get("water").temperature(), .01);
-        assertEquals(0, run.streams().get("gas").state().waterLiquid(), .02 * run.streams().get("gas").total(), "the gas stays gas");
+        assertEquals(0, TestPhases.waterLiquid(run.streams().get("gas").state()), .02 * run.streams().get("gas").total(), "the gas stays gas");
     }
 
     /** Wet crude across its three-phase zone: the engine's PH answers 393.36 K here, and the world's TP flash holds the true state. */
@@ -554,7 +558,7 @@ final class FlowsheetUnitsTest {
             var run = closes(sheet().unit("V", "valve", "{\"target\":\"drop\",\"drop\":1}")
                     .feed("in", "V", "a", feed(temperature, 2e5, WET_CRUDE, 100)).product("out", "V", "b").run());
             assertEquals(temperature, run.streams().get("out").temperature(), .01, "a one-pascal let-down barely moves it");
-            assertEquals(run.streams().get("in").state().waterLiquid(), run.streams().get("out").state().waterLiquid(), .05, "nor its free water");
+            assertEquals(TestPhases.waterLiquid(run.streams().get("in").state()), TestPhases.waterLiquid(run.streams().get("out").state()), .05, "nor its free water");
         }
     }
 

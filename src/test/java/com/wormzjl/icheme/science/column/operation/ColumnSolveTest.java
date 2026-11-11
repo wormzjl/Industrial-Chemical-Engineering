@@ -29,8 +29,8 @@ class ColumnSolveTest {
     @Test void aStartSolvesTheDesignAndItsTableClosesACycleOnTheNetworksBasis() {
         var catalog = com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog();
         V3ColumnInput design = catalog.presets().column("tia_juana_nitrogen").input(catalog);
-        var model = FluidThermodynamics.forNetwork(catalog, design.packageId());
-        var axis = model.components();
+        var model = column(catalog, design);
+        var axis = model.whole().components();
         double[] feed = feedOnTheNetwork(model, design);
         var setpoints = Setpoints.of(ColumnOperatingPoint.of(design));
         var steam = design.steamFeeds().stream().map(s -> new ColumnSolve.Steam(s.molarFlowMolPerSecond(), s.temperatureKelvin(), Double.NaN)).toList();
@@ -52,7 +52,7 @@ class ColumnSolveTest {
             double[] n = new double[axis.size()];
             n[water] = steam.get(j).rate();
             double p = design.topPressurePascal() + design.steamFeeds().get(j).stageNumber() * design.stagePressureDropPascal();
-            steamAccounts.add(new Account(scale(n, SECONDS), model.flashTP(steam.get(j).temperature(), p, n.clone(), () -> {}).enthalpy() * SECONDS));
+            steamAccounts.add(new Account(scale(n, SECONDS), model.whole().flashTP(steam.get(j).temperature(), p, n.clone(), () -> {}).enthalpy() * SECONDS));
         }
         double[] room = new double[table.products().size()];
         Arrays.fill(room, Double.MAX_VALUE);
@@ -95,7 +95,7 @@ class ColumnSolveTest {
                 preset.feedComponentMolarFlowsMolPerSecond(), preset.feedTemperatureKelvin(), preset.stageCount(), preset.feedStageNumber(),
                 preset.topPressurePascal(), preset.stagePressureDropPascal(), preset.specifications(), preset.sideDraws(), preset.steamFeeds(),
                 pumparounds, preset.columnDiameterMetres());
-        var model = FluidThermodynamics.forNetwork(catalog, design.packageId());
+        var model = column(catalog, design);
         double[] feed = feedOnTheNetwork(model, design);
         var setpoints = Setpoints.of(ColumnOperatingPoint.of(design));
         var steam = design.steamFeeds().stream().map(s -> new ColumnSolve.Steam(s.molarFlowMolPerSecond(), s.temperatureKelvin(), Double.NaN)).toList();
@@ -113,8 +113,22 @@ class ColumnSolveTest {
     }
 
     /** The design's feed on the network's compound list. */
+    /**
+     * W3b: the model a column of {@code design} solves on in a world: the network package's view of the design's compounds with
+     * water (its feed island's list; the steam is water in the cubic, which the design's own package, a tjl20 one, holds none of).
+     */
+    private static FluidThermodynamics column(MaterialCatalog catalog, V3ColumnInput design) {
+        var network = FluidThermodynamics.forNetwork(catalog, com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(catalog));
+        var ids = new ArrayList<String>();
+        for (int c = 0; c < design.componentBasis().componentCount(); c++) {
+            String id = design.componentBasis().componentId(c);
+            if (!id.equals("Water")) ids.add(id);
+        }
+        return network.on(ids, true);
+    }
+
     private static double[] feedOnTheNetwork(FluidThermodynamics model, V3ColumnInput design) {
-        var axis = model.components();
+        var axis = model.whole().components();
         double[] feed = new double[axis.size()];
         for (int c = 0; c < design.componentBasis().componentCount(); c++) {
             int i = axis.indexOf(design.componentBasis().componentId(c));
@@ -133,7 +147,7 @@ class ColumnSolveTest {
         var bundled = com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog();
         V3ColumnInput design = bundled.presets().column("tia_juana_nitrogen").input(bundled);
         var wide = MaterialCatalog.parse(widened(4));
-        var narrow = FluidThermodynamics.forNetwork(bundled, design.packageId());
+        var narrow = column(bundled, design);
         var whole = FluidThermodynamics.forNetwork(wide, com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(wide));
         assertTrue(whole.compounds().size() > com.wormzjl.icheme.science.column.v3.V3ComponentBasis.MAX_COMPONENTS, "a wide network package: " + whole.compounds().size());
         var island = whole.on(narrow.compounds());
@@ -147,12 +161,15 @@ class ColumnSolveTest {
             var outcome = ColumnSolve.run(new ColumnSolve.Job(DriftBands.Trigger.START, design, setpoints, new ColumnSolve.Taken(feed, Double.NaN, steam), null), model, screen, () -> {});
             return assertInstanceOf(ColumnSolve.Solved.class, outcome, outcome::toString);
         };
-        var reference = solve.apply(narrow, narrow.components());
+        var reference = solve.apply(narrow, narrow.whole().components());
         var solved = solve.apply(island, whole.components());
         var a = reference.table();
         var b = solved.table();
         assertEquals(whole.components(), b.axis(), "the table is on the world list");
-        assertEquals(narrow.compounds(), solved.seed().input().componentBasis().componentIds(), "V3's public basis is the island's list");
+        // W3b: the refinery lists Water, so V3's basis ends in it (at zero flow: the column's water is its own code's).
+        var basis = new ArrayList<>(narrow.compounds());
+        basis.add(SplitTable.WATER);
+        assertEquals(basis, solved.seed().input().componentBasis().componentIds(), "V3's public basis is the island's list");
         assertEquals(a.condenserPerFeed(), b.condenserPerFeed(), 0);
         assertEquals(a.reboilerPerFeed(), b.reboilerPerFeed(), 0);
         assertEquals(a.products().size(), b.products().size());
@@ -220,8 +237,8 @@ class ColumnSolveTest {
         var d = catalog.presets().column("tia_juana_nitrogen").input(catalog);
         var design = new V3ColumnInput(d.schemaVersion(), d.packageId(), d.assayId(), d.componentBasis(), d.feedComponentMolarFlowsMolPerSecond(), d.feedTemperatureKelvin(),
                 d.stageCount(), d.feedStageNumber(), d.topPressurePascal(), 700.0, d.specifications(), d.sideDraws(), d.steamFeeds(), d.pumparounds(), 0.0);
-        var model = FluidThermodynamics.forNetwork(catalog, design.packageId());
-        var axis = model.components();
+        var model = column(catalog, design);
+        var axis = model.whole().components();
         double[] feed = feedOnTheNetwork(model, design);
         var setpoints = Setpoints.of(ColumnOperatingPoint.of(design));
         double screen = V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO;
@@ -257,8 +274,8 @@ class ColumnSolveTest {
         var trays = built.trays().withOperating(saved);
         var start = trays.operating().input(trays, built.diameter());
         assertEquals("icheme:retired_crude_tjl20", start.packageId());
-        var model = FluidThermodynamics.forNetwork(catalog, design.packageId());
-        var axis = model.components();
+        var model = column(catalog, design);
+        var axis = model.whole().components();
         double[] feed = new double[axis.size()];
         for (int c = 0; c < start.componentBasis().componentCount(); c++) {
             int i = axis.indexOf(start.componentBasis().componentId(c));
@@ -296,8 +313,8 @@ class ColumnSolveTest {
     @Test void anAirThenWaterCondensersWaterTakesTheTrimsShare() {
         var catalog = com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog();
         V3ColumnInput design = catalog.presets().column("tia_juana_nitrogen").input(catalog);
-        var model = FluidThermodynamics.forNetwork(catalog, design.packageId());
-        var axis = model.components();
+        var model = column(catalog, design);
+        var axis = model.whole().components();
         double[] feed = new double[axis.size()];
         for (int c = 0; c < design.componentBasis().componentCount(); c++) {
             int i = axis.indexOf(design.componentBasis().componentId(c));
@@ -340,8 +357,8 @@ class ColumnSolveTest {
     @Test void theCondensersUtilitiesOnTheDefaultColumn() {
         var catalog = com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog();
         V3ColumnInput design = catalog.presets().column("tia_juana_nitrogen").input(catalog);
-        var model = FluidThermodynamics.forNetwork(catalog, design.packageId());
-        var axis = model.components();
+        var model = column(catalog, design);
+        var axis = model.whole().components();
         double[] feed = new double[axis.size()];
         for (int c = 0; c < design.componentBasis().componentCount(); c++) {
             int i = axis.indexOf(design.componentBasis().componentId(c));
@@ -393,7 +410,7 @@ class ColumnSolveTest {
     @Test void theFloodPerFeedIsLinearInTheThroughputBand() {
         var catalog = com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog();
         V3ColumnInput design = catalog.presets().column("tia_juana_nitrogen").input(catalog);
-        var model = FluidThermodynamics.forNetwork(catalog, design.packageId());
+        var model = column(catalog, design);
         double[] feed = feedOnTheNetwork(model, design);
         var setpoints = Setpoints.of(ColumnOperatingPoint.of(design));
         double[] shares = {.6, .8, 1}, perFeed = new double[shares.length];

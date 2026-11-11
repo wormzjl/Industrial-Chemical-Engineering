@@ -181,10 +181,12 @@ class MaterialCatalogTest {
             assertEquals(bundled.spineRevision(p.id()),without.spineRevision(p.id()),p.id());
             assertEquals(bundled.physicsContent(p.id(),p.components()),without.physicsContent(p.id(),p.components()),p.id());
             for(String component:p.components()) {
+                if(component.equals("Water"))continue; // W3b: the water model holds the triple point and the ice of Water in a cubic.
                 assertTrue(SubRecords.freezingPoint(bundled,p.id(),component).isPresent(),p.id()+" "+component);
                 assertTrue(SubRecords.freezingPoint(without,p.id(),component).isEmpty(),p.id()+" "+component);
             }
-            assertTrue(SubRecords.freezingPoint(bundled,p.id(),"Water").isEmpty(),p.id());
+            // W3b: a package with Water in its cubic reads the cubic water's freezing record (the ice anchor); no other has one.
+            assertEquals(p.components().contains("Water"),SubRecords.freezingPoint(bundled,p.id(),"Water").isPresent(),p.id());
         }
         for(String id:List.of("icheme:pilot_cryogenic","icheme:refinery")) {
             var co2=SubRecords.freezingPoint(bundled,id,"CarbonDioxide").orElseThrow();

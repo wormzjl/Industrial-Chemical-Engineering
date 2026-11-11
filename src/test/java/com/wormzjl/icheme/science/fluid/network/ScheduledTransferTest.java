@@ -7,6 +7,7 @@ import java.util.*;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 import com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 class ScheduledTransferTest {
     private final FluidThermodynamics model=FluidTestSupport.networkModel();
@@ -33,7 +34,7 @@ class ScheduledTransferTest {
             var after=result.graph().reservoirs().getFirst();assertEquals(100,after.inventory().moles()[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK]*model.waterMolecularWeight,1e-8);
             assertEquals(tank.inventory().moles()[com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN],after.inventory().moles()[com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN],1e-10);
             assertEquals(energy(graph)+seconds*energyRate,energy(result.graph()),1e-4);
-            assertTrue(after.state().waterLiquid()>0);assertEquals(0,tank.inventory().moles()[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK]);
+            assertTrue(TestPhases.waterLiquid(after.state())>0);assertEquals(0,tank.inventory().moles()[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK]);
         }
     }
     @Test void anUnsupportedWithdrawalPublishesNoPartialInterval() {

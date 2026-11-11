@@ -16,6 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * The W7 gate of batch 2026-11-09-batch-distiller: the batch still on the sheet integrates one batch of naphtha with the world's law
@@ -226,7 +227,7 @@ final class BatchStillUnitTest {
         assertFalse(run.streams().containsKey("vent"));
         assertEquals(0, reading(run, "condenser"), 1e-9);
         var cut = run.streams().get("cut/1");
-        assertTrue(cut.state() != null && Arrays.stream(cut.state().vapor()).sum() > .99 * cut.total(), "the head's vapour leaves as vapour");
+        assertTrue(cut.state() != null && Arrays.stream(TestPhases.vapor(cut.state())).sum() > .99 * cut.total(), "the head's vapour leaves as vapour");
         assertTrue(Arrays.stream(run.streams().get("residue").amounts()).sum() > 0);
     }
 }

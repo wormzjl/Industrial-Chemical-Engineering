@@ -20,7 +20,9 @@ final class V3CatalogPropertyPackage implements V3PropertyPackage {
         data=catalog.requirePackage(id);
         if(!data.model().equals("pr78")) throw new IllegalArgumentException("Thermodynamic solver unavailable: " + data.model());
         // A package that admits crystals (P6): the column is a vapour-liquid algorithm without crystal equations.
-        if(!data.crystals().isEmpty()) throw new CrystalPhasesUnavailable(data.id(),data.crystals(),"the V3 column");
+        // Water's ice is the network's (W3b): the column's own water code has none, as it had none of the free water's ice.
+        var crystals=data.crystals().stream().filter(crystal->{var reference=catalog.crystals().get(crystal);return reference==null||!"Water".equals(reference.component());}).toList();
+        if(!crystals.isEmpty()) throw new CrystalPhasesUnavailable(data.id(),crystals,"the V3 column");
         // A spine package's records carry no shifted_polynomial_5 fits (D6); the column reads them.
         if(!data.spine().isEmpty()) throw new IdealGasFitUnavailable(data.id(),"the V3 column");
         basis=new V3ComponentBasis(data.components());

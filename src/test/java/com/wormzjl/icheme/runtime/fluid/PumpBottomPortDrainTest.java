@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import static com.wormzjl.icheme.fluid.support.FluidTestSupport.nitrogen;
 import static com.wormzjl.icheme.fluid.support.FluidTestSupport.water;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * Defect F1 of the phase-ports in-game check (2026-09-27): a pump drawing water from a tank's bottom face held its island
@@ -118,7 +119,7 @@ class PumpBottomPortDrainTest {
             catch(RuntimeException held){System.out.println("FED_PUMP HELD at slice "+slice+": "+held.getMessage());fail(held.getMessage());return;}
             graph=result.graph();last=result;
             var line=new StringBuilder("FED_PUMP slice="+slice+" accepted="+result.acceptedSubsteps()+" rejected="+result.rejectedSubsteps()+" modes="+result.endpointModes());
-            for(var node:graph.reservoirs())if(node.junction())line.append(" junction ").append(node.id()).append(" vapour=").append(Arrays.stream(node.state().vaporView()).sum()).append(" wV=").append(node.state().waterVapor());
+            for(var node:graph.reservoirs())if(node.junction())line.append(" junction ").append(node.id()).append(" vapour=").append(Arrays.stream(TestPhases.vapor(node.state())).sum()).append(" wV=").append(TestPhases.waterVapor(node.state()));
             var t=graph.reservoirs().get(PumpBottomPortDrainTest.node(graph,tankId)).state();line.append(" tank P=").append(t.pressure()).append(" water=").append(model.liquidMass(t));
             System.out.println(line);
         }

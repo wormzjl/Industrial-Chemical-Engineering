@@ -7,6 +7,7 @@ import com.wormzjl.icheme.science.material.MaterialCatalog;
 import org.junit.jupiter.api.Test;
 import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 class McpGameplayRegressionTest {
     /**
@@ -40,7 +41,7 @@ class McpGameplayRegressionTest {
         var nodes=new ArrayList<PassiveNetwork.Reservoir>();
         for(var n:saved.nodes()) {
             var p=n.phase();var inventory=new PassiveNetwork.Inventory(n.inventory().volume(),n.inventory().moles(),n.inventory().internalEnergy(),com.wormzjl.icheme.science.fluid.state.SolidInventory.EMPTY);
-            nodes.add(new PassiveNetwork.Reservoir(n.id(),n.elevation(),model.state(p.temperature(),p.pressure(),p.liquid(),p.vapor(),p.waterLiquid(),p.waterVapor(),p.hydrocarbonPressure()).withSolids(inventory.solids()),
+            nodes.add(new PassiveNetwork.Reservoir(n.id(),n.elevation(),TestPhases.state(model,p.temperature(),p.pressure(),p.liquid(),p.vapor(),p.waterLiquid(),p.waterVapor()).withSolids(inventory.solids()),
                     PassiveNetwork.NodeKind.valueOf(n.kind()),inventory));
         }
         return new PassiveNetwork(nodes,saved.pipes().stream().map(p->new PassiveNetwork.Pipe(p.id(),p.first(),p.second(),p.sections().stream().map(Section::geometry).toList(),switch(p.control().kind()) {
@@ -100,8 +101,8 @@ class McpGameplayRegressionTest {
         var higher=new FluidDeviceSpec(1,298.15,200000,spec.composition()).initialize(device,model,()->{}).state();
         graph=new PassiveNetwork(List.of(graph.reservoirs().getFirst(),new PassiveNetwork.Reservoir(3,-60,higher,PassiveNetwork.NodeKind.GENERATOR)),graph.pipes());
         var result=solver.solve(graph,5,PassiveIntervalSolver.Settings.defaults(),()->{});
-        assertTrue(result.graph().reservoirs().getFirst().state().waterLiquid()>0);
-        assertEquals(nitrogen.vapor()[com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN],result.graph().reservoirs().getFirst().inventory().moles()[com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN],1e-8);
+        assertTrue(TestPhases.waterLiquid(result.graph().reservoirs().getFirst().state())>0);
+        assertEquals(TestPhases.vapor(nitrogen)[com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN],result.graph().reservoirs().getFirst().inventory().moles()[com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN],1e-8);
         var refined=new PassiveIntervalSolver(model).solve(graph,5,new PassiveIntervalSolver.Settings(.00005,.02,4096),()->{});
         var actual=result.graph().reservoirs().getFirst().state();var expected=refined.graph().reservoirs().getFirst().state();
         System.out.println("MCP_BELOW_SEA_LEVEL pressure="+actual.pressure()+"/"+expected.pressure()+" temperature="+actual.temperature()+"/"+expected.temperature()

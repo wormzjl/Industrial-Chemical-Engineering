@@ -14,6 +14,7 @@ import com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium;
 import com.wormzjl.icheme.science.thermo.phase.PhaseCompetition;
 import com.wormzjl.icheme.science.thermo.phase.PhaseContract;
 import org.junit.jupiter.api.Test;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * G3 fixture family F7 (plan {@code P3_PILOT_ENGINE_PLAN.md} sections 5 and 8.2; D2, D8): CO2 in liquid methane, the
@@ -114,7 +115,7 @@ class G3F7CarbonDioxideInLiquidMethaneTest {
                     var r = engine.tp(EquilibriumRequest.tp(t, p, basis, z, PhaseCompetition.FLUID_AND_CRYSTALS), ws);
                     assertTrue(r.converged(), t + " K " + p + " Pa x " + x + ": " + r.detail());
                     var state = pilot().flashTP(t, p, z, () -> { });
-                    assertTrue(state.liquidProperties() != null, "the pilot network adopts the liquid: " + t + " K " + p + " Pa x " + x);
+                    assertTrue(TestPhases.liquidProperties(state) != null, "the pilot network adopts the liquid: " + t + " K " + p + " Pa x " + x);
                     answered++;
                     worstConservation = Math.max(worstConservation, r.conservationDefect(z));
                     if (r.classification() == EquilibriumResult.Classification.LIQUID_SOLID) {

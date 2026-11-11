@@ -14,6 +14,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 import java.util.Map;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * Rest and steady-flow certificates (plan sections 3.2, 3.3 and 4; section 5 items 3, 5 and 6): the entry
@@ -499,7 +500,7 @@ class IslandCertificateTest {
         double[] wet=amounts(40,0);wet[water]=10;var condensed=model.flashTP(298.15,101325,wet,()->{});
         var wetTank=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,condensed,PassiveNetwork.NodeKind.RESERVOIR,new PassiveNetwork.Inventory(1,amounts(40,0),-1e5)),
                 new PassiveNetwork.Reservoir(2,0,gas,PassiveNetwork.NodeKind.VOID)),a.pipes());
-        assertTrue(condensed.waterVolume()>0);
+        assertTrue(TestPhases.waterVolume(condensed)>0);
         var phase=interval(0,a,wetTank,0,0,0,Map.of());
         assertFalse(phase.phasesUnchanged);assertNull(IslandCertificate.issue(phase,CertificatePolicy.defaults()).certificate());
         // A connection closes inside the interval.
@@ -704,7 +705,7 @@ class IslandCertificateTest {
                 sha.update(s.status().getBytes(java.nio.charset.StandardCharsets.UTF_8));
                 for(var node:s.graph().reservoirs()) {
                     put.accept(node.id());for(double n:node.inventory().moles())bits.accept(n);bits.accept(node.inventory().internalEnergy());
-                    var state=node.state();for(double v:new double[]{state.temperature(),state.pressure(),state.mass(),state.vaporVolume(),state.liquidVolume(),state.waterVolume()})bits.accept(v);
+                    var state=node.state();for(double v:new double[]{state.temperature(),state.pressure(),state.mass(),state.vaporVolume(),TestPhases.liquidVolume(state),TestPhases.waterVolume(state)})bits.accept(v);
                 }
                 var result=s.lastResult().orElseThrow();
                 for(double q:result.averageMassFlows())bits.accept(q);

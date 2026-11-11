@@ -6,6 +6,7 @@ import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 class CoolingTowerTest {
     private final FluidThermodynamics model=FluidTestSupport.networkModel();
@@ -161,10 +162,10 @@ class CoolingTowerTest {
     }
     @Test void liquidWaterDoesNotBecomeAnUnsupportedInputBelowItsFreezingPoint(){
         var zero=new double[model.hydrocarbon.componentCount()];
-        assertTrue(TowerExchange.liquidWater(model,model.state(270,101325,zero,zero,1,0,0)));
+        assertTrue(TowerExchange.liquidWater(model,TestPhases.state(model,270,101325,zero,zero,1,0)));
         assertFalse(TowerExchange.liquidWater(model,water(420,1000000,1)),"Compressed water that flashes at discharge is not a liquid-only feed");
         var gas=zero.clone();gas[gas.length-1]=.001;
-        assertTrue(TowerExchange.liquidWater(model,model.state(300,101325,zero,gas,1,0,101325)),"A stream's gas passes to the basin's vent");
+        assertTrue(TowerExchange.liquidWater(model,TestPhases.state(model,300,101325,zero,gas,1,0)),"A stream's gas passes to the basin's vent");
     }
     @Test void targetModeStopsFansWithoutSprayWhileTheWarmBasinStillCools(){
         var tower=CoolingTower.induced(8,2,1,1).withControl(CoolingTower.Mode.TARGET_TEMPERATURE,1,298.15);

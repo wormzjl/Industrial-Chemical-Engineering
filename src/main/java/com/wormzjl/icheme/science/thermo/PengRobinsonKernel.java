@@ -84,8 +84,8 @@ public final class PengRobinsonKernel {
     private final double[] cellAlpha;
     private final double[] cellIntercept;
     private final double[] cellSlope;
-    /** The fitted ends of each cell's energy line ({@link HuronVidalExcess#held}). */
-    private final double[] cellLow, cellHigh;
+    /** The fitted ends of each cell's energy line ({@link HuronVidalExcess#held}) and its fade temperature (infinite: none). */
+    private final double[] cellLow, cellHigh, cellFade;
     private final double minimumTemperatureKelvin;
     private final double maximumTemperatureKelvin;
     private final double minimumPressurePascal;
@@ -144,12 +144,12 @@ public final class PengRobinsonKernel {
     /** The pairs of one kernel before the constructor copies them. */
     private record Pairs(int count, int[] first, int[] second, double[] constant, double[] slope, int[] model,
                          PairInteractions interactions, boolean[] nrtl, double[] alpha, double[] intercept, double[] energySlope,
-                         double[] low, double[] high, double[] cellLow, double[] cellHigh) {
+                         double[] low, double[] high, double[] cellLow, double[] cellHigh, double[] cellFade) {
         /** Pairs without lines: constants and model pairs (infinite ends). */
         Pairs(int count, int[] first, int[] second, double[] constant, double[] slope, int[] model,
               PairInteractions interactions, boolean[] nrtl, double[] alpha, double[] intercept, double[] energySlope) {
             this(count, first, second, constant, slope, model, interactions, nrtl, alpha, intercept, energySlope,
-                    filled(first.length, Double.NEGATIVE_INFINITY), filled(first.length, Double.POSITIVE_INFINITY), null, null);
+                    filled(first.length, Double.NEGATIVE_INFINITY), filled(first.length, Double.POSITIVE_INFINITY), null, null, null);
         }
 
         private static double[] filled(int length, double value) {
@@ -229,7 +229,7 @@ public final class PengRobinsonKernel {
             slope[at++] = excess.interactionSlope(i, j);
         }
         boolean[] nrtl = null;
-        double[] alpha = null, intercept = null, energySlope = null, cellLow = null, cellHigh = null;
+        double[] alpha = null, intercept = null, energySlope = null, cellLow = null, cellHigh = null, cellFade = null;
         if (anyNrtl) {
             int cells = n * n;
             nrtl = new boolean[cells];
@@ -238,6 +238,7 @@ public final class PengRobinsonKernel {
             energySlope = new double[cells];
             cellLow = new double[cells];
             cellHigh = new double[cells];
+            cellFade = new double[cells];
             for (int i = 0; i < n; i++) {
                 for (int j = 0; j < n; j++) {
                     if (i == j || excess.classical(i, j)) continue;
@@ -248,11 +249,12 @@ public final class PengRobinsonKernel {
                     energySlope[cell] = excess.energySlope(j, i);
                     cellLow[cell] = excess.lineLow(i, j);
                     cellHigh[cell] = excess.lineHigh(i, j);
+                    cellFade[cell] = excess.lineFade(i, j);
                 }
             }
         }
         return new Pairs(n, first, second, constant, slope, model, excess.interactions(), nrtl, alpha, intercept, energySlope,
-                low, high, cellLow, cellHigh);
+                low, high, cellLow, cellHigh, cellFade);
     }
 
     private PengRobinsonKernel(
@@ -333,6 +335,7 @@ public final class PengRobinsonKernel {
         this.cellSlope = new double[cells];
         this.cellLow = new double[cells];
         this.cellHigh = new double[cells];
+        this.cellFade = new double[cells];
         this.cellIndex = excess ? new int[count][count] : new int[0][];
         if (excess) {
             int at = 0;
@@ -348,6 +351,7 @@ public final class PengRobinsonKernel {
                     cellIntercept[at] = pairs.intercept()[source];
                     cellLow[at] = pairs.cellLow()[source];
                     cellHigh[at] = pairs.cellHigh()[source];
+                    cellFade[at] = pairs.cellFade()[source];
                     cellSlope[at++] = pairs.energySlope()[source];
                 }
             }
@@ -516,7 +520,7 @@ public final class PengRobinsonKernel {
                 int j = cellPartner[c];
                 double bj = coVolumes[j];
                 double[] held = workspace.held;
-                HuronVidalExcess.held(cellIntercept[c], cellSlope[c], cellLow[c], cellHigh[c], temperatureKelvin, held);
+                HuronVidalExcess.held(cellIntercept[c], cellSlope[c], cellLow[c], cellHigh[c], cellFade[c], temperatureKelvin, held);
                 double tau = held[0] / rt;
                 double tauDt = held[1] / rt - tau / temperatureKelvin;
                 double tauDt2 = held[2] / rt - 2.0 * tauDt / temperatureKelvin;

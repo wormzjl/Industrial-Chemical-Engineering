@@ -7,6 +7,7 @@ import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import java.util.*;
 import org.junit.jupiter.api.Test;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * Owner decisions D54 (nothing at the mint) and D55: a minted junction holds nothing a placement put there; its buffer
@@ -53,7 +54,7 @@ class JunctionStartFormTest {
         var minted=PassiveNetwork.mintJunctions(spill(model.flashTP(298.15,150000,n,()->{})),model).reservoirs().get(1);
         var held=com.wormzjl.icheme.science.fluid.solver.PhaseLayout.totalAmounts(minted.state());double total=0;for(double x:held)total+=x;
         assertEquals(total,held[held.length-1],0,"water only: "+Arrays.toString(held));
-        assertTrue(minted.state().waterLiquid()>0,"liquid water");
+        assertTrue(TestPhases.waterLiquid(minted.state())>0,"liquid water");
     }
     /** A run of two junctions: the one the generator touches takes its stream; the one beyond takes it from the first, one
      * hop on; neither is the ambient. */

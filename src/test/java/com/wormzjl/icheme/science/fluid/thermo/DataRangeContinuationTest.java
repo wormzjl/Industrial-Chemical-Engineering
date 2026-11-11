@@ -19,6 +19,9 @@ class DataRangeContinuationTest {
     private static final String NETWORK="icheme:tjl20_methane_nitrogen";
     private final MaterialCatalog catalog=com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
     private final FluidThermodynamics model=FluidThermodynamics.forNetwork(catalog,NETWORK);
+    /** W3b: water runs on the network model, whose cubic holds it (a crude package without water in its cubic holds none). */
+    private final FluidThermodynamics wet=com.wormzjl.icheme.fluid.support.FluidTestSupport.networkModel();
+    private double[] wetOverall(Object... pairs){double[] n=new double[wet.componentCount()];for(int i=0;i<pairs.length;i+=2)n[wet.components().indexOf((String)pairs[i])]=(Double)pairs[i+1];return n;}
     private int index(String component){return model.components().indexOf(component);}
     private double[] overall(Object... pairs){double[] n=new double[model.componentCount()];for(int i=0;i<pairs.length;i+=2)n[index((String)pairs[i])]=(Double)pairs[i+1];return n;}
 
@@ -29,11 +32,11 @@ class DataRangeContinuationTest {
         assertEquals(200,gas.temperature());assertTrue(Double.isFinite(gas.enthalpy())&&gas.mass()>0);
         // The same rule on a direct state, the path every Newton trial takes.
         double[] vapor=new double[model.hydrocarbon.componentCount()];vapor[index("Nitrogen")]=.99;vapor[index("crude_pc03")]=.01;
-        var direct=assertDoesNotThrow(()->model.state(200,101325,new double[vapor.length],vapor,0,0,101325));
+        var direct=assertDoesNotThrow(()->TestPhases.state(model,200,101325,new double[vapor.length],vapor,0,0));
         assertTrue(Double.isFinite(direct.enthalpy()));
         // Two fractions below their data as a liquid: smooth, with a viscosity from the continued tables.
         var oil=assertDoesNotThrow(()->model.flashTP(250,101325,overall("crude_pc03",.4,"crude_pc05",.6),()->{}));
-        assertTrue(oil.liquidVolume()>0,"a crude liquid at 250 K");
+        assertTrue(TestPhases.liquidVolume(oil)>0,"a crude liquid at 250 K");
         double mu=model.phaseViscosity(oil,FluidThermodynamics.OIL,new com.wormzjl.icheme.science.fluid.transport.MixtureViscosity.Workspace(),null);
         assertTrue(mu>0&&Double.isFinite(mu),"continued liquid viscosity "+mu);
     }
@@ -42,17 +45,17 @@ class DataRangeContinuationTest {
      * rejected trial and not a hold. */
     @Test void aPressureBelowTheEnvelopeIsCarriedAndOnlyTheNumericalBoxRefusesAState() {
         double[] none=new double[model.hydrocarbon.componentCount()];double[] nitrogen=none.clone();nitrogen[index("Nitrogen")]=1;
-        var thin=assertDoesNotThrow(()->model.state(298.15,50,none,nitrogen,0,0,50));
+        var thin=assertDoesNotThrow(()->TestPhases.state(model,298.15,50,none,nitrogen,0,0));
         assertEquals(50,thin.pressure());
         for(double[] outside:new double[][]{{298.15,.5},{5,101325},{298.15,2e9},{7000,101325}}) {
-            var refused=assertThrows(IllegalArgumentException.class,()->model.state(outside[0],outside[1],none,nitrogen,0,0,outside[1]));
+            var refused=assertThrows(IllegalArgumentException.class,()->TestPhases.state(model,outside[0],outside[1],none,nitrogen,0,0));
             assertFalse(refused instanceof ThermoHold,"the box is a rejected trial, never a hold");
             assertTrue(refused.getMessage().contains("numerical box"),refused.getMessage());
             assertFalse(NumericalBox.contains(outside[0],outside[1]));
         }
-        var malformed=assertThrows(IllegalArgumentException.class,()->model.state(298.15,101325,new double[2],new double[2],0,0,101325));
+        var malformed=assertThrows(IllegalArgumentException.class,()->TestPhases.state(model,298.15,101325,new double[2],new double[2],0,0));
         assertFalse(malformed instanceof ThermoHold,"a wrong basis is malformed input");
-        var nan=assertThrows(IllegalArgumentException.class,()->model.state(Double.NaN,101325,none,nitrogen,0,0,101325));
+        var nan=assertThrows(IllegalArgumentException.class,()->TestPhases.state(model,Double.NaN,101325,none,nitrogen,0,0));
         assertFalse(nan instanceof ThermoHold,"a non-finite temperature is malformed input");
         assertDoesNotThrow(()->model.flashTP(700,101325,overall("Nitrogen",1.0),()->{}));
     }
@@ -61,15 +64,17 @@ class DataRangeContinuationTest {
      * stand-in, free liquid water, until a vessel's refresh freezes it; no hold. Its vapour keeps the ice's sublimation
      * pressure (260 Pa at 263.15 K, against the supercooled liquid's 287 Pa), and a humid gas below it is a gas. */
     @Test void freeLiquidWaterBelowItsMeltingLineIsTheIcesStandInAndItsVapourKeepsTheIcesPressure() {
-        double[] none=new double[model.hydrocarbon.componentCount()];double[] nitrogen=none.clone();nitrogen[index("Nitrogen")]=1;
-        var standIn=assertDoesNotThrow(()->model.state(270,101325,none,nitrogen,1,0,101325));
-        assertEquals(1,standIn.waterLiquid());
-        var pure=assertDoesNotThrow(()->model.flashTP(270,101325,overall("Water",1.0),()->{}));
-        assertEquals(1,pure.waterLiquid(),"pure water at 270 K and 1 atm is ice, carried as its stand-in");
-        var frost=assertDoesNotThrow(()->model.flashTP(263.15,101325,overall("Nitrogen",.995,"Water",.005),()->{}));
-        assertTrue(frost.waterLiquid()>0,"the water above the ice's pressure is ice: "+frost.waterLiquid());
-        assertEquals(model.freeWaterIce().fugacity(263.15,101325),frost.waterPartialPressure(),1e-6*frost.waterPartialPressure(),"the steam over ice");
-        assertEquals(259.89,frost.waterPartialPressure(),.02,"R14-08 at 263.15 K");
+        var model=wet;double[] none=new double[model.componentCount()-1];double[] nitrogen=none.clone();nitrogen[model.components().indexOf("Nitrogen")]=1;
+        var standIn=assertDoesNotThrow(()->TestPhases.state(model,270,101325,none,nitrogen,1,0));
+        assertEquals(1,TestPhases.waterLiquid(standIn));
+        var pure=assertDoesNotThrow(()->model.flashTP(270,101325,wetOverall("Water",1.0),()->{}));
+        assertEquals(1,TestPhases.waterLiquid(pure),"pure water at 270 K and 1 atm is ice, carried as its stand-in");
+        var frost=assertDoesNotThrow(()->model.flashTP(263.15,101325,wetOverall("Nitrogen",.995,"Water",.005),()->{}));
+        assertTrue(TestPhases.waterLiquid(frost)>0,"the water above the ice's pressure is ice: "+TestPhases.waterLiquid(frost));
+        // W3b: the step carries the stand-in, the supercooled aqueous liquid of the cubic, so the steam is the supercooled
+        // liquid's (Wagner-Pruss 287 Pa at 263.15 K) until a refresh freezes the ice, not the ice's 260 Pa (the free-water
+        // rule's cap, retired).
+        assertEquals(287,TestPhases.waterPartialPressure(frost),.03*287,"the steam over the stand-in");
         // The saturation pressure continues as the supercooled liquid's (Wagner-Pruss: 287 Pa at 263.15 K, 1.10 times the
         // ice's 260 Pa), and liquid water from its 273.16 K values: cp held (76.0 J/mol K), the volume along dv/dT (negative
         // there, water being densest at 277 K: 3.16 K colder the held liquid is 2.1e-4 larger).
@@ -80,8 +85,8 @@ class DataRangeContinuationTest {
         double slope=(model.waterLiquid(273.17,101325).molarVolume()-triple.molarVolume())/.01;
         assertTrue(slope<0,"water contracts as it warms at 273.16 K");
         assertEquals(triple.molarVolume()+slope*(270-273.16),held.molarVolume(),1e-6*triple.molarVolume(),"the volume along dv/dT");
-        var humid=assertDoesNotThrow(()->model.flashTP(263,101325,overall("Nitrogen",.999,"Water",.001),()->{}));
-        assertEquals(0,humid.waterLiquid());assertEquals(.001,humid.waterVapor(),1e-15);
+        var humid=assertDoesNotThrow(()->model.flashTP(263,101325,wetOverall("Nitrogen",.999,"Water",.001),()->{}));
+        assertEquals(0,TestPhases.waterLiquid(humid));assertEquals(.001,TestPhases.waterVapor(humid),1e-15);
         // Liquid water below its saturation pressure leaves Region 1's range: a notice, not a refusal.
         var stretched=WaterRegion1.evaluate(catalog.requirePackage(NETWORK).water(),350,1000);
         assertTrue(stretched.specificVolume()>0);

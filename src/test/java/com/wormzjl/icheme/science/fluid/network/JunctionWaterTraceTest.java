@@ -7,6 +7,7 @@ import com.wormzjl.icheme.science.material.MaterialCatalog;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * Decision D10 of documentation/2026-09-26-phase-ports-and-compressor (the base defect of PHASE_PORTS_REVIEW.md, WP1
@@ -44,13 +45,13 @@ class JunctionWaterTraceTest extends PortFixture {
     @Test void unsaturatedWaterVapourThroughABulkLineIntoADrySeededJunction() {
         for(double humidity:new double[]{.005,.01}) {
             var tank=vessel(humidity);
-            assertEquals(0,tank.waterLiquid(),"the vessel's water is all vapour");
+            assertEquals(0,TestPhases.waterLiquid(tank),"the vessel's water is all vapour");
             integrate("bulk "+humidity,line(tank,PhasePort.BULK));
         }
     }
     @Test void aWetVesselsVaporPortIntoADrySeededJunction() {
         var tank=vessel(-1);
-        assertTrue(tank.waterLiquid()>0&&tank.waterVapor()>0,"two-phase wet vessel");
+        assertTrue(TestPhases.waterLiquid(tank)>0&&TestPhases.waterVapor(tank)>0,"two-phase wet vessel");
         integrate("vapor port",line(tank,PhasePort.VAPOR));
     }
 
@@ -77,7 +78,7 @@ class JunctionWaterTraceTest extends PortFixture {
             System.out.println("JUNCTION_WATER_TRACE "+label+" interval="+interval+" slices="+count+" accepted="+accepted+" rejected="+rejected+" worstComponentLedger="+worstMoles
                     +" worstEnergyLedger="+worstEnergy+" junctionWaterFraction="+waterFraction(junction)+" waterToVoid="+voidWater);
             assertTrue(voidWater>0,label+" at "+interval+" s: the water passes the junction to the void");
-            assertTrue(junction.waterVapor()>0,label+" at "+interval+" s: the junction carries the water it receives");
+            assertTrue(TestPhases.waterVapor(junction)>0,label+" at "+interval+" s: the junction carries the water it receives");
         }
     }
     /** A state's water mole fraction. */
@@ -112,7 +113,7 @@ class JunctionWaterTraceTest extends PortFixture {
         var graph=PassiveNetwork.sizeJunctionHoldups(new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,1,generator,PassiveNetwork.NodeKind.GENERATOR),
                 new PassiveNetwork.Reservoir(2,0,air,PassiveNetwork.NodeKind.JUNCTION),new PassiveNetwork.Reservoir(3,0,air,PassiveNetwork.NodeKind.VOID)),
                 List.of(new PassiveNetwork.Pipe(10,0,1,PIPE),new PassiveNetwork.Pipe(11,1,2,PIPE))),model);
-        assertEquals(0,graph.reservoirs().get(1).state().waterLiquid()+graph.reservoirs().get(1).state().waterVapor(),"the fitting starts as air");
+        assertEquals(0,TestPhases.waterLiquid(graph.reservoirs().get(1).state())+TestPhases.waterVapor(graph.reservoirs().get(1).state()),"the fitting starts as air");
         var solver=new PassiveIntervalSolver(model);PassiveIntervalSolver.Result committed=null;double toVoid=0;
         for(int slice=0;slice<20;slice++) {
             solver.replayStart(graph,committed);
@@ -121,7 +122,7 @@ class JunctionWaterTraceTest extends PortFixture {
             for(var transfer:result.boundaries())if(transfer.nodeId()==3)toVoid-=transfer.moles()[water]*model.molecularWeights()[water];
         }
         var junction=graph.reservoirs().get(1).state();
-        double share=junction.waterLiquid()*model.molecularWeights()[water]/junction.mass();
+        double share=TestPhases.waterLiquid(junction)*model.molecularWeights()[water]/junction.mass();
         System.out.println("JUNCTION_ARRIVING_PHASE waterToVoidKg="+toVoid+" junctionLiquidWaterMassShare="+share+" junctionT="+junction.temperature());
         assertTrue(share>.99,"the fitting holds water: liquid water share "+share);
         assertTrue(toVoid/2>1,"the water passes into the void at more than 1 kg/s: "+toVoid/2+" kg/s");

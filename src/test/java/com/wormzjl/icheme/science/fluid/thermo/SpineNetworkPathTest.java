@@ -77,7 +77,7 @@ class SpineNetworkPathTest {
             assertEquals(wp3[i], eos.translation(i) * 1e6, 5e-7, SPECIES[i] + " translation, cm3/mol");
             double[] pure = new double[4];
             pure[i] = 1;
-            var liquid = hydrocarbon.phase(anchor.temperatureKelvin(), anchor.pressurePascal(), pure, Root.LIQUID);
+            var liquid = hydrocarbon.phase(anchor.temperatureKelvin(), anchor.pressurePascal(), TestPhases.conserved(hydrocarbon, pure), Root.LIQUID);
             assertEquals(anchor.molarVolumeCubicMetresPerMol(), liquid.molarVolume(), 1e-12 * liquid.molarVolume(),
                     SPECIES[i] + ": the Tr 0.8 saturated liquid volume at its own state");
             // D10: the formation enthalpy is subtracted per species, so the network's ideal gas is exactly 0 at 298.15 K.
@@ -90,9 +90,10 @@ class SpineNetworkPathTest {
         assertEquals(hydrocarbon.components(), formation.components());
         assertEquals(SpinePackageData.FORMATION_DATUM + ":" + catalog.spineRevision(PILOT), formation.revision());
         assertEquals(-393477.0, formation.offsetJoulesPerMole(3), 0.0);
-        // Free water keeps the network's datum and density: the same water record as the bundled network package.
+        // A spine package stays dry (no water spine, D6: MaterialCatalog.withWater): its pump density is Region 1's at
+        // 298.15 K and 1 atm, its water datum the bundled network package's (which is wet, its pump density the cubic's).
         var bundled = FluidTestSupport.model(catalog, "icheme:tjl20_methane_nitrogen");
-        assertEquals(bundled.pumpReferenceDensity(), model.pumpReferenceDensity(), 0.0);
+        assertEquals(997.048, model.pumpReferenceDensity(), .001);
         assertEquals(bundled.waterLiquid(300, 1e6).molarEnthalpy(), model.waterLiquid(300, 1e6).molarEnthalpy(), 0.0);
         assertTrue(bundled.hydrocarbon.spine().isEmpty(), "the coefficient path: no spine, no identity, no formation reference");
     }
@@ -113,7 +114,9 @@ class SpineNetworkPathTest {
         double[][] feeds = {
                 {1, 0, 0, 0, 0}, {0, 1, 0, 0, 0}, {0, 0, 1, 0, 0}, {0, 0, 0, 1, 0},
                 {0.5, 0.5, 0, 0, 0}, {0.1, 0.7, 0.2, 0, 0}, {0, 0.8, 0, 0.2, 0}, {0.2, 0, 0, 0.8, 0}, {0, 0, 0.6, 0.4, 0},
-                {0.05, 0.8, 0.1, 0.05, 0}, {0.1, 0.6, 0.1, 0.1, 0.1}};
+                {0.05, 0.8, 0.1, 0.05, 0}};
+        // W3b: the wet feed {0.1, 0.6, 0.1, 0.1, 0.1} left the grid: the pilot package holds no water in its cubic, so its
+        // network refuses water (the refinery network carries it as a component).
         double[] temperatures = {80, 100, 120, 150, 180, 230, 260, 300, 400, 700, 1100};
         double[] pressures = {1.0e5, 3.0e5, 1.0e6, 2.0e6, 5.0e6, 1.0e7};
         int evaluated = 0, wetCold = 0, twoPhase = 0;
@@ -143,13 +146,13 @@ class SpineNetworkPathTest {
                     if (feed[4] > 0 && t < 273.16) {
                         // WP4: below the melting line the condensed water is ice, which a TP answer carries as its stand-in.
                         wetCold++;
-                        assertTrue(state.waterLiquid() > 0, "the wet feed's ice at " + t + " K, " + p + " Pa");
+                        assertTrue(TestPhases.waterLiquid(state) > 0, "the wet feed's ice at " + t + " K, " + p + " Pa");
                     }
-                    double[] liquid = state.liquidView(), vapor = state.vaporView();
+                    double[] liquid = TestPhases.liquid(state), vapor = TestPhases.vapor(state);
                     for (int i = 0; i < 4; i++) {
                         assertEquals(feed[i], liquid[i] + vapor[i], 1e-12, "conserved " + SPECIES[i] + " at " + t + " K, " + p + " Pa");
                     }
-                    assertEquals(feed[4], state.waterLiquid() + state.waterVapor(), 1e-12);
+                    assertEquals(feed[4], TestPhases.waterLiquid(state) + TestPhases.waterVapor(state), 1e-12);
                     assertTrue(state.volume() > 0 && Double.isFinite(state.enthalpy()) && Double.isFinite(state.internalEnergy()));
                     assertTrue(model.velocityLimit(state) > 0);
                     if (sum(liquid) > 0 && sum(vapor) > 0) twoPhase++;
@@ -165,9 +168,10 @@ class SpineNetworkPathTest {
         // 2026-10-16 the 106 states P5 refused for a data range are answered too (684), and since WP4 the wet feed below
         // 273.16 K (7 temperatures by 6 pressures), the ice hold before: its water is ice beside the dry feed's answer,
         // CO2-I where it forms: 726, the whole grid.
+        // W3b: the wet feed's 66 states left with it: 660.
         assertTrue(holds.isEmpty(), "no typed hold on the grid since P5: " + holds);
-        assertEquals(42, wetCold);
-        assertEquals(726, evaluated);
+        assertEquals(0, wetCold);
+        assertEquals(660, evaluated);
     }
 
     /** A P1 row: species, T [K], P [Pa], and the printed density, cp (%) and h (J/mol) deviations, anchor (b). */
@@ -429,7 +433,7 @@ class SpineNetworkPathTest {
         var values = eos.evaluateValues(70, 1e5, new double[] {1, 0, 0, 0}, Root.LIQUID, eos.prepare(70));
         assertTrue(Double.isFinite(values.molarEnthalpy()) && values.heatCapacity() > 0);
         // The network's own entry carries it too, with the same values.
-        var phase = model.phase(85, 1e5, new double[] {0, 1, 0, 0}, Root.LIQUID);
+        var phase = model.phase(85, 1e5, TestPhases.conserved(model, new double[] {0, 1, 0, 0}), Root.LIQUID);
         assertEquals(methane.molarEnthalpy(), phase.molarEnthalpy(), 1e-9 * Math.abs(methane.molarEnthalpy()));
     }
 
@@ -437,16 +441,13 @@ class SpineNetworkPathTest {
     void theNetworkRevisionIsTheThermodynamicIdentityAndMovesWithTheSpineAndTheInteractions() {
         var catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
         var model = pilot();
-        // The network's revision is its package's identity on the network family (main keeps the revision, not the identity).
-        var identity = ThermoIdentity.of(catalog, PILOT, HydrocarbonModel.NETWORK_FAMILY, catalog.spineRevision(PILOT),
-                com.wormzjl.icheme.science.thermo.phase.WaterParticipation.SEPARATE_FREE_WATER);
-        assertEquals(identity.revision(), model.revision());
-        assertEquals(catalog.fluidRevision(PILOT), identity.packageRevision());
-        assertEquals(HydrocarbonModel.NETWORK_FAMILY, identity.evaluatorFamily());
-        assertEquals("pr78_translated_v1:direct-liquid-v1:tp-engine-v1:range-continuation-v1:spine-sensible-datum-v1", identity.evaluatorFamily());
+        // The network's revision is its package's derived identity and the model's formulation (W3b: the derived contract,
+        // main keeps the revision, not the identity).
+        var identity = com.wormzjl.icheme.science.thermo.phase.PhaseContract.forDerived(catalog, PILOT, new HydrocarbonModel(catalog, PILOT).evaluator()).identity();
+        assertEquals(identity.revision() + ":" + HydrocarbonModel.FORMULATION, model.revision());
+        assertTrue(identity.packageRevision().startsWith(catalog.fluidRevision(PILOT) + ";"), identity.packageRevision());
+        assertEquals(com.wormzjl.icheme.science.thermo.phase.CubicPhaseEvaluator.DERIVED_FAMILY, identity.evaluatorFamily());
         assertEquals(catalog.spineRevision(PILOT), identity.spineRevision());
-        assertEquals(ThermoIdentity.SEPARATE_FREE_WATER_FORMULATION + ":" + catalog.requirePackage(PILOT).water().revision(),
-                identity.waterModelRevision());
         assertTrue(model.revision().startsWith("thermo-identity-v2;"), model.revision());
         System.out.println("WP5 pilot network revision: " + model.revision());
         String base = model.revision();
@@ -456,7 +457,7 @@ class SpineNetworkPathTest {
         var entropy = PilotCryogenicTestCatalog.parseWith("data/icheme/materials/spine/methane.json",
                 o -> { o.getAsJsonObject("standard_entropy").addProperty("value_j_per_mol_kelvin", 186.3703); PilotCryogenicTestCatalog.bump(o); });
         var entropyModel = new HydrocarbonModel(entropy, PILOT);
-        assertTrue(!base.equals(entropyModel.revision()) && entropy.fluidRevision(PILOT).equals(identity.packageRevision())
+        assertTrue(!base.equals(entropyModel.revision()) && identity.packageRevision().startsWith(entropy.fluidRevision(PILOT) + ";")
                 && !entropy.spineRevision(PILOT).equals(identity.spineRevision()), "a spine edit moves the spine part only");
         // An interaction edit (A of the CH4/N2 group pair, declared with the group matrix's own revision, which the package's
         // identity carries): the package part moves.
@@ -469,7 +470,7 @@ class SpineNetworkPathTest {
                 });
         var interactionModel = new HydrocarbonModel(interaction, PILOT);
         assertTrue(!base.equals(interactionModel.revision()) && interaction.spineRevision(PILOT).equals(identity.spineRevision())
-                && !interaction.fluidRevision(PILOT).equals(identity.packageRevision()), "an interaction edit moves the package part only");
+                && !identity.packageRevision().startsWith(interaction.fluidRevision(PILOT) + ";"), "an interaction edit moves the package part only");
         // A text edit of a spine moves nothing.
         var text = PilotCryogenicTestCatalog.parseWith("data/icheme/materials/spine/methane.json", o -> o.addProperty("source", "edited text"));
         assertEquals(base, new HydrocarbonModel(text, PILOT).revision());
@@ -480,12 +481,12 @@ class SpineNetworkPathTest {
         assertTrue(!base.equals(shifted.revision()));
         assertEquals(-73513.0, shifted.spine().orElseThrow().formationReference().offsetJoulesPerMole(1), 0.0);
         double[] x = {0.2, 0.6, 0.1, 0.1};
-        double before = model.phase(300, 2e6, x, Root.VAPOR).molarEnthalpy();
-        double after = shifted.phase(300, 2e6, x, Root.VAPOR).molarEnthalpy();
+        double before = model.phase(300, 2e6, TestPhases.conserved(model, x), Root.VAPOR).molarEnthalpy();
+        double after = shifted.phase(300, 2e6, TestPhases.conserved(shifted, x), Root.VAPOR).molarEnthalpy();
         assertEquals(before, after, 1e-9 * Math.abs(before) + 1e-9, "the sensible datum does not see the formation enthalpy");
-        // The coefficient path keeps its own layout (LegacyNetworkPathPinTest holds it bit for bit).
+        // W3b: a package without a spine is on the derived family too (the coefficient path and its pin are retired).
         var legacy = new HydrocarbonModel(catalog, "icheme:tjl20_methane_nitrogen");
-        assertEquals(LegacyNetworkPathPinTest.REVISION, legacy.revision());
+        assertTrue(legacy.revision().startsWith("thermo-identity-v2;") && legacy.revision().endsWith(":" + HydrocarbonModel.FORMULATION), legacy.revision());
     }
 
     @Test

@@ -484,6 +484,32 @@ public final class MaterialCatalog {
         return derived(packs,mixtures,defs);
     }
 
+    /** The cubic water record a network model adds to a package that does not name Water ({@link #withWater}). */
+    public static final String CUBIC_WATER = "icheme:cubic_water";
+    /**
+     * This catalog with package {@code packageId} given water as a compound of its cubic, the way the fluid network's
+     * phase model reads it (W3b of batch 2026-11-11-aqueous-solvents): the package's own compounds, then Water on
+     * {@link #CUBIC_WATER}, and its water model's ice among its crystals, built by the loader's code ({@link #build}) as
+     * if the package named them, with its column range. Water reaches every network model this way; no package record
+     * names it, so the column, the presets and the package's own identity are unchanged. The package itself where it names
+     * Water already, where it is a lens, where the record is absent, or where its method takes its ideal gas from
+     * reference spines (one ideal-gas source per species, D6: no water spine exists, so such a package stays dry).
+     */
+    public MaterialCatalog withWater(String packageId) {
+        var parent=requirePackage(packageId);var definition=definitions.get(packageId);
+        if(parent.components().contains("Water")||definition==null||definition.method().spine()||!records.properties().containsKey(CUBIC_WATER))return this;
+        var entries=new ArrayList<>(definition.entries());entries.add(new Entry("Water",CUBIC_WATER,null));
+        var crystals=new ArrayList<>(definition.crystals());
+        var ice=parent.water().ice();
+        if(ice!=null&&!crystals.contains(ice.crystal()))crystals.add(ice.crystal());
+        var wet=new Definition(definition.id(),definition.revision(),definition.head(),definition.method(),entries,crystals,definition.evidence());
+        var built=build(records,wet,parent,records.assays());
+        var packs=new HashMap<>(packages);packs.put(packageId,built.pack());
+        var mixtures=new HashMap<>(liquidMixtures);mixtures.put(packageId,built.liquidMixture());
+        var defs=new HashMap<>(definitions);defs.put(packageId,wet);
+        return derived(packs,mixtures,defs);
+    }
+
     /**
      * The lens a model trained on {@code reference} reads a request on package {@code packageId} through (plan section
      * 3.3 of batch 2026-11-04-refinery-compounds; by value since O7 of batch 2026-11-04-open-thermo-data, owner decision

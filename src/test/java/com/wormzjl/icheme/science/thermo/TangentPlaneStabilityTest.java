@@ -16,6 +16,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.function.DoubleUnaryOperator;
 import org.junit.jupiter.api.Test;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * The tangent-plane stability test against independent answers: the kernel's own equal-fugacity pressure for a
@@ -203,7 +204,7 @@ class TangentPlaneStabilityTest {
             double p = states[s][1];
             Result result = test.test(t, p, z);
             var flash = fluid.flashTP(t, p, Arrays.copyOf(z, n + 1), () -> { });
-            int phases = (sum(flash.liquidView()) > 0.0 ? 1 : 0) + (sum(flash.vaporView()) > 0.0 ? 1 : 0);
+            int phases = (sum(TestPhases.liquid(flash)) > 0.0 ? 1 : 0) + (sum(TestPhases.vapor(flash)) > 0.0 ? 1 : 0);
             String state = t + " K, " + p + " Pa";
             assertEquals(expected[s], result.verdict(), state);
             assertEquals(phases == 2 ? Verdict.UNSTABLE : Verdict.STABLE, result.verdict(), state + ", flash phases " + phases);

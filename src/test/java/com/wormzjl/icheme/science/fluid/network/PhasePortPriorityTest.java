@@ -7,6 +7,7 @@ import com.wormzjl.icheme.science.material.MaterialCatalog;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * Decision D11 of documentation/2026-09-26-phase-ports-and-compressor (ports carry mixed phases by priority; it replaces
@@ -27,7 +28,7 @@ class PhasePortPriorityTest extends PortFixture {
     private final int pentane=index("N-pentane");
     private static final double COMPONENT_LEDGER=1e-12,ENERGY_LEDGER=1e-10;
     private static final String REOPEN="Backward-Euler boundary reopened";
-    private static final int GAS=FluidThermodynamics.GAS,OIL=FluidThermodynamics.OIL,WATER=FluidThermodynamics.WATER;
+    private static final int GAS=FluidThermodynamics.GAS,OIL=FluidThermodynamics.OIL,WATER=FluidThermodynamics.AQUEOUS;
     private static PipeResistance.Geometry line(double length,double diameter){return new PipeResistance.Geometry(length,diameter,PipeResistance.DEFAULT_ROUGHNESS_METRES,0);}
     private static PassiveNetwork.Pipe pipe(long id,int a,int b,PipeResistance.Geometry g,PhasePort pa,PhasePort pb) {
         return new PassiveNetwork.Pipe(id,a,b,List.of(g),new FlowControl.Passive(),0,null,pa,pb);
@@ -42,7 +43,7 @@ class PhasePortPriorityTest extends PortFixture {
         return model.flashTP(t,pressure,n,NOOP);
     }
     private static double share(FluidThermodynamics.State s,int phase) {
-        return (phase==GAS?s.vaporVolume():phase==OIL?s.liquidVolume():s.waterVolume())/s.volume();
+        return (phase==GAS?s.vaporVolume():phase==OIL?TestPhases.liquidVolume(s):TestPhases.waterVolume(s))/s.volume();
     }
     /** The mass of each phase a transferred stream carries: [gas, hydrocarbon liquid, free water]. */
     private double[] phases(PipeTransfer.Stream stream) {
@@ -353,7 +354,7 @@ class PhasePortPriorityTest extends PortFixture {
                 assertTrue(moved[0]>0&&flows[i]>capacity,ports+" ports, line "+i+": the gas makes up the rest of the flow");
                 assertEquals(flows[i]*dt,moved[0]+moved[1]+moved[2],1e-12*flows[i]*dt,ports+" ports, line "+i+": the stream is the flow");
             }
-            double vapourWater=tank.waterVapor()*mw[water],left=end.waterLiquid()*mw[water];
+            double vapourWater=TestPhases.waterVapor(tank)*mw[water],left=TestPhases.waterLiquid(end)*mw[water];
             System.out.println("PHASE_PORT_PRIORITY_CAPACITY ports="+ports+" startWater="+model.phaseMass(tank,WATER)+" startVapourWater="+vapourWater+" endFreeWater="+left);
             assertTrue(left<vapourWater,ports+" ports: no water left but condensate: "+left+" kg");
         }

@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /** Physical initial-value data, not a Minecraft checkpoint: equal outlet setpoints with phase-selective draws. */
 class PressureValveContinuationTest extends PortFixture {
@@ -32,7 +33,7 @@ class PressureValveContinuationTest extends PortFixture {
         assertEquals(model.components(),fixture.components());
         var nodes=new ArrayList<PassiveNetwork.Reservoir>();
         for(var n:fixture.nodes()) {
-            var state=model.state(n.temperature(),n.pressure(),n.liquid(),n.vapor(),n.waterLiquid(),n.waterVapor(),n.hydrocarbonPressure());
+            var state=TestPhases.state(model,n.temperature(),n.pressure(),n.liquid(),n.vapor(),n.waterLiquid(),n.waterVapor());
             var inventory=new PassiveNetwork.Inventory(n.capacity(),n.moles(),n.energy(),SolidInventory.EMPTY,n.height(),n.open());
             nodes.add(new PassiveNetwork.Reservoir(n.id(),n.elevation(),state,n.kind(),inventory));
         }

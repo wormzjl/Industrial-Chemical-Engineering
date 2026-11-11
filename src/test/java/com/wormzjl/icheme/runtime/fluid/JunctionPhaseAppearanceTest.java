@@ -6,6 +6,7 @@ import com.wormzjl.icheme.science.material.MaterialTestBasis;
 import org.junit.jupiter.api.Test;
 import static com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Direction.*;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * Hold class E3 of the placement-sequence fuzz (phase-ports batch, PHASE_PORTS_REVIEW.md "Hold class E3: a hydrocarbon
@@ -25,6 +26,6 @@ class JunctionPhaseAppearanceTest {
         w.runTo(2000);w.assertKeptUp("nitrogen into a water-seeded junction");
         var island=w.onWorld(w.coordinator.snapshots().getFirst());
         var junction=island.graph().reservoirs().stream().filter(n->n.junction()).findFirst().orElseThrow().state();
-        assertTrue(junction.vaporView()[MaterialTestBasis.NITROGEN]>0,"the junction carries the nitrogen in a vapour phase: "+junction);
+        assertTrue(TestPhases.vapor(junction)[MaterialTestBasis.NITROGEN]>0,"the junction carries the nitrogen in a vapour phase: "+junction);
     }
 }

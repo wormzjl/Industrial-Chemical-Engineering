@@ -151,8 +151,9 @@ public final class CubicPhaseEvaluator {
      * {@link DerivedPairs#derive}, one {@link CoefficientIdealGas} per compound (the network's sensible datum; on a package
      * with a reference spine its spine records, on the spine's formation datum as the crystals' anchors are), water
      * untranslated and every other compound translated so that its pure liquid on this kernel has its volume anchor's
-     * volume (the catalog's volume reference, else the record's standard density; none where the anchor has no liquid
-     * root), and water's share ({@link WaterShare}) when {@value #WATER} is in the list.
+     * volume (on a package with a reference spine the spine's own anchors, {@link SpinePackageData#anchors}; else the
+     * catalog's volume reference, else the record's standard density; none where the anchor has no liquid root), and
+     * water's share ({@link WaterShare}) when {@value #WATER} is in the list.
      */
     public static CubicPhaseEvaluator derived(MaterialCatalog catalog, String packageId, List<String> componentIds) {
         var result = DerivedPairs.derive(catalog, packageId, componentIds);
@@ -175,6 +176,11 @@ public final class CubicPhaseEvaluator {
             idealGas.add(spine == null ? CoefficientIdealGas.of(catalog, packageId, ids.get(i))
                     : spine.idealGas().get(pack.components().indexOf(ids.get(i))));
             if (i == water) continue;
+            if (spine != null) {
+                // The pure liquid does not see the pairs: the spine's anchor translation is this kernel's too.
+                translations[i] = spine.anchors().get(pack.components().indexOf(ids.get(i))).translation();
+                continue;
+            }
             var point = calibrations.get(property.component());
             double t = point == null ? property.standardTemperature() : point.temperatureKelvin();
             double target = point == null ? property.molecularWeight() / property.density() : point.molarVolumeCubicMetres();

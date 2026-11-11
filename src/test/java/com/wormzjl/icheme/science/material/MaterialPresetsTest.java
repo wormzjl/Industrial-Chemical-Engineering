@@ -88,7 +88,7 @@ class MaterialPresetsTest {
         var nitrogen=FluidDeviceSpec.nitrogen(changed);assertEquals(1,nitrogen.composition()[axis.indexOf("Nitrogen")]);assertEquals(0,nitrogen.composition()[axis.indexOf("Testgas")]);
         var presets=FluidPresetCatalog.resolve(changed);var previous=FluidPresetCatalog.resolve(original);
         assertEquals(previous.size(),presets.size());
-        var target=new ArrayList<>(axis);target.add("Water");var source=new ArrayList<>(original.requirePackage(pkg).components());source.add("Water");
+        var target=changed.conservedComponents(pkg);var source=original.conservedComponents(pkg);
         for(int i=0;i<presets.size();i++)assertArrayEquals(new MaterialAxis(target).project(new MaterialAxis(source),previous.get(i).moleFractions()),presets.get(i).moleFractions());
         var model=FluidThermodynamics.forNetwork(changed,pkg);assertEquals(target,model.components());
         var state=model.initialNitrogenCharge(1,298.15,101325,()->{});assertTrue(Double.isFinite(state.mass())&&state.mass()>0);

@@ -7,6 +7,7 @@ import com.wormzjl.icheme.science.machine.GasEntrainment;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.thermo.TestPhases;
 
 /**
  * Request 11 in the fluid network (batch 2026-11-03-rotating-machinery, work package W10a, plan section 3.6, owner decisions
@@ -24,7 +25,7 @@ class TwoPhaseMoverTest extends PortFixture {
                 List.of(new PassiveNetwork.Pipe(10,0,1,FAT,control)));
     }
     private static double density(FluidThermodynamics.State state){return state.mass()/state.volume();}
-    private static double share(FluidThermodynamics.State s){return s.vaporVolume()/(s.vaporVolume()+s.liquidVolume()+s.waterVolume());}
+    private static double share(FluidThermodynamics.State s){return s.vaporVolume()/(s.vaporVolume()+TestPhases.liquidVolume(s)+TestPhases.waterVolume(s));}
     /** Water with nitrogen at 298.15 K and {@code pressure} whose vapour fills {@code target} of its fluid volume (bisection
      * on the nitrogen amount; 1 m3 of water), as InletPhaseTest builds it. */
     private FluidThermodynamics.State twoPhase(double target,double pressure) {
