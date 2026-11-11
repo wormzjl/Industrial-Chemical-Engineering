@@ -81,11 +81,12 @@ public final class Flares {
         return new Gas(Flare.gas(donor.inventory().moles(),molarMasses,heatingValues,formulas,donor.state().temperature(),tip),solids);
     }
 
-    /** Each flare's tip at dispatch, open or blocked (reads only). */
+    /** Each flare's tip at dispatch, open or blocked (reads only): on the run into it, its tip's valve or a safety valve's run (batch 2026-11-11-valve-followups, item 4). */
     void plans(PassiveNetwork graph,Map<Long,ShaftPlan> out) {
         sync();
         for(var pipe:graph.pipes()) {
-            if(!(pipe.control() instanceof FlowControl.ControlValve valve)||valve.source()!=FlowControl.ValveSource.FLARE)continue;
+            boolean tipValve=pipe.control() instanceof FlowControl.ControlValve valve&&valve.source()==FlowControl.ValveSource.FLARE;
+            if(!tipValve&&!(pipe.control() instanceof FlowControl.PressureValve))continue;
             long id=graph.reservoirs().get(pipe.second()).id();double tip=tip(id);if(tip<=0)continue;
             var gas=gas(graph.reservoirs().get(pipe.first()),tip);
             limits.put(id,gas.gas().limit());

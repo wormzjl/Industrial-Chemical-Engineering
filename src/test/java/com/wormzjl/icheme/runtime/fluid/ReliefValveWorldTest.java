@@ -345,6 +345,46 @@ class ReliefValveWorldTest {
         }
     }
 
+    /**
+     * Item 4 of the valve follow-ups (owner X5: a flare's tip blocks while solids arrive): a relief run straight into a flare is
+     * one line with no tip valve of its own (owner D6). With solids at the drum, the flare's plan blocks it: the line closes
+     * both ways, the flare reads BLOCKED, and the drum rises above its set pressure; clean again, the line opens.
+     */
+    @Test void aReliefRunIntoAFlareBlocksWhileSolidsArrive() {
+        var world=new EventPathWorld();long drum=plant(world,methane(),5e5)[0];long flare=flare(world,.3);
+        world.runTo(1200);world.assertKeptUp("flare relief");
+        var s=island(world,drum);var clean=world.worldGraph(s);var model=world.model;
+        var flares=new Flares(world.ledger,FluidWorldAuthority.heatingValues(world.catalog,model),model.molecularWeights(),FluidWorldAuthority.formulas(world.catalog,model));
+        int line=-1,at=-1;
+        for(int e=0;e<clean.pipes().size();e++)if(clean.pipes().get(e).control() instanceof FlowControl.PressureValve)line=e;
+        for(int n=0;n<clean.reservoirs().size();n++)if(clean.reservoirs().get(n).id()==drum)at=n;
+        assertEquals(flare,clean.reservoirs().get(clean.pipes().get(line).second()).id(),"one line from the drum into the flare");
+        assertEquals(0,clean.pipes().get(line).forbiddenDirections(),"the compile leaves its fitting mask free");
+        var plans=new HashMap<Long,ShaftPlan>();flares.plans(clean,plans);
+        assertEquals(new ShaftPlan(ShaftPlan.Kind.FLARE,1),plans.get(flare),"clean: the tip is open");
+        assertSame(clean,ShaftPlan.apply(clean,plans),"and the line stays as compiled");
+        var solids=new com.wormzjl.icheme.science.fluid.state.SolidInventory(List.of(new com.wormzjl.icheme.science.fluid.state.SolidInventory.Population(
+                world.catalog.solids().require("icheme:demo_particle"),com.wormzjl.icheme.science.fluid.state.ParticleSize.micrometres("100"),.01)));
+        int drumAt=at;
+        java.util.function.UnaryOperator<PassiveNetwork> dusty=g->{var nodes=new ArrayList<>(g.reservoirs());var node=nodes.get(drumAt);
+            nodes.set(drumAt,new PassiveNetwork.Reservoir(node.id(),node.elevation(),node.state().withSolids(solids),node.kind(),node.inventory()));
+            return new PassiveNetwork(nodes,g.pipes(),g.scheduledTransfers());};
+        plans.clear();flares.plans(dusty.apply(clean),plans);
+        assertEquals(new ShaftPlan(ShaftPlan.Kind.FLARE,0),plans.get(flare),"solids arrive: the tip blocks");
+        var blocked=ShaftPlan.apply(clean,plans);
+        assertEquals(3,blocked.pipes().get(line).forbiddenDirections(),"the relief line closes both ways");
+        var r=new PassiveIntervalSolver(model).solve(blocked,20,PassiveIntervalSolver.Settings.defaults(),()->{});var result=r;
+        flares.booked(0,400,new PassiveIntervalSolver.Result(dusty.apply(r.graph()),r.advancedSeconds(),r.averageMassFlows(),r.acceptedSubsteps(),r.rejectedSubsteps(),r.pumpWorkJoule(),
+                r.boundaries(),r.rejectionReasons(),r.endpointModes(),r.endpointHeads(),r.endpointFlows(),r.pipeTransfers(),r.observations(),r.towers()));
+        assertEquals(Flares.Status.BLOCKED,flares.view(flare).status(),"the flare reads BLOCKED");
+        double p0=clean.reservoirs().get(at).state().pressure(),p1=result.graph().reservoirs().get(at).state().pressure();
+        System.out.println("RELIEF_FLARE_X5 relief="+result.averageMassFlows()[line]+" P="+p0+" -> "+p1+" status="+flares.view(flare).status());
+        assertEquals(0,result.averageMassFlows()[line],1e-12,"nothing reaches the tip");
+        assertTrue(p1>p0+1e3,"the drum rises above its set pressure: "+p0+" to "+p1);
+        plans.clear();flares.plans(result.graph(),plans);
+        assertEquals(0,ShaftPlan.apply(result.graph(),plans).pipes().get(line).forbiddenDirections(),"clean again: the line opens");
+    }
+
     /** The generator {@code id} charged at {@code pressure}, as a queued edit. */
     private static void charge(EventPathWorld world,long id,double pressure) {
         var record=world.registry.registrations().get(id);
