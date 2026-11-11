@@ -164,7 +164,8 @@ public final class NetworkReduction {
             // A configured valve passes only from its first end (A211). A pressure valve passes only while that end stands
             // above its set point; a flow valve only throttles, so it passes the static drive, and nothing at a zero target.
             if(graph.pipes().get(i).control() instanceof FlowControl.Valve valve&&!valve.bare()) {
-                if(valve.pressureControl())drives[i][0]=Math.min(drives[i][0],graph.reservoirs().get(graph.pipes().get(i).first()).state().pressure()-valve.targetPressure());
+                // A lifted safety valve (ReliefValves) passes the same way.
+                if(valve.pressureControl()||valve instanceof FlowControl.PressureValve)drives[i][0]=Math.min(drives[i][0],graph.reservoirs().get(graph.pipes().get(i).first()).state().pressure()-valve.targetPressure());
                 // A gas blanketing valve's target is planned at each step: it passes while its vessel lacks gas (GasBlanket).
                 else if(valve instanceof FlowControl.ControlValve pad&&pad.source()==FlowControl.ValveSource.BLANKET){if(!(GasBlanket.deficit(graph.reservoirs().get(graph.pipes().get(i).second()))>0))drives[i][0]=Double.NEGATIVE_INFINITY;}
                 else if(!(valve.targetMassFlow(1)>0))drives[i][0]=Double.NEGATIVE_INFINITY;

@@ -632,6 +632,11 @@ public final class PhysicalFluidTopology {
                     boolean farSink=far!=null&&(far.valvedSink()||far.kind==TopologyCompiler.Kind.RESERVOIR&&blanketLinks.contains(farLink.id()));
                     boolean farDriven=far!=null&&(far.stillOutlet()||far.actuator()&&outletLinks.contains(farLink.id()));
                     if(farSink||farDriven) {
+                        // Decision D6: a far end that regulates its own flow (a tip's limit, a firebox's fuel, a pad, a driven end) and a
+                        // valve that regulates the guarded pressure would leave the middle junction's pressure open: the valve lifts by its
+                        // plan instead (ReliefValves). Every other run keeps the exact regulator: a planned lift on a stiff liquid-full drum
+                        // or a pipe's junction swings and holds (PSV_REVIEW.md section 4).
+                        valve=FlowControl.PressureValve.relief(valve.targetPressure());
                         int middle=reservoirs.size();reservoirs.add(new PassiveNetwork.Reservoir(virtual--,.5*(reservoirs.get(a).elevation()+reservoirs.get(b).elevation()),seed,PassiveNetwork.NodeKind.JUNCTION));
                         var halves=sections.stream().map(g->scaled(g,.5)).toList();
                         pipes.add(new PassiveNetwork.Pipe(pipeId,from,middle,halves,valve).withPorts(fromPort,PassiveNetwork.PhasePort.BULK).withActuatorArea(halves.getFirst().area()));mapViews(views,run,linkOwner,linkDirections,physical,islandIndex,pipeId,reliefStart,true);

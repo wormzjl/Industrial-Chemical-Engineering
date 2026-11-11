@@ -106,10 +106,11 @@ import java.util.function.Function;
  * <p>45 (batch 2026-11-10-vacuum-pump; 44 on its own branch, renumbered at the merge after the chimney's 44): control tag 8 is a vacuum pump casing on its curve.</p>
  * <p>46 (batch 2026-11-10-prime-movers): heat law tag 5, a gas turbine's exhaust coil (its gas inlet and capacity rate); control valve source ENGINE, a prime mover's fuel valve.</p>
  * <p>47 (batch 2026-11-11-gas-blanketing): a node's gas blanket set pressure after its cooling tower; control valve source BLANKET, a vessel's gas blanketing valve.</p>
+ * <p>48 (same batch, decision D6): a pressure valve's relief and lifted flags after its target, a safety valve before a flow regulator.</p>
  */
 public final class FluidCheckpointCodec {
     /** The state format: the core record's {@code StateFormat} and every unit's state section. */
-    public static final int VERSION=47;
+    public static final int VERSION=48;
     /** The most wall cells a saved heat side holds (crossflow 64, Standard 8, an air cooler's flat wall 1). */
     private static final int MAXIMUM_WALL_CELLS=64;
     /** The envelope: the core record's frame, the unit header and the section layout. Frozen. */
@@ -415,7 +416,7 @@ public final class FluidCheckpointCodec {
                 case FlowControl.Passive ignored->w.u8(0);
                 case FlowControl.Turbine turbine->{w.u8(6);w.f64(turbine.design().ratedPower());w.f64(turbine.design().efficiency());w.f64(turbine.massTarget());}
                 case FlowControl.Pump pump->{w.u8(1);w.f64(pump.requestedVolumeFlow());w.f64(pump.maximumAddedPressure());w.bool(pump.enabled());}
-                case FlowControl.PressureValve valve->{w.u8(2);w.f64(valve.targetPressure());}
+                case FlowControl.PressureValve valve->{w.u8(2);w.f64(valve.targetPressure());w.bool(valve.relief());w.bool(valve.lifted());}
                 case FlowControl.ControlValve valve->{w.u8(4);w.text(valve.source().name());w.f64(valve.targetPressure());w.f64(valve.massTarget());w.f64(valve.volumeTarget());w.bool(valve.sensor()!=null);if(valve.sensor()!=null){w.i64(valve.sensor().getMostSignificantBits());w.i64(valve.sensor().getLeastSignificantBits());}w.i64(valve.revision());}
                 case FlowControl.Compressor compressor->{w.u8(3);w.f64(compressor.requestedVolumeFlow());w.f64(compressor.maximumPressureRatio());w.bool(compressor.enabled());w.f64(compressor.setFlow());w.f64(compressor.setPressure());}
                 case FlowControl.Ejector ejector->{w.u8(7);w.f64(ejector.design().suction());w.f64(ejector.motivePressure());w.f64(ejector.delivered());}
@@ -634,7 +635,7 @@ public final class FluidCheckpointCodec {
             pipeIds[p]=r.i64();first[p]=r.varint(nodes);second[p]=r.varint(nodes);int count=r.varint(MAXIMUM_SECTIONS);
             var list=new ArrayList<PipeResistance.Geometry>(count);for(int s=0;s<count;s++)list.add(new PipeResistance.Geometry(r.f64(),r.f64(),r.f64(),r.f64(),r.varint(1<<20)));
             sections.add(List.copyOf(list));
-            controls.add(switch(r.u8()){case 0->new FlowControl.Passive();case 1->new FlowControl.Pump(r.f64(),r.f64(),r.bool());case 2->new FlowControl.PressureValve(r.f64());
+            controls.add(switch(r.u8()){case 0->new FlowControl.Passive();case 1->new FlowControl.Pump(r.f64(),r.f64(),r.bool());case 2->new FlowControl.PressureValve(r.f64(),r.bool(),r.bool());
                 case 3->new FlowControl.Compressor(r.f64(),r.f64(),r.bool(),r.f64(),r.f64());case 5->machine(r);case 8->new FlowControl.Machine(new com.wormzjl.icheme.science.machine.VacuumPump(com.wormzjl.icheme.science.machine.VacuumPump.Type.valueOf(r.text()),r.f64(),r.f64()),r.f64(),r.bool(),r.f64(),r.f64());case 7->new FlowControl.Ejector(new com.wormzjl.icheme.science.machine.SteamEjector(r.f64()),r.f64(),r.f64());case 6->new FlowControl.Turbine(new com.wormzjl.icheme.science.machine.SteamTurbine(r.f64(),r.f64()),r.f64());case 4->new FlowControl.ControlValve(FlowControl.ValveSource.valueOf(r.text()),r.f64(),r.f64(),r.f64(),r.bool()?new java.util.UUID(r.i64(),r.i64()):null,r.i64());default->throw new IllegalArgumentException("Unknown saved control");});
             firstPorts[p]=port(r);secondPorts[p]=port(r);forbiddenDirections[p]=r.varint(3);actuatorAreas[p]=r.f64();heats[p]=heat(r);
         }

@@ -169,4 +169,89 @@ class ReliefValveWorldTest {
         assertEquals(SET,high,.02*SET,"every drum at its set pressure");
         assertEquals(11.1,relieved,.5,"the header carries the ten feeds");
     }
+
+    /** A drum relieving through a 0.15 m line into a flare's tip whose limit the engine planned at {@code limit} kg/s (the world here plans none). */
+    private static long flare(EventPathWorld world,double limit) {
+        world.place(10,67,0,Kind.PIPE,Direction.UP,.15);world.place(10,68,0,Kind.PIPE,Direction.SOUTH,.15);
+        long id=world.ledger.nextIdentity();
+        var device=new PhysicalFluidTopology.Device(id,at(10,68,1),Kind.VOID,Direction.NORTH,new PipeResistance.Geometry(1,.3,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),FlowControl.ControlValve.flare().withMassTarget(limit),
+                List.of(new PhysicalFluidTopology.Port(at(10,68,1),Direction.NORTH,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.VESSEL)),true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,null);
+        world.registry.submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,EventPathWorld.nitrogen(),0))),id+1,null);
+        return id;
+    }
+    /** Whether the island's safety valve before a flow regulator stands lifted. */
+    private static boolean lifted(IslandCoordinator.Snapshot s) {
+        for(var p:s.graph().pipes())if(p.control() instanceof FlowControl.PressureValve v&&v.planned())return v.lifted();
+        throw new AssertionError("no planned safety valve");
+    }
+
+    /**
+     * Decision D6 (form A2): a drum on a 5 bar feed (1.11 kg/s at its set pressure) relieving into a flare's tip of limit
+     * {@code limit}, run for {@code ticks}. Returns the drum's pressure, the relief, whether the valve stands lifted, and
+     * how often it lifted and reseated, read at every tick.
+     */
+    private record Flared(double pressure,double relief,boolean lifted,int lifts,int seats,String status) {}
+    private static Flared flared(double limit,long ticks,java.util.function.LongConsumer at,EventPathWorld world,long drum) {
+        boolean was=false;int lifts=0,seats=0;
+        while(world.ledger.onlineTick()<ticks) {
+            world.tick();at.accept(world.ledger.onlineTick());
+            var s=world.coordinator.snapshots().stream().filter(x->x.graph().reservoirs().stream().anyMatch(r->r.id()==drum)).findFirst();
+            if(s.isEmpty()||s.get().lastResult().isEmpty())continue;
+            boolean now=lifted(s.get());if(now&&!was)lifts++;if(!now&&was)seats++;was=now;
+        }
+        world.assertKeptUp("flare limit "+limit);
+        var s=island(world,drum);int e=relief(s);
+        var out=new Flared(node(world,drum).state().pressure(),flow(s,e),lifted(s),lifts,seats,s.status());
+        System.out.println("RELIEF_FLARE limit="+limit+" "+out);
+        return out;
+    }
+    private static Flared flared(double limit) {
+        var world=new EventPathWorld();long drum=drum(world,0,SET);gasFeed(world,0,5e5);flare(world,limit);
+        return flared(limit,1600,t->{},world,drum);
+    }
+
+    /** A tip that passes less than the load: the valve lifts once; back pressure holds the drum above its set pressure and the tip passes its limit. */
+    @Test void aFlareThatPassesLessThanTheLoadBacksTheDrumUpAboveItsSetPressure() {
+        var r=flared(.3);
+        assertTrue(r.lifted()&&r.lifts()==1&&r.seats()==0,"lifted once: "+r);
+        assertTrue(r.pressure()>1.1*SET,"above its set pressure by the back pressure: "+r.pressure());
+        assertEquals(.3,r.relief(),.01,"the tip passes its limit");
+    }
+
+    /** A tip that passes the load: the valve regulates, as before D6. */
+    @Test void aFlareThatPassesTheLoadHoldsTheDrumAtItsSetPressure() {
+        var r=flared(2);
+        assertTrue(!r.lifted()&&r.lifts()==0,"never lifted: "+r);
+        assertEquals(SET,r.pressure(),1e-3*SET,"at its set pressure");
+        assertEquals(1.11,r.relief(),.01,"it passes the feed");
+    }
+
+    /** A load just under the tip's limit (95 %, outside the lift's margin) regulates; just over (103 %) lifts once and stands a little above the set pressure. */
+    @Test void aLoadJustUnderOrJustOverTheTipsLimit() {
+        var under=flared(1.11/.95);
+        assertTrue(!under.lifted()&&under.lifts()==0,"under: never lifted: "+under);
+        assertEquals(SET,under.pressure(),1e-3*SET,"under: at its set pressure");
+        var over=flared(1.11/1.03);
+        assertTrue(over.lifted()&&over.lifts()==1&&over.seats()==0,"over: lifted once: "+over);
+        assertTrue(over.pressure()>SET,"over: above its set pressure: "+over.pressure());
+        assertEquals(1.11/1.03,over.relief(),.01,"over: the tip passes its limit");
+    }
+
+    /** A load that crosses the tip's limit upward (the feed to 7 bar) and back down (to 5 bar): the valve lifts once and reseats once, then regulates at its set pressure. */
+    @Test void aLoadCrossingTheTipsLimitLiftsOnceAndReseatsOnce() {
+        var world=new EventPathWorld();long drum=drum(world,0,SET);
+        world.place(11,66,0,Kind.PIPE,Direction.EAST);world.place(12,66,0,Kind.PIPE,Direction.EAST);
+        long feed=world.place(13,66,0,Kind.GENERATOR,Direction.EAST,new FluidDeviceSpec(1,298.15,5e5,FluidDeviceSpec.nitrogen(EventPathWorld.CATALOG).composition()),.05);
+        flare(world,1.4);
+        // The feed ramps by 0.05 bar every 50 ticks: up from 5 to 7 bar from tick 1200, down again from tick 4000.
+        var r=flared(1.4,7000,t->{if(t>=1200&&t<=3200&&(t-1200)%50==0)charge(world,feed,5e5+(t-1200)/50*5e3);if(t>=4000&&t<=6000&&(t-4000)%50==0)charge(world,feed,7e5-(t-4000)/50*5e3);},world,drum);
+        assertTrue(r.lifts()==1&&r.seats()==1&&!r.lifted(),"lifted once, reseated once: "+r);
+        assertEquals(SET,r.pressure(),1e-3*SET,"back at its set pressure");
+        assertEquals(1.11,r.relief(),.01,"passing the feed");
+    }
+    /** The generator {@code id} charged at {@code pressure}, as a queued edit. */
+    private static void charge(EventPathWorld world,long id,double pressure) {
+        var record=world.registry.registrations().get(id);
+        world.registry.submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(record.device(),record.spec().withCharge(record.spec().temperature(),pressure,record.spec().composition()),record.revision()+1))),world.ledger.nextIdentity(),null);
+    }
 }

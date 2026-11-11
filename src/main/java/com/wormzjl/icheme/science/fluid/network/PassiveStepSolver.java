@@ -362,6 +362,8 @@ public final class PassiveStepSolver {
         heldOpenings=new double[graph.pipes().size()];Arrays.fill(heldOpenings,Double.NaN);
         var conflicts=ControlConstraints.dependent(graph);
         for(int e=conflicts.nextSetBit(0);e>=0;e=conflicts.nextSetBit(e+1))heldOpenings[e]=acceptedOpenings.getOrDefault(graph.pipes().get(e).identity(),1.0);
+        // A lifted safety valve (ReliefValves) stands wide open over the step.
+        for(int e=0;e<graph.pipes().size();e++)if(graph.pipes().get(e).control() instanceof FlowControl.PressureValve valve&&valve.lifted())heldOpenings[e]=1;
         standing=ControlConstraints.standing(graph);
         // An island of unconnected nodes changes nothing in a step, unless an open vessel in it gives the atmosphere its gas
         // or its spill (OpenVessel).

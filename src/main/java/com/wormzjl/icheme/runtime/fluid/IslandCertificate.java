@@ -383,7 +383,7 @@ public final class IslandCertificate {
                 case FlowControl.Ejector ejector->{d.text("ejector");d.real(ejector.design().suction());d.real(ejector.motivePressure());d.real(ejector.delivered());}
                 case FlowControl.Machine machine when machine.law() instanceof com.wormzjl.icheme.science.machine.VacuumPump vacuum->{d.text("vacuum_pump");d.text(vacuum.type().name());d.real(vacuum.capacity());d.real(vacuum.ratedSpeed());d.real(machine.speed());d.integer(machine.enabled()?1:0);}
                 case FlowControl.Machine machine->{var law=machine.law();d.text("machine");d.integer(law.liquid()?1:0);d.real(law.ratedFlow());d.real(law.ratedHead());d.real(law.efficiency());if(law instanceof com.wormzjl.icheme.science.machine.CentrifugalPump pump)d.real(pump.ratedSpeed());d.real(machine.speed());d.integer(machine.enabled()?1:0);}
-                case FlowControl.PressureValve valve->{d.text("valve");d.real(valve.targetPressure());}
+                case FlowControl.PressureValve valve->{d.text("valve");d.real(valve.targetPressure());if(valve.relief())d.integer(valve.lifted()?2:1);}
                 case FlowControl.ControlValve valve->{d.text("control_valve");d.text(valve.source().name());d.real(valve.target());d.text(String.valueOf(valve.sensor()));d.number(valve.revision());d.real(valve.targetPressure());d.real(valve.massTarget());d.real(valve.volumeTarget());}
             }
             d.integer(pipe.blockedDirections());d.integer(pipe.forbiddenDirections());d.real(pipe.actuatorArea());
