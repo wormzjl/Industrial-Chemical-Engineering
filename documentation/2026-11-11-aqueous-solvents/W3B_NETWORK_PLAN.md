@@ -112,3 +112,34 @@ Each step ends in a commit and a filtered test run of the classes it can reach. 
 - A fourth fluid phase, electrolytes and hydrates stay capability holds.
 - Saturated steam above 250 C keeps its 2 to 13 % latent-heat error (plan M2).
 - Not in W3b: the still (W4), the V3 column (W5), ethanol in the main data and its creative preset (W6), merge preparation.
+
+## 7. Result of steps 1 and 2 (2026-11-11)
+
+Built by a sub-thread: 1a `e203997e2`, 1c `93c98f2af`, 1b `f148d1eac`, 2 `af1b7a998`. Its report is `tmp/w3b-engine-kernel/W3B_STEP12_REPORT.md` (local).
+
+| Gate | Measured | Bound |
+|---|---|---|
+| Water, n-hexane, nitrogen at -5 C, 1 atm | ice, hexane liquid, gas | ice, liquid, gas |
+| Ice onset beside hexane, 10 % ethanol by mass of the water | -3.30 C (the water-rich liquid keeps 8.2 % ethanol) | -5.5 to -3.0 C |
+| Below that onset | ice beside two liquids and gas | answers |
+| Ethanol, water, n-hexane, nitrogen at 253 to 263 K | ice beside three fluid phases, every component conserved | answers, conserves |
+| PH and UV round trips | 57 answers within 1e-6 N R T | 1e-6 N R T |
+| Kernel evaluations per TP answer, W3a's five cases | 87, 117, 52, 282, 120 | 87, 117, 52, 282, 120 |
+| Ternary at its bubble point | 515 (783 before) | lower |
+| W3a's gate values under the new pair form | unchanged to their printed digits | W3a's bounds |
+
+Kernel time per evaluation (ns; each run alone, 60 s warm-up, 60 s measured):
+
+| List | Before | After |
+|---|---|---|
+| Network refinery, 45 compounds, constant pairs | 305 | 324 (+6 %) |
+| Derived dry list, 44 compounds | 5344 | 1531 |
+| Wet list, 47 compounds, a wet phase | 6125 | 5420 |
+| The same list, a water-free phase | 5901 | 3963 |
+
+- The kernel has one pair list and one rule (`classicalTau` holds the conversion); its composition derivatives are O(n^2 (1 + polar)), O(n^3) before. `Mixing` is removed.
+- What N8's form moved, above 0.1 %: the three values listed under N8. No derived-pair fit moved (each fit is a binary with one pair).
+- The UV restart fires 3 to 5 times in 41 states on four narrow-boiling hydrocarbon binaries; without it 16 of 164 states end in the critical band. It stays.
+- Runs: 1b 185 classes, 1244 tests; `columnGates` 62 classes, 397 tests; `holdGates` 12 classes, 131 tests; all pass but `MaterialPresetsTest` (the override example's methane record lacked W2a's two sub-records; fixed after, 5 tests pass). One whole quick `test` run by a filter mistake (2381 tests, on data since dropped). The fluid GameTests and the final lane have not run.
+
+For step 3 on: a derived kernel on the 45-compound list costs 5 to 12 times the refinery's constant-pair kernel today (1531 to 3963 ns against 324). The 2 % and 10 % dry bounds of section 5 cannot hold on a derived list as measured; step 3 starts with this cost (which pairs must be temperature-dependent, what a prepared temperature can hold) before the network moves. Also open: the derived contract flags no water chemistry (ammonia with water); the bubble point's cost is now mostly the three-product audit (297 of 515); four probes under `tools/` still name `PengRobinsonKernel.Mixing`.
