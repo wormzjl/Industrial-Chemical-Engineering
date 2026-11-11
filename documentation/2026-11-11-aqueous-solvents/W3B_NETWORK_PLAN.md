@@ -401,3 +401,13 @@ Fed water pinned at the arrival's composition fixed the two fed-drain tests (1 a
 - (c) If the pass under (b)'s second case has no root and its iterate empties the phase, it is pinned again with the regrown amount as formation, finally for that solve.
 
 The pass key carries the formation updates and the overrides. To report: how often (b) and (c) fire, failed Newton passes against HEAD, any HEAD-passing test whose numbers move.
+
+## 22. The port-rule redesign withdrawn (2026-11-11)
+
+Sections 18 and 21 are withdrawn; the port rule stays as at `754732f66` (main's D11 rule with stage A group 1's addition).
+
+Measured by the sub-thread on the rule of section 21's last paragraph: the three regressions pass again, but the correction for a small new phase fired 23,002 times in `PressureValveContinuationTest` (a fixed-point loop, each formation leaving 0.78 of the last; 193.9 s against 43.8 s), the fallback fired 97 times, and the kettle failed (boil-up 0.0000 for 0.443 kg/s: the pass after the correction did not converge and the vapour line was left with no flow).
+
+Why it was the wrong work: the kettle passes on main and at the baseline (`48b4fb298`) under the same pin rule, and `boilUp` is unchanged. W3b did not break the rule; something upstream now drives the kettle into a branch it did not enter before (the duty controller reaches 8.1 MW at t = 10 s). The orchestrator ordered a redesign of the rule before asking what the batch had changed.
+
+Now: the group 5 work is kept as a patch in `tmp/w3b-network/`; the kettle's 1 MW case is run at `48b4fb298` and at HEAD with the same print per accepted step (controller output, pool heat, boil-up, gas capacity, vent flow, pin, pool volume, pressure, temperature), and the first step and quantity that differ decide the fix. If the baseline also passes liquid through the top port, the fault is older than W3b and becomes an open item. The condensate of section 21 arose only under the withdrawn rule.
