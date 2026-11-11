@@ -13,9 +13,9 @@ import java.util.Locale;
 
 /**
  * Scratch timing probe (not a test): time per kernel evaluation on an island-size sublist of the refinery list.
- * Usage: IslandTime today|waterfree|wet N [warmSeconds measureSeconds]. today: the refinery's constant pairs on the
+ * Usage: IslandTime today|dry|waterfree|wet N [warmSeconds measureSeconds]. today: the refinery's constant pairs on the
  * sublist (the network's kernel now); waterfree: the derived kernel on the sublist and water, a phase without water;
- * wet: the same kernel, a phase mostly water. The sublist is N compounds evenly spaced over the refinery's order.
+ * wet: the same kernel, a phase mostly water; dry: the derived kernel on the sublist alone (no water in the list). The sublist is N compounds evenly spaced over the refinery's order.
  */
 public class IslandTime {
     public static void main(String[] args) {
@@ -68,7 +68,7 @@ public class IslandTime {
             var catalog = MaterialCatalog.parse(resources);
             var ids = new ArrayList<String>();
             for (int i : pick) ids.add(refinery.components().get(i));
-            ids.add("Water");
+            if (!mode.equals("dry")) ids.add("Water");
             var result = DerivedPairs.derive(catalog, "icheme:timing_island", ids);
             kernel = result.kernel(1.0, 3000.0, 1.0, 1.0e9);
             n = kernel.componentCount();

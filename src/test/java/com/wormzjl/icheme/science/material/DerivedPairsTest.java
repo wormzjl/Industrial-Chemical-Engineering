@@ -124,9 +124,17 @@ class DerivedPairsTest {
         assertEquals(DerivedPairs.Source.ACTIVITY, source(result, "Ethanol", "crude_pc03"));
         assertEquals(DerivedPairs.Source.HENRY, source(result, "Water", "Nitrogen"));
         assertEquals(DerivedPairs.Source.HOMOMORPH, source(result, "Ethanol", "Nitrogen"));
+        // Option B (2026-11-11): a gas pair is E-PPR78 at 298.15 K as a constant; two non-polar non-gases are zero.
         assertEquals(DerivedPairs.Source.EPPR78, source(result, "Methane", "Nitrogen"));
-        assertEquals(DerivedPairs.Source.EPPR78, source(result, "N-hexane", "crude_pc03"));
-        assertTrue(excess.interactionPair(ids.indexOf("Methane"), ids.indexOf("Nitrogen")) >= 0);
+        assertEquals(DerivedPairs.Source.EPPR78, source(result, "Methane", "crude_pc03"));
+        assertEquals(DerivedPairs.Source.NONPOLAR, source(result, "N-hexane", "crude_pc03"));
+        assertEquals(DerivedPairs.Source.NONPOLAR, source(result, "Propane", "crude_pc03"));
+        int methane = ids.indexOf("Methane"), nitrogen = ids.indexOf("Nitrogen");
+        assertTrue(excess.classical(methane, nitrogen) && excess.interactionPair(methane, nitrogen) < 0
+                && excess.interactionSlope(methane, nitrogen) == 0.0 && excess.interaction(methane, nitrogen) != 0.0, "a constant gas pair");
+        assertTrue(excess.interactions() == null, "no derived pair carries a temperature law");
+        int hexane = ids.indexOf("N-hexane"), pc03 = ids.indexOf("crude_pc03");
+        assertTrue(excess.classical(hexane, pc03) && excess.interaction(hexane, pc03) == 0.0);
         // An authored pair wins over E-PPR78, which both compounds' counts would give.
         assertEquals(DerivedPairs.Source.LIBRARY, source(result, "N-hexane", "Benzene"));
         assertEquals(0.008, excess.interaction(ids.indexOf("N-hexane"), ids.indexOf("Benzene")));

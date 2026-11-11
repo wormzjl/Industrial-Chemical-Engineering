@@ -48,8 +48,11 @@ import java.util.function.ToDoubleFunction;
  *   a {@link MaterialCatalog.Homomorph}: E-PPR78's {@code k_ij(T)} of the compound with the homomorph's default dataset,
  *   on the homomorph's own Tc, Pc and acentric factor, used as a classical pair of the real compounds, at 298.15 K and
  *   373.15 K and linear in T between;</li>
- *   <li>{@link Source#EPPR78}: two compounds with E-PPR78 counts: E-PPR78's {@code k_ij(T)} on the kernel's own
- *   {@code a_i(T)} and {@code b_i}, exact in T (a {@link PairInteractions} model of the excess);</li>
+ *   <li>{@link Source#NONPOLAR}: two compounds that are neither a gas (a compound with {@code henry_in_water}) nor
+ *   polar, {@code k_ij = 0} (owner, 2026-11-11, option B of W3B_NETWORK_PLAN.md section 8);</li>
+ *   <li>{@link Source#EPPR78}: a gas or a polar compound with a compound, both with E-PPR78 counts: E-PPR78's
+ *   {@code k_ij} on the two compounds' own Tc, Pc, acentric factors and alphas at 298.15 K, constant in temperature (its
+ *   power law in 298.15/T leaves its fitted range inside the network's: |k| above 1 at 150 K and at 700 K);</li>
  *   <li>{@link Source#MISSING}: anything else, {@code k_ij = 0}, listed by name with its reason in
  *   {@link Result#missing()}.</li>
  * </ol>
@@ -63,7 +66,7 @@ import java.util.function.ToDoubleFunction;
  */
 public final class DerivedPairs {
     /** The declared revision of the derivation: bumped when a rule, a constant or a fit setting here changes. */
-    public static final String REVISION = "derived-pairs-r1";
+    public static final String REVISION = "derived-pairs-r2";
     public static final double FIRST_KELVIN = 298.15;
     public static final double SECOND_KELVIN = 373.15;
     /** The pressure of the activity fit: both compounds liquid at both temperatures for the usual solvents. */
@@ -102,7 +105,7 @@ public final class DerivedPairs {
     private DerivedPairs() {}
 
     /** Where a pair's interaction comes from, in the order of precedence. */
-    public enum Source { LIBRARY, HYDROGEN, HENRY, ACTIVITY, HOMOMORPH, EPPR78, MISSING }
+    public enum Source { LIBRARY, HYDROGEN, HENRY, ACTIVITY, HOMOMORPH, NONPOLAR, EPPR78, MISSING }
 
     /** One unordered pair of the list: its compounds (list order), its source and what it holds. */
     public record Pair(String first, String second, Source source, String detail) {}
@@ -220,6 +223,7 @@ public final class DerivedPairs {
         var tokens = new TreeSet<String>();
         for (Compound c : compounds) tokens.add(c.token);
         var excess = HuronVidalExcess.builder(n);
+        // Only an authored group-contribution rule carries k_ij(T) here; every derived pair is a constant or a line in T.
         var model = PairInteractions.builder(n);
         boolean modelPairs = false;
         var pairs = new ArrayList<Pair>();
@@ -283,7 +287,8 @@ public final class DerivedPairs {
                                 var read = new TreeSet<>(List.of(other.token, other.eppr78Token, polar.token, polar.homomorphToken,
                                         homomorph.token, homomorph.eppr78Token, context.matrixToken()));
                                 try {
-                                    double[] k = context.cache.get("homomorph|" + String.join(",", read), () -> context.homomorphInteraction(other, homomorph), counter);
+                                    double[] k = context.cache.get("homomorph|" + String.join(",", read),
+                                            () -> context.eppr78Interaction(other, homomorph, FIRST_KELVIN, SECOND_KELVIN), counter);
                                     tokens.addAll(read);
                                     excess.classicalLinear(i, j, FIRST_KELVIN, k[0], SECOND_KELVIN, k[1]);
                                     pairs.add(new Pair(a.id, b.id, Source.HOMOMORPH, String.format(java.util.Locale.ROOT,
@@ -295,13 +300,22 @@ public final class DerivedPairs {
                             }
                         }
                     }
+                    if (a.henry == null && b.henry == null && !a.polar && !b.polar) {
+                        excess.classical(i, j, 0.0);
+                        pairs.add(new Pair(a.id, b.id, Source.NONPOLAR, "k_ij 0"));
+                        continue;
+                    }
                     if (a.eppr78 != null && b.eppr78 != null) {
+                        // Fitted with the compounds in record-key order, so one value serves either list order.
+                        boolean ordered = a.recordKey.compareTo(b.recordKey) <= 0;
+                        Compound first = ordered ? a : b, second = ordered ? b : a;
+                        var read = new TreeSet<>(List.of(first.token, second.token, first.eppr78Token, second.eppr78Token, context.matrixToken()));
                         try {
-                            double[][] terms = context.eppr78Terms(a, b);
-                            model.groupTerms(i, j, terms[0], terms[1], terms[2]);
-                            modelPairs = true;
-                            tokens.addAll(List.of(a.eppr78Token, b.eppr78Token, context.matrixToken()));
-                            pairs.add(new Pair(a.id, b.id, Source.EPPR78, terms[0].length + " group terms"));
+                            double[] k = context.cache.get("eppr78|" + String.join(",", read),
+                                    () -> context.eppr78Interaction(first, second, FIRST_KELVIN), counter);
+                            tokens.addAll(read);
+                            excess.classical(i, j, k[0]);
+                            pairs.add(new Pair(a.id, b.id, Source.EPPR78, String.format(java.util.Locale.ROOT, "k_ij %.5f (E-PPR78 at %.2f K)", k[0], FIRST_KELVIN)));
                             continue;
                         } catch (Unresolved unresolved) {
                             reasons.add(unresolved.getMessage());
@@ -459,25 +473,25 @@ public final class DerivedPairs {
         }
 
         /**
-         * k_ij of {@code gas} with the homomorph at 298.15 K and 373.15 K: E-PPR78 on the two compounds' own Tc, Pc,
-         * acentric factors and alphas ({@code gasEnergy}'s sibling in {@code gas-in-organics.mjs}).
+         * E-PPR78's k_ij of {@code gas} with {@code other} at each of {@code temperatures}, on the two compounds' own Tc,
+         * Pc, acentric factors and alphas ({@code gasEnergy}'s sibling in {@code gas-in-organics.mjs}): a homomorph pair
+         * reads it at 298.15 K and 373.15 K, a gas pair at 298.15 K.
          */
-        double[] homomorphInteraction(Compound gas, Compound homomorph) {
-            double[][] terms = eppr78Terms(gas, homomorph);
+        double[] eppr78Interaction(Compound gas, Compound other, double... temperatures) {
+            double[][] terms = eppr78Terms(gas, other);
             var interactions = PairInteractions.builder(2).groupTerms(0, 1, terms[0], terms[1], terms[2]).build();
-            var kernel = PengRobinsonKernel.huronVidal(new double[] {gas.tc, homomorph.tc}, new double[] {gas.pc, homomorph.pc},
-                    new double[] {gas.omega, homomorph.omega}, HuronVidalExcess.builder(2).build(),
-                    new double[][] {gas.alpha, homomorph.alpha}, 1.0, 3000.0, 1.0, 1.0e9);
-            double[] k = new double[2];
-            double[] temperatures = {FIRST_KELVIN, SECOND_KELVIN};
-            for (int t = 0; t < 2; t++) {
+            var kernel = PengRobinsonKernel.huronVidal(new double[] {gas.tc, other.tc}, new double[] {gas.pc, other.pc},
+                    new double[] {gas.omega, other.omega}, HuronVidalExcess.builder(2).build(),
+                    new double[][] {gas.alpha, other.alpha}, 1.0, 3000.0, 1.0, 1.0e9);
+            double[] k = new double[temperatures.length];
+            for (int t = 0; t < temperatures.length; t++) {
                 var workspace = kernel.newWorkspace();
                 kernel.prepareTemperature(temperatures[t], workspace);
                 double[] rootDt = new double[2], rootDt2 = new double[2], value = new double[1], d1 = new double[1], d2 = new double[1];
                 kernel.prepareRootDerivatives(temperatures[t], workspace, rootDt, rootDt2);
                 interactions.evaluate(temperatures[t], workspace.attractionRootsView(), rootDt, rootDt2,
                         new double[] {kernel.coVolume(0), kernel.coVolume(1)}, value, d1, d2);
-                if (!Double.isFinite(value[0])) throw new Refused(gas.id, homomorph.id, "E-PPR78 k_ij is not finite at " + temperatures[t] + " K");
+                if (!Double.isFinite(value[0])) throw new Refused(gas.id, other.id, "E-PPR78 k_ij is not finite at " + temperatures[t] + " K");
                 k[t] = value[0];
             }
             return k;

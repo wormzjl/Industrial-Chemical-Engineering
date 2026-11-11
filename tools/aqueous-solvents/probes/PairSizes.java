@@ -42,6 +42,18 @@ public class PairSizes {
         System.out.println(n + " compounds, " + n * (n - 1) / 2 + " pairs, by source " + bySource);
         double[] tc = result.criticalTemperatures(), pc = result.criticalPressures(), omega = result.acentricFactors();
         var model = result.excess().interactions();
+        if (model == null) {
+            // Since derived-pairs-r2 (option B) no derived pair carries E-PPR78's k_ij(T): the gas pairs are constants.
+            int gasPairs = 0; double largest = 0;
+            for (var pair : result.pairs()) if (pair.source() == DerivedPairs.Source.EPPR78) {
+                gasPairs++;
+                var e = result.excess();
+                double k = Math.abs(e.interaction(names.indexOf(pair.first()), names.indexOf(pair.second())));
+                largest = Math.max(largest, k);
+            }
+            System.out.printf(Locale.ROOT, "no k_ij(T) pairs; %d E-PPR78 gas pairs as constants at 298.15 K, largest |k| %.4f%n", gasPairs, largest);
+            return;
+        }
         int pairs = model.pairCount();
         double[] largest = new double[pairs], at298 = new double[pairs];
         double[][] table = new double[pairs][5];

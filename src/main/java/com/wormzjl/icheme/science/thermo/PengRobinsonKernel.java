@@ -43,6 +43,11 @@ public final class PengRobinsonKernel {
     /** True when the kernel has no pair at all: the quadratic part is then the rank-one product. */
     private final boolean rankOneMixing;
     /**
+     * True when every listed pair is a constant (no line, no model pair): each term a pair's {@code dk/dT} or
+     * {@code d^2k/dT^2} adds is then an exact zero, and the passes that form only such terms are skipped.
+     */
+    private final boolean constantPairs;
+    /**
      * The classical pairs whose {@code k_ij(T)} may be nonzero, {@code i < j}: a constant or a line {@code k0 + k1 T}
      * ({@link #pairModel} -1), or the pair {@link #pairModel} of {@link #interactions}. Their values per temperature live
      * in the workspace.
@@ -318,6 +323,9 @@ public final class PengRobinsonKernel {
             cellStart[count] = at;
         }
         this.rankOneMixing = pairFirst.length == 0 && !excess;
+        boolean constant = interactions == null;
+        for (double slope : pairSlope) constant &= slope == 0.0;
+        this.constantPairs = constant;
     }
 
     public int componentCount() { return count; }
@@ -539,17 +547,66 @@ public final class PengRobinsonKernel {
             for (int i = 0; i < count; i++) workspace.sumA[i] = workspace.sqrtA[i] * qSum;
         } else {
             // g_i = sum_j (1 - k_ij) q_j, reached as the rank-one sum minus the pairs that are not zero, on the
-            // prepared k_ij(T).
+            // prepared k_ij(T); with NRTL cells, in the same pass over the pairs, the row's temperature derivative
+            // g_i' = sum_j (1 - k_ij) x_j s_j' - sum_j k_ij' x_j s_j that correctExcess reads, and the interactions'
+            // own d/dT of -sum_ij q_i q_j k_ij at fixed q, -2 sum_pairs q_i q_j dk_ij/dT (exact zeros for constant
+            // pairs, so a constant list skips them). One pass, each sum in the order the separate passes took.
             double[] k = workspace.pairK;
+            double[] kDt = workspace.pairKDt;
+            double[] q = workspace.q;
+            double[] g = workspace.g;
             double qSum = 0.0;
-            for (int i = 0; i < count; i++) qSum += workspace.q[i];
-            for (int i = 0; i < count; i++) workspace.g[i] = qSum;
-            for (int pair = 0; pair < pairFirst.length; pair++) {
-                int i = pairFirst[pair];
-                int j = pairSecond[pair];
-                double interaction = k[pair];
-                workspace.g[i] -= interaction * workspace.q[j];
-                workspace.g[j] -= interaction * workspace.q[i];
+            for (int i = 0; i < count; i++) qSum += q[i];
+            for (int i = 0; i < count; i++) g[i] = qSum;
+            double interactionDt = 0.0;
+            if (excess) {
+                double[] x = workspace.composition;
+                double[] sDt = workspace.interactionRootDt;
+                double[] gDt = workspace.rowGDt;
+                double rootSum = 0.0;
+                for (int j = 0; j < count; j++) rootSum += x[j] * sDt[j];
+                for (int i = 0; i < count; i++) gDt[i] = rootSum;
+                if (constantPairs) {
+                    for (int pair = 0; pair < pairFirst.length; pair++) {
+                        int i = pairFirst[pair];
+                        int j = pairSecond[pair];
+                        double interaction = k[pair];
+                        g[i] -= interaction * q[j];
+                        g[j] -= interaction * q[i];
+                        gDt[i] -= interaction * x[j] * sDt[j];
+                        gDt[j] -= interaction * x[i] * sDt[i];
+                    }
+                } else {
+                    double[] s = workspace.sqrtA;
+                    for (int pair = 0; pair < pairFirst.length; pair++) {
+                        int i = pairFirst[pair];
+                        int j = pairSecond[pair];
+                        double interaction = k[pair];
+                        double slope = kDt[pair];
+                        g[i] -= interaction * q[j];
+                        g[j] -= interaction * q[i];
+                        gDt[i] -= interaction * x[j] * sDt[j] + slope * x[j] * s[j];
+                        gDt[j] -= interaction * x[i] * sDt[i] + slope * x[i] * s[i];
+                        interactionDt += slope * q[i] * q[j];
+                    }
+                }
+            } else if (constantPairs) {
+                for (int pair = 0; pair < pairFirst.length; pair++) {
+                    int i = pairFirst[pair];
+                    int j = pairSecond[pair];
+                    double interaction = k[pair];
+                    g[i] -= interaction * q[j];
+                    g[j] -= interaction * q[i];
+                }
+            } else {
+                for (int pair = 0; pair < pairFirst.length; pair++) {
+                    int i = pairFirst[pair];
+                    int j = pairSecond[pair];
+                    double interaction = k[pair];
+                    g[i] -= interaction * q[j];
+                    g[j] -= interaction * q[i];
+                    interactionDt += kDt[pair] * q[i] * q[j];
+                }
             }
             aMix = 0.0;
             daMixDt = 0.0;
@@ -558,11 +615,6 @@ public final class PengRobinsonKernel {
                 aMix += workspace.q[i] * workspace.g[i];
                 double dq = workspace.composition[i] * workspace.daDt[i] / (2.0 * workspace.sqrtA[i]);
                 daMixDt += 2.0 * dq * workspace.g[i];
-            }
-            // d/dT of -sum_ij q_i q_j k_ij at fixed q: -2 sum_pairs q_i q_j dk_ij/dT (exact zeros for constant pairs).
-            double interactionDt = 0.0;
-            for (int pair = 0; pair < pairFirst.length; pair++) {
-                interactionDt += workspace.pairKDt[pair] * workspace.q[pairFirst[pair]] * workspace.q[pairSecond[pair]];
             }
             daMixDt -= 2.0 * interactionDt;
         }
@@ -753,7 +805,7 @@ public final class PengRobinsonKernel {
             double row = excess ? workspace.g[i] : workspace.sumA[i] / workspace.sqrtA[i];
             secondDaDt += 2.0 * x[i] * (rootDt2[i] * row + rootDt[i] * crossDt[i]);
         }
-        if (pairFirst.length > 0) secondDaDt = addInteractionTemperatureTerms(workspace, rootDt, crossDt, secondDaDt);
+        if (pairFirst.length > 0 && !constantPairs) secondDaDt = addInteractionTemperatureTerms(workspace, rootDt, crossDt, secondDaDt);
         if (excess) secondDaDt += excessSecondTemperatureDerivative(workspace);
         return secondDaDt;
     }
@@ -811,18 +863,7 @@ public final class PengRobinsonKernel {
         double share = lambda * inverseRt;
         workspace.excessTemperature = temperatureKelvin;
         workspace.excessCoVolume = bMix;
-        // d g_i/dT, the quadratic row's own temperature derivative with the pairs' dk/dT.
-        double rootSum = 0.0;
-        for (int j = 0; j < count; j++) rootSum += x[j] * sDt[j];
-        for (int i = 0; i < count; i++) gDt[i] = rootSum;
-        for (int pair = 0; pair < pairFirst.length; pair++) {
-            int i = pairFirst[pair];
-            int j = pairSecond[pair];
-            double k = workspace.pairK[pair];
-            double kDt = workspace.pairKDt[pair];
-            gDt[i] -= k * x[j] * sDt[j] + kDt * x[j] * s[j];
-            gDt[j] -= k * x[i] * sDt[i] + kDt * x[i] * s[i];
-        }
+        // gDt, d g_i/dT with the pairs' dk/dT, was formed in evaluatePrepared's pass over the pairs.
         double excessEnergy = 0.0;
         double excessEnergyDt = 0.0;
         boolean activePresent = false;
