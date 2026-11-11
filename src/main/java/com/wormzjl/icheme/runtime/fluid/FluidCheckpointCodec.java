@@ -105,10 +105,11 @@ import java.util.function.Function;
  * of their height, so a state written under the constant atmosphere is dropped and rebuilt from the facts.</p>
  * <p>45 (batch 2026-11-10-vacuum-pump; 44 on its own branch, renumbered at the merge after the chimney's 44): control tag 8 is a vacuum pump casing on its curve.</p>
  * <p>46 (batch 2026-11-10-prime-movers): heat law tag 5, a gas turbine's exhaust coil (its gas inlet and capacity rate); control valve source ENGINE, a prime mover's fuel valve.</p>
+ * <p>47 (batch 2026-11-11-aqueous-solvents, W3B_NETWORK_PLAN.md section 20): a tower fill's result carries one loss per component and its leaving air's temperature and humidity.</p>
  */
 public final class FluidCheckpointCodec {
     /** The state format: the core record's {@code StateFormat} and every unit's state section. */
-    public static final int VERSION=46;
+    public static final int VERSION=47;
     /** The most wall cells a saved heat side holds (crossflow 64, Standard 8, an air cooler's flat wall 1). */
     private static final int MAXIMUM_WALL_CELLS=64;
     /** The envelope: the core record's frame, the unit header and the section layout. Frozen. */
@@ -368,10 +369,10 @@ public final class FluidCheckpointCodec {
     private static void geometry(Writer w,com.wormzjl.icheme.science.fluid.network.VesselGeometry g){w.text(g.form().name());w.f64(g.capacity());w.f64(g.height());w.f64(g.diameter());w.f64(g.length());w.f64(g.bootDiameter());w.f64(g.bootLength());}
     /** A kettle's pool (format 28, W7): absent, or its facts and slice inputs. */
     private static void transfer(Writer w,com.wormzjl.icheme.science.fluid.network.TowerTransfer.Result t){
-        w.f64(t.outletTemperature());w.f64(t.evaporation());w.f64(t.dutyWatt());w.f64(t.energyWatt());w.f64(t.dryAirFlow());w.f64(t.fanPowerWatt());w.f64(t.speed());
+        w.f64(t.outletTemperature());w.sparse(t.losses());w.f64(t.dutyWatt());w.f64(t.energyWatt());w.f64(t.dryAirFlow());w.f64(t.fanPowerWatt());w.f64(t.speed());w.f64(t.airTemperature());w.f64(t.airHumidity());
     }
     private static com.wormzjl.icheme.science.fluid.network.TowerTransfer.Result transfer(Reader r){
-        return new com.wormzjl.icheme.science.fluid.network.TowerTransfer.Result(r.f64(),r.f64(),r.f64(),r.f64(),r.f64(),r.f64(),r.f64());
+        return new com.wormzjl.icheme.science.fluid.network.TowerTransfer.Result(r.f64(),r.sparse(MAXIMUM_ARRAY),r.f64(),r.f64(),r.f64(),r.f64(),r.f64(),r.f64(),r.f64());
     }
     private static void towerRates(Writer w,com.wormzjl.icheme.science.fluid.network.TowerExchange.Rates t){transfer(w,t.fill());w.f64(t.surfaceWatt());w.f64(t.inletTemperature());w.f64(t.inletFlow());w.text(t.status());}
     private static com.wormzjl.icheme.science.fluid.network.TowerExchange.Rates towerRates(Reader r){return new com.wormzjl.icheme.science.fluid.network.TowerExchange.Rates(transfer(r),r.f64(),r.f64(),r.f64(),r.text());}

@@ -23,50 +23,49 @@ public final class TowerExchange {
         if(!tower)return Map.of();
         return readings(graph,graph.reservoirs().stream().map(PassiveNetwork.Reservoir::state).toList(),new double[graph.pipes().size()],model);
     }
-    /** Water and energy leave through the fill's result and the basin surface; only the fill evaporates. */
+    /**
+     * The components and energy that leave through the fill's result and the basin surface; only the fill exchanges mass.
+     * {@code inletFlow}: the liquid the spray brings, kg/s; its gas and solids pass to the basin, whose vent takes the gas.
+     */
     public record Rates(TowerTransfer.Result fill,double surfaceWatt,double inletTemperature,double inletFlow,String status) {
         public Rates {
             Objects.requireNonNull(fill);Objects.requireNonNull(status);
             for(double value:new double[]{surfaceWatt,inletTemperature,inletFlow})
                 if(!Double.isFinite(value))throw new IllegalArgumentException("Nonfinite tower reading");
         }
-        public double waterLoss(){return fill.evaporation();}
+        /** Component {@code c}'s loss to the air, kg/s (a gain negative). */
+        public double loss(int c){return fill.loss(c);}
+        /** The net mass the liquid loses to the air, kg/s. */
+        public double massLoss(){return fill.evaporation();}
         public double energyWatt(){return fill.energyWatt()+surfaceWatt;}
         public double coolingDutyWatt(){return fill.dutyWatt()+surfaceWatt;}
     }
-    /** Whether a stream can feed the fill: its liquid is water alone and stays liquid at the atmosphere. Its gas passes to the basin, whose vent takes it. */
-    public static boolean liquidWater(FluidThermodynamics model,FluidThermodynamics.State state) {
-        // W3b: the liquid is one slot that holds water and no other condensable compound, with no other liquid beside it. A gas
-        // dissolved in it (a compound above its critical temperature: the air or nitrogen of a basin's water, about 1e-5 of
-        // it) leaves with the spray as the gas of any stream; read as a second compound, it refused every basin's own water
-        // and a pumped loop never primed (W3b stage A, CoolingTowerRuntimeTest).
-        if(!state.solids().empty())return false;
-        int slot=state.slot(FluidThermodynamics.AQUEOUS);
-        if(slot<0||state.slot(FluidThermodynamics.OIL)>=0)return false;
-        double[] liquid=state.amountsView(slot);
-        if(!(liquid[liquid.length-1]>0))return false;
-        for(int c=0;c<liquid.length-1;c++)if(liquid[c]!=0&&model.hydrocarbon.criticalTemperature(c)>state.temperature())return false;
-        return model.saturationPressure(state.temperature())<CoolingTower.PRESSURE;
-    }
     public static Rates at(PassiveNetwork graph,int node,List<FluidThermodynamics.State> states,double[] flows,FluidThermodynamics model) {
         var basin=graph.reservoirs().get(node);var tower=basin.inventory().tower();
-        double inlet=0,heat=0;boolean unsupported=false;
+        int n=model.componentCount();double[] oil=new double[n],aqueous=new double[n];double inlet=0,heat=0;
         for(int edge=0;edge<flows.length;edge++){
             var pipe=graph.pipes().get(edge);boolean first=pipe.first()==node;
             if(!first&&pipe.second()!=node||pipe.portAt(node)!=PassiveNetwork.PhasePort.SPRAY)continue;
             double incoming=first?-flows[edge]:flows[edge];
             var donor=states.get(first?pipe.second():pipe.first());
-            if(!liquidWater(model,donor)){unsupported=true;continue;}
-            if(incoming>0){double water=incoming*donor.amountsView(donor.slot(FluidThermodynamics.AQUEOUS))[donor.componentCount()-1]*model.waterMolecularWeight/donor.mass();inlet+=water;heat+=water*donor.temperature();}
+            if(!(incoming>0)||!(donor.mass()>0))continue;
+            // The spray's liquid feeds the fill (W3B_NETWORK_PLAN.md section 20); its gas and solids pass to the basin.
+            double share=incoming/donor.mass(),liquid=share*(model.slotMass(donor,FluidThermodynamics.State.LIQUID)+model.slotMass(donor,FluidThermodynamics.State.AQUEOUS));
+            if(!(liquid>0))continue;
+            double[] l=donor.liquidAmountsView(),a=donor.aqueousAmountsView();
+            for(int c=0;c<n;c++){oil[c]+=share*l[c];aqueous[c]+=share*a[c];}
+            inlet+=liquid;heat+=liquid*donor.temperature();
         }
         double basinTemperature=states.get(node).temperature();
         double temperature=inlet>0?heat/inlet:basinTemperature;
-        boolean target=tower.mode()==CoolingTower.Mode.TARGET_TEMPERATURE;
+        var liquid=inlet>0?TowerTransfer.of(model,oil,aqueous,temperature):null;
+        boolean target=tower.mode()==CoolingTower.Mode.TARGET_TEMPERATURE,boiling=liquid!=null&&liquid.boiling;
         // Fans without power stand (W5, fanLimit 0): the tower runs on its stack draught alone.
-        double speed=tower.fanSpeed(!target?tower.speed():inlet>0&&tower.fanLimit()>0?TowerTransfer.targetSpeed(model,tower,inlet,temperature):0);
-        var fill=TowerTransfer.fill(model,tower,inlet,temperature,speed);
-        String status=unsupported?"WATER_ONLY: pure liquid water required at atmospheric discharge"
-            :target&&inlet>0&&Math.abs(fill.outletTemperature()-tower.setPoint())>.1?"TARGET_LIMIT: leaving-water temperature target unavailable"
+        double speed=tower.fanSpeed(!target?tower.speed():liquid!=null&&!boiling&&tower.fanLimit()>0?TowerTransfer.targetSpeed(model,tower,liquid,inlet):0);
+        // A liquid that boils at the atmosphere has no air contact; its vapour leaves by the basin's flash and vent.
+        var fill=liquid==null?TowerTransfer.fill(model,tower,0,basinTemperature,speed):TowerTransfer.fill(model,tower,liquid,inlet,speed);
+        String status=boiling?"BOILING: the liquid boils at the atmosphere; no air contact"
+            :target&&inlet>0&&Math.abs(fill.outletTemperature()-tower.setPoint())>.1?"TARGET_LIMIT: leaving-liquid temperature target unavailable"
             :inlet==0?"NO_SPRAY: basin surface exchange only":"RUNNING";
         return new Rates(fill,basin.empty()?0:TowerTransfer.surfaceWatt(tower,basinTemperature),temperature,inlet,status);
     }

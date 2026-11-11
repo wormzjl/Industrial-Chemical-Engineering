@@ -418,7 +418,6 @@ public final class PassiveStepSolver {
         // produces, actuator included: an actuator left on its setpoint across a closed edge is a second equation for a
         // flow the closure has decided, and on a junction whose other edges are closed the factorization is singular.
         boolean[] boundaryClosed=new boolean[graph.pipes().size()];
-        for(int e=0;e<boundaryClosed.length;e++)if(refusedSpray(graph,e,inputStates))closeBoundary(graph,e,boundaryClosed,modes);
         for(int i=0;i<boundaryClosed.length;i++)if(graph.pipes().get(i).effectiveBlockedDirections()==3) {
             boundaryClosed[i]=true;
             if(!(graph.pipes().get(i).control() instanceof FlowControl.Passive))modes.set(i,FlowControl.Mode.CLOSED);
@@ -618,7 +617,6 @@ public final class PassiveStepSolver {
                 if(restart!=null){restarted[illegalDirection]=true;restarts++;allowedRestart=restart;continue;}
                 closeBoundary(graph,illegalDirection,boundaryClosed,modes);changed=true;
             }
-            if(!changed)for(int e=0;e<graph.pipes().size()&&!changed;e++)if(!boundaryClosed[e]&&flows[e]!=0&&refusedSpray(graph,e,states)){closeBoundary(graph,e,boundaryClosed,modes);changed=true;}
             // A confirmed emptying (keptEmptying) was decided on the network this active set states, so a mode or closure
             // change decides it again.
             if(changed)Arrays.fill(emptied,false);
@@ -1331,6 +1329,8 @@ public final class PassiveStepSolver {
         boolean[] mask=new boolean[model.componentCount()];
         for(var node:graph.reservoirs())if(node.kind()!=PassiveNetwork.NodeKind.VOID){var amounts=node.inventory().moles();for(int c=0;c<mask.length;c++)mask[c]|=amounts[c]>0;}
         for(var transfer:graph.scheduledTransfers())if(transfer instanceof ScheduledTransfer.Injection input){var amounts=input.molesPerSecond();for(int c=0;c<mask.length;c++)mask[c]|=amounts[c]>0;}
+        // A tower's fill takes up the air's own gases and water (W3B_NETWORK_PLAN.md section 20).
+        for(var node:graph.reservoirs())if(node.inventory().tower()!=null)for(int c:TowerTransfer.airComponents(model))mask[c]=true;
         return mask;
     }
     /** Physical species can traverse passive pipes in either direction, actuators only downstream.
@@ -1349,6 +1349,8 @@ public final class PassiveStepSolver {
         for(var transfer:graph.scheduledTransfers())if(transfer instanceof ScheduledTransfer.Injection injection) {
             var amounts=injection.molesPerSecond();for(int c=0;c<count;c++)if(amounts[c]>0)possible[injection.node()].set(c);
         }
+        // A tower's fill takes up the air's own gases and water (W3B_NETWORK_PLAN.md section 20).
+        for(int i=0;i<nodes;i++)if(graph.reservoirs().get(i).inventory().tower()!=null)for(int c:TowerTransfer.airComponents(model))possible[i].set(c);
         // Owner decision D61: where a junction melts crystals, a crystal can bring its component.
         if(!rateOnly&&JunctionCrystals.of(graph,model)!=null)for(int i=0;i<nodes;i++)
             for(var p:graph.reservoirs().get(i).inventory().solids().crystals())possible[i].set(model.crystalSolids().of(p.material()).component());
@@ -2065,12 +2067,6 @@ public final class PassiveStepSolver {
     /** {@link #endPressure} with a spray end at the incoming column's density, so a basin temperature cannot create an inlet head. */
     private double columnEndPressure(PassiveNetwork.Reservoir node,PassiveNetwork.PhasePort port,FluidThermodynamics.State state,double column) {
         return spray(node,port)?sprayPressure(node,column):endPressure(node,port,state);
-    }
-    /** Whether an end of connection {@code edge} is a spray inlet and what stands behind it is no liquid water, nor a line priming with it. */
-    private boolean refusedSpray(PassiveNetwork graph,int edge,List<FluidThermodynamics.State> states) {
-        var pipe=graph.pipes().get(edge);
-        int donor=spray(graph.reservoirs().get(pipe.first()),pipe.firstPort())?pipe.second():spray(graph.reservoirs().get(pipe.second()),pipe.secondPort())?pipe.first():-1;
-        return donor>=0&&!TowerExchange.liquidWater(model,states.get(donor))&&!InletPhase.priming(model,graph,donor,edge);
     }
     /** {@link #endPressure} of the end of {@code pipe} at {@code node}, on that node's own state in {@code graph}. */
     double endPressure(PassiveNetwork graph,PassiveNetwork.Pipe pipe,int node) {
@@ -5213,8 +5209,8 @@ public final class PassiveStepSolver {
             if(graph.reservoirs().get(node).inventory().tower()!=null) {
                 var flows=new double[graph.pipes().size()];for(int e=0;e<flows.length;e++)flows[e]=flow(e,x[edgeOffset+e],tr);
                 var exchange=TowerExchange.at(graph,node,Arrays.asList(st),flows,model);
-                target[target.length-1]-=dt*exchange.waterLoss()/model.waterMolecularWeight;
-                stored-=dt*exchange.energyWatt();heat-=exchange.energyWatt();net-=exchange.waterLoss();
+                for(int c=0;c<target.length;c++)target[c]-=dt*exchange.loss(c)/model.molecularWeight(c);
+                stored-=dt*exchange.energyWatt();heat-=exchange.energyWatt();net-=exchange.massLoss();
             }
             for(int edge:nodeEdges[node]) {
                 var pipe=graph.pipes().get(edge);int a=pipe.first(),b=pipe.second();double flow=flow(edge,x[edgeOffset+edge],tr);

@@ -163,17 +163,6 @@ public final class InletPhase {
             }
         }
     }
-    /**
-     * Whether {@code node}, which is no liquid water itself, is a junction still priming a tower's spray inlet through
-     * connection {@code edge}: what can feed it gives water alone, so what stands in the line leaves by the atmospheric
-     * inlet ahead of that water, as it does from a real line. A plain vessel's suction primes the same way ({@link #held}).
-     */
-    static boolean priming(FluidThermodynamics model,PassiveNetwork graph,int node,int edge) {
-        if(!graph.reservoirs().get(node).junction())return false;
-        boolean[] water={false},other={false};
-        feeders(graph,node,edge,(feeder,port)->{if(heldShare(feeder,port)>0){if(TowerExchange.liquidWater(model,feeder.state()))water[0]=true;else other[0]=true;}});
-        return water[0]&&!other[0];
-    }
     /** The share of its capacity {@code node} feeds through {@code port}: a vessel's contents over its capacity (zero at a
      * dry end), infinite for a generator, zero for a void or a junction. */
     private static double heldShare(PassiveNetwork.Reservoir node,PassiveNetwork.PhasePort port) {

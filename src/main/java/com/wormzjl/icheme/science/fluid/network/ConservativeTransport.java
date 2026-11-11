@@ -328,7 +328,7 @@ public final class ConservativeTransport {
             if(transfer instanceof ScheduledTransfer.Withdrawal out){outgoing[node]+=out.massKgPerSecond();endMass[node]-=dt*out.massKgPerSecond();}
             else if(transfer instanceof ScheduledTransfer.Injection in){var n=in.molesPerSecond();for(int c=0;c<components;c++)endMass[node]+=dt*n[c]*molecularWeight[c];endMass[node]+=dt*in.solidsPerSecond().massKg();}
         }
-        if(towerExchanges!=null)for(int n=0;n<nodes;n++)if(towerExchanges[n]!=null)endMass[n]-=dt*towerExchanges[n].waterLoss();
+        if(towerExchanges!=null)for(int n=0;n<nodes;n++)if(towerExchanges[n]!=null)endMass[n]-=dt*towerExchanges[n].massLoss();
         // An open vessel's vent and spill leave it as fixed amounts (OpenVessel), off its right-hand side below.
         if(releases!=null)for(int node=0;node<nodes;node++)if(releases[node]!=null)for(var released:releases[node].each())endMass[node]-=released.mass(molecularWeight);
         // Owner decision D61 (JunctionCrystals): per solved junction, the crystal each population is if it melts there (else
@@ -396,7 +396,7 @@ public final class ConservativeTransport {
             for(int c=0;c<populationKeys.size();c++)rhs[components+c][index[node]]-=released.solids().mass(populationKeys.get(c));
         }
         if(towerExchanges!=null)for(int n=0;n<nodes;n++)if(towerExchanges[n]!=null&&index[n]>=0)
-            rhs[components-1][index[n]]-=dt*towerExchanges[n].waterLoss();
+            for(int c=0;c<components;c++)rhs[c][index[n]]-=dt*towerExchanges[n].loss(c);
         double[][] solved;
         // One backward-error check on the first component vector qualifies this factorization; the
         // remaining component columns are bounded by the junction continuity and conservation
@@ -497,9 +497,10 @@ public final class ConservativeTransport {
         }
         double[] external=new double[components];double externalEnergy=0,pumpWork=0;var boundaries=new ArrayList<BoundaryTransfer>();
         if(towerExchanges!=null)for(int n=0;n<nodes;n++)if(towerExchanges[n]!=null) {
-            var exchange=towerExchanges[n];double moved=-dt*exchange.waterLoss()/model.waterMolecularWeight,heatMoved=-dt*exchange.energyWatt();
-            energy[n]+=heatMoved;externalEnergy+=heatMoved;external[components-1]+=moved;
-            var amounts=new double[components];amounts[components-1]=moved;
+            var exchange=towerExchanges[n];double heatMoved=-dt*exchange.energyWatt();
+            energy[n]+=heatMoved;externalEnergy+=heatMoved;
+            var amounts=new double[components];
+            for(int c=0;c<components;c++){amounts[c]=-dt*exchange.loss(c)/molecularWeight[c];external[c]+=amounts[c];}
             boundaries.add(new BoundaryTransfer(graph.reservoirs().get(n).id(),amounts,heatMoved,SolidInventory.EMPTY,0,BoundaryTransfer.Kind.ATMOSPHERE));
         }
         for(var transfer:graph.scheduledTransfers()) {
@@ -791,7 +792,7 @@ public final class ConservativeTransport {
                 if(donor==node)out+=rate;
             }
             // An emptying vessel (decision D54) passes what reaches it and its whole stock: dt (In' - Out') = -m_stock.
-            double atmospheric=graph.reservoirs().get(node).inventory().tower()==null?0:TowerExchange.at(graph,node,candidate,flows,model).waterLoss();
+            double atmospheric=graph.reservoirs().get(node).inventory().tower()==null?0:TowerExchange.at(graph,node,candidate,flows,model).massLoss();
             double outflow=fromJunctions+fromOthers-atmospheric+(emptying!=null&&emptying[node]!=null?emptying[node].drain():0),inflow=out-fromJunctions+atmospheric;
             if(out>0&&Double.isFinite(outflow)){double f=outflow/out;for(int edge=0;edge<flows.length;edge++){if(flows[edge]==0)continue;var pipe=graph.pipes().get(edge);if((flows[edge]>0?pipe.first():pipe.second())==node)factor[edge]=f;}}
             else if(fromOthers>0&&inflow>=0&&inflow<=fromOthers){double g=inflow/fromOthers;for(int edge=0;edge<flows.length;edge++){if(flows[edge]==0)continue;var pipe=graph.pipes().get(edge);int donor=flows[edge]>0?pipe.first():pipe.second(),receiver=flows[edge]>0?pipe.second():pipe.first();if(receiver==node&&!junction[donor])factor[edge]=g;}}

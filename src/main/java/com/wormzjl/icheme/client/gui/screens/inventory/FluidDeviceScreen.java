@@ -657,7 +657,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             rows.add(new DeviceColumn.Meter("bottom_pressure",pressureValue(view.tank()==null?null:view.tank().bottomPressure()),p,tr("bottom_pressure.hint")));
             rows.add(meter("tower_cooling_duty",rate==null?"—":value(rate.coolingDutyWatt()/1000),"kW"));
             rows.add(meter("tower_return",rate==null?"—":value(flowRateUnit.display(rate.inletFlow())),flowRateUnit.unit("kg")));
-            rows.add(meter("tower_evaporation",rate==null?"—":value(flowRateUnit.display(rate.waterLoss())),flowRateUnit.unit("kg")));
+            rows.add(meter("tower_evaporation",rate==null?"—":value(flowRateUnit.display(rate.massLoss())),flowRateUnit.unit("kg")));
             if(view.tower().specification().draft()==com.wormzjl.icheme.science.fluid.network.CoolingTower.Draft.INDUCED){
                 rows.add(meter("fan_power",rate==null?"—":value(rate.fill().fanPowerWatt()/1000),"kW"));
                 rows.add(meter("tower_speed",rate==null?"—":value(rate.fill().speed()*100),"%"));
