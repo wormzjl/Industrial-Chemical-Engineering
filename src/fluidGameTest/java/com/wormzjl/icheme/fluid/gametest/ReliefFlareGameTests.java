@@ -35,20 +35,20 @@ public final class ReliefFlareGameTests {
         run(helper, TIP, methane(), false);
     }
 
-    /** Decision D6: a 0.1 m tip passes less of the methane than the load (0.40 of 0.61 kg/s); the valve lifts and the drum rises above its set pressure by the back pressure. */
+    /** Owner D6: a 0.1 m tip passes what the pressure behind it drives; the drum stands at its set pressure while the tip carries the load, above it once the valve stands wide open. No hold either way. */
     @GameTest(template = "empty", timeoutTicks = 8000, batch = "psv-flare-small")
-    public static void aDrumRelievingToATooSmallFlareRisesAboveItsSetPressure(GameTestHelper helper) {
+    public static void aDrumRelievesToASmallFlareWithoutAHold(GameTestHelper helper) {
         run(helper, .1, methane(), true);
     }
 
-    /** The same on nitrogen (0.43 kg/s through the 0.1 m tip). */
+    /** The same on nitrogen, which does not burn: the flare shows FLAME OUT and the gas leaves unburnt. */
     @GameTest(template = "empty", timeoutTicks = 8000, batch = "psv-flare-inert")
-    public static void aDrumRelievingNitrogenToAFlareRisesAboveItsSetPressure(GameTestHelper helper) {
+    public static void aDrumRelievesNitrogenToASmallFlareWithoutAHold(GameTestHelper helper) {
         run(helper, .1, com.wormzjl.icheme.runtime.fluid.FluidDeviceSpec.nitrogen(MaterialRuntime.active()).composition(), true);
     }
 
-    /** The plant with a flare of tip {@code tipSize}, fed {@code gas} at 5 bar; {@code above}: the tip passes less than the load. */
-    static void run(GameTestHelper helper, double tipSize, double[] feedGas, boolean above) {
+    /** The plant with a flare of tip {@code tipSize}, fed {@code gas} at 5 bar; {@code free}: settled at any pressure from the set pressure up (the tip decides), else at the set pressure. */
+    static void run(GameTestHelper helper, double tipSize, double[] feedGas, boolean free) {
         var plant = new AssemblyGameTests.Plant(helper, helper.absolutePos(new BlockPos(8, 4, 8)), new BlockPos(-8, -3, -8), new BlockPos(24, 40, 16));
         var level = plant.level;
         var world = plant.world;
@@ -102,14 +102,14 @@ public final class ReliefFlareGameTests {
                         double q = view.relief() == null ? 0 : view.relief().massFlow();
                         if (view.committedTick() != last[2]) {last[2] = view.committedTick();last[0] = last[1];last[1] = q;pressures[0] = pressures[1];pressures[1] = p;}
                         boolean steady = flareView != null && flareView.massFlow() > 0 && Math.abs(pressures[1] - pressures[0]) < .005 * set;
-                        // Below the tip's limit: at the set pressure, carrying the feed. Above it: higher, as the back pressure holds it.
-                        boolean settled = above ? steady && p > 1.05 * set : steady && q > .1 && last[0] > 0 && Math.abs(last[1] - last[0]) < .05 * last[1] && Math.abs(p - set) < .03 * set;
+                        // At the set pressure, carrying the feed; with a free tip, wherever its back pressure leaves the drum.
+                        boolean settled = free ? steady && p > .97 * set && q > .1 : steady && q > .1 && last[0] > 0 && Math.abs(last[1] - last[0]) < .05 * last[1] && Math.abs(p - set) < .03 * set;
                         helper.assertTrue(settled, "waiting for the relief to settle: P=" + p + " set=" + set + " relief=" + view.relief() + " flare=" + (flareView == null ? null : flareView.massFlow()));
                     })
                     .thenExecute(() -> {
                         var view = world.view(ids[0]);var flareView = world.view(ids[1]).flare();
                         double set = world.registrations().get(ids[0]).spec().relief();
-                        IChemE.LOGGER.info("psv_flare result tip=" + tipSize + " above=" + above + " P={} set={} relief={} kg/s open={} flare={} kg/s status={}", view.state().pressure(), set, view.relief().massFlow(),
+                        IChemE.LOGGER.info("psv_flare result tip=" + tipSize + " free=" + free + " P={} set={} relief={} kg/s open={} flare={} kg/s flare status=" + flareView.status() + " heat=" + flareView.heat() + " status={}", view.state().pressure(), set, view.relief().massFlow(),
                                 view.relief().open(), flareView.massFlow(), view.status());
                         if (view.relief().open()) failure[0] = "the valve relieves to the atmosphere, not to the flare";
                         else if (Math.abs(view.relief().massFlow() - flareView.massFlow()) > .1 * flareView.massFlow()) failure[0] = "the flare burns " + flareView.massFlow() + " kg/s of the valve's " + view.relief().massFlow();

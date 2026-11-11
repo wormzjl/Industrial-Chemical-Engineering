@@ -121,7 +121,7 @@ public final class PhysicalFluidTopology {
                     ||onPortLane||ports.size()!=1||ports.getFirst().port!=PassiveNetwork.PhasePort.BULK||ports.getFirst().role!=ConnectionRole.VESSEL))
                 throw new IllegalArgumentException("A burner is a fired heater's void with one bulk port and its fuel valve, partnered with its radiant coil");
             if(heat!=null&&heat.side()==com.wormzjl.icheme.science.equipment.HeatSides.Side.BURNER&&!burner)throw new IllegalArgumentException("A burner side is a void");
-            // A flare's tip (batch 2026-11-09-flare-stack): a void behind its gas inlet, its tip limit its control.
+            // A flare's tip (batch 2026-11-09-flare-stack): a void behind its gas inlet, its tip's valve its control.
             boolean flare=kind==TopologyCompiler.Kind.VOID&&heat==null&&control instanceof FlowControl.ControlValve tip&&tip.source()==FlowControl.ValveSource.FLARE;
             if(flare&&(onPortLane||ports.size()!=1||ports.getFirst().port!=PassiveNetwork.PhasePort.BULK||ports.getFirst().role!=ConnectionRole.VESSEL))
                 throw new IllegalArgumentException("A flare is a void with one bulk port and its tip limit");
@@ -624,19 +624,16 @@ public final class PhysicalFluidTopology {
                 boolean reliefStart=start!=null&&guardStart!=null&&guardStart==start.id,reliefEnd=!reliefStart&&end!=null&&guardEnd!=null&&guardEnd==end.id;
                 if(reliefStart||reliefEnd) {
                     // A pressure safety valve's outlet run (batch 2026-11-11-gas-blanketing): the upstream pressure valve law,
-                    // stated from the node it guards. A far end with a built-in valve of its own (a flare's tip, a firebox, a
-                    // blanketed vessel) or a driving end keeps its own half, as two driven ends do.
+                    // stated from the node it guards. A far end with a built-in valve of its own (a firebox, a blanketed vessel) or
+                    // a driving end keeps its own half, as two driven ends do. A flare's open tip regulates nothing (owner D6): the
+                    // run into it is one line, valve, pipe and tip bore, as into a chimney; split at a junction, both halves of one
+                    // bore reached the velocity cap together and left the junction's pressure undetermined.
                     var guarded=reliefStart?start:end;var far=reliefStart?end:start;var farLink=reliefStart?endLink:startLink;var guardedLink=reliefStart?startLink:endLink;
                     int from=reliefStart?a:b,to=reliefStart?b:a;var fromPort=reliefStart?startPort:endPort;var farPort=reliefStart?endPort:startPort;
                     var valve=new FlowControl.PressureValve(reliefs.get(guarded.id).pressure());
-                    boolean farSink=far!=null&&(far.valvedSink()||far.kind==TopologyCompiler.Kind.RESERVOIR&&blanketLinks.contains(farLink.id()));
+                    boolean farSink=far!=null&&(far.valvedSink()&&!far.flare()||far.kind==TopologyCompiler.Kind.RESERVOIR&&blanketLinks.contains(farLink.id()));
                     boolean farDriven=far!=null&&(far.stillOutlet()||far.actuator()&&outletLinks.contains(farLink.id()));
                     if(farSink||farDriven) {
-                        // Decision D6: a far end that regulates its own flow (a tip's limit, a firebox's fuel, a pad, a driven end) and a
-                        // valve that regulates the guarded pressure would leave the middle junction's pressure open: the valve lifts by its
-                        // plan instead (ReliefValves). Every other run keeps the exact regulator: a planned lift on a stiff liquid-full drum
-                        // or a pipe's junction swings and holds (PSV_REVIEW.md section 4).
-                        valve=FlowControl.PressureValve.relief(valve.targetPressure());
                         int middle=reservoirs.size();reservoirs.add(new PassiveNetwork.Reservoir(virtual--,.5*(reservoirs.get(a).elevation()+reservoirs.get(b).elevation()),seed,PassiveNetwork.NodeKind.JUNCTION));
                         var halves=sections.stream().map(g->scaled(g,.5)).toList();
                         pipes.add(new PassiveNetwork.Pipe(pipeId,from,middle,halves,valve).withPorts(fromPort,PassiveNetwork.PhasePort.BULK).withActuatorArea(halves.getFirst().area()));mapViews(views,run,linkOwner,linkDirections,physical,islandIndex,pipeId,reliefStart,true);
@@ -650,8 +647,8 @@ public final class PhysicalFluidTopology {
                         }
                         if(far.kind==TopologyCompiler.Kind.RESERVOIR)faces.computeIfAbsent(far.id,k->new HashMap<>()).put(pipeId,tankFaces.get(farLink.id()));
                     } else {
-                        // A chimney's stack (batch 2026-11-10-chimney) is the last section of the run into its tip.
-                        if(far!=null&&far.chimney()){var all=new ArrayList<>(sections);if(reliefStart)all.add(far.geometry());else all.addFirst(far.geometry());sections=List.copyOf(all);}
+                        // A chimney's stack (batch 2026-11-10-chimney), or a flare's tip bore (owner D6), is the last section of the run into its tip.
+                        if(far!=null&&(far.chimney()||far.flare())){var all=new ArrayList<>(sections);if(reliefStart)all.add(far.geometry());else all.addFirst(far.geometry());sections=List.copyOf(all);}
                         pipes.add(new PassiveNetwork.Pipe(pipeId,from,to,sections,valve).withPorts(fromPort,farPort)
                                 .withForbiddenDirections(checkRestrictions(start,end,startLink,endLink,points,reliefEnd)).withActuatorArea((reliefStart?sections.getFirst():sections.getLast()).area()));
                         mapViews(views,run,linkOwner,linkDirections,physical,islandIndex,pipeId,reliefStart);reliefPipes.add(pipeId);
@@ -686,6 +683,9 @@ public final class PhysicalFluidTopology {
                     var burner=burnerEnd?end:start;var feeder=burnerEnd?start:end;var feederLink=burnerEnd?startLink:endLink;
                     var sinkValve=burner.valvedSink()?burner.control:FlowControl.ControlValve.blanket();var sinkPort=burnerEnd?endPort:startPort;
                     int sink=burnerEnd?b:a,source=burnerEnd?a:b;var sourcePort=burnerEnd?startPort:endPort;
+                    // A flare's tip bore is the run's last section (owner D6), as a chimney's stack is: an open tip passes what the
+                    // pressure behind it drives through it.
+                    if(burner.flare()){var all=new ArrayList<>(sections);if(burnerEnd)all.add(burner.geometry());else all.addFirst(burner.geometry());sections=List.copyOf(all);}
                     boolean driven=feeder!=null&&feeder.actuator()&&outletLinks.contains(feederLink.id());
                     if(driven) {
                         int middle=reservoirs.size();reservoirs.add(new PassiveNetwork.Reservoir(virtual--,.5*(reservoirs.get(a).elevation()+reservoirs.get(b).elevation()),seed,PassiveNetwork.NodeKind.JUNCTION));

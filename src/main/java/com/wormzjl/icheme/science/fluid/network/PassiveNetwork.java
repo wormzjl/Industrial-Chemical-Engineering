@@ -300,8 +300,6 @@ public record PassiveNetwork(List<Reservoir> reservoirs,List<Pipe> pipes,List<Sc
             /** This connection without a flow valve's set point: a new target on a running valve is the same line, and its point carries. */
             Identity line(){
                 if(control instanceof FlowControl.Turbine turbine)return controlled(new FlowControl.Turbine(turbine.design()));
-                // A safety valve's lift is a step input (ReliefValves): the same line lifted or not.
-                if(control instanceof FlowControl.PressureValve valve&&valve.planned())return controlled(valve.withLifted(false));
                 return control instanceof FlowControl.ControlValve valve&&!valve.pressureControl()?new Identity(id,first,second,sections,valve.withTarget(0),blockedDirections,filter,firstPort,secondPort,forbiddenDirections,actuatorArea,heat):this;
             }
         }

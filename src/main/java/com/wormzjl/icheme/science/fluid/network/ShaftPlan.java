@@ -16,7 +16,7 @@ import java.util.Map;
  * pump repaired since, switched back on (an island keeps the controls its last slice solved with, and a machine's speed
  * plan restores a casing by itself). {@code BURNERS} (batch 2026-11-09-furnace-fuel-power): a radiant coil's limit
  * ({@link FiredCoil#limit}), keyed by the coil's device; {@code FUEL}: a fired heater's fuel valve's mass target, kg/s, keyed
- * by its burners, the node its run enters. {@code FLARE} (batch 2026-11-09-flare-stack): a flare's tip limit, kg/s, keyed by the
+ * by its burners, the node its run enters. {@code FLARE} (batch 2026-11-09-flare-stack): a flare's tip, open (any positive value) or blocked (0), keyed by the
  * flare, the node its run enters. {@code EXHAUST} (batch 2026-11-10-prime-movers): a gas turbine's steam coil's gas, its
  * capacity rate W/K ({@code value}) and its inlet K ({@code second}), keyed by the coil's device; a prime mover's fuel valve
  * takes {@code FUEL}, keyed by its fuel void, the node its run enters.

@@ -781,8 +781,6 @@ public final class IslandCoordinator {
         if(a.equals(b))return true;
         // A shaft train's slice input (W3): a machine's speed, a frame's displacement, a governor valve's target.
         if(com.wormzjl.icheme.science.fluid.network.ShaftPlan.planned(a,b))return true;
-        // A safety valve's lift (batch 2026-11-11-gas-blanketing, D6): planned at each step, a step input.
-        if(a instanceof FlowControl.PressureValve x&&b instanceof FlowControl.PressureValve y&&x.planned()&&y.planned())return x.targetPressure()==y.targetPressure();
         // A boundary valve a running column works (batch 2026-10-28-column-operation): its planned mass flow, whatever the valve's own control.
         if(b instanceof FlowControl.ControlValve y&&y.source()==FlowControl.ValveSource.MASS_FLOW&&com.wormzjl.icheme.science.fluid.network.PortPlan.COLUMN_SENSOR.equals(y.sensor())
                 &&a instanceof FlowControl.Valve x)return x.targetPressure()==y.targetPressure();

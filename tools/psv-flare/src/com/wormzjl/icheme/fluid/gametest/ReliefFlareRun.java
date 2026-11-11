@@ -22,14 +22,14 @@ public final class ReliefFlareRun {
     }
 
     @GameTest(template = "empty", timeoutTicks = 8000, batch = "psv-flare-small")
-    public static void aTooSmallFlareAlone(GameTestHelper helper) {
+    public static void aSmallFlareAlone(GameTestHelper helper) {
         if (ReviewBatch.skipped(helper, "psv-flare")) return;
-        ReliefFlareGameTests.aDrumRelievingToATooSmallFlareRisesAboveItsSetPressure(helper);
+        ReliefFlareGameTests.aDrumRelievesToASmallFlareWithoutAHold(helper);
     }
 
     @GameTest(template = "empty", timeoutTicks = 8000, batch = "psv-flare-inert")
     public static void nitrogenToAFlareAlone(GameTestHelper helper) {
         if (ReviewBatch.skipped(helper, "psv-flare")) return;
-        ReliefFlareGameTests.aDrumRelievingNitrogenToAFlareRisesAboveItsSetPressure(helper);
+        ReliefFlareGameTests.aDrumRelievesNitrogenToASmallFlareWithoutAHold(helper);
     }
 }

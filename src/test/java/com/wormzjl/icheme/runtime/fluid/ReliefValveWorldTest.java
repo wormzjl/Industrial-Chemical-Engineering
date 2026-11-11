@@ -170,85 +170,106 @@ class ReliefValveWorldTest {
         assertEquals(11.1,relieved,.5,"the header carries the ten feeds");
     }
 
-    /** A drum relieving through a 0.15 m line into a flare's tip whose limit the engine planned at {@code limit} kg/s (the world here plans none). */
-    private static long flare(EventPathWorld world,double limit) {
+    /** One mole of methane on the world's list. */
+    private static double[] methane() {
+        var ids=new ArrayList<>(EventPathWorld.CATALOG.requirePackage(EventPathWorld.CATALOG.presets().network().packageId()).components());ids.add("Water");
+        double[] n=new double[ids.size()];n[ids.indexOf("Methane")]=1;return n;
+    }
+    private static double[] nitrogen(){return FluidDeviceSpec.nitrogen(EventPathWorld.CATALOG).composition();}
+    /** A drum holding {@code gas} at 1 atm, its relief set at {@link #SET}, fed {@code gas} at {@code feed} Pa through a 0.1 m line; returns the drum and the feed. */
+    private static long[] plant(EventPathWorld world,double[] gas,double feed) {
+        long id=world.ledger.nextIdentity();var node=at(10,64,0);
+        var ports=List.of(new PhysicalFluidTopology.Port(node,Direction.WEST,PassiveNetwork.PhasePort.LIQUID),new PhysicalFluidTopology.Port(at(10,66,0),Direction.EAST,PassiveNetwork.PhasePort.VAPOR),
+                new PhysicalFluidTopology.Port(at(10,66,0),Direction.UP,PassiveNetwork.PhasePort.VAPOR,PhysicalFluidTopology.ConnectionRole.RELIEF));
+        var device=new PhysicalFluidTopology.Device(id,node,Kind.RESERVOIR,Direction.NORTH,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive(),ports);
+        var spec=new FluidDeviceSpec(DRUM.capacity(),298.15,101325,gas,SlurryFeed.NONE,DRUM.height(),false,DRUM,null,0).withRelief(SET,null);
+        world.registry.submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,spec,0))),id+1,null);
+        world.place(11,66,0,Kind.PIPE,Direction.EAST,.1);world.place(12,66,0,Kind.PIPE,Direction.EAST,.1);
+        long source=world.place(13,66,0,Kind.GENERATOR,Direction.EAST,new FluidDeviceSpec(1,298.15,feed,gas),.1);
+        return new long[]{id,source};
+    }
+    /**
+     * A flare of tip {@code tip} m at the end of a 0.15 m relief line, open (owner D6: an open tip regulates nothing; the world
+     * here plans no flare, so the tip is placed open).
+     */
+    private static long flare(EventPathWorld world,double tip) {
         world.place(10,67,0,Kind.PIPE,Direction.UP,.15);world.place(10,68,0,Kind.PIPE,Direction.SOUTH,.15);
         long id=world.ledger.nextIdentity();
-        var device=new PhysicalFluidTopology.Device(id,at(10,68,1),Kind.VOID,Direction.NORTH,new PipeResistance.Geometry(1,.3,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),FlowControl.ControlValve.flare().withMassTarget(limit),
+        var device=new PhysicalFluidTopology.Device(id,at(10,68,1),Kind.VOID,Direction.NORTH,new PipeResistance.Geometry(1,tip,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),FlowControl.ControlValve.flare().withMassTarget(1),
                 List.of(new PhysicalFluidTopology.Port(at(10,68,1),Direction.NORTH,PassiveNetwork.PhasePort.BULK,PhysicalFluidTopology.ConnectionRole.VESSEL)),true,PhysicalFluidTopology.Cutoff.NONE,false,PhysicalFluidTopology.ALL_FACES,0,0,null);
         world.registry.submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(device,EventPathWorld.nitrogen(),0))),id+1,null);
         return id;
     }
-    /** Whether the island's safety valve before a flow regulator stands lifted. */
-    private static boolean lifted(IslandCoordinator.Snapshot s) {
-        for(var p:s.graph().pipes())if(p.control() instanceof FlowControl.PressureValve v&&v.planned())return v.lifted();
-        throw new AssertionError("no planned safety valve");
+    /**
+     * A drum relieving into a flare: its pressure, the relief, the back pressure at the valve's outlet (the drum's less the
+     * valve's throttling), the tip's exit velocity on the gas expanded to 1 atm (m/s, the flame's stability measure), the
+     * valve's mode and the island's status.
+     */
+    private record Flared(double pressure,double relief,double back,double velocity,FlowControl.Mode valve,String status) {}
+    private static Flared read(EventPathWorld world,long drum,double tip) {
+        var s=island(world,drum);int e=relief(s);var gas=node(world,drum).state();var result=s.lastResult().orElseThrow();
+        double moles=0;for(double n:com.wormzjl.icheme.science.fluid.solver.PhaseLayout.totalAmounts(gas))moles+=n;
+        double density=101325*(gas.mass()/moles)/(8.314462618*gas.temperature()),q=flow(s,e);
+        return new Flared(gas.pressure(),q,gas.pressure()-result.endpointHeads()[e],Flare.exitVelocity(q,density,tip),result.endpointModes().get(e),s.status());
     }
+    private static Flared flared(double[] gas,double tip) {
+        var world=new EventPathWorld();long drum=plant(world,gas,5e5)[0];flare(world,tip);
+        world.runTo(1600);world.assertKeptUp("flare "+tip);
+        var r=read(world,drum,tip);
+        System.out.println("RELIEF_FLARE tip="+tip+" "+r);
+        return r;
+    }
+    /** Methane's stable exit velocity at a flare's tip, m/s (40 CFR 60.18 on its net heating value). */
+    private static final double METHANE_STABLE=Flare.stableVelocity(802618/Flare.STANDARD_VOLUME);
 
     /**
-     * Decision D6 (form A2): a drum on a 5 bar feed (1.11 kg/s at its set pressure) relieving into a flare's tip of limit
-     * {@code limit}, run for {@code ticks}. Returns the drum's pressure, the relief, whether the valve stands lifted, and
-     * how often it lifted and reseated, read at every tick.
+     * Owner D6: "Flare flowrate should vary with backpressure, and increasing backpressure will eventually lead to dysfunctional
+     * PSV". Methane and nitrogen drums on a 5 bar feed relieving into flares of 0.1, 0.15 and 0.3 m: the tip passes what the
+     * pressure behind it drives. A tip that carries the feed with the valve still throttling leaves the drum at its set
+     * pressure; a smaller one builds back pressure until the valve stands wide open and the drum rises above its set pressure.
      */
-    private record Flared(double pressure,double relief,boolean lifted,int lifts,int seats,String status) {}
-    private static Flared flared(double limit,long ticks,java.util.function.LongConsumer at,EventPathWorld world,long drum) {
-        boolean was=false;int lifts=0,seats=0;
-        while(world.ledger.onlineTick()<ticks) {
-            world.tick();at.accept(world.ledger.onlineTick());
-            var s=world.coordinator.snapshots().stream().filter(x->x.graph().reservoirs().stream().anyMatch(r->r.id()==drum)).findFirst();
-            if(s.isEmpty()||s.get().lastResult().isEmpty())continue;
-            boolean now=lifted(s.get());if(now&&!was)lifts++;if(!now&&was)seats++;was=now;
+    @Test void aFlaresFlowFollowsItsBackPressure() {
+        for(var name:List.of("methane","nitrogen")) {var gas=name.equals("methane")?methane():nitrogen();
+            Flared previous=null;
+            for(double tip:new double[]{.3,.15,.1}) {
+                var r=flared(gas,tip);
+                System.out.println(String.format(Locale.ROOT,"RELIEF_CURVE %s tip=%.2f P=%.0f relief=%.4f back=%.0f velocity=%.1f valve=%s stable=%s",name,tip,r.pressure(),r.relief(),r.back(),r.velocity(),r.valve(),String.format(Locale.ROOT,"%.1f",METHANE_STABLE)));
+                assertTrue(r.pressure()>=SET*(1-1e-3),"never below its set pressure: "+r);
+                assertTrue(r.back()<=r.pressure()&&(r.valve()==FlowControl.Mode.VALVE_OPEN)==(r.pressure()>SET*1.001),"throttling at its set pressure, wide open above it: "+r);
+                if(previous!=null)assertTrue(r.pressure()>=previous.pressure()*(1-1e-4)&&r.back()>=previous.back()*(1-1e-3)||r.pressure()<=SET*1.001,"a smaller tip, more back pressure: "+previous+" then "+r);
+                previous=r;
+            }
+            assertTrue(previous.pressure()>1.05*SET,"the 0.1 m tip holds the drum above its set pressure: "+previous);
         }
-        world.assertKeptUp("flare limit "+limit);
-        var s=island(world,drum);int e=relief(s);
-        var out=new Flared(node(world,drum).state().pressure(),flow(s,e),lifted(s),lifts,seats,s.status());
-        System.out.println("RELIEF_FLARE limit="+limit+" "+out);
-        return out;
-    }
-    private static Flared flared(double limit) {
-        var world=new EventPathWorld();long drum=drum(world,0,SET);gasFeed(world,0,5e5);flare(world,limit);
-        return flared(limit,1600,t->{},world,drum);
+        var big=flared(methane(),.3);
+        assertEquals(SET,big.pressure(),1e-3*SET,"the 0.3 m tip carries the methane feed at the set pressure");
     }
 
-    /** A tip that passes less than the load: the valve lifts once; back pressure holds the drum above its set pressure and the tip passes its limit. */
-    @Test void aFlareThatPassesLessThanTheLoadBacksTheDrumUpAboveItsSetPressure() {
-        var r=flared(.3);
-        assertTrue(r.lifted()&&r.lifts()==1&&r.seats()==0,"lifted once: "+r);
-        assertTrue(r.pressure()>1.1*SET,"above its set pressure by the back pressure: "+r.pressure());
-        assertEquals(.3,r.relief(),.01,"the tip passes its limit");
+    /** Owner D6: the feed stepped from 5 to 7 bar at once: the drum follows its new steady state, no hold. */
+    @Test void aFeedStepRaisesTheReliefWithoutAHold() {
+        var world=new EventPathWorld();long[] p=plant(world,methane(),5e5);flare(world,.15);
+        world.runTo(1200);var before=read(world,p[0],.15);
+        charge(world,p[1],7e5);world.runTo(2400);world.assertKeptUp("feed step");
+        var after=read(world,p[0],.15);
+        System.out.println("RELIEF_STEP before="+before+" after="+after);
+        assertTrue(after.relief()>before.relief(),"more relieved: "+before+" then "+after);
+        assertTrue(after.pressure()>=before.pressure()*(1-1e-4),"no lower: "+before+" then "+after);
     }
 
-    /** A tip that passes the load: the valve regulates, as before D6. */
-    @Test void aFlareThatPassesTheLoadHoldsTheDrumAtItsSetPressure() {
-        var r=flared(2);
-        assertTrue(!r.lifted()&&r.lifts()==0,"never lifted: "+r);
-        assertEquals(SET,r.pressure(),1e-3*SET,"at its set pressure");
-        assertEquals(1.11,r.relief(),.01,"it passes the feed");
-    }
-
-    /** A load just under the tip's limit (95 %, outside the lift's margin) regulates; just over (103 %) lifts once and stands a little above the set pressure. */
-    @Test void aLoadJustUnderOrJustOverTheTipsLimit() {
-        var under=flared(1.11/.95);
-        assertTrue(!under.lifted()&&under.lifts()==0,"under: never lifted: "+under);
-        assertEquals(SET,under.pressure(),1e-3*SET,"under: at its set pressure");
-        var over=flared(1.11/1.03);
-        assertTrue(over.lifted()&&over.lifts()==1&&over.seats()==0,"over: lifted once: "+over);
-        assertTrue(over.pressure()>SET,"over: above its set pressure: "+over.pressure());
-        assertEquals(1.11/1.03,over.relief(),.01,"over: the tip passes its limit");
-    }
-
-    /** A load that crosses the tip's limit upward (the feed to 7 bar) and back down (to 5 bar): the valve lifts once and reseats once, then regulates at its set pressure. */
-    @org.junit.jupiter.api.Disabled("Open, A2's limit (PSV_REVIEW.md section 4): on the way down each edit rebuilds the run regulating while the tip still binds, and the island holds (tick 6007)")
-    @Test void aLoadCrossingTheTipsLimitLiftsOnceAndReseatsOnce() {
-        var world=new EventPathWorld();long drum=drum(world,0,SET);
-        world.place(11,66,0,Kind.PIPE,Direction.EAST);world.place(12,66,0,Kind.PIPE,Direction.EAST);
-        long feed=world.place(13,66,0,Kind.GENERATOR,Direction.EAST,new FluidDeviceSpec(1,298.15,5e5,FluidDeviceSpec.nitrogen(EventPathWorld.CATALOG).composition()),.05);
-        flare(world,1.4);
-        // The feed ramps by 0.05 bar every 50 ticks: up from 5 to 7 bar from tick 1200, down again from tick 4000.
-        var r=flared(1.4,7000,t->{if(t>=1200&&t<=3200&&(t-1200)%50==0)charge(world,feed,5e5+(t-1200)/50*5e3);if(t>=4000&&t<=6000&&(t-4000)%50==0)charge(world,feed,7e5-(t-4000)/50*5e3);},world,drum);
-        assertTrue(r.lifts()==1&&r.seats()==1&&!r.lifted(),"lifted once, reseated once: "+r);
-        assertEquals(SET,r.pressure(),1e-3*SET,"back at its set pressure");
-        assertEquals(1.11,r.relief(),.01,"passing the feed");
+    /** Owner D6: the feed ramped from 5 to 7 bar and back by 0.05 bar every 50 ticks: no hold, and the drum returns to where it stood. */
+    @Test void aFeedRampUpAndDownReturnsTheDrumWhereItStood() {
+        var world=new EventPathWorld();long[] p=plant(world,methane(),5e5);flare(world,.15);
+        world.runTo(1200);var before=read(world,p[0],.15);Flared top=null;
+        for(long t=1200;t<=6000;t+=50) {
+            if(t<=3200)charge(world,p[1],5e5+(t-1200)/50*5e3);else if(t>=4000)charge(world,p[1],7e5-(t-4000)/50*5e3);
+            world.runTo(t+50);if(t==3500)top=read(world,p[0],.15);
+        }
+        world.runTo(7200);world.assertKeptUp("feed ramp");
+        var after=read(world,p[0],.15);
+        System.out.println("RELIEF_RAMP before="+before+" top="+top+" after="+after);
+        assertTrue(top.relief()>before.relief(),"more relieved at 7 bar: "+top);
+        assertEquals(before.pressure(),after.pressure(),2e-3*before.pressure(),"back where it stood");
+        assertEquals(before.relief(),after.relief(),.01*before.relief(),"relieving the feed again");
     }
     /** The generator {@code id} charged at {@code pressure}, as a queued edit. */
     private static void charge(EventPathWorld world,long id,double pressure) {

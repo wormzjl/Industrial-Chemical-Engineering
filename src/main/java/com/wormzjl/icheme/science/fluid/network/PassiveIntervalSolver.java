@@ -267,8 +267,6 @@ public final class PassiveIntervalSolver {
                 // committed interval, carried as its endpoint flows are.
                 boolean carried=last==null&&carriedFlows(accepted)!=null;
                 accepted=GasBlanket.plan(implicit.plan(accepted,startFlows,checkpoint),model,step,last!=null?last.pipeTransfers():carried?carriedTransfers:null,last!=null?lastStep:carried?carriedSeconds:0);
-                // Each pressure safety valve before a flow regulator: wide open for this step while that regulator binds (D6).
-                accepted=ReliefValves.plan(accepted,startFlows);
                 PassiveNetwork start=accepted;
                 if(implicit.backwardEulerCold(accepted)) {
                     if(coldSeedFor!=accepted){coldSeed=coldRateSeed(accepted,checkpoint);coldSeedFor=accepted;}
