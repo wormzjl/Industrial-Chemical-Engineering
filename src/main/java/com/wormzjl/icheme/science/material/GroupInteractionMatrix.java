@@ -12,11 +12,13 @@ import java.util.Optional;
 /**
  * Record kind {@code group_interactions} ({@code materials/group_interactions/<id>.json}): the symmetric group-interaction
  * parameters A_kl and B_kl of a group-contribution kij(T) rule, stored in MPa as the E-PPR78 papers publish them. The
- * record {@code icheme:eppr78_2022} (the pilot package's, a test overlay since O5 of batch 2026-11-04-open-thermo-data) is the 40-group E-PPR78 matrix of Table S4 of the supporting
+ * record {@code icheme:eppr78_2022} (a test overlay of the pilot package from O5 of batch 2026-11-04-open-thermo-data, bundled again since W2a of batch
+ * 2026-11-11-aqueous-solvents for the derived pairs) is the 40-group E-PPR78 matrix of Table S4 of the supporting
  * information of Jaubert et al. 2022 (revision {@code eppr78-2022-si-table-s4-r2}, P3 WP2b, batch
  * 2026-09-24-coolprop-low-temperature; it replaced the Clapeyron.jl transcription of P3 WP2); the decomposition of a
  * species into groups is not part of this record but of each species' reference spine ({@code groups} of a
- * {@code spine} record).
+ * {@code spine} record). A {@code group_interactions} record of scheme {@value ModifiedUnifac#SCHEME} is an activity
+ * table instead, read by {@link ModifiedUnifac}.
  *
  * <p>Fields and rules (each refusal names the field):</p>
  * <ul>

@@ -1,6 +1,6 @@
 // Reader for the ChemSep v8.3 pure-component XML (chemsep1.xml, chemsep2.xml) and the ChemSep temperature
 // correlations. Data only: the files are parsed as text, nothing in them is executed.
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const SCALARS = {
@@ -38,10 +38,22 @@ function groups(block, method) {
   return [...m[1].matchAll(/<group id="(\d+)"\s+value="([^"]*)"/g)].map((g) => [Number(g[1]), Number(g[2])]);
 }
 
-/** Every compound of both files, in file order, with its source file name. */
+/** The [id, count] pairs of a group element such as <ModifiedUnifac name="Modified UNIFAC">, or null. */
+function groupElement(block, tag) {
+  const m = block.match(new RegExp('<' + tag + '\\b[^>]*>([\\s\\S]*?)</' + tag + '>'));
+  if (!m) return null;
+  return [...m[1].matchAll(/<group id="(\d+)"\s+value="([^"]*)"/g)].map((g) => [Number(g[1]), Number(g[2])]);
+}
+
+/**
+ * Every compound of both files, in file order, with its source file name. chemsep2.xml may be absent (the groups
+ * extract tmp/dwsim-groups holds chemsep1.xml only); a compound only it gives is then not found by CAS, which
+ * import.mjs refuses.
+ */
 export function readChemSep(dir) {
   const compounds = [];
   for (const file of ['chemsep1.xml', 'chemsep2.xml']) {
+    if (file === 'chemsep2.xml' && !existsSync(join(dir, file))) continue;
     const text = readFileSync(join(dir, file), 'latin1');
     for (const block of text.split('<compound>').slice(1)) {
       const c = { file };
@@ -51,6 +63,8 @@ export function readChemSep(dir) {
       }
       for (const [key, tag] of Object.entries(CORRELATIONS)) c[key] = correlation(block, tag);
       c.ppr78 = groups(block, 'PPR78');
+      // Modified UNIFAC (Dortmund) subgroup numbers and counts (batch 2026-11-11-aqueous-solvents, plan M3).
+      c.modifiedUnifac = groupElement(block, 'ModifiedUnifac');
       compounds.push(c);
     }
   }

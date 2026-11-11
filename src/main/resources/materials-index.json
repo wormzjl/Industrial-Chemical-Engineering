@@ -56,6 +56,8 @@
   "data/icheme/materials/fuels/coal_block.json",
   "data/icheme/materials/fuels/coal_coke.json",
   "data/icheme/materials/fuels/logs.json",
+  "data/icheme/materials/group_interactions/eppr78_2022.json",
+  "data/icheme/materials/group_interactions/modified_unifac_dortmund.json",
   "data/icheme/materials/interactions/dwsim_refinery_pr78.json",
   "data/icheme/materials/interactions/dwsim_refinery_pr78_co2.json",
   "data/icheme/materials/interactions/tjl20.json",

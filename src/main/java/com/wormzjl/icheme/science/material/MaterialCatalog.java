@@ -8,7 +8,44 @@ import static com.wormzjl.icheme.science.material.JsonFields.*;
 
 /** Immutable validated SI database. Resource keys are distinct from plain component IDs. */
 public final class MaterialCatalog {
-    public record Pr78(double criticalTemperature, double criticalPressure, double acentricFactor) {}
+    /**
+     * A dataset's PR78 constants and, from {@code models.pr78.alpha}, its own alpha function ({@code null}: PR78's own
+     * kappa(omega); batch 2026-11-11-aqueous-solvents, plan M5). Read and validated only: no kernel reads {@code alpha}
+     * yet (W1/W2b wire it). A record without one serializes as before, so {@link #physicsContent} does not move for it.
+     */
+    public record Pr78(double criticalTemperature, double criticalPressure, double acentricFactor, MathiasCopeman alpha) {
+        public Pr78(double criticalTemperature, double criticalPressure, double acentricFactor) {
+            this(criticalTemperature, criticalPressure, acentricFactor, null);
+        }
+    }
+    /**
+     * The Mathias-Copeman alpha, {@code {"type": "mathias_copeman", "coefficients": [c1, c2, c3]}} (1 to 3 finite numbers):
+     * {@code alpha = [1 + c1 u + c2 u^2 + c3 u^3]^2}, {@code u = 1 - sqrt(T/Tc)} (for T above Tc the usual form keeps c1 only).
+     */
+    public record MathiasCopeman(List<Double> coefficients) {
+        public static final String TYPE = "mathias_copeman";
+        public MathiasCopeman {
+            coefficients = List.copyOf(coefficients);
+            if (coefficients.isEmpty() || coefficients.size() > 3) throw new IllegalArgumentException("coefficients: expected 1 to 3 numbers, got " + coefficients.size());
+            for (double c : coefficients) if (!Double.isFinite(c)) throw new IllegalArgumentException("coefficients: nonfinite");
+        }
+    }
+    /**
+     * A dataset's (or water model's) group counts for one group scheme, an entry of its optional {@code group_counts}
+     * sub-record (batch 2026-11-11-aqueous-solvents, plan M3): {@code {"<scheme>": {"counts": {group: n}, "estimated",
+     * "source", "revision"}}}, scheme {@value ModifiedUnifac#SCHEME} (names of the catalog's {@link ModifiedUnifac} table) or
+     * {@value Eppr78Groups#SCHEME} (names of {@link Eppr78Groups}). Counts are positive integers. Data for the pairs derived
+     * from group counts (W2b): like {@link Thermochemistry} it has its own revision and is in no identity
+     * ({@link Package#scientificRevision}, {@link #fluidRevision}, {@link #spineRevision}, {@link #physicsContent}) until a
+     * model reads it.
+     */
+    public record GroupCounts(String scheme, Map<String, Integer> counts, boolean estimated, String source, String revision) {
+        public GroupCounts {
+            Objects.requireNonNull(scheme); Objects.requireNonNull(source); Objects.requireNonNull(revision);
+            counts = Collections.unmodifiableMap(new TreeMap<>(counts));
+            if (counts.isEmpty()) throw new IllegalArgumentException("counts: at least one group required");
+        }
+    }
     public record NrtlPair(String first, String second, double a12, double b12, double a21,
             double b21, double alpha, double minimumTemperature, double maximumTemperature) {}
     /**
@@ -173,7 +210,9 @@ public final class MaterialCatalog {
      * {@link MaterialCatalog#fluidRevision}, and the spine and crystal records (the column refuses such packages) record by
      * record in {@link MaterialCatalog#spineRevision}. Assays are compositions, not physics: no identity carries them, and
      * neither do a dataset's freezing, thermochemistry and flammability sub-records ({@link Freezing}, {@link Thermochemistry},
-     * {@link Flammability}), which no model reads yet.</p>
+     * {@link Flammability}), which no model reads yet, nor its {@code group_counts} ({@link GroupCounts}) and
+     * {@code henry_in_water} ({@link HenryConstant}), data for the derived pairs, nor the group tables until a package's rule
+     * resolves a pair from one.</p>
      */
     public record Package(String id, String revision, String model, List<String> components,
             List<Property> properties, List<List<Double>> interactions, List<NrtlPair> nrtlPairs,
@@ -222,12 +261,26 @@ public final class MaterialCatalog {
     private final Map<String, Combustion> combustion;
     /** Each dataset's and water model's formula, from its {@code thermochemistry} sub-record (C, H, N, O, S atoms per molecule), by its record key. */
     private final Map<String, Map<String, Double>> formulas;
+    /**
+     * The group data of batch 2026-11-11-aqueous-solvents (data for the derived pairs, in no identity): each record's
+     * {@code group_counts} by scheme and each gas's {@code henry_in_water}, by record key ({@code properties/<id>},
+     * {@code water/<id>}), and the modified UNIFAC (Dortmund) tables by record id.
+     */
+    private final GroupData groupData;
+    /** See {@link #groupData}. */
+    private record GroupData(Map<String, Map<String, GroupCounts>> counts, Map<String, HenryConstant> henry, Map<String, ModifiedUnifac> tables) {
+        GroupData {
+            var copy = new HashMap<String, Map<String, GroupCounts>>(); counts.forEach((k, v) -> copy.put(k, Map.copyOf(v)));
+            counts = Map.copyOf(copy); henry = Map.copyOf(henry); tables = Map.copyOf(tables);
+        }
+    }
     private MaterialCatalog(Map<String, MaterialName> names, Map<String, Package> packages, Map<String, String> resources,
             Map<String, Map<ViscosityCorrelation.Phase, ViscosityCorrelation>> viscosities, Map<String, String> waterModels,
             Map<String, FluidAppearance> assayAppearances, Map<String, FluidAppearance> componentAppearances, Map<String, LiquidMixtureCorrection> liquidMixtures, MaterialPresets presets, FluidData fluidData,
             Map<String, Validity> propertyValidity, Map<String, Validity> packageValidity,
             Map<String, ReferenceSpine> spines, Map<String, CrystalReference> crystals, Map<String, Combustion> combustion, Map<String, Map<String, Double>> formulas, SolidMaterialCatalog solids,
-            SolidFuelCatalog fuels, Records records, Map<String, Definition> definitions) {
+            SolidFuelCatalog fuels, Records records, Map<String, Definition> definitions, GroupData groupData) {
+        this.groupData = Objects.requireNonNull(groupData);
         this.propertyValidity = Map.copyOf(propertyValidity); this.packageValidity = Map.copyOf(packageValidity);
         this.spines = Map.copyOf(spines); this.crystals = Map.copyOf(crystals); this.combustion = Map.copyOf(combustion); this.formulas = Map.copyOf(formulas);
         this.records=Objects.requireNonNull(records); this.definitions=Map.copyOf(definitions);
@@ -247,7 +300,7 @@ public final class MaterialCatalog {
     /** This catalog with its packages, liquid-mixture corrections and definitions replaced; a view, never published. */
     private MaterialCatalog derived(Map<String, Package> packages, Map<String, LiquidMixtureCorrection> liquidMixtures, Map<String, Definition> definitions) {
         return new MaterialCatalog(names,packages,resources,viscosities,waterModels,assayAppearances,componentAppearances,liquidMixtures,presets,
-                fluidData,propertyValidity,packageValidity,spines,crystals,combustion,formulas,solids,fuels,records,definitions);
+                fluidData,propertyValidity,packageValidity,spines,crystals,combustion,formulas,solids,fuels,records,definitions,groupData);
     }
     public Package requirePackage(String id) {
         Package p = packages.get(id);
@@ -534,9 +587,16 @@ public final class MaterialCatalog {
             var crystal=CrystalReference.read(o); require(names,crystal.component(),"component"); crystals.put(crystal.id(),crystal);
         });
         var matrices = new HashMap<String, GroupInteractionMatrix>();
+        // A group_interactions record is a kij(T) matrix (E-PPR78) or, by its scheme, an activity table (modified UNIFAC).
+        var activityTables = new HashMap<String, ModifiedUnifac>();
         for (var o : group(groups,"group_interactions").values()) checked(origins,o,() -> {
+            if (o.has("scheme") && ModifiedUnifac.SCHEME.equals(o.get("scheme").isJsonPrimitive() ? o.get("scheme").getAsString() : null)) {
+                var table=ModifiedUnifac.read(o); activityTables.put(table.id(),table); return;
+            }
             var matrix=GroupInteractionMatrix.read(o); matrices.put(matrix.id(),matrix);
         });
+        var groupCounts = new HashMap<String, Map<String, GroupCounts>>();
+        var henry = new HashMap<String, HenryConstant>();
         for (var o : group(groups,"properties").values()) checked(origins,o,() -> {
             String id=text(o,"id"), component=text(o,"component"); require(names,component,"component");
             viscosities.put("properties/" + id, readViscosities(o));
@@ -555,7 +615,8 @@ public final class MaterialCatalog {
             for (String model : models.keySet()) if (!model.equals("pr78")) throw new IllegalArgumentException("Unsupported pure-component model: " + model);
             if (models.has("pr78")) {
                 JsonObject p=object(models,"pr78");
-                pr=new Pr78(positive(p,"critical_temperature_kelvin"),positive(p,"critical_pressure_pascal"),number(p,"acentric_factor"));
+                pr=new Pr78(positive(p,"critical_temperature_kelvin"),positive(p,"critical_pressure_pascal"),number(p,"acentric_factor"),
+                        p.has("alpha")?readAlpha(object(p,"alpha")):null);
             }
             double min=positive(o,"temperature_min_kelvin"), max=positive(o,"temperature_max_kelvin"); range(min,max,"temperature");
             Double floor=null;
@@ -581,6 +642,9 @@ public final class MaterialCatalog {
             if (o.has("thermochemistry")) formulas.put("properties/"+id,Map.copyOf(readThermochemistry(object(o,"thermochemistry")).elements()));
             if (o.has("combustion")) combustion.put("properties/"+id,readCombustion(object(o,"combustion")));
             if (o.has("flammability")) readFlammability(object(o,"flammability"));
+            // Data for the derived pairs (batch 2026-11-11-aqueous-solvents), kept apart from the Property: in no identity.
+            if (o.has("group_counts")) groupCounts.put("properties/"+id,readGroupCounts(object(o,"group_counts"),activityTables));
+            if (o.has("henry_in_water")) henry.put("properties/"+id,HenryConstant.read(object(o,"henry_in_water")));
         });
         for (var o : group(groups,"water").values()) checked(origins,o,() -> {
             viscosities.put("water/" + text(o,"id"), readViscosities(o));
@@ -607,6 +671,7 @@ public final class MaterialCatalog {
             range(w.triplePoint(),w.maximumTemperature(),"water enthalpy"); require(names,"Water","component"); waters.put(text(o,"id"),w);
             if (o.has("thermochemistry")) formulas.put("water/"+text(o,"id"),Map.copyOf(readThermochemistry(object(o,"thermochemistry")).elements()));
             if (o.has("combustion")) combustion.put("water/"+text(o,"id"),readCombustion(object(o,"combustion")));
+            if (o.has("group_counts")) groupCounts.put("water/"+text(o,"id"),readGroupCounts(object(o,"group_counts"),activityTables));
         });
         for (var o : group(groups,"interactions").values()) checked(origins,o,() -> validateInteractions(o,names,matrices));
         // A compound's default dataset is one of its own property records.
@@ -651,7 +716,8 @@ public final class MaterialCatalog {
             throw new IllegalArgumentException(record.origin()+": no package holds every compound of assay "+record.id());
         if(packages.isEmpty()) throw new IllegalArgumentException("Material catalog has no packages");
         var result=new MaterialCatalog(names,packages,resources,viscosities,waterModels,assayAppearances,componentAppearances,liquidMixtures,MaterialPresets.read(group(groups,"presets"),group(groups,"networks"),origins,packages,names.keySet()),fluidData,
-                propertyValidity,packageValidity,spines,crystals,combustion,formulas,SolidMaterialCatalog.parse(resources),SolidFuelCatalog.parse(resources),records,definitions);
+                propertyValidity,packageValidity,spines,crystals,combustion,formulas,SolidMaterialCatalog.parse(resources),SolidFuelCatalog.parse(resources),records,definitions,
+                new GroupData(groupCounts,henry,activityTables));
         for(var row:group(groups,"presets").values())if(text(row,"kind").equals("column"))checked(origins,row,()->
                 MaterialRuntime.with(result,text(row,"package"),()->{com.wormzjl.icheme.science.column.v3.V3ColumnProblemResolver.validateInput(result.presets().column(text(row,"id")).input(result));return null;}));
         for(var row:group(groups,"networks").values())checked(origins,row,()->{
@@ -782,6 +848,67 @@ public final class MaterialCatalog {
             return new Flammability(number(o,"lfl_volume_fraction"),o.has("ufl_volume_fraction")?number(o,"ufl_volume_fraction"):null,
                     bool(o,"estimated"),text(o,"source"),revision(o,"revision"));
         } catch (RuntimeException invalid) { throw new IllegalArgumentException("flammability."+invalid.getMessage(),invalid); }
+    }
+    /** A dataset's {@code models.pr78.alpha} ({@link MathiasCopeman}); a refusal names the field. */
+    static MathiasCopeman readAlpha(JsonObject o) {
+        try {
+            String type=text(o,"type");
+            if(!type.equals(MathiasCopeman.TYPE))throw new IllegalArgumentException("type: expected "+MathiasCopeman.TYPE+", got "+type);
+            return new MathiasCopeman(numbers(o,"coefficients"));
+        } catch (RuntimeException invalid) { throw new IllegalArgumentException("models.pr78.alpha."+invalid.getMessage(),invalid); }
+    }
+    /**
+     * A record's {@code group_counts} sub-record ({@link GroupCounts}) by scheme; a refusal names the field. Names of scheme
+     * {@value ModifiedUnifac#SCHEME} must be subgroups of every such table the catalog holds (and it must hold one), names of
+     * {@value Eppr78Groups#SCHEME} groups of {@link Eppr78Groups}.
+     */
+    static Map<String,GroupCounts> readGroupCounts(JsonObject o,Map<String,ModifiedUnifac> tables) {
+        try {
+            if(o.isEmpty())throw new IllegalArgumentException("at least one scheme required");
+            var result=new TreeMap<String,GroupCounts>();
+            for(String scheme:o.keySet()) {
+                try {
+                    JsonObject entry=object(o,scheme),counts=object(entry,"counts");
+                    var map=new TreeMap<String,Integer>();
+                    for(String name:counts.keySet()) {
+                        if(scheme.equals(Eppr78Groups.SCHEME))Eppr78Groups.require(name);
+                        else if(scheme.equals(ModifiedUnifac.SCHEME)) {
+                            if(tables.isEmpty())throw new IllegalArgumentException("counts: no group_interactions record of scheme "+ModifiedUnifac.SCHEME+" names the subgroups");
+                            for(var table:new TreeMap<>(tables).values())if(table.subgroup(name).isEmpty())
+                                throw new IllegalArgumentException("counts: unknown subgroup "+name+" (table "+table.id()+")");
+                        } else throw new IllegalArgumentException("unknown group scheme (expected "+ModifiedUnifac.SCHEME+" or "+Eppr78Groups.SCHEME+")");
+                        var value=counts.get(name);
+                        if(!value.isJsonPrimitive()||!value.getAsJsonPrimitive().isNumber())throw new IllegalArgumentException("counts."+name+": expected a positive integer");
+                        double count=value.getAsDouble();
+                        if(count!=Math.rint(count)||count<1||count>1000)throw new IllegalArgumentException("counts."+name+": expected a positive integer");
+                        map.put(name,(int)count);
+                    }
+                    result.put(scheme,new GroupCounts(scheme,map,bool(entry,"estimated"),text(entry,"source"),revision(entry,"revision")));
+                } catch (RuntimeException invalid) { throw new IllegalArgumentException(scheme+"."+invalid.getMessage(),invalid); }
+            }
+            return result;
+        } catch (RuntimeException invalid) { throw new IllegalArgumentException("group_counts."+invalid.getMessage(),invalid); }
+    }
+    /**
+     * A compound's group counts in a package by scheme: the {@code group_counts} of the dataset the package takes for it, or of
+     * the package's water model for the water; empty where the record has none.
+     */
+    public Map<String,GroupCounts> groupCounts(String packageId,String componentId) {
+        return groupData.counts().getOrDefault(recordKey(packageId,componentId),Map.of());
+    }
+    /** A gas's Henry constant in water in a package: the {@code henry_in_water} of the dataset the package takes for it. */
+    public Optional<HenryConstant> henryInWater(String packageId,String componentId) {
+        return Optional.ofNullable(groupData.henry().get(recordKey(packageId,componentId)));
+    }
+    /** The modified UNIFAC (Dortmund) tables by record id ({@code group_interactions} records of that scheme). */
+    public Map<String,ModifiedUnifac> modifiedUnifacTables() { return groupData.tables(); }
+    /** The record key of a compound of a package: {@code properties/<dataset id>}, or {@code water/<id>} for the water. */
+    private String recordKey(String packageId,String componentId) {
+        var p=requirePackage(packageId);String id=p.canonicalId(Objects.requireNonNull(componentId,"componentId"));
+        int index=p.components().indexOf(id);
+        if(index>=0)return "properties/"+p.properties().get(index).id();
+        if(id.equals("Water"))return "water/"+waterModels.get(packageId);
+        throw new IllegalArgumentException("Component is outside package: "+componentId);
     }
     private static void validateInteractions(JsonObject o,Map<String,MaterialName> names,Map<String,GroupInteractionMatrix> matrices) {
         String model=text(o,"model"); text(o,"source"); revision(o,"revision");

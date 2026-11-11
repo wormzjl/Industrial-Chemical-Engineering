@@ -6,6 +6,7 @@
 // Writes, under <out dir>: components/<file>.json, properties/chemsep_<file>.json, interactions/<pair library>.json,
 // transport/<volume reference>.json, freezing/<record>.json (freezing sub-records for existing datasets),
 // thermochemistry/<record>.json and flammability/<record>.json (for existing datasets; insert-subrecord.mjs writes them in),
+// group_counts/<record>.json and henry_in_water/<record>.json (the same, for groups_only and henry_only entries),
 // lang-en_us.json (suggested English lines) and report.json; prints the fit errors, the pair sources and a
 // cross-check table against the batch data document. Deterministic: fixed ordering, JSON number formatting.
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
@@ -13,6 +14,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readChemSep, evaluate } from './chemsep.mjs';
 import { readKijPr, readDechema, chooseDechema, pairKey } from './pairs.mjs';
+import { groupCountsRecord, readTables } from './groups.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const EXCEPTIONS = JSON.parse(readFileSync(join(HERE, 'pair-exceptions.json'), 'utf8'));
@@ -274,6 +276,30 @@ function flammabilityRecord(e) {
   return tooLong(e.component, record);
 }
 
+// ---------------------------------------------------------------------------------------------------- groups and Henry (aqueous solvents, M3)
+// Every compound gets its group counts with no further step (plan section 8): ChemSep's group numbers are named by the
+// bundled group_interactions records (--materials, else this repository's src/main/resources/data/icheme/materials).
+const groupTables = readTables(materialsDir ?? join(HERE, '..', '..', 'src', 'main', 'resources', 'data', 'icheme', 'materials'));
+const groupRevisions = selection.group_counts_revisions ?? {};
+for (const r of Object.values(groupRevisions)) if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(r)) throw new Error('invalid group_counts revision ' + r);
+/** A compound's group_counts sub-record (groups.mjs), or null; the refused schemes go to the report. */
+function groupCounts(c, component) {
+  const g = groupCountsRecord(c, groupTables, credit, groupRevisions);
+  for (const reason of g.refused) report.group_counts_refused.push(component + ': ' + reason);
+  return g.record;
+}
+/**
+ * A gas's henry_in_water sub-record: the IAPWS G7-04 coefficients A, B, C the entry gives, with the selection's source
+ * text ({entry} is the gas's formula) and revision.
+ */
+function henryRecord(e) {
+  if (!Array.isArray(e.coefficients) || e.coefficients.length !== 3 || !e.coefficients.every(Number.isFinite))
+    throw new Error(e.component + ': henry coefficients must be three finite numbers');
+  if (!selection.henry_source || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(selection.henry_revision ?? '')) throw new Error('henry_source and henry_revision required');
+  return tooLong(e.component, { type: 'iapws_g7_04', coefficients: e.coefficients,
+    source: selection.henry_source.replaceAll('{entry}', e.gas ?? e.component), revision: selection.henry_revision });
+}
+
 /** The saturated liquid at Tr = 0.7: eq. 105 density and eq. 101 vapour pressure, with the PR78 checks. */
 function liquidReference(c) {
   const t = 0.7 * c.tc, p = evaluate(c.psat, t), rho = evaluate(c.rho, t); // Pa, kmol/m3
@@ -313,7 +339,7 @@ if (selection.thermochemistry_only?.length || selection.compounds.some((s) => s.
   for (const r of [selection.thermochemistry_revision, selection.flammability_revision])
     if (!TOKEN.test(r ?? '')) throw new Error('invalid thermochemistry or flammability revision ' + r);
 
-const report = { compounds: [], pairs: [], freezing_only: [], thermochemistry_only: [], notes: [] };
+const report = { compounds: [], pairs: [], freezing_only: [], thermochemistry_only: [], groups_only: [], group_counts_refused: [], henry_only: [], notes: [] };
 const lang = {};
 const references = [];
 // A selection entry may replace ChemSep constants ("constants": {tc, pc, omega, omit: [field], source, freezing_note})
@@ -391,6 +417,10 @@ for (const s of selection.compounds) {
     property.thermochemistry = thermochemistryRecord(c, e);
     if (e.limits) property.flammability = flammabilityRecord(e);
   }
+  // Group counts always (plan section 8); a gas's Henry constant in water when the entry gives its coefficients.
+  const groupRecord = groupCounts(c, s.id);
+  if (groupRecord) property.group_counts = groupRecord;
+  if (s.henry_in_water) property.henry_in_water = henryRecord({ component: s.id, ...s.henry_in_water });
   write(`properties/${propertiesId.replace(/^[a-z0-9_.-]+:/, '')}.json`, property);
 
   references.push({
@@ -426,10 +456,13 @@ if (selection.volume_reference) {
 }
 
 // ---------------------------------------------------------------------------------------------------- pairs (D3)
-const kij = readKijPr(dwsimDir);
-const dechema = readDechema(dwsimDir, byIndex);
+// Pairs involve an imported compound only, so a selection without compounds reads no pair file (the groups extract
+// tmp/dwsim-groups holds none).
+const importing = selection.compounds.length > 0;
+const kij = importing ? readKijPr(dwsimDir) : { values: new Map(), conflicts: [] };
+const dechema = importing ? readDechema(dwsimDir, byIndex) : { entries: [], unmapped: 0, ipd: [] };
 if (kij.conflicts.length) report.notes.push('kij_pr.dat triangle conflicts: ' + kij.conflicts.join('; '));
-report.notes.push(`pr_ip.dat: ${dechema.entries.length} rows, ${dechema.unmapped} name a ChemSep index outside chemsep1/2.xml; `
+if (importing) report.notes.push(`pr_ip.dat: ${dechema.entries.length} rows, ${dechema.unmapped} name a ChemSep index outside chemsep1/2.xml; `
   + `pr.ipd (2009 corrections, cross-check only): ${dechema.ipd.length} rows`);
 const fresh = selection.compounds.map((s) => ({ id: s.id, cas: s.cas, fresh: true }));
 const partners = (selection.existing ?? []).map((e) => ({ id: e.id, cas: e.cas, fresh: false }));
@@ -511,6 +544,18 @@ for (const e of selection.thermochemistry_only ?? []) {
   report.thermochemistry_only.push({ component: e.component, formation_enthalpy_j_per_mol: record.formation_enthalpy_j_per_mol,
     elements: record.elements, lfl: flammability?.lfl_volume_fraction ?? null, ufl: flammability?.ufl_volume_fraction ?? null });
 }
+// Group counts and Henry constants for existing datasets (aqueous solvents, M3), as wrappers for insert-subrecord.mjs.
+for (const e of selection.groups_only ?? []) {
+  const target = { id: e.properties, path: 'properties/' + e.properties_file, component: e.component };
+  const counts = groupCounts(chemsep(e.cas), e.component);
+  if (counts) write(`group_counts/${e.properties_file}`, { ...target, group_counts: counts });
+  report.groups_only.push({ component: e.component, schemes: counts ? Object.fromEntries(Object.entries(counts).map(([k, v]) => [k, v.counts])) : {} });
+}
+for (const e of selection.henry_only ?? []) {
+  const henry = henryRecord(e);
+  write(`henry_in_water/${e.properties_file}`, { id: e.properties, path: 'properties/' + e.properties_file, component: e.component, henry_in_water: henry });
+  report.henry_only.push({ component: e.component, coefficients: henry.coefficients });
+}
 
 write('lang-en_us.json', lang);
 
@@ -562,4 +607,6 @@ console.log(`\nPairs: kij_pr.dat ${counts.kij_pr}, DECHEMA ${counts.dechema}, ow
   + `zero by rule ${counts.zero_rule}, none ${counts.none} (of ${Object.values(counts).reduce((x, y) => x + y, 0)})`);
 for (const p of report.pairs) console.log(`  DECHEMA ${p.pair} = ${p.kij} (${p.range ? p.range.join('..') + ' K' : 'no T'}; ${p.candidates} candidates: ${p.alternatives.map((a) => a.join('@')).join(', ')})`);
 for (const n of report.notes) console.log('Note: ' + n);
+for (const g of report.groups_only) console.log(`Groups ${g.component.padEnd(16)} ${Object.entries(g.schemes).map(([k, v]) => k + ' ' + JSON.stringify(v)).join('; ') || 'none'}`);
+for (const r of report.group_counts_refused) console.log('Group counts refused: ' + r);
 if (lines.length) console.log('\n' + lines.join('\n'));
