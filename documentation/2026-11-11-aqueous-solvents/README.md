@@ -12,6 +12,7 @@ Owner, 2026-11-11: add ethanol to the compound matrix, identify what it affects 
 - [AQUEOUS_SOLVENTS_PLAN.md](AQUEOUS_SOLVENTS_PLAN.md): the measurements, the design (M1 to M7: the Huron-Vidal mixing rule in the PR78 kernel, one water in the equation of state with its own share of enthalpy and volume from IF97, and the free-water rule removed, group counts per compound with every pair derived at load, three fluid phases from the physics, gas solubility in water, hydrocarbons and polar organics), the speed design, work packages W1 to W6.
 - [W3A_ENGINE_PLAN.md](W3A_ENGINE_PLAN.md): the engine with water in the equation of state: the two books of a phase state (equilibrium on the cubic, balances with water's share), three fluid phases as one system, ice as a crystal, the gates.
 - [W3B_NETWORK_PLAN.md](W3B_NETWORK_PLAN.md): the fluid network on that engine: three phase slots on the whole basis in place of the water scalars, one split row per extra phase, ice as a package crystal, the kernel's one rule, the saves, the free-water rule's deletion, the steps and gates.
+- [COOLING_TOWER_PLAN.md](COOLING_TOWER_PLAN.md): the cooling tower as one atmospheric contact (owner, 2026-11-11): the nozzle's let-down, the fill's exchange of every compound with the air, rates, interfaces, tests.
 
 ## History
 
@@ -51,7 +52,7 @@ Changed so far: `science/thermo/PengRobinsonKernel`, `HuronVidalExcess`; `scienc
 ## Open items
 
 - W3b steps 1 to 5 built, with 21 open engine and network defects and the cost step 5b (W3B_NETWORK_PLAN.md sections 10 and 15); steps 6 and 7 not started; W4 to W6 not started.
-- Cooling tower (W3B_NETWORK_PLAN.md section 20; owner, 2026-11-11: "Remove cooling tower composition requirement, allow evaporation of non-water compounds"; "make cooling water saturated with air as well"): approved by the owner ("Approve") as a work package of the running sub-thread, after the kettle and the suction quick check, before the cost timing; not built.
+- Cooling tower (COOLING_TOWER_PLAN.md; owner, 2026-11-11: any liquid, every compound evaporates, the water leaves saturated with air, gas in the stream is removed, one coherent design, worked out in detail): approved as a work package of the running sub-thread; a draft to sections 20 exists uncommitted and is to be brought to the plan; its section 8 lists four choices open to the owner.
 - The flooded regime (W3B_NETWORK_PLAN.md section 25): the kettle is fixed (2aebdcd3c; owner: "Trace the two failures", "Build it, measured": a gas is pinned at a port only when the entering liquid fills the vapour space), but a flooded tank venting through its top saw-tooths between gas-only and liquid steps (`LiquidCo2LetDownTest` passes). The complete form closes a flooded vessel by its vapour volume, implicitly; its own batch.
 - Pump suction rules (W3B_NETWORK_PLAN.md sections 17, 23 to 26): form G is final (69db75057); the vapour lock is measured and kept; three of the four rules are gone. Open: four review points on 69db75057 (one follow-up commit); cold 6, a wall-deadline hold under G only, to the cost work and step 7's campaign; the vapour pressure stays the condensables definition unless the owner chooses the other.
 - A network on a package with a reference spine holds no water since step 5 (only the test package `pilot_cryogenic` is known to be one); to resolve in step 6.
