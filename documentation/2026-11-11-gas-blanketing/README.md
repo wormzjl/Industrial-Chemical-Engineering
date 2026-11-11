@@ -1,6 +1,6 @@
 # 2026-11-11 gas blanketing
 
-Status: in progress since 2026-11-11. Branch `claude/gas-vent-hold`, cut from `8f91ccd11` (the drum-operation-holds tip, which holds the time-factor batch). The pressure safety valve branch is merged in (`e55b0e363`); the branch also carries the batches `2026-11-11-minecraft-time-delta` and `2026-11-11-drum-operation-holds`. Merge preparation 2026-11-11; the final lane, the version and the merge to `main` are still to come.
+Status: implemented 2026-11-11, merged to `main` as 0.27.0. Branch `claude/gas-vent-hold`, cut from `8f91ccd11` (the drum-operation-holds tip, which holds the time-factor batch). The pressure safety valve branch is merged in (`e55b0e363`); the branch also carries the batches `2026-11-11-minecraft-time-delta` and `2026-11-11-drum-operation-holds`. Merge preparation 2026-11-11; the final lane, the version and the merge to `main` are still to come.
 
 Purpose: a gas blanketing valve as an optional accessory on vertical and horizontal drums. It holds the drum's gas pressure at a set value: supply gas in through piping below it, gas out to atmosphere above it. Then a pressure safety valve on drums and pipes, and a flare whose flow follows its back pressure (D6).
 
@@ -25,6 +25,7 @@ Purpose: a gas blanketing valve as an optional accessory on vertical and horizon
 - 2026-11-11, merge preparation: CHANGELOG lines under `[Unreleased]` (the valves under Added, the flare's back pressure under Changed); tool folders `tools/psv-flare/`, `tools/equipment-drawings/`, `tools/heat-gui-renders/` checked (READMEs, index rows); the batch row's purpose in `documentation/INDEX.md` now names the PSV and the flare; nothing left `src/`. What ran after the cleanup: nothing, documents and tools only.
 - 2026-11-11: owner, at the final lane: "allow two running at the same time", "change testing rule as well". `AGENTS.md` and `tools/merge-lane/README.md`: two Gradle runs may overlap, the final lane included; cost by counters, a wall-clock budget hold replayed alone. Then: "no need to record time when not doing performance optimization": time is recorded only in a performance optimization task, and such a run runs alone.
 - 2026-11-11, final lane (sub-thread, Opus high; [FINAL_LANE_REVIEW.md](FINAL_LANE_REVIEW.md)): one `lane.sh head` on `5e5fabf7b`. 3179 tests, **2 failures** (`ShapeRasterizerTest`: a PSV assertion in the blanketing valve's test, `09e106041`; `DeterministicMathSourceTest`: `Math.hypot` in `EquipmentInstruments`, `439a22868`), fixed after the lane in `6a40f319c` (owner: "Approve both"; the F2 reservations of 8768 drum shapes unchanged; 30 classes, 265 tests pass). chain-100 exact, GameTests 93/93, junction lines 33/33 identical, campaign at factor 1 equal to the 0.26.0 lane in clean counts and holds (991, 990, 1000; no new C or F hold). Step 1 (cleanup `f938f923e`): compile and the blanketed level loop pass.
+- 2026-11-11: merged to `main` as 0.27.0 (owner: "Merge as 0.27.0"), with the other two batches of the branch; final lane in [FINAL_LANE_REVIEW.md](FINAL_LANE_REVIEW.md).
 
 ## Documents
 

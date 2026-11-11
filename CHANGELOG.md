@@ -15,6 +15,8 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-11-11
+
 ### Added
 
 - Simulated time at a configurable factor: process time runs `fluid.timeScale` times faster than online time (1 to 72, default 4, read at server start), one conversion of ticks to process seconds (`SimulationTime`), the factor in the model revision and the solved-state checkpoint; the interval's first step, step cap and the junction holdup scale with it (owner "Holdup only"); the column's, the still's and the electric stores' windows count cycles; FE at the play-time rate, fuel and wear on process time with new default lives of 8 h (cavitation) and 40 min (dry running) of process time under `machines.wear.cavitationProcessHours` and `dryProcessMinutes`; status lines and screens say which time they show; a drum level loop GameTest at 4. On the way: a regulating flow valve on a starved supply opens and passes what reaches it, and a level law's first decision acts on the level error alone (owner choice A) (evaluation `8d5e51d4f` to `903280638`; W1 to W5 `c7a0e4ddd`, `6a3642338`, `ad0c21634`, `a64fcc57d`, `93985cfa5`; W6 `e760aa35c`, `583e04781`; fixes `3a3c2c25d`, `0a5034904`; batch `2026-11-11-minecraft-time-delta`).

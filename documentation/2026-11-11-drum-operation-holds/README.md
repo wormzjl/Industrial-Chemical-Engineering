@@ -1,6 +1,6 @@
 # Drum operation holds
 
-Status: **In progress since 2026-11-11**. Branch `claude/nice-archimedes-0816d4`, cut from `claude/minecraft-time-delta-eval-997e82` (`f9a493084`, not merged). Defects 2, 3 and 5 fixed; 4 answered by the gas blanketing valve; 1 open. Its commits merge to `main` on `claude/gas-vent-hold` with the batches `2026-11-11-minecraft-time-delta` and `2026-11-11-gas-blanketing`.
+Status: **Implemented 2026-11-11**, merged to `main` as 0.27.0. Branch `claude/nice-archimedes-0816d4`, cut from `claude/minecraft-time-delta-eval-997e82` (`f9a493084`, not merged). Defects 2, 3 and 5 fixed; 4 answered by the gas blanketing valve; 1 open. Its commits merge to `main` on `claude/gas-vent-hold` with the batches `2026-11-11-minecraft-time-delta` and `2026-11-11-gas-blanketing`.
 
 ## Scope
 
@@ -32,6 +32,7 @@ Owner, 2026-11-11: the drum-operation defects the time-factor batch (`2026-11-11
 - 2026-11-11 (defect 1): (a) reverted (owner "Revert (a), run it"): the hold remained and the held cases' residual rose to 13 570 mol unexplained. Code as at `9af97a3e6`; `rest` kept.
 - 2026-11-11 (defect 1, rig only): the level loop with the outlet void charged as nitrogen (`-Dicheme.levelLoop.gasOutlet=true`) holds the same way, the rows equal to the digit. A void never stands in a line (`donates`), and its state is the ambient nitrogen in either charge. The foot's 30 kPa deficit equals its own bulk (about 510 kg/m3) as a full 6 m column to the void (arithmetic, not run). Defect 1 open.
 - 2026-11-11, merge preparation (on `claude/gas-vent-hold`): CHANGELOG line under `[Unreleased]` (Fixed); `tools/drum-operation-holds/` README and index row checked; nothing left `src/`. What ran after the cleanup: nothing, documents and tools only.
+- 2026-11-11: merged to `main` as 0.27.0 (owner: "Merge as 0.27.0"), with the other two batches of the branch; final lane in [FINAL_LANE_REVIEW.md](../2026-11-11-gas-blanketing/FINAL_LANE_REVIEW.md).
 
 ## Code areas
 

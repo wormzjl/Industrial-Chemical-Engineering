@@ -1,6 +1,6 @@
 # Minecraft time as the simulation step
 
-Status: **In progress since 2026-11-11** (W1-W6 built and measured; W7, the final lane and the merge open). Branch `claude/minecraft-time-delta-eval-997e82`, from `ff6f6892f` (0.26.0); its commits merge to `main` on `claude/gas-vent-hold` with the batches `2026-11-11-drum-operation-holds` and `2026-11-11-gas-blanketing`.
+Status: **Implemented 2026-11-11**, merged to `main` as 0.27.0 (W1-W6 built and measured; W7, the time line of `AGENTS.md`, open). Branch `claude/minecraft-time-delta-eval-997e82`, from `ff6f6892f` (0.26.0); its commits merge to `main` on `claude/gas-vent-hold` with the batches `2026-11-11-drum-operation-holds` and `2026-11-11-gas-blanketing`.
 
 ## Scope
 
@@ -43,6 +43,7 @@ Owner, 2026-11-11: evaluate running the simulation on Minecraft time (72 process
 - 2026-11-11, gas-vent setup hold diagnosed (owner "Diagnose it", no fix; GAS_VENT_HOLD_REVIEW.md): the first run at 4 crashed on the reused review world before the rig (NPE in `IslandCoordinator.certifiedStatus`, kept as `run/review-world/world-crash-147499`), and was repeated on a fresh world (owner choice A). At 4 and at 1 the same cases hold in their first slices after setup: two "worker failure" holds and one substep limit (522 and 521 rejections). The rows are the drum's and the leg foot's balances; the outlet valve is VALVE_OPEN (starved rule) on an empty drum, the foot junction at 70.7 and 71.3 kPa, and the vent carries 1.40 kg/s in. Independent of the time factor. The suite body ran clean at 4 on a fresh world (24.90 to 76.01 %), so the 121 692 residual does not reproduce.
 - 2026-11-11, gas-vent hold without the starved-valve rule (owner "Yes, run it", measure only; GAS_VENT_HOLD_REVIEW.md section 5): one run at 1, `InletPhase.starved` returning false for the run (reverted). The step, the step at the rule feed and the empty cases still hold (all three now "worker failure"); the empty case at the rule feed runs clean (33.19 to 39.96 %). The outlet readings before the holds equal those with the rule. So the defect is on `main` as it stands, and option 1 only changes its form. Finding 3 is not reached.
 - 2026-11-11, merge preparation (on `claude/gas-vent-hold`): CHANGELOG entry under `[Unreleased]`; tool folders `tools/minecraft-time-delta/` and `tools/unified-thermo-port-forms/` checked (README history, index rows); nothing left `src/`. What ran after the cleanup: nothing, documents and tools only.
+- 2026-11-11: merged to `main` as 0.27.0 (owner: "Merge as 0.27.0"), with the other two batches of the branch; final lane in [FINAL_LANE_REVIEW.md](../2026-11-11-gas-blanketing/FINAL_LANE_REVIEW.md).
 
 ## Code areas
 
