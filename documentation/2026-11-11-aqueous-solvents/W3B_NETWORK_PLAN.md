@@ -254,3 +254,34 @@ The sub-thread's questions and the orchestrator's answers, in one place. Each wa
 8. **Not in these steps:** nitrogen with ethane at 125 K (an unstable two-slot product handed to the three-slot system); the kernel optimisation and water's share below saturation pressure (step 5b, after the tests pass); which compounds take activity fits with hydrocarbons (the owner's).
 9. **Hot steam with hydrocarbons** (15 water-hydrocarbon activity pairs refused in the kernel from 780 K: the cell on water's centre is held flat while water's own term falls with temperature). A local-composition cell's energy fades to zero between 0.75 T* and T*, T* the highest critical temperature among the pair's polar compounds (water 647.096 K), by a quintic that keeps the energy and its first two temperature derivatives continuous. Above T* the pair is classical, so the mixture attraction is nonnegative at every composition. Below 0.75 T* (485 K for water) nothing moves. Activity cells only; the classical linear pairs keep their hold. Built since item 8 was written: items 4 to 7 (the refinery record is back at r3 with water supplied by the model; Henry pairs with k(T), nitrogen -0.636 at 298 K and -0.387 at 373 K, `derived-pairs-r5`; ice under oil answers gas, oil and supercooled water; 1344 dry CO2 carried states bit for bit unchanged).
    - **Corrected the same day.** The window 0.75 T* to T* (162 K for water) put the fade's curvature into the heat capacity: -171 J/mol/K for water with ethanol at 20 to 30 MPa (refused from 599 to 620 K at 30 MPa), -326 J/mol/K in a pilot state at 630 K and 25 MPa. The window is now the fitted end (373.15 K) to 1.25 T* (808.9 K for water): the curvature is about seven times smaller (-22.5 and -35.5 J/mol/K measured), every state is valid and the scan still has no refusal; above 780 K the factor is below 0.01. Cost: liquids between 373 and 485 K move (water in n-hexane at 450 K 0.0101 to 0.0128, n-hexane in water 9.11e-5 to 8.88e-5). Nothing moves below 373.15 K. Water now dissolves in hot oil (0.26 % of the water at 600 K and 5 bar); two network pins that said "all steam" are re-recorded.
+
+## 15. Result of steps 3 to 5 (2026-11-11)
+
+Commits: `58376e618` (main code), `9c3a23ffb`, `fa0a292f3`, `402b1bf86`, `65828c650` (test migration, engine fixes, section 14 items 4 to 9). The sub-thread's report and lists are in `tmp/w3b-network/` (local). Checked by the orchestrator: no package record differs from main; facts schema 21 and checkpoint format 46 are unchanged; the refinery package is at its earlier revision.
+
+**State of the tests.** Filtered runs: thermo, material and the named network classes 431 tests, 2 failing; network, runtime, flowsheet and client groups 1948 tests, 28 failing. Of the 30, 9 belong to step 6 (checkpoint decode, restate, flowsheet callers) and 21 are open engine and network defects: pumps (6), port priority (3), inlet phase (2), a bulk three-phase transfer that leaves a component behind, a solids-only vessel, a kettle's boil-up (8.14 against 0.443 kg/s), a turbine exhaust that is not wet, the melting line on a UV step (5 mK), a stand-in left after a refresh, three tolerance pins. Steps 3 to 5 are not done until these pass.
+
+| Gate (section 5) | Measured |
+|---|---|
+| n-Hexane in water, water in n-hexane, 25 C | 2.095e-6, 9.48e-4 |
+| CO2 over water | 1.001 of its Henry value |
+| Ethanol and water heated through the bubble point | one liquid |
+| Ethanol added to water under hexane | moves between the liquids, no hold |
+| Ice under oil over water at 263 K | gas, oil, supercooled water; melts on the lever step |
+| A dry island's layout | 42 unknowns, as today |
+| A single liquid crossing half water | relabels without a phase event |
+
+**Numbers.**
+- Engine cost, kernel evaluations per TP answer, before and after: dry 87, 87; water with n-hexane 109, 119; ethanol with water 52, 52; the ternary 282, 287; its bubble point 509, 519; water with a cut 112, 117.
+- Gas in water against IAPWS G7-04 at 273, 323, 423, 473 K (exact at 298 and 373 K), old form then new: nitrogen 1.26, 0.92, 1.21, 1.27 then 1.11, 0.97, 1.01, 0.85; methane 1.27, 0.92, 1.22, 1.32 then 1.16, 0.96, 1.04, 0.87; carbon dioxide 1.20, 0.94, 1.16, 1.23 then 1.11, 0.97, 1.04, 0.96. Carbon dioxide in water at 5 MPa: 17 % high before, 11 % now.
+- Water content of nitrogen at 10 MPa: 1.118e-3 before, 1.180e-3 now at 298 K (ideal 3.17e-4); 1.787e-2, 1.853e-2 at 373 K. At 1 atm within 1.5 % of ideal in both forms.
+- The fade: water with ethanol at 3 bar unchanged (383.63 K), at 10 bar 425.97 to 426.16 K; water in n-hexane at 450 K 0.0101 to 0.0128. Water dissolves in hot oil: 0.36 mol of 30 at 550 K, 11.9 at 700 K and 5 bar.
+- 1344 dry CO2 carried states bit for bit unchanged.
+
+**Deviations and limits.**
+- Facts and checkpoints still write the earlier fields through an adapter (`legacySplit`): compounds in any liquid, water in any liquid, water in the gas. Amounts are exact; on load the two come back as two liquids, and a gas dissolved in water alone decodes as an oil of pure gas and is refused ("Liquid root absent"). Step 6 rebuilds the state from the amounts instead.
+- A network on a package with a reference spine holds no water (test package `pilot_cryogenic`); its wet tests were moved to the refinery or removed. To be reported: which main packages this touches.
+- A dry list with gas and two dense products under carrying still gets today's answer (two fluid slots).
+- Tests removed, each with its reason in the lists file: the bit-for-bit pin of the old dry path, the partial-pressure box, two free-water rule tests, the virial steam's network state, the crude-trace fold in a water-full vessel, one pilot refresh.
+
+Next, in the same sub-thread: the 21 defects group by group (conservation first), then step 5b; steps 6 and 7 after that.
