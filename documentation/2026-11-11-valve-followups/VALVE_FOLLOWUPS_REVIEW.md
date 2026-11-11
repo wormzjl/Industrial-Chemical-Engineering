@@ -23,7 +23,7 @@ Branch `claude/valve-followups-build-e04fd4` from `178d7e2f4`. One commit per it
 - **Numbers** (drum set 300 kPa, 5 bar feed; drum pressure, relief): burners 0.5 kg/s 495.5 kPa, 0.500 kg/s; burners 3 kg/s 300.0 kPa, 1.111 kg/s; blanketed drum drawn 0.3 kg/s 498.4 kPa, 0.292 kg/s; drawn 3 kg/s 300 kPa, 1.11 kg/s; compressor 0.05 m³/s 498.6 kPa, 0.270 kg/s; 1 m³/s 300.0 kPa, 1.111 kg/s. All six clean.
 - **Ran.** 17 classes (148 tests); `holdGates` `HoldClassWorldsTest` and `JunctionSeedingGateTest` (48 tests).
 
-## 4. Solids block on a relief run into a flare (`504f5100b`)
+## 4. Solids block on a relief run into a flare (`7e8ed0a8c`)
 - **Expected.** Solids plug the tip (X5), so nothing reaches the flare and the drum rises above set.
 - **Code.** The flare's plan covered only its own tip valve. A safety valve's single line (D6) had no block.
 - **Fix.** `Flares.plans` plans that line too.
