@@ -165,7 +165,7 @@ public final class LevelLoopStepProbe {
                     var tank = world.view(state.drum).tank();
                     state.capacity = tank.capacity();
                     state.cycle = time.seconds(cadence);
-                    state.feed = four ? FEED_AT_4 : state.capacity / (CYCLES * state.cycle) * DENSITY;
+                    state.feed = four ? FEED_AT_4 : state.capacity / (Integer.getInteger("icheme.levelLoop.cycles", CYCLES) * state.cycle) * DENSITY;
                     state.operator = ControlLoopGameTests.operator(level, state.lic);
                     double first = empty ? state.feed : FILL * state.feed;
                     var old = world.registrations().get(feedValveId);

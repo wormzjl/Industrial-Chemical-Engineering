@@ -56,7 +56,7 @@ Forms A and B of the review are `-PprobeTimeScale=72` alone and with `-PprobeMax
 ## Entry points
 
 - `run.sh` and `study.sh` (with `patches/probe-time-scale.patch` applied), `factor.sh`, `level-loop/run.sh`; the JUnit rigs under `worlds/` through `worlds/worlds.init.gradle`.
-- In `src/`: the gates these runs reuse are `LevelLoopGameTests` (fluid GameTests; its `run(helper)` reads the switches `icheme.levelLoop.cycles`, `.blanket` and `.direct`, which only `level-loop/run.sh` sets) and the hold-fuzz harnesses of `tools/unified-thermo-port-forms/` (`-PholdFuzzTimeScale`). Nothing of this folder is in a gate.
+- In `src/`: the gates these runs reuse are `LevelLoopGameTests` (fluid GameTests; the gates call `run(helper, cycles, blanket, direct)` with fixed arguments, and `level-loop/src/.../LevelLoopFactorRun.java` reads the switches `icheme.levelLoop.cycles`, `.blanket` and `.direct` that `level-loop/run.sh` sets) and the hold-fuzz harnesses of `tools/unified-thermo-port-forms/` (`-PholdFuzzTimeScale`). Nothing of this folder is in a gate.
 
 ## History
 
@@ -66,3 +66,4 @@ Forms A and B of the review are `-PprobeTimeScale=72` alone and with `-PprobeMax
 - 2026-11-11 (batch `2026-11-11-drum-operation-holds`): `LevelLoopStepProbe` switches `generatorVent` and `gasOutlet` for the gas-vent hold (GAS_VENT_HOLD_REVIEW.md, GAS_VENT_REVIEW.md).
 - 2026-11-11 (batch `2026-11-11-gas-blanketing`): `level-loop/run.sh` takes `LEVEL_LOOP_TAG` and the rig's switches `-Dicheme.levelLoop.blanket=true` and `-Dicheme.levelLoop.direct=true` (GAS_BLANKET_REVIEW.md).
 - 2026-11-11, merge preparation: checked; no code left `src/`. Run reports stay in the worktree's git-ignored `tmp/time-scale/`; their summary lines are in `results/`.
+- 2026-11-11, merge preparation: the level loop's switches leave `src/`. `LevelLoopGameTests.run` takes the cycle count as an argument (the gates: 2, plain and blanketed); `LevelLoopFactorRun` reads `icheme.levelLoop.cycles`, `.blanket` and `.direct`, and `LevelLoopStepProbe` reads `icheme.levelLoop.cycles` for its rule feed. `run.sh` and the init script are unchanged.

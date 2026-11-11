@@ -55,8 +55,8 @@ import java.util.*;
 public final class LevelLoopGameTests {
     private LevelLoopGameTests() {}
 
-    /** Control cycles of the feed the drum holds (owner T5: two); a tool run may set {@code icheme.levelLoop.cycles}. */
-    static final int CYCLES = Integer.getInteger("icheme.levelLoop.cycles", 2);
+    /** Control cycles of the feed the drum holds in the gates (owner T5: two); a tool run passes its own count. */
+    static final int CYCLES = 2;
     static final int HALF = 15;
     /** The setpoint and its band, %; the fill's level, % (the start), and its feed, a share of the design feed; empty (1 %) and overflowing (99 %). */
     static final double SETPOINT = 50, BAND = 10, FILLED = 25, FILL = .1, LOW = 1, HIGH = 99;
@@ -67,18 +67,18 @@ public final class LevelLoopGameTests {
 
     @GameTest(template = "empty", timeoutTicks = 20000, batch = "level-loop")
     public static void aDrumOfTwoCyclesHoldsItsLevelOnTheCadence(GameTestHelper helper) {
-        run(helper);
+        run(helper, CYCLES, false, false);
     }
 
     /**
      * The same loop on a drum with a gas blanketing valve (batch 2026-11-11-gas-blanketing): no vent line; the valve on the
      * drum's top flange, its inlet on a 3 bar nitrogen line, pads and vents the drum's gas. The same fill, ramp and loop.
-     * (From empty on the design feed, {@code icheme.levelLoop.direct}, the drum overfills before its level controller reads
+     * (From empty on the design feed, {@code direct} in the tool's run, the drum overfills before its level controller reads
      * it, and draining it wide open holds: open, GAS_BLANKET_REVIEW.md.)
      */
     @GameTest(template = "empty", timeoutTicks = 20000, batch = "level-loop-blanket")
     public static void aBlanketedDrumOfTwoCyclesHoldsItsLevelOnTheCadence(GameTestHelper helper) {
-        run(helper, true, false);
+        run(helper, CYCLES, true, false);
     }
 
     /** One line of the run's record, for the log and the batch's review. */
@@ -86,14 +86,11 @@ public final class LevelLoopGameTests {
         IChemE.LOGGER.info("level_loop " + format, args);
     }
 
-    /** The loop as the tool's switches set it: {@code icheme.levelLoop.blanket} (a blanketed drum), {@code icheme.levelLoop.direct} (from empty on the design feed). */
-    static void run(GameTestHelper helper) {
-        run(helper, Boolean.getBoolean("icheme.levelLoop.blanket"), Boolean.getBoolean("icheme.levelLoop.direct"));
-    }
-
-    static void run(GameTestHelper helper, boolean blanket, boolean direct) {
+    /** The loop on a drum holding {@code cycles} control cycles of its feed; {@code blanket}: a blanketed drum; {@code direct}: from empty on the design feed. */
+    static void run(GameTestHelper helper, int cycles, boolean blanket, boolean direct) {
         var plant = new AssemblyGameTests.Plant(helper, helper.absolutePos(new BlockPos(8, 4, 8)), new BlockPos(-8, -3, -8), new BlockPos(16, 24, 16));
         var state = new State();
+        state.cycles = cycles;
         state.blanket = blanket;
         state.direct = direct;
         try {
@@ -240,7 +237,7 @@ public final class LevelLoopGameTests {
                     state.capacity = tank.capacity();
                     state.span = tank.levelHeight();
                     state.cycle = time.seconds(cadence);
-                    state.feed = state.capacity / (CYCLES * state.cycle) * DENSITY;
+                    state.feed = state.capacity / (state.cycles * state.cycle) * DENSITY;
                     state.operator = ControlLoopGameTests.operator(level, state.lic);
                     // The feed valve's own law holds the fill's flow, and the generator goes to 3 bar, in one edit before the
                     // loops: no topology edit follows (an edit recompiles the island, and the slice after one, 6 min of process
@@ -262,7 +259,7 @@ public final class LevelLoopGameTests {
                     state.ficWatcher = ControlLoopGameTests.operator(level, state.fic);
                     ControlPanelMenu.open(state.ficWatcher.player, state.fic);
                     state.applied = world.onlineTick();
-                    log("start factor={} capacity={} m3 height={} m cycle={} s cycles={} feed={} kg/s blanket={} direct={}", time.factor(), fmt(state.capacity), fmt(state.span), fmt(state.cycle), CYCLES, fmt(state.feed), state.blanket, state.direct);
+                    log("start factor={} capacity={} m3 height={} m cycle={} s cycles={} feed={} kg/s blanket={} direct={}", time.factor(), fmt(state.capacity), fmt(state.span), fmt(state.cycle), state.cycles, fmt(state.feed), state.blanket, state.direct);
                 }))
                 // Both loops CONTROLLING on their menus and a cadence more.
                 .thenWaitUntil(until(helper, world, state, 2400, "waiting for both loops to control", () -> {
@@ -366,7 +363,7 @@ public final class LevelLoopGameTests {
                     if (state.watcher != null) state.watcher.player.closeContainer();
                     if (state.ficWatcher != null) state.ficWatcher.player.closeContainer();
                     log("result factor={} cycles={} blanket={} direct={} pressure={} to {} Pa low={} % high={} % levelAtStep={} % levelAtEnd={} % held={} failure={} molesResidual={} mol of {} mol energyResidual={} J of {} J intervals={} ticks={} unread={} setupResidual={} mol {} J",
-                            time.factor(), CYCLES, state.blanket, state.direct, fmt(state.lowPressure), fmt(state.highPressure), fmt(state.low), fmt(state.high), fmt(state.firstHalf), fmt(state.secondHalf), state.held, state.failure,
+                            time.factor(), state.cycles, state.blanket, state.direct, fmt(state.lowPressure), fmt(state.highPressure), fmt(state.low), fmt(state.high), fmt(state.firstHalf), fmt(state.secondHalf), state.held, state.failure,
                             fmt(state.massResidual), fmt(state.massThrough), fmt(state.energyResidual), fmt(state.energyThrough), state.intervals, world.onlineTick() - state.applied, state.unread, fmt(state.setupMoles), fmt(state.setupEnergy));
                     plant.remove();
                 })
@@ -419,6 +416,8 @@ public final class LevelLoopGameTests {
         /** The flow controller's revision when the pending ramp step was requested, or -1 with none pending. */
         long rampRevision = -1;
         int ramp;
+        /** Control cycles of the feed the drum holds. */
+        int cycles = CYCLES;
         /** The book's residual over the setup (valves, lines, specs recompiling the island), mol and J: reported, not checked. */
         double setupMoles, setupEnergy;
         double capacity, span, cycle, feed, low = Double.POSITIVE_INFINITY, high = Double.NEGATIVE_INFINITY, firstHalf = Double.NaN, secondHalf = Double.NaN;
