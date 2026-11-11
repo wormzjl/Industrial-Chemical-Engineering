@@ -90,17 +90,25 @@ public final class LevelLoopStepProbe {
         for (var v : plant.valves.entrySet()) plant.install(v.getKey(), v.getValue());
         long generatorId = id(plant, generator), outletId = id(plant, outlet.getLast()), ventId = id(plant, vent.getLast());
         TankCharge.run(world, generatorId, new FluidDeviceSpec(1, 300, 101_325 - 6 * 9.81 * DENSITY, water));
-        TankCharge.run(world, outletId, new FluidDeviceSpec(1, 300, 101_325, water));
+        // -Dicheme.levelLoop.gasOutlet=true (batch 2026-11-11-drum-operation-holds, the void-column run): the outlet void is
+        // charged as 1 atm nitrogen instead of water. Off: the suite's water.
+        TankCharge.run(world, outletId, new FluidDeviceSpec(1, 300, 101_325, Boolean.getBoolean("icheme.levelLoop.gasOutlet") ? FluidDeviceSpec.nitrogen(MaterialRuntime.active()).composition() : water));
         TankCharge.run(world, ventId, new FluidDeviceSpec(1, 300, 101_325, FluidDeviceSpec.nitrogen(MaterialRuntime.active()).composition()));
         long feedValveId = id(plant, feedValve), levelValveId = id(plant, levelValve);
         long cadence = ControlService.CADENCE;
         // Option 2's timing (owner "Options 1 and 2"): the level valve's target in each accepted slice of the drum's island, with
         // the slice's start, end and dispatch ticks, logged when it changes; and at each control cadence the online tick and the
         // drum view's committed tick, the reading the level law decides on.
-        double[] lastTarget = {Double.NaN};long[] lastDecision = {-1};int[] lines = {0};
+        double[] lastTarget = {Double.NaN};long[] lastDecision = {-1};int[] lines = {0}, nodeLines = {0};
         world.observe((changed, timings) -> {
             state.published(changed, timings);
             if (state.drum == 0 || lines[0] > 120) return;
+            for (var island : changed) {
+                if (nodeLines[0] >= 12 || island.graph().reservoirs().stream().noneMatch(r -> r.id() == state.drum)) continue;
+                var m = timings.get(island.id());if (m == null || !m.accepted()) continue;nodeLines[0]++;
+                var b = new StringBuilder();for (var r : island.graph().reservoirs()) b.append(' ').append(r.kind()).append('@').append(fmt(r.elevation())).append('=').append(fmt(r.state().pressure())).append("Pa/").append(fmt(r.state().mass())).append("kg");
+                log("probe nodes {} tick={} slice end={}{}", label, world.onlineTick(), m.endTick(), b);
+            }
             for (var island : changed) {
                 if (island.graph().reservoirs().stream().noneMatch(r -> r.id() == state.drum)) continue;
                 var m = timings.get(island.id());

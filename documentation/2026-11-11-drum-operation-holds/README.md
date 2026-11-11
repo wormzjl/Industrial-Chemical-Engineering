@@ -30,6 +30,7 @@ Owner, 2026-11-11: the drum-operation defects the time-factor batch (`2026-11-11
 - 2026-11-11 (defect 1): (d) reverted (owner "Revert (d), build (a)"): no gate test, the hold remained, a failed step cost more passes. `PassiveStepSolver` as at `9af97a3e6`.
 - 2026-11-11 (defect 1, option (a), owner "Revert (d), build (a)"): the mint's sweep does not pass an empty vessel's bottom port; a junction there takes the gas reaching the vessel (amends D55). `JunctionStartFormTest` gate fails with it disabled (55.5 mol of water at the foot). 49 changed-class tests, hold gates 58, chain-100 exact, the 33 junction lines equal. Level loop on the gas vent still holds (46 the same substep limit, 23 and 69 round deadline); the probed rows equal the time-delta dump: the failing state is the island's own, not the mint's. `DropLegColdStartTest` passes without `rest` under (a). Quick check not run (`e09e9943b`).
 - 2026-11-11 (defect 1): (a) reverted (owner "Revert (a), run it"): the hold remained and the held cases' residual rose to 13 570 mol unexplained. Code as at `9af97a3e6`; `rest` kept.
+- 2026-11-11 (defect 1, rig only): the level loop with the outlet void charged as nitrogen (`-Dicheme.levelLoop.gasOutlet=true`) holds the same way, the rows equal to the digit. A void never stands in a line (`donates`), and its state is the ambient nitrogen in either charge. The foot's 30 kPa deficit equals its own bulk (about 510 kg/m3) as a full 6 m column to the void (arithmetic, not run). Defect 1 open.
 
 ## Code areas
 
@@ -37,7 +38,8 @@ Owner, 2026-11-11: the drum-operation defects the time-factor batch (`2026-11-11
 
 ## Open items
 
-- Defect 1: the void-column run (owner "Revert (a), run it"), in progress.
+- Defect 1 open: the gas-vent setup hold (GAS_VENT_REVIEW.md, rows). Lead, not verified: the foot's BULK column fills the whole 6 m line to the void whatever the 1 L foot holds.
+- Close-out: the 200-seed quick check at factor 1 on the final code stands (`dh2`, on `9af97a3e6`; `src/` is unchanged since). Then the owner's merge steps.
 - Not explained: the held cases' 1.357e4 mol residual under (a) (reverted).
 - Owner: defect 4, option (A), (B) or (C) for the rig; recommended (A), after defect 1. `LevelLoopGameTests` keeps its fill at a tenth and its ramp until then.
 - Not run: the fluid and column GameTests (the final lane's); the kept crash world `world-crash-147499` (the JUnit reproduces its stack).
