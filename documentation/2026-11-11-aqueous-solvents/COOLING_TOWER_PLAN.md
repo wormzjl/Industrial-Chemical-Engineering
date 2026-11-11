@@ -99,3 +99,30 @@ Each with the per-component and energy ledgers closed at 1e-12; expected values 
 - Gas and vapour released at the nozzle do not change the draught (they join the air above the fill). Effect: none on the fill; the stack's buoyancy is slightly off for a stream that is mostly gas.
 - The basin's surface exchanges no mass, as on main.
 - Two meters on the device screen instead of one list per compound.
+
+## 9. Built (f958b4b90, faf419a4c; 2026-11-12)
+
+The sub-thread built sections 3 to 7; the orchestrator read both commits against this plan. Measured by its tests (expected values derived, ledgers closed per component):
+
+| Case | Result | Section 1's hand estimate |
+|---|---|---|
+| Water references | within 0.04 K and 1.8 % of main's; the calibration point exact | 0.15 % |
+| 10 mol % ethanol at 35 C | ethanol leaves 1.50 times water by moles | 0.9 (4.6 against 5.2 kPa: the estimate's ethanol activity was low) |
+| Air-free water | leaves with 9.57e-6 nitrogen and 5.08e-6 oxygen, within 1 % of the model's own Henry values; no gas phase in the basin | 8.8e-6, 4.7e-6 |
+| Two-phase stream | all its gas leaves; none through a liquid port | as planned |
+| Water at 380 K | nozzle at 373.63 K, 1.13 % vapour (engine: 373.10 K, 1.29 %) | 1.3 % |
+| Methane-saturated water, 10 bar | 89.8 % at the nozzle, 98.9 % in all | 90 %, 95 to 98 % |
+| Carbon dioxide at 303 and 305 K | duty within 0.5 % | no jump |
+| n-hexane | water gain at or below equilibrium | as planned |
+
+Cost: `TowerExchange.at` 35.6 to 67 us per call (2 kernel calls per liquid slot; the rest is the table's searches); the tower network's step 0.91 to 1.02..1.15 ms. Checkpoint format 47 (state). No facts change: the ledger already books per component.
+
+Decided by the orchestrator (owner: "auto proceed"):
+
+- **The table stays two readings** (the sub-thread's option a). The nozzle's error at 380 K (0.5 K, 13 % of the flash vapour) moves heat between the nozzle and the fill, not out of the balance: the fill starts at the table's own boiling point, so the two stages agree with each other, and the basin's temperature comes from its own energy balance. A third reading costs half again per call for every tower, flashing or not; reading it only for a flashing feed puts a switch into a Newton residual. At 450 K (hand) the error grows to about 2 K and 6 % of the flash.
+
+Open in the code (one follow-up commit):
+
+- `TowerTransfer.second`: the second reading jumps from 291 K to `inlet - 10` where the inlet is within 5 K of 291 K. The table then jumps by 1e-4 to 4e-4 in the partial pressures (hand) at an inlet of 286 K and of 296 K, the range of a lightly loaded tower. To be made smooth: `inlet - sqrt((inlet - 291)^2 + 10^2)`.
+- `Stream.bulk`: the liquid's enthalpy is the state's less the gas's, so it holds the solids' enthalpy. It is read only where the liquid has no liquid root at the atmosphere (the whole liquid then leaves with the air); the solids' enthalpy then leaves with it while the solids fall to the basin.
+- `PassiveStepSolver.endPressure`: a spray end's riser is weighed with water's density outside the residual (start guesses, the observed pressures); the residual reads the incoming column's. For an oil the observed pressure at the spray end is off by up to 15 kPa on a 5 m riser. With step 6's presentation work.
