@@ -2,6 +2,8 @@ package com.wormzjl.icheme.science.thermo;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.math.BigDecimal;
+import java.math.MathContext;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -718,7 +720,10 @@ class PengRobinsonKernelHuronVidalTest {
 
         Oracle(Mixture mixture, double t, double[] raw) { this(mixture, t, raw, false); }
 
-        Oracle(Mixture mixture, double t, double[] raw, boolean literature) {
+        Oracle(Mixture mixture, double t, double[] raw, boolean literature) { this(mixture, t, raw, literature, false); }
+
+        /** {@code extended}: the rule's sums in 50-digit decimal arithmetic on the same double energies and G. */
+        Oracle(Mixture mixture, double t, double[] raw, boolean literature, boolean extended) {
             this.literature = literature;
             this.mixture = mixture;
             this.t = t;
@@ -734,6 +739,41 @@ class PengRobinsonKernelHuronVidalTest {
                         : u < 0.0 ? 1.0 + c[0] * u : 1.0 + c[0] * u + c[1] * u * u + c[2] * u * u * u;
                 ai[i] = 0.45724 * R * R * tc * tc / mixture.pc[i] * s * s;
                 bi[i] = 0.07780 * R * tc / mixture.pc[i];
+            }
+            if (extended) {
+                MathContext digits = new MathContext(50);
+                BigDecimal[] bsn = new BigDecimal[n], bdn = new BigDecimal[n];
+                for (int i = 0; i < n; i++) {
+                    bsn[i] = BigDecimal.ZERO;
+                    bdn[i] = BigDecimal.ZERO;
+                    for (int j = 0; j < n; j++) {
+                        BigDecimal w = new BigDecimal(x[j]).multiply(new BigDecimal(bi[j]), digits).multiply(new BigDecimal(g(j, i)), digits);
+                        bsn[i] = bsn[i].add(w.multiply(new BigDecimal(tau(j, i)), digits), digits);
+                        bdn[i] = bdn[i].add(w, digits);
+                    }
+                }
+                logGamma = new double[n];
+                BigDecimal bge = BigDecimal.ZERO;
+                double bm = 0.0, linear = 0.0;
+                for (int k = 0; k < n; k++) {
+                    BigDecimal thetaK = bsn[k].divide(bdn[k], digits);
+                    BigDecimal v = thetaK;
+                    for (int i = 0; i < n; i++) {
+                        if (x[i] == 0.0) continue;
+                        BigDecimal thetaI = bsn[i].divide(bdn[i], digits);
+                        BigDecimal term = new BigDecimal(x[i]).multiply(new BigDecimal(bi[k]), digits).multiply(new BigDecimal(g(k, i)), digits)
+                                .multiply(new BigDecimal(tau(k, i)).subtract(thetaI, digits), digits).divide(bdn[i], digits);
+                        v = v.add(term, digits);
+                    }
+                    logGamma[k] = v.doubleValue();
+                    bge = bge.add(new BigDecimal(x[k]).multiply(thetaK, digits), digits);
+                    bm += x[k] * bi[k];
+                    linear += x[k] * ai[k] / bi[k];
+                }
+                excess = bge.doubleValue();
+                b = bm;
+                a = bm * (linear - R * t * excess / LAMBDA);
+                return;
             }
             double[] sn = new double[n];
             double[] dn = new double[n];
@@ -829,6 +869,84 @@ class PengRobinsonKernelHuronVidalTest {
     }
 
     // ---------------------------------------------------------------------------------------------------------------
+
+    /**
+     * W3B_NETWORK_PLAN.md section 11: a centre whose cell partners hold nearly all of {@code b} with a small {@code G}
+     * (water around a heavy cut, {@code dg} 512.8 kJ/mol at 298 K and alpha 0.1675: {@code G} near 1e-15) has its
+     * classical part formed directly over its non-partners. In four phases (pure water with the cut and hexane absent,
+     * water with their traces, the cut's oil, a hexane-rich phase) at three states and both roots, ln phi agrees to
+     * 1e-12 with the plain sums {@code sum_j x_j b_j G_ji} of the rule taken in 50-digit decimal arithmetic.
+     */
+    @Test void aCentreAmongDominantPartnersAgreesWithThePlainSumsInExtendedPrecision() {
+        double[][] k = new double[3][3];
+        set(k, 0, 2, 0.5);
+        var mixture = new Mixture("water-heavy cut-hexane", new double[] {647.096, 850.0, 507.6}, new double[] {22.064e6, 1.3e6, 3.025e6},
+                new double[] {0.3443, 0.9, 0.301}, new double[][] {WATER_ALPHA, null, null},
+                List.of(new Nrtl(0, 1, 0.1675, 298.15, 512800.0, 19058.3, 373.15, 324300.0, 22381.0)), k,
+                List.of(new double[] {1.0, 0.0, 0.0}, new double[] {1.0 - 1.0e-9 - 1.0e-6, 1.0e-9, 1.0e-6},
+                        new double[] {1.0e-3, 0.5, 0.499}, new double[] {0.05, 1.0e-7, 0.95}));
+        var kernel = mixture.kernel();
+        var workspace = kernel.newWorkspace();
+        var output = kernel.newEvaluation();
+        double worst = 0.0;
+        int compared = 0;
+        for (double[] state : new double[][] {{298.15, 1.0e5}, {373.15, 1.0e5}, {450.0, 3.0e7}}) {
+            for (double[] x : mixture.compositions) {
+                for (PengRobinsonKernel.Root root : PengRobinsonKernel.Root.values()) {
+                    kernel.evaluate(state[0], state[1], x, root, workspace, output);
+                    var oracle = new Oracle(mixture, state[0], x, false, true);
+                    double[] expected = oracle.logPhi(state[1], output.compressibility());
+                    for (int i = 0; i < 3; i++) {
+                        double actual = output.logFugacityCoefficient(i);
+                        assertTrue(Double.isFinite(actual), "finite ln phi_" + i);
+                        double deviation = Math.abs(actual - expected[i]) / Math.max(1.0, Math.abs(expected[i]));
+                        worst = Math.max(worst, deviation);
+                        assertTrue(deviation < 1.0e-12, state[0] + " K, " + state[1] + " Pa, " + java.util.Arrays.toString(x) + " " + root
+                                + ": ln phi_" + i + " " + actual + " against " + expected[i]);
+                        compared++;
+                    }
+                }
+            }
+        }
+        System.out.printf(Locale.ROOT, "dominant partners: %d ln phi against 50-digit plain sums, worst %.1e%n", compared, worst);
+    }
+
+    /**
+     * W3B_NETWORK_PLAN.md section 11 on the refinery network: every crude cut absent in pure water has a finite ln phi from
+     * 90 to 800 K, smooth along the one root at 30 MPa (above water's critical pressure, where no root ends): the second
+     * difference over 0.5 K stays below 0.05 (the cancellation left steps of 50 between 298.15 and 298.2 K, and NaN at 285 K).
+     */
+    @Test void anAbsentCutInPureWaterHasAFiniteSmoothLogFugacity() {
+        var model = com.wormzjl.icheme.fluid.support.FluidTestSupport.networkModel().hydrocarbon;
+        int n = model.componentCount();
+        double[] water = new double[n + 1];
+        water[n] = 1.0;
+        double worst = 0.0;
+        String worstAt = "";
+        int cuts = 0;
+        for (int c = 0; c < n; c++) {
+            if (!model.components().get(c).startsWith("crude_")) continue;
+            cuts++;
+            double previous = Double.NaN, beforePrevious = Double.NaN;
+            for (int step = 0; step <= 1420; step++) {
+                double t = 90.0 + 0.5 * step;
+                double value = model.phase(t, 3.0e7, water, PengRobinsonKernel.Root.LIQUID).logFugacity()[c];
+                assertTrue(Double.isFinite(value), model.components().get(c) + " at " + t + " K");
+                if (step >= 2) {
+                    double curvature = Math.abs(value - 2.0 * previous + beforePrevious);
+                    if (curvature > worst) {
+                        worst = curvature;
+                        worstAt = model.components().get(c) + " at " + t + " K";
+                    }
+                }
+                beforePrevious = previous;
+                previous = value;
+            }
+        }
+        System.out.printf(Locale.ROOT, "absent cuts in pure water, 30 MPa, 90 to 800 K: %d cuts, worst second difference %.2e (%s)%n", cuts, worst, worstAt);
+        assertTrue(cuts >= 12, "the refinery's cuts");
+        assertTrue(worst < 0.05, worstAt + ": " + worst);
+    }
 
     private static double kappa(double omega) {
         return omega <= 0.491

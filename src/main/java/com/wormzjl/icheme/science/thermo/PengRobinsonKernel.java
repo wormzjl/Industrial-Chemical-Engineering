@@ -498,9 +498,11 @@ public final class PengRobinsonKernel {
      * {@code tau' = dg'/(R T) - tau/T}, {@code tau'' = dg''/(R T) - 2 tau'/T},
      * {@code G = exp(-alpha tau)}, {@code G' = -alpha tau' G}, {@code G'' = alpha (alpha tau'^2 - tau'') G}; and the
      * cell's classical energy, the one conversion of a classical pair into Huron-Vidal energies ({@link #classicalTau}
-     * with {@code k = 0}). The cell keeps only its correction to the quadratic rule, {@code F = G - 1} and
-     * {@code R = G tau - tau_cl}, each with its two temperature derivatives. A value that is not finite is refused
-     * before the temperature is recorded as prepared.
+     * with {@code k = 0}). The cell keeps its correction to the quadratic rule, {@code F = G - 1} and
+     * {@code R = G tau - tau_cl}, each with its two temperature derivatives, and {@code G} and {@code G tau} themselves
+     * with the derivatives of {@code G tau}, which an active centre's sums read directly ({@link #correctExcess}: near
+     * {@code G = 0}, {@code F + 1} and {@code R + tau_cl} have lost them). A value that is not finite is refused before
+     * the temperature is recorded as prepared.
      */
     private void prepareExcess(double temperatureKelvin, Workspace workspace) {
         double[] s = workspace.sqrtA;
@@ -544,6 +546,10 @@ public final class PengRobinsonKernel {
                 workspace.cellR[c] = r;
                 workspace.cellRDt[c] = rDt;
                 workspace.cellRDt2[c] = rDt2;
+                workspace.cellG[c] = g;
+                workspace.cellGTau[c] = g * tau;
+                workspace.cellGTauDt[c] = gDt * tau + g * tauDt;
+                workspace.cellGTauDt2[c] = gDt2 * tau + 2.0 * gDt * tauDt + g * tauDt2;
             }
         }
     }
@@ -882,10 +888,14 @@ public final class PengRobinsonKernel {
     /**
      * The NRTL cells' correction to the quadratic rule for the composition just normalised into the workspace, on its
      * quadratic rows {@code g_i}. With {@code w_j = x_j b_j}, the classical baseline of a centre {@code i} is
-     * {@code D_i = b}, {@code theta_i^b = Lambda (a_i/b_i - s_i g_i/b)/(R T)} ({@link #classicalTau} summed); its cells
-     * with a partner that has an amount add {@code dD_i = sum_j w_j F_ji} and {@code dC_i = sum_j w_j R_ji}, so
-     * {@code D_i = b + dD_i} and {@code theta_i = (b theta_i^b + dC_i)/D_i}. A centre with no such partner keeps its
-     * baseline exactly. Then {@code dE = sum_i x_i (theta_i - theta_i^b)} and, per compound {@code k},
+     * {@code D_i = b}, {@code theta_i^b = Lambda (a_i/b_i - s_i g_i/b)/(R T)} ({@link #classicalTau} summed). A centre
+     * whose cells have a partner with an amount (an active centre) has {@code D_i = B_i + sum_j w_j G_ji} and
+     * {@code theta_i = [Lambda (a_i/b_i B_i - s_i g^r_i)/(R T) + sum_j w_j G_ji tau_ji]/D_i}, its classical part
+     * {@code B_i = sum_j w_j} and {@code g^r_i = sum_j (1 - k_ij) x_j s_j} formed directly over the compounds that are
+     * not its partners ({@code O(n)} per active centre). As {@code b} plus the cells' {@code w_j (G_ji - 1)} the sums
+     * cancel where the partners hold nearly all of {@code b} and {@code G} is small: water around the heaviest crude cut,
+     * {@code G} 9e-16 at 298 K, left the cut's ln phi in pure water as rounding noise (W3B_NETWORK_PLAN.md section 11).
+     * A centre with no such partner keeps its baseline exactly. Then {@code dE = sum_i x_i (theta_i - theta_i^b)} and, per compound {@code k},
      * {@code dln gamma_k = (theta_k - theta_k^b) + b_k sum_i x_i [tau_ki^cl w_i - (theta_i/D_i - theta_i^b/b)]
      * + b_k sum_i x_i R'_ki/D_i}, with {@code w_i = 1/D_i - 1/b} and {@code R'_ki = R_ki - F_ki theta_i} on the cells
      * of present centres. The middle sum is separable: {@code Lambda/(R T) [Z1 - (s_k/b_k) Y_k] - Z2}, with
@@ -915,19 +925,19 @@ public final class PengRobinsonKernel {
             double baseDt = lambdaOverR * (uDt / temperatureKelvin - u / (temperatureKelvin * temperatureKelvin));
             workspace.thetaBase[i] = base;
             workspace.thetaBaseDt[i] = baseDt;
-            double dD = 0.0, dDDt = 0.0, dDDt2 = 0.0, dC = 0.0, dCDt = 0.0, dCDt2 = 0.0;
+            double cellD = 0.0, dDDt = 0.0, dDDt2 = 0.0, cellC = 0.0, cellCDt = 0.0, cellCDt2 = 0.0;
             boolean active = false;
             for (int c = cellStart[i]; c < cellStart[i + 1]; c++) {
                 int j = cellPartner[c];
                 double weight = x[j] * coVolumes[j];
                 if (weight == 0.0) continue;
                 active = true;
-                dD += weight * workspace.cellF[c];
+                cellD += weight * workspace.cellG[c];
                 dDDt += weight * workspace.cellFDt[c];
                 dDDt2 += weight * workspace.cellFDt2[c];
-                dC += weight * workspace.cellR[c];
-                dCDt += weight * workspace.cellRDt[c];
-                dCDt2 += weight * workspace.cellRDt2[c];
+                cellC += weight * workspace.cellGTau[c];
+                cellCDt += weight * workspace.cellGTauDt[c];
+                cellCDt2 += weight * workspace.cellGTauDt2[c];
             }
             workspace.active[i] = active;
             if (!active) {
@@ -940,13 +950,32 @@ public final class PengRobinsonKernel {
                 workspace.omega[i] = 0.0;
                 continue;
             }
-            double denominator = bMix + dD;
-            double theta = (bMix * base + dC) / denominator;
-            double thetaDt = (bMix * baseDt + dCDt - theta * dDDt) / denominator;
+            // The classical part over the non-partners, directly: never b less the partners' weights.
+            double restB = 0.0, restG = 0.0, restGDt = 0.0;
+            int[] cellsOfI = cellIndex[i];
+            int[] pairsOfI = pairIndex[i];
+            for (int j = 0; j < count; j++) {
+                if (x[j] == 0.0 || cellsOfI[j] >= 0) continue;
+                int pair = pairsOfI[j];
+                double k = pair < 0 ? 0.0 : workspace.pairK[pair];
+                double kDt = pair < 0 ? 0.0 : workspace.pairKDt[pair];
+                restB += x[j] * coVolumes[j];
+                restG += (1.0 - k) * x[j] * s[j];
+                restGDt += (1.0 - k) * x[j] * sDt[j] - kDt * x[j] * s[j];
+            }
+            double rest = workspace.a[i] / coVolumes[i] * restB - s[i] * restG;
+            double restDt = workspace.daDt[i] / coVolumes[i] * restB - (sDt[i] * restG + s[i] * restGDt);
+            double denominator = restB + cellD;
+            double theta = (share * rest + cellC) / denominator;
+            double numeratorDt = lambdaOverR * (restDt / temperatureKelvin - rest / (temperatureKelvin * temperatureKelvin)) + cellCDt;
+            double thetaDt = (numeratorDt - theta * dDDt) / denominator;
+            workspace.restCoVolume[i] = restB;
+            workspace.restRow[i] = restG;
+            workspace.restRowDt[i] = restGDt;
             workspace.denominator[i] = denominator;
             workspace.denominatorDt[i] = dDDt;
             workspace.denominatorDt2[i] = dDDt2;
-            workspace.numeratorDt2[i] = dCDt2;
+            workspace.numeratorDt2[i] = cellCDt2;
             workspace.theta[i] = theta;
             workspace.thetaDt[i] = thetaDt;
             workspace.omega[i] = 1.0 / denominator - 1.0 / bMix;
@@ -1006,7 +1035,9 @@ public final class PengRobinsonKernel {
     /**
      * {@code d^2 a/dT^2} of the correction for the composition {@link #correctExcess} last formed:
      * {@code -(R/Lambda) b (2 dE' + T dE'')}, {@code dE'' = sum_i x_i (theta_i'' - theta_i^b'')} over the present centres
-     * with a present NRTL partner; {@code theta'' = (C'' - 2 theta' D' - theta D'')/D}, {@code C'' = b theta^b'' + dC''},
+     * with a present NRTL partner; {@code theta'' = (C'' - 2 theta' D' - theta D'')/D}, {@code C''} the second derivative
+     * of the numerator as correctExcess formed it (the classical part over the non-partners, directly, and the cells'
+     * {@code w_j (G tau)''}),
      * {@code theta^b'' = (Lambda/R)(u''/T - 2u'/T^2 + 2u/T^3)}, {@code u = a_i/b_i - s_i g_i/b}, on the quadratic row's
      * {@code g_i''} with the pairs' {@code dk/dT} and {@code d^2k/dT^2}. Zero where no such centre is present.
      */
@@ -1043,7 +1074,23 @@ public final class PengRobinsonKernel {
             double uDt = workspace.daDt[i] / bi - (sDt[i] * g[i] + s[i] * gDt[i]) / bMix;
             double uDt2 = workspace.d2aDt2[i] / bi - (sDt2[i] * g[i] + 2.0 * sDt[i] * gDt[i] + s[i] * gDt2[i]) / bMix;
             double baseDt2 = lambdaOverR * (uDt2 / temperature - 2.0 * uDt / t2 + 2.0 * u / (t2 * temperature));
-            double numeratorDt2 = bMix * baseDt2 + workspace.numeratorDt2[i];
+            double restGDt2 = 0.0;
+            int[] cellsOfI = cellIndex[i];
+            int[] pairsOfI = pairIndex[i];
+            for (int j = 0; j < count; j++) {
+                if (x[j] == 0.0 || cellsOfI[j] >= 0) continue;
+                int pair = pairsOfI[j];
+                double k = pair < 0 ? 0.0 : workspace.pairK[pair];
+                double kDt = pair < 0 ? 0.0 : workspace.pairKDt[pair];
+                double kDt2 = pair < 0 ? 0.0 : workspace.pairKDt2[pair];
+                restGDt2 += (1.0 - k) * x[j] * sDt2[j] - 2.0 * kDt * x[j] * sDt[j] - kDt2 * x[j] * s[j];
+            }
+            double restB = workspace.restCoVolume[i], restG = workspace.restRow[i], restGDt = workspace.restRowDt[i];
+            double rest = workspace.a[i] / bi * restB - s[i] * restG;
+            double restDt = workspace.daDt[i] / bi * restB - (sDt[i] * restG + s[i] * restGDt);
+            double restDt2 = workspace.d2aDt2[i] / bi * restB - (sDt2[i] * restG + 2.0 * sDt[i] * restGDt + s[i] * restGDt2);
+            double numeratorDt2 = lambdaOverR * (restDt2 / temperature - 2.0 * restDt / t2 + 2.0 * rest / (t2 * temperature))
+                    + workspace.numeratorDt2[i];
             double thetaDt2 = (numeratorDt2 - 2.0 * workspace.thetaDt[i] * workspace.denominatorDt[i]
                     - workspace.theta[i] * workspace.denominatorDt2[i]) / workspace.denominator[i];
             excessEnergyDt2 += x[i] * (thetaDt2 - baseDt2);
@@ -1224,20 +1271,22 @@ public final class PengRobinsonKernel {
     }
 
     /**
-     * {@code B_kl = H_lk/D_k - eps^b_lk/b}: the shift of {@code l} around centre {@code k} from the baseline,
-     * {@code tau^cl_lk w_k - (theta_k/D_k - theta_k^b/b)} where the centre has a present NRTL partner, plus the cell's
-     * {@code (R_lk - F_lk theta_k)/D_k} where {@code (k, l)} is an NRTL cell.
+     * {@code B_kl = H_lk/D_k - eps^b_lk/b}: the shift of {@code l} around centre {@code k} from the baseline. Where the
+     * centre has a present NRTL partner it is formed directly, {@code H_lk = G_lk (tau_lk - theta_k)} on a cell and
+     * {@code tau^cl_lk - theta_k} otherwise, with {@code eps^b_lk = tau^cl_lk - theta_k^b} (as differences of
+     * {@code 1/D_k} and {@code 1/b} terms it cancels where {@code D_k} is small, the absent cut in water of
+     * {@link #correctExcess}); otherwise {@code D_k = b}, {@code theta_k = theta_k^b} and it is the cell's
+     * {@code (R_lk - F_lk theta_k)/b}, or zero.
      */
     private double centreShift(int k, int l, double share, double bMix, Workspace workspace) {
-        double shift = 0.0;
-        if (workspace.active[k]) {
-            double d = workspace.denominator[k];
-            shift = classicalTau(k, l, share / HuronVidalExcess.LAMBDA, workspace) * workspace.omega[k]
-                    - (workspace.theta[k] / d - workspace.thetaBase[k] / bMix);
-        }
         int cell = cellIndex[k][l];
-        if (cell >= 0) shift += (workspace.cellR[cell] - workspace.cellF[cell] * workspace.theta[k]) / workspace.denominator[k];
-        return shift;
+        if (workspace.active[k]) {
+            double theta = workspace.theta[k];
+            double classical = classicalTau(k, l, share / HuronVidalExcess.LAMBDA, workspace);
+            double h = cell >= 0 ? workspace.cellGTau[cell] - workspace.cellG[cell] * theta : classical - theta;
+            return h / workspace.denominator[k] - (classical - workspace.thetaBase[k]) / bMix;
+        }
+        return cell >= 0 ? (workspace.cellR[cell] - workspace.cellF[cell] * workspace.theta[k]) / workspace.denominator[k] : 0.0;
     }
 
 
@@ -1457,6 +1506,15 @@ public final class PengRobinsonKernel {
         private final double[] cellR;
         private final double[] cellRDt;
         private final double[] cellRDt2;
+        /** Per NRTL cell: {@code G}, {@code G tau} and the derivatives of {@code G tau}. */
+        private final double[] cellG;
+        private final double[] cellGTau;
+        private final double[] cellGTauDt;
+        private final double[] cellGTauDt2;
+        /** Per active centre: the classical part over its non-partners, {@code B_i}, {@code g^r_i} and {@code g^r_i'}. */
+        private final double[] restCoVolume;
+        private final double[] restRow;
+        private final double[] restRowDt;
         /** Per compound, the cells' correction of the last evaluation (correctExcess and its derivatives). */
         private final double[] rowGDt;
         private final double[] rowGDt2;
@@ -1512,7 +1570,14 @@ public final class PengRobinsonKernel {
             cellR = new double[cells];
             cellRDt = new double[cells];
             cellRDt2 = new double[cells];
+            cellG = new double[cells];
+            cellGTau = new double[cells];
+            cellGTauDt = new double[cells];
+            cellGTauDt2 = new double[cells];
             int e = excessCount;
+            restCoVolume = new double[e];
+            restRow = new double[e];
+            restRowDt = new double[e];
             rowGDt = new double[e];
             rowGDt2 = new double[e];
             thetaBase = new double[e];
