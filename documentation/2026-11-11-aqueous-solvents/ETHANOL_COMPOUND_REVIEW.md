@@ -1,6 +1,6 @@
 # Ethanol in the compound list: what it affects, and a proposal
 
-Batch [2026-11-11-ethanol-compound](README.md), 2026-11-11, at main ff6f6892f (0.26.0). No code or data changed. "Compound matrix" is read here as the network package `icheme:refinery` (45 compounds and water) with its PR78 pair matrix.
+Batch [2026-11-11-aqueous-solvents](README.md), 2026-11-11, at main ff6f6892f (0.26.0). No code or data changed. Section 4's step 2 is settled by [AQUEOUS_SOLVENTS_PLAN.md](AQUEOUS_SOLVENTS_PLAN.md) (option B, as infrastructure). "Compound matrix" is read here as the network package `icheme:refinery` (45 compounds and water) with its PR78 pair matrix.
 
 ## 1. Expected behaviour (physics)
 
