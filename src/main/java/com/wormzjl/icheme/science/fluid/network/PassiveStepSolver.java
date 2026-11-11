@@ -181,7 +181,8 @@ public final class PassiveStepSolver {
             // Each end of the run stands in its own end port's column over the run ({@link #columnDensity}), at its own end's
             // driving pressure.
             var startPort=graph.pipes().get(chain.getFirst()).portAt(start);var finishPort=graph.pipes().get(chain.getLast()).portAt(finish);
-            double pa=endPressure(graph.reservoirs().get(start),startPort,a),pb=endPressure(graph.reservoirs().get(finish),finishPort,b);
+            double pa=endPressure(graph.reservoirs().get(start),startPort,a,()->runColumnDensity(graph,chain,b,finishPort)),
+                    pb=endPressure(graph.reservoirs().get(finish),finishPort,b,()->runColumnDensity(graph,chain,a,startPort));
             double dz=graph.reservoirs().get(finish).elevation()-graph.reservoirs().get(start).elevation(),difference=pa-pb;
             double band=reopenBand(pa,pb);
             double forwardDrive=difference-runColumnDensity(graph,chain,a,startPort)*GRAVITY*dz,reverseDrive=difference-runColumnDensity(graph,chain,b,finishPort)*GRAVITY*dz;
@@ -1655,8 +1656,9 @@ public final class PassiveStepSolver {
                     double predictedDrop=a.state().pressure()-(seeds==null?a.state():seeds.get(pipe.first())).pressure();
                     if(predictedDrop>0)flows[i]*=Math.clamp((a.state().pressure()-valve.targetPressure())/predictedDrop,0,1);
                     double rho=endDensity(a.state(),pipe.firstPort(),pipe.volume());
-                    heads[i]=(endPressure(a,pipe.firstPort(),a.state())-endPressure(b,pipe.secondPort(),b.state())
-                            -columnDensity(a.state(),pipe.firstPort(),pipe.volume())*GRAVITY*(b.elevation()-a.elevation())
+                    double column=columnDensity(a.state(),pipe.firstPort(),pipe.volume());
+                    heads[i]=(columnEndPressure(a,pipe.firstPort(),a.state(),column)-columnEndPressure(b,pipe.secondPort(),b.state(),column)
+                            -column*GRAVITY*(b.elevation()-a.elevation())
                             -pipe.pressureDrop(flows[i],rho,endViscosity(a.state(),pipe.firstPort(),pipe.volume())))/1e5;
                 }
                 continue;
@@ -1784,7 +1786,7 @@ public final class PassiveStepSolver {
     private double shutoffMargin(PassiveNetwork graph,int edge) {
         var pipe=graph.pipes().get(edge);var a=graph.reservoirs().get(pipe.first());var b=graph.reservoirs().get(pipe.second());
         double suction=endDensity(a.state(),pipe.firstPort(),pipe.volume());
-        return riseLimit(graph,edge,riseDensity(edge,suction),a.state().pressure())-(endPressure(b,pipe.secondPort(),b.state())-endPressure(a,pipe.firstPort(),a.state())
+        return riseLimit(graph,edge,riseDensity(edge,suction),a.state().pressure())-(columnEndPressure(b,pipe.secondPort(),b.state(),suction)-columnEndPressure(a,pipe.firstPort(),a.state(),suction)
                 +suction*GRAVITY*(b.elevation()-a.elevation()));
     }
     /**
@@ -1959,7 +1961,7 @@ public final class PassiveStepSolver {
             double head=pipe.control() instanceof FlowControl.Mover?heads[edge]:-heads[edge];
             var lengths=new ArrayList<Double>();var losses=new ArrayList<Double>();
             for(var section:pipe.sections()){lengths.add(section.length());losses.add(PipeResistance.pressureDrop(section,lawFlows[edge],carried.density,carried.viscosity));}
-            var observed=new PipeObservation(pipe.id(),endPressure(e.graph.reservoirs().get(a),pipe.firstPort(),states.get(a))+head,endPressure(e.graph.reservoirs().get(b),pipe.secondPort(),states.get(b)),e.graph.reservoirs().get(a).elevation(),e.graph.reservoirs().get(b).elevation(),column,states.get(donor).temperature(),Math.abs(flows[edge])>1e-10,lengths,losses,flows[edge],e.drawn(edge,flows[edge]>=0?0:1,e.cachedTransport[donor],flows[edge]).density);
+            var observed=new PipeObservation(pipe.id(),columnEndPressure(e.graph.reservoirs().get(a),pipe.firstPort(),states.get(a),column)+head,columnEndPressure(e.graph.reservoirs().get(b),pipe.secondPort(),states.get(b),column),e.graph.reservoirs().get(a).elevation(),e.graph.reservoirs().get(b).elevation(),column,states.get(donor).temperature(),Math.abs(flows[edge])>1e-10,lengths,losses,flows[edge],e.drawn(edge,flows[edge]>=0?0:1,e.cachedTransport[donor],flows[edge]).density);
             if(!pipe.observationPoints().isEmpty()&&!rateOnly){
                 var meters=new ArrayList<FlowSample>();
                 for(var point:pipe.observationPoints()){
@@ -1985,7 +1987,7 @@ public final class PassiveStepSolver {
             if(pipe.control() instanceof FlowControl.PressureValve||pipe.control() instanceof FlowControl.ControlValve) {
                 // The valve stands at the line's first end: its node side is that end's pressure, its line side the row's
                 // first pressure, which includes the valve's drop (the control head).
-                double node=endPressure(e.graph.reservoirs().get(a),pipe.firstPort(),states.get(a)),line=observed.firstPressure();
+                double node=columnEndPressure(e.graph.reservoirs().get(a),pipe.firstPort(),states.get(a),column),line=observed.firstPressure();
                 var read=Math.abs(flows[edge])<=1e-10?PipeObservation.Cavitation.NONE:flows[edge]>=0?cavitation(states.get(donor),node,line,checkpoint):cavitation(states.get(donor),line,node,checkpoint);
                 observed=observed.withValve(Math.abs(node-line),read);
             }
@@ -2068,21 +2070,31 @@ public final class PassiveStepSolver {
         if(vapourLocked(edge)||mode==FlowControl.Mode.INLET_WRONG_PHASE)return true;
         return mover instanceof FlowControl.Machine&&Math.abs(massFlow)<=1e-10&&suctionPressure>0&&vapourShares[edge]>com.wormzjl.icheme.science.machine.GasEntrainment.onset(suctionPressure);
     }
+    /**
+     * The pressure a pipe end at {@code port} of {@code node} stands at: the node's pressure and its port's level head. A
+     * spray inlet's end is its riser's foot: the atmosphere at the nozzle and the column arriving in the line
+     * ({@link #columnEndPressure}); a reader of one end alone, a supplier or a suction end, never stands at a spray inlet,
+     * and there the riser is weighed with the tower's own liquid.
+     */
     double endPressure(PassiveNetwork.Reservoir node,PassiveNetwork.PhasePort port,FluidThermodynamics.State state) {
-        if(spray(node,port))return sprayPressure(node,model.waterMolecularWeight/model.waterLiquid(state.temperature(),CoolingTower.PRESSURE).molarVolume());
+        if(spray(node,port))return sprayPressure(node,state.condensedVolume()>0?model.liquidDensity(state):state.mass()/state.volume());
         return state.pressure()+portHead(node,port,state);
+    }
+    /** {@link #endPressure} of a line's end, a spray inlet's riser at the column {@code arriving} sends in from the line's other end. */
+    private double endPressure(PassiveNetwork.Reservoir node,PassiveNetwork.PhasePort port,FluidThermodynamics.State state,java.util.function.DoubleSupplier arriving) {
+        return spray(node,port)?sprayPressure(node,arriving.getAsDouble()):state.pressure()+portHead(node,port,state);
     }
     /** A spray inlet discharges to the atmosphere at its nozzle; a tower's own end is no other kind of port. */
     private static boolean spray(PassiveNetwork.Reservoir node,PassiveNetwork.PhasePort port){return port==PassiveNetwork.PhasePort.SPRAY&&node.inventory().tower()!=null;}
     private static double sprayPressure(PassiveNetwork.Reservoir node,double column){return CoolingTower.PRESSURE+column*GRAVITY*node.inventory().tower().distributorHeight();}
-    /** {@link #endPressure} with a spray end at the incoming column's density, so a basin temperature cannot create an inlet head. */
+    /** {@link #endPressure} with a spray end at the line's column {@code column}, so a basin temperature cannot create an inlet head. */
     private double columnEndPressure(PassiveNetwork.Reservoir node,PassiveNetwork.PhasePort port,FluidThermodynamics.State state,double column) {
-        return spray(node,port)?sprayPressure(node,column):endPressure(node,port,state);
+        return endPressure(node,port,state,()->column);
     }
-    /** {@link #endPressure} of the end of {@code pipe} at {@code node}, on that node's own state in {@code graph}. */
+    /** {@link #endPressure} of the end of {@code pipe} at {@code node}, on the nodes' own states in {@code graph}. */
     double endPressure(PassiveNetwork graph,PassiveNetwork.Pipe pipe,int node) {
-        var reservoir=graph.reservoirs().get(node);
-        return endPressure(reservoir,pipe.portAt(node),reservoir.state());
+        var reservoir=graph.reservoirs().get(node);int other=pipe.first()==node?pipe.second():pipe.first();
+        return endPressure(reservoir,pipe.portAt(node),reservoir.state(),()->columnDensity(graph.reservoirs().get(other).state(),pipe.portAt(other),pipe.volume()));
     }
     /**
      * The height a one-block tank's level head is stated over (decision D9, option B): one metre, its own height at the
@@ -2616,8 +2628,8 @@ public final class PassiveStepSolver {
      * free head unknown is this demand and the margin is how much head the mover has in hand.
      */
     private double demand(PassiveNetwork graph,PassiveNetwork.Pipe pipe,List<FluidThermodynamics.State> states,double density) {
-        return endPressure(graph.reservoirs().get(pipe.second()),pipe.secondPort(),states.get(pipe.second()))
-                -endPressure(graph.reservoirs().get(pipe.first()),pipe.firstPort(),states.get(pipe.first()))
+        return columnEndPressure(graph.reservoirs().get(pipe.second()),pipe.secondPort(),states.get(pipe.second()),density)
+                -columnEndPressure(graph.reservoirs().get(pipe.first()),pipe.firstPort(),states.get(pipe.first()),density)
                 +density*GRAVITY*(graph.reservoirs().get(pipe.second()).elevation()-graph.reservoirs().get(pipe.first()).elevation());
     }
     /**
@@ -2937,7 +2949,8 @@ public final class PassiveStepSolver {
             var a=graph.reservoirs().get(start);var b=graph.reservoirs().get(finish);
             // Each direction in its donor end port's column over the run ({@link #columnDensity}), at the ends' driving pressures.
             var startPort=graph.pipes().get(chain.getFirst()).portAt(start);var finishPort=graph.pipes().get(chain.getLast()).portAt(finish);
-            double dz=b.elevation()-a.elevation(),difference=endPressure(a,startPort,a.state())-endPressure(b,finishPort,b.state());
+            double dz=b.elevation()-a.elevation(),difference=endPressure(a,startPort,a.state(),()->runColumnDensity(graph,chain,b.state(),finishPort))
+                    -endPressure(b,finishPort,b.state(),()->runColumnDensity(graph,chain,a.state(),startPort));
             boolean forward=forwardAllowed&&difference-runColumnDensity(graph,chain,a.state(),startPort)*GRAVITY*dz>0;
             boolean reverse=reverseAllowed&&difference-runColumnDensity(graph,chain,b.state(),finishPort)*GRAVITY*dz<0;
             if(keep!=null){boolean kept=false;for(int link:chain)kept|=keep[link];if(kept)continue;}
@@ -2966,7 +2979,7 @@ public final class PassiveStepSolver {
             var pipe=graph.pipes().get(i);var a=graph.reservoirs().get(pipe.first());var b=graph.reservoirs().get(pipe.second());
             if(boundaryClosed[i]||!(pipe.control() instanceof FlowControl.Passive)||keep!=null&&keep[i])continue;
             boolean dryA=dryEnd(a,pipe.firstPort()),dryB=dryEnd(b,pipe.secondPort());if(!dryA&&!dryB)continue;
-            double drive=staticDrive(graph,pipe,endPressure(a,pipe.firstPort(),a.state())-endPressure(b,pipe.secondPort(),b.state()));
+            double drive=staticDrive(graph,pipe,endPressure(graph,pipe,pipe.first())-endPressure(graph,pipe,pipe.second()));
             if(dryA&&drive>0||dryB&&drive<0||dryA&&dryB)boundaryClosed[i]=true;
         }
         if(!(sameLines(acceptedPipes,identities(graph))&&Arrays.equals(acceptedNodeIds,nodeIds(graph))))return;
@@ -2983,7 +2996,7 @@ public final class PassiveStepSolver {
                 // states decides, read only beyond the reopen band, the one-way rule's tolerance ({@link #balanceStart}): a
                 // settled line's drive is the junction pressures' roundoff (a line read -7.2e-7 kg/s and was closed for good).
                 var a=graph.reservoirs().get(pipe.first());var b=graph.reservoirs().get(pipe.second());
-                double pa=endPressure(a,pipe.firstPort(),a.state()),pb=endPressure(b,pipe.secondPort(),b.state());
+                double pa=endPressure(graph,pipe,pipe.first()),pb=endPressure(graph,pipe,pipe.second());
                 if(Math.abs(staticDrive(graph,pipe,pa-pb))<=reopenBand(pa,pb))continue;
                 q=initialMassFlow(graph,pipe);
             }
