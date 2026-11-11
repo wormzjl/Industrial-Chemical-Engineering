@@ -299,3 +299,35 @@ Committed: `e5391b412` (a bottom port's pump left its last 6.8 g of water as vap
   - **One rule, dissolved gases never count.** Any liquid takes the bubble pressure without the compounds above their critical temperature. Replaces D16 C: an oil under a nitrogen blanket gains suction margin; a live crude ignores its dissolved methane and may then free gas at the pump.
   - **One rule, equilibrium.** Any liquid takes its full bubble pressure. Pumps on blanketed or open water tanks keep only their static head.
 - Whatever the rule, the floor is read from the supplier directly as well as through a suction walk (a pump drawing straight from its tank had no floor: NPSHA was NaN).
+
+## 17. Pump suction rules lifted (owner, 2026-11-11)
+
+Owner on section 16's question: "The pump cavitation system has been added, this can be lifted now"; on the list below: "All four, measured"; then: "Give pump a small bulletproof zone (without damaging the pump) with minor gas content". The options of section 16 are closed by this section.
+
+**What stays** (the cavitation system is built on it): the suction limit row `PUMP_SUCTION_LIMIT` with the breakdown NPSH (D59 (4), D20 Q11 A); the vapour pressure of the liquid drawn at its own enthalpy (D14, first half of D16 C); limit and lock facts read once per solve (D16 A); the limit never above what the supplier gives (D17).
+
+**What goes.**
+
+| Rule | How |
+|---|---|
+| Water's own saturation curve and `BalanceNet.waterFloor` (D59 (4)) | Now: water is a component, one function for every liquid. The starved water suction of `PumpCavitationTest` must still stand at its own-enthalpy value (about 3174 Pa) with no vapour at the junction (the singular Jacobian recorded at `waterFloor`). |
+| A pump drawing straight from its tank has no limit | Now: the limit is read from the pump's own first node. Such pumps get an NPSH reading, cavitation and wear. |
+| Gas beside the liquid puts the limit at the vessel's pressure (second half of D16 C), and section 16's split by liquid label | Measured: forms below. |
+| Vapour lock, a pump closed for the whole solve at no suction head (D15) | Measured, after the form is chosen. |
+
+**The clean zone (owner).** A centrifugal pump whose suction holds vapour below half the Turpin onset share (1.05 % by volume at 1 bar, 2.6 % at 2.5 bar, 9 % at 10 bar; today's `PumpHealth.GAS_RATIO`, where it is already silent and shows no `GAS` word) takes no harm: no wear, no status word, no sound, and it is not counted as cavitation. Its head there is the gas law's, at least 0.99 of the gas-free head (the law is not changed). One constant states the zone for the limit, the status word and the sound.
+
+**Two pressures, one function.** `releasePressure(liquid, share)`: the lowest pressure at which the liquid drawn, at its own enthalpy, holds a vapour volume share of at most `share` (the bisection of `bubblePressure` with the test "any vapour" replaced by the share).
+
+- Zone edge E: `share` = half the onset at that pressure. A boiling liquid has E at its bubble pressure (its vapour share jumps there); nitrogen-saturated water at 1 atm and 25 C has E near 69 kPa (hand estimate from Henry's law).
+- Vapour pressure p_v, the NPSH reference for the limit, the wear and the page: the bubble pressure of the liquid without its compounds above their critical temperature (the provisional `aqueousFloor`, for every liquid, at its own enthalpy). To report beside it: the pressure at a vapour share of one half, which needs no critical-temperature test (carbon dioxide dissolved in water at 25 C counts as vapour pressure under the first and as gas under the second).
+
+**Forms on the 200-seed quick check** (three, vapour lock kept):
+
+- Form 0: section 16's provisional rule (D16 C for oil, condensables for the aqueous liquid).
+- Form G (expected choice): limit = the greater of E and `p_v + 0.85 rho g NPSH3(Q)`. A pump pulls freely through the clean zone and starves at its edge or at breakdown, at a steady point. Wear reads sigma against p_v, so released gas never wears: blanketed water starved at 69 kPa has 6.7 m over p_v, sigma about 4 for the default pump, at inception.
+- Form T: limit = `p_v + 0.85 rho g NPSH3(Q)` alone; released gas is left to the gas law, which reads the suction once per solve (a step-to-step swing is the risk).
+
+Then, on the chosen form: vapour lock kept against removed. The removals stand only if step 7's campaign shows no new hold class against the baseline. Cases to report under each form (limit, NPSHA, sigma): water under nitrogen at 1 atm; water under carbon dioxide at 1 atm and 25 C; a dead oil under nitrogen; a separator liquid with methane at 10 bar and 310 K; LNG at its bubble point; a propane drum.
+
+Effect on existing worlds: a pump bolted to its tank starts to read NPSH and can cavitate and wear; a pump on a blanketed hydrocarbon tank gains suction margin; modes are state and health keeps its format.
