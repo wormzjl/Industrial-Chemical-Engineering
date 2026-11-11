@@ -300,13 +300,20 @@ public final class FluidTpEquilibrium {
     private static final int THREE = 4;
     // The three-slot system (W3a D3).
     private static final int SLOT_COUNT = 3;
-    /** A watched slot absent this many steps in a row with {@code sum x <} {@link #WATCH_SUM} is dropped. */
+    /**
+     * A watched slot absent this many steps in a row with {@code sum x <} {@link #WATCH_SUM} is dropped: below one its
+     * phase is absent (the tangent plane lies under it), and the audit still reseeds a phase it missed (W3b step 1c: at
+     * 0.9 an absent hexane-rich slot at 0.95 was evaluated on both roots at every step, 366 kernel evaluations instead of
+     * 282 for ethanol, water and n-hexane at 58 C).
+     */
     private static final int WATCH_STEPS = 3;
-    private static final double WATCH_SUM = 0.9;
+    private static final double WATCH_SUM = 1.0;
     /** Halvings of a refused trial composition toward the slot's last accepted one. */
     private static final int REFUSED_HALVINGS = 8;
     /** Two present slots on one root within this {@code sum z (ln x - ln x')^2} are one phase. */
     private static final double SLOT_DUPLICATE = 1.0e-8;
+    /** Two slots of one composition whose compressibility factors agree within this share are on one root. */
+    private static final double SLOT_SAME_ROOT = 1.0e-2;
     /** Newton steps of the slots' Rachford-Rice, and its tolerance on the gradient {@code 1 - sum_i x_ik}. */
     private static final int RACHFORD_RICE_SLOTS_ITERATIONS = 100;
     private static final double SLOT_FRACTION_TOLERANCE = 1.0e-13;
@@ -6293,8 +6300,8 @@ public final class FluidTpEquilibrium {
      * {@code beta >= 0} ({@link #slotFractions}), whose optimality conditions are the presence rows: {@code beta_k >= 0},
      * {@code 1 - sum_i x_ik >= 0}, their product zero, {@code x_ik = z_i / (phi_ik E_i)}. Successive substitution on the
      * stacked {@code ln phi} with the dominant-eigenvalue extrapolation, then the Newton finish on the Gibbs energy over the
-     * mole numbers of the phases present ({@link #slotNewton}). Seeds: Wilson's vapour and liquid, and the water-rich
-     * (else the largest polar compound's) liquid. An absent slot is watched (one evaluation per step) until it has been
+     * mole numbers of the phases present ({@link #slotNewton}). Seeds: Wilson's vapour, Wilson's liquid of the non-polar
+     * compounds (of the whole feed without one), and the water-rich (else the largest polar compound's) liquid. An absent slot is watched (one evaluation per step) until it has been
      * absent with {@code sum x <} {@link #WATCH_SUM} for {@link #WATCH_STEPS} steps; two present slots that coincide are one.
      * The products are audited by the stability test; a failed audit reseeds an absent slot from its stationary trial,
      * once; a second failure is {@link EquilibriumResult#UNSTABLE_PRODUCT}. Returns SINGLE, SPLIT, MERGED, THREE or FAILED.
@@ -6310,12 +6317,20 @@ public final class FluidTpEquilibrium {
                 if (polar[i] && (seedPolar < 0 || w.z[i] > w.z[seedPolar])) seedPolar = i;
             }
         }
+        boolean nonPolar = false;
+        for (int a = 0; a < w.presentCount; a++) nonPolar |= !polar[w.present[a]];
         for (int k = 0; k < SLOT_COUNT; k++) {
             Arrays.fill(s.composition[k], 0.0);
             double sum = 0.0;
             for (int a = 0; a < w.presentCount; a++) {
                 int i = w.present[a];
-                double value = k == 0 ? w.z[i] * w.k[i] : k == 1 ? w.z[i] / w.k[i] : i == seedPolar ? 1.0 : SEED_TRACE * w.z[i];
+                // The first liquid is Wilson's liquid of the non-polar compounds, the polar ones at a trace (W3b step 1c: Wilson's
+                // liquid of the whole feed was water-rich like the second seed, so the oil-rich liquid was never seeded and the
+                // ternary at its bubble point converged to a vapour and the aqueous liquid first, then failed its audit, 783
+                // kernel evaluations instead of 515). Without a non-polar compound, Wilson's liquid of the whole feed.
+                double liquid = w.z[i] / w.k[i];
+                if (k == 1 && nonPolar && polar[i]) liquid *= SEED_TRACE;
+                double value = k == 0 ? w.z[i] * w.k[i] : k == 1 ? liquid : i == seedPolar ? 1.0 : SEED_TRACE * w.z[i];
                 s.composition[k][i] = value;
                 sum += value;
             }
@@ -6385,6 +6400,7 @@ public final class FluidTpEquilibrium {
         for (int halving = 0; ; halving++) {
             try {
                 s.root[k] = lowerGibbsRoot(t, composition, preferred, s.logPhi[k], w);
+                s.compressibility[k] = w.chosen.compressibility();
                 System.arraycopy(composition, 0, s.accepted[k], 0, count);
                 return;
             } catch (IllegalArgumentException | IllegalStateException refused) {
@@ -6514,16 +6530,21 @@ public final class FluidTpEquilibrium {
     }
 
     /**
-     * Drops one of two watched slots on the same root whose compositions agree within {@link #SLOT_DUPLICATE}
-     * ({@code sum_i z_i (ln x_ik - ln x_il)^2}): one phase taken twice, which leaves Q's Hessian singular. The present one
-     * (the lower where both are) stays and takes both fractions.
+     * Drops one of two watched slots whose compositions agree within {@link #SLOT_DUPLICATE}
+     * ({@code sum_i z_i (ln x_ik - ln x_il)^2}) on one root: one phase taken twice, which leaves Q's Hessian singular. The
+     * present one (the lower where both are) stays and takes both fractions. One root is judged by the compressibility
+     * factors the evaluations took, within {@link #SLOT_SAME_ROOT} of the larger, never by the requested label: where the
+     * cubic has one root a vapour slot and a liquid slot evaluate the same phase (W3b step 1c: CO2 over water at 25 C with
+     * an oil-rich seed kept the gas twice, a tie line of zero).
      */
     private boolean dropDuplicates(Workspace w) {
         Slots s = w.slots;
         for (int k = 0; k < SLOT_COUNT; k++) {
             if (!s.watched[k]) continue;
             for (int l = k + 1; l < SLOT_COUNT; l++) {
-                if (!s.watched[l] || s.root[k] != s.root[l]) continue;
+                if (!s.watched[l]) continue;
+                double zk = s.compressibility[k], zl = s.compressibility[l];
+                if (!(Math.abs(zk - zl) <= SLOT_SAME_ROOT * Math.max(Math.abs(zk), Math.abs(zl)))) continue;
                 double distance = 0.0;
                 for (int a = 0; a < w.presentCount; a++) {
                     int i = w.present[a];
@@ -6958,6 +6979,8 @@ public final class FluidTpEquilibrium {
         final int[] freeSlots = new int[SLOT_COUNT], others = new int[SLOT_COUNT], absentSteps = new int[SLOT_COUNT];
         final boolean[] watched = new boolean[SLOT_COUNT], present = new boolean[SLOT_COUNT], dense = new boolean[SLOT_COUNT];
         final Root[] root = new Root[SLOT_COUNT];
+        /** The compressibility factor of each slot's last evaluation, on the root it took. */
+        final double[] compressibility = new double[SLOT_COUNT];
         final double[] c;
         double[] delta, previousDelta;
         final double[] newtonGradient, newtonHessian, newtonFactor, newtonStep, newtonScale;

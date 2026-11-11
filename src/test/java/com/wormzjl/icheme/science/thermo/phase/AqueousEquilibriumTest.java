@@ -383,19 +383,50 @@ class AqueousEquilibriumTest {
         assertTrue(ICE != null && ICE.crystals().contains("icheme:crystal_ice_ih"), "ice competes on the derived contract");
     }
 
-    /** The kernel evaluations per TP answer on the pilot list: W3b's baseline (printed), and a dry list keeps two slots. */
+    /**
+     * The kernel evaluations per TP answer on the pilot list, printed, against W3a's table (W3b step 1: no higher; the
+     * ternary at its bubble point 783 there, 515 since the oil-rich seed and the absent-slot rule of step 1c).
+     */
     @Test void kernelEvaluationsRecorded() {
-        Object[][] cases = {{"dry methane/n-hexane 25 C", 298.15, new Object[] {"Methane", 0.5, "N-hexane", 0.5}},
-                {"water/n-hexane 25 C", 298.15, new Object[] {"Water", 0.5, "N-hexane", 0.5}},
-                {"ethanol/water 80 C", 353.15, new Object[] {"Ethanol", 0.5, "Water", 0.5}},
-                {"ethanol/water/n-hexane 58 C", 331.15, new Object[] {"Ethanol", 0.2, "Water", 0.4, "N-hexane", 0.4}},
-                {"water/cut 117 C", 390.0, new Object[] {"Water", 0.5, "crude_pc03", 0.5}}};
-        StringBuilder line = new StringBuilder("pilot_aqueous kernel evaluations per TP answer (W3b baseline):");
+        Object[][] cases = {{"dry methane/n-hexane 25 C", 298.15, new Object[] {"Methane", 0.5, "N-hexane", 0.5}, 87},
+                {"water/n-hexane 25 C", 298.15, new Object[] {"Water", 0.5, "N-hexane", 0.5}, 117},
+                {"ethanol/water 80 C", 353.15, new Object[] {"Ethanol", 0.5, "Water", 0.5}, 52},
+                {"ethanol/water/n-hexane 58 C", 331.15, new Object[] {"Ethanol", 0.2, "Water", 0.4, "N-hexane", 0.4}, 282},
+                {"ethanol/water/n-hexane at its bubble point", 329.94, new Object[] {"Ethanol", 0.2, "Water", 0.4, "N-hexane", 0.4}, 515},
+                {"water/cut 117 C", 390.0, new Object[] {"Water", 0.5, "crude_pc03", 0.5}, 120}};
+        StringBuilder line = new StringBuilder("pilot_aqueous kernel evaluations per TP answer:");
         for (Object[] c : cases) {
             var r = tp((Double) c[1], ATM, feed((Object[]) c[2]), FLUID);
-            line.append(" ").append(c[0]).append(" ").append(r.diagnostics().kernelEvaluations()).append(";");
-            assertTrue(r.diagnostics().kernelEvaluations() > 0);
+            int evaluations = r.diagnostics().kernelEvaluations();
+            line.append(" ").append(c[0]).append(" ").append(evaluations).append(" (bound ").append(c[3]).append(");");
+            assertTrue(evaluations > 0 && evaluations <= (Integer) c[3], c[0] + ": " + evaluations);
         }
         System.out.println(line);
+    }
+
+    /**
+     * W3b step 1c: UV round trips through a narrow-boiling hydrocarbon binary's two-phase range (n-hexane and benzene at
+     * 1 atm, under a kelvin wide). Its ends from inexact volume solves can straddle the answer; the search restarts with
+     * exact solves (W3a D4), and every state comes back.
+     */
+    @Test void narrowBoilingBinaryRoundTripsThroughUv() {
+        double[] z = feed("N-hexane", 0.5, "Benzene", 0.5);
+        double low = Double.NaN, high = Double.NaN;
+        for (double t = 343.0; t <= 345.0; t += 0.01) {
+            if (tp(t, ATM, z, FLUID).phases().size() == 2) {
+                if (Double.isNaN(low)) low = t;
+                high = t;
+            }
+        }
+        assertTrue(high > low, "a two-phase range");
+        for (int k = 0; k <= 20; k++) {
+            double t = low + (high - low) * k / 20;
+            var r = tp(t, ATM, z, FLUID);
+            var uv = ENGINE.uv(EquilibriumRequest.uv(r.internalEnergy(), r.volume(), BASIS, z, FLUID));
+            assertTrue(uv.converged(), () -> "UV at " + t + " K: " + uv.detail());
+            conserved(uv, z);
+            assertEquals(t, uv.phases().get(0).temperature(), 1.0e-6 * t);
+            assertEquals(r.internalEnergy(), uv.internalEnergy(), 1.0e-6 * R * t);
+        }
     }
 }
