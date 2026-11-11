@@ -4,7 +4,7 @@ Purpose: the one final lane before a merge to `main` (AGENTS.md, "Gradle, measur
 
 ## How to run
 
-From the branch's worktree, with no dev client and no other Gradle run (the campaign's wall deadlines must not share the machine):
+From the branch's worktree, with no dev client. At most one other Gradle run may share the machine; then judge the campaign and the cost gates by counters, and replay a wall-clock budget hold alone before you count it:
 
 ```bash
 bash tools/merge-lane/lane.sh head
@@ -52,3 +52,4 @@ A step list after the side runs only those steps, for example `lane.sh head camp
 - 2026-11-09: `compare.mjs` added at the 0.23.0 final lane (batch 2026-11-04-open-thermo-data, MERGE_REVIEW.md).
 - 2026-11-09: affected-only lane (batch 2026-11-09-final-lane-selection): `affected.mjs`, `record.init.gradle`, `readers.txt`; chain-100 and the GameTests by what they load. A bytecode-reference closure was tried first and dropped: every class reaches the `@Mod` class `IChemE`, which names the client classes, so a renderer change selected every hold gate.
 - 2026-11-10: a `build.gradle` change no longer runs every class (owner: "changing build.gradle should not trigger a full test"); `select` notes it (batch 2026-11-10-custom-shader-system, at its final lane).
+- 2026-11-11: the lane may overlap one other Gradle run (owner: "allow two running at the same time", "change testing rule as well"; `AGENTS.md` changed with it).
