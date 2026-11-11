@@ -6,7 +6,7 @@
   "tooltip.icheme.gas_blanketing_valve": "Right-click the highlighted flange on top of a drum. Pipe a gas supply to its inlet.",
   "tooltip.icheme.gas_blanketing_valve.remove": "Shift + right-click with the accessory wrench to recover.",
   "item.icheme.pressure_safety_valve": "Pressure Safety Valve",
-  "tooltip.icheme.pressure_safety_valve": "Right-click the highlighted flange on top of a drum, or a pipe. Pipe its outlet to a flare or a knock-out drum, or leave it open to the atmosphere.",
+  "tooltip.icheme.pressure_safety_valve": "Its outlet faces you. Right-click the highlighted flange on top of a drum, or a pipe. Pipe its outlet to a flare or a knock-out drum, or leave it open to the atmosphere.",
   "tooltip.icheme.pressure_safety_valve.remove": "Shift + right-click with the accessory wrench to recover.",
   "gui.icheme.fluid.state_on": "On",
   "gui.icheme.fluid.state_off": "Off",

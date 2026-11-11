@@ -245,7 +245,7 @@ public final class InstrumentRenderer {
                 var mount=InstrumentHosts.ReliefValve.of(host);
                 if(mount!=null&&frustum.isVisible(mount.bounds())&&view.pixels(.4,mount.bounds().getCenter().distanceToSqr(camera))>=3)drawReliefValve(pose,buffers,host,mount,camera,-1,255);
             }else if(reliefValve&&(!host.pipe()||host.metadata().installed().isEmpty()&&host.metadata().sensors().isEmpty()&&InstrumentHosts.legacy(host.entity().getBlockState())==null)){
-                var mount=InstrumentHosts.ReliefValve.of(host);
+                var mount=InstrumentHosts.ReliefValve.of(host,InstrumentHosts.toward(mc.player.getLookAngle()));
                 if(mount!=null&&mount.bounds().distanceToSqr(mc.player.getEyePosition())<=64){
                     boolean clear=InstrumentHosts.clear(mc.level,host,mount);
                     var hit=mount.bounds().clip(mc.player.getEyePosition(),mc.player.getEyePosition().add(mc.player.getLookAngle().scale(mc.player.blockInteractionRange())));
@@ -622,7 +622,7 @@ public final class InstrumentRenderer {
     /** A pressure safety valve on a drum or a pipe: in its own colours under the world's light ({@code tint} -1, {@code alpha} 255), or a placement ghost in {@code tint}. */
     private static void drawReliefValve(PoseStack pose,MultiBufferSource buffers,InstrumentHosts.Host host,InstrumentHosts.ReliefValve mount,Vec3 camera,int tint,int alpha){
         java.util.List<com.wormzjl.icheme.science.equipment.Mesh.Polygon> faces;net.minecraft.core.BlockPos origin;
-        if(host.entity() instanceof com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity shell){faces=com.wormzjl.icheme.science.equipment.ShapeRasterizer.reliefValve(shell.shape());origin=shell.origin();}
+        if(host.entity() instanceof com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity shell){var out=net.minecraft.core.Direction.valueOf(mount.face().name());faces=com.wormzjl.icheme.science.equipment.ShapeRasterizer.reliefValve(shell.shape(),out.getAxis().ordinal(),out.getAxisDirection().getStep());origin=shell.origin();}
         else if(host.entity() instanceof com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity pipe){
             var face=net.minecraft.core.Direction.valueOf(mount.face().name());var state=pipe.getBlockState();
             var axis=InstrumentHosts.ReliefValve.pipeAxis(com.wormzjl.icheme.world.level.block.FluidDeviceBlock.connectionMask(state),state.getValue(com.wormzjl.icheme.world.level.block.FluidDeviceBlock.FACING));

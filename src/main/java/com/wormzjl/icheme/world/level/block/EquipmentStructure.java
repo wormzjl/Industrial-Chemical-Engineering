@@ -1473,7 +1473,10 @@ public final class EquipmentStructure {
         var valve = spec.blanket() > 0 ? com.wormzjl.icheme.runtime.instrument.InstrumentHosts.BlanketValve.of(level, vessel.origin(), vessel.shape()) : null;
         if (valve != null) { nozzles = new ArrayList<>(nozzles); nozzles.add(valve.port()); }
         // So does a fitted pressure safety valve, its outlet the relief port where the layout now puts it.
-        var relief = spec.relief() > 0 ? com.wormzjl.icheme.runtime.instrument.InstrumentHosts.ReliefValve.of(level, vessel.origin(), vessel.shape()) : null;
+        // Its outlet keeps the face it was fitted with (owner: "outlet should face the user when placed"), the default where the new layout takes that cell.
+        var fittedFace = device.ports().stream().filter(p -> p.role() == com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.ConnectionRole.RELIEF).map(p -> net.minecraft.core.Direction.valueOf(p.face().name())).findFirst().orElse(null);
+        var relief = spec.relief() > 0 ? com.wormzjl.icheme.runtime.instrument.InstrumentHosts.ReliefValve.of(level, vessel.origin(), vessel.shape(), fittedFace) : null;
+        if (spec.relief() > 0 && relief == null) relief = com.wormzjl.icheme.runtime.instrument.InstrumentHosts.ReliefValve.of(level, vessel.origin(), vessel.shape());
         if (relief != null) { nozzles = new ArrayList<>(nozzles); nozzles.add(relief.port()); }
         world.edit(device.id(), record.revision(), device.withPlacement(position(level, node), nozzles),
                 vessel.shape().kind().mover() || vessel.shape().kind() == EquipmentShape.Kind.FLARE_STACK || vessel.shape().kind().chimney() ? spec : new FluidDeviceSpec(vessel.shape().volume(), spec.temperature(), spec.pressure(), spec.composition(), spec.solids(), vessel.shape().levelHeight(), open(vessel), vessel.shape().fluidGeometry(),spec.tower(), valve == null ? 0 : spec.blanket(), relief == null ? 0 : spec.relief(), null));

@@ -460,6 +460,12 @@ class ShapeRasterizerTest {
                 var place = BlanketValveGeometry.of(shape);
                 org.junit.jupiter.api.Assertions.assertNotNull(place, shape.toString());
                 int[] cell = place.cell(), face = place.face();
+                assertEquals(0, face[1], shape + ": the outlet points to the side");
+                // Asked for a face (the player's), the valve takes it where its cell is free, else none.
+                for (int[] way : new int[][] {{0, 1}, {0, -1}, {2, 1}, {2, -1}}) {
+                    var asked = ReliefValveGeometry.of(shape, way[0], way[1]);
+                    if (asked != null) assertEquals(way[1], asked.face()[way[0]], shape + ": the outlet faces the way asked");
+                }
                 int x = cell[0] + face[0], y = cell[1] + face[1], z = cell[2] + face[2];
                 var layout = ShapeRasterizer.layout(shape);
                 for (var cells : List.of(layout.shell(), layout.interior()))
@@ -495,7 +501,8 @@ class ShapeRasterizerTest {
                     assertTrue(away > 0, shape + ": the outlet pipe's cell " + x + "," + y + "," + z + " is the pipe cell of nozzle " + port.nozzle());
                 }
                 double[] b = place.bounds();
-                assertTrue(b[4] <= shape.sizeY() + 1e-9, shape + ": the valve stands " + b[4] + " high in a box of " + shape.sizeY());
+                // It stays in its own cell, no higher than the layer of the nozzles' pipe cells (a crown that fills every cell beside the flange lifts it a cell).
+                assertTrue(b[4] <= cell[1] + 1 + 1e-9 && cell[1] <= shape.sizeY(), shape + ": the valve stands " + b[4] + " high in cell " + cell[1] + ", box " + shape.sizeY());
                 var blanket = BlanketValveGeometry.of(shape);
                 if (blanket == null) continue;
                 assertTrue(blanket.cell()[0] != cell[0] || blanket.cell()[2] != cell[2], shape + ": both valves in one cell");
@@ -510,7 +517,7 @@ class ShapeRasterizerTest {
         for (double outside : new double[] {.06, .17, .33})
             for (int face = 0; face < 3; face++)
                 for (int axis = 0; axis < 3; axis++) {
-                    if (axis == face) continue;
+                    if (axis == face || face == 1) continue;
                     for (int sign : new int[] {-1, 1}) {
                         var b = ReliefValveGeometry.onPipe(face, sign, axis, outside).bounds();
                         for (int k = 0; k < 3; k++) assertTrue(b[k] >= -1e-9 && b[k + 3] <= 1 + 1e-9, "outside " + outside + " face " + face + "/" + sign + ": " + java.util.Arrays.toString(b));

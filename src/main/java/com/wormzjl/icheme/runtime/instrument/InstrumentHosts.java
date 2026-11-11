@@ -125,7 +125,7 @@ public final class InstrumentHosts {
                 if(host.pipe()){if(host.entity() instanceof FluidDeviceBlockEntity pipe&&legacy(host.entity().getBlockState())!=null)mounts.add(PipeAccessory.of(pipe));}
                 else if(host.metadata().fitting()!=null)mounts.add(vesselFitting(host));
                 if(host.metadata().safetyValve())mounts.add(ReliefValve.of(host));
-            }else if(type!=null&&(!host.pipe()||type==Instrument.Type.SAFETY_VALVE))mounts.add(vesselFitting(host,type));
+            }else if(type!=null&&(!host.pipe()||type==Instrument.Type.SAFETY_VALVE))mounts.add(type==Instrument.Type.SAFETY_VALVE?ReliefValve.of(host,toward(direction)):vesselFitting(host,type));
             for(var mount:mounts){
                 if(mount==null)continue;
                 var hit=mount.bounds().clip(eye,end);if(hit.isEmpty())continue;double distance=hit.get().distanceTo(eye);
@@ -138,6 +138,8 @@ public final class InstrumentHosts {
     public static Instrument.Selectable vesselFitting(Host host,Instrument.Type type){
         return switch(type){case LEVEL_GAUGE->LevelGauge.of(host);case BLANKET_VALVE->BlanketValve.of(host);case SAFETY_VALVE->ReliefValve.of(host);default->null;};
     }
+    /** The horizontal face toward a player who looks along {@code look}: a safety valve's outlet faces the player who fits it. */
+    public static Direction toward(Vec3 look){return Direction.getNearest(-look.x,0,-look.z);}
     /** The fitting type a place of {@link #vesselFitting} takes. */
     public static Instrument.Type typeOf(Instrument.Selectable mount){return mount instanceof LevelGauge?Instrument.Type.LEVEL_GAUGE:mount instanceof BlanketValve?Instrument.Type.BLANKET_VALVE:mount instanceof ReliefValve?Instrument.Type.SAFETY_VALVE:null;}
     /**
@@ -146,33 +148,40 @@ public final class InstrumentHosts {
      */
     public record ReliefValve(AABB bounds,com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Port port,com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Direction face) implements Instrument.Selectable {
         @Override public String id(){return "safety_valve";}
-        public static ReliefValve of(Host host){
-            if(host.entity() instanceof FluidDeviceBlockEntity pipe)return host.pipe()?onPipe(pipe,host.metadata().reliefFace()):null;
+        /** A fitted valve, its outlet out of its registration's face; on a host without one, the valve as fitted with the default face. */
+        public static ReliefValve of(Host host){return of(host,null);}
+        /** The valve on {@code host}: a fitted one out of its own face, a valve still to fit with its outlet {@code toward} the player (null: the default); null where that face is taken. */
+        public static ReliefValve of(Host host,Direction toward){
+            var face=host.metadata().safetyValve()&&host.metadata().reliefFace()!=null?host.metadata().reliefFace():toward;
+            if(host.entity() instanceof FluidDeviceBlockEntity pipe)return host.pipe()?onPipe(pipe,face):null;
             if(!(host.entity() instanceof EquipmentShellBlockEntity shell)||shell.shape()==null||shell.getLevel()==null)return null;
-            return of(shell.getLevel(),shell.origin(),shell.shape());
+            return of(shell.getLevel(),shell.origin(),shell.shape(),face);
         }
-        public static ReliefValve of(Level level,BlockPos origin,EquipmentShape shape){
-            var place=ReliefValveGeometry.of(shape);if(place==null)return null;
+        public static ReliefValve of(Level level,BlockPos origin,EquipmentShape shape){return of(level,origin,shape,null);}
+        /** The valve on a drum, its outlet out of {@code face} (null: the default direction); null where that face is taken or not horizontal. */
+        public static ReliefValve of(Level level,BlockPos origin,EquipmentShape shape,Direction asked){
+            if(asked!=null&&asked.getAxis()==Direction.Axis.Y)return null;
+            var place=asked==null?ReliefValveGeometry.of(shape):ReliefValveGeometry.of(shape,asked.getAxis().ordinal(),asked.getAxisDirection().getStep());if(place==null)return null;
             var b=place.bounds();var cell=place.cell();var face=place.face();
             var position=new com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Position(level.dimension().location().toString(),origin.getX()+cell[0],origin.getY()+cell[1],origin.getZ()+cell[2]);
             var direction=com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Direction.valueOf(Direction.fromDelta(face[0],face[1],face[2]).name());
             return new ReliefValve(new AABB(b[0],b[1],b[2],b[3],b[4],b[5]).move(origin).inflate(.008),
                     new com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Port(position,direction,com.wormzjl.icheme.science.fluid.network.PassiveNetwork.PhasePort.VAPOR,com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.ConnectionRole.RELIEF),direction);
         }
-        /** The valve on {@code pipe}, its outlet out of {@code fitted} (its registration's), or for a valve still to fit out of {@link #outletFace}; null on a pipe with no face free for it. */
-        static ReliefValve onPipe(FluidDeviceBlockEntity pipe,Direction fitted){
+        /** The valve on {@code pipe}, its outlet out of {@code face} (null: {@link #outletFace}); null where that face is not a free side across the pipe. */
+        static ReliefValve onPipe(FluidDeviceBlockEntity pipe,Direction face){
             var state=pipe.getBlockState();int mask=FluidDeviceBlock.connectionMask(state);
             var axis=pipeAxis(mask,state.getValue(FluidDeviceBlock.FACING));
-            var face=fitted!=null?fitted:outletFace(mask,axis);if(face==null||face.getAxis()==axis)return null;
+            if(face==null)face=outletFace(mask,axis);if(face==null||face.getAxis()==axis||face.getAxis()==Direction.Axis.Y||(mask&1<<face.ordinal())!=0)return null;
             var place=ReliefValveGeometry.onPipe(face.getAxis().ordinal(),face.getAxisDirection().getStep(),axis.ordinal(),PipeSizes.outside(pipe.bore()));
             var b=place.bounds();
             return new ReliefValve(new AABB(b[0],b[1],b[2],b[3],b[4],b[5]).move(pipe.getBlockPos()).inflate(.008),null,com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Direction.valueOf(face.name()));
         }
         /** A pipe's axis: that of its first connection, or its facing's on a pipe without one. */
         public static Direction.Axis pipeAxis(int mask,Direction facing){for(var d:Direction.values())if((mask&1<<d.ordinal())!=0)return d.getAxis();return facing.getAxis();}
-        /** The face a safety valve fitted on a pipe leaves by: up where nothing meets the pipe there, else the first free face across the pipe; null where none is. */
+        /** The default face a safety valve on a pipe leaves by: the first free side across the pipe; null where none is. */
         public static Direction outletFace(int mask,Direction.Axis axis){
-            for(var d:new Direction[]{Direction.UP,Direction.NORTH,Direction.SOUTH,Direction.WEST,Direction.EAST,Direction.DOWN})if(d.getAxis()!=axis&&(mask&1<<d.ordinal())==0)return d;
+            for(var d:new Direction[]{Direction.NORTH,Direction.SOUTH,Direction.WEST,Direction.EAST})if(d.getAxis()!=axis&&(mask&1<<d.ordinal())==0)return d;
             return null;
         }
     }

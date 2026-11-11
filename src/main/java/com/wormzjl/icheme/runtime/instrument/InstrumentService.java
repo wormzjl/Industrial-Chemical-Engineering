@@ -72,7 +72,8 @@ public final class InstrumentService {
     public void tick(long tick){if(store.nextDue()==0)store.nextDue(tick+100);if(tick<store.nextDue())return;store.nextDue(tick+100);recoverInvalidSensors();for(var p:store.pending()){var player=server.getPlayerList().getPlayer(p.player());if(player==null)continue;var level=level(p.dimension());if(level==null||!level.hasChunkAt(BlockPos.of(p.position())))continue;commit(player,level,p);store.finish(p.request());exactStacks.remove(p.request());}for(var i:store.installed()){var h=world.instrumentHost(i.key().host());if(h==null)continue;var m=h.mount(i.key().mount());if(m==null||!m.kinds().contains(i.settings().kind())||h.pipe()&&InstrumentHosts.legacy(h.entity().getBlockState())!=null){var removed=store.remove(i.key(),i.instance());if(removed!=null){refund(null,h.entity().getLevel(),h.entity().getBlockPos(),item(removed));samples.remove(i.instance());sync(h);}}}prune();}
     private void commit(ServerPlayer player,ServerLevel level,Store.Pending p){var host=InstrumentHosts.at(level,BlockPos.of(p.position()));if(host==null||host.identity()!=p.key().host()||player.serverLevel()!=level||store.revision(host.identity())!=p.expectedRevision())return;var hand=p.offhand()?InteractionHand.OFF_HAND:InteractionHand.MAIN_HAND;var held=player.getItemInHand(hand);if(!permission(player,host,held))return;if(!p.offhand()&&player.getInventory().selected!=p.slot()||exactStacks.containsKey(p.request())&&held!=exactStacks.get(p.request()))return;
         if(p.type().vessel()){
-            var mount=InstrumentHosts.vesselFitting(host,p.type());
+            // A safety valve to fit has its outlet toward the player (owner: "outlet should face the user when placed").
+            var mount=p.type()==Instrument.Type.SAFETY_VALVE&&p.install()?InstrumentHosts.ReliefValve.of(host,InstrumentHosts.toward(player.getLookAngle())):InstrumentHosts.vesselFitting(host,p.type());
             if(mount==null||!mount.id().equals(p.key().mount())||!InstrumentHosts.reachable(player,host,mount))return;
             boolean relief=p.type()==Instrument.Type.SAFETY_VALVE;
             if(p.install()){
@@ -198,10 +199,11 @@ public final class InstrumentService {
         }
         if(!host.metadata().sensors().equals(store.sensors(host.identity()))||!host.metadata().installed().equals(store.host(host.identity()))||!Objects.equals(host.metadata().fitting(),host.pipe()?null:store.legacy(host.identity()))||!Objects.equals(host.metadata().relief(),store.relief(host.identity()))||host.metadata().reliefFace()!=reliefFace(host)||host.metadata().revision()!=store.revision(host.identity()))sync(host);
     }
-    /** A pipe's safety valve's outlet face, as its registration holds it ({@code FluidDeviceSpec#reliefFace}); null for every other host. */
+    /** A safety valve's outlet face, as its registration holds it: a pipe's {@code FluidDeviceSpec#reliefFace}, a drum's relief port's face; null without a valve. */
     private Direction reliefFace(InstrumentHosts.Host host){
-        if(!host.pipe()||store.relief(host.identity())==null)return null;
-        var record=world.registrations().get(host.identity());var face=record==null?null:record.spec().reliefFace();
+        if(store.relief(host.identity())==null)return null;
+        var record=world.registrations().get(host.identity());if(record==null)return null;
+        var face=host.pipe()?record.spec().reliefFace():record.device().ports().stream().filter(p->p.role()==com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.ConnectionRole.RELIEF).map(com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Port::face).findFirst().orElse(null);
         return face==null?null:Direction.valueOf(face.name());
     }
     public void recoverHost(long id){var host=world.instrumentHost(id);if(host!=null)recover(id,host.entity().getLevel(),host.entity().getBlockPos(),host.pipe()?InstrumentHosts.legacy(host.entity().getBlockState()):null,host.metadata().recoverOnBreak());}

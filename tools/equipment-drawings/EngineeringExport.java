@@ -33,6 +33,13 @@ public class EngineeringExport {
   for(var form:new VesselPlacement.Form[]{VesselPlacement.Form.VERTICAL,VesselPlacement.Form.LENGTHWISE}){var z=ConstructorDefaults.sizes(form);emit(form.name()+"_BLANKET",EquipmentShape.drum(z.diameter(),z.length(),form.orientation(),heading,EquipmentShape.defaultSupport(z.diameter(),form.orientation())));}
   var small=EquipmentShape.drum(1.5,4,EquipmentShape.Orientation.HORIZONTAL,heading,EquipmentShape.defaultSupport(1.5,EquipmentShape.Orientation.HORIZONTAL));emit("LENGTHWISE_BLANKET_SMALL",small);
   extra("GAS_BLANKETING_VALVE",ShapeRasterizer.blanketValve(small),false,false);
+  // Both valves (same batch, the pressure safety valve on the second top flange): a standing and a lying drum, the small lying
+  // drum, and a standing drum 3 m across, whose safety valve takes the next free roof cell; the valve alone and on a pipe.
+  for(var form:new VesselPlacement.Form[]{VesselPlacement.Form.VERTICAL,VesselPlacement.Form.LENGTHWISE}){var z=ConstructorDefaults.sizes(form);emit(form.name()+"_VALVES",EquipmentShape.drum(z.diameter(),z.length(),form.orientation(),heading,EquipmentShape.defaultSupport(z.diameter(),form.orientation())));}
+  emit("LENGTHWISE_VALVES_SMALL",small);
+  emit("VERTICAL_VALVES_WIDE",EquipmentShape.drum(3,6,EquipmentShape.Orientation.VERTICAL,heading,EquipmentShape.defaultSupport(3,EquipmentShape.Orientation.VERTICAL)));
+  extra("PRESSURE_SAFETY_VALVE",ShapeRasterizer.reliefValve(small),false,false);
+  extra("PRESSURE_SAFETY_VALVE_ON_PIPE",ShapeRasterizer.reliefValveOnPipe(2,1,0,PipeSizes.outside(.15)),false,false);
   var line=new LineGeometry.Key(com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.PIPE,5,48,PipeSizes.code(PipeSizes.outside(.15)),0,0,false);
   extra("INLINE_PUMP",InlineMoverGeometry.polygons(line,false,false),true,true);
   extra("INLINE_COMPRESSOR",InlineMoverGeometry.polygons(line,true,false),true,true);
@@ -61,7 +68,8 @@ public class EngineeringExport {
   if(!selected.isEmpty()&&!selected.contains(id)&&!selected.contains(s.kind().name()))return;
   var polygons=raw(s);var probePlan=EquipmentInstruments.of(s);var active=new HashSet<String>();for(var p:probePlan.probes())if(p.manual())active.add(p.id());var wiring=ShapeRasterizer.instrumentWiring(s,active,RenderDetail.NORMAL);polygons.addAll(wiring.polygons());
   for(var p:probePlan.probes())if(p.manual()||p.display())polygons.addAll(InstrumentGeometry.previewHead(p));
-  if(id.contains("_BLANKET"))polygons.addAll(ShapeRasterizer.blanketValve(s));
+  if(id.contains("_BLANKET")||id.contains("_VALVES"))polygons.addAll(ShapeRasterizer.blanketValve(s));
+  if(id.contains("_VALVES"))polygons.addAll(ShapeRasterizer.reliefValve(s));
   if(!wiring.unresolved().isEmpty())throw new IllegalStateException(id+" has unresolved native instrument wiring: "+wiring.unresolved());
   System.out.println(id+" wiring "+wiring.runs().size()+" runs; unresolved="+wiring.unresolved());var data=base(id,polygons);data.put("instrumentPlan",probePlan);data.put("instrumentWiring",Map.of("runs",wiring.runs(),"unresolved",wiring.unresolved()));data.put("serviceEnclosures",ShapeRasterizer.services(s).enclosures());data.put("kind",s.kind().name());data.put("parameters",Map.of("size",s.diameter(),"length",s.tangentLength(),"support",s.support(),"orientation",s.orientation().name(),"heading",s.front().name(),"power_kw",s.duty().power()));
   data.put("axis",s.axis());if(s.kind()==EquipmentShape.Kind.TANK)data.put("planAxis",TankDesign.Plan.of(s.diameter(),(int)s.tangentLength()).a());if(s.kind()==EquipmentShape.Kind.SPHERE)data.put("planAxis",SphereDesign.Plan.of(s.diameter(),s.support()).a());
