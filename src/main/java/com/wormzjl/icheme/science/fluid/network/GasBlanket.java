@@ -43,6 +43,9 @@ public final class GasBlanket {
      */
     public static final double GAMMA=1.4;
 
+    /** The share of the gas a vessel holds at its set pressure below which it lacks none: the valve then asks for nothing, and an island its vessel stands in can rest. */
+    public static final double RESOLUTION=1e-6;
+
     /** The pressure above which a vessel blanketed at {@code set} vents, Pa. */
     public static double ventPressure(double set){return set*(1+BAND);}
     /** Whether {@code node} is a vessel with a gas blanketing valve. */
@@ -89,7 +92,8 @@ public final class GasBlanket {
         double room=Math.max(inventory.volume()-(fluid?OpenVessel.condensedVolume(state):0),ROOM*inventory.volume());
         double held=0;if(gas)for(double n:FluidThermodynamics.phaseMoles(state,GAS))held+=n;
         double density=gas?held/state.vaporVolume()*set/state.pressure():set/(FluidThermodynamics.R*state.temperature());
-        return Math.max(0,density*room-held)/GAMMA;
+        double lack=density*room-held;
+        return lack>RESOLUTION*density*room?lack/GAMMA:0;
     }
     /** The mean molar mass of what {@code donor} gives a gas line, kg/mol: its gas's, or its whole contents' when it holds none. */
     private static double molarMass(FluidThermodynamics model,PassiveNetwork.Reservoir donor) {
