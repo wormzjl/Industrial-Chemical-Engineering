@@ -340,7 +340,14 @@ class PrecipitatedSolidsTest {
         assertTrue(s.pressure()>PhaseLayout.AMBIENT_PRESSURE+1e5,"filled to about 3 bar: taut");
         assertTrue(crystalKg(node)>0,"the water froze");
         assertTrue(TestPhases.waterLiquid(s)>0,"and some stays liquid beside the ice");
-        assertEquals(TestPhases.ice(water).meltingTemperature(s.pressure()),s.temperature(),1e-6,"on the melting line at its pressure");
+        // W3b: the liquid water holds the nitrogen it dissolves at about 3 bar (a mole fraction of about 5e-5), and a solvent
+        // freezes below the pure melting line by its colligative depression, ln x_w = -(ΔH_fus/R)(1/T - 1/T_m): about 6 mK
+        // with ice's 6.01 kJ/mol. The pure line held while the free water dissolved nothing. The ideal law stands for the
+        // dilute solvent (its activity coefficient is 1 to the second order in x); the tolerance covers ±5 % on ΔH_fus.
+        double[] liquid=s.amountsView(s.slot(FluidThermodynamics.AQUEOUS));double xw=liquid[liquid.length-1]/java.util.Arrays.stream(liquid).sum();
+        double tm=TestPhases.ice(water).meltingTemperature(s.pressure()),freeze=1/(1/tm-8.314462618*Math.log(xw)/6010);
+        assertTrue(tm-freeze>1e-3,"the dissolved nitrogen depresses the freeze: "+(tm-freeze)+" K");
+        assertEquals(freeze,s.temperature(),.05*(tm-freeze)+1e-5,"on the melting line at its pressure, less the dissolved nitrogen's depression");
     }
 
     /** The trace flush never deletes crystal mass: a vessel at its crystal equilibrium holding a 1e-25 mol methane trace

@@ -137,8 +137,13 @@ class WaterIntoCryogenicMethaneTest {
             System.out.printf(Locale.ROOT, "WP4 gate (c) refresh after interval %d: %.4e mol of stand-in to %.4e mol of ice at %.3f K %.1f Pa, steam %.4e mol, "
                             + "methane vapour %.4e to %.4e mol, liquid %.4e to %.4e mol%n", k + 1, inVessel, iceMoles, after.state().temperature(), after.state().pressure(),
                     TestPhases.waterVapor(after.state()), TestPhases.vapor(state)[methane], TestPhases.vapor(after.state())[methane], TestPhases.liquid(state)[methane], TestPhases.liquid(after.state())[methane]);
-            assertEquals(0, TestPhases.waterLiquid(after.state()), "no stand-in is left");
-            assertEquals(inVessel, iceMoles + TestPhases.waterVapor(after.state()), 1e-9 * inVessel, "every mole of the water is ice, its steam aside");
+            // W3b: water is a compound of the cubic, so the methane liquid dissolves some of it beside the ice (the
+            // package's derived pairs give 9e-5 by mole at 151 K; the free water's rule dissolved none). No free water is left.
+            var st = after.state(); int oil = st.slot(FluidThermodynamics.OIL);
+            double dissolved = oil < 0 ? 0 : st.amountsView(oil)[water], solvent = oil < 0 ? 1 : java.util.Arrays.stream(st.amountsView(oil)).sum();
+            assertTrue(st.slot(FluidThermodynamics.AQUEOUS) < 0, "no stand-in is left: no aqueous liquid");
+            assertTrue(dissolved / solvent < 1e-3, "the methane liquid holds a trace of the water: " + dissolved / solvent);
+            assertEquals(inVessel, iceMoles + TestPhases.waterVapor(st) + dissolved, 1e-9 * inVessel, "every mole of the water is ice, its steam and its trace in the methane aside");
             assertTrue(TestPhases.vapor(after.state())[methane] > TestPhases.vapor(state)[methane], "the fusion heat boils methane");
             refreshed = true;
         }
