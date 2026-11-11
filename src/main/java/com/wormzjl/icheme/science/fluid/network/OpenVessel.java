@@ -94,6 +94,7 @@ public final class OpenVessel {
     /** Whether an open vessel has anything to give the atmosphere: gas, or liquid above its fill height. Such a vessel is
      * never at rest ({@link NetworkReduction#atRest}). */
     static boolean releasing(PassiveNetwork.Reservoir node) {
+        if(GasBlanket.venting(node))return true;
         if(node.kind()!=PassiveNetwork.NodeKind.RESERVOIR||!node.inventory().open()||node.empty())return false;
         return FluidThermodynamics.holdsPhase(node.state(),GAS)||overflows(node);
     }
@@ -140,7 +141,9 @@ public final class OpenVessel {
      * between a state's phase split and its inventory never books out more than it holds.
      */
     static Releases releases(FluidThermodynamics model,PassiveNetwork.Reservoir node,double dt) {
-        if(node.kind()!=PassiveNetwork.NodeKind.RESERVOIR||!node.inventory().open()||node.empty()||PassiveStepSolver.holdsNoFluid(node))return null;
+        if(node.kind()!=PassiveNetwork.NodeKind.RESERVOIR||node.empty()||PassiveStepSolver.holdsNoFluid(node))return null;
+        // A closed vessel releases only through its gas blanketing valve's vent (batch 2026-11-11-gas-blanketing).
+        if(!node.inventory().open())return GasBlanket.releases(model,node,dt);
         var state=node.state();var held=node.inventory().moles();
         double top=topVolume(node.inventory()),liquid=condensedVolume(state);
         double ventShare=FluidThermodynamics.holdsPhase(state,GAS)?ventShare(node.inventory(),state.vaporVolume(),dt):0,spillShare=liquid>top?releaseShare(dt):0;

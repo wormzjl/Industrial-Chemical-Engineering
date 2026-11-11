@@ -36,11 +36,13 @@ public final class PhysicalFluidTopology {
     public static boolean laneFits(int lane,int slots){return lane>=1&&lane<=RACK_PLACES&&slots>=1&&slots<=RACK_WIDTH&&(lane<=12?(lane-1)%4+slots<=4:slots==1);}
     /** A reservoir's phase outlet, a mover's explicitly directed process connection, or a heat side's inlet or outlet. Stable checkpoint codes. */
     public enum ConnectionRole {
-        VESSEL(0),SUCTION(1),DISCHARGE(2),INLET(3),OUTLET(4);
+        VESSEL(0),SUCTION(1),DISCHARGE(2),INLET(3),OUTLET(4),
+        /** A vessel's blanket gas port (batch 2026-11-11-gas-blanketing): the run into it carries the vessel's gas blanketing valve. */
+        BLANKET(5);
         private final int code;
         ConnectionRole(int code){this.code=code;}
         public int code(){return code;}
-        public static ConnectionRole fromCode(int code){return switch(code){case 0->VESSEL;case 1->SUCTION;case 2->DISCHARGE;case 3->INLET;case 4->OUTLET;default->throw new IllegalArgumentException("Unknown connection role "+code);};}
+        public static ConnectionRole fromCode(int code){return switch(code){case 0->VESSEL;case 1->SUCTION;case 2->DISCHARGE;case 3->INLET;case 4->OUTLET;case 5->BLANKET;default->throw new IllegalArgumentException("Unknown connection role "+code);};}
     }
     /** A multi-cell device's nozzle: the face of {@code cell} where a pipe meets it, its phase class and connection role. */
     public record Port(Position cell,Direction face,PassiveNetwork.PhasePort port,ConnectionRole role) {
@@ -202,7 +204,8 @@ public final class PhysicalFluidTopology {
                         default->throw new IllegalArgumentException("An ejector needs suction, motive and discharge ports");
                     }
                 } else if(kind==TopologyCompiler.Kind.RESERVOIR) {
-                    if(port.role!=ConnectionRole.VESSEL)throw new IllegalArgumentException("A reservoir needs vessel ports");
+                    if(port.role!=ConnectionRole.VESSEL&&port.role!=ConnectionRole.BLANKET)throw new IllegalArgumentException("A reservoir needs vessel ports");
+                    if(port.role==ConnectionRole.BLANKET&&(port.port!=PassiveNetwork.PhasePort.VAPOR||ports.stream().filter(p->p.role==ConnectionRole.BLANKET).count()>1))throw new IllegalArgumentException("A vessel has one blanket gas port, on its vapour space");
                 } else if(kind==TopologyCompiler.Kind.PUMP||kind==TopologyCompiler.Kind.COMPRESSOR||kind==TopologyCompiler.Kind.TURBINE) {
                     if(port.port!=PassiveNetwork.PhasePort.BULK)throw new IllegalArgumentException("A mover needs bulk ports");
                     switch(port.role) {
@@ -349,6 +352,12 @@ public final class PhysicalFluidTopology {
             return false;
         }
         /** The driven side is the actual discharge nozzle, independent of the node's position and the model's heading. */
+        /** Whether the port out of {@code cell} towards {@code face} is this vessel's blanket gas port. */
+        boolean blanketAt(Position cell,Direction face) {
+            if(kind!=TopologyCompiler.Kind.RESERVOIR)return false;
+            for(var port:ports)if(port.cell.equals(cell)&&port.face==face)return port.role==ConnectionRole.BLANKET;
+            return false;
+        }
         boolean outletAt(Position cell,Direction face) {
             if(kind==TopologyCompiler.Kind.HEAT_SIDE){for(var port:ports)if(port.cell.equals(cell)&&port.face==face)return port.role==ConnectionRole.OUTLET;return false;}
             // An ejector's motive and discharge runs leave its node for its own junctions (batch 2026-11-10-steam-ejector-flow).
@@ -491,7 +500,7 @@ public final class PhysicalFluidTopology {
         // The face of every link with a tank (RESERVOIR) end, as the direction from the tank to its neighbour, and the port
         // a pipe end at that tank compiles to (Device.portAt). Generators and voids stay BULK.
         var tankFaces=new HashMap<Long,Direction>();var tankPorts=new HashMap<Long,PassiveNetwork.PhasePort>();var outletLinks=new HashSet<Long>();
-        var linkDirections=new HashMap<Long,Direction>();var motiveLinks=new HashSet<Long>();
+        var linkDirections=new HashMap<Long,Direction>();var motiveLinks=new HashSet<Long>();var blanketLinks=new HashSet<Long>();
         for(var d:physical.values())for(var contact:d.contacts()) {
             var direction=contact.direction();var next=contact.cell().offset(direction);
             var other=across(positions::get,x->x,d,contact.cell(),direction);
@@ -502,6 +511,7 @@ public final class PhysicalFluidTopology {
                 linkDirections.put(linkId,direction);
                 if(d.kind==TopologyCompiler.Kind.RESERVOIR){tankFaces.put(linkId,direction);tankPorts.put(linkId,d.portAt(contact.cell(),direction));}
                 else if(other.kind==TopologyCompiler.Kind.RESERVOIR){tankFaces.put(linkId,opposite(direction));tankPorts.put(linkId,other.portAt(next,opposite(direction)));}
+                if(d.blanketAt(contact.cell(),direction)||other.blanketAt(next,opposite(direction)))blanketLinks.add(linkId);
                 if(d.outletAt(contact.cell(),direction)||other.outletAt(next,opposite(direction)))outletLinks.add(linkId);
                 if(d.motiveAt(contact.cell(),direction)||other.motiveAt(next,opposite(direction)))motiveLinks.add(linkId);
                 linkOwner.put(linkId++,owner.id);
@@ -561,7 +571,10 @@ public final class PhysicalFluidTopology {
                 var sections=run.segments().stream().map(TopologyCompiler.Segment::geometry).toList();
                 int a=indices.get(run.first()),b=indices.get(run.second());
                 long pipeId=runIdentity(run,linkOwner,0);if(!pipeIdentities.add(pipeId))throw new IllegalStateException("Compiled pipe identity collision");
-                boolean burnerStart=start!=null&&start.valvedSink(),burnerEnd=end!=null&&end.valvedSink();
+                // A vessel's blanket gas port (batch 2026-11-11-gas-blanketing): the run into it carries the vessel's gas
+                // blanketing valve, stated toward the vessel, as the run into a firebox carries its fuel valve.
+                boolean padStart=start!=null&&start.kind==TopologyCompiler.Kind.RESERVOIR&&blanketLinks.contains(startLink.id()),padEnd=end!=null&&end.kind==TopologyCompiler.Kind.RESERVOIR&&blanketLinks.contains(endLink.id());
+                boolean burnerStart=start!=null&&start.valvedSink()||padStart,burnerEnd=end!=null&&end.valvedSink()||padEnd;
                 boolean outletStart=start!=null&&start.stillOutlet(),outletEnd=end!=null&&end.stillOutlet();
                 if((outletStart||outletEnd)&&!(burnerStart||burnerEnd)) {
                     // A batch still's outlet (batch 2026-11-09-batch-distiller): the run out of its generator carries its outlet
@@ -587,6 +600,7 @@ public final class PhysicalFluidTopology {
                     // burners' fuel valve, stated toward it; a valve, pump or compressor driving the run's other end keeps its
                     // own half, as two driven ends do.
                     var burner=burnerEnd?end:start;var feeder=burnerEnd?start:end;var feederLink=burnerEnd?startLink:endLink;
+                    var sinkValve=burner.valvedSink()?burner.control:FlowControl.ControlValve.blanket();var sinkPort=burnerEnd?endPort:startPort;
                     int sink=burnerEnd?b:a,source=burnerEnd?a:b;var sourcePort=burnerEnd?startPort:endPort;
                     boolean driven=feeder!=null&&feeder.actuator()&&outletLinks.contains(feederLink.id());
                     if(driven) {
@@ -594,9 +608,9 @@ public final class PhysicalFluidTopology {
                         var halves=sections.stream().map(g->scaled(g,.5)).toList();
                         pipes.add(new PassiveNetwork.Pipe(pipeId,source,middle,halves,control(feeder,compiled.invalidPumpCycles())).withPorts(sourcePort,PassiveNetwork.PhasePort.BULK));mapViews(views,run,linkOwner,linkDirections,physical,islandIndex,pipeId,burnerEnd,true);
                         pipeId=runIdentity(run,linkOwner,1);if(!pipeIdentities.add(pipeId))throw new IllegalStateException("Compiled pipe identity collision");
-                        pipes.add(new PassiveNetwork.Pipe(pipeId,middle,sink,halves,burner.control).withActuatorArea(halves.getLast().area()));mapViews(views,run,linkOwner,linkDirections,physical,islandIndex,pipeId,burnerEnd,true);
+                        pipes.add(new PassiveNetwork.Pipe(pipeId,middle,sink,halves,sinkValve).withPorts(PassiveNetwork.PhasePort.BULK,sinkPort).withActuatorArea(halves.getLast().area()));mapViews(views,run,linkOwner,linkDirections,physical,islandIndex,pipeId,burnerEnd,true);
                     } else {
-                        pipes.add(new PassiveNetwork.Pipe(pipeId,source,sink,sections,burner.control).withPorts(sourcePort,PassiveNetwork.PhasePort.BULK)
+                        pipes.add(new PassiveNetwork.Pipe(pipeId,source,sink,sections,sinkValve).withPorts(sourcePort,sinkPort)
                                 .withForbiddenDirections(checkRestrictions(start,end,startLink,endLink,points,burnerStart)).withActuatorArea((burnerEnd?sections.getLast():sections.getFirst()).area()));
                         mapViews(views,run,linkOwner,linkDirections,physical,islandIndex,pipeId,burnerEnd);
                     }
