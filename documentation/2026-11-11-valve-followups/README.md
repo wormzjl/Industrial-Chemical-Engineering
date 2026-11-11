@@ -1,6 +1,6 @@
 # 2026-11-11 valve follow-ups
 
-Status: in progress since 2026-11-11; items 1 to 5 built on `claude/valve-followups-build-e04fd4`, not merged. Branch `claude/valve-followups`, cut from `main` at `324ce9284` (0.27.0).
+Status: Implemented 2026-11-12, merged to `main` as 0.27.1 (not pushed); built on `claude/valve-followups-build-e04fd4`. Branch `claude/valve-followups`, cut from `main` at `324ce9284` (0.27.0).
 
 Purpose: the items left open when 0.27.0 merged (owner, 2026-11-11: "fix the issues").
 
@@ -25,10 +25,13 @@ Purpose: the items left open when 0.27.0 merged (owner, 2026-11-11: "fix the iss
 - 2026-11-11, item 4 (`7e8ed0a8c`): `Flares.plans` plans the safety valve's line into a flare; `ShaftPlan.apply` closes it on its fitting mask while solids arrive. Relief 0, drum 300.0 to 500.1 kPa in 20 s, BLOCKED. Ran 4 classes (26 tests).
 - 2026-11-11, item 5 (`ea8c63ef6`): `SimulationTime.DEFAULT_FACTOR` (4) for the setting and both harnesses; SUMMARY `factor=`; `compare.mjs` third folder; the factor-4 campaign archived (main checkout, `tools/minecraft-time-delta/logs/time-scale-campaign4-logs-2026-11-11.tar.gz`). Ran `SimulationTimeTest`.
 - 2026-11-11, quick check at factor 4 (seeds 1 to 200, all distributions, `factor.sh vf4` on `ea8c63ef6`): bundled 198 clean (197 in W6's q4; 118 F fixed), cold 196 (the same four holds), defaults 200; no new hold, nothing replayed. VALVE_FOLLOWUPS_REVIEW.md.
+- 2026-11-11, merge preparation (owner, through the orchestrator: "To main as 0.27.1"; `0f38afa3b`): CHANGELOG entry, code guide (fluid-science, fluid-runtime, verification) at `ea8c63ef6`, the probe patch to `tools/minecraft-time-delta/patches/`; no translation commit (`en_us.json` unchanged); `main-reach.pl` lists only the three optional Iris/DH bridges of earlier batches.
+- 2026-11-12, final lane on `0f38afa3b` (FINAL_LANE_REVIEW.md): 2680 tests pass, chain-100 exact, 33 junction lines identical, 94 GameTests pass, campaign at 4 clean 991 / 990 / 1000 against campaign4 (bundled 431 replayed alone: E6 as before); version 0.27.1, merged to `main`.
 
 ## Documents
 
 - [VALVE_FOLLOWUPS_REVIEW.md](VALVE_FOLLOWUPS_REVIEW.md): per item the physics, what the code did, the fix, the numbers and what ran; the quick check.
+- [FINAL_LANE_REVIEW.md](FINAL_LANE_REVIEW.md): the final lane against the 0.27.0 lane and the factor-4 campaign.
 
 ## Code areas
 
@@ -41,5 +44,5 @@ Purpose: the items left open when 0.27.0 merged (owner, 2026-11-11: "fix the iss
 
 - Item 7: the in-game check, which the owner starts.
 - Item 3 is a pass-order rule (the owner may prefer another form); item 4 rests on the compile leaving a relief line into a flare free of check valves.
-- The next final lane compares its campaign against the factor-4 campaign (`compare.mjs <0.27.0 lane> <head> <campaign4>`); it runs the fluid GameTests with `level-loop-blanket-direct`.
+- This batch's lane (`tools/merge-lane/logs/valve-followups-final-lane-logs-2026-11-11.tar.gz`, main checkout) is the next merge's baseline, its campaign at factor 4 with `factor=` recorded.
 - Not in this batch unless the owner asks: the valve item's icon, the Accessory tab on a drum that already shows four tabs, a hand-placed supply pipe beside the rear nozzle's on a 4 m lying drum, no valve on a 1.5 m standing drum.
