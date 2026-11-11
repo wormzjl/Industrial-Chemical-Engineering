@@ -608,3 +608,20 @@ What the code does: the column block refuses any liquid water. On main free wate
 Decision: the check reads the aqueous liquid only; water dissolved in the oil joins the steam feed until W5 gives V3 water in its liquid.
 
 **G3. Sizing samples.** The condenser and the air cooler follow G1. P-101's NPSH (80.37 to 78.65 m) is not water: the dry crude's bubble pressure at 298.15 K went from 115.0 to 129.6 kPa with the derived pairs (light ends over the heavy cuts). Accepted as their effect; the reference is re-pinned with its cause. `UnitSizing` (2.299 to 2.319) and `SizeAll` (73.06 to 73.053) are attributed after G1.
+
+## 34. G1 measured; the wet flash misses the hydrocarbon liquid above water's dew point (2026-11-12)
+
+**G1 built (uncommitted at the time of writing).** The datum's latent heat is declared on the water record (`water.json` r4, 43988.01 J/mol at 298.15 K; IF97's Region 2 ideal part exists only in test code). The network's cubic liquid less V3's: -2.4 to -2.5 J/mol over 298 to 450 K; steam unchanged. The native column has no water code. The 72 gate classes that load `V3WaterProperties`, once: the sample's gap -184 kW to +1.1 kW (main +8.4); the condenser's duty -0.6 % as predicted; the cooling-water line's drop 0.086 to 0.08519 (predicted 0.0851). `RegroupedCrudeTest`'s side liquids move by 6.8e-5 (accepted with the datum). `ColumnEjectorTest` fails on another assertion; it waits for G2a. The condenser stands at 532 m2 and the air cooler at 1340 (main 508.9 and 1265) with the inlet now as on main: what is left is the defect below.
+
+**The defect.** Expected: steam in a hydrocarbon vapour lowers the hydrocarbons' partial pressure (2.5 to 1.9 bar here), so their dew point falls by a few kelvin. What the code does (the sample's naphtha and offgas with its 326.7 mol/s of water, 23 % steam, at 2.5 bar):
+
+| T, K | 384 | 376 | 368 | 360 | 356 | 352 |
+|---|---|---|---|---|---|---|
+| without the water: liquid share | 9.1 % | 31 % | 50 % | 66 % | 73 % | 79 % |
+| with it: oil liquid | 0 | 0 | 0 | 0 | 42 % (and 14.5 % aqueous) | 51 % (and 18 % aqueous) |
+
+All gas down to 358 K, water's dew point, then 42 % oil at once. It is in every wet flash (condensers, junctions, vessels), so it changes network results.
+
+**Mechanism (orchestrator, from the code).** The feed's stability test (`TangentPlaneStability`) tries Wilson's vapour, Wilson's liquid of the whole feed, and then pure water (or each pure component on a short list). With steam in the feed Wilson's liquid starts with a third or more of water and runs to the aqueous side, as the pure-water trial does. No trial starts in the oil-rich liquid, so above water's dew point nothing proves the gas unstable and the flash answers one phase. Below it the aqueous trial proves instability and the three-slot system runs, whose own first liquid is seeded without the water; W3b step 1c found the same fault in those seeds and fixed it there only.
+
+**Decision.** One rule for both: the stability test's Wilson liquid holds water at a trace when water and another compound are present; the water trial keeps the aqueous side. No added trial. A probe decides first whether the reading holds (the distance of the dry control's liquid against the wet gas at 376 K must be negative). Dry feeds stay bit for bit; wet answers that were wrongly one phase change, and the wet scenario's counters with them.

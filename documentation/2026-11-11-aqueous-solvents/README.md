@@ -55,6 +55,7 @@ Changed so far: `science/thermo/PengRobinsonKernel`, `HuronVidalExcess`; `scienc
 
 ## Open items
 
+- Defect, open (W3B_NETWORK_PLAN.md section 34): a wet flash answers all gas above water's dew point where a hydrocarbon liquid exists (the stability test has no oil-rich liquid trial when steam is in the feed). Fix decided, not built; before N10.
 - holdGates: 14 flowsheet failures (W3B_NETWORK_PLAN.md sections 31, 33), diagnosed and decided, not built: V3's liquid-water datum on IAPWS's latent heat (V3's is 1.3 % high); the network's water saturation curve its own; the column block refuses only an aqueous liquid. A dry crude's bubble pressure at 25 C rose from 115.0 to 129.6 kPa with the derived pairs (accepted; told to the owner).
 - Cost (W3B_NETWORK_PLAN.md section 30): wet 2.18 and polar 1.42 times main after stage B, over their bounds (1.5, 1.1). Owner decision open: the analytic node Jacobian in this batch, or other bounds.
 - W3b steps 1 to 5 built, with 21 open engine and network defects and the cost step 5b (W3B_NETWORK_PLAN.md sections 10 and 15); steps 6 and 7 not started; W4 to W6 not started.
