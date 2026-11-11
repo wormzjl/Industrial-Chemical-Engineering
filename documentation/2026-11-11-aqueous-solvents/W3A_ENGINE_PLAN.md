@@ -98,3 +98,35 @@ Files: `science/thermo/phase/**`, `science/fluid/thermo/TranslatedPengRobinson` 
 - Two crystals at once is new code in the deposit solve.
 - Not in W3a: the network's layout and step solver, deleting the free-water code, ethanol and the cubic water in main data, the kernel's sums over polar compounds only, Region 2 in full for the gas share.
 - A simplification I did not take: one generic "split any closed bracket by the lever" in place of the named steps. It would delete several hundred lines, and it would also hide a model discontinuity as a step (the wet crude false root of 2026-11-02 was that). It needs its own review.
+
+## 6. Result (2026-11-11)
+
+Built by a sub-thread in six commits, 96945878b to 5830adcdc. Filtered run: 40 test classes, 213 tests, pass; every existing engine, kernel, qualification and network-engine test unchanged, none re-recorded. The full suite and the final lane have not run.
+
+| Gate (D7) | Measured | Bound |
+|---|---|---|
+| Saturation pressure against IF97 Region 4, 0.01 to 300 C | 0.29 % worst | 0.6 % |
+| Liquid density and enthalpy against Region 1 to 300 C | 0.0000 % | 0.01 % |
+| Latent heat at 100 C, 200 C | 0.029 %, 0.79 % | 0.1 %, 1 % |
+| Water and n-hexane, 1 atm | 61.14 C, vapour 0.794 hexane | 61.4 C within 0.5 K, 0.79 within 0.02 |
+| Ethanol 0.2, water 0.4, n-hexane 0.4, 1 atm | 56.79 C, three fluid phases | 57.0 C within 1 K |
+| Ethanol and water | one liquid; mean dT 0.233 K, dy 0.0038 | 0.25 K, 0.008 |
+| CO2 in water, in ethanol (25 C, 1 atm) | 1.0011 of Henry, 1.036 of the reference | 5 %, a factor 1.3 |
+| Ice onset, 10 % ethanol by mass | -4.03 C (pure water 273.1525 K) | -3.5 to -5.5 C |
+| PH and UV round trips, 57 answers | within 1e-6 N R T | 1e-6 N R T |
+| H(T) through a label flip (water 0.9, methane 0.1, 40 MPa) | 2.5e-15 N R T | 1e-9 |
+| Share derivatives | 2.6e-7 relative | 1e-6 |
+
+Kernel evaluations per TP answer on the pilot list (W3b's baseline): dry methane and n-hexane 87; water and n-hexane 117; ethanol and water at 80 C 52; the ternary at 58 C 282, at its bubble point 783; water and a crude cut 120. A list without a polar compound takes the two-slot path as before.
+
+Deviations from sections 3 and 4:
+- D5: two crystals form by alternating the two tested single-crystal solves to 1e-12, not by one more unknown in one solve.
+- D5: ice keeps its record's volume on the balance book and takes the liquid's volume gap on the equilibrium book; without it the melting line had the wrong sign.
+- D4: a UV search that closes on a jump with an end from an inexact volume solve restarts once with exact solves (failure path only).
+- D7: the saturation gate reads IF97 Region 4, an independent reference.
+
+Open, for W3b:
+- A crystal beside two liquids or three fluid phases is still the `CRYSTAL_PHASES` hold. Ice under oil over water is that case, and today's free-water rule answers it: it must be closed before the network leaves the free-water rule.
+- The ternary at its bubble point costs 783 kernel evaluations; the absent-slot rule and the seeds are where to look.
+- Water 0.95 with CO2 0.05 at 30 MPa and 616 K answers three fluid phases; not checked against data.
+- The UV restart rule may also matter for narrow-boiling hydrocarbon binaries.
