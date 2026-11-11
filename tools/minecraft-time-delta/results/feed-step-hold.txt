@@ -214,3 +214,138 @@ fluid_island=2787 committed_tick=142675 status=HELD: Interval substep limit; no 
 fluid_island=2810 committed_tick=145098 status=HELD: round deadline or worker failure
 level_loop probe result case="step factor-4 feed" factor=4 feed=198.1 kg/s held=clean failure=timed out waiting two cadences level=Infinity to -Infinity % setupResidual=NaN mol NaN J endResidual=10.08 mol -3.574e+05 J of 7638 mol through endLevel=0.1887 %
 level_loop result factor=4 cycles=2 low=Infinity % high=-Infinity % levelAtStep=NaN % levelAtEnd=NaN % held=null failure=timed out waiting for both loops to control molesResidual=0.000 mol of 0.000 mol energyResidual=0.000 J of 0.000 J intervals=0 ticks=2401 unread=0 setupResidual=0.000 mol 0.000 J
+
+== gas-vent setup hold diagnosis (2026-11-11, owner "Diagnose it"): LEVEL_LOOP_OPTS="-Dicheme.levelLoop.generatorVent=true -Dicheme.probe.failures=true" run.sh 4, then run.sh 1, probe patch applied and reverted
+-- first attempt at 4 on the reused review world (online tick 147499, 15 restored certificates): server crash before the rig, kept as run/review-world/world-crash-147499; crash-reports/crash-2026-11-11_13.56.53-server.txt
+java.lang.NullPointerException: Cannot invoke "com.wormzjl.icheme.runtime.fluid.IslandCertificate.largestFlow()" because "certificate" is null
+-- factor 4, fresh world
+level_loop probe setup step factor-4 feed placed, sized, valves queued, charged tick=37
+level_loop probe setup step factor-4 feed fitting (valve instruments, sensors, panels) tick=38
+level_loop probe setup step factor-4 feed cables laid tick=38
+level_loop probe setup step factor-4 feed feed law and 3 bar charge tick=38
+level_loop probe step factor-4 feed factor=4 capacity=7.952 m3 cycle=20.00 s feed=198.1 kg/s first=19.81 kg/s
+level_loop probe timing step factor-4 feed slice start=37 end=38 dispatched=38 levelTarget=0.01000 m3/s
+level_loop probe result case="step factor-4 feed" factor=4 feed=198.1 kg/s held=clean failure=timed out waiting two cadences level=Infinity to -Infinity % setupResidual=NaN mol NaN J endResidual=10.08 mol -3.574e+05 J of 7638 mol through endLevel=0.1887 %
+level_loop probe setup step rule feed placed, sized, valves queued, charged tick=2460
+level_loop probe setup step rule feed fitting (valve instruments, sensors, panels) tick=2461
+level_loop probe setup step rule feed cables laid tick=2461
+level_loop probe setup step rule feed feed law and 3 bar charge tick=2461
+level_loop probe step rule feed factor=4 capacity=7.952 m3 cycle=20.00 s feed=198.1 kg/s first=19.81 kg/s
+level_loop probe timing step rule feed slice start=2460 end=2461 dispatched=2461 levelTarget=0.01000 m3/s
+level_loop probe result case="step rule feed" factor=4 feed=198.1 kg/s held=clean failure=timed out waiting two cadences level=Infinity to -Infinity % setupResidual=NaN mol NaN J endResidual=10.08 mol -3.574e+05 J of 7638 mol through endLevel=0.1887 %
+fluid_island=23 committed_tick=39 status=HELD: round deadline or worker failure
+level_loop probe setup empty factor-4 feed placed, sized, valves queued, charged tick=4946
+level_loop probe setup empty factor-4 feed fitting (valve instruments, sensors, panels) tick=4947
+level_loop probe setup empty factor-4 feed cables laid tick=4947
+level_loop probe setup empty factor-4 feed feed law and 3 bar charge tick=4947
+level_loop probe empty factor-4 feed factor=4 capacity=7.952 m3 cycle=20.00 s feed=198.1 kg/s first=198.1 kg/s
+level_loop probe timing empty factor-4 feed slice start=4947 end=4948 dispatched=4948 levelTarget=0.01000 m3/s
+fluid_island=46 committed_tick=2462 status=HELD: Interval substep limit; no partial interval may commit: advanced=0.11301364600658417 of 0.4 s, accepted=502, rejected=522, reasons={Matrix values must be finite=1, Newton line search stalled at residual #; active-set pass=#=384, Singular Newton Jacobian: Sparse LU rejected a singular matrix; active-set pass=#=3, Newton iteration limit at residual #; active-set pass=#=8
+level_loop probe result case="empty factor-4 feed" factor=4 feed=198.1 kg/s held=clean failure=timed out waiting two cadences level=Infinity to -Infinity % setupResidual=NaN mol NaN J endResidual=0.000 mol 0.000 J of 0.000 mol through endLevel=1.370 %
+level_loop cycle=0 level=24.91 % flow=198.1 kg/s outletReading=0.1993 m3/s lag=1 lic=CONTROLLING 0.3752 island=FULL residual=0.000 mol 0.000 J
+level_loop cycle=1 level=45.50 % flow=198.1 kg/s outletReading=0.07532 m3/s lag=26 lic=CONTROLLING 0.3735 island=FULL residual=-1.455e-11 mol -9.537e-07 J
+level_loop cycle=14 level=50.00 % flow=198.1 kg/s outletReading=0.1988 m3/s lag=0 lic=CONTROLLING 0.7500 island=STEADY: replaying 198.1 kg/s since 508.8 s of play, next check at 523.2 s of play residual=-7.858e-10 mol -1.526e-05 J
+fluid_island=69 committed_tick=4948 status=HELD: round deadline or worker failure
+level_loop cycle=30 level=50.00 % flow=297.2 kg/s outletReading=0.2982 m3/s lag=0 lic=CONTROLLING 0.7500 island=STEADY: replaying 297.2 kg/s since 589.5 s of play, next check at 1816.0 s of play residual=-1.077e-09 mol -2.289e-05 J
+level_loop result factor=4 cycles=2 low=24.90 % high=76.01 % levelAtStep=50.00 % levelAtEnd=50.00 % held=null failure=null molesResidual=-1.077e-09 mol of 1.592e+07 mol energyResidual=-2.289e-05 J of 7.073e+11 J intervals=75 ticks=4408 unread=0 setupResidual=-2.037e-10 mol -4.768e-07 J
+level_loop probe setup empty rule feed placed, sized, valves queued, charged tick=11820
+level_loop probe setup empty rule feed fitting (valve instruments, sensors, panels) tick=11821
+level_loop probe setup empty rule feed cables laid tick=11821
+level_loop probe setup empty rule feed feed law and 3 bar charge tick=11821
+level_loop probe empty rule feed factor=4 capacity=7.952 m3 cycle=20.00 s feed=198.1 kg/s first=198.1 kg/s
+level_loop probe timing empty rule feed slice start=11820 end=11821 dispatched=11821 levelTarget=0.01000 m3/s
+level_loop probe result case="empty rule feed" factor=4 feed=198.1 kg/s held=clean failure=timed out waiting two cadences level=Infinity to -Infinity % setupResidual=NaN mol NaN J endResidual=10.08 mol -3.574e+05 J of 1.056e+04 mol through endLevel=1.371 %
+fluid_island=115 committed_tick=11822 status=HELD: round deadline or worker failure
+PROBE_DUMP ATTEMPTS duration=0.4 elapsed=0.11301364600658417 accepted=502 rejected=522 reasons={Matrix values must be finite=1, Newton line search stalled at residual #; active-set pass=#=384, Singular Newton Jacobian: Sparse LU rejected a singular matrix; active-set pass=#=3, Newton iteration limit at residual #; active-set pass=#=80, Phase/device active-set cycle=54}
+  | PROBE_FAILURE #2007 dt=7.62939453125E-7 pass=0 rate=false nodes=6 pipes=5 phases=[14, 4, 4, 6, 2, 2] Newton line search stalled at residual 4.849266113289288
+  |   norm at start=0.30238789796057264 at failure=4.849266113289288 size=20
+  |   row 2 f=-4.849266113289288 f0=0.2482827128954958 weight=1.0 node 0 RESERVOIR local 2/6 P=101325.0 T=299.1372034011088 m=7.352769227089251E-5 liq=0.0 vap=1.172568400941308E-5 V=7.9521564043991635
+  |   row 1 f=4.277197961136267 f0=-0.2193397912183734 weight=1.0 node 0 RESERVOIR local 1/6 P=101325.0 T=299.1372034011088 m=7.352769227089251E-5 liq=0.0 vap=1.172568400941308E-5 V=7.9521564043991635
+  |   row 10 f=0.5211887303177036 f0=0.0 weight=1.0 node 3 JUNCTION local 1/4 P=70674.51873911078 T=299.9690312272326 m=1.0002599110055423 liq=0.0 vap=9.172153630855808E-4 V=0.001003451562425088
+  |   row 14 f=0.007330117246386122 f0=0.30238789796057264 weight=1.0 pipe 1 0->3 mode=PASSIVE control=Passive q=485.13403414120523
+  |   row 17 f=-0.006159517107230057 f0=0.0 weight=1.0 pipe 4 3->4 mode=VALVE_OPEN control=ControlValve q=499.27661793121075
+  |   vessel 0 id=24 P=101325.0 T=299.1372034011088 m=7.352769227089251E-5 liq=0.0 water=6.049446687099401E-8 vap=1.172568400941308E-5 V=7.9521564043991635 phase=14
+  |   pipe 0 0->5 mode=PASSIVE q0=-1.398361497335576 q=-1.398361497335576
+  |   pipe 1 0->3 mode=PASSIVE q0=0.0 q=485.13403414120523
+  |   pipe 2 2->0 mode=VALVE_REGULATING q0=19.810809642459418 q=19.810809642459418
+  |   pipe 3 1->2 mode=PASSIVE q0=19.810809642459418 q=19.810809642459418
+  |   pipe 4 3->4 mode=VALVE_OPEN q0=0.0 q=499.27661793121075
+  | PROBE_FAILURE #2008 dt=7.62939453125E-7 pass=1 rate=false nodes=6 pipes=5 phases=[10, 4, 4, 6, 2, 2] Newton line search stalled at residual 143.9712940507499
+  |   norm at start=144.76460545587108 at failure=143.9712940507499 size=19
+  |   row 2 f=143.9712940507499 f0=144.76460545587108 weight=1.0 node 0 RESERVOIR local 2/5 P=101325.0 T=299.1372034011088 m=7.352769227089251E-5 liq=0.0 vap=1.172568400941308E-5 V=7.9521564043991635
+  |   row 9 f=-20.25487817425742 f0=0.0 weight=1.0 node 3 JUNCTION local 1/4 P=70674.51873911078 T=299.9690312272326 m=1.0002599110055423 liq=0.0 vap=9.172153630855808E-4 V=0.001003451562425088
+  |   row 1 f=-8.034303268576801 f0=-8.090760792733146 weight=1.0 node 0 RESERVOIR local 1/5 P=101325.0 T=299.1372034011088 m=7.352769227089251E-5 liq=0.0 vap=1.172568400941308E-5 V=7.9521564043991635
+  |   row 0 f=-0.8955793143956166 f0=0.0 weight=1.0 node 0 RESERVOIR local 0/5 P=101325.0 T=299.1372034011088 m=7.352769227089251E-5 liq=0.0 vap=1.172568400941308E-5 V=7.9521564043991635
+  |   row 4 f=-0.6201338959751024 f0=2.1822056384946046E-11 weight=1.0 node 0 RESERVOIR local 4/5 P=101325.0 T=299.1372034011088 m=7.352769227089251E-5 liq=0.0 vap=1.172568400941308E-5 V=7.9521564043991635
+  |   vessel 0 id=24 P=101325.0 T=299.1372034011088 m=7.352769227089251E-5 liq=0.0 water=6.049446687099401E-8 vap=1.172568400941308E-5 V=7.9521564043991635 phase=10
+  |   pipe 0 0->5 mode=PASSIVE q0=-1.398361497335576 q=-1.398361497335576
+  |   pipe 1 0->3 mode=PASSIVE q0=0.0 q=0.010901657919632456
+  |   pipe 2 2->0 mode=VALVE_REGULATING q0=19.810809642459418 q=19.810809642459418
+  |   pipe 3 1->2 mode=PASSIVE q0=19.810809642459418 q=19.810809642459418
+  |   pipe 4 3->4 mode=VALVE_OPEN q0=0.0 q=20.265779832182535
+-- factor 1, fresh world
+level_loop probe setup step factor-4 feed placed, sized, valves queued, charged tick=42
+level_loop probe setup step factor-4 feed fitting (valve instruments, sensors, panels) tick=43
+level_loop probe setup step factor-4 feed cables laid tick=43
+level_loop probe setup step factor-4 feed feed law and 3 bar charge tick=43
+level_loop probe step factor-4 feed factor=1 capacity=7.952 m3 cycle=5.000 s feed=198.1 kg/s first=19.81 kg/s
+level_loop probe timing step factor-4 feed slice start=42 end=43 dispatched=43 levelTarget=0.01000 m3/s
+level_loop probe result case="step factor-4 feed" factor=1 feed=198.1 kg/s held=clean failure=timed out waiting two cadences level=Infinity to -Infinity % setupResidual=NaN mol NaN J endResidual=7.346 mol -3.197e+05 J of 1896 mol through endLevel=0.1190 %
+level_loop probe setup step rule feed placed, sized, valves queued, charged tick=2465
+level_loop probe setup step rule feed fitting (valve instruments, sensors, panels) tick=2466
+level_loop probe setup step rule feed cables laid tick=2466
+level_loop probe setup step rule feed feed law and 3 bar charge tick=2466
+level_loop probe step rule feed factor=1 capacity=7.952 m3 cycle=5.000 s feed=792.4 kg/s first=79.24 kg/s
+level_loop probe timing step rule feed slice start=2465 end=2466 dispatched=2466 levelTarget=0.01000 m3/s
+level_loop probe result case="step rule feed" factor=1 feed=792.4 kg/s held=clean failure=timed out waiting two cadences level=Infinity to -Infinity % setupResidual=NaN mol NaN J endResidual=7.346 mol -3.197e+05 J of 2198 mol through endLevel=0.1888 %
+fluid_island=23 committed_tick=44 status=HELD: round deadline or worker failure
+level_loop probe setup empty factor-4 feed placed, sized, valves queued, charged tick=4951
+level_loop probe setup empty factor-4 feed fitting (valve instruments, sensors, panels) tick=4952
+level_loop probe setup empty factor-4 feed cables laid tick=4952
+level_loop probe setup empty factor-4 feed feed law and 3 bar charge tick=4952
+level_loop probe empty factor-4 feed factor=1 capacity=7.952 m3 cycle=5.000 s feed=198.1 kg/s first=198.1 kg/s
+level_loop probe timing empty factor-4 feed slice start=4951 end=4952 dispatched=4952 levelTarget=0.01000 m3/s
+fluid_island=46 committed_tick=2467 status=HELD: Interval substep limit; no partial interval may commit: advanced=0.03685770034790034 of 0.1 s, accepted=503, rejected=521, reasons={Newton line search stalled at residual #; active-set pass=#=416, Newton iteration limit at residual #; active-set pass=#=5, Phase/device active-set cycle=100}, last=Phase/device active-set cycle
+level_loop probe result case="empty factor-4 feed" factor=1 feed=198.1 kg/s held=clean failure=timed out waiting two cadences level=Infinity to -Infinity % setupResidual=NaN mol NaN J endResidual=7.346 mol -3.197e+05 J of 2744 mol through endLevel=0.3948 %
+fluid_island=69 committed_tick=4953 status=HELD: round deadline or worker failure
+level_loop result factor=1 cycles=2 low=Infinity % high=-Infinity % levelAtStep=NaN % levelAtEnd=NaN % held=null failure=timed out waiting for the drum to hold 25.0 % on the design feed molesResidual=7.206 mol of 2.790e+07 mol energyResidual=-2.834e+05 J of 1.240e+12 J intervals=154 ticks=7157 unread=0 setupResidual=0.000 mol 0.000 J
+level_loop probe setup empty rule feed placed, sized, valves queued, charged tick=14574
+level_loop probe setup empty rule feed fitting (valve instruments, sensors, panels) tick=14575
+level_loop probe setup empty rule feed cables laid tick=14575
+level_loop probe setup empty rule feed feed law and 3 bar charge tick=14575
+level_loop probe empty rule feed factor=1 capacity=7.952 m3 cycle=5.000 s feed=792.4 kg/s first=792.4 kg/s
+level_loop probe timing empty rule feed slice start=14575 end=14576 dispatched=14576 levelTarget=0.01000 m3/s
+level_loop probe timing empty rule feed slice start=14582 end=14590 dispatched=14615 levelTarget=0.000 m3/s
+level_loop probe timing empty rule feed slice start=14638 end=14702 dispatched=14706 levelTarget=0.6385 m3/s
+level_loop probe timing empty rule feed slice start=14702 end=14802 dispatched=14829 levelTarget=0.9574 m3/s
+level_loop probe timing empty rule feed slice start=14802 end=14902 dispatched=14902 levelTarget=1.139 m3/s
+level_loop probe timing empty rule feed slice start=14902 end=15002 dispatched=15002 levelTarget=1.063 m3/s
+level_loop probe timing empty rule feed slice start=15092 end=15182 dispatched=15182 levelTarget=1.060 m3/s
+level_loop probe result case="empty rule feed" factor=1 feed=792.4 kg/s held=clean failure=null level=38.95 to 39.28 % setupResidual=-1.164e-10 mol -9.537e-07 J endResidual=-1.455e-10 mol 0.000 J of 2.510e+06 mol through endLevel=38.95 %
+PROBE_DUMP ATTEMPTS duration=0.1 elapsed=0.03685770034790034 accepted=503 rejected=521 reasons={Newton line search stalled at residual #; active-set pass=#=416, Newton iteration limit at residual #; active-set pass=#=5, Phase/device active-set cycle=100}
+  | PROBE_FAILURE #1911 dt=3.0517578125E-6 pass=1 rate=false nodes=6 pipes=5 phases=[10, 4, 4, 6, 2, 2] Newton line search stalled at residual 757.1795687242644
+  |   norm at start=760.062621864723 at failure=757.1795687242644 size=19
+  |   row 2 f=757.1795687242644 f0=760.062621864723 weight=1.0 node 0 RESERVOIR local 2/5 P=101325.0 T=299.80472478501775 m=1.9217718059578407E-4 liq=0.0 vap=9.668769288780943E-6 V=7.9521564043991635
+  |   row 1 f=-42.257243438049514 f0=-42.62215287897665 weight=1.0 node 0 RESERVOIR local 1/5 P=101325.0 T=299.80472478501775 m=1.9217718059578407E-4 liq=0.0 vap=9.668769288780943E-6 V=7.9521564043991635
+  |   row 9 f=-6.078791941509286 f0=0.0 weight=1.0 node 3 JUNCTION local 1/4 P=71340.17883956619 T=299.9706382224023 m=1.0002745830665565 liq=0.0 vap=9.59898849781164E-4 V=0.001003449482782784
+  |   row 4 f=-0.9978932410659056 f0=-1.5797786085569739E-15 weight=1.0 node 0 RESERVOIR local 4/5 P=101325.0 T=299.80472478501775 m=1.9217718059578407E-4 liq=0.0 vap=9.668769288780943E-6 V=7.9521564043991635
+  |   row 0 f=-0.5735871071181908 f0=0.0 weight=1.0 node 0 RESERVOIR local 0/5 P=101325.0 T=299.80472478501775 m=1.9217718059578407E-4 liq=0.0 vap=9.668769288780943E-6 V=7.9521564043991635
+  |   vessel 0 id=24 P=101325.0 T=299.80472478501775 m=1.9217718059578407E-4 liq=0.0 water=1.8191617549919913E-7 vap=9.668769288780943E-6 V=7.9521564043991635 phase=10
+  |   pipe 0 0->5 mode=PASSIVE q0=-1.398361497335576 q=-1.398361497335576
+  |   pipe 1 0->3 mode=PASSIVE q0=0.0 q=8.215471919741736
+  |   pipe 2 2->0 mode=VALVE_REGULATING q0=79.24323856983767 q=79.24323856983767
+  |   pipe 3 1->2 mode=PASSIVE q0=79.24323856983771 q=79.24323856983771
+  |   pipe 4 3->4 mode=VALVE_OPEN q0=0.0 q=6.252946323904425
+  | REJECT elapsed=0.0368474960327148 step=3.0517578125E-6 Newton line search stalled at residual 757.1795687242644; active-set pass=1
+  | PROBE_FAILURE #1913 dt=1.52587890625E-6 pass=0 rate=false nodes=6 pipes=5 phases=[14, 4, 4, 14, 2, 2] Newton line search stalled at residual 2.2816444556614073
+  |   norm at start=0.6651991285906882 at failure=2.2816444556614073 size=22
+  |   row 2 f=-2.2816444556614073 f0=0.6651991285906882 weight=1.0 node 0 RESERVOIR local 2/6 P=101325.0 T=299.80472478501775 m=1.9217718059578407E-4 liq=0.0 vap=9.668769288780943E-6 V=7.9521564043991635
+  |   row 1 f=2.2006824099825217 f0=-0.6418627705106579 weight=1.0 node 0 RESERVOIR local 1/6 P=101325.0 T=299.80472478501775 m=1.9217718059578407E-4 liq=0.0 vap=9.668769288780943E-6 V=7.9521564043991635
+  |   row 16 f=2.0209516331580742E-4 f0=0.2958189412626893 weight=1.0 pipe 1 0->3 mode=PASSIVE control=Passive q=469.7199810022359
+  |   row 10 f=2.704862311020406E-6 f0=0.0 weight=1.0 node 3 JUNCTION local 1/6 P=71340.17883956619 T=299.9706382224023 m=1.0002745830665565 liq=0.0 vap=9.59898849781164E-4 V=0.001003449482782784
+  |   row 13 f=-2.8868737484235343E-8 f0=2.394306974903746E-12 weight=1.0 node 3 JUNCTION local 4/6 P=71340.17883956619 T=299.9706382224023 m=1.0002745830665565 liq=0.0 vap=9.59898849781164E-4 V=0.001003449482782784
+  |   vessel 0 id=24 P=101325.0 T=299.80472478501775 m=1.9217718059578407E-4 liq=0.0 water=1.8191617549919913E-7 vap=9.668769288780943E-6 V=7.9521564043991635 phase=14
+  |   pipe 0 0->5 mode=PASSIVE q0=-1.398361497335576 q=-1.398361497335576
+  |   pipe 1 0->3 mode=PASSIVE q0=0.0 q=469.7199810022359
+  |   pipe 2 2->0 mode=VALVE_REGULATING q0=79.24323856983767 q=79.24323856983767
+  |   pipe 3 1->2 mode=PASSIVE q0=79.24323856983771 q=79.24323856983771

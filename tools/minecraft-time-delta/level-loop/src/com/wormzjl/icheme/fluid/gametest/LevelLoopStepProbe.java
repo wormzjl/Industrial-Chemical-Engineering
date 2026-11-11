@@ -124,6 +124,7 @@ public final class LevelLoopStepProbe {
         double[] residual = {Double.NaN, Double.NaN};
         long[] stepAt = {-1};
         boolean empty = mode.equals("empty");
+        log("probe setup {} placed, sized, valves queued, charged tick={}", label, world.onlineTick());
         helper.startSequence()
                 .thenWaitUntil(until(helper, world, state, 600, "waiting for the valves and the drum", () -> plant.valvesInstalled()
                         && world.committedDevice(feedValveId).map(d -> d.control() instanceof FlowControl.ControlValve).orElse(false)
@@ -131,6 +132,7 @@ public final class LevelLoopStepProbe {
                         && InstrumentHosts.at(level, drum.controller()) != null && world.view(InstrumentHosts.at(level, drum.controller()).identity()).tank() != null))
                 .thenExecute(step(state, "fitting", () -> {
                     state.drum = InstrumentHosts.at(level, drum.controller()).identity();
+                    log("probe setup {} fitting (valve instruments, sensors, panels) tick={}", label, world.onlineTick());
                     for (var v : List.of(feedValve, levelValve)) {
                         world.instruments().legacyInstalled(id(plant, v), Instrument.Type.PRESSURE_VALVE);
                         var e = (FluidDeviceBlockEntity) level.getBlockEntity(v);
@@ -151,6 +153,7 @@ public final class LevelLoopStepProbe {
                             ColumnFailureModesReviewWorld.pipePort(plant, levelValve), ColumnFailureModesReviewWorld.pipePort(plant, feedValve),
                             ColumnFailureModesReviewWorld.pipePort(plant, meter), state.ficBox.dataPort());
                     ColumnFailureModesReviewWorld.lay(plant, ports, CableMedium.DATA);
+                    log("probe setup {} cables laid tick={}", label, world.onlineTick());
                     var tank = world.view(state.drum).tank();
                     state.capacity = tank.capacity();
                     state.cycle = time.seconds(cadence);
@@ -162,6 +165,7 @@ public final class LevelLoopStepProbe {
                     var law = new FlowControl.ControlValve(FlowControl.ValveSource.MASS_FLOW, first, state.flowSensor, 1);
                     world.edit(feedValveId, old.revision(), new PhysicalFluidTopology.Device(d.id(), d.position(), d.kind(), d.facing(), d.geometry(), law, d.ports(), true, d.cutoff(), d.inlineFilter()), old.spec());
                     TankCharge.run(world, generatorId, new FluidDeviceSpec(1, 300, 300_000, water));
+                    log("probe setup {} feed law and 3 bar charge tick={}", label, world.onlineTick());
                     edit(helper, world, state, state.fic, state.ficBox, new ControlSettings("FIC-1", true, state.flowSensor, feedValveId, Sensor.Unit.KILOGRAM_PER_SECOND, first, ControlSettings.Action.OUTLET));
                     edit(helper, world, state, state.lic, state.licBox, new ControlSettings("LIC-1", true, state.levelSensor, levelValveId, Sensor.Unit.HEIGHT_PERCENT, FILLED, ControlSettings.Action.OUTLET));
                     if (empty) stepAt[0] = committed(world, state);
