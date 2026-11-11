@@ -82,7 +82,9 @@ public final class LevelLoopStepProbe {
         plant.valves.put(levelValve, AssemblyGameTests.Plant.out(drum, Role.LIQUID_OUTLET));
         var vent = line(plant, drum, Role.VAPOUR_OUTLET, 3, 0);
         for (int k = 0; k < vent.size() - 1; k++) plant.pipe(vent.get(k));
-        level.setBlock(vent.getLast(), ModBlocks.FLUID_VOID.get().defaultBlockState(), Block.UPDATE_ALL);
+        // -Dicheme.levelLoop.generatorVent=true: the vent is a 1 atm nitrogen generator, which can give gas back to a
+        // liquid-full drum (a void only takes gas). Off: the suite's void.
+        level.setBlock(vent.getLast(), (Boolean.getBoolean("icheme.levelLoop.generatorVent") ? ModBlocks.FLUID_GENERATOR : ModBlocks.FLUID_VOID).get().defaultBlockState(), Block.UPDATE_ALL);
         plant.devices.add(vent.getLast());
         for (var line : List.of(feed, outlet, vent)) world.resizeLine(id(plant, line.get(1)), BORE, x -> com.wormzjl.icheme.science.equipment.PipeSizes.MAX_BORE);
         for (var v : plant.valves.entrySet()) plant.install(v.getKey(), v.getValue());
@@ -195,9 +197,9 @@ public final class LevelLoopStepProbe {
                     world.observe(null);
                     if (state.operator != null) state.operator.player.closeContainer();
                     String held = state.held != null ? state.held : state.failure != null && state.failure.contains("held") ? state.failure : null;
-                    log("probe result case=\"{}\" factor={} feed={} kg/s held={} failure={} level={} to {} % setupResidual={} mol {} J",
+                    log("probe result case=\"{}\" factor={} feed={} kg/s held={} failure={} level={} to {} % setupResidual={} mol {} J endResidual={} mol {} J of {} mol through endLevel={} %",
                             label, time.factor(), fmt(state.feed), held == null ? "clean" : held.lines().findFirst().orElse(held), state.failure,
-                            fmt(state.low), fmt(state.high), fmt(residual[0]), fmt(residual[1]));
+                            fmt(state.low), fmt(state.high), fmt(residual[0]), fmt(residual[1]), fmt(state.massResidual), fmt(state.energyResidual), fmt(state.massThrough), fmt(state.level(world)));
                     plant.remove();
                 })
                 .thenWaitUntil(() -> helper.assertTrue(plant.removed(), "Waiting for the plant to leave"))

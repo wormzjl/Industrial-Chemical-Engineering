@@ -40,7 +40,7 @@ import java.util.*;
 
 /**
  * An inventory level loop on a drum on the control cadence (batch 2026-11-11-minecraft-time-delta, owner T5): water from a
- * generator through a flow controller (FIC) into a lying 1.5 m by 4 m drum vented to 2 bar of nitrogen, its liquid out
+ * generator through a flow controller (FIC) into a lying 1.5 m by 4 m drum vented to a 1 atm nitrogen void, its liquid out
  * through a level controller's valve (LIC, {@code InventoryControl} once per {@link ControlService#CADENCE}) down to a void.
  * The drum holds {@link #CYCLES} control cycles of the feed: the feed's volume flow is the drum's volume over that many
  * cadences of process time, at the server's time factor. The drum fills at a tenth of the feed to 25 % and holds 25 % on

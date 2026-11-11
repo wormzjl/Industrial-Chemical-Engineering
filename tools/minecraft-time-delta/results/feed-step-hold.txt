@@ -203,3 +203,14 @@ tick=129100 readingTick=129043 level=100.0 % liquid=7.952 m3 outletReading=0.011
 DRUM_DRAIN_RESULT case="empty" factor=1 outletPlacedAtTick=100 ticks=1200 share=0.0 to 0.019998650729034666 held=clean
 DRUM_DRAIN_RESULT case="1 %" factor=1 outletPlacedAtTick=115 ticks=1215 share=0.0 to 0.03613389434234281 held=clean
 DRUM_DRAIN_RESULT case="empty, outlet valve at 592.8 kg/s" factor=1 outletPlacedAtTick=100 ticks=1 share=0.0 to 0.0 held=HELD: Substep refinement exhausted: Newton line search stalled at residual 5.5874665995300425; active-set pass=0; reasons={Newton line sear
+
+== finding 3 with a gas vent (2026-11-11, owner "Yes, rerun it"): run.sh 4 with the vent on a 1 atm nitrogen generator in the probe and the suite body (now -Dicheme.levelLoop.generatorVent=true in the probe; the suite keeps its void). Every case held in its setup, before the loops controlled:
+ required tests failed :(
+fluid_island=2687 committed_tick=137964 status=HELD: Substep refinement exhausted: Newton iteration limit at residual 5.774194844487823E-9; active-set pass=0; reasons={Newton iteration limit at residual #; active-set pass=#=20}
+fluid_island=2718 committed_tick=135322 status=HELD: round deadline or worker failure
+fluid_island=2741 committed_tick=137745 status=HELD: Interval substep limit; no partial interval may commit: advanced=0.11301364600658417 of 0.4 s, accepted=502, rejected=522, reasons={Matrix values must be finite=1, Newton line search stalled at residual #; active-set pass=#=384, Singular Newton Ja
+fluid_island=2764 committed_tick=140231 status=HELD: round deadline or worker failure
+fluid_island=2787 committed_tick=142675 status=HELD: Interval substep limit; no partial interval may commit: advanced=0.11301364600658417 of 0.4 s, accepted=502, rejected=522, reasons={Matrix values must be finite=1, Newton line search stalled at residual #; active-set pass=#=384, Singular Newton Ja
+fluid_island=2810 committed_tick=145098 status=HELD: round deadline or worker failure
+level_loop probe result case="step factor-4 feed" factor=4 feed=198.1 kg/s held=clean failure=timed out waiting two cadences level=Infinity to -Infinity % setupResidual=NaN mol NaN J endResidual=10.08 mol -3.574e+05 J of 7638 mol through endLevel=0.1887 %
+level_loop result factor=4 cycles=2 low=Infinity % high=-Infinity % levelAtStep=NaN % levelAtEnd=NaN % held=null failure=timed out waiting for both loops to control molesResidual=0.000 mol of 0.000 mol energyResidual=0.000 J of 0.000 J intervals=0 ticks=2401 unread=0 setupResidual=0.000 mol 0.000 J
