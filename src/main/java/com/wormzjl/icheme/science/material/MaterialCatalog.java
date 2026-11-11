@@ -174,10 +174,14 @@ public final class MaterialCatalog {
     /**
      * The free-water model of a package. {@code ice} is its ice below the melting line (WP4 of batch
      * 2026-09-24-coolprop-low-temperature), null for a record without one (a frozen fixture): the fluid network needs it.
+     * {@code datumVaporizationEnthalpy} (J/mol) is the latent heat of saturated water at 298.15 K that places liquid water
+     * below the steam (the water datum, {@code V3WaterProperties.liquidEnthalpyOffset}); NaN for a record that declares
+     * none, which keeps the Watson latent heat there.
      */
     public record Water(String revision, double molarMass, double triplePoint, double criticalTemperature,
             double criticalPressure, double maximumTemperature, double boilingTemperature,
-            double vaporizationEnthalpy, double watsonExponent, List<Double> saturation, List<Double> shomate, Ice ice) {
+            double vaporizationEnthalpy, double watsonExponent, List<Double> saturation, List<Double> shomate, Ice ice,
+            double datumVaporizationEnthalpy) {
         public Water { saturation = List.copyOf(saturation); shomate = List.copyOf(shomate); }
         /**
          * The water's ice: its crystal record (a usable {@link CrystalReference} of water anchored at the water's triple
@@ -712,7 +716,8 @@ public final class MaterialCatalog {
             }
             Water w=new Water(revision(o,"revision"),positive(o,"molar_mass"),positive(o,"triple_point"),positive(o,"critical_temperature"),
                     positive(o,"critical_pressure"),positive(o,"max_enthalpy_temperature"),positive(o,"reference_boiling_temperature"),
-                    positive(o,"reference_vaporization_enthalpy"),positive(o,"watson_exponent"),counted(o,"saturation_coefficients",6),counted(o,"shomate_coefficients",7),ice);
+                    positive(o,"reference_vaporization_enthalpy"),positive(o,"watson_exponent"),counted(o,"saturation_coefficients",6),counted(o,"shomate_coefficients",7),ice,
+                    o.has("datum_vaporization_enthalpy")?positive(o,"datum_vaporization_enthalpy"):Double.NaN);
             range(w.triplePoint(),w.boilingTemperature(),"water boiling"); range(w.boilingTemperature(),w.criticalTemperature(),"water critical");
             range(w.triplePoint(),w.maximumTemperature(),"water enthalpy"); require(names,"Water","component"); waters.put(text(o,"id"),w);
             if (o.has("thermochemistry")) formulas.put("water/"+text(o,"id"),Map.copyOf(readThermochemistry(object(o,"thermochemistry")).elements()));
