@@ -845,7 +845,7 @@ public final class FluidThermodynamics {
      * <li>a phase leaves only when the solve empties it: the trace fold ({@link #folded}, D34), and a phase held below
      * {@link #VANISHING_SHARE} and at a smaller share than at {@code from} (owner decision D38 C, {@link #vanishing});</li>
      * <li>a node holding every phase its material can form has none to add, and no TP answer is formed: a vapour and a
-     * liquid on a list without water, all three slots with water (W3b). A stand-in liquid ({@link #standIn}, owner
+     * liquid on a list without water, all three slots with water (W3b); a node holding no fluid has none. A stand-in liquid ({@link #standIn}, owner
      * decision D31 B) is no liquid of the node's own and never makes it complete;</li>
      * <li>where the TP answer ({@link #flashTP}) holds a phase the node lacks that is not in the solve's record
      * ({@code record}, A85), the node's own split decides it (D26): a vessel's {@code vesselSplit} closes its inventory
@@ -870,7 +870,8 @@ public final class FluidThermodynamics {
         int excluded=(record==null?0:record[at])|shrinking&phaseBits(state)&~phaseBits(kept),refused=0;
         double[] totals=kept.totals();
         int own=ownPhaseBits(kept);
-        boolean complete=totals[totals.length-1]>0?own==7:(own&3)==3;
+        // A node holding no fluid (a bed of solids alone) has no phase to add.
+        boolean complete=!(sum(totals)>0)||(totals[totals.length-1]>0?own==7:(own&3)==3);
         if(!complete) {
             if(prepared!=null&&prepared.temperature()!=kept.temperature())prepared=null;
             var equilibrium=folded(equilibriumTP(kept.temperature(),kept.pressure(),totals,checkpoint,prepared).withSolidState(kept.solids(),kept.solidMoments()),junction);
