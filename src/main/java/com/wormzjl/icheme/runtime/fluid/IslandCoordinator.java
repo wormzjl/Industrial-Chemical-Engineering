@@ -204,7 +204,9 @@ public final class IslandCoordinator {
         private PassiveNetwork dispatched;
         private final Attempt attempt;
         private ProcessSolveServices.FluidIslandSolveResult result;
-        private boolean terminal,closed;
+        /** Why a terminal completion brought no result (the worker's failure, a cancellation), or null where it did not say. */
+        private String failure;
+        private boolean terminal,closed,lateResult;
         private final long dispatchedAtTick,admittedNanos;
         // What the slice read of each coupled side's other side at its dispatch (plan section 5.2).
         private Map<Long,ExchangerRelay.Read> reads=Map.of();
@@ -624,11 +626,14 @@ public final class IslandCoordinator {
     }
     private int capacity(){return Math.min(dispatcher.availableWorkers(),Math.min(settings.maximumDispatchesPerTick-dispatchedThisTick,settings.maximumDispatchesPerTick-pending.size()));}
     /** A missing result denotes cancellation, failure or abandonment. Duplicate/late results never advance clocks. */
-    public void completed(Attempt attempt,Optional<ProcessSolveServices.FluidIslandSolveResult> result) {
+    public void completed(Attempt attempt,Optional<ProcessSolveServices.FluidIslandSolveResult> result){completed(attempt,result,null);}
+    /** {@code failure}: why a missing result is missing (the worker's exception, a cancellation), named in the held status; null where unknown. */
+    public void completed(Attempt attempt,Optional<ProcessSolveServices.FluidIslandSolveResult> result,String failure) {
         owned();Objects.requireNonNull(result);var entry=pending.get(attempt.slice.requestId());
         if(entry==null||!entry.attempt.equals(attempt)||entry.terminal)return;
         FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.completionsRouted);
-        entry.terminal=true;entry.result=nanoClock.getAsLong()-entry.admittedNanos>=settings.hardBudgetNanos?null:result.orElse(null);
+        entry.lateResult=nanoClock.getAsLong()-entry.admittedNanos>=settings.hardBudgetNanos;
+        entry.terminal=true;entry.result=entry.lateResult?null:result.orElse(null);entry.failure=result.isEmpty()?failure:null;
         completionsSincePump=true;
         if(entry.closed) {
             pending.remove(attempt.slice.requestId());var island=islands.get(attempt.islandId);
@@ -636,6 +641,12 @@ public final class IslandCoordinator {
             return;
         }
         // The completion router calls pump after its entire bounded drain, avoiding recursive dispatch here.
+    }
+    /** Why a closed entry has no result: the round's deadline (still running, or answered past the wall budget), or what the
+     * completion said of its missing result (the worker's failure: its exception and message). */
+    private static String missing(Pending entry) {
+        if(!entry.terminal||entry.lateResult)return "round deadline";
+        return entry.failure==null?"round deadline or worker failure":entry.failure;
     }
     private void closeRound(Round round) {
         var changed=new ArrayList<Snapshot>();
@@ -655,7 +666,7 @@ public final class IslandCoordinator {
                     island.status=outcome.detail()+island.notice;
                 }
             }
-            if(!accept)island.status=refusal!=null?"HELD: "+refusal:outcome==null?"HELD: round deadline or worker failure"
+            if(!accept)island.status=refusal!=null?"HELD: "+refusal:outcome==null?"HELD: "+missing(entry)
                     :outcome.phaseHold().isPresent()?phaseHoldStatus(outcome.phaseHold().orElseThrow(),false)
                     :outcome.detail().startsWith("HELD")?outcome.detail():"HELD: "+outcome.detail();
             island.clock.completed(attempt.slice,accept);island.held=!accept&&suspension==null&&attempt.revision==island.revision;

@@ -28,8 +28,8 @@ public final class MinecraftFluidRuntime implements AutoCloseable {
             public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveServices.FluidIslandCommand command) {
                 var target=new ProcessSolveServices.FluidIslandTarget(Objects.requireNonNull(dimensions.get(attempt.islandId())),attempt.islandId());
                 var handler=new ProcessSolveServices.FluidCompletionHandler() {
-                    public void completed(ProcessSolveServices.FluidIslandCompletion result){coordinator.completed(attempt,result.completion().result());}
-                    public void abandoned(ProcessSolveServices.FluidIslandRequest request){coordinator.completed(attempt,Optional.empty());}
+                    public void completed(ProcessSolveServices.FluidIslandCompletion result){var c=result.completion();coordinator.completed(attempt,c.result(),c.result().isPresent()?null:failure(attempt.islandId(),c));}
+                    public void abandoned(ProcessSolveServices.FluidIslandRequest request){coordinator.completed(attempt,Optional.empty(),"worker abandoned the solve");}
                 };
                 return ProcessSolveServices.submitFluidIsland(server,new ProcessSolveServices.FluidIslandRequest(attempt.slice().requestId(),target,attempt.revision(),handler),command).admission()==ProcessSolveServices.Admission.ACCEPTED;
             }
@@ -38,6 +38,20 @@ public final class MinecraftFluidRuntime implements AutoCloseable {
         // Called after every completion drain: pumps only when a completion, a newly ready owner, a due round or
         // allocator deadline, or free capacity for an already ready owner gives the pump something to do.
         previousPump=ProcessSolveServices.setReadinessPump(server,coordinator::pumpIfUseful);
+    }
+    /** The held status's words for a completion without a result: "worker failure: {type}: {message}" (its stack to the log),
+     * or the terminal status and detail (a cancellation, the worker's deadline). */
+    static String failure(long island,com.wormzjl.icheme.runtime.BoundedCpuSolveService.Completion<?,?> completion) {
+        var failure=completion.failure().orElse(null);
+        if(failure!=null) {
+            var thrown=new IllegalStateException(failure.type()+": "+failure.message());thrown.setStackTrace(failure.stackTrace().toArray(StackTraceElement[]::new));
+            com.wormzjl.icheme.IChemE.LOGGER.warn("fluid island {} worker failure",island,thrown);
+            String type=failure.type().substring(failure.type().lastIndexOf('.')+1),message=failure.message().replaceAll("\\s+"," ").strip();
+            if(message.length()>200)message=message.substring(0,200)+"...";
+            return "worker failure: "+type+(message.isEmpty()?"":": "+message);
+        }
+        var detail=completion.detail();
+        return "worker "+completion.status().name().toLowerCase(java.util.Locale.ROOT).replace('_',' ')+(detail==null||detail.isBlank()?"":": "+detail);
     }
     private void owned(){if(!server.isSameThread())throw new IllegalStateException("Fluid runtime requires the logical server thread");}
     public IslandCoordinator coordinator(){owned();return coordinator;}
