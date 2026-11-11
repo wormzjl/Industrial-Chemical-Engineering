@@ -3649,15 +3649,17 @@ public final class PassiveStepSolver {
             return p;
         }
         /**
-         * A junction whose connections all carry nothing at {@code p} moves back toward its own pressure as far as they still
-         * carry nothing: to its own pressure, or to the edge of its no-flow range nearest it. Its flows stay zero, so no row
-         * changes. A no-flow range has a zero merit at every point, so the Newton's first step into it is accepted wherever
-         * it lands, the hull's clamp included (defect 3 of batch 2026-11-11-drum-operation-holds: a leg's foot at 300 Pa,
-         * the hull's floor, instead of its column's 52 kPa).
+         * A junction the hull's clamp holds on its bound with nothing flowing through it has no balance there: the bound is
+         * the search's box, not a pressure. It moves back toward its own pressure as far as its connections still carry
+         * nothing: to its own pressure, or to the edge of its no-flow range nearest it. Its flows stay zero, so no row changes.
+         * A no-flow range has a zero merit at every point, so the Newton's first step into it is accepted where it lands, the
+         * clamp included (defect 3 of batch 2026-11-11-drum-operation-holds: a leg's foot at 300 Pa, the hull's floor,
+         * instead of its column's 52 kPa). A junction inside a no-flow band is a balance anywhere in it and stays: moved to the
+         * band's edge, a cryogenic pocket two-phase near its dew point stalled the step (cold seed 65).
          */
         private void rest(double[] p) {
             for(int node=0;node<nodes;node++) {
-                if(unknown[node]<0||!still(node,p))continue;
+                if(unknown[node]<0||p[node]>low&&p[node]<high||!still(node,p))continue;
                 double own=Math.clamp(reference[node],low,high),near=p[node],far=own;
                 p[node]=own;if(still(node,p))continue;
                 for(int k=0;k<60&&Math.abs(far-near)>1e-12*Math.max(1,Math.abs(own));k++){double mid=.5*(near+far);p[node]=mid;if(still(node,p))near=mid;else far=mid;}
